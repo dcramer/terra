@@ -741,6 +741,16 @@ fn walk(
     }
 }
 
+/// How fast one of a kind flies flat out, metres a second: a flier at its own speed, a
+/// swimmer that takes to the air as a duck does at a duck's, anything else at its run.
+pub fn wing_mps(about: &crate::species::SpeciesDef) -> f32 {
+    match about.moves {
+        Moves::Flies(mps) => mps,
+        _ if matches!(about.refuge, Refuge::Flies(..)) => TAKES_WING_MPS,
+        _ => about.run_mps,
+    }
+}
+
 /// A flier on its way from one point to another, so far along: where it is a step on.
 fn fly_on(
     creature: &mut Creature,
@@ -749,12 +759,7 @@ fn fly_on(
     (from, to, along): (Vec3, Vec3, f32),
     dt: f32,
 ) -> Transform {
-    let speed = creature.pace.flies_mps(match about.moves {
-        Moves::Flies(mps) => mps,
-        // A swimmer that takes to the air when startled, as a duck does.
-        _ if matches!(about.refuge, Refuge::Flies(..)) => TAKES_WING_MPS,
-        _ => about.run_mps,
-    });
+    let speed = creature.pace.flies_mps(wing_mps(about));
     let length = (to - from).length().max(0.5);
     let along = (along + speed * dt / length).min(1.0);
     // Up off the ground and down onto it again, as high over the way as a tenth of its length

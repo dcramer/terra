@@ -86,10 +86,12 @@ fn nudges() -> Vec<(f32, f32)> {
     });
     all
 }
-/// A crossing or fleeing animal stays in the camera's sight so long on its way past its spot,
-/// seconds, looked at so often: the camera coming on at its pace, the animal at its own. One
-/// that walks on behind a trunk straight after it is seen reads as walking into the tree.
-const ONWARD_SEEN_S: [f32; 4] = [0.75, 1.5, 2.25, 3.0];
+/// A crossing or fleeing animal stays in the camera's sight from half a second before its spot
+/// to so long on past it, seconds from its spot, looked at so often, its middle each time, not
+/// either end: the camera coming on at its pace, the animal at its own. One that walks on
+/// behind a trunk straight after it is seen reads as walking into the tree; one whose middle
+/// a trunk hides at its spot blinks out (lake film r27, the fox at 11 s).
+const ONWARD_SEEN_S: [f32; 6] = [-0.5, 0.0, 0.75, 1.5, 2.25, 3.0];
 /// So many spots and starts that fit are tried for one whose way on stays seen, before the
 /// first that fit is taken: each look along the way costs about a millisecond.
 const ONWARD_TRIES: usize = 8;
@@ -150,13 +152,7 @@ pub fn read(
         serde_json::from_value(list.clone()).map_err(|e| format!("meetings: {e}"))?;
     meetings
         .into_iter()
-        .map(|meeting| {
-            let species = kind_named(bestiary, &meeting.kind)?;
-            if matches!(bestiary.get(species).moves, Moves::Swims(_)) {
-                return Err(format!("meetings: {} swims", meeting.kind));
-            }
-            Ok((meeting, species))
-        })
+        .map(|meeting| Ok((meeting.clone(), kind_named(bestiary, &meeting.kind)?)))
         .collect()
 }
 
@@ -194,6 +190,9 @@ fn pace_mps(about: &SpeciesDef, behaviour: Behaviour) -> f32 {
     };
     match (about.moves, behaviour) {
         (Moves::Flies(mps), _) => pace.flies_mps(mps),
+        // A swimmer flies in and comes down on the water at its spot: a duck paddles a third of
+        // a metre a second, and swimming in unseen it would start in plain view.
+        (Moves::Swims(_), _) => pace.flies_mps(creatures::wing_mps(about)),
         (_, Behaviour::Grazing) => creatures::keeps_to(about.walk_mps, about),
         _ => pace.runs_mps(about),
     }
@@ -220,9 +219,20 @@ pub fn stage(
     let right = ahead.cross(up);
     let eye = eye_at(around, feet, ahead);
     let flies = matches!(about.moves, Moves::Flies(_));
+    // A swimmer flies in from anywhere unseen and is met on water, afloat.
+    let swims = matches!(about.moves, Moves::Swims(_));
+    let on_wing = flies || swims;
     let lift = up * 0.4;
     let radius = about.body.radius;
-    let dry = |p: Vec3| flies || around.depth_m(p) < -0.1;
+    let dry = |p: Vec3| on_wing || around.depth_m(p) < -0.1;
+    let keeps_to = |p: Vec3| {
+        if swims {
+            around.depth_m(p) > super::SWIMMING_M
+        } else {
+            dry(p)
+        }
+    };
+    let shows = |p: Vec3| if swims { around.shows_at(p) } else { p + lift };
     // Clear of every trunk and solid, across the ground.
     let apart = |p: Vec3, foot: Vec3| (p - foot).reject_from(up).length();
     let clear = |p: Vec3| {
@@ -246,7 +256,7 @@ pub fn stage(
     // Whether its way on past its spot stays in sight of the camera coming on: one grazing
     // stops at its spot, one flying goes over the trunks.
     let stays_seen = |staged: &Staged| {
-        flies
+        on_wing
             || meeting.behaviour == Behaviour::Grazing
             || ONWARD_SEEN_S.iter().all(|&t| {
                 let at = around.ground(staged.spot + staged.way * mps * t) + lift;
@@ -258,11 +268,11 @@ pub fn stage(
         let off = (meeting.bearing + more_deg).to_radians();
         let dir = ahead * libm::cosf(off) + right * libm::sinf(off);
         let spot = around.ground(eye + dir * (meeting.ahead + more_m).max(4.0));
-        let fault = if !dry(spot) {
+        let fault = if !keeps_to(spot) {
             0
         } else if !clear(spot) {
             1
-        } else if !shows_from(around, eye, spot + lift) {
+        } else if !shows_from(around, eye, shows(spot)) {
             2
         } else {
             3
@@ -285,7 +295,7 @@ pub fn stage(
                 0
             } else if !around.unseen_for(start, about.seen_m()) {
                 1
-            } else if !flies && !walkable(around, start, spot) {
+            } else if !on_wing && !walkable(around, start, spot) {
                 2
             } else {
                 3
@@ -312,7 +322,7 @@ pub fn stage(
     }
     first.ok_or_else(|| {
         format!(
-            "of its spots {} in water, {} in a trunk, {} hidden from the camera; of the starts \
+            "of its spots {} off its ground (land, or water for a swimmer), {} in a trunk, {} hidden from the camera; of the starts \
              from the rest {} in water or a trunk, {} in sight, {} with no dry, gentle way in",
             not_spot[0], not_spot[1], not_spot[2], not_start[0], not_start[1], not_start[2]
         )
@@ -457,12 +467,18 @@ fn put_out(
         };
         let (behaviour, way, lead) = (meeting.behaviour, staged.way, staged.lead_s);
         let to = staged.spot + (from - staged.start);
-        let flies = matches!(bestiary.get(species).moves, Moves::Flies(_));
+        let moves = bestiary.get(species).moves;
+        // A swimmer takes off from and comes down on the water's surface, not the bed under
+        // it: flown from the bed, the lake film's ducks skimmed the water at a flier's speed
+        // (r28's first take).
+        let surface = |p: Vec3| p + p.normalize_or(Vec3::Y) * around.depth_m(p).max(0.0);
+        let (aloft, afloat) = (surface(from), surface(to));
         commands
             .entity(animal)
             .entry::<creatures::Creature>()
             .and_modify(move |mut animal| match behaviour {
-                _ if flies => animal.fly(from, to + way * 15.0),
+                _ if matches!(moves, Moves::Flies(_)) => animal.fly(from, to + way * 15.0),
+                _ if matches!(moves, Moves::Swims(_)) => animal.fly(aloft, afloat),
                 Behaviour::Grazing => animal.walk_to(to),
                 Behaviour::Crossing => animal.dash(way, lead + ON_S, creatures::Pace::Calm),
                 Behaviour::Fleeing => animal.dash(way, lead + ON_S, creatures::Pace::Startled),
@@ -696,10 +712,79 @@ mod tests {
             .unwrap();
         assert_eq!(
             seen,
-            (false, true, [true; 4]),
+            (false, true, [true; 6]),
             "unseen at its start, seen at its spot, and seen walking on past it"
         );
         // Staged another way from the one the trunk hides.
         assert!(staged.way.dot(open.way) < 0.99 || staged.spot.distance(open.spot) > 0.5);
+        // A thin trunk 2 m before its spot hides its middle from the camera then but not its
+        // ends, so it still "shows" there: it would blink out at its spot (lake film r27).
+        let planet = world.resource::<Planet>();
+        let middle = staged.spot + lift;
+        let trunk = planet.ground_at(middle + (then_eye - middle).normalize() * 2.0);
+        world.resource_mut::<Obstacles>().add(trunk, 0.15);
+        let hidden = world
+            .run_system_once(move |around: Surroundings| {
+                (
+                    around.in_view(then_eye, middle),
+                    shows_from(&around, then_eye, middle),
+                )
+            })
+            .unwrap();
+        assert_eq!(hidden, (false, true), "the trunk hides its middle only");
+        let again = stage_now(&mut world);
+        let middle_seen = world
+            .run_system_once(move |around: Surroundings| {
+                around.in_view(then_eye, around.ground(again.spot) + lift)
+            })
+            .unwrap();
+        assert!(middle_seen, "staged where its middle shows at its spot");
+    }
+
+    #[test]
+    fn a_swimmer_is_asked_for_on_water_and_flies_in_never_put_on_land() {
+        use bevy::ecs::system::RunSystemOnce;
+        let bestiary = Bestiary::read(&Default::default());
+        let more = serde_json::json!({ "meetings": [
+            { "kind": "Mallard", "behaviour": "grazing", "at": 4, "ahead": 18, "bearing": 20, "group": 3 },
+        ]});
+        let read = read(more.as_object().unwrap(), &bestiary).unwrap();
+        let mallard = bestiary.get(read[0].1);
+        // It comes as fast as it flies, a duck's paddle far too slow to come in unseen.
+        let mps = pace_mps(mallard, Behaviour::Grazing);
+        assert!(mps > 5.0 * mallard.walk_mps, "{mps}");
+        // A smooth planet has no water: there is nowhere to meet it.
+        let mut world = World::new();
+        let planet = Planet::smooth(terra_core::PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        world.insert_resource(Start::choose(&planet, true));
+        let feet = planet.ground_at(Vec3::Y * 2000.0);
+        world.insert_resource(planet);
+        world.init_resource::<Trunks>();
+        world.init_resource::<Obstacles>();
+        world.init_resource::<Warmth>();
+        world.init_resource::<Perches>();
+        world.init_resource::<Thickets>();
+        world.init_resource::<Clock>();
+        let meeting = read[0].0.clone();
+        let species = read[0].1;
+        let why = world
+            .run_system_once(move |around: Surroundings| {
+                let bestiary = Bestiary::read(&Default::default());
+                stage(
+                    &around,
+                    &meeting,
+                    bestiary.get(species),
+                    (feet, Vec3::X),
+                    4.0,
+                    4.3,
+                )
+                .unwrap_err()
+            })
+            .unwrap();
+        let every = format!("of its spots {} off its ground", nudges().len());
+        assert!(why.starts_with(&every), "{why}");
     }
 }

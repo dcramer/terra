@@ -56,7 +56,7 @@ const OPEN_M: f32 = 14.0;
 const SHORE_M: f32 = 4.0;
 const SHALLOWS_M: f32 = 0.35;
 /// Water deep enough to swim on.
-const SWIMMING_M: f32 = 0.4;
+pub(super) const SWIMMING_M: f32 = 0.4;
 /// Ground trodden at least this much is a settlement's (`Growing::trodden`).
 const TRODDEN: f32 = 0.4;
 /// A player on the move meets something about this often, seconds: a group put out ahead
