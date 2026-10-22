@@ -696,9 +696,11 @@ pub fn burst(
             cubes.z > cubes.x || (cubes.z == cubes.x && beside(IVec3::Z) > beside(IVec3::X));
         // Timber's grain may stand up, a post's; masonry's beds stay level.
         let up = breaks(cube.kind) == Breaks::Lengths && cubes.y > cubes.x.max(cubes.z);
+        // Its middle in the base's space, from its size there, before it is turned: its size
+        // along its own axes would put a block running along z or up off its cubes.
+        let middle = foot + size * 0.5;
         let (turn, size, low_end, high_end) = grain(up, along_z, size, low, high);
         let sawn = [low_end, high_end].map(|end| !fallen.contains(&end.to_array()));
-        let middle = foot + size * 0.5;
         let away = (middle - impact).with_y(0.0).normalize_or_zero();
         let axis = Vec3::new(r(1) - 0.5, 0.2 * r(2), r(3) - 0.5).normalize_or(Vec3::X);
         out.push(Fragment {

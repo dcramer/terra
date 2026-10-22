@@ -86,8 +86,14 @@ fn a_tower_whose_foot_gave_way_evenly_crumbles_where_it_stood_onto_its_heap() {
         "{near} of {} near its foot",
         parts.len()
     );
+    // Gone over, its top would land its height out past its side; crumbled, nothing gets
+    // that far (a piece bouncing off the heap may still go well past it).
+    let tall = 30.0 * CELL_M;
     let farthest = parts.iter().map(out).fold(0.0f32, f32::max);
-    assert!(farthest < 12.0, "a piece went {farthest} m out");
+    assert!(
+        farthest < tall,
+        "a piece went {farthest} m out, the tower {tall} m tall"
+    );
     // And onto its own heap: what came last rests well over the ground.
     assert!(highest > 1.0, "the highest piece rests {highest} m up");
     // Its shell peeled out every way, not one.
@@ -207,8 +213,10 @@ fn tipping_blocks_part_in_the_air_and_tumble_as_they_were_turning() {
             assert!(parts[a].spin.dot(Vec3::X).abs() > 0.05, "{}", parts[a].spin);
         }
     }
+    // One body keeps it to a float's grain (micrometres); parted, the joint between them
+    // opens or closes by more than a tenth of a cube, a gap the eye sees.
     assert!(
-        changed > 0.1,
+        changed > 0.1 * CELL_M,
         "the top blocks stayed {changed} m from where they were apart"
     );
 }

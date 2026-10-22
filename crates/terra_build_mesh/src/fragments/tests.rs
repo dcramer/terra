@@ -481,3 +481,61 @@ fn a_timber_wall_falls_as_lengths_along_its_grain_sawn_only_where_its_logs_end()
     let snapped = surfaces(&kit, Shape::Whole, 4.0 * CELL_M, [false; 2]);
     assert!(!snapped.0.contains_key(&Material::LogEnd));
 }
+
+#[test]
+fn a_whole_block_starts_over_the_cubes_it_was_whichever_way_it_is_turned() {
+    // A stone wall along x, one along z, each big enough to fall in blocks of several cubes
+    // (`chunks_of`), and timber posts standing up: each block turned
+    // its own way (`grain`), all of them starting where their cubes stood.
+    let box_of = |high: IVec3| -> Vec<(IVec3, Cube)> {
+        (0..=high.y)
+            .flat_map(|y| {
+                (0..=high.x).flat_map(move |x| (0..=high.z).map(move |z| IVec3::new(x, y, z)))
+            })
+            .map(|at| (at, cube(CubeShape::Whole)))
+            .collect()
+    };
+    let lengths = |_: Kind| Breaks::Lengths;
+    // What fell, its far corner, how it breaks.
+    type Case<'a> = (&'a str, IVec3, &'a dyn Fn(Kind) -> Breaks);
+    let cases: [Case; 3] = [
+        ("a wall along x", IVec3::new(29, 15, 2), &chunks),
+        ("a wall along z", IVec3::new(2, 15, 29), &chunks),
+        ("timber posts", IVec3::new(1, 9, 0), &lengths),
+    ];
+    for (name, high, breaks) in cases {
+        let fell = box_of(high);
+        let made = burst(&fell, &|_| false, breaks, 1.0, 5000);
+        // Each block's box in the base's space, from its turned size.
+        let boxes: Vec<(Vec3, Vec3)> = made
+            .iter()
+            .filter(|f| f.shape == Shape::Whole)
+            .map(|f| {
+                let half = (f.turn * f.size).abs() * 0.5;
+                (f.at - half, f.at + half)
+            })
+            .collect();
+        let most = (high + IVec3::ONE).as_vec3() * CELL_M;
+        let eps = 1e-4;
+        for (low, top) in &boxes {
+            assert!(
+                low.cmpge(Vec3::splat(-eps)).all() && top.cmple(most + eps).all(),
+                "{name}: a block from {low} to {top} is outside the cubes, 0 to {most}"
+            );
+        }
+        // Side by side as their cubes were: no two in each other.
+        for (i, a) in boxes.iter().enumerate() {
+            for b in &boxes[i + 1..] {
+                let inside = (a.1.min(b.1) - a.0.max(b.0)).min_element();
+                assert!(inside < eps, "{name}: two blocks overlap by {inside} m");
+            }
+        }
+        // And they fill the cubes, each a hair smaller ([`SHRINK`]).
+        let volume: f32 = boxes.iter().map(|(l, t)| (*t - *l).element_product()).sum();
+        let whole = most.element_product() * SHRINK * SHRINK * SHRINK;
+        assert!(
+            (volume - whole).abs() < whole * 0.01,
+            "{name}: blocks of {volume} m³ for cubes of {whole}"
+        );
+    }
+}
