@@ -26,7 +26,7 @@
 (
     pattern: Masonry,
     toughness: (health: 300, breaks: Bits),
-    burns: Some((catches: 4.0, fuel_s: 15.0, heat: 0.6)),
+    burns: Some((catches: 2.0, fuel_s: 15.0, heat: 0.6)),
     framing: Some((
         wide: 0.18,
         proud: 0.03,

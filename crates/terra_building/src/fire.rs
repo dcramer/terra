@@ -21,6 +21,8 @@ use std::collections::BTreeMap;
 use std::time::Instant;
 use terra_bases::Site;
 use terra_build::fire::{Burns, Fire, TICK_S};
+
+mod shown;
 use terra_build::ops::Op;
 use terra_build::{CELL_M, Kind};
 use terra_survival::hazards::{BreathesFire, Frightful};
@@ -37,6 +39,11 @@ pub struct SiteFire {
     health: BTreeMap<Kind, u16>,
     /// Game time not yet stepped, in seconds.
     owed_s: f32,
+    /// The blazes as the fire's last tick gathered them, by their place.
+    gathered: BTreeMap<shown::Key, Blaze>,
+    /// The blazes drawn, each eased toward the gathered one every frame ([`shown::ease`]).
+    shown: BTreeMap<shown::Key, Blaze>,
+    /// Those drawn, the largest first, as the drawing takes them.
     blazes: Vec<Blaze>,
     /// Where each breath's stream meets the base this frame, in the world: a flare drawn
     /// there, as a flamethrower's stream splashes where it strikes.
@@ -61,7 +68,7 @@ const SPLASH_WIDE_M: f32 = 4.0;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<SiteFire>()
-        .add_systems(Update, (kinds, breathe, burn, blazes).chain());
+        .add_systems(Update, (kinds, breathe, burn, ease, blazes).chain());
     method(app, "fire.light", light);
     method(app, "fire.heat", heat);
     method(app, "fire.state", state);
@@ -183,6 +190,9 @@ fn burn(
 ) {
     if fire.fire.is_out() {
         fire.owed_s = 0.0;
+        if !fire.gathered.is_empty() {
+            fire.gathered.clear();
+        }
         return;
     }
     fire.owed_s += time.delta_secs();
@@ -251,8 +261,8 @@ fn burn(
     }
     fire.step_ms = step_ms;
     fire.act_ms = act_ms;
-    let blazes = gather(&fire.fire, &building.site.base, &frame);
-    fire.blazes = blazes;
+    let gathered = gather(&fire.fire, &building.site.base, &frame);
+    fire.gathered = gathered;
     // Said every few seconds while it burns, for a script to follow and its cost to be read.
     fire.since_said += 1;
     if fire.since_said >= SAY_EVERY {
@@ -260,7 +270,7 @@ fn burn(
         info!(
             "Fire: {} cubes burning as {} blazes, {} cubes standing; its tick {step_ms:.1} ms and its harm {act_ms:.1} ms on the main thread.",
             fire.fire.burning_count(),
-            fire.blazes.len(),
+            fire.gathered.len(),
             building.site.base.cubes().count()
         );
     }
@@ -278,7 +288,7 @@ const SAY_EVERY: u32 = 8;
 /// fire as a few large flames rather than many small ones, so no more than a few cards lie
 /// over any pixel: at the middle of their open faces, as hot as
 /// they burn on average, as tall as there is fire in it and round it.
-fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze> {
+fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> BTreeMap<shown::Key, Blaze> {
     #[derive(Default)]
     struct Gathered {
         at: Vec3,
@@ -352,7 +362,7 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze
         let wide = BLAZE_CUBES as f32 * CELL_M * (keys.len() as f32).sqrt() * 1.1;
         merged.insert(keys[0], (all, wide));
     }
-    let mut out: Vec<Blaze> = merged
+    merged
         .iter()
         .map(|(&key, (cell, wide))| {
             let round: f32 = (-1..=1)
@@ -370,17 +380,36 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze
             let seed = (key[0].wrapping_mul(73_856_093)
                 ^ key[1].wrapping_mul(19_349_663)
                 ^ key[2].wrapping_mul(83_492_791)) as u32;
-            Blaze {
-                at: frame.transform_point(local),
-                tall: tall.min(7.0),
-                heat,
-                seed: (seed % 10_000) as f32 / 10_000.0,
-                wide: *wide,
-            }
+            // A broad blaze told apart from the cell's own whose key it takes, so one fades
+            // out as the other grows in ([`shown`]).
+            let broad = i32::from(*wide > 0.0);
+            (
+                [key[0], key[1], key[2], broad],
+                Blaze {
+                    at: frame.transform_point(local),
+                    tall: tall.min(7.0),
+                    heat,
+                    seed: (seed % 10_000) as f32 / 10_000.0,
+                    wide: *wide,
+                },
+            )
         })
-        .collect();
-    out.sort_by(|a, b| (b.tall * b.heat).total_cmp(&(a.tall * a.heat)));
-    out
+        .collect()
+}
+
+/// The blazes drawn eased on toward the fire's by the frame's time ([`shown::ease`]).
+fn ease(time: Res<Time>, mut fire: ResMut<SiteFire>) {
+    if fire.gathered.is_empty() && fire.shown.is_empty() && fire.blazes.is_empty() {
+        return;
+    }
+    let SiteFire {
+        gathered,
+        shown,
+        blazes,
+        ..
+    } = &mut *fire;
+    shown::ease(shown, gathered, time.delta_secs());
+    *blazes = shown::largest_first(shown);
 }
 
 /// The blazes given to the drawing.

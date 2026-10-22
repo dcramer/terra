@@ -49,7 +49,7 @@
 (
     pattern: Logs,
     toughness: (health: 400, breaks: Lengths),
-    burns: Some((catches: 3.0, fuel_s: 20.0, heat: 1.0)),
+    burns: Some((catches: 1.5, fuel_s: 20.0, heat: 1.0)),
     damage: {
         Log: Grain(splits: 5.0, chunks: 0.08),
         Hewn: Grain(splits: 3.0, chunks: 0.07),
