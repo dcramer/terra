@@ -1,0 +1,16 @@
+{
+  "form": "blades",
+  "leaves": 76,
+  "length": [0.72, 0.98],
+  "spread": [0.0, 0.5],
+  "shoots": 0,
+  "shoot": { "from": [0, 0], "length": [0, 0], "bend": [0.05, 0.8] },
+  "twig": [0.3, 0.25, 0.15],
+  "thickness": 0,
+  "tone": 0.28,
+  "young": 0,
+  "old": 0,
+  "underside": 0,
+  "blade": { "foot": [0.66, 0.6, 0.42], "colour": [0.25, 0.37, 0.14], "tip": [0.56, 0.47, 0.29], "width": 0.0056 },
+  "seed": 11
+}

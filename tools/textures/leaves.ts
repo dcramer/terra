@@ -34,8 +34,10 @@ export type Recipe = {
    * `frond`: a fern's frond, its pinnae (`leaves` of them) in pairs either side of one
    * rachis corner to corner across the card, from its foot at the lower left, square to it,
    * longest a third of the way up and shortest at its foot and tip, as male and lady fern's
-   * are. */
-  form: "spray" | "compound" | "litter" | "needles" | "frond";
+   * are; `blades`: a tuft of rush or sedge, `leaves` long tapering blades (`blade`) rising
+   * from one foot at the card's bottom and fanning out, each bending over, drawn rather than
+   * cut from a scan. */
+  form: "spray" | "compound" | "litter" | "needles" | "frond" | "blades";
   /** How many leaves, or for `compound`, leaf stalks; for `needles`, the shoots each side
    * shoot has of its own, at most. */
   leaves: number;
@@ -48,6 +50,10 @@ export type Recipe = {
    * (3: a Scots pine's stand in pairs, so a brush of them is thicker); how much of the main
    * twig from its foot is bare (none by default). */
   needle?: { colour: [number, number, number]; young: [number, number, number]; width: number; every: number; lean?: [number, number]; per?: number; bare?: number };
+  /** For `blades`: a blade's colour at its pale foot, along its green middle and at its
+   * browning tip (sRGB), and its width at the foot as a share of the card. `spread` is how far
+   * a blade leans off upright, radians, least and most; `shoot.bend` how far it bends over. */
+  blade?: { foot: [number, number, number]; colour: [number, number, number]; tip: [number, number, number]; width: number };
   /** For `needles`: how far the side shoots turn off the main twig, in radians, least and
    * most (0.8 to 1.15 by default, a spruce's flat spray): a Scots pine's run forward and up,
    * a tuft. Its `shoot` says where along the main twig they leave it (0.08 to 0.88) and how
@@ -666,6 +672,7 @@ function lived(leaf: Laid, recipe: Recipe, k: number): Laid {
  * the size and halved, for smooth edges. */
 export function compose(scan: Scan | undefined, recipe: Recipe, size: number): Composed {
   if (recipe.form === "needles") return needles(recipe, size);
+  if (recipe.form === "blades") return blades(recipe, size);
   if (!scan) throw new Error(`a ${recipe.form} card needs a scan`);
   const { leaves, label } = scanLeaves(scan.alpha, scan.width, scan.height);
   if (!leaves.length) throw new Error(`${recipe.scan} has no leaves in its opacity`);
@@ -865,6 +872,55 @@ function needles(recipe: Recipe, size: number): Composed {
   draw(true);
   const fitted = fit(canvas, big);
   const mean = laid.reduce((sum, n) => sum + n.length, 0) / Math.max(1, laid.length);
+  return { ...halve(fitted.canvas, size), leaf: (mean * fitted.scale) / big };
+}
+
+/** A tuft of rush or sedge, as `Recipe.form`'s `blades` says: each blade a curve from the
+ * foot, the outer ones leaning further, shorter and bent further over, as a clump of soft
+ * rush or tussock sedge stands; drawn in three lengths of colour, foot to tip, the blades
+ * behind darker, so the tuft has depth. */
+function blades(recipe: Recipe, size: number): Composed {
+  const blade = recipe.blade;
+  if (!blade) throw new Error("a blades card needs its `blade`");
+  const big = size * 2;
+  const room = Math.round(big * 0.2);
+  const canvas = new Canvas(big + 2 * room);
+  const roll = dice(recipe.seed);
+  const [least, most] = recipe.spread ?? [0.0, 0.7];
+  const [bendLeast, bendMost] = recipe.shoot?.bend ?? [0.1, 0.6];
+  type Blade = { points: [number, number][]; width: number; shade: number; length: number };
+  const laid: Blade[] = [];
+  for (let k = 0; k < recipe.leaves; k++) {
+    const side = roll.sign();
+    const out = roll.range(least, most);
+    const outer = out / Math.max(most, 1e-3);
+    const length = big * roll.range(recipe.length[0], recipe.length[1]) * (1 - 0.3 * outer);
+    const foot: [number, number] = [room + big * (0.5 + roll.range(-0.025, 0.025)), room + big * 0.985];
+    const bend = side * roll.range(bendLeast, bendMost) * (0.5 + outer);
+    const points = curve(foot, -Math.PI / 2 + side * out, length, bend, 16);
+    laid.push({ points, width: blade.width * big * roll.range(0.75, 1.2), shade: 1 + roll.range(-recipe.tone, recipe.tone * 0.5), length });
+  }
+  // Those behind first, darker; the front half over them.
+  laid.sort((a, b) => a.shade - b.shade);
+  const mix = (a: number[], b: number[], t: number) => a.map((c, i) => c + (b[i] - c) * t) as [number, number, number];
+  laid.forEach((b, i) => {
+    const behind = i < laid.length / 2 ? 0.7 : 1;
+    const n = b.points.length - 1;
+    // Foot to a fifth up, the middle, the last fifth, each its own colour, overlapping a step.
+    const pieces: [number, number, [number, number, number]][] = [
+      [0, Math.round(n * 0.2) + 1, mix(blade.foot, blade.colour, 0.3)],
+      [Math.round(n * 0.2), Math.round(n * 0.8) + 1, blade.colour],
+      [Math.round(n * 0.8), n, mix(blade.colour, blade.tip, 0.7)],
+    ];
+    for (const [from, to, colour] of pieces) {
+      const w0 = b.width * (1 - (0.85 * from) / n);
+      const w1 = b.width * Math.max(0.08, 1 - (0.85 * to) / n);
+      const tone = colour.map((c) => c * b.shade * behind) as [number, number, number];
+      drawTwig(canvas, b.points.slice(from, to + 1), [w0, w1], tone, NEEDLE_ROUGH);
+    }
+  });
+  const fitted = fit(canvas, big);
+  const mean = laid.reduce((sum, b) => sum + b.length, 0) / Math.max(1, laid.length);
   return { ...halve(fitted.canvas, size), leaf: (mean * fitted.scale) / big };
 }
 

@@ -583,7 +583,7 @@ async function cards(name: string, entries: string[], size: number, columns: num
     } else if (source.endsWith(".leaves.json")) {
       const recipe: Recipe = JSON.parse(readFileSync(resolve(source), "utf8"));
       // A conifer's needles are drawn, from no scan.
-      const drawn = recipe.form === "needles";
+      const drawn = recipe.form === "needles" || recipe.form === "blades";
       const id = drawn ? undefined : recipe.scan;
       if (id !== undefined && !scans.has(id)) scans.set(id, await leafScan(id));
       const made = compose(id === undefined ? undefined : scans.get(id), recipe, cell);
