@@ -392,6 +392,9 @@ fn a_billow_comes_up_as_one_cloud_never_as_scattered_discs() {
         .collect();
     billows.extend(dust::surge(400, 6.0, 1.2).into_iter().map(|(_, _, b)| b));
     billows.extend(dust::landing(3.0, Vec3::X, up));
+    // And as they come up, toned to a haze (D305, castle fall round 21).
+    let toned: Vec<dust::Billow> = billows.iter().map(|b| b.toned(&dust::HAZE, up)).collect();
+    billows.extend(toned);
     assert!(billows.iter().any(|b| b.tall > 0.0), "no plume to try");
     for (n, billow) in billows.iter().enumerate() {
         let sprites = dust::layout(billow, up, 0x51ed ^ n as u32);
@@ -432,5 +435,58 @@ fn a_billow_comes_up_as_one_cloud_never_as_scattered_discs() {
             assert!(age > 0.5 || apart == 0, "{what}: {apart} apart");
             assert_eq!(alone, 0, "{what}: {alone} alone");
         }
+    }
+}
+
+#[test]
+fn a_falls_dust_is_a_light_haze_low_round_its_foot() {
+    // Full, a keep's dust climbed into a tall cloud over the fire and the castle; toned
+    // (D305, castle fall round 21), it is a thin haze low round the fall's foot that clears
+    // in seconds. Each sprite moved as `dust::puff` moves it, a frame at a time.
+    let up = Vec3::Y;
+    let top = |billow: &dust::Billow, seed: u32| {
+        let mut top = 0.0f32;
+        for s in dust::layout(billow, up, seed) {
+            let (mut at, mut age, step) = (Vec3::ZERO, 0.0f32, 1.0 / 30.0);
+            while age < billow.life {
+                let grew = dust::grown(age + step, billow.life) - dust::grown(age, billow.life);
+                age += step;
+                let through = (age / billow.life).min(1.0);
+                at += s.lay * grew
+                    + s.drift * step * (1.0 - through)
+                    + up * (grew * s.wide * 0.3 + s.lift * through * step);
+                let wide = dust::sprite_wide(s.wide, dust::grown(age, billow.life));
+                top = top.max(at.y + 0.5 * wide);
+            }
+        }
+        top
+    };
+    let keep = dust::surge(4888, 9.0, 1.7);
+    let highest = |toned: bool| {
+        keep.iter()
+            .enumerate()
+            .map(|(n, (_, from, b))| {
+                let seed = n as u32;
+                from.y
+                    + if toned {
+                        top(&b.toned(&dust::HAZE, up), seed)
+                    } else {
+                        top(b, seed)
+                    }
+            })
+            .fold(0.0f32, f32::max)
+    };
+    let (full, toned) = (highest(false), highest(true));
+    assert!(
+        full > 15.0,
+        "the full rule's keep dust tops out at {full:.1} m: nothing to tone"
+    );
+    assert!(
+        toned < 0.2 * full && toned < 9.0,
+        "toned, the keep's dust still climbs {toned:.1} m (full {full:.1} m)"
+    );
+    for (_, _, b) in &keep {
+        let t = b.toned(&dust::HAZE, up);
+        assert!(t.alpha <= 0.4 && t.life <= 0.5 * b.life && t.wide <= 0.5 * b.wide);
     }
 }

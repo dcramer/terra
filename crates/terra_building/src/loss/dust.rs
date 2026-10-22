@@ -53,6 +53,7 @@ pub(super) fn landing(size: f32, along: Vec3, up: Vec3) -> Option<Billow> {
         stir: 1.0 + 0.3 * size,
         spread: size * 0.8,
         tall: (size - 1.5).max(0.0) * 2.0,
+        lifts: 1.0,
     })
 }
 
@@ -138,6 +139,7 @@ pub(super) fn surge(cubes: usize, wide: f32, drop_s: f32) -> Vec<(f32, Vec3, Bil
                     stir: 0.8,
                     spread: 1.5 * big,
                     tall: 0.0,
+                    lifts: 1.0,
                 },
             ));
         }
@@ -163,6 +165,7 @@ pub(super) fn surge(cubes: usize, wide: f32, drop_s: f32) -> Vec<(f32, Vec3, Bil
                 stir: 0.25,
                 spread: 0.6,
                 tall: COLUMN_TALL_M * (0.7 + 0.5 * big),
+                lifts: 1.0,
             },
         ));
     }
@@ -469,6 +472,7 @@ pub(super) fn dust_at(
         stir: 1.0,
         spread: 0.0,
         tall: 0.0,
+        lifts: 1.0,
     };
     billow_at(commands, shards, assets, most, at, colour, up, billow);
 }
@@ -487,6 +491,48 @@ pub(super) struct Billow {
     /// How far up its sprites are stacked, in metres, those higher rising faster, so it
     /// goes up as a plume taller than wide: 0 for a billow.
     pub(super) tall: f32,
+    /// How much its big sprites lift as they age, a share of the rule's.
+    pub(super) lifts: f32,
+}
+
+/// How far every billow is toned down from the rule's full cloud as it comes up, a share of
+/// each: thickness, width (and how far its sprites spread and stir), life, how tall a plume
+/// is stacked and how fast it rises. Full (all 1) a fall's dust was a tall cloud over the
+/// fire and the castle the developers did not want until dust is done properly ("dust makes
+/// it worse", castle film round 20): toned, it is a light haze low round a fall's foot.
+pub(super) struct Haze {
+    pub(super) thick: f32,
+    pub(super) wide: f32,
+    pub(super) life: f32,
+    pub(super) tall: f32,
+    pub(super) rise: f32,
+}
+
+/// The tone every billow is raised at ([`Billow::toned`]).
+pub(super) const HAZE: Haze = Haze {
+    thick: 0.35,
+    wide: 0.4,
+    life: 0.4,
+    tall: 0.1,
+    rise: 0.25,
+};
+
+impl Billow {
+    /// The billow toned by `haze`, `up` the way up where it is: thinner, smaller, shorter
+    /// lived, its rise slower and its plume shorter, rolling out along the ground as before.
+    pub(super) fn toned(&self, haze: &Haze, up: Vec3) -> Billow {
+        let rising = up * self.drift.dot(up);
+        Billow {
+            alpha: self.alpha * haze.thick,
+            wide: self.wide * haze.wide,
+            life: self.life * haze.life,
+            drift: self.drift - rising + rising * haze.rise,
+            stir: self.stir * haze.wide,
+            spread: self.spread * haze.wide,
+            tall: self.tall * haze.tall,
+            lifts: self.lifts * haze.rise,
+        }
+    }
 }
 
 /// A rising column's sprites' width and how tall it is stacked, in metres.
@@ -559,6 +605,7 @@ pub(super) fn billow_at(
         return false;
     }
     shards.puffs += 1;
+    let billow = billow.toned(&HAZE, up);
     let quad = shards
         .puff
         .get_or_insert_with(|| meshes.add(cutout(&dust_images().0)))
@@ -632,7 +679,7 @@ pub(super) struct Sprite {
     pub(super) wide: f32,
     roll: f32,
     spin: f32,
-    lift: f32,
+    pub(super) lift: f32,
 }
 
 /// How many seconds of its stir a sprite goes out from its billow's middle as it grows.
@@ -690,7 +737,11 @@ pub(super) fn layout(billow: &Billow, up: Vec3, seed: u32) -> Vec<Sprite> {
                 wide: billow.wide * size,
                 roll: r(5) * core::f32::consts::TAU,
                 spin: (r(9) - 0.5) * 0.5,
-                lift: if big { 0.25 + 0.5 * r(10) } else { 0.0 },
+                lift: if big {
+                    (0.25 + 0.5 * r(10)) * billow.lifts
+                } else {
+                    0.0
+                },
             }
         })
         .collect()
