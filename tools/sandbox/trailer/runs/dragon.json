@@ -1,8 +1,7 @@
 {
-  "about": "The burg on the valley floor in the morning, the forest round the meadow and the range's wall behind; a dragon comes in over the trees, strafes its south wall with fire, hovers off the south-east tower to breathe into its timber storey, and its towers and keep come down, the keep after the dragon breathes down into it, in twenty-five seconds",
+  "about": "The burg on the valley floor on a clear late-summer morning (the world's own first day, no date: on 09-22 at 06:06 the valley stood under cloud 0.93 and read grey and autumnal, castle fall round 20), the forest round the meadow and the range's wall behind; a dragon comes in over the trees, strafes its south wall with fire, hovers off the south-east tower to breathe into its timber storey, and its towers and keep come down, the keep after the dragon breathes down into it, in twenty-five seconds",
   "place": "valley",
-  "hour": 6.1,
-  "date": "09-22",
+  "hour": 7.0,
   "seconds": 25,
   "scene": "dragon",
   "player": {
