@@ -259,6 +259,54 @@ fn a_surges_dust_is_buff_tan_and_thick_at_its_core_not_a_grey_veil() {
     assert!(shade > 0.8, "its core {shade} as light as its colour");
 }
 
+/// A dust sprite's cutout holds every texel of it that shows, and draws much less of the
+/// square than the square did: the pixels a lit sprite pays for whether they show or not.
+#[test]
+fn a_dust_sprites_cutout_holds_all_it_shows_in_little_more_than_half_the_square() {
+    use bevy::mesh::{Indices, VertexAttributeValues};
+    let (image, _) = dust::dust_images();
+    let mesh = dust::cutout(&image);
+    let Some(VertexAttributeValues::Float32x2(uvs)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else {
+        panic!("uvs");
+    };
+    let Some(Indices::U32(indices)) = mesh.indices() else {
+        panic!("indices");
+    };
+    let triangles: Vec<[Vec2; 3]> = indices
+        .chunks(3)
+        .map(|t| [t[0], t[1], t[2]].map(|i| Vec2::from(uvs[i as usize])))
+        .collect();
+    // Twice the signed area, positive on the inside of each of the fan's triangles.
+    let cross = |a: Vec2, b: Vec2, p: Vec2| (b - a).perp_dot(p - a);
+    let inside = |p: Vec2| {
+        triangles.iter().any(|&[a, b, c]| {
+            let (d0, d1, d2) = (cross(a, b, p), cross(b, c, p), cross(c, a, p));
+            (d0 >= -1e-6 && d1 >= -1e-6 && d2 >= -1e-6) || (d0 <= 1e-6 && d1 <= 1e-6 && d2 <= 1e-6)
+        })
+    };
+    let side = image.width() as usize;
+    let data = image.data.as_ref().expect("made on the CPU");
+    let (mut shown, mut covered, mut missed) = (0, 0, 0);
+    for y in 0..side {
+        for x in 0..side {
+            let p = Vec2::new(
+                (x as f32 + 0.5) / side as f32,
+                (y as f32 + 0.5) / side as f32,
+            );
+            let holds = inside(p);
+            covered += usize::from(holds);
+            if data[(y * side + x) * 4 + 3] > 0 {
+                shown += 1;
+                missed += usize::from(!holds);
+            }
+        }
+    }
+    assert!(shown > side * side / 4, "the sprite shows {shown} texels");
+    assert_eq!(missed, 0, "texels that show outside the cutout");
+    let share = covered as f32 / (side * side) as f32;
+    assert!(share < 0.6, "the cutout covers {share} of the square");
+}
+
 #[test]
 fn what_fire_burns_through_raises_no_dust_where_it_stood_and_what_breaks_does() {
     // A burning keep's timber, burnt through cube by cube, threw a puff of dust from each,

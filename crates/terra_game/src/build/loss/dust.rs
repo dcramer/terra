@@ -357,6 +357,71 @@ pub(super) fn dust_images() -> (Image, Image) {
     )
 }
 
+/// How many corners a dust sprite's cutout has round its rim.
+pub(super) const CUTOUT_CORNERS: usize = 16;
+
+/// A dust sprite's mesh: a fan fitted round what of its image shows (alpha over nothing), not
+/// the square it is drawn in, after Unreal's particle cutouts (bounding geometry fitted to a
+/// sprite's alpha, which cuts translucent overdraw; docs only). Every pixel of a lit sprite
+/// pays the whole of the sun's, its shadows' and the sky's light, shown or not, and a
+/// castle's fall layers some two thousand of them: its transparent pass climbed to 23 ms of
+/// the frame, 4 of them with the dust unlit (castle bench, round 15). The square's corners and
+/// the rim past each lump are about half of it.
+///
+/// Each corner is as far out as the farthest shown texel of the two wedges beside it, over the
+/// cosine of half a wedge, so the fan holds every one of them. 1 m across, as the square was,
+/// facing +z, its uvs the square's.
+pub(super) fn cutout(image: &Image) -> Mesh {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::mesh::{Indices, PrimitiveTopology};
+    let side = image.width() as usize;
+    let data = image.data.as_ref().expect("made on the CPU");
+    let wedge = core::f32::consts::TAU / CUTOUT_CORNERS as f32;
+    let mut farthest = [0.0f32; CUTOUT_CORNERS];
+    for y in 0..side {
+        for x in 0..side {
+            if data[(y * side + x) * 4 + 3] == 0 {
+                continue;
+            }
+            // Each corner of the texel, as the sprite's x right and y up, -1 to 1.
+            for (cx, cy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                let u = (x + cx) as f32 / side as f32 * 2.0 - 1.0;
+                let v = 1.0 - (y + cy) as f32 / side as f32 * 2.0;
+                let a = libm::atan2f(v, u).rem_euclid(core::f32::consts::TAU);
+                let w = ((a / wedge) as usize).min(CUTOUT_CORNERS - 1);
+                farthest[w] = farthest[w].max((u * u + v * v).sqrt());
+            }
+        }
+    }
+    let mut positions = vec![[0.0f32; 3]];
+    let mut uvs = vec![[0.5f32, 0.5]];
+    for i in 0..CUTOUT_CORNERS {
+        let a = i as f32 * wedge;
+        let (sin, cos) = (libm::sinf(a), libm::cosf(a));
+        let r = farthest[i].max(farthest[(i + CUTOUT_CORNERS - 1) % CUTOUT_CORNERS])
+            / libm::cosf(wedge * 0.5);
+        // Within the square: nothing shows past its edge.
+        let r = r.min(1.0 / cos.abs().max(sin.abs()));
+        let (x, y) = (cos * r * 0.5, sin * r * 0.5);
+        positions.push([x, y, 0.0]);
+        uvs.push([x + 0.5, 0.5 - y]);
+    }
+    let indices: Vec<u32> = (0..CUTOUT_CORNERS as u32)
+        .flat_map(|i| [0, 1 + i, 1 + (i + 1) % CUTOUT_CORNERS as u32])
+        .collect();
+    let corners = positions.len();
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0f32, 0.0, 1.0]; corners])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    .with_inserted_indices(Indices::U32(indices))
+    .with_generated_tangents()
+    .expect("a fan has normals and uvs")
+}
+
 /// A puff of dust at a place in the world, of a colour, as big as `amount` says: a few soft
 /// sprites facing the view, which billow out, rise a little and thin away.
 #[allow(clippy::too_many_arguments)]
@@ -448,13 +513,7 @@ pub(super) fn billow_at(
     shards.puffs += 1;
     let quad = shards
         .puff
-        .get_or_insert_with(|| {
-            meshes.add(
-                Mesh::from(Rectangle::new(1.0, 1.0))
-                    .with_generated_tangents()
-                    .expect("a rectangle has normals and uvs"),
-            )
-        })
+        .get_or_insert_with(|| meshes.add(cutout(&dust_images().0)))
         .clone();
     if shards.dust.is_none() || shards.dust_normals.is_none() {
         let (image, normals) = dust_images();
