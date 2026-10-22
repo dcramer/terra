@@ -708,7 +708,7 @@ fn walk(
         let mut next = steer::out_of(
             solids,
             here + direction * speed * dt,
-            about.body.radius,
+            (creature.facing, about.body.radius, about.body.nose_m()),
             speed,
         );
         // Each keeps to its own: walkers out of water deeper than they wade, swimmers in it.

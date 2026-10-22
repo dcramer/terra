@@ -61,15 +61,77 @@ pub fn round(
     (v.normalize_or_zero(), v.length())
 }
 
-/// Where a creature moving to a point stands, pushed out of any round steering left it in.
+/// Where a creature moving to a point stands, pushed out of any round steering left it in:
+/// its middle and its head with it, every point from its middle to its nose `nose_m` before
+/// it along `facing` kept its body's radius off any bark, the whole body moved by what each
+/// needs. Steering plans for the middle alone, so a long body coming at a trunk head on
+/// (a fox's snout, 0.4 m before its middle, touched one in lake film r24) stops short by its
+/// head, as a capsule agent does where a round one would not.
 pub fn out_of(
     (trunks, obstacles): (&Trunks, &Obstacles),
     at: Vec3,
-    radius: f32,
+    (facing, radius, nose_m): (Vec3, f32, f32),
     speed: f32,
 ) -> Vec3 {
     if speed <= 0.0 {
         return at;
     }
-    clear_of(rounds_near(trunks, obstacles, at, radius + 1.0), at, radius)
+    let ahead = (nose_m - radius).max(0.0);
+    let rounds = rounds_near(trunks, obstacles, at, radius + ahead + 1.0);
+    let mut at = clear_of(rounds.clone(), at, radius);
+    let up = at.normalize_or(Vec3::Y);
+    let facing = facing.reject_from(up).normalize_or_zero();
+    if ahead <= 0.0 || facing == Vec3::ZERO {
+        return at;
+    }
+    // The neck, the head and the nose's tip: no more than a radius apart, so no trunk fits
+    // between two of them.
+    let steps = (ahead / radius).ceil().max(1.0) as usize;
+    for step in 1..=steps {
+        let point = at + facing * (ahead + radius) * step as f32 / steps as f32;
+        at += clear_of(rounds.clone(), point, radius) - point;
+    }
+    at
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use terra_world::flora::Trunk;
+
+    #[test]
+    fn a_long_body_stops_short_of_a_trunk_by_its_head_and_a_round_one_by_its_middle() {
+        let ground = Vec3::Y * 1000.0;
+        let foot = ground + Vec3::X * 1.0;
+        let bark = 0.3;
+        let mut trunks = Trunks::default();
+        trunks.add(Trunk {
+            foot,
+            radius_m: bark,
+            height_m: 18.0,
+            solid: false,
+        });
+        let obstacles = Obstacles::default();
+        // A fox's body: 0.15 m round, its snout 0.4 m before its middle, coming at the trunk
+        // head on, a little to one side and slant, from where its middle is clear and its
+        // snout would be in the bark.
+        let (radius, nose) = (0.15, 0.4);
+        for (aside, slant) in [(0.0, 0.0), (0.1, 0.0), (-0.2, 0.3), (0.25, -0.4)] {
+            let facing = (Vec3::X + Vec3::Z * slant).normalize();
+            let at = ground + Vec3::X * (1.0 - bark - radius - 0.05) + Vec3::Z * aside;
+            let to = out_of((&trunks, &obstacles), at, (facing, radius, nose), 1.0);
+            for step in 0..=20 {
+                let point = to + facing * nose * step as f32 / 20.0;
+                let apart = (point - foot).reject_from(Vec3::Y).length();
+                assert!(
+                    apart >= bark + radius - 1e-3,
+                    "{aside} {slant}: {:.2} m along it, {apart:.2} m from the trunk's middle",
+                    nose * step as f32 / 20.0
+                );
+            }
+            // Round, it stands where it was.
+            let round = out_of((&trunks, &obstacles), at, (facing, radius, radius), 1.0);
+            assert!(round.distance(at) < 1e-4, "{aside} {slant}");
+        }
+    }
 }

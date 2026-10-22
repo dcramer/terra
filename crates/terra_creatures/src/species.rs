@@ -156,6 +156,18 @@ pub struct ClipNames {
 pub struct BodyDef {
     pub radius: f32,
     pub weight: f32,
+    /// How far before its middle its nose reaches, metres: its model's furthest point ahead
+    /// at its scale. A long body's head is kept off the trunks as its middle is
+    /// (`creatures::steer::out_of`); none, a round body's, its radius.
+    #[serde(default)]
+    pub nose_m: Option<f32>,
+}
+
+impl BodyDef {
+    /// How far before its middle its nose reaches, metres, at the least its radius.
+    pub fn nose_m(&self) -> f32 {
+        self.nose_m.unwrap_or(self.radius).max(self.radius)
+    }
 }
 
 /// How a kind of creature treats players.
@@ -337,7 +349,7 @@ impl Bestiary {
 
     /// The room it takes up on the ground, and how hard it is to shove.
     pub fn body(&self, species: Species) -> Body {
-        let BodyDef { radius, weight } = self.get(species).body;
+        let BodyDef { radius, weight, .. } = self.get(species).body;
         Body::new(radius, weight)
     }
 }

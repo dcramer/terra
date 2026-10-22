@@ -618,10 +618,16 @@ fn a_fox_running_through_a_wood_goes_round_every_trunk_and_rock() {
         .ground_at(ground + east * 9.0 + north * 1.2);
     world.resource_mut::<Obstacles>().add(rock, 0.6);
     rounds.push((rock, 0.6));
-    for aim in [0.0, 0.4, -0.7] {
+    // Straight at the first trunk, head on, as well as slant.
+    for aim in [0.0, 0.4, -0.7, 0.12] {
         let fox = kind(&mut world, "Red fox", ground);
         let species = world.get::<Creature>(fox).unwrap().species;
         let body = world.resource::<Bestiary>().get(species).body.radius;
+        let nose_m = world.resource::<Bestiary>().get(species).body.nose_m();
+        assert!(
+            nose_m > body * 2.0,
+            "a fox's snout is well before its middle"
+        );
         world.entity_mut(fox).insert(Detail::default());
         {
             let mut creature = world.get_mut::<Creature>(fox).unwrap();
@@ -635,13 +641,18 @@ fn a_fox_running_through_a_wood_goes_round_every_trunk_and_rock() {
                 .advance_by(Duration::from_secs_f32(1.0 / 30.0));
             world.run_system_once(walk).unwrap();
             let at = world.get::<Transform>(fox).unwrap().translation;
+            // Its snout as far before it as its model reaches, kept off the bark as its
+            // middle is: the lake film's fox touched a trunk with it (r24, 10.5 s).
+            let nose = at + world.get::<Creature>(fox).unwrap().facing * nose_m;
             for &(middle, radius) in &rounds {
-                let apart = (at - middle).reject_from(up).length();
-                assert!(
-                    apart >= radius + body * 0.9,
-                    "aimed {aim}: {apart:.2} m from a trunk of {radius} m at {:?}",
-                    at - ground
-                );
+                for (part, point) in [("middle", at), ("nose", nose)] {
+                    let apart = (point - middle).reject_from(up).length();
+                    assert!(
+                        apart >= radius + body * 0.9,
+                        "aimed {aim}: its {part} {apart:.2} m from a trunk of {radius} m at {:?}",
+                        at - ground
+                    );
+                }
             }
         }
         // Well out beyond the wood, at a fox's gallop.

@@ -10,9 +10,11 @@
 //! spawned `burns` keeps a fire at its foot, as a campfire; `staged.rate`
 //! runs a figure's own time slower or faster, its clip and its going, as a blow's hit-stop
 //! freezes both fighters for a few frames; and `staged.bend` turns some of its bones over its
-//! clip (`pose`). Nothing here
+//! clip (`pose`); a fire it set down is moved clear of the feet of a figure at rest by it
+//! (`fireside`). Nothing here
 //! names a model, an item or a clip: all of it is in the calls.
 
+mod fireside;
 mod impact;
 pub mod pose;
 mod quench;
@@ -149,13 +151,19 @@ struct Animates {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, ((dress, stage, animate).chain(), quench::quench))
-        .add_systems(
-            PostUpdate,
-            pose::bend
-                .after(bevy::app::AnimationSystems)
-                .before(bevy::transform::TransformSystems::Propagate),
-        );
+    app.add_systems(
+        Update,
+        (
+            (dress, stage, animate, fireside::keep_clear).chain(),
+            quench::quench,
+        ),
+    )
+    .add_systems(
+        PostUpdate,
+        pose::bend
+            .after(bevy::app::AnimationSystems)
+            .before(bevy::transform::TransformSystems::Propagate),
+    );
     impact::plugin(app);
     method(app, "staged.spawn", spawn);
     method(app, "staged.play", play);

@@ -6,16 +6,19 @@
 //! to, read from the world as it is, so a new land has its animals where its climate and
 //! cover put them, with no list for any map (D127, D136).
 //!
-//! The land is divided into cells; a cell near a player is looked at once, and what lives in
-//! it is rolled from its own seed, so the same walk meets the same animals. A cell nobody is
+//! The land is divided into cells; a cell near a player is looked at once for each kind, as
+//! it comes within as far as that kind is put out (`reach`), and what lives in it is rolled
+//! from its own seed, so the same walk meets the same animals. A cell nobody is
 //! near any more lets its animals go. Far from every player nothing here runs at all (D145).
 
 mod asked;
 mod groups;
 mod meet;
+mod reach;
 mod unseen;
 pub use asked::Asked;
 use meet::{Band, Way, eye_at, meet, shows_from};
+use reach::nearest_first;
 
 use crate::creatures::{self, Kinds};
 use crate::species::{Bestiary, Haunt, Lives, Niche, Species};
@@ -177,6 +180,9 @@ fn something_grows(
 #[derive(Resource, Default)]
 struct Cells {
     looked: HashMap<IVec3, Vec<Entity>>,
+    /// How near the nearest player was to each cell's middle when it was last looked into,
+    /// metres (`reach::due`); below nothing for a cell of air or rock.
+    within_m: HashMap<IVec3, f32>,
     since_s: f32,
     /// Each player's place when last looked and how long until they next meet something.
     ways: HashMap<Entity, Way>,
@@ -619,6 +625,7 @@ fn populate(
         for animal in cells.looked.drain().flat_map(|(_, put)| put) {
             creatures::leave(&mut commands, animal);
         }
+        cells.within_m.clear();
         info!("Wildlife: {} ridges to sit on.", around.perches.0.len());
     }
     let Some(kinds) = kinds.filter(|kinds| kinds.ready()) else {
@@ -636,18 +643,6 @@ fn populate(
         .collect();
     let viewers: Vec<Vec3> = moving.iter().map(|(_, at, _)| *at).collect();
     let near = |middle: Vec3, within: f32| viewers.iter().any(|v| v.distance(middle) < within);
-    // Let go of the cells nobody is near, and of their animals, alive or dead.
-    let gone: Vec<IVec3> = cells
-        .looked
-        .keys()
-        .filter(|&&cell| !near(middle_of(cell), RELEASE_M))
-        .copied()
-        .collect();
-    for cell in gone {
-        for animal in cells.looked.remove(&cell).unwrap_or_default() {
-            creatures::leave(&mut commands, animal);
-        }
-    }
     let wild: Vec<_> = bestiary
         .all()
         .filter_map(
@@ -662,71 +657,78 @@ fn populate(
     if wild.is_empty() {
         return;
     }
+    let reaches: Vec<f32> = wild
+        .iter()
+        .map(|w| reach::reach_m(bestiary.get(w.0).seen_m()))
+        .collect();
+    let furthest = reaches.iter().copied().fold(POPULATE_M, f32::max);
+    // Let go of the cells nobody is near, and of their animals, alive or dead.
+    let gone: Vec<IVec3> = cells
+        .within_m
+        .keys()
+        .filter(|&&cell| !near(middle_of(cell), furthest + RELEASE_M - POPULATE_M))
+        .copied()
+        .collect();
+    for cell in gone {
+        cells.within_m.remove(&cell);
+        for animal in cells.looked.remove(&cell).unwrap_or_default() {
+            creatures::leave(&mut commands, animal);
+        }
+    }
     let mut about: usize = cells.looked.values().map(Vec::len).sum();
-    let reach = (POPULATE_M / CELL_M).ceil() as i32;
+    let reach = (furthest / CELL_M).ceil() as i32;
     let seed = around.planet.seed().derive("wildlife");
     let mut fresh = 0;
     for viewer in &viewers {
         let home = cell_of(*viewer);
         for &offset in nearest_first(reach) {
             let cell = home + offset;
-            if cells.looked.contains_key(&cell) || !near(middle_of(cell), POPULATE_M) {
+            let now_m = viewers
+                .iter()
+                .map(|v| v.distance(middle_of(cell)))
+                .fold(f32::INFINITY, f32::min);
+            let before_m = cells.within_m.get(&cell).copied().unwrap_or(f32::INFINITY);
+            if !reaches.iter().any(|&r| reach::due(r, now_m, before_m)) {
                 continue;
             }
-            // So many new cells a look at most, so a player arriving does not wait
-            // on all of them at once.
+            // So many new cells of ground a look at most, so a player arriving does not
+            // wait on all of them at once.
             if fresh >= FRESH_A_LOOK {
                 continue;
             }
-            fresh += 1;
             // Each patch of ground belongs to the cell its ground is in; a cell of
             // air or rock is remembered as empty, so it is not asked again.
             let ground = around.ground(middle_of(cell));
             if cell_of(ground) != cell {
-                cells.looked.insert(cell, Vec::new());
+                cells.looked.entry(cell).or_default();
+                cells.within_m.insert(cell, -1.0);
                 continue;
             }
-            let mut put = Vec::new();
-            let mut dice = seed.index(cell_key(cell)).rng();
+            fresh += 1;
+            cells.within_m.insert(cell, now_m);
+            let mut put = cells.looked.remove(&cell).unwrap_or_default();
             let up = ground.normalize();
             let (east, north) = (
                 up.any_orthonormal_vector(),
                 up.any_orthonormal_vector().cross(up),
             );
-            for &(species, per_ha, (fewest, most), niche) in &wild {
-                // A group lives here as often as its kind's numbers make groups on
-                // ground of its niche, wherever in the cell it fits.
-                let groups =
-                    per_ha * (CELL_M * CELL_M / 10_000.0) * 2.0 / (fewest + most).max(1) as f32;
-                if dice.unit() >= groups || about >= MOST {
+            for (&(species, per_ha, (fewest, most), niche), &reach) in wild.iter().zip(&reaches) {
+                if !reach::due(reach, now_m, before_m) {
                     continue;
                 }
-                let at = ground
-                    + east * dice.range(-0.5, 0.5) * CELL_M
-                    + north * dice.range(-0.5, 0.5) * CELL_M;
-                let at = around.ground(at);
-                if !around.fits_unseen(niche, at, bestiary.get(species).seen_m()) {
+                if about >= MOST {
                     continue;
                 }
-                let count = fewest + (dice.unit() * (most - fewest + 1) as f32) as u32;
-                let group = put_group(
+                let group = put_kind(
                     &mut commands,
                     (&kinds, &bestiary),
                     &around,
-                    species,
-                    (at, east * 2.5),
-                    count.min(most),
-                    &mut dice,
+                    (cell, ground, east, north),
+                    (species, per_ha, (fewest, most), niche),
+                    seed,
                 );
                 about += group.len();
                 put.extend(group);
-                debug!(
-                    "Wildlife: {} {} at {:.0} m east and {:.0} m south of the start.",
-                    count,
-                    bestiary.name(species),
-                    around.start.local(at).x,
-                    around.start.local(at).z
-                );
             }
             cells.looked.insert(cell, put);
         }
@@ -778,27 +780,54 @@ fn populate(
     }
 }
 
+/// What of a kind lives in a cell (its ground, its east and north), rolled from the cell's
+/// own seed for the kind, put out where it fits unseen.
+fn put_kind(
+    commands: &mut Commands,
+    (kinds, bestiary): (&Kinds, &Bestiary),
+    around: &Surroundings,
+    (cell, ground, east, north): (IVec3, Vec3, Vec3, Vec3),
+    (species, per_ha, (fewest, most), niche): Wild,
+    seed: Seed,
+) -> Vec<Entity> {
+    let mut dice = seed
+        .derive(bestiary.name(species))
+        .index(cell_key(cell))
+        .rng();
+    // A group lives here as often as its kind's numbers make groups on
+    // ground of its niche, wherever in the cell it fits.
+    let groups = per_ha * (CELL_M * CELL_M / 10_000.0) * 2.0 / (fewest + most).max(1) as f32;
+    if dice.unit() >= groups {
+        return Vec::new();
+    }
+    let at =
+        ground + east * dice.range(-0.5, 0.5) * CELL_M + north * dice.range(-0.5, 0.5) * CELL_M;
+    let at = around.ground(at);
+    if !around.fits_unseen(niche, at, bestiary.get(species).seen_m()) {
+        return Vec::new();
+    }
+    let count = fewest + (dice.unit() * (most - fewest + 1) as f32) as u32;
+    let group = put_group(
+        commands,
+        (kinds, bestiary),
+        around,
+        species,
+        (at, east * 2.5),
+        count.min(most),
+        &mut dice,
+    );
+    debug!(
+        "Wildlife: {} {} at {:.0} m east and {:.0} m south of the start.",
+        count,
+        bestiary.name(species),
+        around.start.local(at).x,
+        around.start.local(at).z
+    );
+    group
+}
+
 /// A kind living about the land: its species, numbers to a hectare, group and niche.
 type Wild<'a> = (Species, f32, (u32, u32), &'a Niche);
-
-/// The cells round a cell within so many of it, nearest first, so the nearest are put out
-/// first when a look leaves some for the next.
-fn nearest_first(reach: i32) -> &'static [IVec3] {
-    use std::sync::OnceLock;
-    static OFFSETS: OnceLock<(i32, Vec<IVec3>)> = OnceLock::new();
-    let (made_for, offsets) = OFFSETS.get_or_init(|| {
-        let mut offsets: Vec<IVec3> = (-reach..=reach)
-            .flat_map(|x| {
-                (-reach..=reach)
-                    .flat_map(move |y| (-reach..=reach).map(move |z| IVec3::new(x, y, z)))
-            })
-            .collect();
-        offsets.sort_by_key(|offset| offset.length_squared());
-        (reach, offsets)
-    });
-    debug_assert_eq!(*made_for, reach);
-    offsets
-}
 
 fn cell_of(point: Vec3) -> IVec3 {
     (point / CELL_M).floor().as_ivec3()
