@@ -169,6 +169,54 @@ fn an_orbit_keeps_its_distance() {
     assert!(orbit.framing(6.0, &places).eye.x > centre.x);
 }
 
+/// An establishing pull-out from two keys eased in (the settlement film, r25): from rest
+/// angled down onto the subject, it backs away and rises a little while its look runs out
+/// to the horizon, still moving at the end. Every frame the subject is farther, the view
+/// flatter, the eye no higher than the last key, and the speed never jumps: no shake.
+#[test]
+fn a_pull_out_eased_in_backs_away_and_flattens_smoothly() {
+    let (start, ground) = flat_places();
+    let places = Places {
+        start: &start,
+        ground: &ground,
+        player: None,
+    };
+    let pull = shot(
+        r#"{"seconds": 20, "ease": "in", "keys": [
+            {"t": 0, "at": [0, 18, 22], "look": [0, 0, 0]},
+            {"t": 20, "at": [-60, 40, 140], "look": [70, 12, -260]}]}"#,
+    );
+    let subject = start.translation;
+    let pitch = |f: Framing| {
+        let ahead = f.target - f.eye;
+        libm::atan2f(ahead.y, Vec2::new(ahead.x, ahead.z).length()).to_degrees()
+    };
+    let step = 1.0 / FILM_FPS;
+    let (mut far, mut flat, mut was, mut speed) = (0.0, -90.0, None::<Vec3>, None::<f32>);
+    for i in 0..=(20.0 * FILM_FPS) as usize {
+        let f = pull.framing(i as f32 * step, &places);
+        let d = f.eye.distance(subject);
+        assert!(d >= far - 1e-3, "nearer at frame {i}: {d} after {far}");
+        assert!(pitch(f) >= flat - 1e-3, "steeper at frame {i}");
+        assert!(f.eye.y - subject.y <= 40.0 + 1e-3, "too high at frame {i}");
+        if let Some(was) = was {
+            let now = f.eye.distance(was) / step;
+            if let Some(before) = speed {
+                assert!(
+                    (now - before).abs() < 0.5,
+                    "speed jumps {before} to {now} at {i}"
+                );
+            }
+            speed = Some(now);
+        }
+        (far, flat, was) = (d, pitch(f), Some(f.eye));
+    }
+    let open = pitch(pull.framing(0.0, &places));
+    assert!((-45.0..=-35.0).contains(&open), "opens {open} degrees down");
+    assert!(flat > -15.0, "ends {flat} degrees down");
+    assert!(speed.unwrap() > 1.0, "at rest at the end");
+}
+
 /// A cut starts a set-up of its own: up to it the camera keeps to the take before, from
 /// it to the next, and nothing of one take's path bends the other's.
 #[test]
