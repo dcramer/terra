@@ -40,8 +40,8 @@ pub use rubble::{Gone, REPOSE, Rubble, gone};
 /// castle's towers and walls coming down together make some thousands): the
 /// game makes fewer at lower ones and fades the oldest first past it.
 pub const MOST: usize = 5000;
-/// The most cubes across a whole chunk's mesh wears its material for ([`Fragment::mesh`]):
-/// a bigger one wears it stretched.
+/// The most cubes across a chunk the cubes left hanging are cut into (`fracture`), and the
+/// longest whole block the game warms a mesh for before the first fall.
 pub const MOST_DRAWN: u8 = 8;
 /// How fast fragments fall, in metres a second a second.
 pub const GRAVITY: f32 = 9.8;
@@ -231,6 +231,9 @@ pub struct Fragment {
     /// member's sawn end; where not, it snapped there from the rest of its length and shows
     /// split wood ([`surfaces`]).
     pub sawn: [bool; 2],
+    /// For a whole block, or a part of one, where it stood in the wall ([`Laid`]), so it
+    /// wears the wall's texture where it was; none for a broken piece.
+    pub laid: Option<Laid>,
 }
 
 /// What happened to a fragment in a step.
@@ -246,18 +249,14 @@ pub struct Landing {
 }
 
 impl Fragment {
-    /// Which mesh it is drawn with: its shape, and for a whole cube or block how many cubes
-    /// across, so its material shows at its real size; and how big that mesh's texture is
-    /// worn for, in metres; and which of its ends are sawn ([`Fragment::sawn`]).
-    pub fn mesh(&self) -> (Shape, u8, [bool; 2], f32) {
+    /// Which mesh it is drawn with ([`Cut`]), in a texture repeating every `repeat` cubes
+    /// along the base's axes ([`repeat`]): its shape, and for a whole cube or block how many
+    /// cubes it is along each axis, so its material shows at its real size, which of its
+    /// ends are sawn ([`Fragment::sawn`]) and where it stood.
+    pub fn mesh(&self, repeat: [u8; 3]) -> Cut {
         match self.shape {
-            Shape::Whole => {
-                let across = (self.size.max_element() / CELL_M)
-                    .round()
-                    .clamp(1.0, f32::from(MOST_DRAWN));
-                (self.shape, across as u8, self.sawn, across * CELL_M)
-            }
-            shape => (shape, 0, [true; 2], PIECE_M),
+            Shape::Whole => Cut::whole(self.size, self.sawn, self.laid, repeat),
+            shape => Cut::piece(shape),
         }
     }
 
@@ -461,6 +460,7 @@ impl Fragment {
                             self.sawn[0] && low.x == 0,
                             self.sawn[1] && low.x + side.x == count.x,
                         ],
+                        laid: self.laid.map(|laid| laid.part(offset)),
                         ..*self
                     });
                 }
@@ -555,6 +555,7 @@ fn pieces(
                 hinge: None,
                 body: None,
                 sawn: [true; 2],
+                laid: None,
             });
         }
     }
@@ -683,17 +684,7 @@ pub fn burst(
         let size = Vec3::new(cubes.x, cubes.y * fill, cubes.z) * CELL_M;
         // Its grain, if it has one, along its first axis (`surfaces`): turned along the
         // wall it fell from, the way the block or the cubes beside it run.
-        let beside = |step: IVec3| {
-            block
-                .iter()
-                .filter(|(at, _)| {
-                    fallen.contains(&(*at + step).to_array())
-                        || fallen.contains(&(*at - step).to_array())
-                })
-                .count()
-        };
-        let along_z =
-            cubes.z > cubes.x || (cubes.z == cubes.x && beside(IVec3::Z) > beside(IVec3::X));
+        let along_z = runs_along_z(block, &fallen, cubes);
         // Timber's grain may stand up, a post's; masonry's beds stay level.
         let up = breaks(cube.kind) == Breaks::Lengths && cubes.y > cubes.x.max(cubes.z);
         // Its middle in the base's space, from its size there, before it is turned: its size
@@ -720,9 +711,29 @@ pub fn burst(
             hinge: None,
             body: None,
             sawn,
+            laid: Some(Laid::over(foot, turn, size)),
         });
     }
     out
+}
+
+/// Whether a block of `cubes` runs along z, the way the wall it fell from runs: its longer
+/// way, or for a square one the way more of the cubes that fell lie beside it.
+fn runs_along_z(
+    block: &[&(IVec3, Cube)],
+    fallen: &std::collections::BTreeSet<[i32; 3]>,
+    cubes: Vec3,
+) -> bool {
+    let beside = |step: IVec3| {
+        block
+            .iter()
+            .filter(|(at, _)| {
+                fallen.contains(&(*at + step).to_array())
+                    || fallen.contains(&(*at - step).to_array())
+            })
+            .count()
+    };
+    cubes.z > cubes.x || (cubes.z == cubes.x && beside(IVec3::Z) > beside(IVec3::X))
 }
 
 /// How a block of cubes `low` to `high`, `size` in metres, is turned so its first axis runs
@@ -838,8 +849,8 @@ const HUGE_CHUNKS_FROM: usize = 4000;
 mod drawn;
 #[cfg(test)]
 use drawn::TIMBER_SHADE;
-use drawn::{FRAGMENT_SHADE, PIECE_M, SHRINK};
-pub use drawn::{material, surfaces};
+pub use drawn::{Cut, Laid, material, repeat, surfaces};
+use drawn::{FRAGMENT_SHADE, SHRINK};
 
 #[cfg(test)]
 mod tests;

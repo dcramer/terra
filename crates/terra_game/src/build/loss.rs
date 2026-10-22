@@ -24,7 +24,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 use terra_build::ops::Op;
 use terra_build::{CELL_M, Cube, Kind};
-use terra_build_mesh::fragments::{self, Breaking, Breaks, Fragment, Rubble, Shape};
+use terra_build_mesh::fragments::{self, Breaking, Breaks, Cut, Fragment, Rubble, Shape};
 use terra_world::quality::Quality;
 
 mod dust;
@@ -142,7 +142,7 @@ enum Drawn {
 #[derive(Resource, Default)]
 struct Shards {
     live: Vec<Live>,
-    meshes: BTreeMap<(Kind, Shape, u8, [bool; 2]), Option<(Handle<Mesh>, Drawn)>>,
+    meshes: BTreeMap<(Kind, Cut), Option<(Handle<Mesh>, Drawn)>>,
     layers: BTreeSet<u16>,
     puff: Option<Handle<Mesh>>,
     dust: Option<Handle<Image>>,
@@ -213,22 +213,24 @@ fn dust_of(look: &BuildLook, kind: Kind) -> Color {
     Color::srgb(mix(light[0]), mix(light[1]), mix(light[2]))
 }
 
-/// The mesh and material a kind's fragments of a shape and size are drawn with
-/// (`Fragment::mesh`), made the first time.
+/// The mesh and material a kind's fragments of a cut are drawn with (`Fragment::mesh`, given
+/// how often its kind's texture repeats), made the first time.
 fn mesh_for(
     shards: &mut Shards,
     look: &BuildLook,
     arrays: Option<&Arrays>,
     meshes: &mut Assets<Mesh>,
     kind: Kind,
-    (shape, across, sawn, drawn_m): (Shape, u8, [bool; 2], f32),
+    cut_of: impl FnOnce([u8; 3]) -> Cut,
 ) -> Option<(Handle<Mesh>, Drawn)> {
-    if let Some(made) = shards.meshes.get(&(kind, shape, across, sawn)) {
+    let kit = look.kits.as_deref().and_then(|kits| kits.of(kind));
+    let cut = cut_of(kit.map_or([1; 3], fragments::repeat));
+    if let Some(made) = shards.meshes.get(&(kind, cut)) {
         return made.clone();
     }
     let made = (|| {
-        let kit = look.kits.as_deref()?.of(kind)?;
-        let surfaces: BTreeMap<_, _> = fragments::surfaces(kit, shape, drawn_m, sawn)
+        let kit = kit?;
+        let surfaces: BTreeMap<_, _> = fragments::surfaces(kit, &cut)
             .0
             .into_iter()
             .map(|(material, surface)| ((kind, material), surface))
@@ -252,9 +254,7 @@ fn mesh_for(
             .or_else(|| look.materials.get(Kind::PLAIN, material))?;
         Some((meshes.add(mesh), Drawn::Own(own.clone())))
     })();
-    shards
-        .meshes
-        .insert((kind, shape, across, sawn), made.clone());
+    shards.meshes.insert((kind, cut), made.clone());
     made
 }
 
@@ -639,19 +639,16 @@ fn warm(
         // Each drawn once, out of sight under the ground and never culled, so its pipelines
         // are compiled before the first fall rather than leaving a hole for its first frames.
         let under = site.frame.transform_point(Vec3::new(0.0, -80.0, 0.0));
-        let sizes = [
-            (Shape::Chunk, 0, [true; 2], 0.25),
-            (Shape::Lump, 0, [true; 2], 0.25),
-        ]
-        .into_iter()
-        .chain(
-            (1..=fragments::MOST_DRAWN)
-                .map(|across| (Shape::Whole, across, [true; 2], f32::from(across) * CELL_M)),
-        );
-        let sizes: Vec<_> = sizes.collect();
+        let cuts: Vec<Cut> = [Cut::piece(Shape::Chunk), Cut::piece(Shape::Lump)]
+            .into_iter()
+            .chain((1..=fragments::MOST_DRAWN).map(|across| {
+                let size = Vec3::new(f32::from(across), 1.0, 1.0) * CELL_M;
+                Cut::whole(size, [true; 2], None, [1; 3])
+            }))
+            .collect();
         for kit in &kits.0 {
-            for &size in &sizes {
-                let made = mesh_for(shards, look, arrays, meshes, kit.kind(), size);
+            for &cut in &cuts {
+                let made = mesh_for(shards, look, arrays, meshes, kit.kind(), |_| cut);
                 if let Some(drawn) = made {
                     let at = Transform::from_translation(under).with_scale(Vec3::splat(0.01));
                     let entity = spawn(commands, drawn, at);
@@ -886,14 +883,10 @@ fn draw_where_they_are(
         if live.entity == Entity::PLACEHOLDER {
             if spawns > 0
                 && let Some(build) = by_root.get(&live.root)
-                && let Some(drawn) = mesh_for(
-                    shards,
-                    look,
-                    arrays,
-                    meshes,
-                    live.fragment.kind,
-                    live.fragment.mesh(),
-                )
+                && let Some(drawn) =
+                    mesh_for(shards, look, arrays, meshes, live.fragment.kind, |repeat| {
+                        live.fragment.mesh(repeat)
+                    })
             {
                 spawns -= 1;
                 live.entity = spawn(commands, drawn, placed(&build.frame, &live));

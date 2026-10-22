@@ -127,7 +127,8 @@ impl Fragment {
         let cube = self.size / count.as_vec3();
         let pieces = cracks.into_iter().map(|(low, side)| {
             let part = cube * side.as_vec3();
-            let offset = self.turn * (low.as_vec3() * cube + part * 0.5 - self.size * 0.5);
+            let along = low.as_vec3() * cube + part * 0.5 - self.size * 0.5;
+            let offset = self.turn * along;
             let seed = hash::of(&[self.seed, (low.x | low.y << 4 | low.z << 8) as u32, 31]);
             let r = |salt: u32| unit(&[seed, salt]) - 0.5;
             let at = self.at + offset;
@@ -142,6 +143,7 @@ impl Fragment {
                     self.sawn[0] && low.x == 0,
                     self.sawn[1] && low.x + side.x == count.x,
                 ],
+                laid: self.laid.map(|laid| laid.part(along)),
                 ..going
             }
         });

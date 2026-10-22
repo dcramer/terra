@@ -92,6 +92,7 @@ fn a_block_landing_cracks_into_a_few_uneven_chunks_that_break_again_down_to_piec
         hinge: None,
         body: None,
         sawn: [true; 2],
+        laid: None,
     };
     let burst = block.shatter(Breaks::Chunks, 1.0);
     // It cracks into a few smaller chunks of uneven size where it first lands, not into
@@ -152,7 +153,10 @@ fn a_timber_fragment_shows_end_grain_across_its_grain_bark_on_its_sides_and_fres
             },
         );
     }
-    let made = surfaces(&kit, Shape::Whole, CELL_M, [true; 2]);
+    let made = surfaces(
+        &kit,
+        &Cut::whole(Vec3::splat(CELL_M), [true; 2], None, [1; 3]),
+    );
     let ends = &made.0[&Material::LogEnd];
     // Its ends, across its grain, its first axis: the sawn end, all of its picture.
     assert!(ends.normals.iter().all(|n| n.x.abs() > 0.9));
@@ -366,7 +370,12 @@ fn a_fragment_is_a_closed_bevelled_box_of_its_kinds_material() {
         ..Kit::default()
     };
     for shape in Shape::ALL {
-        let drawn = surfaces(&stone, shape, 0.5, [true; 2]);
+        let cut = if shape == Shape::Whole {
+            Cut::whole(Vec3::splat(CELL_M), [true; 2], None, [1; 3])
+        } else {
+            Cut::piece(shape)
+        };
+        let drawn = surfaces(&stone, &cut);
         let surface = &drawn.0[&Material::Masonry];
         // Six faces and twelve edges of two triangles, eight corners of one.
         assert_eq!(surface.triangle_count(), 6 * 2 + 12 * 2 + 8);
@@ -381,37 +390,105 @@ fn a_fragment_is_a_closed_bevelled_box_of_its_kinds_material() {
 }
 
 #[test]
-fn a_whole_blocks_beds_are_broken_stone_and_its_sides_the_walls_face() {
+fn a_whole_block_wears_the_walls_face_where_it_stood_and_broken_stone_where_it_split() {
     // What stands beside a break is undressed, broken stone (D305); a block that fell from
-    // the wall broke from it along its beds, so they are drawn so too, and its sides keep
-    // the wall's own face (castle film round 4: a tower's blocks a grid of peach slabs).
-    let stone = Kit {
+    // a wall split from the cubes round it along its beds and its ends along the wall, so
+    // they are drawn so too, and its two sides across the wall keep the wall's own face,
+    // each point of it the texture the standing wall drew there (`planar` in the base's
+    // space, `surface`), at its size along each axis: castle film rounds 8-11 read
+    // fragments as blank cubes, a slab's 2 m texture squeezed onto its thin sides.
+    let mut stone = Kit {
         id: 2,
         pattern: Pattern::Masonry,
         tint: [0.8, 0.7, 0.6],
         ..Kit::default()
     };
-    let drawn = surfaces(&stone, Shape::Whole, 1.0, [true; 2]);
-    let surface = &drawn.0[&Material::Masonry];
-    let shade_of = |up: bool| -> f32 {
-        let found: Vec<f32> = surface
+    let metres = [2.0, 2.0];
+    stone.textures.insert(
+        Material::Masonry,
+        terra_build::kit::Texture {
+            path: "stone".into(),
+            metres,
+            depth: 0.0,
+            reflectance: terra_build::kit::matte(),
+            strips: None,
+            cells: 1,
+            worn: None,
+        },
+    );
+    let repeat = repeat(&stone);
+    assert_eq!(repeat, [4; 3], "a 2 m texture repeats every four cubes");
+    // Two walls meeting at a corner, one along x and one along z, 10 cubes long, 5 high.
+    let mut wall: Vec<(IVec3, Cube)> = Vec::new();
+    for y in 3..8 {
+        for i in 0..10 {
+            wall.push((IVec3::new(i + 3, y, 5), cube(CubeShape::Whole)));
+            wall.push((IVec3::new(2, y, i + 6), cube(CubeShape::Whole)));
+        }
+    }
+    let made = burst(&wall, &|_| false, &chunks, 1.0, 5000);
+    let wholes: Vec<&Fragment> = made.iter().filter(|f| f.shape == Shape::Whole).collect();
+    assert!(wholes.len() > 4);
+    let (mut faces, mut splits, mut turned) = (0, 0, 0);
+    for fragment in wholes {
+        let laid = fragment.laid.expect("a whole block knows where it stood");
+        let cut = fragment.mesh(repeat);
+        let drawn = surfaces(&stone, &cut);
+        let surface = &drawn.0[&Material::Masonry];
+        let size = (fragment.size / CELL_M).round() * CELL_M;
+        // It stood over its cubes: its middle where theirs was.
+        let reach = (laid.turn * size).abs();
+        let low = laid.at - reach * 0.5;
+        assert!(
+            (low / CELL_M - (low / CELL_M).round()).abs().max_element() < 1e-3,
+            "it stood on the cubes' grid, low corner {low}"
+        );
+        turned += usize::from(laid.turn != Quat::IDENTITY);
+        for ((triangle, uvs), colours) in surface
             .positions
             .chunks(3)
+            .zip(surface.uvs.chunks(3))
             .zip(surface.colours.chunks(3))
-            .filter(|(triangle, _)| {
-                let normal = (triangle[1] - triangle[0])
-                    .cross(triangle[2] - triangle[0])
-                    .normalize();
-                (up && normal.y > 0.99) || (!up && normal.x.abs() > 0.99)
-            })
-            .map(|(_, colours)| colours[0][0])
-            .collect();
-        assert!(!found.is_empty());
-        found.iter().sum::<f32>() / found.len() as f32
-    };
-    let (bed, side) = (shade_of(true), shade_of(false));
-    assert!((side - 0.8).abs() < 1e-4, "its side {side}");
-    assert!(bed < side * 0.8, "its bed {bed} beside its side {side}");
+        {
+            let normal = (triangle[1] - triangle[0])
+                .cross(triangle[2] - triangle[0])
+                .normalize();
+            // Its sides across the wall: the wall's face, its colour and, at each point,
+            // the texel the wall wore there, give or take whole copies of it.
+            let across = laid.turn * normal;
+            let wall_face = normal.z.abs() > 0.99;
+            if wall_face {
+                faces += 1;
+                assert!(
+                    (colours[0][0] - 0.8).abs() < 1e-4,
+                    "its face {:?}",
+                    colours[0]
+                );
+                for (p, uv) in triangle.iter().zip(uvs) {
+                    let stood = laid.at + laid.turn * (*p * size);
+                    let wall_uv = crate::mesh::planar(stood, across, metres);
+                    for k in 0..2 {
+                        let off = uv[k] - wall_uv[k];
+                        assert!(
+                            (off - off.round()).abs() < 1e-3,
+                            "at {stood} it wears {uv:?} where the wall wore {wall_uv:?}"
+                        );
+                    }
+                }
+            } else if normal.y.abs() > 0.99 || normal.x.abs() > 0.99 {
+                splits += 1;
+                assert!(
+                    colours[0][0] < 0.8 * 0.8,
+                    "a face it split along {:?}",
+                    colours[0]
+                );
+            }
+        }
+    }
+    assert!(
+        faces > 0 && splits > 0 && turned > 0,
+        "{faces} {splits} {turned}"
+    );
 }
 
 #[test]
@@ -472,13 +549,29 @@ fn a_timber_wall_falls_as_lengths_along_its_grain_sawn_only_where_its_logs_end()
             },
         );
     }
-    let one_end = surfaces(&kit, Shape::Whole, 4.0 * CELL_M, [false, true]);
+    let one_end = surfaces(
+        &kit,
+        &Cut::whole(
+            Vec3::new(4.0 * CELL_M, CELL_M, CELL_M),
+            [false, true],
+            None,
+            [1; 3],
+        ),
+    );
     let ends = &one_end.0[&Material::LogEnd];
     assert!(
         ends.normals.iter().all(|n| n.x > 0.9),
         "sawn only at its high end"
     );
-    let snapped = surfaces(&kit, Shape::Whole, 4.0 * CELL_M, [false; 2]);
+    let snapped = surfaces(
+        &kit,
+        &Cut::whole(
+            Vec3::new(4.0 * CELL_M, CELL_M, CELL_M),
+            [false; 2],
+            None,
+            [1; 3],
+        ),
+    );
     assert!(!snapped.0.contains_key(&Material::LogEnd));
 }
 
