@@ -31,6 +31,7 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
             "terra_bases",
             "terra_walker",
             "terra_survival",
+            "terra_creatures",
             "terra_game",
             "terra_sandbox",
         ],
@@ -459,6 +460,7 @@ mod tests {
             "terra_bases",
             "terra_walker",
             "terra_survival",
+            "terra_creatures",
             "terra_game",
             "terra_sandbox",
         ];

@@ -1,0 +1,37 @@
+[package]
+name = "terra_creatures"
+description = "Creatures and fighting, in Bevy (D407): the kinds of creature and the creatures themselves, wildlife, fliers, seasonal coats, staged figures, and both sides of a fight: hit zones, sword and shield, the bow, combat and how a blow is shown."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# `bevy_remote`: the remote's flight and staged methods (`flight.*`, `staged.*`).
+bevy = { workspace = true, features = ["bevy_remote"] }
+libm.workspace = true
+# The sword and shield's moves, read from their data file.
+ron.workspace = true
+serde.workspace = true
+# Remote methods take and give JSON; already built for Bevy's remote protocol.
+serde_json = "1"
+# The base on screen: a flight's points may be given in the base's frame.
+terra_bases.workspace = true
+terra_climate.workspace = true
+terra_core.workspace = true
+terra_gen.workspace = true
+terra_items.workspace = true
+# What a player carries, makes and needs (D407): what a blow costs and drops, the registries
+# the bestiary is read with, hazards, noise and what a player is told.
+terra_survival.workspace = true
+terra_voxel.workspace = true
+# The walker layer (D198, D407): the player's own components, the figure, camera and pace.
+terra_walker.workspace = true
+terra_world.workspace = true
+
+[dev-dependencies]
+# The test world and player, and taking a player's clothes off.
+terra_survival = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

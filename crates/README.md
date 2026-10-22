@@ -1,6 +1,6 @@
 # Crates
 
-The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28). Only the applications, `terra_sandbox` and `terra_game`, the world they stand on, `terra_world` (D198), and the crates cut from the game (D407), `terra_bases`, `terra_walker` and `terra_survival` so far, may depend on it.
+The game's code so far. The split below is the working plan and may change. One rule shapes it: anything that must be the same for every player lives in a plain Rust crate that knows nothing about Bevy (D28). Only the applications, `terra_sandbox` and `terra_game`, the world they stand on, `terra_world` (D198), and the crates cut from the game (D407), `terra_bases`, `terra_walker`, `terra_survival` and `terra_creatures` so far, may depend on it.
 
 | Crate | What it holds | Bevy? | State |
 |---|---|---|---|
@@ -23,7 +23,8 @@ The game's code so far. The split below is the working plan and may change. One 
 | `terra_bases` | The base on screen in Bevy, on `terra_world` (D407): a base's site, its kits, its acts applied, and its drawing (sections laid and merged, texture arrays, detail by distance, merged cells far off, rooms' light, debug views) and memory; what the walker reads of the hammer. Re-exported by the game as `build`. [README](terra_bases/README.md) | Yes | Exists |
 | `terra_walker` | The walker layer in Bevy (D198), on `terra_world` and `terra_bases` (D407): a body this machine steers, its camera, controls, options menu and figure, and the character's look (appearance, skinning, lift, swing, pace). Re-exported by the game at its old paths (`play::walker`, `appearance`, ...). [README](terra_walker/README.md) | Yes | Exists |
 | `terra_survival` | What a player carries, makes and needs, in Bevy, on `terra_walker` (D407): the inventory, bag and storage, the catalogue and crafting at stations, props set down, claims, harvesting, digging and work, vitals, warmth and death, skills, wear, what is held and worn, and the item icons. Re-exported by the game at its old paths (`play::inventory`, `icons`, ...). [README](terra_survival/README.md) | Yes | Exists |
-| `terra_game` | The game in Bevy, on `terra_world`: the rest of the gameplay layer (D198) and the app: building play, creatures, people, the game's sounds, saving | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
+| `terra_creatures` | Creatures and fighting, in Bevy, on `terra_survival` (D407): the kinds of creature and the creatures, wildlife, fliers, seasonal coats, staged figures, and both sides of a fight: hit zones, sword and shield, the bow, combat and how a blow is shown. Re-exported by the game at its old paths (`play::creatures`, ...). [README](terra_creatures/README.md) | Yes | Exists |
+| `terra_game` | The game in Bevy, on `terra_world`: the rest of the gameplay layer (D198) and the app: building play, people, the game's sounds, saving | Yes | Exists, launched by the sandbox. [README](terra_game/README.md) |
 | `terra_sandbox` | A test environment on top of the game: it launches it, and holds testbeds and developer tools such as the workbench and the icon baker | Yes | Exists. [README](terra_sandbox/README.md) |
 
 Where each part of the engine stands is in [docs/engine.md](../docs/engine.md#tracks). Crates are created when their track starts, not before.

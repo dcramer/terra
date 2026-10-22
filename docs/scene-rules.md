@@ -46,7 +46,7 @@ Counts are reviews of the 60 that name the defect (by search over every review a
 
 ### Steering: nothing walks through a tree
 
-Creatures today know trunks only to climb and perch on them (`play/creatures/mind.rs`); nothing steers round them. Port Recast's `dtObstacleAvoidanceQuery` (DetourCrowd, zlib): each tick a body samples velocities round its wanted one and takes the best that keeps its capsule clear of trunks (`flora::Trunks`), rocks, logs and props (`spatial::SpatialHash`) for a second ahead. Godot's avoidance (RVO2, Apache-2.0) is the alternative for bodies among bodies. It belongs to the mover of [movement.md](movement.md), so creatures and people share it.
+Creatures today know trunks only to climb and perch on them (`terra_creatures/src/creatures/mind.rs`); nothing steers round them. Port Recast's `dtObstacleAvoidanceQuery` (DetourCrowd, zlib): each tick a body samples velocities round its wanted one and takes the best that keeps its capsule clear of trunks (`flora::Trunks`), rocks, logs and props (`spatial::SpatialHash`) for a second ahead. Godot's avoidance (RVO2, Apache-2.0) is the alternative for bodies among bodies. It belongs to the mover of [movement.md](movement.md), so creatures and people share it.
 
 ### Casters and mirrors: the world exists behind the camera
 

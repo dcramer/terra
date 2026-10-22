@@ -293,7 +293,7 @@ By evening the square empties into lit doorways. A player can watch any one pers
 | Navigation | Bodies pushed out of each other and out of `Obstacles` (`terra_walker/src/bodies.rs`), a stand-in until collision is designed (D53) | Any path finding or avoidance; no navigation crate supports Bevy 0.20 yet |
 | Animals | Deer and spiders (`assets/data/creatures.ron`), with idle, graze, wander and flee states; simulation by distance (D145) | Domestic animals: models, rigs, clips, pens, following an owner |
 | Market | `MarketStall` (an empty stall with a counter socket), `Well`, `Stool` props (D304); each stall one of seven trades, its goods on its counter and its stock beside its seller, by the seed (`market.ron`, D352) | Signs, lanterns, meat and cheese (no CC0 scans); a trough, barrels, hand carts and yard fences are laid by rules (D346) |
-| Smoke | None: no particle system; the blood spray is CPU cards (`play/hits.rs`) | Chimney smoke, cooking fires, a forge's sparks |
+| Smoke | None: no particle system; the blood spray is CPU cards (`terra_creatures/src/hits.rs`) | Chimney smoke, cooking fires, a forge's sparks |
 | Sound | Spatial voices by bus; `Ambient` sources in earshot; footsteps for anything walking; the bell; 88 Kenney CC0 clips | Murmur of a crowd, market calls, animals, cart wheels; any cap on how many voices play |
 | Measured | `crowd` experiment: 100 dressed characters, 5.8 ms on the RTX 5090, bound by the CPU's animation and transforms | Any town or crowd number on the RTX 3080 |
 

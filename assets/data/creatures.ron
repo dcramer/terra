@@ -22,7 +22,7 @@
 //            trunk until nobody is near, or Flies(near, far) off to somewhere it keeps to
 //   lives    where it is put in a world: in a herd of so many, or so many at a lair, or
 //            About(per_ha, group): about the land wherever its niche is, so many to a hectare
-//            of it, in groups of so many (play::wildlife)
+//            of it, in groups of so many (terra_creatures::wildlife)
 //   niche    for one About: the growing season's mean warmth it takes, in °C, and the places
 //            it keeps to: Woods, Open, Shore, Water, Trodden
 //   moves    Walks (the default), Flies(metres a second) from place to place, or Swims(feet_m)
@@ -38,7 +38,7 @@
 //   blood    what sprays from it when it is struck
 //   carcass  what butchering it takes and gives, if it can be butchered
 //   lies_s   how long its body lies after it falls
-//   coat     a coat moulted with the seasons (play::coats): the tint its summer coat lays
+//   coat     a coat moulted with the seasons (terra_creatures::coats): the tint its summer coat lays
 //            over the model's own pale colours, how far one animal's tone strays, and whether it
 //            moults white in winter (moults, the default) or keeps its tint the year round
 //   zones    where a blow can land (D119): around the model's joints whose names contain

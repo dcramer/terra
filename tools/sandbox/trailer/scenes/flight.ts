@@ -1,4 +1,4 @@
-// A flier's moves, to judge how it flies (play::fliers, research/2026-10-17-large-flier-motion.md)
+// A flier's moves, to judge how it flies (terra_creatures::fliers, research/2026-10-17-large-flier-motion.md)
 // before it is filmed in a scene: the castle (terra_build::burg) standing as a backdrop for
 // scale, and over the meadow south of it a dragon cruising in, an S of turns left and right,
 // a climb and a dive, a tight turn that slows it, braking into a hover, rearing back and

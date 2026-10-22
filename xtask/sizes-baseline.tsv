@@ -69,9 +69,9 @@ crates/terra_survival/src/icons.rs	draw	170
 crates/terra_survival/src/bag.rs	draw	209
 crates/terra_survival/src/bag.rs	setup	237
 crates/terra_walker/src/camera.rs	follow	216
-crates/terra_game/src/play/creatures.rs	-	1337
-crates/terra_game/src/play/creatures.rs	prepare	152
-crates/terra_game/src/play/creatures.rs	walk	155
+crates/terra_creatures/src/creatures.rs	-	1337
+crates/terra_creatures/src/creatures.rs	prepare	152
+crates/terra_creatures/src/creatures.rs	walk	155
 crates/terra_game/src/play/dial.rs	draw	189
 crates/terra_game/src/play/dial.rs	setup	161
 crates/terra_survival/src/harvest.rs	cut	184
@@ -88,7 +88,7 @@ crates/terra_game/src/play/tool/aim.rs	plan_work	263
 crates/terra_game/src/play/tool/prompt.rs	prompt	228
 crates/terra_game/src/play/town.rs	-	1562
 crates/terra_game/src/play/town.rs	lay	594
-crates/terra_game/src/play/wildlife/mod.rs	populate	174
+crates/terra_creatures/src/wildlife/mod.rs	populate	174
 crates/terra_items/src/lib.rs	counts_change_only_by_what_goes_in_or_out	161
 crates/terra_land/src/bin/fields.rs	run	644
 crates/terra_land/src/site.rs	shore_walk	152

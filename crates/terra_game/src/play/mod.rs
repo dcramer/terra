@@ -10,19 +10,12 @@
 //! `Stance`, `View`, `Downed`) are the walker's, for every layer to read. See docs/player.md and docs/building.md for
 //! the design.
 
-mod archery;
 mod build_menu;
-mod coats;
-mod combat;
-mod creatures;
 mod dial;
-mod fliers;
 pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
 pub use footprint::Footprint;
-mod hits;
 mod map;
-mod melee;
 pub mod music;
 mod noises;
 mod people;
@@ -37,11 +30,8 @@ mod save;
 mod scaffold;
 pub(crate) use shake::Shake;
 pub(crate) mod settlement;
-mod sighted;
 mod sounds;
 mod soundscape;
-mod species;
-mod staged;
 mod stall_goods;
 mod tool;
 pub mod town;
@@ -50,27 +40,32 @@ mod town_fences;
 mod town_gardens;
 mod town_sound;
 mod townsfolk;
-mod wildlife;
-mod zones;
 
+// Creatures and fighting, their own crate since D407, by their old names here.
+use terra_creatures::{
+    archery, coats, combat, creatures, fliers, hits, melee, sighted, species, staged, wildlife,
+    zones,
+};
 // What a player carries, makes and needs, its own crate since D407, by its old names here.
 use super::build::{self, DrivenByPlayer, Site};
 use terra_survival::{
-    bag, crafting, death, dig, gains, harvest, kinds, noise, pile, registries, skills,
-    station_screen, storage_screen, tiles, torchlight, vitals, warmth, wear, work, worn,
+    bag, crafting, death, dig, gains, harvest, noise, pile, registries, skills, station_screen,
+    storage_screen, tiles, torchlight, vitals, warmth, wear, work, worn,
 };
 pub(crate) use terra_survival::{catalogue, claim, hazards, held, interact, props, storage, told};
 pub use terra_survival::{contract, inventory};
 #[cfg(test)]
-use terra_survival::{test_player, test_world};
+use terra_survival::{kinds, test_world};
 // The walker layer (D198), its own crate since D407, by its old names here.
 pub(crate) use terra_walker::bodies;
-use terra_walker::{button, camera, controls, figure, intent, options, shake, walker};
+#[cfg(test)]
+use terra_walker::figure;
+use terra_walker::{button, camera, controls, intent, options, shake, walker};
 // The world layer's modules, by their old names here, for the modules above them.
 use crate::shell::Options;
 use bevy::{app::PluginGroupBuilder, prelude::*, window::CursorOptions};
 use options::MenuSystems;
-use terra_world::{data, daylight, flora, flora_kinds, footprint, lod, models, tick, world};
+use terra_world::{daylight, flora, flora_kinds, footprint, lod, models, tick, world};
 pub use tool::Builder;
 pub use walker::{ArriveAt, Hands, PlayerInput, Stamina, WalkerPlugin, WarpTo};
 // The player's own components are the walker's; every layer reads them by these names.

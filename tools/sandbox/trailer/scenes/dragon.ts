@@ -12,7 +12,7 @@
 // Places are in the castle's own metres: east, up and south of the middle of its gate on the
 // south wall's outer face, the ward to the north (-z), as `build.look` takes them. Frames are
 // a sixtieth of a second each. Where the camera follows the dragon, it looks where the dragon
-// will be, worked out here as `play::fliers` flies it.
+// will be, worked out here as `terra_creatures::fliers` flies it.
 
 import type { Script, Vec3 } from "../../qa/script.ts";
 import { Course as Planned, mix, passes, type Plan, seconds, wings } from "../flight.ts";

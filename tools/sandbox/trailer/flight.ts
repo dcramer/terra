@@ -1,4 +1,4 @@
-// A flier's course worked out as `play::fliers` flies it (its `plan` module, the same steps in
+// A flier's course worked out as `terra_creatures::fliers` flies it (its `plan` module, the same steps in
 // the same order), so a scene can aim its camera where the flier will be, and a plot can show
 // a course before anything is filmed (flightplot.ts). Places are in a base's own metres, y up.
 

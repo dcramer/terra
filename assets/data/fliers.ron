@@ -1,4 +1,4 @@
-// Creatures that fly (D382, play::fliers): a flier body plan, each kind a model with its
+// Creatures that fly (D382, terra_creatures::fliers): a flier body plan, each kind a model with its
 // clips and how it flies (research/2026-10-17-large-flier-motion.md).
 //
 // model         its file and its scale

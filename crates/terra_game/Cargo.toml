@@ -28,6 +28,8 @@ terra_build_mesh.workspace = true
 terra_build_scenes.workspace = true
 terra_climate.workspace = true
 terra_core.workspace = true
+# Creatures and fighting (D407), re-exported at their old paths.
+terra_creatures.workspace = true
 terra_gen.workspace = true
 terra_items.workspace = true
 # What a player carries, makes and needs (D407), re-exported at its old paths.

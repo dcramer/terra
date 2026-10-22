@@ -5,7 +5,7 @@
 // blow he cuts at its leg twice; it sweeps him back on his shield; it presses him to the
 // water's edge and smashes again into the shallows as he sidesteps; his combination of three
 // drives it reeling back up the shore, where it roars over him. Told over the remote
-// (`play::staged`), the camera close and cut on the beats, never looking into the low morning
+// (`terra_creatures::staged`), the camera close and cut on the beats, never looking into the low morning
 // sun in the east-north-east.
 //
 // The fight is timed as shipped melee is (research/melee-feel.md): every blow from
@@ -177,7 +177,7 @@ const p = ([x, z]: V2, y = 0): Vec3 => [ARENA[0] + x, ARENA[1] + ground(ARENA[0]
 const over = (v: Vec3, high: number): Vec3 => [v[0], Math.max(ground(v[0], v[2]), -1.45) + high, v[2]];
 
 /// A fighter, as the remote is told it, and where it is on each frame, worked out as
-/// `play::staged` moves it (straight on the level at its speed), so the camera can frame it;
+/// `terra_creatures::staged` moves it (straight on the level at its speed), so the camera can frame it;
 /// and how fast its own time runs from each frame (`staged.rate`), so its blows are timed.
 class Fighter {
   private legs: { frame: number; from: Vec3; to: Vec3; frames: number }[] = [];
@@ -200,7 +200,7 @@ class Fighter {
   private faces: { frame: number; face: Vec3 | Fighter }[] = [];
   private plays: { frame: number; clip: Clip; from: number; speed: number; once: boolean }[] = [];
 
-  /// Where it stands on a frame: its place as `play::staged` moves it.
+  /// Where it stands on a frame: its place as `terra_creatures::staged` moves it.
   root(frame: number): Vec3 {
     let here = this.start;
     for (const leg of this.legs) {

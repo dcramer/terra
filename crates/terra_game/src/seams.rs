@@ -3,7 +3,9 @@
 //! it is to move to (research/2026-10-18-crate-layout.md, "On Bevy"), and a module naming
 //! one in a crate above its own, or beside it (building play beside creatures and
 //! townsfolk), fails: step 7 cut every crossing, so none may come back. A new module is
-//! placed here; a crate step 8 has made leaves the map, Cargo holding its line.
+//! placed here; a crate step 8 has made leaves the map, Cargo holding its line, but for one
+//! building play stands beside (`terra_creatures`), placed by its name until building play is
+//! a crate too.
 //! Tests and test-only items may name anything. The check reads the sources; it builds
 //! nothing.
 
@@ -59,19 +61,9 @@ const PLACES: &[(&str, Crate)] = {
         // The base on screen, now `terra_bases` (Cargo holds its line), at its old path, which
         // building play's modules below still sit under.
         ("build", Bases),
-        // Creatures and fighting.
-        ("play/archery", Creatures),
-        ("play/coats", Creatures),
-        ("play/combat", Creatures),
-        ("play/creatures", Creatures),
-        ("play/fliers", Creatures),
-        ("play/hits", Creatures),
-        ("play/melee", Creatures),
-        ("play/sighted", Creatures),
-        ("play/species", Creatures),
-        ("play/staged", Creatures),
-        ("play/wildlife", Creatures),
-        ("play/zones", Creatures),
+        // Creatures and fighting, now `terra_creatures`: building play, still here, stands beside
+        // it, so a path into it is placed by the crate's name.
+        ("terra_creatures", Creatures),
         // Townsfolk.
         ("play/people", Folk),
         ("play/pooling", Folk),
@@ -464,6 +456,10 @@ impl Seen {
                 let mut child = at.clone();
                 child.push(first.to_string());
                 if !self.is_module(&child) {
+                    // A crate cut from this one that a module here may not name, by its name.
+                    if first.starts_with("terra_") && PLACES.iter().any(|(m, _)| *m == first) {
+                        return Some(first.to_string());
+                    }
                     // A module a `use` brought in by name (`use crate::build::{self}`, then
                     // `build::props::fit_all`), followed from where it was brought.
                     let to = self.uses.get(from)?.get(first)?;
@@ -629,6 +625,11 @@ fn a_name_brought_in_is_followed() {
     assert_eq!(to("crate::play::GamePlugins"), Some("play".into()));
     assert_eq!(to("crate::planet::Planet"), None);
     assert_eq!(to("bevy::prelude"), None);
+    // A crate cut from this one that building play stands beside is placed by its name.
+    assert_eq!(
+        to("terra_creatures::creatures::Creature"),
+        Some("terra_creatures".into())
+    );
     // A module brought in by name, then named through it.
     assert_eq!(to("walker::Stance"), Some("play/walker".into()));
 }

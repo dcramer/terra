@@ -1,4 +1,4 @@
-// A flight-path plot of a scene's flier (trailer/flight.ts, as `play::fliers` flies it), to
+// A flight-path plot of a scene's flier (trailer/flight.ts, as `terra_creatures::fliers` flies it), to
 // check a course before anything is filmed: from above, coloured by speed, a dot a second;
 // its height; and its speed, bank, climb and how far off the camera's aim it is, through the
 // film. Orange is where it breathes fire (after its wind-up). Each point a breath is aimed at
