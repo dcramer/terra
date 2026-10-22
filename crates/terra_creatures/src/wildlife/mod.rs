@@ -13,10 +13,12 @@
 
 mod asked;
 mod groups;
+mod hiding;
 mod meet;
 mod reach;
 mod unseen;
 pub use asked::Asked;
+pub use hiding::Thickets;
 use meet::{Band, Way, eye_at, meet, shows_from};
 use reach::nearest_first;
 
@@ -34,7 +36,6 @@ use terra_world::lod::Viewpoint;
 use terra_world::parting::ObstructionFade;
 use terra_world::planet::{MainCamera, Planet};
 use terra_world::sky_occlusion::SkyOccluders;
-use terra_world::spatial::SpatialHash;
 use terra_world::start::Start;
 use unseen::put;
 
@@ -141,7 +142,7 @@ pub fn plugin(app: &mut App) {
     app.init_resource::<Cells>()
         .init_resource::<Perches>()
         .init_resource::<Thickets>()
-        .add_systems(Update, file_thickets)
+        .add_systems(Update, hiding::file_thickets)
         .init_resource::<Warmth>()
         // Wherever the world says what grows: not on the yard, the flat test level, unless a
         // forest is grown on it.
@@ -249,7 +250,7 @@ pub struct Surroundings<'w, 's> {
     /// The crowns of the trees, where a forest says them: leaves hide what is behind them.
     crowns: Option<Res<'w, SkyOccluders>>,
     perches: Res<'w, Perches>,
-    /// The bushes and young trees, filed by place: their leaves hide what is behind them.
+    /// The bushes, young trees and stones, filed by place: they hide what is behind them.
     thickets: Res<'w, Thickets>,
     plants: Query<'w, 's, &'static ObstructionFade>,
     /// Where the sun is, for what stands in its light.
@@ -259,41 +260,8 @@ pub struct Surroundings<'w, 's> {
     eyes: Query<'w, 's, (&'static GlobalTransform, &'static Projection), With<MainCamera>>,
 }
 
-/// The bushes and young trees whose leaves hide what is behind them (those the camera fades,
-/// `ObstructionFade`), filed by place once their meshes are in.
-#[derive(Resource)]
-pub struct Thickets(SpatialHash<Entity>);
-
-impl Default for Thickets {
-    fn default() -> Self {
-        Self(SpatialHash::new(16.0))
-    }
-}
-
-/// A thicket's leaves reach at most so far from where it is filed.
-const THICKET_REACH_M: f32 = 6.0;
 /// How far toward the sun a point is looked from for what shades it.
 const SUN_LOOKS_M: f32 = 60.0;
-
-/// Filed already among the thickets.
-#[derive(Component)]
-struct Filed;
-
-/// Files each new bush and young tree once its box is known.
-fn file_thickets(
-    mut commands: Commands,
-    mut thickets: ResMut<Thickets>,
-    plants: Query<(Entity, &ObstructionFade), Without<Filed>>,
-) {
-    for (plant, fade) in &plants {
-        if let Some((centre, reach)) = fade.round() {
-            if reach <= THICKET_REACH_M * 1.5 {
-                thickets.0.insert(centre, plant);
-            }
-            commands.entity(plant).insert(Filed);
-        }
-    }
-}
 
 /// Where birds sit up off the ground besides the trees: the ridges of a settlement's roofs,
 /// each as its two ends, which the layer that puts the buildings up fills in (the town's).
@@ -470,14 +438,7 @@ impl Surroundings<'_, '_> {
         if self.obstacles.sweep(eye, way, length - 0.5, 0.15).is_some() {
             return false;
         }
-        let middle = eye + line * 0.5;
-        let in_a_thicket = self
-            .thickets
-            .0
-            .near(middle, length * 0.5 + THICKET_REACH_M)
-            .filter_map(|(_, plant)| self.plants.get(*plant).ok())
-            .any(|plant| plant.hides(eye, at));
-        if in_a_thicket || self.through_crowns(eye, at) {
+        if self.thickets.hide(&self.plants, eye, at) || self.through_crowns(eye, at) {
             return false;
         }
         // A sample of the ground costs a tenth of a millisecond: a few, over its middle.

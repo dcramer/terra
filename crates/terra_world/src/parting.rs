@@ -159,7 +159,7 @@ const LEAF_MASS: f32 = 0.8;
 
 /// Whether the line from `from` to `to` passes through a box round the origin of `half`
 /// size: a slab test.
-fn crosses(from: Vec3, to: Vec3, half: Vec3) -> bool {
+pub fn crosses(from: Vec3, to: Vec3, half: Vec3) -> bool {
     let along = to - from;
     let (mut low, mut high) = (0.0f32, 1.0f32);
     for axis in 0..3 {

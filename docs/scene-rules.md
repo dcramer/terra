@@ -41,6 +41,7 @@ Counts are reviews of the 60 that name the defect (by search over every review a
 ### Wildlife: when an animal may be seen
 
 - **Spawn out of view.** An animal is placed where the camera does not see it now (frustum and the occlusion rays D384 already casts), and walks or flies into sight; GTA's population spawns out of view the same way. D384's staging keeps its spots, which must now be unseen at placing and seen 1 to 3 s later. Every animal wildlife puts out passes one gate (`wildlife::unseen::put`): unseen now and from the camera 6 m on, tested where it shows (a swimmer on the water's surface, not the bed), each member of a group alone. So that the land is not empty in view, each kind is put out further than it is drawn (`wildlife::reach`), on the far side of the lake before the camera comes.
+- **What hides it is everything solid in the line** (`wildlife::Surroundings::in_view`): the trunks, rocks and logs that stop a walker, the crowns, the bushes' leaves, and the stones too low to stop anyone (a lake's shore stones, `wildlife::hiding`), each by its model's box, so a duck behind a waist-high stone counts as unseen.
 - **Fade when it must appear in view** (a teleport, a load): dithered over 0.6 s, as Bevy's visibility-range crossfade (D240) and Godot's `visibility_range_fade_mode` (MIT) do.
 - **An attention budget.** A look at someone lasts at most 1.2 s (r12's cap, today a scene constant) and then the animal goes back to feeding or walks off; the cap belongs to the creature's kind, not the film.
 
