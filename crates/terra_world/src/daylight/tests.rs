@@ -295,3 +295,26 @@ fn the_sun_casts_crisp_shadows_and_a_deck_soft_ones() {
     assert!(deck > 10.0, "a full deck's key is a wide source: {deck}");
     assert!(light_size(crate::weather::deck_cover(0.5)) < deck);
 }
+
+#[test]
+fn the_shade_keeps_its_colour_through_civil_twilight_and_loses_it_toward_nautical() {
+    // How much of the midtones' colour the shade keeps with the sun so many degrees under.
+    let shade = |height: f32| {
+        let mut grade = bevy::render::view::ColorGrading::default();
+        fade_colour(&mut grade, height, 1.0, crate::weather::Grade::NEUTRAL);
+        grade.shadows.saturation / grade.midtones.saturation
+    };
+    // At sunset the shaded ground is some 25 cd/m², wholly in colour (photopic).
+    assert!(shade(0.0) > 0.95, "sunset {}", shade(0.0));
+    // Mid-way through civil twilight (about 0.2 cd/m², mid-mesopic) it keeps most of it.
+    assert!(shade(-5.0) > 0.6, "civil dusk {}", shade(-5.0));
+    // Into nautical twilight it has lost it, as the rods see.
+    assert!(shade(-12.0) < 0.15, "nautical {}", shade(-12.0));
+    // And it never gains colour as the light goes.
+    let mut last = f32::MAX;
+    for step in 0..=24 {
+        let now = shade(-(step as f32) * 0.5);
+        assert!(now <= last + 1e-5, "{} deg", -(step as f32) * 0.5);
+        last = now;
+    }
+}

@@ -35,6 +35,14 @@ const NIGHT_SATURATION: f32 = 0.45;
 /// From sunset, how much of its colour what is dimly lit keeps against what is bright, the
 /// grade's shadows against its midtones (D302).
 const DIM_SATURATION: f32 = 0.2;
+/// The sun's heights, degrees, over which the dim loses that colour: from where the shaded
+/// ground falls under about 3 cd/m² (some 40 lux of twilight, the sun 3 degrees under), where
+/// an eye's rods begin to take over, to where it is a hundredth of that (nautical twilight),
+/// as mesopic vision fades colour over that range on a log scale (CIE 191:2010). Faded wholly
+/// by 3 degrees under, the forest at civil dusk was grey-black murk and the grass a fire lit
+/// grey (lake film r21).
+const DIM_FADES_DEG: f32 = -3.0;
+const DIM_GREY_DEG: f32 = -11.0;
 /// By night, where the grade's midtones start (Bevy's 0.2 by day), its shadows wholly under
 /// it less 0.1 (D302).
 const NIGHT_MIDTONES: f32 = 0.12;
@@ -795,7 +803,8 @@ fn fade_colour(
         grade.global.tint = cast.tint;
     }
     let lit = smoothstep(-3.0, 3.0, height);
-    let dim = (DIM_SATURATION + (1.0 - DIM_SATURATION) * lit) * night * kept;
+    let colour = smoothstep(DIM_GREY_DEG, DIM_FADES_DEG, height);
+    let dim = (DIM_SATURATION + (1.0 - DIM_SATURATION) * colour) * night * kept;
     if (grade.midtones.saturation - kept).abs() > 1e-4 {
         grade.midtones.saturation = kept;
     }
