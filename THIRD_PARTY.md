@@ -8,6 +8,7 @@ What in this repository comes from other projects, and the terms it comes under.
 |---|---|---|
 | `crates/terra_town/src/orca.rs` | [RVO2 Library](https://gamma.cs.unc.edu/RVO2/) 2.0.3 (University of North Carolina at Chapel Hill): optimal reciprocal collision avoidance, `Agent.cpp`'s `computeNewVelocity` and linear programs, and the obstacle query of `KdTree.cpp`, ported to Rust | Apache-2.0; its notice is kept in the file, with what was changed |
 | `assets/shaders/lake.wesl` | [boujie_water_shader](https://github.com/Chrisknyfe/boujie_water_shader) for Godot 4 by Zach Bernal and contributors (2023): its depth under the water from the depth buffer, Beer's law depth fog faded with distance, and shore foam, ported to WGSL (D322) | MIT; its notice is in the file |
+| `patches/bevy_mesh/` | [Bevy](https://github.com/bevyengine/bevy)'s `bevy_mesh` 0.20.0, copied whole from crates.io with one change, how a mesh's vertex buffer is packed (D435, `patches/README.md`) | MIT OR Apache-2.0; its licence files are kept beside it |
 
 `terra_voxel` will be a port of parts of Voxel Tools. Ported files carry a comment naming the original file, and this table gets a row for the crate.
 

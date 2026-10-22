@@ -63,6 +63,13 @@ ctt = { version = "0.6", default-features = false, features = ["encoder-bc7enc",
 # Decoding the pictures the bake cooks: the version Bevy's image loading already builds.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
+# Bevy crates we carry a small change to (D184), each in patches/ with what changed and why
+# (patches/README.md). Drop one when the pinned release has the fix.
+[patch.crates-io]
+# Vertex buffers packed in ordinary memory, then copied in one write to the GPU's staging
+# memory (D435, bevyengine/bevy#17000).
+bevy_mesh = { path = "patches/bevy_mesh" }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 

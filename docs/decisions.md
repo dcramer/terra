@@ -440,6 +440,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D430](decisions/D430.md) | A film's breath is marched as a volume, play's stays cards | Tech | Agent | Decided | The cinematic tier of D428 draws a dragon's breath as… |
 | [D433](decisions/D433.md) | The fire sheet measures the flame on the renderer's ID matte | Tech | Agent | Decided | The fire sheet (D415, `tools/fire/sheet.ts`) measures a… |
 | [D434](decisions/D434.md) | A far wall keeps a third of its own light before it gets more detail | Tech | Agent | Decided | Work on far and middle-distance mountains… |
+| [D435](decisions/D435.md) | Vertex buffers packed in ordinary memory before the upload | Tech | Agent | Decided | A mesh's vertex buffer is packed in ordinary memory… |
 
 ## Tools and workflow
 

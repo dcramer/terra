@@ -43,6 +43,8 @@ pub mod headless;
 pub mod lakes;
 pub mod loading;
 pub mod lod;
+#[cfg(test)]
+mod mesh_upload_tests;
 pub mod mipmaps;
 pub mod models;
 pub mod pacing;

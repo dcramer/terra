@@ -12,7 +12,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 ## Where things are
 
 - `docs/` designs and decisions: [README](docs/README.md) the map, [tech](docs/tech.md) the stack, [engine](docs/engine.md) the parts, [prototypes](docs/prototypes.md) the next milestone, [development](docs/development.md) every command.
-- `research/` a dated note per question, linked from its README · `assets/` what every binary loads (Bevy's asset root, set in `.cargo/config.toml`) · `art/` source art · `crates/` the game · `xtask/` tasks (`cargo xtask tools`) · `tools/` tooling outside the game, each with a README.
+- `research/` a dated note per question, linked from its README · `assets/` what every binary loads (Bevy's asset root, set in `.cargo/config.toml`) · `art/` source art · `crates/` the game · `xtask/` tasks (`cargo xtask tools`) · `tools/` tooling outside the game, each with a README · `patches/` Bevy crates we carry a change to (D184).
 - `.agents/skills/` (linked as `.claude/skills`) playbooks for characters, models, icons, Tripo, Blender, environment, building: use the matching one.
 - `spike/` throwaway experiments, one question each, deleted once the research note is written; nothing lasting (a skill, tool, doc or game code) may depend on one; move it to `tools/` or the workspace first (D133).
 
