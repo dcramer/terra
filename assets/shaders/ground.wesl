@@ -712,10 +712,15 @@ fn lit_near(far_off: f32) -> f32 {
 }
 // Aerial perspective (see the fragment's end): from how far, over how many metres it takes
 // about two-thirds of the way to the air, and the air's colour against the haze's brightness.
-// Thick for real air: the valley's range stands 1 to 3 km off, where 14 km of it from 1.5 km
-// showed no haze at all (round 13).
+// A clear day's air: 9 km to two-thirds is an extinction of 0.11 per km, Koschmieder's
+// visibility 35 km, so a wall 3 km off keeps three-quarters of its light and a range at 14 km
+// a fifth, receding in layers. At 2400 m, thickened so 14 km from 1.5 km showed some haze
+// (round 13), a wall's foot kept a tenth of its light at 2 to 3 km and hid its rock (D434).
+// At dusk the air keeps the thicker haze the developer prefers there (2026-10-22): the
+// whole dusk's 2400 m, blended to the clear day's by the direct sun's brightness (`day`).
 const AERIAL_FROM_M: f32 = 250.0;
-const AERIAL_M: f32 = 2400.0;
+const AERIAL_M: f32 = 9000.0;
+const AERIAL_DUSK_M: f32 = 2400.0;
 const AERIAL_AIR: vec3<f32> = vec3<f32>(0.5, 0.76, 1.32);
 // How far the far snow's edge frays down the fall line (`fall_stripes`), against the slope.
 const STREAKED: f32 = 0.6;
@@ -724,6 +729,10 @@ const WALL_BARE: f32 = 0.3;
 // How dark the rock's own cast shadows under its beds and in its joints stand (`jointing`).
 const JOINT_SHADOW: f32 = 0.5;
 const JOINT_RECESS: f32 = 0.35;
+// How much of a far wall's folds, the sky its vertices see, is drawn in its rock's colour
+// besides its sky light (D434).
+const FOLD_TINT: f32 = 0.8;
+const FOLD_LIFT: f32 = 1.15;
 // A far snowfield's tint where it is turned from the sun: blue-grey, about half as bright.
 const SHADED_SNOW: vec3<f32> = vec3<f32>(0.4, 0.5, 0.7);
 // The direct light's exposed brightness under which the far snow's shading by the sun fades
@@ -736,11 +745,22 @@ const DUSK_AIR_LIFT: f32 = 1.8;
 // at its thickest it takes two-thirds of the way to the air, on top of the aerial perspective:
 // thinned to a third in 140 m, it lay wholly behind the forest's wall and showed in no view
 // (the r17 review); this way it lifts a range's lowest quarter or so seen over the trees.
+// With the air, a valley's morning haze: visibility 11 km in it, so a wall's foot 3 km off
+// keeps over a third of its light by day (D434; at 900 m it kept a sixtieth).
 const FOOT_MIST_M: vec2<f32> = vec2<f32>(80.0, 750.0);
-const FOOT_MIST_DEPTH_M: f32 = 900.0;
+const FOOT_MIST_DEPTH_M: f32 = 4000.0;
+const FOOT_MIST_DEPTH_DUSK_M: f32 = 900.0;
 // Its share at dusk: whole, it lifted the lake's whole massif to one pale value, its rock
 // as light as its snow (the r18 review).
 const FOOT_MIST_DUSK: f32 = 0.3;
+// How much of the way to the air the ground `past` metres beyond AERIAL_FROM_M and `over_eye`
+// metres over the eye's height is taken, by day (`day` 1) or at dusk (0): the clear air and
+// the low mist under it, both thinning from the dusk's depths to the day's as the sun brightens.
+// terra_world's far_air.rs tests its rule on the CPU (D434).
+fn air_through(past: f32, over_eye: f32, day: f32) -> f32 {
+    let low_mist = (1.0 - smoothstep(FOOT_MIST_M.x, FOOT_MIST_M.y, over_eye)) / mix(FOOT_MIST_DEPTH_DUSK_M, FOOT_MIST_DEPTH_M, day) * mix(FOOT_MIST_DUSK, 1.0, day);
+    return 1.0 - exp(-past / mix(AERIAL_DUSK_M, AERIAL_M, day) - past * low_mist);
+}
 // How wide a far snowfield's broken edge fades, and how much a fine grain frays it.
 const BREAK_SOFT: vec2<f32> = vec2<f32>(0.4, 0.58);
 const BREAK_GRAIN: f32 = 0.12;
@@ -1033,6 +1053,9 @@ fn fragment(
     let flatness = dot(normalize(in.world_normal), up);
 
     var colour = mix(ground.low.rgb, ground.high.rgb, smoothstep(0.25, 0.75, height));
+    // How much snow lies here, the far rock's or the weather's: a far wall's folds dim its
+    // rock's sky light and not its snow's (D434).
+    var snowed = 0.0;
     // Rock shows through from about 30 degrees, as soil and grass hold on gentler slopes.
     let steep = 1.0 - smoothstep(0.8, 0.9, flatness);
 
@@ -1594,6 +1617,7 @@ fn fragment(
             ground_is.normal = normalize(ground_is.normal + tier_up * tier_tilt);
         }
         pbr_input.N = ground_is.normal;
+        snowed = snow;
 } @else {
         let n = normalize(in.world_normal);
         let gx = dpdx(world);
@@ -1952,6 +1976,16 @@ fn fragment(
             colour *= 1.0 - JOINT_RECESS * joint_recess * (1.0 - snow);
             colour *= mix(1.0, mix(0.62, 1.08, rib * 0.5 + 0.5), ribbed * combed);
             colour *= 1.0 - 0.5 * wet_far * (1.0 - snow);
+@if(VERTEX_COLORS)
+            {
+                // A far wall's folds (D434, terrain.rs `folded`): the sky its vertices see
+                // dims its gullies' and its cliff bands' corners in the sky's light; drawn in
+                // the rock's colour too, a share of it, so they show where the sun lights the
+                // face as well, as Battlefield 3 put its terrain's occlusion in the colour.
+                // Lifted a little where the wall is open, so its mean tone holds while its
+                // folds darken.
+                colour *= mix(1.0, in.color.a * FOLD_LIFT, FOLD_TINT * smoothstep(300.0, 900.0, far_off) * (1.0 - snow));
+            }
         }
         colour *= mix(vec3<f32>(1.0), face_tint, (1.0 - snow) * (1.0 - scree));
         // A ledge's top faces the sky: it catches the light over the shaded face under it, and
@@ -1965,6 +1999,7 @@ fn fragment(
             colour = mix(colour, turf, max(ledge_turf, skirt_turf) * (1.0 - snow) * 0.85);
         }
         pbr_input.N = ground_is.normal;
+        snowed = snow;
 }
     } else {
         colour = mix(colour, ground.steep.rgb, steep);
@@ -2020,6 +2055,7 @@ fn fragment(
         map_snow *= climate_inside(world);
     }
     let snow = snow_on(map_snow * SNOW_FULL_M, world, level, canopy_over(world));
+    snowed = max(snowed, snow);
     let wet = max(climate.g * 0.6, climate.b) * (1.0 - snow);
     colour *= mix(1.0, 0.6, wet);
     pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.5, wet * 0.7);
@@ -2152,9 +2188,15 @@ fn fragment(
 }
     pbr_input.material.base_color = vec4<f32>(colour, 1.0);
     // The vertex's alpha is how much of the sky it sees: the sky's light is dimmed by it,
-    // so the bottom of a dug hole is dark rather than lit as open ground.
+    // so the bottom of a dug hole is dark rather than lit as open ground. Past a few hundred
+    // metres it is mostly a far wall's folds (terrain.rs `folded`), and the snow they hold is
+    // left its sky: dimmed, a couloir's snow went grey and the low rock lost its contrast
+    // (D434, mountains r23).
 @if(VERTEX_COLORS)
-    pbr_input.diffuse_occlusion *= vec3<f32>(in.color.a);
+    {
+        let snow_kept = snowed * smoothstep(300.0, 900.0, distance(world, view.world_position));
+        pbr_input.diffuse_occlusion *= vec3<f32>(mix(in.color.a, 1.0, snow_kept));
+    }
     // Under the trees the canopy hides most of the sky: its diffuse light is the sky
     // occlusion volume's (D270), which Bevy's lighting reads; the sky it reflects, which
     // that does not hold, is dimmed here, where the cover map says the trees stand over it.
@@ -2219,8 +2261,7 @@ fn fragment(
         day = smoothstep(DIRECT_FAINT.x, DIRECT_FAINT.y, direct);
         haze_light *= mix(DUSK_AIR_LIFT, 1.0, day);
     }
-    let low_mist = (1.0 - smoothstep(FOOT_MIST_M.x, FOOT_MIST_M.y, over_eye)) / FOOT_MIST_DEPTH_M * mix(FOOT_MIST_DUSK, 1.0, day);
-    let through = 1.0 - exp(-past / AERIAL_M - past * low_mist);
+    let through = air_through(past, over_eye, day);
     out.color = vec4<f32>(mix(out.color.rgb, haze_light * AERIAL_AIR, through), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 }

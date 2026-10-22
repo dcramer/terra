@@ -28,6 +28,8 @@ pub mod detail;
 pub mod dither;
 pub mod drift;
 pub mod falloff;
+#[cfg(test)]
+mod far_air;
 pub mod fire;
 pub mod flora;
 pub mod flora_kinds;

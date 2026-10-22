@@ -308,6 +308,44 @@ fn sky_seen<F: Field>(field: &F, memo: &mut F::Memo, point: Vec3, normal: Vec3) 
     open / asked
 }
 
+/// From this level on, chunks 64 m across and more, a few hundred metres off, the sky a far
+/// wall's vertex sees is dimmed by how its ground folds round it within tens of metres
+/// (`terra_voxel::openness`, D434): its gullies, the corners under its cliff bands, its
+/// notches. Coarser than the pits `sky_seen` finds, and the far mesh cannot shade them: lit
+/// alike, a range at dusk read as smooth plaster (the mountains r22 review). Eased in over
+/// the next two levels, so no chunk's sky changes at once as it splits.
+const FOLDED_FROM: u8 = 2;
+/// The reaches it looks within: a cliff band's riser and a couloir between buttresses. Within
+/// 14 and 42 m a far wall's vertices scored 0.93 on average, 0.08 either way, and the lake's
+/// and valley's views changed by under a fifth of a percent of their pixels (mountains r23).
+const FOLD_REACHES_M: [f32; 2] = [40.0, 120.0];
+/// The openness a wall's open ground scores, under which its sky dims, and how fast: within
+/// 40 and 120 m a far wall scores 0.84 on average, 0.12 either way, so the folds dim it by
+/// 0.3 either way of a quarter, and the deepest are left a third of the sky.
+const FOLD_OPEN: f32 = 0.95;
+const FOLD_GAIN: f32 = 2.5;
+const FOLD_DEEPEST: f32 = 0.3;
+/// Ground this level is left as it is; past the steeper share, the folds dim it whole, so a
+/// far meadow's hollows stay lit and a wall's gullies and benches do not.
+const FOLD_LEVEL: (f32, f32) = (0.97, 0.85);
+
+/// How much of the sky a far chunk's vertex sees for the folds of the ground round it.
+fn folded<F: Field>(field: &F, memo: &mut F::Memo, level: u8, point: Vec3, normal: Vec3) -> f32 {
+    let eased = (f32::from(level - FOLDED_FROM) + 1.0) / 3.0;
+    let steep = smoothstep(
+        FOLD_LEVEL.0,
+        FOLD_LEVEL.1,
+        normal.dot(point.normalize_or(Vec3::Y)),
+    );
+    let weight = eased.min(1.0) * steep;
+    if weight <= 0.0 {
+        return 1.0;
+    }
+    let open = terra_voxel::openness(field, memo, point, normal, &FOLD_REACHES_M);
+    let sky = (1.0 - FOLD_GAIN * (FOLD_OPEN - open)).clamp(FOLD_DEEPEST, 1.0);
+    1.0 - weight * (1.0 - sky)
+}
+
 /// A chunk's mesh as Bevy draws it, or nothing if it has no surface.
 fn to_mesh(planet: &Planet, id: ChunkId, chunk: ChunkMesh) -> Option<Mesh> {
     if chunk.indices.is_empty() {
@@ -315,6 +353,9 @@ fn to_mesh(planet: &Planet, id: ChunkId, chunk: ChunkMesh) -> Option<Mesh> {
     }
     let field = &**planet.voxels();
     let mut memo = field.memo_for(terra_voxel::VOXEL_M);
+    // A far chunk of a world with mountains asks how its ground folds at its own coarseness.
+    let mut folds = (planet.has_mountains() && id.level >= FOLDED_FROM)
+        .then(|| field.memo_for(terra_voxel::VOXEL_M * (1u32 << id.level) as f32));
     let colours: Vec<[f32; 4]> = chunk
         .positions
         .iter()
@@ -324,6 +365,9 @@ fn to_mesh(planet: &Planet, id: ChunkId, chunk: ChunkMesh) -> Option<Mesh> {
             let mut colour = colour(planet, point, normal, weights.ids[0]);
             if id.level <= SHADED_LEVELS {
                 colour[3] = sky_seen(field, &mut memo, point, normal);
+            }
+            if let Some(memo) = folds.as_mut() {
+                colour[3] *= folded(field, memo, id.level, point, normal);
             }
             colour
         })
