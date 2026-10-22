@@ -919,7 +919,7 @@ pub fn matte() -> f32 {
 }
 
 /// A kit's plain colours: `light`, the dust it throws up as it comes down
-/// (`terra_game::build::loss`), and `chinking`, the daub between a coursed kit's courses,
+/// (`terra_building::loss`), and `chinking`, the daub between a coursed kit's courses,
 /// which tints its texture. What a file leaves out is pine's.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]

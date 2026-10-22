@@ -13,17 +13,17 @@
 //! north of the start, `--castle` one base of a castle north of it, and `--far N` N
 //! buildings in hamlets spread round the start out to two kilometres.
 
-use super::{Build, BuildLook, Built, Site, frame_at, lifted, read_kits};
-use crate::planet::Planet;
-use crate::shell::Options;
-use crate::start::FLOOR_CLEARANCE_M;
 use bevy::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
+use terra_bases::{Build, BuildLook, Built, Site, frame_at, lifted, read_kits};
 use terra_build::kit::{Pattern, Profile};
 use terra_build::ops::{Context, Op};
 use terra_build::{Base, Rules};
 use terra_town::village::Building;
+use terra_world::planet::Planet;
+use terra_world::shell::Options;
+use terra_world::start::FLOOR_CLEARANCE_M;
 
 /// How many buildings to a row, and how far apart, in metres.
 const PER_ROW: usize = 10;
@@ -41,7 +41,7 @@ pub(super) fn lay(
     planet: Res<Planet>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    rules: Option<Res<super::act::BuildRules>>,
+    rules: Option<Res<crate::act::BuildRules>>,
 ) {
     if *done || !options.village {
         return;
@@ -181,7 +181,7 @@ pub(super) fn lay_scale(
     let Some(kits) = read_kits().map(Arc::new) else {
         return;
     };
-    let Some(kinds) = super::village_kinds(&kits) else {
+    let Some(kinds) = terra_survival::village_kinds(&kits) else {
         warn!("The scale scenes need a log, a stone and a hewn timber kit.");
         return;
     };

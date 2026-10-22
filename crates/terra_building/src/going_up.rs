@@ -5,13 +5,13 @@
 //! the frames while its sections are laid, merged and put on screen again and again, so a
 //! hitch from building shows as it would to a player.
 
-use super::act::Building;
-use super::plans;
-use crate::play::{LocalPlayer, Player};
-use crate::shell::{Options, ScriptFrame};
-use crate::start::Start;
+use crate::act::Building;
 use bevy::prelude::*;
+use terra_bases::plans;
 use terra_build::roofer::Style;
+use terra_walker::{LocalPlayer, Player};
+use terra_world::shell::{Options, ScriptFrame};
+use terra_world::start::Start;
 
 /// The room's corner tiles, in the base's own cubes, and where the camera stands and looks,
 /// in metres in its own space: across the room from a front corner, as the demo's picture

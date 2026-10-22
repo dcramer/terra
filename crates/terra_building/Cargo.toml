@@ -1,0 +1,42 @@
+[package]
+name = "terra_building"
+description = "Building play, in Bevy (D407): acting on a base with the hammer, what building costs and how each kind goes in, the build menu and dial, doors and shutters, what comes down and its dust, the base's fire, a house going up, the kit sheet and villages laid as scenes, and the remote's building methods."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# `bevy_remote`: the remote's building and fire methods (`build.*`, `fire.*`).
+bevy = { workspace = true, features = ["bevy_remote"] }
+libm.workspace = true
+serde.workspace = true
+# Remote methods take and give JSON; already built for Bevy's remote protocol.
+serde_json = "1"
+# The base on screen (D407): what building play acts on and draws again.
+terra_bases.workspace = true
+terra_build.workspace = true
+# Building laid out: a prop's hang and leaves (D407).
+terra_build_layout.workspace = true
+# Building drawn: the fragments of what comes down (D407).
+terra_build_mesh.workspace = true
+# The kit sheet's rows the build sheet lays (terra_build_scenes::sheet, D407).
+terra_build_scenes.workspace = true
+terra_core.workspace = true
+terra_gen.workspace = true
+terra_items.workspace = true
+# What a player carries, makes and needs (D407): what building costs and draws on, the
+# catalogue, claims, props, skills and what a player is told.
+terra_survival.workspace = true
+# The village's buildings, laid as scenes.
+terra_town.workspace = true
+# The walker layer (D198, D407): the player's own components, controls, camera and view.
+terra_walker.workspace = true
+terra_world.workspace = true
+
+[dev-dependencies]
+# The test world and player.
+terra_survival = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

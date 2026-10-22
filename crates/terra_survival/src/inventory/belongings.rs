@@ -44,6 +44,19 @@ pub struct Spilled {
     pub count: u32,
 }
 
+impl Belongings<'_, '_> {
+    /// Makes what acting through `Belongings` needs that is no one player's: the kinds of
+    /// item and the messages it writes. Survival's plugins make them; a run that acts through
+    /// it without them (building play alone, the sandbox's `build`, D198) calls this, which
+    /// leaves be what is made already.
+    pub fn init(app: &mut App) {
+        app.init_resource::<Items>()
+            .add_message::<Gained>()
+            .add_message::<Broke>()
+            .add_message::<Spilled>();
+    }
+}
+
 impl<'w> Belongings<'w, '_> {
     pub fn items(&self) -> &Items {
         &self.items

@@ -6,18 +6,18 @@
 //! straight on its house. The kinds and their models are the catalogue's (`builds.ron`'s
 //! `fittings`), told to this layer as [`FittingLooks`].
 
-use super::act::Building;
-use super::{Built, Site};
-use crate::play::interact::{CanInteract, Interactable, Interacted};
+use crate::act::Building;
 use bevy::asset::LoadState;
 use bevy::camera::visibility::VisibilityRange;
 use bevy::gltf::GltfAssetLabel;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
 use std::collections::BTreeMap;
+use terra_bases::{Built, Site};
 use terra_build::ops::{Context, Op};
 use terra_build::{Prop, PropKind, Rules};
 use terra_build_layout::fitting::{Hang, Hanging, Leaf};
+use terra_survival::interact::{CanInteract, Interactable, Interacted};
 
 /// How long a leaf takes to swing all the way, in seconds.
 const SWING_S: f32 = 0.7;
@@ -50,7 +50,7 @@ struct FrameLayers(std::collections::BTreeSet<u16>);
 /// Keeps the layers frames wear resident, as sections keep theirs.
 fn keep_frame_layers(
     layers: Res<FrameLayers>,
-    mut arrays: Option<ResMut<super::arrays::Arrays>>,
+    mut arrays: Option<ResMut<terra_bases::arrays::Arrays>>,
     assets: Res<AssetServer>,
     time: Res<Time<Real>>,
 ) {
@@ -73,9 +73,9 @@ fn spawn_frame(
     prop: &Prop,
     face: f32,
     look: &FittingLook,
-    build_look: &super::BuildLook,
-    rules: Option<&super::act::BuildRules>,
-    arrays: Option<&super::arrays::Arrays>,
+    build_look: &terra_bases::BuildLook,
+    rules: Option<&crate::act::BuildRules>,
+    arrays: Option<&terra_bases::arrays::Arrays>,
     meshes: &mut Assets<Mesh>,
     layers: &mut FrameLayers,
 ) {
@@ -92,7 +92,7 @@ fn spawn_frame(
             .map(|(material, surface)| ((kind, material), surface))
             .collect();
     let mut used = std::collections::BTreeSet::new();
-    let (in_arrays, rest) = super::draw::in_arrays(
+    let (in_arrays, rest) = terra_bases::draw::in_arrays(
         &surfaces,
         &build_look.layers,
         Vec3::ZERO,
@@ -180,7 +180,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (load, show, swing, preview).chain())
         .add_systems(
             FixedUpdate,
-            open_and_shut.after(crate::play::interact::Focusing),
+            open_and_shut.after(terra_survival::interact::Focusing),
         );
 }
 
@@ -298,7 +298,7 @@ fn spawn_leaves(
     model: &Model,
     look: &FittingLook,
     open: f32,
-    material: Option<MeshMaterial3d<crate::build::draw::GhostMaterial>>,
+    material: Option<MeshMaterial3d<terra_bases::draw::GhostMaterial>>,
 ) {
     let origin = foot(prop);
     for leaf in prop.leaves(face) {
@@ -339,14 +339,14 @@ fn show(
     mut drawn: Query<(Entity, &mut Fitted)>,
     mut seen: Local<BTreeMap<Option<Entity>, (u64, u64)>>,
     (build_look, rules, arrays, mut meshes, mut frame_layers): (
-        Res<super::BuildLook>,
-        Option<Res<super::act::BuildRules>>,
-        Option<Res<super::arrays::Arrays>>,
+        Res<terra_bases::BuildLook>,
+        Option<Res<crate::act::BuildRules>>,
+        Option<Res<terra_bases::arrays::Arrays>>,
         ResMut<Assets<Mesh>>,
         ResMut<FrameLayers>,
     ),
 ) {
-    let mut bases: Vec<(Option<Entity>, &super::Build)> = Vec::new();
+    let mut bases: Vec<(Option<Entity>, &terra_bases::Build)> = Vec::new();
     if let Some(site) = site.as_deref() {
         bases.push((None, &site.build));
     }
@@ -479,7 +479,7 @@ fn preview(
     site: Option<Res<Site>>,
     models: Res<Models>,
     looks: Res<FittingLooks>,
-    look: Option<Res<super::BuildLook>>,
+    look: Option<Res<terra_bases::BuildLook>>,
     shown: Query<(Entity, &Previewed)>,
 ) {
     let have = shown.iter().next().map(|(_, previewed)| previewed.0);

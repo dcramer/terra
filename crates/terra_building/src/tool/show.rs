@@ -1,14 +1,14 @@
 //! Showing what the builder would do before it is done: outlines, footprints and ghosts.
 
 use super::*;
-use crate::build::Site;
-use crate::planet::Planet;
-use crate::play::catalogue::{Builds, Kind};
-use crate::play::props::{self, Blocked, Models, Prop};
 use bevy::{
     asset::RenderAssetUsages, ecs::system::SystemParam, render::render_resource::PrimitiveTopology,
 };
+use terra_bases::Site;
 use terra_build::{Base, CELL_M, DOOR_HEIGHT_M, Panel, STOREY_M};
+use terra_survival::catalogue::{Builds, Kind};
+use terra_survival::props::{self, Blocked, Models, Prop};
+use terra_world::planet::Planet;
 
 /// The rectangle up the middle of a stretch of wall tiles, in the base's own space:
 /// low-left, low-right, high-right, high-left, as seen from the side the wall faces. Along
@@ -113,7 +113,7 @@ impl Shapes<'_, '_> {
 /// it can be fitted there.
 pub(super) fn preview_fit(
     builder: Single<&Builder, IsLocalPlayer>,
-    mut preview: ResMut<crate::build::props::FitPreview>,
+    mut preview: ResMut<crate::props::FitPreview>,
 ) {
     let wanted = builder
         .planned

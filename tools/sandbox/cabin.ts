@@ -22,7 +22,7 @@
 // D241); and the game saved and loaded again, the base and what the chest holds the same.
 //
 // One running game, driven live over the remote protocol (tools/sandbox, the `build.*`
-// methods in crates/terra_game/src/build/remote.rs). Screenshots of the plan, the cabin
+// methods in crates/terra_building/src/remote.rs). Screenshots of the plan, the cabin
 // going up and the cabin finished go to shots/cabin-*.png; a failing step says what the
 // game said and leaves shots/cabin-<step>.png.
 //

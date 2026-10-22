@@ -16,6 +16,7 @@ terra_build = { path = "crates/terra_build" }
 terra_build_layout = { path = "crates/terra_build_layout" }
 terra_build_mesh = { path = "crates/terra_build_mesh" }
 terra_build_scenes = { path = "crates/terra_build_scenes" }
+terra_building = { path = "crates/terra_building" }
 terra_climate = { path = "crates/terra_climate" }
 terra_game = { path = "crates/terra_game" }
 terra_core = { path = "crates/terra_core" }

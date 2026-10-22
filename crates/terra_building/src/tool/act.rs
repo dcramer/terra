@@ -1,22 +1,22 @@
 //! Doing it: laying plans at a click, building, taking apart and moving over the moment
 //! each takes, and showing the work on the thing itself. What is done to the base goes
-//! through `build::act::Building`, which checks it and settles what it costs.
+//! through `act::Building`, which checks it and settles what it costs.
 
 use super::*;
-use crate::build::Site;
-use crate::build::act::Building;
-use crate::build::hammer::Hammer;
-use crate::planet::Planet;
-use crate::play::catalogue::{self, Builds, Kind, Tab};
-use crate::play::controls::Action;
-use crate::play::noise::{Cue, Noise};
-use crate::play::props::{self, Models, PlacedBy, Prop};
-use crate::play::skills::{Did, ONCE, Skill};
-use crate::play::work::Hold;
-use crate::play::{IsLocalPlayer, Stance};
-use crate::start::Start;
+use crate::act::Building;
 use bevy::ecs::system::SystemParam;
+use terra_bases::Site;
+use terra_bases::hammer::Hammer;
 use terra_build::Bill;
+use terra_survival::catalogue::{self, Builds, Kind, Tab};
+use terra_survival::noise::{Cue, Noise};
+use terra_survival::props::{self, Models, PlacedBy, Prop};
+use terra_survival::skills::{Did, ONCE, Skill};
+use terra_survival::work::Hold;
+use terra_walker::controls::Action;
+use terra_walker::{IsLocalPlayer, Stance};
+use terra_world::planet::Planet;
+use terra_world::start::Start;
 
 /// Why storage with anything in it is not moved or taken apart (D193).
 const EMPTY_FIRST: &str = "Empty it first: nothing is taken apart or moved while it holds anything";
@@ -384,7 +384,7 @@ fn copy(cx: &mut Acting, me: Actor, intent: &Intent, builder: &mut Mut<Builder>)
             player,
             format!(
                 "Material: {}",
-                crate::play::controls::capitalised(building.rules.name(kind).to_string())
+                terra_walker::controls::capitalised(building.rules.name(kind).to_string())
             ),
         );
         return true;

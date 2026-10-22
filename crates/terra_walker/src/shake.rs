@@ -1,4 +1,4 @@
-//! The view shaking: a blow landing or taken (`hits`), a collapse nearby (`build::loss`),
+//! The view shaking: a blow landing or taken (`hits`), a collapse nearby (`terra_building::loss`),
 //! anything that shakes the view kicks [`Shake`], and the camera is moved a little off where
 //! it was put until the shake runs down. The walker's, since the view is: what kicks it
 //! names it from above.

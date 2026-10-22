@@ -10,8 +10,6 @@
 //! `Stance`, `View`, `Downed`) are the walker's, for every layer to read. See docs/player.md and docs/building.md for
 //! the design.
 
-mod build_menu;
-mod dial;
 pub use flora::{FloraSystems, Growth, Obstacles};
 pub use flora_kinds::Flora;
 pub use footprint::Footprint;
@@ -24,11 +22,11 @@ pub use props::{
     looks as prop_looks,
 };
 mod save;
-pub(crate) use shake::Shake;
 mod sounds;
 mod soundscape;
-mod tool;
 
+// Building play, its own crate since D407, by its old names here.
+use terra_building::{build_menu, dial, tool};
 // Creatures and fighting, their own crate since D407, by their old names here.
 use terra_creatures::{
     archery, coats, combat, creatures, fliers, hits, melee, sighted, species, staged, wildlife,
@@ -44,18 +42,18 @@ use super::build::{self, DrivenByPlayer, Site};
 use terra_survival::test_world;
 use terra_survival::{
     bag, crafting, death, dig, gains, harvest, noise, pile, registries, skills, station_screen,
-    storage_screen, tiles, torchlight, vitals, warmth, wear, work, worn,
+    storage_screen, torchlight, vitals, warmth, wear, worn,
 };
-pub(crate) use terra_survival::{catalogue, claim, hazards, held, interact, props, storage, told};
+pub(crate) use terra_survival::{catalogue, claim, held, interact, props, storage, told};
 pub use terra_survival::{contract, inventory};
 // The walker layer (D198), its own crate since D407, by its old names here.
 pub(crate) use terra_walker::bodies;
-use terra_walker::{button, camera, controls, intent, options, shake, walker};
+use terra_walker::{button, camera, controls, options, shake, walker};
 // The world layer's modules, by their old names here, for the modules above them.
 use crate::shell::Options;
 use bevy::{app::PluginGroupBuilder, prelude::*, window::CursorOptions};
 use options::MenuSystems;
-use terra_world::{daylight, flora, flora_kinds, footprint, lod, models, tick, world};
+use terra_world::{daylight, flora, flora_kinds, footprint, lod, world};
 pub use tool::Builder;
 pub use walker::{ArriveAt, Hands, PlayerInput, Stamina, WalkerPlugin, WarpTo};
 // The player's own components are the walker's; every layer reads them by these names.

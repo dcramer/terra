@@ -37,24 +37,24 @@
 //! would move, the outline of a window, the footprint of a room, or a ghost of the item
 //! where it would stand.
 
-use super::catalogue::{Builds, Item, Kind, Part};
-use super::controls::Action;
-use super::intent::Intent;
-use super::inventory::Belongings;
-use super::props::{Blocked, Prop};
-use super::tick::Sim;
-use super::work::Hold;
-use super::{IsLocalPlayer, Player};
-use crate::build::act::Work as BaseWork;
-use crate::build::hammer::Hammer;
+use crate::act::Work as BaseWork;
 use bevy::{
     light::{NotShadowCaster, NotShadowReceiver},
     prelude::*,
 };
 use std::sync::Arc;
+use terra_bases::hammer::Hammer;
 use terra_build::ops::Op;
 use terra_build::{CELL_M, cells};
 use terra_items::ItemKind;
+use terra_survival::catalogue::{Builds, Item, Kind, Part};
+use terra_survival::inventory::Belongings;
+use terra_survival::props::{Blocked, Prop};
+use terra_survival::work::Hold;
+use terra_walker::controls::Action;
+use terra_walker::intent::Intent;
+use terra_walker::{IsLocalPlayer, Player};
+use terra_world::tick::Sim;
 
 mod act;
 mod aim;
@@ -82,7 +82,7 @@ const FREE_TURN: f32 = 15.0;
 /// How far, in cells, the aim must move from where a room snapped before it moves on.
 const ROOM_STICK_CELLS: f32 = 0.8;
 /// How long after building or taking something apart it can be undone, in seconds.
-const UNDO_S: f32 = crate::build::act::UNDO_S;
+const UNDO_S: f32 = crate::act::UNDO_S;
 /// How far one notch raises or lowers an item off the grid; on it, a grid step.
 const FREE_RAISE_M: f32 = 0.1;
 /// How high an item can be raised above where it would stand.
@@ -207,7 +207,7 @@ fn drawn_room(from: IVec2, to: IVec2) -> (IVec2, IVec2) {
 /// The wall tiles of a wall drawn from one tile toward another, along the grid's four
 /// directions only (D146). Both ends included, so it is at least a tile long.
 fn drawn_wall(from: IVec2, to: IVec2, level: i32) -> Vec<IVec3> {
-    crate::build::plans::wall_tiles(from, to, level)
+    terra_bases::plans::wall_tiles(from, to, level)
 }
 
 /// What the hammer does to the base (D139, D144): lays a plan, for nothing, at a click;
@@ -691,9 +691,9 @@ fn setup(
 /// claim's budget of planned cubes (D193).
 fn price(
     builds: Res<Builds>,
-    items: Res<crate::play::inventory::Items>,
-    mut rules: ResMut<crate::build::act::BuildRules>,
-    mut looks: ResMut<crate::build::props::FittingLooks>,
+    items: Res<terra_survival::inventory::Items>,
+    mut rules: ResMut<crate::act::BuildRules>,
+    mut looks: ResMut<crate::props::FittingLooks>,
 ) {
     // What each door and shutters is drawn with.
     looks.0 = builds
@@ -702,23 +702,23 @@ fn price(
         .map(|fitting| {
             (
                 fitting.kind,
-                crate::build::props::FittingLook {
+                crate::props::FittingLook {
                     path: format!("models/openings/{}.glb", fitting.model),
                     dims: fitting.dims,
                     // Its hinge socket, which the model contract puts at its origin.
-                    hinge: crate::play::models::read_sockets(&format!(
+                    hinge: terra_world::models::read_sockets(&format!(
                         "openings/{}.glb",
                         fitting.model
                     ))
                     .ok()
-                    .and_then(|sockets| crate::play::props::socket(&sockets, "hinge"))
+                    .and_then(|sockets| terra_survival::props::socket(&sockets, "hinge"))
                     .unwrap_or(Vec3::ZERO),
                     frame: fitting.frame.clone(),
                 },
             )
         })
         .collect();
-    let bill = |cost: &crate::play::inventory::Cost| {
+    let bill = |cost: &terra_survival::inventory::Cost| {
         let mut bill = terra_build::Bill::default();
         for &(kind, count) in cost {
             bill.add(&terra_build::Bill::of(
@@ -739,8 +739,8 @@ fn price(
 /// in hand. The builder only answers while it is the tool in hand.
 fn choose(
     builds: Res<Builds>,
-    rules: Res<crate::build::act::BuildRules>,
-    look: Res<crate::build::BuildLook>,
+    rules: Res<crate::act::BuildRules>,
+    look: Res<terra_bases::BuildLook>,
     mut belongings: Belongings,
     mut players: Query<(Entity, &Intent, &mut Builder, &mut Hammer), With<Player>>,
 ) {

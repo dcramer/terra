@@ -9,10 +9,7 @@
 //! shipped games is tested along its cone rather than by its particles; and, over the remote,
 //! `fire.light` and `fire.heat`, with `fire.state` saying how it burns.
 
-use super::Site;
-use super::act::Building;
-use crate::play::hazards::{BreathesFire, Frightful};
-use crate::remote::{method, refused};
+use crate::act::Building;
 use bevy::{
     ecs::system::SystemState,
     prelude::*,
@@ -22,12 +19,15 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::time::Instant;
+use terra_bases::Site;
 use terra_build::fire::{Burns, Fire, TICK_S};
 use terra_build::ops::Op;
 use terra_build::{CELL_M, Kind};
+use terra_survival::hazards::{BreathesFire, Frightful};
 use terra_world::climate::ClimateFields;
 use terra_world::daylight::Clock;
 use terra_world::fire::{Blaze, Blazes, Jet};
+use terra_world::remote::{method, refused};
 
 /// The base's fire, what each kind burns as, and its blazes as last worked out.
 #[derive(Resource, Default)]
@@ -69,8 +69,8 @@ pub fn plugin(app: &mut App) {
 
 /// What each kind burns as and how much health it has, from the kits, once they are read.
 fn kinds(
-    look: Option<Res<super::BuildLook>>,
-    rules: Res<super::act::BuildRules>,
+    look: Option<Res<terra_bases::BuildLook>>,
+    rules: Res<crate::act::BuildRules>,
     mut fire: ResMut<SiteFire>,
 ) {
     if !fire.burns.is_empty() {
@@ -94,10 +94,13 @@ fn breathe(
     breathers: Query<(&BreathesFire, &GlobalTransform)>,
     site: Res<Site>,
     mut fire: ResMut<SiteFire>,
-    mut blazes: ResMut<Blazes>,
+    // The world's drawing of fire (D198): without it the breath still heats the base, undrawn.
+    mut blazes: Option<ResMut<Blazes>>,
     mut turn: Local<u32>,
 ) {
-    blazes.jets.clear();
+    if let Some(blazes) = blazes.as_deref_mut() {
+        blazes.jets.clear();
+    }
     let step = time.delta_secs();
     let to_base = site.frame.compute_affine().inverse();
     let SiteFire {
@@ -123,19 +126,21 @@ fn breathe(
         if let Some(hit) = &struck {
             splashes.push(from + way * (hit.distance - SPLASH_BACK_M).max(0.0));
         }
-        blazes.jets.push(Jet {
-            from,
-            way,
-            reach: struck
-                .as_ref()
-                .map_or(breath.reach_m, |hit| hit.distance + SPLASH_BACK_M),
-            spread: breath.spread,
-            on: breath.on,
-            face: struck.as_ref().map_or(0.0, |hit| hit.distance),
-            normal: struck.as_ref().map_or(Vec3::ZERO, |hit| {
-                (site.frame.rotation * hit.normal.as_vec3()).normalize_or_zero()
-            }),
-        });
+        if let Some(blazes) = blazes.as_deref_mut() {
+            blazes.jets.push(Jet {
+                from,
+                way,
+                reach: struck
+                    .as_ref()
+                    .map_or(breath.reach_m, |hit| hit.distance + SPLASH_BACK_M),
+                spread: breath.spread,
+                on: breath.on,
+                face: struck.as_ref().map_or(0.0, |hit| hit.distance),
+                normal: struck.as_ref().map_or(Vec3::ZERO, |hit| {
+                    (site.frame.rotation * hit.normal.as_vec3()).normalize_or_zero()
+                }),
+            });
+        }
         if !breath.on || step <= 0.0 {
             continue;
         }
@@ -170,7 +175,8 @@ fn breathe(
 /// is told to the drawing.
 fn burn(
     time: Res<Time>,
-    clock: Res<Clock>,
+    // The world's clock and climate (D198): without them the fire burns in still air.
+    clock: Option<Res<Clock>>,
     climate: Option<Res<ClimateFields>>,
     mut fire: ResMut<SiteFire>,
     mut building: Building,
@@ -186,7 +192,7 @@ fn burn(
     // The wind where the base stands, in its own space.
     let frame = building.site.frame;
     let here = frame.translation;
-    let wind = climate.map_or(Vec3::ZERO, |climate| {
+    let wind = climate.zip(clock).map_or(Vec3::ZERO, |(climate, clock)| {
         let wind = climate.fields.at(climate.place(here), clock.time()).wind;
         let up = here.normalize_or(Vec3::Y);
         let north = climate.frame.north(here);
@@ -381,12 +387,15 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> Vec<Blaze
 fn blazes(
     mut commands: Commands,
     fire: Res<SiteFire>,
-    mut drawn: ResMut<Blazes>,
+    // The world's drawing of fire (D198): without it the fire still frightens, undrawn.
+    drawn: Option<ResMut<Blazes>>,
     mut fright: Local<Option<Entity>>,
     mut frights: Query<(&mut Transform, &mut Frightful)>,
 ) {
     let splashes = fire.splashes.len();
-    if fire.is_changed() || drawn.blazes.len() != fire.blazes.len() + splashes {
+    if let Some(mut drawn) = drawn
+        && (fire.is_changed() || drawn.blazes.len() != fire.blazes.len() + splashes)
+    {
         // The splashes first, so the drawing's cap never leaves them out.
         drawn.blazes.clear();
         drawn
@@ -505,4 +514,82 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "act_ms": fire.act_ms,
         "cubes": cubes,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::time::TimeUpdateStrategy;
+    use std::time::Duration;
+    use terra_bases::{arrays, draw};
+    use terra_core::{PlanetSpec, Seed};
+    use terra_world::planet::{MainCamera, Planet};
+    use terra_world::shell::Options;
+    use terra_world::start::Start;
+
+    /// Building play's fire burns the base as the sandbox's `build` runs it: building play
+    /// over the base on the shell, the planet and the start, with nothing of the world's
+    /// layer (its clock, climate and drawing of fire) or of survival's plugins (D198). A
+    /// system asking for a resource only those make (`Clock`, `Blazes`, the kinds of item
+    /// `act::Building` reads) would panic here.
+    #[test]
+    fn the_fire_burns_without_the_world_layer() {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            bevy::gizmos::GizmoPlugin,
+        ))
+        .init_asset::<Mesh>()
+        .init_asset::<StandardMaterial>()
+        .init_asset::<Image>()
+        .init_asset::<arrays::BuildMaterial>()
+        .init_asset::<draw::GhostMaterial>()
+        .init_asset::<bevy::mesh::skinning::SkinnedMeshInverseBindposes>()
+        .init_resource::<ButtonInput<KeyCode>>()
+        .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+            100,
+        )));
+        let planet = Planet::new(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        app.insert_resource(Options::from_args(std::iter::empty()).unwrap())
+            .insert_resource(Start(Transform::from_translation(planet.start())))
+            .insert_resource(planet);
+        crate::building::plugin(&mut app);
+        app.world_mut()
+            .spawn((MainCamera, Transform::default(), GlobalTransform::default()));
+        app.update();
+
+        // Every cube of the example base that burns set alight, as `fire.light` would.
+        let world = app.world_mut();
+        let mut state = SystemState::<(Res<Site>, ResMut<SiteFire>)>::new(world);
+        let (site, mut fire) = state.get_mut(world).unwrap();
+        let (low, high) = site.base.bounds().expect("the example base is laid");
+        let SiteFire {
+            fire: burning,
+            burns,
+            ..
+        } = &mut *fire;
+        assert!(!burns.is_empty(), "the kits say what burns");
+        let burns_as = |kind: Kind| burns.get(&kind).copied();
+        for x in low.x..=high.x {
+            for y in low.y..=high.y {
+                for z in low.z..=high.z {
+                    burning.light(&site.base, &burns_as, IVec3::new(x, y, z));
+                }
+            }
+        }
+        assert!(burning.burning_count() > 0, "the example base burns");
+
+        for _ in 0..40 {
+            app.update();
+        }
+        let world = app.world();
+        assert!(!world.contains_resource::<Clock>());
+        assert!(!world.contains_resource::<Blazes>());
+        // Stepped by its tick, the fire is gathered into blazes for a drawing that is not there.
+        assert!(!world.resource::<SiteFire>().blazes.is_empty());
+    }
 }

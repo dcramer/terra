@@ -3,7 +3,7 @@
 //! roll off ledges, settle and shrink away, with a puff of dust where it broke and where
 //! big pieces land, and the view shaken when a big collapse is near; and, until attacks
 //! come (D90), F9 harming the cube the hammer is aimed at by a quarter of its kind's health,
-//! as the remote's `build.damage` does. Mending is the hammer's (`play::tool`), damage drawn
+//! as the remote's `build.damage` does. Mending is the hammer's (`tool`), damage drawn
 //! as its sections are.
 //!
 //! Cheap and bounded: fragments are drawn instanced, a few meshes a kind in the texture
@@ -11,20 +11,22 @@
 //! preset, the oldest fading first past it, fewer made far off and at a low preset. Nothing
 //! of them is interactive or collides with anyone.
 
-use super::act::Building;
-use super::arrays::{Arrays, BuildMaterial};
-use super::draw;
-use super::{Build, BuildLook, Built, Fallen, Site};
-use crate::planet::{MainCamera, Planet};
-use crate::play::{Builder, LocalPlayer, Player, Shake};
+use crate::act::Building;
+use crate::tool::Builder;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
+use terra_bases::arrays::{Arrays, BuildMaterial};
+use terra_bases::draw;
+use terra_bases::{Build, BuildLook, Built, Fallen, Site};
 use terra_build::ops::Op;
 use terra_build::{CELL_M, Cube, Kind};
 use terra_build_mesh::fragments::{self, Breaking, Breaks, Cut, Fragment, Rubble, Shape};
+use terra_walker::shake::Shake;
+use terra_walker::{LocalPlayer, Player};
+use terra_world::planet::{MainCamera, Planet};
 use terra_world::quality::Quality;
 
 mod dust;
@@ -85,7 +87,7 @@ pub fn plugin(app: &mut App) {
         Update,
         (harm_aimed, burst, (step, puff))
             .chain()
-            .after(super::layout::Drawing::Upload),
+            .after(terra_bases::layout::Drawing::Upload),
     );
 }
 

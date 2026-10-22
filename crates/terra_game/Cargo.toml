@@ -1,6 +1,6 @@
 [package]
 name = "terra_game"
-description = "The game in Bevy: the world on screen, the player, what they carry and build, creatures, people, sound, saving, and the harness every build runs under."
+description = "The game in Bevy: the app over the gameplay crates (D407): the map, the game's sounds and music, saving, the remote probe, and the plugin groups every run is built from."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -20,12 +20,8 @@ gltf = { version = "1.4", default-features = false, features = ["utils"] }
 # The base on screen (D407), re-exported as `build`.
 terra_bases.workspace = true
 terra_build.workspace = true
-# Building laid out: its pieces, props' leaves and walking (D407).
-terra_build_layout.workspace = true
-# Building drawn: the sections, their meshes and fragments the game uploads (D407).
-terra_build_mesh.workspace = true
-# The kit sheet's rows the build sheet lays (terra_build_scenes::sheet, D407).
-terra_build_scenes.workspace = true
+# Building play (D407), re-exported at its old paths.
+terra_building.workspace = true
 terra_climate.workspace = true
 terra_core.workspace = true
 # Creatures and fighting (D407), re-exported at their old paths.
@@ -36,8 +32,6 @@ terra_gen.workspace = true
 terra_items.workspace = true
 # What a player carries, makes and needs (D407), re-exported at its old paths.
 terra_survival.workspace = true
-# Settlements: a town laid out and its people's days (D324).
-terra_town.workspace = true
 terra_voxel.workspace = true
 # The walker layer (D198, D407), re-exported at its old paths.
 terra_walker.workspace = true

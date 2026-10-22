@@ -4,7 +4,7 @@
 //! splash, a crown of droplets thrown up and falling back, a white spray puff and rings
 //! spreading on the water (`terra_world::rises`). A few dozen soft sprites facing the view,
 //! lit by the sun and the sky as anything else is, drawn as the build's dust is
-//! (`build::loss`), and gone in under three seconds.
+//! (`terra_building::loss`), and gone in under three seconds.
 
 use super::placed;
 use bevy::{

@@ -1,13 +1,13 @@
 //! What the builder says it would do, and its keys.
 
 use super::*;
-use crate::play::catalogue::{Builds, Kind};
-use crate::play::controls::{Action, Settings, capitalised};
-use crate::play::inventory::{self};
-use crate::play::props::Blocked;
-use crate::shell::Options;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use terra_build::CELL_M;
+use terra_survival::catalogue::{Builds, Kind};
+use terra_survival::inventory::{self};
+use terra_survival::props::Blocked;
+use terra_walker::controls::{Action, Settings, capitalised};
+use terra_world::shell::Options;
 
 /// What each button would do right now, for the prompt under the aiming mark.
 pub fn prompt(

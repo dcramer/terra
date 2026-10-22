@@ -1,7 +1,7 @@
 //! The kit sheet's rows (docs/building-kits.md, D69, D71): every way walls, roofs, floors
 //! and openings meet, as bases of shortcut operations in cubes, each named, and a
 //! material's preview (D349). The game lays them in rows on the yard (`--kit-sheet`,
-//! `terra_game::build::sheet`), placing and lighting them; what each row is lives here,
+//! `terra_building::sheet`), placing and lighting them; what each row is lives here,
 //! with the other scenes, so tests and tools can build it without Bevy.
 
 use glam::{IVec3, Vec3};

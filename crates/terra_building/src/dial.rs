@@ -4,20 +4,20 @@
 //! build menu (`build_menu`). Under the aiming mark, a line says what is picked and what
 //! each button would do.
 
-use super::IsLocalPlayer;
-use super::build_menu::BuildMenu;
-use super::catalogue::Builds;
-use super::controls::{Action, Controls, Settings, capitalised};
-use super::crafting::Crafts;
-use super::flora::Growth;
-use super::harvest::{self, Cutting};
-use super::interact::Focus;
-use super::inventory::{Belongings, Inventory, InventoryScreen};
-use super::options::OptionsMenu;
-use super::registries::FloraGives;
-use super::tool::{self, Builder};
-use crate::shell::Options;
+use crate::build_menu::BuildMenu;
+use crate::tool::{self, Builder};
 use bevy::{input::mouse::AccumulatedMouseMotion, prelude::*, window::CursorOptions};
+use terra_survival::catalogue::Builds;
+use terra_survival::crafting::Crafts;
+use terra_survival::harvest::{self, Cutting};
+use terra_survival::interact::Focus;
+use terra_survival::inventory::{Belongings, Inventory, InventoryScreen};
+use terra_survival::registries::FloraGives;
+use terra_walker::IsLocalPlayer;
+use terra_walker::controls::{Action, Controls, Settings, capitalised};
+use terra_walker::options::OptionsMenu;
+use terra_world::flora::Growth;
+use terra_world::shell::Options;
 
 const DIAL_SIZE: f32 = 650.0;
 /// The most kinds a part has.
@@ -320,15 +320,15 @@ fn draw(
     focus: Single<&Focus, IsLocalPlayer>,
     mut belongings: Belongings,
     cutting: Single<&Cutting, IsLocalPlayer>,
-    digging: Single<&super::dig::Digging, IsLocalPlayer>,
+    digging: Single<&terra_survival::dig::Digging, IsLocalPlayer>,
     growth: Query<&Growth>,
     options: Res<Options>,
     (crafts, builds, flora_gives, rules, look): (
         Crafts,
         Res<Builds>,
         Res<FloraGives>,
-        Option<Res<crate::build::act::BuildRules>>,
-        Option<Res<crate::build::BuildLook>>,
+        Option<Res<crate::act::BuildRules>>,
+        Option<Res<terra_bases::BuildLook>>,
     ),
     cursor: Single<&CursorOptions>,
     mut root: Single<&mut Visibility, (With<DialRoot>, Without<Hud>)>,
@@ -541,7 +541,7 @@ fn in_hand(belongings: &Inventory, builder: &Builder, builds: &Builds) -> String
 fn draw_progress(
     builder: Single<&Builder, IsLocalPlayer>,
     cutting: Single<&Cutting, IsLocalPlayer>,
-    digging: Single<&super::dig::Digging, IsLocalPlayer>,
+    digging: Single<&terra_survival::dig::Digging, IsLocalPlayer>,
     mut bar: Single<&mut Visibility, With<ProgressBar>>,
     mut fill: Single<(&mut Node, &mut BackgroundColor), With<ProgressFill>>,
 ) {

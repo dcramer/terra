@@ -11,4 +11,4 @@ It stands on the world (`terra_world`) and the plain building crates (`terra_bui
 cargo test -p terra_bases
 ```
 
-Building play (`terra_game::build::building`) adds it with what is built over it, and the game re-exports it at its old path, `terra_game::build`. The walker reads the hammer (`hammer::Hammer`); building play acts on `Build` and reads `BuildLook` and `Site`. How it is drawn: [docs/building-drawing.md](../../docs/building-drawing.md).
+Building play (`terra_building::building`) adds it with what is built over it, and the game re-exports it at its old path, `terra_game::build`. The walker reads the hammer (`hammer::Hammer`); building play acts on `Build` and reads `BuildLook` and `Site`. How it is drawn: [docs/building-drawing.md](../../docs/building-drawing.md).

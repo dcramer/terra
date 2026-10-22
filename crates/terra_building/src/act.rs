@@ -25,26 +25,26 @@
 //! the acts' thread, against the base they leave there, so a dozen made in one frame cost
 //! the frame a dozen copies of nothing rather than a dozen waits.
 
-use super::{Applied, Site};
-use crate::planet::Planet;
-use crate::play::Player;
-use crate::play::bodies::Body;
-use crate::play::claim::Claim;
-use crate::play::inventory::Belongings;
-use crate::play::inventory::Cost;
-use crate::play::props::Prop as Item;
-use crate::play::storage::Stores;
-use crate::play::told::Told;
-use crate::shell::Options;
 use bevy::{ecs::system::SystemParam, prelude::*};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
+use terra_bases::{Applied, Site};
 use terra_build::ops::{self, Context, Done, Op, Refusal};
 use terra_build::order::Step;
 use terra_build::{Amount, Bill, CELL_M, Kind, PartId, Rules, Sample, Walker};
 use terra_items::ItemKind;
+use terra_survival::claim::Claim;
+use terra_survival::inventory::Belongings;
+use terra_survival::inventory::Cost;
+use terra_survival::props::Prop as Item;
+use terra_survival::storage::Stores;
+use terra_survival::told::Told;
+use terra_walker::Player;
+use terra_walker::bodies::Body;
+use terra_world::planet::Planet;
+use terra_world::shell::Options;
 
 /// How long after doing something to the base it can be undone, in seconds (D144).
 pub const UNDO_S: f32 = 60.0;
@@ -116,7 +116,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Offcuts>()
         .init_resource::<Applying>()
         .register_required_components::<Player, History>()
-        .add_systems(Update, take_in.before(super::layout::Drawing::Notice));
+        .add_systems(Update, take_in.before(terra_bases::layout::Drawing::Notice));
 }
 
 /// Acts being worked out on workers, oldest first (`Building::act_later`).
@@ -482,7 +482,7 @@ impl Building<'_, '_> {
                 claim: claim.as_ref(),
                 world: &around,
             };
-            let worked = super::work_out(base.clone(), kits, ops, &cx);
+            let worked = terra_bases::work_out(base.clone(), kits, ops, &cx);
             *latest = Some(match &worked {
                 Ok(applied) => applied.base.clone(),
                 Err(_) => base,
@@ -758,7 +758,7 @@ impl Building<'_, '_> {
     /// The ground's height under a column of the base, in centimetres in its own space, as
     /// a footing down to it is laid: the lowest under the column, a little lower.
     pub fn ground_cm(&self, column: [i32; 2]) -> i16 {
-        super::ground_cm(&self.site.frame, &self.planet, column)
+        terra_bases::ground_cm(&self.site.frame, &self.planet, column)
     }
 
     /// Plans with the ground under their cubes sampled into them (construction-001, gap 3).

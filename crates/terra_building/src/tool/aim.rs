@@ -1,17 +1,17 @@
 //! What the builder is aimed at, and what it would cost there.
 
 use super::*;
-use crate::build::Site;
-use crate::build::act::Building;
-use crate::planet::Planet;
-use crate::play::View;
-use crate::play::catalogue::{Builds, Kind};
-use crate::play::claim::Claim;
-use crate::play::flora::Obstacles;
-use crate::play::props::{self, Blocked, Models, Prop, Standing};
-use crate::shell::Options;
+use crate::act::Building;
 use bevy::ecs::system::SystemParam;
+use terra_bases::Site;
 use terra_build::{CELL_M, DOOR_WIDTH_M, Panel, STOREY_M, Side, cells};
+use terra_survival::catalogue::{Builds, Kind};
+use terra_survival::claim::Claim;
+use terra_survival::props::{self, Blocked, Models, Prop, Standing};
+use terra_walker::View;
+use terra_world::flora::Obstacles;
+use terra_world::planet::Planet;
+use terra_world::shell::Options;
 
 /// What `aim` looks at besides the players: the ground, the base, the items standing about
 /// and what is in the way.
@@ -33,7 +33,7 @@ pub(super) struct Aiming<'w, 's> {
             &'static Visibility,
         ),
     >,
-    held: Option<Res<'w, crate::remote::HeldCamera>>,
+    held: Option<Res<'w, terra_world::remote::HeldCamera>>,
 }
 
 /// What the view meets, worked out once a frame for a player and shared by every tool.
@@ -521,7 +521,7 @@ fn room(cx: &Aiming, sight: &Sight, builder: &mut Mut<Builder>) -> Target {
     let drawn = draw_to(builder, aimed, storey);
     // The space aimed into, a roof covering it whole.
     let space = if roof && drawn.is_none() {
-        crate::build::plans::room_footprint(
+        terra_bases::plans::room_footprint(
             &site.base,
             (aimed / CELL_M).floor().as_ivec3().with_y(builder.storey),
         )
@@ -638,28 +638,28 @@ fn room(cx: &Aiming, sight: &Sight, builder: &mut Mut<Builder>) -> Target {
 /// item's price and what is short of it; for the base, the work and the base's answer.
 pub(super) fn afford(
     builds: Res<Builds>,
-    look: Res<crate::build::BuildLook>,
+    look: Res<terra_bases::BuildLook>,
     props: Query<&Prop>,
     mut building: Building,
-    village: Option<Res<crate::play::claim::Village>>,
+    village: Option<Res<terra_survival::claim::Village>>,
     mut players: Query<
         (
             Entity,
             &Transform,
             &Claim,
             &mut Builder,
-            Has<crate::play::LocalPlayer>,
+            Has<terra_walker::LocalPlayer>,
         ),
         With<Player>,
     >,
 ) {
     // Every claim there is, by whose it is, and the village, which a new claim keeps clear
     // of (D193, D265).
-    let claims: Vec<(Entity, crate::play::claim::Keeps)> = players
+    let claims: Vec<(Entity, terra_survival::claim::Keeps)> = players
         .iter()
         .filter_map(|(player, _, claim, ..)| claim.keeps().map(|keeps| (player, keeps)))
         .collect();
-    let villages: Vec<crate::play::claim::Keeps> = village
+    let villages: Vec<terra_survival::claim::Keeps> = village
         .iter()
         .flat_map(|village| village.1.iter().map(|&point| (point, 0.0)))
         .collect();
@@ -682,7 +682,7 @@ pub(super) fn afford(
             Some(_) if placing_claim && claim.stone.is_some() => {
                 Some("You already have a claim; take its stone away to move it")
             }
-            Some(point) if placing_claim => crate::play::claim::too_near(
+            Some(point) if placing_claim => terra_survival::claim::too_near(
                 point,
                 first_across,
                 claims
@@ -740,13 +740,13 @@ pub(super) fn afford(
 /// last.
 fn plan_work(
     builds: &Builds,
-    look: &crate::build::BuildLook,
+    look: &terra_bases::BuildLook,
     building: &mut Building,
     player: Entity,
     near: Vec3,
     builder: &Builder,
 ) -> Option<Planned> {
-    use crate::build::plans;
+    use terra_bases::plans;
     let base = &building.site.base;
     // The material in hand (D232), or the first kit's: a roof's covering lays blocks by
     // hand, roof cubes (D241), and changes cubes to it; a room, a wall or a floor of it is
@@ -1015,7 +1015,7 @@ fn roofs_anew(base: &terra_build::Base, kind: &Kind, variant: usize, cell: IVec3
 /// The roof kind "add a roof" lays in (D241): the roof material in hand, or the roof of the
 /// kind most of the walls' tops under the footprint are, or of the first kit's.
 fn roof_kind(
-    look: &crate::build::BuildLook,
+    look: &terra_bases::BuildLook,
     base: &terra_build::Base,
     footprint: &std::collections::BTreeSet<[i32; 2]>,
     storey: i32,

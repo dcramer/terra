@@ -16,7 +16,7 @@ pub struct Frightful {
 /// transforms look): how far its flame reaches, how wide it spreads (the tangent of its half
 /// angle), how hot it is (heat a second given what it meets, as a burning cube's full flame
 /// gives the cube over it), and whether it is breathing now. A base's fire heats what its
-/// cone meets (`build::fire`).
+/// cone meets (`terra_building::fire`).
 #[derive(Component, Clone, Copy, Debug)]
 pub struct BreathesFire {
     pub reach_m: f32,

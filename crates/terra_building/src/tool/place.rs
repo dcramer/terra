@@ -6,11 +6,7 @@
 //!   pays (D141). Its name is storage's, as scripts know it; acting on the base is building
 //!   play's.
 
-use crate::build::act::Building;
-use crate::play::claim::{self, Claim};
-use crate::play::props::{self, Models, PlacedBy};
-use crate::play::{LocalPlayer, Player, catalogue};
-use crate::remote::{method, refused};
+use crate::act::Building;
 use bevy::{
     ecs::system::SystemState,
     prelude::*,
@@ -18,6 +14,11 @@ use bevy::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use terra_survival::catalogue;
+use terra_survival::claim::{self, Claim};
+use terra_survival::props::{self, Models, PlacedBy};
+use terra_walker::{LocalPlayer, Player};
+use terra_world::remote::{method, refused};
 
 pub(super) fn plugin(app: &mut App) {
     method(app, "storage.place", place);

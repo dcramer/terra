@@ -7,24 +7,24 @@
 //!   Arrows             move between tiles     Enter     pick
 //!   Backspace          put the hammer's part away
 
-use super::IsLocalPlayer;
-use super::button::{left_click, pointer_on};
-use super::camera::grab_mouse;
-use super::catalogue::{Builds, Kind, Tab};
-use super::claim::Claim;
-use super::controls::{Action, Settings};
-use super::inventory::{Belongings, InventoryScreen, Items, describe};
-use super::options::OptionsMenu;
-use super::storage::Stores;
-use super::tiles::{self, PICKED, PLAIN, TILE};
-use super::tool::{self, Builder};
-use crate::build::hammer::Hammer;
+use crate::tool::{self, Builder};
 use bevy::{
     picking::hover::Hovered,
     prelude::*,
     ui::Pressed,
     window::{CursorGrabMode, CursorOptions},
 };
+use terra_bases::hammer::Hammer;
+use terra_survival::catalogue::{Builds, Kind, Tab};
+use terra_survival::claim::Claim;
+use terra_survival::inventory::{Belongings, InventoryScreen, Items, describe};
+use terra_survival::storage::Stores;
+use terra_survival::tiles::{self, PICKED, PLAIN, TILE};
+use terra_walker::IsLocalPlayer;
+use terra_walker::button::{left_click, pointer_on};
+use terra_walker::camera::grab_mouse;
+use terra_walker::controls::{Action, Settings};
+use terra_walker::options::OptionsMenu;
 
 const COLUMNS: usize = 4;
 const RECENT: usize = 6;

@@ -1,7 +1,7 @@
 //! Building over the remote protocol (D69; tools/sandbox): a script lays plans, builds,
 //! takes apart and undoes, and reads the base, as this
 //! machine's player, through the same operations and checks the hammer uses
-//! (`build::act::Building`). Each answers at once with what was done, or why it was
+//! (`act::Building`). Each answers at once with what was done, or why it was
 //! refused in the words the player is shown, and is logged as `Build: …`.
 //!
 //! Places on the base are counted in its own cubes: east, up and south from its claim
@@ -59,12 +59,8 @@
 //! - `build.repair {at, brush?}`: mends the damaged cubes of a brush's box round `at`, as
 //!   the hammer does with nothing picked.
 
-use super::act::{BuildRules, Building, Offcuts};
-use super::{Site, plans};
-use crate::play::Builder;
-use crate::play::{LocalPlayer, Player};
-use crate::remote::{method, refused};
-use crate::start::Start;
+use crate::act::{BuildRules, Building, Offcuts};
+use crate::tool::Builder;
 use bevy::{
     ecs::system::SystemState,
     prelude::*,
@@ -72,10 +68,14 @@ use bevy::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use terra_bases::{Site, plans};
 use terra_build::ops::{Done, Op, Refusal};
 use terra_build::roofer::Style;
 use terra_build::{CELL_M, Facing, Fill, Panel, STOREY_M, Shape};
 use terra_build_layout::fitting::Hang;
+use terra_walker::{LocalPlayer, Player};
+use terra_world::remote::{method, refused};
+use terra_world::start::Start;
 
 pub fn plugin(app: &mut App) {
     method(app, "build.state", state);
@@ -210,7 +210,7 @@ struct Columns {
 fn ground(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Columns { columns } = parse_some(params)?;
     let frame = world.resource::<Site>().frame;
-    let planet = world.resource::<crate::planet::Planet>();
+    let planet = world.resource::<terra_world::planet::Planet>();
     let heights: Vec<f32> = columns
         .iter()
         .map(|&[x, z]| {
@@ -248,7 +248,7 @@ struct DamageDrawn {
 fn damage_drawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let DamageDrawn { drawn } = parse_some(params)?;
     let mut arrays = world
-        .get_resource_mut::<super::arrays::Arrays>()
+        .get_resource_mut::<terra_bases::arrays::Arrays>()
         .ok_or_else(|| refused("nothing is drawn in the texture arrays"))?;
     arrays.hide_damage(!drawn);
     info!("Build: damage drawn: {drawn}");
@@ -266,20 +266,20 @@ struct Example {
 fn example(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Example { name } = parse_some(params)?;
     let kits = world
-        .resource::<super::BuildLook>()
+        .resource::<terra_bases::BuildLook>()
         .kits
         .clone()
         .ok_or_else(|| refused("there are no kits"))?;
     let ops = match name.as_str() {
         "castle" => {
-            let kinds = super::village_kinds(&kits)
+            let kinds = terra_survival::village_kinds(&kits)
                 .ok_or_else(|| refused("the castle needs the settlement's materials"))?;
             let first = kinds.first();
             terra_build::castle::castle(first.masonry, first.beams, first.masonry_roof)
         }
         // The castle built to burn (D377), in the materials its parts are of.
         "burg" => {
-            let kinds = super::village_kinds(&kits)
+            let kinds = terra_survival::village_kinds(&kits)
                 .ok_or_else(|| refused("the burg needs the settlement's materials"))?
                 .first();
             terra_build::burg::burg(terra_build::burg::Materials {
@@ -298,7 +298,7 @@ fn example(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let mut state = SystemState::<(
         ResMut<Site>,
         Commands,
-        Res<crate::planet::Planet>,
+        Res<terra_world::planet::Planet>,
         ResMut<Assets<Mesh>>,
     )>::new(world);
     let result = {
@@ -447,7 +447,7 @@ fn lay(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     };
     let (min, max) = (IVec3::from_array(lay.min), IVec3::from_array(lay.max));
     let (low, high) = (min.min(max), min.max(max));
-    let kits = world.resource::<super::BuildLook>().kits.clone();
+    let kits = world.resource::<terra_bases::BuildLook>().kits.clone();
     as_player(world, |building, player| {
         let base = &building.site.base;
         let ground = |column: [i32; 2]| building.ground_cm(column);
@@ -639,7 +639,7 @@ fn fit(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let base = &world.resource::<Site>().base;
     let (low, _) = plans::hole(base, at).ok_or_else(|| refused("that is not an opening"))?;
     let hang = plans::hang_for(base, low);
-    let builds = world.resource::<crate::play::catalogue::Builds>();
+    let builds = world.resource::<terra_survival::catalogue::Builds>();
     let fitting = match &fit.kind {
         Some(name) => builds.fittings().iter().find(|each| &each.name == name),
         None => builds.fittings().iter().find(|each| each.hang == hang),
@@ -722,7 +722,7 @@ fn ops(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 /// The material in this machine's player's hammer (D232): the one picked, else the first
 /// kit's.
 fn material_of(world: &mut World) -> terra_build::Kind {
-    let laying = world.resource::<super::BuildLook>().laying;
+    let laying = world.resource::<terra_bases::BuildLook>().laying;
     world
         .query_filtered::<&Builder, (With<Player>, With<LocalPlayer>)>()
         .iter(world)
@@ -745,7 +745,7 @@ fn material(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .filter(|kind| rules.names.contains_key(kind))
         .ok_or_else(|| refused(format!("there is no material called {kind}")))?;
     for (mut builder, mut hammer) in world
-        .query_filtered::<(&mut Builder, &mut super::hammer::Hammer), (With<Player>, With<LocalPlayer>)>()
+        .query_filtered::<(&mut Builder, &mut terra_bases::hammer::Hammer), (With<Player>, With<LocalPlayer>)>()
         .iter_mut(world)
     {
         builder.material = Some(picked);
@@ -861,7 +861,7 @@ fn state(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
     let start = *world.resource::<Start>();
     let rules = world.resource::<BuildRules>().clone();
     let offcuts = world.resource::<Offcuts>().0.to_string();
-    let fragments = super::loss::live(world);
+    let fragments = crate::loss::live(world);
     let site = world.resource::<Site>();
     let base = &site.base;
     let frame = site.frame;

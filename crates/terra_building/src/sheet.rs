@@ -18,17 +18,17 @@
 //! The kit's file is read again when it is saved, so the sheet can be left running while
 //! the look is tuned.
 
-use super::{Build, BuildLook, Built, Shown, Site, frame_at, lifted, read_kits};
-use crate::planet::Planet;
-use crate::shell::Options;
-use crate::start::FLOOR_CLEARANCE_M;
 use bevy::prelude::*;
 use std::sync::Arc;
+use terra_bases::{Build, BuildLook, Built, Shown, Site, frame_at, lifted, read_kits};
 use terra_build::kit::Kits;
 use terra_build::ops::Op;
 use terra_build::{Base, BuildOp, Kind};
 use terra_build_scenes::sheet::{acted_rows, placed, preview};
 use terra_core::Operation;
+use terra_world::planet::Planet;
+use terra_world::shell::Options;
+use terra_world::start::FLOOR_CLEARANCE_M;
 
 /// How far apart the rows are, and the three states along each, in metres.
 const ROW_M: f32 = 14.0;
@@ -150,7 +150,7 @@ pub(super) fn lay(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     assets: Res<AssetServer>,
-    rules: Option<Res<super::act::BuildRules>>,
+    rules: Option<Res<crate::act::BuildRules>>,
 ) {
     if *done || !options.kit_sheet {
         return;
@@ -164,7 +164,7 @@ pub(super) fn lay(
     };
     let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
     let stone = kits.footing().map(|kit| kit.kind());
-    let names = super::kit_names();
+    let names = terra_bases::kit_names();
     let (placed, count) = placed(&kits, &names);
     let mut sheet = Laying {
         commands: &mut commands,

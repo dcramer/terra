@@ -13,8 +13,6 @@
 
 pub mod build;
 pub mod play;
-#[cfg(test)]
-mod seams;
 
 // The walker layer (D198), its own crate since D407, at its old paths.
 pub use terra_walker::{appearance, character, lift, pace, skinning, swing};

@@ -5,7 +5,7 @@
 //! Building draws on it (D141): what is built in a claim, a plan's parts and the items set
 //! down, takes what it needs from the builder's pack first and then from the storage
 //! standing in that claim, nearest first, as Enshrouded's base storage serves its builders.
-//! [`Stores`] counts and takes from it for `build::act` and the hammer.
+//! [`Stores`] counts and takes from it for `terra_building::act` and the hammer.
 //!
 //! Storage is taken apart or moved only when it is empty, as nothing is taken away while
 //! anything rests on it (D193); a player is told to empty it first.

@@ -1,5 +1,5 @@
 //! What the layers under building play see of a player's hammer. Building play's builder
-//! (`play::tool::Builder`) holds the work in hand in its own types; the bases and the walker
+//! (`terra_building::tool::Builder`) holds the work in hand in its own types; the bases and the walker
 //! ask only these two things of it, so they are kept here, where both can read them.
 
 use bevy::prelude::*;
