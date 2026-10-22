@@ -1,6 +1,6 @@
 # Game
 
-The game in Bevy (D28, D133): the world on screen, the player, what they carry and build, creatures, people, sound and saving, each a plugin in its own module, and the shell every build runs under (the window, the launch options, scripted runs, the frame-time readout and the remote protocol). Rules every player must agree on stay in the engine-free crates.
+The game in Bevy (D28, D133): the app over the gameplay crates (D407), which holds the map, the game's sounds and music, saving, the remote probe, and the plugin groups every run is built from. The world, the player, what they carry and build, creatures and people are each a crate below it, re-exported here at their old paths. Rules every player must agree on stay in the engine-free crates.
 
 It is launched by the [sandbox](../terra_sandbox/README.md) for now, as its `play` and `build` experiments, so the sandbox's options, controls and scripted runs apply there.
 
@@ -128,37 +128,21 @@ The game holds the mouse while you play and lets go when the window is no longer
 
 Everything placed in the world, the player's and the village's, goes through the same call the builder makes. The list of parts, with what each costs, is in `catalogue.rs` and is a stand-in.
 
-It is made of these pieces, each a module in `src/play/`:
+It is made of the crates under it (D407), each with its own README, and what is left here, each a module in `src/play/`:
 
-| Module | What it is |
+| Crate or module | What it is |
 |---|---|
-| `scene` | The sun, the sky's colours, haze, shadows, and the camera's effects |
-| `flora` | Trees, rocks, bushes and flowers placed from the seed, and the grass |
-| `catalogue` | The parts the builder can build, their variants and what they cost |
-| `inventory` | What is carried, on `terra_items`: the backpack, what is worn and the action bar as components on the player, and the demo's kinds of item |
-| `bag` | The action bar, the raw-item count, notices, and the character sheet and backpack's grid on screen |
-| `interact` | What the interact key would act on: the nearest station, claim stone or person within reach |
-| `crafting` | Stations, recipes, and making things from what you carry |
-| `claim` | Your claim: placing it, growing it, and drawing its edge |
-| `vitals` | Health, stamina and hunger: what wears them down, what brings them back, and the bars |
-| `death` | Going down, the dropped bag, and waking at a bed |
-| `skills` | Skills by doing: what was done becomes progress, steps make work quicker, dying costs some |
-| `creatures` | Deer and spiders: their models and animations, what each does next, and butchering |
-| `combat` | Swinging, guarding and the blows creatures land |
-| `people` | Figures who are not the player: their bodies and outfits, animations, following, and settling to work |
-| `pooling` | The place where magic pools: its glow, its motes, and the monsters that form there |
-| `settlement` | The village, its people, and what they say |
+| [`terra_world`](../terra_world/README.md) | The shell every run starts in, the planet, terrain, sky, light, the day and what grows |
+| [`terra_walker`](../terra_walker/README.md) | The player's body, camera, controls and options, and the character's look |
+| [`terra_survival`](../terra_survival/README.md) | What a player carries, makes and needs: inventory, crafting, claims, harvesting, vitals and death |
+| [`terra_creatures`](../terra_creatures/README.md) | Creatures, wildlife and fighting |
+| [`terra_folk`](../terra_folk/README.md) | People, the town and the settlement on screen |
+| [`terra_bases`](../terra_bases/README.md) | The base on screen: its kits, its acts applied and its drawing |
+| [`terra_building`](../terra_building/README.md) | Building play: the hammer, the build menu and dial, and what comes down |
 | `map` | The map: the land drawn from the planet's rules, revealed as you go |
-| `held` | What is in hand, on the figure, by its name |
-| `worn` | What is worn, on the figure |
 | `save` | Saving and loading the game |
-| `harvest` | Gathering with the right tool for each thing, and refusing what its material cannot work |
-| `work` | Holding a button until a job is done |
-| `tool` | The builder: what it is aimed at, the preview, and building |
-| `dial` | The dial of parts and the prompts |
-| `props` | Items that have been placed, and stopping a walker at them |
-| `figure` | The player's body and which animation it plays |
-| `models` | Reading shapes out of model files |
+| `probe` | The remote probe's methods over the game |
+| `noises`, `sounds`, `soundscape`, `music` | Noises from what happens, what they sound like, the place, and music |
 
 The models are free ones, recoloured in code; see [THIRD_PARTY.md](../../THIRD_PARTY.md). How it was put together and what it costs to draw is in [research/outpost-scene.md](../../research/outpost-scene.md).
 

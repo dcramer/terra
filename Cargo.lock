@@ -6169,8 +6169,6 @@ name = "terra_game"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "bevy-inspector-egui",
- "gltf",
  "libm",
  "ron",
  "serde",
@@ -6178,14 +6176,12 @@ dependencies = [
  "terra_bases",
  "terra_build",
  "terra_building",
- "terra_climate",
  "terra_core",
  "terra_creatures",
  "terra_folk",
  "terra_gen",
  "terra_items",
  "terra_survival",
- "terra_voxel",
  "terra_walker",
  "terra_world",
 ]

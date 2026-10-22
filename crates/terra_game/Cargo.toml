@@ -9,20 +9,16 @@ publish.workspace = true
 [dependencies]
 # `bevy_remote`: the remote protocol, so a script can drive a running build (`--remote`).
 bevy = { workspace = true, features = ["bevy_remote"] }
-bevy-inspector-egui.workspace = true
 libm.workspace = true
 ron.workspace = true
 serde.workspace = true
 # Remote methods take and give JSON; already built for Bevy's remote protocol.
 serde_json = "1"
-# The version Bevy itself reads models with, used here to read model shapes directly.
-gltf = { version = "1.4", default-features = false, features = ["utils"] }
 # The base on screen (D407), re-exported as `build`.
 terra_bases.workspace = true
 terra_build.workspace = true
 # Building play (D407), re-exported at its old paths.
 terra_building.workspace = true
-terra_climate.workspace = true
 terra_core.workspace = true
 # Creatures and fighting (D407), re-exported at their old paths.
 terra_creatures.workspace = true
@@ -32,7 +28,6 @@ terra_gen.workspace = true
 terra_items.workspace = true
 # What a player carries, makes and needs (D407), re-exported at its old paths.
 terra_survival.workspace = true
-terra_voxel.workspace = true
 # The walker layer (D198, D407), re-exported at its old paths.
 terra_walker.workspace = true
 terra_world.workspace = true
