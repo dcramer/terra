@@ -37,7 +37,7 @@ pub enum Footing {
     Soil,
     /// Gravel in a gully's bed, or scree: a few trees on it, mostly at its edges.
     Loose,
-    /// Bare rock: none.
+    /// Bare rock: a few on its benches and ledges, none on its walls.
     Rock,
     /// Under water: none.
     Water,
@@ -60,6 +60,22 @@ impl Stand {
     }
 }
 
+/// How close trees stand on scree, as a share of the forest's on soil: on an active cone near
+/// its angle of repose (`SCREE_ACTIVE_DEG`, talus lies at about 33°) a few, at its edges; on the
+/// settled toe of an apron, gentler than `SCREE_SETTLED_DEG`, whose blocks have weathered soil
+/// between them, an open forest. Scree with one share however steep cut the forest off where a
+/// wall's apron starts, one line along the massif's foot (mountains round 30: the lake's
+/// transect went from 1.0 to 0.15 at the apron's edge, 450 m under the tree line's warmth).
+const SCREE_FEW: f32 = 0.12;
+const SCREE_SETTLED: f32 = 0.7;
+const SCREE_SETTLED_DEG: f32 = 16.0;
+const SCREE_ACTIVE_DEG: f32 = 33.0;
+/// Bare rock's benches and ledges, gentler than the first of `LEDGE_DEG`, hold a few trees in
+/// their cracks, none past the second, as pines and dwarf pine stand scattered on the Tatras'
+/// and the Dolomites' benches over the forest's top.
+const LEDGE_TREES: f32 = 0.12;
+const LEDGE_DEG: (f32, f32) = (22.0, 36.0);
+
 /// The trees a place holds, from its growing season, how steep its ground is and what it is.
 pub fn stand(season: &Season, slope_deg: f32, footing: Footing) -> Stand {
     let over = season.growing_mean_c - TREE_LINE_SEASON_C;
@@ -72,8 +88,12 @@ pub fn stand(season: &Season, slope_deg: f32, footing: Footing) -> Stand {
     let held = 1.0 - smoothstep(THINS_FROM_DEG, TOO_STEEP_DEG, slope_deg);
     let ground = match footing {
         Footing::Soil => 1.0,
-        Footing::Loose => 0.15,
-        Footing::Rock | Footing::Water => 0.0,
+        Footing::Loose => {
+            let settled = 1.0 - smoothstep(SCREE_SETTLED_DEG, SCREE_ACTIVE_DEG, slope_deg);
+            SCREE_FEW + (SCREE_SETTLED - SCREE_FEW) * settled
+        }
+        Footing::Rock => LEDGE_TREES * (1.0 - smoothstep(LEDGE_DEG.0, LEDGE_DEG.1, slope_deg)),
+        Footing::Water => 0.0,
     };
     let density = warm * held * ground;
     if density <= 0.0 {
@@ -514,10 +534,47 @@ mod tests {
             stand(&warm, TOO_STEEP_DEG + 1.0, Footing::Soil).density,
             0.0
         );
-        assert_eq!(stand(&warm, 10.0, Footing::Rock).density, 0.0);
+        assert_eq!(stand(&warm, 40.0, Footing::Rock).density, 0.0);
         assert_eq!(stand(&warm, 10.0, Footing::Water).density, 0.0);
+        let bench = stand(&warm, 10.0, Footing::Rock).density;
+        assert!(bench > 0.0 && bench < 0.2, "a rock bench {bench:.2}");
         let scree = stand(&warm, 30.0, Footing::Loose).density;
         assert!(scree > 0.0 && scree < 0.3);
+    }
+
+    #[test]
+    fn a_wall_s_apron_thins_the_forest_up_its_scree_instead_of_cutting_it_at_its_edge() {
+        // Up a wall's foot, as the lake's transect runs (round 30): soil, the apron's settled
+        // toe, its steepening cone, then the wall with a bench in it. The toe keeps over half
+        // the forest, the cone near its angle of repose few, the bench a few and the wall none:
+        // the forest thins over the apron, not at the line where its scree begins.
+        let warm = season(TREE_LINE_SEASON_C + 1.5);
+        let soil = stand(&warm, 12.0, Footing::Soil).density;
+        let up: Vec<f32> = [14.0, 20.0, 26.0, 32.0]
+            .map(|s| stand(&warm, s, Footing::Loose).density)
+            .to_vec();
+        assert!(
+            up[0] > 0.5 * soil,
+            "the toe {:.2} of soil's {soil:.2}",
+            up[0]
+        );
+        assert!(up.windows(2).all(|w| w[1] < w[0]), "up the cone {up:.2?}");
+        assert!(up[3] < 0.2, "the active cone {:.2}", up[3]);
+        // Along the apron's contour at 26°, the microsite (lee and islands) makes it ragged.
+        let sites = Microsites::new(terra_gen::Seed(5));
+        let row: Vec<f32> = (0..400)
+            .map(|k| {
+                let at = glam::Vec3::new(k as f32 * 10.0, 30_000.0, 0.0);
+                stand_in(&warm, 26.0, Footing::Loose, sites.at(at, 0.0)).density
+            })
+            .collect();
+        let mut sorted = row.clone();
+        sorted.sort_by(f32::total_cmp);
+        let (thin, thick) = (sorted[40], sorted[360]);
+        assert!(
+            thick > 0.4 && thick - thin > 0.2,
+            "at 26° on scree, the 10th percentile {thin:.2}, the 90th {thick:.2}"
+        );
     }
 
     #[test] // Slow: minutes.
