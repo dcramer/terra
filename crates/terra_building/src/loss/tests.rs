@@ -490,3 +490,139 @@ fn a_falls_dust_is_a_light_haze_low_round_its_foot() {
         assert!(t.alpha <= 0.4 && t.life <= 0.5 * b.life && t.wide <= 0.5 * b.wide);
     }
 }
+
+/// Building play over the example base, as the sandbox's `build` runs it, with no renderer.
+fn building_app() -> App {
+    use bevy::time::TimeUpdateStrategy;
+    use terra_bases::arrays;
+    use terra_core::{PlanetSpec, Seed};
+    use terra_world::shell::Options;
+    use terra_world::start::Start;
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        AssetPlugin::default(),
+        bevy::gizmos::GizmoPlugin,
+    ))
+    .init_asset::<Mesh>()
+    .init_asset::<StandardMaterial>()
+    .init_asset::<Image>()
+    .init_asset::<arrays::BuildMaterial>()
+    .init_asset::<bevy::render::storage::ShaderBuffer>()
+    .init_asset::<draw::GhostMaterial>()
+    .init_asset::<bevy::mesh::skinning::SkinnedMeshInverseBindposes>()
+    .init_resource::<ButtonInput<KeyCode>>()
+    .insert_resource(TimeUpdateStrategy::ManualDuration(
+        std::time::Duration::from_millis(16),
+    ));
+    let planet = Planet::new(PlanetSpec {
+        seed: Seed(1),
+        radius_m: 2000.0,
+    });
+    app.insert_resource(Options::from_args(std::iter::empty()).unwrap())
+        .insert_resource(Start(Transform::from_translation(planet.start())))
+        .insert_resource(planet);
+    crate::building::plugin(&mut app);
+    app.init_resource::<Shake>();
+    super::plugin(&mut app);
+    app.world_mut()
+        .spawn((MainCamera, Transform::default(), GlobalTransform::default()));
+    app.update();
+    app
+}
+
+/// The texture arrays fragments are drawn in, as the game makes them where things are
+/// drawn: an app with no render device makes none, and a fragment of a kind drawn in them
+/// then gets no mesh.
+fn give_arrays(app: &mut App) {
+    use bevy::render::storage::ShaderBuffer;
+    let layers = app.world().resource::<BuildLook>().layers.clone();
+    let world = app.world_mut();
+    let fires = world
+        .resource_mut::<Assets<ShaderBuffer>>()
+        .add(ShaderBuffer::from(vec![
+            [0.0f32; 4];
+            terra_world::fire::GLOWS
+        ]));
+    let arrays = world.resource_scope(|world, mut images: Mut<Assets<Image>>| {
+        let mut materials = world.resource_mut::<Assets<BuildMaterial>>();
+        Arrays::new(
+            &mut images,
+            &mut materials,
+            false,
+            Quality::High,
+            layers,
+            std::sync::Arc::new(|_: &str| false),
+            fires,
+        )
+    });
+    world.insert_resource(arrays);
+    // The meshes warmed up before there were arrays to draw them in, none of them.
+    world.resource_mut::<Shards>().meshes.clear();
+}
+
+/// How many fragments about are not drawn.
+fn undrawn(app: &App) -> usize {
+    app.world()
+        .resource::<Shards>()
+        .live
+        .iter()
+        .filter(|live| !live.gone() && live.entity == Entity::PLACEHOLDER)
+        .count()
+}
+
+/// What comes down is drawn from the frame it does, all of it, however much: its sections
+/// stop drawing its cubes that frame, so a fragment left for a later one is a hole. Drawn
+/// 500 a frame, the castle's south-west tower was gone for two frames of the film and came
+/// back with holes (castle fall r19, r21); and past the cap, pieces of it not yet drawn were
+/// let go undrawn.
+#[test]
+fn a_falls_every_fragment_is_drawn_the_frame_it_comes_down_however_many() {
+    let mut app = building_app();
+    give_arrays(&mut app);
+    let site = app.world().resource::<Site>();
+    let root = site.root;
+    let (_, stone) = site.base.cubes().next().expect("the example base is laid");
+    // Twice the cap already about, lying still: the debris of earlier falls.
+    {
+        let mut shards = app.world_mut().resource_mut::<Shards>();
+        for _ in 0..fragments::MOST * 2 {
+            let mut chip = piece(0.15, true);
+            chip.kind = stone.kind;
+            let mut live = Live::new(chip, root);
+            live.age_s = 3.0;
+            shards.live.push(live);
+        }
+    }
+    app.update();
+    assert_eq!(undrawn(&app), 0, "the debris about is drawn");
+    // All of the example base comes down at once.
+    {
+        let mut site = app.world_mut().resource_mut::<Site>();
+        let fell: Vec<(IVec3, Cube)> = site.base.cubes().collect();
+        assert!(fell.len() > 100, "the example base is {} cubes", fell.len());
+        site.fallen.push(Fallen { fell, ..default() });
+    }
+    app.update();
+    let made = app
+        .world()
+        .resource::<Shards>()
+        .live
+        .iter()
+        .filter(|live| live.age_s < 0.5)
+        .count();
+    assert!(
+        made > 500,
+        "the fall made {made} fragments, more than a frame's 500 before"
+    );
+    assert_eq!(
+        undrawn(&app),
+        0,
+        "every fragment drawn the frame it was made"
+    );
+    // And every frame after, as they fall and the cap lets the least of the debris go.
+    for _ in 0..10 {
+        app.update();
+        assert_eq!(undrawn(&app), 0);
+    }
+}

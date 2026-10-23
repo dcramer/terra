@@ -189,16 +189,6 @@ fn budget(quality: Quality) -> (usize, usize, f32) {
     }
 }
 
-/// How many fragments are drawn anew a frame at a preset: a big fall's are spread over a
-/// few frames, while the sections it changed are laid again anyway.
-fn spawn_budget(quality: Quality) -> usize {
-    match quality {
-        Quality::Low => 150,
-        Quality::Medium => 300,
-        Quality::High | Quality::Ultra => 500,
-    }
-}
-
 /// How a kind breaks, from its kit: chunks unless it says.
 fn breaks_of(look: &BuildLook) -> impl Fn(Kind) -> Breaks + '_ {
     move |kind| {
@@ -414,8 +404,8 @@ fn burst(
             }));
         }
         let count = made.len();
-        // Moving at once, drawn a few hundred a frame (`step`), so a big fall's entities are
-        // not all made in one frame.
+        // Moving at once, and drawn this frame (`step`), all of them: they take the place of
+        // cubes the sections stop drawing, so one left for a later frame is a hole there.
         shards
             .live
             .extend(made.into_iter().map(|fragment| Live::new(fragment, root)));
@@ -618,7 +608,6 @@ fn step(
         &look,
         arrays.as_deref(),
         &mut meshes,
-        spawn_budget(*quality),
     );
     draw_heaps(
         &mut commands,
@@ -848,7 +837,9 @@ fn under(
 }
 
 /// Never far past the most: those of least worth make room ([`fade_least`]), and past twice
-/// as many, those of least worth not yet drawn are let go at once.
+/// as many, those of least worth already drawn are gone at once. Never one not yet drawn:
+/// each stands in for a cube the sections no longer draw, and letting it go left holes in a
+/// tower as it fell (castle fall r19 and r21, 12.0 s).
 fn keep_within(shards: &mut Shards, most: usize) {
     let over = shards
         .live
@@ -859,23 +850,24 @@ fn keep_within(shards: &mut Shards, most: usize) {
     fade_least(shards, over);
     let past = shards.live.len().saturating_sub(most * 2);
     if past > 0 {
-        let mut undrawn: Vec<usize> = (0..shards.live.len())
-            .filter(|&i| shards.live[i].entity == Entity::PLACEHOLDER)
+        let mut drawn: Vec<usize> = (0..shards.live.len())
+            .filter(|&i| shards.live[i].entity != Entity::PLACEHOLDER)
             .collect();
         let by = |a: &usize, b: &usize| worth(&shards.live[*a]).total_cmp(&worth(&shards.live[*b]));
-        if past < undrawn.len() {
-            undrawn.select_nth_unstable_by(past, by);
+        if past < drawn.len() {
+            drawn.select_nth_unstable_by(past, by);
         }
-        let gone: BTreeSet<usize> = undrawn.into_iter().take(past).collect();
-        let mut index = 0;
-        shards.live.retain(|_| {
-            index += 1;
-            !gone.contains(&(index - 1))
-        });
+        for i in drawn.into_iter().take(past) {
+            let live = &mut shards.live[i];
+            live.still_s = live.rest_s + live.fade_s;
+        }
     }
 }
 
-/// Each where it is now, those not yet drawn drawn `spawns` a frame; those shrunk away gone.
+/// Each where it is now, those not yet drawn drawn now, all of them, however many came down
+/// at once: a fall's sections are shown without its cubes the frame its fragments are made,
+/// and a fragment drawn a frame later, as 500 a frame were, left the castle's south-west
+/// tower gone for two frames of the film as it fell (r19, r21). Those shrunk away gone.
 #[allow(clippy::too_many_arguments)]
 fn draw_where_they_are(
     commands: &mut Commands,
@@ -885,7 +877,6 @@ fn draw_where_they_are(
     look: &BuildLook,
     arrays: Option<&Arrays>,
     meshes: &mut ResMut<Assets<Mesh>>,
-    mut spawns: usize,
 ) {
     let mut live_now = std::mem::take(&mut shards.live);
     let mut kept = Vec::with_capacity(live_now.len());
@@ -899,14 +890,12 @@ fn draw_where_they_are(
             continue;
         }
         if live.entity == Entity::PLACEHOLDER {
-            if spawns > 0
-                && let Some(build) = by_root.get(&live.root)
+            if let Some(build) = by_root.get(&live.root)
                 && let Some(drawn) =
                     mesh_for(shards, look, arrays, meshes, live.fragment.kind, |repeat| {
                         live.fragment.mesh(repeat)
                     })
             {
-                spawns -= 1;
                 live.entity = spawn(commands, drawn, placed(&build.frame, &live));
             }
             kept.push(live);
