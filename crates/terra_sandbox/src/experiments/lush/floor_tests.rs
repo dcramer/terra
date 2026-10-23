@@ -175,3 +175,96 @@ fn a_plants_scan_learns_the_snow_and_stays_a_plant() {
         "and it withers as a plant, not mossed as a rock"
     );
 }
+
+/// Places of the map's ground in a grid, each with how far it is from a path's frayed edge,
+/// as the placement rules read it (`Map::here`), not the path's own line.
+fn grid_by_path(map: &Map) -> Vec<(Vec2, f32)> {
+    (0..3600)
+        .map(|k| Vec2::new((k % 60) as f32 * 1.5 - 45.0, (k / 60) as f32 * 1.5 - 45.0))
+        .map(|at| (at, map.here(at).path))
+        .collect()
+}
+
+#[test]
+fn no_shrub_stands_in_a_paths_line_and_low_growth_still_lines_it() {
+    let (map, _) = map_with(&[]);
+    let grid = grid_by_path(&map);
+    let beside: Vec<_> = grid
+        .iter()
+        .filter(|(_, d)| (0.0..2.0).contains(d))
+        .collect();
+    assert!(beside.len() > 20, "the grid crosses a path's verge");
+    for (at, _) in &beside {
+        let here = map.here(*at);
+        for shrub in [Under::Hazel, Under::Coppice, Under::Bramble, Under::Sapling] {
+            assert!(
+                !shrub.keeps_path_line(here.path),
+                "{shrub:?} at {at} in the path's line"
+            );
+        }
+        for low in [Under::Bracken, Under::Verge, Under::Fern, Under::Flowers] {
+            assert!(
+                low.keeps_path_line(here.path),
+                "{low:?} kept off the verge at {at}"
+            );
+        }
+    }
+    let off = grid
+        .iter()
+        .find(|(_, d)| *d > PATH_LINE_M + 1.0)
+        .expect("ground off the path");
+    assert!(Under::Hazel.keeps_path_line(map.here(off.0).path));
+}
+
+#[test]
+fn verge_bracken_grows_on_a_sunlit_path_side_not_in_the_deep_wood() {
+    let (open, away) = map_with(&[]);
+    let grid = grid_by_path(&open);
+    // The verge: the metre or so beside the path's edge, full at it and gone by 2.2 m.
+    let verge = grid
+        .iter()
+        .find(|(_, d)| (0.5..1.1).contains(d))
+        .expect("a path's verge")
+        .0;
+    let beyond = grid
+        .iter()
+        .find(|(_, d)| (3.0..5.0).contains(d))
+        .expect("lit ground past the verge")
+        .0;
+    let (shaded, _) = map_with(&stand_round(away, Species::Spruce));
+    let lit = Under::Verge.likes(&open.here(verge));
+    let deep = Under::Verge.likes(&shaded.here(away));
+    assert!(lit > 0.5, "a sunlit verge takes verge bracken: {lit}");
+    assert!(deep < 0.05, "the deep wood off the path takes none: {deep}");
+    let (under_spruce, _) = map_with(&stand_round(verge, Species::Spruce));
+    let dim = Under::Verge.likes(&under_spruce.here(verge));
+    assert!(
+        dim < 0.5 * lit,
+        "a verge under spruce takes less than a lit one: {dim} vs {lit}"
+    );
+    let past = Under::Verge.likes(&open.here(beyond));
+    assert!(past < 0.05, "lit ground past the verge takes none: {past}");
+}
+
+#[test]
+fn verge_tries_start_just_outside_a_paths_edge() {
+    // Tried over the whole floor, a path's verge, about a hundredth of it, took 31 plants of
+    // 2600 tries (forest fix r2); tried beside the paths, every start is on a verge.
+    let path = Path::new(Seed(3));
+    let mut dice = Seed(5).rng();
+    let starts: Vec<f32> = (0..500)
+        .map(|_| path.edge_distance(path.beside(&mut dice, VERGE_OUT_M)))
+        .collect();
+    let outside = starts
+        .iter()
+        .filter(|d| (-0.01..=VERGE_OUT_M + 0.05).contains(*d))
+        .count();
+    // Only where two paths cross is a start on the other's way.
+    assert!(outside >= 490, "{outside} of 500 just outside the edge");
+    assert!(
+        starts.iter().all(|d| *d <= VERGE_OUT_M + 0.05),
+        "none further out"
+    );
+    let far = starts.iter().filter(|d| **d > VERGE_OUT_M * 0.5).count();
+    assert!(far > 150, "spread across the verge, not on the edge: {far}");
+}

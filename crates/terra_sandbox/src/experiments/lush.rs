@@ -1793,6 +1793,29 @@ impl Path {
         }
         nearest
     }
+
+    /// A place just outside a path's edge, on one side or the other, up to so far out: where
+    /// what lines a path is tried, since the paths are about a hundredth of the forest's floor.
+    fn beside(&self, dice: &mut Rng, out_m: f32) -> Vec2 {
+        let pieces: usize = self.lines.iter().map(|line| line.len() - 1).sum();
+        let mut piece = dice.below(pieces as u32) as usize;
+        let line = self
+            .lines
+            .iter()
+            .find(|line| {
+                let here = piece < line.len() - 1;
+                if !here {
+                    piece -= line.len() - 1;
+                }
+                here
+            })
+            .expect("a piece of a line");
+        let ((a, wa), (b, wb)) = (line[piece], line[piece + 1]);
+        let t = dice.unit();
+        let side = if dice.unit() < 0.5 { 1.0 } else { -1.0 };
+        let across = (b - a).normalize_or_zero().perp() * side;
+        a.lerp(b, t) + across * (wa + (wb - wa) * t + dice.range(0.0, out_m))
+    }
 }
 
 /// A mesh being built.

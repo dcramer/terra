@@ -14,6 +14,8 @@
 //!   plants on density maps): drift centres where the light, the trunks, the logs and a
 //!   noise of the kind's own like it, and a clump round each.
 
+mod placements;
+
 use super::shade::{self, NearShadows, ShadowSet};
 use super::species::Species;
 use super::thicket::{self, Stool};
@@ -32,6 +34,7 @@ use bevy::{
     render::render_resource::AsBindGroup,
     shader::ShaderRef,
 };
+use placements::{PLACEMENTS, Placement};
 use std::f32::consts::{PI, TAU};
 use terra_gen::{Noise, Rng, Seed};
 use terra_world::climate::SnowCover;
@@ -685,224 +688,29 @@ enum Under {
     Bramble,
     Snag,
     Twigs,
+    /// Bracken on a path's sunlit verge, as it lines a woodland ride: the lit fronds by the
+    /// way that lead the eye down it (the forest walk of 10-19). Last, so its dice leave every
+    /// other kind where it was.
+    Verge,
 }
 
-/// How each kind of undergrowth is placed: how many drift centres are tried, how many
-/// plants a clump has and how far it spreads, how big they are, how far each is drawn,
-/// where its near level hands over to its far one (none at 0), where its shadow has shrunk
-/// away (none at 0), and how broad its drifts are.
-struct Placement {
-    kind: Under,
-    name: &'static str,
-    tries: u32,
-    clump: (u32, u32),
-    spread_m: f32,
-    scale: (f32, f32),
-    seen_m: f32,
-    near_m: f32,
-    shadow_m: f32,
-    drift_m: f32,
-}
+/// A shrub or young tree, above knee height, stands at least so far from a path's edge, so
+/// the way's line stays open down its length and what crosses it is seen crossing (the forest
+/// walk's hazel across the path and over the stag, lake round 31).
+const PATH_LINE_M: f32 = 2.5;
+/// Verge bracken's clumps are started within so far outside a path's edge (`Path::beside`).
+const VERGE_OUT_M: f32 = 2.0;
 
 /// The middle layer's shadows are cast in full to this share of their distance, then shrink
 /// away (D234).
 const SHADOW_SHRINK: f32 = 0.55;
 
-const PLACEMENTS: [Placement; 16] = [
-    Placement {
-        kind: Under::Bracken,
-        name: "Bracken",
-        tries: 11000,
-        clump: (5, 13),
-        spread_m: 1.1,
-        scale: (0.7, 1.5),
-        seen_m: 55.0,
-        near_m: 0.0,
-        shadow_m: 0.0,
-        drift_m: 16.0,
-    },
-    Placement {
-        kind: Under::Fern,
-        name: "Fern",
-        tries: 6000,
-        clump: (2, 5),
-        spread_m: 0.8,
-        scale: (0.6, 1.7),
-        seen_m: 45.0,
-        near_m: 0.0,
-        shadow_m: 0.0,
-        drift_m: 9.0,
-    },
-    Placement {
-        kind: Under::Frond,
-        name: "Fern",
-        tries: 14000,
-        clump: (5, 12),
-        spread_m: 0.9,
-        scale: (0.55, 1.6),
-        seen_m: 45.0,
-        near_m: 0.0,
-        shadow_m: 0.0,
-        drift_m: 9.0,
-    },
-    Placement {
-        kind: Under::Herb,
-        name: "Herb",
-        tries: 12000,
-        clump: (6, 14),
-        spread_m: 0.7,
-        scale: (0.6, 1.1),
-        seen_m: 35.0,
-        near_m: 0.0,
-        shadow_m: 0.0,
-        drift_m: 7.0,
-    },
-    Placement {
-        kind: Under::Hazel,
-        name: "Hazel",
-        tries: 6000,
-        clump: (1, 3),
-        spread_m: 1.4,
-        scale: (0.85, 1.2),
-        seen_m: 85.0,
-        near_m: 25.0,
-        shadow_m: 24.0,
-        drift_m: 20.0,
-    },
-    Placement {
-        kind: Under::Bilberry,
-        name: "Bilberry",
-        tries: 7000,
-        clump: (5, 11),
-        spread_m: 0.8,
-        scale: (0.45, 0.8),
-        seen_m: 40.0,
-        near_m: 0.0,
-        shadow_m: 0.0,
-        drift_m: 11.0,
-    },
-    Placement {
-        kind: Under::Scrub,
-        name: "Bush",
-        tries: 3500,
-        clump: (1, 3),
-        spread_m: 1.0,
-        scale: (0.85, 1.2),
-        seen_m: 70.0,
-        near_m: 22.0,
-        shadow_m: 24.0,
-        drift_m: 14.0,
-    },
-    Placement {
-        kind: Under::Sapling,
-        name: "Sapling",
-        tries: 10000,
-        clump: (1, 4),
-        spread_m: 2.2,
-        scale: (0.8, 1.2),
-        seen_m: 85.0,
-        near_m: 28.0,
-        shadow_m: 32.0,
-        drift_m: 24.0,
-    },
-    Placement {
-        kind: Under::Branches,
-        name: "Branches",
-        tries: 6000,
-        clump: (1, 2),
-        spread_m: 1.2,
-        scale: (0.5, 1.2),
-        seen_m: 45.0,
-        near_m: 0.0,
-        shadow_m: 0.0,
-        drift_m: 10.0,
-    },
-    Placement {
-        kind: Under::Flowers,
-        name: "Flowers",
-        tries: 5000,
-        clump: (3, 9),
-        spread_m: 0.6,
-        scale: (0.8, 1.3),
-        seen_m: 35.0,
-        near_m: 0.0,
-        shadow_m: 0.0,
-        drift_m: 7.0,
-    },
-    Placement {
-        kind: Under::Coppice,
-        name: "Hazel",
-        tries: 18000,
-        clump: (1, 4),
-        spread_m: 2.6,
-        scale: (0.8, 1.15),
-        seen_m: 85.0,
-        near_m: 28.0,
-        shadow_m: 32.0,
-        drift_m: 22.0,
-    },
-    Placement {
-        kind: Under::Holly,
-        name: "Holly",
-        tries: 18000,
-        clump: (1, 4),
-        spread_m: 2.2,
-        scale: (0.8, 1.2),
-        seen_m: 85.0,
-        near_m: 28.0,
-        shadow_m: 32.0,
-        drift_m: 26.0,
-    },
-    Placement {
-        kind: Under::Spruce,
-        name: "Young spruce",
-        tries: 16000,
-        clump: (2, 6),
-        spread_m: 2.4,
-        scale: (0.75, 1.2),
-        seen_m: 90.0,
-        near_m: 28.0,
-        shadow_m: 32.0,
-        drift_m: 20.0,
-    },
-    Placement {
-        kind: Under::Bramble,
-        name: "Bramble",
-        tries: 8000,
-        clump: (1, 4),
-        spread_m: 1.8,
-        scale: (0.8, 1.3),
-        seen_m: 70.0,
-        near_m: 25.0,
-        shadow_m: 24.0,
-        drift_m: 14.0,
-    },
-    Placement {
-        kind: Under::Snag,
-        name: "Snag",
-        tries: 5000,
-        clump: (1, 1),
-        spread_m: 0.0,
-        scale: (0.9, 1.1),
-        seen_m: 110.0,
-        near_m: 35.0,
-        shadow_m: 45.0,
-        drift_m: 30.0,
-    },
-    Placement {
-        kind: Under::Twigs,
-        name: "Twigs",
-        // Fewer than the litter's twigs (D275), longer and lying loose.
-        tries: 3000,
-        clump: (1, 3),
-        spread_m: 1.6,
-        scale: (0.8, 1.2),
-        seen_m: 30.0,
-        near_m: 0.0,
-        shadow_m: 0.0,
-        drift_m: 12.0,
-    },
-];
+/// A place uniformly in a ring round the clearing's middle, from `from` to `to` metres out.
+fn disc(dice: &mut Rng, from: f32, to: f32) -> Vec2 {
+    let angle = dice.range(0.0, TAU);
+    let distance = libm::sqrtf(dice.range(from * from, to * to));
+    Vec2::new(libm::cosf(angle), libm::sinf(angle)) * distance
+}
 
 /// A bell from `low` to `high`, highest between.
 fn between(low: f32, high: f32, value: f32) -> f32 {
@@ -983,7 +791,36 @@ impl Under {
             Under::Twigs => {
                 (1.0 - smoothstep(0.5, 0.95, here.light)) * (0.5 + 0.5 * near(here.bark, 1.0, 6.0))
             }
+            // On a path's verge, where the sun comes down its corridor.
+            Under::Verge => smoothstep(0.35, 0.8, here.light) * near(here.path, 0.4, 2.2),
         }
+    }
+
+    /// Where a clump of it is tried: what lines a path beside one, the rest over the floor.
+    fn tried_at(self, path: &Path, dice: &mut Rng) -> Vec2 {
+        if self == Under::Verge {
+            path.beside(dice, VERGE_OUT_M)
+        } else {
+            disc(dice, 3.0, FOREST_M + MEADOW_M * 0.6)
+        }
+    }
+
+    /// Whether it keeps the path's line open from a place so far from the path's edge: a
+    /// shrub or young tree only past `PATH_LINE_M`, what grows knee-high and below anywhere
+    /// it is clear of the path (`clear_of`).
+    fn keeps_path_line(self, path_m: f32) -> bool {
+        let tall = matches!(
+            self,
+            Under::Hazel
+                | Under::Scrub
+                | Under::Sapling
+                | Under::Coppice
+                | Under::Holly
+                | Under::Spruce
+                | Under::Bramble
+                | Under::Snag
+        );
+        !tall || path_m >= PATH_LINE_M
     }
 
     /// How far it stays from bark, from what lies on the floor, and from a path's edge.
@@ -1274,7 +1111,7 @@ impl Lay<'_, '_, '_> {
         for n in 0..VARIANTS {
             let atlas = Look::Foliage(self.atlas.clone());
             let drawn = match kind {
-                Under::Bracken => {
+                Under::Bracken | Under::Verge => {
                     let tint = variant_tint(&mut dice, Vec3::new(0.62, 0.64, 0.52));
                     let build = bracken(&mut dice, &card("fern"), tint);
                     Drawn::one(self.meshes.add(build.mesh(false)), atlas)
@@ -1525,11 +1362,6 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         noise: Noise::new(lay.seed.derive("patches")),
     };
     let mut dice = lay.seed.derive("floor").rng();
-    let disc = |dice: &mut Rng, from: f32, to: f32| {
-        let angle = dice.range(0.0, TAU);
-        let distance = libm::sqrtf(dice.range(from * from, to * to));
-        Vec2::new(libm::cosf(angle), libm::sinf(angle)) * distance
-    };
 
     // Rocks and boulders, the rocks scattered round the boulders and alone; sunk a fifth to
     // two fifths of their height once their meshes are loaded (`Sink`).
@@ -1758,7 +1590,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         let mut count = 0;
         let mut closest = Vec2::splat(f32::MAX);
         for _ in 0..placement.tries {
-            let at = disc(&mut dice, 3.0, FOREST_M + MEADOW_M * 0.6);
+            let at = placement.kind.tried_at(&map.path, &mut dice);
             let drifts = smoothstep(
                 0.38,
                 0.62,
@@ -1788,6 +1620,11 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 let scale = dice.range(placement.scale.0, placement.scale.1) * edge;
                 let place = lay.on(p, &mut dice, 0.03 * scale, scale);
                 let drawn = variants[dice.below(variants.len() as u32) as usize].clone();
+                // Rolled as before, so every other plant stays where it was, then left out
+                // if it would stand in the path's line.
+                if !placement.kind.keeps_path_line(here.path) {
+                    continue;
+                }
                 lay.plant(placement, &drawn, p, place);
                 count += 1;
                 if p.length() < closest.length() {
@@ -1801,18 +1638,25 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         ));
     }
     info!("lush: undergrowth: {}.", counts.join(", "));
-    let shadows = lay
-        .shrinking
-        .iter()
-        .map(|((_, end), material)| (material.clone(), *end as f32 / 4.0))
-        .collect();
-    lay.commands.insert_resource(FloorShadows(shadows));
-    let shade = std::mem::replace(
-        &mut lay.shade,
-        NearShadows::new(lay.start, lay.east, lay.south),
-    );
-    lay.commands.insert_resource(shade);
+    lay.hand_over_shadows();
     map
+}
+
+impl Lay<'_, '_, '_> {
+    /// Hands the floor's shadow stand-ins and near shadows to the world, once all is laid.
+    fn hand_over_shadows(&mut self) {
+        let shadows = self
+            .shrinking
+            .iter()
+            .map(|((_, end), material)| (material.clone(), *end as f32 / 4.0))
+            .collect();
+        self.commands.insert_resource(FloorShadows(shadows));
+        let shade = std::mem::replace(
+            &mut self.shade,
+            NearShadows::new(self.start, self.east, self.south),
+        );
+        self.commands.insert_resource(shade);
+    }
 }
 
 /// A rock's share of its height that is under the ground, applied once its mesh has
