@@ -29,9 +29,11 @@ import bevy_pbr::{
 import bevy_pbr::render::{
     forward_io::{VertexOutput, FragmentOutput},
     pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
-    mesh_view_bindings::{globals, view, lights, fog},
+    mesh_view_bindings::{globals, view, lights},
     shadows::fetch_directional_shadow,
 };
+// Bevy declares `fog` only for a camera with `DistanceFog` (as its pbr_functions guards it).
+@if(!PREPASS_PIPELINE && DISTANCE_FOG) import bevy_pbr::render::mesh_view_bindings::fog;
 import super::horizon::horizon_lit;
 
 // Field order must match GroundExtension in planet.rs.
@@ -2250,19 +2252,22 @@ fn fragment(
     // references' walls rise out of their valleys' haze: a peak set straight on the treeline
     // read as a billboard (lake film r16). A height fog, as Unreal's, but whole to near the eye's
     // height and thinning out over a few hundred metres above it.
-    let past = max(distance(world, view.world_position) - AERIAL_FROM_M, 0.0);
-    let over_eye = length(world) - length(view.world_position);
-    var haze_light = dot(fog.base_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
-    var day = 1.0;
-    // At dusk the air before a range is lit by the whole bright west, more than the dimmed
-    // haze says: a range across the lake stood as dark as the treeline under it (lake film r16).
-    if lights.n_directional_lights > 0u {
-        let direct = dot(lights.directional_lights[0].color.rgb * view.exposure, vec3<f32>(0.2126, 0.7152, 0.0722));
-        day = smoothstep(DIRECT_FAINT.x, DIRECT_FAINT.y, direct);
-        haze_light *= mix(DUSK_AIR_LIFT, 1.0, day);
+    // Without distance fog there is no haze to fade toward.
+    @if(DISTANCE_FOG) {
+        let past = max(distance(world, view.world_position) - AERIAL_FROM_M, 0.0);
+        let over_eye = length(world) - length(view.world_position);
+        var haze_light = dot(fog.base_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+        var day = 1.0;
+        // At dusk the air before a range is lit by the whole bright west, more than the dimmed
+        // haze says: a range across the lake stood as dark as the treeline under it (lake film r16).
+        if lights.n_directional_lights > 0u {
+            let direct = dot(lights.directional_lights[0].color.rgb * view.exposure, vec3<f32>(0.2126, 0.7152, 0.0722));
+            day = smoothstep(DIRECT_FAINT.x, DIRECT_FAINT.y, direct);
+            haze_light *= mix(DUSK_AIR_LIFT, 1.0, day);
+        }
+        let through = air_through(past, over_eye, day);
+        out.color = vec4<f32>(mix(out.color.rgb, haze_light * AERIAL_AIR, through), out.color.a);
     }
-    let through = air_through(past, over_eye, day);
-    out.color = vec4<f32>(mix(out.color.rgb, haze_light * AERIAL_AIR, through), out.color.a);
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 }
     return out;
