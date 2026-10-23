@@ -201,7 +201,17 @@ fn lying(
         } else {
             0.0
         };
-        let snow = snow.max(fed_lying(fed, gullied, level, here));
+        // A low wall's benches keep the open feed only by the gullies that cross them, where
+        // the avalanches off the bands above come to rest; level along their whole length,
+        // every bench of the town's foothills lay in one hard white bar, a terrace of contour
+        // lines (settlement r29-30).
+        let low = 1.0 - smoothstep(FED_FALLS.0, FED_FALLS.1, height_m);
+        let open = if low > 0.0 && level > 0.0 && fed > 0.0 {
+            fed * bench_keep(low, here.max(gully_by(point, up, bed)))
+        } else {
+            fed
+        };
+        let snow = snow.max(fed_lying(open, gullied, level, here));
         // Avalanches run down the gullies and fill the couloirs they gather into: a couloir
         // with gully above it all the way up lies deep (D426, round 10), a dimple alone thin.
         // Only in a gully's own bed: caught wherever gully lay above, the ribs between held it
@@ -304,6 +314,32 @@ fn fed_from_m(height_m: f32) -> f32 {
 fn fed_lying(open_m: f32, gully_m: f32, level: f32, here: f32) -> f32 {
     (open_m * level).max(open_m.max(gully_m) * here)
 }
+
+/// How near a gully's bed `point` lies, 0 to 1, looking round it level at [`BENCH_GULLY_M`]:
+/// the most of a gully's bed there, the farther ring counted less.
+fn gully_by(point: Vec3, up: Vec3, bed: &mut dyn FnMut(Vec3) -> f32) -> f32 {
+    let (a, b) = up.any_orthonormal_pair();
+    let mut near: f32 = 0.0;
+    for (reach, weight) in BENCH_GULLY_M {
+        for way in [a, b, -a, -b] {
+            near = near.max(smoothstep(SNOW_BED.0, SNOW_BED.1, bed(point + way * reach)) * weight);
+        }
+    }
+    near
+}
+
+/// The share of the open feed a bench of a wall keeps, as low as `low` (1 under
+/// [`FED_FALLS`], 0 over) says, `near` a gully's bed (`gully_by`): whole by a gully, a
+/// [`BENCH_KEEP`] away from any, so its snow lies in fans under the gullies, lined up down
+/// the wall from bench to bench, rather than along each bench.
+fn bench_keep(low: f32, near: f32) -> f32 {
+    1.0 - low * (1.0 - BENCH_KEEP) * (1.0 - near)
+}
+
+/// How far round a point a bench looks for a gully's bed, in metres, and how much each ring counts.
+const BENCH_GULLY_M: [(f32, f32); 2] = [(15.0, 1.0), (35.0, 0.6)];
+/// The share of the open feed a low wall's bench keeps away from any gully.
+const BENCH_KEEP: f32 = 0.15;
 
 /// A wall carries its fed snow's depth from the first of these, how far its normal points up
 /// (about 72 degrees), whole from the second (about 57).
@@ -650,6 +686,46 @@ mod tests {
         assert_eq!(fed_lying(0.0, 0.3, 0.2, 0.0), 0.0);
         // Half down into the bed, half the gully's depth.
         assert!((fed_lying(0.0, 0.4, 0.0, 0.5) - 0.2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_low_walls_benches_hold_snow_by_their_gullies_not_along_them() {
+        // A stepped foothill wall facing +z, its gullies 20 m wide every 120 m along x, cut
+        // down through every bench; two benches 60 m apart in height. Along each bench's
+        // contour (one height) its open feed is laid as `lying` lays it.
+        let bed = |at: Vec3| {
+            let off = (at.x.rem_euclid(120.0) - 60.0).abs();
+            (1.0 - off / 10.0).clamp(0.0, 1.0)
+        };
+        let fed = 0.5;
+        let along = |height: f32| -> Vec<bool> {
+            (0..480)
+                .map(|x| {
+                    let point = Vec3::new(x as f32, height, 0.0);
+                    let mut bed = bed;
+                    let here = smoothstep(SNOW_BED.0, SNOW_BED.1, bed(point));
+                    let near = here.max(gully_by(point, Vec3::Y, &mut bed));
+                    fed_lying(fed * bench_keep(1.0, near), 0.0, 1.0, here) > fed * 0.5
+                })
+                .collect()
+        };
+        let (upper, lower) = (along(60.0), along(0.0));
+        // Not a band: a share of each bench is snow, in runs no longer than a gully's fan.
+        for bench in [&upper, &lower] {
+            let share = bench.iter().filter(|&&s| s).count() as f32 / bench.len() as f32;
+            assert!(share > 0.15 && share < 0.7, "{share} of the bench snowed");
+            let longest = bench.split(|&s| !s).map(<[bool]>::len).max().unwrap_or(0);
+            assert!(longest < 100, "a run of {longest} m along the bench");
+        }
+        // Lined up down the fall line: the benches' snow lies under the same gullies.
+        let both = upper.iter().zip(&lower).filter(|(a, b)| **a && **b).count();
+        let either = upper.iter().zip(&lower).filter(|(a, b)| **a || **b).count();
+        assert!(
+            both * 10 >= either * 9,
+            "{both} of {either} metres lined up"
+        );
+        // Over the low walls' reach a bench keeps its whole feed (D425's horns unchanged).
+        assert_eq!(bench_keep(0.0, 0.0), 1.0);
     }
 
     #[test]

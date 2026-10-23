@@ -743,6 +743,16 @@ const SHADED_SNOW: vec3<f32> = vec3<f32>(0.4, 0.5, 0.7);
 const DIRECT_FAINT: vec2<f32> = vec2<f32>(0.05, 0.3);
 // How much brighter than the haze the aerial perspective's air stands at dusk.
 const DUSK_AIR_LIFT: f32 = 1.8;
+// Under a low sun still bright (`day` near 1), the air before a far range stands brighter
+// and takes the hour's colour from the haze (`fog.base_color`, daylight.rs's low-sun keys):
+// a long path through the lit air forward-scatters the low light, so a wall kilometres off
+// lifts toward the sky behind it as the Tatras' and the Dolomites' do at golden hour. Lit by
+// the noon sky's blue-grey alone, the settlement's far wall at 15 degrees stood one dark warm
+// slab, eight levels over the forest under it (settlement r29). The sun's sine over the eye's
+// horizon at which it begins and is whole, how much brighter, and how far toward the haze's hue.
+const LOW_SUN: vec2<f32> = vec2<f32>(0.6, 0.2);
+const LOW_SUN_AIR_LIFT: f32 = 2.6;
+const LOW_SUN_HUE: f32 = 0.2;
 // The low mist's heights over the eye between which it thins out, and over how many metres
 // at its thickest it takes two-thirds of the way to the air, on top of the aerial perspective:
 // thinned to a third in 140 m, it lay wholly behind the forest's wall and showed in no view
@@ -2265,15 +2275,20 @@ fn fragment(
         let over_eye = length(world) - length(view.world_position);
         var haze_light = dot(fog.base_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
         var day = 1.0;
+        var low = 0.0;
         // At dusk the air before a range is lit by the whole bright west, more than the dimmed
         // haze says: a range across the lake stood as dark as the treeline under it (lake film r16).
         if lights.n_directional_lights > 0u {
             let direct = dot(lights.directional_lights[0].color.rgb * view.exposure, vec3<f32>(0.2126, 0.7152, 0.0722));
             day = smoothstep(DIRECT_FAINT.x, DIRECT_FAINT.y, direct);
             haze_light *= mix(DUSK_AIR_LIFT, 1.0, day);
+            let sun_up = dot(lights.directional_lights[0].direction_to_light, normalize(view.world_position));
+            low = smoothstep(LOW_SUN.x, LOW_SUN.y, sun_up) * day;
         }
+        let haze_hue = fog.base_color.rgb / max(dot(fog.base_color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4);
+        let air = haze_light * mix(1.0, LOW_SUN_AIR_LIFT, low) * mix(AERIAL_AIR, haze_hue, LOW_SUN_HUE * low);
         let through = air_through(past, over_eye, day);
-        out.color = vec4<f32>(mix(out.color.rgb, haze_light * AERIAL_AIR, through), out.color.a);
+        out.color = vec4<f32>(mix(out.color.rgb, air, through), out.color.a);
     }
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 }
