@@ -785,6 +785,13 @@ const BALL_FLAT: f32 = 0.72;
 fn ball_scale(b: Breath) -> vec3<f32> {
     return vec3(1.0, 1.0, mix(1.0 / BALL_FLAT, 1.0, saturate(b.since_off / 1.5)));
 }
+// The ball's outline and rim: lobes a third of its size, each its own way, pushing its edge in
+// and out by up to this share of its radius; its gas thinning to nothing between these shares
+// of it (squared). By its fine lumps alone, a fifth of its radius, and cut over a fifth at
+// 9-14 a metre, it was opaque to a circle: a round disc over the keep, sunlit white once off
+// (castle fall r24's probe, 9-21 s).
+const BALL_LOBES: f32 = 1.2;
+const BALL_RIM: vec2<f32> = vec2(0.45, 1.15);
 // The stream's gas at its skin, a share of its core's; how much hotter the ball is along the
 // stream's line into it (the ramp's heat), and how much thinner its gas there.
 const JET_SKIN_DENSITY: f32 = 0.45;
@@ -882,7 +889,12 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
         }
         let lumps = fbm3(pb * 2.2 + wb * 1.6);
         let d = length(rel) / rb;
-        ball = (1.0 - smoothstep(0.75, 0.95, d - 0.15 * saturate(dot(rel, b.up) / rb) + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.6)) * b.ball;
+        // Lobed and thinning over its outer half, as a cloud of gas is (a density falloff with
+        // a displaced edge, Fong et al. 2017), so a ray grazing it is covered by degrees.
+        let lobes = noise3(pb * 0.8 + vec3(31.7, 5.3, 12.9));
+        let shape = d - 0.15 * saturate(dot(rel, b.up) / rb) + (lumps - 0.5) * 1.2 + (nb - 0.5) * 0.6 + (lobes - 0.5) * BALL_LOBES;
+        let rim = 1.0 - smoothstep(BALL_RIM.x, BALL_RIM.y, shape);
+        ball = rim * rim * b.ball;
         // The smoke thins as it spreads, wispier at its edge than in its middle.
         ball *= select(1.0, b.smoke * (0.35 + 0.65 * (1.0 - smoothstep(0.3, 0.9, d))), b.since_off > 0.0);
         // And it breaks into billows with gaps between and frays at its edge as it ages: whole,
