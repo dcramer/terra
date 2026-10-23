@@ -14,6 +14,10 @@ pub struct Way {
     /// had.
     moving: bool,
     met: u32,
+    /// A meeting that found nowhere to be met, tried again a little further on as itself:
+    /// its number, so its dice, and the kind it chose if it chose one (`Staging::wanted`);
+    /// a new meeting takes the next number.
+    again: Option<(u64, Option<Species>)>,
 }
 
 /// A group met beside the way stands so much further from it than it bolts at, metres.
@@ -67,6 +71,11 @@ fn seen_coming_on(around: &Surroundings, here: Vec3, ahead: Vec3, spot: Vec3) ->
 /// A meeting being staged: a spot tried each look (each costs a millisecond or two, the ground
 /// and what grows on it asked), the best of each kind so far, and the dice it is rolled with.
 struct Staging {
+    /// Its number among the meetings, which its dice are rolled from.
+    number: u64,
+    /// The kind it is with, kept when it is tried again: retried as a new meeting, a fox
+    /// put off by the camera's coming on came back a boar or nothing (forest walk, 10-22).
+    wanted: Option<Species>,
     dice: terra_gen::Rng,
     tried: usize,
     /// Whether it is with a big animal (`BIG_EVERY`).
@@ -98,6 +107,7 @@ pub fn meet(
             staging: None,
             moving: false,
             met: 0,
+            again: None,
         });
         let up = here.normalize_or(Vec3::Y);
         let went = (here - way.last).reject_from(up);
@@ -116,6 +126,7 @@ pub fn meet(
             // Setting off: what was staged standing is for where they faced.
             way.left = way.left.min(SET_OFF_S);
             way.staging = None;
+            way.again = None;
         }
         way.moving = moving;
         if ahead == Vec3::ZERO || (!moving && cells.met.len() >= most) {
@@ -124,10 +135,15 @@ pub fn meet(
         }
         way.left -= LOOK_EVERY_S;
         if way.left <= 0.0 && way.staging.is_none() && cells.met.len() < most {
-            cells.meetings += 1;
-            let mut dice = seed.index(cells.meetings).rng();
+            let (number, wanted) = way.again.take().unwrap_or_else(|| {
+                cells.meetings += 1;
+                (cells.meetings, None)
+            });
+            let mut dice = seed.index(number).rng();
             way.left = dice.range(MEET_EVERY_S.0, MEET_EVERY_S.1);
             way.staging = Some(Staging {
+                number,
+                wanted,
                 dice,
                 tried: 0,
                 big: moving && way.met.is_multiple_of(BIG_EVERY),
@@ -146,11 +162,13 @@ pub fn meet(
         }
         let chosen = choose_clear(&mut staging, (bestiary, around), wild, (here, ahead));
         let dice = &mut staging.dice;
+        let mut chose = staging.wanted;
         let met = 'met: {
             let Some((spot, aside, index, _, in_view)) = chosen else {
                 break 'met false;
             };
             let (species, _, (fewest, most), _) = wild[index];
+            chose = Some(species);
             // Met as a group of the larger sort its kind keeps.
             let count = (fewest + most).div_ceil(2)
                 + (dice.unit() * ((most - fewest) / 2 + 1) as f32) as u32;
@@ -188,6 +206,9 @@ pub fn meet(
                 ),
                 None => break 'met false,
             };
+            if group.is_empty() {
+                break 'met false;
+            }
             let group_len = group.len();
             cells.met.extend(group);
             info!(
@@ -205,7 +226,8 @@ pub fn meet(
         if met {
             way.met += moving as u32;
         } else {
-            // Nowhere in view: try again at once, a little further on.
+            // Nowhere in view: try again at once, a little further on, the same meeting.
+            way.again = Some((staging.number, chose));
             debug!(
                 "Wildlife: of {} spots none in view to meet at, nor a crossing.",
                 staging.tried
@@ -298,6 +320,12 @@ fn choose(
 ) -> Option<(Vec3, Vec3, usize, f32, bool)> {
     // A big animal's meeting is with one of the big kinds that fit, and the others' with
     // the small, where there are any of that size.
+    // One tried again is with the kind it chose, where that kind fits.
+    if let Some(wanted) = staging.wanted
+        && staging.fits.iter().any(|fit| wild[fit.2].0 == wanted)
+    {
+        staging.fits.retain(|fit| wild[fit.2].0 == wanted);
+    }
     let big =
         |fit: &(Vec3, Vec3, usize, f32, bool)| bestiary.get(wild[fit.2].0).body.radius >= BIG_M;
     if staging.fits.iter().any(|fit| big(fit) == staging.big) {
@@ -415,6 +443,51 @@ mod tests {
             }
         }
         assert_eq!(checked, 8, "the heron is shy and checked at each spot");
+    }
+
+    #[test]
+    fn a_meeting_tried_again_is_with_the_kind_it_chose_not_a_new_roll() {
+        // A fox staged where the camera would soon see it was tried again further on as a
+        // new meeting, and came back a boar or nothing (forest walk, 10-22).
+        let bestiary = Bestiary::read(&Default::default());
+        let [fox, boar] = ["Red fox", "Wild boar"].map(|name| bestiary.named(name).unwrap());
+        let niche = |species: Species| bestiary.get(species).niche.as_ref().unwrap();
+        let wild: [Wild; 2] = [
+            (fox, 4.0, (1, 1), niche(fox)),
+            (boar, 1.0, (2, 4), niche(boar)),
+        ];
+        let pick = |number: u64, wanted: Option<Species>| {
+            let mut staging = Staging {
+                number,
+                wanted,
+                dice: Seed(9).index(number).rng(),
+                tried: 0,
+                big: false,
+                // The fox shows far the better: 30 to 1.
+                fits: vec![
+                    (Vec3::X, Vec3::Z, 0, 30.0, true),
+                    (Vec3::X, Vec3::Z, 1, 1.0, true),
+                ],
+            };
+            wild[choose(&mut staging, &bestiary, &wild).unwrap().2].0
+        };
+        let boars = (0..64).filter(|&n| pick(n, None) == boar).count();
+        assert!(
+            boars < 16,
+            "a new roll is mostly the fox: {boars} boars in 64"
+        );
+        for number in 0..64 {
+            assert_eq!(
+                pick(number, Some(boar)),
+                boar,
+                "tried again, {number} stays a boar"
+            );
+            assert_eq!(
+                pick(number, Some(fox)),
+                fox,
+                "tried again, {number} stays a fox"
+            );
+        }
     }
 
     #[test]

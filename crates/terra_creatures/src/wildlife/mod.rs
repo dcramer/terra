@@ -37,7 +37,7 @@ use terra_world::parting::ObstructionFade;
 use terra_world::planet::{MainCamera, Planet};
 use terra_world::sky_occlusion::SkyOccluders;
 use terra_world::start::Start;
-use unseen::put;
+use unseen::{put, put_near};
 
 /// The land's cells are cubes this wide, a few tens of metres of ground in each.
 const CELL_M: f32 = 32.0;

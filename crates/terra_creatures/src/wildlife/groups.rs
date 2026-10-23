@@ -210,16 +210,16 @@ pub fn put_group(
     for _ in 0..count {
         let turn = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU));
         let at = around.ground(spot + turn * reach * dice.range(0.0, 1.0));
-        if let Some(animal) = super::put(commands, (kinds, bestiary), around, species, at) {
-            put.push(animal);
-        }
+        // One whose spot is in view is moved near, out of sight, not left out; its young by it.
+        let at = around.unseen_near(at, about.seen_m()).unwrap_or(at);
+        put.extend(super::put(commands, (kinds, bestiary), around, species, at));
         if let Some(young) = young_of(bestiary, species, dice) {
             let beside = around.ground(
                 at + turn
                     * reach.normalize_or_zero()
                     * dice.range(YOUNG_BESIDE_M.0, YOUNG_BESIDE_M.1),
             );
-            put.extend(super::put(
+            put.extend(super::put_near(
                 commands,
                 (kinds, bestiary),
                 around,
