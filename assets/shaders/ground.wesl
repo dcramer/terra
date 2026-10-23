@@ -763,6 +763,9 @@ fn air_through(past: f32, over_eye: f32, day: f32) -> f32 {
     let low_mist = (1.0 - smoothstep(FOOT_MIST_M.x, FOOT_MIST_M.y, over_eye)) / mix(FOOT_MIST_DEPTH_DUSK_M, FOOT_MIST_DEPTH_M, day) * mix(FOOT_MIST_DUSK, 1.0, day);
     return 1.0 - exp(-past / mix(AERIAL_DUSK_M, AERIAL_M, day) - past * low_mist);
 }
+// The heights above the sea over which a wall's fed snow goes from a low wall's to a horn's,
+// as terra_world's terrain.rs `FED_FALLS`.
+const FED_FALLS_M: vec2<f32> = vec2<f32>(1500.0, 2500.0);
 // How wide a far snowfield's broken edge fades, and how much a fine grain frays it.
 const BREAK_SOFT: vec2<f32> = vec2<f32>(0.4, 0.58);
 const BREAK_GRAIN: f32 = 0.12;
@@ -1519,7 +1522,11 @@ fn fragment(
             // Its edge frayed by a grain a few metres across and faded over more of the noise:
             // cut at one value over 0.04 of it, the streaks stood hard-edged as paint (the r16 review).
             let grain = (noise(world * 0.11 + 141.0) - 0.5) * BREAK_GRAIN;
-            let breaks = smoothstep(BREAK_SOFT.x, BREAK_SOFT.y, (outcrop - 0.2) * 0.7 + (0.86 - flatness) * 3.0 - held + (streaks - 0.55) * STREAKED + wall_bare + grain);
+            // A low wall's slope breaks it as round 16 did, under half as hard: its fed snow
+            // lies in streaks on its benches and gullies, as terrain.rs feeds it (`FED_FALLS`);
+            // broken as the horns' faces, the town's foothills lay bare and flat (settlement r28).
+            let by_slope = mix(1.7, 3.0, smoothstep(FED_FALLS_M.x, FED_FALLS_M.y, above_sea_m));
+            let breaks = smoothstep(BREAK_SOFT.x, BREAK_SOFT.y, (outcrop - 0.2) * 0.7 + (0.86 - flatness) * by_slope - held + (streaks - 0.55) * STREAKED + wall_bare + grain);
             snow *= 1.0 - breaks * far_snow;
             // The couloirs by the outcrops alone, about a third of them: keyed by the steepness
             // too, the walls' fill broke whole and the range stood bare (round 11).

@@ -192,14 +192,23 @@ fn lying(
             made_of,
             material::STONE | material::SCREE | material::GRAVEL
         ) {
-        let fed = round.snow_m(point + up * FED_M, up) * FED_SHARE;
+        let height_m = round.place(point, up).height_m;
+        let fed = round.snow_m(point + up * fed_from_m(height_m), up) * FED_SHARE;
         let level = smoothstep(FED_WALL.0, FED_WALL.1, normal.dot(up));
         let here = smoothstep(SNOW_BED.0, SNOW_BED.1, bed(point));
-        let snow = snow.max(fed * level.max(here));
+        let gullied = if here > 0.0 {
+            round.snow_m(point + up * FED_GULLY_M, up) * FED_SHARE
+        } else {
+            0.0
+        };
+        let snow = snow.max(fed_lying(fed, gullied, level, here));
         // Avalanches run down the gullies and fill the couloirs they gather into: a couloir
         // with gully above it all the way up lies deep (D426, round 10), a dimple alone thin.
         // Only in a gully's own bed: caught wherever gully lay above, the ribs between held it
         // too, and each horn's upper wall lay in one white cap brighter than the sky (round 11).
+        // Fed as its bed is (`FED_GULLY_M`): the far snow's breaks bare a foothill's slopes
+        // but for its couloirs, so fed from `FED_M` alone its gullies lay bare too (r28).
+        let fed = fed.max(gullied);
         if fed > COULOIR_FED_M && level < 1.0 && here > 0.0 {
             let couloir = (1.0 - level) * here * couloir_catch(point, normal, up, bed);
             (snow.max(couloir * fed), couloir)
@@ -270,6 +279,32 @@ const DRY_M: f32 = 50.0;
 /// the horns stood half white against the third D425 and D426 ask (the r20 review).
 const FED_M: f32 = 1400.0;
 const FED_SHARE: f32 = 1.0;
+/// A gully's bed is fed as from this much higher, as round 13's whole range was: sheltered and
+/// shaded, its avalanche snow outlasts the open faces' (the Tatras' summer snow lies in the
+/// gullies' beds hundreds of metres under the open faces' snow). Fed from [`FED_M`] alone, the
+/// town's foothills, under the open faces' reach, lay bare and flat in one brown value at dusk
+/// (settlement r27); the horns' open faces and ledges keep `FED_M`'s depth, two thirds rock.
+const FED_GULLY_M: f32 = 1900.0;
+
+/// Over these heights above the sea, in metres, a wall's open feed rises from [`FED_GULLY_M`]
+/// to [`FED_M`]: a low wall has more of the range above it to be fed from, and its benches
+/// and ledges hold the avalanches' snow in streaks, while the horns keep two thirds rock (D425).
+/// Fed from `FED_M` everywhere, the town's foothills lay bare and flat (settlement r27-28). The
+/// band is wider than the feeds differ, so the snow still lies deeper the higher it is.
+const FED_FALLS: (f32, f32) = (1500.0, 2500.0);
+
+/// How much higher a wall at `height_m` above the sea is fed snow as, in metres.
+fn fed_from_m(height_m: f32) -> f32 {
+    FED_GULLY_M + (FED_M - FED_GULLY_M) * smoothstep(FED_FALLS.0, FED_FALLS.1, height_m)
+}
+
+/// The depth of a wall's fed snow, in metres: `open_m` fed from [`FED_M`] on its tops and ledges
+/// (`level`, how level it lies, 0 to 1), the deeper of that and `gully_m`, fed from
+/// [`FED_GULLY_M`], in a gully's bed (`here`, how far down into it, 0 to 1).
+fn fed_lying(open_m: f32, gully_m: f32, level: f32, here: f32) -> f32 {
+    (open_m * level).max(open_m.max(gully_m) * here)
+}
+
 /// A wall carries its fed snow's depth from the first of these, how far its normal points up
 /// (about 72 degrees), whole from the second (about 57).
 const FED_WALL: (f32, f32) = (0.3, 0.55);
@@ -600,6 +635,52 @@ fn receive(
             if let Some(entity) = terrain.shown.remove(&id).and_then(|shown| shown.entity) {
                 commands.entity(entity).despawn();
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_gully_bed_keeps_snow_under_the_open_faces_reach() {
+        // A foothill wall too low for the open feed: its gully's bed holds snow, its rib none.
+        assert!(fed_lying(0.0, 0.3, 0.2, 1.0) > 0.2);
+        assert_eq!(fed_lying(0.0, 0.3, 0.2, 0.0), 0.0);
+        // Half down into the bed, half the gully's depth.
+        assert!((fed_lying(0.0, 0.4, 0.0, 0.5) - 0.2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn open_faces_and_ledges_keep_their_own_feed() {
+        // Off a gully's bed a wall lies as the open feed lays it, however deep the gully feed:
+        // the horns stay two thirds rock (D425).
+        for level in [0.0, 0.3, 1.0] {
+            assert_eq!(fed_lying(0.25, 2.0, level, 0.0), 0.25 * level);
+        }
+        // In a bed never less than the open feed gives it.
+        assert!(fed_lying(0.5, 0.1, 0.0, 1.0) >= 0.5);
+        // The gully feed is from higher on the same snow line, so never shallower where both lie.
+        const { assert!(FED_GULLY_M > FED_M) };
+    }
+
+    #[test]
+    fn a_low_wall_is_fed_deeper_yet_snow_still_deepens_upward() {
+        // The foothills fed as round 24's whole range, the horns as D425's two thirds rock.
+        assert_eq!(fed_from_m(800.0), FED_GULLY_M);
+        assert_eq!(fed_from_m(3200.0), FED_M);
+        // The height a wall is fed snow as rises with its own, so no snow line runs backwards
+        // (the r3 review): every metre higher is fed from higher.
+        let mut last = f32::MIN;
+        for step in 0..=500 {
+            let height = step as f32 * 10.0;
+            let fed_as = height + fed_from_m(height);
+            assert!(
+                fed_as > last,
+                "fed as {fed_as} m at {height} m, under {last}"
+            );
+            last = fed_as;
         }
     }
 }
