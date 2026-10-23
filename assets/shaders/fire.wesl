@@ -339,9 +339,10 @@ const TONGUE_SKEW: f32 = 1.7;
 // `NEAR_BEHIND` of its radius away from the eye, so the log's own depth cuts through it, and
 // lower and narrower there (`NEAR_SHORT`), as the flame on a log's cool outer face is; on
 // its top, every log's flame covered its near logs (blind judge: "the flame covers the
-// stack"). A tongue's least width in its log's radius (3.5 drew a bush of wide petals).
-const NEAR_BEHIND: f32 = 1.6;
-const NEAR_SHORT: f32 = 0.6;
+// stack"). At 1.6 radii and 0.6 as tall it stood behind the logs, not among
+// them (blind judge, campfire cut round). A tongue's least width in its log's radius (3.5 drew a bush of wide petals).
+const NEAR_BEHIND: f32 = 1.15;
+const NEAR_SHORT: f32 = 0.75;
 const TONGUE_NARROW: f32 = 2.2;
 // One or two tongues stand much taller and narrower than the rest (`TONGUE_LEADS`), from
 // where the most fuel meets air: high on the hottest log as its heat was at the tongue's
@@ -2109,7 +2110,7 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         // Up to 0.6 they stood apart from the middle as low licks (fire matte round), and at
         // 0.65-0.85 as tall as it, a level-topped wall (fire body round 1), so 0.55-0.75 of it,
         // overlapping it under its peak.
-        flame *= select(0.55 + 0.2 * luck, 1.0, j == 2);
+        flame *= select(0.42 + 0.4 * luck, 1.0, j == 2);
         window = COLUMN_WINDOW * select(0.85 + 0.3 * fract(luck * 3.3), 1.25, j == 2);
     }
     // The frame is square, and its set's tips reach `reach` up it, so the card stands as
@@ -2487,10 +2488,14 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             let n = fbm(vec2(x * 5.0 + luck * 9.0, hy * 2.6 - time * 1.7));
             // Its cover taken over the set's thin median (0.16), so the threshold eats its
             // thin tips and leaves its body: on the raw cover it ate the whole flame.
-            let erode = HEARTH_ERODE_FLOOR + HEARTH_ERODE * smoothstep(0.15, 1.0, hy);
+            // A side column (narrower than the middle's half) torn more and cooler, so it
+            // reads as smaller licks round the middle: as warm and whole as the middle they
+            // were soft yellow-white wings either side (blind judge, campfire cut round).
+            let side = column && window < 0.48;
+            let erode = HEARTH_ERODE_FLOOR + HEARTH_ERODE * smoothstep(0.15, 1.0, hy) + select(0.0, 0.08, side);
             texel.g *= smoothstep(erode, erode + HEARTH_FEATHER, saturate(texel.g * 3.0) * (0.5 + n) * edges);
             texel.g *= mix(1.0, HEARTH_SEE, smoothstep(0.25, 0.85, hy));
-            texel.r = saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.62, smoothstep(0.12, 0.9, hy)));
+            texel.r = select(1.0, 0.85, side) * saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.62, smoothstep(0.12, 0.9, hy)));
         }
         let drawn = baked_fuel(texel, brightness, soft * select(edges, 1.0, layer == SET_CAMPFIRE), select(0.0, HEARTH_ROW, layer == SET_CAMPFIRE));
         light = drawn.rgb;
