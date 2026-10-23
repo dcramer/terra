@@ -30,6 +30,8 @@ pub mod drift;
 pub mod falloff;
 #[cfg(test)]
 mod far_air;
+#[cfg(test)]
+mod far_strata;
 pub mod fire;
 pub mod flora;
 pub mod flora_kinds;

@@ -41,7 +41,7 @@ const OUT: (f32, f32) = (1.9, 2.8);
 const STRAY: f32 = 0.45;
 /// How high a neighbour stands, as shares of the horn's height, and how far its own faces
 /// reach, as a share of the horn's.
-const SHARE: (f32, f32) = (0.55, 0.85);
+const SHARE: (f32, f32) = (0.5, 0.78);
 const TOP_REACH: f32 = 0.7;
 /// From how far out, as a share of its reach, a neighbour's foot eases into the ground, wider
 /// than a horn's (0.55): it rises out of a cirque's floor, hundreds of metres under the ground
@@ -56,6 +56,13 @@ const RIDGE_FROM: f32 = 0.3;
 const RIDGE_WIDE: f32 = 0.45;
 const RIDGE_HIGH: (f32, f32) = (0.55, 0.6);
 const RIDGE_PROFILE: f32 = 1.5;
+/// The teeth a ridge's crest breaks into between the horn and its neighbour, as the Tatras'
+/// ridges do (Orla Perć's gendarmes): about how far apart, as a share of the horn's reach,
+/// and the most a notch between two cuts into the crest's height over the horn's ground. A
+/// crest falling evenly from the arête to the col read as a flat-topped wall (round 28's
+/// review: "pale, smeared and flat-topped").
+const TEETH_SPACING: f32 = 0.2;
+const TEETH_DEPTH: f32 = 0.22;
 /// From how far out, as a share of its width, a ridge's side eases into the ground, as a
 /// horn's foot does.
 const RIDGE_FADE: f32 = 0.55;
@@ -370,7 +377,8 @@ impl Massif {
             let off = (flat - n.way * (from + t * (n.out - from))).length();
             let wide = self.reach * RIDGE_WIDE;
             let start = self.tall * RIDGE_HIGH.0;
-            let crest = start + (n.top * RIDGE_HIGH.1 - start) * t;
+            let crest = (start + (n.top * RIDGE_HIGH.1 - start) * t)
+                * teeth(flat.dot(n.way) / (self.reach * TEETH_SPACING), t, n.key);
             if off < wide
                 && let Some(o) = over(crest)
             {
@@ -385,6 +393,22 @@ impl Massif {
         }
         most
     }
+}
+
+/// How much of a ridge's crest stands `along` its length, counted in teeth spacings, `t` of
+/// the way from the horn to its neighbour, by the neighbour's own 0 to 1: sharp tips (where
+/// `1 - |cos|` peaks, a corner) over rounded notches, spaced unevenly and cut unlike deep as
+/// the horns' towers are (`towered`), faded out at either end, where the horn's arête and the
+/// neighbour's faces stand.
+fn teeth(along: f32, t: f32, key: f32) -> f32 {
+    let ends = smoothstep(0.05, 0.25, t) * (1.0 - smoothstep(0.75, 0.95, t));
+    if ends <= 0.0 {
+        return 1.0;
+    }
+    let phase = along + key * 7.0 + 0.9 / TAU * libm::sinf(TAU * along / 2.7 + key * 13.0);
+    let tip = 1.0 - libm::fabsf(libm::cosf(std::f32::consts::PI * phase));
+    let depth = 0.35 + 0.65 * (0.5 + 0.5 * libm::cosf(TAU * along / 3.3 + key * 5.0));
+    1.0 - TEETH_DEPTH * depth * (1.0 - tip) * ends
 }
 
 /// The larger of each of two pairs, part by part.
@@ -402,4 +426,102 @@ fn smooth_max(a: f32, b: f32, k: f32) -> f32 {
 /// The smaller of `a` and `b`, eased the same way.
 fn smooth_min(a: f32, b: f32, k: f32) -> f32 {
     -smooth_max(-a, -b, k)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Mountains;
+    use super::*;
+    use terra_gen::Seed;
+
+    const RADIUS: f32 = 30_000.0;
+
+    /// The teeth along a ground profile: its highs standing `least_m` or more over the lowest
+    /// ground between them and the next higher point either way (their prominence).
+    fn teeth_in(profile: &[f32], least_m: f32) -> usize {
+        let col = |h: f32, side: &mut dyn Iterator<Item = &f32>| {
+            let mut low = h;
+            for &p in side {
+                if p > h {
+                    return low;
+                }
+                low = low.min(p);
+            }
+            low
+        };
+        (1..profile.len() - 1)
+            .filter(|&i| {
+                let h = profile[i];
+                if profile[i - 1] > h || profile[i + 1] > h {
+                    return false;
+                }
+                let left = col(h, &mut profile[..i].iter().rev());
+                let right = col(h, &mut profile[i + 1..].iter());
+                h - left.max(right) >= least_m
+            })
+            .count()
+    }
+
+    #[test]
+    fn neighbours_stand_lower_than_their_horn_on_crests_broken_into_teeth() {
+        // A range's lesser tops stand well under its great one, and the ridges between break
+        // into teeth, as Orla Perć's gendarmes do: round 28's neighbours at the lake read
+        // "pale, smeared and flat-topped". Round the lake's hero peak (as in
+        // `every_massif_has_neighbours`) and three cells deep in the range, along every ridge
+        // out to a neighbour, the ground itself is walked every 10 m from a fifth to four
+        // fifths of the way out, where it stands a third of the horn's height over its ground.
+        let range = Range::new(Mountains::START, Seed(1));
+        let lake_peak = Vec3::new(-0.488394, 0.796379, -0.356723).normalize();
+        let across = range.mountains.horns_across_m;
+        let fine = |d: Vec3| (d * RADIUS / (across / FINE as f32)).floor().as_ivec3();
+        let ground = |at: Vec3| range.rise(at.normalize(), RADIUS).height_m;
+        let mut cells = vec![fine(lake_peak)];
+        cells.extend(
+            (0..400)
+                .map(|i| {
+                    let y = 1.0 - 2.0 * (i as f32 + 0.5) / 400.0;
+                    let flat = libm::sqrtf(1.0 - y * y);
+                    let around = i as f32 * 2.399_963;
+                    Vec3::new(flat * libm::cosf(around), y, flat * libm::sinf(around))
+                })
+                .filter(|&d| range.inside(d * RADIUS) > 0.9)
+                .take(3)
+                .map(fine),
+        );
+        let (mut walked_m, mut teeth) = (0.0, 0);
+        for cell in cells {
+            for massif in range.standing_round(cell, RADIUS) {
+                let summit = ground(massif.site);
+                for n in &massif.tops {
+                    let from = massif.reach * RIDGE_FROM;
+                    let steps = ((n.out - from) / 10.0) as usize;
+                    let standing = massif.base + massif.tall / 3.0;
+                    let profile: Vec<f32> = (steps / 5..steps * 4 / 5)
+                        .map(|k| ground(massif.site + n.way * (from + 10.0 * k as f32)))
+                        .filter(|&h| h > standing)
+                        .collect();
+                    if profile.len() < 30 {
+                        continue;
+                    }
+                    walked_m += profile.len() as f32 * 10.0;
+                    teeth += teeth_in(&profile, 25.0);
+                    // The lake hero's tops under its own, by a share of its height.
+                    let top = ground(massif.site + n.way * n.out);
+                    if massif.site.normalize().distance(lake_peak) * RADIUS < 200.0 {
+                        let share = (top - massif.base) / (summit - massif.base);
+                        assert!(
+                            share <= 0.85,
+                            "a neighbour stands {share:.2} of its horn's height"
+                        );
+                    }
+                }
+            }
+        }
+        let per_km = teeth as f32 / (walked_m / 1000.0);
+        assert!(walked_m >= 3000.0, "only {walked_m} m of ridge walked");
+        assert!(
+            per_km >= 2.0,
+            "{teeth} teeth over {walked_m} m of ridge, {per_km:.1} a km: crests too smooth"
+        );
+    }
 }

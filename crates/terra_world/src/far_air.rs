@@ -50,7 +50,7 @@ impl Air {
 }
 
 /// The numbers of a WGSL `const NAME: ... = ...;`.
-fn constant(source: &str, name: &str) -> Vec<f32> {
+pub(crate) fn constant(source: &str, name: &str) -> Vec<f32> {
     let start = source
         .find(&format!("const {name}:"))
         .unwrap_or_else(|| panic!("ground.wesl has no {name}"));

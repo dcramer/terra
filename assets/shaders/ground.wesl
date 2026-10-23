@@ -602,6 +602,30 @@ const STRETCH: f32 = 2.5;
 // toward the shallow (a power over 1), so a few stand out deep.
 const GULLY_LEAST: f32 = 0.35;
 const GULLY_SKEW: f32 = 1.3;
+// A far wall's strata (mountains round 29): seen from kilometres, a wall's mesh is too coarse
+// to measure the 50 degrees its tiers are drawn past, and its tiers' tones alone sank into the
+// haze, so the faces read as sheets (round 28's review: "the rock reads as sheets"). Past
+// FAR_STRATA_M the tiers stand on gentler rock too, from the steeper flatness to the gentler,
+// on more of the faces (FAR_BANDED, the least of the banding noise's share), and each standing
+// tier's riser foot, under the bench below it, is drawn as a ledge's shadow line: darker by
+// LEDGE_LINE, at least LEDGE_LINE_PX pixels of height wide however far, as a granite wall's
+// overhangs and ledges read from across a valley in the Tatras' and the Dolomites' photographs.
+// Gives the flatness the tiers fade out over, the least banding, and the shade at tier_f.
+const FAR_STRATA_M: vec2<f32> = vec2<f32>(1200.0, 3500.0);
+const FAR_STRATA_FLAT: vec2<f32> = vec2<f32>(0.74, 0.88);
+const FAR_BANDED: f32 = 0.65;
+const LEDGE_LINE: f32 = 0.5;
+const LEDGE_LINE_PX: f32 = 1.5;
+fn far_strata(far_off: f32, tier_f: f32, height_px: f32) -> vec4<f32> {
+    let far = smoothstep(FAR_STRATA_M.x, FAR_STRATA_M.y, far_off);
+    let flat_from = mix(0.55, FAR_STRATA_FLAT.x, far);
+    let flat_to = mix(0.7, FAR_STRATA_FLAT.y, far);
+    // The line's width as a share of the tier (95 m), at least so many pixels of height.
+    let wide = max(0.06, LEDGE_LINE_PX * height_px / 95.0);
+    let line = (1.0 - smoothstep(wide * 0.6, wide, tier_f)) * far;
+    return vec4<f32>(flat_from, flat_to, FAR_BANDED * far, 1.0 - (1.0 - LEDGE_LINE) * line);
+}
+
 fn fall_stripes(world: vec3<f32>, across: vec3<f32>, spacing: f32, which: f32) -> vec2<f32> {
     let cell = world / (spacing * STRETCH);
     let base = floor(cell);
@@ -1309,14 +1333,15 @@ fn fragment(
             let seen = 1.0 - smoothstep(18.0, 40.0, height_px);
             // Only on the cliffs, past about 50 degrees: on the gentler rock and its ledges the
             // tiers ruled every slope in contour lines (the r5 review).
-            var strength = banded * seen * (1.0 - smoothstep(0.55, 0.7, flatness));
+            let far_tiers = far_strata(far_off, tier_f, height_px);
+            var strength = max(banded, far_tiers.z) * seen * (1.0 - smoothstep(far_tiers.x, far_tiers.y, flatness));
             if strength > 0.001 {
                 let couloir = fall_stripes(world, across_face, 150.0, 0.0).x;
                 let gully = fall_stripes(world, across_face, 62.0, 1.0).x;
                 strength *= smoothstep(-0.75, -0.3, couloir) * mix(1.0, smoothstep(-0.8, -0.2, gully), 0.75);
             }
             let runs = smoothstep(0.5, 0.62, noise(world * 0.0019 + 43.0) * 0.6 + noise(world * 0.0065 + 47.0) * 0.4);
-            let standing = step(0.55, tier_r) * runs * strength;
+            let standing = step(0.55, tier_r) * max(runs, far_tiers.z) * strength;
             let bench_from = 1.0 - (0.18 + 0.17 * tier_b);
             let bench = smoothstep(bench_from - 0.02, bench_from + 0.03, tier_f) * (1.0 - smoothstep(0.985, 1.0, tier_f));
             // How far the normal turns: the riser toward the level, steeper; the bench is shaded
@@ -1326,6 +1351,7 @@ fn fragment(
             // corner under the bench below it in shade, the bench's lip catching the light.
             var band_tone = mix(1.0, mix(0.7, 1.15, tier_r) * mix(0.9, 1.06, bed_r), strength);
             band_tone *= mix(1.0, 0.85, (1.0 - smoothstep(0.0, 0.12, tier_f)) * standing);
+            band_tone *= mix(1.0, far_tiers.w, standing);
             // The benches dusted with snow or turf only in patches: whole, they ruled the faces
             // with bright lines.
             ledge = 0.0;

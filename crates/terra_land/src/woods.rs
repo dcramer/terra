@@ -113,13 +113,22 @@ impl Microsites {
     }
 }
 
-/// The trees a place holds, its season warmed or chilled for them by its microsite.
+/// How many degrees steeper the ground a tree holds on is for each degree its microsite warms
+/// it: the lee and the islands' deeper soil hold roots on steeper ground, an exposed rib less,
+/// so where a wall's foot steepens the forest climbs it in fingers up the sheltered gullies
+/// and thins out ragged over the ribs, not along the one slope it gives out at (round 28's
+/// review: "slopes meet the forest on a hard horizontal line ... no tree fingers climbing the
+/// gullies"; Holtmeier, *Mountain Timberlines*, on the timberline's tongues up the ravines).
+const STEEPER_PER_C: f32 = 6.0;
+
+/// The trees a place holds, its season warmed or chilled for them by its microsite, and the
+/// ground's steepness it holds on by the same (`STEEPER_PER_C`).
 pub fn stand_in(season: &Season, slope_deg: f32, footing: Footing, microsite_c: f32) -> Stand {
     let season = Season {
         growing_mean_c: season.growing_mean_c + microsite_c,
         ..*season
     };
-    stand(&season, slope_deg, footing)
+    stand(&season, slope_deg - STEEPER_PER_C * microsite_c, footing)
 }
 
 /// The growing season worked out ahead over the latitudes, heights and leanings a region
@@ -591,6 +600,46 @@ mod tests {
         assert!(oak_chance(400.0, 0.3) > 0.3);
         assert!(oak_chance(400.0, 0.3) > oak_chance(400.0, -0.2) * 2.0);
         assert_eq!(oak_chance(1_100.0, 0.3), 0.0);
+    }
+
+    #[test]
+    fn where_a_wall_s_foot_steepens_the_forest_thins_ragged_and_climbs_the_lee() {
+        // Warm forest under a wall whose foot steepens: along a contour on steep ground some
+        // places still hold trees and some none, so the edge is ragged, not one line where the
+        // slope passes a limit; climbing the foot, the trees thin, the mean falling with the
+        // slope; and a sheltered gully holds them higher up the foot than an exposed rib.
+        let sites = Microsites::new(terra_gen::Seed(5));
+        let warm = season(TREE_LINE_SEASON_C + 3.0);
+        let row = |slope: f32| -> Vec<f32> {
+            (0..400)
+                .map(|k| {
+                    let at = glam::Vec3::new(k as f32 * 10.0, 30_000.0, 0.0);
+                    stand_in(&warm, slope, Footing::Soil, sites.at(at, 0.0)).density
+                })
+                .collect()
+        };
+        let edge = row(41.0);
+        let wooded = edge.iter().filter(|&&d| d > 0.3).count();
+        let open = edge.iter().filter(|&&d| d < 0.05).count();
+        assert!(
+            wooded > 20 && open > 20,
+            "at 41°, {wooded} wooded, {open} open of 400"
+        );
+        let mean = |v: Vec<f32>| v.iter().sum::<f32>() / v.len() as f32;
+        let means: Vec<f32> = [30.0, 36.0, 40.0, 44.0, 48.0]
+            .map(|s| mean(row(s)))
+            .to_vec();
+        assert!(
+            means.windows(2).all(|w| w[1] < w[0]) && means[0] > 0.9 && means[4] < 0.2,
+            "the forest does not thin up the foot: {means:.2?}"
+        );
+        let at = glam::Vec3::new(0.0, 30_000.0, 0.0);
+        let gully = stand_in(&warm, 44.0, Footing::Soil, sites.at(at, 12.0)).density;
+        let rib = stand_in(&warm, 44.0, Footing::Soil, sites.at(at, -12.0)).density;
+        assert!(
+            gully > rib + 0.2,
+            "at 44°, the lee {gully:.2}, a rib {rib:.2}"
+        );
     }
 
     #[test]
