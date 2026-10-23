@@ -334,6 +334,24 @@ const LOG_HEAT_RATE: f32 = 0.18;
 const LOG_SHORT: f32 = 0.45;
 const LOG_LEAN: f32 = 0.35;
 const TONGUE_SKEW: f32 = 1.7;
+// The near logs dark in front of the flame, as a campfire's charred logs stand against its
+// fire in footage and RDR2: a tongue or side column on a log facing the eye stands behind it,
+// `NEAR_BEHIND` of its radius away from the eye, so the log's own depth cuts through it, and
+// lower and narrower there (`NEAR_SHORT`), as the flame on a log's cool outer face is; on
+// its top, every log's flame covered its near logs (blind judge: "the flame covers the
+// stack"). A tongue's least width in its log's radius (3.5 drew a bush of wide petals).
+const NEAR_BEHIND: f32 = 1.6;
+const NEAR_SHORT: f32 = 0.6;
+const TONGUE_NARROW: f32 = 2.2;
+// One or two tongues stand much taller and narrower than the rest (`TONGUE_LEADS`), from
+// where the most fuel meets air: high on the hottest log as its heat was at the tongue's
+// birth, near where the logs meet; how much taller than the tallest of the rest, how wide
+// in its height, and how slowly its reach changes (a noise in time, per second). As one
+// rounded bush the blind judge wanted "one or two tall, narrow tongues".
+const TONGUE_LEADS: f32 = 2.0;
+const LEAD_TALL: f32 = 1.45;
+const LEAD_WIDE: f32 = 0.24;
+const LEAD_RATE: f32 = 0.3;
 // Its glow inside the stack, as a campfire burns brightest under and between its logs where
 // they meet over the coals (footage; RDR2's campfires glow through their stack's gaps): a
 // card under each log along its underside, from `CORE_ALONG`'s first to its second, hottest
@@ -376,7 +394,37 @@ fn on_log(l: HearthLogs, i: f32, along: f32, foot: vec3<f32>, up: vec3<f32>, eas
 }
 // How hot log `stick` of a hearth burns now, 0 to 1 (`LOG_HEAT_RATE`).
 fn log_heat(stick: f32, seed: f32) -> f32 {
-    return smoothstep(0.25, 0.75, noise(vec2(stick * 3.7 + seed * 11.0, fire.kind.z * LOG_HEAT_RATE + stick * 1.3)));
+    return log_heat_at(stick, seed, fire.kind.z);
+}
+fn log_heat_at(stick: f32, seed: f32, time: f32) -> f32 {
+    return smoothstep(0.25, 0.75, noise(vec2(stick * 3.7 + seed * 11.0, time * LOG_HEAT_RATE + stick * 1.3)));
+}
+// The hearth's hottest log at `time`.
+fn hottest_log(l: HearthLogs, seed: f32, time: f32) -> f32 {
+    var best = 0.0;
+    var most = -1.0;
+    for (var i = 0.0; i < l.count; i += 1.0) {
+        let h = log_heat_at(i, seed, time);
+        if h > most {
+            most = h;
+            best = i;
+        }
+    }
+    return best;
+}
+// How far log `stick` faces the eye, 0 (side or far) to 1 (straight at it), on the ground.
+fn log_near(l: HearthLogs, stick: f32, at: vec3<f32>, up: vec3<f32>, east: vec3<f32>, north: vec3<f32>) -> f32 {
+    let a = l.turn + stick * 6.2831853 / l.count;
+    let outward = east * cos(a) + north * sin(a);
+    let to_eye = view.world_position - at;
+    let level = to_eye - up * dot(to_eye, up);
+    return saturate(dot(outward, level / max(length(level), 1.0e-3)));
+}
+// A point moved `by` metres away from the eye, along the ground.
+fn away_from_eye(at: vec3<f32>, up: vec3<f32>, by: f32) -> vec3<f32> {
+    let to_eye = view.world_position - at;
+    let level = to_eye - up * dot(to_eye, up);
+    return at - level / max(length(level), 1.0e-3) * by;
 }
 
 // A hearth's glow round its flames' core (fire round 23): its radius and centre over its foot
@@ -1807,18 +1855,23 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
         // On its own log, the tongues taking the logs in turn, each life born somewhere else
         // along it (a card every log's width or so along each log's top, as flipbook campfires
         // are laid; tools/props/hearth.ts's logs): the flame follows the logs' length.
+        if k < TONGUE_LEADS {
+            return hearth_lead(corner, foot, up, east, north, tall, heat, seed, k, own, breathe, laid);
+        }
         let stick = k - laid.count * floor(k / laid.count);
         let lap = floor(k / laid.count);
         let along = mix(TONGUE_ALONG.x, TONGUE_ALONG.y, fract(lap * 0.618 + stick * 0.29 + pick * 0.43));
         let burn = log_heat(stick, seed);
         let skew = pow(fract(pick * 5.3), TONGUE_SKEW);
+        let on = on_log(laid, stick, along, foot, up, east, north);
+        let near = log_near(laid, stick, on, up, east, north);
         var h = tall * mix(TONGUE_TALL.x, TONGUE_TALL.y, skew) * mix(TONGUE_LOW, 1.0, along) * mix(LOG_SHORT, 1.0, burn);
-        h *= breathe * (0.75 + 0.4 * age);
-        let w = max(h * (0.4 + 0.2 * fract(pick * 9.1)), laid.radius * 3.5);
+        h *= breathe * (0.75 + 0.4 * age) * mix(1.0, NEAR_SHORT, near);
+        let w = max(h * (0.32 + 0.16 * fract(pick * 9.1)), laid.radius * TONGUE_NARROW);
         let a = laid.turn + stick * 6.2831853 / laid.count;
         let inward = -(east * cos(a) + north * sin(a));
         let aside = cross(up, inward);
-        let base = on_log(laid, stick, along, foot, up, east, north) + up * h * 0.12 * age;
+        let base = away_from_eye(on, up, laid.radius * NEAR_BEHIND * near) + up * h * 0.12 * age;
         // Hugging its log toward the middle low down and the more the cooler its log burns,
         // upright where the logs meet; each leaning a little aside on its own.
         let bend = TONGUE_LEAN * (1.0 - along) + LOG_LEAN * (1.0 - burn);
@@ -1845,6 +1898,38 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
     out.clip = position_world_to_clip(world);
     out.uv = corner;
     out.life = vec4(1.005 + 0.99 * age, heat, own, 2.2);
+    out.size = h;
+    return out;
+}
+
+// A hearth's leading tongue (`TONGUE_LEADS`): high on its hottest log, near where the logs
+// meet, much taller and narrower than the rest, its reach rising and falling slowly; a longer
+// life than theirs, so it stands rather than flickers. Its life's last number 2.4 (`shade`).
+fn hearth_lead(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f32>, north: vec3<f32>, tall: f32, heat: f32, seed: f32, k: f32, own: f32, breathe: f32, laid: HearthLogs) -> Out {
+    var out: Out;
+    let period = 1.2 + 0.5 * fract(own * 7.13);
+    let clock = fire.kind.z / period + own * 3.0;
+    let cycle = floor(clock);
+    let age = clock - cycle;
+    let pick = hash(vec2(cycle * 1.37 + k * 7.0, seed * 13.0 + k));
+    // Its log the hottest as the tongue was born, so it keeps to it over its life.
+    let born = (cycle - own * 3.0) * period;
+    let stick = (hottest_log(laid, seed, born) + k * floor(laid.count * 0.5)) % laid.count;
+    let along = 0.8 + 0.14 * pick;
+    let on = on_log(laid, stick, along, foot, up, east, north);
+    let near = log_near(laid, stick, on, up, east, north);
+    let slow = mix(0.6, 1.0, noise(vec2(fire.kind.z * LEAD_RATE + k * 7.1, seed * 5.0 + k)));
+    var h = tall * TONGUE_TALL.y * LEAD_TALL * slow * select(0.78, 1.0, k < 0.5);
+    h *= breathe * (0.8 + 0.3 * age);
+    let w = h * LEAD_WIDE * (0.85 + 0.3 * fract(pick * 9.1));
+    let a = laid.turn + stick * 6.2831853 / laid.count;
+    let inward = -(east * cos(a) + north * sin(a));
+    let base = away_from_eye(on, up, laid.radius * NEAR_BEHIND * near) + inward * laid.radius + up * h * 0.06 * age;
+    let lean = normalize(up + inward * 0.12 + cross(up, inward) * 0.2 * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.05);
+    let world = card(base, lean, corner, w, h, true, 0.0);
+    out.clip = position_world_to_clip(world);
+    out.uv = corner;
+    out.life = vec4(1.005 + 0.99 * age, heat, own, 2.4);
     out.size = h;
     return out;
 }
@@ -2000,6 +2085,10 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
             let p = on_log(laid, stick, 0.45 + 0.25 * fract(luck * 5.1), foot, up, east, north);
             let high = dot(p - foot, up);
             at = p - up * high + up * max(wide * HEARTH_BODY_UP, high * 0.55);
+            // Behind its log where that log faces the eye (`NEAR_BEHIND`), so the log cuts it.
+            let near = log_near(laid, stick, p, up, east, north);
+            at = away_from_eye(at, up, laid.radius * NEAR_BEHIND * near);
+            flame *= mix(1.0, NEAR_SHORT, 0.5 * near);
         }
         // The side columns low, so the tongues carry the fire's outline among the logs: at
         // 0.62-0.82 of the middle's height they stood beside the logs as wide sheets, the
@@ -2313,7 +2402,9 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let bx = 0.5 + (fract(luck * 3.7) - 0.5) * 0.3 + xx * 0.45;
         let tex = flipbook(SET_CAMPFIRE, f, vec2(select(bx, 1.0 - bx, fract(luck * 7.3) > 0.5), mix(0.04, 0.75, y)));
         let n = fbm(vec2(xx * 9.0 + luck * 11.0, y * 4.5 - time * 3.4));
-        let edge = 0.06 + 0.65 * pow(y, 1.2) + 0.3 * age;
+        // A leading tongue (`hearth_lead`) eaten less up its height, so it stands tall.
+        let lead = life.w > 2.3;
+        let edge = select(0.06 + 0.65 * pow(y, 1.2) + 0.3 * age, 0.05 + 0.42 * pow(y, 1.5) + 0.22 * age, lead);
         let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * saturate(tex.g * 3.0) * (0.55 + 0.75 * n));
         let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.55, smoothstep(0.35, 0.9, y));
         // White-hot at its root over the coals, the sim's own heat inside it, and deep red at
@@ -2321,7 +2412,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         // Yellow-white at the root, orange up it, red at the tip: at a fifth of its height
         // off for its tip, the tongues read one colour (blind judge, campfire roll round).
         let root = 1.0 - smoothstep(0.0, 0.18, y);
-        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 1.4) * (0.6 + 0.4 * (1.0 - across)) + 0.22 * root - 0.15 * age - 0.32 * smoothstep(0.4, 1.0, y));
+        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 1.4) * (0.6 + 0.4 * (1.0 - across)) + 0.22 * root - 0.15 * age - 0.4 * smoothstep(0.2, 0.9, y));
         let drawn = baked_fuel(vec4(heat_here, shape * born * TONGUE_THICK, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft, HEARTH_ROW);
         light = drawn.rgb;
         cover = drawn.a;
@@ -2387,7 +2478,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             let erode = HEARTH_ERODE_FLOOR + HEARTH_ERODE * smoothstep(0.15, 1.0, hy);
             texel.g *= smoothstep(erode, erode + HEARTH_FEATHER, saturate(texel.g * 3.0) * (0.5 + n) * edges);
             texel.g *= mix(1.0, HEARTH_SEE, smoothstep(0.25, 0.85, hy));
-            texel.r = saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.62, smoothstep(0.3, 1.0, hy)));
+            texel.r = saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.62, smoothstep(0.12, 0.9, hy)));
         }
         let drawn = baked_fuel(texel, brightness, soft * select(edges, 1.0, layer == SET_CAMPFIRE), select(0.0, HEARTH_ROW, layer == SET_CAMPFIRE));
         light = drawn.rgb;
@@ -2506,13 +2597,15 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
     }
     // By day a campfire's flames go pale and nearly see-through, as in daylight footage and
     // the games' noon fires (Sons of the Forest, RDR2): the sun outshines them, so less of
-    // what is behind is covered and their orange washes toward a pale yellow. `day` is how
+    // what is behind is covered and their orange washes a little toward amber. `day` is how
     // many stops the eye is exposed under dusk's, from one to three and a half (fire round 20).
+    // Washed 0.4 toward a pale yellow and covering 0.3, the noon body read pale and creamy
+    // (blind judge, campfire glow round), so 0.15 toward amber and covering 0.55.
     if kind == 0 && t > 1.0 && t <= 2.0 && (life.w < 2.5 || life.w > 6.5) {
         let day = smoothstep(1.0, 3.5, fire.exposure.y - log2(view.exposure) - adapted.x);
         let luma = dot(light, vec3(0.2126, 0.7152, 0.0722));
-        light = mix(light, mix(light, vec3(luma) * vec3(1.15, 0.95, 0.55), 0.4), day) * mix(1.0, 0.5, day);
-        cover *= mix(1.0, 0.3, day);
+        light = mix(light, mix(light, vec3(luma) * vec3(1.2, 0.82, 0.4), 0.15), day) * mix(1.0, 0.5, day);
+        cover *= mix(1.0, 0.55, day);
     }
     if max(light.r, cover) < 0.002 {
         discard;
