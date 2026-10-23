@@ -77,6 +77,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D365](decisions/D365.md) | Townsfolk dressed by role, sex and seed | Tech | Agent | Decided | Serves D350's varied people, women among them. |
 | [D419](decisions/D419.md) | Winter strips the plants; falling snow grades cool; trails are shared and fade | Design | Developers | Decided | In winter the land is in its winter state. |
 | [D425](decisions/D425.md) | Mountains: horns and Witcher-like ranges first, two thirds rock, sites re-found once | Design | Developers | Decided | The three questions of the mountain look note: |
+| [D444](decisions/D444.md) | A horn stands in a massif of lesser tops, kept off the valley pins | Tech | Agent | Decided | Each horn (D425) sends ridges out along two or three of… |
 
 ## The player and survival
 

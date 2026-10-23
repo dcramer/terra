@@ -2,6 +2,9 @@ use super::*;
 use glam::Vec2;
 
 const RADIUS: f32 = 30_000.0;
+/// The ground under a point for `Range::horns` that leaves out the massifs' neighbours, which
+/// stand only as high over the ground as their horn's site does: the horns alone.
+const HORNS_ALONE: f32 = f32::INFINITY;
 
 fn range() -> Range {
     Range::new(Mountains::START, Seed(1))
@@ -124,7 +127,12 @@ fn the_mountains_never_jump() {
 
 #[test]
 fn walls_raise_only_the_upper_slopes_and_couloirs_cut_only_down_the_walls() {
-    let m = Mountains::START;
+    // Without the horns: a massif's neighbours stand out of the valleys by their horn's site,
+    // and as walls themselves, so the walls raise them where the ridges alone are low.
+    let m = Mountains {
+        horns_m: 0.0,
+        ..Mountains::START
+    };
     assert!(m.walls > 0.0 && m.couloirs_m > 0.0);
     let plain = Range::new(
         Mountains {
@@ -141,7 +149,7 @@ fn walls_raise_only_the_upper_slopes_and_couloirs_cut_only_down_the_walls() {
         },
         Seed(1),
     );
-    let walled = range();
+    let walled = Range::new(m, Seed(1));
     let (mut raised, mut deeper) = (0, 0);
     for d in directions(20_000) {
         let point = d * RADIUS;
@@ -329,7 +337,7 @@ fn horns_stand_steep_and_pointed_over_the_crests() {
             let point = d * RADIUS;
             with.inside(point) > 0.0
                 && (with.ridges(point / with.mountains.ridges_m) - VALLEY) / (CREST - VALLEY) > 0.9
-                && with.horns(point, 1.0, 1.0).0 > 0.3 * with.mountains.horns_m
+                && with.horns(point, 1.0, 1.0, HORNS_ALONE).0 > 0.3 * with.mountains.horns_m
         })
         .collect();
     let steep_share = |range: &Range| {
@@ -370,7 +378,7 @@ fn horns_stand_at_unlike_heights() {
     // and its lesser neighbour. From seven tenths to the whole (main before round 21), the
     // tops spread under 0.5 of it and the lake's two horns stood as twin pyramids (r20 review).
     let range = range();
-    let horn = |d: Vec3| range.horns(d.normalize() * RADIUS, 1.0, 1.0).0;
+    let horn = |d: Vec3| range.horns(d.normalize() * RADIUS, 1.0, 1.0, HORNS_ALONE).0;
     let top = 0.5 * range.mountains.horns_m;
     let mut heights = Vec::new();
     for d in directions(400_000).filter(|&d| horn(d) > top) {
@@ -395,5 +403,115 @@ fn horns_stand_at_unlike_heights() {
     assert!(
         spread > 0.55 * range.mountains.horns_m,
         "the horns' tops spread over {spread} m"
+    );
+}
+
+/// The summits within `look_m` of `middle` standing at least `relief_m` over the median ground
+/// within 6 km, each with its place (east, north of `middle`, m), height, relief and how many
+/// lesser tops stand near it: tops of their own 600 m round, at least 150 m over its lowest,
+/// 1.5 to 4 km out and at least 0.65 of the summit's relief over the same floor.
+fn summits_round(
+    range: &Range,
+    middle: Vec3,
+    look_m: f32,
+    relief_m: f32,
+) -> Vec<(Vec2, f32, f32, usize)> {
+    const CELL: f32 = 100.0;
+    let middle = middle.normalize();
+    let east = middle.any_orthonormal_vector();
+    let north = middle.cross(east);
+    let half = ((look_m + 6000.0) / CELL) as i32;
+    let n = 2 * half + 1;
+    let rows: Vec<i32> = (0..n).collect();
+    let heights: Vec<Vec<f32>> = terra_gen::par::map(&rows, |&y| {
+        (0..n)
+            .map(|x| {
+                let at =
+                    middle * RADIUS + (east * (x - half) as f32 + north * (y - half) as f32) * CELL;
+                range.rise(at.normalize(), RADIUS).height_m
+            })
+            .collect()
+    });
+    let h = |x: i32, y: i32| heights[y.clamp(0, n - 1) as usize][x.clamp(0, n - 1) as usize];
+    let disc = |x: i32, y: i32, rad: f32| {
+        let k = (rad / CELL) as i32;
+        (-k..=k)
+            .flat_map(move |dy| (-k..=k).map(move |dx| (dx, dy)))
+            .filter_map(move |(dx, dy)| {
+                let d = libm::sqrtf((dx * dx + dy * dy) as f32) * CELL;
+                let (i, j) = (x + dx, y + dy);
+                (d <= rad && (0..n).contains(&i) && (0..n).contains(&j)).then_some((i, j, d))
+            })
+    };
+    let mut summits = Vec::new();
+    for (x, y, _) in disc(half, half, look_m) {
+        let top = h(x, y);
+        if disc(x, y, 1200.0).any(|(i, j, _)| h(i, j) > top) {
+            continue;
+        }
+        let mut around: Vec<f32> = disc(x, y, 6000.0).map(|(i, j, _)| h(i, j)).collect();
+        around.sort_by(f32::total_cmp);
+        let floor = around[around.len() / 2];
+        let relief = top - floor;
+        if relief < relief_m {
+            continue;
+        }
+        let near = disc(x, y, 4000.0)
+            .filter(|&(i, j, d)| {
+                let v = h(i, j);
+                d >= 1500.0
+                    && v >= floor + 0.65 * relief
+                    && disc(i, j, 600.0).all(|(p, q, _)| h(p, q) <= v)
+                    && v - disc(i, j, 600.0).map(|(p, q, _)| h(p, q)).fold(v, f32::min) >= 150.0
+            })
+            .count();
+        let at = Vec2::new((x - half) as f32, (y - half) as f32) * CELL;
+        summits.push((at, top, relief, near));
+    }
+    summits
+}
+
+#[test]
+fn every_massif_has_neighbours() {
+    // A great peak stands among lesser ones, on ridges and foothills of its own massif, as
+    // real ranges do: the lake's peak stood alone, "theres nothing around it thats not usually
+    // how mountains work" (the developer, 2026-10-22). Its direction is the trailer's lake's
+    // hero peak (terra_land's lake site at -15.34, 1.68 km, the peak 4.1 km off at bearing 246);
+    // the others are summits spread over the range. At least three each: by the range alone,
+    // without the land under it, the lake's peak had two before its massif's neighbours
+    // (mountains round 26), and with them four, the others four to seven.
+    let range = range();
+    let lake_peak = Vec3::new(-0.488394, 0.796379, -0.356723);
+    let mut middles = vec![(lake_peak, 1500.0)];
+    middles.extend(
+        directions(400)
+            .filter(|&d| range.inside(d * RADIUS) > 0.9)
+            .take(3)
+            .map(|d| (d, 4000.0)),
+    );
+    let mut lone = Vec::new();
+    let mut seen = Vec::new();
+    for (middle, look_m) in middles {
+        let summits = summits_round(&range, middle, look_m, 1200.0);
+        seen.push(summits.len());
+        for (at, top, relief, near) in summits {
+            if std::env::var_os("TERRA_MASSIFS").is_some() {
+                eprintln!("{top:.0} m (relief {relief:.0}) at {at} from {middle}: {near} near");
+            }
+            if near < 3 {
+                lone.push(format!(
+                    "{top:.0} m (relief {relief:.0}) at {at} from {middle}: {near} near"
+                ));
+            }
+        }
+    }
+    assert!(seen[0] >= 1, "the lake's peak was not found");
+    assert!(
+        seen.iter().sum::<usize>() >= 3,
+        "only {seen:?} summits to judge"
+    );
+    assert!(
+        lone.is_empty(),
+        "summits with under three neighbours: {lone:#?}"
     );
 }

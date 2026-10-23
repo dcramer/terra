@@ -22,6 +22,7 @@ use terra_gen::{Noise, Seed, layer_shift};
 
 mod faces;
 mod horns;
+mod massif;
 pub use faces::Faces;
 use faces::RIB_FADE;
 
@@ -188,6 +189,9 @@ pub struct Range {
     kept: Vec<Vec3>,
     /// Those of them standing in a range (`Range::keeping_ranges_round`).
     kept_in_ranges: Vec<Vec3>,
+    /// What tells this range's shape apart from another's, its seed, numbers and kept spots:
+    /// the key its horns' sites are remembered by (`massif`).
+    key: u64,
 }
 
 /// Octaves of ridges, from the main ridges to relief about 80 m across.
@@ -257,6 +261,12 @@ const SUMMITS_KEPT_M: (f32, f32) = (2500.0, 4000.0);
 const TOPS_KEPT_M: (f32, f32) = (700.0, 1800.0);
 /// Round a kept spot in a range, the same for the mountains round it.
 const TOPS_KEPT_RANGE_M: (f32, f32) = (3500.0, 6000.0);
+/// Round a kept spot out of the ranges, on a valley floor, the massifs' neighbours are off
+/// within the first distance, in metres, and whole from the second: past the skyline a town's
+/// site is chosen by (`MarketTown::peaks_within_m`, 7 km), so the settlement keeps the range
+/// it was chosen under. Within 4 km they stood the walls over it up to 10° higher and moved
+/// the town found. A spot in a range, the lake's, keeps them from `KEPT_M`.
+const NEIGHBOURS_KEPT_M: (f32, f32) = (4500.0, 8000.0);
 /// Over a range's front, from out of it to where its floor has risen (shares of `inside`), its
 /// floor's rise is lowered between the tops too, fading out between the two.
 const TOPS_FLOOR: (f32, f32) = (0.6, 1.0);
@@ -341,6 +351,7 @@ impl Range {
             strata: Noise::new(seed.derive("strata")),
             kept: Vec::new(),
             kept_in_ranges: Vec::new(),
+            key: massif::key(seed.0, format!("{mountains:?}").bytes().map(u64::from)),
         }
     }
 
@@ -349,6 +360,7 @@ impl Range {
     /// rules, reshaping the ranges' fronts kilometres across, would otherwise take with them.
     pub fn with_kept(mut self, spots: impl IntoIterator<Item = Vec3>) -> Self {
         self.kept = spots.into_iter().map(|s| s.normalize()).collect();
+        self.key = massif::key(self.key, massif::bits(&self.kept));
         self
     }
 
@@ -362,7 +374,25 @@ impl Range {
             .copied()
             .filter(|spot| self.inside(*spot * radius_m) > 0.5)
             .collect();
+        self.key = massif::key(self.key, massif::bits(&self.kept_in_ranges));
         self
+    }
+
+    /// [`Range::away_from_kept`] for the kept spots out of the ranges only, on the valley floors
+    /// below them (`Range::keeping_ranges_round`).
+    fn away_from_kept_out_of_ranges(&self, point: Vec3, within: (f32, f32)) -> f32 {
+        let length = point.length();
+        let direction = point / length.max(1e-3);
+        self.kept
+            .iter()
+            .filter(|spot| !self.kept_in_ranges.contains(spot))
+            .fold(1.0, |away: f32, spot| {
+                away.min(smoothstep(
+                    within.0,
+                    within.1,
+                    (direction - *spot).length() * length,
+                ))
+            })
     }
 
     /// How much of the tops' rule a point takes: [`Range::away_from_kept`] within
@@ -455,6 +485,12 @@ impl Range {
     /// [`Range::ridged_and_upper`], and how far a point lies in the band at and below a wall's
     /// foot that its talus apron covers (`Mountains::aprons_m`), 0 to 1.
     fn ridged_upper_and_foot(&self, point: Vec3) -> (f32, f32, f32, f32) {
+        self.ridged_upper_and_foot_with(point, true)
+    }
+
+    /// [`Range::ridged_upper_and_foot`], with or without the horns: without, the ground a
+    /// horn stands on (`massif`).
+    fn ridged_upper_and_foot_with(&self, point: Vec3, with_horns: bool) -> (f32, f32, f32, f32) {
         let m = &self.mountains;
         let (inside, front) = self.inside_and_front(point);
         if inside <= 0.0 {
@@ -562,12 +598,13 @@ impl Range {
         } else {
             0.0
         };
-        let (horns, ribs) = if m.horns_m > 0.0 {
-            self.horns(point, along, inside)
+        let (horns, ribs, walled) = if m.horns_m > 0.0 && with_horns {
+            self.horns(point, along, inside, height - lowered)
         } else {
-            (0.0, 0.0)
+            (0.0, 0.0, 0.0)
         };
-        (height - lowered + horns, upper, foot, ribs)
+        // The massifs' neighbours stand as walls too, out where the ridges alone are not.
+        (height - lowered + horns, upper.max(walled), foot, ribs)
     }
 
     /// How much a point stands on one of a range's separate tops (`Mountains::tops`), 0
