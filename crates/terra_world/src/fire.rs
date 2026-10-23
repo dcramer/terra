@@ -36,6 +36,7 @@ use bevy::{
     shader::ShaderRef,
 };
 pub use exposure::{FireExposure, LEANING_WEIGHT};
+pub use hearth::Logs;
 
 /// Something burning, as the layer above says it: where its flames stand from (their foot,
 /// in the world), how tall they are in metres, how hot (0 to 1, a dying fire's embers to a
@@ -85,6 +86,8 @@ pub struct Blazes {
     pub blazes: Vec<Blaze>,
     pub jets: Vec<Jet>,
     kept: Vec<Blaze>,
+    /// The kept fires' logs as the shader reads them (`Logs::packed`), in `kept`'s order.
+    hearths: Vec<[Vec4; 2]>,
 }
 
 impl Blazes {
@@ -103,6 +106,8 @@ pub struct Kindled {
     pub tall: f32,
     pub wide: f32,
     pub heat: f32,
+    /// The logs it burns on, which its flames lick up along (`hearth::Logs`).
+    pub logs: Logs,
 }
 
 /// How many blazes are drawn at most, by preset.
@@ -125,11 +130,11 @@ const SMOKE_CARDS: usize = 4;
 /// Redemption 2, Kingdom Come): several tongues of flame of their own heights over a bed of
 /// glowing coals among the logs, a few sparks, a thin grey wisp of smoke warm only at its
 /// foot, and a light of their own. At most so many of them; must match `HEARTHS` in
-/// fire.wesl and fire_smoke.wesl. Each has so many flame cards (its ground, coals, two bodies,
-/// then its tongues on the logs; `HEARTH_CARDS` in fire.wesl)
-/// and so many puffs of smoke, close enough in time to rise as one column.
+/// fire.wesl and fire_smoke.wesl. Each has so many flame cards (its ground, coals, body's
+/// columns, tongues on the logs, glow inside its stack and round its flames; `HEARTH_CARDS`
+/// in fire.wesl) and so many puffs of smoke, close enough in time to rise as one column.
 const HEARTHS: usize = 16;
-const HEARTH_FLAME_CARDS: usize = 16;
+const HEARTH_FLAME_CARDS: usize = 32;
 const HEARTH_SMOKE_CARDS: usize = 72;
 /// A hearth's sparks, thirty or more seen at once, most dying low (fire review, round 2:
 /// 30 to 60 small points, not a file of a few streaks).
@@ -183,6 +188,8 @@ pub struct FireUniform {
     reach: Vec4,
     /// x 1 when a breath is marched as a volume, the cinematic tier (`volume::BreathTier`).
     volume: Vec4,
+    /// Each hearth's logs, two a hearth (`hearth::Logs::packed`).
+    hearths: [Vec4; HEARTHS * 2],
 }
 
 /// Flames, embers and jets: drawn unlit, their light added to what is behind, on Bevy's own
@@ -476,7 +483,7 @@ pub fn plugin(app: &mut App) {
         ))
         .add_systems(Startup, setup)
         .add_systems(Update, scorch)
-        .add_systems(PostUpdate, (keep, blow, show, light::light).chain());
+        .add_systems(PostUpdate, (hearth::keep, blow, show, light::light).chain());
 }
 
 /// A mesh of cards, `count` of them, every corner at the origin: the first texture
@@ -823,30 +830,6 @@ fn scorched(fire: &Kindled, at: &Transform) -> Footprint {
     }
 }
 
-/// The fires kept where something kindled stands, each with a number of its own from its
-/// place, so no two flicker alike.
-fn keep(kindled: Query<(&Kindled, &GlobalTransform)>, mut blazes: ResMut<Blazes>) {
-    if kindled.is_empty() && blazes.kept.is_empty() {
-        return;
-    }
-    let kept: Vec<Blaze> = kindled
-        .iter()
-        .map(|(fire, at)| {
-            let at = at.translation();
-            Blaze {
-                at,
-                tall: fire.tall,
-                heat: fire.heat,
-                seed: (at.x * 0.731 + at.z * 0.377).rem_euclid(1.0),
-                wide: fire.wide,
-            }
-        })
-        .collect();
-    if kept != blazes.kept {
-        blazes.kept = kept;
-    }
-}
-
 /// The wind where the fires are, as the climate has it, looked up now and then.
 fn blow(
     time: Res<Time>,
@@ -960,6 +943,10 @@ fn show(
             material.extension.uniform.jets = jets;
             material.extension.uniform.exposure = exposure;
             material.extension.uniform.volume = tier.packed();
+            for (i, logs) in blazes.hearths.iter().take(HEARTHS).enumerate() {
+                material.extension.uniform.hearths[i * 2] = logs[0];
+                material.extension.uniform.hearths[i * 2 + 1] = logs[1];
+            }
         }
     }
     // The smoke is lit by the open sky round it as the shading's light gives it.
@@ -979,6 +966,7 @@ mod film;
 mod fog;
 mod glow;
 mod haze;
+mod hearth;
 mod light;
 mod matte;
 mod seen;

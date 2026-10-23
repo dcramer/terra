@@ -574,7 +574,14 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         entity.insert(bends);
     }
     if let Some([tall, wide, heat]) = asked.burns {
-        entity.insert(terra_world::fire::Kindled { tall, wide, heat });
+        // On the campfire's logs, the one hearth's model there is to stage a fire on.
+        let logs = terra_world::fire::Logs::CAMPFIRE;
+        entity.insert(terra_world::fire::Kindled {
+            tall,
+            wide,
+            heat,
+            logs,
+        });
     }
     if !asked.wears.is_empty() {
         entity.insert(character::Outfit(

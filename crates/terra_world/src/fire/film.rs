@@ -47,12 +47,16 @@ pub(super) const AFTER_FLAMES: &str = "    var post_saturation = color_grading.p
     // A flame's or a glow's share, from its mask past 1 in the alpha
     // (crates/terra_world/src/fire/film.rs).
     let flame = clamp(in.a - 1.0, 0.0, 1.0);
+    // A firelit surface's share, from its mask just under 1 (`LIT_SHARE`), and all of what
+    // shows through a flame (its mask past 1): the camera's curve keeping its hue, every
+    // channel scaled by its brightest one's shoulder. Taken through the camera's own, the
+    // bright logs and coals seen through a thin flame read salmon (campfire roll round: the
+    // pink pixels had 0.4 of the flame's share in the matte).
+    let surface = select(0.0, clamp((1.0 - in.a) / LIT_SHARE, 0.0, 1.0), in.a > 1.0 - 2.0 * LIT_SHARE);
+    let lit = select(surface, 1.0, flame > 0.0);
+    color = mix(color, terra_lit_neutral(world), lit);
     color = mix(color, terra_flame_film(graded), flame);
     post_saturation = mix(post_saturation, 1.0, flame);
-    // A firelit surface's share, from its mask just under 1 (`LIT_SHARE`): the camera's
-    // curve keeping its hue, every channel scaled by its brightest one's shoulder.
-    let lit = select(0.0, clamp((1.0 - in.a) / LIT_SHARE, 0.0, 1.0), in.a > 1.0 - 2.0 * LIT_SHARE);
-    color = mix(color, terra_lit_neutral(world), lit * (1.0 - flame));
 }
     color = saturation(color, post_saturation);";
 
@@ -426,6 +430,12 @@ mod tests {
             out.find("let world = color;").unwrap() > out.find("sectional_color_grading(").unwrap()
         );
         assert!(out.contains("terra_lit_neutral(world)") && out.contains("fn terra_lit_neutral("));
+        // What shows through a flame keeps its hue too, under the flame's own film.
+        assert!(out.contains("select(surface, 1.0, flame > 0.0)"));
+        assert!(
+            out.find("terra_lit_neutral(world), lit)").unwrap()
+                < out.find("terra_flame_film(graded), flame)").unwrap()
+        );
         assert!(out.matches(ENTRY).count() == 1 && out.contains("fn terra_flame_curve("));
         // The film is defined before the function that calls it.
         assert!(out.find("fn terra_flame_film").unwrap() < out.find(ENTRY).unwrap());

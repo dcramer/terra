@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [Campfire as one body of flame: how shipped games lay it on the logs](2026-10-23-campfire-one-body.md) | 2026-10-23 |
 | [Creature rigs: how shipped games make many creatures move well](2026-10-22-creature-rig-pipeline.md) | 2026-10-22 |
 | [Far terrain shadows and the lake's off-screen reflection: how shipped engines shade land past the shadow map (2026-10-22)](2026-10-22-far-terrain-shadows.md) | 2026-10-22 |
 | [Fire review calibration: what AAA frames score from our harsh reviewer](2026-10-22-fire-review-calibration.md) | 2026-10-22 |

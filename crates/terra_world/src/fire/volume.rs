@@ -151,8 +151,8 @@ mod tests {
     fn the_shader_hides_one_tier_where_it_draws_the_other() {
         let shader =
             std::fs::read_to_string(crate::data::assets().join("shaders/fire.wesl")).unwrap();
-        // Told by its uniform's last field, which the hulls, the march and the sprites read.
-        assert!(shader.contains("    volume: vec4<f32>,\n}"));
+        // Told by its uniform's volume field, which the hulls, the march and the sprites read.
+        assert!(shader.contains("    volume: vec4<f32>,\n"));
         assert!(shader.contains("b.marched = fire.volume.x > 0.5;"));
         assert!(shader.contains("|| !b.marched {\n        return nowhere();"));
         assert!(shader.contains("|| !b.marched {\n        discard;"));

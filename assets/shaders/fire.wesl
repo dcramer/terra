@@ -50,6 +50,8 @@ struct Fire {
     // x 1 when a breath is marched as a volume, the cinematic tier (D430,
     // crates/terra_world/src/fire/volume.rs), 0 when it is drawn as cards.
     volume: vec4<f32>,
+    // Each hearth's logs, two a hearth (crates/terra_world/src/fire/hearth.rs `Logs::packed`).
+    hearths: array<vec4<f32>, 32>,
 }
 
 // Field order must match FireExtension in crates/terra_world/src/fire.rs.
@@ -236,8 +238,11 @@ const TORCH_M: f32 = 0.8;
 const GROUND_WIDE: f32 = 0.95;
 const CHAR_COVER: f32 = 0.45;
 // A hearth's cards (crates/terra_world/src/fire.rs HEARTH_FLAME_CARDS): its ground, its coals,
-// its body's columns (`HEARTH_COLUMNS`), then its tongues on the logs.
-const HEARTH_CARDS: f32 = 16.0;
+// its body's columns (`HEARTH_COLUMNS`), its tongues on the logs (`HEARTH_TONGUES`), its glow
+// inside the stack (`HEARTH_CORES`, one under each log), then the glow round its flames.
+const HEARTH_CARDS: f32 = 32.0;
+const HEARTH_TONGUES: i32 = 16;
+const HEARTH_CORES: i32 = 8;
 // How far under the film mask's 1 a firelit surface's alpha goes (film.rs `LIT_SHARE`, which
 // a test holds equal): where the tonemapper takes the camera's shoulder a channel at a time.
 const LIT_SHARE: f32 = 0.05;
@@ -309,6 +314,71 @@ const COLUMN_OUT: f32 = 0.3;
 // How much hotter its foot burns: at 0.25, under five overlapping columns (`HEARTH_COLUMNS`),
 // the middle of the body behind the logs read pale (fire body round 2: 8-13% of its matte).
 const HEARTH_BASE_HOT: f32 = 0.18;
+// Where along a log, foot (0) to top (1), its tongues are born, and how tall one at its foot
+// stands of one at its top: flames rise off all of a burning log, tallest where the logs meet
+// over the coals (footage; RDR2's and Witcher 3's campfires), so the body runs the logs'
+// length. Born round the middle, the flame covered only the teepee's middle (blind judge,
+// fire body round).
+// At half as tall at a log's foot, and cooler there, the flame stopped short of the logs'
+// ends and its body read pale and pink (blind judge 4.2 against main's 4.9, campfire roll
+// round): the low tongues stand nearly as tall, at the same heat.
+const TONGUE_ALONG: vec2<f32> = vec2<f32>(0.06, 0.97);
+const TONGUE_LOW: f32 = 0.8;
+// Each log burns at its own heat, slowly changing (a burning log flares and dies back on its
+// own, as footage's do): its tongues taller and more upright the hotter it burns, so the fan
+// of tongues is uneven, a log's worth at a time (the blind judge: "fanned out too evenly").
+// How fast a log's heat changes, how much shorter its tongues stand at its least, and how far
+// in they lean then. Its tongues' heights skewed so most are short and a few tall
+// (`TONGUE_SKEW`, a power over the even spread).
+const LOG_HEAT_RATE: f32 = 0.18;
+const LOG_SHORT: f32 = 0.45;
+const LOG_LEAN: f32 = 0.35;
+const TONGUE_SKEW: f32 = 1.7;
+// Its glow inside the stack, as a campfire burns brightest under and between its logs where
+// they meet over the coals (footage; RDR2's campfires glow through their stack's gaps): a
+// card under each log along its underside, from `CORE_ALONG`'s first to its second, hottest
+// toward the apex; how far under the log's axis it lies in its radius, how wide it shows in
+// its radius, its peak heat and how much of the hearth's brightness it gives. Three radii
+// wide, a radius under and at 0.55 it lay over the logs as a pale smear (blind judge, 4.3
+// against main's 4.8), so it stays within its log's shadow.
+const CORE_ALONG: vec2<f32> = vec2<f32>(0.25, 1.0);
+const CORE_UNDER: f32 = 0.6;
+const CORE_WIDE: f32 = 1.6;
+const CORE_HEAT: f32 = 0.76;
+const CORE_BRIGHT: f32 = 0.35;
+
+// A hearth's logs (crates/terra_world/src/fire/hearth.rs `Logs`): how many, the first's
+// bearing round its `up`, how far each top turns past its foot, how thick; its feet's and its
+// tops' reach out and height, metres. No logs (count 0), and its flames stand round the middle.
+struct HearthLogs {
+    count: f32,
+    turn: f32,
+    twist: f32,
+    radius: f32,
+    foot: vec2<f32>,
+    top: vec2<f32>,
+}
+
+fn hearth_logs(slot: u32) -> HearthLogs {
+    let i = min(slot, HEARTHS - 1u) * 2u;
+    let a = fire.hearths[i];
+    let b = fire.hearths[i + 1u];
+    return HearthLogs(a.x, a.y, a.z, a.w, b.xy, b.zw);
+}
+
+// The top of log `i`, `along` from its foot (0) to its top (1), where flame rises off it (as
+// Niagara's Static Mesh Location puts particles on the fuel's surface).
+fn on_log(l: HearthLogs, i: f32, along: f32, foot: vec3<f32>, up: vec3<f32>, east: vec3<f32>, north: vec3<f32>) -> vec3<f32> {
+    let a = l.turn + i * 6.2831853 / l.count;
+    let low = foot + (east * cos(a) + north * sin(a)) * l.foot.x + up * l.foot.y;
+    let high = foot + (east * cos(a + l.twist) + north * sin(a + l.twist)) * l.top.x + up * l.top.y;
+    return mix(low, high, along) + up * l.radius * 0.8;
+}
+// How hot log `stick` of a hearth burns now, 0 to 1 (`LOG_HEAT_RATE`).
+fn log_heat(stick: f32, seed: f32) -> f32 {
+    return smoothstep(0.25, 0.75, noise(vec2(stick * 3.7 + seed * 11.0, fire.kind.z * LOG_HEAT_RATE + stick * 1.3)));
+}
+
 // A hearth's glow round its flames' core (fire round 23): its radius and centre over its foot
 // in its flames' heights, its card's height over its width, how fast it falls off, the ramp's
 // heat it is coloured by, and its peak as a share of the flame's brightness: at 0.05 and
@@ -1725,7 +1795,7 @@ fn card(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, upright
 // logs, leaning in along them, rising and stretching over its short life while its tip is eaten
 // away (`shade`, alpha erosion) until it pinches off and is gone, then born again elsewhere.
 // Its life's first number is 1 and its age, so it is soft only very near what is behind it.
-fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f32>, north: vec3<f32>, tall: f32, heat: f32, wide: f32, seed: f32, k: f32, breathe: f32) -> Out {
+fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f32>, north: vec3<f32>, tall: f32, heat: f32, wide: f32, seed: f32, k: f32, breathe: f32, laid: HearthLogs) -> Out {
     var out: Out;
     let own = fract(seed * 0.731 + k * 0.618);
     let period = 0.5 + 0.55 * fract(own * 7.13);
@@ -1733,6 +1803,33 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
     let cycle = floor(clock);
     let age = clock - cycle;
     let pick = hash(vec2(cycle * 1.37 + k * 7.0, seed * 13.0 + k));
+    if laid.count >= 1.0 {
+        // On its own log, the tongues taking the logs in turn, each life born somewhere else
+        // along it (a card every log's width or so along each log's top, as flipbook campfires
+        // are laid; tools/props/hearth.ts's logs): the flame follows the logs' length.
+        let stick = k - laid.count * floor(k / laid.count);
+        let lap = floor(k / laid.count);
+        let along = mix(TONGUE_ALONG.x, TONGUE_ALONG.y, fract(lap * 0.618 + stick * 0.29 + pick * 0.43));
+        let burn = log_heat(stick, seed);
+        let skew = pow(fract(pick * 5.3), TONGUE_SKEW);
+        var h = tall * mix(TONGUE_TALL.x, TONGUE_TALL.y, skew) * mix(TONGUE_LOW, 1.0, along) * mix(LOG_SHORT, 1.0, burn);
+        h *= breathe * (0.75 + 0.4 * age);
+        let w = max(h * (0.4 + 0.2 * fract(pick * 9.1)), laid.radius * 3.5);
+        let a = laid.turn + stick * 6.2831853 / laid.count;
+        let inward = -(east * cos(a) + north * sin(a));
+        let aside = cross(up, inward);
+        let base = on_log(laid, stick, along, foot, up, east, north) + up * h * 0.12 * age;
+        // Hugging its log toward the middle low down and the more the cooler its log burns,
+        // upright where the logs meet; each leaning a little aside on its own.
+        let bend = TONGUE_LEAN * (1.0 - along) + LOG_LEAN * (1.0 - burn);
+        let lean = normalize(up + inward * bend + aside * 0.3 * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.04);
+        let world = card(base, lean, corner, w, h, true, 0.0);
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(1.005 + 0.99 * age, heat, own, 2.0);
+        out.size = h;
+        return out;
+    }
     let ang = (k + pick * 0.8) * 2.39996 + seed * 6.283;
     let reach = wide * TONGUE_OUT;
     let r = reach * (TONGUE_IN + (1.0 - TONGUE_IN) * sqrt(fract(pick * 3.7 + k * 0.13)));
@@ -1747,8 +1844,49 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
     let world = card(base, lean, corner, w, h, true, 0.0);
     out.clip = position_world_to_clip(world);
     out.uv = corner;
-    out.life = vec4(1.005 + 0.99 * age, heat, own, 2.0);
+    out.life = vec4(1.005 + 0.99 * age, heat, own, 2.2);
     out.size = h;
+    return out;
+}
+
+// A hearth's glow inside its stack (`CORE_ALONG`): card `k` lies along the underside of log
+// `k`, a little in toward the middle, facing the eye round the log's length, so it shows
+// through the gaps between the logs in front and under them, as a campfire's stack glows
+// hottest within; its last card stands low over the coals in the middle. Drawn as flame (its
+// life's first number past 1, in the film's mask): tonemapped as the world, the coals seen
+// through the gaps went salmon past its shoulder (campfire roll round: its pink pixels had
+// half the flame's share in the matte).
+fn hearth_core(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f32>, north: vec3<f32>, heat: f32, wide: f32, seed: f32, k: f32, laid: HearthLogs) -> Out {
+    var out: Out;
+    let luck = fract(seed * 0.37 + k * 0.618);
+    if laid.count < 1.0 || k >= laid.count {
+        if k < f32(HEARTH_CORES) - 1.5 {
+            return nowhere();
+        }
+        // The middle's, about half as wide as the logs' feet stand apart, half as high as they meet.
+        let w = select(wide * 0.8, laid.foot.x * 1.1, laid.count >= 1.0);
+        let h = select(wide * 0.4, laid.top.y * 0.5, laid.count >= 1.0);
+        let world = card(foot + up * 0.02, up, corner, w, h, true, 0.0);
+        out.clip = position_world_to_clip(world);
+        out.uv = corner;
+        out.life = vec4(1.5, heat, luck, 8.0);
+        out.size = h;
+        return out;
+    }
+    let a = laid.turn + k * 6.2831853 / laid.count;
+    let inward = -(east * cos(a) + north * sin(a));
+    // `on_log` is on its top: under its axis by `CORE_UNDER` of its radius, a little in.
+    let drop = -up * laid.radius * (0.8 + CORE_UNDER) + inward * laid.radius * 0.5;
+    var low = on_log(laid, k, CORE_ALONG.x, foot, up, east, north) + drop;
+    low += up * max(0.03 - dot(low - foot, up), 0.0);
+    let high = on_log(laid, k, CORE_ALONG.y, foot, up, east, north) + drop;
+    let length_m = max(length(high - low), 0.01);
+    let world = card(low, (high - low) / length_m, corner, laid.radius * CORE_WIDE, length_m, true, 0.0);
+    out.clip = position_world_to_clip(world);
+    out.uv = corner;
+    // Its last number past 7 by half its log's heat now.
+    out.life = vec4(1.5, heat, luck, 7.0 + 0.5 * log_heat(k, seed));
+    out.size = length_m;
     return out;
 }
 
@@ -1760,7 +1898,7 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
 // its own moment of the flipbook; then eight tongues licking up the logs (`hearth_tongue`). Its
 // columns' tips and torn sides are eaten away sharply (round 12's step back: one opaque cone twice
 // the games' height, standing behind the logs as a backdrop, its crown an orange haze).
-fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f32, wide_in: f32, seed: f32, phase: f32, wind: vec3<f32>, glow: f32) -> Out {
+fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f32, wide_in: f32, seed: f32, phase: f32, wind: vec3<f32>, glow: f32, slot: u32) -> Out {
     var out: Out;
     let wide = select(clamp(tall * 0.5, 0.4, 1.6), wide_in, wide_in > 0.0);
     let j = i32(phase * HEARTH_CARDS + 0.5);
@@ -1830,8 +1968,12 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         out.size = r;
         return out;
     }
+    let first_core = 2 + HEARTH_COLUMNS + HEARTH_TONGUES;
+    if j >= first_core {
+        return hearth_core(corner, foot, up, east, north, heat, wide, seed, f32(j - first_core), hearth_logs(slot));
+    }
     if j > 1 + HEARTH_COLUMNS {
-        return hearth_tongue(corner, foot, up, east, north, tall, heat, wide, seed, f32(j - 2 - HEARTH_COLUMNS), breathe);
+        return hearth_tongue(corner, foot, up, east, north, tall, heat, wide, seed, f32(j - 2 - HEARTH_COLUMNS), breathe, hearth_logs(slot));
     }
     // A campfire's body stands about as tall as its logs are high, its tallest tips reaching
     // `tall` only now and then (research/2026-10-19-fire-step-back.md, round 12): drawn as
@@ -1850,6 +1992,15 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         let r = select(wide * COLUMN_OUT * (0.6 + 0.4 * fract(luck * 5.1)), wide * 0.04, j == 2);
         let logs = wide * TEEPEE.x * max(1.0 - r / (wide * TEEPEE.y), 0.0);
         at = foot + (east * cos(a) + north * sin(a)) * r + up * max(wide * HEARTH_BODY_UP, logs * 0.55);
+        // With its logs known, a side column stands over a log of its own, halfway up it, so
+        // the body spreads along the logs rather than round the middle.
+        let laid = hearth_logs(slot);
+        if laid.count >= 1.0 && j > 2 {
+            let stick = floor(f32(j - 3) * laid.count / f32(HEARTH_COLUMNS - 1) + 0.5) % laid.count;
+            let p = on_log(laid, stick, 0.45 + 0.25 * fract(luck * 5.1), foot, up, east, north);
+            let high = dot(p - foot, up);
+            at = p - up * high + up * max(wide * HEARTH_BODY_UP, high * 0.55);
+        }
         // The side columns low, so the tongues carry the fire's outline among the logs: at
         // 0.62-0.82 of the middle's height they stood beside the logs as wide sheets, the
         // tongues lost inside their light (fire round 29: with the columns hidden, eight of
@@ -1948,7 +2099,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         return nowhere();
     }
     if kind == 0 && is_hearth {
-        var tongue = hearth(corner, foot, up, tall, heat, b.z, seed, phase - 1.0, wind, glow);
+        var tongue = hearth(corner, foot, up, tall, heat, b.z, seed, phase - 1.0, wind, glow, slot);
         tongue.glow = glow;
         return tongue;
     }
@@ -2075,7 +2226,30 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
     // What it gives, already exposed, and how much of what is behind it it covers.
     var light = vec3(0.0);
     var cover = 0.0;
-    if kind == 0 && life.w > 4.5 {
+    if kind == 0 && life.w > 6.5 {
+        // A hearth's glow inside its stack (`hearth_core`): hottest along its log's middle
+        // and toward the apex where the logs meet over the coals, fading at its ends and
+        // sides, the embers under the log brightening and dimming slowly as air reaches them;
+        // the middle's a soft mound over the coals, hottest at its foot.
+        let x = (uv.x - 0.5) * 2.0;
+        let v = uv.y;
+        var body = exp(-3.0 * x * x) * (1.0 - smoothstep(0.75, 1.0, abs(x)));
+        var burn = saturate((life.w - 7.0) * 2.0);
+        if life.w > 7.75 {
+            let d = length(vec2(x, (v - 0.2) * 2.2));
+            body = exp(-2.2 * d * d) * (1.0 - smoothstep(0.8, 1.0, d));
+            burn = 1.0;
+        } else {
+            body *= smoothstep(0.0, 0.3, v) * (1.0 - smoothstep(0.85, 1.0, v)) * mix(0.5, 1.0, v);
+        }
+        let n = fbm(vec2(x * 1.5 + luck * 13.0, v * 4.0 - time * 0.4));
+        let breath = max(1.0 + 1.5 * (glow - 1.0), 0.3);
+        body *= (0.55 + 0.7 * n) * mix(0.55, 1.0, burn);
+        let r = ramp_row(CORE_HEAT * (0.6 + 0.5 * saturate(body)), HEARTH_ROW);
+        let alpha = saturate(body * 1.3) * soft;
+        light = r.rgb * alpha * HEARTH_BRIGHTNESS * CORE_BRIGHT * breath * on_screen();
+        cover = alpha * 0.8 * r.a;
+    } else if kind == 0 && life.w > 4.5 {
         // A hearth's glow (`hearth`): a soft warm ball of light, adding only, brightest at its
         // middle and gone well inside its card, flickering with the fire.
         let d = length((uv - 0.5) * 2.0);
@@ -2144,8 +2318,10 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.55, smoothstep(0.35, 0.9, y));
         // White-hot at its root over the coals, the sim's own heat inside it, and deep red at
         // its torn tip, as the references' licks are.
+        // Yellow-white at the root, orange up it, red at the tip: at a fifth of its height
+        // off for its tip, the tongues read one colour (blind judge, campfire roll round).
         let root = 1.0 - smoothstep(0.0, 0.18, y);
-        let heat_here = saturate(0.22 + 0.3 * tex.r + 0.45 * pow(1.0 - y, 1.6) * (0.6 + 0.4 * (1.0 - across)) + 0.2 * root - 0.15 * age - 0.2 * smoothstep(0.45, 1.0, y));
+        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 1.4) * (0.6 + 0.4 * (1.0 - across)) + 0.22 * root - 0.15 * age - 0.32 * smoothstep(0.4, 1.0, y));
         let drawn = baked_fuel(vec4(heat_here, shape * born * TONGUE_THICK, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft, HEARTH_ROW);
         light = drawn.rgb;
         cover = drawn.a;
@@ -2332,7 +2508,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
     // the games' noon fires (Sons of the Forest, RDR2): the sun outshines them, so less of
     // what is behind is covered and their orange washes toward a pale yellow. `day` is how
     // many stops the eye is exposed under dusk's, from one to three and a half (fire round 20).
-    if kind == 0 && t > 1.0 && t <= 2.0 && life.w < 2.5 {
+    if kind == 0 && t > 1.0 && t <= 2.0 && (life.w < 2.5 || life.w > 6.5) {
         let day = smoothstep(1.0, 3.5, fire.exposure.y - log2(view.exposure) - adapted.x);
         let luma = dot(light, vec3(0.2126, 0.7152, 0.0722));
         light = mix(light, mix(light, vec3(luma) * vec3(1.15, 0.95, 0.55), 0.4), day) * mix(1.0, 0.5, day);
@@ -2503,7 +2679,7 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         // flame (its life's first number past 1, not its bed of coals) gives light, so much of
         // the pixel the tonemapper takes through the film, all of it by a red of 1. Its blend
         // adds this to the alpha and leaves the colour.
-        let flame = in.world_normal.x > 1.0 && in.uv_b.x < 2.5;
+        let flame = in.world_normal.x > 1.0 && (in.uv_b.x < 2.5 || (in.uv_b.x > 6.5 && i32(fire.kind.x + 0.5) == 0));
         out.color = vec4(0.0, 0.0, 0.0, select(0.0, min(out.color.r, 1.0), flame));
     }
     return out;

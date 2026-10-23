@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { bed } from "./coals.ts";
 import { BUDGET, HALF, hearth, layout, STONE_TONES, TALL, woodMaps } from "./hearth.ts";
@@ -98,4 +99,29 @@ test("its char is matte and near-black, and the atlas's gutter round each island
   let bled = 0;
   for (let i = 0; i < colour.length; i += 4) if (colour[i] === 255 && colour[i + 1] === 255 && colour[i + 2] === 255) bled++;
   assert.equal(bled, 0, `${bled} white gutter texels`);
+});
+
+test("the fire's flames are told where the campfire's own logs lie (terra_world fire/hearth.rs)", () => {
+  // The flames lick up the logs where the shader is told they lie: the game's numbers are read
+  // here against the model's layout, so a new layout can't leave its flames standing beside it.
+  const rust = readFileSync(new URL("../../crates/terra_world/src/fire/hearth.rs", import.meta.url), "utf8");
+  const block = rust.slice(rust.indexOf("pub const CAMPFIRE: Logs"), rust.indexOf("pub const NONE"));
+  const told = (name: string) => Number(new RegExp(`\\b${name}: ([-\\d.]+)`).exec(block)![1]);
+  const { logs } = layout(1);
+  const tops = logs.map((l) => l.foot.map((x, i) => x + l.axis[i] * (l.L - 0.05)));
+  const mean = (f: (i: number) => number) => logs.reduce((a, _, i) => a + f(i), 0) / logs.length;
+  const bearing = (v: number[]) => Math.atan2(v[2], v[0]);
+  const turn = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+  const near = (name: string, want: number, within: number) =>
+    assert.ok(Math.abs(told(name) - want) < within, `${name} ${told(name)}, the model's ${want.toFixed(3)}`);
+  assert.equal(told("count"), logs.length);
+  // Evenly round from `turn`, the best fit: each log within 0.15 rad of where the shader lays it.
+  near("turn", mean((i) => turn(bearing(logs[i].out) - (i * 2 * Math.PI) / logs.length)), 0.01);
+  logs.forEach((l, i) => assert.ok(Math.abs(turn(bearing(l.out) - told("turn") - (i * 2 * Math.PI) / logs.length)) < 0.15, `log ${i}'s bearing`));
+  near("twist", mean((i) => turn(bearing(tops[i]) - bearing(logs[i].out))), 0.03);
+  near("radius", mean((i) => logs[i].R), 0.005);
+  near("foot", mean((i) => Math.hypot(logs[i].foot[0], logs[i].foot[2])), 0.005);
+  near("foot_up", mean((i) => logs[i].foot[1]), 0.005);
+  near("top", mean((i) => Math.hypot(tops[i][0], tops[i][2])), 0.005);
+  near("top_up", mean((i) => tops[i][1]), 0.005);
 });
