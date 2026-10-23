@@ -157,10 +157,13 @@ pub struct Piece {
 
 /// The scaffold's pieces round `walls` with `lifts` lifts.
 pub fn pieces(walls: &Walls, lifts: u32) -> Vec<Piece> {
+    pieces_by_side(walls, [lifts; 4])
+}
+
+/// The scaffold's pieces round `walls` with each side's own lifts, as one being struck stands
+/// (`standing`): a side's standards, ledgers, boards, rail and brace to its own top lift.
+pub fn pieces_by_side(walls: &Walls, sides: [u32; 4]) -> Vec<Piece> {
     let mut out = Vec::new();
-    if lifts == 0 {
-        return out;
-    }
     let (low, high) = (
         walls.low - Vec2::splat(OUT_M),
         walls.high + Vec2::splat(OUT_M),
@@ -171,10 +174,13 @@ pub fn pieces(walls: &Walls, lifts: u32) -> Vec<Piece> {
         Vec2::new(high.x, high.y),
         Vec2::new(low.x, high.y),
     ];
-    let top_lift = walls.floor_m + LIFT_M * lifts as f32;
-    let standing_to = top_lift + RAIL_M + 0.2;
     let at = |p: Vec2, y: f32| Vec3::new(p.x, y, p.y);
-    for side in 0..4 {
+    for (side, &lifts) in sides.iter().enumerate() {
+        if lifts == 0 {
+            continue;
+        }
+        let top_lift = walls.floor_m + LIFT_M * lifts as f32;
+        let standing_to = top_lift + RAIL_M + 0.2;
         let (a, b) = (corners[side], corners[(side + 1) % 4]);
         let length = a.distance(b);
         let bays = (length / BAY_M).ceil().max(1.0) as usize;
@@ -373,17 +379,36 @@ pub fn on_deck(walls: &Walls, lifts: u32, at: Vec2) -> Option<(Vec3, Vec2)> {
 pub struct Scaffolded {
     walls: Option<Option<Walls>>,
     lifts: u32,
+    /// How many of its lifts' sides are struck since its building was finished (`struck`).
+    struck: u32,
     drawn: Vec<Entity>,
-    /// When, in the time-lapse's seconds, its lifts last changed.
-    changed_t: f32,
 }
 
-/// A finished building's scaffold is struck a lift at a time, from the top, one every so many
-/// of the time-lapse's seconds, as it is taken down, not gone at once; a tall one's lifts
-/// faster, so all of it is down within `STRUCK_S`: a lift every 1.2 s, a wall tower's nine
-/// stood ten seconds past its finish, still up at the film's end.
+/// A finished building's scaffold is struck from the top, a side of a lift at a time, one every
+/// so many of the time-lapse's seconds, as a scaffold is taken down (its top lift's boards,
+/// rail and ledgers off one side, then the next, then the lift under it), not gone at once; a
+/// tall one's faster, so all of it is down within `STRUCK_S`: a lift every 1.2 s, a wall
+/// tower's nine stood ten seconds past its finish, still up at the film's end. A whole lift
+/// round at a time, the castle's lattice went in under a second and a half, read as a swap
+/// (settlement r28); a side at a time it changes a quarter as much a step, over longer.
 const STRIKE_S: f32 = 1.2;
-const STRUCK_S: f32 = 2.4;
+const STRUCK_S: f32 = 3.0;
+
+/// How many lifts each side of a scaffold of `all` lifts still has once `struck` of its lifts'
+/// sides are down: the top lift first, its sides one after another (the fourth first).
+pub fn standing(all: u32, struck: u32) -> [u32; 4] {
+    let left = (all * 4).saturating_sub(struck);
+    let (full, extra) = (left / 4, left % 4);
+    std::array::from_fn(|side| full + u32::from((side as u32) < extra))
+}
+
+/// How many of a finished scaffold's `all` lifts' sides are struck `since` seconds after its
+/// building is finished: a side every `STRIKE_S` / 4 at most, all of them within `STRUCK_S`.
+pub fn struck(all: u32, since: f32) -> u32 {
+    let steps = all * 4;
+    let every = (STRIKE_S / 4.0).min(STRUCK_S / steps.max(1) as f32);
+    ((since.max(0.0) / every) as u32).min(steps)
+}
 
 /// How often, in frames, each rising building's scaffold is looked at again.
 const EVERY: u32 = 6;
@@ -424,44 +449,45 @@ pub fn scaffold(
             continue;
         };
         let up = rising.up.get(rise.index).copied().unwrap_or(true);
-        let wanted = if up {
-            let all = match scaffolded.walls {
-                Some(Some(walls)) => lifts(&walls, walls.eaves_m).max(1),
-                _ => 1,
-            };
-            let every = STRIKE_S.min(STRUCK_S / all as f32);
-            if scaffolded.lifts == 0 || rising.t < scaffolded.changed_t + every {
-                continue;
-            }
-            scaffolded.lifts - 1
+        // As it stands while its walls rise; once finished, struck by the time since.
+        let (wanted, gone) = if up {
+            let since = rising
+                .finished
+                .get(rise.index)
+                .copied()
+                .flatten()
+                .map_or(f32::MAX, |at| rising.t - at);
+            (scaffolded.lifts, struck(scaffolded.lifts, since))
         } else if !rise.planned {
-            0
+            (0, 0)
         } else {
             let walls = *scaffolded
                 .walls
                 .get_or_insert_with(|| Walls::of(&rise.whole));
             match (walls, built_to(&built.base)) {
-                (Some(walls), Some(top)) => lifts(&walls, top),
-                _ => 0,
+                (Some(walls), Some(top)) => (lifts(&walls, top), 0),
+                _ => (0, 0),
             }
         };
-        if wanted == scaffolded.lifts {
+        if wanted == scaffolded.lifts && gone == scaffolded.struck {
             continue;
         }
         scaffolded.lifts = wanted;
-        scaffolded.changed_t = rising.t;
+        scaffolded.struck = gone;
         for drawn in scaffolded.drawn.drain(..) {
             commands.entity(drawn).despawn();
         }
         let Some(Some(walls)) = scaffolded.walls else {
             continue;
         };
-        if wanted == 0 {
+        let sides = standing(wanted, gone);
+        let top = sides.iter().copied().max().unwrap_or(0);
+        if top == 0 {
             decks.0.remove(&rise.index);
             continue;
         }
-        decks.0.insert(rise.index, (built.frame, walls, wanted));
-        let all = pieces(&walls, wanted);
+        decks.0.insert(rise.index, (built.frame, walls, top));
+        let all = pieces_by_side(&walls, sides);
         for (board, material) in [(false, &looks.poles), (true, &looks.boards)] {
             let drawn = commands
                 .spawn((
@@ -601,6 +627,69 @@ mod tests {
             cubes.extend((0..2).map(|_| (y, true)));
         }
         assert_eq!(eaves_layer(cubes.into_iter()), Some(5));
+    }
+
+    /// A finished building's scaffold comes down from the top a side of a lift at a time: each
+    /// step takes off well under a whole lift round, never more than the one before it stood,
+    /// and nothing is left once every side of every lift is struck.
+    #[test]
+    fn a_struck_scaffold_comes_down_a_side_of_a_lift_at_a_time() {
+        let walls = Walls {
+            low: Vec2::new(0.0, 0.0),
+            high: Vec2::new(30.0, 24.0),
+            floor_m: 0.0,
+            eaves_m: 16.0,
+        };
+        let all = lifts(&walls, walls.eaves_m);
+        assert!(all >= 9, "{all}");
+        let length = |pieces: &[Piece]| pieces.iter().map(|p| p.from.distance(p.to)).sum::<f32>();
+        let tallest = |pieces: &[Piece]| {
+            pieces
+                .iter()
+                .map(|p| p.from.y.max(p.to.y))
+                .fold(0.0, f32::max)
+        };
+        let lift_round = length(&pieces(&walls, all)) - length(&pieces(&walls, all - 1));
+        let mut before = pieces_by_side(&walls, standing(all, 0));
+        assert_eq!(before, pieces(&walls, all));
+        for step in 1..=all * 4 {
+            let now = pieces_by_side(&walls, standing(all, step));
+            let taken = length(&before) - length(&now);
+            assert!(taken > 0.0, "step {step} took nothing");
+            assert!(
+                taken < 0.4 * lift_round,
+                "step {step} took {taken} of {lift_round} m"
+            );
+            assert!(tallest(&now) <= tallest(&before) + 1e-4, "step {step} rose");
+            before = now;
+        }
+        assert!(before.is_empty());
+        assert_eq!(standing(all, all * 4 + 5), [0; 4]);
+    }
+
+    /// The strike starts at the finish, a step at most every quarter of `STRIKE_S`, and is
+    /// over within `STRUCK_S` however tall the scaffold.
+    #[test]
+    fn a_scaffold_is_struck_steadily_and_within_its_time() {
+        for all in [1, 3, 10, 14] {
+            assert_eq!(struck(all, 0.0), 0);
+            assert_eq!(struck(all, -1.0), 0);
+            assert_eq!(struck(all, STRUCK_S + 0.01), all * 4, "{all}");
+            let mut last = 0;
+            for i in 1..=300 {
+                let now = struck(all, STRUCK_S * i as f32 / 300.0);
+                assert!(
+                    now >= last && now - last <= 1,
+                    "{all} lifts at step {i}: {last} to {now}"
+                );
+                last = now;
+            }
+        }
+        assert_eq!(
+            struck(1, STRIKE_S / 4.0 * 0.99),
+            0,
+            "a small one waits a quarter lift's time"
+        );
     }
 
     /// Each piece is a closed box: six faces, four corners each.
