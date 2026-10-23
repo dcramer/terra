@@ -122,6 +122,18 @@ pub struct FarExtension {
     horizon_map: Option<Handle<Image>>,
 }
 
+impl FarExtension {
+    /// The crowns' colours and the near fade; the horizon's come from `see_horizon` once the
+    /// land's is baked (until then `horizon_lit` reads lit, D416).
+    pub fn new(crowns: [Vec4; 3], near: Vec4) -> Self {
+        Self {
+            crowns,
+            near,
+            ..Default::default()
+        }
+    }
+}
+
 /// The far forest told the land's horizon each time it is baked.
 fn see_horizon(
     horizon: Res<crate::horizon::HorizonPicture>,

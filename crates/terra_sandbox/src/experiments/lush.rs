@@ -314,7 +314,6 @@ pub fn plugin(app: &mut App) {
         MaterialPlugin::<Foliage>::default(),
         floor::plugin,
         footing::plugin,
-        far::plugin,
         seasons::plugin,
     ))
     .init_resource::<Unmipped>()

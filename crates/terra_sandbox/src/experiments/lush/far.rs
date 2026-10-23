@@ -16,16 +16,18 @@ use bevy::{
     camera::{primitives::Aabb, visibility::NoAutoAabb},
     light::NotShadowCaster,
     mesh::{Indices, PrimitiveTopology},
-    pbr::{ExtendedMaterial, MaterialExtension},
     platform::collections::HashMap,
     prelude::*,
-    render::render_resource::AsBindGroup,
-    shader::ShaderRef,
 };
 use terra_gen::{Noise, Seed};
-use terra_world::planet::Planet;
+use terra_world::{
+    planet::Planet,
+    woods::{FarExtension, FarWoods},
+};
 
-pub(super) type FarForest = ExtendedMaterial<StandardMaterial, FarExtension>;
+/// The far forest's material is the world's (`terra_world::woods`, D396): one definition of
+/// far_forest.wesl's uniform, so a field the shader gains reaches this forest too.
+pub(super) type FarForest = FarWoods;
 
 /// The far forest starts this far past the meadow's edge, give or take its own noise, and
 /// ends where nothing standing on the ground is seen any more from the overlook, 45 m up at
@@ -41,38 +43,6 @@ const CHUNK_M: f32 = 160.0;
 /// its crown is for its height.
 const HEIGHTS: [(f32, f32); 3] = [(18.0, 27.0), (24.0, 34.0), (22.0, 32.0)];
 const CROWN: [f32; 3] = [0.78, 0.42, 0.36];
-
-pub(super) fn plugin(app: &mut App) {
-    app.add_plugins(MaterialPlugin::<FarForest>::default());
-}
-
-/// What the far forest's shader is told. Field order must match far_forest.wesl.
-#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
-pub(super) struct FarExtension {
-    /// Each kind's crown colour, oak, pine and spruce, linear: its leaves' as the near
-    /// crowns show them.
-    #[uniform(100)]
-    crowns: [Vec4; 3],
-    /// Within x of the eye a card is gone, from y on whole: walked into, the far forest
-    /// gives way rather than show its cards.
-    #[uniform(100)]
-    near: Vec4,
-}
-
-impl MaterialExtension for FarExtension {
-    fn vertex_shader() -> ShaderRef {
-        "shaders/far_forest.wesl".into()
-    }
-    fn prepass_vertex_shader() -> ShaderRef {
-        "shaders/far_forest.wesl".into()
-    }
-    fn fragment_shader() -> ShaderRef {
-        "shaders/far_forest.wesl".into()
-    }
-    fn prepass_fragment_shader() -> ShaderRef {
-        "shaders/far_forest.wesl".into()
-    }
-}
 
 /// Where the far forest is laid, and what with.
 pub(super) struct Lay<'a> {
@@ -116,10 +86,10 @@ pub(super) fn lay(
             diffuse_transmission: 0.3,
             ..default()
         },
-        extension: FarExtension {
-            crowns: lay.crowns.map(|c| c.extend(1.0)),
-            near: Vec4::new(25.0, 45.0, 0.0, 0.0),
-        },
+        extension: FarExtension::new(
+            lay.crowns.map(|c| c.extend(1.0)),
+            Vec4::new(25.0, 45.0, 0.0, 0.0),
+        ),
     });
     let edge = Noise::new(lay.seed.derive("far edge"));
     let cells = (TO_M / CELL_M).ceil() as i32;

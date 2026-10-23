@@ -35,7 +35,7 @@ import super::horizon::horizon_lit;
 @if(PREPASS_PIPELINE)
 @group(0) @binding(1) var<uniform> globals: Globals;
 
-// Field order must match FarExtension in far.rs.
+// Field order must match woods::FarExtension in terra_world, its one definition (D396).
 struct Far {
     // Each kind's crown colour, linear: oak, pine, spruce.
     crowns: array<vec4<f32>, 3>,

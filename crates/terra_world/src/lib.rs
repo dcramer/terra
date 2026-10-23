@@ -72,6 +72,8 @@ pub mod spatial;
 pub mod start;
 pub mod terrain;
 pub mod tick;
+#[cfg(test)]
+mod uniform_tests;
 pub mod uploads;
 pub mod upscale;
 pub mod wakes;
