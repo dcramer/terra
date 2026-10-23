@@ -45,6 +45,7 @@ use terra_world::flora_kinds::{Cuttable, Flora};
 use terra_world::grown::build::{self as grown_build, Placing};
 use terra_world::grown::{Cards, plants};
 use terra_world::planet::Planet;
+use terra_world::sky_occlusion::SkyOccluders;
 
 /// A rock's scanned material with moss over what faces the sky (`mossy.wesl`).
 pub(super) type Mossy = ExtendedMaterial<StandardMaterial, MossExtension>;
@@ -466,6 +467,9 @@ struct Here {
     path: f32,
     /// Damp hollows, where ferns and moss grow best.
     wet: f32,
+    /// 1 where the sun reaches it past the crowns and 0 where not (`Lay::in_sun`), for the
+    /// kinds that grow in its patches; the sky's light where not asked.
+    sun: f32,
 }
 
 impl Map {
@@ -488,8 +492,10 @@ impl Map {
         let shade = over.shade * (1.0 - 0.45 * gap);
         // A path's corridor lets the light down to its edges.
         let corridor = 1.0 - smoothstep(0.5, 5.0, path.max(0.0));
+        let light = (1.0 - shade + 0.45 * corridor).min(1.0);
         Here {
-            light: (1.0 - shade + 0.45 * corridor).min(1.0),
+            light,
+            sun: light,
             needles: over.needles,
             spruce: over.spruce,
             leaves: over.leaves,
@@ -629,6 +635,9 @@ pub(super) struct Lay<'a, 'w, 's> {
     pub shrinking: HashMap<(Option<AssetId<Foliage>>, u32), Handle<Foliage>>,
     /// The plants whose shadows are given them only near the camera.
     pub shade: NearShadows,
+    /// The crowns as the sun's light sees them and the way toward the sun as the floor is
+    /// laid, where the world says where it is: what grows in its patches is put by them.
+    pub sun: Option<(&'a SkyOccluders, Vec3)>,
 }
 
 /// From one distance to another, crossfading at the far end.
@@ -700,6 +709,10 @@ enum Under {
 const PATH_LINE_M: f32 = 2.5;
 /// Verge bracken's clumps are started within so far outside a path's edge (`Path::beside`).
 const VERGE_OUT_M: f32 = 2.0;
+/// The sun is looked for past the crowns from so high over the ground, a frond's height,
+/// and so far toward it: past the tallest crown's top in a low morning sun.
+const FRONDS_M: f32 = 0.5;
+const SUN_LOOKS_M: f32 = 120.0;
 
 /// The middle layer's shadows are cast in full to this share of their distance, then shrink
 /// away (D234).
@@ -791,8 +804,9 @@ impl Under {
             Under::Twigs => {
                 (1.0 - smoothstep(0.5, 0.95, here.light)) * (0.5 + 0.5 * near(here.bark, 1.0, 6.0))
             }
-            // On a path's verge, where the sun comes down its corridor.
-            Under::Verge => smoothstep(0.35, 0.8, here.light) * near(here.path, 0.4, 2.2),
+            // On a path's verge, in the sun's patches where the floor is told where the sun
+            // falls, else where the sky's light comes down the path's corridor.
+            Under::Verge => smoothstep(0.35, 0.8, here.sun) * near(here.path, 0.4, 2.2),
         }
     }
 
@@ -889,6 +903,26 @@ impl Drawn {
     }
 }
 impl Lay<'_, '_, '_> {
+    /// What a place is for a kind that grows in the sun's patches, the verge's bracken: in
+    /// the sun where it reaches the fronds' height past the crowns' thick, by the one test of
+    /// what a crown hides (`SkyOccluders::hides`).
+    fn in_sun(&self, kind: Under, at: Vec2, mut here: Here) -> Here {
+        if kind == Under::Verge
+            && let Some((crowns, sun)) = self.sun
+        {
+            let ground = self
+                .planet
+                .ground_at(self.start + self.east * at.x + self.south * at.y);
+            let fronds = ground + ground.normalize() * FRONDS_M;
+            here.sun = if crowns.sun_reaches(fronds, sun, SUN_LOOKS_M) {
+                1.0
+            } else {
+                0.0
+            };
+        }
+        here
+    }
+
     /// A place on the ground, `at` east and south of the start, turned at random about its
     /// up, sunk `sink`, `scale` times its size.
     fn on(&self, at: Vec2, dice: &mut Rng, sink: f32, scale: f32) -> Transform {
@@ -1596,7 +1630,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 0.62,
                 0.5 + 0.5 * drift.fbm(Vec3::new(at.x, 0.0, at.y) / placement.drift_m, 2, 2.0, 0.5),
             );
-            let here = map.here(at);
+            let here = lay.in_sun(placement.kind, at, map.here(at));
             if dice.unit() > placement.kind.likes(&here) * drifts {
                 continue;
             }
@@ -1607,7 +1641,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 } else {
                     round(&mut dice, at, placement.spread_m)
                 };
-                let here = map.here(p);
+                let here = lay.in_sun(placement.kind, p, map.here(p));
                 if here.bark < bark_m
                     || here.lying < lying_m
                     || here.path < path_m
@@ -1619,7 +1653,8 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 let edge = 1.0 - 0.3 * (p.distance(at) / (placement.spread_m * 2.0)).min(1.0);
                 let scale = dice.range(placement.scale.0, placement.scale.1) * edge;
                 let place = lay.on(p, &mut dice, 0.03 * scale, scale);
-                let drawn = variants[dice.below(variants.len() as u32) as usize].clone();
+                let pick = dice.below(variants.len() as u32) as usize;
+                let drawn = variants[pick].clone();
                 // Rolled as before, so every other plant stays where it was, then left out
                 // if it would stand in the path's line.
                 if !placement.kind.keeps_path_line(here.path) {

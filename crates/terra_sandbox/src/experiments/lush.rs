@@ -63,6 +63,9 @@ mod overgrowth;
 mod seasons;
 mod shade;
 mod species;
+#[cfg(test)]
+mod sun_tests;
+mod tally;
 mod thicket;
 
 use floor::{Crowns, Stand};
@@ -590,6 +593,8 @@ struct TreeModel {
     /// The solid lumps the crown's shadow is cast from beyond the cards: smaller than the
     /// crown, so a low sun still finds gaps between its branches.
     lumps: Handle<Mesh>,
+    /// Those lumps' middles and half sizes, for where the sun falls under the crowns.
+    shadow_lumps: Arc<sky_occlusion::Lumps>,
     height: f32,
     trunk_m: f32,
     /// Its crown's middle, level with its foot, and how far its leaves reach from it, for
@@ -973,6 +978,7 @@ fn grow(
         shadow: meshes.add(shadow.mesh()),
         clumps: meshes.add(clumps.mesh()),
         lumps: meshes.add(lumps.mesh()),
+        shadow_lumps: Arc::new(sky_occlusion::Lumps::new(lumps_of(&tree, SHADOW_LUMP))),
         height,
         trunk_m: tree.trunk_m,
         crown: floor::crown_of(&tree.tips),
@@ -1164,6 +1170,11 @@ fn plant(
     mut far_forest: ResMut<Assets<far::FarForest>>,
     mut trunks: ResMut<terra_world::flora::Trunks>,
     parting: Option<Res<terra_world::parting::Parting>>,
+    // Where the sun stands as the floor is laid, for what grows in its patches.
+    sky: (
+        Option<Res<terra_world::daylight::SkyPath>>,
+        Option<Res<terra_world::daylight::Clock>>,
+    ),
 ) {
     let (Some(planet), Some(flora), Some(sun)) = (planet, flora, sun) else {
         return;
@@ -1330,6 +1341,7 @@ fn plant(
             shadow: meshes.add(crown_stand_in(&cards).mesh()),
             clumps: meshes.add(crown_clumps(&tree, 1.0, false).mesh()),
             lumps: meshes.add(crown_clumps(&tree, SHADOW_LUMP, true).mesh()),
+            shadow_lumps: Arc::new(sky_occlusion::Lumps::new(lumps_of(&tree, SHADOW_LUMP))),
             height: VETERAN_M,
             trunk_m: tree.trunk_m,
             crown: floor::crown_of(&tree.tips),
@@ -1407,6 +1419,7 @@ fn plant(
     let mut canopy = Crowns::default();
     // And as the sky's light sees them, for how much of it reaches under them (D270).
     let mut crowns = Vec::new();
+    let mut shadows = Vec::new();
     let mut planted = [0, 0];
     // The nearest of each to the start, for scripted runs to walk up to.
     let mut nearest_to_start = [Vec2::splat(f32::MAX); 2];
@@ -1513,6 +1526,12 @@ fn plant(
                 };
             let foot = place.translation;
             let crown = place.rotation * (model.crown.0 * place.scale);
+            shadows.push(sky_occlusion::CrownShadow {
+                foot,
+                turn: place.rotation,
+                scale: place.scale,
+                lumps: model.shadow_lumps.clone(),
+            });
             trunks.add(terra_world::flora::Trunk {
                 foot,
                 radius_m: model.trunk_m * wide,
@@ -1601,50 +1620,16 @@ fn plant(
             }
         }
     }
-    if let Some(near) = veterans
-        .iter()
-        .min_by(|a, b| a.length().total_cmp(&b.length()))
-    {
-        info!(
-            "lush: {} veteran oaks, the nearest at {:.1},{:.1} (east, south).",
-            veterans.len(),
-            near.x,
-            near.y
-        );
+    tally::Tally {
+        veterans: &veterans,
+        by_species,
+        nearest_of,
+        ivied,
+        banded,
+        planted,
+        nearest_to_start,
     }
-
-    info!(
-        "lush: {} oaks, {} pines and {} spruces; the nearest grown of each at {:.1},{:.1}, {:.1},{:.1} and {:.1},{:.1} (east, south).",
-        by_species[0],
-        by_species[1],
-        by_species[2],
-        nearest_of[0].x,
-        nearest_of[0].y,
-        nearest_of[1].x,
-        nearest_of[1].y,
-        nearest_of[2].x,
-        nearest_of[2].y
-    );
-    for (what, tally) in [("ivy", &ivied), ("a band of moss", &banded)] {
-        let [oak, pine, spruce] = tally.map(|(count, at)| {
-            if count == 0 {
-                "0".to_string()
-            } else {
-                format!("{count} (the nearest at {:.1},{:.1})", at.x, at.y)
-            }
-        });
-        info!("lush: {what} on oaks {oak}, pines {pine}, spruces {spruce} (east, south).");
-    }
-    info!(
-        "lush: {} grown trees and {} young ones planted. The nearest stand at {:.1},{:.1} and \
-         {:.1},{:.1} (east, south).",
-        planted[0],
-        planted[1],
-        nearest_to_start[0].x,
-        nearest_to_start[0].y,
-        nearest_to_start[1].x,
-        nearest_to_start[1].y
-    );
+    .tell();
 
     // The forest carried on past the meadow (D273).
     far::lay(
@@ -1666,7 +1651,7 @@ fn plant(
     );
 
     // The floor under the trees, and the map the grass grows by (D246).
-    commands.insert_resource(SkyOccluders {
+    let occluders = SkyOccluders {
         middle: start,
         up,
         east,
@@ -1676,7 +1661,12 @@ fn plant(
         below_m: 15.0,
         above_m: 45.0,
         crowns,
-    });
+        shadows,
+    };
+    let sun_way = match sky {
+        (Some(path), Some(clock)) => Some(path.sun(clock.hour)),
+        _ => None,
+    };
     let map = floor::lay(
         &mut floor::Lay {
             commands: &mut commands,
@@ -1700,10 +1690,12 @@ fn plant(
             foliage: &mut materials,
             shrinking: HashMap::default(),
             shade: shade::NearShadows::new(start, east, south),
+            sun: sun_way.map(|way| (&occluders, way)),
         },
         path,
         canopy,
     );
+    commands.insert_resource(occluders);
     let map = Arc::new(map);
     commands.insert_resource(CoverRules {
         source: Arc::new(LushCover(map)),
@@ -2311,27 +2303,38 @@ fn crown_clumps(tree: &Tree, scale: f32, shadow: bool) -> Build {
         offset_in_colour: shadow,
         ..default()
     };
-    for branch in 0..tree.branches {
-        let tips: Vec<(Vec3, f32)> = tree
-            .tips
-            .iter()
-            .zip(&tree.branch_of)
-            .filter(|(_, of)| **of == branch)
-            .map(|(tip, _)| *tip)
-            .collect();
-        if tips.is_empty() {
-            continue;
-        }
-        let centre = tips.iter().fold(Vec3::ZERO, |sum, (tip, _)| sum + *tip) / tips.len() as f32;
-        let size = tips.iter().map(|(_, size)| *size).sum::<f32>() / tips.len() as f32;
-        let spread = tips
-            .iter()
-            .map(|(tip, _)| (*tip - centre).abs())
-            .fold(Vec3::ZERO, Vec3::max);
-        let radii = (spread * 0.8 + Vec3::splat(size * 0.6)) * Vec3::new(1.0, 0.75, 1.0) * scale;
+    for (centre, radii) in lumps_of(tree, scale) {
         lump(&mut build, centre, radii);
     }
     build
+}
+
+/// A crown's lumps, one a branch, as big as most of its leaves times `scale`: their middles
+/// and half sizes, in the tree's own frame.
+fn lumps_of(tree: &Tree, scale: f32) -> Vec<(Vec3, Vec3)> {
+    (0..tree.branches)
+        .filter_map(|branch| {
+            let tips: Vec<(Vec3, f32)> = tree
+                .tips
+                .iter()
+                .zip(&tree.branch_of)
+                .filter(|(_, of)| **of == branch)
+                .map(|(tip, _)| *tip)
+                .collect();
+            if tips.is_empty() {
+                return None;
+            }
+            let count = tips.len() as f32;
+            let centre = tips.iter().fold(Vec3::ZERO, |sum, (tip, _)| sum + *tip) / count;
+            let size = tips.iter().map(|(_, size)| *size).sum::<f32>() / count;
+            let spread = tips
+                .iter()
+                .map(|(tip, _)| (*tip - centre).abs())
+                .fold(Vec3::ZERO, Vec3::max);
+            let radii = (spread * 0.8 + Vec3::splat(size * 0.6)) * Vec3::new(1.0, 0.75, 1.0);
+            Some((centre, radii * scale))
+        })
+        .collect()
 }
 
 /// A rough ball: rings of six round, four rings high.

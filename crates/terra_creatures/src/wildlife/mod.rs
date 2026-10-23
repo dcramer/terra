@@ -116,9 +116,6 @@ const MET_STANDING: usize = 8;
 /// Grass thinner than this, as thick by how much taller it grows, leaves an animal on it in
 /// plain sight.
 const BARE_GRASS: f32 = 0.35;
-/// A line through a crown within this share of its size, as thick as its leaves close, is
-/// hidden by them.
-const LEAVES_HIDE: f32 = 0.85;
 /// Grass this tall hides a small animal in it.
 const HIDING_GRASS_M: f32 = 0.45;
 /// A spot in the sun shows what is on it so many times better than one in shade.
@@ -459,40 +456,19 @@ impl Surroundings<'_, '_> {
         if sun.dot(at.normalize_or(Vec3::Y)) < 0.02 {
             return false;
         }
-        let far = at + sun * SUN_LOOKS_M;
-        self.obstacles.sweep(at, sun, SUN_LOOKS_M, 0.05).is_none() && !self.through_crowns(at, far)
+        // Past the crowns as the floor's sunlit fronds are, where the rendered shadow lets
+        // the sun through (`SkyOccluders::sun_reaches`).
+        self.obstacles.sweep(at, sun, SUN_LOOKS_M, 0.05).is_none()
+            && self
+                .crowns
+                .as_ref()
+                .is_none_or(|wood| wood.sun_reaches(at, sun, SUN_LOOKS_M))
     }
 
-    /// Whether the line between two points passes through the thick of a tree's crown.
+    /// Whether the line between two points passes through the thick of a tree's crown
+    /// (`SkyOccluders::hides`).
     fn through_crowns(&self, eye: Vec3, at: Vec3) -> bool {
-        let line = at - eye;
-        let length = line.length();
-        let way = line / length.max(1e-3);
-        if let Some(wood) = &self.crowns {
-            let south = wood.east.cross(wood.up);
-            return wood.crowns.iter().any(|crown| {
-                // Into the crown's own frame, where it is a ball of one.
-                let into = |p: Vec3| {
-                    let off = p - crown.middle;
-                    Vec3::new(
-                        off.dot(wood.east) / crown.half.x.max(0.1),
-                        off.dot(wood.up) / crown.half.y.max(0.1),
-                        off.dot(south) / crown.half.z.max(0.1),
-                    )
-                };
-                let reach = crown.half.max_element();
-                let nearest = (crown.middle - eye).dot(way).clamp(0.0, length);
-                if (eye + way * nearest).distance(crown.middle) > reach {
-                    return false;
-                }
-                let (from, to) = (into(eye), into(at));
-                let along = to - from;
-                let s = (-from.dot(along) / along.length_squared().max(1e-6)).clamp(0.0, 1.0);
-                // Through its thick, not grazing the gaps at its edge.
-                (from + along * s).length() < LEAVES_HIDE * crown.closes.sqrt()
-            });
-        }
-        false
+        self.crowns.as_ref().is_some_and(|wood| wood.hides(eye, at))
     }
 
     /// How tall the grass stands at a point on the ground, as most of its blades do (the

@@ -219,8 +219,8 @@ pub(super) const PLACEMENTS: [Placement; 17] = [
     Placement {
         kind: Under::Verge,
         name: "Verge",
-        tries: 1500,
-        clump: (2, 5),
+        tries: 4500,
+        clump: (3, 6),
         spread_m: 0.9,
         scale: (0.7, 1.3),
         seen_m: 55.0,

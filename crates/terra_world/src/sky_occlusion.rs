@@ -49,6 +49,127 @@ pub struct SkyOccluders {
     pub below_m: f32,
     pub above_m: f32,
     pub crowns: Vec<Crown>,
+    /// The crowns as the sun's shadow is cast from them, where the layer above says so;
+    /// where it does not, the sun is hidden by the crowns' thick (`hides`).
+    pub shadows: Vec<CrownShadow>,
+}
+
+/// A kind of crown's shadow casters, in its tree's own frame (up its +Y): a lump for each of
+/// its branches, its middle and half sizes, as the shadow pass draws them far off, with
+/// gaps between them where a low sun comes through; and a ball round them all.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Lumps {
+    each: Vec<(Vec3, Vec3)>,
+    middle: Vec3,
+    reach: f32,
+}
+
+impl Lumps {
+    pub fn new(each: Vec<(Vec3, Vec3)>) -> Self {
+        let count = each.len().max(1) as f32;
+        let middle = each.iter().fold(Vec3::ZERO, |sum, (at, _)| sum + *at) / count;
+        let reach = each
+            .iter()
+            .map(|(at, half)| at.distance(middle) + half.max_element())
+            .fold(0.0, f32::max);
+        Self {
+            each,
+            middle,
+            reach,
+        }
+    }
+}
+
+/// A tree's crown as its shadow is cast: its kind's lumps, where its tree stands, how it is
+/// turned and how it is sized (the world is `foot + turn * (p * scale)` of its frame).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CrownShadow {
+    pub foot: Vec3,
+    pub turn: Quat,
+    pub scale: Vec3,
+    pub lumps: Arc<Lumps>,
+}
+
+impl CrownShadow {
+    /// Whether the line from `eye` along the unit `way`, out to `length`, passes through a
+    /// lump: solved in the tree's own frame, where each lump is a ball stretched along its
+    /// axes, and the line's measure along itself is the world's.
+    fn casts(&self, eye: Vec3, way: Vec3, length: f32) -> bool {
+        let back = self.turn.inverse();
+        let scale = self.scale.max(Vec3::splat(1e-3));
+        let from = back * (eye - self.foot) / scale;
+        let along = back * way / scale;
+        let lumps = &self.lumps;
+        let nearest = ((lumps.middle - from).dot(along) / along.length_squared().max(1e-9))
+            .clamp(0.0, length);
+        if (from + along * nearest).distance(lumps.middle) > lumps.reach {
+            return false;
+        }
+        lumps.each.iter().any(|(middle, half)| {
+            let half = half.max(Vec3::splat(0.05));
+            let (o, d) = ((from - *middle) / half, along / half);
+            let (a, b, c) = (d.dot(d), o.dot(d), o.dot(o) - 1.0);
+            let disc = b * b - a * c;
+            if disc < 0.0 {
+                return false;
+            }
+            let root = libm::sqrtf(disc);
+            (-b + root) / a > 0.0 && (-b - root) / a < length
+        })
+    }
+}
+
+/// A line through a crown within this share of its size, as thick as its leaves close, is
+/// hidden by them; one through the rest of it passes the gaps at its edge.
+pub const LEAVES_HIDE: f32 = 0.85;
+
+impl SkyOccluders {
+    /// Whether the line between two points passes through the thick of a tree's crown: what
+    /// a crown hides from an eye (D384).
+    pub fn hides(&self, eye: Vec3, at: Vec3) -> bool {
+        let line = at - eye;
+        let length = line.length();
+        let way = line / length.max(1e-3);
+        let south = self.east.cross(self.up);
+        self.crowns.iter().any(|crown| {
+            let reach = crown.half.max_element();
+            let nearest = (crown.middle - eye).dot(way).clamp(0.0, length);
+            if (eye + way * nearest).distance(crown.middle) > reach {
+                return false;
+            }
+            // Into the crown's own frame, where it is a ball of one.
+            let into = |p: Vec3| {
+                let off = p - crown.middle;
+                Vec3::new(
+                    off.dot(self.east) / crown.half.x.max(0.1),
+                    off.dot(self.up) / crown.half.y.max(0.1),
+                    off.dot(south) / crown.half.z.max(0.1),
+                )
+            };
+            let (from, to) = (into(eye), into(at));
+            let along = to - from;
+            let s = (-from.dot(along) / along.length_squared().max(1e-6)).clamp(0.0, 1.0);
+            // Through its thick, not grazing the gaps at its edge.
+            (from + along * s).length() < LEAVES_HIDE * crown.closes.sqrt()
+        })
+    }
+
+    /// Whether the sun, the way `sun` toward it, reaches `at` past the crowns, looked for
+    /// out to `reach_m`: the one test of where the sun falls under the trees, for the
+    /// floor's sunlit fronds (D246) and an animal's sunlit spot (D384). Through the crowns'
+    /// shadow lumps where they are given, so it falls where the rendered shadow lets it
+    /// through: a long slanting line through a stand's crowns passes the thick of one or
+    /// another nearly always, though the shadow pass's lumps let a fifth of a path's verge
+    /// see the morning sun (forest fix round 4, `lush/sun_tests.rs`).
+    pub fn sun_reaches(&self, at: Vec3, sun: Vec3, reach_m: f32) -> bool {
+        if self.shadows.is_empty() {
+            return !self.hides(at, at + sun * reach_m);
+        }
+        !self
+            .shadows
+            .iter()
+            .any(|shadow| shadow.casts(at, sun, reach_m))
+    }
 }
 
 /// The grid is this fine across and up: light from the sky changes slowly from place to
@@ -584,6 +705,7 @@ mod tests {
             below_m: 5.0,
             above_m: 35.0,
             crowns,
+            shadows: Vec::new(),
         }
     }
 
