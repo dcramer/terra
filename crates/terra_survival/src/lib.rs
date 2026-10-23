@@ -45,6 +45,7 @@ pub mod wear;
 pub mod work;
 pub mod worn;
 
+#[cfg(any(test, feature = "testing"))]
 use bevy::prelude::*;
 
 /// A world with what the play systems read and write that is not of any one entity: the
