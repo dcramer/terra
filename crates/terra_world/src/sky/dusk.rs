@@ -146,6 +146,30 @@ pub(super) mod tests {
         }
     }
 
+    /// Through the civil twilight, the sun down to 6 degrees under, the sky stays as bright
+    /// against the land it lights as at sunset, overhead, across and low opposite the sun, as
+    /// a dusk photograph's does: the land is lit by that sky, so the two fade together. Its
+    /// blue hour six times darker against the land than its sunset, the settlement film's
+    /// sky 3 degrees under went to night over a lit meadow (settlement r31).
+    #[test]
+    fn through_civil_twilight_the_sky_fades_with_the_land_it_lights() {
+        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        let against_land = |under: f32, bearing: f32, up: f32| {
+            let (sky, land) = crate::daylight::sky_and_land(-under);
+            luma(seen(under, bearing, up)) * sky / land
+        };
+        for (bearing, up) in [(180.0, 70.0), (90.0, 20.0), (180.0, 8.0), (150.0, 35.0)] {
+            let sunset = against_land(0.0, bearing, up);
+            for under in [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] {
+                let now = against_land(under, bearing, up);
+                assert!(
+                    now > 0.75 * sunset,
+                    "{under} under, {bearing} round, {up} up: {now} against {sunset} at sunset"
+                );
+            }
+        }
+    }
+
     /// The numbers of a function's body in a source, in order.
     pub(in crate::sky) fn numbers(source: &str, function: &str) -> Vec<f32> {
         let start = source.find(&format!("fn {function}(")).unwrap();

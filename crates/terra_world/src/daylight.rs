@@ -306,8 +306,14 @@ fn keys() -> [(f32, Light); 7] {
             Light {
                 light: moon,
                 illuminance: 125.0,
-                horizon: v(0.32, 0.27, 0.42),
-                zenith: v(0.07, 0.09, 0.22),
+                // The blue hour's sky, nearly as bright on screen as the sunset's: the camera
+                // opens only a stop through the civil twilight and the land's light halves,
+                // so the land shows about as bright as at sunset, and the sky that lights it
+                // must too (D432). At (0.32, 0.27, 0.42) and (0.07, 0.09, 0.22) it fell six
+                // times as fast as the land, and the settlement film's sky 3 degrees under
+                // was sRGB 4-9 over a meadow of 39: night, not dusk (settlement r31).
+                horizon: v(0.7, 0.6, 0.8),
+                zenith: v(0.15, 0.23, 0.5),
                 glow: v(0.85, 0.45, 0.35),
                 shade: v(0.48, 0.52, 0.88),
                 ambient: 600.0,
@@ -448,6 +454,14 @@ pub(crate) fn dusk_colours(height: f32) -> (Vec3, Vec3, Vec3) {
         linear(light.zenith),
         linear(light.glow),
     )
+}
+
+/// How bright the sky is drawn with the sun so many degrees up, and how bright the land the
+/// sky lights shows on screen, in proportion: its light over the camera's exposure.
+#[cfg(test)]
+pub(crate) fn sky_and_land(height: f32) -> (f32, f32) {
+    let light = light_at(height);
+    (light.sky, light.ambient * libm::exp2f(-light.exposure))
 }
 
 /// The moon's light with the sun so many degrees below the horizon: none as it sets,
