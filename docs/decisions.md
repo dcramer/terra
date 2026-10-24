@@ -155,7 +155,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D402](decisions/D402.md) | Staged figures, told over the remote | Tech | Agent | Decided | A film's set piece on the ground is played by staged… |
 | [D405](decisions/D405.md) | A playable sword-and-shield prototype comes before the movement system's layers | Design | Developers | Decided | Before the layers of docs/movement.md are built… |
 | [D447](decisions/D447.md) | The fight's rules in a plain crate, its clips checked by tools that build nothing | Tech | Agent | Decided | The move runner's rules leave `terra_creatures::melee`… |
-| [D449](decisions/D449.md) | Out of stamina in a fight | Design | Agent | Open | What a body with too little stamina may still do with a… |
+| [D449](decisions/D449.md) | Out of stamina in a fight | Design | Developers | Decided | What a body with too little stamina may still do with a… |
 
 ## People and the tribe
 
