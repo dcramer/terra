@@ -28,7 +28,9 @@ use terra_gen::{hash, smoothstep};
 /// How many cells of the horns' lattice round a point's are looked at either way, and how far
 /// past a horn's site its neighbours reach, as a share of its reach.
 const SPAN: i32 = 2;
-const EXTENT: f32 = OUT.1 + TOP_REACH;
+const EXTENT: f32 = OUT.1 + TOP_REACH * WIDEN_MOST;
+/// As far, for the ridges, which do not widen.
+const RIDGES_EXTENT: f32 = OUT.1 + TOP_REACH;
 /// How many of the cells the massifs round a point are remembered by (`STANDING`) go across
 /// one of the horns' lattice, either way: the smaller the cell, the fewer massifs can reach
 /// into it, so the fewer each sample looks at (55 at the lake with the lattice's own cells).
@@ -86,6 +88,14 @@ const OVER_GROUND: f32 = 0.5;
 /// ridge turns from standing its whole gap over that ground to standing by its own profile:
 /// shallower ground keeps the gap, so the range's inner walls keep their sheer risers.
 const OVER_GROUND_FROM: (f32, f32) = (0.4, 0.9);
+/// The most a neighbour's foot and its ridge's sides widen as it grows over that ground, as a
+/// share of their own: the massif's reach (`EXTENT`, and which tops and ridges reach a cell)
+/// allows for it.
+const WIDEN_MOST: f32 = 2.0;
+/// Over what depth of ground under the horn's, as shares of its height, a neighbour's foot
+/// turns to widening with it: deeper than `OVER_GROUND_FROM`, so the walls that rise over
+/// shallower ground keep their sheer risers and benches.
+const WIDEN_FROM: (f32, f32) = (0.9, 1.4);
 /// Over how many metres either way a neighbour's or a ridge's foot eases into the ground
 /// under it, and its top under its most: a hard `max` left a crease where they met.
 const EASE_M: f32 = 40.0;
@@ -231,6 +241,8 @@ impl Range {
                     // sphere falls away under the site by at most extent^2 / length more. Farther
                     // from the whole cell than both together, it reaches none of it.
                     let up_down = across * 0.5 + extent * extent / length.max(1.0);
+                    let ridges_up_down = across * 0.5
+                        + (reach * RIDGES_EXTENT) * (reach * RIDGES_EXTENT) / length.max(1.0);
                     if site.distance(site.clamp(low, high)) > libm::hypotf(extent, up_down) {
                         continue;
                     }
@@ -255,13 +267,14 @@ impl Range {
                     for n in &mut tops {
                         let top = site + n.way * n.out;
                         n.top_near = !n.spur
-                            && top.distance(top.clamp(low, high)) < reach * TOP_REACH + up_down;
+                            && top.distance(top.clamp(low, high))
+                                < reach * TOP_REACH * WIDEN_MOST + up_down;
                         let from = site + n.way * (reach * RIDGE_FROM);
                         let along = (middle - from)
                             .dot(n.way)
                             .clamp(0.0, n.out - reach * RIDGE_FROM);
                         n.ridge_near = middle.distance(from + n.way * along) - half
-                            < reach * RIDGE_WIDE + up_down;
+                            < reach * RIDGE_WIDE + ridges_up_down;
                     }
                     tops.retain(|n| n.top_near || n.ridge_near);
                     if tops.is_empty() {
@@ -380,12 +393,17 @@ impl Massif {
         // horn's, rises over that ground in proportion, so it keeps its peaked profile where
         // the cap would flatten it into a block; a spur, the horn's own arête, keeps the
         // horn's ground (its crest stays the arête's, unnotched).
+        let under = self.base - ground;
+        let deep = smoothstep(OVER_GROUND_FROM.0, OVER_GROUND_FROM.1, under / self.tall);
+        let grows = OVER_GROUND * (under / self.tall).max(0.0);
+        // And its foot widens as it grows, so its slopes stay its own and it reaches the
+        // plain in a long foot, as a front range's spurs do, not a wall half its height.
+        let widen = 1.0
+            + (grows * smoothstep(WIDEN_FROM.0, WIDEN_FROM.1, under / self.tall))
+                .min(WIDEN_MOST - 1.0);
         let over = |rise: f32, own: bool| {
-            let under = self.base - ground;
             let over = if under > 0.0 && own {
-                let deep = smoothstep(OVER_GROUND_FROM.0, OVER_GROUND_FROM.1, under / self.tall);
-                let own = rise * (1.0 + OVER_GROUND * under / self.tall);
-                rise + under + (own - rise - under) * deep
+                rise + under + (rise * (1.0 + grows) - rise - under) * deep
             } else {
                 rise + under
             };
@@ -402,7 +420,8 @@ impl Massif {
         for n in &self.tops {
             // The neighbour: a lesser horn of three faces of its own.
             let reach = self.reach * TOP_REACH;
-            let off_top = flat - n.way * n.out;
+            let stretch = if n.spur { 1.0 } else { widen };
+            let off_top = (flat - n.way * n.out) / stretch;
             let from_top = off_top.length();
             if n.top_near
                 && from_top < reach
@@ -562,6 +581,54 @@ mod tests {
                         under <= level * grows * 1.02 + 1.0,
                         "a neighbour {:.0} m high falls {under:.0} m in 50 m over low ground, {level:.0} m over level ground",
                         n.top
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 10, "{checked} neighbours checked");
+    }
+
+    #[test]
+    fn a_neighbour_over_low_ground_meets_it_in_a_foot_as_gentle_as_its_own() {
+        // Mountains round 39: risen taller over ground far under its horn's on the same foot,
+        // the lake's right-hand neighbour ended 2.2 px a px from half its height down to the
+        // forest (Greg: "right side of that mountain ends a lil bit abruptly"), where a front
+        // range meets its plain in long spurs and fans (the Tatras' northern front). Out from
+        // each neighbour's top past its foot, over ground level with its horn's and over
+        // ground deep enough under it to widen it whole: as steep at its steepest, and reaching
+        // farther.
+        let range = Range::new(Mountains::START, Seed(1));
+        let (mut checked, step) = (0, 10.0);
+        for cell in lake_and_deep(&range, 40) {
+            for m in range.standing_round(cell, RADIUS) {
+                for n in m.tops.iter().filter(|n| !n.spur && n.top_near) {
+                    let walk = |ground: f32| {
+                        let lift = |s: f32| m.lift(n.way * (n.out + s), ground, 0.0).0;
+                        let (top, mut steepest, mut foot, mut s) = (lift(0.0), 0.0_f32, 0.0, 0.0);
+                        while s < m.reach * TOP_REACH * WIDEN_MOST * 1.1 {
+                            steepest = steepest.max(lift(s) - lift(s + 5.0 * step));
+                            if lift(s) > top * 0.1 {
+                                foot = s;
+                            }
+                            s += step;
+                        }
+                        (steepest, foot)
+                    };
+                    let (level, under) = (walk(m.base), walk(m.base - WIDEN_FROM.1 * m.tall));
+                    assert!(
+                        under.0 <= level.0 * 1.1 + 1.0,
+                        "a neighbour {:.0} m high falls {:.0} m in 50 m over low ground, {:.0} m over level ground",
+                        n.top,
+                        under.0,
+                        level.0
+                    );
+                    assert!(
+                        under.1 >= level.1 * 1.3,
+                        "a neighbour {:.0} m high reaches {:.0} m out over low ground, {:.0} m over level ground",
+                        n.top,
+                        under.1,
+                        level.1
                     );
                     checked += 1;
                 }
