@@ -548,6 +548,14 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         shape,
         hold: asked.hold.into_iter().collect(),
     };
+    // A scripted run stands still until it is in (`loading::hold`), so a shot frames on
+    // never finds it missing on a busy machine.
+    if let Some(mut loading) = world.get_resource_mut::<terra_world::loading::Loading>() {
+        loading.wait_for(&dressing.model);
+        if let Some(clips) = &dressing.clips {
+            loading.wait_for(clips);
+        }
+    }
     let mut entity = world.spawn((
         Name::new(format!("Staged: {}", asked.name)),
         Staged {

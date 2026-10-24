@@ -38,6 +38,9 @@ use bevy::{
 };
 use std::time::Duration;
 
+pub mod hold;
+pub use hold::Hold;
+
 /// Frames in a row with nothing coming before the screen is taken away.
 const QUIET_FRAMES: u32 = 10;
 /// How long the screen takes to fade once the game starts.
@@ -218,6 +221,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Shaders>()
         .init_resource::<Drawables>()
         .init_resource::<Progress>()
+        .init_resource::<Hold>()
         .configure_sets(
             Update,
             Track.run_if(in_state(Screen::Loading)).before(watch),
@@ -302,12 +306,17 @@ fn count_drawables(
 /// Files asked to be waited for. A file that failed is not coming; whatever asked for it
 /// says so.
 fn files(mut loading: ResMut<Loading>, assets: Res<AssetServer>, mut progress: ResMut<Progress>) {
+    let coming = asked_coming(&mut loading, &assets);
+    progress.report("Loading", coming, loading.asked - coming);
+}
+
+/// How many files asked to be waited for are still coming, those that came let go.
+fn asked_coming(loading: &mut Loading, assets: &AssetServer) -> usize {
     loading.files.retain(|&id| {
         !assets.is_loaded_with_dependencies(id)
             && !matches!(assets.load_state(id), LoadState::Failed(_))
     });
-    let coming = loading.files.len();
-    progress.report("Loading", coming, loading.asked - coming);
+    loading.files.len()
 }
 
 /// Models put in the world, until they have loaded and been placed.
@@ -317,14 +326,23 @@ fn models(
     models: Query<(&WorldAssetRoot, Option<&WorldInstance>)>,
     mut progress: ResMut<Progress>,
 ) {
-    let placing = models
+    let placing = placing(&assets, &spawner, &models);
+    progress.report("Loading", placing, models.iter().len() - placing);
+}
+
+/// How many models put in the world have not loaded or been placed yet.
+fn placing(
+    assets: &AssetServer,
+    spawner: &WorldInstanceSpawner,
+    models: &Query<(&WorldAssetRoot, Option<&WorldInstance>)>,
+) -> usize {
+    models
         .iter()
         .filter(|(model, instance)| {
             !matches!(assets.load_state(&model.0), LoadState::Failed(_))
                 && !instance.is_some_and(|instance| spawner.instance_is_ready(**instance))
         })
-        .count();
-    progress.report("Loading", placing, models.iter().len() - placing);
+        .count()
 }
 
 /// Pictures on screen, such as the icons in the bag, until they have loaded. One made by

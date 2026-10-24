@@ -676,14 +676,14 @@ fn roll(
     mut cine: ResMut<Cine>,
     options: Res<Options>,
     frame: Res<ScriptFrame>,
-    screen: Res<State<Screen>>,
+    (screen, hold): (Res<State<Screen>>, Res<crate::loading::Hold>),
     time: Res<Time>,
 ) {
     let lead = cine.shot.rolls_at as f32 / STEPS_A_SECOND;
     let seconds = if options.scripted() {
         frame.0 as f32 / STEPS_A_SECOND
     } else {
-        if counting(&options, &screen) {
+        if counting(&options, &screen, &hold) {
             cine.watched_s += time.delta_secs();
         }
         let length = lead + cine.shot.seconds + 1.0;

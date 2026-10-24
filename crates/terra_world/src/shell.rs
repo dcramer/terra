@@ -1015,7 +1015,7 @@ impl Plugin for ShellPlugin {
             )
             .add_systems(
                 PreUpdate,
-                (scripted_presses, move_the_vantage)
+                (loading::hold::watch, scripted_presses, move_the_vantage)
                     .chain()
                     .after(InputSystems),
             )
@@ -1057,7 +1057,7 @@ impl Plugin for ShellPlugin {
 /// would steer the run.
 pub(crate) fn scripted_presses(
     options: Res<Options>,
-    screen: Res<State<Screen>>,
+    (screen, hold): (Res<State<Screen>>, Res<loading::Hold>),
     mut frame: ResMut<ScriptFrame>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     mut mouse: ResMut<ButtonInput<MouseButton>>,
@@ -1075,8 +1075,9 @@ pub(crate) fn scripted_presses(
     if !options.scripted() {
         return;
     }
-    // A script's frames are counted from when loading is done, however long that took.
-    if !counting(&options, &screen) {
+    // A script's frames are counted from when loading is done, however long that took, and
+    // stand still while what it put in the world is still coming.
+    if !counting(&options, &screen, &hold) {
         return;
     }
     frame.0 += 1;
@@ -1169,10 +1170,11 @@ fn scripted_run(
     ),
     (drawn, mut drawn_counts): (Query<(&ViewVisibility, &Mesh3d)>, Local<Vec<[usize; 2]>>),
     mut exit: MessageWriter<AppExit>,
-    (mut times, render_waits, quality): (
+    (mut times, render_waits, quality, hold): (
         Local<Vec<String>>,
         Option<Res<RenderWaits>>,
         Option<Res<crate::quality::Quality>>,
+        Res<loading::Hold>,
     ),
 ) {
     if !options.scripted() {
@@ -1183,7 +1185,7 @@ fn scripted_run(
     let real_ms = last_frame
         .replace(now)
         .map(|last| (now - last).as_secs_f32() * 1000.0);
-    if !counting(&options, &screen) {
+    if !counting(&options, &screen, &hold) {
         return;
     }
     *frame += 1;
@@ -1579,10 +1581,11 @@ fn finish(exit: &mut MessageWriter<AppExit>, how: AppExit) {
     });
 }
 
-/// Whether a scripted run's frames are being counted: once loading is done, or while the
+/// Whether a scripted run's frames are being counted: once loading is done, unless held
+/// while what the script put in the world is still coming (`loading::hold`), or while the
 /// loading screen is held up to be looked at.
-pub fn counting(options: &Options, screen: &State<Screen>) -> bool {
-    *screen.get() == Screen::Playing || options.hold_loading
+pub fn counting(options: &Options, screen: &State<Screen>, hold: &loading::Hold) -> bool {
+    (*screen.get() == Screen::Playing && !hold.holds()) || options.hold_loading
 }
 
 /// Whether this is Linux under Windows.

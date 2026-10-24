@@ -60,13 +60,16 @@ pub fn capture(
     names: Query<&Name>,
     globals: Query<&GlobalTransform>,
     mut frames: Local<u32>,
-    screen: Res<State<terra_world::loading::Screen>>,
+    (screen, hold): (
+        Res<State<terra_world::loading::Screen>>,
+        Res<terra_world::loading::Hold>,
+    ),
     mut exit: MessageWriter<AppExit>,
 ) {
     let (Some(bench), Some(prefix)) = (bench, options.sheet.as_ref()) else {
         return;
     };
-    if !terra_world::shell::counting(&options, &screen) {
+    if !terra_world::shell::counting(&options, &screen, &hold) {
         return;
     }
     *frames += 1;
