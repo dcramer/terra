@@ -12,11 +12,12 @@
     // Into dusk: the sun from about 24 degrees up, low in the west behind the camera's left,
     // to about 3 degrees under the horizon at the end, so the last seconds are the afterglow,
     // the land in the sky's light and the homes' windows lit (settlement r31, after the
-    // developer: "we can try going into dusk too"). The hills to the west shade the town
+    // developer: "we can try going into dusk too"); to about 2.3 degrees under since round 32,
+    // whose blue-hour sky stays as bright as the land it lights (D432). The hills to the west shade the town
     // from about 17.3 h, 7 s in; the sun sets about 17 s in; the windows' glow is full from
     // a 6-degree sun, about 13 s in (town/windows.rs). Ending at 17.18 h, the sun 15 degrees
     // up, the film never reached dusk and the windows read only faintly (settlement r30).
-    hours: (16.4, 18.78),
+    hours: (16.4, 18.7),
     claim: 0.0,
     first: 0.3,
     last: 11.0,

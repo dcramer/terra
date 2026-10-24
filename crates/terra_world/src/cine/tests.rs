@@ -189,8 +189,8 @@ fn an_establishing_arc_eased_in_backs_away_and_flattens_smoothly() {
             {"t": 4, "at": [-26, 21, 10], "look": [1.5, -0.2, -2]},
             {"t": 8, "at": [-42, 34.5, 38], "look": [5, -0.5, -4]},
             {"t": 12, "at": [-48, 42.5, 74], "look": [8, 1.5, -8]},
-            {"t": 16, "at": [-56, 36.5, 104], "look": [6, 14.5, -14]},
-            {"t": 20, "at": [-59.8, 20.5, 121.9], "look": [-6.3, 36.2, -17.4]}]}"#,
+            {"t": 16, "at": [-56, 36.5, 104], "look": [-32.9, 14.5, -27.3]},
+            {"t": 20, "at": [-59.8, 20.5, 121.9], "look": [-108.4, 36.2, -19.2]}]}"#,
     );
     let subject = start.translation;
     let ahead = |f: Framing| (f.target - f.eye).normalize();
