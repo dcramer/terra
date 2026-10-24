@@ -475,7 +475,7 @@ Checks, developer tools, languages and the repository.
 | [D256](decisions/D256.md) | Dusk's shade lit by the sky above | Tech | Agent | Decided | The sky light (D190) takes its hue half from the drawn… |
 | [D259](decisions/D259.md) | Clearing away worktrees | Tech | Agent | Decided | `cargo xtask worktrees` lists every worktree and its… |
 | [D308](decisions/D308.md) | QA films | Tech | Agent | Decided | `cargo xtask qa <scenario> --set <kit>\|mixes\|all` films… |
-| [D319](decisions/D319.md) | Benchmarks have the GPU to themselves | Tech | Developers | Decided | Every unattended GPU run an agent starts… |
+| [D319](decisions/D319.md) | Benchmarks have the GPU to themselves | Tech | Developers | Decided | Only a benchmark needs the GPU alone. |
 | [D326](decisions/D326.md) | Checks for places | Tech | Agent | Decided | Every place a demo makes is checked by… |
 | [D357](decisions/D357.md) | Trailer films | Tech | Agent | Decided | The trailer is one run through each place… |
 | [D375](decisions/D375.md) | The agents' routine | Tech | Developers | Decided | Every agent and lead session follows the routine in… |

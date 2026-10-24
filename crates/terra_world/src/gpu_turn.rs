@@ -14,7 +14,7 @@
 //! one is when its script is wrapped in `flock`, has it already: on Linux it finds the lock held
 //! by one of its own forebears (`/proc/locks`) and goes on, where it once waited on itself,
 //! and takes no slot either. That is how a run under `cargo xtask gpu` (tools/gpu) starts: the
-//! scheduler admits it by the GPU's free memory and holds the lock for it, shared or alone.
+//! wrapper holds the lock for it, shared or alone, and a waiting benchmark holds back new runs.
 
 use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
@@ -53,8 +53,8 @@ pub fn take(alone: bool) {
     else {
         return;
     };
-    // A turn a forebear holds (the GPU scheduler's, or a script's `flock`) was admitted by
-    // whoever took it, so neither the lock nor a slot is waited for.
+    // A turn a forebear holds (the GPU wrapper's, or a script's `flock`) was taken by whoever
+    // started this run, so neither the lock nor a slot is waited for.
     let above = held_above(&file);
     if !alone && !above {
         take_slot(&path);
