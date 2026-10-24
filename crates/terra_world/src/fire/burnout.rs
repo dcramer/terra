@@ -13,7 +13,7 @@ const SPREAD: f32 = 1.1;
 /// The soot's density, a share of the burning gas's.
 const SOOT: f32 = 0.04;
 /// The soot's albedo, fresh and aged.
-const ALBEDO: f32 = 0.05;
+const ALBEDO: f32 = 0.03;
 const AGED_ALBEDO: f32 = 0.1;
 
 use terra_gen::smoothstep;

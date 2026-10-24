@@ -897,6 +897,9 @@ fn ball_scale(b: Breath) -> vec3<f32> {
 // (castle fall r24's probe, 9-21 s).
 const BALL_LOBES: f32 = 1.2;
 const BALL_RIM: vec2<f32> = vec2(0.45, 1.15);
+// How far its lumps push its cut at the face, a share of its radius, mostly out past the face
+// (behind the stone the depth hides it), so the hot contact in front is not holed.
+const BALL_CUT_TORN: f32 = 0.8;
 // The stream's gas at its skin, a share of its core's; how much hotter the ball is along the
 // stream's line into it (the ramp's heat), and how much thinner its gas there.
 const JET_SKIN_DENSITY: f32 = 0.45;
@@ -980,6 +983,8 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     var ball = 0.0;
     var hot_b = 0.0;
     var soot_b = 0.0;
+    // The ball's lumps, kept for its cut at the face (below).
+    var torn = 0.0;
     // How far in front of the face it strikes (metres; large when it strikes nothing).
     var plane = 1.0e5;
     if b.face > 0.0 {
@@ -997,6 +1002,7 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
             nb = noise3(pb * 7.0 + wb * 2.4) * 0.6 + noise3(pb * 17.0 + wb * 3.0) * 0.4;
         }
         let lumps = fbm3(pb * 2.2 + wb * 1.6);
+        torn = lumps - 0.5;
         let d = length(rel) / rb;
         // Lobed and thinning over its outer half, as a cloud of gas is (a density falloff with
         // a displaced edge, Fong et al. 2017), so a ray grazing it is covered by degrees.
@@ -1052,7 +1058,11 @@ fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     if b.face > 0.0 {
         let keep = smoothstep(-0.1, 0.35, plane);
         stream *= keep;
-        ball *= mix(keep, 1.0, saturate(b.since_off / 1.0));
+        // The ball's cut by its own lumps, so where the face's plane runs on past the stone
+        // (over a wall's top, past its corner) it ends in torn billows: cut along the plane,
+        // its soot cap stood with a straight edge in the air (castle fall r30, 19.0 s).
+        let keep_b = smoothstep(-0.1, 0.35, plane + (torn + 0.2) * rb * BALL_CUT_TORN);
+        ball *= mix(keep_b, 1.0, saturate(b.since_off / 1.0));
     }
     let dense = stream + ball;
     if dense < 1.0e-3 {
@@ -1127,8 +1137,19 @@ const BEHIND: f32 = 0.5;
 // At 0.12, aging to 0.2, the sunlit cap and the smoke after the stop read light grey against
 // the soot round them (castle fall r27's review), whose albedo is 0.03 to 0.1, warm brown
 // (`fire_smoke.wesl`): the same soot, so the same albedo and the same brown (`SOOT_TINT`).
-const SOOT_ALBEDO: f32 = 0.05;
-const SOOT_TINT: vec3<f32> = vec3<f32>(1.15, 0.97, 0.82);
+// At 0.05 and a near-grey tint, the cap while the stream fed it read as a grey dome 4-6 times
+// the cards' brightness (castle fall r29's review): now the cards' young soot exactly,
+// srgb-linear (0.03, 0.019, 0.012), aging to about their old (0.1, 0.063, 0.04).
+const SOOT_ALBEDO: f32 = 0.03;
+const SOOT_TINT: vec3<f32> = vec3<f32>(1.0, 0.63, 0.4);
+// Layered as a pyro plume is (Nubis, Schneider and Vos, "The Real-time Volumetric
+// Cloudscapes of Horizon Zero Dawn", SIGGRAPH 2015: ambient light by height in the cloud):
+// while the stream feeds it, the sky's fill on its soot from this share at the ball's foot
+// to all of it a radius over its middle, so it is dark and dense by the fire, lit on top.
+const SOOT_SKY_LOW: f32 = 0.2;
+// And its albedo up to this many times higher there, soot older and thinner as it climbs
+// (the cards' age their brown so as they rise): one albedo throughout read as one flat ball.
+const SOOT_HIGH: f32 = 1.3;
 // The sky's fill on the soot, a share of the sun's, unshadowed: an overcast underside.
 const SOOT_SKY: f32 = 0.32;
 // Once off, its smoke ages grey over a second: diluted soot scatters more than a fuel-rich
@@ -1298,13 +1319,23 @@ fn breath(in: VertexOutput) -> vec4<f32> {
                     }
                 }
                 shade_due = !shade_due;
+                let rise = smoothstep(-0.6, 1.0, dot(l - glow_mid, b.up) / glow_rb);
+                if b.since_off <= 0.0 {
+                    skied = mix(SOOT_SKY_LOW, 1.0, rise);
+                }
+                let aged = mix(1.0, SOOT_HIGH, rise * (1.0 - saturate(b.since_off / 1.5)));
                 // The sky's fill is the sky's grey-blue, not the sun's colour: lit by a dusk
                 // sun's red, the smoke after the stop read brick red (vol5's review).
-                lit += through * a * gas.z * (sun * shaded + dot(sun, vec3(0.2126, 0.7152, 0.0722)) * SOOT_SKY * skied * vec3(0.85, 0.93, 1.0));
+                lit += through * a * gas.z * aged * (sun * shaded + dot(sun, vec3(0.2126, 0.7152, 0.0722)) * SOOT_SKY * skied * vec3(0.85, 0.93, 1.0));
             }
             share += through * a * (1.0 - gas.z);
             glow += through * a * (1.0 - gas.z) * dot(flame, vec3(0.2126, 0.7152, 0.0722));
-            if through >= 0.5 && through * (1.0 - a) < 0.5 {
+            // Its depth where its flame first hides half of what is behind it, not its soot: at
+            // the soot's, the smoke cards behind failed the depth test inside that contour and
+            // not outside it, so the smoke there stood out as a lighter patch with a hard,
+            // stepped edge (castle fall r29's review, 9.3 s and 20.3 s). The fog this keeps
+            // off is the flame's (breath r31); over smoke it falls as over the cards.
+            if share >= 0.5 && share - through * a * (1.0 - gas.z) < 0.5 {
                 let at = view.clip_from_world * vec4(eye + dir * s, 1.0);
                 BREATH_DEPTH = at.z / at.w;
             }
