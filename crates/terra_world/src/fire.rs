@@ -351,6 +351,36 @@ const JET_MASK: usize = 7;
 const JET_EMBERS: usize = 8;
 const BREATH_EMBER_CARDS: usize = 160;
 
+/// Where a fire material's draw is sorted among the transparent ones (StandardMaterial's
+/// `depth_bias`: the higher, the later; every card mesh stands at the origin, so this alone
+/// orders them). Drawn after the smoke, which is sorted with it by the same middle: smoke
+/// drawn over its own flames greyed and dimmed their yellow hearts to olive (castle film r5
+/// and r6). A fire's flames show through the smoke over it. A breath is drawn after the
+/// flames too, as it is opaque and stands nearer the eye than the walls it strikes: tied with
+/// them, a burning tower's flame cards behind its fireball were drawn over it, a lighter patch
+/// with their straight edges, and smoke behind it browned it (castle film r11). Its sprites go
+/// first, its hot rod last, so the rod shows through their soot. A mask after what it masks:
+/// tied with the hearth's flames, the hearths' mask was drawn first, and a flame card blended
+/// over it took the share back as it covered (`ONE_MINUS_SRC_ALPHA`), so where the campfire
+/// burned hottest it went through the camera's curve as the world and read pink-white (matte
+/// 0 under its brightest streaks, campfire halo round).
+fn drawn_bias(material: usize) -> f32 {
+    let kind = drawn_kind(material);
+    if material == JET_MASK {
+        3.0
+    } else if material == JET_EMBERS {
+        2.75
+    } else if kind == 2.0 {
+        2.5
+    } else if kind == 5.0 {
+        2.0
+    } else if material == MASK {
+        1.5
+    } else {
+        1.0
+    }
+}
+
 /// The kind of card a fire material's shader draws: the mask draws the flames' (0).
 fn drawn_kind(material: usize) -> f32 {
     if material == JET_MASK {
@@ -685,25 +715,7 @@ fn setup(
                 // colour ramp"): `ONE, ONE_MINUS_SRC_ALPHA`.
                 alpha_mode: AlphaMode::Premultiplied,
                 unlit: true,
-                // Drawn after the smoke, which is sorted with it by the same middle: smoke
-                // drawn over its own flames greyed and dimmed their yellow hearts to olive
-                // (castle film r5 and r6). A fire's flames show through the smoke over it.
-                // A breath is drawn after the flames too, as it is opaque and stands nearer
-                // the eye than the walls it strikes: tied with them, a burning tower's flame
-                // cards behind its fireball were drawn over it, a lighter patch with their
-                // straight edges, and smoke behind it browned it (castle film r11). Its
-                // sprites go first, its hot rod last, so the rod shows through their soot.
-                depth_bias: if i == JET_MASK {
-                    3.0
-                } else if i == JET_EMBERS {
-                    2.75
-                } else if kind == 2.0 {
-                    2.5
-                } else if kind == 5.0 {
-                    2.0
-                } else {
-                    1.0
-                },
+                depth_bias: drawn_bias(i),
                 // A breath's hull is drawn from its far side, so it shows with the eye in it;
                 // its sprites, turned any way, from both.
                 cull_mode: if kind == 2.0 {

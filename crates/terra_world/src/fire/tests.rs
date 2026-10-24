@@ -81,3 +81,19 @@ fn a_kindled_fire_burns_where_it_stands_while_it_is_there() {
     world.run_system_once(hearth::keep).unwrap();
     assert_eq!(world.resource::<Blazes>().all().count(), 0);
 }
+
+#[test]
+fn each_mask_is_drawn_after_the_flames_it_masks() {
+    // A flame blended over its mask takes the share back as it covers, so the hearths' mask
+    // comes after every flame and ember card, and the jets' after their hulls.
+    for colour in [0, 1, 3, 4] {
+        assert_eq!(drawn_kind(colour), colour as f32);
+        assert!(
+            drawn_bias(MASK) > drawn_bias(colour),
+            "hearths' mask before material {colour}"
+        );
+    }
+    assert!(drawn_bias(JET_MASK) > drawn_bias(2));
+    // And before the breaths, which stand over the flames.
+    assert!(drawn_bias(MASK) < drawn_bias(5));
+}
