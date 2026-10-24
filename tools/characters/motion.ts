@@ -36,9 +36,11 @@ const HERE = join(ROOT, "tools", "characters");
 const OUT = join(HERE, "out", "motion");
 const GAME_LIST = join(ROOT, "art", "animation", "made.json");
 const BLENDER = join(ROOT, "tools", "blender", "run.sh");
-const KIMODO = process.env.KIMODO_HOME ?? join(homedir(), ".cache", "terra-kimodo");
+export const KIMODO = process.env.KIMODO_HOME ?? join(homedir(), ".cache", "terra-kimodo");
 // Kimodo's latest model (its CHANGELOG, 2026-10-15: trained on corrected splits; D450).
-const MODEL = "Kimodo-SOMA-RP-v1.2";
+export const MODEL = "Kimodo-SOMA-RP-v1.2";
+/** What kimodo_gen runs with: the text encoder on the processor, offline. */
+export const KIMODO_ENV = { TEXT_ENCODERS_DIR: join(KIMODO, "text_encoders"), TEXT_ENCODER_DEVICE: "cpu", HF_HUB_OFFLINE: "1", LOCAL_CACHE: "True" };
 const FPS = 30;
 
 type Entry = {
@@ -73,6 +75,11 @@ export function constraints(entry: Entry) {
   return entry.once ? [] : path(entry.speed, entry.seconds, entry.way ?? 0);
 }
 
+/** An entry with take `n` kept, and as many samples as make it again. */
+export function kept<E extends { take?: number; samples?: number }>(entry: E, n: number): E {
+  return { ...entry, take: n, ...(n >= 3 || entry.samples ? { samples: Math.max(entry.samples ?? 3, n + 1) } : {}) };
+}
+
 function run(command: string, args: string[], env: Record<string, string> = {}) {
   const result = spawnSync(command, args, { stdio: ["ignore", "pipe", "inherit"], encoding: "utf8", env: { ...process.env, ...env } });
   if (result.status !== 0) throw new Error(`${command} failed`);
@@ -104,7 +111,7 @@ function main() {
     if (!existsSync(take(n))) throw new Error(`no take ${n}: make the takes first`);
     mkdirSync(MADE, { recursive: true });
     copyFileSync(take(n), join(MADE, `${clip}.bvh`));
-    list[clip] = { ...entry, take: n, ...(n >= 3 || entry.samples ? { samples: Math.max(entry.samples ?? 3, n + 1) } : {}) };
+    list[clip] = kept(entry, n);
     writeFileSync(LIST, JSON.stringify(list, null, 2) + "\n");
     console.log(`${clip}: take ${n} kept as ${relative(ROOT, join(MADE, `${clip}.bvh`))}; ` +
       (values.list ? `made_clips.py OUT.glb --list=${named} puts the set into a copy of the mannequin` : "tools/characters/build_bodies.sh puts it into the game"));
@@ -121,7 +128,7 @@ function main() {
     run(join(KIMODO, "venv", "bin", "kimodo_gen"), [
       entry.prompt, "--model", MODEL, "--duration", String(entry.seconds), "--num_samples", samples,
       ...(hold.length ? ["--constraints", held] : []), "--output", join(dir, clip), "--bvh", "--bvh_standard_tpose", "--seed", String(entry.seed),
-    ], { TEXT_ENCODERS_DIR: join(KIMODO, "text_encoders"), TEXT_ENCODER_DEVICE: "cpu", HF_HUB_OFFLINE: "1", LOCAL_CACHE: "True" });
+    ], KIMODO_ENV);
   }
 
   // Each take on a copy of the mannequin, measured against the library's clip, and checked as

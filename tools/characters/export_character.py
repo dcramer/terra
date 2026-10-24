@@ -34,6 +34,9 @@ import twist
 # --clips=FILE: the clips from another mannequin file cut by clips.py, such as a set of the
 # libraries' hardest clips to check a body through; by default the game's.
 FIGURE = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--clips=")), look.FIGURE)
+# --list=FILE: a set's list (art/animation/sets/fight.json) whose clips, and the takes of them
+# tried as X#N, are all carried by aim (D450); narrowed only where an entry has a "step".
+LISTED = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--list=")), None)
 src, dst = look.args()[:2]
 
 look.reset()
@@ -197,6 +200,9 @@ actions = [a for a in bpy.data.actions]
 # not carry into them (aim.py).
 with open(os.path.join(look.ART, "animation", "made.json")) as f:
     steps = {name: entry["step"] for name, entry in json.load(f).items() if "step" in entry}
+if LISTED:
+    with open(LISTED) as f:
+        steps.update({name: entry.get("step") for name, entry in json.load(f).items()})
 aim.bake(arm, actions, mannequin, steps)
 # The limbs' roll moved to the hands and feet and spread over the twist bones (twist.py).
 twist.bake(arm, actions)

@@ -66,6 +66,8 @@ The checker compares the rig with our skeleton and with the hand-rigged mannequi
 
 The clips come from Quaternius's Universal Animation Library 1 and 2 (current versions, bought; `art/README.md`), on a skeleton with Unreal's bone names that Tripo's rig shares. `art/animation/clips.txt` lists the ones the game plays; `clips.py` cuts them into `assets/models/character/mannequin.glb`. To add a clip, add its name there, rerun `clips.py`, then `clip_check.py`, then `build_bodies.sh`.
 
+A combat move's clip is made from its spec in its set's list by one command (D450): `node tools/characters/clip.ts CLIP` (keys, Kimodo takes, aimed export, phases, `moves.ts`, the take kept, into a scratch set; `--into SET.ron` for the game's).
+
 Those clips never roll the upper arm or thigh: an arm's whole roll is in the forearm (up to 164 degrees) and a leg's in the shin, and plain skinning wrings the skin shut where that roll happens. Engines fix it with twist bones, and so do we (`twist.py`, research/skin-deformation.md): as each clip is sampled for a body, the forearm's and shin's roll moves to the hand and foot, which end up exactly where they were, and the twist bone halfway along takes half the roll. The game skins weight-blended: dual quaternions, which keep a limb's volume across what is left and a knee's through a deep bend, but the linear blend round the hips, where dual quaternions bulge (`crates/terra_walker/src/skinning.rs`; the rule is data, `assets/models/character/skinning.json`). Every tool that poses a body skins it the same way (`look.skin_as_game`). `clip_check.py` fails a clip that rolls the upper arm or thigh, or leaves too big a step for the skin.
 
 ### When a limb twists or squeezes

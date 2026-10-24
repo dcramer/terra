@@ -82,5 +82,82 @@
     "once": true,
     "fist": 1,
     "take": 0
+  },
+  "Keyed_Backhand": {
+    "prompt": "A swordsman holding a sword in the right hand and a shield on the left arm swings his right arm across from his left shoulder out to the right in a flat, fast cut, then returns to his guard.",
+    "speed": 0,
+    "seconds": 1.6,
+    "seed": 2,
+    "samples": 3,
+    "once": true,
+    "fist": 1,
+    "guard": {
+      "clip": "Fight_Guard",
+      "frame": 173
+    },
+    "hand": [
+      {
+        "at": 0.45,
+        "grip": [
+          -0.2,
+          0.22,
+          0.45
+        ],
+        "blade": [
+          -0.8,
+          -0.3,
+          0.5
+        ],
+        "back": [
+          -0.2,
+          1,
+          0
+        ],
+        "yaw": 30
+      },
+      {
+        "at": 0.75,
+        "grip": [
+          0.05,
+          0.45,
+          0.25
+        ],
+        "blade": [
+          0.3,
+          0.95,
+          0.1
+        ],
+        "back": [
+          0.3,
+          0,
+          1
+        ],
+        "yaw": 0
+      },
+      {
+        "at": 1,
+        "grip": [
+          0.42,
+          0.3,
+          0.25
+        ],
+        "blade": [
+          0.9,
+          0.25,
+          -0.1
+        ],
+        "back": [
+          0,
+          -0.3,
+          1
+        ],
+        "yaw": -25
+      }
+    ],
+    "blow": {
+      "move": "backhand",
+      "sweep": "left-to-right",
+      "contact": 0
+    }
   }
 }

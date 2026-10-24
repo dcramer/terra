@@ -21,10 +21,11 @@
 //   node tools/characters/moves.ts
 //   node tools/characters/moves.ts [--set assets/data/moves/sword_and_shield.ron] [--fps 15] [--verbose]
 //   node tools/characters/moves.ts --spec art/animation/sets/fight.json   # the clips' specs (the default)
+//   node tools/characters/moves.ts --json rows.json                       # the rows also as JSON
 //
 // Node 22.18 or later; no dependencies.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, matrix, mmul, place, posed, qinv, rot, sub, turn } from "./glb.ts";
@@ -48,6 +49,9 @@ const { values: opt } = parseArgs({
     // Only these body templates, comma-separated; all of them otherwise.
     template: { type: "string", default: "" },
     verbose: { type: "boolean", default: false },
+    // The rows also as JSON, for a caller (clip.ts): [{move, clip, bad, gaps}], gaps the
+    // metres from the guard at the move's start and end, a blow's only.
+    json: { type: "string" },
   },
 });
 
@@ -348,9 +352,12 @@ function guard(move: Move) {
 
 const cm = (x: number) => `${x.toFixed(1)} cm`;
 const failures: string[] = [];
-const row = (what: string, parts: string[], bad: string[]) => {
+type Row = { move?: string; clip: string; bad: string[]; gaps?: [number, number] };
+const rows: Row[] = [];
+const row = (what: string, parts: string[], bad: string[], json: Omit<Row, "bad">) => {
   console.log(`${bad.length ? "✗" : "✓"} ${what}: ${parts.join("; ")}`);
   for (const b of bad) failures.push(`${what}: ${b}`);
+  rows.push({ ...json, bad });
 };
 const specs: Record<string, Blow> = Object.fromEntries(
   Object.entries(existsSync(opt.spec!) ? (JSON.parse(readFileSync(opt.spec!, "utf8")) as Record<string, { blow?: Blow }>) : {})
@@ -365,6 +372,7 @@ for (const move of moves) {
   const clip = clipOf(move.clip);
   const parts: string[] = [];
   const bad: string[] = [];
+  let gaps: [number, number] | undefined;
   const pen = penetration(clip, move.from, move.done);
   parts.push(`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`);
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
@@ -378,6 +386,7 @@ for (const move of moves) {
     const startGap = gap(marks(clip, move.from), guardMarks);
     const endGap = gap(marks(clip, move.done), guardMarks);
     parts.push(`from guard ${startGap.toFixed(2)} m, back to guard ${endGap.toFixed(2)} m`);
+    gaps = [startGap, endGap];
     if (startGap > CHAIN_M) bad.push(`starts ${startGap.toFixed(2)} m from the guard pose`);
     if (endGap > CHAIN_M) bad.push(`ends ${endGap.toFixed(2)} m from the guard pose`);
   }
@@ -395,7 +404,7 @@ for (const move of moves) {
     parts.push(`shield face ${g.off.toFixed(0)}° off ahead, ${g.ahead.toFixed(2)} m ahead, ${g.aboveHead.toFixed(2)} m above the head`);
     if (g.off > FACE_DEG) bad.push(`shield face ${g.off.toFixed(0)}° off ahead (bar ${FACE_DEG}°)`);
   }
-  row(`${move.name} (${move.clip})`, parts, bad);
+  row(`${move.name} (${move.clip})`, parts, bad, { move: move.name, clip: move.clip, gaps });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
 for (const name of opt.also!.split(",").filter(Boolean)) {
@@ -404,9 +413,10 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
   const bad: string[] = [];
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
-  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`], bad);
+  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`], bad, { clip: name });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
+if (opt.json) writeFileSync(opt.json, JSON.stringify(rows, null, 1) + "\n");
 if (failures.length) {
   console.log(`✗ ${failures.length} over the bars:`);
   for (const f of failures) console.log(`  ${f}`);

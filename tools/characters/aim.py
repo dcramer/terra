@@ -157,19 +157,24 @@ def narrow(arm, action, step):
 
 
 def bake(arm, actions, mannequin, steps):
-    """Aims and narrows each of `actions` named in `steps` (clip: step width in metres) on
-    `arm`, against `mannequin`'s rest segments."""
+    """Aims and narrows each of `actions` named in `steps` (clip: step width in metres, or None
+    to aim it only) on `arm`, against `mannequin`'s rest segments. A take tried as `X#N` (the
+    clip step, clip.ts) is X's."""
     q = turns(arm, mannequin)
     ad = arm.animation_data or arm.animation_data_create()
     keep = (ad.action, getattr(ad, "action_slot", None))
     for action in actions:
         name = action.name.split(".")[0]
-        if name not in steps:
+        base = name.split("#")[0]
+        if base not in steps:
             continue
         aim(arm, action, q)
-        before, after, angle = narrow(arm, action, steps[name])
-        print(f"AIM {name}: limbs aimed ({', '.join(f'{n} {math.degrees(q[n].angle):.1f}' for n in sorted(q) if n.endswith('_l'))} deg, left);"
-              f" feet down {before * 100:.1f} cm apart, now {after * 100:.1f} ({angle:.1f} deg in at the hip)")
+        aimed = f"AIM {name}: limbs aimed ({', '.join(f'{n} {math.degrees(q[n].angle):.1f}' for n in sorted(q) if n.endswith('_l'))} deg, left)"
+        if steps[base] is None:
+            print(aimed)
+            continue
+        before, after, angle = narrow(arm, action, steps[base])
+        print(f"{aimed}; feet down {before * 100:.1f} cm apart, now {after * 100:.1f} ({angle:.1f} deg in at the hip)")
     ad.action, slot = keep
     if slot is not None:
         ad.action_slot = slot
