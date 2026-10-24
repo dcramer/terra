@@ -197,12 +197,17 @@ def zone_weights(co, weights, legs, trunk, knots, near=0.25, far=0.6):
     they lose goes to the trunk chain (`trunk`, rump to chest) by linear hats along it, at the
     knots' y (each trunk bone's head, then the last one's tail).
     co: (n, 3) vertices; weights: {vertex: {bone: w}}, changed in place;
-    legs: [(bones, polyline points, upper bone length)]. Returns how many vertices gave weight."""
+    legs: [(bones, polyline points, upper bone length[, wrist height])]: skin below the leg's
+    wrist or hock is the leg's whatever its distance (a broad paw or a hare's long foot reaches
+    past `far` from its bones), eased over `near` above it. Returns how many vertices gave weight."""
     co = np.asarray(co, float)
     owner = list(trunk) + [trunk[-1]]
     loss = np.zeros(len(co))
-    for leg_bones, points, upper in legs:
+    for leg in legs:
+        leg_bones, points, upper = leg[:3]
         keep = keep_near(polyline_distance(co, np.asarray(points, float)), near * upper, far * upper)
+        if len(leg) > 3:
+            keep = np.maximum(keep, 1.0 - smooth(leg[3], leg[3] + near * upper, co[:, 2]))
         for v in np.nonzero(keep < 1.0)[0]:
             ws = weights.get(int(v))
             if not ws:

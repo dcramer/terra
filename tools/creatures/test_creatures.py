@@ -119,6 +119,10 @@ def test_zones_give_the_belly_to_the_trunk():
     assert abs(weights[0]["Spine"] - 0.8) < 1e-9, weights[0]
     assert weights[1] == {"Thigh.L": 1.0}
     assert 0.0 < weights[2]["Thigh.L"] < 1.0 and abs(sum(weights[2].values()) - 1.0) < 1e-9
+    # A broad paw's edge, far from the leg's bones but below its wrist (z 0.25), stays the leg's.
+    paw = {0: {"Thigh.L": 1.0}}
+    assert ms.zone_weights([(0.0, 0.2, 0.0)], paw, [legs[0] + (0.25,)], ["Hips", "Spine"], [0.0, 0.5, 1.0]) == 0
+    assert paw[0] == {"Thigh.L": 1.0}
 
 
 def test_twist_counts_turn_about_the_bone_not_bend():

@@ -33,6 +33,9 @@ from mathutils import Matrix, Quaternion, Vector
 
 import look
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import measures  # noqa: E402
+
 # Sampled 60 times a second, as the game draws: a squirrel bounds 8 strides a second.
 FPS = 60
 argv = sys.argv[sys.argv.index("--") + 1:]
@@ -301,6 +304,41 @@ def haunch(weights, spec):
     print("haunch: rump skin given back to the pelvis on", moved, "vertices, weights spread on", spread)
 
 
+def zoned(weights, spec):
+    """The belly and flanks between the legs given to the trunk (`measures.zone_weights`, D441):
+    each leg is its bones from the first sided one under the trunk down, its polyline their
+    joints; the trunk is the unsided chain from the root to the chest. `zones` in creature.json
+    sets `near` and `far`, fractions of the leg's upper bone length."""
+    def chain_of(root):
+        out = [root]
+        for b, (parent, _, _) in BONES.items():
+            if parent in out and b.endswith((".L", ".R")):
+                out.append(b)
+        return out
+    trunk = [next(b for b, (p, _, _) in BONES.items() if p is None)]
+    while True:
+        nxt = [b for b, (p, _, _) in BONES.items() if p == trunk[-1] and not b.endswith((".L", ".R"))
+               and not b.startswith(("Neck", "Head", "Tail", "Jaw"))]
+        if not nxt:
+            break
+        trunk.append(nxt[0])
+    knots = [ours(BONES[b][1]).y for b in trunk] + [ours(BONES[trunk[-1]][2]).y]
+    legs = []
+    for leg, chain in LEGS.items():
+        top = chain[0]
+        while BONES[top][0] and BONES[top][0].endswith((".L", ".R")):
+            top = BONES[top][0]
+        joints = [top] + [b for b in chain if b != top]
+        points = [ours(BONES[b][1]) for b in joints] + [ours(BONES[joints[-1]][2])]
+        legs.append((chain_of(top), [tuple(p) for p in points], (ours(BONES[chain[0]][2]) - ours(BONES[chain[0]][1])).length,
+                     ours(BONES[chain[2]][1]).z))
+    co = [tuple(v.co) for v in mesh.data.vertices]
+    moved = measures.zone_weights(co, weights, legs, trunk, knots, spec.get("near", 0.25), spec.get("far", 0.6))
+    print("zones: leg weight given to the trunk", trunk, "on", moved, "vertices")
+
+
+if SPEC["plan"] == "quadruped" and SPEC.get("zones", {}) is not False:
+    zoned(weights, SPEC.get("zones", {}))
 if "haunch" in SPEC:
     haunch(weights, SPEC["haunch"])
 mesh.vertex_groups.clear()
@@ -602,8 +640,10 @@ def idle_turn(t, seconds, c):
     for e in EARS:
         flick = math.exp(-(((t % 2.3) - 1.1) / 0.06) ** 2) * 18 if e.endswith(".L") else math.exp(-(((t % 3.1) - 2.0) / 0.06) ** 2) * 18
         turn[e] = q(X, -flick)
+    # The tail sways about every 1.6 s, a whole number of times a clip, so the loop closes.
+    sway = seconds / max(1, round(seconds / 1.6))
     for i, b in enumerate(TAILS):
-        turn[b] = q(Z, c.get("tail", 3) * math.sin(2 * math.pi * (t / 1.6 - i * 0.12)))
+        turn[b] = q(Z, c.get("tail", 3) * math.sin(2 * math.pi * (t / sway - i * 0.12)))
     return turn
 
 
@@ -920,8 +960,9 @@ def clip_fly(name, c):
     beats = c.get("beats", 1)
     for f in range(1, frames + 2):
         t = (f - 1) / frames
-        beat_t = min(t / c.get("flapping", 1.0), 1.0)
-        flapping = t < c.get("flapping", 1.0)
+        # t = 1 is the next beat's t = 0: keyed as that, the loop closes on a beating wing.
+        beat_t = min((t % 1.0) / c.get("flapping", 1.0), 1.0)
+        flapping = t % 1.0 < c.get("flapping", 1.0)
         turn = {ORDER[0]: q(X, c.get("body", 0))}
         for s in (".L", ".R"):
             sgn = side_of(s)

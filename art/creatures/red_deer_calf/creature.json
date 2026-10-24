@@ -2,6 +2,7 @@
   "subject": "red deer calf of four months in autumn: small, long-legged, big head and ears, soft red-brown coat with a few faint pale spots left, pale buff rump patch",
   "file": "RedDeerCalf",
   "plan": "quadruped",
+  "zones": {"near": 0.15, "far": 0.45},
   "tripo_project": "d01ff7b6-3fd3-4b75-a67e-6a03a93cffd1",
   "generator": "h3.1, standard geometry and texture, PBR",
   "credits": {
