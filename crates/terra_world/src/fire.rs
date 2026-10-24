@@ -134,7 +134,7 @@ const SMOKE_CARDS: usize = 4;
 /// columns, tongues on the logs, glow inside its stack and round its flames; `HEARTH_CARDS`
 /// in fire.wesl) and so many puffs of smoke, close enough in time to rise as one column.
 const HEARTHS: usize = 16;
-const HEARTH_FLAME_CARDS: usize = 32;
+const HEARTH_FLAME_CARDS: usize = 44;
 const HEARTH_SMOKE_CARDS: usize = 72;
 /// A hearth's sparks, thirty or more seen at once, most dying low (fire review, round 2:
 /// 30 to 60 small points, not a file of a few streaks).

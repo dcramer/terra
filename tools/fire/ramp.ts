@@ -35,9 +35,11 @@ export type Fuel = { cold: number; hot: number; contrast: number; film: number; 
 /// against the night photographs' 0.39-0.50, two blind judges): spread 4 keeps its middle
 /// deep red-orange (heat 0.5-0.6) and orange to 0.7, yellow at 0.8, near-white past its top
 /// 8%, so the shader's heat falling with height runs white root, yellow-orange, red tip.
+/// With the hearths' mask restored (campfire halo round) that read too yellow at night (29%
+/// against the photographs' 23% at most): spread 5 keeps orange to 0.85 (campfire lick round).
 export const FUELS: Record<string, Fuel> = {
   wood: { cold: 950, hot: 1670, contrast: 0.6, film: 4.5 },
-  hearth: { cold: 950, hot: 1670, contrast: 0.5, film: 3.5, core: { spread: 4, from: 0.92, film: 4.5 } },
+  hearth: { cold: 950, hot: 1670, contrast: 0.5, film: 3.5, core: { spread: 5, from: 0.92, film: 4.5 } },
   oil: { cold: 900, hot: 1500, contrast: 0.6, film: 4.5 },
   gas: { cold: 1100, hot: 1900, contrast: 0.5, film: 6 },
 };

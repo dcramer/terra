@@ -241,8 +241,8 @@ const CHAR_COVER: f32 = 0.45;
 // A hearth's cards (crates/terra_world/src/fire.rs HEARTH_FLAME_CARDS): its ground, its coals,
 // its body's columns (`HEARTH_COLUMNS`), its tongues on the logs (`HEARTH_TONGUES`), its glow
 // inside the stack (`HEARTH_CORES`, one under each log), then the glow round its flames.
-const HEARTH_CARDS: f32 = 32.0;
-const HEARTH_TONGUES: i32 = 16;
+const HEARTH_CARDS: f32 = 44.0;
+const HEARTH_TONGUES: i32 = 28;
 const HEARTH_CORES: i32 = 8;
 // How far under the film mask's 1 a firelit surface's alpha goes (film.rs `LIT_SHARE`, which
 // a test holds equal): where the tonemapper takes the camera's shoulder a channel at a time.
@@ -305,7 +305,7 @@ const HEARTH_SEE: f32 = 0.9;
 // review, fire round 16: 6/10 against 5 at 0.2, with the tongues' and columns' sides softer).
 const HEARTH_FEATHER: f32 = 0.32;
 // A tongue's erosion feather, and how far in a column's torn sides start to thin.
-const TONGUE_FEATHER: f32 = 0.18;
+const TONGUE_FEATHER: f32 = 0.28;
 const COLUMN_SIDES: f32 = 0.4;
 const HEARTH_ERODE_FLOOR: f32 = 0.12;
 // Its body as a few overlapping columns of flame round the stack, not one sheet behind it:
@@ -349,7 +349,7 @@ const HEARTH_HOT_RISE: vec2<f32> = vec2<f32>(0.7, 1.15);
 const HEARTH_HOT_KEEP: vec2<f32> = vec2<f32>(0.45, 0.3);
 // Its heat at its top, a share of its foot's (`shade`): at 0.5 its top quarter read orange,
 // not the deep red the judge asked for (campfire ember round).
-const HEARTH_TOP_HEAT: f32 = 0.42;
+const HEARTH_TOP_HEAT: f32 = 0.32;
 // How many lanes of dark across a column's frame (`shade`), a value noise's cells.
 const HEARTH_LANES: f32 = 12.0;
 // Each tongue's own place across the fire as the eye sees it, so the tongues stand apart with
@@ -400,6 +400,13 @@ const TONGUE_WIDE: vec2<f32> = vec2<f32>(0.2, 0.1);
 // in its height, and how slowly its reach changes (a noise in time, per second). As one
 // rounded bush the blind judge wanted "one or two tall, narrow tongues".
 const TONGUE_LEADS: f32 = 2.0;
+// Its wisps, the tongues past its placed ones (`hearth_tongue`): thin licks between and over
+// the places, so the fire reads as many overlapping see-through licks, not a few crisp
+// tongues (photographs show 15-25; at 14 placed tongues the blind judge counted about 6,
+// campfire halo round). Their height over a placed tongue's, width over their height, and
+// life over a placed tongue's; how much of what is behind them they cover (`shade`).
+const TONGUE_WISP: vec3<f32> = vec3<f32>(0.8, 0.12, 0.7);
+const TONGUE_WISP_COVER: f32 = 0.6;
 const LEAD_TALL: f32 = 1.2;
 const LEAD_WIDE: f32 = 0.2;
 const LEAD_RATE: f32 = 0.3;
@@ -418,7 +425,7 @@ const CORE_HEAT: f32 = 0.92;
 // At 0.35 its glow under the logs read the same dull orange as the body (blind judges, campfire
 // tongue round: "no white-hot bottom"); 0.55 on the hotter core heat and the film with no
 // crosstalk under the blown green, so it glows yellow-white between the logs, not pink.
-const CORE_BRIGHT: f32 = 0.55;
+const CORE_BRIGHT: f32 = 0.8;
 // The middle mound's white-hot heart (`shade`): how much hotter than the core's peak, and how
 // much brighter.
 const CORE_WHITE: f32 = 0.2;
@@ -507,14 +514,18 @@ fn away_from_eye(at: vec3<f32>, up: vec3<f32>, by: f32) -> vec3<f32> {
 // in its flames' heights, its card's height over its width, how fast it falls off, the ramp's
 // heat it is coloured by, and its peak as a share of the flame's brightness: at 0.05 and
 // 0.55 it was a ball of orange light as wide as the fire.
-const HEARTH_GLOW_M: f32 = 0.45;
+const HEARTH_GLOW_M: f32 = 0.6;
 const HEARTH_GLOW_UP: f32 = 0.32;
 const HEARTH_GLOW_TALL: f32 = 1.2;
 const HEARTH_GLOW_FALL: f32 = 6.0;
 const HEARTH_GLOW_HEAT: f32 = 0.7;
-const HEARTH_GLOW: f32 = 0.012;
-// How much hotter a hearth's brightest coals glow over its dullest, kelvin.
-const COAL_HOT: f32 = 420.0;
+const HEARTH_GLOW: f32 = 0.016;
+// How much hotter a hearth's brightest coals glow over its dullest, kelvin: at 420 the bed
+// was a dim speckle (blind judge, campfire halo round); its flames go through the flame film,
+// so a hotter bed goes yellow, not pink. And how far the bed between its lumps glows, as a
+// coal bed is one glowing mass with brighter lumps in it, not lumps on dark.
+const COAL_HOT: f32 = 520.0;
+const COAL_BED: f32 = 0.35;
 const SOFT_M: vec3<f32> = vec3<f32>(0.35, 0.1, 0.5);
 
 fn hash(p: vec2<f32>) -> f32 {
@@ -1948,7 +1959,10 @@ fn card(at: vec3<f32>, up: vec3<f32>, corner: vec2<f32>, w: f32, h: f32, upright
 fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f32>, north: vec3<f32>, tall: f32, heat: f32, wide: f32, seed: f32, k: f32, breathe: f32, laid: HearthLogs) -> Out {
     var out: Out;
     let own = fract(seed * 0.731 + k * 0.618);
-    let period = 0.5 + 0.55 * fract(own * 7.13);
+    // Past its placed tongues its wisps (`TONGUE_WISP`): quicker, narrower and see-through.
+    let placed = 2.0 * TONGUE_PLACES - 2.0;
+    let wisp = laid.count >= 1.0 && k - TONGUE_LEADS >= placed;
+    let period = (0.5 + 0.55 * fract(own * 7.13)) * select(1.0, TONGUE_WISP.z, wisp);
     let clock = fire.kind.z / period + own * 3.0;
     let cycle = floor(clock);
     let age = clock - cycle;
@@ -1963,10 +1977,16 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
         // Its own place across the fire as the eye sees it (`TONGUE_PLACES`), the outermost
         // at the logs' ends, two tongues taking each inner place in turn; it stands on the
         // stack where the logs are that far out, among them, so the near logs cut its foot.
-        let i = select(k - TONGUE_LEADS - TONGUE_PLACES + 1.0, k - TONGUE_LEADS, k - TONGUE_LEADS < TONGUE_PLACES);
+        var i = select(k - TONGUE_LEADS - TONGUE_PLACES + 1.0, k - TONGUE_LEADS, k - TONGUE_LEADS < TONGUE_PLACES);
         let half = TONGUE_PLACES * 0.5;
         let step = 1.0 / half;
-        let s = select((i - half + 1.0) * step, (i - half) * step, i < half) + (pick - 0.5) * TONGUE_STRAY * step;
+        var s = select((i - half + 1.0) * step, (i - half) * step, i < half) + (pick - 0.5) * TONGUE_STRAY * step;
+        if wisp {
+            // Spread evenly across the stack between the places, each on the log there.
+            let wisps = f32(HEARTH_TONGUES) - TONGUE_LEADS - placed;
+            s = ((k - TONGUE_LEADS - placed + 0.5) / wisps * 2.0 - 1.0) * 0.85 + (pick - 0.5) * step;
+            i = clamp(floor((s + 1.0) * half), 0.0, TONGUE_PLACES - 1.0);
+        }
         let to_eye = view.world_position - foot;
         let level = to_eye - up * dot(to_eye, up);
         let across = cross(up, level / max(length(level), 1.0e-3));
@@ -1976,16 +1996,19 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
         let burn = log_heat(i, seed);
         let skew = pow(fract(pick * 5.3), TONGUE_SKEW);
         var h = tall * mix(TONGUE_PLACE_TALL.x, TONGUE_PLACE_TALL.y, skew) * mix(1.0, TONGUE_END_SHORT, s * s) * mix(LOG_SHORT, 1.0, burn);
-        h *= breathe * (0.75 + 0.4 * age);
+        h *= breathe * (0.75 + 0.4 * age) * select(1.0, TONGUE_WISP.x, wisp);
         // No wider than its place, so the dark between two places is about a tongue wide.
-        let w = min(max(h * (TONGUE_WIDE.x + TONGUE_WIDE.y * fract(pick * 9.1)), laid.radius * TONGUE_NARROW), reach * step * TONGUE_GAP);
+        var w = min(max(h * (TONGUE_WIDE.x + TONGUE_WIDE.y * fract(pick * 9.1)), laid.radius * TONGUE_NARROW), reach * step * TONGUE_GAP);
+        if wisp {
+            w = h * TONGUE_WISP.y * (0.8 + 0.4 * fract(pick * 9.1));
+        }
         let base = foot + across * x + up * (rise + laid.radius * 0.4 + h * 0.12 * age);
         // Leaning in toward the middle the farther out it stands, each a little aside on its own.
         let lean = normalize(up - across * s * TONGUE_LEAN + across * TONGUE_ASIDE * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.04);
         let world = card(base, lean, corner, w, h, true, 0.0);
         out.clip = position_world_to_clip(world);
         out.uv = corner;
-        out.life = vec4(1.005 + 0.99 * age, heat, own, 2.0);
+        out.life = vec4(1.005 + 0.99 * age, heat, own, select(2.0, 2.1, wisp));
         out.size = h;
         out.world = hearth_rise(base, foot, up, h, laid);
         return out;
@@ -2497,7 +2520,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
         let air = 0.7 + 0.3 * noise(uv * 6.0 + vec2(time * 0.35, luck * 3.0));
         // Brighter as the fire flares, by twice its flicker, the brightest coals the most.
         let breath = air * max(1.0 + 2.0 * (glow - 1.0), 0.2);
-        let glow = bed * coal * breath;
+        let glow = bed * mix(COAL_BED, 1.0, coal) * breath;
         let alpha = smoothstep(0.02, 0.3, glow) * soft;
         let kelvin = 1150.0 + COAL_HOT * glow * (0.6 + 0.4 * heat);
         light = soot(kelvin, alpha);
@@ -2530,8 +2553,13 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
         let n = fbm(vec2(xx * 9.0 + luck * 11.0, y * 4.5 - time * 3.4));
         // A leading tongue (`hearth_lead`) eaten less up its height, so it stands tall.
         let lead = life.w > 2.3;
-        let edge = select(0.06 + 0.65 * pow(y, 1.2) + 0.3 * age, 0.05 + 0.42 * pow(y, 1.5) + 0.22 * age, lead);
-        let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * saturate(tex.g * 3.0) * (0.55 + 0.75 * n));
+        let wisp = abs(life.w - 2.1) < 0.04;
+        let edge = select(0.06 + 0.65 * pow(y, 1.2) + 0.3 * age, 0.05 + 0.42 * pow(y, 1.5) + 0.22 * age, lead) + select(0.0, 0.12 * y, wisp);
+        // Its top fifth torn into upright streaks that thin away, as a flame's tips break into
+        // wisps rather than end in a rounded lobe.
+        let streak = fbm(vec2(xx * 26.0 + luck * 5.0, y * 2.5 - time * 4.0));
+        let torn = mix(1.0, smoothstep(0.38, 0.62, streak), smoothstep(0.7, 0.92, y));
+        let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * saturate(tex.g * 3.0) * (0.55 + 0.75 * n)) * torn * select(1.0, TONGUE_WISP_COVER, wisp);
         let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.85, smoothstep(0.35, 0.9, y));
         // White-hot at its root over the coals, the sim's own heat inside it, and deep red at
         // its torn tip, as the references' licks are.
