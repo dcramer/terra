@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Formatting and clippy of the crates changed since the merge-base with origin/main, before
-# every push (D37), in seconds. Tests are yours to run for what you changed; the full check,
-# `cargo xtask check --all`, is run by hand (no CI while we are pre-release). It reads
-# the working tree, and prints a line a stage (D388; TERRA_VERBOSE=1 streams everything).
-# Never skip it with --no-verify. With TERRA_REMOTE_CHECKS=1 (.env) the same check runs on the
-# render worker at each commit pushed, for a machine that must not build (tools/git/remote-check.ts).
+# every push to origin (D37), in seconds. A push elsewhere, such as remote-render sending a job's
+# commit to the render worker, is not landing and goes through unchecked (tools/git/guarded.ts).
+# Tests are yours to run for what you changed; the full check, `cargo xtask check --all`, is run
+# by hand (no CI while we are pre-release). It reads the working tree, and prints a line a stage
+# (D388; TERRA_VERBOSE=1 streams everything). Never skip it with --no-verify. With
+# TERRA_REMOTE_CHECKS=1 (.env) the same check runs on the render worker at each commit pushed,
+# for a machine that must not build (tools/git/remote-check.ts).
 set -euo pipefail
+node tools/git/guarded.ts "$1" "$2" || exit 0
+pushed=$(cat)
 cargo=cargo
 command -v cargo >/dev/null || cargo="$HOME/.cargo/bin/cargo"
 # A warning, never a failure: a commit that silently undoes another's recent one (D431).
 node tools/git/undone.ts origin/main..HEAD || true
 if node tools/git/remote-check.ts --enabled; then
-  exec node tools/git/remote-check.ts
+  exec node tools/git/remote-check.ts <<<"$pushed"
 fi
 exec "$cargo" xtask check
