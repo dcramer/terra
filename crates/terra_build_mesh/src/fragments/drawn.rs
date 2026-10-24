@@ -32,9 +32,14 @@ pub(super) const FRAGMENT_SHADE: f32 = 0.72;
 /// its broken arrises; its two sides across the wall are the wall's own faces. A tower's
 /// blocks lit from above in their face's colour read as a grid of flat peach slabs (castle
 /// film round 4); blocks whose every side was the wall's face, as blank boxes (rounds 8-11).
-pub(super) fn split(shape: Shape, normal: Vec3) -> bool {
-    shape == Shape::Whole
-        && (normal.y.abs() > 0.7 || normal.x.abs() > 0.7 || normal.abs().max_element() < 0.95)
+/// An end with nothing that fell beyond it (`sawn`, its course's end: a tower's corner, a
+/// window's jamb) stood open in the wall and is the wall's face there: drawn as broken stone,
+/// set back and darker, every corner block of a falling tower read as a hole in its corner
+/// the moment it came down (castle film round 28, 14.23 s).
+/// An arris is broken where either face it joins is.
+pub(super) fn split(shape: Shape, normal: Vec3, sawn: [bool; 2]) -> bool {
+    let broken_end = normal.x.abs() > 0.3 && !sawn[usize::from(normal.x > 0.0)];
+    shape == Shape::Whole && (normal.y.abs() > 0.3 || broken_end)
 }
 
 /// Where a split face's texture is taken from, shifted off the wall's face: the broken
@@ -104,6 +109,9 @@ pub struct Cut {
     pub cubes: [u8; 3],
     pub sawn: [bool; 2],
     pub laid: Option<(u8, [u8; 3])>,
+    /// A whole block still where it stood, not yet moved: drawn as the wall drew it, its
+    /// faces flat and whole, no arrises and no broken stone ([`Cut::still_standing`]).
+    pub intact: bool,
 }
 
 /// The most cubes along an axis a mesh is made for; a bigger section wears it stretched.
@@ -117,6 +125,7 @@ impl Cut {
             cubes: [0; 3],
             sawn: [true; 2],
             laid: None,
+            intact: false,
         }
     }
 
@@ -138,6 +147,19 @@ impl Cut {
             cubes: cubes.to_array().map(|c| c as u8),
             sawn,
             laid,
+            intact: false,
+        }
+    }
+
+    /// The same block while it still stands where it stood, the moment its wall came down
+    /// and before it moves: drawn as the wall was, so that what fell reads as the wall until
+    /// each block breaks away, the break spreading from where it gave way as they start to
+    /// move, rather than the whole wall turning into a lattice of bevelled blocks with
+    /// broken edges in one frame (castle film round 28, 14.23 s).
+    pub fn still_standing(self) -> Cut {
+        Cut {
+            intact: self.laid.is_some(),
+            ..self
         }
     }
 
@@ -296,6 +318,7 @@ pub fn surfaces(kit: &Kit, cut: &Cut) -> Surfaces {
     };
     let stand = |p: Vec3, normal: Vec3| (stood + laid_turn * (p * size), laid_turn * normal);
     let timber = kit.pattern == Pattern::Logs && kit.textures.contains_key(&Material::LogEnd);
+    let intact = cut.intact && !timber;
     let colour = if material == Material::Masonry {
         kit.tint
     } else {
@@ -330,7 +353,8 @@ pub fn surfaces(kit: &Kit, cut: &Cut) -> Surfaces {
         if !timber
             && corners.len() == 4
             && facing.abs().max_element() > 0.95
-            && split(shape, facing)
+            && !intact
+            && split(shape, facing, sawn)
         {
             let corners = [corners[0], corners[1], corners[2], corners[3]];
             fracture(
@@ -356,7 +380,7 @@ pub fn surfaces(kit: &Kit, cut: &Cut) -> Surfaces {
             }
             let triangle = [a, bb, c];
             if !timber {
-                let split = split(shape, normal);
+                let split = !intact && split(shape, normal, sawn);
                 let shift = if split { SPLIT_SHIFT } else { [0.0; 2] };
                 let uvs = triangle.map(|p| {
                     let (at, facing) = stand(p, normal);
@@ -401,8 +425,21 @@ pub fn surfaces(kit: &Kit, cut: &Cut) -> Surfaces {
             surface.wear.extend([wear; 3]);
         }
     };
-    for corners in bevelled(shape.bevel()) {
-        add(&corners);
+    // As it stood, a plain box: its arrises and corners pieces of no size, left out.
+    let bevel = if intact { 0.0 } else { shape.bevel() };
+    for corners in bevelled(bevel)
+        .iter()
+        .filter(|corners| !intact || corners.len() == 4)
+    {
+        if intact
+            && (corners[1] - corners[0])
+                .cross(corners[3] - corners[0])
+                .length()
+                < 1e-6
+        {
+            continue;
+        }
+        add(corners);
     }
     for (material, surface) in wood.0 {
         surfaces.of(material).append(surface);

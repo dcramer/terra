@@ -286,6 +286,37 @@ fn a_whole_cube_breaks_where_it_lands_hard_and_its_pieces_settle() {
 }
 
 #[test]
+fn a_block_thrown_onto_a_ledge_by_where_it_stood_lands_whole_and_one_falling_far_breaks() {
+    // A tower's block, standing 8.5-9 m up, thrown out and up onto the wall-walk beside it,
+    // whose top is level with it: it lands hard, but has not come down from where it stood.
+    let fell = [(IVec3::new(0, 17, 0), cube(CubeShape::Whole))];
+    let mut block = burst(&fell, &|_| false, &chunks, 1.0, 100)[0];
+    let stood = block.at;
+    assert!(
+        block
+            .laid
+            .is_some_and(|laid| (laid.at - stood).length() < 1e-3)
+    );
+    let walk = |at: Vec3| if at.z < -0.1 { 9.0 } else { 0.0 };
+    block.velocity = Vec3::new(0.0, 4.0, -2.5);
+    let mut hardest: f32 = 0.0;
+    for _ in 0..120 {
+        let landing = block.step(1.0 / 60.0, &walk, &open);
+        hardest = hardest.max(landing.hit.unwrap_or(0.0));
+        assert!(!landing.breaks, "it broke on the walk at {}", block.at);
+    }
+    assert!(
+        hardest > BREAKS_AT,
+        "it landed at {hardest} m/s, too soft to tell"
+    );
+    assert!(block.at.y > 9.0, "it fell off the walk to {}", block.at);
+    // The same block falling to the ground below breaks there.
+    let mut block = burst(&fell, &|_| false, &chunks, 1.0, 100)[0];
+    let broke = (0..240).any(|_| block.step(1.0 / 60.0, &flat, &open).breaks);
+    assert!(broke, "it fell {} m and lay whole", stood.y);
+}
+
+#[test]
 fn a_piece_rolls_off_a_ledge_and_glances_off_a_wall() {
     let ledge = |at: Vec3| if at.x < 1.0 { 1.0 } else { 0.0 };
     let mut piece = burst(
@@ -402,25 +433,7 @@ fn a_whole_block_wears_the_walls_face_where_it_stood_and_broken_stone_where_it_s
     // each point of it the texture the standing wall drew there (`planar` in the base's
     // space, `surface`), at its size along each axis: castle film rounds 8-11 read
     // fragments as blank cubes, a slab's 2 m texture squeezed onto its thin sides.
-    let mut stone = Kit {
-        id: 2,
-        pattern: Pattern::Masonry,
-        tint: [0.8, 0.7, 0.6],
-        ..Kit::default()
-    };
-    let metres = [2.0, 2.0];
-    stone.textures.insert(
-        Material::Masonry,
-        terra_build::kit::Texture {
-            path: "stone".into(),
-            metres,
-            depth: 0.0,
-            reflectance: terra_build::kit::matte(),
-            strips: None,
-            cells: 1,
-            worn: None,
-        },
-    );
+    let (stone, metres) = (stone_kit(), [2.0, 2.0]);
     let repeat = repeat(&stone);
     assert_eq!(repeat, [4; 3], "a 2 m texture repeats every four cubes");
     // Two walls meeting at a corner, one along x and one along z, 10 cubes long, 5 high.
@@ -434,10 +447,11 @@ fn a_whole_block_wears_the_walls_face_where_it_stood_and_broken_stone_where_it_s
     let made = burst(&wall, &|_| false, &chunks, 1.0, 5000);
     let wholes: Vec<&Fragment> = made.iter().filter(|f| f.shape == Shape::Whole).collect();
     assert!(wholes.len() > 4);
-    let (mut faces, mut splits, mut turned) = (0, 0, 0);
+    let (mut faces, mut splits, mut turned, mut ends) = (0, 0, 0, 0);
     for fragment in wholes {
         let laid = fragment.laid.expect("a whole block knows where it stood");
-        let cut = fragment.mesh(repeat);
+        // As it goes, once it has moved from where it stood.
+        let cut = Cut::whole(fragment.size, fragment.sawn, fragment.laid, repeat);
         let drawn = surfaces(&stone, &cut);
         let surface = &drawn.0[&Material::Masonry];
         let size = (fragment.size / CELL_M).round() * CELL_M;
@@ -461,7 +475,10 @@ fn a_whole_block_wears_the_walls_face_where_it_stood_and_broken_stone_where_it_s
             // Its sides across the wall: the wall's face, its colour and, at each point,
             // the texel the wall wore there, give or take whole copies of it.
             let across = laid.turn * normal;
-            let wall_face = normal.z.abs() > 0.99;
+            // Its ends too where nothing that fell lay beyond them: the course's end, open.
+            let open_end = normal.x.abs() > 0.3 && fragment.sawn[usize::from(normal.x > 0.0)];
+            ends += usize::from(open_end && normal.x.abs() > 0.99);
+            let wall_face = normal.y.abs() < 0.3 && (normal.x.abs() < 0.3 || open_end);
             if wall_face {
                 faces += 1;
                 assert!(
@@ -492,9 +509,92 @@ fn a_whole_block_wears_the_walls_face_where_it_stood_and_broken_stone_where_it_s
         }
     }
     assert!(
-        faces > 0 && splits > 0 && turned > 0,
-        "{faces} {splits} {turned}"
+        faces > 0 && splits > 0 && turned > 0 && ends > 0,
+        "{faces} {splits} {turned} {ends}"
     );
+}
+
+/// A masonry kit whose texture is 2 m across, tinted [0.8, 0.7, 0.6].
+fn stone_kit() -> Kit {
+    let mut stone = Kit {
+        id: 2,
+        pattern: Pattern::Masonry,
+        tint: [0.8, 0.7, 0.6],
+        ..Kit::default()
+    };
+    stone.textures.insert(
+        Material::Masonry,
+        terra_build::kit::Texture {
+            path: "stone".into(),
+            metres: [2.0, 2.0],
+            depth: 0.0,
+            reflectance: terra_build::kit::matte(),
+            strips: None,
+            cells: 1,
+            worn: None,
+        },
+    );
+    stone
+}
+
+#[test]
+fn a_falling_tower_shows_its_walls_face_all_round_its_corners_and_broken_stone_only_where_it_broke()
+{
+    // A tower's blocks, the moment it comes down, stand where its cubes stood, so it must
+    // look as it stood: every side face that was open (no cube beside it, outside or in its
+    // court) the wall's own face, in the wall's colour; broken stone only where a block
+    // split from a cube beside it. Its corner blocks' open ends drawn as broken stone, set
+    // back and darker, read as holes down every corner (castle film round 28, 14.23 s).
+    let stone = stone_kit();
+    let repeat = repeat(&stone);
+    let mut tower: Vec<(IVec3, Cube)> = Vec::new();
+    for y in 0..8 {
+        for x in 0..7 {
+            for z in 0..7 {
+                if x == 0 || z == 0 || x == 6 || z == 6 {
+                    tower.push((IVec3::new(x + 10, y + 2, z - 4), cube(CubeShape::Whole)));
+                }
+            }
+        }
+    }
+    let standing: std::collections::BTreeSet<[i32; 3]> =
+        tower.iter().map(|(at, _)| at.to_array()).collect();
+    let made = burst(&tower, &|_| false, &chunks, 1.0, 5000);
+    let (mut open, mut broke) = (0, 0);
+    for fragment in made.iter().filter(|f| f.shape == Shape::Whole) {
+        let laid = fragment.laid.expect("a whole block knows where it stood");
+        let size = (fragment.size / CELL_M).round() * CELL_M;
+        let going = Cut::whole(fragment.size, fragment.sawn, fragment.laid, repeat);
+        let drawn = surfaces(&stone, &going);
+        let surface = &drawn.0[&Material::Masonry];
+        for (triangle, colours) in surface.positions.chunks(3).zip(surface.colours.chunks(3)) {
+            let normal = (triangle[1] - triangle[0])
+                .cross(triangle[2] - triangle[0])
+                .normalize();
+            let facing = laid.turn * normal;
+            // Its flat side faces only, by which way they look in the tower.
+            if facing.y.abs() > 0.5 || facing.abs().max_element() < 0.99 {
+                continue;
+            }
+            let middle =
+                laid.at + laid.turn * ((triangle[0] + triangle[1] + triangle[2]) / 3.0 * size);
+            let beyond = ((middle + facing * CELL_M * 0.25) / CELL_M)
+                .floor()
+                .as_ivec3();
+            let wall = (colours[0][0] - 0.8).abs() < 1e-4;
+            if standing.contains(&beyond.to_array()) {
+                broke += 1;
+            } else {
+                open += 1;
+                assert!(
+                    wall,
+                    "an open face at {middle} looking {facing} is drawn {:?}, not the wall's face",
+                    colours[0]
+                );
+            }
+        }
+    }
+    assert!(open > 100 && broke > 0, "{open} open, {broke} broken");
 }
 
 #[test]
@@ -654,7 +754,7 @@ fn a_whole_blocks_broken_faces_are_rough_stone_set_back_into_it_and_darker_than_
     let size = Vec3::new(4.0 * CELL_M, CELL_M, CELL_M);
     let relief = |foot: Vec3| {
         let laid = Laid::over(foot, Quat::IDENTITY, size);
-        let cut = Cut::whole(size, [true; 2], Some(laid), [4; 3]);
+        let cut = Cut::whole(size, [false; 2], Some(laid), [4; 3]);
         surfaces(&stone, &cut).0[&Material::Masonry].clone()
     };
     let surface = relief(Vec3::new(3.0, 4.0, 5.0));
@@ -710,5 +810,80 @@ fn a_whole_blocks_broken_faces_are_rough_stone_set_back_into_it_and_darker_than_
     assert_ne!(
         relief(Vec3::new(3.5, 4.0, 5.0)).positions,
         surface.positions
+    );
+}
+
+#[test]
+fn a_fallen_wall_looks_as_it_stood_until_each_block_moves_then_shows_its_broken_edges() {
+    // The moment a wall comes down its blocks stand where its cubes stood; drawn bevelled
+    // with broken stone, it turned in one frame from a wall into a lattice of blocks (castle
+    // film round 28, 14.23 s). Unmoved, a block is the wall's plain box, its face all over;
+    // once it moves, its arrises and broken faces show.
+    let stone = stone_kit();
+    let repeat = repeat(&stone);
+    let mut wall: Vec<(IVec3, Cube)> = Vec::new();
+    for y in 2..8 {
+        for x in 0..12 {
+            wall.push((IVec3::new(x, y, 3), cube(CubeShape::Whole)));
+        }
+    }
+    let made = burst(&wall, &|_| false, &chunks, 1.0, 5000);
+    let wholes: Vec<&Fragment> = made.iter().filter(|f| f.shape == Shape::Whole).collect();
+    assert!(wholes.len() > 4);
+    let tint = stone.tint[0];
+    for fragment in wholes {
+        let standing = surfaces(&stone, &fragment.mesh(repeat));
+        let surface = &standing.0[&Material::Masonry];
+        assert_eq!(surface.positions.len(), 36, "a plain box, six faces");
+        assert!(
+            surface.colours.iter().all(|c| (c[0] - tint).abs() < 1e-4),
+            "the wall's face all over while it stands"
+        );
+        assert!(
+            surface
+                .positions
+                .iter()
+                .all(|p| p.abs().max_element() > 0.5 - 1e-5),
+            "nothing set back while it stands"
+        );
+        let mut moved = *fragment;
+        moved.at += Vec3::new(0.05, -0.2, 0.0);
+        let going = surfaces(&stone, &moved.mesh(repeat));
+        let surface = &going.0[&Material::Masonry];
+        assert!(
+            surface.colours.iter().any(|c| c[0] < tint * 0.8),
+            "its broken stone shows once it moves"
+        );
+    }
+}
+
+#[test]
+fn a_wall_gives_way_first_where_it_broke_and_the_break_spreads_from_there() {
+    // A wall knocked out at one end of its foot: the blocks by the break go first, the far
+    // end of the same course later, so the break travels along it over a few frames rather
+    // than the whole foot going at once.
+    let mut wall: Vec<(IVec3, Cube)> = Vec::new();
+    for y in 2..6 {
+        for x in 0..24 {
+            wall.push((IVec3::new(x, y, 3), cube(CubeShape::Whole)));
+        }
+    }
+    let broke = |at: IVec3| at.y == 2 && at.x < 2;
+    let made = burst(&wall, &broke, &chunks, 1.0, 5000);
+    let wait_where = |near: bool| {
+        let waits: Vec<f32> = made
+            .iter()
+            .filter(|f| f.shape == Shape::Whole && f.at.y < 3.0 * CELL_M + 0.01)
+            .filter(|f| (f.at.x < 6.0 * CELL_M) == near)
+            .filter(|f| near || f.at.x > 16.0 * CELL_M)
+            .map(|f| f.wait)
+            .collect();
+        assert!(!waits.is_empty(), "blocks by the foot, near {near}");
+        waits.iter().sum::<f32>() / waits.len() as f32
+    };
+    let (near, far) = (wait_where(true), wait_where(false));
+    assert!(
+        far > near + 0.05,
+        "the far end of the foot goes at {far:.3} s, by the break at {near:.3} s"
     );
 }

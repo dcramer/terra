@@ -113,6 +113,9 @@ struct Live {
     /// How long it takes to shrink away: quicker when the oldest make room.
     fade_s: f32,
     age_s: f32,
+    /// Whether it is drawn as it stood in the wall, whole and plain, until it moves
+    /// (`Fragment::stands`).
+    standing: bool,
 }
 
 impl Live {
@@ -125,6 +128,7 @@ impl Live {
             rest_s: rest_for(&fragment),
             fade_s: FADE_S,
             age_s: 0.0,
+            standing: false,
         }
     }
 
@@ -459,6 +463,27 @@ fn burst(
     }
 }
 
+/// The room the cap leaves for what breaks where it lands, and how many pieces lie at rest
+/// and not yet fading, whose room a block breaking takes: what is breaking now goes before
+/// debris lying from earlier, as Frostbite's debris budget culls the old to make room for a
+/// new collapse. Counting only the free room, a tower falling past the cap over a burning
+/// castle's lying debris broke each block into a third of its pieces, holes in its fall
+/// (castle fall r26, 14.2 s; D305).
+fn room_for(live: &[Live], most: usize) -> (usize, usize) {
+    let room = most.saturating_sub(live.len());
+    let resting = live
+        .iter()
+        .filter(|live| live.fragment.still && !live.fading())
+        .count();
+    (room, resting)
+}
+
+/// The share of its pieces a whole cube breaks into where it lands, with room for `free`
+/// pieces: as many as fit, never less than [`LEAST_SHARE`] nor more than all.
+fn share_of(free: usize, count: usize) -> f32 {
+    (free as f32 / count.max(1) as f32).clamp(LEAST_SHARE, 1.0)
+}
+
 /// Sets so many fragments still not fading shrinking away, those that matter least first
 /// ([`worth`]): as shipped destruction culls its debris (Frostbite's debris budget lets the
 /// small pieces go before the big ones of a collapse), not the oldest whatever they are,
@@ -701,7 +726,7 @@ fn fall(
         let mut cracked: Vec<fragments::Body> = Vec::new();
         // The terrain under each column fragments are over, once a step.
         let mut terrain: BTreeMap<(Entity, [i32; 2]), f32> = BTreeMap::new();
-        let mut room = most.saturating_sub(shards.live.len());
+        let (mut room, mut resting) = room_for(&shards.live, most);
         for live in &mut shards.live {
             live.age_s += STEP_S;
             let Some(build) = by_root.get(&live.root) else {
@@ -749,11 +774,13 @@ fn fall(
                 laid.push((root, live.fragment));
                 let kind = live.fragment.kind;
                 let breaking = breaks(kind);
-                // Some of its pieces however full the budget is: the least worth make room
-                // for them (`fade_least`), so a chunk never cracks into holes.
-                let share = (room as f32 / breaking.count() as f32).max(LEAST_SHARE);
+                // Some of its pieces however full the budget is, and debris at rest gives
+                // way to them (`fade_least`), so a chunk never cracks into holes.
+                let share = share_of(room + resting, breaking.count() as usize);
                 let pieces = live.fragment.shatter(breaking, preset.min(share));
-                room = room.saturating_sub(pieces.len());
+                let free = pieces.len().min(room);
+                room -= free;
+                resting = resting.saturating_sub(pieces.len() - free);
                 landed.push(raised(&live.fragment, breaking.look().dust * 0.6));
                 if !pieces.is_empty() {
                     // What it broke into goes on; the whole is gone at once, hidden
@@ -897,9 +924,23 @@ fn draw_where_they_are(
                     })
             {
                 live.entity = spawn(commands, drawn, placed(&build.frame, &live));
+                live.standing = live.fragment.stands();
             }
             kept.push(live);
             continue;
+        }
+        // Once it moves, its broken edges show: the break spreads over the wall as its
+        // blocks start to go, never the whole wall at once.
+        if live.standing && !live.fragment.stands() {
+            live.standing = false;
+            if let Some((mesh, _)) =
+                mesh_for(shards, look, arrays, meshes, live.fragment.kind, |repeat| {
+                    live.fragment.mesh(repeat)
+                })
+                && let Ok(mut entity) = commands.get_entity(live.entity)
+            {
+                entity.insert(Mesh3d(mesh));
+            }
         }
         if let (Some(build), Ok(mut transform)) =
             (by_root.get(&live.root), transforms.get_mut(live.entity))

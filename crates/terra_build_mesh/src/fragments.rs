@@ -64,6 +64,8 @@ const SLOPE_READ_M: f32 = 0.12;
 /// than a lattice opening (0.035 s a cube opened gaps of most of a cube at landing speed).
 const STAGGER_S: f32 = 0.012;
 const STAGGER_MOST_S: f32 = 0.3;
+/// How near where it stood a whole block still counts as standing there ([`Fragment::stands`]).
+const STANDS_M: f32 = 0.01;
 /// How much of what a landing's impulse at its lowest corner would turn a fragment it is
 /// left with (a box's I = m s² / 6 about its middle), and the fastest it tumbles.
 const TUMBLE: f32 = 0.5;
@@ -254,7 +256,21 @@ impl Fragment {
     /// cubes it is along each axis, so its material shows at its real size, which of its
     /// ends are sawn ([`Fragment::sawn`]) and where it stood.
     pub fn mesh(&self, repeat: [u8; 3]) -> Cut {
+        self.cut(repeat)
+    }
+
+    /// Whether it is a whole block still where it stood in the wall, unmoved and unturned.
+    pub fn stands(&self) -> bool {
+        self.laid.is_some_and(|laid| {
+            laid.at.distance(self.at) < STANDS_M && laid.turn.angle_between(self.turn) < 0.01
+        })
+    }
+
+    fn cut(&self, repeat: [u8; 3]) -> Cut {
         match self.shape {
+            Shape::Whole if self.stands() => {
+                Cut::whole(self.size, self.sawn, self.laid, repeat).still_standing()
+            }
             Shape::Whole => Cut::whole(self.size, self.sawn, self.laid, repeat),
             shape => Cut::piece(shape),
         }
@@ -388,7 +404,13 @@ impl Fragment {
         if self.velocity.y < 0.0 {
             let hit = -self.velocity.y;
             landing.hit = Some(hit);
-            landing.breaks = self.shape == Shape::Whole && hit > BREAKS_AT;
+            // Not before it has come down its own height from where it stood: a block a
+            // crumbling tower threw out onto the wall-walk beside it broke there in its
+            // first half second, and the tower stood holed as it went (castle fall r27).
+            let clear = self
+                .laid
+                .is_none_or(|laid| laid.at.y - self.at.y >= down * 2.0);
+            landing.breaks = self.shape == Shape::Whole && hit > BREAKS_AT && clear;
             landing.cracks = rode.filter(|_| landing.breaks);
             // Following a slope down it, as it slides, is no fall onto it.
             let following = steep * self.velocity.with_y(0.0).length() + GRAVITY * dt * 2.0;
@@ -704,7 +726,13 @@ pub fn burst(
             spin: axis * (0.6 + 1.6 * r(5)) / cubes.max_element().sqrt(),
             // A hair smaller than its cubes, never fighting those still drawn ([`SHRINK`]).
             size: size * SHRINK,
-            wait: ((low.y - lowest) as f32 * STAGGER_S + 0.08 * r(6)).min(STAGGER_MOST_S),
+            // The higher the later, and the break spreads from where it gave way: the
+            // further round the wall from it, the later it goes too, so a tower's foot does
+            // not all go in one frame (castle film round 28).
+            wait: (((low.y - lowest) as f32 + (middle - impact).with_y(0.0).length() / CELL_M)
+                * STAGGER_S
+                + 0.08 * r(6))
+            .min(STAGGER_MOST_S),
             still: false,
             fill,
             seed,

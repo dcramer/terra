@@ -87,9 +87,17 @@ impl Rubble {
     /// What came down takes the heap lying on it, or over it, with it: a heap laid on a
     /// keep's roof by what fell off it as it burned, left standing when the keep fell, held
     /// the keep's own blocks up at its roof line for seconds (castle film round 2).
+    /// A heap under what fell but standing up into where it stood (grains piled in a room
+    /// past the storey over it) is cut to the foot of the lowest cube that fell and no
+    /// higher: kept whole, it would hold up what falls after in the air where that stood.
     pub fn fell(&mut self, gone: &Gone) {
-        self.cells
-            .retain(|at, cell| gone.get(at).is_none_or(|low| cell.floor < *low));
+        self.cells.retain(|at, cell| {
+            let Some(low) = gone.get(at) else {
+                return true;
+            };
+            cell.high = cell.high.min(low - cell.floor);
+            cell.high > 0.01
+        });
     }
 
     /// How high the heap stands over a point at `now`, if there is one there: the top of it.
@@ -410,6 +418,55 @@ mod tests {
         assert!(
             (high - reference).abs() < 0.1 * reference,
             "{high} m on its own heap, {reference} m on the ground"
+        );
+    }
+
+    #[test]
+    fn a_heap_standing_up_into_what_fell_is_cut_to_its_foot_and_one_beside_it_stays() {
+        // Rubble piled high in a tower's room, on a floor that stands, its top up past where
+        // the storey over it stood; and a heap in the next column, which nothing fell from.
+        let mut piece = burst(
+            &[(IVec3::ZERO, cube(CubeShape::Whole))],
+            &|_| true,
+            &chunks,
+            1.0,
+            1,
+        )[0];
+        piece.size = Vec3::splat(1.0);
+        piece.at = Vec3::new(0.25, 1.0, 0.25);
+        let mut rubble = Rubble::default();
+        for _ in 0..40 {
+            rubble.lay(&piece, &|_| 0.0, 0.0);
+        }
+        let standing = rubble.top(piece.at, 0.0).expect("a heap where it landed");
+        let low = 1.0;
+        assert!(standing > low + 0.2, "the heap stands only {standing} m");
+        let beside = rubble
+            .cells
+            .keys()
+            .copied()
+            .find(|at| *at != [0, 0])
+            .expect("a heap beside it");
+        let beside_at = Vec3::new(
+            (beside[0] as f32 + 0.5) * CELL_M,
+            0.0,
+            (beside[1] as f32 + 0.5) * CELL_M,
+        );
+        let beside_top = rubble.top(beside_at, 0.0);
+        // The storey over the floor comes down: its lowest cube's foot is `low`.
+        let fell: Vec<(IVec3, terra_build::Cube)> = (2..12)
+            .map(|y| (IVec3::new(0, y, 0), cube(CubeShape::Whole)))
+            .collect();
+        rubble.fell(&gone(&fell));
+        let left = rubble.top(piece.at, 0.0);
+        assert!(
+            left.is_some_and(|top| top <= low + 1e-4),
+            "the heap stands at {left:?} m, up where what fell stood (its foot {low} m)"
+        );
+        assert_eq!(
+            rubble.top(beside_at, 0.0),
+            beside_top,
+            "the heap beside it changed"
         );
     }
 

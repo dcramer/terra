@@ -492,6 +492,56 @@ fn a_falls_dust_is_a_light_haze_low_round_its_foot() {
 }
 
 /// Building play over the example base, as the sandbox's `build` runs it, with no renderer.
+#[test]
+fn a_block_breaking_where_it_lands_takes_the_room_of_debris_at_rest_not_a_third_of_its_pieces() {
+    let root = Entity::PLACEHOLDER;
+    let most = 400;
+    let mut shards = Shards::default();
+    // A burning castle's debris, lying at rest and old, filling the cap.
+    for _ in 0..most {
+        let mut live = Live::new(piece(0.3, true), root);
+        live.age_s = 20.0;
+        shards.live.push(live);
+    }
+    // A tower's block coming down whole and breaking where it lands.
+    let block = piece(1.0, false);
+    let breaking = Breaks::Chunks;
+    let whole = block.shatter(breaking, 1.0).len();
+    let (room, resting) = room_for(&shards.live, most);
+    assert_eq!((room, resting), (0, most));
+    let pieces = block.shatter(
+        breaking,
+        share_of(room + resting, breaking.count() as usize),
+    );
+    assert_eq!(
+        pieces.len(),
+        whole,
+        "the block broke into part of its pieces"
+    );
+    let new = shards.live.len();
+    shards
+        .live
+        .extend(pieces.into_iter().map(|piece| Live::new(piece, root)));
+    keep_within(&mut shards, most);
+    let fading = |live: &[Live]| live.iter().filter(|live| live.fading()).count();
+    assert_eq!(fading(&shards.live[new..]), 0, "the block's pieces faded");
+    assert_eq!(
+        fading(&shards.live[..new]),
+        whole,
+        "the old debris kept its room"
+    );
+    // With nothing at rest to give way, the cap holds it to its least share.
+    let falling: Vec<Live> = (0..most)
+        .map(|_| Live::new(piece(0.3, false), root))
+        .collect();
+    let (room, resting) = room_for(&falling, most);
+    let least = block.shatter(
+        breaking,
+        share_of(room + resting, breaking.count() as usize),
+    );
+    assert!(least.len() < whole && !least.is_empty());
+}
+
 fn building_app() -> App {
     use bevy::time::TimeUpdateStrategy;
     use terra_bases::arrays;
