@@ -40,6 +40,11 @@ pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-gnu";
 /// from WSL. Windows cannot use a WSL folder as a working directory, so the program is
 /// copied to the Windows temp folder and run from there.
 pub(crate) fn win(args: &[String]) -> bool {
+    launch(args, false)
+}
+
+/// `win`, and for a session someone plays, its log finished and brought home (`session`).
+fn launch(args: &[String], played: bool) -> bool {
     if !on_wsl() {
         eprintln!(
             "`cargo xtask win` is only for WSL. Elsewhere, `cargo run` already uses the GPU."
@@ -87,14 +92,20 @@ pub(crate) fn win(args: &[String]) -> bool {
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(":");
-    Command::new(program)
-        .args(program_args)
-        .current_dir(&run_dir)
-        .env("TERRA_SOURCE_ASSETS", root().join("assets"))
-        .env("WSLENV", wslenv)
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    let game = || {
+        Command::new(program)
+            .args(program_args)
+            .current_dir(&run_dir)
+            .env("TERRA_SOURCE_ASSETS", root().join("assets"))
+            .env("WSLENV", wslenv)
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    };
+    if played {
+        return crate::session::play(&run_dir.join("logs"), game);
+    }
+    game()
 }
 
 /// Builds a package for Windows in a cargo profile (`dev`, `release` or `bench`) and copies
@@ -158,7 +169,8 @@ pub(crate) fn profile_folder(profile: &str) -> &str {
 
 /// Plays the tech demo as a person would: the sandbox's play experiment, with its save
 /// kept between runs. Under WSL the Windows build runs, in a copy of its own, so a
-/// scripted test running at the same time does not get in the way.
+/// scripted test running at the same time does not get in the way. Its log, with the
+/// other GPU runs beside it, ends in the checkout's `logs/` (`session`).
 pub(crate) fn play(args: &[String]) -> bool {
     let mut game: Vec<String> = vec!["--experiment".into(), "play".into()];
     game.extend(args.iter().cloned());
@@ -167,11 +179,11 @@ pub(crate) fn play(args: &[String]) -> bool {
             .map(String::from)
             .to_vec();
         ours.extend(game);
-        return win(&ours);
+        return launch(&ours, true);
     }
     let mut cargo = vec!["run", "-p", "terra_sandbox", "--"];
     cargo.extend(game.iter().map(String::as_str));
-    run("cargo", &cargo)
+    crate::session::play(&root().join("logs"), || run("cargo", &cargo))
 }
 
 /// Plays the yard, the flat test level for working on building (`--level yard`).

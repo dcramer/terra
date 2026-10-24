@@ -15,6 +15,7 @@ mod primitives;
 mod scenes;
 mod scope;
 mod seed;
+mod session;
 mod sizes;
 mod stage;
 mod tasks;

@@ -116,14 +116,23 @@ impl Record {
     }
 }
 
-/// For the log plugin's `custom_layer`: starts the record and hands the log its writer.
-/// It sits behind the log's filter, so it keeps what the log keeps.
+/// For the log plugin's `custom_layer`: starts the record and hands the log its writers,
+/// the record's and the log file's (`log_file`). They sit behind the log's filter, so they
+/// keep what the log keeps.
 pub fn layer(app: &mut App) -> Option<BoxedLayer> {
     let record = Record::default();
     crate::crash::watch(&record);
-    app.insert_resource(record.clone())
-        .add_systems(First, count_frames);
-    Some(Box::new(Writer(record)))
+    let kind = app
+        .world()
+        .get_resource::<crate::shell::Options>()
+        .map_or_else(
+            || crate::log_file::kind(&[], false),
+            |options| crate::log_file::kind(&options.experiments, options.yard()),
+        );
+    let mut writers: Vec<BoxedLayer> = vec![Box::new(Writer(record.clone()))];
+    writers.extend(crate::log_file::layer(&record, &kind));
+    app.insert_resource(record).add_systems(First, count_frames);
+    Some(Box::new(writers))
 }
 
 fn count_frames(record: Res<Record>, frame: Res<FrameCount>) {
@@ -134,15 +143,17 @@ struct Writer(Record);
 
 impl<S: Subscriber> Layer<S> for Writer {
     fn on_event(&self, event: &Event<'_>, _: Context<'_, S>) {
-        let mut text = Text::default();
-        event.record(&mut text);
         let metadata = event.metadata();
-        self.0.add(
-            *metadata.level(),
-            metadata.target(),
-            text.message + &text.fields,
-        );
+        self.0
+            .add(*metadata.level(), metadata.target(), said(event));
     }
+}
+
+/// What a log message says: its text, then any fields given beside it.
+pub(crate) fn said(event: &Event<'_>) -> String {
+    let mut text = Text::default();
+    event.record(&mut text);
+    text.message + &text.fields
 }
 
 /// A message, then any fields given beside it as ` name=value`.

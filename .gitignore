@@ -15,3 +15,5 @@ cabin.ron
 spike/*/out/
 # A spike's models while it runs (spike/README.md); never kept.
 assets/models/spike/
+# A run's log (D448), and a played session's copied home.
+logs/

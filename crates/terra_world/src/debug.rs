@@ -277,6 +277,7 @@ pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
         })
         .init_resource::<Detail>()
         .add_systems(Startup, describe_machine)
+        .add_plugins(crate::frame_setup::plugin)
         .add_systems(First, begin_update)
         .init_resource::<FrameParts>()
         .add_systems(Last, (end_update, report).chain());

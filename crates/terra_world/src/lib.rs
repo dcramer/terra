@@ -36,6 +36,7 @@ pub mod fire;
 pub mod flora;
 pub mod flora_kinds;
 pub mod footprint;
+pub mod frame_setup;
 pub mod gltf_gate;
 pub mod gpu_memory;
 pub mod gpu_turn;
@@ -50,6 +51,7 @@ mod joint_cracks;
 pub mod lakes;
 pub mod loading;
 pub mod lod;
+pub mod log_file;
 #[cfg(test)]
 mod mesh_upload_tests;
 pub mod mipmaps;
