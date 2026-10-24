@@ -292,6 +292,10 @@ pub struct Tree {
     /// its own, 0 to 1.
     pub stature: f32,
     pub luck: f32,
+    /// What its foot stands on: the world keeps only a tree on rock or scree off the snow its
+    /// walls feed (terra_world's `off_snowbeds`), a soil tree's snow being the climate's alone,
+    /// which its stand already took.
+    pub footing: Footing,
     /// How grown it is for its stand, as a share of a mature tree's height: a sapling's
     /// fifth to a veteran's over the rest. Unlike its stature it does not stunt it.
     pub age: f32,
@@ -330,6 +334,11 @@ impl<'a> Woods<'a> {
 
     /// What trees stand at a point on the ground, facing `normal`.
     pub fn stand_at(&self, point: glam::Vec3, normal: glam::Vec3) -> Stand {
+        self.stand_on(point, normal).0
+    }
+
+    /// What trees stand at a point, and what their foot stands on.
+    fn stand_on(&self, point: glam::Vec3, normal: glam::Vec3) -> (Stand, Footing) {
         let up = point.normalize_or(glam::Vec3::Y);
         // A lake is found cell by cell, on a grid metres wide, so ground in a dry cell at its
         // shore can still lie under its surface: the trees there stood in a metre of water. So
@@ -351,7 +360,7 @@ impl<'a> Woods<'a> {
         if let Some(lake) = near {
             stand.density *= smoothstep(SHORE_BARE_M, SHORE_WOODED_M, point.length() - lake);
         }
-        stand
+        (stand, footing)
     }
 
     /// The trees standing within `radius_m` of a direction, between `inner_m` and it, on a
@@ -394,7 +403,7 @@ impl<'a> Woods<'a> {
                 let toward = (middle * land.radius_m() + east * at.x + north * at.y).normalize();
                 let point = land.surface(toward);
                 let normal = ground_normal(land, point);
-                let stand = self.stand_at(point, normal);
+                let (stand, footing) = self.stand_on(point, normal);
                 // Patches the width given and three times it, 0 to 1 over a standard deviation
                 // either side (the noise's spread is about 0.27 a sample).
                 let spread = |noise: &terra_gen::Noise, wide: f32| {
@@ -436,6 +445,7 @@ impl<'a> Woods<'a> {
                     kind,
                     stature,
                     luck,
+                    footing,
                     age,
                 });
             }

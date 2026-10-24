@@ -311,6 +311,12 @@ fn off_snowbeds(planet: &Planet, trees: Vec<Tree>) -> Vec<Tree> {
         return trees;
     };
     let kept = terra_gen::par::map(&trees, |tree| {
+        // On soil the snow is the climate's alone, which the tree's stand already took
+        // (`Woods::stand_at`); only rock and scree take their walls' feed, and asking the ground
+        // what it is made of again was most of this pass's 18 s at the lake (mountains round 32).
+        if tree.footing == terra_land::woods::Footing::Soil {
+            return true;
+        }
         let normal = terra_land::woods::ground_normal(&round.land, tree.at);
         let snowbed = crate::terrain::snowbed_m(planet, round, tree.at, normal);
         let open = terra_land::woods::Stand {
@@ -585,6 +591,7 @@ mod tests {
             kind,
             stature,
             luck: 0.5,
+            footing: terra_land::woods::Footing::Soil,
             age: 1.0,
         }
     }
