@@ -94,4 +94,11 @@ pub(crate) const TASKS: &[Task] = &[
         group: "Look at things",
         run: |args| node("tools/sandbox/qa.ts", args),
     },
+    Task {
+        name: "duel",
+        takes: "[--out <dir>] | --check <fight.jsonl>…",
+        does: "the yard's scripted duel filmed from four cameras into a 2x2 film and a contact sheet, its fight record checked (start latency, chain gaps, feet sliding, overlap, misses, hit-stop), in ~/.cache/terra-review/duel/ (tools/sandbox)",
+        group: "Look at things",
+        run: |args| node("tools/sandbox/duel.ts", args),
+    },
 ];

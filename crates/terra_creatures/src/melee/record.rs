@@ -5,8 +5,10 @@
 //! and being down, its pushbox, whether the other stands in its blow's reach (`terra_motion`'s
 //! `Move::in_reach`), and where the balls of its feet are and how high over its feet; and
 //! what happened on it: the script's step (`script`), each move the player asked for and
-//! what came of it, and each contact, with the hit-stop the rules give it. Places are
-//! metres from the player's feet on the first frame; the first line gives up there too.
+//! what came of it, and each contact, with the hit-stop the rules give it. Places and
+//! directions are in the start's terms, metres east, up and south of it, as `--at`, `--cine`
+//! and the staged log take them, so a camera can be set on the fight from the record (or
+//! from the player's feet on the first frame, with no start); the first line gives up too.
 //! The shown places, between ticks, as a person sees them.
 
 use super::{Fighter, Set};
@@ -20,6 +22,7 @@ use terra_walker::bodies::Body;
 use terra_walker::character;
 use terra_walker::{Motion, Player, Stamina};
 use terra_world::shell::{Options, ScriptFrame};
+use terra_world::start::Start;
 
 /// The balls of the feet, where a planted foot meets the ground, as the gait check reads them.
 const BALLS: [&str; 2] = ["ball_l", "ball_r"];
@@ -101,6 +104,7 @@ fn write(
     bones: Query<&GlobalTransform>,
     children: Query<&Children>,
     names: Query<&Name>,
+    start: Option<Res<Start>>,
 ) {
     let Some(frame) = frame.filter(|frame| frame.is_changed()) else {
         return;
@@ -115,6 +119,11 @@ fn write(
         out.origin = Some(player.1.translation());
     }
     let origin = out.origin.unwrap_or_default();
+    let terms = start
+        .map_or(Transform::from_translation(origin), |start| start.0)
+        .compute_affine()
+        .inverse();
+    let local = |at: Vec3| mm(terms.transform_point3(at));
     let mut bodies = Vec::new();
     for &(entity, place, fighter, is_player, body, motion, staged, pool) in &seen {
         let feet = place.translation();
@@ -151,15 +160,15 @@ fn write(
                     .filter_map(|bone| bones.get(*bone).ok())
                     .map(|bone| {
                         let at = bone.translation();
-                        json!({ "at": mm(at - origin), "up": r((at - feet).dot(up)) })
+                        json!({ "at": local(at), "up": r((at - feet).dot(up)) })
                     })
                     .collect()
             })
             .unwrap_or_default();
         bodies.push(json!({
             "who": if is_player { "you" } else { "partner" },
-            "feet": mm(feet - origin),
-            "facing": mm(facing),
+            "feet": local(feet),
+            "facing": mm(terms.transform_vector3(facing)),
             "move": fighter.runner.name(),
             "t": r(t),
             "phase": now.map(|each| format!("{:?}", each.phase(t))),
@@ -184,7 +193,7 @@ fn write(
         "contacts": std::mem::take(&mut said.contacts),
     });
     if first {
-        line["up"] = json!(mm(up));
+        line["up"] = json!(mm(terms.transform_vector3(up)));
     }
     let written = writeln!(out.file, "{line}").and_then(|()| out.file.flush());
     if let Err(problem) = written {
