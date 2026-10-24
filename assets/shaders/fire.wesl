@@ -286,8 +286,13 @@ const TONGUE_LEAN: f32 = 0.3;
 // eroded from 0.12 and by 0.4 over its life, only a faint lick of each showed (fire round 29),
 // so twice that, eroded from 0.06 and by 0.3, with the side columns lower. Up to 0.55 of
 // `tall` they stood as separate small licks under the body's tips (fire matte round's crops),
-// so taller, overlapping the columns into one body.
-const TONGUE_THICK: f32 = 0.85;
+// so taller, overlapping the columns into one body. Thin in their own places (`TONGUE_PLACES`),
+// at 0.85 and faded to 0.55 up their height, they showed only as faint licks, at 1.0 and 0.7
+// still thin over their upper half (fire crown round).
+const TONGUE_THICK: f32 = 1.25;
+// How much hotter a tongue's root burns, and how much cooler its tip (`shade`).
+const TONGUE_ROOT_HOT: f32 = 0.42;
+const TONGUE_TIP_COOL: f32 = 0.5;
 const TEEPEE: vec2<f32> = vec2<f32>(0.62, 0.6);
 // How far the body's cover is eaten away toward its tips (alpha erosion), how much of what is
 // behind its upper part it lets through, and how much hotter its foot burns.
@@ -311,36 +316,51 @@ const HEARTH_ERODE_FLOOR: f32 = 0.12;
 const HEARTH_COLUMNS: i32 = 5;
 const COLUMN_WINDOW: f32 = 0.4;
 const COLUMN_OUT: f32 = 0.3;
+// The side columns' heights over the middle's, least and spread; the middle's window over
+// `COLUMN_WINDOW` (1.25 before the tongues had places); and the window under which a column
+// is shaded as a side lick (`shade`), between the sides' widest and the middle's.
+const COLUMN_LOW: vec2<f32> = vec2<f32>(0.3, 0.2);
+const COLUMN_MIDDLE: f32 = 0.9;
+const COLUMN_LICK: f32 = 0.34;
+// The middle column's height over the body's (`HEARTH_BODY`), narrower among the tongues in
+// their places (`COLUMN_MIDDLE`): at 0.75 the visible base over the logs lost its near-white
+// and the crown was the leads alone (fire crown round); the blind judge asked it ~20% taller.
+const COLUMN_MIDDLE_TALL: f32 = 1.15;
 // How much hotter its foot burns: at 0.25, under five overlapping columns (`HEARTH_COLUMNS`),
 // the middle of the body behind the logs read pale (fire body round 2: 8-13% of its matte);
 // at 0.18, pale yellow filled the logs' tops to half its height (blind judge, campfire cut round 2).
 // On the redder ramp (spread 4) and over its bottom fifth only, 0.16 gives the near-white
-// root both judges asked for (campfire tongue round).
-const HEARTH_BASE_HOT: f32 = 0.22;
-// Its heat at its top, a share of its foot's (`shade`).
-const HEARTH_TOP_HEAT: f32 = 0.5;
+// root both judges asked for (campfire tongue round). At 0.22 the judge still wanted it whiter
+// (campfire ember round); the middle column now narrower, 0.28 whitens less of it.
+const HEARTH_BASE_HOT: f32 = 0.28;
+// Its heat at its top, a share of its foot's (`shade`): at 0.5 its top quarter read orange,
+// not the deep red the judge asked for (campfire ember round).
+const HEARTH_TOP_HEAT: f32 = 0.42;
 // How many lanes of dark across a column's frame (`shade`), a value noise's cells.
 const HEARTH_LANES: f32 = 12.0;
-// Where along a log, foot (0) to top (1), its tongues are born, and how tall one at its foot
-// stands of one at its top: flames rise off all of a burning log, tallest where the logs meet
-// over the coals (footage; RDR2's and Witcher 3's campfires), so the body runs the logs'
-// length. Born round the middle, the flame covered only the teepee's middle (blind judge,
-// fire body round).
-// At half as tall at a log's foot, and cooler there, the flame stopped short of the logs'
-// ends and its body read pale and pink (blind judge 4.2 against main's 4.9, campfire roll
-// round): the low tongues stand nearly as tall, at the same heat.
-const TONGUE_ALONG: vec2<f32> = vec2<f32>(0.06, 0.97);
-const TONGUE_LOW: f32 = 0.8;
+// Each tongue's own place across the fire as the eye sees it, so the tongues stand apart with
+// the dark between them: born anywhere along their logs, they merged into 2-4 runs at every
+// height (blind judge, campfire ember round: "only 2-3 tongues at the crown", want 6-8). How
+// many places, the outermost at the logs' ends; how far a life strays from its place, in the
+// places' spacing; how short the outermost stand of the middle's (low licks at the logs' ends,
+// as RDR2's and footage's); and a tongue's widest card over the spacing (its drawn flame about
+// half its card, so the dark between two is about a tongue wide).
+const TONGUE_PLACES: f32 = 8.0;
+const TONGUE_STRAY: f32 = 0.3;
+const TONGUE_END_SHORT: f32 = 0.45;
+const TONGUE_GAP: f32 = 1.6;
+// Their heights over `tall` in their places, least and most: at `TONGUE_TALL`'s, under the
+// middle column's crown, they showed only as faint licks low among the logs (fire crown round).
+const TONGUE_PLACE_TALL: vec2<f32> = vec2<f32>(0.55, 1.0);
 // Each log burns at its own heat, slowly changing (a burning log flares and dies back on its
-// own, as footage's do): its tongues taller and more upright the hotter it burns, so the fan
+// own, as footage's do): its tongues taller the hotter it burns (a place takes a log's heat), so the fan
 // of tongues is uneven, a log's worth at a time (the blind judge: "fanned out too evenly").
-// How fast a log's heat changes, how much shorter its tongues stand at its least, and how far
-// in they lean then. Its tongues' heights skewed so most are short and a few tall
-// (`TONGUE_SKEW`, a power over the even spread).
+// How fast a log's heat changes, and how much shorter its tongues stand at its least. Its
+// tongues' heights skewed so most are short and a few tall (`TONGUE_SKEW`, a power over the
+// even spread); at 1.7 few reached the flame's middle height in their places.
 const LOG_HEAT_RATE: f32 = 0.18;
-const LOG_SHORT: f32 = 0.45;
-const LOG_LEAN: f32 = 0.35;
-const TONGUE_SKEW: f32 = 1.7;
+const LOG_SHORT: f32 = 0.7;
+const TONGUE_SKEW: f32 = 1.2;
 // The near logs dark in front of the flame, as a campfire's charred logs stand against its
 // fire in footage and RDR2: a tongue or side column on a log facing the eye stands behind it,
 // `NEAR_BEHIND` of its radius away from the eye, so the log's own depth cuts through it, and
@@ -353,8 +373,9 @@ const NEAR_SHORT: f32 = 0.75;
 // At 2.2, and 0.32-0.48 of its height wide, the tongues merged into one bush (two blind
 // judges asked for 6-10 separate tongues with dark between): 1.5, and 0.2-0.3 of its height.
 const TONGUE_NARROW: f32 = 1.5;
-// How far a tongue leans aside on its own, either way: at 0.3 they stood as one fan.
-const TONGUE_ASIDE: f32 = 0.6;
+// How far a tongue leans aside on its own, either way: at 0.3 they stood as one fan; in their
+// own places (`TONGUE_PLACES`), at 0.6 their tips crossed into the next place.
+const TONGUE_ASIDE: f32 = 0.2;
 const TONGUE_WIDE: vec2<f32> = vec2<f32>(0.2, 0.1);
 // One or two tongues stand much taller and narrower than the rest (`TONGUE_LEADS`), from
 // where the most fuel meets air: high on the hottest log as its heat was at the tongue's
@@ -1905,24 +1926,28 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
         if k < TONGUE_LEADS {
             return hearth_lead(corner, foot, up, east, north, tall, heat, seed, k, own, breathe, laid);
         }
-        let stick = k - laid.count * floor(k / laid.count);
-        let lap = floor(k / laid.count);
-        let along = mix(TONGUE_ALONG.x, TONGUE_ALONG.y, fract(lap * 0.618 + stick * 0.29 + pick * 0.43));
-        let burn = log_heat(stick, seed);
+        // Its own place across the fire as the eye sees it (`TONGUE_PLACES`), the outermost
+        // at the logs' ends, two tongues taking each inner place in turn; it stands on the
+        // stack where the logs are that far out, among them, so the near logs cut its foot.
+        let i = select(k - TONGUE_LEADS - TONGUE_PLACES + 1.0, k - TONGUE_LEADS, k - TONGUE_LEADS < TONGUE_PLACES);
+        let half = TONGUE_PLACES * 0.5;
+        let step = 1.0 / half;
+        let s = select((i - half + 1.0) * step, (i - half) * step, i < half) + (pick - 0.5) * TONGUE_STRAY * step;
+        let to_eye = view.world_position - foot;
+        let level = to_eye - up * dot(to_eye, up);
+        let across = cross(up, level / max(length(level), 1.0e-3));
+        let reach = laid.foot.x + laid.radius;
+        let x = s * reach;
+        let rise = mix(laid.foot.y, laid.top.y, saturate((laid.foot.x - abs(x)) / max(laid.foot.x - laid.top.x, 1.0e-3)));
+        let burn = log_heat(i, seed);
         let skew = pow(fract(pick * 5.3), TONGUE_SKEW);
-        let on = on_log(laid, stick, along, foot, up, east, north);
-        let near = log_near(laid, stick, on, up, east, north);
-        var h = tall * mix(TONGUE_TALL.x, TONGUE_TALL.y, skew) * mix(TONGUE_LOW, 1.0, along) * mix(LOG_SHORT, 1.0, burn);
-        h *= breathe * (0.75 + 0.4 * age) * mix(1.0, NEAR_SHORT, near);
-        let w = max(h * (TONGUE_WIDE.x + TONGUE_WIDE.y * fract(pick * 9.1)), laid.radius * TONGUE_NARROW);
-        let a = laid.turn + stick * 6.2831853 / laid.count;
-        let inward = -(east * cos(a) + north * sin(a));
-        let aside = cross(up, inward);
-        let base = away_from_eye(on, up, laid.radius * NEAR_BEHIND * near) + up * h * 0.12 * age;
-        // Hugging its log toward the middle low down and the more the cooler its log burns,
-        // upright where the logs meet; each leaning a little aside on its own.
-        let bend = TONGUE_LEAN * (1.0 - along) + LOG_LEAN * (1.0 - burn);
-        let lean = normalize(up + inward * bend + aside * TONGUE_ASIDE * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.04);
+        var h = tall * mix(TONGUE_PLACE_TALL.x, TONGUE_PLACE_TALL.y, skew) * mix(1.0, TONGUE_END_SHORT, s * s) * mix(LOG_SHORT, 1.0, burn);
+        h *= breathe * (0.75 + 0.4 * age);
+        // No wider than its place, so the dark between two places is about a tongue wide.
+        let w = min(max(h * (TONGUE_WIDE.x + TONGUE_WIDE.y * fract(pick * 9.1)), laid.radius * TONGUE_NARROW), reach * step * TONGUE_GAP);
+        let base = foot + across * x + up * (rise + laid.radius * 0.4 + h * 0.12 * age);
+        // Leaning in toward the middle the farther out it stands, each a little aside on its own.
+        let lean = normalize(up - across * s * TONGUE_LEAN + across * TONGUE_ASIDE * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.04);
         let world = card(base, lean, corner, w, h, true, 0.0);
         out.clip = position_world_to_clip(world);
         out.uv = corner;
@@ -2143,9 +2168,11 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         // the nine tongues stood clear of the logs; blind 6/10 against 5 with these lower).
         // Up to 0.6 they stood apart from the middle as low licks (fire matte round), and at
         // 0.65-0.85 as tall as it, a level-topped wall (fire body round 1), so 0.55-0.75 of it,
-        // overlapping it under its peak.
-        flame *= select(0.42 + 0.4 * luck, 1.0, j == 2);
-        window = COLUMN_WINDOW * select(0.6 + 0.2 * fract(luck * 3.3), 1.25, j == 2);
+        // overlapping it under its peak. There they filled the dark between the tongues at the
+        // flame's middle height (campfire ember round), so they are its foot only
+        // (`COLUMN_LOW`), and the middle narrower (`COLUMN_MIDDLE`), the tongues its crown.
+        flame *= select(COLUMN_LOW.x + COLUMN_LOW.y * luck, COLUMN_MIDDLE_TALL, j == 2);
+        window = COLUMN_WINDOW * select(0.6 + 0.2 * fract(luck * 3.3), COLUMN_MIDDLE, j == 2);
     }
     // The frame is square, and its set's tips reach `reach` up it, so the card stands as
     // tall as the fire's flames over that: a campfire's 1.3 m tips stand 1.3 m, not the 2.2 m
@@ -2462,13 +2489,15 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let lead = life.w > 2.3;
         let edge = select(0.06 + 0.65 * pow(y, 1.2) + 0.3 * age, 0.05 + 0.42 * pow(y, 1.5) + 0.22 * age, lead);
         let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * saturate(tex.g * 3.0) * (0.55 + 0.75 * n));
-        let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.55, smoothstep(0.35, 0.9, y));
+        let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.85, smoothstep(0.35, 0.9, y));
         // White-hot at its root over the coals, the sim's own heat inside it, and deep red at
         // its torn tip, as the references' licks are.
         // Yellow-white at the root, orange up it, red at the tip: at a fifth of its height
         // off for its tip, the tongues read one colour (blind judge, campfire roll round).
+        // Its root hotter and its tip cooler (`TONGUE_ROOT_HOT`, `TONGUE_TIP_COOL`): at 0.32 and
+        // 0.4 the judge wanted the base whiter and the top quarter a deeper red (campfire ember round).
         let root = 1.0 - smoothstep(0.0, 0.22, y);
-        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 2.0) * (0.6 + 0.4 * (1.0 - across)) + 0.32 * root - 0.15 * age - 0.4 * smoothstep(0.2, 0.9, y));
+        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 2.0) * (0.6 + 0.4 * (1.0 - across)) + TONGUE_ROOT_HOT * root - 0.15 * age - TONGUE_TIP_COOL * smoothstep(0.2, 0.9, y));
         let drawn = baked_fuel(vec4(heat_here, shape * born * TONGUE_THICK, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft, HEARTH_ROW);
         light = drawn.rgb;
         cover = drawn.a;
@@ -2517,7 +2546,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             // A side column's (`side` below) narrower, torn deeper and cut sharper: feathered
             // as the middle's, its sides were a blurry straight-sided haze (blind judge,
             // campfire cut round 2).
-            let lick = window < 0.48;
+            let lick = window < COLUMN_LICK;
             let half = 0.5 * (1.0 - select(0.45, 0.6, lick) * uv.y) * select(1.0, 0.8, lick);
             let tear = fbm(vec2(uv.x * 4.0 + luck * 7.0, uv.y * 6.0 - time * 2.0));
             let off = abs(uv.x - 0.5) / half + 0.3 * (rag - 0.5) + select(0.5, 0.8, lick) * (tear - 0.5);
@@ -2538,7 +2567,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             // A side column (narrower than the middle's half) torn more and cooler, so it
             // reads as smaller licks round the middle: as warm and whole as the middle they
             // were soft yellow-white wings either side (blind judge, campfire cut round).
-            let side = column && window < 0.48;
+            let side = column && window < COLUMN_LICK;
             let erode = HEARTH_ERODE_FLOOR + HEARTH_ERODE * smoothstep(0.15, 1.0, hy) + select(0.0, 0.08, side);
             texel.g *= smoothstep(erode, erode + HEARTH_FEATHER, saturate(texel.g * 3.0) * (0.5 + n) * edges);
             texel.g *= mix(1.0, HEARTH_SEE, smoothstep(0.25, 0.85, hy));

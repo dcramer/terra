@@ -469,9 +469,10 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   const [crack, inside, id] = checks(a, b, hot * (0.6 + 0.5 * feet), seed + 11, stretch);
   const deep = Math.max(crack, 0.55 * groove * smooth(0.35, 0.7, x));
   let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
-  // Grey-white ash on the blocks where it burns hottest.
-  const ash = 0.5 * smooth(0.85, 1.1, x) * smooth(0.62, 0.78, fbm(a * 60, b * 25, seed + 59));
-  block = mix(block, [92, 88, 84], ash);
+  // Grey-white ash on the blocks, in patches, from where it chars through to where it burns
+  // hottest: only on the hottest it read as no ash at all (blind judge, campfire ember round).
+  const ash = 0.65 * smooth(0.6, 0.95, x) * smooth(0.58, 0.74, fbm(a * 60, b * 25, seed + 59));
+  block = mix(block, [124, 120, 114], ash);
   c = mix(c, mix(block.map((v) => v * (0.72 + 0.4 * inside)), [30, 13, 8], deep), char);
   const leak = 0.3 * (1 - inside) * hot;
   // A fissure's heat: its deepest middle and toward the coals the hottest, dull orange-red at
@@ -522,7 +523,9 @@ function heat(l: Log, t: number, n: V3): number {
   const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
   const top = smooth(0.3, 0.9, f) * (0.7 + 0.45 * under);
   const foot = smooth(0.3, 0.0, f) * under * under * 0.95;
-  const lick = under * under * (0.58 + 0.25 * f);
+  // Its underside licked hot enough all along that its cracks glow there, seen low between the
+  // logs (blind judge, campfire ember round: "glowing cracks on the log undersides").
+  const lick = under * under * (0.72 + 0.3 * f);
   // Smoke and heat scorch it all over and char it black from about its middle up (fire round
   // 25: its raw upper faces read as pale planks); its outer end charred in patches through its
   // scorched bark (blind judge, campfire ember round: brown bark read as brush, not burnt logs).
