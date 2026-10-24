@@ -31,10 +31,13 @@ export type Fuel = { cold: number; hot: number; contrast: number; film: number; 
 /// 1. Its row burns its body cooler (red and orange up to 0.85 of its heat) and keeps a small
 /// pale core over the coals (its top 6%, filmed as wood's hottest); spread so over the
 /// whole wood row, the house blaze went red and the breath pale (fire matte round), and a
-/// blind judge missed the core.
+/// blind judge missed the core. Spread 3 still drew it one mid-orange root to tip (luma 0.59
+/// against the night photographs' 0.39-0.50, two blind judges): spread 4 keeps its middle
+/// deep red-orange (heat 0.5-0.6) and orange to 0.7, yellow at 0.8, near-white past its top
+/// 8%, so the shader's heat falling with height runs white root, yellow-orange, red tip.
 export const FUELS: Record<string, Fuel> = {
   wood: { cold: 950, hot: 1670, contrast: 0.6, film: 4.5 },
-  hearth: { cold: 950, hot: 1670, contrast: 0.5, film: 3.5, core: { spread: 3, from: 0.94, film: 4.5 } },
+  hearth: { cold: 950, hot: 1670, contrast: 0.5, film: 3.5, core: { spread: 4, from: 0.92, film: 4.5 } },
   oil: { cold: 900, hot: 1500, contrast: 0.6, film: 4.5 },
   gas: { cold: 1100, hot: 1900, contrast: 0.5, film: 6 },
 };

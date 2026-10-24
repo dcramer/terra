@@ -314,7 +314,13 @@ const COLUMN_OUT: f32 = 0.3;
 // How much hotter its foot burns: at 0.25, under five overlapping columns (`HEARTH_COLUMNS`),
 // the middle of the body behind the logs read pale (fire body round 2: 8-13% of its matte);
 // at 0.18, pale yellow filled the logs' tops to half its height (blind judge, campfire cut round 2).
-const HEARTH_BASE_HOT: f32 = 0.1;
+// On the redder ramp (spread 4) and over its bottom fifth only, 0.16 gives the near-white
+// root both judges asked for (campfire tongue round).
+const HEARTH_BASE_HOT: f32 = 0.16;
+// Its heat at its top, a share of its foot's (`shade`).
+const HEARTH_TOP_HEAT: f32 = 0.5;
+// How many lanes of dark across a column's frame (`shade`), a value noise's cells.
+const HEARTH_LANES: f32 = 10.0;
 // Where along a log, foot (0) to top (1), its tongues are born, and how tall one at its foot
 // stands of one at its top: flames rise off all of a burning log, tallest where the logs meet
 // over the coals (footage; RDR2's and Witcher 3's campfires), so the body runs the logs'
@@ -344,7 +350,10 @@ const TONGUE_SKEW: f32 = 1.7;
 // them (blind judge, campfire cut round). A tongue's least width in its log's radius (3.5 drew a bush of wide petals).
 const NEAR_BEHIND: f32 = 1.15;
 const NEAR_SHORT: f32 = 0.75;
-const TONGUE_NARROW: f32 = 2.2;
+// At 2.2, and 0.32-0.48 of its height wide, the tongues merged into one bush (two blind
+// judges asked for 6-10 separate tongues with dark between): 1.5, and 0.2-0.3 of its height.
+const TONGUE_NARROW: f32 = 1.5;
+const TONGUE_WIDE: vec2<f32> = vec2<f32>(0.2, 0.1);
 // One or two tongues stand much taller and narrower than the rest (`TONGUE_LEADS`), from
 // where the most fuel meets air: high on the hottest log as its heat was at the tongue's
 // birth, near where the logs meet; how much taller than the tallest of the rest, how wide
@@ -352,7 +361,7 @@ const TONGUE_NARROW: f32 = 2.2;
 // rounded bush the blind judge wanted "one or two tall, narrow tongues".
 const TONGUE_LEADS: f32 = 2.0;
 const LEAD_TALL: f32 = 1.45;
-const LEAD_WIDE: f32 = 0.24;
+const LEAD_WIDE: f32 = 0.2;
 const LEAD_RATE: f32 = 0.3;
 // Its glow inside the stack, as a campfire burns brightest under and between its logs where
 // they meet over the coals (footage; RDR2's campfires glow through their stack's gaps): a
@@ -364,7 +373,8 @@ const LEAD_RATE: f32 = 0.3;
 const CORE_ALONG: vec2<f32> = vec2<f32>(0.25, 1.0);
 const CORE_UNDER: f32 = 0.6;
 const CORE_WIDE: f32 = 1.6;
-const CORE_HEAT: f32 = 0.76;
+// On the redder ramp (spread 4) 0.76 burned deep red; 0.86 glows yellow-white at its peak.
+const CORE_HEAT: f32 = 0.86;
 const CORE_BRIGHT: f32 = 0.35;
 
 // A hearth's logs (crates/terra_world/src/fire/hearth.rs `Logs`): how many, the first's
@@ -1895,7 +1905,7 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
         let near = log_near(laid, stick, on, up, east, north);
         var h = tall * mix(TONGUE_TALL.x, TONGUE_TALL.y, skew) * mix(TONGUE_LOW, 1.0, along) * mix(LOG_SHORT, 1.0, burn);
         h *= breathe * (0.75 + 0.4 * age) * mix(1.0, NEAR_SHORT, near);
-        let w = max(h * (0.32 + 0.16 * fract(pick * 9.1)), laid.radius * TONGUE_NARROW);
+        let w = max(h * (TONGUE_WIDE.x + TONGUE_WIDE.y * fract(pick * 9.1)), laid.radius * TONGUE_NARROW);
         let a = laid.turn + stick * 6.2831853 / laid.count;
         let inward = -(east * cos(a) + north * sin(a));
         let aside = cross(up, inward);
@@ -2514,7 +2524,15 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             let erode = HEARTH_ERODE_FLOOR + HEARTH_ERODE * smoothstep(0.15, 1.0, hy) + select(0.0, 0.08, side);
             texel.g *= smoothstep(erode, erode + HEARTH_FEATHER, saturate(texel.g * 3.0) * (0.5 + n) * edges);
             texel.g *= mix(1.0, HEARTH_SEE, smoothstep(0.25, 0.85, hy));
-            texel.r = select(1.0, 0.85, side) * saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.62, smoothstep(0.05, 0.85, hy)));
+            // Dark lanes eaten up it from a little over its foot, drifting slowly, so its upper
+            // part stands as separate tongues with the dark between them: whole, the columns
+            // summed to one bush (two blind judges, campfire char round).
+            let lane = noise(vec2(x * HEARTH_LANES + luck * 13.0, hy * 1.3 - time * 0.7));
+            texel.g *= mix(1.0, smoothstep(0.36, 0.6, lane), smoothstep(0.08, 0.45, hy));
+            // Its heat falling with height to half by 0.7 of it, so its upper half burns deep
+            // red-orange on the hearth's ramp: to 0.62 by 0.85 it was one mid-orange root to
+            // tip (two blind judges, campfire char round).
+            texel.r = select(1.0, 0.85, side) * saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.2, hy))) * mix(1.0, HEARTH_TOP_HEAT, smoothstep(0.05, 0.7, hy)));
         }
         let drawn = baked_fuel(texel, brightness, soft * select(edges, 1.0, layer == SET_CAMPFIRE), select(0.0, HEARTH_ROW, layer == SET_CAMPFIRE));
         light = drawn.rgb;
@@ -2636,11 +2654,13 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
     // what is behind is covered and their orange washes a little toward amber. `day` is how
     // many stops the eye is exposed under dusk's, from one to three and a half (fire round 20).
     // Washed 0.4 toward a pale yellow and covering 0.3, the noon body read pale and creamy
-    // (blind judge, campfire glow round), so 0.15 toward amber and covering 0.55.
+    // (blind judge, campfire glow round), so 0.15 toward amber and covering 0.55. The amber
+    // with almost no blue: at 0.4 of its luma it gave the body blue a body never has (B/R
+    // 0.24-0.29 against the photographs' 0.03-0.16, campfire tongue round).
     if kind == 0 && t > 1.0 && t <= 2.0 && (life.w < 2.5 || life.w > 6.5) {
         let day = smoothstep(1.0, 3.5, fire.exposure.y - log2(view.exposure) - adapted.x);
         let luma = dot(light, vec3(0.2126, 0.7152, 0.0722));
-        light = mix(light, mix(light, vec3(luma) * vec3(1.2, 0.82, 0.4), 0.15), day) * mix(1.0, 0.5, day);
+        light = mix(light, mix(light, vec3(luma) * vec3(1.2, 0.82, 0.06), 0.15), day) * mix(1.0, 0.5, day);
         cover *= mix(1.0, 0.55, day);
     }
     if max(light.r, cover) < 0.002 {

@@ -69,6 +69,13 @@ const ENTRY: &str = "fn tone_mapping(in: vec4<f32>, in_color_grading: ColorGradi
 /// (254, 233, 141); more and its middle loses its orange.
 pub(super) const CROSSTALK: f32 = 0.02;
 
+/// The green, on the screen's scale before the curve, over which the layers' crosstalk comes
+/// in: none under the first, all of it past the second (a smoothstep). Caught at every
+/// brightness, a flame's orange body took a quarter of its red in blue (B/R 0.24-0.29 sRGB),
+/// where night photographs of a campfire's body keep near none (0.03-0.16) and only their
+/// blown core goes white (campfire tongue round): a film's layers bleed where one is full.
+pub(super) const BLOWN: (f32, f32) = (1.5, 4.0);
+
 /// How far under 1 the alpha goes where a fire's light falls on a surface (`fire.wesl`'s
 /// `lit_mask`, its one writer): a hearth's stones, logs and ground within 1.3 m of it
 /// (453a6321) and the wall and ground a marched breath strikes (957c0c79). Its share, so
@@ -140,7 +147,9 @@ fn dof_patched(source: &str) -> Option<String> {
 #[cfg(test)]
 pub(super) fn film(color: Vec3) -> Vec3 {
     let c = color.max(Vec3::ZERO);
-    let caught = Vec3::new(c.y + c.z, c.x + c.z, c.x + c.y) * 0.5 * CROSSTALK;
+    let t = ((c.y - BLOWN.0) / (BLOWN.1 - BLOWN.0)).clamp(0.0, 1.0);
+    let blown = t * t * (3.0 - 2.0 * t);
+    let caught = Vec3::new(c.y + c.z, c.x + c.z, c.x + c.y) * 0.5 * CROSSTALK * blown;
     let x = c + caught;
     Vec3::new(
         crate::hable::hable(x.x),
@@ -174,12 +183,14 @@ fn terra_lit_neutral(color: vec3<f32>) -> vec3<f32> {{
 
 fn terra_flame_film(color: vec3<f32>) -> vec3<f32> {{
     let c = max(color, vec3(0.0));
-    let caught = vec3(c.g + c.b, c.r + c.b, c.r + c.g) * {half:?};
+    let caught = vec3(c.g + c.b, c.r + c.b, c.r + c.g) * {half:?} * smoothstep({b0:?}, {b1:?}, c.g);
     return min(terra_flame_curve(c + caught), vec3(1.0));
 }}
 
 {ENTRY}",
         half = 0.5 * CROSSTALK,
+        b0 = BLOWN.0,
+        b1 = BLOWN.1,
         lit = LIT_SHARE,
     )
 }
@@ -242,6 +253,13 @@ mod tests {
         // Dimmer, the green falls behind the red and the blue stays dark: orange.
         let dim = shown(0.03);
         assert!(dim.y / dim.x < 0.85 && dim.z / dim.x < 0.15, "{dim}");
+        // A body's orange or yellow, its green short of blown, keeps almost no blue, as the night
+        // photographs' bodies do (B/R 0.03-0.16): crosstalk only where the green is blown.
+        for k in [0.05, 0.1, 0.2] {
+            let body = shown(k);
+            assert!(body.x > 180.0, "{k}: {body}");
+            assert!(body.z / body.x < 0.05, "{k}: {body}");
+        }
         // Brighter, every channel rises: yellow on to white, never back to red.
         let steps: Vec<Vec3> = (1..40).map(|i| shown(0.02 * i as f32 * i as f32)).collect();
         for pair in steps.windows(2) {
