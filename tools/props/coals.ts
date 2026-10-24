@@ -231,8 +231,10 @@ export function maps(seed = 1): Uint8Array[] {
       // patches: pale and even, it was a disc that went salmon-pink by firelight (fire round 20).
       const edge = r + 0.2 * (fbm(X * 4, Z * 4, 4) - 0.5) + 0.1 * (fbm(X * 14, Z * 14, 9) - 0.5);
       const patchy = (0.45 + 0.55 * smooth(0.3, 0.65, fbm(X * 7, Z * 7, 8))) * (1 - 0.5 * smooth(0.75, 0.95, edge) * (1 - smooth(0.4, 0.6, fbm(X * 16, Z * 16, 10))));
-      const skirt = smooth(0.5, 0.74, r) * (1 - smooth(0.68, 1.04, edge)) * patchy;
-      const grey = (22 + 14 * n) * (1 - 0.5 * char) * (1 - skirt) + (50 + 16 * n - 10 * smooth(0.6, 0.8, speck)) * skirt;
+      const skirt = smooth(0.55, 0.8, r) * (1 - smooth(0.86, 1.06, edge)) * patchy;
+      // Its ash grey-white where the fire has burnt out to it, in patches (blind judge, campfire
+      // tongue round: "no ember bed"): at 50-66 it read as earth.
+      const grey = (22 + 14 * n) * (1 - 0.5 * char) * (1 - skirt) + (100 + 34 * n - 18 * smooth(0.6, 0.8, speck)) * skirt;
       // Under the heap a crackle of glowing seams through dark ash, as a bed of coals breaks
       // into a mesh of cracks, not a lit disc (fire round 29: separate red baubles).
       const ridge = (f: number, k: number) => 1 - smooth(0.0, 0.06, Math.abs(fbm(X * f, Z * f, k) - 0.5));
@@ -246,9 +248,9 @@ export function maps(seed = 1): Uint8Array[] {
     // Rows of four by where in the bed: its middle past 1,440 K to orange-yellow, then orange,
     // then dull red at the edge, under more ash.
     const band = Math.floor(tile / 4);
-    const heat = [1.35, 1.05, 0.75][band] + 0.1 * rnd();
+    const heat = [1.45, 1.15, 0.8][band] + 0.1 * rnd();
     const ashy = [0.2, 0.6, 1.1][band];
-    const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.2 ? 0.45 + 0.2 * rnd() : 0 }));
+    const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.3 ? 0.45 + 0.2 * rnd() : 0 }));
     for (let y = 0; y < T; y++) {
       for (let x = 0; x < T; x++) {
         const d = unoctahedral((x - 2) / (T - 4), (y - 2) / (T - 4));

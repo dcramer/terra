@@ -434,11 +434,15 @@ function checks(a: number, b: number, open: number, seed: number, stretch: numbe
   const SA = 0.017;
   const u = a / SA + 1.4 * (fbm(a * 20, b * 16, seed + 50) - 0.5) + 0.5 * (fbm(a * 60, b * 45, seed + 49) - 0.5), col = Math.floor(u);
   const dl = Math.min(frac(u), 1 - frac(u)) * SA * stretch;
-  const run = 0.024 + 0.03 * hash(col, seed, 51);
+  // Blocks about as long as wide, crossed nearly everywhere, as alligator char is: at 2.4 to
+  // 5.4 cm long, half uncrossed, its glowing fissures ran along the grain as bristles.
+  const run = 0.016 + 0.014 * hash(col, seed, 51);
   const v = b / run + hash(col, seed, 52) + 0.5 * (fbm(a * 40, b * 12, seed + 53) - 0.5), row = Math.floor(v);
   const dt = Math.min(frac(v), 1 - frac(v)) * run;
-  const crossed = hash(col, Math.round(v), 54) > 0.2 + 0.45 * noise(a * 30, b * 8, seed + 48) ? 1 : 0;
-  const along = smooth(0.25, 0.4, noise(col * 7.3, b * 5, seed + 55));
+  const crossed = hash(col, Math.round(v), 54) > 0.04 + 0.2 * noise(a * 30, b * 8, seed + 48) ? 1 : 0;
+  // Fewer fissures along the grain than across it: at seven columns in ten, a log's glowing
+  // seams ran its length as bristles (blind judge, campfire tongue round: "straw or brush").
+  const along = smooth(0.4, 0.55, noise(col * 7.3, b * 5, seed + 55));
   const wl = (0.0007 + 0.0016 * fbm(a * 12, b * 3, seed + 56)) * (0.5 + open);
   const wt = (0.0005 + 0.001 * hash(col, row, 57)) * (0.5 + open);
   const crack = Math.max(along * (1 - smooth(wl * 0.4, wl, dl)), 0.75 * crossed * (1 - smooth(wt * 0.4, wt, dt)));
@@ -509,17 +513,20 @@ function at(l: Log, s: number): [[number, number], [number, number], boolean] {
 // How hot a log is at t along it on a face of this normal: its underside, toward the middle
 // and down, licked by the flames all along; its inner end over the flames and its foot in the
 // coals most; its upper outer face raw but for its top.
+// Burnt black from its middle to its inner end, its cracks glowing on its burnt faces, and its
+// bark kept only on its cool outer end, as a teepee's logs burn from the apex down: charred
+// all over with glowing seams along the grain at its foot too, its ends read as orange-striped
+// brushes (blind judges twice, campfire cut round 3). Its foot's underside, in the coals, glows.
 function heat(l: Log, t: number, n: V3): number {
   const inward = -dot(n, l.out), down = -n[1], f = t / l.L;
   const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
-  const top = smooth(0.38, 0.95, f) * (0.55 + 0.5 * under);
-  // Its very foot, where it lies in the coals, hot all round, its faces seen too.
-  const foot = smooth(0.42, 0.0, f) * (0.72 + 0.6 * under) + 0.35 * smooth(0.3, 0.0, f);
+  const top = smooth(0.3, 0.9, f) * (0.7 + 0.45 * under);
+  const foot = smooth(0.3, 0.0, f) * under * under * 0.95;
   const lick = under * under * (0.58 + 0.25 * f);
-  // Smoke and heat scorch it all over and char what the camera sees of its upper half too
-  // (fire round 25: its raw upper faces read as pale planks); its lower half, toward the coals,
-  // hot enough that its cracks glow on the faces seen (fire round 30: dark bark from 6 m).
-  const all = 0.3 + 0.2 * f + 0.36 * smooth(0.5, 0.12, f);
+  // Smoke and heat scorch it all over and char it black from about its middle up (fire round
+  // 25: its raw upper faces read as pale planks); its outer end charred in patches through its
+  // scorched bark (blind judge, campfire ember round: brown bark read as brush, not burnt logs).
+  const all = 0.34 + 0.3 * smooth(0.2, 0.55, f);
   return Math.max(top, foot, lick, all);
 }
 
@@ -580,8 +587,9 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
           const [px, py] = [l.box[0] + (x - 2 + 0.5) / D, l.box[1] + (y - 2 + 0.5) / D];
           const r = Math.hypot(px, py);
           const w = endGrain(px, py, r, l.R, true, l.seed + end);
-          // The foot's end lies in the coals: hot, most at its rim.
-          const hot = end ? 0.8 + 0.2 * fbm(px * 40, py * 40, l.seed) : 0.95 + 0.25 * smooth(0.3, 1, r / l.R);
+          // The foot's end, out of the fire, only scorched round its bark (`heat`); the inner
+          // end over the flames charred black, its cracks glowing.
+          const hot = end ? 0.68 + 0.16 * fbm(px * 40, py * 40, l.seed) : 0.12 + 0.2 * smooth(0.6, 1, r / l.R);
           // Its char split along the radial checks and round the rings, as a log's end burns.
           put(cx + x, cy + y, charred(w, hot, Math.atan2(py, px) * 0.024, r, l.seed + 13, 0, Math.max(r, 0.008) / 0.024));
         }

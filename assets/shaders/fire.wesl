@@ -287,7 +287,7 @@ const TONGUE_LEAN: f32 = 0.3;
 // so twice that, eroded from 0.06 and by 0.3, with the side columns lower. Up to 0.55 of
 // `tall` they stood as separate small licks under the body's tips (fire matte round's crops),
 // so taller, overlapping the columns into one body.
-const TONGUE_THICK: f32 = 0.7;
+const TONGUE_THICK: f32 = 0.85;
 const TEEPEE: vec2<f32> = vec2<f32>(0.62, 0.6);
 // How far the body's cover is eaten away toward its tips (alpha erosion), how much of what is
 // behind its upper part it lets through, and how much hotter its foot burns.
@@ -299,7 +299,7 @@ const HEARTH_SEE: f32 = 0.9;
 // review, fire round 16: 6/10 against 5 at 0.2, with the tongues' and columns' sides softer).
 const HEARTH_FEATHER: f32 = 0.32;
 // A tongue's erosion feather, and how far in a column's torn sides start to thin.
-const TONGUE_FEATHER: f32 = 0.24;
+const TONGUE_FEATHER: f32 = 0.18;
 const COLUMN_SIDES: f32 = 0.4;
 const HEARTH_ERODE_FLOOR: f32 = 0.12;
 // Its body as a few overlapping columns of flame round the stack, not one sheet behind it:
@@ -316,11 +316,11 @@ const COLUMN_OUT: f32 = 0.3;
 // at 0.18, pale yellow filled the logs' tops to half its height (blind judge, campfire cut round 2).
 // On the redder ramp (spread 4) and over its bottom fifth only, 0.16 gives the near-white
 // root both judges asked for (campfire tongue round).
-const HEARTH_BASE_HOT: f32 = 0.16;
+const HEARTH_BASE_HOT: f32 = 0.22;
 // Its heat at its top, a share of its foot's (`shade`).
 const HEARTH_TOP_HEAT: f32 = 0.5;
 // How many lanes of dark across a column's frame (`shade`), a value noise's cells.
-const HEARTH_LANES: f32 = 10.0;
+const HEARTH_LANES: f32 = 12.0;
 // Where along a log, foot (0) to top (1), its tongues are born, and how tall one at its foot
 // stands of one at its top: flames rise off all of a burning log, tallest where the logs meet
 // over the coals (footage; RDR2's and Witcher 3's campfires), so the body runs the logs'
@@ -353,6 +353,8 @@ const NEAR_SHORT: f32 = 0.75;
 // At 2.2, and 0.32-0.48 of its height wide, the tongues merged into one bush (two blind
 // judges asked for 6-10 separate tongues with dark between): 1.5, and 0.2-0.3 of its height.
 const TONGUE_NARROW: f32 = 1.5;
+// How far a tongue leans aside on its own, either way: at 0.3 they stood as one fan.
+const TONGUE_ASIDE: f32 = 0.6;
 const TONGUE_WIDE: vec2<f32> = vec2<f32>(0.2, 0.1);
 // One or two tongues stand much taller and narrower than the rest (`TONGUE_LEADS`), from
 // where the most fuel meets air: high on the hottest log as its heat was at the tongue's
@@ -360,7 +362,7 @@ const TONGUE_WIDE: vec2<f32> = vec2<f32>(0.2, 0.1);
 // in its height, and how slowly its reach changes (a noise in time, per second). As one
 // rounded bush the blind judge wanted "one or two tall, narrow tongues".
 const TONGUE_LEADS: f32 = 2.0;
-const LEAD_TALL: f32 = 1.45;
+const LEAD_TALL: f32 = 1.2;
 const LEAD_WIDE: f32 = 0.2;
 const LEAD_RATE: f32 = 0.3;
 // Its glow inside the stack, as a campfire burns brightest under and between its logs where
@@ -374,8 +376,15 @@ const CORE_ALONG: vec2<f32> = vec2<f32>(0.25, 1.0);
 const CORE_UNDER: f32 = 0.6;
 const CORE_WIDE: f32 = 1.6;
 // On the redder ramp (spread 4) 0.76 burned deep red; 0.86 glows yellow-white at its peak.
-const CORE_HEAT: f32 = 0.86;
-const CORE_BRIGHT: f32 = 0.35;
+const CORE_HEAT: f32 = 0.92;
+// At 0.35 its glow under the logs read the same dull orange as the body (blind judges, campfire
+// tongue round: "no white-hot bottom"); 0.55 on the hotter core heat and the film with no
+// crosstalk under the blown green, so it glows yellow-white between the logs, not pink.
+const CORE_BRIGHT: f32 = 0.55;
+// The middle mound's white-hot heart (`shade`): how much hotter than the core's peak, and how
+// much brighter.
+const CORE_WHITE: f32 = 0.2;
+const CORE_HOT_BRIGHT: f32 = 1.2;
 
 // A hearth's logs (crates/terra_world/src/fire/hearth.rs `Logs`): how many, the first's
 // bearing round its `up`, how far each top turns past its foot, how thick; its feet's and its
@@ -1913,7 +1922,7 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
         // Hugging its log toward the middle low down and the more the cooler its log burns,
         // upright where the logs meet; each leaning a little aside on its own.
         let bend = TONGUE_LEAN * (1.0 - along) + LOG_LEAN * (1.0 - burn);
-        let lean = normalize(up + inward * bend + aside * 0.3 * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.04);
+        let lean = normalize(up + inward * bend + aside * TONGUE_ASIDE * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.04);
         let world = card(base, lean, corner, w, h, true, 0.0);
         out.clip = position_world_to_clip(world);
         out.uv = corner;
@@ -2136,7 +2145,7 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
         // 0.65-0.85 as tall as it, a level-topped wall (fire body round 1), so 0.55-0.75 of it,
         // overlapping it under its peak.
         flame *= select(0.42 + 0.4 * luck, 1.0, j == 2);
-        window = COLUMN_WINDOW * select(0.85 + 0.3 * fract(luck * 3.3), 1.25, j == 2);
+        window = COLUMN_WINDOW * select(0.6 + 0.2 * fract(luck * 3.3), 1.25, j == 2);
     }
     // The frame is square, and its set's tips reach `reach` up it, so the card stands as
     // tall as the fire's flames over that: a campfire's 1.3 m tips stand 1.3 m, not the 2.2 m
@@ -2362,19 +2371,25 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let v = uv.y;
         var body = exp(-3.0 * x * x) * (1.0 - smoothstep(0.75, 1.0, abs(x)));
         var burn = saturate((life.w - 7.0) * 2.0);
+        var hot = 0.0;
         if life.w > 7.75 {
             let d = length(vec2(x, (v - 0.2) * 2.2));
             body = exp(-2.2 * d * d) * (1.0 - smoothstep(0.8, 1.0, d));
             burn = 1.0;
+            // Its heart white-hot, small and low where the flame meets the coals, as a
+            // campfire's base is in footage and RDR2's (blind judges, campfire tongue round:
+            // "no white-hot base"): a tight core in its bottom fifth.
+            let c = length(vec2(x * 1.6, (v - 0.1) * 4.0));
+            hot = exp(-3.0 * c * c) * (1.0 - smoothstep(0.6, 1.0, c));
         } else {
             body *= smoothstep(0.0, 0.3, v) * (1.0 - smoothstep(0.85, 1.0, v)) * mix(0.5, 1.0, v);
         }
         let n = fbm(vec2(x * 1.5 + luck * 13.0, v * 4.0 - time * 0.4));
         let breath = max(1.0 + 1.5 * (glow - 1.0), 0.3);
         body *= (0.55 + 0.7 * n) * mix(0.55, 1.0, burn);
-        let r = ramp_row(CORE_HEAT * (0.6 + 0.5 * saturate(body)), HEARTH_ROW);
-        let alpha = saturate(body * 1.3) * soft;
-        light = r.rgb * alpha * HEARTH_BRIGHTNESS * CORE_BRIGHT * breath * on_screen();
+        let r = ramp_row(CORE_HEAT * (0.6 + 0.5 * saturate(body)) + CORE_WHITE * hot, HEARTH_ROW);
+        let alpha = saturate(body * 1.3 + hot) * soft;
+        light = r.rgb * alpha * HEARTH_BRIGHTNESS * CORE_BRIGHT * (1.0 + CORE_HOT_BRIGHT * hot) * breath * on_screen();
         cover = alpha * 0.8 * r.a;
     } else if kind == 0 && life.w > 4.5 {
         // A hearth's glow (`hearth`): a soft warm ball of light, adding only, brightest at its
@@ -2391,9 +2406,12 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         let d = length(p);
         let char = 1.0 - smoothstep(0.55, 1.0, d);
         let spots = fbm(uv * 16.0 + vec2(luck * 31.0, 0.0));
-        let under = 1.0 - smoothstep(0.2, 0.55, d);
+        let under = 1.0 - smoothstep(0.25, 0.65, d);
         let breath = max(1.0 + 2.0 * (glow - 1.0), 0.2);
-        let ember = under * smoothstep(0.45, 0.75, spots) * breath;
+        // Each brightening and dimming on its own as air reaches it, as a bed's embers
+        // flicker (blind judge, campfire tongue round: "no ember bed").
+        let air = 0.55 + 0.7 * noise(uv * 22.0 + vec2(time * 0.8, luck * 9.0));
+        let ember = under * smoothstep(0.42, 0.72, spots) * breath * air;
         light = soot(1150.0 + 350.0 * ember, ember);
         cover = max(covers(light, ember), CHAR_COVER * char);
     } else if kind == 0 && life.w > 2.5 {
@@ -2433,7 +2451,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         // Its teardrop only an envelope: its silhouette and inner detail a narrow slice of
         // the campfire's baked flipbook (books.rs) at its own moment, so its sides and tip are
         // the simulation's torn licks, never a smooth petal (fire round 23).
-        let body = 1.0 - smoothstep(0.3, 1.15, across);
+        let body = 1.0 - smoothstep(0.25, 0.95, across);
         let book = fire.sets[SET_CAMPFIRE];
         let rate = book.x * sqrt(book.y / max(size, 0.2)) * (0.85 + 0.3 * fract(luck * 17.3));
         let f = fract(time * rate / BOOK_FRAMES + luck * 5.17) * BOOK_FRAMES;
@@ -2449,8 +2467,8 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         // its torn tip, as the references' licks are.
         // Yellow-white at the root, orange up it, red at the tip: at a fifth of its height
         // off for its tip, the tongues read one colour (blind judge, campfire roll round).
-        let root = 1.0 - smoothstep(0.0, 0.18, y);
-        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 2.0) * (0.6 + 0.4 * (1.0 - across)) + 0.22 * root - 0.15 * age - 0.4 * smoothstep(0.2, 0.9, y));
+        let root = 1.0 - smoothstep(0.0, 0.22, y);
+        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 2.0) * (0.6 + 0.4 * (1.0 - across)) + 0.32 * root - 0.15 * age - 0.4 * smoothstep(0.2, 0.9, y));
         let drawn = baked_fuel(vec4(heat_here, shape * born * TONGUE_THICK, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft, HEARTH_ROW);
         light = drawn.rgb;
         cover = drawn.a;
@@ -2528,11 +2546,11 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             // part stands as separate tongues with the dark between them: whole, the columns
             // summed to one bush (two blind judges, campfire char round).
             let lane = noise(vec2(x * HEARTH_LANES + luck * 13.0, hy * 1.3 - time * 0.7));
-            texel.g *= mix(1.0, smoothstep(0.36, 0.6, lane), smoothstep(0.08, 0.45, hy));
+            texel.g *= mix(1.0, smoothstep(0.45, 0.55, lane), smoothstep(0.0, 0.18, hy));
             // Its heat falling with height to half by 0.7 of it, so its upper half burns deep
             // red-orange on the hearth's ramp: to 0.62 by 0.85 it was one mid-orange root to
             // tip (two blind judges, campfire char round).
-            texel.r = select(1.0, 0.85, side) * saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.2, hy))) * mix(1.0, HEARTH_TOP_HEAT, smoothstep(0.05, 0.7, hy)));
+            texel.r = select(1.0, 0.85, side) * saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.12, 0.3, hy))) * mix(1.0, HEARTH_TOP_HEAT, smoothstep(0.05, 0.7, hy)));
         }
         let drawn = baked_fuel(texel, brightness, soft * select(edges, 1.0, layer == SET_CAMPFIRE), select(0.0, HEARTH_ROW, layer == SET_CAMPFIRE));
         light = drawn.rgb;
