@@ -182,7 +182,7 @@ export function bed(seed = 1): Bed {
     }
     out.coals.push({ at: [x, y, z], size, from: out.idx.length / 3 });
     // Its tile by how far out it lies: the core's hottest, cooling to red at the edge.
-    const band = r < 0.12 ? 0 : r < 0.25 ? 1 : 2;
+    const band = Math.max((r < 0.15 ? 0 : r < 0.28 ? 1 : 2) - (rnd() < 0.35 ? 1 : 0), 0);
     addCoal(out, [x, y, z], size, big, band * 4 + Math.floor(rnd() * 4), rnd);
   }
   return out;
@@ -241,8 +241,8 @@ export function maps(seed = 1): Uint8Array[] {
       const crackle = char * Math.max(ridge(7, 11), 0.8 * ridge(15, 12));
       // Its middle a hot core, orange-yellow through the gaps between the logs' feet, cooling to
       // red out to the rim (blind judge, campfire glow round: the bed read as "flat tan gravel").
-      const core = smooth(0.5, 0.12, r + 0.15 * (fbm(X * 6, Z * 6, 13) - 0.5)) * (0.75 + 0.35 * n);
-      const smoulder = Math.max(char * smooth(0.3, 0.6, fbm(X * 5, Z * 5, 3)) * 0.4, crackle * 1.3, 1.4 * core) + (1 - char) * smooth(0.72, 0.8, speck) * 0.35;
+      const core = smooth(0.72, 0.2, r + 0.15 * (fbm(X * 6, Z * 6, 13) - 0.5)) * (0.75 + 0.35 * n);
+      const smoulder = Math.max(char * smooth(0.3, 0.6, fbm(X * 5, Z * 5, 3)) * 0.85, crackle * 1.3, 1.4 * core) + (1 - char) * smooth(0.72, 0.8, speck) * 0.35;
       put(x, 2 * T + y, [grey * 1.02 + 12 * smoulder, grey * 0.96, grey * 0.89], glowColour(smoulder), 0.95);
     }
   }
@@ -251,9 +251,9 @@ export function maps(seed = 1): Uint8Array[] {
     // Rows of four by where in the bed: its middle past 1,440 K to orange-yellow, then orange,
     // then dull red at the edge, under more ash.
     const band = Math.floor(tile / 4);
-    const heat = [1.45, 1.15, 0.8][band] + 0.1 * rnd();
-    const ashy = [0.2, 0.6, 1.1][band];
-    const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.3 ? 0.45 + 0.2 * rnd() : 0 }));
+    const heat = [1.25, 1.1, 0.95][band] + 0.1 * rnd();
+    const ashy = [0.1, 0.3, 0.6][band];
+    const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.5 ? 0.6 + 0.4 * rnd() : 0 }));
     for (let y = 0; y < T; y++) {
       for (let x = 0; x < T; x++) {
         const d = unoctahedral((x - 2) / (T - 4), (y - 2) / (T - 4));

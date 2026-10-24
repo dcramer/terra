@@ -100,10 +100,10 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
     const phi = (i / LOGS) * 2 * Math.PI + 0.25 * (rnd() - 0.5);
     const rf = 0.33 + 0.04 * rnd();
     const out: V3 = [Math.cos(phi), 0, Math.sin(phi)];
-    const foot: V3 = [rf * out[0], R * 0.75, rf * out[2]];
+    const foot: V3 = [rf * out[0], R * 1.0, rf * out[2]];
     // Tops past the middle and turned on a little, so the logs cross rather than meet in a point.
-    const pt = phi + 0.5 + 0.3 * rnd(), rt = 0.06 + 0.04 * rnd();
-    const top: V3 = [rt * Math.cos(pt), 0.33 + 0.06 * rnd(), rt * Math.sin(pt)];
+    const pt = phi + 0.5 + 0.3 * rnd(), rt = 0.07 + 0.06 * rnd();
+    const top: V3 = [rt * Math.cos(pt), 0.19 + 0.08 * rnd(), rt * Math.sin(pt)];
     const axis = norm(sub(top, foot));
     const L = Math.hypot(...sub(top, foot)) + 0.05;
     // Its section's plane, turned about its axis at random, so split faces show every way.

@@ -26,7 +26,7 @@ test("its logs lean in over the middle from inside the ring of stones", () => {
   for (const l of logs) {
     const top = l.foot.map((v, i) => v + l.axis[i] * l.L);
     assert.ok(Math.hypot(l.foot[0], l.foot[2]) < ring, "foot inside the stones");
-    assert.ok(Math.hypot(top[0], top[2]) < 0.15 && top[1] > 0.3, "top over the middle");
+    assert.ok(Math.hypot(top[0], top[2]) < 0.2 && top[1] > 0.18, "top over the middle");
   }
 });
 

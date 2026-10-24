@@ -28,16 +28,16 @@ pub struct Logs {
 
 impl Logs {
     /// The campfire's (`tools/props/hearth.ts`, `layout(1)`, its means; its test holds them):
-    /// seven split logs from 0.34 m out to 0.09 m, meeting 0.37 m over its base.
+    /// seven split logs from 0.34 m out to 0.11 m, meeting 0.24 m over its base.
     pub const CAMPFIRE: Logs = Logs {
         count: 7,
         turn: -0.020,
         twist: 0.696,
         radius: 0.091,
         foot: 0.343,
-        foot_up: 0.068,
-        top: 0.088,
-        top_up: 0.368,
+        foot_up: 0.091,
+        top: 0.112,
+        top_up: 0.241,
     };
 
     /// None: the flames round the middle.

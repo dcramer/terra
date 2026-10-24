@@ -75,8 +75,9 @@ const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// shoulder kept off the lit stones since, the green came down again: at (1.0, 0.58, 0.12) our
 /// olive grass round it took it as yellow-olive, hue 36 at a flame's height out, where RDR2's
 /// night pools are hue 20-21 at saturation 0.7-0.9; at (1.0, 0.46, 0.08) it is 25, the stones
-/// hue 22 at 0.74, orange not salmon (campfire step round).
-const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.46, 0.08);
+/// hue 22 at 0.74, orange not salmon (campfire step round); at that the stones sat on the
+/// groundlight check's least hue (20), so a little more green keeps a margin (campfire short round).
+const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.48, 0.08);
 /// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches.
 /// A campfire's 1.3 m at 0.9 heat gives 117,000 lm, about 9,000 cd: a real campfire's order
 /// (some 0.5 m² of flame at 10^4 cd/m²), so the flame stays the brightest thing by it, its

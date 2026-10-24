@@ -268,7 +268,10 @@ const LIT_NEAR_M: f32 = 1.2;
 // logs' height over them, a few small cards on the 0.55 m stack (tools/props/hearth.ts, D427;
 // fire matte round), so it stands taller and is eaten less. Its foot stands a little up
 // among the logs (`HEARTH_BODY_UP`, over the fire's width), its hot base over the coals.
-const HEARTH_BODY: f32 = 1.25;
+// Over the 0.37 m teepee at 1.25 its tips stood about twice the stone ring's radius, RDR2's
+// about once: over the lower stack (logs meeting 0.24 m up) 1.1, the tongues and leads lower
+// with it (campfire short round). Cut alone, the tongues still rose from the tall apex.
+const HEARTH_BODY: f32 = 1.1;
 const HEARTH_BODY_UP: f32 = 0.15;
 // Its tongues: their heights over `tall`, least and most; how far out from the middle they
 // rise, over the fire's width (the logs' teepee), nearest and farthest; how far they lean in
@@ -277,7 +280,7 @@ const HEARTH_BODY_UP: f32 = 0.15;
 // They lick up the logs' slopes, off the teepee's apex, where the body's middle column stands:
 // from 0.12 of the way out, the tallest of them stood there over one another as a white spike
 // (fire round 16's probe: gone with the tongues alone hidden, kept with the columns hidden).
-const TONGUE_TALL: vec2<f32> = vec2<f32>(0.38, 0.72);
+const TONGUE_TALL: vec2<f32> = vec2<f32>(0.26, 0.48);
 const TONGUE_OUT: f32 = 0.5;
 const TONGUE_IN: f32 = 0.4;
 const TONGUE_LEAN: f32 = 0.3;
@@ -290,7 +293,7 @@ const TONGUE_LEAN: f32 = 0.3;
 // so taller, overlapping the columns into one body. Thin in their own places (`TONGUE_PLACES`),
 // at 0.85 and faded to 0.55 up their height, they showed only as faint licks, at 1.0 and 0.7
 // still thin over their upper half (fire crown round).
-const TONGUE_THICK: f32 = 1.25;
+const TONGUE_THICK: f32 = 1.45;
 // How much hotter a tongue's root burns, and how much cooler its tip (`shade`).
 const TONGUE_ROOT_HOT: f32 = 0.42;
 const TONGUE_TIP_COOL: f32 = 0.5;
@@ -315,18 +318,18 @@ const HEARTH_ERODE_FLOOR: f32 = 0.12;
 // and overlapping, merge into one body of flame as the games' campfires do; 0.46 wide and 0.4
 // out, they spread past the logs over the stones (groundlight) as a level-topped wall.
 const HEARTH_COLUMNS: i32 = 5;
-const COLUMN_WINDOW: f32 = 0.4;
+const COLUMN_WINDOW: f32 = 0.5;
 const COLUMN_OUT: f32 = 0.3;
 // The side columns' heights over the middle's, least and spread; the middle's window over
 // `COLUMN_WINDOW` (1.25 before the tongues had places); and the window under which a column
 // is shaded as a side lick (`shade`), between the sides' widest and the middle's.
-const COLUMN_LOW: vec2<f32> = vec2<f32>(0.3, 0.2);
+const COLUMN_LOW: vec2<f32> = vec2<f32>(0.6, 0.2);
 const COLUMN_MIDDLE: f32 = 0.9;
 const COLUMN_LICK: f32 = 0.34;
 // The middle column's height over the body's (`HEARTH_BODY`), narrower among the tongues in
 // their places (`COLUMN_MIDDLE`): at 0.75 the visible base over the logs lost its near-white
 // and the crown was the leads alone (fire crown round); the blind judge asked it ~20% taller.
-const COLUMN_MIDDLE_TALL: f32 = 1.15;
+const COLUMN_MIDDLE_TALL: f32 = 1.0;
 // How much hotter its foot burns: at 0.25, under five overlapping columns (`HEARTH_COLUMNS`),
 // the middle of the body behind the logs read pale (fire body round 2: 8-13% of its matte);
 // at 0.18, pale yellow filled the logs' tops to half its height (blind judge, campfire cut round 2).
@@ -362,13 +365,13 @@ const HEARTH_LANES: f32 = 12.0;
 const TONGUE_PLACES: f32 = 8.0;
 const TONGUE_STRAY: f32 = 0.3;
 const TONGUE_END_SHORT: f32 = 0.45;
-const TONGUE_GAP: f32 = 1.6;
+const TONGUE_GAP: f32 = 2.2;
 // Their heights over `tall` in their places, least and most: at `TONGUE_TALL`'s, under the
 // middle column's crown, they showed only as faint licks low among the logs (fire crown round).
 // At 0.55-1.0, under leads 1.2 as tall, the crown was the leads alone, three tips (blind judge,
 // campfire crown round: want 4-5): 0.75-1.25 and skewed less (`TONGUE_SKEW` 0.8), so they
 // share it with the leads.
-const TONGUE_PLACE_TALL: vec2<f32> = vec2<f32>(0.75, 1.25);
+const TONGUE_PLACE_TALL: vec2<f32> = vec2<f32>(0.5, 0.85);
 // Each log burns at its own heat, slowly changing (a burning log flares and dies back on its
 // own, as footage's do): its tongues taller the hotter it burns (a place takes a log's heat), so the fan
 // of tongues is uneven, a log's worth at a time (the blind judge: "fanned out too evenly").
@@ -407,7 +410,7 @@ const TONGUE_LEADS: f32 = 2.0;
 // life over a placed tongue's; how much of what is behind them they cover (`shade`).
 const TONGUE_WISP: vec3<f32> = vec3<f32>(0.8, 0.12, 0.7);
 const TONGUE_WISP_COVER: f32 = 0.6;
-const LEAD_TALL: f32 = 1.2;
+const LEAD_TALL: f32 = 0.85;
 const LEAD_WIDE: f32 = 0.2;
 const LEAD_RATE: f32 = 0.3;
 // Its glow inside the stack, as a campfire burns brightest under and between its logs where
