@@ -56,6 +56,16 @@ const RIDGE_FROM: f32 = 0.3;
 const RIDGE_WIDE: f32 = 0.45;
 const RIDGE_HIGH: (f32, f32) = (0.55, 0.6);
 const RIDGE_PROFILE: f32 = 1.5;
+/// A spur down each of a horn's arêtes that has no neighbour, a ridge of its own falling from
+/// the arête's shoulder to its foot, as the Matterhorn's Hörnli ridge steps down to the
+/// Hörnli: how far out it runs, as shares of the horn's reach, how high its crest starts and ends, as a
+/// share of the horn's height, and how far its way strays off the arête's either way, in
+/// radians. Without, such an arête fell off the horn's cap into the cirque under it in a
+/// cliff and a notch (the lake's peak, mountains round 31: 106 px over 50 px).
+const SPUR_OUT: (f32, f32) = (1.3, 1.7);
+const SPUR_HIGH: f32 = 0.75;
+const SPUR_END: (f32, f32) = (0.12, 0.25);
+const SPUR_STRAY: f32 = 0.15;
 /// The teeth a ridge's crest breaks into between the horn and its neighbour, as the Tatras'
 /// ridges do (Orla Perć's gendarmes): about how far apart, as a share of the horn's reach,
 /// and the most a notch between two cuts into the crest's height over the horn's ground. A
@@ -127,6 +137,8 @@ struct Neighbour {
     /// kept for (`Range::standing_round`).
     top_near: bool,
     ridge_near: bool,
+    /// A spur (`SPUR_*`): only its ridge, falling to `top` at its end, with no top of its own.
+    spur: bool,
 }
 
 impl Range {
@@ -235,8 +247,8 @@ impl Range {
                     let (middle, half) = ((low + high) * 0.5, (high - low).length() * 0.5);
                     for n in &mut tops {
                         let top = site + n.way * n.out;
-                        n.top_near =
-                            top.distance(top.clamp(low, high)) < reach * TOP_REACH + up_down;
+                        n.top_near = !n.spur
+                            && top.distance(top.clamp(low, high)) < reach * TOP_REACH + up_down;
                         let from = site + n.way * (reach * RIDGE_FROM);
                         let along = (middle - from)
                             .dot(n.way)
@@ -280,26 +292,43 @@ impl Range {
             .min(NEIGHBOURS.1)
             .min(count);
         let first = (pick.y * count as f32) as usize;
-        (0..many)
-            .map(|k| {
-                let i = (first + k) % count;
-                let key = self.leans(c, 20 + i as i32);
-                let a = turn + TAU * (i as f32 + 0.5) / count as f32 + STRAY * (2.0 * key.z - 1.0);
-                Neighbour {
-                    way: east * libm::cosf(a) + north * libm::sinf(a),
-                    out: reach * (OUT.0 + (OUT.1 - OUT.0) * key.x),
-                    top: tall * (SHARE.0 + (SHARE.1 - SHARE.0) * key.y),
-                    faces: self.face_ways(
-                        c,
-                        (east, north),
-                        FaceSet::new(3, a + key.z * TAU, 30 + 3 * i as i32),
-                    ),
-                    key: key.z,
-                    top_near: true,
-                    ridge_near: true,
-                }
-            })
-            .collect()
+        let neighbours = (0..many).map(|k| {
+            let i = (first + k) % count;
+            let key = self.leans(c, 20 + i as i32);
+            let a = turn + TAU * (i as f32 + 0.5) / count as f32 + STRAY * (2.0 * key.z - 1.0);
+            Neighbour {
+                way: east * libm::cosf(a) + north * libm::sinf(a),
+                out: reach * (OUT.0 + (OUT.1 - OUT.0) * key.x),
+                top: tall * (SHARE.0 + (SHARE.1 - SHARE.0) * key.y),
+                faces: self.face_ways(
+                    c,
+                    (east, north),
+                    FaceSet::new(3, a + key.z * TAU, 30 + 3 * i as i32),
+                ),
+                key: key.z,
+                top_near: true,
+                ridge_near: true,
+                spur: false,
+            }
+        });
+        // A spur down each arête left without a neighbour, so the horn steps down it rather
+        // than falling off its cap into the cirque below.
+        let spurs = (many..count).map(|k| {
+            let i = (first + k) % count;
+            let key = self.leans(c, 40 + i as i32);
+            let a = turn + TAU * (i as f32 + 0.5) / count as f32 + SPUR_STRAY * (2.0 * key.z - 1.0);
+            Neighbour {
+                way: east * libm::cosf(a) + north * libm::sinf(a),
+                out: reach * (SPUR_OUT.0 + (SPUR_OUT.1 - SPUR_OUT.0) * key.x),
+                top: tall * (SPUR_END.0 + (SPUR_END.1 - SPUR_END.0) * key.y),
+                faces: [(east, 1.0); 4],
+                key: key.z,
+                top_near: false,
+                ridge_near: true,
+                spur: true,
+            }
+        });
+        neighbours.chain(spurs).collect()
     }
 
     /// How much a site's horn stands, 0 to 1, and the ground it stands on, in metres: as
@@ -376,8 +405,9 @@ impl Massif {
             let t = ((flat.dot(n.way) - from) / (n.out - from)).clamp(0.0, 1.0);
             let off = (flat - n.way * (from + t * (n.out - from))).length();
             let wide = self.reach * RIDGE_WIDE;
-            let start = self.tall * RIDGE_HIGH.0;
-            let crest = (start + (n.top * RIDGE_HIGH.1 - start) * t)
+            let start = self.tall * if n.spur { SPUR_HIGH } else { RIDGE_HIGH.0 };
+            let end = if n.spur { n.top } else { n.top * RIDGE_HIGH.1 };
+            let crest = (start + (end - start) * t)
                 * teeth(flat.dot(n.way) / (self.reach * TEETH_SPACING), t, n.key);
             if off < wide
                 && let Some(o) = over(crest)
@@ -462,19 +492,12 @@ mod tests {
             .count()
     }
 
-    #[test]
-    fn neighbours_stand_lower_than_their_horn_on_crests_broken_into_teeth() {
-        // A range's lesser tops stand well under its great one, and the ridges between break
-        // into teeth, as Orla Perć's gendarmes do: round 28's neighbours at the lake read
-        // "pale, smeared and flat-topped". Round the lake's hero peak (as in
-        // `every_massif_has_neighbours`) and three cells deep in the range, along every ridge
-        // out to a neighbour, the ground itself is walked every 10 m from a fifth to four
-        // fifths of the way out, where it stands a third of the horn's height over its ground.
-        let range = Range::new(Mountains::START, Seed(1));
+    /// The remembered cells round the lake's hero peak (as in `every_massif_has_neighbours`)
+    /// and `deep` deep in the range.
+    fn lake_and_deep(range: &Range, deep: usize) -> Vec<IVec3> {
         let lake_peak = Vec3::new(-0.488394, 0.796379, -0.356723).normalize();
         let across = range.mountains.horns_across_m;
         let fine = |d: Vec3| (d * RADIUS / (across / FINE as f32)).floor().as_ivec3();
-        let ground = |at: Vec3| range.rise(at.normalize(), RADIUS).height_m;
         let mut cells = vec![fine(lake_peak)];
         cells.extend(
             (0..400)
@@ -485,14 +508,29 @@ mod tests {
                     Vec3::new(flat * libm::cosf(around), y, flat * libm::sinf(around))
                 })
                 .filter(|&d| range.inside(d * RADIUS) > 0.9)
-                .take(3)
+                .take(deep)
                 .map(fine),
         );
+        cells
+    }
+
+    #[test]
+    fn neighbours_stand_lower_than_their_horn_on_crests_broken_into_teeth() {
+        // A range's lesser tops stand well under its great one, and the ridges between break
+        // into teeth, as Orla Perć's gendarmes do: round 28's neighbours at the lake read
+        // "pale, smeared and flat-topped". Round the lake's hero peak (as in
+        // `every_massif_has_neighbours`) and three cells deep in the range, along every ridge
+        // out to a neighbour, the ground itself is walked every 10 m from a fifth to four
+        // fifths of the way out, where it stands a third of the horn's height over its ground.
+        let range = Range::new(Mountains::START, Seed(1));
+        let lake_peak = Vec3::new(-0.488394, 0.796379, -0.356723).normalize();
+        let ground = |at: Vec3| range.rise(at.normalize(), RADIUS).height_m;
+        let cells = lake_and_deep(&range, 3);
         let (mut walked_m, mut teeth) = (0.0, 0);
         for cell in cells {
             for massif in range.standing_round(cell, RADIUS) {
                 let summit = ground(massif.site);
-                for n in &massif.tops {
+                for n in massif.tops.iter().filter(|n| !n.spur) {
                     let from = massif.reach * RIDGE_FROM;
                     let steps = ((n.out - from) / 10.0) as usize;
                     let standing = massif.base + massif.tall / 3.0;
@@ -522,6 +560,58 @@ mod tests {
         assert!(
             per_km >= 2.0,
             "{teeth} teeth over {walked_m} m of ridge, {per_km:.1} a km: crests too smooth"
+        );
+    }
+
+    #[test]
+    fn a_horn_steps_down_its_spurs_without_a_cliff_or_a_notch() {
+        // An arête with no neighbour out along it steps down a spur to its foot, as the
+        // Hörnli ridge does, rather than falling off the horn's cap in one cliff into the
+        // cirque under it, a notch, and climbing again to the next top (the lake's peak,
+        // mountains round 31: its skyline dropped 106 px over 50 px into a V; along that arête
+        // the ground fell 1.1 of the horn's height in 330 m, to 0.45 of it under its foot).
+        // Round the lake's peak and twelve cells deep, along every spur of a horn standing at
+        // its site, the ground is walked every 10 m from the site to the spur's end.
+        let range = Range::new(Mountains::START, Seed(1));
+        let ground = |at: Vec3| range.rise(at.normalize(), RADIUS).height_m;
+        let (mut spurs, mut steepest, mut deepest) = (0, 0.0f32, 0.0f32);
+        for cell in lake_and_deep(&range, 12) {
+            for massif in range.standing_round(cell, RADIUS) {
+                let summit = ground(massif.site) - massif.base;
+                if massif.tall < 0.5 * range.mountains.horns_m || summit < 0.8 * massif.tall {
+                    continue;
+                }
+                for n in massif.tops.iter().filter(|n| n.spur) {
+                    let profile: Vec<f32> = (0..=(n.out / 10.0) as usize)
+                        .map(|k| ground(massif.site + n.way * (10.0 * k as f32)) - massif.base)
+                        .map(|h| h / massif.tall)
+                        .collect();
+                    // The most it falls over 300 m, and the deepest dip under the ground both
+                    // before and past it, each as a share of the horn's height.
+                    let fall = (0..profile.len() - 30)
+                        .map(|k| profile[k] - profile[k + 30])
+                        .fold(0.0, f32::max);
+                    let dip = (1..profile.len() - 1)
+                        .map(|k| {
+                            let before = profile[..k].iter().fold(f32::MIN, |a, &b| a.max(b));
+                            let past = profile[k + 1..].iter().fold(f32::MIN, |a, &b| a.max(b));
+                            before.min(past) - profile[k]
+                        })
+                        .fold(0.0, f32::max);
+                    steepest = steepest.max(fall);
+                    deepest = deepest.max(dip);
+                    spurs += 1;
+                }
+            }
+        }
+        assert!(spurs >= 4, "only {spurs} spurs walked");
+        assert!(
+            steepest <= 0.7,
+            "a spur falls {steepest:.2} of its horn's height in 300 m: a cliff"
+        );
+        assert!(
+            deepest <= 0.15,
+            "a spur dips {deepest:.2} of its horn's height into a notch"
         );
     }
 }
