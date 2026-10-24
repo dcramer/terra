@@ -81,7 +81,7 @@ The bars are set against **known-good rigs**, measured by the same tool: Quatern
 
 ## Where we depart from shipped games
 
-- **No hand-painted weights per creature.** Studios paint every creature's weights and fix them over a range-of-motion pass by eye. We paint one body per plan and gate the rest by numbers. A hero creature may still be finished by hand (D437).
+- **No hand-painted weights per creature.** Studios paint every creature's weights and fix them over a range-of-motion pass by eye. We paint one body per plan and gate the rest by numbers. No creature is finished by hand (D437): important monsters are worked out further in dialogue with the developers.
 - **No capture, no motion matching for animals.** AAA quadrupeds are captured clips with layers on top (Far Cry 4's wildlife, Red Dead Redemption 2's horses); The Last of Us Part II's dogs are the one confirmed motion-matched quadruped, captured in suits. Each needs a stage and tens of minutes of a species. We have hundreds of kinds and no stage, and every research capture of dogs or horses is non-commercial (AI4Animation's, CC BY-NC); so gaits are made from biomechanics, as Spore and The Flame in the Flood made theirs. Bought clips (Truebones, royalty-free, not to be redistributed) serve as reference to calibrate against, not as the source.
 - **Clips baked per kind, not retargeted live.** Spore fitted its motion to each body at runtime with its own particle IK; we bake each kind's clips offline in Blender, where they can be checked, and keep runtime to the fix-up layer.
 - **Deformation measured, not looked at.** No studio publishes a deformation metric or a range-of-motion bar; the measures above come from the papers (local volume, edge length) and our people's checks, and are calibrated on known-good rigs.
@@ -100,7 +100,7 @@ An estimate, unmeasured until the first round runs: the share of newly generated
 | Composites (Worman, Seawish, Drillhog) | 40 to 60% | Where the graft goes is a call; a socket picked by hand each |
 | Outside the plans | 0% | Made another way |
 
-**What stays hand work:** approving each concept (the design sheet), each plan's template body once, a hero creature's signature moves (an attack, a roar, a special idle), faces and mouths that speak, corrective shapes on a hero, secondary motion of fur, manes and feathers (spring bones, later), and any kind that fails its check twice, which gets a new mesh before it gets more fixes.
+**What stays a person's call** (no hand-finished tier, D437): approving each concept (the design sheet), each plan's template body once, an important monster's signature moves (an attack, a roar, a special idle) worked out in dialogue with the developers, faces and mouths that speak, secondary motion of fur, manes and feathers (spring bones, later), and any kind that fails its check twice, which gets a new mesh before it gets more fixes.
 
 ## Order of work
 
@@ -114,7 +114,7 @@ An estimate, unmeasured until the first round runs: the share of newly generated
 ## Open questions for the developers
 
 1. **Which plans, which first** (D436): the six plans and composites above, and serpent or many-legged next for the monsters?
-2. **How good is good enough, and who gets hand work** (D437): is "passes the check and 7/10 on a harsh look" the bar for the long tail, with hero creatures (the dragon, the troll, bosses) finished by hand?
+2. **How good is good enough** (D437, decided 2026-10-23): passing the check and 7/10 or more on a harsh review is the bar for every creature; nothing is finished by hand; important monsters are worked out in dialogue.
 3. **Realistic or exaggerated monsters** (D438): do monsters move by real biomechanics as the wildlife does (D122), heavy things slow, or do some move as no animal could, by rules of their own?
 4. **Buying reference**: may we buy a quadruped clip library licensed for games (Truebones' zoo, about $100, royalty-free with credit, files not to be redistributed), to calibrate the check and tune gaits against, not to ship as is?
 5. **How many kinds a plan should make** (D182): how many distinct quadruped monsters a realm wants, which sets how much effort a template body is worth.
