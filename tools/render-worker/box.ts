@@ -75,7 +75,7 @@ export const wake = (b: Box) => writeFileSync(join(b.dir, "wake"), new Date().to
 
 // ---- The daemon's record of itself ----
 
-export type DaemonInfo = { pid: number; mode: string; rev: string; since: string; beat: string; status: string };
+export type DaemonInfo = { pid: number; mode: string; rev: string; since: string; beat: string; status: string; display?: string };
 
 export function daemonInfo(b: Box, now = Date.now()): (DaemonInfo & { alive: boolean }) | undefined {
   try {

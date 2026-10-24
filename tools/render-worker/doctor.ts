@@ -6,12 +6,38 @@ import { existsSync, readdirSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type Box, boxEnv, daemonInfo, git, listJobs } from "./box.ts";
-import { ago, boxSettings, gpuFix } from "./jobs.ts";
+import { ago, boxSettings, displayPlan, gpuFix } from "./jobs.ts";
 
 const sh = (cmd: string, args: string[]) => {
   const r = spawnSync(cmd, args, { encoding: "utf8" });
   return { ok: r.status === 0, out: `${r.stdout ?? ""}${r.stderr ?? ""}`.trim() };
 };
+
+type Line = (ok: boolean | "warn", text: string, fix?: string[]) => void;
+
+/// The display jobs draw through (display.ts): winit needs one even offscreen. What the running
+/// daemon gives them, else what it would; and the X client libraries winit loads.
+function display(b: Box, line: Line): void {
+  const plan = displayPlan(boxEnv(b));
+  if ("error" in plan) return line(false, `display: ${plan.error}`, [`fix ${join(b.repo, ".env")} (.env.example)`]);
+  const d = daemonInfo(b);
+  const xvfb = sh("sh", ["-c", "command -v Xvfb"]);
+  if (plan.how === "fixed") {
+    const n = plan.display.slice(1).split(".")[0];
+    const up = existsSync(`/tmp/.X11-unix/X${n}`);
+    line(up, `display: ${plan.display} from TERRA_RENDER_DISPLAY${up ? "" : ": no X server there"}`, ["start one there, or empty TERRA_RENDER_DISPLAY for the daemon's own Xvfb"]);
+  } else if (d?.alive && d.display) {
+    const n = /Xvfb :(\d+)/.exec(d.display)?.[1];
+    const up = !n || existsSync(`/tmp/.X11-unix/X${n}`);
+    line(up && (xvfb.ok || !d.display.startsWith("Xvfb")), `display: jobs get ${d.display}${up ? "" : ", but its socket is gone"}${xvfb.ok ? "" : "; Xvfb is not installed"}`, ["sudo apt-get install -y xvfb; the daemon starts it again by itself"]);
+  } else line(plan.how === "inherit" || xvfb.ok, `display: ${plan.how === "inherit" ? plan.said : xvfb.ok ? `none set; the daemon starts ${xvfb.out} when a job first needs it` : "none set and Xvfb is not installed: every sandbox job panics"}`, ["sudo apt-get install -y xvfb"]);
+  const libs = ["libX11.so.6", "libXcursor.so.1", "libXi.so.6", "libXrandr.so.2", "libxkbcommon-x11.so.0"];
+  const have = sh("ldconfig", ["-p"]).out;
+  const missing = libs.filter((l) => !have.includes(`${l} `));
+  line(!missing.length, missing.length ? `X client libraries missing: ${missing.join(", ")} (winit cannot open the display)` : "X client libraries: X11, Xcursor, Xi, Xrandr, xkbcommon-x11", [
+    "sudo apt-get install -y libx11-6 libxcursor1 libxi6 libxrandr2 libxkbcommon-x11-0",
+  ]);
+}
 
 export function doctor(b: Box): number {
   let bad = 0;
@@ -37,6 +63,8 @@ export function doctor(b: Box): number {
   if (!loader || !icds.includes("nvidia_icd.json")) line(false, `Vulkan: ${loader ? "" : "no loader (libvulkan1) "}${icds.includes("nvidia_icd.json") ? "" : "no NVIDIA ICD"}`.trim(), ["the NVIDIA driver package brings its ICD; `sudo apt-get install -y libvulkan1`"]);
   else if (info.ok) line(nvDevice ? true : false, `Vulkan: ${nvDevice ? nvDevice[0].replace(/\s+/g, " ") : "vulkaninfo sees no NVIDIA device"}`);
   else line(true, "Vulkan: the loader and the NVIDIA ICD are installed (vulkan-tools is not, so the device is not listed)");
+
+  display(b, line);
 
   line(true, `node: ${process.version} (${process.execPath})`);
   const node22 = Number(process.versions.node.split(".")[0]) >= 22;

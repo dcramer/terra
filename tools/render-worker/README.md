@@ -16,7 +16,7 @@ cargo xtask remote-render --doctor                         # what each box lacks
 ```
 
 - **Files back**: what the command wrote under `~/.cache/terra-review/` while it ran (a film's `frames/` left out), or the `--collect` paths instead (in the checkout, or `~/…`), in `~/.cache/terra-review/remote/<job>/` beside `job.log`. Output: a line when the job's state changes, the folder at the end; on a failure the log's last lines. Exit code: the command's (124 at its `--minutes` limit).
-- **Files**: `client.ts` is the xtask; `box.ts` the box's commands, which the client runs over ssh; `daemon.ts` the daemon that runs jobs; `doctor.ts` the box's checks; `bootstrap.sh` makes a box's folder and installs Node there; `jobs.ts` the decisions as pure functions (`jobs.test.ts`). `flow.test.ts` runs the whole path with a scratch folder for a box (`TERRA_WORKERS=local`, no ssh) in about two seconds. Node 22.18 or later, git, ssh, rsync; no dependencies.
+- **Files**: `client.ts` is the xtask; `box.ts` the box's commands, which the client runs over ssh; `daemon.ts` the daemon that runs jobs; `display.ts` the Xvfb it keeps for them; `doctor.ts` the box's checks; `bootstrap.sh` makes a box's folder and installs Node there; `jobs.ts` the decisions as pure functions (`jobs.test.ts`). `flow.test.ts` runs the whole path with a scratch folder for a box (`TERRA_WORKERS=local`, no ssh) in about two seconds. Node 22.18 or later, git, ssh, rsync; no dependencies.
 
 ## Settings
 
@@ -33,6 +33,7 @@ Every setting is in [`.env.example`](../../.env.example) with its default. The c
 | `TERRA_RENDER_KEEP_DAYS` | box | 7 | Days a job's files and ref are kept. |
 | `TERRA_RENDER_SLOTS` | box | 4 | Jobs at once, each in a slot: a worktree checkout `slots/<n>`, its build, and `homes/<n>` its HOME. |
 | `TERRA_RENDER_GPU_SLOTS` | box | 3 | Of them, GPU jobs at once; a bench has the box alone. A job's class comes from its command, or `--gpu`/`--cpu`. |
+| `TERRA_RENDER_DISPLAY` | box | auto | The X display a job that draws gets (`:1`). Empty: the daemon's own `WAYLAND_DISPLAY`/`DISPLAY`, else one Xvfb the daemon starts on a free number from `:99` when a job first needs it, starts again if it dies and stops when it exits (`display.ts`). |
 | `TERRA_REMOTE_CHECKS` | push hook | 0 | 1 runs the push hook's check on the worker at each commit pushed (`tools/git/remote-check.ts`). |
 
 ## Setting up a box
@@ -50,4 +51,5 @@ The worker never touches any other checkout on the box. Disk: the clone, and for
 
 - **`nvidia-smi` fails after a kernel update**: the driver's prebuilt kernel module exists only for older kernels. `--doctor` prints the fix; on Ubuntu with the 535 driver it is `sudo apt-get update && sudo apt-get install -y linux-modules-nvidia-535-generic linux-generic`, then `sudo reboot`.
 - **The daemon is down**: `--logs daemon` says why; `--update` starts it again. On the box: `systemctl --user status terra-render`.
+- **A sandbox job panics with "neither WAYLAND_DISPLAY nor DISPLAY is set"**: winit's event loop needs a display even for `--offscreen`, and a systemd user service has none. The daemon gives jobs its own Xvfb then; `--doctor`'s `display:` line says which display jobs get, and the job log's `render-worker: display:` line which one it got. If Xvfb is missing: `sudo apt-get install -y xvfb`. The NVIDIA driver draws headless under Vulkan, so the card still renders (the log's adapter line names the GPU, not llvmpipe).
 - **A job waits**: `--status` gives the daemon's last word, such as "outside the window".

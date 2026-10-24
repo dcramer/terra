@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boxSettings, chooseWorker, collected, config, expired, gpuFix, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, parseClient, parseEnvFile, parseWindow, plan, steps, WARM } from "./jobs.ts";
+import { boxSettings, chooseWorker, collected, config, displayPlan, expired, freeDisplay, gpuFix, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, plan, steps, takenDisplays, WARM, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -157,6 +157,39 @@ test("old jobs expire", () => {
 test("the job's environment holds no token or agent socket, cargo keeps its homes, and the build is the slot's", () => {
   const env = jobEnv({ HOME: "/home/u", PATH: "/bin", GH_TOKEN: "t", TRIPO_STUDIO_COOKIE: "c", SSH_AUTH_SOCK: "/s", CARGO_TARGET_DIR: "/shared" }, "/box/homes/2", "j1", "/box/slots/2/target");
   assert.deepEqual(env, { PATH: "/bin", HOME: "/box/homes/2", CARGO_HOME: "/home/u/.cargo", RUSTUP_HOME: "/home/u/.rustup", CARGO_TARGET_DIR: "/box/slots/2/target", TERRA_RENDER_JOB: "j1" });
+});
+
+test("a job that draws gets a display: TERRA_RENDER_DISPLAY, else the daemon's own, else an Xvfb", () => {
+  assert.deepEqual(displayPlan({}), { how: "xvfb" }, "a systemd user service has none");
+  assert.deepEqual(displayPlan({ TERRA_RENDER_DISPLAY: "" }), { how: "xvfb" }, "empty is auto");
+  assert.deepEqual(displayPlan({ DISPLAY: ":0" }), { how: "inherit", said: "DISPLAY=:0" });
+  assert.deepEqual(displayPlan({ WAYLAND_DISPLAY: "wayland-1", DISPLAY: ":0" }), { how: "inherit", said: "WAYLAND_DISPLAY=wayland-1" });
+  assert.deepEqual(displayPlan({ TERRA_RENDER_DISPLAY: "1", WAYLAND_DISPLAY: "wayland-1" }), { how: "fixed", display: ":1" }, "the setting wins");
+  assert.deepEqual(displayPlan({ TERRA_RENDER_DISPLAY: " :7.0 " }), { how: "fixed", display: ":7.0" });
+  assert.ok("error" in displayPlan({ TERRA_RENDER_DISPLAY: "host:0" }), "never a remote display");
+  assert.ok("error" in displayPlan({ TERRA_RENDER_DISPLAY: ":0; rm -rf ~" }));
+});
+
+test("the Xvfb's number is the first free one from 99, by sockets and lock files", () => {
+  const taken = takenDisplays(["X0", "X0_", "X99", ".X100-lock", ".X11-unix", "Xauthority", "X1x"]);
+  assert.deepEqual([...taken].sort((a, b) => a - b), [0, 99, 100]);
+  assert.equal(freeDisplay(taken), 101);
+  assert.equal(freeDisplay(new Set()), 99);
+  assert.deepEqual(xvfbArgs(101).slice(0, 4), [":101", "-screen", "0", "1920x1080x24"]);
+  assert.ok(xvfbArgs(101).includes("-nolisten"), "no TCP");
+  assert.deepEqual([1, 2, 3, 10].map(xvfbBackoff), [2, 4, 8, 60], "an Xvfb that keeps dying is started less often");
+});
+
+test("renders, benches and sandbox runs need a display; builds and warm jobs don't; the job's DISPLAY replaces Wayland", () => {
+  assert.ok(needsDisplay(job()));
+  assert.ok(needsDisplay(job({ command: ["cargo", "xtask", "bench"] })));
+  assert.ok(needsDisplay(job({ class: "cpu", command: ["cargo", "xtask", "sandbox", "--offscreen", "--experiment", "play"] })), "a sandbox run under --cpu still opens winit");
+  assert.ok(!needsDisplay(job({ command: ["cargo", "test", "-p", "terra_gen"] })));
+  assert.ok(!needsDisplay(job({ kind: "warm", command: [] })));
+  const env = jobEnv({ HOME: "/h", WAYLAND_DISPLAY: "wayland-1" }, "/b/h", "j", "/b/t", ":99");
+  assert.equal(env.DISPLAY, ":99");
+  assert.equal(env.WAYLAND_DISPLAY, undefined);
+  assert.equal(jobEnv({ HOME: "/h", DISPLAY: ":0" }, "/b/h", "j", "/b/t").DISPLAY, ":0", "no display given keeps the daemon's");
 });
 
 test("only what the command wrote is collected, never a film's frames", () => {

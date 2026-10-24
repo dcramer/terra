@@ -336,8 +336,10 @@ export function backoff(n: number): number {
 
 /// The job's environment: the daemon's, with no token, HOME the slot's, and the build in the
 /// slot's own `target/` (where the tools look for the sandbox), so slots never wait on each
-/// other's cargo lock. Cargo and rustup keep their homes, which default to HOME's.
-export function jobEnv(env: Record<string, string | undefined>, home: string, id: string, target: string): Record<string, string> {
+/// other's cargo lock. Cargo and rustup keep their homes, which default to HOME's. `display`,
+/// when given, is the X display the job draws through (`displayPlan`); it replaces any Wayland
+/// one, so winit opens X.
+export function jobEnv(env: Record<string, string | undefined>, home: string, id: string, target: string, display?: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined || /TOKEN|SECRET|PASSWORD|COOKIE|API_KEY|^GH_|^GITHUB_|^SSH_AUTH_SOCK$/.test(k)) continue;
@@ -349,8 +351,60 @@ export function jobEnv(env: Record<string, string | undefined>, home: string, id
   out.HOME = home;
   out.CARGO_TARGET_DIR = target;
   out.TERRA_RENDER_JOB = id;
+  if (display) {
+    out.DISPLAY = display;
+    delete out.WAYLAND_DISPLAY;
+  }
   return out;
 }
+
+// ---- The display a job draws through ----
+
+/// Whether a job needs a display: winit's event loop wants one even offscreen, so every GPU job
+/// and bench, and any sandbox run (a `--cpu` one too). Warm builds never open one.
+export function needsDisplay(job: Pick<Job, "class" | "command" | "kind">): boolean {
+  return job.kind === "run" && (classOf(job) !== "cpu" || job.command.some((w) => w === "sandbox" || w.includes("terra_sandbox")));
+}
+
+/// How the box gives jobs a display. TERRA_RENDER_DISPLAY (`:1`) fixes one. Unset or empty: the
+/// daemon's own WAYLAND_DISPLAY or DISPLAY when it has one (a desktop session), else an Xvfb the
+/// daemon starts on a free number and keeps for its lifetime (a systemd user service has none).
+export type DisplayPlan = { how: "inherit"; said: string } | { how: "fixed"; display: string } | { how: "xvfb" };
+
+export function displayPlan(env: Record<string, string | undefined>): DisplayPlan | { error: string } {
+  const fixed = (env.TERRA_RENDER_DISPLAY ?? "").trim();
+  if (fixed) {
+    const m = /^:?(\d{1,4})(\.\d{1,2})?$/.exec(fixed);
+    return m ? { how: "fixed", display: `:${m[1]}${m[2] ?? ""}` } : { error: `TERRA_RENDER_DISPLAY=${fixed}: an X display such as :1, or empty for the daemon's own or an Xvfb` };
+  }
+  if (env.WAYLAND_DISPLAY) return { how: "inherit", said: `WAYLAND_DISPLAY=${env.WAYLAND_DISPLAY}` };
+  if (env.DISPLAY) return { how: "inherit", said: `DISPLAY=${env.DISPLAY}` };
+  return { how: "xvfb" };
+}
+
+/// The display numbers in use, from the names in /tmp/.X11-unix (`X0`) and /tmp (`.X0-lock`).
+export function takenDisplays(names: string[]): Set<number> {
+  const taken = new Set<number>();
+  for (const n of names) {
+    const m = /^(?:X(\d+)|\.X(\d+)-lock)$/.exec(n);
+    if (m) taken.add(Number(m[1] ?? m[2]));
+  }
+  return taken;
+}
+
+/// The first free display number from 99, clear of a desktop's low ones.
+export function freeDisplay(taken: ReadonlySet<number>, from = 99): number {
+  let n = from;
+  while (taken.has(n)) n++;
+  return n;
+}
+
+/// The Xvfb the daemon starts: a 1920x1080 screen, no TCP, never reset when its last client goes.
+export const xvfbArgs = (n: number) => [`:${n}`, "-screen", "0", "1920x1080x24", "-nolisten", "tcp", "-noreset"];
+
+/// Seconds before Xvfb is started again after it died: 2, doubling while it keeps dying within a
+/// minute of starting, at most 60.
+export const xvfbBackoff = (quickDeaths: number) => Math.min(60, 2 * 2 ** Math.max(0, quickDeaths - 1));
 
 /// Whether a file found under a collected folder is collected: written since the job started
 /// (a second's slack for coarse clocks), and in no skipped folder.

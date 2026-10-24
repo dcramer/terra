@@ -5,13 +5,15 @@
 // listens on no port: the client reaches it over ssh through box.ts, which wakes it by writing
 // `wake` in its folder. It runs as a systemd user service or under `--supervise` (box.ts
 // install), and exits to be started again on new code when an update asks (`restart`), once its
-// jobs end. `--selftest` loads it and exits.
+// jobs end. A job that draws gets a display (display.ts): an Xvfb the daemon keeps when it has
+// none. `--selftest` loads it and exits.
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
-import { boxSettings, collected, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, plan, type Policy, type Slots, type Start, short, steps } from "./jobs.ts";
+import { Display } from "./display.ts";
+import { boxSettings, collected, displayPlan, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, plan, type Policy, type Slots, type Start, short, steps } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -83,7 +85,7 @@ export function slotCheckout(b: Box, slot: number, rev: string): string {
 }
 
 /// Runs one job to its end in its slot: its steps in the slot's checkout, then its files into out/.
-export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }): Promise<Job> {
+export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }, display?: Display): Promise<Job> {
   let job: Job = { ...queued, slot, state: "running", started: new Date().toISOString() };
   r.job = job;
   writeJob(b, job);
@@ -102,12 +104,14 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   try {
     note(`slot ${slot}: ${src}`);
     src = slotCheckout(b, slot, job.rev);
+    const dpy = display && needsDisplay(job) ? await display.get() : undefined;
+    if (display && needsDisplay(job)) note(`display: ${dpy ?? (display.why ? `none, ${display.why}` : display.describe())}`);
     for (const step of steps(job)) {
       if (r.cancelled) break;
       note(`${step.what}: ${step.cmd.join(" ")}`);
       if (step.run && !ran) (startedMs = Date.now()), (ran = true);
       const cmd = step.run ? [...limitArgs(job), ...step.cmd] : step.cmd;
-      const env = step.run || step.cmd[0] === "cargo" ? jobEnv(process.env, home, job.id, join(src, "target")) : process.env;
+      const env = step.run || step.cmd[0] === "cargo" ? jobEnv(process.env, home, job.id, join(src, "target"), dpy) : process.env;
       const code = await run(cmd, src, env, log, r);
       if (code !== 0) {
         exit = code;
@@ -166,11 +170,19 @@ async function daemon(b: Box): Promise<number> {
     say(`✗ ${s.error}`);
     return 1;
   }
+  const dp = displayPlan(boxEnv(b));
+  if ("error" in dp) {
+    say(`✗ ${dp.error}`);
+    return 1;
+  }
+  const display = new Display(dp, say);
+  process.on("exit", () => display.stop());
+  for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => process.exit(128 + (sig === "SIGTERM" ? 15 : 2)));
   const rev = git(b.repo, ["rev-parse", "--short=9", "HEAD"]).stdout.trim();
   const since = new Date().toISOString();
   const mode = process.env.TERRA_RENDER_MODE ?? "by hand";
   let status = "starting";
-  const beat = () => writeFileSync(join(b.dir, "daemon.json"), JSON.stringify({ pid: process.pid, mode, rev, since, beat: new Date().toISOString(), status }));
+  const beat = () => writeFileSync(join(b.dir, "daemon.json"), JSON.stringify({ pid: process.pid, mode, rev, since, beat: new Date().toISOString(), status, display: display.describe() }));
   const running = new Map<string, Running>();
   housekeep(b, s.keepDays);
   say(`render daemon at ${rev}, ${mode}, pid ${process.pid}, ${s.slots.slots} slots (${s.slots.gpuSlots} for GPU jobs)`);
@@ -190,7 +202,7 @@ async function daemon(b: Box): Promise<number> {
       const r: Running = { job, cancelled: false };
       running.set(job.id, r);
       say(`slot ${slot}: running ${job.id} (${short(job)})`);
-      runJob(b, job, slot, r).then((j) => {
+      runJob(b, job, slot, r, display).then((j) => {
         say(`${j.state === "done" ? "✓" : "✗"} slot ${slot}: ${j.id} ${j.state}: ${j.note}`);
         running.delete(j.id);
         wakeUp();
@@ -232,6 +244,8 @@ async function main(argv: string[]): Promise<number> {
   if (argv.includes("--selftest")) {
     const s = boxSettings(boxEnv(b));
     if ("error" in s) return console.log(s.error), 1;
+    const dp = displayPlan(boxEnv(b));
+    if ("error" in dp) return console.log(dp.error), 1;
     if (spawnSync("git", ["--version"]).status !== 0) return console.log("no git"), 1;
     return 0;
   }
