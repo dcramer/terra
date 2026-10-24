@@ -446,9 +446,10 @@ function endGrain(x: number, y: number, r: number, R: number, bark: boolean, see
 // Checked char along the grain, as wood burns to alligator char: fissures along it at a
 // across it (warped, of varied spacing), shorter cross-checks between them staggered column
 // to column, some missing. Its crack (0-1, deepest the fissures), how far inside a block
-// (0 at its rim, 1 inside), and the block's hash. `open` widens the cracks as it burns deeper;
-// `stretch` is metres a unit of a, where a is not in metres (an end's angle).
-function checks(a: number, b: number, open: number, seed: number, stretch: number): [number, number, number] {
+// (0 at its rim, 1 inside), the block's hash, and the share of its crack that glows. `open`
+// widens the cracks as it burns deeper; `stretch` is metres a unit of a, where a is not in
+// metres (an end's angle).
+function checks(a: number, b: number, open: number, seed: number, stretch: number): [number, number, number, number] {
   const SA = 0.017;
   const u = a / SA + 1.4 * (fbm(a * 20, b * 16, seed + 50) - 0.5) + 0.5 * (fbm(a * 60, b * 45, seed + 49) - 0.5), col = Math.floor(u);
   const dl = Math.min(frac(u), 1 - frac(u)) * SA * stretch;
@@ -463,9 +464,16 @@ function checks(a: number, b: number, open: number, seed: number, stretch: numbe
   const along = smooth(0.4, 0.55, noise(col * 7.3, b * 5, seed + 55));
   const wl = (0.0007 + 0.0016 * fbm(a * 12, b * 3, seed + 56)) * (0.5 + 1.5 * open);
   const wt = (0.0005 + 0.001 * hash(col, row, 57)) * (0.5 + 1.5 * open);
-  const crack = Math.max(along * (1 - smooth(wl * 0.4, wl, dl)), 0.75 * crossed * (1 - smooth(wt * 0.4, wt, dt)));
+  const [lengthwise, crosswise] = [along * (1 - smooth(wl * 0.4, wl, dl)), 0.75 * crossed * (1 - smooth(wt * 0.4, wt, dt))];
+  const crack = Math.max(lengthwise, crosswise);
   const inside = smooth(0, 0.005, Math.min(along > 0.5 ? dl : 1, crossed ? dt : 1));
-  return [crack, inside, hash(col, row, 58)];
+  // Only the deepest of a net glow, as on burning char: a fissure in broken runs along its
+  // length, a cross-check one in three. Every crack lit alike, the net read as a waffle
+  // grid on the logs' feet from above (campfire view round), and lit as cells, a leopard
+  // print (step-back v6); dark cracks keep the char's net in its albedo.
+  const runs = smooth(0.42, 0.58, noise(col * 5.1, b * 11, seed + 59));
+  const glows = Math.max(lengthwise * runs, crosswise * (hash(col, row, 60) > 0.66 ? 1 : 0));
+  return [crack, inside, hash(col, row, 58), glows];
 }
 // Char over any wood by how hot it got (a across the grain, b along it; `groove` its bark's
 // furrows, which burn and glow first): scorched brown, then black checked char whose cracks
@@ -484,8 +492,9 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // (fire round 32: opened 2.2 times, the feet's fissures stood as even pale stripes, "like a
   // barcode"); the bark's furrows glow dull, never as deep as a fissure.
   const feet = smooth(0.55, 1.25, x);
-  const [crack, inside, id] = checks(a, b, hot * (0.6 + 0.5 * feet), seed + 11, stretch);
+  const [crack, inside, id, glows] = checks(a, b, hot * (0.6 + 0.5 * feet), seed + 11, stretch);
   const deep = Math.max(crack, 0.55 * groove * smooth(0.35, 0.7, x));
+  const lit = Math.max(glows, 0.55 * groove * smooth(0.35, 0.7, x));
   let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
   // Grey-white ash on the blocks, in patches, from where it chars through to where it burns
   // hottest: only on the hottest it read as no ash at all (blind judge, campfire ember round).
@@ -493,7 +502,7 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   const ash = 0.35 * smooth(0.6, 0.95, x) * (1 - 0.6 * smooth(0.85, 1.1, x)) * smooth(0.58, 0.74, fbm(a * 60, b * 25, seed + 59));
   block = mix(block, [124, 120, 114], ash);
   c = mix(c, mix(block.map((v) => v * (0.72 + 0.4 * inside)), [30, 13, 8], deep), char);
-  const leak = 0.3 * (1 - inside) * hot;
+  const leak = 0.3 * (1 - inside) * hot * smooth(0.05, 0.4, lit);
   // A fissure's heat: its deepest middle and toward the coals the hottest, dull orange-red at
   // its lips up the log, through ember orange to yellow-white in the deepest seams at the feet
   // (fire round 31: an even-width pink-red neon mesh, its red near pure, which the night's
@@ -501,10 +510,10 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // Some runs of a seam burn hot and some dull, in patches along it, so its yellow is few and
   // irregular; never past the ember's orange, whose yellow read tan by firelight (campfire glow round).
   const vary = smooth(0.3, 0.8, fbm(a * 5, b * 2.2, seed + 62));
-  const t = Math.min(0.35, deep * deep * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
+  const t = Math.min(0.28, lit * lit * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
   // Only some runs of the seams burn bright, in patches along the log (`vary`), the rest dull:
   // every seam lit alike, the blocks read as a regular checker (campfire fill round).
-  const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t) * (0.3 + 0.7 * smooth(0.45, 0.75, vary));
+  const g = Math.min(1, lit + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t) * (0.3 + 0.7 * smooth(0.45, 0.75, vary));
   const tone = t < 0.5 ? mix([196, 64, 8], HOTTEST, t * 2) : mix(HOTTEST, [255, 206, 120], t * 2 - 1);
   // Where it lies in the coals its whole char glows, not its cracks alone: a broad warm gradient
   // over its blocks, brightest at the hottest, broken by the char's mottle (fire round 31: dark
@@ -550,8 +559,10 @@ function heat(l: Log, t: number, n: V3): number {
   // on every face the eye sees, and its inner end where the logs cross over the flames; plain
   // black char between (blind judge, campfire glow round: a glow spread up every face read as
   // "evenly scattered tan-orange specks", not heat where the fire meets the wood).
+  // Hot on the faces toward the coals and under, charred black on top: hot on every face, the
+  // feet read as a glowing waffle grid from above (campfire view round).
   const low = smooth(0.34, 0.12, f), crossing = smooth(0.8, 0.95, f);
-  const foot = low * (1.0 + 0.2 * under);
+  const foot = low * (0.5 + 0.6 * under);
   const top = crossing * (0.62 + 0.3 * under);
   // Its underside licked hot enough that its cracks glow there, seen low between the logs.
   const lick = under * under * (0.5 + 0.2 * f);
@@ -645,9 +656,18 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
   return out;
 }
 
-/** The stone atlas's colour and metal-roughness maps: a tile a stone, painted by direction. */
+/** The light the firelit ground bounces onto the ring's stones, sRGB on their emissive map,
+ * which glows as the fire burns (`props::Embers`), as games light a fire's surroundings by
+ * their bounce (GI) besides the fire's own light: the fire's lights cannot reach a stone's face
+ * turned from the pit, which drew black by night (sRGB luma 9-10, RDR2's 40-90; campfire view
+ * round), so this is the firelit ground's light on it, toward its foot most. */
+const STONE_BOUNCE = [14, 8, 3.5];
+// Each stone its own share of it, as rendered and measured (campfire view round): a next round picks one.
+const PROBE_LEVELS = [0.5, 0.75, 1, 1.5, 2, 3];
+/** The stone atlas's colour, metal-roughness and emissive maps: a tile a stone, painted by direction. */
 export function stoneMaps(stones: Stone[]): Uint8Array[] {
-  const out = [0, 1].map(() => new Uint8Array(W * W * 4).fill(255));
+  const out = [0, 1, 2].map(() => new Uint8Array(W * W * 4).fill(255));
+  out[2].fill(0);
   stones.forEach((st, tile) => {
     const [tx, ty] = [(tile % (W / TILE)) * TILE, Math.floor(tile / (W / TILE)) * TILE];
     for (let y = 0; y < TILE; y++) {
@@ -674,6 +694,9 @@ export function stoneMaps(stones: Stone[]): Uint8Array[] {
         const o = ((ty + y) * W + tx + x) * 4;
         for (let i = 0; i < 3; i++) out[0][o + i] = Math.round(Math.min(255, c[i]));
         out[1].set([0, Math.round((0.84 - 0.12 * soot + 0.1 * grain) * 255), 0], o);
+        // The firelit ground's bounce, most toward its foot (`STONE_BOUNCE`).
+        const bounce = PROBE_LEVELS[tile % PROBE_LEVELS.length] * (0.55 + 0.45 * smooth(0.4, -0.6, d[1]));
+        out[2].set(STONE_BOUNCE.map((v) => Math.round(v * bounce)), o);
       }
     }
   });
@@ -735,7 +758,13 @@ export function campfire(seed = 1): Buffer {
     emissiveFactor: [1, 1, 1],
     extensions: { KHR_materials_emissive_strength: { emissiveStrength: 3 } },
   });
-  j.materials.push({ name: "Stone", pbrMetallicRoughness: { baseColorTexture: tex(image(sm[0], W / 2, true), "image/jpeg"), metallicRoughnessTexture: tex(image(sm[1], W / 4, true), "image/jpeg"), metallicFactor: 0 } });
+  j.materials.push({
+    name: "Stone",
+    pbrMetallicRoughness: { baseColorTexture: tex(image(sm[0], W / 2, true), "image/jpeg"), metallicRoughnessTexture: tex(image(sm[1], W / 4, true), "image/jpeg"), metallicFactor: 0 },
+    emissiveTexture: tex(image(sm[2], W / 4, false), "image/png"),
+    emissiveFactor: [1, 1, 1],
+    extensions: { KHR_materials_emissive_strength: { emissiveStrength: 3 } },
+  });
   prim(wood, 0, tangents(wood));
   prim(stone, 1);
   const pad = (4 - (len % 4)) % 4;

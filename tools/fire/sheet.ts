@@ -53,6 +53,11 @@ const AIM: Vec3 = [35, 1.5, 10];
 
 export const FIRES: Fire[] = [
   { name: "campfire", class: "campfire", frame: 330, box: "kept", eye: [-10, 1.7, 16], at: [-10, 1, 10], matte: true },
+  // The campfire again from RDR2's camp view (D433), the first row kept so history compares:
+  // its stone ring an ellipse 0.55 as deep as wide, so the eye 33 degrees over the ring and
+  // the camera pitched 26 down, the ring 15% of the picture's width, which at our 45-degree
+  // lens is 4.8 m off, about 8.5 flame heights (the first row: 16 degrees, 6.2 m).
+  { name: "campfire above", class: "campfire", frame: 420, box: "kept", eye: [-10, 2.6, 14], at: [-10, 0.65, 10], matte: true },
   { name: "house blaze", class: "structure", frame: 760, box: "blazes", eye: [4.25, 3.5, 22], at: [4.25, 2.5, 5.75], matte: false },
   { name: "breath", class: "flamethrower", frame: 960, box: "stream", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
   { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },

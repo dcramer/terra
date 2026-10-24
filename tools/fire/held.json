@@ -31,5 +31,8 @@
   "coarse %"
  ],
  "breath night": [],
- "fireball night": []
+ "fireball night": [],
+ "campfire above noon": [],
+ "campfire above dusk": [],
+ "campfire above night": []
 }
