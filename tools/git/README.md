@@ -1,5 +1,6 @@
 # tools/git
 
-Checks of git history that the hooks run.
+Checks of git history that the hooks run, and the hook's checks run elsewhere.
 
 - `undone.ts`, run by `.githooks/pre-push` (D431): `node tools/git/undone.ts [range]` (default `origin/main..HEAD`) warns, a line an undo, of a commit that silently undoes another commit of the last 48 hours outside the range: it deletes every line that commit added to a file (at least three) and puts back what it replaced, or the commit only added, while its message names neither the file nor the commit. Moves and `spike/` don't count. It never fails; nothing printed means clean. Node 22.18+, no dependencies; `node --test tools/git/undone.test.ts`.
+- `remote-check.ts`, run by `.githooks/pre-push` when `TERRA_REMOTE_CHECKS=1` (the environment over `.env`; D37, D445): instead of `cargo xtask check` here, it runs that check on the render worker (`cargo xtask remote-render`, a CPU job) at each commit the push sends, over what the commit changed since its merge-base with origin/main (`--base`), prints the check's own lines and fails the push when the check fails or the worker cannot be reached; the stages' logs come back to `~/.cache/terra-review/remote/check-<sha>/target/check/`. For a machine that must not build. `node --test tools/git/remote-check.test.ts`.

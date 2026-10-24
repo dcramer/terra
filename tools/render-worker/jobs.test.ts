@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boxSettings, chooseWorker, collected, config, expired, gpuFix, inWindow, type Job, jobEnv, jobId, mayStart, parseClient, parseEnvFile, parseWindow, pick, steps, WARM } from "./jobs.ts";
+import { boxSettings, chooseWorker, collected, config, expired, gpuFix, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, parseClient, parseEnvFile, parseWindow, plan, steps, WARM } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -44,6 +44,9 @@ test("the client's arguments: the command after --, options before it, one mode"
   const a = parseClient(["--rev", "abc", "--collect", "shot.png", "--collect", "~/x", "--minutes", "30", "--no-cook", "--worker", "box-a", "--", "cargo", "xtask", "bench", "--runs", "3"]);
   assert.deepEqual(a, { mode: "queue", rev: "abc", command: ["cargo", "xtask", "bench", "--runs", "3"], collect: ["shot.png", "~/x"], cook: false, minutes: 30, out: undefined, wait: true, worker: "box-a" });
   assert.equal((parseClient(["--", "x"], 45) as { minutes: number }).minutes, 45, ".env's limit is the default");
+  assert.equal((parseClient(["--cpu", "--", "x"]) as { class?: string }).class, "cpu");
+  assert.equal((parseClient(["--", "x"]) as { class?: string }).class, undefined);
+  assert.ok("error" in parseClient(["--cpu", "--gpu", "--", "x"]));
   assert.deepEqual(parseClient(["--status"]), { mode: "status", worker: undefined });
   assert.deepEqual(parseClient(["--update", "--worker", "b"]), { mode: "update", worker: "b" });
   assert.deepEqual(parseClient(["--wait", "20261023-120000-aaaa", "--out", "d"]), { mode: "wait", id: "20261023-120000-aaaa", out: "d", worker: undefined });
@@ -74,26 +77,86 @@ test("a window wraps past midnight, and a CI lock holds jobs back", () => {
   assert.ok(mayStart({ afterCi: false }, 600, true).ok);
   assert.deepEqual(mayStart({ afterCi: true, window: night }, 600, false), { ok: false, why: "outside the window" });
   assert.ok(mayStart({ afterCi: true, window: night }, 30, false).ok);
-  assert.deepEqual(boxSettings({ TERRA_RENDER_WINDOW: "22:00-08:00", TERRA_RENDER_KEEP_DAYS: "3" }), { policy: { window: night, afterCi: true }, ciLock: undefined, keepDays: 3 });
+  assert.deepEqual(boxSettings({ TERRA_RENDER_WINDOW: "22:00-08:00", TERRA_RENDER_KEEP_DAYS: "3" }), { policy: { window: night, afterCi: true }, ciLock: undefined, keepDays: 3, slots: { slots: 4, gpuSlots: 3 } });
   assert.ok("error" in boxSettings({ TERRA_RENDER_KEEP_DAYS: "0" }));
+  assert.deepEqual((boxSettings({ TERRA_RENDER_SLOTS: "2" }) as { slots: object }).slots, { slots: 2, gpuSlots: 2 }, "never more GPU slots than slots");
+  assert.deepEqual((boxSettings({ TERRA_RENDER_SLOTS: "8", TERRA_RENDER_GPU_SLOTS: "1" }) as { slots: object }).slots, { slots: 8, gpuSlots: 1 });
+  assert.ok("error" in boxSettings({ TERRA_RENDER_SLOTS: "0" }));
+  assert.ok("error" in boxSettings({ TERRA_RENDER_GPU_SLOTS: "x" }));
 });
 
-test("one job at a time: a warm build first, then the oldest; old jobs expire", () => {
-  const a = job({ id: "20261023-100000-aaaa" });
-  const b = job({ id: "20261023-090000-bbbb" });
-  const warm = job({ id: "20261023-110000-cccc", kind: "warm" });
-  assert.equal(pick([a, b])?.id, b.id);
-  assert.equal(pick([a, b, warm])?.id, warm.id);
-  assert.equal(pick([a, job({ state: "running" })]), undefined);
-  assert.equal(pick([job({ state: "cancelled" })]), undefined);
+test("a job's class: from its command unless --gpu or --cpu says; a bench always has the box", () => {
+  assert.equal(jobClass(["cargo", "xtask", "trailer", "--cut", "x.json"]), "gpu");
+  assert.equal(jobClass(["cargo", "xtask", "sandbox", "--offscreen"]), "gpu");
+  assert.equal(jobClass(["cargo", "xtask", "bench"]), "bench");
+  assert.equal(jobClass(["cargo", "xtask", "gpu", "bench", "--", "x"]), "bench");
+  assert.equal(jobClass(["cargo", "xtask", "bench"], "cpu"), "bench");
+  assert.equal(jobClass(["cargo", "test", "-p", "terra_gen"]), "cpu");
+  assert.equal(jobClass(["cargo", "+nightly", "clippy", "--workspace"]), "cpu");
+  assert.equal(jobClass(["cargo", "-q", "check"]), "cpu");
+  assert.equal(jobClass(["cargo", "xtask", "check", "--base", "abc"]), "cpu");
+  assert.equal(jobClass(["node", "tools/sandbox/film.ts"]), "gpu", "anything else may draw");
+  assert.equal(jobClass(["node", "x.ts"], "cpu"), "cpu");
+  assert.equal(jobClass(["cargo", "test"], "gpu"), "gpu");
+});
+
+test("slots: four jobs at once, the GPU cap holds and CPU jobs pass, a bench waits for an empty box", () => {
+  const at = (n: number, over: Partial<Job> = {}) => job({ id: `20261023-1000${String(n).padStart(2, "0")}-aaaa`, ...over });
+  const cpu = { class: "cpu" as const };
+  const gpu = { class: "gpu" as const };
+  const s = { slots: 4, gpuSlots: 3 };
+  const slotsOf = (r: ReturnType<typeof plan>) => r.start.map((x) => [x.job.id.slice(13, 15), x.slot]);
+
+  // Five CPU jobs: four start at once, one in each slot, the oldest first; the fifth waits.
+  const five = [5, 1, 3, 2, 4].map((n) => at(n, cpu));
+  const p = plan(five, s);
+  assert.deepEqual(slotsOf(p), [["01", 1], ["02", 2], ["03", 3], ["04", 4]]);
+  assert.equal(p.why, "all 4 slots are taken");
+
+  // Four GPU jobs: three take the card; a CPU job behind them takes the fourth slot.
+  const g = plan([at(1, gpu), at(2, gpu), at(3, gpu), at(4, gpu), at(5, cpu)], s);
+  assert.deepEqual(slotsOf(g), [["01", 1], ["02", 2], ["03", 3], ["05", 4]]);
+  assert.equal(g.why, "the 3 GPU slots are taken");
+  // With three GPU jobs running, no GPU job starts, whatever slots are free.
+  const running = [1, 2, 3].map((n) => at(n, { ...gpu, state: "running", slot: n + 1 }));
+  assert.deepEqual(slotsOf(plan([...running, at(4, gpu), at(5, cpu)], s)), [["05", 1]]);
+  // A job queued before classes is classed by its command (a trailer: GPU).
+  assert.deepEqual(plan([...running, at(4)], s).start, []);
+
+  // A bench waits for the box to empty, and nothing queued behind it starts meanwhile.
+  const bench = at(2, { class: "bench" });
+  const b1 = plan([at(1, { ...cpu, state: "running", slot: 3 }), bench, at(3, cpu)], s);
+  assert.deepEqual(b1, { start: [], why: "a bench waits for the box to empty" });
+  // Jobs ahead of it still start; then it waits for them.
+  assert.deepEqual(slotsOf(plan([at(1, cpu), bench, at(3, cpu)], s)), [["01", 1]]);
+  // On an empty box it starts alone, and while it runs nothing else does.
+  assert.deepEqual(slotsOf(plan([bench, at(3, cpu)], s)), [["02", 1]]);
+  assert.deepEqual(plan([{ ...bench, state: "running", slot: 1 }, at(3, cpu)], s), { start: [], why: "a bench has the box" });
+});
+
+test("warm builds go first, each in the slot it warms, and other jobs keep off those slots", () => {
+  const warm = (slot: number) => job({ id: `20261023-110000-ccc${slot}`, kind: "warm", slot, class: "cpu" });
+  const older = job({ id: "20261023-090000-bbbb", class: "cpu" });
+  const p = plan([older, warm(1), warm(2), warm(3), warm(4)], { slots: 4, gpuSlots: 3 });
+  assert.deepEqual(p.start.map((x) => [x.job.id, x.slot]), [1, 2, 3, 4].map((n) => [`20261023-110000-ccc${n}`, n]));
+  // Slot 2 busy: its warm build waits for it, and the run job does not take slot 2's turn.
+  const busy = job({ id: "20261023-080000-dddd", class: "cpu", state: "running", slot: 2 });
+  const q = plan([busy, older, warm(1), warm(2), warm(3), warm(4)], { slots: 4, gpuSlots: 3 });
+  assert.deepEqual(q.start.map((x) => x.slot), [1, 3, 4]);
+  assert.ok(!q.start.some((x) => x.job.id === older.id));
+  // A warm build for a slot the box no longer has takes any free one.
+  assert.deepEqual(plan([warm(4)], { slots: 2, gpuSlots: 2 }).start.map((x) => x.slot), [1]);
+});
+
+test("old jobs expire", () => {
   const now = new Date("2026-10-31T12:00:00Z");
   const old = job({ state: "done", ended: "2026-10-23T13:00:00Z" });
   assert.deepEqual(expired([old, job({ state: "done", ended: "2026-10-30T13:00:00Z" }), job({ state: "running" })], now, 7), [old]);
 });
 
-test("the job's environment holds no token or agent socket, and cargo keeps its homes", () => {
-  const env = jobEnv({ HOME: "/home/u", PATH: "/bin", GH_TOKEN: "t", TRIPO_STUDIO_COOKIE: "c", SSH_AUTH_SOCK: "/s" }, "/box/home", "j1");
-  assert.deepEqual(env, { PATH: "/bin", HOME: "/box/home", CARGO_HOME: "/home/u/.cargo", RUSTUP_HOME: "/home/u/.rustup", TERRA_RENDER_JOB: "j1" });
+test("the job's environment holds no token or agent socket, cargo keeps its homes, and the build is the slot's", () => {
+  const env = jobEnv({ HOME: "/home/u", PATH: "/bin", GH_TOKEN: "t", TRIPO_STUDIO_COOKIE: "c", SSH_AUTH_SOCK: "/s", CARGO_TARGET_DIR: "/shared" }, "/box/homes/2", "j1", "/box/slots/2/target");
+  assert.deepEqual(env, { PATH: "/bin", HOME: "/box/homes/2", CARGO_HOME: "/home/u/.cargo", RUSTUP_HOME: "/home/u/.rustup", CARGO_TARGET_DIR: "/box/slots/2/target", TERRA_RENDER_JOB: "j1" });
 });
 
 test("only what the command wrote is collected, never a film's frames", () => {
@@ -102,15 +165,14 @@ test("only what the command wrote is collected, never a film's frames", () => {
   assert.ok(!collected("trailer/frames/lake/f-001.png", 2000, 1500));
 });
 
-test("a job's steps: its pushed ref, a clean checkout, cook unless told not, the command niced", () => {
-  const s = steps(job(), "/box/repo");
-  assert.deepEqual(s.map((x) => x.what), ["fetch the job's commit", "check it out", "clean all but the build", "cook textures", "run"]);
-  assert.deepEqual(s[0].cmd.slice(-2), ["/box/repo", "+refs/jobs/20261023-120000-aaaa:refs/jobs/20261023-120000-aaaa"]);
-  assert.ok(s[2].cmd.includes("target/"), "the build is kept");
+test("a job's steps: a clean checkout of its commit, cook unless told not, the command niced", () => {
+  const s = steps(job());
+  assert.deepEqual(s.map((x) => x.what), ["check out the job's commit", "clean all but the build", "cook textures", "run"]);
+  assert.equal(s[0].cmd.at(-1), job().rev);
+  assert.ok(s[1].cmd.includes("target/"), "the build is kept");
   assert.deepEqual(s.at(-1)!.cmd, ["nice", "-n", "10", "cargo", "xtask", "trailer", "--cut", "x.json"]);
-  assert.ok(!steps(job({ cook: false }), "r").some((x) => x.what === "cook textures"));
-  const warm = steps(job({ kind: "warm" }), "r");
-  assert.equal(warm[0].cmd.at(-1), "+refs/worker/main:refs/worker/main");
+  assert.ok(!steps(job({ cook: false })).some((x) => x.what === "cook textures"));
+  const warm = steps(job({ kind: "warm" }));
   assert.deepEqual(warm.filter((x) => x.run).map((x) => x.cmd.slice(3)), WARM);
 });
 

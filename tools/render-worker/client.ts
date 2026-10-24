@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { ago, backoff, type ClientArgs, chooseWorker, config, type Job, jobId, parseClient, parseEnvFile, type Seen, short, USAGE } from "./jobs.ts";
+import { ago, backoff, type ClientArgs, chooseWorker, config, type Job, jobClass, jobId, parseClient, parseEnvFile, type Seen, short, USAGE } from "./jobs.ts";
 
 /// A render box as the client reaches it: over ssh, or `local`, this machine (the tests).
 export type Remote = { host: string; dir: string };
@@ -62,7 +62,7 @@ export function submit(r: Remote, cwd: string, job: Omit<Job, "id" | "kind" | "q
   const res = onBox(r, boxCmd(r, ["submit"]), JSON.stringify(full));
   if (res.status !== 0) return { error: why(r, res) };
   const { alive, ahead } = JSON.parse(lastLine(res.stdout)) as { alive: boolean; ahead: number };
-  return { id: full.id, note: alive ? (ahead ? `${ahead} ahead of it` : "next") : "the daemon is not running; the job waits for it (--update starts it)" };
+  return { id: full.id, note: alive ? (ahead ? `${ahead} queued ahead of it` : "next") : "the daemon is not running; the job waits for it (--update starts it)" };
 }
 
 /// Waits on the box for the job to end (the box watches it; a line when its state changes) and
@@ -149,12 +149,17 @@ function holder(remotes: Remote[], id: string): Remote | undefined {
   });
 }
 
-/// The settings: the environment over the .env of this checkout, else of the main checkout.
-export function loadConfig(cwd: string, env = process.env) {
+/// The .env of this checkout, else of the main checkout, parsed; empty when neither has one.
+export function envFile(cwd: string): Record<string, string> {
   const top = git(cwd, ["rev-parse", "--show-toplevel"]).stdout.trim();
   const common = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.trim();
   const file = [top, common && resolve(common, "..")].filter(Boolean).map((d) => join(d, ".env")).find((f) => existsSync(f));
-  return config(env, file ? parseEnvFile(readFileSync(file, "utf8")) : {});
+  return file ? parseEnvFile(readFileSync(file, "utf8")) : {};
+}
+
+/// The settings: the environment over the .env of this checkout, else of the main checkout.
+export function loadConfig(cwd: string, env = process.env) {
+  return config(env, envFile(cwd));
 }
 
 async function main(argv: string[]): Promise<number> {
@@ -208,7 +213,7 @@ async function run(args: ClientArgs, remotes: Remote[], cwd: string, outOf: (id:
   if ("error" in chosen) return console.log(`✗ remote-render: ${chosen.error}`), 1;
   const r = remotes.find((x) => x.host === chosen.host)!;
   if (chosen.note) console.log(`remote-render: ${chosen.note}`);
-  const job = { rev: sha, command: args.command, collect: args.collect, cook: args.cook, minutes: args.minutes };
+  const job = { rev: sha, command: args.command, collect: args.collect, cook: args.cook, minutes: args.minutes, class: jobClass(args.command, args.class) };
   const sub = submit(r, cwd, job);
   if ("error" in sub) return console.log(`✗ remote-render: ${sub.error}`), 1;
   console.log(`render ${sub.id}: queued on ${r.host}, ${sub.note} (${short({ ...job, id: sub.id, kind: "run" } as Job)})`);

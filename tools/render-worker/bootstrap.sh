@@ -6,7 +6,7 @@
 set -eu
 dir="$1"
 case "$dir" in /*) ;; *) dir="$HOME/$dir" ;; esac
-mkdir -p "$dir/jobs" "$dir/home"
+mkdir -p "$dir/jobs" "$dir/homes"
 [ -d "$dir/repo/.git" ] || git init -q "$dir/repo"
 [ "${2:-}" = node ] || exit 0
 if [ -x "$dir/node/bin/node" ] && "$dir/node/bin/node" -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)'; then exit 0; fi

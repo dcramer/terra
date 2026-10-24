@@ -293,10 +293,15 @@ fn lines(text: Option<String>) -> Option<Vec<String>> {
 }
 
 /// What a push holds: everything that differs from where HEAD left origin/main, committed or
-/// not.
-pub(crate) fn push() -> Scope {
-    let Some(base) = output("git", &["merge-base", "HEAD", "origin/main"]) else {
-        return Scope::everything("no merge-base with origin/main");
+/// not; or from `base`, which the push hook's remote check gives, the box's checkout knowing no
+/// origin/main.
+pub(crate) fn push(base: Option<&str>) -> Scope {
+    let base = match base {
+        Some(base) => base.to_string(),
+        None => match output("git", &["merge-base", "HEAD", "origin/main"]) {
+            Some(base) => base,
+            None => return Scope::everything("no merge-base with origin/main"),
+        },
     };
     match lines(output(
         "git",

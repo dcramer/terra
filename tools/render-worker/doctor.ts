@@ -58,10 +58,10 @@ export function doctor(b: Box): number {
 
   const fs = statfsSync(existsSync(b.dir) ? b.dir : homedir());
   const freeGb = Math.round((fs.bavail * fs.bsize) / 1024 ** 3);
-  line(freeGb >= 100 || (freeGb >= 30 ? "warn" : false), `disk: ${freeGb} GB free for ${b.dir}`, ["a job's build and caches take about 100 GB; free some, or old jobs go after 7 days"]);
+  line(freeGb >= 100 || (freeGb >= 30 ? "warn" : false), `disk: ${freeGb} GB free for ${b.dir}`, ["each slot's build and caches take tens of GB; free some, lower TERRA_RENDER_SLOTS, or old jobs go after 7 days"]);
 
   const s = boxSettings(boxEnv(b));
-  line(!("error" in s), "error" in s ? `settings: ${s.error}` : `settings: ${s.policy.window ? `jobs start ${boxEnv(b).TERRA_RENDER_WINDOW}` : "jobs start at any hour"}${s.ciLock ? `, after the CI lock ${s.ciLock}` : ""}`, [
+  line(!("error" in s), "error" in s ? `settings: ${s.error}` : `settings: ${s.policy.window ? `jobs start ${boxEnv(b).TERRA_RENDER_WINDOW}` : "jobs start at any hour"}${s.ciLock ? `, after the CI lock ${s.ciLock}` : ""}, ${s.slots.slots} slots (${s.slots.gpuSlots} for GPU jobs)`, [
     `fix ${join(b.repo, ".env")} (.env.example)`,
   ]);
 
@@ -70,11 +70,13 @@ export function doctor(b: Box): number {
   const now = new Date();
   if (!d) line(false, "daemon: never started", ["cargo xtask remote-render --update"]);
   else if (!d.alive) line(false, `daemon: not running (last word ${ago(d.beat, now)} ago: ${d.status})`, ["cargo xtask remote-render --update starts it; --logs daemon shows why it stopped"]);
-  else line(d.rev === rev || "warn", `daemon: ${d.status}, ${d.mode}, at ${d.rev}${d.rev === rev ? "" : ` (the clone is at ${rev}; it restarts after its job)`}`);
+  else line(d.rev === rev || "warn", `daemon: ${d.status}, ${d.mode}, at ${d.rev}${d.rev === rev ? "" : ` (the clone is at ${rev}; it restarts after its jobs)`}`);
   const jobs = listJobs(b);
   const queued = jobs.filter((j) => j.state === "queued").length;
-  const warm = jobs.filter((j) => j.kind === "warm").at(-1);
-  line(true, `jobs: ${queued} queued, ${jobs.length} kept${warm ? `; last warm build ${warm.state}${warm.note ? ` (${warm.note})` : ""}` : ""}`);
-  if (warm?.state === "failed") line(false, `the warm build after the update failed: --logs ${warm.id}`);
+  const lastWarm = jobs.filter((j) => j.kind === "warm" && j.state !== "cancelled").at(-1);
+  const warms = jobs.filter((j) => j.kind === "warm" && j.rev === lastWarm?.rev && j.state !== "cancelled");
+  const count = (st: string) => warms.filter((j) => j.state === st).length;
+  line(true, `jobs: ${queued} queued, ${jobs.length} kept${warms.length ? `; last update's warm builds: ${count("done")} done, ${count("running") + count("queued")} to go, ${count("failed")} failed` : ""}`);
+  for (const w of warms.filter((j) => j.state === "failed")) line(false, `the warm build in slot ${w.slot ?? 1} failed: --logs ${w.id}`);
   return bad ? 1 : 0;
 }

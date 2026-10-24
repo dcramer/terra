@@ -6,6 +6,7 @@ The render worker ([docs/render-worker.md](../../docs/render-worker.md), D445): 
 cargo xtask remote-render -- cargo xtask sandbox --offscreen --experiment play --shot ~/.cache/terra-review/a.png
 cargo xtask remote-render --rev 1a2b3c4 --collect shot.png -- cargo xtask sandbox --offscreen --experiment play --shot shot.png
 cargo xtask remote-render --no-wait -- cargo xtask bench   # queue, print the job, return
+cargo xtask remote-render --cpu -- node tools/x.ts         # a job that never draws: any free slot
 cargo xtask remote-render --wait <job>                     # wait for it and fetch its files
 cargo xtask remote-render --status                         # each box's daemon and jobs
 cargo xtask remote-render --logs <job|daemon>              # a log's last lines
@@ -30,6 +31,9 @@ Every setting is in [`.env.example`](../../.env.example) with its default. The c
 | `TERRA_RENDER_WINDOW` | box | any hour | Jobs start only between these hours on the box's clock, e.g. `22:00-08:00`. |
 | `TERRA_RENDER_CI_LOCK`, `TERRA_RENDER_AFTER_CI` | box | none, 1 | A CI agent's lock file; while held, no job starts unless `TERRA_RENDER_AFTER_CI=0`. |
 | `TERRA_RENDER_KEEP_DAYS` | box | 7 | Days a job's files and ref are kept. |
+| `TERRA_RENDER_SLOTS` | box | 4 | Jobs at once, each in a slot: a worktree checkout `slots/<n>`, its build, and `homes/<n>` its HOME. |
+| `TERRA_RENDER_GPU_SLOTS` | box | 3 | Of them, GPU jobs at once; a bench has the box alone. A job's class comes from its command, or `--gpu`/`--cpu`. |
+| `TERRA_REMOTE_CHECKS` | push hook | 0 | 1 runs the push hook's check on the worker at each commit pushed (`tools/git/remote-check.ts`). |
 
 ## Setting up a box
 
@@ -40,7 +44,7 @@ The box: Linux with an NVIDIA card and its driver (`nvidia-smi` prints the card)
 3. `cargo xtask remote-render --doctor` says what is still missing.
 4. Optional, on the box: `~/terra-render/repo/.env` with the box's settings above, then `--update` again to restart the daemon on them.
 
-The worker never touches any other checkout on the box. Disk: about 100 GB for the clone, the job checkout's build and the caches.
+The worker never touches any other checkout on the box. Disk: the clone, and for each slot a build and caches of tens of GB.
 
 **Troubleshooting**
 

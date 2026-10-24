@@ -10,22 +10,30 @@
 //   install           starts the daemon (a systemd user service, or a detached supervisor)
 //   plan              what the daemon would do next, running nothing
 //   doctor            the GPU, Vulkan, node, cargo, disk and daemon (doctor.ts)
-// The folder: repo/ the clone pushes land in (its checkout is the worker's code), src/ the job
-// checkout with its build, home/ the jobs' HOME, jobs/<id>/{job.json,out/}, daemon.json/.log.
+// The folder: repo/ the clone pushes land in (its checkout is the worker's code), slots/<n>/
+// each slot's job checkout (a worktree of repo/) with its own build in target/, homes/<n>/ each
+// slot's HOME, jobs/<id>/{job.json,out/}, daemon.json/.log.
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { doctor } from "./doctor.ts";
-import { ago, boxSettings, ID, type Job, jobId, mayStart, parseEnvFile, pick, short, steps, UPDATE_REF } from "./jobs.ts";
+import { ago, boxSettings, classOf, ID, type Job, jobId, mayStart, parseEnvFile, plan as planJobs, short, steps, UPDATE_REF } from "./jobs.ts";
 
+/// `src` and `home` are the single job checkout and HOME from before slots, which slot 1 takes
+/// over (daemon.ts `slotCheckout`).
 export type Box = { dir: string; repo: string; src: string; home: string; jobs: string; daemonJs: string };
 
 export function box(dir: string): Box {
   const abs = dir.startsWith("~/") ? join(homedir(), dir.slice(2)) : resolve(homedir(), dir);
   return { dir: abs, repo: join(abs, "repo"), src: join(abs, "src"), home: join(abs, "home"), jobs: join(abs, "jobs"), daemonJs: join(abs, "repo/tools/render-worker/daemon.ts") };
 }
+
+/// A slot's job checkout, and its HOME, kept apart so caches carry from job to job in a slot
+/// and a job collects only what it wrote.
+export const slotDir = (b: Box, n: number) => join(b.dir, "slots", String(n));
+export const slotHome = (b: Box, n: number) => join(b.dir, "homes", String(n));
 
 export function git(cwd: string, args: string[]): { status: number | null; stdout: string; stderr: string } {
   const r = spawnSync("git", args, { cwd, encoding: "utf8" });
@@ -98,10 +106,10 @@ function submit(b: Box, text: string): number {
   if (!ID.test(job.id) || !Array.isArray(job.command) || readJob(b, job.id)) return fail(`bad or repeated job ${job.id}`);
   const at = git(b.repo, ["rev-parse", "-q", "--verify", `refs/jobs/${job.id}^{commit}`]).stdout.trim();
   if (at !== job.rev) return fail(`refs/jobs/${job.id} is not ${job.rev.slice(0, 9)} in ${b.repo}; push it first`);
-  writeJob(b, { ...job, kind: "run", state: "queued", queued: new Date().toISOString() });
+  writeJob(b, { ...job, kind: "run", class: classOf({ command: job.command, kind: "run", class: ["cpu", "gpu", "bench"].includes(job.class ?? "") ? job.class : undefined }), slot: undefined, state: "queued", queued: new Date().toISOString() });
   wake(b);
   const d = daemonInfo(b);
-  const ahead = listJobs(b).filter((j) => j.id < job.id && (j.state === "queued" || j.state === "running")).length;
+  const ahead = listJobs(b).filter((j) => j.id < job.id && j.state === "queued").length;
   console.log(JSON.stringify({ alive: !!d?.alive, ahead }));
   return 0;
 }
@@ -148,6 +156,15 @@ function status(b: Box, json: boolean): number {
   }
   const now = new Date();
   console.log(d ? `daemon: ${d.alive ? "running" : "not running"} (${d.mode}, at ${d.rev}, since ${ago(d.since, now)} ago, last word ${ago(d.beat, now)} ago): ${d.status}` : "daemon: never started (cargo xtask remote-render --update)");
+  const s = boxSettings(boxEnv(b));
+  if (!("error" in s)) {
+    console.log(`slots: ${s.slots.slots}, of them ${s.slots.gpuSlots} for GPU jobs; a bench has the box alone`);
+    for (let n = 1; n <= s.slots.slots; n++) {
+      const j = jobs.find((j) => j.state === "running" && (j.slot ?? 1) === n);
+      console.log(`  slot ${n}: ${j ? `${j.id} running ${ago(j.started ?? j.queued, now)}  ${short(j)}` : "free"}`);
+    }
+  }
+  console.log("jobs:");
   for (const j of jobs) console.log(`  ${j.id} ${j.state.padEnd(9)} ${ago(j.queued, now).padStart(5)} ago  ${short(j)}${j.note ? `  [${j.note}]` : ""}`);
   if (!jobs.length) console.log("  no jobs");
   return 0;
@@ -180,10 +197,9 @@ function plan(b: Box): number {
   if ("error" in s) return fail(s.error);
   const now = new Date();
   const may = mayStart(s.policy, now.getHours() * 60 + now.getMinutes(), s.policy.afterCi && ciBusy(s.ciLock));
-  const next = pick(listJobs(b));
-  console.log(`render-box: ${may.ok ? "would start a job now" : `would wait: ${may.why}`}`);
-  if (!next) console.log("  no job queued");
-  else for (const st of steps(next, b.repo)) console.log(`  ${next.id} ${st.what}: ${st.cmd.join(" ")}`);
+  const p = planJobs(listJobs(b), s.slots);
+  console.log(`render-box: ${!may.ok ? `would wait: ${may.why}` : p.start.length ? `would start ${p.start.length} now` : "would start nothing now"}${p.why ? `; ${p.why}` : ""}`);
+  for (const { job, slot } of p.start) for (const st of steps(job)) console.log(`  ${job.id} in slot ${slot}, ${st.what}: ${st.cmd.join(" ")}`);
   return 0;
 }
 
@@ -280,14 +296,20 @@ function update(b: Box, sha: string): number {
   }
   const jobs = listJobs(b);
   for (const j of jobs.filter((j) => j.kind === "warm" && j.state === "queued")) writeJob(b, { ...j, state: "cancelled", ended: new Date().toISOString(), note: "a newer update" });
+  const s = boxSettings(boxEnv(b));
+  const slots = "error" in s ? 1 : s.slots.slots;
   const now = new Date();
-  const warm: Job = { id: jobId(now, Math.random().toString(16).slice(2, 6).padEnd(4, "0")), kind: "warm", rev: at, command: [], collect: [], cook: true, minutes: 180, by: "update", queued: now.toISOString(), state: "queued" };
-  writeJob(b, warm);
-  console.log(`render-box: at ${at.slice(0, 9)}; warm builds queued (${warm.id})`);
+  const ids: string[] = [];
+  for (let slot = 1; slot <= slots; slot++) {
+    const id = jobId(now, `${Math.random().toString(16).slice(2, 5).padEnd(3, "0")}${slot.toString(16).slice(-1)}`);
+    writeJob(b, { id, kind: "warm", rev: at, command: [], collect: [], cook: true, minutes: 180, class: "cpu", slot, by: "update", queued: now.toISOString(), state: "queued" });
+    ids.push(id);
+  }
+  console.log(`render-box: at ${at.slice(0, 9)}; warm builds queued in all ${slots} slots, side by side (${ids.join(", ")})`);
   if (jobs.some((j) => j.state === "running") && daemonInfo(b)?.alive) {
     writeFileSync(join(b.dir, "restart"), "");
     wake(b);
-    console.log("✓ render-box: the daemon restarts on the new code once the running job ends");
+    console.log("✓ render-box: the daemon starts no new job and restarts on the new code once the running ones end");
   } else {
     rmSync(join(b.dir, "restart"), { force: true });
     console.log(`✓ render-box: the daemon runs on the new code as ${install(b)}`);

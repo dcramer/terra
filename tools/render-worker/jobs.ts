@@ -1,8 +1,13 @@
 // The render worker's decisions (docs/render-worker.md, D445), pure and tested in jobs.test.ts:
 // the client's settings and arguments, a job and its steps on the box, which worker takes a job,
-// when the box may start one, which it takes, what it collects, and the job's environment.
+// when the box may start one, which jobs it starts in which slots, what it collects, and the
+// job's environment.
 
 export type State = "queued" | "running" | "done" | "failed" | "cancelled";
+
+/// What a job takes of the box: `cpu` a slot (builds, tests, lints), `gpu` a slot and a share
+/// of the card (renders; at most TERRA_RENDER_GPU_SLOTS at once), `bench` the box alone.
+export type Class = "cpu" | "gpu" | "bench";
 
 export type Job = {
   id: string;
@@ -16,6 +21,10 @@ export type Job = {
   /// Whether `cargo xtask cook` runs first (the game draws cooked textures, D188).
   cook: boolean;
   minutes: number;
+  /// Absent on jobs queued before slots: `jobClass` of the command.
+  class?: Class;
+  /// The slot it runs in: set when it starts; a warm job is queued for its slot.
+  slot?: number;
   by: string;
   queued: string;
   state: State;
@@ -34,10 +43,16 @@ export const KEEP_DAYS = 7;
 export const SKIP = ["frames", "remote"];
 /// The builds a `warm` job runs after an update: what `cargo xtask sandbox` and `cargo xtask
 /// bench` build, so a job after it builds only what its commit changed.
+/// Clippy last, so the push hook's remote check (TERRA_REMOTE_CHECKS) lints only what changed.
 export const WARM: string[][] = [
   ["cargo", "build", "-q", "-p", "xtask", "-p", "terra_sandbox"],
   ["cargo", "build", "-q", "--release", "-p", "terra_sandbox"],
+  ["cargo", "clippy", "-q", "--workspace", "--all-targets"],
 ];
+/// Slots, and of them those a GPU job may take, unless TERRA_RENDER_SLOTS and
+/// TERRA_RENDER_GPU_SLOTS say: a 24 GB card holds about three films at 7 GB each.
+export const SLOTS = 4;
+export const GPU_SLOTS = 3;
 /// The ref an update's commit is pushed to in the box's clone.
 export const UPDATE_REF = "refs/worker/main";
 export const jobRef = (job: Pick<Job, "id" | "kind">) => (job.kind === "warm" ? UPDATE_REF : `refs/jobs/${job.id}`);
@@ -109,13 +124,13 @@ export function config(env: Record<string, string | undefined>, file: Record<str
 // ---- The client's arguments ----
 
 export type ClientArgs =
-  | { mode: "queue"; rev?: string; command: string[]; collect: string[]; cook: boolean; minutes: number; out?: string; wait: boolean; worker?: string }
+  | { mode: "queue"; rev?: string; command: string[]; collect: string[]; cook: boolean; minutes: number; out?: string; wait: boolean; worker?: string; class?: "cpu" | "gpu" }
   | { mode: "wait"; id: string; out?: string; worker?: string }
   | { mode: "cancel" | "logs"; id: string; worker?: string }
   | { mode: "status" | "update" | "doctor"; worker?: string };
 
 export const USAGE =
-  "usage: cargo xtask remote-render [--rev <sha>] [--collect <path>]… [--minutes N] [--no-cook] [--out DIR] [--no-wait] [--worker HOST] -- <command…>\n" +
+  "usage: cargo xtask remote-render [--rev <sha>] [--collect <path>]… [--minutes N] [--no-cook] [--gpu|--cpu] [--out DIR] [--no-wait] [--worker HOST] -- <command…>\n" +
   "       cargo xtask remote-render --wait <job> | --logs <job|daemon> | --cancel <job> | --status | --update | --doctor  [--worker HOST]";
 
 export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): ClientArgs | { error: string } {
@@ -129,6 +144,7 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
   let minutes = defaultMinutes;
   let cook = true;
   let wait = true;
+  let cls: "cpu" | "gpu" | undefined;
   let id = "";
   let mode: ClientArgs["mode"] = "queue";
   const setMode = (m: ClientArgs["mode"]) => {
@@ -152,6 +168,10 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
         if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_MINUTES) throw new Error(`--minutes is a whole number from 1 to ${MAX_MINUTES}`);
       } else if (a === "--no-cook") cook = false;
       else if (a === "--no-wait") wait = false;
+      else if (a === "--gpu" || a === "--cpu") {
+        if (cls && cls !== a.slice(2)) throw new Error("--gpu and --cpu together");
+        cls = a.slice(2) as "gpu";
+      }
       else if (a === "--wait" || a === "--cancel" || a === "--logs") {
         setMode(a.slice(2) as "wait");
         id = value();
@@ -170,8 +190,29 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
   for (const c of collect) {
     if (c.startsWith("/") || c.split("/").includes("..")) return { error: `--collect ${c}: a path in the checkout or under ~/, without ..` };
   }
-  return { mode, rev, command, collect, cook, minutes, out, wait, worker };
+  return { mode, rev, command, collect, cook, minutes, out, wait, worker, ...(cls ? { class: cls } : {}) };
 }
+
+/// Words after `cargo xtask` that only build, lint or test, and `cargo` commands that do.
+const CPU_XTASK = ["check", "sizes", "seed", "decision"];
+const CPU_CARGO = ["build", "check", "clippy", "doc", "fmt", "test", "tree"];
+
+/// A job's class from its command, `--gpu` or `--cpu` overriding: a bench (`cargo xtask bench`,
+/// `cargo xtask gpu bench`) always has the box alone; cargo's builds, tests and lints, and
+/// `cargo xtask check`, are CPU; anything else (a trailer, the sandbox, a script) may draw.
+export function jobClass(command: string[], flag?: "cpu" | "gpu"): Class {
+  const cargo = command.indexOf("cargo");
+  const words = command.slice(cargo + 1).filter((w) => !w.startsWith("-") && !w.startsWith("+"));
+  const xtask = cargo >= 0 && words[0] === "xtask";
+  if (xtask && (words[1] === "bench" || (words[1] === "gpu" && words[2] === "bench"))) return "bench";
+  if (flag) return flag;
+  if (cargo < 0) return "gpu";
+  if (xtask) return CPU_XTASK.includes(words[1]) ? "cpu" : "gpu";
+  return CPU_CARGO.includes(words[0]) ? "cpu" : "gpu";
+}
+
+/// A job's class: as queued, or for one queued before classes, from its command.
+export const classOf = (job: Pick<Job, "class" | "command" | "kind">): Class => job.class ?? (job.kind === "warm" ? "cpu" : jobClass(job.command));
 
 // ---- Which worker takes a job ----
 
@@ -209,17 +250,28 @@ export function inWindow(w: Window, minute: number): boolean {
 }
 
 export type Policy = { window?: Window; afterCi: boolean };
+export type Slots = { slots: number; gpuSlots: number };
 
 /// The box's settings (its environment over the .env of the worker's clone there):
 /// TERRA_RENDER_WINDOW (`22:00-08:00`, empty any hour), TERRA_RENDER_CI_LOCK (a CI agent's lock
 /// file; no job starts while it is held), TERRA_RENDER_AFTER_CI (0 ignores that lock) and
-/// TERRA_RENDER_KEEP_DAYS.
-export function boxSettings(env: Record<string, string | undefined>): { policy: Policy; ciLock?: string; keepDays: number } | { error: string } {
+/// TERRA_RENDER_KEEP_DAYS, TERRA_RENDER_SLOTS (jobs at once, default 4) and
+/// TERRA_RENDER_GPU_SLOTS (of them, GPU jobs at once, default 3, at most the slots).
+export function boxSettings(env: Record<string, string | undefined>): { policy: Policy; ciLock?: string; keepDays: number; slots: Slots } | { error: string } {
   const window = parseWindow(env.TERRA_RENDER_WINDOW ?? "");
   if (window && "error" in window) return window;
   const keepDays = whole(env.TERRA_RENDER_KEEP_DAYS, KEEP_DAYS, 365);
   if (!keepDays) return { error: "TERRA_RENDER_KEEP_DAYS: whole days from 1 to 365" };
-  return { policy: { window, afterCi: (env.TERRA_RENDER_AFTER_CI ?? "1") !== "0" }, ciLock: env.TERRA_RENDER_CI_LOCK || undefined, keepDays };
+  const slots = whole(env.TERRA_RENDER_SLOTS, SLOTS, 32);
+  if (!slots) return { error: "TERRA_RENDER_SLOTS: a whole number from 1 to 32" };
+  const gpuSlots = whole(env.TERRA_RENDER_GPU_SLOTS, GPU_SLOTS, 32);
+  if (!gpuSlots) return { error: "TERRA_RENDER_GPU_SLOTS: a whole number from 1 to 32" };
+  return {
+    policy: { window, afterCi: (env.TERRA_RENDER_AFTER_CI ?? "1") !== "0" },
+    ciLock: env.TERRA_RENDER_CI_LOCK || undefined,
+    keepDays,
+    slots: { slots, gpuSlots: Math.min(gpuSlots, slots) },
+  };
 }
 
 /// Whether a job may start now: CI first, and within the window if set. A warm job waits too:
@@ -230,12 +282,45 @@ export function mayStart(policy: Policy, minute: number, ciBusy: boolean): { ok:
   return { ok: true };
 }
 
-/// The next job: none while one runs (one at a time, the card its own); a warm job first, since
-/// it makes every later one faster; then the oldest queued.
-export function pick(jobs: Job[]): Job | undefined {
-  if (jobs.some((j) => j.state === "running")) return undefined;
-  const queued = jobs.filter((j) => j.state === "queued").sort((a, b) => a.id.localeCompare(b.id));
-  return queued.find((j) => j.kind === "warm") ?? queued[0];
+export type Start = { job: Job; slot: number };
+
+/// The jobs to start now, each in a free slot, and why the rest wait. Warm jobs first, since
+/// they make every later one faster, each in the slot it warms; then the oldest queued. A GPU
+/// job waits while TERRA_RENDER_GPU_SLOTS run, and a CPU job behind it may pass. A bench has
+/// the box alone, card and cores, since a build beside it moves its frame times (D185): it waits
+/// for every running job to end, and nothing queued behind it starts meanwhile.
+export function plan(jobs: Job[], s: Slots): { start: Start[]; why?: string } {
+  const running = jobs.filter((j) => j.state === "running");
+  const busy = new Set(running.map((j) => j.slot ?? 1));
+  let gpu = running.filter((j) => classOf(j) !== "cpu").length;
+  const queued = jobs.filter((j) => j.state === "queued").sort((a, b) => Number(b.kind === "warm") - Number(a.kind === "warm") || a.id.localeCompare(b.id));
+  const pinned = (j: Job) => (j.slot && j.slot <= s.slots ? j.slot : undefined);
+  const reserved = new Set(queued.map(pinned).filter((n) => n !== undefined));
+  const start: Start[] = [];
+  if (running.some((j) => classOf(j) === "bench")) return { start, why: queued.length ? "a bench has the box" : undefined };
+  let why: string | undefined;
+  for (const job of queued) {
+    const c = classOf(job);
+    if (c === "bench") {
+      if (busy.size) why ??= "a bench waits for the box to empty";
+      else start.push({ job, slot: 1 });
+      break;
+    }
+    if (c === "gpu" && gpu >= s.gpuSlots) {
+      why ??= `the ${s.gpuSlots} GPU slots are taken`;
+      continue;
+    }
+    const want = pinned(job);
+    const slot = want ?? Array.from({ length: s.slots }, (_, i) => i + 1).find((n) => !busy.has(n) && !reserved.has(n));
+    if (!slot || busy.has(slot)) {
+      why ??= `all ${s.slots} slots are taken`;
+      continue;
+    }
+    busy.add(slot);
+    if (c === "gpu") gpu++;
+    start.push({ job, slot });
+  }
+  return { start, why };
 }
 
 /// Jobs to delete with their files and ref: ended, or queued, longer than `days` ago.
@@ -249,9 +334,10 @@ export function backoff(n: number): number {
   return [5, 15, 30, 60][n] ?? 120;
 }
 
-/// The job's environment: the daemon's, with no token, and HOME the given one. Cargo and
-/// rustup keep their homes, which default to HOME's.
-export function jobEnv(env: Record<string, string | undefined>, home: string, id: string): Record<string, string> {
+/// The job's environment: the daemon's, with no token, HOME the slot's, and the build in the
+/// slot's own `target/` (where the tools look for the sandbox), so slots never wait on each
+/// other's cargo lock. Cargo and rustup keep their homes, which default to HOME's.
+export function jobEnv(env: Record<string, string | undefined>, home: string, id: string, target: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined || /TOKEN|SECRET|PASSWORD|COOKIE|API_KEY|^GH_|^GITHUB_|^SSH_AUTH_SOCK$/.test(k)) continue;
@@ -261,6 +347,7 @@ export function jobEnv(env: Record<string, string | undefined>, home: string, id
   out.CARGO_HOME = env.CARGO_HOME ?? `${realHome}/.cargo`;
   out.RUSTUP_HOME = env.RUSTUP_HOME ?? `${realHome}/.rustup`;
   out.HOME = home;
+  out.CARGO_TARGET_DIR = target;
   out.TERRA_RENDER_JOB = id;
   return out;
 }
@@ -274,14 +361,12 @@ export function collected(relative: string, mtimeMs: number, startedMs: number):
 
 export type Step = { what: string; cmd: string[]; run?: boolean };
 
-/// The box's steps for a job, in its job checkout `src`, whose commit was pushed to `repo` as
-/// the job's ref: what each is, as a command, so `--plan` can print them and the daemon runs
-/// them in order. The `run` steps are niced and held to the job's limit.
-export function steps(job: Job, repo: string): Step[] {
-  const ref = jobRef(job);
+/// The box's steps for a job in its slot's checkout, a worktree of the clone its commit was
+/// pushed to, so the commit is there already: what each is, as a command, so `plan` can print
+/// them and the daemon runs them in order. The `run` steps are niced and held to the job's limit.
+export function steps(job: Job): Step[] {
   const s: Step[] = [
-    { what: "fetch the job's commit", cmd: ["git", "fetch", "-q", "--no-tags", repo, `+${ref}:${ref}`] },
-    { what: "check it out", cmd: ["git", "checkout", "-q", "--detach", "--force", job.rev] },
+    { what: "check out the job's commit", cmd: ["git", "checkout", "-q", "--detach", "--force", job.rev] },
     { what: "clean all but the build", cmd: ["git", "clean", "-q", "-ffdx", "-e", "target/"] },
   ];
   if (job.cook) s.push({ what: "cook textures", cmd: ["cargo", "xtask", "cook"] });
@@ -299,7 +384,7 @@ export const ago = (from: string, now: Date) => {
 };
 
 /// One line for a job in lists and logs.
-export const short = (job: Job) => `${job.rev.slice(0, 9)}: ${job.kind === "warm" ? "warm builds after an update" : job.command.join(" ").slice(0, 100)}`;
+export const short = (job: Job) => `${job.rev.slice(0, 9)} ${classOf(job)}: ${job.kind === "warm" ? `warm builds after an update${job.slot ? ` (slot ${job.slot})` : ""}` : job.command.join(" ").slice(0, 100)}`;
 
 // ---- The box's GPU, for --doctor ----
 

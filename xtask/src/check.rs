@@ -21,8 +21,8 @@ use std::time::Instant;
 /// The task this module runs (D410).
 pub(crate) const TASKS: &[Task] = &[Task {
     name: "check",
-    takes: "[--all] [--verbose]",
-    does: "the hook before a push (D37): formatting, the size and one-definition lints and clippy of the crates changed since main, in seconds; --all is the full check over everything, as the scheduled run on main runs it: every test, the tools' tests, the kit, foliage, artifact, fuzz and Blender checks and the shared crates' rules",
+    takes: "[--all | --base <commit>] [--verbose]",
+    does: "the hook before a push (D37): formatting, the size and one-definition lints and clippy of the crates changed since main, in seconds; --base <commit> takes what changed since that commit instead of the merge-base with origin/main (the hook's remote check, where origin/main is not known); --all is the full check over everything, as the scheduled run on main runs it: every test, the tools' tests, the kit, foliage, artifact, fuzz and Blender checks and the shared crates' rules",
     group: "Play and check",
     run: check,
 }];
@@ -61,21 +61,31 @@ enum How {
 /// main runs it. The stages run in order and the first to fail ends it.
 pub(crate) fn check(args: &[String]) -> bool {
     let mut all = false;
-    for arg in args {
+    let mut base = None;
+    let usage = || {
+        eprintln!("usage: cargo xtask check [--all | --base <commit>] [--verbose]");
+        false
+    };
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
         match arg.as_str() {
             "--all" => all = true,
+            "--base" => match args.next() {
+                Some(commit) if !commit.starts_with('-') => base = Some(commit.as_str()),
+                _ => return usage(),
+            },
             "--verbose" => stage::set_verbose(),
-            _ => {
-                eprintln!("usage: cargo xtask check [--all] [--verbose]");
-                return false;
-            }
+            _ => return usage(),
         }
+    }
+    if all && base.is_some() {
+        return usage();
     }
     let started = Instant::now();
     let scope = if all {
         Scope::everything("--all")
     } else {
-        scope::push()
+        scope::push(base)
     };
     let name = if all { "full check" } else { "check" };
     println!("{name} over {}", scope.summary());

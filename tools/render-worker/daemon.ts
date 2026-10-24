@@ -1,15 +1,17 @@
 // The render box's daemon (docs/render-worker.md, D445): keeps the queue in its folder (box.ts),
-// runs one job at a time in its job checkout at the job's pushed commit, within the box's hours,
-// and puts what the job wrote in the job's out/ for the client to fetch. It listens on no port:
-// the client reaches it over ssh through box.ts, which wakes it by writing `wake` in its folder.
-// It runs as a systemd user service or under `--supervise` (box.ts install), and exits to be
-// started again on new code when an update asks (`restart`). `--selftest` loads it and exits.
+// runs jobs side by side, each in a slot of its own (a job checkout and build) at the job's
+// pushed commit, as many as TERRA_RENDER_SLOTS and the GPU's share allow (jobs.ts `plan`),
+// within the box's hours, and puts what each job wrote in its out/ for the client to fetch. It
+// listens on no port: the client reaches it over ssh through box.ts, which wakes it by writing
+// `wake` in its folder. It runs as a systemd user service or under `--supervise` (box.ts
+// install), and exits to be started again on new code when an update asks (`restart`), once its
+// jobs end. `--selftest` loads it and exits.
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, writeJob } from "./box.ts";
-import { boxSettings, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, pick, type Policy, short, steps, collected } from "./jobs.ts";
+import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
+import { boxSettings, collected, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, plan, type Policy, type Slots, type Start, short, steps } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -57,9 +59,32 @@ export function stop(r: Running): void {
   } catch {}
 }
 
-/// Runs one job to its end: its steps in the job checkout, then its files into out/.
-export async function runJob(b: Box, queued: Job, r: Running = { job: queued, cancelled: false }): Promise<Job> {
-  let job: Job = { ...queued, state: "running", started: new Date().toISOString() };
+/// A slot's job checkout: a worktree of the worker's clone, detached, so a job's checkout and
+/// build never touch the worker's own code or another slot's. Slot 1 takes over the single job
+/// checkout's build and HOME from before slots, so it starts warm.
+export function slotCheckout(b: Box, slot: number, rev: string): string {
+  const dir = slotDir(b, slot);
+  const home = slotHome(b, slot);
+  if (slot === 1 && existsSync(b.home) && !existsSync(home)) {
+    mkdirSync(dirname(home), { recursive: true });
+    renameSync(b.home, home);
+  }
+  mkdirSync(home, { recursive: true });
+  if (existsSync(join(dir, ".git"))) return dir;
+  mkdirSync(dirname(dir), { recursive: true });
+  git(b.repo, ["worktree", "prune"]);
+  const made = git(b.repo, ["worktree", "add", "-q", "--detach", "--no-checkout", dir, rev]);
+  if (made.status !== 0) throw new Error(`could not make slot ${slot}'s checkout: ${made.stderr.trim()}`);
+  if (slot === 1 && existsSync(join(b.src, "target")) && !existsSync(join(dir, "target"))) {
+    renameSync(join(b.src, "target"), join(dir, "target"));
+    rmSync(b.src, { recursive: true, force: true });
+  }
+  return dir;
+}
+
+/// Runs one job to its end in its slot: its steps in the slot's checkout, then its files into out/.
+export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }): Promise<Job> {
+  let job: Job = { ...queued, slot, state: "running", started: new Date().toISOString() };
   r.job = job;
   writeJob(b, job);
   const out = outDir(b, job.id);
@@ -72,28 +97,25 @@ export async function runJob(b: Box, queued: Job, r: Running = { job: queued, ca
   let why = "";
   let startedMs = Date.now();
   let ran = false;
+  const home = slotHome(b, slot);
+  let src = slotDir(b, slot);
   try {
-    mkdirSync(b.home, { recursive: true });
-    if (!existsSync(join(b.src, ".git"))) {
-      // A clone of its own, its objects hard-linked from the worker's, so a job's checkout and
-      // build never touch the worker's own code.
-      const made = git(b.dir, ["clone", "-q", "--no-checkout", b.repo, b.src]);
-      if (made.status !== 0) throw new Error(`could not make the job checkout: ${made.stderr.trim()}`);
-    }
-    for (const step of steps(job, b.repo)) {
+    note(`slot ${slot}: ${src}`);
+    src = slotCheckout(b, slot, job.rev);
+    for (const step of steps(job)) {
       if (r.cancelled) break;
       note(`${step.what}: ${step.cmd.join(" ")}`);
       if (step.run && !ran) (startedMs = Date.now()), (ran = true);
       const cmd = step.run ? [...limitArgs(job), ...step.cmd] : step.cmd;
-      const env = step.run || step.cmd[0] === "cargo" ? jobEnv(process.env, b.home, job.id) : process.env;
-      const code = await run(cmd, b.src, env, log, r);
+      const env = step.run || step.cmd[0] === "cargo" ? jobEnv(process.env, home, job.id, join(src, "target")) : process.env;
+      const code = await run(cmd, src, env, log, r);
       if (code !== 0) {
         exit = code;
         why = r.cancelled ? "cancelled" : step.run ? (code === 124 ? `stopped at its limit of ${job.minutes} min` : `the command exited ${code}`) : `${step.what} failed`;
         break;
       }
     }
-    const files = job.kind === "run" ? gather(job, b.src, b.home, startedMs) : [];
+    const files = job.kind === "run" ? gather(job, src, home, startedMs) : [];
     for (const [from, name] of files) {
       const to = join(out, name);
       mkdirSync(dirname(to), { recursive: true });
@@ -117,10 +139,11 @@ export async function runJob(b: Box, queued: Job, r: Running = { job: queued, ca
   return job;
 }
 
-/// Deletes jobs past their days, with their files and refs; fails jobs a dead daemon left running.
-export function housekeep(b: Box, keepDays: number, now = new Date(), mine?: string): void {
+/// Deletes jobs past their days, with their files and refs; fails jobs a dead daemon left running
+/// (any running job not in `mine`, the jobs this daemon runs).
+export function housekeep(b: Box, keepDays: number, now = new Date(), mine: ReadonlySet<string> = new Set()): void {
   for (const j of listJobs(b)) {
-    if (j.state === "running" && j.id !== mine) writeJob(b, { ...j, state: "failed", exit: 1, ended: now.toISOString(), note: "the daemon stopped during it" });
+    if (j.state === "running" && !mine.has(j.id)) writeJob(b, { ...j, state: "failed", exit: 1, ended: now.toISOString(), note: "the daemon stopped during it" });
   }
   for (const j of expired(listJobs(b), now, keepDays)) {
     rmSync(join(b.jobs, j.id), { recursive: true, force: true });
@@ -128,12 +151,13 @@ export function housekeep(b: Box, keepDays: number, now = new Date(), mine?: str
   }
 }
 
-/// The next job the policy lets start now, or why one waits.
-export function next(b: Box, policy: Policy, ciLock: string | undefined, now = new Date()): { job?: Job; why?: string } {
-  const job = pick(listJobs(b));
-  if (!job) return {};
+/// The jobs the policy and the free slots let start now, each with its slot, and why the rest
+/// wait.
+export function next(b: Box, policy: Policy, ciLock: string | undefined, slots: Slots, now = new Date()): { start: Start[]; why?: string } {
+  const jobs = listJobs(b);
+  if (!jobs.some((j) => j.state === "queued")) return { start: [] };
   const may = mayStart(policy, now.getHours() * 60 + now.getMinutes(), policy.afterCi && ciBusy(ciLock, now.getTime()));
-  return may.ok ? { job } : { why: may.why };
+  return may.ok ? plan(jobs, slots) : { start: [], why: may.why };
 }
 
 async function daemon(b: Box): Promise<number> {
@@ -147,45 +171,43 @@ async function daemon(b: Box): Promise<number> {
   const mode = process.env.TERRA_RENDER_MODE ?? "by hand";
   let status = "starting";
   const beat = () => writeFileSync(join(b.dir, "daemon.json"), JSON.stringify({ pid: process.pid, mode, rev, since, beat: new Date().toISOString(), status }));
+  const running = new Map<string, Running>();
   housekeep(b, s.keepDays);
-  say(`render daemon at ${rev}, ${mode}, pid ${process.pid}`);
+  say(`render daemon at ${rev}, ${mode}, pid ${process.pid}, ${s.slots.slots} slots (${s.slots.gpuSlots} for GPU jobs)`);
   let wakeUp = () => {};
   watch(b.dir, (_e, name) => name === "wake" && wakeUp());
-  let running: Running | undefined;
-  let done: Promise<Job> | undefined;
   let lastWhy = "";
   for (;;) {
-    if (!running) {
-      housekeep(b, s.keepDays);
-      if (existsSync(join(b.dir, "restart"))) {
-        rmSync(join(b.dir, "restart"), { force: true });
-        say("restarting on new code");
-        return 0;
-      }
-      const n = next(b, s.policy, s.ciLock);
-      if (n.job) {
-        const r: Running = { job: n.job, cancelled: false };
-        running = r;
-        status = `running ${n.job.id} (${short(n.job)})`;
-        say(status);
-        done = runJob(b, n.job, r).then((j) => {
-          say(`${j.state === "done" ? "✓" : "✗"} ${j.id} ${j.state}: ${j.note}`);
-          running = undefined;
-          status = "idle";
-          return j;
-        });
-      } else {
-        status = n.why ? `a job waits: ${n.why}` : "idle";
-        if (n.why && n.why !== lastWhy) say(status);
-        lastWhy = n.why ?? "";
-      }
-    } else if (existsSync(join(b.jobs, running.job.id, "cancel")) && !running.cancelled) {
-      say(`cancelling ${running.job.id}`);
-      stop(running);
+    housekeep(b, s.keepDays, new Date(), new Set(running.keys()));
+    const restart = existsSync(join(b.dir, "restart"));
+    if (restart && !running.size) {
+      rmSync(join(b.dir, "restart"), { force: true });
+      say("restarting on new code");
+      return 0;
     }
+    const n = restart ? { start: [], why: "restarting on new code once its jobs end" } : next(b, s.policy, s.ciLock, s.slots);
+    for (const { job, slot } of n.start) {
+      const r: Running = { job, cancelled: false };
+      running.set(job.id, r);
+      say(`slot ${slot}: running ${job.id} (${short(job)})`);
+      runJob(b, job, slot, r).then((j) => {
+        say(`${j.state === "done" ? "✓" : "✗"} slot ${slot}: ${j.id} ${j.state}: ${j.note}`);
+        running.delete(j.id);
+        wakeUp();
+      });
+    }
+    for (const r of running.values()) {
+      if (!r.cancelled && existsSync(join(b.jobs, r.job.id, "cancel"))) {
+        say(`cancelling ${r.job.id}`);
+        stop(r);
+      }
+    }
+    const busy = running.size ? `${running.size} of ${s.slots.slots} slots running` : "idle";
+    status = n.why ? `${busy}; a job waits: ${n.why}` : busy;
+    if ((n.why ?? "") !== lastWhy && n.why) say(`a job waits: ${n.why}`);
+    lastWhy = n.why ?? "";
     beat();
-    await Promise.race([new Promise<void>((r) => ((wakeUp = r), setTimeout(r, 60_000).unref())), done ?? new Promise(() => {})]);
-    if (!running) done = undefined;
+    await new Promise<void>((r) => ((wakeUp = r), setTimeout(r, 60_000).unref()));
   }
 }
 

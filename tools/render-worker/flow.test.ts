@@ -5,11 +5,11 @@
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, test } from "node:test";
-import { box, readJob } from "./box.ts";
+import { box, readJob, slotDir, slotHome } from "./box.ts";
 import { finish, prepare, type Remote, submit } from "./client.ts";
 import { next, runJob } from "./daemon.ts";
 
@@ -28,6 +28,8 @@ const rev = sh(agent, "rev-parse", "HEAD");
 const r: Remote = { host: "local", dir: join(tmp, "box") };
 const b = box(r.dir);
 const policy = { afterCi: true };
+const slots = { slots: 4, gpuSlots: 3 };
+const first = (lock?: string) => next(b, policy, lock, slots).start[0]?.job;
 const quiet = () => {};
 
 // Writes a film under ~/.cache/terra-review, its frames beside it, a shot in the checkout, and
@@ -52,7 +54,7 @@ test("a box is set up from nothing, and a job hands back what it wrote, and only
     console.log = log;
   }
   assert.ok(existsSync(join(b.repo, ".git")));
-  const review = join(b.home, ".cache/terra-review");
+  const review = join(slotHome(b, 1), ".cache/terra-review");
   mkdirSync(join(review, "old"), { recursive: true });
   writeFileSync(join(review, "old/before.png"), "x");
   utimesSync(join(review, "old/before.png"), 1, 1);
@@ -61,9 +63,9 @@ test("a box is set up from nothing, and a job hands back what it wrote, and only
   assert.ok("id" in sub, JSON.stringify(sub));
   const lock = join(tmp, "ci-lock");
   writeFileSync(lock, "");
-  assert.equal(next(b, policy, lock).why, "the CI agent is running");
+  assert.equal(next(b, policy, lock, slots).why, "the CI agent is running");
   rmSync(lock);
-  const queued = next(b, policy, lock).job!;
+  const queued = first(lock)!;
   assert.equal(queued.id, sub.id);
 
   // The client waits while the job runs: the box's wait sees it start and end.
@@ -87,7 +89,7 @@ test("a box is set up from nothing, and a job hands back what it wrote, and only
   assert.ok(!existsSync(join(out, "shot.png")), "the checkout is collected only when asked");
   const jobLog = readFileSync(join(out, "job.log"), "utf8");
   assert.match(jobLog, /token: none/);
-  assert.match(jobLog, /render-worker: fetch the job's commit/, "the box's own lines are kept beside the command's");
+  assert.match(jobLog, /render-worker: slot 1: [\s\S]*render-worker: check out the job's commit/, "the box's own lines are kept beside the command's");
 });
 
 test("--collect takes a path in the checkout; a failing command fails with its code", async () => {
@@ -102,13 +104,13 @@ test("--collect takes a path in the checkout; a failing command fails with its c
   };
   const shot = submit(r, agent, job({ collect: ["shot.png"] }));
   assert.ok("id" in shot);
-  await runJob(b, next(b, policy, undefined).job!);
+  await runJob(b, first()!);
   assert.equal(await quietly(() => finish(r, shot.id, join(tmp, "out2"))), 0);
   assert.equal(readFileSync(join(tmp, "out2/shot.png"), "utf8"), "a\n");
 
   const failing = submit(r, agent, job({ command: ["sh", "-c", "exit 3"] }));
   assert.ok("id" in failing);
-  await runJob(b, next(b, policy, undefined).job!);
+  await runJob(b, first()!);
   assert.equal(await quietly(() => finish(r, failing.id, join(tmp, "out3"))), 3);
 });
 
@@ -119,10 +121,34 @@ test("a queued job is cancelled; a job whose commit was not pushed is refused", 
   const cancel = spawnSync(process.execPath, [boxTs, "--dir", r.dir, "cancel", sub.id], { encoding: "utf8" });
   assert.equal(cancel.status, 0, cancel.stdout);
   assert.equal(readJob(b, sub.id)?.state, "cancelled");
-  assert.equal(next(b, policy, undefined).job, undefined);
+  assert.equal(first(), undefined);
 
   const forged = { ...job(), id: "20261024-000000-dead", kind: "run", by: "x", queued: "", state: "queued" };
   const res = spawnSync(process.execPath, [boxTs, "--dir", r.dir, "submit"], { input: JSON.stringify(forged), encoding: "utf8" });
   assert.equal(res.status, 1);
   assert.match(res.stdout, /push it first/);
+});
+
+test("two jobs run at once, each in its own slot's checkout, build and HOME, and hand back only their own files", async () => {
+  // Writes, under its HOME, a file named for its job holding where it ran and built, and lasts long enough to overlap.
+  const write = `const fs = require("fs"), p = require("path");
+const d = p.join(process.env.HOME, ".cache/terra-review/par");
+fs.mkdirSync(d, { recursive: true });
+fs.writeFileSync(p.join(d, process.env.TERRA_RENDER_JOB + ".txt"), process.cwd() + "\\n" + process.env.CARGO_TARGET_DIR);
+setTimeout(() => {}, 300);`;
+  const a = submit(r, agent, job({ command: ["node", "-e", write] }));
+  const c = submit(r, agent, job({ command: ["node", "-e", write] }));
+  assert.ok("id" in a && "id" in c);
+  const starts = next(b, policy, undefined, slots).start;
+  assert.deepEqual(starts.map((s) => s.slot), [1, 2]);
+  const ended = await Promise.all(starts.map((s) => runJob(b, s.job, s.slot)));
+  assert.deepEqual(ended.map((j) => j.state), ["done", "done"], ended.map((j) => j.note).join("; "));
+  assert.ok(ended[0].started! < ended[1].ended! && ended[1].started! < ended[0].ended!, "they ran at once");
+  for (const s of starts) {
+    const files = readdirSync(join(b.jobs, s.job.id, "out/par"));
+    assert.deepEqual(files, [`${s.job.id}.txt`], "a job collects only what it wrote");
+    const [cwd, target] = readFileSync(join(b.jobs, s.job.id, "out/par", files[0]), "utf8").split("\n");
+    assert.equal(cwd, slotDir(b, s.slot));
+    assert.equal(target, join(slotDir(b, s.slot), "target"));
+  }
 });
