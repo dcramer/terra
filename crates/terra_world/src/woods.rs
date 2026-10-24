@@ -273,7 +273,8 @@ fn stood(
     seed: terra_gen::Seed,
 ) -> (Vec<Tree>, Vec<Tree>, Vec<Tree>) {
     let woods = Woods::of(round);
-    let near = off_snowbeds(planet, woods.trees(middle, 0.0, NEAR_M, SPACING_M, seed));
+    let began = std::time::Instant::now();
+    let near = woods.trees(middle, 0.0, NEAR_M, SPACING_M, seed);
     // The cards stand for every tree, the grown ones too, as an impostor stands for its
     // model: seen from away from the start, past the grown trees' last level of detail, they
     // are the trees. Near the camera they give way to the grown ones (`near`).
@@ -282,16 +283,22 @@ fn stood(
         .into_iter()
         .filter(|tree| tree.at.distance(middle) > CLEAR_M)
         .collect();
-    let mid = off_snowbeds(planet, mid);
-    let coarse = off_snowbeds(
-        planet,
-        woods.trees(
-            middle,
-            COARSE_M,
-            FAR_M,
-            SPACING_M * 2.0,
-            seed.derive("coarse"),
-        ),
+    let coarse = woods.trees(
+        middle,
+        COARSE_M,
+        FAR_M,
+        SPACING_M * 2.0,
+        seed.derive("coarse"),
+    );
+    let laid = began.elapsed().as_secs_f32();
+    let (near, mid, coarse) = (
+        off_snowbeds(planet, near),
+        off_snowbeds(planet, mid),
+        off_snowbeds(planet, coarse),
+    );
+    info!(
+        "Woods: laid out in {laid:.1} s, {:.1} s more off the walls' snowbeds",
+        began.elapsed().as_secs_f32() - laid
     );
     (near, mid, coarse)
 }

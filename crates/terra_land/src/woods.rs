@@ -342,11 +342,12 @@ impl<'a> Woods<'a> {
         };
         let footing = self.round.land.footing(point, water);
         // None in a snowbed: snow the climate leaves lying into summer (the world adds the
-        // snow its walls feed their benches, terra_world's `terrain::snowbed_m`).
-        let mut stand = self
-            .round
-            .stand(point, normal, footing)
-            .under_snow(self.round.snowbed_m(point, normal));
+        // snow its walls feed their benches, terra_world's `terrain::snowbed_m`). Asked only
+        // where trees stand at all: the snow's place on the climate costs as much again.
+        let mut stand = self.round.stand(point, normal, footing);
+        if stand.density > 0.0 {
+            stand = stand.under_snow(self.round.snowbed_m(point, normal));
+        }
         if let Some(lake) = near {
             stand.density *= smoothstep(SHORE_BARE_M, SHORE_WOODED_M, point.length() - lake);
         }
