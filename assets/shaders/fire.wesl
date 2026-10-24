@@ -296,7 +296,7 @@ const TONGUE_LEAN: f32 = 0.3;
 const TONGUE_THICK: f32 = 1.45;
 // How much hotter a tongue's root burns, and how much cooler its tip (`shade`).
 const TONGUE_ROOT_HOT: f32 = 0.42;
-const TONGUE_TIP_COOL: f32 = 0.5;
+const TONGUE_TIP_COOL: f32 = 0.56;
 const TEEPEE: vec2<f32> = vec2<f32>(0.62, 0.6);
 // How far the body's cover is eaten away toward its tips (alpha erosion), how much of what is
 // behind its upper part it lets through, and how much hotter its foot burns.
@@ -318,7 +318,7 @@ const HEARTH_ERODE_FLOOR: f32 = 0.12;
 // and overlapping, merge into one body of flame as the games' campfires do; 0.46 wide and 0.4
 // out, they spread past the logs over the stones (groundlight) as a level-topped wall.
 const HEARTH_COLUMNS: i32 = 5;
-const COLUMN_WINDOW: f32 = 0.5;
+const COLUMN_WINDOW: f32 = 0.62;
 const COLUMN_OUT: f32 = 0.3;
 // The side columns' heights over the middle's, least and spread; the middle's window over
 // `COLUMN_WINDOW` (1.25 before the tongues had places); and the window under which a column
@@ -352,7 +352,10 @@ const HEARTH_HOT_RISE: vec2<f32> = vec2<f32>(0.7, 1.15);
 const HEARTH_HOT_KEEP: vec2<f32> = vec2<f32>(0.45, 0.3);
 // Its heat at its top, a share of its foot's (`shade`): at 0.5 its top quarter read orange,
 // not the deep red the judge asked for (campfire ember round).
-const HEARTH_TOP_HEAT: f32 = 0.32;
+const HEARTH_TOP_HEAT: f32 = 0.28;
+// The most heat its body has over its root (`shade`): pale yellow on the ramp, not white
+// (campfire fill round: RDR2's body #F2F1B7-#EBC06F).
+const HEARTH_BODY_HEAT: f32 = 0.86;
 // How many lanes of dark across a column's frame (`shade`), a value noise's cells.
 const HEARTH_LANES: f32 = 12.0;
 // Each tongue's own place across the fire as the eye sees it, so the tongues stand apart with
@@ -2617,7 +2620,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
         // Its root white-hot only low over the coals (`hearth_hot`): by its own height alone, a
         // tall tongue's root rode up to 0.7 of the flame (campfire crown round).
         let root = (1.0 - smoothstep(0.0, 0.22, y)) * mix(HEARTH_HOT_KEEP.x, 1.0, hearth_hot(rise, y, 1.0));
-        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 2.0) * (0.6 + 0.4 * (1.0 - across)) + TONGUE_ROOT_HOT * root - 0.15 * age - TONGUE_TIP_COOL * smoothstep(0.2, 0.9, y));
+        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 2.0) * (0.6 + 0.4 * (1.0 - across)) + TONGUE_ROOT_HOT * root - 0.15 * age - TONGUE_TIP_COOL * smoothstep(0.3, 0.9, y));
         let drawn = baked_fuel(vec4(heat_here, shape * born * TONGUE_THICK, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft, HEARTH_ROW);
         light = drawn.rgb;
         cover = drawn.a;
@@ -2695,11 +2698,14 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
             // part stands as separate tongues with the dark between them: whole, the columns
             // summed to one bush (two blind judges, campfire char round).
             let lane = noise(vec2(x * HEARTH_LANES + luck * 13.0, hy * 1.3 - time * 0.7));
-            texel.g *= mix(1.0, smoothstep(0.45, 0.55, lane), smoothstep(0.0, 0.18, hy));
+            texel.g *= mix(1.0, smoothstep(0.3, 0.42, lane), smoothstep(0.4, 0.7, hy));
             // Its heat falling with height to half by 0.7 of it, so its upper half burns deep
             // red-orange on the hearth's ramp: to 0.62 by 0.85 it was one mid-orange root to
             // tip (two blind judges, campfire char round).
-            texel.r = select(1.0, 0.85, side) * saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.12, 0.3, hy)) * mix(HEARTH_HOT_KEEP.y, 1.0, hearth_hot(rise, uv.y, 1.0))) * mix(1.0, HEARTH_TOP_HEAT, smoothstep(0.05, 0.7, hy)));
+            texel.r = select(1.0, 0.85, side) * saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.12, 0.3, hy)) * mix(HEARTH_HOT_KEEP.y, 1.0, hearth_hot(rise, uv.y, 1.0))) * mix(1.0, HEARTH_TOP_HEAT, smoothstep(0.15, 0.8, hy)));
+            // Over its white root, never past pale yellow (`HEARTH_BODY_HEAT`): its fuller body
+            // held its heat higher and a white blob stood where columns overlapped.
+            texel.r = min(texel.r, mix(1.0, HEARTH_BODY_HEAT, smoothstep(0.1, 0.25, hy)));
         }
         let drawn = baked_fuel(texel, brightness, soft * select(edges, 1.0, layer == SET_CAMPFIRE), select(0.0, HEARTH_ROW, layer == SET_CAMPFIRE));
         light = drawn.rgb;

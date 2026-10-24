@@ -89,7 +89,10 @@ function section(kind: number, R: number): Run[] {
 // Darker again by a quarter (fire round 31): by firelight they had the hue RDR2's ring has (22
 // against 21-27) but stood brighter (sRGB red 215-237 against 140-176), pale at the shoulder, so
 // the salmon was their albedo, not the light's colour; a greener light only moved their hue.
-export const STONE_TONES: readonly (readonly number[])[] = [[70, 64, 54], [62, 59, 53], [78, 68, 54], [56, 53, 48], [68, 62, 52], [82, 76, 66], [64, 56, 46]];
+// Cool grey, not brown (campfire fill round): by firelight the brown tones' hue stood at 20, the
+// groundlight check's floor, and read salmon, and stood brighter (sRGB 233,128,71) than RDR2's
+// mismatched grey rock, lit #B26D36-#D39558 (hue 27-30); a neutral grey moved it only to 21.
+export const STONE_TONES: readonly (readonly number[])[] = [[60, 65, 66], [54, 59, 61], [68, 72, 70], [50, 54, 56], [62, 66, 65], [76, 80, 79], [58, 61, 60]];
 
 /** Where its logs and stones lie, from a seed. */
 export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
@@ -130,7 +133,15 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
     const long = 0.08 + 0.075 * rnd();
     const size: V3 = [long, 0.048 + 0.06 * rnd(), Math.min(0.06 + 0.05 * rnd(), HALF - RING_R - 0.005)];
     const r = RING_R + 0.02 * (rnd() - 0.5);
-    stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.6 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + i, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
+    // Mismatched and sunk unevenly (campfire fill round: "smooth blobs in a perfect ring"):
+    // each its own scale, and sunk from a third to over half its height, by hashes so the
+    // ring's draws are as they were.
+    const k = 0.75 + 0.6 * hash(seed * 17 + i, 8, 1);
+    size[0] *= k;
+    size[1] *= k;
+    // Never deeper across the ring than before, so it stays inside the footprint.
+    size[2] *= Math.min(k, 1);
+    stones.push({ at: [r * Math.cos(phi), size[1] * (0.25 - 0.4 * hash(seed * 17 + i, 7, 1)), r * Math.sin(phi)], size, turn: phi + 0.6 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + i, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
   }
   return { logs, stones };
 }
@@ -254,15 +265,22 @@ function n3(p: V3, s: number): number {
 
 // A stone's surface in its own frame, for a direction from its middle.
 function stoneLocal(st: Stone, d: V3): V3 {
-  const r = 1 + 0.34 * (n3(mul(d, 1.3), st.seed) - 0.5) + 0.1 * (n3(mul(d, 3.5), st.seed + 5) - 0.5);
+  const r = 1 + 0.26 * (n3(mul(d, 1.3), st.seed) - 0.5) + 0.08 * (n3(mul(d, 3.5), st.seed + 5) - 0.5);
   let p = mul(d, r);
-  // Broken faces: what passes a plane is pressed back onto it, its edge rounded; a second
-  // across the first, so no two stones share an egg's outline.
+  // Broken faces: what passes a plane is pressed back onto it; a second across the first and
+  // three more round it at their own angles and depths, so it is an angular broken rock with
+  // flat faces and edges, not a rounded egg (campfire fill round: "smooth salmon blobs").
   const over = dot(p, st.cut) - 0.62;
-  if (over > 0) p = sub(p, mul(st.cut, over * 0.85));
+  if (over > 0) p = sub(p, mul(st.cut, over * 0.95));
   const cut2 = norm([-st.cut[2] + 0.6 * (hash(st.seed, 3, 1) - 0.5), 0.2, st.cut[0]]);
   const over2 = dot(p, cut2) - (0.55 + 0.25 * hash(st.seed, 4, 1));
-  if (over2 > 0) p = sub(p, mul(cut2, over2 * 0.8));
+  if (over2 > 0) p = sub(p, mul(cut2, over2 * 0.92));
+  for (let k = 0; k < 3; k++) {
+    const a = 2 * Math.PI * (hash(st.seed, 10 + k, 2) + k / 3), up = 0.5 * (hash(st.seed, 13 + k, 2) - 0.3);
+    const c = norm([Math.cos(a), up, Math.sin(a)]);
+    const o = dot(p, c) - (0.58 + 0.28 * hash(st.seed, 16 + k, 2));
+    if (o > 0) p = sub(p, mul(c, o * 0.9));
+  }
   return [p[0] * st.size[0], p[1] * st.size[1], p[2] * st.size[2]];
 }
 // Its frame in the fire's: its long side round the ring, its depth along the radius.
@@ -484,14 +502,20 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // irregular; never past the ember's orange, whose yellow read tan by firelight (campfire glow round).
   const vary = smooth(0.3, 0.8, fbm(a * 5, b * 2.2, seed + 62));
   const t = Math.min(0.35, deep * deep * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
-  const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t);
+  // Only some runs of the seams burn bright, in patches along the log (`vary`), the rest dull:
+  // every seam lit alike, the blocks read as a regular checker (campfire fill round).
+  const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t) * (0.3 + 0.7 * smooth(0.45, 0.75, vary));
   const tone = t < 0.5 ? mix([196, 64, 8], HOTTEST, t * 2) : mix(HOTTEST, [255, 206, 120], t * 2 - 1);
   // Where it lies in the coals its whole char glows, not its cracks alone: a broad warm gradient
   // over its blocks, brightest at the hottest, broken by the char's mottle (fire round 31: dark
   // logs standing on the bed).
   // A soft orange gradient rising from the coals, its mottle broad (fire round 32).
-  const bed = smooth(0.55, 1.1, x) * smooth(0.5, 0.66, fbm(a * 9, b * 3.5, seed + 61)) * (1 - 0.6 * inside);
-  const glow = tone.map((v, i) => v * g + [255, 78, 14][i] * bed);
+  // Unbroken where it lies in the coals, its mottle only dimming it (campfire fill round: the
+  // glowing blocks read as a lattice; the judges ask a continuous glow on the undersides and
+  // contacts), redder where it is coolest.
+  const bed = smooth(0.5, 1.05, x) * (0.5 + 0.5 * smooth(0.35, 0.65, fbm(a * 4, b * 1.6, seed + 61))) * (1 - 0.35 * inside);
+  const bedTone = mix([200, 52, 8], [255, 104, 24], smooth(0.8, 1.25, x));
+  const glow = tone.map((v, i) => v * g + bedTone[i] * bed);
   // Charcoal is matte: its blocks' faces about 0.86 for their faint sheen, its fissures and
   // ash rougher still (fire round 37: at 0.6 the char took the fire's light as a gloss, and
   // read as glossy fresh-cut wood).

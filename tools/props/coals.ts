@@ -249,10 +249,11 @@ export function maps(seed = 1): Uint8Array[] {
   // The coals: a tile each of several, read by direction (octahedral), top at the middle.
   TILES.forEach(([ox, oy], tile) => {
     // Rows of four by where in the bed: its middle past 1,440 K to orange-yellow, then orange,
-    // then dull red at the edge, under more ash.
+    // then dull red at the edge, sitting in ash (campfire fill round: at 1.25/1.1/0.95, 0.6 ash at the edge, the
+    // heap read as flat bright yellow chips to three blind judges).
     const band = Math.floor(tile / 4);
-    const heat = [1.25, 1.1, 0.95][band] + 0.1 * rnd();
-    const ashy = [0.1, 0.3, 0.6][band];
+    const heat = [1.15, 0.94, 0.62][band] + 0.1 * rnd();
+    const ashy = [0.1, 0.3, 0.72][band];
     const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.5 ? 0.6 + 0.4 * rnd() : 0 }));
     for (let y = 0; y < T; y++) {
       for (let x = 0; x < T; x++) {
