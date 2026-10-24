@@ -5,5 +5,11 @@
   "letterbox": 2.39,
   "crossfade": 1.2,
   "card_seconds": 3,
-  "shots": ["forest", "lake", "tundra", "town"]
+  "shots": [
+    "forest",
+    "lake",
+    "settlement",
+    "lakesunset",
+    "dragon"
+  ]
 }

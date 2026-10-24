@@ -1,0 +1,23 @@
+{
+  "about": "The dusk lake from its west corner, facing the set sun's side across the ruffled water (Greg: \"Face the sunset only\"), a troll sat by its campfire on the shore, the camera drifting past it",
+  "place": "lake",
+  "hour": 21.75,
+  "date": "07-20",
+  "seconds": 18,
+  "player": {
+    "at": "-420,-40",
+    "face": "0,-300",
+    "hidden": true
+  },
+  "look": {
+    "shutter": 90,
+    "exposure_bias": -2.6
+  },
+  "sound": [
+    "water:0.6",
+    "wind:0.3",
+    "birds:0.5",
+    "shore:0.5"
+  ],
+  "scene": "lakesunset"
+}

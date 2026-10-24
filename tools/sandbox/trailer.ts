@@ -424,12 +424,15 @@ const add = (file: string, act: number, overlap: number) => {
   files.push(file);
   pieces.push({ name: file, seconds: duration(file), overlap, act });
 };
-add(card("open", cut.title, cut.line, cut.card_seconds), -1, 0);
+// A cut with no card time (`card_seconds` 0) or no title has no cards: a card of no length is
+// an empty file, whose length reads as NaN and breaks the crossfades.
+const cards = cut.card_seconds > 0 && cut.title !== "";
+if (cards) add(card("open", cut.title, cut.line, cut.card_seconds), -1, 0);
 for (const [i, name] of filmed.entries()) add(clipOf(name), i, i === 0 ? 0.8 : cut.crossfade);
-add(card("end", cut.title, cut.end, cut.card_seconds + 1), filmed.length, 1.0);
+if (cards) add(card("end", cut.title, cut.end, cut.card_seconds + 1), filmed.length, 1.0);
 const { starts, seconds } = lay(pieces);
 const layers = filmed.flatMap((name, i) => {
-  const at = i + 1;
+  const at = i + (cards ? 1 : 0);
   return layersOf(shots.get(name) as Shot, Math.max(0, starts[at] - 0.5), Math.min(seconds, starts[at] + pieces[at].seconds + 0.5));
 });
 const bed = bedFor(layers, seconds, join(work, "cut.wav"));

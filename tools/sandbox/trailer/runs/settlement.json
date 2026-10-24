@@ -1,0 +1,110 @@
+{
+  "about": "A settlement rising from its forest clearing by the lake into a market town in an afternoon and on into dusk, its windows lit: the time-lapse's establishing shot (D381, settlement r32), its camera the keys of timelapse/settlement-dusk.json",
+  "place": "town",
+  "hour": 16.4,
+  "seconds": 20,
+  "scene": "settlement",
+  "player": {
+    "at": "0,0",
+    "hidden": true
+  },
+  "ease": "in",
+  "look": {
+    "exposure": "hold",
+    "exposure_bias": 0.6,
+    "hold_clock": true,
+    "detail": 1.35
+  },
+  "keys": [
+    {
+      "t": 0,
+      "at": [
+        -10,
+        11,
+        -333
+      ],
+      "look": [
+        6,
+        -2.5,
+        -336
+      ],
+      "lens": 20
+    },
+    {
+      "t": 4,
+      "at": [
+        -20,
+        18.5,
+        -326
+      ],
+      "look": [
+        7.5,
+        -2.7,
+        -338
+      ],
+      "lens": 20
+    },
+    {
+      "t": 8,
+      "at": [
+        -36,
+        32,
+        -298
+      ],
+      "look": [
+        11,
+        -3,
+        -340
+      ],
+      "lens": 20
+    },
+    {
+      "t": 12,
+      "at": [
+        -42,
+        40,
+        -262
+      ],
+      "look": [
+        14,
+        -1,
+        -344
+      ],
+      "lens": 19
+    },
+    {
+      "t": 16,
+      "at": [
+        -50,
+        34,
+        -232
+      ],
+      "look": [
+        -26.9,
+        12,
+        -363.3
+      ],
+      "lens": 16.5
+    },
+    {
+      "t": 20,
+      "at": [
+        -53.8,
+        18,
+        -214.1
+      ],
+      "look": [
+        -102.4,
+        33.7,
+        -355.2
+      ],
+      "lens": 15.5
+    }
+  ],
+  "sound": [
+    "wind:0.4",
+    "birds:0.35",
+    "fire:0.15"
+  ],
+  "music": "village"
+}
