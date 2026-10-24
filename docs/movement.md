@@ -119,6 +119,56 @@ Each stage is done when its checks pass and a duel run or film shows it; the tro
 
 Before the layers, a playable sword-and-shield prototype in `terra_creatures` (`melee`), for the developers to feel and give feedback on: in the yard (`cargo xtask yard`) or `make play`, T draws a sword and shield and brings a sparring partner. Its moves are data (`assets/data/moves/sword_and_shield.ron`) run by the move runner with phases, cancels and a buffer; active frames typed from `tools/characters/phases.ts`; blades swept against hurt capsules. Shortcuts the layers replace: drive curves stand in for root motion; a guard is judged by facing, not the shield's volume; one hurt capsule a body; a clip picked by the dominant direction, no blend space; the build keys reused in stance (left click, right click, Q, Ctrl); the sword and shield given on drawing, not from the inventory; the spar's health apart from Vitals.
 
+### Second round
+
+The developer's first play, 2026-10-24:
+1. The hands sit inside the body, even at idle.
+2. A swing goes to the left, not ahead.
+3. The props are hung wrong: the partner's shield goes into its head when it guards.
+4. The frame rate is atrocious.
+5. The sounds make no sense.
+6. Rolling, jumping, swinging and blocking cost no stamina.
+7. Nothing chains.
+
+They added: "we probably need to build better tools so you can ensure things are correct".
+
+| What was seen | Cause, as found | What checks it |
+|---|---|---|
+| 1. Hands in the body | The Kimodo fight clips are carried onto the base body by bone rotation, not by aim (`aim.py`, D360). The base is broader than the clip's source, so the arms close into it | Penetration: hands, forearms and held looks against the body's own capsules, every frame of every move |
+| 2. Swings to the left | The clips themselves: the slash is cut "high right to low left", and the backhand's tip is fastest 1.40 m to the left (`phases.ts`). A prompt does not set a blade's path | Arc: the tip's path through the active frames must cross ahead of the body |
+| 3. Shield in the head | The shield hangs on `socket.hand.L`, not on the forearm a strap holds | Held fit: the sword's grip along the hand, the shield's face out from the forearm, both in the penetration check |
+| 4. Frame rate | Not yet measured. `cargo xtask yard` runs the dev profile (our crates at opt-level 1) | The yard benched with the sword drawn |
+| 5. Sounds | A block plays the anvil and a parry the bell (`terra_game/src/play/sounds.rs`), and the swing is a made whoosh | The duel run logs each cue it plays |
+| 6. Stamina | Drawing switches off the walker's roll and jump, and moves carry no cost (against D61) | The duel run logs stamina; tests |
+| 7. No chain | The finisher reuses the slash's clip, and no move starts or ends in the set's guard pose, so a chain is a cross-fade between unrelated poses | Chain: one move's last pose against the next one's first; the duel run fails on an idle where a chain was asked for |
+
+The order of work, each round bounded, the code split as D447 says:
+
+1. **Checks first**:
+   - the penetration, arc, held-fit and chain checks over the move set, in `tools/characters`;
+   - the duel run, as a plain test;
+   - the yard benched with the sword drawn.
+
+   All of them run on today's clips for a baseline.
+2. **What waits on no clip**, side by side:
+   - the frame rate, fixed by what the bench shows;
+   - stamina, as move-set data, with the roll and jump paying again;
+   - sounds by what is struck (a wood or metal shield, flesh), and a swing heard by its speed.
+
+   The runner's rules move to `terra_motion` here.
+3. **A bake-off of where clips come from**, scored by the checks on the same seven moves:
+   - Kimodo with constraints, if it takes them;
+   - a CC0 capture library;
+   - blows made by us, from key poses along a blade arc;
+   - a commercial set, as the reference only.
+4. **The set rebuilt from the winner**:
+   - every move starts and ends in one guard pose;
+   - three distinct light blows that chain, a heavy blow, block and parry, the roll, strafes;
+   - clips fitted to the base body;
+   - the shield on the forearm.
+
+   Done when every check passes and the duel run passes. Then the developers play it again.
+
 ## What happens to what exists
 
 `terra_creatures::staged` keeps its remote calls but tells figures intents and moves, not clips and positions; its bends move into the export and its hips bookkeeping into the mover. `terra_walker/src/figure.rs`'s clip names become the player's move set. `pace.rs` is the pose layer's speed matching. `swing.rs` stays as the spring-bone fix-up. `tools/creatures/animal.py` keeps making the runner's and bird's clips, played through the same layers. Kimodo stays the source of clips for people (D316), made to each move's spec.
