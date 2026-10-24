@@ -142,6 +142,18 @@ They added: "we probably need to build better tools so you can ensure things are
 | 6. Stamina | Drawing switches off the walker's roll and jump, and moves carry no cost (against D61) | The duel run logs stamina; tests |
 | 7. No chain | The finisher reuses the slash's clip, and no move starts or ends in the set's guard pose, so a chain is a cross-fade between unrelated poses | Chain: one move's last pose against the next one's first; the duel run fails on an idle where a chain was asked for |
 
+**The goal**, from the developers on 2026-10-24: "our main goal is fluid combat mechanics, albeit limited in scope right now, visually appealing, with something like enshrouded being our measuring stick for what a reasonable combat system looks like in the context of our game", and "toolchain/pipeline is most important here, because you're an agent and we're newbs". So the pipeline comes first. A move goes from its spec to a judged film by commands an agent runs, and each step fails on its own. It is the loop the environment skill uses (a measured reference, fixed views, checks, a scored review):
+
+| Step | What it does | Fails on |
+|---|---|---|
+| Reference | Enshrouded's combat measured from first-party trailers and footage: a light blow's length, the cadence of a chain, wind-up, hit-stop, the roll's length and time, how fast a guard rises, a stagger, how close fighters stand, and the camera's distance and framing. The numbers and their sources are committed; the pictures are kept out of the repository | — |
+| Clip | One command a move: its spec (start and end in the guard pose, the way its blade sweeps, its length) made from the chosen source, carried onto the base body by aim and exported; its phases written into the move set from the clip, never typed | `moves.ts` |
+| Rules | `terra_motion`'s duel test; our timings against the reference's ranges | The duel test; a timing check |
+| Look | A scripted duel in the yard, filmed from fixed cameras and the player's: a frame sheet and checks on the film (feet sliding, a gap where a chain was asked for, bodies overlapping) | The film's checks |
+| Review | A blind adversarial review of the sheet against Enshrouded's frames, scored out of 10; stopped at the bar, or after two rounds without a gain | The score |
+
+A `combat` skill in `.agents/skills` ties these together, so any agent runs the loop the same way.
+
 The order of work, each round bounded, the code split as D447 says:
 
 1. **Checks first**:
