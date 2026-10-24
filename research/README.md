@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [Campfire history panel: which rounds since 10-21 made it look worse from the camp view](2026-10-24-campfire-history-panel.md) | 2026-10-24 |
 | [Campfire as one whole-fire sim on a few cards: a blind test](2026-10-24-campfire-one-sim.md) | 2026-10-24 |
 | [Campfire as one body of flame: how shipped games lay it on the logs](2026-10-23-campfire-one-body.md) | 2026-10-23 |
 | [Creature rigs: how shipped games make many creatures move well](2026-10-22-creature-rig-pipeline.md) | 2026-10-22 |
