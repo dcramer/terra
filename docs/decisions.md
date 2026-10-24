@@ -157,6 +157,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D447](decisions/D447.md) | The fight's rules in a plain crate, its clips checked by tools that build nothing | Tech | Agent | Decided | The move runner's rules leave `terra_creatures::melee`… |
 | [D449](decisions/D449.md) | Out of stamina in a fight | Design | Developers | Decided | What a body with too little stamina may still do with a… |
 | [D451](decisions/D451.md) | The fight camera | Tech | Agent | Decided | While a weapon is drawn the player's camera frames the… |
+| [D452](decisions/D452.md) | Combat is held by a scorecard of criteria and a ratchet on their numbers | Tech | Agent | Decided | What combat must get right is data… |
 
 ## People and the tribe
 

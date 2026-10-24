@@ -1,8 +1,8 @@
 //! `cargo xtask nightly` (D411): the full run on main, run by hand until it is scheduled.
 //! In its own worktree, `.git/terra-nightly/src`, detached at origin/main, it runs what no hook
 //! runs whole: clippy and every test of the workspace, the slow ones too, the kit checker, the
-//! artifacts ratchet quick and over every scene, fuzz over seeds 0 to 200, the size ratchet and
-//! the docs check after rendering their indexes.
+//! artifacts ratchet quick and over every scene, fuzz over seeds 0 to 200, the size ratchet, the
+//! combat scorecard (D452) and the docs check after rendering their indexes.
 //!
 //! When every stage passes it is the one place a baseline is lowered (D414): what fell, and an
 //! index that was stale, is committed alone and pushed to main from this machine, with the
@@ -12,7 +12,7 @@
 //! what happened. `TERRA_NIGHTLY=0`
 //! turns it off. `--probe` is bisect's: one stage at the commit checked out.
 
-use crate::baselines::{self, ARTIFACTS, SIZES};
+use crate::baselines::{self, ARTIFACTS, COMBAT, SIZES};
 use crate::check::niced;
 use crate::stage::{self, Said, Step};
 use crate::worktrees::{git, git_output};
@@ -28,7 +28,7 @@ pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "nightly",
         takes: "",
-        does: "the full run on origin/main (D411), by hand until scheduled: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
+        does: "the full run on origin/main (D411), by hand until scheduled: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes, the combat scorecard and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
         group: "Play and check",
         run: nightly,
     },
@@ -101,6 +101,7 @@ const KITS: &[&str] = &[
     "kits",
 ];
 const SIZES_HOLD: &[&str] = &["cargo", "xtask", "sizes"];
+const COMBAT_HOLD: &[&str] = &["node", "tools/combat/scorecard.ts"];
 const RENDER: &[&str] = &["node", "tools/docs/docs.ts", "--render"];
 const DOCS: &[&str] = &["node", "tools/docs/docs.ts"];
 const ARTIFACTS_BUILD: &[&str] = &[
@@ -185,6 +186,13 @@ const STAGES: &[Stage] = &[
         build: &["cargo", "build", "-q", "-p", "xtask"],
         run: &["cargo", "xtask", "sizes", "--lower"],
         hold: SIZES_HOLD,
+    },
+    Stage {
+        name: "combat",
+        said: Said::Printed,
+        build: &[],
+        run: &["node", "tools/combat/scorecard.ts", "--lower"],
+        hold: COMBAT_HOLD,
     },
     Stage {
         name: "docs rendered",
@@ -523,12 +531,18 @@ enum Holds {
 
 /// Whether a file a run lowered at one commit still holds on a later main: an artifacts or
 /// fuzz baseline only if nothing building's check reads changed in between (`building`, as
-/// the check's own scoping decides) and the file itself did not.
+/// the check's own scoping decides) and the file itself did not; the combat baseline only if
+/// nothing the scorecard reads (`scope::COMBAT`) changed.
 fn holds(path: &str, since: &BTreeSet<String>, building: bool) -> Holds {
     if path == SIZES {
         Holds::Merge
     } else if !baselines::is_baseline(path) {
         Holds::Render
+    } else if path == COMBAT {
+        let read = since
+            .iter()
+            .any(|f| scope::COMBAT.iter().any(|p| f.starts_with(p)));
+        if read { Holds::Drop } else { Holds::Keep }
     } else if building || since.contains(path) {
         Holds::Drop
     } else {
@@ -741,8 +755,8 @@ mod tests {
         }
         let lowering = STAGES.iter().filter(|s| s.run.contains(&"--lower")).count();
         assert_eq!(
-            lowering, 4,
-            "artifacts quick and full, fuzz and sizes lower"
+            lowering, 5,
+            "artifacts quick and full, fuzz, sizes and combat lower"
         );
     }
 
@@ -792,6 +806,13 @@ mod tests {
         // Sizes entry by entry whatever moved; the indexes rendered again.
         assert_eq!(holds(SIZES, &since, true), Holds::Merge);
         assert_eq!(holds("docs/decisions.md", &since, true), Holds::Render);
+        // The combat baseline: kept whatever building did, dropped when a move or the
+        // baseline itself changed.
+        assert_eq!(holds(COMBAT, &since, true), Holds::Keep);
+        let moved: BTreeSet<String> = ["assets/data/moves/sword_and_shield.ron".to_string()].into();
+        assert_eq!(holds(COMBAT, &moved, false), Holds::Drop);
+        let raised: BTreeSet<String> = [COMBAT.to_string()].into();
+        assert_eq!(holds(COMBAT, &raised, false), Holds::Drop);
     }
 
     #[test]

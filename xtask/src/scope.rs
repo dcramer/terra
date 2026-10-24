@@ -76,6 +76,8 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("assets/data/market.ron", &["terra_town"]),
     ("assets/data/builds.ron", &["terra_town", "terra_bake"]),
     ("assets/data/life.ron", &["terra_town"]),
+    // The sword-and-shield move set, read by the fight's tests.
+    ("assets/data/moves/", &["terra_motion"]),
     // The climate the land's places are found in.
     ("assets/data/climate.ron", &["terra_land"]),
 ];
@@ -131,6 +133,24 @@ pub(crate) const FIRE: &[&str] = &[
     "assets/textures/fire/",
     "assets/data/fire.ron",
     "tools/fire/",
+];
+
+/// What the combat scorecard reads (D452, tools/combat): the move set and its duel, the
+/// fighters' bodies, clips and held things, the clip sets, the fight's rules and their tests,
+/// the contact sounds, and the checks' own tools. A change here is measured again before a
+/// lowering of its baseline is carried, and runs the duel film on main.
+pub(crate) const COMBAT: &[&str] = &[
+    "assets/data/moves/",
+    "assets/data/duels/",
+    "assets/models/character/",
+    "assets/models/held/",
+    "art/animation/sets/",
+    "crates/terra_motion/",
+    "crates/terra_creatures/src/melee/",
+    "crates/terra_game/src/play/sounds.rs",
+    "tools/characters/",
+    "tools/combat/",
+    "tools/sandbox/duel",
 ];
 
 /// What a change touches.

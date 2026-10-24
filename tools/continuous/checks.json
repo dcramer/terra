@@ -11,5 +11,12 @@
     "does": "a campfire's hearth light brightens the yard's ground beside it, against the far ground, and its firelit stones read orange, not salmon pink (tools/sandbox/groundlight.ts)",
     "run": ["node", "tools/sandbox/groundlight.ts"],
     "minutes": 20
+  },
+  {
+    "name": "combat film",
+    "does": "the combat scorecard with the yard duel's film (D452): every criterion of tools/combat/criteria.json, the film's checks among them, held to tools/combat/baseline.tsv",
+    "run": ["cargo", "xtask", "gpu", "film", "--", "cargo", "xtask", "combat", "--film"],
+    "reads": "COMBAT",
+    "minutes": 60
   }
 ]

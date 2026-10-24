@@ -17,13 +17,15 @@
 // chosen take as its blow's move, as it is named in the scored file beside it (takes.glb);
 // moves.ts checks it with --set and --clips. --into, when every clip has a take that passes,
 // keeps each take in the list (as motion.ts --keep does), rebuilds the game's fight clips
-// (assets/models/character/fight.glb) from the list and writes the phases into that set.
+// (assets/models/character/fight.glb) from the list and writes the phases into that set; then
+// runs the combat scorecard (tools/combat/scorecard.ts, D452), and when any criterion is worse
+// than its baseline puts every file it wrote back as it was and refuses the set.
 // A line a stage (D388); everything the steps print goes to the log it names. Exit 1 when a
 // clip has no take that passes. Kimodo is set up as tools/characters/README.md, "Made clips"
 // says. Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -218,6 +220,14 @@ function main() {
       say(false, "into", `not written: every clip needs a take that passes`);
       throw new Failed();
     }
+    // What --into writes, as it was, put back if the scorecard finds the set worse.
+    const into = resolve(ROOT, values.into);
+    const written = [LIST, GAME_CLIPS, into, ...chosen.map(({ s }) => join(listDir, `${s.name}.bvh`))];
+    const before = new Map(written.map((f) => [f, existsSync(f) ? readFileSync(f) : undefined]));
+    const putBack = () => {
+      for (const [f, bytes] of before) if (bytes === undefined) rmSync(f, { force: true });
+      else writeFileSync(f, bytes);
+    };
     for (const { s, pick } of chosen) {
       mkdirSync(listDir, { recursive: true });
       copyFileSync(takeFile(s, pick.take), join(listDir, `${s.name}.bvh`));
@@ -227,10 +237,19 @@ function main() {
     const figure = join(HERE, "out", `${set}-mannequin.glb`);
     blender("into", "made_clips.py", [rel(figure), `--list=${rel(LIST)}`]);
     blender("into", "export_character.py", [rel(BODY), rel(GAME_CLIPS), `--clips=${rel(figure)}`, `--list=${rel(LIST)}`]);
-    const into = resolve(ROOT, values.into);
     let text = readFileSync(into, "utf8");
     for (const { s, m } of chosen) text = writePhases(text, s.blow.move, { clip: s.name, from: 0, done: m.end, active: m.active, speed: speeds.get(s.name), hold: hold(s) });
     writeFileSync(into, text);
+    // The combat ratchet: a set that makes any criterion worse than its baseline is refused.
+    appendFileSync(LOG, `\n$ node tools/combat/scorecard.ts\n`);
+    const card = spawnSync(process.execPath, [join(ROOT, "tools", "combat", "scorecard.ts")], { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+    appendFileSync(LOG, (card.stdout ?? "") + (card.stderr ?? ""));
+    if (card.status !== 0) {
+      putBack();
+      const worse = (card.stdout ?? "").split("\n").filter((l) => l.startsWith("  ✗ ")).map((l) => l.trim().slice(2));
+      say(false, "into", `refused, every file put back: the combat scorecard is worse (${worse.length ? worse.join("; ") : "see the log"}); log ${rel(LOG)}`);
+      throw new Failed();
+    }
     say(true, "into", `${chosen.map((c) => `${c.s.name} take ${c.pick.take}`).join(", ")} kept in ${rel(listDir)}; ${rel(GAME_CLIPS)} rebuilt; phases in ${rel(into)}`);
   }
   console.log(`log: ${rel(LOG)}`);

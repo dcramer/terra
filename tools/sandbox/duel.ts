@@ -14,7 +14,8 @@
 //   cargo xtask duel --check <fight.jsonl>…  only the checks, on records already made
 //
 // Into ~/.cache/terra-review/duel/ by default: duel.mp4, duel-desk.mp4, sheet.jpg,
-// checks.txt, and each camera's fight-<camera>.jsonl and log. Exits 1 when a check fails.
+// checks.txt (and checks.json, its numbers), and each camera's fight-<camera>.jsonl and log.
+// Exits 1 when a check fails.
 // Under WSL the runs are the Windows build, on the real GPU (client.ts `offscreenRun`);
 // start it as `cargo xtask gpu film -- cargo xtask duel` (D319). Needs ffmpeg and
 // ImageMagick. Node 22.18 or later; no dependencies.
@@ -112,6 +113,8 @@ function report(records: { name: string; frames: Frame[] }[], keep: string | und
   const said = lines.map(say);
   for (const line of said) console.log(`duel: ${line}`);
   if (keep) writeFileSync(keep, said.join("\n") + "\n");
+  // The same as numbers beside it, for the combat scorecard's `--film` (tools/combat).
+  if (keep) writeFileSync(keep.replace(/\.txt$/, ".json"), JSON.stringify(lines, null, 1) + "\n");
   return lines.every((each) => each.ok);
 }
 

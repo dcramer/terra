@@ -1,0 +1,1845 @@
+{
+ "about": "What combat must get right, a row a criterion (tools/combat/README.md): what a player notices, its bar and source, the check that measures it, cheap (seconds, CPU) or heavy (the GPU film), whether it is measurable yet. `noticed` is how much a player notices it, 5 most; the scorecard orders failing rows by it (the task list).",
+ "criteria": [
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.light.idle_to_hit",
+   "noticed": 5,
+   "notice": "a light blow lands late after the press: the sword feels sluggish",
+   "bar": {
+    "within": [
+     0.22,
+     0.32
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.light_idle_to_hit_s",
+   "check": {
+    "by": "timing",
+    "measure": "idle_to_hit",
+    "move": "slash"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.chain.slash_backhand",
+   "noticed": 4,
+   "notice": "the second blow of the chain comes too soon or drags after the first",
+   "bar": {
+    "within": [
+     0.55,
+     0.75
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.light_hit_to_hit_s",
+   "check": {
+    "by": "timing",
+    "measure": "hit_to_hit",
+    "move": "slash",
+    "next": "backhand"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.chain.backhand_finisher",
+   "noticed": 4,
+   "notice": "the chain's last blow comes too soon or drags after the second",
+   "bar": {
+    "within": [
+     0.55,
+     0.75
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.light_hit_to_hit_s",
+   "check": {
+    "by": "timing",
+    "measure": "hit_to_hit",
+    "move": "backhand",
+    "next": "finisher"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.chain.blows",
+   "noticed": 2,
+   "notice": "the light chain ends a blow early",
+   "bar": {
+    "within": [
+     3,
+     4
+    ]
+   },
+   "unit": "blows",
+   "source": "tools/combat/refs/enshrouded.json targets.chain_blows",
+   "check": {
+    "by": "timing",
+    "measure": "chain_blows",
+    "move": "slash"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.finisher.hit_to_guard",
+   "noticed": 3,
+   "notice": "the chain's last blow snaps back to guard instead of landing with weight",
+   "bar": {
+    "within": [
+     0.8,
+     1.1
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.last_blow_hit_to_guard_s",
+   "check": {
+    "by": "timing",
+    "measure": "hit_to_guard",
+    "move": "finisher"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.heavy.idle_to_hit",
+   "noticed": 3,
+   "notice": "a heavy blow lands too fast to read as heavy, or too slow to use",
+   "bar": {
+    "within": [
+     0.5,
+     0.65
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.heavy_idle_to_hit_s",
+   "check": {
+    "by": "timing",
+    "measure": "idle_to_hit",
+    "move": "heavy"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.heavy.hit_to_guard",
+   "noticed": 4,
+   "notice": "after a heavy blow lands the player waits too long to act",
+   "bar": {
+    "within": [
+     0.7,
+     1.1
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.heavy_hit_to_guard_s",
+   "check": {
+    "by": "timing",
+    "measure": "hit_to_guard",
+    "move": "heavy"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.heavy.total",
+   "noticed": 4,
+   "notice": "a heavy blow takes too long from press to guard",
+   "bar": {
+    "within": [
+     1.4,
+     1.7
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.heavy_total_s",
+   "check": {
+    "by": "timing",
+    "measure": "total",
+    "move": "heavy"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.roll.length",
+   "noticed": 5,
+   "notice": "the roll lasts too long: the player feels stuck in it",
+   "bar": {
+    "within": [
+     0.5,
+     0.6
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.roll_s",
+   "check": {
+    "by": "timing",
+    "measure": "total",
+    "move": "roll"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.roll.roll_to_roll",
+   "noticed": 3,
+   "notice": "a second roll comes too soon or too late after the first",
+   "bar": {
+    "within": [
+     0.6,
+     0.66
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.roll_to_roll_s",
+   "check": {
+    "by": "timing",
+    "measure": "cancel",
+    "move": "roll"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.hit_stop.slash",
+   "noticed": 3,
+   "notice": "the slash freezes on a hit where Enshrouded flashes and kicks the camera",
+   "bar": {
+    "within": [
+     0,
+     0.05
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.hit_stop_s",
+   "check": {
+    "by": "timing",
+    "measure": "hit_stop",
+    "move": "slash"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.hit_stop.backhand",
+   "noticed": 3,
+   "notice": "the backhand freezes on a hit where Enshrouded flashes and kicks the camera",
+   "bar": {
+    "within": [
+     0,
+     0.05
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.hit_stop_s",
+   "check": {
+    "by": "timing",
+    "measure": "hit_stop",
+    "move": "backhand"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.hit_stop.finisher",
+   "noticed": 3,
+   "notice": "the finisher freezes on a hit where Enshrouded flashes and kicks the camera",
+   "bar": {
+    "within": [
+     0,
+     0.05
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.hit_stop_s",
+   "check": {
+    "by": "timing",
+    "measure": "hit_stop",
+    "move": "finisher"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.hit_stop.heavy",
+   "noticed": 3,
+   "notice": "the heavy freezes on a hit where Enshrouded flashes and kicks the camera",
+   "bar": {
+    "within": [
+     0,
+     0.05
+    ]
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.hit_stop_s",
+   "check": {
+    "by": "timing",
+    "measure": "hit_stop",
+    "move": "heavy"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.telegraph.partner_slash",
+   "noticed": 4,
+   "notice": "the partner's slash lands before the player can read it and answer",
+   "bar": {
+    "at_least": 0.8
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.enemy_telegraph_s_at_least",
+   "check": {
+    "by": "timing",
+    "measure": "idle_to_hit",
+    "move": "partner_slash"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.telegraph.partner_heavy",
+   "noticed": 4,
+   "notice": "the partner's heavy lands before the player can read it and answer",
+   "bar": {
+    "at_least": 0.8
+   },
+   "unit": "s",
+   "source": "tools/combat/refs/enshrouded.json targets.enemy_telegraph_s_at_least",
+   "check": {
+    "by": "timing",
+    "measure": "idle_to_hit",
+    "move": "partner_heavy"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "timing.spacing",
+   "noticed": 2,
+   "notice": "fighters trade blows too close or too far apart",
+   "bar": {
+    "within": [
+     0.5,
+     1
+    ]
+   },
+   "unit": "body heights",
+   "source": "tools/combat/refs/enshrouded.json targets.spacing_body_heights",
+   "check": {
+    "by": "timing",
+    "measure": "spacing"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in the slash",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in the slash",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in the backhand",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in the backhand",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in the finisher",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in the finisher",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in the heavy",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in the heavy",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in the the partner's slash",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in the the partner's slash",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in the the partner's heavy",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in the the partner's heavy",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.roll.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in the roll",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "roll",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.roll.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in the roll",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "roll",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in the block",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in the block",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.contact_off",
+   "noticed": 3,
+   "notice": "the slash lands beside the foe, not in front",
+   "bar": {
+    "at_most": 35
+   },
+   "unit": "deg",
+   "source": "D447 (moves.ts ARC_DEG)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "contact_off_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.contact_ahead",
+   "noticed": 3,
+   "notice": "the slash lands too close to the body to reach the foe",
+   "bar": {
+    "at_least": 0.5
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts AHEAD_M)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "contact_ahead_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.from_guard",
+   "noticed": 4,
+   "notice": "the body snaps out of the guard as the slash starts",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "from_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.to_guard",
+   "noticed": 4,
+   "notice": "the body snaps back into the guard as the slash ends",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "to_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.contact_off",
+   "noticed": 3,
+   "notice": "the backhand lands beside the foe, not in front",
+   "bar": {
+    "at_most": 35
+   },
+   "unit": "deg",
+   "source": "D447 (moves.ts ARC_DEG)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "contact_off_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.contact_ahead",
+   "noticed": 3,
+   "notice": "the backhand lands too close to the body to reach the foe",
+   "bar": {
+    "at_least": 0.5
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts AHEAD_M)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "contact_ahead_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.from_guard",
+   "noticed": 4,
+   "notice": "the body snaps out of the guard as the backhand starts",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "from_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.to_guard",
+   "noticed": 4,
+   "notice": "the body snaps back into the guard as the backhand ends",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "to_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.contact_off",
+   "noticed": 3,
+   "notice": "the finisher lands beside the foe, not in front",
+   "bar": {
+    "at_most": 35
+   },
+   "unit": "deg",
+   "source": "D447 (moves.ts ARC_DEG)",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "contact_off_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.contact_ahead",
+   "noticed": 3,
+   "notice": "the finisher lands too close to the body to reach the foe",
+   "bar": {
+    "at_least": 0.5
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts AHEAD_M)",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "contact_ahead_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.from_guard",
+   "noticed": 4,
+   "notice": "the body snaps out of the guard as the finisher starts",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "from_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.to_guard",
+   "noticed": 4,
+   "notice": "the body snaps back into the guard as the finisher ends",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "to_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.contact_off",
+   "noticed": 3,
+   "notice": "the heavy lands beside the foe, not in front",
+   "bar": {
+    "at_most": 35
+   },
+   "unit": "deg",
+   "source": "D447 (moves.ts ARC_DEG)",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "contact_off_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.contact_ahead",
+   "noticed": 3,
+   "notice": "the heavy lands too close to the body to reach the foe",
+   "bar": {
+    "at_least": 0.5
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts AHEAD_M)",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "contact_ahead_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.from_guard",
+   "noticed": 4,
+   "notice": "the body snaps out of the guard as the heavy starts",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "from_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.to_guard",
+   "noticed": 4,
+   "notice": "the body snaps back into the guard as the heavy ends",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "to_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.contact_off",
+   "noticed": 3,
+   "notice": "the the partner's slash lands beside the foe, not in front",
+   "bar": {
+    "at_most": 35
+   },
+   "unit": "deg",
+   "source": "D447 (moves.ts ARC_DEG)",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "contact_off_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.contact_ahead",
+   "noticed": 3,
+   "notice": "the the partner's slash lands too close to the body to reach the foe",
+   "bar": {
+    "at_least": 0.5
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts AHEAD_M)",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "contact_ahead_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.from_guard",
+   "noticed": 4,
+   "notice": "the body snaps out of the guard as the the partner's slash starts",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "from_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.to_guard",
+   "noticed": 4,
+   "notice": "the body snaps back into the guard as the the partner's slash ends",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "to_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.contact_off",
+   "noticed": 3,
+   "notice": "the the partner's heavy lands beside the foe, not in front",
+   "bar": {
+    "at_most": 35
+   },
+   "unit": "deg",
+   "source": "D447 (moves.ts ARC_DEG)",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "contact_off_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.contact_ahead",
+   "noticed": 3,
+   "notice": "the the partner's heavy lands too close to the body to reach the foe",
+   "bar": {
+    "at_least": 0.5
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts AHEAD_M)",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "contact_ahead_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.from_guard",
+   "noticed": 4,
+   "notice": "the body snaps out of the guard as the the partner's heavy starts",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "from_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.to_guard",
+   "noticed": 4,
+   "notice": "the body snaps back into the guard as the the partner's heavy ends",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "to_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.into_next",
+   "noticed": 4,
+   "notice": "the body jumps between the slash and the backhand",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "into_next_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.into_next",
+   "noticed": 4,
+   "notice": "the body jumps between the backhand and the finisher",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "into_next_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.shield_face",
+   "noticed": 4,
+   "notice": "the raised shield is turned away from the blow",
+   "bar": {
+    "at_most": 35
+   },
+   "unit": "deg",
+   "source": "D447 (moves.ts FACE_DEG)",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "shield_face_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Guard.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in Fight_Guard",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Guard",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Guard.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in Fight_Guard",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Guard",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Strafe_L.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in Fight_Strafe_L",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_L",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Strafe_L.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in Fight_Strafe_L",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_L",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Strafe_R.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in Fight_Strafe_R",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_R",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Strafe_R.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in Fight_Strafe_R",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_R",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Walk_Loop.held",
+   "noticed": 3,
+   "notice": "the sword or shield passes through the body in Walk_Loop",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Walk_Loop",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Walk_Loop.hands",
+   "noticed": 2,
+   "notice": "an arm sinks into the body in Walk_Loop",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Walk_Loop",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Idle_Loop.held",
+   "noticed": 3,
+   "notice": "the sword or shield passes through the body in Idle_Loop",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Idle_Loop",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Idle_Loop.hands",
+   "noticed": 2,
+   "notice": "an arm sinks into the body in Idle_Loop",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Idle_Loop",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.chain_buffer",
+   "noticed": 4,
+   "notice": "a press during a blow is lost instead of starting the next of the chain",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (the move set's buffer)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "moves::tests::a_press_in_a_blows_wind_up_waits_and_starts_the_next_of_the_chain_in_its_window"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.stale_press",
+   "noticed": 3,
+   "notice": "a press long before a blow's window starts a blow the player no longer wants",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (the move set's buffer)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "moves::tests::a_stale_press_is_dropped_and_a_move_left_alone_ends"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.parry_window",
+   "noticed": 4,
+   "notice": "a guard raised just in time does not parry",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (parry_s)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "moves::tests::a_guard_raised_inside_the_window_parries_and_one_raised_earlier_blocks"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.roll_iframes",
+   "noticed": 4,
+   "notice": "a roll is hit in its middle, or untouchable while getting up",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (the roll's invulnerable span)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "moves::tests::a_roll_is_untouchable_only_between_its_tuck_and_its_get_up"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.guard_cover",
+   "noticed": 4,
+   "notice": "the shield stops a blow from behind, or fails one from the side",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (the guard)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "contact::tests::a_guard_covers_blows_from_ahead_and_to_either_side_but_not_from_behind"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.hit_reaction",
+   "noticed": 4,
+   "notice": "a hit does not flinch the struck, or a parry does not stagger the attacker",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (contact)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "contact::tests::a_hit_hurts_and_flinches_the_struck_and_a_parry_staggers_the_attacker"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.reel",
+   "noticed": 3,
+   "notice": "a reeling body acts before its reel has run",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (contact)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "contact::tests::a_reeling_body_cannot_act_until_its_reel_has_run_and_a_spent_one_goes_down"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.hit_stop_freeze",
+   "noticed": 2,
+   "notice": "a hit-stop freezes the whole world, not the bodies in it",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (contact)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "contact::tests::a_hit_stop_all_but_freezes_a_bodys_own_time"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.step_in",
+   "noticed": 4,
+   "notice": "a blow lunges past the foe or falls short",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (the warp)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "moves::tests::a_blow_steps_in_to_stand_where_its_blade_lands_and_no_further"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.reach",
+   "noticed": 4,
+   "notice": "a blow lands on a foe out of its reach, or a roll strikes",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (reach)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "moves::tests::a_blow_reaches_what_stands_in_its_step_ins_cone_and_reach_and_a_roll_nothing"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.fast_blade",
+   "noticed": 4,
+   "notice": "a fast blade passes through a foe without striking",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "D447 (the blade's swept test)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "blade::tests::a_fast_blade_that_skips_past_a_body_between_ticks_still_strikes_it"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.wind_up",
+   "noticed": 3,
+   "notice": "a blow strikes without a wind-up to read",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/movement.md (phases)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "moves::tests::the_shipped_set_reads_and_every_blow_has_a_wind_up_before_its_blade_strikes"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.duel",
+   "noticed": 5,
+   "notice": "the scripted duel does not chain, land, parry, dodge and tire as written",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "terra_motion's duel test (docs/movement.md)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "duel::the_duel_chains_lands_parries_dodges_and_tires"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.stamina.costs",
+   "noticed": 4,
+   "notice": "a blow or roll costs no stamina, or a heavy no more than a light",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "D449",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "stamina::tests::every_blow_and_the_roll_cost_stamina_and_a_heavy_costs_more_than_a_light"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.stamina.tired",
+   "noticed": 4,
+   "notice": "out of stamina, a roll or heavy still starts, or nothing does",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "D449",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "stamina::tests::rested_everything_starts_and_tired_only_a_light_blow_does"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.stamina.tired_blow",
+   "noticed": 3,
+   "notice": "a tired light blow is as fast and hard as a rested one",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "D449",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "stamina::tests::a_tired_light_blow_runs_slower_and_hits_softer"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.stamina.guard_break",
+   "noticed": 4,
+   "notice": "a blow on a guard with too little stamina does not break it",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "D449",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "stamina::tests::a_block_costs_by_the_blows_damage_and_one_too_dear_breaks_the_guard"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.stamina.drawn",
+   "noticed": 4,
+   "notice": "drawn, a roll or blow costs nothing, or a tired one starts",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "D449 (the game's melee)",
+   "check": {
+    "by": "test",
+    "crate": "terra_creatures",
+    "test": "melee::tests::drawn_a_roll_and_each_blow_pay_their_cost_and_too_tired_a_roll_or_heavy_does_not_start"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.sound.struck",
+   "noticed": 4,
+   "notice": "a blow on the shield's face, its boss and the body are not told apart",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "struck facts (terra_motion::struck)",
+   "check": {
+    "by": "test",
+    "crate": "terra_motion",
+    "test": "struck::tests::a_blow_meets_the_shields_face_on_the_guard_its_boss_parried_and_the_body_on_a_hit"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "rule.sound.contact",
+   "noticed": 4,
+   "notice": "a contact makes no sound, or the same sound whatever is struck and however hard",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "the game's contact sounds (terra_game play/sounds.rs)",
+   "check": {
+    "by": "test",
+    "crate": "terra_game",
+    "test": "play::sounds::tests::a_fight_is_heard_by_what_is_struck_and_how_heavy_the_blow"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.same_fight",
+   "noticed": 2,
+   "notice": "two runs of one script fight differently (the fight is not repeatable)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "faults",
+   "source": "D69 (tools/sandbox/duel/checks.ts)",
+   "check": {
+    "by": "film",
+    "name": "same fight"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.latency",
+   "noticed": 5,
+   "notice": "a press starts its move late",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "faults",
+   "source": "tools/sandbox/duel/checks.ts (LATE_FRAMES)",
+   "check": {
+    "by": "film",
+    "name": "start latency"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.chain_gaps",
+   "noticed": 4,
+   "notice": "the player stands idle between two blows of a chain",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "faults",
+   "source": "tools/sandbox/duel/checks.ts",
+   "check": {
+    "by": "film",
+    "name": "chain gaps"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.feet_sliding",
+   "noticed": 5,
+   "notice": "planted feet slide over the ground",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "faults",
+   "source": "tools/sandbox/duel/checks.ts (SLIDE_M)",
+   "check": {
+    "by": "film",
+    "name": "feet sliding"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.overlap",
+   "noticed": 4,
+   "notice": "the fighters' bodies pass into each other",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "faults",
+   "source": "tools/sandbox/duel/checks.ts (OVERLAP_M)",
+   "check": {
+    "by": "film",
+    "name": "pushbox overlap"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.misses",
+   "noticed": 5,
+   "notice": "a blow in reach passes through the foe without landing",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "faults",
+   "source": "tools/sandbox/duel/checks.ts",
+   "check": {
+    "by": "film",
+    "name": "blows in reach"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.hit_stop",
+   "noticed": 3,
+   "notice": "a hit holds the striker for the wrong time",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "faults",
+   "source": "tools/sandbox/duel/checks.ts (STOP_SLACK_FRAMES)",
+   "check": {
+    "by": "film",
+    "name": "hit-stop"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.framed",
+   "noticed": 2,
+   "notice": "the fight drifts out of the films' cameras",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "faults",
+   "source": "tools/sandbox/duel/checks.ts",
+   "check": {
+    "by": "film",
+    "name": "framed"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.camera_share",
+   "noticed": 4,
+   "notice": "the game's camera frames the player too large, too small or off the middle",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "faults",
+   "source": "D451, tools/combat/refs/enshrouded.json targets.camera_player_share",
+   "check": {
+    "by": "film",
+    "name": "player framed"
+   }
+  },
+  {
+   "measurable": false,
+   "cost": "heavy",
+   "id": "review.blind_score",
+   "noticed": 5,
+   "notice": "the fight feels worse than Enshrouded's in a blind side-by-side",
+   "bar": null,
+   "unit": "",
+   "source": "the review desk (D422), Enshrouded's clips",
+   "needs": "a blind panel scoring our duel film against Enshrouded's clips, as the fire rounds score theirs",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "timing.block.raise",
+   "noticed": 4,
+   "notice": "the shield comes up too slowly to answer a blow",
+   "bar": null,
+   "unit": "",
+   "source": "tools/combat/refs/enshrouded.json targets (unmeasured: block_raise_and_blocked_hit)",
+   "needs": "Enshrouded's block raise measured from third-party footage",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "move.block.raise",
+   "noticed": 4,
+   "notice": "the shield arm is not up in front of the body while blocking",
+   "bar": null,
+   "unit": "",
+   "source": "D450 (moves.ts blow.raised)",
+   "needs": "a spec for the game's block clip (Keyed_Block with blow.raised) put --into the set",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "move.guard.shield_face",
+   "noticed": 4,
+   "notice": "the guard stands the strapped shield side-on, not facing the foe",
+   "bar": null,
+   "unit": "",
+   "source": "D450 (moves.ts blow.held)",
+   "needs": "the game's guard loop made from a spec'd held guard (Keyed_Guard --into the set)",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "move.blows.spec",
+   "noticed": 3,
+   "notice": "a blow sweeps the wrong way or lands off its spec",
+   "bar": null,
+   "unit": "",
+   "source": "D450 (clip_spec.ts)",
+   "needs": "the game's blows made from spec'd clips (Keyed_Slash, Keyed_Backhand --into the set)",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "timing.roll.distance",
+   "noticed": 3,
+   "notice": "the roll carries too far or too short",
+   "bar": null,
+   "unit": "",
+   "source": "tools/combat/refs/enshrouded.json targets (unmeasured: roll_distance_and_iframes)",
+   "needs": "a fixed-camera roll in third-party footage",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "timing.hit_reaction",
+   "noticed": 3,
+   "notice": "a struck foe flinches too long or too short",
+   "bar": null,
+   "unit": "",
+   "source": "tools/combat/refs/enshrouded.json targets (unmeasured: hit_reaction)",
+   "needs": "flinch lengths read from Enshrouded's footage",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "timing.light.recovery",
+   "noticed": 3,
+   "notice": "a lone light blow returns to guard too fast or slow",
+   "bar": null,
+   "unit": "",
+   "source": "tools/combat/refs/enshrouded.json targets (unmeasured: light_recovery_to_guard)",
+   "needs": "a lone light blow back to guard in third-party footage",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "film.hit_feedback",
+   "noticed": 4,
+   "notice": "a landed blow has no flash or camera kick",
+   "bar": null,
+   "unit": "",
+   "source": "tools/combat/refs/enshrouded.json targets.hit_stop (a 3-4 frame flash and a camera kick)",
+   "needs": "a flash and camera kick in the game and a film check that finds them",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "film.telegraph_readable",
+   "noticed": 3,
+   "notice": "the partner's wind-up cannot be read from the player's camera",
+   "bar": null,
+   "unit": "",
+   "source": "tools/combat/refs/enshrouded.json targets.enemy_telegraph_s_at_least",
+   "needs": "a film check of the partner's wind-up seen from the game's camera",
+   "check": null
+  }
+ ]
+}

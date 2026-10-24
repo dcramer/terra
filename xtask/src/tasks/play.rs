@@ -95,6 +95,13 @@ pub(crate) const TASKS: &[Task] = &[
         run: |args| node("tools/sandbox/qa.ts", args),
     },
     Task {
+        name: "combat",
+        takes: "[--film] [--json FILE] [--raise \"<why>\" | --lower]",
+        does: "the combat scorecard: every criterion of tools/combat/criteria.json (timings against Enshrouded, the move check on every body, the fight's rule tests; --film adds the duel film's checks), a line each, held to tools/combat/baseline.tsv: worse fails unless raised with its why, --lower is nightly's (D452, D414)",
+        group: "Play and check",
+        run: |args| node("tools/combat/scorecard.ts", args),
+    },
+    Task {
         name: "duel",
         takes: "[--out <dir>] | --check <fight.jsonl>…",
         does: "the yard's scripted duel filmed from four cameras into a 2x2 film and a contact sheet, its fight record checked (start latency, chain gaps, feet sliding, overlap, misses, hit-stop), in ~/.cache/terra-review/duel/ (tools/sandbox)",

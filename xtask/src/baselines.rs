@@ -9,10 +9,14 @@ pub(crate) const ARTIFACTS: &str = "crates/terra_build_scenes/examples/artifacts
 /// The size ratchet's baseline (D396): path, function, lines.
 pub(crate) const SIZES: &str = "xtask/sizes-baseline.tsv";
 
-/// Whether a file, from the root, is a ratchet's baseline: a file of the artifacts folder or
-/// the size baseline.
+/// The combat scorecard's baseline (D452): id, value, why.
+pub(crate) const COMBAT: &str = "tools/combat/baseline.tsv";
+
+/// Whether a file, from the root, is a ratchet's baseline: a file of the artifacts folder, the
+/// size baseline or the combat baseline.
 pub(crate) fn is_baseline(file: &str) -> bool {
     file == SIZES
+        || file == COMBAT
         || file
             .strip_prefix(ARTIFACTS)
             .is_some_and(|rest| rest.starts_with('/'))

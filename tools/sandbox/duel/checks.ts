@@ -30,7 +30,10 @@ export type Contact = { by: string; on: string; move: string; taken: string; sto
 export type Lens = { at: number[]; looking: number[]; up: number[]; vfov: number; aspect: number };
 export type Frame = { frame: number; step: string | null; asked: Asked[]; contacts: Contact[]; fighters: Fighter[]; camera?: Lens; up?: number[] };
 export type Moves = { buffer_s: number; hit_stop: Map<string, number> };
-export type Check = { name: string; ok: boolean; line: string };
+/// A check's verdict: whether it held, its line, and how many faults it found (frames, plants,
+/// blows or contacts over its bar; 1 for a check that is held or not as a whole), the number
+/// the combat scorecard holds (tools/combat).
+export type Check = { name: string; ok: boolean; line: string; faults: number };
 
 /// The player's pushbox, the walker's capsule (the record gives none for the player).
 export const PLAYER_RADIUS_M = 0.35;
@@ -148,7 +151,7 @@ export function latency(frames: Frame[], all = runs(frames), moves?: Moves): Che
   const line = worst
     ? `${late.length} of ${asked} moves asked started late, worst ${worst.never ? `${worst.move} asked at frame ${worst.at} never started` : `${worst.move} asked at frame ${worst.at}, ${worst.frames} frames after it could`}`
     : `${asked} moves asked, each started within ${LATE_FRAMES} frame of its window`;
-  return { name: "start latency", ok: late.length === 0, line };
+  return { name: "start latency", ok: late.length === 0, line, faults: late.length };
 }
 
 /// An idle frame where a chain was asked: between a press that waits for its window and the
@@ -171,7 +174,7 @@ export function chainGaps(frames: Frame[], all = runs(frames)): Check {
   const line = worst
     ? `${gaps.length} of ${chains} chains stood idle, worst ${worst.move} asked at frame ${worst.at}: ${worst.idle} idle frames`
     : `${chains} chained moves, no idle frame between a blow and the next`;
-  return { name: "chain gaps", ok: gaps.length === 0, line };
+  return { name: "chain gaps", ok: gaps.length === 0, line, faults: gaps.length };
 }
 
 /// Feet sliding while planted: a ball of the foot within PLANTED_M of its lowest (LOWEST_SHARE) for
@@ -210,7 +213,7 @@ export function sliding(frames: Frame[]): Check {
   const line = worst
     ? `${slid.length} of ${plants.length} plants slid past ${SLIDE_M * 100} cm, median ${(median(slid.map((each) => each.travel)) * 100).toFixed(1)} cm, worst ${(worst.travel * 100).toFixed(1)} cm (${whose(worst.who)} ${worst.foot ? "right" : "left"} foot, frames ${worst.from}-${worst.to}, ${worst.move})`
     : `${plants.length} plants, none slid past ${SLIDE_M * 100} cm`;
-  return { name: "feet sliding", ok: slid.length === 0, line };
+  return { name: "feet sliding", ok: slid.length === 0, line, faults: slid.length };
 }
 
 /// Pushboxes overlapping: the two fighters' feet never closer than their radii, less OVERLAP_M.
@@ -226,7 +229,7 @@ export function overlap(frames: Frame[]): Check {
   const line = worst
     ? `${over.length} frames overlap past ${OVERLAP_M * 100} cm, worst ${(worst.by * 100).toFixed(1)} cm at frame ${worst.frame}`
     : `the fighters' pushboxes never overlap past ${OVERLAP_M * 100} cm`;
-  return { name: "pushbox overlap", ok: over.length === 0, line };
+  return { name: "pushbox overlap", ok: over.length === 0, line, faults: over.length };
 }
 
 /// A blow in reach that misses: a run with its target in reach (`Move::in_reach`) during its
@@ -256,7 +259,7 @@ export function misses(frames: Frame[], all = runs(frames)): Check {
   const line = first
     ? `${missed.length} of ${reached} blows in reach missed, first ${whose(first.who)} ${first.move} at frames ${first.from}-${first.to}`
     : `${reached} blows in reach in their active frames, each landed or was rolled through`;
-  return { name: "blows in reach", ok: missed.length === 0, line };
+  return { name: "blows in reach", ok: missed.length === 0, line, faults: missed.length };
 }
 
 /// Hit-stop: after each contact the striker is held for the contact's stop_s (within
@@ -283,7 +286,7 @@ export function hitStop(frames: Frame[], moves?: Moves): Check {
   const line = worst
     ? `${off.length} of ${contacts} contacts held wrongly, worst ${worst.move} at frame ${worst.frame}: ${worst.held} frames for ${worst.want.toFixed(1)}${worst.set !== undefined ? `, the set's hit_stop ${worst.set} s` : ""}`
     : `${contacts} contacts, each held its hit-stop to within ${STOP_SLACK_FRAMES} frames`;
-  return { name: "hit-stop", ok: off.length === 0, line };
+  return { name: "hit-stop", ok: off.length === 0, line, faults: off.length };
 }
 
 /// What a fight did, frame by frame: each move started and each contact. Two runs of the
@@ -304,10 +307,11 @@ export function same(records: { name: string; frames: Frame[] }[]): Check {
       return {
         name: "same fight",
         ok: false,
+        faults: 1,
         line: `${other.name} differs from ${first.name} at event ${at + 1}: ${other.said[at] ?? "nothing"} against ${first.said[at] ?? "nothing"}`,
       };
   }
-  return { name: "same fight", ok: true, line: `${records.length} records, the same ${first.said.length} move starts and contacts on the same frames` };
+  return { name: "same fight", ok: true, faults: 0, line: `${records.length} records, the same ${first.said.length} move starts and contacts on the same frames` };
 }
 
 /// The fight where the cameras look: the fighters' middle, on the frames both stand, is on
@@ -322,7 +326,7 @@ export function framed(frames: Frame[], centre: number[], within: number): Check
   const worst = worstOf(off, (each) => each.by);
   const ok = off.length > 0 && mean <= within && (worst?.by ?? 0) <= 2 * within;
   const line = `the fighters' middle ${mean.toFixed(1)} m from where the cameras look on average, ${(worst?.by ?? 0).toFixed(1)} m at most (frame ${worst?.frame ?? "none"}; bars ${within} and ${2 * within} m)`;
-  return { name: "framed", ok, line };
+  return { name: "framed", ok, line, faults: ok ? 0 : 1 };
 }
 
 /// The player's body, feet to crown, as the walker's figure stands (`assets/data/camera.ron`).
@@ -364,7 +368,7 @@ export function share(frames: Frame[], bars: number[]): Check {
     };
     return [{ share: (crown.y - feet.y) / 2, across: Math.abs(middle.x) / 2, partner: !!partner && inside(0) && inside(BODY_M) }];
   });
-  if (!seen.length) return { name: "player framed", ok: false, line: "no drawn frame records its camera" };
+  if (!seen.length) return { name: "player framed", ok: false, line: "no drawn frame records its camera", faults: 1 };
   const height = median(seen.map((each) => each.share));
   const across = median(seen.map((each) => each.across));
   const partner = seen.filter((each) => each.partner).length / seen.length;
@@ -372,7 +376,7 @@ export function share(frames: Frame[], bars: number[]): Check {
   const ok = height >= bars[0] && height <= bars[1] && across <= CENTRED && partner >= SEEN_SHARE;
   const pct = (x: number) => `${(100 * x).toFixed(0)}%`;
   const line = `the player ${height.toFixed(3)} of the frame's height (median; bars ${bars[0]}-${bars[1]}, ${pct(inBars)} of ${seen.length} frames inside), ${pct(across)} of its width off the middle (bar ${pct(CENTRED)}), the partner whole in ${pct(partner)} of them (bar ${pct(SEEN_SHARE)})`;
-  return { name: "player framed", ok, line };
+  return { name: "player framed", ok, line, faults: ok ? 0 : 1 };
 }
 
 /// Every check on one record.

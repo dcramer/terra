@@ -1,0 +1,313 @@
+#!/usr/bin/env node
+// The combat scorecard (D452, tools/combat/README.md): every criterion of criteria.json
+// measured, a line each, and held to baseline.tsv, the combat ratchet.
+//
+//   cargo xtask combat                    the cheap criteria (the move set's timings, the move
+//                                         check on every body, the fight's rule tests), seconds
+//   cargo xtask combat --film             and the duel film's checks (the GPU, minutes)
+//   cargo xtask combat --json FILE        the results also as JSON
+//   cargo xtask combat --raise "<why>"    write the rows that got worse, or are new, with why
+//   cargo xtask combat --lower            write the rows that got better (nightly's alone, D414)
+//
+// A line a criterion: ✓ within its bar; · below its bar and no worse than its baseline (the
+// task list, tools/combat's skill); ✗ worse than its baseline, or not measured; ? not
+// measurable yet. It fails (exit 1) on a ✗ alone: a change may leave a criterion below its
+// bar, never make it worse unless the same commit raises its baseline with --raise and a why.
+// A criterion's number is how far it is outside its bar ("miss", 0 within it), so worse is
+// always a larger miss. What the steps print goes to target/combat/scorecard.log.
+// Node 22.18 or later; no dependencies.
+
+import { spawnSync } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { parseArgs } from "node:util";
+
+const ROOT = resolve(import.meta.dirname, "../..");
+export const CRITERIA = resolve(import.meta.dirname, "criteria.json");
+export const BASELINE = resolve(import.meta.dirname, "baseline.tsv");
+const SET = resolve(ROOT, "assets/data/moves/sword_and_shield.ron");
+/// The player's body, feet to crown (the walker's figure), for spacing in body heights.
+const BODY_M = 1.8;
+/// Two numbers this close are the same: values are kept to three decimals.
+const EPS = 1e-6;
+
+export type Bar = { at_most: number } | { at_least: number } | { within: [number, number] } | { pass: true } | null;
+export type CheckOf =
+  | { by: "timing"; measure: string; move?: string; next?: string }
+  | { by: "moves"; row: string; measure: string }
+  | { by: "test"; crate: string; test: string }
+  | { by: "film"; name: string }
+  | null;
+export type Criterion = {
+  id: string;
+  noticed: number;
+  notice: string;
+  bar: Bar;
+  unit: string;
+  source: string;
+  check: CheckOf;
+  cost: "cheap" | "heavy";
+  measurable: boolean;
+  needs?: string;
+  slack?: number;
+};
+export type Held = { value: number; why: string };
+export type Status = "pass" | "held" | "better" | "worse" | "new" | "missing" | "unmeasured" | "skipped";
+export type Result = { id: string; status: Status; value?: number; miss?: number; base?: number; note?: string };
+
+/// How far a value is outside its bar, in its unit; 0 within it. A test passes as 0, fails as 1.
+export function miss(value: number, bar: Bar): number {
+  if (!bar) return 0;
+  if ("at_most" in bar) return Math.max(0, value - bar.at_most);
+  if ("at_least" in bar) return Math.max(0, bar.at_least - value);
+  if ("within" in bar) return Math.max(0, bar.within[0] - value, value - bar.within[1]);
+  return value;
+}
+
+export function barText(bar: Bar, unit: string): string {
+  const u = unit ? ` ${unit}` : "";
+  if (!bar) return "none yet";
+  if ("at_most" in bar) return `at most ${bar.at_most}${u}`;
+  if ("at_least" in bar) return `at least ${bar.at_least}${u}`;
+  if ("within" in bar) return `${bar.within[0]}-${bar.within[1]}${u}`;
+  return "passes";
+}
+
+/// A criterion against its baseline: within its bar, held, better, worse, or new (no baseline
+/// and outside its bar).
+export function judge(c: Criterion, value: number | undefined, base: Held | undefined): Result {
+  if (!c.measurable) return { id: c.id, status: "unmeasured", note: c.needs };
+  if (value === undefined) return { id: c.id, status: "missing" };
+  const m = round(miss(value, c.bar));
+  const b = base === undefined ? undefined : round(miss(base.value, c.bar));
+  const r = { id: c.id, value, miss: m, base: base?.value };
+  if (b === undefined) return { ...r, status: m === 0 ? "pass" : "new" };
+  if (m > b + (c.slack ?? 0) + EPS) return { ...r, status: "worse" };
+  if (m === 0) return { ...r, status: "pass", note: b > 0 ? "better than its baseline" : undefined };
+  return { ...r, status: m < b - EPS ? "better" : "held" };
+}
+
+export const round = (x: number) => Math.round(x * 1000) / 1000;
+
+/// The baseline: a row a criterion, `id`, `value`, `why` (tab-separated, a header first).
+export function readBaseline(text: string): Map<string, Held> {
+  const held = new Map<string, Held>();
+  for (const line of text.split("\n").slice(1)) {
+    const [id, value, why] = line.split("\t");
+    if (id && value !== undefined) held.set(id, { value: Number(value), why: why ?? "-" });
+  }
+  return held;
+}
+
+export function writeBaseline(held: Map<string, Held>, order: string[]): string {
+  const ids = [...order.filter((id) => held.has(id)), ...[...held.keys()].filter((id) => !order.includes(id)).sort()];
+  return ["id\tvalue\twhy", ...ids.map((id) => `${id}\t${held.get(id)!.value}\t${held.get(id)!.why}`)].join("\n") + "\n";
+}
+
+/// The baseline after a raise (rows worse, or not held yet, take their value with the why) or
+/// a lowering (rows better, or within their bar and not held yet, take theirs). A raise never
+/// lowers a held row and a lowering never raises one (D414).
+export function rebaseline(held: Map<string, Held>, results: Result[], mode: "raise" | "lower", why: string): Map<string, Held> {
+  const next = new Map(held);
+  for (const r of results) {
+    if (r.value === undefined) continue;
+    // Worse, or not held yet (new to the baseline, within its bar or not).
+    const raise = r.status === "worse" || r.status === "new" || r.base === undefined;
+    // Within its bar now: banked when it was outside it (`note`) or not held yet.
+    const lower = r.status === "better" || (r.status === "pass" && (r.base === undefined || r.note !== undefined));
+    if ((mode === "raise" && raise) || (mode === "lower" && lower)) next.set(r.id, { value: r.value, why });
+  }
+  return next;
+}
+
+/// A move's numbers in the move set, read without a RON parser: each `"name": (` and its
+/// fields to the next.
+export type Move = { from: number; speed: number; active?: [number, number]; done: number; cancel?: number; next?: string; hit_stop: number; stop_at?: number };
+export function readSet(text: string): Map<string, Move> {
+  const body = text.replace(/\/\/.*$/gm, "");
+  const start = body.indexOf("moves:");
+  const names = [...body.slice(start).matchAll(/"([\w-]+)":\s*\(/g)];
+  const set = new Map<string, Move>();
+  names.forEach((name, i) => {
+    const chunk = body.slice(start).slice(name.index, names[i + 1]?.index);
+    const num = (key: string) => {
+      const m = new RegExp(`\\b${key}:\\s*([\\d.]+)`).exec(chunk);
+      return m ? Number(m[1]) : undefined;
+    };
+    const active = /\bactive:\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/.exec(chunk);
+    const next = /\bnext:\s*"([\w-]+)"/.exec(chunk);
+    set.set(name[1], {
+      from: num("from") ?? 0,
+      speed: num("speed") ?? 1,
+      active: active ? [Number(active[1]), Number(active[2])] : undefined,
+      done: num("done") ?? 0,
+      cancel: num("cancel"),
+      next: next?.[1],
+      hit_stop: num("hit_stop") ?? 0,
+      stop_at: num("stop_at"),
+    });
+  });
+  return set;
+}
+
+/// A timing in real seconds ((clip time - from) / speed), as the Enshrouded comparison reads
+/// it (research/2026-10-24-enshrouded-combat-measured.md): the hit is the active span's start;
+/// a chained blow starts at its predecessor's cancel.
+export function timing(set: Map<string, Move>, check: { measure: string; move?: string; next?: string }): number | undefined {
+  const m = check.move ? set.get(check.move) : undefined;
+  const real = (mv: Move, t: number) => (t - mv.from) / mv.speed;
+  switch (check.measure) {
+    case "idle_to_hit":
+      return m?.active && real(m, m.active[0]);
+    case "hit_to_guard":
+      return m?.active && (m.done - m.active[0]) / m.speed;
+    case "total":
+      return m && real(m, m.done);
+    case "cancel":
+      return m?.cancel !== undefined ? real(m, m.cancel) : undefined;
+    case "hit_stop":
+      return m?.hit_stop;
+    case "hit_to_hit": {
+      const n = check.next ? set.get(check.next) : undefined;
+      if (!m?.active || m.cancel === undefined || !n?.active) return undefined;
+      return (m.cancel - m.active[0]) / m.speed + real(n, n.active[0]);
+    }
+    case "chain_blows": {
+      let blows = 0;
+      const seen = new Set<string>();
+      for (let name = check.move; name && set.has(name) && !seen.has(name); name = set.get(name)!.next) seen.add(name), blows++;
+      return blows || undefined;
+    }
+    case "spacing": {
+      const stops = [...set.entries()].filter(([name, mv]) => !name.startsWith("partner") && mv.active && mv.stop_at !== undefined).map(([, mv]) => mv.stop_at!);
+      return stops.length ? Math.max(...stops) / BODY_M : undefined;
+    }
+  }
+  return undefined;
+}
+
+/// Each named test's verdict from cargo's output: `test <path> ... ok`, 0 passed, 1 failed.
+export function testVerdicts(out: string): Map<string, number> {
+  const verdicts = new Map<string, number>();
+  for (const m of out.matchAll(/^test (\S+) \.\.\. (ok|FAILED)/gm)) verdicts.set(m[1], m[2] === "ok" ? 0 : 1);
+  return verdicts;
+}
+
+/// The move check's rows (moves.ts --json): a row named by its move, or a clip with no move.
+type MovesRow = { move?: string; clip: string; measured?: Record<string, number> };
+export function movesValue(rows: MovesRow[], check: { row: string; measure: string }): number | undefined {
+  const row = rows.find((r) => r.move === check.row) ?? rows.find((r) => !r.move && r.clip === check.row);
+  return row?.measured?.[check.measure];
+}
+
+const mark: Record<Status, string> = { pass: "✓", held: "·", better: "·", worse: "✗", new: "✗", missing: "✗", unmeasured: "?", skipped: "-" };
+
+/// A criterion's line: its mark, id, number and bar, and what its verdict asks for.
+export function line(c: Criterion, r: Result): string {
+  const test = c.check?.by === "test";
+  const v = r.value === undefined ? "" : test ? (r.value === 0 ? ": passes" : ": fails") : `: ${fmt(r.value)}${c.unit ? ` ${c.unit}` : ""}`;
+  const bar = test || r.value === undefined ? "" : ` (bar ${barText(c.bar, c.unit)})`;
+  const said: Record<Status, string> = {
+    pass: "",
+    held: "",
+    better: `, better than its baseline ${fmt(r.base!)}: nightly banks it`,
+    worse: `, WORSE than its baseline ${fmt(r.base!)}: undo, or --raise "<why>" in this commit`,
+    new: `, below its bar with no baseline: --raise "<why>"`,
+    missing: ": not measured (its check gave no number; the log says why)",
+    unmeasured: `: not measurable yet, needs ${r.note}`,
+    skipped: ": heavy, run with --film",
+  };
+  const note = r.status === "pass" && r.note ? `, ${r.note}: nightly banks it` : "";
+  return `${mark[r.status]} ${c.id}${v}${bar}${said[r.status]}${note}`;
+}
+const fmt = (x: number) => String(round(x));
+
+function main() {
+  const { values: opt } = parseArgs({
+    options: {
+      film: { type: "boolean", default: false },
+      json: { type: "string" },
+      raise: { type: "string" },
+      lower: { type: "boolean", default: false },
+    },
+  });
+  if (opt.raise !== undefined && !opt.raise.trim()) throw new Error("--raise needs its why");
+  const criteria: Criterion[] = JSON.parse(readFileSync(CRITERIA, "utf8")).criteria;
+  const held = existsSync(BASELINE) ? readBaseline(readFileSync(BASELINE, "utf8")) : new Map<string, Held>();
+  const logDir = resolve(ROOT, "target/combat");
+  mkdirSync(logDir, { recursive: true });
+  const LOG = join(logDir, "scorecard.log");
+  writeFileSync(LOG, `scorecard.ts ${process.argv.slice(2).join(" ")}\n`);
+  const run = (command: string, args: string[]) => {
+    appendFileSync(LOG, `\n$ ${command} ${args.join(" ")}\n`);
+    const r = spawnSync(command, args, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+    const out = (r.stdout ?? "") + (r.stderr ?? "");
+    appendFileSync(LOG, out);
+    return out;
+  };
+  const wanted = criteria.filter((c) => c.measurable && (c.cost === "cheap" || opt.film));
+  const values = new Map<string, number>();
+
+  // The move set's timings.
+  const set = readSet(readFileSync(SET, "utf8"));
+  for (const c of wanted) if (c.check?.by === "timing") {
+    const v = timing(set, c.check);
+    if (v !== undefined) values.set(c.id, round(v));
+  }
+  // The move check, on every body template.
+  if (wanted.some((c) => c.check?.by === "moves")) {
+    const json = join(logDir, "moves.json");
+    run(process.execPath, [resolve(ROOT, "tools/characters/moves.ts"), "--json", json]);
+    const rows: MovesRow[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
+    for (const c of wanted) if (c.check?.by === "moves") {
+      const v = movesValue(rows, c.check);
+      if (v !== undefined) values.set(c.id, round(v));
+    }
+  }
+  // The rule tests, a cargo run a crate.
+  const crates = new Map<string, Criterion[]>();
+  for (const c of wanted) if (c.check?.by === "test") crates.set(c.check.crate, [...(crates.get(c.check.crate) ?? []), c]);
+  for (const [crate, cs] of crates) {
+    const names = cs.map((c) => (c.check as { test: string }).test);
+    const verdicts = testVerdicts(run("cargo", ["test", "-q", "-p", crate, "--lib", "--", "--exact", "--format=pretty", ...names]));
+    for (const c of cs) {
+      const v = verdicts.get((c.check as { test: string }).test);
+      if (v !== undefined) values.set(c.id, v);
+    }
+  }
+  // The duel film's checks (tools/sandbox/duel.ts writes checks.json beside its film).
+  if (opt.film) {
+    const out = join(homedir(), ".cache/terra-review/duel");
+    const json = join(out, "checks.json");
+    rmSync(json, { force: true });
+    run(process.execPath, [resolve(ROOT, "tools/sandbox/duel.ts"), "--out", out]);
+    const checks: { name: string; faults: number }[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
+    for (const c of wanted) if (c.check?.by === "film") {
+      const found = checks.find((each) => each.name === (c.check as { name: string }).name);
+      if (found) values.set(c.id, found.faults);
+    }
+  }
+
+  const results = criteria.map((c) => (c.measurable && c.cost === "heavy" && !opt.film ? { id: c.id, status: "skipped" as Status } : judge(c, values.get(c.id), held.get(c.id))));
+  for (const [i, c] of criteria.entries()) console.log(line(c, results[i]));
+  const count = (s: Status[]) => results.filter((r) => s.includes(r.status)).length;
+  const bad = results.filter((r) => ["worse", "new", "missing"].includes(r.status));
+  if (opt.json) writeFileSync(opt.json, JSON.stringify(criteria.map((c, i) => ({ ...c, ...results[i] })), null, 1) + "\n");
+  if (opt.raise || opt.lower) {
+    const next = rebaseline(held, results, opt.raise ? "raise" : "lower", opt.raise ?? `lowered by nightly ${new Date().toISOString().slice(0, 10)}`);
+    const changed = [...next.entries()].filter(([id, h]) => held.get(id)?.value !== h.value).length;
+    writeFileSync(BASELINE, writeBaseline(next, criteria.map((c) => c.id)));
+    console.log(`combat: ${opt.raise ? "raised" : "lowered"} ${changed} rows of tools/combat/baseline.tsv`);
+    if (opt.raise) for (const r of bad) if (r.status !== "missing") r.status = "held";
+  }
+  const still = results.filter((r) => ["worse", "new", "missing"].includes(r.status));
+  const summary = `${count(["pass"])} pass, ${count(["held", "better"])} below their bar and held, ${still.length} worse than their baseline or without their number, ${count(["unmeasured"])} not measurable yet${opt.film ? "" : `, ${count(["skipped"])} heavy (--film)`}`;
+  if (still.length) {
+    console.log(`✗ combat: ${summary} (log target/combat/scorecard.log):`);
+    for (const r of still) console.log(`  ${line(criteria.find((c) => c.id === r.id)!, r)}`);
+    process.exitCode = 1;
+  } else console.log(`✓ combat: ${summary}; held to tools/combat/baseline.tsv`);
+}
+
+if (import.meta.main) main();
