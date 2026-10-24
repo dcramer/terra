@@ -1,6 +1,6 @@
 {
   "name": "enshrouded",
-  "about": "Enshrouded's melee (Keen Games, Steam app 1203620), the developers' measuring stick for combat (D180), measured frame by frame from first-party video. Round 1 (2026-10-24): the heavy blow, a parried enemy blow and the camera's framing are measured; the light chain, the roll, block raise, hit-stop and spacing are listed under `unmeasured` with the footage that holds them. research/2026-10-24-enshrouded-combat-measured.md says how and compares our move set.",
+  "about": "Enshrouded's melee (Keen Games, Steam app 1203620), the developers' measuring stick for combat (D180), measured frame by frame from first-party video. Round 1 (2026-10-24): the heavy blow, a parried enemy blow and the camera's framing. Round 2 (2026-10-24): the light chain, the roll's timing, a landed blow's hit-stop and the spacing; what these sources cannot show is listed under `unmeasured`. `targets` gives the ranges our set and camera should land in. research/2026-10-24-enshrouded-combat-measured.md says how and compares our move set.",
   "measured": "2026-10-24",
   "units": { "time": "seconds of game time (the videos play at 1x)", "length": "body heights (one body: the player's standing height on screen, about 1.8 m)", "share": "fraction of the frame's height" },
   "sources": {
@@ -20,6 +20,35 @@
       "lunge_body_heights": [0.4, 0.8],
       "lunge_note": "the leap carries the body toward the dummy; read from the body's change of size on screen, so a range",
       "source": "ftp", "at": "51.95-53.55 s", "confidence": "medium on times (±0.03 s), low on the lunge"
+    },
+    "light_chain": {
+      "what": "Update 8's sword-and-shield light blows on a golden training dummy, the 'After Update 8' half of the warp comparison, seen from the gameplay camera behind: four blows from idle, the first three out of reach (the warp no longer closes the gap), the fourth stepping in and landing with a flash, then bent over and back to guard",
+      "idle_to_hit_s": { "to_trail_start": 0.24, "to_mid_sweep": 0.29 },
+      "idle_to_hit_note": "idle held 244.73-244.95, first frame leaving it 244.967 (sword raised), the blade's trail from 245.20 to 245.32, mid-sweep 245.25",
+      "hit_to_settled_s": 0.2,
+      "hit_to_settled_note": "after blows 1 to 3 the follow-through stops by about 0.2 s after the hit and the sword is held out ahead (frame-to-frame motion near zero) until the next blow's wind-up; none of them returns to guard, so a light blow's own recovery to guard is not shown",
+      "hits_at": [245.25, 246.0, 246.92, 247.72],
+      "hit_to_hit_s": [0.73, 0.92],
+      "hit_to_hit_note": "0.75, 0.92 and 0.73-0.80 s between hits (mid-sweep, or the flash for the fourth); the sword is held still between blows, so this is the player's pace, an upper bound on the chain's cadence, not its shortest",
+      "windup_from_held_s": [0.15, 0.45],
+      "blows_shown": 4,
+      "blows_note": "the chain runs at least four; the fourth steps in (a lunge of a few tenths of a body height), lands, and ends bent over like the heavy; whether a fifth follows is not shown",
+      "last_hit_to_guard_s": 1.05,
+      "last_hit_to_guard_note": "flash 247.72, bent over with the sword down until about 248.15, rising and turning the shield to 248.53, on guard by 248.77",
+      "source": "ftp", "at": "244.73-248.80 s", "method": "every frame (captured slowed; 339 of 348 gaps one frame), contact sheets of the player cropped, and frame-to-frame motion over the player (motion.mjs)",
+      "confidence": "medium on the first blow's wind-up and the last blow's recovery (±0.03 s); low on the cadence as a design value (player-paced); one chain only"
+    },
+    "roll": {
+      "what": "Update 8's dodge roll (a greatsword player against a torch-and-axe humanoid, a free cinematic camera), narrated 'we also added i-frames to the dodge roll' and 'the dodge roll will have the i-frames and will not roll around enemies by default'",
+      "duration_s": [0.5, 0.53],
+      "duration_note": "first frame leaving the stand to standing again: 155.85-156.38 and 156.48-157.00 s; dive about 0.2 s, tucked ball about 0.1 s, kneel and rise about 0.2 s",
+      "roll_to_roll_s": [0.6, 0.64],
+      "roll_to_roll_note": "rolls chained back to back start at 155.85, 156.48, 157.12 and 157.70 s; the third rises straight into a raised-sword attack",
+      "distance_body_heights": null,
+      "distance_note": "not measurable: the camera turns and tracks with the player through every roll shown, and the enemy, the only ruler, is at another depth",
+      "iframes": "present by Keen's word; nothing on screen marks them (no flash, no tint), so their window is not measurable from video",
+      "source": "ftp", "at": "155.30-158.40 s", "method": "frames captured slowed (about one gap in fourteen two frames or more), contact sheets of the player cropped",
+      "confidence": "medium on the duration (±0.03 s, two rolls agree); medium on the chained cadence (three intervals)"
     },
     "enemy_overhead_parried": {
       "what": "a cave scavenger's overhead axe blow taken on a raised shield and parried (a white burst on the shield), 2023 build",
@@ -44,12 +73,45 @@
     "source": "ftp 51.4-51.9 s and 53.6-53.9 s; cg 20.5-50 s",
     "confidence": "medium (seen from behind)"
   },
+  "hit_stop": {
+    "what": "the light chain's fourth blow landing on the training dummy (Update 8)",
+    "frozen_frames_at_60": 0,
+    "flash_frames_at_60": [3, 4],
+    "note": "every frame from 247.60 to 247.95 s was caught; over the player's legs, clear of the flash, each frame differs from the last by 7 to 30 (of 255) through the contact, so the body is not held for even one frame; the camera kicks over the same frames (the sky moves 3 to 8 from 247.67 to 247.77, still before and after). The flash runs 247.717-247.767. A held pose of one frame hidden by the camera's kick cannot be ruled out; anything longer would show",
+    "source": "ftp", "at": "247.60-247.95 s", "method": "frame-to-frame difference in a crop of the legs and of the sky (motion.mjs) and a contact sheet of every frame",
+    "confidence": "medium for this blow on a dummy; one landed hit; a hit on a living enemy, or a heavy, may hold differently and none is shown at a usable frame rate"
+  },
+  "spacing": {
+    "between_centres_body_heights": [0.5, 1.0],
+    "note": "a greatsword player trading with a torch-and-axe humanoid, read where both stand at about the same depth (feet level in the frame): 0.75 at 178.2 s, about 0.5 at 176.7 and 177.0 s, about 1.3 enemy heights mid-dodge at 155.83 s. On the dummy the light blows whiff at a stand-off the camera cannot measure from behind, and the fourth steps in to land with the shield almost touching it",
+    "source": "ftp", "at": "155.8, 176.7, 177.0, 178.2 s; 245-248 s", "method": "horizontal gap between the two bodies' middles over the player's standing height on screen, in single frames",
+    "confidence": "low: across the view only (depth unknown, so a lower bound where they are not side by side), a two-handed weapon, a free camera"
+  },
+  "targets": {
+    "about": "the ranges our sword-and-shield set and camera should land in, from these numbers; real seconds",
+    "light_idle_to_hit_s": [0.22, 0.32],
+    "light_hit_to_hit_s": [0.55, 0.75],
+    "chain_blows": [3, 4],
+    "last_blow_hit_to_guard_s": [0.8, 1.1],
+    "heavy_idle_to_hit_s": [0.5, 0.65],
+    "heavy_hit_to_guard_s": [0.7, 1.1],
+    "heavy_total_s": [1.4, 1.7],
+    "roll_s": [0.5, 0.6],
+    "roll_to_roll_s": [0.6, 0.66],
+    "hit_stop_s": [0.0, 0.05],
+    "spacing_body_heights": [0.5, 1.0],
+    "enemy_telegraph_s_at_least": 0.8,
+    "camera_player_share": [0.2, 0.27],
+    "camera_distance_body_heights": [3.2, 4.8],
+    "camera_side_offset": "none in a fight"
+  },
   "unmeasured": {
-    "light_blow_and_chain": "ftp 185-198 s (upward slash and crushdown on a dragon) and cg 27-51 s hold sword blows; caught to ~/.cache/terra-review/refs/enshrouded-combat/ftp/slash and cg/cave, not yet read",
-    "roll": "ftp 154-164 s and 171-184 s (the roll with Update 8's i-frames); caught to ftp/roll, not yet read",
-    "block_raise_and_blocked_hit": "cg 20-51 s holds the block held, not its raise; no Update 8 block in the official videos",
-    "hit_stop": "the 2023 video repeats frames and the Update 8 one was read with drops, so a freeze of 2 to 6 frames cannot be told from the capture; needs a capture at 0.25x without drops, or footage at a steady 60",
+    "block_raise_and_blocked_hit": "no block in Update 8's official footage (none in the inserts of RDQ0_R4AR-A read so far); cg 20-51 s holds the 2023 block held, not its raise",
+    "roll_distance_and_iframes": "the rolls shown are under a camera that tracks the player, and i-frames are not drawn; needs a fixed-camera roll (third-party footage) and cannot come from video for the i-frames",
+    "light_recovery_to_guard": "every light blow shown is followed by the next; a lone light blow back to guard is not in Keen's videos",
+    "shortest_chain_cadence": "the chain shown is player-paced; the shortest needs a mashed chain (third-party footage)",
+    "hit_stop_on_enemies": "the only landed blow caught without drops is on a dummy; the 2023 video repeats frames",
     "hit_reaction": "the cave scavenger's stagger rings (cg 36.5-41.5 s) show a stun of about 5 s, not a flinch; flinch lengths not read",
-    "spacing": "ftp 243-249 s (before and after Update 8's warp, on dummies) shows the lunge and the striking distance; caught to ftp/warp, not yet read"
+    "not_looked_at": "Keen's highlights video ToMwQsJTaEM, and RDQ0_R4AR-A 93-104 s (a camp fight with weapon skills)"
   }
 }
