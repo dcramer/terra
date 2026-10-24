@@ -1,0 +1,37 @@
+# Combat clip sources: a bake-off scored by the move check
+
+2026-10-24. The question: where should the sword-and-shield clips come from, so that an agent can make a move from a short spec and get one that passes `node tools/characters/moves.ts`? Passing means no hand, arm or held look in the body; the blow's contact in front, sweeping the way the spec says; a start and end in one guard pose; and chain gaps under 0.1 m. Today's Kimodo clips fail 34 checks (movement.md, "Second round"). This is the step back AGENTS.md asks for after repeated failure. Each source made the same small set: a held guard, a light slash right to left, a backhand left to right, and a block. Each was carried onto the base body by aim (every clip aimed, none narrowed) and exported as `export_character.py` does. Each was then checked with `moves.ts --template male --bend upperarm_l=0,0,0` against a scratch move set, with the active frames measured by `phases.ts`. The prototype's shield-arm bend was left off, since a clip made right needs none. The move check does not fail a wrong sweep, so the table counts that separately.
+
+## Answer
+
+Kimodo, from its latest release (2026-10-15, Kimodo-SOMA-RP-v1.2), with the guard pose given as a full-body keyframe at a blow's first and last frames. It is the only source whose blows start and end in the guard pose (0.01 and 0.03 m) and chain (0.03 m) with nothing typed by hand. Its hands stay clear of the body (−3 to −14 cm) and its contacts land ahead (6° and 23° right, 1.25 m out). Two faults remain, and neither is the source's. First, the shield goes into a thigh or the body (6 to 11 cm) in every move, as it does for every candidate: it hangs on `socket.hand.L`, not on the forearm (round 4). Second, the backhand's prompt still sweeps it to the left. A prompt does not set a blade's path. Kimodo's hand constraints do, and they are the next step.
+
+| Source | Licence | Over the bars (`moves.ts`) | Sweep as spec | Guard start / end, chain (m) | Hands in body | Effort a move | Unattended |
+|---|---|---|---|---|---|---|---|
+| Kimodo, today's takes (prompt only), by aim | NVIDIA Open Model (output unclaimed), code Apache-2.0 | 11 | 1 of 2 | 0.84–1.05 / 1.07–1.16, 0.57–0.73 | backhand 17.7 cm | a prompt, 3 takes, pick | yes |
+| **Kimodo v1.2, guard keyed at first and last frame** | same | **4** (all the shield) | 1 of 2 | **0.01 / 0.03, 0.03** | none | a prompt + the guard keys (`guard_keys.py`) | yes, ~1 min a take on the 5090 |
+| Quaternius UAL2 Standard (CC0), as cut | CC0 1.0 | 18 | 2 of 2 | 0.54–1.64 / 0.55–1.70, 0.12–0.31 | none | none, but only what the pack has | yes |
+| Made: key poses, two-bone IK along the blade's path (Blender) | ours | 6 | 2 of 2 | 0.00 / 0.13, 0.13 | none (sword 5 cm into the spine at the backhand's wind-up) | 5 keys of data a move, tuned by eye and check | yes, once the keys are right |
+| Mixamo sword and shield (reference) | Adobe account, no redistribution | not scored | | | | | |
+
+How each did:
+
+- **Kimodo, prompt only** (`art/animation/sets/fight`, as the game has it, but carried by aim): aiming clears the slash's hands, so it fails 11 checks here against 34 by rotation with the bend. The rest still holds: no blow meets the guard (0.84 to 1.16 m off), nothing chains, the backhand sweeps left and puts the forearm 18 cm into the spine, and the block's shield faces 74° off ahead.
+- **Kimodo with the guard keyed**: the guard take's frame 173 (the start of the `Fight_Guard` loop), turned to face +Z and set on the origin. It is a `fullbody` constraint at frames 0 and 47 of a 1.6 s take, made with the same prompts plus "then returns to his guard" (scratch `guard_keys.py`, `gen.sh`). Kimodo meets the keys within a few centimetres, and the motion between stays its own: hips turn 56–61° into the cut, and contacts land 1.25–1.29 m ahead. The block's shield faces 19° off ahead (it passes). The first take of each move was kept, unpicked.
+- **Quaternius UAL2** (v2.2, 2026-09-28, the free Standard edition, downloaded from itch.io): it has `Sword_Regular_A/B/C` with recoveries, a combo, a heavy combo, `Sword_Block` and `Idle_Shield_Loop`, all on our skeleton. A sweeps right to left, B left to right, and the hands never enter the body. But these are one-handed sword clips: the left arm hangs, so the shield sinks 8–11 cm into the thigh. They have no sword-and-shield guard. Each blow is a fragment of a chain that a recovery ends: A_Rec, B_Rec and C each end within 0.03 m of the pose A starts from. They are short and fast, a 0.42 s blow with the tip at 62–69 m/s. A set made from them is the pack's few moves, with a different shield arm laid over them. It does not scale to 250 moves told apart.
+- **Made blows** (scratch `tools/characters/out/made_blow.py`, keys in `blows.json`): the right fist's grip, blade and back of hand, and the shield's grip, face and thumb, at five times. Each runs along a Catmull-Rom path, the arms are solved by two-bone IK every frame, the spine is turned by a yaw key, and the rest of the body is held from `Idle_Shield_Loop`. The start is exact, the sweeps go where they were keyed, and the block passes (shield 10° off ahead). An end gap of 0.13 m is left, from a keying or export fault in the scratch tool (its first frame differs from the rest), not yet found. A target out of reach (33 cm in the slash's wind-up) is met short. The body stands still below the spine, which no check catches but anyone would see. Making it look like a person, with weight shift, hips, knees and follow-through, is an animator's work, key by key.
+- **Mixamo**: skipped. It needs an Adobe account, which would be the developers', and its terms forbid redistributing the motion. It was not obtained and not used as a reference.
+
+## Scaling to about 250 moves
+
+Kimodo keyed to the guard is the only source where a new move costs a prompt, its keys and a check: unattended, a minute a take, and three takes picked by the check. A capture library gives only what is in it: UAL2 has three light blows and a heavy one for a one-handed sword, and the paid editions not much more. Made blows give exact control but need an animator's eye for every move to look alive. They are the right tool only for the blade's path, not for the body.
+
+## What would pass
+
+The same keyed Kimodo take, with the blade's path pinned too: `right-hand` end-effector constraints at the wind-up and the follow-through, so a backhand starts at the left shoulder and ends out to the right. A Kimodo constraint carries a full pose whose forward kinematics place the hand, so the hand keys need a pose. That means the made-blow IK, run on Kimodo's skeleton for the hand alone: the made tool's useful part, kept. Then the shield goes on the forearm (round 4). With the two together, every row above is expected to pass, but neither is yet verified.
+
+## Sources
+
+- Kimodo: github.com/nv-tlabs/kimodo, CHANGELOG 2026-10-15 (v1.2 models, trained on corrected splits) and `docs/source/user_guide/constraints.md` (root2d, fullbody, left/right-hand and foot, end-effector; Y up, metres, the canonical origin).
+- Quaternius Universal Animation Library 2: quaternius.itch.io/universal-animation-library-2, its devlog (v2.0 2026-06-16, v2.1 2026-07-05, v2.2 2026-09-28) and its License.txt (CC0 1.0).
+- Scratch takes, clips and scripts are kept out of the repository: tools/characters/out/bake/ (ignored), and the session's scratchpad (`kscripts/guard_keys.py`, `gen.sh`, `bake/*.ron`).

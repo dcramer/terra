@@ -168,7 +168,7 @@ The order of work, each round bounded, the code split as D447 says:
    - sounds by what is struck (a wood or metal shield, flesh), and a swing heard by its speed.
 
    The runner's rules move to `terra_motion` here.
-3. **A bake-off of where clips come from**, scored by the checks on the same seven moves:
+3. **A bake-off of where clips come from**, scored by the checks on the same seven moves (done on four, D450: Kimodo keyed to the guard pose, the blade's path by hand keys; research/2026-10-24-combat-clip-sources.md):
    - Kimodo with constraints, if it takes them;
    - a CC0 capture library;
    - blows made by us, from key poses along a blade arc;
