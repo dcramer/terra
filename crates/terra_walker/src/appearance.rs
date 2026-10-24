@@ -215,14 +215,14 @@ fn size_bodies(
 /// What a body holds keeps its own size whatever the body's height: a tall person's axe is
 /// no bigger. Held where the hand's socket is, scaled back by the height of the body above it.
 fn keep_held_size(
-    mut held: Query<(Entity, &mut Transform), With<Held>>,
-    new: Query<(), Added<Held>>,
+    mut held: Query<(Entity, &Held, &mut Transform)>,
+    new: Query<(), Changed<Held>>,
     resized: Query<(), (With<Body>, Changed<Appearance>)>,
     bodies: Query<&Appearance, With<Body>>,
     parents: Query<&ChildOf>,
 ) {
     let any_resized = !resized.is_empty();
-    for (entity, mut transform) in &mut held {
+    for (entity, look, mut transform) in &mut held {
         if !any_resized && !new.contains(entity) {
             continue;
         }
@@ -230,7 +230,7 @@ fn keep_held_size(
             .iter_ancestors(entity)
             .find_map(|each| bodies.get(each).ok())
             .map_or(1.0, |appearance| appearance.height);
-        let scale = Vec3::splat(1.0 / height.max(0.01));
+        let scale = Vec3::splat(look.fit / height.max(0.01));
         if transform.scale != scale {
             transform.scale = scale;
         }

@@ -15,7 +15,8 @@
 //   chain   how far a move's last pose is from the next one's first, and each blow's first
 //           and last pose from the guard's: hands, forearms, head and blade tip, metres
 //
-// Bends the game lays over the clips (the prototype's shield arm) are applied as the game does.
+// A held look hangs from its hand socket, or from the bone its file straps it to (a shield on the
+// forearm), as the game hangs it; bends laid over the clips (--bend) are applied as the game does.
 // A line a row; ✗ marks what is over its bar; exit 1 if any is.
 //
 //   node tools/characters/moves.ts
@@ -36,10 +37,10 @@ const { values: opt } = parseArgs({
     clips: { type: "string", default: "assets/models/character/fight.glb" },
     body: { type: "string", default: "assets/models/character/base.glb" },
     templates: { type: "string", default: "assets/models/character/templates.json" },
-    // What the prototype hangs on the hands (`terra_creatures::melee`, SWORD and SHIELD).
+    // What the prototype holds in the hands (`terra_creatures::melee`, SWORD and SHIELD).
     hold: { type: "string", multiple: true, default: ["socket.hand.R=assets/models/held/arming_sword.glb", "socket.hand.L=assets/models/held/round_shield.glb"] },
-    // The prototype's shield arm bend (`terra_creatures::melee`, SHIELD_ARM), degrees.
-    bend: { type: "string", multiple: true, default: ["upperarm_l=-30,0,14"] },
+    // Bends laid over the clips, BONE=x,y,z degrees about the body's axes (staged bends); none in the prototype.
+    bend: { type: "string", multiple: true, default: [] },
     also: { type: "string", default: "Fight_Guard,Fight_Strafe_L,Fight_Strafe_R,Walk_Loop,Idle_Loop" },
     guard: { type: "string", default: "Fight_Guard" },
     // The clips' specs: a blow's sweep and contact (`"blow"`), by clip; a clip `X#N` (a take
@@ -183,12 +184,48 @@ function poseOf(shape: Shape, clip: Clip, t: number): Pose[] {
   return posed(body, keep, t, bends);
 }
 
-// Held looks: a few hundred of their vertices in their socket's frame, and the blade's tip.
-type Held = { socket: string; name: string; points: V3[]; tip: V3; thin: V3; centre: V3 };
+// Held looks: a few hundred of their vertices in the frame of the node they hang from, and the
+// blade's tip. A look hangs from the hand socket it is held in, or, strapped (a shield on the
+// forearm), from the bone its file's `strap` names, as `terra_walker::character` hangs it.
+type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; centre: V3 };
+type Strap = { bone: string; at: V3; face: V3; grip: V3 };
+const rest = posed(body, undefined, 0);
+// A strap's place in its bone's frame: `at` in metres (the hand socket's, which the bone's
+// scale is undone to), the look turned so its front (-Z) looks along `face` and its grip
+// (+Y) runs along `grip`.
+function strapped(strap: Strap, ratio: number): Pose {
+  const unit = (v: V3): V3 => v.map((x) => x / len(v)) as V3;
+  const y = unit(strap.grip);
+  const back = strap.face.map((x) => -x) as V3;
+  const z = unit(sub(back, y.map((x) => x * dot(back, y)) as V3));
+  const x: V3 = [y[1] * z[2] - y[2] * z[1], y[2] * z[0] - y[0] * z[2], y[0] * z[1] - y[1] * z[0]];
+  // The quaternion of the rotation whose columns are x, y and z.
+  const [m00, m11, m22] = [x[0], y[1], z[2]];
+  const trace = m00 + m11 + m22;
+  let r: Q;
+  if (trace > 0) {
+    const k = 2 * Math.sqrt(1 + trace);
+    r = [(y[2] - z[1]) / k, (z[0] - x[2]) / k, (x[1] - y[0]) / k, k / 4];
+  } else if (m00 > m11 && m00 > m22) {
+    const k = 2 * Math.sqrt(1 + m00 - m11 - m22);
+    r = [k / 4, (x[1] + y[0]) / k, (z[0] + x[2]) / k, (y[2] - z[1]) / k];
+  } else if (m11 > m22) {
+    const k = 2 * Math.sqrt(1 + m11 - m00 - m22);
+    r = [(x[1] + y[0]) / k, k / 4, (y[2] + z[1]) / k, (z[0] - x[2]) / k];
+  } else {
+    const k = 2 * Math.sqrt(1 + m22 - m00 - m11);
+    r = [(z[0] + x[2]) / k, (y[2] + z[1]) / k, k / 4, (x[1] - y[0]) / k];
+  }
+  return { t: strap.at.map((v) => v * ratio) as V3, r, s: [ratio, ratio, ratio] };
+}
 const held: Held[] = opt.hold!.map((h) => {
-  const [socket, file] = h.split("=");
+  const [hand, file] = h.split("=");
   const g = new Glb(file);
   const node = g.gltf.nodes.findIndex((n) => n.mesh !== undefined);
+  const strap = (g.gltf.nodes[node] as { extras?: { strap?: Strap } }).extras?.strap;
+  const socket = strap?.bone ?? hand;
+  const hung = strap ? strapped(strap, rest[body.named(hand)].s[0] / rest[body.named(strap.bone)].s[0]) : undefined;
+  const put = (p: V3): V3 => (hung ? place(hung, p) : p);
   const pose = g.rest(node);
   const p = g.read(g.gltf.meshes![g.gltf.nodes[node].mesh!].primitives[0].attributes.POSITION);
   const all: V3[] = [];
@@ -203,7 +240,9 @@ const held: Held[] = opt.hold!.map((h) => {
   const axis = size.indexOf(Math.min(...size));
   const thin: V3 = [0, 0, 0];
   thin[axis] = 1;
-  return { socket, name: file.split("/").at(-1)!.replace(".glb", ""), points, tip, thin, centre: lo.map((x, j) => (x + hi[j]) / 2) as V3 };
+  const centre = lo.map((x, j) => (x + hi[j]) / 2) as V3;
+  const name = file.split("/").at(-1)!.replace(".glb", "");
+  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: hung ? rot(hung.r, thin) : thin, centre: put(centre) };
 });
 
 // The skinned torso, head and thighs at a pose, gridded for the nearest-vertex search.
@@ -303,7 +342,7 @@ function penetration(clip: Clip, from: number, to: number) {
 function marks(clip: Clip, t: number): V3[] {
   const pose = poseOf(shapes[0], clip, t);
   const hips = pose[node.pelvis].t;
-  const sword = held.find((h) => h.socket === "socket.hand.R");
+  const sword = held.find((h) => h.hand === "socket.hand.R");
   const pts = ["hand_l", "hand_r", "lowerarm_l", "lowerarm_r", "Head"].map((n) => pose[node[n]].t);
   if (sword) pts.push(place(pose[at(sword.socket)], sword.tip));
   return pts.map((p) => sub(p, hips));
@@ -313,7 +352,7 @@ const gap = (a: V3[], b: V3[]) => Math.max(...a.map((p, i) => len(sub(p, b[i])))
 // A blow's tip in its active frames, in the model's space from the hips at the move's start.
 function arc(move: Move) {
   const clip = clipOf(move.clip);
-  const sword = held.find((h) => h.socket === "socket.hand.R")!;
+  const sword = held.find((h) => h.hand === "socket.hand.R")!;
   const start = poseOf(shapes[0], clip, move.from)[node.pelvis].t;
   let fastest = { speed: -1, tip: [0, 0, 0] as V3, t: 0, hips: 0 };
   let first: V3 | undefined;
@@ -339,7 +378,7 @@ function arc(move: Move) {
 }
 
 function guard(move: Move) {
-  const shield = held.find((h) => h.socket === "socket.hand.L");
+  const shield = held.find((h) => h.hand === "socket.hand.L");
   if (!shield || move.hold === undefined) return undefined;
   const pose = poseOf(shapes[0], clipOf(move.clip), move.hold);
   const socket = pose[at(shield.socket)];

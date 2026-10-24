@@ -1,5 +1,6 @@
 """Makes the look of each thing that is held: one file per item, models/held/<item>.glb, that
-the game puts in a hand socket as it is (character.rs).
+the game puts in a hand socket as it is (character.rs), or, strapped (STRAPS: a shield), on the
+forearm's bone where its extras say.
 
 Each look is one mesh with the place it is held at the origin and its handle along +Y toward
 its working end, as a hand socket expects, and says in its glTF extras how far it tips when
@@ -78,6 +79,20 @@ TEXTURED = {
     "round_shield": ("RoundShield.glb", (0, 0.405, -0.025), (0.4, 0.405, -0.025), (0, 1, 0), 0),
 }
 
+# Things strapped to the forearm rather than hung on the hand socket, said in their extras as
+# {"strap": {"bone", "at", "face", "grip"}} for the game (character.rs) and moves.ts: the bone
+# they ride on; where their origin (the grip) sits in its frame, metres; and the directions in
+# that frame their front (-Z) and grip (+Y) turn to. The round shield rides on lowerarm_l,
+# which follows the forearm but not the hand's roll (on lowerarm_twist_01_l, which takes half
+# of it, the block's face turns 27 degrees off ahead): its face out of the little-finger side,
+# ahead when the forearm is raised across the body (5 degrees off at the block's hold); its
+# grip bar along the forearm, its centre over the knuckles, 6.5 cm out from the bone's line,
+# clear of the skin. Measured by tools/characters/moves.ts: clear of the head and body in the
+# guard, block and strafes on every template.
+STRAPS = {
+    "round_shield": {"bone": "lowerarm_l", "at": [-0.02, 0.34, -0.065], "face": [0, 0, -1], "grip": [0, 1, 0]},
+}
+
 
 # The free models' material names, by the role each part plays.
 ROLES = {"DarkWood": "Wood", "LightWood": "Wood", "Steel": "Metal", "LightSteel": "Metal", "Grey": "Metal",
@@ -152,6 +167,8 @@ def textured(item):
     held = Matrix(((1, 0, 0), (0, 0, 1), (0, -1, 0))).transposed()
     ob.data.transform((held @ frame.transposed()).to_4x4() @ Matrix.Translation(-grip))
     ob["carry_tilt"] = carry_tilt
+    if item in STRAPS:
+        ob["strap"] = STRAPS[item]
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)
     path = os.path.join(OUT, f"{item}.glb")

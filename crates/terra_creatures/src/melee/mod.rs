@@ -17,7 +17,6 @@ mod partner;
 mod record;
 mod script;
 
-use crate::staged::pose::Bends;
 use bevy::{gltf::GltfAssetLabel, prelude::*};
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
@@ -46,12 +45,11 @@ pub const HEALTH: f32 = 100.0;
 const LOCK_M: f32 = 15.0;
 /// How long a beaten fighter lies before the spar starts again, seconds.
 const DOWN_S: f32 = 3.0;
-/// The looks drawn: a sword in the right hand, a round shield in the left.
+/// The looks drawn: a sword in the right hand, a round shield in the left, which its file
+/// straps to the forearm (`terra_walker::strap`).
 const SWORD: &str = "models/held/arming_sword.glb";
 const SHIELD: &str = "models/held/round_shield.glb";
 const HAND_L: &str = "socket.hand.L";
-/// The shield arm brought forward and out, so the shield stands clear of the chest.
-const SHIELD_ARM: [f32; 3] = [-30.0, 0.0, 14.0];
 
 /// The move set, read once.
 #[derive(Resource)]
@@ -124,8 +122,8 @@ pub fn plugin(app: &mut App) {
     script::plugin(app);
 }
 
-/// T draws a sword and shield, or sheathes them: drawn, the bar's item is put away, the
-/// shield arm is brought forward, and a sparring partner steps up if none is near.
+/// T draws a sword and shield, or sheathes them: drawn, the bar's item is put away and a
+/// sparring partner steps up if none is near.
 fn draw(
     mut commands: Commands,
     assets: Res<AssetServer>,
@@ -161,7 +159,7 @@ fn draw(
             stance.steer = Steer::default();
             commands
                 .entity(player)
-                .remove::<(Drawn, Fighter, Bends, HandsFull)>()
+                .remove::<(Drawn, Fighter, HandsFull)>()
                 .insert(Acting::default());
             info!("Melee: sheathed");
             continue;
@@ -181,13 +179,6 @@ fn draw(
             )),
             None => warn!("Melee: the figure has no {HAND_L}"),
         }
-        let mut bends = Bends::default();
-        bends.tell(
-            &[("upperarm_l".to_string(), SHIELD_ARM)]
-                .into_iter()
-                .collect(),
-            0.2,
-        );
         commands.entity(player).insert((
             Drawn {
                 lock: None,
@@ -196,7 +187,6 @@ fn draw(
             },
             Fighter::new(Some(hand)),
             Acting::default(),
-            bends,
             HandsFull,
         ));
         info!("Melee: drawn");

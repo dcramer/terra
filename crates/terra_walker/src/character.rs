@@ -17,7 +17,8 @@
 //! one material.
 //!
 //! Something held is used at one angle and carried at another: swung, the grip holds it as
-//! a hand would to strike; walking or standing, it tips forward and down (`Held`).
+//! a hand would to strike; walking or standing, it tips forward and down (`Held`). A shield
+//! is strapped to the forearm instead, where its file says (`strap`).
 //!
 //! Shared by the experiments that show characters, so a tool in the workbench sits as it
 //! does in play.
@@ -65,13 +66,17 @@ const TURN_S: f32 = 0.12;
 #[derive(Component, Default)]
 pub struct Carrying(pub bool);
 
-/// Something held, a child of a hand socket. Carried, it turns `carry_tilt` degrees about
-/// the socket's X: negative tips its working end forward and down when the arm hangs,
-/// positive raises it.
+/// Something held, a child of a hand socket, or of the bone it is strapped to (`strap`).
+/// Carried, it turns `carry_tilt` degrees about its X: negative tips its working end forward
+/// and down when the arm hangs, positive raises it.
 #[derive(Component)]
 pub struct Held {
     pub carry_tilt: f32,
     now: f32,
+    /// Its turn and scale against its parent's frame before any tilt: none on a hand socket;
+    /// strapped, the strap's turn and the socket's scale against the bone's.
+    pub(crate) turn: Quat,
+    pub(crate) fit: f32,
 }
 
 impl Held {
@@ -79,6 +84,8 @@ impl Held {
         Held {
             carry_tilt,
             now: 0.0,
+            turn: Quat::IDENTITY,
+            fit: 1.0,
         }
     }
 }
@@ -251,6 +258,7 @@ pub fn plugin(app: &mut App) {
     .add_observer(put_on)
     .add_observer(body_ready)
     .add_observer(held_ready)
+    .add_observer(crate::strap::strap)
     .add_observer(tint)
     .add_systems(Update, tilt);
 }
@@ -351,7 +359,7 @@ fn tilt(
         } else {
             held.now + (goal - held.now) * ease
         };
-        transform.rotation = Quat::from_rotation_x(held.now.to_radians());
+        transform.rotation = held.turn * Quat::from_rotation_x(held.now.to_radians());
     }
 }
 
@@ -401,7 +409,7 @@ pub fn hold(commands: &mut Commands, model: Handle<WorldAsset>, hand: Entity) ->
 }
 
 /// A value a look's file gives in its glTF extras.
-fn extra(extras: &GltfExtras, key: &str) -> Option<serde_json::Value> {
+pub(crate) fn extra(extras: &GltfExtras, key: &str) -> Option<serde_json::Value> {
     let value: serde_json::Value = serde_json::from_str(&extras.value).ok()?;
     value.get(key).cloned()
 }

@@ -72,8 +72,8 @@ impl Partner {
 }
 
 /// Stands a partner a few metres ahead of a player, facing them: the base body as the
-/// player's template, dressed, a sword in its right hand and a round shield on its left arm,
-/// brought forward and out so the shield stands clear of its chest.
+/// player's template, dressed, a sword in its right hand and a round shield strapped to its
+/// left forearm.
 pub fn bring(commands: &mut Commands, at: Vec3, facing: Vec3) {
     let up = at.normalize();
     let spot = at
@@ -88,7 +88,6 @@ pub fn bring(commands: &mut Commands, at: Vec3, facing: Vec3) {
         "clips": CLIPS,
         "wears": ["shirt", "trousers", "boots", "leather_coat"],
         "hold": { "socket.hand.R": super::SWORD, "socket.hand.L": super::SHIELD },
-        "bend": { "upperarm_l": super::SHIELD_ARM },
         "at": spot.to_array(),
         "facing": at.to_array(),
         "turn_deg_s": 260.0,
