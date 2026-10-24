@@ -37,10 +37,6 @@ const HERE = join(ROOT, "tools", "characters");
 const BLENDER = join(ROOT, "tools", "blender", "run.sh");
 const BODY = join(HERE, "out", "base-male.glb");
 const GAME_CLIPS = join(ROOT, "assets", "models", "character", "fight.glb");
-// What the takes are scored holding: the sword alone, until the shield hangs on the forearm as
-// the game will (melee's round): on the hand socket the shield is not where it will sit, so
-// its depth in the body and a block's shield face are not judged yet.
-const HOLD = ["--hold", "socket.hand.R=assets/models/held/arming_sword.glb"];
 
 /** A take's clip name in the scored file, and its move's name in the scored set. */
 export const takeName = (clip: string, n: number) => `${clip}#${n}`;
@@ -180,7 +176,7 @@ function main() {
   const scoring = join(OUT, "score.ron");
   const json = join(OUT, "score.json");
   writeFileSync(scoring, scoringSet(measured));
-  run("moves", process.execPath, [join(HERE, "moves.ts"), "--set", scoring, "--clips", scored, "--spec", LIST, "--guard", guards[0], "--also=", ...HOLD, "--json", json], {}, [0, 1]);
+  run("moves", process.execPath, [join(HERE, "moves.ts"), "--set", scoring, "--clips", scored, "--spec", LIST, "--guard", guards[0], "--also=", "--json", json], {}, [0, 1]);
   const rows: Row[] = JSON.parse(readFileSync(json, "utf8"));
   const chosen = specs.map((s) => {
     const all = scores(rows, s.name, more.get(s.name));
@@ -211,7 +207,7 @@ function main() {
   }
   const setFile = join(OUT, "moves.ron");
   writeFileSync(setFile, scratch);
-  const checked = run("set", process.execPath, [join(HERE, "moves.ts"), "--set", setFile, "--clips", scored, "--spec", LIST, "--guard", guards[0], "--also=", ...HOLD], {}, [0, 1]);
+  const checked = run("set", process.execPath, [join(HERE, "moves.ts"), "--set", setFile, "--clips", scored, "--spec", LIST, "--guard", guards[0], "--also=",], {}, [0, 1]);
   const setBad = lines(checked, "✗ ").filter((l) => !/^✗ \d+ over the bars/.test(l));
   const chains = [...checked.matchAll(/ into (\w+) ([\d.]+) m/g)].map((x) => `${x[1]} ${x[2]} m`);
   const chained = chains.length ? `, chains into ${chains.join(", ")}` : "";

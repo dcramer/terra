@@ -70,7 +70,7 @@ const CHAIN_M = 0.1; // a pose jump between moves that a blend shows
 // A block's shield arm while raised (its spec's "raised"), from the hips: the left hand this
 // far ahead and up at least, the elbow ahead (at the guard it is beside the body), and still.
 const RAISED_M = 0.3;
-const RAISED_UP_M = 0.3;
+const RAISED_UP_M = 0.42; // across the face, above a guard's forearm across the chest
 const ELBOW_M = 0.2;
 const STILL_M = 0.08;
 
@@ -433,17 +433,24 @@ for (const move of moves) {
     if (Math.abs(a.bearing) > ARC_DEG || a.ahead < AHEAD_M) bad.push(`contact ${Math.abs(a.bearing).toFixed(0)}° ${a.bearing > 0 ? "left" : "right"} of ahead and ${a.ahead.toFixed(2)} m ahead at ${a.t.toFixed(2)} s (bar ${ARC_DEG}°, ${AHEAD_M} m)`);
   }
   if (blow?.held) {
-    // A clip that holds the guard stays within a blend of its pose throughout.
+    // A clip that holds a guard (it is the guard) stays within a blend of its first pose.
     let drift = { m: 0, t: 0 };
+    const pose0 = marks(clip, move.from);
     for (let t = move.from; t <= move.done + 1e-6; t += 1 / fps) {
-      const m = gap(marks(clip, t), guardMarks);
+      const m = gap(marks(clip, t), pose0);
       if (m > drift.m) drift = { m, t };
     }
-    parts.push(`drifts ${drift.m.toFixed(2)} m from the guard`);
-    if (drift.m > CHAIN_M) bad.push(`drifts ${drift.m.toFixed(2)} m from the guard pose at ${drift.t.toFixed(2)} s`);
+    parts.push(`drifts ${drift.m.toFixed(2)} m from its first pose`);
+    if (drift.m > CHAIN_M) bad.push(`drifts ${drift.m.toFixed(2)} m from its first pose at ${drift.t.toFixed(2)} s`);
+    // Its shield faces ahead, as a block's does at its hold.
+    const g = guard({ ...move, hold: move.from });
+    if (g) {
+      parts.push(`shield face ${g.off.toFixed(0)}° off ahead`);
+      if (g.off > FACE_DEG) bad.push(`guard's shield face ${g.off.toFixed(0)}° off ahead (bar ${FACE_DEG}°)`);
+    }
   }
   if (blow?.raised) {
-    // A block's shield arm up in front of the body and still (the shield's own hang aside).
+    // A block's shield arm up in front of the body and still; its face is the hold's check.
     const [a, b] = blow.raised;
     let low = { hand: Infinity, elbow: Infinity, up: Infinity };
     let moved = 0;
@@ -458,7 +465,7 @@ for (const move of moves) {
       bad.push(`shield arm not up in front while raised: hand ${low.hand.toFixed(2)} m ahead, ${low.up.toFixed(2)} m up, elbow ${low.elbow.toFixed(2)} m ahead (bars ${RAISED_M}, ${RAISED_UP_M}, ${ELBOW_M} m)`);
     if (moved > STILL_M) bad.push(`shield hand moves ${moved.toFixed(2)} m while raised (bar ${STILL_M} m)`);
   }
-  if (move.active || blow) {
+  if (move.active || (blow && !blow.held)) {
     const startGap = gap(marks(clip, move.from), guardMarks);
     const endGap = gap(marks(clip, move.done), guardMarks);
     parts.push(`from guard ${startGap.toFixed(2)} m, back to guard ${endGap.toFixed(2)} m`);

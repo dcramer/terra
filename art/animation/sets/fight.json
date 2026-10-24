@@ -83,12 +83,103 @@
     "fist": 1,
     "take": 0
   },
+  "Keyed_Guard": {
+    "prompt": "A person holds a sword in the right hand and a shield in front of the chest with the left arm, and stands in a fighting stance, shifting the weight from foot to foot.",
+    "speed": 0,
+    "seconds": 6,
+    "seed": 1,
+    "samples": 5,
+    "fist": 1,
+    "guard": {
+      "clip": "Fight_Guard",
+      "frame": 173
+    },
+    "blow": {
+      "move": "guard",
+      "held": true
+    },
+    "still": true,
+    "left": [
+      {
+        "at": 1.0,
+        "grip": [
+          -0.03,
+          0.38,
+          0.3
+        ],
+        "blade": [
+          0,
+          -1,
+          0
+        ],
+        "back": [
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "at": 2.5,
+        "grip": [
+          -0.03,
+          0.38,
+          0.3
+        ],
+        "blade": [
+          0,
+          -1,
+          0
+        ],
+        "back": [
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "at": 4.0,
+        "grip": [
+          -0.03,
+          0.38,
+          0.3
+        ],
+        "blade": [
+          0,
+          -1,
+          0
+        ],
+        "back": [
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "at": 5.0,
+        "grip": [
+          -0.03,
+          0.38,
+          0.3
+        ],
+        "blade": [
+          0,
+          -1,
+          0
+        ],
+        "back": [
+          0,
+          0,
+          1
+        ]
+      }
+    ]
+  },
   "Keyed_Backhand": {
     "prompt": "A swordsman holding a sword in the right hand and a shield on the left arm swings his right arm across from his left shoulder out to the right in a flat, fast cut, then returns to his guard.",
     "speed": 0,
     "seconds": 1.6,
     "seed": 2,
-    "samples": 3,
+    "samples": 5,
     "once": true,
     "fist": 1,
     "guard": {
@@ -100,13 +191,13 @@
         "at": 0.45,
         "grip": [
           -0.2,
-          0.22,
+          0.32,
           0.45
         ],
         "blade": [
-          -0.8,
-          -0.3,
-          0.5
+          -0.6,
+          0.3,
+          0.75
         ],
         "back": [
           -0.2,
@@ -158,6 +249,193 @@
       "move": "backhand",
       "sweep": "left-to-right",
       "contact": 0
+    },
+    "timing": {
+      "hit": [
+        0.22,
+        0.32
+      ],
+      "back": [
+        0.8,
+        1.1
+      ]
+    }
+  },
+  "Keyed_Slash": {
+    "prompt": "A swordsman holding a sword in the right hand and a shield on the left arm raises the sword over his right shoulder and cuts down and across to his left in a fast diagonal slash, then returns to his guard.",
+    "speed": 0,
+    "seconds": 1.6,
+    "seed": 2,
+    "samples": 5,
+    "once": true,
+    "fist": 1,
+    "guard": {
+      "clip": "Fight_Guard",
+      "frame": 173
+    },
+    "hand": [
+      {
+        "at": 0.45,
+        "grip": [
+          0.38,
+          0.22,
+          0.5
+        ],
+        "blade": [
+          0.55,
+          0.0,
+          0.85
+        ],
+        "back": [
+          1,
+          0,
+          0
+        ],
+        "yaw": -30
+      },
+      {
+        "at": 0.75,
+        "grip": [
+          0.05,
+          0.52,
+          0.22
+        ],
+        "blade": [
+          0.05,
+          1,
+          -0.1
+        ],
+        "back": [
+          1,
+          0,
+          0.3
+        ],
+        "yaw": 0
+      },
+      {
+        "at": 1.0,
+        "grip": [
+          -0.25,
+          0.4,
+          0.1
+        ],
+        "blade": [
+          -0.8,
+          0.4,
+          -0.2
+        ],
+        "back": [
+          0.3,
+          -0.2,
+          1
+        ],
+        "yaw": 25
+      },
+      {
+        "at": 1.3,
+        "grip": [
+          0.05,
+          0.36,
+          0.05
+        ],
+        "blade": [
+          -0.2,
+          0.6,
+          0.5
+        ],
+        "back": [
+          1,
+          0,
+          0.5
+        ],
+        "yaw": 8
+      }
+    ],
+    "blow": {
+      "move": "slash",
+      "sweep": "right-to-left",
+      "contact": 0,
+      "next": "backhand"
+    },
+    "timing": {
+      "hit": [
+        0.22,
+        0.32
+      ],
+      "back": [
+        0.8,
+        1.1
+      ]
+    }
+  },
+  "Keyed_Block": {
+    "prompt": "A person holds a sword in the right hand and a shield on the left forearm, raises the shield across in front of the chest to block a blow, holds it there, then lowers it back to the guard.",
+    "speed": 0,
+    "seconds": 1.4,
+    "seed": 1,
+    "samples": 5,
+    "once": true,
+    "fist": 1,
+    "guard": {
+      "clip": "Fight_Guard",
+      "frame": 173
+    },
+    "left": [
+      {
+        "at": 0.35,
+        "grip": [
+          0.0,
+          0.38,
+          0.5
+        ],
+        "blade": [
+          0,
+          -1,
+          0
+        ],
+        "back": [
+          0,
+          0,
+          1
+        ],
+        "yaw": 5
+      },
+      {
+        "at": 0.85,
+        "grip": [
+          0.0,
+          0.38,
+          0.5
+        ],
+        "blade": [
+          0,
+          -1,
+          0
+        ],
+        "back": [
+          0,
+          0,
+          1
+        ],
+        "yaw": 5
+      }
+    ],
+    "blow": {
+      "move": "block",
+      "raised": [
+        0.4,
+        0.8
+      ]
+    },
+    "timing": {
+      "hit": [
+        0.2,
+        0.3
+      ],
+      "back": [
+        0.3,
+        0.6
+      ]
     }
   }
 }

@@ -61,7 +61,8 @@ export function readSpec(name: string, entry: Record<string, unknown>): Spec {
     throw new Error(`${name}: ${what}`);
   };
   if (typeof entry.prompt !== "string" || !entry.prompt) wrong("no prompt");
-  if (!entry.once) wrong('a move\'s clip is a one-shot: give it "once": true');
+  const held = (entry.blow as { held?: unknown } | undefined)?.held === true;
+  if (!entry.once && !(held && entry.still)) wrong('a move\'s clip is a one-shot: give it "once": true (a held guard\'s is "still": true)');
   const seconds = Number(entry.seconds);
   if (!(seconds > 0)) wrong("no seconds");
   const guard = entry.guard as { clip?: unknown; frame?: unknown } | undefined;
