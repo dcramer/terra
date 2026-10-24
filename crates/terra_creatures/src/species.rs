@@ -161,6 +161,11 @@ pub struct BodyDef {
     /// (`creatures::steer::out_of`); none, a round body's, its radius.
     #[serde(default)]
     pub nose_m: Option<f32>,
+    /// How far behind its middle its rump or tail reaches, metres, measured as `nose_m` is:
+    /// kept off the trunks as its head is, so one turning away from a tree does not swing its
+    /// hindquarters into the bark; none, its radius.
+    #[serde(default)]
+    pub rear_m: Option<f32>,
 }
 
 impl BodyDef {
@@ -168,13 +173,26 @@ impl BodyDef {
     pub fn nose_m(&self) -> f32 {
         self.nose_m.unwrap_or(self.radius).max(self.radius)
     }
+
+    /// How far behind its middle its rump reaches, metres, at the least its radius.
+    pub fn rear_m(&self) -> f32 {
+        self.rear_m.unwrap_or(self.radius).max(self.radius)
+    }
 }
 
 /// How a kind of creature treats players.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum Temper {
-    /// Wildlife: runs from anyone near, or from being hurt.
-    Shy { flees_within_m: f32, flees_s: f32 },
+    /// Wildlife: runs from anyone near, or from being hurt. `keeps_m` is how far off a wary
+    /// one keeps from people it has not let come near, its flight distance as met: a meeting
+    /// staged for a film stands and walks no nearer the camera than this (red deer keep
+    /// 30-60 m from walkers); none, as near as asked.
+    Shy {
+        flees_within_m: f32,
+        flees_s: f32,
+        #[serde(default)]
+        keeps_m: f32,
+    },
     /// A monster: chases anyone near, bites within reach, and goes home if led too far.
     Hostile {
         notices_m: f32,

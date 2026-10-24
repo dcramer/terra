@@ -6,7 +6,7 @@
 //! it was seen (`crate::sighted`, the trailer's "meeting" line).
 
 use super::*;
-use crate::species::{Moves, SpeciesDef};
+use crate::species::{Moves, SpeciesDef, Temper};
 use serde::Deserialize;
 use terra_world::cine::Cine;
 
@@ -97,6 +97,25 @@ const ONWARD_SEEN_S: [f32; 6] = [-0.5, 0.0, 0.75, 1.5, 2.25, 3.0];
 const ONWARD_TRIES: usize = 8;
 /// The steepest ground a walker is put on or sent across, rise over run.
 const STEEPEST: f32 = 0.8;
+/// How much further out than asked a wary one's spot is tried, metres, the nearest first,
+/// when the distance asked would bring it within its flight distance of the camera
+/// (`keeps_off`).
+const FURTHER_M: [f32; 5] = [0.0, 8.0, 16.0, 24.0, 32.0];
+/// How often a wary one's way, from half a second before its spot to the end of its time on
+/// (`ON_S`), is looked at for its distance from the camera coming on, seconds.
+const KEEPS_EVERY_S: f32 = 0.5;
+/// How far off the camera's way, degrees, one counts as in the picture: the default lens's
+/// half width at 16:9 (36 degrees) and a little more.
+const PICTURE_HALF_DEG: f32 = 40.0;
+
+/// How far off a wary kind keeps from people when it is met, metres: its flight distance
+/// (`Temper::Shy::keeps_m`); none for any other.
+pub fn keeps_m(about: &SpeciesDef) -> f32 {
+    match about.temper {
+        Temper::Shy { keeps_m, .. } => keeps_m,
+        Temper::Hostile { .. } => 0.0,
+    }
+}
 
 /// A meeting placed: its spot, where it starts, the way it goes from there and how long
 /// until it reaches its spot, seconds.
@@ -198,6 +217,56 @@ fn pace_mps(about: &SpeciesDef, behaviour: Behaviour) -> f32 {
     }
 }
 
+/// The camera coming on: where it looks from, its way, up there and its pace.
+struct Coming {
+    eye: Vec3,
+    ahead: Vec3,
+    up: Vec3,
+    mps: f32,
+}
+
+/// Whether a wary one staged so keeps `keeps` m from the camera coming on, from 0.5 s before
+/// it comes on until it is on, wherever the camera would see it nearer: in the picture's
+/// width and in view. One grazing stops at its spot. Nothing to keep at 0 m.
+fn keeps_off(
+    around: &Surroundings,
+    staged: &Staged,
+    coming: &Coming,
+    (keeps, mps, grazing): (f32, f32, bool),
+    lift: Vec3,
+) -> bool {
+    if keeps <= 0.0 {
+        return true;
+    }
+    let steps = ((ON_S + 0.5) / KEEPS_EVERY_S).round() as usize;
+    (0..=steps).all(|i| {
+        let t = i as f32 * KEEPS_EVERY_S - 0.5;
+        let walked = if grazing { t.min(0.0) } else { t };
+        let at = around.ground(staged.spot + staged.way * mps * walked) + lift;
+        let camera = coming.eye + coming.ahead * coming.mps * t;
+        let off = (at - camera).reject_from(coming.up);
+        off.length() >= keeps
+            || off.normalize_or_zero().dot(coming.ahead) < libm::cosf(PICTURE_HALF_DEG.to_radians())
+            || !around.in_view(camera, at)
+    })
+}
+
+/// Why nowhere fitted: the spots and starts tried, counted by what was wrong with each.
+fn why_not(not_spot: [u32; 3], not_start: [u32; 4], keeps: f32) -> String {
+    format!(
+        "of its spots {} off its ground (land, or water for a swimmer), {} in a trunk, {} hidden from the camera; of the starts \
+         from the rest {} in water or a trunk, {} in sight, {} with no dry, gentle way in, {} seen \
+         within its flight distance of {keeps} m",
+        not_spot[0],
+        not_spot[1],
+        not_spot[2],
+        not_start[0],
+        not_start[1],
+        not_start[2],
+        not_start[3]
+    )
+}
+
 /// Where a meeting is put out, `lead_s` before it is asked to be at its spot, by a player
 /// at `feet` going `ahead` there then: its spot so far ahead of the camera and off its axis
 /// as asked, moved a little if that is in water, a trunk or hidden from the camera; and a
@@ -246,8 +315,23 @@ pub fn stage(
     };
     // Why each spot tried did not fit: in water, in a trunk, hidden from the camera; and why
     // each start from one that did.
-    let (mut not_spot, mut not_start) = ([0; 3], [0; 3]);
+    let (mut not_spot, mut not_start) = ([0u32; 3], [0u32; 4]);
     let mps = pace_mps(about, meeting.behaviour);
+    // A wary one on the ground keeps its flight distance from the camera coming on, wherever
+    // the camera would see it nearer: a stag asked 29 m ahead crossed the path and stood
+    // 10 m from the runner (forest walk, 10-23: "normally stag wouldn't go as close to us").
+    let keeps = if on_wing { 0.0 } else { keeps_m(about) };
+    let coming = Coming {
+        eye,
+        ahead,
+        up,
+        mps: camera_mps,
+    };
+    let grazing = meeting.behaviour == Behaviour::Grazing;
+    let keeps_away =
+        |staged: &Staged| keeps_off(around, staged, &coming, (keeps, mps, grazing), lift);
+    let further: &[f32] = if keeps > 0.0 { &FURTHER_M } else { &[0.0] };
+    let asked_m = meeting.ahead.max(keeps);
     let from = match meeting.behaviour {
         Behaviour::Crossing => &CROSSING_FROM[..],
         Behaviour::Fleeing => &FLEEING_FROM[..],
@@ -264,10 +348,13 @@ pub fn stage(
             })
     };
     let (mut first, mut fits) = (None, 0);
-    for (more_m, more_deg) in nudges() {
+    let tries = further
+        .iter()
+        .flat_map(|&far| nudges().into_iter().map(move |(m, d)| (far + m, d)));
+    for (more_m, more_deg) in tries {
         let off = (meeting.bearing + more_deg).to_radians();
         let dir = ahead * libm::cosf(off) + right * libm::sinf(off);
-        let spot = around.ground(eye + dir * (meeting.ahead + more_m).max(4.0));
+        let spot = around.ground(eye + dir * (asked_m + more_m).max(4.0));
         let fault = if !keeps_to(spot) {
             0
         } else if !clear(spot) {
@@ -310,6 +397,10 @@ pub fn stage(
                 way: (spot - start).reject_from(up).normalize_or_zero(),
                 lead_s,
             };
+            if !keeps_away(&staged) {
+                not_start[3] += 1;
+                continue;
+            }
             if stays_seen(&staged) {
                 return Ok(staged);
             }
@@ -320,13 +411,7 @@ pub fn stage(
             }
         }
     }
-    first.ok_or_else(|| {
-        format!(
-            "of its spots {} off its ground (land, or water for a swimmer), {} in a trunk, {} hidden from the camera; of the starts \
-             from the rest {} in water or a trunk, {} in sight, {} with no dry, gentle way in",
-            not_spot[0], not_spot[1], not_spot[2], not_start[0], not_start[1], not_start[2]
-        )
-    })
+    first.ok_or_else(|| why_not(not_spot, not_start, keeps))
 }
 
 /// Whether a walker can go straight from one point to another: dry ground, never steeper than
@@ -560,7 +645,7 @@ mod tests {
             GlobalTransform::from(Transform::from_translation(eye).looking_to(ahead, up)),
             Projection::Perspective(PerspectiveProjection::default()),
         ));
-        // A trunk just where the stag is asked to be, and a row of them beside the way that
+        // A trunk just where the fox is asked to be, and a row of them beside the way that
         // hides what is behind them from the camera now.
         let then_eye = feet + up * EYE_UP_M - ahead * EYE_BEHIND_M;
         let off = 20f32.to_radians();
@@ -581,19 +666,19 @@ mod tests {
             world.resource_mut::<Obstacles>().add(at, 0.6);
         }
         let bestiary = Bestiary::read(&Default::default());
-        let stag = bestiary.named("Red deer stag").unwrap();
+        let fox = bestiary.named("Red fox").unwrap();
         let meeting = Meeting {
-            kind: "stag".into(),
+            kind: "Red fox".into(),
             behaviour: Behaviour::Crossing,
             at: 12.0,
             ahead: 30.0,
             bearing: 20.0,
             group: None,
         };
-        let mps = pace_mps(bestiary.get(stag), Behaviour::Crossing);
+        let mps = pace_mps(bestiary.get(fox), Behaviour::Crossing);
         let (staged, checks) = world
             .run_system_once(move |around: Surroundings| {
-                let about = bestiary.get(stag);
+                let about = bestiary.get(fox);
                 let staged = stage(&around, &meeting, about, (feet, ahead), 8.0, 4.3).unwrap();
                 let in_trunk = around
                     .trunks(staged.spot, 3.0)
@@ -786,5 +871,101 @@ mod tests {
             .unwrap();
         let every = format!("of its spots {} off its ground", nudges().len());
         assert!(why.starts_with(&every), "{why}");
+    }
+
+    #[test]
+    fn a_wary_one_is_staged_no_nearer_the_camera_than_its_flight_distance_and_still_seen() {
+        // The forest film's stag, asked 29 m ahead and 18 degrees right, crossed the path and
+        // stood 10 m from the runner (10-23). Its flight distance is its kind's data (a deer's
+        // here: in the forest's stand no spot 30-40 m off showed the stag, r7); a fox, with
+        // none, is met where it is asked.
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let planet = Planet::smooth(terra_core::PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        world.insert_resource(Start::choose(&planet, true));
+        let feet = planet.ground_at(Vec3::Y * 2000.0);
+        let up = feet.normalize();
+        let ahead = Vec3::X;
+        let now = feet - ahead * 4.3 * 8.0;
+        let eye = now + up * EYE_UP_M - ahead * EYE_BEHIND_M;
+        world.spawn((
+            MainCamera,
+            GlobalTransform::from(Transform::from_translation(eye).looking_to(ahead, up)),
+            Projection::Perspective(PerspectiveProjection::default()),
+        ));
+        // A row of trunks on either side, far out, that hides a start behind it.
+        let right = ahead.cross(up);
+        world.init_resource::<Obstacles>();
+        for side in [-1.0, 1.0] {
+            for i in 0..60 {
+                let along = ahead * (i as f32 * 1.5 - 30.0);
+                let at = planet.ground_at(feet + right * side * 22.0 + along);
+                world.resource_mut::<Obstacles>().add(at, 0.6);
+            }
+        }
+        world.insert_resource(planet);
+        world.init_resource::<Trunks>();
+        world.init_resource::<Warmth>();
+        world.init_resource::<Perches>();
+        world.init_resource::<Thickets>();
+        world.init_resource::<Clock>();
+        let bestiary = Bestiary::read(&Default::default());
+        let then_eye = feet + up * EYE_UP_M - ahead * EYE_BEHIND_M;
+        let lift = up * 0.4;
+        for (name, keeps) in [("Deer", true), ("Red fox", false)] {
+            let kind = bestiary.named(name).unwrap();
+            let about = bestiary.get(kind);
+            let flight = keeps_m(about);
+            assert_eq!(flight >= 30.0, keeps, "{name}: {flight} m");
+            let meeting = Meeting {
+                kind: name.into(),
+                behaviour: Behaviour::Crossing,
+                at: 12.0,
+                ahead: 29.0,
+                bearing: 18.0,
+                group: None,
+            };
+            let mps = pace_mps(about, Behaviour::Crossing);
+            let (nearest, seen_at_spot, spot_m) = world
+                .run_system_once(move |around: Surroundings| {
+                    let bestiary = Bestiary::read(&Default::default());
+                    let about = bestiary.get(kind);
+                    let staged = stage(&around, &meeting, about, (feet, ahead), 8.0, 4.3)
+                        .unwrap_or_else(|why| panic!("{name}: {why}"));
+                    // Its nearest to the camera coming on, wherever the camera sees it, from
+                    // half a second before its spot to the end of its time on.
+                    let nearest = (0..=26)
+                        .map(|i| i as f32 * 0.25 - 0.5)
+                        .filter_map(|t| {
+                            let at = around.ground(staged.spot + staged.way * mps * t) + lift;
+                            let camera = then_eye + ahead * 4.3 * t;
+                            let off = (at - camera).reject_from(up);
+                            let in_picture = off.normalize_or_zero().dot(ahead)
+                                >= libm::cosf(36f32.to_radians());
+                            (in_picture && around.in_view(camera, at)).then(|| off.length())
+                        })
+                        .fold(f32::INFINITY, f32::min);
+                    (
+                        nearest,
+                        shows_from(&around, then_eye, staged.spot + lift),
+                        (staged.spot - then_eye).reject_from(up).length(),
+                    )
+                })
+                .unwrap();
+            assert!(seen_at_spot, "{name}: seen at its spot");
+            if keeps {
+                assert!(
+                    nearest >= flight - 0.5,
+                    "{name}: seen {nearest:.1} m from the camera, its flight distance {flight} m"
+                );
+            } else {
+                // Met within the nudges of where asked, and seen nearer than a stag would be.
+                assert!(spot_m < 40.0, "{name}: met {spot_m:.1} m off, asked 29");
+                assert!(nearest < 30.0, "{name}: nearest seen {nearest:.1} m");
+            }
+        }
     }
 }

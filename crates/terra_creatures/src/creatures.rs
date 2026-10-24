@@ -12,6 +12,7 @@
 
 mod appear;
 mod gait;
+mod ground;
 mod mind;
 mod steer;
 mod wake;
@@ -127,6 +128,8 @@ pub struct Creature {
     bolt: Vec3,
     /// Why it is on the move, which sets how fast (`gait`).
     pace: Pace,
+    /// Whether it is getting on its way or stuck (`ground::step`).
+    progress: ground::Progress,
 }
 
 impl Creature {
@@ -197,6 +200,7 @@ impl Creature {
             side: Vec3::X,
             bolt: Vec3::ZERO,
             pace: Pace::Startled,
+            progress: Default::default(),
         }
     }
 }
@@ -523,6 +527,7 @@ pub fn spawn(
                 side: Vec3::X,
                 bolt: Vec3::ZERO,
                 pace: Pace::Startled,
+                progress: Default::default(),
             },
             bestiary.body(species),
             Transform::from_translation(feet).looking_to(facing, up),
@@ -689,51 +694,14 @@ fn walk(
             (State::Attack(_), Some(toward)) => (toward, 0.0),
             _ => (Vec3::ZERO, 0.0),
         };
-        // Round the trunks, rocks and logs in its way, never through one.
-        let solids = (&*trunks, &*obstacles);
-        let (direction, speed) = steer::round(
-            solids,
-            here,
-            about.body.radius,
-            (creature.facing, direction, speed),
+        let place = ground::step(
+            &mut creature,
+            about,
+            ((&*trunks, &*obstacles), &planet),
+            (here, at.forward().as_vec3()),
+            (direction, speed),
+            dt,
         );
-        if direction != Vec3::ZERO {
-            let turn = 1.0 - libm::expf(-dt * 6.0);
-            creature.facing = creature
-                .facing
-                .lerp(direction, turn)
-                .reject_from(up)
-                .normalize_or(direction);
-        }
-        let mut next = steer::out_of(
-            solids,
-            here + direction * speed * dt,
-            (creature.facing, about.body.radius, about.body.nose_m()),
-            speed,
-        );
-        // Each keeps to its own: walkers out of water deeper than they wade, swimmers in it.
-        let depth = |point: Vec3| planet.water_radius_m(point) - planet.ground_at(point).length();
-        let swims = matches!(about.moves, Moves::Swims(_));
-        let kept = if swims {
-            depth(next) > 0.3
-        } else if about.wades_m > 0.0 {
-            depth(next) < about.wades_m
-        } else {
-            depth(next) < -0.2
-        };
-        if !kept {
-            next = here;
-            if let State::Wander(_) = creature.state {
-                creature.state = State::Idle(1.0);
-            }
-        }
-        let place = match about.moves {
-            // Afloat: on the water's surface, its feet under it.
-            Moves::Swims(feet_m) if depth(next) > 0.0 => {
-                next.normalize() * (planet.water_radius_m(next) - feet_m)
-            }
-            _ => planet.ground_at(next),
-        };
         creature.aloft = 0.0;
         *at = Transform::from_translation(place)
             .looking_to(creature.facing, place.normalize())

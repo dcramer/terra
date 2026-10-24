@@ -24,6 +24,7 @@ fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
         side: Vec3::X,
         bolt: Vec3::ZERO,
         pace: Pace::Startled,
+        progress: Default::default(),
     };
     assert!(creature.unaware());
     creature.state = State::Flee(2.0);
@@ -48,6 +49,7 @@ fn spider(world: &mut World, at: Vec3) -> Entity {
                 side: Vec3::X,
                 bolt: Vec3::ZERO,
                 pace: Pace::Startled,
+                progress: Default::default(),
             },
             Transform::from_translation(at),
         ))
@@ -660,4 +662,73 @@ fn a_fox_running_through_a_wood_goes_round_every_trunk_and_rock() {
         assert!(gone > 20.0, "aimed {aim}: only {gone:.1} m on");
         world.despawn(fox);
     }
+}
+
+#[test]
+fn a_boar_walking_off_into_a_pocket_of_rocks_gets_out_and_never_stands_in_one() {
+    // The forest film's boars stood pressed against a trunk, a rump in the bark, and went
+    // nowhere (10-23). One walking off straight into a dead end of rocks and stumps turns out
+    // of it once it has made no way for a while, its whole body clear of every one.
+    let mut world = world();
+    let ground = world.resource::<Planet>().ground_at(Vec3::Y * 2000.0);
+    let up = ground.normalize();
+    let (east, north) = (Vec3::X, Vec3::Z);
+    // Closed ahead, open behind.
+    let spots: Vec<(f32, f32)> = (0..=10)
+        .map(|i| (3.0, -3.0 + i as f32 * 0.6))
+        .chain((0..9).flat_map(|i| [(2.4 - i as f32 * 0.6, -3.0), (2.4 - i as f32 * 0.6, 3.0)]))
+        .collect();
+    let mut rounds = Vec::new();
+    for (along, aside) in spots {
+        let at = world
+            .resource::<Planet>()
+            .ground_at(ground + east * along + north * aside);
+        world.resource_mut::<Obstacles>().add(at, 0.4);
+        rounds.push((at, 0.4));
+    }
+    let boar = kind(&mut world, "Wild boar", ground);
+    world.entity_mut(boar).insert(Detail::default());
+    let species = world.get::<Creature>(boar).unwrap().species;
+    let body = world.resource::<Bestiary>().get(species).body;
+    {
+        let mut creature = world.get_mut::<Creature>(boar).unwrap();
+        creature.state = State::Flee(60.0);
+        creature.pace = Pace::Wary;
+        creature.bolt = east;
+        creature.facing = east;
+    }
+    let mut out_at = None;
+    for tick in 0..30 * 20 {
+        world
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs_f32(1.0 / 30.0));
+        world.run_system_once(walk).unwrap();
+        let at = world.get::<Transform>(boar).unwrap().translation;
+        let facing = world.get::<Creature>(boar).unwrap().facing;
+        let parts = [
+            ("rump", -body.rear_m()),
+            ("middle", 0.0),
+            ("nose", body.nose_m()),
+        ];
+        for (part, along) in parts {
+            let point = at + facing * along;
+            for &(middle, round) in &rounds {
+                let apart = (point - middle).reject_from(up).length();
+                assert!(
+                    apart >= round + body.radius * 0.9,
+                    "at {:.1} s its {part} {apart:.2} m from a rock of {round} m",
+                    tick as f32 / 30.0
+                );
+            }
+        }
+        let off = at - ground;
+        if off.dot(east) < -3.0 || off.dot(north).abs() > 3.6 {
+            out_at = Some(tick as f32 / 30.0);
+            break;
+        }
+    }
+    assert!(
+        out_at.is_some_and(|s| s < 15.0),
+        "still in the pocket: {out_at:?}"
+    );
 }

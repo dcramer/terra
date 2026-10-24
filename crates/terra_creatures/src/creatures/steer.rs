@@ -61,35 +61,39 @@ pub fn round(
     (v.normalize_or_zero(), v.length())
 }
 
-/// Where a creature moving to a point stands, pushed out of any round steering left it in:
-/// its middle and its head with it, every point from its middle to its nose `nose_m` before
-/// it along `facing` kept its body's radius off any bark, the whole body moved by what each
-/// needs. Steering plans for the middle alone, so a long body coming at a trunk head on
-/// (a fox's snout, 0.4 m before its middle, touched one in lake film r24) stops short by its
-/// head, as a capsule agent does where a round one would not.
+/// Where a creature standing at a point is, pushed out of any round steering left it in: its
+/// middle, its rump and its head with it, every point from its rump `rear_m` behind its
+/// middle to its nose `nose_m` before it along `facing` kept its body's radius off any bark,
+/// the whole body moved by what each needs, the head last. Steering plans for the middle
+/// alone, so a long body coming at a trunk head on (a fox's snout, 0.4 m before its middle,
+/// touched one in lake film r24) stops short by its head, as a capsule agent does where a
+/// round one would not; and one turning away from a trunk keeps its hindquarters out of it
+/// (the forest film's boar, its rump in a redwood, 10-23).
 pub fn out_of(
     (trunks, obstacles): (&Trunks, &Obstacles),
     at: Vec3,
-    (facing, radius, nose_m): (Vec3, f32, f32),
-    speed: f32,
+    (facing, radius): (Vec3, f32),
+    (nose_m, rear_m): (f32, f32),
 ) -> Vec3 {
-    if speed <= 0.0 {
-        return at;
-    }
-    let ahead = (nose_m - radius).max(0.0);
-    let rounds = rounds_near(trunks, obstacles, at, radius + ahead + 1.0);
+    let (ahead, behind) = ((nose_m - radius).max(0.0), (rear_m - radius).max(0.0));
+    let rounds = rounds_near(trunks, obstacles, at, radius + ahead.max(behind) + 1.0);
     let mut at = clear_of(rounds.clone(), at, radius);
     let up = at.normalize_or(Vec3::Y);
     let facing = facing.reject_from(up).normalize_or_zero();
-    if ahead <= 0.0 || facing == Vec3::ZERO {
+    if facing == Vec3::ZERO {
         return at;
     }
-    // The neck, the head and the nose's tip: no more than a radius apart, so no trunk fits
-    // between two of them.
-    let steps = (ahead / radius).ceil().max(1.0) as usize;
-    for step in 1..=steps {
-        let point = at + facing * (ahead + radius) * step as f32 / steps as f32;
-        at += clear_of(rounds.clone(), point, radius) - point;
+    // The haunch and the rump's tip, then the neck, the head and the nose's tip: no more
+    // than a radius apart, so no trunk fits between two of them.
+    for (reach, way) in [(behind, -facing), (ahead, facing)] {
+        if reach <= 0.0 {
+            continue;
+        }
+        let steps = (reach / radius).ceil().max(1.0) as usize;
+        for step in 1..=steps {
+            let point = at + way * (reach + radius) * step as f32 / steps as f32;
+            at += clear_of(rounds.clone(), point, radius) - point;
+        }
     }
     at
 }
@@ -119,7 +123,7 @@ mod tests {
         for (aside, slant) in [(0.0, 0.0), (0.1, 0.0), (-0.2, 0.3), (0.25, -0.4)] {
             let facing = (Vec3::X + Vec3::Z * slant).normalize();
             let at = ground + Vec3::X * (1.0 - bark - radius - 0.05) + Vec3::Z * aside;
-            let to = out_of((&trunks, &obstacles), at, (facing, radius, nose), 1.0);
+            let to = out_of((&trunks, &obstacles), at, (facing, radius), (nose, radius));
             for step in 0..=20 {
                 let point = to + facing * nose * step as f32 / 20.0;
                 let apart = (point - foot).reject_from(Vec3::Y).length();
@@ -130,8 +134,44 @@ mod tests {
                 );
             }
             // Round, it stands where it was.
-            let round = out_of((&trunks, &obstacles), at, (facing, radius, radius), 1.0);
+            let round = out_of(
+                (&trunks, &obstacles),
+                at,
+                (facing, radius),
+                (radius, radius),
+            );
             assert!(round.distance(at) < 1e-4, "{aside} {slant}");
+        }
+    }
+
+    #[test]
+    fn a_long_body_turned_away_from_a_trunk_keeps_its_rump_out_of_the_bark() {
+        // The forest film's boar stood with its rump in a redwood (10-23): its middle clear,
+        // facing away, its hindquarters 0.65 m behind it.
+        let ground = Vec3::Y * 1000.0;
+        let foot = ground + Vec3::X * -1.0;
+        let bark = 0.9;
+        let mut trunks = Trunks::default();
+        trunks.add(Trunk {
+            foot,
+            radius_m: bark,
+            height_m: 30.0,
+            solid: false,
+        });
+        let obstacles = Obstacles::default();
+        let (radius, nose, rear) = (0.35, 0.95, 0.65);
+        for (aside, slant) in [(0.0, 0.0), (0.3, 0.2), (-0.4, -0.5), (0.2, 0.9)] {
+            let facing = (Vec3::X + Vec3::Z * slant).normalize();
+            let at = ground + Vec3::X * (bark + radius + 0.05 - 1.0) + Vec3::Z * aside;
+            let to = out_of((&trunks, &obstacles), at, (facing, radius), (nose, rear));
+            for step in 0..=20 {
+                let along = -rear + (nose + rear) * step as f32 / 20.0;
+                let apart = (to + facing * along - foot).reject_from(Vec3::Y).length();
+                assert!(
+                    apart >= bark + radius - 1e-3,
+                    "{aside} {slant}: {along:.2} m along it, {apart:.2} m from the trunk's middle"
+                );
+            }
         }
     }
 }

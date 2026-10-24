@@ -181,6 +181,7 @@ fn decide(
         Temper::Shy {
             flees_within_m,
             flees_s,
+            ..
         } => shy(creature, about, s, (flees_within_m, flees_s), around, dice),
         Temper::Hostile { .. } => hostile(creature, about.temper, s, bitten),
     };
