@@ -278,7 +278,9 @@ const LIT_NEAR_M: f32 = 1.2;
 // among the logs (`HEARTH_BODY_UP`, over the fire's width), its hot base over the coals.
 // Over the 0.37 m teepee at 1.25 its tips stood about twice the stone ring's radius, RDR2's
 // about once: over the lower stack (logs meeting 0.24 m up) 1.1, the tongues and leads lower
-// with it (campfire short round). Cut alone, the tongues still rose from the tall apex.
+// with it (campfire short round). Cut alone, the tongues still rose from the tall apex. The
+// stack stands 0.37 m again at 1.1 (campfire upper round: from the camp's eye, above, the
+// lower stack read as a small flame over the bed's chips); 1.25 there read too tall and hazy.
 const HEARTH_BODY: f32 = 1.1;
 const HEARTH_BODY_UP: f32 = 0.15;
 // Its tongues: their heights over `tall`, least and most; how far out from the middle they

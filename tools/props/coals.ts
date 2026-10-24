@@ -17,7 +17,7 @@ import { encodePng } from "../sandbox/png.ts";
 export const BED_BUDGET = 4500;
 /// The mound: its radius under the stones and its height in the middle, metres.
 const MOUND_R = 0.46;
-const MOUND_TOP = 0.12;
+const MOUND_TOP = 0.07;
 /// The heap: big coals (subdivided once, 80 triangles) in the middle, small (an icosahedron,
 /// 20) round them, all inside this radius under the logs.
 const BIG = 6;
@@ -239,10 +239,9 @@ export function maps(seed = 1): Uint8Array[] {
       // into a mesh of cracks, not a lit disc (fire round 29: separate red baubles).
       const ridge = (f: number, k: number) => 1 - smooth(0.0, 0.06, Math.abs(fbm(X * f, Z * f, k) - 0.5));
       const crackle = char * Math.max(ridge(7, 11), 0.8 * ridge(15, 12));
-      // Its middle a hot core, orange-yellow through the gaps between the logs' feet, cooling to
-      // red out to the rim (blind judge, campfire glow round: the bed read as "flat tan gravel").
-      const core = smooth(0.72, 0.2, r + 0.15 * (fbm(X * 6, Z * 6, 13) - 0.5)) * (0.75 + 0.35 * n);
-      const smoulder = Math.max(char * smooth(0.3, 0.6, fbm(X * 5, Z * 5, 3)) * 0.85, crackle * 1.3, 1.4 * core) + (1 - char) * smooth(0.72, 0.8, speck) * 0.35;
+      // No hot core lit whole under the logs: from the camp's eye, above, it read as a patch of
+      // yellow chips through the logs (campfire history panel).
+      const smoulder = Math.max(char * smooth(0.3, 0.6, fbm(X * 5, Z * 5, 3)) * 0.85, crackle * 1.3) + (1 - char) * smooth(0.72, 0.8, speck) * 0.35;
       put(x, 2 * T + y, [grey * 1.02 + 12 * smoulder, grey * 0.96, grey * 0.89], glowColour(smoulder), 0.95);
     }
   }
@@ -252,9 +251,11 @@ export function maps(seed = 1): Uint8Array[] {
     // then dull red at the edge, sitting in ash (campfire fill round: at 1.25/1.1/0.95, 0.6 ash at the edge, the
     // heap read as flat bright yellow chips to three blind judges).
     const band = Math.floor(tile / 4);
-    const heat = [1.15, 0.94, 0.62][band] + 0.1 * rnd();
-    const ashy = [0.1, 0.3, 0.72][band];
-    const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.5 ? 0.6 + 0.4 * rnd() : 0 }));
+    // From the camp's eye, above, its coals' tops show most: under more ash, few cells hot over
+    // their whole face (campfire history panel: e9e5b733's bed, 4.75, against yellow chips).
+    const heat = [1.45, 1.15, 0.8][band] + 0.1 * rnd();
+    const ashy = [0.2, 0.6, 1.1][band];
+    const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.3 ? 0.45 + 0.2 * rnd() : 0 }));
     for (let y = 0; y < T; y++) {
       for (let x = 0; x < T; x++) {
         const d = unoctahedral((x - 2) / (T - 4), (y - 2) / (T - 4));

@@ -105,8 +105,8 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
     const out: V3 = [Math.cos(phi), 0, Math.sin(phi)];
     const foot: V3 = [rf * out[0], R * 1.0, rf * out[2]];
     // Tops past the middle and turned on a little, so the logs cross rather than meet in a point.
-    const pt = phi + 0.5 + 0.3 * rnd(), rt = 0.07 + 0.06 * rnd();
-    const top: V3 = [rt * Math.cos(pt), 0.19 + 0.08 * rnd(), rt * Math.sin(pt)];
+    const pt = phi + 0.5 + 0.3 * rnd(), rt = 0.06 + 0.04 * rnd();
+    const top: V3 = [rt * Math.cos(pt), 0.33 + 0.06 * rnd(), rt * Math.sin(pt)];
     const axis = norm(sub(top, foot));
     const L = Math.hypot(...sub(top, foot)) + 0.05;
     // Its section's plane, turned about its axis at random, so split faces show every way.
@@ -478,8 +478,9 @@ function checks(a: number, b: number, open: number, seed: number, stretch: numbe
 // Char over any wood by how hot it got (a across the grain, b along it; `groove` its bark's
 // furrows, which burn and glow first): scorched brown, then black checked char whose cracks
 // glow ember orange, deepest and hottest brightest; their albedo stays dark (the glow is
-// emissive, `play::props`).
-function charred(w: Texel, heat: number, a: number, b: number, seed: number, groove = 0, stretch = 1): Texel {
+// emissive, `play::props`). `net` is how much of its crack net glows, from only the deepest runs
+// (0) to every crack (1).
+function charred(w: Texel, heat: number, a: number, b: number, seed: number, groove = 0, stretch = 1, net = 0): Texel {
   const [c0, , r0, h0] = w;
   // Its front ragged, in tongues along the grain, never a band.
   const jit = 0.42 * (fbm(a * 14, b * 6, seed + 9) - 0.5) + 0.2 * (fbm(a * 55, b * 22, seed + 19) - 0.5);
@@ -494,7 +495,8 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   const feet = smooth(0.55, 1.25, x);
   const [crack, inside, id, glows] = checks(a, b, hot * (0.6 + 0.5 * feet), seed + 11, stretch);
   const deep = Math.max(crack, 0.55 * groove * smooth(0.35, 0.7, x));
-  const lit = Math.max(glows, 0.55 * groove * smooth(0.35, 0.7, x));
+  const deepest = Math.max(glows, 0.55 * groove * smooth(0.35, 0.7, x));
+  const lit = deepest + (deep - deepest) * net;
   let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
   // Grey-white ash on the blocks, in patches, from where it chars through to where it burns
   // hottest: only on the hottest it read as no ash at all (blind judge, campfire ember round).
@@ -510,7 +512,7 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // Some runs of a seam burn hot and some dull, in patches along it, so its yellow is few and
   // irregular; never past the ember's orange, whose yellow read tan by firelight (campfire glow round).
   const vary = smooth(0.3, 0.8, fbm(a * 5, b * 2.2, seed + 62));
-  const t = Math.min(0.28, lit * lit * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
+  const t = Math.min(0.28 + 0.22 * net, lit * lit * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
   // Only some runs of the seams burn bright, in patches along the log (`vary`), the rest dull:
   // every seam lit alike, the blocks read as a regular checker (campfire fill round).
   const g = Math.min(1, lit + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t) * (0.3 + 0.7 * smooth(0.45, 0.75, vary));
@@ -555,25 +557,25 @@ function at(l: Log, s: number): [[number, number], [number, number], boolean] {
 function heat(l: Log, t: number, n: V3): number {
   const inward = -dot(n, l.out), down = -n[1], f = t / l.L;
   const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
-  // The heat gathered where flame meets fuel: a hot band over its lowest quarter, in the coals,
-  // on every face the eye sees, and its inner end where the logs cross over the flames; plain
-  // black char between (blind judge, campfire glow round: a glow spread up every face read as
-  // "evenly scattered tan-orange specks", not heat where the fire meets the wood).
-  // Hot on the faces toward the coals and under, charred black on top: hot on every face, the
+  // Its foot hot on the faces toward the coals and under, not on top: hot on every face, the
   // feet read as a glowing waffle grid from above (campfire view round).
-  const low = smooth(0.34, 0.12, f), crossing = smooth(0.8, 0.95, f);
+  // Its upper half hot on every face, its upper faces too, with hot edges toward the gaps: from
+  // the camp's eye, above, the eye sees mostly the logs' upper faces, and a glow only low and
+  // where they cross read as black sticks over a yellow grid at their feet (campfire history
+  // panel: e9e5b733's upper glow 4.75, the low band 4.00, every judge).
+  const low = smooth(0.34, 0.12, f);
   const foot = low * (0.5 + 0.6 * under);
-  const top = crossing * (0.62 + 0.3 * under);
+  const top = smooth(0.3, 0.85, f) * (0.85 + 0.35 * under);
   // Its underside licked hot enough that its cracks glow there, seen low between the logs.
   const lick = under * under * (0.5 + 0.2 * f);
   // Smoke and heat scorch it all over and char it black from about its middle up (fire round
   // 25: its raw upper faces read as pale planks); its outer end charred in patches through its
   // scorched bark (blind judge, campfire ember round: brown bark read as brush, not burnt logs).
-  const all = 0.34 + 0.14 * smooth(0.2, 0.55, f);
+  const all = 0.34 + 0.3 * smooth(0.2, 0.55, f);
   // Its sides toward its neighbours, which see the coals and the flames through the gaps
-  // between the logs, glow along their edges low down and where they cross.
+  // between the logs, glow along their edges, more toward the inner end.
   const across = Math.abs(dot(n, norm(cross([0, 1, 0], l.out))));
-  const rim = smooth(0.3, 0.85, across) * (0.45 + 0.4 * Math.max(low, crossing));
+  const rim = smooth(0.3, 0.85, across) * (0.62 + 0.25 * f);
   return Math.max(top, foot, lick, all, rim);
 }
 
@@ -624,7 +626,11 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
         const [p, n2, isBark] = at(l, s);
         const n: V3 = add(mul(l.e1, n2[0]), mul(l.e2, n2[1]));
         const w = isBark ? bark(s, t, l.seed) : splitWood(s, t, Math.hypot(p[0], p[1]), l.R, l.seed);
-        put(l.side[0] + x, l.side[1] + y, charred(w, heat(l, t, n), s, t, l.seed, isBark ? smooth(0.3, 0.08, w[3]) : 0));
+        // Its whole crack net glows over its upper half, seen from above as a warm crackle along
+        // the log; at its foot only the deepest runs, or the net read as a waffle grid there
+        // (campfire history panel: e9e5b733's crackle along the logs scored best).
+        const net = smooth(0.3, 0.6, t / l.L);
+        put(l.side[0] + x, l.side[1] + y, charred(w, heat(l, t, n), s, t, l.seed, isBark ? smooth(0.3, 0.08, w[3]) : 0, 1, net));
       }
     }
     // Its ends: the foot's in the coals and the top's over the flames, both charred.
@@ -681,15 +687,16 @@ export function stoneMaps(stones: Stone[]): Uint8Array[] {
         c = mix(c, c.map((v) => v * 1.15), smooth(0.48, 0.52, vein) * (1 - smooth(0.52, 0.56, vein)));
         // Lichen on what faces up, away from the fire's heat.
         c = mix(c, [132, 138, 112], 0.55 * smooth(0.2, 0.5, d[1]) * smooth(0.6, 0.68, n3(mul(p, 6), st.seed + 23)) * smooth(-0.2, 0.3, d[2]));
-        // Black soot on the face toward the fire (its -z, inward) low down, by the coals, broken
-        // by its mottle; its upper face toward the fire bare stone, which the fire lights orange
-        // (blind judge, campfire glow round: sooted near black there, the ring's fire-facing faces
-        // stayed dark at night, where RDR2's read 177,107,58); earth at its foot.
-        const inner = smooth(-0.05, -0.65, d[2]) * smooth(0.35, -0.15, d[1]);
-        const soot = Math.min(1, inner * (0.65 + 0.5 * smooth(0.3, 0.7, n3(mul(p, 11), st.seed + 24))));
-        c = mix(c, [22, 20, 19], 0.7 * soot);
-        // The smoke's stain over its upper half, broken and faint.
-        c = mix(c, [40, 37, 34], 0.15 * smooth(-0.1, 0.6, d[1]) * smooth(0.6, -0.5, d[2]) * smooth(0.25, 0.65, n3(mul(p, 5), st.seed + 25)));
+        // Black soot on the face toward the fire (its -z, inward), most at its top, and over
+        // its top from that side, broken by its mottle; earth at its foot. Sooted only low, its
+        // firelit tops read salmon from the camp's eye, above (campfire history panel: e9e5b733's
+        // sooted ring 4.75, the low soot 4.00, every judge).
+        const inner = smooth(-0.05, -0.65, d[2]) * (0.6 + 0.4 * smooth(-0.3, 0.5, d[1]));
+        const top = smooth(0.35, 0.8, d[1]) * smooth(0.5, -0.4, d[2]) * 0.7;
+        const soot = Math.min(1, Math.max(inner, top) * (0.65 + 0.5 * smooth(0.3, 0.7, n3(mul(p, 11), st.seed + 24))));
+        c = mix(c, [22, 20, 19], 0.85 * soot);
+        // The smoke's stain over its upper half, broken, darkest toward the fire.
+        c = mix(c, [40, 37, 34], 0.35 * smooth(-0.1, 0.6, d[1]) * smooth(0.6, -0.5, d[2]) * smooth(0.25, 0.65, n3(mul(p, 5), st.seed + 25)));
         c = mix(c, [78, 64, 48], 0.7 * smooth(-0.05, -0.45, d[1]));
         const o = ((ty + y) * W + tx + x) * 4;
         for (let i = 0; i < 3; i++) out[0][o + i] = Math.round(Math.min(255, c[i]));
