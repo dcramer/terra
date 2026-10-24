@@ -67,7 +67,7 @@ test("each stone is one of the field stone's tones, lighter or darker, never tin
   }
 });
 
-test("its logs' cracks glow orange-red at their dullest and orange-yellow at their brightest, never pure red nor pale white", () => {
+test("its logs' cracks glow orange-red at their dullest and orange at their brightest, never pure red nor pale white", () => {
   const glow = woodMaps(layout().logs)[1];
   const lit: [number, number, number][] = [];
   for (let i = 0; i < glow.length; i += 4) if (glow[i] >= 12) lit.push([glow[i], glow[i + 1], glow[i + 2]]);
@@ -75,10 +75,11 @@ test("its logs' cracks glow orange-red at their dullest and orange-yellow at the
   const tenth = Math.floor(lit.length / 10);
   const greenToRed = (px: [number, number, number][]) => px.reduce((s, p) => s + p[1], 0) / px.reduce((s, p) => s + p[0], 0);
   assert.ok(greenToRed(lit.slice(0, tenth)) > 0.25, "its dullest cracks near pure red");
-  // Orange-yellow, not the pale yellow-white whose even stripes read as a barcode at the feet
-  // (fire round 32): its green under 0.6 of its red and its blue low.
+  // Deep orange (#FF5A10) to orange-yellow, not the pale yellow-white whose even stripes read as
+  // a barcode at the feet (fire round 32), nor the yellow that read tan by firelight (campfire
+  // glow round): its green between 0.28 and 0.6 of its red and its blue low.
   const bright = lit.slice(-tenth);
-  assert.ok(greenToRed(bright) > 0.4 && greenToRed(bright) < 0.6, "its brightest cracks not orange-yellow");
+  assert.ok(greenToRed(bright) > 0.28 && greenToRed(bright) < 0.6, `its brightest cracks not orange: ${greenToRed(bright).toFixed(2)}`);
   const blueToRed = bright.reduce((s, p) => s + p[2], 0) / bright.reduce((s, p) => s + p[0], 0);
   assert.ok(blueToRed < 0.25, "its brightest cracks pale");
 });

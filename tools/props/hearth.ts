@@ -471,7 +471,8 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
   // Grey-white ash on the blocks, in patches, from where it chars through to where it burns
   // hottest: only on the hottest it read as no ash at all (blind judge, campfire ember round).
-  const ash = 0.35 * smooth(0.6, 0.95, x) * smooth(0.58, 0.74, fbm(a * 60, b * 25, seed + 59));
+  // Little where it glows hottest, whose firelit ash read tan (blind judge, campfire glow round).
+  const ash = 0.35 * smooth(0.6, 0.95, x) * (1 - 0.6 * smooth(0.85, 1.1, x)) * smooth(0.58, 0.74, fbm(a * 60, b * 25, seed + 59));
   block = mix(block, [124, 120, 114], ash);
   c = mix(c, mix(block.map((v) => v * (0.72 + 0.4 * inside)), [30, 13, 8], deep), char);
   const leak = 0.3 * (1 - inside) * hot;
@@ -480,9 +481,9 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // (fire round 31: an even-width pink-red neon mesh, its red near pure, which the night's
   // grade takes to pink).
   // Some runs of a seam burn hot and some dull, in patches along it, so its yellow is few and
-  // irregular; never past halfway from the ember's orange to the yellow-white.
+  // irregular; never past the ember's orange, whose yellow read tan by firelight (campfire glow round).
   const vary = smooth(0.3, 0.8, fbm(a * 5, b * 2.2, seed + 62));
-  const t = Math.min(0.72, deep * deep * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
+  const t = Math.min(0.35, deep * deep * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
   const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t);
   const tone = t < 0.5 ? mix([196, 64, 8], HOTTEST, t * 2) : mix(HOTTEST, [255, 206, 120], t * 2 - 1);
   // Where it lies in the coals its whole char glows, not its cracks alone: a broad warm gradient
@@ -490,7 +491,7 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // logs standing on the bed).
   // A soft orange gradient rising from the coals, its mottle broad (fire round 32).
   const bed = smooth(0.55, 1.1, x) * smooth(0.5, 0.66, fbm(a * 9, b * 3.5, seed + 61)) * (1 - 0.6 * inside);
-  const glow = tone.map((v, i) => v * g + [206, 74, 12][i] * 1.4 * bed);
+  const glow = tone.map((v, i) => v * g + [255, 78, 14][i] * bed);
   // Charcoal is matte: its blocks' faces about 0.86 for their faint sheen, its fissures and
   // ash rougher still (fire round 37: at 0.6 the char took the fire's light as a gloss, and
   // read as glossy fresh-cut wood).
@@ -521,19 +522,23 @@ function at(l: Log, s: number): [[number, number], [number, number], boolean] {
 function heat(l: Log, t: number, n: V3): number {
   const inward = -dot(n, l.out), down = -n[1], f = t / l.L;
   const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
-  const top = smooth(0.3, 0.85, f) * (0.85 + 0.35 * under);
-  const foot = smooth(0.3, 0.0, f) * under * under * 0.95;
-  // Its underside licked hot enough all along that its cracks glow there, seen low between the
-  // logs (blind judge, campfire ember round: "glowing cracks on the log undersides").
-  const lick = under * under * (0.72 + 0.3 * f);
+  // The heat gathered where flame meets fuel: a hot band over its lowest quarter, in the coals,
+  // on every face the eye sees, and its inner end where the logs cross over the flames; plain
+  // black char between (blind judge, campfire glow round: a glow spread up every face read as
+  // "evenly scattered tan-orange specks", not heat where the fire meets the wood).
+  const low = smooth(0.34, 0.12, f), crossing = smooth(0.8, 0.95, f);
+  const foot = low * (1.0 + 0.2 * under);
+  const top = crossing * (0.62 + 0.3 * under);
+  // Its underside licked hot enough that its cracks glow there, seen low between the logs.
+  const lick = under * under * (0.5 + 0.2 * f);
   // Smoke and heat scorch it all over and char it black from about its middle up (fire round
   // 25: its raw upper faces read as pale planks); its outer end charred in patches through its
   // scorched bark (blind judge, campfire ember round: brown bark read as brush, not burnt logs).
-  const all = 0.34 + 0.3 * smooth(0.2, 0.55, f);
+  const all = 0.34 + 0.14 * smooth(0.2, 0.55, f);
   // Its sides toward its neighbours, which see the coals and the flames through the gaps
-  // between the logs, glow along its edges.
+  // between the logs, glow along their edges low down and where they cross.
   const across = Math.abs(dot(n, norm(cross([0, 1, 0], l.out))));
-  const rim = smooth(0.3, 0.85, across) * (0.62 + 0.25 * f);
+  const rim = smooth(0.3, 0.85, across) * (0.45 + 0.4 * Math.max(low, crossing));
   return Math.max(top, foot, lick, all, rim);
 }
 
@@ -632,14 +637,15 @@ export function stoneMaps(stones: Stone[]): Uint8Array[] {
         c = mix(c, c.map((v) => v * 1.15), smooth(0.48, 0.52, vein) * (1 - smooth(0.52, 0.56, vein)));
         // Lichen on what faces up, away from the fire's heat.
         c = mix(c, [132, 138, 112], 0.55 * smooth(0.2, 0.5, d[1]) * smooth(0.6, 0.68, n3(mul(p, 6), st.seed + 23)) * smooth(-0.2, 0.3, d[2]));
-        // Black soot on the face toward the fire (its -z, inward), most at its top, and over
-        // its top from that side, broken by its mottle; earth at its foot.
-        const inner = smooth(-0.05, -0.65, d[2]) * (0.6 + 0.4 * smooth(-0.3, 0.5, d[1]));
-        const top = smooth(0.35, 0.8, d[1]) * smooth(0.5, -0.4, d[2]) * 0.7;
-        const soot = Math.min(1, Math.max(inner, top) * (0.65 + 0.5 * smooth(0.3, 0.7, n3(mul(p, 11), st.seed + 24))));
-        c = mix(c, [22, 20, 19], 0.85 * soot);
-        // The smoke's stain over its upper half, broken, darkest toward the fire.
-        c = mix(c, [40, 37, 34], 0.35 * smooth(-0.1, 0.6, d[1]) * smooth(0.6, -0.5, d[2]) * smooth(0.25, 0.65, n3(mul(p, 5), st.seed + 25)));
+        // Black soot on the face toward the fire (its -z, inward) low down, by the coals, broken
+        // by its mottle; its upper face toward the fire bare stone, which the fire lights orange
+        // (blind judge, campfire glow round: sooted near black there, the ring's fire-facing faces
+        // stayed dark at night, where RDR2's read 177,107,58); earth at its foot.
+        const inner = smooth(-0.05, -0.65, d[2]) * smooth(0.35, -0.15, d[1]);
+        const soot = Math.min(1, inner * (0.65 + 0.5 * smooth(0.3, 0.7, n3(mul(p, 11), st.seed + 24))));
+        c = mix(c, [22, 20, 19], 0.7 * soot);
+        // The smoke's stain over its upper half, broken and faint.
+        c = mix(c, [40, 37, 34], 0.15 * smooth(-0.1, 0.6, d[1]) * smooth(0.6, -0.5, d[2]) * smooth(0.25, 0.65, n3(mul(p, 5), st.seed + 25)));
         c = mix(c, [78, 64, 48], 0.7 * smooth(-0.05, -0.45, d[1]));
         const o = ((ty + y) * W + tx + x) * 4;
         for (let i = 0; i < 3; i++) out[0][o + i] = Math.round(Math.min(255, c[i]));
