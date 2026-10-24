@@ -23,7 +23,15 @@ import { type Picture, writePng } from "../sandbox/png.ts";
 /// cooler than its core (`core`), the power its heats are raised to over its body (`spread`:
 /// above 1 most of a flame burns near its cooler end), the heat its core starts at, and how far
 /// the camera exposes that core (`coreFilm`).
-export type Fuel = { cold: number; hot: number; contrast: number; film: number; core?: { spread: number; from: number; film: number } };
+/// `pale` washes a row toward white as its green rises (`filmed`).
+export type Fuel = { cold: number; hot: number; contrast: number; film: number; core?: { spread: number; from: number; film: number }; pale?: number };
+
+/// How far a campfire's flame is washed toward white as it yellows: by `pale`, eased in as its
+/// green over its red rises from 0.04 to 0.34, so its deep red tips keep their colour, its
+/// orange takes a little and its yellow body and core much (sRGB 255,213,159 at heat 0.9 and
+/// 255,242,193 at 0.95), as RDR2's campfires and a night photograph's blown body read. Unwashed, its flame was 0.81 saturated where RDR2's is
+/// 0.50-0.62, a flat orange cut-out (campfire step-back, difference 3; campfire pale round).
+export const PALE = 0.72;
 
 /// The rows (D377's 950-1670 K for wood). A campfire's hearth is wood, but its flame alone
 /// (D433's matte) was a band hotter than the photographs' at every hour on the wood row: at
@@ -39,7 +47,7 @@ export type Fuel = { cold: number; hot: number; contrast: number; film: number; 
 /// against the photographs' 23% at most): spread 5 keeps orange to 0.85 (campfire lick round).
 export const FUELS: Record<string, Fuel> = {
   wood: { cold: 950, hot: 1670, contrast: 0.6, film: 4.5 },
-  hearth: { cold: 950, hot: 1670, contrast: 0.5, film: 3.5, core: { spread: 5, from: 0.92, film: 4.5 } },
+  hearth: { cold: 950, hot: 1670, contrast: 0.5, film: 3.5, core: { spread: 5, from: 0.92, film: 4.5 }, pale: PALE },
   oil: { cold: 900, hot: 1500, contrast: 0.6, film: 4.5 },
   gas: { cold: 1100, hot: 1900, contrast: 0.5, film: 6 },
 };
@@ -98,6 +106,9 @@ export const BLOWN_BLUE = 0.34;
 /// fire so exposed; a tonemapper that keeps hue (KhronosPbrNeutral) never makes that shift
 /// itself, and drew the blackbody's own deep red 90-99% red and salmon where it desaturated
 /// (fire sheet, stage 3).
+const encode = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+const decode = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+
 function filmed(h: number, fuel: Fuel): number[] {
   const core = fuel.core;
   const k = core ? Math.min(1, Math.max(0, (h - core.from) / (1 - core.from))) : 0;
@@ -107,7 +118,13 @@ function filmed(h: number, fuel: Fuel): number[] {
   const t = fuel.cold + spread * (fuel.hot - fuel.cold);
   const lum = (planckXYZ(t)[1] / planckXYZ(fuel.hot)[1]) ** fuel.contrast;
   const [r, g, b] = blackbody(t).map((c) => 1 - Math.exp(-film * lum * c));
-  return [r, g, Math.min(1, b + BLOWN_BLUE * g ** 4)];
+  // Washed in display (sRGB) terms over its red, which keeps its hue there: washed in linear
+  // light its yellow went orange and its orange red (campfire pale round's probe B).
+  const y = g / Math.max(r, 1e-6);
+  const q = Math.min(1, Math.max(0, (y - 0.04) / 0.3));
+  const w = (fuel.pale ?? 0) * q * q * (3 - 2 * q);
+  const wash = (c: number) => r * decode(encode(c / Math.max(r, 1e-6)) * (1 - w) + w);
+  return [r, wash(g), Math.min(1, wash(b) + BLOWN_BLUE * g ** 4)];
 }
 
 /// How far a heat covers what is behind it: a flame is drawn alpha-blended, premultiplied, as
@@ -146,7 +163,6 @@ export function texture(n = 256): { picture: Picture; scale: number } {
   const rows = ROWS.map((name) => table(FUELS[name], n));
   let scale = 0;
   for (const t of rows) for (let i = 0; i < t.length; i++) if (i % 4 !== 3) scale = Math.max(scale, t[i]);
-  const encode = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
   const rgba = new Uint8Array(n * rows.length * 4);
   rows.forEach((t, y) => {
     for (let i = 0; i < n * 4; i++) {

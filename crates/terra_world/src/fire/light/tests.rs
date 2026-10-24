@@ -326,6 +326,52 @@ fn on_ground_drawn(lit: &Lit, foot: Vec3, out: f32) -> f32 {
 }
 
 #[test]
+fn a_campfires_night_pool_goes_dark_within_a_few_fire_widths() {
+    // The fire sheet's campfire by full night: its pool bright by its stones and falling off
+    // fast past them, as RDR2's do (to a third or a fifth from one flame height out to three;
+    // both lights keyed alike, 7.7 here, it stood flat on the screen).
+    let foot = Vec3::new(0.0, 2000.0, 0.0);
+    let blazes = Blazes {
+        kept: vec![Blaze {
+            at: foot,
+            tall: 1.5,
+            heat: 0.9,
+            seed: 0.3,
+            wide: 0.7,
+        }],
+        ..default()
+    };
+    let lights = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
+    let on = |out: f32| -> f32 {
+        lights
+            .iter()
+            .map(|l| on_ground_drawn(l, foot, out) * keyed(l, 1.0, 36.0))
+            .sum()
+    };
+    let fall = on(1.5) / on(4.5);
+    assert!(
+        fall > 10.0,
+        "the night pool falls only {fall:.1}x from 1.5 m to 4.5 m"
+    );
+    // The stones at its foot keep most of their light: the pit light leads by night.
+    let flat = |out: f32| -> f32 {
+        lights
+            .iter()
+            .map(|l| on_ground_drawn(l, foot, out) * by_night(HEARTH_DUSK_STOPS, 1.0))
+            .sum()
+    };
+    let stones = on(0.55) / flat(0.55);
+    assert!(
+        stones > 0.8,
+        "the stones keep {stones:.2} of their night light"
+    );
+    println!(
+        "night pool: falls {fall:.1}x from 1.5 m to 4.5 m (both keyed alike {:.1}x), stones keep {stones:.2}",
+        flat(1.5) / flat(4.5)
+    );
+}
+
+#[test]
 fn a_campfires_pool_reads_warm_a_few_metres_out_at_dusk() {
     // The lake's campfire at the lake's civil dusk (the sun 1.6 degrees under at 21:45 on
     // 07-20: night 0.13, the sky's light on the shade 1,240). Lake round 20's review measured
@@ -559,7 +605,8 @@ fn a_kept_fire_is_keyed_up_as_the_sun_goes_down_not_by_day() {
     // the day's: more than half the night's boost, where by the night alone it was a fifth of
     // a stop.
     let lake = hearth_by_hour(stops, 1.0, 0.13, 1.0, 1_240.0);
-    assert!(lake >= full * 0.55, "{lake}");
+    let dusk = libm::exp2f(HEARTH_DUSK_STOPS);
+    assert!(lake >= dusk * 0.55, "{lake}");
     assert!(lake > by_night(stops, 0.13) * 2.5, "{lake}");
     // The yard's darker dusk, the sun five degrees under: its night's share, which is more
     // than its sky asks, and so less than the lake's brighter sky asks.
@@ -569,7 +616,7 @@ fn a_kept_fire_is_keyed_up_as_the_sun_goes_down_not_by_day() {
     // Full night: as by the night's stops, the dark sky asking for less.
     assert_eq!(hearth_by_hour(stops, 1.0, 1.0, 1.0, 36.0), full);
     // Never past the night's whole boost, however bright the sky with the sun going.
-    assert!(hearth_by_hour(stops, 1.0, 0.0, 0.6, 20_000.0) <= full);
+    assert!(hearth_by_hour(stops, 1.0, 0.0, 0.6, 20_000.0) <= dusk);
     // A top light keyed up more at dusk: so many times the pit light's at the lake's dusk,
     // none by day, and by full night the night's stops alone, as the pit light's.
     let top = hearth_by_hour(stops, HEARTH_TOP_DUSK, 0.13, 1.0, 1_240.0);
@@ -579,6 +626,17 @@ fn a_kept_fire_is_keyed_up_as_the_sun_goes_down_not_by_day() {
         1.0
     );
     assert_eq!(hearth_by_hour(stops, HEARTH_TOP_DUSK, 1.0, 1.0, 36.0), full);
+    // The top light keyed up at dusk as much whatever its fewer night stops, and by full night
+    // only by those.
+    let fewer = HEARTH_TOP_NIGHT_STOPS;
+    assert_eq!(
+        hearth_by_hour(fewer, HEARTH_TOP_DUSK, 0.13, 1.0, 1_240.0),
+        top
+    );
+    assert_eq!(
+        hearth_by_hour(fewer, HEARTH_TOP_DUSK, 1.0, 1.0, 36.0),
+        libm::exp2f(fewer)
+    );
 }
 
 /// The stream's own lights of the jets that are on.

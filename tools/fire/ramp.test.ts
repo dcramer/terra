@@ -44,3 +44,26 @@ test("the ramp's texture decodes to the ramp: sRGB over its scale, the dim red e
     assert.ok(Math.abs(picture.rgba[i * 4 + 3] / 255 - wood[i * 4 + 3]) < 0.003);
   }
 });
+
+test("a campfire's flame is cream at its core, keeps its hue, and its tips stay deep red", () => {
+  // In display terms over its brightest channel, as the step-back measured the frame.
+  const shown = (heat: number, fuel = FUELS.hearth) => {
+    const c = ramp(heat, fuel).slice(0, 3);
+    const m = Math.max(...c);
+    const e = c.map((v) => (v / m <= 0.0031308 ? 12.92 * (v / m) : 1.055 * (v / m) ** (1 / 2.4) - 0.055));
+    const [r, g, b] = e;
+    return { hue: (60 * (g - b)) / (r - b), sat: (r - b) / r };
+  };
+  const unwashed = { ...FUELS.hearth, pale: 0 };
+  // The core over the coals near #FFF2C0, not white and not a saturated yellow.
+  const core = shown(0.95);
+  assert.ok(core.sat > 0.15 && core.sat < 0.35, `core saturation ${core.sat}`);
+  // Washed toward white without turning: yellow stays yellow, orange orange.
+  for (const h of [0.85, 0.9, 0.95]) {
+    const d = shown(h).hue - shown(h, unwashed).hue;
+    assert.ok(Math.abs(d) < 3, `hue at ${h} moved ${d}`);
+  }
+  assert.ok(shown(0.9).sat < 0.6, `body saturation ${shown(0.9).sat}`);
+  // Its cooler body and tips keep the blackbody's deep red.
+  assert.ok(shown(0.75).sat > 0.95, `tip saturation ${shown(0.75).sat}`);
+});

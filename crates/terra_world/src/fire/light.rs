@@ -102,8 +102,14 @@ const HEARTH_RANGE_M: f32 = 6.0;
 /// greener light, 2.0: at 3.0 the lit stones still passed the shoulder
 /// (sRGB 232,126,88), at 2.0 they are 192,106,61, warm brown (blind review 6/10 against 3,
 /// fire round 13). With the deep night's moon and ambient at 0.6 (`daylight`), 2.5 and a 6 m
-/// reach: the ground round the ring warmer, the field past it dark (fire round 23).
-const HEARTH_NIGHT_STOPS: f32 = 2.5;
+/// reach: the ground round the ring warmer, the field past it dark (fire round 23). With the
+/// top light keyed down by night (`HEARTH_TOP_NIGHT_STOPS`), 3.0: at 2.5 the logs and stones
+/// shadowing the pit light left the night pool darker than both RDR2 frames by its stones
+/// (sRGB luma 60 at a flame height out against 83 and 53; campfire pale round).
+const HEARTH_NIGHT_STOPS: f32 = 3.0;
+/// The most a kept fire is keyed up against the dusk sky (`hearth_by_hour`), whatever its own
+/// night stops: the pit light's night boost before the pale round, so the dusk stays as keyed.
+const HEARTH_DUSK_STOPS: f32 = 2.5;
 /// How much wider than its flames a hearth's light is as a disc (`crate::falloff`): wider
 /// levels its fall-off over the stones at its foot, so the ground metres out takes more of the
 /// night's boost and the stones less. At 3 times its 1.3 m flames the disc's 1/(d²+r²) stayed
@@ -161,6 +167,13 @@ const HEARTH_TOP_RANGE_M: f32 = 10.0;
 /// the sky's light and reads orange, a sitter's face under five times as lit as by the sky.
 const HEARTH_TOP_SPREAD: f32 = 2.0;
 const HEARTH_TOP_DUSK: f32 = 7.0;
+/// How many stops brighter the top light is by night, fewer than the pit light's: hung high
+/// and wide it lit the ground evenly, so at the pit light's 2.5 the night pool stood flat to
+/// three flame heights out (sRGB luma 89 at one, 59 at three), where RDR2's campfires fall to
+/// a third or a fifth (83 to 52, 53 to 32; campfire step-back, difference 2). At 1.0 the pit
+/// light's steeper fall-off leads by night, a bright core going dark within a few fire widths;
+/// by dusk it is keyed up as before (`hearth_by_hour`), and faces by the fire stay lit by it.
+const HEARTH_TOP_NIGHT_STOPS: f32 = 1.0;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
@@ -206,7 +219,7 @@ const HEARTH_DUSK_SKY: f32 = 360.0;
 /// How many times brighter a kept fire's light of so many night stops is at an hour: by the
 /// night's stops (`by_night`), and as the sun goes down (`Sky::twilight`, 0 with the sun six
 /// degrees up, 1 a degree under) at least as much as the sky's light on the shade is over
-/// `HEARTH_DUSK_SKY`, up to the whole night's boost, and that so many times more
+/// `HEARTH_DUSK_SKY`, up to `HEARTH_DUSK_STOPS`' boost, and that so many times more
 /// (`Lit::dusk_gain`), the gain giving way to the night's own stops as the night comes. By
 /// day none: sunlit stone round a fire as bright as by night went salmon (`NIGHT_STOPS`).
 pub(super) fn hearth_by_hour(
@@ -216,7 +229,7 @@ pub(super) fn hearth_by_hour(
     twilight: f32,
     sky_light: f32,
 ) -> f32 {
-    let full = libm::exp2f(stops);
+    let full = libm::exp2f(HEARTH_DUSK_STOPS);
     let gain = 1.0 + (dusk_gain - 1.0) * (1.0 - night.clamp(0.0, 1.0));
     let against_sky = (sky_light / HEARTH_DUSK_SKY).clamp(1.0, full) * gain;
     let down = twilight.clamp(0.0, 1.0);
@@ -531,6 +544,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
             at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_TOP_UP + swayed,
             range: HEARTH_TOP_RANGE_M,
             radius: width(blaze) * HEARTH_TOP_SPREAD,
+            night_stops: HEARTH_TOP_NIGHT_STOPS,
             dusk_gain: HEARTH_TOP_DUSK,
             ..main.clone()
         };
