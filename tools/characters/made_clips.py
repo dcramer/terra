@@ -32,7 +32,9 @@ scene moves it by.
 
 OUT defaults to the game's mannequin file, which it reads and writes; clips.py makes it from
 the libraries first where they are here. --try puts one take into OUT instead of the kept one,
-to measure a candidate with gait_check.py before keeping it. --list=FILE makes another set of
+to measure a candidate with gait_check.py before keeping it; --try=CLIP#N:FILE puts it in as a
+clip of its own, CLIP#N, made by CLIP's entry, so several takes of one clip are measured side by
+side (the clip step, clip.ts). --list=FILE makes another set of
 clips (a creature's, a demo's: art/animation/sets/fight.json, its takes in sets/fight/) onto
 the game's mannequin into OUT, which must be named and then carries the game's clips and the
 set's, so a body exported with it (export_character.py --clips=OUT) plays both: the troll walks
@@ -481,12 +483,12 @@ def main():
     ad = arm.animation_data or arm.animation_data_create()
     ad.action = None
     names = [t.name for t in ad.nla_tracks]
-    fist = fist_pose(FIST_CLIP) if any("fist" in made.get(n, {}) for n in takes) else {}
+    fist = fist_pose(FIST_CLIP) if any("fist" in made.get(n.split("#")[0], {}) for n in takes) else {}
     for name, path in takes.items():
         for pb in arm.pose.bones:
             pb.matrix_basis.identity()
         src, fps = load_take(path)
-        entry = made.get(name, {})
+        entry = made.get(name.split("#")[0], {})
         if entry.get("once"):
             f0, f1, seam = one_shot(src, fps, entry.get("span"))
         elif entry.get("still"):

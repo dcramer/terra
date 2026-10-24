@@ -8,7 +8,8 @@
 //           thighs), skinned
 //   held    how deep a held look (sword, shield) goes into it
 //   arc     a blow's tip at its fastest in its active frames: its bearing from ahead (+ left)
-//           and how far ahead, which way it sweeps, how far the hips have turned
+//           and how far ahead, which way it sweeps, how far the hips have turned; a blow
+//           whose clip has a spec (D450, clip_spec.ts) fails a sweep or contact against it
 //   guard   a block's shield at its hold: how far its face is turned from ahead, how far
 //           in front of the hips it stands
 //   chain   how far a move's last pose is from the next one's first, and each blow's first
@@ -19,10 +20,12 @@
 //
 //   node tools/characters/moves.ts
 //   node tools/characters/moves.ts [--set assets/data/moves/sword_and_shield.ron] [--fps 15] [--verbose]
+//   node tools/characters/moves.ts --spec art/animation/sets/fight.json   # the clips' specs (the default)
 //
 // Node 22.18 or later; no dependencies.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { againstSpec, type Blow } from "./clip_spec.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, matrix, mmul, place, posed, qinv, rot, sub, turn } from "./glb.ts";
 
@@ -38,6 +41,9 @@ const { values: opt } = parseArgs({
     bend: { type: "string", multiple: true, default: ["upperarm_l=-30,0,14"] },
     also: { type: "string", default: "Fight_Guard,Fight_Strafe_L,Fight_Strafe_R,Walk_Loop,Idle_Loop" },
     guard: { type: "string", default: "Fight_Guard" },
+    // The clips' specs: a blow's sweep and contact (`"blow"`), by clip; a clip `X#N` (a take
+    // the clip step tries) is X's.
+    spec: { type: "string", default: "art/animation/sets/fight.json" },
     fps: { type: "string", default: "15" },
     // Only these body templates, comma-separated; all of them otherwise.
     template: { type: "string", default: "" },
@@ -325,7 +331,7 @@ function arc(move: Move) {
   }
   const bearing = (Math.atan2(fastest.tip[0], fastest.tip[2]) * 180) / Math.PI;
   const sweep = first && last[0] > first[0] ? "to the left" : "to the right";
-  return { bearing, ahead: fastest.tip[2], up: fastest.tip[1], sweep, hips: fastest.hips, speed: fastest.speed, t: fastest.t };
+  return { bearing, ahead: fastest.tip[2], up: fastest.tip[1], sweep, hips: fastest.hips, speed: fastest.speed, t: fastest.t, first: first ?? last, last };
 }
 
 function guard(move: Move) {
@@ -346,6 +352,11 @@ const row = (what: string, parts: string[], bad: string[]) => {
   console.log(`${bad.length ? "✗" : "✓"} ${what}: ${parts.join("; ")}`);
   for (const b of bad) failures.push(`${what}: ${b}`);
 };
+const specs: Record<string, Blow> = Object.fromEntries(
+  Object.entries(existsSync(opt.spec!) ? (JSON.parse(readFileSync(opt.spec!, "utf8")) as Record<string, { blow?: Blow }>) : {})
+    .filter(([, e]) => e.blow)
+    .map(([clip, e]) => [clip, e.blow!]),
+);
 const guardClip = clipOf(opt.guard!);
 const guardMarks = marks(guardClip, 0);
 const byName = new Map(moves.map((m) => [m.name, m]));
@@ -361,6 +372,8 @@ for (const move of moves) {
   if (move.active) {
     const a = arc(move);
     parts.push(`contact ${a.bearing.toFixed(0)}° ${a.bearing > 0 ? "left" : "right"} of ahead, ${a.ahead.toFixed(2)} m ahead, sweeping ${a.sweep}, hips turned ${a.hips.toFixed(0)}°`);
+    const blow = specs[move.clip.split("#")[0]];
+    if (blow) bad.push(...againstSpec(blow, a.first, a.last, a.bearing));
     if (Math.abs(a.bearing) > ARC_DEG || a.ahead < AHEAD_M) bad.push(`contact ${Math.abs(a.bearing).toFixed(0)}° ${a.bearing > 0 ? "left" : "right"} of ahead and ${a.ahead.toFixed(2)} m ahead at ${a.t.toFixed(2)} s (bar ${ARC_DEG}°, ${AHEAD_M} m)`);
     const startGap = gap(marks(clip, move.from), guardMarks);
     const endGap = gap(marks(clip, move.done), guardMarks);

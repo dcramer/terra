@@ -37,7 +37,8 @@ const OUT = join(HERE, "out", "motion");
 const GAME_LIST = join(ROOT, "art", "animation", "made.json");
 const BLENDER = join(ROOT, "tools", "blender", "run.sh");
 const KIMODO = process.env.KIMODO_HOME ?? join(homedir(), ".cache", "terra-kimodo");
-const MODEL = "Kimodo-SOMA-RP-v1.1";
+// Kimodo's latest model (its CHANGELOG, 2026-10-15: trained on corrected splits; D450).
+const MODEL = "Kimodo-SOMA-RP-v1.2";
 const FPS = 30;
 
 type Entry = {
