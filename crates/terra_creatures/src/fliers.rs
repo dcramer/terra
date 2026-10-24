@@ -170,6 +170,9 @@ pub struct Flier {
     windup: f32,
     wants_breath: bool,
     aim: Option<Vec3>,
+    /// Where its breath is aimed, eased toward `aim` as a head turns, and how fast that moves.
+    aimed: Option<Vec3>,
+    aim_rate: Vec3,
     roar_s: f32,
 }
 
@@ -193,6 +196,8 @@ impl Flier {
             windup: 0.0,
             wants_breath: false,
             aim: None,
+            aimed: None,
+            aim_rate: Vec3::ZERO,
             roar_s: 0.0,
         }
     }
@@ -528,11 +533,13 @@ fn stroke(t: f32, down: f32) -> f32 {
 /// The breath out of each flier's mouth: on while it breathes, aimed at what it breathes at
 /// within a turn of its head.
 fn breathe(
-    fliers: Query<(&Flier, &Transform)>,
+    time: Res<Time>,
+    mut fliers: Query<(&mut Flier, &Transform)>,
     mut mouths: Query<(&Mouth, &GlobalTransform, &mut BreathesFire)>,
 ) {
+    let step = time.delta_secs();
     for (mouth, at, mut breath) in &mut mouths {
-        let Ok((flier, body)) = fliers.get(mouth.0) else {
+        let Ok((mut flier, body)) = fliers.get_mut(mouth.0) else {
             continue;
         };
         breath.on = flier.breathing;
@@ -546,12 +553,43 @@ fn breathe(
             .reject_from(up)
             .normalize_or(body.forward().as_vec3());
         let down = (ahead * libm::cosf(BREATH_DOWN) - up * libm::sinf(BREATH_DOWN)).normalize();
-        breath.aim = Some(
-            flier
-                .aim
-                .unwrap_or(at.translation() + down * breath.reach_m),
+        let aimed = ease_aim(&mut flier, step);
+        breath.aim = Some(aimed.unwrap_or(at.translation() + down * breath.reach_m));
+    }
+}
+
+/// How long a flier's head takes to settle on a new aim, in seconds. Told its aim a few
+/// times a second (a script's tenth-of-a-second steps, a mind's think rate), a breath snapped
+/// to each one swept in a staircase: the castle film's stream jumped 1.6 m at its strike every
+/// third frame, a 10 Hz peak in its motion 4.5 times the mean (castle fall r27).
+const AIM_SETTLE_S: f32 = 0.3;
+
+/// Where a flier's breath is aimed this frame: its told aim eased toward by a critically
+/// damped spring per axis, as its head turns, so steps in what it is told become a sweep
+/// (Unity's SmoothDamp, Game Programming Gems 4 §1.10); straight at it when first told one.
+fn ease_aim(flier: &mut Flier, step: f32) -> Option<Vec3> {
+    let Some(target) = flier.aim else {
+        flier.aimed = None;
+        flier.aim_rate = Vec3::ZERO;
+        return None;
+    };
+    let Some(mut aimed) = flier.aimed else {
+        flier.aimed = Some(target);
+        flier.aim_rate = Vec3::ZERO;
+        return Some(target);
+    };
+    let mut rate = flier.aim_rate;
+    for axis in 0..3 {
+        spring(
+            &mut aimed[axis],
+            &mut rate[axis],
+            target[axis],
+            AIM_SETTLE_S,
+            step,
         );
     }
+    (flier.aimed, flier.aim_rate) = (Some(aimed), rate);
+    Some(aimed)
 }
 
 /// How far below its way a flier breathes when it is told no target, in radians.

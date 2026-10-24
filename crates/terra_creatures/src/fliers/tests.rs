@@ -144,3 +144,47 @@ fn the_fliers_file_reads_and_every_kind_has_its_model() {
         );
     }
 }
+
+#[test]
+fn a_breath_told_its_aim_in_steps_sweeps_evenly_and_settles_where_it_was_told() {
+    // Told its aim every tenth of a second along a line at 16 m/s, as the castle film's
+    // strafing breath is: snapped to each, the aim moved 1.6 m in one frame of six and not
+    // at all in the other five.
+    let mut flier = Flier::new(
+        0,
+        Flight::Hover {
+            at: Vec3::ZERO,
+            face: Vec3::X,
+        },
+    );
+    let step = 1.0 / 60.0;
+    let speed = 16.0;
+    let told = |frame: u32| Vec3::new(speed * (frame - frame % 6) as f32 * step, 12.0, 2.0);
+    let mut last: Option<Vec3> = None;
+    let mut moves = Vec::new();
+    for frame in 0..120 {
+        flier.aim = Some(told(frame));
+        let aimed = ease_aim(&mut flier, step).expect("an aim");
+        if let Some(last) = last {
+            moves.push((aimed - last).length());
+        }
+        last = Some(aimed);
+    }
+    // Past its first half second, every frame moves it about the sweep's own share of a frame.
+    let even = speed * step;
+    let (least, most) = moves[30..]
+        .iter()
+        .fold((f32::MAX, 0.0f32), |(l, m), d| (l.min(*d), m.max(*d)));
+    assert!(
+        least > even * 0.7 && most < even * 1.3,
+        "moves from {least} to {most} m a frame, the sweep's {even}"
+    );
+    // Held, it comes to rest where it was told.
+    let held = told(119);
+    for _ in 0..60 {
+        flier.aim = Some(held);
+        last = ease_aim(&mut flier, step);
+    }
+    let off = (last.expect("an aim") - held).length();
+    assert!(off < 0.05, "it rests {off} m off where it was told");
+}
