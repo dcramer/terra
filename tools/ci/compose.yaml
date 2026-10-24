@@ -1,7 +1,5 @@
-# The CI agent (docs/ci-agent.md) and, with COMPOSE_PROFILES=render in .env, the render worker
-# (docs/render-worker.md). From tools/ci, with .env written: `docker compose up -d --build`;
-# `docker compose logs -f` shows them; `docker compose run --rm ci --dry-run` tries one CI run,
-# `docker compose run --rm render --plan` what the worker would do next.
+# The CI agent (docs/ci-agent.md). From tools/ci, with .env written: `docker compose up -d --build`;
+# `docker compose logs -f` shows it; `docker compose run --rm ci --dry-run` tries one run.
 services:
   ci:
     build: .
@@ -13,35 +11,6 @@ services:
       - work:/work
       # Downloaded crates, kept across image rebuilds.
       - cargo-registry:/usr/local/cargo/registry
-  render:
-    profiles: [render]
-    build:
-      context: .
-      dockerfile: render.Dockerfile
-    image: terra-render
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      # Held while nightly runs; the worker starts no job then (TERRA_RENDER_AFTER_CI).
-      TERRA_RENDER_CI_LOCK: /ci/terra/.git/terra-ci/lock
-    shm_size: 2gb
-    volumes:
-      # The worker's clone, and in its .git/terra-render the job checkout with its build.
-      - render:/work
-      # Cooked textures, shader caches and the review folder jobs write to, kept across jobs.
-      - render-cache:/root/.cache
-      - cargo-registry:/usr/local/cargo/registry
-      # The CI agent's folder, read only, for its lock.
-      - work:/ci:ro
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu, compute, utility, graphics, video]
 volumes:
   work:
   cargo-registry:
-  render:
-  render-cache:

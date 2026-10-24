@@ -1,144 +1,219 @@
-// `cargo xtask remote-render` (docs/render-worker.md, D445): queues a render job on the render
-// box at a pushed commit, waits for it (a look every 15 s, then up to a minute, a line when its
-// state changes), downloads its files into ~/.cache/terra-review/remote/<job>/ and exits with
-// the command's code. `--local` runs the same flow on this machine with a folder for a store and
-// the worker in this process, no GitHub and no box: the dry run of the whole path.
+// `cargo xtask remote-render` (docs/render-worker.md, D445): runs a command on a render box over
+// ssh, at a commit of this checkout. It pushes the commit to the box's clone as refs/jobs/<id>,
+// queues the job with the box's daemon (box.ts), waits on it there (the box watches the job; no
+// polling over the network), and rsyncs what it wrote into ~/.cache/terra-review/remote/<job>/,
+// exiting with the command's code. `--update` brings a box to origin/main and restarts its
+// daemon, `--doctor` checks it. Settings (.env.example): the environment over this checkout's
+// .env, or the main checkout's from a worktree. Node 22.18+, git, ssh, rsync; no dependencies.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
-import { join } from "node:path";
-import { ago, backoff, type Job, jobId, parseClient, type Rec, USAGE } from "./jobs.ts";
-import { open, type Store } from "./store.ts";
-import { stateDir, takeOne, worker } from "./worker.ts";
+import { join, resolve } from "node:path";
+import { createInterface } from "node:readline";
+import { ago, backoff, type ClientArgs, chooseWorker, config, type Job, jobId, parseClient, parseEnvFile, type Seen, short, USAGE } from "./jobs.ts";
 
-const git = (args: string[]) => spawnSync("git", args, { encoding: "utf8" });
+/// A render box as the client reaches it: over ssh, or `local`, this machine (the tests).
+export type Remote = { host: string; dir: string };
 
-function sleep(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const isLocal = (r: Remote) => r.host === "local";
+let SSH = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=4"];
+export const q = (s: string) => (/^[A-Za-z0-9_./~:@=+,-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
+
+/// A shell command on the box: through ssh (in the user's home), or `sh -c` here.
+function onBox(r: Remote, cmd: string, input?: string, inherit = false) {
+  const [exe, args] = isLocal(r) ? ["sh", ["-c", cmd]] : ["ssh", [...SSH, r.host, cmd]];
+  return spawnSync(exe, args, { encoding: "utf8", input, stdio: [input === undefined ? "ignore" : "pipe", inherit ? "inherit" : "pipe", inherit ? "inherit" : "pipe"], maxBuffer: 64 * 1024 ** 2 });
 }
 
-const short = (job: Job) => `${job.rev.slice(0, 9)}: ${job.command.join(" ").slice(0, 100)}`;
-
-/// The commit to run, in full, or why it cannot be: it must be on a branch of origin.
-export function resolveRev(rev: string | undefined): { sha: string } | { error: string } {
-  const sha = git(["rev-parse", "--verify", "-q", `${rev ?? "HEAD"}^{commit}`]).stdout.trim();
-  if (!sha) return { error: `no commit ${rev}` };
-  git(["fetch", "-q", "origin"]);
-  if (!git(["branch", "-r", "--contains", sha]).stdout.trim()) {
-    return { error: `${sha.slice(0, 9)} is on no branch of origin; push it first (git push origin HEAD:main), the box runs only pushed commits` };
-  }
-  return { sha };
+/// `node box.ts --dir <dir> …` as the box runs it: its own Node and the worker's code.
+export function boxCmd(r: Remote, args: string[]): string {
+  const node = isLocal(r) ? process.execPath : `${r.dir}/node/bin/node`;
+  const script = isLocal(r) ? resolve(import.meta.dirname, "box.ts") : `${r.dir}/repo/tools/render-worker/box.ts`;
+  return [node, script, "--dir", r.dir, ...args].map(q).join(" ");
 }
 
-export function queue(store: Store, job: Omit<Job, "id" | "queued" | "state" | "by">, now = new Date()): Rec {
-  const full: Job = { ...job, id: jobId(now, randomBytes(2).toString("hex")), queued: now.toISOString(), state: "queued", by: `${userInfo().username}@${hostname()}` };
-  return store.create(full);
+const gitUrl = (r: Remote) => (isLocal(r) ? `${r.dir}/repo` : `${r.host}:${r.dir}/repo`);
+const git = (cwd: string, args: string[]) => spawnSync("git", args, { cwd, encoding: "utf8" });
+const lastLine = (s: string | null | undefined) => (s ?? "").trim().split("\n").at(-1) ?? "";
+
+/// Why a box command failed, in a line: ssh's own failure (255), or a box not set up (127).
+function why(r: Remote, res: ReturnType<typeof onBox>): string {
+  if (res.status === 255 && !isLocal(r)) return `ssh ${r.host}: ${lastLine(res.stderr) || "unreachable"}`;
+  if (res.status === 127) return `${r.host} is not set up: cargo xtask remote-render --update --worker ${r.host}`;
+  return lastLine(res.stdout) || lastLine(res.stderr) || `exit ${res.status}`;
 }
 
-/// Waits for the job to end, downloads and unpacks its files into `out`, and returns its exit.
-export function wait(store: Store, id: string, out: string, pause = sleep): number {
-  let state = "";
-  for (let n = 0; ; n++) {
-    const rec = store.list().find((r) => r.job.id === id);
-    if (!rec) {
-      console.log(`✗ render ${id}: no such job (deleted after a week, or cancelled)`);
-      return 1;
-    }
-    const job = rec.job;
-    if (job.state !== state && (job.state === "queued" || job.state === "running")) {
-      console.log(`render ${id}: ${job.state}${job.worker ? ` on ${job.worker}` : ""} (${short(job)})`);
-    }
-    state = job.state;
-    if (job.state === "done" || job.state === "failed") {
-      rmSync(out, { recursive: true, force: true });
-      store.download(rec, out);
-      const tar = join(out, "files.tar");
-      if (existsSync(tar)) {
-        spawnSync("tar", ["-xf", tar, "-C", out]);
-        rmSync(tar);
-      }
-      const took = job.started ? ago(job.started, new Date(job.ended ?? Date.now())) : "?";
-      if (job.state === "done") {
-        console.log(`✓ render ${id}: done in ${took} (${job.note}); files in ${out}`);
-        return 0;
-      }
-      const log = join(out, "job.log");
-      if (existsSync(log)) console.log(readFileSync(log, "utf8").trimEnd().split("\n").slice(-15).join("\n"));
-      console.log(`✗ render ${id}: failed after ${took}: ${job.note}; log ${log}`);
-      return job.exit || 1;
-    }
-    pause(backoff(n) * 1000);
-  }
+type BoxStatus = { daemon?: { alive: boolean; status: string }; rev: string; jobs: Job[] };
+
+export function boxStatus(r: Remote): BoxStatus | { error: string } {
+  const res = onBox(r, boxCmd(r, ["status", "--json"]));
+  if (res.status !== 0) return { error: why(r, res) };
+  return JSON.parse(lastLine(res.stdout)) as BoxStatus;
 }
 
-function status(store: Store): number {
-  const seen = store.seen();
-  const recs = store.list();
+/// Pushes the commit as the job's ref and queues the job.
+export function submit(r: Remote, cwd: string, job: Omit<Job, "id" | "kind" | "queued" | "state" | "by">): { id: string; note: string } | { error: string } {
   const now = new Date();
-  console.log(seen ? `worker: ${seen.text} (seen ${ago(seen.when, now)} ago)` : "worker: never seen; is the box set up? (tools/render-worker/README.md)");
-  for (const r of recs) {
-    const j = r.job;
-    console.log(`  ${j.id} ${j.state.padEnd(7)} ${ago(j.queued, now).padStart(5)} ago  ${short(j)}${j.note ? `  [${j.note}]` : ""}`);
-  }
-  if (!recs.length) console.log("  no jobs");
-  return 0;
+  const full: Job = { ...job, id: jobId(now, randomBytes(2).toString("hex")), kind: "run", queued: now.toISOString(), state: "queued", by: `${userInfo().username}@${hostname()}` };
+  const push = git(cwd, ["push", "-q", gitUrl(r), `${job.rev}:refs/jobs/${full.id}`]);
+  if (push.status !== 0) return { error: `git push to ${r.host}: ${lastLine(push.stderr)}` };
+  const res = onBox(r, boxCmd(r, ["submit"]), JSON.stringify(full));
+  if (res.status !== 0) return { error: why(r, res) };
+  const { alive, ahead } = JSON.parse(lastLine(res.stdout)) as { alive: boolean; ahead: number };
+  return { id: full.id, note: alive ? (ahead ? `${ahead} ahead of it` : "next") : "the daemon is not running; the job waits for it (--update starts it)" };
 }
 
-function main(): number {
-  const args = parseClient(process.argv.slice(2));
-  if ("error" in args) {
-    console.log(`✗ remote-render: ${args.error}\n${USAGE}`);
-    return 2;
+/// Waits on the box for the job to end (the box watches it; a line when its state changes) and
+/// returns it. A dropped ssh is tried again, 5 s, then up to 2 min apart.
+export async function waitOn(r: Remote, id: string, print = (l: string) => console.log(l)): Promise<Job | { error: string }> {
+  for (let n = 0; ; n++) {
+    const [exe, args] = isLocal(r) ? ["sh", ["-c", boxCmd(r, ["wait", id])]] : ["ssh", [...SSH, r.host, boxCmd(r, ["wait", id])]];
+    const child = spawn(exe, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let job: Job | undefined;
+    let err = "";
+    child.stderr.on("data", (d) => (err += d));
+    for await (const line of createInterface({ input: child.stdout })) {
+      if (line.startsWith("JOB ")) job = JSON.parse(line.slice(4)) as Job;
+      else print(line);
+    }
+    const code = await new Promise<number>((done) => (child.exitCode !== null ? done(child.exitCode) : child.on("close", (c) => done(c ?? 1))));
+    if (job) return job;
+    if (code !== 255 || isLocal(r)) return { error: lastLine(err) || `the box's wait exited ${code}` };
+    print(`render ${id}: lost ssh to ${r.host} (${lastLine(err)}); again in ${backoff(n)} s`);
+    await new Promise((done) => setTimeout(done, backoff(n) * 1000));
   }
-  const top = git(["rev-parse", "--show-toplevel"]).stdout.trim();
-  const local = args.local ? join(stateDir(top), "local-store") : undefined;
-  let store: Store;
-  try {
-    store = open(top, local);
-  } catch (e) {
-    console.log(`✗ remote-render: ${(e as Error).message}`);
+}
+
+/// Copies the job's out/ (its files and job.log) into `out`.
+export function fetchFiles(r: Remote, id: string, out: string): string | undefined {
+  mkdirSync(out, { recursive: true });
+  const src = `${isLocal(r) ? "" : `${r.host}:`}${r.dir}/jobs/${id}/out/`;
+  const res = spawnSync("rsync", ["-a", "-e", `ssh ${SSH.join(" ")}`, src, `${out}/`], { encoding: "utf8" });
+  return res.status === 0 ? undefined : `rsync from ${r.host}: ${lastLine(res.stderr)}`;
+}
+
+function report(job: Job, host: string, out: string, fetchErr?: string): number {
+  const took = job.started ? ago(job.started, new Date(job.ended ?? Date.now())) : "0m";
+  if (fetchErr) console.log(`✗ render ${job.id}: ${job.state}, but its files did not come back: ${fetchErr}`);
+  if (job.state === "done") {
+    console.log(`✓ render ${job.id}: done in ${took} on ${host} (${job.note}); files in ${out}`);
+    return fetchErr ? 1 : 0;
+  }
+  const log = join(out, "job.log");
+  if (existsSync(log)) console.log(readFileSync(log, "utf8").trimEnd().split("\n").slice(-15).join("\n"));
+  console.log(`✗ render ${job.id}: ${job.state} after ${took} on ${host}: ${job.note}; log ${log}`);
+  return job.exit || 1;
+}
+
+/// Waits for a job and fetches its files: the end of every path that runs one.
+export async function finish(r: Remote, id: string, out: string): Promise<number> {
+  const job = await waitOn(r, id);
+  if ("error" in job) {
+    console.log(`✗ render ${id}: ${job.error}`);
     return 1;
   }
+  return report(job, r.host, out, fetchFiles(r, id, out));
+}
+
+/// Makes the box's folder, its clone and (over ssh) its Node, with bootstrap.sh.
+export function prepare(r: Remote): boolean {
+  const boot = onBox(r, `sh -s -- ${q(r.dir)}${isLocal(r) ? "" : " node"}`, readFileSync(resolve(import.meta.dirname, "bootstrap.sh"), "utf8"));
+  if (boot.status !== 0) return console.log(`✗ ${r.host}: setting up its folder: ${why(r, boot)}`), false;
+  if (boot.stdout.trim()) console.log(`${r.host}: ${boot.stdout.trim()}`);
+  return true;
+}
+
+/// Brings a box to `sha`: its folder and Node (bootstrap.sh), the commit pushed as
+/// refs/worker/main, then the new code's own `box.ts update`, run from an export of it, so a
+/// fix to updating itself takes effect at once.
+export function update(r: Remote, cwd: string, sha: string): boolean {
+  if (!prepare(r)) return false;
+  const push = git(cwd, ["push", "-q", gitUrl(r), `+${sha}:refs/worker/main`]);
+  if (push.status !== 0) return console.log(`✗ ${r.host}: git push: ${lastLine(push.stderr)}`), false;
+  const node = isLocal(r) ? process.execPath : `${r.dir}/node/bin/node`;
+  const next = `${r.dir}/next`;
+  const cmd = `rm -rf ${q(next)} && mkdir -p ${q(next)} && git -C ${q(`${r.dir}/repo`)} archive ${sha} tools/render-worker | tar -x -C ${q(next)} && ${q(node)} ${q(`${next}/tools/render-worker/box.ts`)} --dir ${q(r.dir)} update ${sha}`;
+  const res = onBox(r, cmd);
+  for (const l of `${res.stdout}`.trim().split("\n").filter(Boolean)) console.log(`${r.host}: ${l}`);
+  if (res.status !== 0) console.log(`✗ ${r.host}: ${why(r, res)}`);
+  return res.status === 0;
+}
+
+/// The box that holds a job: the one named, or the first that lists it.
+function holder(remotes: Remote[], id: string): Remote | undefined {
+  return remotes.find((r) => {
+    const s = boxStatus(r);
+    return !("error" in s) && s.jobs.some((j) => j.id === id);
+  });
+}
+
+/// The settings: the environment over the .env of this checkout, else of the main checkout.
+export function loadConfig(cwd: string, env = process.env) {
+  const top = git(cwd, ["rev-parse", "--show-toplevel"]).stdout.trim();
+  const common = git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout.trim();
+  const file = [top, common && resolve(common, "..")].filter(Boolean).map((d) => join(d, ".env")).find((f) => existsSync(f));
+  return config(env, file ? parseEnvFile(readFileSync(file, "utf8")) : {});
+}
+
+async function main(argv: string[]): Promise<number> {
+  const cwd = process.cwd();
+  const cfg = loadConfig(cwd);
+  if ("error" in cfg) return console.log(`✗ remote-render: ${cfg.error}`), 2;
+  const args = parseClient(argv, cfg.minutes);
+  if ("error" in args) return console.log(`✗ remote-render: ${args.error}\n${USAGE}`), 2;
+  SSH = SSH.map((o) => (o.startsWith("ConnectTimeout=") ? `ConnectTimeout=${cfg.connectTimeout}` : o));
+  const remotes = (args.worker ? [args.worker] : cfg.workers).map((host) => ({ host, dir: cfg.dir }));
   const outOf = (id: string, out?: string) => out ?? join(homedir(), ".cache/terra-review/remote", id);
-  if (args.mode === "status") return status(store);
-  if (args.mode === "wait") return wait(store, args.id, outOf(args.id, args.out));
-  if (args.mode === "cancel") {
-    const rec = store.list().find((r) => r.job.id === args.id);
-    if (!rec || rec.job.state !== "queued") {
-      console.log(`✗ render ${args.id}: ${rec ? `${rec.job.state}, so it stays` : "no such job"}`);
-      return 1;
-    }
-    store.remove(rec);
-    console.log(`✓ render ${args.id}: cancelled`);
-    return 0;
-  }
-  const rev = resolveRev(args.rev);
-  if ("error" in rev) {
-    console.log(`✗ remote-render: ${rev.error}`);
-    return 1;
-  }
-  const seen = store.seen();
-  const running = store.list().some((r) => r.job.state === "running");
-  if (!args.local && !running && (!seen || Date.now() - Date.parse(seen.when) > 15 * 60_000)) {
-    console.log(`remote-render: the worker was ${seen ? `last seen ${ago(seen.when, new Date())} ago` : "never seen"}; the job waits until it is up`);
-  }
-  const rec = queue(store, { rev: rev.sha, command: args.command, collect: args.collect, cook: args.cook, minutes: args.minutes });
-  console.log(`render ${rec.job.id}: queued (${short(rec.job)}) at ${store.where(rec)}`);
-  if (args.local) {
-    const w = worker(top);
-    if ("error" in w) {
-      console.log(`✗ remote-render: ${w.error}`);
-      return 2;
-    }
-    takeOne(store, { ...w, policy: { afterCi: false } });
-  }
-  if (!args.wait) {
-    console.log(`  wait for it: cargo xtask remote-render --wait ${rec.job.id}${args.local ? " --local" : ""}`);
-    return 0;
-  }
-  return wait(store, rec.job.id, outOf(rec.job.id, args.out));
+  return run(args, remotes, cwd, outOf);
 }
 
-if (import.meta.main) process.exit(main());
+async function run(args: ClientArgs, remotes: Remote[], cwd: string, outOf: (id: string, out?: string) => string): Promise<number> {
+  if (args.mode === "status" || args.mode === "doctor") {
+    let bad = 0;
+    for (const r of remotes) {
+      if (remotes.length > 1) console.log(`== ${r.host}`);
+      const res = onBox(r, boxCmd(r, [args.mode]), undefined, true);
+      if (res.status === 255 || res.status === 127) console.log(`✗ ${why(r, res)}`);
+      if (res.status !== 0) bad++;
+    }
+    return bad ? 1 : 0;
+  }
+  if (args.mode === "update") {
+    if (git(cwd, ["fetch", "-q", "origin", "main"]).status !== 0) return console.log("✗ remote-render: git fetch origin main failed"), 1;
+    const sha = git(cwd, ["rev-parse", "origin/main"]).stdout.trim();
+    console.log(`remote-render: updating ${remotes.map((r) => r.host).join(", ")} to origin/main ${sha.slice(0, 9)} (the first push sends the whole history)`);
+    return remotes.map((r) => update(r, cwd, sha)).every(Boolean) ? 0 : 1;
+  }
+  if (args.mode === "wait" || args.mode === "cancel" || args.mode === "logs") {
+    const r = args.mode === "logs" && args.id === "daemon" ? remotes[0] : remotes.length === 1 ? remotes[0] : holder(remotes, args.id);
+    if (!r) return console.log(`✗ render ${args.id}: no worker lists it`), 1;
+    if (args.mode === "wait") return finish(r, args.id, outOf(args.id, args.out));
+    const res = onBox(r, boxCmd(r, [args.mode, args.id]), undefined, true);
+    if (res.status === 255 || res.status === 127) console.log(`✗ ${why(r, res)}`);
+    return res.status === 0 ? 0 : 1;
+  }
+  const sha = git(cwd, ["rev-parse", "--verify", "-q", `${args.rev ?? "HEAD"}^{commit}`]).stdout.trim();
+  if (!sha) return console.log(`✗ remote-render: no commit ${args.rev}`), 1;
+  if (!args.rev && git(cwd, ["status", "--porcelain", "--untracked-files=no"]).stdout.trim()) {
+    console.log(`remote-render: uncommitted changes stay here; the job runs ${sha.slice(0, 9)}`);
+  }
+  const seen: Seen[] = remotes.map((r) => {
+    const s = boxStatus(r);
+    if ("error" in s) return { host: r.host, reachable: false, alive: false, waiting: 0 };
+    return { host: r.host, reachable: true, alive: !!s.daemon?.alive, waiting: s.jobs.filter((j) => j.state === "queued" || j.state === "running").length };
+  });
+  const chosen = chooseWorker(seen);
+  if ("error" in chosen) return console.log(`✗ remote-render: ${chosen.error}`), 1;
+  const r = remotes.find((x) => x.host === chosen.host)!;
+  if (chosen.note) console.log(`remote-render: ${chosen.note}`);
+  const job = { rev: sha, command: args.command, collect: args.collect, cook: args.cook, minutes: args.minutes };
+  const sub = submit(r, cwd, job);
+  if ("error" in sub) return console.log(`✗ remote-render: ${sub.error}`), 1;
+  console.log(`render ${sub.id}: queued on ${r.host}, ${sub.note} (${short({ ...job, id: sub.id, kind: "run" } as Job)})`);
+  if (!args.wait) return console.log(`  wait for it: cargo xtask remote-render --wait ${sub.id}`), 0;
+  return finish(r, sub.id, outOf(sub.id, args.out));
+}
+
+if (import.meta.main) process.exit(await main(process.argv.slice(2)));

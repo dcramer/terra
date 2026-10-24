@@ -13,8 +13,8 @@ pub(crate) const TASKS: &[Task] = &[
     },
     Task {
         name: "remote-render",
-        takes: "[--rev <sha>] [--collect <path>]… [--minutes N] [--no-cook] [--no-wait] [--local] -- <command…> | --wait <job> | --cancel <job> | --status",
-        does: "run a render on the render box at a pushed commit (a film, sheet, shot or bench), wait for it and download what it wrote to ~/.cache/terra-review/remote/<job>/; exits with the command's code; `--local` runs the same flow on this machine (D445, docs/render-worker.md)",
+        takes: "[--rev <sha>] [--collect <path>]… [--minutes N] [--no-cook] [--no-wait] [--worker HOST] -- <command…> | --wait <job> | --logs <job|daemon> | --cancel <job> | --status | --update | --doctor",
+        does: "run a command (a film, sheet, shot or bench) on a render box over ssh at a commit of this checkout, wait for it and rsync what it wrote to ~/.cache/terra-review/remote/<job>/; exits with the command's code; `--update` brings the boxes in TERRA_WORKERS (.env) to origin/main, `--doctor` checks them (D445, docs/render-worker.md)",
         group: "This machine",
         run: |args| node_exit("tools/render-worker/client.ts", args),
     },

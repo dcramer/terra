@@ -84,7 +84,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [terrain.md](terrain.md) | Brief for the first component, the voxel terrain crate. |
 | [development.md](development.md) | Setting up a machine, everyday commands, seeing and measuring output, developer tools, and QA our agents can run. |
 | [ci-agent.md](ci-agent.md) | The CI agent: the container that runs the slow checks whenever main moves and files what breaks as GitHub issues. |
-| [render-worker.md](render-worker.md) | The render worker: the GPU box that takes agents' renders (films, sheets, shots, benches) as jobs at a pushed commit and hands back their files. |
+| [render-worker.md](render-worker.md) | The render worker: the GPU box that takes agents' renders (films, sheets, shots, benches) over ssh at a commit and hands back their files. |
 | [trailer.md](trailer.md) | The trailer: one run through each of the four places, the hour and route of each and why, and how it is filmed (D357). |
 | [troll-fight.md](troll-fight.md) | The troll fight, a demo scene on the lake shore: a 4 m troll against a man with sword and shield, its beats and how it is filmed (D402). |
 | [prototypes.md](prototypes.md) | The builds so far and the milestones ahead, with their pass criteria. |
