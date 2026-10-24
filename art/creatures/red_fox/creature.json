@@ -9,6 +9,7 @@
   "scale": 0.88,
   "budget": 2800,
   "textures": { "colour": 1024, "normal": 1024, "roughness_metal": 512 },
+  "zones": {"near": 0.12, "far": 0.35},
   "bones": {
     "Hips": [null, [0, 0.19, 0.42], [0, 0.08, 0.43]],
     "Spine": ["Hips", [0, 0.08, 0.43], [0, -0.05, 0.44]],

@@ -380,6 +380,58 @@ for leg, chain in LEGS.items():
     for i, b in enumerate(chain):
         IK_OF[b] = (leg, i)
 CONTACT = {leg: TAIL[chain[2]].copy() for leg, chain in LEGS.items()}
+STANCE = SPEC.get("stance", {})
+# A hind foot laid flatter as the kind stands (`stood`).
+HEEL = {leg: q(X, -STANCE.get("heel", 0.0)) if STANCE and leg.startswith("Hind") else Quaternion() for leg in LEGS}
+
+
+def sole_edges(leg):
+    """Where a foot's sole meets the ground at its front and back edges, as the way from each to
+    the foot's tip (the point a placed foot is put by): the front-most and hind-most of the skin
+    the foot or its toes carry most, within a sixth of the foot's length (at most a centimetre)
+    of its lowest, as the kind stands. A foot turns about the edge it stands on, the toe as the
+    heel peels up, the heel as it lands toe up, so the skin on the ground holds where it is. Also
+    how far a foot laid flatter as the kind stands (`HEEL`) is raised so its sole rests on the
+    ground, not in it: a hare's long hind foot turned 30 degrees about its tip put its heel 3 cm
+    under."""
+    chain = LEGS[leg]
+    ids = [v for v, ws in weights.items() if ws and max(ws, key=ws.get) in chain[2:]]
+    if not ids:
+        return Vector(), Vector(), 0.0
+    tip_ = TAIL[chain[2]]
+    off = [HEEL[leg] @ (mesh.data.vertices[v].co - tip_) for v in ids]
+    low = min(o.z for o in off)
+    tol = min(0.01, (TAIL[chain[2]] - HEAD[chain[2]]).length / 6)
+    near = [o for o in off if o.z < low + tol]
+    toe, heel = min(near, key=lambda o: o.y), max(near, key=lambda o: o.y)
+    back = HEEL[leg].inverted()
+    rest_low = min(mesh.data.vertices[v].co.z for v in ids)
+    return -(back @ toe), -(back @ heel), max(0.0, rest_low - (tip_.z + low))
+
+
+SOLE = {leg: sole_edges(leg) for leg in LEGS}
+
+
+def foot_skin(leg):
+    """The skin a foot or its toes carry most, as ways from the foot's tip (at most 300 of it),
+    and how low it lies under the tip as the kind stands (`HEEL`)."""
+    chain = LEGS[leg]
+    ids = [v for v, ws in weights.items() if ws and max(ws, key=ws.get) in chain[2:]]
+    ids = ids[:: max(1, len(ids) // 300)]
+    off = [mesh.data.vertices[v].co - TAIL[chain[2]] for v in ids]
+    return off, min(((HEEL[leg] @ o).z for o in off), default=0.0)
+
+
+FOOT_SKIN = {leg: foot_skin(leg) for leg in LEGS}
+# The whole body lifted so a foot laid flatter rests its sole on the ground (`sole_edges`).
+LAID = max(raised for _, _, raised in SOLE.values())
+
+
+def on_sole(leg, ang):
+    """How far a placed foot's tip moves when the foot turns `ang` degrees about its sole's edge
+    (`sole_edges`) rather than about the tip."""
+    d = SOLE[leg][0 if ang >= 0 else 1]
+    return HEEL[leg] @ (q(X, ang) @ d - d)
 clamped = [0]
 # The furthest each pair of legs was asked to reach, over its length, since last cleared.
 far = {}
@@ -387,9 +439,6 @@ far = {}
 # keyed: a wing's root, which shrinks as it folds.
 SC = {}
 SCALED = {b for b in ("Humerus.L", "Humerus.R") if b in BONES}
-
-
-STANCE = SPEC.get("stance", {})
 
 
 def stood(pose):
@@ -414,9 +463,13 @@ def stood(pose):
         if leg.startswith("Hind"):
             target = target + Vector((0, -STANCE.get("tuck", 0.0) * SCALE, 0))
             rot = q(X, -STANCE.get("heel", 0.0)) @ rot
-        legs[leg] = (target, rot)
-    root = pose.get("root", Vector()) + Vector((0, 0, -STANCE.get("drop", 0.0) * SCALE))
+        legs[leg] = (target + Vector((0, 0, LAID)), rot)
+    root = pose.get("root", Vector()) + Vector((0, 0, LAID - STANCE.get("drop", 0.0) * SCALE))
     return {**pose, "turn": turn, "legs": legs, "root": root}
+
+
+# The tightest a knee or elbow folds, degrees between its two bones (`solve`).
+FOLD = 30.0
 
 
 def solve(pose):
@@ -447,6 +500,18 @@ def solve(pose):
             a, bvec = HEAD[lower] - HEAD[upper], HEAD[foot] - HEAD[lower]
             l1, l2 = a.length, bvec.length
             reach = ankle - ha
+            # A knee or elbow folds no tighter than `FOLD`: a foot drawn in closer is held out
+            # below the hip or shoulder, its sideways offset kept. Folded flat, the leg's plane
+            # follows that offset alone and spins (a squirrel's wrist on its shoulder in the bound,
+            # the arm pointing up, the paw wrung 71-139 degrees about the forearm, D442).
+            near = math.sqrt(l1 * l1 + l2 * l2 - 2 * l1 * l2 * math.cos(math.radians(FOLD)))
+            if reach.length < near:
+                n = Rp @ X
+                aside = n * reach.dot(n)
+                sag = reach - aside
+                if sag.length < 1e-6:
+                    sag = Rp @ -Z
+                reach = aside + sag.normalized() * math.sqrt(max(near * near - aside.length_squared, 0.0))
             d = reach.length
             lo_, hi_ = abs(l1 - l2) + 1e-4, l1 + l2 - 1e-4
             if d > hi_ or d < lo_:
@@ -464,6 +529,15 @@ def solve(pose):
             Ra = (Rp @ a).rotation_difference(knee - ha) @ Rp
             ankle = ha + e1 * d
             Rb = (Ra @ bvec).rotation_difference(ankle - knee) @ Ra
+            # The knee or elbow is a hinge: the lower bone does not turn about itself from the
+            # upper. The shortest turn alone picks any roll near a full fold, its two ways opposite
+            # (a squirrel's elbow folded 175 degrees in the bound turned its paw 132 degrees about
+            # the forearm's skin, D442).
+            Rb = untwisted(Rb, Ra, bvec.normalized())
+            # The ankle or wrist too: the foot keeps its way and its tip but does not turn about
+            # itself from the lower leg, or a leg whose plane tips (the foot drawn in near the hip) wrings the
+            # skin they share (a hare's hock 46 degrees in the bound, D442).
+            foot_turn = untwisted(foot_turn, Rb, (TAIL[foot] - HEAD[foot]).normalized())
             for leg_bone in LEGS[leg]:
                 SC[leg_bone] = 1.0
             R[upper], H[upper] = Ra, ha
@@ -486,6 +560,18 @@ def solve(pose):
             H[b] = H[p] + R[p] @ ((HEAD[b] - HEAD[p]) * SC[p])
             SC[b] = SC[p] * grown.get(b, 1.0)
     return R, H
+
+
+def untwisted(R, parent, axis):
+    """`R` with no turn about its bone left after its parent's: the turn from `parent` to `R`
+    split into a swing and a twist about `axis` (the bone's rest way), the twist dropped. The
+    bone points where it pointed."""
+    rel = parent.inverted() @ R
+    tw = Quaternion((rel.w, *(axis * Vector(rel[1:]).dot(axis))))
+    if tw.magnitude < 1e-9:
+        return R
+    tw.normalize()
+    return parent @ (rel @ tw.inverted())
 
 
 def world(R, H, b):
@@ -555,24 +641,55 @@ def looks(t, seconds, seed=0):
     return [0, 0, 0]
 
 
+ROLL = 25.0
+
+
+def capped_roll(turn, axis, cap=ROLL):
+    """`turn` with its roll about `axis` (a bone's rest direction) cut back, its swing kept, until
+    the turn's rotation vector lies at most `cap` degrees along the axis."""
+    v = Vector(turn[1:])
+    twist = Quaternion((turn.w, *(axis * v.dot(axis))))
+    if twist.magnitude < 1e-9:
+        return turn
+    twist.normalize()
+    if twist.w < 0:
+        twist.negate()
+    swing = turn @ twist.inverted()
+    full = math.degrees(twist.angle) * (1 if Vector(twist[1:]).dot(axis) >= 0 else -1)
+    for k in range(101):
+        out = swing @ Quaternion(axis, math.radians(full * (1 - k / 100)))
+        if out.w < 0:
+            out.negate()
+        if abs(math.degrees(out.angle) * out.axis.dot(axis)) <= cap:
+            return out
+    return swing
+
+
 def folded_wings(turn, amount=1.0):
     """The wings closed against the body: the arm back, the forearm forward over it, the hand
     back along the back, each turned so the feathers hang down the side (the bird plan). The
-    ways are given in the body's own axes, `fold.dirs`: out, back along the body, up from it."""
+    ways are given in the body's own axes, `fold.dirs`: out, back along the body, up from it.
+    The arm alone rolls, and at most `ROLL` degrees about its own bone, the feathers' hang given
+    up for the rest; the forearm and hand only swing to their ways from where the arm carries
+    them: a wing bone turned 70-90 degrees about itself against skin it shares with its parent
+    pinches that skin (the creature check's skin lag, D442)."""
     dirs = SPEC.get("fold", {}).get("dirs", [[0.3, 0.9, -0.3], [0.25, -1.0, 0.15], [0.12, 1.0, 0.1]])
     ahead = (TAIL[ORDER[0]] - HEAD[ORDER[0]]).normalized()
     above = ahead.cross(X).normalized()
     for s in (".L", ".R"):
         parent_rot = Quaternion()
-        for b, dv in zip(WINGS[s], dirs):
+        for i, (b, dv) in enumerate(zip(WINGS[s], dirs)):
             u0 = (TAIL[b] - HEAD[b]).normalized()
-            c0 = (Y - u0 * u0.dot(Y)).normalized()
             u1 = (X * dv[0] * side_of(b) - ahead * dv[1] + above * dv[2]).normalized()
-            c1 = (-above - u1 * u1.dot(-above)).normalized()
-            f0 = Matrix((u0, c0, u0.cross(c0))).transposed()
-            f1 = Matrix((u1, c1, u1.cross(c1))).transposed()
-            want = Quaternion().slerp((f1 @ f0.inverted()).to_quaternion(), amount)
-            turn[b] = parent_rot.inverted() @ want
+            if i == 0:
+                c0 = (Y - u0 * u0.dot(Y)).normalized()
+                c1 = (-above - u1 * u1.dot(-above)).normalized()
+                f0 = Matrix((u0, c0, u0.cross(c0))).transposed()
+                f1 = Matrix((u1, c1, u1.cross(c1))).transposed()
+                want = capped_roll((f1 @ f0.inverted()).to_quaternion(), u0)
+            else:
+                want = (parent_rot @ u0).rotation_difference(u1) @ parent_rot
+            turn[b] = Quaternion().slerp(parent_rot.inverted() @ want, amount)
             parent_rot = want
     # A spread wing's fan cannot close by turning alone, so the folded wing is drawn smaller
     # too, tucked against the side (`fold.scale`).
@@ -758,26 +875,48 @@ def clip_gait(name, c):
                 u = p / d
                 y = -sweep / 2 + sweep * u
                 z = 0.0
+                # The heel peels up about the toe (`on_sole`) as the leg reaches back, the toe holding.
                 ang = math.degrees(math.atan2(y, hip)) * c.get("follow", 0.0) + c.get("peel", 25) * smooth(0.55, 1.0, u)
             else:
                 v = (p - d) / (1 - d)
-                e = 0.5 - 0.5 * math.cos(math.pi * v)
-                y = sweep / 2 - sweep * e
+                # Off the ground and back onto it at the ground's speed, carried back as the
+                # stance carried it (`measures.swing_y`), and lifted straight up and set straight
+                # down: z = lift sin(pi v) rises at once, where sin^2 skimmed the ground moving.
+                y = measures.swing_y(v, sweep, d)
                 z = lift * math.sin(math.pi * v)
                 folds = c.get("hind_fold", fold) if leg.startswith("Hind") else fold
                 ang = (folds * math.sin(math.pi * min(v * 1.3, 1.0)) + (c.get("peel", 25) + lean) * (1 - v) ** 3
                        - lean * smooth(0.6, 1.0, v))
             target = base + Vector((0, y, z))
             led = c.get("ankle_led")
-            if p >= d and (led is True or led == leg[:4]):
+            hung = p >= d and (led is True or led == leg[:4])
+            # Off the ground the foot no longer turns about its sole's edge but about its tip, eased
+            # out after the lift-off and back in before the touch-down: a squirrel's paw folded 80
+            # degrees about its toe raised its wrist onto its shoulder, the elbow folded flat.
+            air = smooth(0.0, 0.3, v) * (1 - smooth(0.7, 1.0, v)) if p >= d else 0.0
+            w = air if hung else 0.0
+            target = target + on_sole(leg, ang) * (1 - air)
+            if hung:
                 # In the swing the knee or hock is carried on the lifted path and the folded
                 # foot hangs from it, so a deer's hoof comes up under its forearm as Muybridge's
                 # deer and horses carry it, not swung on a stiff leg. Eased in after lift-off and
                 # out before the landing, where the tip is placed. `true` for every leg, or
                 # "Fore" or "Hind" for that pair only.
                 foot = TAIL[LEGS[leg][2]] - HEAD[LEGS[leg][2]]
-                w = smooth(0.0, 0.3, v) * (1 - smooth(0.7, 1.0, v))
-                target = target + (q(X, ang) @ foot - foot) * w
+                target = target + HEEL[leg] @ (q(X, ang) @ foot - foot) * w
+            # No skin of the foot goes under where it stands (laid, `HEEL`): planted, a foot peeled
+            # far turns about whatever skin is lowest, not only its sole's edge (a hare's toes, 5 cm
+            # past the bone, stood 4.4 cm into the ground peeled 67 degrees); lifted, its lowest skin
+            # clears the ground as its tip rises (`lift`), by a twentieth of the hip's height at
+            # most. Its sole's two edges alone let a hare's toes, turned by the fold, drag along the
+            # ground through the swing (a 16 cm slide); all the lift on a squirrel's toes folded
+            # down raised its ankle over its hip; measured from the upright foot, a hare's laid
+            # foot was held 3 cm up to the last frame of the swing (its rump's skin shrank 33%).
+            off, low = FOOT_SKIN[leg]
+            if off:
+                clear = min(z, 0.05 * hip) if p >= d else 0.0
+                turned = HEEL[leg] @ q(X, ang)
+                target.z += max(0.0, low + clear - (target.z - base.z + min((turned @ o).z for o in off)))
             legs[leg] = (target, q(X, ang))
         turn = {}
         flex = c.get("flex", 0.0) * math.sin(2 * math.pi * t)
@@ -855,10 +994,25 @@ def clip_graze(name, c):
             folded_wings(turn)
         return {"turn": turn, "legs": planted(), "root": Vector((0, 0, -c.get("crouch", 0.0) * SCALE * k))}
 
+    def skin_low(k):
+        act = new_clip("_reach")
+        key(down(k), 1)
+        low = evaluated_low(1, act)
+        rig.animation_data.action = None
+        bpy.data.actions.remove(act)
+        return low
+
+    # No further than the skin stays out of the ground: a chest or chin can meet it before the
+    # nose's bone does (the moose and ibex sank 4-25 cm).
+    floor = skin_low(0.0) - 0.005
     reach = None
     for i in range(1, 101):
         k = i * 0.03
         R, H = solve(down(k))
+        if skin_low(k) < floor:
+            reach = k - 0.03
+            print(name, "stops where its skin meets the ground, at", round(reach, 2))
+            break
         if tip(R, H, tip_bone).z <= 0.004 * SCALE / 0.3:
             reach = k
             break
@@ -971,8 +1125,11 @@ def clip_fly(name, c):
                 ph = 2 * math.pi * (beat_t * beats - 0.08 * i)
                 a = (up + down) / 2 + (down - up) / 2 * math.sin(ph) if flapping else c.get("hold", 20)
                 own = a if i == 0 else 0.3 * ((down - up) / 2) * math.sin(ph - 0.6) * (1 if flapping else 0)
-                # The arm held out level from a body tipped level, then beating.
-                turn[b] = (q(X, -c.get("body", 0)) if i == 0 else Quaternion()) @ q(Y, own * sgn)
+                # The arm held out level from a body tipped level, then beating, rolling no
+                # more than a folded arm does about its own bone (`capped_roll`).
+                turn[b] = q(Y, own * sgn)
+                if i == 0:
+                    turn[b] = capped_roll(q(X, -c.get("body", 0)) @ turn[b], (TAIL[b] - HEAD[b]).normalized())
             if c.get("bound") and not flapping:
                 folded_wings(turn)
         for leg, chain in LEGS.items():
@@ -1048,6 +1205,8 @@ print("PACES", json.dumps({k: round(v, 3) for k, v in paces.items()}))
 
 for o in scene.objects:
     o.select_set(o in (mesh, rig))
+# Marks the model as made here, for the creature check's foot-slide bar (D442).
+rig["terra_rig"] = "animal.py"
 bpy.ops.export_scene.gltf(
     filepath=OUT,
     export_format="GLB",
@@ -1059,5 +1218,6 @@ bpy.ops.export_scene.gltf(
     export_animation_mode="NLA_TRACKS",
     export_force_sampling=True,
     export_influence_nb=4,
+    export_extras=True,
 )
 print("EXPORTED", OUT, os.path.getsize(OUT))

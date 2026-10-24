@@ -14,39 +14,49 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import measures as ms  # noqa: E402
 
 
-def stride_tracks(frames=60, pace=1.0, duty=0.6, drift=0.0):
-    """Four feet treading in place at `pace` m/s, a frame 1/60 s; one foot drifts `drift` metres
-    sideways over its stance. Returns tracks and lows over one loop (last frame = first)."""
-    tracks, lows = [], []
+def stride_feet(frames=60, pace=1.0, duty=0.6, drift=0.0, peel=0.0, skid=0.0):
+    """Four feet treading in place at `pace` m/s, a frame 1/60 s, each a toe and a heel 5 cm
+    behind it; one foot drifts `drift` metres sideways over its stance, or `skid` metres forward
+    over its first tenth (a touch-down skid); every heel rises `peel` degrees about its toe over
+    the last fifth of the stance. Returns each foot's (F, 2, 3) skin over one loop (last frame =
+    first)."""
+    feet = []
     cycle = frames / 60.0
     sweep = pace * duty * cycle
     for k, phase in enumerate((0.0, 0.25, 0.5, 0.75)):
-        tr, lo = [], []
+        foot = []
         for f in range(frames + 1):
             p = ((f / frames) - phase) % 1.0
+            th = 0.0
             if p < duty:
                 u = p / duty
                 y, z = -sweep / 2 + sweep * u, 0.0
                 x = drift * u if k == 0 else 0.0
+                y -= skid * min(u / 0.1, 1.0) if k == 0 else 0.0
+                th = math.radians(peel) * min(max((u - 0.8) / 0.2, 0.0), 1.0)
             else:
                 v = (p - duty) / (1 - duty)
-                y, z, x = ms.swing_y(v, sweep, duty), 0.05 * math.sin(math.pi * v) ** 2, 0.0
-            tr.append((x + k, y, z))
-            lo.append(z)
-        tracks.append(np.array(tr))
-        lows.append(np.array(lo))
-    return tracks, lows
+                y, z, x = ms.swing_y(v, sweep, duty), 0.05 * math.sin(math.pi * v), 0.0
+                y -= skid if k == 0 else 0.0
+            toe = np.array((x + k, y, z))
+            foot.append((toe, toe + 0.05 * np.array((0.0, math.cos(th), math.sin(th)))))
+        feet.append(np.array(foot))
+    return feet
 
 
-def test_foot_slide_finds_pace_and_drift():
-    tracks, lows = stride_tracks()
-    slide, pace, steps = ms.foot_slide(tracks, lows, 0.002, True)
+def test_foot_slide_finds_pace_and_slip():
+    mid, whole, pace, steps = ms.foot_slide(stride_feet(), 0.002, True)
     assert abs(pace - 1.0) < 0.02, pace
-    assert slide < 0.002, slide
+    assert whole < 0.002, whole
     assert steps == 4, steps
-    tracks, lows = stride_tracks(drift=0.03)
-    slide, _, _ = ms.foot_slide(tracks, lows, 0.002, True)
-    assert 0.02 < slide < 0.04, slide
+    mid, whole, _, _ = ms.foot_slide(stride_feet(drift=0.03), 0.002, True)
+    assert 0.02 < mid < 0.04 and whole < 0.04, (mid, whole)
+    # A heel peeling 40 degrees about a held toe is not a slide (the foot's mean moves ~1 cm).
+    mid, whole, _, _ = ms.foot_slide(stride_feet(peel=40), 0.002, True)
+    assert whole < 0.002, whole
+    # A skid as the foot lands is not mid-stance, but the whole stance has it.
+    mid, whole, _, _ = ms.foot_slide(stride_feet(skid=0.02), 0.002, True)
+    assert mid < 0.003 and 0.015 < whole < 0.03, (mid, whole)
 
 
 def test_swing_has_no_velocity_jump():
@@ -59,7 +69,7 @@ def test_swing_has_no_velocity_jump():
     assert abs(ms.swing_y(1.0, sweep, duty) + sweep / 2) < 1e-12
     # A gallop's short stance: capped, still far closer to the carry than the cosine ease's 0.
     dv = (ms.swing_y(h, sweep, 0.2) - ms.swing_y(0.0, sweep, 0.2)) / h
-    assert abs(dv - 2.5 * sweep) < 1e-3
+    assert abs(dv - 1.5 * sweep) < 1e-3, dv
 
 
 def test_kinks_tell_a_snap_from_a_sine():

@@ -95,42 +95,50 @@ def runs(mask, cyclic):
     return [tuple(r) for r in out]
 
 
-def foot_slide(tracks, lows, eps, cyclic):
-    """How far a planted foot slides over the ground, in metres, and the pace the clip treads.
-    tracks: per foot (F, 3) positions; lows: per foot (F,) its lowest point. A foot is down
-    where its lowest point is within eps of its ground, the 10th percentile of its lowest (not
-    the clip's minimum: a hoof dipping a centimetre at touch-down would leave the whole stance
-    out). Locomotion is in place, so a planted foot is carried back at the clip's pace: the pace
-    is the median velocity of every foot over every frame it is down, and a foot slides by how
-    far it drifts from that carry over each time down. A loop's last frame is its first again,
-    so it is dropped."""
+def foot_slide(feet, eps, cyclic, trim=0.1):
+    """How far a planted foot slips over the ground, in metres: (mid-stance, whole stance, the
+    pace it treads in m/s, times down). feet: per foot (F, n, 3), its skin over the clip. A foot
+    is down where its lowest point is within eps of its ground, the 10th percentile of its lowest
+    (not the clip's minimum: a hoof dipping a centimetre at touch-down would leave the whole
+    stance out). What slips is the skin touching the ground: a step is the median move of the
+    foot's vertices within eps of its ground at both frames, so a foot peeling or rolling about
+    its toe, its heel rising, holds while its toe holds (the foot's mean read a peel as a slide).
+    Locomotion is in place, so a planted foot is carried back at the clip's pace, the median
+    step mid-stance over every foot; the slip is each step less the pace, summed over a time
+    down, and a slide is the widest that sum spreads. Mid-stance leaves out `trim` of each time
+    down at either end, at least a frame; the whole stance keeps the touch-down and lift-off. A
+    loop's last frame is its first again, so it is dropped."""
     if cyclic:
-        tracks = [t[:-1] for t in tracks]
-        lows = [l[:-1] for l in lows]
-    vels, spans = [], []
-    for tr, lo in zip(tracks, lows):
-        n = len(tr)
-        for a, b in runs(lo < np.percentile(lo, 10) + eps, cyclic):
-            # A tenth of each time down at either end is left out, at least a frame: a foot a
-            # hair off the ground, still landing or already easing into its swing, is not a
-            # planted foot sliding.
-            k = max(1, int(round(0.1 * (b - a))))
-            a, b = a + k, b - k
+        feet = [p[:-1] for p in feet]
+    spans = []
+    for p in feet:
+        n = len(p)
+        lo = p[:, :, 2].min(axis=1)
+        ground = np.percentile(lo, 10) + eps
+        for a, b in runs(lo < ground, cyclic):
             if b - a < 3:
                 continue
             idx = np.arange(a, b) % n
-            p = tr[idx, :2]
-            vels.append(np.diff(p, axis=0))
-            spans.append(p)
+            st = []
+            for i, j in zip(idx[:-1], idx[1:]):
+                on = (p[i, :, 2] < ground) & (p[j, :, 2] < ground)
+                if not on.any():
+                    on[np.argmin(p[i, :, 2])] = True
+                st.append(np.median(p[j, on, :2] - p[i, on, :2], axis=0))
+            k = max(1, int(round(trim * (b - a))))
+            spans.append((np.array(st), k))
     if not spans:
-        return 0.0, 0.0, 0
-    pace = np.median(np.concatenate(vels), axis=0)
-    worst = 0.0
-    for p in spans:
-        steps = np.arange(len(p))[:, None]
-        drift = p - p[0] - steps * pace
-        worst = max(worst, float(np.linalg.norm(drift, axis=1).max()))
-    return worst, float(np.linalg.norm(pace)) * 60.0, len(spans)
+        return 0.0, 0.0, 0.0, 0
+    mids = [st[k:len(st) - k] for st, k in spans if len(st) - 2 * k >= 1]
+    pace = np.median(np.concatenate(mids or [st for st, _ in spans]), axis=0)
+
+    def spread(st):
+        path = np.vstack([np.zeros(2), np.cumsum(st - pace, axis=0)])
+        return float(max(np.linalg.norm(path - q, axis=1).max() for q in path))
+
+    mid = max((spread(m) for m in mids), default=0.0)
+    whole = max(spread(st) for st, _ in spans)
+    return mid, whole, float(np.linalg.norm(pace)) * 60.0, len(spans)
 
 
 def loop_gap(first, last, prev=None, turn=0.0):
@@ -227,7 +235,7 @@ def zone_weights(co, weights, legs, trunk, knots, near=0.25, far=0.6):
     return len(moved)
 
 
-def swing_y(v, sweep, duty, cap=2.5):
+def swing_y(v, sweep, duty, cap=1.5):
     """Where a swinging foot is along the body (+y back) at v of its swing, for a stance that
     carries it from -sweep/2 to +sweep/2 over `duty` of the stride: a cubic Hermite from the
     lift-off to the touch-down whose end tangents are the stance's carry, capped at `cap` sweeps,

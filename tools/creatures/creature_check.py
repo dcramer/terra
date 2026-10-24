@@ -18,10 +18,11 @@ checked side by side, one run each (the deer among them sets the skin-lag bar).
 | Lowest skin, gaits and one-shot moves (a hoof digs in as it lands) | -max(1 cm, 4% of height) |
 | Lowest trunk skin, lying clips (Death: head, ears and legs may dip, the body may not) | -max(1 cm, 4% of height) |
 | Loop gap: the wrap's jump (loops) | min(0.5 cm, 1% of body size) |
+| Foot slide, generated models only (`terra_rig` on the armature, set by animal.py): the skin touching the ground slipping from the clip's pace, mid-stance / the whole stance with touch-down and lift-off | 1 cm / 3 cm |
 
-Beside them it reports, without failing a model: foot slide (a planted foot's drift from the
-clip's pace), since the deer itself skates (its Walk carries the hind hooves at 1.2 m/s and the
-fore at 0.8; its idles slide a hoof back 9-15 cm after a step) and so cannot set a bar; kinks
+A bought model's foot slide is reported, not failed: the deer, the reference for deformation
+only, skates (its Walk carries the hind hooves at 1.2 m/s and the fore at 0.8; its idles slide
+a hoof back 9-15 cm after a step). Beside them it reports, without failing a model: kinks
 (a bone tail's velocity changing by over half its top speed in one frame); and the velocity
 jump at a loop's seam.
 Each clip starts from the rest pose: a bone it leaves unkeyed stands at rest, as in glTF.
@@ -46,7 +47,7 @@ LYING = ("death", "die", "lie", "sleep")
 AFLOAT = ("fly", "glide", "hover", "swim", "float", "dabble")
 TRUNK_SKIP = ("Neck", "Head", "Tail", "Ear", "Jaw", "IK", "Pole", "Root")
 BAR = {"trunk_gait": 0.25, "trunk": 0.45, "limb_share": 0.25, "lag_deg": 30.0, "low": -0.01, "low_moving": 0.04,
-       "gap": 0.005, "gap_body": 0.01}
+       "gap": 0.005, "gap_body": 0.01, "slide_mid": 0.01, "slide": 0.03}
 
 
 def clip_name(a):
@@ -186,6 +187,7 @@ def check(src, scale):
 
     rig.animation_data_create()
     out = {"model": src, "scale": scale, "body_m": round(body, 3), "bird": bird, "trunk_bones": trunk, "leg_bones": legs,
+           "generated": bool(rig.get("terra_rig")),
            "belly_verts": int(belly.sum()), "torso_verts": int(torso.sum()), "feet": len(feet),
            "limb_share": None if limb_share is None else round(limb_share, 3),
            "rest_lowest_cm": round(float(lo[2]) * 100, 2), "height_m": round(float(height), 3), "clips": {}}
@@ -204,8 +206,7 @@ def check(src, scale):
         loop = not is_(name, ONE_SHOT)
         trunk_w, lag, lowest, lowest_trunk, hardest = 0.0, 0.0, 1e9, 1e9, 0.0
         first = last = prev = None
-        tracks = [[] for _ in feet]
-        lows = [[] for _ in feet]
+        soles = [[] for _ in feet]
         tails = []
         for k, f in enumerate(range(f0, f1 + 1)):
             p = skin_at(f)
@@ -220,15 +221,16 @@ def check(src, scale):
                 el = np.linalg.norm(p[edges[te, 0]] - p[edges[te, 1]], axis=1)
                 trunk_w = max(trunk_w, ms.stretch(el0[te], el))
             for i, c in enumerate(feet):
-                tracks[i].append(p[c].mean(axis=0))
-                lows[i].append(p[c, 2].min())
+                soles[i].append(p[c])
             tails.append([at(pb.tail) for pb in pbs if pb.name in deform])
             if k % 2:
                 continue
             for bn in rings:
                 b = bones[bn]
-                own = np.array((pbs[bn].matrix @ b.matrix_local.inverted()).to_3x3())
-                par = np.array((pbs[b.parent.name].matrix @ b.parent.matrix_local.inverted()).to_3x3())
+                # Turns only: a bone grown or shrunk (a bird's folding wing) scales its matrix,
+                # which read as an 80-degree twist.
+                own = np.array((pbs[bn].matrix @ b.matrix_local.inverted()).to_3x3().normalized())
+                par = np.array((pbs[b.parent.name].matrix @ b.parent.matrix_local.inverted()).to_3x3().normalized())
                 lag = max(lag, float(ms.twist_about(own.T @ par, np.array(b.tail_local - b.head_local))))
         tails = np.array(tails)
         c = {"frames": f1 - f0, "loop": loop, "gait": is_(name, GAIT) and not is_(name, ONE_SHOT), "lying": is_(name, LYING),
@@ -251,8 +253,9 @@ def check(src, scale):
             kn, worst = ms.kinks(tails[:-1] if loop else tails)
             c["kinks"], c["kink_worst"] = kn, round(worst, 2)
         if feet and not is_(name, AFLOAT) and not is_(name, ONE_SHOT):
-            slide, pace, steps = ms.foot_slide([np.array(t) for t in tracks], [np.array(x) for x in lows], eps, loop)
-            c["slide_cm"], c["pace_mps"], c["steps"] = round(slide * 100, 2), round(pace, 3), steps
+            mid, whole, pace, steps = ms.foot_slide([np.array(t) for t in soles], eps, loop)
+            c["slide_mid_cm"], c["slide_cm"] = round(mid * 100, 2), round(whole * 100, 2)
+            c["pace_mps"], c["steps"] = round(pace, 3), steps
         out["clips"][clip_name(name)] = c
         print("CLIP", os.path.basename(src), clip_name(name), json.dumps(c), flush=True)
     return out
@@ -284,6 +287,9 @@ def fails(m, lag_bar):
             out.append(f"{name} {'trunk ' if key == 'lowest_trunk_cm' else ''}low {c[key]:.1f} cm")
         if c.get("gap_cm", 0) > gap_bar:
             out.append(f"{name} gap {c['gap_cm']:.2f} cm")
+        slid = c.get("slide_mid_cm", 0) > BAR["slide_mid"] * 100 or c.get("slide_cm", 0) > BAR["slide"] * 100
+        if m.get("generated") and slid:
+            out.append(f"{name} slide {c['slide_mid_cm']:.1f}/{c['slide_cm']:.1f} cm")
     return out
 
 
@@ -294,7 +300,7 @@ def row(m, f):
     other = max((c["trunk_p95"] for c in cl if not c["gait"]), default=0)
     share = "n/a" if m["limb_share"] is None else f"{m['limb_share'] * 100:.0f}%"
     return (f"| {os.path.basename(m['model'])} | {share} | {gait * 100:.0f}% / {other * 100:.0f}% | {w('skin_lag_deg'):.0f} |"
-            f" {w('slide_cm'):.1f} | {min(c['lowest_cm'] for c in cl):.1f} | {w('gap_cm'):.2f} | {sum(c.get('kinks', 0) for c in cl)} |"
+            f" {w('slide_mid_cm'):.1f} / {w('slide_cm'):.1f}{'' if m.get('generated') else ' (info)'} | {min(c['lowest_cm'] for c in cl):.1f} | {w('gap_cm'):.2f} | {sum(c.get('kinks', 0) for c in cl)} |"
             f" {'PASS' if not f else 'FAIL: ' + '; '.join(f[:4]) + (' ...' if len(f) > 4 else '')} |")
 
 
@@ -312,7 +318,7 @@ def main():
     deer = [m for m in res if os.path.basename(m["model"]) == "Deer.glb"]
     deer_lag = max((c["skin_lag_deg"] for m in deer for c in m["clips"].values()), default=0.0)
     lag_bar = max(BAR["lag_deg"], 1.25 * deer_lag)
-    lines = ["| Model | Belly on legs | Trunk p95 gait / other | Skin lag deg | Slide cm (info) | Lowest cm | Loop gap cm | Kinks | Verdict |",
+    lines = ["| Model | Belly on legs | Trunk p95 gait / other | Skin lag deg | Slide cm mid / whole | Lowest cm | Loop gap cm | Kinks | Verdict |",
              "|---|---|---|---|---|---|---|---|---|"]
     passed = 0
     for m in res:

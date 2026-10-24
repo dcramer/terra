@@ -16,6 +16,7 @@
     "normal": 1024,
     "roughness_metal": 512
   },
+  "zones": {"near": 0.05, "far": 0.2},
   "bones": {
     "Hips": [
       null,
