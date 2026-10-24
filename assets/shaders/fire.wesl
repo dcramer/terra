@@ -312,8 +312,9 @@ const HEARTH_COLUMNS: i32 = 5;
 const COLUMN_WINDOW: f32 = 0.4;
 const COLUMN_OUT: f32 = 0.3;
 // How much hotter its foot burns: at 0.25, under five overlapping columns (`HEARTH_COLUMNS`),
-// the middle of the body behind the logs read pale (fire body round 2: 8-13% of its matte).
-const HEARTH_BASE_HOT: f32 = 0.18;
+// the middle of the body behind the logs read pale (fire body round 2: 8-13% of its matte);
+// at 0.18, pale yellow filled the logs' tops to half its height (blind judge, campfire cut round 2).
+const HEARTH_BASE_HOT: f32 = 0.1;
 // Where along a log, foot (0) to top (1), its tongues are born, and how tall one at its foot
 // stands of one at its top: flames rise off all of a burning log, tallest where the logs meet
 // over the coals (footage; RDR2's and Witcher 3's campfires), so the body runs the logs'
@@ -2439,7 +2440,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         // Yellow-white at the root, orange up it, red at the tip: at a fifth of its height
         // off for its tip, the tongues read one colour (blind judge, campfire roll round).
         let root = 1.0 - smoothstep(0.0, 0.18, y);
-        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 1.4) * (0.6 + 0.4 * (1.0 - across)) + 0.22 * root - 0.15 * age - 0.4 * smoothstep(0.2, 0.9, y));
+        let heat_here = saturate(0.24 + 0.28 * tex.r + 0.5 * pow(1.0 - y, 2.0) * (0.6 + 0.4 * (1.0 - across)) + 0.22 * root - 0.15 * age - 0.4 * smoothstep(0.2, 0.9, y));
         let drawn = baked_fuel(vec4(heat_here, shape * born * TONGUE_THICK, 0.0, 0.0), HEARTH_BRIGHTNESS * (0.85 + 0.15 * heat), soft, HEARTH_ROW);
         light = drawn.rgb;
         cover = drawn.a;
@@ -2485,10 +2486,14 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
         }
         if column {
             // Its own sides torn and narrowing up it, so dark shows between the columns.
-            let half = 0.5 * (1.0 - 0.45 * uv.y);
+            // A side column's (`side` below) narrower, torn deeper and cut sharper: feathered
+            // as the middle's, its sides were a blurry straight-sided haze (blind judge,
+            // campfire cut round 2).
+            let lick = window < 0.48;
+            let half = 0.5 * (1.0 - select(0.45, 0.6, lick) * uv.y) * select(1.0, 0.8, lick);
             let tear = fbm(vec2(uv.x * 4.0 + luck * 7.0, uv.y * 6.0 - time * 2.0));
-            let off = abs(uv.x - 0.5) / half + 0.3 * (rag - 0.5) + 0.5 * (tear - 0.5);
-            sides = 1.0 - smoothstep(COLUMN_SIDES, 1.0, off);
+            let off = abs(uv.x - 0.5) / half + 0.3 * (rag - 0.5) + select(0.5, 0.8, lick) * (tear - 0.5);
+            sides = 1.0 - smoothstep(select(COLUMN_SIDES, 0.6, lick), select(1.0, 0.9, lick), off);
         }
         let edges = foot * sides * smoothstep(0.0, 0.25, 1.0 - uv.y);
         var texel = flipbook(layer, f, vec2(x, uv.y));
@@ -2509,7 +2514,7 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32) -> 
             let erode = HEARTH_ERODE_FLOOR + HEARTH_ERODE * smoothstep(0.15, 1.0, hy) + select(0.0, 0.08, side);
             texel.g *= smoothstep(erode, erode + HEARTH_FEATHER, saturate(texel.g * 3.0) * (0.5 + n) * edges);
             texel.g *= mix(1.0, HEARTH_SEE, smoothstep(0.25, 0.85, hy));
-            texel.r = select(1.0, 0.85, side) * saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.62, smoothstep(0.12, 0.9, hy)));
+            texel.r = select(1.0, 0.85, side) * saturate((texel.r + HEARTH_BASE_HOT * (1.0 - smoothstep(0.0, 0.25, hy))) * mix(1.0, 0.62, smoothstep(0.05, 0.85, hy)));
         }
         let drawn = baked_fuel(texel, brightness, soft * select(edges, 1.0, layer == SET_CAMPFIRE), select(0.0, HEARTH_ROW, layer == SET_CAMPFIRE));
         light = drawn.rgb;
