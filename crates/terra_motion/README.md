@@ -6,6 +6,8 @@ How bodies move and fight, by rules every player and the server agree on (D447, 
 - `blade`: a blade from hilt to tip swept from tick to tick against a body's hurt capsule.
 - `contact`: what a blow does to both fighters (hit-stop, damage, flinch, stagger, broken guard, shoves), and a fighter's state those change (`Fighting`).
 - `stamina`: what a move costs (a field of its set) and what a body too tired for it may still do (D449, a placeholder until the developers decide).
+- `script`: a fight script, the intents a scripted fighter gives (never clips), each step on a time, inside the buffer before its own cancel window, or so long before the other's blow lands; the game runs one for the player with `--duel duels/yard.ron` (assets/data/duels/).
+- `Move::in_reach`: whether a body stands where a blow is made to land (its step in's cone and stop distance), so one that meets nothing in its active frames has missed.
 - `duel` (tests): two plain bodies on a line driven by scripted presses at 60 Hz through these rules, logging each move, contact and outcome; it fails on an idle frame inside a chain asked for, a blow in range that does not land in its active frames, a parry that does not stagger, a roll's i-frames that do not dodge, or a cost not paid or a too-tired rule not kept.
 
 The crate grows into [docs/movement.md](../../docs/movement.md)'s intent, mover and actions layers as their stages land; one domain crate (D407), not a crate per feature.

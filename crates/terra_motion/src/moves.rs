@@ -116,6 +116,17 @@ impl Move {
         (left > 0.0).then_some(left)
     }
 
+    /// Whether a body so far off (feet to feet, metres) and so many degrees off ahead is one
+    /// the blow is made to land on: inside its step in's cone and no further than it steps
+    /// in to (`warp`), so a blow with it in its active frames that meets nothing has missed
+    /// (the duel run's check). A move without a step in reaches nothing.
+    pub fn in_reach(&self, distance: f32, off_deg: f32) -> bool {
+        self.damage > 0.0
+            && self
+                .warp
+                .is_some_and(|warp| off_deg <= warp.cone && distance <= warp.stop_at)
+    }
+
     /// The body's speed ahead, metres a second, from the move's drive.
     pub fn drive_at(&self, t: f32) -> f32 {
         let clip = self.clip_at(t);
@@ -366,6 +377,18 @@ mod tests {
             "/../../assets/data/moves/sword_and_shield.ron"
         );
         MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn a_blow_reaches_what_stands_in_its_step_ins_cone_and_reach_and_a_roll_nothing() {
+        let set = set();
+        let slash = set.get("slash").unwrap();
+        let warp = slash.warp.unwrap();
+        assert!(slash.in_reach(warp.stop_at, 0.0));
+        assert!(slash.in_reach(1.0, warp.cone - 1.0));
+        assert!(!slash.in_reach(warp.stop_at + 0.05, 0.0), "too far");
+        assert!(!slash.in_reach(1.0, warp.cone + 1.0), "beside it");
+        assert!(!set.get("roll").unwrap().in_reach(0.5, 0.0), "no blade");
     }
 
     #[test]

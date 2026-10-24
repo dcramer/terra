@@ -140,7 +140,13 @@ usage: terra_sandbox [options]
                         render world's work and wait for the GPU, one a line
   --trace <file.jsonl>  write the play experiment's whole state every frame, one line of
                         JSON each, to compare two runs (tools/sandbox/diverge.ts)
-  --fresh               start the play experiment over, throwing away its saved game
+  --duel <file.ron>     drive the drawn player through a fight script of intents, such
+                        as duels/yard.ron under assets/data/: presses on frames or on
+                        what the fight is doing, as a player would (tools/sandbox/duel.ts)
+  --fight-log <file.jsonl>
+                        write each fighter's state every frame, one line of JSON each:
+                        moves asked and running, contacts, feet, places (melee, D69)
+  --fresh              start the play experiment over, throwing away its saved game
   --no-lair             no lair of combat creatures (the spider nest) beside the place,
                         as every demo's and film's place (tools/sandbox/places.ts, D421)
   --free-build          building in the play experiment costs nothing, every cost met
@@ -305,6 +311,10 @@ pub struct Options {
     pub save: Option<PathBuf>,
     /// Where the play experiment writes its whole state every frame, to compare runs.
     pub trace: Option<PathBuf>,
+    /// A fight script driving the drawn player (`--duel`), under assets/data/.
+    pub duel: Option<PathBuf>,
+    /// Where each fighter's state is written every frame (`--fight-log`).
+    pub fight_log: Option<PathBuf>,
     /// Remote calls a scripted run makes on given frames (`remote::Calls`).
     pub calls: Option<PathBuf>,
     /// Where a benchmark writes every timed frame's times.
@@ -530,6 +540,8 @@ impl Options {
             gives: Vec::new(),
             save: None,
             trace: None,
+            duel: None,
+            fight_log: None,
             calls: None,
             frame_times: None,
             fresh: false,
@@ -648,6 +660,8 @@ impl Options {
                 }
                 "--save" => options.save = Some(PathBuf::from(value("--save")?)),
                 "--trace" => options.trace = Some(PathBuf::from(value("--trace")?)),
+                "--duel" => options.duel = Some(PathBuf::from(value("--duel")?)),
+                "--fight-log" => options.fight_log = Some(PathBuf::from(value("--fight-log")?)),
                 "--calls" => options.calls = Some(PathBuf::from(value("--calls")?)),
                 "--frame-times" => {
                     options.frame_times = Some(PathBuf::from(value("--frame-times")?))
@@ -1055,7 +1069,7 @@ impl Plugin for ShellPlugin {
 /// In an unattended run, the keyboard and mouse are whatever the script says and nothing
 /// else. The window is a real one, so without this, anything typed while it has focus
 /// would steer the run.
-pub(crate) fn scripted_presses(
+pub fn scripted_presses(
     options: Res<Options>,
     (screen, hold): (Res<State<Screen>>, Res<loading::Hold>),
     mut frame: ResMut<ScriptFrame>,

@@ -89,6 +89,7 @@ pub fn strike(
     mut noises: MessageWriter<Noise>,
     mut notice: ResMut<Notice>,
     mut glare: ResMut<Glare>,
+    mut said: Option<ResMut<super::record::Said>>,
 ) {
     let set = &set.0;
     let frame = frame.map_or(0, |frame| frame.0);
@@ -198,6 +199,7 @@ pub fn strike(
         noises: &mut noises,
         notice: &mut notice,
         glare: &mut glare,
+        said: said.as_deref_mut(),
     };
     for blow in landed {
         settle(&mut out, &mut fighters, &seen, blow, frame);
@@ -210,6 +212,8 @@ struct Out<'a, 'w, 's, 'n, 'm, 'g> {
     noises: &'a mut MessageWriter<'n, Noise>,
     notice: &'a mut ResMut<'m, Notice>,
     glare: &'a mut ResMut<'g, Glare>,
+    /// The fight's record, when one is kept (`record`).
+    said: Option<&'a mut super::record::Said>,
 }
 
 /// Does what a blow that reached a body does, as it was taken.
@@ -231,6 +235,19 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
             .length()
     );
     let result = rules::outcome(blow.taken, blow.damage, blow.hit_stop);
+    if let Some(said) = out.said.as_deref_mut() {
+        let blow_name = fighters
+            .get(by.entity)
+            .ok()
+            .and_then(|(_, _, fighter, ..)| fighter.runner.name().map(str::to_string));
+        said.contacts.push(serde_json::json!({
+            "by": who(by.player),
+            "on": who(on.player),
+            "move": blow_name,
+            "taken": format!("{:?}", blow.taken),
+            "stop_s": result.stop_s,
+        }));
+    }
     if blow.charge > 0.0
         && let Ok((.., Some(mut pool))) = fighters.get_mut(on.entity)
     {

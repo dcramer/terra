@@ -1,0 +1,28 @@
+// The yard's duel (tools/sandbox/duel.ts, `cargo xtask duel`): the player against the
+// sparring partner with sword and shield, every move of the set once, each timed as a player
+// times it (terra_motion::script): on a time after the last step, inside the buffer before
+// a cancel window (Chain), or so long before the partner's next blow lands, in its own
+// seconds (Blow). The partner strikes on its rhythm, every third blow its heavy.
+//
+// A step: (name, when, press: [intents], hold: seconds), its name the row the contact sheet
+// shows it in.
+(
+    steps: [
+        (name: "draw", when: After(0.5), press: [Draw]),
+        (name: "lock on", when: After(1.5), press: [Lock]),
+        // Raised well before the partner's first blow, so it is a block, not a parry.
+        (name: "block", when: Blow(0.6), press: [Guard], hold: 1.2),
+        // The partner stands open after its blow: the light chain into it.
+        (name: "light 1", when: After(1.25), press: [Light]),
+        (name: "light 2", when: Chain(0.12), press: [Light]),
+        (name: "light 3", when: Chain(0.12), press: [Light]),
+        (name: "heavy", when: Free, press: [Heavy]),
+        // Raised inside the parry window (the set's parry_s) before its next blow lands.
+        (name: "parry", when: Blow(0.1), press: [Guard], hold: 0.5),
+        (name: "riposte", when: After(0.5), press: [Light]),
+        // Through its next blow, sideways, its active frames inside the roll's i-frames.
+        (name: "roll", when: Blow(0.25), press: [Left, Roll], hold: 0.3),
+        (name: "strafe", when: After(1.2), press: [Right], hold: 3.0),
+        (name: "end", when: After(3.5), press: []),
+    ],
+)

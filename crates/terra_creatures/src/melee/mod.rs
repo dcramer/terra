@@ -14,6 +14,8 @@
 mod contact;
 mod hud;
 mod partner;
+mod record;
+mod script;
 
 use crate::staged::pose::Bends;
 use bevy::{gltf::GltfAssetLabel, prelude::*};
@@ -118,6 +120,8 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(Update, contact::fade);
     hud::plugin(app);
+    record::plugin(app);
+    script::plugin(app);
 }
 
 /// T draws a sword and shield, or sheathes them: drawn, the bar's item is put away, the
@@ -226,6 +230,7 @@ fn act(
     figure: Option<Res<Moves>>,
     mut players: Query<Drawing<'_>, (With<Player>, Without<partner::Partner>)>,
     partners: Query<(Entity, &Transform), With<partner::Partner>>,
+    mut said: Option<ResMut<record::Said>>,
 ) {
     let dt = time.delta_secs();
     let set = &set.0;
@@ -309,7 +314,9 @@ fn act(
             // A body without stamina, as in a test, never tires.
             let left = pool.as_ref().map_or(f32::MAX, |pool| pool.left);
             if let Some(name) = asked(&intent, &fighter, set) {
-                match stamina::ask(&mut fighter.runner, set, &name, left) {
+                let got = stamina::ask(&mut fighter.runner, set, &name, left);
+                record::asked(said.as_deref_mut(), &name, got);
+                match got {
                     Some(true) => begin(
                         &mut fighter,
                         &name,
