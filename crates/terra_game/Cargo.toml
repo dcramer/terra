@@ -26,6 +26,8 @@ terra_creatures.workspace = true
 terra_folk.workspace = true
 terra_gen.workspace = true
 terra_items.workspace = true
+# The fight's contacts (what struck what), which the sounds' table is keyed by (D447).
+terra_motion.workspace = true
 # What a player carries, makes and needs (D407), re-exported at its old paths.
 terra_survival.workspace = true
 # The walker layer (D198, D407), re-exported at its old paths.

@@ -21,6 +21,8 @@ terra_build_layout.workspace = true
 terra_climate.workspace = true
 terra_core.workspace = true
 terra_items.workspace = true
+# What a blow met, as a noise says it (`noise::Cue::Struck`), from the fight's rules (D447).
+terra_motion.workspace = true
 terra_voxel.workspace = true
 # The walker layer (D198, D407): the player's own components, the figure, hands and camera.
 terra_walker.workspace = true

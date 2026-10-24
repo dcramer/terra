@@ -3,7 +3,8 @@
 //! and stepped at 60 Hz through the rules the game runs: the runner and its buffer, a blow's
 //! drive and its step in, the blade swept against the hurt capsule, the judge and what a blow
 //! does, and what each costs in stamina. It logs every move start and end, contact and
-//! outcome with the stamina left, and a failed check prints the log. The scenarios run on
+//! outcome with the stamina left and what the contact met as it is heard (`struck`), and a
+//! failed check prints the log. The scenarios run on
 //! every core (D406). A body's stamina here is only spent, never refilled: a duel is
 //! seconds long, and the refill is the walker's (`terra_survival::vitals`).
 
@@ -11,6 +12,7 @@ use crate::blade::{self, Edge};
 use crate::contact::{self, Fighting, NEAREST_M};
 use crate::moves::{self, MoveSet, Phase, Ran, Taken};
 use crate::stamina;
+use crate::struck::{Struck, Surface};
 use glam::{Quat, Vec3};
 
 const DT: f32 = 1.0 / 60.0;
@@ -66,6 +68,8 @@ enum Event {
     Ended(u32, usize, String),
     /// A blow reached a body: the frame, by, on, how it was taken, and the attacker's phase.
     Contact(u32, usize, usize, Taken, Phase),
+    /// What that blow met, as it is heard.
+    Heard(Struck),
 }
 
 struct Duel<'a> {
@@ -301,12 +305,21 @@ impl<'a> Duel<'a> {
             );
             let damage = each.damage * attacker.runner.might(set);
             let (taken, charge) = stamina::guarded(set, taken, damage, body.stamina);
-            landed.push((by, taken, damage, each.hit_stop, each.phase(t), charge));
+            let struck = Struck::of(taken, each, &set.kit, &set.kit, body.fight.body);
+            landed.push((
+                by,
+                taken,
+                damage,
+                each.hit_stop,
+                each.phase(t),
+                charge,
+                struck,
+            ));
         }
         for (body, edge) in self.bodies.iter_mut().zip(edges) {
             body.was = Some(edge);
         }
-        for (by, taken, damage, hit_stop, phase, charge) in landed {
+        for (by, taken, damage, hit_stop, phase, charge, struck) in landed {
             let on = 1 - by;
             let away = (self.feet(on) - self.feet(by)).normalize_or_zero();
             let out = contact::outcome(taken, damage, hit_stop);
@@ -319,6 +332,10 @@ impl<'a> Duel<'a> {
             self.bodies[by].fight.take(out.by, away);
             self.events
                 .push(Event::Contact(self.frame, by, on, taken, phase));
+            if let Some(struck) = struck {
+                self.events.push(Event::Heard(struck));
+                self.say(format!("heard {struck:?}"));
+            }
             let (health, left) = (self.bodies[on].fight.health, self.bodies[on].stamina);
             let apart = (self.bodies[on].x - self.bodies[by].x).abs();
             self.say(format!(
@@ -344,6 +361,17 @@ impl<'a> Duel<'a> {
             .iter()
             .filter_map(|event| match event {
                 Event::Contact(frame, by, _, taken, phase) => Some((*frame, *by, *taken, *phase)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// What each contact met, as it is heard: the surface and whether the blow was heavy.
+    fn heard(&self) -> Vec<(Taken, Surface, bool)> {
+        self.events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Heard(struck) => Some((struck.taken, struck.on, struck.heavy)),
                 _ => None,
             })
             .collect()
@@ -379,6 +407,8 @@ fn lands(set: &MoveSet) -> u32 {
     let (frame, by, taken, phase) = contacts[0];
     assert_eq!((by, taken, phase), (0, Taken::Hit, Phase::Active), "{log}");
     assert_eq!(duel.bodies[1].fight.health, HEALTH - 12.0, "{log}");
+    // Heard as a light blade on flesh.
+    assert_eq!(duel.heard(), [(Taken::Hit, Surface::Flesh, false)], "{log}");
     frame
 }
 
@@ -422,6 +452,10 @@ fn chains(set: &MoveSet) {
     let blocked = (Taken::Blocked, Phase::Active);
     let broken = (Taken::GuardBroken, Phase::Active);
     assert_eq!(taken, [blocked, blocked, blocked, broken], "{log}");
+    // Heard on the shield's wooden face, the last a heavy blow breaking it.
+    let on_face = (Taken::Blocked, Surface::Wood, false);
+    let breaks = (Taken::GuardBroken, Surface::Wood, true);
+    assert_eq!(duel.heard(), [on_face, on_face, on_face, breaks], "{log}");
     assert!(duel.bodies[1].fight.health < HEALTH, "{log}");
     // Each move paid its cost as it started, and each blow on the guard its damage's worth.
     let cost = |names: &[&str]| -> f32 {
@@ -493,6 +527,12 @@ fn parries(set: &MoveSet, lands_at: u32) {
     let contacts = duel.contacts();
     assert_eq!(contacts.len(), 1, "{log}");
     assert_eq!((contacts[0].1, contacts[0].2), (0, Taken::Parried), "{log}");
+    // Heard on the shield's iron boss: steel ringing on metal, not the wooden face.
+    assert_eq!(
+        duel.heard(),
+        [(Taken::Parried, Surface::Iron, false)],
+        "{log}"
+    );
     assert_eq!(duel.starts(0).len(), 1, "A acted while staggered:\n{log}");
     assert!(!duel.bodies[0].fight.free(), "{log}");
     assert_eq!(duel.bodies[1].fight.health, HEALTH, "{log}");
@@ -508,6 +548,7 @@ fn dodges(set: &MoveSet, lands_at: u32) {
     assert_eq!(contacts.len(), 1, "{log}");
     assert_eq!((contacts[0].1, contacts[0].2), (0, Taken::Dodged), "{log}");
     assert_eq!(duel.bodies[1].fight.health, HEALTH, "{log}");
+    assert_eq!(duel.heard(), [], "a dodged blow meets nothing:\n{log}");
 }
 
 #[test]

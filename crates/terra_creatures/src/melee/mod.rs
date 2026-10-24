@@ -67,6 +67,8 @@ pub struct Fighter {
     pub was: Option<blade::Edge>,
     /// The way its move drives it: ahead when it started, or where a roll goes.
     pub way: Vec3,
+    /// In its blow's active frames last tick, so the swing is heard once.
+    pub swung: bool,
 }
 
 impl Fighter {
@@ -76,6 +78,7 @@ impl Fighter {
             hand,
             was: None,
             way: Vec3::ZERO,
+            swung: false,
         }
     }
 }

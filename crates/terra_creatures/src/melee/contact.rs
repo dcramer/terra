@@ -2,7 +2,8 @@
 //! tip in its hand socket's frame, is swept from last tick to this one through its blow's
 //! active frames against the other's hurt capsule, once a blow, and judged, by
 //! `terra_motion`'s rules (`blade`, `moves::judge`, `contact::outcome`). Here: the reaction
-//! clips, the clash, the parry's flash and ring, and what the player is told. Every outcome
+//! clips, the swing and what the blow met as noises (`struck`: the sound is chosen from that
+//! in data, docs/audio.md), the parry's flash, and what the player is told. Every outcome
 //! is logged as `Melee: ...` with the scripted run's frame (D69).
 
 use super::partner::{Beat, Partner};
@@ -13,6 +14,7 @@ use terra_motion::blade::{self, Edge, HILT_M, TIP_M};
 use terra_motion::contact::{self as rules, Effect, Reel, Taking};
 use terra_motion::moves::{self, Phase, Taken};
 use terra_motion::stamina;
+use terra_motion::struck::Struck;
 use terra_survival::noise::{Cue, Noise};
 use terra_survival::told::Notice;
 use terra_walker::figure::Acting;
@@ -54,6 +56,8 @@ struct Seen {
     was: Option<Edge>,
     open: bool,
     invulnerable: bool,
+    /// In a blow's active frames, and whether it is heavy: its swing is heard as they open.
+    swinging: Option<bool>,
     guard_s: Option<f32>,
     player: bool,
     /// Stamina left to hold its guard with; a body without any never tires.
@@ -70,6 +74,8 @@ struct Landed {
     hit_stop: f32,
     /// Stamina the blow takes from the struck's guard.
     charge: f32,
+    /// What it met, as it is heard; nothing when dodged.
+    struck: Option<Struck>,
 }
 
 /// Sweeps every blade in its blow's active frames against every other fighter, and does
@@ -110,6 +116,9 @@ pub fn strike(
             open: now.is_some_and(|each| each.phase(t) == Phase::Active && each.damage > 0.0)
                 && !fighter.runner.landed,
             invulnerable: now.is_some_and(|each| each.invulnerable(t)),
+            swinging: now
+                .filter(|each| each.phase(t) == Phase::Active && each.damage > 0.0)
+                .map(|each| each.heavy),
             guard_s: fighter.guard_s,
             player,
             stamina: pool.map_or(f32::MAX, |pool| pool.left),
@@ -148,6 +157,11 @@ pub fn strike(
             // A tired blow is weaker; a guard with too little stamina for it breaks.
             let damage = each.damage * fighter.runner.might(set);
             let (taken, charge) = stamina::guarded(set, taken, damage, body.stamina);
+            // Both fight with the set's kit; the struck body is its own.
+            let struck = fighters
+                .get(body.entity)
+                .ok()
+                .and_then(|(_, _, on, ..)| Struck::of(taken, each, &set.kit, &set.kit, on.body));
             landed.push(Landed {
                 by,
                 on,
@@ -156,6 +170,7 @@ pub fn strike(
                 damage,
                 hit_stop: each.hit_stop,
                 charge,
+                struck,
             });
             break;
         }
@@ -163,6 +178,16 @@ pub fn strike(
     for (index, each) in seen.iter().enumerate() {
         if let Ok((_, _, mut fighter, ..)) = fighters.get_mut(each.entity) {
             fighter.was = each.edge;
+            // The swing heard once a blow, as its active frames open, from the blade.
+            if let (Some(heavy), false) = (each.swinging, fighter.swung)
+                && let Some(edge) = each.edge
+            {
+                noises.write(Noise::at(
+                    Cue::Swing { heavy },
+                    edge.tip.lerp(edge.hilt, 0.5),
+                ));
+            }
+            fighter.swung = each.swinging.is_some();
             if landed.iter().any(|blow| blow.by == index) {
                 fighter.runner.landed = true;
             }
@@ -218,16 +243,11 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
     }
     hurt(fighters, on.entity, result.on, away);
     hurt(fighters, by.entity, result.by, away);
+    if let Some(struck) = blow.struck {
+        out.noises.write(Noise::at(Cue::Struck(struck), blow.at));
+    }
     match blow.taken {
-        Taken::Hit => {
-            out.noises.write(Noise::at(Cue::Hit, blow.at));
-        }
-        Taken::Blocked => {
-            out.noises.write(Noise::at(Cue::Clash, blow.at));
-        }
         Taken::Parried => {
-            out.noises.write(Noise::at(Cue::Parry, blow.at));
-            out.noises.write(Noise::at(Cue::Clash, blow.at));
             out.commands.spawn((
                 PointLight {
                     intensity: 400_000.0,
@@ -245,13 +265,8 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
                 "Your blow is parried"
             });
         }
-        Taken::GuardBroken => {
-            out.noises.write(Noise::at(Cue::Clash, blow.at));
-            if on.player {
-                out.notice.say("Your guard is broken");
-            }
-        }
-        Taken::Dodged => {}
+        Taken::GuardBroken if on.player => out.notice.say("Your guard is broken"),
+        _ => {}
     }
 }
 

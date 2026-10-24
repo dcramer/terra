@@ -246,7 +246,7 @@ fn player_heard(
         // A swing sets the figure's attack going again.
         let swung = swinging.entry(player).or_default();
         if stance.attacking > *swung + 0.2 {
-            noise.write(Noise::at(Cue::Swing, chest(at)));
+            noise.write(Noise::at(Cue::Swing { heavy: false }, chest(at)));
         }
         *swung = stance.attacking;
     }

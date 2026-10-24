@@ -55,10 +55,16 @@ Made by us with generators on paid plans, whose terms leave what they make with 
 
 ## Sound
 
-By [Kenney](https://kenney.nl), under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): free for any use, no attribution required. We credit them anyway.
+All under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/): free for any use, no attribution required. We credit them anyway.
 
 | Where | From | Changes |
 |---|---|---|
-| `assets/sounds/` | [Impact Sounds](https://kenney.nl/assets/impact-sounds) and [RPG Audio](https://kenney.nl/assets/rpg-audio): footsteps, impacts, chopping, creaks, clicks | None to the files; 88 of the packs' 180 sounds. Fetched from kenney.nl on 2026-10-11, licence checked in each pack's `License.txt`. |
+| `assets/sounds/` | By [Kenney](https://kenney.nl): [Impact Sounds](https://kenney.nl/assets/impact-sounds) and [RPG Audio](https://kenney.nl/assets/rpg-audio): footsteps, impacts, chopping, creaks, clicks | None to the files; 88 of the packs' 180 sounds. Fetched from kenney.nl on 2026-10-11, licence checked in each pack's `License.txt`. |
+| `assets/sounds/swing_light_*`, `swing_heavy_*` | Ben Jaszczak and Brian Nelson (Still North Media), [Medieval sound effects - Weapon Textures](https://opengameart.org/content/medieval-sound-effects-weapon-textures): `Katana Swing` (light), `Axe Swing` (heavy) | Takes cut out, the mic's air thump high-passed away (300 Hz light, 160 Hz heavy) |
+| `assets/sounds/parry_steel_*` | The same team, [Medieval sound effects - Weapon impacts](https://opengameart.org/node/146863): `Norse Sword Katana Blade on Blade`, `Sabre Norse Sword Blade on Blade` | Takes cut out with their ring |
+| `assets/sounds/block_wood_*`, `guard_break_wood_*` | Weapon impacts' `Axe Spear Blade on haft` and `Dagger Spear Blade on Haft` (steel knocking on wood), over [35 wooden cracks/hits/destructions](https://opengameart.org/node/2548) by Independent.nu (`impactwood*`, and `crack*` for a guard broken) | Layered: the knock over a board's thump 9 dB down (high-passed 70 Hz, low-passed 2.5 kHz), the crack on top for a guard broken |
+| `assets/sounds/hit_flesh_*`, `hit_flesh_heavy_*` | [37 hits/punches](https://opengameart.org/node/2558) by Independent.nu (`hit10` to `hit18` light, `hit01` to `hit13` heavy), with Kenney's `knifeSlice` | Layered: the body blow with the slice's start 8 to 9 dB down |
+
+The fight's sounds were fetched from OpenGameArt on 2026-10-24, each pack's licence checked on its page (CC0 only; the Still North packs also quote their makers' terms: "use any of our sounds freely, with no royalties, and no credit needs to be given"). Every one is cut to a take, made mono at 48 kHz, faded out, its peak set to -2 dBFS and encoded as Ogg Vorbis (quality 4), with ffmpeg.
 
 The rest of the game's sound, air, water, fire, birds and music, is made in code (`crates/terra_world/src/audio/`).

@@ -13,6 +13,7 @@
 use crate::crafting::Station;
 use crate::inventory::Cut;
 use bevy::prelude::*;
+use terra_motion::struck::Struck;
 
 /// Something heard, at a place in the world, or with none, by the player alone (menus).
 #[derive(Message, Clone, Copy, Debug, PartialEq)]
@@ -37,14 +38,16 @@ impl Noise {
 pub enum Cue {
     /// A foot set down.
     Step(Feet),
-    /// A swing through the air.
-    Swing,
+    /// A swing through the air, and whether it is a heavy one.
+    Swing {
+        heavy: bool,
+    },
     /// A blow landing on a creature, and one that killed it.
     Hit,
     Kill,
-    /// Steel on steel: a blow taken on a sword or shield, and one turned aside by a parry.
-    Clash,
-    Parry,
+    /// A blow in a fight meeting something: what struck what, how it was taken and how heavy
+    /// it was (a blade on a shield's wooden face, parried on its iron boss, on flesh).
+    Struck(Struck),
     /// The player hurt, and the player going down.
     Hurt,
     Down,

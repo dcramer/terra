@@ -34,8 +34,6 @@ pub enum Sound {
     /// A crowd talking with no word to be made out: a dozen voices rising and falling in
     /// syllables and phrases, near and far, left and right. Never ends.
     Murmur,
-    /// Air cut by a swing.
-    Whoosh,
     /// A spider's warning.
     Hiss,
     /// A startled deer.
@@ -140,7 +138,6 @@ impl Decodable for Synth {
                 Sound::Fire => (Box::new(fire(dice)), 1, None),
                 Sound::Hum => (Box::new(hum(dice)), 1, None),
                 Sound::Murmur => (Box::new(murmur(dice)), 2, None),
-                Sound::Whoosh => one_shot(0.3, whoosh(&mut dice)),
                 Sound::Hiss => one_shot(0.55, hiss(&mut dice)),
                 Sound::Snort => one_shot(0.4, snort(&mut dice)),
                 Sound::Chatter => one_shot(0.7, chatter(&mut dice)),
@@ -625,16 +622,6 @@ fn murmur(mut dice: Dice) -> impl Iterator<Item = f32> + Send {
     })
 }
 
-fn whoosh(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
-    let mut dice = *dice;
-    let mut band = Band::default();
-    move |t| {
-        let through = t / 0.3;
-        let centre = 350.0 + 2200.0 * through;
-        band.pass(dice.noise(), centre, 0.6) * hump(libm::powf(through, 0.7)) * 0.9
-    }
-}
-
 fn hiss(dice: &mut Dice) -> impl FnMut(f32) -> f32 + Send + 'static {
     let mut dice = *dice;
     let mut tone = Smooth::default();
@@ -986,7 +973,6 @@ pub mod tests {
             Sound::Fire,
             Sound::Hum,
             Sound::Murmur,
-            Sound::Whoosh,
             Sound::Hiss,
             Sound::Snort,
             Sound::Chatter,
@@ -1033,7 +1019,6 @@ pub mod tests {
             Sound::Fire,
             Sound::Hum,
             Sound::Murmur,
-            Sound::Whoosh,
             Sound::Hiss,
             Sound::Snort,
             Sound::Chatter,
@@ -1061,8 +1046,7 @@ pub mod tests {
                 | Sound::Hum
                 | Sound::Murmur
                 | Sound::Calls(_) => {}
-                Sound::Whoosh
-                | Sound::Hiss
+                Sound::Hiss
                 | Sound::Snort
                 | Sound::Chatter
                 | Sound::Chirp

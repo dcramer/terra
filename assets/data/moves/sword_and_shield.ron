@@ -44,6 +44,11 @@
     // without its full cost does not start; a light blow comes out tired, its clip at `pace`
     // and doing `might` of its damage; a guard with less left than a blow costs is broken.
     tired: (pace: 0.7, might: 0.5),
+    // What the set fights with, as a blow meets it (terra_motion::struck): a steel blade, and
+    // a round shield whose wooden face takes a blow on the guard and whose iron boss turns a
+    // parried one. With each move's `heavy`, these choose what a contact sounds like, by the
+    // table in data/contacts.ron.
+    kit: (blade: Steel, face: Wood, boss: Iron),
     moves: {
         // Fastest 18 m/s at 0.75 s, 1.2 m ahead at hip height, right to left.
         "slash": (

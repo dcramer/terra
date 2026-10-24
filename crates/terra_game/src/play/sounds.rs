@@ -5,7 +5,9 @@
 //! code, and plays it where it happened. Nothing else in the game plays a sound effect.
 //! Volumes come from the options menu.
 //!
-//! The clips are CC0 recordings by Kenney (THIRD_PARTY.md). A scripted run plays
+//! The clips are CC0 recordings (THIRD_PARTY.md). What a blow in a fight sounds like is a
+//! table in data (`data/contacts.ron`): the first row fitting what struck what names its
+//! clips. A scripted run plays
 //! nothing, but counts what it would have played and prints it at the end, so a script
 //! can check that walking made steps and cutting made strikes.
 
@@ -22,9 +24,13 @@ use crate::loading::Loading;
 use crate::planet::MainCamera;
 use crate::shell::Options;
 use bevy::prelude::*;
+use serde::Deserialize;
+use terra_motion::moves::Taken;
+use terra_motion::struck::{Struck, Surface};
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Heard>()
+        .insert_resource(Contacts::read())
         .add_systems(Startup, load.run_if(audio::speaking))
         .add_systems(Update, (mix, hear).chain())
         .add_systems(Last, report);
@@ -38,7 +44,62 @@ enum Like {
     Nothing,
 }
 
-fn sounds_like(cue: Cue, stations: &Stations) -> Like {
+/// What a blow in a fight sounds like: `data/contacts.ron`'s rows, each with the clips it
+/// names, in order.
+#[derive(Resource)]
+pub struct Contacts(Vec<(Contact, &'static str)>);
+
+/// A row of the table: what it fits (what it leaves out fits anything) and its sound.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Contact {
+    taken: Option<Taken>,
+    by: Option<Surface>,
+    on: Option<Surface>,
+    heavy: Option<bool>,
+    sound: String,
+}
+
+impl Contact {
+    fn fits(&self, struck: Struck) -> bool {
+        self.taken.is_none_or(|taken| taken == struck.taken)
+            && self.by.is_none_or(|by| by == struck.by)
+            && self.on.is_none_or(|on| on == struck.on)
+            && self.heavy.is_none_or(|heavy| heavy == struck.heavy)
+    }
+}
+
+impl Contacts {
+    const FILE: &str = "contacts.ron";
+
+    pub fn read() -> Self {
+        let rows: Vec<Contact> = terra_world::data::read(Self::FILE);
+        Self(
+            rows.into_iter()
+                .map(|row| {
+                    let name = CLIPS
+                        .iter()
+                        .find(|clips| clips.name == row.sound)
+                        .unwrap_or_else(|| {
+                            panic!("{}: there are no clips called {}", Self::FILE, row.sound)
+                        })
+                        .name;
+                    (row, name)
+                })
+                .collect(),
+        )
+    }
+
+    /// The clips of the first row that fits.
+    fn sound(&self, struck: Struck) -> Option<&'static str> {
+        self.0
+            .iter()
+            .find(|(row, _)| row.fits(struck))
+            .map(|(_, name)| *name)
+    }
+}
+
+fn sounds_like(cue: Cue, stations: &Stations, contacts: &Contacts) -> Like {
     use Like::{Clips, Made, Nothing};
     match cue {
         Cue::Step(Feet::Grass) => Clips("step.grass"),
@@ -46,11 +107,11 @@ fn sounds_like(cue: Cue, stations: &Stations) -> Like {
         Cue::Step(Feet::Water) => Made("step.water", Sound::Splash, 0.35, 3.0),
         Cue::Step(Feet::Hoof) => Clips("step.hoof"),
         Cue::Step(Feet::Skitter) => Clips("step.skitter"),
-        Cue::Swing => Made("swing", Sound::Whoosh, 0.38, 3.0),
+        Cue::Swing { heavy: false } => Clips("swing.light"),
+        Cue::Swing { heavy: true } => Clips("swing.heavy"),
         Cue::Hit => Clips("hit"),
         Cue::Kill => Clips("kill"),
-        Cue::Clash => Clips("anvil"),
-        Cue::Parry => Clips("bell"),
+        Cue::Struck(struck) => contacts.sound(struck).map_or(Nothing, Clips),
         Cue::Hurt => Clips("hurt"),
         Cue::Down => Clips("down"),
         Cue::Strike(Cut::Tree | Cut::GreatTree) => Clips("strike.wood"),
@@ -322,6 +383,109 @@ const CLIPS: &[Clips] = &[
         (0.95, 1.05),
         4.0,
     ),
+    // The fight's (THIRD_PARTY.md): by what is struck and how hard, `data/contacts.ron`.
+    clips(
+        "swing.light",
+        &[
+            "swing_light_000",
+            "swing_light_001",
+            "swing_light_002",
+            "swing_light_003",
+            "swing_light_004",
+            "swing_light_005",
+        ],
+        Bus::Effects,
+        0.35,
+        (0.92, 1.1),
+        3.0,
+    ),
+    clips(
+        "swing.heavy",
+        &[
+            "swing_heavy_000",
+            "swing_heavy_001",
+            "swing_heavy_002",
+            "swing_heavy_003",
+            "swing_heavy_004",
+            "swing_heavy_005",
+        ],
+        Bus::Effects,
+        1.0,
+        (0.85, 1.0),
+        3.5,
+    ),
+    clips(
+        "parry.steel",
+        &[
+            "parry_steel_000",
+            "parry_steel_001",
+            "parry_steel_002",
+            "parry_steel_003",
+            "parry_steel_004",
+            "parry_steel_005",
+        ],
+        Bus::Effects,
+        1.0,
+        (0.94, 1.06),
+        8.0,
+    ),
+    clips(
+        "block.wood",
+        &[
+            "block_wood_000",
+            "block_wood_001",
+            "block_wood_002",
+            "block_wood_003",
+            "block_wood_004",
+            "block_wood_005",
+        ],
+        Bus::Effects,
+        0.6,
+        (0.9, 1.08),
+        5.0,
+    ),
+    clips(
+        "guard_break.wood",
+        &[
+            "guard_break_wood_000",
+            "guard_break_wood_001",
+            "guard_break_wood_002",
+            "guard_break_wood_003",
+        ],
+        Bus::Effects,
+        0.7,
+        (0.9, 1.02),
+        6.0,
+    ),
+    clips(
+        "hit.flesh",
+        &[
+            "hit_flesh_000",
+            "hit_flesh_001",
+            "hit_flesh_002",
+            "hit_flesh_003",
+            "hit_flesh_004",
+            "hit_flesh_005",
+        ],
+        Bus::Effects,
+        0.55,
+        (0.92, 1.08),
+        4.0,
+    ),
+    clips(
+        "hit.flesh.heavy",
+        &[
+            "hit_flesh_heavy_000",
+            "hit_flesh_heavy_001",
+            "hit_flesh_heavy_002",
+            "hit_flesh_heavy_003",
+            "hit_flesh_heavy_004",
+        ],
+        Bus::Effects,
+        0.65,
+        (0.88, 1.0),
+        5.0,
+    ),
     clips(
         "bench",
         &[
@@ -440,6 +604,7 @@ fn hear(
     mut noises: MessageReader<Noise>,
     mix: Res<Mix>,
     stations: Res<Stations>,
+    contacts: Res<Contacts>,
     ear: Query<&GlobalTransform, With<MainCamera>>,
     bank: Option<ResMut<Bank>>,
     synths: Option<ResMut<Assets<Synth>>>,
@@ -449,7 +614,7 @@ fn hear(
     let ear = ear.single().ok().map(GlobalTransform::translation);
     let (mut bank, mut synths) = (bank, synths);
     for noise in noises.read() {
-        let (name, reach_m) = match sounds_like(noise.cue, &stations) {
+        let (name, reach_m) = match sounds_like(noise.cue, &stations, &contacts) {
             Like::Clips(name) => (name, reach_of(name)),
             Like::Made(name, _, _, reach_m) => (name, reach_m),
             Like::Nothing => continue,
@@ -461,7 +626,7 @@ fn hear(
             continue;
         }
         heard.count(name);
-        match sounds_like(noise.cue, &stations) {
+        match sounds_like(noise.cue, &stations, &contacts) {
             Like::Clips(name) => {
                 if let Some(bank) = bank.as_mut() {
                     bank.play(&mut commands, &mix, name, noise.at);
@@ -545,7 +710,8 @@ mod tests {
             Cue::Step(Feet::Water),
             Cue::Step(Feet::Hoof),
             Cue::Step(Feet::Skitter),
-            Cue::Swing,
+            Cue::Swing { heavy: false },
+            Cue::Swing { heavy: true },
             Cue::Hit,
             Cue::Kill,
             Cue::Hurt,
@@ -575,17 +741,16 @@ mod tests {
             Cue::Click,
             Cue::Open,
             Cue::Close,
-            Cue::Clash,
-            Cue::Parry,
         ];
         cues.extend(stations.all().map(Cue::Working));
+        cues.extend(every_struck().into_iter().map(Cue::Struck));
         let place = |cue: Cue| match cue {
             Cue::Step(Feet::Grass) => 0,
             Cue::Step(Feet::Wood) => 1,
             Cue::Step(Feet::Water) => 2,
             Cue::Step(Feet::Hoof) => 3,
             Cue::Step(Feet::Skitter) => 4,
-            Cue::Swing => 5,
+            Cue::Swing { .. } => 5,
             Cue::Hit => 6,
             Cue::Kill => 7,
             Cue::Hurt => 8,
@@ -616,10 +781,9 @@ mod tests {
             Cue::Croak => 33,
             Cue::Bark => 34,
             Cue::Wings => 35,
-            Cue::Clash => 36,
-            Cue::Parry => 37,
+            Cue::Struck(_) => 36,
         };
-        let mut listed = [false; 38];
+        let mut listed = [false; 37];
         for &cue in &cues {
             listed[place(cue)] = true;
         }
@@ -630,11 +794,89 @@ mod tests {
         cues
     }
 
+    /// Every blow a fight can land: each way of taking it but a dodge, between every pair of
+    /// surfaces, light and heavy.
+    fn every_struck() -> Vec<Struck> {
+        use Surface::{Flesh, Iron, Steel, Wood};
+        let taken = [
+            Taken::Hit,
+            Taken::Blocked,
+            Taken::Parried,
+            Taken::GuardBroken,
+        ];
+        let mut all = Vec::new();
+        for taken in taken {
+            for by in [Steel, Iron, Wood, Flesh] {
+                for on in [Steel, Iron, Wood, Flesh] {
+                    for heavy in [false, true] {
+                        all.push(Struck {
+                            taken,
+                            by,
+                            on,
+                            heavy,
+                        });
+                    }
+                }
+            }
+        }
+        all
+    }
+
+    /// The sword and shield's blows, as the move set's kit meets: a block knocks on the
+    /// shield's wooden face, a parry rings on its iron boss, a guard broken cracks, a blade on
+    /// flesh is heard heavier for a heavy blow, and a swing by its weight. Each is its own
+    /// sound, so the ear tells them apart.
+    #[test]
+    fn a_fight_is_heard_by_what_is_struck_and_how_heavy_the_blow() {
+        let contacts = Contacts::read();
+        let heard = |taken, on, heavy| {
+            let struck = Struck {
+                taken,
+                by: Surface::Steel,
+                on,
+                heavy,
+            };
+            contacts.sound(struck).unwrap()
+        };
+        let block = heard(Taken::Blocked, Surface::Wood, false);
+        let parry = heard(Taken::Parried, Surface::Iron, false);
+        let broken = heard(Taken::GuardBroken, Surface::Wood, true);
+        let hit = heard(Taken::Hit, Surface::Flesh, false);
+        let heavy_hit = heard(Taken::Hit, Surface::Flesh, true);
+        assert_eq!(
+            [block, parry, broken, hit, heavy_hit],
+            [
+                "block.wood",
+                "parry.steel",
+                "guard_break.wood",
+                "hit.flesh",
+                "hit.flesh.heavy"
+            ]
+        );
+        // A heavy parry rings as a light one; a guard of metal clanks rather than rings, so
+        // only a parry sounds like one.
+        assert_eq!(heard(Taken::Parried, Surface::Iron, true), parry);
+        assert_ne!(heard(Taken::Blocked, Surface::Steel, false), parry);
+        let swing = |heavy| match sounds_like(Cue::Swing { heavy }, &Stations::read(), &contacts) {
+            Like::Clips(name) => name,
+            _ => panic!("a swing is not heard from clips"),
+        };
+        assert_ne!(swing(false), swing(true));
+        // Every blow that is not dodged is heard, by the table's last row if no other.
+        for struck in every_struck() {
+            assert!(
+                contacts.sound(struck).is_some(),
+                "{struck:?} is heard as nothing"
+            );
+        }
+    }
+
     #[test]
     fn every_cue_is_heard_and_its_clips_exist() {
         let stations = Stations::read();
+        let contacts = Contacts::read();
         for cue in every_cue(&stations) {
-            match sounds_like(cue, &stations) {
+            match sounds_like(cue, &stations, &contacts) {
                 Like::Clips(name) => assert!(
                     CLIPS.iter().any(|clips| clips.name == name),
                     "{cue:?}: no clips called {name}"
@@ -697,7 +939,7 @@ mod loudness {
         let stations = Stations::read();
         let made: Vec<_> = super::tests::every_cue(&stations)
             .into_iter()
-            .filter_map(|cue| match sounds_like(cue, &stations) {
+            .filter_map(|cue| match sounds_like(cue, &stations, &Contacts::read()) {
                 Like::Made(name, sound, level, _) => Some((name, sound, level)),
                 _ => None,
             })

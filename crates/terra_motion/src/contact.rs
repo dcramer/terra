@@ -6,6 +6,7 @@
 //! And the fighter's own state those change, ticked in its own time.
 
 use crate::moves::{Runner, Taken};
+use crate::struck::Surface;
 use glam::Vec3;
 
 /// How far either side of straight ahead a guard covers, degrees.
@@ -122,6 +123,8 @@ pub struct Fighting {
     /// A shove along the ground, metres a second, and how long it has left.
     pub shove: Vec3,
     pub shove_s: f32,
+    /// What a blow that hits the body meets.
+    pub body: Surface,
 }
 
 impl Fighting {
@@ -135,6 +138,7 @@ impl Fighting {
             down_s: None,
             shove: Vec3::ZERO,
             shove_s: 0.0,
+            body: Surface::Flesh,
         }
     }
 

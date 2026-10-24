@@ -1,0 +1,25 @@
+#![enable(implicit_some)]
+// What a blow in a fight sounds like (docs/audio.md, D113, D447): a contact says what struck
+// what (a move set's kit: its blade, its shield's face and boss; a body's flesh), how it was
+// taken (Hit, Blocked, Parried, GuardBroken) and whether the move was heavy
+// (terra_motion::struck). The first row that fits it names the clips it plays, from
+// terra_game's play/sounds.rs. A row leaves out what it does not care about, so a new weapon
+// or shield is a kit in its move set, and a new pairing a row here. The last row catches
+// everything, so every blow is heard.
+//
+// Each: taken, by, on (Steel, Iron, Wood, Flesh), heavy; sound.
+[
+    // Turned on metal: a ring that carries, telling the fighter the timing was right.
+    (taken: Parried, sound: "parry.steel"),
+    // Through a wooden guard: the face cracking under the blow.
+    (taken: GuardBroken, on: Wood, sound: "guard_break.wood"),
+    (taken: GuardBroken, sound: "anvil"),
+    // On a wooden shield's face: a dull knock.
+    (taken: Blocked, on: Wood, sound: "block.wood"),
+    // On a guard of metal: the smith's anvil clank, not the parry's ring.
+    (taken: Blocked, sound: "anvil"),
+    // On flesh: a slap and a slice, deeper for a heavy blow.
+    (taken: Hit, on: Flesh, heavy: true, sound: "hit.flesh.heavy"),
+    (taken: Hit, on: Flesh, sound: "hit.flesh"),
+    (sound: "hit"),
+]

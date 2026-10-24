@@ -7,6 +7,7 @@
 //! - `contact`: what a blow that reached a body does to both fighters, and the fighter's own
 //!   state (health, guard, hit-stop, reeling, shoves) it changes.
 //! - `stamina`: what a move costs and what a body too tired for it may still do.
+//! - `struck`: what a blow meets (steel, wood, flesh) and how heavy it is, as it is heard.
 //!
 //! What shows (spawning, intent, clips, flashes, sounds) is `terra_creatures::melee`'s. The
 //! crate grows into docs/movement.md's intent, mover and actions layers as they land.
@@ -15,6 +16,7 @@ pub mod blade;
 pub mod contact;
 pub mod moves;
 pub mod stamina;
+pub mod struck;
 
 #[cfg(test)]
 mod duel;

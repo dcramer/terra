@@ -16,6 +16,7 @@ Technical, and decided (D113).
 - **Anything that walks has `Footsteps`**, and is heard stepping by how far it moves over the ground: the player, villagers, deer and spiders alike.
 - **Things that make a sound of their own carry `Ambient`**: a fire, the place where magic pools. They play only within earshot, so a world can hold any number of them.
 - **Two sources of sound.** Recorded clips, in named sets with several takes each, picked at random and shifted a little in pitch so nothing repeats exactly. And sounds made in code as they play: wind, birds, water, fire, the hum of pooled magic, and music. Those follow the place and never loop.
+- **A blow in a fight says what met what**: the blade's surface and the one it struck (from the move set's kit, D447, or the body), how it was taken and whether the move was heavy. A table in data (`assets/data/contacts.ron`) names the sound: its first row that fits. A new weapon or shield is a kit; a new pairing a row.
 - **Built on Bevy's own audio**, with no new dependency. It has no effects such as reverb or muffling, so indoors is quieter rather than muffled. If we need those, `bevy_seedling` is the candidate, and only the audio module would change.
 - **Every sound has a place in the mix**, checked by tests that measure the clips and the generated sounds at the default volumes, while they sound: the world's background (wind, birds, water) about 40 dB below full scale; fires and the hum close up about 36; the player's steps about 32, creatures' quieter; blows and tools 22 to 30; menus about 33; music about 34. A sound that drifts out of its band fails the check. `TERRA_LOUDNESS=1 cargo test loudness -- --nocapture` prints them all.
 - **Scripted runs are silent but still decide what they would play**, and print it at the end (`SANDBOX heard: step.grass 4`), so a script can check that walking made steps. WSL is silent unless `--sound` is given, since it usually has no sound device.
@@ -29,11 +30,12 @@ A proposal, built so it can be heard and changed (D114).
 | **The world** | Wind outdoors, louder on the open fells; songbirds where it is safe, most among trees and few on the fells; a lake lapping near the shore (small wavelets and drops, not surf). Each place's own calls from all round, near and far: in a wood woodpeckers drumming and wood pigeons cooing, on the fells plovers whistling and a grouse's croak, by a lake ducks, a heron and fish rising (`Chorus`; a town's yards, hens, sparrows and a dog, in the trailer's bed). Indoors all of it drops away. Birds fall silent near where magic pools. Animals are heard where they are: a call as each takes fright or wing, and the ducks, heron, grouse and small birds calling now and then at rest; a fish's plop or splash where it rises. |
 | **Things** | A campfire burns, and a forge or smelter while it works. The place where magic pools hums low. The village bell rings every two or three minutes. |
 | **Doing** | Steps on grass, wood or in water; an axe, pick or knife at work, stroke by stroke; a tree coming down; a hammer while building; a station at work, and a click when something is made. |
+| **Fighting** | A blow is heard by what it meets and how heavy it is (D447): a blade knocking on a wooden shield's face, a parry ringing on its iron boss, the face cracking as a heavy blow breaks the guard, a slap and slice on flesh, deeper for a heavy blow. A swing whistles, a heavy one a broader whoosh. |
 | **Creatures** | A deer snorts when startled; a spider hisses when it turns to attack; blows land; hoofs and skittering legs. |
 | **Music** | A phrase now and then, then a minute or two of silence. Warmer near the village. Low and uneasy near where magic pools or when something hunts you, with hardly a pause. Made in code, so no two phrases are the same. |
 | **Menus** | Panels open and close; buttons click. |
 
-The recorded clips are CC0 packs by Kenney ([THIRD_PARTY.md](../THIRD_PARTY.md)). They are a start, not the game's sound.
+The recorded clips are CC0 packs by Kenney, and for the fight Still North Media's and Independent.nu's from OpenGameArt ([THIRD_PARTY.md](../THIRD_PARTY.md)). They are a start, not the game's sound.
 
 ## Questions for the developers
 

@@ -4,6 +4,7 @@
 //! a guard is judged (blocked, parried), and a body too tired for a move's full cost
 //! (`stamina`) running it slower and weaker.
 
+use crate::struck::Kit;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -141,6 +142,8 @@ pub struct MoveSet {
     pub guard_stamina: f32,
     /// How a light blow comes out with too little stamina for it (D449's placeholder).
     pub tired: Tired,
+    /// What the set strikes and guards with, as a blow meets it.
+    pub kit: Kit,
     pub moves: HashMap<String, Move>,
 }
 
@@ -313,7 +316,7 @@ impl Runner {
 }
 
 /// How a blow that reached a body was taken.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Taken {
     /// Full on the body.
     Hit,
