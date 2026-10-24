@@ -1,0 +1,21 @@
+[package]
+name = "terra_motion"
+description = "How bodies move and fight, by rules a server can run (D447): move sets as data, the move runner's phases, cancels and buffer, how a blow is taken, what moves cost in stamina, and blades swept against hurt capsules. No engine dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+libm.workspace = true
+# Move sets are read from their data files.
+ron.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+# The duel's scenarios run on every core (D406).
+terra_gen.workspace = true
+
+[lints]
+workspace = true

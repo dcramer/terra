@@ -1,9 +1,14 @@
 //! Hit volumes against hurt zones (docs/movement.md, "Bodies that do not pass through"): a
 //! blade is a segment from hilt to tip, swept from where it was last tick to where it is now
 //! so a fast blade cannot skip through a body between ticks, and a body is an upright capsule.
-//! Plain geometry, Bevy-free but for glam's vectors.
+//! Plain geometry on glam's vectors, which Bevy shares.
 
-use bevy::math::Vec3;
+use glam::Vec3;
+
+/// A sword's blade along its hand socket's up: from the hilt to the tip, metres, as
+/// `tools/characters/phases.ts` measured the clips with it.
+pub const HILT_M: f32 = 0.15;
+pub const TIP_M: f32 = 0.83;
 
 /// A blade's place: its hilt and its tip.
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -4,20 +4,23 @@
 //! Ctrl rolls through blows, left click runs the light chain and Shift with it the heavy
 //! blow, and right click held blocks, a guard raised just before a blow parrying it.
 //!
-//! The moves are data (`assets/data/moves/sword_and_shield.ron`, `moves`), a blade is swept
-//! against a body's hurt capsule (`blade`), and what a blow does is settled in `contact`.
-//! The partner's mind is `partner`, the bars and the controls on screen `hud`.
+//! The rules are `terra_motion`'s (D447): the moves as data (`assets/data/moves/
+//! sword_and_shield.ron`) and their runner, a blade swept against a body's hurt capsule, and
+//! what a blow does. Here is only what reads and writes the bodies, plays clips, flashes and
+//! sounds: the player's stance below, what a blow shows in `contact`, the partner's mind in
+//! `partner`, the bars and the controls on screen in `hud`.
 
-pub mod blade;
 mod contact;
 mod hud;
-pub mod moves;
 mod partner;
 
 use crate::staged::pose::Bends;
 use bevy::{gltf::GltfAssetLabel, prelude::*};
-use moves::{MoveSet, Ran, Runner};
+use std::ops::{Deref, DerefMut};
 use std::time::Duration;
+use terra_motion::blade;
+use terra_motion::contact::{Fighting, NEAREST_M};
+use terra_motion::moves::{self, MoveSet, Ran};
 use terra_survival::held::InHand;
 use terra_survival::inventory::HandsFull;
 use terra_walker::character;
@@ -37,9 +40,6 @@ const GUARD_PACE: f32 = 1.4;
 pub const HEALTH: f32 = 100.0;
 /// How far the lock-on reaches, metres.
 const LOCK_M: f32 = 15.0;
-/// The nearest a blow's drive takes a fighter to the other, feet to feet, metres: the
-/// shields and sword arms touch about here, so a blow never carries one into the other.
-pub const NEAREST_M: f32 = 1.3;
 /// How long a beaten fighter lies before the spar starts again, seconds.
 const DOWN_S: f32 = 3.0;
 /// The looks drawn: a sword in the right hand, a round shield in the left.
@@ -53,63 +53,41 @@ const SHIELD_ARM: [f32; 3] = [-30.0, 0.0, 14.0];
 #[derive(Resource)]
 pub struct Set(pub MoveSet);
 
-/// A body in a spar, the player's or the partner's: the move it is in, its health, its
-/// guard (how long it has been up), its hit-stop, a flinch or stagger that stops it acting,
-/// being down, its blade's last place, and a shove from a blow.
+/// A body in a spar, the player's or the partner's: its state in the fight by
+/// `terra_motion`'s rules (its move, health, guard, hit-stop, reeling, being down, a shove),
+/// which it derefs to, and what the game keeps of it: its sword hand, its blade's last place
+/// and the way its move drives it.
 #[derive(Component)]
 pub struct Fighter {
-    pub runner: Runner,
-    pub health: f32,
-    pub guard_s: Option<f32>,
-    pub stop_s: f32,
-    pub stagger_s: f32,
-    pub down_s: Option<f32>,
+    pub fight: Fighting,
     /// The socket in its right hand, whose frame the sword's blade is in.
     pub hand: Option<Entity>,
     pub was: Option<blade::Edge>,
     /// The way its move drives it: ahead when it started, or where a roll goes.
     pub way: Vec3,
-    /// A shove from a blow taken on the guard, metres a second, and how long it lasts.
-    pub shove: Vec3,
-    pub shove_s: f32,
 }
 
 impl Fighter {
     fn new(hand: Option<Entity>) -> Self {
         Self {
-            runner: Runner::default(),
-            health: HEALTH,
-            guard_s: None,
-            stop_s: 0.0,
-            stagger_s: 0.0,
-            down_s: None,
+            fight: Fighting::new(HEALTH),
             hand,
             was: None,
             way: Vec3::ZERO,
-            shove: Vec3::ZERO,
-            shove_s: 0.0,
         }
     }
+}
 
-    /// How fast its own time runs: all but still in a hit-stop.
-    pub fn rate(&self) -> f32 {
-        if self.stop_s > 0.0 { 0.05 } else { 1.0 }
+impl Deref for Fighter {
+    type Target = Fighting;
+    fn deref(&self) -> &Fighting {
+        &self.fight
     }
+}
 
-    /// Whether it can start something: not reeling, not down.
-    pub fn free(&self) -> bool {
-        self.stagger_s <= 0.0 && self.down_s.is_none()
-    }
-
-    /// Moves its timers on by a tick of the world's time.
-    fn age(&mut self, dt: f32) {
-        self.stop_s = (self.stop_s - dt).max(0.0);
-        let own = dt * self.rate();
-        self.stagger_s = (self.stagger_s - own).max(0.0);
-        self.shove_s = (self.shove_s - own).max(0.0);
-        if let Some(down) = &mut self.down_s {
-            *down += dt;
-        }
+impl DerefMut for Fighter {
+    fn deref_mut(&mut self) -> &mut Fighting {
+        &mut self.fight
     }
 }
 

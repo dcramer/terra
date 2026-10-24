@@ -25,6 +25,7 @@ terra_folk = { path = "crates/terra_folk" }
 terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
 terra_land = { path = "crates/terra_land" }
+terra_motion = { path = "crates/terra_motion" }
 terra_sim = { path = "crates/terra_sim" }
 terra_survival = { path = "crates/terra_survival" }
 terra_town = { path = "crates/terra_town" }

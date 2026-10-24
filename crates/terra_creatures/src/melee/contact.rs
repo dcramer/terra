@@ -1,34 +1,23 @@
-//! What a blow does when its blade reaches a body (D405): each fighter's sword, from hilt to
+//! What a blow shows when its blade reaches a body (D405): each fighter's sword, from hilt to
 //! tip in its hand socket's frame, is swept from last tick to this one through its blow's
-//! active frames against the other's hurt capsule (`blade`), once a blow. Judged (`moves::
-//! judge`): a hit costs health, holds both in a hit-stop and makes the struck flinch; a
-//! block costs nothing and shoves both apart with a clash; a parry staggers the attacker with
-//! a flash and a ring; a heavy blow breaks a guard held too long; a roll's i-frames let it by.
-//! Every outcome is logged as `Melee: ...` with the scripted run's frame (D69).
+//! active frames against the other's hurt capsule, once a blow, and judged, by
+//! `terra_motion`'s rules (`blade`, `moves::judge`, `contact::outcome`). Here: the reaction
+//! clips, the clash, the parry's flash and ring, and what the player is told. Every outcome
+//! is logged as `Melee: ...` with the scripted run's frame (D69).
 
-use super::blade::{self, Edge};
-use super::moves::Taken;
 use super::partner::{Beat, Partner};
 use super::{DOWN_S, Drawn, Fighter, HEALTH, Set, show};
 use crate::staged::Staged;
 use bevy::prelude::*;
+use terra_motion::blade::{self, Edge, HILT_M, TIP_M};
+use terra_motion::contact::{self as rules, Effect, Reel, Taking};
+use terra_motion::moves::{self, Phase, Taken};
 use terra_survival::noise::{Cue, Noise};
 use terra_survival::told::Notice;
 use terra_walker::figure::Acting;
 use terra_walker::{Motion, Player};
 use terra_world::shell::ScriptFrame;
 
-/// The sword's blade along its hand socket's up: from the hilt to the tip, metres, as
-/// `tools/characters/phases.ts` measured the clips with it.
-const HILT_M: f32 = 0.15;
-const TIP_M: f32 = 0.83;
-/// How far either side of straight ahead a guard covers, degrees.
-const GUARD_DEG: f32 = 75.0;
-/// How long a blow taken full on makes a body flinch, a parried attacker stagger, and a
-/// broken guard reel, seconds.
-const FLINCH_S: f32 = 0.45;
-const STAGGER_S: f32 = 1.2;
-const BROKEN_S: f32 = 0.8;
 /// A parry's flash, seconds.
 const FLASH_S: f32 = 0.18;
 
@@ -112,9 +101,8 @@ pub fn strike(
             facing,
             edge,
             was: fighter.was,
-            open: now.is_some_and(|each| {
-                each.phase(t) == super::moves::Phase::Active && each.damage > 0.0
-            }) && !fighter.runner.landed,
+            open: now.is_some_and(|each| each.phase(t) == Phase::Active && each.damage > 0.0)
+                && !fighter.runner.landed,
             invulnerable: now.is_some_and(|each| each.invulnerable(t)),
             guard_s: fighter.guard_s,
             player,
@@ -136,14 +124,14 @@ pub fn strike(
             let from = (attacker.feet - body.feet)
                 .reject_from(up)
                 .normalize_or_zero();
-            let facing = body.facing.dot(from) > libm::cosf(GUARD_DEG.to_radians());
+            let facing = rules::guards(body.facing, from);
             let Ok((.., fighter, _, _, _, _, _, _)) = fighters.get(attacker.entity) else {
                 continue;
             };
             let Some(each) = fighter.runner.now(set) else {
                 continue;
             };
-            let taken = super::moves::judge(
+            let taken = moves::judge(
                 body.invulnerable,
                 body.guard_s,
                 facing,
@@ -205,23 +193,24 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
             .reject_from(on.feet.normalize())
             .length()
     );
+    let result = rules::outcome(blow.taken, blow.damage, blow.hit_stop);
+    for entity in [by.entity, on.entity] {
+        if let Ok((.., mut fighter, _, _, _, _, _, _)) = fighters.get_mut(entity) {
+            fighter.stop(result.stop_s);
+        }
+    }
+    hurt(fighters, on.entity, result.on, away);
+    hurt(fighters, by.entity, result.by, away);
     match blow.taken {
         Taken::Hit => {
             out.noises.write(Noise::at(Cue::Hit, blow.at));
-            stop(fighters, [by.entity, on.entity], blow.hit_stop);
-            hurt(fighters, on.entity, blow.damage, "Hit_Chest", FLINCH_S, 1.0);
         }
         Taken::Blocked => {
             out.noises.write(Noise::at(Cue::Clash, blow.at));
-            stop(fighters, [by.entity, on.entity], blow.hit_stop * 0.6);
-            shove(fighters, on.entity, away * 2.6);
-            shove(fighters, by.entity, -away * 1.2);
         }
         Taken::Parried => {
             out.noises.write(Noise::at(Cue::Parry, blow.at));
             out.noises.write(Noise::at(Cue::Clash, blow.at));
-            stop(fighters, [by.entity, on.entity], 0.12);
-            hurt(fighters, by.entity, 0.0, "Hit_Head", STAGGER_S, 0.35);
             out.commands.spawn((
                 PointLight {
                     intensity: 400_000.0,
@@ -241,15 +230,6 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
         }
         Taken::GuardBroken => {
             out.noises.write(Noise::at(Cue::Clash, blow.at));
-            stop(fighters, [by.entity, on.entity], blow.hit_stop);
-            hurt(
-                fighters,
-                on.entity,
-                blow.damage * 0.3,
-                "Hit_Head",
-                BROKEN_S,
-                0.6,
-            );
             if on.player {
                 out.notice.say("Your guard is broken");
             }
@@ -258,54 +238,38 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
     }
 }
 
-/// Holds fighters in a hit-stop.
-fn stop(fighters: &mut Query<Body<'_>>, who: [Entity; 2], seconds: f32) {
-    for entity in who {
-        if let Ok((.., mut fighter, _, _, _, _, _, _)) = fighters.get_mut(entity) {
-            fighter.stop_s = fighter.stop_s.max(seconds);
-        }
+/// The clip a reel shows, and how fast.
+fn reel_clip(reel: Reel) -> (&'static str, f32) {
+    match reel {
+        Reel::Flinch => ("Hit_Chest", 1.0),
+        Reel::Stagger => ("Hit_Head", 0.35),
+        Reel::Broken => ("Hit_Head", 0.6),
     }
 }
 
-/// Shoves a fighter along the ground for a moment, metres a second.
-fn shove(fighters: &mut Query<Body<'_>>, entity: Entity, velocity: Vec3) {
-    if let Ok((.., mut fighter, _, _, _, _, _, _)) = fighters.get_mut(entity) {
-        fighter.shove = velocity;
-        fighter.shove_s = 0.15;
-    }
-}
-
-/// A fighter hurt or thrown off its feet: health lost, its move cut short, its guard down,
-/// and a reaction clip for a while; or down, if its health is gone.
-fn hurt(
-    fighters: &mut Query<Body<'_>>,
-    entity: Entity,
-    damage: f32,
-    clip: &str,
-    seconds: f32,
-    speed: f32,
-) {
+/// A fighter takes a blow's effect (`terra_motion`'s rules: shoved, or hurt, its move cut
+/// short and its guard down, reeling or down) and shows it.
+fn hurt(fighters: &mut Query<Body<'_>>, entity: Entity, effect: Effect, away: Vec3) {
     let Ok((_, _, mut fighter, _, staged, acting, drawn, partner, _)) = fighters.get_mut(entity)
     else {
         return;
     };
-    fighter.health = (fighter.health - damage).max(0.0);
-    fighter.runner.clear();
-    fighter.guard_s = None;
-    let (clip, speed) = if fighter.health <= 0.0 {
-        fighter.down_s = Some(0.0);
-        info!(
-            "Melee: {} down",
-            if drawn.is_some() {
-                "you are"
-            } else {
-                "the partner is"
-            }
-        );
-        ("Death01", 1.0)
-    } else {
-        fighter.stagger_s = seconds;
-        (clip, speed)
+    let Some(taking) = fighter.take(effect, away) else {
+        return;
+    };
+    let (clip, speed) = match taking {
+        Taking::Down => {
+            info!(
+                "Melee: {} down",
+                if drawn.is_some() {
+                    "you are"
+                } else {
+                    "the partner is"
+                }
+            );
+            ("Death01", 1.0)
+        }
+        Taking::Reel(reel) => reel_clip(reel),
     };
     if let (Some(mut drawn), Some(mut acting)) = (drawn, acting) {
         drawn.showing = None;

@@ -1,8 +1,7 @@
 //! Moves as data and the move runner (docs/movement.md, "Moves as data" and the actions
 //! layer): which move a body is in and how far, its phases (wind-up, active, recovery), its
 //! cancel window, a press buffered into that window, its i-frames, and how a blow that meets
-//! a guard is judged (blocked, parried). Bevy-free, as the simulation layers are to be (D28):
-//! it moves into `terra_motion` with the mover (movement.md's order of work, stages 2 and 3).
+//! a guard is judged (blocked, parried).
 
 use serde::Deserialize;
 use std::collections::HashMap;

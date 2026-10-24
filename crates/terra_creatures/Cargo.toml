@@ -21,6 +21,8 @@ terra_climate.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true
 terra_items.workspace = true
+# The fight's rules (D447): moves, their runner, blades and how a blow is taken.
+terra_motion.workspace = true
 # What a player carries, makes and needs (D407): what a blow costs and drops, the registries
 # the bestiary is read with, hazards, noise and what a player is told.
 terra_survival.workspace = true
