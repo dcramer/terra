@@ -1,7 +1,8 @@
 //! Moves as data and the move runner (docs/movement.md, "Moves as data" and the actions
 //! layer): which move a body is in and how far, its phases (wind-up, active, recovery), its
 //! cancel window, a press buffered into that window, its i-frames, and how a blow that meets
-//! a guard is judged (blocked, parried).
+//! a guard is judged (blocked, parried), and a body too tired for a move's full cost
+//! (`stamina`) running it slower and weaker.
 
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -39,6 +40,8 @@ pub struct Move {
     pub hold: Option<f32>,
     #[serde(default)]
     pub brace: Option<f32>,
+    #[serde(default)]
+    pub stamina: f32,
 }
 
 fn one() -> f32 {
@@ -134,7 +137,19 @@ impl Move {
 pub struct MoveSet {
     pub parry_s: f32,
     pub buffer_s: f32,
+    /// Stamina a blow taken on the guard costs, for each point of its damage.
+    pub guard_stamina: f32,
+    /// How a light blow comes out with too little stamina for it (D449's placeholder).
+    pub tired: Tired,
     pub moves: HashMap<String, Move>,
+}
+
+/// A blow thrown too tired: its own time runs at `pace`, and it does `might` of its damage.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Tired {
+    pub pace: f32,
+    pub might: f32,
 }
 
 impl MoveSet {
@@ -151,6 +166,13 @@ impl MoveSet {
             if each.done <= each.from || each.speed <= 0.0 {
                 return Err(format!("{name} is over before it starts"));
             }
+            if each.stamina < 0.0 {
+                return Err(format!("{name} gives stamina back"));
+            }
+        }
+        let tired = set.tired;
+        if !(tired.pace > 0.0 && tired.pace <= 1.0 && (0.0..=1.0).contains(&tired.might)) {
+            return Err("a tired blow must be no faster or harder than a rested one".into());
         }
         Ok(set)
     }
@@ -169,13 +191,15 @@ pub enum Ran {
 }
 
 /// The move a body is in, how far into it in the body's own time, and a press waiting for
-/// its cancel window.
+/// its cancel window (with its age, and whether it was asked too tired).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Runner {
     pub current: Option<(String, f32)>,
-    buffered: Option<(String, f32)>,
+    buffered: Option<(String, f32, bool)>,
     /// Whether the current move's blow has landed, so it lands once.
     pub landed: bool,
+    /// Whether the current move was started too tired for its full cost: slower, weaker.
+    pub tired: bool,
 }
 
 impl Runner {
@@ -194,16 +218,21 @@ impl Runner {
     /// Asks for a move: it starts now if the body is free or its move may be cut short,
     /// or waits for the window if it opens soon enough. Says whether it started.
     pub fn ask(&mut self, set: &MoveSet, name: &str) -> bool {
+        self.ask_as(set, name, false)
+    }
+
+    /// Asks for a move, rested or too tired for its full cost (`stamina::ask`).
+    pub fn ask_as(&mut self, set: &MoveSet, name: &str, tired: bool) -> bool {
         if set.get(name).is_none() {
             return false;
         }
         match self.now(set) {
             Some(now) if !now.cancels(self.t()) => {
-                self.buffered = Some((name.to_string(), 0.0));
+                self.buffered = Some((name.to_string(), 0.0, tired));
                 false
             }
             _ => {
-                self.start(name);
+                self.start_as(name, tired);
                 true
             }
         }
@@ -211,9 +240,25 @@ impl Runner {
 
     /// Starts a move at once, whatever the body was doing: a reaction, or a forced stop.
     pub fn start(&mut self, name: &str) {
+        self.start_as(name, false);
+    }
+
+    /// Starts a move at once, rested or too tired.
+    pub fn start_as(&mut self, name: &str, tired: bool) {
         self.current = Some((name.to_string(), 0.0));
         self.buffered = None;
         self.landed = false;
+        self.tired = tired;
+    }
+
+    /// How fast the current move's own time runs against the body's: slower when tired.
+    pub fn pace(&self, set: &MoveSet) -> f32 {
+        if self.tired { set.tired.pace } else { 1.0 }
+    }
+
+    /// The share of its damage the current move does: less when tired.
+    pub fn might(&self, set: &MoveSet) -> f32 {
+        if self.tired { set.tired.might } else { 1.0 }
     }
 
     /// Ends whatever move there is, and any press waiting.
@@ -225,7 +270,7 @@ impl Runner {
     /// The light blow a press asks for: the next of a chain while a chain's blow is on,
     /// otherwise the first.
     pub fn chained<'a>(&'a self, set: &'a MoveSet, first: &'a str) -> &'a str {
-        let waiting = self.buffered.as_ref().map(|(name, _)| name.as_str());
+        let waiting = self.buffered.as_ref().map(|(name, ..)| name.as_str());
         let after = waiting.or(self.name());
         after
             .and_then(|name| set.get(name))
@@ -234,9 +279,10 @@ impl Runner {
     }
 
     /// Moves the body's own time on: a waiting press starts when its window opens, or is
-    /// dropped once stale; a move ends when it is done.
+    /// dropped once stale; a move ends when it is done. A tired move's own time runs slower.
     pub fn tick(&mut self, set: &MoveSet, dt: f32) -> Ran {
-        if let Some((_, age)) = &mut self.buffered {
+        let pace = self.pace(set);
+        if let Some((_, age, _)) = &mut self.buffered {
             *age += dt;
             if *age > set.buffer_s {
                 self.buffered = None;
@@ -245,16 +291,16 @@ impl Runner {
         let Some((name, t)) = &mut self.current else {
             return Ran::Nothing;
         };
-        *t += dt;
+        *t += dt * pace;
         let Some(now) = set.get(name) else {
             self.current = None;
             return Ran::Nothing;
         };
-        if let Some((next, _)) = &self.buffered
+        if let Some((next, _, tired)) = &self.buffered
             && now.cancels(*t)
         {
-            let next = next.clone();
-            self.start(&next);
+            let (next, tired) = (next.clone(), *tired);
+            self.start_as(&next, tired);
             return Ran::Started(next);
         }
         if *t >= now.lasts() {
@@ -348,6 +394,7 @@ mod tests {
             invulnerable: None,
             hold: None,
             brace: None,
+            stamina: 0.0,
         };
         // Clip seconds 0.2 + 2t: active from t = 0.2 to 0.3, over at 0.6.
         assert!((slash.lasts() - 0.6).abs() < 1e-6);

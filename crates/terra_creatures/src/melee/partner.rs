@@ -1,16 +1,21 @@
 //! The sparring partner (D405): a swordsman with a round shield who closes on a drawn player,
 //! guards while circling, then strikes from the moves data, every third blow the heavy one,
 //! each with a wind-up long enough to read, and stands open after it, the window to punish.
-//! No chance in it, so a scripted run sees the same fight every time (`--steady`).
+//! No chance in it, so a scripted run sees the same fight every time (`--steady`). It has a
+//! stamina of its own, spent and refilled by the same rules as the player's: too tired for
+//! the heavy blow it throws a light one, and a guard it cannot pay for breaks.
 
 use super::{Fighter, Set};
 use crate::staged::{self, Staged};
 use bevy::prelude::*;
 use serde_json::json;
+use terra_motion::moves::MoveSet;
+use terra_motion::stamina;
+use terra_survival::vitals;
 use terra_walker::bodies::Body;
 use terra_walker::character;
 use terra_walker::figure::CLIPS;
-use terra_walker::{Player, Stance};
+use terra_walker::{Player, Stamina, Stance};
 use terra_world::shell::ScriptFrame;
 
 /// Its name on the stage.
@@ -99,6 +104,7 @@ pub fn bring(commands: &mut Commands, at: Vec3, facing: Vec3) {
                 world.entity_mut(entity).insert((
                     Partner::default(),
                     Fighter::new(None),
+                    Stamina::default(),
                     Body::fixed(0.35),
                 ));
                 info!("Melee: a sparring partner steps up");
@@ -114,6 +120,7 @@ type Them<'a> = (
     &'a mut Staged,
     &'a mut Fighter,
     &'a mut Partner,
+    Option<&'a mut Stamina>,
 );
 
 /// Each partner's tick: closing, guarding, striking and recovering on its rhythm against
@@ -130,8 +137,11 @@ pub fn think(
     let frame = frame.map_or(0, |frame| frame.0);
     let dt = time.delta_secs();
     let set = &set.0;
-    for (entity, place, mut staged, mut fighter, mut partner) in &mut partners {
+    for (entity, place, mut staged, mut fighter, mut partner, mut pool) in &mut partners {
         fighter.age(dt);
+        if let Some(pool) = pool.as_deref_mut() {
+            vitals::rest(pool, dt);
+        }
         let rate = fighter.rate();
         staged.tell_rate(rate);
         if fighter.hand.is_none() {
@@ -224,27 +234,15 @@ pub fn think(
                     partner.to(Beat::Strike);
                 }
             }
-            Beat::Strike => {
-                partner.blows += 1;
-                let name = if partner.blows % 3 == 0 {
-                    "partner_heavy"
-                } else {
-                    "partner_slash"
-                };
-                fighter.guard_s = None;
-                fighter.runner.start(name);
-                fighter.way = toward;
-                fighter.was = None;
-                if let Some(each) = set.get(name) {
-                    partner.showing = Some(each.clip.clone());
-                    staged.tell_play(&each.clip, each.speed, true, 150, each.from);
-                }
-                info!(
-                    "Melee: frame {frame}: the partner winds up {name}, {far:.2} m off \
-                     (closest since its last {:.2} m)",
-                    partner.closest_m.take().unwrap_or(far)
-                );
-            }
+            Beat::Strike => wind_up(
+                set,
+                &mut fighter,
+                &mut partner,
+                &mut staged,
+                pool.as_deref_mut(),
+                (toward, far),
+                frame,
+            ),
             Beat::Recover => {
                 fighter.guard_s = None;
                 staged.tell_go(None, 0.0);
@@ -259,4 +257,48 @@ pub fn think(
             }
         }
     }
+}
+
+/// The partner starts a blow: every third the heavy one, the light one when too tired for it
+/// (itself tired if need be), its stamina paid and its clip told.
+fn wind_up(
+    set: &MoveSet,
+    fighter: &mut Fighter,
+    partner: &mut Partner,
+    staged: &mut Staged,
+    mut pool: Option<&mut Stamina>,
+    (toward, far): (Vec3, f32),
+    frame: u32,
+) {
+    partner.blows += 1;
+    let wanted = if partner.blows.is_multiple_of(3) {
+        "partner_heavy"
+    } else {
+        "partner_slash"
+    };
+    let left = pool.as_ref().map_or(f32::MAX, |pool| pool.left);
+    let Some(name) = [wanted, "partner_slash"]
+        .into_iter()
+        .find(|name| stamina::start(&mut fighter.runner, set, name, left))
+    else {
+        partner.to(Beat::Guard);
+        return;
+    };
+    let Some(each) = set.get(name) else { return };
+    if let Some(pool) = pool.as_deref_mut() {
+        pool.spend(each.stamina);
+    }
+    fighter.guard_s = None;
+    fighter.way = toward;
+    fighter.was = None;
+    partner.showing = Some(each.clip.clone());
+    let speed = each.speed * fighter.runner.pace(set);
+    staged.tell_play(&each.clip, speed, true, 150, each.from);
+    info!(
+        "Melee: frame {frame}: the partner winds up {name}{}, {far:.2} m off \
+         (closest since its last {:.2} m), {:.0} stamina left",
+        if fighter.runner.tired { " tired" } else { "" },
+        partner.closest_m.take().unwrap_or(far),
+        pool.map_or(f32::MAX, |pool| pool.left)
+    );
 }

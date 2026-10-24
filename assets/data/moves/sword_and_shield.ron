@@ -30,30 +30,39 @@
 //   invulnerable   when blows pass through the body (a roll's i-frames)
 //   hold      where the clip is held while the button stays down (a block)
 //   brace     for a block: from where in the clip a blow taken on it plays, pushed back
+//   stamina   what it costs, paid as it starts (D61). Placeholders: a light blow about 10, a
+//             heavy 22, the roll 18 as the walker's own roll costs; tuned in play
 (
     // A block pressed this long or less before a blow lands parries it (150 to 200 ms in
     // shipped games). An attack asked within `buffer_s` of the window opening waits for it.
     parry_s: 0.18,
     buffer_s: 0.35,
+    // A blow taken on a raised guard costs this much stamina a point of its damage (the
+    // creatures' fight takes 12 a guarded bite). A parry costs nothing.
+    guard_stamina: 1.0,
+    // Out of stamina (D449, Open; this is the agent's placeholder): a roll or heavy blow
+    // without its full cost does not start; a light blow comes out tired, its clip at `pace`
+    // and doing `might` of its damage; a guard with less left than a blow costs is broken.
+    tired: (pace: 0.7, might: 0.5),
     moves: {
         // Fastest 18 m/s at 0.75 s, 1.2 m ahead at hip height, right to left.
         "slash": (
             clip: "Fight_Slash", from: 0.15, speed: 1.35, active: (0.70, 0.92), done: 1.55,
-            cancel: 1.02, next: "backhand", damage: 12, hit_stop: 0.1,
+            cancel: 1.02, next: "backhand", stamina: 10, damage: 12, hit_stop: 0.1,
             drive: [(0.15, 0.0), (0.45, 1.8), (0.80, 0.6), (1.0, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
         ),
         // Fastest 21 m/s at 0.85 s, left to right.
         "backhand": (
             clip: "Fight_Backhand", from: 0.2, speed: 1.35, active: (0.70, 0.90), done: 1.5,
-            cancel: 0.98, next: "finisher", damage: 12, hit_stop: 0.1,
+            cancel: 0.98, next: "finisher", stamina: 10, damage: 12, hit_stop: 0.1,
             drive: [(0.2, 0.0), (0.45, 1.8), (0.80, 0.6), (1.0, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
         ),
         // The third of the chain: the slash again, a little slower and harder.
         "finisher": (
             clip: "Fight_Slash", from: 0.15, speed: 1.15, active: (0.70, 0.92), done: 1.6,
-            cancel: 1.2, damage: 18, hit_stop: 0.13,
+            cancel: 1.2, stamina: 12, damage: 18, hit_stop: 0.13,
             drive: [(0.15, 0.0), (0.45, 2.4), (0.80, 0.8), (1.05, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.5),
         ),
@@ -61,7 +70,7 @@
         // reads, then through.
         "heavy": (
             clip: "Sword_Attack", from: 0.0, speed: 0.62, active: (0.38, 0.52), done: 1.25,
-            cancel: 1.05, damage: 30, hit_stop: 0.2, heavy: true,
+            cancel: 1.05, stamina: 22, damage: 30, hit_stop: 0.2, heavy: true,
             drive: [(0.0, 0.0), (0.25, 0.6), (0.40, 3.2), (0.55, 0.5), (0.8, 0.0)],
             warp: (within: 3.6, cone: 70, stop_at: 1.5, most_mps: 4.0),
         ),
@@ -69,7 +78,7 @@
         // asked, blows passing through it from tuck to the get-up.
         "roll": (
             clip: "Roll", from: 0.05, speed: 1.45, done: 1.2, cancel: 1.0,
-            invulnerable: (0.12, 0.78),
+            invulnerable: (0.12, 0.78), stamina: 18,
             drive: [(0.05, 5.5), (0.75, 5.5), (0.95, 1.5), (1.2, 0.0)],
         ),
         // The shield brought up and braced by 1.2 s and held; a blow taken on it plays the
@@ -81,14 +90,14 @@
         // The partner's slash: a long, readable wind-up at three quarters speed.
         "partner_slash": (
             clip: "Fight_Slash", from: 0.0, speed: 0.75, active: (0.70, 0.92), done: 1.55,
-            damage: 15, hit_stop: 0.1,
+            stamina: 10, damage: 15, hit_stop: 0.1,
             drive: [(0.3, 0.0), (0.55, 1.5), (0.85, 0.4), (1.0, 0.0)],
             warp: (within: 3.0, cone: 80, stop_at: 1.5, most_mps: 3.0),
         ),
         // The partner's heavy: the big cut, its wind-up held longer.
         "partner_heavy": (
             clip: "Sword_Attack", from: 0.0, speed: 0.45, active: (0.38, 0.52), done: 1.25,
-            damage: 25, hit_stop: 0.18, heavy: true,
+            stamina: 22, damage: 25, hit_stop: 0.18, heavy: true,
             drive: [(0.0, 0.0), (0.30, 0.4), (0.40, 2.6), (0.55, 0.4), (0.8, 0.0)],
             warp: (within: 3.4, cone: 80, stop_at: 1.55, most_mps: 3.0),
         ),

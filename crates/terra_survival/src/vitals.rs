@@ -67,6 +67,20 @@ const STARVING: f32 = 1.5;
 /// heat: at 33 °C, hypothermic, it is down in under two minutes (D153).
 const EXPOSED: f32 = 0.5;
 
+/// Stamina coming back once rested a moment, at `slowed` of the full rate.
+fn refill(stamina: &mut Stamina, dt: f32, slowed: f32) {
+    if stamina.rested_s() > STAMINA_WAIT_S {
+        stamina.fill(STAMINA_BACK * slowed * dt);
+    }
+}
+
+/// A moment passing for a body with stamina but no needs of its own, as the sparring
+/// partner: what it spent comes back as a fed body's does.
+pub fn rest(stamina: &mut Stamina, dt: f32) {
+    stamina.wait(dt);
+    refill(stamina, dt, 1.0);
+}
+
 impl Vitals {
     /// Moves the body on by a moment of doing something, spending and filling its stamina.
     /// Returns whether it died.
@@ -83,9 +97,7 @@ impl Vitals {
             stamina.wait(dt);
         }
         let slowed = if self.fed < HUNGRY { 0.4 } else { 1.0 };
-        if stamina.rested_s() > STAMINA_WAIT_S {
-            stamina.fill(STAMINA_BACK * slowed * dt);
-        }
+        refill(stamina, dt, slowed);
         self.fed = (self.fed - (HUNGER + if hard { HUNGER_HARD } else { 0.0 }) * dt).max(0.0);
         self.since_exposed += dt;
         if self.fed <= 0.0 {
@@ -272,6 +284,22 @@ mod tests {
         let told: Vec<_> = world.resource_mut::<Messages<Told>>().drain().collect();
         assert_eq!(told.len(), 1);
         assert_eq!(told[0].player, eats);
+    }
+
+    #[test]
+    fn a_body_without_needs_gets_its_stamina_back_after_a_moment() {
+        let mut stamina = Stamina::default();
+        stamina.spend(60.0);
+        rest(&mut stamina, STAMINA_WAIT_S * 0.5);
+        assert_eq!(
+            stamina.left,
+            FULL - 60.0,
+            "not before it has rested a moment"
+        );
+        for _ in 0..100 {
+            rest(&mut stamina, 0.1);
+        }
+        assert_eq!(stamina.left, FULL);
     }
 
     #[test]

@@ -12,10 +12,11 @@ use bevy::prelude::*;
 use terra_motion::blade::{self, Edge, HILT_M, TIP_M};
 use terra_motion::contact::{self as rules, Effect, Reel, Taking};
 use terra_motion::moves::{self, Phase, Taken};
+use terra_motion::stamina;
 use terra_survival::noise::{Cue, Noise};
 use terra_survival::told::Notice;
 use terra_walker::figure::Acting;
-use terra_walker::{Motion, Player};
+use terra_walker::{Motion, Player, Stamina};
 use terra_world::shell::ScriptFrame;
 
 /// A parry's flash, seconds.
@@ -41,6 +42,7 @@ type Body<'a> = (
     Option<&'a mut Drawn>,
     Option<&'a mut Partner>,
     Has<Player>,
+    Option<&'a mut Stamina>,
 );
 
 /// A fighter as the blades see it this tick.
@@ -54,6 +56,8 @@ struct Seen {
     invulnerable: bool,
     guard_s: Option<f32>,
     player: bool,
+    /// Stamina left to hold its guard with; a body without any never tires.
+    stamina: f32,
 }
 
 /// A blow that reached a body.
@@ -64,6 +68,8 @@ struct Landed {
     taken: Taken,
     damage: f32,
     hit_stop: f32,
+    /// Stamina the blow takes from the struck's guard.
+    charge: f32,
 }
 
 /// Sweeps every blade in its blow's active frames against every other fighter, and does
@@ -81,7 +87,7 @@ pub fn strike(
     let set = &set.0;
     let frame = frame.map_or(0, |frame| frame.0);
     let mut seen = Vec::new();
-    for (entity, place, fighter, motion, staged, _, _, _, player) in &fighters {
+    for (entity, place, fighter, motion, staged, _, _, _, player, pool) in &fighters {
         let edge = fighter
             .hand
             .and_then(|hand| hands.get(hand).ok())
@@ -106,6 +112,7 @@ pub fn strike(
             invulnerable: now.is_some_and(|each| each.invulnerable(t)),
             guard_s: fighter.guard_s,
             player,
+            stamina: pool.map_or(f32::MAX, |pool| pool.left),
         });
     }
     let mut landed = Vec::new();
@@ -125,7 +132,7 @@ pub fn strike(
                 .reject_from(up)
                 .normalize_or_zero();
             let facing = rules::guards(body.facing, from);
-            let Ok((.., fighter, _, _, _, _, _, _)) = fighters.get(attacker.entity) else {
+            let Ok((_, _, fighter, ..)) = fighters.get(attacker.entity) else {
                 continue;
             };
             let Some(each) = fighter.runner.now(set) else {
@@ -138,19 +145,23 @@ pub fn strike(
                 each.heavy,
                 set.parry_s,
             );
+            // A tired blow is weaker; a guard with too little stamina for it breaks.
+            let damage = each.damage * fighter.runner.might(set);
+            let (taken, charge) = stamina::guarded(set, taken, damage, body.stamina);
             landed.push(Landed {
                 by,
                 on,
                 at,
                 taken,
-                damage: each.damage,
+                damage,
                 hit_stop: each.hit_stop,
+                charge,
             });
             break;
         }
     }
     for (index, each) in seen.iter().enumerate() {
-        if let Ok((.., mut fighter, _, _, _, _, _, _)) = fighters.get_mut(each.entity) {
+        if let Ok((_, _, mut fighter, ..)) = fighters.get_mut(each.entity) {
             fighter.was = each.edge;
             if landed.iter().any(|blow| blow.by == index) {
                 fighter.runner.landed = true;
@@ -184,18 +195,24 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
         .normalize_or_zero();
     let who = |player: bool| if player { "you" } else { "the partner" };
     info!(
-        "Melee: frame {frame}: {} {:?} by {} ({} damage, {:.2} m apart)",
+        "Melee: frame {frame}: {} {:?} by {} ({} damage, {:.0} stamina, {:.2} m apart)",
         who(on.player),
         blow.taken,
         who(by.player),
         blow.damage,
+        blow.charge,
         (on.feet - by.feet)
             .reject_from(on.feet.normalize())
             .length()
     );
     let result = rules::outcome(blow.taken, blow.damage, blow.hit_stop);
+    if blow.charge > 0.0
+        && let Ok((.., Some(mut pool))) = fighters.get_mut(on.entity)
+    {
+        pool.spend(blow.charge);
+    }
     for entity in [by.entity, on.entity] {
-        if let Ok((.., mut fighter, _, _, _, _, _, _)) = fighters.get_mut(entity) {
+        if let Ok((_, _, mut fighter, ..)) = fighters.get_mut(entity) {
             fighter.stop(result.stop_s);
         }
     }
@@ -250,7 +267,7 @@ fn reel_clip(reel: Reel) -> (&'static str, f32) {
 /// A fighter takes a blow's effect (`terra_motion`'s rules: shoved, or hurt, its move cut
 /// short and its guard down, reeling or down) and shows it.
 fn hurt(fighters: &mut Query<Body<'_>>, entity: Entity, effect: Effect, away: Vec3) {
-    let Ok((_, _, mut fighter, _, staged, acting, drawn, partner, _)) = fighters.get_mut(entity)
+    let Ok((_, _, mut fighter, _, staged, acting, drawn, partner, ..)) = fighters.get_mut(entity)
     else {
         return;
     };
@@ -291,7 +308,7 @@ pub fn again(mut fighters: Query<Body<'_>>) {
         return;
     }
     info!("Melee: the spar starts again");
-    for (_, _, mut fighter, _, staged, _, drawn, partner, _) in &mut fighters {
+    for (_, _, mut fighter, _, staged, _, drawn, partner, ..) in &mut fighters {
         fighter.health = HEALTH;
         fighter.down_s = None;
         fighter.stagger_s = 0.0;

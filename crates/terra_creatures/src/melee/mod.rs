@@ -2,7 +2,8 @@
 //! sword and shield and brings a sparring partner, who fights back on a rhythm a player can
 //! read. Drawn, WASD strafes facing the view (or the partner, locked on with Q), Space jumps,
 //! Ctrl rolls through blows, left click runs the light chain and Shift with it the heavy
-//! blow, and right click held blocks, a guard raised just before a blow parrying it.
+//! blow, and right click held blocks, a guard raised just before a blow parrying it. Each
+//! move costs the walker's stamina as its set says, and a blow on the guard costs it too.
 //!
 //! The rules are `terra_motion`'s (D447): the moves as data (`assets/data/moves/
 //! sword_and_shield.ron`) and their runner, a blade swept against a body's hurt capsule, and
@@ -21,6 +22,7 @@ use std::time::Duration;
 use terra_motion::blade;
 use terra_motion::contact::{Fighting, NEAREST_M};
 use terra_motion::moves::{self, MoveSet, Ran};
+use terra_motion::stamina;
 use terra_survival::held::InHand;
 use terra_survival::inventory::HandsFull;
 use terra_walker::character;
@@ -28,7 +30,7 @@ use terra_walker::controls::Action;
 use terra_walker::figure::{Act, Acting, Grip, Moves};
 use terra_walker::intent::Intent;
 use terra_walker::walker::Steer;
-use terra_walker::{Downed, Motion, Player, Stance, View};
+use terra_walker::{Downed, Motion, Player, Stamina, Stance, View};
 use terra_world::tick::Sim;
 
 /// The move set every fighter here uses.
@@ -209,6 +211,7 @@ type Drawing<'a> = (
     &'a mut Fighter,
     &'a mut Drawn,
     &'a mut Acting,
+    Option<&'a mut Stamina>,
     Has<Downed>,
 );
 
@@ -232,6 +235,7 @@ fn act(
         mut fighter,
         mut drawn,
         mut acting,
+        mut pool,
         downed,
     ) in &mut players
     {
@@ -299,38 +303,31 @@ fn act(
         }
         // Moves asked: a roll, the heavy blow, the next of the light chain.
         if free {
-            let asked = if intent.pressed(Action::Dodge) {
-                Some("roll".to_string())
-            } else if intent.pressed(Action::Use) && intent.held(Action::Sprint) {
-                Some("heavy".to_string())
-            } else if intent.pressed(Action::Use) {
-                Some(fighter.runner.chained(set, "slash").to_string())
-            } else {
-                None
-            };
-            if let Some(name) = asked
-                && fighter.runner.ask(set, &name)
-            {
-                begin(
-                    &mut fighter,
-                    &name,
-                    wish,
-                    ahead,
-                    set,
-                    &mut drawn,
-                    &mut acting,
-                );
+            // A body without stamina, as in a test, never tires.
+            let left = pool.as_ref().map_or(f32::MAX, |pool| pool.left);
+            if let Some(name) = asked(&intent, &fighter, set) {
+                match stamina::ask(&mut fighter.runner, set, &name, left) {
+                    Some(true) => begin(
+                        &mut fighter,
+                        &name,
+                        (wish, ahead),
+                        set,
+                        pool.as_deref_mut(),
+                        (&mut drawn, &mut acting),
+                    ),
+                    Some(false) => {}
+                    None => info!("Melee: too tired to {name} ({left:.0} stamina)"),
+                }
             }
         }
         if let Ran::Started(name) = fighter.runner.tick(set, dt * rate) {
             begin(
                 &mut fighter,
                 &name,
-                wish,
-                ahead,
+                (wish, ahead),
                 set,
-                &mut drawn,
-                &mut acting,
+                pool.as_deref_mut(),
+                (&mut drawn, &mut acting),
             );
         }
         let nearest = partners
@@ -363,17 +360,36 @@ fn act(
     }
 }
 
-/// A move started: which way it goes, and its clip.
+/// The move a drawn player's presses ask for: a roll, the heavy blow, the next of the light
+/// chain.
+fn asked(intent: &Intent, fighter: &Fighter, set: &MoveSet) -> Option<String> {
+    if intent.pressed(Action::Dodge) {
+        Some("roll".to_string())
+    } else if intent.pressed(Action::Use) && intent.held(Action::Sprint) {
+        Some("heavy".to_string())
+    } else if intent.pressed(Action::Use) {
+        Some(fighter.runner.chained(set, "slash").to_string())
+    } else {
+        None
+    }
+}
+
+/// A move started: which way it goes (the way asked, and ahead), its stamina paid, and its
+/// clip, slower when it came tired.
 fn begin(
     fighter: &mut Fighter,
     name: &str,
-    wish: Vec3,
-    ahead: Vec3,
+    (wish, ahead): (Vec3, Vec3),
     set: &MoveSet,
-    drawn: &mut Drawn,
-    acting: &mut Acting,
+    pool: Option<&mut Stamina>,
+    (drawn, acting): (&mut Drawn, &mut Acting),
 ) {
     let Some(each) = set.get(name) else { return };
+    if let Some(pool) = pool
+        && each.stamina > 0.0
+    {
+        pool.spend(each.stamina);
+    }
     fighter.way = if name == "roll" {
         if wish == Vec3::ZERO { -ahead } else { wish }
     } else {
@@ -381,13 +397,14 @@ fn begin(
     };
     fighter.guard_s = None;
     fighter.was = None;
-    info!("Melee: you {name}");
+    let tired = if fighter.runner.tired { " tired" } else { "" };
+    info!("Melee: you {name}{tired}");
     drawn.showing = None;
     show(
         drawn,
         acting,
         &each.clip,
-        each.speed,
+        each.speed * fighter.runner.pace(set),
         true,
         each.from,
         Some(110),
@@ -529,4 +546,77 @@ fn walk_clip(
         _ => 1.0,
     };
     show(drawn, acting, clip, speed, false, 0.0, Some(180));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    /// A drawn player with so much stamina presses an action once: the move it is in after,
+    /// and the stamina it has left.
+    fn press(action: Action, left: f32, with: Option<Action>) -> (Option<String>, f32) {
+        let mut world = World::new();
+        world.init_resource::<Time>();
+        let path = terra_world::data::path(SET);
+        let set = MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap();
+        world.insert_resource(Set(set));
+        let mut intent = Intent::default();
+        with.into_iter().for_each(|held| intent.hold(held));
+        intent.hold(action);
+        let mut pool = Stamina::default();
+        pool.spend(Stamina::FULL - left);
+        let player = world
+            .spawn((
+                Player,
+                Transform::from_translation(Vec3::Y * 2000.0),
+                Motion::facing(Vec3::X),
+                intent,
+                View {
+                    forward: Vec3::X,
+                    pitch: 0.0,
+                },
+                Stance::default(),
+                Fighter::new(None),
+                Drawn {
+                    lock: None,
+                    looks: Vec::new(),
+                    showing: None,
+                },
+                Acting::default(),
+                pool,
+            ))
+            .id();
+        world.run_system_once(act).unwrap();
+        let fighter = world.get::<Fighter>(player).unwrap();
+        let name = fighter.runner.name().map(str::to_string);
+        (name, world.get::<Stamina>(player).unwrap().left)
+    }
+
+    #[test]
+    fn drawn_a_roll_and_each_blow_pay_their_cost_and_too_tired_a_roll_or_heavy_does_not_start() {
+        let path = terra_world::data::path(SET);
+        let set = MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let cost = |name: &str| set.get(name).unwrap().stamina;
+        let full = Stamina::FULL;
+        let roll = (Some("roll".to_string()), full - cost("roll"));
+        assert_eq!(press(Action::Dodge, full, None), roll);
+        let slash = (Some("slash".to_string()), full - cost("slash"));
+        assert_eq!(press(Action::Use, full, None), slash);
+        let heavy = (Some("heavy".to_string()), full - cost("heavy"));
+        assert_eq!(press(Action::Use, full, Some(Action::Sprint)), heavy);
+        // Too little for the roll or the heavy blow: neither starts, nothing is spent.
+        let short = cost("roll") - 1.0;
+        assert_eq!(press(Action::Dodge, short, None), (None, short));
+        let short = cost("heavy") - 1.0;
+        assert_eq!(
+            press(Action::Use, short, Some(Action::Sprint)),
+            (None, short)
+        );
+        // A light blow still comes, tired, and takes what there is.
+        assert_eq!(
+            press(Action::Use, 4.0, None),
+            (Some("slash".to_string()), 0.0)
+        );
+    }
 }

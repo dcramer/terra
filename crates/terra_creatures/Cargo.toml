@@ -34,6 +34,8 @@ terra_world.workspace = true
 [dev-dependencies]
 # The test world and player, and taking a player's clothes off.
 terra_survival = { workspace = true, features = ["testing"] }
+# Pressing keys in tests.
+terra_walker = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

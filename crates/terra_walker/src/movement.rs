@@ -353,6 +353,77 @@ fn walk(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::walker::Steer;
+    use bevy::ecs::system::RunSystemOnce;
+    use std::time::Duration;
+    use terra_core::{PlanetSpec, Seed};
+
+    /// A tick of the walk for a player standing on a smooth planet's ground with full
+    /// stamina, steered as given, pressing an action: its stamina left, and whether it
+    /// rolled and jumped.
+    fn press(steer: Steer, action: Action) -> (f32, bool, bool) {
+        let planet = Planet::smooth(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 2000.0,
+        });
+        let ground = planet.ground_at(Vec3::Y * 2100.0);
+        let mut world = World::new();
+        world.insert_resource(planet);
+        world.init_resource::<flora::Obstacles>();
+        let mut time = Time::<()>::default();
+        time.advance_by(Duration::from_secs_f32(1.0 / 60.0));
+        world.insert_resource(time);
+        let mut motion = Motion::facing(Vec3::X);
+        motion.on_ground = true;
+        let mut intent = Intent::default();
+        intent.hold(action);
+        let player = world
+            .spawn((
+                Player,
+                Transform::from_translation(ground),
+                motion,
+                Stance { steer, ..default() },
+                Stamina::default(),
+                View {
+                    forward: Vec3::X,
+                    pitch: 0.0,
+                },
+                intent,
+            ))
+            .id();
+        world.run_system_once(walk).unwrap();
+        let rolled = world.get::<Stance>(player).unwrap().dodging > 0.0;
+        let jumped = world.get::<Motion>(player).unwrap().rising > 0.0;
+        (world.get::<Stamina>(player).unwrap().left, rolled, jumped)
+    }
+
+    #[test]
+    fn a_jump_costs_the_same_with_a_sword_drawn_and_a_roll_is_left_to_the_stance() {
+        let full = Stamina::FULL;
+        let sheathed = Steer::default();
+        // As the sword stance steers a body: facing set, its own pace and drive, its own roll.
+        let drawn = Steer {
+            face: Some(Vec3::X),
+            pace: Some(2.2),
+            drive: Some(Vec3::ZERO),
+            no_roll: true,
+        };
+        assert_eq!(
+            press(sheathed, Action::Jump),
+            (full - JUMP_STAMINA, false, true)
+        );
+        assert_eq!(
+            press(drawn, Action::Jump),
+            (full - JUMP_STAMINA, false, true)
+        );
+        assert_eq!(
+            press(sheathed, Action::Dodge),
+            (full - DODGE_STAMINA, true, false)
+        );
+        // Drawn, the walker neither rolls nor charges: the stance's roll pays its own cost
+        // (`terra_creatures::melee`).
+        assert_eq!(press(drawn, Action::Dodge), (full, false, false));
+    }
 
     #[test]
     fn deep_snow_and_mud_slow_a_walker_and_frozen_ground_does_not() {

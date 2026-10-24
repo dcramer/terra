@@ -1,7 +1,8 @@
 //! What a blow that reached a body does (D405), by how it was taken (`moves::judge`): a hit
 //! costs health, holds both in a hit-stop and makes the struck flinch; a block costs no
-//! health and shoves both apart; a parry staggers the attacker; a heavy blow breaks a guard
-//! held too long; a roll's i-frames let it by.
+//! health, only stamina (`stamina::guarded`), and shoves both apart; a parry staggers the
+//! attacker; a heavy blow breaks a guard held too long, as does any blow on a guard with too
+//! little stamina left to hold it; a roll's i-frames let it by.
 //! And the fighter's own state those change, ticked in its own time.
 
 use crate::moves::{Runner, Taken};

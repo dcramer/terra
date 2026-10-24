@@ -2,12 +2,15 @@
 //! two plain bodies on a line, facing each other, driven by scripted presses (never clips)
 //! and stepped at 60 Hz through the rules the game runs: the runner and its buffer, a blow's
 //! drive and its step in, the blade swept against the hurt capsule, the judge and what a blow
-//! does. It logs every move start and end, contact and outcome, and a failed check prints
-//! the log. The scenarios run on every core (D406).
+//! does, and what each costs in stamina. It logs every move start and end, contact and
+//! outcome with the stamina left, and a failed check prints the log. The scenarios run on
+//! every core (D406). A body's stamina here is only spent, never refilled: a duel is
+//! seconds long, and the refill is the walker's (`terra_survival::vitals`).
 
 use crate::blade::{self, Edge};
 use crate::contact::{self, Fighting, NEAREST_M};
 use crate::moves::{self, MoveSet, Phase, Ran, Taken};
+use crate::stamina;
 use glam::{Quat, Vec3};
 
 const DT: f32 = 1.0 / 60.0;
@@ -22,6 +25,8 @@ const ARC_DEG: f32 = 70.0;
 /// Two bodies' pushboxes, middle to middle (the walker's, 0.35 m round).
 const PUSHBOX_M: f32 = 0.7;
 const HEALTH: f32 = 100.0;
+/// A rested body's stamina, as the walker's.
+const FULL: f32 = 100.0;
 /// Where the second body starts: as far as the partner closes to before it guards.
 const APART_M: f32 = 2.0;
 
@@ -51,6 +56,7 @@ struct Body {
     way: f32,
     was: Option<Edge>,
     guard_held: bool,
+    stamina: f32,
     script: Vec<(When, Press)>,
 }
 
@@ -83,6 +89,7 @@ impl<'a> Duel<'a> {
             way: facing,
             was: None,
             guard_held: false,
+            stamina: FULL,
             script,
         };
         Self {
@@ -93,6 +100,13 @@ impl<'a> Duel<'a> {
             log: Vec::new(),
             idle: [Vec::new(), Vec::new()],
         }
+    }
+
+    /// Starts the two bodies with this much stamina.
+    fn tired(mut self, a: f32, b: f32) -> Self {
+        self.bodies[0].stamina = a;
+        self.bodies[1].stamina = b;
+        self
     }
 
     fn run(mut self, frames: u32) -> Self {
@@ -129,13 +143,22 @@ impl<'a> Duel<'a> {
         due
     }
 
+    /// A move started: its way, and its cost paid.
     fn begin(&mut self, i: usize, name: &str) {
         let body = &mut self.bodies[i];
         body.way = body.facing;
         body.fight.guard_s = None;
         body.was = None;
+        let cost = self.set.get(name).map_or(0.0, |each| each.stamina);
+        body.stamina = (body.stamina - cost).max(0.0);
+        let tired = if body.fight.runner.tired {
+            " tired"
+        } else {
+            ""
+        };
+        let left = body.stamina;
         self.events.push(Event::Started(self.frame, i, name.into()));
-        self.say(format!("{} starts {name}", WHO[i]));
+        self.say(format!("{} starts {name}{tired} (stamina {left})", WHO[i]));
     }
 
     fn step(&mut self) {
@@ -164,10 +187,13 @@ impl<'a> Duel<'a> {
                 Press::Light => Some(body.fight.runner.chained(set, "slash").to_string()),
                 Press::Guard => None,
             });
-            if let Some(name) = asked.filter(|_| free)
-                && body.fight.runner.ask(set, &name)
-            {
-                self.begin(i, &name);
+            if let Some(name) = asked.filter(|_| free) {
+                let left = body.stamina;
+                match stamina::ask(&mut body.fight.runner, set, &name, left) {
+                    Some(true) => self.begin(i, &name),
+                    Some(false) => {}
+                    None => self.say(format!("{} too tired to {name} ({left})", WHO[i])),
+                }
             }
             let body = &mut self.bodies[i];
             match body.fight.runner.tick(set, DT * rate) {
@@ -273,16 +299,19 @@ impl<'a> Duel<'a> {
                 each.heavy,
                 set.parry_s,
             );
-            landed.push((by, taken, each.damage, each.hit_stop, each.phase(t)));
+            let damage = each.damage * attacker.runner.might(set);
+            let (taken, charge) = stamina::guarded(set, taken, damage, body.stamina);
+            landed.push((by, taken, damage, each.hit_stop, each.phase(t), charge));
         }
         for (body, edge) in self.bodies.iter_mut().zip(edges) {
             body.was = Some(edge);
         }
-        for (by, taken, damage, hit_stop, phase) in landed {
+        for (by, taken, damage, hit_stop, phase, charge) in landed {
             let on = 1 - by;
             let away = (self.feet(on) - self.feet(by)).normalize_or_zero();
             let out = contact::outcome(taken, damage, hit_stop);
             self.bodies[by].fight.runner.landed = true;
+            self.bodies[on].stamina -= charge;
             for i in [by, on] {
                 self.bodies[i].fight.stop(out.stop_s);
             }
@@ -290,10 +319,11 @@ impl<'a> Duel<'a> {
             self.bodies[by].fight.take(out.by, away);
             self.events
                 .push(Event::Contact(self.frame, by, on, taken, phase));
-            let health = self.bodies[on].fight.health;
+            let (health, left) = (self.bodies[on].fight.health, self.bodies[on].stamina);
             let apart = (self.bodies[on].x - self.bodies[by].x).abs();
             self.say(format!(
-                "{} {taken:?} by {} ({damage} damage, health {health}, {apart:.2} m apart)",
+                "{} {taken:?} by {} ({damage} damage, health {health}, stamina {left}, \
+                 {apart:.2} m apart)",
                 WHO[on], WHO[by]
             ));
         }
@@ -393,6 +423,61 @@ fn chains(set: &MoveSet) {
     let broken = (Taken::GuardBroken, Phase::Active);
     assert_eq!(taken, [blocked, blocked, blocked, broken], "{log}");
     assert!(duel.bodies[1].fight.health < HEALTH, "{log}");
+    // Each move paid its cost as it started, and each blow on the guard its damage's worth.
+    let cost = |names: &[&str]| -> f32 {
+        names
+            .iter()
+            .map(|name| set.get(name).unwrap().stamina)
+            .sum()
+    };
+    let paid = FULL - duel.bodies[0].stamina;
+    assert!((paid - cost(&names)).abs() < 1e-4, "{log}");
+    let guarded = set.guard_stamina * (12.0 + 12.0 + 18.0);
+    assert!(
+        (FULL - duel.bodies[1].stamina - guarded).abs() < 1e-4,
+        "{log}"
+    );
+}
+
+/// Out of stamina (the placeholder, D449): A with 5 left asks for the heavy blow, which does
+/// not start, then a light one, which comes out tired, slower and weaker; B with none left
+/// cannot roll, and its guard breaks under the tired blow.
+fn tires(set: &MoveSet) {
+    let a = vec![
+        (When::Frame(0), Press::Heavy),
+        (When::Frame(5), Press::Light),
+    ];
+    let b = vec![
+        (When::Frame(0), Press::Guard),
+        (When::Frame(2), Press::Roll),
+    ];
+    let duel = Duel::new(set, a, b).tired(5.0, 0.0).run(160);
+    let log = duel.told();
+    assert_eq!(duel.starts(0), [(5, "slash")], "{log}");
+    assert_eq!(duel.starts(1), [], "{log}");
+    let contacts = duel.contacts();
+    assert_eq!(contacts.len(), 1, "{log}");
+    assert_eq!(
+        (contacts[0].1, contacts[0].2),
+        (0, Taken::GuardBroken),
+        "{log}"
+    );
+    let might = 12.0 * set.tired.might * 0.3;
+    assert!(
+        (HEALTH - duel.bodies[1].fight.health - might).abs() < 1e-4,
+        "{log}"
+    );
+    let ended = duel.events.iter().find_map(|event| match event {
+        Event::Ended(frame, 0, _) => Some(*frame),
+        _ => None,
+    });
+    let slash = set.get("slash").unwrap();
+    let tired_frames = (slash.lasts() / set.tired.pace * 60.0) as u32;
+    assert!(
+        ended.is_some_and(|frame| frame - 5 >= tired_frames),
+        "{log}"
+    );
+    assert_eq!(duel.bodies[0].stamina, 0.0, "{log}");
 }
 
 /// B raises its guard 0.1 s before A's slash lands: parried, and A staggers, its next press
@@ -426,12 +511,14 @@ fn dodges(set: &MoveSet, lands_at: u32) {
 }
 
 #[test]
-fn the_duel_chains_lands_parries_and_dodges() {
+fn the_duel_chains_lands_parries_dodges_and_tires() {
     let set = set();
     let lands_at = lands(&set);
-    let scenarios: [&(dyn Fn() + Sync); 3] =
-        [&|| chains(&set), &|| parries(&set, lands_at), &|| {
-            dodges(&set, lands_at)
-        }];
+    let scenarios: [&(dyn Fn() + Sync); 4] = [
+        &|| chains(&set),
+        &|| tires(&set),
+        &|| parries(&set, lands_at),
+        &|| dodges(&set, lands_at),
+    ];
     terra_gen::par::map(&scenarios, |run| run());
 }
