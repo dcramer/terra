@@ -207,11 +207,10 @@ mod tests {
 
     /// Runs a script against a body that starts each move it is asked for, and another that
     /// starts `blow` on a tick: the ticks each step came on, and what each gave.
-    fn run(
-        text: &str,
-        blow: Option<(&str, u32)>,
-        ticks: u32,
-    ) -> Vec<(u32, String, Vec<(Intent, bool)>)> {
+    /// A step that came: its tick, its name and what it gave.
+    type Came = (u32, String, Vec<(Intent, bool)>);
+
+    fn run(text: &str, blow: Option<(&str, u32)>, ticks: u32) -> Vec<Came> {
         let set = set();
         let mut script = Script::read(text).unwrap();
         let mut me = Fighting::new(100.0);
