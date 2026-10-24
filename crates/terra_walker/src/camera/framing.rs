@@ -1,8 +1,9 @@
 //! How the camera frames the player: over the right shoulder for the walk, building and
 //! everything else (the camera's own, D274, D285); with a weapon drawn, as Enshrouded frames a
 //! fight (D180): the player centred and low, about a quarter of the frame's height, no shoulder
-//! offset; locked on, from behind the player on the line to the target, both in the frame, as
-//! action games' lock-on cameras do. It eases from one to the other on drawing and sheathing.
+//! offset; locked on, from behind the player and a little round from the line to the target
+//! (D453), both in the frame and the target beside the player, as action games' lock-on cameras
+//! do. It eases from one to the other on drawing and sheathing.
 //! The numbers are data, `assets/data/camera.ron`; this says where the boom hangs, which way it
 //! looks and how long it is, and the camera's collision takes it from there as for the walk.
 
@@ -18,6 +19,7 @@ pub struct Fight {
     pub rise_m: f32,
     pub locked_pitch_deg: f32,
     pub locked_focus: f32,
+    pub locked_aside_deg: f32,
     pub ease_in_s: f32,
     pub ease_out_s: f32,
     pub lock_s: f32,
@@ -108,6 +110,27 @@ pub fn boom(fight: &Fight, vfov: f32, looking: Vec3, up: Vec3) -> f32 {
     (near + far) * 0.5
 }
 
+/// Which way the locked camera looks: down by `locked_pitch_deg` at the point `focus_m` along
+/// `ahead` from the player's head, from where, seen from above, it stands `locked_aside_deg`
+/// round from straight behind the player (D453), with the boom `frame` gives it (as long as the
+/// player's share asks, and the way from the player to that point).
+fn locked_looking(fight: &Fight, ahead: Vec3, up: Vec3, focus_m: f32, vfov: f32) -> Vec3 {
+    let pitch = fight.locked_pitch_deg.to_radians();
+    let (cos_p, sin_p) = (libm::cosf(pitch), libm::sinf(pitch));
+    let behind = (ahead * cos_p + up * sin_p).normalize();
+    // Seen from above the eye is `reach` from the point looked at, on a bearing `aside` round
+    // from behind the player: so far from the player on it, by the law of cosines in the
+    // triangle of player, point and eye.
+    let reach = (boom(fight, vfov, behind, up) + focus_m) * cos_p;
+    let aside = fight.locked_aside_deg.to_radians();
+    let (cos_a, sin_a) = (libm::cosf(aside), libm::sinf(aside));
+    let bearing = -ahead * cos_a + ahead.cross(up).normalize() * sin_a;
+    let off = focus_m * sin_a;
+    let from_player = -focus_m * cos_a + libm::sqrtf((reach * reach - off * off).max(0.0));
+    let flat = (ahead * focus_m - bearing * from_player).normalize_or(ahead);
+    (flat * cos_p + up * sin_p).normalize()
+}
+
 fn smooth(x: f32) -> f32 {
     let x = x.clamp(0.0, 1.0);
     x * x * (3.0 - 2.0 * x)
@@ -152,14 +175,14 @@ pub fn frame(
     let mut offset = up * fight.rise_m;
     let mut looking = walk.looking;
     let mut extra = 0.0;
-    // Locked: from over a point between the fighters' heads, looking at it down the line from
-    // the player to the target.
+    // Locked: from over a point between the fighters' heads, looking at it from behind the
+    // player, a little round from the line to the target (D453).
     let toward = (eased.target - head).reject_from(up);
     if eased.locked > 0.0 && toward.length() > 0.1 {
         let k = smooth(eased.locked);
         let ahead = toward.normalize();
-        let pitch = fight.locked_pitch_deg.to_radians();
-        let locked = (ahead * libm::cosf(pitch) + up * libm::sinf(pitch)).normalize();
+        let focus_m = toward.length() * fight.locked_focus;
+        let locked = locked_looking(fight, ahead, up, focus_m, vfov);
         looking = looking.lerp(locked, k).normalize_or(locked);
         let focus = toward * fight.locked_focus;
         offset += focus * k;
@@ -362,6 +385,67 @@ mod tests {
                     "{far} m at {bearing} deg: {body}"
                 );
             }
+            let filled = share(eye, f.looking, up, vfov, Vec3::ZERO, fight.body_m);
+            assert!(
+                (SHARE[0]..=SHARE[1] + 0.02).contains(&filled),
+                "{far} m at {bearing} deg: {filled}"
+            );
+        }
+    }
+
+    /// D453's bar: how far round from straight behind the player the locked camera stands.
+    const OFF_THE_LINE_DEG: [f32; 2] = [15.0, 20.0];
+    /// Half a body's width at the chest, so a target's middle further aside than this from the
+    /// player's, in the picture, shows beside the player rather than behind them.
+    const HALF_WIDTH_M: f32 = 0.25;
+
+    #[test]
+    fn locked_on_the_camera_stands_off_the_line_to_the_target() {
+        let fight = fight();
+        let up = Vec3::Y;
+        let head = up * HEAD_M;
+        let vfov = 55_f32.to_radians();
+        // The duel's spacing, and nearer and further out to the lock's reach, all round.
+        for (far, bearing) in [
+            (1.4_f32, 0.0_f32),
+            (1.4, 90.0),
+            (2.0, -60.0),
+            (4.0, 135.0),
+            (8.0, -150.0),
+            (15.0, 30.0),
+        ] {
+            let b = bearing.to_radians();
+            let feet = Vec3::new(libm::cosf(b), 0.0, libm::sinf(b)) * far;
+            let mut state = Eased::default();
+            let f = eased(1.0, &mut state, true, Some(feet + up * HEAD_M), walk());
+            let eye = head + f.offset - f.looking * f.boom_m;
+            // Seen from above: the angle at the player between straight behind them (away from
+            // the target) and the camera, and on which side it stands.
+            let ahead = feet.reject_from(up).normalize();
+            let back = (eye - head).reject_from(up).normalize();
+            let off = libm::acosf((-ahead).dot(back).clamp(-1.0, 1.0)).to_degrees();
+            assert!(
+                (OFF_THE_LINE_DEG[0]..=OFF_THE_LINE_DEG[1]).contains(&off),
+                "{far} m at {bearing} deg: the camera {off:.1} deg off the line"
+            );
+            let right = ahead.cross(up);
+            assert!(
+                back.dot(right) > 0.0,
+                "{far} m at {bearing} deg: the camera stands on the player's left"
+            );
+            // In the picture, the target's chest stands clear of the player's.
+            let chest = up * (fight.body_m * 0.6);
+            let lens_right = f.looking.cross(up).normalize();
+            let across = |at: Vec3| {
+                let v = at - eye;
+                v.dot(lens_right) / v.dot(f.looking)
+            };
+            let player = (Vec3::ZERO + chest - eye).dot(f.looking);
+            let apart = (across(feet + chest) - across(Vec3::ZERO + chest)) * player;
+            assert!(
+                apart.abs() > HALF_WIDTH_M,
+                "{far} m at {bearing} deg: the target {apart:.2} m aside of the player"
+            );
             let filled = share(eye, f.looking, up, vfov, Vec3::ZERO, fight.body_m);
             assert!(
                 (SHARE[0]..=SHARE[1] + 0.02).contains(&filled),

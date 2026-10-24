@@ -1756,6 +1756,23 @@
    }
   },
   {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "camera.locked_off_line",
+   "noticed": 4,
+   "notice": "locked on, the camera stands straight behind the player and the foe hides behind them",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "D453 (15-20 degrees to one side of the line to the target)",
+   "check": {
+    "by": "test",
+    "crate": "terra_walker",
+    "test": "camera::framing::tests::locked_on_the_camera_stands_off_the_line_to_the_target"
+   }
+  },
+  {
    "measurable": false,
    "cost": "heavy",
    "id": "review.blind_score",

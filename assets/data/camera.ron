@@ -13,11 +13,15 @@
         // The boom hangs from over the head, so the player is centred, low in the frame: no
         // shoulder offset in a fight.
         rise_m: 0.15,
-        // Locked on, the camera stands behind the player on the line to the target and looks
-        // down by this much, at a point so far from the player's head to the target's (0 the
-        // player, 1 the target), so both are in the frame (as action games' lock-on cameras do).
+        // Locked on, the camera stands behind the player and looks down by this much, at a
+        // point so far from the player's head to the target's (0 the player, 1 the target), so
+        // both are in the frame (as action games' lock-on cameras do); seen from above it stands
+        // this far round from the line to the target, to the player's right (the walk's
+        // shoulder; negative the left), so the target shows beside the player rather than
+        // behind them (D453: 15 to 20 degrees).
         locked_pitch_deg: -14.0,
         locked_focus: 0.3,
+        locked_aside_deg: 17.5,
         // How long the camera takes to come to the fight's framing on drawing, to go back to
         // the walk's on sheathing, and to come to the lock and leave it, in seconds.
         ease_in_s: 0.5,

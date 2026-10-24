@@ -59,6 +59,8 @@ move.partner_heavy.to_guard	1.186	seeded from main at 705a8520 (2026-10-24), the
 move.slash.into_next	0.701	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.backhand.into_next	0.696	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.block.shield_face	4.587	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+move.Keyed_Guard.held	-4.382	new criterion camera.locked_off_line (D453): the locked camera stands on the line today, 0 deg off it
+move.Keyed_Guard.hands	-2.265	new criterion camera.locked_off_line (D453): the locked camera stands on the line today, 0 deg off it
 move.Fight_Guard.held	0.342	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Fight_Guard.hands	-3.024	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Fight_Strafe_L.held	-0.926	seeded from main at 705a8520 (2026-10-24), the first scorecard run
@@ -98,3 +100,4 @@ film.misses	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 film.hit_stop	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
 film.framed	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
 film.camera_share	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
+camera.locked_off_line	1	new criterion camera.locked_off_line (D453): the locked camera stands on the line today, 0 deg off it
