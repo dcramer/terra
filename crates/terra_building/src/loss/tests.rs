@@ -676,3 +676,56 @@ fn a_falls_every_fragment_is_drawn_the_frame_it_comes_down_however_many() {
         assert_eq!(undrawn(&app), 0);
     }
 }
+
+/// A burnt wall's fragments are drawn as blackened as it stood (D377): drawn clean, the
+/// castle's burnt south-west tower turned pale the frame it came down, its upper walls'
+/// luma 79 to 110 (castle film r29, 14.23 s).
+#[test]
+fn what_comes_down_of_a_burnt_wall_is_drawn_as_blackened_as_it_stood() {
+    let mut app = building_app();
+    give_arrays(&mut app);
+    {
+        let mut site = app.world_mut().resource_mut::<Site>();
+        let fell: Vec<(IVec3, Cube)> = site.base.cubes().collect();
+        let scorch = fell
+            .iter()
+            .map(|(at, _)| {
+                (
+                    at.to_array(),
+                    Scorch {
+                        level: Scorch::LEVELS,
+                    },
+                )
+            })
+            .collect();
+        site.fallen.push(Fallen {
+            fell,
+            scorch,
+            ..default()
+        });
+    }
+    app.update();
+    let world = app.world();
+    let meshes = world.resource::<Assets<Mesh>>();
+    let mut drawn = 0;
+    for live in &world.resource::<Shards>().live {
+        let Some(mesh) = world
+            .get::<Mesh3d>(live.entity)
+            .and_then(|mesh| meshes.get(&mesh.0))
+        else {
+            continue;
+        };
+        // Those in the texture arrays carry their char with their layer.
+        let Some(VertexAttributeValues::Float32x2(ids)) = mesh.attribute(Mesh::ATTRIBUTE_UV_1)
+        else {
+            continue;
+        };
+        drawn += 1;
+        let char = ids[0][0].fract();
+        assert!(
+            (char - terra_build::fire::CHAR_SHARE).abs() < 1e-3,
+            "a fragment of a wall burnt black drawn with char {char}"
+        );
+    }
+    assert!(drawn > 100, "{drawn} fragments drawn in the arrays");
+}

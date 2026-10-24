@@ -15,6 +15,7 @@ use crate::act::Building;
 use crate::tool::Builder;
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::NotShadowCaster;
+use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
@@ -22,7 +23,7 @@ use terra_bases::arrays::{Arrays, BuildMaterial};
 use terra_bases::draw;
 use terra_bases::{Build, BuildLook, Built, Fallen, Site};
 use terra_build::ops::Op;
-use terra_build::{CELL_M, Cube, Kind};
+use terra_build::{CELL_M, Cube, Kind, Scorch};
 use terra_build_mesh::fragments::{self, Breaking, Breaks, Cut, Fragment, Rubble, Shape};
 use terra_walker::shake::Shake;
 use terra_walker::{LocalPlayer, Player};
@@ -31,8 +32,10 @@ use terra_world::quality::Quality;
 
 mod dust;
 mod heaps;
+mod soot;
 use dust::{billow_at, dust_at, landing, puff};
 use heaps::draw_heaps;
+use soot::{chipped_off, mesh_for};
 
 /// The fixed step fragments move by, in seconds, and the most steps a frame.
 const STEP_S: f32 = 1.0 / 60.0;
@@ -116,6 +119,8 @@ struct Live {
     /// Whether it is drawn as it stood in the wall, whole and plain, until it moves
     /// (`Fragment::stands`).
     standing: bool,
+    /// How blackened it is drawn, in [`Scorch`]'s levels: as what it came from was (D377).
+    char: u8,
 }
 
 impl Live {
@@ -129,7 +134,13 @@ impl Live {
             fade_s: FADE_S,
             age_s: 0.0,
             standing: false,
+            char: 0,
         }
+    }
+
+    /// The same, drawn `char` blackened ([`Live::char`]).
+    fn sooted(self, char: u8) -> Live {
+        Live { char, ..self }
     }
 
     /// Whether it is shrinking away, or gone.
@@ -154,7 +165,7 @@ enum Drawn {
 #[derive(Resource, Default)]
 struct Shards {
     live: Vec<Live>,
-    meshes: BTreeMap<(Kind, Cut), Option<(Handle<Mesh>, Drawn)>>,
+    meshes: BTreeMap<(Kind, Cut, u8), Option<(Handle<Mesh>, Drawn)>>,
     layers: BTreeSet<u16>,
     puff: Option<Handle<Mesh>>,
     dust: Option<Handle<Image>>,
@@ -227,51 +238,6 @@ fn broken(fallen: &Fallen) -> Vec<&(IVec3, Cube)> {
         .iter()
         .filter(|(at, _)| fallen.destroyed.contains(&at.to_array()))
         .collect()
-}
-
-/// The mesh and material a kind's fragments of a cut are drawn with (`Fragment::mesh`, given
-/// how often its kind's texture repeats), made the first time.
-fn mesh_for(
-    shards: &mut Shards,
-    look: &BuildLook,
-    arrays: Option<&Arrays>,
-    meshes: &mut Assets<Mesh>,
-    kind: Kind,
-    cut_of: impl FnOnce([u8; 3]) -> Cut,
-) -> Option<(Handle<Mesh>, Drawn)> {
-    let kit = look.kits.as_deref().and_then(|kits| kits.of(kind));
-    let cut = cut_of(kit.map_or([1; 3], fragments::repeat));
-    if let Some(made) = shards.meshes.get(&(kind, cut)) {
-        return made.clone();
-    }
-    let made = (|| {
-        let kit = kit?;
-        let surfaces: BTreeMap<_, _> = fragments::surfaces(kit, &cut)
-            .0
-            .into_iter()
-            .map(|(material, surface)| ((kind, material), surface))
-            .collect();
-        let mut used = BTreeSet::new();
-        let (in_arrays, rest) = draw::in_arrays(
-            &surfaces,
-            &look.layers,
-            Vec3::ZERO,
-            &BTreeMap::new(),
-            &mut used,
-        );
-        if let (Some(mesh), Some(arrays)) = (in_arrays, arrays) {
-            shards.layers.extend(used);
-            return Some((meshes.add(mesh), Drawn::Arrays(arrays.material.clone())));
-        }
-        let (kind, material, mesh) = rest.into_iter().next()?;
-        let own = look
-            .materials
-            .get(kind, material)
-            .or_else(|| look.materials.get(Kind::PLAIN, material))?;
-        Some((meshes.add(mesh), Drawn::Own(own.clone())))
-    })();
-    shards.meshes.insert((kind, cut), made.clone());
-    made
 }
 
 /// Where a fragment is in the world: its build's frame over where it is in the build's
@@ -386,33 +352,18 @@ fn burst(
         // Down where it stood, or tipping the way its support gave way and cracking up as it
         // goes, by its support's rules (`fragments::collapse`).
         fragments::collapse(&mut made, &fallen.fell, &destroyed, &breaks);
-        // What came off a cube still standing: a few pieces a quarter of its health lost,
-        // out of its open face, where its stones and shingles were.
-        for (at, cube, from, to, out) in &fallen.chipped {
-            let lost = f32::from(to.saturating_sub(*from)) / 4.0;
-            let pieces = fragments::burst(
-                &[(*at, *cube)],
-                &|_| true,
-                &breaks,
-                share * CHIPPED_SHARE * lost,
-                most.saturating_sub(made.len()),
-            );
-            made.extend(pieces.into_iter().map(|mut piece| {
-                // Off its face, not inside it.
-                let centre = (at.as_vec3() + 0.5) * CELL_M;
-                let across = piece.at - centre;
-                piece.at = centre + across - *out * across.dot(*out)
-                    + *out * (CELL_M * 0.5 + piece.size.max_element() * 0.5);
-                piece.velocity += *out * 0.8;
-                piece
-            }));
-        }
+        // Each as sooted as what it came from, so a burnt wall does not turn clean the
+        // frame it comes down (castle film r29, 14.23 s).
+        let mut chars = soot::chars_of(&made, &fallen);
+        chipped_off(&fallen, &breaks, share, most, &mut made, &mut chars);
         let count = made.len();
         // Moving at once, and drawn this frame (`step`), all of them: they take the place of
         // cubes the sections stop drawing, so one left for a later frame is a hole there.
-        shards
-            .live
-            .extend(made.into_iter().map(|fragment| Live::new(fragment, root)));
+        shards.live.extend(
+            made.into_iter()
+                .zip(chars)
+                .map(|(fragment, char)| Live::new(fragment, root).sooted(char)),
+        );
         // Dust where it broke: a puff for every few cubes destroyed, more for what crumbles.
         let broke = broken(&fallen);
         let puffs = broke.len().div_ceil(3).min(most_puffs / 2).max(1);
@@ -680,7 +631,7 @@ fn warm(
             .collect();
         for kit in &kits.0 {
             for &cut in &cuts {
-                let made = mesh_for(shards, look, arrays, meshes, kit.kind(), |_| cut);
+                let made = mesh_for(shards, look, arrays, meshes, kit.kind(), 0, |_| cut);
                 if let Some(drawn) = made {
                     let at = Transform::from_translation(under).with_scale(Vec3::splat(0.01));
                     let entity = spawn(commands, drawn, at);
@@ -787,8 +738,12 @@ fn fall(
                     // inside its pieces.
                     live.still_s = live.rest_s + live.fade_s;
                     live.fragment.still = true;
-                    let root = live.root;
-                    born.extend(pieces.into_iter().map(|fragment| Live::new(fragment, root)));
+                    let (root, char) = (live.root, live.char);
+                    born.extend(
+                        pieces
+                            .into_iter()
+                            .map(|fragment| Live::new(fragment, root).sooted(char)),
+                    );
                 }
             } else if landing.hit.is_some_and(|hit| hit > 3.0)
                 && live.fragment.size.max_element() > 0.2
@@ -804,8 +759,12 @@ fn fall(
                     room = room.saturating_sub(pieces.len().saturating_sub(1));
                     live.still_s = live.rest_s + live.fade_s;
                     live.fragment.still = true;
-                    let root = live.root;
-                    born.extend(pieces.into_iter().map(|fragment| Live::new(fragment, root)));
+                    let (root, char) = (live.root, live.char);
+                    born.extend(
+                        pieces
+                            .into_iter()
+                            .map(|fragment| Live::new(fragment, root).sooted(char)),
+                    );
                 }
             }
         }
@@ -918,10 +877,15 @@ fn draw_where_they_are(
         }
         if live.entity == Entity::PLACEHOLDER {
             if let Some(build) = by_root.get(&live.root)
-                && let Some(drawn) =
-                    mesh_for(shards, look, arrays, meshes, live.fragment.kind, |repeat| {
-                        live.fragment.mesh(repeat)
-                    })
+                && let Some(drawn) = mesh_for(
+                    shards,
+                    look,
+                    arrays,
+                    meshes,
+                    live.fragment.kind,
+                    live.char,
+                    |repeat| live.fragment.mesh(repeat),
+                )
             {
                 live.entity = spawn(commands, drawn, placed(&build.frame, &live));
                 live.standing = live.fragment.stands();
@@ -933,11 +897,15 @@ fn draw_where_they_are(
         // blocks start to go, never the whole wall at once.
         if live.standing && !live.fragment.stands() {
             live.standing = false;
-            if let Some((mesh, _)) =
-                mesh_for(shards, look, arrays, meshes, live.fragment.kind, |repeat| {
-                    live.fragment.mesh(repeat)
-                })
-                && let Ok(mut entity) = commands.get_entity(live.entity)
+            if let Some((mesh, _)) = mesh_for(
+                shards,
+                look,
+                arrays,
+                meshes,
+                live.fragment.kind,
+                live.char,
+                |repeat| live.fragment.mesh(repeat),
+            ) && let Ok(mut entity) = commands.get_entity(live.entity)
             {
                 entity.insert(Mesh3d(mesh));
             }

@@ -324,7 +324,10 @@ pub fn collapse(
     breaks: &dyn Fn(Kind) -> Breaks,
 ) {
     let hanging: Vec<usize> = (0..made.len())
-        .filter(|&i| made[i].shape == Shape::Whole && made[i].hinge.is_none())
+        // A roof's slabs come down on their own, off what fell (`roof`).
+        .filter(|&i| {
+            made[i].shape == Shape::Whole && made[i].hinge.is_none() && !made[i].kind.is_roof()
+        })
         .collect();
     if hanging.len() < 2 {
         return;

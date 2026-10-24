@@ -357,9 +357,102 @@ fn a_roof_left_hanging_sheds_its_covering_rather_than_falling_as_cubes() {
         .collect();
     let parts = burst(&roof, &|_| false, &|_| Breaks::Bits, 1.0, 2000);
     assert!(!parts.is_empty());
-    assert!(parts.iter().all(|part| part.shape != Shape::Whole));
+    // Bits, and a thin slab a cube standing in for its covering (`roof`), never a cube.
+    let slabs: Vec<_> = parts.iter().filter(|p| p.shape == Shape::Whole).collect();
+    assert_eq!(slabs.len(), roof.len());
+    assert!(
+        slabs
+            .iter()
+            .all(|slab| slab.size.min_element() < CELL_M * 0.5)
+    );
     let latest = parts.iter().map(|part| part.wait).fold(0.0, f32::max);
     assert!(latest > 0.0, "the higher a moment later");
+    // Broken through, it goes at once, as slabs thrown off with its bits.
+    let broken = burst(&roof, &|_| true, &|_| Breaks::Bits, 1.0, 2000);
+    let slabs: Vec<_> = broken.iter().filter(|p| p.shape == Shape::Whole).collect();
+    assert_eq!(slabs.len(), roof.len());
+    assert!(
+        slabs
+            .iter()
+            .all(|slab| slab.wait == 0.0 && slab.velocity.y > 0.0)
+    );
+}
+
+#[test]
+fn a_roof_left_hanging_is_drawn_as_it_stood_until_its_covering_is_shed() {
+    // A gable roof the roofer lays over a footprint six cubes by four, left hanging when
+    // what held it gave way. Turned into bits at once, a burning tower's roof vanished in
+    // one frame, its pitch and its shadow with it (castle film r29, 14.23 s).
+    let footprint: std::collections::BTreeSet<[i32; 2]> =
+        (0..6).flat_map(|x| (0..4).map(move |z| [x, z])).collect();
+    let plan = terra_build::roofer::over(&footprint, 6, terra_build::roofer::Style::Gable, None);
+    let fell: Vec<(IVec3, Cube)> = plan
+        .roof
+        .iter()
+        .map(|&(at, shape)| {
+            (
+                at,
+                Cube {
+                    shape,
+                    ..Cube::new(Kind::FIRST_ROOF, Fill::Solid)
+                },
+            )
+        })
+        .collect();
+    let parts = burst(&fell, &|_| false, &|_| Breaks::Bits, 1.0, MOST);
+    let covers = |part: &Fragment, on: Vec3| {
+        let local = part.turn.inverse() * (on - part.at);
+        (local.abs() - part.size * 0.5).max_element() < 0.02
+    };
+    let mut ramps = 0;
+    for (at, cube) in &fell {
+        let CubeShape::Slope(side) = cube.shape else {
+            continue;
+        };
+        ramps += 1;
+        // A ramp's covering runs through its middle, rising toward its side.
+        let middle = (at.as_vec3() + 0.5) * CELL_M;
+        let slab = parts
+            .iter()
+            .find(|part| part.shape == Shape::Whole && part.stands() && covers(part, middle))
+            .unwrap_or_else(|| panic!("the roof at {at} drawn where it stood"));
+        let rising = (slab.turn * Vec3::X).dot(side.step().as_vec3());
+        assert!(rising > 0.5, "along its slope at {at}: {rising}");
+        // Where it stood until its turn to be shed, the bits round it with it; then it goes.
+        let mut slab = *slab;
+        let shed = slab.wait;
+        let mut t = 0.0;
+        while t + 1.0 / 60.0 < shed {
+            slab.step(1.0 / 60.0, &flat, &open);
+            t += 1.0 / 60.0;
+        }
+        assert!(
+            slab.stands(),
+            "still standing at {t:.2} s of {shed:.2} s at {at}"
+        );
+        for _ in 0..12 {
+            slab.step(1.0 / 60.0, &flat, &open);
+        }
+        assert!(!slab.stands(), "falling once its covering is shed at {at}");
+    }
+    assert!(ramps > 8, "a roof's slopes: {ramps}");
+    // And what is shed is not seen through it: no bit stands out over the covering.
+    for part in parts.iter().filter(|part| part.shape != Shape::Whole) {
+        let cube = (part.at / CELL_M).floor().as_ivec3();
+        let Some((
+            _,
+            Cube {
+                shape: CubeShape::Slope(side),
+                ..
+            },
+        )) = fell.iter().find(|(at, _)| *at == cube)
+        else {
+            continue;
+        };
+        let out = (Vec3::Y - side.step().as_vec3()).normalize();
+        let above = (part.at - (cube.as_vec3() + 0.5) * CELL_M).dot(out);
+        assert!(above < 0.06, "a bit {above:.2} m over the roof at {cube}");
+    }
 }
 
 #[test]

@@ -121,6 +121,10 @@ pub struct Fallen {
     /// Whether fire burnt what it destroyed through (`terra_game`'s fire marks its own acts):
     /// gone up in the fire's smoke, not broken, so no puff of dust where each one stood.
     pub burnt: bool,
+    /// How blackened each cube that came down or was chipped was (D377), so its fragments
+    /// are drawn as sooted as the wall they stood in: drawn clean, a burnt tower turned pale
+    /// the frame it came down (castle film r29, 14.23 s, upper tower luma 79 to 110).
+    pub scorch: BTreeMap<[i32; 3], terra_build::Scorch>,
 }
 
 /// How many operations are kept before they are folded into a snapshot.
@@ -188,9 +192,20 @@ pub fn work_out(
             .normalize_or(Vec3::Y);
         chipped.push((at, cube, before, now, out));
     }
+    // How blackened each was, read after the act: a cube gone keeps its scorch in the base
+    // until the fire next sets it (`Base::scorch`).
+    let scorch_of =
+        |cubes: &mut dyn Iterator<Item = IVec3>| -> BTreeMap<[i32; 3], terra_build::Scorch> {
+            cubes
+                .map(|at| (at.to_array(), base.scorch(at)))
+                .filter(|(_, scorch)| *scorch != terra_build::Scorch::default())
+                .collect()
+        };
     if !chipped.is_empty() {
+        let scorch = scorch_of(&mut chipped.iter().map(|chip| chip.0));
         fallen.push(Fallen {
             chipped,
+            scorch,
             ..default()
         });
     }
@@ -211,6 +226,7 @@ pub fn work_out(
                 .map(|(at, _)| at.to_array())
                 .filter(|at| hit.contains(at))
                 .collect(),
+            scorch: scorch_of(&mut done.fell.iter().map(|(at, _)| *at)),
             fell: done.fell.clone(),
             ..default()
         });

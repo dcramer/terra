@@ -32,6 +32,7 @@ use terra_gen::hash;
 
 mod collapse;
 mod fracture;
+mod roof;
 mod rubble;
 pub use collapse::{BODY_MOST_S, Body, Falls, Hinge, collapse, falls};
 pub use rubble::{Gone, REPOSE, Rubble, gone};
@@ -630,6 +631,7 @@ pub fn burst(
     let room = (most / 2).max(most.saturating_sub(hanging.len()));
     let share = share.min(room as f32 / ((broken.len() + shed.len()) * per).max(1) as f32);
     let mut out = Vec::new();
+    let mut broken_slabs = Vec::new();
     for (at, cube) in &broken {
         let low = at.as_vec3() * CELL_M;
         let seed = hash::of(&[at.x as u32, at.y as u32, at.z as u32]);
@@ -646,35 +648,24 @@ pub fn burst(
             1.2,
             &mut out,
         );
-    }
-    let lowest_shed = shed.iter().map(|(at, _)| at.y).min().unwrap_or(0);
-    for (at, cube) in &shed {
-        let low = at.as_vec3() * CELL_M;
-        let seed = hash::of(&[at.x as u32, at.y as u32, at.z as u32]);
-        let away = (low + CELL_M * 0.5 - impact)
-            .with_y(0.0)
-            .normalize_or_zero()
-            * 0.4;
-        let first = out.len();
-        pieces(
-            cube.kind,
-            breaks(cube.kind),
-            low,
-            1.0,
-            seed,
-            share,
-            away,
-            0.2,
-            &mut out,
-        );
-        let wait =
-            ((at.y - lowest_shed) as f32 * STAGGER_S + 0.1 * unit(&[seed, 99])).min(STAGGER_MOST_S);
-        for piece in &mut out[first..] {
-            piece.wait = wait;
-            piece.velocity *= 0.5;
+        // A roof broken through goes as its boarding does, in slabs thrown off with its bits,
+        // not in bits alone: so much less of it, it vanished the frame it broke (castle film
+        // r30, the burning tower's roof at 14.23 s).
+        if cube.kind.is_roof() {
+            let mut slab = roof::slab(*at, cube, hash::of(&[seed, 98]), 0.0);
+            slab.velocity = away * 0.5 + Vec3::Y * 0.6;
+            broken_slabs.push(slab);
         }
     }
-    out.truncate(most);
+    // The roof as it stood until its covering is shed, cube by cube (`roof`).
+    let mut slabs = broken_slabs;
+    shed_roof(&shed, impact, share, breaks, &mut out, &mut slabs);
+    // What is shed comes off the roof it stood in: the slabs first, every so many if they
+    // are more than half the room.
+    let every = slabs.len().div_ceil((most / 2).max(1)).max(1);
+    let slabs: Vec<Fragment> = slabs.into_iter().step_by(every).collect();
+    out.truncate(most.saturating_sub(slabs.len()));
+    out.extend(slabs);
     // The cubes left hanging fall whole, in chunks of uneven size where there are many
     // (`fracture`): a tower comes down as solid chunks of masonry, not a lattice of every
     // so many cubes nor a grid of equal blocks.
@@ -743,6 +734,48 @@ pub fn burst(
         });
     }
     out
+}
+
+/// The bits a roof left hanging sheds into `out`, each cube's a moment after the one under
+/// it gave way, set in the slab standing in for it ([`roof::slab`]) that goes into `slabs`.
+fn shed_roof(
+    shed: &[&(IVec3, Cube)],
+    impact: Vec3,
+    share: f32,
+    breaks: &dyn Fn(Kind) -> Breaks,
+    out: &mut Vec<Fragment>,
+    slabs: &mut Vec<Fragment>,
+) {
+    let lowest_shed = shed.iter().map(|(at, _)| at.y).min().unwrap_or(0);
+    for (at, cube) in shed {
+        let low = at.as_vec3() * CELL_M;
+        let seed = hash::of(&[at.x as u32, at.y as u32, at.z as u32]);
+        let away = (low + CELL_M * 0.5 - impact)
+            .with_y(0.0)
+            .normalize_or_zero()
+            * 0.4;
+        let first = out.len();
+        pieces(
+            cube.kind,
+            breaks(cube.kind),
+            low,
+            1.0,
+            seed,
+            share,
+            away,
+            0.2,
+            out,
+        );
+        let wait =
+            ((at.y - lowest_shed) as f32 * STAGGER_S + 0.1 * unit(&[seed, 99])).min(STAGGER_MOST_S);
+        let pitch = roof::pitch(*at, cube);
+        for piece in &mut out[first..] {
+            piece.wait = wait;
+            piece.velocity *= 0.5;
+            roof::onto(piece, &pitch);
+        }
+        slabs.push(roof::slab(*at, cube, hash::of(&[seed, 98]), wait));
+    }
 }
 
 /// Whether a block of `cubes` runs along z, the way the wall it fell from runs: its longer
