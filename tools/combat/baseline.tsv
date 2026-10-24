@@ -89,3 +89,12 @@ rule.stamina.guard_break	0	seeded from main at 705a8520 (2026-10-24), the first 
 rule.stamina.drawn	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 rule.sound.struck	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 rule.sound.contact	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+film.same_fight	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
+film.latency	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
+film.chain_gaps	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
+film.feet_sliding	66	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
+film.overlap	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
+film.misses	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
+film.hit_stop	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
+film.framed	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
+film.camera_share	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film

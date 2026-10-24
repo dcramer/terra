@@ -28,13 +28,13 @@ Read [docs/movement.md](../../../docs/movement.md) ("The goal", the pipeline) be
 Ordered by what a player notices most (`noticed`), then by how far out. Re-read it from `cargo xtask combat --json` when it moves; the scorecard is the truth, this list its order.
 
 1. `move.roll.held` 22.8 cm (bar 1): the shield goes through the spine in the roll.
-2. `move.backhand.held` 12.5 cm: the shield through a thigh in the backhand.
-3. `move.slash.held`, `move.finisher.held`, `move.partner_slash.held` 12.4 / 12.4 / 12.0 cm: the shield through a thigh in Fight_Slash (one clip, three moves).
-4. `move.block.held` 6.4 cm: the sword through the head while blocking.
-5. `move.heavy.held`, `move.partner_heavy.held` 4.2 cm: the shield in the spine in Sword_Attack.
-6. `timing.roll.length` 0.79 s (bar 0.5-0.6): the roll lasts too long.
-7. `timing.light.idle_to_hit` 0.41 s (bar 0.22-0.32): a light blow lands late.
-8. The duel film's rows (`film.*`, heavy): their first numbers come from the first `--film` run.
+2. `film.feet_sliding` 66 of 81 plants slid past 3 cm (bar 0; median 16.5 cm, worst 89.4 cm, the player's left foot standing): feet skate in the duel. The film's other eight checks pass.
+3. `move.backhand.held` 12.5 cm: the shield through a thigh in the backhand.
+4. `move.slash.held`, `move.finisher.held`, `move.partner_slash.held` 12.4 / 12.4 / 12.0 cm: the shield through a thigh in Fight_Slash (one clip, three moves).
+5. `move.block.held` 6.4 cm: the sword through the head while blocking.
+6. `move.heavy.held`, `move.partner_heavy.held` 4.2 cm: the shield in the spine in Sword_Attack.
+7. `timing.roll.length` 0.79 s (bar 0.5-0.6): the roll lasts too long.
+8. `timing.light.idle_to_hit` 0.41 s (bar 0.22-0.32): a light blow lands late.
 9. `move.backhand.hands`, `move.slash.hands`, `move.finisher.hands` 22.0 / 18.1 / 18.1 cm (bar 2): the sword arm in the spine (with the keyed clips of item 10).
 10. `move.*.from_guard`, `move.*.to_guard` 0.79-1.24 m (bar 0.1), every blow: the body snaps out of and into the guard; `move.slash.into_next`, `move.backhand.into_next` 0.70 m: the chain jumps. These pass only when the game's blows are keyed to its guard (D450: Keyed_Guard, then Keyed_Slash, Keyed_Backhand into the set, the handoff's order).
 11. `timing.heavy.total` 2.02 s (1.4-1.7), `timing.heavy.hit_to_guard` 1.40 s (0.7-1.1): the heavy keeps the player too long.
