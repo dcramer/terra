@@ -122,15 +122,21 @@ def test_zones_give_the_belly_to_the_trunk():
 
 
 def test_twist_counts_turn_about_the_bone_not_bend():
-    ring = np.array([[math.cos(a), 0.0, math.sin(a)] for a in np.linspace(0, 2 * math.pi, 12, endpoint=False)])
-
     def rot(axis, deg):
         c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
-        return {"x": np.array([[1, 0, 0], [0, c, -s], [0, s, c]]), "y": np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])}[axis]
+        return {"x": np.array([[1, 0, 0], [0, c, -s], [0, s, c]]), "y": np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]]),
+                "z": np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])}[axis]
 
-    assert ms.twist(ring, ring @ rot("x", 70).T) < 1e-6  # a bend: no twist
-    assert abs(ms.twist(ring, ring @ rot("y", 25).T) - 25) < 1e-6
-    assert abs(ms.twist(ring, ring @ (rot("x", 60) @ rot("y", 20)).T) - 20) < 1e-6  # twist, then bend
+    up = (0.0, 1.0, 0.0)
+    for bend in (10, 90, 150, 179):  # a knee bent, however far: no twist
+        assert ms.twist_about(rot("x", bend), up) < 1e-4
+        assert ms.twist_about(rot("z", bend), (1.0, 0.0, 0.0)) < 1e-4
+    assert abs(ms.twist_about(rot("y", 60), up) - 60) < 1e-4
+    assert abs(ms.twist_about(rot("x", 60) @ rot("y", 20), up) - 20) < 2  # twist, then bend
+    assert abs(ms.twist_about(rot("x", 170), (1.0, 0.0, 0.0)) - 170) < 1e-4  # a half turn reads right
+    # Folded 175 degrees about an axis 5 degrees off square to the bone: a fold, not a twist.
+    tilted = rot("y", 5) @ rot("x", 175) @ rot("y", -5)
+    assert ms.twist_about(tilted, (0.0, 0.0, 1.0)) < 20
 
 
 tests = [f for n, f in sorted(globals().items()) if n.startswith("test_")]

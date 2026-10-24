@@ -13,7 +13,7 @@ checked side by side, one run each (the deer among them sets the skin-lag bar).
 |---|---|
 | Trunk stretch: p95 of the belly's and torso's edges, stretched or shrunk | 25% in gaits, 45% in other clips |
 | Belly weight on leg bones (four-legged) | 25% |
-| Skin lag: the skin ring at a joint twisted about its bone (its best-fit turn's twist, not the bend) | 30 deg, or 1.25 x the deer's worst |
+| Skin lag: a joint whose bone and parent share skin (a vertex 20-80% each), turned about the bone (its turn's rotation vector along the bone; bending reads 0; linear blending pinches evenly shared skin to cos(t/2)) | 30 deg, or 1.25 x the deer's worst |
 | Lowest skin, standing clips | -1 cm |
 | Lowest skin, gaits and one-shot moves (a hoof digs in as it lands) | -max(1 cm, 4% of height) |
 | Lowest trunk skin, lying clips (Death: head, ears and legs may dip, the body may not) | -max(1 cm, 4% of height) |
@@ -97,6 +97,10 @@ def check(src, scale):
             if g.weight > 0:
                 W.setdefault(names[g.group], {})[v.index] = g.weight
     deform = set(W) & set(b.name for b in bones)
+    total = np.zeros(n)
+    for ws in W.values():
+        for i, w in ws.items():
+            total[i] += w
     bird = any(b.name.startswith("Humerus") for b in bones)
     trunk = [b.name for b in bones if b.name in deform and not sided(b.name) and not b.name.startswith(TRUNK_SKIP)]
     spine_z = float(np.mean([at(bones[b].head_local)[2] for b in trunk])) if trunk else hi[2] * 0.6
@@ -139,7 +143,7 @@ def check(src, scale):
     el0 = np.linalg.norm(rest[edges[:, 0]] - rest[edges[:, 1]], axis=1)
     te = (el0 > 1e-7) & skin[edges[:, 0]] & skin[edges[:, 1]]
 
-    # Rings at joints: skin moved by a child bone or its parent, round the child's head.
+    # Joints whose bone and parent share skin round the bone's head: their turn's twist pinches it.
     rings = {}
     for b in bones:
         if not b.parent or b.name not in deform or b.length < 1e-5:
@@ -156,8 +160,14 @@ def check(src, scale):
         if cand.sum() < 6:
             continue
         cand &= r < np.median(r[cand]) * 2.0
-        if cand.sum() >= 6:
-            rings[b.name] = np.nonzero(cand)[0]
+        idx = np.nonzero(cand)[0]
+        own = np.array([W.get(b.name, {}).get(i, 0.0) for i in idx])
+        par = np.array([W.get(b.parent.name, {}).get(i, 0.0) for i in idx])
+        # The skin the two share, mostly theirs: a vertex led by a third bone twists with it.
+        keep = (own + par > 0.5 * total[idx]) & (own > 0) & (par > 0)
+        share = own[keep] / (own[keep] + par[keep])
+        if ((share > 0.2) & (share < 0.8)).any():
+            rings[b.name] = share
 
     feet = ms.foot_clusters(rest, height, length, 2 if bird else 4)
     eps = max(0.003, 0.01 * height)
@@ -215,14 +225,11 @@ def check(src, scale):
             tails.append([at(pb.tail) for pb in pbs if pb.name in deform])
             if k % 2:
                 continue
-            for bn, idx in rings.items():
+            for bn in rings:
                 b = bones[bn]
-                M = RW @ pbs[bn].matrix
-                M0 = RW @ b.matrix_local
-                inv, inv0 = np.array(M.inverted()), np.array(M0.inverted())
-                lp = (p[idx] / scale) @ inv[:3, :3].T + inv[:3, 3]
-                l0 = (rest[idx] / scale) @ inv0[:3, :3].T + inv0[:3, 3]
-                lag = max(lag, ms.twist(l0, lp))
+                own = np.array((pbs[bn].matrix @ b.matrix_local.inverted()).to_3x3())
+                par = np.array((pbs[b.parent.name].matrix @ b.parent.matrix_local.inverted()).to_3x3())
+                lag = max(lag, float(ms.twist_about(own.T @ par, np.array(b.tail_local - b.head_local))))
         tails = np.array(tails)
         c = {"frames": f1 - f0, "loop": loop, "gait": is_(name, GAIT) and not is_(name, ONE_SHOT), "lying": is_(name, LYING),
              "trunk_p95": round(trunk_w, 3), "skin_lag_deg": round(lag, 1), "lowest_cm": round(lowest * 100, 2),

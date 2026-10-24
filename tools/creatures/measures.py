@@ -233,21 +233,31 @@ def swing_y(v, sweep, duty, cap=2.5):
             + m * (v ** 3 - 2 * v ** 2 + v) + m * (v ** 3 - v ** 2))
 
 
-def twist(rest, posed, axis=1):
-    """How far a ring of skin turned about its bone's axis, in degrees: the best-fit rotation of
-    the ring from rest to pose (Kabsch), both in the bone's own frame, split into swing and twist
-    about `axis` (the bone's length, y in Blender), and the twist's angle. A joint bending turns
-    a ring by swing, which is no candy-wrapper, so only the twist counts."""
-    a = rest - rest.mean(axis=0)
-    b = posed - posed.mean(axis=0)
-    u, _, vt = np.linalg.svd(a.T @ b)
-    d = np.sign(np.linalg.det(vt.T @ u.T)) or 1.0
-    r = vt.T @ np.diag([1.0, 1.0, d]) @ u.T
-    w = np.sqrt(max(0.0, 1.0 + np.trace(r))) / 2
-    other = [(2, 1), (0, 2), (1, 0)][axis]
-    s = (r[other[0], other[1]] - r[other[1], other[0]])
-    if w > 1e-6:
-        v = s / (4 * w)
+def twist_about(r, axis):
+    """How far a joint's turn r (3x3) goes about the unit `axis`, its bone, in degrees, 0 to
+    180: the turn's rotation vector (its angle along its axis, from the quaternion) taken along
+    the bone. Bending is about an axis square to the bone and reads 0, a turn about the bone
+    reads whole. Not the swing-twist split, which near a full fold (a wing or hock folded 175
+    degrees) gives an axis a few degrees off square up to 180 degrees of twist."""
+    r = np.asarray(r, float)
+    a = np.asarray(axis, float) / np.linalg.norm(axis)
+    t = np.trace(r)
+    i = int(np.argmax([t, r[0, 0], r[1, 1], r[2, 2]]))
+    if i == 0:
+        w = np.sqrt(1.0 + t) / 2
+        v = np.array([r[2, 1] - r[1, 2], r[0, 2] - r[2, 0], r[1, 0] - r[0, 1]]) / (4 * w)
     else:
-        v = np.sqrt(max(0.0, 1.0 + 2 * r[axis, axis] - np.trace(r))) / 2
-    return abs((float(np.degrees(2 * np.arctan2(v, w))) + 180.0) % 360.0 - 180.0)
+        j, k = [(1, 2), (2, 0), (0, 1)][i - 1]
+        i -= 1
+        v = np.zeros(3)
+        v[i] = np.sqrt(max(0.0, 1.0 + 2 * r[i, i] - t)) / 2
+        w = (r[k, j] - r[j, k]) / (4 * v[i])
+        v[j] = (r[j, i] + r[i, j]) / (4 * v[i])
+        v[k] = (r[k, i] + r[i, k]) / (4 * v[i])
+    if w < 0:
+        w, v = -w, -v
+    n = np.linalg.norm(v)
+    if n < 1e-12:
+        return 0.0
+    angle = 2 * np.degrees(np.arctan2(n, w))
+    return float(abs(angle * (v / n) @ a))
