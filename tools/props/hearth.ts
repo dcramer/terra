@@ -21,16 +21,22 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { encodePng } from "../sandbox/png.ts";
-import { fbm, hash, HOTTEST, noise, random, smooth } from "./coals.ts";
+import { type Arm, fbm, hash, HOTTEST, noise, random, smooth } from "./coals.ts";
 
 /// The triangles it may have, its coal bed's included: a hero prop's, as a near tree's
 /// (art-style.md's budgets, D427).
 export const BUDGET = 10_000;
 /// The footprint's half width and the height it is made within, metres; the catalogue's
 /// `dims` are what it comes to (the contract's test holds them to the file).
-export const HALF = 0.65;
+export const HALF = 0.8;
 export const TALL = 0.55;
-const LOGS = 7;
+const LOGS = 4;
+/// The first log's bearing; how far out a log's butt lies, least, past the stones; and how far
+/// out it enters the fire, where the flames are told its burning length starts (terra_world's
+/// `fire/hearth.rs`, `Logs::CAMPFIRE`).
+const TURN = 0.35;
+const BUTT_R = 0.7;
+export const BURN_R = 0.36;
 const STONES = 11;
 /// The ring of stones: the radius of their middles.
 const RING_R = 0.52;
@@ -99,19 +105,26 @@ export const STONE_TONES: readonly (readonly number[])[] = [[70, 64, 54], [62, 5
 /** Where its logs and stones lie, from a seed. */
 export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
   const rnd = random(seed);
-  const kinds = [0, 1, 0, 2, 1, 0, 1];
-  const logs: Log[] = kinds.slice(0, LOGS).map((kind, i) => {
-    const R = kind === 2 ? 0.055 + 0.01 * rnd() : 0.085 + 0.025 * rnd();
-    const phi = (i / LOGS) * 2 * Math.PI + 0.25 * (rnd() - 0.5);
-    const rf = 0.33 + 0.04 * rnd();
+  const logs: Log[] = Array.from({ length: LOGS }, (_, i) => {
+    // Round logs of mixed thickness, each lying low: two under at 9-12 deg, two laid over them at
+    // 15-18, their butts out past the stones on the ground, their thin burnt ends crossing a
+    // little past the middle (campfire low-lay round: RDR2's 2-4 round logs at 10-30 deg, the
+    // pile 0.15-0.3 of the ring, against our upright teepee of seven split logs at 0.45-0.6).
+    const kind = 2;
+    const R = [0.06, 0.047, 0.066, 0.05][i % 4] + 0.008 * rnd();
+    const phi = TURN + (i / LOGS) * 2 * Math.PI + 0.14 * (rnd() - 0.5);
+    const rb = BUTT_R + 0.04 * rnd();
     const out: V3 = [Math.cos(phi), 0, Math.sin(phi)];
-    const foot: V3 = [rf * out[0], R * 1.0, rf * out[2]];
-    // Tops past the middle and turned on a little, so the logs cross rather than meet in a point.
-    const pt = phi + 0.5 + 0.3 * rnd(), rt = 0.06 + 0.04 * rnd();
-    const top: V3 = [rt * Math.cos(pt), 0.33 + 0.06 * rnd(), rt * Math.sin(pt)];
-    const axis = norm(sub(top, foot));
-    const L = Math.hypot(...sub(top, foot)) + 0.05;
-    // Its section's plane, turned about its axis at random, so split faces show every way.
+    const foot: V3 = [rb * out[0], R * 0.96, rb * out[2]];
+    // Its end past the middle and turned on a little, so the logs cross rather than meet in a point.
+    const pt = phi + 0.6 + 0.3 * rnd(), rt = 0.05 + 0.04 * rnd();
+    const end: V3 = [rt * Math.cos(pt), 0, rt * Math.sin(pt)];
+    const run = Math.hypot(end[0] - foot[0], end[2] - foot[2]);
+    const slope = ((i % 2 ? 15 : 9) + 3 * rnd()) * (Math.PI / 180);
+    end[1] = foot[1] + run * Math.tan(slope);
+    const axis = norm(sub(end, foot));
+    const L = Math.hypot(...sub(end, foot));
+    // Its section's plane, turned about its axis at random.
     const h = norm(cross(axis, [0, 1, 0]));
     const v = cross(h, axis);
     const roll = rnd() * 2 * Math.PI;
@@ -127,17 +140,37 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
   pack(logs);
   const stones: Stone[] = [];
   // Each stone a tone of the field stone's, lighter or darker by one scale for all its channels:
-  // a scale each tinted them lavender and blue (fire round 20). Three draws still, so the ring
-  // is laid as it was.
+  // a scale each tinted them lavender and blue (fire round 20).
   const toned = (tone: readonly number[], k: number[]) => tone.map((c) => c * (0.9 + (0.2 * (k[0] + k[1] + k[2])) / 3));
-  for (let i = 0; i < STONES; i++) {
-    const phi = (i / STONES) * 2 * Math.PI + 0.22 * (rnd() - 0.5);
-    const long = 0.08 + 0.075 * rnd();
-    const size: V3 = [long, 0.048 + 0.06 * rnd(), Math.min(0.06 + 0.05 * rnd(), HALF - RING_R - 0.005)];
-    const r = RING_R + 0.02 * (rnd() - 0.5);
-    stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.6 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + i, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
+  // Laid in the arcs between the logs, which pass out over the ring through gaps of their own:
+  // each the log's width and a stone's half length each side, so no stone stands in a log.
+  const bearings = logs.map((l) => Math.atan2(l.out[2], l.out[0]));
+  const gap = logs.map((l) => (l.R + 0.09) / RING_R);
+  let left = STONES;
+  for (let k = 0; k < LOGS; k++) {
+    const from = bearings[k] + gap[k];
+    let to = bearings[(k + 1) % LOGS] - gap[(k + 1) % LOGS];
+    while (to < from) to += 2 * Math.PI;
+    const n = k === LOGS - 1 ? left : Math.round(STONES / LOGS);
+    left -= n;
+    for (let j = 0; j < n; j++) {
+      const phi = from + ((to - from) * (j + 0.5 + 0.25 * (rnd() - 0.5))) / n;
+      const long = 0.08 + 0.075 * rnd();
+      const size: V3 = [long, 0.048 + 0.06 * rnd(), 0.06 + 0.05 * rnd()];
+      const r = RING_R + 0.02 * (rnd() - 0.5);
+      stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.6 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + stones.length, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
+    }
   }
   return { logs, stones };
+}
+
+/** Where the logs lie over the coal bed, seen from above: each one's line on the ground and its
+ * half width, so the bed glows only under them (`coals.ts`, `under`). */
+export function arms(seed = 1): Arm[] {
+  return layout(seed).logs.map((l) => {
+    const end = add(l.foot, mul(l.axis, l.L));
+    return { a: [l.foot[0], l.foot[2]], b: [end[0], end[2]], w: l.R };
+  });
 }
 
 // Lays each log's side and two end caps out on the wood atlas in shelves.
@@ -157,16 +190,19 @@ function pack(logs: Log[]) {
 // A log at a point of its section (x, y in its plane) and t along it, as built: tapered, bent
 // a little and its ends rounded over.
 function logPoint(l: Log, x: number, y: number, t: number, scale: number): V3 {
-  const taper = (1 - 0.07 * (t / l.L)) * scale;
+  // Tapered, and burnt thin over its last third, where the logs cross over the coals.
+  const taper = (1 - 0.07 * (t / l.L) - 0.38 * smooth(0.62, 1, t / l.L)) * scale;
   const wob = 1 + 0.05 * (noise(x * 25 + y * 25 + l.seed, t * 6, 3) - 0.5);
   const [cx, cy] = [(x - l.centre[0]) * taper * wob, (y - l.centre[1]) * taper * wob];
   const bend = 0.012 * Math.sin((Math.PI * t) / l.L);
-  return add(add(l.foot, mul(l.axis, t)), add(mul(l.e1, cx), mul(l.e2, cy + bend)));
+  // Pressed flat where it lies on the ground.
+  const p = add(add(l.foot, mul(l.axis, t)), add(mul(l.e1, cx), mul(l.e2, cy + bend)));
+  return [p[0], Math.max(p[1], 0.002), p[2]];
 }
 
 function addLog(m: Mesh, l: Log) {
   l.from = m.pos.length / 3;
-  const ts = [0, 0.012, ...Array.from({ length: 10 }, (_, i) => 0.012 + ((l.L - 0.024) * (i + 1)) / 11), l.L - 0.012, l.L];
+  const ts = [0, 0.012, ...Array.from({ length: 16 }, (_, i) => 0.012 + ((l.L - 0.024) * (i + 1)) / 17), l.L - 0.012, l.L];
   const scales = ts.map((_, i) => (i === 0 || i === ts.length - 1 ? 0.9 : 1));
   const middle = (t: number) => add(l.foot, mul(l.axis, t));
   for (const run of l.runs) {
@@ -462,12 +498,37 @@ function checks(a: number, b: number, open: number, seed: number, stretch: numbe
 // emissive, `play::props`). Its whole crack net glows, on every face: only the deepest runs lit,
 // the logs read dark from the camp's eye, above (campfire net round: e9e5b733's bright net on
 // every face scored higher with every judge, twice).
-function charred(w: Texel, heat: number, a: number, b: number, seed: number, groove = 0, stretch = 1): Texel {
+// The fine net of glowing cracks over a log's burning length (campfire crack round): RDR2's logs
+// over the coals read from above as char under a dense, fine, connected net of glowing checks,
+// luma about 142, not black (our black 25, brown 63). Irregular cells' edges, longer along the
+// grain, domain-warped and of uneven width: a regular grid read as a waffle, lit cells as a
+// leopard print. Returns how much of a crack this texel is and its run's heat.
+export const NET_CELL = 0.012;
+const NET_WIDTH = 0.09;
+export const NET_GAIN = 2.2;
+// One scale of it: the edges of warped cells, a little longer along the grain.
+function netEdge(a: number, b: number, c: number, seed: number): number {
+  const wa = a + c * (fbm(a / c * 0.35, b / c * 0.3, seed + 70) - 0.5);
+  const wb = b + 1.2 * c * (fbm(a / c * 0.3, b / c * 0.25, seed + 71) - 0.5);
+  const [d1, d2] = cells(wa / c, wb / (1.3 * c), seed + 72);
+  const w = c * NET_WIDTH * (0.5 + fbm(a / c * 0.6, b / c * 0.5, seed + 73));
+  return 1 - smooth(w * 0.35, w, (d2 - d1) * c * 0.5);
+}
+// The net at two scales, the finer dimmer, so its dark blocks are of every size: one scale's
+// even cells read as rows of kernels (crack round: "corn on the cob"). Returns how much of a
+// crack this texel is and its run's heat.
+function net(a: number, b: number, seed: number): [number, number] {
+  const crack = Math.max(netEdge(a, b, NET_CELL, seed), 0.45 * netEdge(a, b, NET_CELL * 0.4, seed + 5));
+  return [crack, 0.3 + 0.7 * smooth(0.25, 0.75, fbm(a / NET_CELL * 0.4, b / NET_CELL * 0.3, seed + 74))];
+}
+function charred(w: Texel, heat: number, a: number, b: number, seed: number, groove = 0, stretch = 1, burnt = heat, over = 0): Texel {
   const [c0, , r0, h0] = w;
   // Its front ragged, in tongues along the grain, never a band.
   const jit = 0.42 * (fbm(a * 14, b * 6, seed + 9) - 0.5) + 0.2 * (fbm(a * 55, b * 22, seed + 19) - 0.5);
-  const x = heat + jit;
-  const scorch = smooth(0.1, 0.3, x), char = smooth(0.27, 0.4, x);
+  // How burnt it is (`burnt`, its char and ash) apart from how hot it is now (`heat`, its glow):
+  // a log over the coals is black all round, but glows only where the coals and flames reach.
+  const x = heat + jit, xb = Math.max(burnt, heat) + jit;
+  const scorch = smooth(0.1, 0.3, xb), char = smooth(0.27, 0.4, xb);
   let c = mix(c0, mix(c0.map((v) => v * 0.5), [52, 34, 24], 0.6), scorch);
   if (char <= 0) return [c, DARK, r0, h0];
   const hot = smooth(0.4, 0.82, x);
@@ -481,7 +542,7 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // Grey-white ash on the blocks, in patches, from where it chars through to where it burns
   // hottest: only on the hottest it read as no ash at all (blind judge, campfire ember round).
   // Little where it glows hottest, whose firelit ash read tan (blind judge, campfire glow round).
-  const ash = 0.35 * smooth(0.6, 0.95, x) * (1 - 0.6 * smooth(0.85, 1.1, x)) * smooth(0.58, 0.74, fbm(a * 60, b * 25, seed + 59));
+  const ash = 0.35 * smooth(0.6, 0.95, xb) * (1 - 0.6 * smooth(0.85, 1.1, x)) * smooth(0.58, 0.74, fbm(a * 60, b * 25, seed + 59));
   block = mix(block, [124, 120, 114], ash);
   c = mix(c, mix(block.map((v) => v * (0.72 + 0.4 * inside)), [30, 13, 8], deep), char);
   const leak = 0.3 * (1 - inside) * hot;
@@ -504,7 +565,15 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // contacts), redder where it is coolest.
   const bed = smooth(0.5, 1.05, x) * (0.5 + 0.5 * smooth(0.35, 0.65, fbm(a * 4, b * 1.6, seed + 61))) * (1 - 0.35 * inside);
   const bedTone = mix([200, 52, 8], [255, 104, 24], smooth(0.8, 1.25, x));
-  const glow = tone.map((v, i) => v * g + bedTone[i] * bed);
+  // The fine net on every face over the coals, its runs hot and dull in patches, orange: at
+  // (240,88,14) its hottest took the campfire's yellow past the sheet's at night (campfire soot round).
+  // Its front ragged along the grain as the char's is, never a line across the log.
+  const ov = over > 0 ? smooth(0.05, 0.8, over + 1.6 * jit) : 0;
+  const [fc, run] = ov > 0 ? net(a, b, seed + 80) : [0, 0];
+  const fine = NET_GAIN * ov * char * fc * run * (1 - 0.6 * deep);
+  const fineTone = mix([176, 38, 5], [232, 70, 10], run);
+  c = mix(c.map((v) => v * (1 - 0.45 * ov * char)), [26, 12, 8], 0.8 * fc * ov * char);
+  const glow = tone.map((v, i) => v * g + bedTone[i] * bed + fineTone[i] * fine);
   // Charcoal is matte: its blocks' faces about 0.86 for their faint sheen, its fissures and
   // ash rougher still (fire round 37: at 0.6 the char took the fire's light as a gloss, and
   // read as glossy fresh-cut wood).
@@ -532,8 +601,14 @@ function at(l: Log, s: number): [[number, number], [number, number], boolean] {
 // bark kept only on its cool outer end, as a teepee's logs burn from the apex down: charred
 // all over with glowing seams along the grain at its foot too, its ends read as orange-striped
 // brushes (blind judges twice, campfire cut round 3). Its foot's underside, in the coals, glows.
-function heat(l: Log, t: number, n: V3): number {
-  const inward = -dot(n, l.out), down = -n[1], f = t / l.L;
+function heat(l: Log, t: number, n: V3): [number, number, number] {
+  // How far into the fire it is, by how far out it lies: 0 just inside the stones, 1 from 0.14 m
+  // in, so the logs are burnt black over the coals as RDR2's are (at 0 by the stones and 1 at the
+  // middle, they read as fresh bark, and the dark round the flame fell to the sheet's floor); and
+  // how far out past the ring, where its butt lies on the ground only scorched (low-lay round).
+  const at = add(l.foot, mul(l.axis, t)), d = Math.hypot(at[0], at[2]);
+  const inward = -dot(n, l.out), down = -n[1], f = clamp((RING_R - 0.08 - d) / (RING_R - 0.22));
+  const past = smooth(RING_R - 0.06, RING_R + 0.08, d);
   const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
   // Its foot hot on the faces toward the coals and under, not on top: hot on every face, the
   // feet read as a glowing waffle grid from above (campfire view round).
@@ -542,18 +617,29 @@ function heat(l: Log, t: number, n: V3): number {
   // where they cross read as black sticks over a yellow grid at their feet (campfire history
   // panel: e9e5b733's upper glow 4.75, the low band 4.00, every judge).
   const foot = smooth(0.3, 0.0, f) * under * under * 0.95;
-  const top = smooth(0.3, 0.85, f) * (0.85 + 0.35 * under);
+  // Only its inner end, over the flames, hot on every face: hot over its whole upper half, the
+  // low logs read from above as fresh red-brown timber (campfire low-lay round, against RDR2's
+  // black char glowing at its ends and undersides).
+  const top = smooth(0.75, 1.0, f) * (0.7 + 0.5 * under);
   // Its underside licked hot enough that its cracks glow there, seen low between the logs.
-  const lick = under * under * (0.72 + 0.3 * f);
+  const lick = under * under * (0.72 + 0.3 * f) * (1 - past);
   // Smoke and heat scorch it all over and char it black from about its middle up (fire round
   // 25: its raw upper faces read as pale planks); its outer end charred in patches through its
   // scorched bark (blind judge, campfire ember round: brown bark read as brush, not burnt logs).
-  const all = 0.34 + 0.3 * smooth(0.2, 0.55, f);
+  // Its char (`burnt`) apart, its upper faces only warm, their cracks dull toward the middle.
+  const all = (0.25 + 0.2 * smooth(0.5, 1, f)) * (1 - past);
   // Its sides toward its neighbours, which see the coals and the flames through the gaps
   // between the logs, glow along their edges, more toward the inner end.
   const across = Math.abs(dot(n, norm(cross([0, 1, 0], l.out))));
-  const rim = smooth(0.3, 0.85, across) * (0.62 + 0.25 * f);
-  return Math.max(top, foot, lick, all, rim);
+  const rim = smooth(0.5, 0.95, across) * smooth(0.0, 0.6, under) * (0.5 + 0.3 * f) * (1 - past);
+  // How burnt: black char all round from the stones in, as the fire has burnt it down; its bark
+  // only on its butt out past the ring, there scorched (campfire char round).
+  const burnt = 0.62 * (1 - past) + 0.12 * past;
+  // How far over the coals, where its fine crack net glows on every face, its tops too, with no
+  // broad glow there (campfire crack round).
+  // Not under the flame's foot, where its char stays black round the flame (as the soot is).
+  const over = smooth(0.0, 0.6, f) * (1 - 0.75 * smooth(0.72, 0.95, f)) * (1 - past);
+  return [Math.max(top, foot, lick, all, rim), burnt, over];
 }
 
 /** Edge padding, as a baker dilates its islands: each unpainted texel within `reach` (here the
@@ -603,7 +689,8 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
         const [p, n2, isBark] = at(l, s);
         const n: V3 = add(mul(l.e1, n2[0]), mul(l.e2, n2[1]));
         const w = isBark ? bark(s, t, l.seed) : splitWood(s, t, Math.hypot(p[0], p[1]), l.R, l.seed);
-        put(l.side[0] + x, l.side[1] + y, charred(w, heat(l, t, n), s, t, l.seed, isBark ? smooth(0.3, 0.08, w[3]) : 0));
+        const [hot, burnt, over] = heat(l, t, n);
+        put(l.side[0] + x, l.side[1] + y, charred(w, hot, s, t, l.seed, isBark ? smooth(0.3, 0.08, w[3]) : 0, 1, burnt, over));
       }
     }
     // Its ends: the foot's in the coals and the top's over the flames, both charred.
@@ -617,7 +704,7 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
           // end over the flames charred black, its cracks glowing.
           const hot = end ? 0.68 + 0.16 * fbm(px * 40, py * 40, l.seed) : 0.12 + 0.2 * smooth(0.6, 1, r / l.R);
           // Its char split along the radial checks and round the rings, as a log's end burns.
-          put(cx + x, cy + y, charred(w, hot, Math.atan2(py, px) * 0.024, r, l.seed + 13, 0, Math.max(r, 0.008) / 0.024));
+          put(cx + x, cy + y, charred(w, hot, Math.atan2(py, px) * 0.024, r, l.seed + 13, 0, Math.max(r, 0.008) / 0.024, hot, end));
         }
       }
     });

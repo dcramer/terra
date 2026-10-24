@@ -11,7 +11,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { addBed } from "./coals.ts";
-import { campfire } from "./hearth.ts";
+import { arms, campfire } from "./hearth.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HERE = join(ROOT, "tools", "props");
@@ -238,7 +238,7 @@ export function hasPbr(glb: Buffer): boolean {
 function refine(name: string, prop: Prop) {
   if (prop.hearth) {
     const out = join(ROOT, "assets", "models", prop.into ?? "props", `${prop.file}.glb`);
-    writeFileSync(out, prop.coals ? addBed(campfire()) : campfire());
+    writeFileSync(out, prop.coals ? addBed(campfire(), 1, arms()) : campfire());
     return;
   }
   const glb = join(ART, name, "model.glb");
@@ -258,7 +258,7 @@ function refine(name: string, prop: Prop) {
   const folder = join(ROOT, "assets", "models", prop.into ?? "props");
   const refined = join(folder, `${prop.file}.glb`);
   if (prop.char) run(BLENDER, [join(HERE, "char.py"), here(refined), here(refined)]);
-  if (prop.coals) writeFileSync(refined, addBed(readFileSync(refined)));
+  if (prop.coals) writeFileSync(refined, addBed(readFileSync(refined), 1, arms()));
   const kept = join(OUT, `${name}-undyed.glb`);
   if (prop.dyes) copyFileSync(refined, kept);
   for (const [file, colour] of Object.entries(prop.dyes ?? {})) {

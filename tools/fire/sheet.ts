@@ -21,7 +21,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { imageMagick } from "../sandbox/client.ts";
 import type { Picture } from "../sandbox/png.ts";
-import { type Box, type Held, judge, load, measure, REFERENCES_FILE, references, said } from "./measure.ts";
+import { type Band, type Box, type Held, judge, load, type Metrics, measure, REFERENCES_FILE, references, said } from "./measure.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 
@@ -36,8 +36,18 @@ type Call = { frame: number; method: string; params?: unknown };
 /// shot on, which of `fire.seen`'s boxes is its crop, the camera it is shot from, and whether
 /// its flames write the flame share the matte reads (D433): a hearth's and a torch's do, for
 /// their film (`film.rs`); a blaze and a breath are tonemapped as the world, leave the matte
-/// empty, and are measured by colour.
-export type Fire = { name: string; class: string; frame: number; box: "kept" | "blazes" | "stream" | "ball"; eye: Vec3; at: Vec3; matte: boolean };
+/// empty, and are measured by colour. A view no photograph is taken from holds some numbers to
+/// a reference game's measure instead (`floors`: a number's least, its most still the class's).
+export type Fire = {
+  name: string;
+  class: string;
+  frame: number;
+  box: "kept" | "blazes" | "stream" | "ball";
+  eye: Vec3;
+  at: Vec3;
+  matte: boolean;
+  floors?: Partial<Record<keyof Metrics, number>>;
+};
 
 // Where things stand, in metres east, up and south of the start; the base's cubes, which are
 // half a metre, for what is built. The hammer builds only within 14 m of the player, who stays
@@ -57,7 +67,10 @@ export const FIRES: Fire[] = [
   // its stone ring an ellipse 0.55 as deep as wide, so the eye 33 degrees over the ring and
   // the camera pitched 26 down, the ring 15% of the picture's width, which at our 45-degree
   // lens is 4.8 m off, about 8.5 flame heights (the first row: 16 degrees, 6.2 m).
-  { name: "campfire above", class: "campfire", frame: 420, box: "kept", eye: [-10, 2.6, 14], at: [-10, 0.65, 10], matte: true },
+  // Its soot's floor is RDR2's from this view (D433): the photographs' 0.13 is from beside the
+  // fire, where the logs stand dark against the flame; from above the flame stands on its lit
+  // bed and logs, and RDR2's two frames measure 0.00 and 0.00-0.01 by this rule.
+  { name: "campfire above", class: "campfire", frame: 420, box: "kept", eye: [-10, 2.6, 14], at: [-10, 0.65, 10], matte: true, floors: { soot: 0 } },
   { name: "house blaze", class: "structure", frame: 760, box: "blazes", eye: [4.25, 3.5, 22], at: [4.25, 2.5, 5.75], matte: false },
   { name: "breath", class: "flamethrower", frame: 960, box: "stream", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
   { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
@@ -193,6 +206,11 @@ export function scaled(crop: string, picture: string, w: number, h: number): Box
 /// What each fire and hour has out of its class today (`--hold` writes it): the push check
 /// fails a fire only where it is worse than this, until the stage that fixes it lands
 /// (docs/fire.md, "The plan").
+/// A class's bands with a fire's own floors in place of their least.
+export function floored(bands: Record<string, Band>, floors: Fire["floors"] = {}): Record<string, Band> {
+  return Object.fromEntries(Object.entries(bands).map(([k, b]) => [k, k in floors ? { ...b, min: floors[k as keyof Metrics]! } : b]));
+}
+
 export const HELD_FILE = resolve(import.meta.dirname, "held.json");
 export type HeldOut = Record<string, string[]>;
 
@@ -268,7 +286,7 @@ if (import.meta.main) {
       const known = classes[fire.class];
       // Measured on the flame the renderer drew (D433); a folder from before the matte, by colour.
       const matte = fire.matte && existsSync(matteOf(file)) ? load(matteOf(file)) : undefined;
-      const held = known ? judge(measure(pic, box, matte), known.bands) : [];
+      const held = known ? judge(measure(pic, box, matte), floored(known.bands, fire.floors)) : [];
       const fails = held.filter((h) => !h.holds).length;
       const ground = surround(pic, box);
       rows.push({ fire: fire.name, class: fire.class, hour, crop, out: known ? fails : -1, held, tile, ground });

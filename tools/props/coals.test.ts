@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BED_BUDGET, bed, glowColour, maps, TILES, YELLOW } from "./coals.ts";
+import { BED_BUDGET, bed, glowColour, maps, TILES, under, YELLOW } from "./coals.ts";
+import { arms } from "./hearth.ts";
 
 test("a dull coal glows deep orange-red, never near pure red, which the night's grade turns pink", () => {
   for (const h of [0.2, 0.4, 0.6, 0.8, 1]) {
@@ -11,11 +12,11 @@ test("a dull coal glows deep orange-red, never near pure red, which the night's 
 });
 
 test("a coal bed keeps to its triangle budget", () => {
-  assert.ok(bed().idx.length / 3 <= BED_BUDGET);
+  assert.ok(bed(1, arms()).idx.length / 3 <= BED_BUDGET);
 });
 
 test("its coals are a packed heap: the bed under the logs covered, highest in the middle", () => {
-  const { coals } = bed();
+  const { coals } = bed(1, arms());
   // Seen from above, three in four points within 0.2 m of the middle are under a coal (its
   // round size; its longer side covers more).
   let covered = 0, points = 0;
@@ -36,7 +37,7 @@ test("its coals are a packed heap: the bed under the logs covered, highest in th
 });
 
 test("every face of the bed faces out, so none is culled", () => {
-  const { pos, idx, coals } = bed();
+  const { pos, idx, coals } = bed(1, arms());
   const p = (i: number) => [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]];
   for (let t = 0; t < idx.length; t += 3) {
     const [a, b, c] = [p(idx[t]), p(idx[t + 1]), p(idx[t + 2])];
@@ -51,7 +52,7 @@ test("every face of the bed faces out, so none is culled", () => {
 });
 
 test("its glow is red to orange-yellow, never salmon, and hottest in the middle", () => {
-  const emissive = maps()[1];
+  const emissive = maps(1, arms())[1];
   let lit = 0;
   for (let i = 0; i < emissive.length; i += 4) {
     const [r, g, b] = [emissive[i], emissive[i + 1], emissive[i + 2]];
@@ -68,4 +69,29 @@ test("its glow is red to orange-yellow, never salmon, and hottest in the middle"
   // (1.3 before fire round 31, whose dull coals went orange-red from near pure red.)
   assert.ok(yellow([0, 1, 2, 3]) > yellow([8, 9, 10, 11]) * 1.15, "no hotter core");
   assert.ok(lit > emissive.length / 4 / 20, "it hardly glows");
+});
+
+test("its pit glows only under the logs, its ash round them dark and neutral grey, never tan", () => {
+  const [base, emissive] = maps(1, arms());
+  const logs = arms();
+  let [ash, lit, warm, bright] = [0, 0, 0, 0];
+  // The pit's disc: the bottom-left quarter of the atlas, 0.46 m (MOUND_R) to 0.49 of it.
+  for (let y = 0; y < 256; y += 2) {
+    for (let x = 0; x < 256; x += 2) {
+      const [X, Z] = [((x / 256 - 0.5) / 0.49) * 0.46, ((y / 256 - 0.5) / 0.49) * 0.46];
+      if (Math.hypot(X, Z) > 0.4 || under(X, Z, logs) > 0.02) continue;
+      const o = ((256 + y) * 512 + x) * 4;
+      ash++;
+      if (emissive[o] > 40) lit++;
+      const [r, g, b] = [base[o], base[o + 1], base[o + 2]];
+      if (b < 0.94 * r) warm++;
+      if (0.2126 * r + 0.7152 * g + 0.0722 * b > 60) bright++;
+    }
+  }
+  assert.ok(ash > 2000, `only ${ash} texels of ash`);
+  assert.ok(lit / ash < 0.03, `${lit} of ${ash} ash texels glow`);
+  assert.ok(warm === 0 && bright === 0, `${warm} warm, ${bright} bright of ${ash}`);
+  // Under the crossing, it glows.
+  const mid = ((256 + 128) * 512 + 128) * 4;
+  assert.ok(under(0, 0, logs) > 0.9 && emissive[mid] + emissive[mid + 4 * 6] + emissive[mid + 512 * 24] > 0, "no glow under the crossing");
 });

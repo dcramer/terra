@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { bed } from "./coals.ts";
-import { BUDGET, HALF, hearth, layout, STONE_TONES, TALL, woodMaps } from "./hearth.ts";
+import { arms, BUDGET, BURN_R, HALF, hearth, layout, STONE_TONES, TALL, woodMaps } from "./hearth.ts";
 
 const { wood, stone, logs, stones } = hearth();
 const tris = (m: { idx: number[] }) => m.idx.length / 3;
 
 test("a hero campfire keeps to its budget, its coal bed's included, and spends most of it", () => {
-  const all = tris(wood) + tris(stone) + bed().idx.length / 3;
+  const all = tris(wood) + tris(stone) + bed(1, arms()).idx.length / 3;
   assert.ok(all <= BUDGET && all >= BUDGET * 0.6, `${all} triangles`);
 });
 
@@ -21,12 +21,29 @@ test("it stands inside its catalogue footprint and height, on the ground", () =>
   }
 });
 
-test("its logs lean in over the middle from inside the ring of stones", () => {
+test("its few round logs lie low across the ring, their butts out past the stones", () => {
+  // RDR2's 2-4 round logs at 10-30 deg, the pile 0.15-0.3 of the ring tall, their butts out over
+  // the stones (campfire low-lay round), not an upright teepee standing inside them.
+  assert.ok(logs.length >= 2 && logs.length <= 4, `${logs.length} logs`);
   const ring = Math.min(...stones.map((s) => Math.hypot(s.at[0], s.at[2])));
+  const outer = Math.max(...stones.map((s) => Math.hypot(s.at[0], s.at[2]) + Math.max(s.size[0], s.size[2])));
   for (const l of logs) {
-    const top = l.foot.map((v, i) => v + l.axis[i] * l.L);
-    assert.ok(Math.hypot(l.foot[0], l.foot[2]) < ring, "foot inside the stones");
-    assert.ok(Math.hypot(top[0], top[2]) < 0.2 && top[1] > 0.3, "top over the middle, the stack about 0.37 m high");
+    const end = l.foot.map((v, i) => v + l.axis[i] * l.L);
+    const slope = (Math.asin(l.axis[1]) * 180) / Math.PI;
+    assert.ok(Math.hypot(l.foot[0], l.foot[2]) > outer, "butt past the stones");
+    assert.ok(Math.hypot(end[0], end[2]) < 0.12, "its end over the middle");
+    assert.ok(slope >= 8 && slope <= 30, `lying at ${slope.toFixed(1)} deg`);
+  }
+  let top = 0;
+  for (let i = 1; i < wood.pos.length; i += 3) top = Math.max(top, wood.pos[i]);
+  assert.ok(top <= 0.3 * 2 * ring, `the pile ${top.toFixed(3)} m, ${(top / (2 * ring)).toFixed(2)} of the ring`);
+  // Each passes out over the ring through a gap: no stone stands in a log.
+  for (const s of stones) {
+    const a = Math.atan2(s.at[2], s.at[0]);
+    for (const l of logs) {
+      const d = Math.atan2(Math.sin(a - Math.atan2(l.out[2], l.out[0])), Math.cos(a - Math.atan2(l.out[2], l.out[0])));
+      assert.ok(Math.abs(d) * ring > l.R + Math.max(s.size[0], s.size[2]), "a stone in a log's way");
+    }
   }
 });
 
@@ -110,6 +127,13 @@ test("the fire's flames are told where the campfire's own logs lie (terra_world 
   const told = (name: string) => Number(new RegExp(`\\b${name}: ([-\\d.]+)`).exec(block)![1]);
   const { logs } = layout(1);
   const tops = logs.map((l) => l.foot.map((x, i) => x + l.axis[i] * (l.L - 0.05)));
+  // Each log's burning length, from where it enters the fire (`BURN_R` out) to its end: its butt
+  // out past the stones lies cold on the ground.
+  const feet = logs.map((l) => {
+    const [a, b] = [l.foot[0], l.foot[2]], [u, v] = [l.axis[0], l.axis[2]];
+    const k = u * u + v * v, m = a * u + b * v, t = (-m - Math.sqrt(m * m - k * (a * a + b * b - BURN_R * BURN_R))) / k;
+    return l.foot.map((x, i) => x + l.axis[i] * t);
+  });
   const mean = (f: (i: number) => number) => logs.reduce((a, _, i) => a + f(i), 0) / logs.length;
   const bearing = (v: number[]) => Math.atan2(v[2], v[0]);
   const turn = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -117,12 +141,12 @@ test("the fire's flames are told where the campfire's own logs lie (terra_world 
     assert.ok(Math.abs(told(name) - want) < within, `${name} ${told(name)}, the model's ${want.toFixed(3)}`);
   assert.equal(told("count"), logs.length);
   // Evenly round from `turn`, the best fit: each log within 0.15 rad of where the shader lays it.
-  near("turn", mean((i) => turn(bearing(logs[i].out) - (i * 2 * Math.PI) / logs.length)), 0.01);
-  logs.forEach((l, i) => assert.ok(Math.abs(turn(bearing(l.out) - told("turn") - (i * 2 * Math.PI) / logs.length)) < 0.15, `log ${i}'s bearing`));
-  near("twist", mean((i) => turn(bearing(tops[i]) - bearing(logs[i].out))), 0.03);
+  near("turn", mean((i) => turn(bearing(feet[i]) - (i * 2 * Math.PI) / logs.length)), 0.01);
+  logs.forEach((_, i) => assert.ok(Math.abs(turn(bearing(feet[i]) - told("turn") - (i * 2 * Math.PI) / logs.length)) < 0.15, `log ${i}'s bearing`));
+  near("twist", mean((i) => turn(bearing(tops[i]) - bearing(feet[i]))), 0.03);
   near("radius", mean((i) => logs[i].R), 0.005);
-  near("foot", mean((i) => Math.hypot(logs[i].foot[0], logs[i].foot[2])), 0.005);
-  near("foot_up", mean((i) => logs[i].foot[1]), 0.005);
+  near("foot", mean((i) => Math.hypot(feet[i][0], feet[i][2])), 0.005);
+  near("foot_up", mean((i) => feet[i][1]), 0.005);
   near("top", mean((i) => Math.hypot(tops[i][0], tops[i][2])), 0.005);
   near("top_up", mean((i) => tops[i][1]), 0.005);
 });

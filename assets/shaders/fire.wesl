@@ -286,10 +286,16 @@ const LIT_NEAR_M: f32 = 1.2;
 // its body uncapped (`HEARTH_BODY_HEAT`) and unwashed (ramp.ts `PALE`) scored higher with every
 // judge in two panels than this flame's pale, hazy one.
 const HEARTH_BODY: f32 = 1.25;
+// How tall a hearth's flame is drawn, its columns, tongues, leads and glow, over `tall`; its
+// light, smoke and embers keep `tall`. At 1 its tips stood 1.1-1.5 of the stone ring's width
+// over the ring as one curtain, RDR2's 0.4-0.6 (campfire shape round, three notes reviewers
+// ranked it first, from the camp's eye, above).
+const HEARTH_DRAWN: f32 = 0.55;
 const HEARTH_BODY_UP: f32 = 0.15;
 // Its tongues: their heights over `tall`, least and most; how far out from the middle they
 // rise, over the fire's width (the logs' teepee), nearest and farthest; how far they lean in
-// along the logs; and the teepee's height over the fire's width, so each rises from the logs'
+// along the logs; how far along its logs they stand, over the logs' feet (`TONGUE_REACH`: at 1
+// the outermost stood on the stones, campfire shape round); and the teepee's height over the fire's width, so each rises from the logs'
 // top where it stands and not inside them, hidden (round 12's first try).
 // They lick up the logs' slopes, off the teepee's apex, where the body's middle column stands:
 // from 0.12 of the way out, the tallest of them stood there over one another as a white spike
@@ -298,6 +304,7 @@ const TONGUE_TALL: vec2<f32> = vec2<f32>(0.38, 0.72);
 const TONGUE_OUT: f32 = 0.5;
 const TONGUE_IN: f32 = 0.4;
 const TONGUE_LEAN: f32 = 0.3;
+const TONGUE_REACH: f32 = 0.65;
 // How much a tongue's cover is of its drawn shape: about as thick as the baked body's flame
 // is, since both are lit at the hearth's brightness, which is the set's. Drawn as an opaque
 // mask, a tongue gave three times the body's light, white-hot wherever one stood; at 0.35,
@@ -2054,7 +2061,7 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
         let to_eye = view.world_position - foot;
         let level = to_eye - up * dot(to_eye, up);
         let across = cross(up, level / max(length(level), 1.0e-3));
-        let reach = laid.foot.x + laid.radius;
+        let reach = (laid.foot.x + laid.radius) * TONGUE_REACH;
         let x = s * reach;
         let rise = mix(laid.foot.y, laid.top.y, saturate((laid.foot.x - abs(x)) / max(laid.foot.x - laid.top.x, 1.0e-3)));
         let burn = log_heat(i, seed);
@@ -2178,14 +2185,16 @@ fn hearth_core(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f32
 // its own moment of the flipbook; then eight tongues licking up the logs (`hearth_tongue`). Its
 // columns' tips and torn sides are eaten away sharply (round 12's step back: one opaque cone twice
 // the games' height, standing behind the logs as a backdrop, its crown an orange haze).
-fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f32, wide_in: f32, seed: f32, phase: f32, wind: vec3<f32>, glow: f32, slot: u32) -> Out {
+fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall_in: f32, heat: f32, wide_in: f32, seed: f32, phase: f32, wind: vec3<f32>, glow: f32, slot: u32) -> Out {
     var out: Out;
-    let wide = select(clamp(tall * 0.5, 0.4, 1.6), wide_in, wide_in > 0.0);
+    let wide = select(clamp(tall_in * 0.5, 0.4, 1.6), wide_in, wide_in > 0.0);
+    // A torch's flame as tall as it burns, a hearth's drawn lower over its logs (`HEARTH_DRAWN`).
+    let tall = select(tall_in * HEARTH_DRAWN, tall_in, tall_in < TORCH_M);
     let j = i32(phase * HEARTH_CARDS + 0.5);
     let luck = fract(seed * 0.618 + f32(j) * 0.379);
     let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
     let north = cross(east, up);
-    let torch = tall < TORCH_M;
+    let torch = tall_in < TORCH_M;
     if j == 0 {
         // The ground: flat, a little over it, inside the ring of stones round the logs.
         if torch {
@@ -2220,7 +2229,7 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall: f32, heat: f3
     }
     if j == 1 {
         let w = wide * 1.4;
-        let h = max(0.3, tall * 0.32);
+        let h = max(0.3, tall_in * 0.32);
         let world = card(foot - up * h * 0.25, up, corner, w, h, true, 0.0);
         out.clip = position_world_to_clip(world);
         out.uv = corner;

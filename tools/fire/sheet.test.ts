@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Picture } from "../sandbox/png.ts";
-import { surround } from "./sheet.ts";
+import { judge, type Metrics } from "./measure.ts";
+import { floored, surround } from "./sheet.ts";
 
 /// A picture of one colour, with a flame-white box and, if asked, the band below it lit.
 function picture(ground: [number, number, number], lit: boolean): Picture {
@@ -30,4 +31,13 @@ test("ground the fire lights orange reads lit and warm", () => {
   assert.ok(warmth > 5, `${warmth}`);
   const grey = surround(picture([128, 128, 128], true), BOX);
   assert.ok(Math.abs(grey.warmth - 1) < 1e-9);
+});
+
+test("a fire's own floor lets its soot under the photographs' least, its most and the other numbers still the class's", () => {
+  const bands = { soot: { median: 0.4, min: 0.13, max: 0.92 }, dim: { median: 20, min: 5, max: 63 } };
+  const m = { soot: 0.05, dim: -20 } as Metrics;
+  const by = (b: Parameters<typeof judge>[1]) => Object.fromEntries(judge(m, b).map((h) => [h.called, h.holds]));
+  assert.deepEqual(by(bands), { "dim %": false, "soot/flame": false });
+  assert.deepEqual(by(floored(bands, { soot: 0 })), { "dim %": false, "soot/flame": true });
+  assert.equal(judge({ soot: 1.2 } as Metrics, floored(bands, { soot: 0 })).find((h) => h.called === "soot/flame")?.holds, false);
 });
