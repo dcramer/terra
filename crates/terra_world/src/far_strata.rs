@@ -14,7 +14,15 @@ struct Strata {
     banded: f32,
     line: f32,
     line_px: f32,
+    gain: f32,
+    bench: f32,
+    least: f32,
 }
+
+/// The share of the light the eye gets from a far wall that is its rock's own, the rest the
+/// air's, measured on the lake's wall at dusk in round 30's diagnostic still: a third through
+/// the air, the rock dimmed to 0.37 as a far wall, its tiers' 20% showing as 2 to 4%.
+const ROCK_SHARE: f32 = 1.0 / 6.0;
 
 /// The tiers' own height in the shader, in metres, and the flatness they fade over near.
 const TIER_M: f32 = 95.0;
@@ -34,7 +42,15 @@ impl Strata {
             banded: constant(&source, "FAR_BANDED")[0],
             line: constant(&source, "LEDGE_LINE")[0],
             line_px: constant(&source, "LEDGE_LINE_PX")[0],
+            gain: constant(&source, "FAR_TONE_GAIN")[0],
+            bench: constant(&source, "FAR_BENCH")[0],
+            least: constant(&source, "FAR_TONE_LEAST")[0],
         }
+    }
+
+    /// `far_tier_tone`, line for line: a far tier's tone from its near one, on a bench's top.
+    fn far_tone(&self, tone: f32, bench: f32) -> f32 {
+        (1.0 + (tone - 1.0) * self.gain).max(self.least) * (1.0 + (self.bench - 1.0) * bench)
     }
 
     /// `far_strata`, line for line: the flatness the tiers fade over, the least banding, and
@@ -119,6 +135,42 @@ mod tests {
     }
 
     #[test]
+    fn a_far_wall_s_tiers_part_through_the_haze_and_keep_its_tone() {
+        // A light tier's bench over a dark tier's riser: near, their tones as drawn; far, as
+        // the eye gets them through the air (ROCK_SHARE), they part by a seventh of the light
+        // at least, where the near tones parted by under a twentieth (round 30's diagnostic).
+        let s = Strata::shader();
+        let (light, dark) = (1.1, 0.75);
+        let parted = |a: f32, b: f32| (a - b) / ((a + b) * 0.5) * ROCK_SHARE;
+        let near = parted(light, dark);
+        let far = parted(s.far_tone(light, 1.0), s.far_tone(dark, 0.0));
+        assert!(near < 0.07, "near, tiers part by {near:.3}");
+        assert!(
+            far > 1.0 / 7.0,
+            "far, tiers part by {far:.3} through the haze"
+        );
+        // Over every tier's tone and bed (the shader's tier_r, bed_r) and a bench a quarter
+        // of a tier, the far wall's mean stays within a tenth of its near tone, so the wall
+        // stands as light or dark against the sky as before.
+        let (mut near_sum, mut far_sum, mut n) = (0.0, 0.0, 0.0);
+        for r in 0..=20 {
+            for b in 0..=20 {
+                let tone = (0.7 + 0.45 * r as f32 / 20.0) * (0.9 + 0.16 * b as f32 / 20.0);
+                near_sum += tone;
+                far_sum += 0.75 * s.far_tone(tone, 0.0) + 0.25 * s.far_tone(tone, 1.0);
+                n += 1.0;
+            }
+        }
+        let kept = far_sum / near_sum;
+        assert!(
+            (kept - 1.0).abs() < 0.1,
+            "a far wall's mean tone {:.2} of its near {:.2}",
+            far_sum / n,
+            near_sum / n
+        );
+    }
+
+    #[test]
     fn the_twin_draws_the_shader_rule() {
         let source =
             std::fs::read_to_string(crate::data::assets().join("shaders/ground.wesl")).unwrap();
@@ -139,6 +191,8 @@ mod tests {
             "let tiers = tier_at / 95.0;",
             "var strength = max(banded, far_tiers.z) * seen * (1.0 - smoothstep(far_tiers.x, far_tiers.y, flatness));",
             "band_tone *= mix(1.0, far_tiers.w, standing);",
+            "return max(1.0 + (tone - 1.0) * FAR_TONE_GAIN, FAR_TONE_LEAST) * mix(1.0, FAR_BENCH, bench);",
+            "band_tone = mix(band_tone, far_tier_tone(band_tone, bench * standing), smoothstep(FAR_STRATA_M.x, FAR_STRATA_M.y, far_off));",
         ] {
             assert!(source.contains(used), "the tiers no longer read {used}");
         }

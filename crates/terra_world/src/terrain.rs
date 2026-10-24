@@ -170,7 +170,60 @@ fn lying(
     };
     let lake = round.water_near(up, crate::shore::REACH_CELLS);
     let above_water = lake.map_or(DRY_M, |level| (point.length() - level).clamp(-DRY_M, DRY_M));
-    let snow = round.snow_m(point, normal);
+    let (snow, couloir) = laid_snow(
+        round,
+        planet.has_mountains(),
+        point,
+        normal,
+        made_of,
+        bed,
+        &|p, n| round.snow_m(p, n),
+    );
+    let (loose, footing) = match made_of {
+        material::SCREE => (1.0, Footing::Loose),
+        material::GRAVEL => (2.0, Footing::Loose),
+        // A wall's couloir, to the ground shader, as rock below none: its avalanche snow
+        // (`couloir_catch`), told from the wall's own fed snow, which lies as deep on its tops.
+        material::STONE => (-couloir, Footing::Rock),
+        _ => (0.0, Footing::Soil),
+    };
+    let footing = if above_water < 0.0 {
+        Footing::Water
+    } else {
+        footing
+    };
+    let rock_or_woods = if footing == Footing::Rock {
+        1.0
+    } else {
+        // The woods as the trees stand them: none in a snowbed (`snowbed_m`).
+        let stand = round.stand(point, normal, footing);
+        if stand.density > 0.0 {
+            let snowbed = |p: Vec3, n: Vec3| round.snowbed_m(p, n);
+            let mountains = planet.has_mountains();
+            let laid = laid_snow(round, mountains, point, normal, made_of, bed, &snowbed);
+            -stand.under_snow(laid.0).density
+        } else {
+            0.0
+        }
+    };
+    ([loose, snow], [rock_or_woods, above_water])
+}
+
+/// How deep the snow lies at a point on the ground facing `normal`, in metres, as the land lays
+/// it, `snow_m` the climate's on the day asked, and how far the point lies in a wall's couloir
+/// (`couloir_catch`): on a mountain's walls fed by the avalanches off the range above (D395,
+/// D426).
+fn laid_snow(
+    round: &terra_land::round::Round,
+    mountains: bool,
+    point: Vec3,
+    normal: Vec3,
+    made_of: MaterialId,
+    bed: &mut dyn FnMut(Vec3) -> f32,
+    snow_m: &dyn Fn(Vec3, Vec3) -> f32,
+) -> (f32, f32) {
+    let up = point.normalize_or(Vec3::Y);
+    let snow = snow_m(point, normal);
     // On a mountain's steep faces a summer's snow lies in its gullies' beds and is gone from
     // the ribs between, so from across a valley it streaks down the couloirs rather than
     // capping every bump of the wall (D395).
@@ -187,17 +240,18 @@ fn lying(
     // ledges its joints and bedding break the rock into (D426), as the Matterhorn's and the
     // Odle's faces are streaked; without, the walls past 42 degrees were bare and the range
     // held snow on 4 percent of its rock (the r7 review).
-    let (snow, couloir) = if planet.has_mountains()
+    if mountains
         && matches!(
             made_of,
             material::STONE | material::SCREE | material::GRAVEL
-        ) {
+        )
+    {
         let height_m = round.place(point, up).height_m;
-        let fed = round.snow_m(point + up * fed_from_m(height_m), up) * FED_SHARE;
+        let fed = snow_m(point + up * fed_from_m(height_m), up) * FED_SHARE;
         let level = smoothstep(FED_WALL.0, FED_WALL.1, normal.dot(up));
         let here = smoothstep(SNOW_BED.0, SNOW_BED.1, bed(point));
         let gullied = if here > 0.0 {
-            round.snow_m(point + up * FED_GULLY_M, up) * FED_SHARE
+            snow_m(point + up * FED_GULLY_M, up) * FED_SHARE
         } else {
             0.0
         };
@@ -227,26 +281,44 @@ fn lying(
         }
     } else {
         (snow, 0.0)
-    };
-    let (loose, footing) = match made_of {
-        material::SCREE => (1.0, Footing::Loose),
-        material::GRAVEL => (2.0, Footing::Loose),
-        // A wall's couloir, to the ground shader, as rock below none: its avalanche snow
-        // (`couloir_catch`), told from the wall's own fed snow, which lies as deep on its tops.
-        material::STONE => (-couloir, Footing::Rock),
-        _ => (0.0, Footing::Soil),
-    };
-    let footing = if above_water < 0.0 {
-        Footing::Water
-    } else {
-        footing
-    };
-    let rock_or_woods = if footing == Footing::Rock {
-        1.0
-    } else {
-        -round.stand(point, normal, footing).density
-    };
-    ([loose, snow], [rock_or_woods, above_water])
+    }
+}
+
+/// How deep the snow lies on [`terra_land::round::SNOWBED_DATE`] at a point on the ground
+/// facing `normal`, in metres, as the land lays it: the climate's, and on a mountain's rock and
+/// scree what its walls feed their benches and gullies. No tree stands where it lies
+/// (`terra_land::woods::Stand::under_snow`); without the walls' feed, trees stood on benches
+/// white with it (mountains round 30's review).
+pub(crate) fn snowbed_m(
+    planet: &Planet,
+    round: &terra_land::round::Round,
+    point: Vec3,
+    normal: Vec3,
+) -> f32 {
+    let up = point.normalize_or(Vec3::Y);
+    // No snow here and none where its walls' feed comes from, at most `FED_GULLY_M` higher: none
+    // laid, without asking the ground what it is made of, which is most of the cost over a
+    // forest's hundreds of thousands of trees (it added 20 s to the town's woods).
+    if round.snowbed_m(point, normal) <= 0.0
+        && round.snowbed_m(point + up * FED_GULLY_M.max(FED_M), up) <= 0.0
+    {
+        return 0.0;
+    }
+    let made_of = round.land.ground.sample(point - up * 0.3).material;
+    let field = planet.voxels();
+    let mut memo = field.memo_for(terra_voxel::VOXEL_M);
+    let mut bed = |at: Vec3| field.field().gully_bed(at, &mut memo);
+    let snow_m = |p: Vec3, n: Vec3| round.snowbed_m(p, n);
+    laid_snow(
+        round,
+        planet.has_mountains(),
+        point,
+        normal,
+        made_of,
+        &mut bed,
+        &snow_m,
+    )
+    .0
 }
 
 /// How far `point` lies in a wall's couloir, 0 to 1: the gullies' beds averaged up the fall line

@@ -20,6 +20,9 @@ pub struct Round {
     pub pools: Option<Waters>,
     pub seasons: Seasons,
     pub snow: Snow,
+    /// Its snow as it lies on [`SNOWBED_DATE`], whatever the day: where it lies then no tree
+    /// stands (`woods::Stand::under_snow`).
+    pub snowbeds: Snow,
     /// How much of the falling snow its ground keeps against the prevailing wind (D323), over
     /// the lakes' grid.
     pub drift: Drift,
@@ -47,6 +50,12 @@ const POOL_DEEPEST_M: f32 = 0.35;
 const LAKE_DEEPEST_M: f32 = 1.5;
 const LAKE_AREA_M2: f32 = 5_000.0;
 const POOL_AREA_M2: f32 = 8.0;
+
+/// The day whose snow keeps trees off the ground it lies on: snow lying into midsummer leaves
+/// too short a season for a tree's seedlings, so a late snowbed is treeless heath however warm
+/// its summer (Körner, *Alpine Plant Life*, 2021, on snowbeds; Holtmeier, *Mountain
+/// Timberlines*, 2009). Mountains round 30's review: trees stood on benches white with snow.
+pub const SNOWBED_DATE: &str = "07-15";
 
 /// A clearing's edge's trees stand at this share of the forest's height at its very edge,
 /// where the forest's own stand at least the first share of their kind's full height.
@@ -83,6 +92,20 @@ impl Round {
             latitudes,
             heights,
         );
+        let snowbed_day = terra_climate::Date::parse(SNOWBED_DATE)
+            .expect("SNOWBED_DATE is a date")
+            .day(&land.fields.climate().year);
+        let snowbeds = if snowbed_day == day {
+            snow.clone()
+        } else {
+            Snow::on(
+                &land.fields,
+                snowbed_day,
+                middle * land.radius_m(),
+                latitudes,
+                heights,
+            )
+        };
         let pools = land
             .ground
             .patterned()
@@ -112,6 +135,7 @@ impl Round {
             pools,
             seasons,
             snow,
+            snowbeds,
             drift,
             heath,
             microsites,
@@ -172,14 +196,22 @@ impl Round {
     /// How deep the snow lies at a point on the ground, facing `normal`, in metres, as its
     /// shelter from the wind catches it (D323).
     pub fn snow_m(&self, point: Vec3, normal: Vec3) -> f32 {
+        self.snow_in(&self.snow, point, normal)
+    }
+
+    /// How deep the snow lies at a point on [`SNOWBED_DATE`], as `snow_m` on its day.
+    pub fn snowbed_m(&self, point: Vec3, normal: Vec3) -> f32 {
+        self.snow_in(&self.snowbeds, point, normal)
+    }
+
+    fn snow_in(&self, snow: &Snow, point: Vec3, normal: Vec3) -> f32 {
         // The ground's lean over its lakes' 10 m grid, not a vertex's own: the metre-scale
         // relief of polygons and detail would turn the sun's melt from vertex to vertex.
         let up = point.normalize_or(Vec3::Y);
         let region = self.waters.region();
         let normal = region.normal_at(up).unwrap_or(normal);
         let place = self.place(point, normal);
-        self.snow
-            .depth_caught_m(place.latitude, place.height_m, place.sunward, place.catch)
+        snow.depth_caught_m(place.latitude, place.height_m, place.sunward, place.catch)
     }
 
     /// A point on the ground facing `normal` as the climate takes it, with how much drifting

@@ -53,7 +53,21 @@ pub struct Stand {
     pub stature: f32,
 }
 
+/// Snow lying this deep on [`crate::round::SNOWBED_DATE`], in metres, starts to keep trees
+/// off, and keeps them off whole at the second: the ground shader draws a patch from about the
+/// first, whole past the second.
+pub const SNOWBED_M: (f32, f32) = (0.02, 0.15);
+
 impl Stand {
+    /// The trees that stand where snow lies `snowbed_m` deep on the snowbed date: none in a
+    /// snowbed, thinning over its edge.
+    pub fn under_snow(self, snowbed_m: f32) -> Stand {
+        Stand {
+            density: self.density * (1.0 - smoothstep(SNOWBED_M.0, SNOWBED_M.1, snowbed_m)),
+            ..self
+        }
+    }
+
     /// Whether the trees are krummholz: stunted below the height a tree line's last trees reach.
     pub fn krummholz(&self) -> bool {
         self.density > 0.0 && self.stature < 0.3
@@ -327,7 +341,12 @@ impl<'a> Woods<'a> {
             None => self.round.water_level(up),
         };
         let footing = self.round.land.footing(point, water);
-        let mut stand = self.round.stand(point, normal, footing);
+        // None in a snowbed: snow the climate leaves lying into summer (the world adds the
+        // snow its walls feed their benches, terra_world's `terrain::snowbed_m`).
+        let mut stand = self
+            .round
+            .stand(point, normal, footing)
+            .under_snow(self.round.snowbed_m(point, normal));
         if let Some(lake) = near {
             stand.density *= smoothstep(SHORE_BARE_M, SHORE_WOODED_M, point.length() - lake);
         }
@@ -540,6 +559,32 @@ mod tests {
         assert!(bench > 0.0 && bench < 0.2, "a rock bench {bench:.2}");
         let scree = stand(&warm, 30.0, Footing::Loose).density;
         assert!(scree > 0.0 && scree < 0.3);
+    }
+
+    #[test]
+    fn no_tree_stands_in_a_snowbed_and_its_edge_thins_them() {
+        // A forest's season on a soil slope, a scree toe and a rock bench, which hold trees
+        // (mountains round 30's benches); where snow lies into midsummer, none, however warm
+        // the summer, and over a snowbed's edge fewer the deeper it lies.
+        let warm = season(TREE_LINE_SEASON_C + 1.5);
+        for footing in [Footing::Soil, Footing::Loose, Footing::Rock] {
+            let open = stand(&warm, 15.0, footing);
+            assert!(open.density > 0.1, "{footing:?} holds {:.2}", open.density);
+            assert_eq!(open.under_snow(0.0), open, "{footing:?} bare");
+            assert_eq!(
+                open.under_snow(0.3).density,
+                0.0,
+                "{footing:?} in a snowbed"
+            );
+            let edge: Vec<f32> = [0.0, 0.05, 0.1, 0.2]
+                .map(|m| open.under_snow(m).density)
+                .to_vec();
+            assert!(
+                edge.windows(2).all(|w| w[1] <= w[0]) && edge[1] < edge[0],
+                "{footing:?} over the edge {edge:.2?}"
+            );
+            assert_eq!(open.under_snow(0.3).stature, open.stature);
+        }
     }
 
     #[test]

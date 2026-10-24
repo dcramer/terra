@@ -264,6 +264,62 @@ fn planted(tree: &Tree) -> Planted {
     }
 }
 
+/// The trees the woods stand round `middle`: the grown ones near, every tree as a card out to
+/// `COARSE_M` but the start's clearing, and coarser cards past it to `FAR_M`, none in a snowbed.
+fn stood(
+    planet: &Planet,
+    round: &terra_land::round::Round,
+    middle: Vec3,
+    seed: terra_gen::Seed,
+) -> (Vec<Tree>, Vec<Tree>, Vec<Tree>) {
+    let woods = Woods::of(round);
+    let near = off_snowbeds(planet, woods.trees(middle, 0.0, NEAR_M, SPACING_M, seed));
+    // The cards stand for every tree, the grown ones too, as an impostor stands for its
+    // model: seen from away from the start, past the grown trees' last level of detail, they
+    // are the trees. Near the camera they give way to the grown ones (`near`).
+    let mid: Vec<Tree> = woods
+        .trees(middle, 0.0, COARSE_M, SPACING_M, seed)
+        .into_iter()
+        .filter(|tree| tree.at.distance(middle) > CLEAR_M)
+        .collect();
+    let mid = off_snowbeds(planet, mid);
+    let coarse = off_snowbeds(
+        planet,
+        woods.trees(
+            middle,
+            COARSE_M,
+            FAR_M,
+            SPACING_M * 2.0,
+            seed.derive("coarse"),
+        ),
+    );
+    (near, mid, coarse)
+}
+
+/// The trees off the snowbeds a range's walls feed their benches and scree
+/// (`terrain::snowbed_m`), each over a snowbed's edge kept by its own luck, so the same tree
+/// goes from the grown ones and the cards alike.
+fn off_snowbeds(planet: &Planet, trees: Vec<Tree>) -> Vec<Tree> {
+    let Some(round) = planet.round() else {
+        return trees;
+    };
+    let kept = terra_gen::par::map(&trees, |tree| {
+        let normal = terra_land::woods::ground_normal(&round.land, tree.at);
+        let snowbed = crate::terrain::snowbed_m(planet, round, tree.at, normal);
+        let open = terra_land::woods::Stand {
+            density: 1.0,
+            stature: 1.0,
+        };
+        let density = open.under_snow(snowbed).density;
+        density > 0.0 && tree.luck <= density
+    });
+    trees
+        .into_iter()
+        .zip(kept)
+        .filter_map(|(tree, kept)| kept.then_some(tree))
+        .collect()
+}
+
 /// Where a tree stands, exactly, to find the grown tree a far card stands for: the same rules
 /// give the same tree the same foot to the bit.
 fn foot_key(at: Vec3) -> [u32; 3] {
@@ -295,24 +351,8 @@ fn plant(
     let middle = sited
         .and_then(|sited| sited.woods_middle(&planet))
         .unwrap_or(start.translation);
-    let woods = Woods::of(round);
     let seed = planet.seed().derive("woods");
-    let near = woods.trees(middle, 0.0, NEAR_M, SPACING_M, seed);
-    // The cards stand for every tree, the grown ones too, as an impostor stands for its
-    // model: seen from away from the start, past the grown trees' last level of detail, they
-    // are the trees. Near the camera they give way to the grown ones (`near`).
-    let mid: Vec<Tree> = woods
-        .trees(middle, 0.0, COARSE_M, SPACING_M, seed)
-        .into_iter()
-        .filter(|tree| tree.at.distance(middle) > CLEAR_M)
-        .collect();
-    let coarse = woods.trees(
-        middle,
-        COARSE_M,
-        FAR_M,
-        SPACING_M * 2.0,
-        seed.derive("coarse"),
-    );
+    let (near, mid, coarse) = stood(&planet, round, middle, seed);
 
     // Near: grown conifers, each its kind's at its stature, drawn by what the layer above
     // gave, or the flora's pine.

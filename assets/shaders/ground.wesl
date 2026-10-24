@@ -616,6 +616,21 @@ const FAR_STRATA_FLAT: vec2<f32> = vec2<f32>(0.74, 0.88);
 const FAR_BANDED: f32 = 0.65;
 const LEDGE_LINE: f32 = 0.5;
 const LEDGE_LINE_PX: f32 = 1.5;
+// A far tier's tone in the rock's own colour, from its near `tone`, a standing bench's top
+// (`bench`) pale with the sky's light and the grit and snow it holds: through the haze only a
+// share of a far wall's light is its rock's (round 30's diagnostic still, the lake's wall at
+// dusk: a third through the air, dimmed to 0.37 as a far wall, under a sixth of what the eye
+// gets), so the tiers' near tones, 0.7 to 1.15, showed as 2% and the walls read as sheets. As
+// a real wall's ledges read from across a valley by their light benches over dark risers
+// several times apart, far off the tones part by FAR_TONE_GAIN, the benches by FAR_BENCH.
+// terra_world's far_strata.rs tests it on the CPU.
+const FAR_TONE_GAIN: f32 = 2.4;
+const FAR_BENCH: f32 = 1.7;
+const FAR_TONE_LEAST: f32 = 0.2;
+fn far_tier_tone(tone: f32, bench: f32) -> f32 {
+    return max(1.0 + (tone - 1.0) * FAR_TONE_GAIN, FAR_TONE_LEAST) * mix(1.0, FAR_BENCH, bench);
+}
+
 fn far_strata(far_off: f32, tier_f: f32, height_px: f32) -> vec4<f32> {
     let far = smoothstep(FAR_STRATA_M.x, FAR_STRATA_M.y, far_off);
     let flat_from = mix(0.55, FAR_STRATA_FLAT.x, far);
@@ -820,6 +835,19 @@ fn bedding(world: vec3<f32>) -> Bedding {
     return Bedding(world - centre + fault_throw, bed, strike, dip_way, key);
 }
 
+// The share of the running and of the staggered set's joints that stand open and are drawn.
+const RUN_OPEN: f32 = 0.4;
+const STAGGERED_OPEN: f32 = 0.3;
+// How dark a wall's joints are at `f` (the bed, running and staggered sets' places in their
+// blocks, 0 to 1), each set's line drawn where `open` says, a line `soft` wider for the
+// pixel's footprint.
+fn crack_of(f: vec3<f32>, open: vec3<f32>, soft: f32) -> f32 {
+    let bed = mix(1.0, min(f.x, 1.0 - f.x) * 1.4, open.x);
+    let run = mix(1.0, min(f.y, 1.0 - f.y) * 0.96, open.y);
+    let staggered = mix(1.0, min(f.z, 1.0 - f.z) * 1.56, open.z);
+    return 1.0 - smoothstep(0.0, 0.025 + soft, min(bed, min(run, staggered)));
+}
+
 fn jointing(world: vec3<f32>, up: vec3<f32>, spacing: f32, soft: f32, sun: vec3<f32>) -> Joints {
     // The beds tilted in their fault block (`bedding`); the upright joints cut across them in
     // two sets: one running on through the beds, so the wall stands in upright slabs as the
@@ -858,9 +886,16 @@ fn jointing(world: vec3<f32>, up: vec3<f32>, spacing: f32, soft: f32, sun: vec3<
     // The joints open: the running set wide and dark, the staggered one narrower, a bed open
     // less often.
     let bed_open = step(0.75, hash(vec3<f32>(course, 3.3, 9.7) + b.key * 7.0));
-    let bed_edge = mix(1.0, min(f.x, 1.0 - f.x) * 1.4, bed_open);
-    let joint_edge = min(min(f.y, 1.0 - f.y) * 0.8, min(f.z, 1.0 - f.z) * 1.3) * 1.2;
-    let crack = 1.0 - smoothstep(0.0, 0.025 + soft, min(bed_edge, joint_edge));
+    // Each line drawn only where it is open, keyed to the line itself (the nearest whole
+    // step), so a joint is open along both its sides: every joint of both upright sets drawn
+    // netted the near walls in a crosshatch grid of 16 m squares (mountains round 30's review;
+    // its diagnostic still: cracks or shadows on 63% of the valley's near wall).
+    let open = vec3<f32>(
+        step(0.75, hash(vec3<f32>(floor(tb + 0.5), 3.3, 9.7) + b.key * 7.0)),
+        step(1.0 - RUN_OPEN, hash(vec3<f32>(floor(t1 + 0.5), run, 1.9) + b.key * 7.0)),
+        step(1.0 - STAGGERED_OPEN, hash(vec3<f32>(floor(t2 + 0.5), course, 4.1) + b.key * 7.0)),
+    );
+    let crack = crack_of(f, open, soft);
     // Each slab's face turned its own way, more across the wall than up or down it, so the
     // slabs read upright.
     // Turned by a smooth field more than block by block: a hard turn a block, each lit its own
@@ -1352,6 +1387,7 @@ fn fragment(
             var band_tone = mix(1.0, mix(0.7, 1.15, tier_r) * mix(0.9, 1.06, bed_r), strength);
             band_tone *= mix(1.0, 0.85, (1.0 - smoothstep(0.0, 0.12, tier_f)) * standing);
             band_tone *= mix(1.0, far_tiers.w, standing);
+            band_tone = mix(band_tone, far_tier_tone(band_tone, bench * standing), smoothstep(FAR_STRATA_M.x, FAR_STRATA_M.y, far_off));
             // The benches dusted with snow or turf only in patches: whole, they ruled the faces
             // with bright lines.
             ledge = 0.0;
