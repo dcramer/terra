@@ -15,6 +15,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | [Campfire history panel: which rounds since 10-21 made it look worse from the camp view](2026-10-24-campfire-history-panel.md) | 2026-10-24 |
 | [Campfire as one whole-fire sim on a few cards: a blind test](2026-10-24-campfire-one-sim.md) | 2026-10-24 |
 | [Combat clip sources: a bake-off scored by the move check](2026-10-24-combat-clip-sources.md) | 2026-10-24 |
+| [Enshrouded's melee, measured: first round](2026-10-24-enshrouded-combat-measured.md) | 2026-10-24 |
 | [Campfire as one body of flame: how shipped games lay it on the logs](2026-10-23-campfire-one-body.md) | 2026-10-23 |
 | [Creature rigs: how shipped games make many creatures move well](2026-10-22-creature-rig-pipeline.md) | 2026-10-22 |
 | [Far terrain shadows and the lake's off-screen reflection: how shipped engines shade land past the shadow map (2026-10-22)](2026-10-22-far-terrain-shadows.md) | 2026-10-22 |

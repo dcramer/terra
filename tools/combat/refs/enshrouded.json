@@ -1,0 +1,55 @@
+{
+  "name": "enshrouded",
+  "about": "Enshrouded's melee (Keen Games, Steam app 1203620), the developers' measuring stick for combat (D180), measured frame by frame from first-party video. Round 1 (2026-10-24): the heavy blow, a parried enemy blow and the camera's framing are measured; the light chain, the roll, block raise, hit-stop and spacing are listed under `unmeasured` with the footage that holds them. research/2026-10-24-enshrouded-combat-measured.md says how and compares our move set.",
+  "measured": "2026-10-24",
+  "units": { "time": "seconds of game time (the videos play at 1x)", "length": "body heights (one body: the player's standing height on screen, about 1.8 m)", "share": "fraction of the frame's height" },
+  "sources": {
+    "ftp": { "title": "Enshrouded - Forging the Path | Combat (Keen's developers on Update 8's combat, with gameplay inserts)", "url": "https://www.youtube.com/watch?v=RDQ0_R4AR-A", "by": "Enshrouded (official channel)", "published": "2026-04", "frames": "1920x900 at 60 fps, every frame read at 0.5x (about one in three dropped)", "build": "Update 8, the current melee (charged heavy, i-frames on the roll, warping to targets)" },
+    "cg": { "title": "Enshrouded - Combat Gameplay", "url": "https://www.youtube.com/watch?v=EuViyK4qLQg", "by": "Enshrouded (official channel)", "published": "2023-06", "frames": "1920x1080 at 60 fps (about one frame in ten a repeat), every frame read at 0.25x", "build": "pre-release 2023; melee reworked since (Update 8), so its timings are older than the game's" },
+    "steam": { "url": "https://store.steampowered.com/api/appdetails?appids=1203620", "note": "the store's two trailers (1.0 launch, Wake of the Water) are cinematic cuts with almost no readable melee; used only to confirm that" }
+  },
+  "method": "Frames caught from the official videos in a headless Chromium (each frame's media time from requestVideoFrameCallback), laid out as labelled contact sheets and read by eye: a phase starts on the first frame the pose leaves the last one. Distances are on-screen body heights; camera distance is derived from the player's share of the frame height for an assumed vertical field of view (Enshrouded's is a slider whose default is not published). Pictures are kept in ~/.cache/terra-review/refs/enshrouded-combat/, never in the repository.",
+  "moves": {
+    "heavy": {
+      "what": "Update 8's sword heavy (one-handed sword, round shield on the left arm) on a training dummy: a crouched turn and draw-back while the button is held, a short leap, an overhead cut, a bent-over landing, back to guard",
+      "windup_s": 0.52,
+      "windup_note": "from the first frame leaving idle (51.95) to the impact flash (52.47); includes however long the button was held, so it is the shortest charge shown, not a fixed wind-up",
+      "contact_to_recovery_s": { "bent_over_until": 0.71, "back_on_guard": 1.08 },
+      "total_s": 1.6,
+      "hit_flash_frames_at_60": [2, 4],
+      "lunge_body_heights": [0.4, 0.8],
+      "lunge_note": "the leap carries the body toward the dummy; read from the body's change of size on screen, so a range",
+      "source": "ftp", "at": "51.95-53.55 s", "confidence": "medium on times (±0.03 s), low on the lunge"
+    },
+    "enemy_overhead_parried": {
+      "what": "a cave scavenger's overhead axe blow taken on a raised shield and parried (a white burst on the shield), 2023 build",
+      "windup_s": 0.8,
+      "windup_note": "axe rising from 22.50 to its top at about 22.95, falling to the burst at 23.30; the video cuts on the next frame",
+      "source": "cg", "at": "22.50-23.30 s", "confidence": "medium"
+    }
+  },
+  "camera": {
+    "player_share_of_frame_height": [0.2, 0.27],
+    "player_across_frame": "centred (within about 5% of the middle) in every Update 8 combat shot; no shoulder offset shows",
+    "distance_body_heights_if_vfov": { "55": [3.6, 4.8], "60": [3.2, 4.3], "70": [2.6, 3.6] },
+    "distance_note": "d = 1 body / (2 * share * tan(vfov/2)); share 0.20 to 0.27. If the 1920x900 picture is a 1080-high frame cropped, the share against the full frame is about a sixth smaller and the camera that much further",
+    "height": "a little above the head, looking slightly down: the horizon sits in the upper third, the player's feet in the lower third",
+    "in_a_fight": "pulls no closer for a fight; the enemy is framed ahead of the player, both in view, the player low and centred; the merciless finisher (2023) cuts to a close side camera",
+    "older_2023_camera": "much closer, over the right shoulder, the player cut at the waist (cg 20-50 s)",
+    "sources": ["ftp 51.7, 157.1, 190.6, 262.6 s", "cg 24.5 s"],
+    "confidence": "medium on the share and centring, low on the distance (field of view unknown)"
+  },
+  "guard": {
+    "what": "Update 8's idle with sword and shield: the round shield on the left forearm held in front of the chest and belly, face toward the enemy, sword low in the right hand along the leg, point down and back; the 2023 block holds a rectangular shield up to the face, sword low",
+    "source": "ftp 51.4-51.9 s and 53.6-53.9 s; cg 20.5-50 s",
+    "confidence": "medium (seen from behind)"
+  },
+  "unmeasured": {
+    "light_blow_and_chain": "ftp 185-198 s (upward slash and crushdown on a dragon) and cg 27-51 s hold sword blows; caught to ~/.cache/terra-review/refs/enshrouded-combat/ftp/slash and cg/cave, not yet read",
+    "roll": "ftp 154-164 s and 171-184 s (the roll with Update 8's i-frames); caught to ftp/roll, not yet read",
+    "block_raise_and_blocked_hit": "cg 20-51 s holds the block held, not its raise; no Update 8 block in the official videos",
+    "hit_stop": "the 2023 video repeats frames and the Update 8 one was read with drops, so a freeze of 2 to 6 frames cannot be told from the capture; needs a capture at 0.25x without drops, or footage at a steady 60",
+    "hit_reaction": "the cave scavenger's stagger rings (cg 36.5-41.5 s) show a stun of about 5 s, not a flinch; flinch lengths not read",
+    "spacing": "ftp 243-249 s (before and after Update 8's warp, on dummies) shows the lunge and the striking distance; caught to ftp/warp, not yet read"
+  }
+}
