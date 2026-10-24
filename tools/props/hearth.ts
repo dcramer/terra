@@ -443,8 +443,8 @@ function checks(a: number, b: number, open: number, seed: number, stretch: numbe
   // Fewer fissures along the grain than across it: at seven columns in ten, a log's glowing
   // seams ran its length as bristles (blind judge, campfire tongue round: "straw or brush").
   const along = smooth(0.4, 0.55, noise(col * 7.3, b * 5, seed + 55));
-  const wl = (0.0007 + 0.0016 * fbm(a * 12, b * 3, seed + 56)) * (0.5 + open);
-  const wt = (0.0005 + 0.001 * hash(col, row, 57)) * (0.5 + open);
+  const wl = (0.0007 + 0.0016 * fbm(a * 12, b * 3, seed + 56)) * (0.5 + 1.5 * open);
+  const wt = (0.0005 + 0.001 * hash(col, row, 57)) * (0.5 + 1.5 * open);
   const crack = Math.max(along * (1 - smooth(wl * 0.4, wl, dl)), 0.75 * crossed * (1 - smooth(wt * 0.4, wt, dt)));
   const inside = smooth(0, 0.005, Math.min(along > 0.5 ? dl : 1, crossed ? dt : 1));
   return [crack, inside, hash(col, row, 58)];
@@ -471,7 +471,7 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   let block = mix([15, 13, 12], [40, 36, 33], 0.2 * id + 0.8 * fbm(a * 70, b * 30, seed));
   // Grey-white ash on the blocks, in patches, from where it chars through to where it burns
   // hottest: only on the hottest it read as no ash at all (blind judge, campfire ember round).
-  const ash = 0.65 * smooth(0.6, 0.95, x) * smooth(0.58, 0.74, fbm(a * 60, b * 25, seed + 59));
+  const ash = 0.35 * smooth(0.6, 0.95, x) * smooth(0.58, 0.74, fbm(a * 60, b * 25, seed + 59));
   block = mix(block, [124, 120, 114], ash);
   c = mix(c, mix(block.map((v) => v * (0.72 + 0.4 * inside)), [30, 13, 8], deep), char);
   const leak = 0.3 * (1 - inside) * hot;
@@ -489,8 +489,8 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // over its blocks, brightest at the hottest, broken by the char's mottle (fire round 31: dark
   // logs standing on the bed).
   // A soft orange gradient rising from the coals, its mottle broad (fire round 32).
-  const bed = smooth(0.6, 1.3, x) * (0.6 + 0.4 * fbm(a * 4, b * 1.5, seed + 61)) * (0.7 + 0.3 * inside);
-  const glow = tone.map((v, i) => v * g + [214, 92, 16][i] * 0.5 * bed);
+  const bed = smooth(0.55, 1.1, x) * smooth(0.5, 0.66, fbm(a * 9, b * 3.5, seed + 61)) * (1 - 0.6 * inside);
+  const glow = tone.map((v, i) => v * g + [206, 74, 12][i] * 1.4 * bed);
   // Charcoal is matte: its blocks' faces about 0.86 for their faint sheen, its fissures and
   // ash rougher still (fire round 37: at 0.6 the char took the fire's light as a gloss, and
   // read as glossy fresh-cut wood).
@@ -521,7 +521,7 @@ function at(l: Log, s: number): [[number, number], [number, number], boolean] {
 function heat(l: Log, t: number, n: V3): number {
   const inward = -dot(n, l.out), down = -n[1], f = t / l.L;
   const under = clamp(0.5 + 0.55 * inward + 0.35 * down);
-  const top = smooth(0.3, 0.9, f) * (0.7 + 0.45 * under);
+  const top = smooth(0.3, 0.85, f) * (0.85 + 0.35 * under);
   const foot = smooth(0.3, 0.0, f) * under * under * 0.95;
   // Its underside licked hot enough all along that its cracks glow there, seen low between the
   // logs (blind judge, campfire ember round: "glowing cracks on the log undersides").
@@ -530,7 +530,11 @@ function heat(l: Log, t: number, n: V3): number {
   // 25: its raw upper faces read as pale planks); its outer end charred in patches through its
   // scorched bark (blind judge, campfire ember round: brown bark read as brush, not burnt logs).
   const all = 0.34 + 0.3 * smooth(0.2, 0.55, f);
-  return Math.max(top, foot, lick, all);
+  // Its sides toward its neighbours, which see the coals and the flames through the gaps
+  // between the logs, glow along its edges.
+  const across = Math.abs(dot(n, norm(cross([0, 1, 0], l.out))));
+  const rim = smooth(0.3, 0.85, across) * (0.62 + 0.25 * f);
+  return Math.max(top, foot, lick, all, rim);
 }
 
 /** Edge padding, as a baker dilates its islands: each unpainted texel within `reach` (here the
