@@ -60,6 +60,16 @@ test("a flame ringed by black meets soot at all its edge; on grey, at none", () 
   assert.equal(clean.soot, 0);
 });
 
+// Scaled to a fixed height, the wide one read a third the tall one's soot by construction
+// (D433): a 3:1 flame's border to the dark round it is the same however it is turned.
+test("a wide, low flame and a tall, narrow one ringed alike by black score the same soot", () => {
+  const wide = measure(paint(200, 120, (x, y) => (inside(x, y, 40, 45, 160, 85) ? YELLOW : BLACK)));
+  const tall = measure(paint(120, 200, (x, y) => (inside(x, y, 45, 40, 85, 160) ? YELLOW : BLACK)));
+  assert.ok(wide.soot > 0.1, `soot ${wide.soot}`);
+  assert.ok(Math.abs(wide.soot - tall.soot) < 0.01 * tall.soot, `wide ${wide.soot}, tall ${tall.soot}`);
+  assert.ok(Math.abs(wide.edgeSoot - tall.edgeSoot) < 1, `edge soot wide ${wide.edgeSoot}, tall ${tall.edgeSoot}`);
+});
+
 test("one dark hole in a square flame is one pocket a flame-square, at any size", () => {
   for (const s of [40, 160]) {
     const pic = paint(s, s, (x, y) => (inside(x, y, 0.4 * s, 0.4 * s, 0.6 * s, 0.6 * s) ? BLACK : YELLOW));
@@ -70,12 +80,12 @@ test("one dark hole in a square flame is one pocket a flame-square, at any size"
 
 // The castle rounds' measure.mjs filled pockets at the photograph's own size, and on a
 // frame-filling dark hole its fill outgrew an array ("Invalid array length"); here the fill
-// is at the flame's 256 px, so a hole of millions of pixels is one pocket like any other.
+// is at the flame's 256 px square, so a hole of millions of pixels is one pocket like any other.
 test("a dark hole filling most of a large flame is one pocket, measured at once", () => {
   const pic = paint(2400, 1800, (x, y) => (inside(x, y, 40, 40, 2360, 1760) ? BLACK : YELLOW));
   const started = Date.now();
   const m = measure(pic);
-  assert.ok(Math.abs(m.pockets - (256 * 256) / (256 * 341)) < 0.1, `pockets ${m.pockets}`);
+  assert.ok(Math.abs(m.pockets - 1) < 0.1, `pockets ${m.pockets}`);
   assert.ok(Date.now() - started < 3000, `took ${Date.now() - started} ms`);
 });
 

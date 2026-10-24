@@ -8,9 +8,9 @@
 // least 20 and a fifth of max, so a lit pink stone is not flame), or near white (min >= 235).
 // Its bands (white, pale yellow, yellow, orange, red), B/R and G/R, and its dim share (luma
 // under 0.45 of its p99: thin, see-through flame) are taken at the picture's own size, as they are shares. What depends on scale (soot round the flame, its edge, the dark
-// pockets in it, detail by octave) is taken after the crop is resampled so the flame's box is
-// `FLAME_H` pixels tall, so a small fire in a render and a frame-filling one in a photograph
-// compare. With --class it prints each number against that class's range in references.json
+// pockets in it, detail by octave) is taken after the crop is resampled so the flame's box has
+// the area of a `FLAME_SIDE` square, so a small fire in a render and a frame-filling one in a
+// photograph compare, and a wide, low flame and a tall, narrow one alike (D433). With --class it prints each number against that class's range in references.json
 // (a ✗ where one falls out) and exits 1 when one does. Ported from the measurer the castle
 // film's rounds used (MEASURED.md's method). Node 22.18 or later, ffmpeg for anything but PNG;
 // no dependencies.
@@ -39,19 +39,23 @@ export type Metrics = {
   soot: number;
   /// Of the flame's edge, the percent meeting soot just outside it.
   edgeSoot: number;
-  /// Dark pockets enclosed in the flame, per `FLAME_H`-square of its box.
+  /// Dark pockets enclosed in the flame, per `FLAME_SIDE`-square of its box.
   pockets: number;
-  /// Luma detail by octave, percent of the six: fine (cells of 1-3% of the flame's height),
+  /// Luma detail by octave, percent of the six: fine (cells of 1-3% of the flame's size, `FLAME_SIDE`),
   /// mid (3-12%) and coarse (12-50%).
   fine: number;
   mid: number;
   coarse: number;
 };
 
-/// How tall the flame's box is resampled to for the measures that depend on scale.
-export const FLAME_H = 256;
+/// The side of the square whose area the flame's box is resampled to for the measures that
+/// depend on scale. By area, not by height (D433): soot is the dark band round the flame over
+/// its area, so scaled to a fixed height a wide, low flame had less border for its area by
+/// construction; by area it is the flame's outline over the root of its area, the same for a
+/// shape and its turn. By the larger side a 4:1 flame would score its aspect times a square's.
+export const FLAME_SIDE = 256;
 /// How near the flame soot is counted, and how far out its edge is looked at, in pixels of
-/// the resampled crop (3% and 1% of the flame's height).
+/// the resampled crop (3% and 1% of the flame's size).
 const SOOT_R = 8;
 const EDGE_OUT = 3;
 
@@ -255,9 +259,9 @@ export function measure(pic: Picture, box?: Box, matte?: Picture): Metrics {
     coarse: 0,
   };
   if (nf === 0) return out;
-  // The scale-dependent measures, on the crop resampled so the flame's box is FLAME_H tall.
+  // The scale-dependent measures, on the crop resampled so the flame's box is a FLAME_SIDE square in area.
   const fb = flameBox(flame, W, H);
-  const k = FLAME_H / Math.max(1, fb.y1 - fb.y0 + 1);
+  const k = FLAME_SIDE / Math.sqrt(Math.max(1, (fb.x1 - fb.x0 + 1) * (fb.y1 - fb.y0 + 1)));
   const [sw, sh] = [Math.max(8, Math.round(W * k)), Math.max(8, Math.round(H * k))];
   const scaled = resample(crop, sw, sh);
   // The matte resampled with the crop, as a grey picture: kept where it is still half flame.
@@ -366,7 +370,7 @@ function structure({ w: W, h: H, px }: { w: number; h: number; px: Uint8Array },
   return {
     soot: soot / Math.max(1, nf),
     edgeSoot: edge ? (100 * edgeSoot) / edge : 0,
-    pockets: (pockets * FLAME_H * FLAME_H) / boxArea,
+    pockets: (pockets * FLAME_SIDE * FLAME_SIDE) / boxArea,
     fine,
     mid,
     coarse,

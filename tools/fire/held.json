@@ -1,38 +1,48 @@
 {
- "campfire noon": [
-  "pale %",
-  "red %",
-  "dim %",
-  "pockets"
- ],
+ "campfire noon": [],
+ "campfire above noon": [],
  "house blaze noon": [
-  "dim %"
+  "dim %",
+  "soot/flame",
+  "edge soot %"
  ],
- "breath noon": [],
+ "breath noon": [
+  "yellow %"
+ ],
  "fireball noon": [],
  "campfire dusk": [
-  "pale %"
+  "soot/flame"
  ],
+ "campfire above dusk": [],
  "house blaze dusk": [
-  "dim %"
+  "yellow %",
+  "red %",
+  "red+orange %",
+  "dim %",
+  "soot/flame",
+  "edge soot %",
+  "fine %",
+  "coarse %"
  ],
- "breath dusk": [
-  "pale %"
- ],
+ "breath dusk": [],
  "fireball dusk": [
   "pale %"
  ],
- "campfire night": [
-  "pale %"
- ],
+ "campfire night": [],
+ "campfire above night": [],
  "house blaze night": [
+  "red %",
+  "red+orange %",
   "dim %",
+  "soot/flame",
+  "edge soot %",
+  "fine %",
   "mid %",
   "coarse %"
  ],
  "breath night": [],
- "fireball night": [],
- "campfire above noon": [],
- "campfire above dusk": [],
- "campfire above night": []
+ "fireball night": [
+  "G/R",
+  "edge soot %"
+ ]
 }

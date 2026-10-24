@@ -365,7 +365,7 @@ Every change to fire is measured against photographs of real fire before a perso
   - the dim share;
   - soot over flame, and the soot at the flame's edge;
   - dark pockets in the flame;
-  - detail by octave (fine, mid, coarse) relative to the flame's height;
+  - detail by octave (fine, mid, coarse) relative to the flame's size: these, soot and pockets are taken with the flame's box resampled to a 256-px square's area, so a wide, low flame and a tall one compare (D433);
   - at night, how much the ground round the fire is lit, against the same view by day.
 - **The fire sheet.** The xtask task `fire` (`tools/fire/sheet.ts`) runs one scripted sandbox scene an hour on the yard, noon, dusk and night, each fire from a fixed camera: today a campfire, a log cabin alight, and a dragon's breath on a stone wall with its fireball. Once presets exist, every preset in a row, against stone and against sky.
   - The campfire has two rows (D433): `campfire`, the first camera, 16 degrees over its ring from 6.2 m, kept so history compares; and `campfire above`, RDR2's camp view measured from its frames (the stone ring's ellipse 0.55 as deep as wide, so 33 degrees over it, the camera pitched 26 down, the ring 15% of the picture's width: 4.8 m at our 45-degree lens, about 8.5 flame heights). From the low camera the judges saw the stones' unlit outer faces, a black sky and a lit strip on the horizon; from above the ring, the logs' tops and the bed as RDR2's players do. Blind judges set main and the 10-21 anchor four times as far apart there, 1.28 points against 0.33 (campfire view round).
