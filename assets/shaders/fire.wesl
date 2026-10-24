@@ -860,8 +860,13 @@ fn ball_middle(b: Breath, rb: f32) -> vec3<f32> {
 // spreading to so much more of the ball's size by then.
 const SMOKE_HOLD: f32 = 0.5;
 const SMOKE_GONE: f32 = 4.5;
-const SMOKE_RISE: f32 = 1.1;
-const SMOKE_SPREAD: f32 = 0.7;
+const SMOKE_RISE: f32 = 1.8;
+const SMOKE_SPREAD: f32 = 1.1;
+// And how much taller than wide it stands by two seconds off: a plume, not a ball.
+const SMOKE_STRETCH: f32 = 1.2;
+fn smoke_tall(since_off: f32) -> f32 {
+    return 1.0 + SMOKE_STRETCH * smoothstep(0.0, 2.0, since_off);
+}
 // A fireball burns out within a second of its fuel stopping: its flame was most of what hid
 // what is behind it, and what is left is its soot, this share of the burning gas's density
 // by then, thinning as it spreads (its soot the same, in a ball so much bigger every way) and
@@ -915,7 +920,11 @@ fn breath_left(b: Breath) -> f32 {
 fn breath_gas(l: vec3<f32>, b: Breath, time: f32, detail: bool) -> vec4<f32> {
     let rb = ball_size(b);
     let mid = ball_middle(b, rb);
-    let rel = (l - mid) * ball_scale(b);
+    let squat = (l - mid) * ball_scale(b);
+    // Once off, its smoke draws up as it rises, a plume taller than it is wide, its lumps
+    // drawn out with it into streaks: spreading evenly every way it hung as a round grey ball
+    // and faded in place (castle fall r27's review, 6-7.5 s and 18.8-20.5 s).
+    let rel = squat - b.up * dot(squat, b.up) * (1.0 - 1.0 / smoke_tall(b.since_off));
     let zc = clamp(l.z, 0.0, b.reach);
     let r = stream_radius(zc, b);
     let rho = length(l.xy);
@@ -1115,13 +1124,17 @@ const VOLUME_STEPS: i32 = 96;
 const BEHIND: f32 = 0.5;
 // The soot's albedo: smoke from a fuel-rich flame is near black (soot's single-scattering
 // albedo 0.2 to 0.3, Bond and Bergstrom 2006); at 0.32 its crown stood pale grey as a cloud at noon.
-const SOOT_ALBEDO: f32 = 0.12;
+// At 0.12, aging to 0.2, the sunlit cap and the smoke after the stop read light grey against
+// the soot round them (castle fall r27's review), whose albedo is 0.03 to 0.1, warm brown
+// (`fire_smoke.wesl`): the same soot, so the same albedo and the same brown (`SOOT_TINT`).
+const SOOT_ALBEDO: f32 = 0.05;
+const SOOT_TINT: vec3<f32> = vec3<f32>(1.15, 0.97, 0.82);
 // The sky's fill on the soot, a share of the sun's, unshadowed: an overcast underside.
 const SOOT_SKY: f32 = 0.32;
 // Once off, its smoke ages grey over a second: diluted soot scatters more than a fuel-rich
 // flame's (round 4's after-stop smoke was flat black), but stays dark smoke, soot's albedo
 // 0.2 to 0.3 at most: at 0.34 in a morning sun it read as a white cloud (castle fall r25).
-const SOOT_AGED_ALBEDO: f32 = 0.2;
+const SOOT_AGED_ALBEDO: f32 = 0.1;
 // The soot round a burning ball lit by its flame from within, deepest red at the ball and
 // fading out to a radius and a half from its middle: lit only by the sky, its cap read as a
 // flat black disc over the flame by night (vol11's review), where the references' smoke over
@@ -1211,7 +1224,7 @@ fn breath(in: VertexOutput) -> vec4<f32> {
         let s = lights.directional_lights[0];
         let L = s.direction_to_light;
         to_sun = vec3(dot(L, b.lift), dot(L, b.side), dot(L, b.way));
-        sun = s.color.rgb * view.exposure * (mix(SOOT_ALBEDO, SOOT_AGED_ALBEDO, smoothstep(0.3, 1.5, b.since_off)) / 3.14159265);
+        sun = s.color.rgb * SOOT_TINT * view.exposure * (mix(SOOT_ALBEDO, SOOT_AGED_ALBEDO, smoothstep(0.3, 1.5, b.since_off)) / 3.14159265);
     }
     let across = max(length(dl.xy), 0.25);
     // Drawn again as the film mask, only the flame's share is wanted: in steps twice as long,
@@ -1319,7 +1332,7 @@ fn hull_box(b: Breath) -> array<vec3<f32>, 2> {
     let rb = ball_radius(b);
     // The ball reaches 1.55 of its radius from a middle up to 0.45 of it off the stream's line.
     // Once off, its smoke rises and spreads (`ball_middle`, `SMOKE_RISE`).
-    let wide = max(2.0 * stream_radius(b.reach, b), rb * 2.1 * (1.0 + SMOKE_SPREAD)) + 0.5 + SMOKE_RISE * b.since_off;
+    let wide = max(2.0 * stream_radius(b.reach, b), rb * 2.1 * (1.0 + SMOKE_SPREAD) * smoke_tall(b.since_off)) + 0.5 + SMOKE_RISE * b.since_off;
     return array<vec3<f32>, 2>(vec3(-wide, -wide, -0.5), vec3(wide, wide, b.reach + rb * 1.6 * (1.0 + SMOKE_SPREAD)));
 }
 
