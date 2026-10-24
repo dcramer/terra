@@ -134,10 +134,10 @@ They added: "we probably need to build better tools so you can ensure things are
 
 | What was seen | Cause, as found | What checks it |
 |---|---|---|
-| 1. Hands in the body | The Kimodo fight clips are carried onto the base body by bone rotation, not by aim (`aim.py`, D360). The base is broader than the clip's source, so the arms close into it | Penetration: hands, forearms and held looks against the body's own capsules, every frame of every move |
+| 1. Hands in the body | Measured (`moves.ts`): blows put a hand or arm 11 to 22 cm into the torso, but the guard's arms stand clear and its shield is 7.6 cm into the head, so the idle seen may be the shield arm; a still is to confirm it. The Kimodo fight clips are carried onto the base body by bone rotation, not by aim (`aim.py`, D360). The base is broader than the clip's source, so the arms close into it | Penetration: hands, forearms and held looks against the body's own capsules, every frame of every move |
 | 2. Swings to the left | The clips themselves: the slash is cut "high right to low left", and the backhand's tip is fastest 1.40 m to the left (`phases.ts`). A prompt does not set a blade's path | Arc: the tip's path through the active frames must cross ahead of the body |
 | 3. Shield in the head | The shield hangs on `socket.hand.L`, not on the forearm a strap holds | Held fit: the sword's grip along the hand, the shield's face out from the forearm, both in the penetration check |
-| 4. Frame rate | Not yet measured. `cargo xtask yard` runs the dev profile (our crates at opt-level 1) | The yard benched with the sword drawn |
+| 4. Frame rate | Not found offscreen: the yard on the RTX 5090 at 1920x1080 runs 7.3 ms median in release with the sword drawn and the partner fighting, 5.4 ms in dev (`cargo xtask yard`'s profile), with one 31 ms frame as the partner spawns. Still to measure: windowed play with vsync, and the integrated GPU | The yard benched with the sword drawn |
 | 5. Sounds | A block plays the anvil and a parry the bell (`terra_game/src/play/sounds.rs`), and the swing is a made whoosh | The duel run logs each cue it plays |
 | 6. Stamina | Drawing switches off the walker's roll and jump, and moves carry no cost (against D61) | The duel run logs stamina; tests |
 | 7. No chain | The finisher reuses the slash's clip, and no move starts or ends in the set's guard pose, so a chain is a cross-fade between unrelated poses | Chain: one move's last pose against the next one's first; the duel run fails on an idle where a chain was asked for |
