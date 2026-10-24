@@ -389,13 +389,19 @@ const HEARTH_LANES: f32 = 12.0;
 const TONGUE_PLACES: f32 = 8.0;
 const TONGUE_STRAY: f32 = 0.3;
 const TONGUE_END_SHORT: f32 = 0.8;
+// How deep in the stack a tongue's root may stand, over its reach across (away from the eye),
+// and how far toward the eye over that: at 0 every root stood on one line across the fire's
+// middle, a comb of like tongues behind the logs (all three notes reviewers, campfire form round).
+const TONGUE_DEPTH: vec2<f32> = vec2<f32>(0.9, 0.5);
 const TONGUE_GAP: f32 = 2.6;
 // Their heights over `tall` in their places, least and most: at `TONGUE_TALL`'s, under the
 // middle column's crown, they showed only as faint licks low among the logs (fire crown round).
 // At 0.55-1.0, under leads 1.2 as tall, the crown was the leads alone, three tips (blind judge,
 // campfire crown round: want 4-5): 0.75-1.25 and skewed less (`TONGUE_SKEW` 0.8), so they
-// share it with the leads.
-const TONGUE_PLACE_TALL: vec2<f32> = vec2<f32>(0.75, 1.25);
+// share it with the leads. At those, skewed 0.8, the tongues stood as a comb of like tongues on one
+// line (all three notes reviewers, campfire form round): 0.3-1.4 skewed 2.4, most short, a few tall,
+// rooted in depth (`TONGUE_DEPTH`), so the crown is ragged and the logs show between the licks.
+const TONGUE_PLACE_TALL: vec2<f32> = vec2<f32>(0.3, 1.4);
 // Each log burns at its own heat, slowly changing (a burning log flares and dies back on its
 // own, as footage's do): its tongues taller the hotter it burns (a place takes a log's heat), so the fan
 // of tongues is uneven, a log's worth at a time (the blind judge: "fanned out too evenly").
@@ -404,7 +410,7 @@ const TONGUE_PLACE_TALL: vec2<f32> = vec2<f32>(0.75, 1.25);
 // even spread); at 1.7 few reached the flame's middle height in their places.
 const LOG_HEAT_RATE: f32 = 0.18;
 const LOG_SHORT: f32 = 0.7;
-const TONGUE_SKEW: f32 = 0.8;
+const TONGUE_SKEW: f32 = 2.4;
 // The near logs dark in front of the flame, as a campfire's charred logs stand against its
 // fire in footage and RDR2: a tongue or side column on a log facing the eye stands behind it,
 // `NEAR_BEHIND` of its radius away from the eye, so the log's own depth cuts through it, and
@@ -418,8 +424,9 @@ const NEAR_SHORT: f32 = 0.75;
 // judges asked for 6-10 separate tongues with dark between): 1.5, and 0.2-0.3 of its height.
 const TONGUE_NARROW: f32 = 2.2;
 // How far a tongue leans aside on its own, either way: at 0.3 they stood as one fan; in their
-// own places (`TONGUE_PLACES`), at 0.6 their tips crossed into the next place.
-const TONGUE_ASIDE: f32 = 0.2;
+// own places (`TONGUE_PLACES`), at 0.6 their tips crossed into the next place; 0.4 with their heights
+// ragged (campfire form round).
+const TONGUE_ASIDE: f32 = 0.4;
 const TONGUE_WIDE: vec2<f32> = vec2<f32>(0.32, 0.12);
 // One or two tongues stand much taller and narrower than the rest (`TONGUE_LEADS`), from
 // where the most fuel meets air: high on the hottest log as its heat was at the tongue's
@@ -434,6 +441,9 @@ const TONGUE_LEADS: f32 = 2.0;
 // life over a placed tongue's; how much of what is behind them they cover (`shade`).
 const TONGUE_WISP: vec3<f32> = vec3<f32>(0.8, 0.12, 0.7);
 const TONGUE_WISP_COVER: f32 = 0.6;
+// How far a wisp rises over its life, in its height: torn off the top of the flame, as the
+// references' tips break into separate pieces (campfire form round's notes).
+const TONGUE_TEAR: f32 = 1.2;
 const LEAD_TALL: f32 = 1.5;
 const LEAD_WIDE: f32 = 0.2;
 const LEAD_RATE: f32 = 0.3;
@@ -2063,19 +2073,25 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
         let across = cross(up, level / max(length(level), 1.0e-3));
         let reach = (laid.foot.x + laid.radius) * TONGUE_REACH;
         let x = s * reach;
-        let rise = mix(laid.foot.y, laid.top.y, saturate((laid.foot.x - abs(x)) / max(laid.foot.x - laid.top.x, 1.0e-3)));
+        // Its root at its own depth in the stack too (`TONGUE_DEPTH`), on the logs there, so
+        // the tongues rise from all over the pile and not along one line across it.
+        let toward = level / max(length(level), 1.0e-3);
+        let z = (fract(pick * 3.7 + k * 0.29) * (1.0 + TONGUE_DEPTH.y) - 1.0) * TONGUE_DEPTH.x * reach;
+        let out_by = sqrt(x * x + z * z);
+        let rise = mix(laid.foot.y, laid.top.y, saturate((laid.foot.x - out_by) / max(laid.foot.x - laid.top.x, 1.0e-3)));
         let burn = log_heat(i, seed);
         let skew = pow(fract(pick * 5.3), TONGUE_SKEW);
-        var h = tall * mix(TONGUE_PLACE_TALL.x, TONGUE_PLACE_TALL.y, skew) * mix(1.0, TONGUE_END_SHORT, s * s) * mix(LOG_SHORT, 1.0, burn);
+        var h = tall * mix(TONGUE_PLACE_TALL.x, TONGUE_PLACE_TALL.y, skew) * mix(1.0, TONGUE_END_SHORT, saturate(out_by * out_by / (reach * reach))) * mix(LOG_SHORT, 1.0, burn);
         h *= breathe * (0.75 + 0.4 * age) * select(1.0, TONGUE_WISP.x, wisp);
         // No wider than its place, so the dark between two places is about a tongue wide.
         var w = min(max(h * (TONGUE_WIDE.x + TONGUE_WIDE.y * fract(pick * 9.1)), laid.radius * TONGUE_NARROW), reach * step * TONGUE_GAP);
         if wisp {
             w = h * TONGUE_WISP.y * (0.8 + 0.4 * fract(pick * 9.1));
         }
-        let base = foot + across * x + up * (rise + laid.radius * 0.4 + h * 0.12 * age);
+        // A wisp rises off its root over its life (`TONGUE_TEAR`), a lick torn off the flame's top.
+        let base = foot + across * x + toward * z + up * (rise + laid.radius * 0.4 + h * select(0.12, TONGUE_TEAR, wisp) * age);
         // Leaning in toward the middle the farther out it stands, each a little aside on its own.
-        let lean = normalize(up - across * s * TONGUE_LEAN + across * TONGUE_ASIDE * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.04);
+        let lean = normalize(up - across * s * TONGUE_LEAN - toward * (z / reach) * TONGUE_LEAN + across * TONGUE_ASIDE * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.04);
         let world = card(base, lean, corner, w, h, true, 0.0);
         out.clip = position_world_to_clip(world);
         out.uv = corner;
