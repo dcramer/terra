@@ -155,6 +155,9 @@ pub struct MoveSet {
     pub tired: Tired,
     /// What the set strikes and guards with, as a blow meets it.
     pub kit: Kit,
+    /// The clip a body stands on guard in between moves, the pose its blows are keyed to at
+    /// both ends (D450).
+    pub guard: String,
     pub moves: HashMap<String, Move>,
 }
 
@@ -476,18 +479,19 @@ mod tests {
         let mut runner = Runner::default();
         assert!(runner.ask(&set, runner.chained(&set, "slash").to_string().as_str()));
         assert_eq!(runner.name(), Some("slash"));
-        // Pressed again late in the wind-up, within the buffer of the slash's window: the
-        // backhand waits for it.
-        runner.tick(&set, 0.35);
+        // Pressed again late in the wind-up, a frame before the strike, within the buffer of
+        // the slash's window: the backhand waits for it.
+        let slash = set.get("slash").unwrap();
+        let press = slash.at_clip(slash.active.unwrap().0) - 1.0 / 60.0;
+        runner.tick(&set, press);
         assert_eq!(runner.now(&set).unwrap().phase(runner.t()), Phase::WindUp);
         let next = runner.chained(&set, "slash").to_string();
         assert_eq!(next, "backhand");
         assert!(!runner.ask(&set, &next));
         assert_eq!(runner.name(), Some("slash"));
-        let slash = set.get("slash").unwrap();
         let window = slash.at_clip(slash.cancel.unwrap());
         let mut started = None;
-        let mut t = 0.35;
+        let mut t = press;
         while started.is_none() && t < 2.0 {
             t += 1.0 / 60.0;
             if let Ran::Started(name) = runner.tick(&set, 1.0 / 60.0) {

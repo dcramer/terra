@@ -236,7 +236,8 @@ function main() {
     writeFileSync(LIST, JSON.stringify(list, null, 2) + "\n");
     const figure = join(HERE, "out", `${set}-mannequin.glb`);
     blender("into", "made_clips.py", [rel(figure), `--list=${rel(LIST)}`]);
-    blender("into", "export_character.py", [rel(BODY), rel(GAME_CLIPS), `--clips=${rel(figure)}`, `--list=${rel(LIST)}`]);
+    // The textures at the body budget (D188), as build_bodies.sh exports the base.
+    blender("into", "export_character.py", [rel(BODY), rel(GAME_CLIPS), `--clips=${rel(figure)}`, `--list=${rel(LIST)}`, "--textures=2048"]);
     let text = readFileSync(into, "utf8");
     for (const { s, m } of chosen) text = writePhases(text, s.blow.move, { clip: s.name, from: 0, done: m.end, active: m.active, speed: speeds.get(s.name), hold: hold(s) });
     writeFileSync(into, text);

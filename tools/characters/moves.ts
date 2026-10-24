@@ -45,8 +45,10 @@ const { values: opt } = parseArgs({
     hold: { type: "string", multiple: true, default: ["socket.hand.R=assets/models/held/arming_sword.glb", "socket.hand.L=assets/models/held/round_shield.glb"] },
     // Bends laid over the clips, BONE=x,y,z degrees about the body's axes (staged bends); none in the prototype.
     bend: { type: "string", multiple: true, default: [] },
-    also: { type: "string", default: "Fight_Guard,Fight_Strafe_L,Fight_Strafe_R,Walk_Loop,Idle_Loop" },
-    guard: { type: "string", default: "Fight_Guard" },
+    also: { type: "string", default: "Keyed_Guard,Fight_Guard,Fight_Strafe_L,Fight_Strafe_R,Walk_Loop,Idle_Loop" },
+    // The guard every blow starts and ends at: the set's own `guard` by default (D450), else
+    // Fight_Guard for a set that names none (clip.ts's scratch sets).
+    guard: { type: "string" },
     // The clips' specs: a blow's sweep and contact (`"blow"`), by clip; a clip `X#N` (a take
     // the clip step tries) is X's.
     spec: { type: "string", default: "art/animation/sets/fight.json" },
@@ -76,6 +78,12 @@ const ELBOW_M = 0.2;
 const STILL_M = 0.08;
 
 type Move = { name: string; clip: string; from: number; speed: number; done: number; active?: [number, number]; next?: string; hold?: number };
+
+/** The clip a set names as its guard (`guard: "..."` outside its moves), if any. */
+function setGuard(file: string): string | undefined {
+  const text = readFileSync(file, "utf8").replace(/\/\/.*$/gm, "");
+  return text.slice(0, text.search(/\bmoves\s*:/)).match(/\bguard:\s*"([^"]+)"/)?.[1];
+}
 
 function readSet(file: string): Move[] {
   const text = readFileSync(file, "utf8").replace(/\/\/.*$/gm, "");
@@ -414,7 +422,7 @@ const specs: Record<string, Blow> = Object.fromEntries(
     .filter(([, e]) => e.blow)
     .map(([clip, e]) => [clip, e.blow!]),
 );
-const guardClip = clipOf(opt.guard!);
+const guardClip = clipOf(opt.guard ?? setGuard(opt.set!) ?? "Fight_Guard");
 const guardMarks = marks(guardClip, 0);
 const byName = new Map(moves.map((m) => [m.name, m]));
 

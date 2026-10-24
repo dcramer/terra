@@ -166,7 +166,7 @@ pub fn think(
         let Some(foe) = foe else {
             fighter.guard_s = None;
             staged.tell_go(None, 0.0);
-            partner.show(&mut staged, "Fight_Guard", 1.0, false);
+            partner.show(&mut staged, &set.guard, 1.0, false);
             continue;
         };
         let to = (foe - here).reject_from(up);
@@ -245,7 +245,7 @@ pub fn think(
             Beat::Recover => {
                 fighter.guard_s = None;
                 staged.tell_go(None, 0.0);
-                partner.show(&mut staged, "Fight_Guard", 1.0, false);
+                partner.show(&mut staged, &set.guard, 1.0, false);
                 if partner.beat_s > RECOVER_S {
                     partner.to(if far > CLOSE_M {
                         Beat::Close

@@ -361,6 +361,7 @@ fn act(
                 &mut acting,
                 motion,
                 up,
+                &set.guard,
                 fighter.guard_s.is_some(),
                 pace,
             );
@@ -501,13 +502,14 @@ fn steer(
     stance.steer = steer;
 }
 
-/// The clip a drawn body walks with: its guard still, a strafe to either side, a walk
-/// forward or back, by which way it mostly goes; in the air, a jump.
+/// The clip a drawn body walks with: its guard still (the set's `guard`), a strafe to either
+/// side, a walk forward or back, by which way it mostly goes; in the air, a jump.
 fn walk_clip(
     drawn: &mut Drawn,
     acting: &mut Acting,
     motion: &Motion,
     up: Vec3,
+    guard: &str,
     guarding: bool,
     pace: impl Fn(&str) -> Option<f32>,
 ) {
@@ -535,7 +537,7 @@ fn walk_clip(
     let right = facing.cross(up);
     let (forward, side) = (velocity.dot(facing), velocity.dot(right));
     let (clip, along) = if velocity.length() < 0.2 {
-        ("Fight_Guard", 0.0)
+        (guard, 0.0)
     } else if side.abs() > forward.abs() {
         let clip = if side > 0.0 {
             "Fight_Strafe_R"

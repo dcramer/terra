@@ -23,28 +23,22 @@ Read [docs/movement.md](../../../docs/movement.md) ("The goal", the pipeline) be
 5. **Film** when a move changed: `cargo xtask gpu film -- cargo xtask combat --film` (the duel's film and its checks; the film in `~/.cache/terra-review/duel/`).
 6. **Feel** goes to the review desk: a film for the developer's eye in a `FOR REVIEW` line (`review-desk` skill), never a claim in chat that it feels right.
 
-## The task list (failing criteria, 2026-10-24, main 705a8520)
+## The task list (failing criteria, 2026-10-24, after round 6)
 
-Ordered by what a player notices most (`noticed`), then by how far out. Re-read it from `cargo xtask combat --json` when it moves; the scorecard is the truth, this list its order.
+Ordered by what a player notices most (`noticed`), then by how far out. Re-read it from `cargo xtask combat --json` when it moves; the scorecard is the truth, this list its order. The light chain (slash, backhand, finisher, the partner's slash) is keyed to the game's guard, Keyed_Guard (the set's `guard`, D450), and passes every row.
 
 1. `move.roll.held` 22.8 cm (bar 1): the shield goes through the spine in the roll.
-2. `film.feet_sliding` 66 of 81 plants slid past 3 cm (bar 0; median 16.5 cm, worst 89.4 cm, the player's left foot standing): feet skate in the duel. The film's other eight checks pass.
-3. `move.backhand.held` 12.5 cm: the shield through a thigh in the backhand.
-4. `move.slash.held`, `move.finisher.held`, `move.partner_slash.held` 12.4 / 12.4 / 12.0 cm: the shield through a thigh in Fight_Slash (one clip, three moves).
-5. `move.block.held` 6.4 cm: the sword through the head while blocking.
-6. `move.heavy.held`, `move.partner_heavy.held` 4.2 cm: the shield in the spine in Sword_Attack.
-7. `timing.roll.length` 0.79 s (bar 0.5-0.6): the roll lasts too long.
-8. `timing.light.idle_to_hit` 0.41 s (bar 0.22-0.32): a light blow lands late.
-9. `move.backhand.hands`, `move.slash.hands`, `move.finisher.hands` 22.0 / 18.1 / 18.1 cm (bar 2): the sword arm in the spine (with the keyed clips of item 10).
-10. `move.*.from_guard`, `move.*.to_guard` 0.79-1.24 m (bar 0.1), every blow: the body snaps out of and into the guard; `move.slash.into_next`, `move.backhand.into_next` 0.70 m: the chain jumps. These pass only when the game's blows are keyed to its guard (D450: Keyed_Guard, then Keyed_Slash, Keyed_Backhand into the set, the handoff's order).
-11. `timing.heavy.total` 2.02 s (1.4-1.7), `timing.heavy.hit_to_guard` 1.40 s (0.7-1.1): the heavy keeps the player too long.
-12. `move.partner_slash.hands` 3.2 cm, `move.roll.hands` 2.6 cm.
-13. `timing.hit_stop.*` 0.10-0.20 s (bar 0-0.05): Enshrouded flashes and kicks the camera instead (a design call: raise it on the desk before changing).
-14. `move.backhand.contact_off` 61° (bar 35): the backhand lands beside the foe.
-15. `timing.finisher.hit_to_guard` 0.78 s (0.8-1.1).
-16. `move.Walk_Loop.held` 10.2, `move.Walk_Loop.hands` 6.2, `move.Idle_Loop.held` 21.4 cm: the drawn sword through the leg walking and idle.
+2. `film.feet_sliding` (bar 0; 66 of 81 plants slid past 3 cm before round 6): feet skate in the duel.
+3. `move.block.held` 6.4 cm: the sword through the head while blocking (next: Keyed_Block, its guard at {clip: Keyed_Guard, frame: 75}).
+4. `move.heavy.held`, `move.partner_heavy.held` 4.2 cm: the shield in the spine in Sword_Attack.
+5. `timing.roll.length` 0.79 s (bar 0.5-0.6): the roll lasts too long.
+6. `move.heavy.from_guard`, `move.heavy.to_guard` (and the partner's) 1.18 / 1.11 m (bar 0.1): the heavy snaps out of and into the guard; a keyed heavy fixes them with item 4.
+7. `timing.heavy.total` 2.02 s (1.4-1.7), `timing.heavy.hit_to_guard` 1.40 s (0.7-1.1): the heavy keeps the player too long.
+8. `move.roll.hands` 2.6 cm.
+9. `timing.hit_stop.*` 0.10-0.20 s (bar 0-0.05): Enshrouded flashes and kicks the camera instead (a design call: raise it on the desk before changing).
+10. `move.Walk_Loop.held` 10.2, `move.Walk_Loop.hands` 6.2, `move.Idle_Loop.held` 21.4 cm: the drawn sword through the leg walking and idle.
 
-Not measurable yet (`?`, each with what it needs in `criteria.json`): the blind review score against Enshrouded, the block's raise (ours and Enshrouded's), the guard's shield face and the blows' specs in the game's set (after `--into`), roll distance, hit reactions, a light blow's recovery, hit flash and camera kick, the partner's telegraph seen from the game's camera.
+Not measurable yet (`?`, each with what it needs in `criteria.json`): the blind review score against Enshrouded, the block's raise (ours and Enshrouded's), the guard's shield face and the blows' specs in the game's set, roll distance, hit reactions, a light blow's recovery, hit flash and camera kick, the partner's telegraph seen from the game's camera.
 
 ## The pipeline's commands
 

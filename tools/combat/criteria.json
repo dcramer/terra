@@ -1070,6 +1070,40 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "move.Keyed_Guard.held",
+   "noticed": 5,
+   "notice": "the sword or shield passes through the body in Keyed_Guard, the game's guard",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Keyed_Guard",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Keyed_Guard.hands",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in Keyed_Guard, the game's guard",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM)",
+   "check": {
+    "by": "moves",
+    "row": "Keyed_Guard",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.Fight_Guard.held",
    "noticed": 5,
    "notice": "the sword or shield passes through the body in Fight_Guard",

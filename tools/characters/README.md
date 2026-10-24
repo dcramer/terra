@@ -22,7 +22,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `deform_check.py` | Rings of skin along every limb through the clips: how much each squeezes, flattens and turns |
 | `rig_check.py` | Checks a rig against our skeleton and the mannequin, whose scores are `art/characters/rig-baseline.json` |
 | `rig_render.py` | A sheet of the body through our animations |
-| `export_character.py` | The body as the game loads it: skeleton, sockets, our clips re-sampled on it, skin patches (`patches.py`); `--list=FILE` carries every clip of a set's list by aim (`aim.py`, D450) |
+| `export_character.py` | The body as the game loads it: skeleton, sockets, our clips re-sampled on it, skin patches (`patches.py`); `--list=FILE` carries the clips of a set's list made by the clip step (keyed to a `guard`) by aim (`aim.py`, D450), its older clips as they were made |
 | `shell_garment.py` | Clothing cut from the base body, from a model of that body wearing it (`art/gear/dressed-<body>-<item>/`) |
 | `hung_garment.py` | What hangs from the body rather than lying on it, a long skirt or an apron: rings round the body and what it is worn over, the pelvis's weight falling to the thighs toward the hem, baked from the dressed model |
 | `fit_gear.py` | Rigid gear (a pack, a quiver) fitted to a body at its socket, from `art/gear/<item>/`; straps from the skin (`bands.py`) |
