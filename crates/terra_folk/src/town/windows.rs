@@ -4,7 +4,10 @@
 //! takes it: each window its builders fitted shutters to (`settlement::fit_all`) gets a pane
 //! set back in its hole, drawn emissive only, with no light of its own, so a town of
 //! hundreds of windows costs a few batched quads; the few homes nearest the eye also light
-//! their doorways with a real light (`light`). Not every home is lit: only one its household
+//! their doorways with a real light (`light`). Round each lit window its firelight lies on
+//! the facade as a soft warm pool (`spill`), as a light standing a little out from the hole
+//! would throw it, drawn as an additive card on the wall's face with its falloff baked into
+//! the card's vertices as a lightmap holds it, again with no light (settlement r32). Not every home is lit: only one its household
 //! is in or by, and only the share that keep a fire in the evening; a lit home's windows
 //! flicker a little as firelight does, and fade in as the sun goes down.
 
@@ -43,6 +46,18 @@ const LOOKS: usize = 8;
 /// the room's side, so the jambs and sill frame it.
 const INSET_M: f32 = 0.02;
 const SET_BACK: f32 = 0.7;
+/// The pool of firelight a lit window throws on the wall round it: as from a light standing
+/// `SPILL_STAND_M` out from the hole, so the wall a hole's width off takes about a third of
+/// the light at the window's edge, eased to nothing `SPILL_REACH_M` out; at its brightest
+/// this share of the pane's glow, which over a dusk wall (display level 0.03-0.06) reads as
+/// a warm pool, not a lamp. The card stands `SPILL_OUT_M` off the wall's face, clear of a log
+/// wall's bulge.
+const SPILL_STAND_M: f32 = 0.32;
+const SPILL_REACH_M: f32 = 0.7;
+const SPILL_SHARE: f32 = 0.12;
+const SPILL_OUT_M: f32 = 0.05;
+/// How many rows of vertices hold the pool's falloff either side of the window.
+const SPILL_STEPS: usize = 4;
 
 /// A home's windows, as one entity under its build, their panes its children: shown while
 /// it is lit.
@@ -59,12 +74,22 @@ pub struct Home(pub usize);
 #[derive(Component)]
 struct Glazed;
 
-/// The pane every window is drawn with, a unit quad facing +Z, and each look's material,
-/// its brightness and its flicker's phase.
+/// The pane every window is drawn with, a unit quad facing +Z, each look, and the pool cards
+/// made so far, one a window size.
 #[derive(Resource)]
 struct Glow {
     pane: Handle<Mesh>,
-    looks: Vec<(Handle<StandardMaterial>, f32, f32)>,
+    looks: Vec<Look>,
+    spills: std::collections::HashMap<(i32, i32), Handle<Mesh>>,
+}
+
+/// A look of a lit window: its pane's material and its pool's, how bright and its flicker's
+/// phase.
+struct Look {
+    pane: Handle<StandardMaterial>,
+    spill: Handle<StandardMaterial>,
+    level: f32,
+    phase: f32,
 }
 
 pub fn plugin(app: &mut App) {
@@ -79,7 +104,7 @@ fn make(
 ) {
     let looks = (0..LOOKS)
         .map(|n| {
-            let material = materials.add(StandardMaterial {
+            let pane = materials.add(StandardMaterial {
                 base_color: Color::BLACK,
                 emissive: LinearRgba::BLACK,
                 perceptual_roughness: 1.0,
@@ -88,14 +113,26 @@ fn make(
                 cull_mode: None,
                 ..default()
             });
-            // From a room lit by embers to one by a blazing hearth.
-            let level = 0.55 + 0.75 * ((n as f32 * 0.618_034) % 1.0);
-            (material, level, n as f32 * 2.399)
+            // Added to the wall behind it, the same at any exposure as the pane's glow.
+            let spill = materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                unlit: true,
+                alpha_mode: AlphaMode::Add,
+                ..default()
+            });
+            Look {
+                pane,
+                spill,
+                // From a room lit by embers to one by a blazing hearth.
+                level: 0.55 + 0.75 * ((n as f32 * 0.618_034) % 1.0),
+                phase: n as f32 * 2.399,
+            }
         })
         .collect();
     commands.insert_resource(Glow {
         pane: meshes.add(Rectangle::new(1.0, 1.0)),
         looks,
+        spills: default(),
     });
 }
 
@@ -132,12 +169,84 @@ fn keeps_fire(home: usize) -> bool {
     unit(of(&[home as u32, 0x7f4a_7c15])) < LIT_SHARE
 }
 
-/// Each window's pane in a base, in its own space ([`pane`]).
-fn panes(base: &Base, kits: Option<&Kits>) -> Vec<Transform> {
+/// Each window's pane in a base, in its own space ([`pane`]), with its pool card
+/// ([`spill_at`]).
+fn panes(base: &Base, kits: Option<&Kits>) -> Vec<(Transform, (Transform, Vec2))> {
     base.props()
         .filter(|prop| prop.hang == Hang::Shutters)
-        .map(|prop| pane(prop, fitting::wall_face(base, prop, kits)))
+        .map(|prop| {
+            let face = fitting::wall_face(base, prop, kits);
+            (pane(prop, face), spill_at(prop, face))
+        })
         .collect()
+}
+
+/// A window's pool card: on the wall's face a little out from it and facing out, and the
+/// window's width and height, in metres.
+fn spill_at(prop: &Prop, face: f32) -> (Transform, Vec2) {
+    let (opens, along, low, high, _) = prop.hole();
+    let at = (low + high) * 0.5 + opens * (face + SPILL_OUT_M);
+    let size = Vec2::new((high - low).dot(along), high.y - low.y);
+    (
+        Transform::from_translation(at).looking_to(-opens, Vec3::Y),
+        size,
+    )
+}
+
+/// How much of a window's pool lies on the wall `off` metres out from the window's edge: all
+/// of it over the window, then as a light standing out from the hole lights a wall, the
+/// inverse square and the slant together, eased to nothing at the pool's reach.
+pub fn spill(off: f32) -> f32 {
+    let off = off.max(0.0);
+    let h2 = SPILL_STAND_M * SPILL_STAND_M;
+    libm::powf(h2 / (h2 + off * off), 1.5)
+        * (1.0 - smoothstep(0.6 * SPILL_REACH_M, SPILL_REACH_M, off))
+}
+
+/// A window's pool card, facing +Z: a grid over the window and `SPILL_REACH_M` round it, its
+/// rows closer near the window, where the light falls off fastest, each vertex's colour the
+/// share of the pool there ([`spill`]).
+fn spill_card(size: Vec2) -> Mesh {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::mesh::{Indices, PrimitiveTopology};
+    // Along one axis from the pool's edge in to the window's and out again: each row's offset
+    // from the middle and how far it is out from the window.
+    let line = |half: f32| -> Vec<(f32, f32)> {
+        let out: Vec<f32> = (0..=SPILL_STEPS)
+            .map(|i| SPILL_REACH_M * (i as f32 / SPILL_STEPS as f32).powi(2))
+            .collect();
+        let mut at: Vec<(f32, f32)> = out.iter().rev().map(|&o| (-half - o, o)).collect();
+        at.extend(out.iter().map(|&o| (half + o, o)));
+        at
+    };
+    let (xs, ys) = (line(size.x * 0.5), line(size.y * 0.5));
+    let mut positions = Vec::new();
+    let mut colours = Vec::new();
+    for &(y, oy) in &ys {
+        for &(x, ox) in &xs {
+            positions.push([x, y, 0.0]);
+            let share = spill(Vec2::new(ox, oy).length());
+            colours.push([share, share, share, 1.0]);
+        }
+    }
+    let n = positions.len();
+    let width = xs.len() as u32;
+    let mut indices = Vec::new();
+    for row in 0..ys.len() as u32 - 1 {
+        for col in 0..width - 1 {
+            let a = row * width + col;
+            indices.extend([a, a + 1, a + width + 1, a, a + width + 1, a + width]);
+        }
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 0.0, 1.0]; n])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0, 0.0]; n])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
+    .with_inserted_indices(Indices::U32(indices))
 }
 
 /// A window's pane on a wall whose face stands `face` out from its middle: a quad across the
@@ -160,7 +269,8 @@ fn pane(prop: &Prop, face: f32) -> Transform {
 /// rising town's once it is up.
 fn glaze(
     mut commands: Commands,
-    glow: Res<Glow>,
+    mut glow: ResMut<Glow>,
+    mut meshes: ResMut<Assets<Mesh>>,
     market: Res<Market>,
     rising: Option<Res<Rising>>,
     builds: Query<(Entity, &Built, Option<&Home>, Option<&Rises>), Without<Glazed>>,
@@ -189,7 +299,10 @@ fn glaze(
             continue;
         }
         let look = of(&[index as u32, 24]) as usize % glow.looks.len();
-        let material = glow.looks[look].0.clone();
+        let (material, pool) = (
+            glow.looks[look].pane.clone(),
+            glow.looks[look].spill.clone(),
+        );
         let windows = commands
             .spawn((
                 Name::new("Windows"),
@@ -199,12 +312,30 @@ fn glaze(
                 ChildOf(built.root),
             ))
             .id();
-        for pane in panes {
+        for (pane, (card, size)) in panes {
             commands.spawn((
                 Mesh3d(glow.pane.clone()),
                 MeshMaterial3d(material.clone()),
                 pane,
                 NotShadowCaster,
+                ChildOf(windows),
+            ));
+            // One card mesh a window size, to the centimetre, so a town's cards batch.
+            let size_cm = (
+                (size.x * 100.0).round() as i32,
+                (size.y * 100.0).round() as i32,
+            );
+            let mesh = glow
+                .spills
+                .entry(size_cm)
+                .or_insert_with(|| meshes.add(spill_card(size)))
+                .clone();
+            commands.spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(pool.clone()),
+                card,
+                NotShadowCaster,
+                bevy::light::NotShadowReceiver,
                 ChildOf(windows),
             ));
         }
@@ -249,15 +380,19 @@ fn light(
     }
     let t = time.elapsed_secs();
     told.0.resize(glow.looks.len(), -1.0);
-    for (n, (material, level, phase)) in glow.looks.iter().enumerate() {
-        let value = GLOW * fade * level * flicker(t, *phase);
+    for (n, look) in glow.looks.iter().enumerate() {
+        let value = GLOW * fade * look.level * flicker(t, look.phase);
         if (told.0[n] - value).abs() < 0.004 {
             continue;
         }
         told.0[n] = value;
-        if let Some(mut material) = materials.get_mut(material) {
-            let warm = WARM * value;
+        let warm = WARM * value;
+        if let Some(mut material) = materials.get_mut(&look.pane) {
             material.emissive = LinearRgba::rgb(warm.x, warm.y, warm.z);
+        }
+        if let Some(mut material) = materials.get_mut(&look.spill) {
+            let pool = warm * SPILL_SHARE;
+            material.base_color = Color::linear_rgb(pool.x, pool.y, pool.z);
         }
     }
     if t >= told.1 {
@@ -321,6 +456,59 @@ mod tests {
                 assert!(from < 0.05 && to < 0.05, "{prop:?}: {from} {to}");
             }
         }
+    }
+
+    /// The pool on the wall is full over the window, falls off outward without a step, and
+    /// is gone at the card's edge, so no card's outline shows on the wall or in the air past
+    /// a corner; it stands on the wall's outer face, facing out.
+    #[test]
+    fn a_windows_pool_fades_out_from_it_to_nothing_at_the_cards_edge() {
+        assert_eq!(spill(0.0), 1.0);
+        let falls: Vec<f32> = (0..=70).map(|cm| spill(cm as f32 / 100.0)).collect();
+        assert!(falls.windows(2).all(|p| p[1] <= p[0]), "{falls:?}");
+        assert!(
+            falls.windows(2).all(|p| p[0] - p[1] < 0.06),
+            "a step: {falls:?}"
+        );
+        // A light standing out from the hole: about a third a stand's distance off.
+        assert!((spill(SPILL_STAND_M) - 0.35).abs() < 0.02);
+        assert_eq!(spill(SPILL_REACH_M), 0.0);
+        let size = Vec2::new(0.6, 0.9);
+        let card = spill_card(size);
+        let Some(bevy::mesh::VertexAttributeValues::Float32x4(colours)) =
+            card.attribute(Mesh::ATTRIBUTE_COLOR)
+        else {
+            panic!("no colours");
+        };
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(at)) =
+            card.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("no positions");
+        };
+        for (p, c) in at.iter().zip(colours) {
+            let on_window = p[0].abs() <= size.x * 0.5 + 1e-4 && p[1].abs() <= size.y * 0.5 + 1e-4;
+            let edge = p[0].abs() >= size.x * 0.5 + SPILL_REACH_M - 1e-4
+                || p[1].abs() >= size.y * 0.5 + SPILL_REACH_M - 1e-4;
+            if on_window {
+                assert_eq!(c[0], 1.0, "{p:?}");
+            }
+            if edge {
+                assert_eq!(c[0], 0.0, "{p:?}");
+            }
+        }
+        let face = 0.16;
+        let prop = Prop {
+            min: [2, 2, 3],
+            max: [3, 3, 3],
+            opens: [0, 0, 1],
+            hang: Hang::Shutters,
+            ..Prop::default()
+        };
+        let (out, _, low, high, _) = prop.hole();
+        let (card, _) = spill_at(&prop, face);
+        assert!((card.rotation * Vec3::Z).distance(out) < 1e-4);
+        let off = (card.translation - (low + high) * 0.5).dot(out);
+        assert!(off > face && off < face + 0.1, "{off}");
     }
 
     #[test]
