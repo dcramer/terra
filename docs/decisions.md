@@ -369,6 +369,7 @@ The look, models, bodies and gear, textures and audio.
 | [D440](decisions/D440.md) | A creature's skeleton is fitted to its mesh by its plan | Tech | Agent | Leaning | The skeleton is fitted to the mesh, not typed in… |
 | [D441](decisions/D441.md) | Creature weights from the plan's template body, or zoned heat, whichever measures better | Tech | Agent | Leaning | A creature's weights are made two ways and the creature… |
 | [D442](decisions/D442.md) | The creature check gates a creature by measured deformation and gait | Tech | Agent | Leaning | `tools/creatures/creature_check.py <kind>` gates a… |
+| [D446](decisions/D446.md) | The dusk lake film faces the set sun's side across the water | Design | Developers | Decided | The lake's dusk film looks across the water toward the… |
 
 ## Engine and code
 
