@@ -962,6 +962,8 @@ fn show(
 }
 
 mod books;
+#[cfg(test)]
+mod burnout;
 mod film;
 mod fog;
 mod glow;

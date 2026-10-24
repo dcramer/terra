@@ -740,7 +740,7 @@ fn breath_of(slot: u32) -> Breath {
     let came_on = fire.jets[j + 2u].z;
     let was = saturate((JET_SPEED * max(since - came_on, 0.0) - b.reach) / (JET_SPEED * 0.6));
     b.since_off = select(0.0, max(time - since, 0.0), !on);
-    b.smoke = select(0.0, was * (1.0 - smoothstep(SMOKE_HOLD, SMOKE_GONE, b.since_off)), !on && b.face > 0.0 && b.marched);
+    b.smoke = select(0.0, was * smoke_left(b.since_off), !on && b.face > 0.0 && b.marched);
     b.ball = select(0.0, select(struck, was, !on && b.face > 0.0), b.marched);
     return b;
 }
@@ -770,12 +770,25 @@ fn ball_middle(b: Breath, rb: f32) -> vec3<f32> {
     return vec3(0.0, 0.0, b.reach - BALL_BACK * rb - SMOKE_BACK * b.since_off) + b.up * (rb * 0.45 + SMOKE_RISE * b.since_off);
 }
 
-// The smoke left once off: held thick this long, gone by then (seconds), rising at so many
-// metres a second and spreading to so much more of the ball's size by then.
-const SMOKE_HOLD: f32 = 0.8;
-const SMOKE_GONE: f32 = 5.5;
-const SMOKE_RISE: f32 = 0.7;
+// The smoke left once off: gone by then (seconds), rising at so many metres a second and
+// spreading to so much more of the ball's size by then.
+const SMOKE_HOLD: f32 = 0.5;
+const SMOKE_GONE: f32 = 4.5;
+const SMOKE_RISE: f32 = 1.1;
 const SMOKE_SPREAD: f32 = 0.7;
+// A fireball burns out within a second of its fuel stopping: its flame was most of what hid
+// what is behind it, and what is left is its soot, this share of the burning gas's density
+// by then, thinning as it spreads (its soot the same, in a ball so much bigger every way) and
+// as it mixes into the air from `SMOKE_HOLD` to `SMOKE_GONE`. Held thick for 0.8 s and
+// thinning only by mixing, it hung over the keep for seconds as a big white cloud (castle
+// fall r25's review). The CPU's mirror is `fire::burnout`, whose test holds the rule.
+const SMOKE_SOOT: f32 = 0.04;
+const SMOKE_BURN: f32 = 1.0;
+fn smoke_left(since_off: f32) -> f32 {
+    let burnt = mix(1.0, SMOKE_SOOT, smoothstep(0.0, SMOKE_BURN, since_off));
+    let spread = 1.0 + SMOKE_SPREAD * saturate(since_off / SMOKE_GONE);
+    return burnt / (spread * spread * spread) * (1.0 - smoothstep(SMOKE_HOLD, SMOKE_GONE, since_off));
+}
 const SMOKE_BACK: f32 = 0.3;
 // How far its middle stands back from the face, a share of its radius, and how flat it is along
 // the stream while the stream feeds it: round and 0.85 of its radius back, the ball swallowed
@@ -1020,8 +1033,9 @@ const SOOT_ALBEDO: f32 = 0.12;
 // The sky's fill on the soot, a share of the sun's, unshadowed: an overcast underside.
 const SOOT_SKY: f32 = 0.32;
 // Once off, its smoke ages grey over a second: diluted soot scatters more than a fuel-rich
-// flame's (round 4's after-stop smoke was flat black).
-const SOOT_AGED_ALBEDO: f32 = 0.34;
+// flame's (round 4's after-stop smoke was flat black), but stays dark smoke, soot's albedo
+// 0.2 to 0.3 at most: at 0.34 in a morning sun it read as a white cloud (castle fall r25).
+const SOOT_AGED_ALBEDO: f32 = 0.2;
 // The soot round a burning ball lit by its flame from within, deepest red at the ball and
 // fading out to a radius and a half from its middle: lit only by the sky, its cap read as a
 // flat black disc over the flame by night (vol11's review), where the references' smoke over
