@@ -169,52 +169,80 @@ fn an_orbit_keeps_its_distance() {
     assert!(orbit.framing(6.0, &places).eye.x > centre.x);
 }
 
-/// An establishing pull-out from two keys eased in (the settlement film, r25): from rest
-/// angled down onto the subject, it backs away and rises a little while its look runs out
-/// to the horizon, still moving at the end. Every frame the subject is farther, the view
-/// flatter, the eye no higher than the last key, and the speed never jumps: no shake.
+/// An establishing shot eased in through six keys (the settlement film, r31): from rest
+/// angled down onto the subject, it backs away on an arc, rising and coming down again
+/// while it swings round the subject and its look runs out to the sky over the horizon,
+/// still moving at the end. Every frame the subject is farther, the view flatter, the eye no
+/// higher than 45 m; the velocity and the rate of turn never jump, the heading swings one
+/// way only and no axis of the eye's motion turns back more than once: an arc, no shake.
 #[test]
-fn a_pull_out_eased_in_backs_away_and_flattens_smoothly() {
+fn an_establishing_arc_eased_in_backs_away_and_flattens_smoothly() {
     let (start, ground) = flat_places();
     let places = Places {
         start: &start,
         ground: &ground,
         player: None,
     };
-    let pull = shot(
+    let arc = shot(
         r#"{"seconds": 20, "ease": "in", "keys": [
-            {"t": 0, "at": [0, 18, 22], "look": [0, 0, 0]},
-            {"t": 20, "at": [-60, 40, 140], "look": [70, 12, -260]}]}"#,
+            {"t": 0, "at": [-16, 13.5, 3], "look": [0, 0, 0]},
+            {"t": 4, "at": [-26, 21, 10], "look": [1.5, -0.2, -2]},
+            {"t": 8, "at": [-42, 34.5, 38], "look": [5, -0.5, -4]},
+            {"t": 12, "at": [-48, 42.5, 74], "look": [8, 1.5, -8]},
+            {"t": 16, "at": [-56, 36.5, 104], "look": [6, 14.5, -14]},
+            {"t": 20, "at": [-59.8, 20.5, 121.9], "look": [-6.3, 36.2, -17.4]}]}"#,
     );
     let subject = start.translation;
-    let pitch = |f: Framing| {
-        let ahead = f.target - f.eye;
-        libm::atan2f(ahead.y, Vec2::new(ahead.x, ahead.z).length()).to_degrees()
+    let ahead = |f: Framing| (f.target - f.eye).normalize();
+    let pitch = |f: Framing| libm::asinf(ahead(f).y).to_degrees();
+    let heading = |f: Framing| {
+        let a = ahead(f);
+        libm::atan2f(a.x, -a.z).to_degrees()
     };
     let step = 1.0 / FILM_FPS;
-    let (mut far, mut flat, mut was, mut speed) = (0.0, -90.0, None::<Vec3>, None::<f32>);
+    let (mut far, mut flat, mut top) = (0.0, -90.0, 0.0_f32);
+    let (mut was, mut velocity, mut turn) = (None::<Framing>, None::<Vec3>, None::<f32>);
+    let (mut swing, mut turns_back) = (0.0_f32, [0; 3]);
     for i in 0..=(20.0 * FILM_FPS) as usize {
-        let f = pull.framing(i as f32 * step, &places);
+        let f = arc.framing(i as f32 * step, &places);
         let d = f.eye.distance(subject);
         assert!(d >= far - 1e-3, "nearer at frame {i}: {d} after {far}");
         assert!(pitch(f) >= flat - 1e-3, "steeper at frame {i}");
-        assert!(f.eye.y - subject.y <= 40.0 + 1e-3, "too high at frame {i}");
+        top = top.max(f.eye.y - subject.y);
         if let Some(was) = was {
-            let now = f.eye.distance(was) / step;
-            if let Some(before) = speed {
-                assert!(
-                    (now - before).abs() < 0.5,
-                    "speed jumps {before} to {now} at {i}"
-                );
+            let now = (f.eye - was.eye) / step;
+            // The angle between two views a frame apart, by its sine and cosine: an arc
+            // cosine of a dot this near 1 is all rounding in f32.
+            let (a, b) = (ahead(f), ahead(was));
+            let rate = libm::atan2f(a.cross(b).length(), a.dot(b)).to_degrees() / step;
+            let yaw = heading(f) - heading(was);
+            assert!(yaw <= 1e-3, "the heading swings back at frame {i}");
+            swing -= yaw;
+            if let (Some(before), Some(turned)) = (velocity, turn) {
+                let jump = (now - before).length();
+                assert!(jump < 0.5, "velocity jumps {jump} m/s at frame {i}");
+                assert!((rate - turned).abs() < 0.5, "turn jumps at frame {i}");
+                for axis in 0..3 {
+                    if now[axis] * before[axis] < 0.0 {
+                        turns_back[axis] += 1;
+                    }
+                }
             }
-            speed = Some(now);
+            (velocity, turn) = (Some(now), Some(rate));
         }
-        (far, flat, was) = (d, pitch(f), Some(f.eye));
+        (far, flat, was) = (d, pitch(f), Some(f));
     }
-    let open = pitch(pull.framing(0.0, &places));
+    assert!(turns_back.iter().all(|&n| n <= 1), "zigzags {turns_back:?}");
+    let end = arc.framing(20.0, &places).eye.y - subject.y;
+    assert!(
+        top <= 45.0 && top > end + 10.0,
+        "rises to {top}, ends {end}"
+    );
+    assert!(swing > 30.0, "swings {swing} degrees round");
+    let open = pitch(arc.framing(0.0, &places));
     assert!((-45.0..=-35.0).contains(&open), "opens {open} degrees down");
-    assert!(flat > -15.0, "ends {flat} degrees down");
-    assert!(speed.unwrap() > 1.0, "at rest at the end");
+    assert!(flat > 0.0, "ends {flat} degrees, not up at the sky");
+    assert!(velocity.unwrap().length() > 1.0, "at rest at the end");
 }
 
 /// A cut starts a set-up of its own: up to it the camera keeps to the take before, from

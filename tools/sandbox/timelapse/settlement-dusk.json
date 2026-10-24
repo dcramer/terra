@@ -1,33 +1,41 @@
 {
-  "about": "A time-lapse over a settlement rising in its forest clearing by a lake (D381), in one continuous establishing pull-out with no handheld drift: it opens about 40 degrees down onto the first house from 22 m off and 18 m up as its walls go up, then pulls straight back south-south-west, from rest and still moving at the end, while the settlement spreads to the whole market town. The distance grows throughout, the pitch flattens to 8 degrees down so the mountains come onto the skyline, and the camera never rises past 40 m over the meadow; the lens widens from 20 to 15.5 mm (settlement r25, after the developer: no shake, start angled, zoom out progressively, more horizontal, not crazy high).",
+  "about": "A time-lapse over a settlement rising in its forest clearing by a lake (D381), in one continuous establishing shot into dusk: it opens about 40 degrees down onto the first house from 16 m west of it and 13 m up as its walls go up, then backs away on one eased arc through round 24's framings, swinging about 60 degrees round the town from facing east to north-north-east while it rises to 40 m over the meadow and comes down again to 20 m south-west of the town, its look running out from the house to the sky over the mountain, from rest and still moving at the end. The distance grows throughout and the pitch flattens from 40 degrees down to 6 up, so the town lies whole in the lower half, the castle in the right third and the dusk sky over the mountain along the top; the lens widens from 20 to 15.5 mm. No shake: round 24's zigzag and its swing and drop at 16-18 s are gone (settlement r31, after the developer: round 24 is more dynamic, no shake, start angled, more horizontal, not crazy high).",
   "seconds": 20,
   "keys": [
     {
       "t": 0,
-      "at": [
-        -3.7,
-        15.5,
-        -316.3
-      ],
-      "look": [
-        6,
-        -2.5,
-        -336
-      ],
+      "at": [-10, 11, -333],
+      "look": [6, -2.5, -336],
       "lens": 20
     },
     {
+      "t": 4,
+      "at": [-20, 18.5, -326],
+      "look": [7.5, -2.7, -338],
+      "lens": 20
+    },
+    {
+      "t": 8,
+      "at": [-36, 32, -298],
+      "look": [11, -3, -340],
+      "lens": 20
+    },
+    {
+      "t": 12,
+      "at": [-42, 40, -262],
+      "look": [14, -1, -344],
+      "lens": 19
+    },
+    {
+      "t": 16,
+      "at": [-50, 34, -232],
+      "look": [12, 12, -350],
+      "lens": 16.5
+    },
+    {
       "t": 20,
-      "at": [
-        -53.8,
-        38,
-        -214.1
-      ],
-      "look": [
-        18,
-        10,
-        -401
-      ],
+      "at": [-53.8, 18, -214.1],
+      "look": [-0.3, 33.7, -353.4],
       "lens": 15.5
     }
   ],

@@ -9,18 +9,14 @@
 (
     about: "a market town rising from its clearing in a day",
     seconds: 20.0,
-    // Morning, the sun climbing in the east-south-east from about 19 to 36 degrees (azimuth
-    // about 100-110): beside the camera through the middle as it looks north, and behind it
-    // as it ends looking north-west over the castle, so the castle's face is lit from within
-    // 45 degrees of the camera's back and the sun is never within the frame's half-diagonal
-    // plus 15 degrees (docs/scene-rules.md, "Key light from behind the camera"). Toward
-    // sunset (15.5-17 h) it ended beside the camera on the left, the castle backlit and the
-    // left third washed out by glare (settlement r14); at 6.0-6.35 h, due east and low, it
-    // stood ahead of the camera as it started looking east.
-    // It ends at 17.18 h, the sun about 15 degrees up: by 17.3 h the hills to the west shade
-    // the castle (settlement r22), so the warmth of the end is the low sun's colour
-    // (daylight.rs keys), not a lower sun.
-    hours: (16.4, 17.18),
+    // Into dusk: the sun from about 24 degrees up, low in the west behind the camera's left,
+    // to about 3 degrees under the horizon at the end, so the last seconds are the afterglow,
+    // the land in the sky's light and the homes' windows lit (settlement r31, after the
+    // developer: "we can try going into dusk too"). The hills to the west shade the town
+    // from about 17.3 h, 7 s in; the sun sets about 17 s in; the windows' glow is full from
+    // a 6-degree sun, about 13 s in (town/windows.rs). Ending at 17.18 h, the sun 15 degrees
+    // up, the film never reached dusk and the windows read only faintly (settlement r30).
+    hours: (16.4, 18.78),
     claim: 0.0,
     first: 0.3,
     last: 11.0,
