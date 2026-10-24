@@ -333,8 +333,62 @@ def zoned(weights, spec):
         legs.append((chain_of(top), [tuple(p) for p in points], (ours(BONES[chain[0]][2]) - ours(BONES[chain[0]][1])).length,
                      ours(BONES[chain[2]][1]).z))
     co = [tuple(v.co) for v in mesh.data.vertices]
-    moved = measures.zone_weights(co, weights, legs, trunk, knots, spec.get("near", 0.25), spec.get("far", 0.6))
-    print("zones: leg weight given to the trunk", trunk, "on", moved, "vertices")
+    # The ease from leg to trunk is a share of the body's length wide at least (`blend`), so a
+    # deer's 0.05-0.2 zone is no step on a moose.
+    band = spec.get("blend", 0.04) * (max(knots) - min(knots))
+    moved = measures.zone_weights(co, weights, legs, trunk, knots, spec.get("near", 0.25), spec.get("far", 0.6), band)
+    print("zones: leg weight given to the trunk", trunk, "on", moved, "vertices, eased over", round(band, 3), "m")
+    tops = {b for bones_, *_ in legs for b in bones_[:1]}
+    ease_seam(weights, tops, set(trunk), band)
+
+
+def ease_seam(weights, tops, trunk, band):
+    """The seam where a leg's skin meets the trunk's, eased over the surface: bone heat parts a
+    thigh or shoulder from the flank along a sharp line, which the zones' ease by distance keeps,
+    and a leg swung forward folds the skin there into a crease or flips it out as a flap (the
+    zoo's wolf hip, lynx thigh). Skin led by a leg's top two bones (`tops`) that shares weight
+    with the trunk, and the rings round it, is smoothed among those bones and the trunk's, each
+    vertex half its own and half its neighbours' and its share of them kept, over as many passes
+    as spread it about `band` metres across."""
+    group = tops | trunk
+    near = {}
+    for e in mesh.data.edges:
+        a, b = e.vertices
+        near.setdefault(a, []).append(b)
+        near.setdefault(b, []).append(a)
+    # The outer flank only, where the crease shows: eased on the inner thigh and the belly between
+    # the legs, the skin there followed the legs and the trunk stretched (a squirrel's run 61% to
+    # 109%, an arctic fox's and a boar's past the bar).
+    side = 0.6 * min(abs(ours(BONES[b][1]).x) for b in tops)
+
+    def outer(v):
+        ws = weights[v]
+        return ws and abs(mesh.data.vertices[v].co.x) >= side and max(ws, key=ws.get) in group
+    seam = {v for v, ws in weights.items() if outer(v) and ws.keys() & tops and ws.keys() & trunk}
+    if not seam:
+        return
+    edge = sum((mesh.data.vertices[a].co - mesh.data.vertices[b].co).length for v in seam for a, b in [(v, near[v][0])]
+               if near.get(v)) / len(seam)
+    passes = int(min(8, round(2 * (band / max(edge, 1e-6)) ** 2)))  # none where the band is under an edge wide
+    zone = set(seam)
+    for _ in range(passes // 4):
+        zone |= {n for v in zone for n in near.get(v, []) if outer(n)}
+    for _ in range(passes):
+        new = {}
+        for v in zone:
+            ws, ns = weights[v], near.get(v, [])
+            total = sum(ws.get(b, 0.0) for b in group)
+            if not ns or total <= 0.0:
+                continue
+            mix = {b: 0.5 * ws.get(b, 0.0) + 0.5 * sum(weights[n].get(b, 0.0) for n in ns) / len(ns) for b in group}
+            s = sum(mix.values())
+            if s > 0.0:
+                new[v] = {b: w * total / s for b, w in mix.items() if w > 1e-4}
+        for v, ws in new.items():
+            for b in group:
+                weights[v].pop(b, None)
+            weights[v].update(ws)
+    print("seam: eased on", len(zone), "vertices,", passes, "passes")
 
 
 if SPEC["plan"] == "quadruped" and SPEC.get("zones", {}) is not False:
@@ -840,6 +894,77 @@ def airborne(t, duties, phases, cycle):
     return G / 2 * (t - a) * (b - t) * cycle * cycle
 
 
+# How far a swinging leg may reach forward past where it lands, degrees of its hip-to-hock (or
+# shoulder-to-wrist) line, and how straight it may swing, a share of its length, by body plan;
+# `swing` in a gait clip ({"Hind": [ahead, straight]}) overrides. A hind leg's stifle and hock
+# flex together as it swings (the reciprocal apparatus of hoofed runners; a dog's and cat's
+# hamstrings do the same), so it comes forward folded and is reached out only as it lands:
+# swung straight out 30-45 degrees past its landing, a moose's and a horse's hind leg read as
+# broken at a run.
+SWING_LIMITS = {"quadruped": {"Hind": (8.0, 0.85), "Fore": (25.0, 1.0)}}
+
+
+def softcap(x, top, knee):
+    """x, eased into `top` over the last `knee` below it instead of clipped: no kink."""
+    if x <= top - knee:
+        return x
+    return top - knee + knee * math.tanh((x - top + knee) / knee)
+
+
+def leg_line(leg, target, ang, crouch):
+    """From the hip or shoulder (lowered by `crouch`) to the hock or wrist, for a foot whose tip
+    is at `target` turned `ang` degrees."""
+    upper, _, foot = LEGS[leg][:3]
+    ankle = target - q(X, ang) @ (TAIL[foot] - HEAD[foot])
+    return ankle - (HEAD[upper] - Vector((0, 0, crouch)))
+
+
+def swing_held(leg, target, ang, crouch, c, landed):
+    """The move that keeps a swinging foot within `SWING_LIMITS` of its kind: its leg's line no
+    further ahead than `landed` (degrees, where it touches down) and the plan's margin, the hock
+    or wrist drawn back level; and the leg no straighter than the plan's share, the hock drawn
+    up toward the hip. Eased (`softcap`), so the swing keeps its smoothness."""
+    pair = leg[:4]
+    ahead, straight = c.get("swing", {}).get(pair, SWING_LIMITS.get(PLAN, {}).get(pair, (180.0, 2.0)))
+    rel = leg_line(leg, target, ang, crouch)
+    if rel.z > -1e-6:
+        return Vector()
+    new = rel.copy()
+    a = math.degrees(math.atan2(-rel.y, -rel.z))
+    new.y = rel.z * math.tan(math.radians(min(softcap(a, landed + ahead, 6.0), 80.0)))
+    upper, lower, foot = LEGS[leg][:3]
+    full = (HEAD[lower] - HEAD[upper]).length + (HEAD[foot] - HEAD[lower]).length
+    if new.length > 1e-9:
+        new *= softcap(new.length, straight * full, 0.05 * full) / new.length
+    return new - rel
+
+
+# How far the back bows from side to side in a stride, degrees, by gait (`bend` in a clip): a
+# walking or trotting quadruped's trunk flexes laterally with its legs (Hildebrand 1959; the
+# horse's thoracolumbar bend, Faber et al. 2001, Equine Vet. J. 33:136); a gallop flexes it up
+# and down instead (`flex`).
+BEND = {"walk": 2.0, "trot": 1.5}
+
+
+def trunk_moves(turn, legs, t, phases, c):
+    """The trunk moving with the legs, not a barrel they swing under: each shoulder blade turns
+    about its top with its foreleg, `scapula` (0.3) of the leg's swing, as a runner's scapula
+    slides over the ribs and carries the shoulder joint forward and back (Fischer & Blickhan
+    2006, J. Exp. Zool. 305A:935: the scapula is the forelimb's longest lever in small and large
+    mammals); and the back bows to the side once a stride (`BEND`), the hips one way and the
+    chest the other."""
+    for leg, (target, _) in legs.items():
+        top = PARENT[LEGS[leg][0]]
+        if leg.startswith("Fore") and top and top.endswith((".L", ".R")):
+            ahead = math.degrees(math.atan2(-(target.y - CONTACT[leg].y), HEAD[LEGS[leg][0]].z))
+            turn[top] = q(X, -c.get("scapula", 0.3) * ahead) @ turn.get(top, Quaternion())
+    bend = c.get("bend", BEND.get(c.get("gait"), 0.0)) * math.sin(2 * math.pi * (t - phases.get("Hind.L", 0.0)))
+    if bend and SPINE:
+        turn[ORDER[0]] = q(Z, -bend / 2) @ turn.get(ORDER[0], Quaternion())
+        for b in SPINE:
+            turn[b] = q(Z, bend / len(SPINE)) @ turn.get(b, Quaternion())
+
+
 def clip_gait(name, c):
     """Walking, trotting, galloping, bounding or hopping in place: each foot on the ground for
     `duty` of the cycle, sliding back at the pace, then lifted and swung ahead; `phases` say when
@@ -853,12 +978,18 @@ def clip_gait(name, c):
     cycle, stride, duty, phases = gait_of(c)
     duties = {leg: duty * (c.get("fore", 1.0) if leg.startswith("Fore") else 1.0) for leg in LEGS}
     frames = round(cycle * FPS)
+    # Each foot lands and lifts on a frame: between two, the frame before a touch-down caught the
+    # hoof a centimetre up, within the ground's reach yet moving slower than it (a galloping
+    # stag's 13 cm whole-stance slide). Its time down stays the pace's, so the pace holds.
+    phases = {leg: round(phases.get(leg, 0.0) * frames) / frames for leg in LEGS}
+    duties = {leg: max(round(d * frames), 2) / frames for leg, d in duties.items()}
     lift = c["lift"] * SCALE
     fold = c.get("fold", 45)
     crouch = c.get("crouch", 0.0) * SCALE
     act = new_clip(name)
     worst, before = {}, clamped[0]
     far.clear()
+    reached = {}
     for f in range(1, frames + 2):
         t = (f - 1) / frames
         legs = {}
@@ -904,6 +1035,12 @@ def clip_gait(name, c):
                 # "Fore" or "Hind" for that pair only.
                 foot = TAIL[LEGS[leg][2]] - HEAD[LEGS[leg][2]]
                 target = target + HEEL[leg] @ (q(X, ang) @ foot - foot) * w
+            if p >= d:
+                # Held within the hip's or shoulder's reach (`swing_held`) from soon after the
+                # lift-off to just before the touch-down, where the stance places it.
+                landed = leg_line(leg, base + Vector((0, -sweep / 2, 0)) + on_sole(leg, -lean), -lean, crouch)
+                held = swing_held(leg, target, ang, crouch, c, math.degrees(math.atan2(-landed.y, -landed.z)))
+                target = target + held * (smooth(0.0, 0.2, v) * (1 - smooth(0.85, 1.0, v)))
             # No skin of the foot goes under where it stands (laid, `HEEL`): planted, a foot peeled
             # far turns about whatever skin is lowest, not only its sole's edge (a hare's toes, 5 cm
             # past the bone, stood 4.4 cm into the ground peeled 67 degrees); lifted, its lowest skin
@@ -941,6 +1078,8 @@ def clip_gait(name, c):
         else:
             root = Vector((0, 0, -bob * math.cos(4 * math.pi * t) + air))
             turn[ORDER[0]] = q(Y, c.get("roll", 2.0) * math.sin(2 * math.pi * t))
+        if PLAN == "quadruped":
+            trunk_moves(turn, legs, t, phases, c)
         # The head held steadier than the body, nodding with the step.
         # `reach` stretches the neck forward and down at speed, the head turned back up most of
         # it so the muzzle points ahead, as galloping canids and deer run (Muybridge's
@@ -959,6 +1098,14 @@ def clip_gait(name, c):
         if PLAN == "bird":
             folded_wings(turn)
         R, H = key({"turn": turn, "legs": legs, "root": root}, f)
+        for leg in LEGS:
+            upper, lower, foot = LEGS[leg][:3]
+            rel = H[foot] - H[upper]
+            full = (HEAD[lower] - HEAD[upper]).length + (HEAD[foot] - HEAD[lower]).length
+            k = "swing" if (t - phases.get(leg, 0.0)) % 1.0 >= duties[leg] else "stance"
+            a, e = math.degrees(math.atan2(-rel.y, -rel.z)), rel.length / full
+            o = reached.setdefault((leg[:4], k), [-99.0, 99.0, 0.0])
+            o[0], o[1], o[2] = max(o[0], a), min(o[1], a), max(o[2], e)
         # The planted feet's tips go where they were put; any clamp would slide them.
         for leg, (target, _) in stood({"legs": legs})["legs"].items():
             if (t - phases.get(leg, 0.0)) % 1.0 < duties[leg]:
@@ -972,6 +1119,8 @@ def clip_gait(name, c):
           f" {paces[name] * cycle:.2f} m, feet sweep {stride:.2f} m, flight {flight * 100:.1f} cm,"
           f" planted feet off their marks at worst (cm) {off}; {clamped[0] - before} poses out of reach"
           + "".join(f", {pair} to {r:.2f} of its length" for pair, r in sorted(far.items())))
+    print(f"reach {name}: " + "; ".join(f"{pair} {k} {o[1]:.0f} to {o[0]:.0f} deg ahead, {o[2]:.2f} of its length"
+                                       for (pair, k), o in sorted(reached.items())))
 
 
 def clip_graze(name, c):

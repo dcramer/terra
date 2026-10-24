@@ -39,6 +39,26 @@ function display(b: Box, line: Line): void {
   ]);
 }
 
+/// Which renderer Blender gets: over an Xvfb its OpenGL is Mesa's llvmpipe, software, about 20 s
+/// an Eevee frame; its Vulkan backend reaches the NVIDIA card with no display. Jobs get
+/// TERRA_BLENDER_GPU_BACKEND=vulkan (jobs.ts jobEnv), which tools/blender/run.sh passes on.
+function blender(b: Box, line: Line): void {
+  const found = sh(join(b.repo, "tools/blender/run.sh"), ["--find"]);
+  if (!found.ok) return line("warn", "Blender: none found (BLENDER, or blender on the PATH); creature and model jobs cannot run");
+  const probe = "import gpu\ntry:\n    gpu.init()\n    print('GPU', gpu.platform.backend_type_get(), '|', gpu.platform.renderer_get())\nexcept Exception as e:\n    print('GPU none |', e)";
+  const d = daemonInfo(b);
+  const dpy = /Xvfb (:\d+)/.exec(d?.display ?? "")?.[1];
+  const env = { ...process.env, ...(dpy ? { DISPLAY: dpy } : {}) };
+  const renderer = (backend: string[]) => {
+    const r = spawnSync(found.out, ["--background", ...backend, "--factory-startup", "--python-expr", probe], { encoding: "utf8", env, timeout: 60_000 });
+    return /^GPU (.*)$/m.exec(r.stdout ?? "")?.[1]?.trim() ?? "no answer";
+  };
+  const vulkan = renderer(["--gpu-backend", "vulkan"]);
+  line(/NVIDIA/i.test(vulkan), `Blender (jobs, --gpu-backend vulkan): ${vulkan}`, ["the NVIDIA Vulkan ICD (see Vulkan above); else Blender renders on the CPU, ~20 s an Eevee frame"]);
+  const gl = renderer([]);
+  line(/llvmpipe|softpipe|software/i.test(gl) ? "warn" : true, `Blender over ${dpy ?? "the daemon's display"}, OpenGL: ${gl}${/llvmpipe/i.test(gl) ? " (software; jobs use Vulkan instead)" : ""}`);
+}
+
 export function doctor(b: Box): number {
   let bad = 0;
   const line = (ok: boolean | "warn", text: string, fix: string[] = []) => {
@@ -65,6 +85,7 @@ export function doctor(b: Box): number {
   else line(true, "Vulkan: the loader and the NVIDIA ICD are installed (vulkan-tools is not, so the device is not listed)");
 
   display(b, line);
+  blender(b, line);
 
   line(true, `node: ${process.version} (${process.execPath})`);
   const node22 = Number(process.versions.node.split(".")[0]) >= 22;

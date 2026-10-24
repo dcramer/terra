@@ -67,9 +67,15 @@ def test_swing_has_no_velocity_jump():
         assert abs(dv - carry) < 1e-3, (v, dv, carry)
     assert abs(ms.swing_y(0.0, sweep, duty) - sweep / 2) < 1e-12
     assert abs(ms.swing_y(1.0, sweep, duty) + sweep / 2) < 1e-12
-    # A gallop's short stance: capped, still far closer to the carry than the cosine ease's 0.
-    dv = (ms.swing_y(h, sweep, 0.2) - ms.swing_y(0.0, sweep, 0.2)) / h
-    assert abs(dv - 1.5 * sweep) < 1e-3, dv
+    # A gallop's short stance: the foot still leaves and meets the ground at its speed (four
+    # sweeps a swing), yet goes little past either end of the stance (a cubic with those
+    # tangents flings it 0.38 sweeps out).
+    carry = sweep * 0.8 / 0.2
+    for v in (0.0, 1.0 - h):
+        dv = (ms.swing_y(v + h, sweep, 0.2) - ms.swing_y(v, sweep, 0.2)) / h
+        assert abs(dv - carry) < 1e-3, (v, dv, carry)
+    ys = [ms.swing_y(i / 400, sweep, 0.2) for i in range(401)]
+    assert max(ys) < 0.75 * sweep and min(ys) > -0.75 * sweep, (max(ys), min(ys))
 
 
 def test_kinks_tell_a_snap_from_a_sine():
@@ -116,6 +122,26 @@ def test_feet_found_from_the_skin():
     assert len(feet) == 4 and all(len(f) == 20 for f in feet), [len(f) for f in feet]
 
 
+def test_crease_reads_a_fold_not_a_turn():
+    # Two triangles hinged on the edge 0-1 along x, flat at rest; then the second folded 90
+    # degrees up about that edge; then the whole flat strip turned and moved, which folds nothing.
+    rest = np.array([(0, 0, 0), (1, 0, 0), (0.5, -1, 0), (0.5, 1, 0)], float)
+    tris = [(0, 1, 2), (1, 0, 3)]
+    pairs, edges = ms.hinges(tris)
+    assert pairs.tolist() == [[0, 1]] and edges.tolist() == [[0, 1]]
+    r0 = ms.folds(rest, tris, pairs)
+    folded = rest.copy()
+    folded[3] = (0.5, 0, 1)
+    assert abs(ms.crease(r0, ms.folds(folded, tris, pairs)) - 90.0) < 1e-6
+    c, s = math.cos(0.7), math.sin(0.7)
+    turned = rest @ np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]]).T + (3, 1, 2)
+    assert ms.crease(r0, ms.folds(turned, tris, pairs)) < 1e-6
+    # Flipped back onto itself, a flap reads near 180.
+    flap = rest.copy()
+    flap[3] = (0.5, -1, 0.01)
+    assert ms.crease(r0, ms.folds(flap, tris, pairs)) > 175.0
+
+
 def test_zones_give_the_belly_to_the_trunk():
     # A body along y from 0 to 1 at z 0.5, a leg down from (0.2, 0.2, 0.5) to the ground.
     co = [(0.0, 0.5, 0.3),   # belly, mid-way between the legs, far from the leg
@@ -129,6 +155,14 @@ def test_zones_give_the_belly_to_the_trunk():
     assert abs(weights[0]["Spine"] - 0.8) < 1e-9, weights[0]
     assert weights[1] == {"Thigh.L": 1.0}
     assert 0.0 < weights[2]["Thigh.L"] < 1.0 and abs(sum(weights[2].values()) - 1.0) < 1e-9
+    # A band in metres widens a narrow ease (near 0.05, far 0.2 of a 0.5 m bone: 7.5 cm, a
+    # step), so the flank beside the leg keeps some of it, and the far belly still none.
+    def flank(band):
+        w = {0: {"Thigh.L": 1.0}, 1: {"Thigh.L": 0.8, "Hips": 0.2}}
+        ms.zone_weights([(0.0, 0.2, 0.42), (0.0, 0.5, 0.3)], w, legs, ["Hips", "Spine"], [0.0, 0.5, 1.0], 0.05, 0.2, band)
+        return w[0].get("Thigh.L", 0.0), w[1].get("Thigh.L", 0.0)
+    assert flank(0.0) == (0.0, 0.0), flank(0.0)
+    assert 0.2 < flank(0.3)[0] < 1.0 and flank(0.3)[1] == 0.0, flank(0.3)
     # A broad paw's edge, far from the leg's bones but below its wrist (z 0.25), stays the leg's.
     paw = {0: {"Thigh.L": 1.0}}
     assert ms.zone_weights([(0.0, 0.2, 0.0)], paw, [legs[0] + (0.25,)], ["Hips", "Spine"], [0.0, 0.5, 1.0]) == 0

@@ -2,7 +2,7 @@
   "subject": "wild boar of European forests: heavy wedge-shaped body, high shoulders, coarse bristly dark grey-brown hair with a spinal crest, long snout with a disc nose, short tusks, thin legs",
   "file": "WildBoar",
   "plan": "quadruped",
-  "zones": {"near": 0.15, "far": 0.45},
+  "zones": {"near": 0.15, "far": 0.45, "blend": 0.0},
   "tripo_project": "b794598d-a36e-4dcc-ac49-cd0cb4aefe0e",
   "generator": "h3.1, standard geometry and texture, PBR",
   "credits": {
@@ -267,7 +267,8 @@
       "bob": 0.008,
       "crouch": 0.02,
       "peel": 35,
-      "tail": 5
+      "tail": 5,
+      "scapula": 0.15
     },
     "Run": {
       "kind": "gait",
@@ -279,7 +280,8 @@
       "peel": 45,
       "flex": 8,
       "fold": 75,
-      "tail": 6
+      "tail": 6,
+      "scapula": 0.15
     },
     "Eat": {
       "kind": "graze",

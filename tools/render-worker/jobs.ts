@@ -351,6 +351,8 @@ export function jobEnv(env: Record<string, string | undefined>, home: string, id
   out.HOME = home;
   out.CARGO_TARGET_DIR = target;
   out.TERRA_RENDER_JOB = id;
+  // Blender through Vulkan: over the box's Xvfb its OpenGL is software (doctor.ts `blender`).
+  out.TERRA_BLENDER_GPU_BACKEND = env.TERRA_BLENDER_GPU_BACKEND ?? "vulkan";
   if (display) {
     out.DISPLAY = display;
     delete out.WAYLAND_DISPLAY;

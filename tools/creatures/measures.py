@@ -189,6 +189,37 @@ def stretch(rest_len, posed_len, q=95):
     return float(np.percentile(np.abs(posed_len / rest_len - 1.0), q))
 
 
+def hinges(tris):
+    """The pairs of triangles (m, 2) that share an edge, and that edge's two vertices (m, 2)."""
+    seen, pairs, edges = {}, [], []
+    for t, tri in enumerate(np.asarray(tris)):
+        for a, b in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])):
+            k = (min(a, b), max(a, b))
+            if k in seen:
+                pairs.append((seen[k], t))
+                edges.append(k)
+            else:
+                seen[k] = t
+    return np.array(pairs, int).reshape(-1, 2), np.array(edges, int).reshape(-1, 2)
+
+
+def folds(p, tris, pairs):
+    """How far the skin folds at each hinge, degrees between its two triangles' normals: 0 flat,
+    180 folded back onto itself."""
+    p, tris = np.asarray(p, float), np.asarray(tris)
+    n = np.cross(p[tris[:, 1]] - p[tris[:, 0]], p[tris[:, 2]] - p[tris[:, 0]])
+    n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+    return np.degrees(np.arccos(np.clip((n[pairs[:, 0]] * n[pairs[:, 1]]).sum(axis=1), -1.0, 1.0)))
+
+
+def crease(rest_fold, posed_fold, q=99):
+    """The q-th percentile of how much further the skin folds than at rest, degrees: a crease
+    opening where a leg's skin meets the trunk's, or a flap flipped out of the flank, near 180."""
+    if len(rest_fold) == 0:
+        return 0.0
+    return float(np.percentile(np.maximum(np.asarray(posed_fold) - rest_fold, 0.0), q))
+
+
 def polyline_distance(p, points):
     """Distance of points p (n, 3) to a polyline through `points`."""
     d = np.full(len(p), np.inf)
@@ -197,7 +228,7 @@ def polyline_distance(p, points):
     return d
 
 
-def zone_weights(co, weights, legs, trunk, knots, near=0.25, far=0.6):
+def zone_weights(co, weights, legs, trunk, knots, near=0.25, far=0.6, band=0.0):
     """Zoned torso and belly weights (D441), as a rigger paints a runner: bone heat hands the
     belly and flanks between the legs to the leg bones, so each stride drags the belly into a
     pouch. Each leg's bones keep their weight on a vertex by `keep_near` of its distance to that
@@ -207,13 +238,16 @@ def zone_weights(co, weights, legs, trunk, knots, near=0.25, far=0.6):
     co: (n, 3) vertices; weights: {vertex: {bone: w}}, changed in place;
     legs: [(bones, polyline points, upper bone length[, wrist height])]: skin below the leg's
     wrist or hock is the leg's whatever its distance (a broad paw or a hare's long foot reaches
-    past `far` from its bones), eased over `near` above it. Returns how many vertices gave weight."""
+    past `far` from its bones), eased over `near` above it. The ease from `near` out is `band`
+    metres wide at least, whatever `far` says (the caller sets it by the body's size): an ease a
+    few centimetres wide is a step, and a thigh swung forward opened a crease there (the zoo's
+    wolf hip, lynx thigh). Returns how many vertices gave weight."""
     co = np.asarray(co, float)
     owner = list(trunk) + [trunk[-1]]
     loss = np.zeros(len(co))
     for leg in legs:
         leg_bones, points, upper = leg[:3]
-        keep = keep_near(polyline_distance(co, np.asarray(points, float)), near * upper, far * upper)
+        keep = keep_near(polyline_distance(co, np.asarray(points, float)), near * upper, max(far * upper, near * upper + band))
         if len(leg) > 3:
             keep = np.maximum(keep, 1.0 - smooth(leg[3], leg[3] + near * upper, co[:, 2]))
         for v in np.nonzero(keep < 1.0)[0]:
@@ -235,15 +269,24 @@ def zone_weights(co, weights, legs, trunk, knots, near=0.25, far=0.6):
     return len(moved)
 
 
-def swing_y(v, sweep, duty, cap=1.5):
+def swing_y(v, sweep, duty, cap=1.5, window=0.12):
     """Where a swinging foot is along the body (+y back) at v of its swing, for a stance that
     carries it from -sweep/2 to +sweep/2 over `duty` of the stride: a cubic Hermite from the
-    lift-off to the touch-down whose end tangents are the stance's carry, capped at `cap` sweeps,
-    so the foot's velocity has no jump at either end."""
+    lift-off to the touch-down whose end tangents are the stance's carry, capped at `cap` sweeps
+    (a gallop's short stance asks for four, which flings the foot far behind and ahead), and the
+    rest of the carry added only within `window` of either end, so the foot leaves and meets the
+    ground at the ground's speed with no jump, and no fling. Capped alone, a galloping moose's
+    hoof met the ground at half its speed and slid 11 cm at the touch-down."""
     p0, p1 = sweep / 2, -sweep / 2
-    m = min(sweep * (1 - duty) / duty, cap * sweep)
-    return (p0 * (2 * v ** 3 - 3 * v ** 2 + 1) + p1 * (-2 * v ** 3 + 3 * v ** 2)
-            + m * (v ** 3 - 2 * v ** 2 + v) + m * (v ** 3 - v ** 2))
+    carry = sweep * (1 - duty) / duty
+    m = min(carry, cap * sweep)
+    y = (p0 * (2 * v ** 3 - 3 * v ** 2 + 1) + p1 * (-2 * v ** 3 + 3 * v ** 2)
+         + m * (v ** 3 - 2 * v ** 2 + v) + m * (v ** 3 - v ** 2))
+    if carry > m:
+        def bump(x):  # 0 at 0 and past 1, slope 1 at 0, flat at 1
+            return x * (1 - x) ** 2 if x < 1 else 0.0
+        y += (carry - m) * window * (bump(v / window) - bump((1 - v) / window))
+    return y
 
 
 def twist_about(r, axis):

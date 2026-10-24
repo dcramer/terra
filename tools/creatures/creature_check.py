@@ -143,6 +143,28 @@ def check(src, scale):
     edges = np.array([e.vertices[:] for e in mesh.data.edges])
     el0 = np.linalg.norm(rest[edges[:, 0]] - rest[edges[:, 1]], axis=1)
     te = (el0 > 1e-7) & skin[edges[:, 0]] & skin[edges[:, 1]]
+    # The seam where a limb's skin meets the trunk's: skin whose weight is 10-90% on the limbs'
+    # bones (a wing's too). How far it folds past its rest, at each pair of triangles hinged
+    # there, finds a crease opening or a flap flipped out; how far its edges stretch, a tear.
+    limbs = set(legs) | {b.name for b in bones if b.name in deform and b.name.startswith(("Humerus", "Forearm", "Hand"))}
+    on_limb = np.zeros(n)
+    for b in limbs:
+        for i, w in W[b].items():
+            on_limb[i] += w
+    share = on_limb / np.maximum(total, 1e-9)
+    band = (share > 0.1) & (share < 0.9)
+    mesh.data.calc_loop_triangles()
+    tris = np.array([t.vertices[:] for t in mesh.data.loop_triangles], int).reshape(-1, 3)
+    pairs, hinge = ms.hinges(tris)
+    # Slivers left out: a decimated mesh's needle triangles and hair-thin edges turn and stretch
+    # wildly while the surface they lie in barely moves.
+    area = np.linalg.norm(np.cross(rest[tris[:, 1]] - rest[tris[:, 0]], rest[tris[:, 2]] - rest[tris[:, 0]]), axis=1)
+    inb = band[hinge[:, 0]] | band[hinge[:, 1]]
+    big = area > 0.2 * np.median(area[pairs[inb].ravel()]) if inb.any() else area > 0
+    pairs = pairs[inb & big[pairs[:, 0]] & big[pairs[:, 1]]]
+    fold0 = ms.folds(rest, tris, pairs)
+    se = (el0 > 1e-7) & (band[edges[:, 0]] | band[edges[:, 1]])
+    se &= el0 > 0.4 * np.median(el0[se]) if se.any() else se
 
     # Joints whose bone and parent share skin round the bone's head: their turn's twist pinches it.
     rings = {}
@@ -205,6 +227,7 @@ def check(src, scale):
         name = act.name
         loop = not is_(name, ONE_SHOT)
         trunk_w, lag, lowest, lowest_trunk, hardest = 0.0, 0.0, 1e9, 1e9, 0.0
+        creased = seam_w = 0.0
         first = last = prev = None
         soles = [[] for _ in feet]
         tails = []
@@ -220,6 +243,10 @@ def check(src, scale):
             if te.any():
                 el = np.linalg.norm(p[edges[te, 0]] - p[edges[te, 1]], axis=1)
                 trunk_w = max(trunk_w, ms.stretch(el0[te], el))
+            if len(pairs):
+                creased = max(creased, ms.crease(fold0, ms.folds(p, tris, pairs)))
+                el = np.linalg.norm(p[edges[se, 0]] - p[edges[se, 1]], axis=1)
+                seam_w = max(seam_w, ms.stretch(el0[se], el))
             for i, c in enumerate(feet):
                 soles[i].append(p[c])
             tails.append([at(pb.tail) for pb in pbs if pb.name in deform])
@@ -234,7 +261,8 @@ def check(src, scale):
                 lag = max(lag, float(ms.twist_about(own.T @ par, np.array(b.tail_local - b.head_local))))
         tails = np.array(tails)
         c = {"frames": f1 - f0, "loop": loop, "gait": is_(name, GAIT) and not is_(name, ONE_SHOT), "lying": is_(name, LYING),
-             "trunk_p95": round(trunk_w, 3), "skin_lag_deg": round(lag, 1), "lowest_cm": round(lowest * 100, 2),
+             "trunk_p95": round(trunk_w, 3), "crease_deg": round(creased, 1), "seam_p95": round(seam_w, 3),
+             "skin_lag_deg": round(lag, 1), "lowest_cm": round(lowest * 100, 2),
              "lowest_trunk_cm": round(lowest_trunk * 100, 2) if skin.any() else None}
         if loop:
             keys = key_frames(act)

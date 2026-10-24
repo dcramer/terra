@@ -156,7 +156,8 @@ test("old jobs expire", () => {
 
 test("the job's environment holds no token or agent socket, cargo keeps its homes, and the build is the slot's", () => {
   const env = jobEnv({ HOME: "/home/u", PATH: "/bin", GH_TOKEN: "t", TRIPO_STUDIO_COOKIE: "c", SSH_AUTH_SOCK: "/s", CARGO_TARGET_DIR: "/shared" }, "/box/homes/2", "j1", "/box/slots/2/target");
-  assert.deepEqual(env, { PATH: "/bin", HOME: "/box/homes/2", CARGO_HOME: "/home/u/.cargo", RUSTUP_HOME: "/home/u/.rustup", CARGO_TARGET_DIR: "/box/slots/2/target", TERRA_RENDER_JOB: "j1" });
+  assert.deepEqual(env, { PATH: "/bin", HOME: "/box/homes/2", CARGO_HOME: "/home/u/.cargo", RUSTUP_HOME: "/home/u/.rustup", CARGO_TARGET_DIR: "/box/slots/2/target", TERRA_RENDER_JOB: "j1", TERRA_BLENDER_GPU_BACKEND: "vulkan" });
+  assert.equal(jobEnv({ HOME: "/h", TERRA_BLENDER_GPU_BACKEND: "opengl" }, "/b/h", "j", "/b/t").TERRA_BLENDER_GPU_BACKEND, "opengl", "the box's own choice stands");
 });
 
 test("a job that draws gets a display: TERRA_RENDER_DISPLAY, else the daemon's own, else an Xvfb", () => {

@@ -41,6 +41,10 @@ if v != '$pinned':
     sys.exit(3)
 sys.path.insert(0, r'$(path "$(dirname "$script")")'); runpy.run_path(r'$(path "$script")', run_name='__main__')"
 set +e
-"$BLENDER" --background "${open[@]}" --python-exit-code 1 --python-expr "$boot" -- ${args[@]+"${args[@]}"} </dev/null 2>&1 \
+# TERRA_BLENDER_GPU_BACKEND (vulkan, opengl) picks the GPU backend Eevee draws with: the render
+# worker sets vulkan, since over its Xvfb Blender's OpenGL is software (llvmpipe, ~20 s a frame).
+backend=()
+[[ -n "${TERRA_BLENDER_GPU_BACKEND:-}" ]] && backend=(--gpu-backend "$TERRA_BLENDER_GPU_BACKEND")
+"$BLENDER" --background ${backend[@]+"${backend[@]}"} "${open[@]}" --python-exit-code 1 --python-expr "$boot" -- ${args[@]+"${args[@]}"} </dev/null 2>&1 \
   | grep -v -e '^$' -e 'DeprecationWarning' -e 'use_nodes'
 exit "${PIPESTATUS[0]}"
