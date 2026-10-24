@@ -505,6 +505,7 @@ Checks, developer tools, languages and the repository.
 | [D421](decisions/D421.md) | Demo and film places leave out the combat lair | Design | Developers | Decided | Play keeps its lair of combat creatures… |
 | [D422](decisions/D422.md) | The review desk, one per developer | Tech | Agent | Decided | Each developer runs their own review desk… |
 | [D431](decisions/D431.md) | A push warns when it silently undoes another's recent commit | Tech | Agent | Decided | Work lands by `git pull --rebase origin main` onto one's… |
+| [D445](decisions/D445.md) | Renders run on a GPU box that takes jobs from draft GitHub releases | Tech | Agent | Leaning | An agent's heavy render (a trailer cut or its stills, a… |
 
 ## Superseded and rejected
 

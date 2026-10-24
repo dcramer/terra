@@ -37,7 +37,7 @@ A passing nightly lowers the baselines and pushes that commit to main (D414). So
 ## The box
 
 - **Hardware:** any machine with Docker; Linux, or Windows with Docker Desktop. 32 GB RAM or more, and about 100 GB of free disk for the volumes: history, checkout, the seed build and nightly's worktree.
-- **No GPU:** nightly needs none. Benchmarks will, with the GPU passed into the container.
+- **No GPU:** nightly needs none. With an NVIDIA card, the render worker runs beside it and takes agents' renders when nightly is not running ([render-worker.md](render-worker.md), D445).
 - **Credentials:** the token is the only one, kept in `~/terra-ci/.env` on the box and never in the repository. It runs main's code, as anyone with push access can already make it do.
 
 ## Next
