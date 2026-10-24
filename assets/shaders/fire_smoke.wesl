@@ -84,6 +84,8 @@ const HEARTH_SCATTER: f32 = 6.0;
 const PI: f32 = 3.14159265;
 // How long a breath's soot hangs, in seconds.
 const SOOT_S: f32 = 5.5;
+// How far a breath's soot puff's edge is softened toward a round falloff.
+const SOOT_SOFT: f32 = 0.6;
 // How many kept fires are drawn as hearths (crates/terra_world/src/fire.rs HEARTHS).
 const HEARTHS: u32 = 16u;
 
@@ -132,7 +134,9 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         let roll = luck * 6.283 + s * (0.5 + 0.6 * luck);
         let billow = (east * cos(roll) + north * sin(roll)) * (0.4 + 1.2 * t);
         let middle = born.xyz + going.xyz * (1.0 - exp(-s * 1.4)) / 1.4 + up * (1.2 * s + 0.25 * s * s) + billow + wind.xyz * s * 0.8;
-        let size = mix(1.4, 7.5, sqrt(t)) * (0.6 + 0.8 * luck);
+        // Born a little wider, so its first puffs merge into one rolling cloud: at 1.4 m they
+        // stood as separate black balls along the stream (castle fall r31's review, 5.75-7.5 s).
+        let size = mix(2.2, 7.5, sqrt(t)) * (0.6 + 0.8 * luck);
         let to_eye = normalize(view.world_position - middle);
         var right = cross(up, to_eye);
         if dot(right, right) < 1.0e-6 {
@@ -367,6 +371,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let r = (in.uv - vec2(0.5)) * 2.0;
         let wisp = smoothstep(0.08, 0.55, t);
         cover = mix(pow(near.a, mix(HEARTH_OPEN, 1.25, wisp)), exp(-3.0 * dot(r, r)), HEARTH_SOFT * (1.0 - wisp));
+    }
+    if soot {
+        // Its puff's baked edge softened toward a round falloff, so overlapping puffs sum to
+        // a cloud rather than to stacked balls each with its own rim (castle fall r32).
+        let r = (in.uv - vec2(0.5)) * 2.0;
+        cover = mix(cover, cover * exp(-1.5 * dot(r, r)), SOOT_SOFT);
     }
     var alpha = cover * life * window;
     // Faded in over its last metre and a half in front of what is behind it.

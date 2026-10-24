@@ -280,6 +280,12 @@ fn burn(
 /// each other on a level they burn as one broad one.
 const BLAZE_CUBES: i32 = 4;
 const BROAD_CELLS: usize = 3;
+/// A blaze's flame height and a broad one's width, over what the fire round it would give:
+/// at the whole of it, the castle's blazes stood as one sheet of flame over 38-45% of the
+/// frame (castle fall r31's review), where a burning building's flames stand at its windows,
+/// eaves and breaches with dark wall between them.
+const BLAZE_TALL: f32 = 0.85;
+const BROAD_WIDE: f32 = 0.85;
 
 /// How often the fire is said in the log while it burns, in frames that stepped it.
 const SAY_EVERY: u32 = 8;
@@ -359,7 +365,7 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> BTreeMap<
             all.count += cell.count;
             all.fierce += cell.fierce;
         }
-        let wide = BLAZE_CUBES as f32 * CELL_M * (keys.len() as f32).sqrt() * 1.1;
+        let wide = BLAZE_CUBES as f32 * CELL_M * (keys.len() as f32).sqrt() * 1.1 * BROAD_WIDE;
         merged.insert(keys[0], (all, wide));
     }
     merged
@@ -375,7 +381,9 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> BTreeMap<
                 .sum::<f32>()
                 - cell.count;
             let heat = (cell.fierce / cell.count).clamp(0.0, 1.0);
-            let tall = (0.8 + 0.3 * cell.count.sqrt() + 0.25 * round.sqrt()) * (0.5 + 0.5 * heat);
+            let tall = (0.8 + 0.3 * cell.count.sqrt() + 0.25 * round.sqrt())
+                * (0.5 + 0.5 * heat)
+                * BLAZE_TALL;
             let local = cell.at / cell.count;
             let seed = (key[0].wrapping_mul(73_856_093)
                 ^ key[1].wrapping_mul(19_349_663)

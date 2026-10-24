@@ -111,6 +111,14 @@ const BOOK_COLUMNS: f32 = 8.0;
 const HEARTH_BRIGHTNESS: f32 = 15.0;
 const TORCH_BRIGHTNESS: f32 = 3.3;
 const BLAZE_BRIGHTNESS: f32 = 2.1;
+// A burning building's flame as separate tongues with dark wall between, the full height of
+// the flame: whole, each card's frame was a block of flame and the cards a sheet over 38-45%
+// of the castle (castle fall r31's review). How many lanes across a frame, and the share of
+// its width they eat; its thin cover cooled toward red, where at its baked heat it summed
+// over grey smoke to olive (castle fall r32).
+const BLAZE_LANES: f32 = 6.0;
+const BLAZE_GAP: vec2<f32> = vec2<f32>(0.46, 0.6);
+const BLAZE_THIN: vec2<f32> = vec2<f32>(0.08, 0.4);
 // A breath's: its puffs along the stream, the fireball where it strikes, the blast when it
 // first does. Its puffs no longer sum where they overlap (`breath_fuel`), so at 3.5 the
 // stream was 45% pale (breath r7), at 2.0 orange-yellow (r10).
@@ -2413,7 +2421,9 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
             // tongues, so three to a blaze two metres apart, each wider than the cell, were
             // a hedge of overlapping flames (castle film r11), where a burning building is
             // separate fires with its timbers dark between them.
-            if phase > 0.01 || fract(seed * 53.17) < 0.33 {
+            // Two in five are only embers and smoke, so dark wall stands between the fires
+            // (a third: a sheet over the castle, castle fall r31's review).
+            if phase > 0.01 || fract(seed * 53.17) < 0.4 {
                 return nowhere();
             }
             w = wide * 1.35;
@@ -2431,7 +2441,9 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
         // The tongue set's flames reach only `reach` up its frame (a low wall under smoke), so
         // its cards stand so much taller, square, stretched no more than half again across.
         h /= fire.reach.y;
-        w = clamp(w, h, 1.5 * h);
+        // No wider than a little over its height: at one to one and a half times it, each card's
+        // frame was a block of flame wider than tall and the cards one sheet (castle fall r32).
+        w = clamp(w, 0.8 * h, 1.3 * h);
         let tilt = (fract(luck * 9.7) - 0.5) * 0.22;
         let world = card(at - up * h * 0.04 + lean * 0.2, up, corner, w, h, true, tilt);
         out.clip = position_world_to_clip(world);
@@ -2661,8 +2673,10 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
         var foot = smoothstep(0.0, 0.03, uv.y);
         var sides = smoothstep(0.0, 0.15, x) * smoothstep(0.0, 0.15, 1.0 - x);
         if layer == SET_TONGUE {
-            foot = smoothstep(0.0, 0.16, uv.y + 0.12 * (rag - 0.5));
-            sides = smoothstep(0.1, 0.32, min(x, 1.0 - x) + 0.2 * (rag - 0.5) + 0.1 * uv.y);
+            // Torn, then held to nought at the card's own border, so no straight edge shows
+            // where the tear's noise lifts it (seams at 7.3, 14.6 and 20 s, castle fall r31).
+            foot = smoothstep(0.0, 0.16, uv.y + 0.12 * (rag - 0.5)) * smoothstep(0.0, 0.06, uv.y);
+            sides = smoothstep(0.1, 0.32, min(x, 1.0 - x) + 0.2 * (rag - 0.5) + 0.1 * uv.y) * smoothstep(0.02, 0.14, min(x, 1.0 - x));
         }
         if column {
             // Its own sides torn and narrowing up it, so dark shows between the columns.
@@ -2677,6 +2691,20 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
         }
         let edges = foot * sides * smoothstep(0.0, 0.25, 1.0 - uv.y);
         var texel = flipbook(layer, f, vec2(x, uv.y));
+        if layer == SET_TONGUE {
+            // Parted by dark lanes from its foot to its tips, nearly upright and wandering
+            // slowly, wider up it so its tongues narrow to their tips: a burning building's
+            // flames stand at its windows, eaves and breaches with dark timber between.
+            let hy = saturate(uv.y / max(fire.reach.y, 0.1));
+            let lane = noise(vec2(x * BLAZE_LANES + luck * 13.0, hy * 0.7 - time * 0.25 * rate / baked.x));
+            let gap = BLAZE_GAP.x + 0.12 * hy;
+            texel.g *= smoothstep(gap, gap + BLAZE_GAP.y - BLAZE_GAP.x, lane);
+            // Its thin cover cooler, so its edges and tips end dark red, not olive over smoke:
+            // thin as drawn, its torn edges and its fade into what it meets counted, since a
+            // yellow thinned there after its heat was taken was a dim olive where it met a
+            // wall's top (castle fall r32's first film).
+            texel.r *= mix(0.55, 1.0, smoothstep(BLAZE_THIN.x, BLAZE_THIN.y, texel.g * edges * soft));
+        }
         if layer == SET_CAMPFIRE {
             // A campfire's body torn toward its tips rather than fading to a haze: its cover
             // eaten by a threshold rising with height through a noise climbing up it (alpha
