@@ -221,4 +221,8 @@ async function run(args: ClientArgs, remotes: Remote[], cwd: string, outOf: (id:
   return finish(r, sub.id, outOf(sub.id, args.out));
 }
 
-if (import.meta.main) process.exit(await main(process.argv.slice(2)));
+// Exit once stdout has drained (see box.ts): a pipe keeps only the first 64 KiB otherwise.
+if (import.meta.main) {
+  const code = await main(process.argv.slice(2));
+  process.stdout.write("", () => process.exit(code));
+}

@@ -334,4 +334,9 @@ async function main(argv: string[]): Promise<number> {
   return 2;
 }
 
-if (import.meta.main) process.exit(await main(process.argv.slice(2)));
+// Exit once stdout has drained: `process.exit` straight after a large `console.log` to a pipe
+// drops all past the pipe's 64 KiB, which cut `status --json` short once the job list outgrew it.
+if (import.meta.main) {
+  const code = await main(process.argv.slice(2));
+  process.stdout.write("", () => process.exit(code));
+}
