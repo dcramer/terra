@@ -45,7 +45,7 @@ test("the ramp's texture decodes to the ramp: sRGB over its scale, the dim red e
   }
 });
 
-test("a campfire's flame is cream at its core, keeps its hue, and its tips stay deep red", () => {
+test("a campfire's flame is the blackbody's own: a yellow core, an orange body, deep red tips", () => {
   // In display terms over its brightest channel, as the step-back measured the frame.
   const shown = (heat: number, fuel = FUELS.hearth) => {
     const c = ramp(heat, fuel).slice(0, 3);
@@ -54,16 +54,16 @@ test("a campfire's flame is cream at its core, keeps its hue, and its tips stay 
     const [r, g, b] = e;
     return { hue: (60 * (g - b)) / (r - b), sat: (r - b) / r };
   };
+  // Unwashed (PALE 0): washed toward cream, its flame read pale and hazy from above, where
+  // e9e5b733's saturated, crisper tongues scored higher (campfire net round).
   const unwashed = { ...FUELS.hearth, pale: 0 };
-  // The core over the coals near #FFF2C0, not white and not a saturated yellow.
+  for (const h of [0.75, 0.85, 0.9, 0.95, 1]) assert.deepEqual(shown(h), shown(h, unwashed), `washed at ${h}`);
+  // The core over the coals a saturated yellow, not white nor pure; only the hottest paler.
   const core = shown(0.95);
-  assert.ok(core.sat > 0.15 && core.sat < 0.35, `core saturation ${core.sat}`);
-  // Washed toward white without turning: yellow stays yellow, orange orange.
-  for (const h of [0.85, 0.9, 0.95]) {
-    const d = shown(h).hue - shown(h, unwashed).hue;
-    assert.ok(Math.abs(d) < 3, `hue at ${h} moved ${d}`);
-  }
-  assert.ok(shown(0.9).sat < 0.6, `body saturation ${shown(0.9).sat}`);
-  // Its cooler body and tips keep the blackbody's deep red.
-  assert.ok(shown(0.75).sat > 0.95, `tip saturation ${shown(0.75).sat}`);
+  assert.ok(core.hue > 40 && core.hue < 50 && core.sat > 0.65 && core.sat < 0.8, `core hue ${core.hue} saturation ${core.sat}`);
+  assert.ok(shown(1).sat < 0.6, `hottest saturation ${shown(1).sat}`);
+  // Its body orange and full, its cooler tips the blackbody's deep red.
+  const body = shown(0.9);
+  assert.ok(body.hue > 28 && body.hue < 38 && body.sat > 0.95, `body hue ${body.hue} saturation ${body.sat}`);
+  assert.ok(shown(0.75).sat > 0.95 && shown(0.75).hue < 20, `tip ${JSON.stringify(shown(0.75))}`);
 });

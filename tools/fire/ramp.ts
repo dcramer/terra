@@ -31,7 +31,10 @@ export type Fuel = { cold: number; hot: number; contrast: number; film: number; 
 /// orange takes a little and its yellow body and core much (sRGB 255,213,159 at heat 0.9 and
 /// 255,242,193 at 0.95), as RDR2's campfires and a night photograph's blown body read. Unwashed, its flame was 0.81 saturated where RDR2's is
 /// 0.50-0.62, a flat orange cut-out (campfire step-back, difference 3; campfire pale round).
-export const PALE = 0.72;
+/// Unwashed again (0) with e9e5b733's crisper, thinner tongues (fire.wesl `HEARTH_BODY`): from the
+/// camp's eye, above, the washed flame read pale and hazy, and lost with every judge in two
+/// panels (campfire net round). The wash stays for a fuel that asks it.
+export const PALE = 0;
 
 /// The rows (D377's 950-1670 K for wood). A campfire's hearth is wood, but its flame alone
 /// (D433's matte) was a band hotter than the photographs' at every hour on the wood row: at
