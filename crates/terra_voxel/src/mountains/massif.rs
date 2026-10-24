@@ -79,6 +79,13 @@ const RIDGE_FADE: f32 = 0.55;
 /// The most a neighbour or a ridge stands over the range's ground, as a share of its horn's
 /// height, where the range falls away under it.
 const LIFT_MOST: f32 = 1.0;
+/// How much taller than its own height over its horn's ground a neighbour or a ridge stands
+/// over ground under the horn's, for each horn's height that ground lies under it.
+const OVER_GROUND: f32 = 0.5;
+/// Over what depth of ground under the horn's, as shares of its height, a neighbour or a
+/// ridge turns from standing its whole gap over that ground to standing by its own profile:
+/// shallower ground keeps the gap, so the range's inner walls keep their sheer risers.
+const OVER_GROUND_FROM: (f32, f32) = (0.4, 0.9);
 /// Over how many metres either way a neighbour's or a ridge's foot eases into the ground
 /// under it, and its top under its most: a hard `max` left a crease where they met.
 const EASE_M: f32 = 40.0;
@@ -369,8 +376,20 @@ impl Massif {
         // how far it stands as a wall, the share where it stands out of that ground.
         // How far a shape `rise` metres over the horn's ground stands over the horns' ground
         // there, once its top is eased under its most; none when its foot is wholly under it.
-        let over = |rise: f32| {
-            let height = smooth_min(self.base + rise - ground, self.tall * LIFT_MOST, EASE_M);
+        // A neighbour or the ridge out to it, standing on its own over ground far under the
+        // horn's, rises over that ground in proportion, so it keeps its peaked profile where
+        // the cap would flatten it into a block; a spur, the horn's own arête, keeps the
+        // horn's ground (its crest stays the arête's, unnotched).
+        let over = |rise: f32, own: bool| {
+            let under = self.base - ground;
+            let over = if under > 0.0 && own {
+                let deep = smoothstep(OVER_GROUND_FROM.0, OVER_GROUND_FROM.1, under / self.tall);
+                let own = rise * (1.0 + OVER_GROUND * under / self.tall);
+                rise + under + (own - rise - under) * deep
+            } else {
+                rise + under
+            };
+            let height = smooth_min(over, self.tall * LIFT_MOST, EASE_M);
             Some(height - horns).filter(|&over| over > -EASE_M)
         };
         let stand = |over: f32, share: f32| {
@@ -387,7 +406,7 @@ impl Massif {
             let from_top = off_top.length();
             if n.top_near
                 && from_top < reach
-                && let Some(o) = over(n.top)
+                && let Some(o) = over(n.top, !n.spur)
             {
                 let (d, second, _) = faces_from(&n.faces[..3], off_top, reach);
                 let d = towered(d, second, from_top, reach, n.key);
@@ -410,7 +429,7 @@ impl Massif {
             let crest = (start + (end - start) * t)
                 * teeth(flat.dot(n.way) / (self.reach * TEETH_SPACING), t, n.key);
             if off < wide
-                && let Some(o) = over(crest)
+                && let Some(o) = over(crest, !n.spur)
             {
                 // Its sides eased out at their feet as a horn's are: the power alone bent
                 // sharpest there, so the faces, stepped by the slope above the foot, lifted the
@@ -512,6 +531,43 @@ mod tests {
                 .map(fine),
         );
         cells
+    }
+
+    #[test]
+    fn a_neighbour_over_ground_far_under_its_horn_falls_by_its_own_faces_not_a_wall() {
+        // Mountains round 37: the lake's right-hand block, a neighbour on the range's falling
+        // front over ground about a horn's height under its horn's, stood the horn's whole
+        // height over that ground out to the edge of its foot and ended there in a sheer face.
+        let range = Range::new(Mountains::START, Seed(1));
+        let (mut checked, step) = (0, 10.0);
+        for cell in lake_and_deep(&range, 40) {
+            for m in range.standing_round(cell, RADIUS) {
+                for n in m.tops.iter().filter(|n| !n.spur && n.top_near) {
+                    // Out from the neighbour's top along its way to past its foot, over ground
+                    // level with the horn's and over ground a horn's height under it.
+                    let steepest = |ground: f32| {
+                        let lift = |s: f32| m.lift(n.way * (n.out + s), ground, 0.0).0;
+                        let (mut most, mut s) = (0.0_f32, 0.0);
+                        while s < m.reach * TOP_REACH * 1.2 {
+                            most = most.max(lift(s) - lift(s + 5.0 * step));
+                            s += step;
+                        }
+                        most
+                    };
+                    let (level, under) = (steepest(m.base), steepest(m.base - m.tall));
+                    // It may stand as much taller over the low ground as the rule says, and so
+                    // fall as much more steeply, and no more.
+                    let grows = 1.0 + OVER_GROUND;
+                    assert!(
+                        under <= level * grows * 1.02 + 1.0,
+                        "a neighbour {:.0} m high falls {under:.0} m in 50 m over low ground, {level:.0} m over level ground",
+                        n.top
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 10, "{checked} neighbours checked");
     }
 
     #[test]
