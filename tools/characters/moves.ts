@@ -14,6 +14,9 @@
 //           in front of the hips it stands
 //   chain   how far a move's last pose is from the next one's first, and each blow's first
 //           and last pose from the guard's: hands, forearms, head and blade tip, metres
+//   spec    a clip with a spec: from and back to the guard; one that holds the guard
+//           ("held") within a blend of it throughout; a block's shield arm up in front and
+//           still while it is "raised"
 //
 // A held look hangs from its hand socket, or from the bone its file straps it to (a shield on the
 // forearm), as the game hangs it; bends laid over the clips (--bend) are applied as the game does.
@@ -28,6 +31,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
+import { PACE_FRAMES } from "./phases.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, matrix, mmul, place, posed, qinv, rot, sub, turn } from "./glb.ts";
 
@@ -63,6 +67,12 @@ const ARC_DEG = 35; // a blow's contact off ahead
 const AHEAD_M = 0.5; // a blow's contact this far in front of the hips at least
 const FACE_DEG = 35; // a raised shield's face off ahead
 const CHAIN_M = 0.1; // a pose jump between moves that a blend shows
+// A block's shield arm while raised (its spec's "raised"), from the hips: the left hand this
+// far ahead and up at least, the elbow ahead (at the guard it is beside the body), and still.
+const RAISED_M = 0.3;
+const RAISED_UP_M = 0.3;
+const ELBOW_M = 0.2;
+const STILL_M = 0.08;
 
 type Move = { name: string; clip: string; from: number; speed: number; done: number; active?: [number, number]; next?: string; hold?: number };
 
@@ -357,20 +367,19 @@ function arc(move: Move) {
   let fastest = { speed: -1, tip: [0, 0, 0] as V3, t: 0, hips: 0 };
   let first: V3 | undefined;
   let last: V3 = [0, 0, 0];
-  let prev: V3 | undefined;
   const [a, b] = move.active!;
-  for (let t = a - 1 / fps; t <= b + 1e-6; t += 1 / 120) {
+  const tipAt = (t: number) => sub(place(poseOf(shapes[0], clip, t)[at(sword.socket)], sword.tip), start);
+  // Its speed over a few frames either side, as phases.ts paces it: a frame's jump is no blow.
+  const h = PACE_FRAMES / 60;
+  for (let t = a; t <= b + 1e-6; t += 1 / 120) {
     const pose = poseOf(shapes[0], clip, t);
     const tip = sub(place(pose[at(sword.socket)], sword.tip), start);
-    if (prev && t >= a) {
-      const speed = len(sub(tip, prev)) * 120;
-      const across = sub(pose[node.thigh_l].t, pose[node.thigh_r].t);
-      const hips = (Math.atan2(-across[2], across[0]) * 180) / Math.PI;
-      if (speed > fastest.speed) fastest = { speed, tip, t, hips };
-      first ??= tip;
-      last = tip;
-    }
-    prev = tip;
+    const speed = len(sub(tipAt(Math.min(clip.end, t + h)), tipAt(Math.max(0, t - h)))) / (2 * h);
+    const across = sub(pose[node.thigh_l].t, pose[node.thigh_r].t);
+    const hips = (Math.atan2(-across[2], across[0]) * 180) / Math.PI;
+    if (speed > fastest.speed) fastest = { speed, tip, t, hips };
+    first ??= tip;
+    last = tip;
   }
   const bearing = (Math.atan2(fastest.tip[0], fastest.tip[2]) * 180) / Math.PI;
   const sweep = first && last[0] > first[0] ? "to the left" : "to the right";
@@ -416,12 +425,40 @@ for (const move of moves) {
   parts.push(`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`);
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
+  const blow = specs[move.clip.split("#")[0]];
   if (move.active) {
     const a = arc(move);
     parts.push(`contact ${a.bearing.toFixed(0)}° ${a.bearing > 0 ? "left" : "right"} of ahead, ${a.ahead.toFixed(2)} m ahead, sweeping ${a.sweep}, hips turned ${a.hips.toFixed(0)}°`);
-    const blow = specs[move.clip.split("#")[0]];
     if (blow) bad.push(...againstSpec(blow, a.first, a.last, a.bearing));
     if (Math.abs(a.bearing) > ARC_DEG || a.ahead < AHEAD_M) bad.push(`contact ${Math.abs(a.bearing).toFixed(0)}° ${a.bearing > 0 ? "left" : "right"} of ahead and ${a.ahead.toFixed(2)} m ahead at ${a.t.toFixed(2)} s (bar ${ARC_DEG}°, ${AHEAD_M} m)`);
+  }
+  if (blow?.held) {
+    // A clip that holds the guard stays within a blend of its pose throughout.
+    let drift = { m: 0, t: 0 };
+    for (let t = move.from; t <= move.done + 1e-6; t += 1 / fps) {
+      const m = gap(marks(clip, t), guardMarks);
+      if (m > drift.m) drift = { m, t };
+    }
+    parts.push(`drifts ${drift.m.toFixed(2)} m from the guard`);
+    if (drift.m > CHAIN_M) bad.push(`drifts ${drift.m.toFixed(2)} m from the guard pose at ${drift.t.toFixed(2)} s`);
+  }
+  if (blow?.raised) {
+    // A block's shield arm up in front of the body and still (the shield's own hang aside).
+    const [a, b] = blow.raised;
+    let low = { hand: Infinity, elbow: Infinity, up: Infinity };
+    let moved = 0;
+    const first = marks(clip, a)[0];
+    for (let t = a; t <= b + 1e-6; t += 1 / fps) {
+      const [hand, , elbow] = marks(clip, t);
+      low = { hand: Math.min(low.hand, hand[2]), elbow: Math.min(low.elbow, elbow[2]), up: Math.min(low.up, hand[1]) };
+      moved = Math.max(moved, len(sub(hand, first)));
+    }
+    parts.push(`raised ${a.toFixed(2)}-${b.toFixed(2)} s: left hand ${low.hand.toFixed(2)} m ahead and ${low.up.toFixed(2)} m up, elbow ${low.elbow.toFixed(2)} m ahead, moving ${moved.toFixed(2)} m`);
+    if (low.hand < RAISED_M || low.elbow < ELBOW_M || low.up < RAISED_UP_M)
+      bad.push(`shield arm not up in front while raised: hand ${low.hand.toFixed(2)} m ahead, ${low.up.toFixed(2)} m up, elbow ${low.elbow.toFixed(2)} m ahead (bars ${RAISED_M}, ${RAISED_UP_M}, ${ELBOW_M} m)`);
+    if (moved > STILL_M) bad.push(`shield hand moves ${moved.toFixed(2)} m while raised (bar ${STILL_M} m)`);
+  }
+  if (move.active || blow) {
     const startGap = gap(marks(clip, move.from), guardMarks);
     const endGap = gap(marks(clip, move.done), guardMarks);
     parts.push(`from guard ${startGap.toFixed(2)} m, back to guard ${endGap.toFixed(2)} m`);

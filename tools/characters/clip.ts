@@ -27,7 +27,7 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, stat
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { choose, keysFor, readSpec, writePhases, type Scored, type Spec } from "./clip_spec.ts";
+import { choose, keysFor, readSpec, speedFor, writePhases, type Scored, type Spec } from "./clip_spec.ts";
 import { Glb } from "./glb.ts";
 import { KIMODO, KIMODO_ENV, MODEL, kept } from "./motion.ts";
 import { measure } from "./phases.ts";
@@ -37,12 +37,16 @@ const HERE = join(ROOT, "tools", "characters");
 const BLENDER = join(ROOT, "tools", "blender", "run.sh");
 const BODY = join(HERE, "out", "base-male.glb");
 const GAME_CLIPS = join(ROOT, "assets", "models", "character", "fight.glb");
+// What the takes are scored holding: the sword alone, until the shield hangs on the forearm as
+// the game will (melee's round): on the hand socket the shield is not where it will sit, so
+// its depth in the body and a block's shield face are not judged yet.
+const HOLD = ["--hold", "socket.hand.R=assets/models/held/arming_sword.glb"];
 
 /** A take's clip name in the scored file, and its move's name in the scored set. */
 export const takeName = (clip: string, n: number) => `${clip}#${n}`;
 const moveName = (clip: string, n: number) => `${clip}_${n}`;
 
-export type Measured = { clip: string; take: number; end: number; active?: [number, number] };
+export type Measured = { clip: string; take: number; end: number; active?: [number, number]; hit?: number };
 
 /** The set moves.ts scores the takes by: each take a move, from its first frame to its last. */
 export function scoringSet(takes: Measured[]): string {
@@ -162,8 +166,13 @@ function main() {
   const measured: Measured[] = takes.map(({ s, n }) => {
     const p = measure(glb, takeName(s.name, n));
     if (!p) throw new Failed(`no ${takeName(s.name, n)} in ${rel(scored)}`);
-    if (s.blow.sweep && !p.active) more.get(s.name)!.set(n, ["never strikes: the tip is never fast and ahead"]);
-    return { clip: s.name, take: n, end: p.end, active: p.active };
+    const wrong: string[] = [];
+    if (s.blow.sweep && !p.active) wrong.push("never strikes: the tip is never fast and ahead");
+    if (p.jumps.length) wrong.push(`the tip jumps at ${p.jumps.map((j) => `${j.t.toFixed(2)} s (${j.speed.toFixed(0)} m/s)`).join(", ")}`);
+    more.get(s.name)!.set(n, wrong);
+    // Only a blow strikes: a guard's or a block's quick sword is no active span.
+    const active = s.blow.sweep ? p.active : undefined;
+    return { clip: s.name, take: n, end: p.end, active, hit: s.blow.sweep ? p.fastest?.t : s.blow.raised?.[0] };
   });
   say(true, "phases", measured.map((m) => `${takeName(m.clip, m.take)} ${m.active ? m.active.map((x) => x.toFixed(2)).join("-") : "none"} of ${m.end.toFixed(2)} s`).join(", "));
 
@@ -171,7 +180,7 @@ function main() {
   const scoring = join(OUT, "score.ron");
   const json = join(OUT, "score.json");
   writeFileSync(scoring, scoringSet(measured));
-  run("moves", process.execPath, [join(HERE, "moves.ts"), "--set", scoring, "--clips", scored, "--spec", LIST, "--guard", guards[0], "--also=", "--json", json], {}, [0, 1]);
+  run("moves", process.execPath, [join(HERE, "moves.ts"), "--set", scoring, "--clips", scored, "--spec", LIST, "--guard", guards[0], "--also=", ...HOLD, "--json", json], {}, [0, 1]);
   const rows: Row[] = JSON.parse(readFileSync(json, "utf8"));
   const chosen = specs.map((s) => {
     const all = scores(rows, s.name, more.get(s.name));
@@ -181,12 +190,33 @@ function main() {
   });
   for (const { s, pick } of chosen) say(pick.failures.length === 0, "chosen", pick.failures.length ? `${s.name}: no take passes; the nearest is take ${pick.take}` : `${s.name}: take ${pick.take}`);
 
-  // The scratch set: each chosen take as its blow's move, as the scored file names it.
+  // Each chosen take's playback speed, to meet its spec's timing.
+  const speeds = new Map<string, number>();
+  for (const { s, m } of chosen) {
+    if (!s.timing || m.hit === undefined) continue;
+    const t = speedFor(s.timing, m.hit, m.end);
+    speeds.set(s.name, t.speed);
+    const span = (x: [number, number]) => `${x[0]}-${x[1]}`;
+    say(t.ok, "timing", `${s.name} at speed ${t.speed.toFixed(2)}: hit ${t.hit.toFixed(2)} s (spec ${span(s.timing.hit)}), back on guard ${t.back.toFixed(2)} s after (spec ${span(s.timing.back)})`);
+  }
+
+  // The scratch set: each chosen take as its blow's move, as the scored file names it, with
+  // its chain; checked as a set, so a chain's poses meet.
   let scratch = EMPTY;
-  for (const { s, m } of chosen) scratch = writePhases(scratch, s.blow.move, { clip: takeName(s.name, m.take), from: 0, done: m.end, active: m.active });
-  writeFileSync(join(OUT, "moves.ron"), scratch);
-  say(true, "set", `${rel(join(OUT, "moves.ron"))} (moves.ts --set it --clips ${rel(scored)})`);
-  const passed = chosen.every((c) => c.pick.failures.length === 0);
+  const hold = (s: Spec) => (s.blow.raised ? (s.blow.raised[0] + s.blow.raised[1]) / 2 : undefined);
+  for (const { s, m } of chosen) {
+    const next = specs.some((o) => o.blow.move === s.blow.next) ? s.blow.next : undefined;
+    const phases = { clip: takeName(s.name, m.take), from: 0, done: m.end, active: m.active, speed: speeds.get(s.name), hold: hold(s), next };
+    scratch = writePhases(scratch, s.blow.move, phases);
+  }
+  const setFile = join(OUT, "moves.ron");
+  writeFileSync(setFile, scratch);
+  const checked = run("set", process.execPath, [join(HERE, "moves.ts"), "--set", setFile, "--clips", scored, "--spec", LIST, "--guard", guards[0], "--also=", ...HOLD], {}, [0, 1]);
+  const setBad = lines(checked, "✗ ").filter((l) => !/^✗ \d+ over the bars/.test(l));
+  const chains = [...checked.matchAll(/ into (\w+) ([\d.]+) m/g)].map((x) => `${x[1]} ${x[2]} m`);
+  const chained = chains.length ? `, chains into ${chains.join(", ")}` : "";
+  say(setBad.length === 0, "set", `${rel(setFile)}${chained}, ${setBad.length ? `${setBad.length} over (log)` : "every move within the bars"} (moves.ts --set it --clips ${rel(scored)})`);
+  const passed = chosen.every((c) => c.pick.failures.length === 0) && setBad.length === 0;
   if (values.into) {
     if (!passed) {
       say(false, "into", `not written: every clip needs a take that passes`);
@@ -203,7 +233,7 @@ function main() {
     blender("into", "export_character.py", [rel(BODY), rel(GAME_CLIPS), `--clips=${rel(figure)}`, `--list=${rel(LIST)}`]);
     const into = resolve(ROOT, values.into);
     let text = readFileSync(into, "utf8");
-    for (const { s, m } of chosen) text = writePhases(text, s.blow.move, { clip: s.name, from: 0, done: m.end, active: m.active });
+    for (const { s, m } of chosen) text = writePhases(text, s.blow.move, { clip: s.name, from: 0, done: m.end, active: m.active, speed: speeds.get(s.name), hold: hold(s) });
     writeFileSync(into, text);
     say(true, "into", `${chosen.map((c) => `${c.s.name} take ${c.pick.take}`).join(", ")} kept in ${rel(listDir)}; ${rel(GAME_CLIPS)} rebuilt; phases in ${rel(into)}`);
   }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { againstSpec, choose, readSpec, writePhases } from "./clip_spec.ts";
+import { againstSpec, choose, readSpec, speedFor, writePhases } from "./clip_spec.ts";
 
 const entry = {
   prompt: "A swordsman cuts.", seconds: 1.6, seed: 2, once: true,
@@ -69,6 +69,36 @@ test("phases are written into a move, its other fields and the file's comments k
   const block = writePhases(SET, "block", { clip: "Keyed_Block", from: 0, done: 1.5 });
   assert.match(block, /"block": \(clip: "Keyed_Block", from: 0\.00, speed: 1\.0, done: 1\.50, hold: 0\.8\)/);
   assert.match(block, /clip: "Fight_Slash", from: 0\.15/);
+});
+
+test("a take's playback speed meets its timing where one can, else its hit's", () => {
+  const light = { hit: [0.22, 0.32] as [number, number], back: [0.8, 1.1] as [number, number] };
+  // Hit 0.4 s into 1.6: speeds 1.25-1.82 put the hit in, 1.09-1.5 the back; between, 1.375.
+  const fits = speedFor(light, 0.4, 1.6);
+  assert.ok(fits.ok && Math.abs(fits.speed - 1.375) < 1e-9, `speed ${fits.speed}`);
+  assert.ok(fits.hit >= 0.22 && fits.hit <= 0.32 && fits.back >= 0.8 && fits.back <= 1.1);
+  // Hit 0.75 s in: a speed fast enough for the hit leaves too little back; the hit's is kept.
+  const late = speedFor(light, 0.75, 1.6);
+  assert.equal(late.ok, false);
+  assert.ok(late.hit >= 0.22 && late.hit <= 0.32 && late.back < 0.8);
+});
+
+test("a spec's chain, hold, raise and timing are read and checked", () => {
+  const spec = readSpec("x", { ...entry, blow: { move: "block", raised: [0.4, 0.8], next: "slash" }, timing: { hit: [0.2, 0.3], back: [0.3, 0.6] } });
+  assert.deepEqual(spec.blow.raised, [0.4, 0.8]);
+  assert.equal(spec.blow.next, "slash");
+  assert.deepEqual(spec.timing?.hit, [0.2, 0.3]);
+  assert.equal(readSpec("x", { ...entry, blow: { move: "guard", held: true } }).blow.held, true);
+  assert.throws(() => readSpec("x", { ...entry, blow: { move: "b", raised: [0.8, 0.4] } }), /raised/);
+  assert.throws(() => readSpec("x", { ...entry, blow: { move: "b", raised: [0.4, 2] } }), /raised/);
+  assert.throws(() => readSpec("x", { ...entry, timing: { hit: [0.3] } }), /timing/);
+});
+
+test("a move's speed, hold and chain are written with its phases", () => {
+  const out = writePhases(SET, "block", { clip: "Keyed_Block#1", from: 0, done: 1.4, speed: 1.8, hold: 0.6 });
+  assert.match(out, /"block": \(clip: "Keyed_Block#1", from: 0\.00, speed: 1\.80, done: 1\.40, hold: 0\.60\)/);
+  const added = writePhases(SET, "backhand", { clip: "K#0", from: 0, done: 1.5, speed: 2.5, next: "slash" });
+  assert.match(added, /"backhand": \(clip: "K#0", from: 0\.00, done: 1\.50, next: "slash", speed: 2\.50\),/);
 });
 
 test("a move the set lacks is added to its moves", () => {

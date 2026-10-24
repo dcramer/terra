@@ -6,6 +6,9 @@
 // (assets/data/moves/*.ron). Prints, a line a clip, the span its tip is more than --ahead
 // metres in front of the hips and moving faster than --speed m/s, its fastest moment in it and
 // where it is then; --trace prints every frame. `measure` is the same for a caller (clip.ts).
+// A strike is a sweep: its speed is the tip's over a few frames (PACE_FRAMES either side), and
+// it lasts STRIKE_S at least, so a tip that jumps for a frame or two (a pop in a made take) is
+// no strike but a jump, listed apart (`jumps`).
 //
 //   node tools/characters/phases.ts assets/models/character/fight.glb Fight_Slash Fight_Backhand
 //   node tools/characters/phases.ts <file.glb> <clip>… [--socket socket.hand.R] [--tip 0.83] [--speed 4] [--ahead 0.5] [--trace]
@@ -14,7 +17,16 @@
 
 import { Glb, posed, rot, type V3 } from "./glb.ts";
 
-export type Frame = { t: number; tip: V3; speed: number };
+/** A frame's tip; `speed` its move from the frame before, `pace` its speed over PACE_FRAMES
+ * either side, m/s. */
+export type Frame = { t: number; tip: V3; speed: number; pace: number };
+/** A strike's speed is the tip's over this many frames either side (at 60 a second). */
+export const PACE_FRAMES = 2;
+/** A strike lasts this long at least, seconds: a sweep, not a frame's jump. */
+export const STRIKE_S = 0.1;
+/** A frame's move is a jump when it is over JUMP_MPS and JUMP_TIMES the tip's pace. */
+export const JUMP_MPS = 10;
+export const JUMP_TIMES = 2;
 export type Phases = {
   clip: string;
   /** The clip's length, seconds. */
@@ -23,6 +35,8 @@ export type Phases = {
   /** The striking span through its fastest moment, seconds; none if it never strikes. */
   active?: [number, number];
   fastest?: Frame;
+  /** Frames whose tip jumps: much faster than the frames around it. */
+  jumps: Frame[];
 };
 export type Options = { socket?: string; tip?: number; speed?: number; ahead?: number };
 
@@ -38,25 +52,43 @@ export function measure(glb: Glb, name: string, o: Options = {}): Phases | undef
   const end = clip.end;
   const start = posed(glb, clip, 0)[hips].t;
   const step = 1 / 60;
-  const frames: Frame[] = [];
+  const tips: { t: number; tip: V3 }[] = [];
   for (let t = 0; t <= end + 1e-6; t += step) {
     const hand = posed(glb, clip, t)[sock];
     const out = rot(hand.r, [0, tipM * hand.s[1], 0]);
-    const tip = out.map((x, j) => x + hand.t[j] - start[j]) as V3;
-    const prev = frames.at(-1);
-    const moved = prev ? Math.hypot(...tip.map((x, j) => x - prev.tip[j])) : 0;
-    frames.push({ t, tip, speed: moved / step });
+    tips.push({ t, tip: out.map((x, j) => x + hand.t[j] - start[j]) as V3 });
   }
-  const strikes = (i: number) => frames[i].tip[2] > reach && frames[i].speed > fast;
-  const striking = frames.filter((_, i) => strikes(i));
-  if (striking.length === 0) return { clip: name, end, frames };
-  // The one sweep through the fastest moment, not every quick frame after it.
-  const fastest = striking.reduce((a, b) => (b.speed > a.speed ? b : a));
-  let from = frames.indexOf(fastest);
-  let to = from;
-  while (from > 0 && strikes(from - 1)) from--;
-  while (to < frames.length - 1 && strikes(to + 1)) to++;
-  return { clip: name, end, frames, active: [frames[from].t, frames[to].t], fastest };
+  return { clip: name, end, ...strike(paced(tips, step), { speed: fast, ahead: reach }) };
+}
+
+const dist = (a: V3, b: V3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+/** Each tip's speed from the frame before, and its pace over PACE_FRAMES frames either side. */
+export function paced(tips: { t: number; tip: V3 }[], step: number): Frame[] {
+  return tips.map(({ t, tip }, i) => {
+    const [a, b] = [Math.max(0, i - PACE_FRAMES), Math.min(tips.length - 1, i + PACE_FRAMES)];
+    const pace = b > a ? dist(tips[b].tip, tips[a].tip) / ((b - a) * step) : 0;
+    return { t, tip, speed: i > 0 ? dist(tip, tips[i - 1].tip) / step : 0, pace };
+  });
+}
+
+/** The striking span of `frames`: of the sweeps lasting STRIKE_S at least, their tip ahead and
+ * at pace, the one through the fastest moment; and the frames whose tip jumps. */
+export function strike(frames: Frame[], o: { speed: number; ahead: number }): Omit<Phases, "clip" | "end"> {
+  const jumps = frames.filter((f) => f.speed > JUMP_MPS && f.speed > JUMP_TIMES * f.pace);
+  const strikes = (f: Frame) => f.tip[2] > o.ahead && f.pace > o.speed;
+  const runs: [number, number][] = [];
+  for (let i = 0; i < frames.length; i++) {
+    if (!strikes(frames[i])) continue;
+    let j = i;
+    while (j + 1 < frames.length && strikes(frames[j + 1])) j++;
+    if (frames[j].t - frames[i].t >= STRIKE_S - 1e-6) runs.push([i, j]);
+    i = j;
+  }
+  if (runs.length === 0) return { frames, jumps };
+  const top = ([a, b]: [number, number]) => frames.slice(a, b + 1).reduce((x, y) => (y.pace > x.pace ? y : x));
+  const best = runs.reduce((a, b) => (top(b).pace > top(a).pace ? b : a));
+  return { frames, active: [frames[best[0]].t, frames[best[1]].t], fastest: top(best), jumps };
 }
 
 function main() {
@@ -80,14 +112,14 @@ function main() {
       console.log(`${name}: no such clip in ${file}`);
       continue;
     }
-    if (trace) for (const fr of p.frames) console.log(`${f(fr.t)} tip ${fr.tip.map(f).join(" ")} speed ${f(fr.speed)} m/s`);
+    if (trace) for (const fr of p.frames) console.log(`${f(fr.t)} tip ${fr.tip.map(f).join(" ")} speed ${f(fr.speed)} m/s, pace ${f(fr.pace)} m/s`);
     if (!p.active || !p.fastest) {
       console.log(`${name} (${f(p.end)} s): the tip never moves faster than ${o.speed} m/s more than ${o.ahead} m ahead`);
       continue;
     }
     const [left, up, ahead] = p.fastest.tip;
     console.log(
-      `${name} (${f(p.end)} s): striking ${f(p.active[0])}-${f(p.active[1])} s; fastest ${f(p.fastest.speed)} m/s at ${f(p.fastest.t)} s, ${f(ahead)} m ahead, ${f(up)} m up, ${f(left)} m left`,
+      `${name} (${f(p.end)} s): striking ${f(p.active[0])}-${f(p.active[1])} s; fastest ${f(p.fastest.pace)} m/s at ${f(p.fastest.t)} s, ${f(ahead)} m ahead, ${f(up)} m up, ${f(left)} m left`,
     );
   }
 }

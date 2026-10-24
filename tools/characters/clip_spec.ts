@@ -15,7 +15,14 @@
 //          the shield's face), for a shield move
 //   blow   {"move": its name in the move set, "sweep": "right-to-left" | "left-to-right" |
 //          "overhead", "contact": degrees from ahead the blade crosses at its fastest
-//          (+ left)}; a block has a move and no sweep
+//          (+ left), "next": the move it chains into, checked in the scratch set; "held":
+//          true for a clip that holds the guard (it stays within a blend of the guard pose
+//          throughout); "raised": [from, to] seconds for a block, the span its shield arm is
+//          up in front and still}; a block or a guard has a move and no sweep
+//   timing {"hit": [least, most], "back": [least, most]}: seconds the move should take, at
+//          its playback speed, from its start to its hit (a blow's fastest frame, a block's
+//          raise) and from there back on guard; the speed the scratch set plays the take at
+//          is chosen to meet them (`speedFor`), so they can be tuned without a new take
 //
 // Node 22.18 or later; no dependencies.
 
@@ -23,7 +30,9 @@ export type V3 = [number, number, number];
 export type Key = { at: number; grip: V3; blade?: V3; back?: V3; yaw?: number };
 export const SWEEPS = ["right-to-left", "left-to-right", "overhead"] as const;
 export type Sweep = (typeof SWEEPS)[number];
-export type Blow = { move: string; sweep?: Sweep; contact?: number };
+export type Blow = { move: string; sweep?: Sweep; contact?: number; next?: string; held?: boolean; raised?: [number, number] };
+export type Span = [number, number];
+export type Timing = { hit: Span; back: Span };
 export type Spec = {
   name: string;
   prompt: string;
@@ -34,6 +43,7 @@ export type Spec = {
   hand: Key[];
   left: Key[];
   blow: Blow;
+  timing?: Timing;
 };
 
 /** A blow travels at least this far across the body, or down for an overhead, over its
@@ -68,10 +78,15 @@ export function readSpec(name: string, entry: Record<string, unknown>): Spec {
       return { at, grip: k.grip as V3, blade: k.blade as V3 | undefined, back: k.back as V3 | undefined, yaw: k.yaw as number | undefined };
     });
   };
-  const blow = entry.blow as { move?: unknown; sweep?: unknown; contact?: unknown } | undefined;
+  const blow = entry.blow as { move?: unknown; sweep?: unknown; contact?: unknown; next?: unknown; held?: unknown; raised?: unknown } | undefined;
   if (!blow || typeof blow.move !== "string") wrong('no blow: {"move": its name in the move set, ...}');
   if (blow.sweep !== undefined && !SWEEPS.includes(blow.sweep as Sweep)) wrong(`sweep ${blow.sweep}: one of ${SWEEPS.join(", ")}`);
   if (blow.contact !== undefined && !(typeof blow.contact === "number" && Math.abs(blow.contact) <= 90)) wrong("contact is degrees from ahead, -90 to 90");
+  if (blow.next !== undefined && typeof blow.next !== "string") wrong("next is the name of the move it chains into");
+  const span = (v: unknown, inside: number) => Array.isArray(v) && v.length === 2 && v.every((x) => typeof x === "number" && x >= 0 && x <= inside) && v[0] < v[1];
+  if (blow.raised !== undefined && !span(blow.raised, seconds)) wrong("raised is [from, to] seconds inside the clip");
+  const timing = entry.timing as Record<string, unknown> | undefined;
+  if (timing !== undefined && !(span(timing.hit, 10) && span(timing.back, 10))) wrong('timing is {"hit": [least, most], "back": [least, most]} in seconds');
   return {
     name,
     prompt: entry.prompt as string,
@@ -81,8 +96,29 @@ export function readSpec(name: string, entry: Record<string, unknown>): Spec {
     guard: { clip: guard.clip as string, frame: guard.frame as number },
     hand: keys("hand"),
     left: keys("left"),
-    blow: { move: blow.move as string, sweep: blow.sweep as Sweep | undefined, contact: blow.contact as number | undefined },
+    blow: {
+      move: blow.move as string,
+      sweep: blow.sweep as Sweep | undefined,
+      contact: blow.contact as number | undefined,
+      next: blow.next as string | undefined,
+      held: blow.held === true,
+      raised: blow.raised as Span | undefined,
+    },
+    timing: timing as Timing | undefined,
   };
+}
+
+/** The playback speed that has a take, its hit `hit` seconds in and its end `end`, take its
+ * spec's timing: within both its spans if a speed can, else its hit's (the back then off). */
+export function speedFor(timing: Timing, hit: number, end: number) {
+  const within = (x: number, [a, b]: Span) => x >= a - 1e-6 && x <= b + 1e-6;
+  // Speeds that bring the hit, and the rest of the take, inside their spans.
+  const [h0, h1] = [hit / timing.hit[1], hit / timing.hit[0]];
+  const [b0, b1] = [(end - hit) / timing.back[1], (end - hit) / timing.back[0]];
+  const [lo, hi] = [Math.max(h0, b0), Math.min(h1, b1)];
+  const speed = lo <= hi ? (lo + hi) / 2 : (h0 + h1) / 2;
+  const at = { hit: hit / speed, back: (end - hit) / speed };
+  return { speed, ...at, ok: within(at.hit, timing.hit) && within(at.back, timing.back) };
 }
 
 /** What `kimodo_keys.py` is given for a spec. */
@@ -125,12 +161,19 @@ const round2 = (x: number) => (Math.round(x * 100) / 100).toFixed(2);
 /** A move set's text with one move's clip and phases written in, the rest of the file (its
  * comments, the other moves) as it was: each field replaced where the move has it, added after
  * its clip where not; a move the set lacks is added at the end of its moves. */
-export function writePhases(ron: string, move: string, phases: { clip: string; from: number; done: number; active?: [number, number] }): string {
+export function writePhases(
+  ron: string,
+  move: string,
+  phases: { clip: string; from: number; done: number; active?: [number, number]; speed?: number; hold?: number; next?: string },
+): string {
   const fields: [string, string][] = [
     ["clip", `"${phases.clip}"`],
     ["from", round2(phases.from)],
     ...(phases.active ? [["active", `(${round2(phases.active[0])}, ${round2(phases.active[1])})`] as [string, string]] : []),
     ["done", round2(phases.done)],
+    ...(phases.hold !== undefined ? [["hold", round2(phases.hold)] as [string, string]] : []),
+    ...(phases.next !== undefined ? [["next", `"${phases.next}"`] as [string, string]] : []),
+    ...(phases.speed !== undefined ? [["speed", round2(phases.speed)] as [string, string]] : []),
   ];
   const head = new RegExp(`"${move.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\s*:\\s*\\(`);
   const found = head.exec(ron);
@@ -139,7 +182,8 @@ export function writePhases(ron: string, move: string, phases: { clip: string; f
     if (!moves) throw new Error("no moves: { ... } in the set");
     const close = matching(ron, moves.index + moves[0].length - 1, "{", "}");
     const before = ron.slice(0, close).replace(/\s*$/, "");
-    const entry = `\n        "${move}": (${fields.map(([k, v]) => `${k}: ${v}`).join(", ")}, speed: 1.0),`;
+    const all = phases.speed === undefined ? [...fields, ["speed", "1.0"]] : fields;
+    const entry = `\n        "${move}": (${all.map(([k, v]) => `${k}: ${v}`).join(", ")}),`;
     return before + (before.endsWith(",") || before.endsWith("{") ? "" : ",") + entry + "\n    " + ron.slice(close);
   }
   const open = found.index + found[0].length - 1;
