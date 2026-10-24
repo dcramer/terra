@@ -9,6 +9,8 @@
 //! directions are in the start's terms, metres east, up and south of it, as `--at`, `--cine`
 //! and the staged log take them, so a camera can be set on the fight from the record (or
 //! from the player's feet on the first frame, with no start); the first line gives up too.
+//! The camera drawing the frame is in it as well (where it is, which way it looks and its
+//! up, its vertical field of view and aspect), so a tool measures how the fight is framed.
 //! The shown places, between ticks, as a person sees them.
 
 use super::{Fighter, Set};
@@ -21,6 +23,7 @@ use std::io::{BufWriter, Write};
 use terra_walker::bodies::Body;
 use terra_walker::character;
 use terra_walker::{Motion, Player, Stamina};
+use terra_world::planet::MainCamera;
 use terra_world::shell::{Options, ScriptFrame};
 use terra_world::start::Start;
 
@@ -105,6 +108,7 @@ fn write(
     children: Query<&Children>,
     names: Query<&Name>,
     start: Option<Res<Start>>,
+    camera: Option<Single<(&GlobalTransform, &Projection), With<MainCamera>>>,
 ) {
     let Some(frame) = frame.filter(|frame| frame.is_changed()) else {
         return;
@@ -192,6 +196,15 @@ fn write(
         "asked": std::mem::take(&mut said.asked),
         "contacts": std::mem::take(&mut said.contacts),
     });
+    if let Some((place, Projection::Perspective(lens))) = camera.as_deref().map(|c| (c.0, c.1)) {
+        line["camera"] = json!({
+            "at": local(place.translation()),
+            "looking": mm(terms.transform_vector3(*place.forward())),
+            "up": mm(terms.transform_vector3(*place.up())),
+            "vfov": r(lens.fov.to_degrees()),
+            "aspect": r(lens.aspect_ratio),
+        });
+    }
     if first {
         line["up"] = json!(mm(terms.transform_vector3(up)));
     }

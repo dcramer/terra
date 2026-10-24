@@ -1,0 +1,27 @@
+// How the player's camera frames a fight (crates/terra_walker/src/camera/framing.rs). The
+// walk's camera, behind and over the right shoulder, is the camera's own (D274, D285); with a
+// weapon drawn it eases to this, Enshrouded's framing (D180, measured in
+// tools/combat/refs/enshrouded.json, research/2026-10-24-enshrouded-combat-measured.md), and
+// back on sheathing it.
+(
+    fight: (
+        // The player's body, feet to crown, and how much of the frame's height it fills: the
+        // middle of Enshrouded's 0.20 to 0.27. The boom is as long as that takes at the
+        // field of view of the moment (7.4 m, 4.1 bodies, at the default 55 degrees).
+        body_m: 1.8,
+        share: 0.235,
+        // The boom hangs from over the head, so the player is centred, low in the frame: no
+        // shoulder offset in a fight.
+        rise_m: 0.15,
+        // Locked on, the camera stands behind the player on the line to the target and looks
+        // down by this much, at a point so far from the player's head to the target's (0 the
+        // player, 1 the target), so both are in the frame (as action games' lock-on cameras do).
+        locked_pitch_deg: -14.0,
+        locked_focus: 0.3,
+        // How long the camera takes to come to the fight's framing on drawing, to go back to
+        // the walk's on sheathing, and to come to the lock and leave it, in seconds.
+        ease_in_s: 0.5,
+        ease_out_s: 0.6,
+        lock_s: 0.35,
+    ),
+)

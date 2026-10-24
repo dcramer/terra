@@ -1,6 +1,8 @@
 //! The player's view: looking about with the mouse and keys, the mouse taken for the
 //! game and given back, and the camera behind and a little to the side of the figure,
-//! zoomed with the wheel.
+//! zoomed with the wheel; with a weapon drawn, framing the fight instead (`framing`, D180).
+
+pub mod framing;
 
 use crate::controls::{self, Action, Controls};
 use crate::walker::Hands;
@@ -10,6 +12,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
+use framing::{FightView, Framing};
 use terra_bases::{self as build, Site};
 use terra_core::Solid;
 use terra_world::parting::CameraSubject;
@@ -29,6 +32,8 @@ const FURTHEST_M: f32 = 9.0;
 const ZOOM_NOTCH_M: f32 = 0.6;
 const ZOOM_KEY_M_S: f32 = 5.0;
 const HEAD_M: f32 = 1.62;
+/// Where the walk's boom hangs from: so far right of the head, and up.
+const SHOULDER_M: [f32; 2] = [0.6, 0.25];
 /// The figure's middle, which the camera keeps clear of foliage.
 const CHEST_M: f32 = 1.2;
 /// How round the lens is: it never comes nearer anything solid than this, a trunk included
@@ -81,12 +86,14 @@ struct Arm {
 }
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Zoom>().add_systems(
-        PostUpdate,
-        follow
-            .before(TransformSystems::Propagate)
-            .before(terra_world::remote::CameraHold),
-    );
+    app.init_resource::<Zoom>()
+        .init_resource::<Framing>()
+        .add_systems(
+            PostUpdate,
+            follow
+                .before(TransformSystems::Propagate)
+                .before(terra_world::remote::CameraHold),
+        );
 }
 
 /// Takes the mouse for the game, or gives it back.
@@ -183,7 +190,8 @@ fn eye(player: &Transform, view: &View) -> (Vec3, Vec3) {
 /// from that the boom is pulled by what is broad and in the way; where the lens was last frame
 /// and how far it had slid aside from the boom's end round something thin; and how long the
 /// figure has been hidden from the boom's end, or in sight from it, how far in the boom has
-/// come to see past what hides it, and whether it is coming in.
+/// come to see past what hides it, and whether it is coming in; and how far it has come to a
+/// fight's framing.
 #[derive(Resource)]
 pub struct Zoom {
     now: f32,
@@ -195,6 +203,7 @@ pub struct Zoom {
     seen_s: f32,
     unhide: f32,
     unhiding: bool,
+    framing: framing::Eased,
 }
 
 impl Default for Zoom {
@@ -209,6 +218,7 @@ impl Default for Zoom {
             seen_s: 0.0,
             unhide: 0.0,
             unhiding: false,
+            framing: framing::Eased::default(),
         }
     }
 }
@@ -259,10 +269,13 @@ pub fn zoom(
 /// a moment has the boom come slowly in front of it. Shrubs, young trees and leaves are not
 /// solid; they fade instead (`terra_world::parting`). Where the boom would go into the ground
 /// behind, as looking up, the lens slides up over the ground rather than in toward the
-/// figure, and it keeps out of the figure itself.
+/// figure, and it keeps out of the figure itself. With a weapon drawn the boom hangs and
+/// looks as `framing` has it, and all of that holds the same.
 pub fn follow(
     time: Res<Time>,
-    player: Single<(&Transform, &View), (IsLocalPlayer, Without<MainCamera>)>,
+    framing: Res<Framing>,
+    player: Single<(&Transform, &View, Option<&FightView>), (IsLocalPlayer, Without<MainCamera>)>,
+    others: Query<&Transform, Without<MainCamera>>,
     mut zoom: ResMut<Zoom>,
     start: Res<Start>,
     site: Option<Res<Site>>,
@@ -270,9 +283,9 @@ pub fn follow(
     planet: Res<Planet>,
     options: Res<Options>,
     obstacles: Option<Res<terra_world::flora::Obstacles>>,
-    camera: Single<(&mut Transform, &mut CameraSubject), With<MainCamera>>,
+    camera: Single<(&mut Transform, &mut CameraSubject, Option<&Projection>), With<MainCamera>>,
 ) {
-    let (mut camera, mut subject) = camera.into_inner();
+    let (mut camera, mut subject, lens) = camera.into_inner();
     // A fixed camera, for taking pictures.
     if let Some((from, toward)) = options.vantage {
         subject.0 = None;
@@ -300,10 +313,15 @@ pub fn follow(
         *camera = Transform::from_translation(from).looking_at(toward, from.normalize());
         return;
     }
-    let (player, view) = *player;
+    let (player, view, fight) = *player;
     let (head, looking) = eye(player, view);
     let up = head.normalize();
-    let right = view.forward.cross(up);
+    let dt = time.delta_secs();
+    let target = fight.and_then(|fight| others.get(fight.target?).ok());
+    let frame = framing::framed(
+        &mut zoom, &framing, dt, view, head, looking, fight, target, lens,
+    );
+    let looking = frame.looking;
     let obstacles = obstacles.as_deref();
     let broad = |solid: &Solid| !thin(solid);
     // How far a sphere of `radius` goes from `from` along `along` within `length` before
@@ -345,18 +363,11 @@ pub fn follow(
             (obstacles.clearance_where(at, radius + 0.02, broad) - 0.02).clamp(0.05, radius)
         })
     };
-    // The boom over the right shoulder. Over the shoulder, unless something is in the way
-    // there, as a narrow pit's wall.
-    let shoulder = right * 0.6 + up * 0.25;
-    let pivot = head
-        + shoulder.normalize()
-            * swept(
-                head,
-                shoulder.normalize(),
-                shoulder.length(),
-                room(head, PROBE_M * 0.5),
-            );
-    let zoomed_m = zoom.now;
+    // The boom hangs over the right shoulder, or for a fight over the head, unless something
+    // is in the way there, as a narrow pit's wall.
+    let (shoulder, zoomed_m) = (frame.offset.normalize_or(up), frame.boom_m);
+    let room_m = room(head, PROBE_M * 0.5);
+    let pivot = head + shoulder * swept(head, shoulder, frame.offset.length(), room_m);
     let arm = {
         // Where the boom would put the lens. Where the ground behind is in the way, as
         // looking up, the boom shortens over it, down to GROUND_BOOM_M, and then the lens
@@ -382,7 +393,6 @@ pub fn follow(
             soft,
         }
     };
-    let dt = time.delta_secs();
     // How far in it is pulled eases to where the wider sweep stops it, quickly in and slowly
     // out, but never lets the lens past where the narrow one does.
     let pull = arm.length - arm.soft;
@@ -601,6 +611,7 @@ mod tests {
         world.insert_resource(Start(Transform::from_translation(feet)));
         world.insert_resource(planet.clone());
         world.init_resource::<Zoom>();
+        world.init_resource::<Framing>();
         world.init_resource::<Time>();
         world.spawn((
             Player,
@@ -651,6 +662,46 @@ mod tests {
         let up = feet.normalize();
         let rise = (at - feet).dot(up).clamp(0.0, HEAD_M + 0.25);
         at.distance(feet + up * rise)
+    }
+
+    #[test]
+    fn drawn_the_camera_frames_the_fight_and_sheathed_it_goes_back() {
+        // A player with a weapon drawn, looking a little down, at 55 degrees.
+        let (mut world, feet) = scene(-0.2);
+        let fov = 55_f32.to_radians();
+        let mut camera = world.query_filtered::<Entity, With<MainCamera>>();
+        let camera = camera.single(&world).unwrap();
+        let lens = PerspectiveProjection { fov, ..default() };
+        world
+            .entity_mut(camera)
+            .insert(Projection::Perspective(lens));
+        let mut player = world.query_filtered::<Entity, With<Player>>();
+        let player = player.single(&world).unwrap();
+        let walk = frame(&mut world, 1.0 / 60.0);
+        world.entity_mut(player).insert(FightView::default());
+        let drawn = (0..60)
+            .map(|_| frame(&mut world, 1.0 / 60.0))
+            .last()
+            .unwrap();
+        let up = feet.normalize();
+        let body = world.resource::<Framing>().fight.body_m;
+        let filled = framing::share(drawn.translation, *drawn.forward(), up, fov, feet, body);
+        assert!(
+            (0.20..=0.27).contains(&filled),
+            "the player fills {filled} of the frame"
+        );
+        let middle = feet + up * body * 0.5;
+        let across = (middle - drawn.translation).dot(*drawn.right()).abs();
+        assert!(across < 0.05, "the player is {across} m off the middle");
+        world.entity_mut(player).remove::<FightView>();
+        let back = (0..60)
+            .map(|_| frame(&mut world, 1.0 / 60.0))
+            .last()
+            .unwrap();
+        assert!(
+            back.translation.distance(walk.translation) < 1e-3,
+            "{back:?} {walk:?}"
+        );
     }
 
     #[test]

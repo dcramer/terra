@@ -20,14 +20,16 @@
 // ImageMagick. Node 22.18 or later; no dependencies.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { ROOT, buildOffscreen, imageMagick, offscreenPath, offscreenRun } from "./client.ts";
-import { type Check, type Frame, check, framed, read, readMoves, same, say } from "./duel/checks.ts";
+import { type Check, type Frame, check, framed, read, readMoves, same, say, share } from "./duel/checks.ts";
 import { COLUMNS, moments } from "./duel/moments.ts";
 
 const MOVES = resolve(ROOT, "assets/data/moves/sword_and_shield.ron");
+/// The player's share of the frame's height the game's camera is held to (D180).
+const SHARE: number[] = JSON.parse(readFileSync(resolve(ROOT, "tools/combat/refs/enshrouded.json"), "utf8")).targets.camera_player_share;
 const SCRIPT = "duels/yard.ron";
 /// The frames filmed, every second one kept for 30 a second: from before the draw to past
 /// the script's end (frame 1274 in the first run).
@@ -104,6 +106,9 @@ function report(records: { name: string; frames: Frame[] }[], keep: string | und
   if (records.length > 1) lines.push(same(records));
   lines.push(...check(records[0].frames, existsSync(MOVES) ? readMoves(MOVES) : undefined));
   lines.push(framed(records[0].frames, CENTRE, FRAMED_M));
+  // The game's own camera, the player's run (or a record named for it).
+  const player = records.find((each) => each.name === "player" || each.name.endsWith("player.jsonl"));
+  if (player) lines.push(share(player.frames, SHARE));
   const said = lines.map(say);
   for (const line of said) console.log(`duel: ${line}`);
   if (keep) writeFileSync(keep, said.join("\n") + "\n");

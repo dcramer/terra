@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Contact, type Fighter, type Frame, type Moves, chainGaps, framed, hitStop, latency, misses, overlap, same, sliding } from "./checks.ts";
+import { type Contact, type Fighter, type Frame, type Moves, chainGaps, framed, hitStop, latency, misses, overlap, same, share, sliding } from "./checks.ts";
 import { moments } from "./moments.ts";
 
 const MOVES: Moves = { buffer_s: 0.35, hit_stop: new Map([["slash", 0.1], ["backhand", 0.1], ["partner_slash", 0.1]]) };
@@ -188,4 +188,21 @@ test("the contact sheet shows a blow's start, its landing and its recovery", () 
 test("a fight away from where the cameras look is found", () => {
   assert.ok(framed(fight(), [-0.65, 1, 0], 1.5).ok);
   assert.ok(!framed(fight(), [5, 1, 5], 1.5).ok);
+});
+
+test("the player's camera framing: the share of the frame's height, centred, the partner in view", () => {
+  // Behind the player (x = 0), looking west along the line to the partner (x = -1.3), at
+  // 55 degrees: the body's 1.8 m fills 1.8 / (2 d tan 27.5) of the frame's height.
+  const filmed = (back: number, aside = 0, looking = [-1, 0, 0]) =>
+    fight().map((frame) => ({ ...frame, camera: { at: [back, 0.9, aside], looking, up: [0, 1, 0], vfov: 55, aspect: 16 / 9 } }));
+  const at = (share: number) => 1.8 / (2 * share * Math.tan((27.5 * Math.PI) / 180));
+  const held = share(filmed(at(0.235)), [0.2, 0.27]);
+  assert.ok(held.ok, held.line);
+  assert.match(held.line, /0\.235 of the frame's height/);
+  assert.ok(!share(filmed(at(0.38)), [0.2, 0.27]).ok, "too near");
+  assert.ok(!share(filmed(4.6, 0.6), [0.2, 0.27]).ok, "over the shoulder, too near");
+  assert.ok(!share(filmed(at(0.235), 4.0), [0.2, 0.27]).ok, "off to the side");
+  const away = share(filmed(at(0.235), 0, [-0.6, 0, -0.8]), [0.2, 0.27]);
+  assert.ok(!away.ok, away.line);
+  assert.ok(!share(fight(), [0.2, 0.27]).ok, "no camera recorded");
 });

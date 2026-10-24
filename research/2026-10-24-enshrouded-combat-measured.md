@@ -54,9 +54,9 @@ Ours is `assets/data/moves/sword_and_shield.ron` in real seconds ((clip time −
 | Hit-stop on a landed blow | none; a 3 to 4 frame flash and a camera kick | light 0.10 s, finisher 0.13 s, heavy 0.20 s (6, 8 and 12 frames) | **outside**, medium confidence (one hit, on a dummy) |
 | Spacing while trading | 0.5 to 1.0 body heights between centres | warp stops at 1.45 m (0.8 body heights) | inside, low confidence |
 | Enemy telegraph (overhead) | 0.8 s | partner heavy 0.84 s, partner slash 0.93 s | inside |
-| Player's share of frame height | 0.20 to 0.27 | about 0.38 (4.6 m back, 55° vertical) | **outside**: ours frames the player 1.4 to 1.9 times larger |
-| Camera distance | 3.2 to 4.8 body heights (at 55° to 60°) | 2.6 body heights | **outside**: closer |
-| Shoulder offset in a fight | none; player centred | 0.6 m right of the head | **outside** |
+| Player's share of frame height | 0.20 to 0.27 | drawn, 0.234 on the yard's duel (D451); was 0.36 (4.6 m back, 55° vertical) | inside |
+| Camera distance | 3.2 to 4.8 body heights (at 55° to 60°) | drawn, 4.1 body heights at 55° (D451); was 2.6 | inside |
+| Shoulder offset in a fight | none; player centred | drawn, none: over the head, centred (D451); was 0.6 m right | inside |
 | Block raise | none in Update 8's official footage | 0.28 s | not known |
 
 ## Not measured

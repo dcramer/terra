@@ -26,6 +26,7 @@ use terra_motion::moves::{self, MoveSet, Ran};
 use terra_motion::stamina;
 use terra_survival::held::InHand;
 use terra_survival::inventory::HandsFull;
+use terra_walker::camera::framing::FightView;
 use terra_walker::character;
 use terra_walker::controls::Action;
 use terra_walker::figure::{Act, Acting, Grip, Moves};
@@ -116,7 +117,7 @@ pub fn plugin(app: &mut App) {
                 .chain()
                 .before(Sim::Act),
         )
-        .add_systems(Update, contact::fade);
+        .add_systems(Update, (contact::fade, view));
     hud::plugin(app);
     record::plugin(app);
     script::plugin(app);
@@ -159,7 +160,7 @@ fn draw(
             stance.steer = Steer::default();
             commands
                 .entity(player)
-                .remove::<(Drawn, Fighter, HandsFull)>()
+                .remove::<(Drawn, Fighter, HandsFull, FightView)>()
                 .insert(Acting::default());
             info!("Melee: sheathed");
             continue;
@@ -188,6 +189,7 @@ fn draw(
             Fighter::new(Some(hand)),
             Acting::default(),
             HandsFull,
+            FightView::default(),
         ));
         info!("Melee: drawn");
         let near = partners
@@ -196,6 +198,13 @@ fn draw(
         if !near {
             partner::bring(&mut commands, at.translation, motion.facing);
         }
+    }
+}
+
+/// The camera frames the fight, keeping what the player is locked on to in view (D180).
+fn view(mut players: Query<(&Drawn, &mut FightView), Changed<Drawn>>) {
+    for (drawn, mut view) in &mut players {
+        view.target = drawn.lock;
     }
 }
 

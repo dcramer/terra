@@ -25,7 +25,10 @@ export type Fighter = {
 };
 export type Asked = { move: string; got: string };
 export type Contact = { by: string; on: string; move: string; taken: string; stop_s: number };
-export type Frame = { frame: number; step: string | null; asked: Asked[]; contacts: Contact[]; fighters: Fighter[] };
+/// The camera drawing the frame: where it is, which way it looks and its up, in the start's
+/// terms; its vertical field of view in degrees and its width over its height.
+export type Lens = { at: number[]; looking: number[]; up: number[]; vfov: number; aspect: number };
+export type Frame = { frame: number; step: string | null; asked: Asked[]; contacts: Contact[]; fighters: Fighter[]; camera?: Lens; up?: number[] };
 export type Moves = { buffer_s: number; hit_stop: Map<string, number> };
 export type Check = { name: string; ok: boolean; line: string };
 
@@ -320,6 +323,56 @@ export function framed(frames: Frame[], centre: number[], within: number): Check
   const ok = off.length > 0 && mean <= within && (worst?.by ?? 0) <= 2 * within;
   const line = `the fighters' middle ${mean.toFixed(1)} m from where the cameras look on average, ${(worst?.by ?? 0).toFixed(1)} m at most (frame ${worst?.frame ?? "none"}; bars ${within} and ${2 * within} m)`;
   return { name: "framed", ok, line };
+}
+
+/// The player's body, feet to crown, as the walker's figure stands (`assets/data/camera.ron`).
+export const BODY_M = 1.8;
+/// How far off the middle of the frame, as a share of its width, still reads as centred.
+export const CENTRED = 0.05;
+/// So many of the frames must show the partner whole.
+export const SEEN_SHARE = 0.9;
+
+/// Where a point falls in a lens's picture, -1 to 1 left to right and bottom to top, and
+/// whether it is in front.
+export function project(lens: Lens, p: number[]): { x: number; y: number; ahead: boolean } {
+  const v = p.map((each, i) => each - lens.at[i]);
+  const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const f = lens.looking;
+  const u = lens.up;
+  const r = [f[1] * u[2] - f[2] * u[1], f[2] * u[0] - f[0] * u[2], f[0] * u[1] - f[1] * u[0]];
+  const z = dot(v, f);
+  const tan = Math.tan((lens.vfov * Math.PI) / 360);
+  return { x: dot(v, r) / (z * tan * lens.aspect), y: dot(v, u) / (z * tan), ahead: z > 0 };
+}
+
+/// How the player's camera frames the fight (D180, `targets` in tools/combat/refs/
+/// enshrouded.json): on every drawn frame, the player's height as a share of the frame's,
+/// its median within `bars`; the player's middle across the frame within CENTRED of the
+/// middle (median); and the partner whole in the frame on SEEN_SHARE of them.
+export function share(frames: Frame[], bars: number[]): Check {
+  const up = frames.find((frame) => frame.up)?.up ?? [0, 1, 0];
+  const at = (feet: number[], rise: number) => feet.map((each, i) => each + up[i] * rise);
+  const seen = frames.flatMap((frame) => {
+    const you = fighter(frame, "you");
+    const lens = frame.camera;
+    if (!you || !lens) return [];
+    const [feet, crown, middle] = [0, BODY_M, BODY_M / 2].map((rise) => project(lens, at(you.feet, rise)));
+    const partner = fighter(frame, "partner");
+    const inside = (rise: number) => {
+      const p = project(lens, at(partner!.feet, rise));
+      return p.ahead && Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1;
+    };
+    return [{ share: (crown.y - feet.y) / 2, across: Math.abs(middle.x) / 2, partner: !!partner && inside(0) && inside(BODY_M) }];
+  });
+  if (!seen.length) return { name: "player framed", ok: false, line: "no drawn frame records its camera" };
+  const height = median(seen.map((each) => each.share));
+  const across = median(seen.map((each) => each.across));
+  const partner = seen.filter((each) => each.partner).length / seen.length;
+  const inBars = seen.filter((each) => each.share >= bars[0] && each.share <= bars[1]).length / seen.length;
+  const ok = height >= bars[0] && height <= bars[1] && across <= CENTRED && partner >= SEEN_SHARE;
+  const pct = (x: number) => `${(100 * x).toFixed(0)}%`;
+  const line = `the player ${height.toFixed(3)} of the frame's height (median; bars ${bars[0]}-${bars[1]}, ${pct(inBars)} of ${seen.length} frames inside), ${pct(across)} of its width off the middle (bar ${pct(CENTRED)}), the partner whole in ${pct(partner)} of them (bar ${pct(SEEN_SHARE)})`;
+  return { name: "player framed", ok, line };
 }
 
 /// Every check on one record.
