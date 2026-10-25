@@ -248,4 +248,33 @@ mod tests {
         // Swept along it, nothing stops it.
         assert!(query.sweep(&capsule, Vec3::X * 0.3).is_none());
     }
+
+    #[test]
+    fn a_probe_swept_down_by_a_riser_stops_on_the_step_not_under_it() {
+        // Stair cubes: a step a quarter of a metre up from x = 0, as the union of two boxes
+        // running on, the higher overlapping the lower.
+        let from = |x: f32, top: f32| {
+            Obstacle::Block(Block {
+                centre: Vec3::new(x + 2.0, top * 0.5 - 0.25, 0.0),
+                axes: [Vec3::X, Vec3::Y, Vec3::Z],
+                half: Vec3::new(2.0, top * 0.5 + 0.25, 1.0),
+            })
+        };
+        let shapes = [from(-0.25, 0.25), from(0.0, 0.5)];
+        let query = Obstacles { obstacles: &shapes };
+        // A thin probe a centimetre or two past the riser, within a graze step of it: the
+        // riser is nearer than the top just under the top, but the step's top stops it.
+        for x in [0.005, 0.0227, 0.04] {
+            let at = Vec3::new(x, 0.9445, 0.0);
+            let probe = Capsule {
+                a: at,
+                b: at,
+                radius: 0.002,
+            };
+            let hit = query.sweep(&probe, Vec3::NEG_Y * 0.8).expect("the step");
+            let stops = at.y - 0.8 * hit.fraction - 0.002;
+            assert!((stops - 0.5).abs() < 2.0e-3, "x {x}: stopped at {stops}");
+            assert!(hit.contact.normal.dot(Vec3::Y) > 0.99, "{hit:?}");
+        }
+    }
 }

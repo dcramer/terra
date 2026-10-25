@@ -495,14 +495,16 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
         {
             (support, normal) = (Support::OnGround, floor.normal);
         }
-    } else if support == Support::OnGround
-        && let Some(floor) = slide::floor_below(feet, k.stick_m, query, &shape)
-        && !shape.too_steep(floor.normal)
-    {
+    } else if support == Support::OnGround {
         // The floor it walks along and is carried along is the one under its centre, not the
         // round of an edge its foot rests on (Unreal's floor; Jolt's surface normal): taken for
-        // a ramp, that round lifts the body off the step's top and launches it.
-        normal = floor.normal;
+        // a ramp, that round lifts the body off the step's top and launches it. Its foot on an
+        // edge over a lower floor, it walks along the floor it last stood on, level if none.
+        normal = match slide::floor_stood_on(feet, k.stick_m, query, &shape) {
+            Some(floor) => floor.normal,
+            None if standing => body.normal,
+            None => up,
+        };
     }
     body.support = support;
     body.feet = feet;

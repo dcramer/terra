@@ -463,6 +463,27 @@ pub fn floor_below(feet: Vec3, reach: f32, query: &dyn Query, shape: &Shape) -> 
         .map(|hit| hit.contact)
 }
 
+/// How far under a body's feet the floor under its centre may lie, past where its slope puts
+/// it, for the body to be standing on it, m (Unreal keeps a floor within `MAX_FLOOR_DIST` of
+/// the capsule): further, the foot rests on an edge over a lower floor.
+const FLOOR_GAP_M: f32 = 0.01;
+
+/// The walkable floor under a body's centre that its feet are on: [`floor_below`], no further
+/// under the feet than its slope puts it (a sphere on a slope at angle `a` stands `r (sec a −
+/// 1)` over the floor under its centre). One with its foot on an edge over a lower floor (rolled
+/// up a riser's round before the step, or past a step's edge going down) stands on neither the
+/// lower floor nor the round (Unreal's floor is the face it touches, `ImpactNormal`, not the
+/// sweep's round normal): `None`.
+pub fn floor_stood_on(feet: Vec3, reach: f32, query: &dyn Query, shape: &Shape) -> Option<Contact> {
+    let floor = floor_below(feet, reach, query, shape)?;
+    let rise = floor.normal.dot(shape.up);
+    if shape.too_steep(floor.normal) || rise <= 0.0 {
+        return None;
+    }
+    let slope_gap = shape.radius * (1.0 / rise - 1.0);
+    ((feet - floor.at).dot(shape.up) <= slope_gap + FLOOR_GAP_M).then_some(floor)
+}
+
 /// The ground under a sweep down from a place: the hit, and where the feet end.
 fn floor_under(
     feet: Vec3,
@@ -588,4 +609,85 @@ pub fn walk_stairs(
 /// what is under it, up to the stick distance.
 pub fn stick_to_floor(feet: Vec3, distance: f32, query: &dyn Query, shape: &Shape) -> Option<Vec3> {
     floor_under(feet, -shape.up * distance, query, shape).map(|(feet, _)| feet)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mover::{Block, Obstacle, Obstacles};
+
+    fn shape() -> Shape {
+        Shape {
+            radius: 0.3,
+            height: 1.8,
+            up: Vec3::Y,
+            cos_limit: libm::cosf(50.0_f32.to_radians()),
+            predictive: 0.1,
+            padding: 0.02,
+            dt: 1.0 / 60.0,
+        }
+    }
+
+    fn slab(centre: Vec3, axes: [Vec3; 3], half: Vec3) -> Obstacle {
+        Obstacle::Block(Block { centre, axes, half })
+    }
+
+    #[test]
+    fn a_foot_on_an_edge_over_a_lower_floor_stands_on_neither() {
+        let shape = shape();
+        // A floor at 0 and a step a quarter of a metre up from x = 0.
+        let shapes = [
+            slab(
+                Vec3::new(0.0, -0.5, 0.0),
+                [Vec3::X, Vec3::Y, Vec3::Z],
+                Vec3::new(4.0, 0.5, 1.0),
+            ),
+            slab(
+                Vec3::new(2.0, 0.0, 0.0),
+                [Vec3::X, Vec3::Y, Vec3::Z],
+                Vec3::new(2.0, 0.25, 1.0),
+            ),
+        ];
+        let query = Obstacles { obstacles: &shapes };
+        // On the lower floor: its floor, facing up.
+        let floor = floor_stood_on(Vec3::new(-0.5, 0.0, 0.0), 0.5, &query, &shape);
+        assert!(
+            floor.is_some_and(|f| f.normal.dot(Vec3::Y) > 0.999),
+            "{floor:?}"
+        );
+        // Rolled up the riser's edge a centimetre short of it, a quarter over the floor
+        // under its centre: no floor (not the floor below, nor the edge's round).
+        let x = -0.01_f32;
+        let feet = Vec3::new(x, 0.25 + libm::sqrtf(0.09 - x * x) - 0.3, 0.0);
+        assert!(floor_stood_on(feet, 0.5, &query, &shape).is_none());
+        // Over the step's top: its top.
+        let on_top = floor_stood_on(Vec3::new(0.2, 0.25, 0.0), 0.5, &query, &shape);
+        assert!(
+            on_top.is_some_and(|f| (f.at.y - 0.25).abs() < 2e-3),
+            "{on_top:?}"
+        );
+    }
+
+    #[test]
+    fn a_body_on_a_walkable_slope_stands_on_it() {
+        let shape = shape();
+        for deg in [10.0_f32, 30.0, 45.0] {
+            let a = deg.to_radians();
+            let normal = Vec3::new(-libm::sinf(a), libm::cosf(a), 0.0);
+            let along = Vec3::new(libm::cosf(a), libm::sinf(a), 0.0);
+            let shapes = [slab(
+                -normal * 1.0,
+                [along, normal, Vec3::Z],
+                Vec3::new(5.0, 1.0, 2.0),
+            )];
+            let query = Obstacles { obstacles: &shapes };
+            // The bottom sphere resting on the slope at the origin.
+            let feet = normal * shape.radius - Vec3::Y * shape.radius;
+            let floor = floor_stood_on(feet, 0.5, &query, &shape);
+            assert!(
+                floor.is_some_and(|f| f.normal.dot(normal) > 0.999),
+                "{deg}: {floor:?}"
+            );
+        }
+    }
 }

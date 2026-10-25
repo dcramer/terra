@@ -121,7 +121,13 @@ fn march(source: &impl Distance, capsule: &Capsule, motion: Vec3) -> Option<Hit>
     }
     let start = source.nearest(capsule, motion)?;
     let limit = start.distance.min(0.0) - TOLERANCE;
-    let into = |c: &Contact| c.distance < limit && c.normal.dot(motion) < 0.0;
+    // In, and going in: a face the motion leaves or runs along is not a hit. A step that
+    // ended inside from a place approaching a face went in through it, whatever face is
+    // nearest inside: a riser a centimetre beside a step's top is nearer than the top a
+    // graze step under it, and its level normal would let the march run through the step.
+    let went_in = |c: &Contact, from: &Contact| {
+        c.distance < limit && (c.normal.dot(motion) < 0.0 || from.normal.dot(motion) < 0.0)
+    };
     let steep = source.steepest().max(1.0);
     let (mut t, mut last) = (0.0_f32, start);
     for _ in 0..MARCHES {
@@ -133,13 +139,13 @@ fn march(source: &impl Distance, capsule: &Capsule, motion: Vec3) -> Option<Hit>
         let step = ((last.distance - limit) / steep).max(GRAZE_STEP);
         let next = (t + step / length).min(1.0);
         let at = source.nearest(&capsule.moved(motion * next), motion)?;
-        if into(&at) {
+        if went_in(&at, &last) {
             // The surface lies within the last step: bisect it.
             let (mut lo, mut hi, mut met) = (t, next, at);
             while (hi - lo) * length > TOLERANCE * 0.5 {
                 let mid = (lo + hi) * 0.5;
                 let c = source.nearest(&capsule.moved(motion * mid), motion)?;
-                if into(&c) {
+                if went_in(&c, &last) {
                     (hi, met) = (mid, c);
                 } else {
                     lo = mid;

@@ -21,13 +21,12 @@ Read [docs/controller.md](../../../docs/controller.md) (the design, its criteria
 3. **Score**: `cargo xtask controller`. Nothing `✗`; the criterion's number lower. Run `cargo test -p terra_motion --features course` and the mover's crate's tests.
 4. **Bank**: land on main (AGENTS.md); nightly lowers the baseline. Two rounds without a gain: stop, step back, hand off with what was tried.
 
-## The task list (failing criteria, 2026-10-25, the mover)
+## The task list (failing criteria, 2026-10-25 round 7, the mover)
 
-Ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
+Every measurable row passes (38, round 7: stairs fixed, handoff `controller-stage2.md`, "Round 7"). What is left, ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
 
-1. `stair.up` 0.294 (bar 0.03) and `stair.hop` 15 (bar 0): the stair cubes' flight (0.25 m rise and tread, under a 0.3 m radius) loses speed and leaves the ground at one riser; half cubes hop 6 ticks. Every other flight is within 1.2% (round 6, handoff `controller-stage2.md`, "Round 6").
-2. The walker driving the mover (round 5b, handoff "Next (round 5b)"): its pieces are built, `mover::Bodies::{place, remove}`, `Intent::scale`, `Body::jumped`, and the sources in `terra_walker::mover_world` (props, flora, a base by `terra_build_layout::solids`, others, water).
-3. `cost.body` (the mover's bench).
+1. The walker driving the mover (round 5b, handoff "Next (round 5b)"): its pieces are built, `mover::Bodies::{place, remove}`, `Intent::scale`, `Body::jumped`, and the sources in `terra_walker::mover_world` (props, flora, a base by `terra_build_layout::solids`, others, water).
+2. `cost.body` (the mover's bench).
 
 Flights and a doorway's sill are `course/stairs.rs`: the ground's steps 0.1-0.5 m and a base's whole, half and stair cubes, up and down at the kind's jog (`stair.up`, `stair.down`, `stair.hop`), and a floor 0-0.1 m over the ground through a doorway (`door.hop`).
 
