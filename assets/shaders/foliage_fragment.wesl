@@ -518,9 +518,15 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let across = from_foot - foot_up * stem_h;
         let seed = fract(origin * 0.137) * 50.0;
         let low = 1.0 - smoothstep(PLASTER_LOW_M.x, PLASTER_LOW_M.y, stem_h);
-        let windward = smoothstep(0.2 - 0.3 * low, 0.8, dot(shape, into));
+        // Which way the stem faces, round its axis: the model's own normals are a face's each,
+        // and by them the coat went on and off face by face, in white panels. What lies near
+        // level (a limb's top, a stub's) keeps its own.
+        let radial = across / max(length(across), 1e-4);
+        let standing = 1.0 - abs(dot(shape, foot_up));
+        let faces = normalize(mix(shape, radial, standing));
+        let windward = smoothstep(0.2 - 0.3 * low, 0.8, dot(faces, into));
         // Patches about as tall as they are wide, a hand to a forearm across: stretched up the
-        // stem, with a finer octave at 17 cm, they read as smears (the looks review).
+        // stem, with a finer octave at 17 cm, the coat read as smears (the looks review).
         let blot = wander(across * 1.7 + foot_up * stem_h * 1.4 + seed) * 0.8 + wander(world * 3.0 + seed) * 0.2;
         let plaster = smoothstep(0.5, 0.75, blot + 0.2 * low) * windward;
         let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
