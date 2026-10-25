@@ -46,9 +46,27 @@ Measured with `node tools/fire/motion.ts <clip> [--matte <matte>]`. The flame is
 | red % in the top third | 55 | 57 | 3 | 47 | **above** |
 | pale % low / mid / top | 7 / 12 / 1 | 3 / 10 / 1 | 1 / 0 / 0 | 24 / 55 / 47 | in |
 
+## Tongues (fire round g18)
+
+The reviewers' next fault: our tongues pump up and down instead of leaning, splitting and shedding. `tools/fire/tongues.ts` now measures those four on the same clips. A tongue is a peak of the flame above half its height that stands at least 0.1 H over the notch joining it to a taller one. The flame is first closed and its holes filled, then swept as a component tree. A free blob counts as a tongue by size alone. Tongues are tracked as storm-cell trackers (TITAN) track cells: each track's next footprint is forecast from its mean step, then matched by overlap. A forecast that two pieces fill is a split, and two forecasts filled by one piece are a merger. A shed is a free blob that comes off above the attached tongue it left, or a whole tongue that comes free. A split or shed counts only if its branch never joins back. Each rate is per tongue a second. Lean is the angle from vertical of the line from a tongue's foot to its tip.
+
+**Check (known-good).** Each real clip was slowed to a third by showing each frame three times. The slowed clips read 2.9-3.2 times the lifetime and 0.30-0.35 of each rate, and lean is unchanged. `tongues.test.ts` holds this on masks whose lifetimes, sheds and splits are known. On the real clips each measure's spread is stated in the table, as most over least: lifetime 3.0, sheds 2.3, splits 2.0, lean 3.2. The three standing-view campfires agree more closely on splits (0.99-1.09).
+
+Ours is main 92e3c712, filmed fresh in the g12 view (job `remote/20261025-161821-629c`; its fire code is g15's L3b, and the g12 measures match L3b's to two decimals). The outputs are in `fire/g18/motion/`.
+
+| Measure | main dusk | main night | real min | real max | spread | standing-view 3 | ours |
+|---|---|---|---|---|---|---|---|
+| lifetime mean, s | 0.14 | 0.07 | 0.04 | 0.12 | 3.0x | 0.05-0.12 | dusk **above** |
+| sheds per tongue a second | 0.92 | 0.67 | 0.75 | 1.70 | 2.3x | 0.75-1.70 | night **below** |
+| splits per tongue a second | 1.73 | 2.40 | 0.99 | 1.97 | 2.0x | 0.99-1.09 | night **above**; 1.6-2.2x the standing view |
+| lean median, deg | 9.5 | 8.7 | 7.6 | 24.5 | 3.2x | 9.6-24.5 | in, low (under the standing view) |
+| (merges per tongue a second) | 3.86 | 4.50 | 3.74 | 6.32 | | 3.74-4.06 | in |
+
+Splits are furthest from the real range. Ours forks about twice as often as the standing-view campfires do, and most branches later merge into another tongue. It sheds least and leans least, and at dusk its tongues live longest. These numbers describe lobes that rise and fall past each other in place. Real tongues fork less often, and their tips come off and rise away.
+
 ## Limits
 
-- **Tongue lifetime is not measured yet.** Every real clip gives one frame (0.03 s). At 30 fps a filmed tongue changes shape more than it overlaps itself, so the overlap tracker breaks every frame. Ours gives 0.07 s. The number is printed, but nothing is concluded from it.
+- **Tongue lifetime is near the frame rate.** Real tongues live 0.04-0.12 s on average, one to four frames at 30 fps, so the mean is used, not the median. Shed blobs last 1-2 frames before they fade under the cut, so their rise speed (printed) is not trusted.
 - **Time-of-flight rise speed is weak.** The lag of best correlation between the flicker at 0.4-0.55 H and at 0.75-0.9 H gives correlations of only 0.1-0.2 in the real clips, so the speeds in H/s it prints are not trusted. Only the correlation at no lag is used, in gap 2.
 - **Block matching was tried first and failed.** Matching the flame's luma from frame to frame, the textbook optical flow, gave a median of 0 for every clip, real and ours. A filmed flame is clipped white inside, and its outline changes shape faster than it moves, so the matches scatter both ways.
 - **Ours loses its dim red rim to the cut.** One rule measures both: half the 99th-percentile luma. That rule drops ours' dim red tongue tips, which the matte calls flame, and the logs' glowing texture under the see-through flame counts as flame. Gap 3 is measured on what passes the cut, so the real red share of our top is likely higher still.
