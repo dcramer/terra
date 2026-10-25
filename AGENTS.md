@@ -25,6 +25,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 
 - **Start**: the session hook fast-forwards a clean main checkout, updates the shared seed and seeds your worktree (D183). On failure run `cargo xtask doctor` and fix it before building. Entered a worktree mid-session, or ran `--done` there: `cargo xtask seed` first.
 - **Land on `main` after each incremental change**, no pull requests: commit, `git pull --rebase origin main`, `git push origin HEAD:main`; again if main moved. Never force-push `main`, never `--no-verify`.
+- **Small commits, often** (the developers): land each step that works and is checked on its own (a test, a fix, a measured change, a tool), as it's done; never squash a round's work into one commit or hold it to the end. Unchecked work stays in the worktree.
 - **Hooks only format and lint** (D37): commit runs `cargo fmt --check`, push adds the size and one-definition lints and clippy on the changed crates, in seconds. Run the tests of what you changed yourself. There is no CI while we are pre-release; the full check is `cargo xtask check --all`, by hand.
 - **Baselines**: lowering one is `cargo xtask nightly`'s alone (D414, D411).
 - **Finish**: `git fetch`, `git branch -r --contains <commit>`, then `cargo xtask worktrees --done` (D259).
