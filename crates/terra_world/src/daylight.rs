@@ -661,12 +661,11 @@ fn shine(
     // (D310). So it dims as night falls, toward the moon's cold light.
     // Snow lying in the wood bounces the moon into the shade, so the eye opens less there.
     let snowed = 1.0 - SNOW_DARK_ADAPTS * snow_cover.map_or(0.0, |c| c.0.clamp(0.0, 1.0));
-    let level = (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark))
-        * libm::exp2f(wooded_night_ev(open, dark * snowed));
+    let wooded = wooded_night_ev(open, dark * snowed, air_lit);
+    let level = (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark)) * libm::exp2f(wooded);
     // Snow lying round the eye opens the camera about half a stop, so it reads white (D419).
-    let snow_opens = snow_opens.map_or(0.0, |s| s.0);
-    let set = open_exposure(light.exposure, open, far_seeing, dark * snowed) + under.opens_ev()
-        - snow_opens;
+    let opens = under.opens_ev() - snow_opens.map_or(0.0, |s| s.0);
+    let set = open_exposure(light.exposure, open, far_seeing, dark * snowed, air_lit) + opens;
     let air_scale = air_scale
         .as_deref()
         .copied()
@@ -976,11 +975,11 @@ const WOODED_NIGHT_EV: f32 = 3.5;
 const SNOW_DARK_ADAPTS: f32 = 0.6;
 
 /// The camera's exposure for the hour's `key`, with the sky so `open` over the eye, on a world
-/// that sees far or not, so far into the night: the key in a forest, under trees and by night;
-/// opened up in the open air of a far-seeing world, by day and less by night.
-fn open_exposure(key: f32, open: f32, far_seeing: bool, night: f32) -> f32 {
+/// that sees far or not, so far into the night and `outdoors`: the key in a forest by day; under
+/// trees opened by night; opened up in the open air of a far-seeing world, less by night.
+fn open_exposure(key: f32, open: f32, far_seeing: bool, night: f32, outdoors: f32) -> f32 {
     let night = night.clamp(0.0, 1.0);
-    let wooded = key - wooded_night_ev(open, night);
+    let wooded = key - wooded_night_ev(open, night, outdoors);
     if !far_seeing {
         return wooded;
     }
@@ -988,10 +987,12 @@ fn open_exposure(key: f32, open: f32, far_seeing: bool, night: f32) -> f32 {
 }
 
 /// How many stops the eye opens by night under the trees, so far into the night with the sky
-/// so `open` over it: none in the open, where the moon lights the land, all of
-/// [`WOODED_NIGHT_EV`] under a closed canopy.
-fn wooded_night_ev(open: f32, night: f32) -> f32 {
-    (1.0 - smoothstep(0.55, 0.98, open)) * night.clamp(0.0, 1.0) * WOODED_NIGHT_EV
+/// so `open` over it: none in the open, where the moon lights the land, all of [`WOODED_NIGHT_EV`]
+/// under a closed canopy; none in a closed room (`outdoors`, `IndoorSky` 0), its dark meant and
+/// its own fires setting the eye (D485), and in a room as much as its openings let in (D486).
+fn wooded_night_ev(open: f32, night: f32, outdoors: f32) -> f32 {
+    let dark = night.clamp(0.0, 1.0) * outdoors.clamp(0.0, 1.0);
+    (1.0 - smoothstep(0.55, 0.98, open)) * dark * WOODED_NIGHT_EV
 }
 
 #[cfg(test)]
