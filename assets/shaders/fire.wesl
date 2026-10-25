@@ -1486,8 +1486,12 @@ fn hearth_baked(slot: u32) -> bool {
 // and how much more makes 1, its spine, so the threshold, feather, heart and skin read it as
 // they read the lobes'. Its temperature is not the heat: it stands at 0.82-0.97 wherever the
 // flame is over 0.1 (the campfire's bake), so it would colour the flame one heat throughout.
-const BAKED_EDGE: f32 = 0.15;
-const BAKED_SPAN: f32 = 0.45;
+// Fire round g26: an edge of 0.08 (0.15 before) keeps the thin tongues the higher one cut, and
+// the span keeps the heart (shape 0.58 up, FIELD_CORE) at the same flame, 0.41; the fire sheet
+// went from 6 rows worse than held to 1 (night yellow at its edge), tongues born 4.5/7.2 to
+// 6.8/7.8 a second.
+const BAKED_EDGE: f32 = 0.08;
+const BAKED_SPAN: f32 = 0.57;
 // How tall its field stands, in the drawn flame's height (`HEARTH_DRAWN`); its middle lobe's
 // and each log's lobe's half width, in its width.
 const FIELD_TALL: f32 = 1.3;
