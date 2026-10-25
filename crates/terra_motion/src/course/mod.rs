@@ -17,8 +17,10 @@
 //!   rock), each a step and the door a wall (criteria 1 and 5).
 //! - `stairs`: flights of the ground's and a base's steps walked up and down at the kind's
 //!   speed, and a doorway's sill crossed without a hop (criteria 5 to 7).
+//! - `far`: the same walks on a world 30 km across, where f32 is 2 mm fine (criterion 22, D482).
 
 mod data;
+mod far;
 pub mod field;
 mod runs;
 mod sources;
@@ -87,6 +89,7 @@ pub struct Measure {
 pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     let mut measures = runs::score(&new);
     measures.extend(data::score(&new));
+    measures.extend(far::score(&new));
     let (sources, deepest) = sources::score(&new);
     measures.extend(sources);
     let (stairs, deeper) = stairs::score(&new);

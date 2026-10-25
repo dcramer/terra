@@ -646,6 +646,51 @@
    "measurable": true
   },
   {
+   "id": "far.grounded",
+   "noticed": 4,
+   "notice": "far from the world's origin a body pops off the ground, sticks or strays walking where it walks fine near it",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "ticks of 4 walks at 30 km off the ground or over 10 cm (a tick at a sprint) from the same walk at 2 km",
+   "source": "docs/controller.md criterion 22; D482, Jolt's large worlds (Docs/BigWorlds.md); level, 20 deg up and down, 0.3 m steps",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "far.float",
+   "noticed": 3,
+   "notice": "far from the world's origin a body's feet jitter over the ground",
+   "bar": {
+    "at_most": 0.001
+   },
+   "unit": "m, the foot's gap to the ground at 30 km against 2 km's, worst tick",
+   "source": "docs/controller.md criterion 22; D482; Jolt (tolerance 1 mm)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "far.queries",
+   "noticed": 2,
+   "notice": "a body far from the world's origin costs more than one near it",
+   "bar": {
+    "at_most": 1.1
+   },
+   "unit": "field calls a tick at 30 km over 2 km's, the same 4 walks",
+   "source": "docs/controller.md criterion 22; D482 (f32 noise at 30 km: 528 calls a tick against 140)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "cost.body",
    "noticed": 2,
    "notice": "many bodies moving slow the server's tick",
