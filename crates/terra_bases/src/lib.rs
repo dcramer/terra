@@ -44,6 +44,7 @@ pub mod store;
 #[cfg(test)]
 mod tests;
 pub mod views;
+pub mod weathering;
 
 use draw::{KitMaterials, kit_materials};
 use terra_build_mesh::{relief::Maps, sections::Progress};
@@ -502,6 +503,7 @@ pub fn plugin(app: &mut App) {
         )
         .init_resource::<maps::Loading>()
         .init_resource::<atlases::Atlases>()
+        .add_plugins(weathering::plugin)
         .add_systems(
             Update,
             (

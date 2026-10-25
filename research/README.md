@@ -13,6 +13,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | Note | Dated |
 |---|---|
 | [Loadouts and animation layers: how shipped games put items in two hands and move every body with them](2026-10-25-loadouts-and-animation-layers.md) | 2026-10-25 |
+| [Weathering a building by wave function collapse: a blind test against noise masks](2026-10-25-wfc-weathering.md) | 2026-10-25 |
 | [Campfire history panel: which rounds since 10-21 made it look worse from the camp view](2026-10-24-campfire-history-panel.md) | 2026-10-24 |
 | [Campfire as one whole-fire sim on a few cards: a blind test](2026-10-24-campfire-one-sim.md) | 2026-10-24 |
 | [Character controller: Jolt's CharacterVirtual and Godot's CharacterBody3D](2026-10-24-character-controller.md) | 2026-10-24 |

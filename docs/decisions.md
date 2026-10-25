@@ -292,6 +292,7 @@ How structures are planned, built, drawn and coded.
 | [D367](decisions/D367.md) | One ground under a column, its own once built on | Tech | Agent | Decided | `Ground::height_cm` is the one answer to how high the… |
 | [D373](decisions/D373.md) | Shade laid on a building's colours as light, and a log's underside shaded once | Tech | Agent | Decided | A building's colours are as on screen… |
 | [D377](decisions/D377.md) | Fire in what is built | Tech | Agent | Decided | A cellular fire on a base's cubes, as Far Cry 2's and… |
+| [D480](decisions/D480.md) | A building's weathering motifs are solved by wave function collapse within masks of its shape | Tech | Agent | Leaning | A building's weathering is made from its own cubes… |
 
 ## Art, characters and sound
 

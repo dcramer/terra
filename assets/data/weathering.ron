@@ -1,0 +1,9 @@
+// The weathering spike (research/2026-10-25-wfc-weathering.md, crates/terra_bases/src/weathering.rs):
+// which build is weathered, and how. way: Off (none), Masks (motifs cut by noise) or Wfc
+// (motifs solved by wave function collapse); age in years; build, a part of its name.
+(
+    way: Off,
+    age: 50.0,
+    seed: 1,
+    build: "Village: masonry and timber: L, gable",
+)

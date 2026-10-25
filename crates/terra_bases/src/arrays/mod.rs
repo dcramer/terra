@@ -120,6 +120,11 @@ pub struct BuildArrays {
     /// the view's code is not compiled in at all (`ViewKey`).
     #[uniform(100)]
     pub view: Vec4,
+    /// One build weathered (`crate::weathering`, research/2026-10-25-wfc-weathering.md):
+    /// rows 0-2 the world-to-build affine in cubes, 3 (its least cube, 1 if on), 4 (its box
+    /// in cubes, maps a row of the atlas), 5 (which way, its age).
+    #[uniform(100)]
+    pub weather: [Vec4; 6],
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     pub colour: Handle<Image>,
@@ -136,6 +141,13 @@ pub struct BuildArrays {
     /// char's cracks glow by: one flicker per fire, its light's (D415).
     #[storage(107, read_only)]
     pub fires: Handle<ShaderBuffer>,
+    /// For each of its cubes' faces, its map's slot and one, or 0 (`terra_weathering`).
+    #[texture(108, sample_type = "u_int")]
+    pub weather_lookup: Handle<Image>,
+    /// The maps, three RGBA layers: crack, loss, moss, streak; grime, wear, lichen, damp;
+    /// soot, cavity, edge.
+    #[texture(109, dimension = "2d_array")]
+    pub weather_atlas: Handle<Image>,
 }
 
 impl MaterialExtension for BuildArrays {
@@ -548,6 +560,7 @@ impl Arrays {
             CELLS,
             1,
         ));
+        let (weather_lookup, weather_atlas) = crate::weathering::placeholders(images);
         let images = images_of;
         let material = materials.add(BuildMaterial {
             base: StandardMaterial {
@@ -571,6 +584,9 @@ impl Arrays {
                 height: images[3].clone(),
                 cells: cells.clone(),
                 fires,
+                weather: [Vec4::ZERO; 6],
+                weather_lookup,
+                weather_atlas,
             },
         });
         Arrays {

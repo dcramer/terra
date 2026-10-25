@@ -21,6 +21,8 @@ terra_build_mesh.workspace = true
 terra_core.workspace = true
 terra_gen.workspace = true
 terra_world.workspace = true
+# The weathering spike: a chosen build's per-face maps (research/2026-10-25-wfc-weathering.md).
+terra_weathering.workspace = true
 
 [lints]
 workspace = true

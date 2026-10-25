@@ -6019,6 +6019,7 @@ dependencies = [
  "terra_build_mesh",
  "terra_core",
  "terra_gen",
+ "terra_weathering",
  "terra_world",
 ]
 
@@ -6327,6 +6328,15 @@ dependencies = [
  "terra_motion",
  "terra_world",
  "wesl",
+]
+
+[[package]]
+name = "terra_weathering"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "libm",
+ "terra_gen",
 ]
 
 [[package]]

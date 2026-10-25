@@ -50,6 +50,9 @@ struct Layers {
     // The debug view on (D385): x which (0 none), y texels across a copy of a layer's colour,
     // z the screen pixels a texel should cover a metre off.
     view: vec4<f32>,
+    // One build weathered (crates/terra_bases/src/weathering.rs): rows 0-2 the world-to-build
+    // affine in cubes, 3 (its least cube, 1 if on), 4 (its box, maps a row of the atlas).
+    weather: array<vec4<f32>, 6>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -72,6 +75,85 @@ var cells_array: texture_2d_array<f32>;
 // where, w its flicker now, a share of its mean, 0 for none.
 @group(constants::MATERIAL_BIND_GROUP) @binding(107)
 var<storage, read> fire_glows: array<vec4<f32>, 16>;
+// The weathered build's faces: each cube's six, its map's slot and one, or 0.
+@group(constants::MATERIAL_BIND_GROUP) @binding(108)
+var weather_lookup: texture_2d<u32>;
+// Its maps, three layers: crack, loss, moss, streak; grime, wear, lichen, damp; soot.
+@group(constants::MATERIAL_BIND_GROUP) @binding(109)
+var weather_atlas: texture_2d_array<f32>;
+
+struct Weather {
+    a: vec4<f32>,
+    b: vec4<f32>,
+    c: vec4<f32>,
+    on: bool,
+}
+
+// The weathering maps where a point of the weathered build is (terra_weathering): the cube
+// whose face it is, by the normal's strongest axis, else on a log's round its strongest
+// level one, a little inside; that face's map at where the point is across it, its u along
+// z on the x faces and x otherwise, its v up on walls and along z on floors and roofs.
+// A roof's covering lies sloped over its cubes, so its cubes' faces are steps, a map each, and
+// banded it; it takes its moss and lichen from noise instead, the same in either way: moss in
+// patches, more down toward the eaves, lichen in spots, both by the building's age.
+fn weather_at(wp: vec3<f32>, wn: vec3<f32>, roof: bool) -> Weather {
+    var out = Weather(vec4(0.0), vec4(0.0), vec4(0.0), false);
+    let w = layers.weather;
+    if w[3].w < 0.5 {
+        return out;
+    }
+    let p = vec4(wp, 1.0);
+    let local = vec3(dot(w[0], p), dot(w[1], p), dot(w[2], p));
+    let n = vec3(dot(w[0].xyz, wn), dot(w[1].xyz, wn), dot(w[2].xyz, wn));
+    let a = abs(n);
+    let low = vec3<i32>(w[3].xyz);
+    let dims = vec3<i32>(w[4].xyz);
+    if roof {
+        let box = local - vec3<f32>(low);
+        if any(box < vec3(-1.0)) || any(box > vec3<f32>(dims) + 1.0) {
+            return out;
+        }
+        let aged = clamp(w[5].y / 60.0, 0.0, 1.0);
+        let down = 1.0 - clamp(box.y / max(f32(dims.y), 1.0), 0.0, 1.0);
+        let q = local.xz + local.y * 0.37;
+        let patches = noise21(q * 0.3) * 0.6 + noise21(q * 1.3) * 0.3 + noise21(q * 5.0) * 0.1;
+        out.a.z = smoothstep(0.62, 0.8, patches + 0.25 * down - 0.1) * aged;
+        let crust = noise21(q * 7.0 + 13.0) * 0.7 + noise21(q * 23.0) * 0.3;
+        out.b.z = smoothstep(0.74, 0.8, crust) * aged * 0.6;
+        out.b.x = 0.25 * aged * down;
+        out.on = true;
+        return out;
+    }
+    let strongest = select(select(0, 2, a.z > a.x), 1, a.y > a.x && a.y > a.z);
+    let level = select(0, 2, a.z > a.x);
+    var slot = 0u;
+    var axis = 0;
+    for (var k = 0; k < 4 && slot == 0u; k++) {
+        axis = select(strongest, level, k >= 2);
+        var d = vec3(0.0);
+        d[axis] = select(1.0, -1.0, n[axis] < 0.0);
+        let face = axis * 2 + select(0, 1, n[axis] < 0.0);
+        let cube = vec3<i32>(floor(local - d * select(0.24, 0.7, (k % 2) == 1))) - low;
+        if all(cube >= vec3(0)) && all(cube < dims) {
+            slot = textureLoad(weather_lookup, vec2(cube.x * 6 + face, cube.z * dims.y + cube.y), 0).r;
+        }
+    }
+    if slot == 0u {
+        return out;
+    }
+    let u = select(0, 2, axis == 0);
+    let v = select(1, 2, axis == 1);
+    let f = vec2(fract(local[u]), 1.0 - fract(local[v]));
+    let per_row = u32(w[4].w);
+    let s = slot - 1u;
+    let texel = vec2(f32(s % per_row), f32(s / per_row)) * 32.0 + clamp(f * 32.0, vec2(0.5), vec2(31.5));
+    let uv = texel / (f32(per_row) * 32.0);
+    out.a = textureSampleLevel(weather_atlas, array_sampler, uv, 0, 0.0);
+    out.b = textureSampleLevel(weather_atlas, array_sampler, uv, 1, 0.0);
+    out.c = textureSampleLevel(weather_atlas, array_sampler, uv, 2, 0.0);
+    out.on = true;
+    return out;
+}
 
 // How bright the fires round a place burn now, a share of their mean: each fire light's
 // flicker by how near it is, out to 12 m; 1 where none is near. One flicker per fire (D415):
@@ -548,6 +630,39 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     } else {
         let shade = 1.0 - layers.damage.z * lost;
         pbr_input.material.base_color = vec4(pbr_input.material.base_color.rgb * shade, 1.0);
+    }
+    // Weathering (the spike, research/2026-10-25-wfc-weathering.md): the weathered build's
+    // layers over its material, as engines blend a building's weathering layers: grime down
+    // its low places and under its ledges, damp at its foot, its edges worn to fresh stone,
+    // streaks down from its sills, soot over its openings, lichen and moss where it is
+    // sheltered and damp, its cracks dark, its stones spalled or gone.
+    let weather = weather_at(wp, normalize(in.world_normal), way == 4);
+    if weather.on {
+        var c = pbr_input.material.base_color.rgb;
+        var r = pbr_input.material.perceptual_roughness;
+        let lum = dot(c, vec3(0.3, 0.59, 0.11));
+        let grain = noise21(vec2(wp.x + wp.z, wp.y) * 9.0) * 0.6 + noise21(vec2(wp.x - wp.z, wp.y) * 31.0) * 0.4;
+        let grime = weather.b.x * (0.75 + 0.5 * grain);
+        c = mix(c, mix(vec3(lum), c, 0.5) * vec3(0.42, 0.38, 0.31), clamp(grime, 0.0, 1.0));
+        c *= 1.0 - 0.45 * weather.b.w;
+        c = mix(c, mix(c, vec3(lum), 0.35) * 1.3, weather.b.y * 0.55);
+        c = mix(c, c * vec3(0.22, 0.21, 0.19), clamp(weather.a.w * 1.2, 0.0, 1.0));
+        c = mix(c, vec3(0.02, 0.018, 0.016), weather.c.x * 0.85);
+        let lichen = smoothstep(0.2, 0.6, weather.b.z * (0.6 + 0.8 * grain));
+        c = mix(c, c * 0.4 + vec3(0.16, 0.16, 0.1), lichen * 0.7);
+        let moss = smoothstep(0.2, 0.55, weather.a.z * (0.65 + 0.7 * grain));
+        let moss_colour = mix(vec3(0.035, 0.06, 0.012), vec3(0.09, 0.12, 0.025), grain);
+        c = mix(c, moss_colour, moss);
+        r = mix(r, 0.95, max(moss, lichen));
+        // Loss: 1 a stone gone, its hollow dark; a half a spalled face, fresh and rough.
+        let gone = smoothstep(0.72, 0.88, weather.a.y);
+        let spalled = smoothstep(0.3, 0.45, weather.a.y) * (1.0 - gone);
+        c = mix(c, mix(c, vec3(lum), 0.4) * 1.2, spalled);
+        c = mix(c, c * (0.12 + 0.12 * grain), gone);
+        r = mix(r, 0.95, max(spalled, gone));
+        c = mix(c, c * 0.1, smoothstep(0.3, 0.7, weather.a.x));
+        pbr_input.material.base_color = vec4(c, 1.0);
+        pbr_input.material.perceptual_roughness = r;
     }
     // Fire (D377, terra_build::fire): how blackened the corner is rides on its layer number,
     // under a half. What burns chars to charcoal, black, matte and cracked across and along

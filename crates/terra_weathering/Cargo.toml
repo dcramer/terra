@@ -1,0 +1,15 @@
+[package]
+name = "terra_weathering"
+description = "Weathering a building from its own shape (research/2026-10-25-wfc-weathering.md): masks of edges, crevices, sills, ground and age, and wave function collapse over weathering motifs learned from example patches, rasterised into per-face layer maps a material blends. No engine dependencies."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+libm.workspace = true
+terra_gen.workspace = true
+
+[lints]
+workspace = true
