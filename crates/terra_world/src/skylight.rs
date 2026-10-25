@@ -80,14 +80,19 @@ const SNOW_ALBEDO: Vec3 = Vec3::new(0.85, 0.89, 0.89);
 
 /// Bevy filters a generated environment map into its specular light every frame it is there
 /// (its diffuse light is ours, D492), a third of a millisecond of the GPU's time, though the sky
-/// is painted again only a few times a minute. So it is there only for this many frames after each painting, enough
-/// for the new sky to reach the GPU and be filtered; the filtered light stays on the camera
-/// between (`EnvironmentMapLight`), and its brightness and turn are set on that directly.
-const FILTER_FRAMES: u32 = 4;
+/// is painted again only a few times a minute. So it is there only for the frame of each
+/// painting (D489): `paint` runs before the images' change events are sent, so that frame
+/// extracts the new painting, writes it into the same texture before the filter is encoded
+/// (`GpuImage::prepare_asset` reuses it) and filters it, every painting of a walk measured so; the
+/// filtered light stays on the camera between (`EnvironmentMapLight`), and its brightness and
+/// turn are set on that directly. Were the painting's upload held back by the cap
+/// (`uploads`), the reflection would lag a painting, a shade, until the next.
+const FILTER_FRAMES: u32 = 1;
 /// For the first painting, longer, and counted only once the game is playing and no shader is
 /// compiling: Bevy compiles the filter's pipelines in the background, and removed before they
 /// ran, the light the shading reads is never filtered and stays black, so every shade was
-/// black in a run whose sky did not change, a scripted shot of the kit sheet.
+/// black in a run whose sky did not change, a scripted shot of the kit sheet. So the filter
+/// runs through all of the loading screen, some 300 frames, at no cost to play.
 const FIRST_FILTER_FRAMES: u32 = 30;
 
 /// How much of the open sky's reflection reaches an eye with so much sky open round it, over
@@ -112,7 +117,9 @@ pub fn plugin(app: &mut App) {
         })
         .add_systems(Startup, setup)
         .add_systems(PostStartup, light_camera)
-        .add_systems(PostUpdate, paint);
+        // Before the images' change events are sent, so a painting is extracted, uploaded and
+        // filtered in the frame it is made (as bevy_animation orders its graphs).
+        .add_systems(PostUpdate, paint.before(bevy::asset::AssetEventSystems));
 }
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
