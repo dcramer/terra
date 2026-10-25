@@ -250,11 +250,25 @@ fn settle(time: Res<Time>, mut hurting: ResMut<Hurting>) {
     }
 }
 
-fn redden(hurting: Res<Hurting>, mut pain: Single<&mut BackgroundGradient, With<Pain>>) {
-    if !hurting.is_changed() {
+/// The red at the edges is the player's own view's, as the melee bars are (`melee::hud`): a
+/// film's shot or a fixed camera shows the scene alone (`shows_interface`), as a shipped
+/// game's photo mode hides its hurt overlay. Drawn under them, the spiders biting the player
+/// at a dungeon's door while the camera toured it tinted every probe still's edges
+/// (65, 4, 7) in sRGB, read as torchlight gone red on the walls (dungeons round 16).
+fn redden(
+    hurting: Res<Hurting>,
+    filming: Option<Res<terra_world::cine::Cine>>,
+    options: Option<Res<terra_world::shell::Options>>,
+    mut drawn: Local<f32>,
+    mut pain: Single<&mut BackgroundGradient, With<Pain>>,
+) {
+    let playing = filming.is_none() && options.is_none_or(|options| options.shows_interface());
+    let strength = if playing { hurting.0 * PAIN } else { 0.0 };
+    if strength == *drawn {
         return;
     }
-    pain.0 = vec![edges(hurting.0 * PAIN).into()];
+    *drawn = strength;
+    pain.0 = vec![edges(strength).into()];
 }
 
 #[cfg(test)]
@@ -267,5 +281,33 @@ mod tests {
         let scattered: Vec<f32> = (0..64).map(|_| scatter(&mut state)).collect();
         assert!(scattered.iter().all(|x| (-1.0..=1.0).contains(x)));
         assert!(scattered.iter().any(|&x| x > 0.5) && scattered.iter().any(|&x| x < -0.5));
+    }
+
+    /// How red the edges are drawn, for a player as hurt as can be, in a run with these
+    /// options.
+    fn edge_red(args: &[&str]) -> f32 {
+        let mut app = App::new();
+        let options = terra_world::shell::Options::from_args(args.iter().map(|a| a.to_string()));
+        app.insert_resource(options.unwrap())
+            .insert_resource(Hurting(1.0))
+            .add_systems(Update, redden);
+        let pain = app
+            .world_mut()
+            .spawn((Pain, BackgroundGradient::from(edges(0.0))))
+            .id();
+        app.update();
+        let gradient = &app.world().get::<BackgroundGradient>(pain).unwrap().0[0];
+        let Gradient::Radial(radial) = gradient else {
+            panic!("the edges are a radial gradient");
+        };
+        radial.stops.last().unwrap().color.alpha()
+    }
+
+    /// The player hurt sees red at the edges; a fixed camera's picture of the scene does not
+    /// (dungeons round 16: the probe stills' edges were the spiders' bites, not the light).
+    #[test]
+    fn the_red_of_pain_is_the_players_view_not_a_fixed_cameras() {
+        assert!((edge_red(&[]) - PAIN).abs() < 1e-6);
+        assert_eq!(edge_red(&["--vantage", "4,3,20,6,2,0"]), 0.0);
     }
 }
