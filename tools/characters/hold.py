@@ -18,6 +18,18 @@ at its joint (+ to the left, seen from above) with what is below it. export_char
 it on each body after its clips are aimed and twisted, so the part is exactly the held clip's
 on that body.
 
+A hold may also lay a new pose on the held clip's, after its turns: `aim` points bones, in
+order, each along a way in the body's frame (`[left, up, ahead]`, as the game's model space
+is: +X left, +Y up, +Z ahead), turned the least way at its joint with what is below it, as an
+aim constraint does (Unreal's Look At, Blender's Damped Track); `roll` then turns a bone about
+its own length by degrees (right-handed about the way it points), with what is below it. The
+fight's light blows carry the shield low at the left side so (the upper arm down and out, the
+forearm forward, the board's face forward and out; research/2026-10-25-shield-prior-art.md):
+
+    {"clip": "Keyed_Guard", "bone": "clavicle_l",
+     "aim": {"upperarm_l": [0.55, -0.75, -0.38], "lowerarm_l": [-0.1, -0.55, 0.83]},
+     "roll": {"lowerarm_l": 47}, "in": [0.1, 0.3], "out": [1.35, 1.75]}
+
 A hold may also take `in` and `out` (clip seconds, `[from, to]` each): the part plays the `of`
 clip until `in`'s first second, eases to the held pose by its last, stays held, and eases back
 to the `of` clip over `out` (either may be left out, the part then held from the start or to
@@ -73,6 +85,27 @@ def _held_pose(arm, by_name, name, held):
         pb = pose[bone]
         head = pb.matrix.translation.copy()
         pb.matrix = Matrix.Translation(head) @ Matrix.Rotation(math.radians(degrees), 4, up) @ Matrix.Translation(-head) @ pb.matrix
+        bpy.context.view_layer.update()
+    to_arm = arm.matrix_world.to_3x3().inverted()
+    for bone, way in held.get("aim", {}).items():
+        if bone not in bones:
+            raise SystemExit(f"{name}: {bone} is not in the part below {held['bone']}")
+        pb = pose[bone]
+        # The body's frame as Blender imports glTF: +X left, glTF +Y up is Blender +Z, glTF
+        # +Z ahead is Blender -Y.
+        want = (to_arm @ Vector((way[0], -way[2], way[1]))).normalized()
+        now = (pb.tail - pb.head).normalized()
+        head = pb.head.copy()
+        swing = now.rotation_difference(want).to_matrix().to_4x4()
+        pb.matrix = Matrix.Translation(head) @ swing @ Matrix.Translation(-head) @ pb.matrix
+        bpy.context.view_layer.update()
+    for bone, degrees in held.get("roll", {}).items():
+        if bone not in bones:
+            raise SystemExit(f"{name}: {bone} is not in the part below {held['bone']}")
+        pb = pose[bone]
+        head = pb.head.copy()
+        along = (pb.tail - pb.head).normalized()
+        pb.matrix = Matrix.Translation(head) @ Matrix.Rotation(math.radians(degrees), 4, along) @ Matrix.Translation(-head) @ pb.matrix
         bpy.context.view_layer.update()
     out = {}
     for n in bones:
@@ -176,6 +209,8 @@ def bake(arm, actions, entries):
         made.append(action)
         parts = "; ".join(f"{h['bone']} and below at {h['clip']}'s first pose"
                           + "".join(f", {b} turned {d:+.0f} deg" for b, d in h.get("turn", {}).items())
+                          + "".join(f", {b} aimed along {tuple(round(x, 2) for x in w)}" for b, w in h.get("aim", {}).items())
+                          + "".join(f", {b} rolled {d:+.0f} deg" for b, d in h.get("roll", {}).items())
                           + "".join(f", {k} {h[k][0]:.2f}-{h[k][1]:.2f} s" for k in ("in", "out") if k in h) for h in holds)
         bones = len(still) + sum(len(at) for _, at in eased)
         print(f"HOLD {name}: {entry['of']} with {parts} ({bones} bones), frames {start} to {end} at {fps:g} fps")

@@ -885,8 +885,20 @@
       {
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
-        "turn": {
-          "upperarm_l": 90
+        "aim": {
+          "upperarm_l": [
+            0.55,
+            -0.75,
+            -0.38
+          ],
+          "lowerarm_l": [
+            -0.1,
+            -0.55,
+            0.83
+          ]
+        },
+        "roll": {
+          "lowerarm_l": 47
         },
         "in": [
           0.1,
@@ -905,8 +917,20 @@
       {
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
-        "turn": {
-          "upperarm_l": 90
+        "aim": {
+          "upperarm_l": [
+            0.55,
+            -0.75,
+            -0.38
+          ],
+          "lowerarm_l": [
+            -0.1,
+            -0.55,
+            0.83
+          ]
+        },
+        "roll": {
+          "lowerarm_l": 47
         },
         "in": [
           0.0,
@@ -925,8 +949,20 @@
       {
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
-        "turn": {
-          "upperarm_l": 90
+        "aim": {
+          "upperarm_l": [
+            0.55,
+            -0.75,
+            -0.38
+          ],
+          "lowerarm_l": [
+            -0.1,
+            -0.55,
+            0.83
+          ]
+        },
+        "roll": {
+          "lowerarm_l": 47
         },
         "in": [
           0.3,
