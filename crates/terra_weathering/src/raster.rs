@@ -281,10 +281,12 @@ fn by_motifs(
         's' => 0.5,
         _ => 0.0,
     };
+    // Moss as a soft field, never cut out: the material blends it by its own height, so a
+    // weak field fills the joints and a strong one covers the stones (build.wesl).
     let g = grid * growth.per_cell as f32;
     let moss = smoothstep(
-        0.38,
-        0.62,
+        0.2,
+        0.8,
         field(growth, g, 'm') + (n(Vec2::splat(5.0), 41.0) - 0.5) * 0.45,
     );
     let lichen = spots(growth, g, seed);

@@ -196,6 +196,12 @@ fn hash21(p: vec2<f32>) -> f32 {
     return f32(h & 0xFFFFFFu) / 16777215.0;
 }
 
+// Moss's cushions (weathering): lumps a few centimetres across, 0 to 1, at a point of the
+// surface in metres along its tangent and bitangent.
+fn moss_lumps(s: vec2<f32>) -> f32 {
+    return noise21(s * 16.0) * 0.6 + noise21(s * 41.0 + 7.0) * 0.4;
+}
+
 // Smooth value noise.
 fn noise21(p: vec2<f32>) -> f32 {
     let i = floor(p);
@@ -637,6 +643,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // streaks down from its sills, soot over its openings, lichen and moss where it is
     // sheltered and damp, its cracks dark, its stones spalled or gone.
     let weather = weather_at(wp, normalize(in.world_normal), way == 4);
+    // Moss's cover, its cushions' tilt of the normal and their shade, for the lighting below.
+    var moss_cover = 0.0;
+    var moss_n = vec2(0.0);
+    var moss_shade = 1.0;
     if weather.on {
         var c = pbr_input.material.base_color.rgb;
         var r = pbr_input.material.perceptual_roughness;
@@ -650,10 +660,29 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         c = mix(c, vec3(0.02, 0.018, 0.016), weather.c.x * 0.85);
         let lichen = smoothstep(0.2, 0.6, weather.b.z * (0.6 + 0.8 * grain));
         c = mix(c, c * 0.4 + vec3(0.16, 0.16, 0.1), lichen * 0.7);
-        let moss = smoothstep(0.2, 0.55, weather.a.z * (0.65 + 0.7 * grain));
-        let moss_colour = mix(vec3(0.035, 0.06, 0.012), vec3(0.09, 0.12, 0.025), grain);
-        c = mix(c, moss_colour, moss);
-        r = mix(r, 0.95, max(moss, lichen));
+        // Moss as cushions in the joints, blended by the material's height as engines blend a
+        // layer by height (the Worn block's way): a thin field fills the mortar's low places
+        // first and only a strong one climbs over the stones' tops; its edge ragged with noise,
+        // never cut out; olive to brown, lumpy, matte, a damp darkening just round it.
+        let moss_high = select(textureSampleGrad(height_array, array_sampler, uv, slot, ddx, ddy).r, 0.5, missing);
+        let st = vec2(dot(wp, T), dot(wp, B));
+        let e = 0.004;
+        let lump = moss_lumps(st);
+        let lump_d = vec2(moss_lumps(st + vec2(e, 0.0)), moss_lumps(st + vec2(0.0, e))) - lump;
+        let field = weather.a.z;
+        let ragged = (noise21(st * 23.0 + 5.0) - 0.5) * 0.35 + (lump - 0.5) * 0.3;
+        let moss = smoothstep(0.0, 0.22, field * 1.5 - moss_high - 0.12 + ragged) * smoothstep(0.02, 0.12, field);
+        let tone = noise21(st * 2.3 + 11.0);
+        let olive_brown = mix(vec3(0.07, 0.078, 0.03), vec3(0.075, 0.058, 0.03), smoothstep(0.35, 0.75, tone));
+        let fresh = smoothstep(0.55, 0.9, noise21(st * 5.0 + 3.0)) * 0.6;
+        let moss_colour = mix(olive_brown, vec3(0.1, 0.11, 0.035), fresh) * (0.6 + 0.65 * lump);
+        let damp_band = smoothstep(0.0, 0.3, field) * (1.0 - moss);
+        c *= 1.0 - 0.28 * damp_band;
+        c = mix(c, moss_colour, moss * 0.94);
+        r = mix(r, 0.97, max(moss, lichen));
+        moss_cover = moss;
+        moss_n = -lump_d / e * 0.01 * moss;
+        moss_shade = 1.0 - 0.35 * moss * (1.0 - lump);
         // Loss: 1 a stone gone, its hollow dark; a half a spalled face, fresh and rough.
         let gone = smoothstep(0.72, 0.88, weather.a.y);
         let spalled = smoothstep(0.3, 0.45, weather.a.y) * (1.0 - gone);
@@ -718,11 +747,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let roughness = lighting::perceptualRoughnessToRoughness(arm.g);
     specular_occlusion = saturate(pow(NdotV + ssao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ssao);
 }
-    pbr_input.diffuse_occlusion = diffuse_occlusion;
+    pbr_input.diffuse_occlusion = diffuse_occlusion * moss_shade;
     pbr_input.specular_occlusion = specular_occlusion;
 
     // The normal map's two stored components, its third made up from them.
     var Nt = vec3(mix(normal, crack_n, broken * 0.85) * 2.0 - 1.0 + detail_n * (1.0 - broken), 0.0);
+    // Moss's cushions over the stone: its relief softened under them, their lumps raised.
+    Nt = vec3(Nt.xy * (1.0 - 0.6 * moss_cover) + moss_n, 0.0);
     Nt = vec3(Nt.xy / max(1.0, length(Nt.xy) / 0.98), 0.0);
     Nt.z = sqrt(max(1.0 - dot(Nt.xy, Nt.xy), 0.0));
     pbr_input.N = normalize(Nt.x * T + Nt.y * B + Nt.z * N);
