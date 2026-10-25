@@ -12,6 +12,7 @@ In their words, shortened.
 
 - **The basis is a voxel grid, as Enshrouded's** (D48), and everything built is strictly on it (D181).
 - **Enshrouded is a role model** for building and voxels: "a ton of stuff we really might like to model off of". Building in voxels is fine; the terrain stays smooth voxels. See [research/enshrouded.md](../research/enshrouded.md).
+- **Space Engineers 2 is nearer what we want** than Enshrouded, for the ground and how building behaves (D491, Open): "its SLIGHTLY better than enshrouded but its fully procedural"; mining to work differently, building "block-based (with the ability to carve it out)", where "you deliver resources". Proposed in [construction-003](proposals/construction-003.md).
 - **The Forest's building is an inspiration** (D85): "a nice building system, the way you get logs/etc is nice for larger projects (vs sticks or something akin to that)".
 - **Keep the prior art in mind for the controls too**: Enshrouded, Rust, Ark, Subnautica 2.
 - **You pick the part you want to build, and can cycle its variants**, from "the little dial building menus we see in things like Rust and Subnautica". **A build menu like Subnautica's** (D67): you equip the building tool and it brings up what you have unlocked (D68).

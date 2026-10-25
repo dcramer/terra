@@ -18,6 +18,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | [Loadouts and animation layers: how shipped games put items in two hands and move every body with them](2026-10-25-loadouts-and-animation-layers.md) | 2026-10-25 |
 | [The shield arm in a swing: what shipped sword-and-shield sets do with the shield while the sword cuts](2026-10-25-shield-arm-in-a-swing.md) | 2026-10-25 |
 | [The shield in a blow, frame by frame: what floats in ours, and where shipped games and historical fighters carry it](2026-10-25-shield-prior-art.md) | 2026-10-25 |
+| [Space Engineers 2's terrain, mining and building, against ours](2026-10-25-space-engineers-2.md) | 2026-10-25 |
 | [Weathering a building by wave function collapse: a blind test against noise masks](2026-10-25-wfc-weathering.md) | 2026-10-25 |
 | [What a landed hit shows: the contact-point burst, not a whole-body flash](2026-10-25-what-a-landed-hit-shows.md) | 2026-10-25 |
 | [Campfire history panel: which rounds since 10-21 made it look worse from the camp view](2026-10-24-campfire-history-panel.md) | 2026-10-24 |
