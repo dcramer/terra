@@ -82,6 +82,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D474](decisions/D474.md) | Dungeon cells are dressed by wave function collapse over a theme's socketed modules | Tech | Agent | Leaning | Every placed cell takes a module from its theme's set… |
 | [D483](decisions/D483.md) | A theme names its own sockets, and a socket few modules take is an adjacency rule | Tech | Agent | Leaning | Amends D474 (the dressing in dungeons.md follows it). |
 | [D484](decisions/D484.md) | A dungeon is stamped as one building of cubes in a dug box, and run in from its graph | Tech | Agent | Leaning | `terra_dungeon::stamp` turns a dressed dungeon into what… |
+| [D495](decisions/D495.md) | Mining by hits, and ore in deposits | Design | Developers | Decided | **Mining is hitting the ground** with the tool in hand… |
 
 ## The player and survival
 
@@ -298,7 +299,7 @@ How structures are planned, built, drawn and coded.
 | [D377](decisions/D377.md) | Fire in what is built | Tech | Agent | Decided | A cellular fire on a base's cubes, as Far Cry 2's and… |
 | [D480](decisions/D480.md) | A building's weathering motifs are solved by wave function collapse within masks of its shape | Tech | Agent | Leaning | A building's weathering is made from its own cubes… |
 | [D486](decisions/D486.md) | A room's sky light is what its openings let in | Tech | Agent | Leaning | A room's light probe (D320) dims the sky's light by the… |
-| [D491](decisions/D491.md) | Space Engineers 2's ground and construction loop | Design | — | Open | Whether mining and how blocks are built and taken down… |
+| [D491](decisions/D491.md) | Space Engineers 2's ground and construction loop | Design | — | Open | Whether how blocks are built and taken down follows… |
 | [D494](decisions/D494.md) | Creative and survival | Design | Developers | Decided | A world is played in one of two modes. |
 
 ## Art, characters and sound
