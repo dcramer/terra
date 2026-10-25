@@ -1519,7 +1519,10 @@ const FIELD_TOP: vec3<f32> = vec3<f32>(0.3, 0.4, 0.16);
 // turns its tips' colour from red to orange, not their light up, so by night, exposed 2.5
 // stops up, they don't tonemap yellow (g15: with the brightness, the campfire's top third
 // from above went 24% yellow by night, against 6% at 0.05, and the sheet's 27% over its 23).
-const FIELD_TOP_KEEP: f32 = 1.0;
+// Half, not all (g15 L2): taking it all back left the top third 50% red by dusk and 40 by
+// night (motion.ts), redder than the filmed campfires' 3-47; at half, 41 and 30, inside them,
+// and the sheet's above-night yellow 22, under its 23.
+const FIELD_TOP_KEEP: f32 = 0.5;
 const FIELD_STEPS: i32 = 96;
 const FIELD_LOBES: i32 = 7;
 // A torch's field (under `TORCH_M`): lobes over its head's one point, a middle tongue from
