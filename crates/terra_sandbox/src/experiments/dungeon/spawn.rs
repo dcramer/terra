@@ -76,6 +76,14 @@ fn leaves(sill: Vec3, turn: Quat) -> [(Vec3, Quat); 2] {
     ]
 }
 
+/// The leaves swung open into the room, each from its hinge back along its jamb, so the
+/// doorway between is clear: how a door opens, and whether a walker or a key opens it, is
+/// the developers' call (docs/dungeons.md); until then the demo's doors stand open, so a
+/// walker and the camera pass.
+fn open(sill: Vec3, turn: Quat) -> [(Vec3, Quat); 2] {
+    leaves(sill, turn).map(|(hinge, _)| (hinge, turn * Quat::from_rotation_y(FRAC_PI_2)))
+}
+
 /// The studded leaf stretched to half a doorway's width and its full height.
 fn leaf_scale() -> Vec3 {
     Vec3::new(DOORWAY_M[0] * 0.5 / LEAF_M.x, DOORWAY_M[1] / LEAF_M.y, 1.0)
@@ -186,7 +194,7 @@ pub(super) fn put_up(
                 ));
                 continue;
             }
-            for (at, turn) in leaves(object.at, turn) {
+            for (at, turn) in open(object.at, turn) {
                 inside.spawn((
                     Name::new(object.name.clone()),
                     live(),
@@ -266,6 +274,30 @@ mod tests {
                 "{side}: {spans:?}"
             );
             assert!((spans[1].1 - half).abs() < 1e-4, "{side}: {spans:?}");
+        }
+    }
+
+    /// Open, each leaf stands at its jamb reaching straight into the room (away from the
+    /// way the doorway faces), its full width, so the doorway between the jambs is clear.
+    #[test]
+    fn open_leaves_stand_at_their_jambs_reaching_into_the_room() {
+        let scale = leaf_scale();
+        let width = DOORWAY_M[0] * 0.5;
+        for side in 0..4 {
+            let turn = facing(side);
+            let sill = Vec3::new(3.0, -2.0, 7.0);
+            let (across, out) = (turn * Vec3::X, turn * Vec3::Z);
+            let mut jambs = Vec::new();
+            for (hinge, leaf) in open(sill, turn) {
+                let far = hinge + leaf * (Vec3::X * LEAF_M.x * scale.x);
+                let along = (far - hinge).dot(across);
+                assert!(along.abs() < 1e-4, "{side}: along the jamb, {along}");
+                let into = -(far - hinge).dot(out);
+                assert!((into - width).abs() < 1e-4, "{side}: into the room, {into}");
+                jambs.push((hinge - sill).dot(across));
+            }
+            jambs.sort_by(f32::total_cmp);
+            assert!((jambs[0] + width).abs() < 1e-4 && (jambs[1] - width).abs() < 1e-4);
         }
     }
 }
