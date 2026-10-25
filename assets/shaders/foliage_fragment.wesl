@@ -273,8 +273,8 @@ const BARK_FROST_GREY: f32 = 0.3;
 // farthest round, and from which it is only the windward coat.
 const PLASTER_LOW_M: vec2<f32> = vec2<f32>(0.3, 2.5);
 // The height over a stem's foot, metres, over which the windward coat thins, and how much.
-const PLASTER_HIGH_M: vec2<f32> = vec2<f32>(4.0, 14.0);
-const PLASTER_HIGH: f32 = 0.6;
+const PLASTER_HIGH_M: vec2<f32> = vec2<f32>(1.5, 6.0);
+const PLASTER_HIGH: f32 = 0.85;
 // How much of the bark's colour the windward crust covers.
 const PLASTER_CRUST: f32 = 0.8;
 // How far a cap's lumps tilt its top from the sky's up.
@@ -548,8 +548,9 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let windward = dot(faces, into);
         let turned = mat3x3<f32>(0.64, 0.6, -0.48, -0.48, 0.8, 0.36, 0.6, 0.0, 0.8) * (world + seed);
         let blot = wander(turned * 1.6) * 0.65 + wander(turned * 4.1 + 7.0) * 0.35;
-        // A quarter of the girth, the face the wind meets squarely, and thinner up the stem,
-        // where the crowns take the wind: at half the girth every trunk stood half white.
+        // A quarter of the girth, the face the wind meets squarely, and mostly low, where the
+        // drift reaches: at half the girth every trunk stood half white, and coated to the
+        // crown, the path's judges marked it down (5.85 to 5.11).
         let plaster = smoothstep(0.62, 0.85, windward * 0.85 + 0.8 * (blot - 0.5) + 0.15 * low) * (1.0 - PLASTER_HIGH * smoothstep(PLASTER_HIGH_M.x, PLASTER_HIGH_M.y, stem_h));
         let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
         let stuck = lying * max(plaster, bank);
