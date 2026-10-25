@@ -6,10 +6,10 @@
   "soot/flame",
   "edge soot %"
  ],
- "breath noon": [
-  "yellow %"
+ "breath noon": [],
+ "fireball noon": [
+  "pale %"
  ],
- "fireball noon": [],
  "campfire dusk": [
   "soot/flame"
  ],
@@ -20,17 +20,18 @@
   "red+orange %",
   "dim %",
   "soot/flame",
-  "edge soot %",
-  "fine %",
-  "coarse %"
+  "edge soot %"
  ],
- "breath dusk": [],
+ "breath dusk": [
+  "orange %"
+ ],
  "fireball dusk": [
   "pale %"
  ],
  "campfire night": [],
  "campfire above night": [],
  "house blaze night": [
+  "yellow %",
   "red %",
   "red+orange %",
   "dim %",
@@ -40,7 +41,9 @@
   "mid %",
   "coarse %"
  ],
- "breath night": [],
+ "breath night": [
+  "edge soot %"
+ ],
  "fireball night": [
   "G/R",
   "edge soot %"

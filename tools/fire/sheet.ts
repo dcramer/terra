@@ -8,8 +8,9 @@
 // One scripted sandbox run an hour on the yard: a campfire (a kindled fire, `staged.spawn`
 // with `burns`), a log cabin set alight (the building fire, `fire.light`) and a dragon
 // breathing on a stone wall (its stream and the fireball where it strikes). Each fire is shot
-// from a fixed camera; at the shot `fire.seen` tells each kind's box on the picture, which is
-// the crop measured. Prints one line a fire and hour, ✓ or ✗ on each number, and writes
+// from a fixed camera five times over 2 s; at each shot `fire.seen` tells each kind's box on
+// the picture, which is the crop measured, and a row's numbers are the mean of its shots'
+// (D433). Prints one line a fire and hour, ✓ or ✗ on each number, and writes
 // `<out>/sheet.jpg` (the crops, a row a fire, a column an hour) and `<out>/table.json`. A run
 // is small (the yard), so it skips `~/.cache/terra/gpu.queue` and takes one of the game's own
 // shared slots on `gpu.lock` (D319), as every unattended run does. --from measures a folder a run wrote
@@ -32,8 +33,8 @@ const PICTURE = "1920x1080";
 
 type Vec3 = [number, number, number];
 type Call = { frame: number; method: string; params?: unknown };
-/// A fire on the sheet: its name, the class of photographs it is held to, the frame it is
-/// shot on, which of `fire.seen`'s boxes is its crop, the camera it is shot from, and whether
+/// A fire on the sheet: its name, the class of photographs it is held to, the frame of its
+/// first shot (`shotsOf`), which of `fire.seen`'s boxes is its crop, the camera it is shot from, and whether
 /// its flames write the flame share the matte reads (D433): a hearth's and a torch's do, for
 /// their film (`film.rs`); a blaze and a breath are tonemapped as the world, leave the matte
 /// empty, and are measured by colour. A view no photograph is taken from holds some numbers to
@@ -61,8 +62,20 @@ const WALL = { min: [60, 0, 20], max: [80, 0, 20] };
 const HOVER: Vec3 = [35, 9, 1];
 const AIM: Vec3 = [35, 1.5, 10];
 
+/// Each fire is shot `SHOTS` times, `SPACING` frames apart, and its row is the mean of their
+/// numbers (D433): a fire changes over a second or two (flicker, a tongue's life, the hearth's
+/// swell), so one frame's number depends on the phase it catches. A photograph is one instant
+/// too, so the class is a band of instants, and a row estimates the fire's expected value:
+/// 5 shots 0.5 s apart (a scripted run's 60 frames a second), 2 s from first to last.
+export const SHOTS = 5;
+export const SPACING = 30;
+/// The frames a fire is shot on.
+export const shotsOf = (fire: Fire) => Array.from({ length: SHOTS }, (_, k) => fire.frame + k * SPACING);
+
+// The campfire's last shot is frame 330 and the view above's first 420, the frames each was
+// shot on alone before, so history and the matched views compare.
 export const FIRES: Fire[] = [
-  { name: "campfire", class: "campfire", frame: 330, box: "kept", eye: [-10, 1.7, 16], at: [-10, 1, 10], matte: true },
+  { name: "campfire", class: "campfire", frame: 210, box: "kept", eye: [-10, 1.7, 16], at: [-10, 1, 10], matte: true },
   // The campfire again from RDR2's camp view (D433), the first row kept so history compares:
   // its stone ring an ellipse 0.55 as deep as wide, so the eye 33 degrees over the ring and
   // the camera pitched 26 down, the ring 15% of the picture's width, which at our 45-degree
@@ -76,8 +89,8 @@ export const FIRES: Fire[] = [
   { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
 ];
 
-/// The run's calls: the scene set up, then each fire's camera held from a second before its
-/// shot, and `fire.seen` on the shot's frame.
+/// The run's calls: the scene set up, then each fire's camera held from 40 frames before its
+/// first shot to its last, and `fire.seen` on each shot's frame.
 export function calls(): Call[] {
   const out: Call[] = [
     { frame: 2, method: "staged.spawn", params: { name: "campfire", model: "models/props/Campfire.glb", at: CAMPFIRE, facing: [CAMPFIRE[0], 0, CAMPFIRE[2] + 5], base: true, burns: [1.5, 0.7, 0.9] } },
@@ -96,13 +109,16 @@ export function calls(): Call[] {
     { frame: 840, method: "flight.breathe", params: { on: true, at: AIM, base: true } },
   ];
   for (const fire of FIRES) {
-    for (let f = fire.frame - 40; f <= fire.frame; f++) out.push({ frame: f, method: "build.look", params: { from: fire.eye, at: fire.at } });
-    out.push({ frame: fire.frame, method: "fire.seen" });
+    const shots = shotsOf(fire);
+    for (let f = fire.frame - 40; f <= shots.at(-1)!; f++) out.push({ frame: f, method: "build.look", params: { from: fire.eye, at: fire.at } });
+    for (const f of shots) out.push({ frame: f, method: "fire.seen" });
   }
-  return out.sort((a, b) => a.frame - b.frame);
+  // Fires shot from one camera (the breath and its fireball) ask once a frame.
+  const once = [...new Map(out.map((c) => [JSON.stringify(c), c])).values()];
+  return once.sort((a, b) => a.frame - b.frame);
 }
 
-const frames = () => [...new Set(FIRES.map((f) => f.frame))].sort((a, b) => a - b);
+const frames = () => [...new Set(FIRES.flatMap(shotsOf))].sort((a, b) => a - b);
 const still = (dir: string, frame: number) => join(dir, `f-${String(frame).padStart(5, "0")}.png`);
 /// A still's flame matte (`--flame-matte`, D433), beside it.
 const matteOf = (file: string) => file.replace(/\.png$/, ".matte.png");
@@ -233,7 +249,35 @@ export function worseThan(rows: Row[], held: HeldOut): string[] {
   });
 }
 
-export type Row = { fire: string; class: string; hour: string; crop?: string; out: number; held: Held[]; tile?: string; ground?: { light: number; warmth: number } };
+export type Row = {
+  fire: string;
+  class: string;
+  hour: string;
+  crop?: string;
+  out: number;
+  held: Held[];
+  tile?: string;
+  ground?: Ground;
+  /// Each shot's frame, crop and numbers, whose mean `held` judges.
+  shots?: { frame: number; crop: string; metrics: Metrics }[];
+};
+
+type Ground = { light: number; warmth: number };
+/// One shot of a fire: its still, the crop `fire.seen` told on it, and its flame matte.
+export type Shot = { pic: Picture; box: Box; matte?: Picture };
+const boxText = (b: Box) => `${b.w}x${b.h}+${b.x}+${b.y}`;
+
+/// Each number the mean of its value in every record.
+export function mean<T extends Record<string, number>>(each: T[]): T {
+  return Object.fromEntries(Object.keys(each[0]).map((k) => [k, each.reduce((s, m) => s + m[k], 0) / each.length])) as T;
+}
+
+/// A fire's row over its shots (D433): each shot measured in its own crop, and the row's
+/// numbers, the ground round it too, the mean of the shots'.
+export function sampled(shots: Shot[]): { metrics: Metrics; ground: Ground; each: Metrics[] } {
+  const each = shots.map(({ pic, box, matte }) => measure(pic, box, matte));
+  return { metrics: mean(each), ground: mean(shots.map(({ pic, box }) => surround(pic, box))), each };
+}
 
 if (import.meta.main) {
   const argv = process.argv.slice(2);
@@ -272,24 +316,32 @@ if (import.meta.main) {
     }
     const log = readFileSync(join(dir, "run.log"), "utf8");
     for (const fire of FIRES) {
-      const seen = seenAt(log, fire.frame);
-      const file = still(dir, fire.frame);
       const tile = join(dir, `${fire.name.replace(/ /g, "-")}.png`);
-      if (!seen[fire.box] || !existsSync(file)) {
+      const told = shotsOf(fire).map((frame) => ({ frame, seen: seenAt(log, frame), file: still(dir, frame) }));
+      const missed = told.filter(({ seen, file }) => !seen[fire.box] || !existsSync(file)).map((t) => t.frame);
+      if (missed.length) {
         rows.push({ fire: fire.name, class: fire.class, hour, out: -1, held: [] });
-        tell(`✗ ${fire.name.padEnd(12)} ${hour.padEnd(6)} not seen (${fire.box}): see ${join(dir, "run.log")}`);
+        tell(`✗ ${fire.name.padEnd(12)} ${hour.padEnd(6)} not seen (${fire.box}) on frame ${missed.join(", ")}: see ${join(dir, "run.log")}`);
         continue;
       }
-      const pic = load(file);
-      const box = belowHud(scaled(seen[fire.box], seen.picture, pic.width, pic.height), pic.height);
-      const crop = `${box.w}x${box.h}+${box.x}+${box.y}`;
+      const shots = told.map(({ seen, file }) => {
+        const pic = load(file);
+        const box = belowHud(scaled(seen[fire.box], seen.picture, pic.width, pic.height), pic.height);
+        // Measured on the flame the renderer drew (D433); a folder from before the matte, by colour.
+        const matte = fire.matte && existsSync(matteOf(file)) ? load(matteOf(file)) : undefined;
+        return { pic, box, matte };
+      });
+      const { metrics, ground, each } = sampled(shots);
+      // The tile and crop shown are the middle shot's.
+      const middle = Math.floor(shots.length / 2);
+      const box = shots[middle].box;
+      const file = told[middle].file;
+      const crop = boxText(box);
       const known = classes[fire.class];
-      // Measured on the flame the renderer drew (D433); a folder from before the matte, by colour.
-      const matte = fire.matte && existsSync(matteOf(file)) ? load(matteOf(file)) : undefined;
-      const held = known ? judge(measure(pic, box, matte), floored(known.bands, fire.floors)) : [];
+      const held = known ? judge(metrics, floored(known.bands, fire.floors)) : [];
       const fails = held.filter((h) => !h.holds).length;
-      const ground = surround(pic, box);
-      rows.push({ fire: fire.name, class: fire.class, hour, crop, out: known ? fails : -1, held, tile, ground });
+      const shotRows = told.map(({ frame }, k) => ({ frame, crop: boxText(shots[k].box), metrics: each[k] }));
+      rows.push({ fire: fire.name, class: fire.class, hour, crop, out: known ? fails : -1, held, tile, ground, shots: shotRows });
       tell(`${fails || !known ? "✗" : "✓"} ${fire.name.padEnd(12)} ${hour.padEnd(6)} as ${fire.class}: ${known ? said(held) : "no such class in references.json"}`);
       const noon = rows.find((r) => r.fire === fire.name && r.hour === "noon")?.ground;
       if (hour !== "noon" && noon?.light)
