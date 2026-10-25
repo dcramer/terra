@@ -34,12 +34,16 @@ const INDOOR_EV: f32 = 10.8;
 /// shadowed fifth of the probe stills read redder than the torch-lit tenth (linear R/B 33
 /// against 9). At 140 (round 15) the shade reads cooler than the torch-lit (R/B 4.5 against 7).
 const FILL: f32 = 140.0;
-/// Its colour: a cool, moonless blue-grey, as shipped dungeons light their darks (Diablo IV's
-/// and Elden Ring's catacombs: warm pools at the fires, cool shadow between), so the eye reads
-/// a torch's warmth against them rather than one tint over everything. Green enough that the
+/// Its colour: a cool, moonless grey, as shipped dungeons light their darks (Diablo IV's and
+/// Elden Ring's catacombs: warm pools at the fires, cool shadow between), so the eye reads a
+/// torch's warmth against them rather than one tint over everything. Green enough that the
 /// torches' red spill over it reads grey, not violet: (0.60, 0.72, 1.0) left the shade at a
-/// linear G/B of 0.3-0.4 (round 15's sweep).
-const FILL_COLOUR: Color = Color::srgb(0.62, 0.78, 1.0);
+/// linear G/B of 0.3-0.4 (round 15's sweep). Near grey: at (0.62, 0.78, 1.0), linear blue
+/// three times its red, whatever the torches missed went sky blue, a mine's ceiling slab and
+/// the lintels a blue band over the frame, a grey rock a blue-white lump (round 17's
+/// reviewers: "a ceiling slab that reads as sky"); a neutral fill took the blue off them
+/// (round 18's stills, the sky's own light at nought changing nothing).
+const FILL_COLOUR: Color = Color::srgb(0.78, 0.84, 0.95);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(PostUpdate, fill);
@@ -122,15 +126,21 @@ mod tests {
         // Seen: within six stops of it, over 8-bit black after the tonemapper (at 8 cd/m² it
         // stood 7.3 stops under and the shade took none of its colour).
         assert!(on_screen > 0.18 / 64.0, "{on_screen}");
-        // Cool on the dungeons' warm stone (ochre, linear 0.35, 0.27, 0.18): it gives back
-        // more blue than red, against the fires' warm light.
+        // Cool against the fires: on the dungeons' warm stone (ochre, linear 0.35, 0.27,
+        // 0.18) it gives back a red over blue a tenth of the torches' at least.
         let c = FILL_COLOUR.to_linear();
-        let back = [c.red * 0.35, c.green * 0.27, c.blue * 0.18];
-        assert!(back[2] > back[0], "{back:?}");
+        let t = crate::fire::TORCH_LIGHT.to_linear();
+        let back = (c.red * 0.35) / (c.blue * 0.18);
+        let torch = (t.red * 0.35) / (t.blue * 0.18);
+        assert!(back * 10.0 < torch, "{back} against the torches' {torch}");
         // A grey's blue, not violet: green over half its blue, so red spill over it is grey.
         assert!(
             c.blue > c.green && c.green > c.red && c.green > 0.5 * c.blue,
             "{c:?}"
         );
+        // Never sky: what only it lights, a plain grey ceiling or rock, is a cool grey, its
+        // colour's spread under four tenths of its brightest (0.66 read as sky, round 17).
+        let spread = (c.blue - c.red) / c.blue;
+        assert!(spread < 0.4, "{spread}");
     }
 }
