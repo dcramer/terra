@@ -9,7 +9,7 @@
 //! while its mouth is under and refills at the surface; out of breath, it drowns a second at a
 //! time, as Minecraft's and Valheim's swimmers take harm in pulses.
 
-use super::{Body, Intent, Kind};
+use super::{Body, Intent, Kind, World};
 use std::f32::consts::FRAC_PI_2;
 
 /// How far under floating depth an upward stroke begins to ease off, m: so a swimmer rising
@@ -53,10 +53,12 @@ pub(super) fn stroke(
     (ease > 0.0).then_some(up * ease)
 }
 
-/// A body's breath after a tick whose end left its mouth so deep under water (negative out of
-/// it), m: used while under, refilled at the surface, and once gone, its health taken a share
+/// A body's breath after a tick, by how deep its mouth ends under the water over its feet:
+/// used while under, refilled at the surface, and once gone, its health taken a share
 /// at a time ([`Body::drown`]).
-pub(super) fn breathe(body: &mut Body, mouth_depth: f32, dt: f32) {
+pub(super) fn breathe(body: &mut Body, world: &World, dt: f32) {
+    let from_centre = (body.position - world.centre.as_dvec3()).length() as f32;
+    let mouth_depth = mouth_depth(body, (world.water)(body.feet), from_centre);
     let k = &body.kind;
     body.under = mouth_depth > 0.0;
     body.drown = 0.0;
@@ -80,7 +82,7 @@ pub(super) fn breathe(body: &mut Body, mouth_depth: f32, dt: f32) {
 }
 
 /// How deep a body's mouth is under the water over its feet, m (negative out of it).
-pub(super) fn mouth_depth(body: &Body, surface: Option<f32>, from_centre: f32) -> f32 {
+fn mouth_depth(body: &Body, surface: Option<f32>, from_centre: f32) -> f32 {
     surface.map_or(f32::NEG_INFINITY, |surface| {
         surface - from_centre - body.kind.mouth * body.kind.height
     })

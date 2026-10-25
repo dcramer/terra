@@ -773,9 +773,7 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let landed = (was_airborne && body.ground == Ground::Grounded)
         .then(|| libm::sqrtf(falling * falling + 2.0 * g * dropped));
     landing(body, landed, level, jump, world, dt);
-    let from_centre = (body.position - world.centre.as_dvec3()).length() as f32;
-    let mouth = swim::mouth_depth(body, (world.water)(body.feet), from_centre);
-    swim::breathe(body, mouth, dt);
+    swim::breathe(body, world, dt);
 }
 
 /// What a tick's end keeps of its landing and its jump: the speed it landed at and what the
