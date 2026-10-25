@@ -139,6 +139,10 @@ hit.flash.frames	3	first numbers of D456's hit flash and camera kick (combat rou
 hit.kick.peak	0.8	first numbers of D456's hit flash and camera kick (combat round 12): the struck body lit 3 frames at 60, the view punched 0.8 deg and settled in 0.083 s
 hit.kick.settle	0.083	first numbers of D456's hit flash and camera kick (combat round 12): the struck body lit 3 frames at 60, the view punched 0.8 deg and settled in 0.083 s
 hit.burst.frames	3	first number of the D487 contact burst, combat round 17, the glow where the blade met the body shows 3 frames at 60, Enshrouded 3 to 4
+move.blows.shield_high	-8.841	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
+move.blows.shield_elbow	0.087	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
+move.blows.shield_face	112.131	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
+move.chain.shield_round_trip	0.439	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
 move.Idle_Loop.hands	1.606	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Idle_Loop.held	21.403	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Walk_Loop.hands	6.212	seeded from main at 705a8520 (2026-10-24), the first scorecard run

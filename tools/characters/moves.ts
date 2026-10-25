@@ -18,6 +18,13 @@
 //           in front of the hips it stands
 //   chain   how far a move's last pose is from the next one's first, and each blow's first
 //           and last pose from the guard's: hands, forearms, head and blade tip, metres
+//   carry   where a blow carries its shield while its sword swings (its active frames; the
+//           guard is its own row), shield_path.ts, research/2026-10-25-shield-prior-art.md:
+//           the board's middle above the left shoulder at its highest, the left elbow below the
+//           shoulder at its least, the painted face off the chest's forward at its most; and
+//           for each chained pair, the shield's round trip as the next blow starts at the
+//           cancel, crossfaded over the game's move blend. Numbers for the scorecard
+//           (tools/combat), not bars here: a row "blows" and a row "chain" take the worst
 //   spec    a clip with a spec: from and back to the guard; one that holds the guard
 //           ("held") within a blend of it throughout; a block's shield arm up in front and
 //           still while it is "raised"
@@ -37,6 +44,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, board, meshOf, sliced, through } from "./clash.ts";
 import { PACE_FRAMES } from "./phases.ts";
+import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, matrix, mmul, place, posed, qinv, rot, sub, turn } from "./glb.ts";
 
@@ -83,7 +91,7 @@ const RAISED_UP_M = 0.42; // across the face, above a guard's forearm across the
 const ELBOW_M = 0.2;
 const STILL_M = 0.08;
 
-type Move = { name: string; clip: string; from: number; speed: number; done: number; active?: [number, number]; next?: string; hold?: number };
+type Move = { name: string; clip: string; from: number; speed: number; done: number; active?: [number, number]; next?: string; cancel?: number; hold?: number };
 
 /** The clip a set names as its guard (`guard: "..."` outside its moves), if any. */
 function setGuard(file: string): string | undefined {
@@ -108,6 +116,7 @@ function readSet(file: string): Move[] {
       done: num("done")!,
       active: active ? [Number(active[1]), Number(active[2])] : undefined,
       next: body.match(/\bnext:\s*"([^"]+)"/)?.[1],
+      cancel: num("cancel"),
       hold: num("hold"),
     });
   }
@@ -214,7 +223,8 @@ function poseOf(shape: Shape, clip: Clip, t: number): Pose[] {
 // forearm), from the bone its file's `strap` names, as `terra_walker::character` hangs it.
 // The sword (in the right hand) also as balls, the shield (in the left) as its board, for the
 // clash (clash.ts), in the frame of the node they hang from.
-type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; centre: V3; balls?: Ball[]; board?: Board };
+// `front` is the way the look's painted front (its -Z) looks, in that frame.
+type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; front: V3; centre: V3; balls?: Ball[]; board?: Board };
 type Strap = { bone: string; at: V3; face: V3; grip: V3 };
 const rest = posed(body, undefined, 0);
 // A strap's place in its bone's frame: `at` in metres (the hand socket's, which the bone's
@@ -275,7 +285,8 @@ const held: Held[] = opt.hold!.map((h) => {
   const balls = hand === "socket.hand.R" ? sliced(mesh!, tip).map((b) => ({ ...b, p: put(b.p), r: b.r * k })) : undefined;
   const disc = hand === "socket.hand.L" ? board(mesh!) : undefined;
   const plate = disc && { centre: put(disc.centre), normal: turned(disc.normal), radius: disc.radius * k, half: disc.half * k };
-  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), centre: put(centre), balls, board: plate };
+  const front = turned(rot(pose.r, [0, 0, -1]));
+  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, centre: put(centre), balls, board: plate };
 });
 
 // The skinned torso, head and thighs at a pose, gridded for the nearest-vertex search.
@@ -328,7 +339,7 @@ const at = (name: string) => {
   return i;
 };
 const node = Object.fromEntries(
-  ["pelvis", "Head", "thigh_l", "thigh_r", ...["l", "r"].flatMap((s) => [`hand_${s}`, `lowerarm_${s}`, `upperarm_${s}`, `middle_01_${s}`, `middle_02_${s}`, `index_02_${s}`, `thumb_02_${s}`])].map((n) => [n, at(n)]),
+  ["pelvis", "Head", "spine_03", "thigh_l", "thigh_r", ...["l", "r"].flatMap((s) => [`hand_${s}`, `lowerarm_${s}`, `upperarm_${s}`, `middle_01_${s}`, `middle_02_${s}`, `index_02_${s}`, `thumb_02_${s}`])].map((n) => [n, at(n)]),
 );
 const mid = (a: V3, b: V3): V3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
 
@@ -348,13 +359,29 @@ function swordArm(P: (n: string) => V3): Ball[] {
 const sword = held.find((h) => h.balls);
 const shield = held.find((h) => h.board);
 
+// Where the shield is carried (shield_path.ts): the board's middle as the clash hangs it, the
+// chest's forward (spine_03's, ahead at rest), and the middle in the chest's frame, which a
+// shield arm held still against the chest keeps however the body turns.
+const chestRest = qinv(rest[node.spine_03].r);
+const chestAhead = (pose: Pose[]): V3 => rot(pose[node.spine_03].r, rot(chestRest, [0, 0, 1]));
+const shieldMiddle = (pose: Pose[]): V3 => place(pose[at(shield!.socket)], shield!.board!.centre);
+function inChest(pose: Pose[]): V3 {
+  const c = pose[node.spine_03];
+  return rot(qinv(c.r), sub(shieldMiddle(pose), c.t)).map((x) => x / c.s[0]) as V3;
+}
+
 // Hands, forearms and held looks against the body, and the held looks against each other, over
-// a span of a clip, on every template.
-function penetration(clip: Clip, from: number, to: number) {
+// a span of a clip, on every template; the shield's carry over `carrying` (a blow's active
+// frames: while its sword swings, the guard is dropped).
+function penetration(clip: Clip, from: number, to: number, carrying: [number, number] = [from, to]) {
   let hands: Worst = { cm: -Infinity, where: "" };
   let heldW: Worst = { cm: -Infinity, where: "" };
   let swordW: Worst = { cm: -Infinity, where: "" };
   let armW: Worst = { cm: -Infinity, where: "" };
+  // The carry: cm above the shoulder, m of the elbow below it (the least, kept negated), degrees off.
+  let high: Worst = { cm: -Infinity, where: "" };
+  let elbow: Worst = { cm: -Infinity, where: "" };
+  let face: Worst = { cm: -Infinity, where: "" };
   for (const shape of shapes) {
     for (let t = from; t <= to + 1e-6; t += 1 / fps) {
       const pose = poseOf(shape, clip, t);
@@ -390,10 +417,16 @@ function penetration(clip: Clip, from: number, to: number) {
         swordW = worse(swordW, blade.cm, `${blade.part} in ${shield.name} at ${t.toFixed(2)} s, ${shape.name}`);
         const arm = through(swordArm(P), disc);
         armW = worse(armW, arm.cm, `${shield.name} in ${arm.part} at ${t.toFixed(2)} s, ${shape.name}`);
+        if (t < carrying[0] - 1e-6 || t > carrying[1] + 1e-6) continue;
+        const when = `at ${t.toFixed(2)} s, ${shape.name}`;
+        const shoulder = P("upperarm_l");
+        high = worse(high, (shieldMiddle(pose)[1] - shoulder[1]) * 100, when);
+        elbow = worse(elbow, P("lowerarm_l")[1] - shoulder[1], when);
+        face = worse(face, faceOff(rot(B.r, shield.front), chestAhead(pose)), when);
       }
     }
   }
-  return { hands, held: heldW, sword: swordW, arm: armW };
+  return { hands, held: heldW, sword: swordW, arm: armW, carry: { high, elbow: { cm: -elbow.cm, where: elbow.where }, face } };
 }
 
 // Points that say where a pose is, relative to the hips: hands, forearms, head, blade tip.
@@ -450,6 +483,9 @@ const cm = (x: number) => `${x.toFixed(1)} cm`;
 // The clash's numbers and its words, where there is a sword and a shield to measure.
 type Pen = ReturnType<typeof penetration>;
 const clashed = (pen: Pen): Record<string, number> => (sword && shield ? { sword_shield_cm: pen.sword.cm, shield_arm_cm: pen.arm.cm } : {});
+// The carry's numbers of a clip that is no blow (a guard, a walk): what a blow's start and end hold.
+const carriedBy = (pen: Pen): Record<string, number> =>
+  sword && shield ? { shield_high_cm: pen.carry.high.cm, shield_elbow_below_m: pen.carry.elbow.cm, shield_face_back_deg: pen.carry.face.cm } : {};
 const clashParts = (pen: Pen) => (sword && shield ? [`sword in shield ${cm(pen.sword.cm)} (${pen.sword.where})`, `shield in arm ${cm(pen.arm.cm)} (${pen.arm.where})`] : []);
 const failures: string[] = [];
 type Row = { move?: string; clip: string; bad: string[]; gaps?: [number, number]; measured: Record<string, number> };
@@ -470,13 +506,15 @@ const specs: Record<string, Blow> = Object.fromEntries(
 const guardClip = clipOf(opt.guard ?? setGuard(opt.set!) ?? "Fight_Guard");
 const guardMarks = marks(guardClip, 0);
 const byName = new Map(moves.map((m) => [m.name, m]));
+// The worst carry of every blow, for the row "blows".
+const carried = { high: { cm: -Infinity, where: "" }, elbow: { cm: Infinity, where: "" }, face: { cm: -Infinity, where: "" } };
 
 for (const move of moves) {
   const clip = clipOf(move.clip);
   const parts: string[] = [];
   const bad: string[] = [];
   let gaps: [number, number] | undefined;
-  const pen = penetration(clip, move.from, move.done);
+  const pen = penetration(clip, move.from, move.done, move.active);
   const measured: Record<string, number> = { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen) };
   parts.push(`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen));
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
@@ -486,6 +524,15 @@ for (const move of moves) {
     // A blow moves the shield out of its sword's path (D481); a guard or block is a later bar.
     if (pen.sword.cm > CLASH_CM) bad.push(`sword in shield ${cm(pen.sword.cm)} deep, ${pen.sword.where}`);
     if (pen.arm.cm > CLASH_CM) bad.push(`shield in arm ${cm(pen.arm.cm)} deep, ${pen.arm.where}`);
+    const { high, elbow, face } = pen.carry;
+    measured.shield_high_cm = high.cm;
+    measured.shield_elbow_below_m = elbow.cm;
+    measured.shield_face_back_deg = face.cm;
+    parts.push(`shield ${cm(high.cm)} above the shoulder at most, elbow ${elbow.cm.toFixed(2)} m below it at least, face ${face.cm.toFixed(0)}° off the chest's forward at most`);
+    const of = (w: Worst) => ({ cm: w.cm, where: `${move.name} ${w.where}` });
+    if (high.cm > carried.high.cm) carried.high = of(high);
+    if (elbow.cm < carried.elbow.cm) carried.elbow = of(elbow);
+    if (face.cm > carried.face.cm) carried.face = of(face);
   }
   if (move.active) {
     const a = arc(move);
@@ -567,13 +614,45 @@ for (const move of moves) {
   row(`${move.name} (${move.clip})`, parts, bad, { move: move.name, clip: move.clip, gaps, measured });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
+if (shield && carried.high.cm > -Infinity) {
+  const { high, elbow, face } = carried;
+  row(
+    "blows, the shield's carry",
+    [`highest ${cm(high.cm)} above the shoulder (${high.where})`, `elbow ${elbow.cm.toFixed(2)} m below the shoulder at least (${elbow.where})`, `face ${face.cm.toFixed(0)}° off the chest's forward at most (${face.where})`],
+    [],
+    { clip: "blows", measured: { shield_high_cm: high.cm, shield_elbow_below_m: elbow.cm, shield_face_back_deg: face.cm } },
+  );
+}
+// Each chained pair, the next blow started at the cancel (a press buffered into the window
+// starts it as it opens, terra_motion::moves): the shield's middle in the chest's frame, the
+// outgoing clip playing on as the incoming fades in over the move blend.
+const trips: { pair: string; m: number; where: string }[] = [];
+if (shield)
+  for (const move of moves) {
+    const next = move.next ? byName.get(move.next) : undefined;
+    if (!next || move.cancel === undefined) continue;
+    const [out, into] = [clipOf(move.clip), clipOf(next.clip)];
+    for (const shape of shapes) {
+      const along = (clip: Clip, from: number, speed: number) => (u: number) => inChest(poseOf(shape, clip, Math.min(clip.end, from + u * speed)));
+      const r = roundTrip(along(out, move.cancel, move.speed), along(into, next.from, next.speed), MOVE_BLEND_S, ROUND_TRIP_S, 1 / 60);
+      const pair = `${move.name} into ${next.name}`;
+      const i = trips.findIndex((x) => x.pair === pair);
+      const trip = { pair, m: r.m, where: `${r.at.toFixed(2)} s after the cancel, ${shape.name}` };
+      if (i < 0) trips.push(trip);
+      else if (r.m > trips[i].m) trips[i] = trip;
+    }
+  }
+if (trips.length) {
+  const worst = trips.reduce((a, b) => (b.m > a.m ? b : a));
+  row("chain, the shield's round trip", trips.map((x) => `${x.pair} ${x.m.toFixed(2)} m (${x.where})`), [], { clip: "chain", measured: { shield_round_trip_m: worst.m } });
+}
 for (const name of opt.also!.split(",").filter(Boolean)) {
   const clip = clipOf(name);
   const pen = penetration(clip, 0, clip.end);
   const bad: string[] = [];
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
-  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen) } });
+  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen), ...carriedBy(pen) } });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
 if (opt.json) writeFileSync(opt.json, JSON.stringify(rows, null, 1) + "\n");

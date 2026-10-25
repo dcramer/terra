@@ -2524,7 +2524,7 @@
    "check": null
   },
   {
-   "measurable": false,
+   "measurable": true,
    "cost": "cheap",
    "id": "move.blows.shield_high",
    "noticed": 5,
@@ -2534,11 +2534,14 @@
    },
    "unit": "cm",
    "source": "Enshrouded ftp 245.40-247.20 s (the shield's middle at the belly to the lower chest through a chained light blow); I.33 fol. 1r (the buckler forward at the chest); research/2026-10-25-shield-prior-art.md",
-   "needs": "moves.ts: for every blow (a move with active frames) on every template, the strapped shield's middle (its board's centre, as the clash hangs it) above the left shoulder joint (upperarm_l's head), the highest over the clip, cm; a row measure shield_high_cm",
-   "check": null
+   "check": {
+    "by": "moves",
+    "row": "blows",
+    "measure": "shield_high_cm"
+   }
   },
   {
-   "measurable": false,
+   "measurable": true,
    "cost": "cheap",
    "id": "move.blows.shield_elbow",
    "noticed": 4,
@@ -2548,11 +2551,14 @@
    },
    "unit": "m",
    "source": "Enshrouded ftp 245.40-247.20 s (the shield arm's elbow by the waist, the forearm forward); Mordhau, Elden Ring (recalled: the shield arm low at the side between blocks); research/2026-10-25-shield-prior-art.md",
-   "needs": "moves.ts: for every blow on every template, how far the left elbow (lowerarm_l's head) is below the left shoulder (upperarm_l's head), the least over the clip, m; a row measure shield_elbow_below_m",
-   "check": null
+   "check": {
+    "by": "moves",
+    "row": "blows",
+    "measure": "shield_elbow_below_m"
+   }
   },
   {
-   "measurable": false,
+   "measurable": true,
    "cost": "cheap",
    "id": "move.blows.shield_face",
    "noticed": 4,
@@ -2562,11 +2568,14 @@
    },
    "unit": "deg",
    "source": "Enshrouded ftp 245.40-247.20 s (the face forward and out to the left, oblique); research/2026-10-25-shield-prior-art.md",
-   "needs": "moves.ts: for every blow on every template, the angle between the shield's face (its -Z, as `guard` turns it) and the chest's forward (spine_03's ahead, flattened), the largest over the clip, deg; a row measure shield_face_back_deg",
-   "check": null
+   "check": {
+    "by": "moves",
+    "row": "blows",
+    "measure": "shield_face_back_deg"
+   }
   },
   {
-   "measurable": false,
+   "measurable": true,
    "cost": "cheap",
    "id": "move.chain.shield_round_trip",
    "noticed": 5,
@@ -2576,8 +2585,11 @@
    },
    "unit": "m",
    "source": "D447 (moves.ts CHAIN_M); Enshrouded ftp 245.47-247.20 s (the shield stays out at the side between chained blows); the duel film r17 record frames 298-306 and 338-356 (round trips of about 0.13 and 0.2 s); research/2026-10-25-shield-prior-art.md",
-   "needs": "moves.ts: for each chained pair in the set (a move's `next` started at its `cancel`), the shield's middle in the outgoing clip at the cancel against the incoming clip's over its first 0.3 s, crossfaded over the game's 110 ms move blend (melee::show), the largest gap, m; a row per pair, measure shield_round_trip_m",
-   "check": null
+   "check": {
+    "by": "moves",
+    "row": "chain",
+    "measure": "shield_round_trip_m"
+   }
   },
   {
    "measurable": false,
