@@ -10,7 +10,7 @@
 
 use crate::Base;
 use glam::IVec3;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// How much of a room's light a doorway between two rooms passes to the room beyond: half, a
 /// room seeing another through a door seeing about half of what that room sees round it.
@@ -64,6 +64,48 @@ impl Base {
         share
     }
 
+    /// The doorways between two rooms: each run of opening cubes a room looks through into
+    /// another, as a box of cubes, corners inclusive, and the rooms it joins. Its cubes are
+    /// part of the wall, in neither room (D155), so a doorway's jambs, sill, lintel and
+    /// leaves would take the light of no room; a probe of its own gives them the rooms'.
+    pub fn passages(&self) -> Vec<Passage> {
+        let mut cubes: BTreeMap<[u32; 2], BTreeSet<[i32; 3]>> = BTreeMap::new();
+        for (at, room) in self.room_cells() {
+            for step in FACES {
+                let Beyond::Room(other) = self.beyond_opening(at, step) else {
+                    continue;
+                };
+                if other == room {
+                    continue;
+                }
+                let run = cubes.entry([room.min(other), room.max(other)]).or_default();
+                let mut c = at + step;
+                while self.room(c).is_none() && self.cube(c).is_some_and(|c| c.is_built()) {
+                    run.insert(c.to_array());
+                    c += step;
+                }
+            }
+        }
+        let mut found = Vec::new();
+        for (rooms, mut left) in cubes {
+            while let Some(first) = left.pop_first() {
+                let (mut low, mut high) = (IVec3::from_array(first), IVec3::from_array(first));
+                let mut next = vec![first];
+                while let Some(at) = next.pop() {
+                    let at = IVec3::from_array(at);
+                    (low, high) = (low.min(at), high.max(at));
+                    for step in FACES {
+                        if left.remove(&(at + step).to_array()) {
+                            next.push((at + step).to_array());
+                        }
+                    }
+                }
+                found.push(Passage { low, high, rooms });
+            }
+        }
+        found
+    }
+
     /// What a room's cube looks out on through an opening beside it, going one way: nothing
     /// if no opening is there or a solid cube closes it, else the room or the outside air
     /// past the opening.
@@ -89,6 +131,16 @@ impl Base {
             None => Beyond::Outside(past),
         }
     }
+}
+
+/// A doorway between two rooms (`Base::passages`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Passage {
+    /// Its opening cubes' box, corners inclusive.
+    pub low: IVec3,
+    pub high: IVec3,
+    /// The two rooms it joins, the lower number first.
+    pub rooms: [u32; 2],
 }
 
 enum Beyond {
@@ -158,5 +210,21 @@ mod tests {
         assert!((share(&base, [6, 2, 2], 1.0) - THROUGH_A_DOORWAY).abs() < 1e-6);
         // Air beyond that sees no sky (dug ground under the earth) brings none either way.
         assert_eq!(share(&base, [6, 2, 2], 0.0), 0.0);
+    }
+
+    #[test]
+    fn a_doorway_between_two_rooms_is_its_opening_cubes_and_one_onto_the_open_is_none() {
+        let mut base = two_rooms();
+        // A window onto the open air is no doorway between rooms.
+        fill(&mut base, [0, 1, 2], [0, 2, 2], opening());
+        assert!(base.passages().is_empty());
+        fill(&mut base, [4, 1, 1], [4, 3, 2], opening());
+        let rooms = |at: [i32; 3]| base.room(IVec3::from_array(at)).expect("a room");
+        let (west, east) = (rooms([2, 2, 2]), rooms([6, 2, 2]));
+        let doorways = base.passages();
+        assert_eq!(doorways.len(), 1, "{doorways:?}");
+        let d = doorways[0];
+        assert_eq!((d.low, d.high), (IVec3::new(4, 1, 1), IVec3::new(4, 3, 2)));
+        assert_eq!(d.rooms, [west.min(east), west.max(east)]);
     }
 }

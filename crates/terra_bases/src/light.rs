@@ -242,7 +242,15 @@ fn place(
         if placed.0.get(&build.root).map(|(revision, _)| *revision) == Some(build.revision) {
             continue;
         }
-        let rooms = build.base.indoors();
+        // A doorway between two rooms is part of the wall, in neither room's box: its own
+        // probe gives its jambs, lintel and leaves the rooms' light, not the sky's.
+        let doorways = build.base.passages();
+        let rooms: Vec<(IVec3, IVec3)> = build
+            .base
+            .indoors()
+            .into_iter()
+            .chain(doorways.iter().map(|d| (d.low, d.high)))
+            .collect();
         let unchanged = placed
             .0
             .get(&build.root)
@@ -251,19 +259,18 @@ fn place(
         if unchanged {
             continue;
         }
-        let boxes: Vec<(Vec3, Vec3)> = build
-            .base
-            .indoors_m()
-            .into_iter()
-            .map(|(low, high)| {
+        let cube_m = terra_build::CELL_M;
+        let boxes: Vec<(Vec3, Vec3)> = rooms
+            .iter()
+            .map(|&(low, high)| {
                 (
-                    low - Vec3::splat(INTO_WALLS_M),
-                    high + Vec3::splat(INTO_WALLS_M),
+                    low.as_vec3() * cube_m - Vec3::splat(INTO_WALLS_M),
+                    (high + IVec3::ONE).as_vec3() * cube_m + Vec3::splat(INTO_WALLS_M),
                 )
             })
             .collect();
         let wanted: Vec<[i32; 6]> = boxes.iter().map(|&(min, max)| key(min, max)).collect();
-        let skies = room_skies(&build.base, &build.frame, &planet, &rooms);
+        let skies = room_skies(&build.base, &build.frame, &planet, &rooms, &doorways);
         let mut kept = Vec::new();
         for (_, parent, mut probe) in &mut probes {
             if parent.parent() != build.root {
@@ -318,23 +325,28 @@ fn place(
 
 /// How much of the sky's light each room box lets in (D486), in `rooms`' order: its room's
 /// share from its openings (`Base::room_sky`), the air beyond each seeing what of the sky the
-/// ground round it leaves open (`sky_seen`).
+/// ground round it leaves open (`sky_seen`); the boxes past the rooms' are `doorways`', each
+/// the mean of the two rooms it joins.
 fn room_skies(
     base: &terra_build::Base,
     frame: &Transform,
     planet: &Planet,
     rooms: &[(IVec3, IVec3)],
+    doorways: &[terra_build::sky::Passage],
 ) -> Vec<f32> {
     let cube = terra_build::CELL_M;
     let shares =
         base.room_sky(|air| sky_seen(planet, frame.transform_point((air.as_vec3() + 0.5) * cube)));
-    rooms
+    let share = |room: u32| shares.get(&room).copied().unwrap_or(1.0);
+    let boxes = rooms.len() - doorways.len();
+    rooms[..boxes]
         .iter()
-        .map(|(low, _)| {
-            base.room(*low)
-                .and_then(|room| shares.get(&room).copied())
-                .unwrap_or(1.0)
-        })
+        .map(|(low, _)| base.room(*low).map_or(1.0, share))
+        .chain(
+            doorways
+                .iter()
+                .map(|d| (share(d.rooms[0]) + share(d.rooms[1])) * 0.5),
+        )
         .collect()
 }
 

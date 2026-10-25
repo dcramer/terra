@@ -15,7 +15,7 @@
 //! the rest are kept as they were, so an edit to a castle costs what its rooms near it
 //! cost, not the castle.
 
-use crate::{Base, CELL_M, Cube};
+use crate::{Base, Cube};
 use glam::IVec3;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock};
@@ -196,19 +196,6 @@ impl Base {
             self.found().boxes.values().flatten().copied().collect();
         boxes.sort_by_key(|(low, high)| (low.to_array(), high.to_array()));
         boxes
-    }
-
-    /// The rooms' boxes in metres in the base's own space, low and high corners.
-    pub fn indoors_m(&self) -> Vec<(glam::Vec3, glam::Vec3)> {
-        self.indoors()
-            .into_iter()
-            .map(|(low, high)| {
-                (
-                    low.as_vec3() * CELL_M,
-                    (high + IVec3::ONE).as_vec3() * CELL_M,
-                )
-            })
-            .collect()
     }
 
     /// Whether a cube closes a room in, and the lowest and highest layers of a column that
