@@ -401,6 +401,19 @@ fn stands_at(world: vec3<f32>) -> f32 {
     return textureSampleLevel(cover_stood, map_sampler, at, 0.0).r * inside;
 }
 
+// East and south of the start in the world, the cover map's axes (`floor::from_world`), or the
+// world's own where there is no map: a frame fixed over the land near the start.
+fn level_axes() -> array<vec3<f32>, 2> {
+    if ground.cover_on == 0u {
+        return array<vec3<f32>, 2>(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 1.0));
+    }
+    let m = ground.cover_from_world;
+    return array<vec3<f32>, 2>(
+        normalize(vec3<f32>(m[0].x, m[1].x, m[2].x)),
+        normalize(vec3<f32>(m[0].y, m[1].y, m[2].y)),
+    );
+}
+
 // How much a path runs here, 0 off it to 1 on it, as the cover's third map says.
 fn worn_at(world: vec3<f32>) -> f32 {
     if ground.cover_on == 0u {
@@ -2170,14 +2183,23 @@ fn fragment(
     let open = (1.0 - smoothstep(0.2, 0.6, canopy_over(world))) * snow;
     var ripple = vec2<f32>(0.0);
     if open > 0.01 {
-        let way = normalize(tangent * 0.8 + bitangent * 0.6);
+        // Their phase is how far a point lies along a bearing fixed over the land, never one
+        // turned by the pixel's own normal: `world` is the planet's, kilometres from its
+        // middle, so a turn of the interpolated normal by a hundred-thousandth of a radian
+        // moved a ripple by its own width, and the ripples drew the mesh's normals as rings
+        // of fine lit lines kinked at 45 degrees (snow round 2's "chevron").
+        let level = level_axes();
+        let wind = normalize(level[0] * 0.8 - level[1] * 0.6);
+        let across_wind = normalize(level[0] * 0.6 + level[1] * 0.8);
+        let along_m = dot(world, wind);
+        let way = normalize(wind - geometric * dot(wind, geometric));
         let side = cross(geometric, way);
         let bend = noise(world * 0.3 + 23.0) * 2.4;
-        let phase = fract(dot(world, way) * RIPPLE_PER_M + bend + 0.6 * noise(world * 1.3 + 5.0));
+        let phase = fract(along_m * RIPPLE_PER_M + bend + 0.6 * noise(world * 1.3 + 5.0));
         let face = select(-3.0, 1.0, phase < 0.75) * smoothstep(0.0, 0.08, phase) * (1.0 - smoothstep(0.92, 1.0, phase));
         let patchy = smoothstep(0.35, 0.75, noise(world * 0.22 + 61.0));
         let seen = 1.0 - smoothstep(0.25, 0.6, length(fwidth(world)) * RIPPLE_PER_M);
-        let q = world + way * dot(world, way) * -0.8 + side * dot(world, side) * 1.5;
+        let q = world + wind * along_m * -0.8 + across_wind * dot(world, across_wind) * 1.5;
         let ridge = noise(q * 0.9 + side * 0.25 + 77.0) - noise(q * 0.9 - side * 0.25 + 77.0);
         let r = way * (face * RIPPLE_LEAN * patchy * seen) + side * (ridge * 1.6);
         ripple = vec2<f32>(dot(r, tangent), dot(r, bitangent)) * open;
