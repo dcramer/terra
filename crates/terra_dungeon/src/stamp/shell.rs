@@ -61,6 +61,9 @@ fn slabs(layout: &Layout, cell: &Cell, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
     }
 }
 
+/// A doorway's opening in cubes, across and up, between its jambs and under its lintel.
+pub(super) const DOORWAY: [i32; 2] = [4, 5];
+
 /// A side of a cell, seen from it (its north edge in the frame): a wall a cube thick from the
 /// floor slab to the ceiling slab; a doorway 4 cubes wide and 5 high with trim jambs and
 /// lintel; a stair's way 4 wide and 6 high.
@@ -71,10 +74,16 @@ fn wall(f: Frame, side: Side, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
     f.fill(ops, [0, -1, 0], [5, 7, 0], solid(kinds.wall));
     match side {
         Side::Door(_) => {
-            f.fill(ops, [1, 0, 0], [4, 4, 0], opening(kinds.wall));
-            f.fill(ops, [0, 0, 0], [0, 5, 0], solid(kinds.trim));
-            f.fill(ops, [5, 0, 0], [5, 5, 0], solid(kinds.trim));
-            f.fill(ops, [1, 5, 0], [4, 5, 0], solid(kinds.trim));
+            let [wide, high] = DOORWAY;
+            f.fill(ops, [1, 0, 0], [wide, high - 1, 0], opening(kinds.wall));
+            f.fill(ops, [0, 0, 0], [0, high, 0], solid(kinds.trim));
+            f.fill(
+                ops,
+                [wide + 1, 0, 0],
+                [wide + 1, high, 0],
+                solid(kinds.trim),
+            );
+            f.fill(ops, [1, high, 0], [wide, high, 0], solid(kinds.trim));
         }
         Side::Way => f.fill(ops, [1, 0, 0], [4, 5, 0], opening(kinds.wall)),
         _ => {}

@@ -28,6 +28,12 @@ use terra_build::{BuildOp, Cube, Facing, Fill, Kind, Shape};
 
 /// A building cube's edge, in metres.
 pub const CUBE: f32 = 0.5;
+/// A doorway's opening, across and up, in metres: what its door's leaves fill, a door
+/// object standing at the middle of its sill.
+pub const DOORWAY_M: [f32; 2] = [
+    shell::DOORWAY[0] as f32 * CUBE,
+    shell::DOORWAY[1] as f32 * CUBE,
+];
 /// Cubes across a cell.
 pub(crate) const CELL: i32 = 6;
 /// Cubes from one level's floor to the next.

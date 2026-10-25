@@ -8,7 +8,7 @@ use bevy::world_serialization::WorldAssetRoot;
 use std::f32::consts::FRAC_PI_2;
 use terra_creatures::creatures::{Form, Kinds};
 use terra_creatures::species::Bestiary;
-use terra_dungeon::stamp::{LightKind, ObjectRole};
+use terra_dungeon::stamp::{DOORWAY_M, LightKind, ObjectRole};
 use terra_game::build::{Build, BuildLook, Built};
 use terra_world::fire::{Kindled, Logs};
 use terra_world::planet::Planet;
@@ -30,8 +30,8 @@ const TORCH_FIRE: Kindled = Kindled {
 };
 /// A brazier's fire burns in its bowl, so far under the light's point.
 const BRAZIER_DROP_M: f32 = 0.5;
-/// A door leaf's hinge is at its side; the leaf is so wide.
-const DOOR_WIDE_M: f32 = 0.89;
+/// The studded leaf's model, hinged at its origin and reaching along +X: so wide and so high.
+const LEAF_M: Vec2 = Vec2::new(0.894, 1.939);
 
 /// A dungeon object the game makes live: the goal, a key, a door leaf.
 #[derive(Component, Debug)]
@@ -49,6 +49,26 @@ pub(super) struct Mobs(Vec<(String, Vec3)>);
 /// A turn about up so a model's front (+Z) faces a side.
 fn facing(side: usize) -> Quat {
     Quat::from_rotation_y((2.0 - side as f32) * FRAC_PI_2)
+}
+
+/// A doorway's two leaves, a double door as a gate of its width is hung: each hinged at one
+/// jamb and reaching to the middle, the second turned half round so it reaches back (a
+/// leaf's planks and studs are alike on both faces); where each hinge stands and how it
+/// turns, from the middle of the sill and the doorway's turn.
+fn leaves(sill: Vec3, turn: Quat) -> [(Vec3, Quat); 2] {
+    let along = turn * Vec3::X * (DOORWAY_M[0] * 0.5);
+    [
+        (sill - along, turn),
+        (
+            sill + along,
+            turn * Quat::from_rotation_y(std::f32::consts::PI),
+        ),
+    ]
+}
+
+/// The studded leaf stretched to half a doorway's width and its full height.
+fn leaf_scale() -> Vec3 {
+    Vec3::new(DOORWAY_M[0] * 0.5 / LEAF_M.x, DOORWAY_M[1] / LEAF_M.y, 1.0)
 }
 
 fn scene(assets: &AssetServer, model: &str) -> WorldAssetRoot {
@@ -134,21 +154,30 @@ pub(super) fn put_up(
         }
         for object in &stamp.objects {
             let turn = facing(object.facing);
-            // A door leaf hangs from its hinge, half its width along the wall from the middle.
-            let at = match object.role {
-                ObjectRole::Door => object.at - turn * Vec3::X * (DOOR_WIDE_M * 0.5),
-                _ => object.at,
+            let live = || DungeonObject {
+                role: object.role,
+                name: object.name.clone(),
+                locked: object.locked,
             };
-            inside.spawn((
-                Name::new(object.name.clone()),
-                DungeonObject {
-                    role: object.role,
-                    name: object.name.clone(),
-                    locked: object.locked,
-                },
-                scene(&assets, &object.model),
-                Transform::from_translation(at).with_rotation(turn),
-            ));
+            if object.role != ObjectRole::Door {
+                inside.spawn((
+                    Name::new(object.name.clone()),
+                    live(),
+                    scene(&assets, &object.model),
+                    Transform::from_translation(object.at).with_rotation(turn),
+                ));
+                continue;
+            }
+            for (at, turn) in leaves(object.at, turn) {
+                inside.spawn((
+                    Name::new(object.name.clone()),
+                    live(),
+                    scene(&assets, &object.model),
+                    Transform::from_translation(at)
+                        .with_rotation(turn)
+                        .with_scale(leaf_scale()),
+                ));
+            }
         }
     });
     let mobs = stamp
@@ -184,4 +213,41 @@ pub(super) fn form_mobs(
     }
     info!("Dungeon: {} creatures formed", mobs.0.len());
     commands.remove_resource::<Mobs>();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The two leaves close the doorway jamb to jamb and sill to lintel, meeting in the
+    /// middle, for every way a doorway faces.
+    #[test]
+    fn a_doorways_two_leaves_fill_it_jamb_to_jamb_and_meet_in_the_middle() {
+        let scale = leaf_scale();
+        for side in 0..4 {
+            let turn = facing(side);
+            let sill = Vec3::new(3.0, -2.0, 7.0);
+            let across = turn * Vec3::X;
+            let mut spans = Vec::new();
+            for (hinge, leaf) in leaves(sill, turn) {
+                // The model's corners: hinge foot and the far top corner.
+                let far = hinge + leaf * (Vec3::new(LEAF_M.x, LEAF_M.y, 0.0) * scale);
+                let (a, b) = ((hinge - sill).dot(across), (far - sill).dot(across));
+                spans.push((a.min(b), a.max(b)));
+                assert!(
+                    (far.y - hinge.y - DOORWAY_M[1]).abs() < 1e-4,
+                    "{side}: height"
+                );
+                assert!((hinge.y - sill.y).abs() < 1e-5, "{side}: on the sill");
+            }
+            spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let half = DOORWAY_M[0] * 0.5;
+            assert!((spans[0].0 + half).abs() < 1e-4, "{side}: {spans:?}");
+            assert!(
+                spans[0].1.abs() < 1e-4 && spans[1].0.abs() < 1e-4,
+                "{side}: {spans:?}"
+            );
+            assert!((spans[1].1 - half).abs() < 1e-4, "{side}: {spans:?}");
+        }
+    }
 }
