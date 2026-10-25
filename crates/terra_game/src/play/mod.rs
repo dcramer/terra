@@ -160,7 +160,12 @@ impl Plugin for GameplayPlugin {
         music::plugin(app);
         app.insert_resource(DrivenByPlayer)
             .add_observer(equip)
-            .add_systems(PostStartup, arrive_by_the_door.before(walker::spawn))
+            .add_systems(
+                PostStartup,
+                arrive_by_the_door
+                    .run_if(not(resource_exists::<ArriveAt>))
+                    .before(walker::spawn),
+            )
             .configure_sets(Update, tool::Acting.after(PlayerInput).before(MenuSystems))
             .add_systems(
                 Update,
@@ -184,7 +189,8 @@ impl Plugin for GameplayPlugin {
     }
 }
 
-/// Stands the player a little way out from the base's door, facing it.
+/// Stands the player a little way out from the base's door, facing it, unless a scene has
+/// already said where they arrive (a sandbox's dungeon, at its entrance stair).
 fn arrive_by_the_door(mut commands: Commands, site: Res<Site>) {
     let (approach, facing) = site.approach();
     commands.insert_resource(ArriveAt {
