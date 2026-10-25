@@ -709,9 +709,10 @@ fn lit_jets(blazes: &Blazes, tier: crate::fire::BreathTier) -> Vec<Lit> {
     all.into_iter().take(jets).collect()
 }
 
-/// A campfire swells and sinks as a whole over a second or two, a little: under 7% either way
-/// (filmed campfires' area varies 9-19% in all, mostly in puffs that rise them, fire round
-/// g13), and slowly: its steepest, two depths over a cell at 1.5 times, about 0.13 a second.
+/// A campfire swells and sinks as a whole over a second or two, a little: under 3.5% either way
+/// (filmed campfires' area varies 9-19% in all, mostly in puffs that rise them, fire rounds
+/// g13 and g15), and slowly: its steepest, two depths over a cell at 1.5 times, about 0.06 a
+/// second.
 #[test]
 fn a_campfire_swells_slowly_and_shallowly() {
     let flicker = Flicker::of(0.7);
@@ -721,13 +722,13 @@ fn a_campfire_swells_slowly_and_shallowly() {
     let (low, high) = samples
         .iter()
         .fold((f32::MAX, f32::MIN), |(l, h), &w| (l.min(w), h.max(w)));
-    assert!(low >= 0.93 && high <= 1.07, "{low} {high}");
-    assert!(high - low > 0.04, "it swells: {low} {high}");
+    assert!(low >= 0.965 && high <= 1.035, "{low} {high}");
+    assert!(high - low > 0.02, "it swells: {low} {high}");
     let fastest = samples
         .windows(2)
         .map(|w| (w[1] - w[0]).abs() / 0.001)
         .fold(0.0f32, f32::max);
-    assert!(fastest < 0.15, "slow: {fastest} a second");
+    assert!(fastest < 0.08, "slow: {fastest} a second");
 }
 
 #[test]

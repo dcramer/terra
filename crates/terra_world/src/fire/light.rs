@@ -365,7 +365,8 @@ pub(super) fn glow(blaze: &Blaze, t: f32) -> f32 {
 /// Shallow: at g6's fifth the whole marched flame pumped in place, its area's sd/mean 0.25-0.36
 /// against filmed campfires' 0.09-0.19 and its flicker 0.83 Hz against their 1.8-3.8
 /// (research/2026-10-25-fire-motion.md); its motion is its field's rising puffs (fire round g13).
-const SWELL: (f32, f32) = (0.06, 0.7);
+/// At 0.06 the campfire's area at dusk still varied 0.191 (fire round g15).
+const SWELL: (f32, f32) = (0.03, 0.7);
 
 /// A fire's slow swell and sink at a time, a share of its mean, from its own number: smooth
 /// value noise at `SWELL`'s rate, as deep as a campfire's for a fire that flickers as deep or

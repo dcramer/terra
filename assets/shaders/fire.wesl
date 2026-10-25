@@ -1515,6 +1515,11 @@ const FIELD_EVOLVE: f32 = 1.8;
 // much hotter its skin is there, so its tips go orange and see-through (g13: at 0.16 its top
 // third was 36% red, filmed campfires' 3-47; at g14's 0.05, 66%).
 const FIELD_TOP: vec3<f32> = vec3<f32>(0.3, 0.4, 0.16);
+// How much of the brightness its top's skin heat would add is taken back (1 all): the lift
+// turns its tips' colour from red to orange, not their light up, so by night, exposed 2.5
+// stops up, they don't tonemap yellow (g15: with the brightness, the campfire's top third
+// from above went 24% yellow by night, against 6% at 0.05, and the sheet's 27% over its 23).
+const FIELD_TOP_KEEP: f32 = 1.0;
 const FIELD_STEPS: i32 = 96;
 const FIELD_LOBES: i32 = 7;
 // A torch's field (under `TORCH_M`): lobes over its head's one point, a middle tongue from
@@ -1647,8 +1652,9 @@ fn field_shape(q: vec3<f32>, f: HearthField, time: f32) -> f32 {
     return v;
 }
 
-// The field at a point in its frame: x its flame's density per metre, y its heat (the ramp's).
-fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec2<f32> {
+// The field at a point in its frame: x its flame's density per metre, y its heat (the ramp's),
+// z its heat without its top's skin lift (`FIELD_TOP_KEEP`).
+fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
     let hg = saturate(p.y / f.tall);
     let s = f.scale;
     let luck = vec3(f.seed * 13.7, f.seed * 7.1, f.seed * 3.3);
@@ -1660,7 +1666,7 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec2<f32> {
     let q = vec3(p.x + (sway.x * FIELD_SWAY * f.wide - lean.x) * (0.15 + hg), p.y, p.z + (sway.y * FIELD_SWAY * f.wide - lean.y) * (0.15 + hg));
     var v = field_shape(q, f, time);
     if v < -0.5 {
-        return vec2(0.0, 0.0);
+        return vec3(0.0);
     }
     // Its puffs: a wave phased by height, so a swelling born at the foot rises the flame in
     // FIELD_PUFF.x / its rate seconds (0.4 for a campfire) and the low and high flame swell
@@ -1684,12 +1690,14 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec2<f32> {
     // A thin cool skin over a hot inside, hottest low over the coals, so the pale core shows
     // through the skin rather than being hidden by it; the core hot only deep inside, so the
     // flame stays orange as its class has it and the yellow is a small heart (fire sheet).
-    let heat = 0.40 + 0.45 * saturate(v * 2.0) * (1.0 - FIELD_TOP.x * hg) + 0.10 * (1.0 - smoothstep(0.0, 0.3, hg)) + FIELD_TOP.z * smoothstep(0.3, 0.9, hg) * saturate(v * 4.0);
+    let unlifted = 0.40 + 0.45 * saturate(v * 2.0) * (1.0 - FIELD_TOP.x * hg) + 0.10 * (1.0 - smoothstep(0.0, 0.3, hg));
+    let heat = unlifted + FIELD_TOP.z * smoothstep(0.3, 0.9, hg) * saturate(v * 4.0);
     // Its heart: deep inside its lower part the flame is thicker and burns at the ramp's pale
     // top, so a dense pale mass sits over the coals and grades to orange at the rim, its upper
     // part still see-through (fire round g9: RDR2's 12% pale from above, ours 2-4%).
     let core = smoothstep(FIELD_CORE.x, FIELD_CORE.x + 0.12, v) * (1.0 - smoothstep(FIELD_CORE.y * 0.5, FIELD_CORE.y, hg));
-    return vec2(dens * f.k * (1.0 + FIELD_CORE.z * core), mix(heat * (0.85 + 0.15 * f.heat), FIELD_CORE_HEAT, core));
+    let burns = 0.85 + 0.15 * f.heat;
+    return vec3(dens * f.k * (1.0 + FIELD_CORE.z * core), mix(heat * burns, FIELD_CORE_HEAT, core), mix(unlifted * burns, FIELD_CORE_HEAT, core));
 }
 
 // The hull round a hearth's field, in its frame (across, up, across).
@@ -1759,7 +1767,12 @@ fn hearth_march(in: VertexOutput) -> vec4<f32> {
         if gas.x > 0.0 {
             let r = ramp_row(gas.y, HEARTH_ROW);
             let a = 1.0 - exp(-gas.x * min(ds, far - s));
-            let flame = r.rgb * bright;
+            var flame = r.rgb * bright;
+            if gas.z < gas.y - 1.0e-4 {
+                let lum = vec3(0.2126, 0.7152, 0.0722);
+                let was = dot(ramp_row(gas.z, HEARTH_ROW).rgb, lum) / max(dot(r.rgb, lum), 1.0e-5);
+                flame *= mix(1.0, was, FIELD_TOP_KEEP);
+            }
             light += through * a * flame;
             glow += through * a * dot(flame, vec3(0.2126, 0.7152, 0.0722));
             let was = 1.0 - through;
