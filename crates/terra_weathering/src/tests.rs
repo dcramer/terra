@@ -217,3 +217,161 @@ fn a_house_weathered_has_a_map_for_every_exposed_face() {
         }
     }
 }
+
+/// How high a gabled house's wall stands in its column `z`: 4 cubes at the eaves (z = 0 and
+/// 9), stepping up a cube every two toward the ridge.
+fn gable_top(z: i32) -> i32 {
+    3 + z.min(9 - z).max(0) / 2
+}
+
+/// A stone house 8 by 10 cubes, its eave walls (z = 0 and 9) 4 high, its gable walls (x = 0
+/// and 7) stepping up under a roof that overhangs every wall by a cube (verges and eaves), a
+/// window in the west gable two cubes up.
+fn gabled(at: IVec3) -> Stuff {
+    let (x, y, z) = (at.x, at.y, at.z);
+    if (-1..=8).contains(&x) && (-1..=10).contains(&z) && y == gable_top(z.clamp(0, 9)) + 1 {
+        return Stuff::Roof;
+    }
+    let walls =
+        (x == 0 || x == 7 || z == 0 || z == 9) && (0..=7).contains(&x) && (0..=9).contains(&z);
+    let window = x == 0 && (4..=5).contains(&z) && (1..=2).contains(&y);
+    if walls && (0..=gable_top(z)).contains(&y) && !window {
+        Stuff::Stone
+    } else {
+        Stuff::Air
+    }
+}
+
+#[test]
+fn streaks_start_at_a_sill_or_a_level_wall_head_never_under_a_gable_verge() {
+    let below = |face: usize, at: IVec3, fv: f32| {
+        Context::of(&gabled, &FACES[face], at, 0).at(0.5, fv).below
+    };
+    // The west gable (face -x, sheltered by its verge): under its window's sill, streaks; up its
+    // stepped head, under the verge, none.
+    assert!(below(1, IVec3::new(0, 0, 4), 0.5) > 0.2);
+    for z in 0..=9 {
+        for y in 3..=gable_top(z) {
+            for fv in [0.1, 0.5, 0.9] {
+                let b = below(1, IVec3::new(0, y, z), fv);
+                assert_eq!(
+                    b, 0.0,
+                    "a streak under the gable's verge at z {z}, y {y}: {b}"
+                );
+            }
+        }
+    }
+    // Beside the window, with no sill over it, none.
+    assert_eq!(below(1, IVec3::new(0, 1, 2), 0.5), 0.0);
+    // The eave wall (face -z) ends level under the roof, so streaks run down from its head,
+    // along all of it.
+    for x in 0..=7 {
+        assert!(
+            below(5, IVec3::new(x, 3, 0), 0.5) > 0.0,
+            "none under the eave at x {x}"
+        );
+    }
+}
+
+#[test]
+fn a_streak_runs_down_from_its_source_never_from_mid_wall() {
+    // A 3 by 8 grid, streaks allowed from row 2 down: a run begun at row 4 is carried up to
+    // row 2; one under soot is cleared; one already at the top is kept as it is.
+    let (w, h) = (3, 8);
+    let rows = ["...", "...", "..w", ".k.", "ww.", "ww.", ".w.", "..."];
+    let mut grid: Vec<char> = rows.concat().chars().collect();
+    raster::from_the_source(&mut grid, w, h, &|_, y| y >= 2);
+    let column = |x: usize| (0..h).map(|y| grid[y * w + x]).collect::<String>();
+    assert_eq!(column(0), "..wwww..");
+    assert_eq!(column(1), "...k....");
+    assert_eq!(column(2), "..w.....");
+}
+
+/// The streak layer's texels along a row of cubes of one face, left to right, `row` texels
+/// down from their top.
+fn streak_row(out: &Weathered, face: usize, cubes: &[IVec3], row: usize) -> Vec<u8> {
+    let across = out.dims.x as usize * 6;
+    let per_row = out.per_row as usize;
+    let mut texels = Vec::new();
+    for at in cubes {
+        let rel = *at - out.low;
+        let slot =
+            out.lookup[(rel.z * out.dims.y + rel.y) as usize * across + rel.x as usize * 6 + face];
+        assert!(slot > 0, "no map for {at} face {face}");
+        let s = slot as usize - 1;
+        let (sx, sy) = (s % per_row, s / per_row);
+        for col in 0..TILE {
+            let i = ((sy * TILE + row) * out.side() + sx * TILE + col) * 4 + 3;
+            texels.push(out.atlas[0][i]);
+        }
+    }
+    texels
+}
+
+/// The widths of the bands along a row of texels, where each is over half the row's peak.
+fn bands(texels: &[u8]) -> Vec<usize> {
+    let peak = u32::from(*texels.iter().max().unwrap_or(&0));
+    let mut out = Vec::new();
+    let mut run = 0;
+    for &t in texels.iter().chain([&0]) {
+        if u32::from(t) * 2 > peak {
+            run += 1;
+        } else if run > 0 {
+            out.push(run);
+            run = 0;
+        }
+    }
+    out
+}
+
+#[test]
+fn streaks_are_soft_bands_under_the_eave_and_sill_and_none_under_the_verge() {
+    let (low, high) = (IVec3::new(-1, 0, -1), IVec3::new(8, 8, 10));
+    let eave: Vec<Vec<IVec3>> = (0..=3)
+        .map(|y| (0..=7).map(|x| IVec3::new(x, y, 0)).collect())
+        .collect();
+    let sill: Vec<IVec3> = (0..=9).map(|z| IVec3::new(0, 0, z)).collect();
+    let (mut widths, mut under_verge) = (Vec::new(), 0u32);
+    for seed in 0..4 {
+        let settings = Settings {
+            mode: Mode::Wfc,
+            age: 50.0,
+            seed,
+            tries: 10,
+        };
+        let out = weather(&gabled, low, high, &settings);
+        // The eave wall's rows (face -z, along x) and the gable's under its window.
+        let rows = eave.iter().map(|c| (5, c)).chain([(1, &sill)]);
+        for (face, cubes) in rows {
+            for row in 0..TILE {
+                let texels = streak_row(&out, face, cubes, row);
+                if texels.iter().any(|&t| t >= 64) {
+                    widths.extend(bands(&texels));
+                }
+            }
+        }
+        // Nothing on the gable over the window's head, under the verge.
+        for z in 0..=9 {
+            for y in 3..=gable_top(z) {
+                under_verge += (0..TILE)
+                    .flat_map(|row| streak_row(&out, 1, &[IVec3::new(0, y, z)], row))
+                    .map(u32::from)
+                    .sum::<u32>();
+            }
+        }
+    }
+    assert_eq!(under_verge, 0, "streaks under the gable's verge");
+    assert!(
+        widths.len() > 20,
+        "too few streaks to judge: {}",
+        widths.len()
+    );
+    widths.sort_unstable();
+    let median = widths[widths.len() / 2];
+    eprintln!(
+        "streaks: median {median} texels (1.6 cm) across, {} bands",
+        widths.len()
+    );
+    // About 10 cm or more across: a band, not a hairline.
+    assert!(median >= 6, "streaks a median {median} texels across");
+}

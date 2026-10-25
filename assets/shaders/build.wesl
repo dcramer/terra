@@ -656,7 +656,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         c = mix(c, mix(vec3(lum), c, 0.5) * vec3(0.42, 0.38, 0.31), clamp(grime, 0.0, 1.0));
         c *= 1.0 - 0.45 * weather.b.w;
         c = mix(c, mix(c, vec3(lum), 0.35) * 1.3, weather.b.y * 0.55);
-        c = mix(c, c * vec3(0.22, 0.21, 0.19), clamp(weather.a.w * 1.2, 0.0, 1.0));
+        // Streaks: a faint wash down from a sill or a wall head, a little darker and greyer, never
+        // a black line.
+        c = mix(c, mix(c, vec3(lum), 0.2) * vec3(0.77, 0.76, 0.74), clamp(weather.a.w, 0.0, 1.0));
         c = mix(c, vec3(0.02, 0.018, 0.016), weather.c.x * 0.85);
         let lichen = smoothstep(0.2, 0.6, weather.b.z * (0.6 + 0.8 * grain));
         c = mix(c, c * 0.4 + vec3(0.16, 0.16, 0.1), lichen * 0.7);

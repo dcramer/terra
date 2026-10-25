@@ -5,7 +5,7 @@
 
 use crate::faces::{FACES, Plane};
 use crate::masks::{Context, Masks, Wants, aged};
-use crate::motifs::LAYERS as MOTIFS;
+use crate::motifs::{BANNED_BELOW, LAYERS as MOTIFS};
 use crate::wfc::Model;
 use crate::{CELL_M, LAYERS, Mode, Settings, Stats, Stuff, TILE, Weathered};
 use glam::{IVec3, Vec2, Vec3};
@@ -84,6 +84,31 @@ pub fn prune(grid: &mut [char], w: usize, h: usize, c: char, min: usize) {
     }
 }
 
+/// Streaks ('w') run down from where water leaves the wall, a sill or a wall's head, never
+/// begin mid-wall: each run is carried up over the empty pixels where streaks may go (`wet`)
+/// to the top of that zone, or to a run over it; one stopped short by soot is cleared.
+pub fn from_the_source(grid: &mut [char], w: usize, h: usize, wet: &dyn Fn(usize, usize) -> bool) {
+    // Top down, so a run carried up into one over it joins one already carried up.
+    for y in 0..h {
+        for x in 0..w {
+            if grid[y * w + x] != 'w' || (y > 0 && grid[(y - 1) * w + x] == 'w') {
+                continue;
+            }
+            let mut top = y;
+            while top > 0 && grid[(top - 1) * w + x] == '.' && wet(x, top - 1) {
+                top -= 1;
+            }
+            let reached = top == 0 || !wet(x, top - 1) || grid[(top - 1) * w + x] == 'w';
+            let fill = if reached { 'w' } else { '.' };
+            let foot = (y..h)
+                .take_while(|&k| grid[k * w + x] == 'w')
+                .last()
+                .unwrap_or(y);
+            (top..=foot).for_each(|k| grid[k * w + x] = fill);
+        }
+    }
+}
+
 /// A plane's faces' maps, in the order of its cubes, and how its solves went.
 pub struct Drawn {
     pub maps: Vec<[Vec<u8>; LAYERS]>,
@@ -135,6 +160,14 @@ pub fn solve(
     };
     if index == 0 {
         prune(&mut symbols, w, h, 'c', MIN_CRACK);
+    }
+    if index == 3 {
+        let wet = |x: usize, y: usize| {
+            cube_of(x, y).is_some_and(|(c, fu, fv)| {
+                Wants::of(&c.at(fu, fv), c.stuff, settings.age).streak >= BANNED_BELOW
+            })
+        };
+        from_the_source(&mut symbols, w, h, &wet);
     }
     Solved {
         symbols,
@@ -376,12 +409,13 @@ fn spots(s: &Solved, g: Vec2, seed: u32) -> f32 {
     out
 }
 
-/// A streak at a point: a narrow line down the pixel's middle, darkest at its top and
-/// fading to its foot.
+/// A streak at a point: a soft band down the pixel's middle, 10 to 25 cm across (at four
+/// pixels a half-metre face), widening as it runs down, darkest at its top and fading to its
+/// foot.
 fn streak_at(s: &Solved, g: Vec2, seed: u32) -> f32 {
     let (x, y) = (g.x.floor() as i32, g.y.floor() as i32);
     let mut out: f32 = 0.0;
-    for cx in x - 1..=x + 1 {
+    for cx in x - 2..=x + 2 {
         if !s.is(cx, y, 'w') {
             continue;
         }
@@ -389,7 +423,8 @@ fn streak_at(s: &Solved, g: Vec2, seed: u32) -> f32 {
         let down = (1..).take_while(|k| s.is(cx, y + k, 'w')).count() as f32;
         let along = (up + (g.y - y as f32)) / (up + down + 1.0);
         let centre = cx as f32 + 0.5 + 0.4 * (hash::unit(hash::of(&[cx as u32, seed, 71])) - 0.5);
-        let across = (g.x - centre).abs() / (0.18 + 0.12 * along);
+        let spread = 0.4 + 0.25 * hash::unit(hash::of(&[cx as u32, seed, 73])) + 0.25 * along;
+        let across = (g.x - centre).abs() / spread;
         out = out.max(libm::expf(-across * across) * (1.0 - 0.75 * along));
     }
     out

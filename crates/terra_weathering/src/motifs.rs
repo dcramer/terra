@@ -1,6 +1,6 @@
 //! The weathering motifs, as example patches the overlapping model learns from, a layer
 //! each: what a patch shows is what the solver may make, a crack's pixels joined as a
-//! crack's are, moss in patches, streaks a pixel wide and running down.
+//! crack's are, moss in patches, streaks in columns running down.
 
 use crate::masks::Wants;
 use crate::wfc::{MAX_SYMBOLS, Model};
@@ -117,7 +117,8 @@ const GROWTH: &[&str] = &[
     ",
 ];
 
-/// Streaks a pixel wide running down from where water leaves a sill, of many lengths;
+/// Streaks, a column of pixels each, running down from where water leaves a sill or a wall head
+/// (drawn as soft bands wider than a pixel, `raster::streak_at`), of many lengths;
 /// soot rising in a plume.
 const FLOW: &[&str] = &["
     .w..w.w...w..w.

@@ -42,6 +42,9 @@ pub struct Context {
     /// How many cubes up the opening over it is (its sill), or the ledge over it.
     sill: Option<i32>,
     ledge: Option<i32>,
+    /// How many cubes up the top of its wall is, where the wall ends level under a roof:
+    /// an eave's wall head, never a gable's stepped verge.
+    top: Option<i32>,
     /// How many cubes down the opening under it is (its head).
     head: Option<i32>,
     /// Whether something stands over the air in front of it: an eave, a floor above.
@@ -60,7 +63,7 @@ pub struct Masks {
     pub cavity: f32,
     /// Looking up: moss, lichen.
     pub up: f32,
-    /// Under a sill or a ledge, where water runs down: streaks.
+    /// Under a sill or a level wall head under a roof, where water runs down: streaks.
     pub below: f32,
     /// Over an opening: soot, loosened stones.
     pub above: f32,
@@ -68,6 +71,55 @@ pub struct Masks {
     pub ground: f32,
     /// Under an eave: dry, dusty.
     pub sheltered: f32,
+}
+
+/// Whether a cube is a wall's: laid stone or timber, not a roof's covering.
+fn walling(s: Stuff) -> bool {
+    matches!(s, Stuff::Stone | Stuff::Timber)
+}
+
+/// Whether the cube `head` is the top of a wall facing `n`: wall, its face open, and no wall
+/// over it.
+fn is_head(stuff: &dyn Fn(IVec3) -> Stuff, n: IVec3, head: IVec3) -> bool {
+    walling(stuff(head)) && !walling(stuff(head + IVec3::Y)) && !stuff(head + n).solid()
+}
+
+/// How many cubes up from the foot of `at` the top of its wall is, up through open wall
+/// alone, where water running off a roof wets the wall head: only where the wall ends level
+/// under a roof (its covering on the wall or an eave over the air in front), as along an
+/// eave. A gable's head steps with the roof's slope, so its sloped verge is no source; nor is
+/// a wall broken by an opening first (that is a sill's), or one open to the sky.
+fn wall_top(stuff: &dyn Fn(IVec3) -> Stuff, face: &Face, at: IVec3) -> Option<i32> {
+    let n = face.normal;
+    let k = (0..LOOK).find(|&k| !walling(stuff(at + IVec3::Y * (k + 1))))?;
+    let head = at + IVec3::Y * k;
+    let open = |q: IVec3| walling(stuff(q)) && !stuff(q + n).solid();
+    if !(0..=k).all(|j| open(at + IVec3::Y * j)) || !is_head(stuff, n, head) {
+        return None;
+    }
+    let over = head + IVec3::Y;
+    if stuff(over) != Stuff::Roof && !stuff(over + n).solid() {
+        return None;
+    }
+    // Level: along it either way to its end, every head at the same height. A step up is wall
+    // standing on along it, a step down air with open wall under it.
+    let level = [face.u, -face.u].into_iter().all(|d| {
+        for i in 1..=LOOK {
+            let q = head + d * i;
+            if is_head(stuff, n, q) {
+                continue;
+            }
+            let end = if stuff(q).solid() {
+                // Another wall standing out in front, an inside corner: its end.
+                walling(stuff(q)) && stuff(q + n).solid()
+            } else {
+                !open(q - IVec3::Y)
+            };
+            return end;
+        }
+        true
+    });
+    level.then_some(k + 1)
 }
 
 /// The first `k` in `1..=LOOK` for which `hit` holds.
@@ -91,8 +143,17 @@ impl Context {
         let wall = face.normal.y == 0;
         let solid_over =
             |from: IVec3, k: i32| (k..k + 2 * LOOK).any(|j| stuff(from + IVec3::Y * j).solid());
-        // An opening over it: air in the wall over it with wall again over that.
-        let sill = first(|k| wall && !stuff(at + IVec3::Y * k).solid() && solid_over(at, k + 1));
+        let up = |k: i32| at + IVec3::Y * k;
+        // An opening over it: air in the wall over it, up through wall alone, with wall (not a
+        // roof's covering, as over a gable's step) again over that.
+        let sill = (1..=LOOK).find(|&k| !walling(stuff(up(k)))).filter(|&k| {
+            wall && !stuff(up(k)).solid() && (k + 1..=k + LOOK).any(|j| walling(stuff(up(j))))
+        });
+        let top = if wall {
+            wall_top(stuff, face, at)
+        } else {
+            None
+        };
         // An opening under it: air in the wall under it, above the ground.
         let head = first(|k| wall && at.y - k >= ground && !stuff(at - IVec3::Y * k).solid());
         let ledge = first(|k| wall && stuff(at + n + IVec3::Y * k).solid());
@@ -102,6 +163,7 @@ impl Context {
             sill,
             ledge,
             head,
+            top,
             sheltered: solid_over(at + n, 1),
             height: at.y - ground,
             up: face.normal.y > 0,
@@ -130,12 +192,12 @@ impl Context {
         if self.ledge == Some(1) {
             cavity = cavity.max(ramp(to[0], LEDGE_M));
         }
-        // Metres from the point up to a sill or ledge, and down to an opening's head.
+        // Metres from the point up to a sill or a level wall head, and down to an opening's head.
         let rise = |k: i32| (k as f32 - fv) * CELL_M;
         let under = self
             .sill
             .into_iter()
-            .chain(self.ledge)
+            .chain(self.top)
             .map(rise)
             .fold(f32::MAX, f32::min);
         let below = if under < f32::MAX {
