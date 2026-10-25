@@ -61,7 +61,8 @@ export const LAG_BANDS: [[number, number], [number, number]] = [
   [0.75, 0.9],
 ];
 export const MAX_LAG = 0.6;
-/// The flicker spectrum's window, s: our films are 6 s an hour.
+/// The flicker spectrum's window, s: Welch's, so a longer film averages more of them. Film ours 20 s an
+/// hour and pass `--seconds 20`: a 6 s film gives too few tongues for their rates (fire round g20).
 export const SEGMENT = 6;
 
 export type Geometry = { base: number; height: number; x0: number; x1: number };
