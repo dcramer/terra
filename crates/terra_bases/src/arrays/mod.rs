@@ -122,7 +122,7 @@ pub struct BuildArrays {
     pub view: Vec4,
     /// One build weathered (`crate::weathering`, research/2026-10-25-wfc-weathering.md):
     /// rows 0-2 the world-to-build affine in cubes, 3 (its least cube, 1 if on), 4 (its box
-    /// in cubes, maps a row of the atlas), 5 (which way, its age).
+    /// in cubes, maps a row of the atlas), 5 (which way, its age, metres a cube).
     #[uniform(100)]
     pub weather: [Vec4; 6],
     #[texture(101, dimension = "2d_array")]

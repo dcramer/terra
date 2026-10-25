@@ -219,7 +219,7 @@ fn weather(
         row(2),
         weathered.low.as_vec3().extend(1.0),
         dims.as_vec3().extend(weathered.per_row as f32),
-        Vec4::new(mode as u8 as f32, file.age, 0.0, 0.0),
+        Vec4::new(mode as u8 as f32, file.age, CELL_M, 0.0),
     ];
     w.weather_lookup = images.add(lookup);
     w.weather_motif = images.add(motif);

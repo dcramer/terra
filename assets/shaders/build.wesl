@@ -101,7 +101,8 @@ struct Weather {
 // banded it; it takes its moss and lichen from noise instead, the same in either way: moss's
 // want rising toward the eaves and drifting broadly across the slope (the fragment lays it in
 // the laps under each course's butt, by the covering's height), lichen's crusts a few
-// centimetres across, both by the building's age; c.y how far down toward the eaves.
+// centimetres across, both by the building's age; c.y how far down toward the eaves. On a
+// wall, c.w how high the point is over the build's foot, in metres.
 fn weather_at(wp: vec3<f32>, wn: vec3<f32>, roof: bool) -> Weather {
     var out = Weather(vec4(0.0), vec4(0.0), vec4(0.0), false);
     let w = layers.weather;
@@ -174,7 +175,7 @@ fn weather_at(wp: vec3<f32>, wn: vec3<f32>, roof: bool) -> Weather {
     );
     out.a = vec4(m[0], m[1], m[2], m[3]);
     out.b = vec4(k[0], k[1], m[4], k[2]);
-    out.c = vec4(m[5], k[3], k[4], 1.0);
+    out.c = vec4(m[5], k[3], k[4], (local.y - f32(low.y)) * w[5].z);
     out.on = true;
     return out;
 }
@@ -705,6 +706,30 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             aged_cover = age;
         }
         let timber = way == 2 || way == 3;
+        // How near the foot of the wall: the last metre and a half, where splash, damp and the
+        // ground's dirt darken a wall most.
+        let foot = select(1.0 - smoothstep(0.0, 1.6, weather.c.w), 0.0, roof);
+        if way == 1 {
+            // Each stone its own: no two from a quarry are alike, and each weathers apart, a
+            // little lighter or darker, warmer (iron-stained) or cooler (greener) than the next,
+            // now and then one much darker; the cells' number with the texture's repeat, so a
+            // stone differs from its copy a repeat away. Faded out with the cells as a covering's
+            // pieces are, before a stone is a few pixels across.
+            let cell = cell_at(uv, slot);
+            if cell > 0.0 && piece_shown > 0.0 {
+                let id = vec2(cell * 255.0 + 37.0 * floor(uv.x), 11.0 + 53.0 * floor(uv.y));
+                let k = piece_shown * age;
+                let tone = 1.0 + 0.24 * k * (2.0 * hash21(id) - 1.0);
+                let warm = 0.08 * k * (2.0 * hash21(id + vec2(0.0, 101.0)) - 1.0);
+                c = c * tone * vec3(1.0 + warm, 1.0 + 0.25 * abs(warm), 1.0 - 1.4 * warm);
+                let stained = step(0.84, hash21(id + vec2(57.0, 0.0))) * k;
+                c = mix(c, mix(c, vec3(lum), 0.3) * vec3(0.6, 0.57, 0.5), stained * 0.75);
+            }
+            // The whole wall dulled by age, darker and browner toward its foot, as old walls
+            // are, paler and greyer up its courses where the rain washes it.
+            c = mix(c, mix(c, vec3(lum), 0.35) * vec3(0.93, 0.92, 0.88), 0.5 * age);
+            c = mix(c, mix(c, vec3(lum), 0.3) * vec3(0.55, 0.52, 0.45), foot * foot * 0.75 * age);
+        }
         let grime = weather.b.x * (0.75 + 0.5 * grain);
         // Timber's grime and damp below, its own: dark already, it would go near black here.
         c = mix(c, mix(vec3(lum), c, 0.5) * vec3(0.42, 0.38, 0.31), clamp(grime, 0.0, 1.0) * select(1.0, 0.0, timber));
@@ -757,8 +782,14 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let crust = mix(vec3(0.3, 0.31, 0.26), vec3(0.4, 0.3, 0.11), ochre) * (0.85 + 0.3 * grain);
             c = mix(c, crust, lichen * 0.75);
         } else {
-            lichen = smoothstep(0.2, 0.6, weather.b.z * (0.6 + 0.8 * grain));
-            c = mix(c, c * 0.4 + vec3(0.16, 0.16, 0.1), lichen * 0.7);
+            // Crustose lichen on stone: pale grey-green crusts, here and there a yellow-ochre
+            // one, a few centimetres across, most on the upper courses, which dry between rains,
+            // and none in the damp at the foot.
+            let upper = smoothstep(0.6, 2.6, weather.c.w) * (1.0 - foot);
+            lichen = smoothstep(0.25, 0.55, weather.b.z * (0.5 + 0.7 * grain) * (0.55 + 0.9 * upper));
+            let ochre = smoothstep(0.66, 0.8, noise21(st * 4.3 + 17.0));
+            let crust = mix(vec3(0.36, 0.37, 0.31), vec3(0.42, 0.33, 0.12), ochre) * (0.85 + 0.3 * grain);
+            c = mix(c, crust, lichen * 0.8);
         }
         // Moss as cushions in the joints, blended by the material's height as engines blend a
         // layer by height (the Worn block's way): a thin field fills the mortar's low places
