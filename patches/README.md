@@ -7,7 +7,7 @@ is the crates.io release we pin, copied whole (its licence files kept), with the
 | Crate | Release | Change | Upstream |
 |---|---|---|---|
 | `bevy_mesh` | 0.20.0 | `Mesh::write_packed_vertex_buffer_data` packs runs of 64 KiB of vertices in ordinary memory, then copies each into the slice in one write; `create_packed_vertex_buffer_data` packs straight into its `Vec` (D435) | [bevyengine/bevy#17000](https://github.com/bevyengine/bevy/issues/17000) |
-| `bevy_pbr` | 0.20.0 | `irradiance_volume.wesl`'s `smaller_reflection_probe_holds` and the irradiance volume step of `pbr_functions.wesl`: a reflection probe smaller than every irradiance volume holding a fragment gives its diffuse light, not the volume (D485) | not yet offered |
+| `bevy_pbr` | 0.20.0 | `irradiance_volume.wesl`'s `smaller_reflection_probe_holds` and the irradiance volume step of `pbr_functions.wesl`: a reflection probe smaller than every irradiance volume holding a fragment gives its diffuse light, not the volume; and `light_probe/mod.rs`'s `MAX_VIEW_LIGHT_PROBE_SLOTS`: a view holds 64 probes sharing the 8 texture slots (D485) | not yet offered |
 
 ## Carrying one to a new Bevy release
 
