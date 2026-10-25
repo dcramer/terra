@@ -148,13 +148,21 @@ pub(super) fn lay(
             }
             Class::Sarcophagus => f.fill(ops, [1, 0, 2], [4, 1, 3], solid(kinds.wall)),
             Class::Timber => {
-                for (d, x) in [(1, 5), (3, 0)] {
-                    if walled(d) {
-                        f.fill(ops, [x, 0, 3], [x, 6, 3], solid(kinds.trim));
+                // Each set where its cell puts it along the bay, and one in four with a post
+                // and its beam gone: every set whole in the bay's middle, a straight
+                // gallery read as five identical frames nested down the vista, a tiling bug
+                // (round 13's mine film, 28.5 s).
+                let z = 2 + (hash(cell.at, 420) % 3) as i32;
+                let broken = hash(cell.at, 421).is_multiple_of(4);
+                let gone = hash(cell.at, 422) % 2;
+                let wall = |d: usize| cell.sides[f.side(d)] == Side::Wall;
+                for (k, (d, x)) in [(1, 5), (3, 0)].into_iter().enumerate() {
+                    if wall(d) && !(broken && gone == k as u32) {
+                        f.fill(ops, [x, 0, z], [x, 6, z], solid(kinds.trim));
                     }
                 }
-                if walled(1) && walled(3) {
-                    f.fill(ops, [0, 6, 3], [5, 6, 3], solid(kinds.trim));
+                if !broken && wall(1) && wall(3) {
+                    f.fill(ops, [0, 6, z], [5, 6, z], solid(kinds.trim));
                 }
             }
             Class::Goal => {

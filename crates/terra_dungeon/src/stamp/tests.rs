@@ -1,6 +1,6 @@
 use super::*;
 use crate::graph::Link;
-use crate::place::{STEPS, Space};
+use crate::place::{STEPS, Side, Space};
 use crate::theme::{Role, assets};
 use crate::{ModuleSet, generate};
 use std::collections::{HashSet, VecDeque};
@@ -633,4 +633,62 @@ fn the_camera_looks_down_the_way_ahead_not_at_walls() {
         assert!(turn <= bound, "{}: turns {turn} a metre", theme.name);
         assert!(goal_off < 0.35, "{}: the goal {goal_off} off", theme.name);
     }
+}
+
+/// A mine's timber sets do not repeat as tiles down a gallery (round 13's film: five
+/// identical frames nested down a straight one, 28.5 s): over many tours, no one way of
+/// standing (its place along the bay, which posts, the beam) is most sets'. And a post
+/// never stands in a doorway.
+#[test]
+fn a_mines_timber_sets_stand_each_its_own_way() {
+    use super::modules::{Class, looks};
+    let theme = Theme::all(&assets())
+        .unwrap()
+        .into_iter()
+        .find(|t| t.name == "flooded_mine")
+        .expect("the mine");
+    let set = ModuleSet::new(&theme).unwrap();
+    let trim = kind(&theme.trim);
+    assert_ne!(trim, kind(&theme.walls), "trim told from wall by its kind");
+    let mut ways: HashMap<(i32, bool, bool, bool), usize> = HashMap::new();
+    for s in 0..60 {
+        let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
+            continue;
+        };
+        let stamp = stamp(&dungeon, &theme, &kind);
+        let map = cubes(&stamp.ops);
+        let classes = looks(&dungeon, &theme, &set);
+        for (cell, look) in dungeon.layout.cells.iter().zip(&classes) {
+            if look.class != Class::Timber {
+                continue;
+            }
+            let f = Frame::new(cell.at, look.turn);
+            let is_trim = |x, y, z| map.get(&f.cube(x, y, z)).is_some_and(|c| c.kind == trim);
+            let post = |x, z| (1..6).all(|y| is_trim(x, y, z));
+            for z in 1..5 {
+                let (east, west) = (post(5, z), post(0, z));
+                let beam = (1..5).all(|x| is_trim(x, 6, z));
+                if east || west || beam {
+                    *ways.entry((z, east, west, beam)).or_default() += 1;
+                }
+            }
+            for d in [1, 3] {
+                if matches!(cell.sides[f.side(d)], Side::Door(_)) {
+                    let x = if d == 1 { 5 } else { 0 };
+                    assert!((1..5).all(|z| !post(x, z)), "a post in a doorway");
+                }
+            }
+        }
+    }
+    let sets: usize = ways.values().sum();
+    let most = ways.values().copied().max().unwrap_or(0);
+    println!(
+        "{sets} timber sets, {} ways, the commonest {most}",
+        ways.len()
+    );
+    assert!(sets > 50, "{sets} sets");
+    assert!(
+        2 * most < sets,
+        "{most} of {sets} sets stand alike: {ways:?}"
+    );
 }
