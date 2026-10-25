@@ -73,6 +73,9 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 # Vertex buffers packed in ordinary memory, then copied in one write to the GPU's staging
 # memory (D435, bevyengine/bevy#17000).
 bevy_mesh = { path = "patches/bevy_mesh" }
+# A reflection probe smaller than every irradiance volume holding a fragment gives its diffuse
+# light, so a closed room's probe wins over a forest's sky volume (D485).
+bevy_pbr = { path = "patches/bevy_pbr" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

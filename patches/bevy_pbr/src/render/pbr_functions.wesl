@@ -684,7 +684,8 @@ fn apply_pbr_lighting(
     // priority goes like this:
     //
     // 1. Lightmap (highest)
-    // 2. Irradiance volume
+    // 2. Irradiance volume, unless a smaller reflection probe holds the fragment
+    //    (Terra's patch, D485)
     // 3. Environment map (lowest)
     //
     // When we find a source of diffuse indirect lighting, we stop accumulating
@@ -699,9 +700,15 @@ fn apply_pbr_lighting(
     found_diffuse_indirect = true;
 }
 
+    // Terra's patch (D485): a reflection probe smaller than every irradiance volume holding
+    // the fragment, as a closed room's probe inside a forest's sky volume, gives its diffuse
+    // light instead (the environment map step below).
     @if(IRRADIANCE_VOLUME)
     // Irradiance volume light (indirect)
-    if (!found_diffuse_indirect) {
+    if (!found_diffuse_indirect && !irradiance_volume::smaller_reflection_probe_holds(
+        in.world_position.xyz,
+        &clusterable_object_index_ranges,
+    )) {
         let irradiance_volume_light = irradiance_volume::irradiance_volume_light(
             in.world_position.xyz,
             in.N,

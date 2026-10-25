@@ -84,3 +84,66 @@ fn irradiance_volume_light(
 
     return total_irradiance;
 }
+
+// Terra's patch (D485): a reflection probe smaller than every irradiance volume holding a
+// fragment takes its diffuse light from those volumes. Bevy 0.20 lets any irradiance volume
+// win over every reflection probe's diffuse, so a sky volume over a forest lit the closed
+// rooms of a dungeon dug under it, whatever their own probes said. Shipped engines let the
+// smaller, more local probe win: Unreal's reflection captures (smaller captures override
+// larger ones, "Reflection Environment", Unreal Engine documentation) and Godot 4's
+// ReflectionProbe, whose ambient (`ambient_mode`) replaces the scene's inside its box
+// (godotengine/godot, MIT). A probe is a unit cube in its own space, so how small it is
+// is the determinant of its world-to-probe transform. Outside every reflection probe, or
+// inside a volume smaller than the probe, nothing changes.
+
+/// How much smaller than a unit cube a light probe is, from its world-to-probe transform:
+/// larger for a smaller probe (Terra's patch, D485).
+@if(IRRADIANCE_VOLUMES_ARE_USABLE)
+fn light_probe_density(light_from_world: mat4x4<f32>) -> f32 {
+    return abs(determinant(mat3x3<f32>(
+        light_from_world[0].xyz,
+        light_from_world[1].xyz,
+        light_from_world[2].xyz,
+    )));
+}
+
+/// Whether a reflection probe holding the fragment is smaller than every irradiance volume
+/// holding it, so that probe's diffuse light is the fragment's (Terra's patch, D485).
+@if(IRRADIANCE_VOLUMES_ARE_USABLE)
+fn smaller_reflection_probe_holds(
+    world_position: vec3<f32>,
+    clusterable_object_index_ranges: ptr<function, ClusterableObjectIndexRanges>,
+) -> bool {
+    var probes = light_probe_iterator_new(
+        world_position,
+        /*is_irradiance_volume=*/ false,
+        clusterable_object_index_ranges,
+    );
+    var smallest_probe = 0.0;
+    while (true) {
+        let found = light_probe_iterator_next(&probes);
+        if (found.texture_index < 0) {
+            break;
+        }
+        smallest_probe = max(smallest_probe, light_probe_density(found.light_from_world));
+    }
+    if (smallest_probe == 0.0) {
+        return false;
+    }
+
+    var volumes = light_probe_iterator_new(
+        world_position,
+        /*is_irradiance_volume=*/ true,
+        clusterable_object_index_ranges,
+    );
+    while (true) {
+        let found = light_probe_iterator_next(&volumes);
+        if (found.texture_index < 0) {
+            break;
+        }
+        if (light_probe_density(found.light_from_world) >= smallest_probe) {
+            return false;
+        }
+    }
+    return true;
+}
