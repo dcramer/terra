@@ -659,7 +659,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // Streaks: a faint wash down from a sill or a wall head, a little darker and greyer, never
         // a black line.
         c = mix(c, mix(c, vec3(lum), 0.2) * vec3(0.77, 0.76, 0.74), clamp(weather.a.w, 0.0, 1.0));
-        c = mix(c, vec3(0.02, 0.018, 0.016), weather.c.x * 0.85);
+        // Soot: a soft smoky plume over an opening, darkening by at most about two thirds.
+        c = mix(c, mix(c, vec3(lum), 0.4) * vec3(0.34, 0.32, 0.3), weather.c.x * 0.9);
         let lichen = smoothstep(0.2, 0.6, weather.b.z * (0.6 + 0.8 * grain));
         c = mix(c, c * 0.4 + vec3(0.16, 0.16, 0.1), lichen * 0.7);
         // Moss as cushions in the joints, blended by the material's height as engines blend a

@@ -229,7 +229,7 @@ pub fn plane(
                                 (place[0] - plane.min[0]) as f32 + fu,
                                 (plane.max[1] - place[1]) as f32 + 1.0 - fv,
                             );
-                            by_motifs(solved, grid, &n, settings.seed)
+                            by_motifs(solved, grid, &wants, &n, settings.seed)
                         }
                     };
                     let [grime, wear, damp] = masked(&m, settings.age, &n);
@@ -298,6 +298,7 @@ fn by_masks(w: &Wants, n: &dyn Fn(Vec2, f32) -> f32, p: Vec2) -> [f32; 6] {
 fn by_motifs(
     solved: &[Solved; 4],
     grid: Vec2,
+    wants: &Wants,
     n: &dyn Fn(Vec2, f32) -> f32,
     seed: u32,
 ) -> [f32; 6] {
@@ -325,11 +326,18 @@ fn by_motifs(
     let lichen = spots(growth, g, seed);
     let g = grid * flow.per_cell as f32;
     let streak = streak_at(flow, g, seed) * (0.6 + 0.4 * n(Vec2::new(4.0, 1.0), 43.0));
+    // Soot as a soft plume, never a pixel-wide column: its symbols' share spread over about a
+    // pixel each way, fading as it rises from the opening's head.
+    let plume = [(0.0, 0.0), (-1.0, 0.0), (1.0, 0.0), (0.0, -0.6), (0.0, 0.6)]
+        .iter()
+        .map(|&(dx, dy)| field(flow, g + Vec2::new(dx, dy), 'k'))
+        .sum::<f32>()
+        / 5.0;
     let soot = smoothstep(
-        0.3,
+        0.15,
         0.7,
-        field(flow, g, 'k') + (n(Vec2::new(3.0, 1.5), 47.0) - 0.5) * 0.5,
-    );
+        plume + (n(Vec2::new(3.0, 1.5), 47.0) - 0.5) * 0.4,
+    ) * smoothstep(0.0, 0.7, wants.soot);
     [crack, lost, moss, streak, lichen, soot]
 }
 

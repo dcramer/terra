@@ -287,9 +287,19 @@ fn a_streak_runs_down_from_its_source_never_from_mid_wall() {
     assert_eq!(column(2), "..w.....");
 }
 
-/// The streak layer's texels along a row of cubes of one face, left to right, `row` texels
-/// down from their top.
-fn streak_row(out: &Weathered, face: usize, cubes: &[IVec3], row: usize) -> Vec<u8> {
+/// Where the streak and the soot are in the maps: their layer and channel.
+const STREAK: (usize, usize) = (0, 3);
+const SOOT: (usize, usize) = (2, 0);
+
+/// A motif's texels along a row of cubes of one face, left to right, `row` texels down from
+/// their top.
+fn layer_row(
+    out: &Weathered,
+    (layer, channel): (usize, usize),
+    face: usize,
+    cubes: &[IVec3],
+    row: usize,
+) -> Vec<u8> {
     let across = out.dims.x as usize * 6;
     let per_row = out.per_row as usize;
     let mut texels = Vec::new();
@@ -301,8 +311,8 @@ fn streak_row(out: &Weathered, face: usize, cubes: &[IVec3], row: usize) -> Vec<
         let s = slot as usize - 1;
         let (sx, sy) = (s % per_row, s / per_row);
         for col in 0..TILE {
-            let i = ((sy * TILE + row) * out.side() + sx * TILE + col) * 4 + 3;
-            texels.push(out.atlas[0][i]);
+            let i = ((sy * TILE + row) * out.side() + sx * TILE + col) * 4 + channel;
+            texels.push(out.atlas[layer][i]);
         }
     }
     texels
@@ -331,7 +341,7 @@ fn streaks_are_soft_bands_under_the_eave_and_sill_and_none_under_the_verge() {
         .map(|y| (0..=7).map(|x| IVec3::new(x, y, 0)).collect())
         .collect();
     let sill: Vec<IVec3> = (0..=9).map(|z| IVec3::new(0, 0, z)).collect();
-    let (mut widths, mut under_verge) = (Vec::new(), 0u32);
+    let (mut widths, mut soot, mut under_verge) = (Vec::new(), Vec::new(), 0u32);
     for seed in 0..4 {
         let settings = Settings {
             mode: Mode::Wfc,
@@ -344,9 +354,22 @@ fn streaks_are_soft_bands_under_the_eave_and_sill_and_none_under_the_verge() {
         let rows = eave.iter().map(|c| (5, c)).chain([(1, &sill)]);
         for (face, cubes) in rows {
             for row in 0..TILE {
-                let texels = streak_row(&out, face, cubes, row);
+                let texels = layer_row(&out, STREAK, face, cubes, row);
                 if texels.iter().any(|&t| t >= 64) {
                     widths.extend(bands(&texels));
+                }
+            }
+        }
+        // The soot over the gable's window, along the gable.
+        for y in 3..=4 {
+            let cubes: Vec<IVec3> = (0..=9)
+                .filter(|&z| gable_top(z) >= y)
+                .map(|z| IVec3::new(0, y, z))
+                .collect();
+            for row in 0..TILE {
+                let texels = layer_row(&out, SOOT, 1, &cubes, row);
+                if texels.iter().any(|&t| t >= 64) {
+                    soot.extend(bands(&texels));
                 }
             }
         }
@@ -354,7 +377,7 @@ fn streaks_are_soft_bands_under_the_eave_and_sill_and_none_under_the_verge() {
         for z in 0..=9 {
             for y in 3..=gable_top(z) {
                 under_verge += (0..TILE)
-                    .flat_map(|row| streak_row(&out, 1, &[IVec3::new(0, y, z)], row))
+                    .flat_map(|row| layer_row(&out, STREAK, 1, &[IVec3::new(0, y, z)], row))
                     .map(u32::from)
                     .sum::<u32>();
             }
@@ -374,4 +397,10 @@ fn streaks_are_soft_bands_under_the_eave_and_sill_and_none_under_the_verge() {
     );
     // About 10 cm or more across: a band, not a hairline.
     assert!(median >= 6, "streaks a median {median} texels across");
+    // Soot over an opening a plume, not a pixel-wide column (8 texels): 17 cm or more.
+    assert!(soot.len() > 10, "too little soot to judge: {}", soot.len());
+    soot.sort_unstable();
+    let median = soot[soot.len() / 2];
+    eprintln!("soot: median {median} texels across, {} bands", soot.len());
+    assert!(median >= 11, "soot a median {median} texels across");
 }
