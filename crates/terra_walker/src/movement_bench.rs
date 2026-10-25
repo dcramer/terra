@@ -5,7 +5,8 @@
 //! several runs, so a busy machine's outliers do not move it. `cargo xtask controller --bench`
 //! runs it in release and judges `cost.body`, the mover's worst scene, against the bar; the
 //! rest are its log's `bench` lines. `cost.forest` is the same body walked through the lush
-//! yard's trees and rocks ([`forest`]).
+//! yard's trees and rocks ([`forest`]); `cost.crowd` a thousand men walking through each other
+//! on the planet at 30 km ([`crowd`]).
 
 use bevy::math::DVec3;
 use bevy::prelude::{Vec2, Vec3};
@@ -16,6 +17,8 @@ use terra_motion::course::field::{Course, Field, Solid, forward_at, world};
 use terra_motion::mover::{Bodies, Intent, Kind, Sdf, World};
 use terra_world::planet::{HeightMemo, Planet};
 
+#[path = "movement_bench_crowd.rs"]
+mod crowd;
 #[path = "movement_bench_forest.rs"]
 mod forest;
 
@@ -217,4 +220,20 @@ fn the_mover_bench_times_a_body_walking() {
         f.route
     );
     println!("scorecard\tcost.forest\t{}", f.micros);
+    let (_, far) = &planets[1];
+    let (start, forward) = on(far);
+    let c = crowd::median(
+        (0..crowd::RUNS)
+            .map(|_| crowd::run(far, start, forward, &kind))
+            .collect(),
+    );
+    println!(
+        "bench\tcrowd ({} bodies, planet 30 km)\t{:.2} ms a tick on one core, {:.1} µs a body, {:.0} calls a body a tick; walked {:.1} m on average",
+        c.bodies,
+        c.millis,
+        c.millis * 1.0e3 / c.bodies as f32,
+        c.calls,
+        c.walked
+    );
+    println!("scorecard\tcost.crowd\t{}", c.millis);
 }

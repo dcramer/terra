@@ -421,6 +421,7 @@ fn walk(
         let people = Capsules {
             bodies: &movers.lists.others,
             skip: u32::MAX,
+            near: None,
         };
         let rest = (&trees, &people);
         let things = (&blocks, &rest);

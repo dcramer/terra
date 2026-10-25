@@ -5,7 +5,7 @@ The character controller's scorecard (D457): docs/controller.md's production cri
 ```bash
 cargo xtask controller                   # every cheap criterion, a line each, held to baseline.tsv
 cargo xtask controller --json out.json   # the results also as JSON
-cargo xtask controller --bench           # also the mover's release bench: cost.body and cost.forest, µs a body a tick
+cargo xtask controller --bench           # also the mover's release bench: cost.body and cost.forest (µs a body a tick), cost.crowd (ms a tick)
 node tools/controller/forest-fixture.ts  # cost.forest's fixture again, from the game (when flora's fitting changes)
 cargo xtask controller --raise "<why>"   # write the rows that got worse, or are new, with the why, in the change's commit
 cargo xtask controller --lower           # write the rows that got better: cargo xtask nightly's alone (D414)

@@ -790,12 +790,14 @@
    "bar": {
     "at_most": 4
    },
-   "unit": "ms a tick, 1,000 bodies",
-   "source": "docs/controller.md criterion 20; D52, D138",
-   "check": null,
+   "unit": "ms a tick, 1,000 bodies (on one core until the tick runs on several)",
+   "source": "docs/controller.md criterion 20; D52, D138; the bench's crowd: a thousand men walking through each other on the planet at 30 km",
+   "check": {
+    "by": "bench"
+   },
    "cost": "heavy",
-   "measurable": false,
-   "needs": "a broadphase: today every body's sweep and contacts look at every other body (Capsules), and the pushes pair every two (push::separate), O(n²); a grid of bodies by place, bodies and obstacles gathered from it, then the bench's crowd on the server's cores"
+   "measurable": true,
+   "slack": 6
   },
   {
    "id": "feet.sliding",

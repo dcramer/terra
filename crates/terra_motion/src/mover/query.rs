@@ -17,7 +17,9 @@
 //! micrometre. Jolt's large worlds do the same (`JPH_DOUBLE_PRECISION`: a body's position is
 //! a double, its shape queries run in floats relative to a base offset, Docs/BigWorlds.md).
 
+use super::grid::Grid;
 use glam::{DVec3, Vec3};
+use std::borrow::Cow;
 
 /// How far a contact may sink before a sweep calls it a hit, m (Jolt's collision tolerance).
 pub const TOLERANCE: f32 = 1.0e-3;
@@ -506,21 +508,51 @@ impl<F: Fn(DVec3) -> f32> Query for Sdf<F> {
 }
 
 /// Other bodies' pushboxes: each an ID, its capsule and its velocity. A body's own is
-/// skipped by `skip`.
+/// skipped by `skip`. With `near`, the bodies by the middles of their capsules' axes (the
+/// broadphase, [`Grid`]), only bodies in cells near a query are looked at; the answers are the
+/// same as looking at every one, in the same order.
 pub struct Capsules<'a> {
     pub bodies: &'a [(u32, Capsule, Vec3)],
     pub skip: u32,
+    pub near: Option<&'a Grid>,
 }
 
+/// How much farther than its exact reach a query's box is looked up, m: the f32 offsets'
+/// rounding.
+const NEAR_SLACK: f64 = 0.05;
+
 impl Capsules<'_> {
-    fn each(&self, capsule: &Capsule) -> impl Iterator<Item = Contact> + '_ {
-        let capsule = *capsule;
-        self.bodies
-            .iter()
-            .filter(move |b| b.0 != self.skip)
-            .map(move |(id, other, velocity)| {
-                between(&capsule, &other.framed(capsule.origin), *id, *velocity)
-            })
+    /// The bodies whose surfaces may come within `reach` of a capsule's axis, but its own, in
+    /// order: those the grid has in a box around it (from those gathered already when the
+    /// box is within the gathered one), or every one.
+    fn within<'s>(
+        &'s self,
+        capsule: &Capsule,
+        reach: f32,
+    ) -> impl Iterator<Item = &'s (u32, Capsule, Vec3)> + 's {
+        let chosen = self.near.map(|grid| {
+            let (a, b) = (capsule.world(capsule.a), capsule.world(capsule.b));
+            let r = DVec3::splat(f64::from(reach.max(0.0) + grid.extent) + NEAR_SLACK);
+            let (lo, hi) = (a.min(b) - r, a.max(b) + r);
+            let (list, kept) = grid.within(lo, hi).map_or_else(
+                || {
+                    let mut out = Vec::new();
+                    grid.near(lo, hi, &mut out);
+                    (Cow::Owned(out), None)
+                },
+                |gathered| (Cow::Borrowed(gathered), Some((grid, lo, hi))),
+            );
+            (0..list.len())
+                .map(move |k| list[k])
+                .filter(move |&i| kept.is_none_or(|(grid, lo, hi)| grid.inside(i, lo, hi)))
+        });
+        let every = chosen.is_none().then(|| self.bodies.iter());
+        chosen
+            .into_iter()
+            .flatten()
+            .map(|i| &self.bodies[i as usize])
+            .chain(every.into_iter().flatten())
+            .filter(|b| b.0 != self.skip)
     }
 }
 
@@ -593,15 +625,19 @@ impl Distance for One<'_> {
 
 impl Query for Capsules<'_> {
     fn contacts(&self, capsule: &Capsule, within: f32, out: &mut Vec<Contact>) {
-        out.extend(self.each(capsule).filter(|c| c.distance < within));
+        let c = *capsule;
+        out.extend(
+            self.within(capsule, within + capsule.radius)
+                .map(|(id, other, v)| between(&c, &other.framed(c.origin), *id, *v))
+                .filter(|c| c.distance < within),
+        );
     }
 
     fn sweep(&self, capsule: &Capsule, motion: Vec3) -> Option<Hit> {
         // Only bodies the swept capsule can reach.
         let reach = motion.length() + capsule.radius;
-        self.bodies
-            .iter()
-            .filter(|b| b.0 != self.skip)
+        let length = (capsule.b - capsule.a).length();
+        self.within(capsule, reach + length)
             .map(|(id, other, v)| (id, other.framed(capsule.origin), v))
             .filter(|(_, other, _)| {
                 let mid = (capsule.a + capsule.b) * 0.5 + motion * 0.5;
@@ -747,11 +783,56 @@ mod tests {
         let source = Capsules {
             bodies: &bodies,
             skip: 0,
+            near: None,
         };
         let hit = source
             .sweep(&man(Vec3::ZERO), Vec3::X * 60.0)
             .expect("stopped");
         assert!((60.0 * hit.fraction - 2.4).abs() < 2e-3);
         assert_eq!(hit.contact.body, Some(1));
+    }
+
+    #[test]
+    fn the_grids_bodies_answer_exactly_as_every_body_does() {
+        // A crowd far from the origin, some leaning (a round world's ups), a few small.
+        let base = DVec3::new(30_000.0, 120.0, -400.0);
+        let r = |i: u32, s: u32| terra_gen::hash::unit(terra_gen::hash::of(&[i, s]));
+        let bodies: Vec<(u32, Capsule, Vec3)> = (0..400u32)
+            .map(|i| {
+                let feet = Vec3::new(r(i, 1) * 24.0, r(i, 2) * 3.0, r(i, 3) * 24.0);
+                let up = Vec3::new(r(i, 4) - 0.5, 4.0, r(i, 5) - 0.5).normalize();
+                let (radius, height) = if i % 7 == 0 { (0.15, 0.6) } else { (0.3, 1.8) };
+                let capsule = Capsule::standing(Vec3::ZERO, up, radius, height);
+                (i * 3 + 1, capsule.at(base + feet.as_dvec3()), up * r(i, 6))
+            })
+            .collect();
+        let middles = bodies.iter().map(|(_, c, _)| c.world((c.a + c.b) * 0.5));
+        let grid = Grid::of(middles, 0.9);
+        let (mut touched, mut met) = (0, 0);
+        for (k, (id, me, _)) in bodies.iter().enumerate().step_by(5) {
+            let all = Capsules {
+                bodies: &bodies,
+                skip: *id,
+                near: None,
+            };
+            let near = Capsules {
+                near: Some(&grid),
+                ..all
+            };
+            for within in [-0.1, 0.05, 0.6] {
+                let (mut a, mut b) = (Vec::new(), Vec::new());
+                all.contacts(me, within, &mut a);
+                near.contacts(me, within, &mut b);
+                assert_eq!(a, b, "{k} {within}");
+                touched += a.len();
+            }
+            let k = k as u32;
+            let motion = Vec3::new(r(k, 7) - 0.5, r(k, 8) - 0.5, r(k, 9) - 0.5) * 6.0;
+            let hit = all.sweep(me, motion);
+            assert_eq!(hit, near.sweep(me, motion), "{k}");
+            met += usize::from(hit.is_some());
+        }
+        // Not empty answers: many contacts, most sweeps stopped.
+        assert!(touched > 200 && met > 40, "{touched} {met}");
     }
 }

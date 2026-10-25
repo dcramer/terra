@@ -12,7 +12,7 @@ A body goes where its intent or its move's root motion asks, as far as the world
 - **Fixed tick, deterministic** (D138, 64 a second). Bodies are processed in the order of their IDs. The iteration counts are fixed and trigonometry goes through `libm` (D30). Given the same world and intents, every machine gets the same positions.
 - **Ported, not invented** (D196): collide-and-slide is Jolt 5.6's `CharacterVirtual` (MIT), and its notice is kept in the ported module. The floor settings come from Godot 4.7's `CharacterBody3D` (MIT).
 - **Kinds as data** (D136): every number below comes from the body's kind file, and nothing in code names a kind.
-- **Many bodies** (D52, D127): the cost per body is benched, and a body that stands still with nothing moving near it costs almost nothing.
+- **Many bodies** (D52, D127): the cost per body is benched, and a body that stands still with nothing moving near it costs almost nothing. Bodies find each other through a grid of bodies by place (the broadphase), so a body's cost grows with the bodies near it, not with how many there are; it changes no answer, only which bodies are asked.
 
 ## How a tick moves a body
 

@@ -11,8 +11,10 @@
 //! - `slide`: collide and slide, the step up and stick to the floor (Jolt, MIT).
 //! - `shapes`: what stops a body besides the ground: cubes, doors, props, trees and rocks.
 //! - `push`: bodies apart by mass.
+//! - `grid`: the bodies' broadphase, a grid of them by place.
 
 mod footing;
+mod grid;
 mod push;
 pub mod query;
 pub mod shapes;
@@ -21,6 +23,7 @@ mod slide;
 #[cfg(test)]
 mod course;
 
+pub use grid::Grid;
 pub use query::{Capsule, Capsules, Contact, Hit, Query, Sdf};
 use serde::Deserialize;
 pub use shapes::{Block, Obstacle, Obstacles, Part, Shaped};
@@ -199,6 +202,12 @@ pub struct Bodies {
     bodies: Vec<Body>,
 }
 
+/// Fewer bodies than this ask each other directly: the broadphase's upkeep would cost more
+/// than it saves.
+const CROWD_FROM: usize = 16;
+/// How far beyond a body's own reach the bodies around it are gathered for its tick's
+/// asks, m: its move and the sweeps' motions within it (one beyond looks the grid up again).
+const GATHER_M: f64 = 1.0;
 /// How many rounds of pushing a tick takes (docs/controller.md, step 6).
 const PUSH_ROUNDS: usize = 4;
 /// How much higher than its floor's own slope a walking body's move may lift it before it is
@@ -276,19 +285,36 @@ impl Bodies {
             .iter()
             .map(|b| (b.id, capsule(b), b.velocity))
             .collect();
+        let extent = capsules
+            .iter()
+            .map(|(_, c, _)| (c.b - c.a).length() * 0.5 + c.radius)
+            .fold(0.0, f32::max);
+        let mut grid = (self.bodies.len() >= CROWD_FROM)
+            .then(|| Grid::of(capsules.iter().map(|(_, c, _)| middle(c)), extent));
         for i in 0..self.bodies.len() {
             let id = self.bodies[i].id;
             let intent = asked
                 .binary_search_by_key(&id, |(id, _)| *id)
                 .map_or(Intent::default(), |at| asked[at].1);
+            if let Some(grid) = grid.as_mut() {
+                let me = &capsules[i].1;
+                let (a, b) = (me.world(me.a), me.world(me.b));
+                let reach = me.radius + (me.b - me.a).length() + extent;
+                let r = DVec3::splat(f64::from(reach) + GATHER_M);
+                grid.gather(a.min(b) - r, a.max(b) + r);
+            }
             let others = Capsules {
                 bodies: &capsules,
                 skip: id,
+                near: grid.as_ref(),
             };
             let query = (world.ground, &others);
             step(&mut self.bodies[i], &intent, &query, world, dt);
             let body = &self.bodies[i];
             capsules[i] = (id, capsule(body), body.velocity);
+            if let Some(grid) = grid.as_mut() {
+                grid.moved(i, middle(&capsules[i].1));
+            }
         }
         push::separate(&mut self.bodies, world.ground, PUSH_ROUNDS);
     }
@@ -322,6 +348,11 @@ fn up_at(position: DVec3, world: &World) -> Option<Vec3> {
     (position - world.centre.as_dvec3())
         .try_normalize()
         .map(|up| up.as_vec3())
+}
+
+/// The middle of a capsule's axis in the world: where the broadphase keeps its body.
+fn middle(capsule: &Capsule) -> DVec3 {
+    capsule.world((capsule.a + capsule.b) * 0.5)
 }
 
 /// A body's capsule in its own frame: its feet at its position.

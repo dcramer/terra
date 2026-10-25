@@ -14,16 +14,13 @@ ron.workspace = true
 serde.workspace = true
 # Trees', rocks' and logs' pieces (D267), which the mover's query answers (D53).
 terra_core.workspace = true
-# The controller course's cases run on every core (D406).
-terra_gen = { workspace = true, optional = true }
-
-[dev-dependencies]
-# The duel's scenarios run on every core (D406).
+# The bodies' broadphase hashes its cells; the controller course's cases and the duel's
+# scenarios run on every core (D406).
 terra_gen.workspace = true
 
 [features]
 # The controller's plain-Rust course (`course`, D53), for the movers' tests that run it.
-course = ["dep:terra_gen"]
+course = []
 
 [lints]
 workspace = true

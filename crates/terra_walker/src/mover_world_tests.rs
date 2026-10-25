@@ -296,6 +296,7 @@ fn a_trunk_borrowed_from_flora_and_a_body_standing_there_stop_a_man_at_their_wid
     let them = Capsules {
         bodies: &capsules,
         skip: 0,
+        near: None,
     };
     let end = last(&walk(
         &planet,
