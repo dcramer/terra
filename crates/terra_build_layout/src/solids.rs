@@ -42,6 +42,12 @@ const CUTS: usize = 4;
 /// their wall's face, as drawn).
 pub fn near(base: &Base, at: Vec3, reach: f32, kits: Option<&Kits>) -> Vec<Slab> {
     let mut out = Vec::new();
+    near_into(base, at, reach, kits, &mut out);
+    out
+}
+
+/// [`near`]'s boxes added to a list, for a caller that asks every tick and keeps its list.
+pub fn near_into(base: &Base, at: Vec3, reach: f32, kits: Option<&Kits>, out: &mut Vec<Slab>) {
     let column = |v: f32| (v / CELL_M).floor() as i32;
     let (low, high) = (at - Vec3::splat(reach), at + Vec3::splat(reach));
     for x in column(low.x)..=column(high.x) {
@@ -52,7 +58,7 @@ pub fn near(base: &Base, at: Vec3, reach: f32, kits: Option<&Kits>) -> Vec<Slab>
                     continue;
                 }
                 if let Some(cube) = base.cube(IVec3::new(x, layer, z)) {
-                    cube_slabs(cube, IVec3::new(x, layer, z), &mut out);
+                    cube_slabs(cube, IVec3::new(x, layer, z), out);
                 }
             }
         }
@@ -73,7 +79,6 @@ pub fn near(base: &Base, at: Vec3, reach: f32, kits: Option<&Kits>) -> Vec<Slab>
             });
         }
     }
-    out
 }
 
 /// A cube's solid layers as boxes: as `walk`'s `solid_layers` has them, from its underside (a

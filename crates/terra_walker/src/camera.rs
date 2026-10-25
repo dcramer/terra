@@ -5,6 +5,7 @@
 pub mod framing;
 
 use crate::controls::{self, Action, Controls};
+use crate::stepping::Stepping;
 use crate::walker::Hands;
 use crate::{IsLocalPlayer, View, options};
 use bevy::{
@@ -94,6 +95,13 @@ pub fn plugin(app: &mut App) {
                 .before(TransformSystems::Propagate)
                 .before(terra_world::remote::CameraHold),
         );
+}
+
+/// The player as their figure is shown, its step smoothing's offset under the body
+/// (stepping.rs), so a step up is followed as the figure rises, not as the capsule pops.
+fn as_shown(player: &Transform, stepping: Option<&Stepping>) -> Transform {
+    let below = stepping.map_or(0.0, |stepping| stepping.below);
+    player.with_translation(player.translation - player.translation.normalize() * below)
 }
 
 /// Takes the mouse for the game, or gives it back.
@@ -271,10 +279,18 @@ pub fn zoom(
 /// behind, as looking up, the lens slides up over the ground rather than in toward the
 /// figure, and it keeps out of the figure itself. With a weapon drawn the boom hangs and
 /// looks as `framing` has it, and all of that holds the same.
+/// The local player as the camera follows them.
+type Followed<'a> = (
+    &'a Transform,
+    &'a View,
+    Option<&'a FightView>,
+    Option<&'a Stepping>,
+);
+
 pub fn follow(
     time: Res<Time>,
     framing: Res<Framing>,
-    player: Single<(&Transform, &View, Option<&FightView>), (IsLocalPlayer, Without<MainCamera>)>,
+    player: Single<Followed, (IsLocalPlayer, Without<MainCamera>)>,
     others: Query<&Transform, Without<MainCamera>>,
     mut zoom: ResMut<Zoom>,
     start: Res<Start>,
@@ -313,7 +329,7 @@ pub fn follow(
         *camera = Transform::from_translation(from).looking_at(toward, from.normalize());
         return;
     }
-    let (player, view, fight) = *player;
+    let (player, view, fight) = (&as_shown(player.0, player.3), player.1, player.2);
     let (head, looking) = eye(player, view);
     let up = head.normalize();
     let dt = time.delta_secs();

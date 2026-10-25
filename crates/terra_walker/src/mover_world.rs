@@ -14,6 +14,7 @@ use crate::bodies;
 use bevy::prelude::*;
 use terra_build::Base;
 use terra_build::kit::Kits;
+use terra_build_layout::solids::Slab;
 use terra_motion::mover::{Block, Capsule};
 use terra_world::flora;
 use terra_world::planet::Planet;
@@ -29,46 +30,54 @@ pub fn prop(solid: &bodies::Solid, transform: &Transform) -> Block {
     }
 }
 
-/// The props within a reach of a point, as boxes: a hidden one (a ghost, one carried) is
-/// walked through.
+/// The props within a reach of a point, as boxes, added to a list: a hidden one (a ghost, one
+/// carried) is walked through.
 pub fn props<'a>(
     solids: impl IntoIterator<Item = (&'a bodies::Solid, &'a Transform, &'a Visibility)>,
     at: Vec3,
     reach: f32,
-) -> Vec<Block> {
-    solids
-        .into_iter()
-        .filter(|(_, _, shown)| **shown != Visibility::Hidden)
-        .map(|(solid, transform, _)| prop(solid, transform))
-        .filter(|block| block.centre.distance(at) < reach + block.half.length())
-        .collect()
+    out: &mut Vec<Block>,
+) {
+    out.extend(
+        solids
+            .into_iter()
+            .filter(|(_, _, shown)| **shown != Visibility::Hidden)
+            .map(|(solid, transform, _)| prop(solid, transform))
+            .filter(|block| block.centre.distance(at) < reach + block.half.length()),
+    );
 }
 
 /// The trees, rocks, stumps and logs within a reach of a point, borrowed where flora keeps
-/// them: `terra_motion::mover::Obstacles` over these asks them in place.
-pub fn flora(obstacles: &flora::Obstacles, at: Vec3, reach: f32) -> Vec<&terra_core::Solid> {
-    obstacles.solids_near(at, reach).collect()
-}
-
-/// A base's solid parts within a reach of a point, as boxes in the world: its cubes' layers
-/// and its doors' and shutters' leaves, with the kits it is laid by, placed by its frame (a
-/// turn and a place; a frame is never scaled).
-pub fn base(
-    base: &Base,
-    frame: &Transform,
+/// them and added to a list: `terra_motion::mover::Obstacles` over these asks them in place.
+pub fn flora<'a>(
+    obstacles: &'a flora::Obstacles,
     at: Vec3,
     reach: f32,
-    kits: Option<&Kits>,
-) -> Vec<Block> {
+    out: &mut Vec<&'a terra_core::Solid>,
+) {
+    out.extend(obstacles.solids_near(at, reach));
+}
+
+/// A base's solid parts within a reach of a point, as boxes in the world added to a list: its
+/// cubes' layers and its doors' and shutters' leaves, with the kits it is laid by, placed by its
+/// frame (a turn and a place; a frame is never scaled). `slabs` is room to work in, kept by the
+/// caller.
+pub struct AtBase<'a> {
+    pub base: &'a Base,
+    pub frame: &'a Transform,
+    pub kits: Option<&'a Kits>,
+}
+
+pub fn base(at_base: AtBase, at: Vec3, reach: f32, slabs: &mut Vec<Slab>, out: &mut Vec<Block>) {
+    let AtBase { base, frame, kits } = at_base;
     let local = frame.compute_affine().inverse().transform_point3(at);
-    terra_build_layout::solids::near(base, local, reach, kits)
-        .into_iter()
-        .map(|slab| Block {
-            centre: frame.transform_point(slab.centre),
-            axes: slab.axes.map(|axis| frame.rotation * axis),
-            half: slab.half,
-        })
-        .collect()
+    slabs.clear();
+    terra_build_layout::solids::near_into(base, local, reach, kits, slabs);
+    out.extend(slabs.iter().map(|slab| Block {
+        centre: frame.transform_point(slab.centre),
+        axes: slab.axes.map(|axis| frame.rotation * axis),
+        half: slab.half,
+    }));
 }
 
 /// Other bodies (creatures, people) as the mover's pushboxes, each by an ID the walk gives
@@ -77,19 +86,17 @@ pub fn base(
 pub fn others<'a>(
     bodies: impl IntoIterator<Item = (u32, &'a bodies::Body, &'a Transform)>,
     height: f32,
-) -> Vec<(u32, Capsule, Vec3)> {
-    bodies
-        .into_iter()
-        .map(|(id, body, transform)| {
-            let feet = transform.translation;
-            let up = feet.normalize_or(Vec3::Y);
-            (
-                id,
-                Capsule::standing(feet, up, body.radius, height),
-                Vec3::ZERO,
-            )
-        })
-        .collect()
+    out: &mut Vec<(u32, Capsule, Vec3)>,
+) {
+    out.extend(bodies.into_iter().map(|(id, body, transform)| {
+        let feet = transform.translation;
+        let up = feet.normalize_or(Vec3::Y);
+        (
+            id,
+            Capsule::standing(feet, up, body.radius, height),
+            Vec3::ZERO,
+        )
+    }));
 }
 
 /// How far from the centre the water's surface over a point is, where the ground there is

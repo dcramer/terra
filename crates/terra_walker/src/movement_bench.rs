@@ -1,14 +1,12 @@
 //! The mover's cost (docs/controller.md criterion 20, `cost.body`; D52, D138): one body walked
 //! forward at jog on one core, over the course (a flight of steps, then a slope) and over the
 //! generated planet's own ground (`Planet::new`) at 2 km and at 30 km radius, timed a tick and
-//! its ground's field calls counted, for the mover (D53) and for today's walk ([`step`]) given
-//! the same ground and intent. The median of several runs, so a busy machine's outliers do not
-//! move it. `cargo xtask controller --bench` runs it in release and judges `cost.body`, the
-//! mover's worst scene, against the bar; the rest are its log's `bench` lines. `cost.forest` is
-//! the same body walked through the lush yard's trees and rocks ([`forest`]).
+//! its ground's field calls counted, for the mover (D53), as the walk drives it. The median of
+//! several runs, so a busy machine's outliers do not move it. `cargo xtask controller --bench`
+//! runs it in release and judges `cost.body`, the mover's worst scene, against the bar; the
+//! rest are its log's `bench` lines. `cost.forest` is the same body walked through the lush
+//! yard's trees and rocks ([`forest`]).
 
-use super::{Around, Ask, Motion, Terrain, step, top_speed};
-use crate::Stance;
 use bevy::math::DVec3;
 use bevy::prelude::{Vec2, Vec3};
 use std::cell::{Cell, RefCell};
@@ -16,7 +14,7 @@ use std::time::Instant;
 use terra_core::{PlanetSpec, Seed};
 use terra_motion::course::field::{Course, Field, Solid, forward_at, world};
 use terra_motion::mover::{Bodies, Intent, Kind, Sdf, World};
-use terra_world::planet::{HeightMemo, Planet, surface_through};
+use terra_world::planet::{HeightMemo, Planet};
 
 #[path = "movement_bench_forest.rs"]
 mod forest;
@@ -34,7 +32,6 @@ const MEMO_MOST: usize = 1024;
 /// through a memo kept from tick to tick, as the game's walk does), how steep it may be, its
 /// water and gravity, and where the walk starts and goes.
 struct Ground<'a> {
-    distance: &'a dyn Fn(Vec3) -> f32,
     /// The distance at a point in f64, as the mover asks it (D53's f64 frames).
     precise: &'a dyn Fn(DVec3) -> f32,
     planet: Option<&'a Planet>,
@@ -109,65 +106,6 @@ fn mover(ground: &Ground, kind: &Kind) -> Cost {
     }
 }
 
-/// The ground as today's walk asks it, its distance calls counted.
-struct Counted<'a> {
-    ground: &'a Ground<'a>,
-    calls: &'a Cell<u64>,
-}
-
-impl Terrain for Counted<'_> {
-    fn ground_at(&self, at: Vec3) -> Vec3 {
-        surface_through(at, |p| self.distance(p))
-    }
-    fn distance(&self, at: Vec3) -> f32 {
-        self.calls.set(self.calls.get() + 1);
-        (self.ground.distance)(at)
-    }
-    fn normal(&self, at: Vec3) -> Vec3 {
-        // `terra_core::Ground::normal`'s, as the planet answers it.
-        const STEP: f32 = 0.25;
-        let slope = |axis: Vec3| self.distance(at + axis * STEP) - self.distance(at - axis * STEP);
-        Vec3::new(slope(Vec3::X), slope(Vec3::Y), slope(Vec3::Z)).normalize_or(Vec3::Y)
-    }
-    fn water_radius_m(&self, at: Vec3) -> f32 {
-        (self.ground.water)(at).unwrap_or(0.0)
-    }
-}
-
-/// One run of today's walk over a ground, alone (no bodies, base or flora round it).
-fn today(ground: &Ground) -> Cost {
-    let calls = Cell::new(0u64);
-    let terrain = Counted {
-        ground,
-        calls: &calls,
-    };
-    let (mut feet, mut motion) = (ground.start, Motion::facing(ground.forward));
-    motion.on_ground = true;
-    let stance = Stance::default();
-    let ticks = (SECONDS / TICK) as usize;
-    let began = Instant::now();
-    for _ in 0..ticks {
-        let ask = Ask {
-            wish: ground.forward,
-            top_speed: top_speed(&stance, false),
-            drive: None,
-            jump: false,
-            dt: TICK,
-        };
-        let around = Around {
-            blocked: |target| target,
-            held_at: |_, ground| ground,
-            ceiling: |_, _| None,
-        };
-        feet = step(feet, &mut motion, &ask, &terrain, around);
-    }
-    Cost {
-        micros: began.elapsed().as_secs_f32() * 1.0e6 / ticks as f32,
-        calls: calls.get() as f32 / ticks as f32,
-        walked: feet.distance(ground.start),
-    }
-}
-
 /// A planet's start: dry ground near the top, walked toward +x.
 fn on(planet: &Planet) -> (Vec3, Vec3) {
     let r = planet.radius_m();
@@ -182,7 +120,7 @@ fn on(planet: &Planet) -> (Vec3, Vec3) {
     (start, Vec3::X.reject_from(start.normalize()).normalize())
 }
 
-/// µs a tick and field calls a tick for the mover and today's walk, a scene each, and
+/// µs a tick and field calls a tick for the mover, a scene each, and
 /// `cost.body`, the mover's worst scene's.
 #[test]
 #[ignore = "a release bench: cargo xtask controller --bench"]
@@ -201,14 +139,12 @@ fn the_mover_bench_times_a_body_walking() {
     let course = Course::of(Solid::Profile(
         corners.into_iter().map(|(u, h)| Vec2::new(u, h)).collect(),
     ));
-    let course_distance = |at: Vec3| course.distance(at);
     let course_precise = |at: DVec3| course.distance_at(at);
     let none = |_: Vec3| None;
     let start = world(0.0, 0.0, 0.0);
     let mut scenes = vec![(
         "course".to_string(),
         Ground {
-            distance: &course_distance,
             precise: &course_precise,
             planet: None,
             steepest: 1.0,
@@ -232,10 +168,6 @@ fn the_mover_bench_times_a_body_walking() {
         .iter()
         .map(|(_, p)| move |at: Vec3| crate::mover_world::water(p, at))
         .collect();
-    let distances: Vec<_> = planets
-        .iter()
-        .map(|(_, p)| move |at: Vec3| p.distance(at))
-        .collect();
     let precise: Vec<_> = planets
         .iter()
         .map(|(_, p)| move |at: DVec3| p.distance_in(at, &mut HeightMemo::default()))
@@ -245,7 +177,6 @@ fn the_mover_bench_times_a_body_walking() {
         scenes.push((
             format!("planet {} km", radius_m / 1000.0),
             Ground {
-                distance: &distances[i],
                 precise: &precise[i],
                 planet: Some(planet),
                 steepest: planet.steepest(),
@@ -259,10 +190,9 @@ fn the_mover_bench_times_a_body_walking() {
     let mut worst = 0.0_f32;
     for (name, ground) in &scenes {
         let ours = median((0..RUNS).map(|_| mover(ground, &kind)).collect());
-        let old = median((0..RUNS).map(|_| today(ground)).collect());
         println!(
-            "bench\t{name}\tmover {:.1} µs {:.0} calls a tick, {:.1} m\ttoday's walk {:.1} µs {:.0} calls a tick, {:.1} m",
-            ours.micros, ours.calls, ours.walked, old.micros, old.calls, old.walked
+            "bench\t{name}\tmover {:.1} µs {:.0} calls a tick, {:.1} m",
+            ours.micros, ours.calls, ours.walked
         );
         worst = worst.max(ours.micros);
     }

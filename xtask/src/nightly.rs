@@ -826,7 +826,7 @@ mod tests {
         assert_eq!(holds(COMBAT, &raised, false), Holds::Drop);
         // The controller's likewise, by what its course reads: a move changes combat's alone.
         assert_eq!(holds(CONTROLLER, &moved, false), Holds::Keep);
-        let walked: BTreeSet<String> = ["crates/terra_walker/src/movement.rs".to_string()].into();
+        let walked: BTreeSet<String> = ["tools/controller/criteria.json".to_string()].into();
         assert_eq!(holds(CONTROLLER, &walked, false), Holds::Drop);
         assert_eq!(holds(COMBAT, &walked, false), Holds::Keep);
     }

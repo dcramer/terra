@@ -22,7 +22,7 @@ use std::time::SystemTime;
 use terra_build::kit::{Kit, Kits, Pattern};
 use terra_build::ops::{Context, Done, Op, Refusal};
 use terra_build::save::Snapshot;
-use terra_build::{Base, BuildOp, CELL_M, Cube, Kind, Panel, Rules, STOREY_M, Walker, example};
+use terra_build::{Base, BuildOp, CELL_M, Cube, Kind, Panel, Rules, STOREY_M, example};
 use terra_core::Operation;
 use terra_world::footprint::Footprint;
 use terra_world::planet::{MainCamera, Planet};
@@ -615,12 +615,6 @@ impl Build {
             }
             None => (OUTSIDE_DOOR, Vec3::NEG_Z),
         }
-    }
-
-    /// The height of whatever the base offers to stand on at a point in its own space: a
-    /// floor, a roof, a stair or a slope, whichever is highest within a step of the feet.
-    pub fn support(&self, point: Vec3, walker: &Walker) -> Option<f32> {
-        terra_build_layout::walk::Walking::support(self.walkable(), point, walker)
     }
 
     /// What a walker meets: what stands of the base so far.

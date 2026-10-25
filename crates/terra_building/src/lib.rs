@@ -17,6 +17,7 @@
 pub mod act;
 pub mod build_menu;
 pub mod building;
+mod contacts;
 pub mod dial;
 pub mod fire;
 mod going_up;

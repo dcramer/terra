@@ -2,11 +2,11 @@
 //! other or in a tree. Each is a circle on the ground; where two overlap, both are pushed
 //! apart, the lighter further. Trees and rocks do not move.
 //!
-//! Players are not pushed here: their own walk stops them at others' bodies (see
-//! `push_out`), so the camera never sees one shoved after it has moved. Others are pushed
-//! off them instead.
+//! Players are not pushed here: the mover stops them at others' bodies (D53,
+//! `mover_world::others`), so the camera never sees one shoved after it has moved. Others
+//! are pushed off them instead.
 //!
-//! A stand-in until creatures walk on voxels with a real character controller (D53).
+//! A stand-in until creatures walk the mover too (D53).
 
 use crate::Player;
 use bevy::prelude::*;
@@ -47,40 +47,6 @@ pub struct Solid {
     pub half: Vec3,
 }
 
-/// Moves a walker's next position out of any solid it would be standing inside, by the
-/// nearest side. A walker is a circle on the ground; a solid is its box, walked through
-/// while hidden.
-pub fn push_out_of_solids<'a>(
-    mut target: Vec3,
-    walker_radius: f32,
-    solids: impl Iterator<Item = (&'a Solid, &'a Transform, &'a Visibility)>,
-) -> Vec3 {
-    for (solid, transform, visibility) in solids {
-        if *visibility == Visibility::Hidden {
-            continue;
-        }
-        let turned_back = transform.rotation.inverse();
-        let mut local = turned_back * (target - transform.translation);
-        // Only if the feet are between its foot and its top.
-        if local.y < -0.5 || local.y > solid.half.y * 2.0 - 0.05 {
-            continue;
-        }
-        let reach = Vec2::new(solid.half.x, solid.half.z) + walker_radius;
-        let inside = reach - Vec2::new(local.x.abs(), local.z.abs());
-        if inside.x <= 0.0 || inside.y <= 0.0 {
-            continue;
-        }
-        // Out by the nearest side.
-        if inside.x < inside.y {
-            local.x = reach.x.copysign(local.x);
-        } else {
-            local.z = reach.y.copysign(local.z);
-        }
-        target = transform.translation + transform.rotation * local;
-    }
-    target
-}
-
 pub fn plugin(app: &mut App) {
     app.add_systems(FixedUpdate, keep_apart.in_set(Sim::Resolve));
 }
@@ -97,24 +63,6 @@ fn shares(a: Body, b: Body) -> (f32, f32) {
             (b.weight / total, a.weight / total)
         }
     }
-}
-
-/// Pushes a point at `at` with a body of `radius` out of every body in `others`, along
-/// the ground. For a walker that should stop at bodies rather than be shoved by them.
-pub fn push_out<'a>(
-    mut at: Vec3,
-    radius: f32,
-    others: impl Iterator<Item = (&'a Body, &'a Transform)>,
-) -> Vec3 {
-    let up = at.normalize();
-    for (body, transform) in others {
-        let apart = (at - transform.translation).reject_from(up);
-        let reach = radius + body.radius;
-        if apart.length_squared() < reach * reach && apart.length_squared() > 1e-8 {
-            at += apart.normalize() * (reach - apart.length());
-        }
-    }
-    at
 }
 
 /// Moves overlapping bodies apart, and out of trees, rocks and players, then puts them
@@ -191,30 +139,6 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use terra_core::{PlanetSpec, Seed};
 
-    #[test]
-    fn a_walker_is_pushed_out_of_a_solid_by_its_nearest_side() {
-        let solid = Solid {
-            half: Vec3::splat(0.4),
-        };
-        let push = |target: Vec3, visibility: Visibility| {
-            push_out_of_solids(
-                target,
-                0.3,
-                [(&solid, &Transform::IDENTITY, &visibility)].into_iter(),
-            )
-        };
-        // Just inside the east side: out to the east, a radius clear of the box.
-        let out = push(Vec3::new(0.5, 0.0, 0.1), Visibility::Inherited);
-        assert!((out.x - 0.7).abs() < 1e-5 && (out.z - 0.1).abs() < 1e-5);
-        // Clear of it already, or standing on top of it: left alone.
-        for free in [Vec3::new(0.8, 0.0, 0.0), Vec3::new(0.0, 0.8, 0.0)] {
-            assert_eq!(push(free, Visibility::Inherited), free);
-        }
-        // Hidden, it is walked through.
-        let inside = Vec3::new(0.1, 0.0, 0.1);
-        assert_eq!(push(inside, Visibility::Hidden), inside);
-    }
-
     /// A world on a smooth planet, and a place on its ground.
     fn world() -> (World, Vec3) {
         let planet = Planet::smooth(PlanetSpec {
@@ -279,17 +203,5 @@ mod tests {
         let (bound, spider) = (Body::fixed(0.4), Body::new(0.5, 1.0));
         assert_eq!(shares(bound, spider), (0.0, 1.0));
         assert_eq!(shares(bound, bound), (0.0, 0.0));
-    }
-
-    #[test]
-    fn a_walker_stops_at_a_body() {
-        let up = Vec3::Y * 100.0;
-        let spider = (Body::new(0.6, 1.0), Transform::from_translation(up));
-        let walked = push_out(
-            up + Vec3::X * 0.3,
-            0.4,
-            std::iter::once((&spider.0, &spider.1)),
-        );
-        assert!(((walked - up).reject_from(Vec3::Y).length() - 1.0).abs() < 1e-4);
     }
 }

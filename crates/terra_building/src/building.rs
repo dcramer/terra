@@ -45,6 +45,7 @@ pub fn player_plugin(app: &mut App) {
     props::plugin(app);
     loss::plugin(app);
     remote::plugin(app);
+    crate::contacts::plugin(app);
     memory::remote(app);
     going_up::plugin(app);
 }

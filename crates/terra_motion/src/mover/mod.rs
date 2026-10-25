@@ -169,6 +169,20 @@ pub struct Body {
     buffer: f32,
 }
 
+impl Body {
+    /// What it touched as its last tick left it, in the world: where, the normal, and whether
+    /// the move met it (for a dump of why a body stopped, `build.contacts`).
+    pub fn contacts(&self) -> impl Iterator<Item = (DVec3, Vec3, bool)> + '_ {
+        self.active.iter().map(|t| {
+            (
+                self.frame + t.contact.at.as_dvec3(),
+                t.contact.normal,
+                t.met,
+            )
+        })
+    }
+}
+
 /// The world a tick moves bodies through: what stops them, the water, gravity toward the
 /// centre (D63).
 pub struct World<'a> {

@@ -205,6 +205,7 @@ pub fn run(forest: &Forest, kind: &Kind) -> Cost {
         .sum();
     let (mut next, mut done) = (1, 0.0_f32);
     let (mut ticks, mut micros, mut worst, mut gathered) = (0u64, 0.0_f64, 0.0_f32, 0u64);
+    let mut near = Vec::new();
     for _ in 0..(SECONDS / TICK) as usize {
         let body = bodies.get(0).expect("the body");
         let (feet, speed) = (body.feet, body.velocity.length());
@@ -226,7 +227,8 @@ pub fn run(forest: &Forest, kind: &Kind) -> Cost {
         )];
         let began = Instant::now();
         // As the walk does a tick: gather, then move.
-        let near = crate::mover_world::flora(&forest.flora, feet, REACH_M + speed * TICK);
+        near.clear();
+        crate::mover_world::flora(&forest.flora, feet, REACH_M + speed * TICK, &mut near);
         let tallied: Vec<Tallied> = near
             .iter()
             .map(|solid| Tallied {

@@ -14,8 +14,9 @@
 //! - `lush.footprint {points, thing?}`: for each spot, how far it is from the nearest part of
 //!   any solid mesh taller than a step, between a step and a body's height over the ground
 //!   (nothing inside), and from any but `thing`'s (`other`), and from `thing`'s whole drawn
-//!   footprint up to a body's height; where the player is and how high their feet are over
-//!   the ground; and the same of every frame since it was last asked, as `track`: east,
+//!   footprint up to a body's height (given `lifts`, the feet's height over the ground at
+//!   each spot, only what stands over the feet counts as solid there); where the player is
+//!   and how high their feet are over the ground; and the same of every frame since it was last asked, as `track`: east,
 //!   south and that height.
 
 use super::floor::Sink;
@@ -32,6 +33,8 @@ use terra_world::start::Start;
 
 /// A walker's step (`terra_build::Walker`), the most it steps onto without jumping.
 const STEP_M: f32 = 0.4;
+/// How far over the feet a mesh must stand to be in a walk's way, not under its feet, m.
+const UNDER_M: f32 = 0.05;
 /// A body's height: above it nothing stops a walker.
 const BODY_M: f32 = 1.8;
 /// Models are read up to this high over their origin, in their own units: past any body.
@@ -523,12 +526,20 @@ struct Prints(HashMap<Entity, Arc<Print>>);
 struct Spots {
     points: Vec<[f32; 2]>,
     thing: Option<u64>,
+    /// How high the feet were over the ground at each spot, if a walk's: what of a mesh is no
+    /// higher than they were is under them, not in their way (`solid` in 3D).
+    #[serde(default)]
+    lifts: Vec<f32>,
 }
 
 /// How far each spot is from the nearest solid mesh taller than a step, of anything and of
 /// anything but one thing, and from that thing's drawn footprint; and where the player is.
 fn footprint(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
-    let Spots { points, thing } = parse_some(params)?;
+    let Spots {
+        points,
+        thing,
+        lifts,
+    } = parse_some(params)?;
     let start = *world.resource::<Start>();
     let planet = world.resource::<Planet>().clone();
     let mut players = world.query::<(&Name, &Transform)>();
@@ -583,11 +594,14 @@ fn footprint(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     }
     let answers: Vec<Value> = spots
         .iter()
-        .map(|spot| {
+        .enumerate()
+        .map(|(i, spot)| {
+            let under = lifts.get(i).map_or(0.0, |lift| lift + UNDER_M);
             let gaps: Vec<(f32, &String, bool)> = prints
                 .iter()
                 .filter_map(|(entity, print)| {
-                    let d = gap(print, &print.solid, *spot, |h| h > STEP_M + 0.05)?;
+                    let counts = |h: f32| h > STEP_M + 0.05 && h > under;
+                    let d = gap(print, &print.solid, *spot, counts)?;
                     Some((d, &print.name, Some(entity.to_bits()) == thing))
                 })
                 .collect();

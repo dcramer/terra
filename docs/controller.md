@@ -60,7 +60,7 @@ Gravity's strength belongs to the world, not the body (D63 leaves its value open
 
 The server never sees any of these, and the mover never waits for them:
 
-- **Step smoothing**. Stepping up moves the capsule at once, as Jolt does. The shown body keeps a vertical offset that runs down to zero over about 0.12 s, so a step reads as a stride and not a pop. This is Unreal's mesh smoothing and the Source engine's view smoothing.
+- **Step smoothing**. Stepping up moves the capsule at once, as Jolt does. The shown body keeps a vertical offset that runs down to zero over about 0.12 s, so a step reads as a stride and not a pop. This is Unreal's mesh smoothing and the Source engine's view smoothing. The camera follows the figure as shown, not the capsule (`terra_walker::stepping`).
 - Interpolation between ticks, which is in place already (`terra_world::tick`).
 - Feet planted and stepped by rule (D455), foot IK and the pelvis on slopes and steps (movement.md stage 4), lean into turns, and the swim pose.
 

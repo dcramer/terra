@@ -31,6 +31,7 @@ pub mod options;
 pub mod pace;
 pub mod shake;
 pub mod skinning;
+pub mod stepping;
 pub mod strap;
 pub mod swing;
 pub mod walker;

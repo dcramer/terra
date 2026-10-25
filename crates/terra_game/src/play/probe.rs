@@ -281,6 +281,13 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         .map_err(|_| refused("no player yet"))?;
     let items = world.resource::<Items>();
     let feet = transform.translation;
+    // How high the feet stand over the ground's true field and over the ground as drawn
+    // (coarser far off): on the ground both near nothing, on a floor or a rock the field more.
+    let planet = world.resource::<Planet>();
+    let over = (
+        planet.distance(feet),
+        feet.length() - planet.ground_at(feet).length(),
+    );
     let here = east_south(&start, feet);
     let ahead = east_south(&start, feet + view.forward);
     let carrying: serde_json::Map<String, Value> = items
@@ -348,6 +355,7 @@ pub(super) fn digest(world: &mut World, whole: bool) -> BrpResult {
         "at": place(here),
         "facing": place([ahead[0] - here[0], ahead[1] - here[1]]),
         "on_ground": motion.on_ground,
+        "feet_over": {"field": number(over.0), "drawn": number(over.1)},
         "indoors": motion.indoors,
         "down": downed,
         "health": number(body.health),

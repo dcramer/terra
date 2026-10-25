@@ -78,8 +78,8 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("assets/data/life.ron", &["terra_town"]),
     // The sword-and-shield move set, read by the fight's tests.
     ("assets/data/moves/", &["terra_motion"]),
-    // The movers' kinds (D53), read by the mover and the controller course.
-    ("assets/data/movers.ron", &["terra_motion"]),
+    // The movers' kinds (D53), read by the mover, the controller course and the walk.
+    ("assets/data/movers.ron", &["terra_motion", "terra_walker"]),
     // The climate the land's places are found in.
     ("assets/data/climate.ron", &["terra_land"]),
 ];
@@ -157,14 +157,12 @@ pub(crate) const COMBAT: &[&str] = &[
 ];
 
 /// What the controller scorecard reads (D457, tools/controller): the course and the mover it
-/// drives (today's walk and the ground answer it asks), and the scorecard's own tools. A
+/// drives (and the planet's field the walk asks it of), and the scorecard's own tools. A
 /// change here is measured again before a lowering of its baseline is carried.
 pub(crate) const CONTROLLER: &[&str] = &[
     "crates/terra_motion/src/course/",
     "crates/terra_motion/src/mover/",
     "assets/data/movers.ron",
-    "crates/terra_walker/src/movement",
-    "crates/terra_walker/src/bodies.rs",
     "crates/terra_world/src/planet.rs",
     "tools/controller/",
     "tools/scorecard/",

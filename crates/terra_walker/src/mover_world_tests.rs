@@ -106,7 +106,14 @@ fn cubes(at: &[([i32; 3], Shape)]) -> Base {
 
 /// A base's boxes near a frame's origin as the mover meets them.
 fn base_blocks(built: &Base, frame: &Transform) -> Vec<Block> {
-    base(built, frame, frame.translation, 12.0, None)
+    let mut blocks = Vec::new();
+    let at = AtBase {
+        base: built,
+        frame,
+        kits: None,
+    };
+    base(at, frame.translation, 12.0, &mut Vec::new(), &mut blocks);
+    blocks
 }
 
 #[test]
@@ -237,7 +244,8 @@ fn a_props_box_stands_from_its_foot_turned_and_a_hidden_one_is_walked_through() 
     // Shown, a man walked at it is kept out of it (sliding round its turned face); hidden, he
     // walks through it.
     for (shown, stops) in [(Visibility::Inherited, true), (Visibility::Hidden, false)] {
-        let blocks = props([(&chest, &placed, &shown)], foot, 4.0);
+        let mut blocks = Vec::new();
+        props([(&chest, &placed, &shown)], foot, 4.0, &mut blocks);
         assert_eq!(blocks.len(), usize::from(stops));
         let obstacles = Obstacles { obstacles: &blocks };
         let trace = walk(
@@ -267,7 +275,8 @@ fn a_trunk_borrowed_from_flora_and_a_body_standing_there_stop_a_man_at_their_wid
     let ahead = frame.transform_point(Vec3::new(3.0, 0.0, 0.0));
     let mut trees = flora::Obstacles::default();
     trees.add(ahead, 0.4);
-    let near = flora(&trees, frame.translation, 6.0);
+    let mut near = Vec::new();
+    flora(&trees, frame.translation, 6.0, &mut near);
     assert_eq!(near.len(), 1);
     let trunk = Obstacles { obstacles: &near };
     let end = last(&walk(
@@ -282,7 +291,8 @@ fn a_trunk_borrowed_from_flora_and_a_body_standing_there_stop_a_man_at_their_wid
     // A person there instead, 0.35 m round.
     let person = bodies::Body::new(0.35, 70.0);
     let standing = Transform::from_translation(ahead);
-    let capsules = others([(7, &person, &standing)], 1.8);
+    let mut capsules = Vec::new();
+    others([(7, &person, &standing)], 1.8, &mut capsules);
     let them = Capsules {
         bodies: &capsules,
         skip: 0,

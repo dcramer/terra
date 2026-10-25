@@ -12,8 +12,10 @@
 //       taller than a step: walked into a face or through a corner;
 //   (b) walking at something taller than a step, the player never came within 0.35 m of it
 //       as drawn: an invisible wall, a footprint fatter than the model;
-//   (c) something lower than a step (under 0.3 m) was not stepped onto and over, or the
-//       player was lifted more than a step onto something taller.
+//   (c) something lower than a step (under 0.35 m) was not stepped onto and over, or the
+//       player was lifted more than a step (the mover's, movers.ron) onto something taller.
+//
+// Into (a) is measured in 3D: what of a mesh is no higher than the feet were is under them.
 //
 // Things not yet fitted after the forest has loaded fail too, and so does a kind of thing
 // that should stand in the forest and is missing. Pictures of the first few, and of every
@@ -23,6 +25,7 @@
 //
 // About a minute on a built release. Node 22.18 or later; no dependencies.
 
+import { readFileSync } from "node:fs";
 import * as game from "./client.ts";
 import { APPROACH, BEYOND, BODY, clear, type Spot } from "./ways.ts";
 
@@ -33,14 +36,14 @@ const arg = (name: string, fallback: string) => {
 const count = Number(arg("--count", "20"));
 const windows = game.onWsl && !process.argv.includes("--here");
 
-/// The walker's step (terra_build::Walker).
-const STEP = 0.4;
+/// The mover's step, the man's (assets/data/movers.ron): taller than it, a thing is not stepped onto.
+const STEP = Number(/"Man"[\s\S]*?step_height:\s*([\d.]+)/.exec(readFileSync(new URL("../../assets/data/movers.ron", import.meta.url), "utf8"))![1]);
 /// How far into a solid mesh a body may stand, how far short of a tall thing it may be stopped,
 /// and how high a thing may be and count as low.
 const INTO = 0.1;
 const SHORT = 0.35;
 const LOW = 0.35;
-const TALL = 0.6;
+const TALL = STEP + 0.05;
 /// The kinds the forest must have.
 const KINDS = ["Rock", "Boulder", "Stump", "Log", "Snag", "Oak", "Pine", "Spruce"];
 
@@ -152,10 +155,7 @@ for (const w of walks) {
   await game.waitUntil("the walk", game.status, (now) => now.frame > from + frames + 4, 60);
   const track = (await footprint([])).track.map(([east, south, lift]) => ({ at: [east, south] as [number, number], lift }));
   // Every place walked through against the meshes.
-  const spots = (await footprint(
-    track.map((t) => t.at),
-    o.entity,
-  )).points;
+  const spots = ((await game.call("lush.footprint", { points: track.map((t) => t.at), thing: o.entity, lifts: track.map((t) => t.lift) })) as Print).points;
   const deepest = spots.reduce((worst, s, i) => (s.solid !== null && (worst < 0 || s.solid < (spots[worst].solid as number)) ? i : worst), -1);
   const into = deepest >= 0 ? BODY - (spots[deepest].solid as number) : -Infinity;
   const short = Math.min(...spots.map((s) => (s.seen === null ? Infinity : s.seen))) - BODY;
