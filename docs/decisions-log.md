@@ -793,3 +793,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-10-25**: D478 added (by the developers, on the review desk: "Dive by looking"): Swimming dives by looking, rises by jumping.
 - **2026-10-25**: D479 added (by the developers, on the review desk: "Soft for people, hard for monsters"): People push each other softly, monsters hard.
 - **2026-10-25**: D480 added (agent, the weathering spike, research/2026-10-25-wfc-weathering.md): Weathering motifs are solved by wave function collapse within masks of the building's shape, stored as mixed BC4; Leaning, the spike Off.
+- **2026-10-25**: D481 added (by the agent, combat round 14): the move check measures the sword through its own shield and the shield through the sword arm (moves.ts's clash, clash.ts), scored as `move.<move>.sword_in_shield` and `move.<move>.shield_in_arm`, bar 0 cm.

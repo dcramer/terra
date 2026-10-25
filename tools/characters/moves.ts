@@ -7,6 +7,9 @@
 //   hands   how deep a hand, forearm, elbow or upper arm goes into the body (torso, head,
 //           thighs), skinned
 //   held    how deep a held look (sword, shield) goes into it
+//   clash   held look against held look (clash.ts, D481): how deep the sword (blade, guard,
+//           hilt) goes through the shield's board, and the board through the sword arm (right
+//           hand and forearm); measured and scored (tools/combat), not yet a bar here
 //   arc     a blow's tip at its fastest in its active frames: its bearing from ahead (+ left)
 //           and how far ahead, which way it sweeps, how far the hips have turned; a blow
 //           whose clip has a spec (D450, clip_spec.ts) fails a sweep or contact against it
@@ -31,6 +34,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
+import { type Ball, type Board, board, meshOf, sliced, through } from "./clash.ts";
 import { PACE_FRAMES } from "./phases.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, matrix, mmul, place, posed, qinv, rot, sub, turn } from "./glb.ts";
@@ -206,7 +210,9 @@ function poseOf(shape: Shape, clip: Clip, t: number): Pose[] {
 // Held looks: a few hundred of their vertices in the frame of the node they hang from, and the
 // blade's tip. A look hangs from the hand socket it is held in, or, strapped (a shield on the
 // forearm), from the bone its file's `strap` names, as `terra_walker::character` hangs it.
-type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; centre: V3 };
+// The sword (in the right hand) also as balls, the shield (in the left) as its board, for the
+// clash (clash.ts), in the frame of the node they hang from.
+type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; centre: V3; balls?: Ball[]; board?: Board };
 type Strap = { bone: string; at: V3; face: V3; grip: V3 };
 const rest = posed(body, undefined, 0);
 // A strap's place in its bone's frame: `at` in metres (the hand socket's, which the bone's
@@ -261,7 +267,13 @@ const held: Held[] = opt.hold!.map((h) => {
   thin[axis] = 1;
   const centre = lo.map((x, j) => (x + hi[j]) / 2) as V3;
   const name = file.split("/").at(-1)!.replace(".glb", "");
-  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: hung ? rot(hung.r, thin) : thin, centre: put(centre) };
+  const k = hung?.s[0] ?? 1;
+  const turned = (v: V3): V3 => (hung ? rot(hung.r, v) : v);
+  const mesh = hand === "socket.hand.R" || hand === "socket.hand.L" ? meshOf(g) : undefined;
+  const balls = hand === "socket.hand.R" ? sliced(mesh!, tip).map((b) => ({ ...b, p: put(b.p), r: b.r * k })) : undefined;
+  const disc = hand === "socket.hand.L" ? board(mesh!) : undefined;
+  const plate = disc && { centre: put(disc.centre), normal: turned(disc.normal), radius: disc.radius * k, half: disc.half * k };
+  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), centre: put(centre), balls, board: plate };
 });
 
 // The skinned torso, head and thighs at a pose, gridded for the nearest-vertex search.
@@ -321,10 +333,26 @@ const mid = (a: V3, b: V3): V3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] +
 type Worst = { cm: number; where: string };
 const worse = (w: Worst, cm: number, where: string) => (cm > w.cm ? { cm, where } : w);
 
-// Hands, forearms and held looks against the body, over a span of a clip, on every template.
+// The sword arm as balls, from the joints: the forearm a centimetre apart, as thick as the
+// hands check pads it (the elbow 4 cm, its middle 3.5), and the hand's.
+function swordArm(P: (n: string) => V3): Ball[] {
+  const [elbow, wrist] = [P("lowerarm_r"), P("hand_r")];
+  const n = Math.max(1, Math.ceil(len(sub(wrist, elbow)) / 0.01));
+  const arm: Ball[] = [...Array(n + 1).keys()].map((i) => ({ p: elbow.map((x, j) => x + ((wrist[j] - x) * i) / n) as V3, r: 0.04 - (0.01 * i) / n, part: "forearm_r" }));
+  arm.push({ p: mid(P("hand_r"), P("middle_01_r")), r: 0.025, part: "hand_r" });
+  for (const f of ["middle_02_r", "index_02_r", "thumb_02_r"]) arm.push({ p: P(f), r: 0.012, part: "hand_r" });
+  return arm;
+}
+const sword = held.find((h) => h.balls);
+const shield = held.find((h) => h.board);
+
+// Hands, forearms and held looks against the body, and the held looks against each other, over
+// a span of a clip, on every template.
 function penetration(clip: Clip, from: number, to: number) {
   let hands: Worst = { cm: -Infinity, where: "" };
   let heldW: Worst = { cm: -Infinity, where: "" };
+  let swordW: Worst = { cm: -Infinity, where: "" };
+  let armW: Worst = { cm: -Infinity, where: "" };
   for (const shape of shapes) {
     for (let t = from; t <= to + 1e-6; t += 1 / fps) {
       const pose = poseOf(shape, clip, t);
@@ -352,9 +380,18 @@ function penetration(clip: Clip, from: number, to: number) {
           heldW = worse(heldW, depth * 100, `${h.name} in ${part} at ${t.toFixed(2)} s, ${shape.name}`);
         }
       }
+      if (sword && shield) {
+        const [S, B] = [pose[at(sword.socket)], pose[at(shield.socket)]];
+        const b = shield.board!;
+        const disc: Board = { centre: place(B, b.centre), normal: rot(B.r, b.normal), radius: b.radius * B.s[0], half: b.half * B.s[0] };
+        const blade = through(sword.balls!.map((q) => ({ ...q, p: place(S, q.p), r: q.r * S.s[0] })), disc);
+        swordW = worse(swordW, blade.cm, `${blade.part} in ${shield.name} at ${t.toFixed(2)} s, ${shape.name}`);
+        const arm = through(swordArm(P), disc);
+        armW = worse(armW, arm.cm, `${shield.name} in ${arm.part} at ${t.toFixed(2)} s, ${shape.name}`);
+      }
     }
   }
-  return { hands, held: heldW };
+  return { hands, held: heldW, sword: swordW, arm: armW };
 }
 
 // Points that say where a pose is, relative to the hips: hands, forearms, head, blade tip.
@@ -408,6 +445,10 @@ function guard(move: Move) {
 }
 
 const cm = (x: number) => `${x.toFixed(1)} cm`;
+// The clash's numbers and its words, where there is a sword and a shield to measure.
+type Pen = ReturnType<typeof penetration>;
+const clashed = (pen: Pen): Record<string, number> => (sword && shield ? { sword_shield_cm: pen.sword.cm, shield_arm_cm: pen.arm.cm } : {});
+const clashParts = (pen: Pen) => (sword && shield ? [`sword in shield ${cm(pen.sword.cm)} (${pen.sword.where})`, `shield in arm ${cm(pen.arm.cm)} (${pen.arm.where})`] : []);
 const failures: string[] = [];
 type Row = { move?: string; clip: string; bad: string[]; gaps?: [number, number]; measured: Record<string, number> };
 const rows: Row[] = [];
@@ -432,8 +473,8 @@ for (const move of moves) {
   const bad: string[] = [];
   let gaps: [number, number] | undefined;
   const pen = penetration(clip, move.from, move.done);
-  const measured: Record<string, number> = { hands_cm: pen.hands.cm, held_cm: pen.held.cm };
-  parts.push(`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`);
+  const measured: Record<string, number> = { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen) };
+  parts.push(`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen));
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
   const blow = specs[move.clip.split("#")[0]];
@@ -523,7 +564,7 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
   const bad: string[] = [];
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
-  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm } });
+  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen) } });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
 if (opt.json) writeFileSync(opt.json, JSON.stringify(rows, null, 1) + "\n");

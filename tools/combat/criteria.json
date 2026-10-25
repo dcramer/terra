@@ -356,6 +356,40 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "move.slash.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (slash)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (slash)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "shield_arm_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.slash.hands",
    "noticed": 4,
    "notice": "an arm sinks into the body in the slash",
@@ -385,6 +419,40 @@
     "by": "moves",
     "row": "backhand",
     "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (backhand)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (backhand)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "shield_arm_cm"
    }
   },
   {
@@ -424,6 +492,40 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "move.finisher.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (finisher)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (finisher)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "shield_arm_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.finisher.hands",
    "noticed": 4,
    "notice": "an arm sinks into the body in the finisher",
@@ -453,6 +555,40 @@
     "by": "moves",
     "row": "heavy",
     "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (heavy)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (heavy)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "shield_arm_cm"
    }
   },
   {
@@ -492,6 +628,40 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "move.partner_slash.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (partner_slash)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (partner_slash)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "shield_arm_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.partner_slash.hands",
    "noticed": 4,
    "notice": "an arm sinks into the body in the the partner's slash",
@@ -521,6 +691,40 @@
     "by": "moves",
     "row": "partner_heavy",
     "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (partner_heavy)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (partner_heavy)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "shield_arm_cm"
    }
   },
   {
@@ -560,6 +764,40 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "move.roll.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (roll)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "roll",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.roll.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (roll)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "roll",
+    "measure": "shield_arm_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.roll.hands",
    "noticed": 4,
    "notice": "an arm sinks into the body in the roll",
@@ -589,6 +827,40 @@
     "by": "moves",
     "row": "block",
     "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (block)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (block)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "shield_arm_cm"
    }
   },
   {
@@ -1087,6 +1359,40 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "move.Keyed_Guard.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (Keyed_Guard)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Keyed_Guard",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Keyed_Guard.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (Keyed_Guard)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Keyed_Guard",
+    "measure": "shield_arm_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.Keyed_Guard.hands",
    "noticed": 4,
    "notice": "an arm sinks into the body in Keyed_Guard, the game's guard",
@@ -1116,6 +1422,40 @@
     "by": "moves",
     "row": "Fight_Guard",
     "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Guard.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (Fight_Guard)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Guard",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Guard.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (Fight_Guard)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Guard",
+    "measure": "shield_arm_cm"
    }
   },
   {
@@ -1155,6 +1495,40 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "move.Fight_Strafe_L.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (Fight_Strafe_L)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_L",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Strafe_L.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (Fight_Strafe_L)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_L",
+    "measure": "shield_arm_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.Fight_Strafe_L.hands",
    "noticed": 4,
    "notice": "an arm sinks into the body in Fight_Strafe_L",
@@ -1184,6 +1558,40 @@
     "by": "moves",
     "row": "Fight_Strafe_R",
     "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Strafe_R.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (Fight_Strafe_R)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_R",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Strafe_R.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (Fight_Strafe_R)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_R",
+    "measure": "shield_arm_cm"
    }
   },
   {
@@ -1223,6 +1631,40 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "move.Fight_Walk.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (Fight_Walk)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Walk",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Fight_Walk.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (Fight_Walk)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Walk",
+    "measure": "shield_arm_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.Fight_Walk.hands",
    "noticed": 2,
    "notice": "an arm sinks into the body walking drawn (Fight_Walk)",
@@ -1252,6 +1694,40 @@
     "by": "moves",
     "row": "Jump_Loop",
     "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Jump_Loop.sword_in_shield",
+   "noticed": 5,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (Jump_Loop)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Jump_Loop",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Jump_Loop.shield_in_arm",
+   "noticed": 4,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (Jump_Loop)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
+   "check": {
+    "by": "moves",
+    "row": "Jump_Loop",
+    "measure": "shield_arm_cm"
    }
   },
   {

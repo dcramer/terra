@@ -173,6 +173,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D462](decisions/D462.md) | Dual wielding | Design | — | Open | Whether a body may hold a one-hander in each hand… |
 | [D464](decisions/D464.md) | Holding a one-handed weapon in two hands | Design | — | Open | Whether a one-hander can be held in both hands for other… |
 | [D465](decisions/D465.md) | How many variants of a move | Design | — | Open | How many takes of each move are kept and drawn without… |
+| [D481](decisions/D481.md) | The move check measures the sword through its own shield and the shield through the sword arm | Tech | Agent | Decided | The move check (`tools/characters/moves.ts`, D447)… |
 
 ## People and the tribe
 
