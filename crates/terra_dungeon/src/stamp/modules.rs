@@ -7,7 +7,7 @@
 use super::{Frame, Kinds, Light, LightKind, Object, ObjectRole, Prop, Stamp, hash, shaped, solid};
 use crate::Dungeon;
 use crate::dress::{ModuleSet, RUBBLE, WATER};
-use crate::place::{Cell, Side, opposite};
+use crate::place::{Cell, Side, Space, opposite};
 use crate::theme::Theme;
 use terra_build::{BuildOp, Facing, Shape};
 
@@ -177,6 +177,53 @@ pub(super) fn lay(
             }),
             _ => props(f, cell, look.class, &mut out.props),
         }
+        if matches!(cell.space, Space::Corridor(_)) && look.class != Class::Timber {
+            corridor(cell, kinds, out);
+        }
+    }
+}
+
+/// A corridor's run: a rib of trim across its ceiling every cell, a half metre down, where
+/// both its sides are walled, so a run reads in bays (a vault's transverse ribs, a mine's
+/// sets); and its edges worn, a half cube or two of fallen stone at a wall's foot and now
+/// and then a stone, out of the middle where feet go.
+fn corridor(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
+    let walled = |d: usize| cell.sides[d] == Side::Wall;
+    let along = if walled(1) && walled(3) {
+        Some(0)
+    } else if walled(0) && walled(2) {
+        Some(1)
+    } else {
+        None
+    };
+    let Some(turn) = along else {
+        return;
+    };
+    // Seen along the run: its walls east and west of the frame.
+    let f = Frame::new(cell.at, turn);
+    f.fill(&mut out.ops, [1, 6, 3], [4, 6, 3], solid(kinds.trim));
+    let x = if hash(cell.at, 400).is_multiple_of(2) {
+        1
+    } else {
+        4
+    };
+    for k in 0..1 + hash(cell.at, 401) % 2 {
+        let z = 1 + (hash(cell.at, 402 + k) % 4) as i32;
+        f.fill(
+            &mut out.ops,
+            [x, 0, z],
+            [x, 0, z],
+            shaped(kinds.wall, Shape::Half),
+        );
+    }
+    if hash(cell.at, 410).is_multiple_of(3) {
+        let z = 0.5 + (hash(cell.at, 411) % 5) as f32;
+        out.props.push(Prop {
+            model: rock(cell.at, 412),
+            at: f.point(if x == 1 { 4.5 } else { 1.5 }, 0.0, z),
+            facing: (hash(cell.at, 413) % 4) as usize,
+            scale: 0.25,
+        });
     }
 }
 
