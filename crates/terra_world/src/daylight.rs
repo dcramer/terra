@@ -694,20 +694,15 @@ fn shine(
         let visible = weather.visibility_m().map_or(visible, |v| v.min(visible));
         fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(visible);
     }
-    let base = *clear_sky.get_or_insert(sky.cloudiness);
-    let cloudiness = base.max(weather.cloud);
-    if sky.cloudiness != cloudiness {
-        sky.cloudiness = cloudiness;
-    }
-    sky.deck = crate::weather::deck(&weather, light.ambient * SKY_LIGHT_GAIN * under.diffuse);
-    sky.zenith = colour(light.zenith);
-    sky.glow = colour(light.glow);
-    sky.brightness = light.sky;
-    sky.night = light.night;
-    sky.twilight = 1.0 - smoothstep(-1.0, 6.0, height);
-    sky.sun = sun;
-    sky.spin_axis = path.pole();
-    sky.spin = (clock.hour - MORNING) / 24.0 * TAU;
+    let clear = *clear_sky.get_or_insert(sky.cloudiness);
+    let sky_lit = light.ambient * SKY_LIGHT_GAIN * under.diffuse;
+    paint_sky(
+        &mut sky,
+        &path,
+        (clear, &weather, sky_lit),
+        &light,
+        (sun, height, clock.hour),
+    );
     let lit = SkyLight {
         shade: colour(crate::weather::under_deck(light.shade, deck)),
         brightness: light.ambient * SKY_LIGHT_GAIN * under.diffuse,
@@ -720,6 +715,31 @@ fn shine(
             camera.ev100 = ev;
         }
     }
+}
+
+/// Paints the sky for the hour: the weather's cloud over the clear sky's own, the deck lit
+/// by the sky's light `lit`, the light's colours, the sun and the stars' turn.
+fn paint_sky(
+    sky: &mut Sky,
+    path: &SkyPath,
+    (clear, weather, lit): (f32, &crate::weather::Weather, f32),
+    light: &Light,
+    (sun, height, hour): (Vec3, f32, f32),
+) {
+    let colour = |rgb: Vec3| Color::srgb(rgb.x, rgb.y, rgb.z);
+    let cloudiness = clear.max(weather.cloud);
+    if sky.cloudiness != cloudiness {
+        sky.cloudiness = cloudiness;
+    }
+    sky.deck = crate::weather::deck(weather, lit);
+    sky.zenith = colour(light.zenith);
+    sky.glow = colour(light.glow);
+    sky.brightness = light.sky;
+    sky.night = light.night;
+    sky.twilight = 1.0 - smoothstep(-1.0, 6.0, height);
+    sky.sun = sun;
+    sky.spin_axis = path.pole();
+    sky.spin = (hour - MORNING) / 24.0 * TAU;
 }
 
 /// The volumetric haze's own sky light (D310): under the trees the little that
