@@ -43,6 +43,26 @@ pub(super) fn cached<'a>(
     })
 }
 
+/// Whether a cube hides a face of a block kind's cube beside it. Floors, and walls of kinds
+/// drawn as boxes, do; walls of other kits do not, being thinner than the cube, nor a roof's
+/// cubes, drawn as a roof over them. A whole block of another block kind in a wall is a box:
+/// an earth ceiling meeting a stone wall's top cube runs flat to it, as the wall's face runs
+/// flat to the ceiling, so the seam between them is closed, not two rounded edges with the
+/// hidden faces behind them open (a slit the sun came through in a mine's ceiling).
+pub(super) fn hides_face(base: &Base, kits: &Kits, kit: &Kit, at: IVec3) -> bool {
+    base.cube(at).is_some_and(|cube| {
+        let boxed = cube.kind == Kind::PLAIN
+            || (cube.shape == terra_build::Shape::Whole
+                && kits
+                    .of(cube.kind)
+                    .is_some_and(|kit| kit.pattern == Pattern::Masonry));
+        cube.fill != Fill::Open
+            && cube.kind != kit.kind()
+            && !cube.kind.is_roof()
+            && (!base.in_wall(at) || boxed)
+    })
+}
+
 /// A block kind's cubes in a section as its surface (D197): those in, those not yet, and
 /// the next, each closed where it meets the others but for what is already built, with
 /// the cubes a step beyond the section's edge worked out but not drawn, so its edges meet
@@ -104,16 +124,7 @@ pub(super) fn draw_blocks(
             .is_some()
             .then_some(&holed as &dyn Fn(IVec3) -> Option<u64>),
     };
-    // Floors, and walls of kinds drawn as boxes, hide a face; walls of other kits do not,
-    // being thinner than the cube, nor a roof's cubes, drawn as a roof over them.
-    let hides_always = |at: IVec3| {
-        base.cube(at).is_some_and(|cube| {
-            cube.fill != Fill::Open
-                && cube.kind != kit.kind()
-                && !cube.kind.is_roof()
-                && (!base.in_wall(at) || cube.kind == Kind::PLAIN)
-        })
-    };
+    let hides_always = |at: IVec3| hides_face(base, section.kits, kit, at);
     let keep = |at: IVec3| terra_build::cubes::section_of(at) == section.at;
     // A part's cubes drawn only if the part is wanted: what is in, but not the plan's
     // shell or the next piece, which the section has whole.

@@ -307,3 +307,73 @@ fn a_thick_walls_decked_top_is_closed_to_a_pier_rising_from_it() {
         }
     }
 }
+
+// ---- block kinds meeting
+
+#[test]
+fn an_earth_ceiling_on_stone_walls_is_closed_where_it_meets_them() {
+    // A dungeon room's shell (terra_dungeon's stamp): stone walls a cube thick standing
+    // from below to the ceiling's row, an earth slab between their tops, behind the north
+    // wall the next room's wall, so the stone there is a mass two cubes thick whose inside
+    // draws nothing, and a wall of the room above standing on the slab across the room, its
+    // foot a stone strip in the slab's row. Each stone cube and the earth beside it hide the
+    // faces between them, so both must come to the seam flat and in its plane: a rounded
+    // edge on either, or their reliefs pushing them different ways there, opens a slit along
+    // it into the stone, and the sun came through it as a stripe down the wall. Every line
+    // from just under the ceiling up toward the sky meets the shell.
+    let (stone, earth) = (
+        terra_build::testing::shipped("stone.ron"),
+        terra_build::testing::shipped("earth.ron"),
+    );
+    let kits = Kits(vec![stone.clone(), earth.clone()]);
+    let mut base = Base::default();
+    let mut fill = |min: [i32; 3], max: [i32; 3], kind| {
+        base.apply(BuildOp::Fill {
+            min,
+            max,
+            cube: Some(Cube::new(kind, Fill::Solid)),
+        })
+    };
+    fill([0, 7, 0], [5, 7, 5], earth.kind());
+    fill([0, 4, 0], [5, 7, 0], stone.kind());
+    fill([0, 4, 5], [5, 7, 5], stone.kind());
+    fill([0, 4, 0], [0, 7, 5], stone.kind());
+    fill([5, 4, 0], [5, 7, 5], stone.kind());
+    fill([0, 4, -1], [5, 9, -1], stone.kind());
+    fill([2, 7, 1], [2, 9, 4], stone.kind());
+    let lines = crate::inspect::Lines::of(&base, &kits);
+    // From 5 cm under the ceiling, 1.25 cm apart across the seams (the west wall's, the
+    // strip's two and the north wall's) and 10 cm along them, at the sun's heights and all
+    // round.
+    let mut open = Vec::new();
+    for i in 0..104 {
+        for k in 0..20 {
+            let (a, b) = (0.5 + 0.00625 + i as f32 * 0.0125, 0.525 + k as f32 * 0.1);
+            let mut at = vec![Vec3::new(a, 3.45, b)];
+            if i < 24 {
+                at.push(Vec3::new(b, 3.45, a));
+            }
+            for p in at {
+                for el in [35f32, 50.0, 65.0, 80.0] {
+                    for az in 0..12 {
+                        let (e, t) = (el.to_radians(), (az as f32 * 30.0).to_radians());
+                        let d = Vec3::new(
+                            libm::cosf(e) * libm::cosf(t),
+                            libm::sinf(e),
+                            libm::cosf(e) * libm::sinf(t),
+                        );
+                        if !lines.meets(p, d, 1.5) {
+                            open.push((p, el, az * 30));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        open.is_empty(),
+        "{} lines out through the seam, first {:?}",
+        open.len(),
+        &open[..open.len().min(4)]
+    );
+}

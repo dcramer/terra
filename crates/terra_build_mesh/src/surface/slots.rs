@@ -5,6 +5,7 @@
 //! and the faces put into their surfaces and kept for next time ([`put`]).
 
 use super::*;
+mod edges;
 
 /// As [`draw_part`], each kept cube's faces into the surface of the slot `keep` gives it,
 /// as a section's near detail is drawn a part of it at a time (`sections::CLUSTER`).
@@ -203,9 +204,8 @@ impl<'a> Neighbourhood<'a> {
                 shrunk[i] = (low, high);
             }
         }
-        // Every inside edge: a cube's edge with three of the four cubes round it full, kept by
-        // the cell its middle is in (a list a cell, linked through `edges`), so a point looks
-        // only at those near it.
+        // Every edge the relief fades to (`edges::fades`), kept by the cell its middle is in (a
+        // list a cell, linked through `edges`), so a point looks only at those near it.
         let mut first_edge = vec![u32::MAX; grid.len()];
         let mut edges: Vec<(u32, (Vec3, Vec3))> = Vec::new();
         for &cube in cubes {
@@ -216,9 +216,9 @@ impl<'a> Neighbourhood<'a> {
                     // The edge along `axis` at this corner of the cube, and the four cubes round
                     // it.
                     let corner = cube + step(a, da) + step(b, db);
-                    let round = [(0, 0), (-1, 0), (0, -1), (-1, -1)]
-                        .map(|(ea, eb)| full(corner + step(a, ea) + step(b, eb)));
-                    if round.iter().filter(|&&f| f).count() != 3 {
+                    let around = [(0, 0), (-1, 0), (0, -1), (-1, -1)]
+                        .map(|(ea, eb)| corner + step(a, ea) + step(b, eb));
+                    if !edges::fades(around.map(full), around.map(|c| nb.is_member(c))) {
                         continue;
                     }
                     let from = corner.as_vec3() * CELL_M;

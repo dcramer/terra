@@ -394,14 +394,7 @@ fn the_sections_merged_are_the_sum_of_the_pieces() {
                             layout::roofs::carried_cut(*carried, cube, under, at)
                         })
                 };
-                let hides = |at: IVec3| {
-                    base.cube(at).is_some_and(|cube| {
-                        cube.fill != Fill::Open
-                            && cube.kind != kit.kind()
-                            && !cube.kind.is_roof()
-                            && (!base.in_wall(at) || cube.kind == Kind::PLAIN)
-                    })
-                };
+                let hides = |at: IVec3| hides_face(base, &kits, kit, at);
                 let flat = |_: [f32; 2]| 0.5;
                 // Bedded behind its lintels and sills, as a section's surface is.
                 let beds: Vec<crate::dress::Bed> = pieces
