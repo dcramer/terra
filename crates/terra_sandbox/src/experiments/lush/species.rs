@@ -1099,7 +1099,9 @@ pub fn conifer(dice: &mut Rng, height: f32, species: Species, form: Form, young:
 }
 
 /// How big a clump of a Scots pine's needles is: a shoot's tuft, a few to a pad (D318).
-const PAD_CLUMP_M: f32 = 0.62;
+const PAD_CLUMP_M: f32 = 0.7;
+/// How far apart the pads along a Scots pine's limb are: about a pad across, so they meet.
+const PAD_STEP_M: f32 = 0.7;
 
 /// A grown Scots pine's live crown (D318), as an old pine's is: not whorls of even spokes,
 /// which it had as a sapling and has lost, but a dozen or so crooked limbs left at their own
@@ -1121,11 +1123,23 @@ fn pine_crown(
     let limbs = 14 + dice.below(7) + if flat { 3 } else { 0 };
     let mut turn = dice.range(0.0, TAU);
     let mut pads = 0;
+    // Its limbs left in loose whorls of two or three, a year's growth apart, so the crown
+    // lies in layers (SpeedTree's conifers: whorled, drooping branches carrying their needle
+    // clusters along their length); a whorl's limbs a little apart in height and each its
+    // own length and rise, never a sapling's even spokes.
+    let whorls = (limbs as f32 / 2.5).ceil();
+    let mut heights: Vec<f32> = (0..limbs)
+        .map(|k| {
+            let whorl = (k as f32 * whorls / limbs as f32).floor();
+            ((whorl + 0.5 + dice.range(-0.25, 0.25)) / whorls).min(0.96)
+        })
+        .collect();
+    heights.sort_by(f32::total_cmp);
     for k in 0..limbs {
-        let t = ((k as f32 + dice.range(0.0, 1.0)) / limbs as f32).min(0.96);
+        let t = heights[k as usize];
         let y = base + (top - base) * t;
         let (at, r) = stem_at(y, k as usize);
-        // Round the bole about as a spiral leaves them, never in tiers.
+        // Round the bole about as a spiral leaves them.
         turn += 2.4 + dice.range(-0.6, 0.6);
         let out = round(turn);
         // Its outline: broadest low and rounding off at its top; on a broad old pine, as
@@ -1137,7 +1151,10 @@ fn pine_crown(
         };
         let length =
             (reach * profile * dice.range(0.6, 1.05) * (1.0 + favour * out.dot(light))).max(1.2);
-        let rise = dice.range(-0.15, 0.15) + if flat { 0.25 } else { 0.6 } * t;
+        // The low limbs out level or a little down and sagging along their length under
+        // their foliage, their ends turned up; the high ones climbing.
+        let low = 1.0 - t;
+        let rise = dice.range(-0.15, 0.15) + if flat { 0.25 } else { 0.6 } * t - 0.15 * low;
         let heading = out * libm::cosf(rise) + Vec3::Y * libm::sinf(rise);
         let (points, radii, directions) = line(
             dice,
@@ -1149,20 +1166,30 @@ fn pine_crown(
             6,
             0.12,
             0.3,
-            0.12,
-            0.06,
+            0.16,
+            0.06 + 0.16 * low,
         );
-        let mut ends = vec![(points[points.len() - 1], directions[directions.len() - 1])];
-        // Shoots along its outer half too, so its foliage runs in from its end, not a tuft
-        // on a bare spoke; on a long limb nearer the bole as well, so it is not a puffball on
-        // a bare stick (D359).
-        if length > 2.5 {
-            let (at, _, direction) = along(&points, &radii, dice.range(0.5, 0.7));
-            ends.push((at, direction));
-        }
-        if length > 3.5 {
-            let (at, _, direction) = along(&points, &radii, dice.range(0.28, 0.42));
-            ends.push((at, direction));
+        let mut ends = vec![(
+            points[points.len() - 1],
+            directions[directions.len() - 1],
+            1.0,
+        )];
+        // Its needles run along its outer two thirds, a pad every stride or so, to one side
+        // and the other, overlapping the next, so a limb is clothed, not a tuft on a bare
+        // spoke (D359): pads only at its ends and forks left sky between every tuft ("bonsai
+        // on broomsticks", the looks review of 2026-10-25).
+        let mut s = length * dice.range(0.3, 0.4);
+        let mut side_of = if dice.unit() < 0.5 { -1.0 } else { 1.0 };
+        while s < length - PAD_STEP_M * 0.7 {
+            let (at, _, direction) = along(&points, &radii, s / length);
+            let side = direction.cross(Vec3::Y).normalize_or(Vec3::X) * side_of;
+            ends.push((
+                at + side * dice.range(0.1, 0.25),
+                (direction + side * 0.5).normalize(),
+                0.7,
+            ));
+            side_of = -side_of;
+            s += PAD_STEP_M * dice.range(0.85, 1.15);
         }
         // It forks toward its end, a pad on each fork.
         if length > 2.0 {
@@ -1184,14 +1211,14 @@ fn pine_crown(
                     0.25,
                     0.0,
                 );
-                ends.push((q[q.len() - 1], qd[qd.len() - 1]));
+                ends.push((q[q.len() - 1], qd[qd.len() - 1], 1.0));
                 // Drawn as far as its limb is, so the pad at its end never floats where the
                 // trunk's second level leaves its finer wood out (D359).
                 tree.limb(q, qr, 1);
             }
         }
-        for (end, direction) in ends {
-            pad(dice, tree, end, direction, pads);
+        for (end, direction, full) in ends {
+            pad(dice, tree, end, direction, full, pads);
             pads += 1;
         }
         tree.limb(points, radii, 1);
@@ -1203,31 +1230,35 @@ fn pine_crown(
 /// the end, fanning out ahead and to the sides and turning up, some steeply, each a tuft at
 /// its tip, so they lie as one domed cushion a metre or two across whose edge is the tufts'
 /// needles. A few long shoots fanned apart read as a palmate leaf, lobes on bare stalks.
-fn pad(dice: &mut Rng, tree: &mut Tree, end: Vec3, direction: Vec3, id: usize) {
+/// Its shoots short and crowded, so their tufts overlap and the pad closes into one mass
+/// with a needled fringe, as a pine's pads do from below; spread wide apart, each tuft stood
+/// alone, a pom-pom with sky round it. `full` is how big a pad it is: one at a limb's end or
+/// fork in full, those along the limb smaller.
+fn pad(dice: &mut Rng, tree: &mut Tree, end: Vec3, direction: Vec3, full: f32, id: usize) {
     let ahead = Vec3::new(direction.x, 0.0, direction.z).normalize_or(Vec3::X);
     let side = ahead.cross(Vec3::Y);
-    let shoots = 6 + dice.below(4);
-    let fan = dice.range(2.6, 3.6);
+    let shoots = if full < 1.0 {
+        4 + dice.below(3)
+    } else {
+        8 + dice.below(4)
+    };
+    let fan = dice.range(2.2, 3.0);
     for _ in 0..shoots {
         let a = dice.range(-0.5, 0.5) * fan;
         // Most near level, a few turned up or hanging, so a pad is a flat plate with a ragged
-        // fringe, not a dome, and reads as one with sky between at 40 m (D359).
-        let rise = dice.range(-0.1, 0.5);
+        // fringe, not a dome (D359).
+        let rise = dice.range(-0.1, 0.45);
         let heading = ((ahead * libm::cosf(a) + side * libm::sinf(a)) * libm::cosf(rise)
             + Vec3::Y * libm::sinf(rise))
         .normalize();
-        let length = dice.range(0.3, 0.7);
-        let from = end - ahead * dice.range(0.0, 0.45) + side * dice.range(-0.15, 0.15);
+        let length = dice.range(0.22, 0.5) * full;
+        let from = end - ahead * dice.range(0.0, 0.3) + side * dice.range(-0.12, 0.12);
         let (q, qr, qd) = line(
             dice, from, heading, length, 0.018, 0.6, 2, 0.15, 0.0, 0.3, 0.0,
         );
-        if length > 0.55 {
-            let (point, _, along_it) = along(&q, &qr, 0.5);
-            tree.clump(point, PAD_CLUMP_M * dice.range(0.8, 0.95), along_it, id, id);
-        }
         tree.clump(
             q[q.len() - 1],
-            PAD_CLUMP_M * dice.range(0.9, 1.15),
+            PAD_CLUMP_M * dice.range(0.9, 1.15) * (0.85 + 0.15 * full),
             qd[qd.len() - 1],
             id,
             id,
@@ -1284,7 +1315,9 @@ pub fn crown_cards(dice: &mut Rng, tree: &Tree, height: f32, leaf: Leaf) -> Vec<
             let along = tree.along[i];
             let count = match tree.species {
                 Species::Oak => 6 + dice.below(2),
-                Species::Pine => 3 + dice.below(2),
+                // Three, a third of a turn apart: a fourth, nearly edge on from below, cost a
+                // seventh of a pine's cards for little cover; they go to more tufts instead.
+                Species::Pine => 3,
                 Species::Spruce => 3 + dice.below(3),
             };
             (0..count)
@@ -1352,7 +1385,8 @@ fn card(
                 up,
                 (rank % 3) as f32 * PI / 3.0 + dice.range(-0.3, 0.3),
             );
-            (base, up, facing, size * dice.range(0.6, 0.75))
+            // A little wider than its tuft, so a pad's tufts overlap into one mass.
+            (base, up, facing, size * dice.range(0.68, 0.84))
         }
         Species::Spruce => {
             let base = tip + dice.unit_vector() * 0.12;
@@ -1377,7 +1411,9 @@ fn card(
     let normal = match species {
         Species::Oak => (out_mass * 0.45 + out_crown * 0.35 + facing * 0.2).normalize(),
         // Out of its pad and the crown and up: a pad's top lit, its underside dark (D318).
-        Species::Pine => (out_mass * 0.4 + out_crown * 0.35 + Vec3::Y * 0.25).normalize(),
+        // More out of its pad than up, so a pad's lower cards face down, dark, and carry no
+        // snow seen from under it.
+        Species::Pine => (out_mass * 0.55 + out_crown * 0.3 + Vec3::Y * 0.15).normalize(),
         Species::Spruce => (out_crown * 0.55 + Vec3::Y * 0.25 + facing * 0.2).normalize(),
     };
     // Leaves deep in their mass and in the crown, and low in it, are shaded by the rest.
@@ -1391,8 +1427,23 @@ fn card(
     } else {
         (middle.distance(crown.centre) / (crown.reach * 1.1)).clamp(0.0, 1.0)
     };
-    let in_mass = (middle.distance(mass) / (size * 3.0)).clamp(0.0, 1.0);
-    let light = 0.44 + 0.22 * outer + 0.16 * in_mass + 0.16 * rise + dice.range(-0.13, 0.09);
+    // A pine's pad is dense: its middle and underside are shaded by its own tufts, its rim
+    // and top lit, so it reads as a mass with depth, not a flat cut-out.
+    let (in_mass, light) = if species == Species::Pine {
+        let in_mass = (middle.distance(mass) / (size * 2.0)).clamp(0.0, 1.0);
+        let under = (mass.y - middle.y).max(0.0) / size;
+        (
+            in_mass,
+            0.4 + 0.2 * outer + 0.3 * in_mass + 0.16 * rise - 0.12 * under.min(1.0)
+                + dice.range(-0.13, 0.09),
+        )
+    } else {
+        let in_mass = (middle.distance(mass) / (size * 3.0)).clamp(0.0, 1.0);
+        (
+            in_mass,
+            0.44 + 0.22 * outer + 0.16 * in_mass + 0.16 * rise + dice.range(-0.13, 0.09),
+        )
+    };
     let mut tint = Vec3::new(
         light * dice.range(0.95, 1.05),
         light,
@@ -1437,325 +1488,5 @@ fn card(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use terra_gen::Seed;
-
-    /// A forest oak's crown starts well up its trunk, its outline is irregular, and its
-    /// clumps are spread along its branches, not only at their ends.
-    #[test]
-    fn an_oak_has_a_bole_and_masses() {
-        for (n, form) in [Form::Tall, Form::Broad, Form::Forked]
-            .into_iter()
-            .enumerate()
-        {
-            let mut dice = Seed(5).index(n as u64).rng();
-            let tree = oak(&mut dice, 22.0, form, false);
-            let lowest = tree
-                .tips
-                .iter()
-                .map(|(at, _)| at.y)
-                .fold(f32::MAX, f32::min);
-            assert!(lowest > 22.0 * 0.15, "{form:?}: leaves down to {lowest} m");
-            assert!(
-                tree.masses.len() >= 4,
-                "{form:?}: {} masses",
-                tree.masses.len()
-            );
-            assert!(
-                tree.tips.len() > 120,
-                "{form:?}: {} clumps",
-                tree.tips.len()
-            );
-            assert_eq!(tree.tips.len(), tree.mass_of.len());
-            assert!(tree.limbs.iter().filter(|l| l.depth == 1).count() >= 4);
-        }
-    }
-
-    /// A pine's crown is high on a long clean bole; a spruce's comes nearly to the ground.
-    #[test]
-    fn conifers_have_their_habits() {
-        let mut dice = Seed(6).rng();
-        let pine = conifer(&mut dice, 28.0, Species::Pine, Form::Tall, false);
-        let spruce = conifer(&mut dice, 24.0, Species::Spruce, Form::Tall, false);
-        let lowest = |t: &Tree| t.tips.iter().map(|(at, _)| at.y).fold(f32::MAX, f32::min);
-        assert!(
-            lowest(&pine) > 28.0 * 0.45,
-            "pine leaves down to {}",
-            lowest(&pine)
-        );
-        assert!(
-            lowest(&spruce) < 24.0 * 0.4,
-            "spruce leaves only from {}",
-            lowest(&spruce)
-        );
-        // Below its live crown, a spruce's dead branches.
-        let dead = spruce
-            .limbs
-            .iter()
-            .filter(|l| l.depth == 2 && l.points[0].y < lowest(&spruce) - 0.5)
-            .count();
-        assert!(dead >= 6, "{dead} dead branches");
-        assert!(spruce.branches <= 16);
-    }
-
-    /// A grown Scots pine's crown is pads of needles on crooked limbs left one by one round its
-    /// bole, not whorls of spokes in tiers (D318): its limbs leave the bole at heights of their
-    /// own, and its clumps lie in compact pads, each a cushion round its middle, many to a
-    /// crown, high on its bole.
-    #[test]
-    fn a_scots_pines_crown_is_pads_on_its_limbs() {
-        let mut dice = Seed(18).rng();
-        for form in [Form::Tall, Form::Broad, Form::Forked, Form::Broken] {
-            let height = 28.0;
-            let pine = conifer(&mut dice, height, Species::Pine, form, false);
-            let feet: Vec<f32> = pine
-                .limbs
-                .iter()
-                .enumerate()
-                .filter(|(i, l)| l.depth == 1 && !pine.dead.contains(i))
-                .map(|(_, l)| l.points[0])
-                // Those that leave the bole, not the forks off them.
-                .filter(|foot| {
-                    pine.limbs.iter().filter(|l| l.depth == 0).any(|stem| {
-                        let (at, r) = by_height(&stem.points, &stem.radii, foot.y);
-                        Vec2::new(foot.x - at.x, foot.z - at.z).length() < r + 0.4
-                    })
-                })
-                .map(|foot| foot.y)
-                .collect();
-            assert!(feet.len() >= 12, "{form:?}: {} limbs", feet.len());
-            // A whorl leaves four to six limbs at one height; here none shares its height
-            // (within 0.1 m) with more than two others.
-            let most = feet
-                .iter()
-                .map(|y| feet.iter().filter(|other| (*other - y).abs() < 0.1).count() - 1)
-                .max()
-                .unwrap_or(0);
-            assert!(most <= 2, "{form:?}: {most} limbs at one limb's height");
-            assert!(
-                (15..=150).contains(&pine.branches),
-                "{form:?}: {} pads",
-                pine.branches
-            );
-            for (i, (at, _)) in pine.tips.iter().enumerate() {
-                let middle = pine.masses[pine.mass_of[i]];
-                assert!(
-                    at.distance(middle) < 1.6,
-                    "{form:?}: a clump {} m from its pad's middle",
-                    at.distance(middle)
-                );
-                assert!(at.y > height * 0.55, "{form:?}: a clump at {} m", at.y);
-            }
-        }
-    }
-
-    /// A young spruce in the shade is tiers of drooping boughs with gaps between them, its
-    /// needles on their outer part, not one even mass of needles to its trunk (D289): beside
-    /// a grown spruce's, which runs its needles nearly to the trunk, few of its clumps are
-    /// near its trunk, and some of its height between whorls holds none.
-    #[test]
-    fn a_young_spruce_stands_in_open_tiers() {
-        let mut dice = Seed(12).rng();
-        for k in 0..4 {
-            let height = 4.0 + k as f32;
-            let young = conifer(&mut dice, height, Species::Spruce, Form::Tall, true);
-            let below_top = |at: &Vec3| at.y < height - 1.0;
-            let clumps: Vec<Vec3> = young
-                .tips
-                .iter()
-                .map(|(at, _)| *at)
-                .filter(below_top)
-                .collect();
-            // How far out each clump is, of the farthest of its tier's (within 0.3 m).
-            let out = |at: &Vec3| Vec2::new(at.x, at.z).length();
-            let inner = clumps
-                .iter()
-                .filter(|at| {
-                    let tier = clumps
-                        .iter()
-                        .filter(|other| (other.y - at.y).abs() < 0.3)
-                        .map(out)
-                        .fold(0.0, f32::max);
-                    out(at) < tier * 0.3
-                })
-                .count();
-            assert!(
-                (inner as f32) < clumps.len() as f32 * 0.06,
-                "{k}: {inner} of {} clumps by the trunk",
-                clumps.len()
-            );
-            // Gaps between tiers: tenths of a metre up the crown with no clump's middle.
-            let (low, high) = clumps.iter().fold((f32::MAX, f32::MIN), |(l, h), at| {
-                (l.min(at.y), h.max(at.y))
-            });
-            let bands = ((high - low) / 0.1).ceil() as usize;
-            let mut filled = vec![false; bands.max(1)];
-            for at in &clumps {
-                filled[(((at.y - low) / 0.1) as usize).min(bands - 1)] = true;
-            }
-            let empty = filled.iter().filter(|f| !**f).count();
-            assert!(
-                empty as f32 > bands as f32 * 0.12,
-                "{k}: only {empty} of {bands} bands empty"
-            );
-        }
-    }
-
-    /// The trunk's highest point, and how far out from its foot its top is for its height.
-    fn top_of(tree: &Tree) -> (f32, f32) {
-        let trunk = &tree
-            .limbs
-            .iter()
-            .find(|l| l.depth == 0)
-            .expect("a trunk")
-            .points;
-        let top = trunk[trunk.len() - 1];
-        (top.y, Vec2::new(top.x, top.z).length())
-    }
-
-    /// Pines of a grove are not one pine: some slender, some stout, some leaning hard, each
-    /// with grey dead branches under its live crown (D276).
-    #[test]
-    fn pines_differ_one_from_the_next() {
-        let mut dice = Seed(9).rng();
-        // Sixteen, as one in four leans hard: of eight, one in ten draws had none.
-        let pines: Vec<Tree> = (0..16)
-            .map(|_| conifer(&mut dice, 26.0, Species::Pine, Form::Tall, false))
-            .collect();
-        let girths: Vec<f32> = pines.iter().map(|p| p.trunk_m / 26.0).collect();
-        let (thin, stout) = girths
-            .iter()
-            .fold((f32::MAX, 0.0f32), |(a, b), &g| (a.min(g), b.max(g)));
-        assert!(stout > thin * 1.3, "girths {girths:?}");
-        let leans: Vec<f32> = pines.iter().map(|p| top_of(p).1 / 26.0).collect();
-        assert!(
-            leans.iter().any(|&l| l > 0.06) && leans.iter().any(|&l| l < 0.04),
-            "leans {leans:?}"
-        );
-        for pine in &pines {
-            let lowest = pine
-                .tips
-                .iter()
-                .map(|(at, _)| at.y)
-                .fold(f32::MAX, f32::min);
-            let shed = pine
-                .dead
-                .iter()
-                .map(|&i| &pine.limbs[i])
-                .filter(|l| {
-                    let (a, b) = (l.points[0], l.points[l.points.len() - 1]);
-                    a.y < lowest && a.distance(b) > 0.7
-                })
-                .count();
-            assert!(shed >= 3, "{shed} dead branches under the crown");
-        }
-    }
-
-    /// A forked pine has two leaders, a broken one a dead spike where its top was and a
-    /// branch below turned up to lead in its place.
-    #[test]
-    fn pines_fork_and_break() {
-        let mut dice = Seed(10).rng();
-        let forked = conifer(&mut dice, 26.0, Species::Pine, Form::Forked, false);
-        let leaders = forked
-            .limbs
-            .iter()
-            .filter(|l| l.depth == 0 && l.points[l.points.len() - 1].y > 26.0 * 0.92)
-            .count();
-        assert_eq!(leaders, 2, "{leaders} leaders");
-        let broken = conifer(&mut dice, 26.0, Species::Pine, Form::Broken, false);
-        let (snapped, _) = top_of(&broken);
-        assert!(snapped < 26.0 * 0.88, "its trunk runs to {snapped} m");
-        assert!(
-            broken
-                .dead
-                .iter()
-                .any(|&i| broken.limbs[i].points[0].y >= snapped - 0.01),
-            "no dead spike at its top"
-        );
-        let highest = broken.tips.iter().map(|(at, _)| at.y).fold(0.0, f32::max);
-        assert!(highest > snapped + 1.0, "its leaves end at {highest} m");
-    }
-
-    /// Points every few centimetres along every limb of a tree, its wood as drawn.
-    fn wood_of(tree: &Tree) -> Vec<Vec3> {
-        tree.limbs
-            .iter()
-            .flat_map(|limb| {
-                limb.points.windows(2).flat_map(|w| {
-                    let steps = (w[0].distance(w[1]) / 0.05).ceil().max(1.0) as usize;
-                    (0..=steps).map(move |k| w[0].lerp(w[1], k as f32 / steps as f32))
-                })
-            })
-            .collect()
-    }
-
-    fn leaf() -> Leaf {
-        Leaf {
-            cell: Vec2::ZERO,
-            across: 0.25,
-            outline: [(0.0, 0.0); 8],
-        }
-    }
-
-    /// A crown's leaves hang on its twigs (D309): every clump is on wood, and nine in ten of
-    /// its cards have their stalk within a third of a metre of a twig, where cards hung up to
-    /// half a clump off read from below as floating.
-    #[test]
-    fn a_crowns_cards_hang_on_its_twigs() {
-        let mut dice = Seed(14).rng();
-        for (species, tree) in [
-            (Species::Oak, oak(&mut dice, 22.0, Form::Tall, false)),
-            (Species::Oak, oak(&mut dice, 20.0, Form::Broad, false)),
-            (
-                Species::Pine,
-                conifer(&mut dice, 26.0, Species::Pine, Form::Tall, false),
-            ),
-        ] {
-            let wood = wood_of(&tree);
-            let off_wood = |at: Vec3| wood.iter().map(|w| w.distance(at)).fold(f32::MAX, f32::min);
-            // (A pine's leading shoot's clumps hang straight down its top, a little off its
-            // leaning trunk.)
-            for (tip, _) in &tree.tips {
-                let off = off_wood(*tip);
-                assert!(off < 0.1, "{species:?}: a clump {off} m off its wood");
-            }
-            let cards = crown_cards(&mut dice, &tree, 22.0, leaf());
-            let mut feet: Vec<f32> = cards
-                .iter()
-                .flatten()
-                .step_by(5)
-                .map(|card| off_wood(card.middle - card.up * card.half * 0.75))
-                .collect();
-            feet.sort_by(f32::total_cmp);
-            let most = feet[feet.len() * 9 / 10];
-            assert!(
-                most < 0.35,
-                "{species:?}: one card in ten {most} m from a twig"
-            );
-        }
-    }
-
-    /// A grown Scots pine's bole carries the stubs of the whorls it shed, not a clean pole
-    /// (D309).
-    #[test]
-    fn a_scots_pine_has_a_stubbed_bole() {
-        let mut dice = Seed(16).rng();
-        let pine = conifer(&mut dice, 26.0, Species::Pine, Form::Tall, false);
-        let lowest = pine
-            .tips
-            .iter()
-            .map(|(at, _)| at.y)
-            .fold(f32::MAX, f32::min);
-        let stubs = pine
-            .dead
-            .iter()
-            .filter(|&&i| {
-                let limb = &pine.limbs[i];
-                limb.points[0].y < lowest && limb.points[0].distance(limb.points[1]) < 0.8
-            })
-            .count();
-        assert!(stubs >= 10, "{stubs} stubs on its bole");
-    }
-}
+#[path = "species_tests.rs"]
+mod tests;

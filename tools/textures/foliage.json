@@ -19,7 +19,7 @@
     "spruce": { "atlas": "foliage", "form": "needles", "grows": "the lush forest's spruces and young spruce", "metres": 0.9, "from": "a spruce's sprays to 0.8 (species.rs), young spruce 0.5 (floor.rs)" },
     "bramble": { "atlas": "foliage", "form": "spray", "grows": "the lush forest's bramble", "metres": 0.45, "from": "its sprays 0.3 to 0.42 (thicket::bramble)" },
     "holly": { "atlas": "foliage", "form": "spray", "grows": "the lush forest's holly", "metres": 0.7, "from": "its sprays 0.45 to 0.62 (thicket::holly)" },
-    "scots": { "atlas": "foliage", "form": "needles", "grows": "the lush forest's Scots pines", "metres": 0.7, "from": "a pad's tufts, PAD_CLUMP_M 0.62 (species.rs)" },
+    "scots": { "atlas": "foliage", "form": "needles", "grows": "the lush forest's Scots pines", "metres": 0.8, "from": "a pad's tufts, PAD_CLUMP_M 0.7 (species.rs)" },
     "rush": { "atlas": "foliage", "form": "needles", "grows": "rushes and reeds at the water's edge (flora.ron Rush, Reed)", "metres": 1.0, "from": "a tuft about a metre tall, its cards upright (plants::tuft)" },
     "ivy": { "atlas": "litter", "form": "spray", "grows": "the lush forest's trunks' ivy", "metres": 0.25, "from": "leaves a hand across or less (D359)" },
     "ivydark": { "atlas": "litter", "form": "spray", "grows": "the lush forest's trunks' ivy", "metres": 0.25, "from": "leaves a hand across or less (D359)" }
