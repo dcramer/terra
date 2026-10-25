@@ -9,7 +9,8 @@
 //   held    how deep a held look (sword, shield) goes into it
 //   clash   held look against held look (clash.ts, D481): how deep the sword (blade, guard,
 //           hilt) goes through the shield's board, and the board through the sword arm (right
-//           hand and forearm); measured and scored (tools/combat), not yet a bar here
+//           hand and forearm); a bar for a blow (a move with active frames), measured and scored
+//           (tools/combat) for every move
 //   arc     a blow's tip at its fastest in its active frames: its bearing from ahead (+ left)
 //           and how far ahead, which way it sweeps, how far the hips have turned; a blow
 //           whose clip has a spec (D450, clip_spec.ts) fails a sweep or contact against it
@@ -70,6 +71,7 @@ const { values: opt } = parseArgs({
 // The bars: what a person sees as wrong.
 const HAND_CM = 2; // a hand or arm through the skin
 const HELD_CM = 1; // a sword or shield through the body
+const CLASH_CM = 0; // a blow's sword through its own shield, or the shield through the sword arm (D481)
 const ARC_DEG = 35; // a blow's contact off ahead
 const AHEAD_M = 0.5; // a blow's contact this far in front of the hips at least
 const FACE_DEG = 35; // a raised shield's face off ahead
@@ -478,6 +480,11 @@ for (const move of moves) {
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
   const blow = specs[move.clip.split("#")[0]];
+  if (move.active && sword && shield) {
+    // A blow moves the shield out of its sword's path (D481); a guard or block is a later bar.
+    if (pen.sword.cm > CLASH_CM) bad.push(`sword in shield ${cm(pen.sword.cm)} deep, ${pen.sword.where}`);
+    if (pen.arm.cm > CLASH_CM) bad.push(`shield in arm ${cm(pen.arm.cm)} deep, ${pen.arm.where}`);
+  }
   if (move.active) {
     const a = arc(move);
     parts.push(`contact ${a.bearing.toFixed(0)}° ${a.bearing > 0 ? "left" : "right"} of ahead, ${a.ahead.toFixed(2)} m ahead, sweeping ${a.sweep}, hips turned ${a.hips.toFixed(0)}°`);
