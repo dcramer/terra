@@ -44,6 +44,16 @@ test("a fire's own floor lets its soot under the photographs' least, its most an
   assert.equal(judge({ soot: 1.2 } as Metrics, floored(bands, { soot: 0 })).find((h) => h.called === "soot/flame")?.holds, false);
 });
 
+test("a fire's own ceiling lets its pale over the photographs' most, its least and the other numbers still the class's", () => {
+  const bands = { pale: { median: 0.2, min: 0, max: 3.4 }, yellow: { median: 11, min: 1.6, max: 20.6 } };
+  const m = { pale: 10, yellow: 30 } as Metrics;
+  const by = (b: Parameters<typeof judge>[1]) => Object.fromEntries(judge(m, b).map((h) => [h.called, h.holds]));
+  assert.deepEqual(by(bands), { "pale %": false, "yellow %": false });
+  assert.deepEqual(by(floored(bands, {}, { pale: 12.2 })), { "pale %": true, "yellow %": false });
+  assert.equal(judge({ pale: 15 } as Metrics, floored(bands, {}, { pale: 12.2 })).find((h) => h.called === "pale %")?.holds, false);
+  assert.equal(FIRES.find((f) => f.name === "campfire")?.ceilings, undefined);
+});
+
 test("a row's numbers are the mean of its shots', each measured in its own crop", () => {
   // Two shots of a flame, the second taller and higher, over differently lit ground.
   const flame = (top: number, h: number, ground: [number, number, number]) => {

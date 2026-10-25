@@ -39,7 +39,8 @@ type Call = { frame: number; method: string; params?: unknown };
 /// its flames write the flame share the matte reads (D433): a hearth's and a torch's do, for
 /// their film (`film.rs`); a blaze and a breath are tonemapped as the world, leave the matte
 /// empty, and are measured by colour. A view no photograph is taken from holds some numbers to
-/// a reference game's measure instead (`floors`: a number's least, its most still the class's).
+/// a reference game's measure instead (`floors`: a number's least, its most still the class's;
+/// `ceilings`: a number's most, its least still the class's).
 export type Fire = {
   name: string;
   class: string;
@@ -49,6 +50,7 @@ export type Fire = {
   at: Vec3;
   matte: boolean;
   floors?: Partial<Record<keyof Metrics, number>>;
+  ceilings?: Partial<Record<keyof Metrics, number>>;
   /// The preset its run draws at (`--quality`), the play experiment's own when unset: a film
   /// draws its breath at ultra, marched as a volume (D430), and play as cards.
   quality?: "ultra";
@@ -86,8 +88,11 @@ export const FIRES: Fire[] = [
   // lens is 4.8 m off, about 8.5 flame heights (the first row: 16 degrees, 6.2 m).
   // Its soot's floor is RDR2's from this view (D433): the photographs' 0.13 is from beside the
   // fire, where the logs stand dark against the flame; from above the flame stands on its lit
-  // bed and logs, and RDR2's two frames measure 0.00 and 0.00-0.01 by this rule.
-  { name: "campfire above", class: "campfire", frame: 420, box: "kept", eye: [-10, 2.6, 14], at: [-10, 0.65, 10], matte: true, floors: { soot: 0 } },
+  // bed and logs, and RDR2's two frames measure 0.00 and 0.00-0.01 by this rule. Its pale's
+  // ceiling is RDR2's from this view too (D433): from above its heat shows as a pale heart over
+  // the coals, 12.2% of its flame by the ground-cut proxy (fire round g8), where the
+  // photographs from beside the fire, and RDR2's seated frame (2.9%), stay under the class's 3.4.
+  { name: "campfire above", class: "campfire", frame: 420, box: "kept", eye: [-10, 2.6, 14], at: [-10, 0.65, 10], matte: true, floors: { soot: 0 }, ceilings: { pale: 12.2 } },
   { name: "house blaze", class: "structure", frame: 760, box: "blazes", eye: [4.25, 3.5, 22], at: [4.25, 2.5, 5.75], matte: false },
   { name: "breath", class: "flamethrower", frame: 960, box: "stream", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
   { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
@@ -246,9 +251,15 @@ export function scaled(crop: string, picture: string, w: number, h: number): Box
 /// What each fire and hour has out of its class today (`--hold` writes it): the push check
 /// fails a fire only where it is worse than this, until the stage that fixes it lands
 /// (docs/fire.md, "The plan").
-/// A class's bands with a fire's own floors in place of their least.
-export function floored(bands: Record<string, Band>, floors: Fire["floors"] = {}): Record<string, Band> {
-  return Object.fromEntries(Object.entries(bands).map(([k, b]) => [k, k in floors ? { ...b, min: floors[k as keyof Metrics]! } : b]));
+/// A class's bands with a fire's own floors in place of their least and its own ceilings in
+/// place of their most.
+export function floored(bands: Record<string, Band>, floors: Fire["floors"] = {}, ceilings: Fire["ceilings"] = {}): Record<string, Band> {
+  return Object.fromEntries(
+    Object.entries(bands).map(([k, b]) => [
+      k,
+      { ...b, ...(k in floors ? { min: floors[k as keyof Metrics]! } : {}), ...(k in ceilings ? { max: ceilings[k as keyof Metrics]! } : {}) },
+    ]),
+  );
 }
 
 export const HELD_FILE = resolve(import.meta.dirname, "held.json");
@@ -363,7 +374,7 @@ if (import.meta.main) {
         const file = told[middle].file;
         const crop = boxText(box);
         const known = classes[fire.class];
-        const held = known ? judge(metrics, floored(known.bands, fire.floors)) : [];
+        const held = known ? judge(metrics, floored(known.bands, fire.floors, fire.ceilings)) : [];
         const fails = held.filter((h) => !h.holds).length;
         const shotRows = told.map(({ frame }, k) => ({ frame, crop: boxText(shots[k].box), metrics: each[k] }));
         rows.push({ fire: fire.name, class: fire.class, hour, crop, out: known ? fails : -1, held, tile, ground, shots: shotRows });
