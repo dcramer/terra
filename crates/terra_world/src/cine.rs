@@ -617,9 +617,29 @@ pub struct Cine {
 }
 
 impl Cine {
+    /// A run filming a shot, waiting for it to roll.
+    pub fn new(shot: Shot) -> Self {
+        Self {
+            shot,
+            t: None,
+            watched_s: 0.0,
+            held_ev100: None,
+            cut: false,
+        }
+    }
+
     /// Whether the shot is rolling: a route waits for it.
     pub fn rolling(&self) -> bool {
         self.t.is_some()
+    }
+
+    /// Whether the shot hides the player: then they are out of play for its length, not only
+    /// out of the picture, so nothing in the world senses, chases or bites them, as a game's
+    /// cinematic takes its player out of play (Unreal's Sequencer hides the player's pawn and
+    /// its games set it unhurtable, `SetCanBeDamaged(false)`, while a sequence plays). A tour
+    /// of a place films the place, not a fight at its door.
+    pub fn hides_player(&self) -> bool {
+        self.shot.player.hidden
     }
 }
 
@@ -642,23 +662,17 @@ pub fn plugin(app: &mut App) {
     else {
         return;
     };
-    app.insert_resource(Cine {
-        shot,
-        t: None,
-        watched_s: 0.0,
-        held_ev100: None,
-        cut: false,
-    })
-    .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
-    .add_systems(PreUpdate, roll.after(crate::shell::scripted_presses))
-    .add_systems(Update, (hold_exposure.after(Ticking), bias_detail))
-    .add_systems(
-        PostUpdate,
-        (
-            film.in_set(CameraHold).after(crate::remote::hold_camera),
-            hide_screen.before(VisibilitySystems::VisibilityPropagate),
-        ),
-    );
+    app.insert_resource(Cine::new(shot))
+        .configure_sets(PostUpdate, CameraHold.before(TransformSystems::Propagate))
+        .add_systems(PreUpdate, roll.after(crate::shell::scripted_presses))
+        .add_systems(Update, (hold_exposure.after(Ticking), bias_detail))
+        .add_systems(
+            PostUpdate,
+            (
+                film.in_set(CameraHold).after(crate::remote::hold_camera),
+                hide_screen.before(VisibilitySystems::VisibilityPropagate),
+            ),
+        );
 }
 
 /// A shot films the world without the screen's bars, panels and help, as a game's cinematic

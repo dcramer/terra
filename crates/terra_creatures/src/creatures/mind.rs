@@ -11,6 +11,7 @@ use terra_gen::Rng;
 use terra_survival::hazards::Frightful;
 use terra_walker::walker::Motion;
 use terra_walker::{Downed, Player};
+use terra_world::cine::{Cine, Subject};
 use terra_world::flora::Trunk;
 use terra_world::lod::Detail;
 use terra_world::spatial::SpatialHash;
@@ -66,20 +67,27 @@ pub fn think(
     ticks: Res<Ticks>,
     bestiary: Res<Bestiary>,
     around: Surroundings,
-    players: Query<(Entity, &Transform, Option<&Motion>), (With<Player>, Without<Downed>)>,
+    players: Query<
+        (Entity, &Transform, Option<&Motion>, Has<Subject>),
+        (With<Player>, Without<Downed>),
+    >,
     mut creatures: Query<(Entity, &mut Creature, &Transform, &Detail), Without<Player>>,
     frights: Query<(&Frightful, &GlobalTransform)>,
     mut bitten: MessageWriter<Bitten>,
     mut dice: ResMut<Dice>,
     mut awake: Local<SpatialHash<Entity>>,
+    filming: Option<Res<Cine>>,
 ) {
     let tick = time.delta_secs().min(0.1);
+    // A shot that hides its player has them out of play (`Cine::hides_player`).
+    let out_of_play = filming.is_some_and(|cine| cine.hides_player());
     // Players filed by place, so each creature looks only at those near it (D127).
     awake.clear();
     awake.extend(
         players
             .iter()
-            .map(|(player, at, _)| (at.translation, player)),
+            .filter(|(_, _, _, filmed)| !(out_of_play && *filmed))
+            .map(|(player, at, _, _)| (at.translation, player)),
     );
     for (entity, mut creature, at, detail) in &mut creatures {
         // Far from everyone it thinks less often, over the ticks it waited (D145).
@@ -92,7 +100,12 @@ pub fn think(
         let (quarry, apart) = nearest_player.unzip();
         creature.quarry = quarry;
         let about = bestiary.get(creature.species);
-        let player = nearest_player.and_then(|(player, _)| players.get(player).ok());
+        let player = nearest_player.and_then(|(player, _)| {
+            players
+                .get(player)
+                .ok()
+                .map(|(player, at, motion, _)| (player, at, motion))
+        });
         let toward = player
             .map(|(_, p, _)| (p.translation - here).reject_from(up).normalize_or_zero())
             .filter(|toward| *toward != Vec3::ZERO);

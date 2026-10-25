@@ -97,6 +97,44 @@ fn a_spider_goes_for_the_nearest_player_who_is_up() {
 }
 
 #[test]
+fn a_player_a_shot_hides_is_out_of_play_and_nothing_goes_for_them() {
+    let shot = |hidden: bool| {
+        let json = format!(
+            r#"{{"seconds": 10, "player": {{"hidden": {hidden}}}, "keys": [{{"t": 0, "at": [0, 2002, 0], "look": [1, 2002, 0]}}]}}"#
+        );
+        terra_world::cine::Cine::new(terra_world::cine::Shot::parse(&json).unwrap())
+    };
+    let ground = Vec3::Y * 2000.0;
+    for (hidden, chased) in [(true, false), (false, true)] {
+        let mut world = world();
+        world.insert_resource(shot(hidden));
+        // The filmed player beside the spider, near enough to bite: for three seconds.
+        let filmed = test_player(&mut world, ground + Vec3::X * 1.5);
+        world.entity_mut(filmed).insert(terra_world::cine::Subject);
+        let spider = spider(&mut world, ground);
+        let (mut bites, mut went_for) = (0, false);
+        for _ in 0..150 {
+            world
+                .resource_mut::<Time>()
+                .advance_by(Duration::from_millis(20));
+            world.run_system_once(think).unwrap();
+            bites += world.resource_mut::<Messages<Bitten>>().drain().count();
+            let creature = world.get::<Creature>(spider).unwrap();
+            went_for |= creature.quarry.is_some()
+                || matches!(creature.state, State::Chase | State::Attack(_));
+        }
+        assert_eq!(bites > 0, chased, "hidden {hidden}: bitten {bites} times");
+        assert_eq!(went_for, chased, "hidden {hidden}");
+        if hidden {
+            // Another player, not the one filmed, is still there to be noticed.
+            let other = test_player(&mut world, ground + Vec3::X * 5.0);
+            world.run_system_once(think).unwrap();
+            assert_eq!(world.get::<Creature>(spider).unwrap().quarry, Some(other));
+        }
+    }
+}
+
+#[test]
 fn a_bite_lands_on_the_player_bitten() {
     let mut world = world();
     let ground = Vec3::Y * 2000.0;
