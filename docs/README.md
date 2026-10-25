@@ -38,6 +38,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | Doc | What it covers |
 |---|---|
 | [worlds.md](worlds.md) | The realms as physical worlds: what a world's theme sets, terrain, caverns, water, size, gravity, the starting realm, portals between them. |
+| [instances.md](instances.md) | Leaning (D468 to D471): how a world is loaded in and out: a world instance as a unit (a realm or a dungeon), what it owns and what is global, its life on the server, scoping its entities and resources in the ECS, the crossing and the way back, asset sets, per-instance saves and replication, the first slice (a dungeon door in the forest) and the test that nothing leaks, open questions. |
 | [biomes.md](biomes.md) | Draft: how a world fills with life, from grass to canopy: goals, how placement and drawing could work on voxel terrain, open questions. |
 | [demos.md](demos.md) | Proposal: the next biome demos, a mountain lake, a tundra and a living town, each made by the world's rules: references, what exists, parts and variants, budgets, checks and order of work (D321). |
 | [climate.md](climate.md) | Leaning: seasons and weather as swings in temperature, daylight and precipitation that bodies, ground, plants and creatures respond to; the year's length. |

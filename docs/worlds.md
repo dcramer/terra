@@ -92,7 +92,7 @@ Open: which kinds of weather there are, and whether they hurt, help or only look
 - **Water features** go beyond one sea level. Lakes at different heights and water underground need water to be asked for by place, which the engine's contract already allows (D45). Lakes are planned as the generated ground's basins filled to their spill points (D322, [demos.md](demos.md#1-a-mountain-lake)).
 - **Gravity** pulls toward a world's centre with a strength the world sets. The player's movement already treats "down" as toward the centre.
 - **Any number of worlds** (D17), so every world has to come from rules and its seed alone, its factions, cultures and portals included, with nothing tuned by hand that the game depends on; and a world nobody is in costs nothing, existing only as a seed until someone arrives.
-- **Each world has its own coordinate frame** (D36), and only the one a player is in is generated in full. A crossing is a hand-off between worlds, and on a server of a thousand players (D52) between parts of the server. Nothing has crossed between worlds yet.
+- **Each world has its own coordinate frame** (D36), and only the one a player is in is generated in full. A crossing is a hand-off between worlds, and on a server of a thousand players (D52) between parts of the server. Nothing has crossed between worlds yet; how a world is loaded, left and freed is [instances.md](instances.md) (D468 to D471).
 - **Digging** is the terrain's job (D9); what you get from it is harvesting (D43).
 
 ## Open questions

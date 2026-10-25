@@ -74,7 +74,7 @@ Each track lives in its own crates, so people and agents working in parallel do 
 
 ## What waits for design
 
-- Portals, and loading the world beyond (D72).
+- Portals, and loading the world beyond (D72): the technical side is in [instances.md](instances.md) (D468 to D471); what portals and dungeons are for waits on the developers.
 - What the materials and resources are, and what they are for (D43).
 - Collision (D53, below).
 - The simulation's rules, parked with terraforming (D60).

@@ -470,6 +470,10 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D443](decisions/D443.md) | A creature's paces come from its size | Tech | Agent | Leaning | A kind with no measured speeds takes its walk… |
 | [D457](decisions/D457.md) | The character controller is held by a scorecard of criteria and a ratchet, measured on a plain-Rust course | Tech | Agent | Decided | What the controller must get right is data… |
 | [D466](decisions/D466.md) | Fire is one self-contained module, and every kind's flame body is one marched flame field | Tech | Agent | Leaning | The technical design of fire-module.md, extending D415. |
+| [D468](decisions/D468.md) | A world instance is the unit loaded in and out, one to a Bevy World | Tech | Agent | Leaning | A world instance is one running copy of a world… |
+| [D469](decisions/D469.md) | World content is scoped by default, and a module never names its instance | Tech | Agent | Leaning | On the client, what belongs to the current world is… |
+| [D470](decisions/D470.md) | Crossing to another world is a hand-off under a cover, with a return stack | Tech | Agent | Leaning | A door or portal is an entity with `Door { to, arrival`… |
+| [D471](decisions/D471.md) | Asset sets by theme, a record per instance, replication by instance | Tech | Agent | Leaning | How an instance's files, saves and messages are bounded… |
 
 ## Tools and workflow
 

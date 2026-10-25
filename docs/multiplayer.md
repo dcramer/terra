@@ -43,7 +43,7 @@ These are design questions the scale raises, whatever the technology.
 - **Do resources run out?** If trees and ore do not come back, a thousand players strip a world. Regrowth and scarcity are not optional.
 - **What happens when nobody is online?** Does the world keep changing?
 - **Ownership.** Who may take apart whose base, and who may open what (D94, D166).
-- **More worlds** spread a crowd out, and raise how worlds are shared among servers, and which are running.
+- **More worlds** spread a crowd out, and raise how worlds are shared among servers, and which are running; a world instance is the unit a server runs, freezes and frees ([instances.md](instances.md), D468).
 
 ## Agents as players
 
