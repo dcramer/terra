@@ -6,8 +6,8 @@
 //! dozen lights however much burns, gathered over cells, chosen by what the eye is near and
 //! eased out by 40 m (D127).
 //!
-//! The flicker is a product of three incommensurate sines (Valheim's ratios, 1, 0.564 and
-//! 0.758) plus a low value noise, as fast and as deep as a fire that size puffs: a pool fire
+//! The flicker is a sum of three sines round its puff rate, their phases wandering slowly
+//! (`TONES`), as fast and as deep as a fire that size puffs: a pool fire
 //! of width D puffs at about 1.5 / sqrt(D) Hz (research/2026-10-16-real-time-fire-rendering.md),
 //! a torch by a third either way, a campfire by about 15%, a house fire slower and shallower.
 
@@ -282,19 +282,51 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t.clamp(0.0, 1.0)
 }
 
-/// A fire's flicker at a time, -1 to 1, from its own number: the shape every fire shares.
-fn wave(seed: f32, t: f32, flicker: Flicker) -> f32 {
-    // The product's turns come at about 1.8 times its first sine's rate.
-    let a = core::f32::consts::TAU * flicker.puffs_hz / 1.8 * t + seed * 40.0;
-    let sines = libm::sinf(a) * libm::sinf(0.564 * a + 2.1) * libm::cosf(0.758 * a + 0.7);
-    let x = t * flicker.puffs_hz * 0.7;
+/// A fire's flicker's tones, as many times its puff rate, and their shares of its depth: a
+/// sum, not a product, so its power sits round its puffs, about 1.3 times their rate on the
+/// whole (2.3 Hz for a campfire, as filmed ones flicker, 1.8-3.8 Hz:
+/// research/2026-10-25-fire-motion.md). The product of Valheim's three sines (1, 0.564 and
+/// 0.758) put its power in their beats, at 0.32, 0.81, 1.19 and 2.32 Hz for a campfire, half
+/// of it under 1 Hz, and through the coals and the flame's foot the whole fire pumped in place
+/// at 0.8 Hz (fire round g14).
+const TONES: [(f32, f32); 3] = [(1.0, 0.45), (1.4, 0.33), (1.9, 0.22)];
+
+/// How far each tone's phase wanders, radians, how many times a second its wander turns, and
+/// how far a fire's own rates are off another's, a share either way: so it never repeats and
+/// two fires drift apart, while the wander, slow and shallow, only widens each tone (its rate
+/// strays 0.3 Hz at most).
+const JITTER: (f32, f32, f32) = (1.5, 0.4, 0.08);
+
+/// Smooth value noise, -1 to 1, one cell a unit of `x`, from a fire's own number and a salt.
+fn value_noise(own: u32, x: f32, salt: (u32, u32)) -> f32 {
     let cell = libm::floorf(x);
     let f = x - cell;
     let u = f * f * (3.0 - 2.0 * f);
-    let own = (seed.rem_euclid(1.0) * 65_536.0) as u32;
-    let at = |i: f32| terra_gen::hash::unit3(own, i as i32 as u32, 0x6669, 0x7265) * 2.0 - 1.0;
-    let noise = at(cell) * (1.0 - u) + at(cell + 1.0) * u;
-    (1.8 * sines + 0.3 * noise).clamp(-1.0, 1.0)
+    let at = |i: f32| terra_gen::hash::unit3(own, i as i32 as u32, salt.0, salt.1) * 2.0 - 1.0;
+    at(cell) * (1.0 - u) + at(cell + 1.0) * u
+}
+
+/// A fire's own number as the hash's.
+fn own(seed: f32) -> u32 {
+    (seed.rem_euclid(1.0) * 65_536.0) as u32
+}
+
+/// A fire's flicker at a time, -1 to 1, from its own number: the shape every fire shares.
+fn wave(seed: f32, t: f32, flicker: Flicker) -> f32 {
+    let own = own(seed);
+    let (wander, wander_hz, spread) = JITTER;
+    TONES
+        .iter()
+        .enumerate()
+        .map(|(i, &(rate, share))| {
+            let i = i as u32;
+            let mine = 1.0 + spread * (terra_gen::hash::unit3(own, i, 0x7261, 0x7465) * 2.0 - 1.0);
+            let start = core::f32::consts::TAU * terra_gen::hash::unit3(own, i, 0x7068, 0x6173);
+            let drift = wander * value_noise(own, t * wander_hz + i as f32 * 17.0, (0x6a69, i));
+            let a = core::f32::consts::TAU * flicker.puffs_hz * rate * mine * t + start + drift;
+            share * libm::sinf(a)
+        })
+        .sum()
 }
 
 /// How bright a fire of its own number and flicker burns at a time, a share of its mean:
@@ -340,13 +372,7 @@ const SWELL: (f32, f32) = (0.2, 0.7);
 /// deeper, shallower with a wider fire's shallower flicker.
 pub fn swell(seed: f32, t: f32, flicker: Flicker) -> f32 {
     let depth = SWELL.0 * (flicker.depth / 0.15).min(1.0);
-    let x = t * SWELL.1;
-    let cell = libm::floorf(x);
-    let f = x - cell;
-    let u = f * f * (3.0 - 2.0 * f);
-    let own = (seed.rem_euclid(1.0) * 65_536.0) as u32;
-    let at = |i: f32| terra_gen::hash::unit3(own, i as i32 as u32, 0x7377, 0x656c) * 2.0 - 1.0;
-    1.0 + depth * (at(cell) * (1.0 - u) + at(cell + 1.0) * u)
+    1.0 + depth * value_noise(own(seed), t * SWELL.1, (0x7377, 0x656c))
 }
 
 /// One of the fires' lights, as it should be now.

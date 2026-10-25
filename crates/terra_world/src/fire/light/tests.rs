@@ -50,6 +50,68 @@ fn a_torch_flickers_deep_and_quick_a_campfire_less_a_house_fire_slow_and_shallow
     }
 }
 
+/// A fire's flicker's spectrum, sampled at 100 Hz over forty seconds less its mean: its share
+/// of power below `under` Hz (by a DFT of those bins against the whole variance, Parseval) and
+/// its power-weighted mean frequency up to 10 Hz.
+fn spectrum(seed: f32, flicker: Flicker, under: f32) -> (f32, f32) {
+    let (rate, n) = (100.0, 4000);
+    let x: Vec<f32> = (0..n)
+        .map(|i| signal(seed, i as f32 / rate, flicker))
+        .collect();
+    let mean = x.iter().sum::<f32>() / n as f32;
+    let x: Vec<f32> = x.iter().map(|v| v - mean).collect();
+    let variance = x.iter().map(|v| v * v).sum::<f32>() / n as f32;
+    let bin_hz = rate / n as f32;
+    let power = |k: usize| {
+        let (mut re, mut im) = (0.0f32, 0.0f32);
+        for (i, v) in x.iter().enumerate() {
+            let a = core::f32::consts::TAU * (k * i % n) as f32 / n as f32;
+            re += v * libm::cosf(a);
+            im += v * libm::sinf(a);
+        }
+        2.0 * (re * re + im * im) / (n * n) as f32
+    };
+    let bins: Vec<(f32, f32)> = (1..=(10.0 / bin_hz) as usize)
+        .map(|k| (k as f32 * bin_hz, power(k)))
+        .collect();
+    let low = bins
+        .iter()
+        .filter(|(f, _)| *f < under)
+        .map(|(_, p)| p)
+        .sum::<f32>();
+    let total = bins.iter().map(|(_, p)| p).sum::<f32>();
+    let centre = bins.iter().map(|(f, p)| f * p).sum::<f32>() / total;
+    (low / variance, centre)
+}
+
+/// Filmed campfires flicker at 1.8-3.8 Hz (research/2026-10-25-fire-motion.md), and a light
+/// that swings slower makes the coals and the flame's foot pump with it in place: a campfire's
+/// flicker puts nearly all its power round 2-3 Hz, little under 1 Hz, and every fire's little
+/// under half its puff rate (fire round g14: the product of three sines put a third of it in
+/// beats at 0.32 and 0.81 Hz).
+#[test]
+fn a_fires_flicker_has_its_power_round_its_puffs_not_in_slow_beats() {
+    for seed in [0.1, 0.37, 0.62, 0.9] {
+        let (slow, centre) = spectrum(seed, Flicker::of(0.7), 1.0);
+        assert!(
+            slow < 0.05,
+            "campfire {seed}: {slow} of its power under 1 Hz"
+        );
+        assert!(
+            (1.8..=3.2).contains(&centre),
+            "campfire {seed}: centred at {centre} Hz"
+        );
+        for wide in [0.1, 6.0] {
+            let flicker = Flicker::of(wide);
+            let (slow, _) = spectrum(seed, flicker, flicker.puffs_hz * 0.5);
+            assert!(
+                slow < 0.05,
+                "{flicker:?} {seed}: {slow} under half its puffs"
+            );
+        }
+    }
+}
+
 #[test]
 fn two_fires_do_not_flicker_together() {
     let flicker = Flicker::of(0.7);
