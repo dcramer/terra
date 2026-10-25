@@ -16,6 +16,7 @@ use super::grown;
 use model::{Drawn, Model};
 
 mod model;
+mod piece;
 mod under;
 use super::scene::SUN_DIRECTION;
 use crate::planet::{Planet, Tweaks};
@@ -32,6 +33,7 @@ use bevy::{
     shader::ShaderRef,
     tasks::{AsyncComputeTaskPool, Task, TaskPool, block_on, poll_once},
 };
+pub use piece::FloraPiece;
 use terra_core::{Piece, Solid, Walker};
 use terra_gen::smoothstep;
 use terra_gen::{Noise, Rng, Seed};
@@ -120,6 +122,28 @@ fn flora_textures(assets: &AssetServer) -> (Handle<Image>, Handle<Image>) {
             layers(true),
         ),
     )
+}
+
+/// The flora material's extension, blowing towards `toward`, with the real materials.
+fn wind_extension(assets: &AssetServer, toward: Vec3) -> WindExtension {
+    let (color, normal) = flora_textures(assets);
+    WindExtension {
+        direction: toward,
+        strength: 1.0,
+        layer_metres: layer_metres(),
+        color: Some(color),
+        normal: Some(normal),
+    }
+}
+
+/// The flora material's base: matte, as bark, leaves and rock are.
+fn matte(cull_mode: Option<bevy::render::render_resource::Face>) -> StandardMaterial {
+    StandardMaterial {
+        perceptual_roughness: 0.9,
+        reflectance: 0.18,
+        cull_mode,
+        ..default()
+    }
 }
 
 /// How many metres each of the materials covers, eight to a uniform.
@@ -443,7 +467,7 @@ pub enum FloraSystems {
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<WindMaterial>::default())
-        .add_systems(Update, follow_wind)
+        .add_systems(Update, (follow_wind, piece::draw))
         .init_resource::<Obstacles>()
         .init_resource::<Trunks>()
         // The yard, the flat test level, has nothing growing on it.
@@ -546,20 +570,7 @@ fn plant(
     };
 
     // The wind blows in off the water, which is where the sun is.
-    let (color, normal) = flora_textures(&assets);
-    let wind = WindExtension {
-        direction: -SUN_DIRECTION.reject_from(up).normalize(),
-        strength: 1.0,
-        layer_metres: layer_metres(),
-        color: Some(color),
-        normal: Some(normal),
-    };
-    let matte = |cull_mode| StandardMaterial {
-        perceptual_roughness: 0.9,
-        reflectance: 0.18,
-        cull_mode,
-        ..default()
-    };
+    let wind = wind_extension(&assets, -SUN_DIRECTION.reject_from(up).normalize());
     let solid = materials.add(ExtendedMaterial {
         base: matte(Some(bevy::render::render_resource::Face::Back)),
         extension: wind.clone(),

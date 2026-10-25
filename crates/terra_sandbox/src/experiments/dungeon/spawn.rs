@@ -11,6 +11,8 @@ use terra_creatures::species::Bestiary;
 use terra_dungeon::stamp::{DOORWAY_M, LightKind, ObjectRole};
 use terra_game::build::{Build, BuildLook, Built};
 use terra_world::fire::{Kindled, Logs};
+use terra_world::flora::FloraPiece;
+use terra_world::flora_kinds::Flora;
 use terra_world::planet::Planet;
 
 const TORCH: &str = "models/tools/Torch.glb";
@@ -103,6 +105,7 @@ pub(super) fn put_up(
     planet: Res<Planet>,
     assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
+    flora: Option<Res<Flora>>,
 ) {
     let Pending { stamp, frame } = &*pending;
     let mut build = Build::new(&mut commands, &look, *frame, "Dungeon");
@@ -117,13 +120,19 @@ pub(super) fn put_up(
     let mut root = commands.spawn((Name::new("Dungeon contents"), *frame, Visibility::default()));
     root.with_children(|inside| {
         for prop in &stamp.props {
-            inside.spawn((
-                Name::new(prop.model.clone()),
-                scene(&assets, &prop.model),
-                Transform::from_translation(prop.at)
-                    .with_rotation(facing(prop.facing))
-                    .with_scale(Vec3::splat(prop.scale)),
-            ));
+            let placed = Transform::from_translation(prop.at)
+                .with_rotation(facing(prop.facing))
+                .with_scale(Vec3::splat(prop.scale));
+            let mut spawned = inside.spawn((Name::new(prop.model.clone()), placed));
+            // A rock is drawn as where it grows, in its real stone (round 18: the models as
+            // shipped are flat grey, white lumps under the torches).
+            match flora.as_ref().and_then(|flora| flora.drawn_as(&prop.model)) {
+                Some((kind, model)) => spawned.insert(FloraPiece {
+                    kind,
+                    model: model.to_string(),
+                }),
+                None => spawned.insert(scene(&assets, &prop.model)),
+            };
         }
         for light in &stamp.lights {
             match light.kind {

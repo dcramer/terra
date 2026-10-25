@@ -79,7 +79,7 @@ pub(super) fn of_kinds(
 
 /// Turns a model's parts into one mesh in our colours, carrying how each vertex moves in
 /// the wind.
-fn build_model(kind: &FloraDef, parts: &[Part], meshes: &mut Assets<Mesh>) -> Model {
+pub(super) fn build_model(kind: &FloraDef, parts: &[Part], meshes: &mut Assets<Mesh>) -> Model {
     let all = || parts.iter().flat_map(|part| part.positions.iter());
     let height = all().map(|p| p.y).fold(0.01, f32::max);
     let spread = all()

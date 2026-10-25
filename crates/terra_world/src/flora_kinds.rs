@@ -315,6 +315,22 @@ impl Flora {
         &self.0
     }
 
+    /// The kind a model at an asset path (`models/nature/<name>.glb`) is drawn as where it
+    /// grows, and its name: the first kind naming it, one without ore's rust before one with
+    /// (a fallen stone in a dungeon is a plain rock).
+    pub fn drawn_as<'a>(&self, path: &'a str) -> Option<(usize, &'a str)> {
+        let name = path.strip_prefix("models/nature/")?.strip_suffix(".glb")?;
+        let names = |kind: &FloraDef| kind.models.iter().any(|model| model == name);
+        let first = |rust: bool| {
+            self.0
+                .iter()
+                .position(|kind| kind.rust == rust && kind.grown.is_none() && names(kind))
+        };
+        first(false)
+            .or_else(|| first(true))
+            .map(|kind| (kind, name))
+    }
+
     /// The kind a layer grows, given what is known of the place: the layer's noise there,
     /// how grassy the ground is, how big the thing is, where those matter, and the season,
     /// for what dies back in it. The layer's kinds are tried in the file's order; the first
@@ -613,5 +629,20 @@ mod tests {
         }
         let trunk = flora.kinds()[0].look("Wood");
         assert!(trunk.material.is_some() && !trunk.foliage);
+    }
+
+    #[test]
+    fn a_model_stood_by_hand_is_drawn_as_the_plain_kind_naming_it() {
+        let flora = fixture(
+            r#"
+            (name: "Ore lump", models: ["a", "b"], rust: true, sway: Still, grows: Rocks),
+            (name: "Lump", models: ["a"], sway: Still, grows: Rocks),
+            "#,
+        );
+        // Both name a: the one without rust; only the ore names b.
+        assert_eq!(flora.drawn_as("models/nature/a.glb"), Some((1, "a")));
+        assert_eq!(flora.drawn_as("models/nature/b.glb"), Some((0, "b")));
+        assert_eq!(flora.drawn_as("models/nature/c.glb"), None);
+        assert_eq!(flora.drawn_as("models/props/a.glb"), None);
     }
 }
