@@ -579,7 +579,13 @@ const TROUGH_LEAN: f32 = 0.6;
 const BANK_M: f32 = 0.9;
 const BANK_LEAN: f32 = 1.4;
 const BANK_LIFT: f32 = 0.06;
-const RIPPLE_LEAN: f32 = 0.35;
+const RIPPLE_LEAN: f32 = 0.2;
+// How much steeper a ripple's lee is than its windward face; what share of their tilt is left
+// under a grazing sun; and over what distance, metres, they fade out (snow round 3: "hard white
+// bars in sunlit patches under a low sun" at 0.35 and a lee three times as steep, stepped).
+const RIPPLE_LEE: f32 = 2.2;
+const RIPPLE_GRAZING: f32 = 0.45;
+const RIPPLE_NEAR_M: vec2<f32> = vec2<f32>(8.0, 40.0);
 // Glints in lying snow: cells this many a metre, and the share of them a crystal turned to
 // flash (winter round 10).
 const GLINT_PER_M: f32 = 65.0;
@@ -2249,9 +2255,22 @@ fn fragment(
         let side = cross(geometric, way);
         let bend = noise(world * 0.3 + 23.0) * 2.4;
         let phase = fract(along_m * RIPPLE_PER_M + bend + 0.6 * noise(world * 1.3 + 5.0));
-        let face = select(-3.0, 1.0, phase < 0.75) * smoothstep(0.0, 0.08, phase) * (1.0 - smoothstep(0.92, 1.0, phase));
+        // A gentle windward face and a lee RIPPLE_LEE times steeper, each eased into the next:
+        // a step between them drew every crest as a hard lit bar under a low sun (snow round 3).
+        let windward = smoothstep(0.0, 0.12, phase) * (1.0 - smoothstep(0.62, 0.8, phase));
+        let lee = smoothstep(0.66, 0.8, phase) * (1.0 - smoothstep(0.86, 1.0, phase));
+        let face = windward - RIPPLE_LEE * lee;
         let patchy = smoothstep(0.35, 0.75, noise(world * 0.22 + 61.0));
-        let seen = 1.0 - smoothstep(0.25, 0.6, length(fwidth(world)) * RIPPLE_PER_M);
+        // Fainter as the sun grazes, where a small tilt changes the light most (on flat snow
+        // under a sun 10 degrees up, a tilt of 0.35 toward it nearly triples the light), and
+        // farther off, where they would only fleck the snow; gone where a pixel holds a ripple.
+        var sun_up = 1.0;
+        if lights.n_directional_lights > 0u {
+            sun_up = dot(geometric, lights.directional_lights[0].direction_to_light);
+        }
+        let grazing = mix(RIPPLE_GRAZING, 1.0, smoothstep(0.1, 0.5, sun_up));
+        let near = 1.0 - smoothstep(RIPPLE_NEAR_M.x, RIPPLE_NEAR_M.y, distance(world, view.world_position));
+        let seen = (1.0 - smoothstep(0.25, 0.6, length(fwidth(world)) * RIPPLE_PER_M)) * grazing * near;
         let q = world + wind * along_m * -0.8 + across_wind * dot(world, across_wind) * 1.5;
         let ridge = noise(q * 0.9 + side * 0.25 + 77.0) - noise(q * 0.9 - side * 0.25 + 77.0);
         let r = way * (face * RIPPLE_LEAN * patchy * seen) + side * (ridge * 1.6);
