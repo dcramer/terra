@@ -414,19 +414,26 @@ fn even_clear(e: f32) -> f32 {
 /// Its cosine-weighted mean over the upper hemisphere: 1.15 - 0.35 * 2 / 3.
 const CLEAR_MEAN: f32 = 1.15 - 0.35 * 2.0 / 3.0;
 
-/// The direction toward a texel of a cube's face, +X, -X, +Y, -Y, +Z, -Z, as Bevy's cube maps
-/// lay them, not of unit length.
-fn face_direction(face: u32, x: u32, y: u32, size: u32) -> Vec3 {
+/// The way in the painting's frame that a texel of a cube's face, +X, -X, +Y, -Y, +Z, -Z, is
+/// read for, not of unit length. The faces are laid as the GPU's cube maps are (the Vulkan and
+/// WebGPU face selection), but Bevy reads them left-handed: it turns the world's way into the
+/// painting's frame and negates z before it samples (`environment_map.wesl`'s
+/// `compute_cubemap_sample_dir` and its diffuse light alike), as its own atmosphere's cube
+/// negates z when it paints (`atmosphere/environment.wesl`). So the texel the GPU finds at
+/// (x, y, z) is read for (x, y, -z); painted for (x, y, z), the sky was mirrored north to south
+/// and the sun's warm side lit the shade facing away from it.
+fn texel_direction(face: u32, x: u32, y: u32, size: u32) -> Vec3 {
     let u = (x as f32 + 0.5) / size as f32 * 2.0 - 1.0;
     let v = (y as f32 + 0.5) / size as f32 * 2.0 - 1.0;
-    match face {
+    let sampled = match face {
         0 => Vec3::new(1.0, -v, -u),
         1 => Vec3::new(-1.0, -v, u),
         2 => Vec3::new(u, 1.0, v),
         3 => Vec3::new(u, -1.0, -v),
         4 => Vec3::new(u, -v, 1.0),
         _ => Vec3::new(-u, -v, -1.0),
-    }
+    };
+    sampled * Vec3::new(1.0, 1.0, -1.0)
 }
 
 fn luma(c: Vec3) -> f32 {
@@ -608,8 +615,9 @@ impl Colours {
         sum / luma(sum).max(1e-4)
     }
 
-    /// Paints the cube's six faces, +X, -X, +Y, -Y, +Z, -Z, as RGBA floats, and projects
-    /// each texel's light onto the harmonics by the solid angle it covers.
+    /// Paints the cube's six faces, +X, -X, +Y, -Y, +Z, -Z, as RGBA floats, each texel the
+    /// light of the way Bevy reads it for (`texel_direction`), and projects that light onto the
+    /// harmonics along the same way by the solid angle it covers.
     fn painting(&self, lit: &Lit) -> Painting {
         let angles = harmonics::texel_solid_angles(FACE);
         let mut cube = Vec::with_capacity((FACE * FACE * 6 * 16) as usize);
@@ -619,7 +627,7 @@ impl Colours {
         for face in 0..6 {
             for y in 0..FACE {
                 for x in 0..FACE {
-                    let d = face_direction(face, x, y, FACE).normalize();
+                    let d = texel_direction(face, x, y, FACE).normalize();
                     let e = d.y.max(0.0);
                     let hue = *heights.entry(e.to_bits()).or_insert_with(|| self.hue(e));
                     let c = self.light(lit, d, hue);
@@ -656,7 +664,7 @@ impl Painting {
         for face in 0..6 {
             for y in 0..DIFFUSE {
                 for x in 0..DIFFUSE {
-                    let c = all.diffuse(face_direction(face, x, y, DIFFUSE).normalize());
+                    let c = all.diffuse(texel_direction(face, x, y, DIFFUSE).normalize());
                     for channel in [c.x, c.y, c.z, 1.0] {
                         data.extend_from_slice(&half::f16::from_f32(channel).to_le_bytes());
                     }

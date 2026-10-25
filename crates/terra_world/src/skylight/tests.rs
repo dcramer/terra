@@ -192,7 +192,7 @@ fn the_painting_is_what_each_way_gives_its_heights_hue_worked_out_once() {
     for face in 0..6 {
         for y in 0..FACE {
             for x in 0..FACE {
-                let light = toward(&c, face_direction(face, x, y, FACE).normalize());
+                let light = toward(&c, texel_direction(face, x, y, FACE).normalize());
                 for channel in [light.x, light.y, light.z, 1.0] {
                     assert_eq!(
                         cube[at..at + 4],
@@ -218,7 +218,7 @@ fn the_diffuse_map_is_the_harmonics_toward_each_texel_in_half_floats() {
     let at = texel as usize * 8;
     let half =
         |i: usize| half::f16::from_le_bytes([data[at + i * 2], data[at + i * 2 + 1]]).to_f32();
-    let want = all.diffuse(face_direction(2, DIFFUSE / 2, DIFFUSE / 2, DIFFUSE).normalize());
+    let want = all.diffuse(texel_direction(2, DIFFUSE / 2, DIFFUSE / 2, DIFFUSE).normalize());
     let got = Vec3::new(half(0), half(1), half(2));
     assert!(
         (got - want).abs().max_element() < 2e-3 * want.max_element(),
@@ -310,7 +310,7 @@ fn the_cube_has_the_sky_on_its_top_face_and_the_ground_on_its_bottom() {
     };
     let (top, opaque) = middle(2);
     assert_eq!(opaque, 1.0);
-    let way = face_direction(2, FACE / 2, FACE / 2, FACE).normalize();
+    let way = texel_direction(2, FACE / 2, FACE / 2, FACE).normalize();
     assert!(
         top.distance(toward(&c, way)) < 1e-6 && top.z > top.x,
         "{top}"
@@ -401,5 +401,116 @@ fn above_twilight_an_orange_and_lilac_sky_lights_the_shade_daylight_not_lilac() 
         for side in painting.lobes().0 {
             assert!(side.y >= side.x.min(side.z) * 0.99, "sun {sun}: {side}");
         }
+    }
+}
+
+/// The texel a cube map gives for a world way, as Bevy's shader samples it: turned into the
+/// painting's frame by the inverse of the light's rotation (its `view_rotation`), z negated
+/// (cube maps are left-handed to it, `compute_cubemap_sample_dir`), then the face by the
+/// largest part and the texel by the other two, as Vulkan's and WebGPU's cube face selection
+/// lays them; nearest, not filtered. Worked out apart from `texel_direction`, so a painting
+/// laid the wrong way round fails.
+fn sampled(texels: &[Vec3], size: u32, rotation: Quat, world: Vec3) -> Vec3 {
+    let mut s = rotation.inverse() * world;
+    s.z = -s.z;
+    let a = s.abs();
+    let (face, sc, tc, ma) = if a.x >= a.y && a.x >= a.z {
+        if s.x > 0.0 {
+            (0, -s.z, -s.y, a.x)
+        } else {
+            (1, s.z, -s.y, a.x)
+        }
+    } else if a.y >= a.z {
+        if s.y > 0.0 {
+            (2, s.x, s.z, a.y)
+        } else {
+            (3, s.x, -s.z, a.y)
+        }
+    } else if s.z > 0.0 {
+        (4, s.x, -s.y, a.z)
+    } else {
+        (5, -s.x, -s.y, a.z)
+    };
+    let texel = |c: f32| (((c / ma + 1.0) * 0.5 * size as f32) as u32).min(size - 1);
+    texels[((face * size + texel(tc)) * size + texel(sc)) as usize]
+}
+
+/// A cube's texels as colours, from four channels of `bytes` each a texel.
+fn texels(data: &[u8], bytes: usize, channel: impl Fn(&[u8]) -> f32) -> Vec<Vec3> {
+    data.chunks(bytes * 4)
+        .map(|t| {
+            Vec3::new(
+                channel(&t[..bytes]),
+                channel(&t[bytes..bytes * 2]),
+                channel(&t[bytes * 2..bytes * 3]),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn the_cube_as_bevy_samples_it_is_brightest_and_warmest_toward_the_sun() {
+    // A camera off the planet's pole, so the painting is turned, and a sun 13 degrees up
+    // mostly along the painting's -Z, so a sky mirrored in z puts its glow far off.
+    let up = Vec3::new(0.3, 1.0, 0.2).normalize();
+    let rotation = Quat::from_rotation_arc(Vec3::Y, up);
+    let (rise, round) = (13f32.to_radians(), 250f32.to_radians());
+    let local = Vec3::new(
+        libm::cosf(rise) * libm::cosf(round),
+        libm::sinf(rise),
+        libm::cosf(rise) * libm::sinf(round),
+    );
+    let sun = rotation * local;
+    let mut c = colours();
+    c.low = 0.5;
+    c.sun = local;
+    let painting = c.painting(&c.lit());
+    let cube = texels(&painting.cube, 4, |b| {
+        f32::from_le_bytes(b.try_into().unwrap())
+    });
+    let diffuse = texels(&painting.diffuse(), 2, |b| {
+        half::f16::from_le_bytes(b.try_into().unwrap()).to_f32()
+    });
+    // How far round from the sun a world way is, level with the camera's ground.
+    let level = |d: Vec3| (d - up * d.dot(up)).normalize();
+    let off_sun = |d: Vec3| level(d).angle_between(level(sun)).to_degrees();
+    // The sky's ways over the camera, a degree apart in height and round.
+    let (mut brightest, mut warmest) = ((0.0, Vec3::ZERO), (0.0, Vec3::ZERO));
+    for i in 1..90 {
+        for j in 0..360 {
+            let (e, a) = ((i as f32).to_radians(), (j as f32).to_radians());
+            let way = rotation
+                * Vec3::new(
+                    libm::cosf(e) * libm::cosf(a),
+                    libm::sinf(e),
+                    libm::cosf(e) * libm::sinf(a),
+                );
+            let light = sampled(&cube, FACE, rotation, way);
+            if luma(light) > brightest.0 {
+                brightest = (luma(light), way);
+            }
+            if light.x / light.z > warmest.0 {
+                warmest = (light.x / light.z, way);
+            }
+        }
+    }
+    let from_sun = brightest.1.angle_between(sun).to_degrees();
+    assert!(from_sun < 8.0, "brightest {from_sun:.0} deg from the sun");
+    assert!(
+        off_sun(warmest.1) < 15.0,
+        "warmest {:.0} deg round from the sun",
+        off_sun(warmest.1)
+    );
+    // A side facing the sun's half of the sky takes more diffuse light, and warmer, than the
+    // side facing away, at every height of the way it faces from level to half way up.
+    let side = |round: Vec3, lift: f32| {
+        sampled(&diffuse, DIFFUSE, rotation, (round + up * lift).normalize())
+    };
+    for lift in [0.0, 0.3, 0.6] {
+        let (toward, from) = (side(level(sun), lift), side(level(-sun), lift));
+        assert!(
+            luma(toward) > luma(from) * 1.05 && toward.x / toward.z > from.x / from.z,
+            "lift {lift}: toward {toward} away {from}"
+        );
     }
 }
