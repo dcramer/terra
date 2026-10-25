@@ -15,9 +15,10 @@
 //
 // - flicker: the spectrum of the flame's area over time (Welch, SEGMENT s windows): the dominant
 //   and median frequency in 0.5-8 Hz, and how much the area and the height pump (sd / mean);
-// - tongues: the 8-connected pieces of flame above TONGUE_FROM H (and above 3/4 H), per frame,
-//   tracked from frame to frame by overlap; a tongue's lifetime is its track's, tracks cut by the
-//   clip's ends left out; births a second; how fast a tracked tongue's centroid rises;
+// - tongues: the 8-connected pieces of flame above TONGUE_FROM H (and above 3/4 H), per frame;
+//   and, tracked by tongues.ts (peaks by prominence, forecast and matched as storm cells are),
+//   how long each lives, how often one sheds a blob that rises away or forks in two (per tongue
+//   a second), how far it leans from vertical, and how fast tracked pieces rise;
 // - rise: by time of flight, as flame flicker is measured in the lab: the lag at which the
 //   flicker of the flame's area low in it (LAG_BANDS) best correlates with the area high in it,
 //   the bands' separation over that lag in H a second (a lag near 0: it pumps in place). Block
@@ -35,6 +36,7 @@ import { execFileSync } from "node:child_process";
 import { basename } from "node:path";
 import { type Box, colourBand, isFlame, luma, parseBox } from "./measure.ts";
 import { writePng } from "../sandbox/png.ts";
+import { type TongueTracks, trackTongues } from "./tongues.ts";
 
 /// A clip at the size it is measured at: RGB frames, three bytes a pixel, and the flame matte's
 /// share (a byte a pixel) where the renderer gave one.
@@ -70,7 +72,7 @@ export type Motion = {
   fps: number;
   height: number;
   flicker: { dominant: number; median: number; areaCv: number; heightCv: number };
-  tongues: { count: number; countHigh: number; lifetime: number; tracks: number; births: number; rise: number; rise90: number };
+  tongues: { count: number; countHigh: number } & TongueTracks;
   rise: { lag: number; r: number; r0: number; speed: number };
   roughness: { whole: number; bands: Bands };
   colour: Colours;
@@ -229,66 +231,13 @@ export function flicker(series: number[], fps: number): { dominant: number; medi
   return { dominant, median: mid, cv: sd(series) / mean(series) };
 }
 
-/// Tongues: pieces above TONGUE_FROM H of at least TONGUE_AREA H² (count, and those above 3/4
-/// H), tracked by overlap; a track's centroid's rise from frame to frame, in H a second.
+/// Tongues: pieces above TONGUE_FROM H of at least TONGUE_AREA H² (the mean count a frame, and
+/// of those above 3/4 H), and tongues.ts's tracks of them: lifetime, shedding, splits, lean.
 export function tongues(masks: Uint8Array[], w: number, h: number, g: Geometry, fps: number): Motion["tongues"] {
   const level = (of: number) => Math.max(0, Math.min(h, Math.round(g.base - of * g.height)));
-  const below = level(TONGUE_FROM);
   const least = Math.max(MIN_PIECE, Math.round(TONGUE_AREA * g.height * g.height));
-  const counts: number[] = [];
-  const high: number[] = [];
-  const steps: number[] = [];
-  const life = new Map<number, [number, number]>();
-  let prev: { label: Int32Array; track: number[]; cy: number[] } | undefined;
-  let next = 0;
-  masks.forEach((m, t) => {
-    const { label, area } = pieces(m, w, h, below);
-    const cy = new Array(area.length).fill(0);
-    for (let p = 0; p < w * below; p++) {
-      if (label[p] && area[label[p]] < least) label[p] = 0;
-      if (label[p]) cy[label[p]] += (p / w) | 0;
-    }
-    const valid = area.map((a, i) => i > 0 && a >= least);
-    valid.forEach((ok, j) => {
-      if (ok) cy[j] /= area[j];
-    });
-    counts.push(valid.filter(Boolean).length);
-    high.push(pieces(m, w, h, level(0.75)).area.filter((a, i) => i > 0 && a >= least).length);
-    const track = new Array(area.length).fill(-1);
-    if (prev) {
-      const overlap = new Map<number, number>();
-      for (let p = 0; p < w * below; p++) if (label[p] && prev.label[p]) overlap.set(label[p] * 1e6 + prev.label[p], (overlap.get(label[p] * 1e6 + prev.label[p]) ?? 0) + 1);
-      const used = new Set<number>();
-      for (const [key] of [...overlap].sort((a, b) => b[1] - a[1])) {
-        const [j, i] = [Math.floor(key / 1e6), key % 1e6];
-        if (track[j] < 0 && !used.has(i) && prev.track[i] >= 0) {
-          track[j] = prev.track[i];
-          used.add(i);
-          steps.push(((prev.cy[i] - cy[j]) * fps) / g.height);
-        }
-      }
-    }
-    valid.forEach((ok, j) => {
-      if (!ok) return;
-      if (track[j] < 0) track[j] = next++;
-      const span = life.get(track[j]);
-      if (span) span[1] = t;
-      else life.set(track[j], [t, t]);
-    });
-    prev = { label, track, cy };
-  });
-  const whole = [...life.values()].filter(([s, e]) => s > 0 && e < masks.length - 1);
-  const born = [...life.values()].filter(([s]) => s > 0).length;
-  const up = steps.sort((a, b) => a - b);
-  return {
-    rise: quantile(up, 0.5),
-    rise90: quantile(up, 0.9),
-    count: mean(counts),
-    countHigh: mean(high),
-    lifetime: median(whole.map(([s, e]) => (e - s + 1) / fps)),
-    tracks: whole.length,
-    births: born / ((masks.length - 1) / fps),
-  };
+  const above = (m: Uint8Array, of: number) => pieces(m, w, h, level(of)).area.filter((a, i) => i > 0 && a >= least).length;
+  return { count: mean(masks.map((m) => above(m, TONGUE_FROM))), countHigh: mean(masks.map((m) => above(m, 0.75))), ...trackTongues(masks, w, h, g, fps, TONGUE_FROM, TONGUE_AREA) };
 }
 
 /// The flame's area in a height band (of H) a frame, its slow part (a moving mean over a second)
@@ -512,7 +461,8 @@ export function said(name: string, m: Motion, how: string): string {
   return [
     `${name}: ${m.frames} frames at ${f2(m.fps, 1)} fps; ${how}`,
     `  flicker    dominant ${f2(m.flicker.dominant)} Hz, median ${f2(m.flicker.median)} Hz; area sd/mean ${f2(m.flicker.areaCv)}, height sd/mean ${f2(m.flicker.heightCv)}`,
-    `  tongues    ${f2(m.tongues.count, 1)} above ${TONGUE_FROM} H, ${f2(m.tongues.countHigh, 1)} above 0.75 H; lifetime median ${f2(m.tongues.lifetime)} s (${m.tongues.tracks} tracks), ${f2(m.tongues.births, 1)} born a second; their rise median ${f2(m.tongues.rise)} H/s, p90 ${f2(m.tongues.rise90)}`,
+    `  tongues    ${f2(m.tongues.count, 1)} above ${TONGUE_FROM} H, ${f2(m.tongues.countHigh, 1)} above 0.75 H; ${f2(m.tongues.births, 1)} born a second; tracked pieces' rise median ${f2(m.tongues.rise)} H/s, p90 ${f2(m.tongues.rise90)}`,
+    `  tracked    lifetime mean ${f2(m.tongues.lifetime)} s, p90 ${f2(m.tongues.lifetime90)} (${m.tongues.tracks} tracks); per tongue a second: sheds ${f2(m.tongues.sheds)}, splits ${f2(m.tongues.splits)}, merges ${f2(m.tongues.merges)}; lean median ${f2(m.tongues.lean, 1)} deg, p90 ${f2(m.tongues.lean90, 1)}; shed blobs last ${f2(m.tongues.shedLife)} s, rise ${f2(m.tongues.shedRise)} H/s`,
     `  rise       ${f2(m.rise.speed)} H/s by time of flight: the flicker at ${LAG_BANDS[0].join("-")} H shows at ${LAG_BANDS[1].join("-")} H ${f2(m.rise.lag * 1000, 0)} ms later (r ${f2(m.rise.r)}; r at no lag ${f2(m.rise.r0)})`,
     `  roughness  whole ${f2(m.roughness.whole, 1)}; low / mid / top ${b(m.roughness.bands, 1)}`,
     `  colour %   pale ${b(m.colour.pale, 0)}, yellow ${b(m.colour.yellow, 0)}, orange ${b(m.colour.orange, 0)}, red ${b(m.colour.red, 0)} (low / mid / top); pale sd over time ${f2(m.colour.paleSd, 1)}`,
