@@ -186,13 +186,17 @@ fn in_a_room<'a>(
     rooms: impl IntoIterator<Item = (&'a GlobalTransform, &'a Indoors)>,
     point: Vec3,
 ) -> bool {
-    rooms.into_iter().any(|(room, probe)| {
-        if probe.going {
-            return false;
-        }
+    rooms
+        .into_iter()
+        .any(|(room, probe)| holds(room, probe, point))
+}
+
+/// Whether a room's probe, not going, holds a point.
+fn holds(room: &GlobalTransform, probe: &Indoors, point: Vec3) -> bool {
+    !probe.going && {
         let local = room.affine().inverse().transform_point3(point);
         local.abs().cmple(Vec3::splat(0.5)).all()
-    })
+    }
 }
 
 /// Shelters from the weather what feels the climate and stands in a room (D261): out of the
@@ -476,12 +480,15 @@ fn follow(
 }
 
 /// Says whether the camera is in a room closed and covered, so the eye can open further
-/// there (`terra_world::scene::Indoors`). The world's scene owns it; without the world (the
-/// sandbox's `build` alone), there is no eye to tell.
+/// there (`terra_world::scene::Indoors`), and how much of the sky's light reaches the air
+/// round it, for the haze and the fog (`IndoorSky`, D485). The world's scene owns both;
+/// without the world (the sandbox's `build` alone), there is no eye to tell.
 fn inside(
     camera: Query<&GlobalTransform, With<MainCamera>>,
     rooms: Query<(&GlobalTransform, &Indoors), Without<MainCamera>>,
     indoors: Option<ResMut<terra_world::scene::Indoors>>,
+    air: Option<ResMut<terra_world::scene::IndoorSky>>,
+    time: Res<Time>,
 ) {
     let Some(mut indoors) = indoors else {
         return;
@@ -493,6 +500,31 @@ fn inside(
     if indoors.0 != within {
         indoors.0 = within;
     }
+    if let Some(mut air) = air {
+        let wanted = air_sky(rooms.iter(), eye);
+        let now = toward(air.0, wanted, time.delta_secs());
+        air.set_if_neq(terra_world::scene::IndoorSky(now));
+    }
+}
+
+/// How much of the sky's light reaches the air at a point (D485): in a room, as much as
+/// reaches what is in it (`dimming`), the darkest room's where boxes overlap; outside, all.
+fn air_sky<'a>(
+    rooms: impl IntoIterator<Item = (&'a GlobalTransform, &'a Indoors)>,
+    point: Vec3,
+) -> f32 {
+    rooms
+        .into_iter()
+        .filter(|(room, probe)| holds(room, probe, point))
+        .map(|(_, probe)| dimming(probe.share, probe.sky))
+        .fold(1.0, f32::min)
+}
+
+/// The air's light a step toward what it is to be, over [`FADE_S`] for the whole way, as a
+/// room's probe fades: stepping through a door does not switch the haze.
+fn toward(now: f32, wanted: f32, seconds: f32) -> f32 {
+    let step = seconds / FADE_S;
+    now + (wanted - now).clamp(-step, step)
 }
 
 #[cfg(test)]
@@ -523,6 +555,40 @@ mod tests {
             [(&room, &probe(true))],
             Vec3::new(10.0, 2.0, 0.0)
         ));
+    }
+
+    #[test]
+    fn the_air_in_a_room_shut_from_the_sky_is_unlit_by_it_and_outside_wholly_lit() {
+        let probe = |sky| Indoors {
+            room: [0; 6],
+            share: 1.0,
+            sky,
+            going: false,
+            reflects: Handle::default(),
+            falls: Handle::default(),
+            filled: Vec3::ZERO,
+        };
+        let room = GlobalTransform::from(
+            Transform::from_xyz(10.0, 2.0, 0.0).with_scale(Vec3::new(4.0, 3.0, 6.0)),
+        );
+        let (shut, open) = (probe(0.0), probe(1.0));
+        let inside = Vec3::new(10.0, 2.0, 0.0);
+        assert_eq!(air_sky([(&room, &shut)], inside), 0.0);
+        assert_eq!(air_sky([(&room, &shut)], Vec3::new(20.0, 2.0, 0.0)), 1.0);
+        // Where a shut room's box meets an open one's, the darker holds.
+        assert_eq!(air_sky([(&room, &open), (&room, &shut)], inside), 0.0);
+        // A room with a door onto the air lets in what reaches what is in it.
+        assert!((air_sky([(&room, &open)], inside) - INDOORS).abs() < 1e-6);
+        // The air takes FADE_S to go all the way, not one frame.
+        let mut air = 1.0;
+        for _ in 0..30 {
+            air = toward(air, 0.0, 1.0 / 60.0);
+        }
+        assert!((air - (1.0 - 0.5 / FADE_S)).abs() < 1e-4, "{air}");
+        for _ in 0..60 {
+            air = toward(air, 0.0, 1.0 / 60.0);
+        }
+        assert_eq!(air, 0.0);
     }
 
     #[test]

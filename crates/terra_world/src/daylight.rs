@@ -572,12 +572,13 @@ fn shine(
     mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     mut nightfall: ResMut<Nightfall>,
     air_scale: Option<Res<crate::air::AirScale>>,
-    (eye, planet, weather, cast, snow_opens): (
+    (eye, planet, weather, cast, snow_opens, indoor_sky): (
         Query<&GlobalTransform, With<MainCamera>>,
         Option<Res<Planet>>,
         Option<Res<crate::weather::Weather>>,
         Option<Res<crate::weather::WeatherGrade>>,
         Option<Res<crate::weather::SnowOpens>>,
+        Option<Res<crate::scene::IndoorSky>>,
     ),
     mut clear_sky: Local<Option<f32>>,
 ) {
@@ -649,7 +650,11 @@ fn shine(
         .is_some_and(|scale| scale.0 < crate::air::HAZE_SCALE);
     let open = open.map_or(if far_seeing { 1.0 } else { 0.0 }, |open| open.0);
     let night_air = 1.0 - smoothstep(-12.0, 0.0, path.height(clock.hour));
-    mist_light(&mut volumetric, light.shade, open, night_air);
+    // Indoors the air is lit by what the room's openings let in (D485): the sky's light in
+    // the haze and the distance fog's colour dimmed to it, so a closed room's air is as
+    // dark at noon as at midnight, lit only by its fires.
+    let air_lit = indoor_sky.map_or(1.0, |s| s.0.clamp(0.0, 1.0));
+    mist_light(&mut volumetric, light.shade, open, night_air, air_lit);
     // Bevy mixes the haze in after the exposure, at the brightness it is given: left at the
     // day's, by night it lit every shadow from within, the night only two stops under the day
     // (D310). So it dims as night falls, toward the moon's cold light.
@@ -672,11 +677,14 @@ fn shine(
         let veil = crate::weather::veil(light.ambient * SKY_LIGHT_GAIN * under.diffuse, set)
             * (1.0 - (1.0 - WOODED_VEIL) * wooded);
         let air = air.lerp(MOON_HAZE, dark) * level;
-        fog.color = colour(air.lerp(veil, deck));
+        fog.color = indoor_air(colour(air.lerp(veil, deck)), air_lit);
         // Under a deck the near metres are kept clear of it (haze_start.rs).
-        fog.directional_light_color = crate::haze_start::directional(
-            colour(light.light * 0.55 * under.direct).to_linear(),
-            deck,
+        fog.directional_light_color = indoor_air(
+            crate::haze_start::directional(
+                colour(light.light * 0.55 * under.direct).to_linear(),
+                deck,
+            ),
+            air_lit,
         );
         let visible = weather.visibility_m().map_or(visible, |v| v.min(visible));
         fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(visible);
@@ -713,16 +721,30 @@ fn shine(
 /// comes through the leaves, green; out in the open the whole sky's, its shade's colour,
 /// so mist over a lake glows pale in the morning seen with the sun behind, not hanging
 /// as a dark brown smear where no sunbeam crosses it.
+/// A colour of the air dimmed to the share of the sky's light that reaches it (D485), in
+/// linear light; its alpha, which the fog reads as how far the sun's glow reaches, kept.
+fn indoor_air(colour: Color, air_lit: f32) -> Color {
+    let linear = colour.to_linear();
+    Color::LinearRgba(LinearRgba {
+        red: linear.red * air_lit,
+        green: linear.green * air_lit,
+        blue: linear.blue * air_lit,
+        alpha: linear.alpha,
+    })
+}
+
 fn mist_light(
     volumetric: &mut Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     shade: Vec3,
     open: f32,
     night_air: f32,
+    air_lit: f32,
 ) {
     for mut air in volumetric.iter_mut() {
         let wanted = super::scene::HAZE_AMBIENT
             * (1.0 + (OPEN_HAZE_GLOW - 1.0) * open)
-            * (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - night_air));
+            * (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - night_air))
+            * air_lit;
         if (air.ambient_intensity - wanted).abs() > 1e-6 {
             air.ambient_intensity = wanted;
         }

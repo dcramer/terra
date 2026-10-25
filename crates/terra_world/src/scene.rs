@@ -59,6 +59,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Startup, preset)
         .add_systems(PostStartup, (style_camera, style_sun, haze))
         .init_resource::<Indoors>()
+        .init_resource::<IndoorSky>()
         .add_systems(Update, (haze_follows, follow_quality, adapt_indoors))
         .add_systems(
             Update,
@@ -260,6 +261,19 @@ const ADAPT_BRIGHTER_NIGHT: f32 = 0.4;
 /// Whether the camera is in a room closed and covered, which the game says (D155).
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Indoors(pub bool);
+
+/// How much of the open sky's light reaches the air round the camera, from 0 to 1, which the
+/// game says (D485): 1 outdoors; in a room closed and covered, what its openings let in
+/// (D486). The haze's sky light and the distance fog are dimmed by it: left at the forest's,
+/// they laid a green veil over a dungeon's corridors at noon that was gone at midnight.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct IndoorSky(pub f32);
+
+impl Default for IndoorSky {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
 
 /// The curve the eye adapts by, holding its correction to so many stops brighter and
 /// darker: Bevy's auto exposure meters the frame and corrects by `curve(metered) -

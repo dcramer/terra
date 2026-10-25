@@ -318,3 +318,17 @@ fn the_shade_keeps_its_colour_through_civil_twilight_and_loses_it_toward_nautica
         last = now;
     }
 }
+
+#[test]
+fn a_closed_rooms_air_takes_none_of_the_skys_colour_and_the_open_air_all_of_it() {
+    let haze = Color::srgba(0.55, 0.62, 0.5, 0.4);
+    let shut = indoor_air(haze, 0.0).to_linear();
+    assert_eq!((shut.red, shut.green, shut.blue), (0.0, 0.0, 0.0));
+    // The alpha is how far the sun's glow reaches in the fog, not a brightness.
+    assert!((shut.alpha - 0.4).abs() < 1e-6);
+    let open = indoor_air(haze, 1.0).to_linear();
+    assert!((open.green - haze.to_linear().green).abs() < 1e-6);
+    // Half the sky's light is half the light, not half the sRGB value.
+    let half = indoor_air(haze, 0.5).to_linear();
+    assert!((half.green * 2.0 - open.green).abs() < 1e-6);
+}
