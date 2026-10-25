@@ -2,10 +2,11 @@
 //! chain them: what the course's rows say of a step, a door and a wall, met on real data.
 
 use super::*;
-use bevy::math::{Mat3, Quat};
+use bevy::math::{DVec3, Mat3, Quat};
 use terra_build::{BuildOp, Cube, Facing, Fill, Kind as BuildKind, Panel, Shape};
 use terra_core::{PlanetSpec, Seed};
 use terra_motion::mover::{Bodies, Capsules, Ground, Intent, Kind, Obstacles, Query, Sdf, World};
+use terra_world::planet::HeightMemo;
 
 const TICK: f32 = 1.0 / 64.0;
 const GRAVITY: f32 = 16.0;
@@ -52,7 +53,7 @@ fn walk(
     seconds: f32,
 ) -> Vec<(Vec3, Ground)> {
     let ground = Sdf {
-        distance: |at: Vec3| planet.distance(at),
+        distance: |at: DVec3| planet.distance_in(at, &mut HeightMemo::default()),
         steepest: planet.steepest(),
     };
     let world = World {
@@ -328,7 +329,7 @@ fn water_is_where_the_ground_is_under_the_sea_and_a_body_put_in_it_swims() {
     // A man put a metre under the surface swims.
     let water_at = |at: Vec3| water(&planet, at);
     let field = Sdf {
-        distance: |at: Vec3| planet.distance(at),
+        distance: |at: DVec3| planet.distance_in(at, &mut HeightMemo::default()),
         steepest: planet.steepest(),
     };
     let world = World {

@@ -483,6 +483,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D469](decisions/D469.md) | World content is scoped by default, and a module never names its instance | Tech | Agent | Leaning | On the client, what belongs to the current world is… |
 | [D470](decisions/D470.md) | Crossing to another world is a hand-off under a cover, with a return stack | Tech | Agent | Leaning | A door or portal is an entity with `Door { to, arrival`… |
 | [D471](decisions/D471.md) | Asset sets by theme, a record per instance, replication by instance | Tech | Agent | Leaning | How an instance's files, saves and messages are bounded… |
+| [D482](decisions/D482.md) | The mover keeps bodies in f64 and asks in f32 offsets | Tech | Agent | Decided | The mover (D53) keeps each body's position in f64 and… |
 
 ## Tools and workflow
 

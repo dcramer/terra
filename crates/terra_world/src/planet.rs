@@ -11,6 +11,7 @@ use crate::sky::Sky;
 use sea::{WaterExtension, sea_waves};
 
 mod sea;
+use bevy::math::DVec3;
 use bevy::{
     camera_controller::free_camera::FreeCamera,
     image::{ImageArrayLayout, ImageLoaderSettings},
@@ -243,10 +244,12 @@ impl Planet {
     /// [`Planet::distance`] through a memo of the land's lattice points: asked about many
     /// points near one another, as the mover asks the ground a few hundred times a body a
     /// tick (D53), the land is worked out once a lattice point, not again at every ask. The
-    /// same answer as [`Planet::distance`]; keep the memo from tick to tick and bound it with
-    /// `HeightMemo::keep_within`.
-    pub fn distance_in(&self, point: Vec3, memo: &mut HeightMemo) -> f32 {
-        terra_voxel::Field::distance_in(&*self.ground, point, memo)
+    /// same answer as [`Planet::distance`] but at a point in f64, the mover's body positions
+    /// (D53): the length and the radius's subtraction are taken in f64, so a world's radius
+    /// out the distance is not the f32 point's millimetres of noise. Keep the memo from tick
+    /// to tick and bound it with `HeightMemo::keep_within`.
+    pub fn distance_in(&self, point: DVec3, memo: &mut HeightMemo) -> f32 {
+        terra_voxel::Field::distance_near(&*self.ground, point, memo)
     }
 
     /// How much further than its true distance the ground can be from a point, as a factor

@@ -87,6 +87,7 @@ impl Mover for Today {
         let up = feet.normalize();
         course::Body {
             feet: *feet,
+            position: feet.as_dvec3(),
             up,
             velocity: motion.velocity + up * motion.rising,
             grounded: motion.on_ground,

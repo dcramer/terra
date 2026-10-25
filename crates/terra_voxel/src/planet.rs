@@ -7,7 +7,7 @@
 //! material (D45).
 
 use crate::field::{Field, Sample, material};
-use glam::{Quat, Vec3};
+use glam::{DVec3, Quat, Vec3};
 use terra_core::{Ground, Harvested, MaterialId, Operation, Yield};
 
 /// One change to the ground's shape.
@@ -262,6 +262,17 @@ impl<F: Field> Field for VoxelPlanet<F> {
         let mut distance = self.field.distance_in(point, memo);
         for edit in self.edits_at(point) {
             distance = edit.distance(point, distance);
+        }
+        distance
+    }
+
+    /// The field's own f64 distance; an edit's (a dug hole, a filled mound) is asked at the
+    /// point in f32, as today.
+    fn distance_near(&self, point: DVec3, memo: &mut F::Memo) -> f32 {
+        let mut distance = self.field.distance_near(point, memo);
+        let at = point.as_vec3();
+        for edit in self.edits_at(at) {
+            distance = edit.distance(at, distance);
         }
         distance
     }

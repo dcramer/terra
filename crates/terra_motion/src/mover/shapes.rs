@@ -7,7 +7,7 @@
 //! knows (`query`'s crease rule).
 
 use super::query::{Capsule, Contact, Hit, Query, Sdf};
-use glam::{Vec2, Vec3};
+use glam::{DVec3, Vec2, Vec3};
 use terra_core::Solid;
 
 /// A box turned in the world: its middle, its three axes (orthonormal), and half its size
@@ -22,7 +22,11 @@ pub struct Block {
 impl Block {
     /// The exact distance from a point to it, negative inside.
     pub fn distance(&self, at: Vec3) -> f32 {
-        let d = at - self.centre;
+        self.distance_from(at - self.centre)
+    }
+
+    /// The exact distance from a point so far from its middle.
+    fn distance_from(&self, d: Vec3) -> f32 {
         let local = Vec3::new(
             d.dot(self.axes[0]),
             d.dot(self.axes[1]),
@@ -55,11 +59,20 @@ impl Obstacle {
 pub trait Shaped {
     fn distance(&self, at: Vec3) -> f32;
     fn bounds(&self) -> (Vec3, f32);
+    /// The distance from a world point in f64 (the mover's frames, `query`): a shape that can
+    /// works its offset out in f64; others round the point to f32 (2 mm at 30 km).
+    fn distance_at(&self, at: DVec3) -> f32 {
+        self.distance(at.as_vec3())
+    }
 }
 
 impl Shaped for Block {
     fn distance(&self, at: Vec3) -> f32 {
         Block::distance(self, at)
+    }
+
+    fn distance_at(&self, at: DVec3) -> f32 {
+        self.distance_from((at - self.centre.as_dvec3()).as_vec3())
     }
 
     fn bounds(&self) -> (Vec3, f32) {
@@ -95,6 +108,13 @@ impl Shaped for Obstacle {
         }
     }
 
+    fn distance_at(&self, at: DVec3) -> f32 {
+        match self {
+            Obstacle::Block(block) => Shaped::distance_at(block, at),
+            Obstacle::Solid(solid) => Shaped::distance_at(solid, at),
+        }
+    }
+
     fn bounds(&self) -> (Vec3, f32) {
         match self {
             Obstacle::Block(block) => Shaped::bounds(block),
@@ -106,6 +126,10 @@ impl Shaped for Obstacle {
 impl<S: Shaped + ?Sized> Shaped for &S {
     fn distance(&self, at: Vec3) -> f32 {
         (**self).distance(at)
+    }
+
+    fn distance_at(&self, at: DVec3) -> f32 {
+        (**self).distance_at(at)
     }
 
     fn bounds(&self) -> (Vec3, f32) {
@@ -122,7 +146,9 @@ pub struct Obstacles<'a, S = Obstacle> {
 impl<S: Shaped> Obstacles<'_, S> {
     /// The shapes within a distance of a capsule swept along a motion.
     fn near(&self, capsule: &Capsule, motion: Vec3, within: f32) -> Vec<&S> {
-        let middle = (capsule.a + capsule.b + motion) * 0.5;
+        let middle = capsule
+            .world((capsule.a + capsule.b + motion) * 0.5)
+            .as_vec3();
         let reach = (capsule.b - capsule.a).length() * 0.5 + capsule.radius + within;
         let reach = reach + motion.length() * 0.5;
         self.obstacles
@@ -136,11 +162,11 @@ impl<S: Shaped> Obstacles<'_, S> {
 }
 
 /// The union of some shapes as one exact field.
-fn field<'a, S: Shaped>(near: &'a [&'a S]) -> Sdf<impl Fn(Vec3) -> f32 + 'a> {
+fn field<'a, S: Shaped>(near: &'a [&'a S]) -> Sdf<impl Fn(DVec3) -> f32 + 'a> {
     Sdf {
-        distance: move |at: Vec3| {
+        distance: move |at: DVec3| {
             near.iter()
-                .map(|shape| shape.distance(at))
+                .map(|shape| shape.distance_at(at))
                 .fold(f32::INFINITY, f32::min)
         },
         steepest: 1.0,
@@ -267,6 +293,7 @@ mod tests {
         for x in [0.005, 0.0227, 0.04] {
             let at = Vec3::new(x, 0.9445, 0.0);
             let probe = Capsule {
+                origin: DVec3::ZERO,
                 a: at,
                 b: at,
                 radius: 0.002,

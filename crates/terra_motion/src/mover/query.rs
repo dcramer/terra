@@ -10,8 +10,14 @@
 //! - [`Capsules`]: other bodies' pushboxes, exactly.
 //!
 //! Sources are combined with a pair `(&a, &b)`.
+//!
+//! A capsule is asked in a frame of its own: its points are offsets from an `origin` held in
+//! f64, and a contact's point is in the same frame. Positions on a world 30 km across are
+//! 2 mm apart in f32, more than the query's millimetre; offsets of a few metres keep a
+//! micrometre. Jolt's large worlds do the same (`JPH_DOUBLE_PRECISION`: a body's position is
+//! a double, its shape queries run in floats relative to a base offset, Docs/BigWorlds.md).
 
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 
 /// How far a contact may sink before a sweep calls it a hit, m (Jolt's collision tolerance).
 pub const TOLERANCE: f32 = 1.0e-3;
@@ -22,12 +28,13 @@ const GRAZE_STEP: f32 = 0.05;
 const MARCHES: usize = 128;
 
 /// An upright capsule: the segment from the bottom sphere's centre `a` to the top's `b`, and
-/// its radius.
+/// its radius, `a` and `b` offsets from `origin` (the world's centre unless framed).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Capsule {
     pub a: Vec3,
     pub b: Vec3,
     pub radius: f32,
+    pub origin: DVec3,
 }
 
 impl Capsule {
@@ -37,7 +44,27 @@ impl Capsule {
             a: feet + up * radius,
             b: feet + up * (height - radius).max(radius),
             radius,
+            origin: DVec3::ZERO,
         }
+    }
+
+    /// The same capsule with its points offsets from an origin.
+    pub fn at(self, origin: DVec3) -> Self {
+        Capsule { origin, ..self }
+    }
+
+    /// The same capsule in another's frame: its points offsets from that origin.
+    pub fn framed(self, origin: DVec3) -> Self {
+        let by = (self.origin - origin).as_vec3();
+        Capsule {
+            origin,
+            ..self.moved(by)
+        }
+    }
+
+    /// A point of its frame in the world, in f64.
+    pub fn world(&self, at: Vec3) -> DVec3 {
+        self.origin + at.as_dvec3()
     }
 
     pub fn moved(self, by: Vec3) -> Self {
@@ -56,9 +83,9 @@ impl Capsule {
     }
 }
 
-/// A contact: where the other is nearest, the way it pushes the body (from it toward the body,
-/// unit), how far apart they are (negative: in it), how fast the other moves, and which body
-/// it is when it is one.
+/// A contact: where the other is nearest (in the asking capsule's frame), the way it pushes
+/// the body (from it toward the body, unit), how far apart they are (negative: in it), how
+/// fast the other moves, and which body it is when it is one.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Contact {
     pub at: Vec3,
@@ -199,11 +226,28 @@ fn march(source: &impl Distance, capsule: &Capsule, motion: Vec3) -> Option<Hit>
     })
 }
 
-/// Ground as a signed distance field: the distance from a point to the solid (negative inside)
-/// and the field's steepest slope (`Field::steepest`, 1 for an exact field).
+/// Ground as a signed distance field: the distance from a world point, in f64, to the solid
+/// (negative inside) and the field's steepest slope (`Field::steepest`, 1 for an exact field).
+/// The point is a capsule's origin and an offset added in f64, so a field that works it out
+/// in f64 (a world's `|p| - radius`) answers to a micrometre at any radius.
 pub struct Sdf<F> {
     pub distance: F,
     pub steepest: f32,
+}
+
+/// A field as a capsule's frame sees it: its distance at an offset from the frame's origin.
+struct On<'s, F> {
+    distance: &'s F,
+    origin: DVec3,
+}
+
+impl<F: Fn(DVec3) -> f32> Sdf<F> {
+    fn on(&self, capsule: &Capsule) -> On<'_, F> {
+        On {
+            distance: &self.distance,
+            origin: capsule.origin,
+        }
+    }
 }
 
 /// The step of the field's gradient, m.
@@ -216,18 +260,24 @@ const CREASE: f32 = 0.9;
 
 /// How far an axis's two one-sided differences may part, m, before one of them is suspected of
 /// reaching over an edge, and how far a side may bend from a line and still be one, near the
-/// origin: a fiftieth of a millimetre, a 0.06 deg tilt over the step. Further out it is the
-/// f32 noise of the point (eight of its ulps, [`kink`]): a world's radius out the field's
-/// differences carry that noise, and a side chosen by noise would tilt a floor more than the
-/// centred difference does.
+/// frame's origin: a fiftieth of a millimetre, a 0.06 deg tilt over the step. Further from it
+/// it is the f32 noise of the offset (eight of its ulps, [`kink`]): a side chosen by noise
+/// would tilt a floor more than the centred difference does. The field is asked in f64 at the
+/// origin plus the offset, so the world's radius adds none.
 const KINK: f32 = TOLERANCE * 0.02;
 
-/// [`KINK`] at a point: the least part of the differences that is not the point's f32 noise.
+/// [`KINK`] at a point, an offset from a capsule's origin: the least part of the differences
+/// that is not the offset's f32 noise (the field is asked in f64 at the origin plus the offset,
+/// so only the offset's own rounding is noise).
 fn kink(at: Vec3) -> f32 {
     KINK.max(at.abs().max_element() * f32::EPSILON * 8.0)
 }
 
-impl<F: Fn(Vec3) -> f32> Sdf<F> {
+impl<F: Fn(DVec3) -> f32> On<'_, F> {
+    fn at(&self, offset: Vec3) -> f32 {
+        (self.distance)(self.origin + offset.as_dvec3())
+    }
+
     /// The field's gradient at a point `here` from the field by differences (unit for an exact
     /// field, less at a crease): central along each axis, or the one-sided difference of the
     /// side the field is straight along where the other bends within the step. Just past a
@@ -242,7 +292,7 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
     /// floor's normal from the face hit (`mSurfaceNormal`, `FindFloor`'s line trace
     /// `ImpactNormal`); a field has no face, so its straight side stands for one.
     fn gradient(&self, at: Vec3, here: f32) -> Vec3 {
-        let f = |p: Vec3| (self.distance)(p);
+        let f = |p: Vec3| self.at(p);
         let kink = kink(at);
         let d = |axis: Vec3| {
             let (ahead, behind) = (f(at + axis * GRADIENT), f(at - axis * GRADIENT));
@@ -276,12 +326,12 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
         }
         let here = d;
         let side = |sign: f32| {
-            let d = |axis: Vec3| sign * ((self.distance)(at + axis * (sign * GRADIENT)) - here);
+            let d = |axis: Vec3| sign * (self.at(at + axis * (sign * GRADIENT)) - here);
             Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)).try_normalize()
         };
         let face = |normal: Option<Vec3>| {
             normal.filter(|n| {
-                let half = (self.distance)(at - *n * (d * 0.5));
+                let half = self.at(at - *n * (d * 0.5));
                 (half - d * 0.5).abs() < TOLERANCE
             })
         };
@@ -308,10 +358,10 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
     fn least(&self, capsule: &Capsule) -> (Vec3, f32) {
         let (n, step, along) = self.samples(capsule);
         if n == 1 {
-            return (capsule.a, (self.distance)(capsule.a));
+            return (capsule.a, self.at(capsule.a));
         }
         let (i, least) = (0..n)
-            .map(|i| (i, (self.distance)(along(i as f32 * step))))
+            .map(|i| (i, self.at(along(i as f32 * step))))
             .fold((0, f32::INFINITY), |m, e| if e.1 < m.1 { e } else { m });
         let t = i as f32 * step;
         self.refine(&along, (t, least), (t - step).max(0.0), (t + step).min(1.0))
@@ -329,7 +379,7 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
         hi: f32,
     ) -> (Vec3, f32) {
         const R: f32 = 0.618_034;
-        let f = |t: f32| (self.distance)(along(t));
+        let f = |t: f32| self.at(along(t));
         let (mut lo, mut hi) = (lo, hi);
         let (mut x1, mut x2) = (hi - R * (hi - lo), lo + R * (hi - lo));
         let (mut f1, mut f2) = (f(x1), f(x2));
@@ -361,7 +411,7 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
     /// the step leaves it second order.
     fn contact(&self, capsule: &Capsule, axis: Vec3, d: f32, normal: Vec3) -> Contact {
         let foot = axis - normal * d;
-        let off = (self.distance)(foot);
+        let off = self.at(foot);
         let slope = self.gradient(foot, off);
         let (mut at, mut normal) = (foot, normal);
         if slope.length_squared() > 0.25 && d.abs() > TOLERANCE {
@@ -385,20 +435,21 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
     }
 }
 
-impl<F: Fn(Vec3) -> f32> Distance for Sdf<F> {
+impl<F: Fn(DVec3) -> f32> Distance for Sdf<F> {
     fn nearest(&self, capsule: &Capsule, motion: Vec3) -> Option<Contact> {
-        let (axis, d) = self.least(capsule);
-        let normal = self
+        let on = self.on(capsule);
+        let (axis, d) = on.least(capsule);
+        let normal = on
             .faces(axis, d)
             .into_iter()
             .flatten()
             .min_by(|a, b| a.dot(motion).total_cmp(&b.dot(motion)))
             .unwrap_or(Vec3::ZERO);
-        Some(self.contact(capsule, axis, d, normal))
+        Some(on.contact(capsule, axis, d, normal))
     }
 
     fn distance(&self, capsule: &Capsule) -> Option<f32> {
-        Some(self.least(capsule).1 - capsule.radius)
+        Some(self.on(capsule).least(capsule).1 - capsule.radius)
     }
 
     fn steepest(&self) -> f32 {
@@ -406,24 +457,24 @@ impl<F: Fn(Vec3) -> f32> Distance for Sdf<F> {
     }
 }
 
-impl<F: Fn(Vec3) -> f32> Query for Sdf<F> {
+impl<F: Fn(DVec3) -> f32> Query for Sdf<F> {
     fn contacts(&self, capsule: &Capsule, within: f32, out: &mut Vec<Contact>) {
-        let (n, step, along) = self.samples(capsule);
+        let on = self.on(capsule);
+        let (n, step, along) = on.samples(capsule);
         let reach = capsule.radius + within;
         let start = out.len();
         for i in 0..n {
             let t = i as f32 * step;
-            let d = (self.distance)(along(t));
+            let d = on.at(along(t));
             if d >= reach {
                 continue;
             }
-            let (axis, least) =
-                self.refine(&along, (t, d), (t - step).max(0.0), (t + step).min(1.0));
+            let (axis, least) = on.refine(&along, (t, d), (t - step).max(0.0), (t + step).min(1.0));
             if least - capsule.radius >= within {
                 continue;
             }
-            for normal in self.faces(axis, least).into_iter().flatten() {
-                let found = self.contact(capsule, axis, least, normal);
+            for normal in on.faces(axis, least).into_iter().flatten() {
+                let found = on.contact(capsule, axis, least, normal);
                 // One contact a face: the nearest sample of it.
                 let same = out[start..]
                     .iter()
@@ -455,7 +506,9 @@ impl Capsules<'_> {
         self.bodies
             .iter()
             .filter(move |b| b.0 != self.skip)
-            .map(move |(id, other, velocity)| between(&capsule, other, *id, *velocity))
+            .map(move |(id, other, velocity)| {
+                between(&capsule, &other.framed(capsule.origin), *id, *velocity)
+            })
     }
 }
 
@@ -537,13 +590,14 @@ impl Query for Capsules<'_> {
         self.bodies
             .iter()
             .filter(|b| b.0 != self.skip)
+            .map(|(id, other, v)| (id, other.framed(capsule.origin), v))
             .filter(|(_, other, _)| {
                 let mid = (capsule.a + capsule.b) * 0.5 + motion * 0.5;
                 let near = other.axis_near(mid);
                 (near - capsule.axis_near(near)).length()
                     < reach + other.radius + (capsule.b - capsule.a).length()
             })
-            .filter_map(|(id, other, v)| march(&One(other, *id, *v), capsule, motion))
+            .filter_map(|(id, other, v)| march(&One(&other, *id, *v), capsule, motion))
             .fold(None, |best: Option<Hit>, hit| match best {
                 Some(b) if b.fraction <= hit.fraction => Some(b),
                 _ => Some(hit),
@@ -556,8 +610,8 @@ mod tests {
     use super::*;
     use glam::Vec2;
 
-    fn floor(at: Vec3) -> f32 {
-        at.y
+    fn floor(at: DVec3) -> f32 {
+        at.y as f32
     }
 
     fn man(feet: Vec3) -> Capsule {
@@ -582,14 +636,14 @@ mod tests {
     const FAR: Vec3 = Vec3::new(0.0, 2000.0, 0.0);
 
     /// The floor and a wall at x = 1, met in a crease.
-    fn crease(at: Vec3) -> f32 {
-        let p = at - FAR;
+    fn crease(at: DVec3) -> f32 {
+        let p = at.as_vec3() - FAR;
         p.y.min(1.0 - p.x)
     }
 
     /// The floor and a step up 0.55 m at x = 1 (exact outside).
-    fn step(at: Vec3) -> f32 {
-        let p = at - FAR;
+    fn step(at: DVec3) -> f32 {
+        let p = at.as_vec3() - FAR;
         let q = Vec2::new(1.0 - p.x, p.y - 0.55);
         let block = q.max(Vec2::ZERO).length() + q.max_element().min(0.0);
         block.min(p.y)
@@ -642,7 +696,7 @@ mod tests {
     #[test]
     fn a_wall_beside_a_body_on_the_floor_is_a_second_contact() {
         let ground = Sdf {
-            distance: |at: Vec3| at.y.min(1.0 - at.x),
+            distance: |at: DVec3| at.as_vec3().y.min(1.0 - at.as_vec3().x),
             steepest: 1.0,
         };
         let mut out = Vec::new();
@@ -656,7 +710,8 @@ mod tests {
     fn a_sweep_at_a_thin_wall_stops_at_it_at_any_speed() {
         // A wall a voxel thick at x 3 to 3.5, and the floor.
         let ground = Sdf {
-            distance: |at: Vec3| {
+            distance: |at: DVec3| {
+                let at = at.as_vec3();
                 let q = (at.x - 3.25).abs() - 0.25;
                 at.y.min(q)
             },

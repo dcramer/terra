@@ -7,7 +7,7 @@
 //! is toward the centre as it is in the game (D63) and a flat floor is the sphere itself.
 
 use crate::mover::Obstacle;
-use glam::{Vec2, Vec3};
+use glam::{DVec3, Vec2, Vec3};
 
 /// The radius of the world the level fixtures lie on: large enough that 20 m of course is
 /// flat to a few millimetres' curvature correction, small enough for f32 to keep a tenth of a
@@ -24,6 +24,12 @@ pub trait Field: Sync {
     /// How far a point is outside the solid, in metres, negative inside. Exact outside the
     /// solid for every fixture here, a bound inside.
     fn distance(&self, at: Vec3) -> f32;
+
+    /// The same of a point in f64, as a mover that keeps its places in f64 asks it: a level
+    /// fixture works its frame out in f64, so it answers to a micrometre at any radius.
+    fn distance_at(&self, at: DVec3) -> f32 {
+        self.distance(at.as_vec3())
+    }
 
     /// How far from the centre the water's surface over a point is, where water is.
     fn water(&self, _at: Vec3) -> Option<f32> {
@@ -46,6 +52,30 @@ pub trait Field: Sync {
         const E: f32 = 0.01;
         let d = |axis: Vec3| self.distance(at + axis * E) - self.distance(at - axis * E);
         Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)).normalize_or(at.normalize_or(Vec3::Y))
+    }
+}
+
+/// A level frame on a world of a radius, worked out in f64: what [`world`] and [`local`] are
+/// at [`RADIUS_M`] in f32, at any radius.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Frame {
+    pub radius: f64,
+}
+
+impl Frame {
+    /// The world point of a place in the frame (`u` forward, `h` up, `w` to the side).
+    pub fn world(&self, u: f64, h: f64, w: f64) -> DVec3 {
+        DVec3::new(u, self.radius, w).normalize() * (self.radius + h)
+    }
+
+    /// A world point in the frame: (`u`, `h`, `w`).
+    pub fn local(&self, at: DVec3) -> DVec3 {
+        let d = at.normalize();
+        DVec3::new(
+            self.radius * d.x / d.y,
+            at.length() - self.radius,
+            self.radius * d.z / d.y,
+        )
     }
 }
 
@@ -140,14 +170,28 @@ pub struct Water {
     pub surface: f32,
 }
 
-/// A level fixture: the union of its solids, less what is dug out of them, and its water.
-#[derive(Clone, Debug, Default)]
+/// A level fixture: the union of its solids, less what is dug out of them, and its water, on a
+/// world of a radius ([`RADIUS_M`] unless set).
+#[derive(Clone, Debug)]
 pub struct Course {
     pub solids: Vec<Solid>,
     pub dug: Vec<(Vec3, Vec3)>,
     pub water: Option<Water>,
     /// What stands on it, answered apart from the ground.
     pub obstacles: Vec<Obstacle>,
+    pub radius: f32,
+}
+
+impl Default for Course {
+    fn default() -> Self {
+        Course {
+            solids: Vec::new(),
+            dug: Vec::new(),
+            water: None,
+            obstacles: Vec::new(),
+            radius: RADIUS_M,
+        }
+    }
 }
 
 impl Course {
@@ -160,6 +204,18 @@ impl Course {
         Course {
             solids: vec![solid],
             ..Course::default()
+        }
+    }
+
+    /// The same fixture on a world of another radius.
+    pub fn on(self, radius: f32) -> Self {
+        Course { radius, ..self }
+    }
+
+    /// Its level frame.
+    pub fn frame(&self) -> Frame {
+        Frame {
+            radius: self.radius as f64,
         }
     }
 
@@ -184,15 +240,19 @@ impl Course {
 
 impl Field for Course {
     fn distance(&self, at: Vec3) -> f32 {
-        self.local_distance(local(at))
+        self.distance_at(at.as_dvec3())
+    }
+
+    fn distance_at(&self, at: DVec3) -> f32 {
+        self.local_distance(self.frame().local(at).as_vec3())
     }
 
     fn water(&self, at: Vec3) -> Option<f32> {
         let water = self.water.as_ref()?;
-        let p = local(at);
+        let p = self.frame().local(at.as_dvec3()).as_vec3();
         let over =
             (water.min.x..water.max.x).contains(&p.x) && (water.min.y..water.max.y).contains(&p.z);
-        over.then_some(RADIUS_M + water.surface)
+        over.then_some(self.radius + water.surface)
     }
 
     fn obstacles(&self) -> &[Obstacle] {

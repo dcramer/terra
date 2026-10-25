@@ -25,7 +25,7 @@ A body goes where its intent or its move's root motion asks, as far as the world
 
 ## What stops a body
 
-The mover asks one query trait, defined in `terra_motion` because the mover is the side that asks (D198). The trait has two questions: the contacts within a distance of a capsule (each a point, a normal, a distance and the other's velocity), and the first contact of a capsule swept along a motion. Each source answers from what it already holds, with no collision meshes built:
+The mover asks one query trait, defined in `terra_motion` because the mover is the side that asks (D198). The trait has two questions: the contacts within a distance of a capsule (each a point, a normal, a distance and the other's velocity), and the first contact of a capsule swept along a motion. A body's position is f64 and a capsule's points are f32 offsets from its f64 origin; a source is asked at the origin plus the offset in f64, so 30 km out the field is as fine as at 2 km (D482, Jolt's large worlds). Each source answers from what it already holds, with no collision meshes built:
 
 | Source | Shape | Answered from |
 |---|---|---|

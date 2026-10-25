@@ -24,8 +24,8 @@ mod runs;
 mod sources;
 mod stairs;
 
-pub use field::{Ball, Course, Field, Solid, Water};
-use glam::Vec3;
+pub use field::{Ball, Course, Field, Frame, Solid, Water};
+use glam::{DVec3, Vec3};
 
 /// The fixed tick (D138).
 pub const TICK: f32 = 1.0 / 64.0;
@@ -48,6 +48,8 @@ impl Kind {
 pub struct Body {
     /// The bottom of the capsule.
     pub feet: Vec3,
+    /// The same in f64, where the mover keeps it so (`feet` as f64 where it does not).
+    pub position: DVec3,
     /// The body's up: its capsule stands along it.
     pub up: Vec3,
     /// Its whole velocity, level and vertical.

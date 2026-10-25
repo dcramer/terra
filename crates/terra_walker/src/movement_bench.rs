@@ -8,6 +8,7 @@
 
 use super::{Around, Ask, Motion, Terrain, step, top_speed};
 use crate::Stance;
+use bevy::math::DVec3;
 use bevy::prelude::{Vec2, Vec3};
 use std::cell::{Cell, RefCell};
 use std::time::Instant;
@@ -30,6 +31,8 @@ const MEMO_MOST: usize = 1024;
 /// water and gravity, and where the walk starts and goes.
 struct Ground<'a> {
     distance: &'a dyn Fn(Vec3) -> f32,
+    /// The distance at a point in f64, as the mover asks it (D53's f64 frames).
+    precise: &'a dyn Fn(DVec3) -> f32,
     planet: Option<&'a Planet>,
     steepest: f32,
     water: &'a dyn Fn(Vec3) -> Option<f32>,
@@ -64,11 +67,11 @@ fn mover(ground: &Ground, kind: &Kind) -> Cost {
     let calls = Cell::new(0u64);
     let memo = RefCell::new(HeightMemo::default());
     let sdf = Sdf {
-        distance: |at: Vec3| {
+        distance: |at: DVec3| {
             calls.set(calls.get() + 1);
             match ground.planet {
                 Some(planet) => planet.distance_in(at, &mut memo.borrow_mut()),
-                None => (ground.distance)(at),
+                None => (ground.precise)(at),
             }
         },
         steepest: ground.steepest,
@@ -195,12 +198,14 @@ fn the_mover_bench_times_a_body_walking() {
         corners.into_iter().map(|(u, h)| Vec2::new(u, h)).collect(),
     ));
     let course_distance = |at: Vec3| course.distance(at);
+    let course_precise = |at: DVec3| course.distance_at(at);
     let none = |_: Vec3| None;
     let start = world(0.0, 0.0, 0.0);
     let mut scenes = vec![(
         "course".to_string(),
         Ground {
             distance: &course_distance,
+            precise: &course_precise,
             planet: None,
             steepest: 1.0,
             water: &none,
@@ -227,12 +232,17 @@ fn the_mover_bench_times_a_body_walking() {
         .iter()
         .map(|(_, p)| move |at: Vec3| p.distance(at))
         .collect();
+    let precise: Vec<_> = planets
+        .iter()
+        .map(|(_, p)| move |at: DVec3| p.distance_in(at, &mut HeightMemo::default()))
+        .collect();
     for (i, (radius_m, planet)) in planets.iter().enumerate() {
         let (start, forward) = on(planet);
         scenes.push((
             format!("planet {} km", radius_m / 1000.0),
             Ground {
                 distance: &distances[i],
+                precise: &precise[i],
                 planet: Some(planet),
                 steepest: planet.steepest(),
                 water: &waters[i],

@@ -8,6 +8,7 @@
 
 use super::Body;
 use super::query::{Capsule, Query};
+use glam::Vec3;
 
 fn inverse_mass(body: &Body) -> f32 {
     if body.kind.mass.is_finite() && body.kind.mass > 0.0 {
@@ -18,16 +19,18 @@ fn inverse_mass(body: &Body) -> f32 {
 }
 
 /// A push of a body along a motion, as far as the ground lets it.
-fn shove(body: &mut Body, by: glam::Vec3, ground: &dyn Query) {
+fn shove(body: &mut Body, by: Vec3, ground: &dyn Query) {
     let length = by.length();
     if length < 1e-7 {
         return;
     }
-    let capsule = Capsule::standing(body.feet, body.up, body.kind.radius, body.kind.height);
+    let capsule = Capsule::standing(Vec3::ZERO, body.up, body.kind.radius, body.kind.height)
+        .at(body.position);
     let fraction = ground.sweep(&capsule, by).map_or(1.0, |hit| {
         (hit.fraction - body.kind.padding_m / length).max(0.0)
     });
-    body.feet += by * fraction;
+    body.position += (by * fraction).as_dvec3();
+    body.feet = body.position.as_vec3();
 }
 
 /// Separates overlapping bodies, kept in ID order, for so many rounds.
@@ -43,7 +46,7 @@ pub fn separate(bodies: &mut [Body], ground: &dyn Query, rounds: usize) {
                     continue;
                 }
                 let up = (a.up + b.up).normalize_or(a.up);
-                let apart = b.feet - a.feet;
+                let apart = (b.position - a.position).as_vec3();
                 let (ha, hb) = (0.0, apart.dot(up));
                 if hb > ha + a.kind.height || hb + b.kind.height < ha {
                     continue;

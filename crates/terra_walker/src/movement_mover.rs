@@ -4,10 +4,11 @@
 //! distance overestimates on a slope, a dug hole's is a CSG of fields), and the mover's crease
 //! rule assumes an exact one (round 2's warning), so it is proved here on the real field.
 
+use bevy::math::DVec3;
 use bevy::prelude::Vec3;
 use terra_core::{Operation, PlanetSpec, Seed};
 use terra_motion::mover::{Bodies, Ground, Intent, Kind, Sdf, World};
-use terra_world::planet::Planet;
+use terra_world::planet::{HeightMemo, Planet};
 
 const TICK: f32 = 1.0 / 64.0;
 const GRAVITY: f32 = 16.0;
@@ -28,7 +29,7 @@ fn man() -> Kind {
 fn walk(planet: &Planet, from: Vec3, seconds: f32) -> Vec<(Vec3, Ground, f32)> {
     let kind = man();
     let ground = Sdf {
-        distance: |at: Vec3| planet.distance(at),
+        distance: |at: DVec3| planet.distance_in(at, &mut HeightMemo::default()),
         steepest: planet.steepest(),
     };
     let water = |_: Vec3| None;

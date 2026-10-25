@@ -25,7 +25,7 @@ use serde::Deserialize;
 pub use shapes::{Block, Obstacle, Obstacles, Shaped};
 use slide::{Shape, Support, Touch};
 
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 use std::collections::BTreeMap;
 
 /// A kind's movement numbers (docs/controller.md, "Numbers that are data"), read from
@@ -136,8 +136,11 @@ pub enum Ground {
 pub struct Body {
     pub id: u32,
     pub kind: Kind,
-    /// The bottom of the capsule.
+    /// The bottom of the capsule, in the world: `position` rounded to f32, for what shows it.
     pub feet: Vec3,
+    /// The bottom of the capsule, in f64: what the mover keeps (Jolt's large worlds keep a
+    /// character's position a double). A tick works in offsets from it (`query`'s frames).
+    pub position: DVec3,
     /// Away from the world's centre: its capsule stands along it.
     pub up: Vec3,
     pub velocity: Vec3,
@@ -155,7 +158,9 @@ pub struct Body {
     /// a jump costs is spent on this, not on the press.
     pub jumped: bool,
     support: Support,
+    /// The contacts, in the frame of `frame`: the position the tick that found them began at.
     active: Vec<Touch>,
+    frame: DVec3,
     /// Time since it last stood, and whether it left by jumping (coyote time).
     air_s: f32,
     left_by_jump: bool,
@@ -193,6 +198,7 @@ impl Bodies {
             id,
             kind,
             feet,
+            position: feet.as_dvec3(),
             up,
             velocity: Vec3::ZERO,
             facing: facing
@@ -205,11 +211,12 @@ impl Bodies {
             jumped: false,
             support: Support::InAir,
             active: Vec::new(),
+            frame: feet.as_dvec3(),
             air_s: f32::INFINITY,
             left_by_jump: false,
             buffer: 0.0,
         };
-        settle(&mut body, feet, Vec3::ZERO, world);
+        settle(&mut body, feet.as_dvec3(), Vec3::ZERO, world);
         let at = self.bodies.partition_point(|b| b.id < id);
         if self.bodies.get(at).is_some_and(|b| b.id == id) {
             self.bodies[at] = body;
@@ -236,7 +243,7 @@ impl Bodies {
         let Ok(at) = self.bodies.binary_search_by_key(&id, |b| b.id) else {
             return false;
         };
-        settle(&mut self.bodies[at], feet, velocity, world);
+        settle(&mut self.bodies[at], feet.as_dvec3(), velocity, world);
         true
     }
 
@@ -273,17 +280,18 @@ impl Bodies {
 }
 
 /// A body put at a point at a velocity, its up, contacts and ground state read there.
-fn settle(body: &mut Body, feet: Vec3, velocity: Vec3, world: &World) {
-    let up = (feet - world.centre).normalize_or(body.up);
-    (body.feet, body.up, body.velocity) = (feet, up, velocity);
+fn settle(body: &mut Body, position: DVec3, velocity: Vec3, world: &World) {
+    let up = up_at(position, world).unwrap_or(body.up);
+    (body.position, body.feet) = (position, position.as_vec3());
+    (body.up, body.velocity, body.frame) = (up, velocity, position);
     body.facing = body
         .facing
         .reject_from(up)
         .normalize_or(up.any_orthonormal_vector());
     (body.landed, body.stepped, body.jumped, body.buffer) = (None, 0.0, false, 0.0);
     let shape = shape(body, 1.0 / 64.0);
-    slide::contacts_at(feet, world.ground, &shape, &mut body.active);
-    let (support, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, feet);
+    slide::contacts_at(Vec3::ZERO, world.ground, &shape, &mut body.active);
+    let (support, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, Vec3::ZERO);
     body.support = support;
     let rising = velocity.dot(up) > 1.0e-6;
     (body.ground, body.normal, body.air_s) = if support == Support::OnGround && !rising {
@@ -294,8 +302,16 @@ fn settle(body: &mut Body, feet: Vec3, velocity: Vec3, world: &World) {
     body.left_by_jump = false;
 }
 
+/// Away from the world's centre at a place, if it is not the centre.
+fn up_at(position: DVec3, world: &World) -> Option<Vec3> {
+    (position - world.centre.as_dvec3())
+        .try_normalize()
+        .map(|up| up.as_vec3())
+}
+
+/// A body's capsule in its own frame: its feet at its position.
 fn capsule(body: &Body) -> Capsule {
-    Capsule::standing(body.feet, body.up, body.kind.radius, body.kind.height)
+    Capsule::standing(Vec3::ZERO, body.up, body.kind.radius, body.kind.height).at(body.position)
 }
 
 fn shape(body: &Body, dt: f32) -> Shape {
@@ -308,6 +324,7 @@ fn shape(body: &Body, dt: f32) -> Shape {
         predictive: k.predictive_m,
         padding: k.padding_m,
         dt,
+        origin: body.frame,
     }
 }
 
@@ -389,7 +406,7 @@ fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, dt: f32) -> 
 /// a step it stands on, not a wall: the velocity is already along the floor, and taking a
 /// step's edge out of it would slow the body at every step and lift it there.
 fn unblocked(mut velocity: Vec3, on_ground: bool, body: &Body, shape: &Shape) -> Vec3 {
-    let bottom = body.feet + shape.up * shape.radius;
+    let bottom = (body.position - body.frame).as_vec3() + shape.up * shape.radius;
     for t in &body.active {
         let c = &t.contact;
         let under = (c.at - bottom).dot(shape.up) < -shape.padding;
@@ -406,15 +423,26 @@ fn unblocked(mut velocity: Vec3, on_ground: bool, body: &Body, shape: &Shape) ->
     velocity
 }
 
+/// The tick's frame: its places are offsets from where the body is, and the contacts kept
+/// from the last tick are moved into it.
+fn reframe(body: &mut Body) {
+    let shift = (body.frame - body.position).as_vec3();
+    for t in &mut body.active {
+        t.contact.at += shift;
+    }
+    body.frame = body.position;
+}
+
 /// One body's tick: velocity, collide and slide, stick, step, ground state (Jolt's
 /// `ExtendedUpdate`, with our velocity, jump and water rules).
 fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: f32) {
-    let up = (body.feet - world.centre).normalize_or(body.up);
+    let up = up_at(body.position, world).unwrap_or(body.up);
     body.up = up;
+    reframe(body);
     let shape = shape(body, dt);
     let k = body.kind;
     let g = world.gravity;
-    let from_centre = (body.feet - world.centre).length();
+    let from_centre = (body.position - world.centre.as_dvec3()).length() as f32;
     let depth = (world.water)(body.feet).map_or(0.0, |surface| surface - from_centre);
     let swimming = depth > k.swim_depth * k.height;
 
@@ -447,7 +475,7 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     };
     wanted = slide::cancel_steep(wanted, body.support, &body.active, &shape);
 
-    let start = body.feet;
+    let start = Vec3::ZERO;
     let was_supported = body.support.supported();
     let was_airborne = matches!(body.ground, Ground::Airborne);
     let mut feet = slide::move_shape(start, wanted, dt, query, &shape, &mut body.active);
@@ -507,7 +535,8 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
         };
     }
     body.support = support;
-    body.feet = feet;
+    body.position = body.frame + feet.as_dvec3();
+    body.feet = body.position.as_vec3();
 
     let velocity = if support == Support::OnGround && !jump {
         along_floor(level, normal, up)
@@ -536,7 +565,7 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     };
     // The speed it met the ground at, not the tick's end: what it fell at the tick's start and
     // what it gained over the height it dropped in it (exact under constant gravity).
-    let dropped = (start - body.feet).dot(up).max(0.0);
+    let dropped = (start - feet).dot(up).max(0.0);
     let falling = (-vertical).max(0.0);
     body.landed = (was_airborne && body.ground == Ground::Grounded)
         .then(|| libm::sqrtf(falling * falling + 2.0 * g * dropped));

@@ -766,6 +766,7 @@ mod tests {
             let feet = world(1.0, h, 0.0);
             let body = Body {
                 feet,
+                position: feet.as_dvec3(),
                 up: feet.normalize(),
                 velocity: Vec3::ZERO,
                 grounded: true,

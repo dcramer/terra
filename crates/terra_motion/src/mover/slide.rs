@@ -30,7 +30,7 @@
 //! DEALINGS IN THE SOFTWARE.
 
 use super::query::{Capsule, Contact, Query, TOLERANCE};
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 
 /// Jolt's `mMaxCollisionIterations`.
 const COLLISION_ITERATIONS: usize = 5;
@@ -57,11 +57,13 @@ pub struct Shape {
     pub predictive: f32,
     pub padding: f32,
     pub dt: f32,
+    /// The world point the tick's places are offsets from (`query`'s frames).
+    pub origin: DVec3,
 }
 
 impl Shape {
     pub fn capsule(&self, feet: Vec3) -> Capsule {
-        Capsule::standing(feet, self.up, self.radius, self.height)
+        Capsule::standing(feet, self.up, self.radius, self.height).at(self.origin)
     }
 
     pub fn too_steep(&self, normal: Vec3) -> bool {
@@ -457,6 +459,7 @@ pub fn floor_below(feet: Vec3, reach: f32, query: &dyn Query, shape: &Shape) -> 
         a: centre,
         b: centre,
         radius: PROBE_M,
+        origin: shape.origin,
     };
     query
         .sweep(&probe, -shape.up * (shape.radius + reach))
@@ -625,6 +628,7 @@ mod tests {
             predictive: 0.1,
             padding: 0.02,
             dt: 1.0 / 60.0,
+            origin: DVec3::ZERO,
         }
     }
 

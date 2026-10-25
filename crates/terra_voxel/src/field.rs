@@ -4,7 +4,7 @@
 
 use crate::mountains::{Mountains, Range};
 use crate::patterned::Patterned;
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 use terra_core::{MaterialId, PlanetSpec};
@@ -82,6 +82,14 @@ pub trait Field: Send + Sync {
 
     /// How far a point is from the surface: positive above, negative inside.
     fn distance_in(&self, point: Vec3, memo: &mut Self::Memo) -> f32;
+
+    /// [`Field::distance_in`] at a point given in f64, as a body's position is kept (D53, the
+    /// mover's f64 frames): a field whose distance is a difference of large numbers (a world's
+    /// `|p| - radius`) takes that difference in f64, so the answer is as fine a world's radius
+    /// out as at its centre. By default the point is rounded to f32.
+    fn distance_near(&self, point: DVec3, memo: &mut Self::Memo) -> f32 {
+        self.distance_in(point.as_vec3(), memo)
+    }
 
     /// How far a point is from the surface, and what the ground is made of there.
     fn sample_in(&self, point: Vec3, memo: &mut Self::Memo) -> Sample;
@@ -613,6 +621,18 @@ impl Field for GeneratedPlanet {
         from_centre - (self.spec.radius_m + self.height_in(point / from_centre, memo))
     }
 
+    /// The length and the radius's subtraction in f64; the land's height is still asked in
+    /// f32 along the point's direction (its lattice fraction steps about 4 mm at 30 km, the
+    /// height's noise that times the slope).
+    fn distance_near(&self, point: DVec3, memo: &mut HeightMemo) -> f32 {
+        let from_centre = point.length();
+        if from_centre < 1e-3 {
+            return -self.spec.radius_m;
+        }
+        let height = self.height_in((point / from_centre).as_vec3(), memo);
+        (from_centre - (f64::from(self.spec.radius_m) + f64::from(height))) as f32
+    }
+
     fn sample_in(&self, point: Vec3, memo: &mut HeightMemo) -> Sample {
         let from_centre = point.length();
         if from_centre < 1e-3 {
@@ -890,6 +910,37 @@ mod tests {
             }
         }
         assert!(under > 0 && open > 0, "under walls {under}, open {open}");
+    }
+
+    #[test]
+    fn a_point_in_f64_is_answered_to_a_fraction_of_a_millimetre_a_world_s_radius_out() {
+        let radius_m = 30_000.0;
+        let planet = GeneratedPlanet::new(
+            PlanetSpec {
+                seed: Seed(7),
+                radius_m,
+            },
+            150.0,
+            None,
+        );
+        let mut memo = HeightMemo::default();
+        let up = DVec3::new(0.3, 0.9, 0.2).normalize();
+        let ground = f64::from(radius_m) + f64::from(planet.height_in(up.as_vec3(), &mut memo));
+        // Rising a tenth of a millimetre at a time straight up from the ground: each rise reads
+        // as one (the direction is the same, so the land's height is too). In f32 a point there
+        // is only some 2 mm fine, so the same points would read as steps of 0 or 2 mm.
+        let mut at = |h: f64| planet.distance_near(up * (ground + h), &mut memo);
+        let start = f64::from(at(0.0));
+        assert!(start.abs() < 1.0e-4, "{start} on the ground");
+        for i in 1..20 {
+            let h = f64::from(i) * 1.0e-4;
+            let rise = f64::from(at(h)) - start;
+            assert!((rise - h).abs() < 2.0e-5, "{rise} at {h}");
+        }
+        // The same answer as the f32 ask, to the f32 point's noise.
+        let p = up * (ground + 0.5);
+        let rounded = planet.distance_in(p.as_vec3(), &mut memo);
+        assert!((planet.distance_near(p, &mut memo) - rounded).abs() < 5.0e-3);
     }
 
     const PINNED_GROUND: [(u32, u16); 3] =

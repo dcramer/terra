@@ -5,14 +5,14 @@
 
 use super::{Bodies, Obstacles, Sdf, World};
 use crate::course::{self, Field, Kind, Mover};
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 
 #[derive(Default)]
 struct Ours(Bodies);
 
 fn with_world<R>(field: &dyn Field, then: impl FnOnce(&World) -> R) -> R {
     let ground = Sdf {
-        distance: |at: Vec3| field.distance(at),
+        distance: |at: DVec3| field.distance_at(at),
         // The course's fixtures are exact distances outside the solid.
         steepest: 1.0,
     };
@@ -42,6 +42,7 @@ impl Mover for Ours {
         let body = self.0.get(id).expect("a body the course added");
         course::Body {
             feet: body.feet,
+            position: body.position,
             up: body.up,
             velocity: body.velocity,
             grounded: body.ground == super::Ground::Grounded,
