@@ -158,3 +158,149 @@ fn a_landing_is_reported_at_the_speed_of_the_fall() {
         );
     }
 }
+
+/// A man on the flat course's ground at its origin, facing along it.
+fn on_flat() -> (Ours, crate::course::Course, Vec3) {
+    use crate::course::field::{Course, forward_at, world};
+    let flat = Course::flat();
+    let mut ours = Ours::default();
+    let at = world(0.0, 0.0, 0.0);
+    ours.add(0, &Kind::man(), at, forward_at(at), &flat);
+    (ours, flat, forward_at(at))
+}
+
+#[test]
+fn a_body_taken_out_is_gone_and_the_rest_still_move() {
+    use crate::course::field::world;
+    let (mut ours, flat, forward) = on_flat();
+    let beside = world(0.0, 0.0, 3.0);
+    ours.add(1, &Kind::man(), beside, forward, &flat);
+    assert!(ours.0.remove(0).is_some_and(|body| body.id == 0));
+    assert!(ours.0.remove(0).is_none() && ours.0.get(0).is_none());
+    let walk = course::Intent {
+        wish: forward,
+        ..Default::default()
+    };
+    for _ in 0..64 {
+        ours.tick(&flat, &[(0, walk), (1, walk)], course::TICK);
+    }
+    assert_eq!(ours.0.iter().count(), 1);
+    assert!(
+        ours.body(1).feet.distance(beside) > 3.0,
+        "the other walked on"
+    );
+}
+
+#[test]
+fn a_body_placed_stands_or_falls_where_it_is_put() {
+    use crate::course::field::world;
+    let (mut ours, flat, _) = on_flat();
+    let man = Kind::man();
+    // Teleported 2 m up and still: airborne, it falls and lands at sqrt(2gh).
+    let high = world(5.0, 2.0, 0.0);
+    with_world(&flat, |w| assert!(ours.0.place(0, high, Vec3::ZERO, w)));
+    assert!(!ours.body(0).grounded && ours.body(0).feet == high);
+    let landed = (0..128).find_map(|_| {
+        ours.tick(&flat, &[], course::TICK);
+        ours.landed(0)
+    });
+    let want = libm::sqrtf(2.0 * flat.gravity() * 2.0);
+    assert!(
+        landed.is_some_and(|v| (v - want).abs() < 0.01),
+        "{landed:?}"
+    );
+    // Put on the ground at a run and then held still (downed): grounded at once, unmoving.
+    let ground = world(9.0, 0.0, 0.0);
+    with_world(&flat, |w| ours.0.place(0, ground, Vec3::ZERO, w));
+    let body = ours.body(0);
+    assert!(body.grounded && body.velocity == Vec3::ZERO);
+    ours.tick(&flat, &[], course::TICK);
+    let moved = ours.body(0).feet - ground;
+    // Within a float's step at 2 km from the centre.
+    assert!(moved.length() < 1e-3, "{moved:?}");
+    assert!(with_world(&flat, |w| !ours.0.place(
+        7,
+        ground,
+        Vec3::ZERO,
+        w
+    )));
+    assert_eq!(ours.0.get(0).map(|b| b.kind.jog), Some(man.jog));
+}
+
+#[test]
+fn a_share_of_its_speed_is_its_top_speed() {
+    let man = Kind::man();
+    for (scale, sprint) in [(0.5, false), (0.35, true), (1.0, false)] {
+        let (mut ours, flat, forward) = on_flat();
+        let intent = course::Intent {
+            wish: forward,
+            sprint,
+            scale,
+            ..Default::default()
+        };
+        for _ in 0..128 {
+            ours.tick(&flat, &[(0, intent)], course::TICK);
+        }
+        let speed = ours.body(0).velocity.length();
+        let want = if sprint { man.sprint } else { man.jog } * scale;
+        assert!((speed / want - 1.0).abs() < 0.005, "{speed}, not {want}");
+    }
+}
+
+#[test]
+fn a_drive_moves_a_body_at_its_own_speed_from_the_first_tick() {
+    // A roll: 8.5 m/s along the way, past the kind's sprint, with no acceleration.
+    let (mut ours, flat, forward) = on_flat();
+    let intent = course::Intent {
+        drive: Some(forward * 8.5),
+        ..Default::default()
+    };
+    let start = ours.body(0).feet;
+    for _ in 0..32 {
+        ours.tick(&flat, &[(0, intent)], course::TICK);
+        assert!((ours.body(0).velocity.length() - 8.5).abs() < 0.01);
+        assert!(ours.body(0).grounded);
+    }
+    let gone = ours.body(0).feet.distance(start);
+    assert!((gone - 8.5 * 0.5).abs() < 0.02, "{gone} m in half a second");
+}
+
+#[test]
+fn a_jump_is_reported_on_the_tick_it_leaves_not_the_press() {
+    use crate::course::field::world;
+    let (mut ours, flat, _) = on_flat();
+    let jump = course::Intent {
+        jump: true,
+        ..Default::default()
+    };
+    // Pressed standing: it leaves that tick.
+    ours.tick(&flat, &[(0, jump)], course::TICK);
+    assert!(ours.0.get(0).is_some_and(|b| b.jumped));
+    ours.tick(&flat, &[], course::TICK);
+    assert!(ours.0.get(0).is_some_and(|b| !b.jumped));
+    // Pressed in the air a few ticks before it lands: not then, but on landing (the buffer),
+    // and once.
+    let man = Kind::man();
+    let drop = 0.3;
+    with_world(&flat, |w| {
+        ours.0.place(0, world(0.0, drop, 0.0), Vec3::ZERO, w)
+    });
+    let fall = (libm::sqrtf(2.0 * drop / flat.gravity()) / course::TICK) as usize;
+    let press = fall - (man.buffer_s / course::TICK) as usize / 2;
+    let jumped: Vec<usize> = (0..fall + 16)
+        .filter(|&tick| {
+            let intents = if tick == press {
+                vec![(0, jump)]
+            } else {
+                vec![]
+            };
+            ours.tick(&flat, &intents, course::TICK);
+            ours.0.get(0).is_some_and(|b| b.jumped)
+        })
+        .collect();
+    assert_eq!(jumped.len(), 1, "{jumped:?}");
+    assert!(
+        jumped[0] > press,
+        "jumped at {jumped:?}, pressed at {press}"
+    );
+}

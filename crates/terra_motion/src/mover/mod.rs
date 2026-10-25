@@ -94,13 +94,31 @@ impl Kind {
 }
 
 /// What a body asks of a tick: a level way to go (unit or zero), sprinting, a jump pressed this
-/// tick, or a move's drive (root motion) in place of walking.
-#[derive(Clone, Copy, Debug, Default)]
+/// tick, a share of its kind's speed, or a move's drive (root motion, a roll) in place of
+/// walking.
+#[derive(Clone, Copy, Debug)]
 pub struct Intent {
     pub wish: Vec3,
     pub sprint: bool,
     pub jump: bool,
+    /// Its top speed as a share of its kind's jog, sprint or swim: guarding, a move's pace,
+    /// deep snow or mud (1 for none).
+    pub scale: f32,
+    /// A level velocity it is driven at, its own speed and way kept (a roll, a lunge); the
+    /// ground and what stops it still answer.
     pub drive: Option<Vec3>,
+}
+
+impl Default for Intent {
+    fn default() -> Self {
+        Intent {
+            wish: Vec3::ZERO,
+            sprint: false,
+            jump: false,
+            scale: 1.0,
+            drive: None,
+        }
+    }
 }
 
 /// A body's ground state (D53).
@@ -133,11 +151,14 @@ pub struct Body {
     /// How far a step raised it this tick: what is shown runs it down to nothing (presentation,
     /// docs/controller.md), the mover never.
     pub stepped: f32,
+    /// Whether it jumped this tick: the mover decides, by its buffer and coyote time, so what
+    /// a jump costs is spent on this, not on the press.
+    pub jumped: bool,
     support: Support,
     active: Vec<Touch>,
     /// Time since it last stood, and whether it left by jumping (coyote time).
     air_s: f32,
-    jumped: bool,
+    left_by_jump: bool,
     /// Time left on a jump pressed in the air (the buffer).
     buffer: f32,
 }
@@ -178,19 +199,14 @@ impl Bodies {
             normal: Vec3::ZERO,
             landed: None,
             stepped: 0.0,
+            jumped: false,
             support: Support::InAir,
             active: Vec::new(),
             air_s: f32::INFINITY,
-            jumped: false,
+            left_by_jump: false,
             buffer: 0.0,
         };
-        let shape = shape(&body, 1.0 / 64.0);
-        slide::contacts_at(feet, world.ground, &shape, &mut body.active);
-        let (support, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, feet);
-        body.support = support;
-        if support == Support::OnGround {
-            (body.ground, body.normal, body.air_s) = (Ground::Grounded, normal, 0.0);
-        }
+        settle(&mut body, feet, Vec3::ZERO, world);
         let at = self.bodies.partition_point(|b| b.id < id);
         if self.bodies.get(at).is_some_and(|b| b.id == id) {
             self.bodies[at] = body;
@@ -202,6 +218,23 @@ impl Bodies {
     pub fn get(&self, id: u32) -> Option<&Body> {
         let at = self.bodies.binary_search_by_key(&id, |b| b.id).ok()?;
         Some(&self.bodies[at])
+    }
+
+    /// Takes a body out, as when it is gone from the world: what it was, if it was there.
+    pub fn remove(&mut self, id: u32) -> Option<Body> {
+        let at = self.bodies.binary_search_by_key(&id, |b| b.id).ok()?;
+        Some(self.bodies.remove(at))
+    }
+
+    /// Puts a body's feet at a point, moving at a velocity, its ground read there afresh: a
+    /// spawn, respawn or teleport, or held still (downed). Its kind and facing are kept and a
+    /// jump in its buffer is dropped. False if there is no such body.
+    pub fn place(&mut self, id: u32, feet: Vec3, velocity: Vec3, world: &World) -> bool {
+        let Ok(at) = self.bodies.binary_search_by_key(&id, |b| b.id) else {
+            return false;
+        };
+        settle(&mut self.bodies[at], feet, velocity, world);
+        true
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Body> {
@@ -234,6 +267,28 @@ impl Bodies {
         }
         push::separate(&mut self.bodies, world.ground, PUSH_ROUNDS);
     }
+}
+
+/// A body put at a point at a velocity, its up, contacts and ground state read there.
+fn settle(body: &mut Body, feet: Vec3, velocity: Vec3, world: &World) {
+    let up = (feet - world.centre).normalize_or(body.up);
+    (body.feet, body.up, body.velocity) = (feet, up, velocity);
+    body.facing = body
+        .facing
+        .reject_from(up)
+        .normalize_or(up.any_orthonormal_vector());
+    (body.landed, body.stepped, body.jumped, body.buffer) = (None, 0.0, false, 0.0);
+    let shape = shape(body, 1.0 / 64.0);
+    slide::contacts_at(feet, world.ground, &shape, &mut body.active);
+    let (support, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, feet);
+    body.support = support;
+    let rising = velocity.dot(up) > 1.0e-6;
+    (body.ground, body.normal, body.air_s) = if support == Support::OnGround && !rising {
+        (Ground::Grounded, normal, 0.0)
+    } else {
+        (Ground::Airborne, Vec3::ZERO, f32::INFINITY)
+    };
+    body.left_by_jump = false;
 }
 
 fn capsule(body: &Body) -> Capsule {
@@ -301,7 +356,7 @@ fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, dt: f32) -> 
         k.sprint
     } else {
         k.jog
-    };
+    } * intent.scale.max(0.0);
     if grounded && wish != Vec3::ZERO {
         let grade = along_floor(wish, body.normal, up).dot(up).clamp(-1.0, 1.0);
         top *= k.slope_factor(libm::asinf(grade).to_degrees());
@@ -342,7 +397,7 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
         body.buffer = k.buffer_s + dt;
     }
     let standing = body.ground == Ground::Grounded;
-    let coyote = !body.jumped && body.air_s <= k.coyote_s + 1e-6;
+    let coyote = !body.left_by_jump && body.air_s <= k.coyote_s + 1e-6;
     let jump = body.buffer > 0.0 && !swimming && (standing || coyote);
 
     let level = level_velocity(body, intent, swimming, dt);
@@ -456,11 +511,12 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let falling = (-vertical).max(0.0);
     body.landed = (was_airborne && body.ground == Ground::Grounded)
         .then(|| libm::sqrtf(falling * falling + 2.0 * g * dropped));
+    body.jumped = jump;
     if jump {
-        (body.jumped, body.buffer) = (true, 0.0);
+        (body.left_by_jump, body.buffer) = (true, 0.0);
     }
     if body.ground == Ground::Grounded {
-        (body.air_s, body.jumped) = (0.0, false);
+        (body.air_s, body.left_by_jump) = (0.0, false);
     } else {
         body.air_s += dt;
     }
