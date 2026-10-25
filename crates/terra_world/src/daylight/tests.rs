@@ -23,11 +23,18 @@ fn the_mist_is_drawn_as_thick_round_a_walker_and_thinner_for_an_eye_above_it() {
 #[test]
 fn the_eye_opens_up_in_the_open_of_a_far_seeing_world_and_nowhere_else() {
     let key = 11.8;
-    // The lush forest's world and any world's forest keep the key, by day and by night.
+    // The lush forest's world keeps the key in the open, by day and by night, and any world's
+    // forest by day.
     assert_eq!(open_exposure(key, 1.0, false, 0.0), key);
     assert_eq!(open_exposure(key, 1.0, false, 1.0), key);
     assert_eq!(open_exposure(key, 0.2, true, 0.0), key);
-    assert_eq!(open_exposure(key, 0.2, true, 1.0), key);
+    assert_eq!(open_exposure(key, 0.2, false, 0.0), key);
+    // By night under the crowns the eye opens, on every world, and the more the darker.
+    for far_seeing in [false, true] {
+        let wood = open_exposure(key, 0.2, far_seeing, 1.0);
+        assert!((key - wood - WOODED_NIGHT_EV).abs() < 1e-4, "{wood}");
+        assert!(open_exposure(key, 0.2, far_seeing, 0.5) > wood);
+    }
     // Open moonlit land on a far-seeing world opens up too, less than by day, so a
     // town's street and a lake's shore at night are not silhouettes.
     let moonlit = open_exposure(key, 1.0, true, 1.0);

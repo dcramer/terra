@@ -658,7 +658,8 @@ fn shine(
     // Bevy mixes the haze in after the exposure, at the brightness it is given: left at the
     // day's, by night it lit every shadow from within, the night only two stops under the day
     // (D310). So it dims as night falls, toward the moon's cold light.
-    let level = NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark);
+    let level =
+        (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark)) * libm::exp2f(wooded_night_ev(open, dark));
     // Snow lying round the eye opens the camera about half a stop, so it reads white (D419).
     let snow_opens = snow_opens.map_or(0.0, |s| s.0);
     let set = open_exposure(light.exposure, open, far_seeing, dark) + under.opens_ev() - snow_opens;
@@ -918,15 +919,32 @@ const OPEN_EYE_EV: f32 = 1.5;
 /// 1.6 the town's street was mean sRGB 14, 84% under 8%, against 18/69%, the lake 5.8 v 4.4.
 const OPEN_NIGHT_EV: f32 = 1.45;
 
+/// How many stops the eye opens by night under a closed canopy, as an eye dark-adapts and as
+/// Unreal's auto-exposure falls to its minimum EV in a dark wood. The key (fire round 25) is
+/// set for the open yard round a campfire; under the crowns, where the moon reaches only in
+/// flecks and the sky's light is hidden, it left the forest walk's path at mean sRGB 0.000
+/// and its crowns at 0.003 against Sons of the Forest's night 0.075 (night round, 2026-10-25):
+/// at 1.5, 2.5 and 3.5 stops the path measured 0.003, 0.013 and 0.053 and the crowns 0.009,
+/// 0.026 and 0.079. The haze, which Bevy mixes in after the exposure, is raised with it.
+const WOODED_NIGHT_EV: f32 = 3.5;
+
 /// The camera's exposure for the hour's `key`, with the sky so `open` over the eye, on a world
 /// that sees far or not, so far into the night: the key in a forest, under trees and by night;
 /// opened up in the open air of a far-seeing world, by day and less by night.
 fn open_exposure(key: f32, open: f32, far_seeing: bool, night: f32) -> f32 {
-    if !far_seeing {
-        return key;
-    }
     let night = night.clamp(0.0, 1.0);
-    key - smoothstep(0.55, 0.98, open) * (OPEN_EYE_EV * (1.0 - night) + OPEN_NIGHT_EV * night)
+    let wooded = key - wooded_night_ev(open, night);
+    if !far_seeing {
+        return wooded;
+    }
+    wooded - smoothstep(0.55, 0.98, open) * (OPEN_EYE_EV * (1.0 - night) + OPEN_NIGHT_EV * night)
+}
+
+/// How many stops the eye opens by night under the trees, so far into the night with the sky
+/// so `open` over it: none in the open, where the moon lights the land, all of
+/// [`WOODED_NIGHT_EV`] under a closed canopy.
+fn wooded_night_ev(open: f32, night: f32) -> f32 {
+    (1.0 - smoothstep(0.55, 0.98, open)) * night.clamp(0.0, 1.0) * WOODED_NIGHT_EV
 }
 
 #[cfg(test)]
