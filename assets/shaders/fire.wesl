@@ -1529,6 +1529,10 @@ struct HearthField {
     reach: f32,
     under: f32,
     lobes: i32,
+    // Its noise's scale, one over its height without its flicker: with the flickering height
+    // the pattern's points, `(y - time * rise) / tall`, sloshed all together, further the
+    // longer the game had run (fire round g13).
+    scale: f32,
     // Each lobe's middle across (east, north), its foot's height and its height; its half width.
     at: array<vec4<f32>, FIELD_LOBES>,
     size: array<f32, FIELD_LOBES>,
@@ -1554,6 +1558,7 @@ fn hearth_field(slot: u32) -> HearthField {
         // A torch: as tall as it burns (`hearth`), from a little inside its head.
         f.wide = select(a.w * 0.4, b.z, b.z > 0.0);
         f.tall = a.w * TORCH_FIELD_TALL * mix(1.0, f.glow, 0.5);
+        f.scale = 1.0 / max(a.w * TORCH_FIELD_TALL, 1.0e-3);
         f.k = FIELD_K * TORCH_THICK;
         f.reach = f.wide * 1.1;
         f.under = f.tall * 0.12;
@@ -1573,6 +1578,7 @@ fn hearth_field(slot: u32) -> HearthField {
     f.reach = f.wide * 0.85;
     f.under = 0.05;
     f.tall = a.w * HEARTH_DRAWN * FIELD_TALL * mix(1.0, f.glow, 0.5);
+    f.scale = 1.0 / max(a.w * HEARTH_DRAWN * FIELD_TALL, 1.0e-3);
     let laid = hearth_logs(slot);
     let apex = select(f.tall * 0.3, laid.top.y + laid.radius, laid.count >= 1.0);
     f.at[0] = vec4(0.0, 0.0, apex * 0.2, f.tall - apex * 0.2);
@@ -1622,7 +1628,7 @@ fn field_shape(q: vec3<f32>, f: HearthField, time: f32) -> f32 {
 // The field at a point in its frame: x its flame's density per metre, y its heat (the ramp's).
 fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec2<f32> {
     let hg = saturate(p.y / f.tall);
-    let s = 1.0 / f.tall;
+    let s = f.scale;
     let luck = vec3(f.seed * 13.7, f.seed * 7.1, f.seed * 3.3);
     // The slow octave sways the shape across, more the higher; the wind leans it downwind.
     let n1 = vec3(p.x * 2.6 * s, (p.y - time * FIELD_RISE.x) * 2.0 * s, p.z * 2.6 * s) + luck;
