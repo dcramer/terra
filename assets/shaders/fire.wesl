@@ -1470,8 +1470,8 @@ fn hearth_marched(slot: u32) -> bool {
 // How tall its field stands, in the drawn flame's height (`HEARTH_DRAWN`); its middle lobe's
 // and each log's lobe's half width, in its width.
 const FIELD_TALL: f32 = 1.3;
-const FIELD_MIDDLE_R: f32 = 0.17;
-const FIELD_LOG_R: f32 = 0.095;
+const FIELD_MIDDLE_R: f32 = 0.2;
+const FIELD_LOG_R: f32 = 0.14;
 // Each lobe flickers on its own clock (two waves of 2-4 Hz): its height between FIELD_FLICKER's
 // share of it, its width by FIELD_FLICKER_WIDE either way and its tip leaning across by
 // FIELD_FLICKER_LEAN of its width, so the outline itself changes from moment to moment.
@@ -1480,7 +1480,7 @@ const FIELD_FLICKER_WIDE: f32 = 0.2;
 const FIELD_FLICKER_LEAN: f32 = 0.6;
 // How far a log's lobe leans in toward the middle at its tip, in its distance out, so lobes
 // stay apart low down and the logs show between them.
-const FIELD_LEAN_IN: f32 = 0.18;
+const FIELD_LEAN_IN: f32 = 0.35;
 // How fast its noise rises, metres a second, its slow and quick octaves, and how far it moves
 // the shape across, in its width, growing with height.
 const FIELD_RISE: vec2<f32> = vec2<f32>(0.9, 1.7);
@@ -1488,7 +1488,7 @@ const FIELD_SWAY: f32 = 0.32;
 // How much the quick noise tears from its upper part and how finely it is cut across (in the
 // field's height, so a tongue is about a tenth of it wide), its feather (in the shape's units)
 // and how thick its flame is, per metre.
-const FIELD_TEAR: f32 = 3.6;
+const FIELD_TEAR: f32 = 3.2;
 const FIELD_TEAR_ACROSS: f32 = 14.0;
 const FIELD_FEATHER: f32 = 0.14;
 const FIELD_K: f32 = 10.0;
@@ -1599,7 +1599,7 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec2<f32> {
     let m = n2 * 0.4 + vec3(time * 1.3, time * 1.9, -time * 1.1);
     let evolve = vec3(noise3(m), noise3(m + vec3(31.7, 7.9, 13.1)), noise3(m + vec3(5.9, 19.3, 41.7))) - vec3(0.5);
     let tear = fbm3(n2 + evolve * 1.6);
-    v -= FIELD_TEAR * smoothstep(0.0, 0.4, hg) * (tear - 0.33);
+    v -= FIELD_TEAR * smoothstep(0.0, 0.5, hg) * (tear - 0.36);
     let dens = smoothstep(0.0, FIELD_FEATHER, v);
     // A thin cool skin over a hot inside, hottest low over the coals, so the pale core shows
     // through the skin rather than being hidden by it; the core hot only deep inside, so the

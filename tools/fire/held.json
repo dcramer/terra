@@ -32,7 +32,9 @@
  ],
  "marched breath dusk": [],
  "marched ball dusk": [],
- "campfire night": [],
+ "campfire night": [
+  "soot/flame"
+ ],
  "campfire above night": [],
  "house blaze night": [
   "yellow %",
