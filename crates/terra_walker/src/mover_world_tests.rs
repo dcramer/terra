@@ -363,3 +363,14 @@ fn water_is_where_the_ground_is_under_the_sea_and_a_body_put_in_it_swims() {
     }
     assert_eq!(bodies.get(0).map(|b| b.ground), Some(Ground::Swimming));
 }
+
+/// The course's crowd (`determinism.crowd`) ticked on Bevy's compute pool, as the game's tick
+/// would run it, on 5 and 16 lanes: the same bits as on one.
+#[test]
+fn the_crowd_ends_the_same_on_bevys_pool_as_on_one_thread() {
+    use bevy::tasks::{ComputeTaskPool, TaskPoolBuilder};
+    use terra_motion::mover::course::Ours;
+    let pool = ComputeTaskPool::get_or_init(|| TaskPoolBuilder::new().num_threads(4).build());
+    let differ = terra_motion::course::crowd_reruns(|| Ours::on(OnTasks(pool)), &[5, 16]);
+    assert_eq!(differ, 0);
+}

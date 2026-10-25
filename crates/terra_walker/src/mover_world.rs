@@ -105,6 +105,21 @@ pub fn water(planet: &Planet, at: Vec3) -> Option<f32> {
     planet.under_sea(at).then(|| planet.water_radius_m(at))
 }
 
+/// A Bevy task pool as the mover's lanes' executor (D53, `Bodies::tick_on`): the game's is its
+/// compute pool, whose threads also run its systems, so the bodies' tick shares them rather than
+/// adding a pool of its own beside them. The calling thread runs lanes too while it waits.
+pub struct OnTasks<'a>(pub &'a bevy::tasks::TaskPool);
+
+impl terra_motion::mover::Executor for OnTasks<'_> {
+    fn each(&self, lanes: usize, lane: &(dyn Fn(usize) + Sync)) {
+        self.0.scope(|scope| {
+            for k in 0..lanes {
+                scope.spawn(async move { lane(k) });
+            }
+        });
+    }
+}
+
 #[cfg(test)]
 #[path = "mover_world_tests.rs"]
 mod tests;

@@ -12,19 +12,22 @@
 //! - `shapes`: what stops a body besides the ground: cubes, doors, props, trees and rocks.
 //! - `push`: bodies apart by mass.
 //! - `grid`: the bodies' broadphase, a grid of them by place.
+//! - `lanes`: a tick's steps shared over threads, on whatever pool the caller has.
 
 mod footing;
 mod grid;
+mod lanes;
 mod push;
 pub mod query;
 pub mod shapes;
 mod slide;
 
-#[cfg(test)]
-mod course;
+#[cfg(any(test, feature = "course"))]
+pub mod course;
 
 use grid::Gathered;
 pub use grid::Grid;
+pub use lanes::{Executor, InTurn, Lanes};
 pub use query::{Capsule, Capsules, Contact, Hit, Query, Sdf};
 use serde::Deserialize;
 pub use shapes::{Block, Obstacle, Obstacles, Part, Shaped};
@@ -212,7 +215,7 @@ const CROWD_FROM: usize = 16;
 /// asks, m: its move and the sweeps' motions within it (one beyond looks the grid up again).
 const GATHER_M: f64 = 1.0;
 /// How many neighbouring bodies a lane takes at a time when a tick is shared over threads.
-const RUN: usize = 16;
+const RUN: usize = 8;
 /// How many rounds of pushing a tick takes (docs/controller.md, step 6).
 const PUSH_ROUNDS: usize = 4;
 /// How much higher than its floor's own slope a walking body's move may lift it before it is
@@ -290,50 +293,6 @@ impl Bodies {
         push::separate(&mut self.bodies, &mut self.pairs, world.ground, PUSH_ROUNDS);
     }
 
-    /// [`Bodies::tick`] with the bodies' steps shared over a thread a lane (on rayon's pool,
-    /// whose threads are kept from tick to tick), in runs of neighbouring IDs: `world` builds the world a lane's bodies move through from what is
-    /// the lane's own (its ground's memo, say) and hands it on. The pushes take the first
-    /// lane. The same bits as [`Bodies::tick`] whatever the number of lanes.
-    pub fn tick_on<L: Send>(
-        &mut self,
-        lanes: &mut [L],
-        world: &Lanes<'_, L>,
-        intents: &[(u32, Intent)],
-        dt: f32,
-    ) {
-        assert!(!lanes.is_empty(), "a tick needs a lane to run on");
-        let before = &self.before(intents);
-        // Runs of neighbouring bodies, each taken by the next lane free: a crowd's thick
-        // middle does not hold up the lane given it.
-        let runs: Vec<(usize, &mut [Body])> = self
-            .bodies
-            .chunks_mut(RUN)
-            .enumerate()
-            .map(|(k, run)| (k * RUN, run))
-            .collect();
-        let used = lanes.len().min(runs.len());
-        let runs = std::sync::Mutex::new(runs.into_iter());
-        let work = |lane: &mut L| {
-            world(lane, &mut |w| {
-                while let Some((from, run)) = runs.lock().map_or(None, |mut r| r.next()) {
-                    steps(run, from, before, w, dt);
-                }
-            })
-        };
-        let work = &work;
-        rayon::scope(|scope| {
-            let (first, rest) = lanes[..used.max(1)].split_at_mut(1);
-            for lane in rest {
-                scope.spawn(move |_| work(lane));
-            }
-            work(&mut first[0]);
-        });
-        let (bodies, pairs) = (&mut self.bodies, &mut self.pairs);
-        world(&mut lanes[0], &mut |w| {
-            push::separate(bodies, pairs, w.ground, PUSH_ROUNDS)
-        });
-    }
-
     /// What a tick's steps read of every body: as it began.
     fn before(&self, intents: &[(u32, Intent)]) -> Before {
         let mut asked: Vec<(u32, Intent)> = intents.to_vec();
@@ -357,10 +316,6 @@ impl Bodies {
         }
     }
 }
-
-/// What builds the world a lane's bodies move through, from what is the lane's own, and hands
-/// it on.
-pub type Lanes<'a, L> = dyn Fn(&mut L, &mut dyn FnMut(&World)) + Sync + 'a;
 
 /// Every body as a tick began, which its steps read and none changes: the intents by ID, the
 /// bodies' capsules and velocities by ID, the farthest a body's surface lies from its

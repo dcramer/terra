@@ -6320,6 +6320,7 @@ dependencies = [
  "bevy",
  "libm",
  "naga",
+ "rayon",
  "serde",
  "serde_json",
  "terra_bases",

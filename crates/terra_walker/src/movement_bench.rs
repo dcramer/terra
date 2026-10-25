@@ -222,24 +222,44 @@ fn the_mover_bench_times_a_body_walking() {
     println!("scorecard\tcost.forest\t{}", f.micros);
     let (_, far) = &planets[1];
     let (start, forward) = on(far);
-    let crowd_on = |threads: usize| {
-        crowd::median(
-            (0..crowd::RUNS)
-                .map(|_| crowd::run(far, start, forward, &kind, threads))
+    // The bench's own pools, each of THREADS threads with the calling one: rayon's (the
+    // server's) and Bevy's (the game's compute pool).
+    let rayon = rayon::ThreadPoolBuilder::new()
+        .num_threads(crowd::THREADS - 1)
+        .build()
+        .expect("a pool");
+    let tasks = bevy::tasks::TaskPoolBuilder::new()
+        .num_threads(crowd::THREADS - 1)
+        .build();
+    let on_rayon = crowd::OnRayon(&rayon);
+    let on_tasks = crate::mover_world::OnTasks(&tasks);
+    let crowd_on = |on: &dyn terra_motion::mover::Executor,
+                    name: &str,
+                    threads: usize,
+                    runs: usize| {
+        let load = crowd::load();
+        let (c, spread) = crowd::median(
+            (0..runs)
+                .map(|_| crowd::run(far, start, forward, &kind, on, threads))
                 .collect(),
-        )
+        );
+        println!(
+            "bench\tcrowd ({} bodies, planet 30 km) {name}\t{:.2} ms a tick on {threads} threads (median of {runs}, spread {:.1}%), lanes busy {:.2} ms (CPU), serial {:.2} ms, lanes start {:.3} ms late ({:.3} the last); {:.0} calls a body a tick; walked {:.1} m on average; load {load} -> {}",
+            c.bodies,
+            c.millis,
+            spread * 100.0,
+            c.busy,
+            c.serial,
+            c.late,
+            c.latest,
+            c.calls,
+            c.walked,
+            crowd::load(),
+        );
+        c
     };
-    let c = crowd_on(crowd::THREADS);
-    let one = crowd_on(1);
-    println!(
-        "bench\tcrowd ({} bodies, planet 30 km)\t{:.2} ms a tick on {} threads ({:.2} on one), {:.1} µs a body on one, {:.0} calls a body a tick; walked {:.1} m on average",
-        c.bodies,
-        c.millis,
-        crowd::THREADS,
-        one.millis,
-        one.millis * 1.0e3 / one.bodies as f32,
-        c.calls,
-        c.walked
-    );
+    let c = crowd_on(&on_rayon, "rayon", crowd::THREADS, crowd::RUNS);
+    crowd_on(&on_tasks, "Bevy's pool", crowd::THREADS, crowd::RUNS);
+    crowd_on(&on_rayon, "one thread", 1, 3);
     println!("scorecard\tcost.crowd\t{}", c.millis);
 }

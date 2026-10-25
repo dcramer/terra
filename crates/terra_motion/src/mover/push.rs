@@ -39,45 +39,95 @@ fn shove(body: &mut Body, by: Vec3, ground: &dyn Query) {
 /// molecular dynamics keeps its neighbour lists).
 const SKIN_M: f64 = 1.0;
 
+/// How far a body may have strayed from where the lists placed it, m, before a tick makes them
+/// again ahead, beside the steps on another thread ([`ahead`]): short of half the skin, so the
+/// lists made then from where the bodies stood as the tick began still hold after it.
+const AHEAD_M: f64 = SKIN_M * 0.25;
+
+/// The farthest apart two bodies' feet can be and their pushboxes overlap, m, and the lists'
+/// reach, with their skin: two that overlap are less than both radii apart level and less than
+/// the taller's height apart along up.
+fn reach(bodies: &[Body]) -> f64 {
+    let tallest = bodies.iter().map(|b| b.kind.height).fold(0.0, f32::max);
+    let widest = bodies.iter().map(|b| b.kind.radius).fold(0.0, f32::max);
+    f64::from((4.0 * widest * widest + tallest * tallest).sqrt()) + 1e-3 + SKIN_M
+}
+
+/// Every body's ID and place as a tick began, and the lists' reach: what the lists are made of
+/// ahead, when they will soon be made again, so the pushes' one thread need not.
+pub struct Ahead {
+    at: Vec<(u32, DVec3)>,
+    reach: f64,
+}
+
+/// What to make the lists of ahead this tick, if they will not hold much longer: the bodies or
+/// their reach changed, or a body has strayed [`AHEAD_M`] from where they placed it. Lists made
+/// of where the bodies stood are answered by the same pairs as any made after the steps (each
+/// holds every pair within reach while it holds, and the rest never overlap); the pushes still
+/// make them again, exactly as before, if a body went on to stray half the skin.
+pub fn ahead(bodies: &[Body], lists: &Lists) -> Option<Ahead> {
+    let reach = reach(bodies);
+    (bodies.len() >= 2 && !lists.hold(bodies, reach, AHEAD_M)).then(|| Ahead {
+        at: bodies.iter().map(|b| (b.id, b.position)).collect(),
+        reach,
+    })
+}
+
+impl Ahead {
+    pub fn make(&self, lists: &mut Lists) {
+        lists.make(self.at.iter().copied(), self.reach);
+    }
+}
+
 /// Separates overlapping bodies, kept in ID order, for so many rounds. Each body's partners
 /// are the later bodies listed near it from the broadphase ([`Grid`]), in ID order: the same
 /// pairs as every later body, those left out too far apart to overlap. The lists are kept
 /// from tick to tick, made again when the bodies or their reach changed or a body has moved
-/// half the skin since.
+/// half the skin since. After the first round a pair is asked again only if it overlapped
+/// when last asked or a body of it has been pushed since: otherwise its answer is the same,
+/// apart, and asking it again would change nothing.
 pub fn separate(bodies: &mut [Body], lists: &mut Lists, ground: &dyn Query, rounds: usize) {
     if bodies.len() < 2 {
         return;
     }
-    let tallest = bodies.iter().map(|b| b.kind.height).fold(0.0, f32::max);
-    let widest = bodies.iter().map(|b| b.kind.radius).fold(0.0, f32::max);
-    // Two bodies that overlap are less than both radii apart level and less than the taller's
-    // height apart along up: their feet are nearer than this.
-    let reach = f64::from((4.0 * widest * widest + tallest * tallest).sqrt()) + 1e-3;
+    let reach = reach(bodies);
     let strayed = |body: &Body, at: DVec3| (body.position - at).length() > SKIN_M * 0.5;
-    let kept = lists.reach == reach + SKIN_M
-        && lists.ids.len() == bodies.len()
-        && bodies
-            .iter()
-            .zip(lists.ids.iter().zip(&lists.at))
-            .all(|(b, (&id, &at))| b.id == id && !strayed(b, at));
-    if !kept {
-        lists.make(bodies, reach + SKIN_M);
+    if !lists.hold(bodies, reach, 0.0) {
+        lists.make(bodies.iter().map(|b| (b.id, b.position)), reach);
     }
+    // A clock of pairs asked: when each pair last answered apart (0 if it overlapped or has
+    // not been asked), and when each body was last pushed.
+    let mut clock = 0u64;
+    lists.apart_at.clear();
+    lists.apart_at.resize(lists.partners.len(), 0);
+    lists.pushed_at.clear();
+    lists.pushed_at.resize(bodies.len(), 0);
     for _ in 0..rounds {
         let mut moved = false;
         for i in 0..bodies.len() {
             let mut k = lists.from[i];
             while k < lists.from[i + 1] {
                 let j = lists.partners[k] as usize;
-                k += 1;
+                clock += 1;
+                let apart = lists.apart_at[k];
+                if apart > lists.pushed_at[i] && apart > lists.pushed_at[j] {
+                    k += 1;
+                    continue;
+                }
                 let (head, tail) = bodies.split_at_mut(j);
                 let (a, b) = (&mut head[i], &mut tail[0]);
                 if !pair(a, b, ground) {
+                    lists.apart_at[k] = clock;
+                    k += 1;
                     continue;
                 }
+                (lists.apart_at[k], lists.pushed_at[i], lists.pushed_at[j]) = (0, clock, clock);
+                k += 1;
                 moved = true;
-                if strayed(a, lists.at[i]) || strayed(b, lists.at[j]) {
-                    lists.make(bodies, reach + SKIN_M);
+                if strayed(&head[i], lists.at[i]) || strayed(&tail[0], lists.at[j]) {
+                    lists.make(bodies.iter().map(|b| (b.id, b.position)), reach);
+                    lists.apart_at.clear();
+                    lists.apart_at.resize(lists.partners.len(), 0);
                     let after = &lists.partners[lists.from[i]..lists.from[i + 1]];
                     k = lists.from[i] + after.partition_point(|&p| p as usize <= j);
                 }
@@ -90,7 +140,8 @@ pub fn separate(bodies: &mut [Body], lists: &mut Lists, ground: &dyn Query, roun
 }
 
 /// Each body's later partners within a reach of its feet, ascending, and where every body
-/// stood when they were listed: the bodies' IDs then, and the reach.
+/// stood when they were listed: the bodies' IDs then, and the reach. With them, a tick's
+/// pushes' clock of when each pair last answered apart and each body was last pushed.
 #[derive(Clone, Default)]
 pub struct Lists {
     from: Vec<usize>,
@@ -98,16 +149,34 @@ pub struct Lists {
     at: Vec<DVec3>,
     ids: Vec<u32>,
     reach: f64,
+    apart_at: Vec<u64>,
+    pushed_at: Vec<u64>,
 }
 
 impl Lists {
-    fn make(&mut self, bodies: &[Body], reach: f64) {
+    /// Whether the lists hold for these bodies with this reach: the same bodies, and none
+    /// strayed further than `short` m short of half the skin from where they were listed.
+    fn hold(&self, bodies: &[Body], reach: f64, short: f64) -> bool {
+        self.reach == reach
+            && self.ids.len() == bodies.len()
+            && bodies
+                .iter()
+                .zip(self.ids.iter().zip(&self.at))
+                .all(|(b, (&id, &at))| {
+                    b.id == id && (b.position - at).length() <= SKIN_M * 0.5 - short
+                })
+    }
+
+    fn make(&mut self, bodies: impl Iterator<Item = (u32, DVec3)>, reach: f64) {
         self.reach = reach;
         self.ids.clear();
-        self.ids.extend(bodies.iter().map(|b| b.id));
         self.at.clear();
-        self.at.extend(bodies.iter().map(|b| b.position));
-        let few = bodies.len() < CROWD_FROM;
+        for (id, at) in bodies {
+            self.ids.push(id);
+            self.at.push(at);
+        }
+        let count = self.ids.len();
+        let few = count < CROWD_FROM;
         // Cells as wide as the reach: a body's partners lie in the cells around its own.
         let grid = Grid::of_cells(self.at.iter().copied().filter(|_| !few), 0.0, reach);
         let (mut near, r) = (Vec::new(), DVec3::splat(reach));
@@ -116,7 +185,7 @@ impl Lists {
         for (i, &at) in self.at.iter().enumerate() {
             self.from.push(self.partners.len());
             if few {
-                self.partners.extend(i as u32 + 1..bodies.len() as u32);
+                self.partners.extend(i as u32 + 1..count as u32);
                 continue;
             }
             grid.near(at - r, at + r, &mut near);

@@ -88,6 +88,13 @@ pub struct Measure {
     pub value: f32,
 }
 
+/// How many of the crowd's reruns, on so many threads each, end otherwise than its run on one
+/// (`determinism.crowd`'s crowd): for a mover whose lanes run on a pool the course cannot name,
+/// as the game's (Bevy's compute pool, terra_walker).
+pub fn crowd_reruns<M: Mover>(new: impl Fn() -> M + Sync, threads: &[usize]) -> usize {
+    runs::crowd_reruns(&new, threads)
+}
+
 /// Every case of the course, run on every core, measured: a number a criterion.
 pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     let mut measures = runs::score(&new);

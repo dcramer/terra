@@ -3,13 +3,41 @@
 //! mover's obstacles, their water as the medium.
 //! `cargo xtask controller` runs its test (`tools/controller/criteria.json`'s `course`).
 
-use super::{Bodies, Obstacles, Sdf, World};
+use super::{Bodies, Executor, InTurn, Obstacles, Sdf, World};
 use crate::course::{self, Field, Kind, Mover};
 use glam::{DVec3, Vec3};
 
-/// The bodies, and how many threads (lanes) their ticks are shared over.
-#[derive(Default)]
-struct Ours(Bodies, Vec<()>);
+/// The bodies, how many lanes their ticks are shared over, and what runs the lanes.
+pub struct Ours(Bodies, Vec<()>, Box<dyn Executor>);
+
+impl Ours {
+    /// The mover with its ticks' lanes run by an executor (a pool's threads).
+    pub fn on(executor: impl Executor + 'static) -> Self {
+        Self(Bodies::default(), Vec::new(), Box::new(executor))
+    }
+}
+
+impl Default for Ours {
+    fn default() -> Self {
+        Self::on(InTurn)
+    }
+}
+
+/// Rayon's pool: the lanes spawned on its threads, the first run on the caller's.
+#[cfg(test)]
+pub(crate) struct Rayon;
+
+#[cfg(test)]
+impl Executor for Rayon {
+    fn each(&self, lanes: usize, lane: &(dyn Fn(usize) + Sync)) {
+        rayon::scope(|scope| {
+            for k in 1..lanes {
+                scope.spawn(move |_| lane(k));
+            }
+            lane(0);
+        });
+    }
+}
 
 fn with_world<R>(field: &dyn Field, then: impl FnOnce(&World) -> R) -> R {
     let ground = Sdf {
@@ -38,7 +66,7 @@ impl Mover for Ours {
     fn tick(&mut self, field: &dyn Field, intents: &[(u32, course::Intent)], dt: f32) {
         if self.1.len() > 1 {
             let world = |_: &mut (), then: &mut dyn FnMut(&World)| with_world(field, |w| then(w));
-            self.0.tick_on(&mut self.1, &world, intents, dt);
+            self.0.tick_on(&*self.2, &mut self.1, &world, intents, dt);
         } else {
             with_world(field, |world| self.0.tick(world, intents, dt));
         }
@@ -72,7 +100,7 @@ impl Mover for Ours {
 /// that the course measured every criterion: the bars and the ratchet are the scorecard's.
 #[test]
 fn the_controller_course_measures_the_mover() {
-    let measures = course::score(Ours::default);
+    let measures = course::score(|| Ours::on(Rayon));
     course::print(&measures);
     assert!(!measures.is_empty());
     for m in &measures {
@@ -85,6 +113,7 @@ fn the_controller_course_measures_the_mover() {
     }
 }
 
+#[cfg(test)]
 /// A body of a kind walked forward from a place over a profile for so long: its feet in the
 /// course's frame after each tick.
 fn walked(kind: &Kind, corners: &[(f32, f32)], seconds: f32) -> Vec<Vec3> {
@@ -111,6 +140,7 @@ fn walked(kind: &Kind, corners: &[(f32, f32)], seconds: f32) -> Vec<Vec3> {
         .collect()
 }
 
+#[cfg(test)]
 /// Level ground to 1 m on, then a slope of a grade, deg.
 fn slope(deg: f32) -> [(f32, f32); 3] {
     let (s, c) = (libm::sinf(deg.to_radians()), libm::cosf(deg.to_radians()));
@@ -170,6 +200,7 @@ fn a_landing_is_reported_at_the_speed_of_the_fall() {
     }
 }
 
+#[cfg(test)]
 /// A man on the flat course's ground at its origin, facing along it.
 fn on_flat() -> (Ours, crate::course::Course, Vec3) {
     use crate::course::field::{Course, forward_at, world};

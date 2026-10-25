@@ -191,6 +191,16 @@ pub(super) fn score<M: Mover>(new: &(impl Fn() -> M + Sync)) -> Vec<Measure> {
     ]
 }
 
+/// How many of the crowd's reruns, ticked on so many threads each, end otherwise than its run
+/// on one: criterion 19's crowd, for a mover whose threads are another pool's.
+pub(super) fn crowd_reruns<M: Mover>(new: &(impl Fn() -> M + Sync), threads: &[usize]) -> usize {
+    let orders: Vec<Order> = std::iter::once(Order::Forward)
+        .chain(threads.iter().map(|&n| Order::Threads(n)))
+        .collect();
+    let ends = terra_gen::par::map(&orders, |order| crowd(new, *order).end);
+    ends[1..].iter().filter(|end| **end != ends[0]).count()
+}
+
 /// The slope limit a sweep shows: halfway from the steepest slope walked up to the next one
 /// tried that stopped the body (2.5 deg past the steepest when none did).
 fn limit(slopes: &[(f32, bool)]) -> f32 {
