@@ -25,7 +25,9 @@ Read [docs/controller.md](../../../docs/controller.md) (the design, its criteria
 
 Ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
 
-1. None below its bar (round 4: 34 pass). Next: the walker driving the mover (handoff `controller-stage2.md`, round 4's Next), then `cost.body` (the mover's bench).
+1. None below its bar (round 5a: 34 pass). Next: the walker driving the mover (round 5b, handoff `controller-stage2.md`, "Next (round 5b)"): its pieces are built, `mover::Bodies::{place, remove}`, `Intent::scale`, `Body::jumped`, and the sources in `terra_walker::mover_world` (props, flora, a base by `terra_build_layout::solids`, others, water).
+2. Up a flight of stairs the mover is slow and hops at each nosing (round 5a's watch): no row measures it yet (`stick.stair` is down); add `stair.up`.
+3. `cost.body` (the mover's bench).
 
 The kind-data rows (`accel.data`, `turn.data`, `air.control`, `slope.speed`, `landing.speed`, `data.kinds`) are `course/data.rs`, run for a man and a test-only second kind; a mover reports facing and landings through `Mover::facing` and `Mover::landed` (`None` by default, so today's walker's adapter is unchanged and fails them).
 
