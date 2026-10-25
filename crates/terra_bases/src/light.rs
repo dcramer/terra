@@ -38,9 +38,12 @@ const UNDER_GROUND_M: f32 = 0.5;
 /// is in it to reflect: weathered wood and stone, about a fifth.
 const ROOM_GIVES_BACK: f32 = 0.2;
 /// How far a room's probe reaches past its tiles, into its walls' inner faces and up
-/// under its ceiling, in metres; and how much of it fades out at its edges.
-const INTO_WALLS_M: f32 = 0.3;
-const FALLOFF: f32 = 0.03;
+/// under its ceiling, in metres; and how far in from its edges it fades, in metres, all of
+/// it inside the walls, so their faces take the room's light whole. Bevy's falloff is a
+/// share of the box: at 0.03 of it, an 11 m room's walls took a tenth of the sky's
+/// reflection, white at grazing angles (the mine's jambs and wall bands, dungeon round 12).
+const INTO_WALLS_M: f32 = 0.45;
+const FALLOFF_M: f32 = 0.1;
 
 /// How far from the camera a room's probe lights what is in it, in metres from its middle, as
 /// authored: past it a room's insides are a few pixels through its door and windows, and
@@ -306,7 +309,7 @@ fn place(
                     filled,
                 },
                 LightProbe {
-                    falloff: Vec3::splat(FALLOFF),
+                    falloff: falloff(max - min),
                 },
                 // Bevy lights a view by its nearest few probes and gathers every one in
                 // view each frame to find them: a town's hundreds were most of that.
@@ -321,6 +324,12 @@ fn place(
             ));
         }
     }
+}
+
+/// A probe's falloff as Bevy takes it, a share of its box on each axis, for `FALLOFF_M` on
+/// every one: its weight is the distance in from a face over the box's size times this.
+fn falloff(size: Vec3) -> Vec3 {
+    (Vec3::splat(FALLOFF_M) / size.max(Vec3::splat(FALLOFF_M))).min(Vec3::splat(0.5))
 }
 
 /// How much of the sky's light each room box lets in (D486), in `rooms`' order: its room's
@@ -601,6 +610,29 @@ mod tests {
             air = toward(air, 0.0, 1.0 / 60.0);
         }
         assert_eq!(air, 0.0);
+    }
+
+    #[test]
+    fn a_rooms_walls_take_its_probe_whole_however_big_the_room() {
+        // Bevy's weight (light_probe.wesl): on each axis, saturate((1 - 2|p|) / 2f) for a
+        // point at p in the box's space, its faces at ±0.5; the least of the three.
+        let weight = |size: f32, in_m: f32| {
+            let f = falloff(Vec3::splat(size)).x;
+            let p = 0.5 - in_m / size;
+            ((1.0 - 2.0 * p) / (2.0 * f)).clamp(0.0, 1.0)
+        };
+        for size in [1.6, 3.1, 11.0, 40.0] {
+            assert_eq!(
+                weight(size, INTO_WALLS_M),
+                1.0,
+                "a wall's face, a {size} m box"
+            );
+            assert_eq!(weight(size, 0.0), 0.0, "the box's edge, {size} m");
+            assert!(
+                weight(size, FALLOFF_M * 0.5) < 1.0,
+                "fading inside the wall, {size} m"
+            );
+        }
     }
 
     #[test]
