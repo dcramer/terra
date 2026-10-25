@@ -6,7 +6,8 @@
 //! flipbook campfire lays a card every log's width or so along each log's top (RealTimeVFX's
 //! campfire breakdowns; research/2026-10-23-campfire-one-body.md).
 
-use super::{Blaze, Blazes, Kindled};
+use super::{Blaze, Blazes, HEARTHS, Kindled};
+use crate::planet::MainCamera;
 use bevy::prelude::*;
 
 /// How a hearth's logs lie, in its model, over its fire's foot: so many leaned in a teepee,
@@ -106,19 +107,46 @@ impl Body {
 }
 
 /// The fires kept where something kindled stands, each with a number of its own from its
-/// place, so no two flicker alike, the logs each burns on and how its body is drawn.
-pub(super) fn keep(kindled: Query<(&Kindled, &GlobalTransform)>, mut blazes: ResMut<Blazes>) {
+/// place, so no two flicker alike, the logs each burns on and how its body is drawn. The
+/// nearest `HEARTHS` to the eye come first and are drawn as hearths; each keeps its slot while it stays among them, so
+/// a slot's fire does not change as the eye moves (a dungeon has more torches than slots).
+pub(super) fn keep(
+    kindled: Query<(Entity, &Kindled, &GlobalTransform)>,
+    camera: Query<&GlobalTransform, With<MainCamera>>,
+    mut slots: Local<Vec<Entity>>,
+    mut blazes: ResMut<Blazes>,
+) {
     if kindled.is_empty() && blazes.kept.is_empty() {
         return;
     }
-    let hearths: Vec<[Vec4; 2]> = kindled
+    let eye = camera
         .iter()
-        .map(|(fire, placed)| fire.logs.packed(placed))
+        .next()
+        .map_or(Vec3::ZERO, |eye| eye.translation());
+    let mut fires: Vec<(Entity, &Kindled, &GlobalTransform)> = kindled.iter().collect();
+    fires.sort_by(|a, b| {
+        let (da, db) = (a.2.translation(), b.2.translation());
+        da.distance_squared(eye)
+            .total_cmp(&db.distance_squared(eye))
+    });
+    let near: Vec<Entity> = fires.iter().take(HEARTHS).map(|fire| fire.0).collect();
+    *slots = slotted(&slots, &near);
+    // The slotted fires in their slots, then the rest, nearest first.
+    let order = |entity: Entity| {
+        slots
+            .iter()
+            .position(|&e| e == entity)
+            .unwrap_or(usize::MAX)
+    };
+    fires.sort_by_key(|fire| order(fire.0));
+    let hearths: Vec<[Vec4; 2]> = fires
+        .iter()
+        .map(|(_, fire, placed)| fire.logs.packed(placed))
         .collect();
-    let bodies: Vec<f32> = kindled.iter().map(|(fire, _)| fire.body.told()).collect();
-    let kept: Vec<Blaze> = kindled
+    let bodies: Vec<f32> = fires.iter().map(|(_, fire, _)| fire.body.told()).collect();
+    let kept: Vec<Blaze> = fires
         .iter()
-        .map(|(fire, at)| {
+        .map(|(_, fire, at)| {
             let at = at.translation();
             Blaze {
                 at,
@@ -134,6 +162,26 @@ pub(super) fn keep(kindled: Query<(&Kindled, &GlobalTransform)>, mut blazes: Res
         blazes.hearths = hearths;
         blazes.bodies = bodies;
     }
+}
+
+/// The slots after `near` became the fires to draw as hearths: each that stays keeps its slot,
+/// one that comes takes a freed slot, and a slot left free is filled from the last, so the
+/// slots stay one after another.
+fn slotted(slots: &[Entity], near: &[Entity]) -> Vec<Entity> {
+    let mut kept: Vec<Option<Entity>> = slots
+        .iter()
+        .map(|&e| near.contains(&e).then_some(e))
+        .collect();
+    for &come in near.iter().filter(|e| !slots.contains(e)) {
+        match kept.iter_mut().find(|slot| slot.is_none()) {
+            Some(slot) => *slot = Some(come),
+            None => kept.push(Some(come)),
+        }
+    }
+    while let Some(hole) = kept.iter().position(Option::is_none) {
+        kept.swap_remove(hole);
+    }
+    kept.into_iter().flatten().collect()
 }
 
 /// The frame a hearth's cards are laid in round its `up` (`fire.wesl`'s `hearth`).
@@ -180,6 +228,16 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_fire_keeps_its_slot_while_it_stays_among_the_nearest() {
+        let e = |i: u32| Entity::from_raw_u32(i).expect("a valid index");
+        let slots = vec![e(1), e(2), e(3)];
+        // 2 goes and 4 comes: 4 takes 2's slot, 1 and 3 keep theirs.
+        assert_eq!(slotted(&slots, &[e(3), e(4), e(1)]), vec![e(1), e(4), e(3)]);
+        // 1 goes and nothing comes: the last fills its slot, the slots stay together.
+        assert_eq!(slotted(&slots, &[e(2), e(3)]), vec![e(3), e(2)]);
     }
 
     #[test]
