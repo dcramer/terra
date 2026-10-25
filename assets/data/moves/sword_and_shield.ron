@@ -121,8 +121,9 @@
             drive: [(0.05, 7.6), (0.75, 7.6), (0.95, 2.1), (1.2, 0.0)],
         ),
         // The shield raised across the face from the guard (Keyed_Block, keyed to it at both
-        // ends, D450), up 0.22 s after the press and held at its hold while the block is held.
-        "block": (clip: "Keyed_Block", from: 0.00, speed: 1.81, done: 1.38, hold: 0.60),
+        // ends, D450), up 0.22 s after the press and held at its hold while the block is held;
+        // Clear_Block is that take with the sword arm held out of the board's way (D454).
+        "block": (clip: "Clear_Block", from: 0.00, speed: 1.81, done: 1.38, hold: 0.60),
         // The partner's slash: the slash slowed for a long, readable wind-up.
         "partner_slash": (
             clip: "Open_Slash", from: 0.0, speed: 0.58, active: (0.48, 0.60), done: 1.96,
