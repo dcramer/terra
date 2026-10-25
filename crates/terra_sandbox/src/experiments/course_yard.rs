@@ -59,12 +59,11 @@ pub const WITH: &[&str] = &[
     "60,0",
 ];
 
-/// The trench: where it starts and ends east, each tread's run, and each nested dig's depth,
-/// the next a tread in from each end and deeper: steps 0.1, 0.2, 0.3, 0.4 and 0.5 m down to
-/// a floor 1.5 m under the ground, and as many up. Nested, not side by side: two digs that
-/// meet face to face leave a wall of no thickness between them in the field the mover reads
-/// (each dig's distance is taken alone, `max(ground, -box, -box)` is 0 on the shared face),
-/// which stopped the walk at the first such face.
+/// The trench: where it starts and ends east, each tread's run, and each tread's depth, the
+/// next a tread in from each end and deeper: steps 0.1, 0.2, 0.3, 0.4 and 0.5 m down to a
+/// floor 1.5 m under the ground, and as many up. Each tread is its own dig, side by side in
+/// the trench's one frame, meeting the next face to face as a builder lays them (the faces
+/// they share are joined in the field, `terra_voxel` planet/seams.rs).
 const TRENCH_M: (f32, f32) = (16.0, 28.8);
 const TREAD_M: f32 = 1.2;
 const DEPTHS: [f32; 5] = [0.1, 0.3, 0.6, 1.0, 1.5];
@@ -116,15 +115,26 @@ fn dig(mut commands: Commands, mut planet: ResMut<Planet>, start: Res<Start>) {
         "Course: ground every metre east from the start: {}",
         along.join(" ")
     );
-    for (k, deep) in DEPTHS.into_iter().enumerate() {
-        let (from, to) = (
-            TRENCH_M.0 + TREAD_M * k as f32,
-            TRENCH_M.1 - TREAD_M * k as f32,
-        );
-        let frame = on_ground(&planet, &start, (from + to) / 2.0, 0.0);
+    let middle = (TRENCH_M.0 + TRENCH_M.1) / 2.0;
+    let frame = on_ground(&planet, &start, middle, 0.0);
+    let last = DEPTHS.len() - 1;
+    let floor = TRENCH_M.1 - TRENCH_M.0 - 2.0 * TREAD_M * last as f32;
+    // Down the treads, across the floor, up the treads: each tread's run east, from the
+    // middle, and depth.
+    let down = DEPTHS[..last]
+        .iter()
+        .enumerate()
+        .map(|(k, &deep)| (TRENCH_M.0 + TREAD_M * k as f32, TREAD_M, deep));
+    let up = DEPTHS[..last]
+        .iter()
+        .enumerate()
+        .map(|(k, &deep)| (TRENCH_M.1 - TREAD_M * (k + 1) as f32, TREAD_M, deep));
+    let bottom = (TRENCH_M.0 + TREAD_M * last as f32, floor, DEPTHS[last]);
+    for (from, run, deep) in down.chain([bottom]).chain(up) {
+        let east = from + run / 2.0 - middle;
         planet.apply(&Operation::DigBox {
-            centre: frame.transform_point(Vec3::Y * (CLEAR_M - deep) / 2.0),
-            half: Vec3::new((to - from) / 2.0, (CLEAR_M + deep) / 2.0, TRENCH_HALF_M),
+            centre: frame.transform_point(Vec3::new(east, (CLEAR_M - deep) / 2.0, 0.0)),
+            half: Vec3::new(run / 2.0, (CLEAR_M + deep) / 2.0, TRENCH_HALF_M),
             rotation: frame.rotation,
         });
     }

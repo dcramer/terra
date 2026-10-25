@@ -6,8 +6,11 @@
 //! in the same order agree everywhere. Applying a dig reports what it took out, by
 //! material (D45).
 
+mod seams;
+
 use crate::field::{Field, Sample, material};
 use glam::{DVec3, Quat, Vec3};
+use seams::Room;
 use terra_core::{Ground, Harvested, MaterialId, Operation, Yield};
 
 /// One change to the ground's shape.
@@ -108,6 +111,9 @@ const EDIT_MARGIN_M: f32 = 2.0;
 pub struct VoxelPlanet<F: Field> {
     field: F,
     edits: Vec<Edit>,
+    /// The boxes dug boxes hold together across the faces they share, each dug after the
+    /// edit it names, in that order (`seams`).
+    bridges: Vec<Room>,
 }
 
 impl<F: Field> VoxelPlanet<F> {
@@ -115,6 +121,7 @@ impl<F: Field> VoxelPlanet<F> {
         Self {
             field,
             edits: Vec::new(),
+            bridges: Vec::new(),
         }
     }
 
@@ -159,7 +166,9 @@ impl<F: Field> VoxelPlanet<F> {
     /// Where the edits made since the first so many were, as spheres, with the margin
     /// past them that their bent surface reaches: what to draw again after them.
     pub fn edits_since(&self, first: usize) -> impl Iterator<Item = (Vec3, f32)> + '_ {
-        self.edits.iter().skip(first).map(|edit| {
+        let bridges = self.bridges.iter().filter(move |room| room.after >= first);
+        let edits = self.edits.iter().skip(first);
+        edits.chain(bridges.map(|room| &room.edit)).map(|edit| {
             let (centre, radius) = edit.centre_and_radius();
             (centre, radius + EDIT_MARGIN_M)
         })
@@ -170,19 +179,35 @@ impl<F: Field> VoxelPlanet<F> {
         self.sample_in(point, &mut F::Memo::default())
     }
 
-    /// The edits that reach a point, in the order they were made.
+    /// The ground at a point with the edits that reach it laid over, in the order made.
     ///
     /// A fill counts everywhere: the ground it adds is nearer some points in the air than
     /// the ground under them, and leaving it out there would say the ground is farther
     /// than it is, so a ray could step clean over it. Beyond its reach a fill only lowers
     /// a distance that was more than the margin, and never below it, so nothing near the
     /// surface changes there and nothing there needs drawing again.
-    fn edits_at(&self, point: Vec3) -> impl Iterator<Item = &Edit> {
-        self.edits.iter().filter(move |edit| {
+    ///
+    /// Each edit is followed by the bridges dug after it (`seams`), and `step` lays each over
+    /// what the ground was.
+    fn shaped<T>(&self, point: Vec3, ground: T, step: impl Fn(&Edit, T) -> T) -> T {
+        let reaches = |edit: &Edit| {
             let (centre, radius) = edit.centre_and_radius();
             let reach = radius + EDIT_MARGIN_M;
             matches!(edit, Edit::Fill { .. }) || point.distance_squared(centre) <= reach * reach
-        })
+        };
+        let mut bridges = self.bridges.iter().peekable();
+        let mut ground = ground;
+        for (i, edit) in self.edits.iter().enumerate() {
+            if reaches(edit) {
+                ground = step(edit, ground);
+            }
+            while let Some(room) = bridges.next_if(|room| room.after == i) {
+                if reaches(&room.edit) {
+                    ground = step(&room.edit, ground);
+                }
+            }
+        }
+        ground
     }
 
     /// Applies an operation to the ground and returns what it took out: for a dig, the
@@ -218,7 +243,31 @@ impl<F: Field> VoxelPlanet<F> {
             _ => self.measure_dig(&edit),
         };
         self.edits.push(edit);
+        if let Some(fresh) = Room::of(&edit, self.edits.len() - 1) {
+            self.join(fresh);
+        }
         taken
+    }
+
+    /// Adds the bridges a box just dug makes with the boxes dug before it.
+    fn join(&mut self, fresh: Room) {
+        let (centre, radius) = fresh.edit.centre_and_radius();
+        let dug: Vec<Room> = (self.edits.iter().enumerate())
+            .take(fresh.after)
+            .filter_map(|(i, edit)| Room::of(edit, i))
+            .filter(|room| {
+                let (at, reach) = room.edit.centre_and_radius();
+                at.distance(centre) <= radius + reach + 0.1
+            })
+            .collect();
+        let edits = &self.edits;
+        let refilled = |from: usize, room: &Room| {
+            edits.iter().skip(from + 1).any(|edit| match *edit {
+                Edit::Fill { centre, radius, .. } => room.touched_by(centre, radius),
+                _ => false,
+            })
+        };
+        seams::join(fresh, &dug, &mut self.bridges, refilled);
     }
 
     /// What a dig would take out: every measuring cell inside it that is solid now, by
@@ -259,30 +308,21 @@ impl<F: Field> Field for VoxelPlanet<F> {
     }
 
     fn distance_in(&self, point: Vec3, memo: &mut F::Memo) -> f32 {
-        let mut distance = self.field.distance_in(point, memo);
-        for edit in self.edits_at(point) {
-            distance = edit.distance(point, distance);
-        }
-        distance
+        let ground = self.field.distance_in(point, memo);
+        self.shaped(point, ground, |edit, before| edit.distance(point, before))
     }
 
     /// The field's own f64 distance; an edit's (a dug hole, a filled mound) is asked at the
     /// point in f32, as today.
     fn distance_near(&self, point: DVec3, memo: &mut F::Memo) -> f32 {
-        let mut distance = self.field.distance_near(point, memo);
+        let ground = self.field.distance_near(point, memo);
         let at = point.as_vec3();
-        for edit in self.edits_at(at) {
-            distance = edit.distance(at, distance);
-        }
-        distance
+        self.shaped(at, ground, |edit, before| edit.distance(at, before))
     }
 
     fn sample_in(&self, point: Vec3, memo: &mut F::Memo) -> Sample {
-        let mut sample = self.field.sample_in(point, memo);
-        for edit in self.edits_at(point) {
-            sample = edit.apply(point, sample);
-        }
-        sample
+        let ground = self.field.sample_in(point, memo);
+        self.shaped(point, ground, |edit, before| edit.apply(point, before))
     }
 }
 
@@ -654,6 +694,62 @@ mod tests {
                 half,
                 rotation
             }]
+        );
+    }
+
+    #[test]
+    fn two_boxes_dug_face_to_face_leave_no_wall_where_they_meet() {
+        let mut planet = planet();
+        let (ground, up) = surface(&planet);
+        let deep = ground - up * 30.0;
+        let rotation = Quat::from_rotation_arc(Vec3::Y, up);
+        let along = rotation * Vec3::X;
+        // Two rooms two metres each way, one after the other: together a room four long.
+        for side in [-1.0, 1.0] {
+            planet.apply(&Operation::DigBox {
+                centre: deep + along * side,
+                half: Vec3::ONE,
+                rotation,
+            });
+        }
+        // Across the face they share, the nearest ground is the walls a metre either side.
+        for x in [-0.3, -0.01, 0.0, 0.01, 0.3] {
+            let d = planet.distance(deep + along * x);
+            assert!(
+                (d - 1.0).abs() < 0.01,
+                "{d} m from the ground {x} m off the seam"
+            );
+        }
+        // Saved as they were given: what joins them is worked out again on replay.
+        assert_eq!(planet.operations().len(), 2);
+    }
+
+    #[test]
+    fn ground_filled_in_before_the_box_beside_it_is_dug_stays() {
+        let mut planet = planet();
+        let (ground, up) = surface(&planet);
+        let deep = ground - up * 30.0;
+        let rotation = Quat::from_rotation_arc(Vec3::Y, up);
+        let along = rotation * Vec3::X;
+        let dig = |planet: &mut VoxelPlanet<GeneratedPlanet>, side: f32| {
+            planet.apply(&Operation::DigBox {
+                centre: deep + along * side,
+                half: Vec3::ONE,
+                rotation,
+            });
+        };
+        dig(&mut planet, -1.0);
+        let lump = deep - along * 0.5;
+        planet.apply(&Operation::Fill {
+            centre: lump,
+            radius: 0.3,
+            material: material::SOIL,
+        });
+        dig(&mut planet, 1.0);
+        assert!(planet.sample(lump).solid(), "the lump was dug out again");
+        assert!(
+            planet.distance(deep + along * 1.0) > 0.99,
+            "the new room is dug"
         );
     }
 }
