@@ -312,7 +312,15 @@ fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, dt: f32) -> 
     } else {
         k.accel
     };
-    approach(level(body.velocity), wish * top, rate * dt)
+    // On the ground the speed carried is the speed along the floor (Godot's constant floor
+    // speed), not its level part: that is cos(grade) of it, and the shortfall made up at
+    // `rate` would cap the speed on a steep floor at rate·dt / (1 − cos(grade)).
+    let current = if grounded {
+        level(body.velocity).normalize_or_zero() * body.velocity.length()
+    } else {
+        level(body.velocity)
+    };
+    approach(current, wish * top, rate * dt)
 }
 
 /// One body's tick: velocity, collide and slide, stick, step, ground state (Jolt's
@@ -439,7 +447,12 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     } else {
         Vec3::ZERO
     };
-    body.landed = (was_airborne && body.ground == Ground::Grounded).then_some(-rise_end.min(0.0));
+    // The speed it met the ground at, not the tick's end: what it fell at the tick's start and
+    // what it gained over the height it dropped in it (exact under constant gravity).
+    let dropped = (start - body.feet).dot(up).max(0.0);
+    let falling = (-vertical).max(0.0);
+    body.landed = (was_airborne && body.ground == Ground::Grounded)
+        .then(|| libm::sqrtf(falling * falling + 2.0 * g * dropped));
     if jump {
         (body.jumped, body.buffer) = (true, 0.0);
     }

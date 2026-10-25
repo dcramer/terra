@@ -4,7 +4,8 @@
 //! departures: contacts and sweeps are asked of our own [`Query`] (the ground is a field, not a
 //! mesh); other bodies' contacts never push a body out (pushing is by mass, after every body has
 //! moved); a sweep's hit is kept as a contact for the rest of the tick, since a field answers
-//! the nearest face alone and may hide one behind it; and a step up is refused when the floor it
+//! the nearest face alone and may hide one behind it, and a collision iteration stopped on such
+//! a face goes on to solve against it; and a step up is refused when the floor it
 //! lands on is higher than the step (Unreal's `StepUp`), so a capsule's round bottom does not
 //! add to the step.
 //!
@@ -301,10 +302,14 @@ pub fn move_shape(
         let (mut displacement, mut simulated) =
             solve(velocity, remaining, &mut planes, active, shape.up);
         let length = displacement.length();
+        let mut unseen = false;
         if length > 1.0e-4
             && let Some(hit) = query.sweep(&capsule, displacement)
         {
             let fraction = (hit.fraction - shape.padding / length).max(0.0);
+            unseen = !contacts
+                .iter()
+                .any(|c| c.normal.dot(hit.contact.normal) > 0.999);
             displacement *= fraction;
             simulated *= fraction;
             kept.push(hit.contact);
@@ -316,7 +321,10 @@ pub fn move_shape(
         }
         feet += displacement;
         remaining -= simulated;
-        if displacement.length_squared() < 1.0e-8 {
+        // Stopped by a face the solve did not know of (a field's contact blends a shallow
+        // crease's two faces into one): the next iteration solves against it too. Jolt stops
+        // here, its contacts already holding every face.
+        if displacement.length_squared() < 1.0e-8 && !unseen {
             break;
         }
     }

@@ -11,7 +11,10 @@
 //! - `field`: the fixtures (steps, slopes, stairs, a tunnel, walls with a gap, a pool, a
 //!   round world) as signed distance fields.
 //! - `runs`: the cases and what each measures.
+//! - `data`: the cases measured against the kind's own numbers (speeds, rates, curves), for two
+//!   kinds, so two kinds' files give two results (criterion 14).
 
+mod data;
 pub mod field;
 mod runs;
 
@@ -54,6 +57,15 @@ pub trait Mover {
     /// One tick of every body named, each with its intent.
     fn tick(&mut self, field: &dyn Field, intents: &[(u32, Intent)], dt: f32);
     fn body(&self, id: u32) -> Body;
+    /// The level way a body faces; `None` from a mover that keeps no facing.
+    fn facing(&self, _id: u32) -> Option<Vec3> {
+        None
+    }
+    /// How fast a body was falling when it landed in the last tick, if it landed in it;
+    /// `None` too from a mover that reports no landings.
+    fn landed(&self, _id: u32) -> Option<f32> {
+        None
+    }
 }
 
 /// A criterion's number, as `tools/controller/criteria.json` names it.
@@ -65,7 +77,9 @@ pub struct Measure {
 
 /// Every case of the course, run on every core, measured: a number a criterion.
 pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
-    runs::score(&new)
+    let mut measures = runs::score(&new);
+    measures.extend(data::score(&new));
+    measures
 }
 
 /// The measures as `cargo xtask controller` reads them: a line each, `scorecard`, the id and

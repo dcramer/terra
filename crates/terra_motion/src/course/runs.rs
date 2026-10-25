@@ -14,7 +14,7 @@ const STEPS: [f32; 8] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
 /// 4 cm or more wider let it through.
 const GAPS: [f32; 6] = [-0.1, -0.04, -0.01, 0.04, 0.07, 0.1];
 /// The heights a body is dropped from, m.
-const DROPS: [f32; 4] = [0.5, 1.0, 2.0, 4.0];
+pub(super) const DROPS: [f32; 4] = [0.5, 1.0, 2.0, 4.0];
 /// The crowd: its size, and how long it runs for the determinism criterion.
 const CROWD: u32 = 24;
 const CROWD_TICKS: usize = 10_000;
@@ -214,7 +214,7 @@ fn depth(field: &dyn Field, kind: &Kind, body: &Body) -> f32 {
 }
 
 /// A run of one or more bodies through a fixture, the trace of each kept.
-struct Run<'a, M> {
+pub(super) struct Run<'a, M> {
     mover: M,
     field: &'a dyn Field,
     kinds: Vec<(u32, Kind)>,
@@ -223,7 +223,7 @@ struct Run<'a, M> {
 }
 
 impl<'a, M: Mover> Run<'a, M> {
-    fn new(mover: M, field: &'a dyn Field) -> Self {
+    pub(super) fn new(mover: M, field: &'a dyn Field) -> Self {
         Run {
             mover,
             field,
@@ -233,20 +233,24 @@ impl<'a, M: Mover> Run<'a, M> {
         }
     }
 
-    fn add(&mut self, id: u32, kind: Kind, feet: Vec3) -> Body {
+    pub(super) fn add(&mut self, id: u32, kind: Kind, feet: Vec3) -> Body {
         let facing = forward_at(feet);
         self.mover.add(id, &kind, feet, facing, self.field);
         self.kinds.push((id, kind));
         self.mover.body(id)
     }
 
-    fn body(&self, id: u32) -> Body {
+    pub(super) fn body(&self, id: u32) -> Body {
         self.mover.body(id)
+    }
+
+    pub(super) fn mover(&self) -> &M {
+        &self.mover
     }
 
     /// A tick of every body, each with the intent its script gives it; keeps each body's
     /// depth into the ground and the worst overlap of any two.
-    fn tick(&mut self, mut intent: impl FnMut(u32, &Body) -> Intent) {
+    pub(super) fn tick(&mut self, mut intent: impl FnMut(u32, &Body) -> Intent) {
         let intents: Vec<(u32, Intent)> = self
             .kinds
             .iter()
@@ -289,7 +293,7 @@ fn up_speed(body: &Body) -> f32 {
 }
 
 /// Ground under a profile of (`u`, `h`) corners.
-fn ground(corners: &[(f32, f32)]) -> Course {
+pub(super) fn ground(corners: &[(f32, f32)]) -> Course {
     Course::of(Solid::Profile(
         corners.iter().map(|&(u, h)| Vec2::new(u, h)).collect(),
     ))

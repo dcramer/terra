@@ -25,6 +25,8 @@ Read [docs/controller.md](../../../docs/controller.md) (the design, its criteria
 
 Ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
 
-1. None below its bar (round 2: 24 pass). Next: make the kind-data rows measurable (`accel.data`, `turn.data` with facing in `course::Body`, `air.control`, `landing.speed`, `slope.speed`, criterion 14's two kinds' files), then `cost.body`.
+1. None below its bar (round 3: 30 pass). Next: `cost.body` (the mover's bench), then the walker driving the mover.
 
-Not measurable yet (`?`, each with what it needs): doors, steps of bases, props and rocks, the slope speed curve, acceleration and turn as data, air control, landing speed, swimming's float, dive and breath, stamina; heavy, the in-game filmed course (stage 1b: step smoothing, feet sliding, the yard) and the mover's bench (cost per body).
+The kind-data rows (`accel.data`, `turn.data`, `air.control`, `slope.speed`, `landing.speed`, `data.kinds`) are `course/data.rs`, run for a man and a test-only second kind; a mover reports facing and landings through `Mover::facing` and `Mover::landed` (`None` by default, so today's walker's adapter is unchanged and fails them).
+
+Not measurable yet (`?`, each with what it needs): doors, steps of bases, props and rocks, swimming's float, dive and breath, stamina (D61 decides the attributes, not their costs); heavy, the in-game filmed course (stage 1b: step smoothing, feet sliding, the yard) and the mover's bench (cost per body).

@@ -43,6 +43,14 @@ impl Mover for Ours {
             grounded: body.ground == super::Ground::Grounded,
         }
     }
+
+    fn facing(&self, id: u32) -> Option<Vec3> {
+        self.0.get(id).map(|body| body.facing)
+    }
+
+    fn landed(&self, id: u32) -> Option<f32> {
+        self.0.get(id).and_then(|body| body.landed)
+    }
 }
 
 /// The course's numbers for the mover, printed for `cargo xtask controller`. It asserts only
@@ -58,6 +66,91 @@ fn the_controller_course_measures_the_mover() {
             "{} = {}",
             m.id,
             m.value
+        );
+    }
+}
+
+/// A body of a kind walked forward from a place over a profile for so long: its feet in the
+/// course's frame after each tick.
+fn walked(kind: &Kind, corners: &[(f32, f32)], seconds: f32) -> Vec<Vec3> {
+    use crate::course::field::{Course, Solid, forward_at, local, world};
+    let course = Course::of(Solid::Profile(
+        corners
+            .iter()
+            .map(|&(u, h)| glam::Vec2::new(u, h))
+            .collect(),
+    ));
+    let mut ours = Ours::default();
+    let feet = world(0.0, 0.0, 0.0);
+    let wish = forward_at(feet);
+    ours.add(0, kind, feet, wish, &course);
+    let intent = course::Intent {
+        wish,
+        ..Default::default()
+    };
+    (0..(seconds / course::TICK) as usize)
+        .map(|_| {
+            ours.tick(&course, &[(0, intent)], course::TICK);
+            local(ours.body(0).feet)
+        })
+        .collect()
+}
+
+/// Level ground to 1 m on, then a slope of a grade, deg.
+fn slope(deg: f32) -> [(f32, f32); 3] {
+    let (s, c) = (libm::sinf(deg.to_radians()), libm::cosf(deg.to_radians()));
+    [(-5.0, 0.0), (1.0, 0.0), (1.0 + 40.0 * c, 40.0 * s)]
+}
+
+#[test]
+fn a_body_keeps_its_speed_along_a_steep_floor() {
+    // Carried as its level part, the speed up 45 deg was capped at about 60% of the curve's.
+    let man = Kind::man();
+    let feet = walked(&man, &slope(45.0), 2.5);
+    let second = (1.0 / course::TICK) as usize;
+    let speed = (feet[feet.len() - 1] - feet[feet.len() - 1 - second]).length();
+    let want = man.jog * man.slope_factor(45.0);
+    assert!(
+        (speed / want - 1.0).abs() < 0.02,
+        "{speed} m/s up 45 deg, not {want}"
+    );
+}
+
+#[test]
+fn a_wide_body_walks_up_a_shallow_slope_from_its_foot() {
+    // At the crease the field's one contact blends the floor and the slope, and the sweep along
+    // it stops on the slope's face at once: the body stood at the foot until the next
+    // collision iteration solved against that face too.
+    let wide = Kind {
+        radius: 0.5,
+        height: 2.4,
+        jog: 3.5,
+        accel: 12.0,
+        ..Kind::man()
+    };
+    let feet = walked(&wide, &slope(15.0), 2.0);
+    let end = feet[feet.len() - 1];
+    assert!(end.x > 3.0, "stopped at {end:?}, the slope's foot at 1 m");
+}
+
+#[test]
+fn a_landing_is_reported_at_the_speed_of_the_fall() {
+    use crate::course::field::{Course, forward_at, world};
+    let man = Kind::man();
+    let flat = Course::flat();
+    for height in [0.5, 1.0, 2.0, 4.0] {
+        let mut ours = Ours::default();
+        let at = world(0.0, height, 0.0);
+        ours.add(0, &man, at, forward_at(at), &flat);
+        let landed = (0..128).find_map(|_| {
+            ours.tick(&flat, &[], course::TICK);
+            ours.landed(0)
+        });
+        let want = libm::sqrtf(2.0 * flat.gravity() * height);
+        let landed = landed.expect("it lands");
+        assert!(
+            (landed - want).abs() < 0.01,
+            "{landed} m/s from {height} m, not {want}"
         );
     }
 }

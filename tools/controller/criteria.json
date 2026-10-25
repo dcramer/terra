@@ -103,10 +103,11 @@
    },
    "unit": "of the kind's curve",
    "source": "docs/controller.md criterion 4; player.md, slopes slow you",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "the kind's slope speed curve as data (uphill and downhill by gradient, stage 2) for the course to read"
+   "measurable": true
   },
   {
    "id": "step.ground",
@@ -347,16 +348,17 @@
   {
    "id": "landing.speed",
    "noticed": 2,
-   "notice": "a landing's speed is not known, so a fall cannot hurt",
+   "notice": "a landing's speed is not reported, or is not the fall's, so a fall cannot hurt",
    "bar": {
     "pass": true
    },
-   "unit": "",
+   "unit": "every drop's within a tick of gravity of sqrt(2gh)",
    "source": "docs/controller.md criterion 12; open question 1",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "the mover to report each landing's speed (open question 1, fall damage)"
+   "measurable": true
   },
   {
    "id": "input.first_tick",
@@ -380,12 +382,13 @@
    "bar": {
     "at_most": 1
    },
-   "unit": "ticks off the kind's data",
+   "unit": "ticks off the kind's data (to top speed, and back to standing)",
    "source": "docs/controller.md criterion 14; D136",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "acceleration and deceleration as each kind's data and a mover reading them (stage 2), so two kinds' files give two results"
+   "measurable": true
   },
   {
    "id": "turn.data",
@@ -396,10 +399,26 @@
    },
    "unit": "ticks off the kind's data",
    "source": "docs/controller.md criterion 14; D136",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "a turn rate as each kind's data and a mover reading it (stage 2)"
+   "measurable": true
+  },
+  {
+   "id": "data.kinds",
+   "noticed": 4,
+   "notice": "two kinds whose files differ move alike",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "results alike of those the two kinds' data set apart",
+   "source": "docs/controller.md criterion 14; D136",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
   },
   {
    "id": "air.control",
@@ -410,10 +429,11 @@
    },
    "unit": "of the kind's fraction",
    "source": "docs/controller.md criterion 11; our data",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "the kind's air-control fraction of ground acceleration as data (docs/controller.md gives no number yet)"
+   "measurable": true
   },
   {
    "id": "push.overlap",
