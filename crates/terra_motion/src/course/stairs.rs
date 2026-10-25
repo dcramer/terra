@@ -2,8 +2,9 @@
 //! body walks up and down flights of the ground's steps and a base's (whole, half and stair
 //! cubes), and its speed along the way over the flight is the kind's jog, as on level ground,
 //! with no tick off the ground climbing; and it walks through a doorway onto a floor standing
-//! a little over the ground, never rising above the higher of the two under it. A step's rise
-//! is the step's alone: what is shown smooths it (`Body::stepped`), as in Unreal and Jolt.
+//! a little over the ground, never rising above the higher of the two under it, and onto a
+//! threshold a step high under a lintel 2 m over it, as a base's doorway of four cubes over its
+//! floor stands (the cabin's, `cargo xtask cabin`). A step's rise is the step's alone: what is shown smooths it (`Body::stepped`), as in Unreal and Jolt.
 
 use super::field::{Course, local, world};
 use super::runs::{Outcome, Run, ground, walk};
@@ -27,6 +28,32 @@ const BUILT: [(f32, f32); 3] = [
 ];
 /// A doorway's sills: how far the floor inside stands over the ground at its door, m.
 const SILLS: [f32; 5] = [0.0, 0.006, 0.01, 0.02, 0.1];
+/// A doorway's thresholds under its lintel: how far the floor inside stands over the ground at
+/// its door, m, and how high the cube before it stands, its last step, if one does (as a
+/// base's doorway steps down to the ground: the cabin's half cube 0.12 m proud of the ground
+/// and a quarter under its floor, where `cargo xtask cabin` stopped the walk on the mover).
+const THRESHOLDS: [(f32, f32); 12] = [
+    (0.1, 0.0),
+    (0.2, 0.0),
+    (0.25, 0.0),
+    (0.3, 0.0),
+    (0.4, 0.0),
+    (0.5, 0.0),
+    (0.3, 0.05),
+    (0.35, 0.1),
+    (0.37, 0.12),
+    (0.4, 0.15),
+    (0.45, 0.2),
+    (0.5, 0.25),
+];
+/// Where a body walking at a threshold starts, a little apart, so the tick that meets its
+/// riser falls at each place along a tick's walk: whether a step is taken there can turn on it.
+const PHASES: usize = 5;
+const PHASE_M: f32 = 0.01;
+/// How high a doorway's opening stands over its floor, m: four cubes.
+const OPENING_M: f32 = 2.0;
+/// How far past a doorway's wall a body walking through must get, m.
+const THROUGH_M: f32 = 1.0;
 /// How far the floor inside a doorway runs, m: past where the walk ends.
 const FLOOR_M: f32 = 20.0;
 /// How long a body walks a flight or through a doorway, s.
@@ -49,6 +76,7 @@ enum Case {
         up: bool,
     },
     Sill(f32),
+    Threshold(f32, f32, f32),
 }
 
 fn cases() -> Vec<Case> {
@@ -67,6 +95,12 @@ fn cases() -> Vec<Case> {
         }
     }
     cases.extend(SILLS.map(Case::Sill));
+    for (height, before) in THRESHOLDS {
+        for i in 0..PHASES {
+            let from = i as f32 * PHASE_M;
+            cases.push(Case::Threshold(height, before, from));
+        }
+    }
     cases
 }
 
@@ -136,6 +170,41 @@ fn sill(sill: f32) -> Course {
     course
 }
 
+/// Level ground, a base's wall of cubes with a doorway a metre wide under a lintel
+/// [`OPENING_M`] over its floor, the floor standing `height` over the ground from the wall's
+/// face on, and before it a cube standing `before` over the ground, or none.
+fn threshold(height: f32, before: f32) -> Course {
+    let mut course = Course::flat();
+    let at = Vec3::new(DOOR_U, 0.0, 0.0);
+    let (near, far) = (DOOR_U, DOOR_U + CELL_M);
+    let (lintel, top) = (height + OPENING_M, height + OPENING_M + CELL_M);
+    let mut obstacles = cubes(at, Vec3::new(near, -CELL_M, 0.5), Vec3::new(far, top, 5.0));
+    obstacles.extend(cubes(
+        at,
+        Vec3::new(near, -CELL_M, -5.0),
+        Vec3::new(far, top, -0.5),
+    ));
+    obstacles.extend(cubes(
+        at,
+        Vec3::new(near, lintel, -0.5),
+        Vec3::new(far, top, 0.5),
+    ));
+    obstacles.extend(cubes(
+        at,
+        Vec3::new(near, -CELL_M, -2.0),
+        Vec3::new(near + FLOOR_M, height, 2.0),
+    ));
+    if before > 0.0 {
+        obstacles.push(block(
+            at,
+            Vec3::new(near - CELL_M, -CELL_M, -2.0),
+            Vec3::new(near, before, 2.0),
+        ));
+    }
+    course.obstacles = obstacles;
+    course
+}
+
 fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
     let kind = Kind::man();
     let ticks = (WALK_S / TICK) as usize;
@@ -195,6 +264,18 @@ fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
             }
             run.outcome(vec![over])
         }
+        Case::Threshold(height, before, from) => {
+            let course = threshold(height, before);
+            let mut run = Run::new(new(), &course);
+            run.add(0, kind, world(from, 0.0, 0.0));
+            for _ in 0..ticks {
+                run.tick(|_, b| walk(b));
+            }
+            // How far short of a metre past the wall it ended.
+            let through = DOOR_U + CELL_M + THROUGH_M;
+            let short = (through - local(run.body(0).feet).x).max(0.0);
+            run.outcome(vec![short])
+        }
     }
 }
 
@@ -229,6 +310,10 @@ pub(super) fn score<M: Mover>(new: &(impl Fn() -> M + Sync)) -> (Vec<Measure>, f
             worst(&|c| matches!(c, Case::Flight { up: false, .. }), 0),
         ),
         m("door.hop", worst(&|c| matches!(c, Case::Sill(_)), 0)),
+        m(
+            "door.lintel",
+            worst(&|c| matches!(c, Case::Threshold(..)), 0),
+        ),
     ];
     (measures, deepest)
 }

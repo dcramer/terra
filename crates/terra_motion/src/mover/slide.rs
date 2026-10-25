@@ -554,58 +554,114 @@ pub fn walk_stairs(
         }
         up *= hit.fraction;
     }
-    let raised = feet + up;
-    // Forward.
-    let mut scratch = Vec::new();
-    let moved = move_shape(
-        raised,
-        step_forward / shape.dt,
-        shape.dt,
-        query,
-        shape,
-        &mut scratch,
-    );
-    let across = level(moved - raised);
-    if across.length_squared() < 1.0e-8 {
-        return None;
+    let stair = Stair {
+        start,
+        feet,
+        direction,
+        step_forward,
+        moving: (&steep, &walkable),
+        step_height,
+    };
+    match stair.climb(up, query, shape) {
+        Ok(stepped) => Some(stepped),
+        // Risen the whole step, the head met what overhangs the way on (a doorway's lintel
+        // over its threshold) and the feet came down on the step's edge: risen only as far as
+        // clears that edge, the body passes under (`CLEAR_M`).
+        Err(Some(edge)) if edge + CLEAR_M < up.length() => {
+            stair.climb(up_dir * (edge + CLEAR_M), query, shape).ok()
+        }
+        Err(_) => None,
     }
-    let progress = steep.iter().chain(&walkable).any(|n| {
-        let d = (up_dir * n.dot(up_dir) - *n).normalize_or_zero();
-        d.dot(step_forward.normalize()) > std::f32::consts::FRAC_1_SQRT_2
-            && d.dot(across) > 0.05 * step_forward.length()
-    });
-    if !progress {
-        return None;
-    }
-    // Down, as far as it went up.
-    let (landed, contact) = floor_under(moved, -up, query, shape)?;
-    let mut normal = contact.normal;
-    if shape.too_steep(normal) {
-        let test = move_shape(
+}
+
+/// How far over a step's edge a body that could not step at its whole rise is raised to try
+/// again, m: past its padding, so it moves on over the edge clear of it. Jolt's `WalkStairs`,
+/// Unreal's `StepUp` and PhysX's controller (its up, side and down passes) rise the whole step
+/// height and fail where something a little over the head overhangs the way on: Jolt cuts the
+/// rise only by what is over the body where it stands, and PhysX's users lower the step offset
+/// to pass under a low beam. A second try no higher than the edge found keeps the whole step
+/// for an open riser and takes a body through a doorway onto its threshold.
+const CLEAR_M: f32 = 0.05;
+
+/// A step up being tried: where the tick began and the feet stand, which way and how far on it
+/// steps, the steep and walkable contacts the move pressed into, and the kind's step.
+struct Stair<'a> {
+    start: Vec3,
+    feet: Vec3,
+    direction: Vec3,
+    step_forward: Vec3,
+    moving: (&'a [Vec3], &'a [Vec3]),
+    step_height: f32,
+}
+
+impl Stair<'_> {
+    /// Up by `up`, forward, and down as far: the feet on walkable ground, or why not: the
+    /// height over the feet of the steep edge it came down on, when that was why.
+    fn climb(&self, up: Vec3, query: &dyn Query, shape: &Shape) -> Result<Stepped, Option<f32>> {
+        let Stair {
+            start,
+            feet,
+            direction,
+            step_forward,
+            moving: (steep, walkable),
+            step_height,
+        } = *self;
+        let up_dir = shape.up;
+        let level = |v: Vec3| v - up_dir * v.dot(up_dir);
+        let raised = feet + up;
+        // Forward.
+        let mut scratch = Vec::new();
+        let moved = move_shape(
             raised,
-            direction * STEP_FORWARD_TEST / shape.dt,
+            step_forward / shape.dt,
             shape.dt,
             query,
             shape,
             &mut scratch,
         );
-        if level(test - raised).length_squared() <= across.length_squared() + 1.0e-8 {
-            return None;
+        let across = level(moved - raised);
+        if across.length_squared() < 1.0e-8 {
+            return Err(None);
         }
-        let (_, further) = floor_under(test, -up, query, shape)?;
-        normal = further.normal;
+        let progress = steep.iter().chain(walkable).any(|n| {
+            let d = (up_dir * n.dot(up_dir) - *n).normalize_or_zero();
+            d.dot(step_forward.normalize()) > std::f32::consts::FRAC_1_SQRT_2
+                && d.dot(across) > 0.05 * step_forward.length()
+        });
+        if !progress {
+            return Err(None);
+        }
+        // Down, as far as it went up.
+        let (landed, contact) = floor_under(moved, -up, query, shape).ok_or(None)?;
+        let mut normal = contact.normal;
         if shape.too_steep(normal) {
-            return None;
+            let edge = Some((contact.at - feet).dot(up_dir));
+            let test = move_shape(
+                raised,
+                direction * STEP_FORWARD_TEST / shape.dt,
+                shape.dt,
+                query,
+                shape,
+                &mut scratch,
+            );
+            if level(test - raised).length_squared() <= across.length_squared() + 1.0e-8 {
+                return Err(edge);
+            }
+            let (_, further) = floor_under(test, -up, query, shape).ok_or(edge)?;
+            normal = further.normal;
+            if shape.too_steep(normal) {
+                return Err(edge);
+            }
         }
+        // Unreal's StepUp: no floor higher than the step, measured from the floor it left.
+        if (contact.at - start).dot(up_dir) > step_height + TOLERANCE {
+            return Err(None);
+        }
+        if (landed - feet).dot(normal) < 1.0e-4 {
+            return Err(None);
+        }
+        Ok(Stepped { feet: landed })
     }
-    // Unreal's StepUp: no floor higher than the step, measured from the floor it left.
-    if (contact.at - start).dot(up_dir) > step_height + TOLERANCE {
-        return None;
-    }
-    if (landed - feet).dot(normal) < 1.0e-4 {
-        return None;
-    }
-    Some(Stepped { feet: landed })
 }
 
 /// Jolt's `StickToFloor`: a body that was on the ground and is not rising is swept down onto

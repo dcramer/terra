@@ -275,6 +275,21 @@
    "measurable": true
   },
   {
+   "id": "door.lintel",
+   "noticed": 5,
+   "notice": "walking into a doorway onto its threshold, the body stops at the wall under the lintel",
+   "bar": {
+    "at_most": 0.0
+   },
+   "unit": "m short of 1 m past the wall, worst of thresholds 0.1-0.5 m (12, each from 5 starts 1 cm apart) under a lintel 2 m over the floor",
+   "source": "docs/controller.md criteria 5 and 6; Jolt WalkStairs, Unreal StepUp (both rise the whole step)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "ceiling.depth",
    "noticed": 3,
    "notice": "a jump in a 2 m tunnel puts the head into the roof",
