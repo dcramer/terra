@@ -317,9 +317,31 @@ fn width(blaze: &Blaze) -> f32 {
     }
 }
 
-/// How bright a blaze burns now, a share of its mean (`signal`): its slot's for the shaders.
+/// How bright a blaze burns now, a share of its mean (`signal`, its `swell` in it): its slot's
+/// for the shaders, which its flames' height and brightness, its embers and its char follow.
 pub(super) fn glow(blaze: &Blaze, t: f32) -> f32 {
-    signal(blaze.seed, t, Flicker::of(width(blaze)))
+    let flicker = Flicker::of(width(blaze));
+    signal(blaze.seed, t, flicker) * swell(blaze.seed, t, flicker)
+}
+
+/// How deep a campfire's swell is, a share of its mean, and how many times a second it turns.
+/// The references' whole fire breathes 30 to 50% in height over a second or two, all its
+/// tongues together (campfire motion round 2's notes, #2); the flicker alone (15% at 1.8 puffs
+/// a second) re-rolled it in place.
+const SWELL: (f32, f32) = (0.2, 0.7);
+
+/// A fire's slow swell and sink at a time, a share of its mean, from its own number: smooth
+/// value noise at `SWELL`'s rate, as deep as a campfire's for a fire that flickers as deep or
+/// deeper, shallower with a wider fire's shallower flicker.
+pub fn swell(seed: f32, t: f32, flicker: Flicker) -> f32 {
+    let depth = SWELL.0 * (flicker.depth / 0.15).min(1.0);
+    let x = t * SWELL.1;
+    let cell = libm::floorf(x);
+    let f = x - cell;
+    let u = f * f * (3.0 - 2.0 * f);
+    let own = (seed.rem_euclid(1.0) * 65_536.0) as u32;
+    let at = |i: f32| terra_gen::hash::unit3(own, i as i32 as u32, 0x7377, 0x656c) * 2.0 - 1.0;
+    1.0 + depth * (at(cell) * (1.0 - u) + at(cell + 1.0) * u)
 }
 
 /// One of the fires' lights, as it should be now.
@@ -521,7 +543,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
     // Two lights, both shadowed: a key low in the pit and one at its flames' top (`HEARTH_TOP`).
     lit.extend(blazes.kept.iter().take(hearths).flat_map(|blaze| {
         let flicker = Flicker::of(width(blaze));
-        let glow = signal(blaze.seed, t, flicker);
+        let glow = glow(blaze, t);
         let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
         let lumens = blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow;
         // It sways up from where it hangs, never down: swayed a hand's breadth below, the

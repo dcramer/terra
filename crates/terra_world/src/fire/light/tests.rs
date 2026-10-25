@@ -646,3 +646,23 @@ fn lit_jets(blazes: &Blazes, tier: crate::fire::BreathTier) -> Vec<Lit> {
     assert!(all.len() >= jets);
     all.into_iter().take(jets).collect()
 }
+
+/// A campfire swells and sinks as a whole over a second or two, by a fifth either way at
+/// most, and slowly: its steepest, two depths over a cell at 1.5 times, about 0.42 a second.
+#[test]
+fn a_campfire_swells_slowly_by_up_to_a_fifth() {
+    let flicker = Flicker::of(0.7);
+    let samples: Vec<f32> = (0..30_000)
+        .map(|i| swell(0.37, i as f32 * 0.001, flicker))
+        .collect();
+    let (low, high) = samples
+        .iter()
+        .fold((f32::MAX, f32::MIN), |(l, h), &w| (l.min(w), h.max(w)));
+    assert!(low >= 0.8 - 1e-4 && high <= 1.2 + 1e-4, "{low} {high}");
+    assert!(high - low > 0.15, "it swells: {low} {high}");
+    let fastest = samples
+        .windows(2)
+        .map(|w| (w[1] - w[0]).abs() / 0.001)
+        .fold(0.0f32, f32::max);
+    assert!(fastest < 0.45, "slow: {fastest} a second");
+}

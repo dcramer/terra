@@ -444,6 +444,12 @@ const TONGUE_WISP_COVER: f32 = 0.6;
 // How far a wisp rises over its life, in its height: torn off the top of the flame, as the
 // references' tips break into separate pieces (campfire form round's notes).
 const TONGUE_TEAR: f32 = 1.2;
+// How far a placed tongue climbs over its life, in its height, and how deep its neck is eaten
+// from its root up late in its life (`shade`): standing on its root it re-rolled in place, the
+// silhouette never changing (all three notes reviewers, campfire motion round 2), where the
+// references' tongues are born low, swell, climb, neck and pinch off a piece that rises on.
+const TONGUE_CLIMB: f32 = 0.35;
+const TONGUE_NECK: f32 = 0.9;
 const LEAD_TALL: f32 = 1.5;
 const LEAD_WIDE: f32 = 0.2;
 const LEAD_RATE: f32 = 0.3;
@@ -2089,7 +2095,7 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
             w = h * TONGUE_WISP.y * (0.8 + 0.4 * fract(pick * 9.1));
         }
         // A wisp rises off its root over its life (`TONGUE_TEAR`), a lick torn off the flame's top.
-        let base = foot + across * x + toward * z + up * (rise + laid.radius * 0.4 + h * select(0.12, TONGUE_TEAR, wisp) * age);
+        let base = foot + across * x + toward * z + up * (rise + laid.radius * 0.4 + h * select(TONGUE_CLIMB, TONGUE_TEAR, wisp) * age);
         // Leaning in toward the middle the farther out it stands, each a little aside on its own.
         let lean = normalize(up - across * s * TONGUE_LEAN - toward * (z / reach) * TONGUE_LEAN + across * TONGUE_ASIDE * (fract(pick * 2.9) - 0.5) + fire.wind.xyz * 0.04);
         let world = card(base, lean, corner, w, h, true, 0.0);
@@ -2651,13 +2657,19 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
         // A leading tongue (`hearth_lead`) eaten less up its height, so it stands tall.
         let lead = life.w > 2.3;
         let wisp = abs(life.w - 2.1) < 0.04;
-        let edge = select(0.06 + 0.65 * pow(y, 1.2) + 0.3 * age, 0.05 + 0.42 * pow(y, 1.5) + 0.22 * age, lead) + select(0.0, 0.12 * y, wisp);
+        // A placed tongue's root eaten late in its life, so it necks and pinches off as it
+        // climbs (`TONGUE_NECK`); a leading tongue stands, a wisp is already torn off.
+        let neck = TONGUE_NECK * (1.0 - smoothstep(0.0, 0.5, y)) * smoothstep(0.5, 1.0, age);
+        let edge = select(0.06 + 0.65 * pow(y, 1.2) + 0.3 * age, 0.05 + 0.42 * pow(y, 1.5) + 0.22 * age, lead) + select(0.0, 0.12 * y, wisp) + select(neck, 0.0, lead || wisp);
         // Its top fifth torn into upright streaks that thin away, as a flame's tips break into
         // wisps rather than end in a rounded lobe.
         let streak = fbm(vec2(xx * 26.0 + luck * 5.0, y * 2.5 - time * 4.0));
         let torn = mix(1.0, smoothstep(0.38, 0.62, streak), smoothstep(0.7, 0.92, y));
-        let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * saturate(tex.g * 3.0) * (0.55 + 0.75 * n)) * torn * select(1.0, TONGUE_WISP_COVER, wisp);
-        let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, 0.08, y) * mix(1.0, 0.85, smoothstep(0.35, 0.9, y));
+        let shape = smoothstep(edge - TONGUE_FEATHER, edge + TONGUE_FEATHER, body * saturate(tex.g * 3.0) * (0.55 + 0.75 * n)) * torn * select(1.0, TONGUE_WISP_COVER, wisp) * smoothstep(0.0, 0.15, body);
+        // Held to nought outside its teardrop: the feather's floor (`TONGUE_FEATHER` over a low
+        // threshold) left a faint cover over the card's whole lower part, a dim box round a
+        // tongue or a wisp torn high (campfire motion round 2); a wisp's foot faded softly.
+        let born = smoothstep(0.0, 0.12, age) * smoothstep(0.0, select(0.08, 0.4, wisp), y) * mix(1.0, 0.85, smoothstep(0.35, 0.9, y));
         // White-hot at its root over the coals, the sim's own heat inside it, and deep red at
         // its torn tip, as the references' licks are.
         // Yellow-white at the root, orange up it, red at the tip: at a fifth of its height
