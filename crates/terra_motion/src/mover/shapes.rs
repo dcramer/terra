@@ -45,44 +45,83 @@ pub enum Obstacle {
 impl Obstacle {
     /// The exact distance from a point to it, negative inside.
     pub fn distance(&self, at: Vec3) -> f32 {
+        Shaped::distance(self, at)
+    }
+}
+
+/// What an obstacle is to the query: its exact distance from a point (negative inside) and a
+/// sphere round all of it, its middle and radius. Owned or borrowed, so the world's obstacles
+/// (flora's solids, kept in their own index) are asked where they lie, never copied a tick.
+pub trait Shaped {
+    fn distance(&self, at: Vec3) -> f32;
+    fn bounds(&self) -> (Vec3, f32);
+}
+
+impl Shaped for Block {
+    fn distance(&self, at: Vec3) -> f32 {
+        Block::distance(self, at)
+    }
+
+    fn bounds(&self) -> (Vec3, f32) {
+        (self.centre, self.half.length())
+    }
+}
+
+impl Shaped for Solid {
+    fn distance(&self, at: Vec3) -> f32 {
+        let (plan, height) = self.plan(at);
+        self.pieces
+            .iter()
+            .map(|piece| {
+                // A prism of its rounded outline, open downward into the ground.
+                let w = Vec2::new(piece.distance(plan).0, height - piece.crest);
+                w.max_element().min(0.0) + w.max(Vec2::ZERO).length()
+            })
+            .fold(f32::INFINITY, f32::min)
+    }
+
+    fn bounds(&self) -> (Vec3, f32) {
+        let crest = self.pieces.iter().map(|p| p.crest).fold(0.0, f32::max);
+        let (_, height) = self.plan(self.at);
+        (self.at, self.reach + crest.max(0.0) + height.abs())
+    }
+}
+
+impl Shaped for Obstacle {
+    fn distance(&self, at: Vec3) -> f32 {
         match self {
             Obstacle::Block(block) => block.distance(at),
-            Obstacle::Solid(solid) => {
-                let (plan, height) = solid.plan(at);
-                solid
-                    .pieces
-                    .iter()
-                    .map(|piece| {
-                        // A prism of its rounded outline, open downward into the ground.
-                        let w = Vec2::new(piece.distance(plan).0, height - piece.crest);
-                        w.max_element().min(0.0) + w.max(Vec2::ZERO).length()
-                    })
-                    .fold(f32::INFINITY, f32::min)
-            }
+            Obstacle::Solid(solid) => Shaped::distance(solid, at),
         }
     }
 
-    /// A sphere round all of it: its middle and radius.
     fn bounds(&self) -> (Vec3, f32) {
         match self {
-            Obstacle::Block(block) => (block.centre, block.half.length()),
-            Obstacle::Solid(solid) => {
-                let crest = solid.pieces.iter().map(|p| p.crest).fold(0.0, f32::max);
-                let (_, height) = solid.plan(solid.at);
-                (solid.at, solid.reach + crest.max(0.0) + height.abs())
-            }
+            Obstacle::Block(block) => Shaped::bounds(block),
+            Obstacle::Solid(solid) => solid.bounds(),
         }
     }
 }
 
-/// Obstacles as the mover's query asks them.
-pub struct Obstacles<'a> {
-    pub obstacles: &'a [Obstacle],
+impl<S: Shaped + ?Sized> Shaped for &S {
+    fn distance(&self, at: Vec3) -> f32 {
+        (**self).distance(at)
+    }
+
+    fn bounds(&self) -> (Vec3, f32) {
+        (**self).bounds()
+    }
 }
 
-impl Obstacles<'_> {
+/// Obstacles as the mover's query asks them: a slice of shapes, owned or borrowed (`&[&Solid]`
+/// out of flora's index, `&[Block]` of a base's or props').
+pub struct Obstacles<'a, S = Obstacle> {
+    pub obstacles: &'a [S],
+}
+
+impl<S: Shaped> Obstacles<'_, S> {
     /// The shapes within a distance of a capsule swept along a motion.
-    fn near(&self, capsule: &Capsule, motion: Vec3, within: f32) -> Vec<&Obstacle> {
+    fn near(&self, capsule: &Capsule, motion: Vec3, within: f32) -> Vec<&S> {
         let middle = (capsule.a + capsule.b + motion) * 0.5;
         let reach = (capsule.b - capsule.a).length() * 0.5 + capsule.radius + within;
         let reach = reach + motion.length() * 0.5;
@@ -97,7 +136,7 @@ impl Obstacles<'_> {
 }
 
 /// The union of some shapes as one exact field.
-fn field<'a>(near: &'a [&'a Obstacle]) -> Sdf<impl Fn(Vec3) -> f32 + 'a> {
+fn field<'a, S: Shaped>(near: &'a [&'a S]) -> Sdf<impl Fn(Vec3) -> f32 + 'a> {
     Sdf {
         distance: move |at: Vec3| {
             near.iter()
@@ -108,7 +147,7 @@ fn field<'a>(near: &'a [&'a Obstacle]) -> Sdf<impl Fn(Vec3) -> f32 + 'a> {
     }
 }
 
-impl Query for Obstacles<'_> {
+impl<S: Shaped> Query for Obstacles<'_, S> {
     fn contacts(&self, capsule: &Capsule, within: f32, out: &mut Vec<Contact>) {
         let near = self.near(capsule, Vec3::ZERO, within);
         if !near.is_empty() {
@@ -157,6 +196,36 @@ mod tests {
             rock.distance(Vec3::new(0.0, 9.0, 0.0)) < 0.0,
             "open into the ground"
         );
+    }
+
+    #[test]
+    fn a_rock_borrowed_from_where_it_is_kept_stops_a_body_as_one_owned() {
+        let rock = Solid::of_pieces(Vec3::ZERO, vec![Piece::round(Vec2::ZERO, 0.5, 1.5)]);
+        let owned = [Obstacle::Solid(rock.clone())];
+        let borrowed = [&rock];
+        let (owned, borrowed) = (
+            Obstacles { obstacles: &owned },
+            Obstacles {
+                obstacles: &borrowed,
+            },
+        );
+        let capsule = Capsule::standing(Vec3::new(-2.0, 0.01, 0.0), Vec3::Y, 0.3, 1.8);
+        let (a, b) = (
+            owned
+                .sweep(&capsule, Vec3::X * 3.0)
+                .expect("it meets the rock"),
+            borrowed
+                .sweep(&capsule, Vec3::X * 3.0)
+                .expect("and borrowed"),
+        );
+        // Its face at x = -0.5, the capsule's 0.3 m short of it: 1.2 m of the 3.
+        assert!((a.fraction - 1.2 / 3.0).abs() < 0.01, "{}", a.fraction);
+        assert_eq!(a.fraction, b.fraction);
+        let near = capsule.moved(Vec3::X * 1.1);
+        let (mut x, mut y) = (Vec::new(), Vec::new());
+        owned.contacts(&near, 0.1, &mut x);
+        borrowed.contacts(&near, 0.1, &mut y);
+        assert!(!x.is_empty() && x == y, "{x:?} {y:?}");
     }
 
     #[test]

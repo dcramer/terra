@@ -16,7 +16,7 @@ const SLIVER_M: f32 = 0.05;
 
 /// How thick a roof's cube is under its top, as a fraction of the cube: the roof's own
 /// thickness (`pieces::ROOF_THICK_M`), so its underside is where it is drawn.
-const ROOF_SHELL: f32 = terra_build::pieces::ROOF_THICK_M / CELL_M;
+pub(crate) const ROOF_SHELL: f32 = terra_build::pieces::ROOF_THICK_M / CELL_M;
 
 /// How far from the middle of a walker's feet, as a fraction of their radius, what is
 /// under them holds them up.
@@ -60,7 +60,7 @@ pub trait Walking {
 }
 
 /// The walking's own steps.
-trait Inner {
+pub(crate) trait Inner {
     fn solid_layers(&self, at: Vec3) -> impl Iterator<Item = (f32, f32)> + '_;
     fn off_leaves(&self, from: Vec3, to: Vec3, walker: &Walker, kits: Option<&Kits>) -> Vec3;
     fn off_posts(&self, at: Vec3, axis: usize, start: f32, feet: f32, walker: &Walker) -> Vec3;

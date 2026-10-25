@@ -26,6 +26,7 @@ pub mod lift;
 #[cfg(any(test, feature = "testing"))]
 pub mod model_files;
 pub mod movement;
+pub mod mover_world;
 pub mod options;
 pub mod pace;
 pub mod shake;

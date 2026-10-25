@@ -19,6 +19,8 @@ terra_build.workspace = true
 terra_build_layout.workspace = true
 terra_climate.workspace = true
 terra_core.workspace = true
+# The character controller (D53): the world's sources in its shapes (`mover_world`).
+terra_motion.workspace = true
 terra_world.workspace = true
 
 [dev-dependencies]
