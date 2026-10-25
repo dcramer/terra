@@ -653,6 +653,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var moss_shade = 1.0;
     // How much of its reflectance an aged surface keeps.
     var reflect_k = 1.0;
+    // How aged a covering is: its dust and bloom take most of the sky's and ground's
+    // reflection off it, and soften how far its courses' relief tilts it.
+    var aged_cover = 0.0;
     if weather.on {
         var c = pbr_input.material.base_color.rgb;
         var r = pbr_input.material.perceptual_roughness;
@@ -670,11 +673,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         if roof {
             // An aged covering goes matte and chalky: the sheen of new slate or shakes gone to
             // a dry bloom, lighter and greyer, mottled, so no course mirrors the sky.
+            // Toward a dry mid grey kept to the pieces' own figure, as dark slate's bloom is
+            // (linear albedo about 0.1), whatever its tint.
             let chalk = noise21(st * 1.7 + 3.0) * 0.6 + noise21(st * 6.0) * 0.4;
-            let bloom = mix(vec3(lum), c, 0.4) * (1.25 + 0.3 * chalk) + vec3(0.008);
-            c = mix(c, bloom, 0.75 * age);
+            let figure = clamp(lum / max(dot(mean, vec3(0.3, 0.59, 0.11)), 0.003), 0.5, 1.6);
+            let bloom = mix(vec3(0.1, 0.1, 0.096), c / max(lum, 0.003) * 0.1, 0.25) * (0.8 + 0.4 * chalk) * mix(1.0, figure, 0.6);
+            c = mix(c, bloom, 0.7 * age);
             r = mix(r, 0.86 + 0.08 * chalk, age);
             reflect_k = 1.0 - 0.35 * age;
+            aged_cover = age;
         }
         let timber = way == 2 || way == 3;
         let grime = weather.b.x * (0.75 + 0.5 * grain);
@@ -826,12 +833,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     specular_occlusion = saturate(pow(NdotV + ssao, exp2(-16.0 * roughness - 1.0)) - 1.0 + ssao);
 }
     pbr_input.diffuse_occlusion = diffuse_occlusion * moss_shade;
-    pbr_input.specular_occlusion = specular_occlusion;
+    pbr_input.specular_occlusion = specular_occlusion * (1.0 - 0.5 * aged_cover);
 
     // The normal map's two stored components, its third made up from them.
     var Nt = vec3(mix(normal, crack_n, broken * 0.85) * 2.0 - 1.0 + detail_n * (1.0 - broken), 0.0);
     // Moss's cushions over the stone: its relief softened under them, their lumps raised.
-    Nt = vec3(Nt.xy * (1.0 - 0.6 * moss_cover) + moss_n, 0.0);
+    Nt = vec3(Nt.xy * (1.0 - 0.6 * moss_cover) * (1.0 - 0.3 * aged_cover) + moss_n, 0.0);
     Nt = vec3(Nt.xy / max(1.0, length(Nt.xy) / 0.98), 0.0);
     Nt.z = sqrt(max(1.0 - dot(Nt.xy, Nt.xy), 0.0));
     pbr_input.N = normalize(Nt.x * T + Nt.y * B + Nt.z * N);
