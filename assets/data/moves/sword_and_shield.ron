@@ -69,9 +69,11 @@
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
         ),
         // From the guard and back to it (Keyed_Backhand): the sword to the left shoulder by
-        // 0.4 s and flat across to the right, 1.3 m ahead at its contact, left to right.
+        // 0.4 s and flat across to the right, 1.3 m ahead at its contact, left to right. The
+        // guard dropped (Open_Backhand, D454): the shield out to the left by 0.25 s, back
+        // over 1.25-1.65 s.
         "backhand": (
-            clip: "Keyed_Backhand", from: 0.00, speed: 1.9, active: (0.58, 0.77), done: 1.75,
+            clip: "Open_Backhand", from: 0.00, speed: 1.9, active: (0.58, 0.77), done: 1.75,
             cancel: 1.2, next: "finisher", stamina: 10, damage: 12, hit_stop: 0.03,
             drive: [(0.0, 0.0), (0.3, 1.8), (0.62, 0.6), (0.8, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
@@ -85,8 +87,10 @@
         ),
         // From the guard and back to it (Keyed_Heavy, D450): the sword lifted high behind the right
         // shoulder by 0.75 s and brought down hard across to the lower left, then back on guard.
+        // The guard dropped (Open_Heavy, D454): the shield out to the left over 0.3-0.6 s, back
+        // over 1.9-2.3 s.
         "heavy": (
-            clip: "Keyed_Heavy", from: 0.00, speed: 1.50, active: (0.82, 1.17), done: 2.38,
+            clip: "Open_Heavy", from: 0.00, speed: 1.50, active: (0.82, 1.17), done: 2.38,
             cancel: 1.95, stamina: 22, damage: 30, hit_stop: 0.05, heavy: true,
             drive: [(0.0, 0.0), (0.5, 0.6), (0.86, 3.2), (1.22, 0.5), (1.83, 0.0)],
             warp: (within: 3.6, cone: 70, stop_at: 1.5, most_mps: 4.0),
@@ -112,7 +116,7 @@
         ),
         // The partner's heavy: the big cut, its wind-up held longer.
         "partner_heavy": (
-            clip: "Keyed_Heavy", from: 0.0, speed: 0.95, active: (0.82, 1.17), done: 2.38,
+            clip: "Open_Heavy", from: 0.0, speed: 0.95, active: (0.82, 1.17), done: 2.38,
             stamina: 22, damage: 25, hit_stop: 0.05, heavy: true,
             drive: [(0.0, 0.0), (0.65, 0.4), (0.86, 2.6), (1.18, 0.4), (1.7, 0.0)],
             warp: (within: 3.4, cone: 80, stop_at: 1.55, most_mps: 3.0),

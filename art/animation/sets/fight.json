@@ -898,5 +898,45 @@
         ]
       }
     ]
+  },
+  "Open_Backhand": {
+    "of": "Keyed_Backhand",
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "turn": {
+          "upperarm_l": 90
+        },
+        "in": [
+          0.0,
+          0.25
+        ],
+        "out": [
+          1.25,
+          1.65
+        ]
+      }
+    ]
+  },
+  "Open_Heavy": {
+    "of": "Keyed_Heavy",
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "turn": {
+          "upperarm_l": 90
+        },
+        "in": [
+          0.3,
+          0.6
+        ],
+        "out": [
+          1.9,
+          2.3
+        ]
+      }
+    ]
   }
 }
