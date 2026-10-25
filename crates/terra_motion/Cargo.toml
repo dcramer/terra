@@ -15,7 +15,7 @@ serde.workspace = true
 # Trees', rocks' and logs' pieces (D267), which the mover's query answers (D53).
 terra_core.workspace = true
 # The bodies' broadphase hashes its cells; the controller course's cases and the duel's
-# scenarios run on every core (D406).
+# scenarios run on every core (D406); a hold's ease is its smoothstep.
 terra_gen.workspace = true
 
 [features]

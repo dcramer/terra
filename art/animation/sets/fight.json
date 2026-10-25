@@ -974,5 +974,61 @@
         ]
       }
     ]
+  },
+  "Chained_Slash": {
+    "of": "Keyed_Slash",
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "aim": {
+          "upperarm_l": [
+            0.55,
+            -0.75,
+            -0.38
+          ],
+          "lowerarm_l": [
+            -0.1,
+            -0.55,
+            0.83
+          ]
+        },
+        "roll": {
+          "lowerarm_l": 47
+        },
+        "out": [
+          1.35,
+          1.75
+        ]
+      }
+    ]
+  },
+  "Chained_Backhand": {
+    "of": "Keyed_Backhand",
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "aim": {
+          "upperarm_l": [
+            0.55,
+            -0.75,
+            -0.38
+          ],
+          "lowerarm_l": [
+            -0.1,
+            -0.55,
+            0.83
+          ]
+        },
+        "roll": {
+          "lowerarm_l": 47
+        },
+        "out": [
+          1.25,
+          1.65
+        ]
+      }
+    ]
   }
 }

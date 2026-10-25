@@ -23,7 +23,9 @@
 //           the board's middle above the left shoulder at its highest, the left elbow below the
 //           shoulder at its least, the painted face off the chest's forward at its most; and
 //           for each chained pair, the shield's round trip as the next blow starts at the
-//           cancel, crossfaded over the game's move blend. Numbers for the scorecard
+//           worst press of the window, playing what the runner picks there (its `chained`
+//           take mixed in by the outgoing's `carry`, D454), crossfaded over the game's move
+//           blend; each chained take is checked as a row of its own. Numbers for the scorecard
 //           (tools/combat), not bars here: a row "blows" and a row "chain" take the worst
 //   spec    a clip with a spec: from and back to the guard; one that holds the guard
 //           ("held") within a blend of it throughout; a block's shield arm up in front and
@@ -91,12 +93,33 @@ const RAISED_UP_M = 0.42; // across the face, above a guard's forearm across the
 const ELBOW_M = 0.2;
 const STILL_M = 0.08;
 
-type Move = { name: string; clip: string; from: number; speed: number; done: number; active?: [number, number]; next?: string; cancel?: number; hold?: number };
+type Move = {
+  name: string;
+  clip: string;
+  from: number;
+  speed: number;
+  done: number;
+  active?: [number, number];
+  next?: string;
+  cancel?: number;
+  hold?: number;
+  /** The same blow with its shield out from its first frame, mixed in when chained. */
+  chained?: string;
+  /** How its clip carries the shield out: eased out over `into`, back over `out` (clip s). */
+  carry?: { into: [number, number]; out: [number, number] };
+  /** A chained take's row: entered from a blow's carry, not from the guard. */
+  entered?: "chain";
+};
 
 /** The clip a set names as its guard (`guard: "..."` outside its moves), if any. */
 function setGuard(file: string): string | undefined {
   const text = readFileSync(file, "utf8").replace(/\/\/.*$/gm, "");
   return text.slice(0, text.search(/\bmoves\s*:/)).match(/\bguard:\s*"([^"]+)"/)?.[1];
+}
+
+function carryOf(body: string): Move["carry"] {
+  const m = body.match(/\bcarry:\s*\(\s*in:\s*\((-?[\d.]+),\s*(-?[\d.]+)\),\s*out:\s*\((-?[\d.]+),\s*(-?[\d.]+)\)\s*\)/);
+  return m ? { into: [Number(m[1]), Number(m[2])], out: [Number(m[3]), Number(m[4])] } : undefined;
 }
 
 function readSet(file: string): Move[] {
@@ -118,6 +141,8 @@ function readSet(file: string): Move[] {
       next: body.match(/\bnext:\s*"([^"]+)"/)?.[1],
       cancel: num("cancel"),
       hold: num("hold"),
+      chained: body.match(/\bchained:\s*"([^"]+)"/)?.[1],
+      carry: carryOf(body),
     });
   }
   return moves;
@@ -506,10 +531,49 @@ const specs: Record<string, Blow> = Object.fromEntries(
 const guardClip = clipOf(opt.guard ?? setGuard(opt.set!) ?? "Fight_Guard");
 const guardMarks = marks(guardClip, 0);
 const byName = new Map(moves.map((m) => [m.name, m]));
+const smooth = (lo: number, hi: number, t: number) => {
+  const x = Math.max(0, Math.min(1, (t - lo) / (hi - lo)));
+  return x * x * (3 - 2 * x);
+};
+/** How far out a move's clip carries its shield at clip time `t` (terra_motion's Carry::at). */
+const carryAt = (move: Move, t: number) => (move.carry ? smooth(...move.carry.into, t) * (1 - smooth(...move.carry.out, t)) : 0);
+/** Two clips played together, `b` taking `w` of the weight: each bone's rotation blended
+ * (normalised, the shorter way), its translation and scale mixed, as Bevy blends a node's. */
+function mixed(a: Clip, b: Clip, w: number): Clip {
+  const tracks: Clip["tracks"] = new Map();
+  for (const bone of new Set([...a.tracks.keys(), ...b.tracks.keys()])) {
+    const [x, y] = [a.tracks.get(bone) ?? {}, b.tracks.get(bone) ?? {}];
+    const track: Clip["tracks"] extends Map<string, infer T> ? T : never = {};
+    for (const k of ["t", "r", "s"] as const) {
+      const [f, g] = [x[k] ?? y[k], y[k] ?? x[k]];
+      if (!f || !g) continue;
+      track[k] = (t: number) => {
+        const [p, q] = [f(t), g(t)];
+        const sign = k === "r" && p.reduce((sum, v, j) => sum + v * q[j], 0) < 0 ? -1 : 1;
+        const m = p.map((v, j) => v + (q[j] * sign - v) * w);
+        const l = k === "r" ? Math.hypot(...m) : 1;
+        return m.map((v) => v / l);
+      };
+    }
+    tracks.set(bone, track);
+  }
+  return { name: `${a.name}+${b.name}`, end: Math.min(a.end, b.end), tracks };
+}
+/** What a chained blow plays, pressed with the blow it cuts short at clip time `t`, as the
+ * game's runner picks it (terra_motion::moves::Runner::takes): its clip, with its `chained`
+ * take mixed in by how far out that blow still carries its shield. */
+function takesAfter(move: Move, t: number, next: Move): { clip: Clip; name: string } {
+  const out = next.chained ? carryAt(move, t) : 0;
+  if (out >= 0.999) return { clip: clipOf(next.chained!), name: next.chained! };
+  if (out > 0.001) return { clip: mixed(clipOf(next.clip), clipOf(next.chained!), out), name: `${next.clip} + ${(out * 100).toFixed(0)}% ${next.chained}` };
+  return { clip: clipOf(next.clip), name: next.clip };
+}
+// Every move, and each chained take as a row of its own: it plays the move from a blow's carry.
+const checked: Move[] = moves.flatMap((m) => (m.chained ? [m, { ...m, name: `${m.name}.chained`, clip: m.chained, chained: undefined, entered: "chain" as const }] : [m]));
 // The worst carry of every blow, for the row "blows".
 const carried = { high: { cm: -Infinity, where: "" }, elbow: { cm: Infinity, where: "" }, face: { cm: -Infinity, where: "" } };
 
-for (const move of moves) {
+for (const move of checked) {
   const clip = clipOf(move.clip);
   const parts: string[] = [];
   const bad: string[] = [];
@@ -592,13 +656,14 @@ for (const move of moves) {
     gaps = [startGap, endGap];
     measured.from_guard_m = startGap;
     measured.to_guard_m = endGap;
-    if (startGap > CHAIN_M) bad.push(`starts ${startGap.toFixed(2)} m from the guard pose`);
+    if (startGap > CHAIN_M && !move.entered) bad.push(`starts ${startGap.toFixed(2)} m from the guard pose`);
     if (endGap > CHAIN_M) bad.push(`ends ${endGap.toFixed(2)} m from the guard pose`);
   }
   if (move.next) {
     const next = byName.get(move.next);
     if (next) {
-      const g = gap(marks(clip, move.done), marks(clipOf(next.clip), next.from));
+      // At its end the shield is back at the guard: the next plays what it would from there.
+      const g = gap(marks(clip, move.done), marks(takesAfter(move, move.done, next).clip, next.from));
       parts.push(`into ${move.next} ${g.toFixed(2)} m`);
       measured.into_next_m = g;
       if (g > CHAIN_M) bad.push(`its last pose is ${g.toFixed(2)} m from ${move.next}'s first`);
@@ -623,23 +688,27 @@ if (shield && carried.high.cm > -Infinity) {
     { clip: "blows", measured: { shield_high_cm: high.cm, shield_elbow_below_m: elbow.cm, shield_face_back_deg: face.cm } },
   );
 }
-// Each chained pair, the next blow started at the cancel (a press buffered into the window
-// starts it as it opens, terra_motion::moves): the shield's middle in the chest's frame, the
-// outgoing clip playing on as the incoming fades in over the move blend.
+// Each chained pair, the next blow started anywhere in the window (from the cancel, where a
+// press buffered into it starts, to the outgoing's end), playing what the game's runner picks
+// there: the shield's middle in the chest's frame, the outgoing clip playing on as the incoming
+// fades in over the move blend, the worst press.
 const trips: { pair: string; m: number; where: string }[] = [];
 if (shield)
   for (const move of moves) {
     const next = move.next ? byName.get(move.next) : undefined;
     if (!next || move.cancel === undefined) continue;
-    const [out, into] = [clipOf(move.clip), clipOf(next.clip)];
-    for (const shape of shapes) {
-      const along = (clip: Clip, from: number, speed: number) => (u: number) => inChest(poseOf(shape, clip, Math.min(clip.end, from + u * speed)));
-      const r = roundTrip(along(out, move.cancel, move.speed), along(into, next.from, next.speed), MOVE_BLEND_S, ROUND_TRIP_S, 1 / 60);
-      const pair = `${move.name} into ${next.name}`;
-      const i = trips.findIndex((x) => x.pair === pair);
-      const trip = { pair, m: r.m, where: `${r.at.toFixed(2)} s after the cancel, ${shape.name}` };
-      if (i < 0) trips.push(trip);
-      else if (r.m > trips[i].m) trips[i] = trip;
+    const out = clipOf(move.clip);
+    const pair = `${move.name} into ${next.name}`;
+    for (let press = move.cancel; press < move.done - 1e-6; press += move.speed / 60) {
+      const into = takesAfter(move, press, next);
+      for (const shape of shapes) {
+        const along = (clip: Clip, from: number, speed: number) => (u: number) => inChest(poseOf(shape, clip, Math.min(clip.end, from + u * speed)));
+        const r = roundTrip(along(out, press, move.speed), along(into.clip, next.from, next.speed), MOVE_BLEND_S, ROUND_TRIP_S, 1 / 60);
+        const i = trips.findIndex((x) => x.pair === pair);
+        const trip = { pair, m: r.m, where: `pressed at ${press.toFixed(2)} s into ${into.name}, ${r.at.toFixed(2)} s after, ${shape.name}` };
+        if (i < 0) trips.push(trip);
+        else if (r.m > trips[i].m) trips[i] = trip;
+      }
     }
   }
 if (trips.length) {

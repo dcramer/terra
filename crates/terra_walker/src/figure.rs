@@ -107,6 +107,16 @@ struct Animated {
     doing: Doing,
     playing: Option<(String, usize)>,
     applied: u32,
+    /// Clips played mixed into another (`Act::mix`), each with the one it rides on.
+    mixed: Vec<Mixed>,
+}
+
+/// A clip played in step with another, taking its share of that one's weight as the
+/// transitions fade it in and out.
+struct Mixed {
+    main: AnimationNodeIndex,
+    mix: AnimationNodeIndex,
+    share: f32,
 }
 
 /// A clip a layer above asks a player's figure to play in place of what its walking shows.
@@ -127,6 +137,9 @@ pub struct Act {
     /// Held still once the clip reaches this time.
     pub hold_at: Option<f32>,
     pub blend: Duration,
+    /// Another clip played in step with it, and its share of the weight: a chained blow's
+    /// held take, by how far out the blow it cut short carried its shield (D454).
+    pub mix: Option<(String, f32)>,
 }
 
 impl Act {
@@ -138,6 +151,7 @@ impl Act {
             once: false,
             hold_at: None,
             blend: BLEND,
+            mix: None,
         }
     }
 
@@ -170,15 +184,21 @@ impl Acting {
 struct Figured;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, load).add_systems(
-        Update,
-        (
-            prepare.run_if(not(resource_exists::<Moves>)),
-            stand.run_if(resource_exists::<Moves>),
-            animate,
+    app.add_systems(Startup, load)
+        .add_systems(
+            Update,
+            (
+                prepare.run_if(not(resource_exists::<Moves>)),
+                stand.run_if(resource_exists::<Moves>),
+                animate,
+            )
+                .chain(),
         )
-            .chain(),
-    );
+        .add_systems(
+            PostUpdate,
+            mix.after(bevy::animation::transition::advance_transitions)
+                .before(bevy::animation::animate_targets),
+        );
 }
 
 fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
@@ -296,6 +316,7 @@ fn dress(
             doing: Doing::Idle,
             playing: Some((Doing::Idle.clip().to_string(), 0)),
             applied: 0,
+            mixed: Vec::new(),
         },
     ));
 }
@@ -343,6 +364,21 @@ fn animate(
                         Some((name, copy)) if name == clip => 1 - copy,
                         _ => 0,
                     };
+                    // The clip giving way fades from its whole weight, its mixed clip's share
+                    // given back to it first.
+                    if let Some(main) = transitions.get_main_animation() {
+                        let given: f32 = animated
+                            .mixed
+                            .iter()
+                            .filter(|m| m.main == main)
+                            .filter_map(|m| animator.animation(m.mix).map(|a| a.weight()))
+                            .sum();
+                        if let Some(main) = animator.animation_mut(main) {
+                            let whole = main.weight() + given;
+                            main.set_weight(whole);
+                        }
+                    }
+                    animated.mixed.retain(|m| m.mix != nodes[copy]);
                     let playing = transitions.play(&mut animator, nodes[copy], blend);
                     if !once {
                         playing.repeat();
@@ -351,6 +387,22 @@ fn animate(
                         playing.seek_to(from_s);
                     }
                     animated.playing = Some((clip.to_string(), copy));
+                    if let Some((mix, share)) = act.and_then(|act| act.mix.as_ref())
+                        && let Some(both) = moves.clips.get(mix)
+                    {
+                        let taken = |node| animated.mixed.iter().any(|m| m.mix == node);
+                        let node = if taken(both[0]) { both[1] } else { both[0] };
+                        animator
+                            .start(node)
+                            .seek_to(from_s)
+                            .set_speed(act.map_or(1.0, |act| act.speed))
+                            .set_weight(0.0);
+                        animated.mixed.push(Mixed {
+                            main: nodes[copy],
+                            mix: node,
+                            share: *share,
+                        });
+                    }
                 }
                 None => warn!("The figure has no clip {clip}."),
             }
@@ -370,7 +422,15 @@ fn animate(
             Some(act) => {
                 let held =
                     act.speed >= 0.0 && act.hold_at.is_some_and(|at| playing.seek_time() >= at);
-                playing.set_speed(if held { 0.0 } else { act.speed });
+                let speed = if held { 0.0 } else { act.speed };
+                playing.set_speed(speed);
+                // A clip mixed into it keeps in step.
+                let main = moves.clips[&name][copy];
+                for m in animated.mixed.iter().filter(|m| m.main == main) {
+                    if let Some(mixed) = animator.animation_mut(m.mix) {
+                        mixed.set_speed(speed);
+                    }
+                }
             }
             // The jog and sprint at the speed the player moves, so their feet do not slide.
             None if matches!(doing, Doing::Jog | Doing::Sprint) => {
@@ -381,6 +441,29 @@ fn animate(
             }
             None => {}
         }
+    }
+}
+
+/// Each mixed clip takes its share of the weight the transitions gave the clip it rides on,
+/// and stops with it.
+fn mix(mut figures: Query<(&mut AnimationPlayer, &mut Animated)>) {
+    for (mut animator, mut animated) in &mut figures {
+        animated.mixed.retain(|m| {
+            let Some(whole) = animator.animation(m.main).map(|a| a.weight()) else {
+                animator.stop(m.mix);
+                return false;
+            };
+            if let Some(main) = animator.animation_mut(m.main) {
+                main.set_weight(whole * (1.0 - m.share));
+            }
+            match animator.animation_mut(m.mix) {
+                Some(mixed) => {
+                    mixed.set_weight(whole * m.share);
+                    true
+                }
+                None => false,
+            }
+        });
     }
 }
 
@@ -407,5 +490,62 @@ fn doing(motion: &Motion, stance: &Stance, downed: bool) -> Doing {
         Doing::Use
     } else {
         Doing::Idle
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_mixed_clip_takes_its_share_of_its_mains_weight_and_stops_with_it() {
+        let mut graph = AnimationGraph::new();
+        let main = graph.add_clip(Handle::default(), 1.0, graph.root);
+        let held = graph.add_clip(Handle::default(), 1.0, graph.root);
+        let mut app = App::new();
+        app.add_systems(Update, mix);
+        let mut player = AnimationPlayer::default();
+        // The transitions have given the main 0.8 (a clip giving way has the rest).
+        player.start(main).set_weight(0.8);
+        player.start(held);
+        let figure = app
+            .world_mut()
+            .spawn((
+                player,
+                Animated {
+                    player: Entity::PLACEHOLDER,
+                    hand: None,
+                    doing: Doing::Acting,
+                    playing: None,
+                    applied: 0,
+                    mixed: vec![Mixed {
+                        main,
+                        mix: held,
+                        share: 0.25,
+                    }],
+                },
+            ))
+            .id();
+        app.update();
+        let weight = |app: &App, node| {
+            let player = app.world().get::<AnimationPlayer>(figure).unwrap();
+            player.animation(node).map(|a| a.weight())
+        };
+        assert!((weight(&app, main).unwrap() - 0.6).abs() < 1e-6);
+        assert!((weight(&app, held).unwrap() - 0.2).abs() < 1e-6);
+        // The main stopped (its fade done): the mixed clip stops and is forgotten.
+        app.world_mut()
+            .get_mut::<AnimationPlayer>(figure)
+            .unwrap()
+            .stop(main);
+        app.update();
+        assert_eq!(weight(&app, held), None);
+        assert!(
+            app.world()
+                .get::<Animated>(figure)
+                .unwrap()
+                .mixed
+                .is_empty()
+        );
     }
 }

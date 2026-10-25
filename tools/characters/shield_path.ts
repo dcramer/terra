@@ -5,7 +5,9 @@
 //
 //   roundTrip   the shield's way in and out again as the next blow of a chain starts: the
 //               outgoing clip's shield against the incoming's, crossfaded over the game's move
-//               blend, the farthest the shown shield gets from where it was at the cancel
+//               blend, the farthest the shown shield strays from the straight way between where
+//               it was at the press and where it is at the span's end (a shield that stays
+//               put, or goes straight out for the blow, makes none)
 //   faceOff     how far the board's painted face is turned from the chest's forward, flattened
 
 import { type V3, dot, len, sub } from "./glb.ts";
@@ -16,20 +18,29 @@ export const MOVE_BLEND_S = 0.11;
 export const ROUND_TRIP_S = 0.3;
 
 /**
- * The farthest the shown shield gets, over `span` seconds from a move change, from where it was
- * at the change: `out(u)` and `into(u)` the shield's middle `u` seconds after it in the outgoing
- * and incoming clips (each in the frame it is measured in), the incoming's weight rising from 0
- * to 1 over `blend` seconds as Bevy's animation transitions fade (linearly), the shown shield
- * their weighted mean. Metres, with the second it is farthest.
+ * How far the shown shield goes in and comes back out, over `span` seconds from a move change:
+ * `out(u)` and `into(u)` the shield's middle `u` seconds after it in the outgoing and incoming
+ * clips (each in the frame it is measured in), the incoming's weight rising from 0 to 1 over
+ * `blend` seconds as Bevy's animation transitions fade (linearly), the shown shield their
+ * weighted mean. The farthest the shown shield gets from the straight way between where it was
+ * at the change and where it is at the span's end: a shield held still, or moved straight out
+ * for the blow, makes none; one that dips in and comes back out makes the dip. Metres, with the
+ * second it is farthest.
  */
 export function roundTrip(out: (u: number) => V3, into: (u: number) => V3, blend = MOVE_BLEND_S, span = ROUND_TRIP_S, step = 1 / 120): { m: number; at: number } {
-  const start = out(0);
-  let worst = { m: 0, at: 0 };
-  for (let u = 0; u <= span + 1e-9; u += step) {
+  const shown = (u: number): V3 => {
     const w = blend > 0 ? Math.min(1, u / blend) : 1;
     const [a, b] = [out(u), into(u)];
-    const shown = a.map((x, j) => x * (1 - w) + b[j] * w) as V3;
-    const m = len(sub(shown, start));
+    return a.map((x, j) => x * (1 - w) + b[j] * w) as V3;
+  };
+  const [start, end] = [shown(0), shown(span)];
+  const way = sub(end, start);
+  const long = dot(way, way);
+  let worst = { m: 0, at: 0 };
+  for (let u = 0; u <= span + 1e-9; u += step) {
+    const p = sub(shown(u), start);
+    const k = long > 0 ? Math.max(0, Math.min(1, dot(p, way) / long)) : 0;
+    const m = len(sub(p, way.map((x) => x * k) as V3));
     if (m > worst.m) worst = { m, at: u };
   }
   return worst;

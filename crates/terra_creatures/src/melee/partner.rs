@@ -290,9 +290,13 @@ fn wind_up(
     fighter.guard_s = None;
     fighter.way = toward;
     fighter.was = None;
-    partner.showing = Some(each.clip.clone());
+    let clip = fighter
+        .runner
+        .takes(set)
+        .map_or(each.clip.as_str(), |takes| takes.clip);
+    partner.showing = Some(clip.to_string());
     let speed = each.speed * fighter.runner.pace(set);
-    staged.tell_play(&each.clip, speed, true, 150, each.from);
+    staged.tell_play(clip, speed, true, 150, each.from);
     info!(
         "Melee: frame {frame}: the partner winds up {name}{}, {far:.2} m off \
          (closest since its last {:.2} m), {:.0} stamina left",

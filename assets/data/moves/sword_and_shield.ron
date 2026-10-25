@@ -17,6 +17,12 @@
 //   done      when it is over and the body is back on guard
 //   cancel    from when the next blow of a chain, a roll or a block may cut it short
 //   next      the blow a light attack pressed again chains into
+//   carry     how its clip carries the shield out: eased out over `in` and back over `out`,
+//             clip seconds, as its hold in art/animation/sets/fight.json does
+//   chained   the same blow with the shield out from its first frame, mixed into `clip` when
+//             it cuts short a blow still carrying its shield (that one's `carry`), by how far
+//             out that one has it: all of it pressed while the shield is out, none once it is
+//             back at the guard, so the shield goes on from where it is (D454)
 //   damage    out of a sparring health of 100
 //   hit_stop  how long both fighters are held on a blow that lands, seconds: at most 0.05,
 //             as Enshrouded holds none (D456); the set's `landed` shows the hit instead. A
@@ -71,7 +77,8 @@
         // sword's way, and back to the guard over 1.35-1.75 s.
         "slash": (
             clip: "Open_Slash", from: 0.00, speed: 1.72, active: (0.48, 0.60), done: 1.96,
-            cancel: 1.02, next: "backhand", stamina: 10, damage: 12, hit_stop: 0.03,
+            cancel: 1.02, next: "backhand", carry: (in: (0.1, 0.3), out: (1.35, 1.75)),
+            stamina: 10, damage: 12, hit_stop: 0.03,
             drive: [(0.0, 0.0), (0.25, 1.8), (0.55, 0.6), (0.75, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
         ),
@@ -80,15 +87,17 @@
         // guard dropped (Open_Backhand, D454): the shield out to the left by 0.25 s, back
         // over 1.25-1.65 s.
         "backhand": (
-            clip: "Open_Backhand", from: 0.00, speed: 1.9, active: (0.58, 0.77), done: 1.75,
-            cancel: 1.2, next: "finisher", stamina: 10, damage: 12, hit_stop: 0.03,
+            clip: "Open_Backhand", chained: "Chained_Backhand", from: 0.00, speed: 1.9,
+            active: (0.58, 0.77), done: 1.75, cancel: 1.2, next: "finisher",
+            carry: (in: (0.0, 0.25), out: (1.25, 1.65)), stamina: 10, damage: 12, hit_stop: 0.03,
             drive: [(0.0, 0.0), (0.3, 1.8), (0.62, 0.6), (0.8, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
         ),
         // The third of the chain: the slash again, a little slower and harder.
         "finisher": (
-            clip: "Open_Slash", from: 0.0, speed: 1.5, active: (0.48, 0.60), done: 1.96,
-            cancel: 1.4, stamina: 12, damage: 18, hit_stop: 0.04,
+            clip: "Open_Slash", chained: "Chained_Slash", from: 0.0, speed: 1.5,
+            active: (0.48, 0.60), done: 1.96, cancel: 1.4, stamina: 12, damage: 18,
+            hit_stop: 0.04,
             drive: [(0.0, 0.0), (0.25, 2.4), (0.55, 0.8), (0.8, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.5),
         ),

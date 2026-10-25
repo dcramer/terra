@@ -394,7 +394,8 @@ fn asked(intent: &Intent, fighter: &Fighter, set: &MoveSet) -> Option<String> {
 }
 
 /// A move started: which way it goes (the way asked, and ahead), its stamina paid, and its
-/// clip, slower when it came tired.
+/// clip (its chained take mixed in when it cut short a blow still carrying its shield out),
+/// slower when it came tired.
 fn begin(
     fighter: &mut Fighter,
     name: &str,
@@ -418,16 +419,16 @@ fn begin(
     fighter.was = None;
     let tired = if fighter.runner.tired { " tired" } else { "" };
     info!("Melee: you {name}{tired}");
-    drawn.showing = None;
-    show(
-        drawn,
-        acting,
-        &each.clip,
-        each.speed * fighter.runner.pace(set),
-        true,
-        each.from,
-        Some(110),
-    );
+    let takes = fighter.runner.takes(set);
+    let clip = takes.map_or(each.clip.as_str(), |takes| takes.clip);
+    let speed = each.speed * fighter.runner.pace(set);
+    drawn.showing = Some((clip.to_string(), speed));
+    let mut act = Act::once(clip, each.from, speed);
+    act.blend = Duration::from_millis(110);
+    act.mix = takes
+        .and_then(|takes| takes.mix)
+        .map(|(mix, share)| (mix.to_string(), share));
+    acting.play(act);
 }
 
 /// Asks the figure for a clip unless it shows it already.

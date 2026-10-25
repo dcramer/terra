@@ -25,6 +25,14 @@ pub struct Move {
     pub cancel: Option<f32>,
     #[serde(default)]
     pub next: Option<String>,
+    /// The same blow with its shield held out from its first frame, mixed into `clip` when
+    /// this blow cuts short one still carrying its shield out (its `carry`), by how far out
+    /// that one has it, so the shield goes on from where it is (D454).
+    #[serde(default)]
+    pub chained: Option<String>,
+    /// How this move's clip carries its shield out: eased out over `in` and back over `out`.
+    #[serde(default)]
+    pub carry: Option<Carry>,
     #[serde(default)]
     pub damage: f32,
     #[serde(default)]
@@ -45,6 +53,32 @@ pub struct Move {
 
 fn one() -> f32 {
     1.0
+}
+
+/// How a clip carries its shield out (its hold in art/animation/sets/fight.json, D454): eased
+/// out over `in` and back over `out`, clip seconds, each by a smoothstep.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Carry {
+    #[serde(rename = "in")]
+    pub into: (f32, f32),
+    pub out: (f32, f32),
+}
+
+impl Carry {
+    /// How far out the shield is at a time in the clip: 0 at the guard, 1 carried.
+    pub fn at(&self, clip: f32) -> f32 {
+        let (a, b) = self.into;
+        let (c, d) = self.out;
+        terra_gen::smoothstep(a, b, clip) * (1.0 - terra_gen::smoothstep(c, d, clip))
+    }
+}
+
+/// The clip a move plays, and the clip mixed into it with its share of the weight.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Takes<'a> {
+    pub clip: &'a str,
+    pub mix: Option<(&'a str, f32)>,
 }
 
 /// How a blow closes on a target during its wind-up.
@@ -236,6 +270,8 @@ pub enum Ran {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Runner {
     pub current: Option<(String, f32)>,
+    /// The move the current one cut short, and how far into it, as it started.
+    pub was: Option<(String, f32)>,
     buffered: Option<(String, f32, bool)>,
     /// Whether the current move's blow has landed, so it lands once.
     pub landed: bool,
@@ -254,6 +290,34 @@ impl Runner {
 
     pub fn now<'a>(&self, set: &'a MoveSet) -> Option<&'a Move> {
         set.get(self.name()?)
+    }
+
+    /// What the current move plays: its own clip, keyed from the guard, with its `chained`
+    /// take mixed in by how far out the move it cut short still carried its shield, so the
+    /// shield goes on from where it was rather than back to the guard and out again (D454): a
+    /// layer's weight carried across the change, as a layered blend per bone keeps its own.
+    /// All the chained take when that one had its shield all the way out.
+    pub fn takes<'a>(&self, set: &'a MoveSet) -> Option<Takes<'a>> {
+        let now = self.now(set)?;
+        let out = self.was.as_ref().map_or(0.0, |(name, t)| {
+            set.get(name)
+                .and_then(|was| Some(was.carry?.at(was.clip_at(*t))))
+                .unwrap_or(0.0)
+        });
+        Some(match &now.chained {
+            Some(chained) if out >= 0.999 => Takes {
+                clip: chained,
+                mix: None,
+            },
+            Some(chained) if out > 0.001 => Takes {
+                clip: &now.clip,
+                mix: Some((chained, out)),
+            },
+            _ => Takes {
+                clip: &now.clip,
+                mix: None,
+            },
+        })
     }
 
     /// Asks for a move: it starts now if the body is free or its move may be cut short,
@@ -286,7 +350,7 @@ impl Runner {
 
     /// Starts a move at once, rested or too tired.
     pub fn start_as(&mut self, name: &str, tired: bool) {
-        self.current = Some((name.to_string(), 0.0));
+        self.was = self.current.replace((name.to_string(), 0.0));
         self.buffered = None;
         self.landed = false;
         self.tired = tired;
@@ -305,6 +369,7 @@ impl Runner {
     /// Ends whatever move there is, and any press waiting.
     pub fn clear(&mut self) {
         self.current = None;
+        self.was = None;
         self.buffered = None;
     }
 
@@ -439,6 +504,8 @@ mod tests {
             done: 1.4,
             cancel: Some(1.0),
             next: None,
+            chained: None,
+            carry: None,
             damage: 0.0,
             hit_stop: 0.0,
             heavy: false,
@@ -494,6 +561,53 @@ mod tests {
         assert_eq!(judge(false, Some(0.05), false, false, parry), Taken::Hit);
         assert_eq!(judge(false, None, true, false, parry), Taken::Hit);
         assert_eq!(judge(true, None, false, true, parry), Taken::Dodged);
+    }
+
+    #[test]
+    fn a_blow_chained_while_the_last_still_carries_its_shield_mixes_in_its_chained_take() {
+        // A two-blow chain read from a set: the first carries its shield out over clip 0-0.5
+        // and back over 1.2-1.6 (its window opens at 1.0, it is done at 2.0); the second has
+        // a chained take.
+        let set = MoveSet::read(
+            r#"#![enable(implicit_some)]
+            (parry_s: 0.2, buffer_s: 0.3, guard_stamina: 1.0, tired: (pace: 0.7, might: 0.5),
+                kit: (blade: Steel, face: Wood, boss: Iron), guard: "Guard",
+                landed: (burst: (glow_s: 0.0, glow_m: 0.0, sparks: 0, spark_mps: 0.0, spark_s: 0.0),
+                         kick_deg: 0.0, kick_s: 0.0),
+                moves: {
+                    "first": (clip: "First", done: 2.0, cancel: 1.0, next: "second",
+                              carry: (in: (0.0, 0.5), out: (1.2, 1.6))),
+                    "second": (clip: "Second", done: 2.0, chained: "Second_Held"),
+                })"#,
+        )
+        .unwrap();
+        let played = |press: Option<f32>| {
+            let mut runner = Runner::default();
+            if let Some(press) = press {
+                runner.start("first");
+                runner.tick(&set, press);
+            }
+            runner.ask(&set, "second");
+            let takes = runner.takes(&set).unwrap();
+            (
+                takes.clip.to_string(),
+                takes.mix.map(|(c, w)| (c.to_string(), w)),
+            )
+        };
+        // At the window's opening, the shield all the way out: the held take alone.
+        assert_eq!(played(Some(1.0)), ("Second_Held".into(), None));
+        // Halfway back (the middle of the out ease): half and half.
+        let (clip, mix) = played(Some(1.4));
+        let (held, share) = mix.unwrap();
+        assert_eq!((clip.as_str(), held.as_str()), ("Second", "Second_Held"));
+        assert!((share - 0.5).abs() < 1e-4, "{share}");
+        // A quarter of the way back, a smoothstep's 0.15625 in: 0.84375 out.
+        let (_, mix) = played(Some(1.3));
+        assert!((mix.unwrap().1 - 0.84375).abs() < 1e-4);
+        // Back at the guard, from the guard, or after the first is over: its own.
+        assert_eq!(played(Some(1.7)), ("Second".into(), None));
+        assert_eq!(played(None), ("Second".into(), None));
+        assert_eq!(played(Some(2.1)), ("Second".into(), None));
     }
 
     #[test]
