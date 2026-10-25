@@ -468,8 +468,11 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
         (vertical, vertical - g * dt)
     };
     // The tick moves by the mean of its start and end speeds: exact under constant gravity.
+    // Gravity's half tick presses a standing body into its floor: no wish to go along it, so
+    // not what a step is judged by (Jolt's desired step is the level velocity, gravity on up).
+    let press = body.normal * (g * dt * 0.5) * f32::from(u8::from(standing && !jump));
     let mut wanted = if standing && !jump {
-        along_floor(level, body.normal, up) - body.normal * (g * dt * 0.5)
+        along_floor(level, body.normal, up) - press
     } else {
         level + up * (rise + rise_end) * 0.5
     };
@@ -501,7 +504,7 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
         let stepped = slide::walk_stairs(
             start,
             feet,
-            wanted,
+            wanted + press,
             &body.active,
             query,
             &shape,

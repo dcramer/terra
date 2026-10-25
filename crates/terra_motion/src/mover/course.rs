@@ -305,3 +305,51 @@ fn a_jump_is_reported_on_the_tick_it_leaves_not_the_press() {
         "jumped at {jumped:?}, pressed at {press}"
     );
 }
+
+#[test]
+fn a_body_walking_up_a_slope_asks_the_ground_as_often_as_on_the_level() {
+    // Gravity's press into a slope has a level part: taken for a wish to move, it made the
+    // walk look blocked every tick, and a step up, forward and down was tried for nothing.
+    use crate::course::field::{Course, Solid, forward_at, local, world};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    struct Counted(Course, AtomicUsize);
+    impl Field for Counted {
+        fn distance(&self, at: Vec3) -> f32 {
+            self.1.fetch_add(1, Ordering::Relaxed);
+            self.0.distance(at)
+        }
+        fn distance_at(&self, at: DVec3) -> f32 {
+            self.1.fetch_add(1, Ordering::Relaxed);
+            self.0.distance_at(at)
+        }
+    }
+    let man = Kind::man();
+    let calls_a_tick = |corners: [(f32, f32); 3]| {
+        let profile = corners.iter().map(|&(u, h)| glam::Vec2::new(u, h));
+        let field = Counted(Course::of(Solid::Profile(profile.collect())), 0.into());
+        let mut ours = Ours::default();
+        let feet = world(0.0, 0.0, 0.0);
+        ours.add(0, &man, feet, forward_at(feet), &field);
+        let (mut ticks, mut calls) = (0, 0);
+        for _ in 0..(2.5 / course::TICK) as usize {
+            let intent = course::Intent {
+                wish: forward_at(ours.body(0).feet),
+                ..Default::default()
+            };
+            let before = field.1.load(Ordering::Relaxed);
+            ours.tick(&field, &[(0, intent)], course::TICK);
+            // On the slope's face, past its foot's crease.
+            if local(ours.body(0).feet).x > 2.0 {
+                ticks += 1;
+                calls += field.1.load(Ordering::Relaxed) - before;
+            }
+        }
+        calls as f32 / ticks as f32
+    };
+    let level = calls_a_tick([(-5.0, 0.0), (1.0, 0.0), (40.0, 0.0)]);
+    let up = calls_a_tick(slope(20.0));
+    assert!(
+        up < level * 1.5,
+        "{up} calls a tick up 20 deg, {level} on the level"
+    );
+}
