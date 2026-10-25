@@ -460,6 +460,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D434](decisions/D434.md) | A far wall keeps a third of its own light before it gets more detail | Tech | Agent | Decided | Work on far and middle-distance mountains… |
 | [D435](decisions/D435.md) | Vertex buffers packed in ordinary memory before the upload | Tech | Agent | Decided | A mesh's vertex buffer is packed in ordinary memory… |
 | [D443](decisions/D443.md) | A creature's paces come from its size | Tech | Agent | Leaning | A kind with no measured speeds takes its walk… |
+| [D457](decisions/D457.md) | The character controller is held by a scorecard of criteria and a ratchet, measured on a plain-Rust course | Tech | Agent | Decided | What the controller must get right is data… |
 
 ## Tools and workflow
 

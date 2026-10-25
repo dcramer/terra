@@ -22,6 +22,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { type Criterion as Row, finish, type Held, judge, readBaseline, round, type Status, testVerdicts } from "../scorecard/ratchet.ts";
+
+// The ratchet is shared (tools/scorecard); its parts are named here too, for this scorecard's tests.
+export { type Bar, barText, type Held, judge, miss, readBaseline, rebaseline, type Result, round, type Status, testVerdicts, writeBaseline } from "../scorecard/ratchet.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 export const CRITERIA = resolve(import.meta.dirname, "criteria.json");
@@ -29,97 +33,13 @@ export const BASELINE = resolve(import.meta.dirname, "baseline.tsv");
 const SET = resolve(ROOT, "assets/data/moves/sword_and_shield.ron");
 /// The player's body, feet to crown (the walker's figure), for spacing in body heights.
 const BODY_M = 1.8;
-/// Two numbers this close are the same: values are kept to three decimals.
-const EPS = 1e-6;
-
-export type Bar = { at_most: number } | { at_least: number } | { within: [number, number] } | { pass: true } | null;
 export type CheckOf =
   | { by: "timing"; measure: string; move?: string; next?: string }
   | { by: "moves"; row: string; measure: string }
   | { by: "test"; crate: string; test: string }
   | { by: "film"; name: string }
   | null;
-export type Criterion = {
-  id: string;
-  noticed: number;
-  notice: string;
-  bar: Bar;
-  unit: string;
-  source: string;
-  check: CheckOf;
-  cost: "cheap" | "heavy";
-  measurable: boolean;
-  needs?: string;
-  slack?: number;
-};
-export type Held = { value: number; why: string };
-export type Status = "pass" | "held" | "better" | "worse" | "new" | "missing" | "unmeasured" | "skipped";
-export type Result = { id: string; status: Status; value?: number; miss?: number; base?: number; note?: string };
-
-/// How far a value is outside its bar, in its unit; 0 within it. A test passes as 0, fails as 1.
-export function miss(value: number, bar: Bar): number {
-  if (!bar) return 0;
-  if ("at_most" in bar) return Math.max(0, value - bar.at_most);
-  if ("at_least" in bar) return Math.max(0, bar.at_least - value);
-  if ("within" in bar) return Math.max(0, bar.within[0] - value, value - bar.within[1]);
-  return value;
-}
-
-export function barText(bar: Bar, unit: string): string {
-  const u = unit ? ` ${unit}` : "";
-  if (!bar) return "none yet";
-  if ("at_most" in bar) return `at most ${bar.at_most}${u}`;
-  if ("at_least" in bar) return `at least ${bar.at_least}${u}`;
-  if ("within" in bar) return `${bar.within[0]}-${bar.within[1]}${u}`;
-  return "passes";
-}
-
-/// A criterion against its baseline: within its bar, held, better, worse, or new (no baseline
-/// and outside its bar).
-export function judge(c: Criterion, value: number | undefined, base: Held | undefined): Result {
-  if (!c.measurable) return { id: c.id, status: "unmeasured", note: c.needs };
-  if (value === undefined) return { id: c.id, status: "missing" };
-  const m = round(miss(value, c.bar));
-  const b = base === undefined ? undefined : round(miss(base.value, c.bar));
-  const r = { id: c.id, value, miss: m, base: base?.value };
-  if (b === undefined) return { ...r, status: m === 0 ? "pass" : "new" };
-  if (m > b + (c.slack ?? 0) + EPS) return { ...r, status: "worse" };
-  if (m === 0) return { ...r, status: "pass", note: b > 0 ? "better than its baseline" : undefined };
-  return { ...r, status: m < b - EPS ? "better" : "held" };
-}
-
-export const round = (x: number) => Math.round(x * 1000) / 1000;
-
-/// The baseline: a row a criterion, `id`, `value`, `why` (tab-separated, a header first).
-export function readBaseline(text: string): Map<string, Held> {
-  const held = new Map<string, Held>();
-  for (const line of text.split("\n").slice(1)) {
-    const [id, value, why] = line.split("\t");
-    if (id && value !== undefined) held.set(id, { value: Number(value), why: why ?? "-" });
-  }
-  return held;
-}
-
-export function writeBaseline(held: Map<string, Held>, order: string[]): string {
-  const ids = [...order.filter((id) => held.has(id)), ...[...held.keys()].filter((id) => !order.includes(id)).sort()];
-  return ["id\tvalue\twhy", ...ids.map((id) => `${id}\t${held.get(id)!.value}\t${held.get(id)!.why}`)].join("\n") + "\n";
-}
-
-/// The baseline after a raise (rows worse, or not held yet, take their value with the why) or
-/// a lowering (rows better, or within their bar and not held yet, take theirs). A raise never
-/// lowers a held row and a lowering never raises one (D414).
-export function rebaseline(held: Map<string, Held>, results: Result[], mode: "raise" | "lower", why: string): Map<string, Held> {
-  const next = new Map(held);
-  for (const r of results) {
-    if (r.value === undefined) continue;
-    // Worse, or not held yet (new to the baseline, within its bar or not).
-    const raise = r.status === "worse" || r.status === "new" || r.base === undefined;
-    // Within its bar now: banked when it was outside it (`note`) or not held yet.
-    const lower = r.status === "better" || (r.status === "pass" && (r.base === undefined || r.note !== undefined));
-    if ((mode === "raise" && raise) || (mode === "lower" && lower)) next.set(r.id, { value: r.value, why });
-  }
-  return next;
-}
+export type Criterion = Row<CheckOf>;
 
 /// A move's numbers in the move set, read without a RON parser: each `"name": (` and its
 /// fields to the next.
@@ -187,41 +107,12 @@ export function timing(set: Map<string, Move>, check: { measure: string; move?: 
   return undefined;
 }
 
-/// Each named test's verdict from cargo's output: `test <path> ... ok`, 0 passed, 1 failed.
-export function testVerdicts(out: string): Map<string, number> {
-  const verdicts = new Map<string, number>();
-  for (const m of out.matchAll(/^test (\S+) \.\.\. (ok|FAILED)/gm)) verdicts.set(m[1], m[2] === "ok" ? 0 : 1);
-  return verdicts;
-}
-
 /// The move check's rows (moves.ts --json): a row named by its move, or a clip with no move.
 type MovesRow = { move?: string; clip: string; measured?: Record<string, number> };
 export function movesValue(rows: MovesRow[], check: { row: string; measure: string }): number | undefined {
   const row = rows.find((r) => r.move === check.row) ?? rows.find((r) => !r.move && r.clip === check.row);
   return row?.measured?.[check.measure];
 }
-
-const mark: Record<Status, string> = { pass: "✓", held: "·", better: "·", worse: "✗", new: "✗", missing: "✗", unmeasured: "?", skipped: "-" };
-
-/// A criterion's line: its mark, id, number and bar, and what its verdict asks for.
-export function line(c: Criterion, r: Result): string {
-  const test = c.check?.by === "test";
-  const v = r.value === undefined ? "" : test ? (r.value === 0 ? ": passes" : ": fails") : `: ${fmt(r.value)}${c.unit ? ` ${c.unit}` : ""}`;
-  const bar = test || r.value === undefined ? "" : ` (bar ${barText(c.bar, c.unit)})`;
-  const said: Record<Status, string> = {
-    pass: "",
-    held: "",
-    better: `, better than its baseline ${fmt(r.base!)}: nightly banks it`,
-    worse: `, WORSE than its baseline ${fmt(r.base!)}: undo, or --raise "<why>" in this commit`,
-    new: `, below its bar with no baseline: --raise "<why>"`,
-    missing: ": not measured (its check gave no number; the log says why)",
-    unmeasured: `: not measurable yet, needs ${r.note}`,
-    skipped: ": heavy, run with --film",
-  };
-  const note = r.status === "pass" && r.note ? `, ${r.note}: nightly banks it` : "";
-  return `${mark[r.status]} ${c.id}${v}${bar}${said[r.status]}${note}`;
-}
-const fmt = (x: number) => String(round(x));
 
 function main() {
   const { values: opt } = parseArgs({
@@ -290,24 +181,20 @@ function main() {
   }
 
   const results = criteria.map((c) => (c.measurable && c.cost === "heavy" && !opt.film ? { id: c.id, status: "skipped" as Status } : judge(c, values.get(c.id), held.get(c.id))));
-  for (const [i, c] of criteria.entries()) console.log(line(c, results[i]));
-  const count = (s: Status[]) => results.filter((r) => s.includes(r.status)).length;
-  const bad = results.filter((r) => ["worse", "new", "missing"].includes(r.status));
-  if (opt.json) writeFileSync(opt.json, JSON.stringify(criteria.map((c, i) => ({ ...c, ...results[i] })), null, 1) + "\n");
-  if (opt.raise || opt.lower) {
-    const next = rebaseline(held, results, opt.raise ? "raise" : "lower", opt.raise ?? `lowered by nightly ${new Date().toISOString().slice(0, 10)}`);
-    const changed = [...next.entries()].filter(([id, h]) => held.get(id)?.value !== h.value).length;
-    writeFileSync(BASELINE, writeBaseline(next, criteria.map((c) => c.id)));
-    console.log(`combat: ${opt.raise ? "raised" : "lowered"} ${changed} rows of tools/combat/baseline.tsv`);
-    if (opt.raise) for (const r of bad) if (r.status !== "missing") r.status = "held";
-  }
-  const still = results.filter((r) => ["worse", "new", "missing"].includes(r.status));
-  const summary = `${count(["pass"])} pass, ${count(["held", "better"])} below their bar and held, ${still.length} worse than their baseline or without their number, ${count(["unmeasured"])} not measurable yet${opt.film ? "" : `, ${count(["skipped"])} heavy (--film)`}`;
-  if (still.length) {
-    console.log(`✗ combat: ${summary} (log target/combat/scorecard.log):`);
-    for (const r of still) console.log(`  ${line(criteria.find((c) => c.id === r.id)!, r)}`);
-    process.exitCode = 1;
-  } else console.log(`✓ combat: ${summary}; held to tools/combat/baseline.tsv`);
+  finish({
+    name: "combat",
+    criteria,
+    results,
+    held,
+    baseline: BASELINE,
+    baselineName: "tools/combat/baseline.tsv",
+    log: "target/combat/scorecard.log",
+    heavy: "run with --film",
+    heavyRun: opt.film,
+    json: opt.json,
+    raise: opt.raise,
+    lower: opt.lower,
+  });
 }
 
 if (import.meta.main) main();

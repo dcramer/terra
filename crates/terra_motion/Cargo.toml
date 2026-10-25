@@ -12,10 +12,16 @@ libm.workspace = true
 # Move sets are read from their data files.
 ron.workspace = true
 serde.workspace = true
+# The controller course's cases run on every core (D406).
+terra_gen = { workspace = true, optional = true }
 
 [dev-dependencies]
 # The duel's scenarios run on every core (D406).
 terra_gen.workspace = true
+
+[features]
+# The controller's plain-Rust course (`course`, D53), for the movers' tests that run it.
+course = ["dep:terra_gen"]
 
 [lints]
 workspace = true

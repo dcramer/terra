@@ -6308,6 +6308,7 @@ dependencies = [
  "terra_build_layout",
  "terra_climate",
  "terra_core",
+ "terra_motion",
  "terra_world",
  "wesl",
 ]

@@ -102,6 +102,13 @@ pub(crate) const TASKS: &[Task] = &[
         run: |args| node("tools/combat/scorecard.ts", args),
     },
     Task {
+        name: "controller",
+        takes: "[--json FILE] [--raise \"<why>\" | --lower]",
+        does: "the character controller's scorecard: every criterion of tools/controller/criteria.json (the plain-Rust course of terra_motion::course driving the mover), a line each, held to tools/controller/baseline.tsv: worse fails unless raised with its why, --lower is nightly's (D457, D414)",
+        group: "Play and check",
+        run: |args| node("tools/controller/scorecard.ts", args),
+    },
+    Task {
         name: "duel",
         takes: "[--out <dir>] | --check <fight.jsonl>…",
         does: "the yard's scripted duel filmed from four cameras into a 2x2 film and a contact sheet, its fight record checked (start latency, chain gaps, feet sliding, overlap, misses, hit-stop), in ~/.cache/terra-review/duel/ (tools/sandbox)",

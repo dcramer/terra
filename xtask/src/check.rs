@@ -2,7 +2,7 @@
 //! one-definition lints and clippy of the crates changed since main, and nothing else; and
 //! `--all`, the full check the scheduled run on main runs (`.github/workflows/main.yml`),
 //! with the gates only it runs: every test, the tools'
-//! tests, the kits, foliage, artifacts and fuzz ratchets, the combat scorecard (D452), the
+//! tests, the kits, foliage, artifacts and fuzz ratchets, the combat and controller scorecards (D452, D457), the
 //! Blender scripts, and the shared
 //! crates kept free of Bevy (D28) and of the clock and the system's randomness.
 //!
@@ -23,7 +23,7 @@ use std::time::Instant;
 pub(crate) const TASKS: &[Task] = &[Task {
     name: "check",
     takes: "[--all | --base <commit>] [--verbose]",
-    does: "the hook before a push (D37): formatting, the size and one-definition lints and clippy of the crates changed since main, in seconds; --base <commit> takes what changed since that commit instead of the merge-base with origin/main (the hook's remote check, where origin/main is not known); --all is the full check over everything, as the scheduled run on main runs it: every test, the tools' tests, the kit, foliage, artifact, fuzz, combat and Blender checks and the shared crates' rules",
+    does: "the hook before a push (D37): formatting, the size and one-definition lints and clippy of the crates changed since main, in seconds; --base <commit> takes what changed since that commit instead of the merge-base with origin/main (the hook's remote check, where origin/main is not known); --all is the full check over everything, as the scheduled run on main runs it: every test, the tools' tests, the kit, foliage, artifact, fuzz, combat, controller and Blender checks and the shared crates' rules",
     group: "Play and check",
     run: check,
 }];
@@ -242,6 +242,10 @@ fn full() -> Vec<(Step, How)> {
     stages.push((
         Step::new("combat", Said::Printed, LOGS).rerun("cargo xtask combat"),
         How::Command(command("node", &["tools/combat/scorecard.ts"])),
+    ));
+    stages.push((
+        Step::new("controller", Said::Printed, LOGS).rerun("cargo xtask controller"),
+        How::Command(command("node", &["tools/controller/scorecard.ts"])),
     ));
     stages.push((
         Step::new("docs", Said::Printed, LOGS).rerun("node tools/docs/docs.ts"),

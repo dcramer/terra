@@ -1,0 +1,25 @@
+id	value	why
+tunnel.wall	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+tunnel.body	3	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+penetration.max	0.972	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+penetration.median	0.077	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+slope.limit	12.5	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+step.ground	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+stick.slope	54	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+stick.stair	27	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+ceiling.depth	0.972	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+ceiling.speed	5.5	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+gravity.landing	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+gravity.upright	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+jump.apex	0.047	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+jump.coyote	0.1	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+jump.buffer	0.15	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+landing.delay	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+landing.bounce	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+input.first_tick	1	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+push.overlap	0.592	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+push.share	0.799	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+push.fixed	0.2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+fit.gap	3	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+swim.enters	1	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+determinism.crowd	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run

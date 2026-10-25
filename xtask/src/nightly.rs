@@ -2,7 +2,7 @@
 //! In its own worktree, `.git/terra-nightly/src`, detached at origin/main, it runs what no hook
 //! runs whole: clippy and every test of the workspace, the slow ones too, the kit checker, the
 //! artifacts ratchet quick and over every scene, fuzz over seeds 0 to 200, the size ratchet, the
-//! combat scorecard (D452) and the docs check after rendering their indexes.
+//! combat and controller scorecards (D452, D457) and the docs check after rendering their indexes.
 //!
 //! When every stage passes it is the one place a baseline is lowered (D414): what fell, and an
 //! index that was stale, is committed alone and pushed to main from this machine, with the
@@ -12,7 +12,7 @@
 //! what happened. `TERRA_NIGHTLY=0`
 //! turns it off. `--probe` is bisect's: one stage at the commit checked out.
 
-use crate::baselines::{self, ARTIFACTS, COMBAT, SIZES};
+use crate::baselines::{self, ARTIFACTS, COMBAT, CONTROLLER, SIZES};
 use crate::check::niced;
 use crate::stage::{self, Said, Step};
 use crate::worktrees::{git, git_output};
@@ -28,7 +28,7 @@ pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "nightly",
         takes: "",
-        does: "the full run on origin/main (D411), by hand until scheduled: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes, the combat scorecard and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
+        does: "the full run on origin/main (D411), by hand until scheduled: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes, the combat and controller scorecards and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
         group: "Play and check",
         run: nightly,
     },
@@ -102,6 +102,7 @@ const KITS: &[&str] = &[
 ];
 const SIZES_HOLD: &[&str] = &["cargo", "xtask", "sizes"];
 const COMBAT_HOLD: &[&str] = &["node", "tools/combat/scorecard.ts"];
+const CONTROLLER_HOLD: &[&str] = &["node", "tools/controller/scorecard.ts"];
 const RENDER: &[&str] = &["node", "tools/docs/docs.ts", "--render"];
 const DOCS: &[&str] = &["node", "tools/docs/docs.ts"];
 const ARTIFACTS_BUILD: &[&str] = &[
@@ -193,6 +194,13 @@ const STAGES: &[Stage] = &[
         build: &[],
         run: &["node", "tools/combat/scorecard.ts", "--lower"],
         hold: COMBAT_HOLD,
+    },
+    Stage {
+        name: "controller",
+        said: Said::Printed,
+        build: &[],
+        run: &["node", "tools/controller/scorecard.ts", "--lower"],
+        hold: CONTROLLER_HOLD,
     },
     Stage {
         name: "docs rendered",
@@ -538,10 +546,13 @@ fn holds(path: &str, since: &BTreeSet<String>, building: bool) -> Holds {
         Holds::Merge
     } else if !baselines::is_baseline(path) {
         Holds::Render
-    } else if path == COMBAT {
-        let read = since
-            .iter()
-            .any(|f| scope::COMBAT.iter().any(|p| f.starts_with(p)));
+    } else if path == COMBAT || path == CONTROLLER {
+        let reads = if path == COMBAT {
+            scope::COMBAT
+        } else {
+            scope::CONTROLLER
+        };
+        let read = since.iter().any(|f| reads.iter().any(|p| f.starts_with(p)));
         if read { Holds::Drop } else { Holds::Keep }
     } else if building || since.contains(path) {
         Holds::Drop
@@ -755,8 +766,8 @@ mod tests {
         }
         let lowering = STAGES.iter().filter(|s| s.run.contains(&"--lower")).count();
         assert_eq!(
-            lowering, 5,
-            "artifacts quick and full, fuzz, sizes and combat lower"
+            lowering, 6,
+            "artifacts quick and full, fuzz, sizes, combat and controller lower"
         );
     }
 
@@ -813,6 +824,11 @@ mod tests {
         assert_eq!(holds(COMBAT, &moved, false), Holds::Drop);
         let raised: BTreeSet<String> = [COMBAT.to_string()].into();
         assert_eq!(holds(COMBAT, &raised, false), Holds::Drop);
+        // The controller's likewise, by what its course reads: a move changes combat's alone.
+        assert_eq!(holds(CONTROLLER, &moved, false), Holds::Keep);
+        let walked: BTreeSet<String> = ["crates/terra_walker/src/movement.rs".to_string()].into();
+        assert_eq!(holds(CONTROLLER, &walked, false), Holds::Drop);
+        assert_eq!(holds(COMBAT, &walked, false), Holds::Keep);
     }
 
     #[test]

@@ -182,24 +182,21 @@ fn walk(
         }
         let sprinting =
             intent.held(Action::Sprint) && stamina.as_ref().is_none_or(|body| body.can_sprint());
-        let top_speed = top_speed(&stance, sprinting) * ground.map_or(1.0, going);
-        // Ease into and out of a run rather than starting and stopping dead.
-        let ease = 1.0 - libm::expf(-dt * if motion.on_ground { 11.0 } else { 2.5 });
         let wish = if stance.dodging > 0.0 {
             stance.dodge_direction
         } else {
             wish
         };
-        motion.velocity = match steer.drive {
-            // A move's drive is its own: no easing into it.
-            Some(drive) if motion.on_ground => drive.reject_from(up),
-            _ => motion.velocity.lerp(wish * top_speed, ease).reject_from(up),
+        let jump = motion.on_ground
+            && intent.pressed(Action::Jump)
+            && stamina.as_mut().is_none_or(|body| body.spend(JUMP_STAMINA));
+        let ask = Ask {
+            wish,
+            top_speed: top_speed(&stance, sprinting) * ground.map_or(1.0, going),
+            drive: steer.drive,
+            jump,
+            dt,
         };
-        let mut target = feet + motion.velocity * dt;
-        // Furniture and kit are solid. Walls come after, so they have the last word.
-        target = bodies::push_out_of_solids(target, walker.radius, solids.iter());
-        // Creatures and people take up room.
-        target = bodies::push_out(target, walker.radius, others.iter());
 
         // The build being walked at decides what blocks the way: the player's own, or someone
         // else's, such as a house in the village. Builds stand well apart, so it is the one
@@ -213,102 +210,69 @@ fn walk(
         let frame = site.map_or(Transform::IDENTITY, |site| site.frame);
         let to_base = frame.compute_affine().inverse();
         let from_base = frame.compute_affine();
-        if let Some(site) = site {
-            let walked = site.walkable().walk(
-                to_base.transform_point3(feet),
-                to_base.transform_point3(target),
-                &walker,
-                site.kits.as_deref(),
-            );
-            target = from_base.transform_point3(walked);
-        }
-        // Trunks, rocks, stumps and logs taller than a step push the player round them; lower
-        // ones are stepped onto, below (D267).
-        target = obstacles.push_out(target, walker.radius, walker.step_up);
-        // The sea and the lakes are for looking at: wade in a little way and no further.
-        let ground_ahead = planet.ground_at(target).length();
-        if ground_ahead < planet.water_radius_m(target) - WADE_DEPTH_M
-            && ground_ahead < planet.ground_at(feet).length()
-        {
-            target = feet;
-        }
-        // Ground rising too steeply is a wall, as the side of a dug hole is: it stops the
-        // player rather than lifting them up it, and they slide along it as far as it lets
-        // them. A jump can clear a low one; hills are walked up as before.
-        let ground = |at: Vec3| planet.ground_at(at).length();
-        if walled(feet, target, ground) {
-            let facing = planet
-                .normal(planet.ground_at(target))
-                .reject_from(up)
-                .normalize_or_zero();
-            let step = target - feet;
-            let along = feet + step - facing * step.dot(facing).min(0.0);
-            target = if walled(feet, along, ground) {
-                feet
-            } else {
-                along
-            };
-        }
-        // The body must fit where it goes, as it does not under the overhang of a slanting
-        // pit. Someone already caught in the ground may move, to get out.
-        let room = |at: Vec3| planet.distance(at);
-        let stands = |at: Vec3| planet.ground_at(at);
-        if cramped(stands(target), &walker, room) && !cramped(stands(feet), &walker, room) {
-            target = feet;
-        }
-
-        motion.rising -= GRAVITY * dt;
-        if motion.on_ground
-            && intent.pressed(Action::Jump)
-            && stamina.as_mut().is_none_or(|body| body.spend(JUMP_STAMINA))
-        {
-            motion.rising = JUMP_SPEED;
-        }
-        target += up * motion.rising * dt;
-
-        // What holds the player up: indoors, the base's floor; outdoors, whichever is higher of
-        // the ground and anything the base offers there, such as its steps or a roof.
-        let local = to_base.transform_point3(target);
         let before = to_base.transform_point3(feet);
-        let offered = site.and_then(|site| {
-            site.support(Vec3::new(local.x, before.y.max(local.y), local.z), &walker)
-        });
-        let offered = offered.map(|height| {
-            from_base
-                .transform_point3(Vec3::new(local.x, height, local.z))
-                .length()
-        });
-        // The ground as it is drawn, so the player stands on what they see. Near the start
-        // that is the true ground; further off the planet's mesh is coarser, and walking on
-        // the true ground there sinks the player into the drawn one or lifts them off it.
-        let ground = planet.ground_at(target).length();
-        // A rock, stump or log low enough to step onto holds the player up as the ground
-        // does, and so does a taller one they stand on already (D267).
-        let ground = lying_on(&obstacles, target, &walker).map_or(ground, |on| on.max(ground));
-        let held_at = match offered {
-            Some(floor) if site.is_some_and(|site| site.walkable().ceiling(before).is_some()) => {
-                floor
+        let blocked = |mut target: Vec3| {
+            // Furniture and kit are solid. Walls come after, so they have the last word.
+            target = bodies::push_out_of_solids(target, walker.radius, solids.iter());
+            // Creatures and people take up room.
+            target = bodies::push_out(target, walker.radius, others.iter());
+            if let Some(site) = site {
+                let walked = site.walkable().walk(
+                    before,
+                    to_base.transform_point3(target),
+                    &walker,
+                    site.kits.as_deref(),
+                );
+                target = from_base.transform_point3(walked);
             }
-            Some(surface) => surface.max(ground),
-            None => ground,
+            // Trunks, rocks, stumps and logs taller than a step push the player round them;
+            // lower ones are stepped onto, below (D267).
+            obstacles.push_out(target, walker.radius, walker.step_up)
         };
-        motion.on_ground = target.length() <= held_at + 0.02 && motion.rising <= 0.0;
-        if motion.on_ground {
-            target = target.normalize() * held_at;
-            motion.rising = 0.0;
-            motion.airborne = 0.0;
-        } else {
-            motion.airborne += dt;
-        }
+        // What holds the player up: indoors, the base's floor; outdoors, whichever is higher of
+        // the ground and anything the base offers there, such as its steps or a roof. A rock,
+        // stump or log low enough to step onto holds the player up as the ground does, and so
+        // does a taller one they stand on already (D267).
+        let held_at = |target: Vec3, ground: f32| {
+            let local = to_base.transform_point3(target);
+            let offered = site.and_then(|site| {
+                site.support(Vec3::new(local.x, before.y.max(local.y), local.z), &walker)
+            });
+            let offered = offered.map(|height| {
+                from_base
+                    .transform_point3(Vec3::new(local.x, height, local.z))
+                    .length()
+            });
+            let ground = lying_on(&obstacles, target, &walker).map_or(ground, |on| on.max(ground));
+            match offered {
+                Some(floor)
+                    if site.is_some_and(|site| site.walkable().ceiling(before).is_some()) =>
+                {
+                    floor
+                }
+                Some(surface) => surface.max(ground),
+                None => ground,
+            }
+        };
         // A ceiling stops a jump.
-        if let Some(ceiling) = site.and_then(|site| site.walkable().ceiling(before))
-            && motion.rising > 0.0
-            && to_base.transform_point3(target).y + walker.height > ceiling
-        {
-            target =
-                from_base.transform_point3(Vec3::new(local.x, ceiling - walker.height, local.z));
-            motion.rising = 0.0;
-        }
+        let ceiling = |reached: Vec3, held: Vec3| {
+            let ceiling = site.and_then(|site| site.walkable().ceiling(before))?;
+            let local = to_base.transform_point3(reached);
+            (to_base.transform_point3(held).y + walker.height > ceiling).then(|| {
+                from_base.transform_point3(Vec3::new(local.x, ceiling - walker.height, local.z))
+            })
+        };
+        let target = step(
+            feet,
+            &mut motion,
+            &ask,
+            &*planet,
+            Around {
+                blocked,
+                held_at,
+                ceiling,
+            },
+        );
 
         let indoors = site.is_some_and(|site| {
             site.walkable()
@@ -327,10 +291,7 @@ fn walk(
             );
         }
 
-        // What was actually covered, which is less than what was asked when something is in
-        // the way. The figure's stride follows this.
         let up = target.normalize();
-        motion.velocity = ((target - feet) / dt.max(1e-4)).reject_from(up);
         // Turn to face the way the figure is going, or the way it is working.
         stance.since_acting += dt;
         let toward = toward(&stance, view.forward, wish, up);
@@ -349,6 +310,145 @@ fn walk(
         *transform = Transform::from_translation(target).looking_to(motion.facing, up);
     }
 }
+
+/// What a body asks of a tick: the way it means to go and how fast, a move's drive, whether
+/// it jumps (it is on the ground and could pay for it), and the tick's length.
+pub(crate) struct Ask {
+    pub(crate) wish: Vec3,
+    pub(crate) top_speed: f32,
+    pub(crate) drive: Option<Vec3>,
+    pub(crate) jump: bool,
+    pub(crate) dt: f32,
+}
+
+/// What the ground answers a walker, as the planet does (`Planet`); the controller course
+/// answers it from its fixtures (D53, `terra_motion::course`).
+pub(crate) trait Terrain {
+    fn ground_at(&self, at: Vec3) -> Vec3;
+    fn distance(&self, at: Vec3) -> f32;
+    fn normal(&self, at: Vec3) -> Vec3;
+    fn water_radius_m(&self, at: Vec3) -> f32;
+}
+
+impl Terrain for Planet {
+    fn ground_at(&self, at: Vec3) -> Vec3 {
+        Planet::ground_at(self, at)
+    }
+    fn distance(&self, at: Vec3) -> f32 {
+        Planet::distance(self, at)
+    }
+    fn normal(&self, at: Vec3) -> Vec3 {
+        Planet::normal(self, at)
+    }
+    fn water_radius_m(&self, at: Vec3) -> f32 {
+        Planet::water_radius_m(self, at)
+    }
+}
+
+/// What a walker meets besides the ground: where what is in the way pushes a step to
+/// (`blocked`), how far from the centre what is under a place holds it up given the
+/// ground's own height there (`held_at`), and where a ceiling stops a rising body that
+/// reached one place and is held at another (`ceiling`).
+pub(crate) struct Around<B, H, C> {
+    pub(crate) blocked: B,
+    pub(crate) held_at: H,
+    pub(crate) ceiling: C,
+}
+
+/// One tick of a walker's way over the ground: its velocity eased toward what it asks, the
+/// step pushed out of what is in the way, stopped by deep water, walls and room it does not
+/// fit, raised by a jump and pulled down by gravity, then held up by what is under it. Sets
+/// `motion`'s velocity to what was covered, and says where the feet end.
+pub(crate) fn step(
+    feet: Vec3,
+    motion: &mut Motion,
+    ask: &Ask,
+    planet: &impl Terrain,
+    around: Around<
+        impl FnOnce(Vec3) -> Vec3,
+        impl FnOnce(Vec3, f32) -> f32,
+        impl FnOnce(Vec3, Vec3) -> Option<Vec3>,
+    >,
+) -> Vec3 {
+    let (dt, walker) = (ask.dt, Walker::default());
+    let up = feet.normalize();
+    // Ease into and out of a run rather than starting and stopping dead.
+    let ease = 1.0 - libm::expf(-dt * if motion.on_ground { 11.0 } else { 2.5 });
+    motion.velocity = match ask.drive {
+        // A move's drive is its own: no easing into it.
+        Some(drive) if motion.on_ground => drive.reject_from(up),
+        _ => motion
+            .velocity
+            .lerp(ask.wish * ask.top_speed, ease)
+            .reject_from(up),
+    };
+    let mut target = (around.blocked)(feet + motion.velocity * dt);
+    // The sea and the lakes are for looking at: wade in a little way and no further.
+    let ground_ahead = planet.ground_at(target).length();
+    if ground_ahead < planet.water_radius_m(target) - WADE_DEPTH_M
+        && ground_ahead < planet.ground_at(feet).length()
+    {
+        target = feet;
+    }
+    // Ground rising too steeply is a wall, as the side of a dug hole is: it stops the
+    // player rather than lifting them up it, and they slide along it as far as it lets
+    // them. A jump can clear a low one; hills are walked up as before.
+    let ground = |at: Vec3| planet.ground_at(at).length();
+    if walled(feet, target, ground) {
+        let facing = planet
+            .normal(planet.ground_at(target))
+            .reject_from(up)
+            .normalize_or_zero();
+        let step = target - feet;
+        let along = feet + step - facing * step.dot(facing).min(0.0);
+        target = if walled(feet, along, ground) {
+            feet
+        } else {
+            along
+        };
+    }
+    // The body must fit where it goes, as it does not under the overhang of a slanting
+    // pit. Someone already caught in the ground may move, to get out.
+    let room = |at: Vec3| planet.distance(at);
+    let stands = |at: Vec3| planet.ground_at(at);
+    if cramped(stands(target), &walker, room) && !cramped(stands(feet), &walker, room) {
+        target = feet;
+    }
+
+    motion.rising -= GRAVITY * dt;
+    if ask.jump {
+        motion.rising = JUMP_SPEED;
+    }
+    target += up * motion.rising * dt;
+
+    // The ground as it is drawn, so the player stands on what they see. Near the start
+    // that is the true ground; further off the planet's mesh is coarser, and walking on
+    // the true ground there sinks the player into the drawn one or lifts them off it.
+    let reached = target;
+    let held_at = (around.held_at)(target, planet.ground_at(target).length());
+    motion.on_ground = target.length() <= held_at + 0.02 && motion.rising <= 0.0;
+    if motion.on_ground {
+        target = target.normalize() * held_at;
+        motion.rising = 0.0;
+        motion.airborne = 0.0;
+    } else {
+        motion.airborne += dt;
+    }
+    if motion.rising > 0.0
+        && let Some(stopped) = (around.ceiling)(reached, target)
+    {
+        target = stopped;
+        motion.rising = 0.0;
+    }
+    // What was actually covered, which is less than what was asked when something is in
+    // the way. The figure's stride follows this.
+    motion.velocity = ((target - feet) / dt.max(1e-4)).reject_from(target.normalize());
+    target
+}
+
+#[cfg(test)]
+#[path = "movement_course.rs"]
+mod course;
 
 #[cfg(test)]
 mod tests {

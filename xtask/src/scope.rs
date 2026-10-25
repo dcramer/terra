@@ -153,6 +153,18 @@ pub(crate) const COMBAT: &[&str] = &[
     "tools/sandbox/duel",
 ];
 
+/// What the controller scorecard reads (D457, tools/controller): the course and the mover it
+/// drives (today's walk and the ground answer it asks), and the scorecard's own tools. A
+/// change here is measured again before a lowering of its baseline is carried.
+pub(crate) const CONTROLLER: &[&str] = &[
+    "crates/terra_motion/src/course/",
+    "crates/terra_walker/src/movement",
+    "crates/terra_walker/src/bodies.rs",
+    "crates/terra_world/src/planet.rs",
+    "tools/controller/",
+    "tools/scorecard/",
+];
+
 /// What a change touches.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Scope {

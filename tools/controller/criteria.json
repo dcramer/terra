@@ -1,0 +1,607 @@
+{
+ "about": "What the character controller must get right, a row a criterion (tools/controller/README.md, docs/controller.md's production criteria): what a player notices, its bar and source, the check that measures it, cheap (the plain-Rust course, seconds) or heavy (the in-game film, a bench), whether it is measurable yet. `noticed` is how much a player notices it, 5 most; the scorecard orders failing rows by it (the task list). `course` names the test that drives the mover through terra_motion::course and prints its numbers.",
+ "course": {
+  "crate": "terra_walker",
+  "test": "movement::course::the_controller_course_measures_todays_walk"
+ },
+ "criteria": [
+  {
+   "id": "tunnel.wall",
+   "noticed": 5,
+   "notice": "a body driven fast at a wall one voxel thick ends up in it or through it",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 8 speeds, 2-60 m/s",
+   "source": "docs/controller.md criterion 1; Jolt (swept move); ours for the SDF sweep",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "tunnel.body",
+   "noticed": 4,
+   "notice": "a body driven fast at another passes through it",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 8 speeds, 2-60 m/s",
+   "source": "docs/controller.md criterion 1; Jolt (swept move)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "tunnel.door",
+   "noticed": 4,
+   "notice": "a body driven fast at a door passes through it",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 8 speeds",
+   "source": "docs/controller.md criterion 1",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "a base's doors answered by the mover's query trait in the plain course (D53's buildings source, stage 2)"
+  },
+  {
+   "id": "penetration.max",
+   "noticed": 4,
+   "notice": "a body's capsule sinks into the ground, a wall or a roof",
+   "bar": {
+    "at_most": 0.01
+   },
+   "unit": "m",
+   "source": "docs/controller.md criterion 2; Jolt (tolerance 1 mm, padding 2 cm)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "penetration.median",
+   "noticed": 3,
+   "notice": "a body's capsule sits a little into what it touches",
+   "bar": {
+    "at_most": 0.002
+   },
+   "unit": "m",
+   "source": "docs/controller.md criterion 2; Jolt (tolerance 1 mm, padding 2 cm)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "slope.limit",
+   "noticed": 4,
+   "notice": "a slope too steep is walked up, or one shallow enough stops the body",
+   "bar": {
+    "at_most": 0.5
+   },
+   "unit": "deg off the kind's limit",
+   "source": "docs/controller.md criterion 3; Jolt's limit; our data (50 deg for a man)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "slope.speed",
+   "noticed": 3,
+   "notice": "a body goes up a hill as fast as on the flat",
+   "bar": {
+    "at_most": 0.02
+   },
+   "unit": "of the kind's curve",
+   "source": "docs/controller.md criterion 4; player.md, slopes slow you",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "the kind's slope speed curve as data (uphill and downhill by gradient, stage 2) for the course to read"
+  },
+  {
+   "id": "step.ground",
+   "noticed": 5,
+   "notice": "a step the body should walk up stops it, or one too high is walked up",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 10 steps wrong",
+   "source": "docs/controller.md criterion 5; Jolt WalkStairs; our one rule (0.55 m for a man)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "step.building",
+   "noticed": 4,
+   "notice": "a base's step is climbed by a different rule than the ground's",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "steps wrong",
+   "source": "docs/controller.md criterion 5",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "a base's cubes answered by the mover's query trait in the plain course (stage 2)"
+  },
+  {
+   "id": "step.prop",
+   "noticed": 3,
+   "notice": "a prop's top is climbed by a different rule than the ground's",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "steps wrong",
+   "source": "docs/controller.md criterion 5",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "props' boxes answered by the mover's query trait in the plain course (stage 2)"
+  },
+  {
+   "id": "step.rock",
+   "noticed": 3,
+   "notice": "a rock or log is climbed by a different rule than the ground's",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "steps wrong",
+   "source": "docs/controller.md criterion 5",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "trees' and rocks' pieces (terra_core::solid) answered by the mover's query trait in the plain course (stage 2)"
+  },
+  {
+   "id": "step.smooth",
+   "noticed": 5,
+   "notice": "a step pops the body up in one frame",
+   "bar": {
+    "at_most": 0.25
+   },
+   "unit": "of the step a frame",
+   "source": "docs/controller.md criterion 6; Unreal mesh smoothing",
+   "check": null,
+   "cost": "heavy",
+   "measurable": false,
+   "needs": "the in-game filmed course (stage 1b): the shown root's rise a frame over each step, and its settling within 0.15 s"
+  },
+  {
+   "id": "stick.slope",
+   "noticed": 4,
+   "notice": "sprinting down a 45 deg slope the body leaves the ground and floats",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "airborne ticks",
+   "source": "docs/controller.md criterion 7; Jolt StickToFloor",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "stick.stair",
+   "noticed": 4,
+   "notice": "sprinting down a stair of 0.3 m steps the body hops off each one",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "airborne ticks",
+   "source": "docs/controller.md criterion 7; Jolt StickToFloor",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "ceiling.depth",
+   "noticed": 3,
+   "notice": "a jump in a 2 m tunnel puts the head into the roof",
+   "bar": {
+    "at_most": 0.01
+   },
+   "unit": "m",
+   "source": "docs/controller.md criterion 8; Jolt contact planes",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "ceiling.speed",
+   "noticed": 2,
+   "notice": "a jump into a roof keeps rising instead of stopping",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "m/s up on contact",
+   "source": "docs/controller.md criterion 8; Jolt contact planes",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "gravity.landing",
+   "noticed": 3,
+   "notice": "a body falling on a round world lands off the line to its centre",
+   "bar": {
+    "at_most": 0.01
+   },
+   "unit": "m",
+   "source": "docs/controller.md criterion 9; D63",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "gravity.upright",
+   "noticed": 3,
+   "notice": "a body on a round world stands tilted from the line to its centre",
+   "bar": {
+    "at_most": 0.5
+   },
+   "unit": "deg",
+   "source": "docs/controller.md criterion 9; D63",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "jump.apex",
+   "noticed": 3,
+   "notice": "a jump goes higher or lower than its launch speed and gravity say",
+   "bar": {
+    "at_most": 0.01
+   },
+   "unit": "m off v²/2g",
+   "source": "docs/controller.md criterion 10; our data",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "jump.coyote",
+   "noticed": 4,
+   "notice": "a jump pressed just after running off a ledge is lost",
+   "bar": {
+    "at_most": 0.016
+   },
+   "unit": "s off the kind's coyote time",
+   "source": "docs/controller.md criterion 10; the platformer convention; our data (0.1 s)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "jump.buffer",
+   "noticed": 4,
+   "notice": "a jump pressed just before landing is lost",
+   "bar": {
+    "at_most": 0.016
+   },
+   "unit": "s off the kind's buffer",
+   "source": "docs/controller.md criterion 10; the platformer convention; our data (0.15 s)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "landing.delay",
+   "noticed": 3,
+   "notice": "a body that has touched down is not grounded yet",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "ticks",
+   "source": "docs/controller.md criterion 12; Jolt ground states",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "landing.bounce",
+   "noticed": 3,
+   "notice": "a body bounces on landing",
+   "bar": {
+    "at_most": 0.001
+   },
+   "unit": "m",
+   "source": "docs/controller.md criterion 12; Jolt ground states",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "landing.speed",
+   "noticed": 2,
+   "notice": "a landing's speed is not known, so a fall cannot hurt",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/controller.md criterion 12; open question 1",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "the mover to report each landing's speed (open question 1, fall damage)"
+  },
+  {
+   "id": "input.first_tick",
+   "noticed": 5,
+   "notice": "the body starts moving a tick or more after the key is pressed",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "ticks",
+   "source": "docs/controller.md criterion 13; D180; movement.md stage 2",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "accel.data",
+   "noticed": 4,
+   "notice": "every kind gets up to speed alike, whatever its file says",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "ticks off the kind's data",
+   "source": "docs/controller.md criterion 14; D136",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "acceleration and deceleration as each kind's data and a mover reading them (stage 2), so two kinds' files give two results"
+  },
+  {
+   "id": "turn.data",
+   "noticed": 3,
+   "notice": "every kind turns alike, whatever its file says",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "ticks off the kind's data",
+   "source": "docs/controller.md criterion 14; D136",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "a turn rate as each kind's data and a mover reading it (stage 2)"
+  },
+  {
+   "id": "air.control",
+   "noticed": 3,
+   "notice": "steering in the air is stronger or weaker than the kind's data",
+   "bar": {
+    "at_most": 0.02
+   },
+   "unit": "of the kind's fraction",
+   "source": "docs/controller.md criterion 11; our data",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "the kind's air-control fraction of ground acceleration as data (docs/controller.md gives no number yet)"
+  },
+  {
+   "id": "push.overlap",
+   "noticed": 4,
+   "notice": "bodies stand inside each other in a crowd",
+   "bar": {
+    "at_most": 0.05
+   },
+   "unit": "m",
+   "source": "docs/controller.md criterion 15; movement.md duel bar",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "push.share",
+   "noticed": 3,
+   "notice": "a man shoves a body four times his weight as far as it shoves him",
+   "bar": {
+    "at_most": 0.05
+   },
+   "unit": "off the mass ratio",
+   "source": "docs/controller.md criterion 15; open question 4",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "push.fixed",
+   "noticed": 4,
+   "notice": "a body that holds its place is shoved",
+   "bar": {
+    "at_most": 0.001
+   },
+   "unit": "m",
+   "source": "docs/controller.md criterion 15",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "fit.gap",
+   "noticed": 4,
+   "notice": "a body squeezes through a gap narrower than itself, or is stopped by one wide enough",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 6 gaps wrong",
+   "source": "docs/controller.md criterion 16; ours",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "swim.enters",
+   "noticed": 4,
+   "notice": "deep water is a wall the body cannot walk into",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/controller.md criterion 17; D74",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "swim.float",
+   "noticed": 3,
+   "notice": "a body in deep water sinks or does not float up to the surface",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/controller.md criterion 17; D74",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "swimming in the mover (ground state swimming, buoyancy as data) and open question 3"
+  },
+  {
+   "id": "swim.dive",
+   "noticed": 3,
+   "notice": "a swimmer cannot dive or rise on intent",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/controller.md criterion 17; D74",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "swimming in the mover and open question 3 (how to dive)"
+  },
+  {
+   "id": "swim.breath",
+   "noticed": 2,
+   "notice": "breath runs out above water, or never under it",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "docs/controller.md criterion 17; D74",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "breath in the mover's report and open question 3 (how long)"
+  },
+  {
+   "id": "stamina.costs",
+   "noticed": 3,
+   "notice": "sprinting, jumping or swimming costs more or less than the kind's data",
+   "bar": {
+    "at_most": 0.01
+   },
+   "unit": "of the kind's cost",
+   "source": "docs/controller.md criterion 18; D61",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "stamina carried through the course's mover trait, with the kind's costs as data (stage 2)"
+  },
+  {
+   "id": "determinism.crowd",
+   "noticed": 3,
+   "notice": "two machines see a crowd end in different places",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 3 reruns different",
+   "source": "docs/controller.md criterion 19; D51, D138; reruns: again, bodies given reversed, interleaved",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "cost.body",
+   "noticed": 2,
+   "notice": "many bodies moving slow the server's tick",
+   "bar": {
+    "at_most": 25
+   },
+   "unit": "µs a body a tick",
+   "source": "docs/controller.md criterion 20; D52, D138",
+   "check": null,
+   "cost": "heavy",
+   "measurable": false,
+   "needs": "a release CPU bench of the mover (one body walking the course on one core; 1,000 under 4 ms a tick on the server's cores): cargo xtask bench measures the game's frames on the GPU, so stage 2 adds the mover's own bench"
+  },
+  {
+   "id": "feet.sliding",
+   "noticed": 4,
+   "notice": "feet slide over the ground at walk, jog or sprint, or in starts, stops and turns",
+   "bar": {
+    "at_most": 0.03
+   },
+   "unit": "m a contact",
+   "source": "docs/controller.md criterion 21; movement.md stage 2; D455",
+   "check": null,
+   "cost": "heavy",
+   "measurable": false,
+   "needs": "the in-game filmed course (stage 1b): each foot contact's slide, as the duel film's film.feet_sliding reads it"
+  },
+  {
+   "id": "film.yard",
+   "noticed": 4,
+   "notice": "what passes on the plain course fails in the game, on dug ground and a base",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "criteria failing",
+   "source": "docs/controller.md, the in-game filmed course",
+   "check": null,
+   "cost": "heavy",
+   "measurable": false,
+   "needs": "the in-game filmed course (stage 1b): the plain course's features dug and built in the yard, walked, jogged and sprinted by a scripted player (--press, cargo xtask gpu film)"
+  }
+ ]
+}

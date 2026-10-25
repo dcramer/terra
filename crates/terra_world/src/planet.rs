@@ -52,6 +52,41 @@ pub const FACES: [(Vec3, Vec3, Vec3); 6] = [
     (Vec3::NEG_Z, Vec3::Y, Vec3::X),
 ];
 
+/// Where something at a point stands on a ground that says how far a point is from it
+/// (`distance`): the nearest surface straight up or down from it, toward or away from the
+/// centre. `Planet::ground_at` asks it of the voxel ground; the controller course (D53,
+/// `terra_motion::course`) of its fixtures.
+pub fn surface_through(point: Vec3, distance: impl Fn(Vec3) -> f32) -> Vec3 {
+    let up = point.normalize_or(Vec3::Y);
+    let inside = distance(point) < 0.0;
+    // Out of the ground the surface is looked for below; in it, above. Each step is as
+    // long as the ground is far, which on undug ground lands on it at once, and at
+    // least a few centimetres, so the side of a hole is not crawled along.
+    let toward = if inside { up } else { -up };
+    let (mut near, mut far) = (point, point);
+    for _ in 0..64 {
+        let away = distance(far);
+        if away.abs() < 0.002 {
+            return far;
+        }
+        if (away < 0.0) != inside {
+            break;
+        }
+        near = far;
+        far += toward * away.abs().max(0.05);
+    }
+    // The surface lies between the last step on this side and the first past it.
+    for _ in 0..16 {
+        let middle = (near + far) * 0.5;
+        if (distance(middle) < 0.0) == inside {
+            near = middle;
+        } else {
+            far = middle;
+        }
+    }
+    (near + far) * 0.5
+}
+
 /// The planet every experiment shares. Ask it where the ground is.
 /// The planet the game stands on. Everything asks it about the ground through the
 /// questions below, and nothing reaches into what answers them, so the stand-in's
@@ -124,34 +159,7 @@ impl Planet {
     /// it. The point is a place in the world, not a direction, since there can be ground
     /// above as well as below, as in a hole that has been dug.
     pub fn ground_at(&self, point: Vec3) -> Vec3 {
-        let up = point.normalize_or(Vec3::Y);
-        let inside = self.ground.distance(point) < 0.0;
-        // Out of the ground the surface is looked for below; in it, above. Each step is as
-        // long as the ground is far, which on undug ground lands on it at once, and at
-        // least a few centimetres, so the side of a hole is not crawled along.
-        let toward = if inside { up } else { -up };
-        let (mut near, mut far) = (point, point);
-        for _ in 0..64 {
-            let distance = self.ground.distance(far);
-            if distance.abs() < 0.002 {
-                return far;
-            }
-            if (distance < 0.0) != inside {
-                break;
-            }
-            near = far;
-            far += toward * distance.abs().max(0.05);
-        }
-        // The surface lies between the last step on this side and the first past it.
-        for _ in 0..16 {
-            let middle = (near + far) * 0.5;
-            if (self.ground.distance(middle) < 0.0) == inside {
-                near = middle;
-            } else {
-                far = middle;
-            }
-        }
-        (near + far) * 0.5
+        surface_through(point, |at| self.ground.distance(at))
     }
 
     /// Whether the ground at a point has been dug or filled, rather than lying where it was
