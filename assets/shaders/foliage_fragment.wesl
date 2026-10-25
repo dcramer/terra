@@ -536,14 +536,17 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let radial = across / max(length(across), 1e-4);
         let standing = 1.0 - abs(dot(shape, foot_up));
         let faces = normalize(mix(shape, radial, standing));
-        let windward = smoothstep(0.2 - 0.3 * low, 0.8, dot(faces, into));
-        // Patches about as tall as they are wide, a hand to a forearm across: stretched up the
-        // stem, with a finer octave at 17 cm, the coat read as smears (the looks review).
-        let blot = wander(across * 1.7 + foot_up * stem_h * 1.4 + seed) * 0.8 + wander(world * 3.0 + seed) * 0.2;
-        let plaster = smoothstep(0.5, 0.75, blot + 0.2 * low) * windward;
+        // One coat over the windward face, its edge ragged and its inside holed: in patches of
+        // their own, stretched up the stem, it read as smears (the looks review's fault 4), and
+        // as patches a hand across, a camouflage of white squares, value noise's lattice drawn
+        // along the trunk's axis. The noise is taken turned off the world's axes.
+        let windward = dot(faces, into);
+        let turned = mat3x3<f32>(0.64, 0.6, -0.48, -0.48, 0.8, 0.36, 0.6, 0.0, 0.8) * (world + seed);
+        let blot = wander(turned * 1.6) * 0.65 + wander(turned * 4.1 + 7.0) * 0.35;
+        let plaster = smoothstep(0.45, 0.7, windward * 0.85 + 0.6 * (blot - 0.5) + 0.25 * low);
         let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
         let stuck = lying * max(plaster, bank);
-        colour = mix(colour, SNOW, stuck);
+        colour = mix(colour, SNOW * (0.9 + 0.1 * blot), stuck);
         // Lit half as snow lying is, so the coat reads white, not a grey stain on the bark.
         snow = max(snow, stuck * 0.5);
     }
