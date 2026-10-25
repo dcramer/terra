@@ -11,12 +11,14 @@
 //! - `shell`: slabs, walls, doorways, the stairs and the surface stair's parapet and arch.
 //! - `modules`: what each module of the dressing becomes in cubes and props, and the features.
 //! - `runin`: door leaves, chests, mobs, torches, and the tour.
+//! - `view`: the camera's way along the tour, kept off what stands round it.
 
 mod modules;
 mod runin;
 mod shell;
 #[cfg(test)]
 mod tests;
+mod view;
 
 use crate::Dungeon;
 use crate::dress::ModuleSet;
@@ -137,6 +139,10 @@ pub struct Stamp {
     pub start_facing: usize,
     /// A tour a camera can follow: down the stair, through the key rooms, to the goal.
     pub route: Vec<Vec3>,
+    /// A camera's eye along the tour every `view::STEP_M`: `view::ROOM_M` from walls, pillars
+    /// and open leaves in plan, as high as `view::EYE_M` allows with that room all round
+    /// (`view::TIGHT_M` at the least, under a stair's slab), smoothed.
+    pub view: Vec<Vec3>,
 }
 
 /// Lays a dungeon in cubes; `kind` names the building kinds of the theme's walls, floors and
@@ -160,6 +166,7 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
         start: Vec3::ZERO,
         start_facing: 2,
         route: Vec::new(),
+        view: Vec::new(),
     };
     shell::lay(&dungeon.layout, &kinds, &mut out.ops);
     modules::lay(dungeon, theme, &looks, &kinds, &mut out);

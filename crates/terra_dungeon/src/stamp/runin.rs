@@ -5,6 +5,7 @@
 //! for a camera, from the stair down through the key rooms to the goal.
 
 use super::modules::{Class, Look};
+use super::view::Room;
 use super::{
     CELL, CUBE, ChestSpawn, Frame, LEVEL, LIGHTS, Light, LightKind, MobSpawn, Object, ObjectRole,
     Stamp, clear, cube_of, floor_of, hash, stands, steps,
@@ -25,7 +26,9 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Sta
     mobs(dungeon, looks, map, out);
     torches(dungeon, looks, out);
     tour(dungeon, out);
-    out.route = walked(map, &out.route);
+    let room = Room::new(map, &out.objects);
+    out.route = walked(map, &room, &out.route);
+    out.view = room.view(&out.route);
 }
 
 /// A leaf in the doorway at the far room of each door, locked door and one-way door; an arch
@@ -469,36 +472,44 @@ pub(super) fn sight(map: &Map, a: Vec3, b: Vec3) -> bool {
     })
 }
 
-/// The tour walked: each leg past the surface's that a pillar, a plinth or a heap stands
-/// in goes round it, by the shortest walk over the cubes from end to end, pulled taut to
-/// the fewest straight legs that are clear (a navigation mesh's path and its string
-/// pulling); a leg with no walk round is kept as it was.
-fn walked(map: &Map, route: &[Vec3]) -> Vec<Vec3> {
+/// The tour walked: each point past the surface moved to the nearest place with `ROOM_M`
+/// round it if it has not; each leg that a pillar, a plinth or a heap stands
+/// in, or that passes nearer a wall, a pillar's corner or an open leaf than `ROOM_M`, goes
+/// round it by the shortest walk over the cubes from end to end that keeps that room
+/// (else by any walk), pulled taut to the fewest straight legs that keep it (else that are
+/// clear): a navigation mesh's path, its agent radius and its string pulling. A leg with no
+/// walk round is kept as it was.
+fn walked(map: &Map, room: &Room, route: &[Vec3]) -> Vec<Vec3> {
     let mut out: Vec<Vec3> = route.iter().take(2).copied().collect();
     for pair in route.windows(2).skip(1) {
         let a = *out.last().unwrap_or(&pair[0]);
-        let mut b = pair[1];
-        if !sight(map, a, b) {
+        let mut b = room.settle(pair[1]);
+        if !room.roomy(a, b) {
             let feet = |c: IVec3| (c.as_vec3() + Vec3::new(0.5, 0.0, 0.5)) * CUBE;
-            let mut from = a;
-            let path: Vec<Vec3> = round(map, cube_of(a), cube_of(b))
-                .into_iter()
-                .map(feet)
-                .collect();
+            let (from_cube, to_cube) = (cube_of(a), cube_of(b));
+            let roomy = |c: IVec3| room.roomy_at(feet(c));
+            let mut cubes = round(map, from_cube, to_cube, &roomy);
+            if cubes.last() != Some(&to_cube) {
+                cubes = round(map, from_cube, to_cube, &|_| true);
+            }
+            let path: Vec<Vec3> = cubes.into_iter().map(feet).collect();
             // An end on what stands in the room (the goal's plinth) moves to the nearest
             // place a walker stands.
             if let Some(&last) = path.last().filter(|_| !stands(map, cube_of(b))) {
                 b = last;
             }
+            let mut from = a;
             let mut i = 0;
             while i + 1 < path.len() {
-                let far = (i + 1..path.len())
-                    .rev()
-                    .find(|&j| sight(map, from, path[j]))
-                    .unwrap_or(i + 1);
-                if sight(map, from, b) {
+                if room.roomy(from, b) {
                     break;
                 }
+                let far = |ok: &dyn Fn(Vec3, Vec3) -> bool| {
+                    (i + 1..path.len()).rev().find(|&j| ok(from, path[j]))
+                };
+                let far = far(&|p, q| room.roomy(p, q))
+                    .or_else(|| far(&|p, q| sight(map, p, q)))
+                    .unwrap_or(i + 1);
                 from = path[far];
                 out.push(from);
                 i = far;
@@ -509,9 +520,10 @@ fn walked(map: &Map, route: &[Vec3]) -> Vec<Vec3> {
     out
 }
 
-/// The shortest walk over the cubes from one standing place to another, near them; or to
-/// the place nearest it, if no walker stands there.
-fn round(map: &Map, from: IVec3, to: IVec3) -> Vec<IVec3> {
+/// The shortest walk over the cubes from one standing place to another, near them, through
+/// places `ok` lets it (the first always); or to the place nearest it, if no walker reaches
+/// it.
+fn round(map: &Map, from: IVec3, to: IVec3, ok: &dyn Fn(IVec3) -> bool) -> Vec<IVec3> {
     let (low, high) = (
         from.min(to) - IVec3::splat(ROUND_CUBES),
         from.max(to) + IVec3::splat(ROUND_CUBES),
@@ -528,7 +540,7 @@ fn round(map: &Map, from: IVec3, to: IVec3) -> Vec<IVec3> {
             break;
         }
         for n in steps(map, p) {
-            if n.cmpge(low).all() && n.cmple(high).all() && !back.contains_key(&n) {
+            if n.cmpge(low).all() && n.cmple(high).all() && !back.contains_key(&n) && ok(n) {
                 back.insert(n, p);
                 queue.push_back(n);
             }

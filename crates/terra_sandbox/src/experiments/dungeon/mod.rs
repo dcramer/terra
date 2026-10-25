@@ -180,6 +180,10 @@ fn lay_out(
             point(leg[1] + Vec3::Y * (EYE_M - 0.2))
         );
     }
+    // The camera's eye along the tour, kept off walls, leaves and slabs (a film's keys).
+    for (i, &eye) in stamp.view.iter().enumerate() {
+        info!("Dungeon view {i}: {}", point(eye));
+    }
     commands.insert_resource(Pending { stamp, frame });
 }
 
