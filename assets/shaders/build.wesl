@@ -701,7 +701,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let mean_lum = dot(mean, vec3(0.3, 0.59, 0.11));
             let figure = clamp(lum / max(mean_lum, 0.003), 0.5, 1.6);
             let ridge = clamp(rel * 2.5, -0.5, 0.5);
-            let silver = vec3(0.235, 0.228, 0.215) * mix(1.0, figure, 0.45) * (1.0 + ridge * age);
+            let silver = vec3(0.25, 0.225, 0.19) * mix(1.0, figure, 0.3) * (1.0 + ridge * age);
             c = mix(c, silver, age * (1.0 - 0.55 * shelter) * (1.0 - 0.5 * wet));
             c *= 1.0 - 0.3 * clamp(grime, 0.0, 1.0);
             let lanes = uv.x * 23.0 + 0.13;
