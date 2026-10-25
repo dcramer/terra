@@ -40,8 +40,6 @@ pub struct Move {
     #[serde(default)]
     pub hold: Option<f32>,
     #[serde(default)]
-    pub brace: Option<f32>,
-    #[serde(default)]
     pub stamina: f32,
 }
 
@@ -422,7 +420,6 @@ mod tests {
             warp: None,
             invulnerable: None,
             hold: None,
-            brace: None,
             stamina: 0.0,
         };
         // Clip seconds 0.2 + 2t: active from t = 0.2 to 0.3, over at 0.6.

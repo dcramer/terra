@@ -1797,16 +1797,106 @@
    "check": null
   },
   {
-   "measurable": false,
+   "measurable": true,
    "cost": "cheap",
    "id": "move.block.raise",
    "noticed": 4,
-   "notice": "the shield arm is not up in front of the body while blocking",
-   "bar": null,
-   "unit": "",
-   "source": "D450 (moves.ts blow.raised)",
-   "needs": "a spec for the game's block clip (Keyed_Block with blow.raised) put --into the set",
-   "check": null
+   "notice": "the shield arm is not up in front of the face while blocking",
+   "bar": {
+    "at_least": 0.42
+   },
+   "unit": "m",
+   "source": "D450 (moves.ts blow.raised: RAISED_M, RAISED_UP_M, ELBOW_M, STILL_M)",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "raised_hand_up_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.raise_ahead",
+   "noticed": 4,
+   "notice": "the raised shield hand is not out in front of the body",
+   "bar": {
+    "at_least": 0.3
+   },
+   "unit": "m",
+   "source": "D450 (moves.ts blow.raised: RAISED_M, RAISED_UP_M, ELBOW_M, STILL_M)",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "raised_hand_ahead_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.raise_elbow",
+   "noticed": 4,
+   "notice": "the raised shield arm's elbow hangs at the side",
+   "bar": {
+    "at_least": 0.2
+   },
+   "unit": "m",
+   "source": "D450 (moves.ts blow.raised: RAISED_M, RAISED_UP_M, ELBOW_M, STILL_M)",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "raised_elbow_ahead_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.raise_still",
+   "noticed": 4,
+   "notice": "the raised shield wavers while the block is held",
+   "bar": {
+    "at_most": 0.08
+   },
+   "unit": "m",
+   "source": "D450 (moves.ts blow.raised: RAISED_M, RAISED_UP_M, ELBOW_M, STILL_M)",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "raised_moves_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.from_guard",
+   "noticed": 4,
+   "notice": "the body snaps out of the guard as the shield comes up",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "from_guard_m"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.block.to_guard",
+   "noticed": 4,
+   "notice": "the body snaps back into the guard as the shield comes down",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M)",
+   "check": {
+    "by": "moves",
+    "row": "block",
+    "measure": "to_guard_m"
+   }
   },
   {
    "measurable": false,

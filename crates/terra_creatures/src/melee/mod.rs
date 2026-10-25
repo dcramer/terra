@@ -365,7 +365,7 @@ fn act(
                 motion,
                 up,
                 &set.guard,
-                fighter.guard_s.is_some(),
+                fighter.guard_s.and(set.get("block")),
                 pace,
             );
         }
@@ -506,26 +506,27 @@ fn steer(
 }
 
 /// The clip a drawn body walks with: its guard still (the set's `guard`), a strafe to either
-/// side, a walk forward or back, by which way it mostly goes; in the air, a jump.
+/// side, a walk forward or back, by which way it mostly goes; in the air, a jump. Blocking,
+/// the set's `block` move, raised and held at its `hold`.
 fn walk_clip(
     drawn: &mut Drawn,
     acting: &mut Acting,
     motion: &Motion,
     up: Vec3,
     guard: &str,
-    guarding: bool,
+    blocking: Option<&moves::Move>,
     pace: impl Fn(&str) -> Option<f32>,
 ) {
-    if guarding {
+    if let Some(block) = blocking {
         // The guard raised and held where the shield is up.
         if drawn
             .showing
             .as_ref()
-            .is_none_or(|(now, _)| now != "Fight_Block")
+            .is_none_or(|(now, _)| *now != block.clip)
         {
-            drawn.showing = Some(("Fight_Block".to_string(), 1.6));
-            let mut act = Act::once("Fight_Block", 0.75, 1.6);
-            act.hold_at = Some(1.2);
+            drawn.showing = Some((block.clip.clone(), block.speed));
+            let mut act = Act::once(&block.clip, block.from, block.speed);
+            act.hold_at = block.hold;
             act.blend = Duration::from_millis(90);
             acting.play(act);
         }
@@ -570,6 +571,14 @@ mod tests {
     /// A drawn player with so much stamina presses an action once: the move it is in after,
     /// and the stamina it has left.
     fn press(action: Action, left: f32, with: Option<Action>) -> (Option<String>, f32) {
+        let (world, player) = pressed(action, left, with);
+        let fighter = world.get::<Fighter>(player).unwrap();
+        let name = fighter.runner.name().map(str::to_string);
+        (name, world.get::<Stamina>(player).unwrap().left)
+    }
+
+    /// The world a drawn player with so much stamina pressed an action once in, and the player.
+    fn pressed(action: Action, left: f32, with: Option<Action>) -> (World, Entity) {
         let mut world = World::new();
         world.init_resource::<Time>();
         let path = terra_world::data::path(SET);
@@ -602,9 +611,21 @@ mod tests {
             ))
             .id();
         world.run_system_once(act).unwrap();
-        let fighter = world.get::<Fighter>(player).unwrap();
-        let name = fighter.runner.name().map(str::to_string);
-        (name, world.get::<Stamina>(player).unwrap().left)
+        (world, player)
+    }
+
+    #[test]
+    fn a_held_block_raises_the_sets_block_clip_and_holds_it_at_its_hold() {
+        let (world, player) = pressed(Action::BuildMenu, Stamina::FULL, None);
+        let block = world.resource::<Set>().0.get("block").unwrap().clone();
+        let drawn = world.get::<Drawn>(player).unwrap();
+        assert_eq!(drawn.showing, Some((block.clip.clone(), block.speed)));
+        let acting = world.get::<Acting>(player).unwrap();
+        let act = acting.clip.as_ref().unwrap();
+        assert_eq!(
+            (act.clip.as_str(), act.hold_at),
+            (block.clip.as_str(), block.hold)
+        );
     }
 
     #[test]
