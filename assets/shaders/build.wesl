@@ -90,6 +90,8 @@ struct Weather {
     a: vec4<f32>,
     b: vec4<f32>,
     c: vec4<f32>,
+    // The crack motif's most within a few texels round: how near a crack's line runs.
+    near: f32,
     on: bool,
 }
 
@@ -104,7 +106,7 @@ struct Weather {
 // centimetres across, both by the building's age; c.y how far down toward the eaves. On a
 // wall, c.w how high the point is over the build's foot, in metres.
 fn weather_at(wp: vec3<f32>, wn: vec3<f32>, roof: bool) -> Weather {
-    var out = Weather(vec4(0.0), vec4(0.0), vec4(0.0), false);
+    var out = Weather(vec4(0.0), vec4(0.0), vec4(0.0), 0.0, false);
     let w = layers.weather;
     if w[3].w < 0.5 {
         return out;
@@ -176,6 +178,12 @@ fn weather_at(wp: vec3<f32>, wn: vec3<f32>, roof: bool) -> Weather {
     out.a = vec4(m[0], m[1], m[2], m[3]);
     out.b = vec4(k[0], k[1], m[4], k[2]);
     out.c = vec4(m[5], k[3], k[4], (local.y - f32(low.y)) * w[5].z);
+    // The crack motif two and a half texels round, each kept on the face's own map.
+    for (var d = 0; d < 4; d++) {
+        let o = vec2(f32(d % 2), f32(1 - d % 2)) * select(2.5, -2.5, d >= 2);
+        let ud = (at * 32.0 + clamp(f * 32.0 + o, vec2(0.5), vec2(31.5))) / (f32(per_row) * 32.0);
+        out.near = max(out.near, textureSampleLevel(weather_motif, array_sampler, ud, 0, 0.0).r);
+    }
     out.on = true;
     return out;
 }
@@ -826,7 +834,24 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         c = mix(c, mix(c, vec3(lum), 0.4) * 1.2, spalled);
         c = mix(c, c * (0.12 + 0.12 * grain), gone);
         r = mix(r, 0.95, max(spalled, gone));
-        c = mix(c, c * 0.1, smoothstep(0.3, 0.7, weather.a.x));
+        let crack = smoothstep(0.3, 0.7, weather.a.x);
+        if way == 1 && !missing {
+            // Laid stone cracks along its joints, as old walls do: the mortar worn back and
+            // darkened with age, and where a crack's line runs near a joint the joint opened, dark
+            // and a little wider. Across a stone only now and then (one stone in four), a fine
+            // line, not black.
+            let aa = max(max(fw.x, fw.y) * CELLS * 0.7, 0.15);
+            let own = in_cell(uv, slot);
+            let joint = 1.0 - smoothstep(-aa, aa, own);
+            let opened = 1.0 - smoothstep(-aa, aa, own - 1.5);
+            c = mix(c, c * vec3(0.62, 0.6, 0.56), joint * age * 0.55);
+            c = mix(c, c * 0.22, opened * smoothstep(0.25, 0.6, weather.near));
+            let id = vec2(cell_at(uv, slot) * 255.0 + 37.0 * floor(uv.x), 11.0 + 53.0 * floor(uv.y));
+            let across = step(0.75, hash21(id + vec2(5.0, 77.0)));
+            c = mix(c, c * 0.45, crack * (1.0 - opened) * across * 0.8);
+        } else {
+            c = mix(c, c * 0.1, crack);
+        }
         pbr_input.material.base_color = vec4(c, 1.0);
         pbr_input.material.perceptual_roughness = r;
     }
