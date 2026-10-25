@@ -23,15 +23,14 @@ Read [docs/movement.md](../../../docs/movement.md) ("The goal", the pipeline) be
 5. **Film** when a move changed: `cargo xtask gpu film -- cargo xtask combat --film` (the duel's film and its checks; the film in `~/.cache/terra-review/duel/`).
 6. **Feel** goes to the review desk: a film for the developer's eye in a `FOR REVIEW` line (`review-desk` skill), never a claim in chat that it feels right.
 
-## The task list (failing criteria, 2026-10-24, after round 11)
+## The task list (failing criteria, 2026-10-24, after round 12)
 
-Ordered by what a player notices most (`noticed`), then by how far out. Re-read it from `cargo xtask combat --json` when it moves; the scorecard is the truth, this list its order. The light chain (slash, backhand, finisher, the partner's slash) is keyed to the game's guard, Keyed_Guard (the set's `guard`, D450), and passes every row; the heavy and the partner's heavy (Keyed_Heavy, keyed the same way) pass every row; the roll (Fight_Roll, the library's with the arms held out of the tuck, D454) passes every row; the block (Keyed_Block, keyed the same way, the shield across the face, its raise measured by moves.ts's `raised` bars) passes every row.
+Ordered by what a player notices most (`noticed`), then by how far out. Re-read it from `cargo xtask combat --json` when it moves; the scorecard is the truth, this list its order. The light chain (slash, backhand, finisher, the partner's slash) is keyed to the game's guard, Keyed_Guard (the set's `guard`, D450), and passes every row; the heavy and the partner's heavy (Keyed_Heavy, keyed the same way) pass every row; the roll (Fight_Roll, the library's with the arms held out of the tuck, D454) passes every row; the block (Keyed_Block, keyed the same way, the shield across the face, its raise measured by moves.ts's `raised` bars) passes every row. A landed blow holds 0.03-0.05 s and shows by a flash on what it struck and a punch of the view (D456, the set's `landed`; `hit.*` rows, measured by the tests that hold them).
 
 1. `film.feet_sliding` (bar 0; 35 of 36 plants slid after round 9, 3 of 84 after round 10's foot lock, D455, 1 of 77 after round 11, 22.4 cm, the partner's right foot standing): what is left is the walk's own stride (a clip foot gliding in at 3.5 m/s, too fast in the body's frame to lock: stride warping, movement.md phase 2) and the slash's first frames (the clip's left foot sliding as it lands from the guard).
-2. `timing.hit_stop.*` 0.10-0.20 s (bar 0-0.05): Enshrouded flashes and kicks the camera instead (a design call: raise it on the desk before changing).
-3. `move.Walk_Loop.held` 10.2, `move.Walk_Loop.hands` 6.2, `move.Idle_Loop.held` 21.4 cm: the drawn sword through the leg walking and idle.
+2. `move.Walk_Loop.held` 10.2, `move.Walk_Loop.hands` 6.2, `move.Idle_Loop.held` 21.4 cm: the drawn sword through the leg walking and idle.
 
-Not measurable yet (`?`, each with what it needs in `criteria.json`): the blind review score against Enshrouded, Enshrouded's block raise (`timing.block.raise`), the guard's shield face and the blows' specs in the game's set, roll distance, hit reactions, a light blow's recovery, hit flash and camera kick, the partner's telegraph seen from the game's camera.
+Not measurable yet (`?`, each with what it needs in `criteria.json`): the blind review score against Enshrouded, Enshrouded's block raise (`timing.block.raise`), the guard's shield face and the blows' specs in the game's set, roll distance, hit reactions, a light blow's recovery, the partner's telegraph seen from the game's camera.
 
 ## The pipeline's commands
 

@@ -1959,16 +1959,64 @@
    "check": null
   },
   {
-   "measurable": false,
+   "measurable": true,
    "cost": "cheap",
-   "id": "film.hit_feedback",
+   "id": "hit.flash.frames",
    "noticed": 4,
-   "notice": "a landed blow has no flash or camera kick",
-   "bar": null,
-   "unit": "",
-   "source": "tools/combat/refs/enshrouded.json targets.hit_stop (a 3-4 frame flash and a camera kick)",
-   "needs": "a flash and camera kick in the game and a film check that finds them",
-   "check": null
+   "notice": "a landed blow shows no flash on what it struck, or one that lingers",
+   "bar": {
+    "within": [
+     3,
+     4
+    ]
+   },
+   "unit": "frames at 60",
+   "source": "D456; tools/combat/refs/enshrouded.json hit_stop.flash_frames_at_60 (3-4)",
+   "check": {
+    "by": "measured",
+    "crate": "terra_creatures",
+    "test": "melee::flash::tests::a_struck_body_flashes_for_a_few_frames_and_gets_its_own_materials_back"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "hit.kick.peak",
+   "noticed": 3,
+   "notice": "a landed blow does not kick the camera, or kicks it so hard the fight is hard to follow",
+   "bar": {
+    "within": [
+     0.3,
+     1.5
+    ]
+   },
+   "unit": "deg",
+   "source": "D456 (a small kick of the camera); Enshrouded's size is not measured (refs/enshrouded.json hit_stop.note: the sky moves 3 to 8 of 255 a frame), so the bar runs from a few pixels (0.3 deg, about 6 at 1080 lines and 55 deg) to a kick that stays small (1.5 deg)",
+   "check": {
+    "by": "measured",
+    "crate": "terra_creatures",
+    "test": "melee::flash::tests::a_landed_blow_punches_the_view_and_it_settles_within_a_tenth_of_a_second_or_so"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "hit.kick.settle",
+   "noticed": 3,
+   "notice": "the camera's kick on a landed blow lingers, or is gone before it is seen",
+   "bar": {
+    "within": [
+     0.05,
+     0.12
+    ]
+   },
+   "unit": "s",
+   "source": "D456; tools/combat/refs/enshrouded.json hit_stop.note (the camera kicks from 247.67 to 247.77 s, still before and after: about 0.1 s)",
+   "check": {
+    "by": "measured",
+    "crate": "terra_creatures",
+    "test": "melee::flash::tests::a_landed_blow_punches_the_view_and_it_settles_within_a_tenth_of_a_second_or_so"
+   }
   },
   {
    "measurable": false,

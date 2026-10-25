@@ -148,6 +148,7 @@ pub(crate) const COMBAT: &[&str] = &[
     "crates/terra_motion/",
     "crates/terra_creatures/src/melee/",
     "crates/terra_game/src/play/sounds.rs",
+    "crates/terra_walker/src/shake.rs",
     "tools/characters/",
     "tools/combat/",
     "tools/sandbox/duel",

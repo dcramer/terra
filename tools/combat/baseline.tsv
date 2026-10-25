@@ -101,3 +101,12 @@ film.hit_stop	0	seeded from main at 705a8520 (2026-10-24), the first scorecard r
 film.framed	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
 film.camera_share	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
 camera.locked_off_line	1	new criterion camera.locked_off_line (D453): the locked camera stands on the line today, 0 deg off it
+move.block.raise	0.528	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
+move.block.raise_ahead	0.339	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
+move.block.raise_elbow	0.354	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
+move.block.raise_still	0.013	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
+move.block.from_guard	0.03	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
+move.block.to_guard	0.03	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
+hit.flash.frames	3	first numbers of D456's hit flash and camera kick (combat round 12): the struck body lit 3 frames at 60, the view punched 0.8 deg and settled in 0.083 s
+hit.kick.peak	0.8	first numbers of D456's hit flash and camera kick (combat round 12): the struck body lit 3 frames at 60, the view punched 0.8 deg and settled in 0.083 s
+hit.kick.settle	0.083	first numbers of D456's hit flash and camera kick (combat round 12): the struck body lit 3 frames at 60, the view punched 0.8 deg and settled in 0.083 s

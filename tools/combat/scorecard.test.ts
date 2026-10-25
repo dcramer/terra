@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CRITERIA, type Criterion, judge, miss, movesValue, readBaseline, readSet, rebaseline, testVerdicts, timing, writeBaseline } from "./scorecard.ts";
+import { CRITERIA, type Criterion, judge, measuredValues, miss, movesValue, readBaseline, readSet, rebaseline, testVerdicts, timing, writeBaseline } from "./scorecard.ts";
 
 const c = (bar: Criterion["bar"], extra: Partial<Criterion> = {}): Criterion => ({ id: "x", noticed: 3, notice: "", bar, unit: "s", source: "", check: null, cost: "cheap", measurable: true, ...extra });
 
@@ -81,6 +81,9 @@ test("cargo's lines and the move check's rows give each criterion its number", (
   const verdicts = testVerdicts("running 2 tests\ntest a::b ... ok\ntest a::c ... FAILED\n");
   assert.equal(verdicts.get("a::b"), 0);
   assert.equal(verdicts.get("a::c"), 1);
+  // What a passing test measured, printed beside libtest's own progress dots.
+  const measured = measuredValues("running 2 tests\nmeasured hit.kick.peak 0.8\n.measured hit.flash.frames 3\n.\ntest result: ok. 2 passed; 0 failed; 0 measured; 9 filtered out\n");
+  assert.deepEqual([...measured], [["hit.kick.peak", 0.8], ["hit.flash.frames", 3]]);
   const rows = [
     { move: "slash", clip: "Fight_Slash", measured: { held_cm: 12 } },
     { clip: "Fight_Slash", measured: { held_cm: 1 } },

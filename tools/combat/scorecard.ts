@@ -3,7 +3,8 @@
 // measured, a line each, and held to baseline.tsv, the combat ratchet.
 //
 //   cargo xtask combat                    the cheap criteria (the move set's timings, the move
-//                                         check on every body, the fight's rule tests), seconds
+//                                         check on every body, the fight's rule tests and what
+//                                         they measure), seconds
 //   cargo xtask combat --film             and the duel film's checks (the GPU, minutes)
 //   cargo xtask combat --json FILE        the results also as JSON
 //   cargo xtask combat --raise "<why>"    write the rows that got worse, or are new, with why
@@ -37,6 +38,7 @@ export type CheckOf =
   | { by: "timing"; measure: string; move?: string; next?: string }
   | { by: "moves"; row: string; measure: string }
   | { by: "test"; crate: string; test: string }
+  | { by: "measured"; crate: string; test: string }
   | { by: "film"; name: string }
   | null;
 export type Criterion = Row<CheckOf>;
@@ -107,6 +109,14 @@ export function timing(set: Map<string, Move>, check: { measure: string; move?: 
   return undefined;
 }
 
+/// The numbers a passing test printed of what it measured, `measured <criterion id> <value>`
+/// (a test that fails prints none, so its criteria have no number).
+export function measuredValues(out: string): Map<string, number> {
+  const values = new Map<string, number>();
+  for (const m of out.matchAll(/measured ([\w.]+) (-?\d+(?:\.\d+)?(?:e-?\d+)?)/g)) values.set(m[1], Number(m[2]));
+  return values;
+}
+
 /// The move check's rows (moves.ts --json): a row named by its move, or a clip with no move.
 type MovesRow = { move?: string; clip: string; measured?: Record<string, number> };
 export function movesValue(rows: MovesRow[], check: { row: string; measure: string }): number | undefined {
@@ -165,6 +175,17 @@ function main() {
     for (const c of cs) {
       const v = verdicts.get((c.check as { test: string }).test);
       if (v !== undefined) values.set(c.id, v);
+    }
+  }
+  // The numbers rule tests measure, printed as they pass, a cargo run a crate.
+  const measuring = new Map<string, Criterion[]>();
+  for (const c of wanted) if (c.check?.by === "measured") measuring.set(c.check.crate, [...(measuring.get(c.check.crate) ?? []), c]);
+  for (const [crate, cs] of measuring) {
+    const names = [...new Set(cs.map((c) => (c.check as { test: string }).test))];
+    const measured = measuredValues(run("cargo", ["test", "-q", "-p", crate, "--lib", "--", "--exact", "--nocapture", "--test-threads=1", ...names]));
+    for (const c of cs) {
+      const v = measured.get(c.id);
+      if (v !== undefined) values.set(c.id, round(v));
     }
   }
   // The duel film's checks (tools/sandbox/duel.ts writes checks.json beside its film).

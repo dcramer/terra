@@ -3,9 +3,11 @@
 //! active frames against the other's hurt capsule, once a blow, and judged, by
 //! `terra_motion`'s rules (`blade`, `moves::judge`, `contact::outcome`). Here: the reaction
 //! clips, the swing and what the blow met as noises (`struck`: the sound is chosen from that
-//! in data, docs/audio.md), the parry's flash, and what the player is told. Every outcome
+//! in data, docs/audio.md), the parry's flash, a landed blow's flash on what it struck
+//! (`flash`) and punch of the view (D456), and what the player is told. Every outcome
 //! is logged as `Melee: ...` with the scripted run's frame (D69).
 
+use super::flash::Lit;
 use super::partner::{Beat, Partner};
 use super::{DOWN_S, Drawn, Fighter, HEALTH, Set, show};
 use crate::staged::Staged;
@@ -18,6 +20,7 @@ use terra_motion::struck::Struck;
 use terra_survival::noise::{Cue, Noise};
 use terra_survival::told::Notice;
 use terra_walker::figure::Acting;
+use terra_walker::shake::Shake;
 use terra_walker::{Motion, Player, Stamina};
 use terra_world::shell::ScriptFrame;
 
@@ -90,6 +93,8 @@ pub fn strike(
     mut notice: ResMut<Notice>,
     mut glare: ResMut<Glare>,
     mut said: Option<ResMut<super::record::Said>>,
+    mut lit: MessageWriter<Lit>,
+    shake: Option<ResMut<Shake>>,
 ) {
     let set = &set.0;
     let frame = frame.map_or(0, |frame| frame.0);
@@ -200,9 +205,22 @@ pub fn strike(
         notice: &mut notice,
         glare: &mut glare,
         said: said.as_deref_mut(),
+        struck: Vec::new(),
     };
     for blow in landed {
         settle(&mut out, &mut fighters, &seen, blow, frame);
+    }
+    // A blow that lands shows by a flash on what it struck and a punch of the view (D456),
+    // not by holding the fight.
+    let shown = set.landed;
+    for &body in &out.struck {
+        lit.write(Lit {
+            body,
+            seconds: shown.flash_s,
+        });
+    }
+    if let (false, Some(mut shake)) = (out.struck.is_empty(), shake) {
+        shake.punch(shown.kick_deg, shown.kick_s);
     }
 }
 
@@ -214,6 +232,8 @@ struct Out<'a, 'w, 's, 'n, 'm, 'g> {
     glare: &'a mut ResMut<'g, Glare>,
     /// The fight's record, when one is kept (`record`).
     said: Option<&'a mut super::record::Said>,
+    /// The bodies a blow landed on, to flash.
+    struck: Vec<Entity>,
 }
 
 /// Does what a blow that reached a body does, as it was taken.
@@ -284,6 +304,9 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
         }
         Taken::GuardBroken if on.player => out.notice.say("Your guard is broken"),
         _ => {}
+    }
+    if matches!(blow.taken, Taken::Hit | Taken::GuardBroken) {
+        out.struck.push(on.entity);
     }
 }
 

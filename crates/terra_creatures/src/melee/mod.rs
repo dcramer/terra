@@ -8,11 +8,13 @@
 //! The rules are `terra_motion`'s (D447): the moves as data (`assets/data/moves/
 //! sword_and_shield.ron`) and their runner, a blade swept against a body's hurt capsule, and
 //! what a blow does. Here is only what reads and writes the bodies, plays clips, flashes and
-//! sounds: the player's stance below, what a blow shows in `contact`, the partner's mind in
+//! sounds: the player's stance below, what a blow shows in `contact` (the struck body's flash
+//! in `flash`, D456), the partner's mind in
 //! `partner`, the bars and the controls on screen in `hud`.
 
 mod contact;
 mod feet;
+mod flash;
 mod hud;
 mod partner;
 mod record;
@@ -121,6 +123,7 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(Update, (contact::fade, view));
     feet::plugin(app);
+    flash::plugin(app);
     hud::plugin(app);
     record::plugin(app);
     script::plugin(app);

@@ -156,7 +156,20 @@ pub struct MoveSet {
     /// The clip a body stands on guard in between moves, the pose its blows are keyed to at
     /// both ends (D450).
     pub guard: String,
+    /// What a blow that lands shows, in place of a long hit-stop (D456).
+    pub landed: Landed,
     pub moves: HashMap<String, Move>,
+}
+
+/// What a blow that lands shows (D456): what it struck flashes for `flash_s`, and the player's
+/// view is kicked by `kick_deg`, easing back to rest over `kick_s`. Presentation only: the
+/// fight's rules never read it.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Landed {
+    pub flash_s: f32,
+    pub kick_deg: f32,
+    pub kick_s: f32,
 }
 
 /// A blow thrown too tired: its own time runs at `pace`, and it does `might` of its damage.
