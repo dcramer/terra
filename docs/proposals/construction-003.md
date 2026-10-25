@@ -31,10 +31,12 @@ SE2 builds from a catalogue of parts by purpose (armour cubes, slopes, corners a
 - **Snapping**: a part snaps to the edge of the part aimed at, as SE2's mount points do (a wall to a floor's edge or a wall's end, a floor to a wall's top, a roof slope to a wall's top or the slope below), and to the base's grid otherwise. Drawing a wall as a line or a room as a rectangle (D152, D154) lays a run of parts.
 - **Everything placed is a plan first**, as SE's projections: free, ghosts walked through (D139, unchanged). The hammer does this already: every brush box, shape, wall and room lays plans (`terra_building::tool::aim`, `terra_build::plans`), and holding the hammer at one fills it (`Op::Fill`); only the costs are pretend (D333). The plans in a claim add up to one list of what they need and how much is in reach, SE2's build queue.
 - **A part is built by working it**: hold the hammer at it and it goes in, in its kit's physical order (a log wall course by course, a stone wall stone by stone, D139), drawn as far as it is filled (D358), the material taken as it goes, from the pack, then storage in the claim (D141), later carts and recruits (D90). The brush's size works a box of plans at once, SE2's area welder. Whether logs are still carried and set (D140) is a question below.
+- **One thing at a time, or a whole structure**: the developers, 2026-10-25: "i think the main difference is we should be able to build one thing at a time vs building the entire structure from ghosts?" Proposed: click lays a part's ghost and, held on, builds it there and then from what you carry, as SE2's place-then-weld in one gesture; let go and it stays a ghost to finish later. Laying a whole structure as ghosts first stays for planning ahead. The hammer builds the ghost aimed at, in any order, once what it rests on stands (nothing floats, D192, D193), not only the plan's next part as now. How this reads is on the desk.
 - **Taking down is working it backwards**: Q and hold, a part coming out in reverse and everything given back; damage takes a part's cubes the same way, and repair works it up again (D305).
 - **Carving**: any box cut out of a part, planned or built, as D233 does now: a doorway or a window anywhere in a wall, its cubes given back, the rest of the part standing.
+- **What is destroyed comes back as a ghost**: a part lost to an attack, fire or collapse, not taken down with the hammer, is left as its ghost in place to build again (D355, decided and deferred; "we'll auto replace a destroyed part w/ a ghost i think"), as SE2 marks what is missing against the blueprint.
 
-So the loop is ours already; what is new is the catalogue of parts and their snapping, the claim's build list, and delivery made real. Amends D226 and D253: the hammer leads with parts, not brushes painting cubes; roofs are still built by hand, of roof parts, to any shape (D241, D343). Lifts the pause on costs and storage in D333's baseline: building would spend what is delivered, not infinite pretend resources.
+So the loop is ours already; what is new is the catalogue of parts and their snapping, the claim's build list, and delivery made real. Amends D226 and D253: the hammer leads with parts, not brushes painting cubes; roofs are still built by hand, of roof parts, to any shape (D241, D343). Costs come with the modes (D494): creative has infinite resources and is what the developers test with; survival spends what is delivered, which lifts D333's pause there.
 
 ## What stays
 
@@ -50,11 +52,13 @@ Answered in chat, 2026-10-25:
 - **1. What "block-based" changes**: the build loop, with prefab parts in place of placing each voxel; not the look.
 - **2. What carving means**: walls and the rest can still be carved out.
 - **5. What a part is**: made of cubes, as now: "so things still need to made of cubes like they are now. i think that part of our system can stay? but each block would need to be placed as a ghost first, then constructed by delivering the parts".
+- **Modes**: "we should have a mode, creative vs survival, and creative has infinite resources, which is what we'll use to test a lot" (D494).
 
 On the desk, each with a recommendation:
 
 - **3. Mining**: held and continuous, by tool tier and hardness, every material giving something (recommended); or the scoops as now with SE2's yields only.
 - **4. Ore**: deposits uneven by region and depth, found by their surface signs (recommended); or veins everywhere, as now.
+- **7. One thing at a time**: click lays the ghost and holding on builds it at once, any ghost built in any order once what holds it stands (recommended); or ghosts first as now, the one aimed at built.
 - **6. Placing a single cube**: kept, as the smallest part in the catalogue (recommended); or parts only, carving the one act on a single cube.
 
 Left open, to answer once those are: whether players can put ground back (SE2: no; Enshrouded: yes); whether big materials are still carried to a plan (D140, D296) or every material comes from the pack and storage, as SE's.
