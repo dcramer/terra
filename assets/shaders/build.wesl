@@ -748,7 +748,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let e = 0.004;
         let lump = moss_lumps(st);
         let lump_d = vec2(moss_lumps(st + vec2(e, 0.0)), moss_lumps(st + vec2(0.0, e))) - lump;
-        let field = smoothstep(0.08, 0.4, weather.a.z * (0.7 + 0.6 * grain));
+        let field = smoothstep(0.05, 0.35, weather.a.z * (0.7 + 0.6 * grain));
         let ragged = (noise21(st * 23.0 + 5.0) - 0.5) * 0.4 + (lump - 0.5) * 0.3;
         // The height's pull held within bounds, so a deep-grained timber's ridges or a
         // stone's proud tops slow the moss rather than stopping it.
@@ -758,9 +758,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             moss = smoothstep(-0.04, 0.06, reach - rel + ragged * 0.15);
         }
         let tone = noise21(st * 2.3 + 11.0);
-        let olive_brown = mix(vec3(0.08, 0.095, 0.035), vec3(0.08, 0.066, 0.034), smoothstep(0.4, 0.8, tone));
+        let olive_brown = mix(vec3(0.1, 0.12, 0.04), vec3(0.1, 0.083, 0.042), smoothstep(0.4, 0.8, tone));
         let fresh = smoothstep(0.55, 0.9, noise21(st * 5.0 + 3.0)) * 0.6;
-        let moss_colour = mix(olive_brown, vec3(0.11, 0.125, 0.04), fresh) * (0.7 + 0.5 * lump);
+        let moss_colour = mix(olive_brown, vec3(0.13, 0.155, 0.045), fresh) * (0.7 + 0.5 * lump);
         let damp_band = smoothstep(0.0, 0.25, field) * (1.0 - moss);
         c *= 1.0 - select(0.28, 0.1, roof) * damp_band;
         c = mix(c, moss_colour, moss * 0.94);
