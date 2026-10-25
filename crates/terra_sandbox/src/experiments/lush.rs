@@ -525,7 +525,11 @@ struct Forest {
 struct LushCover(Arc<floor::Map>);
 
 impl CoverSource for LushCover {
-    fn growing(&self, _planet: &Planet, _ground: Vec3, at: Vec2) -> Growing {
+    /// None on dug ground (a dungeon's digs).
+    fn growing(&self, planet: &Planet, ground: Vec3, at: Vec2) -> Growing {
+        if planet.dug(ground) {
+            return Growing::default();
+        }
         self.0.growing(at)
     }
 
@@ -1503,7 +1507,8 @@ fn plant(
                     dice.range(0.85, 1.18)
                 };
             place.scale = Vec3::new(wide, scale, wide);
-            if left_out {
+            // Rolled as the rest, then left out on dug ground (a dungeon's digs).
+            if left_out || planet.dug(place.translation) {
                 continue;
             }
             by_species[model.species as usize] += 1;

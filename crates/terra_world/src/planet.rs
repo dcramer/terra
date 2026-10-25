@@ -168,6 +168,10 @@ impl Planet {
     /// Whether the ground at a point has been dug or filled, rather than lying where it was
     /// generated: nothing that grew there stands on it any more.
     pub fn dug(&self, point: Vec3) -> bool {
+        // Undug, the ground is where it was generated, wherever the field finds it.
+        if self.ground.edit_count() == 0 {
+            return false;
+        }
         let up = point.normalize_or(Vec3::Y);
         (self.ground_at(point).length() - self.surface(up).length()).abs() > 0.15
     }

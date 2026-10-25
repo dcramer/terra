@@ -144,13 +144,7 @@ fn lay_out(
     };
     let stamp = stamp::stamp(&dungeon, theme, &kind);
     let frame = site(&planet, &start, &stamp, demos.near, demos.within);
-    for dig in &stamp.digs {
-        planet.apply(&Operation::DigBox {
-            centre: frame.transform_point(dig.centre),
-            half: dig.half,
-            rotation: frame.rotation,
-        });
-    }
+    dig_in(&mut planet, &stamp, &frame);
     let up_side = (stamp.start_facing + 2) % 4;
     let at = stamp.start + dir(up_side) * START_BEYOND_M;
     commands.insert_resource(ArriveAt {
@@ -187,6 +181,19 @@ fn lay_out(
         );
     }
     commands.insert_resource(Pending { stamp, frame });
+}
+
+/// Digs the dungeon's boxes out of the ground at its frame. What grows is planted after
+/// (Startup before the forest's Update), and nothing is planted on dug ground
+/// (`Planet::dug`), so no tree, bush or grass stands inside.
+fn dig_in(planet: &mut Planet, stamp: &Stamp, frame: &Transform) {
+    for dig in &stamp.digs {
+        planet.apply(&Operation::DigBox {
+            centre: frame.transform_point(dig.centre),
+            half: dig.half,
+            rotation: frame.rotation,
+        });
+    }
 }
 
 /// The dungeon's frame: its stair's top at the candidate within `within` of `near` whose
@@ -235,3 +242,6 @@ fn site(planet: &Planet, start: &Start, stamp: &Stamp, near: (f32, f32), within:
     );
     frame_at(point, &start.0)
 }
+
+#[cfg(test)]
+mod tests;

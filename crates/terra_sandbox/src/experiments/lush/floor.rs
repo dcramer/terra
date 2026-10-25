@@ -938,6 +938,13 @@ impl Lay<'_, '_, '_> {
         }
     }
 
+    /// Whether a place is on ground dug or filled before the floor was laid (a dungeon's
+    /// digs): nothing is laid there, as nothing grown stays where the ground is dug
+    /// (`terra_world::flora`'s `follow_digs`).
+    fn dug(&self, place: &Transform) -> bool {
+        self.planet.dug(place.translation)
+    }
+
     /// Where a direction in the world points on the map.
     fn on_map(&self, direction: Vec3) -> Vec2 {
         Vec2::new(direction.dot(self.east), direction.dot(self.south)).normalize_or(Vec2::X)
@@ -1435,6 +1442,9 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         };
         let place = lay.on(at, dice, 0.0, scale);
         let (mesh, material) = kinds[dice.below(kinds.len() as u32) as usize].clone();
+        if lay.dug(&place) {
+            return;
+        }
         lay.commands.spawn((
             Name::new(if boulder { "Boulder" } else { "Rock" }),
             Mesh3d(mesh),
@@ -1505,7 +1515,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
             let h = map.here(p);
             h.path > 1.0 && h.bark > 0.6 && h.lying > 0.3
         });
-        if !clear {
+        if !clear || lay.dug(&place) {
             continue;
         }
         for k in -steps..=steps {
@@ -1569,6 +1579,9 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         let (bark_mesh, end_mesh, radius) = stumps[dice.below(STUMP_KINDS as u32) as usize].clone();
         let scale = dice.range(0.8, 1.25);
         let place = lay.on(at, &mut dice, 0.0, scale);
+        if lay.dug(&place) {
+            continue;
+        }
         let bark = if here.needles > 0.5 {
             lay.pine_bark.clone()
         } else {
@@ -1657,7 +1670,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 let drawn = variants[pick].clone();
                 // Rolled as before, so every other plant stays where it was, then left out
                 // if it would stand in the path's line.
-                if !placement.kind.keeps_path_line(here.path) {
+                if !placement.kind.keeps_path_line(here.path) || lay.dug(&place) {
                     continue;
                 }
                 lay.plant(placement, &drawn, p, place);
