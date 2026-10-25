@@ -23,8 +23,11 @@ Yes, but neither is good yet. WFC motifs (C) beat noise-cut motifs (B) in both b
 | r3 | 3.65 | 4.06 | 4.42 | +0.36 [+0.12, +0.60], p 0.008 | +0.77 |
 | r3b (after the patina iteration) | 3.95 | 3.91 | 4.33 | +0.42 [+0.26, +0.59], p 0.000 | +0.38 |
 | r5 (moss, roof, streaks, soot, timber; r3's C re-judged as a fourth build: 4.29) | 3.96 | 4.01 | 4.45 | +0.43 [+0.35, +0.52], p 0.000 | +0.49 |
+| r6 (stone tone, cracks in joints, log moss, slates, timber, water; r5's C re-judged: 4.63) | 3.95 | 4.31 | 4.58 | +0.27 [+0.13, +0.41], p 0.002 | +0.63 |
 
 Round 5 (panel `weathering-r5`) changed the look in five ways. Moss is now height-blended into the joints with soft edges and a bump. An aged roof goes matte; its dark rectangles were the glossy slate's specular reflection of the ground, and they show unweathered too. Streaks start only at sills and level eave wall heads, as faint 10-25 cm washes. The dark line from the ridge was really the soot motif, which is now a soft plume. Timber is silvered. Against round 3's C in the same panel the new C gains +0.15 [+0.08, +0.23], p 0.001. B no longer beats A (+0.05, p 0.41).
+
+Round 6 (panel `weathering-r6`) took on round 5's harsh review: each stone its own tone and hue by its cell, the wall dulled and darker toward its foot, lichen on the upper courses, cracks opened along the joints and seldom across a stone, fibrous log moss, slates varied by piece across the texture's repeat, warmer silvered logs, washes and splash. C held against round 5's C (-0.06 [-0.13, +0.01], no difference shown), while B, which shares the blend, rose to +0.36 over A. Two ablations in the same panel scored lower than C: without the dulling (4.51) and also with round 5's black cracks (4.53, no difference from the first). So the dulling helps, and the judges do not tell the cracks apart.
 
 C led in every view (r3: noon 4.56, overcast 4.44, window 4.26). Between the panels, one iteration added an age patina over the stone, dark joints, cracks kept to the joints and pale wall lichen. It made C worse against A (+0.77 to +0.38) and was reverted. A's images were the same in both panels, so its 0.30 rise shows how far one panel's level drifts from the next. Compare builds within a panel only.
 
@@ -59,6 +62,8 @@ The maps are 11 channels per texel (the fourth channel of the last layer is a co
 Half size alone ruins the sharp motifs (a max error of 219 is a crack or a lichen spot lost). The mixed layout keeps them and halves only the smooth masks. No face was blank, so sharing one empty slot saves nothing on this house. The runtime uploads the mixed layout: `terra_weathering::bc4` encodes BC4 block bytes, two R-channel BC4 arrays hold the motif channels at 32 texels a face and the masks at 16 (4.6 MB for the house against 15.2 MB for the raw atlas), and `weather_at` samples both; R8 arrays of the same planes where the GPU lacks BC. Rendered beside the raw upload the house is unchanged (RMSE 0.3% of full scale, no visible difference at the window). Deriving the mask channels (edge, cavity, height) in the shader from the cube data the material already has would leave only the motif channels, about 3 KB per face.
 
 ## Remaining gaps
+
+After round 6, the faults the round addressed hold the score but do not raise it; the judges still see a clean stone wall at the 3/4 view, where the moss at the log wing's foot and the black cracks of round 5 read as age.
 
 After round 5, from its harsh review (C at 4.5 of 10):
 
