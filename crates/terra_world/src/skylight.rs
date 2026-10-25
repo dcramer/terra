@@ -645,6 +645,30 @@ impl Colours {
     }
 }
 
+/// The open sky of a clear day with the sun at `sun` in the world, the painting turned into
+/// the world by `frame`, as `paint` leaves it: for the irradiance volume's tests.
+#[cfg(test)]
+pub(crate) fn clear_sky(sun: Vec3, frame: Quat) -> OpenSky {
+    let c = Colours {
+        low: 0.6,
+        day: 1.0,
+        shade: Vec3::new(0.4, 0.5, 1.0),
+        horizon: Vec3::new(0.9, 0.85, 0.8),
+        zenith: Vec3::new(0.1, 0.25, 0.7),
+        ground: Vec3::new(0.3, 0.35, 0.1),
+        overcast: 0.0,
+        sun: frame.inverse() * sun.normalize(),
+        glow: Vec3::new(1.0, 0.5, 0.18),
+    };
+    let (sky, ground) = c.painting(&c.lit()).lobes();
+    OpenSky {
+        sky,
+        ground,
+        brightness: 1.0,
+        frame,
+    }
+}
+
 impl Painting {
     /// The diffuse light toward each of +X, -X, +Y, -Y, +Z, -Z, from the sky above the horizon
     /// and from the ground below it, as the environment map's diffuse light is.

@@ -477,8 +477,12 @@ fn world_sides(open: &OpenSky) -> [(Vec3, Vec3); 6] {
 
 /// The volume's texture: for each cell and side, the open sky's light for the share seen,
 /// the leaves' glow for the share hidden, and the ground's bounce, dimmed in deep shade. Laid
-/// out as Bevy's irradiance volumes are: the negative sides in the first half of each slab,
-/// the positive in the second; X, then Y, then Z, one slab after the other.
+/// out as Bevy's shader reads its irradiance volumes (`irradiance_volume.wesl`, whose
+/// `neg_offset` adds half the height for a normal's negative part): the positive sides in the
+/// first half of each slab, the negative in the second; X, then Y, then Z, one slab after the
+/// other. Bevy's own docs (`irradiance_volume.rs`) give the halves the other way round; the
+/// shader is what reads them, and following the docs lit each side with the light of the one
+/// opposite: the shade facing away from the sun, and what faces down, took the most.
 fn texels(seen: &Seen, sides: &[(Vec3, Vec3); 6]) -> Vec<u8> {
     let UVec3 {
         x: nx,
@@ -500,7 +504,7 @@ fn texels(seen: &Seen, sides: &[(Vec3, Vec3); 6]) -> Vec<u8> {
                         sky * share + LEAF_GLOW * luma * (1.0 - share) + ground * ground_lit;
                     let axis = side / 2;
                     let negative = side % 2 == 1;
-                    let t = y + if negative { 0 } else { ny };
+                    let t = y + if negative { ny } else { 0 };
                     let p = z + axis * nz;
                     let at = ((p * ny * 2 + t) * nx + x) * 4;
                     data[at..at + 4].copy_from_slice(&rgb9e5(light).to_le_bytes());
@@ -820,17 +824,68 @@ mod tests {
         assert!((a - b).abs() < 0.1, "{a} then {b}");
     }
 
+    fn unpack(v: u32) -> Vec3 {
+        let e = (v >> 27) as i32 - 15 - 9;
+        let s = libm::exp2f(e as f32);
+        Vec3::new(
+            (v & 511) as f32 * s,
+            (v >> 9 & 511) as f32 * s,
+            (v >> 18 & 511) as f32 * s,
+        )
+    }
+
+    /// The light the volume's texture gives a surface of world normal `n` in a cell, read as
+    /// Bevy's shader reads it (`irradiance_volume.wesl`, `irradiance_volume_light`): the
+    /// normal unturned by the volume's own turn; for each axis the slab of that axis, a third
+    /// of the depth, and in it the upper half of the height (`neg_offset` of 0.5) where the
+    /// normal's part along the axis is negative; the three blended by the parts' squares.
+    fn as_bevy_reads(data: &[u8], cells: UVec3, cell: UVec3, n: Vec3) -> Vec3 {
+        let mut light = Vec3::ZERO;
+        for (axis, part) in n.to_array().into_iter().enumerate() {
+            let t = cell.y + if part < 0.0 { cells.y } else { 0 };
+            let p = cell.z + axis as u32 * cells.z;
+            let at = (((p * cells.y * 2 + t) * cells.x + cell.x) * 4) as usize;
+            let texel = u32::from_le_bytes(data[at..at + 4].try_into().unwrap());
+            light += unpack(texel) * part * part;
+        }
+        light
+    }
+
+    #[test]
+    fn under_an_open_sky_the_volume_lights_what_faces_the_sun_and_the_sky_most() {
+        // D490: a shaded side facing the sun's half of the sky takes more light than one
+        // facing away, and (the sky being brighter than the ground's bounce) what faces up
+        // more than what faces down. The painting is turned into the world as the
+        // environment map's is, and the volume as a forest's is, east of north.
+        let cells = UVec3::new(2, 2, 2);
+        let seen = Seen {
+            cells,
+            sides: vec![[1.0; 6]; 8],
+            up: vec![1.0; 8],
+        };
+        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        let frame = Quat::from_rotation_y(0.7);
+        for sun in [
+            Vec3::new(-0.95, 0.23, -0.2),
+            Vec3::new(0.3, 0.5, 0.8),
+            Vec3::new(0.0, 0.9, 0.4),
+        ] {
+            let open = crate::skylight::clear_sky(sun, frame);
+            let data = texels(&seen, &world_sides(&open));
+            let flat = Vec3::new(sun.x, 0.0, sun.z).normalize();
+            let read = |n: Vec3| as_bevy_reads(&data, cells, UVec3::ONE, n);
+            let (toward, away) = (read(flat), read(-flat));
+            assert!(
+                luma(toward) > 1.1 * luma(away),
+                "sun {sun}: toward {toward}, away {away}"
+            );
+            let (up, down) = (read(Vec3::Y), read(-Vec3::Y));
+            assert!(luma(up) > luma(down), "sun {sun}: up {up}, down {down}");
+        }
+    }
+
     #[test]
     fn colours_pack_as_the_gpu_reads_them() {
-        let unpack = |v: u32| {
-            let e = (v >> 27) as i32 - 15 - 9;
-            let s = libm::exp2f(e as f32);
-            Vec3::new(
-                (v & 511) as f32 * s,
-                (v >> 9 & 511) as f32 * s,
-                (v >> 18 & 511) as f32 * s,
-            )
-        };
         for c in [
             Vec3::new(0.5, 0.25, 0.125),
             Vec3::new(3.0, 0.01, 1.7),
