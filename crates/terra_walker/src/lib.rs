@@ -34,6 +34,21 @@ pub mod strap;
 pub mod swing;
 pub mod walker;
 
+/// The systems that fit the clip's pose to the body after the animation and before the
+/// joints' world places are worked out (its proportions, its lift). A fix-up that bends the
+/// pose further (feet kept where they land) runs after them.
+#[derive(bevy::ecs::schedule::SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Fitted;
+
+/// `Fitted`'s place in `PostUpdate`, configured by each plugin with a system in it.
+pub(crate) fn fitted()
+-> bevy::ecs::schedule::ScheduleConfigs<bevy::ecs::schedule::InternedSystemSet> {
+    use bevy::prelude::*;
+    Fitted
+        .after(bevy::app::AnimationSystems)
+        .before(bevy::transform::TransformSystems::Propagate)
+}
+
 pub use walker::{
     ArriveAt, Downed, Hands, IsLocalPlayer, LocalPlayer, Motion, Player, PlayerInput, Stamina,
     Stance, View, WalkerPlugin, WarpTo,

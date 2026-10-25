@@ -6,6 +6,8 @@
 //! - `blade`: a blade swept from tick to tick against a body's hurt capsule.
 //! - `contact`: what a blow that reached a body does to both fighters, and the fighter's own
 //!   state (health, guard, hit-stop, reeling, shoves) it changes.
+//! - `feet`: feet locked where they land while a move drives or turns the body over them,
+//!   stepping when it has gone too far, and the two-bone solve that bends a leg to them.
 //! - `stamina`: what a move costs and what a body too tired for it may still do.
 //! - `struck`: what a blow meets (steel, wood, flesh) and how heavy it is, as it is heard.
 //! - `script`: a fight script, the intents a scripted fighter gives on times or on what the
@@ -16,6 +18,7 @@
 
 pub mod blade;
 pub mod contact;
+pub mod feet;
 pub mod moves;
 pub mod script;
 pub mod stamina;

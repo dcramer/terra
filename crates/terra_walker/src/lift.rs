@@ -15,7 +15,6 @@ use std::sync::Arc;
 use bevy::{
     gltf::{Gltf, GltfExtras},
     prelude::*,
-    transform::TransformSystems,
     world_serialization::WorldInstanceReady,
 };
 use serde::Deserialize;
@@ -84,12 +83,8 @@ pub fn plugin(app: &mut App) {
         .init_resource::<ClipNames>()
         .add_observer(find_lifts)
         .add_systems(Update, name_clips)
-        .add_systems(
-            PostUpdate,
-            lift_bodies
-                .after(bevy::app::AnimationSystems)
-                .before(TransformSystems::Propagate),
-        );
+        .configure_sets(PostUpdate, crate::fitted())
+        .add_systems(PostUpdate, lift_bodies.in_set(crate::Fitted));
 }
 
 /// When a body's model is in: the node carrying its file's lifts, if it has any.

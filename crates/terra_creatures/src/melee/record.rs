@@ -96,6 +96,7 @@ type Them<'a> = (
     Option<&'a Motion>,
     Option<&'a Staged>,
     Option<&'a Stamina>,
+    Option<&'a super::feet::Kept>,
 );
 
 fn write(
@@ -129,7 +130,7 @@ fn write(
         .inverse();
     let local = |at: Vec3| mm(terms.transform_point3(at));
     let mut bodies = Vec::new();
-    for &(entity, place, fighter, is_player, body, motion, staged, pool) in &seen {
+    for &(entity, place, fighter, is_player, body, motion, staged, pool, kept) in &seen {
         let feet = place.translation();
         let facing = motion
             .map(|motion| motion.facing)
@@ -187,6 +188,7 @@ fn write(
             "health": r(fighter.health),
             "stamina": pool.map(|pool| r(pool.left)),
             "balls": balls,
+            "kept": kept.map(|kept| kept.states()),
         }));
     }
     let mut line = json!({

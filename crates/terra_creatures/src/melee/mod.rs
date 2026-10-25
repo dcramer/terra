@@ -12,6 +12,7 @@
 //! `partner`, the bars and the controls on screen in `hud`.
 
 mod contact;
+mod feet;
 mod hud;
 mod partner;
 mod record;
@@ -61,6 +62,7 @@ pub struct Set(pub MoveSet);
 /// which it derefs to, and what the game keeps of it: its sword hand, its blade's last place
 /// and the way its move drives it.
 #[derive(Component)]
+#[require(feet::Kept)]
 pub struct Fighter {
     pub fight: Fighting,
     /// The socket in its right hand, whose frame the sword's blade is in.
@@ -118,6 +120,7 @@ pub fn plugin(app: &mut App) {
                 .before(Sim::Act),
         )
         .add_systems(Update, (contact::fade, view));
+    feet::plugin(app);
     hud::plugin(app);
     record::plugin(app);
     script::plugin(app);

@@ -23,11 +23,11 @@ Read [docs/movement.md](../../../docs/movement.md) ("The goal", the pipeline) be
 5. **Film** when a move changed: `cargo xtask gpu film -- cargo xtask combat --film` (the duel's film and its checks; the film in `~/.cache/terra-review/duel/`).
 6. **Feel** goes to the review desk: a film for the developer's eye in a `FOR REVIEW` line (`review-desk` skill), never a claim in chat that it feels right.
 
-## The task list (failing criteria, 2026-10-24, after round 9)
+## The task list (failing criteria, 2026-10-24, after round 10)
 
 Ordered by what a player notices most (`noticed`), then by how far out. Re-read it from `cargo xtask combat --json` when it moves; the scorecard is the truth, this list its order. The light chain (slash, backhand, finisher, the partner's slash) is keyed to the game's guard, Keyed_Guard (the set's `guard`, D450), and passes every row; the heavy and the partner's heavy (Keyed_Heavy, keyed the same way) pass every row; the roll (Fight_Roll, the library's with the arms held out of the tuck, D454) passes every row.
 
-1. `film.feet_sliding` (bar 0; 66 of 81 plants slid past 3 cm before round 6, 35 of 36 after round 9, the worst the partner's left foot through partner_heavy): feet skate in the duel.
+1. `film.feet_sliding` (bar 0; 35 of 36 plants slid after round 9, 3 of 84 after round 10's foot lock, D455, median 8.5 cm, worst 22.4 cm): what is left is the walk's own stride (a clip foot gliding in at 3.5 m/s, too fast in the body's frame to lock: stride warping, movement.md phase 2) and the slash's first frames (the clip's left foot sliding as it lands from the guard).
 2. `move.block.held` 6.4 cm: the sword through the head while blocking (next: Keyed_Block, its guard at {clip: Keyed_Guard, frame: 75}).
 3. `timing.hit_stop.*` 0.10-0.20 s (bar 0-0.05): Enshrouded flashes and kicks the camera instead (a design call: raise it on the desk before changing).
 4. `move.Walk_Loop.held` 10.2, `move.Walk_Loop.hands` 6.2, `move.Idle_Loop.held` 21.4 cm: the drawn sword through the leg walking and idle.

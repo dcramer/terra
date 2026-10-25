@@ -24,7 +24,6 @@ use bevy::{
         skinning::{SkinnedMesh, SkinnedMeshInverseBindposes},
     },
     prelude::*,
-    transform::TransformSystems,
     world_serialization::WorldInstanceReady,
 };
 use serde::Deserialize;
@@ -304,12 +303,8 @@ pub fn plugin(app: &mut App) {
             )
                 .chain(),
         )
-        .add_systems(
-            PostUpdate,
-            hold_joints
-                .after(bevy::app::AnimationSystems)
-                .before(TransformSystems::Propagate),
-        );
+        .configure_sets(PostUpdate, crate::fitted())
+        .add_systems(PostUpdate, hold_joints.in_set(crate::Fitted));
 }
 
 /// Records the rest pose of each body and look as it appears.
