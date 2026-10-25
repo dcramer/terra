@@ -18,6 +18,8 @@
 //!   speed, and a doorway's sill crossed without a hop (criteria 5 to 7).
 //! - `flora`: stumps and logs as flora fits them, taller than a step and never climbed, by a
 //!   root or from a slope's high side, or no taller and stepped onto (criterion 5).
+//! - `water`: a lake walked into, waded, swum across and walked out of, straight and at an
+//!   angle to its shores, and a body floated to rest (criterion 17, D74).
 //! - `far`: the same walks on a world 30 km across, where f32 is 2 mm fine (criterion 22, D482).
 
 mod data;
@@ -27,6 +29,7 @@ mod flora;
 mod runs;
 mod sources;
 mod stairs;
+mod water;
 
 pub use field::{Ball, Course, Field, Frame, Solid, Water};
 use glam::{DVec3, Vec3};
@@ -93,7 +96,9 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(stairs);
     let (flora, deepest_flora) = flora::score(&new);
     measures.extend(flora);
-    let deepest = deepest.max(deeper).max(deepest_flora);
+    let (water, deepest_water) = water::score(&new);
+    measures.extend(water);
+    let deepest = deepest.max(deeper).max(deepest_flora).max(deepest_water);
     // What a body met besides the ground counts toward how deep it ever went.
     for m in measures.iter_mut().filter(|m| m.id == "penetration.max") {
         m.value = m.value.max(deepest);

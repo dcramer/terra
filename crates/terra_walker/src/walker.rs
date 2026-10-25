@@ -308,14 +308,16 @@ const DETOUR_TURN: f32 = 1.4;
 /// seconds at a rock.
 const DETOUR_LONGEST_S: f32 = 8.0;
 const TRIES_A_SIDE: u32 = 3;
-/// After this long at one spot without reaching it, the walk gives it up for the next.
+/// After this long without getting [`PASSED_M`] nearer its spot than it has been, the walk
+/// gives the spot up for the next. Timed from the walk's start at the spot instead, a long leg
+/// swum at half a jog was given up halfway across the mountain lake (unit D).
 const GIVE_UP_S: f32 = 20.0;
 /// Getting this much nearer its spot means what was in the way is passed.
 const PASSED_M: f32 = 2.0;
 
 /// A route walk's way round something in its way: the nearest it has been to its spot, how
 /// long since it got nearer, which try round it this is and how long it has still to head
-/// off, and how long it has been making for this spot.
+/// off, and how long since it last got well nearer this spot.
 #[derive(Default)]
 struct Detour {
     nearest: Option<f32>,
@@ -325,6 +327,9 @@ struct Detour {
     side: f32,
     /// The nearest it was before its first try round, to know when it is past.
     before: Option<f32>,
+    /// The nearest it has been to this spot, detours and all, and how long since it got
+    /// [`PASSED_M`] nearer.
+    closest: Option<f32>,
     at_spot: f32,
 }
 
@@ -333,6 +338,13 @@ impl Detour {
     /// left positive.
     fn turn(&mut self, distance: f32, dt: f32) -> f32 {
         self.at_spot += dt;
+        if self
+            .closest
+            .is_none_or(|closest| distance < closest - PASSED_M)
+        {
+            self.closest = Some(distance);
+            self.at_spot = 0.0;
+        }
         if self.off > 0.0 {
             self.off -= dt;
             return DETOUR_TURN * self.side;
@@ -365,7 +377,8 @@ impl Detour {
         0.0
     }
 
-    /// Whether the walk has made for its spot so long it should give it up.
+    /// Whether the walk has made for its spot so long without getting nearer that it should
+    /// give it up.
     fn given_up(&self) -> bool {
         self.at_spot > GIVE_UP_S
     }
@@ -665,5 +678,17 @@ mod tests {
             detour.turn(20.0, dt);
         }
         assert!(detour.given_up());
+    }
+
+    /// A spot far off and walked toward slowly, as across a lake swum at half a jog, is kept
+    /// however long the walk takes.
+    #[test]
+    fn a_far_spot_neared_slowly_is_not_given_up() {
+        let mut detour = Detour::default();
+        let dt = 1.0 / 60.0;
+        for i in 0..(60.0 * GIVE_UP_S * 3.0) as usize {
+            detour.turn(150.0 - 2.0 * i as f32 * dt, dt);
+            assert!(!detour.given_up(), "given up after {:.1} s", i as f32 * dt);
+        }
     }
 }

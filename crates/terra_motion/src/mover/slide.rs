@@ -45,6 +45,12 @@ const RECOVERY: f32 = 1.0;
 const STEP_FORWARD_MIN: f32 = 0.02;
 const STEP_FORWARD_TEST: f32 = 0.15;
 const STEP_COS_FORWARD: f32 = 0.258_819;
+/// A sweep's hit is a face a contact already gave when their normals are this close (0.8
+/// deg): closer than a field's contacts merge faces (`query`, 2.6 deg), so a face merged into
+/// the one under the body and met by the sweep is solved against, not taken for known. Taken
+/// at the merge's 0.999, a body walking down into a hollow of the 30 km world's ground stood
+/// for good, its velocity along the floor (unit D).
+const SAME_FACE_COS: f32 = 0.9999;
 
 /// A body's shape and how it meets the world in a tick.
 #[derive(Clone, Copy, Debug)]
@@ -290,7 +296,7 @@ pub fn move_shape(
             let distance = plane_distance(&capsule, hit);
             let known = contacts
                 .iter()
-                .any(|c: &Contact| c.normal.dot(hit.normal) > 0.999);
+                .any(|c: &Contact| c.normal.dot(hit.normal) > SAME_FACE_COS);
             if !known && distance < shape.predictive {
                 contacts.push(Contact { distance, ..*hit });
             }
@@ -311,7 +317,7 @@ pub fn move_shape(
             let fraction = (hit.fraction - shape.padding / length).max(0.0);
             unseen = !contacts
                 .iter()
-                .any(|c| c.normal.dot(hit.contact.normal) > 0.999);
+                .any(|c| c.normal.dot(hit.contact.normal) > SAME_FACE_COS);
             displacement *= fraction;
             simulated *= fraction;
             kept.push(hit.contact);
@@ -678,6 +684,7 @@ pub fn stick_to_floor(feet: Vec3, distance: f32, query: &dyn Query, shape: &Shap
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mover::query::Hit;
     use crate::mover::{Block, Obstacle, Obstacles};
 
     fn shape() -> Shape {
@@ -695,6 +702,92 @@ mod tests {
 
     fn slab(centre: Vec3, axes: [Vec3; 3], half: Vec3) -> Obstacle {
         Obstacle::Block(Block { centre, axes, half })
+    }
+
+    /// Ground of two planes meeting in a shallow hollow, as a field answers it: its contacts
+    /// give the face under the body alone (the other, a little over two degrees off it, merged
+    /// into it), its sweep meets the other, which the body starts a fraction of a millimetre
+    /// into. The state the lake's route stood in for good on the 30 km world (unit D).
+    struct Hollow {
+        faces: [(Vec3, f32); 2],
+    }
+
+    impl Hollow {
+        fn distance(capsule: &Capsule, (normal, offset): (Vec3, f32)) -> f32 {
+            capsule.a.dot(normal).min(capsule.b.dot(normal)) - offset - capsule.radius
+        }
+    }
+
+    impl Query for Hollow {
+        fn contacts(&self, capsule: &Capsule, within: f32, out: &mut Vec<Contact>) {
+            let (normal, offset) = self.faces[0];
+            let distance = Self::distance(capsule, self.faces[0]);
+            if distance < within {
+                let centre = if capsule.a.dot(normal) < capsule.b.dot(normal) {
+                    capsule.a
+                } else {
+                    capsule.b
+                };
+                let at = centre - normal * (centre.dot(normal) - offset);
+                out.push(Contact {
+                    at,
+                    normal,
+                    distance,
+                    velocity: Vec3::ZERO,
+                    body: None,
+                });
+            }
+        }
+
+        fn sweep(&self, capsule: &Capsule, motion: Vec3) -> Option<Hit> {
+            self.faces
+                .iter()
+                .filter_map(|&(normal, offset)| {
+                    let into = -motion.dot(normal);
+                    let distance = Self::distance(capsule, (normal, offset));
+                    if into <= 1.0e-9 {
+                        return None;
+                    }
+                    let fraction = (distance / into).max(0.0);
+                    (fraction < 1.0).then(|| Hit {
+                        fraction,
+                        contact: Contact {
+                            at: capsule.a - normal * (capsule.radius + distance),
+                            normal,
+                            distance,
+                            velocity: Vec3::ZERO,
+                            body: None,
+                        },
+                    })
+                })
+                .min_by(|a, b| a.fraction.total_cmp(&b.fraction))
+        }
+    }
+
+    #[test]
+    fn a_face_the_contacts_merged_away_is_slid_along_not_stopped_at() {
+        let shape = shape();
+        // Down a 12 degree slope toward +x, the ground ahead 2.3 degrees less steep.
+        let under = Vec3::new(0.2, 1.0, 0.0).normalize();
+        let ahead = Vec3::new(0.158, 1.0, 0.0).normalize();
+        assert!(under.dot(ahead) > 0.999 && under.dot(ahead) < 0.9995);
+        let feet = Vec3::new(0.0, (shape.radius + 0.00036) / under.y - shape.radius, 0.0);
+        let centre = feet + Vec3::Y * shape.radius;
+        let hollow = Hollow {
+            faces: [
+                (under, 0.0),
+                (ahead, centre.dot(ahead) - shape.radius + 0.0002),
+            ],
+        };
+        let down = Vec3::new(1.0, -0.2, 0.0).normalize();
+        let velocity = down * 4.3 - under * 0.125;
+        let mut active = Vec::new();
+        let moved = move_shape(feet, velocity, 1.0 / 64.0, &hollow, &shape, &mut active) - feet;
+        assert!(
+            moved.dot(down) > 0.9 * 4.3 / 64.0,
+            "moved {moved} of {}",
+            4.3 / 64.0
+        );
     }
 
     #[test]

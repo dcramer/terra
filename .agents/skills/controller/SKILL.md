@@ -37,4 +37,6 @@ The kind-data rows (`accel.data`, `turn.data`, `air.control`, `slope.speed`, `la
 
 What stops a body besides the ground (`step.building`, `step.prop`, `step.rock`, `tunnel.door`) is `course/sources.rs`: a fixture's `obstacles` (`mover::shapes`: turned boxes for a base's cubes, a door's leaf and a prop; `terra_core::Solid` pieces for a rock), answered apart from its ground field. A step is as high as named at its face, where it is climbed: a box laid level there, a rock's crest lowered by the world's curve at its middle.
 
-Not measurable yet (`?`, each with what it needs): swimming's float, dive and breath, stamina (D61 decides the attributes, not their costs); the crowd's cost (a broadphase); heavy, the in-game filmed course (stage 1b: step smoothing, feet sliding, the yard). A change to the mover's queries runs `--bench` too: no ✗ on `cost.body`.
+Water (`swim.shore`, `swim.wade`, `swim.float`, criterion 17) is `course/water.rs`: a lake with smooth shores to 12 and 25 deg walked into, waded, swum across and out, straight and 25 and 45 deg off, and a body floated to rest; water is a medium the mover reads at the feet (`World.water`), never a contact.
+
+Not measurable yet (`?`, each with what it needs): swimming's dive and breath, stamina (D61 decides the attributes, not their costs); the crowd's cost (a broadphase); heavy, the in-game filmed course (stage 1b: step smoothing, feet sliding, the yard). A change to the mover's queries runs `--bench` too: no ✗ on `cost.body`.

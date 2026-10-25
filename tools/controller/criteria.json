@@ -605,18 +605,49 @@
    "measurable": true
   },
   {
+   "id": "swim.shore",
+   "noticed": 5,
+   "notice": "a body walking into a lake, across it and out stops in the water or at the far shore",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "m short of the far shore's dry ground, worst walk (shores to 12 and 25 deg, straight across and 25 and 45 deg off), given 1.5 times the walk at the kind's jog and swim",
+   "source": "docs/controller.md criterion 17 and the sources table (water a medium, not a contact); D74",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "swim.wade",
+   "noticed": 3,
+   "notice": "a body wading in swims before the water is as deep as its kind's swim depth, or wades on deeper",
+   "bar": {
+    "at_most": 0.03
+   },
+   "unit": "m off the kind's swim depth (swim_depth x height) where it first leaves its feet going in, worst walk",
+   "source": "docs/controller.md criterion 17, 'Numbers that are data' (swim depth); D74",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "swim.float",
    "noticed": 3,
    "notice": "a body in deep water sinks or does not float up to the surface",
    "bar": {
-    "pass": true
+    "at_most": 0.02
    },
-   "unit": "",
-   "source": "docs/controller.md criterion 17; D74",
-   "check": null,
+   "unit": "m off the kind's float depth (float_depth x height under the surface), put 3 m under and left 8 s",
+   "source": "docs/controller.md criterion 17, 'Numbers that are data' (buoyancy); D74",
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "swimming in the mover (ground state swimming, buoyancy as data) and open question 3"
+   "measurable": true
   },
   {
    "id": "swim.dive",
