@@ -481,6 +481,43 @@ struct Looked {
     naive_open_m: f32,
     turn: f32,
     goal_off: f32,
+    /// The fastest the look turns over `PAN_S`, in radians a second, at the stamp's pace and
+    /// at the plain dolly's 2.5 m/s.
+    pan: f32,
+    plain_pan: f32,
+    /// Frames with a wall within `WALL_M` of the eye anywhere in them (`frame_rays`), and
+    /// within a metre.
+    walled_frame: usize,
+    metre_frame: usize,
+    /// The nearest wall in any frame, in metres (up to 1.5).
+    nearest: f32,
+    /// The steepest the look pitches, up or down, in radians.
+    pitch: f32,
+    /// How long the dolly takes from the first look measured to the last, at the stamp's
+    /// pace and at 2.5 m/s, in seconds.
+    seconds: f32,
+    plain_seconds: f32,
+}
+
+/// The look's turn is measured over this long, in seconds (round 17's mine whip: 168° in
+/// 1.9 s, some 90° a second).
+const PAN_S: f32 = 0.5;
+/// A wall this near the eye in frame fills it (the smear round 18 saw at 0.3-0.6 m).
+const WALL_M: f32 = 0.5;
+
+/// Rays across a 20 mm lens's frame, 84° by 53°: five across and three up, through its
+/// corners, edges' middles and middle.
+fn frame_rays(d: Vec3) -> impl Iterator<Item = Vec3> {
+    let right = d.cross(Vec3::Y).normalize_or(Vec3::X);
+    let up = right.cross(d);
+    let (across, high) = (
+        libm::tanf(42f32.to_radians()),
+        libm::tanf(26.5f32.to_radians()),
+    );
+    (0..15).map(move |k| {
+        let (u, w) = ((k % 5) as f32 / 2.0 - 1.0, (k / 5) as f32 - 1.0);
+        (d + right * (u * across) + up * (w * high)).normalize()
+    })
 }
 
 /// Where a look is at most this far off the way 4 m on, the way on is in frame (a 20 mm
@@ -500,6 +537,7 @@ fn check_look(theme: &Theme, dungeon: &Dungeon) -> Looked {
     let map = cubes(&stamp.ops);
     let (view, look) = (&stamp.view, &stamp.look);
     assert_eq!(view.len(), look.len(), "a look an eye");
+    assert_eq!(view.len(), stamp.pace.len(), "a pace an eye");
     let dir = |i: usize| (look[i] - view[i]).normalize();
     let goal = stamp
         .objects
@@ -515,31 +553,51 @@ fn check_look(theme: &Theme, dungeon: &Dungeon) -> Looked {
         .unwrap_or(view.len() - 1);
     let surface = stamp.route[0].distance(stamp.route[1]);
     let lead = (4.0 / STEP_M) as usize;
-    // How far a ray from an eye runs through open cubes, and whether the cube it meets faces
-    // it within 45° of straight on (the axis it stepped across into it).
-    let open = |from: Vec3, d: Vec3| {
+    // How far a ray from an eye runs through open cubes, up to `most` metres, and the axis it
+    // stepped across into the cube it meets (nought if none).
+    let hit = |from: Vec3, d: Vec3, most: f32| {
         let mut was = cube_of(from);
-        for k in 1..=160 {
+        for k in 1..=(most / 0.05).round() as i32 {
             let c = cube_of(from + d * (k as f32 * 0.05));
             if !clear(&map, c) {
-                let across = c - was;
-                let face = if across.x != 0 {
-                    d.x
-                } else if across.y != 0 {
-                    d.y
-                } else {
-                    d.z
-                };
-                return (
-                    k as f32 * 0.05,
-                    face.abs() > std::f32::consts::FRAC_1_SQRT_2,
-                );
+                return (k as f32 * 0.05, c - was);
             }
             was = c;
         }
-        (8.0, false)
+        (most, IVec3::ZERO)
     };
-    let mut seen = Looked::default();
+    // How far it runs, up to 8 m, and whether the cube it meets faces it within 45° of
+    // straight on.
+    let open = |from: Vec3, d: Vec3| {
+        let (free, across) = hit(from, d, 8.0);
+        let face = if across.x != 0 {
+            d.x
+        } else if across.y != 0 {
+            d.y
+        } else {
+            d.z
+        };
+        (
+            free,
+            across != IVec3::ZERO && face.abs() > std::f32::consts::FRAC_1_SQRT_2,
+        )
+    };
+    // When the dolly reaches each eye, at the stamp's pace and at the plain 2.5 m/s.
+    let mut times = vec![0.0f32];
+    let mut plain = vec![0.0f32];
+    for i in 1..view.len() {
+        times.push(times[i - 1] + stamp.pace[i - 1]);
+        plain.push(plain[i - 1] + view[i].distance(view[i - 1]) / 2.5);
+    }
+    let pan = |t: &[f32], i: usize| {
+        (i + 1..view.len())
+            .find(|&j| t[j] - t[i] >= PAN_S)
+            .map_or(0.0, |j| dir(i).angle_between(dir(j)) / (t[j] - t[i]))
+    };
+    let mut seen = Looked {
+        nearest: 1.5,
+        ..Looked::default()
+    };
     let mut run = 0.0f32;
     for i in 0..stop {
         if (i as f32) * STEP_M < surface + 1.0 {
@@ -566,6 +624,21 @@ fn check_look(theme: &Theme, dungeon: &Dungeon) -> Looked {
         if i + 1 < view.len() {
             seen.turn = seen.turn.max(d.angle_between(dir(i + 1)) / STEP_M);
         }
+        seen.pan = seen.pan.max(pan(&times, i));
+        seen.plain_pan = seen.plain_pan.max(pan(&plain, i));
+        let wall = |r: Vec3| match hit(view[i], r, 1.5) {
+            (free, across) if across.y == 0 && across != IVec3::ZERO => free,
+            _ => 1.5,
+        };
+        let nearest = frame_rays(d).map(wall).fold(1.5, f32::min);
+        seen.walled_frame += (nearest < WALL_M) as usize;
+        seen.metre_frame += (nearest < 1.0) as usize;
+        seen.nearest = seen.nearest.min(nearest);
+        seen.pitch = seen.pitch.max(libm::asinf(d.y.abs().min(1.0)));
+        if i + 1 < view.len() {
+            seen.seconds += times[i + 1] - times[i];
+            seen.plain_seconds += plain[i + 1] - plain[i];
+        }
     }
     seen.goal_off = dir(stop).angle_between(goal.at + Vec3::Y * 0.5 - view[stop]);
     seen
@@ -573,7 +646,7 @@ fn check_look(theme: &Theme, dungeon: &Dungeon) -> Looked {
 
 #[test]
 fn the_camera_looks_down_the_way_ahead_not_at_walls() {
-    use super::look::TURN_MOST_PER_M;
+    use super::look::{PITCH_MOST, TURN_MOST_PER_M, TURN_MOST_PER_S};
     for theme in Theme::all(&assets()).unwrap() {
         let set = ModuleSet::new(&theme).unwrap();
         let seeds: Vec<u64> = (0..SEEDS).collect();
@@ -594,6 +667,21 @@ fn the_camera_looks_down_the_way_ahead_not_at_walls() {
         let most = |f: &dyn Fn(&Looked) -> f32| seen.iter().map(f).fold(0.0, f32::max);
         let (lost_m, turn) = (most(&|s| s.lost_m), most(&|s| s.turn));
         let goal_off = most(&|s| s.goal_off);
+        let (pan, plain_pan) = (most(&|s| s.pan), most(&|s| s.plain_pan));
+        let walled_frame = sum(&|s| s.walled_frame as f32) / samples;
+        let metre_frame = sum(&|s| s.metre_frame as f32) / samples;
+        let nearest = seen.iter().map(|s| s.nearest).fold(1.5, f32::min);
+        let pitch = most(&|s| s.pitch);
+        let slower = sum(&|s| s.seconds) / sum(&|s| s.plain_seconds);
+        println!(
+            "{}: turning {:.0}°/s over {PAN_S} s at most at the tour's pace ({:.0} at 2.5 m/s), the tour {slower:.2} times as long; pitched {:.0}° at most; a wall in frame within {WALL_M} m {:.2}% of frames, within 1 m {:.2}%, {nearest:.2} m at the nearest",
+            theme.name,
+            pan.to_degrees(),
+            plain_pan.to_degrees(),
+            pitch.to_degrees(),
+            100.0 * walled_frame,
+            100.0 * metre_frame
+        );
         println!(
             "{}: {} tours, {samples} looks: the way on out of frame {:.2}% but turning round ({lost_m:.1} m at most), facing a wall within {NEAR_M} m {:.2}% ({:.2}), open {open:.2} m down the look on average ({naive_open:.2} looking at the way 4 m on), turning {:.0}° a metre at most, the goal {:.0}° off at the stop at most",
             theme.name,
@@ -632,6 +720,28 @@ fn the_camera_looks_down_the_way_ahead_not_at_walls() {
         let bound = TURN_MOST_PER_M * std::f32::consts::SQRT_2 * 1.01;
         assert!(turn <= bound, "{}: turns {turn} a metre", theme.name);
         assert!(goal_off < 0.35, "{}: the goal {goal_off} off", theme.name);
+        // Round 17's mine film whipped round out of a dead end, some 90° a second; at the
+        // tour's pace no look turns faster than a slow pan.
+        assert!(
+            pan <= TURN_MOST_PER_S * 1.01,
+            "{}: turns {}°/s",
+            theme.name,
+            pan.to_degrees()
+        );
+        // The view keeps the eye off walls (`view::ROOM_M`), and the look keeps a wall from
+        // filling the frame: round 18 saw walls smeared at 0.3-0.6 m.
+        // Round 17's mine film pitched 59° down at a well.
+        assert!(
+            pitch <= PITCH_MOST + 1e-3,
+            "{}: pitched {}°",
+            theme.name,
+            pitch.to_degrees()
+        );
+        assert!(
+            walled_frame <= 0.001 && metre_frame < 0.03 && nearest >= 0.6,
+            "{}: a wall within {WALL_M} m in {walled_frame} of frames, {nearest} m at the nearest",
+            theme.name
+        );
     }
 }
 

@@ -30,6 +30,7 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Sta
     out.route = walked(map, &room, &out.route);
     out.view = room.view(&out.route);
     out.look = super::look::looks(map, &out.view, &out.objects);
+    out.pace = super::look::pace(&out.view, &out.look);
 }
 
 /// A leaf in the doorway at the far room of each door, locked door and one-way door; an arch

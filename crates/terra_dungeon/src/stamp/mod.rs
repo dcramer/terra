@@ -149,6 +149,9 @@ pub struct Stamp {
     /// look, at the way `look::AHEAD_M` on, or drawn to a room's goal or key once near,
     /// turning at most `look::TURN_PER_M` but where the way ahead turns faster.
     pub look: Vec<Vec3>,
+    /// The seconds a camera's dolly takes from each eye of `view` to the next, nought at the
+    /// last: `look::DOLLY_M_S`, slowed so the look turns at most `look::TURN_MOST_PER_S`.
+    pub pace: Vec<f32>,
 }
 
 /// Lays a dungeon in cubes; `kind` names the building kinds of the theme's walls, floors and
@@ -174,6 +177,7 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
         route: Vec::new(),
         view: Vec::new(),
         look: Vec::new(),
+        pace: Vec::new(),
     };
     shell::lay(&dungeon.layout, &kinds, &mut out.ops);
     modules::lay(dungeon, theme, &looks, &kinds, &mut out);

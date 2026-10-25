@@ -52,6 +52,17 @@ pub const TURN_MOST_PER_M: f32 = 1.05;
 pub const HARD_RAD: f32 = 0.5;
 /// How far out along its look each look point stands, in metres.
 pub const LOOK_M: f32 = 4.0;
+/// The most the look pitches up or down, in radians (30°): round 17's mine film pitched to
+/// 59° down at a well, the way 4 m on a short chord under the eye.
+pub const PITCH_MOST: f32 = 0.52;
+/// The dolly's pace along the view where the look turns slowly, in metres a second.
+pub const DOLLY_M_S: f32 = 2.5;
+/// The fastest the look turns at the dolly's pace, in radians a second (45°, a slow pan):
+/// the dolly slows where it would turn faster (round 17's mine film yawed 168° in 1.9 s
+/// out of a dead end at the plain 2.5 m/s, a whip pan).
+pub const TURN_MOST_PER_S: f32 = 0.785;
+/// The dolly's slowing is eased over this much of the view either side, in metres.
+const EASE_M: f32 = 1.5;
 
 /// Whether the line between two points passes only open cubes, every 0.1 m.
 pub(super) fn seen(map: &Map, a: Vec3, b: Vec3) -> bool {
@@ -71,15 +82,17 @@ pub(super) fn looks(map: &Map, view: &[Vec3], objects: &[Object]) -> Vec<Vec3> {
         .map(|o| o.at + Vec3::Y * INTEREST_UP_M)
         .collect();
     let lead = (AHEAD_M / STEP_M).round() as usize;
-    let last = (view[n - 1] - view[n - 2]).normalize_or(Vec3::NEG_Z);
+    // Where the way 4 m on comes back to the eye (a dead end, the tour's end), the way on
+    // held as it was: round 17's mine film fell back to the whole tour's last direction
+    // there, a jump the turn bound then spread into a whip pan.
+    let mut held = level((view[1] - view[0]).normalize_or(Vec3::NEG_Z), PITCH_MOST);
     let ons: Vec<Vec3> = (0..n)
         .map(|i| {
             let to = view[(i + lead).min(n - 1)] - Vec3::Y * LOWER_M - view[i];
             if to.length() > 0.5 {
-                to.normalize()
-            } else {
-                last
+                held = level(to.normalize(), PITCH_MOST);
             }
+            held
         })
         .collect();
     let raw: Vec<Vec3> = (0..n)
@@ -115,6 +128,53 @@ pub(super) fn looks(map: &Map, view: &[Vec3], objects: &[Object]) -> Vec<Vec3> {
         .collect()
 }
 
+/// A direction pitched no more than `most` radians up or down.
+fn level(d: Vec3, most: f32) -> Vec3 {
+    let (yaw, pitch) = angles(d);
+    from_angles(yaw, pitch.clamp(-most, most))
+}
+
+/// The direction of a yaw and pitch, in radians.
+fn from_angles(yaw: f32, pitch: f32) -> Vec3 {
+    let flat = libm::cosf(pitch);
+    Vec3::new(
+        libm::sinf(yaw) * flat,
+        libm::sinf(pitch),
+        -libm::cosf(yaw) * flat,
+    )
+}
+
+/// The seconds the dolly takes from each eye of the view to the next (nought at the last):
+/// `DOLLY_M_S`, slowed where the look would turn faster than `TURN_MOST_PER_S`, the slowing
+/// eased over `EASE_M` either side. Eased as the most needed within `EASE_M` averaged over
+/// `EASE_M`, so no step is quicker than its own turn allows.
+pub(super) fn pace(view: &[Vec3], look: &[Vec3]) -> Vec<f32> {
+    let n = view.len();
+    if n < 2 {
+        return vec![0.0; n];
+    }
+    let dir = |i: usize| (look[i] - view[i]).normalize_or(Vec3::NEG_Z);
+    let need: Vec<f32> = (0..n - 1)
+        .map(|i| {
+            let plain = view[i].distance(view[i + 1]) / DOLLY_M_S;
+            plain.max(dir(i).angle_between(dir(i + 1)) / TURN_MOST_PER_S)
+        })
+        .collect();
+    let reach = (EASE_M / STEP_M).round() as usize;
+    let around = |i: usize| i.saturating_sub(reach)..(i + reach + 1).min(n - 1);
+    let most: Vec<f32> = (0..n - 1)
+        .map(|i| need[around(i)].iter().fold(0.0f32, |a, &b| a.max(b)))
+        .collect();
+    let mut out: Vec<f32> = (0..n - 1)
+        .map(|i| {
+            let near = &most[around(i)];
+            near.iter().sum::<f32>() / near.len() as f32
+        })
+        .collect();
+    out.push(0.0);
+    out
+}
+
 /// A direction turned towards an axis until it is at most `most` radians off it.
 fn within(dir: Vec3, axis: Vec3, most: f32) -> Vec3 {
     let off = dir.angle_between(axis);
@@ -143,8 +203,9 @@ fn turned(dirs: &[Vec3], frame: &[Vec3], slow: f32, fast: f32) -> Vec<Vec3> {
     let Some(&first) = dirs.first() else {
         return Vec::new();
     };
-    let mut out = vec![first];
     let (mut yaw, mut pitch) = angles(first);
+    pitch = pitch.clamp(-PITCH_MOST, PITCH_MOST);
+    let mut out = vec![from_angles(yaw, pitch)];
     // Clamped forward: the look-ahead already turns before a corner, and a turn spread
     // before the change too swung the look into the corner's wall (round 15: 5.5% of the
     // crypt's looks with a wall within 1.5 m, against 1.1%).
@@ -162,13 +223,8 @@ fn turned(dirs: &[Vec3], frame: &[Vec3], slow: f32, fast: f32) -> Vec<Vec3> {
             (sy, sp) = step(fast);
         }
         yaw += sy;
-        pitch += sp;
-        let flat = libm::cosf(pitch);
-        out.push(Vec3::new(
-            libm::sinf(yaw) * flat,
-            libm::sinf(pitch),
-            -libm::cosf(yaw) * flat,
-        ));
+        pitch = (pitch + sp).clamp(-PITCH_MOST, PITCH_MOST);
+        out.push(from_angles(yaw, pitch));
     }
     out
 }
@@ -197,6 +253,29 @@ mod tests {
         assert!(out[1].angle_between(se) < 1e-4);
         let out = turned(&[sw, se], &[sw, se], 0.5, 0.5);
         assert!(out[0].angle_between(out[1]) <= 0.5 + 1e-4);
+    }
+
+    #[test]
+    fn the_dolly_slows_where_the_look_turns_fast_and_only_there() {
+        // A straight way, then a quarter turn of the look in one step: 2.5 m/s along the
+        // straight, and slowed about the turn so that no step turns faster than the bound.
+        let view: Vec<Vec3> = (0..60).map(|i| Vec3::Z * (i as f32 * STEP_M)).collect();
+        let look: Vec<Vec3> = view
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| p + if i < 30 { Vec3::Z } else { Vec3::X })
+            .collect();
+        let pace = pace(&view, &look);
+        assert_eq!(pace.len(), view.len());
+        let plain = STEP_M / DOLLY_M_S;
+        assert!((pace[5] - plain).abs() < 1e-5, "plain: {}", pace[5]);
+        assert!((pace[55] - plain).abs() < 1e-5, "plain after: {}", pace[55]);
+        let turn = std::f32::consts::FRAC_PI_2 / TURN_MOST_PER_S;
+        assert!(pace[29] >= turn - 1e-5, "the turn's step {}", pace[29]);
+        // Eased: the steps either side slower than plain too, some way off.
+        assert!(pace[26] > plain && pace[32] > plain);
+        // A look pitched steeply is held to the most pitch.
+        assert!(level(Vec3::new(0.0, -1.0, -0.3).normalize(), PITCH_MOST).y >= -0.5);
     }
 
     #[test]
