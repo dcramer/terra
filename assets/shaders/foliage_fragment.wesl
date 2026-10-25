@@ -249,8 +249,9 @@ const SNOW: vec3<f32> = vec3<f32>(0.92, 0.94, 0.97);
 const SNOW_TOP: vec3<f32> = vec3<f32>(1.0, 0.95, 0.86);
 // How much of a level spray's load shows seen from below, where only its edge overhangs.
 const BOUGH_UNDERSIDE: f32 = 0.12;
-// How many of the loads' clumps a metre, on a crown's cards.
-const LOAD_CLUMPS: f32 = 0.55;
+// How many of the loads' clumps a metre, on a crown's cards: about three metres across, a few pads
+// (at 0.55 the loads flecked the crown, the looks review's fault 4).
+const LOAD_CLUMPS: f32 = 0.35;
 // How a green leaf still on through a snowy spell is shaded, darker and cooler: an evergreen's
 // needles read near black-green beside the white (Ghost of Yotei's, Red Dead 2's spruces).
 const NEEDLES_UNDER_SNOW: vec3<f32> = vec3<f32>(0.32, 0.4, 0.45);
@@ -290,6 +291,8 @@ fn climate_place(world: vec3<f32>) -> vec2<f32> {
 // How far over a spray's upper edge, metres up the card, its picture must be empty for snow
 // to lie along that edge.
 const SHELF_M: f32 = 0.12;
+// How much wider than a pixel the picture is taken for that test: two mips up.
+const SHELF_BLUR: f32 = 4.0;
 
 // 1 where a card's picture is empty SHELF_M straight up from this point, along the card's own
 // plane: the top edge of a spray, where a load lies (the offset-alpha test of snow on foliage
@@ -313,7 +316,8 @@ fn shelf_edge(uv: vec2<f32>, world: vec3<f32>, sky_up: vec3<f32>) -> f32 {
     let sx = (a22 * bx - a12 * by) / det;
     let sy = (a11 * by - a12 * bx) / det;
     let uv_up = (sx * dux + sy * duy) * SHELF_M;
-    let over = textureSampleGrad(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, at + uv_up, dux, duy).a;
+    // Blurred a few mips, to the spray's mass, not its needles.
+    let over = textureSampleGrad(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, at + uv_up, dux * SHELF_BLUR, duy * SHELF_BLUR).a;
     return 1.0 - smoothstep(0.15, 0.5, over);
 }
 
@@ -447,11 +451,17 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // needles into a variegated leaf (weather round 8) or specks (round 18). A full load
         // fills a spray's top whatever the clumps say, a thin one only their gaps. Gated by
         // the load itself, so summer's cards stay green.
-        snow = smoothstep(-0.05, 0.05, load * 1.8 - 0.1 - 0.6 * clumps(world * LOAD_CLUMPS + 5.0)) * smoothstep(0.0, 0.1, load);
+        // Two octaves, the finer a third: one alone read as a load on every other pad.
+        let cover = clumps(world * LOAD_CLUMPS + 5.0) * 0.67 + clumps(world * LOAD_CLUMPS * 2.3 + 13.0) * 0.33;
+        snow = smoothstep(-0.05, 0.05, load * 1.8 - 0.1 - 0.6 * cover) * smoothstep(0.0, 0.1, load);
         // And as a shelf along each spray's upper edge, where the card's picture has nothing
         // over it a few centimetres up: the load sits on the boughs, not scattered over their
-        // faces (weather round 9's judge: "snow sits scattered across the card face").
-        snow = max(snow, lying * (0.4 + 0.6 * high) * shelf_edge(uv, world, sky_up));
+        // faces (weather round 9's judge: "snow sits scattered across the card face"). Only
+        // inside a clump, and on a spray facing up, with the picture taken blurred to the
+        // spray's mass: on every tuft's edge it drew each needle white, salt and pepper over
+        // the crown (the looks review's fault 4: "frosted cereal").
+        let in_clump = 1.0 - smoothstep(0.3, 0.55, cover);
+        snow = max(snow, lying * (0.4 + 0.6 * high) * in_clump * smoothstep(0.1, 0.5, bough_up) * shelf_edge(uv, world, sky_up));
         // A load lies on top of its spray, which hides it from an eye under it: seen from
         // below, a crown's sprays read dark, the load showing only where a spray's outline is
         // seen edge-on, along its top (the looks review's fault 4: "snow sits on the undersides
