@@ -1494,6 +1494,19 @@ const FIELD_FEATHER: f32 = 0.14;
 const FIELD_K: f32 = 10.0;
 const FIELD_STEPS: i32 = 96;
 const FIELD_LOBES: i32 = 7;
+// A torch's field (under `TORCH_M`): lobes over its head's one point, a middle tongue from
+// inside the head and `TORCH_SIDES` lower ones round it, which part from it as they flicker
+// and tear, as a pitch head's flame splits (tools/fire/bake/sets/torch.json, "one tall tongue
+// that splits"). How tall it stands in the flame's height, its middle's half width and a
+// side lobe's in its width, how far out a side lobe stands and how tall it is (in the
+// middle's), and how much thicker its flame is per metre than a hearth's, as it is smaller.
+const TORCH_FIELD_TALL: f32 = 1.2;
+const TORCH_FIELD_R: f32 = 0.42;
+const TORCH_SIDE_R: f32 = 0.26;
+const TORCH_SIDE_OUT: f32 = 0.24;
+const TORCH_SIDE_TALL: vec2<f32> = vec2<f32>(0.5, 0.7);
+const TORCH_SIDES: i32 = 2;
+const TORCH_THICK: f32 = 1.6;
 
 struct HearthField {
     foot: vec3<f32>,
@@ -1505,6 +1518,11 @@ struct HearthField {
     heat: f32,
     seed: f32,
     glow: f32,
+    // Its flame's thickness per metre (`FIELD_K`), its hull's half width and how far its hull
+    // reaches under its foot, in metres.
+    k: f32,
+    reach: f32,
+    under: f32,
     lobes: i32,
     // Each lobe's middle across (east, north), its foot's height and its height; its half width.
     at: array<vec4<f32>, FIELD_LOBES>,
@@ -1519,9 +1537,6 @@ fn hearth_field(slot: u32) -> HearthField {
     }
     let a = slots[slot * 2u];
     let b = slots[slot * 2u + 1u];
-    if a.w < TORCH_M {
-        return f;
-    }
     f.foot = a.xyz;
     f.up = normalize(a.xyz);
     f.east = normalize(cross(f.up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
@@ -1529,7 +1544,29 @@ fn hearth_field(slot: u32) -> HearthField {
     f.heat = b.x;
     f.seed = b.y;
     f.glow = clamp(max(b.w, 0.0), 0.6, 1.4);
+    f.k = FIELD_K;
+    if a.w < TORCH_M {
+        // A torch: as tall as it burns (`hearth`), from a little inside its head.
+        f.wide = select(a.w * 0.4, b.z, b.z > 0.0);
+        f.tall = a.w * TORCH_FIELD_TALL * mix(1.0, f.glow, 0.5);
+        f.k = FIELD_K * TORCH_THICK;
+        f.reach = f.wide * 1.1;
+        f.under = f.tall * 0.12;
+        f.at[0] = vec4(0.0, 0.0, -f.tall * 0.08, f.tall * 1.08);
+        f.size[0] = f.wide * TORCH_FIELD_R;
+        f.lobes = 1;
+        for (var i = 0; i < TORCH_SIDES; i++) {
+            let k = f.seed * 6.283 + f32(i) * 2.39996;
+            let tall = mix(TORCH_SIDE_TALL.x, TORCH_SIDE_TALL.y, fract(f.seed * 7.31 + f32(i) * 0.618));
+            f.at[f.lobes] = vec4(cos(k) * f.wide * TORCH_SIDE_OUT, sin(k) * f.wide * TORCH_SIDE_OUT, -f.tall * 0.05, f.tall * tall);
+            f.size[f.lobes] = f.wide * TORCH_SIDE_R;
+            f.lobes += 1;
+        }
+        return f;
+    }
     f.wide = select(clamp(a.w * 0.5, 0.4, 1.6), b.z, b.z > 0.0);
+    f.reach = f.wide * 0.85;
+    f.under = 0.05;
     f.tall = a.w * HEARTH_DRAWN * FIELD_TALL * mix(1.0, f.glow, 0.5);
     let laid = hearth_logs(slot);
     let apex = select(f.tall * 0.3, laid.top.y + laid.radius, laid.count >= 1.0);
@@ -1605,13 +1642,13 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec2<f32> {
     // through the skin rather than being hidden by it; the core hot only deep inside, so the
     // flame stays orange as its class has it and the yellow is a small heart (fire sheet).
     let heat = 0.40 + 0.45 * saturate(v * 2.0) * (1.0 - 0.6 * hg) + 0.10 * (1.0 - smoothstep(0.0, 0.3, hg));
-    return vec2(dens * FIELD_K, heat * (0.85 + 0.15 * f.heat));
+    return vec2(dens * f.k, heat * (0.85 + 0.15 * f.heat));
 }
 
 // The hull round a hearth's field, in its frame (across, up, across).
 fn field_box(f: HearthField) -> array<vec3<f32>, 2> {
-    let r = f.wide * 0.85;
-    return array<vec3<f32>, 2>(vec3(-r, -0.05, -r), vec3(r, f.tall * 1.15, r));
+    let r = f.reach;
+    return array<vec3<f32>, 2>(vec3(-r, -f.under, -r), vec3(r, f.tall * 1.15, r));
 }
 
 fn hearth_hull(corner: vec3<f32>, slot: u32) -> Out {
@@ -2512,8 +2549,9 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall_in: f32, heat:
         out.size = h;
         return out;
     }
-    // A marched hearth's columns and tongues are its flame field's (D466, `hearth_march`).
-    if hearth_marched(slot) && !torch && j >= 2 && j < 2 + HEARTH_COLUMNS + HEARTH_TONGUES {
+    // A marched hearth's columns and tongues are its flame field's (D466, `hearth_march`), and
+    // a marched torch's one flame card.
+    if hearth_marched(slot) && j >= 2 && j < 2 + HEARTH_COLUMNS + HEARTH_TONGUES {
         return nowhere();
     }
     // A baked set's frame is a whole fire, its own tongues alternating with dark (books.rs):

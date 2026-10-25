@@ -73,7 +73,7 @@ A place in the sandbox (`tools/sandbox/places.ts` data, D249: no new options) wi
 ## The plan
 
 1. Done: the field as the campfire's body (rounds g1-g4); it beat the cards in motion and holds the sheet. A kind chooses it by its `Kindled`'s `body: Body::Marched` (`fire/hearth.rs`), the shader's `hearth_marched`; until `fire.ron`, that field is the preset.
-2. The torch and house blaze on it, one kind a round, each measured on the sheet and a panel; the hearth's card tricks removed as each goes.
+2. The torch (done, g6) and house blaze on it, one kind a round, each measured on the sheet and a panel; the hearth's card tricks removed as each goes.
 3. `fire.ron` and the `terra_fire` crate: kinds as data, the field's sources and the wind and rain rules, tested.
 4. Weather: wind shear, rain dimming and going out, heat discs for snow, shown on the bench.
 5. The bench and the torch and candle sheet rows.
