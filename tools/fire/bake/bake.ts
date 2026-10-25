@@ -4,6 +4,9 @@
 // (bake.py, headless through tools/blender), then packed into the flipbook format (pack.ts)
 // and written to assets/textures/fire/<set>.png, <set>.motion.png and <set>.json, with a
 // contact sheet of its raw passes measured against its class's photographs (sheet.ts).
+// A set of kind "volume" (D493) is not simulated here: volume.py reads its sim's cache (the
+// recipe's `volume.cache`) and volume.ts packs the box of cells it names into a looping 3D
+// volume, <set>.dds and <set>.json, and checks the loop's seam.
 //
 //   node tools/fire/bake/bake.ts <set>... | --all [--draft] [--pack]
 //
@@ -19,6 +22,7 @@ import { join, resolve } from "node:path";
 import { pack } from "./pack.ts";
 import { sheet } from "./sheet.ts";
 import { packSmoke } from "./smoke.ts";
+import { packVolume, type VolumeRecipe } from "./volume.ts";
 
 const HERE = import.meta.dirname;
 const ROOT = resolve(HERE, "../../..");
@@ -30,7 +34,7 @@ export type Recipe = {
   name: string;
   about: string;
   class: string;
-  kind: "loop" | "oneshot";
+  kind: "loop" | "oneshot" | "volume";
   /// Lit six ways, not glowing: smoke (smoke.ts).
   six_way?: boolean;
   /// Sim frames a rendered frame.
@@ -65,14 +69,14 @@ function draft(r: Recipe): Recipe {
   };
 }
 
-function bake(r: Recipe, out: string) {
+function bake(r: Recipe, out: string, script = "bake.py") {
   mkdirSync(out, { recursive: true });
   const path = join(out, "recipe.json");
   writeFileSync(path, JSON.stringify(r, null, 1));
   // Blender's own output goes to a file, not through Node: a sim's progress is too long to hold.
   const logPath = join(out, "blender.log");
   const fd = openSync(logPath, "w");
-  const run = spawnSync(join(ROOT, "tools/blender/run.sh"), [join(HERE, "bake.py"), path, out], { stdio: ["ignore", fd, fd] });
+  const run = spawnSync(join(ROOT, "tools/blender/run.sh"), [join(HERE, script), path, out], { stdio: ["ignore", fd, fd] });
   closeSync(fd);
   if (run.status !== 0) {
     const tail = readFileSync(logPath, "utf8").trim().split("\n").filter((l) => !/^Fra:/.test(l)).slice(-12).join("\n");
@@ -95,6 +99,15 @@ function main() {
     if (flags.has("--draft")) r = draft(r);
     const out = join(SHOTS, r.name);
     try {
+      if (r.kind === "volume") {
+        if (flags.has("--draft")) throw new Error(`✗ ${r.name}: a volume reads a sim already baked; it has no draft`);
+        if (!flags.has("--pack") || !existsSync(join(out, "raw.bin"))) bake(r, out, "volume.py");
+        const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
+        const packed = packVolume(r as VolumeRecipe, out, ASSETS);
+        console.log(`${r.name.padEnd(16)} read ${meta.frames} frames in ${meta.read_s} s (flame outside the box at most ${meta.outside_flame_max.toFixed(2)}); ${packed.line}`);
+        if (!packed.seam.pass) failed = true;
+        continue;
+      }
       if (!flags.has("--pack") || !existsSync(join(out, "raw.bin"))) bake(r, out);
       const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
       const dest = flags.has("--draft") ? out : ASSETS;

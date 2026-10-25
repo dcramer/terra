@@ -1,0 +1,22 @@
+{
+  "about": "The campfire's flame as a looping 3D volume (D493): fire round g23's Mantaflow sim F (96 cells over a 1.6 x 1.6 x 2.2 m domain, vorticity 0.8, flame vorticity 1.5, a gusting side wind of 1.8 m/s mean along +x, the clock in real seconds; g23's sim.py), its flame and temperature at the sim's own 2.3 cm cells in a 40 x 36 x 52 box round where it reaches (0.92 x 0.82 x 1.19 m, the wind along x), 8 s at 30 fps from 3 s in, the second after the loop blended into its start.",
+  "class": "campfire",
+  "kind": "volume",
+  "size": 32,
+  "frames": 240,
+  "crossfade": 30,
+  "fps": 30,
+  "volume": {
+    "cache": "~/.cache/terra-review/fire/g23/sims/F/cache",
+    "first": 91,
+    "extract": 480,
+    "box_min": [16, 18, 0],
+    "cells": [40, 36, 52],
+    "domain_min": [-0.8, -0.8, -0.02],
+    "domain_size": [1.6, 1.6, 2.2],
+    "columns": 12
+  },
+  "domain": {},
+  "sources": [],
+  "camera": { "center": [0, 0.65], "extent": 1.4 }
+}
