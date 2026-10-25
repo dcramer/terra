@@ -122,6 +122,25 @@ impl HeightMemo {
         }
     }
 
+    /// Forgets every lattice point once it holds more than `most`, keeping its room: a memo
+    /// kept from tick to tick by something that moves over the ground and asks it often (a
+    /// body's mover, D53) stays small and is never freed and made again. What it answers is
+    /// the same either way.
+    pub fn keep_within(&mut self, most: usize) {
+        if self.heights.len() > most {
+            self.heights.clear();
+        }
+        if let Some(around) = &mut self.around {
+            around.keep_within(most);
+        }
+    }
+
+    /// How many lattice points it holds.
+    #[cfg(test)]
+    pub(crate) fn held(&self) -> usize {
+        self.heights.len()
+    }
+
     /// The memo for the ground round about: at least `spacing_m` between its points.
     fn around(&mut self, spacing_m: f32) -> &mut HeightMemo {
         let step = self.step as f32 * GeneratedPlanet::LATTICE_M;

@@ -92,7 +92,7 @@ These are `tools/controller/criteria.json` (D457), in D452's shape: a row for ea
 | 17 | Swimming | Deep water is swum rather than walled; the body floats to the surface and dives on intent; breath is used with the head under | D74 |
 | 18 | Stamina | Sprinting, jumping and swimming cost the kind's data to within 1% | D61 |
 | 19 | Determinism | 10,000 ticks of the crowd course end bit-identical across runs, thread counts and the order bodies are given in | D51, D138 |
-| 20 | Cost per body | Under 25 µs a body a tick on one core walking the course, and a crowd of 1,000 under 4 ms a tick on the server's cores (`cargo xtask bench`) | D52, D138 (a quarter of the 15.6 ms tick) |
+| 20 | Cost per body | Under 25 µs a body a tick on one core walking the course and the planet's ground at 2 and 30 km (`cargo xtask controller --bench`, release), and a crowd of 1,000 under 4 ms a tick on the server's cores | D52, D138 (a quarter of the 15.6 ms tick) |
 | 21 | Feet sliding | Under 3 cm a contact at walk, jog and sprint, and in starts, stops and turns | movement.md stage 2; D455 |
 
 No Enshrouded movement numbers have been measured yet; combat's measurements are D180's. The QA stage should measure Enshrouded's walk, sprint and jump speeds and its step height, as the combat reference was measured, and add each one's row once it is.

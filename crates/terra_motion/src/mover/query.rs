@@ -107,60 +107,95 @@ trait Distance {
     /// The capsule surface's distance to the source, and the contact it is nearest: of two
     /// faces as near (a crease), the one a motion goes into most.
     fn nearest(&self, capsule: &Capsule, motion: Vec3) -> Option<Contact>;
+    /// The distance [`Distance::nearest`]'s contact has, alone: what a march step needs, the
+    /// contact's way only where the step went in.
+    fn distance(&self, capsule: &Capsule) -> Option<f32> {
+        self.nearest(capsule, Vec3::ZERO).map(|c| c.distance)
+    }
     /// How far the true distance may be from the one answered, as a factor (1 when exact).
     fn steepest(&self) -> f32;
 }
 
 /// The march every [`Distance`] sweeps by: steps of the distance over the steepest slope, a
 /// graze step past a surface the capsule is touching but not approaching, and a bisection of
-/// the last step when it went in.
+/// the last step when it went in. A step asks the distance alone, and the contact (its way, of
+/// a crease's faces) only where the step went deeper than it started: the same hit as asking
+/// the contact at every step, for a fraction of the field's calls.
 fn march(source: &impl Distance, capsule: &Capsule, motion: Vec3) -> Option<Hit> {
     let length = motion.length();
     if length < 1e-6 {
         return None;
     }
-    let start = source.nearest(capsule, motion)?;
-    let limit = start.distance.min(0.0) - TOLERANCE;
+    let at = |t: f32| capsule.moved(motion * t);
+    let contact = |t: f32| source.nearest(&at(t), motion);
+    let distance = |t: f32| source.distance(&at(t));
+    let start = distance(0.0)?;
+    let limit = start.min(0.0) - TOLERANCE;
     // In, and going in: a face the motion leaves or runs along is not a hit. A step that
     // ended inside from a place approaching a face went in through it, whatever face is
     // nearest inside: a riser a centimetre beside a step's top is nearer than the top a
     // graze step under it, and its level normal would let the march run through the step.
-    let went_in = |c: &Contact, from: &Contact| {
-        c.distance < limit && (c.normal.dot(motion) < 0.0 || from.normal.dot(motion) < 0.0)
-    };
+    let into = |c: &Contact| c.normal.dot(motion) < 0.0;
     let steep = source.steepest().max(1.0);
-    let (mut t, mut last) = (0.0_f32, start);
+    // Where the march is, its distance, and its contact once asked.
+    let (mut t, mut d, mut last) = (0.0_f32, start, None::<Contact>);
     for _ in 0..MARCHES {
         if t >= 1.0 {
             return None;
         }
         // Nothing is nearer than the distance; a surface it grazes is stepped along, and one
         // stepped into is found by the bisection.
-        let step = ((last.distance - limit) / steep).max(GRAZE_STEP);
+        let step = ((d - limit) / steep).max(GRAZE_STEP);
         let next = (t + step / length).min(1.0);
-        let at = source.nearest(&capsule.moved(motion * next), motion)?;
-        if went_in(&at, &last) {
-            // The surface lies within the last step: bisect it.
-            let (mut lo, mut hi, mut met) = (t, next, at);
-            while (hi - lo) * length > TOLERANCE * 0.5 {
-                let mid = (lo + hi) * 0.5;
-                let c = source.nearest(&capsule.moved(motion * mid), motion)?;
-                if went_in(&c, &last) {
-                    (hi, met) = (mid, c);
-                } else {
-                    lo = mid;
-                }
-            }
-            return Some(Hit {
-                fraction: lo,
-                contact: met,
-            });
+        let ahead = distance(next)?;
+        if ahead >= limit {
+            (t, d, last) = (next, ahead, None);
+            continue;
         }
-        (t, last) = (next, at);
+        let from = match last {
+            Some(c) => c,
+            None => contact(t)?,
+        };
+        let met = contact(next)?;
+        let from_in = into(&from);
+        if !(from_in || into(&met)) {
+            (t, d, last) = (next, ahead, Some(met));
+            continue;
+        }
+        // The surface lies within the last step: bisect it. Approaching a face where the step
+        // began, deeper is in, whichever way the face met there points.
+        let (mut lo, mut hi, mut met) = (t, next, Some(met));
+        while (hi - lo) * length > TOLERANCE * 0.5 {
+            let mid = (lo + hi) * 0.5;
+            let went_in = if distance(mid)? >= limit {
+                None
+            } else if from_in {
+                Some(None)
+            } else {
+                let c = contact(mid)?;
+                into(&c).then_some(Some(c))
+            };
+            match went_in {
+                Some(c) => (hi, met) = (mid, c),
+                None => lo = mid,
+            }
+        }
+        let contact = match met {
+            Some(c) => c,
+            None => contact(hi)?,
+        };
+        return Some(Hit {
+            fraction: lo,
+            contact,
+        });
     }
+    let contact = match last {
+        Some(c) => c,
+        None => contact(t)?,
+    };
     Some(Hit {
         fraction: t,
-        contact: last,
+        contact,
     })
 }
 
@@ -215,12 +250,30 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
         }
     }
 
-    /// The field along the axis: the samples, no more than half a radius apart.
-    fn samples(&self, capsule: &Capsule) -> (usize, impl Fn(f32) -> Vec3 + '_) {
+    /// The field along the axis: the samples, no more than half a radius apart, and the
+    /// fraction of the axis between them; a sphere's (a probe's) is one.
+    fn samples(&self, capsule: &Capsule) -> (usize, f32, impl Fn(f32) -> Vec3 + '_) {
         let ab = capsule.b - capsule.a;
-        let n = ((ab.length() / (capsule.radius * 0.5)).ceil() as usize).max(1) + 1;
+        let n = if ab.length_squared() > 0.0 {
+            ((ab.length() / (capsule.radius * 0.5)).ceil() as usize).max(1) + 1
+        } else {
+            1
+        };
         let a = capsule.a;
-        (n, move |t: f32| a + ab * t)
+        (n, 1.0 / (n.max(2) - 1) as f32, move |t: f32| a + ab * t)
+    }
+
+    /// The axis point nearest the field, and the field there: the least sample, refined.
+    fn least(&self, capsule: &Capsule) -> (Vec3, f32) {
+        let (n, step, along) = self.samples(capsule);
+        if n == 1 {
+            return (capsule.a, (self.distance)(capsule.a));
+        }
+        let (i, least) = (0..n)
+            .map(|i| (i, (self.distance)(along(i as f32 * step))))
+            .fold((0, f32::INFINITY), |m, e| if e.1 < m.1 { e } else { m });
+        let t = i as f32 * step;
+        self.refine(&along, (t, least), (t - step).max(0.0), (t + step).min(1.0))
     }
 
     /// The least of the field near an axis sample `(t, d)`, by golden section over its
@@ -292,13 +345,7 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
 
 impl<F: Fn(Vec3) -> f32> Distance for Sdf<F> {
     fn nearest(&self, capsule: &Capsule, motion: Vec3) -> Option<Contact> {
-        let (n, along) = self.samples(capsule);
-        let step = 1.0 / (n - 1) as f32;
-        let (i, least) = (0..n)
-            .map(|i| (i, (self.distance)(along(i as f32 * step))))
-            .fold((0, f32::INFINITY), |m, e| if e.1 < m.1 { e } else { m });
-        let t = i as f32 * step;
-        let (axis, d) = self.refine(&along, (t, least), (t - step).max(0.0), (t + step).min(1.0));
+        let (axis, d) = self.least(capsule);
         let normal = self
             .faces(axis, d)
             .into_iter()
@@ -308,6 +355,10 @@ impl<F: Fn(Vec3) -> f32> Distance for Sdf<F> {
         Some(self.contact(capsule, axis, d, normal))
     }
 
+    fn distance(&self, capsule: &Capsule) -> Option<f32> {
+        Some(self.least(capsule).1 - capsule.radius)
+    }
+
     fn steepest(&self) -> f32 {
         self.steepest
     }
@@ -315,8 +366,7 @@ impl<F: Fn(Vec3) -> f32> Distance for Sdf<F> {
 
 impl<F: Fn(Vec3) -> f32> Query for Sdf<F> {
     fn contacts(&self, capsule: &Capsule, within: f32, out: &mut Vec<Contact>) {
-        let (n, along) = self.samples(capsule);
-        let step = 1.0 / (n - 1) as f32;
+        let (n, step, along) = self.samples(capsule);
         let reach = capsule.radius + within;
         let start = out.len();
         for i in 0..n {

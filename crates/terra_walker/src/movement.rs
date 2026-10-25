@@ -455,6 +455,10 @@ mod course;
 mod mover;
 
 #[cfg(test)]
+#[path = "movement_bench.rs"]
+mod bench;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::walker::Steer;

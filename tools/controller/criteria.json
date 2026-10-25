@@ -654,10 +654,26 @@
    },
    "unit": "µs a body a tick",
    "source": "docs/controller.md criterion 20; D52, D138",
+   "check": {
+    "by": "bench"
+   },
+   "cost": "heavy",
+   "measurable": true,
+   "slack": 5
+  },
+  {
+   "id": "cost.crowd",
+   "noticed": 2,
+   "notice": "a crowd of a thousand moving slows the server's tick",
+   "bar": {
+    "at_most": 4
+   },
+   "unit": "ms a tick, 1,000 bodies",
+   "source": "docs/controller.md criterion 20; D52, D138",
    "check": null,
    "cost": "heavy",
    "measurable": false,
-   "needs": "a release CPU bench of the mover (one body walking the course on one core; 1,000 under 4 ms a tick on the server's cores): cargo xtask bench measures the game's frames on the GPU, so stage 2 adds the mover's own bench"
+   "needs": "a broadphase: today every body's sweep and contacts look at every other body (Capsules), and the pushes pair every two (push::separate), O(n²); a grid of bodies by place, bodies and obstacles gathered from it, then the bench's crowd on the server's cores"
   },
   {
    "id": "feet.sliding",

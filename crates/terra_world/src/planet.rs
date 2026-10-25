@@ -26,6 +26,8 @@ use std::sync::Arc;
 use terra_core::{Ground, Operation, PlanetSpec, RayHit, Seed, Yield};
 use terra_gen::Noise;
 use terra_gen::smoothstep;
+/// What [`Planet::distance_in`] keeps between asks.
+pub use terra_voxel::HeightMemo;
 use terra_voxel::{GeneratedPlanet, VoxelPlanet};
 
 // The ground as generated is the land's (`terra_land::ground`), so the tools that map its
@@ -236,6 +238,15 @@ impl Planet {
     /// How far a point is above the ground, below it if negative.
     pub fn distance(&self, point: Vec3) -> f32 {
         self.ground.distance(point)
+    }
+
+    /// [`Planet::distance`] through a memo of the land's lattice points: asked about many
+    /// points near one another, as the mover asks the ground a few hundred times a body a
+    /// tick (D53), the land is worked out once a lattice point, not again at every ask. The
+    /// same answer as [`Planet::distance`]; keep the memo from tick to tick and bound it with
+    /// `HeightMemo::keep_within`.
+    pub fn distance_in(&self, point: Vec3, memo: &mut HeightMemo) -> f32 {
+        terra_voxel::Field::distance_in(&*self.ground, point, memo)
     }
 
     /// How much further than its true distance the ground can be from a point, as a factor

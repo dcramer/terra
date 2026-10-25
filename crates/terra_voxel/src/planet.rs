@@ -533,6 +533,29 @@ mod tests {
     }
 
     #[test]
+    fn one_memo_kept_over_many_asks_answers_as_each_ask_alone() {
+        // A body's mover asks the ground hundreds of times a tick through one memo kept from
+        // tick to tick (D53): every answer must be the one a lone ask gives, edits included,
+        // and a memo trimmed back must answer the same again.
+        let mut planet = planet();
+        let (ground, up) = surface(&planet);
+        planet.apply(&Operation::Dig {
+            centre: ground,
+            radius: 1.5,
+        });
+        let side = up.any_orthonormal_vector();
+        let mut memo = crate::HeightMemo::default();
+        for i in 0..2000 {
+            let (a, b) = (i as f32 * 0.37, i as f32 * 0.011);
+            let at = ground + side * (b * libm::cosf(a) * 8.0) + up * libm::sinf(a * 3.0) * 2.0;
+            let alone = Ground::distance(&planet, at);
+            assert_eq!(planet.distance_in(at, &mut memo), alone, "at {at}");
+            memo.keep_within(64);
+        }
+        assert!(memo.held() <= 64 + 4, "{} points held", memo.held());
+    }
+
+    #[test]
     fn filled_ground_is_walked_on_and_made_of_the_fill() {
         let mut planet = planet();
         let (ground, up) = surface(&planet);

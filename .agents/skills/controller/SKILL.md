@@ -26,7 +26,7 @@ Read [docs/controller.md](../../../docs/controller.md) (the design, its criteria
 Every measurable row passes (38, round 7: stairs fixed, handoff `controller-stage2.md`, "Round 7"). What is left, ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
 
 1. The walker driving the mover (round 5b, handoff "Next (round 5b)"): its pieces are built, `mover::Bodies::{place, remove}`, `Intent::scale`, `Body::jumped`, and the sources in `terra_walker::mover_world` (props, flora, a base by `terra_build_layout::solids`, others, water).
-2. `cost.body` (the mover's bench).
+2. `cost.body` (41.9 µs, bar 25; handoff "Unit A"): `cargo xtask controller --bench` runs the mover's release bench (`terra_walker` `movement_bench.rs`: the course and `Planet::new` at 2 and 30 km, µs and field calls a tick, against today's walk). The planet is asked through one `HeightMemo` a body (`Planet::distance_in`, `keep_within`); the march asks distances alone. Left: 30 km's spurious steps (precision first), a shared gradient, per-tick allocations; `cost.crowd` needs a broadphase.
 
 Flights and a doorway's sill are `course/stairs.rs`: the ground's steps 0.1-0.5 m and a base's whole, half and stair cubes, up and down at the kind's jog (`stair.up`, `stair.down`, `stair.hop`), and a floor 0-0.1 m over the ground through a doorway (`door.hop`).
 
@@ -34,4 +34,4 @@ The kind-data rows (`accel.data`, `turn.data`, `air.control`, `slope.speed`, `la
 
 What stops a body besides the ground (`step.building`, `step.prop`, `step.rock`, `tunnel.door`) is `course/sources.rs`: a fixture's `obstacles` (`mover::shapes`: turned boxes for a base's cubes, a door's leaf and a prop; `terra_core::Solid` pieces for a rock), answered apart from its ground field. A step is as high as named at its face, where it is climbed: a box laid level there, a rock's crest lowered by the world's curve at its middle.
 
-Not measurable yet (`?`, each with what it needs): swimming's float, dive and breath, stamina (D61 decides the attributes, not their costs); heavy, the in-game filmed course (stage 1b: step smoothing, feet sliding, the yard) and the mover's bench (cost per body).
+Not measurable yet (`?`, each with what it needs): swimming's float, dive and breath, stamina (D61 decides the attributes, not their costs); the crowd's cost (a broadphase); heavy, the in-game filmed course (stage 1b: step smoothing, feet sliding, the yard). A change to the mover's queries runs `--bench` too: no ✗ on `cost.body`.
