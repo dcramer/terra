@@ -316,12 +316,33 @@ fn walls(gap: f32) -> Course {
 }
 
 fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
+    match case {
+        Case::Crowd(order) => crowd(new, order),
+        Case::Step(_) | Case::Slope(_) | Case::Gap(_) | Case::Wall(_) | Case::Through(_) => {
+            moves(new, case)
+        }
+        Case::StickSlope
+        | Case::StickStair
+        | Case::Ceiling
+        | Case::Fall(_)
+        | Case::Apex
+        | Case::Coyote(_) => falls(new, case),
+        Case::Buffer(_)
+        | Case::Drop(_)
+        | Case::Input
+        | Case::Pool
+        | Case::Share(_)
+        | Case::Fixed(_) => lands(new, case),
+    }
+}
+
+/// The cases of walking and driving into things: steps, slopes, gaps, walls and bodies.
+fn moves<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
     let kind = Kind::man();
     let flat = Course::flat();
     let start = world(0.0, 0.0, 0.0);
     let ticks = |s: f32| (s / TICK) as usize;
     match case {
-        Case::Crowd(order) => crowd(new, order),
         Case::Step(height) => {
             let course = ground(&[(0.0, 0.0), (1.5, 0.0), (1.5, height), (6.0, height)]);
             let mut run = Run::new(new(), &course);
@@ -396,6 +417,17 @@ fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
             }
             run.outcome(vec![f32::from(u8::from(through))])
         }
+        _ => unreachable!("not a case of moves: {case:?}"),
+    }
+}
+
+/// The cases of keeping to the ground and leaving it: stick, ceiling, gravity, the jump.
+fn falls<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
+    let kind = Kind::man();
+    let flat = Course::flat();
+    let start = world(0.0, 0.0, 0.0);
+    let ticks = |s: f32| (s / TICK) as usize;
+    match case {
         Case::StickSlope | Case::StickStair => {
             let mut corners = vec![(-5.0, 0.0), (1.0, 0.0)];
             if matches!(case, Case::StickSlope) {
@@ -511,6 +543,17 @@ fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
                 ..Outcome::default()
             }
         }
+        _ => unreachable!("not a case of falls: {case:?}"),
+    }
+}
+
+/// The cases of landing, input, water and pushing.
+fn lands<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
+    let kind = Kind::man();
+    let flat = Course::flat();
+    let start = world(0.0, 0.0, 0.0);
+    let ticks = |s: f32| (s / TICK) as usize;
+    match case {
         Case::Buffer(early) => {
             let drop_from = world(0.0, 1.5, 0.0);
             let landed = {
@@ -628,6 +671,7 @@ fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
             };
             run.outcome(vec![value])
         }
+        _ => unreachable!("not a case of lands: {case:?}"),
     }
 }
 
