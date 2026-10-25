@@ -7,7 +7,7 @@
 use super::modules::{Class, Look};
 use super::{
     CELL, CUBE, ChestSpawn, Frame, LEVEL, LIGHTS, Light, LightKind, MobSpawn, Object, ObjectRole,
-    Stamp, floor_of, hash, stands,
+    Stamp, clear, cube_of, floor_of, hash, stands, steps,
 };
 use crate::Dungeon;
 use crate::graph::{Graph, Link};
@@ -25,6 +25,7 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Sta
     mobs(dungeon, looks, map, out);
     torches(dungeon, looks, out);
     tour(dungeon, out);
+    out.route = walked(map, &out.route);
 }
 
 /// A leaf in the doorway at the far room of each door, locked door and one-way door; an arch
@@ -203,6 +204,9 @@ fn mobs(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Stamp) {
     }
 }
 
+/// How far either side of a doorway's middle the tour passes square through it, in metres.
+const DOOR_STEP_M: f32 = 0.9;
+
 fn torch(at: IVec3, d: usize) -> Light {
     Light {
         at: Frame::new(at, d).point(3.0, 4.0, 1.3),
@@ -318,6 +322,16 @@ fn tour(dungeon: &Dungeon, out: &mut Stamp) {
         out.route
             .extend(layout.cell(at).map(|c| cell_point(layout, c)));
     }
+    let foot = stair.cells.first().and_then(|&at| layout.cell(at));
+    let into = foot.and_then(|c| {
+        layout
+            .neighbours(c)
+            .find(|&n| layout.cells[n].space == Space::Room(graph.entrance()))
+            .map(|n| (c, n))
+    });
+    if let Some((c, n)) = into {
+        through(layout, c, n, &mut out.route);
+    }
     out.route.push(centre(layout, graph.entrance()));
     let mut keys: Vec<usize> = (0..graph.rooms.len())
         .filter(|&r| graph.rooms[r].role == Role::Puzzle)
@@ -334,8 +348,12 @@ fn tour(dungeon: &Dungeon, out: &mut Stamp) {
         };
         for (e, a, b) in steps {
             let cells = cells_between(layout, e, a, b);
-            out.route
-                .extend(cells.into_iter().map(|c| cell_point(layout, c)));
+            for pair in cells.windows(2) {
+                through(layout, pair[0], pair[1], &mut out.route);
+                if !matches!(layout.cells[pair[1]].space, Space::Room(_)) {
+                    out.route.push(cell_point(layout, pair[1]));
+                }
+            }
             out.route.push(centre(layout, b));
         }
         here = to;
@@ -380,7 +398,21 @@ fn rooms_between(
     Some(steps)
 }
 
-/// The corridor and stair cells of an edge in walking order from room `a` to room `b`.
+/// From one cell into the next of another space, through the doorway between them: a step
+/// short of it, its middle and a step past, so a path smoothed through the tour (a camera's)
+/// passes the doorway square, not across its jamb.
+fn through(layout: &Layout, from: usize, to: usize, route: &mut Vec<Vec3>) {
+    if layout.cells[from].space == layout.cells[to].space {
+        return;
+    }
+    let (a, b) = (cell_point(layout, from), cell_point(layout, to));
+    let door = (a + b) * 0.5;
+    let step = (b - a).normalize_or_zero() * DOOR_STEP_M;
+    route.extend([door - step, door, door + step]);
+}
+
+/// The corridor and stair cells of an edge in walking order from room `a` to room `b`, after
+/// the cell of `a` it leaves from and before the cell of `b` it comes into.
 fn cells_between(layout: &Layout, e: usize, a: usize, b: usize) -> Vec<usize> {
     let own = |c: usize| match layout.cells[c].space {
         Space::Room(r) => r == a || r == b,
@@ -413,10 +445,100 @@ fn cells_between(layout: &Layout, e: usize, a: usize, b: usize) -> Vec<usize> {
     let mut path = Vec::new();
     let mut at = end;
     while let Some(c) = at {
-        if !matches!(layout.cells[c].space, Space::Room(_)) {
-            path.push(c);
-        }
+        path.push(c);
         at = back[c];
+    }
+    path.reverse();
+    path
+}
+
+/// How high over the feet a tour's way must be clear: a body's chest and a camera's eye.
+const CLEAR_AT_M: [f32; 2] = [1.0, 1.6];
+/// How far round a leg's ends the way round what stands in it is looked for, in cubes.
+const ROUND_CUBES: i32 = 16;
+
+/// Whether the way from one point to another, at chest and eye height over it, passes no
+/// cube that is not open.
+pub(super) fn sight(map: &Map, a: Vec3, b: Vec3) -> bool {
+    let steps = ((b - a).length() / 0.1).ceil().max(1.0) as i32;
+    (0..=steps).all(|k| {
+        let p = a.lerp(b, k as f32 / steps as f32);
+        CLEAR_AT_M
+            .iter()
+            .all(|&up| clear(map, cube_of(p + Vec3::Y * up)))
+    })
+}
+
+/// The tour walked: each leg past the surface's that a pillar, a plinth or a heap stands
+/// in goes round it, by the shortest walk over the cubes from end to end, pulled taut to
+/// the fewest straight legs that are clear (a navigation mesh's path and its string
+/// pulling); a leg with no walk round is kept as it was.
+fn walked(map: &Map, route: &[Vec3]) -> Vec<Vec3> {
+    let mut out: Vec<Vec3> = route.iter().take(2).copied().collect();
+    for pair in route.windows(2).skip(1) {
+        let a = *out.last().unwrap_or(&pair[0]);
+        let mut b = pair[1];
+        if !sight(map, a, b) {
+            let feet = |c: IVec3| (c.as_vec3() + Vec3::new(0.5, 0.0, 0.5)) * CUBE;
+            let mut from = a;
+            let path: Vec<Vec3> = round(map, cube_of(a), cube_of(b))
+                .into_iter()
+                .map(feet)
+                .collect();
+            // An end on what stands in the room (the goal's plinth) moves to the nearest
+            // place a walker stands.
+            if let Some(&last) = path.last().filter(|_| !stands(map, cube_of(b))) {
+                b = last;
+            }
+            let mut i = 0;
+            while i + 1 < path.len() {
+                let far = (i + 1..path.len())
+                    .rev()
+                    .find(|&j| sight(map, from, path[j]))
+                    .unwrap_or(i + 1);
+                if sight(map, from, b) {
+                    break;
+                }
+                from = path[far];
+                out.push(from);
+                i = far;
+            }
+        }
+        out.push(b);
+    }
+    out
+}
+
+/// The shortest walk over the cubes from one standing place to another, near them; or to
+/// the place nearest it, if no walker stands there.
+fn round(map: &Map, from: IVec3, to: IVec3) -> Vec<IVec3> {
+    let (low, high) = (
+        from.min(to) - IVec3::splat(ROUND_CUBES),
+        from.max(to) + IVec3::splat(ROUND_CUBES),
+    );
+    let mut back: HashMap<IVec3, IVec3> = HashMap::from([(from, from)]);
+    let mut queue = VecDeque::from([from]);
+    let mut nearest = from;
+    let away = |p: IVec3| (p - to).length_squared();
+    while let Some(p) = queue.pop_front() {
+        if away(p) < away(nearest) {
+            nearest = p;
+        }
+        if p == to {
+            break;
+        }
+        for n in steps(map, p) {
+            if n.cmpge(low).all() && n.cmple(high).all() && !back.contains_key(&n) {
+                back.insert(n, p);
+                queue.push_back(n);
+            }
+        }
+    }
+    let mut path = vec![nearest];
+    let mut at = nearest;
+    while at != from {
+        at = back[&at];
+        path.push(at);
     }
     path.reverse();
     path

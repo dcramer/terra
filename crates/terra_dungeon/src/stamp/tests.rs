@@ -20,29 +20,25 @@ fn walk(map: &Map, start: IVec3) -> HashSet<IVec3> {
     let mut seen = HashSet::from([start]);
     let mut queue = VecDeque::from([start]);
     while let Some(p) = queue.pop_front() {
-        for step in STEPS {
-            for dy in [1, 0, -1, -2] {
-                let n = p + step + IVec3::Y * dy;
-                if seen.contains(&n) || !stands(map, n) {
-                    continue;
-                }
-                let head = if dy > 0 {
-                    clear(map, p + IVec3::Y * 4)
-                } else {
-                    (n.y + 4..=p.y + 3).all(|y| clear(map, IVec3::new(n.x, y, n.z)))
-                };
-                if head {
-                    seen.insert(n);
-                    queue.push_back(n);
-                }
+        for n in steps(map, p) {
+            if seen.insert(n) {
+                queue.push_back(n);
             }
         }
     }
     seen
 }
 
-fn cube_of(p: Vec3) -> IVec3 {
-    (p / CUBE).floor().as_ivec3()
+/// The first leg of a tour where a camera at eye height (or a body's chest) going straight
+/// from point to point would pass through a cube not open; the first leg is the surface's,
+/// above the dig.
+fn blocked(map: &Map, route: &[Vec3]) -> Option<usize> {
+    route
+        .windows(2)
+        .enumerate()
+        .skip(1)
+        .find(|(_, pair)| !runin::sight(map, pair[0], pair[1]))
+        .map(|(leg, _)| leg)
 }
 
 /// A reached spot within two cubes of a point.
@@ -176,6 +172,15 @@ fn check(theme: &Theme, dungeon: &Dungeon, s: u64) -> Numbers {
         stamp.lights.len()
     );
     assert!(stamp.route.len() >= graph.main.len() + 3, "{at}: a tour");
+    if let Some(leg) = blocked(&map, &stamp.route) {
+        let r = &stamp.route;
+        panic!(
+            "{at}: the tour's leg {leg} of {} passes through a cube, {} to {}",
+            r.len() - 1,
+            r[leg],
+            r[leg + 1]
+        );
+    }
     assert_eq!(
         stamp.route[0], stamp.start,
         "{at}: the tour starts at the start"

@@ -299,6 +299,27 @@ pub(crate) fn stands(map: &HashMap<IVec3, Cube>, at: IVec3) -> bool {
         && (0..4).all(|k| clear(map, at + IVec3::Y * k))
 }
 
+/// Where a walker standing at `at` can step: a cube along each way, up one or down two, with
+/// their head clear on the way.
+pub(crate) fn steps(map: &HashMap<IVec3, Cube>, at: IVec3) -> impl Iterator<Item = IVec3> + '_ {
+    crate::place::STEPS.into_iter().flat_map(move |step| {
+        [1, 0, -1, -2].into_iter().filter_map(move |dy| {
+            let n = at + step + IVec3::Y * dy;
+            let head = if dy > 0 {
+                clear(map, at + IVec3::Y * 4)
+            } else {
+                (n.y + 4..=at.y + 3).all(|y| clear(map, IVec3::new(n.x, y, n.z)))
+            };
+            (stands(map, n) && head).then_some(n)
+        })
+    })
+}
+
+/// The cube a point in metres is in.
+pub(crate) fn cube_of(p: Vec3) -> IVec3 {
+    (p / CUBE).floor().as_ivec3()
+}
+
 fn dig(min: IVec3, max: IVec3) -> Dig {
     let (min, max) = (min.as_vec3() * CUBE, max.as_vec3() * CUBE);
     Dig {
