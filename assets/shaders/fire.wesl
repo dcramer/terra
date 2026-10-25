@@ -1494,8 +1494,10 @@ const FIELD_FEATHER: f32 = 0.14;
 const FIELD_K: f32 = 10.0;
 // Its pale heart (`field_gas`): how far inside the shape it starts (0 the edge, 1 the spine),
 // how high it reaches in the field's height and how much thicker its flame is there; the
-// heat it burns at, the hearth ramp's pale.
-const FIELD_CORE: vec3<f32> = vec3<f32>(0.58, 0.45, 2.0);
+// heat it burns at, the hearth ramp's pale. Its flame 1.5 times thicker, not 2 (g15 L3b):
+// with the top's light kept at half (FIELD_TOP_KEEP), the 2 times thicker heart left the
+// sheet's noon campfire over its 5% pale; at 1.5 it holds 5, its motion measures unchanged.
+const FIELD_CORE: vec3<f32> = vec3<f32>(0.58, 0.45, 1.5);
 const FIELD_CORE_HEAT: f32 = 0.985;
 // Its puffs (`field_gas`), as a fire's flame necks and bulges in rings that rise it (Cetegen &
 // Ahmed 1993, pool-fire puffing at about 1.5/sqrt(D) Hz; fire round g13: main flickered at
