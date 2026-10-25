@@ -692,3 +692,39 @@ fn a_mines_timber_sets_stand_each_its_own_way() {
         "{most} of {sets} sets stand alike: {ways:?}"
     );
 }
+
+#[test]
+fn fallen_stone_is_rocks_never_a_lone_half_cube() {
+    use super::modules::{Class, looks};
+    for theme in Theme::all(&assets()).unwrap() {
+        let set = ModuleSet::new(&theme).unwrap();
+        let (mut worn, mut rocks) = (0, 0);
+        for s in 0..30 {
+            let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
+                continue;
+            };
+            let stamp = stamp(&dungeon, &theme, &kind);
+            for op in &stamp.ops {
+                if let BuildOp::Fill { cube: Some(c), .. } = op {
+                    assert!(
+                        !matches!(c.shape, Shape::Half),
+                        "{}: a half cube laid, a blockout box on the floor",
+                        theme.name
+                    );
+                }
+            }
+            let classes = looks(&dungeon, &theme, &set);
+            worn += classes.iter().filter(|l| l.class == Class::Rubble).count();
+            rocks += stamp
+                .props
+                .iter()
+                .filter(|p| p.model.contains("Rock_"))
+                .count();
+        }
+        assert!(
+            rocks >= 4 * worn,
+            "{}: {rocks} rocks for {worn} rubble cells",
+            theme.name
+        );
+    }
+}

@@ -135,7 +135,7 @@ pub(super) fn lay(
                 f.fill(ops, [2, 1, 1], [3, 3, 1], None);
             }
             Class::Collapse => collapse(cell, kinds, out),
-            Class::Rubble => rubble(cell, look, kinds, out),
+            Class::Rubble => rubble(cell, look, out),
             Class::Basin => sink(Frame::new(cell.at, 0), cell, 0, kinds, ops),
             Class::Shore => shore(cell, look, kinds, ops),
             Class::Runner => {
@@ -195,8 +195,10 @@ pub(super) fn lay(
 
 /// A corridor's run: a rib of trim across its ceiling every cell, a half metre down, where
 /// both its sides are walled, so a run reads in bays (a vault's transverse ribs, a mine's
-/// sets); and its edges worn, a half cube or two of fallen stone at a wall's foot and now
-/// and then a stone, out of the middle where feet go.
+/// sets); and its edges worn, a fallen stone or two at a wall's foot and now and then a
+/// smaller one by the other, out of the middle where feet go. The fallen stones are rocks,
+/// each turned and sized its own way: half cubes of the wall's stone stood there before and
+/// read as blockout boxes, a step of them down every corridor (round 13's films).
 fn corridor(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     let walled = |d: usize| cell.sides[d] == Side::Wall;
     let along = if walled(1) && walled(3) {
@@ -218,13 +220,13 @@ fn corridor(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
         4
     };
     for k in 0..1 + hash(cell.at, 401) % 2 {
-        let z = 1 + (hash(cell.at, 402 + k) % 4) as i32;
-        f.fill(
-            &mut out.ops,
-            [x, 0, z],
-            [x, 0, z],
-            shaped(kinds.wall, Shape::Half),
-        );
+        let z = 1.0 + (hash(cell.at, 402 + k) % 40) as f32 / 10.0;
+        out.props.push(Prop {
+            model: rock(cell.at, 404 + k),
+            at: f.point(if x == 1 { 1.4 } else { 4.6 }, 0.0, z),
+            facing: (hash(cell.at, 406 + k) % 4) as usize,
+            scale: 0.35 + (hash(cell.at, 408 + k) % 4) as f32 * 0.05,
+        });
     }
     if hash(cell.at, 410).is_multiple_of(3) {
         let z = 0.5 + (hash(cell.at, 411) % 5) as f32;
@@ -377,31 +379,32 @@ fn collapse(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     }
 }
 
-/// Half cubes and a rock or two along the side the rubble spills from.
-fn rubble(cell: &Cell, look: Look, kinds: &Kinds, out: &mut Stamp) {
+/// Stones fallen along the side the rubble spills from: a few big ones against it and smaller
+/// ones rolled farther out, each its own rock, turned and sized its own way. Half cubes of
+/// the wall's stone stood there before and read as blockout boxes in every film (round 13).
+fn rubble(cell: &Cell, look: Look, out: &mut Stamp) {
     let side = (0..4)
         .find(|&d| look.sockets[d] & RUBBLE != 0)
         .or_else(|| (0..4).find(|&d| cell.sides[d] == Side::Wall))
         .unwrap_or(look.turn);
     let f = Frame::new(cell.at, side);
-    let z0 = if cell.sides[side] == Side::Open { 0 } else { 1 };
-    for k in 0..3 {
-        let x = 1 + (hash(cell.at, 50 + k) % 4) as i32;
-        let z = z0 + (hash(cell.at, 60 + k) % 2) as i32;
-        f.fill(
-            &mut out.ops,
-            [x, 0, z],
-            [x, 0, z],
-            shaped(kinds.wall, Shape::Half),
-        );
-    }
-    for k in 0..1 + hash(cell.at, 70) % 2 {
-        let x = 1.0 + (hash(cell.at, 80 + k) % 4) as f32;
+    let z0 = if cell.sides[side] == Side::Open {
+        0.0
+    } else {
+        1.0
+    };
+    let stones = 4 + hash(cell.at, 70) % 3;
+    for k in 0..stones {
+        // The first two lie against the side, the rest roll out up to a metre.
+        let big = k < 2;
+        let x = 1.0 + (hash(cell.at, 50 + k) % 70) as f32 / 20.0;
+        let out_m = (hash(cell.at, 60 + k) % 10) as f32 / 10.0 * if big { 0.6 } else { 2.5 };
+        let scale = if big { 0.4 } else { 0.18 } + (hash(cell.at, 80 + k) % 5) as f32 * 0.05;
         out.props.push(Prop {
             model: rock(cell.at, 90 + k),
-            at: f.point(x + 0.5, 0.0, z0 as f32 + 1.5),
+            at: f.point(x, 0.0, z0 + 0.4 + out_m),
             facing: (hash(cell.at, 100 + k) % 4) as usize,
-            scale: 0.3,
+            scale,
         });
     }
 }
