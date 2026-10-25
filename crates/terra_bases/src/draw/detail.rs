@@ -91,7 +91,10 @@ pub fn held(drawn: &Drawn) -> [bool; 4] {
     let mut held = [false; 4];
     if drawn.by_detail {
         for (i, part) in drawn.parts.iter().enumerate().take(DETAILS.len()) {
-            held[i] = part.key == Some(drawn.key) && !part.entities.is_empty();
+            // Laid for this shape, even with nothing in it: a group whose cubes make no mesh
+            // at a detail holds that detail all the same, or it would be laid again for ever
+            // (and a scripted run's loading would wait on it, as a dungeon's did).
+            held[i] = part.key == Some(drawn.key);
         }
     }
     held
@@ -458,6 +461,25 @@ mod tests {
             next([true, true, false, false], now, ahead, 30.0),
             Some((Detail::Far, false))
         );
+    }
+
+    #[test]
+    fn a_detail_laid_with_nothing_in_it_is_held() {
+        let mut drawn = Drawn {
+            entity: None,
+            ticket: 1,
+            key: 7,
+            reach: Reach::Hull,
+            drawing: None,
+            gpu_bytes: 0,
+            bounds: None,
+            parts: (0..DETAILS.len()).map(|_| OnScreen::default()).collect(),
+            rest: Vec::new(),
+            by_detail: true,
+        };
+        drawn.parts[1].key = Some(7);
+        drawn.parts[2].key = Some(3);
+        assert_eq!(held(&drawn), [false, true, false, false]);
     }
 
     #[test]
