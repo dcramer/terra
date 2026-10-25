@@ -29,7 +29,7 @@ The mover asks one query trait, defined in `terra_motion` because the mover is t
 
 | Source | Shape | Answered from |
 |---|---|---|
-| Voxel ground, dug or not | The SDF itself | Distance and gradient. A sweep advances by distance divided by the field's steepest slope (`Field::steepest`), so a voxel-thin wall cannot be skipped |
+| Voxel ground, dug or not | The SDF itself | Distance and gradient (centred differences, one-sided where the step reaches over a convex edge). A sweep advances by distance divided by the field's steepest slope (`Field::steepest`), so a voxel-thin wall cannot be skipped |
 | Buildings | The base's cubes as boxes, merged greedily per section (building-plan.md), and a door's leaves where they are drawn | `terra_build_layout`, recast as contacts |
 | Props | Each solid item's box, turned with it; hidden ones skipped | `bodies::Solid`, moved into the plain crate |
 | Trees, rocks, stumps, logs | Rounded convex pieces with their tops | `terra_core::solid` |

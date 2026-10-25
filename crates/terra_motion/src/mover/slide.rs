@@ -669,6 +669,30 @@ mod tests {
     }
 
     #[test]
+    fn the_floor_just_past_a_step_edge_faces_up() {
+        // Just up a half cube's step, its edge 7.9 mm behind the body's centre (where a walk
+        // up stair.hop's steps puts it a tick after the step): the floor under the centre is
+        // the top's, not tilted by the edge's round beside it (2.9 deg with a central
+        // difference straddling the edge). Every way of the edge, and nearer and further.
+        let shape = shape();
+        for way in [Vec3::X, -Vec3::X, Vec3::Z, -Vec3::Z] {
+            let shapes = [slab(
+                way * 0.25,
+                [Vec3::X, Vec3::Y, Vec3::Z],
+                Vec3::new(0.25, 0.25, 0.25),
+            )];
+            let query = Obstacles { obstacles: &shapes };
+            for inside in [0.0079_f32, 0.004, 0.012, 0.03] {
+                let feet = way * inside + Vec3::Y * 0.251;
+                let floor = floor_stood_on(feet, 0.05, &query, &shape)
+                    .unwrap_or_else(|| panic!("{way} {inside}: no floor"));
+                let tilt = libm::acosf(floor.normal.dot(Vec3::Y).min(1.0)).to_degrees();
+                assert!(tilt < 0.1, "{way} {inside}: tilted {tilt} deg");
+            }
+        }
+    }
+
+    #[test]
     fn a_body_on_a_walkable_slope_stands_on_it() {
         let shape = shape();
         for deg in [10.0_f32, 30.0, 45.0] {

@@ -214,14 +214,55 @@ const GRADIENT: f32 = 1.0e-2;
 /// difference blends the two into a slope that is neither, which a body would ride up.
 const CREASE: f32 = 0.9;
 
+/// How far an axis's two one-sided differences may part, m, before one of them is suspected of
+/// reaching over an edge, and how far a side may bend from a line and still be one, near the
+/// origin: a fiftieth of a millimetre, a 0.06 deg tilt over the step. Further out it is the
+/// f32 noise of the point (eight of its ulps, [`kink`]): a world's radius out the field's
+/// differences carry that noise, and a side chosen by noise would tilt a floor more than the
+/// centred difference does.
+const KINK: f32 = TOLERANCE * 0.02;
+
+/// [`KINK`] at a point: the least part of the differences that is not the point's f32 noise.
+fn kink(at: Vec3) -> f32 {
+    KINK.max(at.abs().max_element() * f32::EPSILON * 8.0)
+}
+
 impl<F: Fn(Vec3) -> f32> Sdf<F> {
-    /// The field's gradient at a point by central differences (unit for an exact field, less
-    /// at a crease).
-    fn gradient(&self, at: Vec3) -> Vec3 {
+    /// The field's gradient at a point `here` from the field by differences (unit for an exact
+    /// field, less at a crease): central along each axis, or the one-sided difference of the
+    /// side the field is straight along where the other bends within the step. Just past a
+    /// box's convex edge (a step climbed a tick ago, its edge 8 mm behind) the centred step
+    /// reaches over the edge, where the field rounds it, and tilts a floor's normal 3-5 deg,
+    /// enough to throw the body off its floor; the side away from the edge is the top's alone.
+    /// The ENO choice of stencil (Harten, Engquist, Osher and Chakravarthy 1987; Osher and
+    /// Fedkiw, Level Set Methods and Dynamic Implicit Surfaces, 2003, 3.3): of the two, the
+    /// stencil the field is smoother across. Only where the field rounds an edge (bends convex:
+    /// the slope ahead exceeds the slope behind); a crease (bends concave, where two faces' fields
+    /// meet) keeps the centred blend, for `faces` to tell its faces apart. Jolt and Unreal take a
+    /// floor's normal from the face hit (`mSurfaceNormal`, `FindFloor`'s line trace
+    /// `ImpactNormal`); a field has no face, so its straight side stands for one.
+    fn gradient(&self, at: Vec3, here: f32) -> Vec3 {
+        let f = |p: Vec3| (self.distance)(p);
+        let kink = kink(at);
         let d = |axis: Vec3| {
-            (self.distance)(at + axis * GRADIENT) - (self.distance)(at - axis * GRADIENT)
+            let (ahead, behind) = (f(at + axis * GRADIENT), f(at - axis * GRADIENT));
+            let (fore, back) = (ahead - here, here - behind);
+            let centred = (fore + back) * 0.5;
+            if fore - back <= kink {
+                return centred;
+            }
+            // How far each side's middle lies over the line through its ends (under: convex).
+            let fore_bend = f(at + axis * (GRADIENT * 0.5)) - here - fore * 0.5;
+            let back_bend = f(at - axis * (GRADIENT * 0.5)) - here + back * 0.5;
+            if back_bend < -(fore_bend.abs() * 4.0 + kink) {
+                fore
+            } else if fore_bend < -(back_bend.abs() * 4.0 + kink) {
+                back
+            } else {
+                centred
+            }
         };
-        Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)) / (2.0 * GRADIENT)
+        Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)) / GRADIENT
     }
 
     /// The faces nearest a point `d` from the field: its gradient's way, or at a crease each of
@@ -229,11 +270,11 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
     /// face's: the field falls along it at an exact field's unit rate. Ours, not Jolt's: a mesh
     /// gives a contact a triangle, a field one distance a point.
     fn faces(&self, at: Vec3, d: f32) -> [Option<Vec3>; 2] {
-        let gradient = self.gradient(at);
+        let gradient = self.gradient(at, d);
         if gradient.length() >= CREASE || d <= 0.0 {
             return [gradient.try_normalize(), None];
         }
-        let here = (self.distance)(at);
+        let here = d;
         let side = |sign: f32| {
             let d = |axis: Vec3| sign * ((self.distance)(at + axis * (sign * GRADIENT)) - here);
             Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)).try_normalize()
@@ -320,7 +361,8 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
     /// the step leaves it second order.
     fn contact(&self, capsule: &Capsule, axis: Vec3, d: f32, normal: Vec3) -> Contact {
         let foot = axis - normal * d;
-        let (off, slope) = ((self.distance)(foot), self.gradient(foot));
+        let off = (self.distance)(foot);
+        let slope = self.gradient(foot, off);
         let (mut at, mut normal) = (foot, normal);
         if slope.length_squared() > 0.25 && d.abs() > TOLERANCE {
             let on = foot - slope * (off / slope.length_squared());
