@@ -1728,8 +1728,13 @@ fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
     if v < -0.5 {
         return vec3(0.0);
     }
-    return field_flame(v, saturate(p.y / f.tall), f);
+    let drawn = field_flame(v, saturate(p.y / f.tall), f);
+    return vec3(drawn.x * (1.0 + BAKED_THIN * (1.0 - smoothstep(0.1, 0.4, v))), drawn.yz);
 }
+
+// How much thicker a baked field's thin flame is, at its edge, fading to none by 0.4 of its
+// shape in: the thin tongues near its edge read bright enough to show (fire round g28).
+const BAKED_THIN: f32 = 1.0;
 
 // A baked fire's shed wisps (D493, docs/fire-module.md's "Shed wisps"; sim/wisp.rs): up to
 // WISPS small flames it sheds from its loop's tongue tips, each a soft ellipsoid along its way,
