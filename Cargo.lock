@@ -6225,6 +6225,7 @@ dependencies = [
  "libm",
  "ron",
  "serde",
+ "terra_core",
  "terra_gen",
 ]
 

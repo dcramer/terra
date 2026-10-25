@@ -6,6 +6,7 @@
 //! in its own level frame: `u` forward, `h` up (along the radius) and `w` to the side, so down
 //! is toward the centre as it is in the game (D63) and a flat floor is the sphere itself.
 
+use crate::mover::Obstacle;
 use glam::{Vec2, Vec3};
 
 /// The radius of the world the level fixtures lie on: large enough that 20 m of course is
@@ -27,6 +28,12 @@ pub trait Field: Sync {
     /// How far from the centre the water's surface over a point is, where water is.
     fn water(&self, _at: Vec3) -> Option<f32> {
         None
+    }
+
+    /// What stops a body besides the ground: cubes, doors, props, trees and rocks, as the
+    /// mover's query asks them (D53).
+    fn obstacles(&self) -> &[Obstacle] {
+        &[]
     }
 
     /// Gravity's strength toward the centre, m/s².
@@ -139,6 +146,8 @@ pub struct Course {
     pub solids: Vec<Solid>,
     pub dug: Vec<(Vec3, Vec3)>,
     pub water: Option<Water>,
+    /// What stands on it, answered apart from the ground.
+    pub obstacles: Vec<Obstacle>,
 }
 
 impl Course {
@@ -184,6 +193,10 @@ impl Field for Course {
         let over =
             (water.min.x..water.max.x).contains(&p.x) && (water.min.y..water.max.y).contains(&p.z);
         over.then_some(RADIUS_M + water.surface)
+    }
+
+    fn obstacles(&self) -> &[Obstacle] {
+        &self.obstacles
     }
 }
 

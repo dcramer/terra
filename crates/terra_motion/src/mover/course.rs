@@ -1,8 +1,9 @@
 //! The mover driven through the controller's plain-Rust course (D457, `crate::course`): the
-//! course's fixtures answer as an exact signed distance field, their water as the medium.
+//! course's fixtures answer as an exact signed distance field, what stands on them as the
+//! mover's obstacles, their water as the medium.
 //! `cargo xtask controller` runs its test (`tools/controller/criteria.json`'s `course`).
 
-use super::{Bodies, Sdf, World};
+use super::{Bodies, Obstacles, Sdf, World};
 use crate::course::{self, Field, Kind, Mover};
 use glam::Vec3;
 
@@ -15,9 +16,12 @@ fn with_world<R>(field: &dyn Field, then: impl FnOnce(&World) -> R) -> R {
         // The course's fixtures are exact distances outside the solid.
         steepest: 1.0,
     };
+    let obstacles = Obstacles {
+        obstacles: field.obstacles(),
+    };
     let water = |at: Vec3| field.water(at);
     let world = World {
-        ground: &ground,
+        ground: &(&ground, &obstacles),
         water: &water,
         gravity: field.gravity(),
         centre: Vec3::ZERO,

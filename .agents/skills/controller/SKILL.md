@@ -25,8 +25,10 @@ Read [docs/controller.md](../../../docs/controller.md) (the design, its criteria
 
 Ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
 
-1. None below its bar (round 3: 30 pass). Next: `cost.body` (the mover's bench), then the walker driving the mover.
+1. None below its bar (round 4: 34 pass). Next: the walker driving the mover (handoff `controller-stage2.md`, round 4's Next), then `cost.body` (the mover's bench).
 
 The kind-data rows (`accel.data`, `turn.data`, `air.control`, `slope.speed`, `landing.speed`, `data.kinds`) are `course/data.rs`, run for a man and a test-only second kind; a mover reports facing and landings through `Mover::facing` and `Mover::landed` (`None` by default, so today's walker's adapter is unchanged and fails them).
 
-Not measurable yet (`?`, each with what it needs): doors, steps of bases, props and rocks, swimming's float, dive and breath, stamina (D61 decides the attributes, not their costs); heavy, the in-game filmed course (stage 1b: step smoothing, feet sliding, the yard) and the mover's bench (cost per body).
+What stops a body besides the ground (`step.building`, `step.prop`, `step.rock`, `tunnel.door`) is `course/sources.rs`: a fixture's `obstacles` (`mover::shapes`: turned boxes for a base's cubes, a door's leaf and a prop; `terra_core::Solid` pieces for a rock), answered apart from its ground field. A step is as high as named at its face, where it is climbed: a box laid level there, a rock's crest lowered by the world's curve at its middle.
+
+Not measurable yet (`?`, each with what it needs): swimming's float, dive and breath, stamina (D61 decides the attributes, not their costs); heavy, the in-game filmed course (stage 1b: step smoothing, feet sliding, the yard) and the mover's bench (cost per body).

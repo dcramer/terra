@@ -9,10 +9,12 @@
 //!
 //! - `query`: what stops a body, the one query trait and its sources.
 //! - `slide`: collide and slide, the step up and stick to the floor (Jolt, MIT).
+//! - `shapes`: what stops a body besides the ground: cubes, doors, props, trees and rocks.
 //! - `push`: bodies apart by mass.
 
 mod push;
 pub mod query;
+pub mod shapes;
 mod slide;
 
 #[cfg(test)]
@@ -20,6 +22,7 @@ mod course;
 
 pub use query::{Capsule, Capsules, Contact, Hit, Query, Sdf};
 use serde::Deserialize;
+pub use shapes::{Block, Obstacle, Obstacles};
 use slide::{Shape, Support, Touch};
 
 use glam::Vec3;

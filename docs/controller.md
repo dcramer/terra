@@ -33,6 +33,8 @@ The mover asks one query trait, defined in `terra_motion` because the mover is t
 | Buildings | The base's cubes as boxes, merged greedily per section (building-plan.md), and a door's leaves where they are drawn | `terra_build_layout`, recast as contacts |
 | Props | Each solid item's box, turned with it; hidden ones skipped | `bodies::Solid`, moved into the plain crate |
 | Trees, rocks, stumps, logs | Rounded convex pieces with their tops | `terra_core::solid` |
+
+Buildings, props and trees and rocks are the mover's obstacles (`terra_motion::mover::shapes`): a turned box (a cube, a leaf, a prop) or a solid's pieces, each its exact distance, those near a capsule answered together as one exact field, so cubes side by side have no seam. The ground stays a source apart, so a box standing on it meets it at a true corner, not a blended one.
 | Other bodies | Their pushbox capsules, moving | Treated as moving obstacles in the sweep, then separated by mass afterwards (step 6) |
 | Water | A medium, not a contact: the depth of the surface over a point | `Planet::water_radius_m`, and lakes and rivers when they come |
 

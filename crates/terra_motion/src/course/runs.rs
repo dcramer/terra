@@ -7,9 +7,9 @@ use super::{Body, Intent, Kind, Measure, Mover, TICK};
 use glam::{Vec2, Vec3};
 
 /// The speeds a body is driven at a wall or another body, m/s, up to the bar's 60.
-const SPEEDS: [f32; 8] = [2.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
+pub(super) const SPEEDS: [f32; 8] = [2.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
 /// The step heights tried, m: 0.1 to 0.8 by 0.1, and either side of the kind's step.
-const STEPS: [f32; 8] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
+pub(super) const STEPS: [f32; 8] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
 /// How much wider than the body's diameter each gap is, m: narrower ones must stop it, those
 /// 4 cm or more wider let it through.
 const GAPS: [f32; 6] = [-0.1, -0.04, -0.01, 0.04, 0.07, 0.1];
@@ -56,9 +56,9 @@ enum Case {
 /// What a case gave: its numbers, the capsule's depth into the ground after each tick, the
 /// worst overlap of two bodies after a tick, and for the crowd its end state.
 #[derive(Default)]
-struct Outcome {
-    values: Vec<f32>,
-    depths: Vec<f32>,
+pub(super) struct Outcome {
+    pub(super) values: Vec<f32>,
+    pub(super) depths: Vec<f32>,
     overlap: f32,
     end: Vec<u32>,
 }
@@ -202,13 +202,17 @@ fn limit(slopes: &[(f32, bool)]) -> f32 {
     }
 }
 
-/// How far a body's capsule is into the ground: its radius less the least distance along its
-/// axis, sampled every 15 cm or so; negative when clear.
+/// How far a body's capsule is into the ground or what stands on it: its radius less the least
+/// distance along its axis, sampled every 15 cm or so; negative when clear.
 fn depth(field: &dyn Field, kind: &Kind, body: &Body) -> f32 {
     let a = body.feet + body.up * kind.radius;
     let b = body.feet + body.up * (kind.height - kind.radius);
+    let distance = |at: Vec3| {
+        let obstacles = field.obstacles().iter().map(|o| o.distance(at));
+        obstacles.fold(field.distance(at), f32::min)
+    };
     let nearest = (0..=8)
-        .map(|i| field.distance(a.lerp(b, i as f32 / 8.0)))
+        .map(|i| distance(a.lerp(b, i as f32 / 8.0)))
         .fold(f32::INFINITY, f32::min);
     kind.radius - nearest
 }
@@ -271,7 +275,7 @@ impl<'a, M: Mover> Run<'a, M> {
         }
     }
 
-    fn outcome(self, values: Vec<f32>) -> Outcome {
+    pub(super) fn outcome(self, values: Vec<f32>) -> Outcome {
         Outcome {
             values,
             depths: self.depths,
@@ -281,7 +285,7 @@ impl<'a, M: Mover> Run<'a, M> {
     }
 }
 
-fn walk(body: &Body) -> Intent {
+pub(super) fn walk(body: &Body) -> Intent {
     Intent {
         wish: forward_at(body.feet),
         ..Intent::default()

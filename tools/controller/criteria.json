@@ -44,10 +44,11 @@
    },
    "unit": "of 8 speeds",
    "source": "docs/controller.md criterion 1",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "a base's doors answered by the mover's query trait in the plain course (D53's buildings source, stage 2)"
+   "measurable": true
   },
   {
    "id": "penetration.max",
@@ -133,10 +134,11 @@
    },
    "unit": "steps wrong",
    "source": "docs/controller.md criterion 5",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "a base's cubes answered by the mover's query trait in the plain course (stage 2)"
+   "measurable": true
   },
   {
    "id": "step.prop",
@@ -147,10 +149,11 @@
    },
    "unit": "steps wrong",
    "source": "docs/controller.md criterion 5",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "props' boxes answered by the mover's query trait in the plain course (stage 2)"
+   "measurable": true
   },
   {
    "id": "step.rock",
@@ -161,10 +164,11 @@
    },
    "unit": "steps wrong",
    "source": "docs/controller.md criterion 5",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "trees' and rocks' pieces (terra_core::solid) answered by the mover's query trait in the plain course (stage 2)"
+   "measurable": true
   },
   {
    "id": "step.smooth",

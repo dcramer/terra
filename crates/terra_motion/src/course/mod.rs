@@ -13,10 +13,13 @@
 //! - `runs`: the cases and what each measures.
 //! - `data`: the cases measured against the kind's own numbers (speeds, rates, curves), for two
 //!   kinds, so two kinds' files give two results (criterion 14).
+//! - `sources`: what stops a body besides the ground (a base's cubes and door, a prop, a
+//!   rock), each a step and the door a wall (criteria 1 and 5).
 
 mod data;
 pub mod field;
 mod runs;
+mod sources;
 
 pub use field::{Ball, Course, Field, Solid, Water};
 use glam::Vec3;
@@ -79,6 +82,12 @@ pub struct Measure {
 pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     let mut measures = runs::score(&new);
     measures.extend(data::score(&new));
+    let (sources, deepest) = sources::score(&new);
+    measures.extend(sources);
+    // What a body met besides the ground counts toward how deep it ever went.
+    for m in measures.iter_mut().filter(|m| m.id == "penetration.max") {
+        m.value = m.value.max(deepest);
+    }
     measures
 }
 
