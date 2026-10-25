@@ -75,7 +75,7 @@ What the world lays, as plain data in a local frame (metres, x east, y up, z sou
 
 ## Next
 
-- **Light underground**: a closed room still takes sky light from the lush forest's irradiance volume (Bevy uses no room probe once a volume is in view); the room's sky share from its openings is written, not landed.
+- **Light underground**: a room's probe now wins over the forest's sky volume (D485) and holds what its openings let in (D486), but Bevy keeps only the 8 room probes nearest the camera, so farther boxes of the crypt's 168 still take the sky; `node tools/sandbox/indoorlight.ts` (a continuous check) fails until they don't.
 - **Door leaves** that open (a locked one when its keys are taken), chests that hold their loot as storage, water surfaces in basins.
 
 ## Open questions (design, the developers')

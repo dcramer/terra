@@ -13,6 +13,12 @@
     "minutes": 20
   },
   {
+    "name": "indoorlight",
+    "does": "a closed dungeon room and corridor are as bright at noon as at midnight and their unlit corners near black: their rooms' probes, not the forest's sky volume, light them (D485, D486; tools/sandbox/indoorlight.ts)",
+    "run": ["node", "tools/sandbox/indoorlight.ts"],
+    "minutes": 20
+  },
+  {
     "name": "combat film",
     "does": "the combat scorecard with the yard duel's film (D452): every criterion of tools/combat/criteria.json, the film's checks among them, held to tools/combat/baseline.tsv",
     "run": ["cargo", "xtask", "gpu", "film", "--", "cargo", "xtask", "combat", "--film"],
