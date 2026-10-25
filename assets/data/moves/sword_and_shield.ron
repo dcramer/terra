@@ -84,12 +84,14 @@
             drive: [(0.0, 0.0), (0.25, 0.6), (0.40, 3.2), (0.55, 0.5), (0.8, 0.0)],
             warp: (within: 3.6, cone: 70, stop_at: 1.5, most_mps: 4.0),
         ),
-        // The base's forward roll, in place in its clip: the body driven 3.5 m along the way
-        // asked, blows passing through it from tuck to the get-up.
+        // The base's forward roll with the arms held out of the tuck (Fight_Roll, hold.py), in
+        // place in its clip: the body driven 3.3 m along the way asked, blows passing through
+        // it from tuck to the get-up. 0.6 s from the stand to the next roll, Enshrouded's
+        // (0.5-0.53 s to standing, 0.6-0.64 s roll to roll, tools/combat/refs/enshrouded.json).
         "roll": (
-            clip: "Roll", from: 0.05, speed: 1.45, done: 1.2, cancel: 1.0,
+            clip: "Fight_Roll", from: 0.05, speed: 2.0, done: 1.25, cancel: 1.25,
             invulnerable: (0.12, 0.78), stamina: 18,
-            drive: [(0.05, 5.5), (0.75, 5.5), (0.95, 1.5), (1.2, 0.0)],
+            drive: [(0.05, 7.6), (0.75, 7.6), (0.95, 2.1), (1.2, 0.0)],
         ),
         // The shield brought up and braced by 1.2 s and held; a blow taken on it plays the
         // push back from 1.25.

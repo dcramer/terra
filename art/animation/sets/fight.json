@@ -607,5 +607,24 @@
         0.6
       ]
     }
+  },
+  "Fight_Roll": {
+    "of": "Roll",
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "turn": {
+          "upperarm_l": 90
+        }
+      },
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_r",
+        "turn": {
+          "upperarm_r": -90
+        }
+      }
+    ]
   }
 }

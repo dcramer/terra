@@ -25,6 +25,7 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 import aim
+import hold
 import look
 import patches
 import lift
@@ -208,6 +209,12 @@ if LISTED:
 aim.bake(arm, actions, mannequin, steps)
 # The limbs' roll moved to the hands and feet and spread over the twist bones (twist.py).
 twist.bake(arm, actions)
+# A list's clips made from another with a part held as a third holds it (hold.py): the
+# fight's roll with the shield arm as the guard holds it. After aim and twist, so the part is
+# exactly the held clip's on this body.
+if LISTED:
+    with open(LISTED) as f:
+        hold.bake(arm, actions, json.load(f))
 # The hips lifted by this body's size wherever it would go deeper into the floor than the
 # mannequin (lift.py), measured skinned as the game skins it; the base's game file also keeps
 # how much more or less each morph needs, for the game to mix by the body's sliders.

@@ -23,20 +23,17 @@ Read [docs/movement.md](../../../docs/movement.md) ("The goal", the pipeline) be
 5. **Film** when a move changed: `cargo xtask gpu film -- cargo xtask combat --film` (the duel's film and its checks; the film in `~/.cache/terra-review/duel/`).
 6. **Feel** goes to the review desk: a film for the developer's eye in a `FOR REVIEW` line (`review-desk` skill), never a claim in chat that it feels right.
 
-## The task list (failing criteria, 2026-10-24, after round 6)
+## The task list (failing criteria, 2026-10-24, after round 8)
 
-Ordered by what a player notices most (`noticed`), then by how far out. Re-read it from `cargo xtask combat --json` when it moves; the scorecard is the truth, this list its order. The light chain (slash, backhand, finisher, the partner's slash) is keyed to the game's guard, Keyed_Guard (the set's `guard`, D450), and passes every row.
+Ordered by what a player notices most (`noticed`), then by how far out. Re-read it from `cargo xtask combat --json` when it moves; the scorecard is the truth, this list its order. The light chain (slash, backhand, finisher, the partner's slash) is keyed to the game's guard, Keyed_Guard (the set's `guard`, D450), and passes every row; the roll (Fight_Roll, the library's with the arms held out of the tuck, D454) passes every row.
 
-1. `move.roll.held` 22.8 cm (bar 1): the shield goes through the spine in the roll.
-2. `film.feet_sliding` (bar 0; 66 of 81 plants slid past 3 cm before round 6): feet skate in the duel.
-3. `move.block.held` 6.4 cm: the sword through the head while blocking (next: Keyed_Block, its guard at {clip: Keyed_Guard, frame: 75}).
-4. `move.heavy.held`, `move.partner_heavy.held` 4.2 cm: the shield in the spine in Sword_Attack.
-5. `timing.roll.length` 0.79 s (bar 0.5-0.6): the roll lasts too long.
-6. `move.heavy.from_guard`, `move.heavy.to_guard` (and the partner's) 1.18 / 1.11 m (bar 0.1): the heavy snaps out of and into the guard; a keyed heavy fixes them with item 4.
-7. `timing.heavy.total` 2.02 s (1.4-1.7), `timing.heavy.hit_to_guard` 1.40 s (0.7-1.1): the heavy keeps the player too long.
-8. `move.roll.hands` 2.6 cm.
-9. `timing.hit_stop.*` 0.10-0.20 s (bar 0-0.05): Enshrouded flashes and kicks the camera instead (a design call: raise it on the desk before changing).
-10. `move.Walk_Loop.held` 10.2, `move.Walk_Loop.hands` 6.2, `move.Idle_Loop.held` 21.4 cm: the drawn sword through the leg walking and idle.
+1. `film.feet_sliding` (bar 0; 66 of 81 plants slid past 3 cm before round 6, 45 after): feet skate in the duel.
+2. `move.block.held` 6.4 cm: the sword through the head while blocking (next: Keyed_Block, its guard at {clip: Keyed_Guard, frame: 75}).
+3. `move.heavy.held`, `move.partner_heavy.held` 4.2 cm: the shield in the spine in Sword_Attack.
+4. `move.heavy.from_guard`, `move.heavy.to_guard` (and the partner's) 1.18 / 1.11 m (bar 0.1): the heavy snaps out of and into the guard; a keyed heavy fixes them with item 3.
+5. `timing.heavy.total` 2.02 s (1.4-1.7), `timing.heavy.hit_to_guard` 1.40 s (0.7-1.1): the heavy keeps the player too long.
+6. `timing.hit_stop.*` 0.10-0.20 s (bar 0-0.05): Enshrouded flashes and kicks the camera instead (a design call: raise it on the desk before changing).
+7. `move.Walk_Loop.held` 10.2, `move.Walk_Loop.hands` 6.2, `move.Idle_Loop.held` 21.4 cm: the drawn sword through the leg walking and idle.
 
 Not measurable yet (`?`, each with what it needs in `criteria.json`): the blind review score against Enshrouded, the block's raise (ours and Enshrouded's), the guard's shield face and the blows' specs in the game's set, roll distance, hit reactions, a light blow's recovery, hit flash and camera kick, the partner's telegraph seen from the game's camera.
 

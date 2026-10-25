@@ -376,6 +376,7 @@ The look, models, bodies and gear, textures and audio.
 | [D442](decisions/D442.md) | The creature check gates a creature by measured deformation and gait | Tech | Agent | Leaning | `tools/creatures/creature_check.py <kind>` gates a… |
 | [D446](decisions/D446.md) | The dusk lake film faces the set sun's side across the water | Design | Developers | Decided | The lake's dusk film looks across the water toward the… |
 | [D450](decisions/D450.md) | Combat clips made by Kimodo, keyed to the guard pose | Tech | Agent | Decided | A move's clip is made with Kimodo's latest model… |
+| [D454](decisions/D454.md) | The fight's roll is the library's with the arms held out of the tuck | Tech | Agent | Decided | The sword-and-shield set's roll plays `Fight_Roll`… |
 
 ## Engine and code
 
