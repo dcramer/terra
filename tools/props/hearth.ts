@@ -30,13 +30,15 @@ export const BUDGET = 10_000;
 /// `dims` are what it comes to (the contract's test holds them to the file).
 export const HALF = 0.8;
 export const TALL = 0.55;
-const LOGS = 4;
-/// The first log's bearing; how far out a log's butt lies, least, past the stones; and how far
+const LOGS = 5;
+/// The first log's bearing; how far out a log's butt lies, least, inside the stones; and how far
 /// out it enters the fire, where the flames are told its burning length starts (terra_world's
 /// `fire/hearth.rs`, `Logs::CAMPFIRE`).
 const TURN = 0.35;
-const BUTT_R = 0.7;
-export const BURN_R = 0.36;
+const BUTT_R = 0.36;
+export const BURN_R = 0.34;
+/// How tall the stack stands, metres: 0.3-0.5 of the ring across (logs' form round).
+export const STACK = 0.48;
 const STONES = 11;
 /// The ring of stones: the radius of their middles.
 const RING_R = 0.52;
@@ -74,12 +76,33 @@ function arc(R: number, from: number, to: number, n: number): [number, number][]
 function line(a: [number, number], b: [number, number], n: number): [number, number][] {
   return Array.from({ length: n }, (_, i) => [a[0] + ((b[0] - a[0]) * i) / (n - 1), a[1] + ((b[1] - a[1]) * i) / (n - 1)] as [number, number]);
 }
-// A section's runs: a half (kind 0), a quarter (1) or a whole round (2).
-function section(kind: number, R: number): Run[] {
+// A section's runs: a half (kind 0), a quarter (1) or a whole round (2). Split wood is angular,
+// not sawn: its bark's round uneven and its split faces torn, a ridge or a step along the grain
+// across each (logs' form round: the notes' smooth, equal cylinders).
+function section(kind: number, R: number, seed = 1): Run[] {
+  const rnd = random(seed * 7 + kind);
   const runs: { bark: boolean; pts: [number, number][] }[] =
     kind === 0 ? [{ bark: true, pts: arc(R, 0, Math.PI, 13) }, { bark: false, pts: line([-R, 0], [R, 0], 6) }]
-    : kind === 1 ? [{ bark: true, pts: arc(R, 0, Math.PI / 2, 8) }, { bark: false, pts: line([0, R], [0, 0], 4) }, { bark: false, pts: line([0, 0], [R, 0], 4) }]
+    : kind === 1 ? [{ bark: true, pts: arc(R, 0, Math.PI / 2, 8) }, { bark: false, pts: line([0, R], [0, 0], 5) }, { bark: false, pts: line([0, 0], [R, 0], 5) }]
     : [{ bark: true, pts: arc(R, 0, 2 * Math.PI, 17) }];
+  for (const r of runs) {
+    const n = r.pts.length;
+    // A split face's normal in the section's plane, and how far each of its inner points stands
+    // off it: a torn ridge, never a flat cut; its ends stay on the bark's.
+    const [a, b] = [r.pts[0], r.pts[n - 1]];
+    const off = norm([-(b[1] - a[1]), b[0] - a[0], 0]);
+    r.pts = r.pts.map((p, k) => {
+      if (r.bark) {
+        if (kind !== 2 && (k === 0 || k === n - 1)) return p;
+        const g = 1 + 0.08 * (rnd() - 0.5);
+        return [p[0] * g, p[1] * g] as [number, number];
+      }
+      if (k === 0 || k === n - 1) return p;
+      const d = R * (0.1 * (rnd() - 0.35) + (k === Math.floor(n / 2) ? 0.07 : 0));
+      return [p[0] + off[0] * d, p[1] + off[1] * d] as [number, number];
+    });
+    if (kind === 2) r.pts[n - 1] = r.pts[0];
+  }
   let s = 0;
   return runs.map((r) => {
     const ss = r.pts.map((p, i) => (i ? (s += Math.hypot(p[0] - r.pts[i - 1][0], p[1] - r.pts[i - 1][1])) : s));
@@ -106,22 +129,21 @@ export const STONE_TONES: readonly (readonly number[])[] = [[70, 64, 54], [62, 5
 export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
   const rnd = random(seed);
   const logs: Log[] = Array.from({ length: LOGS }, (_, i) => {
-    // Round logs of mixed thickness, each lying low: two under at 9-12 deg, two laid over them at
-    // 15-18, their butts out past the stones on the ground, their thin burnt ends crossing a
-    // little past the middle (campfire low-lay round: RDR2's 2-4 round logs at 10-30 deg, the
-    // pile 0.15-0.3 of the ring, against our upright teepee of seven split logs at 0.45-0.6).
-    const kind = 2;
-    const R = [0.06, 0.047, 0.066, 0.05][i % 4] + 0.008 * rnd();
+    // Split firewood of mixed thickness, halves, quarters and a thin round, leaned into a stack
+    // `STACK` tall, their butts on the ground inside the stones and their burnt, tapered ends
+    // crossing a little past the middle at mixed heights (logs' form round: the notes' refs lean
+    // their wood 20-50 deg into a pile 0.3-0.5 of the ring, every end inside it; between the
+    // upright teepee of seven at 0.45-0.6, which read as a tall pile from above, and the low lay
+    // of four round logs at 9-18 deg spilling over the stones, which read as a flat star).
+    const kind = [0, 1, 2, 0, 1][i % 5];
+    const R = [0.085, 0.085, 0.032, 0.06, 0.07][i % 5] + 0.008 * rnd();
     const phi = TURN + (i / LOGS) * 2 * Math.PI + 0.14 * (rnd() - 0.5);
-    const rb = BUTT_R + 0.04 * rnd();
+    const rb = BUTT_R + 0.03 * rnd();
     const out: V3 = [Math.cos(phi), 0, Math.sin(phi)];
-    const foot: V3 = [rb * out[0], R * 0.96, rb * out[2]];
+    const foot: V3 = [rb * out[0], R * 0.55, rb * out[2]];
     // Its end past the middle and turned on a little, so the logs cross rather than meet in a point.
-    const pt = phi + 0.6 + 0.3 * rnd(), rt = 0.05 + 0.04 * rnd();
-    const end: V3 = [rt * Math.cos(pt), 0, rt * Math.sin(pt)];
-    const run = Math.hypot(end[0] - foot[0], end[2] - foot[2]);
-    const slope = ((i % 2 ? 15 : 9) + 3 * rnd()) * (Math.PI / 180);
-    end[1] = foot[1] + run * Math.tan(slope);
+    const pt = phi + 0.6 + 0.3 * rnd(), rt = 0.04 + 0.04 * rnd();
+    const end: V3 = [rt * Math.cos(pt), STACK * [1, 0.84, 0.95, 0.78, 0.9][i % 5] - 0.6 * R, rt * Math.sin(pt)];
     const axis = norm(sub(end, foot));
     const L = Math.hypot(...sub(end, foot));
     // Its section's plane, turned about its axis at random.
@@ -130,7 +152,7 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
     const roll = rnd() * 2 * Math.PI;
     const e1 = add(mul(h, Math.cos(roll)), mul(v, Math.sin(roll)));
     const e2 = cross(e1, axis);
-    const runs = section(kind, R);
+    const runs = section(kind, R, seed * 31 + i);
     const all = runs.flatMap((r) => r.pts);
     const centre: [number, number] = [all.reduce((a, p) => a + p[0], 0) / all.length, all.reduce((a, p) => a + p[1], 0) / all.length];
     const xs = all.map((p) => p[0]), ys = all.map((p) => p[1]);
@@ -142,24 +164,13 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
   // Each stone a tone of the field stone's, lighter or darker by one scale for all its channels:
   // a scale each tinted them lavender and blue (fire round 20).
   const toned = (tone: readonly number[], k: number[]) => tone.map((c) => c * (0.9 + (0.2 * (k[0] + k[1] + k[2])) / 3));
-  // Laid in the arcs between the logs, which pass out over the ring through gaps of their own:
-  // each the log's width and a stone's half length each side, so no stone stands in a log.
-  const bearings = logs.map((l) => Math.atan2(l.out[2], l.out[0]));
-  const gap = logs.map((l) => (l.R + 0.09) / RING_R);
-  let left = STONES;
-  for (let k = 0; k < LOGS; k++) {
-    const from = bearings[k] + gap[k];
-    let to = bearings[(k + 1) % LOGS] - gap[(k + 1) % LOGS];
-    while (to < from) to += 2 * Math.PI;
-    const n = k === LOGS - 1 ? left : Math.round(STONES / LOGS);
-    left -= n;
-    for (let j = 0; j < n; j++) {
-      const phi = from + ((to - from) * (j + 0.5 + 0.25 * (rnd() - 0.5))) / n;
-      const long = 0.08 + 0.075 * rnd();
-      const size: V3 = [long, 0.048 + 0.06 * rnd(), 0.06 + 0.05 * rnd()];
-      const r = RING_R + 0.02 * (rnd() - 0.5);
-      stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.6 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + stones.length, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
-    }
+  // Laid round the whole ring, a little uneven: the wood stands inside it.
+  for (let j = 0; j < STONES; j++) {
+    const phi = TURN + 0.3 + (2 * Math.PI * (j + 0.3 * (rnd() - 0.5))) / STONES;
+    const long = 0.08 + 0.075 * rnd();
+    const size: V3 = [long, 0.048 + 0.06 * rnd(), 0.06 + 0.05 * rnd()];
+    const r = RING_R + 0.02 * (rnd() - 0.5);
+    stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.6 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + stones.length, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
   }
   return { logs, stones };
 }
@@ -190,13 +201,19 @@ function pack(logs: Log[]) {
 // A log at a point of its section (x, y in its plane) and t along it, as built: tapered, bent
 // a little and its ends rounded over.
 function logPoint(l: Log, x: number, y: number, t: number, scale: number): V3 {
-  // Tapered, and burnt thin over its last third, where the logs cross over the coals.
-  const taper = (1 - 0.07 * (t / l.L) - 0.38 * smooth(0.62, 1, t / l.L)) * scale;
-  const wob = 1 + 0.05 * (noise(x * 25 + y * 25 + l.seed, t * 6, 3) - 0.5);
+  // Tapered, and burnt down to a third over its inner half, where the logs cross over the coals,
+  // eaten unevenly there (logs' form round: the notes' refs burn their inner ends to tapered,
+  // broken stubs).
+  const u = t / l.L, burnt = smooth(0.5, 1, u);
+  const taper = (1 - 0.07 * u - 0.6 * burnt) * scale;
+  const wob = 1 + (0.05 + 0.16 * burnt) * (noise(x * 25 + y * 25 + l.seed, t * (6 + 30 * burnt), 3) - 0.5);
   const [cx, cy] = [(x - l.centre[0]) * taper * wob, (y - l.centre[1]) * taper * wob];
   const bend = 0.012 * Math.sin((Math.PI * t) / l.L);
+  // Its inner end broken off, not cut: longer on some sides than others.
+  const round = Math.atan2(y - l.centre[1], x - l.centre[0]);
+  const jag = l.R * 1.1 * (noise(2 * Math.cos(round) + l.seed, 2 * Math.sin(round) + 7, 5) - 0.5) * smooth(l.L - 0.02, l.L, t);
   // Pressed flat where it lies on the ground.
-  const p = add(add(l.foot, mul(l.axis, t)), add(mul(l.e1, cx), mul(l.e2, cy + bend)));
+  const p = add(add(l.foot, mul(l.axis, t + jag)), add(mul(l.e1, cx), mul(l.e2, cy + bend)));
   return [p[0], Math.max(p[1], 0.002), p[2]];
 }
 
@@ -228,7 +245,8 @@ function addLog(m: Mesh, l: Log) {
     const ring = l.runs.flatMap((r) => r.pts).filter((p, k, all) => Math.hypot(p[0] - all[(k + 1) % all.length][0], p[1] - all[(k + 1) % all.length][1]) > 1e-9);
     const first = m.pos.length / 3;
     const capUv = ([x, y]: [number, number]) => [(l.caps[end][0] + 2 + (x - l.box[0]) * D) / W, (l.caps[end][1] + 2 + (y - l.box[1]) * D) / W];
-    m.pos.push(...logPoint(l, l.centre[0], l.centre[1], t, 1));
+    // The inner end's middle burnt to a blunt point past its rim.
+    m.pos.push(...logPoint(l, l.centre[0], l.centre[1], end ? t + 0.25 * l.R : t, 1));
     m.uv.push(...capUv(l.centre));
     ring.forEach((p) => {
       m.pos.push(...logPoint(l, p[0], p[1], t, scales[j]));
@@ -639,8 +657,15 @@ function heat(l: Log, t: number, n: V3): [number, number, number] {
   // broad glow there (campfire crack round).
   // Not under the flame's foot, where its char stays black round the flame (as the soot is).
   const over = smooth(0.0, 0.6, f) * (1 - 0.75 * smooth(0.72, 0.95, f)) * (1 - past);
-  return [Math.max(top, foot, lick, all, rim), burnt, over];
+  // Its glow falls with height over the coals, its char kept: leaned into a stack, the wood
+  // standing in front of the flame reads as black char against it, as the photographs' does,
+  // its seams lit low, where the coals heat it (logs' form round: glowing all the way up, the
+  // stack read as orange-striped cobs and took the low view's soot from 0.16 to 0.06).
+  const fall = 1 - GLOW_FALL * smooth(0.1, 0.32, at[1]);
+  return [Math.max(top, foot, lick, all, rim) * fall, burnt, over * fall];
 }
+/** How much of a log's glow is gone at the stack's top (`heat`). */
+export const GLOW_FALL = 0.7;
 
 /** Edge padding, as a baker dilates its islands: each unpainted texel within `reach` (here the
  * whole gutter) of an island takes its nearest painted neighbour's values, so no mip averages the
@@ -703,8 +728,10 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
           // The foot's end, out of the fire, only scorched round its bark (`heat`); the inner
           // end over the flames charred black, its cracks glowing.
           const hot = end ? 0.68 + 0.16 * fbm(px * 40, py * 40, l.seed) : 0.12 + 0.2 * smooth(0.6, 1, r / l.R);
-          // Its char split along the radial checks and round the rings, as a log's end burns.
-          put(cx + x, cy + y, charred(w, hot, Math.atan2(py, px) * 0.024, r, l.seed + 13, 0, Math.max(r, 0.008) / 0.024, hot, end));
+          // Its char split along the radial checks and round the rings, as a log's end burns;
+          // its glow falling with its height, as its length's does (`heat`).
+          const fall = 1 - GLOW_FALL * smooth(0.1, 0.32, end ? l.foot[1] + l.axis[1] * l.L : l.foot[1]);
+          put(cx + x, cy + y, charred(w, hot * fall, Math.atan2(py, px) * 0.024, r, l.seed + 13, 0, Math.max(r, 0.008) / 0.024, hot, end));
         }
       }
     });

@@ -458,7 +458,7 @@ const CORE_ALONG: vec2<f32> = vec2<f32>(0.25, 1.0);
 const CORE_UNDER: f32 = 0.6;
 const CORE_WIDE: f32 = 1.6;
 // On the redder ramp (spread 4) 0.76 burned deep red; 0.86 glows yellow-white at its peak.
-const CORE_HEAT: f32 = 0.92;
+const CORE_HEAT: f32 = 0.86;
 // At 0.35 its glow under the logs read the same dull orange as the body (blind judges, campfire
 // tongue round: "no white-hot bottom"); 0.55 on the hotter core heat and the film with no
 // crosstalk under the blown green, so it glows yellow-white between the logs, not pink.

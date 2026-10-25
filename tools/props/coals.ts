@@ -210,12 +210,13 @@ export function bed(seed = 1, arms: readonly Arm[] = []): Bed {
       // Out along a log's line, between the heap and ARM_R, a little to either side.
       const { arm, f } = along[i - BIG - SMALL];
       const [px, pz] = arm.a, [qx, qz] = arm.b;
-      const t = (rnd() * 0.2 - 0.1) + f;
+      // As far out along it, in metres, whatever its length (`f` of a low log's 0.63 m).
+      const len = Math.hypot(px - qx, pz - qz) || 1;
+      const t = (((rnd() * 0.2 - 0.1) + f) * 0.63) / len;
       let [ax, az] = [qx + (px - qx) * t, qz + (pz - qz) * t];
       const k = Math.min(1, (ARM_R - 0.04) / (Math.hypot(ax, az) || 1));
       [ax, az] = [ax * k, az * k];
       const side = (rnd() - 0.5) * arm.w;
-      const len = Math.hypot(px - qx, pz - qz) || 1;
       [x, z] = [ax - ((pz - qz) / len) * side, az + ((px - qx) / len) * side];
       size = 0.022 + 0.01 * rnd();
     }

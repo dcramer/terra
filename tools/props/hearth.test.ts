@@ -21,30 +21,47 @@ test("it stands inside its catalogue footprint and height, on the ground", () =>
   }
 });
 
-test("its few round logs lie low across the ring, their butts out past the stones", () => {
-  // RDR2's 2-4 round logs at 10-30 deg, the pile 0.15-0.3 of the ring tall, their butts out over
-  // the stones (campfire low-lay round), not an upright teepee standing inside them.
-  assert.ok(logs.length >= 2 && logs.length <= 4, `${logs.length} logs`);
+test("its split wood, of mixed thickness, leans into a stack 0.3-0.5 of the ring tall, every end inside the stones", () => {
+  // The notes' references (logs' form round): split, angular wood of mixed thickness leaned
+  // 20-50 deg into a pile 0.3-0.5 of the ring tall, every end inside the ring; not round logs
+  // lying low in a star spilling over the stones, nor an upright teepee 0.45-0.6 tall.
+  assert.ok(logs.length >= 4 && logs.length <= 6, `${logs.length} logs`);
+  assert.ok(logs.filter((l) => l.kind !== 2).length >= logs.length / 2, "most of it split");
+  const thick = logs.map((l) => l.R * (l.kind === 2 ? 1 : l.kind === 0 ? 0.6 : 0.5));
+  assert.ok(Math.max(...thick) / Math.min(...thick) >= 1.3, "of mixed thickness");
   const ring = Math.min(...stones.map((s) => Math.hypot(s.at[0], s.at[2])));
-  const outer = Math.max(...stones.map((s) => Math.hypot(s.at[0], s.at[2]) + Math.max(s.size[0], s.size[2])));
   for (const l of logs) {
     const end = l.foot.map((v, i) => v + l.axis[i] * l.L);
     const slope = (Math.asin(l.axis[1]) * 180) / Math.PI;
-    assert.ok(Math.hypot(l.foot[0], l.foot[2]) > outer, "butt past the stones");
     assert.ok(Math.hypot(end[0], end[2]) < 0.12, "its end over the middle");
-    assert.ok(slope >= 8 && slope <= 30, `lying at ${slope.toFixed(1)} deg`);
+    assert.ok(slope >= 20 && slope <= 55, `leaning at ${slope.toFixed(1)} deg`);
   }
-  let top = 0;
-  for (let i = 1; i < wood.pos.length; i += 3) top = Math.max(top, wood.pos[i]);
-  assert.ok(top <= 0.3 * 2 * ring, `the pile ${top.toFixed(3)} m, ${(top / (2 * ring)).toFixed(2)} of the ring`);
-  // Each passes out over the ring through a gap: no stone stands in a log.
-  for (const s of stones) {
-    const a = Math.atan2(s.at[2], s.at[0]);
-    for (const l of logs) {
-      const d = Math.atan2(Math.sin(a - Math.atan2(l.out[2], l.out[0])), Math.cos(a - Math.atan2(l.out[2], l.out[0])));
-      assert.ok(Math.abs(d) * ring > l.R + Math.max(s.size[0], s.size[2]), "a stone in a log's way");
-    }
-  }
+  let top = 0, out = 0;
+  for (let i = 0; i < wood.pos.length; i += 3) [top, out] = [Math.max(top, wood.pos[i + 1]), Math.max(out, Math.hypot(wood.pos[i], wood.pos[i + 2]))];
+  assert.ok(top >= 0.3 * 2 * ring && top <= 0.5 * 2 * ring, `the stack ${top.toFixed(3)} m, ${(top / (2 * ring)).toFixed(2)} of the ring`);
+  // No wood past the stones' inner faces.
+  let inner = Infinity;
+  for (let i = 0; i < stone.pos.length; i += 3) inner = Math.min(inner, Math.hypot(stone.pos[i], stone.pos[i + 2]));
+  assert.ok(out <= inner, `wood out to ${out.toFixed(3)} m, the stones from ${inner.toFixed(3)} m`);
+});
+
+test("its inner ends are burnt to tapered stubs, not cut", () => {
+  // Over the coals each piece is burnt thin: its section at its inner end a third to a half of
+  // its foot's, and that end broken, longer on some sides than others.
+  const from = (l: (typeof logs)[number]) => l.from!;
+  logs.forEach((l, i) => {
+    const to = i + 1 < logs.length ? from(logs[i + 1]) : wood.pos.length / 3;
+    const pts = Array.from({ length: to - from(l) }, (_, k) => wood.pos.slice((from(l) + k) * 3, (from(l) + k) * 3 + 3));
+    const along = (p: number[]) => p.reduce((a, x, j) => a + (x - l.foot[j]) * l.axis[j], 0);
+    const across = (p: number[]) => Math.hypot(...p.map((x, j) => x - l.foot[j] - l.axis[j] * along(p)));
+    const near = (t: number) => pts.filter((p) => Math.abs(along(p) - t) < 0.02);
+    const wide = (ps: number[][]) => Math.max(...ps.map(across));
+    const ratio = wide(near(l.L - 0.03)) / wide(near(0.05));
+    assert.ok(ratio >= 0.25 && ratio <= 0.55, `log ${i}: its inner end ${ratio.toFixed(2)} of its foot`);
+    // A square cut has its rim at its length, and only its middle's point past it.
+    const past = pts.filter((p) => along(p) > l.L + 0.15 * l.R).length;
+    assert.ok(past >= 3, `log ${i}: its end cut square (${past} points past its length)`);
+  });
 });
 
 test("every face of it faces out: its logs from their axes, its stones from their middles", () => {
@@ -64,13 +81,16 @@ test("every face of it faces out: its logs from their axes, its stones from thei
     const k = stone.idx[i], near = stones.findLast((s) => s.from! <= Math.floor(i / 3))!;
     assert.ok(dot(stone.nrm.slice(k * 3, k * 3 + 3), sub(p(stone, k), near.at)) > 0, "a stone's normal turned in");
   }
-  // A log's vertex normals point away from its axis or along it at its ends.
+  // A log's vertex normals point away from its axis or along it at its ends; on its broken
+  // inner end, either, or along its rim at worst (a notch's side).
   for (let k = 0; k < wood.pos.length / 3; k++) {
     const at = p(wood, k), n = wood.nrm.slice(k * 3, k * 3 + 3);
     const l = logs.findLast((x) => x.from! <= k)!;
     const r = sub(at, l.foot), t = dot(r, l.axis);
-    const off = t <= 0.001 ? l.axis.map((v) => -v) : t >= l.L - 0.001 ? l.axis : sub(r, l.axis.map((v) => v * t));
-    assert.ok(dot(n, off) > -1e-6, "a log's normal turned in");
+    const radial = sub(r, l.axis.map((v) => v * t));
+    const off = t <= 0.001 ? l.axis.map((v) => -v) : t >= l.L - 0.001 ? l.axis : radial;
+    const broken = t > l.L - 0.02 - 0.6 * l.R && (dot(n, l.axis) > 0 || dot(n, radial) > -0.15 * Math.hypot(...radial));
+    assert.ok(broken || dot(n, off) > -1e-6, "a log's normal turned in");
   }
 });
 
