@@ -3,8 +3,7 @@
 //! criterion of `tools/controller/criteria.json` is judged by, measured against geometry and
 //! the kind's own numbers, never against the mover's idea of them.
 //!
-//! A mover is driven through [`Mover`], so stage 2's controller replaces today's walker
-//! (driven through its adapter in `terra_walker`'s tests) without the course changing.
+//! A mover is driven through [`Mover`], so a change of mover leaves the course unchanged.
 //! [`score`] runs every case on every core (D406) and gives a [`Measure`] a criterion;
 //! [`print`] writes them as `cargo xtask controller` reads them.
 //!
@@ -70,15 +69,10 @@ pub trait Mover {
     /// One tick of every body named, each with its intent.
     fn tick(&mut self, field: &dyn Field, intents: &[(u32, Intent)], dt: f32);
     fn body(&self, id: u32) -> Body;
-    /// The level way a body faces; `None` from a mover that keeps no facing.
-    fn facing(&self, _id: u32) -> Option<Vec3> {
-        None
-    }
-    /// How fast a body was falling when it landed in the last tick, if it landed in it;
-    /// `None` too from a mover that reports no landings.
-    fn landed(&self, _id: u32) -> Option<f32> {
-        None
-    }
+    /// The level way a body faces; `None` for a body not placed.
+    fn facing(&self, id: u32) -> Option<Vec3>;
+    /// How fast a body was falling when it landed in the last tick, if it landed in it.
+    fn landed(&self, id: u32) -> Option<f32>;
 }
 
 /// A criterion's number, as `tools/controller/criteria.json` names it.

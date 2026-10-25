@@ -33,7 +33,7 @@ Far from the origin (`far.grounded`, `far.float`, `far.queries`, criterion 22, D
 
 Flights and a doorway's sill are `course/stairs.rs`: the ground's steps 0.1-0.5 m and a base's whole, half and stair cubes, up and down at the kind's jog (`stair.up`, `stair.down`, `stair.hop`), and a floor 0-0.1 m over the ground through a doorway (`door.hop`).
 
-The kind-data rows (`accel.data`, `turn.data`, `air.control`, `slope.speed`, `landing.speed`, `data.kinds`) are `course/data.rs`, run for a man and a test-only second kind; a mover reports facing and landings through `Mover::facing` and `Mover::landed` (`None` by default, so today's walker's adapter is unchanged and fails them).
+The kind-data rows (`accel.data`, `turn.data`, `air.control`, `slope.speed`, `landing.speed`, `data.kinds`) are `course/data.rs`, run for a man and a test-only second kind; a mover reports facing and landings through `Mover::facing` and `Mover::landed`.
 
 What stops a body besides the ground (`step.building`, `step.prop`, `step.rock`, `tunnel.door`) is `course/sources.rs`: a fixture's `obstacles` (`mover::shapes`: turned boxes for a base's cubes, a door's leaf and a prop; `terra_core::Solid` pieces for a rock), answered apart from its ground field. A step is as high as named at its face, where it is climbed: a box laid level there, a rock's crest lowered by the world's curve at its middle.
 

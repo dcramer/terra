@@ -12,6 +12,9 @@
 //   4. new long: every new frame over 25 ms has one in an old run within 60 frames of it
 //                (the same ground's first sight, pipelines compiling), not a stall old lacks;
 //   5. frame:    the median of new's runs' frame p99 no more than the slowest of old's runs.
+// A change to how the player moves is judged with the camera on a fixed path, replayed alike
+// in every run (`--glide` and a `--vantage …@frame` key every 10 frames, recorded from one
+// run's camera), so what is in view cannot differ (D53).
 // Usage: node tools/sandbox/frametimes.ts --old a.csv b.csv … --new c.csv d.csv …
 // Leave a cold first run (shaders compiling, the pipeline cache empty) out of the files.
 // Node 22.18 or later; no dependencies.
