@@ -107,13 +107,13 @@ What has to collide with what:
 
 Where each shape would come from:
 
-- **Voxel terrain**: generated with each chunk's mesh, for the finest chunks near anything that can move, and rebuilt when the ground is dug.
+- **Voxel terrain**: walking bodies ask the SDF itself (D53); only rigid bodies, if we have them, would need shapes from the finest chunks' meshes near them, rebuilt when the ground is dug (D33).
 - **Bases**: from the base's cubes (D181).
 - **Objects**: computed per area, like the objects themselves, so a million trees do not mean a million shapes.
 
 What exists today is a stand-in. The player walks using arithmetic: the voxel field for the ground, the base's cubes for floors, walls and doors, circles for trees and boxes for placed items. There are no collision shapes, and loose objects have none of it.
 
-The plan on record is a physics engine (Avian, D33) for shapes and loose objects, with the player and creatures asking the voxel data directly so they never wait for a shape to be built. That plan predates this requirement and has not been tested. It needs its own design doc before anything is built.
+Decided (D53): bodies are moved by a character controller ported from Jolt's CharacterVirtual, in `terra_motion`, asking each source (the voxel SDF, a base's cubes, props' boxes, trees and rocks, other bodies) directly, so no collision mesh is built for walking: [controller.md](controller.md). Loose objects and ragdolls, if we have them, are Avian's (D33).
 
 ## Many things, all interactive
 

@@ -25,7 +25,7 @@ Every moving body runs the same pipeline each tick, its numbers from its kind's 
 | # | Layer | What it does | Shipped model |
 |---|---|---|---|
 | 1 | **Intent** | What the body wants: a velocity, a facing, a look target, a move asked for. Written by player input, a creature's mind or a scene; the only way in | Every engine's controller input |
-| 2 | **Mover** | The body in the world: a capsule moved by code toward the intent, with its kind's speeds, acceleration and turn rate, stopped by ground, walls and other bodies. Inside a move, the move's root motion drives it instead, warped toward its target | Holden's code- and data-driven displacement; Unreal's Character Movement and Motion Warping |
+| 2 | **Mover** | The body in the world: a capsule moved by code toward the intent, with its kind's speeds, acceleration and turn rate, stopped by ground, walls and other bodies. Inside a move, the move's root motion drives it instead, warped toward its target. Designed in [controller.md](controller.md) (D53) | Holden's code- and data-driven displacement; Unreal's Character Movement and Motion Warping |
 | 3 | **Actions** | The move runner: which move a body is in and how far, its phases (wind-up, active, recovery), its cancel windows, an input buffered into the next window, poise through a heavy wind-up, and what a hit does to the one struck (flinch, stagger, knockdown) | Fighting-game frame data; FromSoftware's event tracks; God of War's cancels |
 | 4 | **Pose** | The skeleton's pose: locomotion by blend spaces (speed, and direction against facing) in a small state machine (idle, start, move, stop, turn, fall, land); the move's clip over it, whole-body or upper-body by mask; inertialised transitions, so the new pose shows at once | Godot's AnimationTree; Bollo's inertialisation |
 | 5 | **Fix-up** | After the pose: feet on the ground with a pelvis offset; the off hand on a two-handed grip and the shield arm on its strap; head and spine turned to look and aim; held things pushed out of the body's own capsules; additive lean and hit flinches; spring bones | Two-bone and look-at IK (Godot, ozz); additive layers |
@@ -68,6 +68,7 @@ A **reaction set** per kind: additive flinches per zone, a stagger, a knockdown,
 | Part | From | How |
 |---|---|---|
 | Graph, blends, masks, additive, clip events | Bevy 0.20 | Use as is |
+| The mover: collide-and-slide, stairs, stick-to-floor, ground states | Jolt 5.6's CharacterVirtual (MIT), Godot 4.7's floor settings (MIT) | Port onto our own collision queries (D53, [controller.md](controller.md)) |
 | State machine, blend spaces, root-motion accumulation | Godot 4.7 AnimationTree (MIT) | Port onto Bevy's graph |
 | Root extraction from the hips | ozz-animation 0.17's motion extraction (MIT) | Port into the export tools |
 | Inertialised transitions | Bollo (GDC 2018), Holden's articles | Build from the papers; replaces `AnimationTransitions` |
@@ -96,7 +97,7 @@ Move sets by weapon kind and combat style (D124): about ten kinds (sword, sword 
 1. **Commitment.** Can most moves be cancelled into a dodge or block late in the wind-up and in recovery (Enshrouded, Devil May Cry), or does a swing commit you until its recovery, as in Souls games? Recommended: light moves cancel, heavy ones commit, a dodge out of any recovery. Open.
 2. **Lock-on** (combat.md's question 3). Recommended: a soft lock that warps your blows toward the nearest enemy you face, and a hard lock on a key. Open.
 3. **Blades that stop.** Does a blade bounce off a shield, stone or heavy armour and stagger its wielder (For Honor, Kingdom Come), or pass through with a hit-stop? Recommended: bounce on shields and stone, hit-stop on flesh. Open.
-4. **Bodies blocking bodies.** Do players push each other and their recruits, or pass through? Recommended: players and recruits push softly, monsters hard. Open.
+4. **Bodies blocking bodies.** Do players push each other and their recruits, or pass through? Recommended: players and recruits push softly, monsters hard. Open; the mechanism is in [controller.md](controller.md).
 5. **Paired moves.** Finishers, grabs, a monster seizing a player: recommended few, later, as paired clips. Open.
 6. **Climbing big monsters** (Shadow of the Colossus, Dragon's Dogma): recommended not for now; it makes a body a moving surface. Open.
 7. **Deaths and knockdowns**: by clip now and physics later, as recommended, or physics from the start? Open.

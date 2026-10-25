@@ -396,7 +396,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D30](decisions/D30.md) | Maths in shared state | Tech | Agent | Decided | The `libm` crate for sine and similar functions… |
 | [D31](decisions/D31.md) | Bevy version policy | Tech | Agent | Decided | Pinned, now to 0.20. |
 | [D32](decisions/D32.md) | Terrain meshing library | Tech | Agent | Decided | The `transvoxel` crate, in `terra_voxel`… |
-| [D33](decisions/D33.md) | Physics | Tech | Agent | Leaning | Avian for rigid bodies. |
+| [D33](decisions/D33.md) | Physics | Tech | Agent | Leaning | Avian for rigid bodies: loose objects… |
 | [D34](decisions/D34.md) | Networking library | Tech | Agent | Leaning | Our own messages over `renet`, with a Steam transport… |
 | [D35](decisions/D35.md) | UI | Tech | Agent | Leaning | Bevy's own UI for the game; `bevy_egui` for developer… |
 | [D36](decisions/D36.md) | Coordinates | Tech | Agent | Leaning | One coordinate frame per world, with positions relative… |
@@ -405,7 +405,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D42](decisions/D42.md) | Engine build order | Tech | Agent | Leaning | A small foundation (shared contracts, then the… |
 | [D45](decisions/D45.md) | Contracts for harvest and water | Tech | Agent | Decided | Every harvest is an operation that returns a yield. |
 | [D47](decisions/D47.md) | Numerous world objects | Tech | Agent | Leaning | Objects such as trees and rocks are computed from the… |
-| [D53](decisions/D53.md) | Collision | Tech | — | Open | Required: collision shapes that work with voxel terrain… |
+| [D53](decisions/D53.md) | Collision | Tech | Agent | Decided | Every body is moved by one kinematic character… |
 | [D58](decisions/D58.md) | How the game is modelled in code | Tech | Developers | Decided | In ECS. |
 | [D135](decisions/D135.md) | Loading screen | Tech | Agent | Decided | Every build starts on a loading screen that covers the… |
 | [D136](decisions/D136.md) | Kinds of thing as data | Tech | Agent | Decided | Kinds of item, recipe, station and creature are entries… |

@@ -102,7 +102,7 @@ Long members are made to their length (D200), their texture repeating along them
 
 ## Collision
 
-First, as now: arithmetic on the cubes, each to its fill and its kind's slab, stairs and slopes from the shapes' table, props by their boxes. When collision is designed (D53, a doc first, as engine.md says), each section also gives boxes merged greedily from its built cubes, rebuilt when it changes; nothing else changes.
+First, as now: arithmetic on the cubes, each to its fill and its kind's slab, stairs and slopes from the shapes' table, props by their boxes. When the character controller lands (D53, [controller.md](controller.md)), each section also gives boxes merged greedily from its built cubes, rebuilt when it changes, which the controller's queries answer from; nothing else changes.
 
 ## The art pipeline
 
@@ -200,6 +200,6 @@ Each step ends checked by script before the next (D69), and is committed as it g
 | A block kind's surface costs too many triangles near and far | Finer near the camera, coarser far off, per section; measured on the `village` bench |
 | A castle's section rebuilds too slowly | Section size tuned by the bench; the merge on workers |
 | The ghost of a large plan costs too much to draw | Instancing, plans drawn only near and to the tribe, a budget per claim |
-| Collision is undesigned (D53) | Cubes' arithmetic serves until its doc; sections give boxes when it comes |
+| The character controller is designed, not built (D53) | Cubes' arithmetic serves until it lands; sections give boxes then |
 | Bevy's render API moves under us (D184) | Merging and instancing in our own module, on Bevy's public mesh API |
 | `terra_build` grows into a monolith again | The modules above, each with its own tests |
