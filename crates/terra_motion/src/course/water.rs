@@ -11,7 +11,7 @@ use glam::{Vec2, Vec3};
 use terra_gen::smoothstep;
 
 /// The water's surface over the lake, m: under the dry ground at 0, as a lake's is.
-const SURFACE: f32 = -0.2;
+pub(super) const SURFACE: f32 = -0.2;
 /// The lake's bed under the dry ground, m, and how long its flat middle is.
 const BED: f32 = -2.5;
 const MIDDLE_M: f32 = 6.0;
@@ -55,7 +55,7 @@ fn shore_m(grade: f32, drop: f32) -> f32 {
 
 /// The lake's ground along the way: dry, down the near shore, the bed, up the far shore,
 /// dry; and where the far shore's dry ground starts.
-fn lake(grade: f32) -> (Course, f32) {
+pub(super) fn lake(grade: f32) -> (Course, f32) {
     let (down, up) = (shore_m(grade, -BED), shore_m(grade, FAR_H - BED));
     let bed_u = NEAR_U + down;
     let rise_u = bed_u + MIDDLE_M;

@@ -19,7 +19,7 @@ use terra_survival::told::Told;
 use terra_survival::vitals::{self, Vitals};
 use terra_walker::controls::Action;
 use terra_walker::intent::Intent;
-use terra_walker::movement::Fell;
+use terra_walker::movement::{Drowned, Fell};
 use terra_walker::{Downed, Player, Stamina, Stance, View};
 use terra_world::tick::Sim;
 
@@ -82,7 +82,7 @@ pub fn plugin(app: &mut App) {
             FixedUpdate,
             (
                 (swing, guard).chain().in_set(Sim::Act),
-                (take_blows, take_falls).in_set(Sim::Resolve),
+                (take_blows, take_falls, take_drowning).in_set(Sim::Resolve),
             ),
         );
 }
@@ -312,17 +312,45 @@ fn take_falls(
     mut hurt: MessageWriter<Hurt>,
 ) {
     for &Fell { body, harm } in fell.read() {
-        let Ok(mut vitals) = players.get_mut(body) else {
-            continue;
-        };
-        let taken = harm * vitals::FULL;
-        vitals.hurt(taken);
-        hurt.write(Hurt {
-            player: body,
-            amount: taken,
-        });
-        info!("Fell for {taken:.0}; health {:.0}.", vitals.health);
+        if let Some(health) = take_share(&mut players, &mut hurt, body, harm) {
+            info!("Fell for {:.0}; health {health:.0}.", harm * vitals::FULL);
+        }
     }
+}
+
+/// A player out of breath under water loses a share of their health a pulse (D74, D478),
+/// as from a fall: nothing worn takes any of it.
+fn take_drowning(
+    mut drowned: MessageReader<Drowned>,
+    mut players: Query<&mut Vitals, (With<Player>, Without<Downed>)>,
+    mut hurt: MessageWriter<Hurt>,
+) {
+    for &Drowned { body, harm } in drowned.read() {
+        if let Some(health) = take_share(&mut players, &mut hurt, body, harm) {
+            info!(
+                "Drowning for {:.0}; health {health:.0}.",
+                harm * vitals::FULL
+            );
+        }
+    }
+}
+
+/// Takes a share of a player's full health, told as a hurt: the health left, if they are a
+/// player still up.
+fn take_share(
+    players: &mut Query<&mut Vitals, (With<Player>, Without<Downed>)>,
+    hurt: &mut MessageWriter<Hurt>,
+    body: Entity,
+    harm: f32,
+) -> Option<f32> {
+    let mut vitals = players.get_mut(body).ok()?;
+    let taken = harm * vitals::FULL;
+    vitals.hurt(taken);
+    hurt.write(Hurt {
+        player: body,
+        amount: taken,
+    });
+    Some(vitals.health)
 }
 
 #[cfg(test)]
@@ -389,6 +417,23 @@ mod tests {
         assert!(health(&world, killed) <= 0.0);
         let told: Vec<_> = world.resource_mut::<Messages<Hurt>>().drain().collect();
         assert_eq!(told.len(), 2);
+    }
+
+    #[test]
+    fn drowning_takes_its_share_of_health_a_pulse() {
+        let mut world = world();
+        world.init_resource::<Messages<Drowned>>();
+        let player = test_player(&mut world, GROUND);
+        for _ in 0..10 {
+            world.write_message(Drowned {
+                body: player,
+                harm: 0.1,
+            });
+        }
+        world.run_system_once(take_drowning).unwrap();
+        assert!(world.get::<Vitals>(player).unwrap().health <= 1.0e-3);
+        let told = world.resource_mut::<Messages<Hurt>>().drain().count();
+        assert_eq!(told, 10);
     }
 
     #[test]

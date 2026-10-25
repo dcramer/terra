@@ -20,6 +20,8 @@
 //!   root or from a slope's high side, or no taller and stepped onto (criterion 5).
 //! - `water`: a lake walked into, waded, swum across and walked out of, straight and at an
 //!   angle to its shores, and a body floated to rest (criterion 17, D74).
+//! - `dive`: diving by looking down, rising on jump, floating back up, breath used under water
+//!   and drowning, a diver along a lake's bed and out up its shore (criterion 17, D478).
 //! - `fall`: falls that must not hurt (a jump, a step, a stair, a short drop), drops that
 //!   must, onto level ground and a slope, and into deep water (D476).
 //! - `pushes`: people easing apart, a man walked past one standing, a monster walking through
@@ -27,6 +29,7 @@
 //! - `far`: the same walks on a world 30 km across, where f32 is 2 mm fine (criterion 22, D482).
 
 mod data;
+mod dive;
 mod fall;
 mod far;
 pub mod field;
@@ -84,6 +87,10 @@ pub trait Mover {
     fn landed(&self, id: u32) -> Option<f32>;
     /// The share of its health a body's landing in the last tick took (D476), 0 if none.
     fn fall(&self, id: u32) -> f32;
+    /// How much breath a body has left, s (D74).
+    fn breath(&self, id: u32) -> f32;
+    /// The share of its health drowning took in the last tick, 0 if none.
+    fn drown(&self, id: u32) -> f32;
     /// Ticks its bodies on so many threads from now on, if it can share them out; one
     /// unless told.
     fn threads(&mut self, _threads: usize) {}
@@ -118,6 +125,8 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(flora);
     let (water, deepest_water) = water::score(&new);
     measures.extend(water);
+    let (dive, deepest_dive) = dive::score(&new);
+    measures.extend(dive);
     let (pushes, deepest_push, overlap) = pushes::score(&new);
     measures.extend(pushes);
     let deepest = deepest
@@ -125,6 +134,7 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
         .max(deeper)
         .max(deepest_flora)
         .max(deepest_water)
+        .max(deepest_dive)
         .max(deepest_fall);
     // What a body met besides the ground counts toward how deep it ever went.
     for m in measures.iter_mut() {

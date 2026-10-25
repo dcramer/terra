@@ -52,6 +52,7 @@ const MEMO_MOST: usize = 1024;
 pub fn plugin(app: &mut App) {
     app.init_resource::<Movers>()
         .add_message::<Fell>()
+        .add_message::<Drowned>()
         .add_systems(FixedUpdate, walk.in_set(Sim::Act));
     crate::stepping::plugin(app);
 }
@@ -61,6 +62,15 @@ pub fn plugin(app: &mut App) {
 /// fatal. What it costs is the gameplay's to take (`terra_creatures::combat`).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Fell {
+    pub body: Entity,
+    pub harm: f32,
+}
+
+/// A body out of breath under water drowning (D74, D478): the share of its health this pulse
+/// took (`mover::Body::drown`, a pulse a second, its kind's `drown_s`); 1 or more in all is
+/// fatal. What it costs is the gameplay's to take (`terra_creatures::combat`).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Drowned {
     pub body: Entity,
     pub harm: f32,
 }
@@ -253,6 +263,13 @@ fn ask(
         jump: intent.pressed(Action::Jump) && can,
         scale: pace * asked.going,
         drive,
+        // Swimming (D478): forward looking down dives, jump held rises.
+        pitch: if intent.held(Action::Forward) && !intent.held(Action::Back) {
+            view.pitch
+        } else {
+            0.0
+        },
+        rise: intent.held(Action::Jump),
     }
 }
 
@@ -387,6 +404,7 @@ fn walk(
     mut commands: Commands,
     mut players: Query<Walked, With<Player>>,
     mut fell: MessageWriter<Fell>,
+    mut drowned: MessageWriter<Drowned>,
 ) {
     let dt = time.delta_secs();
     if dt <= 0.0 {
@@ -532,6 +550,12 @@ fn walk(
             fell.write(Fell {
                 body: entity,
                 harm: body.fall,
+            });
+        }
+        if body.drown > 0.0 {
+            drowned.write(Drowned {
+                body: entity,
+                harm: body.drown,
             });
         }
         if body.jumped

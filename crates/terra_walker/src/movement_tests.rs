@@ -20,6 +20,7 @@ fn standing(steer: Steer, action: Option<Action>) -> (World, Entity) {
     world.init_resource::<flora::Obstacles>();
     world.init_resource::<Movers>();
     world.init_resource::<Messages<Fell>>();
+    world.init_resource::<Messages<Drowned>>();
     let mut time = Time::<()>::default();
     time.advance_by(Duration::from_secs_f32(TICK));
     world.insert_resource(time);
@@ -213,4 +214,71 @@ fn a_player_jogs_on_past_a_person_who_gives_way_and_round_one_bound() {
         "turned only {aside} m aside"
     );
     assert_eq!(gave, 0.0);
+}
+
+/// The walk swims by the player's keys and look (D478): held forward looking down, a player
+/// afloat in the sea dives; holding jump, they rise; held under, their breath runs out after
+/// its kind's `breath_s` and they are told drowning a pulse a second.
+#[test]
+fn a_player_dives_looking_down_rises_on_jump_and_drowns_held_under() {
+    let (mut world, player) = standing(Steer::default(), Some(Action::Forward));
+    let planet = Planet::new(PlanetSpec {
+        seed: Seed(1),
+        radius_m: 2000.0,
+    });
+    let sea = planet.sea_radius_m();
+    let deep = (0..4000)
+        .map(|i| {
+            let y = 1.0 - 2.0 * (i as f32 + 0.5) / 4000.0;
+            let (flat, around) = (libm::sqrtf(1.0 - y * y), i as f32 * 2.399_963);
+            Vec3::new(flat * libm::cosf(around), y, flat * libm::sinf(around))
+        })
+        .find(|&up| {
+            planet.surface(up).length() < sea - 12.0 && planet.water_radius_m(up * sea) == sea
+        })
+        .expect("a sea 12 m deep");
+    world.insert_resource(planet);
+    let man = man();
+    let afloat = sea - man.float_depth * man.height;
+    let forward = deep.any_orthonormal_vector();
+    world.get_mut::<Transform>(player).unwrap().translation = deep * afloat;
+    *world.get_mut::<View>(player).unwrap() = View {
+        forward,
+        pitch: -1.0,
+    };
+    let depth = |world: &World| sea - world.get::<Transform>(player).unwrap().translation.length();
+    let run = |world: &mut World, ticks: usize| {
+        let mut drowned = Vec::new();
+        for _ in 0..ticks {
+            world.run_system_once(walk).unwrap();
+            drowned.extend(world.resource_mut::<Messages<Drowned>>().drain());
+        }
+        drowned
+    };
+    let start = depth(&world);
+    run(&mut world, 128);
+    let dived = depth(&world);
+    assert!(dived > start + 1.5, "dived from {start} m to {dived} m");
+    // Jump held, forward let go: up.
+    let mut intent = Intent::default();
+    intent.hold(Action::Jump);
+    *world.get_mut::<Intent>(player).unwrap() = intent;
+    run(&mut world, 64);
+    let rose = depth(&world);
+    assert!(rose < dived - 0.8, "rose from {dived} m to {rose} m");
+    // Down again and held there: no harm in the first breath_s under (its mouth went under
+    // within the first half second), then a pulse a second.
+    let mut intent = Intent::default();
+    intent.hold(Action::Forward);
+    *world.get_mut::<Intent>(player).unwrap() = intent;
+    let held = run(&mut world, ((man.breath_s - 1.0) * 64.0) as usize - 192);
+    assert!(held.is_empty(), "drowned with breath left: {held:?}");
+    let drowned = run(&mut world, 288);
+    assert_eq!(drowned.len(), 3, "{drowned:?}");
+    let pulse = 1.0 / man.drown_s;
+    assert!(
+        drowned
+            .iter()
+            .all(|d| d.body == player && (d.harm - pulse).abs() < 1e-4)
+    );
 }

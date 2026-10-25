@@ -23,6 +23,16 @@
 //   swim_depth               water deeper than this fraction of its height is swum (D74)
 //   float_depth              afloat, this fraction of its height is under the surface
 //   water_drag               the water's drag on it, 1/s
+//   dive                     a swimmer moving while looking down strokes down at up to this,
+//                            m/s, looking straight down; holding jump it rises at it (D478)
+//   dive_from_deg            it dives only looking further down than this, deg, so a camera
+//                            resting a little under level does not take it under
+//   mouth                    where it breathes, a fraction of its height: under water there,
+//                            its breath is used (D74)
+//   breath_s                 how long its breath lasts under water, s (D478: about 30)
+//   breath_back_s            how long at the surface its breath takes to come back from none, s
+//   drown_s                  out of breath, how long it takes to drown, s: its health is
+//                            taken a share a second
 //   fall_onset, fall_fatal   a fall hurts by the speed it meets the floor at along the floor's
 //                            normal (D476): not below the onset, all its health at the fatal
 //                            speed, by the fall's energy between, m/s; water deep enough to
@@ -62,6 +72,12 @@
         swim_depth: 0.7,
         float_depth: 0.75,
         water_drag: 2.0,
+        dive: 1.5,
+        dive_from_deg: 15.0,
+        mouth: 0.92,
+        breath_s: 30.0,
+        breath_back_s: 4.0,
+        drown_s: 10.0,
         fall_onset: 12.0,
         fall_fatal: 25.0,
         push: Soft,

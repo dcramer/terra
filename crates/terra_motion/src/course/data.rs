@@ -41,6 +41,14 @@ pub(super) fn second(man: &Kind) -> Kind {
         jump_speed: 4.5,
         fall_onset: 10.0,
         fall_fatal: 20.0,
+        swim: 1.4,
+        swim_accel: 5.0,
+        dive: 1.0,
+        dive_from_deg: 25.0,
+        mouth: 0.85,
+        breath_s: 45.0,
+        breath_back_s: 6.0,
+        drown_s: 15.0,
         ..*man
     }
 }

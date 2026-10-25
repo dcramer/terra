@@ -818,31 +818,93 @@
   },
   {
    "id": "swim.dive",
-   "noticed": 3,
-   "notice": "a swimmer cannot dive or rise on intent",
+   "noticed": 5,
+   "notice": "a swimmer moving while looking down does not dive, dives at a rate its look does not set, or a camera resting a little under level takes it under; or holding jump does not rise",
    "bar": {
-    "pass": true
+    "at_most": 0.02
    },
-   "unit": "",
-   "source": "docs/controller.md criterion 17; D74",
-   "check": null,
+   "unit": "share of the kind's dive (vertical) or swim (level) speed off, worst stroke: forward looking 10-70 deg down from afloat, read over a second after the first, against dive x sin and swim x cos of the look past the kind's dive_from_deg (stretched so straight down stays straight down); and jump held from 8 m under, against dive; two kinds",
+   "source": "docs/controller.md criterion 17; D74, D478",
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "swimming in the mover and open question 3 (how to dive)"
+   "measurable": true
+  },
+  {
+   "id": "swim.rise",
+   "noticed": 4,
+   "notice": "a swimmer holding jump, or let alone, does not come back up to the surface",
+   "bar": {
+    "at_most": 0.02
+   },
+   "unit": "m off the kind's float depth, worst of: jump held from 8 m under for the way up at its dive rate and 2 s; nothing held from 8 m under for 10 s; two kinds",
+   "source": "docs/controller.md criterion 17; D74, D478",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "swim.surface",
+   "noticed": 4,
+   "notice": "a swimmer at the surface goes under, or bobs more and more",
+   "bar": {
+    "at_most": 0.0
+   },
+   "unit": "m the mouth (the kind's mouth x height) went under the surface, swimming forward 8 s afloat looking level, 0.08 rad down (the camera's rest) and 2 deg short of the kind's dive_from_deg, and the last 4 s of 10 floating up from 8 m under; plus m the bob's span grew from the first half of the time to the second; two kinds",
+   "source": "docs/controller.md criterion 17; D74, D478",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
   },
   {
    "id": "swim.breath",
-   "noticed": 2,
-   "notice": "breath runs out above water, or never under it",
+   "noticed": 4,
+   "notice": "breath is used above water or not under it, runs out sooner or later than the kind's, does not drown, or does not come back at the surface",
    "bar": {
-    "pass": true
+    "at_most": 0.02
    },
-   "unit": "",
-   "source": "docs/controller.md criterion 17; D74",
-   "check": null,
+   "unit": "share off, worst span: breath gone breath_s after the mouth (judged by the surface) went under, dead drown_s after, full again breath_back_s of time out after drowning (what bobs under spend added back); and breath used afloat 1.5 breath_s; plus a tick's worth a tick it fell with the mouth out or rose under; two kinds",
+   "source": "docs/controller.md criterion 17; D74, D478",
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "breath in the mover's report and open question 3 (how long)"
+   "measurable": true
+  },
+  {
+   "id": "swim.bottom",
+   "noticed": 3,
+   "notice": "a diver on a lake's bed sinks into it, floats off it while stroking down, or is slowed by it",
+   "bar": {
+    "at_most": 0.02
+   },
+   "unit": "m, worst of: deepest the feet went under the bed, how far over the bed (less the kind's padding) it ends, and how far short of its stroke's level speed (swim x cos) it went along the bed in 4 s, diving at 60 deg into a pool 11.8 m deep; two kinds",
+   "source": "docs/controller.md criterion 17; D74, D478",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "swim.exit",
+   "noticed": 4,
+   "notice": "a diver swimming toward a shore does not come out of the water onto it",
+   "bar": {
+    "at_most": 0.0
+   },
+   "unit": "m short of 0.5 m past the far shore's dry ground, dived 1.5 s at 60 deg in the lake (2.3 m deep), then forward level up a 12 and a 25 deg shore, given 1.5 times the way at the kind's swim speed; two kinds",
+   "source": "docs/controller.md criterion 17; D74, D478",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
   },
   {
    "id": "stamina.costs",

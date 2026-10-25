@@ -13,6 +13,7 @@
 //! - `push`: bodies apart by mass.
 //! - `grid`: the bodies' broadphase, a grid of them by place.
 //! - `lanes`: a tick's steps shared over threads, on whatever pool the caller has.
+//! - `swim`: diving, rising and breath in water (D74, D478).
 
 mod footing;
 mod grid;
@@ -21,6 +22,7 @@ mod push;
 pub mod query;
 pub mod shapes;
 mod slide;
+mod swim;
 
 #[cfg(any(test, feature = "course"))]
 pub mod course;
@@ -73,6 +75,17 @@ pub struct Kind {
     pub swim_depth: f32,
     pub float_depth: f32,
     pub water_drag: f32,
+    /// A swimmer strokes down or up at most this fast, looking straight down or holding jump,
+    /// m/s (D478); it dives only looking further down than `dive_from_deg`, deg.
+    pub dive: f32,
+    pub dive_from_deg: f32,
+    /// Where its mouth is, a fraction of its height: under water there, it uses its breath.
+    pub mouth: f32,
+    /// How long its breath lasts under water, how long it takes at the surface to come back
+    /// from none, and how long out of breath it takes to drown, s (D74, D478).
+    pub breath_s: f32,
+    pub breath_back_s: f32,
+    pub drown_s: f32,
     /// A fall hurts by the speed it meets the floor at along the floor's normal (D476): not
     /// at all below `fall_onset`, the whole of a body's health at `fall_fatal`, m/s. Water deep
     /// enough to swim in breaks a fall.
@@ -148,6 +161,10 @@ pub struct Intent {
     /// A level velocity it is driven at, its own speed and way kept (a roll, a lunge); the
     /// ground and what stops it still answer.
     pub drive: Option<Vec3>,
+    /// Where it looks, up or down from level, rad: a swimmer moving strokes along it (D478).
+    pub pitch: f32,
+    /// Jump held: a swimmer rises (D478).
+    pub rise: bool,
 }
 
 impl Default for Intent {
@@ -158,6 +175,8 @@ impl Default for Intent {
             jump: false,
             scale: 1.0,
             drive: None,
+            pitch: 0.0,
+            rise: false,
         }
     }
 }
@@ -202,6 +221,14 @@ pub struct Body {
     /// Whether it jumped this tick: the mover decides, by its buffer and coyote time, so what
     /// a jump costs is spent on this, not on the press.
     pub jumped: bool,
+    /// How much breath it has left, s, and whether its mouth is under water (D74).
+    pub breath: f32,
+    pub under: bool,
+    /// The share of its health drowning took this tick: a pulse a second once its breath is
+    /// gone. 1 or more in all is fatal.
+    pub drown: f32,
+    /// How long since its last pulse of drowning, s.
+    gasping: f32,
     support: Support,
     /// The contacts, in the frame of `frame`: the position the tick that found them began at.
     active: Vec<Touch>,
@@ -279,6 +306,10 @@ impl Bodies {
             fall: 0.0,
             stepped: 0.0,
             jumped: false,
+            breath: kind.breath_s,
+            under: false,
+            drown: 0.0,
+            gasping: 0.0,
             support: Support::InAir,
             active: Vec::new(),
             frame: feet.as_dvec3(),
@@ -510,7 +541,7 @@ fn approach(from: Vec3, to: Vec3, by: f32) -> Vec3 {
 }
 
 /// The level velocity a body wants this tick, and its facing turned toward its way.
-fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, dt: f32) -> Vec3 {
+fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, look: f32, dt: f32) -> Vec3 {
     let (k, up) = (body.kind, body.up);
     let level = |v: Vec3| v - up * v.dot(up);
     let wish = level(intent.wish).normalize_or_zero();
@@ -531,7 +562,7 @@ fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, dt: f32) -> 
     }
     let grounded = body.ground == Ground::Grounded;
     let mut top = if swimming {
-        k.swim
+        k.swim * libm::cosf(look)
     } else if intent.sprint {
         k.sprint
     } else {
@@ -614,10 +645,18 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let coyote = !body.left_by_jump && body.air_s <= k.coyote_s + 1e-6;
     let jump = body.buffer > 0.0 && !swimming && (standing || coyote);
 
-    let level = level_velocity(body, intent, swimming, dt);
+    let look = swim::look(&k, intent.pitch);
+    let level = level_velocity(body, intent, swimming, look, dt);
     let vertical = body.velocity.dot(up);
+    let moving = intent.wish.reject_from(up).length_squared() > 1.0e-12;
+    let stroke = swimming
+        .then(|| swim::stroke(&k, intent, moving, look, depth))
+        .flatten();
     let (rise, rise_end) = if jump {
         (k.jump_speed, k.jump_speed - g * dt)
+    } else if let Some(stroke) = stroke {
+        let by = k.swim_accel * dt;
+        (vertical, vertical + (stroke - vertical).clamp(-by, by))
     } else if swimming {
         let under = (depth / k.height).clamp(0.0, 1.0);
         let lift = g * under / k.float_depth.max(1e-3) - g;
@@ -734,6 +773,9 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let landed = (was_airborne && body.ground == Ground::Grounded)
         .then(|| libm::sqrtf(falling * falling + 2.0 * g * dropped));
     landing(body, landed, level, jump, world, dt);
+    let from_centre = (body.position - world.centre.as_dvec3()).length() as f32;
+    let mouth = swim::mouth_depth(body, (world.water)(body.feet), from_centre);
+    swim::breathe(body, mouth, dt);
 }
 
 /// What a tick's end keeps of its landing and its jump: the speed it landed at and what the

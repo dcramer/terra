@@ -95,6 +95,14 @@ impl Mover for Ours {
         self.0.get(id).map_or(0.0, |body| body.fall)
     }
 
+    fn breath(&self, id: u32) -> f32 {
+        self.0.get(id).map_or(0.0, |body| body.breath)
+    }
+
+    fn drown(&self, id: u32) -> f32 {
+        self.0.get(id).map_or(0.0, |body| body.drown)
+    }
+
     fn threads(&mut self, threads: usize) {
         self.1 = vec![(); threads];
     }
