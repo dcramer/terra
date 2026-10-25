@@ -527,6 +527,7 @@ Checks, developer tools, languages and the repository.
 | [D431](decisions/D431.md) | A push warns when it silently undoes another's recent commit | Tech | Agent | Decided | Work lands by `git pull --rebase origin main` onto one's… |
 | [D445](decisions/D445.md) | Renders run on a GPU box that takes jobs over SSH | Tech | Agent | Leaning | An agent's heavy render (a trailer cut or its stills, a… |
 | [D448](decisions/D448.md) | Every run writes its log to a file; a played session's log says what shared the GPU | Tech | Agent | Decided | Every run of the game writes each line its log keeps to… |
+| [D467](decisions/D467.md) | A demo is an experiment that stands for others, its keys moving the world's own clock | Tech | Agent | Leaning | A playable demo for the developers is a sandbox… |
 
 ## Superseded and rejected
 

@@ -7,6 +7,7 @@ use bevy::prelude::*;
 
 mod crowd;
 mod forest;
+mod forest_walk;
 mod icons;
 mod look;
 mod lush;
@@ -24,7 +25,28 @@ pub struct Experiment {
     pub add: fn(&mut App),
 }
 
+/// Experiments that stand for others and their options, given before the run's own so the
+/// run's win: a demo is a line here, not an option of its own (D249).
+const STANDS_FOR: &[(&str, &[&str])] = &[("forest-walk", forest_walk::WITH)];
+
+/// The command line with what each experiment named in it stands for put in front.
+pub fn expanded(args: Vec<String>) -> Vec<String> {
+    let mut with: Vec<String> = Vec::new();
+    for pair in args.windows(2).filter(|pair| pair[0] == "--experiment") {
+        if let Some((_, more)) = STANDS_FOR.iter().find(|(name, _)| *name == pair[1]) {
+            with.extend(more.iter().map(|arg| arg.to_string()));
+        }
+    }
+    with.extend(args);
+    with
+}
+
 pub const ALL: &[Experiment] = &[
+    Experiment {
+        name: "forest-walk",
+        about: "A walk in the lush forest with its wildlife: F6 summer or winter, F7 dawn, noon, dusk or night, J and L an hour back or on, F8 the next weather, P a feedback picture and note, O the help. The same as play and lush on the yard at the forest film's path.",
+        add: forest_walk::plugin,
+    },
     Experiment {
         name: "scatter",
         about: "Rocks placed from a seed around the start. Left click, or F, harvests one.",

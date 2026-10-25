@@ -300,7 +300,7 @@ fn shorten(line: &str) -> String {
 }
 
 /// Seconds since 1970 as `YYYYMMDD-HHMMSS`, in UTC (Howard Hinnant's `civil_from_days`).
-pub(crate) fn stamp(seconds: u64) -> String {
+pub fn stamp(seconds: u64) -> String {
     let days = (seconds / 86_400) as i64;
     let of_day = seconds % 86_400;
     let z = days + 719_468;

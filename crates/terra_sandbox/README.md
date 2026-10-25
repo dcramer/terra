@@ -96,6 +96,25 @@ cargo xtask play
 cargo run -p terra_sandbox -- --experiment look --experiment build
 ```
 
+## The forest walk
+
+```sh
+cargo xtask sandbox --experiment forest-walk
+```
+
+The lush forest on foot, with its wildlife about (a hare, a boar, a stag crossing the way every few seconds as you walk), from the head of the forest film's path in high summer at noon (D467). It stands for `--experiment play --experiment lush --level yard` and a start; options after it win, such as `--time 7.5` or `--date 01-15`.
+
+| Key | Does |
+|---|---|
+| F6 | Summer (07-20) or winter (01-15): the climate's own date, its snow lying, leaves and frost |
+| F7 | Dawn, noon, dusk, night in turn, by the sun on that date |
+| J / L | An hour back or on |
+| F8 | The next weather (clear, overcast, rain, heavy rain, storm, snowfall, heavy snow, blizzard) that a day within a month has at this hour; the date moves to it |
+| P | Feedback: the screen and a note of the moment, numbered, in `~/.cache/terra-review/feedback/<n>-<time>.{png,json}`. Say "feedback 3: ..." and an agent stands there again with the note's `again` or `again_view` command |
+| O | Hide or show the help panel |
+
+Flowers that die back are placed by the season the run started in, so start with `--date 01-15` to see winter without them. `node tools/sandbox/forest-walk.ts` checks it in one scripted run; `--film <out.mp4>` films it.
+
 ## The look experiment
 
 ```bash

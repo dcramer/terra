@@ -131,11 +131,40 @@ impl Date {
             }
         }
     }
+
+    /// The day of an Earth calendar a day of the clock is, as `--date` takes it (`07-20`): the
+    /// calendar's day that far through the year after midwinter, `parse`'s other way.
+    pub fn calendar(day: i64, year: &Year) -> String {
+        let since = (f64::from(year.phase(day)) * 365.0).floor() as u32 % 365;
+        let mut of_year = (since + MIDWINTER_DAY) % 365;
+        let mut month = 0;
+        while of_year >= MONTH_DAYS[month] {
+            of_year -= MONTH_DAYS[month];
+            month += 1;
+        }
+        format!("{:02}-{:02}", month + 1, of_year + 1)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_calendar_day_reads_back_as_it_was_given() {
+        let year = Year {
+            days: 365.0,
+            tilt_deg: 23.44,
+            start: 0.6768,
+        };
+        for (month, days) in MONTH_DAYS.iter().enumerate() {
+            for day in 1..=*days {
+                let text = format!("{:02}-{day:02}", month + 1);
+                let clock = Date::parse(&text).unwrap().day(&year);
+                assert_eq!(Date::calendar(clock, &year), text, "clock day {clock}");
+            }
+        }
+    }
 
     #[test]
     fn the_clock_reads_back_its_day_and_hour() {

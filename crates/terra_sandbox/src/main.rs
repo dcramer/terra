@@ -43,7 +43,7 @@ fn main() -> AppExit {
             }
         };
     }
-    let mut options = match shell::Options::from_args(std::env::args().skip(1)) {
+    let mut options = match shell::Options::from_args(experiments::expanded(args).into_iter()) {
         Ok(options) => options,
         Err(problem) => {
             eprintln!("{problem}\n\n{}", shell::USAGE);
