@@ -478,7 +478,7 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // or down does not say it, as most of a pine's cards stand near on edge.
         let to_eye = normalize(view.world_position - world);
         // A sapling's or shrub's, low, is seen from beside or over it, and keeps its load.
-        let from_below = smoothstep(0.2, 0.7, -dot(to_eye, sky_up)) * (1.0 - low);
+        let from_below = smoothstep(0.3, 0.8, -dot(to_eye, sky_up)) * (1.0 - low);
         let edge_on = 1.0 - smoothstep(0.2, 0.7, abs(dot((*input).world_normal, to_eye)));
         snow *= mix(1.0, edge_on * smoothstep(0.0, 0.35, bough_up), from_below);
         // Needles still on in a snowy spell are an evergreen's, dark and cool under the white:
