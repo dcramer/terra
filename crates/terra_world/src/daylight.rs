@@ -667,11 +667,51 @@ fn shine(
     let snow_opens = snow_opens.map_or(0.0, |s| s.0);
     let set = open_exposure(light.exposure, open, far_seeing, dark * snowed) + under.opens_ev()
         - snow_opens;
-    for mut fog in &mut haze {
-        let air_scale = air_scale
-            .as_deref()
-            .copied()
-            .unwrap_or(crate::air::AirScale(crate::air::HAZE_SCALE));
+    let air_scale = air_scale
+        .as_deref()
+        .copied()
+        .unwrap_or(crate::air::AirScale(crate::air::HAZE_SCALE));
+    tint_haze(
+        &mut haze,
+        &light,
+        (open, air_scale, air_lit),
+        (&weather, under, deck),
+        (dark, level, set),
+    );
+    let clear = *clear_sky.get_or_insert(sky.cloudiness);
+    let sky_lit = light.ambient * SKY_LIGHT_GAIN * under.diffuse;
+    paint_sky(
+        &mut sky,
+        &path,
+        (clear, &weather, sky_lit),
+        &light,
+        (sun, height, clock.hour),
+    );
+    let lit = SkyLight {
+        shade: colour(crate::weather::under_deck(light.shade, deck)),
+        brightness: light.ambient * SKY_LIGHT_GAIN * under.diffuse,
+    };
+    // Set only when it changes, so the sky is painted again only then.
+    skylight.set_if_neq(lit);
+    for mut camera in &mut exposure {
+        let ev = set;
+        if camera.ev100 != ev {
+            camera.ev100 = ev;
+        }
+    }
+}
+
+/// The distance haze for the hour (D224): the horizon's air, toward the moon's cold light by
+/// night and `level` bright; the deck's veil under cloud (D418); dimmed indoors (D485).
+fn tint_haze(
+    haze: &mut Query<&mut DistanceFog, With<MainCamera>>,
+    light: &Light,
+    (open, air_scale, air_lit): (f32, crate::air::AirScale, f32),
+    (weather, under, deck): (&crate::weather::Weather, crate::weather::Under, f32),
+    (dark, level, set): (f32, f32, f32),
+) {
+    let colour = |rgb: Vec3| Color::srgb(rgb.x, rgb.y, rgb.z);
+    for mut fog in haze.iter_mut() {
         let (air, visible) = haze_for(light.horizon, open, air_scale);
         // Under a deck the haze is the deck's light on the air, as bright on screen as the
         // deck at the horizon, so the far land fades into the sky rather than a band; what
@@ -693,27 +733,6 @@ fn shine(
         );
         let visible = weather.visibility_m().map_or(visible, |v| v.min(visible));
         fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(visible);
-    }
-    let clear = *clear_sky.get_or_insert(sky.cloudiness);
-    let sky_lit = light.ambient * SKY_LIGHT_GAIN * under.diffuse;
-    paint_sky(
-        &mut sky,
-        &path,
-        (clear, &weather, sky_lit),
-        &light,
-        (sun, height, clock.hour),
-    );
-    let lit = SkyLight {
-        shade: colour(crate::weather::under_deck(light.shade, deck)),
-        brightness: light.ambient * SKY_LIGHT_GAIN * under.diffuse,
-    };
-    // Set only when it changes, so the sky is painted again only then.
-    skylight.set_if_neq(lit);
-    for mut camera in &mut exposure {
-        let ev = set;
-        if camera.ev100 != ev {
-            camera.ev100 = ev;
-        }
     }
 }
 
