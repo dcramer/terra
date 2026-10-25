@@ -53,7 +53,7 @@ One pipeline, a few body plans (creatures.md): people and things shaped like peo
 
 ## Moves as data
 
-A body's kind names its **move set** (`assets/data/moves/*.ron`): locomotion clips by gait, and its moves. A move says:
+A body's kind names its **move set** (`assets/data/moves/*.ron`): locomotion clips by gait, and its moves. What is in each hand chooses the set, by weapon class and stance, over shared locomotion: [holding.md](holding.md) (D459). A move says:
 
 - its clip, and whether its root motion drives the body;
 - its phases, **measured by the tools** from the clip, never typed: wind-up from the clip's start of motion, active frames from when the weapon's tip (followed through the skeleton) sweeps forward of the body, recovery after;
