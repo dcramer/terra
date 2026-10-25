@@ -790,7 +790,18 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         }
         // Streaks: a faint wash down from a sill or a wall head, a little darker and greyer, never
         // a black line.
-        c = mix(c, mix(c, vec3(lum), 0.2) * vec3(0.77, 0.76, 0.74), clamp(weather.a.w, 0.0, 1.0));
+        // Read as water's: fine runs down the wash (narrow streaks stretched downward, along the
+        // wall), a little greener and browner where it stays wet longest.
+        let wall_h = dot(wp, normalize(cross(vec3(0.0, 1.0, 0.0), N) + vec3(1e-4, 0.0, 0.0)));
+        let runs = noise21(vec2(wall_h * 28.0, wp.y * 1.5)) * 0.6 + noise21(vec2(wall_h * 70.0, wp.y * 3.0)) * 0.4;
+        let wash = clamp(weather.a.w, 0.0, 1.0) * (0.55 + 0.9 * runs);
+        c = mix(c, mix(c, vec3(lum), 0.25) * vec3(0.64, 0.64, 0.58), clamp(wash, 0.0, 1.0));
+        // Splash at the foot: rain thrown back off the ground spatters the lowest courses with
+        // its dirt, darkest and densest in the last hand's breadth, thinning upward in specks.
+        let splash_band = select(1.0 - smoothstep(0.02, 0.5, weather.c.w), 0.0, roof);
+        let specks = smoothstep(0.35, 0.7, noise21(st * 26.0 + 9.0) * 0.6 + noise21(st * 61.0) * 0.4 + splash_band * 0.35);
+        let splash = splash_band * mix(specks, 1.0, splash_band * splash_band) * age;
+        c = mix(c, mix(c, vec3(lum), 0.3) * vec3(0.5, 0.45, 0.37), splash * 0.65);
         // Soot: a soft smoky plume over an opening, darkening by at most about two thirds.
         c = mix(c, mix(c, vec3(lum), 0.4) * vec3(0.34, 0.32, 0.3), weather.c.x * 0.9);
         var lichen = 0.0;
