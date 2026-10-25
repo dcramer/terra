@@ -79,14 +79,17 @@ pub fn sky_axes(rotation: Quat) -> [Vec4; 3] {
 }
 
 /// The open sky as the smoke materials are to read it this frame: from the camera's
-/// environment light, or none before there is one.
+/// environment light, or none before there is one, dimmed to the share of it that reaches
+/// the air round the camera (`air_lit`, `IndoorSky`, D485). Undimmed, a dungeon's fire bowl
+/// at noon sent up two grey searchlight cones, its wisp lit by the whole sky (round 8).
 pub fn sky(
     open: Option<&OpenSky>,
     environment: Option<&EnvironmentMapLight>,
+    air_lit: f32,
 ) -> ([Vec4; 6], [Vec4; 3]) {
     match (open, environment) {
         (Some(open), Some(environment)) => (
-            sky_sides(open, environment.intensity),
+            sky_sides(open, environment.intensity * air_lit.clamp(0.0, 1.0)),
             sky_axes(environment.rotation),
         ),
         _ => ([Vec4::ZERO; 6], sky_axes(Quat::IDENTITY)),
@@ -133,5 +136,20 @@ mod tests {
         let sides = sky_sides(&open, 2.0);
         assert!(sides[2].truncate().distance(Vec3::new(0.6, 0.8, 1.2)) < 1e-6);
         assert_eq!(sides[3], Vec4::ZERO);
+    }
+
+    #[test]
+    fn smoke_in_a_room_shut_off_from_the_sky_takes_none_of_its_light() {
+        let mut open = OpenSky::default();
+        open.sky[2] = Vec3::splat(0.4);
+        let environment = EnvironmentMapLight {
+            intensity: 1800.0,
+            ..default()
+        };
+        let lit = |air_lit| sky(Some(&open), Some(&environment), air_lit).0[2].x;
+        assert!(lit(1.0) > 0.0);
+        // A room letting in a tenth of the sky lights its smoke a tenth as much, a closed one not.
+        assert!((lit(0.1) - 0.1 * lit(1.0)).abs() < 1e-3);
+        assert_eq!(lit(0.0), 0.0);
     }
 }

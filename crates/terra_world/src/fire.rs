@@ -865,7 +865,10 @@ fn show(
     mut fires: ResMut<Assets<FireMaterial>>,
     mut smokes: ResMut<Assets<FireSmokeMaterial>>,
     realm: Option<Res<FireExposure>>,
-    open_sky: Option<Res<crate::skylight::OpenSky>>,
+    (open_sky, indoor_sky): (
+        Option<Res<crate::skylight::OpenSky>>,
+        Option<Res<crate::scene::IndoorSky>>,
+    ),
     environments: Query<&bevy::light::EnvironmentMapLight, With<Camera3d>>,
     tier: Res<volume::BreathTier>,
 ) {
@@ -939,8 +942,10 @@ fn show(
             }
         }
     }
-    // The smoke is lit by the open sky round it as the shading's light gives it.
-    let (sky, sky_frame) = smoke::sky(open_sky.as_deref(), environments.iter().next());
+    // The smoke is lit by the open sky round it as the shading's light gives it, in a room
+    // as far as its openings let it in (D485).
+    let air_lit = indoor_sky.map_or(1.0, |s| s.0);
+    let (sky, sky_frame) = smoke::sky(open_sky.as_deref(), environments.iter().next(), air_lit);
     for (kind, handle) in drawn.smoke.iter().enumerate() {
         if let Some(mut material) = smokes.get_mut(handle) {
             material.extension.uniform.wind = drawn.wind.extend(count as f32);
