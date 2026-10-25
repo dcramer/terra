@@ -741,9 +741,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let e = 0.004;
         let lump = moss_lumps(st);
         let lump_d = vec2(moss_lumps(st + vec2(e, 0.0)), moss_lumps(st + vec2(0.0, e))) - lump;
-        let field = smoothstep(0.12, 0.5, weather.a.z * (0.7 + 0.6 * grain));
+        let field = smoothstep(0.08, 0.4, weather.a.z * (0.7 + 0.6 * grain));
         let ragged = (noise21(st * 23.0 + 5.0) - 0.5) * 0.4 + (lump - 0.5) * 0.3;
-        var moss = smoothstep(0.0, 0.25, field * 1.6 - 0.8 - rel * 3.0 + ragged);
+        // The height's pull held within bounds, so a deep-grained timber's ridges or a
+        // stone's proud tops slow the moss rather than stopping it.
+        var moss = smoothstep(0.0, 0.25, field * 1.75 - 0.72 - clamp(rel * 3.0, -0.4, 0.4) + ragged);
         if roof {
             let reach = -0.45 + 0.6 * clamp(weather.a.z, 0.0, 1.0);
             moss = smoothstep(-0.04, 0.06, reach - rel + ragged * 0.15);
