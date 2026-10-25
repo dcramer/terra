@@ -76,12 +76,12 @@
             drive: [(0.0, 0.0), (0.25, 2.4), (0.55, 0.8), (0.8, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.5),
         ),
-        // A big diagonal cut, fastest 49 m/s at 0.42 s, 1.4 m ahead: its wind-up slowed so it
-        // reads, then through.
+        // From the guard and back to it (Keyed_Heavy, D450): the sword lifted high behind the right
+        // shoulder by 0.75 s and brought down hard across to the lower left, then back on guard.
         "heavy": (
-            clip: "Sword_Attack", from: 0.0, speed: 0.62, active: (0.38, 0.52), done: 1.25,
-            cancel: 1.05, stamina: 22, damage: 30, hit_stop: 0.2, heavy: true,
-            drive: [(0.0, 0.0), (0.25, 0.6), (0.40, 3.2), (0.55, 0.5), (0.8, 0.0)],
+            clip: "Keyed_Heavy", from: 0.00, speed: 1.50, active: (0.82, 1.17), done: 2.38,
+            cancel: 1.95, stamina: 22, damage: 30, hit_stop: 0.2, heavy: true,
+            drive: [(0.0, 0.0), (0.5, 0.6), (0.86, 3.2), (1.22, 0.5), (1.83, 0.0)],
             warp: (within: 3.6, cone: 70, stop_at: 1.5, most_mps: 4.0),
         ),
         // The base's forward roll with the arms held out of the tuck (Fight_Roll, hold.py), in
@@ -108,9 +108,9 @@
         ),
         // The partner's heavy: the big cut, its wind-up held longer.
         "partner_heavy": (
-            clip: "Sword_Attack", from: 0.0, speed: 0.45, active: (0.38, 0.52), done: 1.25,
+            clip: "Keyed_Heavy", from: 0.0, speed: 0.95, active: (0.82, 1.17), done: 2.38,
             stamina: 22, damage: 25, hit_stop: 0.18, heavy: true,
-            drive: [(0.0, 0.0), (0.30, 0.4), (0.40, 2.6), (0.55, 0.4), (0.8, 0.0)],
+            drive: [(0.0, 0.0), (0.65, 0.4), (0.86, 2.6), (1.18, 0.4), (1.7, 0.0)],
             warp: (within: 3.4, cone: 80, stop_at: 1.55, most_mps: 3.0),
         ),
     },
