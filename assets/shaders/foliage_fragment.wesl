@@ -275,6 +275,8 @@ const PLASTER_LOW_M: vec2<f32> = vec2<f32>(0.3, 2.5);
 // The height over a stem's foot, metres, over which the windward coat thins, and how much.
 const PLASTER_HIGH_M: vec2<f32> = vec2<f32>(4.0, 14.0);
 const PLASTER_HIGH: f32 = 0.6;
+// How much of the bark's colour the windward crust covers.
+const PLASTER_CRUST: f32 = 0.8;
 // How far a cap's lumps tilt its top from the sky's up.
 const CAP_LUMPS: f32 = 0.7;
 // How bright a turned leaf is against the green one it was: dead leaves are duller and darker
@@ -548,10 +550,11 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let blot = wander(turned * 1.6) * 0.65 + wander(turned * 4.1 + 7.0) * 0.35;
         // A quarter of the girth, the face the wind meets squarely, and thinner up the stem,
         // where the crowns take the wind: at half the girth every trunk stood half white.
-        let plaster = smoothstep(0.55, 0.8, windward * 0.85 + 0.6 * (blot - 0.5) + 0.25 * low) * (1.0 - PLASTER_HIGH * smoothstep(PLASTER_HIGH_M.x, PLASTER_HIGH_M.y, stem_h));
+        let plaster = smoothstep(0.62, 0.85, windward * 0.85 + 0.8 * (blot - 0.5) + 0.15 * low) * (1.0 - PLASTER_HIGH * smoothstep(PLASTER_HIGH_M.x, PLASTER_HIGH_M.y, stem_h));
         let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
         let stuck = lying * max(plaster, bank);
-        colour = mix(colour, SNOW * (0.9 + 0.1 * blot), stuck);
+        // A crust, the bark's darkest furrows showing through it where it is thin.
+        colour = mix(colour, SNOW * (0.9 + 0.1 * blot), stuck * mix(1.0, PLASTER_CRUST, plaster * (1.0 - bank)));
         // Lit half as snow lying is, so the coat reads white, not a grey stain on the bark.
         snow = max(snow, stuck * 0.5);
     }
