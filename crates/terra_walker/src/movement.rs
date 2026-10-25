@@ -100,6 +100,11 @@ impl Movers {
     pub fn body(&self, player: Entity) -> Option<&mover::Body> {
         self.bodies.get(*self.ids.get(&player)?)
     }
+
+    /// The players' kind (a man's, D136).
+    pub fn kind(&self) -> &Kind {
+        &self.kind
+    }
 }
 
 /// The props (`bodies::Solid`) filed by where they stand, and how far the widest reaches from
@@ -274,12 +279,12 @@ struct Sources<'w, 's, 'a> {
 
 /// What can stop the players this tick, gathered near each into the walk's lists: the props
 /// and the base they are at as boxes, the trees and rocks borrowed from flora, the other bodies
-/// as still capsules.
+/// as still capsules (a person's only its core, D479).
 fn gather<'a>(
     sources: &Sources<'_, '_, 'a>,
     lists: &mut Lists,
     trees: &mut Vec<&'a terra_core::Solid>,
-    height: f32,
+    kind: &Kind,
 ) {
     let Lists {
         places,
@@ -319,7 +324,7 @@ fn gather<'a>(
     let close = close
         .enumerate()
         .map(|(i, (body, transform))| (OTHERS + i as u32, body, transform));
-    mover_world::others(close, height, others);
+    mover_world::others(close, kind, others);
 }
 
 /// The build a body is at decides what blocks the way: the player's own, or someone else's,
@@ -414,7 +419,7 @@ fn walk(
         others: &others,
     };
     let mut trees = recycle(std::mem::take(&mut lists.trees));
-    gather(&sources, lists, &mut trees, kind.height);
+    gather(&sources, lists, &mut trees, &kind);
     movers
         .memo
         .keep_within(MEMO_MOST * movers.lists.places.len().max(1));

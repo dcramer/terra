@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use terra_build::Base;
 use terra_build::kit::Kits;
 use terra_build_layout::solids::Slab;
-use terra_motion::mover::{Block, Capsule};
+use terra_motion::mover::{Block, Capsule, Kind};
 use terra_world::flora;
 use terra_world::planet::Planet;
 
@@ -81,19 +81,27 @@ pub fn base(at_base: AtBase, at: Vec3, reach: f32, slabs: &mut Vec<Slab>, out: &
 }
 
 /// Other bodies (creatures, people) as the mover's pushboxes, each by an ID the walk gives
-/// it: a capsule standing at its place as wide as its circle and so tall, still. They are not
-/// the mover's bodies, so they stop a body and are not pushed by it (open question 4).
+/// it: a capsule standing at its place as wide as its circle and as tall as the kind, still.
+/// They are not the mover's bodies, so they are not pushed by it: a creature stops a body at
+/// its width, and a person (D479) only at the kind's core, giving way by itself
+/// (`bodies::keep_apart`).
 pub fn others<'a>(
     bodies: impl IntoIterator<Item = (u32, &'a bodies::Body, &'a Transform)>,
-    height: f32,
+    kind: &Kind,
     out: &mut Vec<(u32, Capsule, Vec3)>,
 ) {
     out.extend(bodies.into_iter().map(|(id, body, transform)| {
         let feet = transform.translation;
         let up = feet.normalize_or(Vec3::Y);
+        // A person gives way (D479): met only by a man's core, the rest left to them to part.
+        let radius = if body.soft() {
+            kind.core_m.min(body.radius)
+        } else {
+            body.radius
+        };
         (
             id,
-            Capsule::standing(feet, up, body.radius, height),
+            Capsule::standing(feet, up, radius, kind.height),
             Vec3::ZERO,
         )
     }));

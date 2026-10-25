@@ -22,6 +22,8 @@
 //!   angle to its shores, and a body floated to rest (criterion 17, D74).
 //! - `fall`: falls that must not hurt (a jump, a step, a stair, a short drop), drops that
 //!   must, onto level ground and a slope, and into deep water (D476).
+//! - `pushes`: people easing apart, a man walked past one standing, a monster walking through
+//!   men and into a wall with one, and a man pushing a monster (D479, criterion 15).
 //! - `far`: the same walks on a world 30 km across, where f32 is 2 mm fine (criterion 22, D482).
 
 mod data;
@@ -29,6 +31,7 @@ mod fall;
 mod far;
 pub mod field;
 mod flora;
+mod pushes;
 mod runs;
 mod sources;
 mod stairs;
@@ -40,7 +43,7 @@ use glam::{DVec3, Vec3};
 /// The fixed tick (D138).
 pub const TICK: f32 = 1.0 / 64.0;
 
-pub use crate::mover::{Intent, Kind};
+pub use crate::mover::{Intent, Kind, Push};
 
 impl Kind {
     /// A man, by `assets/data/movers.ron` (docs/controller.md's stand-ins).
@@ -115,14 +118,21 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(flora);
     let (water, deepest_water) = water::score(&new);
     measures.extend(water);
+    let (pushes, deepest_push, overlap) = pushes::score(&new);
+    measures.extend(pushes);
     let deepest = deepest
+        .max(deepest_push)
         .max(deeper)
         .max(deepest_flora)
         .max(deepest_water)
         .max(deepest_fall);
     // What a body met besides the ground counts toward how deep it ever went.
-    for m in measures.iter_mut().filter(|m| m.id == "penetration.max") {
-        m.value = m.value.max(deepest);
+    for m in measures.iter_mut() {
+        match m.id {
+            "penetration.max" => m.value = m.value.max(deepest),
+            "push.overlap" => m.value = m.value.max(overlap),
+            _ => {}
+        }
     }
     measures
 }

@@ -3,7 +3,7 @@
 //! or a law (v²/2g, a mass ratio, the same state from the same inputs).
 
 use super::field::{Ball, Course, Field, Solid, Water, forward_at, local, side_at, world};
-use super::{Body, Intent, Kind, Measure, Mover, TICK};
+use super::{Body, Intent, Kind, Measure, Mover, Push, TICK};
 use glam::{Vec2, Vec3};
 
 /// The speeds a body is driven at a wall or another body, m/s, up to the bar's 60.
@@ -18,6 +18,8 @@ pub(super) const DROPS: [f32; 4] = [0.5, 1.0, 2.0, 4.0];
 /// The crowd: its size, and how long it runs for the determinism criterion.
 const CROWD: u32 = 24;
 const CROWD_TICKS: usize = 10_000;
+/// How long the crowd stands once it has walked, ticks: a second, its soft pairs eased apart.
+const CROWD_SETTLE: usize = 64;
 /// The latest tick after leaving a ledge, or before landing, a jump is tried at.
 const LATE: usize = 24;
 /// Where the round world's falls start: over the pole, the equator, between, and in the cave.
@@ -62,7 +64,7 @@ enum Case {
 pub(super) struct Outcome {
     pub(super) values: Vec<f32>,
     pub(super) depths: Vec<f32>,
-    overlap: f32,
+    pub(super) overlap: f32,
     end: Vec<u32>,
 }
 
@@ -272,7 +274,8 @@ impl<'a, M: Mover> Run<'a, M> {
     }
 
     /// A tick of every body, each with the intent its script gives it; keeps each body's
-    /// depth into the ground and the worst overlap of any two.
+    /// depth into the ground and the worst overlap of any two pushed apart at once (a pair
+    /// with a hard body, D479: a soft pair eases apart over ticks, [`Run::overlap_now`]).
     pub(super) fn tick(&mut self, mut intent: impl FnMut(u32, &Body) -> Intent) {
         let intents: Vec<(u32, Intent)> = self
             .kinds
@@ -288,10 +291,32 @@ impl<'a, M: Mover> Run<'a, M> {
         for (i, (a, ka)) in bodies.iter().enumerate() {
             self.depths.push(depth(self.field, ka, a));
             for (b, kb) in &bodies[i + 1..] {
-                let apart = (a.feet - b.feet).reject_from(a.up).length();
-                self.overlap = self.overlap.max(ka.radius + kb.radius - apart);
+                if ka.push == Push::Hard || kb.push == Push::Hard {
+                    self.overlap = self.overlap.max(overlap(a, ka, b, kb));
+                }
             }
         }
+    }
+
+    /// The worst overlap of any two bodies now, soft or hard.
+    pub(super) fn overlap_now(&self) -> f32 {
+        let bodies: Vec<(Body, Kind)> = self
+            .kinds
+            .iter()
+            .map(|(id, kind)| (self.mover.body(*id), *kind))
+            .collect();
+        let mut worst = 0.0_f32;
+        for (i, (a, ka)) in bodies.iter().enumerate() {
+            for (b, kb) in &bodies[i + 1..] {
+                worst = worst.max(overlap(a, ka, b, kb));
+            }
+        }
+        worst
+    }
+
+    /// Takes the worst overlap of a case as it stands now into its outcome's.
+    pub(super) fn keep_overlap(&mut self, overlap: f32) {
+        self.overlap = self.overlap.max(overlap);
     }
 
     pub(super) fn outcome(self, values: Vec<f32>) -> Outcome {
@@ -302,6 +327,12 @@ impl<'a, M: Mover> Run<'a, M> {
             end: Vec::new(),
         }
     }
+}
+
+/// How far two bodies' pushboxes overlap, level.
+pub(super) fn overlap(a: &Body, ka: &Kind, b: &Body, kb: &Kind) -> f32 {
+    let apart = (a.feet - b.feet).reject_from(a.up).length();
+    ka.radius + kb.radius - apart
 }
 
 pub(super) fn walk(body: &Body) -> Intent {
@@ -323,7 +354,7 @@ pub(super) fn ground(corners: &[(f32, f32)]) -> Course {
 }
 
 /// Walls across the way at `u` 3 to 3.5 m, 3 m high, with a gap so wide at `w` = 0 (none at 0).
-fn walls(gap: f32) -> Course {
+pub(super) fn walls(gap: f32) -> Course {
     let (near, far) = (3.0, 3.5);
     let mut course = Course::flat();
     if gap <= 0.0 {
@@ -650,14 +681,7 @@ fn lands<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
             run.outcome(vec![moved.unwrap_or(ticks(1.0)) as f32])
         }
         Case::Pool => {
-            let mut pool = Course::flat();
-            pool.dug
-                .push((Vec3::new(2.0, -3.0, -4.0), Vec3::new(8.0, 1.0, 4.0)));
-            pool.water = Some(Water {
-                min: Vec2::new(2.0, -4.0),
-                max: Vec2::new(8.0, 4.0),
-                surface: -0.2,
-            });
+            let pool = pool();
             let mut run = Run::new(new(), &pool);
             run.add(0, kind, start);
             for _ in 0..ticks(3.0) {
@@ -667,13 +691,14 @@ fn lands<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
             run.outcome(vec![f32::from(u8::from(walled))])
         }
         Case::Share(reversed) | Case::Fixed(reversed) => {
-            // A man and a body four times his mass, or a fixed one, overlapping by 20 cm.
+            // A man and a hard body four times his mass, or a fixed one, overlapping by 20 cm.
             let heavy = Kind {
                 mass: if matches!(case, Case::Share(_)) {
                     kind.mass * 4.0
                 } else {
                     f32::INFINITY
                 },
+                push: Push::Hard,
                 ..kind
             };
             let (a, b) = (start, world(2.0 * kind.radius - 0.2, 0.0, 0.0));
@@ -702,9 +727,25 @@ fn lands<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
     }
 }
 
+/// A pool 3 m deep dug into level ground 2-8 m ahead, 8 m across, its water 0.2 m under the
+/// ground. Dug out to well over the ground: a dug box's top in the air would leave a floor the
+/// field makes up under its top half (a difference is a bound, not exact), one a wider body
+/// lands on halfway down the hole.
+fn pool() -> Course {
+    let mut pool = Course::flat();
+    pool.dug
+        .push((Vec3::new(2.0, -3.0, -4.0), Vec3::new(8.0, 40.0, 4.0)));
+    pool.water = Some(Water {
+        min: Vec2::new(2.0, -4.0),
+        max: Vec2::new(8.0, 4.0),
+        surface: -0.2,
+    });
+    pool
+}
+
 /// The crowd course: bodies on a grid walking and sprinting across to the far side of the
-/// middle and back, through each other, for [`CROWD_TICKS`]; added and ticked in the order
-/// given, on the threads given. Its end state is every body's numbers' bits, by ID.
+/// middle and back, through each other, for [`CROWD_TICKS`], then standing [`CROWD_SETTLE`];
+/// added and ticked in the order given, on the threads given. Its end state is every body's numbers' bits, by ID.
 fn crowd<M: Mover>(new: &impl Fn() -> M, order: Order) -> Outcome {
     let flat = Course::flat();
     let kind = Kind::man();
@@ -747,6 +788,12 @@ fn crowd<M: Mover>(new: &impl Fn() -> M, order: Order) -> Outcome {
             }
         });
     }
+    // Then all stand, and the soft pairs they made ease apart.
+    for _ in 0..CROWD_SETTLE {
+        run.tick(|_, _| Intent::default());
+    }
+    let settled = run.overlap_now();
+    run.keep_overlap(settled);
     let end = (0..CROWD)
         .flat_map(|id| {
             let body = run.body(id);
@@ -780,6 +827,18 @@ mod tests {
         let mut all = sweep(90.0);
         all.reverse();
         assert!((super::limit(&all) - 72.5).abs() < 1e-6);
+    }
+
+    /// The pool is open to its bottom: over its middle the nearest ground is its floor or its
+    /// walls, never a floor made up halfway down.
+    #[test]
+    fn the_pool_is_a_hole_three_metres_deep_to_the_ground() {
+        let pool = pool();
+        for y in [0.5, 0.0, -0.5, -1.0, -2.0] {
+            let d = pool.local_distance(Vec3::new(5.0, y, 0.0));
+            let want = (y + 3.0).min(3.0);
+            assert!((d - want).abs() < 1e-3, "{d} m at {y}, want {want}");
+        }
     }
 
     #[test]

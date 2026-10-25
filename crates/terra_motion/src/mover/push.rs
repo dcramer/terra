@@ -1,14 +1,19 @@
-//! Bodies apart by mass (docs/controller.md, step 6; D53's departure from Jolt, whose
-//! characters treat each other as walls that never give way): after every body has moved,
-//! each pair whose pushboxes overlap is separated along the level line between them, each by
-//! its share of the overlap inversely to its mass, a fixed body (infinite mass) not at all.
-//! Pairs are taken in ID order for a few rounds, and each push is swept against the ground,
-//! so a push never puts a body into a wall; what a wall stops is left for the other to take in
-//! a later round.
+//! Bodies apart (docs/controller.md, step 6; D53's departure from Jolt, whose characters
+//! treat each other as walls that never give way; D479). A step met another body only by its
+//! core (`Kind::core_m`), so a body is never stopped dead by another and the pushes do the
+//! rest. A pair of two soft bodies (people) eases apart, a share of its overlap a tick by their
+//! kinds' time (Detour's crowd separation, `dtCrowd::update`, zlib, resolves a share a pass the
+//! same way): [`eased`] sums each body's from where all stood as a tick began, and each body's
+//! step begins by being shoved by its own. After every body has moved, each pair with a hard
+//! body whose pushboxes overlap is pushed apart at once along the level line between them, each
+//! by its share of the overlap inversely to its mass, a fixed body (infinite mass) not at all.
+//! These pairs are taken in ID order for a few rounds, and each push is swept against the
+//! ground, so a push never puts a body into a wall: what a wall stops of one body's share is
+//! handed to the other in the same push.
 
 use super::grid::Grid;
 use super::query::{Capsule, Query};
-use super::{Body, CROWD_FROM};
+use super::{Body, CROWD_FROM, Push};
 use glam::{DVec3, Vec3};
 
 fn inverse_mass(body: &Body) -> f32 {
@@ -19,11 +24,12 @@ fn inverse_mass(body: &Body) -> f32 {
     }
 }
 
-/// A push of a body along a motion, as far as the ground lets it.
-fn shove(body: &mut Body, by: Vec3, ground: &dyn Query) {
+/// A push of a body along a motion, as far as the ground lets it: what of it the ground
+/// stopped.
+pub fn shove(body: &mut Body, by: Vec3, ground: &dyn Query) -> Vec3 {
     let length = by.length();
     if length < 1e-7 {
-        return;
+        return Vec3::ZERO;
     }
     let capsule = Capsule::standing(Vec3::ZERO, body.up, body.kind.radius, body.kind.height)
         .at(body.position);
@@ -32,6 +38,7 @@ fn shove(body: &mut Body, by: Vec3, ground: &dyn Query) {
     });
     body.position += (by * fraction).as_dvec3();
     body.feet = body.position.as_vec3();
+    by * (1.0 - fraction)
 }
 
 /// How much farther apart than overlapping reach a body's partners are listed, m: the lists
@@ -197,12 +204,8 @@ impl Lists {
     }
 }
 
-/// Separates one pair if it overlaps: whether it did.
-fn pair(a: &mut Body, b: &mut Body, ground: &dyn Query) -> bool {
-    let (ia, ib) = (inverse_mass(a), inverse_mass(b));
-    if ia + ib <= 0.0 {
-        return false;
-    }
+/// How two bodies overlap, if they do: the level way from `a` to `b` (unit) and how far.
+fn overlapping(a: &Body, b: &Body) -> Option<(Vec3, f32)> {
     let apart = (b.position - a.position).as_vec3();
     // Overlapping, they are nearer than both radii level and the taller's height along up.
     let (sum, tall) = (
@@ -210,27 +213,102 @@ fn pair(a: &mut Body, b: &mut Body, ground: &dyn Query) -> bool {
         a.kind.height.max(b.kind.height),
     );
     if apart.length_squared() >= (sum * sum + tall * tall) * 1.01 {
-        return false;
+        return None;
     }
     let up = (a.up + b.up).normalize_or(a.up);
     let (ha, hb) = (0.0, apart.dot(up));
     if hb > ha + a.kind.height || hb + b.kind.height < ha {
-        return false;
+        return None;
     }
     let level = apart - up * hb;
     let distance = level.length();
-    let overlap = a.kind.radius + b.kind.radius - distance;
+    let overlap = sum - distance;
     if overlap <= 0.0 {
-        return false;
+        return None;
     }
     let dir = if distance > 1e-6 {
         level / distance
     } else {
         a.facing
     };
-    let share = ia / (ia + ib);
-    shove(a, -dir * overlap * share, ground);
-    shove(b, dir * overlap * (1.0 - share), ground);
+    Some((dir, overlap))
+}
+
+/// Whether a pair is soft (D479): both its kinds are.
+fn soft(a: &Body, b: &Body) -> bool {
+    a.kind.push == Push::Soft && b.kind.push == Push::Soft
+}
+
+/// `a`'s share of a pair's push, by mass, if either gives way.
+fn share(a: &Body, b: &Body) -> Option<f32> {
+    let (ia, ib) = (inverse_mass(a), inverse_mass(b));
+    (ia + ib > 0.0).then(|| ia / (ia + ib))
+}
+
+/// What a soft pair's easing moves each body of it by in a tick so long, if it overlaps: the
+/// share of the overlap the softer kind's time leaves after the tick, by mass.
+fn ease(a: &Body, b: &Body, dt: f32) -> Option<(Vec3, Vec3)> {
+    if !soft(a, b) {
+        return None;
+    }
+    let share = share(a, b)?;
+    let (dir, overlap) = overlapping(a, b)?;
+    let time = a.kind.soft_s.max(b.kind.soft_s);
+    let eased = if time > 0.0 {
+        1.0 - libm::expf(-dt / time)
+    } else {
+        1.0
+    };
+    let by = dir * overlap * eased;
+    Some((-by * share, by * (1.0 - share)))
+}
+
+/// What every body is moved by in a tick so long as the soft pairs among them ease apart
+/// (D479), from where they all stand: each soft pair that overlaps adds its share to both, in
+/// ID order, the lists made first if they do not hold (Detour's crowd separation, `dtCrowd`'s
+/// collision pass, zlib: an agent's displacement the sum over its neighbours). Each body is
+/// then [`shove`]d by its own, by itself, so on any thread to the same bits.
+pub fn eased(bodies: &[Body], lists: &mut Lists, dt: f32) -> Vec<Vec3> {
+    let mut by = vec![Vec3::ZERO; bodies.len()];
+    if bodies.len() < 2 || bodies.iter().all(|b| b.kind.push != Push::Soft) {
+        return by;
+    }
+    let reach = reach(bodies);
+    if !lists.hold(bodies, reach, 0.0) {
+        lists.make(bodies.iter().map(|b| (b.id, b.position)), reach);
+    }
+    for i in 0..bodies.len() {
+        for &j in &lists.partners[lists.from[i]..lists.from[i + 1]] {
+            let j = j as usize;
+            if let Some((on_a, on_b)) = ease(&bodies[i], &bodies[j], dt) {
+                by[i] += on_a;
+                by[j] += on_b;
+            }
+        }
+    }
+    by
+}
+
+/// Pushes one hard pair apart at once if it overlaps (a soft one eases apart, [`eased`]):
+/// whether it did.
+fn pair(a: &mut Body, b: &mut Body, ground: &dyn Query) -> bool {
+    if soft(a, b) {
+        return false;
+    }
+    let Some(share) = share(a, b) else {
+        return false;
+    };
+    let Some((dir, overlap)) = overlapping(a, b) else {
+        return false;
+    };
+    let by = dir * overlap;
+    // What a wall stops of one's share the other takes, if it gives way at all.
+    let left = shove(a, -by * share, ground);
+    let gives = f32::from(u8::from(share < 1.0));
+    let left = shove(b, by * (1.0 - share) - left * gives, ground);
+    if share > 0.0 {
+        shove(a, -left, ground);
+    }
     true
 }
 
@@ -269,7 +347,8 @@ mod tests {
             centre: Vec3::new(0.0, -1.0e6, 0.0),
         };
         let mut crowd = Bodies::default();
-        // Packed tight, some on top of each other, a few heavy and one that never gives way.
+        // Packed tight, some on top of each other, a few heavy, some hard and one that never
+        // gives way.
         for id in 0..300u32 {
             let h = terra_gen::hash::lowbias32(id);
             let (x, z) = ((h % 97) as f32 * 0.17, ((h >> 8) % 89) as f32 * 0.13);
@@ -279,6 +358,10 @@ mod tests {
                 5 | 11 => 320.0,
                 _ => kind.mass,
             };
+            // Soft and hard pairs both.
+            if id % 7 == 3 {
+                kind.push = Push::Hard;
+            }
             crowd.add(id, kind, Vec3::new(x, 0.0, z), Vec3::X, &world);
         }
         let mut by_grid = crowd.bodies.clone();
@@ -288,6 +371,25 @@ mod tests {
         let mut lists = Lists::default();
         for tick in 0..8u32 {
             let before = by_grid.clone();
+            // The soft pairs' easing from the lists, and from every pair.
+            let by = eased(&by_grid, &mut lists, 1.0 / 64.0);
+            let mut all = vec![Vec3::ZERO; by_all.len()];
+            for i in 0..by_all.len() {
+                for j in i + 1..by_all.len() {
+                    if let Some((on_a, on_b)) = ease(&by_all[i], &by_all[j], 1.0 / 64.0) {
+                        all[i] += on_a;
+                        all[j] += on_b;
+                    }
+                }
+            }
+            for ((a, b), (on_grid, on_all)) in by_grid
+                .iter_mut()
+                .zip(by_all.iter_mut())
+                .zip(by.iter().zip(&all))
+            {
+                shove(a, *on_grid, &floor);
+                shove(b, *on_all, &floor);
+            }
             separate(&mut by_grid, &mut lists, &floor, 4);
             every_pair(&mut by_all, &floor, 4);
             let moved = by_grid

@@ -78,6 +78,23 @@ pub struct Kind {
     /// enough to swim in breaks a fall.
     pub fall_onset: f32,
     pub fall_fatal: f32,
+    /// How it pushes and is pushed by another body (D479): two soft bodies ease apart, any
+    /// other pair is pushed apart at once by mass.
+    pub push: Push,
+    /// The radius of the core by which it stops another body's move, m: what overlaps less is
+    /// left to the pushes, so a body is never stopped dead by another and never passes
+    /// through one.
+    pub core_m: f32,
+    /// How long a soft pair's overlap takes to ease to a share of 1/e, s.
+    pub soft_s: f32,
+}
+
+/// How a kind pushes (D479): people softly, giving way and never blocking; monsters hard, by
+/// their mass.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+pub enum Push {
+    Soft,
+    Hard,
 }
 
 impl Kind {
@@ -307,21 +324,27 @@ impl Bodies {
     /// One tick of every body, each with its intent (none for a body not named), then the
     /// pushes. Every body steps against the others as the tick began (Jacobi), so the bodies
     /// may be stepped in any order and on any number of threads to the same bits
-    /// ([`Bodies::tick_on`]); the pushes go in ID order after.
+    /// ([`Bodies::tick_on`]); the hard pushes go in ID order after. A body's step begins by
+    /// easing it from the soft bodies it stood in as the tick began (D479, `push::eased`).
     pub fn tick(&mut self, world: &World, intents: &[(u32, Intent)], dt: f32) {
-        let before = self.before(intents);
+        let before = self.before(intents, dt);
         steps(&mut self.bodies, 0, &before, world, dt);
         push::separate(&mut self.bodies, &mut self.pairs, world.ground, PUSH_ROUNDS);
     }
 
-    /// What a tick's steps read of every body: as it began.
-    fn before(&self, intents: &[(u32, Intent)]) -> Before {
+    /// What a tick's steps read of every body: as it began, and what the soft pairs it stood
+    /// in ease it by.
+    fn before(&mut self, intents: &[(u32, Intent)], dt: f32) -> Before {
+        let eased = push::eased(&self.bodies, &mut self.pairs, dt);
         let mut asked: Vec<(u32, Intent)> = intents.to_vec();
         asked.sort_by_key(|(id, _)| *id);
+        // Another body stops a step by its core alone (D479): what overlaps more shallowly is
+        // the pushes' to part, softly or by mass. Each as its easing will leave it.
         let capsules: Vec<(u32, Capsule, Vec3)> = self
             .bodies
             .iter()
-            .map(|b| (b.id, capsule(b), b.velocity))
+            .zip(&eased)
+            .map(|(b, by)| (b.id, core(b).moved(*by), b.velocity))
             .collect();
         let extent = capsules
             .iter()
@@ -334,18 +357,21 @@ impl Bodies {
             capsules,
             extent,
             grid,
+            eased,
         }
     }
 }
 
 /// Every body as a tick began, which its steps read and none changes: the intents by ID, the
 /// bodies' capsules and velocities by ID, the farthest a body's surface lies from its
-/// capsule's middle, and a crowd's grid of them.
+/// capsule's middle, a crowd's grid of them, and what each is eased by from the soft bodies it
+/// stood in.
 struct Before {
     asked: Vec<(u32, Intent)>,
     capsules: Vec<(u32, Capsule, Vec3)>,
     extent: f32,
     grid: Option<Grid>,
+    eased: Vec<Vec3>,
 }
 
 /// A run of bodies stepped, the first the `from`th by ID, each against the others as the tick
@@ -372,6 +398,9 @@ fn steps(bodies: &mut [Body], from: usize, before: &Before, world: &World, dt: f
             gathered: before.grid.as_ref().map(|_| &gathered),
         };
         let query = (world.ground, &others);
+        // Eased first from the soft bodies it stood in, by itself against the ground, so any
+        // lane gives the same bits.
+        push::shove(body, before.eased[from + k], world.ground);
         step(body, &intent, &query, world, dt);
     }
 }
@@ -434,6 +463,15 @@ fn middle(capsule: &Capsule) -> DVec3 {
 /// A body's capsule in its own frame: its feet at its position.
 fn capsule(body: &Body) -> Capsule {
     Capsule::standing(Vec3::ZERO, body.up, body.kind.radius, body.kind.height).at(body.position)
+}
+
+/// A body's core in its own frame: the axis of its capsule, as thick as its kind's core.
+fn core(body: &Body) -> Capsule {
+    let k = &body.kind;
+    let core = k.core_m.clamp(1.0e-3, k.radius);
+    let mut capsule = capsule(body);
+    capsule.radius = core;
+    capsule
 }
 
 fn shape(body: &Body, dt: f32) -> Shape {

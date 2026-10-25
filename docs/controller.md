@@ -21,7 +21,7 @@ A body goes where its intent or its move's root motion asks, as far as the world
 3. **Step up**, one rule for every source. If the move was blocked while walking forward, the body tries up the step height, then forward, then down. It keeps the result only if it lands on walkable ground and the floor carries on a short way past the edge (Jolt's forward test). Where the whole rise put the head into what overhangs the way (a doorway's lintel over its threshold) and the feet came down on the edge, it tries again risen only 5 cm over that edge (Jolt and Unreal rise the whole step and stop there). A thing of flora (a stump, a log, a rock) taller than the step over its ground is no step but a thing to jump onto, however it is come at (by its thin end's lower piece, by the round of an edge a little over the piece stood on, or from a slope's high side), unless the feet already stand more than a step over its ground: its contacts are met as walls, their normals laid level (Unreal's `CanCharacterStepUpOn`, and its walkability judged by the face struck, `ImpactNormal`).
 4. **Stick to the floor**. A body that was grounded and is not jumping is swept down up to the stick distance and snapped onto walkable ground, so it stays on its feet down a hill or stairs.
 5. **Ground state**: grounded, steep (on ground past the limit, sliding down), airborne or swimming. Swimming means the water is deeper than the kind's swim depth.
-6. **After every body has moved, pushboxes**. Bodies that overlap are separated by mass: each moves by its share of the overlap, inversely to its mass, and a fixed body has infinite mass. This runs for four rounds in ID order. Each push is a sweep against the world, so a push never puts a body into a wall and a later push cannot undo an earlier one. The player is pushed like anyone else, wherever pushing is allowed (open question 4).
+6. **After every body has moved, pushboxes** (D479). A step met another body only by its core (`core_m`), so bodies that walk into each other overlap and are pushed apart here, each by its share of the overlap inversely to its mass, a fixed body having infinite mass. Two soft bodies (people) ease apart, by the share of the overlap their kinds' `soft_s` leaves a tick (Detour's crowd separation), summed for each body from where all stood as the tick began and shoved as its step begins, on its own lane; any pair with a hard body (a monster) at once, after the steps, for four rounds in ID order. Each push is a sweep against the world, and what a wall stops of one body's share is handed to the other, so a push never puts a body into a wall. The player is pushed like anyone else.
 
 ## What stops a body
 
@@ -35,7 +35,7 @@ The mover asks one query trait, defined in `terra_motion` because the mover is t
 | Trees, rocks, stumps, logs | Rounded convex pieces with their tops | `terra_core::solid` |
 
 Buildings, props and trees and rocks are the mover's obstacles (`terra_motion::mover::shapes`): a turned box (a cube, a leaf, a prop) or a solid's pieces, each its exact distance, those near a capsule answered together as one exact field, so cubes side by side have no seam. The ground stays a source apart, so a box standing on it meets it at a true corner, not a blended one.
-| Other bodies | Their pushbox capsules, moving | Treated as moving obstacles in the sweep, then separated by mass afterwards (step 6) |
+| Other bodies | Their cores (a thin capsule on the pushbox's axis), moving | Treated as moving obstacles in the sweep, then pushed apart afterwards (step 6) |
 | Water | A medium, not a contact: the depth of the surface over a point | `Planet::water_radius_m`, and lakes and rivers when they come |
 
 Ceilings need nothing special: a capsule's top meets a roof as its side meets a wall, and the upward velocity into it is removed.
@@ -53,7 +53,7 @@ Each kind's file holds these numbers. A man's stand-ins are shown in brackets: t
 - **Swimming**: swim depth as a fraction of height, and buoyancy.
 - **Stamina** costs of sprinting, jumping and swimming (D61; jumping costs 8 today).
 - **Falls** (D476): the landing speed into the floor a fall starts to hurt at, and the one it kills at.
-- **Pushing**: which kinds push which, taken from the answer to open question 4.
+- **Pushing** (D479): soft or hard, the core another body is stopped by (0.05 m), and how long a soft pair takes to ease apart (0.05 s, for review).
 
 Gravity's strength belongs to the world, not the body (D63 leaves its value open).
 
@@ -89,7 +89,7 @@ These are `tools/controller/criteria.json` (D457), in D452's shape: a row for ea
 | 12b | Falls | No harm from a jump, a step, stairs or a drop short of the onset; harmed 3% past the onset, alive 3% short of the fatal speed and dead 3% past it; harm never falls with height; a slope takes its share by its normal; no harm into water deep enough to swim in (`course/fall.rs`) | D476 |
 | 13 | Input to motion | Velocity moves toward the input on the first tick after it is pressed | D180; movement.md stage 2 |
 | 14 | Acceleration and turn as data | Time to top speed and turn rate within one tick of the kind's data, and two kinds' files give two results | D136 |
-| 15 | Weighted pushing | Overlap under 5 cm after a tick, each body's share within 5% of its mass ratio, a fixed body unmoved, the player included | movement.md duel bar; open question 4 |
+| 15 | Pushing (D479) | A pair with a hard body under 5 cm overlap after a tick, each body's share within 5% of its mass ratio, a fixed body unmoved, the player included; two people ease apart by their kind's time, a walker loses under 10% of its walk passing one standing and moves them no farther than out of its way; a monster loses under 30% of its walk through a line of men, a man moves it at his share of their mass, and nobody is pushed into a wall (`course/pushes.rs`) | movement.md duel bar; D479; Detour's crowd separation |
 | 16 | Fits where it should | Passes gaps 4 cm wider than its diameter, and is stopped by narrower ones | Ours |
 | 17 | Swimming | Deep water is swum rather than walled; the body floats to the surface and dives on intent; breath is used with the head under | D74 |
 | 18 | Stamina | Sprinting, jumping and swimming cost the kind's data to within 1% | D61 |
@@ -105,4 +105,4 @@ No Enshrouded movement numbers have been measured yet; combat's measurements are
 1. **Fall damage**: decided, D476 (by landing speed). Built: a landing takes a share of the body's health by the speed it meets the floor at along the floor's normal (`Kind::fall_harm`, `mover::Body::fall`), none below the kind's `fall_onset`, all of it at `fall_fatal`, by the fall's energy between (so linear in the height fallen past the onset's); water deep enough to swim in (the kind's swim depth) breaks it. The numbers are D476's placeholders in movers.ron (12 and 25 m/s); the game takes the harm from the player's health as a blow's (`terra_walker::movement::Fell`, `terra_creatures::combat::take_falls`). Rows `fall.*`.
 2. **Climbing** (player.md lists it, without a design). Recommended: a ledge grab and a mantle now, and free climbing on stamina later if wanted. Open.
 3. **Swimming beyond D74**. The questions are how to swim at the surface and how to dive (look to dive, or keys for up and down), how fast, and how long breath lasts. Recommended: dive by looking and pressing forward, rise with jump; a swim speed about half the jog; about 30 s of breath at the start. Open.
-4. **Bodies blocking bodies** (movement.md question 4). Recommended: players and recruits push each other softly, and monsters push hard. Open.
+4. **Bodies blocking bodies**: decided, D479 (people softly, monsters hard). Built: step 6, rows `push.*`. In the game players ease apart from each other and from recruits (`terra_walker::bodies`, who give way by themselves until people walk the mover); creatures still stop a player at their width, as they are not the mover's bodies yet.

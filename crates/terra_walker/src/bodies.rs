@@ -4,13 +4,17 @@
 //!
 //! Players are not pushed here: the mover stops them at others' bodies (D53,
 //! `mover_world::others`), so the camera never sees one shoved after it has moved. Others
-//! are pushed off them instead.
+//! are pushed off them instead. People push softly (D479): a person is met by the mover only by
+//! a man's core, so a player walks past one, and two people, or a person and a player, ease
+//! apart by a share of their overlap a tick, as the mover's soft pairs do (a man's `soft_s`).
 //!
 //! A stand-in until creatures walk the mover too (D53).
 
 use crate::Player;
+use crate::movement::Movers;
 use bevy::prelude::*;
 use terra_build::Walker;
+use terra_motion::mover::Push;
 use terra_world::flora::Obstacles;
 use terra_world::planet::Planet;
 use terra_world::spatial::SpatialHash;
@@ -22,19 +26,36 @@ pub struct Body {
     pub radius: f32,
     /// Heavier bodies give way less. Zero never gives way.
     pub weight: f32,
+    /// How it pushes (D479): a person softly, anything else hard.
+    pub push: Push,
 }
 
 impl Body {
+    /// A creature's, which pushes hard.
     pub fn new(radius: f32, weight: f32) -> Self {
-        Self { radius, weight }
+        Self {
+            radius,
+            weight,
+            push: Push::Hard,
+        }
+    }
+
+    /// A person's, who pushes softly (D479): gives way and never blocks.
+    pub fn person(radius: f32, weight: f32) -> Self {
+        Self {
+            push: Push::Soft,
+            ..Self::new(radius, weight)
+        }
     }
 
     /// One that holds its place, such as someone bound.
     pub fn fixed(radius: f32) -> Self {
-        Self {
-            radius,
-            weight: 0.0,
-        }
+        Self::new(radius, 0.0)
+    }
+
+    /// Whether it gives way softly: a person who is not held in place.
+    pub fn soft(&self) -> bool {
+        self.push == Push::Soft && self.weight > 0.0
     }
 }
 
@@ -68,9 +89,12 @@ fn shares(a: Body, b: Body) -> (f32, f32) {
 /// Moves overlapping bodies apart, and out of trees, rocks and players, then puts them
 /// back on the ground. Each body is compared only with those filed near it, so the cost
 /// grows with how crowded a place is, not with how many bodies there are (D127).
-fn keep_apart(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn keep_apart(
+    time: Res<Time>,
     planet: Res<Planet>,
     obstacles: Res<Obstacles>,
+    movers: Option<Res<Movers>>,
     players: Query<&Transform, With<Player>>,
     mut bodies: Query<(&Body, &mut Transform), Without<Player>>,
     mut filed: Local<SpatialHash<usize>>,
@@ -84,6 +108,14 @@ fn keep_apart(
             .enumerate()
             .map(|(index, (_, transform))| (transform.translation, index)),
     );
+    // A soft pair parts by this share of its overlap a tick (a man's kind's time, as the
+    // mover's soft pairs); with no walk, at once.
+    let soft_s = movers.map_or(0.0, |movers| movers.kind().soft_s);
+    let eased = if soft_s > 0.0 {
+        1.0 - libm::expf(-time.delta_secs() / soft_s)
+    } else {
+        1.0
+    };
     let mut moved = vec![Vec3::ZERO; all.len()];
     for i in 0..all.len() {
         let (a, here) = (*all[i].0, all[i].1.translation);
@@ -100,7 +132,10 @@ fn keep_apart(
             }
             // Two in the same spot part along any line.
             let away = apart.normalize_or(up.any_orthonormal_vector());
-            let overlap = reach - apart.length();
+            let mut overlap = reach - apart.length();
+            if a.soft() && b.soft() {
+                overlap *= eased;
+            }
             let (share_a, share_b) = shares(a, b);
             moved[i] += away * overlap * share_a;
             moved[j] -= away * overlap * share_b;
@@ -122,7 +157,9 @@ fn keep_apart(
             let apart = (at - place).reject_from(up);
             let reach = walker + body.radius;
             if apart.length_squared() < reach * reach {
-                at += apart.normalize_or(up.any_orthonormal_vector()) * (reach - apart.length());
+                let ease = if body.soft() { eased } else { 1.0 };
+                let away = apart.normalize_or(up.any_orthonormal_vector());
+                at += away * (reach - apart.length()) * ease;
             }
         }
         // What is lower than a step they walk over, as the player does (D267).
@@ -149,6 +186,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(planet);
         world.init_resource::<Obstacles>();
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_secs_f32(1.0 / 64.0));
+        world.insert_resource(time);
         (world, ground)
     }
 
@@ -171,6 +211,30 @@ mod tests {
             .id();
         world.run_system_once(keep_apart).unwrap();
         assert!(apart(&world, deer, spider) > 0.9 - 1e-3);
+    }
+
+    /// People push softly (D479): two people in each other ease apart by a man's soft time,
+    /// a share a tick, as the mover's soft pairs do; a person and a creature part at once.
+    #[test]
+    fn two_people_ease_apart_and_a_person_and_a_creature_part_at_once() {
+        let parted = |other: Body| {
+            let (mut world, ground) = world();
+            world.init_resource::<Movers>();
+            let a = world
+                .spawn((Body::person(0.35, 2.0), Transform::from_translation(ground)))
+                .id();
+            let b = world
+                .spawn((other, Transform::from_translation(ground + Vec3::X * 0.5)))
+                .id();
+            world.run_system_once(keep_apart).unwrap();
+            apart(&world, a, b)
+        };
+        let soft_s = Movers::default().kind().soft_s;
+        let eased = 1.0 - libm::expf(-1.0 / 64.0 / soft_s);
+        let want = 0.5 + 0.2 * eased;
+        let soft = parted(Body::person(0.35, 2.0));
+        assert!((soft - want).abs() < 1e-3, "{soft} apart, want {want}");
+        assert!(parted(Body::new(0.35, 2.0)) > 0.7 - 1e-3);
     }
 
     #[test]

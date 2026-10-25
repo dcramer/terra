@@ -308,7 +308,7 @@ fn arrive(
         // Someone bound holds their place; others are shoved like anyone.
         person.insert(match arrival.doing {
             Doing::Bound | Doing::Sitting => Body::fixed(0.35),
-            _ => Body::new(0.35, 2.0),
+            _ => Body::person(0.35, 2.0),
         });
         let person = person.id();
         let (graph, clips) = (graph.clone(), *clips);

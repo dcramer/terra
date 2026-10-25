@@ -173,3 +173,44 @@ fn a_player_jogs_on_the_ground_through_the_mover_and_a_warp_is_followed() {
     world.run_system_once(walk).unwrap();
     assert_eq!(world.resource::<Movers>().bodies.iter().count(), 0);
 }
+
+/// People push softly (D479): a player jogging at a person standing just off their way keeps
+/// to it, met only by a man's core, and the person gives way; someone bound there gives none
+/// and turns the player aside round their width.
+#[test]
+fn a_player_jogs_on_past_a_person_who_gives_way_and_round_one_bound() {
+    let ran = |body: crate::bodies::Body| {
+        let (mut world, player) = standing(Steer::default(), Some(Action::Forward));
+        let start = world.get::<Transform>(player).unwrap().translation;
+        let planet = world.resource::<Planet>();
+        let stood = planet.ground_at(start + Vec3::new(3.0, 0.0, 0.1));
+        let them = world.spawn((body, Transform::from_translation(stood))).id();
+        let mut aside = 0.0_f32;
+        for _ in 0..96 {
+            world.run_system_once(walk).unwrap();
+            world.run_system_once(crate::bodies::keep_apart).unwrap();
+            let feet = world.get::<Transform>(player).unwrap().translation;
+            aside = aside.max((feet - start).reject_from(start.normalize()).z.abs());
+        }
+        let feet = world.get::<Transform>(player).unwrap().translation;
+        let at = world.get::<Transform>(them).unwrap().translation;
+        let went = (feet - start).reject_from(start.normalize()).x;
+        (went, aside, at.distance(stood))
+    };
+    // A second and a half at a jog, less the run-up.
+    let free = JOG_SPEED * 1.4;
+    let (went, aside, gave) = ran(crate::bodies::Body::person(0.35, 2.0));
+    assert!(went > free, "went {went} m of {free}");
+    // No farther aside than a man's core and his own radius reach past where they stood.
+    assert!(
+        aside < man().core_m + 0.3 - 0.1 + 0.02,
+        "turned {aside} m aside"
+    );
+    assert!(gave > 0.1, "gave way {gave} m");
+    let (_, aside, gave) = ran(crate::bodies::Body::fixed(0.35));
+    assert!(
+        aside > 0.3 + 0.35 - 0.1 - 0.05,
+        "turned only {aside} m aside"
+    );
+    assert_eq!(gave, 0.0);
+}

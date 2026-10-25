@@ -49,7 +49,7 @@ impl Bodies {
         dt: f32,
     ) {
         assert!(!lanes.is_empty(), "a tick needs a lane to run on");
-        let before = &self.before(intents);
+        let before = &self.before(intents, dt);
         let ahead: Option<Ahead> = push::ahead(&self.bodies, &self.pairs);
         let lists = Mutex::new(&mut self.pairs);
         // Runs of neighbouring bodies, each lane given a block of them, the same from tick to

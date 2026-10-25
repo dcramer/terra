@@ -42,6 +42,12 @@ air.control	0	stair.up and stair.hop's first numbers, measured on the mover afte
 push.overlap	0.592	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 push.share	0.799	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 push.fixed	0.2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+push.soft	0	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
+push.pass	0.064	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
+push.stander	0.857	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
+push.monster	0.114	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
+push.person	0	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
+push.wall	0	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
 fit.gap	3	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 swim.enters	1	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 swim.shore	0	unit D: the water's first numbers (a lake walked into, waded, swum across and out; a body floated), course/water.rs

@@ -28,6 +28,15 @@
 //                            speed, by the fall's energy between, m/s; water deep enough to
 //                            swim in breaks it. D476's placeholders: 12 (a drop of 4.5 m at
 //                            today's gravity of 16) and 25 (19.5 m)
+//   push                     Soft or Hard (D479): people push each other softly (two soft
+//                            bodies give way and ease apart), monsters hard (any pair with a
+//                            hard body is pushed apart at once, each by its share of their mass)
+//   core_m                   the core by which it stops another body's move, m: closer than
+//                            its capsule is left to the pushes, so a body walking into another
+//                            is never stopped dead by it, and never passes through it
+//   soft_s                   how long a soft pair's overlap takes to ease to 1/e of itself, s
+//                            (a 20 cm overlap is under 1 cm in three of these); a stand-in
+//                            for review
 {
     "Man": (
         radius: 0.3,
@@ -55,5 +64,8 @@
         water_drag: 2.0,
         fall_onset: 12.0,
         fall_fatal: 25.0,
+        push: Soft,
+        core_m: 0.05,
+        soft_s: 0.05,
     ),
 }

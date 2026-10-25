@@ -613,8 +613,8 @@
    "bar": {
     "at_most": 0.05
    },
-   "unit": "m",
-   "source": "docs/controller.md criterion 15; movement.md duel bar",
+   "unit": "m, a pair with a hard body after a tick, and the crowd's soft pairs once it has stood a second",
+   "source": "docs/controller.md criterion 15; movement.md duel bar; D479",
    "check": {
     "by": "course"
    },
@@ -645,6 +645,96 @@
    },
    "unit": "m",
    "source": "docs/controller.md criterion 15",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "push.soft",
+   "noticed": 3,
+   "notice": "two people standing in each other snap apart at once, or stay in each other",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "ticks off ln 20 of the kind's soft_s for a 20 cm overlap of two men to fall under 1 cm",
+   "source": "docs/controller.md criterion 15; D479; Detour dtCrowd collision handling (zlib)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "push.pass",
+   "noticed": 5,
+   "notice": "a person standing in the way stops a walker dead (D479: people never block)",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "of the walk with no one there lost, worst of a man jogged past one standing 0.05-0.5 m to the side for 1.5 s",
+   "source": "docs/controller.md criterion 15; D479; Detour dtCrowd collision handling (zlib)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "push.stander",
+   "noticed": 3,
+   "notice": "a person standing is shoved farther than out of the way of someone walking past",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "of the way out of the walker's path (both radii less how far aside it stood) the one standing is moved, worst of the same walks",
+   "source": "docs/controller.md criterion 15; D479; Detour dtCrowd collision handling (zlib)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "push.monster",
+   "noticed": 4,
+   "notice": "a monster is held up by the men in its way (D479: monsters push hard)",
+   "bar": {
+    "at_most": 0.3
+   },
+   "unit": "of its walk alone lost, a monster (400 kg, hard) walked 2 s through a line of five men 0.8 m apart, two shifts",
+   "source": "docs/controller.md criterion 15; D479; Detour dtCrowd collision handling (zlib)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "push.person",
+   "noticed": 3,
+   "notice": "a man pushes a monster farther than his share of their mass, or not at all",
+   "bar": {
+    "at_most": 0.05
+   },
+   "unit": "off the mass share, the monster's speed over the man's jog, a man walking head on into it for a second",
+   "source": "docs/controller.md criterion 15; D479; Detour dtCrowd collision handling (zlib)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "push.wall",
+   "noticed": 5,
+   "notice": "a body is pushed into or through a wall",
+   "bar": {
+    "at_most": 0.001
+   },
+   "unit": "m into the wall (1 through), worst body of a monster walking a man into a wall, two offsets",
+   "source": "docs/controller.md criterion 15; D479; Detour dtCrowd collision handling (zlib)",
    "check": {
     "by": "course"
    },

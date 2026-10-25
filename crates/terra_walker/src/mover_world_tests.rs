@@ -269,7 +269,7 @@ fn a_props_box_stands_from_its_foot_turned_and_a_hidden_one_is_walked_through() 
 }
 
 #[test]
-fn a_trunk_borrowed_from_flora_and_a_body_standing_there_stop_a_man_at_their_width() {
+fn a_trunk_and_a_creature_standing_there_stop_a_man_at_their_width_and_a_person_at_a_core() {
     let planet = smooth();
     let frame = yard(&planet);
     let ahead = frame.transform_point(Vec3::new(3.0, 0.0, 0.0));
@@ -288,26 +288,34 @@ fn a_trunk_borrowed_from_flora_and_a_body_standing_there_stop_a_man_at_their_wid
         2.0,
     ));
     assert!((end.x - (3.0 - 0.4 - 0.3)).abs() < 0.05, "at {end}");
-    // A person there instead, 0.35 m round.
-    let person = bodies::Body::new(0.35, 70.0);
-    let standing = Transform::from_translation(ahead);
-    let mut capsules = Vec::new();
-    others([(7, &person, &standing)], 1.8, &mut capsules);
-    let them = Capsules {
-        bodies: &capsules,
-        skip: 0,
-        near: None,
-        gathered: None,
+    // A creature there instead, 0.35 m round, stops him at its width; a person (D479) only
+    // at a man's core, giving way by themselves.
+    let met = |body: bodies::Body| {
+        let standing = Transform::from_translation(ahead);
+        let mut capsules = Vec::new();
+        others([(7, &body, &standing)], &man(), &mut capsules);
+        let them = Capsules {
+            bodies: &capsules,
+            skip: 0,
+            near: None,
+            gathered: None,
+        };
+        last(&walk(
+            &planet,
+            &them,
+            &dry,
+            &frame,
+            (Vec3::ZERO, Vec3::X),
+            2.0,
+        ))
     };
-    let end = last(&walk(
-        &planet,
-        &them,
-        &dry,
-        &frame,
-        (Vec3::ZERO, Vec3::X),
-        2.0,
-    ));
+    let end = met(bodies::Body::new(0.35, 70.0));
     assert!((end.x - (3.0 - 0.35 - 0.3)).abs() < 0.05, "at {end}");
+    let end = met(bodies::Body::person(0.35, 70.0));
+    assert!(
+        (end.x - (3.0 - man().core_m - 0.3)).abs() < 0.05,
+        "at {end}"
+    );
 }
 
 #[test]
