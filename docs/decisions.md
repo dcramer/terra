@@ -299,7 +299,7 @@ How structures are planned, built, drawn and coded.
 | [D377](decisions/D377.md) | Fire in what is built | Tech | Agent | Decided | A cellular fire on a base's cubes, as Far Cry 2's and… |
 | [D480](decisions/D480.md) | A building's weathering motifs are solved by wave function collapse within masks of its shape | Tech | Agent | Leaning | A building's weathering is made from its own cubes… |
 | [D486](decisions/D486.md) | A room's sky light is what its openings let in | Tech | Agent | Leaning | A room's light probe (D320) dims the sky's light by the… |
-| [D491](decisions/D491.md) | Space Engineers 2's ground and construction loop | Design | — | Open | Whether how blocks are built and taken down follows… |
+| [D491](decisions/D491.md) | Space Engineers 2's ground and construction loop | Design | Developers | Decided | How blocks are built and taken down follows Space… |
 | [D494](decisions/D494.md) | Creative and survival | Design | Developers | Decided | A world is played in one of two modes. |
 
 ## Art, characters and sound

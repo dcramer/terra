@@ -1,6 +1,6 @@
 # Construction 003: Space Engineers 2's ground and construction loop
 
-Status: **Open** (D491). A candidate, for the developers to adopt in part or whole; nothing here is built on until they do. The research is [research/2026-10-25-space-engineers-2.md](../../research/2026-10-25-space-engineers-2.md).
+Status: **Decided** (D491 for construction, D495 for mining, D494 for the modes, D296 Leaning for carrying), 2026-10-25. The research is [research/2026-10-25-space-engineers-2.md](../../research/2026-10-25-space-engineers-2.md).
 
 ## What it answers
 
