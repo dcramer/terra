@@ -27,6 +27,7 @@ const TORCH_FIRE: Kindled = Kindled {
     heat: 0.6,
     logs: Logs::NONE,
     body: terra_world::fire::Body::Cards,
+    light: terra_world::fire::TORCH_LIGHT,
 };
 /// A brazier's fire burns in its bowl, so far under the light's point.
 const BRAZIER_DROP_M: f32 = 0.5;
@@ -39,6 +40,7 @@ const BOWL_FIRE: Kindled = Kindled {
     heat: 0.9,
     logs: terra_world::fire::Logs::CAMPFIRE.below(0.08),
     body: terra_world::fire::Body::Marched,
+    light: terra_world::fire::HEARTH_LIGHT,
 };
 /// The studded leaf's model, hinged at its origin and reaching along +X: so wide and so high.
 const LEAF_M: Vec2 = Vec2::new(0.894, 1.939);

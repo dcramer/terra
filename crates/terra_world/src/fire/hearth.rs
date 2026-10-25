@@ -144,6 +144,7 @@ pub(super) fn keep(
         .map(|(_, fire, placed)| fire.logs.packed(placed))
         .collect();
     let bodies: Vec<f32> = fires.iter().map(|(_, fire, _)| fire.body.told()).collect();
+    let lights: Vec<Color> = fires.iter().map(|(_, fire, _)| fire.light).collect();
     let kept: Vec<Blaze> = fires
         .iter()
         .map(|(_, fire, at)| {
@@ -157,8 +158,13 @@ pub(super) fn keep(
             }
         })
         .collect();
-    if kept != blazes.kept || hearths != blazes.hearths || bodies != blazes.bodies {
+    if kept != blazes.kept
+        || hearths != blazes.hearths
+        || bodies != blazes.bodies
+        || lights != blazes.lights
+    {
         blazes.kept = kept;
+        blazes.lights = lights;
         blazes.hearths = hearths;
         blazes.bodies = bodies;
     }

@@ -50,6 +50,7 @@ fn a_campfire_clears_the_ground_a_stride_past_its_stones_and_no_farther() {
         heat: 0.9,
         logs: super::Logs::CAMPFIRE,
         body: super::Body::Marched,
+        light: super::HEARTH_LIGHT,
     };
     let at = Transform::from_translation(Vec3::new(3.0, 2000.0, -4.0));
     let ground = scorched(&fire, &at);
@@ -71,6 +72,7 @@ fn a_kindled_fire_burns_where_it_stands_while_it_is_there() {
         heat: 0.9,
         logs: super::Logs::CAMPFIRE,
         body: super::Body::Marched,
+        light: super::HEARTH_LIGHT,
     };
     let lit = world
         .spawn((fire, GlobalTransform::from_translation(at)))

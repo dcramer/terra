@@ -25,14 +25,16 @@ const SHUT: [f32; 2] = [0.05, 0.35];
 /// between (round 8); at the deep night's 9 with them at their night light its rooms were lit
 /// orange boxes (the keep's goal mean sRGB 0.24, round 9); at 10.8, 0.18.
 const INDOOR_EV: f32 = 10.8;
-/// The light filling a room shut off from the sky everywhere, cd/m²: its fires' light bounced
-/// round its walls, which the probes do not carry. Without it a corridor between torches
-/// was black (the mine film's 22.5 s, the crypt's 2.5 s, round 8's review); at 16 the mine's
-/// goal's darkest twentieth is sRGB 0.015 against 0.001.
-const FILL: f32 = 16.0;
-/// Its colour: stone's bounce of firelight, warm but near grey, so a corridor's dark reads
-/// grey-buff rather than the torches' red (round 8: R/G 3 to 4.5 over every interior).
-const FILL_COLOUR: Color = Color::srgb(1.0, 0.94, 0.86);
+/// The light filling a room shut off from the sky everywhere, cd/m²: what of its fires' light
+/// the probes do not carry, bounced round its stone. Without it a corridor between torches
+/// was black (the mine film's 22.5 s, the crypt's 2.5 s, round 8's review); at 16 and warm
+/// grey every surface took one even orange-buff cast with no dark between the torches (round
+/// 11, all three reviewers); at 8, the stretches between lights fall to dim pools.
+const FILL: f32 = 8.0;
+/// Its colour: a cool, moonless blue-grey, as shipped dungeons light their darks (Diablo IV's
+/// and Elden Ring's catacombs: warm pools at the fires, cool shadow between), so the eye reads
+/// a torch's warmth against them rather than one tint over everything.
+const FILL_COLOUR: Color = Color::srgb(0.70, 0.80, 1.0);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(PostUpdate, fill);
@@ -106,16 +108,19 @@ mod tests {
     }
 
     #[test]
-    fn a_shut_room_is_filled_dim_and_near_grey() {
+    fn a_shut_room_is_filled_dim_and_cool() {
         // Some light everywhere, so no stretch between torches is black.
         assert!(fill_brightness(0.0) > 0.0);
         // Dim: a stone wall (albedo 0.3) under it alone, at the room's key, stands well under
         // a mid-grey before the eye opens up (1 / (1.2 x 2^EV) per cd/m², Bevy's exposure).
         let on_screen = fill_brightness(0.0) * 0.3 / (1.2 * libm::exp2f(INDOOR_EV));
         assert!(on_screen < 0.18 / 8.0, "{on_screen}");
-        // Near grey: its red over its blue, linear, well under the torches' (1.0, 0.5, 0.08)
-        // sRGB, whose is some 140.
+        // Cool: bluer than it is red or green, against the fires' warm light, but a grey's
+        // blue, not a sky's (its red at least two fifths of its blue, linear).
         let c = FILL_COLOUR.to_linear();
-        assert!(c.red / c.blue < 1.5 && c.red / c.green < 1.2, "{c:?}");
+        assert!(
+            c.blue > c.green && c.green > c.red && c.red > 0.4 * c.blue,
+            "{c:?}"
+        );
     }
 }

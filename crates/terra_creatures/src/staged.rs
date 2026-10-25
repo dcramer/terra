@@ -593,6 +593,7 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             heat,
             logs,
             body: terra_world::fire::Body::Marched,
+            light: terra_world::fire::HEARTH_LIGHT,
         };
         match asked.burns_up {
             Some(up) => {

@@ -666,3 +666,45 @@ fn a_campfire_swells_slowly_by_up_to_a_fifth() {
         .fold(0.0f32, f32::max);
     assert!(fastest < 0.45, "slow: {fastest} a second");
 }
+
+#[test]
+fn a_torch_lights_yellower_than_a_campfire_and_each_fire_by_its_own_colour() {
+    // A pitch torch's light is less orange than wood's: more green to its red, and still warm
+    // (red over green over blue), so torchlit stone reads warm off-white, not rust.
+    let (t, h) = (TORCH_LIGHT.to_srgba(), HEARTH_LIGHT.to_srgba());
+    assert!(
+        t.green / t.red > h.green / h.red + 0.1,
+        "{t:?} against {h:?}"
+    );
+    assert!(t.red > t.green && t.green > t.blue && t.blue > 0.2, "{t:?}");
+    // Two kept fires, a campfire and a torch: each one's lights take its own colour.
+    let ground = Vec3::new(0.0, 2000.0, 0.0);
+    let fire = |x: f32| Blaze {
+        at: ground + Vec3::X * x,
+        tall: 0.6,
+        heat: 0.8,
+        seed: x * 0.1,
+        wide: 0.2,
+    };
+    let blazes = Blazes {
+        kept: vec![fire(0.0), fire(8.0)],
+        lights: vec![HEARTH_LIGHT, TORCH_LIGHT],
+        ..default()
+    };
+    let lit = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
+    let colour_by = |x: f32| {
+        lit.iter()
+            .filter(|l| l.kept && (l.at.x - x).abs() < 1.0)
+            .map(|l| l.color)
+            .collect::<Vec<_>>()
+    };
+    let (camp, torch) = (colour_by(0.0), colour_by(8.0));
+    assert!(
+        !camp.is_empty() && camp.iter().all(|&c| c == HEARTH_LIGHT),
+        "{camp:?}"
+    );
+    assert!(
+        !torch.is_empty() && torch.iter().all(|&c| c == TORCH_LIGHT),
+        "{torch:?}"
+    );
+}

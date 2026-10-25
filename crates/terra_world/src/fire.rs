@@ -90,6 +90,8 @@ pub struct Blazes {
     /// `Body::told`), in `kept`'s order.
     hearths: Vec<[Vec4; 2]>,
     bodies: Vec<f32>,
+    /// The kept fires' light colours (`Kindled::light`), in `kept`'s order.
+    lights: Vec<Color>,
 }
 
 impl Blazes {
@@ -112,6 +114,9 @@ pub struct Kindled {
     pub logs: Logs,
     /// How its flame body is drawn, its kind's choice (`hearth::Body`).
     pub body: Body,
+    /// The colour of its light, its fuel's: wood's orange (`HEARTH_LIGHT`), a pitch torch's
+    /// yellower white (`TORCH_LIGHT`).
+    pub light: Color,
 }
 
 /// How many blazes are drawn at most, by preset.
@@ -973,7 +978,7 @@ pub use matte::with_matte;
 pub use volume::BreathTier;
 
 pub use glow::{Glow, GlowMaterial};
-pub use light::{FireGlows, GLOWS};
+pub use light::{FireGlows, GLOWS, HEARTH_LIGHT, TORCH_LIGHT};
 
 mod exposure;
 #[cfg(test)]

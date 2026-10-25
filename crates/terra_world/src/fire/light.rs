@@ -80,7 +80,12 @@ const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// with the flame drawn lower over low logs they fell to 20-21 at 0.48, so more again
 /// (campfire low-lay round), but at 0.53 the grass round it went to hue 31, past the hearth
 /// test's 30, so 0.50 (campfire soot round).
-const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.50, 0.08);
+pub const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.50, 0.08);
+/// A pitch torch's light: hotter and yellower than wood's, about 2,700 K (Charity's table:
+/// #ffa957), as games white-balance torchlit stone to a warm off-white and keep orange for
+/// the hearth. At the campfire's (1.0, 0.5, 0.08) a dungeon's torchlit walls read one rust
+/// cast, R/G 2.5 to 4.5 (dungeon round 11, all three reviewers).
+pub const TORCH_LIGHT: Color = Color::srgb(1.0, 0.66, 0.32);
 /// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches.
 /// A campfire's 1.3 m at 0.9 heat gives 117,000 lm, about 9,000 cd: a real campfire's order
 /// (some 0.5 m² of flame at 10^4 cd/m²), so the flame stays the brightest thing by it, its
@@ -480,7 +485,8 @@ pub(super) fn strikes(
 }
 
 /// The lights the fires want now, the jets' first, then the kept fires', then each cell's.
-pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
+/// A breath's stream as three lights along it, at its start, middle and reach.
+fn jet_lights(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
     let (jet_lumens, jet_light) = jet_light(tier);
     // Marched, its stream's lights take no night stop, only its strike's: hung metres over the
     // ground, they lit it as one flat flood past the shoulder (vol10's review), where the
@@ -489,27 +495,8 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
         super::BreathTier::Cards => NIGHT_STOPS,
         super::BreathTier::Marched => 0.0,
     };
-    // Each cell: its weighted place, its weight, its weighted glow, its widest flame and its
-    // heaviest blaze's number.
-    let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32, f32, f32, (f32, f32))> =
-        std::collections::BTreeMap::new();
-    let hearths = blazes.kept.len().min(HEARTHS);
-    for blaze in blazes.all().skip(hearths) {
-        let weight = blaze.tall * blaze.heat;
-        let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
-        let cell = cells
-            .entry(key)
-            .or_insert((Vec3::ZERO, 0.0, 0.0, 0.0, (0.0, 0.0)));
-        cell.0 += blaze.at * weight;
-        cell.1 += weight;
-        cell.2 += glow(blaze, t) * weight;
-        cell.3 = cell.3.max(width(blaze));
-        if weight > cell.4.0 {
-            cell.4 = (weight, blaze.seed);
-        }
-    }
     let up = |at: Vec3| at.normalize_or(Vec3::Y);
-    let mut lit: Vec<Lit> = blazes
+    blazes
         .jets
         .iter()
         .filter(|jet| jet.on)
@@ -534,48 +521,80 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 }
             })
         })
-        .collect();
+        .collect()
+}
+
+pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
+    // Each cell: its weighted place, its weight, its weighted glow, its widest flame and its
+    // heaviest blaze's number.
+    let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32, f32, f32, (f32, f32))> =
+        std::collections::BTreeMap::new();
+    let hearths = blazes.kept.len().min(HEARTHS);
+    for blaze in blazes.all().skip(hearths) {
+        let weight = blaze.tall * blaze.heat;
+        let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
+        let cell = cells
+            .entry(key)
+            .or_insert((Vec3::ZERO, 0.0, 0.0, 0.0, (0.0, 0.0)));
+        cell.0 += blaze.at * weight;
+        cell.1 += weight;
+        cell.2 += glow(blaze, t) * weight;
+        cell.3 = cell.3.max(width(blaze));
+        if weight > cell.4.0 {
+            cell.4 = (weight, blaze.seed);
+        }
+    }
+    let up = |at: Vec3| at.normalize_or(Vec3::Y);
+    let mut lit = jet_lights(blazes, t, tier);
     // A hearth's light hangs in the body of its flames, clear of its logs' ends, so it lights
     // the ground round it and the faces of those sat by it, and its glow in the air (`fog`) is
     // a halo round the flames: at 0.8 of their height, by their tips, the glow was a ball
     // beside the fire (fire sheet review, 3/10); level with a 0.9 m teepee's ends the logs
     // were the brightest thing by it (lake film r6), which the campfire's 0.55 m stack clears.
     // Two lights, both shadowed: a key low in the pit and one at its flames' top (`HEARTH_TOP`).
-    lit.extend(blazes.kept.iter().take(hearths).flat_map(|blaze| {
-        let flicker = Flicker::of(width(blaze));
-        let glow = glow(blaze, t);
-        let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
-        let lumens = blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow;
-        // It sways up from where it hangs, never down: swayed a hand's breadth below, the
-        // shadowed light passed under a log's end, whose shadow ballooned for a fifth of a
-        // second into a hard black wedge over the ground (fire round 30, clip frames 198-208).
-        let swayed = sway(blaze.seed, t, flicker, reach);
-        let rise = swayed.dot(up(blaze.at));
-        let swayed = swayed + up(blaze.at) * (rise.abs() - rise);
-        let main = Lit {
-            at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_LIGHT_UP + swayed,
-            lumens: lumens * (1.0 - HEARTH_TOP),
-            color: HEARTH_LIGHT,
-            range: HEARTH_RANGE_M,
-            // Its flames as a disc light (`crate::falloff`), wider than they are
-            // (`HEARTH_SPREAD`): its fall-off levels off over the stones at its foot.
-            radius: width(blaze) * HEARTH_SPREAD,
-            glow,
-            kept: true,
-            night_stops: HEARTH_NIGHT_STOPS,
-            dusk_gain: 1.0,
-        };
-        let top = Lit {
-            lumens: lumens * HEARTH_TOP * HEARTH_TOP_GAIN,
-            at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_TOP_UP + swayed,
-            range: HEARTH_TOP_RANGE_M,
-            radius: width(blaze) * HEARTH_TOP_SPREAD,
-            night_stops: HEARTH_TOP_NIGHT_STOPS,
-            dusk_gain: HEARTH_TOP_DUSK,
-            ..main.clone()
-        };
-        [main, top]
-    }));
+    let colours = blazes.lights.iter().chain(std::iter::repeat(&HEARTH_LIGHT));
+    lit.extend(
+        blazes
+            .kept
+            .iter()
+            .zip(colours)
+            .take(hearths)
+            .flat_map(|(blaze, &colour)| {
+                let flicker = Flicker::of(width(blaze));
+                let glow = glow(blaze, t);
+                let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
+                let lumens = blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow;
+                // It sways up from where it hangs, never down: swayed a hand's breadth below, the
+                // shadowed light passed under a log's end, whose shadow ballooned for a fifth of a
+                // second into a hard black wedge over the ground (fire round 30, clip frames 198-208).
+                let swayed = sway(blaze.seed, t, flicker, reach);
+                let rise = swayed.dot(up(blaze.at));
+                let swayed = swayed + up(blaze.at) * (rise.abs() - rise);
+                let main = Lit {
+                    at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_LIGHT_UP + swayed,
+                    lumens: lumens * (1.0 - HEARTH_TOP),
+                    color: colour,
+                    range: HEARTH_RANGE_M,
+                    // Its flames as a disc light (`crate::falloff`), wider than they are
+                    // (`HEARTH_SPREAD`): its fall-off levels off over the stones at its foot.
+                    radius: width(blaze) * HEARTH_SPREAD,
+                    glow,
+                    kept: true,
+                    night_stops: HEARTH_NIGHT_STOPS,
+                    dusk_gain: 1.0,
+                };
+                let top = Lit {
+                    lumens: lumens * HEARTH_TOP * HEARTH_TOP_GAIN,
+                    at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_TOP_UP + swayed,
+                    range: HEARTH_TOP_RANGE_M,
+                    radius: width(blaze) * HEARTH_TOP_SPREAD,
+                    night_stops: HEARTH_TOP_NIGHT_STOPS,
+                    dusk_gain: HEARTH_TOP_DUSK,
+                    ..main.clone()
+                };
+                [main, top]
+            }),
+    );
     // Each gathering's light hangs out from the middle of all that burns, on the outside of
     // the walls its flames stand on: at the gathering's own middle, inside a burning building,
     // it lit the inner faces and none of the stone the eye sees (castle film r8).
