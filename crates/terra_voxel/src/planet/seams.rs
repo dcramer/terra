@@ -15,6 +15,16 @@
 //! keeping only the largest. A point inside the union then lies inside some box with room
 //! around it, and every box lies inside the union, so the field stays a bound that never
 //! says the ground is farther than it is (the crease rule, D53).
+//!
+//! Boxes each square to the ground at its own spot are turned a little from each other on
+//! a curved planet (a thousandth of a radian 2 m apart on a 2 km one), so their shared face
+//! is two faces crossing, a sliver of ground mm thick between them on one side. A turned
+//! box joins as the box square to the other's frame that it holds (`Room::square_to`), its
+//! faces then within 2 cm, and the bridge spans the sliver: digs it out, never more than
+//! the faces' touch past the two. Rooms turned too far (2 cm of lean) are not one face.
+//! Bridges are found when a box is dug, among the boxes and bridges within reach of it;
+//! one with a turned box is kept to the dug box's neighbourhood, so a trench dug box by box
+//! along a curved planet holds one bridge a seam, not ever more reaching back along it.
 
 use super::{Edit, box_distance};
 use glam::{Quat, Vec3};
@@ -23,6 +33,10 @@ use glam::{Quat, Vec3};
 const TOUCH_M: f32 = 0.01;
 /// The least overlap across a shared face that is a way through, not a crack.
 const LEAST_M: f32 = 0.02;
+/// How far inside a room turned a little from another's frame the box square to that frame
+/// may lie, at most: past it the two are turned too far for their faces to be one face.
+/// Rooms each square to the ground at its own spot lean 1 mm a metre apart on a 1 km planet.
+const MOST_INSET_M: f32 = 0.02;
 /// The most bridges one dig adds, so a dig never costs more than a bounded amount.
 const MOST_PER_DIG: usize = 64;
 
@@ -77,16 +91,58 @@ impl Room {
         }
     }
 
-    fn same_frame(&self, other: &Room) -> bool {
-        self.rotation.abs_diff_eq(other.rotation, 1e-6)
-            || self.rotation.abs_diff_eq(-other.rotation, 1e-6)
+    /// The largest box square to a frame that this room holds round its middle (`grow`
+    /// -1), or the least that holds it (`grow` 1), and how far that box's faces lie from its
+    /// own at most: for a room turned a little from the frame (as two rooms each square to
+    /// the ground at its own spot on a curved planet are), or none when it is turned so far
+    /// that its faces are not the frame's.
+    fn square_to(&self, rotation: Quat, grow: f32) -> Option<(Room, f32)> {
+        if self.rotation.abs_diff_eq(rotation, 1e-6) || self.rotation.abs_diff_eq(-rotation, 1e-6) {
+            return Some((*self, 0.0));
+        }
+        // Its axes in the frame's terms; off the diagonal is how far each leans into another.
+        let turn = glam::Mat3::from_quat(rotation.inverse() * self.rotation);
+        let lean = (0..3)
+            .flat_map(|i| (0..3).filter(move |&j| j != i).map(move |j| (i, j)))
+            .map(|(i, j)| turn.col(j)[i].abs())
+            .fold(0.0, f32::max);
+        // Along each axis a turned box reaches its own half size (times at most 1) and at
+        // most `lean` times each other; a box square to the frame of half sizes `inner` lies
+        // inside it when, along each of its axes, what those reach is no more than its own.
+        let half = (self.high - self.low) * 0.5;
+        let sized = Vec3::from_array(std::array::from_fn(|i| {
+            half[i] + grow * lean * (half.element_sum() - half[i])
+        }));
+        let moved = (half - sized).abs().max_element();
+        if moved > MOST_INSET_M || sized.min_element() <= 0.0 {
+            return None;
+        }
+        let middle = rotation.inverse() * (self.rotation * ((self.low + self.high) * 0.5));
+        let room = Room::new(
+            rotation,
+            middle - sized,
+            middle + sized,
+            self.after,
+            self.since,
+        );
+        Some((room, moved))
     }
 
-    /// Whether another room of its frame lies inside it.
+    /// Whether another room lies inside it (one turned a little, by the box that holds it).
     pub fn holds(&self, other: &Room) -> bool {
-        self.same_frame(other)
-            && (self.low - TOUCH_M).cmple(other.low).all()
-            && other.high.cmple(self.high + TOUCH_M).all()
+        other
+            .square_to(self.rotation, 1.0)
+            .is_some_and(|(other, _)| {
+                (self.low - TOUCH_M).cmple(other.low).all()
+                    && other.high.cmple(self.high + TOUCH_M).all()
+            })
+    }
+
+    /// Whether it may meet another room: their spheres touch.
+    fn near(&self, other: &Room) -> bool {
+        let (at, reach) = self.edit.centre_and_radius();
+        let (there, far) = other.edit.centre_and_radius();
+        at.distance(there) <= reach + far + TOUCH_M + MOST_INSET_M
     }
 
     /// Whether a sphere reaches inside it.
@@ -102,16 +158,19 @@ impl Room {
         box_distance(centre, middle, half, rotation) < radius
     }
 
-    /// The boxes it and another room of its frame hold together across a face they share,
-    /// dug after the given edit.
+    /// The boxes it and another room hold together across a face they share, in its frame,
+    /// dug after the given edit. A room turned a little from its frame is taken as the box
+    /// square to the frame inside it, so their faces meet within that box's inset too.
     pub fn bridges(&self, other: &Room, after: usize) -> Vec<Room> {
-        if !self.same_frame(other) {
+        let Some((other, inset)) = other.square_to(self.rotation, -1.0) else {
             return Vec::new();
-        }
+        };
+        let other = &other;
         let (low, high) = (self.low.max(other.low), self.high.min(other.high));
         let across = high - low;
+        let touch = TOUCH_M + inset;
         (0..3)
-            .filter(|&k| across[k] >= -TOUCH_M && (0..3).all(|j| j == k || across[j] >= LEAST_M))
+            .filter(|&k| across[k] >= -touch && (0..3).all(|j| j == k || across[j] >= LEAST_M))
             .map(|k| {
                 let (mut l, mut h) = (low, high);
                 l[k] = self.low[k].min(other.low[k]);
@@ -133,6 +192,13 @@ pub(super) fn join(
     refilled: impl Fn(usize, &Room) -> bool,
 ) {
     let after = fresh.after;
+    // Every bridge it makes is in its frame. One made with a room turned from that frame
+    // is kept to the room's own neighbourhood (a box its size again each way): rooms each
+    // turned a little from the last (a trench along a curved planet) would otherwise make
+    // bridges reaching back along it as far as the turns allow, a few more every dig, where
+    // one across each seam is all a way through needs.
+    let size = fresh.high - fresh.low;
+    let (near_low, near_high) = (fresh.low - size, fresh.high + size);
     let mut work = vec![fresh];
     let mut added = 0;
     while let Some(room) = work.pop() {
@@ -140,10 +206,23 @@ pub(super) fn join(
             .iter()
             .chain([&fresh])
             .chain(rooms.iter())
+            .filter(|other| room.near(other))
             .copied()
             .collect();
         for other in &others {
-            for bridge in room.bridges(other, after) {
+            let turned = other
+                .square_to(fresh.rotation, 1.0)
+                .is_some_and(|(_, by)| by > 0.0);
+            for mut bridge in room.bridges(other, after) {
+                if turned {
+                    bridge = Room::new(
+                        bridge.rotation,
+                        bridge.low.max(near_low),
+                        bridge.high.min(near_high),
+                        bridge.after,
+                        bridge.since,
+                    );
+                }
                 let held = |r: &Room| r.holds(&bridge);
                 if dug.iter().chain([&fresh]).chain(rooms.iter()).any(held)
                     || refilled(bridge.since, &bridge)
@@ -242,6 +321,106 @@ mod tests {
         let mut turned = room([1.0, 0.0, 0.0], [2.0, 1.0, 1.0], 1);
         turned.rotation = Quat::from_rotation_y(0.1);
         assert!(joined(&[a, turned]).is_empty());
+    }
+
+    /// A room as `room` makes it, turned about its middle by a rotation.
+    fn turned(low: [f32; 3], high: [f32; 3], index: usize, by: Quat) -> Room {
+        let (low, high) = (Vec3::from(low), Vec3::from(high));
+        let edit = Edit::DigBox {
+            centre: (low + high) * 0.5,
+            half: (high - low) * 0.5,
+            rotation: by,
+        };
+        Room::of(&edit, index).unwrap()
+    }
+
+    #[test]
+    fn rooms_turned_a_little_hold_a_box_across_their_faces_that_lies_inside_both() {
+        // Two thousandths of a radian about the face's own up: two rooms each square to the
+        // ground at its spot, 4 m apart on a 2 km planet.
+        let by = Quat::from_rotation_z(0.002);
+        let first = room([0.0, 0.0, 0.0], [2.0, 2.0, 2.0], 0);
+        let second = turned([2.0, 0.0, 0.0], [4.0, 2.0, 2.0], 1, by);
+        let rooms = joined(&[first, second]);
+        assert_eq!(rooms.len(), 1, "{:?}", spans(&rooms));
+        let bridge = rooms[0];
+        // Across the face and along it, from one room's far wall to the other's, within what
+        // the turn leans (2 mm a metre).
+        let corners = |r: &Room| [r.rotation * r.low, r.rotation * r.high];
+        let [low, high] = corners(&bridge);
+        assert!(low.abs_diff_eq(Vec3::ZERO, 0.02), "{low}");
+        assert!(high.x > 3.97 && high.y > 1.97 && high.z > 1.97, "{high}");
+        // Nowhere outside the two rooms by more than the faces' touch.
+        let outside = |p: Vec3| {
+            let d = |r: &Room| {
+                let Edit::DigBox {
+                    centre,
+                    half,
+                    rotation,
+                } = r.edit
+                else {
+                    unreachable!()
+                };
+                box_distance(p, centre, half, rotation)
+            };
+            d(&first).min(d(&second))
+        };
+        let steps = 8;
+        for i in 0..=steps {
+            for j in 0..=steps {
+                for k in 0..=steps {
+                    let t = Vec3::new(i as f32, j as f32, k as f32) / steps as f32;
+                    let p = bridge.rotation * (bridge.low + (bridge.high - bridge.low) * t);
+                    assert!(outside(p) < TOUCH_M + MOST_INSET_M, "{p} {}", outside(p));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_trench_of_rooms_each_turned_from_the_last_holds_a_bridge_a_seam() {
+        // Rooms 2 m long one after another, each a thousandth of a radian on from the last
+        // about the trench's side (square to a 2 km planet's ground at its spot): the field
+        // has room across every seam, and a dig costs a bridge, not ever more.
+        let n = 40;
+        let boxes: Vec<Room> = (0..n)
+            .map(|i| {
+                let x = 2.0 * i as f32;
+                let by = Quat::from_rotation_z(0.001 * i as f32);
+                turned([x, 0.0, 0.0], [x + 2.0, 2.0, 2.0], i, by)
+            })
+            .collect();
+        let rooms = joined(&boxes);
+        assert!(rooms.len() <= n, "{} bridges for {n} rooms", rooms.len());
+        for seam in 1..n {
+            let at = Vec3::new(2.0 * seam as f32, 1.0, 1.0);
+            let deepest = boxes
+                .iter()
+                .chain(rooms.iter())
+                .map(|r| {
+                    let Edit::DigBox {
+                        centre,
+                        half,
+                        rotation,
+                    } = r.edit
+                    else {
+                        unreachable!()
+                    };
+                    -box_distance(at, centre, half, rotation)
+                })
+                .fold(f32::MIN, f32::max);
+            assert!(deepest > 0.9, "{deepest} m of room at seam {seam}");
+        }
+    }
+
+    #[test]
+    fn a_fill_between_two_rooms_turned_a_little_keeps_their_bridge_out() {
+        let by = Quat::from_rotation_z(0.002);
+        let first = room([0.0, 0.0, 0.0], [2.0, 2.0, 2.0], 0);
+        let second = turned([2.0, 0.0, 0.0], [4.0, 2.0, 2.0], 2, by);
+        let mut rooms = Vec::new();
+        join(second, &[first], &mut rooms, |from, _| from < 1);
+        assert!(rooms.is_empty());
     }
 
     #[test]

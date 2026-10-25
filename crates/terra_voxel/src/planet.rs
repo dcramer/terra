@@ -725,6 +725,78 @@ mod tests {
     }
 
     #[test]
+    fn boxes_dug_apart_in_time_join_as_boxes_dug_together() {
+        let mut planet = planet();
+        let (ground, up) = surface(&planet);
+        let deep = ground - up * 30.0;
+        let rotation = Quat::from_rotation_arc(Vec3::Y, up);
+        let along = rotation * Vec3::X;
+        let dig = |planet: &mut VoxelPlanet<GeneratedPlanet>, side: f32| {
+            planet.apply(&Operation::DigBox {
+                centre: deep + along * side,
+                half: Vec3::ONE,
+                rotation,
+            });
+        };
+        // A room, then other digging and filling elsewhere, then the room beside it.
+        dig(&mut planet, -1.0);
+        for k in 0..20 {
+            let away = deep + along * (10.0 + k as f32);
+            planet.apply(&Operation::Dig {
+                centre: away,
+                radius: 0.5,
+            });
+            planet.apply(&Operation::Fill {
+                centre: away + up * 5.0,
+                radius: 0.3,
+                material: material::SOIL,
+            });
+        }
+        dig(&mut planet, 1.0);
+        for x in [-0.3, 0.0, 0.3] {
+            let d = planet.distance(deep + along * x);
+            assert!((d - 1.0).abs() < 0.01, "{d} m {x} m off the seam");
+        }
+    }
+
+    #[test]
+    fn boxes_each_dug_square_to_the_ground_at_its_own_spot_leave_no_wall() {
+        // As a builder lays rooms one by one along the ground: each square to the planet's
+        // up where it is, so on a curved planet two rooms side by side are turned a little
+        // (here 2 m apart round about 1970 m, a thousandth of a radian) and their shared
+        // face is two faces crossing at the middle, a sliver of ground between them above.
+        let mut planet = planet();
+        let first = Vec3::new(1.0, 2.0, 0.5).normalize();
+        let radius = 2000.0 + planet.field().height_m(first) - 30.0;
+        let toward = Quat::from_rotation_arc(Vec3::Y, first) * Vec3::X;
+        let axis = first.cross(toward).normalize();
+        let room = |metres: f32| {
+            let here = Quat::from_axis_angle(axis, metres / radius) * first;
+            (here * radius, Quat::from_rotation_arc(Vec3::Y, here))
+        };
+        for metres in [-1.0, 1.0] {
+            let (centre, rotation) = room(metres);
+            planet.apply(&Operation::DigBox {
+                centre,
+                half: Vec3::ONE,
+                rotation,
+            });
+        }
+        // Across the seam, high and low, the nearest ground is the roof or the floor.
+        let (middle, rotation) = room(0.0);
+        for height in [-0.5, 0.0, 0.5, 0.9] {
+            for x in [-0.2, 0.0, 0.2] {
+                let d = planet.distance(middle + rotation * Vec3::new(x, height, 0.0));
+                let want = 1.0 - f32::abs(height);
+                assert!(
+                    d > want - 0.02,
+                    "{d} m from the ground {x} m off the seam, {height} m up (want {want})"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn ground_filled_in_before_the_box_beside_it_is_dug_stays() {
         let mut planet = planet();
         let (ground, up) = surface(&planet);

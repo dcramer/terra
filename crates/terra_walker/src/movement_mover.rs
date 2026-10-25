@@ -152,30 +152,41 @@ fn a_dug_ledge_a_voxel_high_is_stepped_up_and_one_two_high_stops_the_body_at_its
 #[test]
 fn a_body_walks_over_where_two_dug_treads_meet() {
     use bevy::prelude::{Mat3, Quat};
-    let mut planet = planet();
-    let start = planet.ground_at(Vec3::Y * 2100.0);
-    let up = start.normalize();
-    let forward = Vec3::X.reject_from(up).normalize();
-    let side = forward.cross(up);
-    let rotation = Quat::from_mat3(&Mat3::from_cols(forward, up, side));
-    // Two treads dug side by side in one frame, as a builder lays them: 2-5 m ahead 0.6 m
-    // down, 5-8 m ahead 0.9 m down, each 3 m across. Where they meet, the ground over the
-    // first's floor is gone (more than a step: a wall there would stop the body).
-    for (from, deep) in [(2.0, 0.6), (5.0, 0.9)] {
-        planet.apply(&Operation::DigBox {
-            centre: start + forward * (from + 1.5) + up * ((1.0 - deep) * 0.5),
-            half: Vec3::new(1.5, (1.0 + deep) * 0.5, 1.5),
-            rotation,
-        });
+    // Two treads dug side by side, as a builder lays them: 2-5 m ahead 0.6 m down, 5-8 m
+    // ahead 0.9 m down, each 3 m across. Where they meet, the ground over the first's floor
+    // is gone (more than a step: a wall there would stop the body). Laid in one frame, or
+    // each square to the planet's up at its own spot (a few thousandths of a radian apart).
+    for own_frames in [false, true] {
+        let mut planet = planet();
+        let start = planet.ground_at(Vec3::Y * 2100.0);
+        let up = start.normalize();
+        let forward = Vec3::X.reject_from(up).normalize();
+        let side = forward.cross(up);
+        let rotation = Quat::from_mat3(&Mat3::from_cols(forward, up, side));
+        for (from, deep) in [(2.0, 0.6), (5.0, 0.9)] {
+            let middle = start + forward * (from + 1.5);
+            let (here, rotation) = match own_frames {
+                false => (up, rotation),
+                true => {
+                    let here = middle.normalize();
+                    (here, Quat::from_rotation_arc(up, here) * rotation)
+                }
+            };
+            planet.apply(&Operation::DigBox {
+                centre: middle + here * ((1.0 - deep) * 0.5),
+                half: Vec3::new(1.5, (1.0 + deep) * 0.5, 1.5),
+                rotation,
+            });
+        }
+        let trace = walk(&planet, start, 4.0);
+        let deepest = trace.iter().map(|t| t.2).fold(f32::MIN, f32::max);
+        assert!(deepest < 0.01, "{deepest} m into the ground");
+        let (end, _, _) = trace[trace.len() - 1];
+        let along = (end - start).dot(forward);
+        let height = end.length() - start.length();
+        assert!(
+            along > 7.0 && (height + 0.9).abs() < 0.05,
+            "own frames {own_frames}: stopped {along} m ahead, {height} m up"
+        );
     }
-    let trace = walk(&planet, start, 4.0);
-    let deepest = trace.iter().map(|t| t.2).fold(f32::MIN, f32::max);
-    assert!(deepest < 0.01, "{deepest} m into the ground");
-    let (end, _, _) = trace[trace.len() - 1];
-    let along = (end - start).dot(forward);
-    let height = end.length() - start.length();
-    assert!(
-        along > 7.0 && (height + 0.9).abs() < 0.05,
-        "stopped {along} m ahead, {height} m up"
-    );
 }
