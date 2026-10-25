@@ -260,7 +260,8 @@ pub struct Flicker {
 
 impl Flicker {
     /// A fire's flicker by how wide its flames are, metres: a torch's (0.1 m) a third deep at
-    /// about three puffs a second, a campfire's (0.7 m) 15% at 1.8, a house's (6 m) 7% at 0.6.
+    /// about two puffs a second (`TORCH_PUFFS`), a campfire's (0.7 m) 15% at 1.8, a house's
+    /// (6 m) 7% at 0.6.
     pub fn of(wide_m: f32) -> Flicker {
         let wide = wide_m.clamp(0.02, 40.0);
         let x = libm::log10f(wide);
@@ -275,7 +276,7 @@ impl Flicker {
         };
         Flicker {
             depth: depth.clamp(0.06, 0.35),
-            puffs_hz: (1.5 / libm::sqrtf(wide)).clamp(0.4, 3.0),
+            puffs_hz: (1.5 / libm::sqrtf(wide)).clamp(0.4, TORCH_PUFFS),
         }
     }
 }
@@ -285,13 +286,20 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 }
 
 /// A fire's flicker's tones, as many times its puff rate, and their shares of its depth: a
-/// sum, not a product, so its power sits round its puffs, about 1.3 times their rate on the
-/// whole (2.3 Hz for a campfire, as filmed ones flicker, 1.8-3.8 Hz:
+/// sum, not a product, so its power sits just above its puffs, about 1.7 times their rate on
+/// the whole (3 Hz for a campfire, its first tone 2.4, as filmed ones flicker, 1.8-3.8 Hz:
 /// research/2026-10-25-fire-motion.md). The product of Valheim's three sines (1, 0.564 and
 /// 0.758) put its power in their beats, at 0.32, 0.81, 1.19 and 2.32 Hz for a campfire, half
 /// of it under 1 Hz, and through the coals and the flame's foot the whole fire pumped in place
-/// at 0.8 Hz (fire round g14).
-const TONES: [(f32, f32); 3] = [(1.0, 0.45), (1.4, 0.33), (1.9, 0.22)];
+/// at 0.8 Hz (fire round g14). Its first tone at the puff rate itself (1, 1.4 and 1.9) became
+/// a baked campfire's whole flicker, 1.8 Hz, through the light on the logs and ground under its
+/// see-through flame (fire round g27); the flame's own puffing is its rising field's.
+const TONES: [(f32, f32); 3] = [(1.35, 0.45), (1.9, 0.33), (2.55, 0.22)];
+
+/// The most a fire puffs a second, a torch's: its light's first tone (`TONES`) at 3 Hz, a
+/// flicker over 0.3-0.4 s as The Witcher 3's torches (docs/fire.md), though by the pool-fire
+/// rate its 0.1 m flame would puff at 4.7.
+const TORCH_PUFFS: f32 = 2.2;
 
 /// How far each tone's phase wanders, radians, how many times a second its wander turns, and
 /// how far a fire's own rates are off another's, a share either way: so it never repeats and

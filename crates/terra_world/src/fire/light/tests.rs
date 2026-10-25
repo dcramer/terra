@@ -41,11 +41,13 @@ fn a_torch_flickers_deep_and_quick_a_campfire_less_a_house_fire_slow_and_shallow
             (mean - 1.0).abs() < flicker.depth * 0.15,
             "{flicker:?}: {mean}"
         );
-        // Puffing at about its rate: two turns a puff, give or take, and some noise.
-        let puffs = turns / 2.0;
+        // Flickering at about its first tone's rate, just above its puffs: two turns a
+        // flicker, give or take, and some noise.
+        let flickers = turns / 2.0;
+        let first = flicker.puffs_hz * TONES[0].0;
         assert!(
-            puffs > flicker.puffs_hz * 0.6 && puffs < flicker.puffs_hz * 2.0,
-            "{flicker:?}: {puffs} puffs a second"
+            flickers > first * 0.6 && flickers < first * 2.0,
+            "{flicker:?}: {flickers} flickers a second"
         );
     }
 }
@@ -86,9 +88,9 @@ fn spectrum(seed: f32, flicker: Flicker, under: f32) -> (f32, f32) {
 
 /// Filmed campfires flicker at 1.8-3.8 Hz (research/2026-10-25-fire-motion.md), and a light
 /// that swings slower makes the coals and the flame's foot pump with it in place: a campfire's
-/// flicker puts nearly all its power round 2-3 Hz, little under 1 Hz, and every fire's little
-/// under half its puff rate (fire round g14: the product of three sines put a third of it in
-/// beats at 0.32 and 0.81 Hz).
+/// flicker puts nearly all its power round 2.5-3.5 Hz, above its flame's own puffing (1.8 Hz,
+/// fire round g27), little under 1 Hz, and every fire's little under half its puff rate (fire
+/// round g14: the product of three sines put a third of it in beats at 0.32 and 0.81 Hz).
 #[test]
 fn a_fires_flicker_has_its_power_round_its_puffs_not_in_slow_beats() {
     for seed in [0.1, 0.37, 0.62, 0.9] {
@@ -98,7 +100,7 @@ fn a_fires_flicker_has_its_power_round_its_puffs_not_in_slow_beats() {
             "campfire {seed}: {slow} of its power under 1 Hz"
         );
         assert!(
-            (1.8..=3.2).contains(&centre),
+            (2.5..=3.6).contains(&centre),
             "campfire {seed}: centred at {centre} Hz"
         );
         for wide in [0.1, 6.0] {
