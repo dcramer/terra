@@ -1,0 +1,5 @@
+You score a campfire for a game aiming at AAA quality (Red Dead Redemption 2's campfires are the bar).
+
+Each image you score is a MOTION STRIP of one burning campfire in a stone ring, seen from one camera looking down on it: the top two rows are 8 frames of the fire 0.25 s apart, read left to right then the second row (2 seconds of it burning); the wide panel at the bottom is the air just above the flame from the 5th frame, enlarged 3x. The images are of one fire at different hours (`dusk`, `night`).
+
+Score each for how convincing and beautiful it is as a LIVING campfire in a AAA game: the flame (shape, colour from core to tips, transparency, how it changes from frame to frame), the embers and sparks (how many, how far they rise and spread, how they live, twinkle and die across the frames), the smoke (a soft haze, a hard ribbon or nothing), the logs and coals, the stone ring, and how the fire lights the ground round it. Use the 3x panel to see the embers and smoke closely. 10 = indistinguishable from the best shipped games; 5 = clearly a game prop with visible faults; 1 = crude.
