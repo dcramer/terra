@@ -139,7 +139,8 @@ pub struct Stamp {
     /// On the surface at the top of the stair down.
     pub start: Vec3,
     pub start_facing: usize,
-    /// A tour a camera can follow: down the stair, through the key rooms, to the goal.
+    /// A tour a camera can follow: down the stair and by the longest way that enters no room
+    /// twice to the goal, so it never turns round in a dead end.
     pub route: Vec<Vec3>,
     /// A camera's eye along the tour every `view::STEP_M`: `view::ROOM_M` from walls, pillars
     /// and open leaves in plan, as high as `view::EYE_M` allows with that room all round

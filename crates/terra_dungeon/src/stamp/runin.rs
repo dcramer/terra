@@ -2,7 +2,7 @@
 //! links that have doors, a chest against a wall of each room with loot, the mobs of each room
 //! on free floor away from its doors, torches on walls (a room's wall decorations first, a
 //! corridor's every third cell, about 30 lights in all), the start on the surface and a tour
-//! for a camera, from the stair down through the key rooms to the goal.
+//! for a camera, from the stair down by the longest way that enters no room twice to the goal.
 
 use super::modules::{Class, Look};
 use super::view::Room;
@@ -313,7 +313,11 @@ fn cell_point(layout: &Layout, c: usize) -> Vec3 {
 }
 
 /// The start at the stair's top on the surface, facing down it; then down the stair and room
-/// to room by the graph to each key room, the lock shut, and on to the goal.
+/// to room by the graph's longest way from the entrance to the goal that enters no room twice
+/// (`showcase`), so it walks the loop the key rooms hang from and never turns round in a dead
+/// end: round 20's films turned on the spot for 2-7 s at a key room's back wall, the tour
+/// walking in to the key and out the way it came. A key room is seen from its doorway as the
+/// tour passes the room it opens off, its key drawing the eye (`look::INTEREST_M`).
 fn tour(dungeon: &Dungeon, out: &mut Stamp) {
     let (layout, graph) = (&dungeon.layout, &dungeon.graph);
     let Some(stair) = layout.stairs.iter().find(|s| s.edge.is_none()) else {
@@ -337,70 +341,77 @@ fn tour(dungeon: &Dungeon, out: &mut Stamp) {
     if let Some((c, n)) = into {
         through(layout, c, n, &mut out.route);
     }
-    out.route.push(centre(layout, graph.entrance()));
-    let mut keys: Vec<usize> = (0..graph.rooms.len())
-        .filter(|&r| graph.rooms[r].role == Role::Puzzle)
-        .collect();
-    keys.sort_by_key(|&r| graph.rooms[r].depth);
-    let legs = keys
-        .iter()
-        .map(|&r| (r, true))
-        .chain([(graph.goal(), false)]);
-    let mut here = graph.entrance();
-    for (to, shut) in legs {
-        let Some(steps) = rooms_between(graph, here, to, shut) else {
-            continue;
-        };
-        for (e, a, b) in steps {
-            let cells = cells_between(layout, e, a, b);
-            for pair in cells.windows(2) {
-                through(layout, pair[0], pair[1], &mut out.route);
-                if !matches!(layout.cells[pair[1]].space, Space::Room(_)) {
-                    out.route.push(cell_point(layout, pair[1]));
-                }
+    let mut room = centre(layout, graph.entrance());
+    for (e, a, b) in showcase(graph, graph.entrance(), graph.goal()) {
+        let mut leg = Vec::new();
+        let cells = cells_between(layout, e, a, b);
+        for pair in cells.windows(2) {
+            through(layout, pair[0], pair[1], &mut leg);
+            if !matches!(layout.cells[pair[1]].space, Space::Room(_)) {
+                leg.push(cell_point(layout, pair[1]));
             }
-            out.route.push(centre(layout, b));
         }
-        here = to;
+        if let (Some(&from), Some(&to)) = (out.route.last(), leg.first()) {
+            out.route.push(across(from, room, to));
+        }
+        out.route.extend(leg);
+        room = centre(layout, b);
     }
+    out.route.push(room);
 }
 
-/// The rooms from one to another by the graph's ways, secrets left out and the lock shut if
-/// asked: each step's edge, from and to.
-fn rooms_between(
-    graph: &Graph,
-    from: usize,
-    to: usize,
-    shut: bool,
-) -> Option<Vec<(usize, usize, usize)>> {
-    let mut back: Vec<Option<(usize, usize)>> = vec![None; graph.rooms.len()];
-    let mut seen = vec![false; graph.rooms.len()];
-    seen[from] = true;
-    let mut queue = VecDeque::from([from]);
-    while let Some(r) = queue.pop_front() {
+/// Where the tour crosses a room, from where it came in to where it goes out: the room's
+/// middle, or short of it where the way out is beside the way in, so the way turns no
+/// sharper than a right angle there (on a circle through both, Thales) and never runs back
+/// along itself: round 21's tours went in to a room's middle and back out beside the door
+/// they came in by, 17° apart.
+fn across(from: Vec3, middle: Vec3, to: Vec3) -> Vec3 {
+    let between = (from + to) * 0.5;
+    let reach = (from.distance(to) * 0.5).min(between.distance(middle));
+    let toward = (middle - between).normalize_or_zero();
+    let at = between + toward * reach;
+    Vec3::new(at.x, middle.y, at.z)
+}
+
+/// The longest way by the graph's links from one room to another that enters no room twice,
+/// secrets left out, locks open and one-way doors only their way (a showcase walk, not a
+/// player's): each step's edge, from and to. Of ways as long, the first found. A graph is
+/// some 16 rooms, most of them dead ends, so every such way is tried.
+pub(crate) fn showcase(graph: &Graph, from: usize, to: usize) -> Vec<(usize, usize, usize)> {
+    fn walk(
+        graph: &Graph,
+        at: usize,
+        to: usize,
+        seen: &mut [bool],
+        way: &mut Vec<(usize, usize, usize)>,
+        best: &mut Option<Vec<(usize, usize, usize)>>,
+    ) {
+        if at == to {
+            if best.as_ref().is_none_or(|b| way.len() > b.len()) {
+                *best = Some(way.clone());
+            }
+            return;
+        }
         for (e, edge) in graph.edges.iter().enumerate() {
-            let locked = matches!(edge.link, Link::Locked(_));
-            if edge.link == Link::Secret || (shut && locked) {
+            if edge.link == Link::Secret {
                 continue;
             }
             for (a, b) in edge.ways() {
-                if a == r && !seen[b] {
+                if a == at && !seen[b] {
                     seen[b] = true;
-                    back[b] = Some((e, a));
-                    queue.push_back(b);
+                    way.push((e, a, b));
+                    walk(graph, b, to, seen, way, best);
+                    way.pop();
+                    seen[b] = false;
                 }
             }
         }
     }
-    let mut steps = Vec::new();
-    let mut r = to;
-    while r != from {
-        let (e, a) = back[r]?;
-        steps.push((e, a, r));
-        r = a;
-    }
-    steps.reverse();
-    Some(steps)
+    let mut seen = vec![false; graph.rooms.len()];
+    seen[from] = true;
+    let mut best = None;
+    walk(graph, from, to, &mut seen, &mut Vec::new(), &mut best);
+    best.unwrap_or_default()
 }
 
 /// From one cell into the next of another space, through the doorway between them: a step
@@ -516,6 +527,25 @@ fn walked(map: &Map, room: &Room, route: &[Vec3]) -> Vec<Vec3> {
                 out.push(from);
                 i = far;
             }
+        }
+        out.push(b);
+    }
+    unfolded(map, room, out)
+}
+
+/// The walked tour with no point where it folds back on itself, turning more than 120°: a
+/// point settled past the next, or a walk round one leg starting back along the last
+/// (round 21, a crypt's doorway: a metre on and back), left out where the leg past it keeps
+/// its room, or is clear at least.
+fn unfolded(map: &Map, room: &Room, route: Vec<Vec3>) -> Vec<Vec3> {
+    let mut out: Vec<Vec3> = Vec::with_capacity(route.len());
+    for b in route {
+        while let [.., p, m] = out[..] {
+            let back = (m - p).normalize_or_zero().dot((b - m).normalize_or_zero()) < -0.5;
+            if !(back && out.len() > 2 && (room.roomy(p, b) || sight(map, p, b))) {
+                break;
+            }
+            out.pop();
         }
         out.push(b);
     }

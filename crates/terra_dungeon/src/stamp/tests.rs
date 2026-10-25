@@ -491,6 +491,12 @@ struct Looked {
     metre_frame: usize,
     /// The nearest wall in any frame, in metres (up to 1.5).
     nearest: f32,
+    /// Eyes back within `RETRACE_M` of where the eye stood more than `RETRACE_ALONG_M` of the
+    /// view before: the tour gone into a dead end and out the way it came, which a film cuts
+    /// out, turning on the spot where it cut (round 20's mine and keep, 2-7 s at a wall).
+    retraced: usize,
+    /// Looks where the way turns back on itself, its 4 m behind and 4 m on over 120° apart.
+    turned_back: usize,
     /// The steepest the look pitches, up or down, in radians.
     pitch: f32,
     /// How long the dolly takes from the first look measured to the last, at the stamp's
@@ -525,6 +531,10 @@ fn frame_rays(d: Vec3) -> impl Iterator<Item = Vec3> {
 const FRAME_RAD: f32 = 0.7;
 /// A wall at arm's length or so.
 const NEAR_M: f32 = 1.5;
+/// An eye this near where the eye stood over `RETRACE_ALONG_M` of the view before has come
+/// back the way it went: round 20's tour tool cut such a loop out, as a film would.
+const RETRACE_M: f32 = 0.5;
+const RETRACE_ALONG_M: f32 = 2.0;
 
 /// The look from each eye of one stamp's view, past the surface leg and short of where a
 /// film stops (3.5 m from the goal in plan): how often the way on is out of frame and the
@@ -612,6 +622,9 @@ fn check_look(theme: &Theme, dungeon: &Dungeon) -> Looked {
         let lost = d.angle_between(on) > FRAME_RAD;
         let behind = view[i] - view[i.saturating_sub(lead)];
         let back = behind.length() > 0.5 && behind.angle_between(on) > 2.1;
+        seen.turned_back += back as usize;
+        let gone_by = i.saturating_sub((RETRACE_ALONG_M / STEP_M) as usize);
+        seen.retraced += (0..gone_by).any(|j| view[j].distance(view[i]) < RETRACE_M) as usize;
         seen.lost += (lost && !back) as usize;
         run = if lost { run + STEP_M } else { 0.0 };
         seen.lost_m = seen.lost_m.max(run);
@@ -672,15 +685,29 @@ fn the_camera_looks_down_the_way_ahead_not_at_walls() {
         let metre_frame = sum(&|s| s.metre_frame as f32) / samples;
         let nearest = seen.iter().map(|s| s.nearest).fold(1.5, f32::min);
         let pitch = most(&|s| s.pitch);
+        let retraced = sum(&|s| s.retraced as f32) / samples;
+        let turned_back = sum(&|s| s.turned_back as f32) / samples;
         let slower = sum(&|s| s.seconds) / sum(&|s| s.plain_seconds);
         println!(
-            "{}: turning {:.0}°/s over {PAN_S} s at most at the tour's pace ({:.0} at 2.5 m/s), the tour {slower:.2} times as long; pitched {:.0}° at most; a wall in frame within {WALL_M} m {:.2}% of frames, within 1 m {:.2}%, {nearest:.2} m at the nearest",
+            "{}: turning {:.0}°/s over {PAN_S} s at most at the tour's pace ({:.0} at 2.5 m/s), the tour {slower:.2} times as long; pitched {:.0}° at most; a wall in frame within {WALL_M} m {:.2}% of frames, within 1 m {:.2}%, {nearest:.2} m at the nearest; back where it was {:.2}% of eyes, the way turning back on itself {:.2}%",
             theme.name,
             pan.to_degrees(),
             plain_pan.to_degrees(),
             pitch.to_degrees(),
             100.0 * walled_frame,
-            100.0 * metre_frame
+            100.0 * metre_frame,
+            100.0 * retraced,
+            100.0 * turned_back
+        );
+        // A showcase walk never goes into a dead end it must turn round in (round 20's films
+        // turned on the spot at a key room's back wall for 2-7 s; 14/14/28% of eyes came
+        // back where they had been, crypt/mine/keep), and turns sharply round only where a
+        // room's way out is beside its way in, short of its middle (4.7/4.3/6.1% of looks
+        // with the way turning back on itself then, 0.27/0.39/0.27 round 21).
+        assert!(
+            retraced == 0.0 && turned_back < 0.01,
+            "{}: back where it was in {retraced} of eyes, the way turning back {turned_back}",
+            theme.name
         );
         println!(
             "{}: {} tours, {samples} looks: the way on out of frame {:.2}% but turning round ({lost_m:.1} m at most), facing a wall within {NEAR_M} m {:.2}% ({:.2}), open {open:.2} m down the look on average ({naive_open:.2} looking at the way 4 m on), turning {:.0}° a metre at most, the goal {:.0}° off at the stop at most",
