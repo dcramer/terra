@@ -18,6 +18,10 @@ struct HeatHaze {
     count: u32,
     aspect: f32,
     pad: f32,
+    // The two octaves' cells a half width and shares of the bend (haze.rs `OCTAVES`, chosen so
+    // the bend never folds the picture), and where the bend fades across a column (`SIDE`).
+    octaves: vec4<f32>,
+    side: vec4<f32>,
 }
 
 @group(0) @binding(0) var screen: texture_2d<f32>;
@@ -65,20 +69,22 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
         let high = max((c.y - c.z) / w, 1e-3);
         // The column widens as the hot air mixes in, near twice as wide by its top.
         let across = (in.uv.x - c.x) * haze.aspect / w / (1.0 + 0.8 * clamp(up / high, 0.0, 1.0));
-        let side = 1.0 - smoothstep(0.35, 1.0, abs(across));
+        let side = 1.0 - smoothstep(haze.side.x, haze.side.y, abs(across));
         let rise = smoothstep(0.0, 0.12 * high, up) * (1.0 - smoothstep(0.4 * high, high, up));
         let mask = side * rise;
         if (mask <= 0.0) {
             continue;
         }
-        // The air rises about four half widths a second, its cells a third and a seventh of
-        // a half width, the small ones faster, swaying as they go.
+        // The air rises about four half widths a second, the small cells faster, swaying as
+        // they go. At a third and a seventh of a half width the cells were so steep the bend
+        // folded the picture into straight seams (haze.rs `OCTAVES`).
         let q = vec2(across, up) + l.y * 17.0;
         let t = haze.time;
-        let big = vec2(noise(q * 3.0 + vec2(0.0, -t * 4.0 * 3.0)), noise(q * 3.0 + vec2(5.2, -t * 4.0 * 3.0 + 1.3)));
-        let small = vec2(noise(q * 7.0 + vec2(1.7, -t * 6.0 * 7.0)), noise(q * 7.0 + vec2(9.4, -t * 6.0 * 7.0 + 2.1)));
+        let o = haze.octaves;
+        let big = vec2(noise(q * o.x + vec2(0.0, -t * 4.0 * o.x)), noise(q * o.x + vec2(5.2, -t * 4.0 * o.x + 1.3)));
+        let small = vec2(noise(q * o.z + vec2(1.7, -t * 6.0 * o.z)), noise(q * o.z + vec2(9.4, -t * 6.0 * o.z + 2.1)));
         // Hot air bends the light across more than along its rise.
-        let bend = (0.65 * big + 0.35 * small) * vec2(1.0, 0.6);
+        let bend = (o.y * big + o.w * small) * vec2(1.0, 0.6);
         offset += bend * l.x * w * mask * vec2(1.0 / haze.aspect, 1.0);
     }
     if (all(offset == vec2(0.0))) {

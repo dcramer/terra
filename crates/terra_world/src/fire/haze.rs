@@ -33,6 +33,18 @@ const COLUMN: (f32, f32) = (0.15, 2.0);
 /// it (fire round 23); at 0.25 it read as marbled water.
 const BEND: f32 = 0.15;
 
+/// The hot air's two octaves of noise (`fire_haze.wesl`): each its cells a half width and its
+/// share of the bend. The haze maps each pixel to where it is seen from; where that map's slope
+/// reaches a pixel a pixel it folds, and the picture tears along a straight line, value noise
+/// being steepest along the middles of its cells. At 3 and 7 cells a half width it tore the
+/// flames' tips and the air over them in straight seams, a box of the picture shifted against
+/// the rest (campfire round m3); at 1.5 and 2.5 it never folds
+/// (`the_haze_never_folds_the_picture`).
+const OCTAVES: [(f32, f32); 2] = [(1.5, 0.7), (2.5, 0.3)];
+
+/// Where the bend fades out across a column, from and to, in its half widths from the middle.
+const SIDE: (f32, f32) = (0.35, 1.0);
+
 /// The haze's columns on the screen, as the pass's uniform (the shader's `HeatHaze`).
 #[derive(Component, ExtractComponent, Clone, Copy, ShaderType, Default, Debug)]
 #[extract_app(RenderApp)]
@@ -46,6 +58,9 @@ pub struct HeatHaze {
     count: u32,
     aspect: f32,
     pad: f32,
+    /// The octaves' cells a half width and shares (`OCTAVES`), and where the side fades (`SIDE`).
+    octaves: Vec4,
+    side: Vec4,
 }
 
 impl FullscreenMaterial for HeatHaze {
@@ -142,6 +157,8 @@ fn columns(
         let mut next = HeatHaze {
             time: time.elapsed_secs_wrapped(),
             aspect: lens.aspect,
+            octaves: Vec4::new(OCTAVES[0].0, OCTAVES[0].1, OCTAVES[1].0, OCTAVES[1].1),
+            side: Vec4::new(SIDE.0, SIDE.1, 0.0, 0.0),
             ..default()
         };
         for (_, blaze) in near {
@@ -213,6 +230,27 @@ mod tests {
         let near = column(&l, &fire(Vec3::new(0.0, 0.0, -3.0))).unwrap().0;
         let far = column(&l, &fire(Vec3::new(0.0, 0.0, -12.0))).unwrap().0;
         assert!(near.w > 3.0 * far.w, "{near} {far}");
+    }
+
+    /// Across a column, the haze's map moves a pixel by its noise times the side's fade, and
+    /// by the fade's own slope times the noise: together under one pixel a pixel, so it never
+    /// folds the picture into a seam. Value noise of lattice values -1 to 1 blended by a
+    /// smoothstep is at its steepest 1.5 x 2 a cell; the octaves' shares make the noise at
+    /// most 1. Along the rise the bend is 0.6 of this, its ramp longer than the side's.
+    #[test]
+    fn the_haze_never_folds_the_picture() {
+        const NOISE_SLOPE: f32 = 3.0;
+        let shares: f32 = OCTAVES.iter().map(|o| o.1).sum();
+        assert!((shares - 1.0).abs() < 1e-4, "{shares}");
+        let cells: f32 = OCTAVES.iter().map(|(k, s)| k * s).sum();
+        let fade = |a: f32| 1.0 - terra_gen::smoothstep(SIDE.0, SIDE.1, a);
+        let mut worst = 0.0f32;
+        for i in 0..=1400 {
+            let a = i as f32 / 1000.0;
+            let slope = (fade(a + 1e-3) - fade(a)).abs() / 1e-3;
+            worst = worst.max(BEND * (NOISE_SLOPE * cells * fade(a) + slope));
+        }
+        assert!(worst < 1.0, "the haze folds: {worst} a pixel a pixel");
     }
 
     #[test]
