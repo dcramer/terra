@@ -30,6 +30,16 @@ const TORCH_FIRE: Kindled = Kindled {
 };
 /// A brazier's fire burns in its bowl, so far under the light's point.
 const BRAZIER_DROP_M: f32 = 0.5;
+/// A fire bowl by the goal: the campfire's stones and logs at this size on a pillar's top.
+const BOWL_SCALE: f32 = 0.45;
+/// Its flames: the campfire's at the bowl's size, about twice a torch's light.
+const BOWL_FIRE: Kindled = Kindled {
+    tall: 0.7,
+    wide: 0.32,
+    heat: 0.9,
+    logs: terra_world::fire::Logs::CAMPFIRE.below(0.08),
+    body: terra_world::fire::Body::Marched,
+};
 /// The studded leaf's model, hinged at its origin and reaching along +X: so wide and so high.
 const LEAF_M: Vec2 = Vec2::new(0.894, 1.939);
 
@@ -130,6 +140,14 @@ pub(super) fn put_up(
                         terra_survival::props::CAMPFIRE,
                         Transform::from_translation(light.at - Vec3::Y * BRAZIER_DROP_M),
                     ));
+                }
+                LightKind::Bowl => {
+                    // The fire's logs are laid by its scale, as the model's are.
+                    let placed = Transform::from_translation(light.at)
+                        .with_rotation(facing(light.facing))
+                        .with_scale(Vec3::splat(BOWL_SCALE));
+                    inside.spawn((Name::new("Fire bowl"), scene(&assets, CAMPFIRE), placed));
+                    inside.spawn((Name::new("Fire bowl's fire"), BOWL_FIRE, placed));
                 }
                 LightKind::Campfire => {
                     inside.spawn((

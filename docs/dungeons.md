@@ -66,7 +66,7 @@ What the world lays, as plain data in a local frame (metres, x east, y up, z sou
 - **Digs**: a terrain box a level, one under its basins and shores and one up the entrance well, each to 0.03 m under the floor's top (creatures stand on the ground, not on cubes).
 - **Shell** in the theme's wall, floor and trim kinds: floor and ceiling slabs, a wall a cube thick where placement put one, doorways and stair ways as `Fill::Open` cubes so each space stays a closed room to building's light, stairs of 8 risers over 6 m, a parapet and lintel at the surface.
 - **Modules** to cubes and props by words in their names (pillar, alcove, rubble, basin, shore, runner, decor, ...); an unknown name is plain floor.
-- **Run-in**: the graph's mobs at free spots away from doors, a chest a room with its loot, the goal object and the keys at their features (dungeon objects, not items), studded leaves at locked and one-way doors, up to 30 torches and braziers, the start on the surface and a tour of floor points to the goal.
+- **Run-in**: the graph's mobs at free spots away from doors, a chest a room with its loot, the goal object on its plinth between two fire bowls on stone pillars, so it is the brightest thing in its room, and the keys at their features (dungeon objects, not items), studded leaves at locked and one-way doors, up to 30 torches and braziers, the start on the surface and a tour of floor points to the goal.
 - **Promises** (tested over 200 seeds): a walker stepping up a cube and down two reaches every object, chest, mob and fire from the start; air never leaves its space but up the entrance well; every model exists.
 
 ## In the sandbox

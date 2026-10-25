@@ -167,6 +167,7 @@ pub(super) fn lay(
                 };
                 out.objects
                     .push(object(name, ObjectRole::Goal, f, 1.0, model));
+                goal_fires(f, cell, kinds, out);
             }
             Class::Key => key(f, theme, kinds, out),
             Class::Rest => out.lights.push(Light {
@@ -176,6 +177,23 @@ pub(super) fn lay(
             }),
             _ => props(f, cell, look.class, &mut out.props),
         }
+    }
+}
+
+/// A fire bowl either side of the goal's plinth, a little behind it, each on a stone pillar
+/// a metre high: the goal is the room's brightest thing, lit from both sides (a dark goal
+/// room was the worst still of every theme, round 6). None stands in front of a doorway.
+fn goal_fires(f: Frame, cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
+    for (x, side) in [(1, 3), (4, 1)] {
+        if matches!(cell.sides[f.side(side)], Side::Door(_) | Side::Way) {
+            continue;
+        }
+        f.fill(&mut out.ops, [x, 0, 2], [x, 1, 2], solid(kinds.trim));
+        out.lights.push(Light {
+            at: f.point(x as f32 + 0.5, 2.0, 2.5),
+            kind: LightKind::Bowl,
+            facing: f.side(2),
+        });
     }
 }
 

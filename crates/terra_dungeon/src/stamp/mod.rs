@@ -67,6 +67,8 @@ pub enum LightKind {
     Brazier,
     /// The rest room's fire, on the floor.
     Campfire,
+    /// A fire bowl on a pillar's top, where `at` is: the goal's pair.
+    Bowl,
 }
 
 #[derive(Clone, Debug)]
