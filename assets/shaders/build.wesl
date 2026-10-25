@@ -813,6 +813,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // The height's pull held within bounds, so a deep-grained timber's ridges or a
         // stone's proud tops slow the moss rather than stopping it.
         var moss = smoothstep(0.0, 0.25, field * 1.75 - 0.72 - clamp(rel * 3.0, -0.4, 0.4) + ragged);
+        if timber {
+            // On logs moss grows as thin fibrous tufts along the grain, in the grooves and the
+            // checks first, its edge thinning out to strands rather than ending: fibres
+            // stretched along the logs (level, along the wall) cut its want, over a wide edge.
+            let along = dot(wp, normalize(cross(vec3(0.0, 1.0, 0.0), N) + vec3(1e-4, 0.0, 0.0)));
+            let fibre = noise21(vec2(along * 7.0, wp.y * 70.0)) * 0.55 + noise21(vec2(along * 19.0, wp.y * 190.0)) * 0.45;
+            let want = field * 1.6 - 0.62 - clamp(rel * 4.0, -0.5, 0.5) + (fibre - 0.5) * 0.9 + ragged * 0.4;
+            moss = smoothstep(0.0, 0.55, want) * (0.55 + 0.45 * smoothstep(0.3, 0.7, fibre));
+        }
         if roof {
             let reach = -0.45 + 0.6 * clamp(weather.a.z, 0.0, 1.0);
             moss = smoothstep(-0.04, 0.06, reach - rel + ragged * 0.15);
