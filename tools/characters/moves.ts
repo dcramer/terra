@@ -45,7 +45,7 @@ const { values: opt } = parseArgs({
     hold: { type: "string", multiple: true, default: ["socket.hand.R=assets/models/held/arming_sword.glb", "socket.hand.L=assets/models/held/round_shield.glb"] },
     // Bends laid over the clips, BONE=x,y,z degrees about the body's axes (staged bends); none in the prototype.
     bend: { type: "string", multiple: true, default: [] },
-    also: { type: "string", default: "Keyed_Guard,Fight_Guard,Fight_Strafe_L,Fight_Strafe_R,Walk_Loop,Idle_Loop" },
+    also: { type: "string", default: "Keyed_Guard,Fight_Guard,Fight_Strafe_L,Fight_Strafe_R,Fight_Walk,Jump_Loop" },
     // The guard every blow starts and ends at: the set's own `guard` by default (D450), else
     // Fight_Guard for a set that names none (clip.ts's scratch sets).
     guard: { type: "string" },

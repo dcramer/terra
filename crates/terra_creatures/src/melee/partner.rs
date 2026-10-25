@@ -209,7 +209,7 @@ pub fn think(
                 fighter.guard_s = None;
                 if far > CLOSE_M {
                     staged.tell_go(Some(foe - toward * (CLOSE_M - 0.2)), WALK_MPS);
-                    partner.show(&mut staged, "Walk_Loop", 1.0, false);
+                    partner.show(&mut staged, super::WALK, 1.0, false);
                 } else {
                     partner.to(Beat::Guard);
                 }

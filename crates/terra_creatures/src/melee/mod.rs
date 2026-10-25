@@ -54,6 +54,9 @@ const DOWN_S: f32 = 3.0;
 const SWORD: &str = "models/held/arming_sword.glb";
 const SHIELD: &str = "models/held/round_shield.glb";
 const HAND_L: &str = "socket.hand.L";
+/// The walk a drawn body goes forward and back in: the library's walk with both arms held as
+/// the guard holds them (D458), so the sword and shield stay out of the legs.
+const WALK: &str = "Fight_Walk";
 
 /// The move set, read once.
 #[derive(Resource)]
@@ -553,7 +556,7 @@ fn walk_clip(
         };
         (clip, side.abs())
     } else {
-        ("Walk_Loop", forward)
+        (WALK, forward)
     };
     // A stride at the pace it goes, so the feet keep to the ground; back is a walk played
     // backwards, there being no clip of its own.
@@ -656,5 +659,40 @@ mod tests {
             press(Action::Use, 4.0, None),
             (Some("slash".to_string()), 0.0)
         );
+    }
+
+    /// The clip a drawn body shows going so fast this way, as `walk_clip` picks it.
+    fn walking(velocity: Vec3) -> String {
+        let mut drawn = Drawn {
+            lock: None,
+            looks: Vec::new(),
+            showing: None,
+        };
+        let mut motion = Motion::facing(Vec3::NEG_Z);
+        motion.on_ground = true;
+        motion.velocity = velocity;
+        let mut acting = Acting::default();
+        walk_clip(
+            &mut drawn,
+            &mut acting,
+            &motion,
+            Vec3::Y,
+            "Keyed_Guard",
+            None,
+            |_| Some(1.1),
+        );
+        drawn.showing.unwrap().0
+    }
+
+    #[test]
+    fn drawn_a_body_walks_with_the_guards_arms_and_never_the_bare_walk() {
+        // Forward and back, the walk with the arms held at the guard (D458); standing, the
+        // guard itself; the library's walk, its arms swinging the sword through the legs, never.
+        assert_eq!(walking(Vec3::NEG_Z), WALK);
+        assert_eq!(walking(Vec3::Z), WALK);
+        assert_eq!(walking(Vec3::ZERO), "Keyed_Guard");
+        let clips = terra_walker::model_files::json(terra_walker::figure::CLIPS);
+        let clips = terra_walker::model_files::animations(&clips);
+        assert!(clips.iter().any(|c| c == WALK), "fight.glb has no {WALK}");
     }
 }

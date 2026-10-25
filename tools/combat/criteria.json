@@ -1206,43 +1206,43 @@
   {
    "measurable": true,
    "cost": "cheap",
-   "id": "move.Walk_Loop.held",
+   "id": "move.Fight_Walk.held",
    "noticed": 3,
-   "notice": "the sword or shield passes through the body in Walk_Loop",
+   "notice": "the sword or shield passes through the body walking drawn (Fight_Walk)",
    "bar": {
     "at_most": 1
    },
    "unit": "cm",
-   "source": "D447 (moves.ts HELD_CM)",
+   "source": "D447 (moves.ts HELD_CM), D458",
    "check": {
     "by": "moves",
-    "row": "Walk_Loop",
+    "row": "Fight_Walk",
     "measure": "held_cm"
    }
   },
   {
    "measurable": true,
    "cost": "cheap",
-   "id": "move.Walk_Loop.hands",
+   "id": "move.Fight_Walk.hands",
    "noticed": 2,
-   "notice": "an arm sinks into the body in Walk_Loop",
+   "notice": "an arm sinks into the body walking drawn (Fight_Walk)",
    "bar": {
     "at_most": 2
    },
    "unit": "cm",
-   "source": "D447 (moves.ts HAND_CM)",
+   "source": "D447 (moves.ts HAND_CM), D458",
    "check": {
     "by": "moves",
-    "row": "Walk_Loop",
+    "row": "Fight_Walk",
     "measure": "hands_cm"
    }
   },
   {
    "measurable": true,
    "cost": "cheap",
-   "id": "move.Idle_Loop.held",
+   "id": "move.Jump_Loop.held",
    "noticed": 3,
-   "notice": "the sword or shield passes through the body in Idle_Loop",
+   "notice": "the sword or shield passes through the body in the air drawn (Jump_Loop)",
    "bar": {
     "at_most": 1
    },
@@ -1250,16 +1250,16 @@
    "source": "D447 (moves.ts HELD_CM)",
    "check": {
     "by": "moves",
-    "row": "Idle_Loop",
+    "row": "Jump_Loop",
     "measure": "held_cm"
    }
   },
   {
    "measurable": true,
    "cost": "cheap",
-   "id": "move.Idle_Loop.hands",
+   "id": "move.Jump_Loop.hands",
    "noticed": 2,
-   "notice": "an arm sinks into the body in Idle_Loop",
+   "notice": "an arm sinks into the body in the air drawn (Jump_Loop)",
    "bar": {
     "at_most": 2
    },
@@ -1267,7 +1267,7 @@
    "source": "D447 (moves.ts HAND_CM)",
    "check": {
     "by": "moves",
-    "row": "Idle_Loop",
+    "row": "Jump_Loop",
     "measure": "hands_cm"
    }
   },

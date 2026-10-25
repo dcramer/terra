@@ -865,5 +865,18 @@
         }
       }
     ]
+  },
+  "Fight_Walk": {
+    "of": "Walk_Loop",
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l"
+      },
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_r"
+      }
+    ]
   }
 }
