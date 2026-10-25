@@ -11,7 +11,7 @@ use crate::interact::{CanInteract, Interactable};
 use crate::storage::Storage;
 use bevy::{
     asset::RenderAssetUsages,
-    gltf::{GltfAssetLabel, GltfLoaderSettings},
+    gltf::GltfAssetLabel,
     light::NotShadowCaster,
     mesh::Indices,
     platform::collections::HashMap,
@@ -422,7 +422,10 @@ const GLOW_SCALE: f32 = 8.0;
 /// A textured part's material: its own textures, loaded from its file through Bevy's glTF
 /// loader by their labels, and its own factors. Loading them that way gives them mipmaps
 /// and filtering (`terra_world::mipmaps`), and each texture is loaded once however many
-/// pieces draw it.
+/// pieces draw it. The file is loaded whole, with Bevy's default settings, though only its
+/// textures are wanted here: Bevy loads a file once for every request made while it loads,
+/// as the first asked, so a staged campfire asked for then (the fire sheet's, frame 2) was
+/// given this load's model, and with its meshes left out it stood with nothing to draw.
 fn textured_material(
     path: &str,
     textures: &Textures,
@@ -430,16 +433,7 @@ fn textured_material(
     assets: &AssetServer,
 ) -> StandardMaterial {
     let load = |index: usize| -> Handle<Image> {
-        assets
-            .load_builder()
-            .with_settings(|settings: &mut GltfLoaderSettings| {
-                // Only its textures are wanted: the meshes are made here.
-                settings.load_meshes = RenderAssetUsages::empty();
-                settings.load_cameras = false;
-                settings.load_lights = false;
-                settings.load_animations = false;
-            })
-            .load(GltfAssetLabel::Texture(index).from_asset(path.to_string()))
+        assets.load(GltfAssetLabel::Texture(index).from_asset(path.to_string()))
     };
     let colour = load(textures.colour);
     as_prop(&StandardMaterial {
@@ -820,5 +814,72 @@ mod tests {
         assert_eq!(drawn.emissive_texture, Some(map.clone()));
         assert_eq!(drawn.metallic_roughness_texture, Some(map));
         assert_eq!(drawn.perceptual_roughness, 0.95);
+    }
+
+    #[test]
+    fn a_model_loaded_whole_while_a_props_textures_load_from_it_keeps_its_meshes() {
+        // Bevy loads a file once, as the first request for it asks: a staged campfire asked
+        // for while its placed prop's textures are still loading (the fire sheet, frame 2)
+        // gets that load's model, so it must be the whole one.
+        use bevy::{app::ScheduleRunnerPlugin, asset::AssetPlugin, gltf::Gltf};
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_once()),
+            AssetPlugin {
+                file_path: terra_world::data::assets().to_string_lossy().into_owned(),
+                ..default()
+            },
+            ImagePlugin::default(),
+            bevy::mesh::MeshPlugin,
+            bevy::scene::ScenePlugin,
+            bevy::world_serialization::WorldSerializationPlugin,
+            bevy::animation::AnimationPlugin,
+            terra_world::gltf_gate::GatedGltfPlugin::default(),
+        ));
+        app.finish();
+        app.cleanup();
+        let server = app.world().resource::<AssetServer>().clone();
+        let file = "props/Campfire.glb";
+        // Kept, as the prop's model keeps them: a load let go is cancelled.
+        let textured: Vec<StandardMaterial> = read_model(file)
+            .unwrap()
+            .iter()
+            .filter_map(|part| part.textures.as_ref())
+            .map(|textures| textured_material(&format!("models/{file}"), textures, false, &server))
+            .collect();
+        assert!(!textured.is_empty(), "the campfire has textured parts");
+        // Asked for while they load: the file's own handle, once their load has made it (it
+        // can be made and let go between two looks, rarely, so not waited for past a second).
+        let path = format!("models/{file}");
+        let start = std::time::Instant::now();
+        let mut whole = None;
+        while whole.is_none() && start.elapsed().as_secs() < 1 {
+            whole = server.get_handle::<Gltf>(&path);
+        }
+        let whole: Handle<Gltf> = whole.unwrap_or_else(|| server.load(path));
+        let start = std::time::Instant::now();
+        while !server.is_loaded_with_dependencies(whole.id()) {
+            assert!(
+                start.elapsed().as_secs() < 60,
+                "{:?}",
+                server.get_load_states(whole.id())
+            );
+            app.update();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        // Its scene draws its parts, as a staged campfire stands it.
+        let gltf = app.world().resource::<Assets<Gltf>>().get(&whole).unwrap();
+        let scene = gltf.default_scene.clone().unwrap();
+        let worlds = app
+            .world()
+            .resource::<Assets<bevy::world_serialization::WorldAsset>>();
+        let drawn = worlds
+            .get(&scene)
+            .unwrap()
+            .world
+            .iter_entities()
+            .filter(|each| each.contains::<Mesh3d>())
+            .count();
+        assert!(drawn > 0, "the campfire loaded with no parts to draw");
     }
 }
