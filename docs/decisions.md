@@ -126,7 +126,7 @@ Equipment, packs, tools, stations and icons.
 | [D129](decisions/D129.md) | How item icons are made | Tech | Agent | Decided | Icons are image files baked during development and… |
 | [D130](decisions/D130.md) | What item icons look like | Design | Agent | Leaning | In the art style (D14, now direction D, art-style.md)… |
 | [D151](decisions/D151.md) | Expanding a station | Design | Developers | Decided | Stations are expanded and upgraded… |
-| [D460](decisions/D460.md) | Where the off hand's item comes from | Design | — | Open | How a shield, a torch or a second blade gets into the… |
+| [D460](decisions/D460.md) | Where the off hand's item comes from | Design | Developers | Decided | How a shield, a torch or a second blade gets into the… |
 
 ## Lore, magic, combat and growth
 
@@ -171,12 +171,12 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D455](decisions/D455.md) | A fighter's planted feet are locked to the ground and step when the body leaves them | Tech | Agent | Decided | After the clip has posed a fighter and before the… |
 | [D456](decisions/D456.md) | A landed blow flashes and kicks the camera, it does not freeze the fight | Design | Developers | Decided | A blow that lands holds the fighters for at most 0.05 s… |
 | [D459](decisions/D459.md) | What each hand holds, and how its animation is chosen, by rule from data | Tech | Agent | Leaning | The technical parts of holding.md. |
-| [D461](decisions/D461.md) | Which stances come first, after sword and shield | Design | — | Open | Which of holding.md's stances are built… |
-| [D462](decisions/D462.md) | Dual wielding | Design | — | Open | Whether a body may hold a one-hander in each hand… |
-| [D464](decisions/D464.md) | Holding a one-handed weapon in two hands | Design | — | Open | Whether a one-hander can be held in both hands for other… |
-| [D465](decisions/D465.md) | How many variants of a move | Design | — | Open | How many takes of each move are kept and drawn without… |
+| [D461](decisions/D461.md) | Which stances come first, after sword and shield | Design | Developers | Decided | Which of holding.md's stances are built… |
+| [D462](decisions/D462.md) | Dual wielding | Design | Developers | Decided | Whether a body may hold a one-hander in each hand… |
+| [D464](decisions/D464.md) | Holding a one-handed weapon in two hands | Design | Developers | Decided | Whether a one-hander can be held in both hands for other… |
+| [D465](decisions/D465.md) | How many variants of a move | Design | Developers | Decided | How many takes of each move are kept and drawn without… |
 | [D481](decisions/D481.md) | The move check measures the sword through its own shield and the shield through the sword arm | Tech | Agent | Decided | The move check (`tools/characters/moves.ts`, D447)… |
-| [D487](decisions/D487.md) | A landed blow shows a burst where the blade met the body, not a flash of the whole body | Design | — | Open | Recommended by the agent (combat round 17)… |
+| [D487](decisions/D487.md) | A landed blow shows a burst where the blade met the body, not a flash of the whole body | Design | Developers | Decided | Recommended by the agent (combat round 17)… |
 
 ## People and the tribe
 
@@ -398,7 +398,7 @@ The look, models, bodies and gear, textures and audio.
 | [D450](decisions/D450.md) | Combat clips made by Kimodo, keyed to the guard pose | Tech | Agent | Decided | A move's clip is made with Kimodo's latest model… |
 | [D454](decisions/D454.md) | The fight's roll and light slash hold the arms by a layered blend per bone | Tech | Agent | Decided | The sword-and-shield set's roll plays `Fight_Roll`… |
 | [D458](decisions/D458.md) | A drawn body walks with the guard's arms laid over the library's walk | Tech | Agent | Decided | A body with the sword and shield drawn walks forward and… |
-| [D463](decisions/D463.md) | Left-handed bodies | Design | — | Open | Whether a body's main hand may be the left (holding.md). |
+| [D463](decisions/D463.md) | Left-handed bodies | Design | Developers | Decided | Whether a body's main hand may be the left (holding.md). |
 | [D475](decisions/D475.md) | The air's haze over what is drawn starts fifty metres out | Tech | Agent | Decided | Bevy's aerial perspective (the sky pass's haze and… |
 
 ## Engine and code
