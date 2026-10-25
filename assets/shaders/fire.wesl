@@ -1497,6 +1497,24 @@ const FIELD_K: f32 = 10.0;
 // heat it burns at, the hearth ramp's pale.
 const FIELD_CORE: vec3<f32> = vec3<f32>(0.58, 0.45, 2.0);
 const FIELD_CORE_HEAT: f32 = 0.985;
+// Its puffs (`field_gas`), as a fire's flame necks and bulges in rings that rise it (Cetegen &
+// Ahmed 1993, pool-fire puffing at about 1.5/sqrt(D) Hz; fire round g13: main flickered at
+// 0.83 Hz against filmed campfires' 1.8-3.8, research/2026-10-25-fire-motion.md): how many
+// puffs stand along its height at once, how many leave its foot a second for a campfire's
+// width (more for a narrower fire, as the root of its width), how finely their timing varies
+// round it, and how far they swell and pinch the shape (in its units). A wave, not value
+// noise: noise's spectrum is flat below its cells' rate, so the flame wandered slowly (g13 i2).
+const FIELD_PUFF: vec4<f32> = vec4<f32>(1.0, 2.6, 1.5, 0.28);
+// How far its height and brightness follow the fire's whole-fire flicker (`glow`): a little,
+// as its puffs and tongues are its motion (g13: the whole flame pumped in place, low and high
+// together, area sd/mean 0.25-0.36 against filmed 0.09-0.19).
+const FIELD_GLOW: vec2<f32> = vec2<f32>(0.25, 0.4);
+// How quickly its tear's drift turns over, a share of g9's.
+const FIELD_EVOLVE: f32 = 1.8;
+// Its top: how much less hot inside it is at its tip (g9's 0.6), how much thinner, and how
+// much hotter its skin is there, so its tips go orange and see-through (g13: at 0.16 its top
+// third was 36% red, filmed campfires' 3-47; at g14's 0.05, 66%).
+const FIELD_TOP: vec3<f32> = vec3<f32>(0.3, 0.4, 0.16);
 const FIELD_STEPS: i32 = 96;
 const FIELD_LOBES: i32 = 7;
 // A torch's field (under `TORCH_M`): lobes over its head's one point, a middle tongue from
@@ -1533,6 +1551,8 @@ struct HearthField {
     // the pattern's points, `(y - time * rise) / tall`, sloshed all together, further the
     // longer the game had run (fire round g13).
     scale: f32,
+    // How many puffs leave its foot a second.
+    puffs: f32,
     // Each lobe's middle across (east, north), its foot's height and its height; its half width.
     at: array<vec4<f32>, FIELD_LOBES>,
     size: array<f32, FIELD_LOBES>,
@@ -1557,8 +1577,9 @@ fn hearth_field(slot: u32) -> HearthField {
     if a.w < TORCH_M {
         // A torch: as tall as it burns (`hearth`), from a little inside its head.
         f.wide = select(a.w * 0.4, b.z, b.z > 0.0);
-        f.tall = a.w * TORCH_FIELD_TALL * mix(1.0, f.glow, 0.5);
+        f.tall = a.w * TORCH_FIELD_TALL * mix(1.0, f.glow, FIELD_GLOW.x);
         f.scale = 1.0 / max(a.w * TORCH_FIELD_TALL, 1.0e-3);
+        f.puffs = FIELD_PUFF.y * clamp(sqrt(0.7 / max(f.wide, 0.05)), 0.8, 1.5);
         f.k = FIELD_K * TORCH_THICK;
         f.reach = f.wide * 1.1;
         f.under = f.tall * 0.12;
@@ -1577,8 +1598,9 @@ fn hearth_field(slot: u32) -> HearthField {
     f.wide = select(clamp(a.w * 0.5, 0.4, 1.6), b.z, b.z > 0.0);
     f.reach = f.wide * 0.85;
     f.under = 0.05;
-    f.tall = a.w * HEARTH_DRAWN * FIELD_TALL * mix(1.0, f.glow, 0.5);
+    f.tall = a.w * HEARTH_DRAWN * FIELD_TALL * mix(1.0, f.glow, FIELD_GLOW.x);
     f.scale = 1.0 / max(a.w * HEARTH_DRAWN * FIELD_TALL, 1.0e-3);
+    f.puffs = FIELD_PUFF.y * clamp(sqrt(0.7 / max(f.wide, 0.05)), 0.8, 1.5);
     let laid = hearth_logs(slot);
     let apex = select(f.tall * 0.3, laid.top.y + laid.radius, laid.count >= 1.0);
     f.at[0] = vec4(0.0, 0.0, apex * 0.2, f.tall - apex * 0.2);
@@ -1640,19 +1662,29 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec2<f32> {
     if v < -0.5 {
         return vec2(0.0, 0.0);
     }
+    // Its puffs: a wave phased by height, so a swelling born at the foot rises the flame in
+    // FIELD_PUFF.x / its rate seconds (0.4 for a campfire) and the low and high flame swell
+    // apart; each side's timing and strength drift on their own, slowly.
+    let pc = vec3(q.x * FIELD_PUFF.z * s, time * 0.7, q.z * FIELD_PUFF.z * s) + luck.yzx;
+    let jitter = 3.0 * (noise3(pc) - 0.5);
+    let strength = 0.6 + 0.8 * noise3(pc * vec3(1.0, 1.3, 1.0) + vec3(17.3, 5.1, 29.9));
+    let wave = sin(6.2832 * (p.y * FIELD_PUFF.x * s - fract(time * f.puffs)) + jitter);
+    v += FIELD_PUFF.w * strength * wave * (0.35 + 0.65 * smoothstep(0.0, 0.35, hg));
     // The quick octave, stretched along the rise so it carves tongues, eats the flame from its
     // bottom third up. It changes in place as well as rising: its points are first moved by a
     // slow layer drifting down and across against the rise, so the pattern itself evolves.
     let n2 = vec3(q.x * FIELD_TEAR_ACROSS * s, (q.y - time * FIELD_RISE.y) * 2.8 * s, q.z * FIELD_TEAR_ACROSS * s) + luck.zxy;
-    let m = n2 * 0.4 + vec3(time * 1.3, time * 1.9, -time * 1.1);
+    let m = n2 * 0.4 + vec3(time * 1.3, time * 1.9, -time * 1.1) * FIELD_EVOLVE;
     let evolve = vec3(noise3(m), noise3(m + vec3(31.7, 7.9, 13.1)), noise3(m + vec3(5.9, 19.3, 41.7))) - vec3(0.5);
     let tear = fbm3(n2 + evolve * 1.6);
     v -= FIELD_TEAR * smoothstep(0.0, 0.5, hg) * (tear - 0.36);
-    let dens = smoothstep(0.0, FIELD_FEATHER, v);
+    // Its tips fade by thinning, not by cooling to red (g13: its top third 55-57% red against
+    // filmed campfires' 3-47%).
+    let dens = smoothstep(0.0, FIELD_FEATHER, v) * (1.0 - FIELD_TOP.y * smoothstep(0.5, 1.0, hg));
     // A thin cool skin over a hot inside, hottest low over the coals, so the pale core shows
     // through the skin rather than being hidden by it; the core hot only deep inside, so the
     // flame stays orange as its class has it and the yellow is a small heart (fire sheet).
-    let heat = 0.40 + 0.45 * saturate(v * 2.0) * (1.0 - 0.6 * hg) + 0.10 * (1.0 - smoothstep(0.0, 0.3, hg));
+    let heat = 0.40 + 0.45 * saturate(v * 2.0) * (1.0 - FIELD_TOP.x * hg) + 0.10 * (1.0 - smoothstep(0.0, 0.3, hg)) + FIELD_TOP.z * smoothstep(0.3, 0.9, hg) * saturate(v * 4.0);
     // Its heart: deep inside its lower part the flame is thicker and burns at the ramp's pale
     // top, so a dense pale mass sits over the coals and grades to orange at the rim, its upper
     // part still see-through (fire round g9: RDR2's 12% pale from above, ours 2-4%).
@@ -1718,7 +1750,7 @@ fn hearth_march(in: VertexOutput) -> vec4<f32> {
     var light = vec3(0.0);
     var through = 1.0;
     var glow = 0.0;
-    let bright = HEARTH_BRIGHTNESS * (0.85 + 0.15 * f.heat) * f.glow;
+    let bright = HEARTH_BRIGHTNESS * (0.85 + 0.15 * f.heat) * mix(1.0, f.glow, FIELD_GLOW.y);
     for (var i = 0; i < FIELD_STEPS; i++) {
         if s >= far || through < 0.01 {
             break;
