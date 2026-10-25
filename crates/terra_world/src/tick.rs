@@ -27,6 +27,13 @@ pub enum Sim {
     End,
 }
 
+/// The most ticks a frame catches up on, as Unreal caps its substeps (`MaxSubsteps`, 6 by
+/// default) and Unity its catch-up (`Maximum Allowed Timestep`): a frame that took longer
+/// leaves the rest of its time untaken, so the game slows while frames are that slow rather
+/// than running a burst of ticks that makes the next frame slower still. Bevy's own cap,
+/// `Time<Virtual>`'s `max_delta`, is 250 ms, sixteen ticks at 64 a second.
+pub const MOST_TICKS_A_FRAME: u32 = 6;
+
 /// How many ticks have run, for what acts once in so many.
 #[derive(Resource, Default)]
 pub struct Ticks(pub u64);
@@ -48,12 +55,18 @@ pub fn plugin(app: &mut App) {
         (Sim::Act, Sim::World, Sim::Resolve, Sim::End).chain(),
     )
     .init_resource::<Ticks>()
+    .add_systems(Startup, cap_catch_up)
     .add_systems(FixedFirst, (count, take_up))
     .add_systems(FixedLast, put_down)
     .add_systems(
         RunFixedMainLoop,
         show.in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
     );
+}
+
+/// A frame's time taken up to `MOST_TICKS_A_FRAME` ticks of it, at the tick's rate.
+fn cap_catch_up(mut clock: ResMut<Time<Virtual>>, tick: Res<Time<Fixed>>) {
+    clock.set_max_delta(tick.timestep() * MOST_TICKS_A_FRAME);
 }
 
 fn count(mut ticks: ResMut<Ticks>) {
@@ -116,6 +129,26 @@ fn between(from: &Transform, to: &Transform, along: f32) -> Transform {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_slow_frame_catches_up_on_so_many_ticks_and_no_more() {
+        use bevy::time::TimeUpdateStrategy;
+        use std::time::Duration;
+        let mut app = App::new();
+        app.add_plugins((bevy::time::TimePlugin, plugin));
+        let ticks = |app: &App| app.world().resource::<Ticks>().0;
+        // A frame of a second, then one of a tenth, at Bevy's 64 ticks a second.
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs(1)));
+        app.update();
+        app.update();
+        let slow = ticks(&app);
+        assert_eq!(slow, u64::from(MOST_TICKS_A_FRAME), "a second's frame");
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+            50,
+        )));
+        app.update();
+        assert_eq!(ticks(&app) - slow, 3, "a frame of 50 ms has its own ticks");
+    }
 
     #[test]
     fn a_body_is_shown_as_far_between_ticks_as_the_frame_is_and_a_teleport_stays() {
