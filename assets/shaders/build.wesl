@@ -663,20 +663,24 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // Moss as cushions in the joints, blended by the material's height as engines blend a
         // layer by height (the Worn block's way): a thin field fills the mortar's low places
         // first and only a strong one climbs over the stones' tops; its edge ragged with noise,
-        // never cut out; olive to brown, lumpy, matte, a damp darkening just round it.
-        let moss_high = select(textureSampleGrad(height_array, array_sampler, uv, slot, ddx, ddy).r, 0.5, missing);
+        // never cut out; olive to brown, lumpy, matte, a damp darkening just round it. The
+        // height is taken against its own mean round about (a far mip), so the joints are its
+        // low places whatever range a material's height map spans.
+        let moss_high = textureSampleGrad(height_array, array_sampler, uv, slot, ddx, ddy).r;
+        let moss_mean = textureSampleLevel(height_array, array_sampler, uv, slot, 6.0).r;
+        let rel = select(moss_high - moss_mean, 0.0, missing);
         let st = vec2(dot(wp, T), dot(wp, B));
         let e = 0.004;
         let lump = moss_lumps(st);
         let lump_d = vec2(moss_lumps(st + vec2(e, 0.0)), moss_lumps(st + vec2(0.0, e))) - lump;
-        let field = weather.a.z;
-        let ragged = (noise21(st * 23.0 + 5.0) - 0.5) * 0.35 + (lump - 0.5) * 0.3;
-        let moss = smoothstep(0.0, 0.22, field * 1.5 - moss_high - 0.12 + ragged) * smoothstep(0.02, 0.12, field);
+        let field = smoothstep(0.12, 0.5, weather.a.z * (0.7 + 0.6 * grain));
+        let ragged = (noise21(st * 23.0 + 5.0) - 0.5) * 0.4 + (lump - 0.5) * 0.3;
+        let moss = smoothstep(0.0, 0.25, field * 1.6 - 0.8 - rel * 3.0 + ragged);
         let tone = noise21(st * 2.3 + 11.0);
-        let olive_brown = mix(vec3(0.07, 0.078, 0.03), vec3(0.075, 0.058, 0.03), smoothstep(0.35, 0.75, tone));
+        let olive_brown = mix(vec3(0.08, 0.095, 0.035), vec3(0.08, 0.066, 0.034), smoothstep(0.4, 0.8, tone));
         let fresh = smoothstep(0.55, 0.9, noise21(st * 5.0 + 3.0)) * 0.6;
-        let moss_colour = mix(olive_brown, vec3(0.1, 0.11, 0.035), fresh) * (0.6 + 0.65 * lump);
-        let damp_band = smoothstep(0.0, 0.3, field) * (1.0 - moss);
+        let moss_colour = mix(olive_brown, vec3(0.11, 0.125, 0.04), fresh) * (0.7 + 0.5 * lump);
+        let damp_band = smoothstep(0.0, 0.25, field) * (1.0 - moss);
         c *= 1.0 - 0.28 * damp_band;
         c = mix(c, moss_colour, moss * 0.94);
         r = mix(r, 0.97, max(moss, lichen));
