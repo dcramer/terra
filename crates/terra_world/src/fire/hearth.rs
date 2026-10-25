@@ -89,19 +89,24 @@ impl Logs {
 /// baked flipbook cards (its columns and tongues on the logs), or one marched flame field
 /// (`fire.wesl`'s `hearth_march`), which beat the cards for the campfire in a blind panel
 /// (fire round g4). Kinds move to the field one at a time; a torch (`TORCH_M`) keeps its card.
+/// Or the same field reading its shape and motion from a baked looping simulation in place of
+/// its lobes and noise (`Baked`, D493, `sim`); no kind chooses it until the developers do.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Body {
     #[default]
     Cards,
     Marched,
+    Baked,
 }
 
 impl Body {
-    /// What `fire.wesl`'s `hearth_marched` reads: 1 for the field.
+    /// What `fire.wesl`'s `hearth_marched` and `hearth_baked` read: 1 for the field, 2 for the
+    /// baked loop.
     pub fn told(self) -> f32 {
         match self {
             Body::Cards => 0.0,
             Body::Marched => 1.0,
+            Body::Baked => 2.0,
         }
     }
 }

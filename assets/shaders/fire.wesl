@@ -53,8 +53,14 @@ struct Fire {
     // Each hearth's logs, two a hearth (crates/terra_world/src/fire/hearth.rs `Logs::packed`).
     hearths: array<vec4<f32>, 32>,
     // Each hearth's body, four a vector in slot order: 1 its marched flame field, 0 its cards
-    // (crates/terra_world/src/fire/hearth.rs `Body::told`, `hearth_marched`).
+    // (crates/terra_world/src/fire/hearth.rs `Body::told`, `hearth_marched`), 2 its baked loop.
     bodies: array<vec4<f32>, 4>,
+    // Each hearth's place in its baked loop (crates/terra_world/src/fire/sim.rs `Placement`):
+    // its time offset in seconds, its turn, its mirror (1 or -1) and its scale.
+    baked: array<vec4<f32>, 16>,
+    // The baked loop's sidecar (`sim::Sim::packed`): its box's corner and frames, its size and
+    // rate, a frame's cells and how many frames a row.
+    sim: array<vec4<f32>, 3>,
 }
 
 // Field order must match FireExtension in crates/terra_world/src/fire.rs.
@@ -72,6 +78,10 @@ struct Fire {
 @group(constants::MATERIAL_BIND_GROUP) @binding(109) var gas_noise: texture_3d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(110) var gas_noise_sampler: sampler;
 const GAS_NOISE_SIZE: f32 = 32.0;
+// A baked kind's looping volume (crates/terra_world/src/fire/sim.rs, D493): R its flame, G its
+// temperature, its frames tiled across and down; sampled through the noise's sampler, as every
+// fetch stays half a cell inside its frame.
+@group(constants::MATERIAL_BIND_GROUP) @binding(111) var sim_volume: texture_3d<f32>;
 // What breaths have let go: soot, then drops, each where and when, then its going and luck.
 @group(constants::MATERIAL_BIND_GROUP) @binding(104) var<storage, read> puffs: array<vec4<f32>>;
 // The exposure the eye is adapted to (crates/terra_world/src/adaptation.rs): x the stops the
@@ -1467,6 +1477,17 @@ fn hearth_marched(slot: u32) -> bool {
     let i = min(slot, HEARTHS - 1u);
     return fire.bodies[i / 4u][i % 4u] > 0.5;
 }
+// Whether its marched field reads a baked loop in place of its lobes and noise (D493).
+fn hearth_baked(slot: u32) -> bool {
+    let i = min(slot, HEARTHS - 1u);
+    return fire.bodies[i / 4u][i % 4u] > 1.5;
+}
+// A baked field's edge (`baked_gas`): the sim's flame at which the field's shape is 0, its edge,
+// and how much more makes 1, its spine, so the threshold, feather, heart and skin read it as
+// they read the lobes'. Its temperature is not the heat: it stands at 0.82-0.97 wherever the
+// flame is over 0.1 (the campfire's bake), so it would colour the flame one heat throughout.
+const BAKED_EDGE: f32 = 0.15;
+const BAKED_SPAN: f32 = 0.45;
 // How tall its field stands, in the drawn flame's height (`HEARTH_DRAWN`); its middle lobe's
 // and each log's lobe's half width, in its width.
 const FIELD_TALL: f32 = 1.3;
@@ -1566,6 +1587,12 @@ struct HearthField {
     // Each lobe's middle across (east, north), its foot's height and its height; its half width.
     at: array<vec4<f32>, FIELD_LOBES>,
     size: array<f32, FIELD_LOBES>,
+    // A baked field's place in its loop (`fire.baked`; its scale 0 for any other), its turn's
+    // cosine and sine, its two frames' tiles' corners in texels and how far between them it is.
+    baked: vec4<f32>,
+    turn: vec2<f32>,
+    tiles: vec4<f32>,
+    blend: f32,
 }
 
 fn hearth_field(slot: u32) -> HearthField {
@@ -1605,6 +1632,9 @@ fn hearth_field(slot: u32) -> HearthField {
         }
         return f;
     }
+    if hearth_baked(slot) {
+        return baked_field(f, slot);
+    }
     f.wide = select(clamp(a.w * 0.5, 0.4, 1.6), b.z, b.z > 0.0);
     f.reach = f.wide * 0.85;
     f.under = 0.05;
@@ -1625,6 +1655,67 @@ fn hearth_field(slot: u32) -> HearthField {
         f.lobes += 1;
     }
     return f;
+}
+
+// A baked field (D493): its hull the bake's box turned and scaled round its foot, as tall as the
+// box; its place in the loop this hearth's (`sim::Placement`).
+fn baked_field(field: HearthField, slot: u32) -> HearthField {
+    var f = field;
+    f.baked = fire.baked[min(slot, HEARTHS - 1u)];
+    let s = f.baked.w;
+    f.turn = vec2(cos(f.baked.y), sin(f.baked.y));
+    let lo = fire.sim[0].xyz;
+    let hi = lo + fire.sim[1].xyz;
+    f.tall = s * hi.z;
+    f.wide = s * max(fire.sim[1].x, fire.sim[1].y);
+    f.scale = 1.0 / max(f.tall, 1.0e-3);
+    f.reach = s * length(max(abs(lo.xy), abs(hi.xy)));
+    f.under = s * max(-lo.z, 0.0) + 0.02;
+    f.lobes = 1;
+    return f;
+}
+
+// A baked field's two frames at `time` (`sim::frames_at`): its loop played at the root of one
+// over its scale, as a fire's puffing goes, from its own offset.
+fn baked_frames(field: HearthField, time: f32) -> HearthField {
+    var f = field;
+    if f.baked.w <= 0.0 {
+        return f;
+    }
+    let frames = fire.sim[0].w;
+    let at = fract((time * inverseSqrt(f.baked.w) + f.baked.x) * fire.sim[1].w / frames) * frames;
+    let a = min(floor(at), frames - 1.0);
+    f.blend = at - a;
+    f.tiles = vec4(baked_tile(a), baked_tile(select(a + 1.0, 0.0, a + 1.0 >= frames)));
+    return f;
+}
+
+// A frame's tile's corner in the volume, in texels (`sim::tile`).
+fn baked_tile(frame: f32) -> vec2<f32> {
+    let row = floor(frame / fire.sim[2].w);
+    return vec2((frame - row * fire.sim[2].w) * fire.sim[2].x, row * fire.sim[2].y);
+}
+
+// The baked field at a point in its frame (`field_gas`'s): the point turned, mirrored and scaled
+// into the bake's box (`sim::to_bake`), its flame read from both frames and blended, made the
+// field's shape by BAKED_EDGE and coloured as the lobes' is.
+fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
+    let g = vec2(p.x, p.z);
+    let b = vec3(f.turn.x * g.x + f.turn.y * g.y, f.baked.z * (f.turn.x * g.y - f.turn.y * g.x), p.y) / f.baked.w;
+    let u = (b - fire.sim[0].xyz) / fire.sim[1].xyz;
+    if any(u < vec3(0.0)) || any(u > vec3(1.0)) {
+        return vec3(0.0);
+    }
+    let cells = fire.sim[2].xyz;
+    let t = clamp(u * cells, vec3(0.5), cells - vec3(0.5));
+    let size = vec3<f32>(textureDimensions(sim_volume));
+    let a = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.xy, 0.0) + t) / size, 0.0).r;
+    let c = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.zw, 0.0) + t) / size, 0.0).r;
+    let v = (mix(a, c, f.blend) - BAKED_EDGE) / BAKED_SPAN;
+    if v < -0.5 {
+        return vec3(0.0);
+    }
+    return field_flame(v, saturate(p.y / f.tall), f);
 }
 
 // How far inside the field's shape a point is (across, up, across in its frame, metres): 1 on
@@ -1660,6 +1751,9 @@ fn field_shape(q: vec3<f32>, f: HearthField, time: f32) -> f32 {
 // The field at a point in its frame: x its flame's density per metre, y its heat (the ramp's),
 // z its heat without its top's skin lift (`FIELD_TOP_KEEP`).
 fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
+    if f.baked.w > 0.0 {
+        return baked_gas(p, f);
+    }
     let hg = saturate(p.y / f.tall);
     let s = f.scale;
     let luck = vec3(f.seed * 13.7, f.seed * 7.1, f.seed * 3.3);
@@ -1689,6 +1783,12 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
     let evolve = vec3(noise3(m), noise3(m + vec3(31.7, 7.9, 13.1)), noise3(m + vec3(5.9, 19.3, 41.7))) - vec3(0.5);
     let tear = fbm3(n2 + evolve * 1.6);
     v -= FIELD_TEAR * smoothstep(0.0, 0.5, hg) * (tear - 0.36);
+    return field_flame(v, hg, f);
+}
+
+// The field's flame where its shape is `v` (0 its edge, 1 its spine) at `hg` of its height: x
+// its density per metre, y its heat, z its heat without its top's skin lift (`field_gas`).
+fn field_flame(v: f32, hg: f32, f: HearthField) -> vec3<f32> {
     // Its tips fade by thinning, not by cooling to red (g13: its top third 55-57% red against
     // filmed campfires' 3-47%).
     let dens = smoothstep(0.0, FIELD_FEATHER, v) * (1.0 - FIELD_TOP.y * smoothstep(0.5, 1.0, hg));
@@ -1708,7 +1808,7 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
 // The hull round a hearth's field, in its frame (across, up, across).
 fn field_box(f: HearthField) -> array<vec3<f32>, 2> {
     let r = f.reach;
-    return array<vec3<f32>, 2>(vec3(-r, -f.under, -r), vec3(r, f.tall * 1.15, r));
+    return array<vec3<f32>, 2>(vec3(-r, -f.under, -r), vec3(r, f.tall * select(1.15, 1.0, f.baked.w > 0.0), r));
 }
 
 fn hearth_hull(corner: vec3<f32>, slot: u32) -> Out {
@@ -1729,11 +1829,11 @@ fn hearth_hull(corner: vec3<f32>, slot: u32) -> Out {
 }
 
 fn hearth_march(in: VertexOutput) -> vec4<f32> {
-    let f = hearth_field(u32(in.uv.x + 0.5));
+    let time = fire.kind.z;
+    let f = baked_frames(hearth_field(u32(in.uv.x + 0.5)), time);
     if f.lobes == 0 {
         discard;
     }
-    let time = fire.kind.z;
     let eye = view.world_position;
     let dir = normalize(in.world_position.xyz - eye);
     var far = distance(eye, in.world_position.xyz);

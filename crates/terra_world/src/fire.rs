@@ -201,6 +201,10 @@ pub struct FireUniform {
     hearths: [Vec4; HEARTHS * 2],
     /// Each hearth's body, four a vector, in slot order (`hearth::Body::told`).
     bodies: [Vec4; HEARTHS / 4],
+    /// Each hearth's place in its baked loop (`sim::Placement::packed`), in slot order.
+    baked: [Vec4; HEARTHS],
+    /// The baked loop's sidecar as the shader reads it (`sim::Sim::packed`).
+    sim: [Vec4; 3],
 }
 
 /// Flames, embers and jets: drawn unlit, their light added to what is behind, on Bevy's own
@@ -245,6 +249,9 @@ pub struct FireExtension {
     #[texture(109, dimension = "3d")]
     #[sampler(110)]
     noise: Handle<Image>,
+    /// The baked loop (`sim`), sampled through the noise's sampler; a texel until a fire reads it.
+    #[texture(111, dimension = "3d")]
+    sim: Handle<Image>,
 }
 
 /// Which pipeline a fire material is drawn with: a breath's hull is not depth tested, since
@@ -524,7 +531,10 @@ pub fn plugin(app: &mut App) {
         ))
         .add_systems(Startup, setup)
         .add_systems(Update, scorch)
-        .add_systems(PostUpdate, (hearth::keep, blow, show, light::light).chain());
+        .add_systems(
+            PostUpdate,
+            (hearth::keep, blow, show, sim::tell, light::light).chain(),
+        );
 }
 
 /// A mesh of cards, `count` of them, every corner at the origin: the first texture
@@ -676,6 +686,7 @@ fn setup(
     let motions = images.add(books.motions);
     let ramp = images.add(books.ramp);
     let noise = images.add(volume::noise());
+    let sim = images.add(sim::unread());
     // Nothing let go yet: born an hour ago, long gone.
     let puffs = Puffs {
         buffer: buffers.add(ShaderBuffer::from(
@@ -723,6 +734,7 @@ fn setup(
                 motions: motions.clone(),
                 ramp: ramp.clone(),
                 noise: noise.clone(),
+                sim: sim.clone(),
                 puffs: puffs.buffer.clone(),
                 adaptation: adaptation.0.clone(),
             },
@@ -972,6 +984,7 @@ mod hearth;
 mod light;
 mod matte;
 mod seen;
+mod sim;
 mod smoke;
 mod volume;
 pub use matte::with_matte;
