@@ -296,6 +296,7 @@ How structures are planned, built, drawn and coded.
 | [D373](decisions/D373.md) | Shade laid on a building's colours as light, and a log's underside shaded once | Tech | Agent | Decided | A building's colours are as on screen… |
 | [D377](decisions/D377.md) | Fire in what is built | Tech | Agent | Decided | A cellular fire on a base's cubes, as Far Cry 2's and… |
 | [D480](decisions/D480.md) | A building's weathering motifs are solved by wave function collapse within masks of its shape | Tech | Agent | Leaning | A building's weathering is made from its own cubes… |
+| [D486](decisions/D486.md) | A room's sky light is what its openings let in | Tech | Agent | Leaning | A room's light probe (D320) dims the sky's light by the… |
 
 ## Art, characters and sound
 

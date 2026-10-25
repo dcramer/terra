@@ -22,11 +22,18 @@ use bevy::render::render_resource::{
 };
 use std::collections::BTreeMap;
 use terra_world::climate::{ClimateSample, Sheltered};
-use terra_world::planet::MainCamera;
+use terra_world::planet::{MainCamera, Planet};
 use terra_world::skylight::OpenSky;
 
-/// How much of the sky's light reaches inside a room.
+/// How much of the sky's light reaches inside a room with a door or window onto the open
+/// air; a room's own share of it is what its openings let in (`terra_build::sky`, D486).
 const INDOORS: f32 = 0.6;
+/// How far a ray from the air beyond an opening looks for the ground hiding the sky, in
+/// metres: past a dungeon's well or a cellar's steps, short of the far hills.
+const SKY_RAY_M: f32 = 40.0;
+/// How far under the ground as generated the air beyond an opening must be before rays are
+/// cast to find how much sky it sees, in metres: above it, a house's door, all of it.
+const UNDER_GROUND_M: f32 = 0.5;
 /// How much of the light come into a room its walls, floor and ceiling give back, for what
 /// is in it to reflect: weathered wood and stone, about a fifth.
 const ROOM_GIVES_BACK: f32 = 0.2;
@@ -57,6 +64,8 @@ const FADE_S: f32 = 0.8;
 struct Indoors {
     room: [i32; 6],
     share: f32,
+    /// How much of the sky's light its room's openings let in, from 0 to 1 (D486).
+    sky: f32,
     going: bool,
     /// Its reflection: a cube of one colour, what the room gives back, faded in with it;
     /// every room's own while it fades, and the one all rooms closed share once it has
@@ -219,6 +228,7 @@ fn place(
     open: Res<OpenSky>,
     mut images: ResMut<Assets<Image>>,
     mut shared: ResMut<RoomLight>,
+    planet: Res<Planet>,
 ) {
     // Nothing to dim until the sky lights the camera.
     let Some(sky) = camera.iter().next().cloned() else {
@@ -249,17 +259,23 @@ fn place(
             })
             .collect();
         let wanted: Vec<[i32; 6]> = boxes.iter().map(|&(min, max)| key(min, max)).collect();
+        let skies = room_skies(&build.base, &build.frame, &planet, &rooms);
         let mut kept = Vec::new();
         for (_, parent, mut probe) in &mut probes {
             if parent.parent() != build.root {
                 continue;
             }
-            probe.going = !wanted.contains(&probe.room);
-            if !probe.going {
+            let at = wanted.iter().position(|room| *room == probe.room);
+            probe.going = at.is_none();
+            if let Some(at) = at {
                 kept.push(probe.room);
+                if probe.sky != skies[at] {
+                    probe.sky = skies[at];
+                }
             }
         }
-        for (&(min, max), room) in boxes.iter().zip(wanted) {
+        said(&skies, sky.intensity);
+        for ((&(min, max), room), let_in) in boxes.iter().zip(wanted).zip(skies) {
             if kept.contains(&room) {
                 continue;
             }
@@ -268,10 +284,11 @@ fn place(
             let reflects = images.add(cube(filled));
             commands.spawn((
                 Name::new("Indoors"),
-                lit(&sky, 0.0, &falls, &reflects),
+                lit(&sky, (0.0, let_in), &falls, &reflects),
                 Indoors {
                     room,
                     share: 0.0,
+                    sky: let_in,
                     going: false,
                     reflects,
                     falls,
@@ -295,6 +312,75 @@ fn place(
     }
 }
 
+/// How much of the sky's light each room box lets in (D486), in `rooms`' order: its room's
+/// share from its openings (`Base::room_sky`), the air beyond each seeing what of the sky the
+/// ground round it leaves open (`sky_seen`).
+fn room_skies(
+    base: &terra_build::Base,
+    frame: &Transform,
+    planet: &Planet,
+    rooms: &[(IVec3, IVec3)],
+) -> Vec<f32> {
+    let cube = terra_build::CELL_M;
+    let shares =
+        base.room_sky(|air| sky_seen(planet, frame.transform_point((air.as_vec3() + 0.5) * cube)));
+    rooms
+        .iter()
+        .map(|(low, _)| {
+            base.room(*low)
+                .and_then(|room| shares.get(&room).copied())
+                .unwrap_or(1.0)
+        })
+        .collect()
+}
+
+/// How much of the open sky a point in the air sees, from 0 to 1: all of it above the ground
+/// as generated (every house's door, at once); under it, as a dug well or a dungeon is, the
+/// share of rays over its hemisphere, weighed by how steeply they fall, that reach the open
+/// air without meeting the ground; none inside the ground.
+fn sky_seen(planet: &Planet, point: Vec3) -> f32 {
+    let up = point.normalize_or(Vec3::Y);
+    if planet.surface(up).length() - point.length() < UNDER_GROUND_M {
+        return 1.0;
+    }
+    if planet.distance(point) < 0.0 {
+        return 0.0;
+    }
+    let east = up.any_orthonormal_vector();
+    let south = up.cross(east);
+    let (mut open, mut all) = (0.0, 0.0);
+    for (rise, around) in [(90.0_f32, 1), (60.0, 6), (30.0, 6)] {
+        for k in 0..around {
+            let turn = k as f32 * std::f32::consts::TAU / around as f32;
+            let rise = rise.to_radians();
+            let flat = east * libm::cosf(turn) + south * libm::sinf(turn);
+            let way = (up * libm::sinf(rise) + flat * libm::cosf(rise)).normalize();
+            let weight = libm::sinf(rise);
+            all += weight;
+            if planet.raycast(point, way, SKY_RAY_M).is_none() {
+                open += weight;
+            }
+        }
+    }
+    open / all
+}
+
+/// Says in the log how much sky a base's rooms let in, the least, the mean and the most, and
+/// the sky's light in the darkest of them once faded in: what a room's light is measured by.
+fn said(skies: &[f32], sky: f32) {
+    if skies.is_empty() {
+        return;
+    }
+    let least = skies.iter().copied().fold(1.0_f32, f32::min);
+    let most = skies.iter().copied().fold(0.0_f32, f32::max);
+    let mean = skies.iter().sum::<f32>() / skies.len() as f32;
+    info!(
+        "Indoors: {} room boxes let in {least:.2} to {most:.2} of the sky, {mean:.2} on average; the darkest lit {:.0} of the sky's {sky:.0}",
+        skies.len(),
+        sky * dimming(1.0, least)
+    );
+}
+
 /// How far a probe has faded after a frame so long, toward in or out.
 fn faded(share: f32, going: bool, seconds: f32) -> f32 {
     let step = seconds / FADE_S;
@@ -307,9 +393,9 @@ fn faded(share: f32, going: bool, seconds: f32) -> f32 {
 
 /// The sky's light inside a room faded in so far, eased in and out: as outside at 0, dimmed
 /// at 1.
-fn dimming(share: f32) -> f32 {
+fn dimming(share: f32, sky: f32) -> f32 {
     let eased = share * share * (3.0 - 2.0 * share);
-    1.0 + (INDOORS - 1.0) * eased
+    1.0 + (INDOORS * sky.clamp(0.0, 1.0) - 1.0) * eased
 }
 
 /// The sky's light as it reaches inside a room faded in so far: the camera's, at the
@@ -317,12 +403,12 @@ fn dimming(share: f32) -> f32 {
 /// reflects, the room's own.
 fn lit(
     light: &EnvironmentMapLight,
-    share: f32,
+    (share, sky): (f32, f32),
     falls: &Handle<Image>,
     reflects: &Handle<Image>,
 ) -> EnvironmentMapLight {
     EnvironmentMapLight {
-        intensity: light.intensity * dimming(share),
+        intensity: light.intensity * dimming(share, sky),
         diffuse_map: falls.clone(),
         specular_map: reflects.clone(),
         ..light.clone()
@@ -377,7 +463,7 @@ fn follow(
                 }
             }
         }
-        let now = lit(sky, share, &probe.falls, &probe.reflects);
+        let now = lit(sky, (share, probe.sky), &probe.falls, &probe.reflects);
         // Its brightness follows the sky's as the day turns, a step too small to see left
         // until it is not, so a town's probes are not every one changed every frame.
         if (light.intensity - now.intensity).abs() > light.intensity.abs() * BRIGHTNESS_STEP
@@ -418,6 +504,7 @@ mod tests {
         let probe = |going| Indoors {
             room: [0; 6],
             share: 1.0,
+            sky: 1.0,
             going,
             reflects: Handle::default(),
             falls: Handle::default(),
@@ -479,6 +566,7 @@ mod tests {
                 Indoors {
                     room: [i as i32; 6],
                     share,
+                    sky: 1.0,
                     going: false,
                     reflects: Handle::default(),
                     falls: Handle::default(),
@@ -535,11 +623,13 @@ mod tests {
         let mut frames = 0;
         while share < 1.0 {
             let next = faded(share, false, frame);
-            biggest = biggest.max((dimming(next) - dimming(share)).abs());
+            biggest = biggest.max((dimming(next, 1.0) - dimming(share, 1.0)).abs());
             share = next;
             frames += 1;
         }
-        assert!((dimming(1.0) - INDOORS).abs() < 1e-6 && dimming(0.0) == 1.0);
+        assert!((dimming(1.0, 1.0) - INDOORS).abs() < 1e-6 && dimming(0.0, 1.0) == 1.0);
+        // A room no sky reaches goes dark once faded in, and is lit as outside before.
+        assert!(dimming(1.0, 0.0) == 0.0 && dimming(0.0, 0.0) == 1.0);
         // Two fifths of the light over most of a second, never more than a fiftieth of
         // it in a frame.
         assert!(frames > 30, "{frames} frames");
@@ -547,6 +637,6 @@ mod tests {
         while share > 0.0 {
             share = faded(share, true, frame);
         }
-        assert_eq!(dimming(share), 1.0);
+        assert_eq!(dimming(share, 1.0), 1.0);
     }
 }

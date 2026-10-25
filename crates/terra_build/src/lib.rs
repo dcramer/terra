@@ -60,6 +60,7 @@ pub mod roofer;
 pub mod rooms;
 pub mod save;
 mod shortcuts;
+pub mod sky;
 pub mod support;
 pub mod testing;
 
