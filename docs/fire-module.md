@@ -67,13 +67,13 @@ A place in the sandbox (`tools/sandbox/places.ts` data, D249: no new options) wi
 ## The measure
 
 - **The fire sheet** (D433) gains rows for the torch and candle beside the campfire, house blaze, breath and fireball, every row on its matte, at noon, dusk and night. A shared change lands if it moves more rows into class across kinds than out.
-- **Motion strips** for every kind (`fire/motion/tools`, today the campfire's): eight frames 0.25 s apart a kind and hour, judged blind by three fresh judges a panel against a known-good anchor (RDR2's camp for the campfire). A shared change wants two panels preferring it, pooled, by 0.25 or more.
+- **Motion strips** for every kind (`fire/motion/tools`, today the campfire's): eight frames 0.25 s apart a kind and hour, judged one build a judge against fixed anchors (D472, `tools/review`), 16 fresh judges a build; a change wins when its mean beats main's with the 95% interval above nought, by a rule written before the panel.
 - **The bench's cost**: `cargo xtask bench` on the 3080 for one near campfire (0.3 ms budget) and the burning village (1.5 ms), fire.md's budgets.
 
 ## The plan
 
-1. Spike: the field as the campfire's body, cards off, against main in a motion panel (round g1).
-2. If it wins: the field as a preset `body: Marched`, then the torch and house blaze on it, one kind a round, each measured on the sheet and a panel; the hearth's card tricks removed as each goes.
+1. Done: the field as the campfire's body (rounds g1-g4); it beat the cards in motion and holds the sheet. A kind chooses it by its `Kindled`'s `body: Body::Marched` (`fire/hearth.rs`), the shader's `hearth_marched`; until `fire.ron`, that field is the preset.
+2. The torch and house blaze on it, one kind a round, each measured on the sheet and a panel; the hearth's card tricks removed as each goes.
 3. `fire.ron` and the `terra_fire` crate: kinds as data, the field's sources and the wind and rain rules, tested.
 4. Weather: wind shear, rain dimming and going out, heat discs for snow, shown on the bench.
 5. The bench and the torch and candle sheet rows.

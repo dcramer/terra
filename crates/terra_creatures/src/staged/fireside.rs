@@ -212,18 +212,21 @@ mod tests {
             wide: 0.9,
             heat: 0.9,
             logs: terra_world::fire::Logs::CAMPFIRE,
+            body: terra_world::fire::Body::Marched,
         },
         Kindled {
             tall: 0.6,
             wide: 0.0,
             heat: 0.3,
             logs: terra_world::fire::Logs::CAMPFIRE,
+            body: terra_world::fire::Body::Marched,
         },
         Kindled {
             tall: 3.0,
             wide: 2.5,
             heat: 2.0,
             logs: terra_world::fire::Logs::CAMPFIRE,
+            body: terra_world::fire::Body::Marched,
         },
     ];
 

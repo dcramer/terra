@@ -36,7 +36,7 @@ use bevy::{
     shader::ShaderRef,
 };
 pub use exposure::{FireExposure, LEANING_WEIGHT};
-pub use hearth::Logs;
+pub use hearth::{Body, Logs};
 
 /// Something burning, as the layer above says it: where its flames stand from (their foot,
 /// in the world), how tall they are in metres, how hot (0 to 1, a dying fire's embers to a
@@ -86,8 +86,10 @@ pub struct Blazes {
     pub blazes: Vec<Blaze>,
     pub jets: Vec<Jet>,
     kept: Vec<Blaze>,
-    /// The kept fires' logs as the shader reads them (`Logs::packed`), in `kept`'s order.
+    /// The kept fires' logs and bodies as the shader reads them (`Logs::packed`,
+    /// `Body::told`), in `kept`'s order.
     hearths: Vec<[Vec4; 2]>,
+    bodies: Vec<f32>,
 }
 
 impl Blazes {
@@ -108,6 +110,8 @@ pub struct Kindled {
     pub heat: f32,
     /// The logs it burns on, which its flames lick up along (`hearth::Logs`).
     pub logs: Logs,
+    /// How its flame body is drawn, its kind's choice (`hearth::Body`).
+    pub body: Body,
 }
 
 /// How many blazes are drawn at most, by preset.
@@ -190,6 +194,8 @@ pub struct FireUniform {
     volume: Vec4,
     /// Each hearth's logs, two a hearth (`hearth::Logs::packed`).
     hearths: [Vec4; HEARTHS * 2],
+    /// Each hearth's body, four a vector, in slot order (`hearth::Body::told`).
+    bodies: [Vec4; HEARTHS / 4],
 }
 
 /// Flames, embers and jets: drawn unlit, their light added to what is behind, on Bevy's own
@@ -549,52 +555,6 @@ fn cards(slots: usize, each: usize, from: f32) -> Mesh {
     .with_inserted_indices(Indices::U32(indices))
 }
 
-/// The breaths' hulls: a box for each jet, its corners 0 to 1 on each axis (its position),
-/// which the shader stretches round the jet's stream and fireball and marches through
-/// (`fire.wesl`, `breath`), its back faces drawn so it shows with the eye inside it too.
-fn hulls(slots: usize) -> Mesh {
-    let mut positions = Vec::with_capacity(slots * 24);
-    let mut normals = Vec::with_capacity(slots * 24);
-    let mut ids = Vec::with_capacity(slots * 24);
-    let mut indices = Vec::with_capacity(slots * 36);
-    for slot in 0..slots {
-        for axis in 0..3 {
-            for side in [0.0f32, 1.0] {
-                // (u, v, axis) turn as x, y, z do, so the face runs anticlockwise seen from
-                // its outside when it is at 1, and is turned over when it is at 0.
-                let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
-                let first = positions.len() as u32;
-                for (a, b) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)] {
-                    let mut p = [0.0f32; 3];
-                    p[axis] = side;
-                    p[u] = a;
-                    p[v] = b;
-                    let mut n = [0.0f32; 3];
-                    n[axis] = side * 2.0 - 1.0;
-                    positions.push(p);
-                    normals.push(n);
-                    ids.push([slot as f32, 0.0]);
-                }
-                if side > 0.5 {
-                    indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
-                } else {
-                    indices.extend([first, first + 2, first + 1, first, first + 3, first + 2]);
-                }
-            }
-        }
-    }
-    let corners = vec![[0.0f32, 0.0]; positions.len()];
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, corners)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, ids)
-    .with_inserted_indices(Indices::U32(indices))
-}
-
 /// The cards of every kind, each a mesh of its own drawn wherever the fires are.
 fn spawn_cards(
     commands: &mut Commands,
@@ -639,8 +599,23 @@ fn spawn_cards(
         cards(HEARTHS.min(count), HEARTH_EMBER_CARDS, 1.0),
         fire[1].clone(),
     );
-    spawn("Fire: jets", hulls(JETS), fire[2].clone());
-    spawn("Fire: jets' mask", hulls(JETS), fire[JET_MASK].clone());
+    spawn("Fire: jets", volume::hulls(JETS, 0.0), fire[2].clone());
+    spawn(
+        "Fire: jets' mask",
+        volume::hulls(JETS, 0.0),
+        fire[JET_MASK].clone(),
+    );
+    // Each hearth's flame body marched as one field (D466, docs/fire-module.md).
+    spawn(
+        "Fire: hearth fields",
+        volume::hulls(HEARTHS.min(count), 1.0),
+        fire[2].clone(),
+    );
+    spawn(
+        "Fire: hearth fields' mask",
+        volume::hulls(HEARTHS.min(count), 1.0),
+        fire[JET_MASK].clone(),
+    );
     spawn(
         "Fire: jets' sprites",
         cards(JETS, BREATH_CARDS, 0.0),
@@ -958,6 +933,9 @@ fn show(
             for (i, logs) in blazes.hearths.iter().take(HEARTHS).enumerate() {
                 material.extension.uniform.hearths[i * 2] = logs[0];
                 material.extension.uniform.hearths[i * 2 + 1] = logs[1];
+            }
+            for (i, body) in blazes.bodies.iter().take(HEARTHS).enumerate() {
+                material.extension.uniform.bodies[i / 4][i % 4] = *body;
             }
         }
     }

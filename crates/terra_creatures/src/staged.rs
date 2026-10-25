@@ -589,6 +589,7 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             wide,
             heat,
             logs,
+            body: terra_world::fire::Body::Marched,
         });
     }
     if !asked.wears.is_empty() {

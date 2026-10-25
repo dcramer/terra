@@ -52,6 +52,9 @@ struct Fire {
     volume: vec4<f32>,
     // Each hearth's logs, two a hearth (crates/terra_world/src/fire/hearth.rs `Logs::packed`).
     hearths: array<vec4<f32>, 32>,
+    // Each hearth's body, four a vector in slot order: 1 its marched flame field, 0 its cards
+    // (crates/terra_world/src/fire/hearth.rs `Body::told`, `hearth_marched`).
+    bodies: array<vec4<f32>, 4>,
 }
 
 // Field order must match FireExtension in crates/terra_world/src/fire.rs.
@@ -1235,6 +1238,9 @@ fn sun_through(l: vec3<f32>, to_sun: vec3<f32>, b: Breath, time: f32) -> f32 {
 // (`sun_through`), so a soot crown is lit on top and dark beneath.
 @if(!PREPASS_PIPELINE)
 fn breath(in: VertexOutput) -> vec4<f32> {
+    if in.uv.y > 0.5 {
+        return hearth_march(in);
+    }
     let b = breath_of(u32(in.uv.x + 0.5));
     if b.reach <= 0.0 || breath_left(b) <= 0.0 || !b.marched {
         discard;
@@ -1427,6 +1433,9 @@ fn hull_lit_box(b: Breath) -> array<vec3<f32>, 2> {
 
 // A corner of a breath's hull placed round its jet.
 fn hull(corner: vec3<f32>, id: vec2<f32>) -> Out {
+    if id.y > 0.5 {
+        return hearth_hull(corner, u32(id.x + 0.5));
+    }
     let b = breath_of(u32(id.x + 0.5));
     if b.reach <= 0.0 || breath_left(b) <= 0.0 || !b.marched {
         return nowhere();
@@ -1445,6 +1454,250 @@ fn hull(corner: vec3<f32>, id: vec2<f32>) -> Out {
     out.size = 0.0;
     out.world = world;
     return out;
+}
+
+// A hearth's flame body as one marched flame field (D466, docs/fire-module.md, "The general
+// flame"): teardrop lobes over its sources (the middle of its stack, and each log), the points
+// moved before the shape is read by noise scrolled up through it, so tongues rise, sway, neck
+// and tear off; its flame where the moved shape passes a threshold over a thin feather, so its
+// edges are torn sheets, not haze; its heat by depth inside and height, through the hearth's
+// row of the ramp, marched front to back as the breath's gas is (`breath`). A hearth's kind
+// chooses it (crates/terra_world/src/fire/hearth.rs `Body`).
+fn hearth_marched(slot: u32) -> bool {
+    let i = min(slot, HEARTHS - 1u);
+    return fire.bodies[i / 4u][i % 4u] > 0.5;
+}
+// How tall its field stands, in the drawn flame's height (`HEARTH_DRAWN`); its middle lobe's
+// and each log's lobe's half width, in its width.
+const FIELD_TALL: f32 = 1.3;
+const FIELD_MIDDLE_R: f32 = 0.17;
+const FIELD_LOG_R: f32 = 0.095;
+// Each lobe flickers on its own clock (two waves of 2-4 Hz): its height between FIELD_FLICKER's
+// share of it, its width by FIELD_FLICKER_WIDE either way and its tip leaning across by
+// FIELD_FLICKER_LEAN of its width, so the outline itself changes from moment to moment.
+const FIELD_FLICKER: vec2<f32> = vec2<f32>(0.6, 1.1);
+const FIELD_FLICKER_WIDE: f32 = 0.2;
+const FIELD_FLICKER_LEAN: f32 = 0.6;
+// How far a log's lobe leans in toward the middle at its tip, in its distance out, so lobes
+// stay apart low down and the logs show between them.
+const FIELD_LEAN_IN: f32 = 0.18;
+// How fast its noise rises, metres a second, its slow and quick octaves, and how far it moves
+// the shape across, in its width, growing with height.
+const FIELD_RISE: vec2<f32> = vec2<f32>(0.9, 1.7);
+const FIELD_SWAY: f32 = 0.32;
+// How much the quick noise tears from its upper part and how finely it is cut across (in the
+// field's height, so a tongue is about a tenth of it wide), its feather (in the shape's units)
+// and how thick its flame is, per metre.
+const FIELD_TEAR: f32 = 3.6;
+const FIELD_TEAR_ACROSS: f32 = 14.0;
+const FIELD_FEATHER: f32 = 0.14;
+const FIELD_K: f32 = 10.0;
+const FIELD_STEPS: i32 = 96;
+const FIELD_LOBES: i32 = 7;
+
+struct HearthField {
+    foot: vec3<f32>,
+    up: vec3<f32>,
+    east: vec3<f32>,
+    north: vec3<f32>,
+    tall: f32,
+    wide: f32,
+    heat: f32,
+    seed: f32,
+    glow: f32,
+    lobes: i32,
+    // Each lobe's middle across (east, north), its foot's height and its height; its half width.
+    at: array<vec4<f32>, FIELD_LOBES>,
+    size: array<f32, FIELD_LOBES>,
+}
+
+fn hearth_field(slot: u32) -> HearthField {
+    var f: HearthField;
+    f.lobes = 0;
+    if slot >= min(u32(fire.kind.w + 0.5), HEARTHS) || slot >= u32(fire.kind.y + 0.5) || !hearth_marched(slot) {
+        return f;
+    }
+    let a = slots[slot * 2u];
+    let b = slots[slot * 2u + 1u];
+    if a.w < TORCH_M {
+        return f;
+    }
+    f.foot = a.xyz;
+    f.up = normalize(a.xyz);
+    f.east = normalize(cross(f.up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
+    f.north = cross(f.east, f.up);
+    f.heat = b.x;
+    f.seed = b.y;
+    f.glow = clamp(max(b.w, 0.0), 0.6, 1.4);
+    f.wide = select(clamp(a.w * 0.5, 0.4, 1.6), b.z, b.z > 0.0);
+    f.tall = a.w * HEARTH_DRAWN * FIELD_TALL * mix(1.0, f.glow, 0.5);
+    let laid = hearth_logs(slot);
+    let apex = select(f.tall * 0.3, laid.top.y + laid.radius, laid.count >= 1.0);
+    f.at[0] = vec4(0.0, 0.0, apex * 0.2, f.tall - apex * 0.2);
+    f.size[0] = f.wide * FIELD_MIDDLE_R;
+    f.lobes = 1;
+    for (var i = 0.0; i < min(laid.count, f32(FIELD_LOBES - 1)); i += 1.0) {
+        let w = on_log(laid, i, 0.5, f.foot, f.up, f.east, f.north) - f.foot;
+        let y0 = dot(w, f.up) - laid.radius * 0.5;
+        let hot = log_heat(i, f.seed);
+        f.at[f.lobes] = vec4(dot(w, f.east), dot(w, f.north), y0, max(f.tall * (0.6 + 0.4 * hot) - y0, 0.1));
+        f.size[f.lobes] = f.wide * FIELD_LOG_R * (0.8 + 0.4 * hot);
+        f.lobes += 1;
+    }
+    return f;
+}
+
+// How far inside the field's shape a point is (across, up, across in its frame, metres): 1 on
+// a lobe's spine, 0 at its edge, below outside.
+fn field_shape(q: vec3<f32>, f: HearthField, time: f32) -> f32 {
+    // Copied to vars, so they can be indexed by a counter.
+    var at = f.at;
+    var size = f.size;
+    var v = -1.0;
+    for (var i = 0; i < f.lobes; i++) {
+        let l = at[i];
+        // Its clock: two waves of its own frequencies (2-4 Hz) and phases, one per measure.
+        let k = f.seed * 5.3 + f32(i) * 1.618;
+        let hz = 2.0 + 2.0 * fract(vec4(k * 7.13, k * 3.71, k * 9.37, k * 5.19));
+        let ph = 6.2832 * fract(vec4(k * 2.31, k * 4.79, k * 1.13, k * 8.57));
+        let w4 = sin(6.2832 * hz * time + ph);
+        let tall = mix(FIELD_FLICKER.x, FIELD_FLICKER.y, saturate(0.5 + 0.3 * w4.x + 0.2 * w4.y));
+        let wide = 1.0 + FIELD_FLICKER_WIDE * (0.6 * w4.y + 0.4 * w4.z);
+        let lean = vec2(w4.z, w4.w) * FIELD_FLICKER_LEAN * size[i];
+        let h = (q.y - l.z) / (l.w * tall);
+        if h > -0.25 && h < 1.0 {
+            // A teardrop: round at its foot, widest a fifth up, pointed at its tip; a log's
+            // lobe leaning in toward the middle as it rises, its tip swung by its clock.
+            let hs = saturate(h);
+            let prof = sqrt(saturate(h * 3.0 + 0.75)) * pow(saturate(1.0 - h), 0.75);
+            let d = length(q.xz - l.xy * (1.0 - FIELD_LEAN_IN * hs) - lean * hs * hs);
+            v = max(v, 1.0 - d / max(size[i] * wide * prof, 1.0e-3));
+        }
+    }
+    return v;
+}
+
+// The field at a point in its frame: x its flame's density per metre, y its heat (the ramp's).
+fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec2<f32> {
+    let hg = saturate(p.y / f.tall);
+    let s = 1.0 / f.tall;
+    let luck = vec3(f.seed * 13.7, f.seed * 7.1, f.seed * 3.3);
+    // The slow octave sways the shape across, more the higher; the wind leans it downwind.
+    let n1 = vec3(p.x * 2.6 * s, (p.y - time * FIELD_RISE.x) * 2.0 * s, p.z * 2.6 * s) + luck;
+    let sway = vec2(noise3(n1), noise3(n1 + vec3(11.3, 4.1, 23.7))) - vec2(0.5);
+    let w = fire.wind.xyz;
+    let lean = vec2(dot(w, f.east), dot(w, f.north)) * 0.05 * hg * hg * f.tall;
+    let q = vec3(p.x + (sway.x * FIELD_SWAY * f.wide - lean.x) * (0.15 + hg), p.y, p.z + (sway.y * FIELD_SWAY * f.wide - lean.y) * (0.15 + hg));
+    var v = field_shape(q, f, time);
+    if v < -0.5 {
+        return vec2(0.0, 0.0);
+    }
+    // The quick octave, stretched along the rise so it carves tongues, eats the flame from its
+    // bottom third up. It changes in place as well as rising: its points are first moved by a
+    // slow layer drifting down and across against the rise, so the pattern itself evolves.
+    let n2 = vec3(q.x * FIELD_TEAR_ACROSS * s, (q.y - time * FIELD_RISE.y) * 2.8 * s, q.z * FIELD_TEAR_ACROSS * s) + luck.zxy;
+    let m = n2 * 0.4 + vec3(time * 1.3, time * 1.9, -time * 1.1);
+    let evolve = vec3(noise3(m), noise3(m + vec3(31.7, 7.9, 13.1)), noise3(m + vec3(5.9, 19.3, 41.7))) - vec3(0.5);
+    let tear = fbm3(n2 + evolve * 1.6);
+    v -= FIELD_TEAR * smoothstep(0.0, 0.4, hg) * (tear - 0.33);
+    let dens = smoothstep(0.0, FIELD_FEATHER, v);
+    // A thin cool skin over a hot inside, hottest low over the coals, so the pale core shows
+    // through the skin rather than being hidden by it; the core hot only deep inside, so the
+    // flame stays orange as its class has it and the yellow is a small heart (fire sheet).
+    let heat = 0.40 + 0.45 * saturate(v * 2.0) * (1.0 - 0.6 * hg) + 0.10 * (1.0 - smoothstep(0.0, 0.3, hg));
+    return vec2(dens * FIELD_K, heat * (0.85 + 0.15 * f.heat));
+}
+
+// The hull round a hearth's field, in its frame (across, up, across).
+fn field_box(f: HearthField) -> array<vec3<f32>, 2> {
+    let r = f.wide * 0.85;
+    return array<vec3<f32>, 2>(vec3(-r, -0.05, -r), vec3(r, f.tall * 1.15, r));
+}
+
+fn hearth_hull(corner: vec3<f32>, slot: u32) -> Out {
+    let f = hearth_field(slot);
+    if f.lobes == 0 {
+        return nowhere();
+    }
+    let box = field_box(f);
+    let l = mix(box[0], box[1], corner);
+    let world = f.foot + f.east * l.x + f.up * l.y + f.north * l.z;
+    var out: Out;
+    out.clip = position_world_to_clip(world);
+    out.uv = vec2(f32(slot), 1.0);
+    out.life = vec4(0.0);
+    out.size = 0.0;
+    out.world = world;
+    return out;
+}
+
+fn hearth_march(in: VertexOutput) -> vec4<f32> {
+    let f = hearth_field(u32(in.uv.x + 0.5));
+    if f.lobes == 0 {
+        discard;
+    }
+    let time = fire.kind.z;
+    let eye = view.world_position;
+    let dir = normalize(in.world_position.xyz - eye);
+    var far = distance(eye, in.world_position.xyz);
+    BREATH_DEPTH = in.position.z;
+@if(DEPTH_PREPASS)
+    {
+        let here = depth_ndc_to_view_z(in.position.z);
+        BREATH_DEPTH = prepass_depth(in.position, 0u);
+        let scene = depth_ndc_to_view_z(BREATH_DEPTH);
+        far = min(far, far * scene / min(here, -1.0e-4));
+    }
+    let o = eye - f.foot;
+    let ol = vec3(dot(o, f.east), dot(o, f.up), dot(o, f.north));
+    let dl = vec3(dot(dir, f.east), dot(dir, f.up), dot(dir, f.north));
+    let box = field_box(f);
+    let inv = 1.0 / select(dl, vec3(1.0e-6), abs(dl) < vec3(1.0e-6));
+    let t0 = (box[0] - ol) * inv;
+    let t1 = (box[1] - ol) * inv;
+    let near = max(max(max(min(t0.x, t1.x), min(t0.y, t1.y)), min(t0.z, t1.z)), 0.0);
+    far = min(far, min(min(max(t0.x, t1.x), max(t0.y, t1.y)), max(t0.z, t1.z)));
+    if near >= far {
+        discard;
+    }
+    let ds = max((far - near) / f32(FIELD_STEPS), f.tall * 0.018);
+    let jitter = fract(52.9829189 * fract(dot(in.position.xy, vec2(0.06711056, 0.00583715)) + time * 7.13));
+    var s = near + ds * jitter;
+    var light = vec3(0.0);
+    var through = 1.0;
+    var glow = 0.0;
+    let bright = HEARTH_BRIGHTNESS * (0.85 + 0.15 * f.heat) * f.glow;
+    for (var i = 0; i < FIELD_STEPS; i++) {
+        if s >= far || through < 0.01 {
+            break;
+        }
+        let gas = field_gas(ol + dl * s, f, time);
+        if gas.x > 0.0 {
+            let r = ramp_row(gas.y, HEARTH_ROW);
+            let a = 1.0 - exp(-gas.x * min(ds, far - s));
+            let flame = r.rgb * bright;
+            light += through * a * flame;
+            glow += through * a * dot(flame, vec3(0.2126, 0.7152, 0.0722));
+            let was = 1.0 - through;
+            through *= 1.0 - a * r.a;
+            if was < 0.5 && 1.0 - through >= 0.5 {
+                let at = view.clip_from_world * vec4(eye + dir * s, 1.0);
+                BREATH_DEPTH = at.z / at.w;
+            }
+        }
+        s += ds;
+    }
+    var cover = 1.0 - through;
+    if cover < 0.002 && glow < 0.002 {
+        discard;
+    }
+    // By day as a hearth's cards (`shade`): a little toward amber and see-through.
+    let day = smoothstep(1.0, 3.5, fire.exposure.y - log2(view.exposure) - adapted.x);
+    let luma = dot(light, vec3(0.2126, 0.7152, 0.0722));
+    light = mix(light, mix(light, vec3(luma) * vec3(1.2, 0.82, 0.06), 0.15), day) * mix(1.0, 0.5, day);
+    cover *= mix(1.0, 0.55, day);
+    FLAME_SHARE = max(cover, glow / (glow + through * BEHIND + 0.02));
+    return vec4(light * on_screen(), cover);
 }
 
 fn nowhere() -> Out {
@@ -2258,6 +2511,10 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall_in: f32, heat:
         out.life = vec4(1.5, heat, luck, 3.0);
         out.size = h;
         return out;
+    }
+    // A marched hearth's columns and tongues are its flame field's (D466, `hearth_march`).
+    if hearth_marched(slot) && !torch && j >= 2 && j < 2 + HEARTH_COLUMNS + HEARTH_TONGUES {
+        return nowhere();
     }
     // A baked set's frame is a whole fire, its own tongues alternating with dark (books.rs):
     // a hearth's body is a few columns, each a slice of that frame at its own moment, so it has

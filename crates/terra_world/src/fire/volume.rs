@@ -14,6 +14,7 @@
 use bevy::{
     asset::RenderAssetUsages,
     image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
+    mesh::{Indices, PrimitiveTopology},
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
@@ -56,6 +57,54 @@ pub(super) fn noise() -> Image {
     sampler.set_address_mode(ImageAddressMode::Repeat);
     image.sampler = ImageSampler::Descriptor(sampler);
     image
+}
+
+/// The breaths' hulls: a box for each jet, its corners 0 to 1 on each axis (its position),
+/// which the shader stretches round the jet's stream and fireball and marches through
+/// (`fire.wesl`, `breath`), its back faces drawn so it shows with the eye inside it too.
+/// `which` rides in each corner's second number: 0 a jet's, 1 a hearth's flame field (D466,
+/// `hearth_march`).
+pub(super) fn hulls(slots: usize, which: f32) -> Mesh {
+    let mut positions = Vec::with_capacity(slots * 24);
+    let mut normals = Vec::with_capacity(slots * 24);
+    let mut ids = Vec::with_capacity(slots * 24);
+    let mut indices = Vec::with_capacity(slots * 36);
+    for slot in 0..slots {
+        for axis in 0..3 {
+            for side in [0.0f32, 1.0] {
+                // (u, v, axis) turn as x, y, z do, so the face runs anticlockwise seen from
+                // its outside when it is at 1, and is turned over when it is at 0.
+                let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+                let first = positions.len() as u32;
+                for (a, b) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)] {
+                    let mut p = [0.0f32; 3];
+                    p[axis] = side;
+                    p[u] = a;
+                    p[v] = b;
+                    let mut n = [0.0f32; 3];
+                    n[axis] = side * 2.0 - 1.0;
+                    positions.push(p);
+                    normals.push(n);
+                    ids.push([slot as f32, which]);
+                }
+                if side > 0.5 {
+                    indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
+                } else {
+                    indices.extend([first, first + 2, first + 1, first, first + 3, first + 2]);
+                }
+            }
+        }
+    }
+    let corners = vec![[0.0f32, 0.0]; positions.len()];
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, corners)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, ids)
+    .with_inserted_indices(Indices::U32(indices))
 }
 
 /// How the breaths are drawn now.

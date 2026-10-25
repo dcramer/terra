@@ -84,8 +84,29 @@ impl Logs {
     }
 }
 
+/// How a kept fire's flame body is drawn, chosen by its kind (D466, docs/fire-module.md): the
+/// baked flipbook cards (its columns and tongues on the logs), or one marched flame field
+/// (`fire.wesl`'s `hearth_march`), which beat the cards for the campfire in a blind panel
+/// (fire round g4). Kinds move to the field one at a time; a torch (`TORCH_M`) keeps its card.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Body {
+    #[default]
+    Cards,
+    Marched,
+}
+
+impl Body {
+    /// What `fire.wesl`'s `hearth_marched` reads: 1 for the field.
+    pub fn told(self) -> f32 {
+        match self {
+            Body::Cards => 0.0,
+            Body::Marched => 1.0,
+        }
+    }
+}
+
 /// The fires kept where something kindled stands, each with a number of its own from its
-/// place, so no two flicker alike, and the logs each burns on.
+/// place, so no two flicker alike, the logs each burns on and how its body is drawn.
 pub(super) fn keep(kindled: Query<(&Kindled, &GlobalTransform)>, mut blazes: ResMut<Blazes>) {
     if kindled.is_empty() && blazes.kept.is_empty() {
         return;
@@ -94,6 +115,7 @@ pub(super) fn keep(kindled: Query<(&Kindled, &GlobalTransform)>, mut blazes: Res
         .iter()
         .map(|(fire, placed)| fire.logs.packed(placed))
         .collect();
+    let bodies: Vec<f32> = kindled.iter().map(|(fire, _)| fire.body.told()).collect();
     let kept: Vec<Blaze> = kindled
         .iter()
         .map(|(fire, at)| {
@@ -107,9 +129,10 @@ pub(super) fn keep(kindled: Query<(&Kindled, &GlobalTransform)>, mut blazes: Res
             }
         })
         .collect();
-    if kept != blazes.kept || hearths != blazes.hearths {
+    if kept != blazes.kept || hearths != blazes.hearths || bodies != blazes.bodies {
         blazes.kept = kept;
         blazes.hearths = hearths;
+        blazes.bodies = bodies;
     }
 }
 
