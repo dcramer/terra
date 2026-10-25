@@ -161,15 +161,31 @@ pub struct MoveSet {
     pub moves: HashMap<String, Move>,
 }
 
-/// What a blow that lands shows (D456): what it struck flashes for `flash_s`, and the player's
+/// What a blow that lands shows (D456, D487): what it struck flashes for `flash_s`, as bright
+/// as `flash` (1 D456's, 0 none), a `burst` shows where the blade met it, and the player's
 /// view is kicked by `kick_deg`, easing back to rest over `kick_s`. Presentation only: the
 /// fight's rules never read it.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Landed {
+    pub flash: f32,
     pub flash_s: f32,
+    pub burst: Burst,
     pub kick_deg: f32,
     pub kick_s: f32,
+}
+
+/// What shows where a landed blade met the body (D487): a white-hot glow `glow_m` across for
+/// `glow_s`, and `sparks` flung on along the blade's travel at `spark_mps`, each gone after
+/// `spark_s`. A glow 0 across and no sparks show nothing.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Burst {
+    pub glow_s: f32,
+    pub glow_m: f32,
+    pub sparks: u32,
+    pub spark_mps: f32,
+    pub spark_s: f32,
 }
 
 /// A blow thrown too tired: its own time runs at `pace`, and it does `might` of its damage.

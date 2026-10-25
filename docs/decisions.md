@@ -176,6 +176,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D464](decisions/D464.md) | Holding a one-handed weapon in two hands | Design | — | Open | Whether a one-hander can be held in both hands for other… |
 | [D465](decisions/D465.md) | How many variants of a move | Design | — | Open | How many takes of each move are kept and drawn without… |
 | [D481](decisions/D481.md) | The move check measures the sword through its own shield and the shield through the sword arm | Tech | Agent | Decided | The move check (`tools/characters/moves.ts`, D447)… |
+| [D487](decisions/D487.md) | A landed blow shows a burst where the blade met the body, not a flash of the whole body | Design | — | Open | Recommended by the agent (combat round 17)… |
 
 ## People and the tribe
 

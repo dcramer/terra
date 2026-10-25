@@ -9,9 +9,10 @@
 //! sword_and_shield.ron`) and their runner, a blade swept against a body's hurt capsule, and
 //! what a blow does. Here is only what reads and writes the bodies, plays clips, flashes and
 //! sounds: the player's stance below, what a blow shows in `contact` (the struck body's flash
-//! in `flash`, D456), the partner's mind in
+//! in `flash`, D456; where the blade met it in `burst`, D487), the partner's mind in
 //! `partner`, the bars and the controls on screen in `hud`.
 
+mod burst;
 mod contact;
 mod feet;
 mod flash;
@@ -126,6 +127,7 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(Update, (contact::fade, view));
     feet::plugin(app);
+    burst::plugin(app);
     flash::plugin(app);
     hud::plugin(app);
     record::plugin(app);

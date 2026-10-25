@@ -155,7 +155,7 @@ fn random(seed: u32, i: u32, salt: u32) -> f32 {
 
 /// A soft round, its alpha falling off from its middle, a little uneven, as the build's dust
 /// is drawn with.
-fn soft_image() -> Image {
+pub(crate) fn soft_image() -> Image {
     const SIDE: u32 = 64;
     let mut data = Vec::with_capacity((SIDE * SIDE * 4) as usize);
     for y in 0..SIDE {

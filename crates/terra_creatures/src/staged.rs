@@ -15,7 +15,7 @@
 //! names a model, an item or a clip: all of it is in the calls.
 
 mod fireside;
-mod impact;
+pub(crate) mod impact;
 pub mod pose;
 mod quench;
 

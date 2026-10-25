@@ -2495,6 +2495,26 @@
    }
   },
   {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "hit.burst.frames",
+   "noticed": 4,
+   "notice": "a landed blow shows nothing where the blade met the body, or a glow that lingers there",
+   "bar": {
+    "within": [
+     3,
+     4
+    ]
+   },
+   "unit": "frames at 60",
+   "source": "D487 (Open); tools/combat/refs/enshrouded.json hit_stop.flash_frames_at_60 (3-4), the glow at the contact, 247.717-247.767 s (research/2026-10-25-what-a-landed-hit-shows.md)",
+   "check": {
+    "by": "measured",
+    "crate": "terra_creatures",
+    "test": "melee::burst::tests::a_contact_glows_and_sparks_where_the_blade_met_and_is_gone_after_its_life"
+   }
+  },
+  {
    "measurable": false,
    "cost": "cheap",
    "id": "film.telegraph_readable",

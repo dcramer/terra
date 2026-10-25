@@ -1,6 +1,7 @@
 //! What a blow that lands shows on what it struck (D456): the body flashes, its skin and what
 //! it wears and holds lit for the set's `landed.flash_s` (3 to 4 frames at 60, as Enshrouded's
-//! struck flash), in place of a long freeze. Presentation only: nothing the fight's rules read.
+//! struck flash), as bright as `landed.flash` (0 none: D487 proposes the contact's `burst`
+//! instead), in place of a long freeze. Presentation only: nothing the fight's rules read.
 //! Materials are shared between bodies, so each mesh of the struck body shows a lit copy of
 //! its own (one a material, shared) and gets its own back after, as a hit flash is drawn by
 //! swapping in an overlay or a material instance in other engines (Unreal's dynamic material
@@ -14,11 +15,13 @@ use terra_walker::character::BodyMaterial;
 /// exposure, so it reads alike by day and by night. A warm white.
 const GLOW: LinearRgba = LinearRgba::rgb(0.9, 0.85, 0.75);
 
-/// A body struck: it flashes for `seconds` (the set's `landed.flash_s`).
+/// A body struck: it flashes for `seconds` (the set's `landed.flash_s`), as bright as
+/// `strength` (the set's `landed.flash`, 1 the full glow).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Lit {
     pub body: Entity,
     pub seconds: f32,
+    pub strength: f32,
 }
 
 /// A body flashing: how much longer, and each of its meshes with the material it had and the
@@ -35,11 +38,11 @@ enum Was {
     Body(Handle<BodyMaterial>, AssetId<BodyMaterial>),
 }
 
-/// The lit copies, one a material, however many bodies flash with it.
+/// The lit copies, one a material and strength, however many bodies flash with it.
 #[derive(Resource, Default)]
 struct Copies {
-    standard: HashMap<AssetId<StandardMaterial>, Handle<StandardMaterial>>,
-    body: HashMap<AssetId<BodyMaterial>, Handle<BodyMaterial>>,
+    standard: HashMap<(AssetId<StandardMaterial>, u32), Handle<StandardMaterial>>,
+    body: HashMap<(AssetId<BodyMaterial>, u32), Handle<BodyMaterial>>,
 }
 
 pub fn plugin(app: &mut App) {
@@ -48,10 +51,10 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, (light, fade).chain());
 }
 
-/// A material lit: what it gives off is the flash's, whatever map it had.
-fn lit(own: &StandardMaterial) -> StandardMaterial {
+/// A material lit: what it gives off is the flash's, as strong as asked, whatever map it had.
+fn lit(own: &StandardMaterial, strength: f32) -> StandardMaterial {
     StandardMaterial {
-        emissive: GLOW,
+        emissive: GLOW * strength,
         emissive_texture: None,
         emissive_exposure_weight: 0.0,
         ..own.clone()
@@ -71,7 +74,13 @@ fn light(
     mut copies: ResMut<Copies>,
 ) {
     let mut done = HashSet::new();
-    for &Lit { body, seconds } in struck.read() {
+    for &Lit {
+        body,
+        seconds,
+        strength,
+    } in struck.read()
+    {
+        let strong = strength.to_bits();
         if let Ok(mut flash) = flashing.get_mut(body) {
             flash.left = flash.left.max(seconds);
             continue;
@@ -82,31 +91,31 @@ fn light(
         let mut parts = Vec::new();
         for part in std::iter::once(body).chain(children.iter_descendants(body)) {
             if let Ok(own) = standard.get(part) {
-                let copy = match copies.standard.get(&own.id()) {
+                let copy = match copies.standard.get(&(own.id(), strong)) {
                     Some(copy) => copy.clone(),
                     None => {
-                        let Some(base) = standards.get(&own.0).map(lit) else {
+                        let Some(base) = standards.get(&own.0).map(|own| lit(own, strength)) else {
                             continue;
                         };
                         let copy = standards.add(base);
-                        copies.standard.insert(own.id(), copy.clone());
+                        copies.standard.insert((own.id(), strong), copy.clone());
                         copy
                     }
                 };
                 parts.push((part, Was::Standard(own.0.clone(), copy.id())));
                 commands.entity(part).insert(MeshMaterial3d(copy));
             } else if let Ok(own) = skins.get(part) {
-                let copy = match copies.body.get(&own.id()) {
+                let copy = match copies.body.get(&(own.id(), strong)) {
                     Some(copy) => copy.clone(),
                     None => {
                         let Some((base, extension)) = bodies
                             .get(&own.0)
-                            .map(|own| (lit(&own.base), own.extension))
+                            .map(|own| (lit(&own.base, strength), own.extension))
                         else {
                             continue;
                         };
                         let copy = bodies.add(BodyMaterial { base, extension });
-                        copies.body.insert(own.id(), copy.clone());
+                        copies.body.insert((own.id(), strong), copy.clone());
                         copy
                     }
                 };
@@ -203,6 +212,7 @@ mod tests {
         world.write_message(Lit {
             body: struck,
             seconds: landed.flash_s,
+            strength: 1.0,
         });
         let glows = |world: &World, part: Entity| {
             let standard = world.resource::<Assets<StandardMaterial>>();
