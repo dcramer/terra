@@ -21,6 +21,7 @@ terra_climate = { path = "crates/terra_climate" }
 terra_game = { path = "crates/terra_game" }
 terra_core = { path = "crates/terra_core" }
 terra_creatures = { path = "crates/terra_creatures" }
+terra_dungeon = { path = "crates/terra_dungeon" }
 terra_folk = { path = "crates/terra_folk" }
 terra_gen = { path = "crates/terra_gen" }
 terra_items = { path = "crates/terra_items" }
@@ -111,6 +112,10 @@ opt-level = 3
 # A town laid whole, and a day lived in it, are sweeps of the same kind (D406); a
 # workspace member is not covered by `package."*"`.
 [profile.dev.package.terra_town]
+opt-level = 3
+
+# A dungeon is a sweep of the same kind: its tests generate a thousand a theme (D406).
+[profile.dev.package.terra_dungeon]
 opt-level = 3
 
 # The layout's tests sweep every kit and base, as building's do.

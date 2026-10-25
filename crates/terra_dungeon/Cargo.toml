@@ -1,0 +1,21 @@
+[package]
+name = "terra_dungeon"
+description = "Dungeons by rule (docs/dungeons.md): a mission graph from a theme and a goal, placed on a grid of cells with corridors and stairs, and dressed by wave function collapse from a theme's modules; plain Rust, no Bevy (D28)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glam.workspace = true
+libm.workspace = true
+serde.workspace = true
+# Themes and their modules are data (D136), RON as the game's other data files.
+ron.workspace = true
+# Seeds and repeatable random streams, and the sheet's sweep over every core (terra_gen::par, D406).
+terra_gen.workspace = true
+# The sheet's maps, the version Bevy's image loading already builds.
+png.workspace = true
+
+[lints]
+workspace = true

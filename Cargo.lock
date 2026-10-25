@@ -6145,6 +6145,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra_dungeon"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "libm",
+ "png",
+ "ron",
+ "serde",
+ "terra_gen",
+]
+
+[[package]]
 name = "terra_folk"
 version = "0.1.0"
 dependencies = [

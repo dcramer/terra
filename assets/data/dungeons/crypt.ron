@@ -1,0 +1,44 @@
+// The crypt, "The Ossuary Gate" (docs/dungeons.md). Working assumptions, not designed: the
+// numbers, the bestiary and the loot are stand-ins until the developers settle them.
+// Module sides are north, east, south, west, each the sockets it takes joined by `|`:
+// open (floor into the same space), wall, door, stair, rubble, water.
+(
+    name: "crypt",
+    title: "The Ossuary Gate",
+    goal: "Take the relic from the crypt-lord's chamber behind the locked gate; its key lies in the ossuary.",
+    rooms: (11, 15),
+    levels: 2,
+    keys: 1,
+    walls: "Greystone",
+    floors: "Stone",
+    features: (goal: "relic_dais", key: "ossuary_altar", rest: "campfire", stair: "stair"),
+    bestiary: [
+        (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 2)),
+        (species: "Spider", roles: [Passage, Branch, Guard, Goal, Treasure], danger: 0.5, group: (2, 4), weight: 2.0),
+    ],
+    loot: [
+        (item: "Arrow", roles: [Passage, Branch, Treasure, Shortcut], count: (4, 10), weight: 2.0),
+        (item: "Iron", roles: [Treasure, Secret, Guard, Goal], count: (1, 3), weight: 2.0),
+        (item: "Bow", roles: [Treasure, Secret, Goal], danger: 0.4, count: (1, 1)),
+        (item: "Leather coat", roles: [Treasure, Secret, Goal], danger: 0.3, count: (1, 1)),
+        (item: "Boots", roles: [Treasure, Branch], count: (1, 1)),
+        (item: "Torch", roles: [Passage, Rest], count: (1, 2)),
+        (item: "Cooked meat", roles: [Rest], count: (1, 3)),
+    ],
+    modules: [
+        (name: "flagstones", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 10.0, rotates: false, safe: true),
+        (name: "cracked_flags", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 3.0, rotates: false),
+        (name: "loculi", sides: ["wall", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 5.0),
+        (name: "sconce", sides: ["wall", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 2.0),
+        (name: "pillar", sides: ["open", "open", "open", "open"], weight: 4.0, spaces: [Room], rotates: false),
+        (name: "sarcophagus", sides: ["wall", "open|wall", "open", "open|wall"], weight: 2.5, spaces: [Room]),
+        (name: "urns", sides: ["wall", "wall", "open|door", "open|door"], weight: 1.5, spaces: [Room]),
+        (name: "bone_drift", sides: ["open|wall|door|stair", "wall", "open|wall|door|stair", "wall"], weight: 2.0, spaces: [Corridor]),
+        (name: "collapse", sides: ["wall", "wall", "rubble", "rubble"], weight: 1.0, spaces: [Room], blocks: true),
+        (name: "rubble_spill", sides: ["rubble", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 0.5),
+        (name: "relic_dais", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
+        (name: "ossuary_altar", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
+        (name: "campfire", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
+        (name: "stair", sides: ["open|wall|stair", "open|wall|stair", "open|wall|stair", "open|wall|stair"], fixed: true, spaces: [Stair], rotates: false),
+    ],
+)

@@ -1,0 +1,42 @@
+// The flooded mine, "Deep Seam" (docs/dungeons.md). Working assumptions, not designed: the
+// numbers, the bestiary and the loot are stand-ins until the developers settle them.
+// Module sides are north, east, south, west, each the sockets it takes joined by `|`:
+// open (floor into the same space), wall, door, stair, rubble, water. A module whose open
+// sides are water only floods its whole room or corridor run, as no dry module takes water.
+(
+    name: "flooded_mine",
+    title: "Deep Seam",
+    goal: "Reach the miner trapped in the deepest gallery; the lever in the pump room drains the flooded gate.",
+    rooms: (12, 16),
+    levels: 3,
+    keys: 1,
+    walls: "Stone",
+    floors: "Earth",
+    features: (goal: "trapped_miner", key: "pump_lever", rest: "campfire", stair: "stair"),
+    bestiary: [
+        (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 2)),
+        (species: "Spider", roles: [Branch, Guard, Goal, Treasure], danger: 0.4, group: (3, 5), weight: 2.0),
+    ],
+    loot: [
+        (item: "Ore", roles: [Passage, Branch, Treasure, Shortcut], count: (2, 6), weight: 3.0),
+        (item: "Iron", roles: [Treasure, Secret, Guard, Goal], danger: 0.3, count: (1, 3), weight: 2.0),
+        (item: "Iron pickaxe", roles: [Treasure, Secret, Goal], danger: 0.5, count: (1, 1)),
+        (item: "Torch", roles: [Passage, Branch, Rest], count: (1, 2)),
+        (item: "Cooked meat", roles: [Rest, Treasure], count: (1, 3)),
+    ],
+    modules: [
+        (name: "earth_floor", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 8.0, rotates: false, safe: true),
+        (name: "timbered", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 6.0),
+        (name: "flooded", sides: ["water|wall|door|stair", "water|wall|door|stair", "water|wall|door|stair", "water|wall|door|stair"], weight: 3.0, rotates: false),
+        (name: "ore_vein", sides: ["wall", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 2.0),
+        (name: "rail_run", sides: ["open|door|stair", "wall", "open|door|stair", "wall"], weight: 3.0, spaces: [Corridor]),
+        (name: "tool_corner", sides: ["wall", "wall", "open|door", "open|door"], weight: 1.5, spaces: [Room]),
+        (name: "prop_post", sides: ["open", "open", "open", "open"], weight: 3.0, spaces: [Room], rotates: false),
+        (name: "cave_in", sides: ["wall", "wall", "rubble", "rubble"], weight: 1.5, spaces: [Room], blocks: true),
+        (name: "spoil_heap", sides: ["rubble", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 0.5),
+        (name: "trapped_miner", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
+        (name: "pump_lever", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
+        (name: "campfire", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
+        (name: "stair", sides: ["open|wall|stair", "open|wall|stair", "open|wall|stair", "open|wall|stair"], fixed: true, spaces: [Stair], rotates: false),
+    ],
+)
