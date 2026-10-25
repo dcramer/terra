@@ -2606,7 +2606,7 @@
    "check": null
   },
   {
-   "measurable": false,
+   "measurable": true,
    "cost": "cheap",
    "id": "held.shield.grip_hand",
    "noticed": 4,
@@ -2616,11 +2616,14 @@
    },
    "unit": "cm",
    "source": "docs/holding.md section 3 (the hand closes on the handle; IK only past 1 cm); Hurstwic, Viking shields (gripped behind the boss, no arm straps); research/2026-10-25-shield-prior-art.md",
-   "needs": "moves.ts: the distance from the left hand socket's origin (socket.hand.L, the middle of the fist) to the shield's grip (its origin as the strap hangs it), the largest over every clip on every template, cm; a row measure grip_hand_cm",
-   "check": null
+   "check": {
+    "by": "moves",
+    "row": "grip",
+    "measure": "grip_hand_cm"
+   }
   },
   {
-   "measurable": false,
+   "measurable": true,
    "cost": "cheap",
    "id": "held.shield.grip_across_palm",
    "noticed": 3,
@@ -2630,8 +2633,11 @@
    },
    "unit": "deg",
    "source": "Hurstwic, Viking shields (a wooden handgrip across the board behind the boss, held in the fist); I.33 fol. 1r and 5r (the buckler's grip in the fist); fit_held.py STRAPS (the round shield's grip along lowerarm_l, 90 deg by construction); research/2026-10-25-shield-prior-art.md",
-   "needs": "moves.ts: the angle between the shield's grip bar (its +Y as hung) and the line across the left palm (socket.hand.L's axis across the knuckles), at the guard's first frame and the largest over every clip, deg; a row measure grip_palm_deg",
-   "check": null
+   "check": {
+    "by": "moves",
+    "row": "grip",
+    "measure": "grip_palm_deg"
+   }
   }
  ]
 }

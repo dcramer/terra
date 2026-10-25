@@ -9,6 +9,9 @@
 //               it was at the press and where it is at the span's end (a shield that stays
 //               put, or goes straight out for the blow, makes none)
 //   faceOff     how far the board's painted face is turned from the chest's forward, flattened
+//   gripOff     how far the shield's grip is from the fist that should close on it, and how
+//               far its bar is turned from the line across the palm (held.shield.grip_hand,
+//               grip_across_palm; research/2026-10-25-shield-prior-art.md fault 3)
 
 import { type V3, dot, len, sub } from "./glb.ts";
 
@@ -53,4 +56,18 @@ export function faceOff(face: V3, forward: V3, up: V3 = [0, 1, 0]): number {
   const flat = forward.map((x, j) => x - up[j] * k) as V3;
   const c = dot(face, flat) / (len(face) * len(flat) || 1);
   return (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI;
+}
+
+/**
+ * The shield's grip against the fist (research/2026-10-25-shield-prior-art.md fault 3): `fist`
+ * the middle of the closed fist (socket.hand.L's origin), `knuckles` two points on the line
+ * across the palm (the index and little finger's first joints), `grip` the shield's grip (its
+ * look's origin, as it is hung) and `bar` the way its handle runs (the look's +Y). The grip's
+ * distance from the fist, cm, and the degrees between the bar and the line across the palm, as
+ * lines (0 across the palm either way round, 90 along the forearm).
+ */
+export function gripOff(fist: V3, knuckles: [V3, V3], grip: V3, bar: V3): { cm: number; deg: number } {
+  const across = sub(knuckles[1], knuckles[0]);
+  const c = Math.abs(dot(across, bar)) / (len(across) * len(bar) || 1);
+  return { cm: len(sub(grip, fist)) * 100, deg: (Math.acos(Math.min(1, c)) * 180) / Math.PI };
 }

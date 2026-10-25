@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { faceOff, roundTrip } from "./shield_path.ts";
+import { faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import type { V3 } from "./glb.ts";
 
 const still = (p: V3) => () => p;
@@ -43,4 +43,23 @@ test("a board's face is measured from the chest's forward laid flat", () => {
   assert.ok(Math.abs(faceOff([1, 0, 1], [0, 0, 1]) - 45) < 1e-9);
   // Face up, a chest bowed forward: 90, the bow taken out of the forward.
   assert.ok(Math.abs(faceOff([0, 1, 0], [0, -0.5, 0.8]) - 90) < 1e-9);
+});
+
+test("a grip in the fist across the palm is on it; one strapped along the forearm is off the fist and square to the palm", () => {
+  // A left fist at the origin, its knuckles across +Z (index forward, little finger back), the
+  // forearm back along -X.
+  const knuckles: [V3, V3] = [[0.02, 0, 0.04], [0.02, 0, -0.04]];
+  const inFist = gripOff([0, 0, 0], knuckles, [0, 0, 0], [0, 0, -1]);
+  assert.ok(inFist.cm < 1e-9 && inFist.deg < 1e-6, JSON.stringify(inFist));
+  // Turned 20 degrees about the forearm's line: 20 off, the bar either way round.
+  const r = (20 * Math.PI) / 180;
+  for (const s of [1, -1]) {
+    const turned = gripOff([0, 0, 0], knuckles, [0, 0, 0], [0, s * Math.sin(r), s * Math.cos(r)]);
+    assert.ok(Math.abs(turned.deg - 20) < 1e-6, `${turned.deg}`);
+  }
+  // Strapped: its bar along the forearm, its grip 7 cm back from the fist and 6.5 cm out of the
+  // palm side: sqrt(7^2 + 6.5^2) cm off, square to the palm.
+  const strapped = gripOff([0, 0, 0], knuckles, [-0.07, -0.065, 0], [1, 0, 0]);
+  assert.ok(Math.abs(strapped.cm - Math.hypot(7, 6.5)) < 1e-6, `${strapped.cm}`);
+  assert.ok(Math.abs(strapped.deg - 90) < 1e-6, `${strapped.deg}`);
 });

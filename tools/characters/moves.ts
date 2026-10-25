@@ -27,6 +27,11 @@
 //           take mixed in by the outgoing's `carry`, D454), crossfaded over the game's move
 //           blend; each chained take is checked as a row of its own. Numbers for the scorecard
 //           (tools/combat), not bars here: a row "blows" and a row "chain" take the worst
+//   grip    the shield's grip (its look's origin, as it is hung) against the left fist: how far
+//           it is from socket.hand.L's origin, and how far its bar (+Y) turns off the line
+//           across the palm (index to little finger's first joints), the worst of every move
+//           and clip on every template, and the guard's first frame; a row "grip" for the
+//           scorecard (held.shield.grip_*, research/2026-10-25-shield-prior-art.md fault 3)
 //   spec    a clip with a spec: from and back to the guard; one that holds the guard
 //           ("held") within a blend of it throughout; a block's shield arm up in front and
 //           still while it is "raised"
@@ -46,7 +51,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, board, meshOf, sliced, through } from "./clash.ts";
 import { PACE_FRAMES } from "./phases.ts";
-import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, roundTrip } from "./shield_path.ts";
+import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, matrix, mmul, place, posed, qinv, rot, sub, turn } from "./glb.ts";
 
@@ -248,8 +253,9 @@ function poseOf(shape: Shape, clip: Clip, t: number): Pose[] {
 // forearm), from the bone its file's `strap` names, as `terra_walker::character` hangs it.
 // The sword (in the right hand) also as balls, the shield (in the left) as its board, for the
 // clash (clash.ts), in the frame of the node they hang from.
-// `front` is the way the look's painted front (its -Z) looks, in that frame.
-type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; front: V3; centre: V3; balls?: Ball[]; board?: Board };
+// `front` is the way the look's painted front (its -Z) looks, in that frame; `grip` where its
+// origin (the place it is held at) sits and `bar` the way its handle (+Y) runs.
+type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; front: V3; centre: V3; grip: V3; bar: V3; balls?: Ball[]; board?: Board };
 type Strap = { bone: string; at: V3; face: V3; grip: V3 };
 const rest = posed(body, undefined, 0);
 // A strap's place in its bone's frame: `at` in metres (the hand socket's, which the bone's
@@ -311,7 +317,8 @@ const held: Held[] = opt.hold!.map((h) => {
   const disc = hand === "socket.hand.L" ? board(mesh!) : undefined;
   const plate = disc && { centre: put(disc.centre), normal: turned(disc.normal), radius: disc.radius * k, half: disc.half * k };
   const front = turned(rot(pose.r, [0, 0, -1]));
-  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, centre: put(centre), balls, board: plate };
+  const bar = turned(rot(pose.r, [0, 1, 0]));
+  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, centre: put(centre), grip: put(pose.t), bar, balls, board: plate };
 });
 
 // The skinned torso, head and thighs at a pose, gridded for the nearest-vertex search.
@@ -364,7 +371,7 @@ const at = (name: string) => {
   return i;
 };
 const node = Object.fromEntries(
-  ["pelvis", "Head", "spine_03", "thigh_l", "thigh_r", ...["l", "r"].flatMap((s) => [`hand_${s}`, `lowerarm_${s}`, `upperarm_${s}`, `middle_01_${s}`, `middle_02_${s}`, `index_02_${s}`, `thumb_02_${s}`])].map((n) => [n, at(n)]),
+  ["pelvis", "Head", "spine_03", "thigh_l", "thigh_r", "socket.hand.L", "index_01_l", "pinky_01_l", ...["l", "r"].flatMap((s) => [`hand_${s}`, `lowerarm_${s}`, `upperarm_${s}`, `middle_01_${s}`, `middle_02_${s}`, `index_02_${s}`, `thumb_02_${s}`])].map((n) => [n, at(n)]),
 );
 const mid = (a: V3, b: V3): V3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
 
@@ -407,6 +414,9 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
   let high: Worst = { cm: -Infinity, where: "" };
   let elbow: Worst = { cm: -Infinity, where: "" };
   let face: Worst = { cm: -Infinity, where: "" };
+  // The shield's grip against the left fist: cm off it, degrees off the line across the palm.
+  let gripCm: Worst = { cm: -Infinity, where: "" };
+  let gripDeg: Worst = { cm: -Infinity, where: "" };
   for (const shape of shapes) {
     for (let t = from; t <= to + 1e-6; t += 1 / fps) {
       const pose = poseOf(shape, clip, t);
@@ -442,6 +452,9 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
         swordW = worse(swordW, blade.cm, `${blade.part} in ${shield.name} at ${t.toFixed(2)} s, ${shape.name}`);
         const arm = through(swordArm(P), disc);
         armW = worse(armW, arm.cm, `${shield.name} in ${arm.part} at ${t.toFixed(2)} s, ${shape.name}`);
+        const g = gripOff(pose[node["socket.hand.L"]].t, [P("index_01_l"), P("pinky_01_l")], place(B, shield.grip), rot(B.r, shield.bar));
+        gripCm = worse(gripCm, g.cm, `at ${t.toFixed(2)} s, ${shape.name}`);
+        gripDeg = worse(gripDeg, g.deg, `at ${t.toFixed(2)} s, ${shape.name}`);
         if (t < carrying[0] - 1e-6 || t > carrying[1] + 1e-6) continue;
         const when = `at ${t.toFixed(2)} s, ${shape.name}`;
         const shoulder = P("upperarm_l");
@@ -451,7 +464,7 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
       }
     }
   }
-  return { hands, held: heldW, sword: swordW, arm: armW, carry: { high, elbow: { cm: -elbow.cm, where: elbow.where }, face } };
+  return { hands, held: heldW, sword: swordW, arm: armW, carry: { high, elbow: { cm: -elbow.cm, where: elbow.where }, face }, grip: { cm: gripCm, deg: gripDeg } };
 }
 
 // Points that say where a pose is, relative to the hips: hands, forearms, head, blade tip.
@@ -572,6 +585,12 @@ function takesAfter(move: Move, t: number, next: Move): { clip: Clip; name: stri
 const checked: Move[] = moves.flatMap((m) => (m.chained ? [m, { ...m, name: `${m.name}.chained`, clip: m.chained, chained: undefined, entered: "chain" as const }] : [m]));
 // The worst carry of every blow, for the row "blows".
 const carried = { high: { cm: -Infinity, where: "" }, elbow: { cm: Infinity, where: "" }, face: { cm: -Infinity, where: "" } };
+// The shield's grip against the fist, the worst of every move and clip, for the row "grip".
+const gripped = { cm: { cm: -Infinity, where: "" }, deg: { cm: -Infinity, where: "" } };
+const grips = (pen: Pen, what: string) => {
+  if (pen.grip.cm.cm > gripped.cm.cm) gripped.cm = { cm: pen.grip.cm.cm, where: `${what} ${pen.grip.cm.where}` };
+  if (pen.grip.deg.cm > gripped.deg.cm) gripped.deg = { cm: pen.grip.deg.cm, where: `${what} ${pen.grip.deg.where}` };
+};
 
 for (const move of checked) {
   const clip = clipOf(move.clip);
@@ -579,6 +598,7 @@ for (const move of checked) {
   const bad: string[] = [];
   let gaps: [number, number] | undefined;
   const pen = penetration(clip, move.from, move.done, move.active);
+  grips(pen, move.name);
   const measured: Record<string, number> = { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen) };
   parts.push(`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen));
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
@@ -718,11 +738,22 @@ if (trips.length) {
 for (const name of opt.also!.split(",").filter(Boolean)) {
   const clip = clipOf(name);
   const pen = penetration(clip, 0, clip.end);
+  grips(pen, name);
   const bad: string[] = [];
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
   row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen), ...carriedBy(pen) } });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
+}
+if (shield && gripped.cm.cm > -Infinity) {
+  // The guard's first frame, where a drawn fighter stands, and the worst of every clip.
+  const atGuard = penetration(guardClip, 0, 0).grip.deg;
+  row(
+    "grip, the shield in the fist",
+    [`grip ${cm(gripped.cm.cm)} from the fist at most (${gripped.cm.where})`, `bar ${gripped.deg.cm.toFixed(0)}° off the line across the palm at most (${gripped.deg.where}), ${atGuard.cm.toFixed(0)}° in the guard`],
+    [],
+    { clip: "grip", measured: { grip_hand_cm: gripped.cm.cm, grip_palm_deg: gripped.deg.cm, grip_palm_guard_deg: atGuard.cm } },
+  );
 }
 if (opt.json) writeFileSync(opt.json, JSON.stringify(rows, null, 1) + "\n");
 if (failures.length) {
