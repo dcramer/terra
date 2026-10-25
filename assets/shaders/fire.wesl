@@ -2518,9 +2518,13 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     let out_from = (vec2(hash(vec2(luck, 1.0)), hash(vec2(luck, 2.0))) - 0.5) * mix(tall * 0.8, b.z * 0.6, kept);
     // A hearth's spreading out as they climb, a cone opening about one in two.
     let sway = mix(2.0, 0.6 + 1.1 * rise, kept);
-    let at = foot + up * (rise + tall * mix(0.3, 0.12, kept)) + east * (out_from.x + wander.x * sway * t) + north * (out_from.y + wander.y * sway * t) + wind * seconds * mix(0.8, 0.4, kept);
+    // A hearth's carried on the air (`ember_drift`), and its flight with it.
+    let drift = ember_drift(seconds, rise, luck, own, seed, time) * kept;
+    let rise_was = climb * (1.0 - exp(-max(seconds - 0.05, 0.0) * 0.9)) / 0.9;
+    let drifting = (drift - ember_drift(max(seconds - 0.05, 0.0), rise_was, luck, own, seed, time - 0.05) * kept) / 0.05;
+    let at = foot + up * (rise + tall * mix(0.3, 0.12, kept)) + east * (out_from.x + wander.x * sway * t + drift.x) + north * (out_from.y + wander.y * sway * t + drift.y) + wind * seconds * mix(0.8, 0.4, kept);
     // Stretched along its flight: up and downwind, and as the eddies toss it.
-    let flight = normalize(up * (3.0 * exp(-seconds * 0.9) + 0.4) + wind * 0.8 + (east * quick.x + north * quick.y) * 2.0 * kept);
+    let flight = normalize(up * (3.0 * exp(-seconds * 0.9) + 0.4) + wind * 0.8 + (east * quick.x + north * quick.y) * 2.0 * kept + (east * drifting.x + north * drifting.y) * 0.6);
     let to_eye = normalize(view.world_position - at);
     var across = cross(flight, to_eye);
     if dot(across, across) < 1.0e-6 {
@@ -2540,6 +2544,24 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     out.life = vec4(t, heat, luck, 2.0 + kept);
     out.glow = glow;
     return out;
+}
+
+// Where a hearth's ember `seconds` into its life has been carried on the air, metres east and
+// north (campfire notes #5: they rose as one straight, tilted stream, where the photographs'
+// and RDR2's drift and curl). Each turns on an eddy of its own, either way, that widens as it
+// climbs; the fire's gust swings them, the higher the further, and since an ember feels the
+// gust of the moment it passed, the cloud snakes rather than leaning as one; and about one in
+// three is caught and carried off to a side of its own.
+fn ember_drift(seconds: f32, rise: f32, luck: f32, own: f32, seed: f32, time: f32) -> vec2<f32> {
+    let spin = select(-1.0, 1.0, fract(luck * 7.31) > 0.5) * (1.8 + 2.4 * fract(own * 5.17));
+    let a = 6.2831853 * fract(luck * 3.77) + spin * seconds;
+    let curl = vec2(cos(a), sin(a)) * (0.03 + 0.11 * min(rise, 1.2));
+    let felt = time - 0.5 * seconds;
+    let gust = (vec2(noise(vec2(felt * 0.45, seed * 13.0)), noise(vec2(felt * 0.45 + 31.0, seed * 13.0))) - 0.5) * 1.2 * rise;
+    let caught = step(fract(own * 11.3), 0.33);
+    let away = 6.2831853 * fract(luck * 9.13 + seed);
+    let carry = vec2(cos(away), sin(away)) * caught * (0.25 + 0.35 * fract(luck * 2.9)) * seconds * smoothstep(0.1, 0.6, rise);
+    return curl + gust + carry;
 }
 
 // `soft` is how far it has faded in front of what is behind it: taken as less soot glowing,

@@ -422,7 +422,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let ev100 = -log2(view.exposure * 1.2);
         scatter = mix(1.0, HEARTH_SCATTER, smoothstep(10.5, 12.5, ev100));
         albedo = mix(vec3(0.14, 0.14, 0.145), vec3(0.42, 0.42, 0.43), smoothstep(0.05, 0.5, t));
-        albedo_sky = mix(vec3(0.5, 0.5, 0.51), vec3(0.8, 0.82, 0.86), smoothstep(0.05, 0.5, t));
+        // Grey-brown, not blue-grey (campfire notes #5: at dusk the column read as a blue shaft).
+        albedo_sky = mix(vec3(0.5, 0.49, 0.47), vec3(0.8, 0.78, 0.75), smoothstep(0.05, 0.5, t));
     }
     var light = vec3(0.0);
     var fire_light = vec3(0.0);
@@ -469,9 +470,16 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         fire_light += warm_reach * e * (response(vec3(dot(L, T), dot(L, B), dot(L, F)), near_m, far_m) / PI);
     }
     // The open sky from all round: thin smoke at a quarter a side gives back the sky itself.
-    light += (2.0 / 3.0) * (near_m.r * sky_from(T) + far_m.r * sky_from(-T)
+    var sky = (2.0 / 3.0) * (near_m.r * sky_from(T) + far_m.r * sky_from(-T)
         + near_m.g * sky_from(B) + far_m.g * sky_from(-B)
         + far_m.b * sky_from(F) + near_m.b * sky_from(-F));
+    // A hearth's smoke takes the sky's brightness, not its blue: at dusk the open sky is most of
+    // its light and deep blue, so its pale wisp gave it back as a blue shaft over the warm fire
+    // (campfire notes #5), where the references' wood smoke stays a dull grey-brown haze.
+    if hearth {
+        sky = vec3(dot(sky, vec3(0.2126, 0.7152, 0.0722)));
+    }
+    light += sky;
     // Its hot core's own light, where it is young over the fire: dimly in a hearth's first half
     // metre, a blaze's column at its foot, a breath's soot its first moments.
     // A breath's soot glows only just off the flame: at the 14th power it still glowed orange
