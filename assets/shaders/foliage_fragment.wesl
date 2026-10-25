@@ -452,6 +452,16 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // over it a few centimetres up: the load sits on the boughs, not scattered over their
         // faces (weather round 9's judge: "snow sits scattered across the card face").
         snow = max(snow, lying * (0.4 + 0.6 * high) * shelf_edge(uv, world, sky_up));
+        // A load lies on top of its spray, which hides it from an eye under it: seen from
+        // below, a crown's sprays read dark, the load showing only where a spray's outline is
+        // seen edge-on, along its top (the looks review's fault 4: "snow sits on the undersides
+        // of branches"; from below, a white line along each pine brush's top). By the eye's
+        // height over the point, eased in from a few degrees under it; the card's own face up
+        // or down does not say it, as most of a pine's cards stand near on edge.
+        let to_eye = normalize(view.world_position - world);
+        let from_below = smoothstep(0.1, 0.55, -dot(to_eye, sky_up));
+        let edge_on = 1.0 - smoothstep(0.1, 0.45, abs(dot((*input).world_normal, to_eye)));
+        snow *= mix(1.0, edge_on * smoothstep(0.0, 0.35, bough_up), from_below);
         // Needles still on in a snowy spell are an evergreen's, dark and cool under the white:
         // the spruce's sage, kept, read as a broadleaf in leaf (weather round 8).
         let green = lying * (1.0 - turned);
