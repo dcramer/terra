@@ -155,13 +155,14 @@ pub struct Stamp {
     pub pace: Vec<f32>,
 }
 
-/// Lays a dungeon in cubes; `kind` names the building kinds of the theme's walls, floors and
-/// trim.
+/// Lays a dungeon in cubes; `kind` names the building kinds of the theme's walls, floors,
+/// ceilings and trim.
 pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> Stamp {
     let set = ModuleSet::new(theme).expect("the dungeon was dressed from these modules");
     let kinds = Kinds {
         wall: kind(&theme.walls),
         floor: kind(&theme.floors),
+        ceiling: kind(theme.ceilings.as_ref().unwrap_or(&theme.floors)),
         trim: kind(&theme.trim),
     };
     let looks = modules::looks(dungeon, theme, &set);
@@ -191,6 +192,8 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
 pub(crate) struct Kinds {
     pub wall: Kind,
     pub floor: Kind,
+    /// A ceiling no room stands on.
+    pub ceiling: Kind,
     pub trim: Kind,
 }
 

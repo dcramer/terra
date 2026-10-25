@@ -124,6 +124,11 @@ pub struct Theme {
     /// The building kind of its walls and floors (D181), for laying it in cubes.
     pub walls: String,
     pub floors: String,
+    /// The building kind of its ceilings where no room stands on them (the rock a mine is
+    /// cut in, not its trodden floor); the floors' if not given. A ceiling under a room is
+    /// that room's floor.
+    #[serde(default)]
+    pub ceilings: Option<String>,
     /// The building kind of its pillars, timbering, door jambs and lintels.
     #[serde(default = "hewn")]
     pub trim: String,

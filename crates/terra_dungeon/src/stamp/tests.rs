@@ -865,3 +865,74 @@ fn fallen_stone_is_rocks_never_a_lone_half_cube() {
         );
     }
 }
+
+#[test]
+fn a_ceiling_is_the_themes_ceilings_but_under_a_room_its_floor() {
+    // Each name its own kind. The mine's ceilings are the rock it is cut in, not its
+    // trodden floor: a room's slab over it is in the ceilings' kind where no room stands
+    // on it, and where one does, that room's floor, in the floors' kind.
+    let named = |name: &str| {
+        Kind(
+            name.bytes()
+                .fold(7u16, |h, b| h.wrapping_mul(31) ^ b as u16),
+        )
+    };
+    for theme in Theme::all(&assets()).unwrap() {
+        let set = ModuleSet::new(&theme).unwrap();
+        let (floor, ceiling) = (
+            named(&theme.floors),
+            named(theme.ceilings.as_ref().unwrap_or(&theme.floors)),
+        );
+        let (mut open, mut under, mut rock) = (0, 0, 0);
+        for s in 0..20 {
+            let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
+                continue;
+            };
+            let map = cubes(&stamp(&dungeon, &theme, &named).ops);
+            let layout = &dungeon.layout;
+            for cell in &layout.cells {
+                let above = layout.cell(cell.at - IVec3::Y);
+                let room = |i: usize| !matches!(layout.cells[i].space, Space::Stair(_));
+                if matches!(cell.space, Space::Stair(_)) || above.is_some_and(|i| !room(i)) {
+                    continue;
+                }
+                let middle = map
+                    .get(&Frame::new(cell.at, 0).cube(2, 7, 2))
+                    .map(|c| c.kind);
+                // Open there: a shaft a module left.
+                if middle.is_none() {
+                    continue;
+                }
+                if above.is_some() {
+                    under += 1;
+                    // Trim or a module's piece may stand in the row; never the other slab.
+                    assert!(
+                        floor == ceiling || middle != Some(ceiling),
+                        "{} seed {s} {}",
+                        theme.name,
+                        cell.at
+                    );
+                } else {
+                    open += 1;
+                    assert!(
+                        floor == ceiling || middle != Some(floor),
+                        "{} seed {s} {}",
+                        theme.name,
+                        cell.at
+                    );
+                    rock += usize::from(middle == Some(ceiling));
+                }
+            }
+        }
+        assert!(open > 0, "{}: no ceiling without a room on it", theme.name);
+        assert!(
+            rock * 10 >= open * 9,
+            "{}: {rock} of {open} open ceilings in the ceilings' kind",
+            theme.name
+        );
+        if theme.name == "flooded_mine" {
+            assert_ne!(ceiling, floor, "the mine's ceilings are its rock");
+            assert!(under > 0, "{}: no room over another", theme.name);
+        }
+    }
+}

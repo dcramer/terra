@@ -17,8 +17,12 @@ enum Slab {
 }
 
 pub(super) fn lay(layout: &Layout, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
-    for cell in &layout.cells {
-        slabs(layout, cell, kinds, ops);
+    // Every ceiling before any floor: a room's floor laid over the ceiling under it is that
+    // ceiling, in the floors' kind.
+    for floor in [false, true] {
+        for cell in &layout.cells {
+            slabs(layout, cell, floor, kinds, ops);
+        }
     }
     for cell in &layout.cells {
         for (d, &side) in cell.sides.iter().enumerate() {
@@ -33,10 +37,12 @@ pub(super) fn lay(layout: &Layout, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
     }
 }
 
-/// The floor slab under a cell and the ceiling slab over it (the next level's floor); a stair
-/// opens both over its rise: no ceiling over the lower cells but the top's front, no floor in
-/// the well and only the front of the landing's. The surface stair has no ceiling.
-fn slabs(layout: &Layout, cell: &Cell, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
+/// The floor slab under a cell (`floor`), in the floors' kind, or the ceiling slab over it,
+/// in the ceilings' (the next level's floor where a room is over it); a stair opens both
+/// over its rise: no ceiling over the lower cells but the top's front, no floor in the well
+/// and only the front of the landing's. The surface stair has no ceiling.
+fn slabs(layout: &Layout, cell: &Cell, floor: bool, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
+    let laying = floor;
     let (floor, ceiling, turn) = match cell.space {
         Space::Stair(s) => {
             let stair = &layout.stairs[s];
@@ -52,12 +58,15 @@ fn slabs(layout: &Layout, cell: &Cell, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
         _ => (Slab::Whole, Slab::Whole, 0),
     };
     let f = Frame::new(cell.at, turn);
-    for (slab, y) in [(floor, -1), (ceiling, 7)] {
-        match slab {
-            Slab::Whole => f.fill(ops, [0, y, 0], [5, y, 5], solid(kinds.floor)),
-            Slab::Front => f.fill(ops, [0, y, 0], [5, y, 2], solid(kinds.floor)),
-            Slab::None => {}
-        }
+    let (slab, y, kind) = if laying {
+        (floor, -1, kinds.floor)
+    } else {
+        (ceiling, 7, kinds.ceiling)
+    };
+    match slab {
+        Slab::Whole => f.fill(ops, [0, y, 0], [5, y, 5], solid(kind)),
+        Slab::Front => f.fill(ops, [0, y, 0], [5, y, 2], solid(kind)),
+        Slab::None => {}
     }
 }
 
