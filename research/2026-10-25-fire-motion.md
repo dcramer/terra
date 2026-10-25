@@ -66,6 +66,19 @@ Splits are furthest from the real range. Ours forks about twice as often as the 
 
 **The splits bar for our view (fire round g21): 1.2 or fewer, on both dusk and night.** Our film is the campfire from above, a camp's eye standing a few metres off. Per clip, splits read 1.06 and 1.09 (Virginia State Parks 1 and 2), 0.99 (Claytor Lake), 1.19 (Feuer) and 1.97 (Fire.ogv). Feuer is a close view, but its fire is built like ours: 1.6 tongues above half height and 12 born a second, against ours' 2.0 and 10.5 and the standing views' 1.6-3.0 and 12-19. Fire.ogv is a close view of a larger, busier fire, with 3.6 tongues above half height and 38 born a second. Crowded tongues fork into each other, so its rate belongs to a different fire, not to a different camera. Four clips of a fire built like ours, from both distances, read 0.99-1.19, so the bar is their top. Taking the whole range, 1.97, would pass main (1.98/1.87 over 20 s) and hold nothing. The same four clips give lifetime 0.04-0.12 s, sheds 0.75-1.70 and lean 7.6-24.5 deg, so those targets stand. Those clips give 120-190 tracks over their 10 s, and our 20 s films 230-280, so both sides carry counting noise: a rate of ours over 20 s is good to about ±0.2 (g20).
 
+## The baked body's flicker and births (fire round g27)
+
+The baked campfire (`Body::Baked`, D493) flickers at 1.80-1.86 Hz however fast its loop plays. Each build changed one thing and was filmed on the fixed 20 s camera (`fire/g27/`, rule.md pre-registered). Dominant frequencies, dusk and night:
+
+- Base: 1.80 and 1.83.
+- Glow held at 1 (light.rs `glow`; light, flame and cards steady): 1.67 and 1.66.
+- Hearth cards off: 1.76 and 1.76.
+- Baked field's brightness not following the glow: 1.79 and 1.82.
+
+So the 1.8 Hz peak is the glow's first tone (the puff rate, 1.5/sqrt(width)). It reaches the area through the light on what lies under and round see-through flame, the logs and ground the matte counts (see Limits), more than through the cards. The baked field's own brightness term does not carry it. Held steady, the peak left is the bake's own puffing at 1.67 Hz, which is also what the bake's offline film (`tools/fire/bake/march.ts`) shows, 1.62 Hz. The fix belongs to the light, which Marched shares, so nothing was changed.
+
+Tongue births are the thin flame near the baked field's edge. Raising `BAKED_EDGE` cost births in the game: 0.08 gave 7.0/7.8 a second, 0.2 (heart kept) 4.2/6.7, 0.35 2.6/4.0. Twice the flame's thickness gave 10.3/7.3. A copy of march.ts shaded as the game does pointed the other way with march.ts's colours, and the game's way with the game's own ramp. It also showed that the marcher's step, frame blend and feather each move births by 0.3 or less. What decides a thin tongue is whether it is bright enough to pass the cut (half the 99th-percentile luma, 122 of 255 here), not whether the edge keeps it.
+
 ## Limits
 
 - **Tongue lifetime is near the frame rate.** Real tongues live 0.04-0.12 s on average, one to four frames at 30 fps, so the mean is used, not the median. Shed blobs last 1-2 frames before they fade under the cut, so their rise speed (printed) is not trusted.
