@@ -71,7 +71,7 @@ What the world lays, as plain data in a local frame (metres, x east, y up, z sou
 
 ## In the sandbox
 
-`cargo xtask sandbox --experiment dungeon` (also `dungeon-mine`, `dungeon-keep`; theme and seed in `assets/data/dungeon_demo.ron`) digs the most level site near the start, lays the stamp as one building with footings off and spawns the rest; the walker starts on the grass north of the stair. The run's log gives the tour as `--route` points and each leg as a `--vantage`.
+`cargo xtask sandbox --experiment dungeon` (also `dungeon-mine`, `dungeon-keep`; theme and seed in `assets/data/dungeon_demo.ron`) digs the most level site near the start, lays the stamp as one building with footings off and spawns the rest; the walker starts on the grass north of the stair. The run's log gives the tour as `--route` points and each leg as a `--vantage`. It also logs the film camera's eye along the tour (`Dungeon view i`, kept off walls) and where it looks from each (`Dungeon look i`): at the way 4 m on, drawn to the goal or a key once near and in sight while the way on stays in frame, turning at most 20° a metre, 60° while lagging past 0.5 rad off the way on, as a composer's hard limit keeps its target in frame (stamp/look.rs).
 
 ## Next
 

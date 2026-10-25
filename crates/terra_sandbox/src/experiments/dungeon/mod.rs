@@ -184,6 +184,10 @@ fn lay_out(
     for (i, &eye) in stamp.view.iter().enumerate() {
         info!("Dungeon view {i}: {}", point(eye));
     }
+    // Where it looks from each: at the way ahead, or at the room's goal or key once near.
+    for (i, &at) in stamp.look.iter().enumerate() {
+        info!("Dungeon look {i}: {}", point(at));
+    }
     commands.insert_resource(Pending { stamp, frame });
 }
 

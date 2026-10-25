@@ -462,3 +462,175 @@ fn the_camera_keeps_off_walls_leaves_and_slabs() {
         "the share of views every 0.1 m that fail, a theme: {faulty:?}"
     );
 }
+
+#[derive(Default)]
+struct Looked {
+    samples: usize,
+    /// Looks with the way 4 m on more than `FRAME_RAD` off them, out of frame, but where the
+    /// way turns back on itself (its 4 m behind and 4 m on over 120° apart), where a camera
+    /// turning round has it out of frame for a moment whatever it does.
+    lost: usize,
+    /// The longest stretch of the way, in metres, so.
+    lost_m: f32,
+    /// Looks facing a wall within `NEAR_M`, within 45° of straight on.
+    walled: usize,
+    /// The same for a look at the way 4 m on.
+    naive_walled: usize,
+    /// How far down the look is open, summed, and the same for a look at the way 4 m on.
+    open_m: f32,
+    naive_open_m: f32,
+    turn: f32,
+    goal_off: f32,
+}
+
+/// Where a look is at most this far off the way 4 m on, the way on is in frame (a 20 mm
+/// lens's frame is some 84° across).
+const FRAME_RAD: f32 = 0.7;
+/// A wall at arm's length or so.
+const NEAR_M: f32 = 1.5;
+
+/// The look from each eye of one stamp's view, past the surface leg and short of where a
+/// film stops (3.5 m from the goal in plan): how often the way on is out of frame and the
+/// longest stretch so, how often it faces a wall near, how far down it is open (a cube met
+/// marching the ray every 0.05 m, up to 8 m) against a look at the way 4 m on, the fastest
+/// turn a metre, and how far off the goal it looks where the film stops.
+fn check_look(theme: &Theme, dungeon: &Dungeon) -> Looked {
+    use super::view::STEP_M;
+    let stamp = stamp(dungeon, theme, &kind);
+    let map = cubes(&stamp.ops);
+    let (view, look) = (&stamp.view, &stamp.look);
+    assert_eq!(view.len(), look.len(), "a look an eye");
+    let dir = |i: usize| (look[i] - view[i]).normalize();
+    let goal = stamp
+        .objects
+        .iter()
+        .find(|o| o.role == ObjectRole::Goal)
+        .expect("a goal");
+    let stop = (0..view.len())
+        .rev()
+        .find(|&i| {
+            let off = view[i] - goal.at;
+            off.x.hypot(off.z) >= 3.5
+        })
+        .unwrap_or(view.len() - 1);
+    let surface = stamp.route[0].distance(stamp.route[1]);
+    let lead = (4.0 / STEP_M) as usize;
+    // How far a ray from an eye runs through open cubes, and whether the cube it meets faces
+    // it within 45° of straight on (the axis it stepped across into it).
+    let open = |from: Vec3, d: Vec3| {
+        let mut was = cube_of(from);
+        for k in 1..=160 {
+            let c = cube_of(from + d * (k as f32 * 0.05));
+            if !clear(&map, c) {
+                let across = c - was;
+                let face = if across.x != 0 {
+                    d.x
+                } else if across.y != 0 {
+                    d.y
+                } else {
+                    d.z
+                };
+                return (
+                    k as f32 * 0.05,
+                    face.abs() > std::f32::consts::FRAC_1_SQRT_2,
+                );
+            }
+            was = c;
+        }
+        (8.0, false)
+    };
+    let mut seen = Looked::default();
+    let mut run = 0.0f32;
+    for i in 0..stop {
+        if (i as f32) * STEP_M < surface + 1.0 {
+            continue;
+        }
+        let on = view[(i + lead).min(view.len() - 1)] - view[i];
+        if on.length() < 0.5 {
+            continue;
+        }
+        seen.samples += 1;
+        let d = dir(i);
+        let lost = d.angle_between(on) > FRAME_RAD;
+        let behind = view[i] - view[i.saturating_sub(lead)];
+        let back = behind.length() > 0.5 && behind.angle_between(on) > 2.1;
+        seen.lost += (lost && !back) as usize;
+        run = if lost { run + STEP_M } else { 0.0 };
+        seen.lost_m = seen.lost_m.max(run);
+        let (free, flat) = open(view[i], d);
+        seen.walled += (free < NEAR_M && flat) as usize;
+        seen.open_m += free;
+        let (naive_free, naive_flat) = open(view[i], on.normalize());
+        seen.naive_open_m += naive_free;
+        seen.naive_walled += (naive_free < NEAR_M && naive_flat) as usize;
+        if i + 1 < view.len() {
+            seen.turn = seen.turn.max(d.angle_between(dir(i + 1)) / STEP_M);
+        }
+    }
+    seen.goal_off = dir(stop).angle_between(goal.at + Vec3::Y * 0.5 - view[stop]);
+    seen
+}
+
+#[test]
+fn the_camera_looks_down_the_way_ahead_not_at_walls() {
+    use super::look::TURN_MOST_PER_M;
+    for theme in Theme::all(&assets()).unwrap() {
+        let set = ModuleSet::new(&theme).unwrap();
+        let seeds: Vec<u64> = (0..SEEDS).collect();
+        let seen: Vec<Looked> = terra_gen::par::map(&seeds, |&s| {
+            let dungeon = generate(&theme, &set, Seed(s)).ok()?;
+            Some(check_look(&theme, &dungeon))
+        })
+        .into_iter()
+        .flatten()
+        .collect();
+        let sum = |f: &dyn Fn(&Looked) -> f32| seen.iter().map(f).sum::<f32>();
+        let samples = sum(&|s| s.samples as f32);
+        let lost = sum(&|s| s.lost as f32) / samples;
+        let walled = sum(&|s| s.walled as f32) / samples;
+        let naive_walled = sum(&|s| s.naive_walled as f32) / samples;
+        let open = sum(&|s| s.open_m) / samples;
+        let naive_open = sum(&|s| s.naive_open_m) / samples;
+        let most = |f: &dyn Fn(&Looked) -> f32| seen.iter().map(f).fold(0.0, f32::max);
+        let (lost_m, turn) = (most(&|s| s.lost_m), most(&|s| s.turn));
+        let goal_off = most(&|s| s.goal_off);
+        println!(
+            "{}: {} tours, {samples} looks: the way on out of frame {:.2}% but turning round ({lost_m:.1} m at most), facing a wall within {NEAR_M} m {:.2}% ({:.2}), open {open:.2} m down the look on average ({naive_open:.2} looking at the way 4 m on), turning {:.0}° a metre at most, the goal {:.0}° off at the stop at most",
+            theme.name,
+            seen.len(),
+            100.0 * lost,
+            100.0 * walled,
+            100.0 * naive_walled,
+            turn.to_degrees(),
+            goal_off.to_degrees()
+        );
+        // Round 13's films looked down a corridor's straight to its end wall, the way on 90°
+        // off and out of frame for a second (the crypt's 16 s), then whipped round. Turning
+        // round out of a dead end, at most 2.5 m (some 2.3 at `TURN_MOST_PER_M`).
+        assert!(
+            lost < 0.02 && lost_m <= 2.5,
+            "{}: the way on out of frame {lost}, {lost_m} m",
+            theme.name
+        );
+        // Facing a wall near no more often than the plain look at the way 4 m on, give or
+        // take a thousandth (round 15's look at the farthest point it saw: 3% against 0.11%).
+        // The plain look itself faces one in 1.09% of the mine's looks, along straight ways:
+        // the view's, not the look's (round 16).
+        assert!(
+            walled <= naive_walled + 0.001,
+            "{}: {walled} of looks at a wall near, against {naive_walled}",
+            theme.name
+        );
+        // As open in front of it as the plain look at the way 4 m on, within a twentieth: the
+        // smoothing, the turn bound and the pull towards the goal cost it little.
+        assert!(
+            open > 0.95 * naive_open,
+            "{}: open {open} m against {naive_open}",
+            theme.name
+        );
+        // At most the bound in yaw and in pitch at once.
+        let bound = TURN_MOST_PER_M * std::f32::consts::SQRT_2 * 1.01;
+        assert!(turn <= bound, "{}: turns {turn} a metre", theme.name);
+        assert!(goal_off < 0.35, "{}: the goal {goal_off} off", theme.name);
+    }
+}

@@ -12,7 +12,9 @@
 //! - `modules`: what each module of the dressing becomes in cubes and props, and the features.
 //! - `runin`: door leaves, chests, mobs, torches, and the tour.
 //! - `view`: the camera's way along the tour, kept off what stands round it.
+//! - `look`: where the camera looks along it.
 
+mod look;
 mod modules;
 mod runin;
 mod shell;
@@ -143,6 +145,10 @@ pub struct Stamp {
     /// and open leaves in plan, as high as `view::EYE_M` allows with that room all round
     /// (`view::TIGHT_M` at the least, under a stair's slab), smoothed.
     pub view: Vec<Vec3>,
+    /// Where the camera looks from each eye of `view`: a point `look::LOOK_M` out along its
+    /// look, at the way `look::AHEAD_M` on, or drawn to a room's goal or key once near,
+    /// turning at most `look::TURN_PER_M` but where the way ahead turns faster.
+    pub look: Vec<Vec3>,
 }
 
 /// Lays a dungeon in cubes; `kind` names the building kinds of the theme's walls, floors and
@@ -167,6 +173,7 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
         start_facing: 2,
         route: Vec::new(),
         view: Vec::new(),
+        look: Vec::new(),
     };
     shell::lay(&dungeon.layout, &kinds, &mut out.ops);
     modules::lay(dungeon, theme, &looks, &kinds, &mut out);
