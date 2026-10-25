@@ -92,7 +92,7 @@ These are `tools/controller/criteria.json` (D457), in D452's shape: a row for ea
 | 17 | Swimming | Deep water is swum rather than walled; the body floats to the surface and dives on intent; breath is used with the head under | D74 |
 | 18 | Stamina | Sprinting, jumping and swimming cost the kind's data to within 1% | D61 |
 | 19 | Determinism | 10,000 ticks of the crowd course end bit-identical across runs, thread counts and the order bodies are given in | D51, D138 |
-| 20 | Cost per body | Under 25 µs a body a tick on one core walking the course and the planet's ground at 2 and 30 km (`cargo xtask controller --bench`, release), and a crowd of 1,000 under 4 ms a tick on the server's cores | D52, D138 (a quarter of the 15.6 ms tick) |
+| 20 | Cost per body | Under 25 µs a body a tick on one core walking the course and the planet's ground at 2 and 30 km (`cargo xtask controller --bench`, release), under 50 µs walking the `walk` scene's route among the lush yard's trees and rocks (`cost.forest`), and a crowd of 1,000 under 4 ms a tick on the server's cores | D52, D138 (a quarter of the 15.6 ms tick) |
 | 21 | Feet sliding | Under 3 cm a contact at walk, jog and sprint, and in starts, stops and turns | movement.md stage 2; D455 |
 | 22 | Far from the origin | At 30 km, walking level ground, 20 deg up and down and 0.3 m steps: never off the ground nor over 10 cm (a tick at a sprint) from the same walk at 2 km, the foot's gap to the ground within 1 mm of 2 km's, and no more than 10% more field calls a tick | D482; Jolt's large worlds |
 

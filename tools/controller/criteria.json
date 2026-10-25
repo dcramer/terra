@@ -707,6 +707,22 @@
    "slack": 5
   },
   {
+   "id": "cost.forest",
+   "noticed": 2,
+   "notice": "walking through the forest makes frames hitch",
+   "bar": {
+    "at_most": 50
+   },
+   "unit": "µs a body a tick, the walk scene's route among the lush yard's trees and rocks",
+   "source": "docs/controller.md criterion 20; D52, D138; unit C2 (the walk scene's p99 14 -> 23 ms)",
+   "check": {
+    "by": "bench"
+   },
+   "cost": "heavy",
+   "measurable": true,
+   "slack": 10
+  },
+  {
    "id": "cost.crowd",
    "noticed": 2,
    "notice": "a crowd of a thousand moving slows the server's tick",

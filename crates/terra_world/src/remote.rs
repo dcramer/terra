@@ -134,6 +134,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.quit", quit);
     method(app, "sandbox.whoami", whoami);
     method(app, "world.obstacles", obstacles);
+    method(app, "world.solids", solids);
     crate::gpu_memory::remote(app);
     if listen {
         info!("remote: listening on localhost:{port}");
@@ -782,6 +783,43 @@ fn obstacles(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     Ok(Value::Array(
         found.into_iter().map(|(_, v)| v).take(200).collect(),
     ))
+}
+
+/// Every tree, rock, stump and log within so far of a spot, east and south of the start, as
+/// flora keeps them (`terra_core::Solid`, D267), in the world's frame: where each stands (and
+/// east and south of the start), its plan's directions, and its pieces. What a bench's fixture is written from
+/// (`terra_walker`'s `movement_bench`, `cost.forest`).
+fn solids(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
+    let Near { at, within } = parse_some(params)?;
+    let start = *world.resource::<crate::start::Start>();
+    let store = world.resource::<crate::flora::Obstacles>();
+    let centre = start.at(at[0], at[1]);
+    let v = |v: Vec3| [v.x, v.y, v.z];
+    let found: Vec<Value> = store
+        .solids_near(centre, within)
+        .map(|solid| {
+            let pieces: Vec<Value> = solid
+                .pieces
+                .iter()
+                .map(|piece| {
+                    json!({
+                        "hull": piece.hull.iter().map(|p| [p.x, p.y]).collect::<Vec<_>>(),
+                        "radius": piece.radius,
+                        "top": piece.top.min(99.0),
+                        "crest": piece.crest.min(99.0),
+                    })
+                })
+                .collect();
+            let local = start.local(solid.at);
+            json!({
+                "at": v(solid.at),
+                "east_south": [local.x, local.z],
+                "frame": solid.frame().map(v),
+                "pieces": pieces,
+            })
+        })
+        .collect();
+    Ok(json!({"start": v(start.translation), "solids": found}))
 }
 
 /// Asked to close. Requests are answered after the frame's last systems, too late for

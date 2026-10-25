@@ -221,6 +221,18 @@ impl Solid {
         Self::new(at, [x, up.cross(x), up], (pieces, firm), Vec::new())
     }
 
+    /// A thing of given pieces in a given plan (across, along, up), with no surface to stand
+    /// on: one written down as [`Solid::frame`] and its pieces read it, as a bench's fixture.
+    pub fn framed(at: Vec3, frame: [Vec3; 3], pieces: Vec<Piece>) -> Self {
+        let firm = pieces.len();
+        Self::new(at, frame, (pieces, firm), Vec::new())
+    }
+
+    /// Its plan's directions in the world: across, along and up.
+    pub fn frame(&self) -> [Vec3; 3] {
+        [self.x, self.z, self.up]
+    }
+
     fn new(
         at: Vec3,
         [x, z, up]: [Vec3; 3],
@@ -633,6 +645,30 @@ mod tests {
         assert_eq!(low.push_out(feet, 0.3, 0.4), feet);
         let held = low.surface(Vec3::new(0.5, 1000.0, 0.0), 0.15, 0.4).unwrap();
         assert!((held - 0.3).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_solid_written_down_by_its_frame_and_pieces_stops_a_walker_as_the_one_fitted() {
+        let place = Placement {
+            x: Vec3::new(0.6, 0.0, 0.8),
+            z: Vec3::new(-0.8, 0.0, 0.6),
+            ..flat_place(1.0, 0.0)
+        };
+        let fitted = Solid::fit(
+            &Relief::of(&block(2.0, 1.0, 1.2), &[]),
+            place,
+            |_| 0.0,
+            vec![],
+        )
+        .unwrap();
+        let copy = Solid::framed(fitted.at, fitted.frame(), fitted.pieces.clone());
+        for feet in [Vec3::new(1.1, 1000.0, 0.3), Vec3::new(-0.2, 1000.0, 1.0)] {
+            assert_eq!(
+                fitted.push_out(feet, 0.3, 0.4),
+                copy.push_out(feet, 0.3, 0.4)
+            );
+        }
+        assert_eq!(fitted.reach, copy.reach);
     }
 
     #[test]

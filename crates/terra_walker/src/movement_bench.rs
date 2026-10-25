@@ -4,7 +4,8 @@
 //! its ground's field calls counted, for the mover (D53) and for today's walk ([`step`]) given
 //! the same ground and intent. The median of several runs, so a busy machine's outliers do not
 //! move it. `cargo xtask controller --bench` runs it in release and judges `cost.body`, the
-//! mover's worst scene, against the bar; the rest are its log's `bench` lines.
+//! mover's worst scene, against the bar; the rest are its log's `bench` lines. `cost.forest` is
+//! the same body walked through the lush yard's trees and rocks ([`forest`]).
 
 use super::{Around, Ask, Motion, Terrain, step, top_speed};
 use crate::Stance;
@@ -16,6 +17,9 @@ use terra_core::{PlanetSpec, Seed};
 use terra_motion::course::field::{Course, Field, Solid, forward_at, world};
 use terra_motion::mover::{Bodies, Intent, Kind, Sdf, World};
 use terra_world::planet::{HeightMemo, Planet, surface_through};
+
+#[path = "movement_bench_forest.rs"]
+mod forest;
 
 const TICK: f32 = 1.0 / 64.0;
 /// How long each run walks, s, and how many runs a scene's median is of.
@@ -263,4 +267,24 @@ fn the_mover_bench_times_a_body_walking() {
         worst = worst.max(ours.micros);
     }
     println!("scorecard\tcost.body\t{worst}");
+    let woods = forest::Forest::load();
+    let f = forest::median(
+        (0..forest::RUNS)
+            .map(|_| forest::run(&woods, &kind))
+            .collect(),
+    );
+    println!(
+        "bench\tforest ({} solids, {} pieces)\tmover {:.1} µs a tick (worst {:.0}), calls a tick: planet {:.0}, solids {:.0} ({:.1} gathered), pieces {:.0}; {:.0} of {:.0} m",
+        woods.solids,
+        woods.pieces,
+        f.micros,
+        f.worst,
+        f.planet,
+        f.solids,
+        f.gathered,
+        f.pieces,
+        f.walked,
+        f.route
+    );
+    println!("scorecard\tcost.forest\t{}", f.micros);
 }
