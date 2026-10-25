@@ -451,6 +451,10 @@ pub(crate) fn step(
 mod course;
 
 #[cfg(test)]
+#[path = "movement_mover.rs"]
+mod mover;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::walker::Steer;

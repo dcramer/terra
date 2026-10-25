@@ -238,6 +238,13 @@ impl Planet {
         self.ground.distance(point)
     }
 
+    /// How much further than its true distance the ground can be from a point, as a factor
+    /// (`terra_voxel::Field::steepest`): a sweep by [`Planet::distance`] advances by the
+    /// distance over this, so it never steps past a surface (D53).
+    pub fn steepest(&self) -> f32 {
+        terra_voxel::Field::steepest(&*self.ground)
+    }
+
     /// Where a ray first meets the ground, within so far. `direction` is unit length.
     pub fn raycast(&self, origin: Vec3, direction: Vec3, max_distance: f32) -> Option<RayHit> {
         self.ground.raycast(origin, direction, max_distance)
