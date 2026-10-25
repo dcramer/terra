@@ -648,6 +648,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let weather = weather_at(wp, normalize(in.world_normal), way == 4);
     // Moss's cover, its cushions' tilt of the normal and their shade, for the lighting below.
     var moss_cover = 0.0;
+    // The tilt of the normal its weathering adds: moss's cushions, aged timber's raised grain.
     var moss_n = vec2(0.0);
     var moss_shade = 1.0;
     // How much of its reflectance an aged surface keeps.
@@ -675,10 +676,45 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             r = mix(r, 0.86 + 0.08 * chalk, age);
             reflect_k = 1.0 - 0.35 * age;
         }
+        let timber = way == 2 || way == 3;
         let grime = weather.b.x * (0.75 + 0.5 * grain);
-        c = mix(c, mix(vec3(lum), c, 0.5) * vec3(0.42, 0.38, 0.31), clamp(grime, 0.0, 1.0));
-        c *= 1.0 - 0.45 * weather.b.w;
+        // Timber's grime and damp below, its own: dark already, it would go near black here.
+        c = mix(c, mix(vec3(lum), c, 0.5) * vec3(0.42, 0.38, 0.31), clamp(grime, 0.0, 1.0) * select(1.0, 0.0, timber));
+        c *= 1.0 - select(0.45, 0.0, timber) * weather.b.w;
         c = mix(c, mix(c, vec3(lum), 0.35) * 1.3, weather.b.y * 0.55);
+        if timber {
+            // Exposed timber silvers: sun and rain take its brown out to a light-mid grey over
+            // decades, the figure of its grain kept, less where it is sheltered (its grime, under
+            // a ledge or the eaves) and wet (its damp, the bottom log), which stay browner and
+            // darker, the wet greener. Its grain raised as the soft earlywood wears from between
+            // the harder latewood: the ridges of its height lighter, its grooves darker, and in
+            // the normal; fine checks split along it.
+            let shelter = smoothstep(0.1, 0.5, weather.b.x);
+            let wet = clamp(weather.b.w, 0.0, 1.0);
+            let mean_lum = dot(mean, vec3(0.3, 0.59, 0.11));
+            let figure = clamp(lum / max(mean_lum, 0.003), 0.5, 1.6);
+            let ridge = clamp(rel * 2.5, -0.5, 0.5);
+            let silver = vec3(0.235, 0.228, 0.215) * mix(1.0, figure, 0.45) * (1.0 + ridge * age);
+            c = mix(c, silver, age * (1.0 - 0.55 * shelter) * (1.0 - 0.5 * wet));
+            c *= 1.0 - 0.3 * clamp(grime, 0.0, 1.0);
+            let lanes = uv.x * 23.0 + 0.13;
+            let lane = floor(lanes);
+            let across = min(fract(lanes), 1.0 - fract(lanes));
+            let open = smoothstep(0.6, 0.72, noise21(vec2(lane * 5.7, uv.y * 2.5))) * step(0.45, hash21(vec2(lane, 9.0)));
+            let width = 0.035 * open;
+            let check = (1.0 - smoothstep(width, width + fw.x * 23.0 + 0.004, across)) * open * age * select(1.0, 0.0, way == 3);
+            c = mix(c, c * 0.3, check * 0.85);
+            c = mix(c, c * vec3(0.5, 0.58, 0.42), wet * 0.8);
+            r = mix(r, 0.82 + 0.08 * grain, age);
+            r = mix(r, 0.72, wet * 0.5);
+            reflect_k = 1.0 - 0.3 * age;
+            let eg = max(1.5 / 512.0, max(fw.x, fw.y));
+            let hu = textureSampleGrad(height_array, array_sampler, uv + vec2(eg, 0.0), slot, ddx, ddy).r
+                - textureSampleGrad(height_array, array_sampler, uv - vec2(eg, 0.0), slot, ddx, ddy).r;
+            let hv = textureSampleGrad(height_array, array_sampler, uv + vec2(0.0, eg), slot, ddx, ddy).r
+                - textureSampleGrad(height_array, array_sampler, uv - vec2(0.0, eg), slot, ddx, ddy).r;
+            moss_n = select(vec2(-hu, hv) * 1.5 * age, vec2(0.0), missing);
+        }
         // Streaks: a faint wash down from a sill or a wall head, a little darker and greyer, never
         // a black line.
         c = mix(c, mix(c, vec3(lum), 0.2) * vec3(0.77, 0.76, 0.74), clamp(weather.a.w, 0.0, 1.0));
@@ -721,7 +757,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         c = mix(c, moss_colour, moss * 0.94);
         r = mix(r, 0.97, max(moss, lichen));
         moss_cover = moss;
-        moss_n = -lump_d / e * 0.01 * moss;
+        moss_n = mix(moss_n, -lump_d / e * 0.01, moss);
         moss_shade = 1.0 - 0.35 * moss * (1.0 - lump);
         // Loss: 1 a stone gone, its hollow dark; a half a spalled face, fresh and rough.
         let gone = smoothstep(0.72, 0.88, weather.a.y);
