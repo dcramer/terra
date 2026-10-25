@@ -2522,6 +2522,104 @@
    "source": "tools/combat/refs/enshrouded.json targets.enemy_telegraph_s_at_least",
    "needs": "a film check of the partner's wind-up seen from the game's camera",
    "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "move.blows.shield_high",
+   "noticed": 5,
+   "notice": "the shield floats up over the shoulder like a sail while the sword swings",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "Enshrouded ftp 245.40-247.20 s (the shield's middle at the belly to the lower chest through a chained light blow); I.33 fol. 1r (the buckler forward at the chest); research/2026-10-25-shield-prior-art.md",
+   "needs": "moves.ts: for every blow (a move with active frames) on every template, the strapped shield's middle (its board's centre, as the clash hangs it) above the left shoulder joint (upperarm_l's head), the highest over the clip, cm; a row measure shield_high_cm",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "move.blows.shield_elbow",
+   "noticed": 4,
+   "notice": "the shield arm is held up like a wing, the elbow at the shoulder and the forearm straight up",
+   "bar": {
+    "at_least": 0.15
+   },
+   "unit": "m",
+   "source": "Enshrouded ftp 245.40-247.20 s (the shield arm's elbow by the waist, the forearm forward); Mordhau, Elden Ring (recalled: the shield arm low at the side between blocks); research/2026-10-25-shield-prior-art.md",
+   "needs": "moves.ts: for every blow on every template, how far the left elbow (lowerarm_l's head) is below the left shoulder (upperarm_l's head), the least over the clip, m; a row measure shield_elbow_below_m",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "move.blows.shield_face",
+   "noticed": 4,
+   "notice": "the shield's painted face turns back toward the camera behind the player during a blow",
+   "bar": {
+    "at_most": 90
+   },
+   "unit": "deg",
+   "source": "Enshrouded ftp 245.40-247.20 s (the face forward and out to the left, oblique); research/2026-10-25-shield-prior-art.md",
+   "needs": "moves.ts: for every blow on every template, the angle between the shield's face (its -Z, as `guard` turns it) and the chest's forward (spine_03's ahead, flattened), the largest over the clip, deg; a row measure shield_face_back_deg",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "move.chain.shield_round_trip",
+   "noticed": 5,
+   "notice": "the shield snaps back in toward the body and out again as the next blow of the chain starts",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m",
+   "source": "D447 (moves.ts CHAIN_M); Enshrouded ftp 245.47-247.20 s (the shield stays out at the side between chained blows); the duel film r17 record frames 298-306 and 338-356 (round trips of about 0.13 and 0.2 s); research/2026-10-25-shield-prior-art.md",
+   "needs": "moves.ts: for each chained pair in the set (a move's `next` started at its `cancel`), the shield's middle in the outgoing clip at the cancel against the incoming clip's over its first 0.3 s, crossfaded over the game's 110 ms move blend (melee::show), the largest gap, m; a row per pair, measure shield_round_trip_m",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "heavy",
+   "id": "film.shield_round_trip",
+   "noticed": 4,
+   "notice": "the shield jumps in and out at a move change (a chained blow, a parried blow's stagger, the block)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "",
+   "source": "the duel film r17 (record frames 298-306, 338-356, the parried heavy's stagger 458-464); research/2026-10-25-shield-prior-art.md",
+   "needs": "the fight record (terra_creatures::melee, --fight-log) to carry each fighter's shield middle each frame, and duel.ts --check to count shield paths that leave and come back more than 0.1 m within 0.3 s of a move change; a film check named shield round trips",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "held.shield.grip_hand",
+   "noticed": 4,
+   "notice": "the shield hangs beside the fist instead of in it: the hand is off its grip",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "docs/holding.md section 3 (the hand closes on the handle; IK only past 1 cm); Hurstwic, Viking shields (gripped behind the boss, no arm straps); research/2026-10-25-shield-prior-art.md",
+   "needs": "moves.ts: the distance from the left hand socket's origin (socket.hand.L, the middle of the fist) to the shield's grip (its origin as the strap hangs it), the largest over every clip on every template, cm; a row measure grip_hand_cm",
+   "check": null
+  },
+  {
+   "measurable": false,
+   "cost": "cheap",
+   "id": "held.shield.grip_across_palm",
+   "noticed": 3,
+   "notice": "the fist cannot close on the shield's grip: the bar runs along the forearm instead of across the palm",
+   "bar": {
+    "at_most": 15
+   },
+   "unit": "deg",
+   "source": "Hurstwic, Viking shields (a wooden handgrip across the board behind the boss, held in the fist); I.33 fol. 1r and 5r (the buckler's grip in the fist); fit_held.py STRAPS (the round shield's grip along lowerarm_l, 90 deg by construction); research/2026-10-25-shield-prior-art.md",
+   "needs": "moves.ts: the angle between the shield's grip bar (its +Y as hung) and the line across the left palm (socket.hand.L's axis across the knuckles), at the guard's first frame and the largest over every clip, deg; a row measure grip_palm_deg",
+   "check": null
   }
  ]
 }
