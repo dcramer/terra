@@ -9,7 +9,8 @@
 //! those tests to pass.
 //!
 //! A body's tick asks about the bodies around it many times over; it gathers them once for a
-//! box around it ([`Grid::gather`]) and each ask that fits in that box takes the gathered list.
+//! box around it ([`Grid::gather`], into a [`Gathered`] of its own, so bodies stepped on
+//! several threads share one grid) and each ask that fits in that box takes the gathered list.
 
 use glam::DVec3;
 use std::collections::HashMap;
@@ -56,31 +57,43 @@ pub struct Grid {
     points: Vec<DVec3>,
     /// The farthest any body's surface lies from its point, m.
     pub extent: f32,
-    /// The bodies of a box gathered for many asks, and the box.
-    gathered: Vec<u32>,
-    around: Option<(DVec3, DVec3)>,
+    /// A cell's side, m.
+    cell: f64,
 }
 
-fn key(at: DVec3) -> Key {
-    let c = (at / CELL_M).floor();
-    (c.x as i64, c.y as i64, c.z as i64)
+/// The bodies of a box gathered for many asks, and the box: one a thread.
+#[derive(Default)]
+pub struct Gathered {
+    list: Vec<u32>,
+    around: Option<(DVec3, DVec3)>,
 }
 
 impl Grid {
     /// The grid of points, each its index's body, none of whose surfaces lies farther than
     /// `extent` from its point.
     pub fn of(points: impl Iterator<Item = DVec3>, extent: f32) -> Self {
+        Grid::of_cells(points, extent, CELL_M)
+    }
+
+    /// [`Grid::of`] in cells of a side, m: about the reach of the boxes it will be asked of.
+    pub fn of_cells(points: impl Iterator<Item = DVec3>, extent: f32, cell: f64) -> Self {
         let mut grid = Grid {
             extent,
+            cell,
             ..Grid::default()
         };
         for (i, at) in points.enumerate() {
-            let k = key(at);
+            let k = grid.key(at);
             grid.keys.push(k);
             grid.points.push(at);
             grid.cells.entry(k).or_default().push(i as u32);
         }
         grid
+    }
+
+    fn key(&self, at: DVec3) -> Key {
+        let c = (at / self.cell).floor();
+        (c.x as i64, c.y as i64, c.z as i64)
     }
 
     pub fn len(&self) -> usize {
@@ -91,12 +104,11 @@ impl Grid {
         self.keys.is_empty()
     }
 
-    /// A body's point moved.
+    /// A body's point moved. A [`Gathered`] list gathered before holds the bodies whose
+    /// points were in its box then: gather again.
     pub fn moved(&mut self, index: usize, to: DVec3) {
-        // A gathered list holds the bodies whose points were in its box.
-        self.around = None;
         self.points[index] = to;
-        let k = key(to);
+        let k = self.key(to);
         let was = self.keys[index];
         if k == was {
             return;
@@ -120,7 +132,7 @@ impl Grid {
     /// Every body whose point lies in a box, ascending, into `out`.
     pub fn near(&self, lo: DVec3, hi: DVec3, out: &mut Vec<u32>) {
         out.clear();
-        let (a, b) = (key(lo), key(hi));
+        let (a, b) = (self.key(lo), self.key(hi));
         let span = |a: i64, b: i64| (b - a + 1).max(0);
         let cells = span(a.0, b.0)
             .saturating_mul(span(a.1, b.1))
@@ -141,19 +153,19 @@ impl Grid {
         out.sort_unstable();
     }
 
-    /// Gathers the bodies of a box for the asks to come ([`Grid::within`]).
-    pub fn gather(&mut self, lo: DVec3, hi: DVec3) {
-        let mut out = std::mem::take(&mut self.gathered);
-        self.near(lo, hi, &mut out);
-        self.gathered = out;
-        self.around = Some((lo, hi));
+    /// Gathers the bodies of a box for the asks to come ([`Gathered::within`]).
+    pub fn gather(&self, lo: DVec3, hi: DVec3, into: &mut Gathered) {
+        self.near(lo, hi, &mut into.list);
+        into.around = Some((lo, hi));
     }
+}
 
+impl Gathered {
     /// The gathered bodies, if a box lies within the gathered one: those in it and maybe
     /// more ([`Grid::inside`] tells), ascending.
     pub fn within(&self, lo: DVec3, hi: DVec3) -> Option<&[u32]> {
         let (a, b) = self.around?;
-        (lo.cmpge(a).all() && hi.cmple(b).all()).then_some(&self.gathered[..])
+        (lo.cmpge(a).all() && hi.cmple(b).all()).then_some(&self.list[..])
     }
 }
 
@@ -181,7 +193,7 @@ mod tests {
     fn a_box_holds_every_body_a_scan_finds_there_in_id_order() {
         let mut points: Vec<DVec3> = (0..400).map(|i| scatter(i, 30.0)).collect();
         let mut grid = Grid::of(points.iter().copied(), 0.0);
-        let mut out = Vec::new();
+        let (mut out, mut gathered) = (Vec::new(), Gathered::default());
         for round in 0..3u32 {
             for q in 0..50u32 {
                 let lo = scatter(q + 1000 * (round + 1), 30.0);
@@ -191,10 +203,10 @@ mod tests {
                 assert!(out.windows(2).all(|w| w[0] < w[1]), "ascending");
                 assert_eq!(out, found, "{q}");
                 // A smaller box inside a gathered one is answered from it, and holds as much.
-                grid.gather(lo - 1.0, hi + 1.0);
-                let inner = grid.within(lo, hi).expect("inside");
+                grid.gather(lo - 1.0, hi + 1.0, &mut gathered);
+                let inner = gathered.within(lo, hi).expect("inside");
                 assert!(found.iter().all(|i| inner.contains(i)));
-                assert!(grid.within(lo - 2.0, hi).is_none());
+                assert!(gathered.within(lo - 2.0, hi).is_none());
             }
             // Move every third body somewhere else and look again.
             for i in (0..points.len()).step_by(3) {

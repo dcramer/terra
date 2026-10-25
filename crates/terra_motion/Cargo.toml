@@ -12,6 +12,9 @@ libm.workspace = true
 # Move sets are read from their data files.
 ron.workspace = true
 serde.workspace = true
+# A tick's bodies stepped on several cores (D53): its pool's threads are kept, so a tick
+# hands them work in microseconds where a thread spawned a tick takes a few hundred.
+rayon = "1"
 # Trees', rocks' and logs' pieces (D267), which the mover's query answers (D53).
 terra_core.workspace = true
 # The bodies' broadphase hashes its cells; the controller course's cases and the duel's

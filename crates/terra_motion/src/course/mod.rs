@@ -76,6 +76,9 @@ pub trait Mover {
     fn facing(&self, id: u32) -> Option<Vec3>;
     /// How fast a body was falling when it landed in the last tick, if it landed in it.
     fn landed(&self, id: u32) -> Option<f32>;
+    /// Ticks its bodies on so many threads from now on, if it can share them out; one
+    /// unless told.
+    fn threads(&mut self, _threads: usize) {}
 }
 
 /// A criterion's number, as `tools/controller/criteria.json` names it.

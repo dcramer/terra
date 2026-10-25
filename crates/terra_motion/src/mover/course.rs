@@ -7,8 +7,9 @@ use super::{Bodies, Obstacles, Sdf, World};
 use crate::course::{self, Field, Kind, Mover};
 use glam::{DVec3, Vec3};
 
+/// The bodies, and how many threads (lanes) their ticks are shared over.
 #[derive(Default)]
-struct Ours(Bodies);
+struct Ours(Bodies, Vec<()>);
 
 fn with_world<R>(field: &dyn Field, then: impl FnOnce(&World) -> R) -> R {
     let ground = Sdf {
@@ -35,7 +36,12 @@ impl Mover for Ours {
     }
 
     fn tick(&mut self, field: &dyn Field, intents: &[(u32, course::Intent)], dt: f32) {
-        with_world(field, |world| self.0.tick(world, intents, dt));
+        if self.1.len() > 1 {
+            let world = |_: &mut (), then: &mut dyn FnMut(&World)| with_world(field, |w| then(w));
+            self.0.tick_on(&mut self.1, &world, intents, dt);
+        } else {
+            with_world(field, |world| self.0.tick(world, intents, dt));
+        }
     }
 
     fn body(&self, id: u32) -> course::Body {
@@ -55,6 +61,10 @@ impl Mover for Ours {
 
     fn landed(&self, id: u32) -> Option<f32> {
         self.0.get(id).and_then(|body| body.landed)
+    }
+
+    fn threads(&mut self, threads: usize) {
+        self.1 = vec![(); threads];
     }
 }
 

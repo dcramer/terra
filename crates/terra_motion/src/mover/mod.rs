@@ -23,6 +23,7 @@ mod slide;
 #[cfg(test)]
 mod course;
 
+use grid::Gathered;
 pub use grid::Grid;
 pub use query::{Capsule, Capsules, Contact, Hit, Query, Sdf};
 use serde::Deserialize;
@@ -200,6 +201,8 @@ pub struct World<'a> {
 #[derive(Default)]
 pub struct Bodies {
     bodies: Vec<Body>,
+    /// The pushes' partners, kept from tick to tick (Verlet lists).
+    pairs: push::Lists,
 }
 
 /// Fewer bodies than this ask each other directly: the broadphase's upkeep would cost more
@@ -208,6 +211,8 @@ const CROWD_FROM: usize = 16;
 /// How far beyond a body's own reach the bodies around it are gathered for its tick's
 /// asks, m: its move and the sweeps' motions within it (one beyond looks the grid up again).
 const GATHER_M: f64 = 1.0;
+/// How many neighbouring bodies a lane takes at a time when a tick is shared over threads.
+const RUN: usize = 16;
 /// How many rounds of pushing a tick takes (docs/controller.md, step 6).
 const PUSH_ROUNDS: usize = 4;
 /// How much higher than its floor's own slope a walking body's move may lift it before it is
@@ -275,12 +280,65 @@ impl Bodies {
         self.bodies.iter()
     }
 
-    /// One tick of every body, in ID order, each with its intent (none for a body not named),
-    /// then the pushes.
+    /// One tick of every body, each with its intent (none for a body not named), then the
+    /// pushes. Every body steps against the others as the tick began (Jacobi), so the bodies
+    /// may be stepped in any order and on any number of threads to the same bits
+    /// ([`Bodies::tick_on`]); the pushes go in ID order after.
     pub fn tick(&mut self, world: &World, intents: &[(u32, Intent)], dt: f32) {
+        let before = self.before(intents);
+        steps(&mut self.bodies, 0, &before, world, dt);
+        push::separate(&mut self.bodies, &mut self.pairs, world.ground, PUSH_ROUNDS);
+    }
+
+    /// [`Bodies::tick`] with the bodies' steps shared over a thread a lane (on rayon's pool,
+    /// whose threads are kept from tick to tick), in runs of neighbouring IDs: `world` builds the world a lane's bodies move through from what is
+    /// the lane's own (its ground's memo, say) and hands it on. The pushes take the first
+    /// lane. The same bits as [`Bodies::tick`] whatever the number of lanes.
+    pub fn tick_on<L: Send>(
+        &mut self,
+        lanes: &mut [L],
+        world: &Lanes<'_, L>,
+        intents: &[(u32, Intent)],
+        dt: f32,
+    ) {
+        assert!(!lanes.is_empty(), "a tick needs a lane to run on");
+        let before = &self.before(intents);
+        // Runs of neighbouring bodies, each taken by the next lane free: a crowd's thick
+        // middle does not hold up the lane given it.
+        let runs: Vec<(usize, &mut [Body])> = self
+            .bodies
+            .chunks_mut(RUN)
+            .enumerate()
+            .map(|(k, run)| (k * RUN, run))
+            .collect();
+        let used = lanes.len().min(runs.len());
+        let runs = std::sync::Mutex::new(runs.into_iter());
+        let work = |lane: &mut L| {
+            world(lane, &mut |w| {
+                while let Some((from, run)) = runs.lock().map_or(None, |mut r| r.next()) {
+                    steps(run, from, before, w, dt);
+                }
+            })
+        };
+        let work = &work;
+        rayon::scope(|scope| {
+            let (first, rest) = lanes[..used.max(1)].split_at_mut(1);
+            for lane in rest {
+                scope.spawn(move |_| work(lane));
+            }
+            work(&mut first[0]);
+        });
+        let (bodies, pairs) = (&mut self.bodies, &mut self.pairs);
+        world(&mut lanes[0], &mut |w| {
+            push::separate(bodies, pairs, w.ground, PUSH_ROUNDS)
+        });
+    }
+
+    /// What a tick's steps read of every body: as it began.
+    fn before(&self, intents: &[(u32, Intent)]) -> Before {
         let mut asked: Vec<(u32, Intent)> = intents.to_vec();
         asked.sort_by_key(|(id, _)| *id);
-        let mut capsules: Vec<(u32, Capsule, Vec3)> = self
+        let capsules: Vec<(u32, Capsule, Vec3)> = self
             .bodies
             .iter()
             .map(|b| (b.id, capsule(b), b.velocity))
@@ -289,34 +347,56 @@ impl Bodies {
             .iter()
             .map(|(_, c, _)| (c.b - c.a).length() * 0.5 + c.radius)
             .fold(0.0, f32::max);
-        let mut grid = (self.bodies.len() >= CROWD_FROM)
+        let grid = (self.bodies.len() >= CROWD_FROM)
             .then(|| Grid::of(capsules.iter().map(|(_, c, _)| middle(c)), extent));
-        for i in 0..self.bodies.len() {
-            let id = self.bodies[i].id;
-            let intent = asked
-                .binary_search_by_key(&id, |(id, _)| *id)
-                .map_or(Intent::default(), |at| asked[at].1);
-            if let Some(grid) = grid.as_mut() {
-                let me = &capsules[i].1;
-                let (a, b) = (me.world(me.a), me.world(me.b));
-                let reach = me.radius + (me.b - me.a).length() + extent;
-                let r = DVec3::splat(f64::from(reach) + GATHER_M);
-                grid.gather(a.min(b) - r, a.max(b) + r);
-            }
-            let others = Capsules {
-                bodies: &capsules,
-                skip: id,
-                near: grid.as_ref(),
-            };
-            let query = (world.ground, &others);
-            step(&mut self.bodies[i], &intent, &query, world, dt);
-            let body = &self.bodies[i];
-            capsules[i] = (id, capsule(body), body.velocity);
-            if let Some(grid) = grid.as_mut() {
-                grid.moved(i, middle(&capsules[i].1));
-            }
+        Before {
+            asked,
+            capsules,
+            extent,
+            grid,
         }
-        push::separate(&mut self.bodies, world.ground, PUSH_ROUNDS);
+    }
+}
+
+/// What builds the world a lane's bodies move through, from what is the lane's own, and hands
+/// it on.
+pub type Lanes<'a, L> = dyn Fn(&mut L, &mut dyn FnMut(&World)) + Sync + 'a;
+
+/// Every body as a tick began, which its steps read and none changes: the intents by ID, the
+/// bodies' capsules and velocities by ID, the farthest a body's surface lies from its
+/// capsule's middle, and a crowd's grid of them.
+struct Before {
+    asked: Vec<(u32, Intent)>,
+    capsules: Vec<(u32, Capsule, Vec3)>,
+    extent: f32,
+    grid: Option<Grid>,
+}
+
+/// A run of bodies stepped, the first the `from`th by ID, each against the others as the tick
+/// began.
+fn steps(bodies: &mut [Body], from: usize, before: &Before, world: &World, dt: f32) {
+    let mut gathered = Gathered::default();
+    for (k, body) in bodies.iter_mut().enumerate() {
+        let id = body.id;
+        let intent = before
+            .asked
+            .binary_search_by_key(&id, |(id, _)| *id)
+            .map_or(Intent::default(), |at| before.asked[at].1);
+        if let Some(grid) = before.grid.as_ref() {
+            let me = &before.capsules[from + k].1;
+            let (a, b) = (me.world(me.a), me.world(me.b));
+            let reach = me.radius + (me.b - me.a).length() + before.extent;
+            let r = DVec3::splat(f64::from(reach) + GATHER_M);
+            grid.gather(a.min(b) - r, a.max(b) + r, &mut gathered);
+        }
+        let others = Capsules {
+            bodies: &before.capsules,
+            skip: id,
+            near: before.grid.as_ref(),
+            gathered: before.grid.as_ref().map(|_| &gathered),
+        };
+        let query = (world.ground, &others);
+        step(body, &intent, &query, world, dt);
     }
 }
 

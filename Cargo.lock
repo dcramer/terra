@@ -6235,6 +6235,7 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "libm",
+ "rayon",
  "ron",
  "serde",
  "terra_core",

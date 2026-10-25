@@ -41,8 +41,10 @@ const SKIN_M: f64 = 1.0;
 
 /// Separates overlapping bodies, kept in ID order, for so many rounds. Each body's partners
 /// are the later bodies listed near it from the broadphase ([`Grid`]), in ID order: the same
-/// pairs as every later body, those left out too far apart to overlap.
-pub fn separate(bodies: &mut [Body], ground: &dyn Query, rounds: usize) {
+/// pairs as every later body, those left out too far apart to overlap. The lists are kept
+/// from tick to tick, made again when the bodies or their reach changed or a body has moved
+/// half the skin since.
+pub fn separate(bodies: &mut [Body], lists: &mut Lists, ground: &dyn Query, rounds: usize) {
     if bodies.len() < 2 {
         return;
     }
@@ -51,8 +53,16 @@ pub fn separate(bodies: &mut [Body], ground: &dyn Query, rounds: usize) {
     // Two bodies that overlap are less than both radii apart level and less than the taller's
     // height apart along up: their feet are nearer than this.
     let reach = f64::from((4.0 * widest * widest + tallest * tallest).sqrt()) + 1e-3;
-    let mut lists = Lists::default();
-    lists.make(bodies, reach + SKIN_M);
+    let strayed = |body: &Body, at: DVec3| (body.position - at).length() > SKIN_M * 0.5;
+    let kept = lists.reach == reach + SKIN_M
+        && lists.ids.len() == bodies.len()
+        && bodies
+            .iter()
+            .zip(lists.ids.iter().zip(&lists.at))
+            .all(|(b, (&id, &at))| b.id == id && !strayed(b, at));
+    if !kept {
+        lists.make(bodies, reach + SKIN_M);
+    }
     for _ in 0..rounds {
         let mut moved = false;
         for i in 0..bodies.len() {
@@ -66,9 +76,7 @@ pub fn separate(bodies: &mut [Body], ground: &dyn Query, rounds: usize) {
                     continue;
                 }
                 moved = true;
-                let strayed =
-                    |body: &Body, at: usize| (body.position - lists.at[at]).length() > SKIN_M * 0.5;
-                if strayed(a, i) || strayed(b, j) {
+                if strayed(a, lists.at[i]) || strayed(b, lists.at[j]) {
                     lists.make(bodies, reach + SKIN_M);
                     let after = &lists.partners[lists.from[i]..lists.from[i + 1]];
                     k = lists.from[i] + after.partition_point(|&p| p as usize <= j);
@@ -82,20 +90,26 @@ pub fn separate(bodies: &mut [Body], ground: &dyn Query, rounds: usize) {
 }
 
 /// Each body's later partners within a reach of its feet, ascending, and where every body
-/// stood when they were listed.
-#[derive(Default)]
-struct Lists {
+/// stood when they were listed: the bodies' IDs then, and the reach.
+#[derive(Clone, Default)]
+pub struct Lists {
     from: Vec<usize>,
     partners: Vec<u32>,
     at: Vec<DVec3>,
+    ids: Vec<u32>,
+    reach: f64,
 }
 
 impl Lists {
     fn make(&mut self, bodies: &[Body], reach: f64) {
+        self.reach = reach;
+        self.ids.clear();
+        self.ids.extend(bodies.iter().map(|b| b.id));
         self.at.clear();
         self.at.extend(bodies.iter().map(|b| b.position));
         let few = bodies.len() < CROWD_FROM;
-        let grid = Grid::of(self.at.iter().copied().filter(|_| !few), 0.0);
+        // Cells as wide as the reach: a body's partners lie in the cells around its own.
+        let grid = Grid::of_cells(self.at.iter().copied().filter(|_| !few), 0.0, reach);
         let (mut near, r) = (Vec::new(), DVec3::splat(reach));
         self.from.clear();
         self.partners.clear();
@@ -120,8 +134,16 @@ fn pair(a: &mut Body, b: &mut Body, ground: &dyn Query) -> bool {
     if ia + ib <= 0.0 {
         return false;
     }
-    let up = (a.up + b.up).normalize_or(a.up);
     let apart = (b.position - a.position).as_vec3();
+    // Overlapping, they are nearer than both radii level and the taller's height along up.
+    let (sum, tall) = (
+        a.kind.radius + b.kind.radius,
+        a.kind.height.max(b.kind.height),
+    );
+    if apart.length_squared() >= (sum * sum + tall * tall) * 1.01 {
+        return false;
+    }
+    let up = (a.up + b.up).normalize_or(a.up);
     let (ha, hb) = (0.0, apart.dot(up));
     if hb > ha + a.kind.height || hb + b.kind.height < ha {
         return false;
@@ -192,21 +214,32 @@ mod tests {
         }
         let mut by_grid = crowd.bodies.clone();
         let mut by_all = crowd.bodies.clone();
-        separate(&mut by_grid, &floor, 4);
-        every_pair(&mut by_all, &floor, 4);
-        let moved = by_grid
-            .iter()
-            .zip(&crowd.bodies)
-            .filter(|(a, b)| a.position != b.position)
-            .count();
-        assert!(moved > 100, "{moved}");
-        for (a, b) in by_grid.iter().zip(&by_all) {
-            assert_eq!(
-                a.position.to_array().map(f64::to_bits),
-                b.position.to_array().map(f64::to_bits),
-                "{}",
-                a.id
-            );
+        // Ticks apart, each body walked a little between them (a few under the lists' half
+        // skin, so kept, then past it), the lists kept from one to the next.
+        let mut lists = Lists::default();
+        for tick in 0..8u32 {
+            let before = by_grid.clone();
+            separate(&mut by_grid, &mut lists, &floor, 4);
+            every_pair(&mut by_all, &floor, 4);
+            let moved = by_grid
+                .iter()
+                .zip(&before)
+                .filter(|(a, b)| a.position != b.position)
+                .count();
+            assert!(moved > 20, "{tick} {moved}");
+            for (a, b) in by_grid.iter().zip(&by_all) {
+                assert_eq!(
+                    a.position.to_array().map(f64::to_bits),
+                    b.position.to_array().map(f64::to_bits),
+                    "{tick} {}",
+                    a.id
+                );
+            }
+            for body in by_grid.iter_mut().chain(by_all.iter_mut()) {
+                let h = terra_gen::hash::lowbias32(body.id ^ (tick << 16));
+                let way = DVec3::new(f64::from(h % 7) - 3.0, 0.0, f64::from((h >> 4) % 7) - 3.0);
+                body.position += way * 0.04;
+            }
         }
     }
 }

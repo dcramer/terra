@@ -436,7 +436,10 @@ pub fn cancel_steep(velocity: Vec3, state: Support, active: &[Touch], shape: &Sh
 
 /// The contacts a level velocity pushes into, steep and walkable: Jolt's `CanWalkStairs` test
 /// takes the steep alone; Unreal's `StepUp` is tried at any blocking hit, so the round of an
-/// edge lower than the bottom sphere's walkable limit is stepped onto too, not slid up.
+/// edge lower than the bottom sphere's walkable limit is stepped onto too, not slid up. Another
+/// body is never a step (Unreal's pawns, `CanCharacterStepUpOn` no by default), and a move one
+/// blocked is short for that body, not for the walkable ground it also presses: only a steep
+/// face (a riser) beside it is stepped toward, so walking into another in a crowd tries no step.
 fn pushed_into(active: &[Touch], velocity: Vec3, shape: &Shape) -> (Vec<Vec3>, Vec<Vec3>) {
     let into: Vec<Contact> = active
         .iter()
@@ -444,11 +447,18 @@ fn pushed_into(active: &[Touch], velocity: Vec3, shape: &Shape) -> (Vec<Vec3>, V
         .map(|t| t.contact)
         .filter(|c| c.normal.dot(velocity - c.velocity) < 0.0)
         .collect();
-    let (steep, walkable): (Vec<Contact>, Vec<Contact>) =
-        into.into_iter().partition(|c| shape.too_steep(c.normal));
+    let by_body = into.iter().any(|c| c.body.is_some());
+    let (steep, walkable): (Vec<Contact>, Vec<Contact>) = into
+        .into_iter()
+        .filter(|c| c.body.is_none())
+        .partition(|c| shape.too_steep(c.normal));
     (
         steep.iter().map(|c| c.normal).collect(),
-        walkable.iter().map(|c| c.normal).collect(),
+        walkable
+            .iter()
+            .filter(|_| !by_body)
+            .map(|c| c.normal)
+            .collect(),
     )
 }
 

@@ -17,7 +17,7 @@
 //! micrometre. Jolt's large worlds do the same (`JPH_DOUBLE_PRECISION`: a body's position is
 //! a double, its shape queries run in floats relative to a base offset, Docs/BigWorlds.md).
 
-use super::grid::Grid;
+use super::grid::{Gathered, Grid};
 use glam::{DVec3, Vec3};
 use std::borrow::Cow;
 
@@ -515,6 +515,8 @@ pub struct Capsules<'a> {
     pub bodies: &'a [(u32, Capsule, Vec3)],
     pub skip: u32,
     pub near: Option<&'a Grid>,
+    /// The bodies `near` gathered around this body for its tick, if it did.
+    pub gathered: Option<&'a Gathered>,
 }
 
 /// How much farther than its exact reach a query's box is looked up, m: the f32 offsets'
@@ -534,7 +536,8 @@ impl Capsules<'_> {
             let (a, b) = (capsule.world(capsule.a), capsule.world(capsule.b));
             let r = DVec3::splat(f64::from(reach.max(0.0) + grid.extent) + NEAR_SLACK);
             let (lo, hi) = (a.min(b) - r, a.max(b) + r);
-            let (list, kept) = grid.within(lo, hi).map_or_else(
+            let gathered = self.gathered.and_then(|g| g.within(lo, hi));
+            let (list, kept) = gathered.map_or_else(
                 || {
                     let mut out = Vec::new();
                     grid.near(lo, hi, &mut out);
@@ -784,6 +787,7 @@ mod tests {
             bodies: &bodies,
             skip: 0,
             near: None,
+            gathered: None,
         };
         let hit = source
             .sweep(&man(Vec3::ZERO), Vec3::X * 60.0)
@@ -814,6 +818,7 @@ mod tests {
                 bodies: &bodies,
                 skip: *id,
                 near: None,
+                gathered: None,
             };
             let near = Capsules {
                 near: Some(&grid),

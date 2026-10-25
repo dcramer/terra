@@ -422,6 +422,7 @@ fn walk(
             bodies: &movers.lists.others,
             skip: u32::MAX,
             near: None,
+            gathered: None,
         };
         let rest = (&trees, &people);
         let things = (&blocks, &rest);

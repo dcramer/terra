@@ -23,12 +23,15 @@ const LATE: usize = 24;
 /// Where the round world's falls start: over the pole, the equator, between, and in the cave.
 const FALLS: usize = 4;
 
-#[derive(Clone, Copy, Debug)]
+/// How a crowd's rerun differs from the first: run again, its bodies given in another
+/// order, or ticked on so many threads (criterion 19).
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Order {
     Forward,
     Again,
     Reversed,
     Interleaved,
+    Threads(usize),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -69,6 +72,8 @@ fn cases() -> Vec<Case> {
         Case::Crowd(Order::Again),
         Case::Crowd(Order::Reversed),
         Case::Crowd(Order::Interleaved),
+        Case::Crowd(Order::Threads(5)),
+        Case::Crowd(Order::Threads(16)),
     ];
     let kind = Kind::man();
     let steps = STEPS
@@ -140,17 +145,21 @@ pub(super) fn score<M: Mover>(new: &(impl Fn() -> M + Sync)) -> Vec<Measure> {
     };
     let crowd = |order: Order| {
         all().find_map(|(case, o)| match case {
-            Case::Crowd(each) if std::mem::discriminant(each) == std::mem::discriminant(&order) => {
-                Some(o)
-            }
+            Case::Crowd(each) if *each == order => Some(o),
             _ => None,
         })
     };
     let first = crowd(Order::Forward).map(|o| o.end.clone());
-    let differ = [Order::Again, Order::Reversed, Order::Interleaved]
-        .into_iter()
-        .filter(|order| crowd(*order).map(|o| &o.end) != first.as_ref())
-        .count();
+    let differ = [
+        Order::Again,
+        Order::Reversed,
+        Order::Interleaved,
+        Order::Threads(5),
+        Order::Threads(16),
+    ]
+    .into_iter()
+    .filter(|order| crowd(*order).map(|o| &o.end) != first.as_ref())
+    .count();
     let overlap = outcomes.iter().map(|o| o.overlap).fold(0.0, f32::max);
 
     let m = |id, value: f32| Measure { id, value };
@@ -685,7 +694,7 @@ fn lands<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
 
 /// The crowd course: bodies on a grid walking and sprinting across to the far side of the
 /// middle and back, through each other, for [`CROWD_TICKS`]; added and ticked in the order
-/// given. Its end state is every body's numbers' bits, by ID.
+/// given, on the threads given. Its end state is every body's numbers' bits, by ID.
 fn crowd<M: Mover>(new: &impl Fn() -> M, order: Order) -> Outcome {
     let flat = Course::flat();
     let kind = Kind::man();
@@ -695,11 +704,15 @@ fn crowd<M: Mover>(new: &impl Fn() -> M, order: Order) -> Outcome {
     };
     let mut ids: Vec<u32> = (0..CROWD).collect();
     match order {
-        Order::Forward | Order::Again => {}
+        Order::Forward | Order::Again | Order::Threads(_) => {}
         Order::Reversed => ids.reverse(),
         Order::Interleaved => ids.sort_by_key(|id| (id % 2, *id)),
     }
-    let mut run = Run::new(new(), &flat);
+    let mut mover = new();
+    if let Order::Threads(n) = order {
+        mover.threads(n);
+    }
+    let mut run = Run::new(mover, &flat);
     for &id in &ids {
         let at = place(id);
         run.add(id, kind, world(at.x, 0.0, at.y));

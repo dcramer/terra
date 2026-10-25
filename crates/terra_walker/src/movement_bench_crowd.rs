@@ -1,12 +1,14 @@
 //! A crowd's cost (docs/controller.md criterion 20, `cost.crowd`; D52, D138): a thousand men
 //! on the generated planet's ground at 30 km, on a grid 1.5 m apart, each walking or sprinting
 //! across to its place mirrored through the crowd's middle and back, through the others, as
-//! the course's crowd does; timed a tick on one core, the median of a few runs. The bodies'
-//! sweeps, contacts and pushes find each other through the mover's broadphase (`Grid`).
+//! the course's crowd does; timed a tick on [`THREADS`] threads, the median of a few runs.
+//! The bodies' sweeps, contacts and pushes find each other through the mover's broadphase
+//! (`Grid`); their steps are shared over the threads (`Bodies::tick_on`), each thread its own
+//! memo of the planet's heights.
 
 use bevy::math::DVec3;
 use bevy::prelude::{Vec2, Vec3};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::time::Instant;
 use terra_motion::mover::{Bodies, Intent, Kind, Sdf, World};
 use terra_world::planet::{HeightMemo, Planet};
@@ -21,6 +23,17 @@ const SECONDS: f32 = 2.0;
 pub const RUNS: usize = 3;
 /// The planet's lattice points kept a body (as the bench's single body, `MEMO_MOST`).
 const MEMO_MOST: usize = 1024;
+/// The cores the server gives the bodies' tick (docs/controller.md criterion 20: 4 ms of the
+/// 15.6 ms tick "on the server's cores"): an assumption until the server's machine is chosen,
+/// half a 16-thread machine's eight cores, the other half the tick's other systems'.
+pub const THREADS: usize = 8;
+
+/// A thread's own: its memo of the planet's heights, and how many times it asked the ground.
+#[derive(Default)]
+struct Lane {
+    memo: HeightMemo,
+    calls: u64,
+}
 
 pub struct Cost {
     /// A tick of the whole crowd, ms.
@@ -32,26 +45,30 @@ pub struct Cost {
     pub bodies: usize,
 }
 
-/// One run of the crowd, from `start` with `forward` along the ground.
-pub fn run(planet: &Planet, start: Vec3, forward: Vec3, kind: &Kind) -> Cost {
+/// One run of the crowd on so many threads, from `start` with `forward` along the ground.
+pub fn run(planet: &Planet, start: Vec3, forward: Vec3, kind: &Kind, threads: usize) -> Cost {
     let up = start.normalize();
     let side = up.cross(forward).normalize();
-    let memo = RefCell::new(HeightMemo::default());
-    let calls = Cell::new(0u64);
-    let sdf = Sdf {
-        distance: |at: DVec3| {
-            calls.set(calls.get() + 1);
-            planet.distance_in(at, &mut memo.borrow_mut())
-        },
-        steepest: planet.steepest(),
-    };
+    let steepest = planet.steepest();
     let water = |at: Vec3| crate::mover_world::water(planet, at);
-    let world = World {
-        ground: &sdf,
-        water: &water,
-        gravity: 9.81,
-        centre: Vec3::ZERO,
+    let world = |lane: &mut Lane, then: &mut dyn FnMut(&World)| {
+        let lane = RefCell::new(lane);
+        let sdf = Sdf {
+            distance: |at: DVec3| {
+                let mut lane = lane.borrow_mut();
+                lane.calls += 1;
+                planet.distance_in(at, &mut lane.memo)
+            },
+            steepest,
+        };
+        then(&World {
+            ground: &sdf,
+            water: &water,
+            gravity: 9.81,
+            centre: Vec3::ZERO,
+        });
     };
+    let mut lanes: Vec<Lane> = (0..threads).map(|_| Lane::default()).collect();
     let place = |id: u32| {
         let (col, row) = ((id % COLUMNS) as f32, (id / COLUMNS) as f32);
         Vec2::new(
@@ -64,13 +81,16 @@ pub fn run(planet: &Planet, start: Vec3, forward: Vec3, kind: &Kind) -> Cost {
     let count = COLUMNS * ROWS;
     for id in 0..count {
         let above = at(place(id)).normalize() * (start.length() + 50.0);
-        bodies.add(id, *kind, planet.ground_at(above), forward, &world);
+        let feet = planet.ground_at(above);
+        world(&mut lanes[0], &mut |w| {
+            bodies.add(id, *kind, feet, forward, w)
+        });
     }
     let began: Vec<Vec3> = bodies.iter().map(|b| b.feet).collect();
     let mut back = vec![false; count as usize];
     let mut intents = Vec::with_capacity(count as usize);
     let ticks = (SECONDS / TICK) as usize;
-    calls.set(0);
+    lanes.iter_mut().for_each(|lane| lane.calls = 0);
     let clock = Instant::now();
     for _ in 0..ticks {
         intents.clear();
@@ -91,8 +111,11 @@ pub fn run(planet: &Planet, start: Vec3, forward: Vec3, kind: &Kind) -> Cost {
                 },
             ));
         }
-        memo.borrow_mut().keep_within(MEMO_MOST * count as usize);
-        bodies.tick(&world, &intents, TICK);
+        for lane in &mut lanes {
+            lane.memo
+                .keep_within(MEMO_MOST * (count as usize).div_ceil(threads));
+        }
+        bodies.tick_on(&mut lanes, &world, &intents, TICK);
     }
     let millis = clock.elapsed().as_secs_f32() * 1.0e3 / ticks as f32;
     let walked = bodies
@@ -103,7 +126,8 @@ pub fn run(planet: &Planet, start: Vec3, forward: Vec3, kind: &Kind) -> Cost {
         / count as f32;
     Cost {
         millis,
-        calls: calls.get() as f32 / (ticks as f32 * count as f32),
+        calls: lanes.iter().map(|lane| lane.calls).sum::<u64>() as f32
+            / (ticks as f32 * count as f32),
         walked,
         bodies: count as usize,
     }

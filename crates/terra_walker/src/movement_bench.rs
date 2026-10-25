@@ -222,16 +222,22 @@ fn the_mover_bench_times_a_body_walking() {
     println!("scorecard\tcost.forest\t{}", f.micros);
     let (_, far) = &planets[1];
     let (start, forward) = on(far);
-    let c = crowd::median(
-        (0..crowd::RUNS)
-            .map(|_| crowd::run(far, start, forward, &kind))
-            .collect(),
-    );
+    let crowd_on = |threads: usize| {
+        crowd::median(
+            (0..crowd::RUNS)
+                .map(|_| crowd::run(far, start, forward, &kind, threads))
+                .collect(),
+        )
+    };
+    let c = crowd_on(crowd::THREADS);
+    let one = crowd_on(1);
     println!(
-        "bench\tcrowd ({} bodies, planet 30 km)\t{:.2} ms a tick on one core, {:.1} µs a body, {:.0} calls a body a tick; walked {:.1} m on average",
+        "bench\tcrowd ({} bodies, planet 30 km)\t{:.2} ms a tick on {} threads ({:.2} on one), {:.1} µs a body on one, {:.0} calls a body a tick; walked {:.1} m on average",
         c.bodies,
         c.millis,
-        c.millis * 1.0e3 / c.bodies as f32,
+        crowd::THREADS,
+        one.millis,
+        one.millis * 1.0e3 / one.bodies as f32,
         c.calls,
         c.walked
     );

@@ -698,8 +698,8 @@
    "bar": {
     "at_most": 0
    },
-   "unit": "of 3 reruns different",
-   "source": "docs/controller.md criterion 19; D51, D138; reruns: again, bodies given reversed, interleaved",
+   "unit": "of 5 reruns different",
+   "source": "docs/controller.md criterion 19; D51, D138; reruns: again, bodies given reversed, interleaved, ticked on 5 and on 16 threads",
    "check": {
     "by": "course"
    },
@@ -790,7 +790,7 @@
    "bar": {
     "at_most": 4
    },
-   "unit": "ms a tick, 1,000 bodies (on one core until the tick runs on several)",
+   "unit": "ms a tick, 1,000 bodies on 8 threads (the server's cores assumed, movement_bench_crowd.rs THREADS)",
    "source": "docs/controller.md criterion 20; D52, D138; the bench's crowd: a thousand men walking through each other on the planet at 30 km",
    "check": {
     "by": "bench"
