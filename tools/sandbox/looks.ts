@@ -69,6 +69,10 @@ export const MEASURES: Record<string, { called: string; share?: boolean }> = {
   flatFoliage: { called: "flat foliage", share: true },
   foliageColour: { called: "leaf colour spread" },
   foliageLit: { called: "leaves catching light", share: true },
+  crownFlat: { called: "flat crowns", share: true },
+  crownColour: { called: "crown colour spread" },
+  crownLit: { called: "crowns catching light", share: true },
+  crownHue: { called: "crown hue (degrees)" },
   farUnderSky: { called: "far under sky" },
   farBluerThanMiddle: { called: "far bluer than middle" },
   ...Object.fromEntries(

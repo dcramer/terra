@@ -69,6 +69,15 @@ export type Look = {
   flatFoliage?: number;
   foliageColour?: number;
   foliageLit?: number;
+  /// The same three over the crowns alone (`crowns`), the upper half of the picture, where a
+  /// forest's crowns and bushes stand, so the ground cover at one's feet, most of a forest
+  /// floor's leaves, cannot hide crowns of one flat colour; and the crowns' leaves' median hue
+  /// in degrees (`crownHue`), olive in Sons of the Forest's, teal where a grey-blue veil lies
+  /// over dark crowns. None where the upper half has too few leaves to say.
+  crownFlat?: number;
+  crownColour?: number;
+  crownLit?: number;
+  crownHue?: number;
 };
 
 /// One band of a picture by distance (D326): how bright, how blue against green, how
@@ -200,6 +209,7 @@ export function look(p: Picture, masked: (x: number, y: number) => boolean = () 
     facets: facets(p, masked),
     flat: flat(p, masked),
     ...foliage(p, masked),
+    ...crowns(p, masked),
   };
 }
 
@@ -256,6 +266,28 @@ export function foliage(p: Picture, masked: (x: number, y: number) => boolean = 
   }
   if (squares < LEAFY_SQUARES) return {};
   return { flatFoliage: flatSquares / squares, foliageColour: colour / squares, foliageLit: lit / squares };
+}
+
+/// The crowns' leaves (`crownFlat`, `crownColour`, `crownLit`, `crownHue`): `foliage` over the
+/// upper half of the picture alone, and the median hue of its leaf pixels below the skyline,
+/// every other pixel each way.
+export function crowns(p: Picture, masked: (x: number, y: number) => boolean = () => false): { crownFlat?: number; crownColour?: number; crownLit?: number; crownHue?: number } {
+  const { width: W, height: H, rgba } = p;
+  const out = (x: number, y: number) => y >= H / 2 || masked(x, y);
+  const f = foliage(p, out);
+  if (f.flatFoliage === undefined) return {};
+  const line = skyline(p);
+  const hues: number[] = [];
+  for (let y = 0; y < H / 2; y += 2) {
+    for (let x = 0; x < W; x += 2) {
+      if (out(x, y) || y < line[x]) continue;
+      const i = (y * W + x) * 4;
+      const [r, g, b] = [rgba[i] / 255, rgba[i + 1] / 255, rgba[i + 2] / 255];
+      if (leafy(r, g, b)) hues.push(hsv(r, g, b)[0]);
+    }
+  }
+  hues.sort((a, c) => a - c);
+  return { crownFlat: f.flatFoliage, crownColour: f.foliageColour, crownLit: f.foliageLit, crownHue: hues[hues.length >> 1] };
 }
 
 /// Hue in degrees, saturation (chroma over value) and value of sRGB values 0 to 1, as HSV has
@@ -726,7 +758,8 @@ export function line(name: string, l: Look, against: Look = SOTF, called = "SotF
   const SOTF = against;
   const f = (v: number) => v.toFixed(3);
   const share = (v: number | undefined) => (v === undefined ? "-" : `${(100 * v).toFixed(1)}%`);
-  return `${name}: mean ${f(l.mean)} (${called} ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%), shade red/green ${f(l.shadeRedOverGreen)} (${f(SOTF.shadeRedOverGreen)}), shade blue/green ${f(l.shadeBlueOverGreen)} (${f(SOTF.shadeBlueOverGreen)}), middle blue/green ${f(l.middleBlueOverGreen)} (${f(SOTF.middleBlueOverGreen)}), lime top ${(100 * l.limeTop).toFixed(1)}% (${(100 * SOTF.limeTop).toFixed(1)}%), trunks middle ${share(l.trunkMiddle)} (${share(SOTF.trunkMiddle)}), flat foliage ${share(l.flatFoliage)} (${share(SOTF.flatFoliage)}), leaf colour spread ${l.foliageColour === undefined ? "-" : f(l.foliageColour)} (${SOTF.foliageColour === undefined ? "-" : f(SOTF.foliageColour)}), leaves catching light ${share(l.foliageLit)} (${share(SOTF.foliageLit)})`;
+  const opt = (v: number | undefined, digits = 3) => (v === undefined ? "-" : v.toFixed(digits));
+  return `${name}: mean ${f(l.mean)} (${called} ${f(SOTF.mean)}), p5 ${f(l.p5)} (${f(SOTF.p5)}), below 0.08 ${(100 * l.dark).toFixed(0)}% (${(100 * SOTF.dark).toFixed(0)}%), red/green ${f(l.redOverGreen)} (${f(SOTF.redOverGreen)}), blue/green ${f(l.blueOverGreen)} (${f(SOTF.blueOverGreen)}), contrast ${f(l.contrast)} (${f(SOTF.contrast)}), lit litter ${(100 * l.litLitter).toFixed(1)}% (${(100 * SOTF.litLitter).toFixed(1)}%), shade red/green ${f(l.shadeRedOverGreen)} (${f(SOTF.shadeRedOverGreen)}), shade blue/green ${f(l.shadeBlueOverGreen)} (${f(SOTF.shadeBlueOverGreen)}), middle blue/green ${f(l.middleBlueOverGreen)} (${f(SOTF.middleBlueOverGreen)}), lime top ${(100 * l.limeTop).toFixed(1)}% (${(100 * SOTF.limeTop).toFixed(1)}%), trunks middle ${share(l.trunkMiddle)} (${share(SOTF.trunkMiddle)}), flat foliage ${share(l.flatFoliage)} (${share(SOTF.flatFoliage)}), leaf colour spread ${l.foliageColour === undefined ? "-" : f(l.foliageColour)} (${SOTF.foliageColour === undefined ? "-" : f(SOTF.foliageColour)}), leaves catching light ${share(l.foliageLit)} (${share(SOTF.foliageLit)}), flat crowns ${share(l.crownFlat)} (${share(SOTF.crownFlat)}), crown colour spread ${opt(l.crownColour)} (${opt(SOTF.crownColour)}), crowns catching light ${share(l.crownLit)} (${share(SOTF.crownLit)}), crown hue ${opt(l.crownHue, 1)} (${opt(SOTF.crownHue, 1)})`;
 }
 
 /// The middle of the lower half of a picture, where a third-person film's placeholder figure

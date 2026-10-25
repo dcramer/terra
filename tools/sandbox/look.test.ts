@@ -82,10 +82,11 @@ test("the mean of looks is the mean of each number", () => {
 test("every reference kept has every number a look has, each a number", async () => {
   const { references, reference } = await import("./look.ts");
   // Flat foliage is measured only where a picture has leaves enough to say.
-  const keys = [...Object.keys(look(picture(() => [100, 120, 80]))), "flatFoliage", "foliageColour", "foliageLit"].sort();
+  const crownKeys = ["crownFlat", "crownColour", "crownLit", "crownHue"];
+  const keys = [...Object.keys(look(picture(() => [100, 120, 80]))), "flatFoliage", "foliageColour", "foliageLit", ...crownKeys].sort();
   // Measured since some references were made, from frames no longer to hand; a reference a
   // place is held to has what it is held on (looks.test.ts).
-  const later = ["trunkMiddle", "tint", "lilac", "hardEdges", "facets", "flat", "flatFoliage", "foliageColour", "foliageLit"];
+  const later = ["trunkMiddle", "tint", "lilac", "hardEdges", "facets", "flat", "flatFoliage", "foliageColour", "foliageLit", ...crownKeys];
   assert.ok(references().includes("sotf-forest-day"));
   for (const name of references()) {
     const kept = reference(name);
@@ -240,6 +241,28 @@ test("a bush of one green lit brighter and darker is flat foliage; leaves glinti
   }));
   near(real.flatFoliage!, 0);
   assert.ok(real.foliageColour! > 0.1, `${real.foliageColour}`);
+});
+
+test("crowns are measured over the upper half alone: flat crowns over varied grass are flat, and their hue is theirs", async () => {
+  const { crowns, foliage } = await import("./look.ts");
+  const leaf = (x: number, y: number) => grain(Math.floor(x / 8), Math.floor(y / 8));
+  // Upper half one teal green lit brighter and darker (hue 150); lower half grass glinting pale,
+  // lit through yellow and olive.
+  const teal = [40, 120, 80];
+  const p = sized(256, 384, (x, y) => {
+    const k = leaf(x, y);
+    if (y < 192) return teal.map((c) => Math.round(c * (0.25 + 0.75 * k))) as [number, number, number];
+    if (k < 0.2) return [150, 175, 130];
+    if (k < 0.4) return [150, 190, 30];
+    return [90, 120, 40].map((c) => Math.round(c * (0.4 + k))) as [number, number, number];
+  });
+  const c = crowns(p);
+  near(c.crownFlat!, 1);
+  near(c.crownHue!, 150, 1);
+  // The whole picture's leaves, grass and all, are half flat.
+  near(foliage(p).flatFoliage!, 0.5, 0.01);
+  // Too few leaves above: nothing to say of the crowns.
+  assert.deepEqual(crowns(sized(256, 384, (_, y) => (y < 192 ? [110, 160, 230] : [45, 60, 20]))), {});
 });
 
 test("leaves catching the light are those half as bright again as their square's middle leaf", async () => {

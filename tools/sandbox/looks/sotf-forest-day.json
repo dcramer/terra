@@ -1,6 +1,6 @@
 {
   "name": "sotf-forest-day",
-  "about": "Sons of the Forest's daytime forest interiors: twenty frames from Endnight's Steam store screenshots and three official trailers, measured with the player's hands left in (research/2026-10-14-sotf-forest-look.md); the middle third's brown share is that note's `brownMid`, by the same hues. The lush forest's target by day (D286). Its debug tint, lilac, hard edges, facets and flat colour were measured by look.ts on 2026-10-15 from the same twenty frames, the rest left as the research measured them. Its flat foliage, leaf colour and lit leaves (D368) were measured by look.ts on 2026-10-15 from the same twenty frames, the 20 with leaves enough to say.",
+  "about": "Sons of the Forest's daytime forest interiors: twenty frames from Endnight's Steam store screenshots and three official trailers, measured with the player's hands left in (research/2026-10-14-sotf-forest-look.md); the middle third's brown share is that note's `brownMid`, by the same hues. The lush forest's target by day (D286). Its debug tint, lilac, hard edges, facets and flat colour were measured by look.ts on 2026-10-15 from the same twenty frames, the rest left as the research measured them. Its flat foliage, leaf colour and lit leaves (D368) were measured by look.ts on 2026-10-15 from the same twenty frames, the 20 with leaves enough to say. Its crowns (the upper half alone: flat crowns, crown colour spread, crowns catching light, and their leaves' median hue) were measured by look.ts on 2026-10-25 from the same twenty frames, the 18 with leaves enough in the upper half.",
   "sources": [
     "https://store.steampowered.com/app/1326470/",
     "https://store.steampowered.com/api/appdetails?appids=1326470"
@@ -30,6 +30,10 @@
     "flat": 0.006681882689740719,
     "flatFoliage": 0.18120548013175922,
     "foliageColour": 0.1129243017276231,
-    "foliageLit": 0.0965363032132039
+    "foliageLit": 0.0965363032132039,
+    "crownFlat": 0.2105328210931743,
+    "crownColour": 0.11322589620211969,
+    "crownLit": 0.09521564214180737,
+    "crownHue": 63.36101602192582
   }
 }

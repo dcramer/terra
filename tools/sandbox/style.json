@@ -22,7 +22,7 @@
         "redOverGreen": { "rule": "grade", "within": 0.08 },
         "blueOverGreen": { "rule": "grade", "within": 0.1 },
         "shadeRedOverGreen": { "rule": "shade", "within": 0.2 },
-        "shadeBlueOverGreen": { "rule": "shade", "within": 0.1 },
+        "shadeBlueOverGreen": { "rule": "shade", "within": 0.1, "note": "Fails since D475 (0.462 to 0.228, SotF 0.377): it passed only because the same wrongly near aerial haze turned the green shade blue. Kept as it is, not loosened: its fix is the shade's make-up, waiting on the developers." },
         "hardEdges": { "rule": "shade", "under": 0.07 },
         "contrast": { "rule": "plants", "within": 0.1 },
         "facets": { "rule": "ground", "under": 0.1 },
@@ -33,6 +33,10 @@
         "flatFoliage": { "rule": "leaves", "under": 0.25 },
         "foliageColour": { "rule": "leaves", "over": 0.04 },
         "foliageLit": { "rule": "leaves", "over": 0.06 },
+        "crownFlat": { "rule": "leaves", "under": 0.15 },
+        "crownColour": { "rule": "leaves", "over": 0.03 },
+        "crownLit": { "rule": "leaves", "over": 0.06 },
+        "crownHue": { "rule": "leaves", "within": 10 },
         "trunkMiddle": { "rule": "eye", "within": 0.2 },
         "limeTop": { "rule": "eye", "under": 0.03 }
       }
