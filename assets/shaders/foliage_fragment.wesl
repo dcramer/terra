@@ -410,7 +410,6 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
     // day above freezing takes it off, as the ground's snow going takes it.
     let lying = smoothstep(0.02, 0.12, weather.r * SNOW_FULL_M) * (0.55 + 0.45 * weather.a) * (1.0 - weather.b);
     let sky_up = normalize(world);
-    let up = dot((*input).N, sky_up);
     // A load lies on the bough, not on each needle the normal map draws: by it, the loads
     // broke into specks (weather round 18).
     let bough_up = dot((*input).world_normal, sky_up);
@@ -490,6 +489,12 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // The deeper it lies, the more of each limb it covers, in clumps.
         // A log's or limb's upper face carries a cap with an edge, as snow has a thickness:
         // a soft gradient over the face read as a stain, not a load (winter round 11).
+        // By the limb's own shape, not the bark's normal map: by that, every ridge of the bark
+        // facing up or into the wind took snow, specks over the trunks and white smears down
+        // their furrows (the looks review's fault 4). A trunk standing up has no upper face; a
+        // branch stub's and a limb's take it.
+        let shape = (*input).world_normal;
+        let up = dot(shape, sky_up);
         let clumped = smoothstep(0.15 - 0.15 * lying, 0.45 - 0.15 * lying, wander(world * 1.3));
         snow = smoothstep(0.2, 0.42, lying * smoothstep(0.2, 0.55, up) * clumped);
         colour = mix(colour, SNOW, snow * 0.95);
@@ -512,8 +517,10 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let across = from_foot - foot_up * stem_h;
         let seed = fract(origin * 0.137) * 50.0;
         let low = 1.0 - smoothstep(PLASTER_LOW_M.x, PLASTER_LOW_M.y, stem_h);
-        let windward = smoothstep(0.2 - 0.3 * low, 0.8, dot((*input).N, into));
-        let blot = wander(across * 1.7 + foot_up * stem_h * 0.5 + seed) * 0.7 + wander(world * 6.0 + seed) * 0.3;
+        let windward = smoothstep(0.2 - 0.3 * low, 0.8, dot(shape, into));
+        // Patches about as tall as they are wide, a hand to a forearm across: stretched up the
+        // stem, with a finer octave at 17 cm, they read as smears (the looks review).
+        let blot = wander(across * 1.7 + foot_up * stem_h * 1.4 + seed) * 0.8 + wander(world * 3.0 + seed) * 0.2;
         let plaster = smoothstep(0.5, 0.75, blot + 0.2 * low) * windward;
         let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
         let stuck = lying * max(plaster, bank);
