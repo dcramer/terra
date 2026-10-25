@@ -80,6 +80,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D444](decisions/D444.md) | A horn stands in a massif of lesser tops, kept off the valley pins | Tech | Agent | Decided | Each horn (D425) sends ridges out along two or three of… |
 | [D473](decisions/D473.md) | Dungeons are made in stages: a mission graph, placed on 3 m cells and 4 m levels | Tech | Agent | Leaning | A dungeon is a theme and a seed, made in stages… |
 | [D474](decisions/D474.md) | Dungeon cells are dressed by wave function collapse over a theme's socketed modules | Tech | Agent | Leaning | Every placed cell takes a module from its theme's set… |
+| [D483](decisions/D483.md) | A theme names its own sockets, and a socket few modules take is an adjacency rule | Tech | Agent | Leaning | Amends D474 (the dressing in dungeons.md follows it). |
 
 ## The player and survival
 

@@ -1,8 +1,12 @@
 //! Stage 3, dressing by wave function collapse (D474): each placed cell takes a module from its
 //! theme's set (a module turned to each facing is a variant). A module's side takes sockets:
 //! a wall, door or stair side must take what placement put there; an open side, into the same
-//! room or corridor, must share an interior socket (open floor, rubble or water) with the
-//! module across it. Cells placement fixes (the goal's dais, the key rooms' altars, the rest
+//! room or corridor, must share an interior socket with the module across it. Open floor,
+//! rubble and water are built in; a theme names its own (a pillar row's `aisle`, an alcove
+//! run, the two beats of a wall's rhythm, a runner or a rail), and a socket only a few modules
+//! take is a rule (D483): a pillar row runs on to a wall, a rail to a door or its buffer, a
+//! pool meets dry floor only at a shore's steps. `any` is every socket but water and rubble,
+//! for the features a run may end against. Cells placement fixes (the goal's dais, the key rooms' altars, the rest
 //! room's fire, the stairs) take their module in any facing that fits.
 //!
 //! The solver is the simple tiled model (Gumin's WaveFunctionCollapse, as Townscaper and Bad
@@ -16,27 +20,38 @@ use crate::place::{Layout, STEPS, Side, Space, opposite};
 use crate::theme::{self, Role, Theme};
 use terra_gen::{Rng, Seed};
 
-pub const OPEN: u8 = 1;
-pub const WALL: u8 = 2;
-pub const DOOR: u8 = 4;
-pub const STAIR: u8 = 8;
-pub const RUBBLE: u8 = 16;
-pub const WATER: u8 = 32;
-/// The sockets an open side shares.
-pub const INTERIOR: u8 = OPEN | RUBBLE | WATER;
+pub const OPEN: u32 = 1;
+pub const WALL: u32 = 2;
+pub const DOOR: u32 = 4;
+pub const STAIR: u32 = 8;
+pub const RUBBLE: u32 = 16;
+pub const WATER: u32 = 32;
+/// Sockets in all, the built-in six and a theme's own.
+pub const SOCKETS: usize = 32;
 /// Solves tried before the plain floors.
 pub const RETRIES: u32 = 8;
 
-pub fn socket(name: &str) -> Result<u8, String> {
-    Ok(match name.trim() {
-        "open" => OPEN,
-        "wall" => WALL,
-        "door" => DOOR,
-        "stair" => STAIR,
-        "rubble" => RUBBLE,
-        "water" => WATER,
-        other => return Err(format!("no socket {other}")),
-    })
+/// The built-in sockets, by bit.
+pub const BUILT_IN: [&str; 6] = ["open", "wall", "door", "stair", "rubble", "water"];
+
+/// Every socket a theme's modules name: the built-in six, then its own in the order first met.
+fn sockets_of(theme: &Theme) -> Result<Vec<String>, String> {
+    let mut names: Vec<String> = BUILT_IN.map(String::from).to_vec();
+    for m in &theme.modules {
+        for name in m.sides.iter().flat_map(|s| s.split('|')).map(str::trim) {
+            if name != "any" && !names.iter().any(|n| n == name) {
+                names.push(name.to_string());
+            }
+        }
+    }
+    if names.len() > SOCKETS {
+        return Err(format!(
+            "{}: {} sockets, at most {SOCKETS}",
+            theme.name,
+            names.len()
+        ));
+    }
+    Ok(names)
 }
 
 /// A module turned to one facing.
@@ -46,15 +61,19 @@ pub struct Variant {
     /// Quarter turns clockwise: its north side faces east after one.
     pub turn: u8,
     /// North, east, south, west, after turning.
-    pub sides: [u8; 4],
+    pub sides: [u32; 4],
     pub weight: f32,
 }
 
 /// A theme's variants, with the masks the solver works with: up to 128 variants, a bit each.
 pub struct ModuleSet {
     pub variants: Vec<Variant>,
-    /// By side and socket mask: the variants whose side takes one of the sockets.
-    fits: [[u128; 64]; 4],
+    /// By side and socket: the variants whose side takes it.
+    fits: [[u128; SOCKETS]; 4],
+    /// The sockets an open side shares: open floor, rubble, water and the theme's own.
+    pub interior: u32,
+    /// The theme's sockets, by bit.
+    pub sockets: Vec<String>,
     /// The free variants a room cell, and a corridor cell, may take.
     room: u128,
     corridor: u128,
@@ -67,20 +86,26 @@ pub struct ModuleSet {
 
 impl ModuleSet {
     pub fn new(theme: &Theme) -> Result<ModuleSet, String> {
+        let sockets = sockets_of(theme)?;
+        let all = ((1u64 << sockets.len()) - 1) as u32;
+        let any = all & !(WATER | RUBBLE);
         let mut variants: Vec<Variant> = Vec::new();
         for (module, m) in theme.modules.iter().enumerate() {
             if m.sides.len() != 4 {
                 return Err(format!("{}: {} sides, not 4", m.name, m.sides.len()));
             }
-            let mut sides = [0u8; 4];
+            let mut sides = [0u32; 4];
             for (d, text) in m.sides.iter().enumerate() {
-                for name in text.split('|') {
-                    sides[d] |= socket(name).map_err(|e| format!("{}: {e}", m.name))?;
+                for name in text.split('|').map(str::trim) {
+                    sides[d] |= match sockets.iter().position(|n| n == name) {
+                        Some(bit) => 1 << bit,
+                        None => any,
+                    };
                 }
             }
             let mut own: Vec<Variant> = Vec::new();
             for turn in 0..if m.rotates { 4 } else { 1 } {
-                let turned: [u8; 4] = std::array::from_fn(|d| sides[(d + 4 - turn) % 4]);
+                let turned: [u32; 4] = std::array::from_fn(|d| sides[(d + 4 - turn) % 4]);
                 if !own.iter().any(|v| v.sides == turned) {
                     own.push(Variant {
                         module,
@@ -101,7 +126,9 @@ impl ModuleSet {
             ));
         }
         let mut set = ModuleSet {
-            fits: [[0; 64]; 4],
+            fits: [[0; SOCKETS]; 4],
+            interior: all & !(WALL | DOOR | STAIR),
+            sockets,
             room: 0,
             corridor: 0,
             safe: 0,
@@ -113,9 +140,9 @@ impl ModuleSet {
             let bit = 1u128 << v;
             let m = &theme.modules[variant.module];
             for d in 0..4 {
-                for mask in 0..64 {
-                    if variant.sides[d] & mask as u8 != 0 {
-                        set.fits[d][mask] |= bit;
+                for (socket, fits) in set.fits[d].iter_mut().enumerate() {
+                    if variant.sides[d] & (1 << socket) != 0 {
+                        *fits |= bit;
                     }
                 }
             }
@@ -137,8 +164,21 @@ impl ModuleSet {
         self.blocks[self.variants[variant].module]
     }
 
+    /// Under water: a side takes water and none a dry floor (a shore, with steps, is dry).
     pub fn wet(&self, variant: usize) -> bool {
-        self.variants[variant].sides.iter().any(|s| s & WATER != 0)
+        let sides = &self.variants[variant].sides;
+        let dry = self.interior & !WATER;
+        sides.iter().any(|s| s & WATER != 0) && sides.iter().all(|s| s & dry == 0)
+    }
+
+    /// The variants whose side `d` takes one of the sockets of `mask`.
+    pub fn fit(&self, d: usize, mask: u32) -> u128 {
+        bits(mask as u128).fold(0, |u, socket| u | self.fits[d][socket])
+    }
+
+    /// The interior sockets some variant of `domain` offers on side `d`.
+    fn offered(&self, domain: u128, d: usize) -> u32 {
+        bits(domain).fold(0, |u, v| u | (self.variants[v].sides[d] & self.interior))
     }
 }
 
@@ -195,9 +235,9 @@ pub fn dress(
                         Side::Wall => WALL,
                         Side::Door(_) => DOOR,
                         Side::Way => STAIR,
-                        Side::Open => INTERIOR,
+                        Side::Open => set.interior,
                     };
-                    domain &= set.fits[d][need as usize];
+                    domain &= set.fit(d, need);
                 }
                 domain
             })
@@ -335,9 +375,7 @@ fn propagate(
             let Some(next) = *next else {
                 continue;
             };
-            let offered =
-                bits(domain[cell]).fold(0u8, |u, v| u | (set.variants[v].sides[d] & INTERIOR));
-            let kept = domain[next] & set.fits[opposite(d)][offered as usize];
+            let kept = domain[next] & set.fit(opposite(d), set.offered(domain[cell], d));
             if kept != domain[next] {
                 if kept == 0 {
                     return false;
@@ -375,7 +413,7 @@ mod tests {
                             Side::Wall => WALL,
                             Side::Door(_) => DOOR,
                             Side::Way => STAIR,
-                            Side::Open => INTERIOR,
+                            Side::Open => set.interior,
                         };
                         assert!(
                             variant.sides[d] & need != 0,
@@ -385,10 +423,18 @@ mod tests {
                         );
                         if cell.sides[d] == Side::Open {
                             let next = layout.cell(cell.at + STEPS[d]).unwrap();
-                            assert_eq!(
-                                set.wet(v),
-                                set.wet(dressing.picks[next]),
-                                "{at}: water stops inside a space"
+                            let across = &set.variants[dressing.picks[next]];
+                            assert!(
+                                variant.sides[d] & across.sides[opposite(d)] & set.interior != 0,
+                                "{at}: {} and {} share no socket at {}",
+                                theme.modules[variant.module].name,
+                                theme.modules[across.module].name,
+                                cell.at
+                            );
+                            assert!(
+                                !set.wet(v) || across.sides[opposite(d)] & WATER != 0,
+                                "{at}: water ends without a shore at {}",
+                                cell.at
                             );
                         }
                     }

@@ -1,7 +1,9 @@
 // The ruined keep, "Three Braziers" (docs/dungeons.md). Working assumptions, not designed:
 // the numbers, the bestiary and the loot are stand-ins until the developers settle them.
 // Module sides are north, east, south, west, each the sockets it takes joined by `|`:
-// open (floor into the same space), wall, door, stair, rubble, water.
+// open (floor into the same space), wall, door, stair, rubble, water, and the theme's own
+// (a pillar row's aisle, an alcove run, a wall's rhythm ra/rb, a rail or runner): a socket few
+// modules take is a rule (D483). `any` is every socket but water and rubble.
 (
     name: "ruined_keep",
     title: "Three Braziers",
@@ -26,17 +28,25 @@
         (item: "Cooked meat", roles: [Rest], count: (1, 3)),
     ],
     modules: [
+        // Floors.
         (name: "flagstones", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 10.0, rotates: false, safe: true),
-        (name: "banner_wall", sides: ["wall", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 3.0),
-        (name: "weapon_rack", sides: ["wall", "open|wall|door", "open|door", "open|wall|door"], weight: 1.5, spaces: [Room]),
-        (name: "pillar", sides: ["open", "open", "open", "open"], weight: 3.0, spaces: [Room], rotates: false),
+        (name: "wet_flags", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 1.0, rotates: false),
+        // Walls in rhythm: a banner or a sconce, then a plain bay, then again.
+        (name: "banner_wall", sides: ["wall", "ra|wall|door|stair", "open|wall|door|stair", "rb|wall|door|stair"], weight: 2.0),
+        (name: "sconce", sides: ["wall", "ra|wall|door|stair", "open|wall|door|stair", "rb|wall|door|stair"], weight: 1.0),
+        (name: "plain_bay", sides: ["wall", "rb|wall|door|stair", "open|wall|door|stair", "ra|wall|door|stair"], weight: 3.0),
+        (name: "weapon_rack", sides: ["wall", "open|wall|door", "open|door", "open|wall|door"], weight: 1.0, spaces: [Room]),
+        // A carpet runs unbroken from a door to a door or the dais, or to its fringed end.
+        (name: "carpet_runner", sides: ["runner|door|wall", "open|wall", "runner|door|wall", "open|wall"], weight: 3.0, spaces: [Room]),
+        (name: "carpet_end", sides: ["runner", "open|wall", "open|wall|door|stair", "open|wall"], weight: 1.0, spaces: [Room]),
+        // Pillars only in rows, from wall to wall (or to the dais).
+        (name: "pillar", sides: ["aisle|wall", "open", "aisle|wall", "open"], weight: 3.0, spaces: [Room]),
         (name: "trestle", sides: ["open|wall", "open", "open|wall", "open"], weight: 1.5, spaces: [Room]),
-        (name: "puddle", sides: ["water|wall|door|stair", "water|wall|door|stair", "water|wall|door|stair", "water|wall|door|stair"], weight: 0.6, rotates: false),
         (name: "collapse", sides: ["wall", "wall", "rubble", "rubble"], weight: 1.2, spaces: [Room], blocks: true),
         (name: "rubble_spill", sides: ["rubble", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 0.6),
-        (name: "sanctum_dais", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
-        (name: "brazier", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
-        (name: "campfire", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
+        (name: "sanctum_dais", sides: ["any", "any", "any", "any"], fixed: true, spaces: [Room]),
+        (name: "brazier", sides: ["any", "any", "any", "any"], fixed: true, spaces: [Room]),
+        (name: "campfire", sides: ["any", "any", "any", "any"], fixed: true, spaces: [Room]),
         (name: "stair", sides: ["open|wall|stair", "open|wall|stair", "open|wall|stair", "open|wall|stair"], fixed: true, spaces: [Stair], rotates: false),
     ],
 )

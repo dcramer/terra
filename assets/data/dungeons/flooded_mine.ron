@@ -1,8 +1,9 @@
 // The flooded mine, "Deep Seam" (docs/dungeons.md). Working assumptions, not designed: the
 // numbers, the bestiary and the loot are stand-ins until the developers settle them.
 // Module sides are north, east, south, west, each the sockets it takes joined by `|`:
-// open (floor into the same space), wall, door, stair, rubble, water. A module whose open
-// sides are water only floods its whole room or corridor run, as no dry module takes water.
+// open (floor into the same space), wall, door, stair, rubble, water, and the theme's own
+// (a pillar row's aisle, a wall's rhythm ra/rb, a rail): a socket few modules take is a rule
+// (D483). Water meets dry ground only at a shore. `any` is every socket but water and rubble.
 (
     name: "flooded_mine",
     title: "Deep Seam",
@@ -26,18 +27,28 @@
         (item: "Cooked meat", roles: [Rest, Treasure], count: (1, 3)),
     ],
     modules: [
+        // Floors.
         (name: "earth_floor", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 8.0, rotates: false, safe: true),
-        (name: "timbered", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 6.0),
-        (name: "flooded", sides: ["water|wall|door|stair", "water|wall|door|stair", "water|wall|door|stair", "water|wall|door|stair"], weight: 3.0, rotates: false),
-        (name: "ore_vein", sides: ["wall", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 2.0),
-        (name: "rail_run", sides: ["open|door|stair", "wall", "open|door|stair", "wall"], weight: 3.0, spaces: [Corridor]),
+        // Timbering in rhythm along a gallery: a set of posts and beam, then a plain bay.
+        (name: "timber_set", sides: ["wall", "ra|wall|door|stair", "open|wall|door|stair", "rb|wall|door|stair"], weight: 3.0),
+        (name: "earth_bay", sides: ["wall", "rb|wall|door|stair", "open|wall|door|stair", "ra|wall|door|stair"], weight: 3.0),
+        // Flooded galleries: water meets dry ground only at a shore with steps down.
+        (name: "flooded", sides: ["water|wall|door", "water|wall|door", "water|wall|door", "water|wall|door"], weight: 4.0, rotates: false),
+        (name: "shore", sides: ["water", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 2.0),
+        (name: "shore_corner", sides: ["water", "water", "open|wall|door|stair", "open|wall|door|stair"], weight: 1.0),
+        (name: "ore_vein", sides: ["wall", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 1.5),
+        // Rails run unbroken along a gallery, from a door or stair to a door, a stair or a buffer.
+        (name: "rail_run", sides: ["rail|door|stair", "wall", "rail|door|stair", "wall"], weight: 4.0, spaces: [Corridor]),
+        (name: "rail_turn", sides: ["rail|door|stair", "rail|door|stair", "wall", "wall"], weight: 2.0, spaces: [Corridor]),
+        (name: "rail_buffer", sides: ["rail", "wall", "open|wall|door|stair", "wall"], weight: 1.0, spaces: [Corridor]),
         (name: "tool_corner", sides: ["wall", "wall", "open|door", "open|door"], weight: 1.5, spaces: [Room]),
-        (name: "prop_post", sides: ["open", "open", "open", "open"], weight: 3.0, spaces: [Room], rotates: false),
+        // Pit props stand in rows under the roof beam.
+        (name: "prop_post", sides: ["aisle|wall", "open", "aisle|wall", "open"], weight: 3.0, spaces: [Room]),
         (name: "cave_in", sides: ["wall", "wall", "rubble", "rubble"], weight: 1.5, spaces: [Room], blocks: true),
         (name: "spoil_heap", sides: ["rubble", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], weight: 0.5),
-        (name: "trapped_miner", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
-        (name: "pump_lever", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
-        (name: "campfire", sides: ["open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair", "open|wall|door|stair"], fixed: true, spaces: [Room]),
+        (name: "trapped_miner", sides: ["any", "any", "any", "any"], fixed: true, spaces: [Room]),
+        (name: "pump_lever", sides: ["any", "any", "any", "any"], fixed: true, spaces: [Room]),
+        (name: "campfire", sides: ["any", "any", "any", "any"], fixed: true, spaces: [Room]),
         (name: "stair", sides: ["open|wall|stair", "open|wall|stair", "open|wall|stair", "open|wall|stair"], fixed: true, spaces: [Stair], rotates: false),
     ],
 )

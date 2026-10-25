@@ -53,7 +53,7 @@ pub(crate) enum Class {
 pub(crate) struct Look {
     pub class: Class,
     pub turn: usize,
-    pub sockets: [u8; 4],
+    pub sockets: [u32; 4],
 }
 
 pub(crate) fn looks(dungeon: &Dungeon, theme: &Theme, set: &ModuleSet) -> Vec<Look> {
