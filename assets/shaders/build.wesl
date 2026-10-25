@@ -94,8 +94,10 @@ struct Weather {
 // level one, a little inside; that face's map at where the point is across it, its u along
 // z on the x faces and x otherwise, its v up on walls and along z on floors and roofs.
 // A roof's covering lies sloped over its cubes, so its cubes' faces are steps, a map each, and
-// banded it; it takes its moss and lichen from noise instead, the same in either way: moss in
-// patches, more down toward the eaves, lichen in spots, both by the building's age.
+// banded it; it takes its moss and lichen from noise instead, the same in either way: moss's
+// want rising toward the eaves and drifting broadly across the slope (the fragment lays it in
+// the laps under each course's butt, by the covering's height), lichen's crusts a few
+// centimetres across, both by the building's age; c.y how far down toward the eaves.
 fn weather_at(wp: vec3<f32>, wn: vec3<f32>, roof: bool) -> Weather {
     var out = Weather(vec4(0.0), vec4(0.0), vec4(0.0), false);
     let w = layers.weather;
@@ -116,11 +118,12 @@ fn weather_at(wp: vec3<f32>, wn: vec3<f32>, roof: bool) -> Weather {
         let aged = clamp(w[5].y / 60.0, 0.0, 1.0);
         let down = 1.0 - clamp(box.y / max(f32(dims.y), 1.0), 0.0, 1.0);
         let q = local.xz + local.y * 0.37;
-        let patches = noise21(q * 0.3) * 0.6 + noise21(q * 1.3) * 0.3 + noise21(q * 5.0) * 0.1;
-        out.a.z = smoothstep(0.62, 0.8, patches + 0.25 * down - 0.1) * aged;
-        let crust = noise21(q * 7.0 + 13.0) * 0.7 + noise21(q * 23.0) * 0.3;
-        out.b.z = smoothstep(0.74, 0.8, crust) * aged * 0.6;
-        out.b.x = 0.25 * aged * down;
+        let drift = noise21(q * 0.45) * 0.7 + noise21(q * 1.6) * 0.3;
+        out.a.z = aged * (0.08 + 0.92 * down * down) * (0.55 + 0.9 * drift);
+        let crust = noise21(q * 9.0 + 13.0) * 0.6 + noise21(q * 27.0) * 0.4;
+        out.b.z = smoothstep(0.56, 0.7, crust + 0.1 * down) * aged;
+        out.b.x = 0.15 * aged * down;
+        out.c.y = down;
         out.on = true;
         return out;
     }
@@ -647,11 +650,31 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var moss_cover = 0.0;
     var moss_n = vec2(0.0);
     var moss_shade = 1.0;
+    // How much of its reflectance an aged surface keeps.
+    var reflect_k = 1.0;
     if weather.on {
         var c = pbr_input.material.base_color.rgb;
         var r = pbr_input.material.perceptual_roughness;
         let lum = dot(c, vec3(0.3, 0.59, 0.11));
+        let age = clamp(layers.weather[5].y / 60.0, 0.0, 1.0);
         let grain = noise21(vec2(wp.x + wp.z, wp.y) * 9.0) * 0.6 + noise21(vec2(wp.x - wp.z, wp.y) * 31.0) * 0.4;
+        // The material's height against its own mean round about (a far mip): its joints, laps
+        // and grooves below nought, its stones' tops, butts and ridges above, whatever range a
+        // material's height map spans.
+        let high = textureSampleGrad(height_array, array_sampler, uv, slot, ddx, ddy).r;
+        let high_mean = textureSampleLevel(height_array, array_sampler, uv, slot, 6.0).r;
+        let rel = select(high - high_mean, 0.0, missing);
+        let st = vec2(dot(wp, T), dot(wp, B));
+        let roof = way == 4;
+        if roof {
+            // An aged covering goes matte and chalky: the sheen of new slate or shakes gone to
+            // a dry bloom, lighter and greyer, mottled, so no course mirrors the sky.
+            let chalk = noise21(st * 1.7 + 3.0) * 0.6 + noise21(st * 6.0) * 0.4;
+            let bloom = mix(vec3(lum), c, 0.4) * (1.25 + 0.3 * chalk) + vec3(0.008);
+            c = mix(c, bloom, 0.75 * age);
+            r = mix(r, 0.86 + 0.08 * chalk, age);
+            reflect_k = 1.0 - 0.35 * age;
+        }
         let grime = weather.b.x * (0.75 + 0.5 * grain);
         c = mix(c, mix(vec3(lum), c, 0.5) * vec3(0.42, 0.38, 0.31), clamp(grime, 0.0, 1.0));
         c *= 1.0 - 0.45 * weather.b.w;
@@ -661,30 +684,40 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         c = mix(c, mix(c, vec3(lum), 0.2) * vec3(0.77, 0.76, 0.74), clamp(weather.a.w, 0.0, 1.0));
         // Soot: a soft smoky plume over an opening, darkening by at most about two thirds.
         c = mix(c, mix(c, vec3(lum), 0.4) * vec3(0.34, 0.32, 0.3), weather.c.x * 0.9);
-        let lichen = smoothstep(0.2, 0.6, weather.b.z * (0.6 + 0.8 * grain));
-        c = mix(c, c * 0.4 + vec3(0.16, 0.16, 0.1), lichen * 0.7);
+        var lichen = 0.0;
+        if roof {
+            // Crustose lichen on a covering: pale grey-green crusts, now and then ochre, on the
+            // faces toward each course's butt (its height's high part) and toward the eaves.
+            lichen = weather.b.z * (0.3 + 0.7 * smoothstep(-0.05, 0.2, rel));
+            let ochre = smoothstep(0.7, 0.85, noise21(st * 3.1 + 21.0));
+            let crust = mix(vec3(0.3, 0.31, 0.26), vec3(0.4, 0.3, 0.11), ochre) * (0.85 + 0.3 * grain);
+            c = mix(c, crust, lichen * 0.75);
+        } else {
+            lichen = smoothstep(0.2, 0.6, weather.b.z * (0.6 + 0.8 * grain));
+            c = mix(c, c * 0.4 + vec3(0.16, 0.16, 0.1), lichen * 0.7);
+        }
         // Moss as cushions in the joints, blended by the material's height as engines blend a
         // layer by height (the Worn block's way): a thin field fills the mortar's low places
         // first and only a strong one climbs over the stones' tops; its edge ragged with noise,
-        // never cut out; olive to brown, lumpy, matte, a damp darkening just round it. The
-        // height is taken against its own mean round about (a far mip), so the joints are its
-        // low places whatever range a material's height map spans.
-        let moss_high = textureSampleGrad(height_array, array_sampler, uv, slot, ddx, ddy).r;
-        let moss_mean = textureSampleLevel(height_array, array_sampler, uv, slot, 6.0).r;
-        let rel = select(moss_high - moss_mean, 0.0, missing);
-        let st = vec2(dot(wp, T), dot(wp, B));
+        // never cut out; olive to brown, lumpy, matte, a damp darkening just round it. On a
+        // covering, in the laps under each course's butt and the gaps between its pieces, the
+        // lowest of its height, spreading over the pieces only toward the eaves.
         let e = 0.004;
         let lump = moss_lumps(st);
         let lump_d = vec2(moss_lumps(st + vec2(e, 0.0)), moss_lumps(st + vec2(0.0, e))) - lump;
         let field = smoothstep(0.12, 0.5, weather.a.z * (0.7 + 0.6 * grain));
         let ragged = (noise21(st * 23.0 + 5.0) - 0.5) * 0.4 + (lump - 0.5) * 0.3;
-        let moss = smoothstep(0.0, 0.25, field * 1.6 - 0.8 - rel * 3.0 + ragged);
+        var moss = smoothstep(0.0, 0.25, field * 1.6 - 0.8 - rel * 3.0 + ragged);
+        if roof {
+            let reach = -0.45 + 0.6 * clamp(weather.a.z, 0.0, 1.0);
+            moss = smoothstep(-0.04, 0.06, reach - rel + ragged * 0.15);
+        }
         let tone = noise21(st * 2.3 + 11.0);
         let olive_brown = mix(vec3(0.08, 0.095, 0.035), vec3(0.08, 0.066, 0.034), smoothstep(0.4, 0.8, tone));
         let fresh = smoothstep(0.55, 0.9, noise21(st * 5.0 + 3.0)) * 0.6;
         let moss_colour = mix(olive_brown, vec3(0.11, 0.125, 0.04), fresh) * (0.7 + 0.5 * lump);
         let damp_band = smoothstep(0.0, 0.25, field) * (1.0 - moss);
-        c *= 1.0 - 0.28 * damp_band;
+        c *= 1.0 - select(0.28, 0.1, roof) * damp_band;
         c = mix(c, moss_colour, moss * 0.94);
         r = mix(r, 0.97, max(moss, lichen));
         moss_cover = moss;
@@ -734,7 +767,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         }
     }
     pbr_input.material.metallic = arm.b;
-    pbr_input.material.reflectance = vec3(entry.z);
+    pbr_input.material.reflectance = vec3(entry.z * reflect_k);
     // The light view (D385): an 18% grey lit as it is, as the grey card beside it.
 @if(BUILD_VIEW) {
     if u32(layers.view.x + 0.5) == LIGHT_ALONE {
