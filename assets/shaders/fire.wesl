@@ -2495,7 +2495,10 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     // round 2). Most die low and soon, a few ride the plume two or three flames high, as
     // RDR2's and the photographs' do.
     let own = hash(vec2(phase * 17.0 + seed, 3.0));
-    let life_s = mix(1.6 + 2.2 * luck, 0.7 + 1.6 * own * own, kept);
+    // A hearth's live one to three seconds, so 20-40 are up at once over its whole cone, not a
+    // few low by the flames (campfire notes #5: the photographs' and RDR2's small embers rising
+    // a flame height or two in a widening cone, winking out).
+    let life_s = mix(1.6 + 2.2 * luck, 1.1 + 2.0 * own * own, kept);
     let t = fract(time / life_s + mix(fract(phase) * 1.37, own * 7.13, kept) + seed);
     let seconds = t * life_s;
     let climb = mix(2.5 + 3.5 * luck, 1.0 + 2.6 * own * luck, kept);
@@ -2507,7 +2510,8 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     let quick = vec2(noise(vec2(own * 59.0, seconds * 3.1)), noise(vec2(own * 97.0, seconds * 3.1))) - 0.5;
     let wander = slow + quick * 0.45 * kept;
     let out_from = (vec2(hash(vec2(luck, 1.0)), hash(vec2(luck, 2.0))) - 0.5) * mix(tall * 0.8, b.z * 0.6, kept);
-    let sway = mix(2.0, 0.5 + 0.6 * rise, kept);
+    // A hearth's spreading out as they climb, a cone opening about one in two.
+    let sway = mix(2.0, 0.6 + 1.1 * rise, kept);
     let at = foot + up * (rise + tall * mix(0.3, 0.12, kept)) + east * (out_from.x + wander.x * sway * t) + north * (out_from.y + wander.y * sway * t) + wind * seconds * mix(0.8, 0.4, kept);
     // Stretched along its flight: up and downwind, and as the eddies toss it.
     let flight = normalize(up * (3.0 * exp(-seconds * 0.9) + 0.4) + wind * 0.8 + (east * quick.x + north * quick.y) * 2.0 * kept);
@@ -2527,7 +2531,7 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     let world = at + across * (corner.x - 0.5) * size + flight * (corner.y - 0.5) * size * mix(5.0, 2.0, kept);
     out.clip = position_world_to_clip(world);
     out.uv = corner;
-    out.life = vec4(t, heat, luck, 2.0);
+    out.life = vec4(t, heat, luck, 2.0 + kept);
     out.glow = glow;
     return out;
 }
@@ -2864,7 +2868,14 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
         let p = (uv - 0.5) * vec2(2.0, 2.0);
         let spark = 1.0 - smoothstep(0.2, 1.0, length(p));
         let wink = 0.6 + 0.4 * sin(time * (9.0 + luck * 14.0) + luck * 50.0);
-        let alpha = spark * pow(1.0 - t, 1.5) * wink * soft;
+        var alpha = spark * pow(1.0 - t, 1.5) * wink * soft;
+        // A hearth's stays lit as it climbs, tumbling (a sharper twinkle), and winks out at the
+        // end of its life rather than fading from the start: fading from birth, most were too dim
+        // to see past their first flame height (campfire notes #5).
+        if life.w > 2.5 {
+            let tumble = 0.45 + 0.55 * abs(sin(time * (7.0 + luck * 11.0) + luck * 31.0));
+            alpha = spark * (1.0 - smoothstep(0.82, 1.0, t)) * mix(1.0, 0.6, t) * tumble * soft;
+        }
         light = soot(1520.0 - t * 250.0, alpha);
     } else if kind == 4 {
         // A drop: a hot bright streak, its head hottest, cooling to red as it burns out.
