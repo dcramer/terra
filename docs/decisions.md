@@ -279,7 +279,7 @@ How structures are planned, built, drawn and coded.
 | [D287](decisions/D287.md) | Building's junk checked by meshes and by frames, and ratcheted | Tech | Agent | Decided | What a renderer would draw as junk is checked without a… |
 | [D290](decisions/D290.md) | One way to draw every construction material, for hundreds of materials | Design | Developers | Decided | As construction-002.md says. |
 | [D295](decisions/D295.md) | Storage, and building from it | Tech | Agent | Decided | As step 7 of building-plan.md builds D141 on D84's… |
-| [D296](decisions/D296.md) | How big materials are carried and set | Design | — | Open | D140 says logs and other big materials are carried to… |
+| [D296](decisions/D296.md) | How big materials are carried and set | Design | Developers | Leaning | Big materials are carried on the shoulder or in the… |
 | [D298](decisions/D298.md) | A change of material within a pattern is a repaint at once | Design | Agent | Decided | Change material between two kinds of one family… |
 | [D305](decisions/D305.md) | Loss and repair: damage, collapse, fragments and mending | Tech | Agent | Decided | As `terra_build::loss` holds them… |
 | [D306](decisions/D306.md) | Decks framed on their posts, and stairs that bear | Tech | Agent | Decided | A timber deck is framed within its layer of cubes as a… |
