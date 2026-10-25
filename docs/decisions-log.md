@@ -834,3 +834,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-10-25**: D464 decided (by the developers, on the review desk: "Versatile grips"): Holding a one-handed weapon in two hands.
 - **2026-10-25**: D465 decided (by the developers, on the review desk: "Three of the common ones"): How many variants of a move.
 - **2026-10-25**: D487 decided (by the developers, on the review desk: "Contact burst only"): A landed blow shows a burst where the blade met the body, not a flash of the whole body.
+- **2026-10-25**: D487 shipped and D456 amended to point to it (combat round 18): the whole-body flash's code and the set's `landed.flash`/`flash_s` deleted rather than kept as a knob at 0 (nothing uses it); `hit.flash.frames` now holds the struck body unlit, bar 0 frames.

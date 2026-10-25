@@ -161,15 +161,12 @@ pub struct MoveSet {
     pub moves: HashMap<String, Move>,
 }
 
-/// What a blow that lands shows (D456, D487): what it struck flashes for `flash_s`, as bright
-/// as `flash` (1 D456's, 0 none), a `burst` shows where the blade met it, and the player's
-/// view is kicked by `kick_deg`, easing back to rest over `kick_s`. Presentation only: the
-/// fight's rules never read it.
+/// What a blow that lands shows (D456, D487): a `burst` where the blade met the body (the
+/// struck body keeps its own colours), and the player's view kicked by `kick_deg`, easing back
+/// to rest over `kick_s`. Presentation only: the fight's rules never read it.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Landed {
-    pub flash: f32,
-    pub flash_s: f32,
     pub burst: Burst,
     pub kick_deg: f32,
     pub kick_s: f32,

@@ -3,13 +3,11 @@
 //! active frames against the other's hurt capsule, once a blow, and judged, by
 //! `terra_motion`'s rules (`blade`, `moves::judge`, `contact::outcome`). Here: the reaction
 //! clips, the swing and what the blow met as noises (`struck`: the sound is chosen from that
-//! in data, docs/audio.md), the parry's flash, a landed blow's flash on what it struck
-//! (`flash`), the burst where its blade met it (`burst`, D487) and punch of the view (D456),
-//! and what the player is told. Every outcome is logged as `Melee: ...` with the scripted
+//! in data, docs/audio.md), the parry's flash, a landed blow's burst where its blade met the
+//! body (`burst`, D487) and punch of the view (D456), and what the player is told. Every outcome is logged as `Melee: ...` with the scripted
 //! run's frame (D69).
 
 use super::burst::Met;
-use super::flash::Lit;
 use super::partner::{Beat, Partner};
 use super::{DOWN_S, Drawn, Fighter, HEALTH, Set, show};
 use crate::staged::Staged;
@@ -97,7 +95,6 @@ pub fn strike(
     mut notice: ResMut<Notice>,
     mut glare: ResMut<Glare>,
     mut said: Option<ResMut<super::record::Said>>,
-    mut lit: MessageWriter<Lit>,
     mut met: MessageWriter<Met>,
     shake: Option<ResMut<Shake>>,
 ) {
@@ -216,19 +213,10 @@ pub fn strike(
     for blow in landed {
         settle(&mut out, &mut fighters, &seen, blow, frame);
     }
-    // A blow that lands shows by a flash on what it struck, a burst where the blade met it
-    // and a punch of the view (D456, D487), not by holding the fight.
+    // A blow that lands shows by a burst where the blade met the body and a punch of the
+    // view (D456, D487), not by holding the fight; the struck body keeps its own colours.
     let shown = set.landed;
-    for &(body, at) in &out.struck {
-        if shown.flash > 0.0 {
-            lit.write(Lit {
-                body,
-                seconds: shown.flash_s,
-                strength: shown.flash,
-            });
-        }
-        met.write(at);
-    }
+    met.write_batch(out.struck.iter().copied());
     if let (false, Some(mut shake)) = (out.struck.is_empty(), shake) {
         shake.punch(shown.kick_deg, shown.kick_s);
     }
@@ -242,8 +230,8 @@ struct Out<'a, 'w, 's, 'n, 'm, 'g> {
     glare: &'a mut ResMut<'g, Glare>,
     /// The fight's record, when one is kept (`record`).
     said: Option<&'a mut super::record::Said>,
-    /// The bodies a blow landed on, to flash.
-    struck: Vec<(Entity, Met)>,
+    /// Where each blow that landed met the body.
+    struck: Vec<Met>,
 }
 
 /// Does what a blow that reached a body does, as it was taken.
@@ -316,13 +304,10 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
         _ => {}
     }
     if matches!(blow.taken, Taken::Hit | Taken::GuardBroken) {
-        out.struck.push((
-            on.entity,
-            Met {
-                at: blow.at,
-                along: blow.along,
-            },
-        ));
+        out.struck.push(Met {
+            at: blow.at,
+            along: blow.along,
+        });
     }
 }
 
@@ -407,5 +392,36 @@ pub fn fade(
         } else {
             light.intensity = 400_000.0 * flash.left / FLASH_S;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use terra_motion::moves::MoveSet;
+    use terra_walker::shake;
+
+    /// A frame at 60.
+    const FRAME_S: f32 = 1.0 / 60.0;
+
+    /// A landed blow's punch of the view, frame by frame at 60 from the frame it lands: all of
+    /// it at once, then less each frame, settled (within a pixel, 0.05 degrees at 1080 lines
+    /// and 55 degrees) in about Enshrouded's 0.1 s. Its size and the time it takes to settle
+    /// are the combat scorecard's `hit.kick.peak` and `hit.kick.settle` (D456).
+    #[test]
+    fn a_landed_blow_punches_the_view_and_it_settles_within_a_tenth_of_a_second_or_so() {
+        let path = terra_world::data::path(super::super::SET);
+        let landed = MoveSet::read(&std::fs::read_to_string(path).unwrap())
+            .unwrap()
+            .landed;
+        let tipped: Vec<f32> = (0..60)
+            .map(|frame| shake::punched(landed.kick_deg, landed.kick_s, frame as f32 * FRAME_S))
+            .collect();
+        assert!(tipped.windows(2).all(|w| w[1] <= w[0]), "{tipped:?}");
+        let peak = tipped[0];
+        let settled = tipped.iter().position(|&deg| deg < 0.05).unwrap();
+        assert!(peak > 0.0 && settled > 0, "{tipped:?}");
+        assert!(tipped[settled..].iter().all(|&deg| deg < 0.05));
+        println!("measured hit.kick.peak {peak}");
+        println!("measured hit.kick.settle {}", settled as f32 * FRAME_S);
     }
 }

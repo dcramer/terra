@@ -53,16 +53,13 @@
     // both ends (D450), so a blow starts and ends where the guard stands.
     guard: "Keyed_Guard",
     // What a blow that lands shows in place of a freeze (D456, as Enshrouded does,
-    // tools/combat/refs/enshrouded.json `hit_stop`): what it struck flashes for `flash_s` (3 to
-    // 4 frames at 60) as bright as `flash` (1 D456's whole-body flash, 0 none: D487 proposes
-    // 0), a burst shows where the blade met it (D487, Enshrouded's flash is at the contact: a
-    // white-hot glow `glow_m` across for `glow_s`, `sparks` flung on along the blade at
-    // `spark_mps` for `spark_s`; glow_m 0 and sparks 0 turn it off), and the player's view is
-    // kicked, tipped down `kick_deg` at once and eased back to rest over `kick_s` (Enshrouded's
-    // sky moves for about 0.1 s).
+    // tools/combat/refs/enshrouded.json `hit_stop`): a burst where the blade met the body, the
+    // struck body keeping its own colours (D487, Enshrouded's flash is at the contact: a
+    // white-hot glow `glow_m` across for `glow_s` (3 to 4 frames at 60), `sparks` flung on
+    // along the blade at `spark_mps` for `spark_s`; glow_m 0 and sparks 0 turn it off), and
+    // the player's view is kicked, tipped down `kick_deg` at once and eased back to rest over
+    // `kick_s` (Enshrouded's sky moves for about 0.1 s).
     landed: (
-        flash: 1.0,
-        flash_s: 0.06,
         burst: (glow_s: 0.06, glow_m: 0.4, sparks: 20, spark_mps: 7.0, spark_s: 0.18),
         kick_deg: 0.8,
         kick_s: 0.1,

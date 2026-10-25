@@ -1,5 +1,5 @@
-//! What a blow that lands shows where its blade met the body (D487, proposed in place of D456's
-//! whole-body flash): a white-hot glow at the contact for a few frames, lighting what is
+//! What a blow that lands shows where its blade met the body (D487, in place of a flash of the
+//! whole struck body): a white-hot glow at the contact for a few frames, lighting what is
 //! around it, and a spray of sparks flung on the way the blade was going, falling as they
 //! fade. Enshrouded's landed hit is this (its "flash" is at the contact, the struck body keeps
 //! its colour; research/2026-10-25-what-a-landed-hit-shows.md), as are Monster Hunter's and
@@ -318,11 +318,12 @@ mod tests {
 
     /// A fighter's blow swept across the other's body in its active frames: a hit and a
     /// guard broken burst at the contact, the way the blade went; a blow on the guard and a
-    /// blow that misses show none.
+    /// blow that misses show none. The struck body keeps its own colours, frame by frame at
+    /// 60 through the burst's life (D487: no whole-body flash); the frames it shows lit are
+    /// the combat scorecard's `hit.flash.frames` (bar 0).
     #[test]
-    fn only_a_landed_blow_bursts_and_at_the_contact() {
+    fn only_a_landed_blow_bursts_and_at_the_contact_and_the_body_keeps_its_colours() {
         use super::super::Fighter;
-        use super::super::flash::Lit;
         use terra_survival::noise::Noise;
         use terra_survival::told::Notice;
         use terra_walker::Player;
@@ -337,7 +338,6 @@ mod tests {
         ];
         for (blow, guard, wide_m, bursts) in cases {
             let mut world = world();
-            world.init_resource::<Messages<Lit>>();
             world.init_resource::<Messages<Noise>>();
             world.init_resource::<Notice>();
             world.init_resource::<super::super::contact::Glare>();
@@ -368,11 +368,49 @@ mod tests {
             world.spawn((Transform::from_translation(GROUND), attacker));
             let mut struck = Fighter::new(None);
             struck.guard_s = guard;
-            world.spawn((Transform::from_translation(struck_at), struck, Player));
+            // The struck body's skin, a mesh of its own with a material of its own.
+            let own = world
+                .resource_mut::<Assets<StandardMaterial>>()
+                .add(Color::srgb(0.6, 0.4, 0.3));
+            let skin = world.spawn(MeshMaterial3d(own.clone())).id();
+            world
+                .spawn((Transform::from_translation(struck_at), struck, Player))
+                .add_children(&[skin]);
             world
                 .run_system_cached(super::super::contact::strike)
                 .unwrap();
             let met: Vec<Met> = world.resource_mut::<Messages<Met>>().drain().collect();
+            // The burst plays out over its life; the skin shows its own material, unlit.
+            world.write_message_batch(met.iter().copied());
+            let systems = [
+                world.register_system(spawn),
+                world.register_system(glow),
+                world.register_system(spark),
+            ];
+            let mut lit = 0;
+            for _ in 0..30 {
+                world
+                    .resource_mut::<Time>()
+                    .advance_by(Duration::from_secs_f32(FRAME_S));
+                for system in systems {
+                    world.run_system(system).unwrap();
+                }
+                world.resource_mut::<Messages<Met>>().update();
+                let shows = world.get::<MeshMaterial3d<StandardMaterial>>(skin);
+                let materials = world.resource::<Assets<StandardMaterial>>();
+                let kept = shows.is_some_and(|m| m.0 == own)
+                    && materials
+                        .get(&own)
+                        .is_some_and(|m| m.emissive == LinearRgba::BLACK);
+                lit += !kept as u32;
+            }
+            assert_eq!(
+                lit, 0,
+                "{blow}: the struck body keeps its own colours (D487)"
+            );
+            if bursts == Some("Hit") {
+                println!("measured hit.flash.frames {lit}");
+            }
             match bursts {
                 Some(taken) => {
                     assert_eq!(met.len(), 1, "{blow} {taken}");

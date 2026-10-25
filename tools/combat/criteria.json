@@ -2439,19 +2439,16 @@
    "cost": "cheap",
    "id": "hit.flash.frames",
    "noticed": 4,
-   "notice": "a landed blow shows no flash on what it struck, or one that lingers",
+   "notice": "a landed blow lights the whole struck body, a 2D game's convention our reference does not show (the struck body keeps its colours; the hit shows at the contact, hit.burst.frames)",
    "bar": {
-    "within": [
-     3,
-     4
-    ]
+    "at_most": 0
    },
    "unit": "frames at 60",
-   "source": "D456; tools/combat/refs/enshrouded.json hit_stop.flash_frames_at_60 (3-4)",
+   "source": "D487 (Decided: the contact burst alone); research/2026-10-25-what-a-landed-hit-shows.md (Enshrouded's dummy keeps its colours on every frame, 247.717-247.783 s)",
    "check": {
     "by": "measured",
     "crate": "terra_creatures",
-    "test": "melee::flash::tests::a_struck_body_flashes_for_a_few_frames_and_gets_its_own_materials_back"
+    "test": "melee::burst::tests::only_a_landed_blow_bursts_and_at_the_contact_and_the_body_keeps_its_colours"
    }
   },
   {
@@ -2471,7 +2468,7 @@
    "check": {
     "by": "measured",
     "crate": "terra_creatures",
-    "test": "melee::flash::tests::a_landed_blow_punches_the_view_and_it_settles_within_a_tenth_of_a_second_or_so"
+    "test": "melee::contact::tests::a_landed_blow_punches_the_view_and_it_settles_within_a_tenth_of_a_second_or_so"
    }
   },
   {
@@ -2491,7 +2488,7 @@
    "check": {
     "by": "measured",
     "crate": "terra_creatures",
-    "test": "melee::flash::tests::a_landed_blow_punches_the_view_and_it_settles_within_a_tenth_of_a_second_or_so"
+    "test": "melee::contact::tests::a_landed_blow_punches_the_view_and_it_settles_within_a_tenth_of_a_second_or_so"
    }
   },
   {
@@ -2507,7 +2504,7 @@
     ]
    },
    "unit": "frames at 60",
-   "source": "D487 (Open); tools/combat/refs/enshrouded.json hit_stop.flash_frames_at_60 (3-4), the glow at the contact, 247.717-247.767 s (research/2026-10-25-what-a-landed-hit-shows.md)",
+   "source": "D487; tools/combat/refs/enshrouded.json hit_stop.flash_frames_at_60 (3-4), the glow at the contact, 247.717-247.767 s (research/2026-10-25-what-a-landed-hit-shows.md)",
    "check": {
     "by": "measured",
     "crate": "terra_creatures",
