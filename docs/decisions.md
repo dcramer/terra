@@ -101,6 +101,10 @@ Needs, death, the body, the map and options.
 | [D315](decisions/D315.md) | Climate's crate, clock, weather and cells | Tech | Agent | Decided | The world's clock is days (`WorldTime`, a 64-bit count… |
 | [D327](decisions/D327.md) | Climate samples, maps and plants' years in code | Tech | Agent | Decided | A `ClimateSample` on what cares (the walker's player… |
 | [D328](decisions/D328.md) | Body temperature and the going in code | Tech | Agent | Decided | D153's first effects, as climate.md orders them. |
+| [D476](decisions/D476.md) | A long fall hurts by landing speed | Design | Developers | Decided | A fall hurts by the speed it lands at… |
+| [D477](decisions/D477.md) | Climbing is free climbing on stamina | Design | Developers | Decided | A body can climb any surface it can hold, on stamina… |
+| [D478](decisions/D478.md) | Swimming dives by looking, rises by jumping | Design | Developers | Decided | Swimming (D74): looking down and moving forward dives… |
+| [D479](decisions/D479.md) | People push each other softly, monsters hard | Design | Developers | Decided | Players and recruits push each other softly… |
 
 ## Items and crafting
 
