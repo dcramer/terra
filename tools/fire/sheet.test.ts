@@ -4,7 +4,8 @@ import { test } from "node:test";
 import type { Picture } from "../sandbox/png.ts";
 import { judge, type Metrics } from "./measure.ts";
 import { measure } from "./measure.ts";
-import { calls, FIRES, floored, sampled, shotsOf, surround } from "./sheet.ts";
+import { join } from "node:path";
+import { calls, dirAt, FIRES, firesAt, floored, PRESETS, sampled, sandboxArgs, shotsOf, surround } from "./sheet.ts";
 
 /// A picture of one colour, with a flame-white box and, if asked, the band below it lit.
 function picture(ground: [number, number, number], lit: boolean): Picture {
@@ -72,4 +73,27 @@ test("each fire is shot five times over two seconds, its own camera held through
       assert.deepEqual(looks.map((c) => c.params), [{ from: fire.eye, at: fire.at }], `${fire.name} ${f}: one camera, its own`);
     }
   }
+});
+
+test("the breath is shot again at ultra, as the films draw it, in a run of its own, and play's run as before", () => {
+  const ultra = firesAt("ultra");
+  assert.deepEqual(
+    ultra.map((f) => [f.class, f.box]),
+    [
+      ["flamethrower", "stream"],
+      ["fireball", "ball"],
+    ],
+  );
+  assert.deepEqual(PRESETS, ["", "ultra"]);
+  const cards = sandboxArgs("dusk", "", "d", "c.jsonl");
+  const marched = sandboxArgs("dusk", "ultra", "d/ultra", "c.jsonl");
+  assert.ok(!cards.includes("--quality"));
+  assert.deepEqual(marched.slice(marched.indexOf("--quality"), marched.indexOf("--quality") + 2), ["--quality", "ultra"]);
+  // The marched run shoots its own fires alone, the breath lit before the first shot.
+  const shotsAt = (args: string[]) => args[args.indexOf("--shots") + 1].split("@")[1].split(",").map(Number);
+  assert.deepEqual(shotsAt(marched), shotsOf(ultra[0]));
+  assert.ok(shotsAt(cards).every((f) => firesAt("").some((fire) => shotsOf(fire).includes(f))));
+  assert.ok(calls(ultra).find((c) => c.method === "flight.breathe")!.frame < shotsOf(ultra[0])[0]);
+  assert.equal(dirAt("noon", "ultra"), join("noon", "ultra"));
+  assert.equal(dirAt("noon", ""), "noon");
 });

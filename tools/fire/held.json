@@ -10,6 +10,8 @@
  "fireball noon": [
   "pale %"
  ],
+ "marched breath noon": [],
+ "marched ball noon": [],
  "campfire dusk": [
   "soot/flame"
  ],
@@ -28,6 +30,8 @@
  "fireball dusk": [
   "pale %"
  ],
+ "marched breath dusk": [],
+ "marched ball dusk": [],
  "campfire night": [],
  "campfire above night": [],
  "house blaze night": [
@@ -47,5 +51,10 @@
  "fireball night": [
   "G/R",
   "edge soot %"
+ ],
+ "marched breath night": [],
+ "marched ball night": [
+  "yellow %",
+  "red+orange %"
  ]
 }

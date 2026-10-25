@@ -7,7 +7,8 @@
 //
 // One scripted sandbox run an hour on the yard: a campfire (a kindled fire, `staged.spawn`
 // with `burns`), a log cabin set alight (the building fire, `fire.light`) and a dragon
-// breathing on a stone wall (its stream and the fireball where it strikes). Each fire is shot
+// breathing on a stone wall (its stream and the fireball where it strikes); and one more at
+// ultra (`<hour>/ultra/`) for the breath as the films draw it, marched as a volume (D430). Each fire is shot
 // from a fixed camera five times over 2 s; at each shot `fire.seen` tells each kind's box on
 // the picture, which is the crop measured, and a row's numbers are the mean of its shots'
 // (D433). Prints one line a fire and hour, ✓ or ✗ on each number, and writes
@@ -48,6 +49,9 @@ export type Fire = {
   at: Vec3;
   matte: boolean;
   floors?: Partial<Record<keyof Metrics, number>>;
+  /// The preset its run draws at (`--quality`), the play experiment's own when unset: a film
+  /// draws its breath at ultra, marched as a volume (D430), and play as cards.
+  quality?: "ultra";
 };
 
 // Where things stand, in metres east, up and south of the start; the base's cubes, which are
@@ -87,11 +91,23 @@ export const FIRES: Fire[] = [
   { name: "house blaze", class: "structure", frame: 760, box: "blazes", eye: [4.25, 3.5, 22], at: [4.25, 2.5, 5.75], matte: false },
   { name: "breath", class: "flamethrower", frame: 960, box: "stream", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
   { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
+  // The breath again as the films draw it (D433): at ultra, marched as a volume (D430), in a
+  // run of its own, so the breath the castle fall shows is held to the photographs too. Its
+  // hull writes the flame's share into the alpha as a hearth's cards do, so it has a matte.
+  { name: "marched breath", class: "flamethrower", frame: 960, box: "stream", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: true, quality: "ultra" },
+  { name: "marched ball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: true, quality: "ultra" },
 ];
 
-/// The run's calls: the scene set up, then each fire's camera held from 40 frames before its
-/// first shot to its last, and `fire.seen` on each shot's frame.
-export function calls(): Call[] {
+/// The runs an hour takes, one a preset its fires are drawn at, the play experiment's own first.
+export const PRESETS = [...new Set(FIRES.map((f) => f.quality ?? ""))];
+/// The fires a preset's run shoots.
+export const firesAt = (preset: string) => FIRES.filter((f) => (f.quality ?? "") === preset);
+/// Where a preset's run at an hour writes: the hour's folder, a preset's own inside it.
+export const dirAt = (dir: string, preset: string) => (preset ? join(dir, preset) : dir);
+
+/// A run's calls: the scene set up, then each of its fires' camera held from 40 frames before
+/// its first shot to its last, and `fire.seen` on each shot's frame.
+export function calls(fires: Fire[] = FIRES): Call[] {
   const out: Call[] = [
     { frame: 2, method: "staged.spawn", params: { name: "campfire", model: "models/props/Campfire.glb", at: CAMPFIRE, facing: [CAMPFIRE[0], 0, CAMPFIRE[2] + 5], base: true, burns: [1.5, 0.7, 0.9] } },
     // A plan is only laid; the hammer's steps build it (free and instant on the yard), or the
@@ -108,7 +124,7 @@ export function calls(): Call[] {
     { frame: 60, method: "fire.light", params: { at: [CABIN.min[0], 0, CABIN.max[2]], to: [CABIN.max[0], 5, CABIN.max[2]] } },
     { frame: 840, method: "flight.breathe", params: { on: true, at: AIM, base: true } },
   ];
-  for (const fire of FIRES) {
+  for (const fire of fires) {
     const shots = shotsOf(fire);
     for (let f = fire.frame - 40; f <= shots.at(-1)!; f++) out.push({ frame: f, method: "build.look", params: { from: fire.eye, at: fire.at } });
     for (const f of shots) out.push({ frame: f, method: "fire.seen" });
@@ -118,7 +134,7 @@ export function calls(): Call[] {
   return once.sort((a, b) => a.frame - b.frame);
 }
 
-const frames = () => [...new Set(FIRES.flatMap(shotsOf))].sort((a, b) => a - b);
+const frames = (fires: Fire[]) => [...new Set(fires.flatMap(shotsOf))].sort((a, b) => a - b);
 const still = (dir: string, frame: number) => join(dir, `f-${String(frame).padStart(5, "0")}.png`);
 /// A still's flame matte (`--flame-matte`, D433), beside it.
 const matteOf = (file: string) => file.replace(/\.png$/, ".matte.png");
@@ -139,27 +155,35 @@ function waitForRoom() {
   }
 }
 
-/// Runs the scene at an hour into `dir`, again once if the GPU ran out of memory.
-function run(hour: string, dir: string) {
+/// Runs the scene at an hour and preset into `dir`, again once if the GPU ran out of memory.
+function run(hour: string, preset: string, dir: string) {
+  const last = frames(firesAt(preset)).at(-1)!;
   for (let tries = 0; ; tries++) {
     waitForRoom();
-    runOnce(hour, dir);
+    runOnce(hour, preset, dir);
     if (tries > 0 || !readFileSync(join(dir, "run.log"), "utf8").includes("rendering error: Out of Memory")) break;
     console.log(`fire: the GPU ran out of memory at ${hour}; again`);
   }
-  if (!existsSync(still(dir, frames().at(-1)!))) throw new Error(`the run at ${hour} made no still at frame ${frames().at(-1)}: see ${join(dir, "run.log")}`);
+  if (!existsSync(still(dir, last))) throw new Error(`the run at ${hour} made no still at frame ${last}: see ${join(dir, "run.log")}`);
 }
 
-/// Runs the scene at an hour into `dir`: its calls, its stills and what it said.
-function runOnce(hour: string, dir: string) {
+/// The sandbox's options for a run at an hour and preset into `dir`: the yard, the hour, its
+/// calls, the frames its fires are shot on with their mattes, and the preset if not play's own.
+export function sandboxArgs(hour: string, preset: string, dir: string, callsFile: string): string[] {
+  return [
+    ...["--offscreen", "--clean", "--picture", PICTURE],
+    ...["--experiment", "play", "--level", "yard", "--free-build", "--mute", "--at", "0,0", "--face", "0,30"],
+    ...["--time", HOURS[hour] ?? hour, "--date", DATE, "--calls", callsFile, "--shots", `${join(dir, "f")}@${frames(firesAt(preset)).join(",")}`, "--flame-matte"],
+    ...(preset ? ["--quality", preset] : []),
+  ];
+}
+
+/// Runs the scene at an hour and preset into `dir`: its calls, its stills and what it said.
+function runOnce(hour: string, preset: string, dir: string) {
   mkdirSync(dir, { recursive: true });
   const callsFile = join(dir, "calls.jsonl");
-  writeFileSync(callsFile, calls().map((c) => JSON.stringify(c)).join("\n") + "\n");
-  const args = [
-    ...["900", resolve(ROOT, "target/release/terra_sandbox"), "--offscreen", "--clean", "--picture", PICTURE],
-    ...["--experiment", "play", "--level", "yard", "--free-build", "--mute", "--at", "0,0", "--face", "0,30"],
-    ...["--time", HOURS[hour] ?? hour, "--date", DATE, "--calls", callsFile, "--shots", `${join(dir, "f")}@${frames().join(",")}`, "--flame-matte"],
-  ];
+  writeFileSync(callsFile, calls(firesAt(preset)).map((c) => JSON.stringify(c)).join("\n") + "\n");
+  const args = ["900", resolve(ROOT, "target/release/terra_sandbox"), ...sandboxArgs(hour, preset, dir, callsFile)];
   const done = spawnSync("timeout", args, { cwd: ROOT, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, maxBuffer: 1 << 28 });
   writeFileSync(join(dir, "run.log"), `${done.stdout}${done.stderr}`);
 }
@@ -308,45 +332,47 @@ if (import.meta.main) {
   const classes = existsSync(REFERENCES_FILE) ? references().classes : {};
   const rows: Row[] = [];
   for (const hour of hours) {
-    const dir = join(out, hour);
-    if (!from) {
-      const started = Date.now();
-      run(hour, dir);
-      tell(`fire: ${hour} shot in ${Math.round((Date.now() - started) / 1000)} s`);
-    }
-    const log = readFileSync(join(dir, "run.log"), "utf8");
-    for (const fire of FIRES) {
-      const tile = join(dir, `${fire.name.replace(/ /g, "-")}.png`);
-      const told = shotsOf(fire).map((frame) => ({ frame, seen: seenAt(log, frame), file: still(dir, frame) }));
-      const missed = told.filter(({ seen, file }) => !seen[fire.box] || !existsSync(file)).map((t) => t.frame);
-      if (missed.length) {
-        rows.push({ fire: fire.name, class: fire.class, hour, out: -1, held: [] });
-        tell(`✗ ${fire.name.padEnd(12)} ${hour.padEnd(6)} not seen (${fire.box}) on frame ${missed.join(", ")}: see ${join(dir, "run.log")}`);
-        continue;
+    for (const preset of PRESETS) {
+      const dir = dirAt(join(out, hour), preset);
+      if (!from) {
+        const started = Date.now();
+        run(hour, preset, dir);
+        tell(`fire: ${hour}${preset ? ` at ${preset}` : ""} shot in ${Math.round((Date.now() - started) / 1000)} s`);
       }
-      const shots = told.map(({ seen, file }) => {
-        const pic = load(file);
-        const box = belowHud(scaled(seen[fire.box], seen.picture, pic.width, pic.height), pic.height);
-        // Measured on the flame the renderer drew (D433); a folder from before the matte, by colour.
-        const matte = fire.matte && existsSync(matteOf(file)) ? load(matteOf(file)) : undefined;
-        return { pic, box, matte };
-      });
-      const { metrics, ground, each } = sampled(shots);
-      // The tile and crop shown are the middle shot's.
-      const middle = Math.floor(shots.length / 2);
-      const box = shots[middle].box;
-      const file = told[middle].file;
-      const crop = boxText(box);
-      const known = classes[fire.class];
-      const held = known ? judge(metrics, floored(known.bands, fire.floors)) : [];
-      const fails = held.filter((h) => !h.holds).length;
-      const shotRows = told.map(({ frame }, k) => ({ frame, crop: boxText(shots[k].box), metrics: each[k] }));
-      rows.push({ fire: fire.name, class: fire.class, hour, crop, out: known ? fails : -1, held, tile, ground, shots: shotRows });
-      tell(`${fails || !known ? "✗" : "✓"} ${fire.name.padEnd(12)} ${hour.padEnd(6)} as ${fire.class}: ${known ? said(held) : "no such class in references.json"}`);
-      const noon = rows.find((r) => r.fire === fire.name && r.hour === "noon")?.ground;
-      if (hour !== "noon" && noon?.light)
-        tell(`  ${fire.name} ${hour}: the ground round it ${((100 * ground.light) / noon.light).toFixed(1)}% as lit as at noon, red over blue ${ground.warmth.toFixed(2)} (noon ${noon.warmth.toFixed(2)})`);
-      spawnSync(...imageMagick(["convert", file, "-crop", `${crop}`, "+repage", "-resize", "x300", tile]));
+      const log = readFileSync(join(dir, "run.log"), "utf8");
+      for (const fire of firesAt(preset)) {
+        const tile = join(dir, `${fire.name.replace(/ /g, "-")}.png`);
+        const told = shotsOf(fire).map((frame) => ({ frame, seen: seenAt(log, frame), file: still(dir, frame) }));
+        const missed = told.filter(({ seen, file }) => !seen[fire.box] || !existsSync(file)).map((t) => t.frame);
+        if (missed.length) {
+          rows.push({ fire: fire.name, class: fire.class, hour, out: -1, held: [] });
+          tell(`✗ ${fire.name.padEnd(12)} ${hour.padEnd(6)} not seen (${fire.box}) on frame ${missed.join(", ")}: see ${join(dir, "run.log")}`);
+          continue;
+        }
+        const shots = told.map(({ seen, file }) => {
+          const pic = load(file);
+          const box = belowHud(scaled(seen[fire.box], seen.picture, pic.width, pic.height), pic.height);
+          // Measured on the flame the renderer drew (D433); a folder from before the matte, by colour.
+          const matte = fire.matte && existsSync(matteOf(file)) ? load(matteOf(file)) : undefined;
+          return { pic, box, matte };
+        });
+        const { metrics, ground, each } = sampled(shots);
+        // The tile and crop shown are the middle shot's.
+        const middle = Math.floor(shots.length / 2);
+        const box = shots[middle].box;
+        const file = told[middle].file;
+        const crop = boxText(box);
+        const known = classes[fire.class];
+        const held = known ? judge(metrics, floored(known.bands, fire.floors)) : [];
+        const fails = held.filter((h) => !h.holds).length;
+        const shotRows = told.map(({ frame }, k) => ({ frame, crop: boxText(shots[k].box), metrics: each[k] }));
+        rows.push({ fire: fire.name, class: fire.class, hour, crop, out: known ? fails : -1, held, tile, ground, shots: shotRows });
+        tell(`${fails || !known ? "✗" : "✓"} ${fire.name.padEnd(12)} ${hour.padEnd(6)} as ${fire.class}: ${known ? said(held) : "no such class in references.json"}`);
+        const noon = rows.find((r) => r.fire === fire.name && r.hour === "noon")?.ground;
+        if (hour !== "noon" && noon?.light)
+          tell(`  ${fire.name} ${hour}: the ground round it ${((100 * ground.light) / noon.light).toFixed(1)}% as lit as at noon, red over blue ${ground.warmth.toFixed(2)} (noon ${noon.warmth.toFixed(2)})`);
+        spawnSync(...imageMagick(["convert", file, "-crop", `${crop}`, "+repage", "-resize", "x300", tile]));
+      }
     }
   }
   // The sheet: a row a fire, a column an hour, each crop labelled with how many numbers fall out.
