@@ -5,6 +5,7 @@ The fire module's automatic check (docs/fire.md, "The automatic check"; D415): e
 ```bash
 node tools/fire/measure.ts <still.png> 800x500+0+420                    # a fire's numbers in a crop
 node tools/fire/measure.ts <still.png> 800x500+0+420 --class structure  # held to a class: ✗ where one falls out, exit 1
+node tools/fire/motion.ts <clip> [--matte <matte>] [--box WxH+X+Y]      # how a filmed or rendered fire moves (research/2026-10-25-fire-motion.md)
 node tools/fire/references.ts [--fetch]                                 # measure the photographs into references.json
 cargo xtask fire [--time noon,dusk,night] [--gate] [--hold]              # the fire sheet: every fire the game draws, held to its class
 node tools/fire/bake/bake.ts <set>... | --all [--draft] [--pack]        # bake flipbooks in Blender (5.2, CPU) into assets/textures/fire/

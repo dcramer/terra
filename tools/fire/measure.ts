@@ -128,7 +128,22 @@ export const isFlame = (r: number, g: number, b: number) => {
   const min = Math.min(r, g, b);
   return min >= 235 || (max >= 110 && r >= max && g >= b && max - min >= Math.max(20, FLAME_SAT * max));
 };
-const luma = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+/// A flame pixel's colour band (one `isFlame` passes): near white, else by hue and saturation
+/// pale yellow, yellow, orange or red.
+export type ColourBand = "white" | "pale" | "yellow" | "orange" | "red";
+export function colourBand(r: number, g: number, b: number): ColourBand {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (min >= 235) return "white";
+  const d = max - min;
+  const hue = g >= b ? (60 * (g - b)) / d : 360 - (60 * (b - g)) / d;
+  const sat = d / max;
+  if (hue >= 45 && hue <= 65 && sat < 0.45) return "pale";
+  if (hue >= 40 && hue <= 65) return "yellow";
+  if (hue >= 25 && hue < 40) return "orange";
+  return "red";
+}
+export const luma = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 const pct = (a: ArrayLike<number>, q: number) => (a.length ? a[Math.min(a.length - 1, Math.floor(q * a.length))] : 0);
 
 /// Bilinear resample of RGB to a new size (area-averaged first when shrinking by 2 or more).
@@ -221,19 +236,7 @@ export function measure(pic: Picture, box?: Box, matte?: Picture): Metrics {
     br += b / Math.max(r, 1);
     gr += g / Math.max(r, 1);
     fl.push(luma(r, g, b));
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const d = max - min;
-    if (min >= 235) {
-      band.white++;
-      continue;
-    }
-    const hue = g >= b ? (60 * (g - b)) / d : 360 - (60 * (b - g)) / d;
-    const sat = d / max;
-    if (hue >= 45 && hue <= 65 && sat < 0.45) band.pale++;
-    else if (hue >= 40 && hue <= 65) band.yellow++;
-    else if (hue >= 25 && hue < 40) band.orange++;
-    else band.red++;
+    band[colourBand(r, g, b)]++;
   }
   fl.sort((a, b) => a - b);
   const p99 = pct(fl, 0.99);

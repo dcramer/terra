@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [How real campfires move, measured against ours](2026-10-25-fire-motion.md) | 2026-10-25 |
 | [Why the forest walk's summer night was black](2026-10-25-forest-night.md) | 2026-10-25 |
 | [Loadouts and animation layers: how shipped games put items in two hands and move every body with them](2026-10-25-loadouts-and-animation-layers.md) | 2026-10-25 |
 | [The shield arm in a swing: what shipped sword-and-shield sets do with the shield while the sword cuts](2026-10-25-shield-arm-in-a-swing.md) | 2026-10-25 |
