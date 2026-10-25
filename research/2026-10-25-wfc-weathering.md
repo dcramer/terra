@@ -47,13 +47,13 @@ The maps are 11 channels per texel (the fourth channel of the last layer is a co
 
 | Layout | Bytes for the house | Per face | RMS | Max | Worst channel |
 |---|---|---|---|---|---|
-| Raw RGBA8, as uploaded now | 15.6 MB | 12 KB | 0 | 0 | |
+| Raw RGBA8, as first uploaded | 15.6 MB | 12 KB | 0 | 0 | |
 | BC4 per channel, full size | 7.0 MB | 5.4 KB | 0.85 | 18 | |
 | Half size (16 texels a side), uncompressed | 3.8 MB | 2.9 KB | 5.3 | 219 | lichen, 8.8 |
 | Half size and BC4 | 1.8 MB | 1.4 KB | 5.4 | | |
-| **Mixed**: motif channels BC4 at full size, mask channels BC4 at half size | **4.6 MB** | **3.7 KB** | **1.65** | **40** | edge, 3.6 |
+| **Mixed**, as uploaded now: motif channels BC4 at full size, mask channels BC4 at half size | **4.6 MB** | **3.7 KB** | **1.65** | **40** | edge, 3.6 |
 
-Half size alone ruins the sharp motifs (a max error of 219 is a crack or a lichen spot lost). The mixed layout keeps them and halves only the smooth masks. No face was blank, so sharing one empty slot saves nothing on this house. The runtime still uploads the raw atlas. The mixed layout needs BC4 encoding to block bytes (today's `bc4` only measures the error) and two texture arrays of different tile sizes in the shader. Both are next steps, not done in the spike. Deriving the mask channels (edge, cavity, height) in the shader from the cube data the material already has would leave only the motif channels, about 3 KB per face.
+Half size alone ruins the sharp motifs (a max error of 219 is a crack or a lichen spot lost). The mixed layout keeps them and halves only the smooth masks. No face was blank, so sharing one empty slot saves nothing on this house. The runtime uploads the mixed layout: `terra_weathering::bc4` encodes BC4 block bytes, two R-channel BC4 arrays hold the motif channels at 32 texels a face and the masks at 16 (4.6 MB for the house against 15.2 MB for the raw atlas), and `weather_at` samples both; R8 arrays of the same planes where the GPU lacks BC. Rendered beside the raw upload the house is unchanged (RMSE 0.3% of full scale, no visible difference at the window). Deriving the mask channels (edge, cavity, height) in the shader from the cube data the material already has would leave only the motif channels, about 3 KB per face.
 
 ## Remaining gaps
 
