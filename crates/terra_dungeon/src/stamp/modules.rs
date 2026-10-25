@@ -168,8 +168,10 @@ pub(super) fn lay(
             Class::Goal => {
                 f.fill(ops, [2, 0, 2], [3, 0, 3], solid(kinds.trim));
                 let name = &theme.features.goal;
+                // The trapped miner is the textured base body, not the pale untextured
+                // mannequin, which burnt pink-white between the bowls (round 16).
                 let model = if name.contains("miner") {
-                    "models/character/mannequin.glb"
+                    "models/character/base.glb"
                 } else {
                     "models/props/Chest.glb"
                 };
@@ -235,17 +237,22 @@ fn corridor(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     }
 }
 
-/// A fire bowl either side of the goal's plinth, a little behind it, each on a stone pillar
+/// A fire bowl either side of the goal's plinth, in the back corners, each on a stone pillar
 /// a metre high: the goal is the room's brightest thing, lit from both sides (a dark goal
-/// room was the worst still of every theme, round 6). None stands in front of a doorway.
+/// room was the worst still of every theme, round 6), but from behind and a metre off, not
+/// beside it: at 0.75 m the mine's pale figure burnt pink-white (5.6% of a still near white,
+/// round 16). None stands in front of a doorway: with one in the back wall, the bowls stand
+/// beside the plinth instead.
 fn goal_fires(f: Frame, cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
+    let opening = |d: usize| matches!(cell.sides[f.side(d)], Side::Door(_) | Side::Way);
+    let z = if opening(0) { 2 } else { 1 };
     for (x, side) in [(1, 3), (4, 1)] {
-        if matches!(cell.sides[f.side(side)], Side::Door(_) | Side::Way) {
+        if opening(side) {
             continue;
         }
-        f.fill(&mut out.ops, [x, 0, 2], [x, 1, 2], solid(kinds.trim));
+        f.fill(&mut out.ops, [x, 0, z], [x, 1, z], solid(kinds.trim));
         out.lights.push(Light {
-            at: f.point(x as f32 + 0.5, 2.0, 2.5),
+            at: f.point(x as f32 + 0.5, 2.0, z as f32 + 0.5),
             kind: LightKind::Bowl,
             facing: f.side(2),
         });
