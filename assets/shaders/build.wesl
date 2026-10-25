@@ -736,16 +736,16 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             if cell > 0.0 && piece_shown > 0.0 {
                 let id = vec2(cell * 255.0 + 37.0 * floor(uv.x), 11.0 + 53.0 * floor(uv.y));
                 let k = piece_shown * age;
-                let tone = 1.0 + 0.24 * k * (2.0 * hash21(id) - 1.0);
-                let warm = 0.08 * k * (2.0 * hash21(id + vec2(0.0, 101.0)) - 1.0);
+                let tone = 1.0 + 0.32 * k * (2.0 * hash21(id) - 1.0);
+                let warm = 0.13 * k * (2.0 * hash21(id + vec2(0.0, 101.0)) - 1.0);
                 c = c * tone * vec3(1.0 + warm, 1.0 + 0.25 * abs(warm), 1.0 - 1.4 * warm);
-                let stained = step(0.84, hash21(id + vec2(57.0, 0.0))) * k;
+                let stained = step(0.8, hash21(id + vec2(57.0, 0.0))) * k;
                 c = mix(c, mix(c, vec3(lum), 0.3) * vec3(0.6, 0.57, 0.5), stained * 0.75);
             }
             // The whole wall dulled by age, darker and browner toward its foot, as old walls
             // are, paler and greyer up its courses where the rain washes it.
-            c = mix(c, mix(c, vec3(lum), 0.35) * vec3(0.93, 0.92, 0.88), 0.5 * age);
-            c = mix(c, mix(c, vec3(lum), 0.3) * vec3(0.55, 0.52, 0.45), foot * foot * 0.75 * age);
+            c = mix(c, mix(c, vec3(lum), 0.4) * vec3(0.88, 0.87, 0.82), 0.65 * age);
+            c = mix(c, mix(c, vec3(lum), 0.3) * vec3(0.5, 0.47, 0.4), foot * 0.8 * age);
         }
         let grime = weather.b.x * (0.75 + 0.5 * grain);
         // Timber's grime and damp below, its own: dark already, it would go near black here.
@@ -817,9 +817,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             // one, a few centimetres across, most on the upper courses, which dry between rains,
             // and none in the damp at the foot.
             let upper = smoothstep(0.6, 2.6, weather.c.w) * (1.0 - foot);
-            lichen = smoothstep(0.25, 0.55, weather.b.z * (0.5 + 0.7 * grain) * (0.55 + 0.9 * upper));
-            let ochre = smoothstep(0.66, 0.8, noise21(st * 4.3 + 17.0));
-            let crust = mix(vec3(0.36, 0.37, 0.31), vec3(0.42, 0.33, 0.12), ochre) * (0.85 + 0.3 * grain);
+            lichen = smoothstep(0.2, 0.5, weather.b.z * (0.5 + 0.7 * grain) * (0.55 + 0.9 * upper));
+            let ochre = smoothstep(0.62, 0.78, noise21(st * 4.3 + 17.0));
+            let crust = mix(vec3(0.4, 0.42, 0.3), vec3(0.5, 0.37, 0.11), ochre) * (0.85 + 0.3 * grain);
             c = mix(c, crust, lichen * 0.8);
         }
         // Moss as cushions in the joints, blended by the material's height as engines blend a
@@ -843,7 +843,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let along = dot(wp, normalize(cross(vec3(0.0, 1.0, 0.0), N) + vec3(1e-4, 0.0, 0.0)));
             let fibre = noise21(vec2(along * 7.0, wp.y * 70.0)) * 0.55 + noise21(vec2(along * 19.0, wp.y * 190.0)) * 0.45;
             let want = field * 1.6 - 0.62 - clamp(rel * 4.0, -0.5, 0.5) + (fibre - 0.5) * 0.9 + ragged * 0.4;
-            moss = smoothstep(0.0, 0.55, want) * (0.55 + 0.45 * smoothstep(0.3, 0.7, fibre));
+            moss = smoothstep(0.0, 0.55, want) * (0.7 + 0.3 * smoothstep(0.3, 0.7, fibre));
         }
         if roof {
             let reach = -0.45 + 0.6 * clamp(weather.a.z, 0.0, 1.0);
