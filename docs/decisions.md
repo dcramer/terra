@@ -299,7 +299,7 @@ How structures are planned, built, drawn and coded.
 | [D480](decisions/D480.md) | A building's weathering motifs are solved by wave function collapse within masks of its shape | Tech | Agent | Leaning | A building's weathering is made from its own cubes… |
 | [D486](decisions/D486.md) | A room's sky light is what its openings let in | Tech | Agent | Leaning | A room's light probe (D320) dims the sky's light by the… |
 | [D491](decisions/D491.md) | Space Engineers 2's ground and construction loop | Design | — | Open | Whether mining and how blocks are built and taken down… |
-| [D494](decisions/D494.md) | Creative and survival | Design | Developers | Leaning | A world is played in one of two modes. |
+| [D494](decisions/D494.md) | Creative and survival | Design | Developers | Decided | A world is played in one of two modes. |
 
 ## Art, characters and sound
 
