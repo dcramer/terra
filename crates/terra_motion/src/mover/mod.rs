@@ -1,0 +1,452 @@
+//! The mover (D53, docs/controller.md): one kinematic character controller every body is moved
+//! by, the player, people and creatures alike, with only its kind's numbers different. A tick
+//! of a body builds its velocity from its intent (or its move's drive), collides and slides it
+//! through what the [`Query`] answers (`slide`, ported from Jolt's `CharacterVirtual`), steps it
+//! up a stair, holds it to the floor going down, and reads its ground state; after every body
+//! has moved, overlapping bodies are separated by mass (`push`). Bodies are moved in the order
+//! of their IDs, whatever order they are given in, so the same world and intents give the same
+//! positions everywhere (D138).
+//!
+//! - `query`: what stops a body, the one query trait and its sources.
+//! - `slide`: collide and slide, the step up and stick to the floor (Jolt, MIT).
+//! - `push`: bodies apart by mass.
+
+mod push;
+pub mod query;
+mod slide;
+
+#[cfg(test)]
+mod course;
+
+pub use query::{Capsule, Capsules, Contact, Hit, Query, Sdf};
+use serde::Deserialize;
+use slide::{Shape, Support, Touch};
+
+use glam::Vec3;
+use std::collections::BTreeMap;
+
+/// A kind's movement numbers (docs/controller.md, "Numbers that are data"), read from
+/// `assets/data/movers.ron`, which explains each.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub struct Kind {
+    pub radius: f32,
+    pub height: f32,
+    /// Kilograms; infinite for a body that never gives way.
+    pub mass: f32,
+    pub jog: f32,
+    pub sprint: f32,
+    pub swim: f32,
+    /// Toward a wished velocity and back to standing on the ground, and in water, m/s².
+    pub accel: f32,
+    pub decel: f32,
+    pub swim_accel: f32,
+    /// The fraction of `accel` a body has in the air.
+    pub air_control: f32,
+    /// How fast its facing turns toward its way, deg/s.
+    pub turn_deg_s: f32,
+    pub step_height: f32,
+    pub slope_limit_deg: f32,
+    /// Speed by the floor's grade along the way, five (deg, factor) points, downhill negative.
+    pub slope_speed: [(f32, f32); 5],
+    /// Launch speed, m/s.
+    pub jump_speed: f32,
+    pub coyote_s: f32,
+    pub buffer_s: f32,
+    /// How far down a body is held to the floor, the predictive contact distance and the
+    /// padding kept from what it is swept at, m.
+    pub stick_m: f32,
+    pub predictive_m: f32,
+    pub padding_m: f32,
+    /// Water deeper than this fraction of its height is swum; afloat, this fraction of it is
+    /// under; the water's drag on it, 1/s.
+    pub swim_depth: f32,
+    pub float_depth: f32,
+    pub water_drag: f32,
+}
+
+impl Kind {
+    /// A kind by name from a movers file.
+    pub fn parse(text: &str, name: &str) -> Result<Kind, String> {
+        let kinds: BTreeMap<String, Kind> = ron::from_str(text).map_err(|why| why.to_string())?;
+        kinds
+            .get(name)
+            .copied()
+            .ok_or_else(|| format!("no kind {name}"))
+    }
+
+    /// The speed factor on a floor of a grade along the way, deg (uphill positive).
+    pub fn slope_factor(&self, grade_deg: f32) -> f32 {
+        let curve = &self.slope_speed;
+        if grade_deg <= curve[0].0 {
+            return curve[0].1;
+        }
+        for pair in curve.windows(2) {
+            let ((a, fa), (b, fb)) = (pair[0], pair[1]);
+            if grade_deg <= b {
+                return fa + (fb - fa) * (grade_deg - a) / (b - a).max(1e-6);
+            }
+        }
+        curve[curve.len() - 1].1
+    }
+}
+
+/// What a body asks of a tick: a level way to go (unit or zero), sprinting, a jump pressed this
+/// tick, or a move's drive (root motion) in place of walking.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Intent {
+    pub wish: Vec3,
+    pub sprint: bool,
+    pub jump: bool,
+    pub drive: Option<Vec3>,
+}
+
+/// A body's ground state (D53).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ground {
+    Grounded,
+    /// On ground past the slope limit, sliding down it.
+    Steep,
+    Airborne,
+    Swimming,
+}
+
+/// A body as the mover keeps it.
+#[derive(Clone, Debug)]
+pub struct Body {
+    pub id: u32,
+    pub kind: Kind,
+    /// The bottom of the capsule.
+    pub feet: Vec3,
+    /// Away from the world's centre: its capsule stands along it.
+    pub up: Vec3,
+    pub velocity: Vec3,
+    /// The level way it faces, turned toward its way at its kind's turn rate.
+    pub facing: Vec3,
+    pub ground: Ground,
+    /// The floor's normal while grounded.
+    pub normal: Vec3,
+    /// How fast it was falling when it landed this tick (open question 1, fall damage).
+    pub landed: Option<f32>,
+    /// How far a step raised it this tick: what is shown runs it down to nothing (presentation,
+    /// docs/controller.md), the mover never.
+    pub stepped: f32,
+    support: Support,
+    active: Vec<Touch>,
+    /// Time since it last stood, and whether it left by jumping (coyote time).
+    air_s: f32,
+    jumped: bool,
+    /// Time left on a jump pressed in the air (the buffer).
+    buffer: f32,
+}
+
+/// The world a tick moves bodies through: what stops them, the water, gravity toward the
+/// centre (D63).
+pub struct World<'a> {
+    pub ground: &'a dyn Query,
+    /// How far from the centre the water's surface over a point is, where water is.
+    pub water: &'a dyn Fn(Vec3) -> Option<f32>,
+    pub gravity: f32,
+    pub centre: Vec3,
+}
+
+/// Every body the mover moves, kept in ID order.
+#[derive(Default)]
+pub struct Bodies {
+    bodies: Vec<Body>,
+}
+
+/// How many rounds of pushing a tick takes (docs/controller.md, step 6).
+const PUSH_ROUNDS: usize = 4;
+
+impl Bodies {
+    /// Places a body of a kind with its feet at a point, facing a level way.
+    pub fn add(&mut self, id: u32, kind: Kind, feet: Vec3, facing: Vec3, world: &World) {
+        let up = (feet - world.centre).normalize_or(Vec3::Y);
+        let mut body = Body {
+            id,
+            kind,
+            feet,
+            up,
+            velocity: Vec3::ZERO,
+            facing: facing
+                .reject_from(up)
+                .normalize_or(up.any_orthonormal_vector()),
+            ground: Ground::Airborne,
+            normal: Vec3::ZERO,
+            landed: None,
+            stepped: 0.0,
+            support: Support::InAir,
+            active: Vec::new(),
+            air_s: f32::INFINITY,
+            jumped: false,
+            buffer: 0.0,
+        };
+        let shape = shape(&body, 1.0 / 64.0);
+        slide::contacts_at(feet, world.ground, &shape, &mut body.active);
+        let (support, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, feet);
+        body.support = support;
+        if support == Support::OnGround {
+            (body.ground, body.normal, body.air_s) = (Ground::Grounded, normal, 0.0);
+        }
+        let at = self.bodies.partition_point(|b| b.id < id);
+        if self.bodies.get(at).is_some_and(|b| b.id == id) {
+            self.bodies[at] = body;
+        } else {
+            self.bodies.insert(at, body);
+        }
+    }
+
+    pub fn get(&self, id: u32) -> Option<&Body> {
+        let at = self.bodies.binary_search_by_key(&id, |b| b.id).ok()?;
+        Some(&self.bodies[at])
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Body> {
+        self.bodies.iter()
+    }
+
+    /// One tick of every body, in ID order, each with its intent (none for a body not named),
+    /// then the pushes.
+    pub fn tick(&mut self, world: &World, intents: &[(u32, Intent)], dt: f32) {
+        let mut asked: Vec<(u32, Intent)> = intents.to_vec();
+        asked.sort_by_key(|(id, _)| *id);
+        let mut capsules: Vec<(u32, Capsule, Vec3)> = self
+            .bodies
+            .iter()
+            .map(|b| (b.id, capsule(b), b.velocity))
+            .collect();
+        for i in 0..self.bodies.len() {
+            let id = self.bodies[i].id;
+            let intent = asked
+                .binary_search_by_key(&id, |(id, _)| *id)
+                .map_or(Intent::default(), |at| asked[at].1);
+            let others = Capsules {
+                bodies: &capsules,
+                skip: id,
+            };
+            let query = (world.ground, &others);
+            step(&mut self.bodies[i], &intent, &query, world, dt);
+            let body = &self.bodies[i];
+            capsules[i] = (id, capsule(body), body.velocity);
+        }
+        push::separate(&mut self.bodies, world.ground, PUSH_ROUNDS);
+    }
+}
+
+fn capsule(body: &Body) -> Capsule {
+    Capsule::standing(body.feet, body.up, body.kind.radius, body.kind.height)
+}
+
+fn shape(body: &Body, dt: f32) -> Shape {
+    let k = &body.kind;
+    Shape {
+        radius: k.radius,
+        height: k.height,
+        up: body.up,
+        cos_limit: libm::cosf(k.slope_limit_deg.to_radians()),
+        predictive: k.predictive_m,
+        padding: k.padding_m,
+        dt,
+    }
+}
+
+/// A level velocity along the floor at the same speed (Godot's constant floor speed).
+fn along_floor(level: Vec3, normal: Vec3, up: Vec3) -> Vec3 {
+    let n_up = normal.dot(up);
+    if n_up < 1e-3 || level.length_squared() < 1e-12 {
+        return level;
+    }
+    let along = level - up * (level.dot(normal) / n_up);
+    along.normalize_or_zero() * level.length()
+}
+
+/// A vector moved toward another by at most a length.
+fn approach(from: Vec3, to: Vec3, by: f32) -> Vec3 {
+    let gap = to - from;
+    let length = gap.length();
+    if length <= by || length < 1e-9 {
+        to
+    } else {
+        from + gap * (by / length)
+    }
+}
+
+/// The level velocity a body wants this tick, and its facing turned toward its way.
+fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, dt: f32) -> Vec3 {
+    let (k, up) = (body.kind, body.up);
+    let level = |v: Vec3| v - up * v.dot(up);
+    let wish = level(intent.wish).normalize_or_zero();
+    if wish != Vec3::ZERO {
+        let turn = k.turn_deg_s.to_radians() * dt;
+        let angle = libm::acosf(body.facing.dot(wish).clamp(-1.0, 1.0));
+        body.facing = if angle <= turn {
+            wish
+        } else {
+            let side = up.cross(body.facing);
+            let sign = if side.dot(wish) >= 0.0 { 1.0 } else { -1.0 };
+            let (s, c) = (libm::sinf(turn * sign), libm::cosf(turn * sign));
+            (body.facing * c + side * s).normalize()
+        };
+    }
+    if let Some(drive) = intent.drive {
+        return level(drive);
+    }
+    let grounded = body.ground == Ground::Grounded;
+    let mut top = if swimming {
+        k.swim
+    } else if intent.sprint {
+        k.sprint
+    } else {
+        k.jog
+    };
+    if grounded && wish != Vec3::ZERO {
+        let grade = along_floor(wish, body.normal, up).dot(up).clamp(-1.0, 1.0);
+        top *= k.slope_factor(libm::asinf(grade).to_degrees());
+    }
+    let rate = if swimming {
+        k.swim_accel
+    } else if !grounded {
+        k.accel * k.air_control
+    } else if wish == Vec3::ZERO {
+        k.decel
+    } else {
+        k.accel
+    };
+    approach(level(body.velocity), wish * top, rate * dt)
+}
+
+/// One body's tick: velocity, collide and slide, stick, step, ground state (Jolt's
+/// `ExtendedUpdate`, with our velocity, jump and water rules).
+fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: f32) {
+    let up = (body.feet - world.centre).normalize_or(body.up);
+    body.up = up;
+    let shape = shape(body, dt);
+    let k = body.kind;
+    let g = world.gravity;
+    let from_centre = (body.feet - world.centre).length();
+    let depth = (world.water)(body.feet).map_or(0.0, |surface| surface - from_centre);
+    let swimming = depth > k.swim_depth * k.height;
+
+    if intent.jump {
+        body.buffer = k.buffer_s + dt;
+    }
+    let standing = body.ground == Ground::Grounded;
+    let coyote = !body.jumped && body.air_s <= k.coyote_s + 1e-6;
+    let jump = body.buffer > 0.0 && !swimming && (standing || coyote);
+
+    let level = level_velocity(body, intent, swimming, dt);
+    let vertical = body.velocity.dot(up);
+    let (rise, rise_end) = if jump {
+        (k.jump_speed, k.jump_speed - g * dt)
+    } else if swimming {
+        let under = (depth / k.height).clamp(0.0, 1.0);
+        let lift = g * under / k.float_depth.max(1e-3) - g;
+        let end = (vertical + lift * dt) * (1.0 - k.water_drag * dt).max(0.0);
+        (vertical, end)
+    } else if standing {
+        (0.0, -g * dt)
+    } else {
+        (vertical, vertical - g * dt)
+    };
+    // The tick moves by the mean of its start and end speeds: exact under constant gravity.
+    let mut wanted = if standing && !jump {
+        along_floor(level, body.normal, up) - body.normal * (g * dt * 0.5)
+    } else {
+        level + up * (rise + rise_end) * 0.5
+    };
+    wanted = slide::cancel_steep(wanted, body.support, &body.active, &shape);
+
+    let start = body.feet;
+    let was_supported = body.support.supported();
+    let was_airborne = matches!(body.ground, Ground::Airborne);
+    let mut feet = slide::move_shape(start, wanted, dt, query, &shape, &mut body.active);
+    let (mut support, mut normal) = slide::support(&mut body.active, wanted, &shape, feet);
+    let rising = (feet - start).dot(up) / dt > 1.0e-6;
+    if was_supported
+        && !support.supported()
+        && !rising
+        && !jump
+        && !swimming
+        && let Some(stuck) = slide::stick_to_floor(feet, k.stick_m, query, &shape)
+    {
+        feet = stuck;
+        slide::contacts_at(feet, query, &shape, &mut body.active);
+        (support, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, feet);
+    }
+    body.stepped = 0.0;
+    if support.supported() && !swimming {
+        let stepped = slide::walk_stairs(
+            start,
+            feet,
+            wanted,
+            &body.active,
+            query,
+            &shape,
+            k.step_height,
+        );
+        if let Some(stepped) = stepped {
+            body.stepped = (stepped.feet - feet).dot(up);
+            feet = stepped.feet;
+            slide::contacts_at(feet, query, &shape, &mut body.active);
+            (_, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, feet);
+            support = Support::OnGround;
+        }
+    }
+    // Perched on an edge too steep to stand on, over walkable floor within the stick distance
+    // (Unreal's perch): standing.
+    if matches!(support, Support::OnSteepGround) && !rising && !swimming {
+        let probe = Capsule {
+            a: feet + up * k.radius,
+            b: feet + up * k.radius,
+            radius: 0.02,
+        };
+        let down = -up * (k.radius + k.stick_m);
+        if let Some(hit) = query.sweep(&probe, down)
+            && !shape.too_steep(hit.contact.normal)
+        {
+            (support, normal) = (Support::OnGround, hit.contact.normal);
+        }
+    }
+    body.support = support;
+    body.feet = feet;
+
+    let mut velocity = if support == Support::OnGround && !jump {
+        along_floor(level, normal, up)
+    } else {
+        level + up * rise_end
+    };
+    for t in &body.active {
+        let c = &t.contact;
+        if t.met || c.distance < shape.padding {
+            let into = (velocity - c.velocity).dot(c.normal);
+            if into < 0.0 {
+                velocity -= c.normal * into;
+            }
+        }
+    }
+    body.velocity = velocity;
+    body.ground = if swimming {
+        Ground::Swimming
+    } else {
+        match support {
+            Support::OnGround => Ground::Grounded,
+            Support::OnSteepGround => Ground::Steep,
+            _ => Ground::Airborne,
+        }
+    };
+    body.normal = if body.ground == Ground::Grounded {
+        normal
+    } else {
+        Vec3::ZERO
+    };
+    body.landed = (was_airborne && body.ground == Ground::Grounded).then_some(-rise_end.min(0.0));
+    if jump {
+        (body.jumped, body.buffer) = (true, 0.0);
+    }
+    if body.ground == Ground::Grounded {
+        (body.air_s, body.jumped) = (0.0, false);
+    } else {
+        body.air_s += dt;
+    }
+    body.buffer = (body.buffer - dt).max(0.0);
+}

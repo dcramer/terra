@@ -1,0 +1,52 @@
+// Every kind of body's movement numbers (docs/controller.md, "Numbers that are data"; D53,
+// D136): the mover (terra_motion::mover) reads a kind's entry by name, and nothing in code
+// names a kind. The numbers are stand-ins: today's walker's, Jolt's defaults or the industry's,
+// as the doc says; a design answer replaces them.
+//
+// Each:
+//   radius, height, mass     the capsule, m, and how hard it is to shove, kg
+//   jog, sprint, swim        its speeds, m/s
+//   accel, decel             toward a wished velocity, and back to standing, on the ground, m/s²
+//   swim_accel               likewise in water
+//   air_control              the fraction of accel it has in the air
+//   turn_deg_s               how fast its facing turns toward its way
+//   step_height              the highest step it walks up, from the floor it leaves, m
+//   slope_limit_deg          the steepest floor it stands on and walks up
+//   slope_speed              its speed by the floor's grade along its way: five (deg, factor)
+//                            points, downhill negative, straight lines between
+//   jump_speed               launch speed, m/s
+//   coyote_s                 how long after it walks off an edge a jump is still taken
+//   buffer_s                 how long before it lands a jump pressed is kept for the landing
+//   stick_m                  how far down it is held to the floor going down a hill or stair
+//   predictive_m, padding_m  how far off contacts are gathered, and the gap kept from what
+//                            it is swept at (Jolt's 0.1 and 0.02)
+//   swim_depth               water deeper than this fraction of its height is swum (D74)
+//   float_depth              afloat, this fraction of its height is under the surface
+//   water_drag               the water's drag on it, 1/s
+{
+    "Man": (
+        radius: 0.3,
+        height: 1.8,
+        mass: 75.0,
+        jog: 4.3,
+        sprint: 7.4,
+        swim: 2.0,
+        accel: 30.0,
+        decel: 40.0,
+        swim_accel: 8.0,
+        air_control: 0.3,
+        turn_deg_s: 720.0,
+        step_height: 0.55,
+        slope_limit_deg: 50.0,
+        slope_speed: ((-45.0, 0.9), (-20.0, 1.0), (0.0, 1.0), (20.0, 0.85), (45.0, 0.6)),
+        jump_speed: 6.0,
+        coyote_s: 0.1,
+        buffer_s: 0.15,
+        stick_m: 0.5,
+        predictive_m: 0.1,
+        padding_m: 0.02,
+        swim_depth: 0.7,
+        float_depth: 0.75,
+        water_drag: 2.0,
+    ),
+}

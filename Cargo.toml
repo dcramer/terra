@@ -117,6 +117,10 @@ opt-level = 3
 [profile.dev.package.terra_build_layout]
 opt-level = 3
 
+# The controller's course drives the mover through every case and a crowd of 10,000 ticks.
+[profile.dev.package.terra_motion]
+opt-level = 3
+
 # The drawing's tests sweep every kit and shape, as building's do.
 [profile.dev.package.terra_build_mesh]
 opt-level = 3

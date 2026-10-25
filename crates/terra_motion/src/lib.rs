@@ -5,6 +5,8 @@
 //!   and how a blow that meets a guard is judged.
 //! - `course` (feature `course`): the controller's plain-Rust course, analytic fixtures and the
 //!   numbers its criteria are judged by (D53, `cargo xtask controller`).
+//! - `mover`: the character controller every body is moved by (D53, from Jolt's
+//!   `CharacterVirtual`): collide and slide, steps, the floor, ground states, pushing by mass.
 //! - `blade`: a blade swept from tick to tick against a body's hurt capsule.
 //! - `contact`: what a blow that reached a body does to both fighters, and the fighter's own
 //!   state (health, guard, hit-stop, reeling, shoves) it changes.
@@ -23,6 +25,7 @@ pub mod contact;
 #[cfg(any(test, feature = "course"))]
 pub mod course;
 pub mod feet;
+pub mod mover;
 pub mod moves;
 pub mod script;
 pub mod stamina;

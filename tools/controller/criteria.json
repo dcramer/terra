@@ -1,8 +1,8 @@
 {
  "about": "What the character controller must get right, a row a criterion (tools/controller/README.md, docs/controller.md's production criteria): what a player notices, its bar and source, the check that measures it, cheap (the plain-Rust course, seconds) or heavy (the in-game film, a bench), whether it is measurable yet. `noticed` is how much a player notices it, 5 most; the scorecard orders failing rows by it (the task list). `course` names the test that drives the mover through terra_motion::course and prints its numbers.",
  "course": {
-  "crate": "terra_walker",
-  "test": "movement::course::the_controller_course_measures_todays_walk"
+  "crate": "terra_motion",
+  "test": "mover::course::the_controller_course_measures_the_mover"
  },
  "criteria": [
   {

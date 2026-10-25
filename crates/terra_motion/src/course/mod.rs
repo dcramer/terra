@@ -21,51 +21,17 @@ use glam::Vec3;
 /// The fixed tick (D138).
 pub const TICK: f32 = 1.0 / 64.0;
 
-/// A kind's numbers the course judges a mover by (docs/controller.md, "Numbers that are
-/// data"). Until kinds' files hold them (stage 2), [`Kind::man`] gives the doc's stand-ins.
-#[derive(Clone, Copy, Debug)]
-pub struct Kind {
-    pub radius: f32,
-    pub height: f32,
-    /// Kilograms; infinite for a body that never gives way.
-    pub mass: f32,
-    pub jog: f32,
-    pub sprint: f32,
-    /// Launch speed, m/s.
-    pub jump_speed: f32,
-    pub step_height: f32,
-    pub slope_limit_deg: f32,
-    pub coyote_s: f32,
-    pub buffer_s: f32,
-}
+pub use crate::mover::{Intent, Kind};
 
 impl Kind {
-    /// A man, by docs/controller.md's stand-ins: today's walker's capsule and speeds, Jolt's
-    /// slope limit, a step one dug voxel high with padding.
+    /// A man, by `assets/data/movers.ron` (docs/controller.md's stand-ins).
     pub fn man() -> Self {
-        Kind {
-            radius: 0.3,
-            height: 1.8,
-            mass: 75.0,
-            jog: 4.3,
-            sprint: 7.4,
-            jump_speed: 6.0,
-            step_height: 0.55,
-            slope_limit_deg: 50.0,
-            coyote_s: 0.1,
-            buffer_s: 0.15,
-        }
+        let text = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/data/movers.ron"
+        ));
+        Kind::parse(text, "Man").expect("the movers file holds a man")
     }
-}
-
-/// What a body asks of a tick: a level way to go (unit or zero), sprinting, a jump pressed
-/// this tick, or a move's drive (root motion) in place of walking.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Intent {
-    pub wish: Vec3,
-    pub sprint: bool,
-    pub jump: bool,
-    pub drive: Option<Vec3>,
 }
 
 /// A body as a mover leaves it after a tick.

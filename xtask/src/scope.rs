@@ -158,6 +158,8 @@ pub(crate) const COMBAT: &[&str] = &[
 /// change here is measured again before a lowering of its baseline is carried.
 pub(crate) const CONTROLLER: &[&str] = &[
     "crates/terra_motion/src/course/",
+    "crates/terra_motion/src/mover/",
+    "assets/data/movers.ron",
     "crates/terra_walker/src/movement",
     "crates/terra_walker/src/bodies.rs",
     "crates/terra_world/src/planet.rs",
