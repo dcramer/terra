@@ -1,0 +1,128 @@
+#!/usr/bin/env node
+// The controller's in-game filmed course (docs/controller.md; D457): the plain course's
+// features dug and built in the yard (the sandbox's `controller-yard` experiment: steps
+// 0.1-0.5 m down and up, a lump, a mound past the slope limit, a base's stairs, doorway, low
+// passage and drop), its route walked by the scripted player at a jog and, beside it, at a
+// sprint (shift held), each run filmed through the game's own camera (`--cine` with no keys:
+// the HUD hidden, exposure and clock held) and written as a walk record (`--fight-log`, the
+// player as a walker). yard-checks.ts measures the heavy rows from the records, not by eye:
+// step smoothing (the shown figure's and camera's rise a frame at each step up, and settling),
+// feet sliding (the duel's own check) and the yard's own criteria (marks reached, stuck, fallen
+// through, the steep mound climbed). The two films side by side, named, in one film.
+//
+//   cargo xtask controller --film                  run, film and check, then the scorecard
+//   node tools/controller/yard.ts [--out <dir>]    the run, film and checks alone
+//   node tools/controller/yard.ts --check <dir>    only the checks, on records already made
+//
+// Into ~/.cache/terra-review/controller-yard/ by default: yard.mp4, checks.txt, checks.json
+// (the numbers the scorecard reads), and each run's walk-<pace>.jsonl and log. Exits 1 when a
+// check fails. Under WSL the runs are the Windows build, on the real GPU; start it as
+// `cargo xtask gpu film -- cargo xtask controller --film` (D319). Needs ffmpeg. Node 22.18 or
+// later; no dependencies.
+
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { ROOT, buildOffscreen, offscreenPath, offscreenRun } from "../sandbox/client.ts";
+import { read } from "../sandbox/duel/checks.ts";
+import { type Walk, check } from "./yard-checks.ts";
+
+/// The frames run and filmed (every second one kept, for 30 a second): the route's start to
+/// past its end at a jog.
+const FROM = 20;
+const TO = 2400;
+const ROLLS = 10;
+const PICTURE = "960x540";
+/// The paces walked: a jog (the route's own), and a sprint, shift held throughout.
+const PACES: { name: string; args: string[] }[] = [
+  { name: "jog", args: [] },
+  { name: "sprint", args: ["--press", `shift@1-${TO + 10}`] },
+];
+
+const args = process.argv.slice(2);
+if (args.includes("--help") || args.includes("-h")) {
+  console.log("yard.ts [--out <dir>] | --check <dir>");
+  process.exit(0);
+}
+const opt = (name: string) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+const out = resolve(opt("--check") ?? opt("--out") ?? join(homedir(), ".cache/terra-review/controller-yard"));
+const started = Date.now();
+const took = () => `${((Date.now() - started) / 1000).toFixed(0)} s`;
+
+if (!args.includes("--check")) {
+  mkdirSync(out, { recursive: true });
+  if (!buildOffscreen()) process.exit(1);
+  console.log(`yard: built (${took()})`);
+  const work = resolve(ROOT, "shots/controller-yard");
+  rmSync(work, { recursive: true, force: true });
+  const runs = await Promise.all(PACES.map((pace) => film(pace, work)));
+  for (const each of runs.filter((r) => !r.ok)) console.log(`yard: ✗ ${each.name} did not finish; its log: ${each.log}`);
+  if (runs.some((r) => !r.ok)) process.exit(1);
+  console.log(`yard: ran ${PACES.map((p) => p.name).join(", ")} (${took()})`);
+  const mp4 = sideBySide(work);
+  console.log(`yard: film ${mp4}, ${(statSync(mp4).size / 1e6).toFixed(1)} MB (${took()})`);
+  rmSync(work, { recursive: true, force: true });
+}
+process.exit(report() ? 0 : 1);
+
+/// The checks on each pace's record and log, a line each, kept as checks.txt and checks.json.
+function report(): boolean {
+  const walks: Walk[] = PACES.map(({ name }) => {
+    const log = readFileSync(join(out, `${name}.log`), "utf8");
+    const route = [...log.matchAll(/Route: (.*?)\.?\r?$/gm)].map((m) => m[1]);
+    const ground = (/Course: ground every metre east from the start: ([-\d. ]+)/.exec(log)?.[1] ?? "").trim().split(" ").map(Number);
+    return { name, frames: read(join(out, `walk-${name}.jsonl`)), route, ground };
+  });
+  const lines = check(walks);
+  const said = lines.map((each) => `${each.name}: ${each.line}`);
+  for (const line of said) console.log(`yard: ${line}`);
+  writeFileSync(join(out, "checks.txt"), said.join("\n") + "\n");
+  writeFileSync(join(out, "checks.json"), JSON.stringify(lines, null, 1) + "\n");
+  return lines.every((each) => each.ok);
+}
+
+/// One pace's run to its end, its frames in work/<pace>, its record and log in out.
+async function film(pace: { name: string; args: string[] }, work: string): Promise<{ name: string; ok: boolean; log: string }> {
+  const frames = join(work, pace.name);
+  mkdirSync(frames, { recursive: true });
+  const shot = join(work, `${pace.name}.json`);
+  writeFileSync(shot, JSON.stringify({ about: `the game's camera, at a ${pace.name}`, seconds: (TO - ROLLS) / 60 + 1, keys: [], look: { shutter: 90 } }, null, 2));
+  const [command, words] = offscreenRun(`yard-${pace.name}`, [
+    ...["--clean", "--experiment", "controller-yard", ...pace.args],
+    ...["--fight-log", offscreenPath(join(out, `walk-${pace.name}.jsonl`)), "--picture", PICTURE],
+    ...["--cine", `${offscreenPath(shot)}@${ROLLS}`, "--shots", `${offscreenPath(frames)}/f@${FROM}-${TO}/2`],
+  ]);
+  const log = join(out, `${pace.name}.log`);
+  const said = await run(command, words);
+  writeFileSync(log, `${command} ${words.join(" ")}\n\n${said}`);
+  return { name: pace.name, ok: said.includes("SANDBOX saved"), log };
+}
+
+/// A run to its end; tried again while Windows will not replace a program still closing.
+async function run(command: string, words: string[]): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    const said = await new Promise<string>((done, fail) => {
+      const child = spawn(command, words, { cwd: ROOT, env: { ...process.env, BEVY_ASSET_ROOT: ROOT } });
+      const chunks: Buffer[] = [];
+      child.stdout.on("data", (chunk) => chunks.push(chunk));
+      child.stderr.on("data", (chunk) => chunks.push(chunk));
+      child.on("error", fail);
+      child.on("close", () => done(Buffer.concat(chunks).toString("utf8")));
+    });
+    if (attempt >= 30 || !said.includes("Could not copy the program")) return said;
+    await new Promise((done) => setTimeout(done, 2000));
+  }
+}
+
+/// The paces' films side by side at 30 a second, each named in its corner.
+function sideBySide(work: string): string {
+  const font = spawnSync("fc-match", ["-f", "%{file}", "DejaVu Sans:bold"], { encoding: "utf8" }).stdout.trim();
+  const inputs = PACES.flatMap((pace) => ["-framerate", "30", "-pattern_type", "glob", "-i", `${join(work, pace.name)}/f-*.png`]);
+  const named = PACES.map((pace, i) => `[${i}]drawtext=fontfile=${font}:text='${pace.name}':x=14:y=12:fontsize=22:fontcolor=white:borderw=2:bordercolor=black@0.7[c${i}]`);
+  const graph = [...named, `${PACES.map((_, i) => `[c${i}]`).join("")}hstack=inputs=${PACES.length}[v]`].join(";");
+  const mp4 = join(out, "yard.mp4");
+  const made = spawnSync("ffmpeg", ["-y", "-loglevel", "error", ...inputs, "-filter_complex", graph, "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { encoding: "utf8" });
+  if (made.status !== 0 || !existsSync(mp4)) throw new Error(`ffmpeg failed: ${made.stderr.slice(0, 400)}`);
+  return mp4;
+}

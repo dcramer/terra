@@ -103,8 +103,8 @@ pub(crate) const TASKS: &[Task] = &[
     },
     Task {
         name: "controller",
-        takes: "[--json FILE] [--raise \"<why>\" | --lower]",
-        does: "the character controller's scorecard: every criterion of tools/controller/criteria.json (the plain-Rust course of terra_motion::course driving the mover), a line each, held to tools/controller/baseline.tsv: worse fails unless raised with its why, --lower is nightly's (D457, D414)",
+        takes: "[--bench] [--film] [--json FILE] [--raise \"<why>\" | --lower]",
+        does: "the character controller's scorecard: every criterion of tools/controller/criteria.json (the plain-Rust course of terra_motion::course driving the mover; --bench the mover's release bench; --film the in-game filmed course on the GPU, tools/controller/yard.ts), a line each, held to tools/controller/baseline.tsv: worse fails unless raised with its why, --lower is nightly's (D457, D414)",
         group: "Play and check",
         run: |args| node("tools/controller/scorecard.ts", args),
     },

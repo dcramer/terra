@@ -6251,6 +6251,7 @@ dependencies = [
  "mimalloc",
  "serde",
  "serde_json",
+ "terra_build",
  "terra_climate",
  "terra_core",
  "terra_creatures",
@@ -6258,6 +6259,7 @@ dependencies = [
  "terra_game",
  "terra_gen",
  "terra_survival",
+ "terra_voxel",
  "terra_walker",
  "terra_world",
 ]

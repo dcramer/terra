@@ -69,7 +69,7 @@ The server never sees any of these, and the mover never waits for them:
 These are `tools/controller/criteria.json` (D457), in D452's shape: a row for each criterion with its bar, its source and its check, held by a ratchet (`cargo xtask controller`, the `controller` skill). They are measured on two courses:
 
 - **The plain-Rust course** (`terra_motion::course`, driving a mover through its `Mover` trait). Analytic SDF fixtures are run as tests in `terra_motion`, on every core (D406): steps from 0.1 to 0.8 m by 0.1, slopes from 0 to 70 deg by 5, a dug tunnel 2 m high, a gap one voxel wide, a stair, a ledge to drop off, a pool, a sphere-world course for gravity, and a moving crowd.
-- **The in-game filmed course**. The same features are dug and built in the yard, and a scripted player walks, jogs and sprints through them (`--press`, `cargo xtask gpu film`).
+- **The in-game filmed course**. The same features are dug and built in the yard (the sandbox's `controller-yard` experiment: the ground's steps 0.1-0.5 m down and up, a lump, a mound past the slope limit, a base's stairs, doorway, low passage and a 1.5 m drop; the yard has no water), and a scripted player jogs and sprints through them on its route, filmed through the game's camera; the heavy rows are measured from each run's per-frame walk record, not by eye (`cargo xtask gpu film -- cargo xtask controller --film`, tools/controller/yard.ts). The player has no walk pace to press yet, so walking is not filmed.
 
 | # | Criterion | Bar | Source |
 |---|---|---|---|

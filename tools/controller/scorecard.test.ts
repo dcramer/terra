@@ -12,7 +12,7 @@ test("the course's numbers are read from its lines and nothing else", () => {
   ]);
 });
 
-test("every criterion has its fields, a measurable one its course check (a heavy one the bench), the rest what they need", () => {
+test("every criterion has its fields, a measurable one its course check (a heavy one the bench or the film), the rest what they need", () => {
   const file = JSON.parse(readFileSync(CRITERIA, "utf8"));
   assert.ok(file.course.crate && file.course.test);
   const ids = new Set<string>();
@@ -23,7 +23,8 @@ test("every criterion has its fields, a measurable one its course check (a heavy
     assert.ok(c.noticed >= 1 && c.noticed <= 5, c.id);
     assert.ok(c.notice && c.source && "bar" in c, c.id);
     assert.ok(c.cost === "cheap" || c.cost === "heavy", c.id);
-    if (c.measurable) assert.equal(c.check?.by, c.cost === "heavy" ? "bench" : "course", c.id);
+    if (c.measurable) assert.ok(c.cost === "heavy" ? ["bench", "film"].includes(c.check?.by) : c.check?.by === "course", c.id);
     else assert.ok(c.needs, `${c.id} says what it needs`);
+    if (c.check?.by === "film") assert.ok(c.check.name, `${c.id} names its film check`);
   }
 });

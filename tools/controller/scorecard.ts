@@ -8,16 +8,19 @@
 //   cargo xtask controller --json FILE        the results also as JSON
 //   cargo xtask controller --bench            also the heavy cost rows: the mover's release bench
 //                                             (terra_walker's movement::bench, D185's CPU half)
+//   cargo xtask controller --film             also the in-game filmed course's rows (yard.ts: the GPU,
+//                                             minutes; `cargo xtask gpu film -- cargo xtask controller --film`)
 //   cargo xtask controller --raise "<why>"    write the rows that got worse, or are new, with why
 //   cargo xtask controller --lower            write the rows that got better (nightly's, D414)
 //
 // The heavy criteria: the mover's bench runs with --bench (release, one core, medians); the
-// in-game filmed course (stage 1b) is not run yet and says what it needs. What cargo printed
+// in-game filmed course with --film (yard.ts writes checks.json beside its film). What cargo printed
 // goes to target/controller/scorecard.log.
 // Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { type Criterion, finish, type Held, judge, readBaseline, round, type Status } from "../scorecard/ratchet.ts";
@@ -45,6 +48,7 @@ function main() {
       raise: { type: "string" },
       lower: { type: "boolean", default: false },
       bench: { type: "boolean", default: false },
+      film: { type: "boolean", default: false },
     },
   });
   if (opt.raise !== undefined && !opt.raise.trim()) throw new Error("--raise needs its why");
@@ -71,9 +75,25 @@ function main() {
     for (const [id, v] of courseValues(bout)) values.set(id, v);
     for (const m of bout.matchAll(/^bench\t(.*)$/gm)) console.log(`  ${m[1].replaceAll("\t", ": ")}`);
   }
+  // The in-game filmed course: its checks' numbers, a row each.
+  if (opt.film) {
+    const out = join(homedir(), ".cache/terra-review/controller-yard");
+    const json = join(out, "checks.json");
+    rmSync(json, { force: true });
+    const y = spawnSync(process.execPath, [resolve(import.meta.dirname, "yard.ts"), "--out", out], { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+    logged += `\n$ node tools/controller/yard.ts --out ${out}\n${(y.stdout ?? "") + (y.stderr ?? "")}`;
+    for (const m of (y.stdout ?? "").matchAll(/^yard: (.*)$/gm)) console.log(`  ${m[1]}`);
+    const checks: { name: string; value: number }[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
+    for (const c of criteria) {
+      const check = c.check as { by?: string; name?: string } | null;
+      const found = check?.by === "film" ? checks.find((each) => each.name === check.name) : undefined;
+      if (found && Number.isFinite(found.value)) values.set(c.id, round(found.value));
+    }
+  }
   writeFileSync(log, logged);
 
-  const results = criteria.map((c) => (c.measurable && c.cost === "heavy" && !(opt.bench && (c.check as { by?: string } | null)?.by === "bench") ? { id: c.id, status: "skipped" as Status } : judge(c, values.get(c.id), held.get(c.id))));
+  const ran = (c: Criterion) => ({ bench: opt.bench, film: opt.film })[(c.check as { by?: string } | null)?.by ?? ""] === true;
+  const results = criteria.map((c) => (c.measurable && c.cost === "heavy" && !ran(c) ? { id: c.id, status: "skipped" as Status } : judge(c, values.get(c.id), held.get(c.id))));
   finish({
     name: "controller",
     criteria,
@@ -82,7 +102,7 @@ function main() {
     baseline: BASELINE,
     baselineName: "tools/controller/baseline.tsv",
     log: "target/controller/scorecard.log",
-    heavy: "run with --bench; the in-game filmed course is stage 1b",
+    heavy: "run with --bench, the filmed course with --film",
     heavyRun: false,
     json: opt.json,
     raise: opt.raise,

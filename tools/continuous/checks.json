@@ -24,5 +24,12 @@
     "run": ["cargo", "xtask", "gpu", "film", "--", "cargo", "xtask", "combat", "--film"],
     "reads": "COMBAT",
     "minutes": 60
+  },
+  {
+    "name": "controller film",
+    "does": "the controller scorecard with the in-game filmed course (D457): the yard's steps, mound, base and drop jogged and sprinted (tools/controller/yard.ts), step smoothing, feet sliding and the yard's own criteria held to tools/controller/baseline.tsv with every cheap row",
+    "run": ["cargo", "xtask", "gpu", "film", "--", "cargo", "xtask", "controller", "--film"],
+    "reads": "CONTROLLER",
+    "minutes": 60
   }
 ]

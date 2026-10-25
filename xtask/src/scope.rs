@@ -157,13 +157,18 @@ pub(crate) const COMBAT: &[&str] = &[
 ];
 
 /// What the controller scorecard reads (D457, tools/controller): the course and the mover it
-/// drives (and the planet's field the walk asks it of), and the scorecard's own tools. A
-/// change here is measured again before a lowering of its baseline is carried.
+/// drives (and the planet's field the walk asks it of), the walker its bench and filmed course
+/// drive (the course's yard, the walk's record), and the scorecard's own tools. A change here
+/// is measured again before a lowering of its baseline is carried, and runs the filmed course
+/// on main.
 pub(crate) const CONTROLLER: &[&str] = &[
     "crates/terra_motion/src/course/",
     "crates/terra_motion/src/mover/",
     "assets/data/movers.ron",
     "crates/terra_world/src/planet.rs",
+    "crates/terra_walker/src/",
+    "crates/terra_sandbox/src/experiments/course_yard.rs",
+    "crates/terra_creatures/src/melee/record.rs",
     "tools/controller/",
     "tools/scorecard/",
 ];

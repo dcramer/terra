@@ -11,7 +11,11 @@
 //! from the player's feet on the first frame, with no start); the first line gives up too.
 //! The camera drawing the frame is in it as well (where it is, which way it looks and its
 //! up, its vertical field of view and aspect), so a tool measures how the fight is framed.
-//! The shown places, between ticks, as a person sees them.
+//! The shown places, between ticks, as a person sees them. A player with no sword drawn is
+//! written too outside a duel, as a walker (no move), so a walk is judged by the same numbers
+//! (`tools/controller/yard.ts`, the controller's filmed course); each player says how far
+//! below its body its figure is shown after a step up (`below`, `terra_walker::stepping`),
+//! whether it stands on the ground and its speed.
 
 use super::{Fighter, Set};
 use crate::staged::Staged;
@@ -22,6 +26,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use terra_walker::bodies::Body;
 use terra_walker::character;
+use terra_walker::stepping::Stepping;
 use terra_walker::{Motion, Player, Stamina};
 use terra_world::planet::MainCamera;
 use terra_world::shell::{Options, ScriptFrame};
@@ -55,14 +60,17 @@ struct Out {
     file: BufWriter<File>,
     origin: Option<Vec3>,
     balls: HashMap<Entity, [Entity; 2]>,
+    /// Whether a player with no sword drawn is written as a walker: not in a duel, whose
+    /// record is the fight's alone (its checks would read the walk to the draw as one).
+    walkers: bool,
 }
 
 pub fn plugin(app: &mut App) {
-    let Some(path) = app
-        .world()
-        .get_resource::<Options>()
-        .and_then(|options| options.fight_log.clone())
-    else {
+    let Some(options) = app.world().get_resource::<Options>() else {
+        return;
+    };
+    let walkers = options.duel.is_none();
+    let Some(path) = options.fight_log.clone() else {
         return;
     };
     let file = File::create(&path).unwrap_or_else(|problem| {
@@ -72,6 +80,7 @@ pub fn plugin(app: &mut App) {
         file: BufWriter::new(file),
         origin: None,
         balls: HashMap::new(),
+        walkers,
     })
     .init_resource::<Said>()
     .add_systems(Last, write);
@@ -99,12 +108,32 @@ type Them<'a> = (
     Option<&'a super::feet::Kept>,
 );
 
+/// A player walking with no sword drawn: not a fighter, written as a walker.
+type Walkers<'a> = (
+    Entity,
+    &'a GlobalTransform,
+    Option<&'a Motion>,
+    Option<&'a Stepping>,
+);
+
+/// What a player's walk adds to its line: its figure's lag after a step up, whether it
+/// stands on the ground, and its speed, m/s.
+fn walking(line: &mut Value, motion: Option<&Motion>, stepping: Option<&Stepping>) {
+    line["below"] = json!(r(stepping.map_or(0.0, |s| s.below)));
+    if let Some(motion) = motion {
+        line["on_ground"] = json!(motion.on_ground);
+        line["speed"] = json!(r(motion.velocity.length()));
+    }
+}
+
 fn write(
     frame: Option<Res<ScriptFrame>>,
     set: Res<Set>,
     mut out: ResMut<Out>,
     mut said: ResMut<Said>,
     fighters: Query<Them<'_>>,
+    walkers: Query<Walkers<'_>, (With<Player>, Without<Fighter>)>,
+    steps: Query<&Stepping>,
     bones: Query<&GlobalTransform>,
     children: Query<&Children>,
     names: Query<&Name>,
@@ -116,12 +145,14 @@ fn write(
     };
     let set = &set.0;
     let seen: Vec<_> = fighters.iter().collect();
-    // Before the sword is drawn there is no fighter, only the script's steps.
-    let player = seen.iter().find(|each| each.3);
-    let up = player.map_or(Vec3::Y, |player| player.1.translation().normalize());
+    // Before the sword is drawn there is no fighter, only the script's steps and a walker.
+    let player = seen.iter().find(|each| each.3).map(|each| each.1);
+    let walk = out.walkers;
+    let player = player.or(walkers.iter().find(|_| walk).map(|each| each.1));
+    let up = player.map_or(Vec3::Y, |player| player.translation().normalize());
     let first = out.origin.is_none() && player.is_some();
     if let Some(player) = player.filter(|_| first) {
-        out.origin = Some(player.1.translation());
+        out.origin = Some(player.translation());
     }
     let origin = out.origin.unwrap_or_default();
     let terms = start
@@ -151,25 +182,9 @@ fn write(
             }
             _ => false,
         };
-        if let std::collections::hash_map::Entry::Vacant(slot) = out.balls.entry(entity)
-            && let [Some(l), Some(r)] =
-                BALLS.map(|name| character::find(entity, name, &children, &names))
-        {
-            slot.insert([l, r]);
-        }
-        let balls: Vec<Value> = out
-            .balls
-            .get(&entity)
-            .map(|pair| {
-                pair.iter()
-                    .filter_map(|bone| bones.get(*bone).ok())
-                    .map(|bone| {
-                        let at = bone.translation();
-                        json!({ "at": local(at), "up": r((at - feet).dot(up)) })
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let balls = balls_of(
+            &mut out, entity, feet, up, &local, &children, &names, &bones,
+        );
         bodies.push(json!({
             "who": if is_player { "you" } else { "partner" },
             "feet": local(feet),
@@ -190,6 +205,38 @@ fn write(
             "balls": balls,
             "kept": kept.map(|kept| kept.states()),
         }));
+        if is_player {
+            let last = bodies.last_mut().expect("just pushed");
+            walking(last, motion, steps.get(entity).ok());
+        }
+    }
+    for (entity, place, motion, stepping) in walkers.iter().filter(|_| walk) {
+        let feet = place.translation();
+        let facing = motion.map_or(Vec3::Z, |motion| motion.facing);
+        // A walker's balls over its figure's root as shown, so a step's smoothing is no dip.
+        let root = feet - up * stepping.map_or(0.0, |s| s.below);
+        let balls = balls_of(
+            &mut out, entity, root, up, &local, &children, &names, &bones,
+        );
+        let mut line = json!({
+            "who": "you",
+            "feet": local(feet),
+            "facing": mm(terms.transform_vector3(facing)),
+            "move": null,
+            "t": 0.0,
+            "phase": null,
+            "cancels": false,
+            "reach": false,
+            "guard": false,
+            "stop_s": 0.0,
+            "stagger_s": 0.0,
+            "down": false,
+            "free": true,
+            "radius": null,
+            "balls": balls,
+        });
+        walking(&mut line, motion, stepping);
+        bodies.push(line);
     }
     let mut line = json!({
         "frame": frame.0,
@@ -214,4 +261,36 @@ fn write(
     if let Err(problem) = written {
         warn!("Melee: the fight's record could not be written: {problem}");
     }
+}
+
+/// Where the balls of a body's feet are, in the start's terms, and how high over `feet`, the
+/// bones found once a body.
+#[allow(clippy::too_many_arguments)]
+fn balls_of(
+    out: &mut Out,
+    entity: Entity,
+    feet: Vec3,
+    up: Vec3,
+    local: &dyn Fn(Vec3) -> [f64; 3],
+    children: &Query<&Children>,
+    names: &Query<&Name>,
+    bones: &Query<&GlobalTransform>,
+) -> Vec<Value> {
+    if let std::collections::hash_map::Entry::Vacant(slot) = out.balls.entry(entity)
+        && let [Some(l), Some(r)] = BALLS.map(|name| character::find(entity, name, children, names))
+    {
+        slot.insert([l, r]);
+    }
+    out.balls
+        .get(&entity)
+        .map(|pair| {
+            pair.iter()
+                .filter_map(|bone| bones.get(*bone).ok())
+                .map(|bone| {
+                    let at = bone.translation();
+                    json!({ "at": local(at), "up": r((at - feet).dot(up)) })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }

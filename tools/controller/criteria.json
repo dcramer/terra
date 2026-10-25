@@ -192,12 +192,14 @@
    "bar": {
     "at_most": 0.25
    },
-   "unit": "of the step a frame",
+   "unit": "of the step a frame, the shown figure or the camera, the worst step up of the filmed course at a jog and a sprint",
    "source": "docs/controller.md criterion 6; Unreal mesh smoothing",
-   "check": null,
+   "check": {
+    "by": "film",
+    "name": "step smooth"
+   },
    "cost": "heavy",
-   "measurable": false,
-   "needs": "the in-game filmed course (stage 1b): the shown root's rise a frame over each step, and its settling within 0.15 s"
+   "measurable": true
   },
   {
    "id": "stick.slope",
@@ -806,12 +808,14 @@
    "bar": {
     "at_most": 0.03
    },
-   "unit": "m a contact",
+   "unit": "m, the worst planted foot's travel on the filmed course (the duel's feet sliding check)",
    "source": "docs/controller.md criterion 21; movement.md stage 2; D455",
-   "check": null,
+   "check": {
+    "by": "film",
+    "name": "feet sliding"
+   },
    "cost": "heavy",
-   "measurable": false,
-   "needs": "the in-game filmed course (stage 1b): each foot contact's slide, as the duel film's film.feet_sliding reads it"
+   "measurable": true
   },
   {
    "id": "film.yard",
@@ -820,12 +824,14 @@
    "bar": {
     "at_most": 0
    },
-   "unit": "criteria failing",
+   "unit": "criteria failing a pace: every mark reached, never stuck, never through the ground, the steep mound never climbed, every step settled",
    "source": "docs/controller.md, the in-game filmed course",
-   "check": null,
+   "check": {
+    "by": "film",
+    "name": "yard"
+   },
    "cost": "heavy",
-   "measurable": false,
-   "needs": "the in-game filmed course (stage 1b): the plain course's features dug and built in the yard, walked, jogged and sprinted by a scripted player (--press, cargo xtask gpu film)"
+   "measurable": true
   }
  ]
 }

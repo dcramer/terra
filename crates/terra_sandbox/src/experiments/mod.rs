@@ -5,6 +5,7 @@
 
 use bevy::prelude::*;
 
+mod course_yard;
 mod crowd;
 mod dungeon;
 mod forest;
@@ -29,6 +30,7 @@ pub struct Experiment {
 /// Experiments that stand for others and their options, given before the run's own so the
 /// run's win: a demo is a line here, not an option of its own (D249).
 const STANDS_FOR: &[(&str, &[&str])] = &[
+    ("controller-yard", course_yard::WITH),
     ("forest-walk", forest_walk::WITH),
     ("dungeon", dungeon::WITH),
     ("dungeon-mine", dungeon::WITH),
@@ -48,6 +50,11 @@ pub fn expanded(args: Vec<String>) -> Vec<String> {
 }
 
 pub const ALL: &[Experiment] = &[
+    Experiment {
+        name: "controller-yard",
+        about: "The controller's filmed course: steps 0.1-0.5 m dug down and up, a lump, a mound past the slope limit, a base's stairs, doorway, low passage and drop, in a line east of the start, walked by its route (tools/controller/yard.ts). The same as play on the bare yard at noon.",
+        add: course_yard::plugin,
+    },
     Experiment {
         name: "dungeon",
         about: "A generated crypt dug into the lush forest, torch-lit, the player by its stair down (assets/data/dungeon_demo.ron). The same as play and lush on the yard at noon.",
