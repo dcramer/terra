@@ -507,12 +507,16 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // sparkle instead.
     let cell_px = max(length(dpdx(uv)), length(dpdy(uv))) * CELLS;
     let piece_shown = 1.0 - smoothstep(PIECE_FADE.x, PIECE_FADE.y, cell_px);
+    // Which piece a point is on, by its cell's number and the texture's repeat, so a piece
+    // differs from its copy a repeat away and no pattern recurs from repeat to repeat.
+    var piece = vec2(-1.0);
     if way == 4 && piece_shown > 0.0 {
         let cell = cell_at(uv, slot);
         if cell > 0.0 {
-            let n = cell * 255.0;
-            let tone = 1.0 + piece_shown * PIECE_TONE * (2.0 * hash21(vec2(n, 7.0)) - 1.0);
-            let warm = piece_shown * PIECE_WARMTH * (2.0 * hash21(vec2(n, 13.0)) - 1.0);
+            let n = cell * 255.0 + 37.0 * floor(uv.x);
+            piece = vec2(n, 53.0 * floor(uv.y));
+            let tone = 1.0 + piece_shown * PIECE_TONE * (2.0 * hash21(piece + vec2(0.0, 7.0)) - 1.0);
+            let warm = piece_shown * PIECE_WARMTH * (2.0 * hash21(piece + vec2(0.0, 13.0)) - 1.0);
             pbr_input.material.base_color = vec4(
                 pbr_input.material.base_color.rgb * tone * vec3(1.0 + warm, 1.0, 1.0 - warm),
                 1.0,
@@ -707,8 +711,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             // (linear albedo about 0.1), whatever its tint.
             let chalk = noise21(st * 1.7 + 3.0) * 0.6 + noise21(st * 6.0) * 0.4;
             let figure = clamp(lum / max(dot(mean, vec3(0.3, 0.59, 0.11)), 0.003), 0.5, 1.6);
-            let bloom = mix(vec3(0.1, 0.1, 0.096), c / max(lum, 0.003) * 0.1, 0.25) * (0.8 + 0.4 * chalk) * mix(1.0, figure, 0.6);
-            c = mix(c, bloom, 0.7 * age);
+            // Each piece weathered apart, some barely, some chalky: by its hash, its bloom's
+            // share and lightness; the texture's own figure kept less, so it does not show as
+            // one mottle repeated from piece to piece.
+            let ph = select(0.5, hash21(piece + vec2(3.0, 29.0)), piece.x >= 0.0);
+            let pk = mix(1.0, 0.6 + 0.8 * ph, piece_shown);
+            let bloom = mix(vec3(0.1, 0.1, 0.096), c / max(lum, 0.003) * 0.1, 0.25) * (0.8 + 0.4 * chalk) * mix(1.0, figure, 0.35) * mix(1.0, 0.82 + 0.36 * ph, piece_shown);
+            c = mix(c, bloom, clamp(0.75 * age * pk, 0.0, 1.0));
             r = mix(r, 0.86 + 0.08 * chalk, age);
             reflect_k = 1.0 - 0.35 * age;
             aged_cover = age;
@@ -755,7 +764,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             let mean_lum = dot(mean, vec3(0.3, 0.59, 0.11));
             let figure = clamp(lum / max(mean_lum, 0.003), 0.5, 1.6);
             let ridge = clamp(rel * 2.5, -0.5, 0.5);
-            let silver = vec3(0.25, 0.225, 0.19) * mix(1.0, figure, 0.3) * (1.0 + ridge * age);
+            // Warm grey-brown, as old logs are: a neutral grey here goes blue in the sky-lit shade
+            // (the `light` view's grey card does), where photographs show them brown-grey.
+            let silver = vec3(0.27, 0.22, 0.165) * mix(1.0, figure, 0.3) * (1.0 + ridge * age);
             c = mix(c, silver, age * (1.0 - 0.55 * shelter) * (1.0 - 0.5 * wet));
             c *= 1.0 - 0.3 * clamp(grime, 0.0, 1.0);
             let lanes = uv.x * 23.0 + 0.13;
@@ -768,7 +779,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
             c = mix(c, c * vec3(0.5, 0.58, 0.42), wet * 0.8);
             r = mix(r, 0.82 + 0.08 * grain, age);
             r = mix(r, 0.72, wet * 0.5);
-            reflect_k = 1.0 - 0.3 * age;
+            // Dry, fibrous and dull: little of the sky's sheen, which blued it in shade.
+            reflect_k = 1.0 - 0.6 * age;
             let eg = max(1.5 / 512.0, max(fw.x, fw.y));
             let hu = textureSampleGrad(height_array, array_sampler, uv + vec2(eg, 0.0), slot, ddx, ddy).r
                 - textureSampleGrad(height_array, array_sampler, uv - vec2(eg, 0.0), slot, ddx, ddy).r;
