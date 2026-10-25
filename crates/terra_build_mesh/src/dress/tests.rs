@@ -270,3 +270,62 @@ fn an_empty_surface_takes_the_masks_without_a_fault() {
     mask(&mut surface, &kit, Material::Log, &Base::default());
     assert_eq!(surface.triangle_count(), 0);
 }
+
+#[test]
+fn a_wall_in_a_room_dug_deep_under_its_base_is_dirtied_from_its_floor_not_as_buried() {
+    use terra_build::{BuildOp, Cube, Kind};
+    // A dungeon room's shell as terra_dungeon stamps it, ten metres under its base's level,
+    // with no ground sampled (as the dungeon's base): a stone floor, a wall four metres high
+    // on its north edge, a ceiling over it; and the same shell standing on the ground.
+    let shell = |under: i32| {
+        let mut base = Base::default();
+        let solid = Some(Cube::new(Kind(4), Fill::Solid));
+        for (min, max) in [
+            ([0, -1, 0], [7, -1, 7]),
+            ([0, 0, 0], [7, 7, 0]),
+            ([0, 8, 0], [7, 8, 7]),
+        ] {
+            let (min, max): ([i32; 3], [i32; 3]) = (min, max);
+            base.apply(BuildOp::Fill {
+                min: [min[0], min[1] - under, min[2]],
+                max: [max[0], max[1] - under, max[2]],
+                cube: solid,
+            });
+        }
+        base
+    };
+    let mut kit = terra_build::testing::kit();
+    kit.dress.masks = Masks {
+        dirt: 1.4,
+        dirt_tint: [0.4, 0.37, 0.32],
+        ..Masks::default()
+    };
+    // The room side of the wall at its foot and 2.5 m up, past the dirt's highest rise, and
+    // the ceiling's underside: their shades, dug in and on the ground.
+    let shades = |under: i32| {
+        let floor = -(under as f32) * CELL_M;
+        let mut surface = Surface::default();
+        for (y, normal) in [(0.05, Vec3::Z), (2.5, Vec3::Z), (4.0, -Vec3::Y)] {
+            let z = if normal == Vec3::Z { CELL_M } else { 2.0 };
+            surface.positions.push(Vec3::new(1.8, floor + y, z));
+            surface.normals.push(normal);
+            surface.colours.push([1.0; 3]);
+        }
+        mask(&mut surface, &kit, Material::Masonry, &shell(under));
+        surface.colours.iter().map(|c| c[0]).collect::<Vec<_>>()
+    };
+    let (dug, standing) = (shades(20), shades(0));
+    for (i, (dug, standing)) in dug.iter().zip(&standing).enumerate() {
+        assert!(
+            (dug - standing).abs() < 0.08,
+            "point {i}: {dug} dug in, {standing} on the ground"
+        );
+    }
+    // Dirty at its foot, clean up the wall, as a wall on the ground.
+    assert!(dug[0] < 0.6, "the foot not dirtied: {}", dug[0]);
+    assert!(
+        (dug[1] - 1.0).abs() < 1e-4,
+        "dirtied 2.5 m up its wall: {}",
+        dug[1]
+    );
+}

@@ -310,6 +310,45 @@ impl Rained<'_> {
     }
 }
 
+/// How many cubes down from the cell a face under the ground looks into its floor is sought,
+/// sixteen metres: deeper than any dug room is tall.
+pub(super) const DUG_REACH: i32 = 32;
+
+/// The floors that faces under the ground stand over. A face under its column's ground is
+/// seen only where the ground is dug out, as a dungeon's rooms are, and there its dirt and
+/// damp rise from the floor in front of it, not from the ground metres over the room. A
+/// dungeon's base samples no ground, so its columns keep the base's level over its walls,
+/// and every wall took its dirt's whole colour: the crypt's walls drawn about 7 stops under
+/// mid-grey against D488's 3 to 6 (dungeons r24, r25).
+pub(super) struct Dug<'a> {
+    pub(super) base: &'a Base,
+    /// The floor's top under each cell looked into, if one is within reach.
+    pub(super) floors: BTreeMap<[i32; 3], Option<f32>>,
+}
+
+impl Dug<'_> {
+    /// The ground a point of a face is dressed from: its column's, or where the point is
+    /// under that, the top of the first solid cube under the cell the face looks into, if
+    /// there is one within reach (none outside a building, so a footing's face is as it was).
+    pub(super) fn ground(&mut self, p: Vec3, n: Vec3, ground: f32) -> f32 {
+        if p.y >= ground {
+            return ground;
+        }
+        let cell = ((p + n * (CELL_M * 0.5)) / CELL_M).floor().as_ivec3();
+        let base = self.base;
+        let floor = *self.floors.entry(cell.to_array()).or_insert_with(|| {
+            (0..DUG_REACH)
+                .map(|down| cell - IVec3::Y * down)
+                .find(|&at| {
+                    base.cube(at)
+                        .is_some_and(|cube| layout::drawn_fill(&cube) == Fill::Solid)
+                })
+                .map(|at| (at.y + 1) as f32 * CELL_M)
+        });
+        floor.map_or(ground, |floor| floor.min(ground))
+    }
+}
+
 /// A kit's masks laid over a surface it drew in a material, in its base's own space.
 pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     let masks = &kit.dress.masks;
@@ -355,15 +394,13 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
         sources: BTreeMap::new(),
     };
     let rains = layered && (masks.splash > 0.0 || masks.streaks > 0.0);
+    let mut dug = Dug {
+        base,
+        floors: BTreeMap::new(),
+    };
     let mut shade = |p: Vec3, n: Vec3, c: &mut [f32; 3]| {
-        let mut k = Vec3::from_array(masked(
-            masks,
-            (timber, layered),
-            p,
-            n,
-            ground(p),
-            &mut noise,
-        ));
+        let ground = dug.ground(p, n, ground(p));
+        let mut k = Vec3::from_array(masked(masks, (timber, layered), p, n, ground, &mut noise));
         if rains {
             k *= rained.shade(masks, p, n);
         }
