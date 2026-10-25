@@ -15,11 +15,14 @@
 //!   kinds, so two kinds' files give two results (criterion 14).
 //! - `sources`: what stops a body besides the ground (a base's cubes and door, a prop, a
 //!   rock), each a step and the door a wall (criteria 1 and 5).
+//! - `stairs`: flights of the ground's and a base's steps walked up and down at the kind's
+//!   speed, and a doorway's sill crossed without a hop (criteria 5 to 7).
 
 mod data;
 pub mod field;
 mod runs;
 mod sources;
+mod stairs;
 
 pub use field::{Ball, Course, Field, Solid, Water};
 use glam::Vec3;
@@ -84,6 +87,9 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(data::score(&new));
     let (sources, deepest) = sources::score(&new);
     measures.extend(sources);
+    let (stairs, deeper) = stairs::score(&new);
+    measures.extend(stairs);
+    let deepest = deepest.max(deeper);
     // What a body met besides the ground counts toward how deep it ever went.
     for m in measures.iter_mut().filter(|m| m.id == "penetration.max") {
         m.value = m.value.max(deepest);

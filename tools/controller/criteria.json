@@ -215,6 +215,66 @@
    "measurable": true
   },
   {
+   "id": "stair.up",
+   "noticed": 5,
+   "notice": "walking up a flight of steps is slower than walking on the level, or faster",
+   "bar": {
+    "at_most": 0.03
+   },
+   "unit": "of the kind's jog off it, worst flight (steps 0.1-0.5 m: the ground's, a base's whole, half and stair cubes)",
+   "source": "docs/controller.md criteria 5 and 6; Jolt WalkStairs, Unreal StepUp (horizontal speed kept), Enshrouded",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "stair.hop",
+   "noticed": 5,
+   "notice": "walking up a flight of steps the body leaves the ground or slides at each step's edge",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "ticks not grounded climbing, all flights",
+   "source": "docs/controller.md criteria 5 and 6; Jolt WalkStairs, Unreal StepUp",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "stair.down",
+   "noticed": 4,
+   "notice": "walking down a flight of steps is slower than walking on the level, or faster",
+   "bar": {
+    "at_most": 0.03
+   },
+   "unit": "of the kind's jog off it, worst flight",
+   "source": "docs/controller.md criterion 7; Jolt StickToFloor",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "door.hop",
+   "noticed": 4,
+   "notice": "stepping through a doorway onto a floor a little over the ground the body hops",
+   "bar": {
+    "at_most": 0.002
+   },
+   "unit": "m over the higher of ground and floor, worst of sills 0-0.1 m",
+   "source": "docs/controller.md criteria 5 and 6; Unreal StepUp and floor snapping",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "ceiling.depth",
    "noticed": 3,
    "notice": "a jump in a 2 m tunnel puts the head into the roof",

@@ -12,7 +12,7 @@ use glam::{Vec2, Vec3};
 use terra_core::{Piece, Solid};
 
 /// A base's cube, m (`terra_build::CELL_M`).
-const CELL_M: f32 = 0.5;
+pub(super) const CELL_M: f32 = 0.5;
 /// Where each step's face is along the way, and how far on its top runs, m.
 const FACE_U: f32 = 1.5;
 const TOP_U: f32 = 10.0;
@@ -38,7 +38,7 @@ enum Case {
 
 /// A box in the level frame from one corner to the other, turned to the frame at a place (its
 /// top flat there, as a base or a prop is laid level).
-fn block(at: Vec3, min: Vec3, max: Vec3) -> Obstacle {
+pub(super) fn block(at: Vec3, min: Vec3, max: Vec3) -> Obstacle {
     let origin = world(at.x, at.y, at.z);
     let up = origin.normalize();
     let axes = [forward_at(origin), up, side_at(origin)];
@@ -52,7 +52,7 @@ fn block(at: Vec3, min: Vec3, max: Vec3) -> Obstacle {
 
 /// A base's cubes filling a box of the base's frame (whose origin is at `at`), the top layer
 /// filled as far as `max` reaches into it.
-fn cubes(at: Vec3, min: Vec3, max: Vec3) -> Vec<Obstacle> {
+pub(super) fn cubes(at: Vec3, min: Vec3, max: Vec3) -> Vec<Obstacle> {
     let cells = ((max - min) / CELL_M).ceil();
     let mut out = Vec::new();
     for i in 0..cells.x as i32 {
@@ -98,11 +98,10 @@ fn step(source: Source, height: f32) -> Course {
 }
 
 /// A base's wall of cubes across the way at `u` 3 to 3.5 m, 2.5 m high, with a doorway a metre
-/// wide at `w` = 0 under a lintel, and its door's leaf, 4 cm thick, shut on the wall's face.
-fn door() -> Course {
-    let at = Vec3::new(3.0, 0.0, 0.0);
-    let (near, far, high) = (3.0, 3.5, 2.5);
-    let mut course = Course::flat();
+/// wide at `w` = 0 under a lintel.
+pub(super) fn doorway() -> Vec<Obstacle> {
+    let at = Vec3::new(DOOR_U, 0.0, 0.0);
+    let (near, far, high) = (DOOR_U, DOOR_U + CELL_M, 2.5);
     let mut wall = cubes(at, Vec3::new(near, -CELL_M, 0.5), Vec3::new(far, high, 5.0));
     wall.extend(cubes(
         at,
@@ -114,12 +113,21 @@ fn door() -> Course {
         Vec3::new(near, 2.0, -0.5),
         Vec3::new(far, high, 0.5),
     ));
-    wall.push(block(
-        at,
-        Vec3::new(near - 0.04, 0.0, -0.5),
-        Vec3::new(near, 2.0, 0.5),
+    wall
+}
+
+/// Where a doorway's wall begins along the way, m.
+pub(super) const DOOR_U: f32 = 3.0;
+
+/// The doorway with its door's leaf, 4 cm thick, shut on the wall's face.
+fn door() -> Course {
+    let mut course = Course::flat();
+    course.obstacles = doorway();
+    course.obstacles.push(block(
+        Vec3::new(DOOR_U, 0.0, 0.0),
+        Vec3::new(DOOR_U - 0.04, 0.0, -0.5),
+        Vec3::new(DOOR_U, 2.0, 0.5),
     ));
-    course.obstacles = wall;
     course
 }
 

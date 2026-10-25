@@ -426,15 +426,41 @@ pub fn cancel_steep(velocity: Vec3, state: Support, active: &[Touch], shape: &Sh
     velocity
 }
 
-/// The steep contacts a level velocity pushes into, Jolt's `CanWalkStairs` test.
-fn steep_into(active: &[Touch], velocity: Vec3, shape: &Shape) -> Vec<Vec3> {
-    active
+/// The contacts a level velocity pushes into, steep and walkable: Jolt's `CanWalkStairs` test
+/// takes the steep alone; Unreal's `StepUp` is tried at any blocking hit, so the round of an
+/// edge lower than the bottom sphere's walkable limit is stepped onto too, not slid up.
+fn pushed_into(active: &[Touch], velocity: Vec3, shape: &Shape) -> (Vec<Vec3>, Vec<Vec3>) {
+    let into: Vec<Contact> = active
         .iter()
         .filter(|t| t.met)
         .map(|t| t.contact)
-        .filter(|c| c.normal.dot(velocity - c.velocity) < 0.0 && shape.too_steep(c.normal))
-        .map(|c| c.normal)
-        .collect()
+        .filter(|c| c.normal.dot(velocity - c.velocity) < 0.0)
+        .collect();
+    let (steep, walkable): (Vec<Contact>, Vec<Contact>) =
+        into.into_iter().partition(|c| shape.too_steep(c.normal));
+    (
+        steep.iter().map(|c| c.normal).collect(),
+        walkable.iter().map(|c| c.normal).collect(),
+    )
+}
+
+/// How wide the probe for the floor under a body's centre is, m: near a line, so a step's edge
+/// beside the centre is not taken for the floor under it.
+const PROBE_M: f32 = 0.002;
+
+/// The floor under a body's centre, as far down as its bottom sphere and a reach under that: a
+/// thin probe swept down from the sphere's centre (Unreal's `FindFloor` line trace), so the
+/// round of an edge its foot rests on is not taken for the floor's slope.
+pub fn floor_below(feet: Vec3, reach: f32, query: &dyn Query, shape: &Shape) -> Option<Contact> {
+    let centre = feet + shape.up * shape.radius;
+    let probe = Capsule {
+        a: centre,
+        b: centre,
+        radius: PROBE_M,
+    };
+    query
+        .sweep(&probe, -shape.up * (shape.radius + reach))
+        .map(|hit| hit.contact)
 }
 
 /// The ground under a sweep down from a place: the hit, and where the feet end.
@@ -475,8 +501,8 @@ pub fn walk_stairs(
     }
     let forward = wish_step / wish_len;
     let achieved = level(feet - start).dot(forward).max(0.0);
-    let steep = steep_into(active, level(wished), shape);
-    if achieved + 1.0e-4 >= wish_len || steep.is_empty() {
+    let (steep, walkable) = pushed_into(active, level(wished), shape);
+    if achieved + 1.0e-4 >= wish_len || (steep.is_empty() && walkable.is_empty()) {
         return None;
     }
     // Step toward the contact that most opposes the move, within 75 deg of it.
@@ -488,7 +514,14 @@ pub fn walk_stairs(
             (direction, most) = (test, test.dot(forward));
         }
     }
-    let step_forward = direction * STEP_FORWARD_MIN.max(wish_len - achieved);
+    // Jolt's least step forward is for a riser met at a high frame rate; an edge's round or a
+    // slope's foot is stepped by what was lost alone, so a step never outruns the walk.
+    let least = if steep.is_empty() {
+        0.0
+    } else {
+        STEP_FORWARD_MIN
+    };
+    let step_forward = direction * least.max(wish_len - achieved);
     // Up.
     let mut up = up_dir * step_height;
     if let Some(hit) = query.sweep(&shape.capsule(feet), up) {
@@ -512,7 +545,7 @@ pub fn walk_stairs(
     if across.length_squared() < 1.0e-8 {
         return None;
     }
-    let progress = steep.iter().any(|n| {
+    let progress = steep.iter().chain(&walkable).any(|n| {
         let d = (up_dir * n.dot(up_dir) - *n).normalize_or_zero();
         d.dot(step_forward.normalize()) > std::f32::consts::FRAC_1_SQRT_2
             && d.dot(across) > 0.05 * step_forward.length()

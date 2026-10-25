@@ -1,12 +1,21 @@
 id	value	why
 tunnel.wall	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 tunnel.body	3	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+tunnel.door	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 penetration.max	0.972	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 penetration.median	0.077	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 slope.limit	12.5	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+slope.speed	0.001	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 step.ground	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+step.building	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+step.prop	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+step.rock	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 stick.slope	54	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 stick.stair	27	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+stair.up	0.294	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+stair.hop	15	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+stair.down	0.001	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+door.hop	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 ceiling.depth	0.972	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 ceiling.speed	5.5	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 gravity.landing	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
@@ -16,7 +25,12 @@ jump.coyote	0.1	seeded from today's walker at 4151fe44 (2026-10-24), the first s
 jump.buffer	0.15	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 landing.delay	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 landing.bounce	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+landing.speed	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 input.first_tick	1	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+accel.data	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+turn.data	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+data.kinds	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+air.control	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 push.overlap	0.592	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 push.share	0.799	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 push.fixed	0.2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run

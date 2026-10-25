@@ -181,6 +181,9 @@ pub struct Bodies {
 
 /// How many rounds of pushing a tick takes (docs/controller.md, step 6).
 const PUSH_ROUNDS: usize = 4;
+/// How much higher than its floor's own slope a walking body's move may lift it before it is
+/// put back on the floor, m: the solver's press into the floor is less.
+const LIFT_M: f32 = 1.0e-3;
 
 impl Bodies {
     /// Places a body of a kind with its feet at a point, facing a level way.
@@ -381,6 +384,28 @@ fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, dt: f32) -> 
     approach(current, wish * top, rate * dt)
 }
 
+/// A body's velocity with nothing into what it met. On the ground, what it can stand on and
+/// what is under its bottom sphere's centre (Jolt's supporting volume) is floor or the edge of
+/// a step it stands on, not a wall: the velocity is already along the floor, and taking a
+/// step's edge out of it would slow the body at every step and lift it there.
+fn unblocked(mut velocity: Vec3, on_ground: bool, body: &Body, shape: &Shape) -> Vec3 {
+    let bottom = body.feet + shape.up * shape.radius;
+    for t in &body.active {
+        let c = &t.contact;
+        let under = (c.at - bottom).dot(shape.up) < -shape.padding;
+        if on_ground && (under || !shape.too_steep(c.normal)) {
+            continue;
+        }
+        if t.met || c.distance < shape.padding {
+            let into = (velocity - c.velocity).dot(c.normal);
+            if into < 0.0 {
+                velocity -= c.normal * into;
+            }
+        }
+    }
+    velocity
+}
+
 /// One body's tick: velocity, collide and slide, stick, step, ground state (Jolt's
 /// `ExtendedUpdate`, with our velocity, jump and water rules).
 fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: f32) {
@@ -428,9 +453,13 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let mut feet = slide::move_shape(start, wanted, dt, query, &shape, &mut body.active);
     let (mut support, mut normal) = slide::support(&mut body.active, wanted, &shape, feet);
     let rising = (feet - start).dot(up) / dt > 1.0e-6;
-    if was_supported
-        && !support.supported()
-        && !rising
+    // Jolt sticks a body that left its floor and is not moving up. One walking on the ground
+    // whose move rose is put back on its floor too (Unreal's floor kept under a walking body):
+    // slid up the round of an edge, it stands over the edge, not on it.
+    let fell_off = was_supported && !support.supported() && !rising;
+    let floor_rise = along_floor(level, body.normal, up).dot(up) * dt;
+    let rose = standing && (feet - start).dot(up) > floor_rise.max(0.0) + LIFT_M;
+    if (fell_off || rose)
         && !jump
         && !swimming
         && let Some(stuck) = slide::stick_to_floor(feet, k.stick_m, query, &shape)
@@ -461,36 +490,34 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     // Perched on an edge too steep to stand on, over walkable floor within the stick distance
     // (Unreal's perch): standing.
     if matches!(support, Support::OnSteepGround) && !rising && !swimming {
-        let probe = Capsule {
-            a: feet + up * k.radius,
-            b: feet + up * k.radius,
-            radius: 0.02,
-        };
-        let down = -up * (k.radius + k.stick_m);
-        if let Some(hit) = query.sweep(&probe, down)
-            && !shape.too_steep(hit.contact.normal)
+        if let Some(floor) = slide::floor_below(feet, k.stick_m, query, &shape)
+            && !shape.too_steep(floor.normal)
         {
-            (support, normal) = (Support::OnGround, hit.contact.normal);
+            (support, normal) = (Support::OnGround, floor.normal);
         }
+    } else if support == Support::OnGround
+        && let Some(floor) = slide::floor_below(feet, k.stick_m, query, &shape)
+        && !shape.too_steep(floor.normal)
+    {
+        // The floor it walks along and is carried along is the one under its centre, not the
+        // round of an edge its foot rests on (Unreal's floor; Jolt's surface normal): taken for
+        // a ramp, that round lifts the body off the step's top and launches it.
+        normal = floor.normal;
     }
     body.support = support;
     body.feet = feet;
 
-    let mut velocity = if support == Support::OnGround && !jump {
+    let velocity = if support == Support::OnGround && !jump {
         along_floor(level, normal, up)
     } else {
         level + up * rise_end
     };
-    for t in &body.active {
-        let c = &t.contact;
-        if t.met || c.distance < shape.padding {
-            let into = (velocity - c.velocity).dot(c.normal);
-            if into < 0.0 {
-                velocity -= c.normal * into;
-            }
-        }
-    }
-    body.velocity = velocity;
+    body.velocity = unblocked(
+        velocity,
+        support == Support::OnGround && !jump,
+        body,
+        &shape,
+    );
     body.ground = if swimming {
         Ground::Swimming
     } else {
