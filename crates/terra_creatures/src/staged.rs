@@ -504,6 +504,9 @@ struct Spawn {
     /// Flames kept burning at its foot, so tall, so wide and so hot (`fire::Kindled`), as on
     /// a campfire or a brazier set on the ground.
     burns: Option<[f32; 3]>,
+    /// How high over its foot those flames stand, in its model's metres: a torch's head on
+    /// its staff (the fire sheet's torch, docs/fire-module.md). On its foot when not given.
+    burns_up: Option<f32>,
 }
 
 /// The figure called a name, if there is one.
@@ -584,13 +587,25 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     if let Some([tall, wide, heat]) = asked.burns {
         // On the campfire's logs, the one hearth's model there is to stage a fire on.
         let logs = terra_world::fire::Logs::CAMPFIRE;
-        entity.insert(terra_world::fire::Kindled {
+        let kindled = terra_world::fire::Kindled {
             tall,
             wide,
             heat,
             logs,
             body: terra_world::fire::Body::Marched,
-        });
+        };
+        match asked.burns_up {
+            Some(up) => {
+                entity.with_child((
+                    Name::new(format!("Staged: {}'s flames", asked.name)),
+                    kindled,
+                    Transform::from_xyz(0.0, up, 0.0),
+                ));
+            }
+            None => {
+                entity.insert(kindled);
+            }
+        }
     }
     if !asked.wears.is_empty() {
         entity.insert(character::Outfit(
