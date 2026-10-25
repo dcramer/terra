@@ -805,6 +805,7 @@ pub(super) fn light(
     mut fog: ResMut<super::fog::Glows>,
     tier: Res<super::BreathTier>,
     sky_light: Option<Res<crate::skylight::SkyLight>>,
+    indoor_sky: Option<Res<crate::scene::IndoorSky>>,
 ) {
     let t = time.elapsed_secs_wrapped();
     let was: Vec<Was> = drawn
@@ -830,7 +831,9 @@ pub(super) fn light(
     wants.extend(strikes(&blazes, &drawn.jets, t, *tier));
     wants.extend(lit(&blazes, t, *tier));
     let shown = choose(wants, eye, &was, shadowed(*quality));
-    let night = sky.as_ref().map_or(0.0, |sky| sky.night);
+    // In a room shut off from the sky the fires burn as by night: nothing outshines them (D488).
+    let air_lit = indoor_sky.map_or(1.0, |s| s.0);
+    let night = crate::indoor::fires_night(sky.as_ref().map_or(0.0, |sky| sky.night), air_lit);
     let twilight = sky.as_ref().map_or(0.0, |sky| sky.twilight);
     let sky_light = sky_light.map_or(0.0, |lit| lit.brightness);
     let mut told = [[0.0f32; 4]; GLOWS];

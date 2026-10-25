@@ -975,11 +975,11 @@ const WOODED_NIGHT_EV: f32 = 3.5;
 const SNOW_DARK_ADAPTS: f32 = 0.6;
 
 /// The camera's exposure for the hour's `key`, with the sky so `open` over the eye, on a world
-/// that sees far or not, so far into the night and `outdoors`: the key in a forest by day; under
-/// trees opened by night; opened up in the open air of a far-seeing world, less by night.
+/// that sees far or not, so far into the night and `outdoors` (shut off, the night's, D488): the
+/// key in a forest by day; under trees opened by night; out in a far-seeing world's air, less.
 fn open_exposure(key: f32, open: f32, far_seeing: bool, night: f32, outdoors: f32) -> f32 {
     let night = night.clamp(0.0, 1.0);
-    let wooded = key - wooded_night_ev(open, night, outdoors);
+    let wooded = crate::indoor::key(key, outdoors) - wooded_night_ev(open, night, outdoors);
     if !far_seeing {
         return wooded;
     }

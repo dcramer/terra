@@ -47,6 +47,7 @@ pub mod hable;
 pub mod haze_start;
 pub mod headless;
 pub mod horizon;
+pub mod indoor;
 #[cfg(test)]
 mod joint_cracks;
 pub mod lakes;

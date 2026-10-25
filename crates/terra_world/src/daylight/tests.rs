@@ -59,21 +59,23 @@ fn the_eye_opens_up_in_the_open_of_a_far_seeing_world_and_nowhere_else() {
 fn by_night_a_closed_room_keeps_the_key_while_the_eye_opens_under_the_trees() {
     let key = 11.8;
     // Both hide the sky (`open` low), at midnight: under the crowns, outdoors, the eye opens
-    // the whole canopy's stops; in a closed room (D485, `IndoorSky` 0) it keeps the key, the
-    // room's dark meant and its fires setting the eye.
+    // the whole canopy's stops; in a closed room (D485, `IndoorSky` 0) it keeps the room's own
+    // key (D488), the room's dark meant and its fires setting the eye.
     for far_seeing in [false, true] {
         let wood = open_exposure(key, 0.1, far_seeing, 1.0, 1.0);
         assert!((key - wood - WOODED_NIGHT_EV).abs() < 1e-4, "{wood}");
-        assert_eq!(open_exposure(key, 0.1, far_seeing, 1.0, 0.0), key);
+        let room = crate::indoor::key(key, 0.0);
+        assert_eq!(open_exposure(key, 0.1, far_seeing, 1.0, 0.0), room);
         assert_eq!(wooded_night_ev(0.1, 1.0, 0.0), 0.0);
         // A room open to the sky through its door opens the eye less than the wood, and
-        // smoothly as the eye steps out.
-        let mut last = key;
+        // smoothly as the eye steps out: from the room's key to the wood's, no stop at once.
+        let mut last = room;
         for k in 0..=20 {
             let now = open_exposure(key, 0.1, far_seeing, 1.0, k as f32 / 20.0);
-            assert!(now <= last && last - now < 0.3, "{last} then {now}");
+            assert!((last - now).abs() < 0.3, "{last} then {now}");
             last = now;
         }
+        assert_eq!(last, wood);
     }
 }
 

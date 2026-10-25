@@ -30,6 +30,7 @@ impl Plugin for WorldPlugin {
         skylight::plugin(app);
         sky_occlusion::plugin(app);
         daylight::plugin(app);
+        crate::indoor::plugin(app);
         climate::plugin(app);
         wind::plugin(app);
         weather::plugin(app);
