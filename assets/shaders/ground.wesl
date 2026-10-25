@@ -129,9 +129,16 @@ const SNOW_FULL_M: f32 = 0.5;
 const HORIZON_SOFT: f32 = 0.008;
 // Lying snow, linear: short of fresh snow's albedo of 0.9, settled and dusted with what falls
 // from the trees, and a little cool: the sun's warm light on it read peach. No bluer than it
-// is green, or a low sun's red and the sky's blue on it make it magenta (the tundra's review).
+// is green, or a low sun's red and the sky's blue on it make it magenta (the tundra's review);
+// and less red than green, as ice takes red (Warren 1982: snow's albedo falls toward the red),
+// or the forest's shaded snow read lilac (the looks review, hue 236-255 at noon, 300 at dusk).
 // At 0.7 the forest's snow under a deck read grey beside the haze (weather round 2).
-const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
+const SNOW: vec3<f32> = vec3<f32>(0.85, 0.89, 0.89);
+// What of the sky's light shaded snow gives back, by channel: light that comes back from
+// shaded snow has wandered deep in the pack, where the ice takes red (the blue of a hole dug
+// in snow), so snow in shade is white-blue and in the sun warm white, as photographs and Sons
+// of the Forest's snow show, never the sky's averaged lilac.
+const SNOW_SKY: vec3<f32> = vec3<f32>(0.84, 1.0, 1.0);
 // Fresh fallen oak leaves, linear: a warm mid brown, lighter and redder than the floor's
 // old umber litter.
 const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
@@ -2157,6 +2164,7 @@ fn fragment(
     colour = mix(colour, RIME, rime * 0.5);
     let sparkle = 0.94 + 0.12 * noise(world * 9.0 + 3.0);
     colour = mix(colour, SNOW * sparkle, snow);
+    pbr_input.diffuse_occlusion *= mix(vec3<f32>(1.0), SNOW_SKY, snow);
     pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.8, snow);
     // The snow's own surface: drifted in soft swells a metre or two across, and grained finer.
     let geometric = normalize(in.world_normal);

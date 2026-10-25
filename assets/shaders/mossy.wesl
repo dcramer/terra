@@ -32,7 +32,7 @@ struct RockSnow {
 @group(constants::MATERIAL_BIND_GROUP) @binding(104)
 var<uniform> rock_snow: RockSnow;
 // As ground.wesl's lying snow.
-const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
+const SNOW: vec3<f32> = vec3<f32>(0.85, 0.89, 0.89);
 // A fern's fronds dead in winter, linear: bracken's rust-brown gone dull and dark, as the
 // fronds lie in a snowy wood (winter round 13's judge: "the fern clump is dark summer green").
 const WITHERED: vec3<f32> = vec3<f32>(0.16, 0.075, 0.03);

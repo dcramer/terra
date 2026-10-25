@@ -66,7 +66,7 @@ const SNOW_BOUNCE: Vec3 = Vec3::new(0.45, 0.47, 0.52);
 /// lights the snow round a shaded thing as it lights the rest. At SNOW_BOUNCE, under a full
 /// deck the forest's trunks took a third of the light from the snow below them that a side
 /// facing snow of 0.8 takes (weather round 4).
-const SNOW_ALBEDO: Vec3 = Vec3::new(0.87, 0.88, 0.88);
+const SNOW_ALBEDO: Vec3 = Vec3::new(0.85, 0.89, 0.89);
 
 /// Bevy filters a generated environment map into its diffuse and specular light every frame
 /// it is there, nearly two milliseconds of the GPU's time, though the sky is painted again only

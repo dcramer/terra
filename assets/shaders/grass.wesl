@@ -80,7 +80,7 @@ const BLADES_PRESSED_M: f32 = 0.25;
 // How far under the snow's surface, metres, a blade buried whole is drawn.
 const BURIED_BELOW_M: f32 = 0.05;
 // Snow caught on what still stands through it, linear, as the ground's snow.
-const SNOW: vec3<f32> = vec3<f32>(0.87, 0.88, 0.88);
+const SNOW: vec3<f32> = vec3<f32>(0.85, 0.89, 0.89);
 // Rime on grass's blades in a hard frost, linear.
 const RIME: vec3<f32> = vec3<f32>(0.5, 0.53, 0.57);
 
