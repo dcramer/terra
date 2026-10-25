@@ -78,6 +78,8 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("assets/data/life.ron", &["terra_town"]),
     // The sword-and-shield move set, read by the fight's tests.
     ("assets/data/moves/", &["terra_motion"]),
+    // The movers' kinds (D53), read by the mover and the controller course.
+    ("assets/data/movers.ron", &["terra_motion"]),
     // The climate the land's places are found in.
     ("assets/data/climate.ron", &["terra_land"]),
 ];
