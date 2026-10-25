@@ -16,9 +16,10 @@ use terra_survival::inventory::{self, Belongings, Broke, Gear, Items};
 use terra_survival::kinds::ToolDef;
 use terra_survival::skills::{Did, ONCE, Skill, Skills};
 use terra_survival::told::Told;
-use terra_survival::vitals::Vitals;
+use terra_survival::vitals::{self, Vitals};
 use terra_walker::controls::Action;
 use terra_walker::intent::Intent;
+use terra_walker::movement::Fell;
 use terra_walker::{Downed, Player, Stamina, Stance, View};
 use terra_world::tick::Sim;
 
@@ -81,7 +82,7 @@ pub fn plugin(app: &mut App) {
             FixedUpdate,
             (
                 (swing, guard).chain().in_set(Sim::Act),
-                take_blows.in_set(Sim::Resolve),
+                (take_blows, take_falls).in_set(Sim::Resolve),
             ),
         );
 }
@@ -303,6 +304,27 @@ fn take_blows(
     }
 }
 
+/// A player's fall takes its share of their health (D476): no guard, roll or leather takes
+/// any of it.
+fn take_falls(
+    mut fell: MessageReader<Fell>,
+    mut players: Query<&mut Vitals, (With<Player>, Without<Downed>)>,
+    mut hurt: MessageWriter<Hurt>,
+) {
+    for &Fell { body, harm } in fell.read() {
+        let Ok(mut vitals) = players.get_mut(body) else {
+            continue;
+        };
+        let taken = harm * vitals::FULL;
+        vitals.hurt(taken);
+        hurt.write(Hurt {
+            player: body,
+            amount: taken,
+        });
+        info!("Fell for {taken:.0}; health {:.0}.", vitals.health);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,6 +364,31 @@ mod tests {
 
     fn health_lost(((vitals, _), _): ((Vitals, Stamina), Option<f32>)) -> f32 {
         Vitals::default().health - vitals.health
+    }
+
+    #[test]
+    fn a_fall_takes_its_share_of_health_and_a_fatal_one_all_of_it() {
+        let mut world = world();
+        world.init_resource::<Messages<Fell>>();
+        let (hurt, killed) = (
+            test_player(&mut world, GROUND),
+            test_player(&mut world, GROUND + Vec3::X * 3.0),
+        );
+        world.write_message(Fell {
+            body: hurt,
+            harm: 0.25,
+        });
+        world.write_message(Fell {
+            body: killed,
+            harm: 1.0,
+        });
+        world.run_system_once(take_falls).unwrap();
+        let health = |world: &World, player| world.get::<Vitals>(player).unwrap().health;
+        let lost = Vitals::default().health - health(&world, hurt);
+        assert!((lost - 0.25 * vitals::FULL).abs() < 1e-3, "{lost}");
+        assert!(health(&world, killed) <= 0.0);
+        let told: Vec<_> = world.resource_mut::<Messages<Hurt>>().drain().collect();
+        assert_eq!(told.len(), 2);
     }
 
     #[test]

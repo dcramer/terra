@@ -19,6 +19,7 @@ fn standing(steer: Steer, action: Option<Action>) -> (World, Entity) {
     world.insert_resource(planet);
     world.init_resource::<flora::Obstacles>();
     world.init_resource::<Movers>();
+    world.init_resource::<Messages<Fell>>();
     let mut time = Time::<()>::default();
     time.advance_by(Duration::from_secs_f32(TICK));
     world.insert_resource(time);
@@ -101,6 +102,38 @@ fn deep_snow_and_mud_slow_a_walker_and_frozen_ground_does_not() {
 fn the_walks_speeds_are_a_mans() {
     let man = man();
     assert_eq!((JOG_SPEED, SPRINT_SPEED), (man.jog, man.sprint));
+}
+
+/// A player let fall onto the ground is told hurt by the share its kind's numbers give the
+/// speed it landed at (D476), once; one let fall from a step's height is not.
+#[test]
+fn a_long_fall_is_told_hurt_and_a_short_one_not() {
+    let fallen = |height: f32| {
+        let (mut world, player) = standing(Steer::default(), None);
+        let ground = world.get::<Transform>(player).unwrap().translation;
+        world.get_mut::<Transform>(player).unwrap().translation =
+            ground + ground.normalize() * height;
+        let mut fell = Vec::new();
+        for _ in 0..192 {
+            world.run_system_once(walk).unwrap();
+            fell.extend(world.resource_mut::<Messages<Fell>>().drain());
+        }
+        assert!(fell.iter().all(|f| f.body == player));
+        fell.iter().map(|f| f.harm).collect::<Vec<f32>>()
+    };
+    assert!(fallen(0.5).is_empty());
+    // 25 m at the walk's gravity lands at about 28 m/s, past a man's fatal 25.
+    let fell = fallen(25.0);
+    assert_eq!(fell.len(), 1, "{fell:?}");
+    assert!(fell[0] >= 1.0, "{fell:?}");
+    let (onset, fatal) = (man().fall_onset, man().fall_fatal);
+    let landed = libm::sqrtf(2.0 * GRAVITY * 8.0);
+    assert!(landed > onset && landed < fatal);
+    let fell = fallen(8.0);
+    assert!(
+        fell.len() == 1 && fell[0] > 0.0 && fell[0] < 1.0,
+        "{fell:?}"
+    );
 }
 
 /// The walk drives the mover: held forward for two seconds the player jogs over the ground,

@@ -20,9 +20,12 @@
 //!   root or from a slope's high side, or no taller and stepped onto (criterion 5).
 //! - `water`: a lake walked into, waded, swum across and walked out of, straight and at an
 //!   angle to its shores, and a body floated to rest (criterion 17, D74).
+//! - `fall`: falls that must not hurt (a jump, a step, a stair, a short drop), drops that
+//!   must, onto level ground and a slope, and into deep water (D476).
 //! - `far`: the same walks on a world 30 km across, where f32 is 2 mm fine (criterion 22, D482).
 
 mod data;
+mod fall;
 mod far;
 pub mod field;
 mod flora;
@@ -76,6 +79,8 @@ pub trait Mover {
     fn facing(&self, id: u32) -> Option<Vec3>;
     /// How fast a body was falling when it landed in the last tick, if it landed in it.
     fn landed(&self, id: u32) -> Option<f32>;
+    /// The share of its health a body's landing in the last tick took (D476), 0 if none.
+    fn fall(&self, id: u32) -> f32;
     /// Ticks its bodies on so many threads from now on, if it can share them out; one
     /// unless told.
     fn threads(&mut self, _threads: usize) {}
@@ -100,6 +105,8 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     let mut measures = runs::score(&new);
     measures.extend(data::score(&new));
     measures.extend(far::score(&new));
+    let (fall, deepest_fall) = fall::score(&new);
+    measures.extend(fall);
     let (sources, deepest) = sources::score(&new);
     measures.extend(sources);
     let (stairs, deeper) = stairs::score(&new);
@@ -108,7 +115,11 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(flora);
     let (water, deepest_water) = water::score(&new);
     measures.extend(water);
-    let deepest = deepest.max(deeper).max(deepest_flora).max(deepest_water);
+    let deepest = deepest
+        .max(deeper)
+        .max(deepest_flora)
+        .max(deepest_water)
+        .max(deepest_fall);
     // What a body met besides the ground counts toward how deep it ever went.
     for m in measures.iter_mut().filter(|m| m.id == "penetration.max") {
         m.value = m.value.max(deepest);

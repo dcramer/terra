@@ -51,8 +51,18 @@ const MEMO_MOST: usize = 1024;
 
 pub fn plugin(app: &mut App) {
     app.init_resource::<Movers>()
+        .add_message::<Fell>()
         .add_systems(FixedUpdate, walk.in_set(Sim::Act));
     crate::stepping::plugin(app);
+}
+
+/// A body landed from a fall that hurt it (D476): the share of its health the landing took,
+/// by the speed it met the floor at (`mover::Body::fall`, its kind's numbers); 1 or more is
+/// fatal. What it costs is the gameplay's to take (`terra_creatures::combat`).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Fell {
+    pub body: Entity,
+    pub harm: f32,
 }
 
 /// The players as the mover keeps them, each by an ID it is given when first walked, and what
@@ -371,6 +381,7 @@ fn walk(
     mut movers: ResMut<Movers>,
     mut commands: Commands,
     mut players: Query<Walked, With<Player>>,
+    mut fell: MessageWriter<Fell>,
 ) {
     let dt = time.delta_secs();
     if dt <= 0.0 {
@@ -511,6 +522,12 @@ fn walk(
             motion.velocity = Vec3::ZERO;
             motion.rising = 0.0;
             continue;
+        }
+        if body.fall > 0.0 {
+            fell.write(Fell {
+                body: entity,
+                harm: body.fall,
+            });
         }
         if body.jumped
             && let Some(mut stamina) = stamina

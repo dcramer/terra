@@ -29,6 +29,11 @@ jump.buffer	0.15	seeded from today's walker at 4151fe44 (2026-10-24), the first 
 landing.delay	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 landing.bounce	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 landing.speed	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+fall.harmless	0	D476 fall damage: the fall rows' first numbers (fall.harmless, fall.speeds, fall.rise, fall.normal, fall.water)
+fall.speeds	0	D476 fall damage: the fall rows' first numbers (fall.harmless, fall.speeds, fall.rise, fall.normal, fall.water)
+fall.rise	0	D476 fall damage: the fall rows' first numbers (fall.harmless, fall.speeds, fall.rise, fall.normal, fall.water)
+fall.normal	0	D476 fall damage: the fall rows' first numbers (fall.harmless, fall.speeds, fall.rise, fall.normal, fall.water)
+fall.water	0	D476 fall damage: the fall rows' first numbers (fall.harmless, fall.speeds, fall.rise, fall.normal, fall.water)
 input.first_tick	1	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 accel.data	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 turn.data	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser

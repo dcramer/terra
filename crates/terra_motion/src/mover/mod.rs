@@ -73,6 +73,11 @@ pub struct Kind {
     pub swim_depth: f32,
     pub float_depth: f32,
     pub water_drag: f32,
+    /// A fall hurts by the speed it meets the floor at along the floor's normal (D476): not
+    /// at all below `fall_onset`, the whole of a body's health at `fall_fatal`, m/s. Water deep
+    /// enough to swim in breaks a fall.
+    pub fall_onset: f32,
+    pub fall_fatal: f32,
 }
 
 impl Kind {
@@ -98,6 +103,17 @@ impl Kind {
             }
         }
         curve[curve.len() - 1].1
+    }
+
+    /// The share of a body's health a landing at a speed into the floor takes (D476): none
+    /// below the onset, all of it at the fatal speed and past it, and between by the fall's
+    /// energy, so the harm grows with the height fallen past the onset's.
+    pub fn fall_harm(&self, into: f32) -> f32 {
+        let (onset, fatal) = (self.fall_onset, self.fall_fatal.max(self.fall_onset + 1e-3));
+        if into <= onset {
+            return 0.0;
+        }
+        ((into * into - onset * onset) / (fatal * fatal - onset * onset)).min(1.0)
     }
 }
 
@@ -157,8 +173,12 @@ pub struct Body {
     pub ground: Ground,
     /// The floor's normal while grounded.
     pub normal: Vec3,
-    /// How fast it was falling when it landed this tick (open question 1, fall damage).
+    /// How fast it was falling when it landed this tick.
     pub landed: Option<f32>,
+    /// The share of its health that landing took (D476, [`Kind::fall_harm`]): by the speed it
+    /// met the floor at along the floor's normal, none where water deep enough to swim in
+    /// broke the fall. 1 or more is fatal.
+    pub fall: f32,
     /// How far a step raised it this tick: what is shown runs it down to nothing (presentation,
     /// docs/controller.md), the mover never.
     pub stepped: f32,
@@ -239,6 +259,7 @@ impl Bodies {
             ground: Ground::Airborne,
             normal: Vec3::ZERO,
             landed: None,
+            fall: 0.0,
             stepped: 0.0,
             jumped: false,
             support: Support::InAir,
@@ -355,6 +376,20 @@ fn steps(bodies: &mut [Body], from: usize, before: &Before, world: &World, dt: f
     }
 }
 
+/// The share of its health a body's landing at a speed takes (D476): by what of its velocity
+/// as it met the floor goes into the floor along its normal (its level way down a slope does
+/// not), none where the water over where it landed is deep enough to swim in.
+fn fall(body: &Body, level: Vec3, speed: f32, world: &World) -> f32 {
+    let k = &body.kind;
+    let from_centre = (body.position - world.centre.as_dvec3()).length() as f32;
+    let depth = (world.water)(body.feet).map_or(0.0, |surface| surface - from_centre);
+    if depth > k.swim_depth * k.height {
+        return 0.0;
+    }
+    let met = level - body.up * speed;
+    k.fall_harm((-met.dot(body.normal)).max(0.0))
+}
+
 /// A body put at a point at a velocity, its up, contacts and ground state read there.
 fn settle(body: &mut Body, position: DVec3, velocity: Vec3, world: &World) {
     let up = up_at(position, world).unwrap_or(body.up);
@@ -364,7 +399,13 @@ fn settle(body: &mut Body, position: DVec3, velocity: Vec3, world: &World) {
         .facing
         .reject_from(up)
         .normalize_or(up.any_orthonormal_vector());
-    (body.landed, body.stepped, body.jumped, body.buffer) = (None, 0.0, false, 0.0);
+    (
+        body.landed,
+        body.fall,
+        body.stepped,
+        body.jumped,
+        body.buffer,
+    ) = (None, 0.0, 0.0, false, 0.0);
     let shape = shape(body, 1.0 / 64.0);
     slide::contacts_at(Vec3::ZERO, world.ground, &shape, &mut body.active);
     let (support, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, Vec3::ZERO);
@@ -652,8 +693,16 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     // what it gained over the height it dropped in it (exact under constant gravity).
     let dropped = (start - feet).dot(up).max(0.0);
     let falling = (-vertical).max(0.0);
-    body.landed = (was_airborne && body.ground == Ground::Grounded)
+    let landed = (was_airborne && body.ground == Ground::Grounded)
         .then(|| libm::sqrtf(falling * falling + 2.0 * g * dropped));
+    landing(body, landed, level, jump, world, dt);
+}
+
+/// What a tick's end keeps of its landing and its jump: the speed it landed at and what the
+/// landing hurt, its time in the air (coyote time) and its jump's buffer.
+fn landing(body: &mut Body, landed: Option<f32>, level: Vec3, jump: bool, world: &World, dt: f32) {
+    body.landed = landed;
+    body.fall = landed.map_or(0.0, |speed| fall(body, level, speed, world));
     body.jumped = jump;
     if jump {
         (body.left_by_jump, body.buffer) = (true, 0.0);

@@ -20,7 +20,7 @@ const GRADE_STEP: f32 = 5.0;
 
 /// A second kind, a heavier, slower body, every number these cases read unlike the man's. It is
 /// the course's alone: no second body walks the mover in the game yet.
-fn second(man: &Kind) -> Kind {
+pub(super) fn second(man: &Kind) -> Kind {
     Kind {
         radius: 0.5,
         height: 2.4,
@@ -39,6 +39,8 @@ fn second(man: &Kind) -> Kind {
             (45.0, 0.45),
         ],
         jump_speed: 4.5,
+        fall_onset: 10.0,
+        fall_fatal: 20.0,
         ..*man
     }
 }

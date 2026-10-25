@@ -23,6 +23,11 @@
 //   swim_depth               water deeper than this fraction of its height is swum (D74)
 //   float_depth              afloat, this fraction of its height is under the surface
 //   water_drag               the water's drag on it, 1/s
+//   fall_onset, fall_fatal   a fall hurts by the speed it meets the floor at along the floor's
+//                            normal (D476): not below the onset, all its health at the fatal
+//                            speed, by the fall's energy between, m/s; water deep enough to
+//                            swim in breaks it. D476's placeholders: 12 (a drop of 4.5 m at
+//                            today's gravity of 16) and 25 (19.5 m)
 {
     "Man": (
         radius: 0.3,
@@ -48,5 +53,7 @@
         swim_depth: 0.7,
         float_depth: 0.75,
         water_drag: 2.0,
+        fall_onset: 12.0,
+        fall_fatal: 25.0,
     ),
 }

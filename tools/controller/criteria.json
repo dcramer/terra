@@ -449,7 +449,82 @@
     "pass": true
    },
    "unit": "every drop's within a tick of gravity of sqrt(2gh)",
-   "source": "docs/controller.md criterion 12; open question 1",
+   "source": "docs/controller.md criterion 12; D476",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "fall.harmless",
+   "noticed": 5,
+   "notice": "a jump, a step or a flight of stairs down, or a short drop hurts",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "harm (shares of health) summed over a jump in place, steps 0.1-0.8 and 1.5 m down, a flight of 0.3 m stairs and drops short of the onset, two kinds",
+   "source": "D476; docs/controller.md, falls",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "fall.speeds",
+   "noticed": 4,
+   "notice": "a fall a little short of the kind's onset hurts, one a little past it does not, or one past the fatal speed leaves the body alive",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 8 drops 3% either side of the onset and the fatal speed, two kinds, judged wrong",
+   "source": "D476; docs/controller.md, falls",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "fall.rise",
+   "noticed": 3,
+   "notice": "a longer fall hurts less than a shorter one",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "steps of drops 1-30 m by 0.5 m, two kinds, where the harm falls, or does not rise between the onset and the fatal speed",
+   "source": "D476; docs/controller.md, falls",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "fall.normal",
+   "noticed": 2,
+   "notice": "a fall onto a slope hurts as much as one onto level ground, though the slope takes some of it",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 4 drops onto a 40 deg slope judged wrong: 5% past the onset harmless, 3% past the fatal speed hurt but alive",
+   "source": "D476; docs/controller.md, falls",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "fall.water",
+   "noticed": 4,
+   "notice": "a fall into water deep enough to swim in hurts",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "harm (shares of health) summed over drops of 5-30 m into water 6 m deep and just deep enough to swim in, two kinds",
+   "source": "D476; docs/controller.md, falls",
    "check": {
     "by": "course"
    },

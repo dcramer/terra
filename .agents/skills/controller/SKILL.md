@@ -36,6 +36,8 @@ Flights and a doorway's sill are `course/stairs.rs`: the ground's steps 0.1-0.5 
 
 The kind-data rows (`accel.data`, `turn.data`, `air.control`, `slope.speed`, `landing.speed`, `data.kinds`) are `course/data.rs`, run for a man and a test-only second kind; a mover reports facing and landings through `Mover::facing` and `Mover::landed`.
 
+Falls (`fall.harmless`, `fall.speeds`, `fall.rise`, `fall.normal`, `fall.water`, D476) are `course/fall.rs`, for a man and the second kind: the mover reports a landing's harm (`Mover::fall`, `Body::fall`, by `Kind::fall_harm` of the speed into the floor along its normal), checked against `sqrt(2gh)` and the kind's `fall_onset`/`fall_fatal`. The game takes it as `terra_walker::movement::Fell` -> `terra_creatures::combat::take_falls`.
+
 What stops a body besides the ground (`step.building`, `step.prop`, `step.rock`, `tunnel.door`) is `course/sources.rs`: a fixture's `obstacles` (`mover::shapes`: turned boxes for a base's cubes, a door's leaf and a prop; `terra_core::Solid` pieces for a rock), answered apart from its ground field. A step is as high as named at its face, where it is climbed: a box laid level there, a rock's crest lowered by the world's curve at its middle.
 
 Water (`swim.shore`, `swim.wade`, `swim.float`, criterion 17) is `course/water.rs`: a lake with smooth shores to 12 and 25 deg walked into, waded, swum across and out, straight and 25 and 45 deg off, and a body floated to rest; water is a medium the mover reads at the feet (`World.water`), never a contact.

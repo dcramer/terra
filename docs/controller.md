@@ -52,6 +52,7 @@ Each kind's file holds these numbers. A man's stand-ins are shown in brackets: t
 - **Stick-to-floor distance** (0.5 m, Jolt's), predictive contact distance (0.1 m) and padding (2 cm).
 - **Swimming**: swim depth as a fraction of height, and buoyancy.
 - **Stamina** costs of sprinting, jumping and swimming (D61; jumping costs 8 today).
+- **Falls** (D476): the landing speed into the floor a fall starts to hurt at, and the one it kills at.
 - **Pushing**: which kinds push which, taken from the answer to open question 4.
 
 Gravity's strength belongs to the world, not the body (D63 leaves its value open).
@@ -84,7 +85,8 @@ These are `tools/controller/criteria.json` (D457), in D452's shape: a row for ea
 | 9 | Gravity toward the centre | At the poles, the equator and in a tunnel, a body lands where the radial line meets the ground (within 1 cm), standing upright to within 0.5 deg | D63 |
 | 10 | Jump | Apex within 1 cm of v²/2g, coyote time and buffer each kept to within one tick | Our data; the platformer convention |
 | 11 | Air control | Acceleration in the air within 2% of the kind's fraction | Our data |
-| 12 | Landing | Grounded within one tick of touching ground, no bounce, landing speed reported (for open question 1) | Jolt ground states |
+| 12 | Landing | Grounded within one tick of touching ground, no bounce, landing speed reported | Jolt ground states |
+| 12b | Falls | No harm from a jump, a step, stairs or a drop short of the onset; harmed 3% past the onset, alive 3% short of the fatal speed and dead 3% past it; harm never falls with height; a slope takes its share by its normal; no harm into water deep enough to swim in (`course/fall.rs`) | D476 |
 | 13 | Input to motion | Velocity moves toward the input on the first tick after it is pressed | D180; movement.md stage 2 |
 | 14 | Acceleration and turn as data | Time to top speed and turn rate within one tick of the kind's data, and two kinds' files give two results | D136 |
 | 15 | Weighted pushing | Overlap under 5 cm after a tick, each body's share within 5% of its mass ratio, a fixed body unmoved, the player included | movement.md duel bar; open question 4 |
@@ -100,7 +102,7 @@ No Enshrouded movement numbers have been measured yet; combat's measurements are
 
 ## Open questions for the developers
 
-1. **Fall damage** (player.md). Does a long fall hurt? Recommended: damage above a landing speed of about 12 m/s (a fall of about 4.5 m at today's gravity), rising to death by about 25 m/s (about 20 m), with water breaking the fall. Open.
+1. **Fall damage**: decided, D476 (by landing speed). Built: a landing takes a share of the body's health by the speed it meets the floor at along the floor's normal (`Kind::fall_harm`, `mover::Body::fall`), none below the kind's `fall_onset`, all of it at `fall_fatal`, by the fall's energy between (so linear in the height fallen past the onset's); water deep enough to swim in (the kind's swim depth) breaks it. The numbers are D476's placeholders in movers.ron (12 and 25 m/s); the game takes the harm from the player's health as a blow's (`terra_walker::movement::Fell`, `terra_creatures::combat::take_falls`). Rows `fall.*`.
 2. **Climbing** (player.md lists it, without a design). Recommended: a ledge grab and a mantle now, and free climbing on stamina later if wanted. Open.
 3. **Swimming beyond D74**. The questions are how to swim at the surface and how to dive (look to dive, or keys for up and down), how fast, and how long breath lasts. Recommended: dive by looking and pressing forward, rise with jump; a swim speed about half the jog; about 30 s of breath at the start. Open.
 4. **Bodies blocking bodies** (movement.md question 4). Recommended: players and recruits push each other softly, and monsters push hard. Open.

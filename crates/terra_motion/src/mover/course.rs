@@ -91,6 +91,10 @@ impl Mover for Ours {
         self.0.get(id).and_then(|body| body.landed)
     }
 
+    fn fall(&self, id: u32) -> f32 {
+        self.0.get(id).map_or(0.0, |body| body.fall)
+    }
+
     fn threads(&mut self, threads: usize) {
         self.1 = vec![(); threads];
     }
