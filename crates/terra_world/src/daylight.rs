@@ -572,13 +572,14 @@ fn shine(
     mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     mut nightfall: ResMut<Nightfall>,
     air_scale: Option<Res<crate::air::AirScale>>,
-    (eye, planet, weather, cast, snow_opens, indoor_sky): (
+    (eye, planet, weather, cast, snow_opens, indoor_sky, snow_cover): (
         Query<&GlobalTransform, With<MainCamera>>,
         Option<Res<Planet>>,
         Option<Res<crate::weather::Weather>>,
         Option<Res<crate::weather::WeatherGrade>>,
         Option<Res<crate::weather::SnowOpens>>,
         Option<Res<crate::scene::IndoorSky>>,
+        Option<Res<crate::climate::SnowCover>>,
     ),
     mut clear_sky: Local<Option<f32>>,
 ) {
@@ -658,11 +659,14 @@ fn shine(
     // Bevy mixes the haze in after the exposure, at the brightness it is given: left at the
     // day's, by night it lit every shadow from within, the night only two stops under the day
     // (D310). So it dims as night falls, toward the moon's cold light.
-    let level =
-        (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark)) * libm::exp2f(wooded_night_ev(open, dark));
+    // Snow lying in the wood bounces the moon into the shade, so the eye opens less there.
+    let snowed = 1.0 - SNOW_DARK_ADAPTS * snow_cover.map_or(0.0, |c| c.0.clamp(0.0, 1.0));
+    let level = (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark))
+        * libm::exp2f(wooded_night_ev(open, dark * snowed));
     // Snow lying round the eye opens the camera about half a stop, so it reads white (D419).
     let snow_opens = snow_opens.map_or(0.0, |s| s.0);
-    let set = open_exposure(light.exposure, open, far_seeing, dark) + under.opens_ev() - snow_opens;
+    let set = open_exposure(light.exposure, open, far_seeing, dark * snowed) + under.opens_ev()
+        - snow_opens;
     for mut fog in &mut haze {
         let air_scale = air_scale
             .as_deref()
@@ -927,6 +931,10 @@ const OPEN_NIGHT_EV: f32 = 1.45;
 /// at 1.5, 2.5 and 3.5 stops the path measured 0.003, 0.013 and 0.053 and the crowns 0.009,
 /// 0.026 and 0.079. The haze, which Bevy mixes in after the exposure, is raised with it.
 const WOODED_NIGHT_EV: f32 = 3.5;
+/// How much less the eye opens under the crowns by night with the snow lying: at the full
+/// 3.5 stops the winter walk's night stood at mean sRGB 0.23, brighter than Sons of the
+/// Forest's moonlit frames (0.08-0.16); without them, 0.04.
+const SNOW_DARK_ADAPTS: f32 = 0.6;
 
 /// The camera's exposure for the hour's `key`, with the sky so `open` over the eye, on a world
 /// that sees far or not, so far into the night: the key in a forest, under trees and by night;
