@@ -878,5 +878,25 @@
         "bone": "clavicle_r"
       }
     ]
+  },
+  "Open_Slash": {
+    "of": "Keyed_Slash",
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "turn": {
+          "upperarm_l": 90
+        },
+        "in": [
+          0.1,
+          0.3
+        ],
+        "out": [
+          1.35,
+          1.75
+        ]
+      }
+    ]
   }
 }

@@ -17,6 +17,15 @@ it); `turn` lays a turn on that pose, a bone turned that many degrees about the 
 at its joint (+ to the left, seen from above) with what is below it. export_character.py bakes
 it on each body after its clips are aimed and twisted, so the part is exactly the held clip's
 on that body.
+
+A hold may also take `in` and `out` (clip seconds, `[from, to]` each): the part plays the `of`
+clip until `in`'s first second, eases to the held pose by its last, stays held, and eases back
+to the `of` clip over `out` (either may be left out, the part then held from the start or to
+the end). It is Unreal's Layered Blend per Bone with its weight driven by a curve, a Unity
+layer's weight: each held bone slerped in its own parent frame from the `of` clip's pose to the
+held one by a smoothstep weight, keyed every frame. The fight's light blows drop the guard so
+(the shield out to the left through the blow and back to the guard in its recovery, as
+Enshrouded's does, research/2026-10-25-shield-arm-in-a-swing.md).
 """
 
 import math
@@ -72,6 +81,39 @@ def _held_pose(arm, by_name, name, held):
     return out
 
 
+def _ease(t, window, rising):
+    """A smoothstep from 0 at a window's first second to 1 at its last (1 - that if falling)."""
+    lo, hi = window
+    s = 1.0 if t >= hi else 0.0 if hi <= lo or t <= lo else (t - lo) / (hi - lo)
+    s = s * s * (3.0 - 2.0 * s)
+    return s if rising else 1.0 - s
+
+
+def weight(t, held):
+    """How far a hold's part is held at `t` seconds into its clip: 1 throughout for a hold with
+    no `in` or `out`."""
+    w = 1.0
+    if "in" in held:
+        w *= _ease(t, held["in"], True)
+    if "out" in held:
+        w *= _ease(t, held["out"], False)
+    return w
+
+
+def _sampled(arm, action, bones, start, end):
+    """Each of `bones`' location, rotation and scale in its own frame at every frame of
+    `action` from `start` to `end`; a bone the action does not key at rest."""
+    pose = arm.pose.bones
+    _use(arm, action)
+    for n in bones:
+        pose[n].matrix_basis = Matrix.Identity(4)
+    out = {}
+    for f in range(start, end + 1):
+        bpy.context.scene.frame_set(f)
+        out[f] = {n: tuple(v.copy() for v in pose[n].matrix_basis.decompose()) for n in bones}
+    return out
+
+
 def bake(arm, actions, entries):
     """For each entry of a list with `of` and `hold`, a new clip by its name: `of` copied with
     each hold's part held. Returns the new actions (each also appended to `actions`), and
@@ -88,9 +130,16 @@ def bake(arm, actions, entries):
         src = by_name.get(entry["of"])
         if src is None:
             raise SystemExit(f"{name}: no clip {entry['of']} to make it from")
-        still = {}
+        still, eased = {}, []
         for held in holds:
-            still.update(_held_pose(arm, by_name, name, held))
+            at = _held_pose(arm, by_name, name, held)
+            if "in" in held or "out" in held:
+                eased.append((held, at))
+            else:
+                still.update(at)
+        fps = bpy.context.scene.render.fps / bpy.context.scene.render.fps_base
+        first, last = (int(round(f)) for f in src.frame_range)
+        played = _sampled(arm, src, {n for _, at in eased for n in at}, first, last) if eased else {}
         action = src.copy()
         old = by_name.get(name)
         if old is not None:
@@ -100,8 +149,22 @@ def bake(arm, actions, entries):
         for bag in _bags(action):
             for c in [c for c in bag if any(c.data_path.startswith(f'pose.bones["{n}"]') for n in still)]:
                 bag.remove(c)
+            for c in [c for c in bag if any(c.data_path.startswith(f'pose.bones["{n}"]') for _, at in eased for n in at)]:
+                bag.remove(c)
         _use(arm, action)
         start, end = (int(round(f)) for f in action.frame_range)
+        for held, at in eased:
+            for f in range(first, last + 1):
+                w = weight((f - first) / fps, held)
+                for n, (loc, rot, scale) in at.items():
+                    ploc, prot, pscale = played[f][n]
+                    pb = pose[n]
+                    pb.rotation_mode = "QUATERNION"
+                    pb.location = ploc.lerp(loc, w)
+                    pb.rotation_quaternion = prot.slerp(rot, w)
+                    pb.scale = pscale.lerp(scale, w)
+                    for channel in CHANNELS:
+                        pb.keyframe_insert(channel, frame=f, group=n)
         for n, (loc, rot, scale) in still.items():
             pb = pose[n]
             pb.rotation_mode = "QUATERNION"
@@ -112,8 +175,10 @@ def bake(arm, actions, entries):
         actions.append(action)
         made.append(action)
         parts = "; ".join(f"{h['bone']} and below at {h['clip']}'s first pose"
-                          + "".join(f", {b} turned {d:+.0f} deg" for b, d in h.get("turn", {}).items()) for h in holds)
-        print(f"HOLD {name}: {entry['of']} with {parts} ({len(still)} bones), frames {start} to {end}")
+                          + "".join(f", {b} turned {d:+.0f} deg" for b, d in h.get("turn", {}).items())
+                          + "".join(f", {k} {h[k][0]:.2f}-{h[k][1]:.2f} s" for k in ("in", "out") if k in h) for h in holds)
+        bones = len(still) + sum(len(at) for _, at in eased)
+        print(f"HOLD {name}: {entry['of']} with {parts} ({bones} bones), frames {start} to {end} at {fps:g} fps")
     ad.action, slot = keep
     if slot is not None:
         ad.action_slot = slot

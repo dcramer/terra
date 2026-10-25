@@ -394,7 +394,7 @@ The look, models, bodies and gear, textures and audio.
 | [D442](decisions/D442.md) | The creature check gates a creature by measured deformation and gait | Tech | Agent | Leaning | `tools/creatures/creature_check.py <kind>` gates a… |
 | [D446](decisions/D446.md) | The dusk lake film faces the set sun's side across the water | Design | Developers | Decided | The lake's dusk film looks across the water toward the… |
 | [D450](decisions/D450.md) | Combat clips made by Kimodo, keyed to the guard pose | Tech | Agent | Decided | A move's clip is made with Kimodo's latest model… |
-| [D454](decisions/D454.md) | The fight's roll is the library's with the arms held out of the tuck | Tech | Agent | Decided | The sword-and-shield set's roll plays `Fight_Roll`… |
+| [D454](decisions/D454.md) | The fight's roll and light slash hold the arms by a layered blend per bone | Tech | Agent | Decided | The sword-and-shield set's roll plays `Fight_Roll`… |
 | [D458](decisions/D458.md) | A drawn body walks with the guard's arms laid over the library's walk | Tech | Agent | Decided | A body with the sword and shield drawn walks forward and… |
 | [D463](decisions/D463.md) | Left-handed bodies | Design | — | Open | Whether a body's main hand may be the left (holding.md). |
 | [D475](decisions/D475.md) | The air's haze over what is drawn starts fifty metres out | Tech | Agent | Decided | Bevy's aerial perspective (the sky pass's haze and… |

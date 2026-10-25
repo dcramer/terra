@@ -460,10 +460,12 @@ const row = (what: string, parts: string[], bad: string[], json: Omit<Row, "bad"
   for (const b of bad) failures.push(`${what}: ${b}`);
   rows.push({ ...json, bad });
 };
+const specEntries = existsSync(opt.spec!) ? (JSON.parse(readFileSync(opt.spec!, "utf8")) as Record<string, { blow?: Blow; of?: string }>) : {};
+// A clip made from another with a part held (hold.py, `of`) is held to the blow its own clip is.
 const specs: Record<string, Blow> = Object.fromEntries(
-  Object.entries(existsSync(opt.spec!) ? (JSON.parse(readFileSync(opt.spec!, "utf8")) as Record<string, { blow?: Blow }>) : {})
-    .filter(([, e]) => e.blow)
-    .map(([clip, e]) => [clip, e.blow!]),
+  Object.entries(specEntries)
+    .map(([clip, e]) => [clip, e.blow ?? (e.of ? specEntries[e.of]?.blow : undefined)] as const)
+    .filter((e): e is readonly [string, Blow] => !!e[1]),
 );
 const guardClip = clipOf(opt.guard ?? setGuard(opt.set!) ?? "Fight_Guard");
 const guardMarks = marks(guardClip, 0);
