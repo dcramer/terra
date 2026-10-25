@@ -272,6 +272,8 @@ const BARK_FROST_GREY: f32 = 0.3;
 // The height over a stem's foot, metres, to which plastered snow is thickest and wraps
 // farthest round, and from which it is only the windward coat.
 const PLASTER_LOW_M: vec2<f32> = vec2<f32>(0.3, 2.5);
+// How far a cap's lumps tilt its top from the sky's up.
+const CAP_LUMPS: f32 = 0.7;
 // How bright a turned leaf is against the green one it was: dead leaves are duller and darker
 // than living ones; at a quarter brighter oaks and bracken went pastel orange and salmon.
 const AUTUMN_LIGHT: f32 = 0.8;
@@ -414,6 +416,8 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
     // broke into specks (weather round 18).
     let bough_up = dot((*input).world_normal, sky_up);
     var snow = 0.0;
+    // Which way a load's top faces: the sky's, but for a cap's lumps.
+    var snow_up = sky_up;
     if wind.bark < 0.5 {
         // A bough's load, as Unreal's world-normal blend and Ghost of Yotei's snow on trees
         // lay it: on what faces up, the crown's upper side (its normal, leaning out of the
@@ -496,9 +500,17 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // branch stub's and a limb's take it.
         let shape = (*input).world_normal;
         let up = dot(shape, sky_up);
-        let clumped = smoothstep(0.15 - 0.15 * lying, 0.45 - 0.15 * lying, wander(world * 1.3));
-        snow = smoothstep(0.2, 0.42, lying * smoothstep(0.2, 0.55, up) * clumped);
-        colour = mix(colour, SNOW, snow * 0.95);
+        // Its edge ragged, where the snow thins and breaks, its cover holed a hand or two
+        // across, its white uneven and its top in soft lumps: whole, smooth and evenly lit the
+        // old oak's caps read as plaster (the looks review's fault 4).
+        let ragged = wander(world * 5.0 + 7.0) - 0.5;
+        let face = smoothstep(0.3, 0.8, up + 0.35 * ragged);
+        let patches = wander(world * 1.3) * 0.6 + wander(world * 3.7 + 19.0) * 0.4;
+        let clumped = smoothstep(0.2 - 0.15 * lying, 0.5 - 0.15 * lying, patches);
+        snow = smoothstep(0.15, 0.55, lying * face * clumped);
+        colour = mix(colour, SNOW * (0.88 + 0.12 * wander(world * 9.0 + 3.0)), snow * 0.95);
+        let lump = vec3<f32>(wander(world * 2.5 + 1.0), wander(world * 2.5 + 41.0), wander(world * 2.5 + 83.0)) - 0.5;
+        snow_up = normalize(sky_up + CAP_LUMPS * (lump - sky_up * dot(lump, sky_up)));
         // Bark in a frost is dry and grey, and the moss on it dull under the rime: its green
         // read as a summer wood's beside the snow (weather round 7).
         let bark_grey = dot(colour, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -537,7 +549,7 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
     }
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
     // Lit as the snow lying is, by the sky over it, not as the leaf under it.
-    (*input).N = normalize(mix((*input).N, sky_up, snow));
+    (*input).N = normalize(mix((*input).N, snow_up, snow));
     return snow;
 }
 
