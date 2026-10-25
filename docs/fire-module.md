@@ -67,7 +67,7 @@ A place in the sandbox (`tools/sandbox/places.ts` data, D249: no new options) wi
 ## The measure
 
 - **The fire sheet** (D433) gains rows for the torch and candle beside the campfire, house blaze, breath and fireball, every row on its matte, at noon, dusk and night. A shared change lands if it moves more rows into class across kinds than out.
-- **Motion strips** for every kind (`fire/motion/tools`, today the campfire's): eight frames 0.25 s apart a kind and hour, judged one build a judge against fixed anchors (D472, `tools/review`), 16 fresh judges a build; a change wins when its mean beats main's with the 95% interval above nought, by a rule written before the panel.
+- **Motion strips** for every kind (`fire/motion/tools`, today the campfire's): eight frames 0.25 s apart a kind and hour, judged one build a judge against fixed anchors (D472, `tools/review`), 16 fresh judges a build; a change wins when its mean beats main's with the 95% interval above nought, by a rule written before the panel. The strips cannot see motion (D472, round g17), so a change whose aim is motion passes on motion.ts's targets against the filmed campfires, the sheet twice, and campfire and torch panels not worse.
 - **The bench's cost**: `cargo xtask bench` on the 3080 for one near campfire (0.3 ms budget) and the burning village (1.5 ms), fire.md's budgets.
 
 ## The plan
