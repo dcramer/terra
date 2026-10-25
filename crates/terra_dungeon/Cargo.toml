@@ -14,6 +14,9 @@ serde.workspace = true
 ron.workspace = true
 # Seeds and repeatable random streams, and the sheet's sweep over every core (terra_gen::par, D406).
 terra_gen.workspace = true
+# The stamp lays a dungeon in building's half-metre cubes (stamp/, D181): BuildOp, Cube, Shape;
+# a plain crate (D28).
+terra_build.workspace = true
 # The sheet's maps, the version Bevy's image loading already builds.
 png.workspace = true
 

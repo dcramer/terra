@@ -124,6 +124,9 @@ pub struct Theme {
     /// The building kind of its walls and floors (D181), for laying it in cubes.
     pub walls: String,
     pub floors: String,
+    /// The building kind of its pillars, timbering, door jambs and lintels.
+    #[serde(default = "hewn")]
+    pub trim: String,
     pub features: Features,
     pub bestiary: Vec<Mob>,
     pub loot: Vec<Loot>,
@@ -132,6 +135,10 @@ pub struct Theme {
 
 fn one() -> f32 {
     1.0
+}
+
+fn hewn() -> String {
+    "Hewn".to_string()
 }
 
 fn yes() -> bool {

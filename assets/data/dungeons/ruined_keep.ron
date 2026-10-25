@@ -11,6 +11,7 @@
     keys: 3,
     walls: "Limewash",
     floors: "Stone",
+    trim: "Hewn",
     features: (goal: "sanctum_dais", key: "brazier", rest: "campfire", stair: "stair"),
     bestiary: [
         (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 3)),

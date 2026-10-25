@@ -7,6 +7,8 @@
 //!    and stairs.
 //! 3. `dress`: every cell given a module of the theme's set by wave function collapse.
 //! 4. `theme`: themes as data, `assets/data/dungeons/*.ron`.
+//! 5. `stamp`: the dressed dungeon laid in building's cubes, with what is spawned in it (props,
+//!    lights, mobs, chests, the goal, keys, door leaves), the start and a tour.
 //!
 //! `sheet` measures many seeds and draws their maps (`cargo run -p terra_dungeon --bin
 //! dungeons`). Plain Rust, no Bevy (D28): the sandbox and the server lay what this makes.
@@ -18,6 +20,7 @@ pub mod map;
 pub mod place;
 mod route;
 pub mod sheet;
+pub mod stamp;
 pub mod theme;
 
 use terra_gen::Seed;

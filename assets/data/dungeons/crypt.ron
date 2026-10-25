@@ -11,6 +11,7 @@
     keys: 1,
     walls: "Greystone",
     floors: "Stone",
+    trim: "Stone",
     features: (goal: "relic_dais", key: "ossuary_altar", rest: "campfire", stair: "stair"),
     bestiary: [
         (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 2)),

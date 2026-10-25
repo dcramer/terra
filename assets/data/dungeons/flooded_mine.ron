@@ -12,6 +12,7 @@
     keys: 1,
     walls: "Stone",
     floors: "Earth",
+    trim: "Hewn",
     features: (goal: "trapped_miner", key: "pump_lever", rest: "campfire", stair: "stair"),
     bestiary: [
         (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 2)),
