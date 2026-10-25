@@ -6352,6 +6352,7 @@ dependencies = [
  "bevy",
  "bevy-inspector-egui",
  "gltf",
+ "half",
  "libm",
  "objc2-foundation 0.3.2",
  "ron",

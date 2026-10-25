@@ -412,7 +412,7 @@ fn light(
     mut images: ResMut<Assets<Image>>,
     mut volumes: Query<&mut IrradianceVolume>,
 ) {
-    let (Some(mut baked), Some(occluders)) = (baked, occluders) else {
+    let (Some(mut baked), Some(_)) = (baked, occluders) else {
         return;
     };
     if let Ok(mut volume) = volumes.get_mut(baked.entity)
@@ -438,7 +438,7 @@ fn light(
         return;
     }
     baked.from = Some(*open);
-    let (seen, sides) = (baked.seen.clone(), world_sides(&occluders, &open));
+    let (seen, sides) = (baked.seen.clone(), world_sides(&open));
     baked.lighting = Some(AsyncComputeTaskPool::get().spawn(async move { texels(&seen, &sides) }));
 }
 
@@ -452,14 +452,15 @@ fn moved(from: &OpenSky, to: &OpenSky) -> bool {
 }
 
 /// The open sky's light toward each side of the world, +X, -X, +Y, -Y, +Z, -Z, from the
-/// sky's own frame: what comes from above the horizon, and from the ground.
-fn world_sides(o: &SkyOccluders, open: &OpenSky) -> [(Vec3, Vec3); 6] {
-    let south = o.east.cross(o.up);
+/// painting's frame: what comes from above the horizon, and from the ground.
+fn world_sides(open: &OpenSky) -> [(Vec3, Vec3); 6] {
     let axes = [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z];
+    let into_sky = open.frame.inverse();
     axes.map(|axis| {
-        // The side, in the sky's frame, as a blend of its six sides by the square of each
-        // part, as an ambient cube is read.
-        let local = Vec3::new(axis.dot(o.east), axis.dot(o.up), axis.dot(south));
+        // The side, in the painting's frame, as a blend of its six sides by the square of
+        // each part, as an ambient cube is read. The sky is brighter toward the sun (D490), so
+        // which way round the side faces matters as well as how far up.
+        let local = into_sky * axis;
         let mut sky = Vec3::ZERO;
         let mut ground = Vec3::ZERO;
         for (k, part) in [local.x, -local.x, local.y, -local.y, local.z, -local.z]

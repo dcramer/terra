@@ -455,7 +455,8 @@ pub struct GeneratorBindGroups {
     pub downsampling_first: BindGroup,
     pub downsampling_second: BindGroup,
     pub radiance: Vec<BindGroup>, // One per mip level
-    pub irradiance: BindGroup,
+    /// None for a diffuse map the app fills itself (Terra's patch, D492).
+    pub irradiance: Option<BindGroup>,
     pub copy: BindGroup,
 }
 
@@ -647,38 +648,48 @@ pub fn prepare_generated_environment_map_bind_groups(
         }
 
         // Create irradiance bind group
-        let irradiance_constants = FilteringConstants {
-            mip_level: 0.0,
-            // 32 phi, 32 theta = 1024 samples total
-            sample_count: 1024,
-            roughness: 1.0,
-            noise_size_bits,
-        };
+        // Terra's patch (D492): a diffuse map that is not a storage texture is one the app
+        // fills itself, as Terra does from the sky's spherical harmonics; it is left as it is,
+        // not convolved.
+        let irradiance_bind_group = env_map_light
+            .diffuse_map
+            .texture
+            .usage()
+            .contains(TextureUsages::STORAGE_BINDING)
+            .then(|| {
+                let irradiance_constants = FilteringConstants {
+                    mip_level: 0.0,
+                    // 32 phi, 32 theta = 1024 samples total
+                    sample_count: 1024,
+                    roughness: 1.0,
+                    noise_size_bits,
+                };
 
-        let mut irradiance_constants_buffer = UniformBuffer::from(irradiance_constants);
-        irradiance_constants_buffer.write_buffer(&render_device, &queue);
+                let mut irradiance_constants_buffer = UniformBuffer::from(irradiance_constants);
+                irradiance_constants_buffer.write_buffer(&render_device, &queue);
 
-        // create a 2d array view
-        let irradiance_map =
-            env_map_light
-                .diffuse_map
-                .texture
-                .create_view(&TextureViewDescriptor {
-                    dimension: Some(TextureViewDimension::D2Array),
-                    ..Default::default()
-                });
+                // create a 2d array view
+                let irradiance_map =
+                    env_map_light
+                        .diffuse_map
+                        .texture
+                        .create_view(&TextureViewDescriptor {
+                            dimension: Some(TextureViewDimension::D2Array),
+                            ..Default::default()
+                        });
 
-        let irradiance_bind_group = render_device.create_bind_group(
-            "irradiance_bind_group",
-            &pipeline_cache.get_bind_group_layout(&layouts.irradiance),
-            &BindGroupEntries::sequential((
-                &textures.environment_map.default_view,
-                &samplers.linear,
-                &irradiance_map,
-                &irradiance_constants_buffer,
-                &stbn_texture_view,
-            )),
-        );
+                render_device.create_bind_group(
+                    "irradiance_bind_group",
+                    &pipeline_cache.get_bind_group_layout(&layouts.irradiance),
+                    &BindGroupEntries::sequential((
+                        &textures.environment_map.default_view,
+                        &samplers.linear,
+                        &irradiance_map,
+                        &irradiance_constants_buffer,
+                        &stbn_texture_view,
+                    )),
+                )
+            });
 
         // Create copy bind group (source env map → destination mip0)
         let src_view = env_map_light
@@ -896,8 +907,8 @@ pub fn filtering_system(
         }
 
         // Irradiance convolution pass
-        // Generate the diffuse environment map
-        {
+        // Generate the diffuse environment map, unless the app fills it (Terra's patch, D492)
+        if let Some(irradiance_bind_group) = &bind_groups.irradiance {
             let mut compute_pass =
                 ctx.command_encoder()
                     .begin_compute_pass(&ComputePassDescriptor {
@@ -908,7 +919,7 @@ pub fn filtering_system(
             let irr_span = diagnostics.pass_span(&mut compute_pass, "lightprobe_irradiance_map");
 
             compute_pass.set_pipeline(irradiance_pipeline);
-            compute_pass.set_bind_group(0, &bind_groups.irradiance, &[]);
+            compute_pass.set_bind_group(0, irradiance_bind_group, &[]);
 
             // 32×32 texture processed with 8×8 workgroups for all 6 faces
             compute_pass.dispatch_workgroups(4, 4, 6);

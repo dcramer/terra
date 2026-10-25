@@ -403,6 +403,7 @@ The look, models, bodies and gear, textures and audio.
 | [D475](decisions/D475.md) | The air's haze over what is drawn starts fifty metres out | Tech | Agent | Decided | Bevy's aerial perspective (the sky pass's haze and… |
 | [D489](decisions/D489.md) | The sky light's repaint is worked out once a height | Tech | Agent | Decided | The painted sky the shade is lit by… |
 | [D490](decisions/D490.md) | The sky's light varies by direction, as the drawn sky does | Design | Developers | Decided | The light the sky gives the shade… |
+| [D492](decisions/D492.md) | The sky light's diffuse light is its spherical harmonics, worked out on the CPU | Tech | Agent | Decided | The painted sky (D190, D490) is projected… |
 
 ## Engine and code
 

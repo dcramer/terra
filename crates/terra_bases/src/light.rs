@@ -641,6 +641,7 @@ mod tests {
             sky: [Vec3::new(0.3, 0.4, 0.6); 6],
             ground: [Vec3::new(0.1, 0.1, 0.05); 6],
             brightness: 1.0,
+            frame: Default::default(),
         };
         // Faded in, a fifth of what comes in on average; at first, all of it, so nothing
         // changes in a frame as the room closes.
@@ -667,6 +668,7 @@ mod tests {
             sky: [Vec3::splat(c); 6],
             ground: [Vec3::splat(c * 0.4); 6],
             brightness: 1.0,
+            frame: Default::default(),
         };
         world.insert_resource(sky(0.5));
         world.spawn((MainCamera, EnvironmentMapLight::default()));

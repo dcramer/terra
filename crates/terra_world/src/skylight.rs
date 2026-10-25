@@ -3,8 +3,11 @@
 //! open sky is bright and cool, an underside takes the ground's warm or green bounce, and
 //! shiny things reflect the sky. Shipped games do this with an environment map captured
 //! from their sky; this paints a small one from the sky's colours, the sun and the
-//! ground, and Bevy filters it into diffuse and specular light every frame
-//! (`GeneratedEnvironmentMapLight`).
+//! ground, brighter and warmer toward the sun as the drawn sky is (D490); its diffuse light is
+//! its spherical harmonics, worked out here (D492), and Bevy filters it into the specular
+//! light (`GeneratedEnvironmentMapLight`).
+
+mod harmonics;
 
 use crate::planet::{MainCamera, Tweaks};
 use crate::sky::Sky;
@@ -19,6 +22,8 @@ use bevy::{
 
 /// Pixels along each face of the painted sky: it is smooth, so small is enough.
 const FACE: u32 = 32;
+/// Texels along each face of its diffuse light, smoother still: three bands of harmonics.
+const DIFFUSE: u32 = 16;
 
 /// The light the sky gives the shade, which `daylight` sets for the hour.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
@@ -37,16 +42,19 @@ impl Default for SkyLight {
     }
 }
 
-/// The open sky's diffuse light toward each side, as the painted sky gives it, in the sky's own
-/// frame (+Y up, east +X, south +Z): for each of +X, -X, +Y, -Y, +Z, -Z, what comes from above
-/// the horizon and what from the ground below it, each as the environment map's diffuse light
-/// is, the irradiance over pi, before its brightness. What hides some of the sky, as a
-/// forest's crowns do, takes its share away (`sky_occlusion`).
+/// The open sky's diffuse light toward each side, as the painted sky gives it, in the
+/// painting's frame (+Y up, turned into the world by `frame`): for each of +X, -X, +Y, -Y,
+/// +Z, -Z, what comes from above the horizon and what from the ground below it, each as the
+/// environment map's diffuse light is, the irradiance over pi, before its brightness. The sky
+/// is brighter toward the sun (D490), so the sides differ round as well as up and down. What
+/// hides some of the sky, as a forest's crowns do, takes its share away (`sky_occlusion`).
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
 pub struct OpenSky {
     pub sky: [Vec3; 6],
     pub ground: [Vec3; 6],
     pub brightness: f32,
+    /// The turn from the painting's frame into the world's, as the environment map's.
+    pub frame: Quat,
 }
 
 /// The painted sky, what it was last painted from, and for how many more frames Bevy is to
@@ -54,7 +62,9 @@ pub struct OpenSky {
 #[derive(Resource)]
 struct Painted {
     image: Handle<Image>,
-    from: Option<[f32; 16]>,
+    /// Its diffuse light, filled here, not by Bevy's filter (D492).
+    diffuse: Handle<Image>,
+    from: Option<[f32; 22]>,
     filtering: u32,
 }
 
@@ -68,9 +78,9 @@ const SNOW_BOUNCE: Vec3 = Vec3::new(0.45, 0.47, 0.52);
 /// facing snow of 0.8 takes (weather round 4).
 const SNOW_ALBEDO: Vec3 = Vec3::new(0.85, 0.89, 0.89);
 
-/// Bevy filters a generated environment map into its diffuse and specular light every frame
-/// it is there, nearly two milliseconds of the GPU's time, though the sky is painted again only
-/// a few times a minute. So it is there only for this many frames after each painting, enough
+/// Bevy filters a generated environment map into its specular light every frame it is there
+/// (its diffuse light is ours, D492), a third of a millisecond of the GPU's time, though the sky
+/// is painted again only a few times a minute. So it is there only for this many frames after each painting, enough
 /// for the new sky to reach the GPU and be filtered; the filtered light stays on the camera
 /// between (`EnvironmentMapLight`), and its brightness and turn are set on that directly.
 const FILTER_FRAMES: u32 = 4;
@@ -121,8 +131,25 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         dimension: Some(TextureViewDimension::Cube),
         ..default()
     });
+    // Not a storage texture, so Bevy's filter leaves it as it is (patches/bevy_pbr, D492).
+    let mut diffuse = Image::new_fill(
+        Extent3d {
+            width: DIFFUSE,
+            height: DIFFUSE,
+            depth_or_array_layers: 6,
+        },
+        TextureDimension::D2,
+        &[0; 8],
+        TextureFormat::Rgba16Float,
+        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    );
+    diffuse.texture_view_descriptor = Some(TextureViewDescriptor {
+        dimension: Some(TextureViewDimension::Cube),
+        ..default()
+    });
     commands.insert_resource(Painted {
         image: images.add(image),
+        diffuse: images.add(diffuse),
         from: None,
         filtering: FIRST_FILTER_FRAMES,
     });
@@ -183,6 +210,10 @@ fn paint(
     // one, and does not follow later changes to its brightness or turn, so they are given
     // to it as well; without this the shade kept the first frame's light all day.
     if let Some(mut filtered) = filtered {
+        // Bevy makes its own diffuse map to filter into; the shading reads ours instead.
+        if filtered.diffuse_map != painted.diffuse {
+            filtered.diffuse_map = painted.diffuse.clone();
+        }
         if filtered.intensity != intensity {
             filtered.intensity = intensity;
         }
@@ -225,7 +256,10 @@ fn paint(
         zenith: linear(sky.zenith),
         ground: Vec3::ZERO,
         overcast: sky.deck.x.clamp(0.0, 1.0),
+        sun: rotation.inverse() * tweaks.sun_direction.normalize_or(Vec3::Y),
+        glow: linear(sky.glow),
     };
+    let lit = colours.lit();
     // Sunlit ground, as bright beside the sky as the sun makes it, and lit by the sky too, in
     // the sky's colour (white, the grass bounced its own green into a low sun's shade); under
     // snow, the snow's white (D327).
@@ -234,7 +268,7 @@ fn paint(
             * through
             * (tweaks.sun_illuminance * sun_height
                 / (std::f32::consts::PI * light.brightness.max(1.0))))
-        + bare.lerp(SNOW_ALBEDO, cover) * colours.overhead();
+        + bare.lerp(SNOW_ALBEDO, cover) * colours.overhead(&lit);
     if open.brightness != light.brightness {
         open.brightness = light.brightness;
     }
@@ -270,13 +304,16 @@ fn paint(
                 ..default()
             });
     }
-    let (sky, ground) = colours.lobes();
-    open.sky = sky;
-    open.ground = ground;
+    let painting = colours.painting(&lit);
+    (open.sky, open.ground) = painting.lobes();
+    open.frame = rotation;
+    if let Some(mut image) = images.get_mut(&painted.diffuse) {
+        image.data = Some(painting.diffuse());
+    }
     let Some(mut image) = images.get_mut(&painted.image) else {
         return;
     };
-    image.data = Some(colours.cube());
+    image.data = Some(painting.cube);
 }
 
 /// The colour of daylight of a correlated colour temperature, as the CIE's daylight locus
@@ -330,7 +367,66 @@ pub(crate) fn srgb_on_daylight_locus(srgb: Vec3) -> Vec3 {
     Vec3::new(back.red, back.green, back.blue)
 }
 
-/// What the sky is painted from, as linear colours.
+/// The CIE's standard clear sky, type 12 of its standard general skies (CIE S 011/E:2003,
+/// ISO 15469:2004; Kittler, Perez and Darula 1998, from Perez, Seals and Michalsky's
+/// all-weather sky, 1993): a sky element's luminance goes as f(chi) phi(Z), chi its angle from
+/// the sun and Z from the zenith, by the gradation phi(Z) = 1 + a exp(b / cos Z) and the
+/// scattering indicatrix f(chi) = 1 + c (exp(d chi) - exp(d pi / 2)) + e cos^2 chi, whose c term
+/// is the aureole round the sun. a, b, c, d and e as the standard's table gives them (checked
+/// against colour-science's `cie2003.py`).
+const CLEAR_SKY: [f32; 5] = [-1.0, -0.32, 10.0, -3.0, 0.45];
+
+/// The clear sky's gradation at a height (the cosine of the zenith angle): darker overhead.
+fn gradation(e: f32) -> f32 {
+    let [a, b, ..] = CLEAR_SKY;
+    if e > 1e-3 {
+        1.0 + a * libm::expf(b / e)
+    } else {
+        1.0
+    }
+}
+
+/// The clear sky's indicatrix toward a way at so much of a cosine from the sun, and the part of
+/// it that is the aureole, the sunlight the air's haze scatters forward.
+fn indicatrix(toward_sun: f32) -> (f32, f32) {
+    let [_, _, c, d, e] = CLEAR_SKY;
+    let chi = libm::acosf(toward_sun.clamp(-1.0, 1.0));
+    let aureole = c * (libm::expf(d * chi) - libm::expf(d * std::f32::consts::FRAC_PI_2));
+    (
+        1.0 + aureole + e * toward_sun * toward_sun,
+        aureole.max(0.0),
+    )
+}
+
+/// The old clear sky's brightness at a height, the same all round: what the night's sky keeps,
+/// and the mean the CIE's clear sky is scaled to.
+fn even_clear(e: f32) -> f32 {
+    1.15 - 0.35 * e
+}
+
+/// Its cosine-weighted mean over the upper hemisphere: 1.15 - 0.35 * 2 / 3.
+const CLEAR_MEAN: f32 = 1.15 - 0.35 * 2.0 / 3.0;
+
+/// The direction toward a texel of a cube's face, +X, -X, +Y, -Y, +Z, -Z, as Bevy's cube maps
+/// lay them, not of unit length.
+fn face_direction(face: u32, x: u32, y: u32, size: u32) -> Vec3 {
+    let u = (x as f32 + 0.5) / size as f32 * 2.0 - 1.0;
+    let v = (y as f32 + 0.5) / size as f32 * 2.0 - 1.0;
+    match face {
+        0 => Vec3::new(1.0, -v, -u),
+        1 => Vec3::new(-1.0, -v, u),
+        2 => Vec3::new(u, 1.0, v),
+        3 => Vec3::new(u, -1.0, -v),
+        4 => Vec3::new(u, -v, 1.0),
+        _ => Vec3::new(-u, -v, -1.0),
+    }
+}
+
+fn luma(c: Vec3) -> f32 {
+    c.dot(Vec3::new(0.2126, 0.7152, 0.0722))
+}
+
+/// What the sky is painted from, as linear colours, in the painting's frame (+Y up).
 #[derive(Clone, Copy)]
 struct Colours {
     /// How low the sun is, 0 to 1.
@@ -343,143 +439,219 @@ struct Colours {
     ground: Vec3,
     /// How much of the sky an overcast deck covers (`Sky::deck`'s x, D418).
     overcast: f32,
+    /// The way to the sun, of unit length, below the horizon too.
+    sun: Vec3,
+    /// The colour of the glow round the sun (`Sky::glow`).
+    glow: Vec3,
+}
+
+/// What a painting works out once from its colours: how far the CIE's clear sky is scaled to
+/// light open ground as the old even sky did, the glow's hue by its logarithm, and how much
+/// of the aureole takes it.
+struct Lit {
+    clear: f32,
+    glow: Vec3,
+    warmth: f32,
+}
+
+/// The painted sky (D490, D492): the cube Bevy filters into the specular light, and the
+/// spherical harmonics of what is above the horizon and what below, from which the diffuse
+/// light is read.
+struct Painting {
+    cube: Vec<u8>,
+    sky: harmonics::Harmonics,
+    ground: harmonics::Harmonics,
 }
 
 impl Colours {
-    fn key(&self) -> [f32; 16] {
-        let mut key = [0.0; 16];
-        for (i, c) in [self.shade, self.horizon, self.zenith, self.ground]
-            .iter()
-            .enumerate()
+    fn key(&self) -> [f32; 22] {
+        let mut key = [0.0; 22];
+        for (i, c) in [
+            self.shade,
+            self.horizon,
+            self.zenith,
+            self.ground,
+            self.glow,
+        ]
+        .iter()
+        .enumerate()
         {
             key[i * 3..i * 3 + 3].copy_from_slice(&c.to_array());
         }
-        key[12] = self.low;
-        key[13] = self.day;
-        key[14] = self.overcast;
+        // The sun's way by half, so it is followed to about half a degree: its aureole is
+        // tens of degrees wide.
+        key[15..18].copy_from_slice(&(self.sun * 0.5).to_array());
+        key[18] = self.low;
+        key[19] = self.day;
+        key[20] = self.overcast;
         key
     }
 
-    /// The light from a direction, +Y up. The sky takes its hue from the drawn sky, half
-    /// way to the shade's colour, which the art chose, and is brighter toward the horizon
-    /// as a clear sky is; below the horizon is the ground.
-    fn toward(&self, d: Vec3) -> Vec3 {
-        self.at_height(d.y)
-    }
-
-    /// The same by the height alone, the sine of the elevation: the painted sky is the same
-    /// all round its up, so `lobes` and `cube` work each height out once (D489).
-    fn at_height(&self, up: f32) -> Vec3 {
-        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722)).max(1e-4);
-        let hue = |c: Vec3| c / luma(c);
-        let sky = |e: f32| {
-            let drawn = hue(self.horizon.lerp(self.zenith, e.max(0.0).sqrt()));
-            // While the sun is low the drawn horizon is orange and pink, and half of it washed
-            // the whole forest salmon at dusk; the shade under trees is lit by the sky above
-            // it, so it takes mostly the shade's cool colour then (D256).
-            let mixed = hue(drawn.lerp(hue(self.shade), 0.5 + 0.38 * self.low));
-            // By day on the daylight locus: mixed along a straight line from the horizon's orange
-            // to the zenith's blue, it passed through magenta, and the shade it lit read lilac.
-            // Not while the sun is low: twilight's sky lies off the locus toward violet, the
-            // ozone's Chappuis band taking its orange (Hulburt 1953), and moved onto it the
-            // shade keys' warm violet came out a neutral grey the green ground bounce tinted
-            // (settlement r21).
-            // Squared, so a dawn of 10 degrees and up (the forest's 07:30) keeps most of it.
-            mixed.lerp(
-                on_daylight_locus(mixed),
-                self.day * (1.0 - self.low * self.low),
-            ) * self.brightening(e.max(0.0))
-        };
-        if up >= 0.0 {
-            sky(up)
-        } else {
-            sky(0.0).lerp(self.ground, (-up / 0.15).clamp(0.0, 1.0))
+    fn lit(&self) -> Lit {
+        // The clear sky's cosine-weighted mean, even in height (even in area) and round.
+        const N: usize = 24;
+        let mut sum = 0.0;
+        for i in 0..N {
+            let y = (i as f32 + 0.5) / N as f32;
+            let across = (1.0 - y * y).max(0.0).sqrt();
+            for j in 0..N * 2 {
+                let round = (j as f32 + 0.5) / (N * 2) as f32 * std::f32::consts::TAU;
+                let d = Vec3::new(across * libm::cosf(round), y, across * libm::sinf(round));
+                sum += indicatrix(d.dot(self.sun)).0 * gradation(y) * y;
+            }
+        }
+        let mean = sum / (N * N) as f32;
+        // By day on the daylight locus, as the sky's hue is: the low sun's orange glow,
+        // mixed with a day's blue, was a little magenta.
+        let glow = self.glow.max(Vec3::splat(1e-4));
+        let glow = glow / luma(glow);
+        let glow = glow.lerp(
+            on_daylight_locus(glow),
+            self.day * (1.0 - self.low * self.low),
+        );
+        Lit {
+            clear: CLEAR_MEAN / mean.max(1e-6),
+            glow: glow.max(Vec3::splat(1e-4)).map(libm::logf),
+            // A low sun's glow is the drawn sky's colour as its orange horizon is, and the
+            // shade takes mostly the shade's cool colour then (D256): a quarter of it.
+            warmth: 1.0 - 0.76 * self.low,
         }
     }
 
-    /// How bright the sky is at a height `e` (the sine of its elevation) beside its mean. A
-    /// clear sky is brighter toward the horizon; an overcast one is three times brighter
-    /// overhead than at the horizon, the CIE's standard overcast sky (Moon and Spencer 1942,
-    /// L = Lz (1 + 2 sin e) / 3), so under a deck what faces up is lit well over what faces
-    /// out or down, where the deck was lit evenly and a snow load's top and underside took
-    /// the same light (weather round 18). Scaled so open ground takes the clear sky's light.
-    fn brightening(&self, e: f32) -> f32 {
-        let clear = 1.15 - 0.35 * e;
-        // The clear sky's cosine-weighted mean over the hemisphere, 1.15 - 0.35 * 2 / 3, over
-        // the overcast law's, 7 / 9.
-        let overcast = (1.15 - 0.35 * 2.0 / 3.0) * 9.0 / 7.0 * (1.0 + 2.0 * e) / 3.0;
-        clear + (overcast - clear) * self.overcast
+    /// The sky's hue at a height `e`, the sine of its elevation, at a luma of 1, and its
+    /// logarithm: the same all round, so a painting works each height out once (D489). It
+    /// takes its hue from the drawn sky, half way to the shade's colour, which the art chose.
+    fn hue(&self, e: f32) -> (Vec3, Vec3) {
+        let hue = |c: Vec3| c / luma(c).max(1e-4);
+        let drawn = hue(self.horizon.lerp(self.zenith, e.max(0.0).sqrt()));
+        // While the sun is low the drawn horizon is orange and pink, and half of it washed
+        // the whole forest salmon at dusk; the shade under trees is lit by the sky above
+        // it, so it takes mostly the shade's cool colour then (D256).
+        let mixed = hue(drawn.lerp(hue(self.shade), 0.5 + 0.38 * self.low));
+        // By day on the daylight locus: mixed along a straight line from the horizon's orange
+        // to the zenith's blue, it passed through magenta, and the shade it lit read lilac.
+        // Not while the sun is low: twilight's sky lies off the locus toward violet, the
+        // ozone's Chappuis band taking its orange (Hulburt 1953), and moved onto it the
+        // shade keys' warm violet came out a neutral grey the green ground bounce tinted
+        // (settlement r21).
+        // Squared, so a dawn of 10 degrees and up (the forest's 07:30) keeps most of it.
+        let c = mixed.lerp(
+            on_daylight_locus(mixed),
+            self.day * (1.0 - self.low * self.low),
+        );
+        (c, c.max(Vec3::splat(1e-4)).map(libm::logf))
     }
 
-    /// The hue of the light the sky sheds on open ground, at a luma of 1.
-    /// The sky is the same all round, so the cosine-weighted sum over the upper hemisphere is
-    /// one over its height: even in height is even in area, each height weighted by itself.
-    fn overhead(&self) -> Vec3 {
+    /// The light from a way `d` of unit length, given the sky's hue at its height, or at the
+    /// horizon below it. The sky is as bright round it as the CIE's clear sky by day,
+    /// brightest round the sun and toward the horizon, and the share of it that is the
+    /// aureole, sunlight scattered forward by the haze, takes the glow's colour, so a side
+    /// facing the sun's half of the sky takes more light and warmer (D490). An overcast sky is
+    /// three times brighter overhead than at the horizon, the CIE's standard overcast sky
+    /// (Moon and Spencer 1942, L = Lz (1 + 2 sin e) / 3), so under a deck what faces up is lit
+    /// well over what faces out or down, where the deck was lit evenly and a snow load's top
+    /// and underside took the same light (weather round 18). Scaled so open ground takes the
+    /// light the even clear sky gave it. Below the horizon is the ground.
+    fn light(&self, lit: &Lit, d: Vec3, (hue, ln): (Vec3, Vec3)) -> Vec3 {
+        let sky = |d: Vec3| {
+            let e = d.y.max(0.0);
+            let (f, aureole) = indicatrix(d.dot(self.sun));
+            let phi = gradation(e);
+            let clear = even_clear(e) + (lit.clear * f * phi - even_clear(e)) * self.day;
+            // The even clear sky's mean over the overcast law's, 7 / 9.
+            let overcast = CLEAR_MEAN * 9.0 / 7.0 * (1.0 + 2.0 * e) / 3.0;
+            let luminance = clear + (overcast - clear) * self.overcast;
+            let sunward = (1.0 - self.overcast) * self.day * lit.clear * aureole * phi
+                / luminance.max(1e-6)
+                * lit.warmth;
+            if sunward < 1e-4 {
+                return hue * luminance;
+            }
+            // Mixed by the logarithm, which keeps a blue sky warmed toward an orange glow off
+            // magenta, as daylight's locus nearly is a line in it.
+            let warmed = ln.lerp(lit.glow, sunward).map(libm::expf);
+            warmed / luma(warmed) * luminance
+        };
+        if d.y >= 0.0 {
+            return sky(d);
+        }
+        let under = (-d.y / 0.15).clamp(0.0, 1.0);
+        if under >= 1.0 {
+            return self.ground;
+        }
+        let level = Vec3::new(d.x, 0.0, d.z).normalize_or(Vec3::X);
+        sky(level).lerp(self.ground, under)
+    }
+
+    /// The hue of the light the sky sheds on open ground, at a luma of 1: the cosine-weighted
+    /// sum over the upper hemisphere, even in height (even in area) and round.
+    fn overhead(&self, lit: &Lit) -> Vec3 {
         const N: usize = 16;
         let mut sum = Vec3::ZERO;
         for i in 0..N {
             let y = (i as f32 + 0.5) / N as f32;
             let across = (1.0 - y * y).max(0.0).sqrt();
-            sum += self.toward(Vec3::new(across, y, 0.0)) * y;
-        }
-        sum / sum.dot(Vec3::new(0.2126, 0.7152, 0.0722)).max(1e-4)
-    }
-
-    /// The diffuse light toward each of +X, -X, +Y, -Y, +Z, -Z, from the sky above the horizon
-    /// and from the ground below it: the cosine-weighted sum of the light from every way,
-    /// over pi, as Bevy filters the painted sky into its diffuse light.
-    fn lobes(&self) -> ([Vec3; 6], [Vec3; 6]) {
-        const N: usize = 48;
-        let normals = [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z];
-        let (mut sky, mut ground) = ([Vec3::ZERO; 6], [Vec3::ZERO; 6]);
-        // Directions spread evenly over the sphere: even in height, even round.
-        for i in 0..N {
-            let y = 1.0 - 2.0 * (i as f32 + 0.5) / N as f32;
-            let across = (1.0 - y * y).max(0.0).sqrt();
-            // The same all round: once a height, not once a direction, which was most of a
-            // repaint's 7 ms on the main thread.
-            let light = self.at_height(y);
+            let hue = self.hue(y);
             for j in 0..N * 2 {
                 let round = (j as f32 + 0.5) / (N * 2) as f32 * std::f32::consts::TAU;
                 let d = Vec3::new(across * libm::cosf(round), y, across * libm::sinf(round));
-                for (k, n) in normals.iter().enumerate() {
-                    // Each direction stands for 4 pi / (2 N squared) of the sphere.
-                    let share = d.dot(*n).max(0.0) * 4.0 / (2 * N * N) as f32;
-                    if y >= 0.0 {
-                        sky[k] += light * share;
-                    } else {
-                        ground[k] += light * share;
+                sum += self.light(lit, d, hue) * y;
+            }
+        }
+        sum / luma(sum).max(1e-4)
+    }
+
+    /// Paints the cube's six faces, +X, -X, +Y, -Y, +Z, -Z, as RGBA floats, and projects
+    /// each texel's light onto the harmonics by the solid angle it covers.
+    fn painting(&self, lit: &Lit) -> Painting {
+        let angles = harmonics::texel_solid_angles(FACE);
+        let mut cube = Vec::with_capacity((FACE * FACE * 6 * 16) as usize);
+        let (mut sky, mut ground) = Default::default();
+        // Each height's hue once: the faces' pixels share a few hundred of them, by symmetry.
+        let mut heights = std::collections::HashMap::<u32, (Vec3, Vec3)>::new();
+        for face in 0..6 {
+            for y in 0..FACE {
+                for x in 0..FACE {
+                    let d = face_direction(face, x, y, FACE).normalize();
+                    let e = d.y.max(0.0);
+                    let hue = *heights.entry(e.to_bits()).or_insert_with(|| self.hue(e));
+                    let c = self.light(lit, d, hue);
+                    let angle = angles[(y * FACE + x) as usize];
+                    let part: &mut harmonics::Harmonics =
+                        if d.y >= 0.0 { &mut sky } else { &mut ground };
+                    part.add(d, c, angle);
+                    for channel in [c.x, c.y, c.z, 1.0] {
+                        cube.extend_from_slice(&channel.to_le_bytes());
                     }
                 }
             }
         }
-        (sky, ground)
+        Painting { cube, sky, ground }
+    }
+}
+
+impl Painting {
+    /// The diffuse light toward each of +X, -X, +Y, -Y, +Z, -Z, from the sky above the horizon
+    /// and from the ground below it, as the environment map's diffuse light is.
+    fn lobes(&self) -> ([Vec3; 6], [Vec3; 6]) {
+        let normals = [Vec3::X, -Vec3::X, Vec3::Y, -Vec3::Y, Vec3::Z, -Vec3::Z];
+        (
+            normals.map(|n| self.sky.diffuse(n)),
+            normals.map(|n| self.ground.diffuse(n)),
+        )
     }
 
-    /// The six faces of the cube, +X, -X, +Y, -Y, +Z, -Z, as RGBA floats.
-    fn cube(&self) -> Vec<u8> {
-        let mut data = Vec::with_capacity((FACE * FACE * 6 * 16) as usize);
-        // Each height once: the faces' pixels share a few hundred of them, by symmetry.
-        let mut heights = std::collections::HashMap::<u32, Vec3>::new();
+    /// The environment map's diffuse light, a cube of `DIFFUSE` texels a side as RGBA half
+    /// floats: what Bevy's filter worked out on the GPU by 1,024 random samples a texel.
+    fn diffuse(&self) -> Vec<u8> {
+        let all = self.sky.plus(&self.ground);
+        let mut data = Vec::with_capacity((DIFFUSE * DIFFUSE * 6 * 8) as usize);
         for face in 0..6 {
-            for y in 0..FACE {
-                for x in 0..FACE {
-                    let u = (x as f32 + 0.5) / FACE as f32 * 2.0 - 1.0;
-                    let v = (y as f32 + 0.5) / FACE as f32 * 2.0 - 1.0;
-                    let d = match face {
-                        0 => Vec3::new(1.0, -v, -u),
-                        1 => Vec3::new(-1.0, -v, u),
-                        2 => Vec3::new(u, 1.0, v),
-                        3 => Vec3::new(u, -1.0, -v),
-                        4 => Vec3::new(u, -v, 1.0),
-                        _ => Vec3::new(-u, -v, -1.0),
-                    };
-                    let up = d.normalize().y;
-                    let c = *heights
-                        .entry(up.to_bits())
-                        .or_insert_with(|| self.at_height(up));
+            for y in 0..DIFFUSE {
+                for x in 0..DIFFUSE {
+                    let c = all.diffuse(face_direction(face, x, y, DIFFUSE).normalize());
                     for channel in [c.x, c.y, c.z, 1.0] {
-                        data.extend_from_slice(&channel.to_le_bytes());
+                        data.extend_from_slice(&half::f16::from_f32(channel).to_le_bytes());
                     }
                 }
             }
@@ -489,234 +661,4 @@ impl Colours {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn under_an_overcast_deck_what_faces_up_is_lit_over_what_faces_out() {
-        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-        let lit = |overcast: f32| {
-            let mut c = colours();
-            c.overcast = overcast;
-            // The ground under snow, lit by the sky over it, as `paint` sets it.
-            c.ground = SNOW_ALBEDO * c.overhead();
-            let (sky, ground) = c.lobes();
-            let side = luma(sky[0] + ground[0]);
-            (luma(sky[2] + ground[2]), side, luma(sky[3] + ground[3]))
-        };
-        let (up, side, down) = lit(1.0);
-        let (clear_up, clear_side, clear_down) = lit(0.0);
-        // An overcast sky is three times brighter overhead than at its horizon, so a side,
-        // which sees half the sky, mostly its low part, and half the snow, takes a sixth less
-        // than what faces up (CIE: a wall takes 0.4 of the open ground's sky light); a clear
-        // sky, brightest low, lit them nearly alike.
-        assert!(up > 1.15 * side, "up {up} side {side}");
-        assert!(
-            up / side > clear_up / clear_side + 0.1,
-            "{clear_up} {clear_side}"
-        );
-        assert!(up / down > clear_up / clear_down, "{clear_up} {clear_down}");
-        // Open ground takes about the light it took under a clear sky.
-        assert!((up - clear_up).abs() < 0.1 * clear_up, "{up} {clear_up}");
-    }
-
-    #[test]
-    fn under_a_closed_canopy_nothing_mirrors_the_sky_and_in_the_open_all_of_it() {
-        assert_eq!(sky_reflected(0.0), 0.0);
-        assert_eq!(sky_reflected(1.0), 1.0);
-        assert!(sky_reflected(0.3) < sky_reflected(0.6));
-        // Small changes as the eye walks are not followed.
-        assert_eq!(sky_reflected(0.401), sky_reflected(0.405));
-    }
-
-    fn colours() -> Colours {
-        Colours {
-            low: 0.0,
-            day: 1.0,
-            shade: Vec3::new(0.4, 0.5, 1.0),
-            horizon: Vec3::new(0.9, 0.85, 0.8),
-            zenith: Vec3::new(0.1, 0.25, 0.7),
-            ground: Vec3::new(0.3, 0.35, 0.1),
-            overcast: 0.0,
-        }
-    }
-
-    #[test]
-    fn the_sky_is_blue_above_and_the_ground_below() {
-        let c = colours();
-        let above = c.toward(Vec3::Y);
-        assert!(above.z > above.x, "{above}");
-        assert_eq!(c.toward(-Vec3::Y), c.ground);
-    }
-
-    #[test]
-    fn a_clear_sky_is_brighter_at_the_horizon() {
-        let c = colours();
-        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-        assert!(luma(c.toward(Vec3::X)) > luma(c.toward(Vec3::Y)));
-    }
-
-    #[test]
-    fn each_side_takes_a_cosine_weighted_share_of_what_it_faces() {
-        let c = colours();
-        let (sky, ground) = c.lobes();
-        // Facing straight up sees only sky, and its light is a weighted mean of the sky's:
-        // between the zenith's and the horizon's, the brighter.
-        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-        assert!(luma(ground[2]) < 1e-6 && luma(sky[3]) < 1e-6);
-        let (zenith, horizon) = (luma(c.toward(Vec3::Y)), luma(c.toward(Vec3::X)));
-        let up = luma(sky[2]);
-        assert!(
-            up > zenith.min(horizon) * 0.98 && up < zenith.max(horizon) * 1.02,
-            "{up}"
-        );
-        // Facing down sees only the ground, which is one colour: all of it.
-        assert!(ground[3].distance(c.ground) < 0.02, "{}", ground[3]);
-        // A side sees half sky and half ground.
-        let side = sky[0] + ground[0];
-        let half = (c.ground + c.toward(Vec3::X)) * 0.5;
-        assert!(luma(side) > luma(half) * 0.7 && luma(side) < luma(half) * 1.3);
-    }
-
-    #[test]
-    fn the_cube_has_the_sky_on_its_top_face_and_the_ground_on_its_bottom() {
-        let c = colours();
-        let cube = c.cube();
-        // The pixel by the middle of a face, faces in the order +X, -X, +Y, -Y, +Z, -Z.
-        let middle = |face: u32| {
-            let pixel = (face * FACE + FACE / 2) * FACE + FACE / 2;
-            let at = pixel as usize * 16;
-            let float =
-                |i: usize| f32::from_le_bytes(cube[at + i * 4..at + i * 4 + 4].try_into().unwrap());
-            (Vec3::new(float(0), float(1), float(2)), float(3))
-        };
-        let (top, opaque) = middle(2);
-        assert_eq!(opaque, 1.0);
-        assert!(top.distance(c.toward(Vec3::Y)) < 0.01, "{top}");
-        let (bottom, _) = middle(3);
-        assert!(bottom.distance(c.ground) < 0.01, "{bottom}");
-    }
-
-    #[test]
-    fn worked_out_once_a_height_the_painting_is_what_each_direction_gives() {
-        // A low sun under some cloud, so every branch of `at_height` is taken.
-        let mut c = colours();
-        c.low = 0.4;
-        c.overcast = 0.3;
-        let cube = c.cube();
-        let mut at = 0;
-        for face in 0..6 {
-            for y in 0..FACE {
-                for x in 0..FACE {
-                    let u = (x as f32 + 0.5) / FACE as f32 * 2.0 - 1.0;
-                    let v = (y as f32 + 0.5) / FACE as f32 * 2.0 - 1.0;
-                    let d = [
-                        Vec3::new(1.0, -v, -u),
-                        Vec3::new(-1.0, -v, u),
-                        Vec3::new(u, 1.0, v),
-                        Vec3::new(u, -1.0, -v),
-                        Vec3::new(u, -v, 1.0),
-                        Vec3::new(-u, -v, -1.0),
-                    ][face];
-                    let light = c.toward(d.normalize());
-                    for channel in [light.x, light.y, light.z, 1.0] {
-                        assert_eq!(
-                            cube[at..at + 4],
-                            channel.to_le_bytes(),
-                            "face {face} {x},{y}"
-                        );
-                        at += 4;
-                    }
-                }
-            }
-        }
-        // The lobes' sky light is the cosine-weighted sum of each direction's, by any order.
-        let (sky, _) = c.lobes();
-        let mut up = Vec3::ZERO;
-        let n = 2000;
-        for i in 0..n {
-            let y = (i as f32 + 0.5) / n as f32;
-            // Even in height is even in area; a side's cosine toward +Y is the height.
-            up += c.toward(Vec3::new((1.0 - y * y).sqrt(), y, 0.0)) * y * 2.0 / n as f32;
-        }
-        assert!(sky[2].distance(up) < 0.01 * up.length(), "{} {up}", sky[2]);
-    }
-
-    #[test]
-    fn daylight_of_6500_kelvin_is_srgb_white_and_the_locus_runs_amber_to_blue() {
-        // sRGB's white is D65, CIE daylight of 6,504 K.
-        let white = daylight(6_504.0);
-        assert!((white - Vec3::ONE).abs().max_element() < 0.03, "{white}");
-        let warm = daylight(4_000.0);
-        let cold = daylight(15_000.0);
-        assert!(warm.x > warm.y && warm.y > warm.z, "{warm}");
-        assert!(cold.z > cold.y && cold.y > cold.x, "{cold}");
-    }
-
-    #[test]
-    fn a_low_sun_keeps_the_shade_violet_and_the_ground_lit_by_the_sky_is_not_green() {
-        // The settlement's dusk: an orange horizon, a violet shade key, grass on the ground.
-        let mut c = Colours {
-            low: 1.0,
-            day: 1.0,
-            shade: srgb_linear(0.76, 0.68, 0.92),
-            horizon: srgb_linear(1.0, 0.8, 0.62),
-            zenith: srgb_linear(0.35, 0.45, 0.75),
-            ground: Vec3::ZERO,
-            overcast: 0.0,
-        };
-        let sky = c.overhead();
-        // Violet: red and blue both over green, as the keys give it; on the locus green sat
-        // between them and the shade read grey.
-        assert!(sky.y < sky.x && sky.y < sky.z, "{sky}");
-        // Grass lit by that sky gives back a grey, not its own green.
-        let grass = Vec3::new(0.05, 0.09, 0.03);
-        c.ground = grass * sky;
-        let lit = c.ground / c.ground.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-        let unlit = grass / grass.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-        assert!(lit.y < unlit.y, "{lit} {unlit}");
-        // By day it stays on the locus.
-        c.low = 0.0;
-        let day = c.overhead();
-        assert!(day.y >= day.x.min(day.z), "{day}");
-    }
-
-    #[test]
-    fn a_colour_on_the_locus_is_never_magenta_and_keeps_its_brightness() {
-        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-        let lilac = Vec3::new(0.45, 0.4, 0.8);
-        let on = on_daylight_locus(lilac);
-        // Daylight's green lies between its red and its blue; lilac's is under both.
-        assert!(on.y >= on.x.min(on.z), "{on}");
-        assert!((luma(on) - luma(lilac)).abs() < 1e-3, "{on}");
-        // As cool as it was: blue over red kept within the locus's reach.
-        assert!(on.z > on.x, "{on}");
-    }
-
-    fn srgb_linear(r: f32, g: f32, b: f32) -> Vec3 {
-        Vec3::from_slice(&Color::srgb(r, g, b).to_linear().to_f32_array()[..3])
-    }
-
-    #[test]
-    fn above_twilight_an_orange_and_lilac_sky_lights_the_shade_daylight_not_lilac() {
-        // An orange horizon, a blue zenith and a lilac shade colour, with the sun above
-        // twilight; every way up into the sky and the light toward each side is daylight.
-        let c = Colours {
-            low: 0.0,
-            day: 1.0,
-            shade: srgb_linear(0.68, 0.66, 0.9),
-            horizon: srgb_linear(0.95, 0.55, 0.38),
-            zenith: srgb_linear(0.16, 0.24, 0.52),
-            ground: Vec3::new(0.1, 0.1, 0.08),
-            overcast: 0.0,
-        };
-        for d in [Vec3::Y, Vec3::new(1.0, 0.05, 0.0), Vec3::new(1.0, 0.5, 1.0)] {
-            let light = c.toward(d.normalize());
-            assert!(light.y >= light.x.min(light.z) * 0.999, "{d}: {light}");
-        }
-        let (sky, _) = c.lobes();
-        for side in sky {
-            assert!(side.y >= side.x.min(side.z) * 0.999, "{side}");
-        }
-    }
-}
+mod tests;
