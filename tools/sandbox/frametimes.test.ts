@@ -24,39 +24,27 @@ test("the same builds pass; a slower game or a long frame in the game fails", ()
   assert.ok(bars(old, same).every((b) => b.pass));
 
   const slower = [1, 2, 3].map((i) => run(`new-${i}`, parse(csv(5.2))));
-  assert.deepEqual(bars(old, slower).map((b) => b.pass), [false, true, true, true, true]);
+  assert.deepEqual(bars(old, slower).map((b) => b.pass), [false, true, true, true]);
 
   // A 30 ms frame long on the GPU is the view's; one long in the game is not.
   const gpuOld = [run("old-1", parse(csv(5, ["99,30,5,9,29,9.5,0.5"]))), ...old.slice(1)];
   const gpu = [run("new-1", parse(csv(5, ["99,30,5,9,29,9.5,0.5"]))), ...same.slice(1)];
   assert.equal(bars(gpuOld, gpu)[2].pass, true);
   const inGame = [run("new-1", parse(csv(5, ["99,30,28,9,8,27,0.5"]))), ...same.slice(1)];
-  assert.equal(bars(old, inGame)[2].pass, false);
-});
-
-test("the sky's repaints are counted apart from the game's p99, and their counts must match", () => {
-  const paint = (n: number) => Array.from({ length: n }, (_, i) => `${90 + i},12,11.5,9,8,9.5,0`);
-  const old = [1, 2, 3].map((i) => run(`old-${i}`, parse(csv(5, paint(2)))));
-  const same = [1, 2, 3].map((i) => run(`new-${i}`, parse(csv(5, paint(3)))));
-  assert.equal(same[0].repaints, 3);
-  assert.equal(same[0].gameP99, 5);
-  assert.ok(bars(old, same).every((b) => b.pass));
-  // Five repaints where old has two: the builds walked different ground.
-  const more = [1, 2, 3].map((i) => run(`new-${i}`, parse(csv(5, paint(5)))));
-  assert.deepEqual(bars(old, more).map((b) => b.pass), [true, false, true, true, true]);
+  assert.equal(bars(old, inGame)[1].pass, false);
 });
 
 test("a new long frame passes beside an old one on the same ground, fails where old has none", () => {
   const old = [run("old-1", parse(csv(5, ["99,40,5,9,39,9.5,0"]))), run("old-2", parse(csv(5)))];
   const near = [run("new-1", parse(csv(5, ["60,40,5,9,39,9.5,0"])))];
-  assert.equal(bars(old, near)[3].pass, true);
+  assert.equal(bars(old, near)[2].pass, true);
   const far = [run("new-1", parse(csv(5, ["20,40,5,9,39,9.5,0"])))];
-  assert.equal(bars(old, far)[3].pass, false);
+  assert.equal(bars(old, far)[2].pass, false);
 });
 
 test("frame p99 passes inside or under old's range, fails over it", () => {
   const old = [run("old-1", parse(csv(5))), run("old-2", parse(csv(5, ["98,14,5,9,8,9.5,0", "99,14,5,9,8,9.5,0"])))];
   const over = [1, 2].map((i) => run(`new-${i}`, parse(csv(5, ["98,15,5,9,8,9.5,0", "99,15,5,9,8,9.5,0"]))));
-  assert.equal(bars(old, over)[4].pass, false);
-  assert.equal(bars(old, [run("new-1", parse(csv(5)))])[4].pass, true);
+  assert.equal(bars(old, over)[3].pass, false);
+  assert.equal(bars(old, [run("new-1", parse(csv(5)))])[3].pass, true);
 });

@@ -3,15 +3,13 @@
 // to the game's own work (the main world) on a frame the render world bounds, where a
 // frame's whole p99 is mostly the view and the GPU, and so noise between two builds. Both
 // builds walk the same path (the same route spots reached), so the same ground comes into view:
-//   1. game:     the median of new's runs' p99 of game_ms, the sky's repaints left out (frames
-//                with game_ms over 10, terra_world::skylight::paint's 7 ms), within old's
-//                runs' range (or under it);
-//   2. repaints: those frames, a count a run: new's median within old's range ± 1, or the
-//                two builds' paths differ and the A/B compares different ground;
-//   3. long:     every new frame over 25 ms is long in the render world or the GPU, not the game;
-//   4. new long: every new frame over 25 ms has one in an old run within 60 frames of it
+//   1. game:     the median of new's runs' p99 of game_ms within old's runs' range (or under
+//                it); the sky's repaints, 7 ms of game a second while walking, no longer
+//                stand out of it to be counted apart (D489);
+//   2. long:     every new frame over 25 ms is long in the render world or the GPU, not the game;
+//   3. new long: every new frame over 25 ms has one in an old run within 60 frames of it
 //                (the same ground's first sight, pipelines compiling), not a stall old lacks;
-//   5. frame:    the median of new's runs' frame p99 no more than the slowest of old's runs.
+//   4. frame:    the median of new's runs' frame p99 no more than the slowest of old's runs.
 // A change to how the player moves is judged with the camera on a fixed path, replayed alike
 // in every run (`--glide` and a `--vantage …@frame` key every 10 frames, recorded from one
 // run's camera), so what is in view cannot differ (D53).
@@ -26,8 +24,6 @@ export type Frame = { frame: number; ms: number; game: number; busy: number; gpu
 
 /// The bars' margins.
 export const LONG_MS = 25;
-/// A frame whose game takes longer is a sky repaint (traced: 7 ms of paint on ~4.5 of game).
-export const REPAINT_MS = 10;
 /// How near in frames a new long frame must be to an old one to be the same ground's.
 export const LONG_NEAR_FRAMES = 60;
 
@@ -61,10 +57,7 @@ export type Run = {
   p99: number;
   worst: number;
   gameMedian: number;
-  /// The game's p99 over the frames that are not sky repaints.
   gameP99: number;
-  /// Frames whose game is over REPAINT_MS: the sky's repaints.
-  repaints: number;
   /// Frames where the game took longer than the render world's work.
   gameBound: Frame[];
   /// Frames over LONG_MS, and those whose longest part is the game's.
@@ -74,7 +67,7 @@ export type Run = {
 
 export function run(name: string, frames: Frame[]): Run {
   const ms = frames.map((f) => f.ms);
-  const game = frames.filter((f) => f.game <= REPAINT_MS).map((f) => f.game);
+  const game = frames.map((f) => f.game);
   const long = frames.filter((f) => f.ms > LONG_MS);
   return {
     name,
@@ -83,7 +76,6 @@ export function run(name: string, frames: Frame[]): Run {
     worst: Math.max(...ms),
     gameMedian: median(game),
     gameP99: quantile(game, 0.99),
-    repaints: frames.length - game.length,
     gameBound: frames.filter((f) => f.game > f.busy),
     long,
     longInGame: long.filter((f) => f.game >= Math.max(f.busy, f.gpu)),
@@ -104,8 +96,6 @@ export function bars(old: Run[], now: Run[]): Bar[] {
   const range = (values: number[], f = fmt) => `${f(Math.min(...values))}-${f(Math.max(...values))}`;
   const oldGame = old.map((r) => r.gameP99);
   const newGame = median(now.map((r) => r.gameP99));
-  const oldPaints = old.map((r) => r.repaints);
-  const newPaints = median(now.map((r) => r.repaints));
   const count = (runs: Run[], key: "long" | "longInGame") =>
     runs.reduce((n, r) => n + r[key].length, 0);
   const unmatched = unmatchedLong(old, now);
@@ -117,14 +107,7 @@ export function bars(old: Run[], now: Run[]): Bar[] {
       pass: newGame <= Math.max(...oldGame),
       old: range(oldGame),
       new: fmt(newGame),
-      why: `median of runs' p99 game_ms, repaints (game > ${REPAINT_MS}) apart, within old's range`,
-    },
-    {
-      name: "repaints",
-      pass: newPaints >= Math.min(...oldPaints) - 1 && newPaints <= Math.max(...oldPaints) + 1,
-      old: range(oldPaints, String),
-      new: String(newPaints),
-      why: "frames with game > 10 a run, new's median within old's range ± 1 (same path)",
+      why: "median of runs' p99 game_ms within old's range",
     },
     {
       name: `>${LONG_MS} ms in game`,
@@ -166,10 +149,10 @@ function main(args: string[]) {
   const old = load(sides["--old"]);
   const now = load(sides["--new"]);
   const f = (n: number) => n.toFixed(2).padStart(6);
-  console.log(`run              median    p99  worst  game50 game99  paints  >25ms  game-bound  (game99 without game > ${REPAINT_MS})`);
+  console.log("run              median    p99  worst  game50 game99  >25ms  game-bound");
   for (const r of [...old, ...now]) {
     console.log(
-      `${r.name.padEnd(15)} ${f(r.median)} ${f(r.p99)} ${f(r.worst)} ${f(r.gameMedian)} ${f(r.gameP99)} ${String(r.repaints).padStart(7)} ${String(r.long.length).padStart(6)} ${String(r.gameBound.length).padStart(11)}`,
+      `${r.name.padEnd(15)} ${f(r.median)} ${f(r.p99)} ${f(r.worst)} ${f(r.gameMedian)} ${f(r.gameP99)} ${String(r.long.length).padStart(6)} ${String(r.gameBound.length).padStart(11)}`,
     );
   }
   const unmatched = new Set(unmatchedLong(old, now).map((u) => u.frame));
