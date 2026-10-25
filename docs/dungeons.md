@@ -1,6 +1,6 @@
 # Dungeons by rule
 
-Status: Leaning, technical (D473, D474, by the agent); the generator and its sheet are built in `terra_dungeon`, nothing is laid in the world yet. What a dungeon is for in the game is a design question for the developers, listed at the end and not decided here. [instances.md](instances.md) says how a dungeon behind a door is loaded as its own world; this doc says how one is made.
+Status: Leaning, technical (D473, D474, D483, D484, by the agent); the generator, its sheet and the stamp are built in `terra_dungeon`, and the sandbox lays one in the forest (`--experiment dungeon`, `dungeon-mine`, `dungeon-keep`). What a dungeon is for in the game is a design question for the developers, listed at the end and not decided here. [instances.md](instances.md) says how a dungeon behind a door is loaded as its own world; this doc says how one is made.
 
 ## Constraints
 
@@ -35,12 +35,13 @@ Rooms by role and how they are linked, before any has a place (Dormans' mission 
 
 Wave function collapse (Gumin's simple tiled model, as Townscaper and Bad North use it) over the theme's modules, a module turned to each facing a variant.
 
-- **Sockets** on each side: `open`, `wall`, `door`, `stair`, `rubble`, `water`. A wall, door or stair side must take what placement put there; an open side must share an interior socket (open, rubble, water) with the module across.
+- **Sockets** on each side: `open`, `wall`, `door`, `stair`, `rubble`, `water` and the theme's own (D483). A wall, door or stair side must take what placement put there; an open side must share an interior socket (every socket but wall, door and stair) with the module across. `any` is every socket but water and rubble.
+- **Rules by socket** (D483): a socket few modules take is structure. Pillars take `aisle` along their row, so a row runs wall to wall; loculi take `alcove` beside them and end at a corner, door or end piece; decorated walls alternate two beats (`ra`, `rb`: a sconce or relief, then a plain bay); runners and rails (`runner`, `rail`) run unbroken from a door, stair or feature to another or to an end piece.
 - **Held as given**: the goal's dais, each key room's altar, lever or brazier, the rest room's fire (the cell of its room with the most open sides and no door) and every stair cell take their module in any facing that fits.
-- **Water** modules take only water on open sides and no dry module takes water, so water fills a whole room or corridor run (a corridor broken by a stair is two runs) or none; a room with a held feature stays dry.
+- **Water** meets dry floor only at a `shore`, steps down from its dry side; a pool takes no stair, so a flooded gallery has a shore before its stair.
 - **Rubble**: a collapse (blocks its cell) sits in a room's corner and spills rubble into the cells beside it.
 - **Solver**: the cell with fewest variants left, a pick by weight, arc consistency over open sides; a contradiction, or a dressing that cuts a cell off from the entrance, starts again from a derived seed, up to 8 times; then the theme's plain floors, which always solve.
-- **Promises** (tested over 1,000 seeds): every cell filled with a variant its sides take; water only whole; every cell not blocked and every held feature reached from the entrance; the solve rate without the fallback above a bound.
+- **Promises** (tested over 1,000 seeds): every cell filled with a variant its sides take; every open side's two modules share a socket; water ends only at a shore; every cell not blocked and every held feature reached from the entrance; the solve rate without the fallback above a bound.
 
 ### 4. Themes as data (`theme.rs`, D136)
 
@@ -58,11 +59,24 @@ Spider is the only hostile creature in play; Drillhog, Worman and Seawish join a
 
 `cargo run --release -p terra_dungeon --bin dungeons -- --seeds 1000 --maps <dir>`: a line a theme (solvable, placed and tries, dressed without the fallback and tries, connected, verified, median time a stage, room and cell counts, variety: the Jaccard distance between neighbouring seeds' cells and the entropy of module use) and a PNG a theme of its first 8 dungeons, a column a level, rooms tinted by role, the graph's nodes and links over the grid, mobs and loot as pips.
 
+## The stamp and the run-in (`stamp/`, D484)
+
+What the world lays, as plain data in a local frame (metres, x east, y up, z south; the origin the roof's top at the entrance cell's north-west corner; level L's floor top at -4(L+1) m).
+
+- **Digs**: a terrain box a level, one under its basins and shores and one up the entrance well, each to 0.03 m under the floor's top (creatures stand on the ground, not on cubes).
+- **Shell** in the theme's wall, floor and trim kinds: floor and ceiling slabs, a wall a cube thick where placement put one, doorways and stair ways as `Fill::Open` cubes so each space stays a closed room to building's light, stairs of 8 risers over 6 m, a parapet and lintel at the surface.
+- **Modules** to cubes and props by words in their names (pillar, alcove, rubble, basin, shore, runner, decor, ...); an unknown name is plain floor.
+- **Run-in**: the graph's mobs at free spots away from doors, a chest a room with its loot, the goal object and the keys at their features (dungeon objects, not items), studded leaves at locked and one-way doors, up to 30 torches and braziers, the start on the surface and a tour of floor points to the goal.
+- **Promises** (tested over 200 seeds): a walker stepping up a cube and down two reaches every object, chest, mob and fire from the start; air never leaves its space but up the entrance well; every model exists.
+
+## In the sandbox
+
+`cargo xtask sandbox --experiment dungeon` (also `dungeon-mine`, `dungeon-keep`; theme and seed in `assets/data/dungeon_demo.ron`) digs the most level site near the start, lays the stamp as one building with footings off and spawns the rest; the walker starts on the grass north of the stair. The run's log gives the tour as `--route` points and each leg as a `--vantage`.
+
 ## Next
 
-- **Stamp and walk**: cells to building cubes (a slab, a ring of wall, jambs and lintels at doors, stairs, a parapet at the surface stair), walkability checked at cube level.
-- **Run-in**: mobs at free spots away from doors, chests against walls with the room's loot, lights, the goal object and keys, door leaves (a locked one opens when its keys are taken), the start on the surface, the tour as waypoints.
-- **The sandbox**: `--dungeon <theme>@<seed>` digs and lays one under the forest (a selector of a general generator, D249), then films.
+- **Light underground**: a closed room still takes sky light from the lush forest's irradiance volume (Bevy uses no room probe once a volume is in view); the room's sky share from its openings is written, not landed.
+- **Door leaves** that open (a locked one when its keys are taken), chests that hold their loot as storage, water surfaces in basins.
 
 ## Open questions (design, the developers')
 

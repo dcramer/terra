@@ -6255,8 +6255,10 @@ dependencies = [
  "terra_climate",
  "terra_core",
  "terra_creatures",
+ "terra_dungeon",
  "terra_game",
  "terra_gen",
+ "terra_survival",
  "terra_walker",
  "terra_world",
 ]

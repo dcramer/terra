@@ -1,0 +1,12 @@
+// The dungeon demos (crates/terra_sandbox/src/experiments/dungeon): each experiment's theme
+// (assets/data/dungeons) and seed, and where in the lush forest it is dug: the most level spot
+// within `within` metres of `near`, east and south of the start.
+(
+    demos: [
+        (experiment: "dungeon", theme: "crypt", seed: 7),
+        (experiment: "dungeon-mine", theme: "flooded_mine", seed: 7),
+        (experiment: "dungeon-keep", theme: "ruined_keep", seed: 7),
+    ],
+    near: (-70.0, -50.0),
+    within: 40.0,
+)

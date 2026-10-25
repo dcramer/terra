@@ -81,6 +81,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D473](decisions/D473.md) | Dungeons are made in stages: a mission graph, placed on 3 m cells and 4 m levels | Tech | Agent | Leaning | A dungeon is a theme and a seed, made in stages… |
 | [D474](decisions/D474.md) | Dungeon cells are dressed by wave function collapse over a theme's socketed modules | Tech | Agent | Leaning | Every placed cell takes a module from its theme's set… |
 | [D483](decisions/D483.md) | A theme names its own sockets, and a socket few modules take is an adjacency rule | Tech | Agent | Leaning | Amends D474 (the dressing in dungeons.md follows it). |
+| [D484](decisions/D484.md) | A dungeon is stamped as one building of cubes in a dug box, and run in from its graph | Tech | Agent | Leaning | `terra_dungeon::stamp` turns a dressed dungeon into what… |
 
 ## The player and survival
 

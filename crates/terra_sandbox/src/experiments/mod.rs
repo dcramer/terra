@@ -6,6 +6,7 @@
 use bevy::prelude::*;
 
 mod crowd;
+mod dungeon;
 mod forest;
 mod forest_walk;
 mod icons;
@@ -27,7 +28,12 @@ pub struct Experiment {
 
 /// Experiments that stand for others and their options, given before the run's own so the
 /// run's win: a demo is a line here, not an option of its own (D249).
-const STANDS_FOR: &[(&str, &[&str])] = &[("forest-walk", forest_walk::WITH)];
+const STANDS_FOR: &[(&str, &[&str])] = &[
+    ("forest-walk", forest_walk::WITH),
+    ("dungeon", dungeon::WITH),
+    ("dungeon-mine", dungeon::WITH),
+    ("dungeon-keep", dungeon::WITH),
+];
 
 /// The command line with what each experiment named in it stands for put in front.
 pub fn expanded(args: Vec<String>) -> Vec<String> {
@@ -42,6 +48,21 @@ pub fn expanded(args: Vec<String>) -> Vec<String> {
 }
 
 pub const ALL: &[Experiment] = &[
+    Experiment {
+        name: "dungeon",
+        about: "A generated crypt dug into the lush forest, torch-lit, the player by its stair down (assets/data/dungeon_demo.ron). The same as play and lush on the yard at noon.",
+        add: |app| dungeon::plugin(app, "dungeon"),
+    },
+    Experiment {
+        name: "dungeon-mine",
+        about: "The dungeon demo as a flooded mine.",
+        add: |app| dungeon::plugin(app, "dungeon-mine"),
+    },
+    Experiment {
+        name: "dungeon-keep",
+        about: "The dungeon demo as a ruined keep.",
+        add: |app| dungeon::plugin(app, "dungeon-keep"),
+    },
     Experiment {
         name: "forest-walk",
         about: "A walk in the lush forest with its wildlife: F6 summer or winter, F7 dawn, noon, dusk or night, J and L an hour back or on, F8 the next weather, P a feedback picture and note, O the help. The same as play and lush on the yard at the forest film's path.",

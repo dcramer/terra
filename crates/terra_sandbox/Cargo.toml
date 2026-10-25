@@ -16,8 +16,12 @@ mimalloc = "0.1.52"
 terra_climate.workspace = true
 terra_core.workspace = true
 terra_creatures.workspace = true
+# The dungeon demos: a generated dungeon laid in building cubes (experiments/dungeon).
+terra_dungeon.workspace = true
 terra_game.workspace = true
 terra_gen.workspace = true
+# The dungeon demos light fires as the game's campfires burn (props::CAMPFIRE).
+terra_survival.workspace = true
 terra_walker.workspace = true
 terra_world.workspace = true
 
