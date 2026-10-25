@@ -9,7 +9,7 @@
 //! braces, skipping strings, characters and comments. A function's lines run from the line
 //! of its `fn` to its closing brace, a function written inside it included.
 
-use crate::{Task, output, root};
+use crate::{Task, root};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
@@ -383,17 +383,47 @@ const SPLIT: [&str; 6] = [
     "An offender in the baseline may shrink; leave its entry, the full run on main (`cargo xtask nightly`) lowers it (D414).",
 ];
 
-/// The tracked Rust sources measured, as path and text, or `None` when git cannot list them.
+/// The Rust sources measured, as path and text, or `None` when git cannot list them.
 fn sources() -> Option<Vec<(String, String)>> {
-    let mut args = vec!["ls-files", "--"];
+    sources_in(&root())
+}
+
+/// The Rust sources under a checkout's measured folders as they are on disk: those tracked and
+/// those not yet added that git does not ignore. A new file is measured before `git add`, so a
+/// run on the tree being written sees what the commit will hold (commit d5237b84's 315-line
+/// `run`, in a file not yet added, passed so).
+fn sources_in(dir: &std::path::Path) -> Option<Vec<(String, String)>> {
+    let mut args = vec![
+        "ls-files",
+        "-z",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "--",
+    ];
     args.extend(MEASURED);
-    let listed = output("git", &args)?;
+    let out = std::process::Command::new("git")
+        .args(&args)
+        .current_dir(dir)
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let listed = String::from_utf8_lossy(&out.stdout);
+    let mut paths: Vec<&str> = listed
+        .split('\0')
+        .filter(|path| path.ends_with(".rs"))
+        .collect();
+    // A file in conflict is listed once a stage.
+    paths.sort_unstable();
+    paths.dedup();
     Some(
-        listed
-            .lines()
-            .filter(|path| path.ends_with(".rs"))
+        paths
+            .into_iter()
             .filter_map(|path| {
-                let text = std::fs::read_to_string(root().join(path)).ok()?;
+                let text = std::fs::read_to_string(dir.join(path)).ok()?;
                 Some((path.to_string(), text))
             })
             .collect(),
@@ -792,6 +822,36 @@ mod tests {
                 ("planted.rs", "long", FN_LINES + 2)
             ])
         );
+    }
+
+    /// A source not yet added is measured as one tracked is; one git ignores is not.
+    #[test]
+    fn a_file_not_yet_added_is_measured() {
+        let dir = std::env::temp_dir().join(format!("terra-sizes-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("crates/a/src")).unwrap();
+        let git = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .unwrap()
+                .status;
+            assert!(status.success(), "git {args:?}");
+        };
+        git(&["init", "-q"]);
+        std::fs::write(dir.join(".gitignore"), "ignored.rs\n").unwrap();
+        for name in ["tracked.rs", "new.rs", "ignored.rs"] {
+            std::fs::write(dir.join("crates/a/src").join(name), "fn f() {}\n").unwrap();
+        }
+        git(&["add", "crates/a/src/tracked.rs"]);
+        let found: Vec<String> = sources_in(&dir)
+            .unwrap()
+            .into_iter()
+            .map(|(path, _)| path)
+            .collect();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(found, ["crates/a/src/new.rs", "crates/a/src/tracked.rs"]);
     }
 
     /// The repository as it is passes: nothing is over the limits that the baseline does not
