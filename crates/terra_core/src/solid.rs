@@ -169,6 +169,12 @@ impl Piece {
         (apart - self.radius, out)
     }
 
+    /// How far a point is outside its edge, less than nothing inside it: `distance`'s first
+    /// half, worked out with one square root, for a query that asks it many times a tick.
+    pub fn gap(&self, at: Vec2) -> f32 {
+        outline_gap(&self.hull, at) - self.radius
+    }
+
     /// The middle of its outline and how far round it reaches.
     pub fn bounds(&self) -> (Vec2, f32) {
         let middle = self.hull.iter().copied().sum::<Vec2>() / self.hull.len().max(1) as f32;
@@ -563,6 +569,34 @@ fn outline_distance(hull: &[Vec2], at: Vec2) -> (f32, Vec2) {
     }
 }
 
+/// `outline_distance`'s distance alone: the least squared distance to an edge, rooted once,
+/// and less than nothing inside (inside a convex outline, the nearest edge is as far as the
+/// nearest edge's line).
+fn outline_gap(hull: &[Vec2], at: Vec2) -> f32 {
+    match hull.len() {
+        0 => f32::INFINITY,
+        1 => at.distance(hull[0]),
+        2 => at.distance(nearest_on_segment(hull[0], hull[1], at)),
+        n => {
+            let mut inside = true;
+            let mut least = f32::INFINITY;
+            let mut a = hull[n - 1];
+            for &b in hull {
+                let (edge, from) = (b - a, at - a);
+                // Anticlockwise: outside an edge when the point is on its right.
+                if edge.perp_dot(from) < 0.0 {
+                    inside = false;
+                }
+                let t = (from.dot(edge) / edge.length_squared().max(1e-12)).clamp(0.0, 1.0);
+                least = least.min((from - edge * t).length_squared());
+                a = b;
+            }
+            let least = least.sqrt();
+            if inside { -least } else { least }
+        }
+    }
+}
+
 fn nearest_on_segment(a: Vec2, b: Vec2, at: Vec2) -> Vec2 {
     let ab = b - a;
     let t = ((at - a).dot(ab) / ab.length_squared().max(1e-12)).clamp(0.0, 1.0);
@@ -614,6 +648,14 @@ mod tests {
             assert!(outline_distance(&hull, p).0 <= 1e-5);
         }
         assert!((outline_distance(&hull, Vec2::new(3.0, 1.0)).0 - 1.0).abs() < 1e-5);
+        // Its gap alone is the same, inside and out.
+        for p in [
+            Vec2::new(3.0, 1.0),
+            Vec2::new(1.8, 1.0),
+            Vec2::new(-0.5, 2.5),
+        ] {
+            assert!((outline_gap(&hull, p) - outline_distance(&hull, p).0).abs() < 1e-5);
+        }
         // Deep inside, out through the nearest side.
         let (inside, out) = outline_distance(&hull, Vec2::new(1.8, 1.0));
         assert!((inside + 0.2).abs() < 1e-5);

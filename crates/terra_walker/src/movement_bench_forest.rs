@@ -5,7 +5,7 @@
 //! the game's walk gathers them (`mover_world::flora` out of a `flora::Obstacles`). The
 //! solids are a fixture (`movement_bench_forest.json`), dumped from the running game by the
 //! `world.solids` remote method, since fitting them needs their models' meshes. Timed a tick,
-//! with the calls a tick by source: the planet's field, the solids asked, the pieces in them.
+//! with the calls a tick by source: the planet's field, the solids asked, the pieces offered.
 
 use bevy::math::DVec3;
 use bevy::prelude::{Vec2, Vec3};
@@ -13,7 +13,7 @@ use serde::Deserialize;
 use std::cell::{Cell, RefCell};
 use std::time::Instant;
 use terra_core::{Piece, PlanetSpec, Seed, Solid};
-use terra_motion::mover::{Bodies, Intent, Kind, Obstacles, Sdf, Shaped, World};
+use terra_motion::mover::{Bodies, Intent, Kind, Obstacles, Part, Sdf, Shaped, World};
 use terra_world::flora;
 use terra_world::planet::{HeightMemo, Planet};
 use terra_world::start::Start;
@@ -42,11 +42,11 @@ struct Fixture {
 struct Fitted {
     at: [f32; 3],
     frame: [[f32; 3]; 3],
-    pieces: Vec<Part>,
+    pieces: Vec<Written>,
 }
 
 #[derive(Deserialize)]
-struct Part {
+struct Written {
     hull: Vec<[f32; 2]>,
     radius: f32,
     top: f32,
@@ -154,6 +154,19 @@ impl Shaped for Tallied<'_> {
 
     fn bounds(&self) -> (Vec3, f32) {
         self.solid.bounds()
+    }
+
+    fn parts_near(&self, at: Vec3, reach: f32, out: &mut Vec<Part>) {
+        self.solid.parts_near(at, reach, out);
+    }
+
+    /// The query's union asks a solid here: tallied as one solid asked and the pieces it was
+    /// offered, the most it may answer exactly (those its bounds do not skip).
+    fn nearest_of(&self, parts: &[Part], at: DVec3, best: f32) -> f32 {
+        let tally = self.tally;
+        tally.solids.set(tally.solids.get() + 1);
+        tally.pieces.set(tally.pieces.get() + parts.len() as u64);
+        self.solid.nearest_of(parts, at, best)
     }
 }
 

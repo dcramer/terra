@@ -5,6 +5,14 @@
 //! the union of them: the union of exact distances is exact outside it, so a floor of cubes
 //! side by side has no seam to catch on, and a cube's edge on the floor is a crease the field
 //! knows (`query`'s crease rule).
+//!
+//! A tree's or rock's solid is many convex pieces (`terra_core::Solid`, up to 32). As Jolt's
+//! compound shapes cull their sub-shapes by bounds before testing one (`StaticCompoundShape`'s
+//! bounding-volume tree, MIT) and Unreal tests a primitive only when its bounds overlap the
+//! query (`FBodyInstance`'s per-shape bounds), a query keeps only the pieces whose bounds come
+//! within its reach ([`Shaped::parts_near`]), nearest shape first, and the field skips a piece
+//! whose bound is no nearer than the nearest found so far ([`Shaped::nearest_of`]): exact
+//! still, as the union is, since a piece skipped is never the nearest.
 
 use super::query::{Capsule, Contact, Hit, Query, Sdf};
 use glam::{DVec3, Vec2, Vec3};
@@ -64,6 +72,42 @@ pub trait Shaped {
     fn distance_at(&self, at: DVec3) -> f32 {
         self.distance(at.as_vec3())
     }
+    /// The parts of it a query reaching so far from a point may touch, as [`Part`]s: one,
+    /// all of it, for a shape that is not made of parts.
+    fn parts_near(&self, at: Vec3, reach: f32, out: &mut Vec<Part>) {
+        let _ = (at, reach);
+        out.push(Part::WHOLE);
+    }
+    /// The least of `best` and the distance from a point to these parts of it: a part whose
+    /// bound is no nearer than `best` is not asked.
+    fn nearest_of(&self, parts: &[Part], at: DVec3, best: f32) -> f32 {
+        let _ = parts;
+        best.min(self.distance_at(at))
+    }
+}
+
+/// A part of a shape a query keeps: its index, and its bounds as the shape says (a solid's
+/// piece: its outline's middle in plan and how far round it reaches).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Part {
+    pub index: u32,
+    pub middle: Vec2,
+    pub radius: f32,
+}
+
+impl Part {
+    const WHOLE: Part = Part {
+        index: 0,
+        middle: Vec2::ZERO,
+        radius: f32::INFINITY,
+    };
+}
+
+/// The distance from a point in a solid's plan, so high over its ground, to a piece: a prism
+/// of its rounded outline, open downward into the ground.
+fn piece_distance(piece: &terra_core::Piece, plan: Vec2, height: f32) -> f32 {
+    let w = Vec2::new(piece.gap(plan), height - piece.crest);
+    w.max_element().min(0.0) + w.max(Vec2::ZERO).length()
 }
 
 impl Shaped for Block {
@@ -85,12 +129,46 @@ impl Shaped for Solid {
         let (plan, height) = self.plan(at);
         self.pieces
             .iter()
-            .map(|piece| {
-                // A prism of its rounded outline, open downward into the ground.
-                let w = Vec2::new(piece.distance(plan).0, height - piece.crest);
-                w.max_element().min(0.0) + w.max(Vec2::ZERO).length()
-            })
+            .map(|piece| piece_distance(piece, plan, height))
             .fold(f32::INFINITY, f32::min)
+    }
+
+    /// The pieces whose outline comes within the reach of the point in plan, and whose crest
+    /// is not more than the reach under it, nearest first.
+    fn parts_near(&self, at: Vec3, reach: f32, out: &mut Vec<Part>) {
+        let (plan, height) = self.plan(at);
+        let from = out.len();
+        for (index, piece) in self.pieces.iter().enumerate() {
+            if height - piece.crest >= reach {
+                continue;
+            }
+            let (middle, radius) = piece.bounds();
+            if plan.distance(middle) - radius < reach {
+                out.push(Part {
+                    index: index as u32,
+                    middle,
+                    radius,
+                });
+            }
+        }
+        let apart = |part: &Part| plan.distance(part.middle) - part.radius;
+        out[from..].sort_by(|a, b| apart(a).total_cmp(&apart(b)));
+    }
+
+    /// Each piece's distance is no less than how far the point is outside the circle round its
+    /// outline in plan, nor than how far over its crest it is: a piece no nearer by that than
+    /// `best` is skipped.
+    fn nearest_of(&self, parts: &[Part], at: DVec3, best: f32) -> f32 {
+        let (plan, height) = self.plan(at.as_vec3());
+        let mut best = best;
+        for part in parts {
+            let piece = &self.pieces[part.index as usize];
+            let below = (plan.distance(part.middle) - part.radius).max(height - piece.crest);
+            if below < best {
+                best = best.min(piece_distance(piece, plan, height));
+            }
+        }
+        best
     }
 
     fn bounds(&self) -> (Vec3, f32) {
@@ -121,6 +199,20 @@ impl Shaped for Obstacle {
             Obstacle::Solid(solid) => solid.bounds(),
         }
     }
+
+    fn parts_near(&self, at: Vec3, reach: f32, out: &mut Vec<Part>) {
+        match self {
+            Obstacle::Block(block) => block.parts_near(at, reach, out),
+            Obstacle::Solid(solid) => solid.parts_near(at, reach, out),
+        }
+    }
+
+    fn nearest_of(&self, parts: &[Part], at: DVec3, best: f32) -> f32 {
+        match self {
+            Obstacle::Block(block) => block.nearest_of(parts, at, best),
+            Obstacle::Solid(solid) => solid.nearest_of(parts, at, best),
+        }
+    }
 }
 
 impl<S: Shaped + ?Sized> Shaped for &S {
@@ -135,6 +227,14 @@ impl<S: Shaped + ?Sized> Shaped for &S {
     fn bounds(&self) -> (Vec3, f32) {
         (**self).bounds()
     }
+
+    fn parts_near(&self, at: Vec3, reach: f32, out: &mut Vec<Part>) {
+        (**self).parts_near(at, reach, out)
+    }
+
+    fn nearest_of(&self, parts: &[Part], at: DVec3, best: f32) -> f32 {
+        (**self).nearest_of(parts, at, best)
+    }
 }
 
 /// Obstacles as the mover's query asks them: a slice of shapes, owned or borrowed (`&[&Solid]`
@@ -143,31 +243,54 @@ pub struct Obstacles<'a, S = Obstacle> {
     pub obstacles: &'a [S],
 }
 
+/// The shapes a query may touch, nearest first, each with its parts that it may.
+struct Near<'a, S> {
+    shapes: Vec<(&'a S, std::ops::Range<usize>)>,
+    parts: Vec<Part>,
+}
+
 impl<S: Shaped> Obstacles<'_, S> {
-    /// The shapes within a distance of a capsule swept along a motion.
-    fn near(&self, capsule: &Capsule, motion: Vec3, within: f32) -> Vec<&S> {
+    /// The shapes, and their parts, within a distance of a capsule swept along a motion.
+    fn near(&self, capsule: &Capsule, motion: Vec3, within: f32) -> Near<'_, S> {
         let middle = capsule
             .world((capsule.a + capsule.b + motion) * 0.5)
             .as_vec3();
         let reach = (capsule.b - capsule.a).length() * 0.5 + capsule.radius + within;
         let reach = reach + motion.length() * 0.5;
-        self.obstacles
+        let mut by: Vec<(f32, &S)> = self
+            .obstacles
             .iter()
-            .filter(|shape| {
+            .filter_map(|shape| {
                 let (centre, radius) = shape.bounds();
-                centre.distance(middle) < reach + radius
+                let apart = centre.distance(middle) - radius;
+                (apart < reach).then_some((apart, shape))
             })
-            .collect()
+            .collect();
+        by.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut near = Near {
+            shapes: Vec::with_capacity(by.len()),
+            parts: Vec::new(),
+        };
+        for (_, shape) in by {
+            let from = near.parts.len();
+            shape.parts_near(middle, reach, &mut near.parts);
+            if near.parts.len() > from {
+                near.shapes.push((shape, from..near.parts.len()));
+            }
+        }
+        near
     }
 }
 
-/// The union of some shapes as one exact field.
-fn field<'a, S: Shaped>(near: &'a [&'a S]) -> Sdf<impl Fn(DVec3) -> f32 + 'a> {
+/// The union of some shapes' parts as one exact field.
+fn field<'a, S: Shaped>(near: &'a Near<'a, S>) -> Sdf<impl Fn(DVec3) -> f32 + 'a> {
     Sdf {
         distance: move |at: DVec3| {
-            near.iter()
-                .map(|shape| shape.distance_at(at))
-                .fold(f32::INFINITY, f32::min)
+            near.shapes
+                .iter()
+                .fold(f32::INFINITY, |best, (shape, parts)| {
+                    shape.nearest_of(&near.parts[parts.clone()], at, best)
+                })
         },
         steepest: 1.0,
     }
@@ -176,14 +299,14 @@ fn field<'a, S: Shaped>(near: &'a [&'a S]) -> Sdf<impl Fn(DVec3) -> f32 + 'a> {
 impl<S: Shaped> Query for Obstacles<'_, S> {
     fn contacts(&self, capsule: &Capsule, within: f32, out: &mut Vec<Contact>) {
         let near = self.near(capsule, Vec3::ZERO, within);
-        if !near.is_empty() {
+        if !near.shapes.is_empty() {
             field(&near).contacts(capsule, within, out);
         }
     }
 
     fn sweep(&self, capsule: &Capsule, motion: Vec3) -> Option<Hit> {
         let near = self.near(capsule, motion, super::query::TOLERANCE);
-        if near.is_empty() {
+        if near.shapes.is_empty() {
             return None;
         }
         field(&near).sweep(capsule, motion)
@@ -252,6 +375,58 @@ mod tests {
         owned.contacts(&near, 0.1, &mut x);
         borrowed.contacts(&near, 0.1, &mut y);
         assert!(!x.is_empty() && x == y, "{x:?} {y:?}");
+    }
+
+    #[test]
+    fn a_query_kept_to_the_pieces_near_it_answers_as_all_of_them() {
+        // A trunk and its root flare: a round piece, and outlines of 3 to 8 corners round it,
+        // some low enough to step onto, on ground tilted as on a hillside.
+        let mut pieces = vec![Piece::round(Vec2::ZERO, 0.3, 2.5)];
+        for i in 0..8 {
+            let a = i as f32 * 0.785;
+            let (c, s) = (libm::cosf(a), libm::sinf(a));
+            let corners = 3 + i % 6;
+            let hull = (0..corners)
+                .map(|k| {
+                    let b = k as f32 * std::f32::consts::TAU / corners as f32;
+                    Vec2::new(c, s) * 0.6 + Vec2::new(libm::cosf(b), libm::sinf(b)) * 0.25
+                })
+                .collect();
+            let top = 0.1 + 0.15 * i as f32;
+            pieces.push(Piece {
+                hull,
+                radius: 0.02,
+                top,
+                crest: top,
+            });
+        }
+        let up = Vec3::new(0.2, 1.0, 0.1).normalize();
+        let trunk = Solid::of_pieces(up * 100.0, pieces);
+        let (reach, mut worst) = (1.2, 0.0_f32);
+        for i in 0..400 {
+            // Spots round it, up to 2 m off and from under its foot to over its crown.
+            let (a, r, h) = (
+                i as f32 * 2.399,
+                (i % 20) as f32 * 0.1,
+                (i % 7) as f32 * 0.5 - 0.5,
+            );
+            let x = up.any_orthonormal_vector();
+            let z = up.cross(x);
+            let middle = trunk.at + (x * libm::cosf(a) + z * libm::sinf(a)) * r + up * h;
+            let mut parts = Vec::new();
+            trunk.parts_near(middle, reach, &mut parts);
+            for d in [Vec3::ZERO, x * 0.4, z * -0.5, up * 0.3] {
+                let at = middle + d;
+                let whole = Shaped::distance(&trunk, at);
+                let kept = trunk.nearest_of(&parts, at.as_dvec3(), f32::INFINITY);
+                if whole < reach - d.length() {
+                    worst = worst.max((whole - kept).abs());
+                } else {
+                    assert!(kept >= whole - 1e-5, "kept {kept} nearer than all {whole}");
+                }
+            }
+        }
+        assert!(worst < 1e-5, "off by {worst} m within the query's reach");
     }
 
     #[test]

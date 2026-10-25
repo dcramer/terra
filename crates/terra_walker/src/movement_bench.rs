@@ -274,7 +274,7 @@ fn the_mover_bench_times_a_body_walking() {
             .collect(),
     );
     println!(
-        "bench\tforest ({} solids, {} pieces)\tmover {:.1} µs a tick (worst {:.0}), calls a tick: planet {:.0}, solids {:.0} ({:.1} gathered), pieces {:.0}; {:.0} of {:.0} m",
+        "bench\tforest ({} solids, {} pieces)\tmover {:.1} µs a tick (worst {:.0}), calls a tick: planet {:.0}, solids {:.0} ({:.1} gathered), pieces offered {:.0}; {:.0} of {:.0} m",
         woods.solids,
         woods.pieces,
         f.micros,

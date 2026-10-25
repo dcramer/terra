@@ -22,7 +22,7 @@ mod course;
 
 pub use query::{Capsule, Capsules, Contact, Hit, Query, Sdf};
 use serde::Deserialize;
-pub use shapes::{Block, Obstacle, Obstacles, Shaped};
+pub use shapes::{Block, Obstacle, Obstacles, Part, Shaped};
 use slide::{Shape, Support, Touch};
 
 use glam::{DVec3, Vec3};
