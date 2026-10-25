@@ -29,12 +29,17 @@ const INDOOR_EV: f32 = 10.8;
 /// the probes do not carry, bounced round its stone. Without it a corridor between torches
 /// was black (the mine film's 22.5 s, the crypt's 2.5 s, round 8's review); at 16 and warm
 /// grey every surface took one even orange-buff cast with no dark between the torches (round
-/// 11, all three reviewers); at 8, the stretches between lights fall to dim pools.
-const FILL: f32 = 8.0;
+/// 11, all three reviewers). At 8 and cool it was not seen at all (round 13's reviewers: the
+/// shade read ochre): 7 stops under a mid-grey on stone, its blue at the 8-bit floor, so the
+/// shadowed fifth of the probe stills read redder than the torch-lit tenth (linear R/B 33
+/// against 9). At 140 (round 15) the shade reads cooler than the torch-lit (R/B 4.5 against 7).
+const FILL: f32 = 140.0;
 /// Its colour: a cool, moonless blue-grey, as shipped dungeons light their darks (Diablo IV's
 /// and Elden Ring's catacombs: warm pools at the fires, cool shadow between), so the eye reads
-/// a torch's warmth against them rather than one tint over everything.
-const FILL_COLOUR: Color = Color::srgb(0.70, 0.80, 1.0);
+/// a torch's warmth against them rather than one tint over everything. Green enough that the
+/// torches' red spill over it reads grey, not violet: (0.60, 0.72, 1.0) left the shade at a
+/// linear G/B of 0.3-0.4 (round 15's sweep).
+const FILL_COLOUR: Color = Color::srgb(0.62, 0.78, 1.0);
 
 pub fn plugin(app: &mut App) {
     app.add_systems(PostUpdate, fill);
@@ -109,17 +114,22 @@ mod tests {
 
     #[test]
     fn a_shut_room_is_filled_dim_and_cool() {
-        // Some light everywhere, so no stretch between torches is black.
-        assert!(fill_brightness(0.0) > 0.0);
-        // Dim: a stone wall (albedo 0.3) under it alone, at the room's key, stands well under
-        // a mid-grey before the eye opens up (1 / (1.2 x 2^EV) per cd/m², Bevy's exposure).
+        // A stone wall (albedo 0.3) under the fill alone, at the room's key, on screen
+        // (1 / (1.2 x 2^EV) per cd/m², Bevy's exposure).
         let on_screen = fill_brightness(0.0) * 0.3 / (1.2 * libm::exp2f(INDOOR_EV));
+        // Dim: well under a mid-grey, three stops at least, so the torches' pools stand out.
         assert!(on_screen < 0.18 / 8.0, "{on_screen}");
-        // Cool: bluer than it is red or green, against the fires' warm light, but a grey's
-        // blue, not a sky's (its red at least two fifths of its blue, linear).
+        // Seen: within six stops of it, over 8-bit black after the tonemapper (at 8 cd/m² it
+        // stood 7.3 stops under and the shade took none of its colour).
+        assert!(on_screen > 0.18 / 64.0, "{on_screen}");
+        // Cool on the dungeons' warm stone (ochre, linear 0.35, 0.27, 0.18): it gives back
+        // more blue than red, against the fires' warm light.
         let c = FILL_COLOUR.to_linear();
+        let back = [c.red * 0.35, c.green * 0.27, c.blue * 0.18];
+        assert!(back[2] > back[0], "{back:?}");
+        // A grey's blue, not violet: green over half its blue, so red spill over it is grey.
         assert!(
-            c.blue > c.green && c.green > c.red && c.red > 0.4 * c.blue,
+            c.blue > c.green && c.green > c.red && c.green > 0.5 * c.blue,
             "{c:?}"
         );
     }
