@@ -17,11 +17,14 @@
 //!   rock), each a step and the door a wall (criteria 1 and 5).
 //! - `stairs`: flights of the ground's and a base's steps walked up and down at the kind's
 //!   speed, and a doorway's sill crossed without a hop (criteria 5 to 7).
+//! - `flora`: stumps and logs as flora fits them, taller than a step and never climbed, by a
+//!   root or from a slope's high side, or no taller and stepped onto (criterion 5).
 //! - `far`: the same walks on a world 30 km across, where f32 is 2 mm fine (criterion 22, D482).
 
 mod data;
 mod far;
 pub mod field;
+mod flora;
 mod runs;
 mod sources;
 mod stairs;
@@ -94,7 +97,9 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(sources);
     let (stairs, deeper) = stairs::score(&new);
     measures.extend(stairs);
-    let deepest = deepest.max(deeper);
+    let (flora, deepest_flora) = flora::score(&new);
+    measures.extend(flora);
+    let deepest = deepest.max(deeper).max(deepest_flora);
     // What a body met besides the ground counts toward how deep it ever went.
     for m in measures.iter_mut().filter(|m| m.id == "penetration.max") {
         m.value = m.value.max(deepest);

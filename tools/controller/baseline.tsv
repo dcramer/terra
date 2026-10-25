@@ -10,6 +10,7 @@ step.ground	2	seeded from today's walker at 4151fe44 (2026-10-24), the first sco
 step.building	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 step.prop	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 step.rock	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+step.flora	0	step.flora's first number: a thing of flora taller than the step is no step (footing::NoStep, Unreal's CanCharacterStepUpOn), 11 of 64 walks climbed before
 stick.slope	54	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 stick.stair	27	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 stair.up	0.294	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser

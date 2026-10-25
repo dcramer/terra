@@ -12,6 +12,7 @@
 //! - `shapes`: what stops a body besides the ground: cubes, doors, props, trees and rocks.
 //! - `push`: bodies apart by mass.
 
+mod footing;
 mod push;
 pub mod query;
 pub mod shapes;
@@ -438,6 +439,7 @@ fn reframe(body: &mut Body) {
 fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: f32) {
     let up = up_at(body.position, world).unwrap_or(body.up);
     body.up = up;
+    let query = &footing::NoStep::new(query, up, body.kind.step_height);
     reframe(body);
     let shape = shape(body, dt);
     let k = body.kind;

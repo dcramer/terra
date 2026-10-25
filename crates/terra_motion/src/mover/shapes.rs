@@ -84,6 +84,12 @@ pub trait Shaped {
         let _ = parts;
         best.min(self.distance_at(at))
     }
+    /// Whether a body whose feet stand at `feet` may step up onto it where it touches it at
+    /// `at` ([`Query::steps_onto`]): yes, unless it says otherwise.
+    fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
+        let _ = (at, feet, step);
+        true
+    }
 }
 
 /// A part of a shape a query keeps: its index, and its bounds as the shape says (a solid's
@@ -102,6 +108,10 @@ impl Part {
         radius: f32::INFINITY,
     };
 }
+
+/// How near a piece a contact's point is for the piece to be what it touches, m: past the
+/// sweep's tolerance.
+const TOUCH_M: f32 = 0.01;
 
 /// The distance from a point in a solid's plan, so high over its ground, to a piece: a prism
 /// of its rounded outline, open downward into the ground.
@@ -171,6 +181,25 @@ impl Shaped for Solid {
         best
     }
 
+    /// Unreal's `CanCharacterStepUpOn`, by the piece touched: one taller than the step over the
+    /// ground under it is no step but a thing to jump onto, however it is come at (by a lower
+    /// piece of it, such as a log's thin end, or from a slope's high side), unless the feet
+    /// already stand more than a step over its ground, up on it or on something as high.
+    fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
+        let (plan, height) = self.plan(at.as_vec3());
+        let touched = self
+            .pieces
+            .iter()
+            .map(|piece| (piece_distance(piece, plan, height), piece))
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        match touched {
+            Some((apart, piece)) if apart <= TOUCH_M && piece.top > step => {
+                self.plan(feet.as_vec3()).1 > step
+            }
+            _ => true,
+        }
+    }
+
     fn bounds(&self) -> (Vec3, f32) {
         let crest = self.pieces.iter().map(|p| p.crest).fold(0.0, f32::max);
         let (_, height) = self.plan(self.at);
@@ -213,6 +242,13 @@ impl Shaped for Obstacle {
             Obstacle::Solid(solid) => solid.nearest_of(parts, at, best),
         }
     }
+
+    fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
+        match self {
+            Obstacle::Block(block) => block.steps_onto(at, feet, step),
+            Obstacle::Solid(solid) => solid.steps_onto(at, feet, step),
+        }
+    }
 }
 
 impl<S: Shaped + ?Sized> Shaped for &S {
@@ -234,6 +270,10 @@ impl<S: Shaped + ?Sized> Shaped for &S {
 
     fn nearest_of(&self, parts: &[Part], at: DVec3, best: f32) -> f32 {
         (**self).nearest_of(parts, at, best)
+    }
+
+    fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
+        (**self).steps_onto(at, feet, step)
     }
 }
 
@@ -310,6 +350,14 @@ impl<S: Shaped> Query for Obstacles<'_, S> {
             return None;
         }
         field(&near).sweep(capsule, motion)
+    }
+
+    fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
+        let at32 = at.as_vec3();
+        self.obstacles.iter().all(|shape| {
+            let (centre, radius) = shape.bounds();
+            centre.distance(at32) > radius + TOUCH_M || shape.steps_onto(at, feet, step)
+        })
     }
 }
 

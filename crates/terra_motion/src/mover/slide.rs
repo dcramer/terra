@@ -657,6 +657,11 @@ impl Stair<'_> {
         if (contact.at - start).dot(up_dir) > step_height + TOLERANCE {
             return Err(None);
         }
+        // Unreal's CanCharacterStepUpOn: not onto a thing that is no step, however it is met.
+        let world = |at: Vec3| shape.origin + at.as_dvec3();
+        if !query.steps_onto(world(contact.at), world(feet), step_height) {
+            return Err(None);
+        }
         if (landed - feet).dot(normal) < 1.0e-4 {
             return Err(None);
         }

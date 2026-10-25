@@ -171,6 +171,21 @@
    "measurable": true
   },
   {
+   "id": "step.flora",
+   "noticed": 3,
+   "notice": "a stump or log taller than a step is climbed by way of its roots, or from a slope's high side",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "walks wrong",
+   "source": "docs/controller.md criterion 5",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "step.smooth",
    "noticed": 5,
    "notice": "a step pops the body up in one frame",

@@ -112,6 +112,14 @@ pub trait Query {
     /// goes deeper into something it starts in; `None` when it makes all of it. What it starts
     /// touching or in and moves along or out of does not stop it.
     fn sweep(&self, capsule: &Capsule, motion: Vec3) -> Option<Hit>;
+
+    /// Whether a body whose feet stand at `feet` may step up onto what it touches at `at`,
+    /// world points (Unreal's `CanCharacterStepUpOn`): yes, unless a source says otherwise, as
+    /// a thing of flora taller than the step does (`shapes`).
+    fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
+        let _ = (at, feet, step);
+        true
+    }
 }
 
 impl<A: Query + ?Sized, B: Query + ?Sized> Query for (&A, &B) {
@@ -125,6 +133,10 @@ impl<A: Query + ?Sized, B: Query + ?Sized> Query for (&A, &B) {
             (Some(a), Some(b)) => Some(if b.fraction < a.fraction { b } else { a }),
             (a, b) => a.or(b),
         }
+    }
+
+    fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
+        self.0.steps_onto(at, feet, step) && self.1.steps_onto(at, feet, step)
     }
 }
 
