@@ -571,8 +571,8 @@ const RIM_LEAN: f32 = 1.1;
 const RIPPLE_PER_M: f32 = 3.2;
 // A trodden path's snow: packed down into a trough, greyer and darker than the drifts beside
 // it, broken by footprints, and how far its sides tilt the snow.
-const TRODDEN_SNOW: vec3<f32> = vec3<f32>(0.66, 0.68, 0.72);
-const TROUGH_LEAN: f32 = 1.8;
+const TRODDEN_SNOW: vec3<f32> = vec3<f32>(0.64, 0.68, 0.7);
+const TROUGH_LEAN: f32 = 0.6;
 // The bank the walkers' feet push up either side of a path (winter round 14; the judge: "an
 // even-width dark ribbon with no churned edge"): how far out it reaches, metres, how far its
 // outer face tilts the snow, and how much brighter its fresh, broken snow is.
@@ -584,6 +584,51 @@ const RIPPLE_LEAN: f32 = 0.35;
 // flash (winter round 10).
 const GLINT_PER_M: f32 = 65.0;
 const GLINT_SHARE: f32 = 0.04;
+// Footprints in a path's packed snow (the looks review: "the path drawn as hard blotches";
+// Red Dead 2's and Sons of the Forest's trails are pocked by boots): ovals a boot long pressed
+// a few centimetres in, each turned near the path's way, one to a cell PRINT_CELL_M wide in
+// `share` of the cells. Gives how deep the deepest print over a point is, 0 to 1, and how
+// that changes a metre, in the world. A cell's print stays inside the cells beside it on the
+// point's own side, so eight cells hold every print that can reach a point.
+const PRINT_CELL_M: f32 = 0.34;
+const PRINT_HALF_M: vec2<f32> = vec2<f32>(0.14, 0.055);
+const PRINT_DEPTH_M: f32 = 0.035;
+fn prints_at(world: vec3<f32>, normal: vec3<f32>, along: vec3<f32>, share: f32) -> vec4<f32> {
+    let p = world / PRINT_CELL_M;
+    let base = floor(p);
+    let side = select(vec3<f32>(-1.0), vec3<f32>(1.0), fract(p) > vec3<f32>(0.5));
+    let across = cross(normal, along);
+    var best = vec4<f32>(0.0);
+    for (var i = 0u; i < 8u; i++) {
+        let c = base + side * vec3<f32>(f32(i & 1u), f32((i >> 1u) & 1u), f32((i >> 2u) & 1u));
+        if hash(c) >= share {
+            continue;
+        }
+        let jitter = vec3<f32>(
+            hash(c + vec3<f32>(11.0, 0.0, 0.0)),
+            hash(c + vec3<f32>(0.0, 11.0, 0.0)),
+            hash(c + vec3<f32>(0.0, 0.0, 11.0)),
+        );
+        let d = world - (c + 0.25 + 0.5 * jitter) * PRINT_CELL_M;
+        let turn = (hash(c + vec3<f32>(0.0, 0.0, 23.0)) - 0.5) * 0.7;
+        let a = along * cos(turn) + across * sin(turn);
+        let b = cross(normal, a);
+        let u = dot(d, a) / PRINT_HALF_M.x;
+        let v = dot(d, b) / PRINT_HALF_M.y;
+        let r = sqrt(u * u + v * v);
+        // Older prints half filled by what has fallen and blown since.
+        let fresh = 0.4 + 0.6 * hash(c + vec3<f32>(0.0, 23.0, 0.0));
+        let h = (1.0 - smoothstep(0.55, 1.0, r)) * fresh;
+        if r < 1.0 && h > best.x {
+            let t = clamp((r - 0.55) / 0.45, 0.0, 1.0);
+            let dh_dr = -6.0 * t * (1.0 - t) / 0.45 * fresh;
+            let dr = (a * (u / PRINT_HALF_M.x) + b * (v / PRINT_HALF_M.y)) / max(r, 1e-4);
+            best = vec4<f32>(h, dr * dh_dr);
+        }
+    }
+    return best;
+}
+
 fn snow_on(depth_m: f32, world: vec3<f32>, up_facing: f32, under: f32) -> f32 {
     let lying = depth_m * (1.0 - SNOW_UNDER_CROWNS * under);
     let edge = noise(world * 0.35 + 91.0) * 0.6 + noise(world * 1.9 + 23.0) * 0.4;
@@ -2239,29 +2284,45 @@ fn fragment(
         colour *= 1.0 + 0.05 * rim * snow;
         pbr_input.diffuse_occlusion *= vec3<f32>(1.0 - WELL_OCCLUDES * deep * snow);
     }
-    // Along a path the snow is trodden into a trough a hand or two deep, packed grey and
-    // broken by footprints, its sides falling in from the untrodden snow beside it, the
-    // ground's dark showing through where it is worn most (winter round 12's judge: "no
-    // trail trough"; the Red Dead 2 trail's). The path's edge wanders a little.
+    // Along a path the snow is trodden into a shallow trough, packed a little greyer than the
+    // drifts beside it and pocked with footprints, its sides falling in from the untrodden snow
+    // beside it (winter round 12's judge: "no trail trough"; the Red Dead 2 trail's). A soft
+    // band whose edge wanders over metres: thresholds on fine noise drew it as hard dark
+    // blotches, and earth showing through them read as stickers (the looks review).
     let worn_raw = worn_at(world);
+    let pixel_m = length(fwidth(world));
     var trough = vec2<f32>(0.0);
     if worn_raw > 0.01 && snow > 0.0 {
-        // Its width wanders over metres, and its edge is churned, kicked snow and prints
-        // breaking it, not a clean line.
-        let wide = (noise(world * 0.23 + 13.0) - 0.5) * 0.45;
-        let churn = (noise(world * 3.7 + 29.0) - 0.5) * 0.35 + (noise(world * 11.0 + 5.0) - 0.5) * 0.15;
-        let worn = smoothstep(0.15, 0.85, worn_raw + (noise(world * 0.9 + 47.0) - 0.5) * 0.35 + wide + churn);
-        let prints = smoothstep(0.45, 0.7, noise(world * 3.1 + 19.0) * 0.65 + noise(world * 8.0 + 3.0) * 0.35);
-        let packed = TRODDEN_SNOW * (0.9 + 0.12 * noise(world * 5.0 + 71.0)) * mix(1.0, 0.82, prints);
-        colour = mix(colour, packed, worn * snow);
-        // Down to the earth here and there in the middle of it.
-        let bare = smoothstep(0.75, 0.95, worn * (0.6 + 0.5 * prints)) * 0.35;
-        colour = mix(colour, colour * vec3<f32>(0.45, 0.42, 0.4), bare * snow);
+        let wide = (noise(world * 0.23 + 13.0) - 0.5) * 0.35;
+        let edge = (noise(world * 1.1 + 29.0) - 0.5) * 0.22 + (noise(world * 3.7 + 5.0) - 0.5) * 0.06;
+        let worn = smoothstep(0.1, 0.9, worn_raw + wide + edge);
+        let packed = TRODDEN_SNOW * (0.95 + 0.08 * noise(world * 1.7 + 71.0));
+        colour = mix(colour, packed, worn * snow * 0.85);
+        // The path's way, from how much path lies round the point at four bearings (a
+        // structure tensor's doubled angle), for the prints' heading.
+        let r = 1.2;
+        let d1 = normalize(tangent + bitangent);
+        let d2 = normalize(tangent - bitangent);
+        let a = worn_at(world + tangent * r) + worn_at(world - tangent * r);
+        let b = worn_at(world + bitangent * r) + worn_at(world - bitangent * r);
+        let c = worn_at(world + d1 * r) + worn_at(world - d1 * r);
+        let e = worn_at(world + d2 * r) + worn_at(world - d2 * r);
+        let half_turn = 0.5 * atan2(c - e, a - b + 1e-5);
+        let along = tangent * cos(half_turn) + bitangent * sin(half_turn);
+        // Footprints, as many as the path is worn, each a hollow whose far wall faces the eye,
+        // packed darker and hidden from some of the sky; past where a pixel spans a few
+        // centimetres only their mean darkening is left, which would otherwise shimmer.
+        let print = prints_at(world, geometric, along, 0.35 * worn);
+        let sharp = 1.0 - smoothstep(0.02, 0.06, pixel_m);
+        let pressed = mix(0.2 * worn, print.x, sharp);
+        colour *= 1.0 - 0.07 * pressed * snow;
+        pbr_input.diffuse_occlusion *= vec3<f32>(1.0 - 0.12 * pressed * snow);
+        let walls = print.yzw * PRINT_DEPTH_M * sharp;
         let sides = vec2<f32>(
-            worn_at(world + tangent * 0.4) - worn_at(world - tangent * 0.4),
-            worn_at(world + bitangent * 0.4) - worn_at(world - bitangent * 0.4),
+            worn_at(world + tangent * 0.8) - worn_at(world - tangent * 0.8),
+            worn_at(world + bitangent * 0.8) - worn_at(world - bitangent * 0.8),
         );
-        trough = sides * TROUGH_LEAN * snow;
+        trough = (sides * TROUGH_LEAN + vec2<f32>(dot(walls, tangent), dot(walls, bitangent))) * snow;
         ripple *= 1.0 - worn;
         pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.65, worn * snow);
     }
