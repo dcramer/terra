@@ -71,7 +71,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [multiplayer.md](multiplayer.md) | Server-first multiplayer, built toward a thousand players on one persistent server. |
 | [art-style.md](art-style.md) | **The style guide and art direction for anything the game draws**, the same in every realm and setting: textured, lightly stylised realism, what a realm brings, life size, shape, colour, light, budgets, the concept prompt, a checklist, how the renderer makes the look and open questions. |
 | [fire.md](fire.md) | Leaning (D415): one Fire module for every fire, from a candle to a burning castle, a breath and an explosion: its layers, the flipbook channels and our Mantaflow baker, one colour ramp, the exposure rule, the tonemapper bake-off, light, smoke and haze rules, presets as data, LOD and the cinematic tier, the check against real fire, and the staged plan. |
-| [fire-module.md](fire-module.md) | Leaning (D466): the fire module's boundaries and small surface, the general flame every kind shares (a marched flame field in place of cards), wind, rain and snow, the fire bench and the measure across kinds |
+| [fire-module.md](fire-module.md) | Leaning (D466): the fire module's boundaries and small surface, the general flame every kind shares (a marched flame field in place of cards), wind, rain and snow, the fire bench and the measure across kinds; proposed (D493): the flame's motion from a baked looping simulation |
 | [audio.md](audio.md) | Sound: how it is put together, what it sounds like now, and questions for the developers. |
 
 **Parked**

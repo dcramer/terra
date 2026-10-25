@@ -1,6 +1,6 @@
 # The fire module: boundaries and the general flame
 
-Status: Leaning (D466), the agents' technical design; extends [fire.md](fire.md) (D415). The design questions stay Open in fire.md's last section.
+Status: Leaning (D466), the agents' technical design; extends [fire.md](fire.md) (D415). The design questions stay Open in fire.md's last section. The flame's motion from a baked simulation is proposed in its last section (D493), waiting on the developers.
 
 The developer, 2026-10-25: "I would love to work on some effects like fire in general, since it's ass. we wanna make sure that weather states and etc. will work well... do have a campfire optimization, but steer it more towards general fire textures and animations. this should be a self contained module as much as possible." On the review desk he chose to rebuild the flame body with a new technique over more card tuning.
 
@@ -77,3 +77,44 @@ A place in the sandbox (`tools/sandbox/places.ts` data, D249: no new options) wi
 3. `fire.ron` and the `terra_fire` crate: kinds as data, the field's sources and the wind and rain rules, tested.
 4. Weather: wind shear, rain dimming and going out, heat discs for snow, shown on the bench.
 5. The bench and the torch and candle sheet rows.
+
+## Proposed: the flame's motion from a baked simulation (D493)
+
+Status: Leaning (D493), waiting on the developers' answer on the review desk (item `r-fire-sim`); nothing is built before it. It is the hybrid of the table above, which D466 left as the upgrade path if a measured gap asked for one.
+
+**The gap.** Five rounds (g17-g21) tuned the field's lobe clocks, pinch and tear; its tongues still split 1.65 times a second or more against the filmed campfires' 1.2 at most, and live 0.16 s at dusk against 0.04-0.12 (research/2026-10-25-fire-motion.md). Lobes rising past each other read as forks; noise has no way to tear one body into tongues. A Mantaflow campfire, filmed in the same view (research/2026-10-25-fire-fluid-sim.md), round g23's F (96 cells, vorticity 0.8, flame vorticity 1.5, a gusting side wind of 1.8 m/s mean, the clock in real seconds), meets eight of motion.ts's nine targets: flicker 2.50 Hz, area sd/mean 0.19, 13.1 tongues born a second, life 0.05 s, splits 0.85, lean 9.5°, r at no lag 0.05, top red 11%. It misses sheds (0.27 against 1.0 or more; see the open item). Shipped games take fire's motion from offline simulations the same way.
+
+**What changes.** A baked kind's field reads its shape and motion from a looping 3D volume in place of its lobes and noise (`field_gas`). The marcher, its box, its steps, the emission and absorption, the threshold and feather that make the edge a torn sheet, the film mask and the depth it writes are unchanged. The volume holds two channels a cell: the sim's flame (the field's density, cut by the existing threshold; g22 found the edge as flame³ matters as much as the sim) and its temperature (the ramp's heat, in place of depth and height). Velocity is not stored: the field needs none to draw, and wind is not replayed from it. Frames are blended linearly in time; if a 60 fps film shows the blend doubling tongues, the bake goes to 60 fps (twice the memory) before motion vectors, which made our one-sim flipbook worse than none (D466's table). A kind chooses it as it chose the field, by its body (`Body` in `fire/hearth.rs`).
+
+**What stays.** The light's flicker (`light.rs`, the sum of sines round the puff rate), the shared colour ramp and its rows, each kind's settings (size, brightness, ramp row, LOD distances; its rise speed becomes its playback speed), sparks, embers, smoke and the flare, and every gate below. Today the field's puffs and the light share one clock; a baked flame and the light would not, so the baker also writes the loop's light a frame, and the light follows it only if a film shows the two out of step.
+
+**The loop.**
+- **Seamless** by the baker's existing offline crossfade (`tools/fire/bake/sets`' `crossfade`): the sim runs a second past the loop's end and that second is blended into its start. One fetch a step at play time, and soft for under a second in eight. Two copies half a loop apart would cost two fetches and soften every frame, as two uncorrelated flames averaged lose their torn edges.
+- **8 s at 30 fps** (240 frames): long enough to hold several of the bake's gusts (periods 2.7-11 s) so one fire watched does not visibly repeat; the puffs (2.2 Hz) and tongues (0.05 s) need 30 fps at least.
+- **At the sim's own 2.3 cm cells**, 32 x 32 x 64 over the flame's 0.6 x 0.6 x 1.2 m box. Finer cells hold no more detail (the sim has none; g22's 160-cell bake was calmer, not sharper); the edge's sharpness is the threshold's.
+- **Memory**: 64 KB a frame as BC5 (two BC4 channels, half a byte a texel each), about 15 MB for the loop; 31 MB uncompressed (the research note's range was 8-31 MB for one channel). Block-compressed 3D textures need wgpu's `TEXTURE_COMPRESSION_BC_SLICED_3D`, to be confirmed on the pinned Bevy and every target GPU before building; without it, the 31 MB.
+- **Shared by every fire of that bake**, loaded once. Each fire plays it at its own time offset (seeded, any of 240 frames), mirrored or not across the wind's plane, turned so its baked wind lies downwind (see wind), scaled ±15% with its speed as the root of its scale, as a fire's puffing goes (about 1.5/√D Hz).
+- **Variants a player tells apart (D182)**: one per bake. Offsets, mirroring and scale keep neighbouring fires from moving in step, so a village never reads as copies, but a player would not call two of them different fires. A different fuel layout or stage is a different bake: for the campfire, at most three (a teepee, logs laid flat in a star, a low fire over embers), told apart by height, width and how many tongues stand; about 15 MB each.
+
+**Other kinds.**
+- **Torch**: its own bake, a single head about 0.15 m across, puffing near 4 Hz, a box about 0.25 x 0.25 x 0.6 m (under 5 MB). It is carried, so its swing is wind on top (below). It keeps the procedural field until its bake passes its own gates.
+- **Brazier**: the campfire's loop, scaled.
+- **House blaze**: many sites (`Blaze`); each site plays the campfire's loop scaled up two to three times, at its own offset, overlapping, as shipped games layer flipbooks; its own large bake only if a panel asks.
+- **Candle**: keeps the procedural field. A candle's flame is laminar; there is no turbulence to bake.
+- **Breath and fireball**: keep their own gas (D430).
+
+**Wind and weather.** The bake's own wind (1.8 m/s gusting, veering ±20°) is in its lean, so each fire turns its loop so the baked wind blows the game's way. Wind stronger than the bake's adds Thomas's shear (Weather and wind, above) for the difference, sampled on the same coordinates; the game's gusts move that shear, on top of the loop's own. In calm air the baked lean stays, about 10°, inside the filmed fires' 7.6-24.5°; a calm bake is the remedy if a panel finds it wrong. Rain, going out and heat shrink the field and raise its threshold as now; snow and heat discs are unchanged. The limit, known in baked fire: the loop's gusts are fixed and the fire does not react to a body passing it.
+
+**The bake pipeline** is the fire baker, `node tools/fire/bake/bake.ts` (TypeScript, Blender headless through `tools/blender/run.sh`), given a set kind that writes the volume instead of rendering a flipbook: the recipe a JSON in `tools/fire/bake/sets/` (F's settings, its wind and its fuel), the packed loop in `assets/textures/fire/` with a sidecar (size, frames, fps, cell, the loop's light a frame), a `--draft` at 48 cells in minutes. The sim's cache (1.6-1.8 GB, 31-40 min on 24 cores) stays in `~/.cache/terra-review`, never in the repository and never in `/tmp`. Against the public repository: each committed bake adds about 15 MB to its history for good (`assets/textures/fire/` is 27 MB today), so only a bake that has passed its gates is committed; tries stay in `shots/`. The recipe is the source; no `art/` file is needed.
+
+**How it is checked.**
+- **Motion**: `node tools/fire/motion.ts` on the game's dusk film (clipm.ts's view, 20 s) against the nine targets, within the tracker's ±0.3; and a film across the loop's seam, whose second of crossfade measures as the rest.
+- **The fire sheet** twice, held to `held.json` (D433), and D472's campfire and torch panels not worse (interval not wholly below -0.1); motion is the gate, as the strips cannot see it.
+- **Cost**: `cargo xtask bench` on the 3080 for one near campfire against the 0.3 ms budget and the burning village against 1.5 ms, beside main's field. One trilinear fetch a step should cost less than seven lobes and noise; unmeasured until benched. A seam test in the baker's own tests.
+
+**Open: sheds** (0.27 against 1.0 or more). Wind costs sheds: Blender's wind pushes only the flame's gas, so a torn blob is carried along with its tongue instead of left behind; real wind moves the air round the fire too, and Blender has no inflow for that (g23's probes). Mantaflow's guides (a guiding velocity field as ambient wind) are one more try in Blender; EmberGen or Houdini, whose wind is an ambient velocity, would be a purchase, the developers' call. Without either, the loop ships at eight of nine.
+
+**Rejected.**
+- **Tuning the noise field further**: five rounds, splits stuck at 1.65 or more and dusk life at 0.16; the fault is the method.
+- **A live grid** (32 x 32 x 64, about 2.7 MB): about 0.3-0.5 ms a fire on the 3080 (estimate, about 50 dispatches a step), so ten fires cost 3-5 ms against the village's 1.5 ms; its gain, fire reacting to wind and the player, is what Epic keeps 3D grids for in hero effects and cinematics.
+- **A better flipbook on cards**: a card is flat from above, and ours read as haze and failed our gate (D466).
