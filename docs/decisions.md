@@ -400,6 +400,7 @@ The look, models, bodies and gear, textures and audio.
 | [D458](decisions/D458.md) | A drawn body walks with the guard's arms laid over the library's walk | Tech | Agent | Decided | A body with the sword and shield drawn walks forward and… |
 | [D463](decisions/D463.md) | Left-handed bodies | Design | Developers | Decided | Whether a body's main hand may be the left (holding.md). |
 | [D475](decisions/D475.md) | The air's haze over what is drawn starts fifty metres out | Tech | Agent | Decided | Bevy's aerial perspective (the sky pass's haze and… |
+| [D489](decisions/D489.md) | The sky light's repaint is worked out once a height | Tech | Agent | Decided | The painted sky the shade is lit by… |
 
 ## Engine and code
 

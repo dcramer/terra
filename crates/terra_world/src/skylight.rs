@@ -364,8 +364,13 @@ impl Colours {
     /// way to the shade's colour, which the art chose, and is brighter toward the horizon
     /// as a clear sky is; below the horizon is the ground.
     fn toward(&self, d: Vec3) -> Vec3 {
+        self.at_height(d.y)
+    }
+
+    /// The same by the height alone, the sine of the elevation: the painted sky is the same
+    /// all round its up, so `lobes` and `cube` work each height out once (D489).
+    fn at_height(&self, up: f32) -> Vec3 {
         let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722)).max(1e-4);
-        let up = d.y;
         let hue = |c: Vec3| c / luma(c);
         let sky = |e: f32| {
             let drawn = hue(self.horizon.lerp(self.zenith, e.max(0.0).sqrt()));
@@ -431,10 +436,12 @@ impl Colours {
         for i in 0..N {
             let y = 1.0 - 2.0 * (i as f32 + 0.5) / N as f32;
             let across = (1.0 - y * y).max(0.0).sqrt();
+            // The same all round: once a height, not once a direction, which was most of a
+            // repaint's 7 ms on the main thread.
+            let light = self.at_height(y);
             for j in 0..N * 2 {
                 let round = (j as f32 + 0.5) / (N * 2) as f32 * std::f32::consts::TAU;
                 let d = Vec3::new(across * libm::cosf(round), y, across * libm::sinf(round));
-                let light = self.toward(d);
                 for (k, n) in normals.iter().enumerate() {
                     // Each direction stands for 4 pi / (2 N squared) of the sphere.
                     let share = d.dot(*n).max(0.0) * 4.0 / (2 * N * N) as f32;
@@ -452,6 +459,8 @@ impl Colours {
     /// The six faces of the cube, +X, -X, +Y, -Y, +Z, -Z, as RGBA floats.
     fn cube(&self) -> Vec<u8> {
         let mut data = Vec::with_capacity((FACE * FACE * 6 * 16) as usize);
+        // Each height once: the faces' pixels share a few hundred of them, by symmetry.
+        let mut heights = std::collections::HashMap::<u32, Vec3>::new();
         for face in 0..6 {
             for y in 0..FACE {
                 for x in 0..FACE {
@@ -465,7 +474,10 @@ impl Colours {
                         4 => Vec3::new(u, -v, 1.0),
                         _ => Vec3::new(-u, -v, -1.0),
                     };
-                    let c = self.toward(d.normalize());
+                    let up = d.normalize().y;
+                    let c = *heights
+                        .entry(up.to_bits())
+                        .or_insert_with(|| self.at_height(up));
                     for channel in [c.x, c.y, c.z, 1.0] {
                         data.extend_from_slice(&channel.to_le_bytes());
                     }
@@ -583,6 +595,51 @@ mod tests {
         assert!(top.distance(c.toward(Vec3::Y)) < 0.01, "{top}");
         let (bottom, _) = middle(3);
         assert!(bottom.distance(c.ground) < 0.01, "{bottom}");
+    }
+
+    #[test]
+    fn worked_out_once_a_height_the_painting_is_what_each_direction_gives() {
+        // A low sun under some cloud, so every branch of `at_height` is taken.
+        let mut c = colours();
+        c.low = 0.4;
+        c.overcast = 0.3;
+        let cube = c.cube();
+        let mut at = 0;
+        for face in 0..6 {
+            for y in 0..FACE {
+                for x in 0..FACE {
+                    let u = (x as f32 + 0.5) / FACE as f32 * 2.0 - 1.0;
+                    let v = (y as f32 + 0.5) / FACE as f32 * 2.0 - 1.0;
+                    let d = [
+                        Vec3::new(1.0, -v, -u),
+                        Vec3::new(-1.0, -v, u),
+                        Vec3::new(u, 1.0, v),
+                        Vec3::new(u, -1.0, -v),
+                        Vec3::new(u, -v, 1.0),
+                        Vec3::new(-u, -v, -1.0),
+                    ][face];
+                    let light = c.toward(d.normalize());
+                    for channel in [light.x, light.y, light.z, 1.0] {
+                        assert_eq!(
+                            cube[at..at + 4],
+                            channel.to_le_bytes(),
+                            "face {face} {x},{y}"
+                        );
+                        at += 4;
+                    }
+                }
+            }
+        }
+        // The lobes' sky light is the cosine-weighted sum of each direction's, by any order.
+        let (sky, _) = c.lobes();
+        let mut up = Vec3::ZERO;
+        let n = 2000;
+        for i in 0..n {
+            let y = (i as f32 + 0.5) / n as f32;
+            // Even in height is even in area; a side's cosine toward +Y is the height.
+            up += c.toward(Vec3::new((1.0 - y * y).sqrt(), y, 0.0)) * y * 2.0 / n as f32;
+        }
+        assert!(sky[2].distance(up) < 0.01 * up.length(), "{} {up}", sky[2]);
     }
 
     #[test]
