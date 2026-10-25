@@ -269,14 +269,21 @@ fn dress(
         if let Some(shape) = dressing.shape.clone() {
             body.insert((character::Body, shape));
         }
-        let hold = dressing.hold.clone();
+        let (hold, name) = (dressing.hold.clone(), staged.name.clone());
         body.observe(
             move |ready: On<WorldInstanceReady>,
                   mut commands: Commands,
                   assets: Res<AssetServer>,
                   children: Query<&Children>,
-                  players: Query<(), With<AnimationPlayer>>,
+                  (players, drawn): (Query<(), With<AnimationPlayer>>, Query<(), With<Mesh3d>>),
                   names: Query<&Name>| {
+                let parts = children
+                    .iter_descendants(ready.entity)
+                    .filter(|&c| drawn.contains(c));
+                info!(
+                    "Staged: {name}'s model is in, {} parts drawn.",
+                    parts.count()
+                );
                 if let Some(animator) = children
                     .iter_descendants(ready.entity)
                     .find(|&child| players.contains(child))
