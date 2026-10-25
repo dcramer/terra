@@ -2,6 +2,8 @@
 
 Status: Leaning (D415), the agents' technical design. The design questions are marked Open and listed at the end for the developers. The findings behind it are in [research/2026-10-19-how-games-draw-fire.md](../research/2026-10-19-how-games-draw-fire.md). A step back after about 30 rounds, with a professional flipbook put through our path and a ranked plan, is in [research/2026-10-19-fire-step-back.md](../research/2026-10-19-fire-step-back.md).
 
+The module's boundaries, the general flame every kind shares (a marched flame field in place of cards), weather and wind, the fire bench and the measure across kinds are in [fire-module.md](fire-module.md) (D466, 2026-10-25); where they differ from the sections below, it wins.
+
 ## Intent
 
 The developer, 2026-10-18: "We are going to focus on CRUSHING the fire module, we wanna do it properly, well, and in the way that would make an AAA developer proud. we do it properly, and once, every time this entire simulation needs fire ever again, we have it properly done!"
