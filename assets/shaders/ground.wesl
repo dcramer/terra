@@ -431,6 +431,26 @@ fn worn_at(world: vec3<f32>) -> f32 {
     return textureSampleLevel(cover_stood, map_sampler, at, 0.0).g * inside;
 }
 
+// The one way the wind sets over a place, along the ground: the ground is not told the weather's
+// wind. It blows toward minus this, up the ripples' gentle face and off their steep lee.
+fn wind_way() -> vec3<f32> {
+    let level = level_axes();
+    return normalize(level[0] * 0.8 - level[1] * 0.6);
+}
+
+// How much low growth lies under a place, grass and duff and roots, as the cover maps say: what
+// snow buries in soft lumps.
+fn buried_at(world: vec3<f32>) -> f32 {
+    if ground.cover_on == 0u {
+        return 0.0;
+    }
+    let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
+    let inside = clamp(min(min(at.x, at.y), min(1.0 - at.x, 1.0 - at.y)) * 20.0, 0.0, 1.0);
+    let grass = textureSampleLevel(cover_map, map_sampler, at, 0.0).r;
+    let roots = textureSampleLevel(cover_more, map_sampler, at, 0.0).g;
+    return clamp(grass + roots, 0.0, 1.0) * inside;
+}
+
 // How much of a canopy stands over a place, as the cover map says.
 fn canopy_over(world: vec3<f32>) -> f32 {
     if ground.cover_on == 0u {
@@ -580,6 +600,15 @@ const BANK_M: f32 = 0.9;
 const BANK_LEAN: f32 = 1.4;
 const BANK_LIFT: f32 = 0.06;
 const RIPPLE_LEAN: f32 = 0.2;
+// Drifts (snow round 3): how much of a trunk's well the snow piled on its windward side fills,
+// how far that pile tilts the snow, and how much brighter its fresh snow is; and the lumps over
+// buried low growth, how many a metre, how far their sides tilt, how much their tops lift.
+const DRIFT_FILLS: f32 = 0.8;
+const DRIFT_LEAN: f32 = 1.2;
+const DRIFT_LIFT: f32 = 0.05;
+const LUMP_PER_M: f32 = 1.0;
+const LUMP_LEAN: f32 = 1.1;
+const LUMP_LIFT: f32 = 0.05;
 // How much steeper a ripple's lee is than its windward face; what share of their tilt is left
 // under a grazing sun; and over what distance, metres, they fade out (snow round 3: "hard white
 // bars in sunlit patches under a low sun" at 0.35 and a lee three times as steep, stepped).
@@ -2248,7 +2277,7 @@ fn fragment(
         // moved a ripple by its own width, and the ripples drew the mesh's normals as rings
         // of fine lit lines kinked at 45 degrees (snow round 2's "chevron").
         let level = level_axes();
-        let wind = normalize(level[0] * 0.8 - level[1] * 0.6);
+        let wind = wind_way();
         let across_wind = normalize(level[0] * 0.6 + level[1] * 0.8);
         let along_m = dot(world, wind);
         let way = normalize(wind - geometric * dot(wind, geometric));
@@ -2289,9 +2318,19 @@ fn fragment(
             stands_at(world + tangent * 0.5) - stands_at(world - tangent * 0.5),
             stands_at(world + bitangent * 0.5) - stands_at(world - bitangent * 0.5),
         );
-        well = smoothstep(0.3, 1.0, stands);
+        // Drifts: on a trunk's windward side the wind piles the snow against the bark, filling
+        // the well and rising to it; in its lee the eddy keeps the hollow, a little wider.
+        var windward = 0.0;
+        if dot(toward, toward) > 1e-6 {
+            windward = -dot(normalize(toward.x * tangent + toward.y * bitangent), wind_way());
+        }
+        let piled = max(windward, 0.0) * (0.7 + 0.3 * noise(world * 0.9 + 83.0));
+        let scoured = max(-windward, 0.0);
+        well = smoothstep(0.3 - 0.12 * scoured, 1.0, stands) * (1.0 - DRIFT_FILLS * piled);
         let rim = smoothstep(0.04, 0.2, stands) * (1.0 - smoothstep(0.22, 0.42, stands));
-        lean = toward * (WELL_LEAN * well - RIM_LEAN * rim);
+        let drift = piled * smoothstep(0.08, 0.4, stands);
+        lean = toward * (WELL_LEAN * well - RIM_LEAN * rim - DRIFT_LEAN * drift);
+        colour *= 1.0 + DRIFT_LIFT * drift * snow;
         var behind = 0.5;
         if lights.n_directional_lights > 0u && dot(toward, toward) > 1e-6 {
             let L = lights.directional_lights[0].direction_to_light;
@@ -2360,7 +2399,25 @@ fn fragment(
         trough -= vec2<f32>(out.x - out.y, out.z - out.w) * BANK_LEAN * bank;
         colour *= 1.0 + BANK_LIFT * bank;
     }
-    var drifted = normalize(geometric + tangent * (swell.x + lean.x + ripple.x + trough.x) + bitangent * (swell.y + lean.y + ripple.y + trough.y));
+    // Soft lumps where low growth lies buried, half a metre to a metre across, none on the path
+    // or in a trunk's well: their tops a little brighter, their feet a little shaded.
+    var lumps = vec2<f32>(0.0);
+    if snow > 0.0 && ground.cover_on != 0u {
+        let under = smoothstep(0.15, 0.6, buried_at(world)) * (1.0 - smoothstep(0.05, 0.3, worn_raw)) * (1.0 - well) * snow;
+        if under > 0.01 {
+            let h = smoothstep(0.5, 0.85, noise(world * LUMP_PER_M + 91.0));
+            let d = 0.2;
+            let slope = vec2<f32>(
+                smoothstep(0.5, 0.85, noise((world - tangent * d) * LUMP_PER_M + 91.0))
+                    - smoothstep(0.5, 0.85, noise((world + tangent * d) * LUMP_PER_M + 91.0)),
+                smoothstep(0.5, 0.85, noise((world - bitangent * d) * LUMP_PER_M + 91.0))
+                    - smoothstep(0.5, 0.85, noise((world + bitangent * d) * LUMP_PER_M + 91.0)),
+            );
+            lumps = slope * LUMP_LEAN * under;
+            colour *= 1.0 + LUMP_LIFT * (h - 0.3) * under;
+        }
+    }
+    var drifted = normalize(geometric + tangent * (swell.x + lean.x + ripple.x + trough.x + lumps.x) + bitangent * (swell.y + lean.y + ripple.y + trough.y + lumps.y));
     // Glints: a crystal here and there, a facet a centimetre and a half across turned its own
     // way, mirror-smooth, so where it turns the sun to the eye it flashes, and in shade or
     // under an overcast it does not (Bevy's own sun specular and shadow); its sky reflection
