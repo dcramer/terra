@@ -80,9 +80,30 @@ Question: started from C (96 cells, vorticity 0.4, flame vorticity 1.0, emission
 ### Setting it up
 
 - **Real seconds.** `time_scale` 2.5, the speed g22 calibrated by dropping frames, here baked in, with up to 10 substeps a frame for the CFL number. The baked velocity grid confirms the clock: Mantaflow's frame is 0.1 × 25/fps × `time_scale` of its time units, and with that the flame gas rises at 3.2-3.4 m/s. A 30 kW fire's intermittent flame rises at about 1.9 Q^(1/5), 3.8 m/s ([McCaffrey 1979](https://nvlpubs.nist.gov/nistpubs/Legacy/IR/nbsir79-1910.pdf)). The fuel patches drift 2.5 times as fast a frame, as C's did at 2.5x.
-- **Wind is a push on the flame gas, not a moving air mass.** Three low-resolution probes (48 cells, 10 s held at each strength, 2-3 min each) set it:
+- **Wind is a push on the flame gas, not a moving air mass.** Four low-resolution probes (48 cells, 10 s held at each strength, 2-3 min each) set it:
   - Blender's wind field with its default `flow` 1 drags the gas's whole velocity toward the wind's, the rise included. The flame stopped rising (0.1-0.2 m/s) and lay over 59-88° at every strength.
   - A wind-tunnel inflow (a slab over the upwind face, a smoke inflow of no density, its initial velocity the wind) moved no air, with no density and with a trace of it.
   - The wind field with `flow` 0 pushes only where there is gas, as Blender applies fields to smoke, and leaves the rise at 2.6-3.4 m/s. Strength 0.25, 0.5, 1 and 2 gave the flame gas a mean drift of 2.4, 3.6, 6.5 and 12 m/s, from the baked velocity grid. This one is used.
 - **Gusts.** The strength is a mean times a lognormal envelope exp(0.6x - 0.18) of a smooth signal x of periods 2.7-11 s, so lulls are about a third of the mean and gusts about two and a half times it, the gust factor of wind near the ground. The wind veers ±20° about the side axis on its own slow signal, and Blender's per-sample noise on the strength equals the mean. D is a breezy evening: mean 0.09, for a drift of about 0.8 m/s gusting to 2.5. E is a still night at half that. Both blow across the view, because the camera sees lean only across it. A breeze of 2-4 m/s at 10 m is about 1.2-2.5 m/s at a campfire's height, by the log wind profile.
 - **The top's red.** motion.ts counts a pixel red if its hue is under 25° and it is above the flame cut, a luma of about 127. At that brightness the Standard view clips red, so a plain deep red reads as orange. Above red_lo the emission colour turns, by height, toward linear (1, 0.1, 0.06), which clips to a red hue over a wide range of brightness. That is the cooler, sootier top of a real flame. Tried on C's frames 100-159, it turned red from 0.4 to 0.7 m for a top-third red of 46%, and from 0.5 to 0.85 m for 22%; the second is used. It reads slightly pink rather than orange-red, a look to judge, not a motion measure.
+
+### Result
+
+No sim met every target. F met eight of the nine and missed sheds, at 0.27 against 1.0 or more. Each sim ran 20 s at 30 fps after 3 s to settle, at its own speed with no frames dropped, and was measured with `motion.ts --seconds 20`. The drift is the flame gas's mean sideways speed over the film, from the baked velocity grid, with its sd over time.
+
+| Sim (vorticity / flame vort., wind strength, noise; drift) | flicker med Hz | area sd/mean | born /s | life s | sheds | splits | lean deg | r at no lag | top red % | tracks |
+|---|---|---|---|---|---|---|---|---|---|---|
+| target | 1.83-3.83 | ≤ 0.19 | 12-19 | 0.04-0.12 | ≥ 1.0 | ≤ 1.2 | ≥ 8.8 | ≤ 0.12 | 3-47 | |
+| C p3 at 2.5x (g22, frames dropped) | 3.00 | 0.15 | 7.3 | 0.04 | 0.31 | 0.61 | 4.7 | 0.11 | 0 | 58 |
+| E 0.4 / 1.0, 0.045, 0.045; 1.09 ± 0.46 m/s | 2.67 | 0.18 | 14.2 | 0.07 | **0.56** | 1.18 | **8.0** | 0.10 | 16 | 283 |
+| D 0.4 / 1.0, 0.09, 0.09; 1.59 ± 0.53 m/s | 2.50 | **0.20** | 12.7 | 0.06 | **0.27** | **1.33** | **8.2** | 0.10 | 10 | 252 |
+| **F** 0.8 / 1.5, 0.06, 0.18; 1.77 ± 0.56 m/s | 2.50 | 0.19 | 13.1 | 0.05 | **0.27** | 0.85 | 9.5 | 0.05 | 11 | 261 |
+
+Bold is a miss. All three dominant peaks are 2.17-2.19 Hz, the real puffing. Bakes took 31-40 min on 24 cores, and 1.6-1.8 GB each. Renders took 15-19 min on the RTX 3080.
+
+- **Real seconds and wind fixed what g22 could not reach.** Births rose from 6-7 to 13-14 a second, inside the real 12-19. The tracker found 250-280 tracks, against the real clips' 120-190. Lean reached 9.5 deg in F.
+- **Wind costs sheds.** Sheds were 0.56 in the lightest wind and 0.27 in the two stronger ones. Shed blobs last 0.03-0.05 s, one or two frames. A push applied only where there is gas carries a torn-off blob along with its tongue instead of leaving it behind, so fewer detach. Real wind moves the air around the flame too.
+- **The tongues' lean lags the gas's.** The gas leans 17-28 deg, but the tongues' median is 8-9.5 deg. Most measured tongues stand among the logs, where the gas is still rising straight from the fuel. Stronger wind (D) moved it 0.2 deg and broke splits and area.
+- **Vorticity bought splits back.** Doubling vorticity with more wind noise (F) took splits from 1.18-1.33 to 0.85 and lean from 8.0-8.2 to 9.5. Sheds did not move.
+
+The recommendation stands: build neither a baked loop nor a live grid yet. A sim's last miss is sheds, which needs wind that moves the air and not only the flame's gas. Mantaflow in Blender gives no inflow for that, as the probes found. The next try would be a guiding velocity field (Mantaflow's guides) or a sim in EmberGen or Houdini, whose wind is an ambient velocity. That is a step up in tooling; it is the developers' call whether sheds alone is worth it.
