@@ -13,9 +13,11 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{
     Extent3d, TextureDimension, TextureFormat, TextureViewDescriptor, TextureViewDimension,
 };
+use bevy::render::renderer::RenderDevice;
 use terra_build::kit::Pattern;
 use terra_build::{CELL_M, Fill};
-use terra_weathering::{Mode, Settings, Stuff};
+use terra_weathering::compress::{MASKS, MOTIF};
+use terra_weathering::{Mode, Settings, Stuff, Weathered};
 
 /// The data file: which build, and how.
 const FILE: &str = "weathering.ron";
@@ -50,8 +52,8 @@ struct Weathering {
     done: bool,
 }
 
-/// The material's placeholders: nothing weathered.
-pub fn placeholders(images: &mut Assets<Image>) -> (Handle<Image>, Handle<Image>) {
+/// The material's placeholders: nothing weathered (the lookup, the motif and the mask maps).
+pub fn placeholders(images: &mut Assets<Image>) -> [Handle<Image>; 3] {
     let lookup = Image::new(
         Extent3d {
             width: 1,
@@ -63,12 +65,12 @@ pub fn placeholders(images: &mut Assets<Image>) -> (Handle<Image>, Handle<Image>
         TextureFormat::R32Uint,
         RenderAssetUsages::RENDER_WORLD,
     );
-    (images.add(lookup), images.add(atlas(1, vec![0; 4])))
+    let blank = || array(1, 1, vec![0], TextureFormat::R8Unorm);
+    [images.add(lookup), images.add(blank()), images.add(blank())]
 }
 
-/// An RGBA8 array, `side` square, a layer for each `side * side * 4` bytes of `data`.
-fn atlas(side: u32, data: Vec<u8>) -> Image {
-    let layers = (data.len() / (side as usize * side as usize * 4)) as u32;
+/// A one-channel array, `side` square, `layers` deep, of `data` in `format` (BC4 or R8).
+fn array(side: u32, layers: u32, data: Vec<u8>, format: TextureFormat) -> Image {
     let mut image = Image::new(
         Extent3d {
             width: side,
@@ -77,7 +79,7 @@ fn atlas(side: u32, data: Vec<u8>) -> Image {
         },
         TextureDimension::D2,
         data,
-        TextureFormat::Rgba8Unorm,
+        format,
         RenderAssetUsages::RENDER_WORLD,
     );
     image.texture_view_descriptor = Some(TextureViewDescriptor {
@@ -105,6 +107,7 @@ fn weather(
     arrays: Option<Res<Arrays>>,
     mut materials: ResMut<Assets<BuildMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    device: Option<Res<RenderDevice>>,
 ) {
     if state.done || frames.0 < AFTER_FRAMES {
         return;
@@ -197,23 +200,11 @@ fn weather(
         way(c.mixed)
     );
     let dims = weathered.dims;
-    let lookup = Image::new(
-        Extent3d {
-            width: (dims.x * 6) as u32,
-            height: (dims.y * dims.z) as u32,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        weathered
-            .lookup
-            .iter()
-            .flat_map(|v| v.to_le_bytes())
-            .collect(),
-        TextureFormat::R32Uint,
-        RenderAssetUsages::RENDER_WORLD,
-    );
-    let side = weathered.side() as u32;
-    let atlas = atlas(side, weathered.atlas.concat());
+    let bc = device.is_some_and(|d| {
+        d.features()
+            .contains(bevy::render::render_resource::WgpuFeatures::TEXTURE_COMPRESSION_BC)
+    });
+    let [lookup, motif, masks] = textures(&weathered, bc);
     let to_local = root.affine().inverse();
     let (m, t) = (to_local.matrix3, to_local.translation);
     // Rows of the world-to-build affine, in cubes rather than metres.
@@ -231,7 +222,54 @@ fn weather(
         Vec4::new(mode as u8 as f32, file.age, 0.0, 0.0),
     ];
     w.weather_lookup = images.add(lookup);
-    w.weather_atlas = images.add(atlas);
+    w.weather_motif = images.add(motif);
+    w.weather_masks = images.add(masks);
+}
+
+/// The lookup and the maps in the mixed layout (research's "Memory and compression"): the
+/// motif channels full size, the masks half, BC4 where the GPU samples it (`bc`), else the
+/// same planes uncompressed.
+fn textures(weathered: &Weathered, bc: bool) -> [Image; 3] {
+    let dims = weathered.dims;
+    let lookup = Image::new(
+        Extent3d {
+            width: (dims.x * 6) as u32,
+            height: (dims.y * dims.z) as u32,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        weathered
+            .lookup
+            .iter()
+            .flat_map(|v| v.to_le_bytes())
+            .collect(),
+        TextureFormat::R32Uint,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    let planes = weathered.planes();
+    let side = planes.side as u32;
+    let (motif, masks, format) = if bc {
+        let (motif, masks) = planes.bc4();
+        (motif, masks, TextureFormat::Bc4RUnorm)
+    } else {
+        (planes.motif, planes.masks, TextureFormat::R8Unorm)
+    };
+    info!(
+        "Weathering, uploaded: {} KB as {:?} ({} motif layers {side} square, {} mask layers \
+         {} square) and a {} KB lookup; the raw atlas was {} KB",
+        (motif.len() + masks.len()) / 1024,
+        format,
+        MOTIF.len(),
+        MASKS.len(),
+        side / 2,
+        weathered.lookup.len() * 4 / 1024,
+        weathered.atlas.iter().map(Vec::len).sum::<usize>() / 1024,
+    );
+    [
+        lookup,
+        array(side, MOTIF.len() as u32, motif, format),
+        array(side / 2, MASKS.len() as u32, masks, format),
+    ]
 }
 
 pub fn plugin(app: &mut App) {

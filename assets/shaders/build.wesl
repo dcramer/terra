@@ -78,9 +78,13 @@ var<storage, read> fire_glows: array<vec4<f32>, 16>;
 // The weathered build's faces: each cube's six, its map's slot and one, or 0.
 @group(constants::MATERIAL_BIND_GROUP) @binding(108)
 var weather_lookup: texture_2d<u32>;
-// Its maps, three layers: crack, loss, moss, streak; grime, wear, lichen, damp; soot.
+// Its maps, a one-channel layer each (BC4, terra_weathering::compress): the motifs crack,
+// loss, moss, streak, lichen, soot, 32 texels a face; the masks grime, wear, damp, cavity,
+// edge, 16 a face.
 @group(constants::MATERIAL_BIND_GROUP) @binding(109)
-var weather_atlas: texture_2d_array<f32>;
+var weather_motif: texture_2d_array<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(110)
+var weather_masks: texture_2d_array<f32>;
 
 struct Weather {
     a: vec4<f32>,
@@ -149,11 +153,28 @@ fn weather_at(wp: vec3<f32>, wn: vec3<f32>, roof: bool) -> Weather {
     let f = vec2(fract(local[u]), 1.0 - fract(local[v]));
     let per_row = u32(w[4].w);
     let s = slot - 1u;
-    let texel = vec2(f32(s % per_row), f32(s / per_row)) * 32.0 + clamp(f * 32.0, vec2(0.5), vec2(31.5));
-    let uv = texel / (f32(per_row) * 32.0);
-    out.a = textureSampleLevel(weather_atlas, array_sampler, uv, 0, 0.0);
-    out.b = textureSampleLevel(weather_atlas, array_sampler, uv, 1, 0.0);
-    out.c = textureSampleLevel(weather_atlas, array_sampler, uv, 2, 0.0);
+    // Half a texel in from the face's edges in either array, so faces do not bleed.
+    let at = vec2(f32(s % per_row), f32(s / per_row));
+    let uv = (at * 32.0 + clamp(f * 32.0, vec2(0.5), vec2(31.5))) / (f32(per_row) * 32.0);
+    let uh = (at * 16.0 + clamp(f * 16.0, vec2(0.5), vec2(15.5))) / (f32(per_row) * 16.0);
+    let m = array(
+        textureSampleLevel(weather_motif, array_sampler, uv, 0, 0.0).r,
+        textureSampleLevel(weather_motif, array_sampler, uv, 1, 0.0).r,
+        textureSampleLevel(weather_motif, array_sampler, uv, 2, 0.0).r,
+        textureSampleLevel(weather_motif, array_sampler, uv, 3, 0.0).r,
+        textureSampleLevel(weather_motif, array_sampler, uv, 4, 0.0).r,
+        textureSampleLevel(weather_motif, array_sampler, uv, 5, 0.0).r,
+    );
+    let k = array(
+        textureSampleLevel(weather_masks, array_sampler, uh, 0, 0.0).r,
+        textureSampleLevel(weather_masks, array_sampler, uh, 1, 0.0).r,
+        textureSampleLevel(weather_masks, array_sampler, uh, 2, 0.0).r,
+        textureSampleLevel(weather_masks, array_sampler, uh, 3, 0.0).r,
+        textureSampleLevel(weather_masks, array_sampler, uh, 4, 0.0).r,
+    );
+    out.a = vec4(m[0], m[1], m[2], m[3]);
+    out.b = vec4(k[0], k[1], m[4], k[2]);
+    out.c = vec4(m[5], k[3], k[4], 1.0);
     out.on = true;
     return out;
 }

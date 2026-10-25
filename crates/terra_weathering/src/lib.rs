@@ -22,6 +22,7 @@
 
 use glam::IVec3;
 
+pub mod bc4;
 pub mod compress;
 mod faces;
 mod masks;

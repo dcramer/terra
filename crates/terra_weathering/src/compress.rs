@@ -69,7 +69,8 @@ impl Weathered {
                 let half = down(&tile, TILE);
                 errors[0].add(ch, &tile, &bc4(&tile, TILE));
                 errors[1].add(ch, &tile, &quantise(up(&half, TILE)));
-                errors[2].add(ch, &tile, &quantise(up(&bc4(&half, TILE / 2), TILE)));
+                // Filtered up by the GPU, never rounded again.
+                errors[2].add(ch, &tile, &up(&bc4(&half, TILE / 2), TILE));
             }
             blank += usize::from(empty);
         }
@@ -145,32 +146,73 @@ impl Errors {
     }
 }
 
-/// A tile `n` a side through BC4 and back: per 4x4 block, its least and most (as bytes)
-/// and the nearest of eight evenly spaced steps between them.
+/// A tile `n` a side through BC4 and back (`crate::bc4`): rounded to bytes, encoded, and
+/// decoded as the GPU does, unrounded.
 pub fn bc4(tile: &[f32], n: usize) -> Vec<f32> {
-    let mut out = tile.to_vec();
-    for by in (0..n).step_by(4) {
-        for bx in (0..n).step_by(4) {
-            let block: [usize; 16] = std::array::from_fn(|k| (by + k / 4) * n + bx + k % 4);
-            let lo = block
-                .iter()
-                .map(|&i| libm::roundf(tile[i]))
-                .fold(f32::MAX, f32::min);
-            let hi = block
-                .iter()
-                .map(|&i| libm::roundf(tile[i]))
-                .fold(f32::MIN, f32::max);
-            for &i in &block {
-                out[i] = if hi > lo {
-                    let step = libm::roundf((tile[i] - lo) / (hi - lo) * 7.0);
-                    libm::roundf(lo + (hi - lo) * step / 7.0)
-                } else {
-                    lo
-                };
+    let bytes: Vec<u8> = tile.iter().map(|&v| byte(v)).collect();
+    crate::bc4::decode(&crate::bc4::encode(&bytes, n, n), n, n)
+}
+
+/// A value in 0..255 steps as a byte, rounded.
+fn byte(v: f32) -> u8 {
+    libm::roundf(v).clamp(0.0, 255.0) as u8
+}
+
+/// The channels the material samples at full size (the `SHARP` ones) and at half size,
+/// by their place in `CHANNELS`.
+pub const MOTIF: [usize; 6] = [0, 1, 2, 3, 6, 8];
+pub const MASKS: [usize; 5] = [4, 5, 7, 9, 10];
+
+/// The maps as the material samples them, the mixed way: a plane a channel; the motif
+/// channels' (`MOTIF`) `side` texels square, each face's map where it is in the atlas; the
+/// mask channels' (`MASKS`) half that, each face's map halved by a 2x2 box.
+#[derive(Clone, Debug, Default)]
+pub struct Planes {
+    pub side: usize,
+    /// `MOTIF.len()` planes, `side * side` bytes each, row by row.
+    pub motif: Vec<u8>,
+    /// `MASKS.len()` planes, `(side / 2)^2` bytes each.
+    pub masks: Vec<u8>,
+}
+
+impl Planes {
+    /// Both arrays' planes in BC4, each plane's blocks after the one before's.
+    pub fn bc4(&self) -> (Vec<u8>, Vec<u8>) {
+        let encode = |planes: &[u8], side: usize| -> Vec<u8> {
+            planes
+                .chunks_exact(side * side)
+                .flat_map(|plane| crate::bc4::encode(plane, side, side))
+                .collect()
+        };
+        (
+            encode(&self.motif, self.side),
+            encode(&self.masks, self.side / 2),
+        )
+    }
+}
+
+impl Weathered {
+    /// The maps in the mixed layout's planes (`Planes`), not yet encoded.
+    pub fn planes(&self) -> Planes {
+        let side = self.side();
+        let (half, h) = (side / 2, TILE / 2);
+        let per_row = self.per_row as usize;
+        let mut motif = Vec::with_capacity(MOTIF.len() * side * side);
+        for &ch in &MOTIF {
+            let layer = &self.atlas[ch / 4];
+            motif.extend((0..side * side).map(|i| layer[i * 4 + ch % 4]));
+        }
+        let mut masks = vec![0u8; MASKS.len() * half * half];
+        for (plane, &ch) in masks.chunks_exact_mut(half * half).zip(&MASKS) {
+            for slot in 0..self.slots as usize {
+                let (sx, sy) = (slot % per_row, slot / per_row);
+                for (i, v) in down(&self.tile(slot, ch), TILE).into_iter().enumerate() {
+                    plane[(sy * h + i / h) * half + sx * h + i % h] = byte(v);
+                }
             }
         }
+        Planes { side, motif, masks }
     }
-    out
 }
 
 /// A tile `n` a side halved by a 2x2 box.
@@ -216,26 +258,85 @@ fn quantise(tile: Vec<f32>) -> Vec<f32> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn bc4_keeps_flat_blocks_and_bounds_its_error_by_the_step() {
-        let n = 8;
-        let flat = vec![77.0; n * n];
-        assert_eq!(bc4(&flat, n), flat);
-        // Each block's error is at most half of one of its seven steps (and a byte's rounding).
-        let tile: Vec<f32> = (0..n * n)
-            .map(|i| ((i % n * 37 + i / n * 91) % 256) as f32)
-            .collect();
-        let back = bc4(&tile, n);
-        for by in (0..n).step_by(4) {
-            for bx in (0..n).step_by(4) {
-                let block: Vec<usize> = (0..16).map(|k| (by + k / 4) * n + bx + k % 4).collect();
-                let lo = block.iter().map(|&i| tile[i]).fold(f32::MAX, f32::min);
-                let hi = block.iter().map(|&i| tile[i]).fold(f32::MIN, f32::max);
-                for &i in &block {
-                    assert!((back[i] - tile[i]).abs() <= (hi - lo) / 14.0 + 1.0);
+    /// What the material samples, decoded from the bytes uploaded and read back face by
+    /// face as the shader does (the masks bilinear up), against the maps as drawn: the
+    /// error's rms and max.
+    fn uploaded_error(w: &Weathered) -> (f32, f32) {
+        let planes = w.planes();
+        let (motif, masks) = planes.bc4();
+        let (side, half, h) = (planes.side, planes.side / 2, TILE / 2);
+        assert_eq!(motif.len(), MOTIF.len() * side * side / 2);
+        assert_eq!(masks.len(), MASKS.len() * half * half / 2);
+        let decode = |bytes: &[u8], side: usize| -> Vec<Vec<f32>> {
+            bytes
+                .chunks_exact(side * side / 2)
+                .map(|p| crate::bc4::decode(p, side, side))
+                .collect()
+        };
+        let (motif, masks) = (decode(&motif, side), decode(&masks, half));
+        let per_row = w.per_row as usize;
+        let (mut sum, mut count, mut max) = (0.0f64, 0usize, 0.0f32);
+        for slot in 0..w.slots as usize {
+            let (sx, sy) = (slot % per_row, slot / per_row);
+            for ch in 0..CHANNELS.len() {
+                let back = match MOTIF.iter().position(|&c| c == ch) {
+                    Some(m) => (0..TILE * TILE)
+                        .map(|i| motif[m][(sy * TILE + i / TILE) * side + sx * TILE + i % TILE])
+                        .collect(),
+                    None => {
+                        let m = MASKS.iter().position(|&c| c == ch).expect("a mask");
+                        let small: Vec<f32> = (0..h * h)
+                            .map(|i| masks[m][(sy * h + i / h) * half + sx * h + i % h])
+                            .collect();
+                        up(&small, TILE)
+                    }
+                };
+                for (a, b) in w.tile(slot, ch).iter().zip(&back) {
+                    let d = (a - b).abs();
+                    sum += f64::from(d * d);
+                    max = max.max(d);
+                    count += 1;
                 }
             }
         }
+        (libm::sqrt(sum / count as f64) as f32, max)
+    }
+
+    #[test]
+    fn what_is_uploaded_decodes_to_the_error_the_mixed_way_measured() {
+        // A stone wall 6 cubes long and 4 high, standing alone.
+        let wall = |at: glam::IVec3| {
+            if (0..=5).contains(&at.x) && (0..=3).contains(&at.y) && at.z == 0 {
+                crate::Stuff::Stone
+            } else {
+                crate::Stuff::Air
+            }
+        };
+        let settings = crate::Settings {
+            mode: crate::Mode::Wfc,
+            age: 50.0,
+            seed: 3,
+            tries: 10,
+        };
+        let w = crate::weather(
+            &wall,
+            glam::IVec3::new(-1, 0, -1),
+            glam::IVec3::new(6, 4, 1),
+            &settings,
+        );
+        let (rms, max) = uploaded_error(&w);
+        let measured = w.compression().mixed;
+        assert!(
+            (rms - measured.rms).abs() < 1e-3,
+            "{rms} vs {}",
+            measured.rms
+        );
+        assert!(
+            (max - measured.max).abs() < 1e-3,
+            "{max} vs {}",
+            measured.max
+        );
+        assert!(rms > 0.0 && rms < 5.0, "{rms}");
     }
 
     #[test]

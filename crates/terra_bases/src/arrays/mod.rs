@@ -144,10 +144,13 @@ pub struct BuildArrays {
     /// For each of its cubes' faces, its map's slot and one, or 0 (`terra_weathering`).
     #[texture(108, sample_type = "u_int")]
     pub weather_lookup: Handle<Image>,
-    /// The maps, three RGBA layers: crack, loss, moss, streak; grime, wear, lichen, damp;
-    /// soot, cavity, edge.
+    /// The motif maps, a one-channel layer each (BC4, `terra_weathering::compress::MOTIF`):
+    /// crack, loss, moss, streak, lichen, soot.
     #[texture(109, dimension = "2d_array")]
-    pub weather_atlas: Handle<Image>,
+    pub weather_motif: Handle<Image>,
+    /// The mask maps at half size, likewise (`MASKS`): grime, wear, damp, cavity, edge.
+    #[texture(110, dimension = "2d_array")]
+    pub weather_masks: Handle<Image>,
 }
 
 impl MaterialExtension for BuildArrays {
@@ -560,7 +563,8 @@ impl Arrays {
             CELLS,
             1,
         ));
-        let (weather_lookup, weather_atlas) = crate::weathering::placeholders(images);
+        let [weather_lookup, weather_motif, weather_masks] =
+            crate::weathering::placeholders(images);
         let images = images_of;
         let material = materials.add(BuildMaterial {
             base: StandardMaterial {
@@ -586,7 +590,8 @@ impl Arrays {
                 fires,
                 weather: [Vec4::ZERO; 6],
                 weather_lookup,
-                weather_atlas,
+                weather_motif,
+                weather_masks,
             },
         });
         Arrays {
