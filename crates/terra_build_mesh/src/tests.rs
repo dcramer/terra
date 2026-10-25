@@ -377,3 +377,79 @@ fn an_earth_ceiling_on_stone_walls_is_closed_where_it_meets_them() {
         &open[..open.len().min(4)]
     );
 }
+
+/// Every line from `at` at the elevations `els` (degrees, negative down), twelve azimuths
+/// round, 1.5 m long, that meets nothing.
+fn open_lines(lines: &crate::inspect::Lines, at: &[Vec3], els: &[f32]) -> Vec<(Vec3, f32, i32)> {
+    let mut open = Vec::new();
+    for &p in at {
+        for &el in els {
+            for az in 0..12 {
+                let (e, t) = (el.to_radians(), (az as f32 * 30.0).to_radians());
+                let d = Vec3::new(
+                    libm::cosf(e) * libm::cosf(t),
+                    libm::sinf(e),
+                    libm::cosf(e) * libm::sinf(t),
+                );
+                if !lines.meets(p, d, 1.5) {
+                    open.push((p, el, az * 30));
+                }
+            }
+        }
+    }
+    open
+}
+
+/// The mine's kits, stone walls and earth floors, and their kinds.
+fn mine_shell() -> (Kits, [terra_build::Kind; 2]) {
+    let kits = Kits(
+        ["stone.ron", "earth.ron"]
+            .map(terra_build::testing::shipped)
+            .to_vec(),
+    );
+    let kinds = [kits.0[0].kind(), kits.0[1].kind()];
+    (kits, kinds)
+}
+
+#[test]
+fn an_earth_floor_by_stone_walls_is_closed_where_it_meets_them() {
+    // The ceiling's seam turned over: a dungeon room's earth floor slab between stone walls
+    // standing from the slab's row, behind the north wall the next room's (a mass two cubes
+    // thick), and the top of a wall of the room below across the room, a stone strip in the
+    // slab's row. Every line from just over the floor down into it meets the shell (so the
+    // pale line along the mine's floor-wall edges, round 23's film, is no slit at the seam).
+    let (kits, [stone, earth]) = mine_shell();
+    let mut base = Base::default();
+    let mut fill = |min: [i32; 3], max: [i32; 3], kind| {
+        base.apply(BuildOp::Fill {
+            min,
+            max,
+            cube: Some(Cube::new(kind, Fill::Solid)),
+        })
+    };
+    fill([0, -1, 0], [5, -1, 5], earth);
+    fill([0, -1, 0], [5, 3, 0], stone);
+    fill([0, -1, 5], [5, 3, 5], stone);
+    fill([0, -1, 0], [0, 3, 5], stone);
+    fill([5, -1, 0], [5, 3, 5], stone);
+    fill([0, -3, -1], [5, 3, -1], stone);
+    fill([2, -3, 1], [2, -1, 4], stone);
+    let lines = crate::inspect::Lines::of(&base, &kits);
+    let mut at = Vec::new();
+    for i in 0..104 {
+        for k in 0..20 {
+            let (a, b) = (0.5 + 0.00625 + i as f32 * 0.0125, 0.525 + k as f32 * 0.1);
+            at.push(Vec3::new(a, 0.05, b));
+            if i < 24 {
+                at.push(Vec3::new(b, 0.05, a));
+            }
+        }
+    }
+    let open = open_lines(&lines, &at, &[-35.0, -50.0, -65.0, -80.0]);
+    assert!(
+        open.is_empty(),
+        "{} lines out through the floor's seam, first {:?}",
+        open.len(),
+        &open[..open.len().min(4)]
+    );
+}
