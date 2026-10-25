@@ -148,7 +148,7 @@ function addMound(bed: Bed, rnd: () => number) {
     for (let k = 0; k < SEG; k++) {
       const rr = (MOUND_R * r) / RINGS, a = (k / SEG) * Math.PI * 2 + r * 0.3;
       const j = r < RINGS ? 1 + (rnd() - 0.5) * 0.1 : 1;
-      point(Math.cos(a) * rr * j, Math.sin(a) * rr * j, r === RINGS ? 0 : mound(rr) + (rnd() - 0.5) * 0.01);
+      point(Math.cos(a) * rr * j, Math.sin(a) * rr * j, r === RINGS ? 0 : Math.max(mound(rr) + (rnd() - 0.5) * 0.01, 0));
     }
   }
   const below = [0, -1, 0];
@@ -172,7 +172,9 @@ function addCoal(bed: Bed, at: number[], size: number, big: boolean, tile: numbe
     const k = 1 + 0.1 * Math.sin(x * 2.6 + lumps[0]) * Math.sin(z * 2.2 + lumps[1]) + 0.07 * Math.sin(y * 3.1 + lumps[2]) + 0.05 * (hash(i, tile, base) - 0.5);
     const [px, py, pz] = [x * k * size * long, y * k * size * squat, z * k * size];
     const [qy, qz] = [py * Math.cos(tilt) - pz * Math.sin(tilt), py * Math.sin(tilt) + pz * Math.cos(tilt)];
-    return [at[0] + px * Math.cos(turn) + qz * Math.sin(turn), at[1] + qy, at[2] - px * Math.sin(turn) + qz * Math.cos(turn)];
+    // Cut flush at the ground, where the contract puts its origin, as the stones are: what is
+    // sunk in the ash lies on the prop's base, never under it (play::contract).
+    return [at[0] + px * Math.cos(turn) + qz * Math.sin(turn), Math.max(at[1] + qy, 0), at[2] - px * Math.sin(turn) + qz * Math.cos(turn)];
   });
   const N = P.map(() => [0, 0, 0]);
   for (const [a, b, c] of f) {

@@ -36,6 +36,11 @@ test("its coals are a packed heap: the bed under the logs covered, highest in th
   assert.ok(top(0, 0.1) > top(0.25, 1) + 0.03, "no higher in the middle");
 });
 
+test("nothing of the bed lies under the prop's base, where the contract puts its origin", () => {
+  const { pos } = bed(1, arms());
+  for (let i = 1; i < pos.length; i += 3) assert.ok(pos[i] >= 0, `a point ${(-pos[i]).toFixed(3)} m under the base`);
+});
+
 test("every face of the bed faces out, so none is culled", () => {
   const { pos, idx, coals } = bed(1, arms());
   const p = (i: number) => [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]];
