@@ -51,6 +51,18 @@ pub mod irradiance_volume;
 /// fragment, this number needs to be relatively small.
 pub const MAX_VIEW_LIGHT_PROBES: usize = 8;
 
+/// The maximum number of each type of light probe that each view holds in its
+/// uniform, which may exceed [`MAX_VIEW_LIGHT_PROBES`] when probes share their
+/// textures.
+///
+/// Terra (D485): the texture binding arrays keep [`MAX_VIEW_LIGHT_PROBES`]
+/// slots, but a dungeon has a reflection probe a room, and the closed rooms
+/// share one cubemap pair. Upstream ties both counts to 8, so the rooms past
+/// the 8 nearest the camera fell back to the sky's irradiance volume. Probes
+/// are clustered, so a fragment only walks the probes of its cluster, not all
+/// of these.
+pub const MAX_VIEW_LIGHT_PROBE_SLOTS: usize = 64;
+
 /// How many texture bindings are used in the fragment shader, *not* counting
 /// environment maps or irradiance volumes.
 const STANDARD_MATERIAL_FRAGMENT_SHADER_MIN_TEXTURE_BINDINGS: usize = 16;
@@ -122,11 +134,11 @@ struct RenderLightProbe {
 pub struct LightProbesUniform {
     /// The list of applicable reflection probes, sorted from nearest to the
     /// camera to the farthest away from the camera.
-    reflection_probes: [RenderLightProbe; MAX_VIEW_LIGHT_PROBES],
+    reflection_probes: [RenderLightProbe; MAX_VIEW_LIGHT_PROBE_SLOTS],
 
     /// The list of applicable irradiance volumes, sorted from nearest to the
     /// camera to the farthest away from the camera.
-    irradiance_volumes: [RenderLightProbe; MAX_VIEW_LIGHT_PROBES],
+    irradiance_volumes: [RenderLightProbe; MAX_VIEW_LIGHT_PROBE_SLOTS],
 
     /// The number of reflection probes in the list.
     reflection_probe_count: i32,
@@ -507,16 +519,16 @@ fn upload_light_probes(
         let maybe_view_light_probe_info =
             render_view_environment_maps.and_then(|maps| maps.view_light_probe_info.as_ref());
         let mut light_probes_uniform = LightProbesUniform {
-            reflection_probes: [RenderLightProbe::default(); MAX_VIEW_LIGHT_PROBES],
-            irradiance_volumes: [RenderLightProbe::default(); MAX_VIEW_LIGHT_PROBES],
+            reflection_probes: [RenderLightProbe::default(); MAX_VIEW_LIGHT_PROBE_SLOTS],
+            irradiance_volumes: [RenderLightProbe::default(); MAX_VIEW_LIGHT_PROBE_SLOTS],
             reflection_probe_count: render_view_environment_maps
                 .map(RenderViewLightProbes::len)
                 .unwrap_or_default()
-                .min(MAX_VIEW_LIGHT_PROBES) as i32,
+                .min(MAX_VIEW_LIGHT_PROBE_SLOTS) as i32,
             irradiance_volume_count: render_view_irradiance_volumes
                 .map(RenderViewLightProbes::len)
                 .unwrap_or_default()
-                .min(MAX_VIEW_LIGHT_PROBES) as i32,
+                .min(MAX_VIEW_LIGHT_PROBE_SLOTS) as i32,
             view_cubemap_index: match maybe_view_light_probe_info {
                 Some(view_light_probe_info) => view_light_probe_info.cubemap_index,
                 None => -1,
@@ -572,8 +584,8 @@ fn upload_light_probes(
 impl Default for LightProbesUniform {
     fn default() -> Self {
         Self {
-            reflection_probes: [RenderLightProbe::default(); MAX_VIEW_LIGHT_PROBES],
-            irradiance_volumes: [RenderLightProbe::default(); MAX_VIEW_LIGHT_PROBES],
+            reflection_probes: [RenderLightProbe::default(); MAX_VIEW_LIGHT_PROBE_SLOTS],
+            irradiance_volumes: [RenderLightProbe::default(); MAX_VIEW_LIGHT_PROBE_SLOTS],
             reflection_probe_count: 0,
             irradiance_volume_count: 0,
             view_cubemap_index: -1,
@@ -676,7 +688,7 @@ where
     /// is expected to be shipped to the GPU.
     fn add_to_uniform(
         &self,
-        render_light_probes: &mut [RenderLightProbe; MAX_VIEW_LIGHT_PROBES],
+        render_light_probes: &mut [RenderLightProbe; MAX_VIEW_LIGHT_PROBE_SLOTS],
         render_light_probe_count: &mut i32,
     ) {
         render_light_probes[0..self.render_light_probes.len()]
@@ -687,13 +699,24 @@ where
     /// Gathers up all light probes of the given type in the scene and records
     /// them in this structure.
     fn maybe_gather_light_probes(&mut self, light_probes: &[LightProbeInfo<C>]) {
-        for light_probe in light_probes.iter().take(MAX_VIEW_LIGHT_PROBES) {
+        for light_probe in light_probes {
+            if self.render_light_probes.len() >= MAX_VIEW_LIGHT_PROBE_SLOTS {
+                break;
+            }
+            // Terra (D485): a probe whose texture would overflow the binding
+            // array is skipped; nearer probes sharing a texture still fit.
+            if !self.cubemap_to_binding_index.contains_key(&light_probe.asset_id)
+                && self.binding_index_to_textures.len() >= MAX_VIEW_LIGHT_PROBES
+            {
+                continue;
+            }
             // Determine the index of the cubemap in the binding array.
             let cubemap_index = self.get_or_insert_cubemap(&light_probe.asset_id);
 
             // Assign an ID, and write in the index.
             let render_light_probe_index = self.render_light_probes.len() as u32;
-            debug_assert!((render_light_probe_index as usize) < MAX_VIEW_LIGHT_PROBES);
+            debug_assert!((render_light_probe_index as usize) < MAX_VIEW_LIGHT_PROBE_SLOTS);
+            debug_assert!((cubemap_index as usize) < MAX_VIEW_LIGHT_PROBES);
             self.main_entity_to_render_light_probe_index
                 .insert(light_probe.main_entity, render_light_probe_index);
 
