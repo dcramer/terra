@@ -1492,6 +1492,11 @@ const FIELD_TEAR: f32 = 3.2;
 const FIELD_TEAR_ACROSS: f32 = 14.0;
 const FIELD_FEATHER: f32 = 0.14;
 const FIELD_K: f32 = 10.0;
+// Its pale heart (`field_gas`): how far inside the shape it starts (0 the edge, 1 the spine),
+// how high it reaches in the field's height and how much thicker its flame is there; the
+// heat it burns at, the hearth ramp's pale.
+const FIELD_CORE: vec3<f32> = vec3<f32>(0.58, 0.45, 2.0);
+const FIELD_CORE_HEAT: f32 = 0.985;
 const FIELD_STEPS: i32 = 96;
 const FIELD_LOBES: i32 = 7;
 // A torch's field (under `TORCH_M`): lobes over its head's one point, a middle tongue from
@@ -1642,7 +1647,11 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec2<f32> {
     // through the skin rather than being hidden by it; the core hot only deep inside, so the
     // flame stays orange as its class has it and the yellow is a small heart (fire sheet).
     let heat = 0.40 + 0.45 * saturate(v * 2.0) * (1.0 - 0.6 * hg) + 0.10 * (1.0 - smoothstep(0.0, 0.3, hg));
-    return vec2(dens * f.k, heat * (0.85 + 0.15 * f.heat));
+    // Its heart: deep inside its lower part the flame is thicker and burns at the ramp's pale
+    // top, so a dense pale mass sits over the coals and grades to orange at the rim, its upper
+    // part still see-through (fire round g9: RDR2's 12% pale from above, ours 2-4%).
+    let core = smoothstep(FIELD_CORE.x, FIELD_CORE.x + 0.12, v) * (1.0 - smoothstep(FIELD_CORE.y * 0.5, FIELD_CORE.y, hg));
+    return vec2(dens * f.k * (1.0 + FIELD_CORE.z * core), mix(heat * (0.85 + 0.15 * f.heat), FIELD_CORE_HEAT, core));
 }
 
 // The hull round a hearth's field, in its frame (across, up, across).
