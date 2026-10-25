@@ -104,8 +104,9 @@ impl<A: Query + ?Sized, B: Query + ?Sized> Query for (&A, &B) {
 /// A source whose distance to a capsule's surface is known at any place: the sweep is
 /// common to all of them, a march by distance.
 trait Distance {
-    /// The capsule surface's distance to the source, and the contact it is nearest.
-    fn nearest(&self, capsule: &Capsule) -> Option<Contact>;
+    /// The capsule surface's distance to the source, and the contact it is nearest: of two
+    /// faces as near (a crease), the one a motion goes into most.
+    fn nearest(&self, capsule: &Capsule, motion: Vec3) -> Option<Contact>;
     /// How far the true distance may be from the one answered, as a factor (1 when exact).
     fn steepest(&self) -> f32;
 }
@@ -118,7 +119,7 @@ fn march(source: &impl Distance, capsule: &Capsule, motion: Vec3) -> Option<Hit>
     if length < 1e-6 {
         return None;
     }
-    let start = source.nearest(capsule)?;
+    let start = source.nearest(capsule, motion)?;
     let limit = start.distance.min(0.0) - TOLERANCE;
     let into = |c: &Contact| c.distance < limit && c.normal.dot(motion) < 0.0;
     let steep = source.steepest().max(1.0);
@@ -131,13 +132,13 @@ fn march(source: &impl Distance, capsule: &Capsule, motion: Vec3) -> Option<Hit>
         // stepped into is found by the bisection.
         let step = ((last.distance - limit) / steep).max(GRAZE_STEP);
         let next = (t + step / length).min(1.0);
-        let at = source.nearest(&capsule.moved(motion * next))?;
+        let at = source.nearest(&capsule.moved(motion * next), motion)?;
         if into(&at) {
             // The surface lies within the last step: bisect it.
             let (mut lo, mut hi, mut met) = (t, next, at);
             while (hi - lo) * length > TOLERANCE * 0.5 {
                 let mid = (lo + hi) * 0.5;
-                let c = source.nearest(&capsule.moved(motion * mid))?;
+                let c = source.nearest(&capsule.moved(motion * mid), motion)?;
                 if into(&c) {
                     (hi, met) = (mid, c);
                 } else {
@@ -165,12 +166,47 @@ pub struct Sdf<F> {
 }
 
 /// The step of the field's gradient, m.
-const GRADIENT: f32 = 2.0e-3;
+const GRADIENT: f32 = 1.0e-2;
+
+/// How far an exact field's central difference may fall below its unit slope before a point is
+/// called a crease: as near two faces as each other (a wall meeting the floor), where the
+/// difference blends the two into a slope that is neither, which a body would ride up.
+const CREASE: f32 = 0.9;
 
 impl<F: Fn(Vec3) -> f32> Sdf<F> {
-    fn gradient(&self, at: Vec3, here: f32) -> Vec3 {
-        let d = |axis: Vec3| (self.distance)(at + axis * GRADIENT) - here;
-        Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)).normalize_or(Vec3::ZERO)
+    /// The field's gradient at a point by central differences (unit for an exact field, less
+    /// at a crease).
+    fn gradient(&self, at: Vec3) -> Vec3 {
+        let d = |axis: Vec3| {
+            (self.distance)(at + axis * GRADIENT) - (self.distance)(at - axis * GRADIENT)
+        };
+        Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)) / (2.0 * GRADIENT)
+    }
+
+    /// The faces nearest a point `d` from the field: its gradient's way, or at a crease each of
+    /// the one-sided differences (ahead and behind, which there are each one face's) that is a
+    /// face's: the field falls along it at an exact field's unit rate. Ours, not Jolt's: a mesh
+    /// gives a contact a triangle, a field one distance a point.
+    fn faces(&self, at: Vec3, d: f32) -> [Option<Vec3>; 2] {
+        let gradient = self.gradient(at);
+        if gradient.length() >= CREASE || d <= 0.0 {
+            return [gradient.try_normalize(), None];
+        }
+        let here = (self.distance)(at);
+        let side = |sign: f32| {
+            let d = |axis: Vec3| sign * ((self.distance)(at + axis * (sign * GRADIENT)) - here);
+            Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)).try_normalize()
+        };
+        let face = |normal: Option<Vec3>| {
+            normal.filter(|n| {
+                let half = (self.distance)(at - *n * (d * 0.5));
+                (half - d * 0.5).abs() < TOLERANCE
+            })
+        };
+        match [face(side(1.0)), face(side(-1.0))] {
+            [None, None] => [gradient.try_normalize(), None],
+            faces => faces,
+        }
     }
 
     /// The field along the axis: the samples, no more than half a radius apart.
@@ -181,8 +217,17 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
         (n, move |t: f32| a + ab * t)
     }
 
-    /// The least of the field near an axis sample, by golden section over its neighbours.
-    fn refine(&self, along: &impl Fn(f32) -> Vec3, lo: f32, hi: f32) -> (Vec3, f32) {
+    /// The least of the field near an axis sample `(t, d)`, by golden section over its
+    /// neighbours, never more than the sample's own: the field along an axis by a wall is flat
+    /// and only a floor's corner below it falls away, so a millimetre's noise on the flat can
+    /// lead the section away from the floor, and the floor's contact would be lost.
+    fn refine(
+        &self,
+        along: &impl Fn(f32) -> Vec3,
+        (t, d): (f32, f32),
+        lo: f32,
+        hi: f32,
+    ) -> (Vec3, f32) {
         const R: f32 = 0.618_034;
         let f = |t: f32| (self.distance)(along(t));
         let (mut lo, mut hi) = (lo, hi);
@@ -201,17 +246,36 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
                 f2 = f(x2);
             }
         }
-        let ends = [(lo, f(lo)), (hi, f(hi)), (x1, f1), (x2, f2)];
+        let ends = [(t, d), (lo, f(lo)), (hi, f(hi)), (x1, f1), (x2, f2)];
         let (t, d) = ends
             .into_iter()
             .fold((lo, f32::INFINITY), |m, e| if e.1 < m.1 { e } else { m });
         (along(t), d)
     }
 
-    fn contact(&self, capsule: &Capsule, axis: Vec3, d: f32) -> Contact {
-        let normal = self.gradient(axis, d);
+    /// A contact through the surface point nearest an axis point `d` from the field along a
+    /// face's normal: the normal's foot moved onto the surface by one Newton step (exact for an
+    /// exact field), and the normal taken from that point to the axis. A gradient by
+    /// differences carries the field's noise over its step (in f32 a tenth of a millimetre at
+    /// a world's radius over 4 mm, a few percent), which put an edge's point millimetres off;
+    /// the step leaves it second order.
+    fn contact(&self, capsule: &Capsule, axis: Vec3, d: f32, normal: Vec3) -> Contact {
+        let foot = axis - normal * d;
+        let (off, slope) = ((self.distance)(foot), self.gradient(foot));
+        let (mut at, mut normal) = (foot, normal);
+        if slope.length_squared() > 0.25 && d.abs() > TOLERANCE {
+            let on = foot - slope * (off / slope.length_squared());
+            let toward = (axis - on) * d.signum();
+            // Kept where the point is as far as the field says: where a field only bounds the
+            // distance (a hollow's rim), the gradient's own foot and way.
+            if (toward.length() - d.abs()).abs() < TOLERANCE
+                && let Some(n) = toward.try_normalize()
+            {
+                (at, normal) = (on, n);
+            }
+        }
         Contact {
-            at: axis - normal * d,
+            at,
             normal,
             distance: d - capsule.radius,
             velocity: Vec3::ZERO,
@@ -221,15 +285,21 @@ impl<F: Fn(Vec3) -> f32> Sdf<F> {
 }
 
 impl<F: Fn(Vec3) -> f32> Distance for Sdf<F> {
-    fn nearest(&self, capsule: &Capsule) -> Option<Contact> {
+    fn nearest(&self, capsule: &Capsule, motion: Vec3) -> Option<Contact> {
         let (n, along) = self.samples(capsule);
         let step = 1.0 / (n - 1) as f32;
-        let (i, _) = (0..n)
+        let (i, least) = (0..n)
             .map(|i| (i, (self.distance)(along(i as f32 * step))))
             .fold((0, f32::INFINITY), |m, e| if e.1 < m.1 { e } else { m });
         let t = i as f32 * step;
-        let (axis, d) = self.refine(&along, (t - step).max(0.0), (t + step).min(1.0));
-        Some(self.contact(capsule, axis, d))
+        let (axis, d) = self.refine(&along, (t, least), (t - step).max(0.0), (t + step).min(1.0));
+        let normal = self
+            .faces(axis, d)
+            .into_iter()
+            .flatten()
+            .min_by(|a, b| a.dot(motion).total_cmp(&b.dot(motion)))
+            .unwrap_or(Vec3::ZERO);
+        Some(self.contact(capsule, axis, d, normal))
     }
 
     fn steepest(&self) -> f32 {
@@ -249,19 +319,22 @@ impl<F: Fn(Vec3) -> f32> Query for Sdf<F> {
             if d >= reach {
                 continue;
             }
-            let (axis, least) = self.refine(&along, (t - step).max(0.0), (t + step).min(1.0));
-            let found = self.contact(capsule, axis, least);
-            if found.distance >= within {
+            let (axis, least) =
+                self.refine(&along, (t, d), (t - step).max(0.0), (t + step).min(1.0));
+            if least - capsule.radius >= within {
                 continue;
             }
-            // One contact a face: the nearest sample of it.
-            let same = out[start..]
-                .iter()
-                .position(|c: &Contact| c.normal.dot(found.normal) > 0.999);
-            match same {
-                Some(k) if found.distance < out[start + k].distance => out[start + k] = found,
-                Some(_) => {}
-                None => out.push(found),
+            for normal in self.faces(axis, least).into_iter().flatten() {
+                let found = self.contact(capsule, axis, least, normal);
+                // One contact a face: the nearest sample of it.
+                let same = out[start..]
+                    .iter()
+                    .position(|c: &Contact| c.normal.dot(found.normal) > 0.999);
+                match same {
+                    Some(k) if found.distance < out[start + k].distance => out[start + k] = found,
+                    Some(_) => {}
+                    None => out.push(found),
+                }
             }
         }
     }
@@ -347,7 +420,7 @@ fn nearest_points(p: &Capsule, q: &Capsule) -> (Vec3, Vec3) {
 struct One<'a>(&'a Capsule, u32, Vec3);
 
 impl Distance for One<'_> {
-    fn nearest(&self, capsule: &Capsule) -> Option<Contact> {
+    fn nearest(&self, capsule: &Capsule, _: Vec3) -> Option<Contact> {
         Some(between(capsule, self.0, self.1, self.2))
     }
     fn steepest(&self) -> f32 {
@@ -383,6 +456,7 @@ impl Query for Capsules<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use glam::Vec2;
 
     fn floor(at: Vec3) -> f32 {
         at.y
@@ -403,6 +477,68 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert!((out[0].distance - 0.05).abs() < 1e-4);
         assert!(out[0].normal.dot(Vec3::Y) > 0.999);
+    }
+
+    /// Where these fixtures stand: 2 km from the origin, a world's radius, where f32 keeps a
+    /// tenth of a millimetre and a field's differences carry that noise.
+    const FAR: Vec3 = Vec3::new(0.0, 2000.0, 0.0);
+
+    /// The floor and a wall at x = 1, met in a crease.
+    fn crease(at: Vec3) -> f32 {
+        let p = at - FAR;
+        p.y.min(1.0 - p.x)
+    }
+
+    /// The floor and a step up 0.55 m at x = 1 (exact outside).
+    fn step(at: Vec3) -> f32 {
+        let p = at - FAR;
+        let q = Vec2::new(1.0 - p.x, p.y - 0.55);
+        let block = q.max(Vec2::ZERO).length() + q.max_element().min(0.0);
+        block.min(p.y)
+    }
+
+    #[test]
+    fn a_body_in_a_crease_meets_the_floor_and_the_wall_and_no_slope_between() {
+        let ground = Sdf {
+            distance: crease,
+            steepest: 1.0,
+        };
+        // Touching both, and sunk a few millimetres into the floor against the wall.
+        for sunk in [0.0, 0.004] {
+            let feet = FAR + Vec3::new(0.7, -sunk, 0.0);
+            let mut out = Vec::new();
+            ground.contacts(&man(feet), 0.1, &mut out);
+            let floor = out.iter().find(|c| c.normal.y > 0.99).expect("the floor");
+            assert!((floor.distance + sunk).abs() < 1e-3, "{out:?}");
+            assert!(out.iter().any(|c| c.normal.x < -0.99), "the wall: {out:?}");
+            let blended = |c: &&Contact| c.normal.y < 0.99 && c.normal.x > -0.99;
+            assert!(out.iter().find(blended).is_none(), "{out:?}");
+        }
+        // Swept down the wall, it stays on the floor; along the floor, it stops at the wall.
+        let hit = ground.sweep(&man(FAR + Vec3::new(0.7, 0.0, 0.0)), Vec3::NEG_Y * 0.5);
+        assert!(hit.is_none_or(|h| h.fraction * 0.5 < 2e-3), "{hit:?}");
+        let hit = ground
+            .sweep(&man(FAR + Vec3::new(0.6, 0.0, 0.0)), Vec3::X * 0.3)
+            .expect("the wall");
+        assert!(hit.contact.normal.x < -0.99, "{hit:?}");
+        assert!((hit.fraction * 0.3 - 0.1).abs() < 2e-3, "{hit:?}");
+    }
+
+    #[test]
+    fn an_edge_contact_lies_on_the_edge_and_faces_from_it() {
+        let ground = Sdf {
+            distance: step,
+            steepest: 1.0,
+        };
+        // The bottom sphere over the step's edge, its centre ahead of and above it.
+        let feet = FAR + Vec3::new(0.85, 0.3, 0.0);
+        let mut out = Vec::new();
+        ground.contacts(&man(feet), 0.1, &mut out);
+        let edge = out.iter().find(|c| c.normal.x < -0.1).expect("the edge");
+        let corner = FAR + Vec3::new(1.0, 0.55, 0.0);
+        assert!((edge.at - corner).length() < 2e-4, "{edge:?}");
+        let way = (feet + Vec3::Y * 0.3 - corner).normalize();
+        assert!(edge.normal.dot(way) > 0.99999, "{edge:?}");
     }
 
     #[test]

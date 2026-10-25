@@ -25,7 +25,6 @@ Read [docs/controller.md](../../../docs/controller.md) (the design, its criteria
 
 Ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
 
-1. `step.ground` 1 of 10 steps wrong; `penetration.max` 0.059 m (bar 0.01); `stick.stair` 1 airborne tick sprinting down the 0.3 m stair.
-2. `slope.limit` 2.75 deg off (bar 0.5).
+1. None below its bar (round 2: 24 pass). Next: make the kind-data rows measurable (`accel.data`, `turn.data` with facing in `course::Body`, `air.control`, `landing.speed`, `slope.speed`, criterion 14's two kinds' files), then `cost.body`.
 
 Not measurable yet (`?`, each with what it needs): doors, steps of bases, props and rocks, the slope speed curve, acceleration and turn as data, air control, landing speed, swimming's float, dive and breath, stamina; heavy, the in-game filmed course (stage 1b: step smoothing, feet sliding, the yard) and the mover's bench (cost per body).
