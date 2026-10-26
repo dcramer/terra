@@ -429,7 +429,13 @@ fn tour(dungeon: &Dungeon, out: &mut Stamp) {
         out.route.extend(leg);
         room = centre(layout, b);
     }
-    out.route.push(room);
+    // It ends at the goal (its plinth's foot, `walked`), not the goal room's middle: in a
+    // room of 4 m cells the goal's cell middle stands 2 m or more off the room's, and the look
+    // at the way on toward the middle held the goal 0.42 rad off where the film stops 3.5 m
+    // short of it (D527's first build; the look's pull keeps the way on in frame).
+    let goal = out.objects.iter().find(|o| o.role == ObjectRole::Goal);
+    out.route
+        .push(goal.map_or(room, |g| Vec3::new(g.at.x, room.y, g.at.z)));
 }
 
 /// Where the tour crosses a room, from where it came in to where it goes out: the room's
