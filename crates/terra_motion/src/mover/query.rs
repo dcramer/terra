@@ -272,6 +272,15 @@ const GRADIENT: f32 = 1.0e-2;
 /// difference blends the two into a slope that is neither, which a body would ride up.
 const CREASE: f32 = 0.9;
 
+/// How far the field's slope may fall across its step along an axis (concave) before the point
+/// is also called a crease, unit (about the angle, rad, its faces part by there): 0.02 is a
+/// hollow rounded tighter than half a metre. The blend shrinks only as the cosine of half the
+/// faces' angle, so [`CREASE`] alone let a floor meeting a face up to 51.7 deg read as one
+/// slope of half that, walkable, and a body pressed into ground just too steep strode up it;
+/// the bend grows with the angle itself. Unreal's walking judges the face hit (`IsWalkable`
+/// on the impact normal), Jolt's `CharacterVirtual` keeps each contact's own normal.
+const CREASE_BEND: f32 = 0.02;
+
 /// How far an axis's two one-sided differences may part, m, before one of them is suspected of
 /// reaching over an edge, and how far a side may bend from a line and still be one, near the
 /// frame's origin: a fiftieth of a millimetre, a 0.06 deg tilt over the step. Further from it
@@ -306,13 +315,22 @@ impl<F: Fn(DVec3) -> f32> On<'_, F> {
     /// floor's normal from the face hit (`mSurfaceNormal`, `FindFloor`'s line trace
     /// `ImpactNormal`); a field has no face, so its straight side stands for one.
     fn gradient(&self, at: Vec3, here: f32) -> Vec3 {
+        self.bent(at, here).0
+    }
+
+    /// [`Self::gradient`], and how far the field bends concave across the step along the axis
+    /// it bends most (the slope behind less the slope ahead, unit: a crease's two faces part by
+    /// about as much, a smooth hollow by its curvature times the step).
+    fn bent(&self, at: Vec3, here: f32) -> (Vec3, f32) {
         let f = |p: Vec3| self.at(p);
         let kink = kink(at);
-        let d = |axis: Vec3| {
+        let mut concave = 0.0f32;
+        let mut d = |axis: Vec3| {
             let (ahead, behind) = (f(at + axis * GRADIENT), f(at - axis * GRADIENT));
             let (fore, back) = (ahead - here, here - behind);
             let centred = (fore + back) * 0.5;
             if fore - back <= kink {
+                concave = concave.max(back - fore);
                 return centred;
             }
             // How far each side's middle lies over the line through its ends (under: convex).
@@ -326,7 +344,8 @@ impl<F: Fn(DVec3) -> f32> On<'_, F> {
                 centred
             }
         };
-        Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)) / GRADIENT
+        let gradient = Vec3::new(d(Vec3::X), d(Vec3::Y), d(Vec3::Z)) / GRADIENT;
+        (gradient, concave / GRADIENT)
     }
 
     /// The faces nearest a point `d` from the field: its gradient's way, or at a crease each of
@@ -334,8 +353,8 @@ impl<F: Fn(DVec3) -> f32> On<'_, F> {
     /// face's: the field falls along it at an exact field's unit rate. Ours, not Jolt's: a mesh
     /// gives a contact a triangle, a field one distance a point.
     fn faces(&self, at: Vec3, d: f32) -> [Option<Vec3>; 2] {
-        let gradient = self.gradient(at, d);
-        if gradient.length() >= CREASE || d <= 0.0 {
+        let (gradient, concave) = self.bent(at, d);
+        if (gradient.length() >= CREASE && concave < CREASE_BEND) || d <= 0.0 {
             return [gradient.try_normalize(), None];
         }
         let here = d;
@@ -725,6 +744,35 @@ mod tests {
             .expect("the wall");
         assert!(hit.contact.normal.x < -0.99, "{hit:?}");
         assert!((hit.fraction * 0.3 - 0.1).abs() < 2e-3, "{hit:?}");
+    }
+
+    /// A body resting where the floor meets a slope meets each face apart, at any slope: the
+    /// blend of a floor and a face just too steep to stand on read as one slope of half the
+    /// angle, a floor.
+    #[test]
+    fn a_body_where_the_floor_meets_a_slope_meets_each_face_and_no_slope_between() {
+        for deg in [30.0f32, 45.0, 50.5, 51.5, 60.0] {
+            let (s, c) = (libm::sinf(deg.to_radians()), libm::cosf(deg.to_radians()));
+            let face = Vec3::new(-s, c, 0.0);
+            let ground = Sdf {
+                distance: move |at: DVec3| {
+                    let p = at.as_vec3() - FAR;
+                    p.y.min((p - Vec3::X).dot(face))
+                },
+                steepest: 1.0,
+            };
+            // The bottom sphere touching both.
+            let feet = FAR + Vec3::X * (1.0 - 0.3 * libm::tanf(deg.to_radians() * 0.5));
+            let mut out = Vec::new();
+            ground.contacts(&man(feet), 0.1, &mut out);
+            assert!(out.iter().any(|c| c.normal.y > 0.999), "{deg}: {out:?}");
+            assert!(
+                out.iter().any(|c| c.normal.dot(face) > 0.999),
+                "{deg}: {out:?}"
+            );
+            let between = |c: &&Contact| c.normal.y <= 0.999 && c.normal.dot(face) <= 0.999;
+            assert!(out.iter().find(between).is_none(), "{deg}: {out:?}");
+        }
     }
 
     #[test]
