@@ -5,8 +5,9 @@
 //! nearest the body's stopping distance (the kind's `decel`, movers.ron), so the jog's locked
 //! foot stays locked and the clip brings the other alongside. Its travel is taken off the
 //! pelvis (Unreal's root lock, `lock_roots`) and its time matched to the body's distance while
-//! it brakes (Lyra's distance matching, `terra_motion::distance`), played no faster than
-//! RATE_CAP, then on at its own pace once the body stands; it gives way to the idle once its
+//! it brakes (Lyra's distance matching, `terra_motion::distance`; as Lyra's
+//! DistanceMatchToTarget, its rate unclamped, never back), then on at its own pace once the
+//! body stands; it gives way to the idle once its
 //! travel is done and both feet stand, and to a jog wished again at the jog's step (Unreal's
 //! sync markers). So the clip steps the feet, not D455's rule.
 
@@ -20,10 +21,6 @@ use crate::feet::Baked;
 pub(crate) const STOPS: [&str; 2] = ["Jog_Stop", "Jog_Stop_R"];
 /// The body stands once it goes slower than this over the ground, m/s.
 pub(crate) const STANDING_MPS: f32 = 0.05;
-/// A stop's clip is played no faster than this while its distance is matched (Lyra's play
-/// rate clamp): a body braking harder than the clip leaves the rest to play at 1 once it
-/// stands, its feet held by their locks, not a clip's last steps rushed through.
-pub(crate) const RATE_CAP: f32 = 2.0;
 
 /// What the figure shows next, `was` what it showed and `now` what its speed alone says (a
 /// stride, standing, or anything else, which goes as said): a stop when a stride's wish is let
@@ -123,8 +120,10 @@ pub(crate) fn stopping(speed: f32, decel: f32) -> f32 {
 }
 
 /// A stop's time this frame, `dt` on from `at`, the body going `speed`: while it brakes, where
-/// the clip's distance left is the body's stopping distance, never back and no faster than
-/// RATE_CAP (its time set, rate 0); once it stands, on at the clip's own pace (rate 1).
+/// the clip's distance left is the body's stopping distance, never back (its time set, rate
+/// 0); once it stands, on at the clip's own pace (rate 1). The rate is not capped: a capped
+/// clip lags a body braking harder than it, and its planted foot drifts from the body's
+/// (D528, controller.md 21d).
 pub(crate) fn matched(
     playing: &mut bevy::animation::ActiveAnimation,
     at: &mut f32,
@@ -141,11 +140,10 @@ pub(crate) fn matched(
     playing.seek_to(*at);
 }
 
-/// A braking stop's time `dt` on from `at`: where its distance left is the body's stopping
-/// distance, never back and no faster than RATE_CAP.
-fn braking(clip: &Markers, at: f32, (speed, decel, scale, dt): (f32, f32, f32, f32)) -> f32 {
+/// A braking stop's time from `at`: where its distance left is the body's stopping distance,
+/// never back.
+fn braking(clip: &Markers, at: f32, (speed, decel, scale, _): (f32, f32, f32, f32)) -> f32 {
     clip.stop_time(stopping(speed, decel) / scale, at)
-        .min(at + RATE_CAP * dt)
 }
 
 /// The loop's time a stop or start gives way to it at, the clip `at`: as far between the same
@@ -305,17 +303,20 @@ mod tests {
     }
 
     #[test]
-    fn a_stop_braking_harder_than_its_clip_plays_no_faster_than_its_cap() {
+    fn a_stop_braking_harder_than_its_clip_goes_to_its_match_at_once_and_never_back() {
         let clip = stop(0);
         // 4 m/s at 40 m/s^2 stops in 0.2 m: its clip at 0.2 m left is 0.553 s in (1 - (1 -
-        // t)^2 = 0.8), but from 0.4 s a 60th of a second on goes no farther than RATE_CAP's.
+        // t)^2 = 0.8), so from 0.4 s a 60th of a second on it goes there, however fast.
         let clip_at = clip.stop_time(stopping(4.0, 40.0), 0.0);
         assert!((clip_at - 0.553).abs() < 0.01, "{clip_at}");
-        let (was, dt) = (0.4, 1.0 / 60.0);
-        let to = braking(&clip, was, (4.0, 40.0, 1.0, dt));
-        assert!((to - (was + RATE_CAP * dt)).abs() < 1e-5, "{to}");
-        // Near its match it goes to it, and never back.
-        assert!((braking(&clip, 0.54, (4.0, 40.0, 1.0, dt)) - clip_at).abs() < 1e-4);
+        let dt = 1.0 / 60.0;
+        let to = braking(&clip, 0.4, (4.0, 40.0, 1.0, dt));
+        assert!((to - clip_at).abs() < 1e-4, "{to}");
+        // Its distance left there is the body's stopping distance.
+        let (_, end) = clip.stop();
+        let left = end - (2.0 * to - to * to);
+        assert!((left - stopping(4.0, 40.0)).abs() < 5e-3, "{left}");
+        // Past its match it holds where it is, never back.
         assert_eq!(braking(&clip, 0.6, (4.0, 40.0, 1.0, dt)), 0.6);
     }
 }
