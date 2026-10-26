@@ -322,12 +322,55 @@ pub fn passes_timed(store: &DiagnosticsStore) -> Option<Instant> {
         .max()
 }
 
+/// What a pass's CPU time is kept under, beside its GPU time under its own name, in the
+/// benchmark's series of pass times.
+pub const CPU_PASS: &str = "cpu ";
+
+/// A render pass's diagnostic as a series of the benchmark's pass times: its GPU time under
+/// its name, its CPU time (the commands recorded for it) under `CPU_PASS` and its name.
+pub fn pass_series(path: &str) -> Option<String> {
+    let pass = path.strip_prefix("render/")?;
+    pass.strip_suffix("/elapsed_gpu")
+        .map(str::to_string)
+        .or_else(|| Some(format!("{CPU_PASS}{}", pass.strip_suffix("/elapsed_cpu")?)))
+}
+
+/// The medians of each series, costliest first, as `name value` pairs, the first 20.
+fn costliest(series: &mut std::collections::BTreeMap<String, Vec<f32>>, prefix: &str) -> String {
+    let mut passes: Vec<(f32, &str)> = series
+        .iter_mut()
+        .map(|(pass, ms)| {
+            ms.sort_by(f32::total_cmp);
+            (ms[ms.len() / 2], pass.trim_start_matches(prefix))
+        })
+        .collect();
+    passes.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let top: Vec<String> = passes
+        .iter()
+        .take(20)
+        .map(|(ms, pass)| format!("{pass} {ms:.2}"))
+        .collect();
+    top.join(", ")
+}
+
 /// The benchmark's lines on the GPU's passes: the costliest by their medians over the run
-/// and over its last tenth, and the triangles each sent to be drawn.
+/// and over its last tenth, and the triangles each sent to be drawn; and the costliest on the
+/// render world's CPU, recording them.
 pub fn print_passes(
     pass_ms: &mut std::collections::BTreeMap<String, Vec<f32>>,
     pass_triangles: &mut std::collections::BTreeMap<String, Vec<f32>>,
 ) {
+    let (mut cpu, mut gpu): (std::collections::BTreeMap<_, _>, _) = std::mem::take(pass_ms)
+        .into_iter()
+        .filter(|(_, ms): &(String, Vec<f32>)| !ms.is_empty())
+        .partition(|(pass, _)| pass.starts_with(CPU_PASS));
+    let pass_ms = &mut gpu;
+    if !cpu.is_empty() {
+        println!(
+            "SANDBOX CPU passes, medians in ms: {}",
+            costliest(&mut cpu, CPU_PASS)
+        );
+    }
     // The same over the run's last tenth, where a scene that grows (a fall, a town
     // rising) costs the most and the whole run's medians hide it.
     for (what, of, unit) in [
@@ -339,23 +382,10 @@ pub fn print_passes(
         println!("SANDBOX {what} in the last tenth, medians {unit}: {tail}");
     }
     // The costliest passes on the GPU, by their medians.
-    let mut passes: Vec<(f32, &str)> = pass_ms
-        .iter_mut()
-        .map(|(pass, ms)| {
-            ms.sort_by(f32::total_cmp);
-            (ms[ms.len() / 2], pass.as_str())
-        })
-        .collect();
-    passes.sort_by(|a, b| b.0.total_cmp(&a.0));
-    if !passes.is_empty() {
-        let costliest: Vec<String> = passes
-            .iter()
-            .take(20)
-            .map(|(ms, pass)| format!("{pass} {ms:.2}"))
-            .collect();
+    if !pass_ms.is_empty() {
         println!(
             "SANDBOX GPU passes, medians in ms: {}",
-            costliest.join(", ")
+            costliest(pass_ms, "")
         );
     }
     // What is drawn: triangles a frame by pass, meshes, and memory.
@@ -823,6 +853,27 @@ mod tests {
         assert_eq!(spread.high, 99.0);
         assert_eq!(spread.worst, 100.0);
         assert_eq!(Spread::of(Vec::new()), None);
+    }
+
+    #[test]
+    fn a_pass_keeps_its_gpu_and_cpu_times_apart() {
+        let gpu = pass_series("render/auxiliary_views/elapsed_gpu");
+        assert_eq!(gpu.as_deref(), Some("auxiliary_views"));
+        let cpu = pass_series("render/auxiliary_views/elapsed_cpu").unwrap();
+        assert_eq!(cpu, format!("{CPU_PASS}auxiliary_views"));
+        assert_eq!(
+            pass_series("render/auxiliary_views/clipper_invocations"),
+            None
+        );
+        assert_eq!(pass_series("frame_time"), None);
+        let mut series = std::collections::BTreeMap::from([
+            (cpu, vec![2.0, 1.0, 3.0]),
+            (format!("{CPU_PASS}ssao"), vec![0.5]),
+        ]);
+        assert_eq!(
+            costliest(&mut series, CPU_PASS),
+            "auxiliary_views 2.00, ssao 0.50"
+        );
     }
 
     #[test]

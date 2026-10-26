@@ -1281,16 +1281,10 @@ fn scripted_run(
         }
         for diagnostic in store.iter() {
             let path = diagnostic.path().as_str();
-            if let (Some(pass), Some(then)) = (
-                path.strip_prefix("render/")
-                    .and_then(|p| p.strip_suffix("/elapsed_gpu")),
-                then,
-            ) {
+            if let (Some(pass), Some(then)) = (crate::debug::pass_series(path), then) {
                 let ms = crate::debug::timed_then(diagnostic, then).unwrap_or(0.0);
                 let earlier = timed.1 - 1;
-                let times = pass_ms
-                    .entry(pass.to_string())
-                    .or_insert_with(|| vec![0.0; earlier]);
+                let times = pass_ms.entry(pass).or_insert_with(|| vec![0.0; earlier]);
                 times.push(ms as f32);
             }
             // The triangles each pass sent to be drawn, where the GPU counts them.

@@ -149,6 +149,7 @@ fn worth_saying(line: &str) -> Option<&str> {
         "frame parts, ",
         "render world, median: ",
         "GPU passes, ",
+        "CPU passes, ",
         "triangles a frame, ",
         "drawn, medians: ",
     ]
