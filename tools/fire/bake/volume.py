@@ -10,7 +10,8 @@
 # MANTA::writeConfiguration: base_res at byte 148, res_min at 160, gzipped little-endian ints);
 # the cell size is the domain's height over its base cells (the VDB's own voxel size follows the
 # adaptive grid and is not it). For each frame it writes the box's flame then its temperature, float32, x fastest, then
-# y, then z (up), to raw.bin; and to meta.json the cell size, the domain's cells, the temperature's
+# y, then z (up), to raw.bin; the box's gas velocity, three float32 a cell in Mantaflow's own units (cells a unit of its
+# time, of which a frame is 0.1 * 25 / fps * the domain's time_scale), to vel.bin, for the tongue tips volume.ts lists; and to meta.json the cell size, the domain's cells, the temperature's
 # largest value, and how much flame each frame has outside the box (its share of the frame's
 # flame, and the largest flame there), so a box that cuts the flame shows. Blender's Python is
 # used only for its OpenVDB module (D121). Our own script: nothing of Blender's is copied in.
@@ -43,15 +44,25 @@ def grid(path, name, base, rmin):
     return a
 
 
+def velocity(path, base, rmin):
+    """A frame's gas velocity over the domain's whole base grid, three a cell."""
+    a = np.zeros(tuple(base) + (3,), np.float32)
+    vdb.read(path, VELOCITY).copyToArray(a, ijk=tuple(-x for x in rmin))
+    return a
+
+
 def config(f):
     with gzip.open(os.path.join(cache, "config", "config_%04d.uni" % f)) as c:
         b = c.read()
     return struct.unpack_from("<3i", b, 148), struct.unpack_from("<3i", b, 160)
 
 
+# Blender names its fluid grids after OpenVDB's conventions since 2.92 ("velocity"), Mantaflow's own before.
+names = [g.name for g in vdb.readAllGridMetadata(os.path.join(cache, "data", "fluid_data_%04d.vdb" % first))]
+VELOCITY = "velocity" if "velocity" in names else "vel"
 start = time.time()
-outside, outside_max, t_max, res = [], [], 0.0, None
-with open(os.path.join(out, "raw.bin"), "wb") as raw:
+outside, outside_max, t_max, res, rise = [], [], 0.0, None, []
+with open(os.path.join(out, "raw.bin"), "wb") as raw, open(os.path.join(out, "vel.bin"), "wb") as vel:
     for f in range(first, first + count):
         path = os.path.join(cache, "data", "fluid_data_%04d.vdb" % f)
         if not os.path.exists(path):
@@ -72,6 +83,10 @@ with open(os.path.join(out, "raw.bin"), "wb") as raw:
         # x fastest: (x, y, z) -> (z, y, x) in C order.
         raw.write(np.ascontiguousarray(fb.transpose(2, 1, 0)).tobytes())
         raw.write(np.ascontiguousarray(tb.transpose(2, 1, 0)).tobytes())
+        vb = velocity(path, res, rmin)[box]
+        vel.write(np.ascontiguousarray(vb.transpose(2, 1, 0, 3)).tobytes())
+        if (fb > 0.3).any():
+            rise.append(float(np.median(vb[..., 2][fb > 0.3])))
 
 meta = {
     "frames": count,
@@ -83,6 +98,9 @@ meta = {
     "outside_share_mean": sum(outside) / len(outside),
     "outside_flame_max": max(outside_max),
     "outside_frames_over_0.3": sum(1 for m in outside_max if m > 0.3),
+    "grids": names,
+    "velocity_grid": VELOCITY,
+    "velocity_up_median_raw": sorted(rise)[len(rise) // 2] if rise else 0.0,
     "read_s": round(time.time() - start, 1),
 }
 with open(os.path.join(out, "meta.json"), "w") as f:

@@ -14,7 +14,8 @@
     "cells": [40, 36, 52],
     "domain_min": [-0.8, -0.8, -0.02],
     "domain_size": [1.6, 1.6, 2.2],
-    "columns": 12
+    "columns": 12,
+    "time_scale": 2.5
   },
   "domain": {},
   "sources": [],

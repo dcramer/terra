@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { coarse, crossfade, seam, tile, untile } from "./volume.ts";
+import { coarse, crossfade, flameHeight, seam, tile, tips, untile } from "./volume.ts";
 
 // A slowly wandering field: each frame the last plus a little noise, stronger and weaker by turns
 // as a gusting fire's is, so a loop cut from it jumps at the seam by the whole drift over the
@@ -51,4 +51,62 @@ test("frames tiled into one texture come back out, and averaged blocks are the c
   // 2 x 4 x 1 blocks of 2 cells a side over z 0-1 (z 2 dropped): 1s below, the upper half's
   // last four rows of z 1 3s.
   assert.deepEqual([...c], [1, 1, 1, 1, 2, 2, 2, 2]);
+});
+
+// A flame of columns on a 20 x 20 x 40 grid: a broad body 20 cells tall, and on it three tongues
+// of their own heights and one stub below three quarters of the flame's height.
+function tongues(): { flame: Float32Array; vel: Float32Array; cells: [number, number, number] } {
+  const cells: [number, number, number] = [20, 20, 40];
+  const flame = new Float32Array(20 * 20 * 40);
+  const vel = new Float32Array(flame.length * 3);
+  const column = (x0: number, y0: number, r: number, top: number) => {
+    for (let z = 0; z < top; z++)
+      for (let y = y0 - r; y <= y0 + r; y++)
+        for (let x = x0 - r; x <= x0 + r; x++) {
+          // Rounded: the middle column is the highest, its neighbours a cell lower.
+          const lower = Math.max(Math.abs(x - x0), Math.abs(y - y0));
+          if (z < top - lower) flame[(z * 20 + y) * 20 + x] = 0.5;
+        }
+  };
+  column(10, 10, 6, 20);
+  column(4, 4, 1, 38);
+  column(15, 5, 1, 34);
+  column(14, 15, 1, 32);
+  column(5, 15, 1, 24);
+  // The gas rises at 4 cells a frame and drifts downwind at 1.
+  for (let p = 0; p < flame.length; p++) [vel[p * 3], vel[p * 3 + 2]] = [1, 4];
+  return { flame, vel, cells };
+}
+
+test("a frame's tongue tips are its highest local tops above three quarters of its height, with the gas's speed there", () => {
+  const { flame, vel, cells } = tongues();
+  const tall = 38;
+  const listed = tips(flame, vel, cells, tall, 0.02, [-0.2, -0.2, 0], 0.02 * 30);
+  // The three tongues, highest first; the stub (24 < 28.5) and the body's top are not tips.
+  assert.deepEqual(
+    listed.map((t) => t.slice(0, 3)),
+    [
+      [-0.2 + 4.5 * 0.02, -0.2 + 4.5 * 0.02, 0.76],
+      [-0.2 + 15.5 * 0.02, -0.2 + 5.5 * 0.02, 0.68],
+      [-0.2 + 14.5 * 0.02, -0.2 + 15.5 * 0.02, 0.64],
+    ].map((t) => t.map((v) => Number(v.toFixed(3)))),
+  );
+  // 4 cells a frame of 2 cm at 30 frames a second is 2.4 m/s up, 1 is 0.6 downwind.
+  for (const t of listed) assert.deepEqual(t.slice(3), [0.6, 0, 2.4]);
+  // A flame with only its body has no tongue above three quarters of it, and no frame lists more than three.
+  const body = new Float32Array(flame.length);
+  for (let p = 0; p < 20 * 20 * 15; p++) body[p] = 0.5;
+  assert.deepEqual(tips(body, vel, cells, 38, 0.02, [0, 0, 0], 1), []);
+  assert.ok(tips(flame, vel, cells, 20, 0.02, [0, 0, 0], 1).length === 3);
+});
+
+test("the flame's height is the 98th percentile of its cells' tops over the loop", () => {
+  const cells: [number, number, number] = [10, 10, 50];
+  // Every cell of the lowest 30 levels, and one column to 50: 3000 cells under 30, 20 over.
+  const f = new Float32Array(10 * 10 * 50);
+  for (let p = 0; p < 10 * 10 * 30; p++) f[p] = 1;
+  for (let z = 30; z < 50; z++) f[z * 100] = 1;
+  assert.equal(flameHeight([f], cells), 30);
+  // Below the edge is not flame.
+  assert.equal(flameHeight([f.map((x) => x * 0.05)], cells), 0);
 });
