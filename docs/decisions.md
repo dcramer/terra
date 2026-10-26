@@ -437,6 +437,7 @@ The look, models, bodies and gear, textures and audio.
 | [D519](decisions/D519.md) | Above the clouds | Design | Developers | Decided | Clouds are flown through from the start… |
 | [D521](decisions/D521.md) | The sky's effects | Design | Developers | Decided | The sky has the real set of effects… |
 | [D532](decisions/D532.md) | Clips come from generators and free sets, not capture or bought packs | Design | Developers | Decided | The clips Kimodo makes badly (idles, sprint, swimming… |
+| [D533](decisions/D533.md) | Uthana's takes come on our body uploaded bare, lifted onto our ground and checked against its reference | Engineering | Agent | Decided | `tools/uthana` uploads a body without its animations… |
 
 ## Engine and code
 

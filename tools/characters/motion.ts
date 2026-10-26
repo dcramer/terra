@@ -68,8 +68,8 @@ type Entry = {
 };
 
 /** A take of an Uthana entry: the motion made, the one looped from it, the dollars both cost,
- * and the scale its translations were given (uthana.ts groundScale). */
-type Made = { motion: string; looped?: string; dollars: number; scale: number };
+ * and how high its feet were lifted onto our ground (uthana/carry.ts `lift`, m). */
+type Made = { motion: string; looped?: string; dollars: number; lift?: number };
 
 /** The takes of `clip` an Uthana entry still needs: of the first `samples`, those not made. */
 export function wanted(samples: number, made: (n: number) => boolean): number[] {
@@ -82,15 +82,20 @@ async function uthanaTakes(entry: Entry, samples: number, file: (n: number) => s
   const made: Record<number, Made> = existsSync(log) ? JSON.parse(readFileSync(log, "utf8")) : {};
   const id = await character();
   for (const n of wanted(samples, (n) => existsSync(file(n)))) {
-    const before = await balance();
-    const raw = await motion(entry.prompt, { model: "3", length: entry.seconds, footIk: false, character: id });
-    const loop = entry.looped ? await looped(id, raw, entry.looped) : undefined;
-    mkdirSync(dirname(file(n)), { recursive: true });
-    const scale = await download(id, loop ?? raw, file(n), String(FPS), false);
-    const after = await balance();
-    made[n] = { motion: raw, ...(loop ? { looped: loop } : {}), dollars: Math.round((before - after) * 10000) / 10000, scale: Math.round(scale * 1000) / 1000 };
+    // A take paid for but not on disk (refused, or lost) is downloaded again, free.
+    if (!made[n]) {
+      const before = await balance();
+      const raw = await motion(entry.prompt, { model: "3", length: entry.seconds, footIk: false, character: id });
+      const loop = entry.looped ? await looped(id, raw, entry.looped) : undefined;
+      const after = await balance();
+      made[n] = { motion: raw, ...(loop ? { looped: loop } : {}), dollars: Math.round((before - after) * 10000) / 10000 };
+      writeFileSync(log, JSON.stringify(made, null, 2) + "\n");
+      console.log(`take ${n}: Uthana motion ${raw}${loop ? `, looped ${loop}` : ""}, $${made[n].dollars} (left $${after.toFixed(2)})`);
+    }
+    // Carried onto our body and checked against Uthana's reference; a take that does not stand is refused.
+    const { lift } = await download(made[n].looped ?? made[n].motion, file(n), { fps: String(FPS), inPlace: false });
+    made[n].lift = Math.round(lift * 10000) / 10000;
     writeFileSync(log, JSON.stringify(made, null, 2) + "\n");
-    console.log(`take ${n}: Uthana motion ${raw}${loop ? `, looped ${loop}` : ""}, $${made[n].dollars} (left $${after.toFixed(2)}), translations x${made[n].scale.toFixed(2)}`);
   }
   return made;
 }
