@@ -219,6 +219,7 @@ fn at(x: f32, lumens: f32) -> Lit {
         kept: false,
         night_stops: 2.5,
         dusk_gain: 1.0,
+        casts: true,
     }
 }
 
@@ -227,7 +228,7 @@ fn none(n: usize) -> Vec<Was> {
         Was {
             at: Vec3::ZERO,
             on: false,
-            shadows: false
+            near: false
         };
         n
     ]
@@ -269,10 +270,10 @@ fn a_burning_village_is_a_dozen_lights_the_nearest_shadowed_none_past_forty_metr
 #[test]
 fn a_lights_shadows_stay_on_it_until_it_is_well_past_their_reach() {
     // Two fires; the one at 21 m had shadows and keeps them, a new one at 21 m gets none.
-    let was = |x: f32, shadows: bool| Was {
+    let was = |x: f32, near: bool| Was {
         at: Vec3::new(x, 0.0, 0.0),
         on: true,
-        shadows,
+        near,
     };
     let shown = choose(
         vec![at(21.0, 1.0e7)],
@@ -304,6 +305,35 @@ fn a_lights_shadows_stay_on_it_until_it_is_well_past_their_reach() {
     );
     assert_eq!(shown[0].as_ref().unwrap().lit.at.x, 10.0);
     assert_eq!(shown[1].as_ref().unwrap().lit.at.x, 5.0);
+}
+
+#[test]
+fn a_hearths_pit_key_casts_its_shadows_and_its_top_light_shines_in_the_fog_unshadowed() {
+    // Two campfires, 3 and 6 m off, each a key that casts and a top light that does not, and
+    // a blaze 4 m off; two shadowed lights.
+    let hearth = |x: f32, casts: bool| Lit {
+        kept: true,
+        casts,
+        ..at(x, 1.0e5)
+    };
+    let lit = vec![
+        hearth(3.0, true),
+        hearth(3.1, false),
+        at(4.0, 1.0e5),
+        hearth(6.0, true),
+        hearth(6.1, false),
+    ];
+    let shown = choose(lit, Some(Vec3::ZERO), &none(LIGHTS), 2);
+    let on: Vec<&Shown> = shown.iter().flatten().collect();
+    let x = |f: fn(&Shown) -> bool| {
+        let mut x: Vec<f32> = on.iter().filter(|s| f(s)).map(|s| s.lit.at.x).collect();
+        x.sort_by(f32::total_cmp);
+        x
+    };
+    // The nearest two that may cast do: the first fire's key and the blaze; no top light.
+    assert_eq!(x(|s| s.shadows), vec![3.0, 4.0]);
+    // In the fog: the first fire's key, shadowed, and both top lights; never the blaze.
+    assert_eq!(x(|s| s.scatters), vec![3.0, 3.1, 6.1]);
 }
 
 /// The illuminance a light gives the ground so far out from under it, lux.

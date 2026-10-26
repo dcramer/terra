@@ -142,8 +142,10 @@ const HEARTH_LIGHT_UP: f32 = 0.4;
 /// his firelit face, the shadow factor at him about 1 (lake round 18's probe, light by light).
 /// At 0.6 of it, 3 times its share, at the flames' top, his face is 2.4 times as lit as with
 /// no firelight and warm (R/B 3.5), the ground round the ring 297 times the far ground (161
-/// before), the stones still warm brown (sRGB 224,160,78). Shadowed: it casts the sitter's
-/// shadow on the ground behind him, and costs nothing on his face (183 against 180 unshadowed).
+/// before), the stones still warm brown (sRGB 224,160,78). Unshadowed (`Lit::casts`), still
+/// shining in the air's glow: its cube cost 1.5 ms by dusk (fire round g29), and the sitter's
+/// shadow on the ground behind him is the pit key's (shadowed, it was 183 on his face against
+/// 180 unshadowed).
 /// The fire sheet's dusk campfire crop, 22% red and orange with it (34% in an earlier run), is
 /// not its doing: kept out of the air's glow it stayed at 22%, and at 2.5 times it was 24%
 /// (lake round 20).
@@ -397,6 +399,10 @@ pub(super) struct Lit {
     /// How many times more it is keyed up against the dusk sky than a kept fire's pit light
     /// (`hearth_by_hour`): a hearth's top light's `HEARTH_TOP_DUSK`, every other's 1.
     pub dusk_gain: f32,
+    /// Whether it may cast shadows: a hearth's top light does not, its pit key casting the
+    /// fire's (`choose`); each of a light's cube's six views is drawn every frame, 0.55 ms of
+    /// GPU and 0.6 of render CPU a light (fire round g29).
+    pub casts: bool,
 }
 
 /// A jet's light, its lumens and colour, as its breath is drawn.
@@ -448,6 +454,7 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
                     kept: false,
                     night_stops: NIGHT_STOPS,
                     dusk_gain: 1.0,
+                    casts: true,
                 }
             })
         })
@@ -505,6 +512,7 @@ pub(super) fn strikes(
                     kept: false,
                     night_stops: BREATH_NIGHT_STOPS,
                     dusk_gain: 1.0,
+                    casts: true,
                 }
             })
         })
@@ -541,6 +549,7 @@ fn jet_lights(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
                     color: jet_light,
                     night_stops: jet_stops,
                     dusk_gain: 1.0,
+                    casts: true,
                     range: JET_RANGE_M,
                     radius: 0.5,
                     glow,
@@ -578,7 +587,8 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
     // a halo round the flames: at 0.8 of their height, by their tips, the glow was a ball
     // beside the fire (fire sheet review, 3/10); level with a 0.9 m teepee's ends the logs
     // were the brightest thing by it (lake film r6), which the campfire's 0.55 m stack clears.
-    // Two lights, both shadowed: a key low in the pit and one at its flames' top (`HEARTH_TOP`).
+    // Two lights: a shadowed key low in the pit and an unshadowed one at its flames' top
+    // (`HEARTH_TOP`).
     let colours = blazes.lights.iter().chain(std::iter::repeat(&HEARTH_LIGHT));
     lit.extend(
         blazes
@@ -609,6 +619,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     kept: true,
                     night_stops: HEARTH_NIGHT_STOPS,
                     dusk_gain: 1.0,
+                    casts: true,
                 };
                 let top = Lit {
                     lumens: lumens * HEARTH_TOP * HEARTH_TOP_GAIN,
@@ -617,6 +628,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     radius: width(blaze) * HEARTH_TOP_SPREAD,
                     night_stops: HEARTH_TOP_NIGHT_STOPS,
                     dusk_gain: HEARTH_TOP_DUSK,
+                    casts: false,
                     ..main.clone()
                 };
                 [main, top]
@@ -662,6 +674,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 kept: false,
                 night_stops: NIGHT_STOPS,
                 dusk_gain: 1.0,
+                casts: true,
             }
         })
         .collect();
@@ -680,21 +693,23 @@ pub fn shadowed(quality: Quality) -> usize {
     }
 }
 
-/// What one of the light entities was last frame: where, and whether it cast shadows.
+/// What one of the light entities was last frame: where, and whether it cast shadows or
+/// shone in the fog (`near`, held on to as shadows are).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Was {
     pub at: Vec3,
     pub on: bool,
-    pub shadows: bool,
+    pub near: bool,
 }
 
-/// A light to show: what it is, how far its distance has eased it, and whether it casts
-/// shadows (and so shines in the fog).
+/// A light to show: what it is, how far its distance has eased it, whether it casts shadows,
+/// and whether it shines in the fog (a kept fire's near light, shadowed or not).
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Shown {
     pub lit: Lit,
     pub fade: f32,
     pub shadows: bool,
+    pub scatters: bool,
 }
 
 fn smooth(from: f32, to: f32, x: f32) -> f32 {
@@ -705,7 +720,8 @@ fn smooth(from: f32, to: f32, x: f32) -> f32 {
 /// The lights to show on each light entity: the most a fire's light matters where the eye is
 /// (its lumens over its distance, eased out from 30 to 40 m), each kept on the entity that
 /// showed the nearest of last frame's, so a light's shadows stay on it as fires come and go;
-/// the nearest `shadows` within 20 m cast shadows, kept to 23 m once on.
+/// of the lights that may cast them (`Lit::casts`) the nearest `shadows` within 20 m cast
+/// shadows, kept to 23 m once on, and as many of the rest, a kept fire's, shine in the fog.
 pub(super) fn choose(
     lit: Vec<Lit>,
     eye: Option<Vec3>,
@@ -726,6 +742,7 @@ pub(super) fn choose(
                         lit,
                         fade,
                         shadows: false,
+                        scatters: false,
                     },
                 )
             })
@@ -760,15 +777,26 @@ pub(super) fn choose(
         .filter_map(|(i, shown)| {
             let shown = shown.as_ref()?;
             let d = far(shown.lit.at);
-            let had = was[i].shadows;
+            let had = was[i].near;
             let within = if had { SHADOW_M[1] } else { SHADOW_M[0] };
             (eye.is_some() && d < within).then_some((d - if had { 3.0 } else { 0.0 }, i))
         })
         .collect();
     near.sort_by(|a, b| a.0.total_cmp(&b.0));
-    for &(_, i) in near.iter().take(shadows) {
-        if let Some(shown) = out[i].as_mut() {
-            shown.shadows = true;
+    let (mut casting, mut glowing) = (0, 0);
+    for &(_, i) in &near {
+        let Some(shown) = out[i].as_mut() else {
+            continue;
+        };
+        if shown.lit.casts {
+            if casting < shadows {
+                casting += 1;
+                shown.shadows = true;
+                shown.scatters = shown.lit.kept;
+            }
+        } else if shown.lit.kept && glowing < shadows {
+            glowing += 1;
+            shown.scatters = true;
         }
     }
     out
@@ -862,12 +890,12 @@ pub(super) fn light(
                 Was {
                     at: Vec3::ZERO,
                     on: false,
-                    shadows: false,
+                    near: false,
                 },
-                |(light, transform, visibility, _)| Was {
+                |(light, transform, visibility, volumetric)| Was {
                     at: transform.translation,
                     on: *visibility != Visibility::Hidden,
-                    shadows: light.shadow_maps_enabled,
+                    near: light.shadow_maps_enabled || volumetric,
                 },
             )
         })
@@ -890,7 +918,12 @@ pub(super) fn light(
             continue;
         };
         match shown {
-            Some(Shown { lit, fade, shadows }) => {
+            Some(Shown {
+                lit,
+                fade,
+                shadows,
+                scatters,
+            }) => {
                 // Each light is brighter by night by its own stops: a kept fire's fewer than a
                 // blaze's, so its flame stays the brightest thing by it (D415), and a marched
                 // breath's fewer again.
@@ -906,10 +939,9 @@ pub(super) fn light(
                 transform.translation = lit.at;
                 *visibility = Visibility::Inherited;
                 light.shadow_maps_enabled = shadows;
-                // A kept fire's shadowed light shines in the air round it (`fog`), sampling
-                // its shadows there; a blaze's stays out of the fog, where its tens of
-                // millions of lumens lit a ball of air brighter than the house (round 6).
-                let scatters = shadows && lit.kept;
+                // A kept fire's near lights shine in the air round it (`fog`), the shadowed
+                // one sampling its shadows there; a blaze's stays out of the fog, where its
+                // tens of millions of lumens lit a ball of air brighter than the house (round 6).
                 if scatters != volumetric {
                     if scatters {
                         commands.entity(entity).insert(VolumetricLight);
