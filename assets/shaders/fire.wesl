@@ -1746,7 +1746,23 @@ fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
     let hg = saturate(p.y / (f.tall * BAKED_FLAME_TOP));
     let drawn = field_flame(v, hg, f, BAKED_HEART);
     let thin = BAKED_THIN * (1.0 - smoothstep(0.1, 0.4, v)) * (1.0 - smoothstep(0.3, 0.6, hg));
-    return vec3(drawn.x * (1.0 + thin) * (1.0 - BAKED_TIPS * smoothstep(0.5, 1.0, hg)), drawn.yz);
+    return vec3(drawn.x * (1.0 + thin) * (1.0 - BAKED_TIPS * smoothstep(0.5, 1.0, hg)), baked_yellow(drawn.y), baked_yellow(drawn.z));
+}
+
+// How far a baked flame's yellow band, the hearth row's heats between orange and its pale core
+// (BAKED_YELLOW: rising over x-y, falling over z-w), is pulled down toward orange; the core over
+// it is left as it is, so its pale and the motion gate's cut (half the core's p99) stay. By
+// night, over black, the flame shows its own colour: on the baked loop its yellow stood at the
+// fire sheet's 23% ceiling and run-to-run noise tipped it over (fire round g45). No uniform tells
+// night from dusk (both at EV 9, the eye within 0.4 stop), so it pulls at every hour. Pulled
+// 0.05 from 0.76: night yellow 23.x -> 17.3 (twice), red+orange 72 -> 77.8, pale 4.5, noon and
+// dusk pale 3.2-3.3 and 3.9 as before, the motion gate 6 of 6 at dusk and night. Pulled 0.03
+// from 0.80: 21.2 twice, but dusk tongue life 0.03 under the gate's 0.04 (g45/rule.md).
+const BAKED_YELLOW: vec4<f32> = vec4<f32>(0.76, 0.86, 0.88, 0.92);
+const BAKED_YELLOW_PULL: f32 = 0.05;
+fn baked_yellow(heat: f32) -> f32 {
+    let band = smoothstep(BAKED_YELLOW.x, BAKED_YELLOW.y, heat) * (1.0 - smoothstep(BAKED_YELLOW.z, BAKED_YELLOW.w, heat));
+    return heat - BAKED_YELLOW_PULL * band;
 }
 
 // How much thicker a baked field's thin flame is, at its edge, fading to none by 0.4 of its
