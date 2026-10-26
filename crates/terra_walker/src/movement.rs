@@ -601,6 +601,8 @@ fn shown(
     motion.velocity = body.velocity.reject_from(up);
     motion.rising = body.velocity.dot(up);
     motion.on_ground = body.ground == Ground::Grounded;
+    motion.swimming = body.ground == Ground::Swimming;
+    motion.under = body.under;
     motion.airborne = match body.ground {
         Ground::Airborne => motion.airborne + dt,
         _ => 0.0,

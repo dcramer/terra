@@ -515,6 +515,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D493](decisions/D493.md) | The campfire's flame's motion comes from a baked, looping fluid simulation, sampled by the marched field | Tech | Developers | Decided | The design is fire-module.md's last section… |
 | [D496](decisions/D496.md) | A fire's glow is marched short, by its own lights | Tech | Agent | Leaning | Bevy's volumetric fog shader marches a fire's glow… |
 | [D513](decisions/D513.md) | A campfire's worn ground is its model's ash bed, out to 0.8 m, not a terrain decal | Tech | Agent | Leaning | The ground a campfire has worn round its ring… |
+| [D514](decisions/D514.md) | A swimmer's figure treads, strokes or dives by its swim and lies along its way | Tech | Agent | Decided | How swimming (D74, D478) is shown, presentation only… |
 
 ## Tools and workflow
 

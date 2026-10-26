@@ -65,7 +65,7 @@ impl Stepping {
 }
 
 /// Each frame: each player's figure shown its step's height below its body, run down.
-fn show(
+pub(crate) fn show(
     time: Res<Time>,
     mut players: Query<(&mut Stepping, &Transform, &Children), With<Player>>,
     mut figures: Query<&mut Transform, (With<Body>, Without<Player>)>,
