@@ -436,6 +436,7 @@ The look, models, bodies and gear, textures and audio.
 | [D517](decisions/D517.md) | Which clouds the sky has, and in what order | Design | Developers | Decided | The clouds come fair-weather first: cumulus… |
 | [D519](decisions/D519.md) | Above the clouds | Design | Developers | Decided | Clouds are flown through from the start… |
 | [D521](decisions/D521.md) | The sky's effects | Design | Developers | Decided | The sky has the real set of effects… |
+| [D532](decisions/D532.md) | Clips come from generators and free sets, not capture or bought packs | Design | Developers | Decided | The clips Kimodo makes badly (idles, sprint, swimming… |
 
 ## Engine and code
 
