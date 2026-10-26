@@ -1889,6 +1889,23 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "clips.foot_markers",
+   "noticed": 4,
+   "notice": "a fighter's feet slide under it on every step: the fight clips were rebuilt without their foot-down markers, so no foot locks",
+   "bar": {
+    "pass": true
+   },
+   "unit": "",
+   "source": "D455 (feet locked by the clips' baked markers); combat round 25's rebuild lost them (65664dad)",
+   "check": {
+    "by": "test",
+    "crate": "terra_walker",
+    "test": "feet::tests::every_clip_played_carries_its_foot_down_markers"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "rule.parry_window",
    "noticed": 4,
    "notice": "a guard raised just in time does not parry",
