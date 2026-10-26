@@ -127,6 +127,7 @@ Needs, death, the body, the map and options.
 | [D510](decisions/D510.md) | Climbing overhangs and ceilings | Design | Developers | Decided | Recommended: a face can be climbed to about 30° past… |
 | [D511](decisions/D511.md) | A climb jump | Design | Developers | Decided | Recommended: a lunge of about 1.5 m along the face for a… |
 | [D523](decisions/D523.md) | At the water's edge: wading slows, a swimmer climbs out, breath is shown | Design | Developers | Decided | Wading slows the walk linearly with depth to 60% of a… |
+| [D528](decisions/D528.md) | A runner stops in about two steps | Design | Developers | Decided | A body decelerates at about 15 m/s² (was 40)… |
 
 ## Items and crafting
 
@@ -198,6 +199,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D481](decisions/D481.md) | The move check measures the sword through its own shield and the shield through the sword arm | Tech | Agent | Decided | The move check (`tools/characters/moves.ts`, D447)… |
 | [D487](decisions/D487.md) | A landed blow shows a burst where the blade met the body, not a flash of the whole body | Design | Developers | Decided | Recommended by the agent (combat round 17)… |
 | [D504](decisions/D504.md) | The sword-and-shield set carries a strapped heater now, a round shield later | Design | Developers | Decided | The prototype's shield becomes a strapped heater or kite… |
+| [D529](decisions/D529.md) | Odd pairs in the hands | Design | Developers | Decided | From docs/holding.md's loadout model… |
 
 ## People and the tribe
 
