@@ -1,6 +1,7 @@
 id	value	why
 tunnel.wall	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 tunnel.body	3	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+tunnel.closing	0	unit S: new row tunnel.closing (2 of 12 on main: head on and glancing at 60 m/s crossed); swept cores put both bodies back to their time of impact
 tunnel.door	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 penetration.max	0.972	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 penetration.median	0.077	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run

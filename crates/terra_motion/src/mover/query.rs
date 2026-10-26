@@ -645,6 +645,17 @@ impl Distance for One<'_> {
     }
 }
 
+/// When a capsule moving along a motion first touches another held still, or goes deeper
+/// into one it starts in, as a share of the motion, and the contact there: the march every
+/// sweep makes, for two bodies' cores moving relative to each other (`mover::swept`).
+pub(super) fn impact(capsule: &Capsule, motion: Vec3, other: &Capsule) -> Option<Hit> {
+    march(
+        &One(&other.framed(capsule.origin), 0, Vec3::ZERO),
+        capsule,
+        motion,
+    )
+}
+
 impl Query for Capsules<'_> {
     fn contacts(&self, capsule: &Capsule, within: f32, out: &mut Vec<Contact>) {
         let c = *capsule;

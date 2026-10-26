@@ -26,8 +26,11 @@
 //!   must, onto level ground and a slope, and into deep water (D476).
 //! - `pushes`: people easing apart, a man walked past one standing, a monster walking through
 //!   men and into a wall with one, and a man pushing a monster (D479, criterion 15).
+//! - `closing`: two bodies closing at 10-60 m/s, head on, at a glance and one falling onto
+//!   another, never passing through each other (criterion 1, D53).
 //! - `far`: the same walks on a world 30 km across, where f32 is 2 mm fine (criterion 22, D482).
 
+mod closing;
 mod data;
 mod dive;
 mod fall;
@@ -129,8 +132,11 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(dive);
     let (pushes, deepest_push, overlap) = pushes::score(&new);
     measures.extend(pushes);
+    let (closing, deepest_closing) = closing::score(&new);
+    measures.extend(closing);
     let deepest = deepest
         .max(deepest_push)
+        .max(deepest_closing)
         .max(deeper)
         .max(deepest_flora)
         .max(deepest_water)

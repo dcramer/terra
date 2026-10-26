@@ -36,6 +36,21 @@
    "measurable": true
   },
   {
+   "id": "tunnel.closing",
+   "noticed": 4,
+   "notice": "two bodies closing fast (a fall, a charge, a knockback) pass through each other in a tick",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 12 meetings (head on, at a glance, one falling onto another; closing at 10-60 m/s) where the cores met",
+   "source": "docs/controller.md criterion 1; D53; Jolt's continuous collision (PhysicsSystem's CCD: a fast body cast along its motion relative to the other's)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "tunnel.door",
    "noticed": 4,
    "notice": "a body driven fast at a door passes through it",

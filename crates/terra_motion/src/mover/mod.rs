@@ -11,6 +11,7 @@
 //! - `slide`: collide and slide, the step up and stick to the floor (Jolt, MIT).
 //! - `shapes`: what stops a body besides the ground: cubes, doors, props, trees and rocks.
 //! - `push`: bodies apart by mass.
+//! - `swept`: two bodies closing fast put back to where their cores met (Jolt's CCD).
 //! - `grid`: the bodies' broadphase, a grid of them by place.
 //! - `lanes`: a tick's steps shared over threads, on whatever pool the caller has.
 //! - `swim`: diving, rising and breath in water (D74, D478).
@@ -22,6 +23,7 @@ mod push;
 pub mod query;
 pub mod shapes;
 mod slide;
+mod swept;
 mod swim;
 
 #[cfg(any(test, feature = "course"))]
@@ -275,8 +277,8 @@ pub struct Bodies {
 /// Fewer bodies than this ask each other directly: the broadphase's upkeep would cost more
 /// than it saves.
 const CROWD_FROM: usize = 16;
-/// How far beyond a body's own reach the bodies around it are gathered for its tick's
-/// asks, m: its move and the sweeps' motions within it (one beyond looks the grid up again).
+/// How far beyond a body's own reach and its step the bodies around it are gathered for its
+/// tick's asks, m: the sweeps' motions within the step (one beyond looks the grid up again).
 const GATHER_M: f64 = 1.0;
 /// How many neighbouring bodies a lane takes at a time when a tick is shared over threads.
 const RUN: usize = 8;
@@ -360,6 +362,7 @@ impl Bodies {
     pub fn tick(&mut self, world: &World, intents: &[(u32, Intent)], dt: f32) {
         let before = self.before(intents, dt);
         steps(&mut self.bodies, 0, &before, world, dt);
+        swept::stop(&mut self.bodies, &before, world.ground);
         push::separate(&mut self.bodies, &mut self.pairs, world.ground, PUSH_ROUNDS);
     }
 
@@ -418,7 +421,10 @@ fn steps(bodies: &mut [Body], from: usize, before: &Before, world: &World, dt: f
         if let Some(grid) = before.grid.as_ref() {
             let me = &before.capsules[from + k].1;
             let (a, b) = (me.world(me.a), me.world(me.b));
-            let reach = me.radius + (me.b - me.a).length() + before.extent;
+            // As far as its step may go besides: a body faster than the margin (a fall, a
+            // charge) would look the grid up again at each sweep.
+            let reach =
+                me.radius + (me.b - me.a).length() + before.extent + body.velocity.length() * dt;
             let r = DVec3::splat(f64::from(reach) + GATHER_M);
             grid.gather(a.min(b) - r, a.max(b) + r, &mut gathered);
         }
@@ -491,16 +497,16 @@ fn middle(capsule: &Capsule) -> DVec3 {
     capsule.world((capsule.a + capsule.b) * 0.5)
 }
 
-/// A body's capsule in its own frame: its feet at its position.
-fn capsule(body: &Body) -> Capsule {
-    Capsule::standing(Vec3::ZERO, body.up, body.kind.radius, body.kind.height).at(body.position)
-}
-
 /// A body's core in its own frame: the axis of its capsule, as thick as its kind's core.
 fn core(body: &Body) -> Capsule {
+    core_at(body, body.position)
+}
+
+/// A body's core were its feet at a place, in a frame there.
+fn core_at(body: &Body, at: DVec3) -> Capsule {
     let k = &body.kind;
     let core = k.core_m.clamp(1.0e-3, k.radius);
-    let mut capsule = capsule(body);
+    let mut capsule = Capsule::standing(Vec3::ZERO, body.up, k.radius, k.height).at(at);
     capsule.radius = core;
     capsule
 }

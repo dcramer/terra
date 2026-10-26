@@ -4,7 +4,7 @@
 //! too, so the bodies' tick adds no pool of its own beside it; tests and benches hand it rayon's.
 
 use super::push::{self, Ahead};
-use super::{Bodies, Body, Intent, PUSH_ROUNDS, RUN, World, steps};
+use super::{Bodies, Body, Intent, PUSH_ROUNDS, RUN, World, steps, swept};
 use std::cmp::Reverse;
 use std::ops::Range;
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -94,6 +94,7 @@ impl Bodies {
         drop(own);
         let (bodies, pairs) = (&mut self.bodies, &mut self.pairs);
         world(&mut lanes[0], &mut |w| {
+            swept::stop(bodies, before, w.ground);
             push::separate(bodies, pairs, w.ground, PUSH_ROUNDS)
         });
     }
