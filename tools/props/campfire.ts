@@ -79,8 +79,10 @@ const SECTIONS = [0.4, 0.02, 0.78, 0.21, 0.59];
 /// line up it (`Logs::CAMPFIRE`) still lies inside it.
 const BOWS = [0.012, -0.009, 0.007, -0.013, 0.01];
 /// The triangles of each part: five logs, thirteen stones, three sticks and the ground, under the
-/// budget with the coal bed's ~4,200. Their form is in their normal maps, baked from the full scans.
-export const PART_BUDGET = { log: 400, stone: 170, stick: 120, ground: 600 };
+/// budget with the coal bed's ~4,400. Their form is in their normal maps, baked from the full scans.
+/// A log is a tube 14 sides round (campfire.py `log_low`), 444 triangles in 15 rings: decimated
+/// to 400 it kept six sides or so and read as a square beam (judge, round 8).
+export const PART_BUDGET = { log: 460, stone: 170, stick: 120, ground: 600 };
 /// The maps' sides: 2K for the wood and stone of a prop past 1.5 m (art-style.md), 1K for the
 /// ground seen from above.
 const MAPS = { wood: 2048, stone: 2048, ground: 1024 };
