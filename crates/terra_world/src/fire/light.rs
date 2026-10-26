@@ -115,7 +115,10 @@ const HEARTH_RANGE_M: f32 = 6.0;
 /// top light keyed down by night (`HEARTH_TOP_NIGHT_STOPS`), 3.0: at 2.5 the logs and stones
 /// shadowing the pit light left the night pool darker than both RDR2 frames by its stones
 /// (sRGB luma 60 at a flame height out against 83 and 53; campfire pale round).
-const HEARTH_NIGHT_STOPS: f32 = 3.0;
+/// A fifth of a stop more with the top light's 1.4 (fire round g39; at 3.5 the night flame's crop
+/// went past the sheet's yellow, 26-28% against 23): the harsh reviewers' night pool
+/// was weak by the stones too.
+const HEARTH_NIGHT_STOPS: f32 = 3.2;
 /// The most a kept fire is keyed up against the dusk sky (`hearth_by_hour`), whatever its own
 /// night stops: the pit light's night boost before the pale round, so the dusk stays as keyed.
 const HEARTH_DUSK_STOPS: f32 = 2.5;
@@ -184,7 +187,13 @@ const HEARTH_TOP_DUSK: f32 = 7.0;
 /// a third or a fifth (83 to 52, 53 to 32; campfire step-back, difference 2). At 1.0 the pit
 /// light's steeper fall-off leads by night, a bright core going dark within a few fire widths;
 /// by dusk it is keyed up as before (`hearth_by_hour`), and faces by the fire stay lit by it.
-const HEARTH_TOP_NIGHT_STOPS: f32 = 1.0;
+/// At 1.0 three harsh reviewers found the night pool dying a stone's width past the ring
+/// against RDR2's warm pool fading over metres (fire round g38); 1.4 lifts the ground a few
+/// metres out by 1.3 times, with the pit light a fifth of a stop up (`HEARTH_NIGHT_STOPS`) so the
+/// pool still falls off past three flame heights as RDR2's does (at 1.8 alone it fell only
+/// 9.4 times from 1.5 m to 4.5 m). Free: both lights' ranges and shadows are unchanged, so only
+/// their brightness moves (docs/fire.md, "What the light costs").
+const HEARTH_TOP_NIGHT_STOPS: f32 = 1.4;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
