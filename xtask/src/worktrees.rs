@@ -19,7 +19,10 @@
 //! - in every build folder, the main checkout's, the nightly's and continuous's included,
 //!   rustc's incremental cache of a unit it has not compiled for a day is deleted: rustc keeps
 //!   one for every unit it ever compiled, and a unit compiled again without one is compiled in
-//!   full, once.
+//!   full, once;
+//! - under WSL, a staged copy of a program in the Windows temp folder (`cargo xtask win
+//!   --copy`, a whole program and its assets) that nothing has run from for a day is deleted,
+//!   unless its program is running.
 //!
 //! Idle is measured from the last thing that touched it: an edit to its files, git (a commit or
 //! a checkout, not the index, which `git status` rewrites) or a build. A subagent sent another
@@ -187,19 +190,29 @@ pub fn worktrees(args: &[String]) -> bool {
             if done { verb } else { "FAILED" },
         );
     }
+    finish(prune, freed, &main_checkout, now);
+    ok
+}
+
+/// The prune's sweeps beyond the worktrees, and its last line; or, listing, what a prune does.
+fn finish(prune: bool, freed: u64, main_checkout: &Path, now: SystemTime) {
     if prune {
-        freed += trim(&main_checkout.join("target"), now);
-        println!("worktrees: freed {}", gb(freed));
+        let freed = freed + trim(&main_checkout.join("target"), now);
+        let copies = crate::windows::sweep_copies(now);
+        if copies > 0 {
+            println!("Windows copies not run for a day deleted: {}", gb(copies));
+        }
+        println!("worktrees: freed {}", gb(freed + copies));
     } else {
         println!(
             "\n`cargo xtask worktrees --prune` removes a subagent's worktree once it is on main, \
              clean and idle two days. Build folders are deleted after one idle hour, or seeded \
              again after a day if a session is still open there. In every build folder, the \
-             main checkout's too, rustc's incremental caches unwritten for a day are deleted. \
+             main checkout's too, rustc's incremental caches unwritten for a day are deleted, and \
+             under WSL, so are the Windows temp folder's staged copies not run for a day. \
              Running builds and unreadable states are kept. `--done` deletes this worktree's build now."
         );
     }
-    ok
 }
 
 /// Process working directories and executable files protect sessions between builds too.

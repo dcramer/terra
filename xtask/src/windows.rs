@@ -1,9 +1,13 @@
 //! Running on the real GPU from WSL (D185): the Windows build of a program, its assets
 //! copied beside it, and `play` and `yard`, which use it wherever you are.
 
-use crate::{Task, root, run};
+use crate::{Task, root, run, sweep};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::{Duration, SystemTime};
+
+/// How long a staged copy (`windows_program`) is kept once nothing has run from it.
+const COPY_IDLE: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// The tasks this module runs (D410).
 pub(crate) const TASKS: &[Task] = &[
@@ -191,6 +195,61 @@ pub(crate) fn yard(args: &[String]) -> bool {
     let mut game: Vec<String> = vec!["--level".into(), "yard".into()];
     game.extend(args.iter().cloned());
     play(&game)
+}
+
+/// Deletes the staged copies in the Windows temp folder nothing has run from for a day (D259):
+/// each is a whole program and its assets, about 750 MB, named by view and worktree, so most
+/// are never run again and they filled the Windows disk. Its program goes first: Windows will
+/// not delete a program that is running (through WSL, an I/O error), so a copy in use is kept
+/// whole. What it freed.
+pub(crate) fn sweep_copies(now: SystemTime) -> u64 {
+    if !on_wsl() {
+        return 0;
+    }
+    let Some(staged) = windows_temp().map(|temp| temp.join("terra")) else {
+        return 0;
+    };
+    let mut freed = 0;
+    for copy in children(&staged) {
+        if now.duration_since(last_run(&copy)).unwrap_or_default() < COPY_IDLE {
+            continue;
+        }
+        let bytes = sweep::unlinked(&copy);
+        let programs = children(&copy)
+            .into_iter()
+            .filter(|path| path.extension().is_some_and(|e| e == "exe"));
+        if programs
+            .into_iter()
+            .all(|program| std::fs::remove_file(program).is_ok())
+            && std::fs::remove_dir_all(&copy).is_ok()
+        {
+            freed += bytes;
+        }
+    }
+    freed
+}
+
+/// When a staged copy was last run from: its program is copied in at every launch, and a run
+/// writes its logs and shots beside it.
+fn last_run(copy: &Path) -> SystemTime {
+    let mut paths = vec![copy.to_path_buf()];
+    for path in children(copy) {
+        if path.ends_with("logs") || path.ends_with("shots") {
+            paths.extend(children(&path));
+        }
+        paths.push(path);
+    }
+    paths
+        .iter()
+        .filter_map(|p| p.metadata().and_then(|m| m.modified()).ok())
+        .max()
+        .unwrap_or(SystemTime::UNIX_EPOCH)
+}
+
+fn children(dir: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(dir)
+        .map(|entries| entries.flatten().map(|e| e.path()).collect())
+        .unwrap_or_default()
 }
 
 /// The Windows temp folder, as a path WSL can use.
