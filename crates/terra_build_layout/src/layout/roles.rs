@@ -486,12 +486,15 @@ impl<'a> Roles<'a> {
     /// a face it is on (a footing's cap where a wall stands on it): a plinth lifted clear of
     /// high ground beside a short footing ran up into its cap, the two one in the other with
     /// their ends in one plane. Lowered as far as it must be, its foot going as far down.
+    /// Kept under its cap as laid where the wall over the cube broke and the cap is left
+    /// undressed (`edges`): the plinth does not rise when what stood on it falls, and raised
+    /// it stood out of its cubes into the break.
     fn lift(&self, cube: IVec3) -> (i32, i32) {
         let (lift, sink) = self.ground_lift(cube);
         let Some(plinth) = self.plinth_high.filter(|_| lift > 0) else {
             return (lift, sink);
         };
-        let edges = self.edges(cube);
+        let edges = self.work_out(cube);
         let top = edges
             .iter()
             .filter(|e| {
