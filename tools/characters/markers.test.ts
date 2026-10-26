@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bake, foot, groundOf, HIGHEST_M, SKATE_M, WALK_MPS } from "./markers.ts";
+import { bake, distanceOf, foot, groundOf, HIGHEST_M, RATE, SKATE_M, WALK_MPS } from "./markers.ts";
 import { Glb, type V3 } from "./glb.ts";
 
 const FPS = 60;
@@ -91,4 +91,27 @@ test("the game's walks have a foot down at every moment, and its strides do not 
     }
     for (const clip of ["Jog_Fwd_Loop", "Sprint_Loop"]) assert.equal(baked[clip].splits, 0, `${file}: ${clip} skates ${baked[clip].skate_m}`);
   }
+});
+
+test("a clip that keeps its root motion has its pelvis's travel along the way it goes, in its parent's space; one that stays has none", () => {
+  // Braking along -x at 30 frames a second: 2 m/s for half a second, then stopping, swaying 3 cm across.
+  const fps = 30;
+  const path: V3[] = Array.from({ length: 31 }, (_, i) => {
+    const t = i / fps;
+    const x = t < 0.5 ? 2 * t : 1 + 2 * (t - 0.5) - 2 * (t - 0.5) ** 2;
+    return [-Math.min(x, 1.25), 1, 0.03 * Math.sin(t * 10)];
+  });
+  // The parent turned a quarter about up (+y): its +z is the world's +x.
+  const half = Math.SQRT1_2;
+  const curve = distanceOf(path, fps, 1, { t: [0, 0, 0], r: [0, half, 0, half], s: [1, 1, 1] })!;
+  assert.equal(curve.distance.length, RATE + 1);
+  assert.ok(Math.abs(curve.distance[Math.round(0.2 * RATE)] - 0.4) < 0.01, `${curve.distance[12]}`);
+  assert.ok(Math.abs(curve.distance.at(-1)! - 1.25) < 0.01);
+  // World -x is the parent's -z.
+  assert.deepEqual(curve.way.map((x) => Math.round(x) + 0), [0, 0, -1]);
+  // A parent drawn twice its size: a model metre is half of one of its units.
+  const scaled = distanceOf(path, fps, 1, { t: [0, 0, 0], r: [0, half, 0, half], s: [2, 2, 2] })!;
+  assert.deepEqual(scaled.way.map((x) => Math.round(x * 10) / 10 + 0), [0, 0, -0.5]);
+  const sways: V3[] = Array.from({ length: 31 }, (_, i) => [0.05 * Math.sin(i), 1, 0]);
+  assert.equal(distanceOf(sways, fps, 1), undefined);
 });

@@ -27,6 +27,7 @@ pub mod blade;
 pub mod contact;
 #[cfg(any(test, feature = "course"))]
 pub mod course;
+pub mod distance;
 pub mod feet;
 pub mod hold;
 pub mod mover;
