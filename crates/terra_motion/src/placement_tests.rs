@@ -569,3 +569,85 @@ fn a_foot_over_lower_ground_is_over_it_until_the_pelvis_comes_down() {
         "{overs:?}"
     );
 }
+
+/// A swinging foot raised onto a higher face that then swings off it over level ground (the
+/// yard's stop at the mound) eases down; until it is down it reads as over its ground, as
+/// probed, not as eased, so a lock's start (`feet::PLANT_M`) waits for it to land.
+#[test]
+fn a_foot_swung_off_a_higher_face_is_over_its_ground_until_it_has_eased_down() {
+    let face = |x: f32| (if x >= 0.0 { 0.6 } else { 0.0 }, UP);
+    let level = |_: f32| (0.0, UP);
+    let shown = flat(-0.3);
+    let mut placing = Placing::default();
+    // Over the face for a few frames: raised onto it.
+    for _ in 0..10 {
+        let g = placing.ground(
+            0,
+            foot(flat(0.1), None, Vec3::ZERO),
+            DT,
+            under_of(face, Vec3::ZERO),
+        );
+        assert!(g.over(g.placed(0.0)).iter().all(|o| o.abs() < 1e-3));
+    }
+    // Swung back over level ground: eased down over frames, over it until then.
+    let overs: Vec<f32> = (0..20)
+        .map(|_| {
+            let g = placing.ground(
+                0,
+                foot(shown, None, Vec3::ZERO),
+                DT,
+                under_of(level, Vec3::ZERO),
+            );
+            let placed = g.placed(0.0);
+            let over = g.over(placed);
+            let off = off_ground(placed, shown, Vec3::ZERO, &level);
+            assert!((over[0] - off[0]).abs() < 1e-4 && (over[1] - off[1]).abs() < 1e-4);
+            over[0].min(over[1])
+        })
+        .collect();
+    assert!(overs[0] > crate::feet::PLANT_M, "{overs:?}");
+    assert!(overs[overs.len() - 1] < 0.005, "{overs:?}");
+}
+
+/// A swinging foot raised onto a higher tread lags its ground by up to `LAG_SHARE` of its
+/// clip's clearance; once locked (a heel strike, the clip's ball still 6 cm up) it is raised at
+/// once, neither heel nor ball under the clip's height over the tread.
+#[test]
+fn a_locked_foot_is_raised_onto_its_ground_at_once() {
+    let ground = tread(0.3);
+    let shown = Pose {
+        at: flat(0.1).at + UP * 0.06,
+        ..flat(0.0)
+    };
+    let mut placing = Placing::default();
+    // Swinging over the lower side, then over the tread: lagging.
+    placing.foot(
+        0,
+        foot(flat(-0.3), None, Vec3::ZERO),
+        DT,
+        under_of(&ground, Vec3::ZERO),
+    );
+    let free = placing.foot(
+        0,
+        foot(shown, None, Vec3::ZERO),
+        DT,
+        under_of(&ground, Vec3::ZERO),
+    );
+    assert!(off_ground(free, shown, Vec3::ZERO, &ground)[0] < -0.01);
+    // Lagging under its ground it is not read as down past where the clip has it.
+    let g = placing.ground(
+        0,
+        foot(shown, None, Vec3::ZERO),
+        DT,
+        under_of(&ground, Vec3::ZERO),
+    );
+    assert_eq!(g.over(g.placed(0.0)), [0.0; 2]);
+    let locked = placing.foot(
+        0,
+        foot(shown, Some(shown), Vec3::ZERO),
+        DT,
+        under_of(&ground, Vec3::ZERO),
+    );
+    let off = off_ground(locked, shown, Vec3::ZERO, &ground);
+    assert!(off.iter().all(|o| o.abs() < 1e-3), "{off:?}");
+}

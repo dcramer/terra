@@ -151,6 +151,9 @@ pub struct Grounded {
     ball_at: Vec3,
     /// The heel's and ball's ground over the root's level and the normal stood to, as eased.
     heights: (f32, f32, Vec3),
+    /// The heel's and ball's ground over the root's level as probed this frame (frozen for a
+    /// lock), before easing: where the foot would rest, which a lock's start reads (`over`).
+    probed: (f32, f32),
     up: Vec3,
     hip: Vec3,
     reach: f32,
@@ -314,8 +317,15 @@ impl Placing {
                 // clearance over its flat ground (its ball over its rest): a foot is lifted
                 // out of the ground at once (a lock across a riser), and a swinging foot over a
                 // higher tread is kept clear of it, coming down onto it only as the clip's
-                // foot comes down, when the lock takes it.
-                let clear = ((ball_at - root).dot(up) - BALL_REST_M).max(0.0) * LAG_SHARE;
+                // foot comes down, when the lock takes it. A locked foot's raise does not lag:
+                // the lag is for a swinging foot, and the clip has a locked one on the ground,
+                // so it is out of its ground at once (as any foot under its ground is), never
+                // under the clip's height over it (a heel strike onto a higher tread).
+                let clear = if lock.is_some() {
+                    0.0
+                } else {
+                    ((ball_at - root).dot(up) - BALL_REST_M).max(0.0) * LAG_SHARE
+                };
                 let ease = |was: f32, to: f32| (was + (to - was) * k).max(to - clear);
                 (
                     ease(heel, target.0),
@@ -329,6 +339,7 @@ impl Placing {
             shown,
             ball_at,
             heights: eased,
+            probed: (target.0, target.1),
             up,
             hip,
             reach,
@@ -373,8 +384,12 @@ impl Grounded {
 
     /// How far the foot placed at `placed` stands over its ground past where the clip has it
     /// over its flat ground, heel (the ankle) and ball, m: what placement could not lower (a
-    /// foot over lower ground the pelvis has not yet come down to), or under for a raise that
-    /// lags; 0 for a foot let go. A lock's start reads it (`feet::PLANT_M`).
+    /// foot over lower ground the pelvis has not yet come down to, or still easing down to
+    /// ground it has just come over); never under, as a raise that lags is put on its ground
+    /// once locked; 0 for a foot let go. A lock's start reads it (`feet::PLANT_M`), so it is
+    /// over the ground as probed, not as eased: as Unreal's Foot Placement plants by the
+    /// trace's distance to the ground, a foot swung off a higher face whose eased ground still
+    /// holds it up is not down, nor is one whose raise onto a face lags under it.
     pub fn over(&self, placed: Pose) -> [f32; 2] {
         if self.off {
             return [0.0; 2];
@@ -382,8 +397,9 @@ impl Grounded {
         let ball = self.shown.turn.inverse() * (self.ball_at - self.shown.at);
         let height = |at: Vec3| (at - self.root).dot(self.up);
         [
-            height(placed.at) - self.heights.0 - height(self.shown.at),
-            height(placed.at + placed.turn * ball) - self.heights.1 - height(self.ball_at),
+            (height(placed.at) - self.probed.0 - height(self.shown.at)).max(0.0),
+            (height(placed.at + placed.turn * ball) - self.probed.1 - height(self.ball_at))
+                .max(0.0),
         ]
     }
 }
