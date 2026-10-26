@@ -11,13 +11,15 @@
 //! runs a figure's own time slower or faster, its clip and its going, as a blow's hit-stop
 //! freezes both fighters for a few frames; and `staged.bend` turns some of its bones over its
 //! clip (`pose`); a fire it set down is moved clear of the feet of a figure at rest by it
-//! (`fireside`). Nothing here
+//! (`fireside`); `staged.morph` and `staged.glow` ease its morph targets and its painted glow,
+//! as a creature that wakes (`wake`). Nothing here
 //! names a model, an item or a clip: all of it is in the calls.
 
 mod fireside;
 pub(crate) mod impact;
 pub mod pose;
 mod quench;
+pub mod wake;
 
 use crate::fliers::placed;
 use bevy::{
@@ -177,6 +179,7 @@ pub fn plugin(app: &mut App) {
         (
             (dress, stage, animate, fireside::keep_clear).chain(),
             quench::quench,
+            wake::ease,
         ),
     )
     .add_systems(
@@ -197,6 +200,8 @@ pub fn plugin(app: &mut App) {
     method(app, "staged.face", face);
     method(app, "staged.rate", rate);
     method(app, "staged.bend", bend);
+    method(app, "staged.morph", wake::morph);
+    method(app, "staged.glow", wake::glow);
 }
 
 /// Whether clips fit a model's skeleton: most of the bones they move are its bones, by the
