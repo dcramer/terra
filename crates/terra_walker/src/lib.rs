@@ -35,6 +35,7 @@ pub mod skinning;
 pub mod stepping;
 pub mod strap;
 pub mod swing;
+pub mod underfoot;
 pub mod walker;
 
 /// The systems that fit the clip's pose to the body after the animation and before the

@@ -200,6 +200,16 @@ impl Foot {
         matches!(self.state, State::Planted(_))
     }
 
+    /// Where the foot was locked while it is locked or let go (planted or releasing), else
+    /// none: each lock is its own (foot placement freezes the ground found under it for its
+    /// life, `placement`).
+    pub fn locked(&self) -> Option<Pose> {
+        match self.state {
+            State::Planted(lock) | State::Releasing(lock) => Some(lock),
+            _ => None,
+        }
+    }
+
     /// The lock weight, 0 to 1.
     pub fn alpha(&self) -> f32 {
         self.alpha
@@ -249,7 +259,9 @@ impl Foot {
         }
         let full = self.alpha >= FULL;
         let gone = posed.off;
-        let swings = posed.swing_mps >= SWING_MPS && !posed.landing;
+        // Only a foot the clip has low takes the weight on landing however it swings; one the
+        // pose still has up (a fall's foot coming forward) is not locked in the air.
+        let swings = posed.swing_mps >= SWING_MPS && !(posed.landing && posed.low);
         let stands = full && !gone && !swings;
         self.why = match () {
             _ if curve < FULL || stands => "",
@@ -606,6 +618,15 @@ mod tests {
             landing: true,
             ..on(at, 0.04, false)
         };
+        // Coming down with the foot still up in the pose (its ankle past LOW_ANKLE_M) and
+        // swinging, it is not locked in the air, whatever its curve says.
+        let mut high = Foot::default();
+        let up_in_pose = Posed {
+            low: false,
+            ..landing
+        };
+        assert_eq!(high.update(up_in_pose, DT, false), at);
+        assert!(!high.planted());
         assert_eq!(swinging.update(landing, DT, false), at);
         assert!(swinging.planted());
     }
