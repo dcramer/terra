@@ -1065,7 +1065,7 @@
    "bar": {
     "at_most": 0.03
    },
-   "unit": "m, the worst planted foot's travel on the filmed course, turns in place left to turn.foot (the duel's feet sliding check)",
+   "unit": "m, the worst planted foot's travel on the filmed course, turns in place left to turn.foot (the duel's feet sliding check, its contact read from the ball over the world's ground)",
    "source": "docs/controller.md criterion 21; movement.md stage 2; D455",
    "check": {
     "by": "film",
@@ -1102,6 +1102,22 @@
    "check": {
     "by": "film",
     "name": "feet ground"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "feet.aloft",
+   "noticed": 4,
+   "notice": "a foot is planted in the air and hangs there",
+   "bar": {
+    "at_most": 0.07
+   },
+   "unit": "m, the worst locked plant's first frame: its sole's lower point (heel or ball) over the world's ground, less where that point rests on level ground, on the filmed course",
+   "source": "D455 (the lock curves' 7 cm height gate); ALS FootLock",
+   "check": {
+    "by": "film",
+    "name": "feet aloft"
    },
    "cost": "heavy",
    "measurable": true

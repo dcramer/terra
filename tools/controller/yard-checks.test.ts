@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Frame } from "../sandbox/duel/checks.ts";
-import { type Walk, drops, feet, ground, over, sinking, smooth, steps, turn, yard } from "./yard-checks.ts";
+import { type Walk, aloft, drops, feet, ground, over, sinking, smooth, steps, turn, yard } from "./yard-checks.ts";
 
 /// A walk east at 4.2 m/s on level ground at 0 for `n` frames; `lift(i)` raises the body,
 /// `below(i)` how far under it the figure is shown, `camera(i)` the camera's height.
@@ -123,6 +123,53 @@ test("the wait after the route's last mark is not stuck; a wait short of it is",
   assert.match(yard([of(waits(10, 150), route)]).line, /stuck at frame/);
 });
 
+/// A walk on the spot whose left ball is, frame by frame, `x` m east, `up` m over the shown
+/// root and `sole` m over the world's ground under it (no \`sole\` in the record with `record`
+/// false: the duel's and older records).
+function footing(rows: { x: number; up: number; sole: number }[], record = true): Walk {
+  const frames = walk(rows.length).map((f, i) => {
+    const body = f.fighters[0];
+    const { x, up, sole } = rows[i];
+    const extra = record ? { sole: [[sole + 0.04, sole], null] } : {};
+    return { ...f, fighters: [{ ...body, feet: [0, 0, 0], speed: 0, balls: [{ at: [x, up, 0.1], up }, null], ...extra } as unknown as Frame["fighters"][number]] };
+  });
+  return of(frames);
+}
+const span = (n: number, row: (i: number) => { x: number; up: number; sole: number }) => Array.from({ length: n }, (_, i) => row(i));
+
+test("contact is the ball over the world's ground: a swing lowered under the root is no plant", () => {
+  // Planted 30 frames, then swinging 0.6 m on over a lower tread, lowered with the pelvis to
+  // the plant's height over the root but 0.35 m over the tread.
+  const rows = [...span(30, () => ({ x: 0, up: 0.04, sole: 0.04 })), ...span(20, (i) => ({ x: 0.03 * (i + 1), up: 0.04, sole: 0.35 }))];
+  assert.match(feet([footing(rows)]).line, /1 plants, none slid/);
+  // Read over the root, as the duel and older records are, it is one plant sliding 60 cm.
+  assert.match(feet([footing(rows, false)]).line, /1 of 1 plants slid past 3 cm, median 60.0 cm/);
+});
+
+test("a lock dragged 5 cm on a lower tread is caught", () => {
+  const rows = [
+    ...span(30, () => ({ x: 0, up: 0.04, sole: 0.04 })),
+    ...span(10, (i) => ({ x: 0.06 * (i + 1), up: 0.2, sole: 0.2 })),
+    ...span(20, (i) => ({ x: 0.6 + (0.05 * i) / 19, up: -0.36, sole: 0.04 })),
+  ];
+  const check = feet([footing(rows)]);
+  assert.ok(!check.ok && Math.abs(check.value - 0.05) < 1e-9, check.line);
+  assert.match(check.line, /1 of 2 plants slid/);
+});
+
+test("a ball in the ground is no contact: the plants either side of it are two, the frames counted", () => {
+  // A free foot through a tread 10 cm for 5 frames between two plants 30 cm apart.
+  const rows = [
+    ...span(20, () => ({ x: 0, up: 0.04, sole: 0.04 })),
+    ...span(5, (i) => ({ x: 0.05 * (i + 1), up: 0.04, sole: -0.1 })),
+    ...span(20, () => ({ x: 0.3, up: 0.04, sole: 0.04 })),
+  ];
+  const check = feet([footing(rows)]);
+  assert.ok(check.ok && check.value === 0, check.line);
+  assert.match(check.line, /2 plants, none slid past 3 cm, 5 frames a ball past 2 cm in the ground \(no contact; worst 10.0 cm, left foot, frame 20\)/);
+  assert.match(feet([footing(rows, false)]).line, /1 of 1 plants slid/);
+});
+
 /// A walk standing on its left foot, locked 30 frames: its heel and ball `sole(i)` m over the
 /// world's ground, its clip posing them 0.08 and 0.04 m over its flat ground, its leg short of
 /// its goal by `short` and of the lock's goal alone by `lock`.
@@ -150,6 +197,16 @@ test("a locked sole where its clip has it passes; floating, pitched or sunk fail
   assert.ok(ground(once).ok && !sinking(once).ok, sinking(once).line);
   assert.ok(sinking([standing(() => [0.38, 0.34])]).ok);
   assert.match(ground([standing(() => [0.08, 0.04], 0, 0, false)]).line, /no locked plant/);
+});
+
+test("feet.aloft fails a foot locked in the air, not a heel strike or a stance's end", () => {
+  assert.ok(aloft([standing(() => [0.08, 0.04])]).ok);
+  // Locked 20 cm up, coming down over 5 frames (a stop's lock): the lock's start is aloft.
+  const air = aloft([standing((i) => (i < 5 ? [0.28 - i * 0.04, 0.24 - i * 0.04] : [0.08, 0.04]))]);
+  assert.ok(!air.ok && Math.abs(air.value - 0.2) < 1e-9, air.line);
+  // A heel strike (the ball up, the heel down) and a toe-off at the end (the heel up, then both).
+  const strike = (i: number) => (i < 3 ? [0.08, 0.15] : i > 26 ? [0.2, 0.15] : [0.08, 0.04]);
+  assert.ok(aloft([standing(strike)]).ok, aloft([standing(strike)]).line);
 });
 
 test("pelvis.drop counts the shortfall placement adds, not the lock's own", () => {
