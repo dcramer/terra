@@ -324,8 +324,8 @@ impl<'a> Room<'a> {
     }
 }
 
-/// The two leaves of a doorway's door standing open: each from its jamb, a cube in from the
-/// sill's middle either way twice, two cubes into the room it opens into: where the game's
+/// The two leaves of a doorway's door standing open: each from its jamb, half the doorway
+/// from the sill's middle either way, a leaf's width into the room it opens into: where the game's
 /// leaves stood before they were hung to lie flat on a wall (`door::leaf`); the tours are
 /// made keeping clear of them still.
 fn leaves(sill: Vec3, facing: usize) -> [Leaf; 2] {
@@ -334,11 +334,12 @@ fn leaves(sill: Vec3, facing: usize) -> [Leaf; 2] {
     let across = f.point(1.0, 0.0, 0.0) - o;
     let into = f.point(0.0, 0.0, 1.0) - o;
     let flat = |v: Vec3| Vec2::new(v.x, v.z);
-    [-2.0, 2.0].map(|s| {
+    let half = DOORWAY_M[0] * 0.5 / CUBE;
+    [-half, half].map(|s| {
         let hinge = sill + across * s;
         Leaf {
             a: flat(hinge),
-            b: flat(hinge + into * 2.0),
+            b: flat(hinge + into * half),
             y: [sill.y, sill.y + DOORWAY_M[1]],
         }
     })

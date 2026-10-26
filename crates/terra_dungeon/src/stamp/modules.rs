@@ -4,7 +4,10 @@
 //! drawn as one; a name not known is a plain floor. The features placement holds (the goal,
 //! the keys, the rest's fire) are objects and lights here too.
 
-use super::{Frame, Kinds, Light, LightKind, Object, ObjectRole, Prop, Stamp, hash, shaped, solid};
+use super::{
+    CELL, EDGE, Frame, INNER, Kinds, Light, LightKind, MID, Object, ObjectRole, Prop, Stamp, hash,
+    shaped, solid,
+};
 use crate::Dungeon;
 use crate::dress::{ModuleSet, RUBBLE, WATER};
 use crate::place::{Cell, Side, Space, opposite};
@@ -17,7 +20,7 @@ pub(crate) enum Class {
     Plain,
     /// A square column of trim, floor to ceiling, at the middle.
     Pillar,
-    /// A niche in a thickened north wall.
+    /// Two tiers of niches in a thickened north wall, loculi.
     Alcove,
     /// A heap of stone against its walled corner; blocks the cell.
     Collapse,
@@ -127,12 +130,16 @@ pub(super) fn lay(
         let look = looks[c];
         let f = Frame::new(cell.at, look.turn);
         let walled = |d: usize| cell.sides[f.side(d)] != Side::Open;
+        // The cube under the ceiling, and the middle two rows.
+        let (top, m) = (kinds.head(cell.space) - 1, CELL / 2);
         let ops = &mut out.ops;
         match look.class {
-            Class::Pillar => f.fill(ops, [2, 0, 2], [3, 6, 3], solid(kinds.trim)),
+            Class::Pillar => f.fill(ops, [m - 1, 0, m - 1], [m, top, m], solid(kinds.trim)),
             Class::Alcove if walled(0) => {
-                f.fill(ops, [1, 0, 1], [4, 6, 1], solid(kinds.wall));
-                f.fill(ops, [2, 1, 1], [3, 3, 1], None);
+                f.fill(ops, [1, 0, 1], [INNER, top, 1], solid(kinds.wall));
+                for y in [1, 5].into_iter().filter(|&y| y + 2 < top) {
+                    f.fill(ops, [m - 1, y, 1], [m, y + 2, 1], None);
+                }
             }
             Class::Collapse => collapse(cell, kinds, out),
             Class::Rubble => rubble(cell, look, out),
@@ -140,33 +147,36 @@ pub(super) fn lay(
             Class::Shore => shore(cell, look, kinds, ops),
             Class::Runner => {
                 let z0 = if walled(0) { 1 } else { 0 };
-                let z1 = if walled(2) { 4 } else { 5 };
-                f.fill(ops, [2, -1, z0], [3, -1, z1], solid(kinds.trim));
+                let z1 = if walled(2) { INNER } else { EDGE };
+                f.fill(ops, [m - 1, -1, z0], [m, -1, z1], solid(kinds.trim));
             }
+            // Two metres long, a metre deep and high.
             Class::Sarcophagus if walled(0) => {
-                f.fill(ops, [1, 0, 1], [4, 1, 2], solid(kinds.wall));
+                f.fill(ops, [m - 2, 0, 1], [m + 1, 1, 2], solid(kinds.wall));
             }
-            Class::Sarcophagus => f.fill(ops, [1, 0, 2], [4, 1, 3], solid(kinds.wall)),
+            Class::Sarcophagus => {
+                f.fill(ops, [m - 2, 0, m - 1], [m + 1, 1, m], solid(kinds.wall));
+            }
             Class::Timber => {
                 // Each set where its cell puts it along the bay, and one in four with a post
                 // and its beam gone: every set whole in the bay's middle, a straight
                 // gallery read as five identical frames nested down the vista, a tiling bug
                 // (round 13's mine film, 28.5 s).
-                let z = 2 + (hash(cell.at, 420) % 3) as i32;
+                let z = 2 + (hash(cell.at, 420) % (CELL - 3) as u32) as i32;
                 let broken = hash(cell.at, 421).is_multiple_of(4);
                 let gone = hash(cell.at, 422) % 2;
                 let wall = |d: usize| cell.sides[f.side(d)] == Side::Wall;
-                for (k, (d, x)) in [(1, 5), (3, 0)].into_iter().enumerate() {
+                for (k, (d, x)) in [(1, EDGE), (3, 0)].into_iter().enumerate() {
                     if wall(d) && !(broken && gone == k as u32) {
-                        f.fill(ops, [x, 0, z], [x, 6, z], solid(kinds.trim));
+                        f.fill(ops, [x, 0, z], [x, top, z], solid(kinds.trim));
                     }
                 }
                 if !broken && wall(1) && wall(3) {
-                    f.fill(ops, [0, 6, z], [5, 6, z], solid(kinds.trim));
+                    f.fill(ops, [0, top, z], [EDGE, top, z], solid(kinds.trim));
                 }
             }
             Class::Goal => {
-                f.fill(ops, [2, 0, 2], [3, 0, 3], solid(kinds.trim));
+                f.fill(ops, [m - 1, 0, m - 1], [m, 0, m], solid(kinds.trim));
                 let name = &theme.features.goal;
                 // The trapped miner is the textured base body, not the pale untextured
                 // mannequin, which burnt pink-white between the bowls (round 16).
@@ -181,7 +191,7 @@ pub(super) fn lay(
             }
             Class::Key => key(f, theme, kinds, out),
             Class::Rest => out.lights.push(Light {
-                at: f.point(3.0, 0.0, 3.0),
+                at: f.point(MID, 0.0, MID),
                 kind: LightKind::Campfire,
                 facing: 0,
             }),
@@ -213,26 +223,33 @@ fn corridor(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     };
     // Seen along the run: its walls east and west of the frame.
     let f = Frame::new(cell.at, turn);
-    f.fill(&mut out.ops, [1, 6, 3], [4, 6, 3], solid(kinds.trim));
-    let x = if hash(cell.at, 400).is_multiple_of(2) {
-        1
+    let top = kinds.head(cell.space) - 1;
+    f.fill(
+        &mut out.ops,
+        [1, top, CELL / 2],
+        [INNER, top, CELL / 2],
+        solid(kinds.trim),
+    );
+    let west = hash(cell.at, 400).is_multiple_of(2);
+    let (foot, other) = if west {
+        (1.4, CELL as f32 - 1.5)
     } else {
-        4
+        (CELL as f32 - 1.4, 1.5)
     };
     for k in 0..1 + hash(cell.at, 401) % 2 {
-        let z = 1.0 + (hash(cell.at, 402 + k) % 40) as f32 / 10.0;
+        let z = 1.0 + (hash(cell.at, 402 + k) % (INNER as u32 * 10)) as f32 / 10.0;
         out.props.push(Prop {
             model: rock(cell.at, 404 + k),
-            at: f.point(if x == 1 { 1.4 } else { 4.6 }, 0.0, z),
+            at: f.point(foot, 0.0, z),
             facing: (hash(cell.at, 406 + k) % 4) as usize,
             scale: 0.35 + (hash(cell.at, 408 + k) % 4) as f32 * 0.05,
         });
     }
     if hash(cell.at, 410).is_multiple_of(3) {
-        let z = 0.5 + (hash(cell.at, 411) % 5) as f32;
+        let z = 0.5 + (hash(cell.at, 411) % EDGE as u32) as f32;
         out.props.push(Prop {
             model: rock(cell.at, 412),
-            at: f.point(if x == 1 { 4.5 } else { 1.5 }, 0.0, z),
+            at: f.point(other, 0.0, z),
             facing: (hash(cell.at, 413) % 4) as usize,
             scale: 0.25,
         });
@@ -248,7 +265,7 @@ fn corridor(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
 fn goal_fires(f: Frame, cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     let opening = |d: usize| matches!(cell.sides[f.side(d)], Side::Door(_) | Side::Way);
     let z = if opening(0) { 2 } else { 1 };
-    for (x, side) in [(1, 3), (4, 1)] {
+    for (x, side) in [(1, 3), (INNER, 1)] {
         if opening(side) {
             continue;
         }
@@ -265,7 +282,7 @@ fn object(name: &str, role: ObjectRole, f: Frame, y: f32, model: &str) -> Object
     Object {
         name: name.to_string(),
         role,
-        at: f.point(3.0, y, 3.0),
+        at: f.point(MID, y, MID),
         facing: f.side(2),
         model: model.to_string(),
         lock: crate::door::Lock::None,
@@ -287,13 +304,19 @@ fn key(f: Frame, theme: &Theme, kinds: &Kinds, out: &mut Stamp) {
         (1, "models/props/Chest.glb")
     };
     if high > 0 {
-        f.fill(&mut out.ops, [2, 0, 2], [3, high - 1, 3], solid(kinds.trim));
+        let m = CELL / 2;
+        f.fill(
+            &mut out.ops,
+            [m - 1, 0, m - 1],
+            [m, high - 1, m],
+            solid(kinds.trim),
+        );
     }
     out.objects
         .push(object(name, ObjectRole::Key, f, high as f32, model));
     if name.contains("brazier") {
         out.lights.push(Light {
-            at: f.point(3.0, high as f32 + 1.0, 3.0),
+            at: f.point(MID, high as f32 + 1.0, MID),
             kind: LightKind::Brazier,
             facing: f.side(2),
         });
@@ -317,21 +340,28 @@ fn rock(at: glam::IVec3, salt: u32) -> String {
 fn props(f: Frame, cell: &Cell, class: Class, props: &mut Vec<Prop>) {
     match class {
         Class::Urns => {
-            props.push(prop("models/props/VaseRow.glb", f, 3.0, 1.5, 2, 1.0));
-            props.push(prop("models/props/VasePair.glb", f, 4.5, 3.0, 3, 1.0));
+            props.push(prop("models/props/VaseRow.glb", f, MID, 1.5, 2, 1.0));
+            props.push(prop("models/props/VasePair.glb", f, MID + 1.5, MID, 3, 1.0));
         }
         Class::Stores => {
-            props.push(prop("models/props/Barrel.glb", f, 4.3, 1.7, 2, 1.0));
-            props.push(prop("models/props/BoltCrate.glb", f, 2.5, 1.5, 2, 1.0));
+            props.push(prop("models/props/Barrel.glb", f, MID + 1.3, 1.7, 2, 1.0));
+            props.push(prop(
+                "models/props/BoltCrate.glb",
+                f,
+                MID - 0.5,
+                1.5,
+                2,
+                1.0,
+            ));
         }
-        Class::Rack => props.push(prop("models/props/AxesLaid.glb", f, 3.0, 1.5, 2, 1.0)),
-        Class::Table => props.push(prop("models/props/Bench.glb", f, 3.0, 3.0, 1, 1.0)),
-        Class::Vein => props.push(prop(&rock(cell.at, 1), f, 3.0, 1.3, 2, 0.6)),
+        Class::Rack => props.push(prop("models/props/AxesLaid.glb", f, MID, 1.5, 2, 1.0)),
+        Class::Table => props.push(prop("models/props/Bench.glb", f, MID, MID, 1, 1.0)),
+        Class::Vein => props.push(prop(&rock(cell.at, 1), f, MID, 1.3, 2, 0.6)),
         _ => {}
     }
 }
 
-/// A heap against the cell's most walled corner: a cube lower every two cubes out, from 2.5 m,
+/// A heap against the cell's most walled corner: a cube lower every two cubes out, from 3.5 m,
 /// a slope on each column's top, and a few rocks on it.
 fn collapse(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     let walls = |t: usize| {
@@ -340,12 +370,12 @@ fn collapse(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     let turn = (0..4).max_by_key(|&t| (walls(t), 4 - t)).unwrap_or(0);
     let f = Frame::new(cell.at, turn);
     let walled = |d: usize| cell.sides[f.side(d)] != Side::Open;
-    let height = |x: i32, z: i32| 5 - ((5 - x) + z) / 2;
-    for x in 0..6 {
-        for z in 0..6 {
+    let height = |x: i32, z: i32| EDGE - ((EDGE - x) + z) / 2;
+    for x in 0..CELL {
+        for z in 0..CELL {
             let edge = (z == 0 && walled(0))
-                || (x == 5 && walled(1))
-                || (z == 5 && walled(2))
+                || (x == EDGE && walled(1))
+                || (z == EDGE && walled(2))
                 || (x == 0 && walled(3));
             let h = height(x, z);
             if edge || h <= 0 {
@@ -354,7 +384,7 @@ fn collapse(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
             if h > 1 {
                 f.fill(&mut out.ops, [x, 0, z], [x, h - 2, z], solid(kinds.wall));
             }
-            let rise = if hash(cell.at, (x * 6 + z) as u32).is_multiple_of(2) {
+            let rise = if hash(cell.at, (x * CELL + z) as u32).is_multiple_of(2) {
                 Facing::North
             } else {
                 Facing::East
@@ -369,7 +399,10 @@ fn collapse(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     }
     let rocks = 2 + hash(cell.at, 7) % 2;
     for k in 0..rocks {
-        let (x, z) = (1 + (hash(cell.at, 10 + k) % 4) as i32, 1 + k as i32);
+        let (x, z) = (
+            1 + (hash(cell.at, 10 + k) % INNER as u32) as i32,
+            1 + k as i32,
+        );
         let at = f.point(x as f32 + 0.5, height(x, z) as f32, z as f32 + 0.5);
         out.props.push(Prop {
             model: rock(cell.at, 20 + k),
@@ -398,7 +431,7 @@ fn rubble(cell: &Cell, look: Look, out: &mut Stamp) {
     for k in 0..stones {
         // The first two lie against the side, the rest roll out up to a metre.
         let big = k < 2;
-        let x = 1.0 + (hash(cell.at, 50 + k) % 70) as f32 / 20.0;
+        let x = 1.0 + (hash(cell.at, 50 + k) % 100) as f32 / 100.0 * (CELL as f32 - 2.5);
         let out_m = (hash(cell.at, 60 + k) % 10) as f32 / 10.0 * if big { 0.6 } else { 2.5 };
         let scale = if big { 0.4 } else { 0.18 } + (hash(cell.at, 80 + k) % 5) as f32 * 0.05;
         out.props.push(Prop {
@@ -415,9 +448,9 @@ fn rubble(cell: &Cell, look: Look, out: &mut Stamp) {
 fn sink(f: Frame, cell: &Cell, from: i32, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
     let walled = |d: usize| cell.sides[f.side(d)] != Side::Open;
     let x0 = if walled(3) { 1 } else { 0 };
-    let x1 = if walled(1) { 4 } else { 5 };
+    let x1 = if walled(1) { INNER } else { EDGE };
     let z0 = if walled(0) { from.max(1) } else { from };
-    let z1 = if walled(2) { 4 } else { 5 };
+    let z1 = if walled(2) { INNER } else { EDGE };
     f.fill(ops, [x0, -1, z0], [x1, -1, z1], None);
     f.fill(ops, [x0, -2, z0], [x1, -2, z1], solid(kinds.floor));
 }
@@ -430,14 +463,15 @@ fn shore(cell: &Cell, look: Look, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
     };
     // Seen from the dry side, the water south.
     let f = Frame::new(cell.at, opposite(wet));
-    sink(f, cell, 3, kinds, ops);
+    let m = CELL / 2;
+    sink(f, cell, m, kinds, ops);
     let walled = |d: usize| cell.sides[f.side(d)] != Side::Open;
     let x0 = if walled(3) { 1 } else { 0 };
-    let x1 = if walled(1) { 4 } else { 5 };
+    let x1 = if walled(1) { INNER } else { EDGE };
     f.fill(
         ops,
-        [x0, -1, 2],
-        [x1, -1, 2],
+        [x0, -1, m - 1],
+        [x1, -1, m - 1],
         shaped(kinds.floor, Shape::Stair(Facing::North)),
     );
 }

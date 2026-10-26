@@ -1,5 +1,5 @@
-//! Stage 2, placement (D473): the graph laid on a grid of cells, 3 m square and a level (4 m)
-//! high. Rooms are rectangles of cells set beside the room they hang from, in the graph's
+//! Stage 2, placement (D473): the graph laid on a grid of cells, 4 m square and a level (6 m)
+//! high (D527). Rooms are rectangles of cells set beside the room they hang from, in the graph's
 //! order, on a level their danger asks for; corridors are routed between them by A*
 //! (`route`), with a stair where they change level. Every cell knows its space and what each
 //! of its four sides is: a wall, open into the same space, a door or a stair's way.

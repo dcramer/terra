@@ -4,9 +4,11 @@
 //! and spawns the rest.
 //!
 //! The frame: metres, x east, y up, z south, from the north-west corner of cell (0, 0, 0) at
-//! y 0, the top of the roof and of the stair up to the surface. A cell is 6 by 6 cubes; level
-//! L (cell.y, counted down) has its floor top at cube height -8 (L + 1), its floor slab the
-//! layer under that and its ceiling slab 7 layers above (the next level's floor), 3.5 m clear.
+//! y 0, the top of the roof and of the stair up to the surface. A cell is 8 by 8 cubes, 4 m,
+//! so a corridor is 3 m clear between walls a cube thick; level L (cell.y, counted down) has
+//! its floor top at cube height -12 (L + 1), 6 m apart (D527), its floor slab the layer under
+//! that and its ceiling slab 11 layers above (the next level's floor), 5.5 m clear, brought
+//! down to the theme's headroom over its corridors and rooms (`Theme::headroom`).
 //!
 //! - `shell`: slabs, walls, doorways, the stairs and the surface stair's parapet and arch.
 //! - `modules`: what each module of the dressing becomes in cubes and props, and the features.
@@ -26,7 +28,7 @@ mod view;
 
 use crate::Dungeon;
 use crate::dress::ModuleSet;
-use crate::place::Layout;
+use crate::place::{Layout, Space};
 use crate::theme::Theme;
 use glam::{IVec3, Vec3};
 use std::collections::HashMap;
@@ -40,10 +42,18 @@ pub const DOORWAY_M: [f32; 2] = [
     shell::DOORWAY[0] as f32 * CUBE,
     shell::DOORWAY[1] as f32 * CUBE,
 ];
-/// Cubes across a cell.
-pub(crate) const CELL: i32 = 6;
-/// Cubes from one level's floor to the next.
-pub(crate) const LEVEL: i32 = 8;
+/// Cubes across a cell: 4 m (D527).
+pub(crate) const CELL: i32 = 8;
+/// Cubes from one level's floor to the next: 6 m (D527).
+pub(crate) const LEVEL: i32 = 12;
+/// A cell's last row of cubes, where its far wall stands.
+pub(crate) const EDGE: i32 = CELL - 1;
+/// A walled cell's last clear row inside its walls.
+pub(crate) const INNER: i32 = CELL - 2;
+/// A cell's middle, in cubes from its corner.
+pub(crate) const MID: f32 = CELL as f32 * 0.5;
+// A stair climbs a level in its two cells: two flat columns at each end and a cube a step.
+const _: () = assert!(2 * CELL - 4 == LEVEL);
 /// Lights a dungeon gets at most; the renderer draws the nearest 16 fires.
 pub(crate) const LIGHTS: usize = 30;
 
@@ -171,6 +181,7 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
         floor: kind(&theme.floors),
         ceiling: kind(theme.ceilings.as_ref().unwrap_or(&theme.floors)),
         trim: kind(&theme.trim),
+        head: [head_of(theme.headroom.0), head_of(theme.headroom.1)],
     };
     let looks = modules::looks(dungeon, theme, &set);
     let mut out = Stamp {
@@ -202,6 +213,26 @@ pub(crate) struct Kinds {
     /// A ceiling no room stands on.
     pub ceiling: Kind,
     pub trim: Kind,
+    /// The cubes clear over a corridor's floor and over a room's (`Theme::headroom`): the
+    /// ceiling's underside.
+    pub head: [i32; 2],
+}
+
+impl Kinds {
+    /// The cubes clear over a cell's floor: its ceiling's underside; a stair's well is open
+    /// to the slab.
+    pub fn head(&self, space: Space) -> i32 {
+        match space {
+            Space::Corridor(_) => self.head[0],
+            Space::Room(_) => self.head[1],
+            Space::Stair(_) => LEVEL - 1,
+        }
+    }
+}
+
+/// A headroom in metres as cubes clear: above a doorway's lintel, under the slab.
+fn head_of(metres: f32) -> i32 {
+    ((metres / CUBE).round() as i32).clamp(shell::DOORWAY[1] + 1, LEVEL - 1)
 }
 
 pub(crate) fn solid(kind: Kind) -> Option<Cube> {
@@ -231,7 +262,7 @@ fn turn_facing(facing: Facing, turn: usize) -> Facing {
 }
 
 /// A cell seen from one of its sides: positions written as if that side were north (x east
-/// 0..6, z south 0..6, y cubes above the floor top), turned a quarter clockwise a step, north
+/// 0..CELL, z south 0..CELL, y cubes above the floor top), turned a quarter clockwise a step, north
 /// to east, as modules turn.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Frame {
@@ -370,7 +401,7 @@ fn bounds<'a>(cells: impl Iterator<Item = &'a IVec3>) -> Option<(IVec3, IVec3)> 
 
 /// One box a level, its cells' bounds and a cube round them, from just under the floor's top
 /// to the ceiling slab's top, and one a level under its basins and shores, down to just under
-/// a basin's floor; and one up the surface stair to 3 m above the surface.
+/// a basin's floor; and one up the surface stair to the top of its arch.
 fn digs(layout: &Layout, looks: &[modules::Look]) -> Vec<Dig> {
     let mut out = Vec::new();
     for level in 0..layout.levels {
@@ -403,7 +434,8 @@ fn digs(layout: &Layout, looks: &[modules::Look]) -> Vec<Dig> {
         let lo = stair.cells.iter().fold(IVec3::MAX, |m, &c| m.min(c));
         let hi = stair.cells.iter().fold(IVec3::MIN, |m, &c| m.max(c));
         let mut min = IVec3::new(lo.x * CELL - 1, floor_of(lo.y) - 1, lo.z * CELL - 1);
-        let mut max = IVec3::new((hi.x + 1) * CELL + 1, 6, (hi.z + 1) * CELL + 1);
+        let arch = shell::DOORWAY[1] + 1;
+        let mut max = IVec3::new((hi.x + 1) * CELL + 1, arch, (hi.z + 1) * CELL + 1);
         // Not over the room it comes up from.
         match crate::place::opposite(stair.up) {
             0 => min.z += 1,

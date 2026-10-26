@@ -3,7 +3,7 @@
 //!
 //! 1. `graph`: the mission graph, rooms by role and how they are linked, with a lock and its
 //!    keys, a loop, a shortcut, a secret, and the mobs and loot in each room.
-//! 2. `place` (with `route`): the graph laid on a grid of 3 m cells, 4 m levels, with corridors
+//! 2. `place` (with `route`): the graph laid on a grid of 4 m cells, 6 m levels (D527), with corridors
 //!    and stairs.
 //! 3. `dress`: every cell given a module of the theme's set by wave function collapse.
 //! 4. `theme`: themes as data, `assets/data/dungeons/*.ron`.

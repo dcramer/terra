@@ -68,7 +68,7 @@ pub struct Loot {
     pub weight: f32,
 }
 
-/// A module: what fills one cell (3 m square, a level high), and the sockets each of its sides
+/// A module: what fills one cell (4 m square, a level high, D527), and the sockets each of its sides
 /// takes. Sides are north, east, south, west before rotation; each is a `|`-joined list of
 /// sockets: `open`, `wall`, `door`, `stair`, `rubble`, `water`.
 #[derive(Clone, Debug, Deserialize)]
@@ -132,6 +132,11 @@ pub struct Theme {
     /// The building kind of its pillars, timbering, door jambs and lintels.
     #[serde(default = "hewn")]
     pub trim: String,
+    /// The metres clear over its corridors' floors and its rooms', under a level's 5.5 m
+    /// (D527): a vaulted theme's corridor crowned at 4.5 m and its rooms at 5 m, a mine's
+    /// drifts lower. Flat ceilings of cubes until the vault kits are made.
+    #[serde(default = "full_height")]
+    pub headroom: (f32, f32),
     pub features: Features,
     pub bestiary: Vec<Mob>,
     pub loot: Vec<Loot>,
@@ -140,6 +145,10 @@ pub struct Theme {
 
 fn one() -> f32 {
     1.0
+}
+
+fn full_height() -> (f32, f32) {
+    (5.5, 5.5)
 }
 
 fn hewn() -> String {

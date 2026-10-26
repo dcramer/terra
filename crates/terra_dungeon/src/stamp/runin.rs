@@ -7,8 +7,8 @@
 use super::modules::{Class, Look};
 use super::view::Room;
 use super::{
-    CELL, CUBE, ChestSpawn, DOORWAY_M, Frame, LEVEL, LIGHTS, Light, LightKind, MobSpawn, Object,
-    ObjectRole, Stamp, clear, cube_of, floor_of, hash, stands, steps,
+    CELL, CUBE, ChestSpawn, DOORWAY_M, Frame, INNER, LEVEL, LIGHTS, Light, LightKind, MID,
+    MobSpawn, Object, ObjectRole, Stamp, clear, cube_of, floor_of, hash, stands, steps,
 };
 use crate::Dungeon;
 use crate::door::Lock;
@@ -58,7 +58,7 @@ fn doors(dungeon: &Dungeon, map: &Map, out: &mut Stamp) {
             },
             lock => lock,
         };
-        let sill = Frame::new(at, d).point(3.0, 0.0, 0.0);
+        let sill = Frame::new(at, d).point(MID, 0.0, 0.0);
         out.objects.push(Object {
             name: name.to_string(),
             role: ObjectRole::Door,
@@ -80,24 +80,28 @@ pub(super) fn doorway_axes(facing: usize) -> (Vec3, Vec3) {
 }
 
 /// How far each leaf of the door at `sill` swings into its room (`Object::opens`): folded
-/// flat on its wall where the wall runs on two cubes past the jamb with the room clear in
+/// flat on its wall where the wall runs on a leaf's width past the jamb with the room clear in
 /// front of it, as a door in a thick wall swings back to the wall; a quarter turn, on the
 /// side wall flush with the jamb; or, where the room is solid just inside the jamb (a wall
 /// or pier narrower than the doorway), a quarter turn out of it, along the jamb.
 fn opens(map: &Map, sill: Vec3, facing: usize) -> [f32; 2] {
     let (across, into) = doorway_axes(facing);
+    // Up the leaf: its foot, middle and head, in cubes.
+    let high = DOORWAY_M[1] / CUBE;
+    let ups = [1.5, high * 0.5 + 0.5, high - 0.5];
+    let wide = (DOORWAY_M[0] * 0.5 / CUBE).round() as i32;
     [-1.0, 1.0].map(|side| {
         let jamb = sill + across * side * DOORWAY_M[0] * 0.5;
-        let flat = [0.5, 1.5].iter().all(|&k| {
-            let beside = jamb + across * side * CUBE * k;
-            [1.5, 3.5].iter().all(|&up| {
+        let flat = (0..wide).all(|k| {
+            let beside = jamb + across * side * CUBE * (k as f32 + 0.5);
+            ups.iter().all(|&up| {
                 let beside = beside + Vec3::Y * CUBE * up;
                 !clear(map, cube_of(beside + into * CUBE * 0.5))
                     && clear(map, cube_of(beside + into * CUBE * 1.5))
             })
         });
         let inside = jamb - across * side * CUBE * 0.5 + into * CUBE * 1.5;
-        let blocked = [1.5, 3.5]
+        let blocked = ups
             .iter()
             .any(|&up| !clear(map, cube_of(inside + Vec3::Y * CUBE * up)));
         if blocked {
@@ -155,21 +159,21 @@ fn spots(dungeon: &Dungeon, looks: &[Look], map: &Map, room: usize) -> Vec<(Vec3
             let sides = layout.cells[c].sides;
             (0..4)
                 .filter(move |&d| matches!(sides[d], Side::Door(_) | Side::Way))
-                .map(move |d| Frame::new(at, d).point(3.0, 0.0, 0.0))
+                .map(move |d| Frame::new(at, d).point(MID, 0.0, 0.0))
         })
         .collect();
     let mut out = Vec::new();
     for &(at, _) in cells.iter().filter(|&&(_, c)| free(looks[c].class)) {
         let f = Frame::new(at, 0);
-        for x in 1..=4 {
-            for z in 1..=4 {
+        for x in 1..=INNER {
+            for z in 1..=INNER {
                 let Some(y) = [0, -1].into_iter().find(|&y| stands(map, f.cube(x, y, z))) else {
                     continue;
                 };
                 let p = f.point(x as f32 + 0.5, y as f32, z as f32 + 0.5);
                 let reach = doors.iter().map(|d| d.distance(p)).fold(100.0, f32::min);
                 let wet = if y == 0 { 0.0 } else { 3.0 };
-                let jitter = (hash(at, (x * 6 + z) as u32) % 100) as f32 * 0.003;
+                let jitter = (hash(at, (x * CELL + z) as u32) % 100) as f32 * 0.003;
                 out.push((p, reach - wet + jitter));
             }
         }
@@ -214,8 +218,8 @@ fn chests(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Stamp) {
         walls.sort_by_key(|&(rank, at, d)| (rank, at.to_array(), d));
         let against = walls.iter().find_map(|&(_, at, d)| {
             let f = Frame::new(at, d);
-            let p = f.point(3.0, 0.0, 1.8);
-            let fits = (2..=3).all(|x| stands(map, f.cube(x, 0, 1)));
+            let p = f.point(MID, 0.0, 1.8);
+            let fits = (CELL / 2 - 1..=CELL / 2).all(|x| stands(map, f.cube(x, 0, 1)));
             (fits && taken.iter().all(|t| t.distance(p) > 1.0)).then_some((p, opposite(d)))
         });
         let fallback = || spots(dungeon, looks, map, r).first().map(|&(p, _)| (p, 2));
@@ -263,7 +267,7 @@ const DOOR_STEP_M: f32 = 0.9;
 
 fn torch(at: IVec3, d: usize) -> Light {
     Light {
-        at: Frame::new(at, d).point(3.0, 4.0, 1.3),
+        at: Frame::new(at, d).point(MID, 4.0, 1.3),
         kind: LightKind::Torch,
         facing: opposite(d),
     }
@@ -352,13 +356,13 @@ fn cell_point(layout: &Layout, c: usize) -> Vec3 {
     let cell = &layout.cells[c];
     let y = match cell.space {
         Space::Stair(s) => match layout.stairs[s].cells.iter().position(|&a| a == cell.at) {
-            Some(0) => 1.5,
-            Some(1) => LEVEL as f32 - 0.5,
+            // Half a cube over the steps at the cell's middle (`shell::steps`).
+            Some(i @ (0 | 1)) => (i as i32 * CELL) as f32 + MID - 1.5,
             _ => 0.0,
         },
         _ => 0.0,
     };
-    Frame::new(cell.at, 0).point(3.0, y, 3.0)
+    Frame::new(cell.at, 0).point(MID, y, MID)
 }
 
 /// The start at the stair's top on the surface, facing down it; then down the stair and room
@@ -373,7 +377,7 @@ fn tour(dungeon: &Dungeon, out: &mut Stamp) {
         return;
     };
     let top = stair.cells[stair.cells.len() - 1];
-    out.start = Frame::new(top, stair.up).point(3.0, LEVEL as f32, 0.5);
+    out.start = Frame::new(top, stair.up).point(MID, LEVEL as f32, 0.5);
     out.start_facing = opposite(stair.up);
     out.route.push(out.start);
     for &at in stair.cells.iter().rev() {

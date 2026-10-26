@@ -14,6 +14,8 @@
     walls: "Limewash",
     floors: "Stone",
     trim: "Hewn",
+    // Vaulted: a corridor crowned at 4.5 m, a room at 5 m (D527), flat cubes for now.
+    headroom: (4.5, 5.0),
     features: (goal: "sanctum_dais", key: "brazier", rest: "campfire", stair: "stair"),
     bestiary: [
         (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 3)),

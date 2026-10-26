@@ -3,7 +3,7 @@
 //! and the stairs. Positions are a `Frame`'s: a side's wall is the north edge of the cell seen
 //! from that side; a stair is drawn rising north and turned to its `up`.
 
-use super::{Frame, Kinds, opening, shaped, solid};
+use super::{CELL, EDGE, Frame, INNER, Kinds, LEVEL, opening, shaped, solid};
 use crate::place::{Cell, Layout, Side, Space, Stair};
 use terra_build::{BuildOp, Facing, Shape};
 
@@ -38,9 +38,10 @@ pub(super) fn lay(layout: &Layout, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
 }
 
 /// The floor slab under a cell (`floor`), in the floors' kind, or the ceiling slab over it,
-/// in the ceilings' (the next level's floor where a room is over it); a stair opens both
-/// over its rise: no ceiling over the lower cells but the top's front, no floor in the well
-/// and only the front of the landing's. The surface stair has no ceiling.
+/// in the ceilings' (the next level's floor where a room is over it), solid down to the
+/// cell's headroom (`Kinds::head`); a stair opens both over its rise: no ceiling over the
+/// lower cells but the top's front, no floor in the well and only the front of the
+/// landing's. The surface stair has no ceiling.
 fn slabs(layout: &Layout, cell: &Cell, floor: bool, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
     let laying = floor;
     let (floor, ceiling, turn) = match cell.space {
@@ -58,29 +59,32 @@ fn slabs(layout: &Layout, cell: &Cell, floor: bool, kinds: &Kinds, ops: &mut Vec
         _ => (Slab::Whole, Slab::Whole, 0),
     };
     let f = Frame::new(cell.at, turn);
-    let (slab, y, kind) = if laying {
-        (floor, -1, kinds.floor)
+    let (slab, y0, y1, kind) = if laying {
+        (floor, -1, -1, kinds.floor)
     } else {
-        (ceiling, 7, kinds.ceiling)
+        (ceiling, kinds.head(cell.space), LEVEL - 1, kinds.ceiling)
     };
     match slab {
-        Slab::Whole => f.fill(ops, [0, y, 0], [5, y, 5], solid(kind)),
-        Slab::Front => f.fill(ops, [0, y, 0], [5, y, 2], solid(kind)),
+        Slab::Whole => f.fill(ops, [0, y0, 0], [EDGE, y1, EDGE], solid(kind)),
+        Slab::Front => f.fill(ops, [0, y0, 0], [EDGE, y1, 2], solid(kind)),
         Slab::None => {}
     }
 }
 
-/// A doorway's opening in cubes, across and up, between its jambs and under its lintel.
-pub(super) const DOORWAY: [i32; 2] = [4, 5];
+/// A doorway's opening in cubes, across and up, between its jambs and under its lintel: the
+/// corridor's width, 3 m, and 3 m high.
+pub(super) const DOORWAY: [i32; 2] = [CELL - 2, 6];
+/// A stair's way, up: a cube over a doorway.
+const WAY_HIGH: i32 = DOORWAY[1] + 1;
 
 /// A side of a cell, seen from it (its north edge in the frame): a wall a cube thick from the
-/// floor slab to the ceiling slab; a doorway 4 cubes wide and 5 high with trim jambs and
-/// lintel; a stair's way 4 wide and 6 high.
+/// floor slab to the ceiling slab; a doorway `DOORWAY` across its clear width with trim jambs
+/// and lintel; a stair's way as wide and `WAY_HIGH`.
 fn wall(f: Frame, side: Side, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
     if side == Side::Open {
         return;
     }
-    f.fill(ops, [0, -1, 0], [5, 7, 0], solid(kinds.wall));
+    f.fill(ops, [0, -1, 0], [EDGE, LEVEL - 1, 0], solid(kinds.wall));
     match side {
         Side::Door(_) => {
             let [wide, high] = DOORWAY;
@@ -94,51 +98,72 @@ fn wall(f: Frame, side: Side, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
             );
             f.fill(ops, [1, high, 0], [wide, high, 0], solid(kinds.trim));
         }
-        Side::Way => f.fill(ops, [1, 0, 0], [4, 5, 0], opening(kinds.wall)),
+        Side::Way => f.fill(
+            ops,
+            [1, 0, 0],
+            [INNER, WAY_HIGH - 1, 0],
+            opening(kinds.wall),
+        ),
         _ => {}
     }
 }
 
-/// A stair's twelve columns across its two lower cells, rising north in its frame: two flat,
-/// eight steps each a cube up (a stair cube on top, two quarter-metre treads), two at the
-/// upper floor; four cubes wide between the side walls.
+/// A stair's columns across its two lower cells, rising north in its frame: two flat, a
+/// level's steps each a cube up (a stair cube on top, two quarter-metre treads), two at the
+/// upper floor; as wide as the cell between its side walls.
 fn steps(stair: &Stair, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
-    for c in 2..12 {
-        let cell = stair.cells[if c < 6 { 0 } else { 1 }];
+    for c in 2..2 * CELL {
+        let cell = stair.cells[(c / CELL) as usize];
         let f = Frame::new(cell, stair.up);
-        let z = 5 - c % 6;
-        if c >= 10 {
-            f.fill(ops, [1, 0, z], [4, 7, z], solid(kinds.floor));
+        let z = EDGE - c % CELL;
+        if c >= 2 * CELL - 2 {
+            f.fill(ops, [1, 0, z], [INNER, LEVEL - 1, z], solid(kinds.floor));
             continue;
         }
         let top = c - 2;
         if top > 0 {
-            f.fill(ops, [1, 0, z], [4, top - 1, z], solid(kinds.floor));
+            f.fill(ops, [1, 0, z], [INNER, top - 1, z], solid(kinds.floor));
         }
         f.fill(
             ops,
             [1, top, z],
-            [4, top, z],
+            [INNER, top, z],
             shaped(kinds.floor, Shape::Stair(Facing::North)),
         );
     }
 }
 
 /// The stair up to the surface: its walls carried two cubes above ground as a parapet, round
-/// its back too, and an arch of trim over its top.
+/// its back too, and an arch of trim over its top as high as a doorway.
 fn surface(stair: &Stair, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
     let last = stair.cells.len() - 1;
     for (i, &cell) in stair.cells.iter().enumerate() {
         let f = Frame::new(cell, stair.up);
-        f.fill(ops, [0, 8, 0], [0, 9, 5], solid(kinds.wall));
-        f.fill(ops, [5, 8, 0], [5, 9, 5], solid(kinds.wall));
+        let (ground, arch) = (LEVEL, LEVEL + DOORWAY[1]);
+        f.fill(
+            ops,
+            [0, ground, 0],
+            [0, ground + 1, EDGE],
+            solid(kinds.wall),
+        );
+        f.fill(
+            ops,
+            [EDGE, ground, 0],
+            [EDGE, ground + 1, EDGE],
+            solid(kinds.wall),
+        );
         if i == 0 {
-            f.fill(ops, [0, 8, 5], [5, 9, 5], solid(kinds.wall));
+            f.fill(
+                ops,
+                [0, ground, EDGE],
+                [EDGE, ground + 1, EDGE],
+                solid(kinds.wall),
+            );
         }
         if i == last {
-            f.fill(ops, [0, 8, 0], [0, 13, 0], solid(kinds.trim));
-            f.fill(ops, [5, 8, 0], [5, 13, 0], solid(kinds.trim));
-            f.fill(ops, [0, 13, 0], [5, 13, 0], solid(kinds.trim));
+            f.fill(ops, [0, ground, 0], [0, arch, 0], solid(kinds.trim));
+            f.fill(ops, [EDGE, ground, 0], [EDGE, arch, 0], solid(kinds.trim));
+            f.fill(ops, [0, arch, 0], [EDGE, arch, 0], solid(kinds.trim));
         }
     }
 }

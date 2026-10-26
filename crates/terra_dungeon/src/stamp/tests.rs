@@ -64,8 +64,8 @@ fn closed(layout: &Layout, map: &Map) -> Result<usize, String> {
             continue;
         }
         let f = Frame::new(cell.at, 0);
-        let inside =
-            (1..=4).flat_map(|x| (0..=6).flat_map(move |y| (1..=4).map(move |z| (x, y, z))));
+        let inside = (1..=INNER)
+            .flat_map(|x| (0..=LEVEL - 2).flat_map(move |y| (1..=INNER).map(move |z| (x, y, z))));
         for start in inside.map(|(x, y, z)| f.cube(x, y, z)) {
             if map.contains_key(&start) || !seen.insert(start) {
                 continue;
@@ -261,7 +261,7 @@ fn stamps_name_models_that_exist_and_repeat() {
 fn frames_turn_as_modules_turn() {
     // A cell's north-west cube seen from the east is its north-east cube.
     let f = Frame::new(IVec3::new(1, 0, 2), 1);
-    assert_eq!(f.cube(0, 0, 0), IVec3::new(11, -8, 12));
+    assert_eq!(f.cube(0, 0, 0), IVec3::new(CELL + EDGE, -LEVEL, 2 * CELL));
     assert_eq!(f.side(0), 1);
     // A point in a cube turns with it.
     for turn in 0..4 {
@@ -290,7 +290,7 @@ const VIEW_SEEDS: u64 = 1000;
 
 /// A door's two leaves standing open, as the game swung them before they were hung at the
 /// room's face of the wall to lie flat on it (`open_door_leaves_lie_flat_on_a_wall`): from
-/// each jamb a metre into the room. The camera still keeps clear of where they stood.
+/// each jamb a leaf's width into the room. The camera still keeps clear of where they stood.
 fn open_leaves(stamp: &Stamp) -> Vec<(Vec3, Vec3)> {
     let doors = stamp.objects.iter().filter(|o| o.role == ObjectRole::Door);
     doors
@@ -298,7 +298,7 @@ fn open_leaves(stamp: &Stamp) -> Vec<(Vec3, Vec3)> {
             let f = Frame::new(IVec3::ZERO, o.facing);
             let across = (f.point(1.0, 0.0, 0.0) - f.point(0.0, 0.0, 0.0)).normalize();
             let into = (f.point(0.0, 0.0, 1.0) - f.point(0.0, 0.0, 0.0)).normalize();
-            [-1.0, 1.0].map(|s| (o.at + across * s, into))
+            [-1.0, 1.0].map(|s| (o.at + across * s * DOORWAY_M[0] * 0.5, into))
         })
         .collect()
 }
@@ -310,7 +310,9 @@ fn solid_at(map: &Map, leaves: &[(Vec3, Vec3)], p: Vec3) -> bool {
             let q = p - hinge;
             let along = q.dot(into);
             let off = (q - into * along) * Vec3::new(1.0, 0.0, 1.0);
-            (0.0..=1.0).contains(&along) && off.length() < 0.05 && (0.0..=2.5).contains(&q.y)
+            (0.0..=DOORWAY_M[0] * 0.5).contains(&along)
+                && off.length() < 0.05
+                && (0.0..=DOORWAY_M[1]).contains(&q.y)
         })
 }
 
@@ -801,19 +803,25 @@ fn a_mines_timber_sets_stand_each_its_own_way() {
                 continue;
             }
             let f = Frame::new(cell.at, look.turn);
+            // The cube under the cell's ceiling, where a set's beam lies.
+            let head = match cell.space {
+                Space::Corridor(_) => theme.headroom.0,
+                _ => theme.headroom.1,
+            };
+            let top = head_of(head) - 1;
             let is_trim = |x, y, z| map.get(&f.cube(x, y, z)).is_some_and(|c| c.kind == trim);
-            let post = |x, z| (1..6).all(|y| is_trim(x, y, z));
-            for z in 1..5 {
-                let (east, west) = (post(5, z), post(0, z));
-                let beam = (1..5).all(|x| is_trim(x, 6, z));
+            let post = |x, z| (1..top).all(|y| is_trim(x, y, z));
+            for z in 1..=INNER {
+                let (east, west) = (post(EDGE, z), post(0, z));
+                let beam = (1..=INNER).all(|x| is_trim(x, top, z));
                 if east || west || beam {
                     *ways.entry((z, east, west, beam)).or_default() += 1;
                 }
             }
             for d in [1, 3] {
                 if matches!(cell.sides[f.side(d)], Side::Door(_)) {
-                    let x = if d == 1 { 5 } else { 0 };
-                    assert!((1..5).all(|z| !post(x, z)), "a post in a doorway");
+                    let x = if d == 1 { EDGE } else { 0 };
+                    assert!((1..=INNER).all(|z| !post(x, z)), "a post in a doorway");
                 }
             }
         }
@@ -898,7 +906,7 @@ fn a_ceiling_is_the_themes_ceilings_but_under_a_room_its_floor() {
                     continue;
                 }
                 let middle = map
-                    .get(&Frame::new(cell.at, 0).cube(2, 7, 2))
+                    .get(&Frame::new(cell.at, 0).cube(2, LEVEL - 1, 2))
                     .map(|c| c.kind);
                 // Open there: a shaft a module left.
                 if middle.is_none() {
