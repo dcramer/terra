@@ -69,7 +69,7 @@ var climate_ground: texture_2d<f32>;
 var climate_ground_sampler: sampler;
 const SNOW_FULL_M: f32 = 0.5;
 const UNDER_SNOW_SHARE: f32 = 0.6;
-const BURIED_SHARE: f32 = 0.85;
+const BURIED_SHARE: f32 = 1.0;
 
 // Where a plant stands in its kind's year, 0 early to 1 late: foliage.wesl's `hash`, so its
 // leaves fall and turn alike.

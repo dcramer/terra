@@ -268,7 +268,11 @@ const FROST: vec3<f32> = vec3<f32>(0.62, 0.66, 0.7);
 // buries what grows there (ground.wesl's SNOW_UNDER_CROWNS takes some under the crowns).
 const UNDER_SNOW_SHARE: f32 = 0.6;
 // The share of that depth below which a leaf is out of sight under the snow (`buried`).
-const BURIED_SHARE: f32 = 0.85;
+const BURIED_SHARE: f32 = 1.0;
+// A low plant's bough's load, as a share of a crown top's.
+const LOW_LOAD: f32 = 0.7;
+// How far either side of its threshold a bough's load eases in.
+const LOAD_EDGE: f32 = 0.2;
 // How much of bark's colour a frost greys, where snow lies (weather round 8).
 const BARK_FROST_GREY: f32 = 0.3;
 // The height over a stem's foot, metres, to which plastered snow is thickest and wraps
@@ -372,8 +376,8 @@ fn clumps(p: vec3<f32>) -> f32 {
 // main pass and the prepass, so depth and colour agree on what is left.
 // Leaves the snow lying buries are under it, out of sight (desk r-looks-forest): painted
 // white where they stood, a young spruce's lowest boughs and a bush's foot lay on the snow as
-// a flat white paper skirt cut to their cards. Below BURIED_SHARE of the depth `seasoned`
-// buries them to, in the same ragged line, so its white is only where they come out of it.
+// a flat white paper skirt cut to their cards. Below BURIED_SHARE of the snow's depth, in a
+// ragged line, so they come out of it dark, as needles do from snow.
 // The same in the main pass and the prepass.
 fn buried(world: vec3<f32>, instance: u32) {
     if wind.climate.on == 0u || wind.bark > 0.5 {
@@ -480,14 +484,20 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // Most on what faces straight up and high in the crown, the sides and undersides
         // dark needles in shade (weather round 16's judge: "snow sits on undersides and sides
         // as much as on tops").
-        let load = lying * max(0.3 + 0.7 * high, low) * max(smoothstep(0.45, 0.9, bough_up) * below, level * (1.0 + 0.5 * low));
+        // A low bough's held under a crown top's (LOW_LOAD): at a top's, and more on its
+        // level sprays, a young spruce's lowest boughs lay white to their outlines on the snow
+        // (winter round 2's judge).
+        let load = lying * max(0.3 + 0.7 * high, low * LOW_LOAD) * max(smoothstep(0.45, 0.9, bough_up) * below, level);
         // In clumps a couple of metres across, a bough's load: finer, the white flecked the
         // needles into a variegated leaf (weather round 8) or specks (round 18). A full load
         // fills a spray's top whatever the clumps say, a thin one only their gaps. Gated by
         // the load itself, so summer's cards stay green.
-        // Two octaves, the finer a third: one alone read as a load on every other pad.
-        let cover = clumps(world * LOAD_CLUMPS + 5.0) * 0.67 + clumps(world * LOAD_CLUMPS * 2.3 + 13.0) * 0.33;
-        snow = smoothstep(-0.05, 0.05, load * 1.8 - 0.1 - 0.6 * cover) * smoothstep(0.0, 0.1, load);
+        // Three octaves, each finer about half as much: one alone read as a load on every
+        // other pad. Its edge eased over a fifth of the load, the finest octave breaking it, so
+        // a load thins into the dark needles: cut at a twentieth it filled each spray to its
+        // outline, a flat white paper cut-out (winter round 2's judge).
+        let cover = clumps(world * LOAD_CLUMPS + 5.0) * 0.55 + clumps(world * LOAD_CLUMPS * 2.3 + 13.0) * 0.3 + clumps(world * LOAD_CLUMPS * 6.1 + 29.0) * 0.15;
+        snow = smoothstep(-LOAD_EDGE, LOAD_EDGE, load * 1.8 - 0.1 - 0.6 * cover) * smoothstep(0.0, 0.1, load);
         // And as a shelf along each spray's upper edge, where the card's picture has nothing
         // over it a few centimetres up: the load sits on the boughs, not scattered over their
         // faces (weather round 9's judge: "snow sits scattered across the card face"). Only
@@ -513,9 +523,9 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         colour *= mix(vec3<f32>(1.0), NEEDLES_UNDER_SNOW, green * (1.0 - 0.5 * low));
         let rimed = green * (0.4 + 0.6 * weather.a) * (0.3 + 0.7 * low) * (0.6 + 0.4 * clumps(world * 9.0 + 3.0));
         colour = mix(colour, FROST, rimed * UNDERGROWTH_RIME);
-        let depth = weather.r * SNOW_FULL_M * UNDER_SNOW_SHARE;
-        let buried = 1.0 - smoothstep(0.7, 1.0, (rise + 0.1 * (clumps(world * 3.0 + 17.0) - 0.5)) / max(depth, 0.01));
-        snow = max(snow, buried * smoothstep(0.03, 0.08, depth) * lying);
+        // What stands lower than the snow is under it (`buried` drops it), its needles coming
+        // out dark from the snow's line: painted white for the last fifth below it, a band of
+        // white needles lay over the snow round every low bough (winter round 2's judge).
         // A load's top, turned up to the deck, is lit by the bright sky overhead and reads
         // near white beside the blue of what faces out or down (Horizon Forbidden West's
         // snowfall); by the bough's own facing and the spray's, whichever turns more up.
