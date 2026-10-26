@@ -29,7 +29,7 @@ pub use solid::{Blocked, Standing, blocked, ray_box};
 
 /// A campfire's flames, as the fire drawing draws them with their embers, smoke and light
 /// (terra_world::fire): their tips licking 1.3 m over the stones, 0.75 m over its low
-/// teepee of logs (0.55 m, tools/props/char.py), as a campfire's do in photographs (at 0.9 m
+/// teepee of logs (0.46 m, tools/props/campfire.ts), as a campfire's do in photographs (at 0.9 m
 /// the logs hid all but their tips, fire sheet review 3/10); at 1.5 a 3.3 m card stood them
 /// over a seated troll (fire sheet, stage 3). Its body is the baked loop with its shed wisps
 /// (D493, the developers' choice of fire round g28's build).
@@ -446,6 +446,9 @@ fn textured_material(
         perceptual_roughness: textures.roughness,
         double_sided: textures.double_sided,
         cull_mode: (!textures.double_sided).then_some(Face::Back),
+        alpha_mode: textures
+            .alpha_cutoff
+            .map_or(AlphaMode::Opaque, AlphaMode::Mask),
         emissive: if glows {
             LinearRgba::rgb(GLOW_SCALE, GLOW_SCALE, GLOW_SCALE)
         } else {
@@ -849,6 +852,13 @@ mod tests {
             .map(|textures| textured_material(&format!("models/{file}"), textures, false, &server))
             .collect();
         assert!(!textured.is_empty(), "the campfire has textured parts");
+        // Its worn ground cut out by its alpha, as the file's MASK says (D513); the rest opaque.
+        let masked = |m: &StandardMaterial| matches!(m.alpha_mode, AlphaMode::Mask(_));
+        assert!(
+            textured.iter().any(masked),
+            "the campfire's ground is not cut out"
+        );
+        assert!(!textured.iter().all(masked), "all the campfire is cut out");
         // Asked for while they load: the file's own handle, once their load has made it (it
         // can be made and let go between two looks, rarely, so not waited for past a second).
         let path = format!("models/{file}");

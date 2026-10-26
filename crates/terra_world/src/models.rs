@@ -45,6 +45,9 @@ pub struct Textures {
     pub roughness: f32,
     /// Drawn from both sides, as a thin cloth or an open shell must be.
     pub double_sided: bool,
+    /// Cut out where the colour's alpha falls below this, as glTF's `MASK` mode says (a
+    /// campfire's worn ground fading ragged into the terrain, D513); `None` is opaque.
+    pub alpha_cutoff: Option<f32>,
 }
 
 /// The textures a material draws from the first set of texture places, if it has a colour
@@ -72,6 +75,8 @@ fn textures_of(material: &gltf::Material) -> Option<Textures> {
         metallic: pbr.metallic_factor(),
         roughness: pbr.roughness_factor(),
         double_sided: material.double_sided(),
+        alpha_cutoff: (material.alpha_mode() == gltf::material::AlphaMode::Mask)
+            .then(|| material.alpha_cutoff().unwrap_or(0.5)),
     })
 }
 
