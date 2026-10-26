@@ -184,6 +184,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D465](decisions/D465.md) | How many variants of a move | Design | Developers | Decided | How many takes of each move are kept and drawn without… |
 | [D481](decisions/D481.md) | The move check measures the sword through its own shield and the shield through the sword arm | Tech | Agent | Decided | The move check (`tools/characters/moves.ts`, D447)… |
 | [D487](decisions/D487.md) | A landed blow shows a burst where the blade met the body, not a flash of the whole body | Design | Developers | Decided | Recommended by the agent (combat round 17)… |
+| [D504](decisions/D504.md) | The sword-and-shield set carries a strapped heater now, a round shield later | Design | Developers | Decided | The prototype's shield becomes a strapped heater or kite… |
 
 ## People and the tribe
 
