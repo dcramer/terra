@@ -9,10 +9,12 @@
 //! Markers`), read at the time each clip playing on the legs is at and summed by its weight, as
 //! ALS sums its FootLock curves. A body whose feet cannot be kept (no legs, no animation player,
 //! no clip with markers) says so: in the fight log (`Kept::gated`) and once in the log. Each
-//! foot is then raised onto the walk's own ground under it (`terra_motion::placement`, asked
-//! through `underfoot`): probed once a lock, a swinging foot once a frame. Only the thigh, calf
-//! and foot are turned, so nothing else that writes the joints after the animation
-//! (the body's proportions, its lift) is disturbed.
+//! foot is then put on the walk's own ground under it (`terra_motion::placement`, asked
+//! through `underfoot`): probed once a lock, a swinging foot once a frame, and the pelvis
+//! lowered for the lower foot. Only the pelvis's place and the thigh, calf and foot's turns are
+//! written (the pelvis's drop taken out again next frame where nothing rewrote it), so nothing
+//! else that writes the joints after the animation (the body's proportions, its lift) is
+//! disturbed.
 
 use std::collections::HashMap;
 
@@ -181,8 +183,12 @@ pub struct Kept {
     /// alone leaves, before the foot is placed on the ground: what placement adds
     /// (`pelvis.drop`) is their difference.
     shorts: [[f32; 2]; 2],
-    /// Each foot raised onto the ground under it (`terra_motion::placement`).
+    /// Each foot put on the ground under it and the pelvis lowered for it
+    /// (`terra_motion::placement`).
     placing: Placing,
+    /// The pelvis as lowered last frame: the joint, its translation as written, and what was
+    /// added to it.
+    pelvis: Option<(Entity, Vec3, Vec3)>,
     /// Each foot's lock curve over the clips playing this frame.
     curve: [f32; 2],
     /// Each clip node's weight last frame, to tell the clips coming in from those going.
@@ -451,6 +457,7 @@ fn keep(
         // reads a stride's feet on the ground it passes again.
         let let_go = std::mem::take(&mut kept.let_go);
         let stance = std::mem::take(&mut kept.stance);
+        kept.restore_pelvis(&mut transforms);
         let Some(base) = world(body, &transforms, &parents) else {
             continue;
         };
@@ -472,38 +479,62 @@ fn keep(
             passing,
             dt,
         };
-        for (side, &joints) in legs.iter().enumerate() {
-            kept.leg(
+        // Each foot locked and its ground found, then the pelvis lowered for the lower, then
+        // each leg bent to its foot placed.
+        let grounded = [0, 1].map(|side| {
+            kept.ground_leg(
                 side,
-                joints,
+                legs[side],
                 &frame,
-                &mut transforms,
+                &transforms,
                 &parents,
                 &mut underfoot,
-            );
+            )
+        });
+        let drop = match &grounded {
+            [Some((_, left)), Some((_, right))] => {
+                kept.placing.pelvis([left, right], frame.root, dt)
+            }
+            _ => 0.0,
+        };
+        if let Ok(pelvis) = parents.get(legs[0][0]).map(ChildOf::parent) {
+            kept.drop_pelvis(pelvis, drop, up, &mut transforms, &parents);
+        }
+        for (side, each) in grounded.into_iter().enumerate() {
+            if let Some((clip, grounded)) = each {
+                let goal = grounded.placed(drop);
+                kept.bend_leg(
+                    side,
+                    legs[side],
+                    clip,
+                    goal,
+                    drop,
+                    &frame,
+                    &mut transforms,
+                    &parents,
+                );
+            }
         }
     }
 }
 
 impl Kept {
-    /// Leg `side` kept this frame: its foot locked by its curve (`Foot::update`), raised onto
-    /// the ground under it (`Placing::foot`), and the leg bent to it.
-    fn leg(
+    /// Leg `side`'s foot this frame: locked by its curve (`Foot::update`) and its ground found
+    /// (`Placing::ground`), with the clip's own pose of it; none without its joints.
+    fn ground_leg(
         &mut self,
         side: usize,
         joints: [Entity; 3],
         frame: &Frame,
-        transforms: &mut Query<&mut Transform>,
+        transforms: &Query<&mut Transform>,
         parents: &Query<&ChildOf>,
         underfoot: &mut Underfoot,
-    ) {
+    ) -> Option<(Pose, placement::Grounded)> {
         let Frame {
             ground, root, up, ..
         } = *frame;
         self.shorts[side] = [0.0; 2];
-        let Some(leg) = Leg::of(joints, transforms, parents) else {
-            return;
-        };
+        let leg = Leg::of(joints, transforms, parents)?;
         let ankle = leg.foot.translation();
         let clip = Pose {
             at: ankle,
@@ -535,34 +566,98 @@ impl Kept {
         };
         let other = self.feet[1 - side].moving();
         let kept_at = self.feet[side].update(posed, dt, other);
-        let lock = self.feet[side].locked();
-        let goal = self.placing.foot(
+        // What the lock's goal alone leaves the leg short, before the foot is placed and the
+        // pelvis lowered.
+        let (_, to_lock) = leg.solve(kept_at.at, *frame.base.forward());
+        self.shorts[side][1] = (to_lock - kept_at.at).length();
+        let hip = leg.thigh.translation();
+        let reach = hip.distance(leg.calf.translation()) + leg.calf.translation().distance(ankle);
+        let grounded = self.placing.ground(
             side,
             placement::Foot {
                 shown: kept_at,
                 ball,
-                lock,
+                lock: self.feet[side].locked(),
                 root,
                 up,
                 off: frame.off,
-                hip: leg.thigh.translation(),
+                hip,
+                reach,
             },
             dt,
             |at| underfoot.under(at, root, up),
         );
-        if goal == clip {
+        Some((clip, grounded))
+    }
+
+    /// Leg `side` bent to `goal`, its foot placed, the pelvis lowered by `drop`; left as the
+    /// clip has it where neither moved it.
+    #[allow(clippy::too_many_arguments)]
+    fn bend_leg(
+        &mut self,
+        side: usize,
+        joints: [Entity; 3],
+        clip: Pose,
+        goal: Pose,
+        drop: f32,
+        frame: &Frame,
+        transforms: &mut Query<&mut Transform>,
+        parents: &Query<&ChildOf>,
+    ) {
+        if goal == clip && drop <= DROP_STILL_M {
             self.strained[side] = false;
+            self.shorts[side] = [0.0; 2];
             return;
         }
-        let ahead = *frame.base.forward();
-        // What the lock's goal alone leaves the leg short, before the foot is placed.
-        let (_, to_lock) = leg.solve(kept_at.at, ahead);
-        let short_lock = (to_lock - kept_at.at).length();
-        let short = leg.bend(joints, goal, ahead, transforms);
+        let Some(leg) = Leg::of(joints, transforms, parents) else {
+            return;
+        };
+        let short = leg.bend(joints, goal, *frame.base.forward(), transforms);
         self.strained[side] = short > 0.01;
-        self.shorts[side] = [short, short_lock];
+        self.shorts[side][0] = short;
+    }
+
+    /// The pelvis as the clip has it: last frame's drop taken out again where nothing wrote the
+    /// joint since (a clip that does not move the pelvis).
+    fn restore_pelvis(&mut self, transforms: &mut Query<&mut Transform>) {
+        if let Some((pelvis, written, by)) = self.pelvis.take()
+            && let Ok(mut transform) = transforms.get_mut(pelvis)
+            && transform.translation == written
+        {
+            transform.translation -= by;
+        }
+    }
+
+    /// Lowers the pelvis (the joint the thighs hang from) by `drop` along `up`, the whole body
+    /// over it with it (ALS's pelvis offset).
+    fn drop_pelvis(
+        &mut self,
+        pelvis: Entity,
+        drop: f32,
+        up: Vec3,
+        transforms: &mut Query<&mut Transform>,
+        parents: &Query<&ChildOf>,
+    ) {
+        if drop <= DROP_STILL_M {
+            return;
+        }
+        let Some(over) = parents
+            .get(pelvis)
+            .ok()
+            .and_then(|parent| world(parent.parent(), transforms, parents))
+        else {
+            return;
+        };
+        let by = over.affine().inverse().transform_vector3(-up * drop);
+        if let Ok(mut transform) = transforms.get_mut(pelvis) {
+            transform.translation += by;
+            self.pelvis = Some((pelvis, transform.translation, by));
+        }
     }
 }
+
+/// A pelvis dropped by less than this is left where the clip has it, m.
+const DROP_STILL_M: f32 = 1e-4;
 
 #[cfg(test)]
 mod tests {

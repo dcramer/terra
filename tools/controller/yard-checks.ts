@@ -142,6 +142,9 @@ function walkPlants(walk: Walk, turn: boolean): Plant[] {
 /// ground (docs/movement.md stage 4: feet on slopes within 2 cm); feet.sinking's, so far under.
 export const GROUND_M = 0.02;
 export const SINK_M = 0.02;
+/// feet.aloft's bar: a locked sole's lower point (heel or ball) no more than this over where it
+/// rests on level ground, m (the lock curves' bake reads a plant's height within 7 cm, D455).
+export const ALOFT_M = 0.07;
 /// pelvis.drop's bars: the shortfall placement adds to a leg, at p95 and at worst.
 export const DROP_M = 0.01;
 export const DROP_WORST_M = 0.03;
@@ -152,8 +155,9 @@ export const UNEVEN_M = 0.05;
 /// A frame of a locked plant: how far its sole is off where its clip has it (the worse of the
 /// heel's and the ball's height over the world's ground against their height over the clip's
 /// flat ground), how far it is sunk past that (0 if not), the ground under the ball over the
-/// shown root, and the leg's shortfall from its goal and from the lock's goal alone.
-type Held = { off: number; sunk: number; ground: number; short?: number; lock?: number };
+/// shown root, the heel's and ball's own height over the world's ground, and the leg's shortfall
+/// from its goal and from the lock's goal alone.
+type Held = { off: number; sunk: number; ground: number; heel: number; ball: number; short?: number; lock?: number };
 type Run = { walk: string; foot: number; from: number; to: number; held: Held[] };
 
 /// Each foot's locked plants (`kept` "planted" on the ground, PLANT_FRAMES or more on end, its
@@ -175,7 +179,7 @@ function locked(walk: Walk): Run[] {
       if (!found) continue;
       const [heel, ball] = [(sole[0] as number) - clip[0], (sole[1] as number) - clip[1]];
       const up = w.balls[foot]?.up ?? (sole[1] as number);
-      const held = { off: Math.max(Math.abs(heel), Math.abs(ball)), sunk: Math.max(0, -heel, -ball), ground: up - (sole[1] as number), short: w.short?.[foot], lock: w.short_lock?.[foot] };
+      const held = { off: Math.max(Math.abs(heel), Math.abs(ball)), sunk: Math.max(0, -heel, -ball), ground: up - (sole[1] as number), heel: sole[0] as number, ball: sole[1] as number, short: w.short?.[foot], lock: w.short_lock?.[foot] };
       run ??= { walk: walk.name, foot, from: frame.frame, to: frame.frame, held: [] };
       run.to = frame.frame;
       run.held.push(held);
@@ -218,6 +222,33 @@ export function sinking(walks: Walk[]): Check {
   const ok = !sunk.length;
   const line = `${ok ? "" : "✗ "}${runs.length} locked plants, ${sunk.length} sunk past ${cm(SINK_M)}; worst ${cm(worst.sunk)} (${where(worst.run)})`;
   return { name: "feet sinking", ok, line, value: worst.sunk, faults: sunk.length };
+}
+
+/// feet.aloft: a foot locked in the air (its clip coming in has it down while the pose shown
+/// still has it coming down, a stop's), however its clip has it: each locked plant's first
+/// frame (the lock's start, when its ground is frozen), its sole's lower point over the
+/// world's ground, heel or ball, less where that point rests (the walk's tenth percentile of it
+/// over its locked frames on level ground); the row's number the worst plant's, m. A heel
+/// strike's ball is up, its heel down: only both up is aloft. A stance's end, the clip lifting
+/// the foot as its lock lets go, is not a lock's start.
+export function aloft(walks: Walk[]): Check {
+  const each = walks.flatMap((walk) => {
+    const runs = locked(walk);
+    return [0, 1].flatMap((foot) => {
+      const mine = runs.filter((run) => run.foot === foot);
+      const level = mine.flatMap((run) => run.held.filter((h) => Math.abs(h.ground) < UNEVEN_M));
+      if (!level.length) return [];
+      const rest = (of: (h: Held) => number) => sorted(level.map(of))[Math.floor(level.length * 0.1)];
+      const [heel, ball] = [rest((h) => h.heel), rest((h) => h.ball)];
+      return mine.map((run) => ({ run, up: Math.min(run.held[0].heel - heel, run.held[0].ball - ball) }));
+    });
+  });
+  if (!each.length) return none("feet aloft");
+  const worst = each.reduce((a, b) => (b.up > a.up ? b : a));
+  const up = each.filter((one) => one.up > ALOFT_M);
+  const ok = !up.length;
+  const line = `${ok ? "" : "✗ "}${each.length} locked plants, ${up.length} locked with the sole past ${cm(ALOFT_M)} over its rest; worst ${cm(worst.up)} (${where(worst.run)})`;
+  return { name: "feet aloft", ok, line, value: worst.up, faults: up.length };
 }
 
 /// pelvis.drop: the shortfall foot placement adds to a locked leg (its shortfall from the goal
@@ -315,4 +346,4 @@ export function yard(walks: Walk[]): Check {
   return { name: "yard", ok: !failed.length, line, value: failed.length, faults: failed.length };
 }
 
-export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), ground(walks), sinking(walks), ...drops(walks), yard(walks)];
+export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), ground(walks), sinking(walks), aloft(walks), ...drops(walks), yard(walks)];

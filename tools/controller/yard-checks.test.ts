@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Frame } from "../sandbox/duel/checks.ts";
-import { type Walk, drops, feet, ground, over, sinking, smooth, steps, turn, yard } from "./yard-checks.ts";
+import { type Walk, aloft, drops, feet, ground, over, sinking, smooth, steps, turn, yard } from "./yard-checks.ts";
 
 /// A walk east at 4.2 m/s on level ground at 0 for `n` frames; `lift(i)` raises the body,
 /// `below(i)` how far under it the figure is shown, `camera(i)` the camera's height.
@@ -150,6 +150,16 @@ test("a locked sole where its clip has it passes; floating, pitched or sunk fail
   assert.ok(ground(once).ok && !sinking(once).ok, sinking(once).line);
   assert.ok(sinking([standing(() => [0.38, 0.34])]).ok);
   assert.match(ground([standing(() => [0.08, 0.04], 0, 0, false)]).line, /no locked plant/);
+});
+
+test("feet.aloft fails a foot locked in the air, not a heel strike or a stance's end", () => {
+  assert.ok(aloft([standing(() => [0.08, 0.04])]).ok);
+  // Locked 20 cm up, coming down over 5 frames (a stop's lock): the lock's start is aloft.
+  const air = aloft([standing((i) => (i < 5 ? [0.28 - i * 0.04, 0.24 - i * 0.04] : [0.08, 0.04]))]);
+  assert.ok(!air.ok && Math.abs(air.value - 0.2) < 1e-9, air.line);
+  // A heel strike (the ball up, the heel down) and a toe-off at the end (the heel up, then both).
+  const strike = (i: number) => (i < 3 ? [0.08, 0.15] : i > 26 ? [0.2, 0.15] : [0.08, 0.04]);
+  assert.ok(aloft([standing(strike)]).ok, aloft([standing(strike)]).line);
 });
 
 test("pelvis.drop counts the shortfall placement adds, not the lock's own", () => {

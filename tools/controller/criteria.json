@@ -1107,6 +1107,22 @@
    "measurable": true
   },
   {
+   "id": "feet.aloft",
+   "noticed": 4,
+   "notice": "a foot is planted in the air and hangs there",
+   "bar": {
+    "at_most": 0.07
+   },
+   "unit": "m, the worst locked plant's first frame: its sole's lower point (heel or ball) over the world's ground, less where that point rests on level ground, on the filmed course",
+   "source": "D455 (the lock curves' 7 cm height gate); ALS FootLock",
+   "check": {
+    "by": "film",
+    "name": "feet aloft"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
    "id": "feet.sinking",
    "noticed": 4,
    "notice": "a planted foot sinks into a step or a slope",

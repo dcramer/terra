@@ -9,11 +9,18 @@
 //! the heel's and ball's ground and rolled by the ground's normal (within `TILT_DEG`), turned
 //! about its ball so a locked ball stays put, and raised until neither heel nor ball is under
 //! its ground (a rigid sole rests on the highest ground under it: a foot locked across a
-//! riser stands on the upper tread, its heel over the edge), each eased. A foot
-//! is only raised here: raising never asks a leg for more than the clip did, so the pelvis is
-//! not moved. A foot over lower ground (a drop, a tread's lower side) stays at the clip's
-//! height, for the pelvis to lower (unit 2c). The leg is then bent to the foot by D455's
-//! two-bone solve (`feet::two_bone`).
+//! riser stands on the upper tread, its heel over the edge), each eased. A foot over lower
+//! ground (a tread's lower side, a slope down) is lowered onto it, and the pelvis with it: as
+//! ALS's and Unity's foot IK scripts offset the pelvis, it drops by the lower of the two feet's
+//! needed offsets (every foot's, swinging or planted: weighting it by the lock bobs it), eased by
+//! a critically damped spring as Unreal's Foot Placement node springs its pelvis, and in the
+//! world, so a body stepping down onto the ground the pelvis already went to does not dip
+//! again. As Unreal's node bounds the pelvis by the legs' extension (its Min/MaxExtensionRatio),
+//! the drop is capped where a planted leg would fold past `FOLD_RATIO` of its length, and a foot
+//! whose ground is lower than that (a real drop) is left out: it is lowered only as far as its
+//! own leg reaches, and stays short. A foot is never put farther from the lowered hip than the
+//! clip has it or `REACH_RATIO` of its leg, so lowering never strains a leg. The leg is then
+//! bent to the foot by D455's two-bone solve (`feet::two_bone`).
 //!
 //! Engine-free: places are world positions, so it tests with a field and no skeleton; the game
 //! probes the walk's own world and writes the legs (`terra_walker::feet`).
@@ -40,6 +47,16 @@ pub const BALL_REST_M: f32 = 0.04;
 /// has it (flat ground's numbers do not move a leg).
 pub const STILL_M: f32 = 0.001;
 pub const STILL_DEG: f32 = 0.5;
+/// The pelvis's spring, rad/s: critically damped, so it settles without overshoot, 95% of the
+/// way in 4.7 / this seconds (a tenth of a second: a stride's stance, as Unreal's Foot Placement
+/// springs its pelvis stiffly enough to keep up with a run).
+pub const PELVIS_HZ: f32 = 45.0;
+/// A lowered foot's leg reaches no farther from its hip than this share of its length (or the
+/// clip's own reach, if more): nearly straight, never past (Unreal's MaxExtensionRatio).
+pub const REACH_RATIO: f32 = 0.98;
+/// The pelvis drops no further than folds a planted leg's hip-to-ankle to this share of its
+/// length (Unreal's MinExtensionRatio): ground lower than that is a drop, not a step.
+pub const FOLD_RATIO: f32 = 0.4;
 
 /// The ground under a point: how high it is over the root's level, m, and its normal.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -93,13 +110,38 @@ struct Placed {
     eased: Option<((f32, f32, Vec3), Vec3)>,
 }
 
-/// A body's two feet placed on the ground under them, frame by frame.
+/// The pelvis's drop as eased: how far along the up, how fast, and the root it was over.
+#[derive(Clone, Copy, Debug, Default)]
+struct Pelvis {
+    drop: f32,
+    speed: f32,
+    root: Option<Vec3>,
+}
+
+/// A body's two feet and its pelvis placed on the ground under them, frame by frame.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Placing {
     feet: [Placed; 2],
+    pelvis: Pelvis,
 }
 
-/// What `Placing::foot` reads of a foot this frame.
+/// A foot's ground this frame, before the pelvis is lowered (`Placing::ground`): it asks the
+/// pelvis for its `need`, and is placed once the pelvis's drop is known (`Placing::pelvis`,
+/// `Grounded::placed`).
+#[derive(Clone, Copy, Debug)]
+pub struct Grounded {
+    shown: Pose,
+    ball_at: Vec3,
+    /// The heel's and ball's ground over the root's level and the normal stood to, as eased.
+    heights: (f32, f32, Vec3),
+    up: Vec3,
+    hip: Vec3,
+    reach: f32,
+    locked: bool,
+    off: bool,
+}
+
+/// What `Placing::ground` reads of a foot this frame.
 #[derive(Clone, Copy, Debug)]
 pub struct Foot {
     /// The foot as the lock shows it (`feet::Foot::update`), at the clip's height.
@@ -113,22 +155,75 @@ pub struct Foot {
     pub up: Vec3,
     /// Feet not kept this frame (a body down, aloft): it goes back to the clip.
     pub off: bool,
-    /// The leg's hip, in the world: the foot is never put farther from it than the clip has it.
+    /// The leg's hip, in the world, before the pelvis is lowered: the foot is never put farther
+    /// from it than the clip has it, or than `REACH_RATIO` of the leg.
     pub hip: Vec3,
+    /// The leg's length, hip to knee to ankle, m.
+    pub reach: f32,
 }
 
 impl Placing {
-    /// Foot `side` placed on the ground under it, `dt` seconds on: `under` probes the ground
-    /// under a world point (`probe`). A locked foot is probed under its heel and ball once, at
-    /// its lock, and keeps that ground while it is locked; a free, stepping or released foot
-    /// once a frame under its ankle.
+    /// Foot `side` placed on the ground under it with the pelvis where the clip has it (one
+    /// foot alone: `ground`, then `Grounded::placed`).
     pub fn foot(
         &mut self,
         side: usize,
         foot: Foot,
         dt: f32,
-        mut under: impl FnMut(Vec3) -> Option<Under>,
+        under: impl FnMut(Vec3) -> Option<Under>,
     ) -> Pose {
+        self.ground(side, foot, dt, under).placed(0.0)
+    }
+
+    /// The pelvis's drop this frame, m along the up: the lower foot's need (`Grounded::need`,
+    /// ALS's and Unity's pelvis offset), a foot whose need is past what a planted leg folds to
+    /// (`Grounded::fold`) left out; nothing while a foot is let go. Eased by a critically damped
+    /// spring (`PELVIS_HZ`), and in the world: the root come down by some of the drop (a body
+    /// stepping down onto ground the pelvis already went to) takes that much of it, so the
+    /// pelvis does not dip again. A root going up adds nothing: the figure eases its own steps
+    /// up (`Stepping`).
+    pub fn pelvis(&mut self, feet: [&Grounded; 2], root: Vec3, dt: f32) -> f32 {
+        let up = feet[0].up;
+        let cap = feet
+            .iter()
+            .map(|foot| foot.fold())
+            .fold(f32::INFINITY, f32::min);
+        let to = if feet.iter().any(|foot| foot.off) {
+            0.0
+        } else {
+            feet.iter()
+                .map(|foot| foot.need())
+                .filter(|&need| need <= cap)
+                .fold(0.0, f32::max)
+        };
+        let pelvis = &mut self.pelvis;
+        if let Some(was) = pelvis.root {
+            pelvis.drop = (pelvis.drop + (root - was).dot(up)).clamp(0.0, pelvis.drop);
+        }
+        pelvis.root = Some(root);
+        // A critically damped spring stepped exactly (x'' = -2wx' - w^2 x).
+        let (w, dt) = (PELVIS_HZ, dt.max(0.0));
+        let (x, v) = (pelvis.drop - to, pelvis.speed);
+        let (e, j) = (libm::expf(-w * dt), v + w * x);
+        pelvis.drop = to + (x + j * dt) * e;
+        pelvis.speed = (v - w * j * dt) * e;
+        if pelvis.drop <= 0.0 {
+            (pelvis.drop, pelvis.speed) = (0.0, 0.0);
+        }
+        pelvis.drop
+    }
+
+    /// Foot `side`'s ground this frame, `dt` seconds on: `under` probes the ground under a
+    /// world point (`probe`). A locked foot is probed under its heel and ball once, at its lock,
+    /// and keeps that ground while it is locked; a free, stepping or released foot once a frame
+    /// under its ankle.
+    pub fn ground(
+        &mut self,
+        side: usize,
+        foot: Foot,
+        dt: f32,
+        mut under: impl FnMut(Vec3) -> Option<Under>,
+    ) -> Grounded {
         let Foot {
             shown,
             ball,
@@ -137,6 +232,7 @@ impl Placing {
             up,
             off,
             hip,
+            reach,
         } = foot;
         let placed = &mut self.feet[side];
         let ball_at = shown.at + shown.turn * ball;
@@ -211,7 +307,49 @@ impl Placing {
             }
         };
         placed.eased = Some((eased, root));
-        raised(shown, ball_at, eased, up, hip)
+        Grounded {
+            shown,
+            ball_at,
+            heights: eased,
+            up,
+            hip,
+            reach,
+            locked: lock.is_some(),
+            off,
+        }
+    }
+}
+
+impl Grounded {
+    /// How far under the clip's flat ground this foot's ground is (the higher of its heel's and
+    /// ball's: a sole rests on the highest under it), m: the drop it asks of the pelvis.
+    pub fn need(&self) -> f32 {
+        if self.off {
+            return 0.0;
+        }
+        (-self.heights.0.max(self.heights.1)).max(0.0)
+    }
+
+    /// How far the pelvis may drop before this leg, its foot on its ground, folds its hip to
+    /// ankle to `FOLD_RATIO` of its length: none for a foot not locked (a swinging foot is not
+    /// stood on).
+    fn fold(&self) -> f32 {
+        if !self.locked || self.off {
+            return f32::INFINITY;
+        }
+        let lift = self.heights.0.max(self.heights.1);
+        let from = self.hip - (self.shown.at + self.up * lift);
+        let (high, across) = (
+            from.dot(self.up),
+            from.reject_from(self.up).length_squared(),
+        );
+        let least = FOLD_RATIO * self.reach;
+        (high - (least * least - across).max(0.0).sqrt()).max(0.0)
+    }
+
+    /// The foot placed on its ground with the pelvis lowered by `drop` (`raised`).
+    pub fn placed(&self, drop: f32) -> Pose {
+        raised(self, drop)
     }
 }
 
@@ -247,50 +385,67 @@ fn sole(heel: Vec3, ball: Vec3, normal: Vec3, up: Vec3) -> Vec3 {
     (up - ahead * pitch - side * roll).normalize_or(up)
 }
 
-/// The foot `shown` (its ball at `ball_at`) raised onto its ground, `heel` and `ball` its
-/// heights over the root's level under them and `normal` the normal it stands to: turned to
-/// the normal within `TILT_DEG` of `up`, about its ball (so a locked ball stays where the lock
-/// holds it), and raised until neither heel nor ball is lower over its ground than the clip
-/// has it over its flat ground, as a rigid sole rests on the highest ground under it; never
-/// lowered. A turn that would put the ankle farther from `hip` than the clip has it (a foot
-/// behind the body at its stance's end, turned about its ball) is made only as far as the leg
-/// reaches: a leg is never asked for more than the clip did.
-fn raised(
-    shown: Pose,
-    ball_at: Vec3,
-    (heel, ball, normal): (f32, f32, Vec3),
-    up: Vec3,
-    hip: Vec3,
-) -> Pose {
+/// The foot `grounded.shown` (its ball at `ball_at`) put on its ground (its heel's and ball's
+/// heights over the root's level and the normal it stands to), the pelvis lowered by `drop`:
+/// turned to the normal within `TILT_DEG` of `up`, about its ball (so a locked ball stays
+/// where the lock holds it), and raised or lowered until neither heel nor ball is lower over
+/// its ground than the clip has it over its flat ground and one of them is not higher, as a
+/// rigid sole rests on the highest ground under it. Lowered no farther from the lowered hip
+/// than the clip has it or `REACH_RATIO` of the leg (a foot over a drop stays short); a turn
+/// that would put the ankle farther from it than unturned (a foot behind the body at its
+/// stance's end, turned about its ball) is made only as far as that: a leg is never asked for
+/// more than the clip did.
+fn raised(grounded: &Grounded, drop: f32) -> Pose {
+    let Grounded {
+        shown,
+        ball_at,
+        heights: (heel, ball, normal),
+        up,
+        hip,
+        reach: leg,
+        ..
+    } = *grounded;
+    let hip_at = hip - up * drop;
+    let longest = shown.at.distance(hip).max(REACH_RATIO * leg);
     let full = lean(up, normal, TILT_DEG.to_radians());
     let reach = ball_at - shown.at;
     // The foot turned `s` of the way to the ground's normal.
     let turned = |s: f32| {
         let tilt = Quat::IDENTITY.slerp(full, s);
         let moved = tilt * reach - reach;
-        let lift = heel.max(ball - moved.dot(up)).max(0.0);
-        let at = shown.at + up * lift - moved.reject_from(up);
+        let across = shown.at - moved.reject_from(up);
+        let mut lift = heel.max(ball - moved.dot(up));
+        if lift < 0.0 {
+            // Lowered no farther than the leg reaches from the lowered hip.
+            let from = hip_at - across;
+            let (high, side) = (from.dot(up), from.reject_from(up).length_squared());
+            let deepest = high - (longest * longest - side).max(0.0).sqrt();
+            lift = lift.max(deepest).min(0.0);
+        }
         (
             Pose {
-                at,
+                at: across + up * lift,
                 turn: (tilt * shown.turn).normalize(),
             },
             lift,
         )
     };
     let (placed, lift) = turned(1.0);
-    if lift < STILL_M && full.angle_between(Quat::IDENTITY).to_degrees() < STILL_DEG {
+    if lift.abs() < STILL_M && full.angle_between(Quat::IDENTITY).to_degrees() < STILL_DEG {
         return shown;
     }
-    let most = shown.at.distance(hip);
-    if placed.at.distance(hip) <= most {
+    // Unturned it reaches no farther than the clip's foot or the lowered hip allows.
+    let most = shown
+        .at
+        .distance(hip)
+        .max(turned(0.0).0.at.distance(hip_at));
+    if placed.at.distance(hip_at) <= most + 1e-5 {
         return placed;
     }
-    // Unturned it is only raised, which brings it no farther (a foot under its hip).
     let (mut lo, mut hi) = (0.0, 1.0);
     for _ in 0..10 {
         let mid = (lo + hi) * 0.5;
-        if turned(mid).0.at.distance(hip) > most {
+        if turned(mid).0.at.distance(hip_at) > most {
             hi = mid;
         } else {
             lo = mid;
