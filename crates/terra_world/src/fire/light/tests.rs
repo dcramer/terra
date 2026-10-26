@@ -237,7 +237,7 @@ fn none(n: usize) -> Vec<Was> {
 }
 
 #[test]
-fn a_burning_village_is_a_dozen_lights_the_nearest_shadowed_none_past_forty_metres() {
+fn a_burning_village_is_a_score_of_lights_the_nearest_shadowed_none_past_forty_metres() {
     // A hundred fires, one every metre and a half along a street from the eye.
     let lit: Vec<Lit> = (0..100).map(|i| at(1.0 + i as f32 * 1.5, 1.0e6)).collect();
     let shown = choose(lit, Some(Vec3::ZERO), &none(LIGHTS), 2);
@@ -803,4 +803,74 @@ fn a_torch_lights_yellower_than_a_campfire_and_each_fire_by_its_own_colour() {
         !torch.is_empty() && torch.iter().all(|&c| c == TORCH_LIGHT),
         "{torch:?}"
     );
+}
+
+/// A dungeon's torches: so many kept fires a metre and a half up the walls of a corridor along
+/// x, one every three metres on alternate sides.
+fn torches(n: usize) -> Blazes {
+    let fire = |i: usize| Blaze {
+        at: Vec3::new(
+            i as f32 * 3.0,
+            2001.5,
+            if i.is_multiple_of(2) { -1.4 } else { 1.4 },
+        ),
+        tall: 0.45,
+        heat: 0.6,
+        seed: (i as f32 * 0.37).fract(),
+        wide: 0.12,
+    };
+    Blazes {
+        kept: (0..n).map(fire).collect(),
+        lights: vec![TORCH_LIGHT; n],
+        ..default()
+    }
+}
+
+#[test]
+fn every_torch_of_a_dungeon_lights_as_a_torch_however_many_burn() {
+    // Thirty torches, more than the sixteen drawn as hearths: each one lights in its own
+    // colour from just over its flame, none gathered into a blaze's light.
+    let blazes = torches(30);
+    let lit = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
+    assert!(lit.iter().all(|l| l.kept && l.color == TORCH_LIGHT));
+    for fire in &blazes.kept {
+        let own = lit.iter().filter(|l| l.at.distance(fire.at) < 1.0).count();
+        assert_eq!(own, 2, "{fire:?}");
+    }
+}
+
+#[test]
+fn walking_a_torchlit_corridor_no_light_blinks_in_or_out() {
+    // Down the corridor a centimetre a step: each torch's light, all its lights summed, moves
+    // from step to step by a small share of the brightest torch's, never by a light cut whole.
+    let blazes = torches(40);
+    let lit = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
+    let mut was = none(LIGHTS);
+    let mut last: Option<Vec<f32>> = None;
+    let (mut worst, mut brightest) = (0.0f32, 0.0f32);
+    for step in 0..3000 {
+        let eye = Vec3::new(20.0 + step as f32 * 0.01, 2001.6, 0.0);
+        let shown = choose(lit.clone(), Some(eye), &was, 2);
+        let mut by_torch = vec![0.0f32; blazes.kept.len()];
+        for s in shown.iter().flatten() {
+            let i = (s.lit.at.x / 3.0).round() as usize;
+            by_torch[i] += s.lit.lumens * s.fade;
+        }
+        brightest = brightest.max(by_torch.iter().copied().fold(0.0, f32::max));
+        if let Some(last) = &last {
+            for (a, b) in by_torch.iter().zip(last) {
+                worst = worst.max((a - b).abs());
+            }
+        }
+        was = shown
+            .iter()
+            .map(|s| Was {
+                at: s.as_ref().map_or(Vec3::ZERO, |s| s.lit.at),
+                on: s.is_some(),
+                near: s.as_ref().is_some_and(|s| s.shadows),
+            })
+            .collect();
+        last = Some(by_torch);
+    }
+    assert!(worst < 0.02 * brightest, "{worst} of {brightest}");
 }

@@ -11,24 +11,19 @@
 //! of width D puffs at about 1.5 / sqrt(D) Hz (research/2026-10-16-real-time-fire-rendering.md),
 //! a torch by a third either way, a campfire by about 15%, a house fire slower and shallower.
 
-use super::{Blaze, Blazes, HEARTHS};
+use super::{Blaze, Blazes};
 use crate::planet::MainCamera;
 use crate::quality::Quality;
-use bevy::{
-    light::VolumetricLight,
-    prelude::*,
-    render::{
-        Render, RenderApp, RenderSystems,
-        extract_resource::{ExtractResource, ExtractResourcePlugin},
-        render_asset::RenderAssets,
-        renderer::RenderQueue,
-        storage::{GpuShaderBuffer, ShaderBuffer},
-    },
-};
+use bevy::{light::VolumetricLight, prelude::*};
 
-/// How many point lights the fires are lit by, and how far round each its fire is gathered,
-/// in metres.
-pub(super) const LIGHTS: usize = 12;
+mod glows;
+pub use glows::FireGlows;
+pub(super) use glows::plugin;
+
+/// How many point lights the fires are lit by (docs/fire.md's budget: 16 unshadowed and the
+/// shadowed ones), and how far round each its fire is gathered, in metres. At 12 a dungeon's
+/// thirty torches, two lights each, traded the lights 22 times a second along a corridor.
+pub(super) const LIGHTS: usize = 20;
 const LIGHT_CELL_M: f32 = 9.0;
 /// How far out from the middle of all that burns a gathering's light hangs, metres.
 const LIGHT_OUT_M: f32 = 3.0;
@@ -190,6 +185,8 @@ const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
 /// first, kept on until past the second, so a light at the edge does not blink (Valheim's 20 m).
 const SHADOW_M: [f32; 2] = [20.0, 23.0];
+/// A light shown is eased in from the weight of the first left out to so many times it.
+const CUT_EASE: f32 = 2.0;
 /// How far a light sways for each metre of its flame's height, and the least and most.
 const SWAY_A_METRE: f32 = 0.07;
 const SWAY_M: [f32; 2] = [0.005, 0.4];
@@ -573,8 +570,12 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
     // heaviest blaze's number.
     let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32, f32, f32, (f32, f32))> =
         std::collections::BTreeMap::new();
-    let hearths = blazes.kept.len().min(HEARTHS);
-    for blaze in blazes.all().skip(hearths) {
+    // Only the wild blazes are gathered: a kept fire past the nearest `HEARTHS` (a dungeon has
+    // thirty torches) lights as a kept fire still. Gathered, the far torches were lit as
+    // blazes, each cell some five torches' light hung 1.5 m up and 3 m out from the middle of
+    // all that burns, in the rock or the next corridor: 75% of the crypt's fire light and 5
+    // of its 12 lights, moving each time the nearest sixteen changed (dungeon light round).
+    for blaze in &blazes.blazes {
         let weight = blaze.tall * blaze.heat;
         let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
         let cell = cells
@@ -603,7 +604,6 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
             .kept
             .iter()
             .zip(colours)
-            .take(hearths)
             .flat_map(|(blaze, &colour)| {
                 let flicker = Flicker::of(width(blaze));
                 let glow = glow(blaze, t);
@@ -691,13 +691,13 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
     lit
 }
 
-/// How many fire lights cast shadows, by preset: two, four on the high (docs/fire.md), one on
-/// the low, whose GPUs a cube of six shadow maps a light costs most.
+/// How many fire lights cast shadows, by preset: one in play, four in films (docs/fire.md). A
+/// shadowed light is a cube of six shadow views: in a crypt hall of four torches each past the
+/// first cost about 0.6 ms of GPU and 0.7 of render CPU on the RTX 4090, so play keeps one.
 pub fn shadowed(quality: Quality) -> usize {
     match quality {
-        Quality::Low => 1,
-        Quality::Medium => 2,
-        Quality::High | Quality::Ultra => 4,
+        Quality::Low | Quality::Medium | Quality::High => 1,
+        Quality::Ultra => 4,
     }
 }
 
@@ -757,6 +757,14 @@ pub(super) fn choose(
         })
         .collect();
     wanted.sort_by(|a, b| b.0.total_cmp(&a.0));
+    // Past the last light there is room for, the lights nearest the cut ease out as their
+    // weight comes down to the first one left out's, so a light is never cut while it shows:
+    // cut at once, the light on a far wall blinked each time two torches traded places.
+    if let Some(&(cut, _)) = wanted.get(was.len()) {
+        for (weight, shown) in &mut wanted {
+            shown.fade *= smooth(cut, cut * CUT_EASE, *weight);
+        }
+    }
     wanted.truncate(was.len());
     let mut out: Vec<Option<Shown>> = vec![None; was.len()];
     for (_, shown) in wanted {
@@ -810,62 +818,6 @@ pub(super) fn choose(
     out
 }
 
-/// The fire lights' places and flickers (`GLOWS` of them: xyz where, w its glow, 0 for
-/// none), for what burns to glow with: the char's cracks on a burning building flare as the
-/// fire nearest them does. A buffer of the render world, written each frame.
-#[derive(Resource, Clone, Debug)]
-pub struct FireGlows {
-    pub buffer: Handle<ShaderBuffer>,
-    pub glows: [[f32; 4]; GLOWS],
-}
-
-impl ExtractResource<RenderApp> for FireGlows {
-    type Source = FireGlows;
-
-    fn extract_resource(source: &FireGlows) -> Self {
-        source.clone()
-    }
-}
-
-pub(super) fn plugin(app: &mut App) {
-    let buffer = app
-        .world_mut()
-        .resource_mut::<Assets<ShaderBuffer>>()
-        .add(ShaderBuffer::from(vec![[0.0f32; 4]; GLOWS]));
-    app.insert_resource(FireGlows {
-        buffer,
-        glows: [[0.0; 4]; GLOWS],
-    });
-    if app.get_sub_app(RenderApp).is_none() {
-        return;
-    }
-    app.add_plugins(ExtractResourcePlugin::<FireGlows>::default());
-    app.sub_app_mut(RenderApp)
-        .add_systems(Render, write_glows.in_set(RenderSystems::PrepareResources));
-}
-
-fn write_glows(
-    glows: Option<Res<FireGlows>>,
-    buffers: Res<RenderAssets<GpuShaderBuffer>>,
-    queue: Res<RenderQueue>,
-) {
-    let Some(glows) = glows else {
-        return;
-    };
-    if let Some(target) = buffers.get(&glows.buffer) {
-        queue.write_buffer(
-            &target.buffer,
-            0,
-            &glows
-                .glows
-                .iter()
-                .flatten()
-                .flat_map(|v| v.to_le_bytes())
-                .collect::<Vec<u8>>(),
-        );
-    }
-}
-
 /// The fires' light, each frame: the lights the fires want, chosen for where the eye is, on
 /// the light entities, and their places and flickers told to what burns.
 #[allow(clippy::too_many_arguments)]
@@ -912,12 +864,24 @@ pub(super) fn light(
     let mut wants = flashes(&blazes, &drawn.jets, t);
     wants.extend(strikes(&blazes, &drawn.jets, t, *tier));
     wants.extend(lit(&blazes, t, *tier));
-    let shown = choose(wants, eye, &was, shadowed(*quality));
     // In a room shut off from the sky the fires burn as by night: nothing outshines them (D488).
     let air_lit = indoor_sky.map_or(1.0, |s| s.0);
     let night = crate::indoor::fires_night(sky.as_ref().map_or(0.0, |sky| sky.night), air_lit);
     let twilight = sky.as_ref().map_or(0.0, |sky| sky.twilight);
     let sky_light = sky_light.map_or(0.0, |lit| lit.brightness);
+    // Each light is brighter by night by its own stops: a kept fire's fewer than a blaze's, so
+    // its flame stays the brightest thing by it (D415), and a marched breath's fewer again.
+    // Weighed so before the lights are chosen: weighed by their day's lumens, a torch's
+    // shadowed key (0.4 of its light by day, half of it by night) lost its light to the top
+    // light and the blazes, and a dungeon's torches cast shadows 0.36 lights a frame.
+    for want in &mut wants {
+        want.lumens *= if want.kept {
+            hearth_by_hour(want.night_stops, want.dusk_gain, night, twilight, sky_light)
+        } else {
+            by_night(want.night_stops, night)
+        };
+    }
+    let shown = choose(wants, eye, &was, shadowed(*quality));
     let mut told = [[0.0f32; 4]; GLOWS];
     let mut wanted = Vec::new();
     for (i, (&entity, shown)) in drawn.lights.iter().zip(shown).enumerate() {
@@ -932,15 +896,7 @@ pub(super) fn light(
                 shadows,
                 scatters,
             }) => {
-                // Each light is brighter by night by its own stops: a kept fire's fewer than a
-                // blaze's, so its flame stays the brightest thing by it (D415), and a marched
-                // breath's fewer again.
-                let boost = if lit.kept {
-                    hearth_by_hour(lit.night_stops, lit.dusk_gain, night, twilight, sky_light)
-                } else {
-                    by_night(lit.night_stops, night)
-                };
-                light.intensity = lit.lumens * fade * boost;
+                light.intensity = lit.lumens * fade;
                 light.range = lit.range;
                 light.color = lit.color;
                 light.radius = lit.radius;
