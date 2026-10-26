@@ -5,7 +5,8 @@ mannequin file, each in place of the library's clip of the same name
     tools/blender/run.sh tools/characters/made_clips.py [OUT.glb] [--try=CLIP:FILE.bvh] [--list=FILE.json]
 
 Each clip in art/animation/made.json has its take, a BVH on Kimodo's SOMA skeleton in its
-standard T-pose, at art/animation/made/<clip>.bvh (made by motion.ts). For each:
+standard T-pose, at art/animation/made/<clip>.bvh, or a GLB on our own skeleton made by Uthana
+(D532) at art/animation/made/<clip>.glb (both made by motion.ts). For each:
 
   - the stride: from one left heel strike to the next, in the take's steady middle, whose first
     and last poses are nearest alike, so it loops with the smallest seam; or for a clip marked
@@ -18,7 +19,10 @@ standard T-pose, at art/animation/made/<clip>.bvh (made by motion.ts). For each:
   - the upper arms' and thighs' roll about their own length handed down to the forearm and
     shin, where the twist step (twist.py) spreads it; our skinning assumes the upper limbs never
     roll (clip_check.py), as Quaternius's clips never do;
+  - or, for an entry Uthana closed into a loop itself ("looped"), the whole take;
   - closed into a loop: the last frame the first again, the frames before it eased into it;
+    its seam, how far the hands, feet and head are from where they started relative to the
+    hips before the easing, printed (cm) beside the turn of its bones (deg);
   - for a stride with "arms", its arms set to a runner's swing, its legs and spine untouched
     (swing_arms), and for one with "fist", its fingers closed that share of the way into the
     library's clenched fist (Kimodo leaves them straight).
@@ -82,8 +86,24 @@ EASE = 4            # frames eased into the loop's seam
 
 def load_take(path):
     """The take on its own skeleton, a key a frame, and its frame rate (Kimodo's 30), which is
-    not the scene's: its frames are counted by its own rate and keyed at the scene's."""
+    not the scene's: its frames are counted by its own rate and keyed at the scene's. A GLB take
+    (Uthana's, on our skeleton, motion.ts) is keyed at the scene's rate by the importer, its
+    bones named as SOMA's that have one, so it is carried as a Kimodo take is: rest to rest, the
+    same skeleton, its world rotations kept."""
     before = set(bpy.data.objects)
+    if path.endswith(".glb"):
+        bpy.ops.import_scene.gltf(filepath=path)
+        new = [o for o in bpy.data.objects if o not in before]
+        src = next(o for o in new if o.type == "ARMATURE")
+        for o in new:
+            if o is not src:
+                bpy.data.objects.remove(o)
+        soma = {ours: theirs for theirs, ours in MAP.items()}
+        for bone in src.data.bones:
+            if bone.name in soma:
+                bone.name = soma[bone.name]   # its action's paths follow the name
+        scene = bpy.context.scene
+        return src, scene.render.fps / scene.render.fps_base
     bpy.ops.import_anim.bvh(filepath=path, global_scale=0.01, rotate_mode="NATIVE", axis_forward="-Z", axis_up="Y", use_fps_scale=False)
     with open(path) as f:
         frame_time = next(float(line.split(":")[1]) for line in f if line.startswith("Frame Time:"))
@@ -267,14 +287,33 @@ def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False):
                 pb.keyframe_insert("location", frame=(f - f0) * k)
     last = f1 - f0
     if once:
-        return action
+        return action, 0.0
+    seam = seam_cm(arm, last * k)
     for fc in curves(action):
         gap = fc.evaluate(0) - fc.evaluate(last * k)
         for e in range(1, EASE + 1):
             w = e / EASE
             f = (last - EASE + e) * k
             fc.keyframe_points.insert(f, fc.evaluate(f) + gap * w * w * (3 - 2 * w), options={"REPLACE"})
-    return action
+    return action, seam
+
+
+SEAM_BONES = ("hand_l", "hand_r", "foot_l", "foot_r", "Head")
+
+
+def seam_cm(arm, end):
+    """How far the hands, feet and head at frame `end` of `arm`'s action are from where they
+    are at frame 0, each relative to the hips, at most (cm): the jump a loop's last frames must
+    ease over."""
+    scene = bpy.context.scene
+
+    def marks(f):
+        scene.frame_set(int(f), subframe=f - int(f))
+        hips = arm.pose.bones["pelvis"].head
+        return [arm.matrix_world.to_3x3() @ (arm.pose.bones[b].head - hips) for b in SEAM_BONES]
+
+    a, b = marks(0), marks(end)
+    return max((p - q).length for p, q in zip(a, b)) * 100
 
 
 FINGERS = ("thumb", "index", "middle", "ring", "pinky")
@@ -476,8 +515,10 @@ def main():
         made = json.load(f)
     # An entry with no take kept yet is still being made (motion.ts); the library's clip stays.
     # A take tried is made alone, into a copy that already has the kept ones.
-    takes = {name: look.path(path) for name, path in tried.items()} or {
-        name: os.path.join(kept, f"{name}.bvh") for name in made if os.path.exists(os.path.join(kept, f"{name}.bvh"))}
+    # A clip's take is Uthana's GLB if it has one, else Kimodo's BVH.
+    def take_of(name):
+        return next((p for p in (os.path.join(kept, f"{name}{ext}") for ext in (".glb", ".bvh")) if os.path.exists(p)), None)
+    takes = {name: look.path(path) for name, path in tried.items()} or {name: take_of(name) for name in made if take_of(name)}
     look.reset()
     bpy.ops.import_scene.gltf(filepath=look.FIGURE if chosen else out)
     arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
@@ -491,7 +532,8 @@ def main():
             pb.matrix_basis.identity()
         src, fps = load_take(path)
         entry = made.get(name.split("#")[0], {})
-        if entry.get("once"):
+        if entry.get("once") or entry.get("looped"):
+            # A one-shot, or a take Uthana made a loop of: the whole take.
             f0, f1, seam = one_shot(src, fps, entry.get("span"))
         elif entry.get("still"):
             f0, f1, seam = still(src, fps, tuple(entry.get("loop", (2.0, 5.0))), entry.get("busy", False))
@@ -513,7 +555,7 @@ def main():
         k = 1.0
         if entry.get("still") or entry.get("once"):
             k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
-        action = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False))
+        action, seam_at = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False))
         if entry.get("way"):
             # Which way the take went, measured: its travel from where its hips face.
             scene = bpy.context.scene
@@ -537,7 +579,7 @@ def main():
             bpy.data.actions.remove(old)
         if name not in names:
             names.append(name)
-        print(f"MADE {name} from {os.path.relpath(path, look.ROOT)}: frames {f0} to {f1}, {(f1 - f0) / fps:.2f} s, seam {seam:.2f} deg")
+        print(f"MADE {name} from {os.path.relpath(path, look.ROOT)}: frames {f0} to {f1}, {(f1 - f0) / fps:.2f} s, seam {seam:.2f} deg, {seam_at:.1f} cm")
     # Every clip a track of its own again, each strip where its action starts, as clips.py
     # lays them: the importer's own tracks start a frame late, which the export would keep.
     for t in list(ad.nla_tracks):

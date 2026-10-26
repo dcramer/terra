@@ -52,7 +52,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, board, meshOf, sliced, through } from "./clash.ts";
 import { PACE_FRAMES } from "./phases.ts";
-import { type Shape, armPoints, skinOf } from "./skin.ts";
+import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
 import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, place, posed, qinv, rot, sub, turn } from "./glb.ts";
@@ -182,19 +182,7 @@ const clipOf = (name: string): Clip => {
 // and each template's morph mix and joint offsets (skin.ts).
 const { shapes, skinned } = skinOf(body, opt.templates!, opt.template!.split(",").filter(Boolean));
 
-function poseOf(shape: Shape, clip: Clip, t: number): Pose[] {
-  // A morph's joints moved over the clip (`terra_walker::appearance`).
-  const keep = { ...clip, tracks: new Map(clip.tracks) };
-  for (const [node, by] of shape.moved) {
-    const name = body.gltf.nodes[node].name;
-    if (!name) continue;
-    const track = keep.tracks.get(name);
-    const rest = body.rest(node).t;
-    const from = track?.t ?? (() => rest);
-    keep.tracks.set(name, { ...track, t: (time: number) => from(time).map((x, j) => x + by[j]) });
-  }
-  return posed(body, keep, t, bends);
-}
+const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => shaped(body, shape, clip, t, bends);
 
 // Held looks: a few hundred of their vertices in the frame of the node they hang from, and the
 // blade's tip. A look hangs from the hand socket it is held in, or, strapped (a shield on the

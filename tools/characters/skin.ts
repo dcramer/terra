@@ -3,7 +3,7 @@
 // inside the torso, head or thighs, skinned. Node 22.18 or later; no dependencies.
 
 import { readFileSync } from "node:fs";
-import { type Glb, type Pose, type V3, dot, len, matrix, mmul, posed, qinv, rot, sub } from "./glb.ts";
+import { type Clip, type Glb, type Pose, type Q, type V3, dot, len, matrix, mmul, posed, qinv, rot, sub } from "./glb.ts";
 
 export type Shape = { name: string; positions: Float64Array; moved: Map<number, V3>; shift: Map<number, V3> };
 export type Inside = (q: V3) => { depth: number; part: string };
@@ -131,4 +131,49 @@ export function skinOf(body: Glb, templatesFile: string, only: string[] = []): {
     };
   }
   return { shapes, skinned };
+}
+
+/** The body posed by `clip` at `t` as a template shapes it: its morph's joints moved over the
+ * clip (`terra_walker::appearance`). */
+export function shaped(body: Glb, shape: Shape, clip: Clip, t: number, bends: Map<string, Q> = new Map()): Pose[] {
+  const keep = { ...clip, tracks: new Map(clip.tracks) };
+  for (const [node, by] of shape.moved) {
+    const name = body.gltf.nodes[node].name;
+    if (!name) continue;
+    const track = keep.tracks.get(name);
+    const rest = body.rest(node).t;
+    const from = track?.t ?? (() => rest);
+    keep.tracks.set(name, { ...track, t: (time: number) => from(time).map((x, j) => x + by[j]) });
+  }
+  return posed(body, keep, t, bends);
+}
+
+/** How deep an arm goes into the body over a clip, on every template (the move check's
+ * `hands`, for any clip): the worst depth past the arm's half-thickness (cm) and where, and the
+ * share of poses (a template at a time) with an arm more than `bar` cm in. */
+export function armsInBody(body: Glb, templatesFile: string, clip: Clip, bar = 2, step = 1 / 15): { cm: number; where: string; over: number } {
+  const { shapes, skinned } = skinOf(body, templatesFile);
+  const node = new Map(body.gltf.nodes.map((n, i) => [n.name, i]));
+  let worst = { cm: -Infinity, where: "" };
+  let over = 0;
+  let poses = 0;
+  for (const shape of shapes) {
+    for (let t = 0; t <= clip.end + 1e-6; t += step) {
+      const pose = shaped(body, shape, clip, t);
+      const inside = skinned(shape, pose);
+      const P = (n: string) => pose[node.get(n)!].t;
+      let most = -Infinity;
+      for (const s of ["l", "r"]) {
+        for (const [q, pad, what] of armPoints(P, s)) {
+          const { depth, part } = inside(q);
+          const cm = (depth - pad) * 100;
+          most = Math.max(most, cm);
+          if (cm > worst.cm) worst = { cm, where: `${what} in ${part} at ${t.toFixed(2)} s, ${shape.name}` };
+        }
+      }
+      poses++;
+      if (most > bar) over++;
+    }
+  }
+  return { ...worst, over: over / poses };
 }

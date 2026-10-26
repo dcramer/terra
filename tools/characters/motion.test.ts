@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { constraints, path } from "./motion.ts";
+import { constraints, path, wanted } from "./motion.ts";
 
 test("a take's path runs straight ahead at the clip's speed, a point a frame", () => {
   const [constraint] = path(3.2, 6);
@@ -31,4 +31,11 @@ test("a strafe's path runs to the body's right at its speed, facing ahead throug
 test("a one-shot is held to nothing, a strafe to its path", () => {
   assert.deepEqual(constraints({ prompt: "", speed: 0, seconds: 3, seed: 1, once: true }), []);
   assert.equal(constraints({ prompt: "", speed: 1.2, seconds: 6, seed: 1, way: 90 })[0].frame_indices.length, 180);
+});
+
+test("a paid take already made is never made again: only the missing ones are wanted", () => {
+  const made = new Set([0, 2]);
+  assert.deepEqual(wanted(3, (n) => made.has(n)), [1]);
+  assert.deepEqual(wanted(4, (n) => made.has(n)), [1, 3]);
+  assert.deepEqual(wanted(2, () => true), []);
 });
