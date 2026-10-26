@@ -18,12 +18,7 @@ export const BED_BUDGET = 4500;
 /// The bed: its radius under the stones, its height in the middle and of the ash's berm round
 /// it, metres: dished, as a fire burnt down in its pit is, never a raised plate (campfire char round:
 /// RDR2's shallow pit of grey ash, against our raised lit disc).
-/// Out under the stones and between them (0.46 m, inside the stones, a flat disc with a hard
-/// edge, harsh review g38): past `PIT_R` its ash and soot are cut out by its alpha, raggedly, into
-/// the earth, as a decal's edge is.
-export const MOUND_R = 0.58;
-/// The pit as it was painted inside the stones, metres; the soot and ash round it lie past it.
-const PIT_R = 0.46;
+const MOUND_R = 0.46;
 const MOUND_TOP = 0.012;
 const BERM = 0.02;
 /// The heap: big coals (subdivided once, 80 triangles) in the middle, small (an icosahedron,
@@ -72,9 +67,8 @@ export const smooth = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 const mound = (r: number) => {
-  // Dished inside the stones (`PIT_R`), and past them a skin on the ground, under its soot.
-  const k = Math.min(r / PIT_R, 1);
-  return Math.max((MOUND_TOP + BERM * smooth(0.5, 0.85, k)) * smooth(1, 0.85, k), 0.003);
+  const k = Math.min(r / MOUND_R, 1);
+  return (MOUND_TOP + BERM * smooth(0.5, 0.85, k)) * smooth(1, 0.85, k);
 };
 export function random(seed: number) {
   let s = (seed * 2654435761) >>> 0;
@@ -142,7 +136,7 @@ function face(bed: Bed, a: number, b: number, c: number, inside: number[]) {
 }
 
 function addMound(bed: Bed, rnd: () => number) {
-  const base = bed.pos.length / 3, RINGS = 6, SEG = 18;
+  const base = bed.pos.length / 3, RINGS = 5, SEG = 18;
   const point = (x: number, z: number, y: number) => {
     const r = Math.hypot(x, z), dh = (mound(r + 0.01) - mound(r - 0.01)) / 0.02, l = Math.hypot(dh, 1);
     bed.pos.push(x, y, z);
@@ -279,12 +273,10 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
   // The mound: pale ash at the stones, darker char and dull red smoulder under the heap.
   for (let y = 0; y < 2 * T; y++) {
     for (let x = 0; x < 2 * T; x++) {
-      // X, Z in the pit's radius (`PIT_R`), so the pit is painted as it was; `k` in the bed's.
-      const [X, Z] = [((x / (2 * T) - 0.5) / 0.49) * (MOUND_R / PIT_R), ((y / (2 * T) - 0.5) / 0.49) * (MOUND_R / PIT_R)];
+      const [X, Z] = [(x / (2 * T) - 0.5) / 0.49, (y / (2 * T) - 0.5) / 0.49];
       const r = Math.hypot(X, Z), n = fbm(X * 9, Z * 9, 1), speck = fbm(X * 30, Z * 30, 2);
-      const k = (r * PIT_R) / MOUND_R;
       // Black char under the logs, glowing only there; grey ash over the rest of the pit.
-      const below = under(X * PIT_R, Z * PIT_R, arms);
+      const below = under(X * MOUND_R, Z * MOUND_R, arms);
       const char = Math.max(below, 0.6 * (1 - smooth(0.3, 0.6, r)));
       // A warm dark grey ash skirt round the heap, its edge soft and broken into the earth in
       // patches: pale and even, it was a disc that went salmon-pink by firelight (fire round 20).
@@ -307,17 +299,7 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
       // No hot core lit whole under the logs: from the camp's eye, above, it read as a patch of
       // yellow chips through the logs (campfire history panel).
       const smoulder = Math.max(below * smooth(0.3, 0.6, fbm(X * 5, Z * 5, 3)) * 0.85, crackle * 1.3) + (1 - char) * smooth(0.78, 0.84, speck) * 0.15;
-      // Round the pit, under and between the stones, soot and ash broken into the earth: black
-      // soot on the ground nearest the fire's side of the stones, grey ash spilt in patches, and
-      // the bed's edge cut out raggedly by its alpha, never a circle.
-      const spill = smooth(0.92, 1.12, r);
-      const sooty = spill * smooth(0.35, 0.7, fbm(X * 6, Z * 6, 13));
-      const outer = (grey + 10 * smoulder * below) * (1 - 0.45 * sooty);
-      // Cut at 0.71-0.91 of the bed (0.41-0.53 m), so never at its round rim.
-      const rag = 0.12 * (fbm(X * 5, Z * 5, 14) - 0.5) + 0.06 * (fbm(X * 17, Z * 17, 15) - 0.5) + 0.03 * (fbm(X * 45, Z * 45, 16) - 0.5);
-      const cover = 1 - smooth(0.74, 0.88, k + rag);
-      put(x, 2 * T + y, [outer, outer * 0.99 * (1 - 0.03 * sooty), outer * 0.97 * (1 - 0.06 * sooty)], glowColour(smoulder), 0.95);
-      out[0][((2 * T + y) * S + x) * 4 + 3] = Math.round(255 * cover);
+      put(x, 2 * T + y, [grey + 10 * smoulder * below, grey * 0.99, grey * 0.97], glowColour(smoulder), 0.95);
     }
   }
   // The coals: a tile each of several, read by direction (octahedral), top at the middle.
@@ -330,12 +312,7 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
     // the campfire's yellow passed the sheet's at night (campfire char round).
     // From the camp's eye, above, its coals' tops show most: under more ash, few cells hot over
     // their whole face (campfire history panel: e9e5b733's bed, 4.75, against yellow chips).
-    // Cooler by a sixth (art round g39): its middle read as yellow-white blobs, liquid, to a harsh
-    // judge, and took the night campfire past the sheet's yellow. Its edge cooled by more, to
-    // 0.5: under 1 a glow's green falls only a little faster than its red, so cooled by a sixth
-    // alike, the edge's orange came within 1.15 of the middle's (core g/r 0.416 against 0.363),
-    // and the bed read no hotter in its middle; at 0.5 its dull red is 0.351.
-    const heat = [1.0, 0.8, 0.5][band] + 0.1 * rnd();
+    const heat = [1.2, 1.0, 0.75][band] + 0.1 * rnd();
     const ashy = [0.2, 0.6, 1.1][band];
     const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.3 ? 0.45 + 0.2 * rnd() : 0 }));
     for (let y = 0; y < T; y++) {
@@ -402,8 +379,7 @@ export function addBed(glb: Buffer, seed = 1, arms: readonly Arm[] = []): Buffer
     j.images.push({ mimeType: "image/png", bufferView: view(png) });
     return j.textures.push({ sampler: 0, source: j.images.length - 1 }) - 1;
   });
-  // Masked, so the bed's ragged edge (its colour map's alpha) is cut into the ground.
-  j.materials.push({ name: "Coals", alphaMode: "MASK", alphaCutoff: 0.5, emissiveFactor: [1, 1, 1], emissiveTexture: { index: tex[1] }, pbrMetallicRoughness: { baseColorTexture: { index: tex[0] }, metallicRoughnessTexture: { index: tex[2] }, metallicFactor: 0 } });
+  j.materials.push({ name: "Coals", emissiveFactor: [1, 1, 1], emissiveTexture: { index: tex[1] }, pbrMetallicRoughness: { baseColorTexture: { index: tex[0] }, metallicRoughnessTexture: { index: tex[2] }, metallicFactor: 0 } });
   j.meshes[0].primitives.push({ attributes, indices, material: j.materials.length - 1 });
   const pad = (4 - (len % 4)) % 4;
   if (pad) parts.push(Buffer.alloc(pad));

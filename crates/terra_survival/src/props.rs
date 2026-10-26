@@ -446,9 +446,6 @@ fn textured_material(
         perceptual_roughness: textures.roughness,
         double_sided: textures.double_sided,
         cull_mode: (!textures.double_sided).then_some(Face::Back),
-        alpha_mode: textures
-            .alpha_cutoff
-            .map_or(AlphaMode::Opaque, AlphaMode::Mask),
         emissive: if glows {
             LinearRgba::rgb(GLOW_SCALE, GLOW_SCALE, GLOW_SCALE)
         } else {

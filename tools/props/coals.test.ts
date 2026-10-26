@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BED_BUDGET, bed, glowColour, MOUND_R, maps, TILES, under, YELLOW } from "./coals.ts";
+import { BED_BUDGET, bed, glowColour, maps, TILES, under, YELLOW } from "./coals.ts";
 import { arms } from "./hearth.ts";
 
 test("a dull coal glows deep orange-red, never near pure red, which the night's grade turns pink", () => {
@@ -80,10 +80,10 @@ test("its pit glows only under the logs, its ash round them dark and neutral gre
   const [base, emissive] = maps(1, arms());
   const logs = arms();
   let [ash, lit, warm, bright] = [0, 0, 0, 0];
-  // The pit's disc: the bottom-left quarter of the atlas, MOUND_R to 0.49 of it.
+  // The pit's disc: the bottom-left quarter of the atlas, 0.46 m (MOUND_R) to 0.49 of it.
   for (let y = 0; y < 256; y += 2) {
     for (let x = 0; x < 256; x += 2) {
-      const [X, Z] = [((x / 256 - 0.5) / 0.49) * MOUND_R, ((y / 256 - 0.5) / 0.49) * MOUND_R];
+      const [X, Z] = [((x / 256 - 0.5) / 0.49) * 0.46, ((y / 256 - 0.5) / 0.49) * 0.46];
       if (Math.hypot(X, Z) > 0.4 || under(X, Z, logs) > 0.02) continue;
       const o = ((256 + y) * 512 + x) * 4;
       ash++;
@@ -99,24 +99,4 @@ test("its pit glows only under the logs, its ash round them dark and neutral gre
   // Under the crossing, it glows.
   const mid = ((256 + 128) * 512 + 128) * 4;
   assert.ok(under(0, 0, logs) > 0.9 && emissive[mid] + emissive[mid + 4 * 6] + emissive[mid + 512 * 24] > 0, "no glow under the crossing");
-});
-
-test("its bed's edge is cut raggedly into the ground by its alpha, under the stones, never at its round rim", () => {
-  const [base] = maps(1, arms());
-  // The radius, metres, along a bearing where the mask first cuts the bed (alpha under half).
-  const cut = (a: number) => {
-    for (let r = 0; r <= MOUND_R; r += 0.002) {
-      const [x, y] = [128 + ((Math.cos(a) * r) / MOUND_R) * 0.49 * 256, 128 + ((Math.sin(a) * r) / MOUND_R) * 0.49 * 256];
-      if (base[((256 + Math.round(y)) * 512 + Math.round(x)) * 4 + 3] < 128) return r;
-    }
-    return Infinity;
-  };
-  const cuts = Array.from({ length: 90 }, (_, i) => cut((i / 90) * Math.PI * 2));
-  const [near, far] = [Math.min(...cuts), Math.max(...cuts)];
-  // Whole over the pit inside the stones (their inner faces at about 0.42 m), gone before the rim.
-  assert.ok(near > 0.36 && far < MOUND_R - 0.03, `cut from ${near.toFixed(3)} to ${far.toFixed(3)} m`);
-  // Ragged: not a circle by some centimetres.
-  assert.ok(far - near > 0.04, `cut within ${(far - near).toFixed(3)} m, a circle`);
-  // The coals' own tiles are drawn whole.
-  for (const [ox, oy] of TILES.slice(0, 8)) assert.equal(base[((oy + 64) * 512 + ox + 64) * 4 + 3], 255);
 });
