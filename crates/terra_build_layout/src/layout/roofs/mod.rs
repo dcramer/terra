@@ -376,6 +376,16 @@ impl Roofs {
         }
         roofs.index();
         roofs.link(base);
+        roofs.carry_eaves(base, kits);
+        roofs.index();
+        roofs.link(base);
+        roofs.group();
+        roofs
+    }
+
+    /// Carries the roof on past every open edge by its kit's eaves.
+    fn carry_eaves(&mut self, base: &Base, kits: &Kits) {
+        let roofs = &mut *self;
         // Carried on past every open edge by its kit's eaves, each square of it on the
         // planes of the cube it runs on from; where two run on into the same square, the
         // higher, so eaves meeting round an inside corner make a valley.
@@ -402,6 +412,16 @@ impl Roofs {
                 (square.cube.y as f32 + plane(shape, u, v)) * CELL_M
             };
             let highest = square.corners.iter().fold(f32::MIN, |a, &b| a.max(b));
+            // Whether a place carried on into, a step this way from the square, is the
+            // roof's own: its cubes there, near it.
+            let roofed = |[dx, dz]: [i32; 2]| {
+                let place = [square.place[0] + dx, square.place[1] + dz];
+                let middle = height(place[0] as f32 + 0.5, place[1] as f32 + 0.5);
+                roofs.by_place.get(&place).is_some_and(|on| {
+                    on.iter()
+                        .any(|&r| (roofs.squares[r].middle - middle).abs() < 1.0)
+                })
+            };
             let mut out: Vec<[i32; 2]> = Vec::new();
             for side in 0..4 {
                 if !open[side] {
@@ -419,12 +439,18 @@ impl Roofs {
                 let next = (side + 1) % 4;
                 if open[next] {
                     let (turn, _, _) = SIDES[next];
+                    // Nor round it from a side open over a lower roof of its own, where cubes
+                    // step down: the eaves straight out there are that roof's own squares,
+                    // and carried round past its edge they stood a step over its own eaves
+                    // (gap 11).
                     let round: Vec<[i32; 2]> = (1..=n)
                         .flat_map(|a| {
                             (1..=n).map(move |b| {
-                                [step[0] * a + turn[0] * b, step[1] * a + turn[1] * b]
+                                ([step[0] * a, step[1] * a], [turn[0] * b, turn[1] * b])
                             })
                         })
+                        .filter(|&(along, across)| !roofed(along) && !roofed(across))
+                        .map(|(along, across)| [along[0] + across[0], along[1] + across[1]])
                         .collect();
                     let creased = round.iter().any(|&[dx, dz]| {
                         let place = [square.place[0] + dx, square.place[1] + dz];
@@ -447,11 +473,7 @@ impl Roofs {
                 let middle = height(place[0] as f32 + 0.5, place[1] as f32 + 0.5);
                 // Not where the roof's cubes are, near it, nor into a wall or anything else
                 // beside the roof.
-                let roofed = roofs.by_place.get(&place).is_some_and(|on| {
-                    on.iter()
-                        .any(|&r| (roofs.squares[r].middle - middle).abs() < 1.0)
-                });
-                if roofed {
+                if roofed([dx, dz]) {
                     continue;
                 }
                 let inside = IVec3::new(
@@ -490,10 +512,6 @@ impl Roofs {
             }
         }
         roofs.squares.extend(past.into_values().flatten());
-        roofs.index();
-        roofs.link(base);
-        roofs.group();
-        roofs
     }
 
     fn index(&mut self) {

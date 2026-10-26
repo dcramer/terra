@@ -871,4 +871,46 @@ mod tests {
             "{report:?}"
         );
     }
+
+    #[test]
+    fn fuzz_seed_72_inner_corners_stepping_keep_their_beams_and_trims_on_their_own_roof() {
+        // Found by `cargo xtask fuzz` at seeds 61 and 72, shrunk: a 2x2x2 box of slate whose
+        // top layer is four inner corners alike, so its roof steps down a cube between them
+        // (gap 11). A valley's beam reached past its high end into the lower cube beside it
+        // (9 cm over that roof), and one cube's eaves, carried round its corner past a side
+        // open over the lower cube, stood a step over that cube's own eaves, their verge's
+        // trim 21 cm over its roof.
+        let materials = baseline();
+        let kind = |name: &str| {
+            materials
+                .names
+                .iter()
+                .find(|(_, n)| n.as_str() == name)
+                .map(|(&k, _)| k)
+                .unwrap()
+        };
+        let base = build(
+            &materials.kits,
+            &[Blocks {
+                at: [9, -1, 3],
+                size: 2,
+                shape: Shape::InnerCorner(Facing::South),
+                kind: kind("slate"),
+            }],
+        );
+        let report = terra_build_mesh::inspect::inspect(
+            &base,
+            &materials.kits,
+            &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+        );
+        let out: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| {
+                f.fault == terra_build_mesh::inspect::Fault::PokesOut
+                    && ["Log", "Trim"].iter().any(|what| f.what.contains(what))
+            })
+            .collect();
+        assert!(out.is_empty(), "{out:#?}");
+    }
 }

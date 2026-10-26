@@ -63,13 +63,17 @@ pub(super) fn crease_beams(
         let level = Vec3::new(along.x, 0.0, along.z).length().max(0.2);
         // Where its crease meets another, its end so far back in plan from where
         // they meet, measured level from that point, whatever the beam's drop under the
-        // roof carried it toward it; elsewhere only drawn short of its end.
+        // roof carried it toward it. Elsewhere drawn short of its end, and first brought
+        // back plumb inside its square where the drop carried it out past the end: at a
+        // hip's or a valley's high end the faces' normal leans down the crease, so the beam
+        // laid under it reached past the corner into the square beyond, over the lower
+        // roof there where cubes step (gap 11).
         let back = |end: Vec3, meet: Vec3, way: Vec3, short: f32, met: bool| {
-            if !met {
-                return end + way * (short / level);
-            }
             let level_way = Vec3::new(way.x, 0.0, way.z).normalize_or_zero();
             let now = (end - meet).with_y(0.0).dot(level_way);
+            if !met {
+                return end + way * ((short + (-now).max(0.0)) / level);
+            }
             end + way * ((short - now).max(0.0) / level)
         };
         if i == 0 {

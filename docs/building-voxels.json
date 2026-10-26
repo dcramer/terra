@@ -471,12 +471,20 @@
           "status": "Closed"
         },
         {
+          "junction": "A roof kind's corners laid by hand alike side by side, the roof stepping a cube between them",
+          "rule": "A hip's or a valley's beam at an end that meets no crease is brought back plumb inside its square, not carried past it by its drop under the slope; a cube's eaves are not carried round its corner from a side open over a lower roof of its own, where they stood a step over that roof's eaves, so no beam or trim stands over the lower roof",
+          "code": ["terra_build_layout::layout::roofs::frame", "terra_build_layout::layout::roofs"],
+          "tests": ["terra_build_scenes::fuzz::fuzz_seed_72_inner_corners_stepping_keep_their_beams_and_trims_on_their_own_roof"],
+          "cases": [],
+          "status": "Closed"
+        },
+        {
           "junction": "A roof kind laid by hand where no roof is: slopes and corners stacked two high",
-          "rule": "Not yet closed: a box of slopes or corners two cubes high draws its upper layer's edge pieces and frame 10 to 30 cm over the layer under it",
-          "code": ["terra_build_layout::layout::roofs::lines", "terra_build_mesh::roofing"],
+          "rule": "Not yet closed: an outer corner's hip beam stands 11 cm over the roof (seeds 35, 54, 115), and a high edge's board over a lower roof where cubes step stands 13 to 20 cm over it (seeds 61, 72, 180, 196)",
+          "code": ["terra_build_layout::layout::roofs::lines", "terra_build_layout::layout::roofs::frame", "terra_build_mesh::roofing"],
           "tests": [],
           "cases": [],
-          "also": "the fuzz pass, seeds 35, 39, 54, 61, 72, 115, 150, 180, 184, 196, 197",
+          "also": "the fuzz pass, seeds 35, 54, 61, 72, 115, 150, 180, 184, 196",
           "status": "Gap 11"
         },
         {
