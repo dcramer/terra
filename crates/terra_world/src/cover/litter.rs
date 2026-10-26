@@ -48,6 +48,9 @@ pub const FILE: &str = "litter.ron";
 const SPACING_M: f32 = 0.3;
 /// How light the litter's cards are drawn against their scans' colour (D293).
 const LITTER_VALUE: f32 = 0.72;
+/// The share of leaf and needle pieces tinted green-brown with decay: at least the first,
+/// and up to both together where the decay drifts lie (D503).
+const DECAYED_SHARE: (f32, f32) = (0.15, 0.35);
 /// How steeply litter right against a trunk, a log or a rock leans up onto it: rise over run.
 const HEAP_LEAN: f32 = 0.9;
 /// From how far pieces start to sink into the ground, and where the last is gone.
@@ -179,7 +182,7 @@ pub(super) fn lay(
             let pick = h(4);
             let twig_share = 0.07 + 0.18 * roots;
             // Ivy creeps over the leaves in drifts a few metres across, under broadleaves.
-            let ivy = smoothstep(0.62, 0.8, drift(seed, at)) * (1.0 - needly) * litter;
+            let ivy = smoothstep(0.55, 0.78, drift(seed, at)) * (1.0 - needly) * litter;
             let kind = if h(15) < ivy * 0.8 {
                 &cards.ivy
             } else if pick < twig_share {
@@ -228,12 +231,21 @@ pub(super) fn lay(
             } else {
                 value
             };
-            let tint = Vec3::new(
-                value * (0.82 + 0.1 * h(10)),
-                value,
-                value * (0.95 + 0.1 * h(11)),
-            );
             let is_ivy = std::ptr::eq(kind, &cards.ivy);
+            // Some of the leaves gone green-brown with decay and the moss on them, more in
+            // the ground's own decayed patches, so the litter is mixed rather than brown alone
+            // (D503).
+            let decayed = !is_ivy
+                && h(21) < DECAYED_SHARE.0 + DECAYED_SHARE.1 * drift(seed.wrapping_add(7), at);
+            let tint = if decayed {
+                Vec3::new(value * 0.72, value * (1.0 + 0.1 * h(10)), value * 0.62)
+            } else {
+                Vec3::new(
+                    value * (0.82 + 0.1 * h(10)),
+                    value,
+                    value * (0.95 + 0.1 * h(11)),
+                )
+            };
             if is_ivy {
                 // Its shade on the leaves under it.
                 mesh.piece(
@@ -505,5 +517,30 @@ mod tests {
         assert_eq!(share(&under_oaks, &cards.needles), 0.0);
         assert!(share(&under_pines, &cards.needles) > 0.7);
         assert_eq!(share(&under_pines, &cards.leaves), 0.0);
+    }
+
+    #[test]
+    fn the_litter_is_mixed_with_green_brown_decay_not_brown_alone() {
+        let under_oaks = samples(1.0, 0.0, 0.0, 0.0);
+        let mesh = lay(&under_oaks, &cards(), 7, Vec2::ZERO, &[], |p| p).expect("litter");
+        let Some(bevy::mesh::VertexAttributeValues::Float32x4(colours)) =
+            mesh.attribute(Mesh::ATTRIBUTE_COLOR)
+        else {
+            panic!("no colours");
+        };
+        // Told by its blue: a brown leaf's tint is as blue as it is green, a decayed one's
+        // well under, its green over its red.
+        let pieces: Vec<_> = colours.iter().step_by((SIDE * SIDE) as usize).collect();
+        let decayed = pieces
+            .iter()
+            .filter(|c| c[2] < 0.75 * c[1] && c[1] > 1.2 * c[0])
+            .count() as f32
+            / pieces.len() as f32;
+        assert!(
+            (0.12..0.6).contains(&decayed),
+            "{:.0}% of {} pieces green-brown",
+            100.0 * decayed,
+            pieces.len()
+        );
     }
 }
