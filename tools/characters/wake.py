@@ -105,7 +105,7 @@ for k, d in zip(map(tuple, key), dark + 0.3 * turn):
 mean = {k: float(np.mean(v)) for k, v in cells.items()}
 smooth = {k: np.mean([mean[n] for n in ((k[0] + i, k[1] + j) for i in (-1, 0, 1) for j in (-1, 0, 1)) if n in mean])
           for k in mean}
-spots = sorted(smooth, key=smooth.get)[:60]
+spots = sorted(smooth, key=smooth.get)[:400]
 pairs = [(smooth[a] + smooth[b], a, b) for a in spots for b in spots
          if a[0] * cell < cx < b[0] * cell and abs(a[1] - b[1]) * cell < 0.12
          and 0.15 < (b[0] - a[0]) * cell < 0.5 and abs((a[0] + b[0] + 1) * cell / 2 - cx) < 0.12]
