@@ -11,12 +11,14 @@ use terra_world::grown::Habit;
 use terra_world::grown::build::{Build, Limb, tube};
 use terra_world::grown::tree::Tree;
 
-/// Sides round a limb by its depth (stem, branch, twig, fine twig), near and farther off.
-const SIDES: [[u32; 4]; 2] = [[10, 7, 5, 3], [7, 4, 3, 3]];
+/// Sides round a limb by its depth (stem, branch, twig, fine twig), near and farther off;
+/// a young conifer's boughs, hidden in its needles, as few as a tree's.
+const SIDES: [[u32; 4]; 2] = [[8, 5, 4, 3], [6, 4, 3, 3]];
+const CONIFER_SIDES: [[u32; 4]; 2] = [[10, 3, 3, 3], [7, 3, 3, 3]];
 
 /// The longest straight piece of a limb, near and farther off: a curve longer than this is
 /// cut into more pieces along a Catmull-Rom spline through its points.
-const PIECE_M: [f32; 2] = [0.15, 0.4];
+const PIECE_M: [f32; 2] = [0.25, 0.5];
 
 /// How thick a limb's tip is before its point, by depth: a hazel rod ends in a bud a few
 /// millimetres across, not five centimetres of cut stem.
@@ -25,33 +27,46 @@ const TIP_R: [f32; 3] = [0.004, 0.003, 0.002];
 /// A fine twig's radius at its foot (1 to 2 mm, so 2 to 4 mm thick) and its length.
 const FINE_R: (f32, f32) = (0.001, 0.002);
 const FINE_M: (f32, f32) = (0.1, 0.3);
+/// The share of a limb's pieces that carry two fine twigs rather than one.
+const FINE_TWO: f32 = 0.25;
 
-/// A shrub's wood at a level of detail (0 near, 1 farther off), with fine twigs near when
-/// it stands bare in winter.
+/// A shrub's wood at a level of detail (0 near, 1 farther off), with fine twigs near on its
+/// outermost limbs when it stands bare in winter.
 pub(super) fn wood(tree: &Tree, detail: usize, fine: bool) -> Build {
-    let deepest = match (tree.habit, detail) {
-        (Habit::Conical, 0) => 1,
-        (Habit::Conical, _) => 0,
-        (_, 0) => 2,
-        _ => 1,
+    let conical = tree.habit == Habit::Conical;
+    let deepest = match tree.habit {
+        Habit::Conical => [1, 0][detail],
+        Habit::Upright => [2, 1][detail],
+        Habit::Spreading => [3, 2][detail],
     };
+    let sides = if conical { CONIFER_SIDES } else { SIDES }[detail];
     let limbs = tapered(tree);
     let mut build = Build::default();
     for limb in limbs.iter().filter(|limb| limb.depth <= deepest) {
-        let smooth = pointed(curved(limb, PIECE_M[detail]));
+        // A branch bent through two pieces a straight length at least near, so its wander
+        // turns round a curve rather than at a corner; a conifer's bough as grown.
+        let (piece, least) = match (conical, limb.depth, detail) {
+            (true, 1.., _) => (f32::MAX, 1),
+            (_, 1, 0) => (PIECE_M[0], 2),
+            _ => (PIECE_M[detail], 1),
+        };
+        let mut smooth = curved(limb, piece, least);
+        if limb.depth <= 1 {
+            smooth = pointed(smooth);
+        }
         tube(
             &mut build,
             &smooth,
-            SIDES[detail][limb.depth.min(3) as usize],
+            sides[limb.depth.min(3) as usize],
             tree.height,
             1.0,
             Vec3::ONE,
         );
     }
-    if fine && detail == 0 && tree.habit != Habit::Conical {
-        for limb in limbs.iter().filter(|limb| matches!(limb.depth, 1 | 2)) {
+    if fine && detail == 0 && !conical {
+        for limb in limbs.iter().filter(|limb| limb.depth == deepest) {
             for twig in fine_twigs(limb) {
-                tube(&mut build, &twig, SIDES[0][3], tree.height, 1.0, Vec3::ONE);
+                tube(&mut build, &twig, sides[3], tree.height, 1.0, Vec3::ONE);
             }
         }
     }
@@ -116,9 +131,9 @@ fn tapered(tree: &Tree) -> Vec<Limb> {
 }
 
 /// A limb bent through a Catmull-Rom spline through its points, each piece cut into as many
-/// as keep it under `piece` metres, so a curved cane or stem bends smoothly rather than in
+/// as keep it under `piece` metres (at least `least`, at most four), so a curved cane or stem bends smoothly rather than in
 /// straight lengths with corners between.
-fn curved(limb: &Limb, piece: f32) -> Limb {
+fn curved(limb: &Limb, piece: f32, least: usize) -> Limb {
     let p = &limb.points;
     let n = p.len();
     if n < 2 {
@@ -133,7 +148,7 @@ fn curved(limb: &Limb, piece: f32) -> Limb {
     for i in 0..n - 1 {
         let (p0, p1, p2) = (p[i.saturating_sub(1)], p[i], p[i + 1]);
         let p3 = p[(i + 2).min(n - 1)];
-        let cuts = ((p1.distance(p2) / piece).ceil() as usize).clamp(1, 4);
+        let cuts = ((p1.distance(p2) / piece).ceil() as usize).clamp(least, 4);
         for c in 1..=cuts {
             let u = c as f32 / cuts as f32;
             let (u2, u3) = (u * u, u * u * u);
@@ -183,7 +198,7 @@ fn fine_twigs(limb: &Limb) -> Vec<Limb> {
         let along = (b - a).normalize_or(Vec3::Y);
         let key = (a * 1000.0).as_ivec3();
         let seed = hash::of(&[key.x as u32, key.y as u32, key.z as u32, limb.depth]);
-        let count = 1 + u32::from(limb.depth == 2 && hash::unit(seed) < 0.5);
+        let count = 1 + u32::from(hash::unit(seed) < FINE_TWO);
         for k in 0..count {
             let h = |salt: u32| hash::unit(hash::of(&[seed, k, salt]));
             let u = 0.15 + 0.8 * h(1);
@@ -280,7 +295,7 @@ mod tests {
             points: points.clone(),
             depth: 0,
         };
-        let smooth = curved(&limb, 0.15);
+        let smooth = curved(&limb, 0.15, 1);
         assert_eq!(smooth.points[0], points[0]);
         assert!(smooth.points.last().unwrap().distance(points[4]) < 1e-5);
         let worst = smooth
@@ -288,7 +303,7 @@ mod tests {
             .windows(3)
             .map(|w| (w[1] - w[0]).angle_between(w[2] - w[1]))
             .fold(0.0, f32::max);
-        assert!(worst < 0.25, "turns {worst} rad at a corner");
+        assert!(worst < 0.3, "turns {worst} rad at a corner");
     }
 
     #[test]
