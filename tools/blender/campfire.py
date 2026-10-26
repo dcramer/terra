@@ -216,7 +216,9 @@ for i, l in enumerate(spec["logs"]):
     for v in seg.data.vertices:
         p, n = v.co, v.normal
         t = (p - foot).dot(ax) / L
-        chars.append(max(smooth(0.12, 0.42, t), max(-n.z, 0) * smooth(0.0, 0.25, t)))
+        # Round 7: charred from a fifth of the way up, where it lies over the bed's coals (out
+        # to 0.34 m), not from two fifths: its glow sits low now, and there it was still bark.
+        chars.append(max(smooth(0.06, 0.32, t), max(-n.z, 0) * smooth(0.0, 0.15, t)))
         inward = Vector((-p.x, -p.y, 0))
         inward = inward.normalized() if inward.length > 1e-6 else Vector((0, 0, 0))
         faces.append(max(n.dot(inward), -n.z * (1 - smooth(0.06, 0.2, p.z))))
@@ -427,7 +429,7 @@ def ground_map(side):
     grey = grey * (1 - 0.75 * drift) + (96 + 16 * (speck - 0.5)) * 0.75 * drift
     # Clods of dark earth, 2-5 cm, kicked out over the edge and the grass.
     clods = (fbm(x * 26, y * 26, 15) > 0.7) & (r > 0.46) & (r < HALF - 0.02)
-    grey = np.where(clods, 30 + 10 * speck, grey)
+    grey = np.where(clods, 30 + 10 * speck + 12 * nsmooth(0.55, 0.75, r), grey)
     # Charcoal bits, a few millimetres to a couple of centimetres, thick in the pit, thinning out.
     bits = (fbm(x * 70, y * 70, 12) > 0.68 - 0.06 * (1 - nsmooth(0.3, 0.75, r))) & (r < 0.75) & ~clods
     grey = np.where(bits, 18 + 8 * speck, grey)
@@ -438,13 +440,17 @@ def ground_map(side):
     # Its edge broken coarsely, in bays and spurs a hand or two wide: fine wobbles alone still
     # read as one cut line from the camp's eye (judge, round 5).
     edge = r + 0.14 * (fbm(x * 3, y * 3, 7) - 0.5) + 0.06 * (fbm(x * 9, y * 9, 8) - 0.5) + 0.02 * (fbm(x * 30, y * 30, 9) - 0.5)
-    fade = nsmooth(0.58, 0.76, edge) * ~bits
-    rgb = rgb * (1 - 0.45 * fade[..., None]) + np.array([44, 46, 34], dtype=np.float32) * 0.45 * fade[..., None]
+    # Round 7: blended wide and far into a dry olive earth near the grass's own tone, so its cut
+    # at the edge has little to show: at 45% of a dark 44 it stayed a dark-brown splat with
+    # cut-out edges on the grass (judge, round 6). Darker inside, at the stones.
+    fade = nsmooth(0.5, 0.8, edge) * ~bits
+    rgb = rgb * (1 - 0.8 * fade[..., None]) + np.array([60, 58, 36], dtype=np.float32) * 0.8 * fade[..., None]
     # Its edge a broken band, not a line: the dirt kept by a fine noise the less the farther out
     # (0.62-0.8), so it breaks up into flecks and crumbs on the grass; at one cut at 0.72 it read
     # as a splotchy decal's sharp edge (judge, round 4).
     holes = (r > 0.58) & (fbm(x * 6, y * 6, 10) < 0.25 + 0.4 * nsmooth(0.58, 0.75, r)) & ~clods
-    crumbs = fbm(x * 20, y * 20, 13) + 0.35 * (fbm(x * 7, y * 7, 14) - 0.5) > 0.32 + 0.45 * nsmooth(0.62, 0.8, edge)
+    # Round 7: and finer flecks among the crumbs, so the cut breaks up into grit.
+    crumbs = fbm(x * 20, y * 20, 13) + 0.35 * (fbm(x * 7, y * 7, 14) - 0.5) + 0.25 * (fbm(x * 55, y * 55, 16) - 0.5) > 0.32 + 0.45 * nsmooth(0.62, 0.8, edge)
     alpha = (((edge < 0.62) | crumbs | clods | (drift > 0.5)) & ~holes & (r < HALF - 0.01)).astype(np.float32)
     rgba = np.concatenate([np.clip(rgb, 0, 255) / 255, alpha[..., None]], -1)
     return rgba.astype(np.float32)
@@ -581,6 +587,13 @@ def char_nodes(t, cap):
     # And patches gone ash-grey along the charred length, between the cracks.
     grey = t.math("MULTIPLY", t.ramp(t.noise(t.vec("ADD", p, (9.4, 2.2, 5.6)), 5.0, 3.0), 0.6, 0.7), t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), 0.65))
     ash = t.math("MAXIMUM", ash, grey)
+    # Round 7: and up the logs, where their glow has faded out, smaller patches gone grey more
+    # often, cold char's matte black broken by ash (RDR2's): the fire sheet's dark pockets count
+    # char broken by something lit, and at noon the glow no longer breaks it there.
+    height = t.node("ShaderNodeSeparateXYZ", Vector=p).outputs["Z"]
+    upper = t.ramp(height, 0.16, 0.32)
+    flakes = t.math("MULTIPLY", t.ramp(t.noise(t.vec("ADD", p, (4.2, 8.1, 0.7)), 9.0, 3.0), 0.56, 0.66), t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), 0.6))
+    ash = t.math("MAXIMUM", ash, t.math("MULTIPLY", flakes, upper))
     return p, amount, scorch, crack, edge, black, ash, whole, calm, deep
 
 
@@ -608,9 +621,9 @@ def log_relief(t, cap):
 
 
 def log_glow(t, cap):
-    """The glow in the char's own cracks, the cores of the dark lines between its blocks, over
-    the whole charred length: brightest where it faces the fire and round the end in the flames,
-    dim on the faces turned away, dulled under ash. A separate net drawn over the char read as a
+    """The glow in the char's own cracks, the cores of the dark lines between its blocks, low on
+    the logs by the coals, and higher up only where it faces the fire and round the end in the
+    flames, dulled under ash. A separate net drawn over the char read as a
     decal, and glow near the apex only left the fire sheet's dark pockets at 4 of a held 5-170,
     where hearth.ts's crack net over the whole log made 20 (round 2)."""
     p, amount, scorch, crack, edge, black, ash, whole, calm, deep = char_nodes(t, cap)
@@ -622,25 +635,38 @@ def log_glow(t, cap):
     seam = t.math("MULTIPLY", t.ramp(edge, 0.01, 0.045, 1.0, 0.0), t.math("MULTIPLY", whole, t.ramp(t.noise(p, 5.0, 2.0), 0.38, 0.6, 0.6, 1.0)))
     # Round 6: wider in the deep char's patches, hardly any in the smooth bark's.
     seam = t.math("MULTIPLY", t.math("MAXIMUM", seam, t.math("MULTIPLY", t.ramp(edge, 0.01, 0.07, 1.0, 0.0), deep)), t.math("SUBTRACT", 1.0, t.math("MULTIPLY", calm, 0.8)))
+    # Round 7: the glow low, by the coals: below 5-20 cm every face glows (the bed lights them
+    # from under) in wider seams; above, only the faces turned in to the fire, fading to a
+    # third by 32 cm, and the end in the flames all round at under half. A crack net lit evenly all
+    # the way up the logs' outer faces read as a tiled texture (judge, round 6); RDR2's glow is
+    # low in deep fissures, cold matte char and ash above.
+    height = t.node("ShaderNodeSeparateXYZ", Vector=p).outputs["Z"]
+    near = t.ramp(height, 0.05, 0.2, 1.0, 0.0)
+    fade = t.ramp(height, 0.12, 0.32, 1.0, 0.3)
+    seam = t.math("MAXIMUM", seam, t.math("MULTIPLY", t.math("MULTIPLY", t.ramp(edge, 0.01, 0.07, 1.0, 0.0), near), t.math("SUBTRACT", 1.0, t.math("MULTIPLY", calm, 0.5))))
+    facing = t.ramp(t.attr("face"), 0.2, 0.6)
+    tip = t.math("MULTIPLY", t.ramp(t.attr("heat"), 0.8, 1.0), 0.45)
     # A cap glows only at the end in the flames: the cold butt's lit whole drew a glowing ring
     # round it at night (judge, round 5).
-    hot = t.ramp(t.attr("heat"), 0.4, 1.0) if cap else t.math("MAXIMUM", t.math("ADD", 0.12, t.math("MULTIPLY", t.ramp(t.attr("face"), 0.2, 0.6), 0.88)), t.ramp(t.attr("heat"), 0.4, 1.0))
+    hot = t.ramp(t.attr("heat"), 0.4, 1.0) if cap else t.math("MAXIMUM", t.math("MAXIMUM", t.math("MULTIPLY", near, t.math("ADD", 0.55, t.math("MULTIPLY", facing, 0.45))), t.math("MULTIPLY", facing, fade)), tip)
     h = t.math("MULTIPLY", t.math("MULTIPLY", seam, amount), t.math("MULTIPLY", hot, t.math("ADD", 0.8, t.math("MULTIPLY", t.noise(p, 9.0), 0.2))))
     h = t.math("MULTIPLY", h, t.math("SUBTRACT", 1.0, t.math("MULTIPLY", ash, 0.7)))
     t.emit(t.vec("SCALE", HOT, scale=h))
 
 
 def stone_colour(t, maps_, m_lin):
-    """The scan's own detail graded to a dark grey near neutral (linear about 0.13, sRGB 100),
+    """The scan's own detail graded to a dark warm grey (linear about 0.14, sRGB 104),
     keeping a twentieth of its hue (a seventh still read pinkish under dusk's warm light, round 4;
     a third salmon, round 3), darker in its cavities (the full scan's curvature), sooted toward
     the fire."""
     p = t.node("ShaderNodeNewGeometry")
     diff = t.image(maps_["diff"]).outputs["Color"]
     lum = t.node("ShaderNodeRGBToBW", Color=diff).outputs["Val"]
-    grey = t.math("MULTIPLY", t.math("POWER", t.math("DIVIDE", lum, m_lin), 0.8), 0.13)
+    grey = t.math("MULTIPLY", t.math("POWER", t.math("DIVIDE", lum, m_lin), 0.8), 0.14)
     hue = t.vec("SCALE", diff, scale=t.math("DIVIDE", 1.0, t.math("MAXIMUM", lum, 0.002)))
-    tint = t.vec("ADD", t.vec("SCALE", (0.97, 1.0, 1.02), scale=0.95), t.vec("SCALE", hue, scale=0.05))
+    # Round 7: a warm grey (fieldstone's, RDR2's #7d756a-#a39a8c), not the cool one: cool, under
+    # dusk's blue sky the stones read grey-lavender (judge, round 6).
+    tint = t.vec("ADD", t.vec("SCALE", (1.04, 1.0, 0.91), scale=0.95), t.vec("SCALE", hue, scale=0.05))
     cavity = t.ramp(p.outputs["Pointiness"], 0.42, 0.52, 0.55, 1.0)
     soot = t.math("MINIMUM", t.math("MAXIMUM", t.math("ADD", t.attr("soot"), t.math("MULTIPLY", t.math("SUBTRACT", t.noise(p.outputs["Position"], 14.0), 0.5), 0.4)), 0.0), 1.0)
     g = t.math("MULTIPLY", t.math("MULTIPLY", grey, t.attr("tone")), t.math("MULTIPLY", cavity, t.math("SUBTRACT", 1.0, t.math("MULTIPLY", soot, 0.85))))

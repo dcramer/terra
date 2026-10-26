@@ -30,7 +30,12 @@ const BERM = 0.006;
 /// 5); a bed is lumps of 1-6 cm. Middling ones of 20 triangles read as dice (fire round 25).
 const BIG = 4;
 const MID = 20;
-const SMALL = 100;
+const SMALL = 80;
+/// And charcoal spilled over the pit's outer half, out to the stones, mostly cold: a heap only
+/// in the middle and a bare ash floor round it read as a pale disc (judge, campfire remodel
+/// round 6; RDR2's coals and charred bits spill across the floor).
+const SPILL = 24;
+const SPILL_R: [number, number] = [0.24, 0.42];
 const HEAP_R = 0.22;
 /// How high the heap is raised in its middle, over the mound, metres.
 const HEAP_UP = 0.02;
@@ -210,15 +215,20 @@ export function bed(seed = 1, arms: readonly Arm[] = []): Bed {
   addMound(out, rnd);
   // A few more under each log, out along it past the heap, where it burns over the bed.
   const along = arms.flatMap((arm) => [0.18, 0.28, 0.38].map((f) => ({ arm, f })));
-  for (let i = 0; i < BIG + MID + SMALL + along.length; i++) {
-    const big = i < BIG, mid = !big && i < BIG + MID, small = !big && !mid && i < BIG + MID + SMALL;
+  const spilt = BIG + MID + SMALL + along.length;
+  for (let i = 0; i < spilt + SPILL; i++) {
+    const big = i < BIG, mid = !big && i < BIG + MID, small = !big && !mid && i < BIG + MID + SMALL, spill = i >= spilt;
     // Each kind spread evenly over its disc (a golden-angle spiral), the small ones a little past the heap.
     const spread = (j: number, n: number, r0: number, r1: number) => Math.sqrt(r0 * r0 + (r1 * r1 - r0 * r0) * ((j + rnd()) / n));
     const r = big ? 0.12 * Math.sqrt((i + 0.5) / BIG) : mid ? spread(i - BIG, MID, 0.03, HEAP_R) : spread(i - BIG - MID, SMALL, 0.02, HEAP_R);
     const a = i * 2.39996 + rnd() * 0.5;
     let size = big ? 0.055 + 0.02 * rnd() : mid ? (0.03 + 0.012 * rnd()) * (1.1 - 0.3 * Math.min(r / HEAP_R, 1)) : 0.014 + 0.01 * rnd();
     let [x, z] = [Math.cos(a) * r, Math.sin(a) * r];
-    if (!big && !mid && !small) {
+    if (spill) {
+      const rs = spread(i - spilt, SPILL, SPILL_R[0], SPILL_R[1]);
+      [x, z] = [Math.cos(a) * rs, Math.sin(a) * rs];
+      size = 0.01 + 0.015 * rnd();
+    } else if (!big && !mid && !small) {
       // Out along a log's line, between the heap and ARM_R, a little to either side.
       const { arm, f } = along[i - BIG - MID - SMALL];
       const [px, pz] = arm.a, [qx, qz] = arm.b;
@@ -243,7 +253,7 @@ export function bed(seed = 1, arms: readonly Arm[] = []): Bed {
     // Its tile by how far out it lies: the core's hottest, cooling to red at the edge.
     const rr = Math.hypot(x, z);
     // The small ones a band cooler, half of them: charcoal and dull embers among the hot.
-    const band = Math.min(Math.max((rr < 0.12 ? 0 : rr < 0.22 ? 1 : 2) - (rnd() < 0.35 ? 1 : 0), 0) + (!big && !mid && rnd() < 0.5 ? 1 : 0), 2);
+    const band = spill ? 2 : Math.min(Math.max((rr < 0.12 ? 0 : rr < 0.22 ? 1 : 2) - (rnd() < 0.35 ? 1 : 0), 0) + (!big && !mid && rnd() < 0.5 ? 1 : 0), 2);
     addCoal(out, [x, y, z], size, big || mid, band * 4 + Math.floor(rnd() * 4), rnd);
   }
   return out;
@@ -306,8 +316,11 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
       // tan (the campfire remodel, D513: RDR2's pit is pale ash in a black-sooted ring).
       const ash = (1 - skirt) * (1 - char) + skirt;
       // Its skirt's ash 40 over the dark, not 62: paler, it lit peach at night (remodel round 5).
-      const burnt = 40 * skirt * (0.7 + 0.3 * n);
-      const grey = (16 + 10 * n) * char * (1 - skirt) + (28 + 12 * n - 6 * smooth(0.6, 0.8, speck) + burnt) * ash;
+      // Round 7: 26, in patches, over a darker floor (22-32), flecked with charcoal: at 40 over
+      // 28-40 the firelit skirt read as a crisp pale disc inside the ring (judge, round 6).
+      const burnt = 26 * skirt * (0.55 + 0.45 * n);
+      const flecks = smooth(0.62, 0.7, fbm(X * 45, Z * 45, 13));
+      const grey = ((16 + 10 * n) * char * (1 - skirt) + (22 + 10 * n - 6 * smooth(0.6, 0.8, speck) + burnt) * ash) * (1 - 0.5 * flecks);
       // Under the heap a crackle of glowing seams through dark ash, as a bed of coals breaks
       // into a mesh of cracks, not a lit disc (fire round 29: separate red baubles).
       const ridge = (f: number, k: number) => 1 - smooth(0.0, 0.06, Math.abs(fbm(X * f, Z * f, k) - 0.5));

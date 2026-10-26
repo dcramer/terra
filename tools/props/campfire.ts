@@ -51,14 +51,18 @@ export const BURN_R = 0.34;
 export const STACK = 0.48;
 /// The fieldstones: how many, the longest side of the middle-sized one, each one's size as a
 /// share of it (0.75-1.4, mixed round the ring), and how far out their inner faces lie, least:
-/// just past the logs' butts. Thirteen 0.2-0.35 m stones nearly touching close the ring, as
-/// RDR2's 12-16 do; ten at uneven gaps read as a necklace of pebbles (judge, round 2).
+/// just past the logs' butts. Thirteen 0.2-0.4 m stones nearly touching close the ring, as
+/// RDR2's 12-16 do; ten at uneven gaps read as a necklace of pebbles (judge, round 2), and at
+/// 0.19-0.35 m, spaced by their longest sides, small and wide apart (judge, round 6).
 const STONES = 13;
-const MID = 0.25;
+const MID = 0.28;
 const SIZES = [1.0, 0.8, 1.3, 0.9, 1.15, 0.75, 1.4, 0.95, 1.2, 0.85, 1.25, 0.8, 1.1];
 export const INNER_R = 0.45;
 /// The ring's middle line, where a stone's long side lies along it.
-const RING_R = 0.55;
+const RING_R = 0.6;
+/// The gaps between stones, metres: 1-2.5 cm, and one of 10 cm where the wood is fed in.
+const GAP = [0.01, 0.025];
+const FEED = 0.1;
 /// Which scan each stone is cut from, and how many quarter turns it is rolled about its long side
 /// first, so a scan used twice shows another face: the angular boulder and rock_07 most, stone_01
 /// for a few, rock_09 a flat stone lying in the ring.
@@ -119,20 +123,22 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[]; sticks: Stick[
     return { R, foot, axis: norm(sub(end, foot)), L: Math.hypot(...sub(end, foot)), roll, from: SECTIONS[i], flip: i % 2 === 1, bow: BOWS[i] };
   });
   // The stones round the ring nearly touching: each takes the angle its long side spans at
-  // `RING_R`, the rest is shared out as gaps of 1-3 cm, one wider where the wood is fed in. A
-  // third are sunk deep, the rest seated a little (the ground is banked 3.5 cm against them too).
-  const spans = SIZES.map((k) => 2 * Math.atan((MID * k) / (2 * RING_R)));
-  const free = 2 * Math.PI - spans.reduce((a, s) => a + s, 0);
-  const shares = Array.from({ length: STONES }, (_, j) => (0.5 + rnd()) * (j === 3 ? 4 : 1));
-  const whole = shares.reduce((a, g) => a + g, 0);
+  // `RING_R`, spaced so the gaps between them are `GAP`, one `FEED` where the wood is fed in
+  // (their spans pressed together a little to fit, as a scan's ends taper). A third are sunk
+  // deep, near half their height, the rest seated a tenth or so: sat on top they read unseated
+  // (judge, round 6).
+  const gaps = Array.from({ length: STONES }, (_, j) => (j === 3 ? FEED : GAP[0] + (GAP[1] - GAP[0]) * rnd()) / RING_R);
+  const raw = SIZES.map((k) => 2 * Math.atan((MID * k) / (2 * RING_R)));
+  const fit = (2 * Math.PI - gaps.reduce((a, g) => a + g, 0)) / raw.reduce((a, s) => a + s, 0);
+  const spans = raw.map((s) => s * fit);
   let bearing = TURN + 0.9;
   const stones: Stone[] = [];
   const mids: [number, number][] = [];
   for (let j = 0; j < STONES; j++) {
     const [source, roll] = STONE_FROM[j];
-    const sink = j % 3 === 0 ? 0.25 + 0.1 * rnd() : 0.04 + 0.1 * rnd();
+    const sink = j % 3 === 0 ? 0.35 + 0.15 * rnd() : 0.08 + 0.1 * rnd();
     stones.push({ source, roll, bearing, inner: INNER_R + 0.03 * rnd(), size: MID * SIZES[j], yaw: 0.4 * (rnd() - 0.5), tilt: [0.5 * (rnd() - 0.5), 0.6 * (rnd() - 0.5)], sink });
-    const gap = (shares[j] / whole) * free;
+    const gap = gaps[j];
     const next = bearing + spans[j] / 2 + gap + spans[(j + 1) % STONES] / 2;
     mids.push([bearing + spans[j] / 2 + gap / 2, gap]);
     bearing = next;
@@ -144,7 +150,7 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[]; sticks: Stick[
     const [cx, , cz] = at(b, r), t = b + Math.PI / 2 + skew;
     return [[cx - half * Math.cos(t), 0.012, cz - half * Math.sin(t)], [cx + half * Math.cos(t), 0.012, cz + half * Math.sin(t)]];
   };
-  const [a1, b1] = across(wide[1], 0.69, 0.16, 0.35), [a2, b2] = across(wide[2], 0.7, 0.13, -0.5);
+  const [a1, b1] = across(wide[1], 0.72, 0.16, 0.35), [a2, b2] = across(wide[2], 0.73, 0.13, -0.5);
   const sticks: Stick[] = [
     { piece: 0, a: at(wide[0] + 0.05, 0.5), b: at(wide[0] - 0.08, 0.77) },
     { piece: 1, a: a1, b: b1 },
