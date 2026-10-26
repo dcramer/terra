@@ -178,6 +178,36 @@ struct Placed {
     eased: Option<((f32, f32, Vec3), Vec3)>,
 }
 
+impl Placed {
+    /// A foot locked with its ankle `at`: its ground probed once at its lock (`probe`) and
+    /// frozen for the lock, and whether it came off a riser it straddled this frame. Locked
+    /// straddling a riser, it is probed again while it straddles (as ALS traces a planted foot
+    /// each frame): once the point it had on the higher tread has left it (a toe-off rolling the
+    /// heel over a step down's edge), the sole is set on the ground now under it, not left over
+    /// the lower tread at the higher's height.
+    fn locked(
+        &mut self,
+        at: Vec3,
+        up: Vec3,
+        mut probe: impl FnMut() -> Option<Ground>,
+    ) -> (Option<Ground>, bool) {
+        let straddles = |ground: &Ground| riser(ground.found[0], ground.found[1], up);
+        if self.lock != Some(at) {
+            self.lock = Some(at);
+            self.frozen = probe();
+            return (self.frozen, false);
+        }
+        if self.frozen.as_ref().is_some_and(straddles) {
+            let now = probe();
+            if now.as_ref().is_some_and(|ground| !straddles(ground)) {
+                self.frozen = now;
+                return (now, true);
+            }
+        }
+        (self.frozen, false)
+    }
+}
+
 /// The pelvis's drop as eased: how far along the up, how fast, and the root it was over.
 #[derive(Clone, Copy, Debug, Default)]
 struct Pelvis {
@@ -373,33 +403,12 @@ impl Placing {
                 (None, None) => None,
             }
         };
-        let mut stepped_off = false;
-        let target = match lock {
-            _ if off => None,
-            Some(lock) => {
-                if placed.lock != Some(lock.at) {
-                    placed.lock = Some(lock.at);
-                    placed.frozen = sole_ground();
-                } else if placed
-                    .frozen
-                    .is_some_and(|ground| riser(ground.found[0], ground.found[1], up))
-                {
-                    // Locked straddling a riser, it is probed again while it straddles (as ALS
-                    // traces a planted foot each frame): once the point it had on the higher
-                    // tread has left it (a toe-off rolling the heel over a step down's edge),
-                    // the sole is set on the ground now under it, not left over the lower
-                    // tread at the higher's height.
-                    let now = sole_ground();
-                    if now.is_some_and(|ground| !riser(ground.found[0], ground.found[1], up)) {
-                        placed.frozen = now;
-                        stepped_off = true;
-                    }
-                }
-                placed.frozen
-            }
+        let (target, stepped_off) = match lock {
+            _ if off => (None, false),
+            Some(lock) => placed.locked(lock.at, up, sole_ground),
             None => {
                 placed.lock = None;
-                sole_ground()
+                (sole_ground(), false)
             }
         };
         // Heights over the root's level now; no ground found, or the foot let go: the clip's own
