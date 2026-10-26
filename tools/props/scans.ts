@@ -46,14 +46,15 @@ export function scanArgs(file: string, scan: Scan, source: string): { args: stri
   };
 }
 
-/** Fetches a Poly Haven model's glTF and its geometry, without its textures. */
-async function fetchScan(id: string): Promise<string> {
-  const dir = join(CACHE, id);
+/** Fetches a Poly Haven model's glTF and its geometry, without its textures; or, `textures`
+ * given, with them at that resolution ("1k", "2k"), as the campfire's parts keep theirs. */
+export async function fetchScan(id: string, textures?: string): Promise<string> {
+  const dir = join(CACHE, textures ? `${id}-${textures}` : id);
   const gltf = join(dir, `${id}.gltf`);
   if (existsSync(gltf)) return gltf;
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(join(dir, "textures"), { recursive: true });
   const files = await (await fetch(`https://api.polyhaven.com/files/${id}`)).json();
-  const entry = files.gltf?.["1k"]?.gltf;
+  const entry = files.gltf?.[textures ?? "1k"]?.gltf;
   if (!entry) throw new Error(`Poly Haven has no glTF of ${id}`);
   const get = async (url: string, to: string) => {
     const response = await fetch(url);
@@ -61,18 +62,20 @@ async function fetchScan(id: string): Promise<string> {
     writeFileSync(to, Buffer.from(await response.arrayBuffer()));
   };
   for (const [path, file] of Object.entries(entry.include ?? {}) as [string, { url: string }][]) {
-    if (path.endsWith(".bin")) await get(file.url, join(dir, path));
+    if (textures || path.endsWith(".bin")) await get(file.url, join(dir, path));
   }
-  // The glTF without its images, so Blender looks for none and keeps none.
   const json = await (await fetch(entry.url)).json();
-  delete json.images;
-  delete json.textures;
-  delete json.samplers;
-  for (const material of json.materials ?? []) {
-    material.pbrMetallicRoughness = { baseColorFactor: [0.5, 0.5, 0.5, 1] };
-    delete material.normalTexture;
-    delete material.occlusionTexture;
-    delete material.emissiveTexture;
+  if (!textures) {
+    // The glTF without its images, so Blender looks for none and keeps none.
+    delete json.images;
+    delete json.textures;
+    delete json.samplers;
+    for (const material of json.materials ?? []) {
+      material.pbrMetallicRoughness = { baseColorFactor: [0.5, 0.5, 0.5, 1] };
+      delete material.normalTexture;
+      delete material.occlusionTexture;
+      delete material.emissiveTexture;
+    }
   }
   writeFileSync(gltf, JSON.stringify(json));
   return gltf;

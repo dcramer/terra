@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BED_BUDGET, bed, glowColour, maps, TILES, under, YELLOW } from "./coals.ts";
-import { arms } from "./hearth.ts";
+import { arms } from "./campfire.ts";
 
 test("a dull coal glows deep orange-red, never near pure red, which the night's grade turns pink", () => {
   for (const h of [0.2, 0.4, 0.6, 0.8, 1]) {
@@ -76,23 +76,29 @@ test("its glow is red to orange-yellow, never salmon, and hottest in the middle"
   assert.ok(lit > emissive.length / 4 / 20, "it hardly glows");
 });
 
-test("its pit glows only under the logs, its ash round them dark and neutral grey, never tan", () => {
+test("its pit glows only under the logs, its ash neutral grey, never tan, palest out at the stones", () => {
   const [base, emissive] = maps(1, arms());
   const logs = arms();
   let [ash, lit, warm, bright] = [0, 0, 0, 0];
-  // The pit's disc: the bottom-left quarter of the atlas, 0.46 m (MOUND_R) to 0.49 of it.
+  const [near, out] = [[0, 0], [0, 0]];
+  // The pit's disc: the bottom-left quarter of the atlas, 0.45 m (MOUND_R) to 0.49 of it.
   for (let y = 0; y < 256; y += 2) {
     for (let x = 0; x < 256; x += 2) {
-      const [X, Z] = [((x / 256 - 0.5) / 0.49) * 0.46, ((y / 256 - 0.5) / 0.49) * 0.46];
+      const [X, Z] = [((x / 256 - 0.5) / 0.49) * 0.45, ((y / 256 - 0.5) / 0.49) * 0.45];
       if (Math.hypot(X, Z) > 0.4 || under(X, Z, logs) > 0.02) continue;
       const o = ((256 + y) * 512 + x) * 4;
       ash++;
       if (emissive[o] > 40) lit++;
       const [r, g, b] = [base[o], base[o + 1], base[o + 2]];
       if (b < 0.94 * r) warm++;
-      if (0.2126 * r + 0.7152 * g + 0.0722 * b > 60) bright++;
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      if (luma > 115) bright++;
+      const ring = Math.hypot(X, Z) < 0.2 ? near : Math.hypot(X, Z) > 0.3 ? out : null;
+      if (ring) [ring[0], ring[1]] = [ring[0] + luma, ring[1] + 1];
     }
   }
+  const [lnear, lout] = [near[0] / near[1], out[0] / out[1]];
+  assert.ok(lout > lnear + 15, `its ash out at the stones (${lout.toFixed(0)}) no paler than by the heap (${lnear.toFixed(0)})`);
   assert.ok(ash > 2000, `only ${ash} texels of ash`);
   assert.ok(lit / ash < 0.03, `${lit} of ${ash} ash texels glow`);
   assert.ok(warm === 0 && bright === 0, `${warm} warm, ${bright} bright of ${ash}`);

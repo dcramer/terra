@@ -18,7 +18,7 @@ export const BED_BUDGET = 4500;
 /// The bed: its radius under the stones, its height in the middle and of the ash's berm round
 /// it, metres: dished, as a fire burnt down in its pit is, never a raised plate (campfire char round:
 /// RDR2's shallow pit of grey ash, against our raised lit disc).
-const MOUND_R = 0.46;
+const MOUND_R = 0.45;
 const MOUND_TOP = 0.012;
 const BERM = 0.02;
 /// The heap: big coals (subdivided once, 80 triangles) in the middle, small (an icosahedron,
@@ -31,7 +31,7 @@ const HEAP_R = 0.22;
 const CORE_R = 0.17;
 const ARM_R = 0.34;
 /// What lies over the bed, seen from above: each log's line on the ground (x, z at its two ends)
-/// and its half width, metres; the campfire's from `tools/props/hearth.ts` (`arms`).
+/// and its half width, metres; the campfire's from `tools/props/campfire.ts` (`arms`).
 export type Arm = { a: [number, number]; b: [number, number]; w: number };
 // How far a point is from an arm's line on the ground, and how far along it (0-1).
 const toArm = (x: number, z: number, { a, b }: Arm): [number, number] => {
@@ -290,8 +290,11 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
       // Dark grey, never warm: the firelight warms it, and tan ash at 72-98 went salmon at the
       // firelit ring's brightest, twice the ground's luma (campfire char round: RDR2's ash in
       // its ring is about the firelit ground's, 1.1 times it).
+      // Out at the stones, where the fire has burnt out to it, grey-white ash, neutral, never
+      // tan (the campfire remodel, D513: RDR2's pit is pale ash in a black-sooted ring).
       const ash = (1 - skirt) * (1 - char) + skirt;
-      const grey = (16 + 10 * n) * char * (1 - skirt) + (28 + 12 * n - 6 * smooth(0.6, 0.8, speck)) * ash;
+      const burnt = 62 * skirt * (0.7 + 0.3 * n);
+      const grey = (16 + 10 * n) * char * (1 - skirt) + (28 + 12 * n - 6 * smooth(0.6, 0.8, speck) + burnt) * ash;
       // Under the heap a crackle of glowing seams through dark ash, as a bed of coals breaks
       // into a mesh of cracks, not a lit disc (fire round 29: separate red baubles).
       const ridge = (f: number, k: number) => 1 - smooth(0.0, 0.06, Math.abs(fbm(X * f, Z * f, k) - 0.5));

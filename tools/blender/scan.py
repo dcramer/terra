@@ -19,6 +19,7 @@ import os
 import sys
 
 import bpy
+from pieces import cut, triangles, weld
 
 args = sys.argv[sys.argv.index("--") + 1 :]
 whole = "--whole" in args
@@ -77,32 +78,10 @@ if loose:
     bpy.ops.object.select_all(action="DESELECT")
 
 
-def triangles(ob):
-    return sum(len(p.vertices) - 2 for p in ob.data.polygons)
-
-
 for number, ob in enumerate(meshes, start=1):
     before = triangles(ob)
-    # Scans are often split along their texture seams; welded, they can be cut as one.
-    bpy.context.view_layer.objects.active = ob
-    bpy.ops.object.select_all(action="DESELECT")
-    ob.select_set(True)
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=0.0005)
-    bpy.ops.object.mode_set(mode="OBJECT")
-    # One pass can stop short on a scan with many seams and loose pieces; a few more get it
-    # to its budget.
-    for _ in range(6):
-        now = triangles(ob)
-        if now <= budget * 1.05:
-            break
-        cut = ob.modifiers.new("cut", "DECIMATE")
-        cut.decimate_type = "COLLAPSE"
-        cut.ratio = budget / now
-        cut.use_collapse_triangulate = True
-        bpy.context.view_layer.objects.active = ob
-        bpy.ops.object.modifier_apply(modifier=cut.name)
+    weld(ob)
+    cut(ob, budget)
     if crease is None:
         for poly in ob.data.polygons:
             poly.use_smooth = True

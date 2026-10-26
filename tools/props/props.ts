@@ -11,7 +11,6 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { addBed } from "./coals.ts";
-import { arms, campfire } from "./hearth.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HERE = join(ROOT, "tools", "props");
@@ -135,8 +134,8 @@ export type Prop = {
   char?: boolean;
   // A fire's coal bed added after char by coals.ts: an ash mound inside its logs, chunky
   // glowing coals heaped on it (a campfire, fire round 17).
-  // Made by hearth.ts rather than Tripo: a campfire as a hero prop, split firewood in a ring of
-  // rounded stones (fire round 18); then its coal bed, as `coals` says.
+  // Made by campfire.ts rather than Tripo: a campfire as a hero prop assembled from Poly Haven
+  // scans in Blender (tools/blender/campfire.py), with its coal bed.
   hearth?: boolean;
   coals?: boolean;
 };
@@ -238,7 +237,8 @@ export function hasPbr(glb: Buffer): boolean {
 function refine(name: string, prop: Prop) {
   if (prop.hearth) {
     const out = join(ROOT, "assets", "models", prop.into ?? "props", `${prop.file}.glb`);
-    writeFileSync(out, prop.coals ? addBed(campfire(), 1, arms()) : campfire());
+    // campfire.ts assembles it from scans in Blender and adds its coal bed itself.
+    run(process.execPath, [join(HERE, "campfire.ts"), out]);
     return;
   }
   const glb = join(ART, name, "model.glb");
@@ -258,7 +258,7 @@ function refine(name: string, prop: Prop) {
   const folder = join(ROOT, "assets", "models", prop.into ?? "props");
   const refined = join(folder, `${prop.file}.glb`);
   if (prop.char) run(BLENDER, [join(HERE, "char.py"), here(refined), here(refined)]);
-  if (prop.coals) writeFileSync(refined, addBed(readFileSync(refined), 1, arms()));
+  if (prop.coals) writeFileSync(refined, addBed(readFileSync(refined), 1));
   const kept = join(OUT, `${name}-undyed.glb`);
   if (prop.dyes) copyFileSync(refined, kept);
   for (const [file, colour] of Object.entries(prop.dyes ?? {})) {
