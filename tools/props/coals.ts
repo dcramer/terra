@@ -20,12 +20,20 @@ export const BED_BUDGET = 4500;
 /// RDR2's shallow pit of grey ash, against our raised lit disc).
 const MOUND_R = 0.45;
 const MOUND_TOP = 0.012;
-const BERM = 0.02;
-/// The heap: big coals (subdivided once, 80 triangles) in the middle, small (an icosahedron,
-/// 20) round them, all inside this radius under the logs.
-const BIG = 6;
-const SMALL = 30;
+/// Its berm half a centimetre: at 2 cm, lit by the fire, the pit read as a pale raised bowl
+/// (campfire remodel, round 5).
+const BERM = 0.006;
+/// The heap: a few big coals and some middling ones (subdivided once, 80 triangles) in the
+/// middle, half buried under a hundred small embers and charcoal (an icosahedron, 20, too small
+/// to show its facets) heaped over and round them, all inside this radius under the logs: 6 big
+/// and 30 small, each 7-16 cm across, read as a few yellow pebbles (judge, campfire remodel round
+/// 5); a bed is lumps of 1-6 cm. Middling ones of 20 triangles read as dice (fire round 25).
+const BIG = 4;
+const MID = 20;
+const SMALL = 100;
 const HEAP_R = 0.22;
+/// How high the heap is raised in its middle, over the mound, metres.
+const HEAP_UP = 0.02;
 /// Its glow only under the logs: a ragged patch round where they cross, this far out, and down
 /// each log's line as far as `ARM_R` (RDR2's glow ~0.3-0.4 of the ring, under the logs).
 const CORE_R = 0.17;
@@ -164,7 +172,7 @@ function addMound(bed: Bed, rnd: () => number) {
 
 // A coal: a lumpy rounded chunk, longer one way, a little squat, smooth-shaded.
 function addCoal(bed: Bed, at: number[], size: number, big: boolean, tile: number, rnd: () => number) {
-  const { v, f } = SPHERES[1];
+  const { v, f } = SPHERES[big ? 1 : 0];
   const base = bed.pos.length / 3;
   const turn = rnd() * Math.PI * 2, tilt = (rnd() - 0.5) * 0.7, long = 1.05 + 0.3 * rnd(), squat = 0.55 + 0.15 * rnd();
   const lumps = [rnd() * 6, rnd() * 6, rnd() * 6];
@@ -202,15 +210,17 @@ export function bed(seed = 1, arms: readonly Arm[] = []): Bed {
   addMound(out, rnd);
   // A few more under each log, out along it past the heap, where it burns over the bed.
   const along = arms.flatMap((arm) => [0.18, 0.28, 0.38].map((f) => ({ arm, f })));
-  for (let i = 0; i < BIG + SMALL + along.length; i++) {
-    const big = i < BIG;
-    const r = big ? 0.13 * Math.sqrt((i + 0.5) / BIG) : Math.sqrt(0.01 + (HEAP_R * HEAP_R - 0.01) * ((i - BIG + rnd()) / SMALL));
+  for (let i = 0; i < BIG + MID + SMALL + along.length; i++) {
+    const big = i < BIG, mid = !big && i < BIG + MID, small = !big && !mid && i < BIG + MID + SMALL;
+    // Each kind spread evenly over its disc (a golden-angle spiral), the small ones a little past the heap.
+    const spread = (j: number, n: number, r0: number, r1: number) => Math.sqrt(r0 * r0 + (r1 * r1 - r0 * r0) * ((j + rnd()) / n));
+    const r = big ? 0.12 * Math.sqrt((i + 0.5) / BIG) : mid ? spread(i - BIG, MID, 0.03, HEAP_R) : spread(i - BIG - MID, SMALL, 0.02, HEAP_R);
     const a = i * 2.39996 + rnd() * 0.5;
-    let size = big ? 0.06 + 0.02 * rnd() : (0.035 + 0.016 * rnd()) * (1.1 - 0.3 * Math.min(r / HEAP_R, 1));
+    let size = big ? 0.055 + 0.02 * rnd() : mid ? (0.03 + 0.012 * rnd()) * (1.1 - 0.3 * Math.min(r / HEAP_R, 1)) : 0.014 + 0.01 * rnd();
     let [x, z] = [Math.cos(a) * r, Math.sin(a) * r];
-    if (i >= BIG + SMALL) {
+    if (!big && !mid && !small) {
       // Out along a log's line, between the heap and ARM_R, a little to either side.
-      const { arm, f } = along[i - BIG - SMALL];
+      const { arm, f } = along[i - BIG - MID - SMALL];
       const [px, pz] = arm.a, [qx, qz] = arm.b;
       // As far out along it, in metres, whatever its length (`f` of a low log's 0.63 m).
       const len = Math.hypot(px - qx, pz - qz) || 1;
@@ -220,10 +230,11 @@ export function bed(seed = 1, arms: readonly Arm[] = []): Bed {
       [ax, az] = [ax * k, az * k];
       const side = (rnd() - 0.5) * arm.w;
       [x, z] = [ax - ((pz - qz) / len) * side, az + ((px - qx) / len) * side];
-      size = 0.022 + 0.01 * rnd();
+      size = 0.015 + 0.01 * rnd();
     }
-    // Rests on what is under it: sunk a third into the ash, or on a coal it overlaps.
-    let y = mound(Math.hypot(x, z)) + size * 0.1;
+    // Rests on what is under it: sunk a third into the ash, or on a coal it overlaps, the heap
+    // a little higher in its middle.
+    let y = mound(Math.hypot(x, z)) + size * 0.1 + HEAP_UP * (1 - smooth(0.0, 0.16, Math.hypot(x, z)));
     for (const c of out.coals) {
       const d = Math.hypot(c.at[0] - x, c.at[2] - z), reach = (c.size + size) * 0.85;
       if (d < reach) y = Math.max(y, c.at[1] + Math.sqrt(reach * reach - d * d) * 0.3);
@@ -231,8 +242,9 @@ export function bed(seed = 1, arms: readonly Arm[] = []): Bed {
     out.coals.push({ at: [x, y, z], size, from: out.idx.length / 3 });
     // Its tile by how far out it lies: the core's hottest, cooling to red at the edge.
     const rr = Math.hypot(x, z);
-    const band = Math.max((rr < 0.12 ? 0 : rr < 0.22 ? 1 : 2) - (rnd() < 0.35 ? 1 : 0), 0);
-    addCoal(out, [x, y, z], size, big, band * 4 + Math.floor(rnd() * 4), rnd);
+    // The small ones a band cooler, half of them: charcoal and dull embers among the hot.
+    const band = Math.min(Math.max((rr < 0.12 ? 0 : rr < 0.22 ? 1 : 2) - (rnd() < 0.35 ? 1 : 0), 0) + (!big && !mid && rnd() < 0.5 ? 1 : 0), 2);
+    addCoal(out, [x, y, z], size, big || mid, band * 4 + Math.floor(rnd() * 4), rnd);
   }
   return out;
 }
@@ -293,7 +305,8 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
       // Out at the stones, where the fire has burnt out to it, grey-white ash, neutral, never
       // tan (the campfire remodel, D513: RDR2's pit is pale ash in a black-sooted ring).
       const ash = (1 - skirt) * (1 - char) + skirt;
-      const burnt = 62 * skirt * (0.7 + 0.3 * n);
+      // Its skirt's ash 40 over the dark, not 62: paler, it lit peach at night (remodel round 5).
+      const burnt = 40 * skirt * (0.7 + 0.3 * n);
       const grey = (16 + 10 * n) * char * (1 - skirt) + (28 + 12 * n - 6 * smooth(0.6, 0.8, speck) + burnt) * ash;
       // Under the heap a crackle of glowing seams through dark ash, as a bed of coals breaks
       // into a mesh of cracks, not a lit disc (fire round 29: separate red baubles).
@@ -315,7 +328,8 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
     // the campfire's yellow passed the sheet's at night (campfire char round).
     // From the camp's eye, above, its coals' tops show most: under more ash, few cells hot over
     // their whole face (campfire history panel: e9e5b733's bed, 4.75, against yellow chips).
-    const heat = [1.2, 1.0, 0.75][band] + 0.1 * rnd();
+    // Its outer row 0.6, near black charcoal with a few dull seams (remodel round 6).
+    const heat = [1.15, 0.95, 0.6][band] + 0.1 * rnd();
     const ashy = [0.2, 0.6, 1.1][band];
     const cells = Array.from({ length: 11 }, () => ({ at: unoctahedral(rnd(), rnd()), hot: rnd() < 0.3 ? 0.45 + 0.2 * rnd() : 0 }));
     for (let y = 0; y < T; y++) {
