@@ -129,6 +129,7 @@ echo "== 5. the game's files"
 mkdir -p assets/models/gear
 morphs=$(printf "%s\n" "${designed[@]}" $(for r in "${rigged[@]}"; do echo "${r%% *}"; done) | sort | paste -sd, -)
 $blender $here/export_character.py "$out/$base.glb" assets/models/character/base.glb "--morphs=$morphs" --textures=2048 | grep -E "MORPH|SOCKETS|EXPORTED|Error" || true
+node $here/markers.ts assets/models/character/base.glb   # each clip's foot-down markers (D455)
 for look in $out/gear/$base/*.glb; do
   $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "assets/models/gear/$(basename "$look")" "--morphs=$morphs" --textures=1024 | grep -E "CARRIED|Error" &
 done

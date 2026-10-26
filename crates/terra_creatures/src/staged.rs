@@ -198,6 +198,7 @@ fn dress(
     clips: Res<Assets<AnimationClip>>,
     nodes: Res<Assets<GltfNode>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
+    mut baked: Option<ResMut<terra_walker::feet::Baked>>,
     waiting: Query<(Entity, &Staged, &Dressing)>,
 ) {
     for (entity, staged, dressing) in &waiting {
@@ -248,6 +249,10 @@ fn dress(
             .into_iter()
             .collect();
         paces.extend(terra_walker::pace::paces(moves, &nodes));
+        // Its clips' foot-down markers, which its feet are kept by (`terra_walker::feet`).
+        if let Some(baked) = baked.as_mut() {
+            baked.register(moves, &nodes);
+        }
         let mut graph = AnimationGraph::new();
         let root = graph.root;
         let named: HashMap<String, [AnimationNodeIndex; 2]> = moves

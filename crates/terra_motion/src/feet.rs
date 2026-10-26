@@ -17,18 +17,45 @@
 use glam::{Quat, Vec3};
 use serde::Deserialize;
 
-/// How high a body's clips stand a planted foot (D455): the clip's ball of the foot within
-/// `low_m` of its ground is on it, the plant; past `lifted_m` the clip has lifted it, a margin
-/// over `low_m` so a foot rolling off its toe is not let go and taken again frame by frame.
-/// Data, by the clips a body plays (D136): a fighter's stance stands its ball about 3-4 cm over
-/// the feet (its move set's), a jog's or a sprint's stride 3-7 cm, rolling heel to toe (the
-/// body's kind's, `assets/data/movers.ron`).
-#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+/// A clip's foot-down markers (D455), baked for every clip by `tools/characters/markers.ts`
+/// into its file's glTF extras: each foot's planted phases, `[down, up]` seconds into the clip
+/// (`up < down` for a span over a loop's end), where its ball stands on the ground the clip
+/// strides on, judged against the clip's own lowest and its ball's speed over that ground. Data
+/// shipped with the clips (D136), as ALS- and Lyra-era rigs bake foot-lock curves, so a
+/// fighter's stance (its ball 3-4 cm up) and a jog's rolling foot (5.6-6.5 cm) are each told by
+/// their own clip rather than one height. Named as Unreal's sync markers (foot down L/R), which
+/// sync groups will use too.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Plant {
-    pub low_m: f32,
-    pub lifted_m: f32,
+pub struct Markers {
+    pub length_s: f32,
+    pub foot_down_l: Vec<[f32; 2]>,
+    pub foot_down_r: Vec<[f32; 2]>,
 }
+
+impl Markers {
+    /// Whether the clip has foot `side` (0 left, 1 right) down `t` seconds in; a time past the
+    /// clip's end (a clip played once, held at its end) is its end.
+    pub fn down(&self, side: usize, t: f32) -> bool {
+        let t = t.clamp(0.0, self.length_s);
+        let spans = if side == 0 {
+            &self.foot_down_l
+        } else {
+            &self.foot_down_r
+        };
+        spans.iter().any(|&[down, up]| {
+            if down <= up {
+                (down..=up).contains(&t)
+            } else {
+                t >= down || t <= up
+            }
+        })
+    }
+}
+
+/// A foot stands when at least this share of the weight playing has it down (`Posed::down`).
+pub const DOWN_SHARE: f32 = 0.5;
+
 /// A locked foot this far from the clip's steps when the other is down; this far, at once.
 pub const REACH_M: f32 = 0.22;
 pub const MOST_M: f32 = 0.38;
@@ -83,10 +110,9 @@ enum State {
 pub struct Posed {
     /// The foot where the clip puts it, in the world.
     pub pose: Pose,
-    /// How high the clip's ball of the foot is over the body's ground.
-    pub ball_up: f32,
-    /// How high the clips playing stand a planted foot.
-    pub plant: Plant,
+    /// What share of the weight of the clips playing has the foot down by their markers
+    /// (`Markers::down`), 0 to 1.
+    pub down: f32,
     /// The world's up.
     pub up: Vec3,
     /// How fast the clip moves the foot in the body's own frame, metres a second.
@@ -169,8 +195,8 @@ impl Foot {
             };
         }
         let flat = |a: Vec3, b: Vec3| (a - b).reject_from(posed.up).length();
-        let low = posed.ball_up <= posed.plant.low_m;
-        let lifted = posed.ball_up > posed.plant.lifted_m;
+        let low = posed.down >= DOWN_SHARE;
+        let lifted = !low;
         let gone = posed.off;
         let stands = low && !gone && (posed.swing_mps < SWING_MPS || posed.landing);
         if let State::Planted(lock) = self.state {
@@ -296,16 +322,6 @@ mod tests {
     use super::*;
 
     const DT: f32 = 1.0 / 60.0;
-    /// A stance's plant, as the sword-and-shield set has it.
-    const STANCE: Plant = Plant {
-        low_m: 0.055,
-        lifted_m: 0.07,
-    };
-    /// A stride's, as a man's kind has it.
-    const STRIDE: Plant = Plant {
-        low_m: 0.075,
-        lifted_m: 0.09,
-    };
 
     /// The film's check (tools/sandbox/duel/checks.ts, `sliding`) on one foot's path: a ball
     /// within 2 cm of the ground 4 frames or more is a plant; how far each plant travelled.
@@ -353,8 +369,7 @@ mod tests {
             };
             let posed = Posed {
                 pose,
-                ball_up: 0.035,
-                plant: STANCE,
+                down: 1.0,
                 up: Vec3::Y,
                 swing_mps: 0.0,
                 strained: false,
@@ -421,10 +436,10 @@ mod tests {
             at: Vec3::new(x, y, 0.0),
             turn: Quat::IDENTITY,
         };
+        // Down by the clip's markers while its ball is low.
         let on = |pose: Pose, ball_up: f32, off: bool| Posed {
             pose,
-            ball_up,
-            plant: STANCE,
+            down: if ball_up < 0.05 { 1.0 } else { 0.0 },
             up: Vec3::Y,
             swing_mps: 0.0,
             strained: false,
@@ -515,8 +530,7 @@ mod tests {
                 };
                 let posed = Posed {
                     pose,
-                    ball_up: 0.035 + lift,
-                    plant: STRIDE,
+                    down: if lift > 0.0 { 0.0 } else { 1.0 },
                     up: Vec3::Y,
                     swing_mps: swing,
                     strained: false,
@@ -561,6 +575,25 @@ mod tests {
         assert!(swing_mps(was, now, Vec3::Z * 5.0, Vec3::Y, 0.01) < 1e-4);
         // A foot carried up with the figure (a step smoothed) has not moved over the ground.
         assert!(swing_mps(was, was + Vec3::Y * 0.04, Vec3::ZERO, Vec3::Y, 0.01) < 1e-4);
+    }
+
+    #[test]
+    fn a_clips_markers_have_a_foot_down_through_its_spans_and_over_a_loops_end() {
+        let markers = Markers {
+            length_s: 0.75,
+            foot_down_l: vec![[0.7, 0.1]],
+            foot_down_r: vec![[0.3, 0.5]],
+        };
+        let left: Vec<bool> = [0.0, 0.05, 0.1, 0.2, 0.69, 0.7, 0.75]
+            .map(|t| markers.down(0, t))
+            .into();
+        assert_eq!(left, [true, true, true, false, false, true, true]);
+        let right: Vec<bool> = [0.0, 0.29, 0.3, 0.4, 0.5, 0.6]
+            .map(|t| markers.down(1, t))
+            .into();
+        assert_eq!(right, [false, false, true, true, true, false]);
+        // A clip played once and held at its end stays as its end has it.
+        assert!(markers.down(0, 3.0) && !markers.down(1, 3.0));
     }
 
     #[test]

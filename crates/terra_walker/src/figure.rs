@@ -219,6 +219,7 @@ fn prepare(
     gltfs: Res<Assets<Gltf>>,
     gltf_nodes: Res<Assets<GltfNode>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
+    mut baked: ResMut<crate::feet::Baked>,
 ) {
     if !assets.is_loaded_with_dependencies(&model.clips) {
         return;
@@ -233,6 +234,7 @@ fn prepare(
         let second = graph.add_clip(clip.clone(), 1.0, graph.root);
         clips.insert(name.to_string(), [first, second]);
     }
+    baked.register(gltf, &gltf_nodes);
     commands.insert_resource(Moves {
         graph: graphs.add(graph),
         clips,

@@ -33,6 +33,7 @@ import { choose, keysFor, readSpec, speedFor, writePhases, type Scored, type Spe
 import { Glb } from "./glb.ts";
 import { KIMODO, KIMODO_ENV, MODEL, kept } from "./motion.ts";
 import { measure } from "./phases.ts";
+import { bakeFile } from "./markers.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HERE = join(ROOT, "tools", "characters");
@@ -238,6 +239,8 @@ function main() {
     blender("into", "made_clips.py", [rel(figure), `--list=${rel(LIST)}`]);
     // The textures at the body budget (D188), as build_bodies.sh exports the base.
     blender("into", "export_character.py", [rel(BODY), rel(GAME_CLIPS), `--clips=${rel(figure)}`, `--list=${rel(LIST)}`, "--textures=2048"]);
+    // Each clip's foot-down markers, which the game keeps feet by (D455).
+    bakeFile(GAME_CLIPS);
     let text = readFileSync(into, "utf8");
     for (const { s, m } of chosen) text = writePhases(text, s.blow.move, { clip: s.name, from: 0, done: m.end, active: m.active, speed: speeds.get(s.name), hold: hold(s) });
     writeFileSync(into, text);

@@ -63,7 +63,7 @@ The server never sees any of these, and the mover never waits for them:
 
 - **Step smoothing**. Stepping up moves the capsule at once, as Jolt does. The shown body keeps a vertical offset that runs down to zero over about 0.12 s, so a step reads as a stride and not a pop. This is Unreal's mesh smoothing and the Source engine's view smoothing. The camera follows the figure as shown, not the capsule (`terra_walker::stepping`).
 - Interpolation between ticks, which is in place already (`terra_world::tick`).
-- Feet planted and stepped by rule for every body, walking or fighting (D455, `terra_walker::feet`): a stride's clip plays in place at the body's speed (`pace.rs`, speed matching) and its planted feet are read on the ground it passes, so they lock where they land. Still to come: foot IK and the pelvis on slopes and steps (movement.md stage 4), blends by speed and direction, starts, stops and turns, lean into turns, and the swim pose.
+- Feet planted and stepped by rule for every body, walking or fighting (D455, `terra_walker::feet`): a stride's clip plays in place at the body's speed (`pace.rs`, speed matching) and its planted feet are read on the ground it passes, so they lock where they land; which feet a clip has down is baked per clip into its file (foot-down markers, `tools/characters/markers.ts`). Still to come: foot IK and the pelvis on slopes and steps (movement.md stage 4), blends by speed and direction, starts, stops and turns, lean into turns, and the swim pose.
 
 ## Climbing
 

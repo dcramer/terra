@@ -47,10 +47,6 @@
 //   soft_s                   how long a soft pair's overlap takes to ease to 1/e of itself, s
 //                            (a 20 cm overlap is under 1 cm in three of these); a stand-in
 //                            for review
-//   plant                    how its locomotion clips stand a planted foot (D455): the ball
-//                            of the foot within `low_m` of the ground is planted, past
-//                            `lifted_m` lifted (a jog's ball stands 5.6-6.5 cm over the root
-//                            as it rolls heel to toe; terra_motion::feet::Plant)
 {
     "Man": (
         radius: 0.3,
@@ -87,6 +83,5 @@
         push: Soft,
         core_m: 0.05,
         soft_s: 0.05,
-        plant: (low_m: 0.075, lifted_m: 0.09),
     ),
 }

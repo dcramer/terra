@@ -100,8 +100,6 @@ pub struct Kind {
     pub core_m: f32,
     /// How long a soft pair's overlap takes to ease to a share of 1/e, s.
     pub soft_s: f32,
-    /// How high its locomotion clips stand a planted foot (`feet::Plant`, D455).
-    pub plant: crate::feet::Plant,
 }
 
 /// How a kind pushes (D479): people softly, giving way and never blocking; monsters hard, by
