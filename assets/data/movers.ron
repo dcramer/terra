@@ -61,7 +61,7 @@
         sprint: 7.4,
         swim: 2.0,
         accel: 30.0,
-        decel: 40.0,
+        decel: 15.0, // D528: a jog stops in about two steps (0.6 m); was 40
         swim_accel: 8.0,
         air_control: 0.3,
         turn_deg_s: 720.0,
