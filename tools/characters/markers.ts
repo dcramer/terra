@@ -230,9 +230,10 @@ export function distanceOf(path: V3[], fps: number, end: number, parent?: Pose):
   if (length < TRAVEL_M) return undefined;
   const ahead: V3 = [went[0] / length, 0, went[2] / length];
   const distance = Array.from({ length: Math.round(end * RATE) + 1 }, (_, i) => round(dot(flat(path[Math.min(path.length - 1, Math.round((i / RATE) * fps))]), ahead)));
+  // A model metre in the parent's units: not normalised, so a scaled parent (the Rig's 1.08)
+  // takes off as much travel as the clip put on.
   const local = parent ? rot(qinv(parent.r), ahead).map((x, k) => x / parent.s[k]) : ahead;
-  const n = Math.hypot(...local);
-  return { distance, way: local.map((x) => round(x / n, 1e5)) as V3 };
+  return { distance, way: local.map((x) => round(x, 1e5)) as V3 };
 }
 
 /** A foot's curve resampled from FPS to RATE. */

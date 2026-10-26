@@ -109,6 +109,9 @@ test("a clip that keeps its root motion has its pelvis's travel along the way it
   assert.ok(Math.abs(curve.distance.at(-1)! - 1.25) < 0.01);
   // World -x is the parent's -z.
   assert.deepEqual(curve.way.map((x) => Math.round(x) + 0), [0, 0, -1]);
+  // A parent drawn twice its size: a model metre is half of one of its units.
+  const scaled = distanceOf(path, fps, 1, { t: [0, 0, 0], r: [0, half, 0, half], s: [2, 2, 2] })!;
+  assert.deepEqual(scaled.way.map((x) => Math.round(x * 10) / 10 + 0), [0, 0, -0.5]);
   const sways: V3[] = Array.from({ length: 31 }, (_, i) => [0.05 * Math.sin(i), 1, 0]);
   assert.equal(distanceOf(sways, fps, 1), undefined);
 });
