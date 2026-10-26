@@ -216,6 +216,7 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
     - a campfire: about ±15%;
     - a house fire: slower and shallower, since a big fire puffs slowly.
   - **The same signal drives** the light's power, the fuel glow, the sparks' glow and the flame's brightness (Sons of the Forest's linked flickers). Nothing on a fire pulses on its own.
+  - **A kept fire's light flickers shallower than its flame**: half a deep flicker, never under a campfire's 15% (`fire::light::LIGHT_FLICKER`), so a torch's light strays about a sixth from its mean while its flame strays a third. At the flame's depth every torch of a corridor pulsed its pool on the walls 5-12% a frame, read as jitter (dungeon light round).
 - **Jitter.**
   - The light's position moves on all three axes by the same signal: about 5 mm for a candle or torch, 0.1 m for a campfire, scaled with the flame's size.
   - Its `radius` is the flame's half-width, so the shadows soften as a real flame's do.

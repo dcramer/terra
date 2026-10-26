@@ -278,6 +278,21 @@ impl Flicker {
     }
 }
 
+/// How much of a deep flicker a kept fire's light takes: a torch's flame strays a third from its
+/// mean, its light half that, never shallower than a campfire's ([`LIGHT_DEPTH_LEAST`]), as
+/// deep as its flame from there down. A light is the whole flame's sum, which strays less than
+/// the flame's look: at its flame's depth every torch of a corridor pulsed its pool on the walls
+/// 5-12% a frame, which read as jitter (dungeon light round, a held crypt corridor's pops).
+const LIGHT_FLICKER: f32 = 0.5;
+const LIGHT_DEPTH_LEAST: f32 = 0.15;
+
+impl Flicker {
+    /// How far its light strays from its mean for each of its flame's strays ([`LIGHT_FLICKER`]).
+    pub fn light_share(self) -> f32 {
+        (self.depth * LIGHT_FLICKER).max(self.depth.min(LIGHT_DEPTH_LEAST)) / self.depth
+    }
+}
+
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t.clamp(0.0, 1.0)
 }
@@ -608,7 +623,9 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 let flicker = Flicker::of(width(blaze));
                 let glow = glow(blaze, t);
                 let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
-                let lumens = blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * glow;
+                // Its light strays from its mean less than its flame does (`LIGHT_FLICKER`).
+                let shines = 1.0 + (glow - 1.0) * flicker.light_share();
+                let lumens = blaze.tall * blaze.heat * HEARTH_LUMENS_A_METRE * shines;
                 // It sways up from where it hangs, never down: swayed a hand's breadth below, the
                 // shadowed light passed under a log's end, whose shadow ballooned for a fifth of a
                 // second into a hard black wedge over the ground (fire round 30, clip frames 198-208).

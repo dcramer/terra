@@ -827,6 +827,48 @@ fn torches(n: usize) -> Blazes {
 }
 
 #[test]
+fn a_torchs_light_flickers_half_as_deep_as_its_flame_a_campfires_as_deep() {
+    // Sampled over ten seconds: how far each kept fire's lights stray from their mean, against
+    // how far its flame's signal does (`glow`, what its flames are drawn by).
+    let stray = |blazes: &Blazes| {
+        let (mut light, mut flame) = (Vec::new(), Vec::new());
+        for i in 0..2000 {
+            let t = i as f32 * 0.005;
+            let lit = lit(blazes, t, crate::fire::BreathTier::Cards);
+            light.push(lit[0].lumens + lit[1].lumens);
+            flame.push(lit[0].glow);
+        }
+        let spread = |s: &[f32]| {
+            let mean = s.iter().sum::<f32>() / s.len() as f32;
+            s.iter().fold(0.0f32, |m, v| m.max((v / mean - 1.0).abs()))
+        };
+        (spread(&light), spread(&flame))
+    };
+    let (light, flame) = stray(&torches(1));
+    assert!(flame > 0.25, "a torch's flame strays {flame}");
+    let share = light / flame;
+    assert!(
+        (0.4..0.6).contains(&share),
+        "{light} against its flame's {flame}"
+    );
+    let campfire = Blazes {
+        kept: vec![Blaze {
+            at: Vec3::new(0.0, 2000.0, 0.0),
+            tall: 1.5,
+            heat: 0.9,
+            seed: 0.3,
+            wide: 0.7,
+        }],
+        ..default()
+    };
+    let (light, flame) = stray(&campfire);
+    assert!(
+        (light / flame - 1.0).abs() < 0.05,
+        "{light} against its flame's {flame}"
+    );
+}
+
+#[test]
 fn every_torch_of_a_dungeon_lights_as_a_torch_however_many_burn() {
     // Thirty torches, more than the sixteen drawn as hearths: each one lights in its own
     // colour from just over its flame, none gathered into a blaze's light.
