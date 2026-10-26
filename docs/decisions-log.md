@@ -954,3 +954,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-10-26**: D532 decided (by the developers): clips come from generators (Kimodo, a trial of Uthana) and CC0 sets; no capture suit, studio or store packs.
 - **2026-10-26**: D532 clarified (by the developers): nobody performs, so no video-to-motion of ourselves either.
 - **2026-10-26**: D488 amended (by the agent, dungeon light round 2): the shut room's key, fill and fires' night ease in and out over 1.5 s (`indoor::ShutOff`), not with the air's 0.8 s ease: a room is shut over the air's last third, so at a doorway the fires stepped 3 stops in a quarter of a second.
+- **2026-10-26**: D532 updated (by the developers): after the trial, Uthana's paid text-to-motion is the source for idles, sprint, swimming, reactions and climbing; Kimodo stays for the fight's moves.
