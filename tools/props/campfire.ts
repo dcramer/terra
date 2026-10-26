@@ -41,8 +41,10 @@ export const TALL = 0.55;
 const LOGS = 5;
 /// The first log's bearing; how far out a log's butt lies, least; and how far out it enters the
 /// fire, where the flames are told its burning length starts (terra_world's `fire/hearth.rs`,
-/// `Logs::CAMPFIRE`, which the test holds to this layout).
-const TURN = 0.35;
+/// `Logs::CAMPFIRE`, which the test holds to this layout). The camp's eye, at the front (+Z,
+/// bearing pi/2), looks in between two logs, a fifth of a turn either side: at 0.35 one log's
+/// butt faced it square, its end read as a sawn stump (judge, round 5).
+const TURN = 0.35 + Math.PI / 5;
 const BUTT_R = 0.36;
 export const BURN_R = 0.34;
 /// How tall the stack stands, metres: 0.3-0.5 of the ring across.

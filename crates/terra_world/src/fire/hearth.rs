@@ -34,7 +34,7 @@ impl Logs {
     /// its base.
     pub const CAMPFIRE: Logs = Logs {
         count: 5,
-        turn: 0.393,
+        turn: 1.021,
         twist: 0.402,
         radius: 0.052,
         foot: 0.340,
