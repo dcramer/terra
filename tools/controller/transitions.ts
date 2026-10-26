@@ -152,4 +152,23 @@ export function turns(walks: Walk[]): Check {
   return { name: "turn steps", ok, line: `${ok ? "" : "✗ "}${total} feet stepped by the rule in turns from standing or slow (bar 0): ${said.join("; ") || "no turn in the records"}`, value: said.length ? total : NaN, faults: ok ? 0 : 1 };
 }
 
-export const transitions = (walks: Walk[]): Check[] => [settle(walks), starts(walks), turns(walks)];
+/// stop.steps: the rule's steps in each stop (from 0.3 s before the body stands until it next
+/// moves or turns), summed over the walks: a stop clip braking on the planted foot steps the
+/// other itself (Paragon's, ALS's).
+export function stopSteps(walks: Walk[]): Check {
+  const said: string[] = [];
+  let total = 0;
+  for (const walk of walks) {
+    const s = seen(walk.frames);
+    for (const stop of stops(s)) {
+      const steps = ruleSteps(s, stop.at - Math.round(0.3 * FPS), stop.until);
+      if (steps) said.push(`${walk.name} frame ${s[stop.at].frame}: ${steps}`);
+      total += steps;
+    }
+  }
+  const ok = total === 0;
+  const counted = walks.some((walk) => stops(seen(walk.frames)).length);
+  return { name: "stop steps", ok, line: `${ok ? "" : "✗ "}${total} feet stepped by the rule in stops (bar 0)${said.length ? `: ${said.join("; ")}` : ""}`, value: counted ? total : NaN, faults: ok ? 0 : 1 };
+}
+
+export const transitions = (walks: Walk[]): Check[] => [settle(walks), stopSteps(walks), starts(walks), turns(walks)];

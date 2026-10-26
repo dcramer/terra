@@ -1250,6 +1250,22 @@
    "measurable": true
   },
   {
+   "id": "stop.steps",
+   "noticed": 4,
+   "notice": "a foot is shuffled into place by rule as the body stops, not stepped by a stop",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "feet stepped by D455's rule (`stepping`) in each stop on the filmed course, from 0.3 s before the body stands until it next moves or turns, both paces summed",
+   "source": "docs/controller.md criterion 21d; Paragon's and ALS's per-foot stops; D455; D528",
+   "check": {
+    "by": "film",
+    "name": "stop steps"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
    "id": "start.steps",
    "noticed": 4,
    "notice": "a foot is dragged and then hopped forward as the body starts off",
