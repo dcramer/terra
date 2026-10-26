@@ -304,7 +304,8 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
       // patches: pale and even, it was a disc that went salmon-pink by firelight (fire round 20).
       const edge = r + 0.2 * (fbm(X * 4, Z * 4, 4) - 0.5) + 0.1 * (fbm(X * 14, Z * 14, 9) - 0.5);
       const patchy = (0.45 + 0.55 * smooth(0.3, 0.65, fbm(X * 7, Z * 7, 8))) * (1 - 0.5 * smooth(0.75, 0.95, edge) * (1 - smooth(0.4, 0.6, fbm(X * 16, Z * 16, 10))));
-      const skirt = smooth(0.55, 0.8, r) * (1 - smooth(0.86, 1.06, edge)) * patchy;
+      // Round 7: out to the bed's edge: fading at 0.86-1.06 it drew a dark ring inside the stones.
+      const skirt = smooth(0.55, 0.8, r) * (1 - smooth(0.95, 1.15, edge)) * patchy;
       // Its ash grey-white where the fire has burnt out to it, in patches (blind judge, campfire
       // tongue round: "no ember bed"): at 50-66 it read as earth. Its grey 72-98 and a little
       // less red: at 100-134 it was the firelit ring's brightest, salmon, at the groundlight
@@ -316,9 +317,9 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
       // tan (the campfire remodel, D513: RDR2's pit is pale ash in a black-sooted ring).
       const ash = (1 - skirt) * (1 - char) + skirt;
       // Its skirt's ash 40 over the dark, not 62: paler, it lit peach at night (remodel round 5).
-      // Round 7: 26, in patches, over a darker floor (22-32), flecked with charcoal: at 40 over
+      // Round 7: 30, in patches, over a darker floor (22-32), flecked with charcoal: at 40 over
       // 28-40 the firelit skirt read as a crisp pale disc inside the ring (judge, round 6).
-      const burnt = 26 * skirt * (0.55 + 0.45 * n);
+      const burnt = 30 * skirt * (0.55 + 0.45 * n);
       const flecks = smooth(0.62, 0.7, fbm(X * 45, Z * 45, 13));
       const grey = ((16 + 10 * n) * char * (1 - skirt) + (22 + 10 * n - 6 * smooth(0.6, 0.8, speck) + burnt) * ash) * (1 - 0.5 * flecks);
       // Under the heap a crackle of glowing seams through dark ash, as a bed of coals breaks

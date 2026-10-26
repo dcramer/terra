@@ -413,8 +413,9 @@ def ground_map(side):
     # Sooty ash, darker toward the stones as a hollow's sides are, and dark trodden dirt (46, cool):
     # pale ash at 150 and dirt at 60 a little warm lit pale peach under the fire (judge, round 4).
     # Round 6: darker still, darkest in the middle under the bed: at 132 the firelit floor still
-    # went peach at night, a pale bowl (judge, round 5).
-    ash = 84 + 18 * (n - 0.5) - 25 * nsmooth(0.6, 0.75, fbm(x * 7, y * 7, 5)) - 30 * (1 - nsmooth(0.15, 0.4, r))
+    # went peach at night, a pale bowl (judge, round 5). Round 7: 58, near the coal bed's skirt
+    # over it, so where it shows between the bed's edge and the stones it draws no ring.
+    ash = 58 + 18 * (n - 0.5) - 25 * nsmooth(0.6, 0.75, fbm(x * 7, y * 7, 5)) - 30 * (1 - nsmooth(0.15, 0.4, r))
     soot = 28 + 12 * (n - 0.5)
     dirt = 46 + 18 * (fbm(x * 4, y * 4, 6) - 0.5) + 10 * (speck - 0.5)
     # Wide blends: at 0.4-0.47 and 0.54-0.68 the ash met the soot in a pale ring line (round 3).
@@ -592,7 +593,7 @@ def char_nodes(t, cap):
     # char broken by something lit, and at noon the glow no longer breaks it there.
     height = t.node("ShaderNodeSeparateXYZ", Vector=p).outputs["Z"]
     upper = t.ramp(height, 0.16, 0.32)
-    flakes = t.math("MULTIPLY", t.ramp(t.noise(t.vec("ADD", p, (4.2, 8.1, 0.7)), 9.0, 3.0), 0.56, 0.66), t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), 0.6))
+    flakes = t.math("MULTIPLY", t.ramp(t.noise(t.vec("ADD", p, (4.2, 8.1, 0.7)), 9.0, 3.0), 0.52, 0.62), t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), 0.6))
     ash = t.math("MAXIMUM", ash, t.math("MULTIPLY", flakes, upper))
     return p, amount, scorch, crack, edge, black, ash, whole, calm, deep
 
@@ -636,19 +637,20 @@ def log_glow(t, cap):
     # Round 6: wider in the deep char's patches, hardly any in the smooth bark's.
     seam = t.math("MULTIPLY", t.math("MAXIMUM", seam, t.math("MULTIPLY", t.ramp(edge, 0.01, 0.07, 1.0, 0.0), deep)), t.math("SUBTRACT", 1.0, t.math("MULTIPLY", calm, 0.8)))
     # Round 7: the glow low, by the coals: below 5-20 cm every face glows (the bed lights them
-    # from under) in wider seams; above, only the faces turned in to the fire, fading to a
-    # third by 32 cm, and the end in the flames all round at under half. A crack net lit evenly all
+    # from under, its outer faces at 0.4) in wider seams; above, only the faces turned in to the
+    # fire, fading to under half by 32 cm, and the end in the flames all round at 0.6 (at 0.3
+    # and 0.45 the fire sheet's noon pockets fell to 3.7-4.3 of a held 5, build 1). A crack net lit evenly all
     # the way up the logs' outer faces read as a tiled texture (judge, round 6); RDR2's glow is
     # low in deep fissures, cold matte char and ash above.
     height = t.node("ShaderNodeSeparateXYZ", Vector=p).outputs["Z"]
     near = t.ramp(height, 0.05, 0.2, 1.0, 0.0)
-    fade = t.ramp(height, 0.12, 0.32, 1.0, 0.3)
-    seam = t.math("MAXIMUM", seam, t.math("MULTIPLY", t.math("MULTIPLY", t.ramp(edge, 0.01, 0.07, 1.0, 0.0), near), t.math("SUBTRACT", 1.0, t.math("MULTIPLY", calm, 0.5))))
+    fade = t.ramp(height, 0.12, 0.32, 1.0, 0.45)
+    seam = t.math("MAXIMUM", seam, t.math("MULTIPLY", t.math("MULTIPLY", t.ramp(edge, 0.01, 0.06, 1.0, 0.0), near), t.math("SUBTRACT", 1.0, t.math("MULTIPLY", calm, 0.5))))
     facing = t.ramp(t.attr("face"), 0.2, 0.6)
-    tip = t.math("MULTIPLY", t.ramp(t.attr("heat"), 0.8, 1.0), 0.45)
+    tip = t.math("MULTIPLY", t.ramp(t.attr("heat"), 0.7, 1.0), 0.6)
     # A cap glows only at the end in the flames: the cold butt's lit whole drew a glowing ring
     # round it at night (judge, round 5).
-    hot = t.ramp(t.attr("heat"), 0.4, 1.0) if cap else t.math("MAXIMUM", t.math("MAXIMUM", t.math("MULTIPLY", near, t.math("ADD", 0.55, t.math("MULTIPLY", facing, 0.45))), t.math("MULTIPLY", facing, fade)), tip)
+    hot = t.ramp(t.attr("heat"), 0.4, 1.0) if cap else t.math("MAXIMUM", t.math("MAXIMUM", t.math("MULTIPLY", near, t.math("ADD", 0.4, t.math("MULTIPLY", facing, 0.6))), t.math("MULTIPLY", facing, fade)), tip)
     h = t.math("MULTIPLY", t.math("MULTIPLY", seam, amount), t.math("MULTIPLY", hot, t.math("ADD", 0.8, t.math("MULTIPLY", t.noise(p, 9.0), 0.2))))
     h = t.math("MULTIPLY", h, t.math("SUBTRACT", 1.0, t.math("MULTIPLY", ash, 0.7)))
     t.emit(t.vec("SCALE", HOT, scale=h))
