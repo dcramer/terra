@@ -820,7 +820,7 @@ mod tests {
         // The combat baseline: kept whatever building did, dropped when a move or the
         // baseline itself changed.
         assert_eq!(holds(COMBAT, &since, true), Holds::Keep);
-        let moved: BTreeSet<String> = ["assets/data/moves/sword_and_shield.ron".to_string()].into();
+        let moved: BTreeSet<String> = ["assets/data/moves/sword.shielded.ron".to_string()].into();
         assert_eq!(holds(COMBAT, &moved, false), Holds::Drop);
         let raised: BTreeSet<String> = [COMBAT.to_string()].into();
         assert_eq!(holds(COMBAT, &raised, false), Holds::Drop);

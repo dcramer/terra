@@ -192,7 +192,54 @@ pub struct MoveSet {
     pub guard: String,
     /// What a blow that lands shows, in place of a long hit-stop (D456).
     pub landed: Landed,
+    /// The move each button asks for in the set's stance.
+    pub buttons: Buttons,
     pub moves: HashMap<String, Move>,
+}
+
+/// The move each of a body's buttons asks for, as its set names them by holding.md's stance
+/// table ("Which button does what"): `main` (left click), `main_heavy` (with the modifier),
+/// `off` (right click), `off_heavy`, and `dodge`, its own key. A light chain starts at `main`
+/// and goes on by each blow's `next`; an `off` move with a `hold` is a guard held while the
+/// button is. A button the set leaves out does nothing.
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Buttons {
+    #[serde(default)]
+    pub main: Option<String>,
+    #[serde(default)]
+    pub main_heavy: Option<String>,
+    #[serde(default)]
+    pub off: Option<String>,
+    #[serde(default)]
+    pub off_heavy: Option<String>,
+    #[serde(default)]
+    pub dodge: Option<String>,
+}
+
+/// One of a body's buttons, as `Buttons` names them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Button {
+    Main,
+    MainHeavy,
+    Off,
+    OffHeavy,
+    Dodge,
+}
+
+impl Buttons {
+    fn named(&self) -> impl Iterator<Item = &str> {
+        [
+            &self.main,
+            &self.main_heavy,
+            &self.off,
+            &self.off_heavy,
+            &self.dodge,
+        ]
+        .into_iter()
+        .flatten()
+        .map(String::as_str)
+    }
 }
 
 /// What a blow that lands shows (D456, D487): a `burst` where the blade met the body (the
@@ -244,6 +291,13 @@ impl MoveSet {
             if each.stamina < 0.0 {
                 return Err(format!("{name} gives stamina back"));
             }
+        }
+        if let Some(name) = set
+            .buttons
+            .named()
+            .find(|name| !set.moves.contains_key(*name))
+        {
+            return Err(format!("a button asks for {name}, which is not in the set"));
         }
         let tired = set.tired;
         if !(tired.pace > 0.0 && tired.pace <= 1.0 && (0.0..=1.0).contains(&tired.might)) {
@@ -384,6 +438,25 @@ impl Runner {
             .unwrap_or(first)
     }
 
+    /// The move a press of a button asks for, by the set's `buttons`: the main button's the
+    /// next of the chain it starts, any other its own move; none if the set gives it none.
+    pub fn pressed<'a>(&'a self, set: &'a MoveSet, button: Button) -> Option<&'a str> {
+        let buttons = &set.buttons;
+        let named = match button {
+            Button::Main => {
+                return buttons
+                    .main
+                    .as_deref()
+                    .map(|first| self.chained(set, first));
+            }
+            Button::MainHeavy => &buttons.main_heavy,
+            Button::Off => &buttons.off,
+            Button::OffHeavy => &buttons.off_heavy,
+            Button::Dodge => &buttons.dodge,
+        };
+        named.as_deref()
+    }
+
     /// Moves the body's own time on: a waiting press starts when its window opens, or is
     /// dropped once stale; a move ends when it is done. A tired move's own time runs slower.
     pub fn tick(&mut self, set: &MoveSet, dt: f32) -> Ran {
@@ -466,7 +539,7 @@ mod tests {
     fn set() -> MoveSet {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../assets/data/moves/sword_and_shield.ron"
+            "/../../assets/data/moves/sword.shielded.ron"
         );
         MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap()
     }
@@ -574,6 +647,7 @@ mod tests {
                 kit: (blade: Steel, face: Wood, boss: Iron), guard: "Guard",
                 landed: (burst: (glow_s: 0.0, glow_m: 0.0, sparks: 0, spark_mps: 0.0, spark_s: 0.0),
                          kick_deg: 0.0, kick_s: 0.0),
+                buttons: (),
                 moves: {
                     "first": (clip: "First", done: 2.0, cancel: 1.0, next: "second",
                               carry: (in: (0.0, 0.5), out: (1.2, 1.6))),

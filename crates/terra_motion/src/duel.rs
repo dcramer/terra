@@ -10,7 +10,7 @@
 
 use crate::blade::{self, Edge};
 use crate::contact::{self, Fighting, NEAREST_M};
-use crate::moves::{self, MoveSet, Phase, Ran, Taken};
+use crate::moves::{self, Button, MoveSet, Phase, Ran, Taken};
 use crate::stamina;
 use crate::struck::{Struck, Surface};
 use glam::{Quat, Vec3};
@@ -185,11 +185,14 @@ impl<'a> Duel<'a> {
             let free = body.fight.free();
             let guarding = free && body.guard_held && body.fight.runner.name().is_none();
             body.fight.guard_s = guarding.then(|| body.fight.guard_s.map_or(0.0, |s| s + DT));
-            let asked = presses.iter().find_map(|press| match press {
-                Press::Roll => Some("roll".to_string()),
-                Press::Heavy => Some("heavy".to_string()),
-                Press::Light => Some(body.fight.runner.chained(set, "slash").to_string()),
-                Press::Guard => None,
+            let asked = presses.iter().find_map(|press| {
+                let button = match press {
+                    Press::Roll => Button::Dodge,
+                    Press::Heavy => Button::MainHeavy,
+                    Press::Light => Button::Main,
+                    Press::Guard => return None,
+                };
+                body.fight.runner.pressed(set, button).map(str::to_string)
             });
             if let Some(name) = asked.filter(|_| free) {
                 let left = body.stamina;
@@ -386,7 +389,7 @@ impl<'a> Duel<'a> {
 fn set() -> MoveSet {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../assets/data/moves/sword_and_shield.ron"
+        "/../../assets/data/moves/sword.shielded.ron"
     );
     MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap()
 }

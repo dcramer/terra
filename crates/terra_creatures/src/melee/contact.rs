@@ -397,7 +397,6 @@ pub fn fade(
 
 #[cfg(test)]
 mod tests {
-    use terra_motion::moves::MoveSet;
     use terra_walker::shake;
 
     /// A frame at 60.
@@ -409,10 +408,7 @@ mod tests {
     /// are the combat scorecard's `hit.kick.peak` and `hit.kick.settle` (D456).
     #[test]
     fn a_landed_blow_punches_the_view_and_it_settles_within_a_tenth_of_a_second_or_so() {
-        let path = terra_world::data::path(super::super::SET);
-        let landed = MoveSet::read(&std::fs::read_to_string(path).unwrap())
-            .unwrap()
-            .landed;
+        let landed = super::super::drawn_set().landed;
         let tipped: Vec<f32> = (0..60)
             .map(|frame| shake::punched(landed.kick_deg, landed.kick_s, frame as f32 * FRAME_S))
             .collect();

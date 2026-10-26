@@ -28,7 +28,7 @@ import { ROOT, buildOffscreen, imageMagick, offscreenPath, offscreenRun } from "
 import { type Check, type Frame, check, framed, read, readMoves, same, say, share } from "./duel/checks.ts";
 import { COLUMNS, moments } from "./duel/moments.ts";
 
-const MOVES = resolve(ROOT, "assets/data/moves/sword_and_shield.ron");
+const MOVES = resolve(ROOT, "assets/data/moves/sword.shielded.ron");
 /// The player's share of the frame's height the game's camera is held to (D180).
 const SHARE: number[] = JSON.parse(readFileSync(resolve(ROOT, "tools/combat/refs/enshrouded.json"), "utf8")).targets.camera_player_share;
 const SCRIPT = "duels/yard.ron";

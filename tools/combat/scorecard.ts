@@ -31,7 +31,7 @@ export { type Bar, barText, type Held, judge, miss, readBaseline, rebaseline, ty
 const ROOT = resolve(import.meta.dirname, "../..");
 export const CRITERIA = resolve(import.meta.dirname, "criteria.json");
 export const BASELINE = resolve(import.meta.dirname, "baseline.tsv");
-const SET = resolve(ROOT, "assets/data/moves/sword_and_shield.ron");
+const SET = resolve(ROOT, "assets/data/moves/sword.shielded.ron");
 /// The player's body, feet to crown (the walker's figure), for spacing in body heights.
 const BODY_M = 1.8;
 export type CheckOf =

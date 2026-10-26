@@ -1,0 +1,7 @@
+// The family each class of held item falls back to (docs/holding.md section 2, D459): a pair
+// of hands plays `<class>.<stance>`, else `<family>.<stance>`, else the stance's generic set
+// (`one_hand.single`), so a new class plays before its own clips exist. The families are
+// blade, blunt, polearm and heavy; a class is added here when its first item is.
+{
+    "sword": "blade",
+}

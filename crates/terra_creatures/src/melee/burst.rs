@@ -237,8 +237,7 @@ mod tests {
     const GROUND: Vec3 = Vec3::new(0.0, 1000.0, 0.0);
 
     fn set() -> MoveSet {
-        let path = terra_world::data::path(super::super::SET);
-        MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap()
+        super::super::drawn_set()
     }
 
     fn world() -> World {

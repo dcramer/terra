@@ -1,6 +1,8 @@
 //! How bodies move and fight, by rules every player and the server agree on (D447, D28):
 //! no engine in it, so it tests in seconds and a server runs it without a window.
 //!
+//! - `hold`: what each hand holds, the stance the pair gives, and the move set it plays,
+//!   looked up by class and stance with the fallback (docs/holding.md, D459).
 //! - `moves`: move sets as data and the move runner: phases, cancels, the buffer, i-frames,
 //!   and how a blow that meets a guard is judged.
 //! - `course` (feature `course`): the controller's plain-Rust course, analytic fixtures and the
@@ -26,6 +28,7 @@ pub mod contact;
 #[cfg(any(test, feature = "course"))]
 pub mod course;
 pub mod feet;
+pub mod hold;
 pub mod mover;
 pub mod moves;
 pub mod placement;

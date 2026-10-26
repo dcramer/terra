@@ -87,7 +87,7 @@ pub fn bring(commands: &mut Commands, at: Vec3, facing: Vec3) {
         "template": "male",
         "clips": CLIPS,
         "wears": ["shirt", "trousers", "boots", "leather_coat"],
-        "hold": { "socket.hand.R": super::SWORD, "socket.hand.L": super::SHIELD },
+        "hold": { "socket.hand.R": super::look(super::DRAWN.0), "socket.hand.L": super::look(super::DRAWN.1) },
         "at": spot.to_array(),
         "facing": at.to_array(),
         "turn_deg_s": 260.0,

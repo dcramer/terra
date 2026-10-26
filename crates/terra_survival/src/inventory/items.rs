@@ -104,6 +104,11 @@ impl Items {
         self.defs.get(kind.0 as usize)?.tool.as_ref()
     }
 
+    /// How a kind is held, for the stance and move set (docs/holding.md), if it has a `hold`.
+    pub fn hold(&self, kind: ItemKind) -> Option<&terra_motion::hold::Hold> {
+        self.defs.get(kind.0 as usize)?.hold.as_ref()
+    }
+
     /// Where a kind is worn and what it does there, if it is worn.
     pub fn worn(&self, kind: ItemKind) -> Option<&WornDef> {
         self.defs.get(kind.0 as usize)?.worn.as_ref()
@@ -140,13 +145,13 @@ impl Items {
             .collect()
     }
 
-    /// What a kind's icon is baked from (D129): a tool's held look, gear's look (on the
-    /// base body), and anything else's own look; and the cells it fills, which set the
-    /// icon's shape. Whether the look exists yet is for the caller to find out.
+    /// What a kind's icon is baked from (D129): a tool's or a held item's held look, gear's
+    /// look (on the base body), and anything else's own look; and the cells it fills, which
+    /// set the icon's shape. Whether the look exists yet is for the caller to find out.
     pub fn icon_source(&self, kind: ItemKind) -> Option<(String, crate::icons::Icon)> {
         let def = self.catalogue.get(kind).ok()?;
         let id = terra_walker::character::item_id(&def.name);
-        let look = if self.tool(kind).is_some() {
+        let look = if self.tool(kind).is_some() || self.hold(kind).is_some() {
             terra_walker::character::held_look(&id)
         } else if def.gear.is_some() {
             terra_walker::character::look(&id)

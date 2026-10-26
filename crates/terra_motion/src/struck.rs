@@ -63,7 +63,7 @@ mod tests {
     fn set() -> MoveSet {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../assets/data/moves/sword_and_shield.ron"
+            "/../../assets/data/moves/sword.shielded.ron"
         );
         MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap()
     }

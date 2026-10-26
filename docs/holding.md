@@ -2,7 +2,7 @@
 
 Status: **accepted by the developers, 2026-10-25** ("Right model", on the review desk); D460 to D465 are decided. The architecture is technical and recorded as D459, by the agent; the questions at the end were answered by the developers (D460 to D465). The research behind it is [research/2026-10-25-loadouts-and-animation-layers.md](../research/2026-10-25-loadouts-and-animation-layers.md). It sits under [movement.md](movement.md) (the pose and fix-up layers) and [items.md](items.md) (equipment D64, the action bar D66).
 
-The developer, 2026-10-25: "we have various weapons, two arms, sometimes two handed items, sometimes two one handed items, sometimes one one handed item... sometimes one in a left arm sometimes one in the right arm (it varies right). and then how do animations work? what happens with variance? i dont know if we figured that out vs just yeeting shit into here". We had not. Today there is one sword-and-shield set, wired in by hand. Its looks are constants in `terra_creatures::melee`, and only the right hand's socket shows what the bar holds (`terra_survival::held`).
+The developer, 2026-10-25: "we have various weapons, two arms, sometimes two handed items, sometimes two one handed items, sometimes one one handed item... sometimes one in a left arm sometimes one in the right arm (it varies right). and then how do animations work? what happens with variance? i dont know if we figured that out vs just yeeting shit into here". We had not. Today (step 2 of section 6, combat round 26) the sword and shield are items with `hold` entries, and their stance gives the one set made, `sword.shielded`, by the rule and lookup in `terra_motion::hold`. T still puts them in the hands (D405's shortcut), and only the right hand's socket shows what the bar holds (`terra_survival::held`).
 
 ## Constraints
 
@@ -30,13 +30,14 @@ Each of a body's two hands holds one item or nothing. A body has a **main hand**
 | nothing | nothing | **Unarmed** | `unarmed` |
 | one-hander of class C | nothing, or a `carried` item | **Single** | `C.single` (the off arm in the carried item's pose) |
 | one-hander C | a shield | **Shielded** | `C.shielded` |
-| one-hander C | a one-hander D (`Either`) | **Dual** (D462) | `C.dual` when C and D share a family, else `C.single` plus D's off-hand light |
+| one-hander C | a one-hander D (any two, D462) | **Dual** (D462) | `C.dual` when C and D share a family, else `C.single` plus D's off-hand light |
 | a two-hander C | put away | **Two** | `C.two` |
 | nothing | a shield | **Shield** | `shield.alone` (bash, block, fists) |
 | a tool | anything | **Tool** | the tool's use moves (today's, `items.ron`'s `tool`) |
 
+- **A `carried` item counts as nothing** in either hand: a torch in the off hand with a sword is Single, a torch alone Unarmed, both with the carried item's arm pose.
 - **A two-hander empties the off hand**: the off item stays equipped but rides its stowed socket (a shield on the back, a blade at the hip), and comes back when the two-hander leaves, as Elden Ring does.
-- **An item that cannot go where it is put is refused by the rule**, not by the screen: a shield in the main hand, a second two-hander.
+- **An item that cannot go where it is put is refused by the rule**, not by the screen: a shield in the main hand, a second two-hander, a tool in the off hand. So is a pair the table does not list: a blade in the off hand with the main hand empty.
 - **Handedness is a mirror**, not a second set of data. Every set is made right-handed. A left-handed body plays it mirrored (section 2), and its items hang on the mirrored sockets, turned, never scaled by −1, so a shield's face is not drawn inside out. Whether bodies may be left-handed is D463.
 - **How items reach the hands** (D460): today the bar's picked item goes to the main hand (D66). Proposed: an **off-hand slot** on the equipment sheet (D64) holds a shield, a torch or a second blade, and is in hand whenever the main hand's item leaves the off hand free.
 
@@ -53,13 +54,13 @@ Movement.md's pose layer, filled per stance. Every layer is chosen by rule, from
 | **Fix-up** | Off hand onto a two-handed grip, shield on its strap, feet (D455), look | Everyone | After the pose (section 3) |
 
 - **A move set is a file a stance-and-class pair**, `assets/data/moves/<class>.<stance>.ron`: its hold poses, its moves, the buttons they answer and its numbers, shaped as `sword_and_shield.ron` is today. A set may name another to start from (`from: "sword.single"`) and add or replace moves. So `sword.shielded` is `sword.single` with the shield's block and bash.
-- **A set falls back** from class to family to the stance's generic set, so a new class plays before its own clips exist: `sabre.single`, then `blade.single`, then `one_hand.single`. The families are `blade`, `blunt`, `polearm` and `heavy`.
+- **A set falls back** from class to family to the stance's generic set, so a new class plays before its own clips exist: `sabre.single`, then `blade.single`, then `one_hand.single` (`two_hand.two`, `shield.alone`, `unarmed` for the others). The families are `blade`, `blunt`, `polearm` and `heavy`, each class's in `assets/data/moves/families.ron`.
 - **Combat styles** (D124, [magic.md](magic.md#combat-styles)) are a few moves added to a set, with their own chains, not sets of their own. Stillwater Guard adds to `sword.shielded`, the Wolf's Run to `dagger.dual`.
 - **Locomotion is never per item.** The hold layer is laid over it at run time by Bevy's mask groups (`bevy_animation` 0.20: Blend and Add nodes, masks), as Lyra's item layers and Godot's filtered Blend2 do. D458 bakes `Fight_Walk` at export today. That gives way to this once the pose layer is built (movement.md stage 2), since baking every hold over every locomotion clip is 20 × 25 clips.
 
 ### Which button does what
 
-Two hand buttons, named by hand: **main** (left click) and **off** (right click). Heavy is main with the modifier; dodge is its own key. Today these are the walker's Use, Use with Sprint, BuildMenu and Dodge.
+Two hand buttons, named by hand: **main** (left click) and **off** (right click). Heavy is main with the modifier; dodge is its own key. Today these are the walker's Use, Use with Sprint, BuildMenu and Dodge. Each set names the move each button asks for (`buttons: (main: "slash", main_heavy: "heavy", off: "block", dodge: "roll")` in `sword.shielded`), by this table.
 
 | Stance | Main | Main, heavy | Off | Off, heavy |
 |---|---|---|---|---|
@@ -141,9 +142,9 @@ Items of a class share every clip, hold pose, phase, chain and button. Each item
 | Today | Proposed |
 |---|---|
 | Only the right hand's socket has a `Grip`; `held` shows the bar's item in it | Both hands' sockets; each shows its own hand's item |
-| The sword and shield are constants in `melee`, given on T (D405's shortcut) | Items with `hold` entries, put in hands by the loadout (D460) |
-| One set, `sword_and_shield.ron`, with the partner's slower blows as moves of their own | `sword.shielded.ron`; the partner plays it at its style's rate |
-| Buttons wired to slash, heavy, block and roll | Buttons by the stance table, named in each set |
+| The sword and shield are items with `hold` entries (`Arming sword`, `Heater shield`), given on T (D405's shortcut) | Put in hands by the loadout (D460) |
+| One set, `sword.shielded.ron`, chosen by the stance rule and the lookup, with the partner's slower blows as moves of their own (its slash plays at a third of the player's rate, past a style's ±8%) | The partner plays it at its style's rate |
+| Buttons by the stance table, named in the set (`buttons`) | Done |
 | `Fight_Walk`, the guard's arms baked over the walk (D458) | The hold layer by mask at run time, from movement.md stage 2 |
 | `figure.rs` names locomotion clips in code | The body's locomotion set as data |
 | One take a move | Up to the set's `takes`, drawn by shuffle |
@@ -158,7 +159,7 @@ Each step is done when its checks pass and nothing on the scorecard gets worse:
    - `sword.shielded.ron`;
    - buttons by stance.
 
-   Done when the prototype plays as it does now, from items, and the scorecard holds.
+   Done when the prototype plays as it does now, from items, and the scorecard holds. Built in combat round 26, but for a set's `from` (nothing needs it until a second set) and the partner at its style's rate (a design call: today's partner blows are far slower than a style may make them).
 3. **Both hands shown from the loadout**: `held` on both sockets, and `melee` takes its looks from the hands. Done when the penetration rows hold, and a torch carried in the off hand with a sword passes the held-fit check.
 4. **The hold layer at run time** (movement.md stage 2), in place of `Fight_Walk`. Done when every stance's hold passes over every locomotion clip.
 5. **The second stance, two-handed** (greatsword), with second-grip IK (movement.md stage 4). It proves the model: a new class and stance by data, clips and IK. Done when the duel of two-handed against shielded passes and the grip rows pass.

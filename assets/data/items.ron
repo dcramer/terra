@@ -29,6 +29,14 @@
 //                warmth      how warm it keeps its wearer, in clo: a shirt and trousers
 //                            0.5, a winter coat 1, furs over wool 3 (climate.md, D153)
 //                holds       what it carries and how many, filling no cells (D118)
+//   hold       how it is held, which gives the stance and move set (docs/holding.md, D459):
+//                class    the move sets it uses, `<class>.<stance>` in data/moves
+//                grip     Main (a one-hander, main hand), Either (a one-hander, either
+//                         hand), Off (off hand only, a shield) or Two (both hands)
+//                lead     for Two, the hand its grip rides in: Main or Off
+//                carried  held with no moves, only its arm's pose (a lit torch)
+//                length, mass, balance   metres, kilograms, and its balance point's
+//                         distance from the grip in metres, timing and reach by rule
 (
     start: (
         wears: ["Small pack", "Leather coat", "Trousers", "Boots"],
@@ -114,6 +122,21 @@
             lasts: 480,
             // A burning torch is a poor club, but it is one.
             tool: (strikes: (5.0, 1.9), lights: true, hint: "Lights the way while it is in hand"),
+        ),
+        // The sparring prototype's sword and shield, drawn on T (D405) until the off hand's
+        // slot is built (D460); their looks are models/held/arming_sword.glb and
+        // heater_shield.glb. A heater strapped on the forearm (D504).
+        (
+            name: "Arming sword",
+            size: (2, 1),
+            about: "A one-handed sword, for the main hand",
+            hold: (class: "sword", grip: Main, length: 0.95, mass: 1.2, balance: 0.12),
+        ),
+        (
+            name: "Heater shield",
+            size: (2, 2),
+            about: "A shield strapped on the forearm, for the off hand",
+            hold: (class: "shield", grip: Off, length: 0.75, mass: 3.5, balance: 0.1),
         ),
 
         (

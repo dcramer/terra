@@ -5,8 +5,9 @@
 //! blow, and right click held blocks, a guard raised just before a blow parrying it. Each
 //! move costs the walker's stamina as its set says, and a blow on the guard costs it too.
 //!
-//! The rules are `terra_motion`'s (D447): the moves as data (`assets/data/moves/
-//! sword_and_shield.ron`) and their runner, a blade swept against a body's hurt capsule, and
+//! The rules are `terra_motion`'s (D447): the stance the two items in hand give and the move
+//! set it plays (`hold`, docs/holding.md: `assets/data/moves/sword.shielded.ron`), the moves as
+//! data and their runner, a blade swept against a body's hurt capsule, and
 //! what a blow does. Here is only what reads and writes the bodies, plays clips, flashes and
 //! sounds: the player's stance below, what a blow shows in `contact` (where the blade met the
 //! body in `burst`, D487), the partner's mind in `partner`, the bars and the controls on
@@ -26,7 +27,8 @@ use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 use terra_motion::blade;
 use terra_motion::contact::{Fighting, NEAREST_M};
-use terra_motion::moves::{self, MoveSet, Ran};
+use terra_motion::hold::{Holding, Sets};
+use terra_motion::moves::{self, Button, MoveSet, Ran};
 use terra_motion::stamina;
 use terra_survival::held::InHand;
 use terra_survival::inventory::HandsFull;
@@ -39,8 +41,13 @@ use terra_walker::walker::Steer;
 use terra_walker::{Downed, Motion, Player, Stamina, Stance, View};
 use terra_world::tick::Sim;
 
-/// The move set every fighter here uses.
-const SET: &str = "moves/sword_and_shield.ron";
+/// What T puts in each hand, main and off, by item (D405's shortcut, until the off hand's slot
+/// is built, D460): a sword in the right hand, a heater shield in the left (D504), which its
+/// file straps to the forearm by its enarmes (`terra_walker::strap`). The stance and move set
+/// come from their `hold` entries in `assets/data/items.ron`, their looks from their names.
+const DRAWN: (&str, &str) = ("Arming sword", "Heater shield");
+/// The folder of move sets, `<class>.<stance>.ron`.
+const SETS: &str = "moves";
 /// How fast a drawn body walks, metres a second, and with its guard up.
 const PACE: f32 = 2.2;
 const GUARD_PACE: f32 = 1.4;
@@ -50,11 +57,6 @@ pub const HEALTH: f32 = 100.0;
 const LOCK_M: f32 = 15.0;
 /// How long a beaten fighter lies before the spar starts again, seconds.
 const DOWN_S: f32 = 3.0;
-/// The looks drawn: a sword in the right hand, a heater shield in the left (D504), which its
-/// file straps to the forearm by its enarmes (`terra_walker::strap`). The round shield's file
-/// stays for its own style later.
-const SWORD: &str = "models/held/arming_sword.glb";
-const SHIELD: &str = "models/held/heater_shield.glb";
 const HAND_L: &str = "socket.hand.L";
 /// The walk a drawn body goes forward and back in: the library's walk with both arms held as
 /// the guard holds them (D458), so the sword and shield stay out of the legs.
@@ -63,6 +65,32 @@ const WALK: &str = "Fight_Walk";
 /// The move set, read once.
 #[derive(Resource)]
 pub struct Set(pub MoveSet);
+
+/// The move set the drawn pair plays: the stance their `hold` entries give and the set looked
+/// up for it by class and stance, with the fallback (`terra_motion::hold`, docs/holding.md).
+pub fn drawn_set() -> MoveSet {
+    let items = terra_survival::kinds::read();
+    let hand = |name: &str| {
+        let kind = items.kinds.iter().find(|kind| kind.name == name);
+        let kind = kind.unwrap_or_else(|| panic!("items.ron: there is no kind called {name}"));
+        kind.hold.as_ref().map_or(Holding::Tool, Holding::Item)
+    };
+    let sets = Sets::read_folder(&terra_world::data::path(SETS))
+        .unwrap_or_else(|problem| panic!("{SETS}: {problem}"));
+    let picked = sets
+        .pick(hand(DRAWN.0), hand(DRAWN.1))
+        .unwrap_or_else(|why| panic!("Melee: {DRAWN:?} cannot be held so: {why:?}"));
+    let (name, set) = picked
+        .set
+        .unwrap_or_else(|| panic!("Melee: no set for {:?} with {DRAWN:?}", picked.stance));
+    info!("Melee: {DRAWN:?} stand {:?}, playing {name}", picked.stance);
+    set.clone()
+}
+
+/// The look of an item held in hand, by its name.
+fn look(name: &str) -> String {
+    character::held_look(&character::item_id(name))
+}
 
 /// A body in a spar, the player's or the partner's: its state in the fight by
 /// `terra_motion`'s rules (its move, health, guard, hit-stop, reeling, being down, a shove),
@@ -116,10 +144,7 @@ pub struct Drawn {
 }
 
 pub fn plugin(app: &mut App) {
-    let text = std::fs::read_to_string(terra_world::data::path(SET))
-        .unwrap_or_else(|problem| panic!("Could not read {SET}: {problem}"));
-    let set = MoveSet::read(&text).unwrap_or_else(|problem| panic!("{SET}: {problem}"));
-    app.insert_resource(Set(set))
+    app.insert_resource(Set(drawn_set()))
         .add_systems(
             FixedUpdate,
             (draw, act, partner::think, contact::strike, contact::again)
@@ -179,14 +204,14 @@ fn draw(
         in_hand.drawn = true;
         let sword = character::hold(
             &mut commands,
-            assets.load(GltfAssetLabel::Scene(0).from_asset(SWORD)),
+            assets.load(GltfAssetLabel::Scene(0).from_asset(look(DRAWN.0))),
             hand,
         );
         let mut looks = vec![sword];
         match character::find(player, HAND_L, &children, &names) {
             Some(left) => looks.push(character::hold(
                 &mut commands,
-                assets.load(GltfAssetLabel::Scene(0).from_asset(SHIELD)),
+                assets.load(GltfAssetLabel::Scene(0).from_asset(look(DRAWN.1))),
                 left,
             )),
             None => warn!("Melee: the figure has no {HAND_L}"),
@@ -314,7 +339,7 @@ fn act(
         let free = fighter.free();
         // The guard: up while right click is held, if not in a blow or reeling.
         let in_move = fighter.runner.name().is_some();
-        let guarding = free && intent.held(Action::BuildMenu) && !in_move;
+        let guarding = free && intent.held(Action::BuildMenu) && !in_move && guard(set).is_some();
         fighter.guard_s = guarding.then(|| fighter.guard_s.map_or(0.0, |held| held + dt));
         if fighter.guard_s == Some(0.0) {
             info!("Melee: guard up");
@@ -373,7 +398,7 @@ fn act(
                 motion,
                 up,
                 &set.guard,
-                fighter.guard_s.and(set.get("block")),
+                fighter.guard_s.and(guard(set)),
                 pace,
             );
         }
@@ -381,18 +406,26 @@ fn act(
     }
 }
 
-/// The move a drawn player's presses ask for: a roll, the heavy blow, the next of the light
-/// chain.
+/// The move a drawn player's presses ask for, by the set's buttons (holding.md's stance
+/// table): Dodge its dodge, Use with Sprint the main hand's heavy, Use the next of the main
+/// hand's chain. The off hand's button is the guard, held (`guard`).
 fn asked(intent: &Intent, fighter: &Fighter, set: &MoveSet) -> Option<String> {
-    if intent.pressed(Action::Dodge) {
-        Some("roll".to_string())
+    let button = if intent.pressed(Action::Dodge) {
+        Button::Dodge
     } else if intent.pressed(Action::Use) && intent.held(Action::Sprint) {
-        Some("heavy".to_string())
+        Button::MainHeavy
     } else if intent.pressed(Action::Use) {
-        Some(fighter.runner.chained(set, "slash").to_string())
+        Button::Main
     } else {
-        None
-    }
+        return None;
+    };
+    fighter.runner.pressed(set, button).map(str::to_string)
+}
+
+/// The guard the off hand's button raises while it is held: its move, when it holds.
+fn guard(set: &MoveSet) -> Option<&moves::Move> {
+    let off = set.buttons.off.as_deref()?;
+    set.get(off).filter(|each| each.hold.is_some())
 }
 
 /// A move started: which way it goes (the way asked, and ahead), its stamina paid, and its
@@ -412,7 +445,7 @@ fn begin(
     {
         pool.spend(each.stamina);
     }
-    fighter.way = if name == "roll" {
+    fighter.way = if set.buttons.dodge.as_deref() == Some(name) {
         if wish == Vec3::ZERO { -ahead } else { wish }
     } else {
         ahead
@@ -590,8 +623,7 @@ mod tests {
     fn pressed(action: Action, left: f32, with: Option<Action>) -> (World, Entity) {
         let mut world = World::new();
         world.init_resource::<Time>();
-        let path = terra_world::data::path(SET);
-        let set = MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let set = drawn_set();
         world.insert_resource(Set(set));
         let mut intent = Intent::default();
         with.into_iter().for_each(|held| intent.hold(held));
@@ -639,8 +671,7 @@ mod tests {
 
     #[test]
     fn drawn_a_roll_and_each_blow_pay_their_cost_and_too_tired_a_roll_or_heavy_does_not_start() {
-        let path = terra_world::data::path(SET);
-        let set = MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let set = drawn_set();
         let cost = |name: &str| set.get(name).unwrap().stamina;
         let full = Stamina::FULL;
         let roll = (Some("roll".to_string()), full - cost("roll"));

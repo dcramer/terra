@@ -42,7 +42,7 @@
 // A line a row; ✗ marks what is over its bar; exit 1 if any is.
 //
 //   node tools/characters/moves.ts
-//   node tools/characters/moves.ts [--set assets/data/moves/sword_and_shield.ron] [--fps 15] [--verbose]
+//   node tools/characters/moves.ts [--set assets/data/moves/sword.shielded.ron] [--fps 15] [--verbose]
 //   node tools/characters/moves.ts --spec art/animation/sets/fight.json   # the clips' specs (the default)
 //   node tools/characters/moves.ts --json rows.json                       # the rows also as JSON
 //
@@ -58,7 +58,7 @@ import { Glb, type Clip, type Pose, type Q, type V3, dot, len, matrix, mmul, pla
 
 const { values: opt } = parseArgs({
   options: {
-    set: { type: "string", default: "assets/data/moves/sword_and_shield.ron" },
+    set: { type: "string", default: "assets/data/moves/sword.shielded.ron" },
     clips: { type: "string", default: "assets/models/character/fight.glb" },
     body: { type: "string", default: "assets/models/character/base.glb" },
     templates: { type: "string", default: "assets/models/character/templates.json" },

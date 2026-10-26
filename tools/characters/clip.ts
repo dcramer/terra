@@ -10,7 +10,7 @@
 //
 //   node tools/characters/clip.ts Keyed_Backhand                  # into a scratch set
 //   node tools/characters/clip.ts Keyed_Backhand --measure        # score the takes made again
-//   node tools/characters/clip.ts Keyed_Backhand --into assets/data/moves/sword_and_shield.ron
+//   node tools/characters/clip.ts Keyed_Backhand --into assets/data/moves/sword.shielded.ron
 //
 // --list is the set (art/animation/sets/fight.json by default), its kept takes in the folder
 // named as it is. The scratch set, tools/characters/out/clip/<set>/moves.ron, holds each clip's

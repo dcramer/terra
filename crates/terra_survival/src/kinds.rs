@@ -50,6 +50,9 @@ pub struct ItemDef {
     pub tool: Option<ToolDef>,
     #[serde(default)]
     pub worn: Option<WornDef>,
+    /// How it is held, for the stance and move set its hands give (docs/holding.md, D459).
+    #[serde(default)]
+    pub hold: Option<terra_motion::hold::Hold>,
 }
 
 fn one_cell() -> (u8, u8) {
@@ -217,6 +220,35 @@ mod tests {
         for name in named {
             assert!(known(name), "{name} is named but is not a kind");
         }
+    }
+
+    /// The prototype's two items, by their entries alone, give the shielded stance and the
+    /// shipped `sword.shielded` set; the shield alone a stance of its own.
+    #[test]
+    fn the_sword_and_shield_items_give_the_shielded_stance_and_its_shipped_set() {
+        use terra_motion::hold::{Holding, Sets, Stance};
+        let file = read();
+        let hold = |name: &str| {
+            file.kinds
+                .iter()
+                .find(|kind| kind.name == name)
+                .and_then(|kind| kind.hold.as_ref())
+                .unwrap_or_else(|| panic!("{name} has no hold"))
+        };
+        let sets = Sets::read_folder(&data::path("moves")).unwrap();
+        let (sword, shield) = (hold("Arming sword"), hold("Heater shield"));
+        let picked = sets
+            .pick(Holding::Item(sword), Holding::Item(shield))
+            .unwrap();
+        assert_eq!(picked.stance, Stance::Shielded);
+        assert_eq!(picked.set.map(|(name, _)| name), Some("sword.shielded"));
+        let picked = sets.pick(Holding::Nothing, Holding::Item(shield)).unwrap();
+        assert_eq!(
+            picked.stance,
+            Stance::Shield,
+            "no set made yet: {:?}",
+            picked.set
+        );
     }
 
     #[test]

@@ -17,7 +17,7 @@ Read [docs/movement.md](../../../docs/movement.md) ("The goal", the pipeline) be
 ## The loop, one round
 
 1. **Pick** the top failing criterion of the list below (or the one the brief names). One criterion, or one move's criteria together when one clip fixes them.
-2. **Change** the least that moves it: a key in `art/animation/sets/fight.json` and `clip.ts`, a number in `assets/data/moves/sword_and_shield.ron`, a rule in `crates/terra_motion`.
+2. **Change** the least that moves it: a key in `art/animation/sets/fight.json` and `clip.ts`, a number in `assets/data/moves/sword.shielded.ron`, a rule in `crates/terra_motion`.
 3. **Score**: `cargo xtask combat`. Nothing `✗`; the criterion's number lower.
 4. **Bank**: land on main (AGENTS.md); nightly lowers the baseline. Two rounds without a gain on a criterion: stop, step back (AGENTS.md), and hand it off with what was tried.
 5. **Film** when a move changed: `cargo xtask gpu film -- cargo xtask combat --film` (the duel's film and its checks; the film in `~/.cache/terra-review/duel/`).
@@ -39,7 +39,7 @@ Not measurable yet (`?`, each with what it needs in `criteria.json`): the blind 
 | Step | Command |
 |---|---|
 | The move check, every body template | `node tools/characters/moves.ts` (`--json rows.json` for the numbers, `--set`, `--clips`, `--spec`) |
-| A clip from its spec (Kimodo, D450) | `node tools/characters/clip.ts <Clip>` into a scratch set; `--measure` rescores; `--into assets/data/moves/sword_and_shield.ron` keeps it, refused if the scorecard is worse |
+| A clip from its spec (Kimodo, D450) | `node tools/characters/clip.ts <Clip>` into a scratch set; `--measure` rescores; `--into assets/data/moves/sword.shielded.ron` keeps it, refused if the scorecard is worse |
 | The duel film and its checks | `cargo xtask gpu film -- cargo xtask duel`; `cargo xtask duel --check <fight.jsonl>…` on records already made |
 | The fight's rules | `cargo test -p terra_motion` (the duel test among them) |
 | The Enshrouded reference | `tools/combat/refs/enshrouded.json` (`targets`, `unmeasured`); how it was read: `research/2026-10-24-enshrouded-combat-measured.md`; its pictures under `~/.cache/terra-review/refs/enshrouded-combat/` |

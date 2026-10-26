@@ -199,7 +199,7 @@ mod tests {
     fn set() -> MoveSet {
         let text = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../assets/data/moves/sword_and_shield.ron"
+            "/../../assets/data/moves/sword.shielded.ron"
         ))
         .unwrap();
         MoveSet::read(&text).unwrap()
