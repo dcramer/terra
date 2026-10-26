@@ -84,6 +84,15 @@ struct VolumetricFog {
 /// 1 / (4π)
 const FRAC_4_PI: f32 = 0.07957747154594767;
 
+// Terra's patch (D496): a fog volume whose absorption is over `GLOW_ABSORPTION` a metre is a
+// fire's glow (`terra_world::fire::fog` carries its air 1e5 times thicker, so no real fog
+// comes near it), warmed by its fire's lights alone: it is marched in `GLOW_STEPS` steps and
+// takes no directional light, where the moon's shadow cascades at every one of 48 steps,
+// over the whole screen with the eye inside its box, cost a near campfire 3.3 ms by night
+// (fire round g32).
+const GLOW_ABSORPTION: f32 = 100.0;
+const GLOW_STEPS: u32 = 16u;
+
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
     @location(0) position: vec3<f32>,
@@ -116,7 +125,9 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let fog_color = volumetric_fog.fog_color;
     let ambient_color = volumetric_fog.ambient_color;
     let ambient_intensity = volumetric_fog.ambient_intensity;
-    let step_count = volumetric_fog.step_count;
+    // Terra's patch (D496): a fire's glow is marched short.
+    let glow = volumetric_fog.absorption > GLOW_ABSORPTION;
+    let step_count = select(volumetric_fog.step_count, GLOW_STEPS, glow);
     let bounding_radius = volumetric_fog.bounding_radius;
     let absorption = volumetric_fog.absorption;
     let scattering = volumetric_fog.scattering;
@@ -189,7 +200,8 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let inv_step_count = 1.0 / f32(step_count);
     let step_size_world = ray_length_view * inv_step_count;
 
-    let directional_light_count = lights.n_directional_lights;
+    // Terra's patch (D496): and lit by its fire's lights alone.
+    let directional_light_count = select(lights.n_directional_lights, 0u, glow);
 
     // Calculate the ray origin (`Ro`) and the ray direction (`Rd`) in NDC,
     // view, and world coordinates.

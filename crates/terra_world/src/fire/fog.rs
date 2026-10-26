@@ -203,4 +203,21 @@ mod tests {
         assert!((extinction - DENSITY * (ABSORPTION + SCATTERING)).abs() < 1.0e-7);
         assert!(volume.density_factor * volume.scattering > 0.0);
     }
+
+    #[test]
+    fn the_fog_shader_knows_a_glow_by_its_air_and_no_real_fog_for_one() {
+        // The patched shader marches a volume short, by its point lights alone, past this
+        // absorption a metre (D496); the haze's is 0.05.
+        let shader = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../patches/bevy_pbr/src/volumetric_fog/volumetric_fog.wesl"
+        ));
+        let mark: f32 = shader
+            .lines()
+            .find_map(|line| line.strip_prefix("const GLOW_ABSORPTION: f32 = "))
+            .and_then(|rest| rest.trim_end_matches(';').parse().ok())
+            .expect("the shader's glow mark");
+        assert!(air(Handle::default()).absorption > mark * 10.0);
+        assert!(mark > 10.0, "a real fog absorbs well under 1 a metre");
+    }
 }
