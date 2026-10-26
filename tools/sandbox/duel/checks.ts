@@ -25,6 +25,8 @@ export type Fighter = {
   /// Each foot's heel and ball over the world's ground under them (sampled straight down,
   /// `terra_creatures::melee::sole`), null where none was found; older records lack it.
   sole?: (number | null)[][];
+  /// A strapped shield's board middle and the way its face looks (shield.ts); older records lack it.
+  shield?: { mid: number[]; face: number[] };
 };
 export type Asked = { move: string; got: string };
 export type Contact = { by: string; on: string; move: string; taken: string; stop_s: number };
@@ -35,8 +37,8 @@ export type Frame = { frame: number; step: string | null; asked: Asked[]; contac
 export type Moves = { buffer_s: number; hit_stop: Map<string, number> };
 /// A check's verdict: whether it held, its line, and how many faults it found (frames, plants,
 /// blows or contacts over its bar; 1 for a check that is held or not as a whole), the number
-/// the combat scorecard holds (tools/combat).
-export type Check = { name: string; ok: boolean; line: string; faults: number };
+/// the combat scorecard holds (tools/combat), or its `value` where it measures one (metres).
+export type Check = { name: string; ok: boolean; line: string; faults: number; value?: number };
 
 /// The player's pushbox, the walker's capsule (the record gives none for the player).
 export const PLAYER_RADIUS_M = 0.35;

@@ -27,6 +27,7 @@ import { join, resolve } from "node:path";
 import { ROOT, buildOffscreen, imageMagick, offscreenPath, offscreenRun } from "./client.ts";
 import { type Check, type Frame, check, framed, read, readMoves, same, say, share } from "./duel/checks.ts";
 import { COLUMNS, moments } from "./duel/moments.ts";
+import { staggerJump } from "./duel/shield.ts";
 
 const MOVES = resolve(ROOT, "assets/data/moves/sword.shielded.ron");
 /// The player's share of the frame's height the game's camera is held to (D180).
@@ -106,6 +107,8 @@ function report(records: { name: string; frames: Frame[] }[], keep: string | und
   const lines: Check[] = [];
   if (records.length > 1) lines.push(same(records));
   lines.push(...check(records[0].frames, existsSync(MOVES) ? readMoves(MOVES) : undefined));
+  const jump = staggerJump(records[0].frames);
+  if (jump) lines.push(jump);
   lines.push(framed(records[0].frames, CENTRE, FRAMED_M));
   // The game's own camera, the player's run (or a record named for it).
   const player = records.find((each) => each.name === "player" || each.name.endsWith("player.jsonl"));

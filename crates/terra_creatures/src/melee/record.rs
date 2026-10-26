@@ -20,11 +20,14 @@
 //! clip posed them over the clip's flat ground (`clip`), the height of the ground under each over
 //! the shown root (`under`) and the heel to the ball across the up (`span`), and how far its leg
 //! stayed short of the goal it was bent to and of the lock's goal alone (`short`, `short_lock`):
-//! `feet.ground`'s and `pelvis.drop`'s numbers.
+//! `feet.ground`'s and `pelvis.drop`'s numbers. A fighter with a strapped shield gives its
+//! board's middle (the middle of its meshes' bounds) and the way its face looks (`shield`:
+//! `mid`, `face`), so a check measures how the shield moves through a move change (a stagger).
 
 use super::Fighter;
 use super::sole::Ground;
 use crate::staged::Staged;
+use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -33,6 +36,7 @@ use std::io::{BufWriter, Write};
 use terra_walker::bodies::Body;
 use terra_walker::character;
 use terra_walker::stepping::Stepping;
+use terra_walker::strap::Strapped;
 use terra_walker::{Motion, Player, Stamina};
 use terra_world::planet::MainCamera;
 use terra_world::shell::{Options, ScriptFrame};
@@ -150,6 +154,8 @@ fn write(
     start: Option<Res<Start>>,
     camera: Option<Single<(&GlobalTransform, &Projection), With<MainCamera>>>,
     mut ground: Ground,
+    shields: Query<(), With<Strapped>>,
+    bounds: Query<(&GlobalTransform, &Aabb)>,
 ) {
     let Some(frame) = frame.filter(|frame| frame.is_changed()) else {
         return;
@@ -219,6 +225,9 @@ fn write(
             "gated": kept.and_then(|kept| kept.gated()),
         }));
         let last = bodies.last_mut().expect("just pushed");
+        if let Some(shield) = shield_of(entity, &terms, (&children, &shields, &bones, &bounds)) {
+            last["shield"] = shield;
+        }
         if is_player {
             walking(last, motion, steps.get(entity).ok());
         }
@@ -280,6 +289,54 @@ fn write(
     if let Err(problem) = written {
         warn!("Melee: the fight's record could not be written: {problem}");
     }
+}
+
+/// A fighter's strapped shield, in the start's terms: its board's middle and the way its face
+/// (the look's -Z) looks.
+fn shield_of(
+    fighter: Entity,
+    terms: &bevy::math::Affine3A,
+    (children, shields, places, bounds): (
+        &Query<&Children>,
+        &Query<(), With<Strapped>>,
+        &Query<&GlobalTransform>,
+        &Query<(&GlobalTransform, &Aabb)>,
+    ),
+) -> Option<Value> {
+    let look = children
+        .iter_descendants(fighter)
+        .find(|each| shields.contains(*each))?;
+    let face = places.get(look).ok()?.forward();
+    let mid = middle(look, children, bounds)?;
+    Some(json!({
+        "mid": mm(terms.transform_point3(mid)),
+        "face": mm(terms.transform_vector3(*face)),
+    }))
+}
+
+/// The middle of a look's meshes' bounds in the world, as shown: a shield's board middle.
+fn middle(
+    look: Entity,
+    children: &Query<&Children>,
+    bounds: &Query<(&GlobalTransform, &Aabb)>,
+) -> Option<Vec3> {
+    let (low, high) = children
+        .iter_descendants(look)
+        .filter_map(|each| bounds.get(each).ok())
+        .flat_map(|(place, aabb)| {
+            let (centre, half) = (Vec3::from(aabb.center), Vec3::from(aabb.half_extents));
+            [-1.0, 1.0].into_iter().flat_map(move |x| {
+                [-1.0, 1.0].into_iter().flat_map(move |y| {
+                    [-1.0, 1.0]
+                        .into_iter()
+                        .map(move |z| place.transform_point(centre + half * Vec3::new(x, y, z)))
+                })
+            })
+        })
+        .fold(None, |seen: Option<(Vec3, Vec3)>, at| {
+            Some(seen.map_or((at, at), |(low, high)| (low.min(at), high.max(at))))
+        })?;
+    Some((low + high) * 0.5)
 }
 
 /// A walker's line: a fighter's, with no move, guard or harm.

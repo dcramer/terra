@@ -315,14 +315,22 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
     }
 }
 
-/// The clip a reel shows, and how fast.
-fn reel_clip(reel: Reel) -> (&'static str, f32) {
+/// The clip a reel shows, how fast, and how long it blends in, ms. A stagger blends in as a
+/// hit reaction's montage does (Unreal's 0.25 s by default), long enough that the shield goes
+/// from where the parried blow carried it to the guard without a snap; a flinch is quick.
+fn reel_clip(reel: Reel) -> (&'static str, f32, u64) {
     match reel {
-        Reel::Flinch => ("Hit_Chest", 1.0),
-        Reel::Stagger => ("Hit_Head", 0.35),
-        Reel::Broken => ("Hit_Head", 0.6),
+        Reel::Flinch => ("Hit_Chest", 1.0, REEL_BLEND_MS),
+        Reel::Stagger => ("Hit_Head", 0.35, STAGGER_BLEND_MS),
+        Reel::Broken => ("Hit_Head", 0.6, REEL_BLEND_MS),
     }
 }
+
+/// How long a reel blends in, ms.
+const REEL_BLEND_MS: u64 = 80;
+/// How long a stagger blends in, ms: the shield's way from a blow's carry at the left side to
+/// the guard (about 0.4 m) at no more than 0.15 m in 0.1 s (`film.stagger.shield_jump`).
+const STAGGER_BLEND_MS: u64 = 300;
 
 /// A fighter takes a blow's effect (`terra_motion`'s rules: shoved, or hurt, its move cut
 /// short and its guard down, reeling or down) and shows it.
@@ -334,7 +342,7 @@ fn hurt(fighters: &mut Query<Body<'_>>, entity: Entity, effect: Effect, away: Ve
     let Some(taking) = fighter.take(effect, away) else {
         return;
     };
-    let (clip, speed) = match taking {
+    let (clip, speed, blend) = match taking {
         Taking::Down => {
             info!(
                 "Melee: {} down",
@@ -344,17 +352,27 @@ fn hurt(fighters: &mut Query<Body<'_>>, entity: Entity, effect: Effect, away: Ve
                     "the partner is"
                 }
             );
-            ("Death01", 1.0)
+            ("Death01", 1.0, REEL_BLEND_MS)
         }
         Taking::Reel(reel) => reel_clip(reel),
     };
+    // A reel keeps the guard's arms over its unarmed clip (a layered blend per bone, as a hit
+    // reaction plays under a weapon stance's upper body, D454): the shield and sword stay up
+    // and out of the body while it reels, and are where the guard wants them when it ends.
+    let hold = matches!(taking, Taking::Reel(_)).then(|| fighter.set.guard.clone());
     if let (Some(mut drawn), Some(mut acting)) = (drawn, acting) {
         drawn.showing = None;
-        show(&mut drawn, &mut acting, clip, speed, true, 0.0, Some(80));
+        show(&mut drawn, &mut acting, clip, speed, true, 0.0, Some(blend));
+        if let Some(act) = &mut acting.clip {
+            act.hold = hold.clone();
+        }
     }
     if let (Some(mut staged), Some(mut partner)) = (staged, partner) {
         partner.showing = Some(clip.to_string());
-        staged.tell_play(clip, speed, true, 80, 0.0);
+        staged.tell_play(clip, speed, true, blend, 0.0);
+        if let Some(hold) = &hold {
+            staged.lay_hold(hold);
+        }
         partner.to(Beat::Recover);
     }
 }

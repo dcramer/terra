@@ -2792,8 +2792,24 @@
    },
    "unit": "",
    "source": "the duel film r17 (record frames 298-306, 338-356, the parried heavy's stagger 458-464); research/2026-10-25-shield-prior-art.md",
-   "needs": "the fight record (terra_creatures::melee, --fight-log) to carry each fighter's shield middle each frame, and duel.ts --check to count shield paths that leave and come back more than 0.1 m within 0.3 s of a move change; a film check named shield round trips",
+   "needs": "duel.ts --check to count shield paths that leave and come back more than 0.1 m within 0.3 s of a move change (the fight record carries each fighter's shield middle since round 29, `shield.mid`); a film check named shield round trips",
    "check": null
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.stagger.shield_jump",
+   "noticed": 4,
+   "notice": "when a parried blow staggers a fighter, its shield snaps from where the blow held it to where the reel holds it in a few frames",
+   "bar": {
+    "at_most": 0.15
+   },
+   "unit": "m",
+   "source": "research/2026-10-25-shield-prior-art.md fault 4 (the duel film r17, record frames 458-464: up at the left to down by the hip in 6 frames); tools/sandbox/duel/shield.ts (JUMP_M, JUMP_FRAMES): the farthest the board middle moves in the fighter's own frame within 0.1 s, from 0.1 s before a stagger to 0.3 s after it",
+   "check": {
+    "by": "film",
+    "name": "stagger shield jump"
+   }
   },
   {
    "measurable": true,

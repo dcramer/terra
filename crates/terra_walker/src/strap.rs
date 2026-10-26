@@ -30,6 +30,10 @@ impl Strap {
     }
 }
 
+/// A held look strapped to its bone (a shield), so a record or check can find it.
+#[derive(Component)]
+pub struct Strapped;
+
 /// Once a held look has loaded, straps it on if its file says so (`put`).
 pub(crate) fn strap(
     ready: On<WorldInstanceReady>,
@@ -93,7 +97,7 @@ fn put(
     held.turn = strap.turn();
     transform.translation = Vec3::from(strap.at) * fit;
     transform.rotation = held.turn;
-    commands.entity(look).insert(ChildOf(bone));
+    commands.entity(look).insert((ChildOf(bone), Strapped));
 }
 
 #[cfg(test)]

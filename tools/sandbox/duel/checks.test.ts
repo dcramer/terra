@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Contact, type Fighter, type Frame, type Moves, chainGaps, framed, hitStop, latency, misses, overlap, same, share, sliding } from "./checks.ts";
 import { moments } from "./moments.ts";
+import { staggerJump } from "./shield.ts";
 
 const MOVES: Moves = { buffer_s: 0.35, hit_stop: new Map([["slash", 0.1], ["backhand", 0.1], ["partner_slash", 0.1]]) };
 
@@ -205,4 +206,34 @@ test("the player's camera framing: the share of the frame's height, centred, the
   const away = share(filmed(at(0.235), 0, [-0.6, 0, -0.8]), [0.2, 0.27]);
   assert.ok(!away.ok, away.line);
   assert.ok(!share(fight(), [0.2, 0.27]).ok, "no camera recorded");
+});
+
+test("a stagger whose shield eases over 0.4 s passes; one snapping 0.4 m in 3 frames fails", () => {
+  // The partner faces east (+x), so its left is north (-z): the board from out at the left
+  // (0.4 m north) to by the hip (0.1 m north), down 0.2 m, its feet shoved back as it goes.
+  const staggered = (span: number) => {
+    const frames = fight(90);
+    frames.forEach((frame, n) => {
+      const f = frame.fighters[1];
+      const k = Math.min(1, Math.max(0, (n - 30) / span));
+      const s = k * k * (3 - 2 * k);
+      f.feet = [-1.3 - 0.3 * Math.min(1, Math.max(0, (n - 30) / 20)), 0, 0];
+      f.stagger_s = n >= 31 && n < 60 ? 0.5 : 0;
+      frame.contacts = n === 30 ? [contact("the partner", "partner_heavy", 0.12, "Parried")] : [];
+      f.shield = { mid: [f.feet[0] + 0.2, 1.0 - 0.2 * s, -0.4 + 0.3 * s], face: [1, 0, 0] };
+    });
+    return frames;
+  };
+  const eased = staggerJump(staggered(24))!;
+  assert.ok(eased.ok, eased.line);
+  const snapped = staggerJump(staggered(3))!;
+  assert.ok(!snapped.ok);
+  assert.ok(Math.abs(snapped.value! - Math.hypot(0.2, 0.3)) < 0.01, snapped.line);
+  // The shove of the feet is no jump: the board kept still in the body's frame passes at 0.
+  const shoved = staggered(3).map((frame) => ({ ...frame, fighters: frame.fighters.map((f) => (f.who === "partner" ? { ...f, shield: { mid: [f.feet[0] + 0.2, 1, -0.4], face: [1, 0, 0] } } : f)) }));
+  assert.equal(staggerJump(shoved)!.value, 0);
+  // A flinch (reeling with no parry) is no stagger.
+  assert.equal(staggerJump(staggered(3).map((frame) => ({ ...frame, contacts: [] })))!.value, 0);
+  // A record with no shield is not measured.
+  assert.equal(staggerJump(fight()), undefined);
 });

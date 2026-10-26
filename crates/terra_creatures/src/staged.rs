@@ -83,6 +83,11 @@ impl Staged {
     /// hold, `terra_walker::layer`), looping.
     pub fn tell_play_held(&mut self, clip: &str, hold: &str, speed: f32, blend_ms: u64) {
         self.tell_play(clip, speed, false, blend_ms, 0.0);
+        self.lay_hold(hold);
+    }
+
+    /// Lays `hold`'s first pose over the arms of the clip just told (a reel under the guard).
+    pub fn lay_hold(&mut self, hold: &str) {
         if let Some(asked) = &mut self.asked {
             asked.hold = Some(hold.to_string());
         }

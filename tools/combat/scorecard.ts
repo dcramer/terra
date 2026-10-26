@@ -202,10 +202,10 @@ function main() {
     const json = join(out, "checks.json");
     rmSync(json, { force: true });
     run(process.execPath, [resolve(ROOT, "tools/sandbox/duel.ts"), "--out", out]);
-    const checks: { name: string; faults: number }[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
+    const checks: { name: string; faults: number; value?: number }[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
     for (const c of wanted) if (c.check?.by === "film") {
       const found = checks.find((each) => each.name === (c.check as { name: string }).name);
-      if (found) values.set(c.id, found.faults);
+      if (found) values.set(c.id, found.value ?? found.faults);
     }
   }
 
