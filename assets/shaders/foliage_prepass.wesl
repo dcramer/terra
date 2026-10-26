@@ -124,7 +124,8 @@ fn bare(uv: vec2<f32>, ranked: bool, world: vec3<f32>) {
     // turns as one plant.
     let year = textureSampleLevel(climate_leaves, climate_leaves_sampler, climate_place(world), layer, 0.0);
     let on = mix(year.r, year.g, plant_share(floor(world / 3.0) * 1.7 + 0.3));
-    if on < 0.999 && clumps(world * 2.5 + 0.37) > on {
+    // None on is none left, as foliage_fragment.wesl's.
+    if on < 0.999 && max(clumps(world * 2.5 + 0.37), 0.002) > on {
         discard;
     }
 }
