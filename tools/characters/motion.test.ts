@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { constraints, path, wanted } from "./motion.ts";
+import { constraints, path, uthanaArgs, wanted } from "./motion.ts";
 
 test("a take's path runs straight ahead at the clip's speed, a point a frame", () => {
   const [constraint] = path(3.2, 6);
@@ -38,4 +38,13 @@ test("a paid take already made is never made again: only the missing ones are wa
   assert.deepEqual(wanted(3, (n) => made.has(n)), [1]);
   assert.deepEqual(wanted(4, (n) => made.has(n)), [1, 3]);
   assert.deepEqual(wanted(2, () => true), []);
+});
+
+test("an Uthana take is made by 3.0 unless its entry names a model; 2.0 takes a seed a take, and its foot IK", () => {
+  assert.deepEqual(uthanaArgs({ seed: 1, seconds: 8 }, 2), { model: "3", length: 8, footIk: false });
+  assert.deepEqual(uthanaArgs({ model: "2", seed: 1, seconds: 8, foot_ik: true }, 0), { model: "2", length: 8, footIk: true, seed: 1 });
+  assert.equal(uthanaArgs({ model: "2", seed: 1, seconds: 8 }, 3).seed, 4);
+  // 3.0 makes 4 to 10 whole seconds; 2.0 is not held to it.
+  assert.throws(() => uthanaArgs({ seed: 1, seconds: 12 }, 0));
+  assert.equal(uthanaArgs({ model: "2", seed: 1, seconds: 12 }, 0).length, 12);
 });

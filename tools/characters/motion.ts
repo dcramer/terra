@@ -26,7 +26,9 @@
 // ~/.cache/terra-kimodo by default.
 //
 // An entry with source "uthana" is made by Uthana's text-to-motion 3.0 on our own body instead
-// (prompt, seconds: a whole number from 4 to 10, at $0.10 a second), with looped (seconds) for
+// (prompt, seconds: a whole number from 4 to 10, at $0.10 a second), or by the model it names
+// (model "2", text-to-motion 2.0 at $0.03 a second, each take seeded from seed on, with
+// foot_ik), with looped (seconds) for
 // a clip Uthana closes into a loop itself, easing its end into its start over that long, kept
 // whole. Its takes are GLBs; a take already made is never made again (each is paid for), so
 // --samples N makes more. What each cost, by the account's credit, is printed and kept in
@@ -35,7 +37,8 @@
 // Each take is measured: the stride or loop and its seam (deg, and cm: the hands, feet and
 // head at the loop's end from its start, relative to the hips, before it is eased closed), the
 // gait and the limbs' check, how deep the arms go into the body on every template (moves.ts's
-// hands, bar 2 cm) and, for a clip that stays where it stands, how far each foot wanders.
+// hands, bar 2 cm) and, for a clip that stays where it stands, how far each foot wanders and
+// how it stands (stance.ts: knees, hips, head against rest), ✗ beside each over its bar.
 // Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
@@ -47,6 +50,7 @@ import { parseArgs } from "node:util";
 import { balance, character, download, looped, motion } from "../uthana/uthana.ts";
 import { Glb, posed } from "./glb.ts";
 import { armsInBody } from "./skin.ts";
+import { BAR, stance, stanceLine } from "./stance.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HERE = join(ROOT, "tools", "characters");
@@ -64,12 +68,21 @@ type Entry = {
   prompt: string; speed: number; seconds: number; seed: number; take?: number; samples?: number;
   still?: boolean; loop?: [number, number]; busy?: boolean; way?: number; once?: boolean; span?: [number, number];
   speeds?: [number, number][]; travels?: boolean;
-  source?: "uthana"; looped?: number; motion?: string;
+  source?: "uthana"; looped?: number; motion?: string; model?: "1" | "2" | "3"; foot_ik?: boolean;
 };
 
-/** A take of an Uthana entry: the motion made and its prompt, the one looped from it, the
- * dollars both cost, and how high its feet were lifted onto our ground (uthana/carry.ts `lift`, m). */
-type Made = { motion: string; prompt?: string; looped?: string; dollars: number; lift?: number };
+/** A take of an Uthana entry: the motion made, its prompt, the model and seed that made it, the
+ * one looped from it, the dollars both cost, and how high its feet were lifted onto our ground
+ * (uthana/carry.ts `lift`, m). */
+type Made = { motion: string; prompt?: string; model?: string; seed?: number; looped?: string; dollars: number; lift?: number };
+
+/** What makes take `n` of an Uthana entry: its model (3.0 unless it says) and, for the models
+ * that take one (1.0 and 2.0), a seed a take on from the entry's, and its foot IK. */
+export function uthanaArgs(entry: Pick<Entry, "model" | "seed" | "seconds" | "foot_ik">, n: number) {
+  const model = entry.model ?? "3";
+  if (model === "3" && (!Number.isInteger(entry.seconds) || entry.seconds < 4 || entry.seconds > 10)) throw new Error(`Uthana's 3.0 makes 4 to 10 whole seconds, not ${entry.seconds}`);
+  return { model, length: entry.seconds, footIk: entry.foot_ik ?? false, ...(model === "3" ? {} : { seed: (entry.seed ?? 0) + n }) };
+}
 
 /** The takes of `clip` an Uthana entry still needs: of the first `samples`, those not made. */
 export function wanted(samples: number, made: (n: number) => boolean): number[] {
@@ -78,7 +91,7 @@ export function wanted(samples: number, made: (n: number) => boolean): number[] 
 
 /** Makes the Uthana takes of `entry` that are missing, each at `file(n)`; returns their log. */
 async function uthanaTakes(entry: Entry, samples: number, file: (n: number) => string, log: string): Promise<Record<number, Made>> {
-  if (!Number.isInteger(entry.seconds) || entry.seconds < 4 || entry.seconds > 10) throw new Error(`Uthana's 3.0 makes 4 to 10 whole seconds, not ${entry.seconds}`);
+  uthanaArgs(entry, 0);
   const made: Record<number, Made> = existsSync(log) ? JSON.parse(readFileSync(log, "utf8")) : {};
   // The log's folder first: a take paid for is written down before anything else can fail.
   mkdirSync(dirname(log), { recursive: true });
@@ -89,7 +102,8 @@ async function uthanaTakes(entry: Entry, samples: number, file: (n: number) => s
     // but not looped yet is looped.
     if (!made[n] || (entry.looped && !made[n].looped)) {
       const before = await balance();
-      made[n] ??= { motion: await motion(entry.prompt, { model: "3", length: entry.seconds, footIk: false, character: id }), prompt: entry.prompt, dollars: 0 };
+      const how = uthanaArgs(entry, n);
+      made[n] ??= { motion: await motion(entry.prompt, { ...how, character: id }), prompt: entry.prompt, model: how.model, ...(how.seed === undefined ? {} : { seed: how.seed }), dollars: 0 };
       save();
       if (entry.looped && !made[n].looped) made[n].looped = await looped(id, made[n].motion, entry.looped);
       const after = await balance();
@@ -258,13 +272,22 @@ async function main() {
     const row = lines(gait, "GAIT").find((l) => l.includes(`try_${n}`)) ?? "";
     const limbs = lines(check, "CLIPCHECK {")[0] ?? "";
     const once = lines(made, `ONCE ${clip}`)[0] ?? lines(made, `WAY ${clip}`)[0] ?? "";
-    console.log(`take ${n}: ${stride.replace(/^MADE \S+ /, "")}`);
+    // An idle's seam against its bar: what the loop's last frames ease over.
+    const seam = stride.match(/seam ([\d.]+) deg, ([\d.]+) cm/);
+    const open = entry.still && !entry.busy && seam && (Number(seam[1]) > BAR.seamDeg || Number(seam[2]) > BAR.seamCm);
+    console.log(`take ${n}: ${stride.replace(/^MADE \S+ /, "")}${open ? " ✗" : ""}`);
     for (const l of [once.replace(/^(ONCE|WAY) \S+ /, ""), row.replace(/^GAIT\s+\S+\s+\S+\s+/, ""), limbs.replace(/^CLIPCHECK /, "")]) if (l) console.log(`        ${l}`);
     const played = new Glb(figure).clip(clip);
     if (played) {
       const arms = armsInBody(body, templates, played);
+      const x = (over: boolean) => (over ? " ✗" : "");
+      const idle = entry.still && !entry.busy;
+      const feet = idle ? wander(body, figure, clip) : 0;
       console.log(`        arms in body: worst ${arms.cm.toFixed(1)} cm (${arms.where}), ${(arms.over * 100).toFixed(0)}% of poses over 2 cm` +
-        (entry.still && !entry.busy ? `; feet wander ${wander(body, figure, clip).toFixed(1)} cm` : ""));
+        x(idle && (arms.cm > BAR.arms || arms.over > 0)) + (idle ? `; feet wander ${feet.toFixed(1)} cm${x(feet > BAR.wander)}` : ""));
+      // An idle's stance against the body's rest: soft knees, low hips, a head hung forward
+      // (stance.ts, its bar set on the references).
+      if (idle) console.log(`        stance: ${stanceLine(stance(body, played))}`);
     }
   }
   console.log(`keep one with: node tools/characters/motion.ts ${clip}${values.list ? ` --list ${named}` : ""} --keep N`);
