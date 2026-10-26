@@ -52,7 +52,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, board, meshOf, sliced, through } from "./clash.ts";
 import { PACE_FRAMES } from "./phases.ts";
-import { type Shape, skinOf } from "./skin.ts";
+import { type Shape, armPoints, skinOf } from "./skin.ts";
 import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, place, posed, qinv, rot, sub, turn } from "./glb.ts";
@@ -332,15 +332,7 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
       const inside = skinned(shape, pose);
       const P = (n: string) => pose[node[n]].t;
       for (const s of ["l", "r"]) {
-        const pts: [V3, number, string][] = [
-          [mid(P(`hand_${s}`), P(`middle_01_${s}`)), 0.025, `hand_${s}`],
-          [P(`middle_02_${s}`), 0.012, `hand_${s}`],
-          [P(`index_02_${s}`), 0.012, `hand_${s}`],
-          [P(`thumb_02_${s}`), 0.012, `hand_${s}`],
-          [mid(P(`lowerarm_${s}`), P(`hand_${s}`)), 0.035, `forearm_${s}`],
-          [P(`lowerarm_${s}`), 0.04, `elbow_${s}`],
-          [mid(P(`upperarm_${s}`), P(`lowerarm_${s}`)), 0.045, `upper arm_${s}`],
-        ];
+        const pts = armPoints(P, s);
         for (const [q, pad, what] of pts) {
           const { depth, part } = inside(q);
           hands = worse(hands, (depth - pad) * 100, `${what} in ${part} at ${t.toFixed(2)} s, ${shape.name}`);

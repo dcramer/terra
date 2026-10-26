@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import type { Board } from "../../characters/clash.ts";
 import { Glb, type Q, posed, qmul } from "../../characters/glb.ts";
-import { type Eight, type PoseFrame, type Posed, headOff, intoModel, onForearm, poseChecks, shieldHigh } from "./pose.ts";
+import { ARMS_CM, type Eight, type PoseFrame, type Posed, armsIn, headOff, intoModel, onForearm, poseChecks, shieldHigh } from "./pose.ts";
 
 const body = new Glb(resolve(import.meta.dirname, "../../../assets/models/character/base.glb"));
 const atRest = posed(body, undefined, 0);
@@ -96,4 +96,17 @@ test("the checks read the player's blows, and leave the guard standing and the b
   const head = poseChecks(frames, false).find((c) => c.name === "head yaw in blows");
   near(head?.value, 44, 0.1);
   assert.equal(head?.faults, 2);
+});
+
+test("arms held out from the body are clear of it, a hand laid inside the chest is in it", () => {
+  // The base body at rest holds its arms out (the A pose): every arm point outside the skin.
+  assert.ok(armsIn(restPose()).cm < 0, `${armsIn(restPose()).cm}`);
+  // The right hand and its fingers moved to the chest's middle (spine_03's place, inside the
+  // torso): deeper than the bar, in the torso.
+  const pose = restPose();
+  const chest = pose.bones.spine_03.slice(0, 3);
+  for (const bone of ["hand_r", "middle_01_r", "middle_02_r", "index_02_r", "thumb_02_r"]) pose.bones[bone] = e(chest);
+  const inside = armsIn(pose);
+  assert.ok(inside.cm > ARMS_CM, `${inside.cm}`);
+  assert.match(inside.where, /^hand_r in spine/);
 });

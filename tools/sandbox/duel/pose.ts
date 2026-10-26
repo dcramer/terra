@@ -17,6 +17,11 @@
 //                  middle off the board's back (cm), and the hand strap (the look's origin, D504)
 //                  off the fist (socket.hand.L), cm. The developer: "you'd have this wrapped
 //                  around the arm in real life ... not uniform with the arm geometry".
+//   arms in body   how deep an arm (hand, fingers, forearm, elbow, upper arm) goes into the
+//                  body (torso, head, thighs), skinned as the move check skins it (skin.ts),
+//                  cm past the arm's own thickness, in the idles a person watches longest: the
+//                  drawn guard standing and walking, the sheathed idle and walk. The developer:
+//                  "the idle animation still looks stupid and the guys arms clip into the body".
 //
 // Node 22.18 or later; no dependencies.
 
@@ -24,6 +29,7 @@ import { resolve } from "node:path";
 import { type Board, board, meshOf } from "../../characters/clash.ts";
 import { Glb, type Pose, type Q, type V3, dot, len, place, posed, qinv, rot, sub } from "../../characters/glb.ts";
 import { faceOff, gripOff } from "../../characters/shield_path.ts";
+import { armPoints, skinOf } from "../../characters/skin.ts";
 import type { Check, Fighter, Frame, Lens } from "./checks.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
@@ -48,6 +54,8 @@ export const FOREARM_DEG = 10;
 export const OFF_CM = 5;
 /// The hand strap off the fist (moves.ts's `grip`, held.shield.grip_hand's bar).
 export const STRAP_CM = 1;
+/// An arm through the skin past its own thickness (moves.ts's HAND_CM).
+export const ARMS_CM = 2;
 /// After the block is let go or a move ends, the frames its blend back to the guard may take.
 const SETTLE = 20;
 /// A body moving faster than this, m/s, walks.
@@ -59,11 +67,13 @@ export const yaw = (v: V3): number => (Math.atan2(v[0], v[2]) * 180) / Math.PI;
 /// An angle into -180..180.
 export const wrap = (deg: number): number => ((((deg + 180) % 360) + 360) % 360) - 180;
 
-/// The base body the fighters wear, its rest pose in the model's space by bone name.
+/// The base body the fighters wear, and its rest pose in the model's space by bone name.
+let based: Glb | undefined;
+const base = (): Glb => (based ??= new Glb(resolve(ROOT, "assets/models/character/base.glb")));
 let rested: Map<string, Pose> | undefined;
 function rest(): Map<string, Pose> {
   if (rested) return rested;
-  const body = new Glb(resolve(ROOT, "assets/models/character/base.glb"));
+  const body = base();
   const at = posed(body, undefined, 0);
   rested = new Map(body.gltf.nodes.map((n, i) => [n.name ?? "", at[i]]));
   return rested;
@@ -136,6 +146,27 @@ export function shieldHigh(pose: Posed, b?: Board, at = rest()): { cm: number; f
   const chest = ahead(pose, "spine_03", at);
   if (!s || !hips || !chest) return undefined;
   return { cm: (s.board.centre[1] - hips[1]) * 100, face: faceOff(s.face, chest) };
+}
+
+/// The fighters' skin (the base body as the template both wear, `male`: terra_creatures::melee's
+/// partner and player), and how deep a posed body's arms go into it: the deepest point, cm past
+/// its thickness, and where.
+let skin: ReturnType<typeof skinOf> | undefined;
+export function armsIn(pose: Posed): { cm: number; where: string } {
+  const body = base();
+  skin ??= skinOf(body, resolve(ROOT, "assets/models/character/templates.json"), ["male"]);
+  const at = posed(body, undefined, 0);
+  const poses = body.gltf.nodes.map((n, i) => (n.name && pose.bones[n.name] ? eight(pose.bones[n.name]) : at[i]));
+  const inside = skin.skinned(skin.shapes[0], poses);
+  const P = (bone: string) => eight(pose.bones[bone]).t;
+  let worst = { cm: -Infinity, where: "" };
+  for (const side of ["l", "r"])
+    for (const [q, pad, what] of armPoints(P, side)) {
+      const { depth, part } = inside(q);
+      const cm = (depth - pad) * 100;
+      if (cm > worst.cm) worst = { cm, where: `${what} in ${part}` };
+    }
+  return worst;
 }
 
 /// A body on a frame, as the checks read it: who, drawn or not, what it does (a move's name,
@@ -242,10 +273,36 @@ export function shieldForearm(all: Sample[], b?: Board): Check[] {
   ];
 }
 
+/// The arms against the body in the idles (`arms in body`): every settled frame of either
+/// body standing or walking in no move, drawn (the guard) and sheathed; its value the deepest,
+/// cm, each stance's worst beside it.
+export function armsInBody(all: Sample[]): Check | undefined {
+  const name = "arms in the body at rest";
+  // Every other frame: an idle moves slowly, and the skin is costly (about 10 ms a pose).
+  const idles = all.filter((s) => s.settled && s.frame % 2 === 0 && (s.doing === "idle" || s.doing === "walk"));
+  if (!idles.length) return undefined;
+  type Worst = { cm: number; where: string; frame: number; who: string; n: number; over: number };
+  const stances = new Map<string, Worst>();
+  for (const s of idles) {
+    const a = armsIn(s.pose);
+    const key = `${s.drawn ? "drawn" : "sheathed"} ${s.doing}`;
+    const was = stances.get(key) ?? { cm: -Infinity, where: "", frame: 0, who: "", n: 0, over: 0 };
+    const now = a.cm > was.cm ? { ...was, ...a, frame: s.frame, who: s.who } : was;
+    stances.set(key, { ...now, n: was.n + 1, over: was.over + (a.cm > ARMS_CM ? 1 : 0) });
+  }
+  const each = [...stances.entries()];
+  const [, worst] = worstOf(each, ([, w]) => w.cm)!;
+  const over = each.reduce((a, [, w]) => a + w.over, 0);
+  const whose = (w: string) => (w === "you" ? "the player's" : `the ${w}'s`);
+  const parts = each.map(([k, w]) => `${k} ${w.cm.toFixed(1)} cm (${w.where}, ${whose(w.who)}, frame ${w.frame}; ${w.over} of ${w.n} over)`);
+  const line = `an arm into the body at rest, deepest ${worst.cm.toFixed(1)} cm: ${parts.join("; ")} (bar ${ARMS_CM} cm)`;
+  return { name, ok: over === 0, line, faults: over, value: r1(worst.cm) };
+}
+
 /// Every composed-pose check on a record; the head's also against the game camera's look when
 /// the record is the player run's.
 export function poseChecks(frames: PoseFrame[], byCamera: boolean): Check[] {
   const all = samples(frames, byCamera);
   if (!all.length) return [];
-  return [headYaw(all), shieldRest(all), ...shieldForearm(all)].filter((c): c is Check => c !== undefined);
+  return [headYaw(all), shieldRest(all), ...shieldForearm(all), armsInBody(all)].filter((c): c is Check => c !== undefined);
 }

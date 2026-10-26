@@ -2924,6 +2924,22 @@
     "by": "film",
     "name": "shield strap off the fist"
    }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.pose.arms_in_body",
+   "noticed": 4,
+   "notice": "an arm sinks into the body in an idle, drawn or sheathed (\"the idle animation still looks stupid and the guys arms clip into the body\", the developer, playing the game (2026-10-26))",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "an arm through the skin past its own thickness (moves.ts HAND_CM, D447); pose.ts ARMS_CM: the deepest of the arm points (hand, fingers, forearm, elbow, upper arm, skin.ts armPoints) into the torso, head or thighs, skinned as the male template (skin.ts), in every settled frame of either body standing or walking in no move, drawn and sheathed; tools/sandbox/duel/pose.ts on the duel record's composed pose (terra_creatures::melee::pose, D530)",
+   "check": {
+    "by": "film",
+    "name": "arms in the body at rest"
+   }
   }
  ]
 }

@@ -8,6 +8,24 @@ import { type Glb, type Pose, type V3, dot, len, matrix, mmul, posed, qinv, rot,
 export type Shape = { name: string; positions: Float64Array; moved: Map<number, V3>; shift: Map<number, V3> };
 export type Inside = (q: V3) => { depth: number; part: string };
 
+const mid = (a: V3, b: V3): V3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+
+/** Points along one arm (`l` or `r`) at a pose, each with its half-thickness (m) and its name,
+ * for how deep the arm goes into the body (the move check's `hands`, the composed pose's arms):
+ * the palm, three fingertips' middles, the forearm, the elbow and the upper arm. `P` gives a
+ * bone's place by name. */
+export function armPoints(P: (bone: string) => V3, s: string): [V3, number, string][] {
+  return [
+    [mid(P(`hand_${s}`), P(`middle_01_${s}`)), 0.025, `hand_${s}`],
+    [P(`middle_02_${s}`), 0.012, `hand_${s}`],
+    [P(`index_02_${s}`), 0.012, `hand_${s}`],
+    [P(`thumb_02_${s}`), 0.012, `hand_${s}`],
+    [mid(P(`lowerarm_${s}`), P(`hand_${s}`)), 0.035, `forearm_${s}`],
+    [P(`lowerarm_${s}`), 0.04, `elbow_${s}`],
+    [mid(P(`upperarm_${s}`), P(`lowerarm_${s}`)), 0.045, `upper arm_${s}`],
+  ];
+}
+
 /** The body's templates (all, or `only` these) and its skin at a pose. */
 export function skinOf(body: Glb, templatesFile: string, only: string[] = []): { shapes: Shape[]; skinned: (shape: Shape, pose: Pose[]) => Inside } {
   // The body: its skin, which of its vertices are torso, head or thigh (by their heaviest joint),

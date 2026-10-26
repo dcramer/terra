@@ -161,6 +161,7 @@ film.pose.shield_rest_high	27.7	new rows film.pose.* (round 30, D530): the game'
 film.pose.shield_forearm_deg	15.6	new rows film.pose.* (round 30, D530): the game's composed pose from the duel record, the developer's complaints from play (head 45 deg left in blows, shield raised off the block, heater off the forearm); their first numbers on main
 film.pose.shield_forearm_off	12.5	new rows film.pose.* (round 30, D530): the game's composed pose from the duel record, the developer's complaints from play (head 45 deg left in blows, shield raised off the block, heater off the forearm); their first numbers on main
 film.pose.shield_strap_fist	17.6	new rows film.pose.* (round 30, D530): the game's composed pose from the duel record, the developer's complaints from play (head 45 deg left in blows, shield raised off the block, heater off the forearm); their first numbers on main
+film.pose.arms_in_body	6.2	new row film.pose.arms_in_body (combat round 31, D530): the developer's 'the guys arms clip into the body', measured on the composed idles; the sheathed idle and walk put the right hand 5.6-6.2 cm into the right thigh (Idle_Loop, which moves.ts never measures)
 move.Idle_Loop.hands	1.606	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Idle_Loop.held	21.403	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Walk_Loop.hands	6.212	seeded from main at 705a8520 (2026-10-24), the first scorecard run
