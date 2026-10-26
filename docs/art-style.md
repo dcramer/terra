@@ -95,6 +95,7 @@ These are triangles in the game's file, starting from what the bake-off and the 
 | A large prop or station: a forge, a bed, a machine | 1,500 to 2,500 |
 | A hero prop the player sits beside, such as a campfire, its parts included (D427) | 6,000 to 10,000 |
 | A creature, wolf-sized | 1,500 to 3,000 |
+| A creature larger than a wolf and met up close, such as the dungeon spider, 2.5 m across its legs | up to 4,000; an Agent choice the developers may overrule: eight long legs need the triangles to stay round at a few metres, as the stag (4,200) and boar (3,400) already do |
 | A character body | 2,500 to 5,000 |
 | A rock | 100 to 600 |
 | A tree, near | 2,000 to 8,000, its leaf cards included (D222) |
