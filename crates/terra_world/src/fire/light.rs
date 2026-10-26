@@ -949,7 +949,10 @@ pub(super) fn light(
                         commands.entity(entity).remove::<VolumetricLight>();
                     }
                 }
-                if scatters {
+                // One glow a fire, round its top light, which its pit key shines in as well:
+                // each glow the eye is inside is marched over the whole screen, 3.6 ms by night
+                // a glow at a campfire 4.4 m off (fire round g29).
+                if scatters && !lit.casts {
                     wanted.push(super::fog::Glow::of(lit.at, lit.radius, fade));
                 }
                 if let Some(slot) = told.get_mut(i) {
