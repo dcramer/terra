@@ -25,6 +25,9 @@
 //   wade                     wading, its speed falls linearly with depth to this fraction of
 //                            its jog at swim depth (D523: 0.6, a placeholder for the playtest)
 //   water_drag               the water's drag on it, 1/s
+//   climb_out                a swimmer at the surface swimming into a ledge no higher than
+//                            this over the water climbs out onto it, m (D523: about 1 m, a
+//                            placeholder for the playtest)
 //   dive                     a swimmer moving while looking down strokes down at up to this,
 //                            m/s, looking straight down; holding jump it rises at it (D478)
 //   dive_from_deg            it dives only looking further down than this, deg, so a camera
@@ -75,6 +78,7 @@
         float_depth: 0.75,
         wade: 0.6,
         water_drag: 2.0,
+        climb_out: 1.0,
         dive: 1.5,
         dive_from_deg: 15.0,
         mouth: 0.92,

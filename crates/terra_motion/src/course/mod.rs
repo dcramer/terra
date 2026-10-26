@@ -22,6 +22,8 @@
 //!   angle to its shores, and a body floated to rest (criterion 17, D74).
 //! - `dive`: diving by looking down, rising on jump, floating back up, breath used under water
 //!   and drowning, a diver along a lake's bed and out up its shore (criterion 17, D478).
+//! - `ledge`: a swimmer climbing out onto a bank up to its kind's limit over the water, and
+//!   never onto a higher one (D523).
 //! - `fall`: falls that must not hurt (a jump, a step, a stair, a short drop), drops that
 //!   must, onto level ground and a slope, and into deep water (D476).
 //! - `pushes`: people easing apart, a man walked past one standing, a monster walking through
@@ -37,6 +39,7 @@ mod fall;
 mod far;
 pub mod field;
 mod flora;
+mod ledge;
 mod pushes;
 mod runs;
 mod sources;
@@ -133,6 +136,8 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(wade);
     let (dive, deepest_dive) = dive::score(&new);
     measures.extend(dive);
+    let (ledge, deepest_ledge) = ledge::score(&new);
+    measures.extend(ledge);
     let (pushes, deepest_push, overlap) = pushes::score(&new);
     measures.extend(pushes);
     let (closing, deepest_closing) = closing::score(&new);
@@ -145,6 +150,7 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
         .max(deepest_water)
         .max(deepest_wade)
         .max(deepest_dive)
+        .max(deepest_ledge)
         .max(deepest_fall);
     // What a body met besides the ground counts toward how deep it ever went.
     for m in measures.iter_mut() {

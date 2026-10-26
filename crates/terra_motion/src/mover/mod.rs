@@ -80,6 +80,9 @@ pub struct Kind {
     /// its swim depth (D523), so it slows into a swim rather than stepping down to one.
     pub wade: f32,
     pub water_drag: f32,
+    /// A swimmer at the surface swimming into a ledge no higher than this over the water climbs
+    /// out onto it, m (D523; Unreal's `MaxOutOfWaterStepHeight`).
+    pub climb_out: f32,
     /// A swimmer strokes down or up at most this fast, looking straight down or holding jump,
     /// m/s (D478); it dives only looking further down than `dive_from_deg`, deg.
     pub dive: f32,
@@ -243,6 +246,8 @@ pub struct Body {
     left_by_jump: bool,
     /// Time left on a jump pressed in the air (the buffer).
     buffer: f32,
+    /// Climbing out of water (D523): launched and still rising, so not swimming.
+    climbing: bool,
 }
 
 impl Body {
@@ -320,6 +325,7 @@ impl Bodies {
             frame: feet.as_dvec3(),
             air_s: f32::INFINITY,
             left_by_jump: false,
+            climbing: false,
             buffer: 0.0,
         };
         settle(&mut body, feet.as_dvec3(), Vec3::ZERO, world);
@@ -674,7 +680,8 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let g = world.gravity;
     let from_centre = (body.position - world.centre.as_dvec3()).length() as f32;
     let depth = (world.water)(body.feet).map_or(0.0, |surface| surface - from_centre);
-    let wading = depth / (k.swim_depth * k.height).max(1e-3);
+    let vertical = body.velocity.dot(up);
+    let (wading, climb) = swim::wading(body, intent, depth, g, query, &shape);
     let swimming = wading > 1.0;
 
     if intent.jump {
@@ -682,17 +689,18 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     }
     let standing = body.ground == Ground::Grounded;
     let coyote = !body.left_by_jump && body.air_s <= k.coyote_s + 1e-6;
-    let jump = body.buffer > 0.0 && !swimming && (standing || coyote);
+    let jumped = body.buffer > 0.0 && !swimming && (standing || coyote);
+    let jump = jumped || climb.is_some();
+    let launch = climb.unwrap_or(k.jump_speed);
 
     let look = swim::look(&k, intent.pitch);
     let level = level_velocity(body, intent, wading, look, dt);
-    let vertical = body.velocity.dot(up);
     let moving = intent.wish.reject_from(up).length_squared() > 1.0e-12;
     let stroke = swimming
         .then(|| swim::stroke(&k, intent, moving, look, depth))
         .flatten();
     let (rise, rise_end) = if jump {
-        (k.jump_speed, k.jump_speed - g * dt)
+        (launch, launch - g * dt)
     } else if let Some(stroke) = stroke {
         let by = k.swim_accel * dt;
         (vertical, vertical + (stroke - vertical).clamp(-by, by))
@@ -802,7 +810,7 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let falling = (-vertical).max(0.0);
     let landed = (was_airborne && body.ground == Ground::Grounded)
         .then(|| libm::sqrtf(falling * falling + 2.0 * g * dropped));
-    landing(body, landed, level, jump, world, dt);
+    landing(body, landed, level, jumped, world, dt);
     swim::breathe(body, world, dt);
 }
 

@@ -8,8 +8,16 @@
 //! than hanging where it stopped, as Unreal's neutral default does). Its breath (D74) is used
 //! while its mouth is under and refills at the surface; out of breath, it drowns a second at a
 //! time, as Minecraft's and Valheim's swimmers take harm in pulses.
+//!
+//! A swimmer at the surface swimming into a ledge no higher than its kind's `climb_out` over
+//! the water climbs out onto it (D523): Unreal's water jump (`UCharacterMovementComponent::
+//! CheckWaterJump`, its `MaxOutOfWaterStepHeight` and `OutofWaterZ`, after its API docs), a
+//! sweep ahead for a wall and a line over it at the limit, then a launch up and on, falling.
 
+use super::query::{Capsule, Query};
+use super::slide::Shape;
 use super::{Body, Intent, Kind, World};
+use glam::Vec3;
 use std::f32::consts::FRAC_PI_2;
 
 /// How far under floating depth an upward stroke begins to ease off, m: so a swimmer rising
@@ -51,6 +59,96 @@ pub(super) fn stroke(
     }
     let ease = ((depth - k.float_depth * k.height) / EASE_M).clamp(0.0, 1.0);
     (ease > 0.0).then_some(up * ease)
+}
+
+/// How far ahead a swimmer looks for a wall to climb out over, in its radii (Unreal's
+/// `CheckWaterJump` sweeps its capsule 1.2 radii on), and how far past the wall it looks for
+/// the ledge's top (Unreal's line, 3.2 radii from the capsule's axis).
+const WALL_RADII: f32 = 1.2;
+const OVER_RADII: f32 = 3.2;
+/// The least a swimmer wishing into a wall goes toward it: within 75 deg of straight at it,
+/// as a step is taken (Jolt's `mStepCosForward`), so swimming along a bank does not climb it.
+const INTO_COS: f32 = 0.258_819;
+/// How far over the ledge's top a climb out lifts the feet, m: clear of its edge's round.
+const CLEAR_M: f32 = 0.15;
+/// The thin probe's radius that finds the ledge's top, m.
+const PROBE_M: f32 = 0.02;
+
+/// The water's depth at a body's feet as a share of its kind's swim depth, 1 or more swum,
+/// and the speed up it climbs out at this tick if it does ([`climb_out`]): a swimmer climbing
+/// out (D523) rises as a jump does, not swimming, until it tops its arc.
+pub(super) fn wading(
+    body: &mut Body,
+    intent: &Intent,
+    depth: f32,
+    gravity: f32,
+    query: &dyn Query,
+    shape: &Shape,
+) -> (f32, Option<f32>) {
+    let k = &body.kind;
+    let wading = depth / (k.swim_depth * k.height).max(1e-3);
+    body.climbing &= body.velocity.dot(shape.up) > 0.0;
+    let climb = (wading > 1.0 && !body.climbing)
+        .then(|| climb_out(body, intent, depth, gravity, query, shape))
+        .flatten();
+    body.climbing |= climb.is_some();
+    let wading = if body.climbing {
+        wading.min(1.0)
+    } else {
+        wading
+    };
+    (wading, climb)
+}
+
+/// The speed up a swimmer climbing out this tick launches at, if it does (Unreal's
+/// `CheckWaterJump`): at the surface (its mouth out), wishing into a wall too steep to stand
+/// on within [`WALL_RADII`] ahead, whose walkable top stands no higher than the kind's
+/// `climb_out` over the water (`depth` is how deep its feet are, m) with room over it, and the
+/// water over it too shallow to swim. Unreal launches at a fixed `OutofWaterZ`; this launches
+/// just high enough to clear the ledge found, so a low bank is not leapt.
+fn climb_out(
+    body: &Body,
+    intent: &Intent,
+    depth: f32,
+    gravity: f32,
+    query: &dyn Query,
+    shape: &Shape,
+) -> Option<f32> {
+    let (k, up) = (&body.kind, shape.up);
+    let wish = intent.wish.reject_from(up).normalize_or_zero();
+    if body.under || wish == Vec3::ZERO {
+        return None;
+    }
+    let reach = k.radius * WALL_RADII;
+    let wall = query.sweep(&shape.capsule(Vec3::ZERO), wish * reach)?;
+    let into = -wall.contact.normal.reject_from(up).normalize_or_zero();
+    if !shape.too_steep(wall.contact.normal) || wish.dot(into) < INTO_COS {
+        return None;
+    }
+    // The line over the wall at the limit (Unreal's trace at `MaxOutOfWaterStepHeight`): open,
+    // or ending on ground to stand on.
+    let limit = depth + k.climb_out;
+    let probe = |at: Vec3| Capsule {
+        a: at,
+        b: at,
+        radius: PROBE_M,
+        origin: shape.origin,
+    };
+    let over = up * limit;
+    if let Some(hit) = query.sweep(&probe(over), into * k.radius * OVER_RADII)
+        && shape.too_steep(hit.contact.normal)
+    {
+        return None;
+    }
+    // The top, straight down from the limit where the body would stand past the wall's face.
+    let stand = over + into * (reach * wall.fraction + 2.0 * k.radius + shape.padding);
+    let top = query.sweep(&probe(stand), -up * limit)?;
+    let rise = limit * (1.0 - top.fraction) - PROBE_M;
+    let swum = depth - rise > k.swim_depth * k.height;
+    if shape.too_steep(top.contact.normal) || swum {
+        return None;
+    }
+    Some(libm::sqrtf(2.0 * gravity * (rise + CLEAR_M).max(0.0)))
 }
 
 /// A body's breath after a tick, by how deep its mouth ends under the water over its feet:

@@ -998,6 +998,36 @@
    "measurable": true
   },
   {
+   "id": "swim.ledge",
+   "noticed": 4,
+   "notice": "a swimmer swimming into a bank no higher over the water than its kind's climb-out limit does not climb out onto it",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "share of banks 0.35, 0.7 and 0.9 of the kind's climb_out over deep water, swum into from the surface straight and 30 deg off, it does not end standing on; given 1.5 times the way at the kind's swim speed and 3 s; two kinds",
+   "source": "D523 (a swimmer climbs out onto a ledge up to about 1 m over the water, as Unreal's water jump does); docs/controller.md criterion 17",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "swim.ledge.high",
+   "noticed": 4,
+   "notice": "a swimmer climbs out onto a bank higher over the water than its kind's climb-out limit",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "share of banks 1.2 and 1.5 of the kind's climb_out over deep water, swum into as swim.ledge, it ends standing on; two kinds",
+   "source": "D523 (up to about 1 m); Unreal's MaxOutOfWaterStepHeight",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "stamina.costs",
    "noticed": 3,
    "notice": "sprinting, jumping or swimming costs more or less than the kind's data",

@@ -44,6 +44,7 @@ pub(super) fn second(man: &Kind) -> Kind {
         swim: 1.4,
         swim_accel: 5.0,
         wade: 0.5,
+        climb_out: 1.3,
         dive: 1.0,
         dive_from_deg: 25.0,
         mouth: 0.85,
