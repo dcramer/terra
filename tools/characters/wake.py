@@ -64,8 +64,9 @@ def front_faces(lo, hi, cx, half):
 
 
 def texels(faces):
-    """Every texel of `faces`: its pixel, where it is on the body and how dark it is painted."""
-    px, pos, dark = [], [], []
+    """Every texel of `faces`: its pixel, where it is on the body, how dark it is painted and
+    how far its face turns from straight ahead (0 ahead, 1 sideways or up)."""
+    px, pos, dark, turn = [], [], [], []
     for f in faces:
         loops = f.loops[:]
         for k in range(1, len(loops) - 1):
@@ -85,19 +86,21 @@ def texels(faces):
             px.append(q)
             pos.append(p[0] + b[:, :1] * (p[1] - p[0]) + b[:, 1:] * (p[2] - p[0]))
             dark.append(lum[q[:, 1], q[:, 0]])
-    return np.concatenate(px), np.concatenate(pos), np.concatenate(dark)
+            turn.append(np.full(len(q), 1 + f.normal.y))
+    return np.concatenate(px), np.concatenate(pos), np.concatenate(dark), np.concatenate(turn)
 
 
 # 1. The eyes: the darkest pair of spots on the front of the upper trunk, level and either
-# side of its middle. Spots are 3 cm cells of texels, each averaged with its neighbours.
+# side of its middle, in hollows that face ahead: the dark inner faces of a fork in the crown
+# turn up or aside. Spots are 3 cm cells of texels, each averaged with its neighbours.
 band = np.array([v.co[:] for v in bm.verts if abs(v.co.z - joint["neck_01"].z) < 0.3 and abs(v.co.x) < 1])
 cx, cy = (float(c) for c in np.median(band[:, :2], 0))
 faces = front_faces(joint["spine_03"].z, joint["Head"].z + 0.5, cx, 0.45)
-px, pos, dark = texels(faces)
+px, pos, dark, turn = texels(faces)
 cell = 0.03
 key = np.floor(pos[:, [0, 2]] / cell).astype(int)
 cells = {}
-for k, d in zip(map(tuple, key), dark):
+for k, d in zip(map(tuple, key), dark + 0.3 * turn):
     cells.setdefault(k, []).append(d)
 mean = {k: float(np.mean(v)) for k, v in cells.items()}
 smooth = {k: np.mean([mean[n] for n in ((k[0] + i, k[1] + j) for i in (-1, 0, 1) for j in (-1, 0, 1)) if n in mean])
@@ -105,7 +108,7 @@ smooth = {k: np.mean([mean[n] for n in ((k[0] + i, k[1] + j) for i in (-1, 0, 1)
 spots = sorted(smooth, key=smooth.get)[:60]
 pairs = [(smooth[a] + smooth[b], a, b) for a in spots for b in spots
          if a[0] * cell < cx < b[0] * cell and abs(a[1] - b[1]) * cell < 0.12
-         and 0.15 < (b[0] - a[0]) * cell < 0.7 and abs((a[0] + b[0] + 1) * cell / 2 - cx) < 0.12]
+         and 0.15 < (b[0] - a[0]) * cell < 0.5 and abs((a[0] + b[0] + 1) * cell / 2 - cx) < 0.12]
 _, eye_l, eye_r = min(pairs)
 eyes = [Vector(((k[0] + 0.5) * cell, 0, (k[1] + 0.5) * cell)) for k in (eye_l, eye_r)]
 spacing = eyes[1].x - eyes[0].x
@@ -138,10 +141,30 @@ node.image = mask
 links.new(node.outputs["Color"], bsdf.inputs["Emission Color"])
 bsdf.inputs["Emission Strength"].default_value = 1.0
 
+# The crown kept on the trunk: what the conversion bound to the arms well above them (the
+# leaves and twigs over the shoulders) moved to the trunk's bone at its height, so an arm
+# raised into the crown goes in among its leaves instead of dragging them with it.
+arm_bones = {g.index for g in body.vertex_groups if g.name.split("_")[0] in (
+    "clavicle", "upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky")}
+trunk = {n: body.vertex_groups[n].index for n in ("spine_03", "neck_01", "Head")}
+above = max(joint["clavicle_l"].z, joint["clavicle_r"].z) + 0.6
+moved = 0
+for v in bm.verts:
+    w = v[deform]
+    off = sum(w[g] for g in list(w.keys()) if g in arm_bones)
+    if v.co.z < above or off == 0:
+        continue
+    for g in [g for g in w.keys() if g in arm_bones]:
+        del w[g]
+    to = trunk["Head"] if v.co.z > joint["Head"].z else trunk["neck_01"] if v.co.z > joint["neck_01"].z else trunk["spine_03"]
+    w[to] = w.get(to, 0) + off
+    moved += 1
+print("CROWN", f"{moved} vertices over {above:.2f} m moved off the arms")
+
 # 3. The mouth's cut: below the eyes by their spacing, as wide as they are apart and a bit,
 # ragged along its length. The faces around it are split once for a finer lip.
 mx, mz = (eyes[0].x + eyes[1].x) / 2, eyes[0].z / 2 + eyes[1].z / 2 - 1.3 * spacing
-half = 0.7 * spacing
+half = 0.9 * spacing
 
 
 def jag(x):
@@ -185,6 +208,7 @@ def material(name, rgb, rough):
     p = m.node_tree.nodes["Principled BSDF"]
     p.inputs["Base Color"].default_value = (*rgb, 1)
     p.inputs["Roughness"].default_value = rough
+    p.inputs["Specular IOR Level"].default_value = 0.1
     body.data.materials.append(m)
     return len(body.data.materials) - 1
 
@@ -202,7 +226,7 @@ def new_vert(co):
     return v
 
 
-mouth_bag = material(f"{body.name}_mouth", (0.012, 0.008, 0.005), 1.0)
+mouth_bag = material(f"{body.name}_mouth", (0.004, 0.003, 0.002), 1.0)
 splinter = material(f"{body.name}_teeth", (0.17, 0.145, 0.11), 0.85)
 gw, gh, bag_w, bag_h = 14, 8, 1.3 * half, 0.45
 grid = [[new_vert(surface(mx + u * bag_w, mz + v * bag_h)
@@ -229,7 +253,7 @@ bm.normal_update()
 
 # 5. The Wake shape: each lip moved off the cut, most in the middle and raggedly, curled in.
 wf = 0.95 * half
-up, down, reach = 0.25 * spacing, 0.4 * spacing, 1.6 * spacing
+up, down, reach = 0.3 * spacing, 0.5 * spacing, 1.6 * spacing
 
 
 def along(x):

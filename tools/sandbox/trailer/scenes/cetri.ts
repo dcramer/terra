@@ -9,17 +9,26 @@ const ROLLS = 360;
 const BEATS = { glow: 4.2, wakes: 5.0, lunge: 8.2, comes: 10.6, end: 16.5 };
 /// Where it stands: beside the path, a few metres short of the nearest grown oak (16.2, 41.2).
 const CETRI: [number, number] = [19.5, 38];
-/// The walker's eye along the path (forest.json's route, (3.7, 4.7) to (16.8, 25)).
+/// The walker's eye up the path (forest.json's route, (3.7, 4.7) to (16.8, 25)), then off it toward the oaks.
 const WALK: [[number, number], [number, number]] = [
-  [9.6, 13.8],
-  [15.4, 22.7],
+  [12.5, 18.5],
+  [17.2, 29.2],
 ];
 const EYE = 1.7;
 
 /// The ground's height under the path and the oaks, metres up of the start, every 5 m from
 /// 5 east and 10 south, from a probe of tiny figures (their spawn logs). Empty: the scene
 /// stands the probe instead, and the camera guesses level ground.
-const GROUND: number[][] = [];
+const GROUND: number[][] = [
+  [-0.2, -0.3, -0.3, -0.2, -0.5, -0.8], // 10
+  [-0.2, -0.3, -0.2, -0.1, -0.5, -0.9], // 15
+  [-0.2, -0.3, -0.4, -0.5, -0.7, -1.1], // 20
+  [-0.3, -0.5, -0.7, -0.9, -1.0, -1.0], // 25
+  [-0.3, -0.5, -0.7, -0.9, -1.0, -0.9], // 30
+  [-0.5, -0.6, -0.7, -0.7, -0.8, -0.9], // 35
+  [-0.5, -0.7, -0.8, -0.8, -0.8, -1.0], // 40
+  [-0.5, -0.7, -1.0, -0.9, -1.0, -1.0], // 45
+];
 const G0: [number, number] = [5, 10];
 function ground(east: number, south: number): number {
   if (!GROUND.length) return 0;

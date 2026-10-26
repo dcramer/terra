@@ -204,6 +204,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D531](decisions/D531.md) | The drawn shield rests low and rises only while the block is held | Design | Developers | Decided | With a shield drawn and the block not held… |
 | [D534](decisions/D534.md) | The Cetri, a tree that walks | Design | Developers | Decided | A monster drawn by a developer's child (creatures.md)… |
 | [D535](decisions/D535.md) | Pose fix-ups after the clips: the hanging hands kept off the hips, the head kept on the aim | Tech | Agent | Decided | After every clip and hold has posed a body… |
+| [D536](decisions/D536.md) | A creature that wakes: a Wake shape key for its mouth, an emissive map for its eyes, lit by two staged calls | Tech | Agent | Decided | A creature whose face changes when it wakes… |
 
 ## People and the tribe
 

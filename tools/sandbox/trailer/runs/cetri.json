@@ -5,7 +5,7 @@
   "date": "07-20",
   "seconds": 16.5,
   "scene": "cetri",
-  "player": { "at": "9.6,13.8", "face": "19.5,38", "hidden": true },
+  "player": { "at": "12.5,18.5", "face": "19.5,38", "hidden": true },
   "look": { "shutter": 180, "exposure_bias": 0.3 },
   "sound": ["birds:0.8", "wind:0.4", "woods:0.8"]
 }
