@@ -209,6 +209,7 @@ pub struct Grounded {
     up: Vec3,
     hip: Vec3,
     reach: f32,
+    extent: Option<f32>,
     locked: bool,
     off: bool,
     root: Vec3,
@@ -233,6 +234,11 @@ pub struct Foot {
     pub hip: Vec3,
     /// The leg's length, hip to knee to ankle, m.
     pub reach: f32,
+    /// A warped stride's (`terra_walker::pace::gait`): how far the clip has its ankle from the
+    /// hip, m, unwarped. A locked foot asks the pelvis down until its leg reaches it no farther
+    /// (`Grounded::need`), as Unreal's Stride Warping pulls the pelvis down toward its warped
+    /// feet so a leg is not stretched past its clip's.
+    pub extent: Option<f32>,
 }
 
 impl Placing {
@@ -268,6 +274,14 @@ impl Placing {
                 .map(|foot| foot.need())
                 .filter(|&need| need <= cap)
                 .fold(0.0, f32::max)
+                // A warped stride's planted leg reached (`Grounded::stretch`), no lower than a
+                // planted leg folds.
+                .max(
+                    feet.iter()
+                        .map(|foot| foot.stretch())
+                        .fold(0.0, f32::max)
+                        .min(cap),
+                )
         };
         let pelvis = &mut self.pelvis;
         if let Some(was) = pelvis.root {
@@ -306,6 +320,7 @@ impl Placing {
             off,
             hip,
             reach,
+            extent,
         } = foot;
         let placed = &mut self.feet[side];
         let ball_at = shown.at + shown.turn * ball;
@@ -358,12 +373,27 @@ impl Placing {
                 (None, None) => None,
             }
         };
+        let mut stepped_off = false;
         let target = match lock {
             _ if off => None,
             Some(lock) => {
                 if placed.lock != Some(lock.at) {
                     placed.lock = Some(lock.at);
                     placed.frozen = sole_ground();
+                } else if placed
+                    .frozen
+                    .is_some_and(|ground| riser(ground.found[0], ground.found[1], up))
+                {
+                    // Locked straddling a riser, it is probed again while it straddles (as ALS
+                    // traces a planted foot each frame): once the point it had on the higher
+                    // tread has left it (a toe-off rolling the heel over a step down's edge),
+                    // the sole is set on the ground now under it, not left over the lower
+                    // tread at the higher's height.
+                    let now = sole_ground();
+                    if now.is_some_and(|ground| !riser(ground.found[0], ground.found[1], up)) {
+                        placed.frozen = now;
+                        stepped_off = true;
+                    }
                 }
                 placed.frozen
             }
@@ -387,6 +417,9 @@ impl Placing {
         // root, so a jump's rise does not leave it behind.
         let k = 1.0 - libm::expf(-dt.max(0.0) / EASE_S);
         let eased = match placed.eased {
+            // Come off the edge it straddled, it is on the ground now under it at once: it
+            // was over it, the edge holding it up, and does not float down.
+            _ if stepped_off => target,
             None => target,
             Some(((heel, ball, normal), was_root)) => {
                 let moved = if off { 0.0 } else { (root - was_root).dot(up) };
@@ -421,6 +454,7 @@ impl Placing {
             up,
             hip,
             reach,
+            extent,
             locked: lock.is_some(),
             off,
             root,
@@ -436,6 +470,23 @@ impl Grounded {
             return 0.0;
         }
         (-self.heights.0.max(self.heights.1)).max(0.0)
+    }
+
+    /// How far the hip must come down for a locked foot of a warped stride, on its ground, to
+    /// be reached no farther than the clip's leg reaches its own (`Foot::extent`), m, as
+    /// Unreal's Stride Warping pulls the pelvis down toward its warped feet: nothing unwarped
+    /// on flat ground, a lower ground's depth (`need`) where the foot is where its clip has it.
+    pub fn stretch(&self) -> f32 {
+        let Some(extent) = self.extent.filter(|_| self.locked && !self.off) else {
+            return 0.0;
+        };
+        let lift = self.heights.0.max(self.heights.1);
+        let from = self.hip - (self.shown.at + self.up * lift);
+        let (high, across) = (
+            from.dot(self.up),
+            from.reject_from(self.up).length_squared(),
+        );
+        (high - (extent * extent - across).max(0.0).sqrt()).max(0.0)
     }
 
     /// How far the pelvis may drop before this leg, its foot on its ground, folds its hip to

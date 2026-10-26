@@ -23,7 +23,6 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { Glb } from "../characters/glb.ts";
 import { bakeFile } from "../characters/markers.ts";
 import { type Criterion, finish, type Held, judge, readBaseline, round, type Status } from "../scorecard/ratchet.ts";
 
@@ -51,38 +50,6 @@ export function staleMarkers(files: string[]): string[] {
     const { count, same } = bakeFile(resolve(ROOT, file), false);
     return !count || !same;
   });
-}
-
-/// A kind's number in movers.ron (`jog`, `sprint`: its speeds, m/s).
-export function moverSpeed(ron: string, kind: string, field: string): number | undefined {
-  const at = ron.indexOf(`"${kind}": (`);
-  if (at < 0) return undefined;
-  const end = ron.indexOf("\n    ),", at);
-  const m = ron.slice(at, end < 0 ? undefined : end).match(new RegExp(`\\b${field}:\\s*([0-9.]+)`));
-  return m ? Number(m[1]) : undefined;
-}
-
-/// Each gait's clip pace (the ground it strides over a second, its body file's `paces`, as the
-/// game reads them, `terra_walker::pace`) against the speed its kind moves while it plays
-/// (movers.ron), on a body of the base's height: the play rate the game needs for its feet not
-/// to slide. A sprint whose clip strides like a jog is played fast, its cadence frantic, or its
-/// feet slide under the lock. Each gait's line, and the worst ratio's distance from 1.
-export function paceMatch(file: string, kind: string, gaits: { clip: string; speed: string }[]): { worst: number; each: string[] } {
-  const body = new Glb(resolve(ROOT, file));
-  const node = body.gltf.nodes.find((n: { extras?: { paces?: unknown } }) => n.extras?.paces) as { extras: { paces: Record<string, number> } } | undefined;
-  const paces = node?.extras.paces ?? {};
-  const ron = readFileSync(resolve(ROOT, "assets/data/movers.ron"), "utf8");
-  let worst = 0;
-  const each: string[] = [];
-  for (const gait of gaits) {
-    const pace = paces[gait.clip];
-    const speed = moverSpeed(ron, kind, gait.speed);
-    // A gait with no pace or no speed cannot be matched at all.
-    const ratio = pace && speed ? speed / pace : Number.POSITIVE_INFINITY;
-    worst = Math.max(worst, Math.abs(ratio - 1));
-    each.push(`${gait.clip} ${pace ?? "?"} m/s at ${gait.speed} ${speed ?? "?"} x${ratio.toFixed(2)}`);
-  }
-  return { worst, each };
 }
 
 function main() {
@@ -119,13 +86,16 @@ function main() {
     if (stale.length) console.log(`  markers stale or missing (run node tools/characters/markers.ts on them): ${stale.join(", ")}`);
   }
 
-  // Each gait's clip strides as fast as its kind moves.
+  // A criterion another crate's test measures (the figure's gaits, terra_walker::pace).
   for (const c of criteria) {
-    const check = c.check as { by?: string; file?: string; kind?: string; gaits?: { clip: string; speed: string }[] } | null;
-    if (check?.by !== "paces" || !check.file || !check.kind || !check.gaits) continue;
-    const { worst, each } = paceMatch(check.file, check.kind, check.gaits);
-    values.set(c.id, round(worst));
-    console.log(`  paces: ${each.join(", ")}`);
+    const check = c.check as { by?: string; crate?: string; test?: string } | null;
+    if (check?.by !== "test" || !check.crate || !check.test) continue;
+    const t = ["test", "-q", "-p", check.crate, "--lib", "--", "--exact", check.test, "--nocapture"];
+    const tr = spawnSync("cargo", t, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+    const tout = (tr.stdout ?? "") + (tr.stderr ?? "");
+    logged += `\n$ cargo ${t.join(" ")}\n${tout}`;
+    const found = courseValues(tout).get(c.id);
+    if (found !== undefined) values.set(c.id, found);
   }
 
   // The bench: the mover's cost a body a tick, in release on one core (D185's CPU half).

@@ -114,6 +114,7 @@ fn foot(shown: Pose, lock: Option<Pose>, root: Vec3) -> Foot {
         off: false,
         hip: Vec3::new(0.0, 10.0, 0.0),
         reach: 0.88,
+        extent: None,
     }
 }
 
@@ -394,6 +395,44 @@ fn a_foot_over_lower_ground_is_lowered_onto_it_and_the_pelvis_with_it_springing_
             }
         }
     }
+}
+
+#[test]
+fn a_warped_strides_planted_leg_is_reached_no_farther_than_its_clips_by_lowering_the_pelvis() {
+    // On flat ground, the left foot locked 0.5 m behind its hip where the warp put it, the
+    // clip's own 0.4 m behind (its leg reaching `clip` from the hip): the pelvis comes down
+    // until the leg reaches the warped foot no farther than the clip's reaches its own.
+    let flat_ground = |_: f32| (0.0, UP);
+    let hip = HIP + Vec3::X * 0.5;
+    let clip = (hip - (ANKLE + Vec3::X * 0.1)).length();
+    let mut placing = Placing::default();
+    let under = under_of(flat_ground, Vec3::ZERO);
+    let warped = |placing: &mut Placing, extent: Option<f32>, locked: bool| {
+        let feet = [flat(0.0), flat(0.6)].map(|shown| Foot {
+            hip,
+            reach: LEG,
+            extent,
+            ..foot(shown, locked.then_some(shown), Vec3::ZERO)
+        });
+        let grounded = [0, 1].map(|side| placing.ground(side, feet[side], DT, &under));
+        let mut drop = 0.0;
+        for _ in 0..30 {
+            drop = placing.pelvis([&grounded[0], &grounded[1]], Vec3::ZERO, DT);
+        }
+        (drop, grounded[0].placed(drop))
+    };
+    let (drop, placed) = warped(&mut placing, Some(clip), true);
+    let reach = placed.at.distance(hip - UP * drop);
+    assert!(
+        drop > 0.01 && (reach - clip).abs() < 2e-3,
+        "{drop} {reach} {clip}"
+    );
+    // Unwarped (no extent asked), or with neither foot locked, it does not come down.
+    assert_eq!(warped(&mut Placing::default(), None, true).0, 0.0);
+    assert_eq!(warped(&mut Placing::default(), Some(clip), false).0, 0.0);
+    // Its own extent reached as the clip has it asks nothing.
+    let own = (hip - ANKLE).length();
+    assert!(warped(&mut Placing::default(), Some(own), true).0 < 1e-5);
 }
 
 #[test]
@@ -730,6 +769,46 @@ fn a_sole_straddling_a_riser_keeps_the_clips_pitch_on_the_higher_tread() {
         under_of(ground, Vec3::ZERO),
     );
     assert!(placed.turn.angle_between(Quat::IDENTITY).to_degrees() > 20.0);
+}
+
+/// A foot locked across a step down (its heel on the higher tread, its ball over the lower)
+/// rests on the higher tread; once its toe-off has rolled the heel over the edge too, it is set
+/// on the lower tread, not left there at the higher's height. A lock wholly on one tread keeps
+/// the ground it was locked on whatever is probed later.
+#[test]
+fn a_foot_locked_across_a_step_down_comes_down_once_its_heel_leaves_the_edge() {
+    let ground = |x: f32| (if x >= 0.06 { -0.09 } else { 0.0 }, UP);
+    let mut placing = Placing::default();
+    let lock = flat(0.0);
+    let under = under_of(ground, Vec3::ZERO);
+    let at = |placing: &mut Placing, shown: Pose| {
+        let g = placing.ground(0, leg(shown, Some(lock), Vec3::ZERO), DT, &under);
+        g.placed(g.need()).at.y
+    };
+    // Straddling: on the higher tread, as the clip has it.
+    for _ in 0..10 {
+        assert!((at(&mut placing, lock) - ANKLE.y).abs() < 1e-4);
+    }
+    // The heel rolled over the edge (the same lock, its ankle shown 7 cm on): it comes down
+    // onto the lower tread, eased (the pelvis lowered by its need).
+    let rolled = flat(0.07);
+    let mut last = 0.0;
+    for _ in 0..30 {
+        last = at(&mut placing, rolled);
+    }
+    assert!((last - (ANKLE.y - 0.09)).abs() < 1e-3, "{last}");
+    // Locked wholly on the higher tread, ground probed lower later does not move it.
+    let mut placing = Placing::default();
+    let high = flat(-0.2);
+    let held = |placing: &mut Placing, shown: Pose| {
+        let g = placing.ground(0, leg(shown, Some(high), Vec3::ZERO), DT, &under);
+        g.placed(g.need()).at.y
+    };
+    held(&mut placing, high);
+    for _ in 0..30 {
+        last = held(&mut placing, flat(0.07));
+    }
+    assert!((last - ANKLE.y).abs() < 1e-4, "{last}");
 }
 
 /// A swinging foot over a riser rests on the higher tread, but its point over the edge hangs

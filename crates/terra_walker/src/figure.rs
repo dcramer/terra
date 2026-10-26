@@ -458,6 +458,7 @@ fn animate(
         let Some(playing) = animator.animation_mut(main) else {
             continue;
         };
+        let mut warp = 1.0;
         match act {
             // As asked, held where asked.
             Some(act) => {
@@ -472,11 +473,12 @@ fn animate(
                     }
                 }
             }
-            // The jog and sprint at the speed the player moves, so their feet do not slide.
+            // The jog and sprint at the player's speed, played and warped (`pace::gait`).
             None if matches!(doing, Doing::Jog | Doing::Sprint) => {
                 if let Some(pace) = moves.paces.get(&name) {
-                    let scale = place.scale().y;
-                    playing.set_speed(crate::pace::rate(velocity.length(), *pace, scale));
+                    let gait = crate::pace::gait(velocity.length(), *pace, place.scale().y);
+                    playing.set_speed(gait.rate);
+                    warp = gait.warp;
                 }
             }
             None => {}
@@ -486,7 +488,7 @@ fn animate(
         if let Ok(mut kept) = feet.get_mut(animated.player) {
             let pace = moves.paces.get(&name).copied().unwrap_or(0.0);
             let rate = animator.animation(main).map_or(0.0, |a| a.speed());
-            kept.stride(velocity, pace * place.scale().y, rate);
+            kept.stride(velocity, pace * place.scale().y, rate, warp);
         }
     }
 }

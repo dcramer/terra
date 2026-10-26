@@ -517,7 +517,12 @@ fn animate(
         active.set_speed(speed * staged.rate);
         if let Ok(mut kept) = feet.get_mut(animates.staged) {
             let pace = animates.paces.get(&name).copied().unwrap_or(0.0);
-            kept.stride(staged.facing, pace * place.scale().y, speed * staged.rate);
+            kept.stride(
+                staged.facing,
+                pace * place.scale().y,
+                speed * staged.rate,
+                1.0,
+            );
         }
     }
 }

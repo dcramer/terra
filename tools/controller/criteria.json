@@ -326,7 +326,7 @@
    "noticed": 5,
    "notice": "walking into a doorway onto its threshold, the body stops at the wall under the lintel",
    "bar": {
-    "at_most": 0.0
+    "at_most": 0
    },
    "unit": "m short of 1 m past the wall, worst of thresholds 0.1-0.5 m (12, each from 5 starts 1 cm apart) under a lintel 2 m over the floor",
    "source": "docs/controller.md criteria 5 and 6; Jolt WalkStairs, Unreal StepUp (both rise the whole step)",
@@ -341,7 +341,7 @@
    "noticed": 5,
    "notice": "jogging at a lump of ground lower than a step, its foot too steep to stand on (the filmed yard's), the body stops at its foot and walks round it",
    "bar": {
-    "at_most": 0.0
+    "at_most": 0
    },
    "unit": "walks stopped short, of 60 (lumps 0.3-0.4 m high with feet 60-66 deg, 4 lines across, 5 starts 1 cm apart)",
    "source": "docs/controller.md criteria 1 and 5; Jolt CharacterVirtual (CancelVelocityTowardsSteepSlopes only for a slope it cannot walk, after WalkStairs)",
@@ -896,7 +896,7 @@
    "noticed": 4,
    "notice": "a swimmer at the surface goes under, or bobs more and more",
    "bar": {
-    "at_most": 0.0
+    "at_most": 0
    },
    "unit": "m the mouth (the kind's mouth x height) went under the surface, swimming forward 8 s afloat looking level, 0.08 rad down (the camera's rest) and 2 deg short of the kind's dive_from_deg, and the last 4 s of 10 floating up from 8 m under; plus m the bob's span grew from the first half of the time to the second; two kinds",
    "source": "docs/controller.md criterion 17; D74, D478",
@@ -941,7 +941,7 @@
    "noticed": 4,
    "notice": "a diver swimming toward a shore does not come out of the water onto it",
    "bar": {
-    "at_most": 0.0
+    "at_most": 0
    },
    "unit": "m short of 0.5 m past the far shore's dry ground, dived 1.5 s at 60 deg in the lake (2.3 m deep), then forward level up a 12 and a 25 deg shore, given 1.5 times the way at the kind's swim speed; two kinds",
    "source": "docs/controller.md criterion 17; D74, D478",
@@ -1099,16 +1099,12 @@
    "bar": {
     "at_most": 0.1
    },
-   "unit": "|speed / pace - 1| of the worst gait (Jog_Fwd_Loop at jog, Sprint_Loop at sprint), the base height",
+   "unit": "the worst gait (Jog_Fwd_Loop at jog, Sprint_Loop at sprint, the base height) as the figure shows it (pace::gait): the larger of its play rate and stride warp distance from 1, or of the speed its shown stride leaves uncovered",
    "source": "docs/controller.md criterion 21c; D455; Unreal's sync groups and stride warping, Lyra's locomotion (a clip at its gait's speed, a capped play rate)",
    "check": {
-    "by": "paces",
-    "file": "assets/models/character/fight.glb",
-    "kind": "Man",
-    "gaits": [
-     { "clip": "Jog_Fwd_Loop", "speed": "jog" },
-     { "clip": "Sprint_Loop", "speed": "sprint" }
-    ]
+    "by": "test",
+    "crate": "terra_walker",
+    "test": "pace::tests::the_gaits_stride_as_fast_as_a_man_moves"
    },
    "cost": "cheap",
    "measurable": true

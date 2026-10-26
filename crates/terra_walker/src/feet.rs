@@ -165,6 +165,14 @@ pub struct Kept {
     /// the body's velocity over the ground while a clip that travels plays at its pace, zero
     /// for a clip that stands. Whoever plays the clip sets it (`figure`).
     pub ground: Vec3,
+    /// How fast the ground passes under the clip as played, unwarped, in the world, m/s
+    /// (`stride`): `ground` is it warped.
+    made: Vec3,
+    /// How much longer than its clip's the stride playing is to be shown, less 1 (`pace::gait`'s
+    /// warp, `stride`), and as shown this frame, eased to it (`WARP_HZ`): each foot's travel
+    /// along the way is stretched so (`warped`).
+    warp_to: f32,
+    warp_by: f32,
     /// A layer above lets the feet go this frame (a fighter down, a roll): they go as the clip
     /// has them. Set each frame by whoever knows.
     pub let_go: bool,
@@ -204,11 +212,38 @@ pub struct Kept {
 }
 
 impl Kept {
-    /// The clip playing travels `pace` metres a second (scaled to the body) at `rate`, `way`:
+    /// The clip playing travels `pace` metres a second (scaled to the body) at `rate`, `way`,
+    /// its feet's travel along the way stretched `warp` times (`pace::gait`, stride warping):
     /// the ground its planted feet stand on passes under the body that fast (none for a clip
     /// that stands, of no pace).
-    pub fn stride(&mut self, way: Vec3, pace: f32, rate: f32) {
-        self.ground = way.normalize_or_zero() * pace * rate.abs();
+    pub fn stride(&mut self, way: Vec3, pace: f32, rate: f32, warp: f32) {
+        self.made = way.normalize_or_zero() * pace * rate.abs();
+        self.warp_to = if pace > 0.0 { warp - 1.0 } else { 0.0 };
+        self.ground = self.made * (1.0 + self.warp_by);
+    }
+
+    /// The stride's warp eased toward what `stride` asks, `dt` seconds on, as Unreal's Stride
+    /// Warping interpolates its stride scale (its Stride Scale Modifier's Interp Result, an
+    /// FInterpTo): a speed jittering up a stair, a gait or an action coming in does not snap
+    /// the feet along the way.
+    fn ease_warp(&mut self, dt: f32) {
+        self.warp_by += (self.warp_to - self.warp_by) * (WARP_HZ * dt).clamp(0.0, 1.0);
+        if (self.warp_to - self.warp_by).abs() < 1e-4 {
+            self.warp_by = self.warp_to;
+        }
+        self.ground = self.made * (1.0 + self.warp_by);
+    }
+
+    /// The clip's foot `ankle` and ball `ball` as a warped stride shows them (Unreal's Stride
+    /// Warping, its documentation): their place along the way the body goes, from the hip
+    /// `hip` (the thigh, on the ground's plane), stretched by the warp; none unwarped.
+    fn warped(&self, ankle: Vec3, ball: Vec3, hip: Vec3, up: Vec3) -> Option<(Vec3, Vec3)> {
+        let way = self.made.reject_from(up).normalize_or_zero();
+        if self.warp_by == 0.0 || way == Vec3::ZERO {
+            return None;
+        }
+        let by = way * (ankle - hip).dot(way) * self.warp_by;
+        Some((ankle + by, ball + by))
     }
 
     /// How each foot is kept, left then right, as the fight log writes it.
@@ -470,6 +505,7 @@ fn keep(
         let aloft = motion.is_some_and(|motion| !motion.on_ground);
         let landing = kept.was_off && !aloft;
         kept.was_off = aloft;
+        kept.ease_warp(dt);
         let passing = (!stance).then(|| base.affine().inverse().transform_vector3(kept.ground));
         let frame = Frame {
             curve,
@@ -548,6 +584,25 @@ impl Kept {
         let ball_local = self.balls[side].and_then(|ball| transforms.get(ball).ok());
         let clip_ball = ball_local.map_or(ankle, |ball| leg.foot.transform_point(ball.translation));
         self.clip_soles[side] = [(ankle - ground).dot(up), (clip_ball - ground).dot(up)];
+        // The leg's length, hip to knee to ankle, and how far the clip has its ankle from the
+        // hip, as the clip poses them.
+        let hip = leg.thigh.translation();
+        let reach = hip.distance(leg.calf.translation()) + leg.calf.translation().distance(ankle);
+        let clip_extent = hip.distance(ankle);
+        // A stride read on the ground it passes is shown as warped, before the lock and
+        // placement (Unreal's Stride Warping goes before its foot placement): its feet
+        // stretched along the way, a lock taking the warped foot and placement probing under
+        // it, the pelvis lowered for a planted leg to reach it no farther than the clip's
+        // reaches its own (`placement::Foot::extent`).
+        let warped = (frame.passing.is_some() && !frame.off)
+            .then(|| self.warped(ankle, clip_ball, hip, up))
+            .flatten();
+        let extent = warped.map(|_| clip_extent);
+        let (ankle, clip_ball) = warped.unwrap_or((ankle, clip_ball));
+        let shown = Pose {
+            at: ankle,
+            turn: clip.turn,
+        };
         // The ball in the foot's frame at the figure's size: the joint's own scale is not all of
         // it (a body drawn 1.08 times its rig puts the ball 1.1 cm farther out than the bone's
         // offset scaled by the foot alone).
@@ -561,7 +616,7 @@ impl Kept {
         });
         self.was[side] = Some(in_body);
         let posed = Posed {
-            pose: clip,
+            pose: shown,
             swing_mps,
             lock: frame.curve[side],
             up,
@@ -579,8 +634,6 @@ impl Kept {
         // pelvis lowered.
         let (_, to_lock) = leg.solve(kept_at.at, *frame.base.forward());
         self.shorts[side][1] = (to_lock - kept_at.at).length();
-        let hip = leg.thigh.translation();
-        let reach = hip.distance(leg.calf.translation()) + leg.calf.translation().distance(ankle);
         let grounded = self.placing.ground(
             side,
             placement::Foot {
@@ -592,6 +645,7 @@ impl Kept {
                 off: frame.off,
                 hip,
                 reach,
+                extent,
             },
             dt,
             |at| underfoot.under(at, root, up, (ground - root).dot(up)),
@@ -664,6 +718,10 @@ impl Kept {
         }
     }
 }
+
+/// How fast a stride's warp eases toward what its gait asks, a second (`Kept::ease_warp`):
+/// most of the way in a tenth of a second.
+const WARP_HZ: f32 = 10.0;
 
 /// A pelvis dropped by less than this is left where the clip has it, m.
 const DROP_STILL_M: f32 = 1e-4;
