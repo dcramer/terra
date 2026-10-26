@@ -1062,5 +1062,45 @@
         ]
       }
     ]
+  },
+  "Strap_Grip": {
+    "over": [
+      "Keyed_Guard",
+      "Fight_Guard",
+      "Fight_Strafe_L",
+      "Fight_Strafe_R",
+      "Fight_Walk",
+      "Jump_Loop",
+      "Open_Slash",
+      "Open_Backhand",
+      "Open_Heavy",
+      "Chained_Slash",
+      "Chained_Backhand",
+      "Clear_Block",
+      "Fight_Roll"
+    ],
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "hand_l",
+        "aim": {
+          "hand_l": [
+            -0.73,
+            -0.369,
+            0.575
+          ]
+        },
+        "roll": {
+          "hand_l": -96.4
+        }
+      },
+      {
+        "clip": "Keyed_Guard",
+        "bone": "lowerarm_twist_01_l",
+        "roll": {
+          "lowerarm_twist_01_l": -48
+        }
+      }
+    ]
   }
 }

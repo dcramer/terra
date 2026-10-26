@@ -38,6 +38,15 @@ layer's weight: each held bone slerped in its own parent frame from the `of` cli
 held one by a smoothstep weight, keyed every frame. The fight's light blows drop the guard so
 (the shield out to the left through the blow and back to the guard in its recovery, as
 Enshrouded's does, research/2026-10-25-shield-arm-in-a-swing.md).
+
+An entry with `over` (a list of clips) in place of `of` lays its holds over each of those clips
+in place, after the clips made from others so they take it too, held throughout (no `in` or
+`out`). The strapped heater's straps fix the left hand to the forearm, so its grip (the fist
+turned onto the hand strap, the back of the hand to the board) is held so over every clip a
+fighter plays (D459):
+
+    "Strap_Grip": {"over": ["Keyed_Guard", ...], "hold": [
+        {"clip": "Keyed_Guard", "bone": "hand_l", "aim": {...}, "roll": {"hand_l": -96}}, ...]}
 """
 
 import math
@@ -198,23 +207,56 @@ def bake(arm, actions, entries):
                     pb.scale = pscale.lerp(scale, w)
                     for channel in CHANNELS:
                         pb.keyframe_insert(channel, frame=f, group=n)
-        for n, (loc, rot, scale) in still.items():
-            pb = pose[n]
-            pb.rotation_mode = "QUATERNION"
-            pb.location, pb.rotation_quaternion, pb.scale = loc, rot, scale
-            for f in (start, end):
-                for channel in CHANNELS:
-                    pb.keyframe_insert(channel, frame=f, group=n)
+        _key_still(arm, still, start, end)
         actions.append(action)
         made.append(action)
-        parts = "; ".join(f"{h['bone']} and below at {h['clip']}'s first pose"
-                          + "".join(f", {b} turned {d:+.0f} deg" for b, d in h.get("turn", {}).items())
-                          + "".join(f", {b} aimed along {tuple(round(x, 2) for x in w)}" for b, w in h.get("aim", {}).items())
-                          + "".join(f", {b} rolled {d:+.0f} deg" for b, d in h.get("roll", {}).items())
-                          + "".join(f", {k} {h[k][0]:.2f}-{h[k][1]:.2f} s" for k in ("in", "out") if k in h) for h in holds)
         bones = len(still) + sum(len(at) for _, at in eased)
-        print(f"HOLD {name}: {entry['of']} with {parts} ({bones} bones), frames {start} to {end} at {fps:g} fps")
+        print(f"HOLD {name}: {entry['of']} with {_said(holds)} ({bones} bones), frames {start} to {end} at {fps:g} fps")
+    # Holds laid over clips in place (`over`), after the clips made above, so those take them too.
+    by_name = {a.name: a for a in actions}
+    for name, entry in entries.items():
+        if "over" not in entry or "hold" not in entry:
+            continue
+        holds = entry["hold"] if isinstance(entry["hold"], list) else [entry["hold"]]
+        if any("in" in h or "out" in h for h in holds):
+            raise SystemExit(f"{name}: a hold laid over clips is held throughout (no in or out)")
+        # Every held pose is read before any clip changes: a clip held over may be the one held.
+        still = {}
+        for held in holds:
+            still.update(_held_pose(arm, by_name, name, held))
+        for clip in entry["over"]:
+            action = by_name.get(clip)
+            if action is None:
+                raise SystemExit(f"{name}: no clip {clip} to lay its hold over")
+            for bag in _bags(action):
+                for c in [c for c in bag if any(c.data_path.startswith(f'pose.bones["{n}"]') for n in still)]:
+                    bag.remove(c)
+            _use(arm, action)
+            start, end = (int(round(f)) for f in action.frame_range)
+            _key_still(arm, still, start, end)
+        print(f"HOLD {name}: {_said(holds)} ({len(still)} bones) laid over {', '.join(entry['over'])}")
     ad.action, slot = keep
     if slot is not None:
         ad.action_slot = slot
     return made
+
+
+def _key_still(arm, still, start, end):
+    """Keys each of `still`'s bones at its held location, rotation and scale, at the first and
+    last frames of the clip in use."""
+    for n, (loc, rot, scale) in still.items():
+        pb = arm.pose.bones[n]
+        pb.rotation_mode = "QUATERNION"
+        pb.location, pb.rotation_quaternion, pb.scale = loc, rot, scale
+        for f in (start, end):
+            for channel in CHANNELS:
+                pb.keyframe_insert(channel, frame=f, group=n)
+
+
+def _said(holds):
+    """Holds in words, for a HOLD line."""
+    return "; ".join(f"{h['bone']} and below at {h['clip']}'s first pose"
+                     + "".join(f", {b} turned {d:+.0f} deg" for b, d in h.get("turn", {}).items())
+                     + "".join(f", {b} aimed along {tuple(round(x, 2) for x in w)}" for b, w in h.get("aim", {}).items())
+                     + "".join(f", {b} rolled {d:+.0f} deg" for b, d in h.get("roll", {}).items())
+                     + "".join(f", {k} {h[k][0]:.2f}-{h[k][1]:.2f} s" for k in ("in", "out") if k in h) for h in holds)
