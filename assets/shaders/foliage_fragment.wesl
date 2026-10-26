@@ -281,6 +281,10 @@ const PLASTER_HIGH: f32 = 0.85;
 const PLASTER_CRUST: f32 = 0.8;
 // How far a cap's lumps tilt its top from the sky's up.
 const CAP_LUMPS: f32 = 0.7;
+// How fast a limb's normal turns across it, per metre (one over its radius), from which it
+// is thin (a shrub's stem or a twig, a centimetre or two round) rather than a trunk: the
+// mesh carries no radius, but a tube's smooth normals turn by 1/r round it.
+const THIN_TURN: vec2<f32> = vec2<f32>(6.0, 15.0);
 // How bright a turned leaf is against the green one it was: dead leaves are duller and darker
 // than living ones; at a quarter brighter oaks and bracken went pastel orange and salmon.
 const AUTUMN_LIGHT: f32 = 0.8;
@@ -527,13 +531,20 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // branch stub's and a limb's take it.
         let shape = (*input).world_normal;
         let up = dot(shape, sky_up);
+        // How thin the limb is, from how fast its normal turns across the screen against how
+        // far the surface moves: 1/r round a tube, none along it.
+        let turn = max(length(dpdx(shape)) / max(length(dpdx(world)), 1.0e-6), length(dpdy(shape)) / max(length(dpdy(world)), 1.0e-6));
+        let thin = smoothstep(THIN_TURN.x, THIN_TURN.y, turn);
         // Its edge ragged, where the snow thins and breaks, its cover holed a hand or two
         // across, its white uneven and its top in soft lumps: whole, smooth and evenly lit the
         // old oak's caps read as plaster (the looks review's fault 4).
         let ragged = wander(world * 5.0 + 7.0) - 0.5;
         let face = smoothstep(0.3, 0.8, up + 0.35 * ragged);
         let patches = wander(world * 1.3) * 0.6 + wander(world * 3.7 + 19.0) * 0.4;
-        let clumped = smoothstep(0.2 - 0.15 * lying, 0.5 - 0.15 * lying, patches);
+        // A twig's or a thin stem's top takes a line of snow along its length wherever snow
+        // lies, as fresh snow sits along every bare twig of a hedge: in a trunk's patches a
+        // metre across, most of a bare shrub's twigs carried none (winter round 2's judge).
+        let clumped = mix(smoothstep(0.2 - 0.15 * lying, 0.5 - 0.15 * lying, patches), 1.0, thin);
         snow = smoothstep(0.15, 0.55, lying * face * clumped);
         colour = mix(colour, SNOW * (0.88 + 0.12 * wander(world * 9.0 + 3.0)), snow * 0.95);
         let lump = vec3<f32>(wander(world * 2.5 + 1.0), wander(world * 2.5 + 41.0), wander(world * 2.5 + 83.0)) - 0.5;

@@ -17,6 +17,8 @@ use terra_world::grown::build::{Build, Limb, Placing, tube};
 use terra_world::grown::tree::{self as grown_tree, Canopy, Spray, Tree};
 use terra_world::grown::{Card, Habit, TreeDef};
 
+mod wood;
+
 /// A plant of the middle layer, as meshes: its wood and leaves near and farther off, the
 /// sparse cards its shadow is cast from, and, for something solid, its trunk on its own, so
 /// a walker is stopped by the trunk rather than the reach of its branches.
@@ -86,25 +88,23 @@ fn def(habit: Habit, leaves: &str, clump_m: f32, trunk: f32) -> TreeDef {
 
 /// A leafy plant from its shape: its wood at two levels, its leaves' cards placed once and
 /// drawn near and with fewer, larger cards farther off, as the trees' levels are (D221), and
-/// its shadow's sparse cards.
-fn leafy(dice: &mut Rng, tree: &Tree, leaf: &Card, tint: Vec3) -> Shrub {
+/// its shadow's sparse cards; `bare` for one that drops its leaves in winter, whose wood then
+/// carries fine twigs near.
+fn leafy(dice: &mut Rng, tree: &Tree, leaf: &Card, tint: Vec3, bare: bool) -> Shrub {
     let canopy = Canopy::of(tree, tint);
     let placed = grown_tree::crown_cards(dice, tree, &canopy);
-    drawn(tree, &canopy, &placed, leaf)
+    drawn(tree, &canopy, &placed, leaf, bare)
 }
 
 /// A leafy plant's cards, placed, drawn at its levels: every card of every clump near, as a
 /// tree's nearest level, so its leaves stand at their own size a stride off rather than a
 /// few enlarged (D269); past that the trees' middle level, three of each clump enlarged.
-fn drawn(tree: &Tree, canopy: &Canopy, placed: &[Vec<Placing>], leaf: &Card) -> Shrub {
+fn drawn(tree: &Tree, canopy: &Canopy, placed: &[Vec<Placing>], leaf: &Card, bare: bool) -> Shrub {
     // Near, each card folded and drooping, so a bush a stride off is not planes of leaves.
     let mut near = grown_tree::crown_folded(placed, leaf);
     let mut far = grown_tree::crown(placed, tree, leaf, 1);
     let shadow = grown_tree::shadow_cards(placed, tree, leaf);
-    let mut wood = [
-        grown_tree::wood(tree, 0, 1.0),
-        grown_tree::wood(tree, 1, 1.0),
-    ];
+    let mut wood = [wood::wood(tree, 0, bare), wood::wood(tree, 1, bare)];
     for build in [&mut near, &mut far].into_iter().chain(wood.iter_mut()) {
         build.see_sky(|at| canopy.sky(at));
     }
@@ -228,7 +228,7 @@ pub(super) fn coppice(
         moved(&mut stem, lean * spin, out * dice.range(0.04, 0.3));
         merge(&mut whole, stem);
     }
-    leafy(dice, &whole, leaf, tint)
+    leafy(dice, &whole, leaf, tint, true)
 }
 
 /// Oak scrub: two to four small oaks from one root a metre or two tall, crooked and
@@ -250,7 +250,7 @@ pub(super) fn scrub(dice: &mut Rng, leaf: &Card, tint: Vec3) -> Shrub {
         moved(&mut stem, lean * spin, out * dice.range(0.05, 0.35));
         merge(&mut whole, stem);
     }
-    leafy(dice, &whole, leaf, tint)
+    leafy(dice, &whole, leaf, tint, true)
 }
 
 /// A small conifer-shaped evergreen, its branches in whorls to near the ground: holly, of
@@ -302,7 +302,7 @@ pub(super) fn evergreen(
             dice, &canopy, spray.at, along, size, roll,
         ));
     }
-    drawn(&tree, &canopy, &placed, leaf)
+    drawn(&tree, &canopy, &placed, leaf, false)
 }
 
 /// Holly: a small evergreen tree two to five metres tall, a short stem or two under a dense
@@ -352,7 +352,7 @@ pub(super) fn holly(dice: &mut Rng, leaf: &Card, tint: Vec3) -> Shrub {
     tree.branches = sprays.div_ceil(4) as usize;
     tree.height = height;
     tree.trunk_m = height * 0.018;
-    leafy(dice, &tree, leaf, tint)
+    leafy(dice, &tree, leaf, tint, false)
 }
 
 /// A sapling: one slender upright stem and its few branches, oak or hazel leaves, two to
@@ -369,7 +369,7 @@ pub(super) fn sapling(dice: &mut Rng, leaf: &Card, tint: Vec3) -> Shrub {
         Quat::from_axis_angle(Vec3::Y.cross(out), dice.range(0.0, 0.12)),
         Vec3::ZERO,
     );
-    leafy(dice, &tree, leaf, tint)
+    leafy(dice, &tree, leaf, tint, true)
 }
 
 /// Bramble: a tangle of arching canes from one root, each rising steeply then bowing over
@@ -423,7 +423,7 @@ pub(super) fn bramble(dice: &mut Rng, leaf: &Card, tint: Vec3) -> Shrub {
         .flat_map(|limb| limb.points.iter().map(|p| p.y))
         .fold(0.3, f32::max);
     tangle.trunk_m = 0.013;
-    leafy(dice, &tangle, leaf, tint)
+    leafy(dice, &tangle, leaf, tint, true)
 }
 
 /// A snag's branch, dead and weathered (D289): out from where the living one left the trunk,
