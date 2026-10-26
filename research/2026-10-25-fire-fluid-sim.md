@@ -130,3 +130,27 @@ Bold is a miss.
 - **The gusts swing the whole flame.** Area sd/mean is 0.31-0.37, about twice F's 0.19. The carry swings from a fifth to two and a half times its mean, and the flame's size follows it. H's dominant flicker became the 0.5 Hz gust swing.
 - **Lean and births rose.** Lean was 11.0-11.2 deg against F's 9.5. G's births were 18.3 a second, near the top of the real 12-19.
 - F remains the best sim, missing sheds alone. The recommendation in g23 stands. Sheds are not a matter of which frame the wind is in, so the sim path's remaining lever is the turbulence that tears a tongue (resolution, or a solver with ambient turbulence, such as EmberGen or Houdini). Which, if either, is the developers' call.
+
+## Round g35: turbulence that tears tongues
+
+Question: g34 found sheds are not a matter of which frame the wind is in. Does more turbulence (finer cells, more vorticity, Blender's noise upres) tear tongue tips off so they rise away? The bakes and calls were set before measuring (`~/.cache/terra-review/fire/g35/rule.md`, scripts in `g35/tools`).
+
+- **I**: F's settings at 128 cells (F 96), vorticity 1.6 and flame vorticity 3.0, substeps up to 14. Mantaflow's vorticity confinement adds strength × (N × curl) in grid units, so at finer cells F's numbers act 96/128 as strongly. Undo that and 1.6 / 3.0 is F's × 1.5.
+- **J**: the same bake with noise upres 2 (a 256-cell noise grid) at Blender's default strength 1.0. One `bake_all` into an ALL cache bakes both. I renders it with the noise off, J with the noise on. A modular noise bake on a finished data bake came out empty in two 32-cell probes, and its film was black.
+- Baked on the render worker (Blender 5.2.3, 32 cores) in 80 min, 4.6 GB of base grids and 9.9 GB of noise. Rendered as F was, in 13 min (I) and 16 min (J) on the RTX 4090, and measured by today's motion.ts with `--seconds 20`. F measures as it did in g23.
+
+| Sim | flicker med Hz | area sd/mean | born /s | life s | sheds | splits | lean deg | r at no lag | top red % | tracks | targets met |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| target | 1.83-3.83 | ≤ 0.19 | 12-19 | 0.04-0.12 | ≥ 1.0 | ≤ 1.2 | ≥ 8.8 | ≤ 0.12 | 3-47 | | |
+| F (g23; 96 cells, 0.8 / 1.5) | 2.50 | 0.19 | 13.1 | 0.05 | **0.27** | 0.85 | 9.5 | 0.05 | 11 | 261 | 8 |
+| I (128 cells, 1.6 / 3.0) | 2.50 | **0.23** | **10.4** | 0.04 | **0.21** | 0.46 | 11.1 | 0.06 | 7 | 209 | 6 |
+| J (I + noise upres 2) | 2.83 (peak 6.0) | **0.84** | **9.8** | 0.08 | **0.00** | 0.00 | **-** | -0.03 | 47 | 197 | 5, degenerate |
+
+Bold is a miss. By the calls set beforehand, neither is a gain: sheds stayed under twice F's (0.54). Neither the noise strength 2 bake nor the 160-cell one was earned.
+
+- **Finer cells calm the flame, even with confinement scaled up.** As g22 found, I's flame is a smoother body. Fewer tongues are born (10.4 against 13.1), fewer split (0.46), and sheds fell to 0.21. Shed blobs still last 0.03 s, one frame.
+- **Mantaflow's noise does not tear a flame; it powders it.** J's flame is a dim, speckled cloud (the flame cut falls to luma 67, no pale or yellow at all). The tracker finds no attached tongues to shed from, so its zeros mean nothing. Blender's wavelet noise adds detail to the upres'd grids along a noise field, and on a flame field that detail comes out as sparkle. It is made for smoke.
+- **The offline tools that make torn flames do it with a solver term Mantaflow lacks.** Houdini's pyro *shredding* pushes the velocity along the heat field's gradient, which gives fire its streaks and licks, and its *disturbance* breaks the flame up at a set scale ([SideFX, Pyro Burn shelf tool](https://www.sidefx.com/docs/houdini/shelf/pyro_burn.html)). EmberGen's flipbooks are what shipped fire is mostly baked from today (about 90% of Back 4 Blood's fire flipbooks, [Cherry 2021](https://realtimevfx.com/t/justin-cherry-realtime-vfx-reels-2021-back-4-blood/18495)).
+- **Shipped real-time fire gets its pieces from particles, not from one volume.** A flame is a SubUV flipbook on many short-lived, velocity-aligned sprites that spawn over the fuel and rise ([Epic, adding visual effects](https://dev.epicgames.com/documentation/unreal-engine/at12-adding-visual-effects-to-your-game)), so each card's tip leaves on its own. Effects built on one baked flipbook add pieces over it: Afonseca's EmberGen campfire, one flipbook on a bent plane with no particles, names "secondary flame licks" as its next step ([RTVFX sketch 48](https://realtimevfx.com/t/bruno-afonseca-sketch-48/19028)). Torches are often a teardrop mesh with scrolling UVs and a few particles to break up its outline ([Polycount](https://polycount.com/discussion/comment/1136113/)). No studio talk on RDR2's or AC's fire describes it.
+
+The sim path's sheds chase is closed for Mantaflow: wind in either frame (g23, g34), finer cells and noise (g35) all leave sheds at 0.2-0.3. F stays the bake. Sheds would come as shipped games get them, as separate short-lived pieces over the loop. docs/fire-module.md's D493 section sketches them as wisps drawn by the same marcher; nothing is built.
