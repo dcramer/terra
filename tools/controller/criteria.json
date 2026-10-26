@@ -1093,6 +1093,27 @@
    "measurable": true
   },
   {
+   "id": "pace.match",
+   "noticed": 4,
+   "notice": "the sprinting figure's stride is far too short for its speed: its legs churn too fast, or its locked feet stretch the legs and let go early",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "|speed / pace - 1| of the worst gait (Jog_Fwd_Loop at jog, Sprint_Loop at sprint), the base height",
+   "source": "docs/controller.md criterion 21c; D455; Unreal's sync groups and stride warping, Lyra's locomotion (a clip at its gait's speed, a capped play rate)",
+   "check": {
+    "by": "paces",
+    "file": "assets/models/character/fight.glb",
+    "kind": "Man",
+    "gaits": [
+     { "clip": "Jog_Fwd_Loop", "speed": "jog" },
+     { "clip": "Sprint_Loop", "speed": "sprint" }
+    ]
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "feet.sliding",
    "noticed": 4,
    "notice": "feet slide over the ground at walk, jog or sprint, or in starts, stops and turns",
