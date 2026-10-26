@@ -9,15 +9,17 @@ use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_2, PI};
 use terra_creatures::creatures::{Form, Kinds};
 use terra_creatures::species::Bestiary;
-use terra_dungeon::door::{Door, Lock};
+use terra_dungeon::door::{self, Door, Lock};
 use terra_dungeon::stamp::{DOORWAY_M, LightKind, ObjectRole};
 use terra_game::build::{Build, BuildLook, Built};
 use terra_walker::Player;
+use terra_world::cine::{Cine, Places, Subject};
 use terra_world::fire::{Kindled, Logs};
 use terra_world::flora::FloraPiece;
 use terra_world::flora_kinds::Flora;
 use terra_world::planet::Planet;
 use terra_world::shell::ScriptFrame;
+use terra_world::start::Start;
 
 const TORCH: &str = "models/tools/Torch.glb";
 const CAMPFIRE: &str = "models/props/Campfire.glb";
@@ -76,25 +78,8 @@ pub struct Leaf {
 /// developers' open question, docs/dungeons.md), so its locked gate opens as any door does.
 const KEYS_HELD: bool = true;
 
-/// How far ahead along its way a camera pushes, in seconds: a camera filming a walk stands
-/// in for the body it films, so it opens a door as that body a step ahead would, before
-/// the shut leaves fill a wide lens (at a walk, open 2.5 m out, where D512's 1.5 m reach
-/// alone had a 20 mm lens filled with planks for a second at each door).
-const CAMERA_LEAD_S: f32 = 0.9;
-
-/// Where a body at `at` moving at `velocity` (a doorway's frame) pushes from: a player where
-/// it is, a camera `CAMERA_LEAD_S` ahead, short of the sill so it still pushes from its side.
-fn pushing_from(at: Vec3, velocity: Vec3, camera: bool) -> Vec3 {
-    if !camera {
-        return at;
-    }
-    let ahead = at + velocity * CAMERA_LEAD_S;
-    if ahead.z * at.z > 0.0 {
-        ahead
-    } else {
-        Vec3::new(ahead.x, ahead.y, at.z.signum() * 0.01)
-    }
-}
+/// How often a camera's shot is read ahead for the doors it walks into, in seconds.
+const FILM_EVERY_S: f32 = 0.05;
 
 /// The dungeon's creatures, in the world, waiting for their kinds to be ready.
 #[derive(Resource)]
@@ -273,54 +258,86 @@ pub(super) fn put_up(
     commands.remove_resource::<Pending>();
 }
 
-/// Pushes each doorway's leaves by D512's rule with every player and camera walking at it
-/// (a film's camera walks the tour as a body would), swinging its leaves as it opens. Logs
-/// the frame a door is pushed and the frame a body passes its sill with how far open it
-/// stands then (frames counted as `--press` counts them), so a film's doors are checked
-/// from its log.
+/// Pushes each doorway's leaves by D512's rule with every player and camera walking at it,
+/// swinging its leaves as it opens; a camera a shot holds pushes as the body walking the
+/// shot, from the shot read ahead (`Door::film`). Logs the frame a door is pushed and the
+/// frame a body passes its sill with how far open it stands then (frames counted as
+/// `--press` counts them), so a film's doors are checked from its log.
 pub(super) fn push_doors(
-    time: Res<Time>,
-    script: Option<Res<ScriptFrame>>,
+    (time, script): (Res<Time>, Option<Res<ScriptFrame>>),
+    (cine, start, planet): (Option<Res<Cine>>, Option<Res<Start>>, Res<Planet>),
+    subject: Query<&Transform, With<Subject>>,
     bodies: Query<(Entity, &GlobalTransform, Has<Camera3d>), Or<(With<Player>, With<Camera3d>)>>,
     mut was: Local<HashMap<Entity, Vec3>>,
     mut doorways: Query<(&mut Doorway, &Name, &GlobalTransform, &Children)>,
-    mut leaves: Query<(&Leaf, &mut Transform)>,
+    mut leaves: Query<(&Leaf, &mut Transform), Without<Subject>>,
 ) {
     let dt = time.delta_secs();
     if dt <= 0.0 {
         return;
     }
+    // The shot's eye from now over the horizon, when a shot holds the camera.
+    let filmed: Option<Vec<Vec3>> = cine
+        .as_ref()
+        .filter(|cine| cine.shot.holds_camera())
+        .zip(start.as_ref())
+        .and_then(|(cine, start)| {
+            let t = cine.t?;
+            let ground = |at: Vec3| planet.ground_at(at);
+            let places = Places {
+                start: &start.0,
+                ground: &ground,
+                player: subject.iter().next().map(|t| t.translation),
+            };
+            let reads = (door::FILM_HORIZON_S / FILM_EVERY_S) as usize;
+            Some(
+                (0..=reads)
+                    .map(|n| cine.shot.framing(t + n as f32 * FILM_EVERY_S, &places).eye)
+                    .collect(),
+            )
+        });
+    // Where each body is and was; a camera the shot holds walks it, so it pushes by the shot.
     let moving: Vec<(Vec3, Vec3, bool)> = bodies
         .iter()
         .map(|(body, at, camera)| {
             let at = at.translation();
-            (at, was.insert(body, at).unwrap_or(at), camera)
+            let by_shot = camera && filmed.is_some();
+            (at, was.insert(body, at).unwrap_or(at), by_shot)
         })
         .collect();
     for (mut doorway, name, frame, children) in &mut doorways {
         let (swing, opened) = (doorway.0.swing, doorway.0.opened());
         let from_world = frame.affine().inverse();
-        let near: Vec<(Vec3, Vec3)> = moving
+        let near: Vec<(Vec3, Vec3, bool)> = moving
             .iter()
-            .map(|&(at, before, _)| {
+            .map(|&(at, before, by_shot)| {
                 let (at, before) = (
                     from_world.transform_point3(at),
                     from_world.transform_point3(before),
                 );
-                (at, (at - before) / dt)
+                (at, (at - before) / dt, by_shot)
             })
             .collect();
-        let pushing: Vec<(Vec3, Vec3)> = near
+        if let Some(filmed) = &filmed {
+            let path: Vec<Vec3> = filmed
+                .iter()
+                .map(|&eye| from_world.transform_point3(eye))
+                .collect();
+            doorway
+                .0
+                .film(&path, FILM_EVERY_S, DOORWAY_M[0], KEYS_HELD, 0.0);
+        }
+        let walking: Vec<(Vec3, Vec3)> = near
             .iter()
-            .zip(&moving)
-            .map(|(&(at, velocity), &(.., camera))| (pushing_from(at, velocity, camera), velocity))
+            .filter(|&&(.., by_shot)| !by_shot)
+            .map(|&(at, velocity, _)| (at, velocity))
             .collect();
-        doorway.0.step(&pushing, DOORWAY_M[0], KEYS_HELD, dt);
+        doorway.0.step(&walking, DOORWAY_M[0], KEYS_HELD, dt);
         let frame = script.as_ref().map_or(0, |f| f.0);
         if !opened && doorway.0.opened() {
             info!("Dungeon door {name} pushed at frame {frame}");
         }
-        for &(at, velocity) in &near {
+        for &(at, velocity, _) in &near {
             let before = at - velocity * dt;
             let through =
                 at.x.abs() <= DOORWAY_M[0] * 0.5 && (-1.0..=DOORWAY_M[1] + 1.0).contains(&at.y);
@@ -372,60 +389,6 @@ mod tests {
 
     /// Shut, the two leaves close the doorway jamb to jamb and sill to lintel, meeting in
     /// the middle.
-    /// Walks a body at a shut door from 6 m out at `speed` m/s; how far from the sill it is
-    /// when the door stands fully open.
-    fn open_at(camera: bool, speed: f32) -> f32 {
-        let dt = 1.0 / 60.0;
-        let mut door = Door::shut(Lock::None);
-        let velocity = Vec3::new(0.0, 0.0, -speed);
-        let mut at = Vec3::new(0.2, 1.6, 6.0);
-        while door.swing < 1.0 && at.z > 0.0 {
-            door.step(
-                &[(pushing_from(at, velocity, camera), velocity)],
-                DOORWAY_M[0],
-                false,
-                dt,
-            );
-            at += velocity * dt;
-        }
-        at.z
-    }
-
-    #[test]
-    fn a_camera_at_a_walk_has_a_door_open_before_its_leaves_fill_the_lens() {
-        // A 20 mm lens on Super 35 sees 64 degrees across: shut leaves 2 m across fill it
-        // from 1.6 m. A camera at the tour's pace finds the door open well before that.
-        for speed in [1.5, 2.5] {
-            let open = open_at(true, speed);
-            assert!(open > 2.0, "{speed} m/s: open only {open:.2} m out");
-        }
-        // A player still pushes it at D512's reach, open as it reaches the sill.
-        let open = open_at(false, 2.5);
-        assert!(open > 0.0 && open < 0.5, "player: open {open:.2} m out");
-    }
-
-    #[test]
-    fn a_camera_passing_a_door_or_walking_away_does_not_open_it() {
-        let mut door = Door::shut(Lock::None);
-        let dt = 1.0 / 60.0;
-        for (from, velocity) in [
-            (Vec3::new(-4.0, 1.6, 1.0), Vec3::X * 2.5),
-            (Vec3::new(0.0, 1.6, 0.3), Vec3::Z * 2.5),
-        ] {
-            let mut at = from;
-            for _ in 0..120 {
-                door.step(
-                    &[(pushing_from(at, velocity, true), velocity)],
-                    DOORWAY_M[0],
-                    false,
-                    dt,
-                );
-                at += velocity * dt;
-            }
-        }
-        assert!(!door.opened());
-    }
-
     #[test]
     fn a_doorways_two_leaves_shut_fill_it_jamb_to_jamb_and_meet_in_the_middle() {
         let mut spans = Vec::new();
