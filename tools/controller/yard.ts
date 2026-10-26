@@ -38,10 +38,12 @@ const TO = 2400;
 const ROLLS = 10;
 const PICTURE = "960x540";
 /// Once the route is done (a jog's by frame ~960, a sprint's ~640), the body turns where it
-/// stands, as a player tapping a way to face does: back (180 deg), then right (90 deg), a few
-/// frames' tap each, so it goes a few centimetres while it turns (turn.foot's plants). The
-/// wait before is not stuck: the route is done once its last mark is reached.
-const TURNS = ["--press", "s@1300-1306", "--press", "d@1600-1604"];
+/// stands, as a player tapping a way to face does: toward back, then toward right, a tap of
+/// three frames each (to 1.5 m/s at accel 30), so it goes about 10 cm at decel 15 while it
+/// turns some 35 deg (the facing turns only while a way is held; turn.foot's plants, a turn
+/// of 20 deg within 0.2 m). Six frames went 0.54 m at decel 15 (D528), a stop, not a turn.
+/// The wait before is not stuck: the route is done once its last mark is reached.
+const TURNS = ["--press", "s@1300-1303", "--press", "d@1600-1603"];
 type Run = { name: string; args: string[]; to: number };
 const YARD = ["--clean", "--experiment", "controller-yard"];
 /// The paces walked: a jog (the route's own), and a sprint, shift held throughout.
