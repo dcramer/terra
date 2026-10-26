@@ -246,6 +246,13 @@ const FLOOR_SQUARE_M: f32 = 8.0;
 const CROWN_REACH: i32 = 2;
 /// How far a log's or rock's snow well reaches past its edge, metres.
 const LOG_WELL_M: f32 = 0.8;
+/// How far out from a shrub's or young tree's foot its well reaches: as snow lies round a
+/// stool of stems or a young spruce, hollowed under its boughs and lipped where the wind
+/// eddies, so a stem stands in the snow rather than out of a flat white sheet.
+const FEET_WELL_M: f32 = 0.5;
+/// How far round its middle a shrub's foot spreads, at its scale: a stool's stems leave
+/// their root a hand or two apart.
+const FOOT_M: f32 = 0.25;
 /// How many variants of each kind of undergrowth are grown, each its own tint.
 const VARIANTS: u64 = 6;
 
@@ -448,6 +455,9 @@ pub(super) struct Map {
     path: Path,
     canopy: Crowns,
     lying: Lying,
+    /// The feet of the middle layer's shrubs and young trees, for their wells alone: apart
+    /// from `lying`, which placement reads, so no other plant moves for them.
+    feet: Lying,
     noise: Noise,
 }
 
@@ -464,6 +474,8 @@ struct Here {
     bark: f32,
     well: f32,
     lying: f32,
+    /// How far the nearest shrub's foot is.
+    feet: f32,
     path: f32,
     /// Damp hollows, where ferns and moss grow best.
     wet: f32,
@@ -484,6 +496,14 @@ impl Map {
             + (self.noise(at, 73.0, 0.6) - 0.5) * 0.4
     }
 
+    /// A plant of a kind set at a place, at its scale: a shrub's or young tree's foot is
+    /// filed for its well.
+    fn planted(&mut self, kind: Under, at: Vec2, scale: f32) {
+        if kind.stands_in_a_well() {
+            self.feet.add(at, FOOT_M * scale);
+        }
+    }
+
     fn here(&self, at: Vec2) -> Here {
         let over = self.canopy.over(at);
         let path = self.path_edge(at);
@@ -502,6 +522,7 @@ impl Map {
             bark: over.bark,
             well: over.well,
             lying: self.lying.edge(at),
+            feet: self.feet.edge(at),
             path,
             wet: smoothstep(0.35, 0.75, self.noise(at, 61.0, 13.0)),
         }
@@ -593,7 +614,10 @@ impl Map {
             heath_moss: 0.0,
             // Litter heaps against trunks, logs and rocks, its edge wandering (D294).
             heap: 1.0 - smoothstep(0.0, 0.9, here.bark.min(here.lying) + wander * 0.25),
-            stands: here.well.max(1.0 - smoothstep(0.0, LOG_WELL_M, here.lying)),
+            stands: here
+                .well
+                .max(1.0 - smoothstep(0.0, LOG_WELL_M, here.lying))
+                .max(1.0 - smoothstep(0.0, FEET_WELL_M, here.feet)),
             // Tall meadow grass in patches where the sun reaches; in the shade, clumps of
             // taller sedge among the short grass, so it is not one height (D293).
             tall: (smoothstep(0.7, 0.95, here.light)
@@ -835,6 +859,12 @@ impl Under {
                 | Under::Snag
         );
         !tall || path_m >= PATH_LINE_M
+    }
+
+    /// Whether it stands in a well of its own in the snow and the litter, as a tree does: a
+    /// shrub's stool or a young tree, not what grows knee-high or lies dead.
+    fn stands_in_a_well(self) -> bool {
+        self != Under::Snag && !self.keeps_path_line(0.0)
     }
 
     /// How far it stays from bark, from what lies on the floor, and from a path's edge.
@@ -1400,6 +1430,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
         path,
         canopy,
         lying: Lying::default(),
+        feet: Lying::default(),
         noise: Noise::new(lay.seed.derive("patches")),
     };
     let mut dice = lay.seed.derive("floor").rng();
@@ -1674,6 +1705,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                     continue;
                 }
                 lay.plant(placement, &drawn, p, place);
+                map.planted(placement.kind, p, scale);
                 count += 1;
                 if p.length() < closest.length() {
                     closest = p;

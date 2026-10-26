@@ -289,6 +289,8 @@ const CAP_LUMPS: f32 = 0.7;
 // is thin (a shrub's stem or a twig, a centimetre or two round) rather than a trunk: the
 // mesh carries no radius, but a tube's smooth normals turn by 1/r round it.
 const THIN_TURN: vec2<f32> = vec2<f32>(6.0, 15.0);
+// How much less of the wind's plastered coat a thin stem holds.
+const THIN_PLASTER: f32 = 0.8;
 // How bright a turned leaf is against the green one it was: dead leaves are duller and darker
 // than living ones; at a quarter brighter oaks and bracken went pastel orange and salmon.
 const AUTUMN_LIGHT: f32 = 0.8;
@@ -594,8 +596,13 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // A quarter of the girth, the face the wind meets squarely, and mostly low, where the
         // drift reaches: at half the girth every trunk stood half white, and coated to the
         // crown, the path's judges marked it down (5.85 to 5.11).
-        let plaster = smoothstep(0.62, 0.85, windward * 0.85 + 0.8 * (blot - 0.5) + 0.15 * low) * (1.0 - PLASTER_HIGH * smoothstep(PLASTER_HIGH_M.x, PLASTER_HIGH_M.y, stem_h));
-        let bank = 1.0 - smoothstep(0.15, 0.4, stem_h + 0.3 * (wander(across * 5.0 + seed) - 0.5));
+        // A thin stem (a hazel rod, a sapling's) holds little: the wind's snow blows past it
+        // and none banks against it, its foot only rimmed where it leaves the snow. Coated
+        // and banked as a trunk is, every shrub's lower stems looked dipped in white paint
+        // (winter round 2's judge).
+        let plaster = smoothstep(0.62, 0.85, windward * 0.85 + 0.8 * (blot - 0.5) + 0.15 * low) * (1.0 - PLASTER_HIGH * smoothstep(PLASTER_HIGH_M.x, PLASTER_HIGH_M.y, stem_h)) * (1.0 - THIN_PLASTER * thin);
+        let bank_top = mix(0.4, 0.06, thin);
+        let bank = 1.0 - smoothstep(bank_top * 0.375, bank_top, stem_h + bank_top * 0.75 * (wander(across * 5.0 + seed) - 0.5));
         let stuck = lying * max(plaster, bank);
         // A crust, the bark's darkest furrows showing through it where it is thin.
         colour = mix(colour, SNOW * (0.9 + 0.1 * blot), stuck * mix(1.0, PLASTER_CRUST, plaster * (1.0 - bank)));

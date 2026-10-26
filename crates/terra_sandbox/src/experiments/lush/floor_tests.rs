@@ -12,6 +12,7 @@ fn map_with(stands: &[Stand]) -> (Map, Vec2) {
         path: Path::new(Seed(3)),
         canopy,
         lying: Lying::default(),
+        feet: Lying::default(),
         noise: Noise::new(Seed(4)),
     };
     let away = (0..400)
@@ -79,6 +80,26 @@ fn a_trunk_stands_near_its_foot_and_not_metres_off() {
     let off = map.growing(at + Vec2::X * 4.0);
     assert!(foot.stands > 0.6, "a tree well lies at its foot: {foot:?}");
     assert_eq!(off.stands, 0.0, "nothing stands four metres off: {off:?}");
+}
+
+#[test]
+fn a_shrub_stands_in_a_well_of_its_own_and_moves_nothing() {
+    let (mut map, at) = map_with(&[]);
+    let bare = map.growing(at + Vec2::X * 0.4);
+    let lying = map.here(at + Vec2::X * 0.4).lying;
+    map.feet.add(at, FOOT_M);
+    let foot = map.growing(at + Vec2::X * 0.4);
+    let off = map.growing(at + Vec2::X * 2.0);
+    assert_eq!(bare.stands, 0.0, "nothing stands there before: {bare:?}");
+    assert!(
+        foot.stands > 0.5,
+        "a well lies round the stool's foot: {foot:?}"
+    );
+    assert_eq!(off.stands, 0.0, "none two metres off: {off:?}");
+    // What placement reads is the same, so every other plant stands where it did.
+    assert_eq!(map.here(at + Vec2::X * 0.4).lying, lying);
+    assert!(Under::Hazel.stands_in_a_well() && Under::Spruce.stands_in_a_well());
+    assert!(!Under::Fern.stands_in_a_well() && !Under::Snag.stands_in_a_well());
 }
 
 #[test]
