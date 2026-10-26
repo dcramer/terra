@@ -142,6 +142,23 @@ const SNOW_SKY: vec3<f32> = vec3<f32>(0.84, 1.0, 1.0);
 // Fresh fallen oak leaves, linear: a warm mid brown, lighter and redder than the floor's
 // old umber litter.
 const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
+// The floor's old litter, linear: a dark umber (D293).
+const OLD_LITTER: vec3<f32> = vec3<f32>(0.068, 0.054, 0.036);
+// Litter a season or more down, linear: leaves gone green-brown with decay and the moss and
+// algae on them, an olive no lighter than the umber.
+const DECAYED_LITTER: vec3<f32> = vec3<f32>(0.056, 0.062, 0.03);
+// Small green leaves, seedlings and moss in the litter, linear.
+const GREEN_IN_LITTER: vec3<f32> = vec3<f32>(0.045, 0.068, 0.026);
+
+// The litter's colour at a point (D503): never brown alone, as a real floor and The Witcher 3's
+// are, but umber leaves and needles mixed with green-brown decay in patches a metre or two
+// across and flecks of green through them; the autumn's fresh fall, `fresh`, warm brown over it.
+fn litter_tone(world: vec3<f32>, fresh: f32, fleck: f32) -> vec3<f32> {
+    let decay = smoothstep(0.38, 0.72, noise(world * 0.55 + 59.0) * 0.75 + fleck * 0.25);
+    let green = smoothstep(0.62, 0.85, noise(world * 1.9 + 37.0) * 0.7 + noise(world * 5.3 + 11.0) * 0.3);
+    let old = mix(mix(OLD_LITTER, DECAYED_LITTER, decay * 0.85), GREEN_IN_LITTER, green * 0.7);
+    return mix(old, FRESH_LITTER, fresh);
+}
 // A settlement's trodden ways, linear: packed earth, grey-brown and dusty, as a market town's
 // streets are in Kingdom Come's and The Witcher's frames, not the planet's warm soil; and the
 // straw dropped about their edges.
@@ -1729,7 +1746,7 @@ fn fragment(
         // The same layers and shares as below, drawn as `low_floor` says.
         let n = normalize(in.world_normal);
         let flat_ground = 1.0 - steep;
-        let litter_colour = mix(vec3<f32>(0.068, 0.054, 0.036), FRESH_LITTER, fresh);
+        let litter_colour = litter_tone(world, fresh, fleck);
         let needle_colour = vec3<f32>(0.054, 0.043, 0.031);
         let leaves = smoothstep(0.2, 0.75, litter + (blotch - 0.5) * 0.45) * flat_ground;
         let needly = smoothstep(0.25, 0.7, needles + (blotch - 0.5) * 0.4) * flat_ground;
@@ -1807,7 +1824,7 @@ fn fragment(
         // Under broadleaves the floor is their fallen leaves, brown with paler and darker
         // ones; under conifers, needles, a warmer red-brown. Both a dark umber, as Sons of
         // the Forest's floor is, not lit orange (D293).
-        let litter_colour = mix(vec3<f32>(0.068, 0.054, 0.036), FRESH_LITTER, fresh);
+        let litter_colour = litter_tone(world, fresh, fleck);
         let needle_colour = vec3<f32>(0.054, 0.043, 0.031);
         let leaves = smoothstep(0.2, 0.75, litter + (blotch - 0.5) * 0.45) * flat_ground;
         let needly = smoothstep(0.25, 0.7, needles + (blotch - 0.5) * 0.4) * flat_ground;
