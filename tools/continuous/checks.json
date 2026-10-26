@@ -1,5 +1,12 @@
 [
   {
+    "name": "nightly",
+    "does": "the full run on main (D411): clippy and every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes, the scorecards and docs; lowers the baselines and pushes that alone when all pass, bisects a failure; .git/terra-nightly/report.txt. At most every 3 hours, as it takes most of an hour",
+    "run": ["cargo", "xtask", "nightly"],
+    "rest": 3,
+    "minutes": 240
+  },
+  {
     "name": "fire",
     "does": "the fire sheet against its held baseline, tools/fire/held.json (D415)",
     "run": ["cargo", "xtask", "fire", "--gate"],

@@ -5,11 +5,14 @@
 // `.git/terra-continuous/src`. Each check is a row of `checks.json` (data, D136): its name,
 // the command, what it reads (a list of paths in `xtask/src/scope.rs`, so it runs only when one
 // of them changed; none, every time main moves) and, optionally, `hours` to run it again on a
-// timer although nothing changed. A check passes when its command exits 0.
+// timer although nothing changed, and `rest`, hours it waits after a run however main moved.
+// A check passes when its command exits 0.
 //
 //   cargo xtask continuous                # once: every check due at origin/main's tip
 //   cargo xtask continuous --watch [min]  # the same every so many minutes (default 5)
-//   cargo xtask continuous --install [min] # a systemd user timer running it every so many minutes
+//   cargo xtask continuous --install [min] # a systemd user timer running it every so many minutes,
+//                                          # or a crontab entry where systemd's user bus is out of reach
+//   cargo xtask continuous --uninstall     # removes either
 //
 // Prints a line a check that ran; its output goes to `.git/terra-continuous/logs/<name>.log`.
 // `.git/terra-continuous/status.txt` is a line a check, its state at the last commit it ran,
@@ -27,7 +30,7 @@ const ROOT = resolve(HERE, "../..");
 /// The most commits of a regression's range the status names.
 const NAMED = 12;
 
-export type Check = { name: string; does: string; run: string[]; reads?: string; hours?: number; minutes?: number };
+export type Check = { name: string; does: string; run: string[]; reads?: string; hours?: number; rest?: number; minutes?: number };
 /// What came of a check's last run: the commit and when, whether it passed, the last commit it
 /// passed at, and the line it ended on.
 /// `when` is an ISO time in UTC.
@@ -41,9 +44,11 @@ export function scopePaths(source: string, name: string): string[] {
 }
 
 /// Why a check runs at `tip`, or nothing when it need not: never run, main moved and touched
-/// what it reads (`touched`, always true for a check that names nothing), or its timer is up.
+/// what it reads (`touched`, always true for a check that names nothing), or its timer is up;
+/// never within its `rest` of the last run, so a long check does not run back to back.
 export function due(check: Check, last: Record | undefined, tip: string, touched: boolean, now: number): string | undefined {
   if (!last) return "first run";
+  if (check.rest && now - Date.parse(last.when) < check.rest * 3600_000) return undefined;
   if (check.hours && now - Date.parse(last.when) >= check.hours * 3600_000) return `${check.hours} h since the last`;
   if (last.at === tip) return undefined;
   return touched ? "main moved" : undefined;
@@ -204,24 +209,101 @@ function sleep(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-/// A systemd user timer running `cargo xtask continuous` from the main checkout every so many
-/// minutes; a run while one is going does nothing.
+const UNITS = join(homedir(), ".config/systemd/user");
+/// The lines fencing its crontab entry, so `--uninstall` takes out only them.
+const BEGIN = "# BEGIN terra-continuous (cargo xtask continuous --uninstall removes it)";
+const END = "# END terra-continuous";
+
+/// A crontab with its entry taken out, and `entry` put in when there is one.
+export function cronWith(table: string, entry?: string): string {
+  const kept: string[] = [];
+  let inside = false;
+  for (const line of table.split("\n")) {
+    if (line === BEGIN) inside = true;
+    else if (line === END) inside = false;
+    else if (!inside) kept.push(line);
+  }
+  while (kept.length && !kept.at(-1)) kept.pop();
+  if (entry) kept.push(BEGIN, entry, END);
+  return kept.length ? `${kept.join("\n")}\n` : "";
+}
+
+/// Single-quoted for /bin/sh.
+function quoted(text: string): string {
+  return `'${text.replaceAll("'", `'\\''`)}'`;
+}
+
+/// The crontab line running it from `home` every so many minutes with `path` (cron's own PATH
+/// has no cargo or node), its lines appended to `log`.
+export function cronEntry(every: number, home: string, path: string, log: string): string {
+  const when = every < 60 ? `*/${every} * * * *` : `0 */${Math.max(1, Math.round(every / 60))} * * *`;
+  return `${when} cd ${quoted(home)} && PATH=${quoted(path)} cargo xtask continuous >> ${quoted(log)} 2>&1`;
+}
+
+function crontab(): string {
+  const r = spawnSync("crontab", ["-l"], { encoding: "utf8" });
+  return r.status === 0 ? r.stdout : "";
+}
+
+function setCrontab(table: string): boolean {
+  return spawnSync("crontab", ["-"], { input: table, encoding: "utf8" }).status === 0;
+}
+
+/// Whether systemd's user manager answers. Under WSLg it runs, but WSLg's own runtime folder
+/// hides its bus in /run/user, so `systemctl --user` cannot reach it.
+function userBus(): boolean {
+  return spawnSync("systemctl", ["--user", "show-environment"], { stdio: "ignore" }).status === 0;
+}
+
+/// Runs `cargo xtask continuous` from the main checkout every so many minutes, with this
+/// shell's PATH: a systemd user timer, or a crontab entry where the user bus is out of reach.
+/// A run while one is going does nothing. `--uninstall` takes out either.
 function install(every: number): number {
-  const units = join(homedir(), ".config/systemd/user");
-  mkdirSync(units, { recursive: true });
   const home = mainCheckout();
+  const status = join(home, ".git/terra-continuous/status.txt");
+  const path = process.env.PATH ?? "/usr/bin:/bin";
+  if (!userBus()) {
+    const log = join(home, ".git/terra-continuous/cron.log");
+    mkdirSync(dirname(log), { recursive: true });
+    if (!setCrontab(cronWith(crontab(), cronEntry(every, home, path, log)))) {
+      console.log("✗ continuous: crontab refused the entry");
+      return 1;
+    }
+    console.log(`✓ continuous: a crontab entry every ${every} min from ${home} (no systemd user bus here); crontab -l shows it, ${log} its lines; status ${status}`);
+    return 0;
+  }
+  mkdirSync(UNITS, { recursive: true });
   writeFileSync(
-    join(units, "terra-continuous.service"),
-    `[Unit]\nDescription=Terra's continuous checks on main (tools/continuous)\n\n[Service]\nType=oneshot\nWorkingDirectory=${home}\nExecStart=/bin/sh -lc 'exec cargo xtask continuous'\n`,
+    join(UNITS, "terra-continuous.service"),
+    `[Unit]\nDescription=Terra's continuous checks on main (tools/continuous)\n\n[Service]\nType=oneshot\nWorkingDirectory=${home}\nEnvironment="PATH=${path}"\nExecStart=/bin/sh -c 'exec cargo xtask continuous'\n`,
   );
   writeFileSync(
-    join(units, "terra-continuous.timer"),
+    join(UNITS, "terra-continuous.timer"),
     `[Unit]\nDescription=Terra's continuous checks on main every ${every} minutes\n\n[Timer]\nOnBootSec=5min\nOnUnitInactiveSec=${every}min\n\n[Install]\nWantedBy=timers.target\n`,
   );
   for (const args of [["--user", "daemon-reload"], ["--user", "enable", "--now", "terra-continuous.timer"]]) {
     if (spawnSync("systemctl", args, { stdio: "inherit" }).status !== 0) return 1;
   }
-  console.log(`✓ continuous: terra-continuous.timer every ${every} min from ${home}; status ${join(home, ".git/terra-continuous/status.txt")}`);
+  console.log(`✓ continuous: terra-continuous.timer every ${every} min from ${home}; status ${status}`);
+  return 0;
+}
+
+/// Takes out what `--install` put in, of either kind, leaving the state and its worktree.
+function uninstall(): number {
+  const table = crontab();
+  const cron = table.split("\n").includes(BEGIN);
+  if (cron && !setCrontab(cronWith(table))) {
+    console.log("✗ continuous: crontab refused the change");
+    return 1;
+  }
+  const timer = existsSync(join(UNITS, "terra-continuous.timer"));
+  if (timer) {
+    spawnSync("systemctl", ["--user", "disable", "--now", "terra-continuous.timer"], { stdio: "ignore" });
+    for (const unit of ["terra-continuous.timer", "terra-continuous.service"]) rmSync(join(UNITS, unit), { force: true });
+    spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
+  }
+  const what = [cron && "crontab entry", timer && "systemd timer"].filter(Boolean).join(" and ");
+  console.log(what ? `✓ continuous: removed its ${what}` : "continuous: nothing installed");
   return 0;
 }
 
@@ -230,13 +312,14 @@ function main(): number {
   const minutes = Number(value ?? 5) || 5;
   if (flag === undefined) return once();
   if (flag === "--install") return install(minutes);
+  if (flag === "--uninstall") return uninstall();
   if (flag === "--watch") {
     for (;;) {
       once();
       sleep(minutes * 60_000);
     }
   }
-  console.log("usage: cargo xtask continuous [--watch [minutes] | --install [minutes]]");
+  console.log("usage: cargo xtask continuous [--watch [minutes] | --install [minutes] | --uninstall]");
   return 2;
 }
 

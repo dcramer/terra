@@ -1,4 +1,4 @@
-//! `cargo xtask nightly` (D411): the full run on main, run by hand until it is scheduled.
+//! `cargo xtask nightly` (D411): the full run on main, scheduled by `cargo xtask continuous`.
 //! In its own worktree, `.git/terra-nightly/src`, detached at origin/main, it runs what no hook
 //! runs whole: clippy and every test of the workspace, the slow ones too, the kit checker, the
 //! artifacts ratchet quick and over every scene, fuzz over seeds 0 to 200, the size ratchet, the
@@ -28,7 +28,7 @@ pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "nightly",
         takes: "",
-        does: "the full run on origin/main (D411), by hand until scheduled: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes, the combat and controller scorecards and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
+        does: "the full run on origin/main (D411), scheduled as continuous's first check: every test, the kits, the artifacts ratchet over every scene, fuzz over seeds 0 to 200, sizes, the combat and controller scorecards and docs, in its own worktree; lowers the baselines to what it measured and pushes that alone, or bisects a failure to its first bad commit; .git/terra-nightly/report.txt. TERRA_NIGHTLY=0 turns it off",
         group: "Play and check",
         run: nightly,
     },
@@ -278,9 +278,14 @@ pub(crate) fn nightly(args: &[String]) -> bool {
     };
     let report = state.join("report.txt");
     let last = std::fs::read_to_string(&report).unwrap_or_default();
-    if last_run(&last).is_some_and(|(_, commit)| commit == tip) {
-        println!("nightly: origin/main at {} was run already", short(&tip));
-        return true;
+    if let Some((passed, _)) = last_run(&last).filter(|(_, commit)| *commit == tip) {
+        // The verdict it had, so a scheduler reading the exit code sees a failure still failing.
+        println!(
+            "nightly: origin/main at {} was run already and {}",
+            short(&tip),
+            if passed { "passed" } else { "failed" }
+        );
+        return passed;
     }
     println!("nightly over origin/main at {}", short(&tip));
     let outcomes: Vec<Outcome> = STAGES.iter().map(|s| run_stage(s, &src, &logs)).collect();

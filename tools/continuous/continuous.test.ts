@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { type Check, due, scopePaths, verdict } from "./continuous.ts";
+import { type Check, cronEntry, cronWith, due, scopePaths, verdict } from "./continuous.ts";
 
 const fire: Check = { name: "fire", does: "", run: ["cargo", "xtask", "fire", "--gate"], reads: "FIRE" };
 const a = "a".repeat(40);
@@ -25,6 +25,21 @@ test("a check runs the first time, when main moved over what it reads, or when i
   assert.equal(due(fire, last, b, false, now), undefined);
   assert.equal(due(fire, last, b, true, now), "main moved");
   assert.equal(due({ ...fire, hours: 1 }, last, a, false, now), "1 h since the last");
+  assert.equal(due({ ...fire, rest: 3 }, last, b, true, now), undefined, "resting 3 h after a run an hour ago");
+  assert.equal(due({ ...fire, rest: 3 }, last, b, true, now + 2 * 3600_000), "main moved");
+  assert.equal(due({ ...fire, rest: 3 }, undefined, b, true, now), "first run");
+});
+
+test("its crontab entry goes in fenced and comes out leaving every other line", () => {
+  const theirs = "# theirs\n17 9 * * * backup\n";
+  const entry = cronEntry(5, "/home/x/it's", "/usr/bin:/bin", "/home/x/log");
+  assert.equal(entry, `*/5 * * * * cd '/home/x/it'\\''s' && PATH='/usr/bin:/bin' cargo xtask continuous >> '/home/x/log' 2>&1`);
+  assert.match(cronEntry(120, "/h", "/p", "/l"), /^0 \*\/2 \* \* \* /);
+  const installed = cronWith(theirs, entry);
+  assert.ok(installed.startsWith(theirs) && installed.includes(`\n${entry}\n`));
+  assert.equal(cronWith(cronWith(installed, entry), entry), installed, "installing twice keeps one entry");
+  assert.equal(cronWith(installed), theirs);
+  assert.equal(cronWith(cronWith("", entry)), "");
 });
 
 test("a failure after a pass names the range since the last pass and the commits in it touching what it reads", () => {
