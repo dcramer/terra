@@ -1,0 +1,18 @@
+{
+  "subject": "giant cave spider, a real spider's anatomy at the size of a large dog: cephalothorax and abdomen joined by a narrow waist, eight glossy eyes in two rows, pedipalps, heavy chelicerae with curved fangs, eight seven-segmented hairy legs, mottled umber brown with ochre bands at the joints",
+  "file": "Spider",
+  "plan": "many-legged",
+  "rig": "rig.glb: Quaternius's spider as the game shipped it (SpiderArmature, its five clips), kept as the skeleton and clips the new body is fitted to",
+  "tripo_project": "aa4f613e-adff-4aec-af84-f2a70e3c5691",
+  "generator": "h3.1, detailed geometry, detailed texture, PBR",
+  "credits": {
+    "concept": 20,
+    "model": 55
+  },
+  "budget": 4000,
+  "textures": {
+    "colour": 2048,
+    "normal": 2048,
+    "roughness_metal": 1024
+  }
+}
