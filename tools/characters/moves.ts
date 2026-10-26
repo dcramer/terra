@@ -9,8 +9,8 @@
 //   held    how deep a held look (sword, shield) goes into it
 //   clash   held look against held look (clash.ts, D481): how deep the sword (blade, guard,
 //           hilt) goes through the shield's board, and the board through the sword arm (right
-//           hand and forearm); a bar for a blow (a move with active frames), measured and scored
-//           (tools/combat) for every move
+//           hand and forearm); a bar for every move and clip, scored (tools/combat) for every
+//           move
 //   arc     a blow's tip at its fastest in its active frames: its bearing from ahead (+ left)
 //           and how far ahead, which way it sweeps, how far the hips have turned; a blow
 //           whose clip has a spec (D450, clip_spec.ts) fails a sweep or contact against it
@@ -88,7 +88,7 @@ const { values: opt } = parseArgs({
 // The bars: what a person sees as wrong.
 const HAND_CM = 2; // a hand or arm through the skin
 const HELD_CM = 1; // a sword or shield through the body
-const CLASH_CM = 0; // a blow's sword through its own shield, or the shield through the sword arm (D481)
+const CLASH_CM = 0; // a move's or clip's sword through its own shield, or the shield through the sword arm (D481)
 const ARC_DEG = 35; // a blow's contact off ahead
 const AHEAD_M = 0.5; // a blow's contact this far in front of the hips at least
 const FACE_DEG = 35; // a raised shield's face off ahead
@@ -532,6 +532,14 @@ const clashed = (pen: Pen): Record<string, number> => (sword && shield ? { sword
 // The carry's numbers of a clip that is no blow (a guard, a walk): what a blow's start and end hold.
 const carriedBy = (pen: Pen): Record<string, number> =>
   sword && shield ? { shield_high_cm: pen.carry.high.cm, shield_elbow_below_m: pen.carry.elbow.cm, shield_face_back_deg: pen.carry.face.cm } : {};
+// Every move and clip keeps the sword out of its own shield and the shield out of the sword arm (D481).
+const clashBad = (pen: Pen): string[] =>
+  sword && shield
+    ? [
+        ...(pen.sword.cm > CLASH_CM ? [`sword in shield ${cm(pen.sword.cm)} deep, ${pen.sword.where}`] : []),
+        ...(pen.arm.cm > CLASH_CM ? [`shield in arm ${cm(pen.arm.cm)} deep, ${pen.arm.where}`] : []),
+      ]
+    : [];
 const clashParts = (pen: Pen) => (sword && shield ? [`sword in shield ${cm(pen.sword.cm)} (${pen.sword.where})`, `shield in arm ${cm(pen.arm.cm)} (${pen.arm.where})`] : []);
 const failures: string[] = [];
 type Row = { move?: string; clip: string; bad: string[]; gaps?: [number, number]; measured: Record<string, number> };
@@ -612,10 +620,8 @@ for (const move of checked) {
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
   const blow = specs[move.clip.split("#")[0]];
+  bad.push(...clashBad(pen));
   if (move.active && sword && shield) {
-    // A blow moves the shield out of its sword's path (D481); a guard or block is a later bar.
-    if (pen.sword.cm > CLASH_CM) bad.push(`sword in shield ${cm(pen.sword.cm)} deep, ${pen.sword.where}`);
-    if (pen.arm.cm > CLASH_CM) bad.push(`shield in arm ${cm(pen.arm.cm)} deep, ${pen.arm.where}`);
     const { high, elbow, face } = pen.carry;
     measured.shield_high_cm = high.cm;
     measured.shield_elbow_below_m = elbow.cm;
@@ -750,6 +756,7 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
   const bad: string[] = [];
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
+  bad.push(...clashBad(pen));
   row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen), ...carriedBy(pen) } });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
