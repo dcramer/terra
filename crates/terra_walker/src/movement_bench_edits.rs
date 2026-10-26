@@ -33,7 +33,7 @@ fn edit(planet: &Planet, middle: Vec3, forward: Vec3, i: usize) -> Operation {
     let right = up.cross(forward).normalize();
     let azimuth = unit(i, 0) * std::f32::consts::TAU;
     let across = forward * libm::cosf(azimuth) + right * libm::sinf(azimuth);
-    let reach = if i % CLUSTER_SHARE == 0 {
+    let reach = if i.is_multiple_of(CLUSTER_SHARE) {
         CLUSTER_M
     } else {
         SPREAD_M
