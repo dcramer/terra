@@ -19,7 +19,8 @@ fn the_sidecar_and_the_volume_agree_on_its_size() {
 #[test]
 fn a_fire_shows_the_frame_its_time_is_in_and_comes_round_to_its_start() {
     let sim = Sim::read();
-    let step = 1.0 / sim.fps;
+    // A bake's frame on the clock: it plays `PLAY` times faster than baked.
+    let step = 1.0 / (sim.fps * PLAY);
     let still = placed(0.0, 1.0);
     // A quarter of the way through frame 7, then frame 7's last, which blends toward 8.
     let (a, b, t) = sim.frames_at(7.25 * step, still);
@@ -29,13 +30,14 @@ fn a_fire_shows_the_frame_its_time_is_in_and_comes_round_to_its_start() {
     let (a, b, _) = sim.frames_at((sim.frames as f32 - 0.5) * step, still);
     assert_eq!((a, b), (sim.frames - 1, 0));
     let (a, b, t) = sim.frames_at(3.6, still);
-    let (a2, b2, t2) = sim.frames_at(3.6 + sim.seconds(), still);
+    let (a2, b2, t2) = sim.frames_at(3.6 + sim.frames as f32 * step, still);
     assert_eq!((a, b), (a2, b2));
     assert!((t - t2).abs() < 1.0e-3);
-    // Its offset moves it on so many seconds; four times the bake's size plays half as fast.
+    // Its offset moves it on so many of the bake's seconds; four times the bake's size plays
+    // half as fast.
     assert_eq!(
-        sim.frames_at(0.0, placed(2.0, 1.0)),
-        sim.frames_at(2.0, still)
+        sim.frames_at(0.0, placed(2.0, 1.0)).0,
+        sim.frames_at(2.0 / PLAY, still).0
     );
     let (a, _, _) = sim.frames_at(2.0, placed(0.0, 4.0));
     assert_eq!(a, sim.frames_at(1.0, still).0);

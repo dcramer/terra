@@ -119,16 +119,17 @@ fn a_wisp_leaves_its_tip_at_the_gas_speed_and_thins_through_the_edge_as_it_dies(
         .find_map(|k| born(&s, p, 0.5, Vec2::ZERO, 0, k))
         .expect("a lane sheds");
     // The tip is 0.8 m up at the bake's middle; the bake's 4 m/s up and 1 m/s downwind are the
-    // fire's at its scale times its loop's rate (1.2 at 1.44): 4.8 up, 1.2 down the wind, which
-    // blows north at this turn.
+    // fire's at its scale times its loop's rate, up and down the wind, which blows north at this
+    // turn.
+    let rate = p.rate();
     assert!(w.from.distance(Vec3::new(0.0, 0.8 * scale, 0.0)) < 1e-5);
     assert!(
-        w.velocity.distance(Vec3::new(0.0, 4.8, 1.2)) < 1e-4,
+        w.velocity.distance(Vec3::new(0.0, 4.0, 1.0) * scale * rate) < 1e-4,
         "{}",
         w.velocity
     );
     // It lives a filmed tongue's life, at the loop's pace.
-    assert!(w.life >= LIFE_S[0] * 1.2 - 1e-6 && w.life <= LIFE_S[1] * 1.2 + 1e-6);
+    assert!(w.life >= LIFE_S[0] / rate - 1e-6 && w.life <= LIFE_S[1] / rate + 1e-6);
     let at = |t: f32| w.drawn(w.born + t * w.life, scale, &s);
     let [mid, axis] = at(0.0).expect("drawn at its birth");
     assert!(mid.truncate().distance(w.from) < 1e-5 && (mid.w - FLAME).abs() < 1e-6);

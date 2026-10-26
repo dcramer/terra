@@ -1684,6 +1684,9 @@ fn baked_field(field: HearthField, slot: u32) -> HearthField {
     return f;
 }
 
+// How much faster than baked a baked loop plays (`sim::PLAY`, fire round g28).
+const BAKED_PLAY: f32 = 1.25;
+
 // A baked field's two frames at `time` (`sim::frames_at`): its loop played at the root of one
 // over its scale, as a fire's puffing goes, from its own offset.
 fn baked_frames(field: HearthField, time: f32) -> HearthField {
@@ -1692,7 +1695,7 @@ fn baked_frames(field: HearthField, time: f32) -> HearthField {
         return f;
     }
     let frames = fire.sim[0].w;
-    let at = fract((time * inverseSqrt(f.baked.w) + f.baked.x) * fire.sim[1].w / frames) * frames;
+    let at = fract((time * BAKED_PLAY * inverseSqrt(f.baked.w) + f.baked.x) * fire.sim[1].w / frames) * frames;
     let a = min(floor(at), frames - 1.0);
     f.blend = at - a;
     f.tiles = vec4(baked_tile(a), baked_tile(select(a + 1.0, 0.0, a + 1.0 >= frames)));

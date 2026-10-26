@@ -37,6 +37,9 @@ const SCALE_SPREAD: f32 = 0.15;
 const TURN_EASE_S: f32 = 2.0;
 /// Below this wind, metres a second, a fire's loop keeps a bearing of its own.
 const CALM_MPS: f32 = 0.1;
+/// How much faster than baked a fire plays its loop (`fire.wesl`'s `BAKED_PLAY`): the bake puffs
+/// at 1.67 Hz in the game, filmed campfires flicker at 1.8-3.8 (fire round g28).
+const PLAY: f32 = 1.25;
 /// DXGI's BC5 UNORM, the format the baker writes (`tools/fire/bake/bc5.ts`).
 const DXGI_BC5_UNORM: u32 = 83;
 /// A DDS file's header with its DX10 extension, in bytes.
@@ -164,9 +167,10 @@ impl Placement {
         }
     }
 
-    /// How fast it plays its loop: as the root of one over its scale (puffing at about 1.5/√D Hz).
+    /// How fast it plays its loop: `PLAY` times the root of one over its scale (puffing at about
+    /// 1.5/√D Hz).
     pub fn rate(self) -> f32 {
-        1.0 / libm::sqrtf(self.scale)
+        PLAY / libm::sqrtf(self.scale)
     }
 
     /// A point of its fire's frame (east, up, north, metres from its foot) in the bake's box
