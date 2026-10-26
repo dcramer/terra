@@ -15,7 +15,7 @@ reaches every part of it: here, a stone or iron head; in the game, a tint (chara
 A thing carried hanging by a handle (a market basket, in HUNG) is made from its prop instead,
 and a textured model of ours (a sword, a shield, in TEXTURED) keeps its own materials and maps:
 
-    tools/blender/run.sh tools/characters/fit_held.py arming_sword round_shield
+    tools/blender/run.sh tools/characters/fit_held.py arming_sword round_shield heater_shield
 
 Reads the tool models in assets/models/tools: free ones (THIRD_PARTY.md), and ours where no
 free one exists, a pickaxe and a torch, made by tools/props standing on their handles; writes
@@ -77,6 +77,11 @@ TEXTURED = {
     # board behind it, so with the fist forward it covers the forearm and body. Its planks run
     # along +X.
     "round_shield": ("RoundShield.glb", (0, 0.405, -0.025), (0.4, 0.405, -0.025), (0, 1, 0), 0),
+    # Strapped by enarmes (D504): held at its hand strap, on its back right of the middle seen
+    # from behind, where the fist closes; the forearm runs from the arm strap on the left to it
+    # (+Y, across the board, 15 degrees down toward the hand as enarmes are often set), its
+    # point toward +X. Its back view, with the straps, is art/props/heater_shield/back.png.
+    "heater_shield": ("HeaterShield.glb", (-0.12, 0.40, -0.035), (-0.41, 0.322, -0.035), (0, -1, 0), 0),
 }
 
 # Things strapped to the forearm rather than hung on the hand socket, said in their extras as
@@ -88,9 +93,12 @@ TEXTURED = {
 # ahead when the forearm is raised across the body (5 degrees off at the block's hold); its
 # grip bar along the forearm, its centre over the knuckles, 6.5 cm out from the bone's line,
 # clear of the skin. Measured by tools/characters/moves.ts: clear of the head and body in the
-# guard, block and strafes on every template.
+# guard, block and strafes on every template. The heater (D504) rides the same way, its hand
+# strap 42 cm along the bone and 4 cm out, its point down in the guard: square across the board
+# or nearer the elbow, its top corner went 21 cm into the spine in the heavy and the left strafe.
 STRAPS = {
     "round_shield": {"bone": "lowerarm_l", "at": [-0.02, 0.34, -0.065], "face": [0, 0, -1], "grip": [0, 1, 0]},
+    "heater_shield": {"bone": "lowerarm_l", "at": [0.0, 0.42, -0.04], "face": [0, 0, -1], "grip": [0, 1, 0]},
 }
 
 

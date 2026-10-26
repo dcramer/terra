@@ -62,7 +62,8 @@ export function faceOff(face: V3, forward: V3, up: V3 = [0, 1, 0]): number {
  * The shield's grip against the fist (research/2026-10-25-shield-prior-art.md fault 3): `fist`
  * the middle of the closed fist (socket.hand.L's origin), `knuckles` two points on the line
  * across the palm (the index and little finger's first joints), `grip` the shield's grip (its
- * look's origin, as it is hung) and `bar` the way its handle runs (the look's +Y). The grip's
+ * look's origin, as it is hung; a strapped shield's hand strap) and `bar` the way its handle runs
+ * (the look's +Y; a strapped look's hand strap, across its board, +X). The grip's
  * distance from the fist, cm, and the degrees between the bar and the line across the palm, as
  * lines (0 across the palm either way round, 90 along the forearm).
  */

@@ -9,7 +9,7 @@ A film of 20 to 30 seconds on the mountain lake's south shore (`lake`, the open 
 ## The fighters
 
 - **The troll** is a character made as ours are (the character skill): a design sheet in a T-pose, a Tripo model and auto-rig on its Unreal skeleton, converted onto our skeleton and checked with the rig checker, exported at 4 m. On our skeleton it plays clips made for a person, slowed for its size (a creature twice our height moves about 1.5 times slower, by Froude scaling, which is what makes it read as heavy). Checked on a workbench sheet against high-fidelity game trolls (The Witcher 3's rock trolls, God of War's, Skyrim's) before it is animated.
-- **The man** is the base body as the player's template, dressed, with a textured sword in the right hand and a round shield in the left (held looks, `assets/models/held/`).
+- **The man** is the base body as the player's template, dressed, with a textured sword in the right hand and a strapped heater shield on the left forearm (D504) (held looks, `assets/models/held/`).
 - **Their clips** are made with Kimodo (`tools/characters/motion.ts`), as the game's own made clips are, and must pass the clip checker:
   - troll: idle, a lumbering walk, an overhead two-handed smash, a sideways sweep, a hit reaction, a roar;
   - man: a guard stance behind the shield, strafing left and right in guard, three sword attacks, a block, a dodge (the game's roll), a hit reaction.

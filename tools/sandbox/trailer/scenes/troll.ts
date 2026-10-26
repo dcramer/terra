@@ -139,7 +139,7 @@ const MAN = {
   template: "male",
   clips: "models/character/fight.glb",
   wears: ["shirt", "trousers", "boots", "leather_coat"],
-  hold: { "socket.hand.R": "models/held/arming_sword.glb", "socket.hand.L": "models/held/round_shield.glb" },
+  hold: { "socket.hand.R": "models/held/arming_sword.glb", "socket.hand.L": "models/held/heater_shield.glb" },
   bend: { upperarm_l: [-30, 0, 14], lowerarm_l: [0, 0, 0] },
 };
 /// How far ahead of the troll its blows land, metres: its arm and fist at its size.

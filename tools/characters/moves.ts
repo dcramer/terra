@@ -27,8 +27,9 @@
 //           take mixed in by the outgoing's `carry`, D454), crossfaded over the game's move
 //           blend; each chained take is checked as a row of its own. Numbers for the scorecard
 //           (tools/combat), not bars here: a row "blows" and a row "chain" take the worst
-//   grip    the shield's grip (its look's origin, as it is hung) against the left fist: how far
-//           it is from socket.hand.L's origin, and how far its bar (+Y) turns off the line
+//   grip    the shield's grip (its look's origin, as it is hung: a strapped shield's hand strap,
+//           D504) against the left fist: how far it is from socket.hand.L's origin, and how far
+//           its bar (+Y; a strapped look's hand strap, across its board, +X) turns off the line
 //           across the palm (index to little finger's first joints), the worst of every move
 //           and clip on every template, and the guard's first frame; a row "grip" for the
 //           scorecard (held.shield.grip_*, research/2026-10-25-shield-prior-art.md fault 3)
@@ -62,7 +63,7 @@ const { values: opt } = parseArgs({
     body: { type: "string", default: "assets/models/character/base.glb" },
     templates: { type: "string", default: "assets/models/character/templates.json" },
     // What the prototype holds in the hands (`terra_creatures::melee`, SWORD and SHIELD).
-    hold: { type: "string", multiple: true, default: ["socket.hand.R=assets/models/held/arming_sword.glb", "socket.hand.L=assets/models/held/round_shield.glb"] },
+    hold: { type: "string", multiple: true, default: ["socket.hand.R=assets/models/held/arming_sword.glb", "socket.hand.L=assets/models/held/heater_shield.glb"] },
     // Bends laid over the clips, BONE=x,y,z degrees about the body's axes (staged bends); none in the prototype.
     bend: { type: "string", multiple: true, default: [] },
     also: { type: "string", default: "Keyed_Guard,Fight_Guard,Fight_Strafe_L,Fight_Strafe_R,Fight_Walk,Jump_Loop" },
@@ -254,7 +255,8 @@ function poseOf(shape: Shape, clip: Clip, t: number): Pose[] {
 // The sword (in the right hand) also as balls, the shield (in the left) as its board, for the
 // clash (clash.ts), in the frame of the node they hang from.
 // `front` is the way the look's painted front (its -Z) looks, in that frame; `grip` where its
-// origin (the place it is held at) sits and `bar` the way its handle (+Y) runs.
+// origin (the place it is held at) sits and `bar` the way its handle (+Y) runs, or a strapped
+// look's hand strap (+X).
 type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; front: V3; centre: V3; grip: V3; bar: V3; balls?: Ball[]; board?: Board };
 type Strap = { bone: string; at: V3; face: V3; grip: V3 };
 const rest = posed(body, undefined, 0);
@@ -317,7 +319,9 @@ const held: Held[] = opt.hold!.map((h) => {
   const disc = hand === "socket.hand.L" ? board(mesh!) : undefined;
   const plate = disc && { centre: put(disc.centre), normal: turned(disc.normal), radius: disc.radius * k, half: disc.half * k };
   const front = turned(rot(pose.r, [0, 0, -1]));
-  const bar = turned(rot(pose.r, [0, 1, 0]));
+  // A held grip's bar runs along its handle (+Y); a strapped look's hand strap runs across its
+  // board, square to the forearm (+X), where the fist closes on it (D459, D504).
+  const bar = turned(rot(pose.r, strap ? [1, 0, 0] : [0, 1, 0]));
   return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, centre: put(centre), grip: put(pose.t), bar, balls, board: plate };
 });
 
@@ -749,8 +753,8 @@ if (shield && gripped.cm.cm > -Infinity) {
   // The guard's first frame, where a drawn fighter stands, and the worst of every clip.
   const atGuard = penetration(guardClip, 0, 0).grip.deg;
   row(
-    "grip, the shield in the fist",
-    [`grip ${cm(gripped.cm.cm)} from the fist at most (${gripped.cm.where})`, `bar ${gripped.deg.cm.toFixed(0)}° off the line across the palm at most (${gripped.deg.where}), ${atGuard.cm.toFixed(0)}° in the guard`],
+    "grip, the fist on the shield's hand strap",
+    [`strap ${cm(gripped.cm.cm)} from the fist at most (${gripped.cm.where})`, `strap ${gripped.deg.cm.toFixed(0)}° off the line across the palm at most (${gripped.deg.where}), ${atGuard.cm.toFixed(0)}° in the guard`],
     [],
     { clip: "grip", measured: { grip_hand_cm: gripped.cm.cm, grip_palm_deg: gripped.deg.cm, grip_palm_guard_deg: atGuard.cm } },
   );

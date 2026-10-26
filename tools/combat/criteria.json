@@ -2610,12 +2610,12 @@
    "cost": "cheap",
    "id": "held.shield.grip_hand",
    "noticed": 4,
-   "notice": "the shield hangs beside the fist instead of in it: the hand is off its grip",
+   "notice": "the fist is off the shield's hand strap: a strapped shield (D504) is held by the forearm through its arm strap and the fist closed on its hand strap, and the fist hangs away from it",
    "bar": {
     "at_most": 1
    },
    "unit": "cm",
-   "source": "docs/holding.md section 3 (the hand closes on the handle; IK only past 1 cm); Hurstwic, Viking shields (gripped behind the boss, no arm straps); research/2026-10-25-shield-prior-art.md",
+   "source": "D504 and D459 (a strapped heater, its enarmes: the forearm through the arm strap, the fist on the hand strap; the look's origin is the hand strap, fit_held.py STRAPS); docs/holding.md section 3 (the hand closes on the handle; IK only past 1 cm); research/2026-10-25-shield-prior-art.md. Redefined in round 24 from the round shield's centre grip",
    "check": {
     "by": "moves",
     "row": "grip",
@@ -2627,12 +2627,12 @@
    "cost": "cheap",
    "id": "held.shield.grip_across_palm",
    "noticed": 3,
-   "notice": "the fist cannot close on the shield's grip: the bar runs along the forearm instead of across the palm",
+   "notice": "the fist cannot close on the shield's hand strap: the strap, across the board square to the forearm, runs into the hand instead of across the palm",
    "bar": {
     "at_most": 15
    },
    "unit": "deg",
-   "source": "Hurstwic, Viking shields (a wooden handgrip across the board behind the boss, held in the fist); I.33 fol. 1r and 5r (the buckler's grip in the fist); fit_held.py STRAPS (the round shield's grip along lowerarm_l, 90 deg by construction); research/2026-10-25-shield-prior-art.md",
+   "source": "D504 and D459 (a strapped heater's hand strap runs across its board, square to the forearm, and lies across the palm of the fist that holds it: the look's +X, fit_held.py TEXTURED); research/2026-10-25-shield-prior-art.md. Redefined in round 24 from the round shield's centre-grip bar",
    "check": {
     "by": "moves",
     "row": "grip",

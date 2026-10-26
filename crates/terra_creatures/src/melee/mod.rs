@@ -50,10 +50,11 @@ pub const HEALTH: f32 = 100.0;
 const LOCK_M: f32 = 15.0;
 /// How long a beaten fighter lies before the spar starts again, seconds.
 const DOWN_S: f32 = 3.0;
-/// The looks drawn: a sword in the right hand, a round shield in the left, which its file
-/// straps to the forearm (`terra_walker::strap`).
+/// The looks drawn: a sword in the right hand, a heater shield in the left (D504), which its
+/// file straps to the forearm by its enarmes (`terra_walker::strap`). The round shield's file
+/// stays for its own style later.
 const SWORD: &str = "models/held/arming_sword.glb";
-const SHIELD: &str = "models/held/round_shield.glb";
+const SHIELD: &str = "models/held/heater_shield.glb";
 const HAND_L: &str = "socket.hand.L";
 /// The walk a drawn body goes forward and back in: the library's walk with both arms held as
 /// the guard holds them (D458), so the sword and shield stay out of the legs.

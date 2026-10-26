@@ -143,8 +143,8 @@ move.blows.shield_high	-8.841	first numbers of the shield's carry and the chain'
 move.blows.shield_elbow	0.087	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
 move.blows.shield_face	112.131	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
 move.chain.shield_round_trip	0.439	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
-held.shield.grip_hand	20.413	held.shield.grip_hand and grip_across_palm measured (moves.ts row grip): their first numbers, the round shield strapped on lowerarm_l
-held.shield.grip_across_palm	89.943	held.shield.grip_hand and grip_across_palm measured (moves.ts row grip): their first numbers, the round shield strapped on lowerarm_l
+held.shield.grip_hand	22.781	held.shield.grip_hand and grip_across_palm redefined for the strapped heater (D504, D459, round 24): the fist off the heater's hand strap and the strap off the line across the palm; first numbers of the redefined rows (the fist sits on the far side of the forearm, a hand roll away)
+held.shield.grip_across_palm	89.979	held.shield.grip_hand and grip_across_palm redefined for the strapped heater (D504, D459, round 24): the fist off the heater's hand strap and the strap off the line across the palm; first numbers of the redefined rows (the fist sits on the far side of the forearm, a hand roll away)
 move.Idle_Loop.hands	1.606	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Idle_Loop.held	21.403	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Walk_Loop.hands	6.212	seeded from main at 705a8520 (2026-10-24), the first scorecard run
