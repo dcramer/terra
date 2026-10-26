@@ -69,7 +69,11 @@ const SMOKE_HOUSE: i32 = 1;
 // grows itself as it climbs). And how thin a hearth's wisp is against its baked puff.
 const PUFF_FROM: f32 = 4.0;
 const PUFF_TO: f32 = 34.0;
-const HEARTH_THIN: f32 = 0.14;
+const HEARTH_THIN: f32 = 0.17;
+// How long a hearth's puffs live, seconds, least and more by its seed; and how fast its fire's
+// light dies away up its column, by the puff's age as a share of its life (fire round g49).
+const HEARTH_LIFE_S: vec2<f32> = vec2(5.0, 1.0);
+const HEARTH_WARM: f32 = 6.5;
 // A hearth's baked puff's alpha opened out (to this power) and mixed so far with a soft round
 // fall-off over its card, so each puff's edge reaches the next ones' and the wisp is one
 // thread: the bake's own alpha is a small ball in its card, and the puffs read as beads with
@@ -190,17 +194,21 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         // Gone four or five metres up: lived nine seconds its puffs climbed past eight
         // metres, swaying apart, and hung among the trunks as patches of fog (lake film r5).
         // A haze, not a ribbon (campfire notes #5): its puffs live three seconds, so it has
-        // thinned to nothing a metre or two over the flames, as the photographs' does.
-        let life_s = 2.8 + 0.6 * fract(seed * 3.3);
+        // thinned to nothing a metre or two over the flames, as the photographs' does. A thin
+        // column, not a haze (fire round g49): at three seconds no reviewer saw any smoke over
+        // the fire, where RDR2's camps show a column lit from below rising out of the frame;
+        // its puffs live `HEARTH_LIFE_S`, so it climbs four or five metres, narrower than it
+        // was and swaying less, and bends downwind.
+        let life_s = HEARTH_LIFE_S.x + HEARTH_LIFE_S.y * fract(seed * 3.3);
         let t = fract(globals.time / life_s + j + seed * 0.37);
         let seconds = t * life_s;
         let rise = (0.8 + 0.5 * heat) * seconds * (1.0 - 0.35 * t);
         let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
         let north = cross(east, up);
-        let sway = (vec2(smooth_noise(vec2(seed * 13.0, seconds * 0.35 - globals.time * 0.1)), smooth_noise(vec2(seed * 29.0 + 7.0, seconds * 0.35 - globals.time * 0.1))) - 0.5) * (0.3 + 1.8 * t);
+        let sway = (vec2(smooth_noise(vec2(seed * 13.0, seconds * 0.35 - globals.time * 0.1)), smooth_noise(vec2(seed * 29.0 + 7.0, seconds * 0.35 - globals.time * 0.1))) - 0.5) * (0.3 + 1.6 * t);
         let middle = foot + up * (tall * 0.55 + rise) + east * sway.x + north * sway.y + wind.xyz * seconds * (0.25 + 0.45 * t);
-        // Wide and soft: born as wide as the flames' tips and opening to twice that.
-        let size = mix(0.35 + tall * 0.25, 1.0 + tall * 0.5, sqrt(t)) * (0.9 + 0.2 * luck);
+        // Soft: born as wide as the flames' tips and opening to about twice that.
+        let size = mix(0.35 + tall * 0.25, 0.9 + tall * 0.45, sqrt(t)) * (0.9 + 0.2 * luck);
         let to_eye = normalize(view.world_position - middle);
         var right = cross(up, to_eye);
         if dot(right, right) < 1.0e-6 {
@@ -212,7 +220,9 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         // Drawn out along its rise, a wisp more than a ball.
         let corner = (vertex.uv - vec2(0.5)) * vec2(size, size * 1.3);
         let turned = vec2(corner.x * cos(spin) - corner.y * sin(spin), corner.x * sin(spin) + corner.y * cos(spin));
-        let world = middle + right * turned.x + card_up * turned.y;
+        // Each puff a little to a side of its own, so the column's edges break up: on one line
+        // the puffs summed to a band with straight edges, a road up the frame by dusk (fire round g49).
+        let world = middle + right * ((luck - 0.5) * size * 0.45 + turned.x) + card_up * turned.y;
         out.position = position_world_to_clip(world);
         out.world_position = vec4(world, 1.0);
         out.uv = vertex.uv;
@@ -365,7 +375,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         life = smoothstep(0.03, 0.2, t) * pow(1.0 - t, 1.3) * mix(0.6, 0.4, t);
     }
     if hearth {
-        life = smoothstep(0.012, 0.07, t) * pow(1.0 - t, 2.4) * HEARTH_THIN;
+        life = smoothstep(0.008, 0.045, t) * pow(1.0 - t, 2.0) * HEARTH_THIN;
     }
     let p = abs(in.uv - vec2(0.5));
     let window = 1.0 - smoothstep(0.42, 0.5, max(p.x, p.y));
@@ -465,8 +475,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // five seconds): its fill hangs in the smoke, and lit the column orange to the top
         // (fire round 24); at 0.08-0.22 the night's column was still a tan-brown sock lit
         // evenly 1.5 m up, where the references' smoke is a faint warm haze over the flames
-        // dying into the dark (fire round 27, blind 6/10 against 5).
-        let warm_reach = select(1.0, 1.0 - smoothstep(0.02, 0.08, t), hearth);
+        // dying into the dark (fire round 27, blind 6/10 against 5). Cut off there, the column
+        // was dark from half a metre up and no reviewer saw smoke at all (fire round g47), where
+        // RDR2's is lit orange from below and fades up into the dark: so the light dies away up
+        // it as exp(-HEARTH_WARM t), 0.6 half a metre up, a seventh at a metre and a half.
+        let warm_reach = select(1.0, exp(-HEARTH_WARM * t), hearth);
         fire_light += warm_reach * e * (response(vec3(dot(L, T), dot(L, B), dot(L, F)), near_m, far_m) / PI);
     }
     // The open sky from all round: thin smoke at a quarter a side gives back the sky itself.
