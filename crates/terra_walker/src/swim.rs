@@ -3,7 +3,8 @@
 //! under it; the body laid along its stroke, level at the surface and pitched along its way
 //! under water, as Subnautica's divers and Unreal's swimmers are tilted by their pitch, eased
 //! in and out as a wader starts to swim and comes out (BotW, Valheim, Enshrouded blend the
-//! surface swim the same way). The strokes are made upright (`made_clips.py`'s `upright`), so
+//! surface swim the same way). The strokes are made standing (Kimodo holds no swimming: a crawl is
+//! a windmill of the arms, a dive's pull an overhead sweep, art/animation/made.json), so
 //! the tread and the strokes blend in the clip's frame and only this tilt lays them down. The
 //! feet are let go while swimming (`feet`: a swimmer is off the ground). What the server never
 //! sees: the way is read from the body's velocity, which every client has.

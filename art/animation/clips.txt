@@ -32,3 +32,6 @@ Sword_Attack
 Talk_Loop
 Hammer_Loop
 Lean_Loop
+Swim_Tread_Loop
+Swim_Fwd_Loop
+Swim_Dive_Loop

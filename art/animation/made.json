@@ -157,7 +157,8 @@
       4
     ],
     "busy": true,
-    "samples": 4
+    "samples": 4,
+    "take": 0
   },
   "Swim_Fwd_Loop": {
     "prompt": "A person stands in place and swings both arms in big alternating forward circles over the head, like a front crawl swimmer, kicking the legs a little.",
@@ -170,7 +171,8 @@
       3
     ],
     "busy": true,
-    "samples": 4
+    "samples": 4,
+    "take": 1
   },
   "Swim_Dive_Loop": {
     "prompt": "A person stands in place, reaches both arms straight up over the head, then sweeps both arms out and down to the thighs together, then raises them over the head again, again and again.",
@@ -183,6 +185,7 @@
       3.5
     ],
     "busy": true,
-    "samples": 4
+    "samples": 4,
+    "take": 0
   }
 }
