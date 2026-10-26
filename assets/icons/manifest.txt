@@ -1,4 +1,4 @@
-arming_sword rendered models/held/arming_sword.glb 465f2a107d761c67 1
+arming_sword rendered models/held/arming_sword.glb 465f2a107d761c67 2
 arrow painted - - -
 berries painted - - -
 boots painted models/gear/boots.glb dcd875c54e9110b1 -
@@ -6,7 +6,7 @@ bow painted models/held/bow.glb 5158e7b9be852413 -
 cooked_meat painted - - -
 fibre painted - - -
 hammer painted models/held/hammer.glb 72b96af943a049bf -
-heater_shield rendered models/held/heater_shield.glb 7b7d44e6259519f2 1
+heater_shield rendered models/held/heater_shield.glb 7b7d44e6259519f2 2
 hide painted - - -
 iron painted - - -
 iron_axe painted models/held/iron_axe.glb f2b26d24513e2b9b -

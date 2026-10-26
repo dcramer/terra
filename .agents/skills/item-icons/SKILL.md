@@ -51,6 +51,7 @@ When an item's file changes but its look does not (gear rebuilt with its morphs 
 ## The render style
 
 - **Held things** lie along the icon's diagonal, square on, broad side to the front, working end up and to the right.
+- **A strapped thing** (a shield, `strap` in its extras) shows its front, its -Z, not its back with the straps.
 - **Everything else** faces the front, seen from 15 degrees above; worn things as worn, with no body in them.
 - **One rig**: the play scene's warm sun from above and to the left, its blue shade, a cool light from behind on the edges, the play camera's grading. No outline, no background, no perspective. Framed by the look's bounds and the item's cells, 96 pixels a cell.
 

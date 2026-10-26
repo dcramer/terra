@@ -64,6 +64,7 @@ No layers (one piece per slot), but pieces from different slots overlap: a pack'
 ### Held things (tools, weapons)
 
 - **Made once, for every body**: the grip at the origin, the handle along +Y toward the working end, the striking edge or face toward +Z, the length real. The hand socket is placed for each body, so nothing is set per character.
+- **Strapped to the forearm** (a shield, D504): its front toward -Z and its grip along +Y, said in its glTF extras as `strap` (`terra_walker::strap`, `tools/characters/fit_held.py`); the icon rig and the game both read its front from there.
 - How it is carried and which clips it swings with are in its file, not in code. A two-handed weapon also marks where the off hand holds it, for the arm to reach.
 
 ### Colour

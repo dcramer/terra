@@ -30,11 +30,12 @@ use bevy::{
     },
     world_serialization::{WorldAsset, WorldAssetRoot, WorldInstanceReady},
 };
+use terra_walker::strap::Strap;
 use terra_world::loading::Shaders;
 
 /// The style's version: raise it whenever the rig changes, so every icon baked before is
 /// stale and the check asks for them to be baked again.
-pub const STYLE: u32 = 1;
+pub const STYLE: u32 = 2;
 /// Where the manifest of icons is, under `assets/`: a line per item, `<item> <source>
 /// <look> <fingerprint of the look> <style>`, the source `rendered` or `painted`
 /// (`tools/icons/paint.ts`). A painted icon of an item with no look has `-` for its look
@@ -281,6 +282,7 @@ fn draw(
     mut images: ResMut<Assets<Image>>,
     ready: Query<(), With<Ready>>,
     turns: Query<&IconTurn>,
+    strapped: Query<(), With<FacesBack>>,
     children: Query<&Children>,
     bounds: Query<(&Aabb, &GlobalTransform), Without<LeftOut>>,
     mut lights: Query<(&mut Transform, &IconLight)>,
@@ -298,32 +300,7 @@ fn draw(
                 WorldAssetRoot(scene.clone()),
                 Transform::IDENTITY,
             ))
-            .observe(
-                |ready: On<WorldInstanceReady>,
-                 mut commands: Commands,
-                 children: Query<&Children>,
-                 extras: Query<&GltfExtras>,
-                 materials: Query<&GltfMaterialName>| {
-                    let left_out = left_out(ready.entity, &children, &extras);
-                    if let Some(turn) = extra(ready.entity, &children, &extras, "icon_turn") {
-                        commands.entity(ready.entity).insert(IconTurn(turn));
-                    }
-                    for each in children.iter_descendants(ready.entity) {
-                        commands.entity(each).insert(RenderLayers::layer(LAYER));
-                        // A role is the material's name before any `.`, as tints read it.
-                        let role = |name: &GltfMaterialName| {
-                            name.0.split('.').next().unwrap_or("").to_string()
-                        };
-                        if materials
-                            .get(each)
-                            .is_ok_and(|name| left_out.contains(&role(name)))
-                        {
-                            commands.entity(each).insert((LeftOut, Visibility::Hidden));
-                        }
-                    }
-                    commands.entity(ready.entity).insert(Ready);
-                },
-            )
+            .observe(prepare)
             .id();
         icons.drawing = Some(Drawing {
             subject,
@@ -366,7 +343,12 @@ fn draw(
         }
         let (w, h) = drawing.subject.cells;
         let turn = if drawing.subject.held() {
-            lay(&corners, f32::from(w) / f32::from(h))
+            let front = if strapped.contains(drawing.look) {
+                Vec3::NEG_Z
+            } else {
+                Vec3::Z
+            };
+            lay(&corners, f32::from(w) / f32::from(h), front)
         } else {
             Quat::from_rotation_y(turns.get(drawing.look).map_or(0.0, |t| t.0.to_radians()))
         };
@@ -445,6 +427,36 @@ fn draw(
     }
 }
 
+/// Once a look has loaded, readies it for its icon: on the icons' layer, with what its
+/// extras say of it (its turn, whether it is strapped, the parts it leaves out).
+fn prepare(
+    ready: On<WorldInstanceReady>,
+    mut commands: Commands,
+    children: Query<&Children>,
+    extras: Query<&GltfExtras>,
+    materials: Query<&GltfMaterialName>,
+) {
+    let left_out = left_out(ready.entity, &children, &extras);
+    if let Some(turn) = extra(ready.entity, &children, &extras, "icon_turn") {
+        commands.entity(ready.entity).insert(IconTurn(turn));
+    }
+    if extra::<Strap>(ready.entity, &children, &extras, "strap").is_some() {
+        commands.entity(ready.entity).insert(FacesBack);
+    }
+    for each in children.iter_descendants(ready.entity) {
+        commands.entity(each).insert(RenderLayers::layer(LAYER));
+        // A role is the material's name before any `.`, as tints read it.
+        let role = |name: &GltfMaterialName| name.0.split('.').next().unwrap_or("").to_string();
+        if materials
+            .get(each)
+            .is_ok_and(|name| left_out.contains(&role(name)))
+        {
+            commands.entity(each).insert((LeftOut, Visibility::Hidden));
+        }
+    }
+    commands.entity(ready.entity).insert(Ready);
+}
+
 /// A part of a look its icon leaves out, by the look's own say.
 #[derive(Component)]
 struct LeftOut;
@@ -453,6 +465,11 @@ struct LeftOut;
 /// a pack from behind its wearer (`{"icon_turn": 180}` in its glTF extras).
 #[derive(Component)]
 struct IconTurn(f32);
+
+/// A held look strapped to the forearm (a shield), whose front is its -Z, as the strap
+/// has it (`terra_walker::strap`), where the held contract has +Z.
+#[derive(Component)]
+struct FacesBack;
 
 /// A value under `key` in the glTF extras of any part of `look`.
 fn extra<T: serde::de::DeserializeOwned>(
@@ -498,12 +515,15 @@ fn corners(
 
 /// How to turn a held look, handle along +Y, so it lies along the diagonal of an icon
 /// `aspect` times as wide as it is tall, working end up and to the right, broad side to
-/// the front (+Z): whichever of X and Z it is thinner along is turned to face the camera.
-pub fn lay(corners: &[Vec3], aspect: f32) -> Quat {
+/// the front (+Z): whichever of X and Z it is thinner along is turned to face the camera,
+/// and a look thin along Z shows the side its `front` (+Z or -Z) is on.
+pub fn lay(corners: &[Vec3], aspect: f32, front: Vec3) -> Quat {
     let (low, high) = span(corners);
     let size = high - low;
     let broadside = if size.x < size.z {
         Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+    } else if front.z < 0.0 {
+        Quat::from_rotation_y(std::f32::consts::PI)
     } else {
         Quat::IDENTITY
     };
@@ -617,7 +637,7 @@ mod tests {
     fn a_held_look_lies_broadside_along_the_diagonal() {
         // An axe head thin along X, as the held contract has it (edge toward +Z).
         let corners = [Vec3::new(-0.01, 0.0, -0.1), Vec3::new(0.01, 0.6, 0.1)];
-        let turn = lay(&corners, 1.0);
+        let turn = lay(&corners, 1.0, Vec3::Z);
         let thin = turn * Vec3::X;
         assert!(
             thin.z.abs() > 0.99,
@@ -626,11 +646,26 @@ mod tests {
         let working_end = turn * Vec3::Y;
         assert!(working_end.x > 0.6 && working_end.y > 0.6, "{working_end}");
         // Two cells wide, it lies flatter, along that icon's diagonal.
-        let working_end = lay(&corners, 2.0) * Vec3::Y;
+        let working_end = lay(&corners, 2.0, Vec3::Z) * Vec3::Y;
         assert!(
             (working_end.y / working_end.x - 0.5).abs() < 1e-4,
             "{working_end}"
         );
+    }
+
+    #[test]
+    fn a_board_shows_its_front_whichever_side_it_is_on() {
+        // A shield thin along Z: the camera sits toward +Z, so the front must turn to +Z.
+        let corners = [Vec3::new(-0.3, 0.0, -0.04), Vec3::new(0.3, 0.7, 0.04)];
+        for front in [Vec3::Z, Vec3::NEG_Z] {
+            let shown = lay(&corners, 1.0, front) * front;
+            assert!(
+                shown.z > 0.99,
+                "its front {front} faces the camera: {shown}"
+            );
+            let working_end = lay(&corners, 1.0, front) * Vec3::Y;
+            assert!(working_end.x > 0.6 && working_end.y > 0.6, "{working_end}");
+        }
     }
 
     #[test]
