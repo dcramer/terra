@@ -46,6 +46,7 @@ const FPS = 30;
 type Entry = {
   prompt: string; speed: number; seconds: number; seed: number; take?: number; samples?: number;
   still?: boolean; loop?: [number, number]; busy?: boolean; way?: number; once?: boolean; span?: [number, number];
+  speeds?: [number, number][]; travels?: boolean;
 };
 
 /** A straight path at `speed`, a point a frame, `way` degrees to the right of Kimodo's forward
@@ -69,9 +70,37 @@ export function path(speed: number, seconds: number, way = 0) {
   }];
 }
 
-/** What a take of `entry` is held to: its path, or for a one-shot nothing, the take free to
- * step in, back or aside as its action asks. */
+/** A straight path ahead whose speed goes through `speeds` (seconds, m/s), straight between
+ * them and held past the last, the body facing ahead: what holds a start or a stop to its
+ * speeds (a stop's braking, a start's pick-up). */
+export function profile(speeds: [number, number][], seconds: number) {
+  const frames = Math.round(seconds * FPS);
+  const at = [...Array(frames).keys()];
+  const speed = (t: number) => {
+    const next = speeds.findIndex(([s]) => s > t);
+    if (next < 0) return speeds[speeds.length - 1][1];
+    if (next === 0) return speeds[0][1];
+    const [[t0, v0], [t1, v1]] = [speeds[next - 1], speeds[next]];
+    return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0);
+  };
+  let z = 0;
+  const along = at.map((i) => {
+    const was = z;
+    z += speed((i + 0.5) / FPS) / FPS;
+    return was;
+  });
+  return [{
+    type: "root2d",
+    frame_indices: at,
+    smooth_root_2d: along.map((z) => [0, z]),
+    global_root_heading: at.map(() => [1, 0]),
+  }];
+}
+
+/** What a take of `entry` is held to: its path (a start's or stop's speeds), or for a one-shot
+ * nothing, the take free to step in, back or aside as its action asks. */
 export function constraints(entry: Entry) {
+  if (entry.speeds) return profile(entry.speeds, entry.seconds);
   return entry.once ? [] : path(entry.speed, entry.seconds, entry.way ?? 0);
 }
 

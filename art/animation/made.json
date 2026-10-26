@@ -97,5 +97,53 @@
     ],
     "busy": true,
     "samples": 4
+  },
+  "Jog_Stop": {
+    "prompt": "A person jogs forward, then comes to a stop and stands still.",
+    "speed": 0,
+    "speeds": [
+      [
+        0,
+        3.7
+      ],
+      [
+        1.6,
+        3.7
+      ],
+      [
+        2.2,
+        0
+      ]
+    ],
+    "seconds": 4,
+    "seed": 1,
+    "once": true,
+    "travels": true,
+    "samples": 4,
+    "take": 1
+  },
+  "Jog_Start": {
+    "prompt": "A person stands still, then starts jogging forward.",
+    "speed": 0,
+    "speeds": [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        0
+      ],
+      [
+        1.5,
+        3.7
+      ]
+    ],
+    "seconds": 3.5,
+    "seed": 1,
+    "once": true,
+    "travels": true,
+    "samples": 4,
+    "take": 3
   }
 }

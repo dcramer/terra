@@ -215,11 +215,13 @@ def facing(src, f):
     return Vector((0.0, 0.0, 1.0)).cross(Vector((across.x, across.y, 0.0))).normalized()
 
 
-def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False):
+def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False):
     """Frames f0 to f1 of `src` as an action called `name` on `arm`, in place and looped, each
     frame of the take `k` frames of the action. A take that travels `way` degrees to the right
     of where it faces (a strafe) is turned by its travel less that; a one-shot (`once`) by where
-    its body faces at the take's start (Kimodo's ahead), and not closed into a loop."""
+    its body faces at the take's start (Kimodo's ahead), and not closed into a loop. One that
+    `travels` (a start, a stop) keeps its hips' travel, its root motion, which the game takes off
+    by the clip's distance curve as Lyra's distance matching does (markers.ts bakes it)."""
     scene = bpy.context.scene
     src_rest = {s: world_rest(src, s) for s in MAP}
     dst_rest = {d: world_rest(arm, d) for d in MAP.values()}
@@ -241,7 +243,7 @@ def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False):
     else:
         ahead = facing(src, f0)
     turn = Matrix.Rotation(math.atan2(ahead.x, -ahead.y), 4, "Z")
-    per_frame = travel / (f1 - f0)
+    per_frame = travel * 0.0 if travels else travel / (f1 - f0)
     action = bpy.data.actions.new(name)
     arm.animation_data_create()
     arm.animation_data.action = action
@@ -511,7 +513,7 @@ def main():
         k = 1.0
         if entry.get("still") or entry.get("once"):
             k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
-        action = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False))
+        action = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False))
         if entry.get("way"):
             # Which way the take went, measured: its travel from where its hips face.
             scene = bpy.context.scene

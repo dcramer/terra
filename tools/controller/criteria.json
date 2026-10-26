@@ -1142,6 +1142,54 @@
    "measurable": true
   },
   {
+   "id": "stop.settle",
+   "noticed": 4,
+   "notice": "the feet shuffle after the body has stopped instead of stopping with it",
+   "bar": {
+    "at_most": 0.3
+   },
+   "unit": "s, the worst stop on the filmed course: from the body standing to the last frame a ball of a foot moves over 5 mm (a stop clip's last plant lands as its distance curve reaches zero; a blend to the idle leaves the rule's settle step a quarter second on)",
+   "source": "docs/controller.md criterion 21d; Lyra's distance-matched stops; ALS's stops; D455",
+   "check": {
+    "by": "film",
+    "name": "stop settle"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "start.steps",
+   "noticed": 4,
+   "notice": "a foot is dragged and then hopped forward as the body starts off",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "feet stepped by D455's rule (a foot the clip left behind, `stepping`) in the first second of each straight start off standing on the filmed course, both paces summed",
+   "source": "docs/controller.md criterion 21d; Lyra's distance-matched starts; ALS's starts; D455",
+   "check": {
+    "by": "film",
+    "name": "start steps"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "turn.steps",
+   "noticed": 4,
+   "notice": "the feet shuffle round by rule as the body turns from standing or slow, not as a turn is stepped",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "feet stepped by D455's rule in each turn of 45 deg or more with the body under 1 m/s at some frame of it (a turn in place, a start or stop that turns, a pivot) and half a second on, on the filmed course, both paces summed",
+   "source": "docs/controller.md criterion 21d; Lyra's turn-in-place clips, ALS's rotate-in-place and pivots; D455",
+   "check": {
+    "by": "film",
+    "name": "turn steps"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
    "id": "feet.ground",
    "noticed": 4,
    "notice": "a planted foot floats over a lower step or sinks into a higher one or a slope",

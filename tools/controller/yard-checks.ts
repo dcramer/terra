@@ -6,6 +6,7 @@
 // walk. Node 22.18 or later; no dependencies.
 
 import { type Frame, PLANT_FRAMES, type Plant, SLIDE_M, THROUGH_SOLE_M, plants, slidOf } from "../sandbox/duel/checks.ts";
+import { transitions } from "./transitions.ts";
 
 /// A check's verdict: whether it held, its line, its number (the scorecard row's value) and
 /// how many faults it found.
@@ -416,4 +417,4 @@ export function yard(walks: Walk[]): Check {
   return { name: "yard", ok: !failed.length, line, value: failed.length, faults: failed.length };
 }
 
-export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), ground(walks), sinking(walks), aloft(walks), ...drops(walks), yard(walks)];
+export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), ground(walks), sinking(walks), aloft(walks), ...drops(walks), yard(walks), ...transitions(walks)];
