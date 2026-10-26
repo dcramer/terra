@@ -29,3 +29,7 @@ The first `motion` uploads `assets/models/character/base.glb` as a character (it
 ## Rights
 
 Clips made with paid credits are ours ("you own all right, title, and interest in and to the Customer Outputs generated under such Paid Plan", uthana.com/terms), so they may sit in the repository and steer Kimodo. Free-plan clips are Uthana's under CC BY 4.0: don't use the free plan. Uthana may train on what we make.
+
+## On our body
+
+Uthana's GLB is our skeleton's nodes and the motion with no skin; `download` adds `base.glb`'s skin (`withSkin`), so Blender and the character tools read it as our armature. Its root and pelvis translations come about 13 times too small on our uploaded body (the pelvis 6.4 cm off the ground standing; the same motion downloaded on Uthana's Manny stands at full height), so `download` scales them by what puts the feet on the ground (`groundScale`, printed as `scale`). The poses themselves are not yet right on our body either (2026-10-26: the trial idle carried onto the mannequin leans about 35° with its knees and a foot twisted): until that is solved, a take is not kept. `motion.ts` makes and measures takes for an entry with `"source": "uthana"` ([tools/characters](../characters/README.md), "Made clips"). Each call's cost is the fall in the account's credit (`org` prints `payg_total_usd`); looping is charged too, $0.01 a second.
