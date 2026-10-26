@@ -6,7 +6,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 
 - **Realistic but fun** (D122): things work as in the world, so players can reason about them (arrows ride in a quiver on your belt; what you know you found out by looking, D93). Where realism would only be a chore, fun wins.
 - **Hundreds of variants, not millions** (D182): things are made from parts by rules, a theme (realm, maker, people) choosing which, in variants a player tells apart and cares about. A generator says how many distinct variants it makes and what tells them apart.
-- **Where Bevy falls short, port from the engine that does it best** (D196), never our own invention or another engine: its code under MIT, BSD, Apache or zlib (Godot, Voxel Tools, O3DE, Jolt), otherwise (Unreal, GPL) only its docs, papers and talks. Name the source in the code, with any licence notice it requires. How deep: D184.
+- **Port from the best prior art, in any engine** (D196): always look for the best-in-class implementation, wherever it runs, and rewrite it for ours; where Bevy falls short, never our own invention or another engine: its code under MIT, BSD, Apache or zlib (Godot, Voxel Tools, O3DE, Jolt), otherwise (Unreal, GPL) only its docs, papers and talks. Name the source in the code, with any licence notice it requires. How deep: D184.
 - **One art style for every realm** (D14): read [docs/art-style.md](docs/art-style.md) before making, generating or judging a model, concept, material or icon, and check the result against its checklist. A realm changes parts, materials and light, never the rules.
 
 ## Where things are
@@ -66,6 +66,7 @@ Every byte an agent reads is paid again each turn.
 - **Tools for repeated work** (D71): when a check you will do again takes several manual steps, a restart or squinting at a picture, make it one step. General over single-case; its output reads at a glance and explains itself ([examples](docs/development.md#developer-tools)).
 - **No options for one-offs** (D249): one scene or check uses existing options, `cargo xtask remote` or an uncommitted script; if none can, ask.
 - **Do it as shipped games do**: find how they and other engines do it first, use the industry's terms, say where we depart.
+- **Paid when it is much better** (D526): look for paid tools, libraries, assets and services too; propose one when it beats the free ones or solves what we'd find very hard, explaining on the desk what it is, what it costs and why we need it; the developers buy.
 - **Third-party current**: before building on or debugging a pack, library or tool, get its latest release from the original source and read its changelog.
 - **Step back on a second attempt** at one failure: list the approaches (ours, an industry tool, a service, a known-good reference), pick one an agent can verify by measurement, and compare against the known-good reference.
 - **Correct before fast**: right first; measure so the numbers are known; optimise later unless unusable.

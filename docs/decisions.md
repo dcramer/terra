@@ -466,7 +466,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D138](decisions/D138.md) | The game's tick | Tech | Agent | Decided | Gameplay runs at a fixed rate, 64 ticks a second… |
 | [D145](decisions/D145.md) | Simulation level of detail | Tech | Agent | Decided | Creatures are simulated by how near the nearest player… |
 | [D184](decisions/D184.md) | How far we change Bevy | Tech | Agent | Decided | Extend first: our own systems, components… |
-| [D196](decisions/D196.md) | When Bevy falls short | Tech | Developers | Decided | Find the engine or public tool that does it well and… |
+| [D196](decisions/D196.md) | Best-in-class prior art, from any engine | Tech | Developers | Decided | For anything we build, it is always fine to look for the… |
 | [D198](decisions/D198.md) | The game in layers | Tech | Agent | Decided | `terra_game` is three plugin layers… |
 | [D239](decisions/D239.md) | Quality presets, and what the integrated GPU must hold | Tech | Agent | Decided | Three presets, low, medium and high… |
 | [D288](decisions/D288.md) | Foliage shaded only where it is in front | Tech | Agent | Decided | Leaves, grass, litter and the plants that sway… |
@@ -586,6 +586,7 @@ Checks, developer tools, languages and the repository.
 | [D467](decisions/D467.md) | A demo is an experiment that stands for others, its keys moving the world's own clock | Tech | Agent | Leaning | A playable demo for the developers is a sandbox… |
 | [D472](decisions/D472.md) | Visual A/B judging scores one build per judge, against fixed anchors | Tech | Agent | Decided | A blind visual comparison by subagent judges… |
 | [D525](decisions/D525.md) | Binary assets live in Git LFS, from now on | Tech | Developers | Decided | Every binary asset and piece of source art is stored in… |
+| [D526](decisions/D526.md) | Paid solutions | Tech | Developers | Decided | A paid tool, library, asset, service or engine source is… |
 
 ## Superseded and rejected
 
