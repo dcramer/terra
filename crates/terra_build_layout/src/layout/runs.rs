@@ -84,15 +84,8 @@ pub(super) fn courses(
                         -crate::fitting::OVERLAP_M * 0.5
                     }
                     Spot::Hole => -beside_hole,
-                    // Ending against another kind under an end board (`trims::ends`): its
-                    // sawn end inside the board, not in the plane of the board's face. Asked
-                    // of the cube its kept half lies in as well: a split log on a wall's top
-                    // has its centre on the next layer's floor, where nothing may stand.
-                    _ if walls.board_against(axis.cube(row, beyond, cube.y))
-                        || walls.board_against(axis.cube(row, beyond, kept)) =>
-                    {
-                        -kit.frame * 0.6
-                    }
+                    // Against another kind under an end board: its sawn end inside it.
+                    _ if boarded(walls, axis.cube(row, beyond, cube.y), kept) => -kit.frame * 0.6,
                     // Uneven, but never past the overhang: short of it by up to `ragged`.
                     Spot::Nothing if corner && open => {
                         kit.overhang - unit(hash::of(&[seed, end as u32, which])) * kit.ragged()
@@ -341,6 +334,14 @@ pub(super) fn set_role(piece: &mut Piece, to: Option<Role>) {
     if let Piece::Log { role, .. } = piece {
         *role = to;
     }
+}
+
+/// Whether a log ending against `beyond` ends under an end board there (`trims::ends`), so
+/// its sawn end goes inside the board, out of the plane of the board's face: asked of the
+/// layer `kept`, the one its kept half lies in, as well, as a split log on a wall's top has
+/// its centre on the next layer's floor, where nothing may stand.
+fn boarded(walls: &Walls, beyond: IVec3, kept: i32) -> bool {
+    walls.board_against(beyond) || walls.board_against(beyond.with_y(kept))
 }
 
 /// The layer a split log's cubes are on: the one its kept half lies in.
