@@ -62,6 +62,14 @@ var<uniform> wind: Wind;
 var climate_leaves: texture_2d_array<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(107)
 var climate_leaves_sampler: sampler;
+// The snow's depth round the camera, as foliage_fragment.wesl's, for what it buries.
+@group(constants::MATERIAL_BIND_GROUP) @binding(104)
+var climate_ground: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(105)
+var climate_ground_sampler: sampler;
+const SNOW_FULL_M: f32 = 0.5;
+const UNDER_SNOW_SHARE: f32 = 0.6;
+const BURIED_SHARE: f32 = 0.85;
 
 // Where a plant stands in its kind's year, 0 early to 1 late: foliage.wesl's `hash`, so its
 // leaves fall and turn alike.
@@ -111,6 +119,19 @@ fn clumps(p: vec3<f32>) -> f32 {
 // `ranked`, its second texture coordinate's y far below nothing): gone in clumps a hand or
 // two across (`clumps`), so it thins and stands bare (D327). The same in the
 // main pass and the prepass, so depth and colour agree on what is left.
+// As foliage_fragment.wesl's: the leaves the snow lying buries are gone under it.
+fn buried(world: vec3<f32>, instance: u32) {
+    if wind.climate.on == 0u || wind.bark > 0.5 {
+        return;
+    }
+    let depth = textureSampleLevel(climate_ground, climate_ground_sampler, climate_place(world), 0.0).r * SNOW_FULL_M * UNDER_SNOW_SHARE;
+    let origin = mesh_functions::get_world_from_local(instance)[3].xyz;
+    let rise = dot(world - origin, normalize(world)) + 0.1 * (clumps(world * 3.0 + 17.0) - 0.5);
+    if depth > 0.03 && rise < depth * BURIED_SHARE {
+        discard;
+    }
+}
+
 fn bare(uv: vec2<f32>, ranked: bool, world: vec3<f32>) {
     if wind.climate.on == 0u || wind.bark > 0.5 || ranked {
         return;
@@ -282,6 +303,7 @@ fn fragment(in: prepass_io::VertexOutput, @builtin(front_facing) is_front: bool)
     bare(in.uv, in.uv_b.y < -500.0, in.world_position.xyz);
 @if(VERTEX_UVS_A && !VERTEX_UVS_B)
     bare(in.uv, false, in.world_position.xyz);
+    buried(in.world_position.xyz, in.instance_index);
 
     pbr_prepass_functions::prepass_sample_color_and_alpha_discard(in);
 
@@ -345,5 +367,6 @@ fn fragment(in: prepass_io::VertexOutput) {
     bare(in.uv, in.uv_b.y < -500.0, in.world_position.xyz);
 @if(VERTEX_UVS_A && !VERTEX_UVS_B)
     bare(in.uv, false, in.world_position.xyz);
+    buried(in.world_position.xyz, in.instance_index);
     pbr_prepass_functions::prepass_sample_color_and_alpha_discard(in);
 }

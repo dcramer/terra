@@ -267,6 +267,8 @@ const FROST: vec3<f32> = vec3<f32>(0.62, 0.66, 0.7);
 // How much of the snow's depth the climate gives lies on a forest floor, so how high it
 // buries what grows there (ground.wesl's SNOW_UNDER_CROWNS takes some under the crowns).
 const UNDER_SNOW_SHARE: f32 = 0.6;
+// The share of that depth below which a leaf is out of sight under the snow (`buried`).
+const BURIED_SHARE: f32 = 0.85;
 // How much of bark's colour a frost greys, where snow lies (weather round 8).
 const BARK_FROST_GREY: f32 = 0.3;
 // The height over a stem's foot, metres, to which plastered snow is thickest and wraps
@@ -364,6 +366,23 @@ fn clumps(p: vec3<f32>) -> f32 {
 // `ranked`, its second texture coordinate's y far below nothing): gone in clumps a hand or
 // two across (`clumps`), so it thins and stands bare (D327). The same in the
 // main pass and the prepass, so depth and colour agree on what is left.
+// Leaves the snow lying buries are under it, out of sight (desk r-looks-forest): painted
+// white where they stood, a young spruce's lowest boughs and a bush's foot lay on the snow as
+// a flat white paper skirt cut to their cards. Below BURIED_SHARE of the depth `seasoned`
+// buries them to, in the same ragged line, so its white is only where they come out of it.
+// The same in the main pass and the prepass.
+fn buried(world: vec3<f32>, instance: u32) {
+    if wind.climate.on == 0u || wind.bark > 0.5 {
+        return;
+    }
+    let depth = textureSampleLevel(climate_ground, climate_ground_sampler, climate_place(world), 0.0).r * SNOW_FULL_M * UNDER_SNOW_SHARE;
+    let origin = mesh_functions::get_world_from_local(instance)[3].xyz;
+    let rise = dot(world - origin, normalize(world)) + 0.1 * (clumps(world * 3.0 + 17.0) - 0.5);
+    if depth > 0.03 && rise < depth * BURIED_SHARE {
+        discard;
+    }
+}
+
 fn bare(uv: vec2<f32>, ranked: bool, world: vec3<f32>) {
     if wind.climate.on == 0u || wind.bark > 0.5 || ranked {
         return;
@@ -1080,6 +1099,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     bare(in.uv, in.uv_b.y < -500.0, in.world_position.xyz);
 @if(VERTEX_UVS_A && !VERTEX_UVS_B)
     bare(in.uv, false, in.world_position.xyz);
+    buried(in.world_position.xyz, in.instance_index);
 
     var pbr_input: PbrInput;
 @if(VERTEX_UVS_A && VERTEX_TANGENTS && !VERTEX_UVS_B) {
