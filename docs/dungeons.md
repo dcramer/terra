@@ -25,7 +25,7 @@ Rooms by role and how they are linked, before any has a place (Dormans' mission 
 
 ### 2. Placement (`place.rs`, `route.rs`, D473)
 
-- **The grid** (D527): cells 4 m square (eight building cubes; a cube of wall each side leaves a 3 m corridor) and levels 6 m apart (a slab and 5.5 m clear), the ceiling brought down to the theme's headroom (`headroom`: the crypt's and the keep's corridors 4.5 m and rooms 5 m, the mine's drifts 3.5 m and stopes 5 m, flat cubes until the vault kits are made). Doorways are the corridor's width and 3 m high, each leaf 1.5 m. A cell is `IVec3`: x east, y the level counted down, z south. The entrance is 2 by 2 at the origin with a stair up to the surface north of it.
+- **The grid** (D527): cells 4 m square (eight building cubes; a cube of wall each side leaves a 3 m corridor) and levels 6 m apart (a slab and 5.5 m clear), the ceiling brought down to the theme's headroom (`headroom`: the crypt's and the keep's corridors 4.5 m and rooms 5 m, the mine's drifts 3.5 m and stopes 5 m; flat cubes, hidden in the crypt by the barrow kit's vaults springing at 2.95 m). Doorways are the corridor's width and 3 m high, each leaf 1.5 m. A cell is `IVec3`: x east, y the level counted down, z south. The entrance is 2 by 2 at the origin with a stair up to the surface north of it.
 - **Rooms** in the graph's order, each beside the room it hangs from: the best of 30 tries (a side, a gap of 2 to 4 cells, 5 to 7 with a level change) by closeness to the placed rooms it links to, a cell clear of everything. Size by role (goal 4 by 4, guard and puzzle 3 by 3, rest 2 by 3, others 2 to 3). Level from danger, at most one from the parent's.
 - **Corridors** by A* from any free cell beside one room to one beside the other, shortest edges first, a turn dearer than a step; a stair is one move three cells along and a level up or down, taking two cells on both levels (the run below, its well and landing above). A placement that cannot route an edge starts again from a derived seed, up to 12 times.
 - **Sides**: every cell knows its space (a room, a corridor by edge, a stair) and each side: a wall, open into the same space, a door (by edge) or a stair's way.
@@ -98,7 +98,7 @@ Status: Decided (D527): the developers on the desk (q-dungeon-themes), "Yes, all
 **What each needs.**
 
 - **Barrow halls**:
-  - Kit pieces made with the models skill and Tripo: a barrel-vault segment over a 3 m span, a cell long; a groin vault for a crossing; a transverse rib with its springers and imposts; a square pier with a base and capital; an arch for a doorway or bay; a loculus front, empty or filled; a sarcophagus.
+  - Made (`tools/props/barrow.py`, procedural in Blender, laid by the stamp's `kit.rs`): a barrel vault, a groin vault (crossings and hall bays, scaled), a doorway arch, a pier (a pilaster half in a wall), a loculus front, shrouded and bare remains; the ashlar pack `large_sandstone_blocks`. Still to make: a sarcophagus. As first planned, kit pieces made with the models skill and Tripo: a barrel-vault segment over a 3 m span, a cell long; a groin vault for a crossing; a transverse rib with its springers and imposts; a square pier with a base and capital; an arch for a doorway or bay; a loculus front, empty or filled; a sarcophagus.
   - A second stone pack, ashlar.
   - Props: bones, skulls and shrouds.
   - Building gains a dressed piece laid over a run of cubes.
