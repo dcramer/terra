@@ -82,6 +82,15 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("assets/data/movers.ron", &["terra_motion", "terra_walker"]),
     // The climate the land's places are found in.
     ("assets/data/climate.ron", &["terra_land"]),
+    // The dungeons' themes, and the items, creatures and models their tests check the themes
+    // and modules name.
+    ("assets/data/dungeons/", &["terra_dungeon"]),
+    ("assets/data/items.ron", &["terra_dungeon"]),
+    ("assets/data/creatures.ron", &["terra_dungeon"]),
+    ("assets/models/character/", &["terra_dungeon"]),
+    ("assets/models/nature/", &["terra_dungeon"]),
+    ("assets/models/openings/", &["terra_dungeon"]),
+    ("assets/models/props/", &["terra_dungeon"]),
 ];
 
 /// Files whose change can alter how everything builds or what the gate is: these run
