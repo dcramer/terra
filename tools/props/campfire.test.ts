@@ -11,11 +11,14 @@ function model() {
   return JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString("utf8"));
 }
 
-test("its logs, 9-11 cm thick and not all alike, lean 20-55 deg into a stack over the middle, their butts inside the stones", () => {
+test("its logs, 8-13 cm thick and plainly not alike, bowed a little, lean 20-55 deg into a stack over the middle, their butts inside the stones", () => {
   assert.equal(logs.length, 5);
   const girth = logs.map((l) => l.R);
-  for (const R of girth) assert.ok(2 * R >= 0.09 && 2 * R <= 0.11, `a log ${(200 * R).toFixed(1)} cm thick`);
-  assert.ok(Math.max(...girth) - Math.min(...girth) >= 0.004, "of mixed girth");
+  for (const R of girth) assert.ok(2 * R >= 0.08 && 2 * R <= 0.13, `a log ${(200 * R).toFixed(1)} cm thick`);
+  // Five of one girth read as tubes from one mould (judge, round 4): the thickest a third again the thinnest or more.
+  assert.ok(Math.max(...girth) / Math.min(...girth) >= 1.3, "of mixed girth");
+  // Bowed, but within its own radius, so the flames' straight line up it stays inside it.
+  for (const l of logs) assert.ok(Math.abs(l.bow) >= 0.005 && Math.abs(l.bow) < 0.5 * l.R, `a log bowed ${l.bow} m`);
   let top = 0;
   for (const l of logs) {
     const end = l.foot.map((v, i) => v + l.axis[i] * l.L);

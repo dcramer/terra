@@ -1,7 +1,7 @@
 {
   "subject": "campfire: a ring of rough grey stones round a heap of glowing orange embers, split logs leaned together over it in a cone and burning, short bright orange-yellow flames rising from the middle, charred black ends on the logs",
   "file": "Campfire",
-  "dims": [1.6, 0.463, 1.6],
+  "dims": [1.6, 0.459, 1.6],
   "budget": 10000,
   "roles": ["Rock", "RockDark", "Wood", "WoodDark", "Black", "Fire"],
   "hearth": true,
