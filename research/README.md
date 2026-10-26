@@ -13,6 +13,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | Note | Dated |
 |---|---|
 | [How do major games theme and scale their dungeons, and which themes should Terra's have?](2026-10-26-dungeon-themes.md) | 2026-10-26 |
+| [Volumetric clouds and a real sky: how games and engines draw them](2026-10-26-volumetric-skies.md) | 2026-10-26 |
 | [Climbing in shipped games and engines: what is climbable, what it costs, how the body follows the face](2026-10-25-climbing.md) | 2026-10-25 |
 | [Do vaults and arched niches lift the crypt demo's score?](2026-10-25-dungeon-vaults.md) | 2026-10-25 |
 | [Can a fluid-simulated campfire move as real ones do?](2026-10-25-fire-fluid-sim.md) | 2026-10-25 |
