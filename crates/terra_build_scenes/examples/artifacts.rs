@@ -356,7 +356,7 @@ fn fuzz(
             })
             .collect();
         println!(
-            "\n  shrunk from {} elements to {} in {tries} bases; as a test (crates/terra_build_scenes/src/fuzz.rs):\n\n#[test]\nfn fuzz_seed_{seed}_is_drawn_without_{}() {{\n    // Found by `cargo xtask fuzz` at seed {seed}, shrunk:\n{}\n    let materials = baseline();\n    let kind = |name: &str| materials.names.iter().find(|(_, n)| n.as_str() == name).map(|(&k, _)| k).unwrap();\n    let base = build(&materials.kits, &{});\n    let report = terra_build_mesh::inspect::inspect(&base, &materials.kits, &terra_build_mesh::relief::Maps::worst(&materials.kits, false));\n    assert_eq!(report.count(terra_build_mesh::inspect::Fault::{fault:?}), 0);\n}}\n",
+            "\n  shrunk from {} elements to {} in {tries} bases; as a test (crates/terra_build_scenes/src/fuzz/tests.rs):\n\n#[test]\nfn fuzz_seed_{seed}_is_drawn_without_{}() {{\n    // Found by `cargo xtask fuzz` at seed {seed}, shrunk:\n{}\n    let materials = baseline();\n    let kind = |name: &str| materials.names.iter().find(|(_, n)| n.as_str() == name).map(|(&k, _)| k).unwrap();\n    let base = build(&materials.kits, &{});\n    let report = terra_build_mesh::inspect::inspect(&base, &materials.kits, &terra_build_mesh::relief::Maps::worst(&materials.kits, false));\n    assert_eq!(report.count(terra_build_mesh::inspect::Fault::{fault:?}), 0);\n}}\n",
             all.len(),
             kept.len(),
             format!("{fault:?}").to_lowercase(),
