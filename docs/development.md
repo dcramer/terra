@@ -4,11 +4,20 @@ How to set up a machine and work in the repository. The reasons behind these cho
 
 ## Set up
 
+The binary assets and source art (models, images, textures, sounds, motion capture: the patterns in `.gitattributes`) live in Git LFS (D525), so install [git-lfs](https://git-lfs.com) before cloning and set its filter once per machine:
+
+```bash
+mise use -g git-lfs@latest      # or your package manager's git-lfs
+git lfs install --skip-repo     # the filter only: our own hooks (.githooks) call git-lfs's
+```
+
 Clone the repository, then from its root:
 
 ```bash
 make setup
 ```
+
+A checkout made without git-lfs holds pointers where those files go: install it as above, then `git lfs pull`. Worktrees share the main checkout's store (`.git/lfs`), so a new one downloads nothing already fetched. The hooks refuse a commit that would put such a file in git whole rather than as a pointer, and a push uploads its LFS objects to GitHub after its checks. The render worker gets them from your machine by rsync, never from GitHub (D525, [render-worker.md](render-worker.md)); GitHub's LFS bandwidth is metered, so avoid fresh clones where a worktree does.
 
 It installs what Cargo cannot install for itself, when it is missing: rustup and the pinned compiler, Xcode's command line tools on macOS, and Bevy's libraries on Debian or Ubuntu (with `sudo`; under WSL also MinGW and the Windows target). It then points git at the hooks, builds the game and runs `cargo xtask doctor` (D387). Node it only checks for. `make` lists the everyday tasks, each a `cargo xtask` task; the Makefile stays that thin, and anything with logic goes in `xtask`.
 

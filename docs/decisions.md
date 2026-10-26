@@ -585,6 +585,7 @@ Checks, developer tools, languages and the repository.
 | [D448](decisions/D448.md) | Every run writes its log to a file; a played session's log says what shared the GPU | Tech | Agent | Decided | Every run of the game writes each line its log keeps to… |
 | [D467](decisions/D467.md) | A demo is an experiment that stands for others, its keys moving the world's own clock | Tech | Agent | Leaning | A playable demo for the developers is a sandbox… |
 | [D472](decisions/D472.md) | Visual A/B judging scores one build per judge, against fixed anchors | Tech | Agent | Decided | A blind visual comparison by subagent judges… |
+| [D525](decisions/D525.md) | Binary assets live in Git LFS, from now on | Tech | Developers | Decided | Every binary asset and piece of source art is stored in… |
 
 ## Superseded and rejected
 
