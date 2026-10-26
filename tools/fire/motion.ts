@@ -5,10 +5,10 @@
 //   node tools/fire/motion.ts <video | 'dir/f-*[0-9].png'> [--box WxH+X+Y] [--matte <video | glob>]
 //        [--from S] [--seconds S] [--fps N] [--cut L] [--overlay out.png] [--json]
 //
-// The flame is measure.ts's flame colour (`isFlame`) where the run's flame matte says flame
-// (`--matte`, D433), or, for footage with none, where the pixel is also brighter than `--cut`
-// (default LUMA_CUT of the clip's 99th-percentile flame luma), so the ground the fire lights is
-// not flame. Specks under MIN_PIECE px are dropped (sparks). The clip is decoded twice: once small
+// The flame is measure.ts's flame colour (`isFlame`) brighter than `--cut`, and where the run's
+// flame matte says flame (`--matte`, D433). The cut defaults to LUMA_CUT of the clip's
+// 99th-percentile flame luma for footage, so the ground the fire lights is not flame; a render
+// with a matte is cut at LUMA_CUT of white, where a filmed flame, clipped white inside, is cut. Specks under MIN_PIECE px are dropped (sparks). The clip is decoded twice: once small
 // to find the flame, then cropped round it and scaled so the flame is NORM_H px tall, so a far
 // fire and a close one compare. Heights are from the flame's base (its pooled 99th-percentile
 // row) in flame heights H (the 98th percentile of its pixels' heights over the clip). Per clip:
@@ -45,7 +45,8 @@ export type Clip = { w: number; h: number; fps: number; frames: Uint8Array[]; ma
 /// The flame's height at analysis, px: tall enough for its tongues and edge to show, small
 /// enough to match blocks over a clip in seconds.
 export const NORM_H = 160;
-/// Footage's flame cut, of its 99th-percentile flame luma: lit ground is far dimmer than flame.
+/// The flame cut, of footage's 99th-percentile flame luma (of white for a render): lit ground is
+/// far dimmer than flame.
 export const LUMA_CUT = 0.5;
 /// The least piece of flame kept, px at analysis: smaller is a spark or noise.
 export const MIN_PIECE = 6;
@@ -126,12 +127,18 @@ function clean(mask: Uint8Array, w: number, h: number): Uint8Array {
 
 /// The least matte share (of 255) where a render's pixel may be flame: any flame drawn there.
 /// The matte only takes out what is not flame (lit ground, stones); what is flame is then cut
-/// by the same rule as footage, so a render and a film are measured alike, thin flame included.
+/// at half white as clipped footage is (`lumaCut`), so a render and a film are measured alike.
 export const MATTE_SEEN = 16;
 const seen = (clip: Clip, i: number, p: number) => !clip.mattes || clip.mattes[i][p] >= MATTE_SEEN;
 
-/// The flame cut: LUMA_CUT of the 99th percentile of the flame-coloured pixels' luma.
+/// The flame cut: LUMA_CUT of the 99th percentile of the flame-coloured pixels' luma for
+/// footage, whose core clips white so that is about half of white; for a render with a matte,
+/// LUMA_CUT of white itself. A render's core need not clip, and cut from its own 99th
+/// percentile, a paler core raised the cut and dropped the dim tips, so the night tongues'
+/// lean read the core's brightness, not their motion (fire round g43: two builds differing
+/// only in the core read 7.7 and 6.4 deg at their own cuts, 7.8 and 7.7 at one cut).
 export function lumaCut(clip: Clip): number {
+  if (clip.mattes) return LUMA_CUT * 255;
   const ls: number[] = [];
   clip.frames.forEach((f, i) => {
     for (let p = 0; p < clip.w * clip.h; p += 3) if (isFlame(f[3 * p], f[3 * p + 1], f[3 * p + 2]) && seen(clip, i, p)) ls.push(luma(f[3 * p], f[3 * p + 1], f[3 * p + 2]));

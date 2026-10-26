@@ -78,6 +78,30 @@ test("the run's matte stands in for the luma cut", () => {
   near(m.flicker.dominant, 2.5, 0.1, "dominant Hz");
 });
 
+/// The synthetic fire with its run's matte, its body's brightness scaled by `core` and its third
+/// tongue (x 122-131) dimmed to luma 109-129, under half white.
+function matted(core: number): Clip {
+  const clip = fire();
+  clip.mattes = clip.frames.map((f) => {
+    const m = new Uint8Array(clip.w * clip.h);
+    for (let p = 0; p < m.length; p++) m[p] = f[3 * p] >= 200 ? 255 : 0;
+    return m;
+  });
+  for (const f of clip.frames)
+    for (let p = 0; p < clip.w * clip.h; p++) {
+      const [x, y] = [p % clip.w, (p / clip.w) | 0];
+      const k = y >= 170 && y < 230 ? core : y < 170 && x >= 122 && x < 132 ? 0.72 : 1;
+      for (let c = 0; c < 3; c++) f[3 * p + c] = Math.round(f[3 * p + c] * k);
+    }
+  return clip;
+}
+
+test("a render's cut does not follow its core: a dimmer core keeps no dimmer tip", () => {
+  const [bright, dim] = [analyse(matted(1)), analyse(matted(0.78))];
+  near(bright.tongues.count, 2, 0.01, "tongues, bright core");
+  near(dim.tongues.count, 2, 0.01, "tongues, dim core");
+});
+
 test("roughness is outline over root area, and no edge where a band cuts the flame", () => {
   const [w, h] = [40, 30];
   const rect = new Uint8Array(w * h);
