@@ -259,6 +259,7 @@ The developers want tools that help refine each system (D71), and as many of the
 | [Prop maker](../tools/props/README.md) | `cargo xtask props concept\|model\|refine <prop>` | A prop from a description to the game: concept, Tripo model, clean-up into our palette, levelled and facing front; `props fronts` shows every model from the front on one sheet |
 | [Kit pieces](../tools/kits/README.md) | `cargo xtask blender tools/kits/pieces.py <source> <out>` | A building kit's dressed pieces, the profiles swept along each edge by its role and the corner stones up it, made in Blender from their source under `art/kits/` (D215) |
 | [Tripo CLI](../tools/tripo/README.md) | `cargo xtask tripo <command>` | Everything Tripo's Studio does, on our subscription's credits (below) |
+| [Uthana CLI](../tools/uthana/README.md) | `node tools/uthana/uthana.ts motion "<prompt>" -o clip.glb` | Text-to-motion clips on our body, on paid credits (D532) |
 | [Character pipeline](../tools/characters/README.md) | `cargo xtask bodies` | Bodies, morphs, skins, worn and held looks, from `art/`; the `character` skill has the steps |
 | [Blender runner](../tools/blender/README.md) | `cargo xtask blender <script.py>` | Any Blender script, headless, on the Windows Blender from WSL (below) |
 | [Icon painter](../tools/icons/README.md) | `cargo xtask icons`, `cargo xtask paint-icons <item>` | Item icons: baked from each item's look, then painted in the art style |
