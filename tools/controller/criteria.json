@@ -1058,6 +1058,22 @@
    "slack": 5
   },
   {
+   "id": "cost.edits",
+   "noticed": 2,
+   "notice": "a much-dug world slows every body",
+   "bar": {
+    "at_most": 30
+   },
+   "unit": "µs a body a tick on the 2 km planet with 10,000 edits made (9 in 10 spread over 3 km, 1 in 10 within 60 m of the walk)",
+   "source": "docs/controller.md criterion 20; D21, D52; handoff controller-stage2.md Unit F2 (a sample scans every edit) and Unit V",
+   "check": {
+    "by": "bench"
+   },
+   "cost": "heavy",
+   "measurable": true,
+   "slack": 5
+  },
+  {
    "id": "cost.forest",
    "noticed": 2,
    "notice": "walking through the forest makes frames hitch",

@@ -6329,6 +6329,7 @@ dependencies = [
  "terra_build",
  "terra_build_layout",
  "terra_core",
+ "terra_gen",
  "terra_motion",
  "terra_world",
  "wesl",
