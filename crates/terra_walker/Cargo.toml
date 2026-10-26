@@ -25,6 +25,8 @@ terra_world.workspace = true
 [dev-dependencies]
 # cost.crowd's bench times the bodies' tick on a rayon pool (the server's, D53) beside Bevy's.
 rayon = "1"
+# cost.edits's bench places its edits by the shared hash.
+terra_gen.workspace = true
 # The controller course's fixtures (D53), which the mover's bench walks (`cargo xtask controller --bench`).
 terra_motion = { workspace = true, features = ["course"] }
 # The WESL compiler and shader validator Bevy builds its shaders with, at Bevy's versions:

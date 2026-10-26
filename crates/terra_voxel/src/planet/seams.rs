@@ -52,7 +52,12 @@ pub(super) struct Room {
     high: Vec3,
     /// The dig it is, as the field asks it.
     pub edit: Edit,
+    /// Where it is laid among the edits (`index`), [`UNSTAMPED`] until it is.
+    pub stamp: u32,
 }
+
+/// A room not laid yet.
+pub(super) const UNSTAMPED: u32 = u32::MAX;
 
 impl Room {
     /// A dug box as a room, at its place in the edits.
@@ -73,6 +78,7 @@ impl Room {
             low: middle - half,
             high: middle + half,
             edit: *edit,
+            stamp: UNSTAMPED,
         })
     }
 
@@ -88,6 +94,7 @@ impl Room {
                 half: (high - low) * 0.5,
                 rotation,
             },
+            stamp: UNSTAMPED,
         }
     }
 

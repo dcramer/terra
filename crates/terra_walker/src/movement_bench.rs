@@ -4,7 +4,8 @@
 //! its ground's field calls counted, for the mover (D53), as the walk drives it. The median of
 //! several runs, so a busy machine's outliers do not move it. `cargo xtask controller --bench`
 //! runs it in release and judges `cost.body`, the mover's worst scene, against the bar; the
-//! rest are its log's `bench` lines. `cost.forest` is the same body walked through the lush
+//! rest are its log's `bench` lines. `cost.edits` is the body on the 2 km planet with 10,000
+//! edits made to it ([`edits`]); `cost.forest` is the same body walked through the lush
 //! yard's trees and rocks ([`forest`]); `cost.crowd` a thousand men walking through each other
 //! on the planet at 30 km ([`crowd`]).
 
@@ -19,6 +20,8 @@ use terra_world::planet::{HeightMemo, Planet};
 
 #[path = "movement_bench_crowd.rs"]
 mod crowd;
+#[path = "movement_bench_edits.rs"]
+mod edits;
 #[path = "movement_bench_forest.rs"]
 mod forest;
 
@@ -220,6 +223,15 @@ fn the_mover_bench_times_a_body_walking() {
         f.route
     );
     println!("scorecard\tcost.forest\t{}", f.micros);
+    let mut dug = 0.0_f32;
+    for (count, cost, making) in edits::run(&kind, course.gravity()) {
+        println!(
+            "bench\tplanet 2 km, {count} edits (made in {making:.1} s)\tmover {:.1} µs {:.0} calls a tick, {:.1} m",
+            cost.micros, cost.calls, cost.walked
+        );
+        dug = cost.micros;
+    }
+    println!("scorecard\tcost.edits\t{dug}");
     let (_, far) = &planets[1];
     let (start, forward) = on(far);
     // The bench's own pools, each of THREADS threads with the calling one: rayon's (the

@@ -6,10 +6,12 @@
 //! in the same order agree everywhere. Applying a dig reports what it took out, by
 //! material (D45).
 
+mod index;
 mod seams;
 
 use crate::field::{Field, Sample, material};
 use glam::{DVec3, Quat, Vec3};
+use index::{Index, Level};
 use seams::Room;
 use terra_core::{Ground, Harvested, MaterialId, Operation, Yield};
 
@@ -45,6 +47,18 @@ impl Edit {
             Edit::Dig { centre, radius } | Edit::Fill { centre, radius, .. } => (centre, radius),
             Edit::DigBox { centre, half, .. } => (centre, half.length()),
         }
+    }
+
+    fn is_fill(&self) -> bool {
+        matches!(self, Edit::Fill { .. })
+    }
+
+    /// Whether a dig is near enough a point to change the ground there (a fill counts
+    /// everywhere, `VoxelPlanet::shaped`).
+    fn reaches(&self, point: Vec3) -> bool {
+        let (centre, radius) = self.centre_and_radius();
+        let reach = radius + EDIT_MARGIN_M;
+        point.distance_squared(centre) <= reach * reach
     }
 
     /// The distance to the ground at a point after this edit, given what it was before.
@@ -114,6 +128,8 @@ pub struct VoxelPlanet<F: Field> {
     /// The boxes dug boxes hold together across the faces they share, each dug after the
     /// edit it names, in that order (`seams`).
     bridges: Vec<Room>,
+    /// The edits and bridges by place, in the order laid (`index`).
+    index: Index,
 }
 
 impl<F: Field> VoxelPlanet<F> {
@@ -122,6 +138,7 @@ impl<F: Field> VoxelPlanet<F> {
             field,
             edits: Vec::new(),
             bridges: Vec::new(),
+            index: Index::default(),
         }
     }
 
@@ -189,12 +206,17 @@ impl<F: Field> VoxelPlanet<F> {
     ///
     /// Each edit is followed by the bridges dug after it (`seams`), and `step` lays each over
     /// what the ground was.
-    fn shaped<T>(&self, point: Vec3, ground: T, step: impl Fn(&Edit, T) -> T) -> T {
-        let reaches = |edit: &Edit| {
-            let (centre, radius) = edit.centre_and_radius();
-            let reach = radius + EDIT_MARGIN_M;
-            matches!(edit, Edit::Fill { .. }) || point.distance_squared(centre) <= reach * reach
-        };
+    ///
+    /// Only the edits that can change the ground at the point are looked at (`index`), with
+    /// the same answer as laying every one ([`Self::scanned`]).
+    fn shaped<T: Level>(&self, point: Vec3, ground: T, step: impl Fn(&Edit, T) -> T) -> T {
+        self.index.shaped(point, ground, step)
+    }
+
+    /// [`Self::shaped`] by every edit and bridge in order: what the index must answer.
+    #[cfg(test)]
+    fn scanned<T>(&self, point: Vec3, ground: T, step: impl Fn(&Edit, T) -> T) -> T {
+        let reaches = |edit: &Edit| edit.is_fill() || edit.reaches(point);
         let mut bridges = self.bridges.iter().peekable();
         let mut ground = ground;
         for (i, edit) in self.edits.iter().enumerate() {
@@ -243,6 +265,7 @@ impl<F: Field> VoxelPlanet<F> {
             _ => self.measure_dig(&edit),
         };
         self.edits.push(edit);
+        self.index.add(edit);
         if let Some(fresh) = Room::of(&edit, self.edits.len() - 1) {
             self.join(fresh);
         }
@@ -267,7 +290,20 @@ impl<F: Field> VoxelPlanet<F> {
                 _ => false,
             })
         };
+        let before: Vec<u32> = self.bridges.iter().map(|room| room.stamp).collect();
         seams::join(fresh, &dug, &mut self.bridges, refilled);
+        // The bridges it took away are crossed out, those it made laid, in order.
+        let mut kept = self.bridges.iter().map(|room| room.stamp).peekable();
+        for stamp in before {
+            if kept.next_if_eq(&stamp).is_none() {
+                self.index.remove(stamp);
+            }
+        }
+        for room in &mut self.bridges {
+            if room.stamp == seams::UNSTAMPED {
+                room.stamp = self.index.add(room.edit);
+            }
+        }
     }
 
     /// What a dig would take out: every measuring cell inside it that is solid now, by
