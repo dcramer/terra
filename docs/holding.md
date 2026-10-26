@@ -56,7 +56,7 @@ Movement.md's pose layer, filled per stance. Every layer is chosen by rule, from
 - **A move set is a file a stance-and-class pair**, `assets/data/moves/<class>.<stance>.ron`: its hold poses, its moves, the buttons they answer and its numbers, shaped as `sword_and_shield.ron` is today. A set may name another to start from (`from: "sword.single"`) and add or replace moves. So `sword.shielded` is `sword.single` with the shield's block and bash.
 - **A set falls back** from class to family to the stance's generic set, so a new class plays before its own clips exist: `sabre.single`, then `blade.single`, then `one_hand.single` (`two_hand.two`, `shield.alone`, `unarmed` for the others). The families are `blade`, `blunt`, `polearm` and `heavy`, each class's in `assets/data/moves/families.ron`.
 - **Combat styles** (D124, [magic.md](magic.md#combat-styles)) are a few moves added to a set, with their own chains, not sets of their own. Stillwater Guard adds to `sword.shielded`, the Wolf's Run to `dagger.dual`.
-- **Locomotion is never per item.** The hold layer is laid over it at run time by Bevy's mask groups (`bevy_animation` 0.20: Blend and Add nodes, masks), as Lyra's item layers and Godot's filtered Blend2 do. D458 bakes `Fight_Walk` at export today. That gives way to this once the pose layer is built (movement.md stage 2), since baking every hold over every locomotion clip is 20 × 25 clips.
+- **Locomotion is never per item.** The hold layer is laid over it at run time by Bevy's mask groups (`bevy_animation` 0.20: Blend and Add nodes, masks), as Lyra's item layers and Godot's filtered Blend2 do. Built for the guard over the walk (D458, combat round 28): `terra_walker::layer` masks every bone into the arms (from the clavicles) or the rest, and a clip asked with a hold plays off the arms with the hold's first pose on them, taking the weight its transitions give it; baking every hold over every locomotion clip would be 20 × 25 clips.
 
 ### Which button does what
 
@@ -129,7 +129,7 @@ Items of a class share every clip, hold pose, phase, chain and button. Each item
 |---|---|---|
 | The stance rule | Any pair of grips giving a stance the table above does not, or an item allowed where its grip says no | A table test in `terra_motion` |
 | The move check, per set and side | `moves.ts`'s rows (hands or items in the body, the blade's arc, guard start and end, chains) on every set, both sides where mirrored, with the class's shortest and longest items | `node tools/characters/moves.ts --set <class.stance>`, every body template |
-| Hold over locomotion | A held item or hand in the body on any locomotion clip under any stance's hold | `moves.ts --also`, as D458 measures `Fight_Walk` today |
+| Hold over locomotion | A held item or hand in the body on any locomotion clip under any stance's hold | `moves.ts --also`, a row a clip under a hold (`Walk_Loop+Keyed_Guard`: the same mask, `glb.ts`'s `layered`) |
 | Second grip | The off hand more than 1 cm from the second grip after IK, or more than 8 cm before it (the clip wrong, not the IK), or an arm at full stretch | A new `moves.ts` row |
 | Mirror | A mirrored clip's left bones not the original's right ones reflected, within 1 mm and 0.1° | A test of the mirror step |
 | Takes | Two kept takes of a move closer than 10 cm in the tip's path (duplicates); phases more than a frame apart; reach more than 10 cm apart | `clip.ts --measure` |
@@ -145,7 +145,7 @@ Items of a class share every clip, hold pose, phase, chain and button. Each item
 | The sword is given on T, with the shield when the off hand's slot is empty (D405's shortcut); each fighter plays the set its hands give | The sword from the bar, once a drawn sword is the bar's item |
 | One set, `sword.shielded.ron`, chosen by the stance rule and the lookup, with the partner's slower blows as moves of their own (its slash plays at a third of the player's rate, past a style's ±8%) | The partner plays it at its style's rate |
 | Buttons by the stance table, named in the set (`buttons`) | Done |
-| `Fight_Walk`, the guard's arms baked over the walk (D458) | The hold layer by mask at run time, from movement.md stage 2 |
+| The guard's arms laid over the library's walk at run time by a bone mask (`terra_walker::layer`, D458); the strafes and the drawn jump keep their own arms | A hold pose for the strafes and the jump; the body's locomotion set as data |
 | `figure.rs` names locomotion clips in code | The body's locomotion set as data |
 | One take a move | Up to the set's `takes`, drawn by shuffle |
 
@@ -161,7 +161,7 @@ Each step is done when its checks pass and nothing on the scorecard gets worse:
 
    Done when the prototype plays as it does now, from items, and the scorecard holds. Built in combat round 26, but for a set's `from` (nothing needs it until a second set) and the partner at its style's rate (a design call: today's partner blows are far slower than a style may make them).
 3. **Both hands shown from the loadout**: `held` on both sockets, and `melee` takes its looks from the hands. Done when the penetration rows hold, and a torch carried in the off hand with a sword passes the held-fit check. Built in combat round 27: the torch rows (`held.torch.*`, the guard, walk and strafes) pass; a sword with a torch is not drawn until a `single` set is made (D461's order).
-4. **The hold layer at run time** (movement.md stage 2), in place of `Fight_Walk`. Done when every stance's hold passes over every locomotion clip.
+4. **The hold layer at run time** (movement.md stage 2), in place of `Fight_Walk`. Done when every stance's hold passes over every locomotion clip. Built in combat round 28 (D458): the guard over the walk, jog and sprint passes (`move.Fight_Walk.*`, `move.Jog_Fwd_Loop.*`, `move.Sprint_Loop.*`), every number of the walk as `Fight_Walk` had it, which is deleted. The guard over the strafes and the jump does not (the sword 15-20 cm into the lifting thigh), so they keep their own arms until a hold pose for them is made.
 5. **The second stance, two-handed** (greatsword), with second-grip IK (movement.md stage 4). It proves the model: a new class and stance by data, clips and IK. Done when the duel of two-handed against shielded passes and the grip rows pass.
 6. **Two items of one class** (the arming sword and a longer, heavier sword) on one set. Done when the timing rule holds in the duel's records.
 7. **Variants**: kept takes, the shuffle bag, the additive layer. Done when the take rows pass.

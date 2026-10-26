@@ -1700,7 +1700,7 @@
    "cost": "cheap",
    "id": "held.torch.Fight_Walk",
    "noticed": 3,
-   "notice": "a torch carried in the off hand beside the sword passes through the body in walking drawn (Fight_Walk)",
+   "notice": "a torch carried in the off hand beside the sword passes through the body in walking drawn (the library's walk under the guard's hold, laid at run time)",
    "bar": {
     "at_most": 1
    },
@@ -1708,7 +1708,7 @@
    "source": "D447 (moves.ts HELD_CM); holding.md section 6 step 3, a torch carried in the off hand (D460) with a sword",
    "check": {
     "by": "moves",
-    "row": "Fight_Walk",
+    "row": "Walk_Loop+Keyed_Guard",
     "measure": "held_cm",
     "hold": [
      "socket.hand.R=assets/models/held/arming_sword.glb",
@@ -1721,15 +1721,15 @@
    "cost": "cheap",
    "id": "move.Fight_Walk.held",
    "noticed": 3,
-   "notice": "the sword or shield passes through the body walking drawn (Fight_Walk)",
+   "notice": "the sword or shield passes through the body walking drawn (the library's walk under the guard's hold, laid at run time)",
    "bar": {
     "at_most": 1
    },
    "unit": "cm",
-   "source": "D447 (moves.ts HELD_CM), D458",
+   "source": "D447 (moves.ts HELD_CM), D458 (the hold layer)",
    "check": {
     "by": "moves",
-    "row": "Fight_Walk",
+    "row": "Walk_Loop+Keyed_Guard",
     "measure": "held_cm"
    }
   },
@@ -1738,7 +1738,7 @@
    "cost": "cheap",
    "id": "move.Fight_Walk.sword_in_shield",
    "noticed": 5,
-   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (Fight_Walk)",
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (the library's walk under the guard's hold, laid at run time)",
    "bar": {
     "at_most": 0
    },
@@ -1746,7 +1746,7 @@
    "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
    "check": {
     "by": "moves",
-    "row": "Fight_Walk",
+    "row": "Walk_Loop+Keyed_Guard",
     "measure": "sword_shield_cm"
    }
   },
@@ -1755,7 +1755,7 @@
    "cost": "cheap",
    "id": "move.Fight_Walk.shield_in_arm",
    "noticed": 4,
-   "notice": "the shield's board goes through the sword arm (right hand or forearm) (Fight_Walk)",
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (the library's walk under the guard's hold, laid at run time)",
    "bar": {
     "at_most": 0
    },
@@ -1763,7 +1763,7 @@
    "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
    "check": {
     "by": "moves",
-    "row": "Fight_Walk",
+    "row": "Walk_Loop+Keyed_Guard",
     "measure": "shield_arm_cm"
    }
   },
@@ -1772,15 +1772,83 @@
    "cost": "cheap",
    "id": "move.Fight_Walk.hands",
    "noticed": 2,
-   "notice": "an arm sinks into the body walking drawn (Fight_Walk)",
+   "notice": "an arm sinks into the body walking drawn (the library's walk under the guard's hold, laid at run time)",
    "bar": {
     "at_most": 2
    },
    "unit": "cm",
-   "source": "D447 (moves.ts HAND_CM), D458",
+   "source": "D447 (moves.ts HAND_CM), D458 (the hold layer)",
    "check": {
     "by": "moves",
-    "row": "Fight_Walk",
+    "row": "Walk_Loop+Keyed_Guard",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Jog_Fwd_Loop.held",
+   "noticed": 3,
+   "notice": "the sword or shield passes through the body jogging drawn (the library's Jog_Fwd_Loop under the guard's hold)",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM), D458 (the hold layer), holding.md section 6 step 4",
+   "check": {
+    "by": "moves",
+    "row": "Jog_Fwd_Loop+Keyed_Guard",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Jog_Fwd_Loop.hands",
+   "noticed": 3,
+   "notice": "an arm sinks into the body jogging drawn (the library's Jog_Fwd_Loop under the guard's hold)",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM), D458 (the hold layer), holding.md section 6 step 4",
+   "check": {
+    "by": "moves",
+    "row": "Jog_Fwd_Loop+Keyed_Guard",
+    "measure": "hands_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Sprint_Loop.held",
+   "noticed": 3,
+   "notice": "the sword or shield passes through the body sprinting drawn (the library's Sprint_Loop under the guard's hold)",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM), D458 (the hold layer), holding.md section 6 step 4",
+   "check": {
+    "by": "moves",
+    "row": "Sprint_Loop+Keyed_Guard",
+    "measure": "held_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.Sprint_Loop.hands",
+   "noticed": 3,
+   "notice": "an arm sinks into the body sprinting drawn (the library's Sprint_Loop under the guard's hold)",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HAND_CM), D458 (the hold layer), holding.md section 6 step 4",
+   "check": {
+    "by": "moves",
+    "row": "Sprint_Loop+Keyed_Guard",
     "measure": "hands_cm"
    }
   },

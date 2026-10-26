@@ -7,10 +7,13 @@
 //! D112).
 //!
 //! Its clips are the fight file's (`CLIPS`: the base's and the sword fight's, on the base's
-//! skeleton), two of each so a clip played again blends from itself. A layer above may ask
-//! for a clip in place of what walking shows (`Acting`), as the sword fight does (`melee`).
+//! skeleton), two of each so a clip played again blends from itself, and the same masked for
+//! the hold layer (`layer`): two off the arms, for a clip played under a hold, and one on the
+//! arms alone, for the hold. A layer above may ask for a clip in place of what walking shows
+//! (`Acting`), with a stance's hold over it, as the sword fight does (`melee`).
 
 use crate::character::{CARRIED_IN, Carrying};
+use crate::layer::Nodes;
 use crate::{Downed, Motion, Player, Stance};
 use bevy::{
     gltf::GltfNode, platform::collections::HashMap, prelude::*,
@@ -76,11 +79,11 @@ impl Doing {
     }
 }
 
-/// The animations, as places in the figure's animation graph: every clip by name, twice.
+/// The animations, as places in the figure's animation graph: every clip by name.
 #[derive(Resource)]
 pub struct Moves {
     graph: Handle<AnimationGraph>,
-    clips: HashMap<String, [AnimationNodeIndex; 2]>,
+    clips: HashMap<String, Nodes>,
     /// The stride clips' own paces (`pace.rs`), so their feet do not slide.
     paces: HashMap<String, f32>,
 }
@@ -108,10 +111,13 @@ struct Animated {
     player: Entity,
     hands: Vec<Entity>,
     doing: Doing,
-    playing: Option<(String, usize)>,
+    /// The clip playing, which copy, and whether under a hold.
+    playing: Option<(String, usize, bool)>,
     applied: u32,
     /// Clips played mixed into another (`Act::mix`), each with the one it rides on.
     mixed: Vec<Mixed>,
+    /// Holds laid over the clips playing (`Act::hold`), each with the clips under it.
+    holds: Vec<crate::layer::Held>,
     /// Where the player's body was shown last frame (`shown_velocity`).
     shown: Option<Vec3>,
 }
@@ -145,6 +151,9 @@ pub struct Act {
     /// Another clip played in step with it, and its share of the weight: a chained blow's
     /// held take, by how far out the blow it cut short carried its shield (D454).
     pub mix: Option<(String, f32)>,
+    /// A clip whose first pose the arms hold over this one, by the hold layer's mask
+    /// (`layer`): a stance's hold, the guard's arms over a walk (D458).
+    pub hold: Option<String>,
 }
 
 impl Act {
@@ -157,6 +166,7 @@ impl Act {
             hold_at: None,
             blend: BLEND,
             mix: None,
+            hold: None,
         }
     }
 
@@ -230,13 +240,7 @@ fn prepare(
     let Some(gltf) = gltfs.get(&model.clips) else {
         return;
     };
-    let mut graph = AnimationGraph::new();
-    let mut clips = HashMap::new();
-    for (name, clip) in &gltf.named_animations {
-        let first = graph.add_clip(clip.clone(), 1.0, graph.root);
-        let second = graph.add_clip(clip.clone(), 1.0, graph.root);
-        clips.insert(name.to_string(), [first, second]);
-    }
+    let (graph, clips) = crate::layer::graph(gltf, &gltf_nodes);
     baked.register(gltf, &gltf_nodes);
     commands.insert_resource(Moves {
         graph: graphs.add(graph),
@@ -301,7 +305,7 @@ fn dress(
     let mut transitions = AnimationTransitions::new();
     if let Some(idle) = moves.clips.get(Doing::Idle.clip()) {
         transitions
-            .play(&mut animator, idle[0], Duration::ZERO)
+            .play(&mut animator, idle.whole[0], Duration::ZERO)
             .repeat();
     }
     // Whatever is in each hand is held in that hand's socket (`held`).
@@ -327,9 +331,10 @@ fn dress(
             player,
             hands,
             doing: Doing::Idle,
-            playing: Some((Doing::Idle.clip().to_string(), 0)),
+            playing: Some((Doing::Idle.clip().to_string(), 0, false)),
             applied: 0,
             mixed: Vec::new(),
+            holds: Vec::new(),
             shown: None,
         },
     ));
@@ -379,6 +384,9 @@ fn animate(
                 Some(act) => (act.clip.as_str(), act.once, act.from_s, act.blend),
                 None => (doing.clip(), doing.once(), 0.0, BLEND),
             };
+            let hold = act
+                .and_then(|act| act.hold.as_ref())
+                .and_then(|hold| moves.clips.get(hold));
             // Both hands carry in a carried clip and use what they hold in any other.
             for &grip in &animated.hands {
                 if let Ok(mut hand) = hands.get_mut(grip) {
@@ -389,9 +397,10 @@ fn animate(
                 Some(nodes) => {
                     // The same clip again blends from itself, by its other copy.
                     let copy = match &animated.playing {
-                        Some((name, copy)) if name == clip => 1 - copy,
+                        Some((name, copy, _)) if name == clip => 1 - copy,
                         _ => 0,
                     };
+                    let node = nodes.of(copy, hold.is_some());
                     // The clip giving way fades from its whole weight, its mixed clip's share
                     // given back to it first.
                     if let Some(main) = transitions.get_main_animation() {
@@ -406,27 +415,34 @@ fn animate(
                             main.set_weight(whole);
                         }
                     }
-                    animated.mixed.retain(|m| m.mix != nodes[copy]);
-                    let playing = transitions.play(&mut animator, nodes[copy], blend);
+                    animated.mixed.retain(|m| m.mix != node);
+                    let playing = transitions.play(&mut animator, node, blend);
                     if !once {
                         playing.repeat();
                     }
                     if from_s > 0.0 {
                         playing.seek_to(from_s);
                     }
-                    animated.playing = Some((clip.to_string(), copy));
+                    animated.playing = Some((clip.to_string(), copy, hold.is_some()));
+                    if let Some(hold) = hold {
+                        crate::layer::lay(&mut animated.holds, &mut animator, hold.over, node);
+                    }
                     if let Some((mix, share)) = act.and_then(|act| act.mix.as_ref())
                         && let Some(both) = moves.clips.get(mix)
                     {
                         let taken = |node| animated.mixed.iter().any(|m| m.mix == node);
-                        let node = if taken(both[0]) { both[1] } else { both[0] };
+                        let node = if taken(both.whole[0]) {
+                            both.whole[1]
+                        } else {
+                            both.whole[0]
+                        };
                         animator
                             .start(node)
                             .seek_to(from_s)
                             .set_speed(act.map_or(1.0, |act| act.speed))
                             .set_weight(0.0);
                         animated.mixed.push(Mixed {
-                            main: nodes[copy],
+                            main: nodes.of(copy, hold.is_some()),
                             mix: node,
                             share: *share,
                         });
@@ -435,14 +451,11 @@ fn animate(
                 None => warn!("The figure has no clip {clip}."),
             }
         }
-        let Some((name, copy)) = animated.playing.clone() else {
+        let Some((name, copy, held)) = animated.playing.clone() else {
             continue;
         };
-        let Some(playing) = moves
-            .clips
-            .get(&name)
-            .and_then(|nodes| animator.animation_mut(nodes[copy]))
-        else {
+        let main = moves.clips[&name].of(copy, held);
+        let Some(playing) = animator.animation_mut(main) else {
             continue;
         };
         match act {
@@ -453,7 +466,6 @@ fn animate(
                 let speed = if held { 0.0 } else { act.speed };
                 playing.set_speed(speed);
                 // A clip mixed into it keeps in step.
-                let main = moves.clips[&name][copy];
                 for m in animated.mixed.iter().filter(|m| m.main == main) {
                     if let Some(mixed) = animator.animation_mut(m.mix) {
                         mixed.set_speed(speed);
@@ -473,17 +485,17 @@ fn animate(
         // clip strides, the way the body goes: its planted feet are kept on it (`feet`).
         if let Ok(mut kept) = feet.get_mut(animated.player) {
             let pace = moves.paces.get(&name).copied().unwrap_or(0.0);
-            let node = moves.clips[&name][copy];
-            let rate = animator.animation(node).map_or(0.0, |a| a.speed());
+            let rate = animator.animation(main).map_or(0.0, |a| a.speed());
             kept.stride(velocity, pace * place.scale().y, rate);
         }
     }
 }
 
 /// Each mixed clip takes its share of the weight the transitions gave the clip it rides on,
-/// and stops with it.
+/// and stops with it; each hold takes the weight of the clips under it (`layer::ride`).
 fn mix(mut figures: Query<(&mut AnimationPlayer, &mut Animated)>) {
     for (mut animator, mut animated) in &mut figures {
+        crate::layer::ride(&mut animated.holds, &mut animator);
         animated.mixed.retain(|m| {
             let Some(whole) = animator.animation(m.main).map(|a| a.weight()) else {
                 animator.stop(m.mix);
@@ -598,6 +610,7 @@ mod tests {
                     doing: Doing::Acting,
                     playing: None,
                     applied: 0,
+                    holds: Vec::new(),
                     mixed: vec![Mixed {
                         main,
                         mix: held,

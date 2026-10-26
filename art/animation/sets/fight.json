@@ -866,19 +866,6 @@
       }
     ]
   },
-  "Fight_Walk": {
-    "of": "Walk_Loop",
-    "hold": [
-      {
-        "clip": "Keyed_Guard",
-        "bone": "clavicle_l"
-      },
-      {
-        "clip": "Keyed_Guard",
-        "bone": "clavicle_r"
-      }
-    ]
-  },
   "Open_Slash": {
     "of": "Keyed_Slash",
     "hold": [
@@ -1069,7 +1056,6 @@
       "Fight_Guard",
       "Fight_Strafe_L",
       "Fight_Strafe_R",
-      "Fight_Walk",
       "Jump_Loop",
       "Open_Slash",
       "Open_Backhand",

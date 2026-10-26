@@ -129,7 +129,36 @@ export class Glb {
     }
     return { name, end, tracks };
   }
+
+  /// `under` with the bones of `roots` and every bone below them held at `over`'s first pose,
+  /// in their own frames: the hold layer laid over a locomotion clip by a bone mask, as the
+  /// game lays it at run time (terra_walker::figure, D458). Unreal's Layered Blend per Bone at
+  /// full weight; a held bone `over` has no track for is at rest, as `posed` reads any.
+  layered(under: Clip, over: Clip, roots: readonly string[] = HOLD_MASK): Clip {
+    const held = new Set<string>();
+    const below = (i: number) => {
+      const name = this.gltf.nodes[i].name;
+      if (name) held.add(name);
+      this.gltf.nodes[i].children?.forEach(below);
+    };
+    this.gltf.nodes.forEach((n, i) => n.name && roots.includes(n.name) && below(i));
+    const tracks = new Map(under.tracks);
+    for (const name of held) {
+      const track = over.tracks.get(name);
+      if (!track) {
+        tracks.delete(name);
+        continue;
+      }
+      const first = Object.fromEntries(Object.entries(track).map(([k, f]) => [k, () => f(0)]));
+      tracks.set(name, first);
+    }
+    return { name: `${under.name}+${over.name}`, end: under.end, tracks };
+  }
 }
+
+/// The bones a stance's hold lays its pose on, with every bone below them: both arms from the
+/// clavicles (D458; the twin of terra_walker::figure::HOLD_MASK).
+export const HOLD_MASK: readonly string[] = ["clavicle_l", "clavicle_r"];
 
 export type Clip = { name: string; end: number; tracks: Map<string, Partial<Record<keyof Pose, (t: number) => number[]>>> };
 

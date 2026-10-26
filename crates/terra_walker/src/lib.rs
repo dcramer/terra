@@ -21,6 +21,7 @@ pub mod controls;
 pub mod feet;
 pub mod figure;
 pub mod intent;
+pub mod layer;
 pub mod lift;
 /// What the model files carry, for this crate's tests and those of the crates above
 /// (the `testing` feature).

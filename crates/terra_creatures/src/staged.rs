@@ -32,6 +32,7 @@ use bevy::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::time::Duration;
+use terra_walker::layer::Nodes;
 use terra_walker::{appearance, character};
 use terra_world::planet::Planet;
 use terra_world::remote::{method, refused};
@@ -73,8 +74,18 @@ impl Staged {
             once,
             blend: Duration::from_millis(blend_ms),
             from_s: from_s.max(0.0),
+            hold: None,
         });
         self.asked_n += 1;
+    }
+
+    /// Blends it into a clip with the arms holding `hold`'s first pose over it (a stance's
+    /// hold, `terra_walker::layer`), looping.
+    pub fn tell_play_held(&mut self, clip: &str, hold: &str, speed: f32, blend_ms: u64) {
+        self.tell_play(clip, speed, false, blend_ms, 0.0);
+        if let Some(asked) = &mut self.asked {
+            asked.hold = Some(hold.to_string());
+        }
     }
 
     /// Changes the speed of the clip playing without starting it again.
@@ -128,6 +139,8 @@ struct Asked {
     blend: Duration,
     /// Seconds into the clip it starts from, past a slow start.
     from_s: f32,
+    /// A clip whose first pose the arms hold over it (`terra_walker::layer`).
+    hold: Option<String>,
 }
 
 /// A figure whose model and clips are still loading: what to dress it in once they are in.
@@ -139,15 +152,18 @@ struct Dressing {
     hold: Vec<(String, String)>,
 }
 
-/// On a figure's animation player: whose, its clips by name, two of each so a clip played
-/// again blends from itself, the stride clips' paces, and what it plays.
+/// On a figure's animation player: whose, its clips by name, at their places in its graph
+/// (two of each so a clip played again blends from itself, and the hold layer's,
+/// `terra_walker::layer`), the stride clips' paces, what it plays (which copy, and whether
+/// under a hold), and the holds laid.
 #[derive(Component)]
 struct Animates {
     staged: Entity,
-    clips: HashMap<String, [AnimationNodeIndex; 2]>,
+    clips: HashMap<String, Nodes>,
     paces: HashMap<String, f32>,
-    playing: Option<(String, usize)>,
+    playing: Option<(String, usize, bool)>,
     applied: u32,
+    holds: Vec<terra_walker::layer::Held>,
 }
 
 pub fn plugin(app: &mut App) {
@@ -157,6 +173,11 @@ pub fn plugin(app: &mut App) {
             (dress, stage, animate, fireside::keep_clear).chain(),
             quench::quench,
         ),
+    )
+    .add_systems(
+        PostUpdate,
+        hold.after(bevy::animation::transition::advance_transitions)
+            .before(bevy::animation::animate_targets),
     )
     .add_systems(
         PostUpdate,
@@ -253,17 +274,7 @@ fn dress(
         if let Some(baked) = baked.as_mut() {
             baked.register(moves, &nodes);
         }
-        let mut graph = AnimationGraph::new();
-        let root = graph.root;
-        let named: HashMap<String, [AnimationNodeIndex; 2]> = moves
-            .named_animations
-            .iter()
-            .map(|(name, clip)| {
-                let a = graph.add_clip(clip.clone(), 1.0, root);
-                let b = graph.add_clip(clip.clone(), 1.0, root);
-                (name.to_string(), [a, b])
-            })
-            .collect();
+        let (graph, named) = terra_walker::layer::graph(moves, &nodes);
         let graph = graphs.add(graph);
         let mut body = commands.spawn((
             WorldAssetRoot(scene),
@@ -302,6 +313,7 @@ fn dress(
                             paces: paces.clone(),
                             playing: None,
                             applied: 0,
+                            holds: Vec::new(),
                         },
                     ));
                 }
@@ -457,29 +469,36 @@ fn animate(
                     Some(nodes) => {
                         // The same clip again blends from itself, by its other copy.
                         let copy = match &animates.playing {
-                            Some((name, copy)) if *name == asked.clip => 1 - copy,
+                            Some((name, copy, _)) if *name == asked.clip => 1 - copy,
                             _ => 0,
                         };
-                        let active = transitions.play(&mut player, nodes[copy], asked.blend);
+                        let hold = asked.hold.as_ref().and_then(|h| animates.clips.get(h));
+                        let held = hold.map(|hold| hold.over);
+                        let node = nodes.of(copy, held.is_some());
+                        let active = transitions.play(&mut player, node, asked.blend);
                         if !asked.once {
                             active.repeat();
                         }
                         if asked.from_s > 0.0 {
                             active.seek_to(asked.from_s);
                         }
-                        animates.playing = Some((asked.clip.clone(), copy));
+                        animates.playing = Some((asked.clip.clone(), copy, held.is_some()));
+                        if let Some(over) = held {
+                            let holds = &mut animates.holds;
+                            terra_walker::layer::lay(holds, &mut player, over, node);
+                        }
                     }
                     None => warn!("Staged: {} has no clip {}.", staged.name, asked.clip),
                 }
             }
         }
-        let Some((name, copy)) = animates.playing.clone() else {
+        let Some((name, copy, held)) = animates.playing.clone() else {
             continue;
         };
         let Some(active) = animates
             .clips
             .get(&name)
-            .and_then(|nodes| player.animation_mut(nodes[copy]))
+            .and_then(|nodes| player.animation_mut(nodes.of(copy, held)))
         else {
             continue;
         };
@@ -527,6 +546,13 @@ struct Spawn {
 }
 
 /// The figure called a name, if there is one.
+/// Each hold takes the weight of the clips under it (`terra_walker::layer::ride`).
+fn hold(mut animators: Query<(&mut Animates, &mut AnimationPlayer)>) {
+    for (mut animates, mut player) in &mut animators {
+        terra_walker::layer::ride(&mut animates.holds, &mut player);
+    }
+}
+
 fn figure(world: &mut World, name: &str) -> Option<Entity> {
     let mut state = SystemState::<Query<(Entity, &Staged)>>::new(world);
     let figures = state.get(world).ok()?;
@@ -659,10 +685,12 @@ struct Play {
     once: bool,
     blend_ms: Option<u64>,
     from_s: Option<f32>,
+    /// A clip whose first pose the arms hold over it (a stance's hold, `terra_walker::layer`).
+    hold: Option<String>,
 }
 
 /// Blends a figure into a clip: looping, or once and held on its last pose until the next,
-/// from its start or so far into it.
+/// from its start or so far into it, with a hold over its arms if asked.
 fn play(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let asked: Play = parse_some(params)?;
     let entity = named(world, &asked.name)?;
@@ -673,6 +701,7 @@ fn play(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             once: asked.once,
             blend: Duration::from_millis(asked.blend_ms.unwrap_or(BLEND_MS)),
             from_s: asked.from_s.unwrap_or(0.0).max(0.0),
+            hold: asked.hold,
         });
         staged.asked_n += 1;
     }

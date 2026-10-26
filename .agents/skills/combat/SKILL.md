@@ -32,7 +32,7 @@ Ordered by what a player notices most (`noticed`), then by how far out. Re-read 
 
 Each fighter plays the set its own hands give (holding.md step 3, round 27: `Hands`, the off hand's slot, D460); `held.torch.*` measure a torch carried in the off hand beside the sword over the guard, walk and strafes (a moves row's `hold`).
 
-The drawn walk is `Fight_Walk`, the library's walk with the guard's arms held over it (D458, round 13), and passes; a drawn body never shows `Idle_Loop` (it stands in the guard), so the move check measures the guards, the strafes, `Fight_Walk` and `Jump_Loop`.
+The drawn walk is the library's `Walk_Loop` with the set's guard laid over its arms at run time by a bone mask (D458, `terra_walker::layer`, round 28; `Fight_Walk` is gone), and passes, as do the jog and sprint under it; a drawn body never shows `Idle_Loop` (it stands in the guard), so the move check measures the guards, the strafes, `Walk_Loop+Keyed_Guard` (a clip under a hold), the jog and sprint so, and `Jump_Loop`. The guard laid over the strafes or the jump puts the sword into the thigh, so they keep their own arms.
 
 Not measurable yet (`?`, each with what it needs in `criteria.json`): the blind review score against Enshrouded, Enshrouded's block raise (`timing.block.raise`), the guard's shield face and the blows' specs in the game's set, roll distance, hit reactions, a light blow's recovery, the partner's telegraph seen from the game's camera.
 

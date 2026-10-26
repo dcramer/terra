@@ -61,9 +61,10 @@ pub const HEALTH: f32 = 100.0;
 const LOCK_M: f32 = 15.0;
 /// How long a beaten fighter lies before the spar starts again, seconds.
 const DOWN_S: f32 = 3.0;
-/// The walk a drawn body goes forward and back in: the library's walk with both arms held as
-/// the guard holds them (D458), so the sword and shield stay out of the legs.
-const WALK: &str = "Fight_Walk";
+/// The walk a drawn body goes forward and back in: the library's walk, every body's, with the
+/// set's guard laid over both arms by the hold layer (`terra_walker::layer`, D458), so the
+/// sword and shield stay out of the legs.
+const WALK: &str = "Walk_Loop";
 
 /// Every move set, read once; each fighter plays the one its own hands pick (`set_for`).
 #[derive(Resource)]
@@ -525,6 +526,16 @@ fn show(
     acting.play(act);
 }
 
+/// Asks the figure for a looping clip with `hold`'s first pose laid over its arms (the stance's
+/// hold over a locomotion clip, `terra_walker::layer`), unless it shows it already.
+fn show_held(drawn: &mut Drawn, acting: &mut Acting, clip: &str, hold: &str, speed: f32) {
+    let fresh = drawn.showing.as_ref().is_none_or(|(now, _)| now != clip);
+    show(drawn, acting, clip, speed, false, 0.0, Some(180));
+    if fresh && let Some(act) = &mut acting.clip {
+        act.hold = Some(hold.to_string());
+    }
+}
+
 /// How the walk goes this tick: a move's own drive (closing on a locked target in a blow's
 /// wind-up), a shove, or the stance's pace, facing the view or the target.
 /// Where the player is, the partner locked on to, and the nearest partner.
@@ -633,7 +644,11 @@ fn walk_clip(
         }
         _ => 1.0,
     };
-    show(drawn, acting, clip, speed, false, 0.0, Some(180));
+    if clip == WALK {
+        show_held(drawn, acting, clip, guard, speed);
+    } else {
+        show(drawn, acting, clip, speed, false, 0.0, Some(180));
+    }
 }
 
 #[cfg(test)]

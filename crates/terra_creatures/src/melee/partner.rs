@@ -57,6 +57,17 @@ pub enum Beat {
 
 impl Partner {
     /// Tells its figure a clip unless it plays it already.
+    /// Shows a locomotion clip looping with `hold`'s first pose laid over its arms (the stance's
+    /// hold, `terra_walker::layer`), as `show` does.
+    pub fn show_held(&mut self, staged: &mut Staged, clip: &str, hold: &str) {
+        if self.showing.as_deref() == Some(clip) {
+            staged.set_clip_speed(1.0);
+            return;
+        }
+        self.showing = Some(clip.to_string());
+        staged.tell_play_held(clip, hold, 1.0, 200);
+    }
+
     pub fn show(&mut self, staged: &mut Staged, clip: &str, speed: f32, once: bool) {
         if self.showing.as_deref() == Some(clip) {
             staged.set_clip_speed(speed);
@@ -238,7 +249,7 @@ pub fn think(
                 fighter.guard_s = None;
                 if far > CLOSE_M {
                     staged.tell_go(Some(foe - toward * (CLOSE_M - 0.2)), WALK_MPS);
-                    partner.show(&mut staged, super::WALK, 1.0, false);
+                    partner.show_held(&mut staged, super::WALK, &set.guard);
                 } else {
                     partner.to(Beat::Guard);
                 }

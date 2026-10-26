@@ -4,7 +4,9 @@
 //!
 //! `--model <path>` loads a .glb or .gltf under `assets/`; given more than once, the
 //! models stand side by side doing the same thing. `--anim <clip>` plays a clip
-//! (repeatable; the first plays when looking by hand). `--hold <item>` puts an item's held
+//! (repeatable; the first plays when looking by hand); `--anim Walk_Loop+Keyed_Guard` plays a
+//! clip with another's first pose laid over its arms, as the game lays a stance's hold
+//! (`terra_walker::layer`). `--hold <item>` puts an item's held
 //! look in the right hand, `--wear <item>` puts on an item's look for each model's body, and
 //! `--attach <file>[@<socket>]` puts on any look, on a socket if given, otherwise as the file
 //! says (`character`). `--focus <name>` looks closely at one
@@ -71,18 +73,23 @@ struct Model {
     /// Its scene has been spawned; a model without animations never gets a player.
     loaded: bool,
     player: Option<Entity>,
-    clips: Vec<(String, AnimationNodeIndex, f32)>,
+    clips: Vec<Clip>,
 }
+
+/// A clip as a model's graph has it: its name, its node, its length, and the node of the hold
+/// laid over its arms if its name gives one (`Walk_Loop+Keyed_Guard`).
+type Clip = (String, AnimationNodeIndex, f32, Option<AnimationNodeIndex>);
 
 impl Bench {
     /// Every model's player and its node and length for `clip`.
     fn playing<'a>(
         &'a self,
         clip: &'a str,
-    ) -> impl Iterator<Item = (Entity, AnimationNodeIndex, f32)> + 'a {
+    ) -> impl Iterator<Item = (Entity, AnimationNodeIndex, f32, Option<AnimationNodeIndex>)> + 'a
+    {
         self.models.iter().filter_map(move |model| {
-            let (_, node, length) = model.clips.iter().find(|(name, _, _)| name == clip)?;
-            Some((model.player?, *node, *length))
+            let (_, node, length, hold) = model.clips.iter().find(|c| c.0 == clip)?;
+            Some((model.player?, *node, *length, *hold))
         })
     }
 
@@ -280,6 +287,7 @@ fn spawn(
     options: Res<Options>,
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
+    gltf_nodes: Res<Assets<bevy::gltf::GltfNode>>,
     clips: Res<Assets<AnimationClip>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     mut camera: Query<&mut Transform, With<MainCamera>>,
@@ -331,20 +339,7 @@ fn spawn(
         let mut names: Vec<&str> = gltf.named_animations.keys().map(AsRef::as_ref).collect();
         names.sort();
         info!("workbench: {path}: {} clips: {:?}", names.len(), names);
-        let mut graph = AnimationGraph::new();
-        let mut nodes = Vec::new();
-        for name in &bench.clips {
-            let Some(handle) = gltf.named_animations.get(name.as_str()) else {
-                warn!("workbench: {path} has no clip named {name}");
-                continue;
-            };
-            let length = clips.get(handle).map_or(1.0, AnimationClip::duration);
-            nodes.push((
-                name.clone(),
-                graph.add_clip(handle.clone(), 1.0, graph.root),
-                length,
-            ));
-        }
+        let (graph, nodes) = placed_clips(gltf, &gltf_nodes, &clips, &bench.clips, path);
         let graph = graphs.add(graph);
         let Some(scene) = gltf.default_scene.clone() else {
             continue;
@@ -429,10 +424,13 @@ fn spawn(
                     commands
                         .entity(entity)
                         .insert(AnimationGraphHandle(graph.clone()));
-                    if let (Ok(mut player), Some((_, node, _))) =
+                    if let (Ok(mut player), Some((_, node, _, hold))) =
                         (players.get_mut(entity), model.clips.first())
                     {
                         player.play(*node).repeat();
+                        if let Some(hold) = hold {
+                            player.play(*hold).pause();
+                        }
                     }
                     model.player = Some(entity);
                     model.loaded = true;
@@ -547,6 +545,36 @@ fn view(
     }
 }
 
+/// A model's graph (`terra_walker::layer::graph`) and the bench's clips placed in it, a clip
+/// named `A+B` as `A` under `B`'s hold.
+fn placed_clips(
+    gltf: &Gltf,
+    gltf_nodes: &Assets<bevy::gltf::GltfNode>,
+    clips: &Assets<AnimationClip>,
+    names: &[String],
+    path: &str,
+) -> (AnimationGraph, Vec<Clip>) {
+    let (graph, placed) = terra_walker::layer::graph(gltf, gltf_nodes);
+    let mut nodes = Vec::new();
+    for name in names {
+        let (under, over) = match name.split_once('+') {
+            Some((under, over)) => (under, Some(over)),
+            None => (name.as_str(), None),
+        };
+        let (Some(handle), Some(at)) = (gltf.named_animations.get(under), placed.get(under)) else {
+            warn!("workbench: {path} has no clip named {under}");
+            continue;
+        };
+        let hold = over.and_then(|over| placed.get(over)).map(|at| at.over);
+        if over.is_some() && hold.is_none() {
+            warn!("workbench: {path} has no clip named {name}'s hold");
+        }
+        let length = clips.get(handle).map_or(1.0, AnimationClip::duration);
+        nodes.push((name.clone(), at.of(0, hold.is_some()), length, hold));
+    }
+    (graph, nodes)
+}
+
 /// Holds every model at `fraction` of the way through `clip`, or plays it from the start,
 /// with anything in hand carried or used as that clip has it.
 fn pose(
@@ -559,11 +587,15 @@ fn pose(
     for mut hand in hands.iter_mut() {
         hand.0 = character::CARRIED_IN.contains(&clip);
     }
-    for (entity, node, length) in bench.playing(clip) {
+    for (entity, node, length, hold) in bench.playing(clip) {
         let Ok(mut player) = players.get_mut(entity) else {
             continue;
         };
         player.stop_all();
+        // The hold at its first pose, over the arms (`terra_walker::layer`).
+        if let Some(hold) = hold {
+            player.play(hold).pause();
+        }
         match fraction {
             Some(fraction) => {
                 player.play(node).seek_to(length * fraction).pause();

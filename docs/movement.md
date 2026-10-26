@@ -109,7 +109,7 @@ Each stage is done when its checks pass and a duel run or film shows it; the tro
 | Stage | Builds | Done when |
 |---|---|---|
 | 1. Clips fit for a game | Root extraction at export; a retarget pose per body at export; phases and reach measured from the weapon's tip; guard poses at start and end | Clip and move checks pass on the man's and the troll's sets; no hips travel left in a move |
-| 2. Mover and pose | `terra_motion`'s intent, mover and pushbox; blend spaces and the state machine; inertialised transitions; the player's figure and people moved onto it | The walker walks, jogs, starts, stops and turns with feet sliding under 3 cm; input to motion within one frame |
+| 2. Mover and pose | `terra_motion`'s intent, mover and pushbox; blend spaces and the state machine; inertialised transitions; a stance's hold over locomotion by bone mask (built: `terra_walker::layer`, D458); the player's figure and people moved onto it | The walker walks, jogs, starts, stops and turns with feet sliding under 3 cm; input to motion within one frame |
 | 3. Moves and contact | Move sets as data; the move runner with phases, cancels and buffering; root-motion warping; hit volumes, hurt zones, hit-stop and reactions; `terra_creatures::combat` and `terra_creatures::staged` on it | A duel run of the man against the troll passes; the troll fight reshot by intents |
 | 4. Fix-up | Foot IK and pelvis, hand IK on grips and shields, look-at and aim, additive lean | The penetration ratchet at zero for shield and off hand; feet on slopes within 2 cm |
 | 5. Creatures | The big biped, the runner and the bird on the same pipeline; the many-legged walker; size by scale | A duel run per plan, at three sizes |
