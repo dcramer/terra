@@ -151,11 +151,11 @@ fn show(
     sky: Option<Res<crate::sky::Sky>>,
     volumes: Res<Volumes>,
     mut fog: Query<(&mut FogVolume, &mut Transform, &mut Visibility)>,
-    indoor_sky: Option<Res<crate::scene::IndoorSky>>,
+    shut_off: Option<Res<crate::indoor::ShutOff>>,
 ) {
     // In a room shut off from the sky a fire's air glows as by night (D488).
-    let air_lit = indoor_sky.map_or(1.0, |s| s.0);
-    let night = crate::indoor::fires_night(sky.map_or(0.0, |sky| sky.night), air_lit);
+    let shut_off = shut_off.map_or(0.0, |s| s.0);
+    let night = crate::indoor::fires_night(sky.map_or(0.0, |sky| sky.night), shut_off);
     for (i, &entity) in volumes.0.iter().enumerate() {
         let Ok((mut volume, mut transform, mut visibility)) = fog.get_mut(entity) else {
             continue;

@@ -31,9 +31,9 @@ pub(super) const WOODED_NIGHT_EV: f32 = 3.5;
 /// Forest's moonlit frames (0.08-0.16); without them, 0.04.
 pub(super) const SNOW_DARK_ADAPTS: f32 = 0.6;
 
-/// The camera's exposure for the hour's `key`, with the sky so `open` over the eye, on a world
-/// that sees far or not, so far into the night and `outdoors` (shut off, the night's, D488): the
-/// key in a forest by day; under trees opened by night; out in a far-seeing world's air, less.
+/// The camera's exposure for the hour's `key` (a shut room's already, `indoor::key`), with the
+/// sky so `open` over the eye, on a world that sees far or not, so far into the night and
+/// `outdoors` (shut off, the night's, D488): the key in a forest by day; under trees opened by night; out in a far-seeing world's air, less.
 /// `open` is `OpenOverhead`, None where no canopy is worked out round the eye (the yard, a world
 /// with no trees): the sky open there, as `SkySeen` reads it, so its night keeps the key.
 pub(super) fn open_exposure(
@@ -44,7 +44,7 @@ pub(super) fn open_exposure(
     outdoors: f32,
 ) -> f32 {
     let night = night.clamp(0.0, 1.0);
-    let wooded = crate::indoor::key(key, outdoors) - wooded_night_ev(open, night, outdoors);
+    let wooded = key - wooded_night_ev(open, night, outdoors);
     if !far_seeing {
         return wooded;
     }

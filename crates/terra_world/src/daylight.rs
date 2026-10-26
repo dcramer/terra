@@ -573,7 +573,7 @@ fn shine(
     mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     mut nightfall: ResMut<Nightfall>,
     air_scale: Option<Res<crate::air::AirScale>>,
-    (eye, planet, weather, cast, snow_opens, indoor_sky, snow_cover): (
+    (eye, planet, weather, cast, snow_opens, indoor_sky, snow_cover, shut_off): (
         Query<&GlobalTransform, With<MainCamera>>,
         Option<Res<Planet>>,
         Option<Res<crate::weather::Weather>>,
@@ -581,6 +581,7 @@ fn shine(
         Option<Res<crate::weather::SnowOpens>>,
         Option<Res<crate::scene::IndoorSky>>,
         Option<Res<crate::climate::SnowCover>>,
+        Option<Res<crate::indoor::ShutOff>>,
     ),
     mut clear_sky: Local<Option<f32>>,
 ) {
@@ -668,7 +669,9 @@ fn shine(
     let level = (NIGHT_HAZE + (1.0 - NIGHT_HAZE) * (1.0 - dark)) * libm::exp2f(wooded);
     // Snow lying round the eye opens the camera about half a stop, so it reads white (D419).
     let opens = under.opens_ev() - snow_opens.map_or(0.0, |s| s.0);
-    let set = open_exposure(light.exposure, overhead, far_seeing, dark * snowed, air_lit) + opens;
+    // A room shut off from the sky keys the eye as its own, eased in over a second or two.
+    let key = crate::indoor::key(light.exposure, shut_off.map_or(0.0, |s| s.0));
+    let set = open_exposure(key, overhead, far_seeing, dark * snowed, air_lit) + opens;
     let air_scale = air_scale
         .as_deref()
         .copied()

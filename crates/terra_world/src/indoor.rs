@@ -44,9 +44,21 @@ const FILL: f32 = 140.0;
 /// reviewers: "a ceiling slab that reads as sky"); a neutral fill took the blue off them
 /// (round 18's stills, the sky's own light at nought changing nothing).
 const FILL_COLOUR: Color = Color::srgb(0.78, 0.84, 0.95);
+/// How long the room's key, fill and fires' night take to go all the way from the open air's
+/// to a shut room's, seconds. The air round the eye eases over 0.8 s across its whole range
+/// (`terra_bases::light`), but a room is shut over its last third ([`SHUT`]), so the fires went
+/// 3 stops brighter in a quarter of a second at a dungeon's doorway (dungeon light round): as
+/// an eye adapts, over a second or two (Unreal's eye adaptation speeds, 1-3 stops a second).
+const EASE_S: f32 = 1.5;
+
+/// How shut off from the sky the air round the eye is ([`shut`]), eased over [`EASE_S`]: what
+/// the eye's key, the fill and the fires' night are set by.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct ShutOff(pub f32);
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(PostUpdate, fill);
+    app.init_resource::<ShutOff>()
+        .add_systems(PostUpdate, (ease, fill).chain());
 }
 
 /// How shut off from the sky the air round the eye is, from 0 (outdoors, or a room open
@@ -55,30 +67,43 @@ pub fn shut(air_lit: f32) -> f32 {
     1.0 - smoothstep(SHUT[0], SHUT[1], air_lit)
 }
 
-/// The eye's key for the hour's `key` with so much of the sky reaching the air round it.
-pub fn key(key: f32, air_lit: f32) -> f32 {
-    key + (INDOOR_EV - key) * shut(air_lit)
+/// The eye's key for the hour's `key` with the air round it so shut off (`ShutOff`).
+pub fn key(key: f32, shut_off: f32) -> f32 {
+    key + (INDOOR_EV - key) * shut_off
 }
 
-/// How far into the night the fires burn, for the sky's `night`: by night in a room shut off
-/// from the sky, where nothing outshines them.
-pub fn fires_night(night: f32, air_lit: f32) -> f32 {
-    night.max(shut(air_lit))
+/// How far into the night the fires burn, for the sky's `night`, with the air round the eye so
+/// shut off (`ShutOff`): by night in a room shut off from the sky, where nothing outshines them.
+pub fn fires_night(night: f32, shut_off: f32) -> f32 {
+    night.max(shut_off)
 }
 
-/// How bright the room's fill is round an eye with so much of the sky reaching it, cd/m².
-pub fn fill_brightness(air_lit: f32) -> f32 {
-    FILL * shut(air_lit)
+/// How bright the room's fill is round an eye with the air so shut off (`ShutOff`), cd/m².
+pub fn fill_brightness(shut_off: f32) -> f32 {
+    FILL * shut_off
+}
+
+/// How shut off the air is a step toward what it is to be: [`EASE_S`] for the whole way.
+fn toward(now: f32, wanted: f32, seconds: f32) -> f32 {
+    let step = seconds / EASE_S;
+    now + (wanted - now).clamp(-step, step)
+}
+
+/// Eases how shut off the air round the eye is toward what the sky reaching it says.
+fn ease(air: Option<Res<IndoorSky>>, time: Res<Time>, mut shut_off: ResMut<ShutOff>) {
+    let wanted = shut(air.map_or(1.0, |air| air.0));
+    let now = toward(shut_off.0, wanted, time.delta_secs());
+    shut_off.set_if_neq(ShutOff(now));
 }
 
 /// Gives the camera the room's fill while it is shut off from the sky, and takes it away
 /// outside, where the world's own ambient (none, `skylight`) is left as it was.
 fn fill(
     mut commands: Commands,
-    air: Option<Res<IndoorSky>>,
+    shut_off: Res<ShutOff>,
     camera: Query<(Entity, Option<&AmbientLight>), With<MainCamera>>,
 ) {
-    let brightness = fill_brightness(air.map_or(1.0, |air| air.0));
+    let brightness = fill_brightness(shut_off.0);
     for (entity, had) in &camera {
         match had {
             _ if brightness <= 0.0 => {
@@ -105,22 +130,65 @@ mod tests {
     #[test]
     fn a_room_shut_off_from_the_sky_is_seen_the_same_by_day_as_by_night() {
         // Noon's key and midnight's (daylight::keys) give one key in a dungeon's deep room.
-        assert_eq!(key(11.8, 0.0), key(9.0, 0.0));
+        let deep = shut(0.0);
+        assert_eq!(key(11.8, deep), key(9.0, deep));
         // And its fires burn as by night at noon.
-        assert_eq!(fires_night(0.0, 0.0), 1.0);
+        assert_eq!(fires_night(0.0, deep), 1.0);
         // Outdoors, and in a house's room (D486: 0.6 of the sky), nothing changes.
         for air_lit in [1.0, 0.6] {
-            assert_eq!(key(11.8, air_lit), 11.8);
-            assert_eq!(fires_night(0.3, air_lit), 0.3);
-            assert_eq!(fill_brightness(air_lit), 0.0);
+            let shut_off = shut(air_lit);
+            assert_eq!(key(11.8, shut_off), 11.8);
+            assert_eq!(fires_night(0.3, shut_off), 0.3);
+            assert_eq!(fill_brightness(shut_off), 0.0);
         }
+    }
+
+    #[test]
+    fn through_a_doorway_the_fires_and_the_eye_change_over_a_second_or_two() {
+        // Stepping in from the open air at noon, and back out: the air round the eye goes from
+        // the sky's to none, eased over 0.8 s as `terra_bases::light` eases it; a kept fire is
+        // 3 stops brighter by night (the doorway's step, measured on the crypt's tour).
+        let dt = 1.0 / 60.0;
+        let (mut air, mut shut_off) = (1.0f32, 0.0f32);
+        let (mut fires, mut eye) = (Vec::new(), Vec::new());
+        for frame in 0..600 {
+            let wanted = if frame < 300 { 0.0 } else { 1.0 };
+            air += (wanted - air).clamp(-dt / 0.8, dt / 0.8);
+            shut_off = toward(shut_off, shut(air), dt);
+            fires.push(3.0 * fires_night(0.0, shut_off));
+            eye.push(key(11.8, shut_off));
+        }
+        // No quarter of a second changes the fires by a stop (at once, it was 3), nor the eye
+        // by a third of one.
+        let quarter = (0.25 / dt) as usize;
+        for (series, most) in [(&fires, 1.0), (&eye, 1.0 / 3.0)] {
+            for (i, w) in series.windows(quarter + 1).enumerate() {
+                let step = (w[quarter] - w[0]).abs();
+                assert!(
+                    step < most,
+                    "{step} stops over the quarter second from frame {i}"
+                );
+            }
+        }
+        // And they get there: lit as by night and keyed as the room within 2.5 s of the step,
+        // and as the day again 2.5 s after stepping out.
+        let at = |s: f32| (s / dt) as usize;
+        let (inside, outside) = (
+            (fires[at(2.5)], eye[at(2.5)]),
+            (fires[at(7.5)], eye[at(7.5)]),
+        );
+        assert!(
+            inside.0 == 3.0 && (inside.1 - INDOOR_EV).abs() < 1e-5,
+            "{inside:?}"
+        );
+        assert_eq!(outside, (0.0, 11.8));
     }
 
     #[test]
     fn a_shut_room_is_filled_dim_and_cool() {
         // A stone wall (albedo 0.3) under the fill alone, at the room's key, on screen
         // (1 / (1.2 x 2^EV) per cd/m², Bevy's exposure).
-        let on_screen = fill_brightness(0.0) * 0.3 / (1.2 * libm::exp2f(INDOOR_EV));
+        let on_screen = fill_brightness(shut(0.0)) * 0.3 / (1.2 * libm::exp2f(INDOOR_EV));
         // Dim: well under a mid-grey, three stops at least, so the torches' pools stand out.
         assert!(on_screen < 0.18 / 8.0, "{on_screen}");
         // Seen: within six stops of it, over 8-bit black after the tonemapper (at 8 cd/m² it

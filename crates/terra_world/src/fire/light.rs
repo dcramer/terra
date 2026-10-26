@@ -839,7 +839,7 @@ pub(super) fn light(
     mut fog: ResMut<super::fog::Glows>,
     tier: Res<super::BreathTier>,
     sky_light: Option<Res<crate::skylight::SkyLight>>,
-    indoor_sky: Option<Res<crate::scene::IndoorSky>>,
+    shut_off: Option<Res<crate::indoor::ShutOff>>,
 ) {
     let t = time.elapsed_secs_wrapped();
     let was: Vec<Was> = drawn
@@ -865,8 +865,8 @@ pub(super) fn light(
     wants.extend(strikes(&blazes, &drawn.jets, t, *tier));
     wants.extend(lit(&blazes, t, *tier));
     // In a room shut off from the sky the fires burn as by night: nothing outshines them (D488).
-    let air_lit = indoor_sky.map_or(1.0, |s| s.0);
-    let night = crate::indoor::fires_night(sky.as_ref().map_or(0.0, |sky| sky.night), air_lit);
+    let shut_off = shut_off.map_or(0.0, |s| s.0);
+    let night = crate::indoor::fires_night(sky.as_ref().map_or(0.0, |sky| sky.night), shut_off);
     let twilight = sky.as_ref().map_or(0.0, |sky| sky.twilight);
     let sky_light = sky_light.map_or(0.0, |lit| lit.brightness);
     // Each light is brighter by night by its own stops: a kept fire's fewer than a blaze's, so
