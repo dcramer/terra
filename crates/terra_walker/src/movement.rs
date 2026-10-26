@@ -598,6 +598,7 @@ fn shown(
     dt: f32,
 ) {
     let up = body.up;
+    motion.wish = wish.reject_from(up);
     motion.velocity = body.velocity.reject_from(up);
     motion.rising = body.velocity.dot(up);
     motion.on_ground = body.ground == Ground::Grounded;

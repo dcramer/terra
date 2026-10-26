@@ -40,8 +40,10 @@ struct FigureModel {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Doing {
+pub(crate) enum Doing {
     Idle,
+    /// Going from a stride to standing (`starts`).
+    Stop,
     Jog,
     Sprint,
     Fall,
@@ -62,6 +64,7 @@ impl Doing {
     fn clip(self) -> &'static str {
         match self {
             Doing::Idle => "Idle_Loop",
+            Doing::Stop => crate::starts::STOPS[0],
             Doing::Jog => "Jog_Fwd_Loop",
             Doing::Sprint => "Sprint_Loop",
             Doing::Fall => "Jump_Loop",
@@ -88,7 +91,7 @@ impl Doing {
     fn once(self) -> bool {
         matches!(
             self,
-            Doing::Use | Doing::Down | Doing::Attack | Doing::Flinch | Doing::Roll
+            Doing::Use | Doing::Down | Doing::Attack | Doing::Flinch | Doing::Roll | Doing::Stop
         )
     }
 }
@@ -100,6 +103,9 @@ pub struct Moves {
     clips: HashMap<String, Nodes>,
     /// The stride clips' own paces (`pace.rs`), so their feet do not slide.
     paces: HashMap<String, f32>,
+    /// Every clip's markers, by name: a stop's distance curves and the loops' steps
+    /// (`starts`).
+    markers: HashMap<String, terra_motion::feet::Markers>,
 }
 
 impl Moves {
@@ -134,6 +140,9 @@ struct Animated {
     holds: Vec<crate::layer::Held>,
     /// Where the player's body was shown last frame (`shown_velocity`).
     shown: Option<Vec3>,
+    /// A stop's time, as its distance has it, and which stop (`starts`).
+    at: f32,
+    stop: usize,
 }
 
 /// A clip played in step with another, taking its share of that one's weight as the
@@ -232,8 +241,13 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             PostUpdate,
-            mix.after(bevy::animation::transition::advance_transitions)
-                .before(bevy::animation::animate_targets),
+            (
+                mix.after(bevy::animation::transition::advance_transitions)
+                    .before(bevy::animation::animate_targets),
+                crate::starts::lock_roots
+                    .after(bevy::app::AnimationSystems)
+                    .before(crate::Fitted),
+            ),
         );
 }
 
@@ -267,6 +281,9 @@ fn prepare(
         graph: graphs.add(graph),
         clips,
         paces: crate::pace::paces(gltf, &gltf_nodes).into_iter().collect(),
+        markers: crate::feet::markers(gltf, &gltf_nodes)
+            .into_iter()
+            .collect(),
     });
 }
 
@@ -359,14 +376,18 @@ fn dress(
             mixed: Vec::new(),
             holds: Vec::new(),
             shown: None,
+            at: 0.0,
+            stop: 0,
         },
     ));
 }
 
 /// Picks the animation that fits what each player is doing, or what a layer above asks,
 /// and blends their figure into it.
+#[allow(clippy::too_many_arguments)]
 fn animate(
     moves: Option<Res<Moves>>,
+    movers: Option<Res<crate::movement::Movers>>,
     time: Res<Time>,
     mut players: Query<
         (
@@ -409,10 +430,24 @@ fn animate(
         let act = acting
             .and_then(|acting| acting.clip.as_ref())
             .filter(|_| !downed);
+        let speed = velocity.length();
         let doing = match act {
             Some(_) => Doing::Acting,
-            None => doing(velocity.length(), motion.airborne, stance, downed, swim),
+            None => crate::starts::shown(
+                animated.doing,
+                doing(speed, motion.airborne, stance, downed, swim),
+                motion.wish != Vec3::ZERO,
+                animated.at,
+                moves.markers.get(clip_of(animated.doing, animated.stop)),
+            ),
         };
+        // The kind's braking and the figure's size against its clips', for a stop.
+        let matching = (
+            speed,
+            movers.as_ref().map_or(0.0, |m| m.kind().decel),
+            place.scale().y,
+            time.delta_secs(),
+        );
         if let Some(mut lie) = lie {
             lie.asked = match doing {
                 Doing::Swim(swim) => crate::swim::lie(motion, Some(swim)),
@@ -421,6 +456,24 @@ fn animate(
         }
         let asked = acting.map_or(0, |acting| acting.asked);
         if animated.doing != doing || (act.is_some() && animated.applied != asked) {
+            // A stop giving way plays on at its own pace as it fades, not held where it was.
+            if animated.doing == Doing::Stop
+                && let Some(main) = transitions.get_main_animation()
+                && let Some(fading) = animator.animation_mut(main)
+            {
+                fading.set_speed(1.0);
+            }
+            if act.is_none() {
+                let planted = feet.get(animated.player).ok().and_then(planted);
+                let (at, stop) = entered(
+                    &moves,
+                    (animated.doing, doing),
+                    (animated.at, animated.stop),
+                    planted,
+                    matching,
+                );
+                (animated.at, animated.stop) = (at, stop);
+            }
             change(
                 &moves,
                 &mut animated,
@@ -442,37 +495,35 @@ fn animate(
         let Some(playing) = animator.animation_mut(main) else {
             continue;
         };
-        let mut warp = 1.0;
-        match act {
-            // As asked, held where asked.
-            Some(act) => {
-                let held =
-                    act.speed >= 0.0 && act.hold_at.is_some_and(|at| playing.seek_time() >= at);
-                let speed = if held { 0.0 } else { act.speed };
-                playing.set_speed(speed);
-                // A clip mixed into it keeps in step.
-                for m in animated.mixed.iter().filter(|m| m.main == main) {
-                    if let Some(mixed) = animator.animation_mut(m.mix) {
-                        mixed.set_speed(speed);
-                    }
+        let rate = play(
+            &moves,
+            act,
+            doing,
+            &name,
+            playing,
+            &mut animated.at,
+            matching,
+        );
+        // A clip mixed into an asked one keeps in step.
+        if act.is_some() {
+            let speed = animator.animation(main).map_or(1.0, |a| a.speed());
+            for m in animated.mixed.iter().filter(|m| m.main == main) {
+                if let Some(mixed) = animator.animation_mut(m.mix) {
+                    mixed.set_speed(speed);
                 }
             }
-            // The jog and sprint at the player's speed, played and warped (`pace::gait`).
-            None if matches!(doing, Doing::Jog | Doing::Sprint) => {
-                if let Some(pace) = moves.paces.get(&name) {
-                    let gait = crate::pace::gait(velocity.length(), *pace, place.scale().y);
-                    playing.set_speed(gait.rate);
-                    warp = gait.warp;
-                }
-            }
-            None => {}
         }
         // The ground a travelling clip's feet stand on passes under the body as fast as the
-        // clip strides, the way the body goes: its planted feet are kept on it (`feet`).
+        // clip strides, the way the body goes: its planted feet are kept on it (`feet`). A
+        // stop's passes as the body goes: its distance is the body's.
         if let Ok(mut kept) = feet.get_mut(animated.player) {
-            let pace = moves.paces.get(&name).copied().unwrap_or(0.0);
-            let rate = animator.animation(main).map_or(0.0, |a| a.speed());
-            kept.stride(velocity, pace * place.scale().y, rate, warp);
+            match rate {
+                None => kept.stride(velocity, speed, 1.0, 1.0),
+                Some((rate, warp)) => {
+                    let pace = moves.paces.get(&name).copied().unwrap_or(0.0);
+                    kept.stride(velocity, pace * place.scale().y, rate, warp);
+                }
+            }
         }
     }
 }
@@ -493,7 +544,13 @@ fn change(
     let (clip, once, from_s, blend) = match act {
         Some(act) => (act.clip.as_str(), act.once, act.from_s, act.blend),
         None if swims => (doing.clip(), doing.once(), 0.0, SWIM_BLEND),
-        None => (doing.clip(), doing.once(), 0.0, BLEND),
+        // A stop, and a stride after one, from where `entered` put them.
+        None => (
+            clip_of(doing, animated.stop),
+            doing.once(),
+            animated.at,
+            BLEND,
+        ),
     };
     let hold = act
         .and_then(|act| act.hold.as_ref())
@@ -561,6 +618,92 @@ fn change(
         }
         None => warn!("The figure has no clip {clip}."),
     }
+}
+
+/// The clip that shows `doing`, a stop by which (`starts::STOPS`).
+fn clip_of(doing: Doing, stop: usize) -> &'static str {
+    match doing {
+        Doing::Stop => crate::starts::STOPS[stop.min(crate::starts::STOPS.len() - 1)],
+        _ => doing.clip(),
+    }
+}
+
+/// The foot a body's feet stand on (`Kept::locks`): the one locked, else the one its clips
+/// have down; none in the air.
+fn planted(kept: &crate::feet::Kept) -> Option<usize> {
+    let [l, r] = kept.locks();
+    [1, 0]
+        .into_iter()
+        .map(|k| (l[k], r[k]))
+        .find(|(l, r)| (l - r).abs() > 0.5)
+        .map(|(l, r)| usize::from(r > l))
+}
+
+/// Where the clip `doing` shows starts, from `was`, and which stop: a stop braking on the
+/// `planted` foot where its distance left is nearest the body's stopping distance
+/// (`starts::stop_entry`); a stride from a stop at the stop's step (`starts::into_loop`, the
+/// stop at `at`); anything else from its start.
+fn entered(
+    moves: &Moves,
+    (was, doing): (Doing, Doing),
+    (at, stop): (f32, usize),
+    planted: Option<usize>,
+    (speed, decel, scale, _): (f32, f32, f32, f32),
+) -> (f32, usize) {
+    let marks = |clip: &str| moves.markers.get(clip).filter(|m| !m.lock_l.is_empty());
+    match (was, doing) {
+        (_, Doing::Stop) => {
+            let stops = crate::starts::STOPS.map(marks);
+            let left = crate::starts::stopping(speed, decel) / scale;
+            crate::starts::stop_entry(&stops, planted, left)
+                .map_or((0.0, 0), |(which, t)| (t, which))
+        }
+        (Doing::Stop, Doing::Jog | Doing::Sprint) => {
+            match (marks(clip_of(was, stop)), marks(doing.clip())) {
+                (Some(from), Some(run)) => (crate::starts::into_loop(from, at, run), 0),
+                _ => (0.0, 0),
+            }
+        }
+        _ => (0.0, 0),
+    }
+}
+
+/// Plays the clip `name` that shows `doing` this frame: as a layer above asks it (`act`), a
+/// stop by its distance (`starts::matched`), a jog or sprint at the body's speed
+/// (`pace::gait`). Its play rate and warp; none for a stop.
+fn play(
+    moves: &Moves,
+    act: Option<&Act>,
+    doing: Doing,
+    name: &str,
+    playing: &mut bevy::animation::ActiveAnimation,
+    at: &mut f32,
+    matching: (f32, f32, f32, f32),
+) -> Option<(f32, f32)> {
+    let (speed, _, scale, _) = matching;
+    match act {
+        // As asked, held where asked.
+        Some(act) => {
+            let held = act.speed >= 0.0 && act.hold_at.is_some_and(|at| playing.seek_time() >= at);
+            playing.set_speed(if held { 0.0 } else { act.speed });
+        }
+        None if doing == Doing::Stop => {
+            if let Some(clip) = moves.markers.get(name).filter(|m| m.travels()) {
+                crate::starts::matched(playing, at, clip, matching);
+                return None;
+            }
+        }
+        // The jog and sprint at the player's speed, played and warped (`pace::gait`).
+        None if matches!(doing, Doing::Jog | Doing::Sprint) => {
+            if let Some(pace) = moves.paces.get(name) {
+                let gait = crate::pace::gait(speed, *pace, scale);
+                playing.set_speed(gait.rate);
+                return Some((gait.rate, gait.warp));
+            }
+        }
+        None => {}
+    }
+    Some((playing.speed(), 1.0))
 }
 
 /// Each mixed clip takes its share of the weight the transitions gave the clip it rides on,
@@ -697,6 +840,8 @@ mod tests {
                         share: 0.25,
                     }],
                     shown: None,
+                    at: 0.0,
+                    stop: 0,
                 },
             ))
             .id();

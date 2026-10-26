@@ -37,6 +37,11 @@ use crate::{Downed, Motion, character};
 pub struct Baked(HashMap<AssetId<AnimationClip>, Markers>);
 
 impl Baked {
+    /// A clip's markers, if it has them.
+    pub fn get(&self, clip: AssetId<AnimationClip>) -> Option<&Markers> {
+        self.0.get(&clip)
+    }
+
     /// The markers a body file carries (`markers`), for each of its clips as loaded.
     pub fn register(&mut self, gltf: &Gltf, nodes: &Assets<GltfNode>) {
         let markers = markers(gltf, nodes);
