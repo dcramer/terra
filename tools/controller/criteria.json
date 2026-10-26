@@ -847,6 +847,22 @@
    "measurable": true
   },
   {
+   "id": "swim.pose",
+   "noticed": 4,
+   "notice": "a swimmer walks or stands upright in the water instead of treading upright, stroking along the surface and diving along its way",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "share of the filmed lake's swimming frames (half a second after each start, stop or change of clip not judged) whose figure shows no swim clip, or whose torso (pelvis to neck) lies over 15 deg from up treading or from the way it goes stroking or diving",
+   "source": "docs/controller.md 'What is presentation' (the swim pose); D478; Unreal's and BotW's swimmers tilted by their pitch",
+   "check": {
+    "by": "film",
+    "name": "swim pose"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
    "id": "swim.float",
    "noticed": 3,
    "notice": "a body in deep water sinks or does not float up to the surface",

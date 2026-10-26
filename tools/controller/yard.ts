@@ -8,7 +8,9 @@
 // player as a walker). yard-checks.ts measures the heavy rows from the records, not by eye:
 // step smoothing (the shown figure's and camera's rise a frame at each step up, and settling),
 // feet sliding (the duel's own check) and the yard's own criteria (marks reached, stuck, fallen
-// through, the steep mound climbed). The two films side by side, named, in one film.
+// through, the steep mound climbed). The two films side by side, named, in one film. Beside them
+// a lake (the play world's, the yard has no water) is swum out into, along the surface, dived
+// and surfaced, filmed alone (lake.mp4), and swim.ts measures the swimmer's pose from its record.
 //
 //   cargo xtask controller --film                  run, film and check, then the scorecard
 //   node tools/controller/yard.ts [--out <dir>]    the run, film and checks alone
@@ -26,6 +28,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { ROOT, buildOffscreen, offscreenPath, offscreenRun } from "../sandbox/client.ts";
 import { read } from "../sandbox/duel/checks.ts";
+import { pose } from "./swim.ts";
 import { type Walk, check } from "./yard-checks.ts";
 
 /// The frames run and filmed (every second one kept, for 30 a second): the route's start to
@@ -39,11 +42,23 @@ const PICTURE = "960x540";
 /// frames' tap each, so it goes a few centimetres while it turns (turn.foot's plants). The
 /// wait before is not stuck: the route is done once its last mark is reached.
 const TURNS = ["--press", "s@1300-1306", "--press", "d@1600-1604"];
+type Run = { name: string; args: string[]; to: number };
+const YARD = ["--clean", "--experiment", "controller-yard"];
 /// The paces walked: a jog (the route's own), and a sprint, shift held throughout.
-const PACES: { name: string; args: string[] }[] = [
-  { name: "jog", args: [...TURNS] },
-  { name: "sprint", args: ["--press", `shift@1-${TO + 10}`, ...TURNS] },
+const PACES: Run[] = [
+  { name: "jog", args: [...YARD, ...TURNS], to: TO },
+  { name: "sprint", args: [...YARD, "--press", `shift@1-${TO + 10}`, ...TURNS], to: TO },
 ];
+/// The lake: walked in off the shore until it swims (the frames to 540), slowed to tread water,
+/// dived (down held), swum under, then up to the surface (space held) and on along it.
+const LAKE: Run = {
+  name: "lake",
+  args: [
+    ...["--clean", "--experiment", "play", "--radius", "30000", "--site", "lake@-15.34,1.68", "--date", "06-10", "--time", "12", "--steady"],
+    ...["--press", "w@60-540", "--press", "down@600-630", "--press", "w@640-880", "--press", "space@900-1120", "--press", "w@1000-1200"],
+  ],
+  to: 1300,
+};
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
@@ -61,12 +76,12 @@ if (!args.includes("--check")) {
   console.log(`yard: built (${took()})`);
   const work = resolve(ROOT, "shots/controller-yard");
   rmSync(work, { recursive: true, force: true });
-  const runs = await Promise.all(PACES.map((pace) => film(pace, work)));
+  const runs = await Promise.all([...PACES, LAKE].map((pace) => film(pace, work)));
   for (const each of runs.filter((r) => !r.ok)) console.log(`yard: ✗ ${each.name} did not finish; its log: ${each.log}`);
   if (runs.some((r) => !r.ok)) process.exit(1);
-  console.log(`yard: ran ${PACES.map((p) => p.name).join(", ")} (${took()})`);
-  const mp4 = sideBySide(work);
-  console.log(`yard: film ${mp4}, ${(statSync(mp4).size / 1e6).toFixed(1)} MB (${took()})`);
+  console.log(`yard: ran ${[...PACES, LAKE].map((p) => p.name).join(", ")} (${took()})`);
+  for (const mp4 of [sideBySide(work, PACES, "yard.mp4"), sideBySide(work, [LAKE], "lake.mp4")])
+    console.log(`yard: film ${mp4}, ${(statSync(mp4).size / 1e6).toFixed(1)} MB (${took()})`);
   rmSync(work, { recursive: true, force: true });
 }
 process.exit(report() ? 0 : 1);
@@ -79,7 +94,8 @@ function report(): boolean {
     const ground = (/Course: ground every metre east from the start: ([-\d. ]+)/.exec(log)?.[1] ?? "").trim().split(" ").map(Number);
     return { name, frames: read(join(out, `walk-${name}.jsonl`)), route, ground };
   });
-  const lines = check(walks);
+  const lake: Walk = { name: LAKE.name, frames: read(join(out, `walk-${LAKE.name}.jsonl`)), route: [], ground: [] };
+  const lines = [...check(walks), pose(lake)];
   const said = lines.map((each) => `${each.name}: ${each.line}`);
   for (const line of said) console.log(`yard: ${line}`);
   writeFileSync(join(out, "checks.txt"), said.join("\n") + "\n");
@@ -88,15 +104,15 @@ function report(): boolean {
 }
 
 /// One pace's run to its end, its frames in work/<pace>, its record and log in out.
-async function film(pace: { name: string; args: string[] }, work: string): Promise<{ name: string; ok: boolean; log: string }> {
+async function film(pace: Run, work: string): Promise<{ name: string; ok: boolean; log: string }> {
   const frames = join(work, pace.name);
   mkdirSync(frames, { recursive: true });
   const shot = join(work, `${pace.name}.json`);
-  writeFileSync(shot, JSON.stringify({ about: `the game's camera, at a ${pace.name}`, seconds: (TO - ROLLS) / 60 + 1, keys: [], look: { shutter: 90 } }, null, 2));
+  writeFileSync(shot, JSON.stringify({ about: `the game's camera, at a ${pace.name}`, seconds: (pace.to - ROLLS) / 60 + 1, keys: [], look: { shutter: 90 } }, null, 2));
   const [command, words] = offscreenRun(`yard-${pace.name}`, [
-    ...["--clean", "--experiment", "controller-yard", ...pace.args],
+    ...pace.args,
     ...["--fight-log", offscreenPath(join(out, `walk-${pace.name}.jsonl`)), "--picture", PICTURE],
-    ...["--cine", `${offscreenPath(shot)}@${ROLLS}`, "--shots", `${offscreenPath(frames)}/f@${FROM}-${TO}/2`],
+    ...["--cine", `${offscreenPath(shot)}@${ROLLS}`, "--shots", `${offscreenPath(frames)}/f@${FROM}-${pace.to}/2`],
   ]);
   const log = join(out, `${pace.name}.log`);
   const said = await run(command, words);
@@ -120,13 +136,13 @@ async function run(command: string, words: string[]): Promise<string> {
   }
 }
 
-/// The paces' films side by side at 30 a second, each named in its corner.
-function sideBySide(work: string): string {
+/// Runs' films side by side at 30 a second, each named in its corner.
+function sideBySide(work: string, PACES: Run[], name: string): string {
   const font = spawnSync("fc-match", ["-f", "%{file}", "DejaVu Sans:bold"], { encoding: "utf8" }).stdout.trim();
   const inputs = PACES.flatMap((pace) => ["-framerate", "30", "-pattern_type", "glob", "-i", `${join(work, pace.name)}/f-*.png`]);
   const named = PACES.map((pace, i) => `[${i}]drawtext=fontfile=${font}:text='${pace.name}':x=14:y=12:fontsize=22:fontcolor=white:borderw=2:bordercolor=black@0.7[c${i}]`);
-  const graph = [...named, `${PACES.map((_, i) => `[c${i}]`).join("")}hstack=inputs=${PACES.length}[v]`].join(";");
-  const mp4 = join(out, "yard.mp4");
+  const graph = [...named, `${PACES.map((_, i) => `[c${i}]`).join("")}${PACES.length > 1 ? `hstack=inputs=${PACES.length}` : "null"}[v]`].join(";");
+  const mp4 = join(out, name);
   const made = spawnSync("ffmpeg", ["-y", "-loglevel", "error", ...inputs, "-filter_complex", graph, "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart", mp4], { encoding: "utf8" });
   if (made.status !== 0 || !existsSync(mp4)) throw new Error(`ffmpeg failed: ${made.stderr.slice(0, 400)}`);
   return mp4;

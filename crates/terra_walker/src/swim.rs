@@ -70,7 +70,9 @@ pub fn swim(motion: &Motion, stroking: bool) -> Option<Swim> {
 
 /// How far from upright the body lies, rad, its head toward where it faces: none treading or
 /// out of the water, along its way stroking (a quarter turn level, more diving down), and at
-/// the surface level but for its head and shoulders out.
+/// the surface level but for its head and shoulders out; a stroke heading down from the surface
+/// (a dive begun, the mouth not yet under) lets its head go down with it, the lift gone by
+/// `SURFACE_LIFT` past level, so it lies along its way as the dive's stroke takes over.
 pub fn lie(motion: &Motion, swim: Option<Swim>) -> f32 {
     let along = || {
         let level = motion.velocity.length();
@@ -78,7 +80,14 @@ pub fn lie(motion: &Motion, swim: Option<Swim>) -> f32 {
     };
     match swim {
         None | Some(Swim::Tread) => 0.0,
-        Some(Swim::Stroke) => along().min(FRAC_PI_2 - SURFACE_LIFT),
+        Some(Swim::Stroke) => {
+            let along = along();
+            if along <= FRAC_PI_2 {
+                along.min(FRAC_PI_2 - SURFACE_LIFT)
+            } else {
+                along - SURFACE_LIFT * (1.0 - ((along - FRAC_PI_2) / SURFACE_LIFT).min(1.0))
+            }
+        }
         Some(Swim::Dive) => along(),
     }
     .clamp(0.0, MOST_TILT)
@@ -190,6 +199,14 @@ mod tests {
         assert!((deg(lie(&down, Some(Swim::Dive))) - 135.0).abs() < 0.1);
         let up = swimmer(0.0, 1.5, true);
         assert!(deg(lie(&up, Some(Swim::Dive))).abs() < 0.1);
+        // Heading 34 deg down from the surface, the mouth not yet under: along its way, and
+        // through level the lie goes on without a jump.
+        let going_down = swimmer(1.47, -1.0, false);
+        let along = 90.0 + deg(libm::atan2f(1.0, 1.47));
+        assert!((deg(lie(&going_down, Some(Swim::Stroke))) - along).abs() < 0.1);
+        let lies = |rising: f32| deg(lie(&swimmer(1.0, rising, false), Some(Swim::Stroke)));
+        assert!((lies(-0.0001) - lies(0.0)).abs() < 0.1);
+        assert!(lies(-0.1) > lies(0.0));
         assert_eq!(lie(&level, Some(Swim::Tread)), 0.0);
         assert_eq!(lie(&level, None), 0.0);
     }

@@ -23,6 +23,10 @@
 //! `feet.ground`'s and `pelvis.drop`'s numbers. A fighter with a strapped shield gives its
 //! board's middle (the middle of its meshes' bounds) and the way its face looks (`shield`:
 //! `mid`, `face`), so a check measures how the shield moves through a move change (a stagger).
+//! A walker says whether it swims and is under water (`swimming`, `under_water`), the clip
+//! its figure shows (`shows`, `terra_walker::figure::Shows`), the way its torso points, pelvis
+//! to neck (`torso`), and the way it goes, rising included (`going`, m/s): `swim.pose`'s
+//! numbers.
 
 use super::Fighter;
 use super::sole::Ground;
@@ -46,6 +50,8 @@ use terra_world::start::Start;
 const BALLS: [&str; 2] = ["ball_l", "ball_r"];
 /// The feet's bones, their heels as the lock curves' bake reads them (`tools/characters/markers.ts`).
 const HEELS: [&str; 2] = ["foot_l", "foot_r"];
+/// The torso's ends, its way from the first to the second.
+const TORSO: [&str; 2] = ["pelvis", "neck_01"];
 
 /// What happened this frame, put in by the systems it happened in.
 #[derive(Resource, Default)]
@@ -73,6 +79,7 @@ struct Out {
     origin: Option<Vec3>,
     balls: HashMap<Entity, [Entity; 2]>,
     heels: HashMap<Entity, [Entity; 2]>,
+    torsos: HashMap<Entity, [Entity; 2]>,
     /// Whether a player with no sword drawn is written as a walker: not in a duel, whose
     /// record is the fight's alone (its checks would read the walk to the draw as one).
     walkers: bool,
@@ -94,6 +101,7 @@ pub fn plugin(app: &mut App) {
         origin: None,
         balls: HashMap::new(),
         heels: HashMap::new(),
+        torsos: HashMap::new(),
         walkers,
     })
     .init_resource::<Said>()
@@ -129,6 +137,7 @@ type Walkers<'a> = (
     Option<&'a Motion>,
     Option<&'a Stepping>,
     Option<&'a terra_walker::feet::Kept>,
+    Option<&'a terra_walker::figure::Shows>,
 );
 
 /// What a player's walk adds to its line: its figure's lag after a step up, whether it
@@ -242,18 +251,19 @@ fn write(
             &mut ground,
         );
     }
-    for (entity, place, motion, stepping, kept) in walkers.iter().filter(|_| walk) {
+    for (entity, place, motion, stepping, kept, shows) in walkers.iter().filter(|_| walk) {
         let feet = place.translation();
-        let facing = motion.map_or(Vec3::Z, |motion| motion.facing);
+        let facing = mm(terms.transform_vector3(motion.map_or(Vec3::Z, |m| m.facing)));
         // A walker's balls over its figure's root as shown, so a step's smoothing is no dip.
         let root = feet - up * stepping.map_or(0.0, |s| s.below);
         let balls = balls_of(
             &mut out, entity, root, up, &local, &children, &names, &bones,
         );
-        let facing = mm(terms.transform_vector3(facing));
         let mut line = walker(local(feet), facing, balls, kept);
         walking(&mut line, motion, stepping);
         let found = (&children, &names, &bones);
+        let torso = torso_of(&mut out, entity, found);
+        swimmer(&mut line, motion, shows, torso, (up, &terms));
         let below = stepping.map_or(0.0, |s| s.below);
         soles(
             &mut line,
@@ -419,6 +429,44 @@ fn soles(
     line["clip"] = json!(kept.clip_soles().map(|feet| feet.map(|h| r(h + below))));
     line["short"] = json!(kept.shorts().map(|[short, _]| r(short)));
     line["short_lock"] = json!(kept.shorts().map(|[_, lock]| r(lock)));
+}
+
+/// A walker's swim (`swimming`, `under_water`), its figure's clip (`shows`), its torso's way,
+/// pelvis to neck (`torso`), and the way it goes, rising included (`going`), in start terms.
+fn swimmer(
+    line: &mut Value,
+    motion: Option<&Motion>,
+    shows: Option<&terra_walker::figure::Shows>,
+    torso: Option<Vec3>,
+    (up, terms): (Vec3, &bevy::math::Affine3A),
+) {
+    let way = |v: Vec3| mm(terms.transform_vector3(v));
+    if let Some(motion) = motion {
+        line["swimming"] = json!(motion.swimming);
+        line["under_water"] = json!(motion.under);
+        line["going"] = json!(way(motion.velocity + up * motion.rising));
+    }
+    line["shows"] = json!(shows.map(|shows| shows.clip.as_str()));
+    line["torso"] = json!(torso.map(way));
+}
+
+/// A body's torso, pelvis to neck, a unit way in the world, its bones found once a body.
+fn torso_of(
+    out: &mut Out,
+    entity: Entity,
+    (children, names, bones): (&Query<&Children>, &Query<&Name>, &Query<&GlobalTransform>),
+) -> Option<Vec3> {
+    if let std::collections::hash_map::Entry::Vacant(slot) = out.torsos.entry(entity)
+        && let [Some(pelvis), Some(neck)] =
+            TORSO.map(|name| character::find(entity, name, children, names))
+    {
+        slot.insert([pelvis, neck]);
+    }
+    let [pelvis, neck] = out
+        .torsos
+        .get(&entity)?
+        .map(|bone| bones.get(bone).ok().map(GlobalTransform::translation));
+    (neck? - pelvis?).try_normalize()
 }
 
 /// Where the balls of a body's feet are, in the start's terms, and how high over `feet`, the
