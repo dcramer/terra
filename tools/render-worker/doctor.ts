@@ -59,6 +59,23 @@ function blender(b: Box, line: Line): void {
   line(/llvmpipe|softpipe|software/i.test(gl) ? "warn" : true, `Blender over ${dpy ?? "the daemon's display"}, OpenGL: ${gl}${/llvmpipe/i.test(gl) ? " (software; jobs use Vulkan instead)" : ""}`);
 }
 
+/// Git LFS (D525): the worker's own git-lfs (bootstrap.sh), set as its clone's filter, and the
+/// clone's checkout holding its LFS files rather than pointers (the client rsyncs the objects).
+function lfs(b: Box, line: Line): void {
+  const bin = join(b.dir, "git-lfs", "git-lfs");
+  const version = sh(bin, ["version"]);
+  const filter = git(b.repo, ["config", "--get", "filter.lfs.process"]).stdout.trim();
+  if (!version.ok || !filter.startsWith(bin)) {
+    return line(false, version.ok ? "git-lfs: installed, but not the clone's filter" : "git-lfs: not in the worker's folder; job checkouts would hold LFS pointers", ["cargo xtask remote-render --update (bootstrap.sh installs and sets it)"]);
+  }
+  const listed = spawnSync(bin, ["ls-files"], { cwd: b.repo, encoding: "utf8", maxBuffer: 64 * 1024 ** 2 });
+  const files = (listed.stdout ?? "").split("\n").filter(Boolean);
+  const pointers = files.filter((l) => / - /.test(l)).length;
+  line(listed.status === 0 && pointers === 0, `${version.out.split(" ")[0]}: the clone's filter; its checkout holds ${files.length - pointers} of ${files.length} LFS files${pointers ? ` (${pointers} are still pointers)` : ""}`, [
+    "the client sends a commit's LFS objects with each job and update (client.ts sendLfs): cargo xtask remote-render --update",
+  ]);
+}
+
 export function doctor(b: Box): number {
   let bad = 0;
   const line = (ok: boolean | "warn", text: string, fix: string[] = []) => {
@@ -90,6 +107,7 @@ export function doctor(b: Box): number {
   line(true, `node: ${process.version} (${process.execPath})`);
   const node22 = Number(process.versions.node.split(".")[0]) >= 22;
   if (!node22) line(false, "node is older than 22.18", ["cargo xtask remote-render --update installs Node 22 into the worker's folder"]);
+  lfs(b, line);
 
   const cargo = sh("cargo", ["--version"]);
   line(cargo.ok, `cargo: ${cargo.ok ? cargo.out : "not on PATH"}`, ["rustup: https://rustup.rs (no sudo)"]);

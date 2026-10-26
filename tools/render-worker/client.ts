@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { objects } from "../git/lfs.ts";
 import { ago, backoff, type ClientArgs, chooseWorker, config, type Job, jobClass, jobId, parseClient, parseEnvFile, type Seen, short, USAGE } from "./jobs.ts";
 
 /// A render box as the client reaches it: over ssh, or `local`, this machine (the tests).
@@ -59,6 +60,8 @@ export function submit(r: Remote, cwd: string, job: Omit<Job, "id" | "kind" | "q
   const full: Job = { ...job, id: jobId(now, randomBytes(2).toString("hex")), kind: "run", queued: now.toISOString(), state: "queued", by: `${userInfo().username}@${hostname()}` };
   const push = git(cwd, ["push", "-q", gitUrl(r), `${job.rev}:refs/jobs/${full.id}`]);
   if (push.status !== 0) return { error: `git push to ${r.host}: ${lastLine(push.stderr)}` };
+  const lfs = sendLfs(r, cwd, job.rev);
+  if (lfs) return { error: lfs };
   const res = onBox(r, boxCmd(r, ["submit"]), JSON.stringify(full));
   if (res.status !== 0) return { error: why(r, res) };
   const { alive, ahead } = JSON.parse(lastLine(res.stdout)) as { alive: boolean; ahead: number };
@@ -84,6 +87,31 @@ export async function waitOn(r: Remote, id: string, print = (l: string) => conso
     print(`render ${id}: lost ssh to ${r.host} (${lastLine(err)}); again in ${backoff(n)} s`);
     await new Promise((done) => setTimeout(done, backoff(n) * 1000));
   }
+}
+
+/// Sends the box the Git LFS objects a commit's files point to (D525), which a git push over ssh
+/// does not carry: those it lacks, by rsync from this checkout's store, so jobs never spend the
+/// GitHub LFS bandwidth. An object this machine lacks too is fetched from origin first.
+export function sendLfs(r: Remote, cwd: string, rev: string): string | undefined {
+  let oids: string[];
+  try {
+    oids = objects(cwd, rev);
+  } catch (e) {
+    return `reading ${rev.slice(0, 9)}'s LFS pointers: ${(e as Error).message}`;
+  }
+  if (!oids.length) return undefined;
+  const store = join(resolve(cwd, git(cwd, ["rev-parse", "--git-common-dir"]).stdout.trim()), "lfs", "objects");
+  const path = (o: string) => `${o.slice(0, 2)}/${o.slice(2, 4)}/${o}`;
+  const missing = () => oids.filter((o) => !existsSync(join(store, path(o))));
+  if (missing().length) {
+    const fetched = git(cwd, ["lfs", "fetch", "origin", rev]);
+    const still = missing();
+    if (still.length) return `${still.length} LFS objects of ${rev.slice(0, 9)} are neither here nor on origin: ${lastLine(fetched.stderr) || still[0]}`;
+  }
+  const dest = `${isLocal(r) ? "" : `${r.host}:`}${r.dir}/repo/.git/lfs/objects/`;
+  const args = ["-a", "--ignore-existing", "--mkpath", "--files-from=-", "-e", `ssh ${SSH.join(" ")}`, `${store}/`, dest];
+  const res = spawnSync("rsync", args, { input: `${oids.map(path).join("\n")}\n`, encoding: "utf8" });
+  return res.status === 0 ? undefined : `rsync of LFS objects to ${r.host}: ${lastLine(res.stderr)}`;
 }
 
 /// Copies the job's out/ (its files and job.log) into `out`.
@@ -132,6 +160,8 @@ export function update(r: Remote, cwd: string, sha: string): boolean {
   if (!prepare(r)) return false;
   const push = git(cwd, ["push", "-q", gitUrl(r), `+${sha}:refs/worker/main`]);
   if (push.status !== 0) return console.log(`✗ ${r.host}: git push: ${lastLine(push.stderr)}`), false;
+  const lfs = sendLfs(r, cwd, sha);
+  if (lfs) return console.log(`✗ ${r.host}: ${lfs}`), false;
   const node = isLocal(r) ? process.execPath : `${r.dir}/node/bin/node`;
   const next = `${r.dir}/next`;
   const cmd = `rm -rf ${q(next)} && mkdir -p ${q(next)} && git -C ${q(`${r.dir}/repo`)} archive ${sha} tools/render-worker | tar -x -C ${q(next)} && ${q(node)} ${q(`${next}/tools/render-worker/box.ts`)} --dir ${q(r.dir)} update ${sha}`;

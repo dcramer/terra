@@ -5,12 +5,13 @@
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, test } from "node:test";
 import { box, readJob, slotDir, slotHome } from "./box.ts";
-import { finish, prepare, type Remote, submit } from "./client.ts";
+import { finish, prepare, type Remote, sendLfs, submit } from "./client.ts";
 import { next, runJob } from "./daemon.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "render-flow-"));
@@ -151,4 +152,21 @@ setTimeout(() => {}, 300);`;
     assert.equal(cwd, slotDir(b, s.slot));
     assert.equal(target, join(slotDir(b, s.slot), "target"));
   }
+});
+
+test("a job's commit takes the LFS objects its pointers name to the box; one found nowhere fails", () => {
+  const pointer = (oid: string) => `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize 5\n`;
+  const at = (root: string, oid: string) => join(root, ".git/lfs/objects", oid.slice(0, 2), oid.slice(2, 4), oid);
+  const oid = createHash("sha256").update("model").digest("hex");
+  mkdirSync(join(at(agent, oid), ".."), { recursive: true });
+  writeFileSync(at(agent, oid), "model");
+  writeFileSync(join(agent, "m.glb"), pointer(oid));
+  sh(agent, "add", "m.glb");
+  sh(agent, "commit", "-q", "-m", "a model in LFS");
+  assert.equal(sendLfs(r, agent, sh(agent, "rev-parse", "HEAD")), undefined);
+  assert.equal(readFileSync(at(b.repo, oid), "utf8"), "model");
+  writeFileSync(join(agent, "lost.glb"), pointer("0".repeat(64)));
+  sh(agent, "add", "lost.glb");
+  sh(agent, "commit", "-q", "-m", "a pointer to nothing");
+  assert.match(sendLfs(r, agent, sh(agent, "rev-parse", "HEAD")) ?? "", /1 LFS objects of [0-9a-f]{9} are neither here nor on origin/);
 });
