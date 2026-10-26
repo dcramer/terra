@@ -32,6 +32,7 @@ use super::Fighter;
 use super::sole::Ground;
 use crate::staged::Staged;
 use bevy::camera::primitives::Aabb;
+use bevy::math::Affine3A;
 use bevy::prelude::*;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -176,15 +177,7 @@ fn write(
     let walk = out.walkers;
     let player = player.or(walkers.iter().find(|_| walk).map(|each| each.1));
     let up = player.map_or(Vec3::Y, |player| player.translation().normalize());
-    let first = out.origin.is_none() && player.is_some();
-    if let Some(player) = player.filter(|_| first) {
-        out.origin = Some(player.translation());
-    }
-    let origin = out.origin.unwrap_or_default();
-    let terms = start
-        .map_or(Transform::from_translation(origin), |start| start.0)
-        .compute_affine()
-        .inverse();
+    let (terms, first) = start_terms(&mut out, start, player);
     let local = |at: Vec3| mm(terms.transform_point3(at));
     let mut bodies = Vec::new();
     for &(entity, place, fighter, is_player, body, motion, staged, pool, kept) in &seen {
@@ -282,19 +275,7 @@ fn write(
         bodies.push(line);
     }
     // A duel's player before the draw (or after a sheathe): not a fighter, its pose apart.
-    let sheathed: Vec<Value> = walkers
-        .iter()
-        .filter(|_| !walk)
-        .filter_map(|(entity, place, motion, _, _, shows)| {
-            Some(json!({
-                "feet": local(place.translation()),
-                "facing": mm(terms.transform_vector3(motion.map_or(Vec3::Z, |m| m.facing))),
-                "speed": r(motion.map_or(0.0, |m| m.velocity.length())),
-                "shows": shows.map(|shows| shows.clip.clone()),
-                "pose": posing.of(entity, &terms)?,
-            }))
-        })
-        .collect();
+    let sheathed = (!walk).then(|| sheathed(&walkers, &mut posing, &terms));
     let mut line = json!({
         "frame": frame.0,
         "fighters": bodies,
@@ -302,16 +283,10 @@ fn write(
         "asked": std::mem::take(&mut said.asked),
         "contacts": std::mem::take(&mut said.contacts),
     });
-    if let Some((place, Projection::Perspective(lens))) = camera.as_deref().map(|c| (c.0, c.1)) {
-        line["camera"] = json!({
-            "at": local(place.translation()),
-            "looking": mm(terms.transform_vector3(*place.forward())),
-            "up": mm(terms.transform_vector3(*place.up())),
-            "vfov": r(lens.fov.to_degrees()),
-            "aspect": r(lens.aspect_ratio),
-        });
+    if let Some(lens) = camera.and_then(|c| lens(c.0, c.1, &terms)) {
+        line["camera"] = lens;
     }
-    if !sheathed.is_empty() {
+    if let Some(sheathed) = sheathed.filter(|each| !each.is_empty()) {
         line["sheathed"] = json!(sheathed);
     }
     if first {
@@ -321,6 +296,60 @@ fn write(
     if let Err(problem) = written {
         warn!("Melee: the fight's record could not be written: {problem}");
     }
+}
+
+/// The start's terms, places in which the record gives (the player's first place with no
+/// start), and whether this is the first line with a player.
+fn start_terms(
+    out: &mut Out,
+    start: Option<Res<Start>>,
+    player: Option<&GlobalTransform>,
+) -> (Affine3A, bool) {
+    let first = out.origin.is_none() && player.is_some();
+    if let Some(player) = player.filter(|_| first) {
+        out.origin = Some(player.translation());
+    }
+    let origin = out.origin.unwrap_or_default();
+    let terms = start
+        .map_or(Transform::from_translation(origin), |start| start.0)
+        .compute_affine()
+        .inverse();
+    (terms, first)
+}
+
+/// The camera drawing the frame, in the start's terms: where it is, which way it looks and
+/// its up, its vertical field of view and aspect.
+fn lens(place: &GlobalTransform, projection: &Projection, terms: &Affine3A) -> Option<Value> {
+    let Projection::Perspective(lens) = projection else {
+        return None;
+    };
+    Some(json!({
+        "at": mm(terms.transform_point3(place.translation())),
+        "looking": mm(terms.transform_vector3(*place.forward())),
+        "up": mm(terms.transform_vector3(*place.up())),
+        "vfov": r(lens.fov.to_degrees()),
+        "aspect": r(lens.aspect_ratio),
+    }))
+}
+
+/// A duel's players with no sword drawn: where they stand and go, the clip shown, the pose.
+fn sheathed(
+    walkers: &Query<Walkers<'_>, (With<Player>, Without<Fighter>)>,
+    posing: &mut super::pose::Posing,
+    terms: &Affine3A,
+) -> Vec<Value> {
+    walkers
+        .iter()
+        .filter_map(|(entity, place, motion, _, _, shows)| {
+            Some(json!({
+                "feet": mm(terms.transform_point3(place.translation())),
+                "facing": mm(terms.transform_vector3(motion.map_or(Vec3::Z, |m| m.facing))),
+                "speed": r(motion.map_or(0.0, |m| m.velocity.length())),
+                "shows": shows.map(|shows| shows.clip.clone()),
+                "pose": posing.of(entity, terms)?,
+            }))
+        })
+        .collect()
 }
 
 /// A fighter's strapped shield, in the start's terms: its board's middle and the way its face
