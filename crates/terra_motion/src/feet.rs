@@ -140,11 +140,27 @@ pub struct Posed {
     pub low: bool,
     /// The ball of the foot in the foot's own frame, which a locked foot keeps still.
     pub ball: Vec3,
+    /// The clip's heel (the ankle) and ball over its flat ground (the figure's root), m: a
+    /// locked foot's lowest are where it rests (`PLANT_M`).
+    pub sole: [f32; 2],
+    /// How far the foot as placed on the ground last frame stood over its ground past where
+    /// the clip has it over its flat ground, heel and ball, m (`placement::Grounded::over`: a
+    /// foot over lower ground the pelvis has not yet come down to); 0 unplaced.
+    pub over: [f32; 2],
 }
 
 /// A clip's ankle this near the body's ground has the foot on it (a flat foot's ankle stands
 /// about 10 cm up).
 pub const LOW_ANKLE_M: f32 = 0.15;
+
+/// A lock starts only with the foot as placed this near where it rests on its ground, m: its
+/// sole's lower point (heel or ball) over its ground, less where that point stands when locked
+/// (as Unreal's Foot Placement plants a foot only within its PlantSettings' DistanceToGround of
+/// the traced ground; its documentation, no code taken). The bake's height gate (markers.ts,
+/// 7 cm over a point's lowest): a clip coming in whose curve is at 1 while the pose shown still
+/// has the foot coming down (a stop's fade), or a foot over lower ground the pelvis has not yet
+/// come down to, is locked once it is down, not in the air.
+pub const PLANT_M: f32 = 0.07;
 
 /// One foot's lock.
 #[derive(Clone, Copy, Debug)]
@@ -158,6 +174,11 @@ pub struct Foot {
     alpha: f32,
     /// What last kept the foot free while the clip had it low, as the fight log writes it.
     why: &'static str,
+    /// Where the clip has the heel and ball while the foot is locked and its own curve has it
+    /// down, at their lowest (`sole`): where it rests, which a lock's start is gated on
+    /// (`PLANT_M`); none before its first such lock. A landing's lock (the fall's clip, its
+    /// curve not at 1, the ball under its flat ground) is not where the foot rests.
+    rest: Option<[f32; 2]>,
 }
 
 impl Default for Foot {
@@ -169,6 +190,7 @@ impl Default for Foot {
             still_s: 0.0,
             alpha: 0.0,
             why: "",
+            rest: None,
         }
     }
 }
@@ -216,8 +238,8 @@ impl Foot {
     }
 
     /// Why the foot was last left free while its clips' curve had it locked (`"off"`: the body
-    /// down, aloft or let go; `"swing"`: the clip's foot too fast; `"rising"`: the curve not
-    /// yet back at 1), or `""`.
+    /// down, aloft or let go; `"swing"`: the clip's foot too fast; `"high"`: the foot as placed
+    /// not yet down, `PLANT_M`; `"rising"`: the curve not yet back at 1), or `""`.
     pub fn why(&self) -> &'static str {
         self.why
     }
@@ -227,7 +249,21 @@ impl Foot {
     pub fn update(&mut self, posed: Posed, dt: f32, other_moving: bool) -> Pose {
         let shown = self.step(posed, dt, other_moving);
         self.shown = Some(shown);
+        if self.planted() && posed.lock >= FULL {
+            let rest = self.rest.get_or_insert(posed.sole);
+            *rest = [rest[0].min(posed.sole[0]), rest[1].min(posed.sole[1])];
+        }
         shown
+    }
+
+    /// How far the foot as placed stands over where it rests (`PLANT_M`): its sole's lower
+    /// point over its ground, less where that point stands locked; 0 before its first lock.
+    pub fn aloft(&self, posed: &Posed) -> f32 {
+        self.rest.map_or(0.0, |rest| {
+            (0..2)
+                .map(|i| posed.sole[i] + posed.over[i] - rest[i])
+                .fold(f32::INFINITY, f32::min)
+        })
     }
 
     fn step(&mut self, posed: Posed, dt: f32, other_moving: bool) -> Pose {
@@ -263,10 +299,15 @@ impl Foot {
         // pose still has up (a fall's foot coming forward) is not locked in the air.
         let swings = posed.swing_mps >= SWING_MPS && !(posed.landing && posed.low);
         let stands = full && !gone && !swings;
+        // A new lock starts only once the foot as placed is down (`PLANT_M`); a lock held, let
+        // go or stepped is not a new one.
+        let lands = stands && self.aloft(&posed) <= PLANT_M;
+        let starts = matches!(self.state, State::Free | State::Blending { .. });
         self.why = match () {
-            _ if curve < FULL || stands => "",
+            _ if curve < FULL || (stands && (lands || !starts)) => "",
             _ if gone => "off",
             _ if swings => "swing",
+            _ if stands => "high",
             _ => "rising",
         };
         if let State::Releasing(lock) = self.state {
@@ -315,7 +356,7 @@ impl Foot {
         }
         match self.state {
             State::Free => {
-                if stands {
+                if lands {
                     self.state = State::Planted(clip);
                 }
                 clip
@@ -324,7 +365,7 @@ impl Foot {
             State::Blending { from, s } => {
                 let s = s + dt / BLEND_S;
                 if s >= 1.0 {
-                    self.state = if stands {
+                    self.state = if lands {
                         State::Planted(clip)
                     } else {
                         State::Free
@@ -504,6 +545,8 @@ mod tests {
                 landing: false,
                 low: true,
                 ball: Vec3::ZERO,
+                sole: [0.0; 2],
+                over: [0.0; 2],
             };
             path.push(kept.update(posed, DT, false).at);
             clip.push(pose.at);
@@ -576,6 +619,8 @@ mod tests {
             landing: false,
             low: true,
             ball: Vec3::ZERO,
+            sole: [0.0; 2],
+            over: [0.0; 2],
         };
         assert_eq!(
             foot.update(on(pose(0.0, 0.0), 0.03, false), DT, false),
@@ -680,6 +725,8 @@ mod tests {
                     landing: false,
                     low: true,
                     ball: Vec3::ZERO,
+                    sole: [0.0; 2],
+                    over: [0.0; 2],
                 };
                 out[side]
                     .0
@@ -772,6 +819,82 @@ mod tests {
         assert_eq!(Markers::default().lock(0, 0.3), 0.0);
     }
 
+    /// A lock starts only once the foot as placed is down (`PLANT_M`, Unreal's Foot Placement
+    /// DistanceToGround): a clip coming in at 1 while the pose still has the foot coming down
+    /// (a stop's fade), or a foot the pelvis has not yet lowered onto lower ground, is left
+    /// free, and is locked the frame it is down; a foot already locked is not let go for it.
+    #[test]
+    fn a_lock_starts_only_once_the_foot_as_placed_is_down() {
+        let at = |x: f32, y: f32| Pose {
+            at: Vec3::new(x, y, 0.0),
+            turn: Quat::IDENTITY,
+        };
+        // The clip's ankle `y` up with the ball 6 cm under it, placed `over` past the clip.
+        let posed = |x: f32, y: f32, lock: f32, over: f32| Posed {
+            pose: at(x, y),
+            lock,
+            up: Vec3::Y,
+            swing_mps: 0.0,
+            strained: false,
+            off: false,
+            landing: false,
+            low: true,
+            ball: Vec3::ZERO,
+            sole: [y, y - 0.06],
+            over: [over; 2],
+        };
+        let mut foot = Foot::default();
+        // A landing's lock, its clip's curve not at 1 and the fall's ball under its flat
+        // ground, says nothing of where the foot rests.
+        let landing = Posed {
+            landing: true,
+            ..posed(0.0, 0.0, 0.0, 0.0)
+        };
+        foot.update(landing, DT, false);
+        assert!(foot.planted());
+        assert_eq!(foot.aloft(&posed(0.0, 0.40, 1.0, 0.0)), 0.0);
+        // Before its first lock nothing says where it rests: locked as the curve has it.
+        foot.update(posed(0.0, 0.10, 1.0, 0.0), DT, false);
+        assert!(foot.planted());
+        // Let go and lifted.
+        for _ in 0..30 {
+            foot.update(posed(0.2, 0.40, 0.0, 0.0), DT, false);
+        }
+        assert!(!foot.planted() && !foot.moving(), "{}", foot.state());
+        // A clip coming in at 1 with the foot still 30 cm up and coming down: free, "high",
+        // following the clip, until its sole is within PLANT_M of where it rests.
+        let mut y = 0.40;
+        let mut locked_at = None;
+        while y > 0.10 {
+            let shown = foot.update(posed(0.3, y, 1.0, 0.0), DT, false);
+            if foot.planted() {
+                locked_at = Some(y);
+                break;
+            }
+            assert_eq!(shown, at(0.3, y));
+            assert_eq!(foot.why(), "high");
+            y -= 0.02;
+        }
+        let locked_at = locked_at.expect("locked once down");
+        assert!(locked_at - 0.10 <= PLANT_M + 1e-5, "{locked_at}");
+        assert!(locked_at - 0.10 > PLANT_M - 0.02 - 1e-5, "{locked_at}");
+        // Locked, the clip lifting it under a full curve does not let it go (a lock held is
+        // not a lock's start).
+        foot.update(posed(0.3, 0.30, 1.0, 0.0), DT, false);
+        assert!(foot.planted());
+        // Let go, then the clip down at its rest but the foot placed 30 cm over lower ground
+        // (the pelvis not yet down): free until placement has it down.
+        for _ in 0..30 {
+            foot.update(posed(0.5, 0.40, 0.0, 0.0), DT, false);
+        }
+        for over in [0.30, 0.2, 0.1] {
+            foot.update(posed(0.6, 0.10, 1.0, over), DT, false);
+            assert!(!foot.planted(), "{over}");
+        }
+        foot.update(posed(0.6, 0.10, 1.0, 0.03), DT, false);
+        assert!(foot.planted());
+    }
+
     /// A planted foot is eased back to the clip by the lock weight as the curve falls; the
     /// weight does not rise with the curve until it is back at 1, and then the foot is locked
     /// again where it is shown, not snapped to the clip (ALS's foot lock).
@@ -791,6 +914,8 @@ mod tests {
             landing: false,
             low: true,
             ball: Vec3::ZERO,
+            sole: [0.0; 2],
+            over: [0.0; 2],
         };
         // A frame as long as the lock takes to fall all the way, so it follows the curve.
         const STEP: f32 = RELEASE_S;

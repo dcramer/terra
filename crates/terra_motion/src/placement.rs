@@ -31,7 +31,8 @@ use crate::feet::Pose;
 use crate::mover::{Capsule, Query};
 use glam::{DVec3, Quat, Vec3};
 
-/// The probe starts this far over the root's level and goes this far under it, m: a step up as
+/// The probe starts this far over the body's ground (where the mover stands it, over the
+/// figure's root by a step's ease) and goes this far under the root's level, m: a step up as
 /// high as a body steps (a man's 0.55 m, movers.ron) and the ankle over it.
 pub const ABOVE_M: f32 = 0.7;
 pub const BELOW_M: f32 = 0.6;
@@ -72,22 +73,32 @@ pub struct Under {
 }
 
 /// The ground under `at` (a world point), probed by `ground`, the mover's own query: a sphere
-/// of `PROBE_M` swept down along `up` from `ABOVE_M` over `root`'s level to `BELOW_M` under it,
-/// at `at`'s place across. None where nothing is met (a drop), or where the probe starts
-/// inside the ground (a face higher than a step).
-pub fn probe<Q: Query + ?Sized>(ground: &Q, at: DVec3, root: DVec3, up: Vec3) -> Option<Under> {
+/// of `PROBE_M` swept down along `up` from `ABOVE_M` over the body's ground (`body`, how far it
+/// stands over `root`'s level: a figure shown under its body while it eases a step up) to
+/// `BELOW_M` under `root`'s level, at `at`'s place across. None where nothing is met (a drop),
+/// or where the probe starts inside the ground (a face higher than a step). Started over the
+/// root rather than the body, a figure eased half a metre under its body up a stair started a
+/// swinging foot's probe inside the next tread and sank the foot into it.
+pub fn probe<Q: Query + ?Sized>(
+    ground: &Q,
+    at: DVec3,
+    root: DVec3,
+    up: Vec3,
+    body: f32,
+) -> Option<Under> {
     let level = at - up.as_dvec3() * (at - root).dot(up.as_dvec3());
-    let top = up * (ABOVE_M + PROBE_M);
+    let above = ABOVE_M + body.max(0.0);
+    let top = up * (above + PROBE_M);
     let sphere = Capsule {
         a: top,
         b: top,
         radius: PROBE_M,
         origin: level,
     };
-    let hit = ground.sweep(&sphere, -up * (ABOVE_M + BELOW_M))?;
+    let hit = ground.sweep(&sphere, -up * (above + BELOW_M))?;
     let height = hit.contact.at.dot(up);
     // Met where it started: it started in the ground.
-    if hit.fraction <= 0.0 || height > ABOVE_M {
+    if hit.fraction <= 0.0 || height > above {
         return None;
     }
     Some(Under {
@@ -145,6 +156,7 @@ pub struct Grounded {
     reach: f32,
     locked: bool,
     off: bool,
+    root: Vec3,
 }
 
 /// What `Placing::ground` reads of a foot this frame.
@@ -322,6 +334,7 @@ impl Placing {
             reach,
             locked: lock.is_some(),
             off,
+            root,
         }
     }
 }
@@ -356,6 +369,22 @@ impl Grounded {
     /// The foot placed on its ground with the pelvis lowered by `drop` (`raised`).
     pub fn placed(&self, drop: f32) -> Pose {
         raised(self, drop)
+    }
+
+    /// How far the foot placed at `placed` stands over its ground past where the clip has it
+    /// over its flat ground, heel (the ankle) and ball, m: what placement could not lower (a
+    /// foot over lower ground the pelvis has not yet come down to), or under for a raise that
+    /// lags; 0 for a foot let go. A lock's start reads it (`feet::PLANT_M`).
+    pub fn over(&self, placed: Pose) -> [f32; 2] {
+        if self.off {
+            return [0.0; 2];
+        }
+        let ball = self.shown.turn.inverse() * (self.ball_at - self.shown.at);
+        let height = |at: Vec3| (at - self.root).dot(self.up);
+        [
+            height(placed.at) - self.heights.0 - height(self.shown.at),
+            height(placed.at + placed.turn * ball) - self.heights.1 - height(self.ball_at),
+        ]
     }
 }
 

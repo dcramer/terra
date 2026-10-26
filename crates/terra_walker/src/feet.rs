@@ -183,6 +183,9 @@ pub struct Kept {
     /// alone leaves, before the foot is placed on the ground: what placement adds
     /// (`pelvis.drop`) is their difference.
     shorts: [[f32; 2]; 2],
+    /// Each foot as placed last frame, heel and ball, over its ground past where its clip had
+    /// it (`placement::Grounded::over`): a lock starts only once it is down (`feet::PLANT_M`).
+    over: [[f32; 2]; 2],
     /// Each foot put on the ground under it and the pelvis lowered for it
     /// (`terra_motion::placement`).
     placing: Placing,
@@ -501,8 +504,10 @@ fn keep(
             kept.drop_pelvis(pelvis, drop, up, &mut transforms, &parents);
         }
         for (side, each) in grounded.into_iter().enumerate() {
+            kept.over[side] = [0.0; 2];
             if let Some((clip, grounded)) = each {
                 let goal = grounded.placed(drop);
+                kept.over[side] = grounded.over(goal);
                 kept.bend_leg(
                     side,
                     legs[side],
@@ -563,6 +568,8 @@ impl Kept {
             landing: frame.landing,
             low: (ankle - ground).dot(up) <= feet::LOW_ANKLE_M,
             ball,
+            sole: [(ankle - root).dot(up), (clip_ball - root).dot(up)],
+            over: self.over[side],
         };
         let other = self.feet[1 - side].moving();
         let kept_at = self.feet[side].update(posed, dt, other);
@@ -585,7 +592,7 @@ impl Kept {
                 reach,
             },
             dt,
-            |at| underfoot.under(at, root, up),
+            |at| underfoot.under(at, root, up, (ground - root).dot(up)),
         );
         Some((clip, grounded))
     }
