@@ -72,13 +72,24 @@ Creatures that fly are a body plan of their own (D382, `terra_creatures::fliers`
 
 ## Designed kinds
 
-Monsters the developers have designed, each its own kind (D250). Their models are in `assets/models/creatures`, made from concepts in `art/props`; none is rigged, animated or in play yet.
+Monsters the developers have designed, each its own kind (D250). Their models are in `assets/models/creatures`, made from concepts in `art/props`; none is rigged, animated or in play yet, but the Cetri, made as a character (below).
 
 | Kind | What it is | Where |
 |---|---|---|
 | Worman | A giant earthworm standing as tall as a person, disguised as a traveller: a blue cap, round dark glasses, red lips, two thin arms and a knife. It attacks anyone who comes close | Wherever travellers go |
 | Drillhog | A groundhog the size of a boar, with drills growing from its back and head, which it digs and attacks with | Dungeons and places underground |
 | Seawish | A fish as tall as a person, standing on its tail, with a thick mop of seaweed growing on its head; it fights with a rusty sword and its seaweed. In the water it passes for a floating clump of seaweed | Beaches |
+| Cetri (D534) | A living oak 7 m tall that stands in the forest as one of its trees, wakes and lunges at whoever comes close, then stalks them slowly | Broadleaf forest, among the oaks |
+
+### The Cetri
+
+Drawn by a developer's child, titled "Cetri", with two notes: "It disguises itself as a normal tree." and "If you come close it jumps at you." The developer: "real monster, slow and towering in the game. realistic and scary" (D534).
+
+- **What it is**: an English oak, the forest's own broadleaf ("Leafy tree" in `flora.ron`, its oak leaf card), about 7 m to the top of its crown: a massive trunk of deep-furrowed, mossy oak bark that splits low into two root legs on splayed root feet; two long, thin, crooked branch arms, each ending in five long twig claws; a round, dense crown of oak leaves wider than its shoulders. In the upper trunk, two narrow slanted eye slits sunk deep in the bark, and below them a long jagged split lined with splintered pale-wood teeth, which in its sleep reads as an old oak's frost crack.
+- **Asleep** it is a tree: standing straight, root feet together, arms raised as boughs into its crown, eyes dark. Nothing about it is off but that it is not quite where the other trees are.
+- **Awake**: its eyes glow a dim yellow-amber from inside the bark, lit only while it is awake; it wakes when a player comes within a few metres and lunges at once, arms sweeping down to grab; then it stalks after them at a slow, heavy walk, slower than a person walks, as a body four times our height moves (Froude scaling, troll-fight.md). It cannot run; it is outwalked, not outfought.
+- **Made** as the troll was, on the biped plan (D436): our skeleton, from Tripo's auto-rig converted by the character pipeline at 7 m, with its own hands and feet (`CREATURE=1`); its source art in `art/characters/cetri/`. It is a large creature met up close: about 14,000 triangles for its first level of detail, crown included, with Tripo's PBR maps (colour, normal, roughness and metal), 2K in the game's file.
+- **Still to come**: its crown from our oak leaf cards, bound to its head and arm bones, so that asleep it matches the forest's oaks leaf for leaf (Tripo's crown is solid clumps); the eyes' glow as an emissive mask switched on waking; its sleeping pose, wake-and-lunge and walk as clips of its own (the troll's heavy walk, smash and roar stand in); how it decides to wake is the creatures' minds', not built yet.
 
 ## What it asks of the engine
 

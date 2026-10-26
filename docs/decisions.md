@@ -202,6 +202,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D529](decisions/D529.md) | Odd pairs in the hands | Design | Developers | Decided | From docs/holding.md's loadout model… |
 | [D530](decisions/D530.md) | Combat is also checked on the game's composed pose, from the duel's record | Tech | Agent | Decided | The duel's fight record (`--fight-log` in a `--duel`… |
 | [D531](decisions/D531.md) | The drawn shield rests low and rises only while the block is held | Design | Developers | Decided | With a shield drawn and the block not held… |
+| [D534](decisions/D534.md) | The Cetri, a tree that walks | Design | Developers | Decided | A monster drawn by a developer's child (creatures.md)… |
 
 ## People and the tribe
 
