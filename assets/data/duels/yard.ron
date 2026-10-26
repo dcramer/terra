@@ -23,6 +23,10 @@
         // Through its next blow, sideways, its active frames inside the roll's i-frames.
         (name: "roll", when: Blow(0.25), press: [Left, Roll], hold: 0.3),
         (name: "strafe", when: After(1.2), press: [Right], hold: 3.0),
-        (name: "end", when: After(3.5), press: []),
+        // After the fight, so its frames stay as they were: sheathed, its idle and walk, for the
+        // composed-pose checks (tools/sandbox/duel/pose.ts; the drawn walk is the strafe's).
+        (name: "sheathe", when: After(3.5), press: [Draw]),
+        (name: "walk sheathed", when: After(1.5), press: [Forward], hold: 1.2),
+        (name: "end", when: After(2.0), press: []),
     ],
 )

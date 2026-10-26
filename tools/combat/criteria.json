@@ -2844,6 +2844,86 @@
     "row": "grip",
     "measure": "grip_palm_deg"
    }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.pose.head_yaw_blows",
+   "noticed": 5,
+   "notice": "the player's head turns off where it aims as it swings (\"my head turns like 45 degree to the left when aiming forward and swinging\", the developer, playing the game (2026-10-26))",
+   "bar": {
+    "at_most": 15
+   },
+   "unit": "deg",
+   "source": "eyes on the foe through a blow, a glance at most (Enshrouded's fighters keep their heads on the target through a chain, research/2026-10-24-enshrouded-combat-measured.md); pose.ts HEAD_DEG: the worst of the player's blow frames, the head's ahead off its facing (along which its blows go), the game camera's look beside it; tools/sandbox/duel/pose.ts on the duel record's composed pose (terra_creatures::melee::pose, D530)",
+   "check": {
+    "by": "film",
+    "name": "head yaw in blows"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.pose.shield_rest_high",
+   "noticed": 5,
+   "notice": "the shield stays raised with the block not held (\"the shield is raised up even when not holding down the block button\", the developer, playing the game (2026-10-26))",
+   "bar": {
+    "at_most": 10
+   },
+   "unit": "cm",
+   "source": "Enshrouded's guard carries the board at the left hip and raises it only to block (research/2026-10-25-shield-prior-art.md); pose.ts REST_CM: the board's middle over the pelvis where the player's rests (the median of its frames drawn, standing or walking in no move, 20 frames past a block or move); tools/sandbox/duel/pose.ts on the duel record's composed pose (terra_creatures::melee::pose, D530)",
+   "check": {
+    "by": "film",
+    "name": "shield at rest"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.pose.shield_forearm_deg",
+   "noticed": 4,
+   "notice": "the heater does not lie along the forearm it is strapped to (\"in some of your stances its not uniform with the arm geometry\", the developer, playing the game (2026-10-26))",
+   "bar": {
+    "at_most": 10
+   },
+   "unit": "deg",
+   "source": "a heater rides the forearm on its straps, the forearm against the board (research/2026-10-25-shield-prior-art.md, D504); pose.ts FOREARM_DEG: the forearm (elbow to wrist) off the board's plane, every drawn frame; tools/sandbox/duel/pose.ts on the duel record's composed pose (terra_creatures::melee::pose, D530)",
+   "check": {
+    "by": "film",
+    "name": "shield off the forearm's line"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.pose.shield_forearm_off",
+   "noticed": 4,
+   "notice": "the heater floats off the forearm instead of wrapping it (\"you'd have this wrapped around the arm in real life\", the developer, playing the game (2026-10-26))",
+   "bar": {
+    "at_most": 5
+   },
+   "unit": "cm",
+   "source": "the forearm against the board's back (D504): a forearm's half-thickness (3.5 cm, moves.ts's pad) and a strap's padding; pose.ts OFF_CM: the forearm's middle off the board's back, every drawn frame; tools/sandbox/duel/pose.ts on the duel record's composed pose (terra_creatures::melee::pose, D530)",
+   "check": {
+    "by": "film",
+    "name": "shield off the forearm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.pose.shield_strap_fist",
+   "noticed": 4,
+   "notice": "the fist is not on the heater's hand strap in the game's pose",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "held.shield.grip_hand's bar (D459, D504) on the composed pose; pose.ts STRAP_CM: the hand strap (the look's origin) off socket.hand.L, every drawn frame; tools/sandbox/duel/pose.ts on the duel record's composed pose (terra_creatures::melee::pose, D530)",
+   "check": {
+    "by": "film",
+    "name": "shield strap off the fist"
+   }
   }
  ]
 }

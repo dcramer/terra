@@ -165,6 +165,7 @@ fn write(
     mut ground: Ground,
     shields: Query<(), With<Strapped>>,
     bounds: Query<(&GlobalTransform, &Aabb)>,
+    mut posing: super::pose::Posing,
 ) {
     let Some(frame) = frame.filter(|frame| frame.is_changed()) else {
         return;
@@ -240,6 +241,10 @@ fn write(
         if is_player {
             walking(last, motion, steps.get(entity).ok());
         }
+        // A duel's record carries the pose shown, for the composed-pose checks (`pose`).
+        if let Some(pose) = posing.of(entity, &terms).filter(|_| !walk) {
+            last["pose"] = pose;
+        }
         // Its feet over the world's ground, as a walker's: the duel reads contact there.
         soles(
             last,
@@ -276,6 +281,20 @@ fn write(
         );
         bodies.push(line);
     }
+    // A duel's player before the draw (or after a sheathe): not a fighter, its pose apart.
+    let sheathed: Vec<Value> = walkers
+        .iter()
+        .filter(|_| !walk)
+        .filter_map(|(entity, place, motion, _, _, shows)| {
+            Some(json!({
+                "feet": local(place.translation()),
+                "facing": mm(terms.transform_vector3(motion.map_or(Vec3::Z, |m| m.facing))),
+                "speed": r(motion.map_or(0.0, |m| m.velocity.length())),
+                "shows": shows.map(|shows| shows.clip.clone()),
+                "pose": posing.of(entity, &terms)?,
+            }))
+        })
+        .collect();
     let mut line = json!({
         "frame": frame.0,
         "fighters": bodies,
@@ -291,6 +310,9 @@ fn write(
             "vfov": r(lens.fov.to_degrees()),
             "aspect": r(lens.aspect_ratio),
         });
+    }
+    if !sheathed.is_empty() {
+        line["sheathed"] = json!(sheathed);
     }
     if first {
         line["up"] = json!(mm(terms.transform_vector3(up)));

@@ -27,6 +27,7 @@ import { join, resolve } from "node:path";
 import { ROOT, buildOffscreen, imageMagick, offscreenPath, offscreenRun } from "./client.ts";
 import { type Check, type Frame, check, framed, read, readMoves, same, say, share } from "./duel/checks.ts";
 import { COLUMNS, moments } from "./duel/moments.ts";
+import { type PoseFrame, poseChecks } from "./duel/pose.ts";
 import { staggerJump } from "./duel/shield.ts";
 
 const MOVES = resolve(ROOT, "assets/data/moves/sword.shielded.ron");
@@ -34,9 +35,9 @@ const MOVES = resolve(ROOT, "assets/data/moves/sword.shielded.ron");
 const SHARE: number[] = JSON.parse(readFileSync(resolve(ROOT, "tools/combat/refs/enshrouded.json"), "utf8")).targets.camera_player_share;
 const SCRIPT = "duels/yard.ron";
 /// The frames filmed, every second one kept for 30 a second: from before the draw to past
-/// the script's end (frame 1274 in the first run).
+/// the script's end (the end at frame 1123 before round 30 added a sheathed idle and walk after the fight, 1333 since).
 const FROM = 20;
-const TO = 1330;
+const TO = 1450;
 /// The shot rolls a little before, so the exposure it holds is the yard's, not the load's.
 const ROLLS = 10;
 const PICTURE = "960x540";
@@ -113,6 +114,8 @@ function report(records: { name: string; frames: Frame[] }[], keep: string | und
   // The game's own camera, the player's run (or a record named for it).
   const player = records.find((each) => each.name === "player" || each.name.endsWith("player.jsonl"));
   if (player) lines.push(share(player.frames, SHARE));
+  // The composed pose (duel/pose.ts): the player run's, its aim the game camera's look.
+  lines.push(...poseChecks((player ?? records[0]).frames as PoseFrame[], player !== undefined));
   const said = lines.map(say);
   for (const line of said) console.log(`duel: ${line}`);
   if (keep) writeFileSync(keep, said.join("\n") + "\n");

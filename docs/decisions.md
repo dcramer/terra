@@ -200,6 +200,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D487](decisions/D487.md) | A landed blow shows a burst where the blade met the body, not a flash of the whole body | Design | Developers | Decided | Recommended by the agent (combat round 17)… |
 | [D504](decisions/D504.md) | The sword-and-shield set carries a strapped heater now, a round shield later | Design | Developers | Decided | The prototype's shield becomes a strapped heater or kite… |
 | [D529](decisions/D529.md) | Odd pairs in the hands | Design | Developers | Decided | From docs/holding.md's loadout model… |
+| [D530](decisions/D530.md) | Combat is also checked on the game's composed pose, from the duel's record | Tech | Agent | Decided | The duel's fight record (`--fight-log` in a `--duel`… |
 
 ## People and the tribe
 

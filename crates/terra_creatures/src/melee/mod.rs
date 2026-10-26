@@ -18,6 +18,7 @@ mod contact;
 mod feet;
 mod hud;
 mod partner;
+mod pose;
 mod record;
 mod script;
 mod sole;
