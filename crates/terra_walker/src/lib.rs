@@ -22,6 +22,7 @@ pub mod character;
 pub mod controls;
 pub mod feet;
 pub mod figure;
+pub mod gaze;
 pub mod intent;
 pub mod layer;
 pub mod lift;

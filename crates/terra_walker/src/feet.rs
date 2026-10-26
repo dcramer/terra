@@ -450,7 +450,7 @@ type Bodies<'a> = (
 );
 
 #[allow(clippy::too_many_arguments)]
-fn keep(
+pub(crate) fn keep(
     time: Res<Time>,
     baked: Res<Baked>,
     graphs: Res<Assets<AnimationGraph>>,

@@ -187,6 +187,7 @@ impl Plugin for WalkerPlugin {
         figure::plugin(app);
         crate::feet::plugin(app);
         crate::arms::plugin(app);
+        crate::gaze::plugin(app);
         camera::plugin(app);
         movement::plugin(app);
         app.init_resource::<Hands>()
