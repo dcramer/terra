@@ -1,6 +1,6 @@
 # Weather
 
-Status: **proposal, 2026-10-19**. How the weather is drawn and checked is technical and mine to decide (D418); what the weather does to play, and how much of it a world gets, is the developers', Open at the end. It builds on [climate.md](climate.md), which owns the quantities (D312 to D315, D327), and follows [scene-rules.md](scene-rules.md): every rule has a system that owns it and a check that fails when it breaks. What shipped games do, with sources, is [research/2026-10-18-storms-and-winter.md](../research/2026-10-18-storms-and-winter.md).
+Status: **proposal, 2026-10-19**. How the weather is drawn and checked is technical and mine to decide (D418); what the weather does to play, and how much of it a world gets, is the developers', Open at the end. It builds on [climate.md](climate.md), which owns the quantities (D312 to D315, D327), and follows [scene-rules.md](scene-rules.md): every rule has a system that owns it and a check that fails when it breaks. What shipped games do, with sources, is [research/2026-10-18-storms-and-winter.md](../research/2026-10-18-storms-and-winter.md). The sky itself, clouds as lit volumes from the climate, the sun, moon and stars, is [sky.md](sky.md) (D515).
 
 ## Why
 
