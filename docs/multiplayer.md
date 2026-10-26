@@ -63,7 +63,7 @@ Open: whether agent players are for us (testing, tuning, filling a server) or a 
 1. **Who runs the servers?** Players running their own, as with Minecraft and Valheim, costs us a server program and documentation. Running official ones costs money and ongoing attention.
 2. **Friends or strangers?** A private server for a community is close to playing with friends. A public one needs moderation, ownership rules and far more defence against cheating.
 3. **Does a small game, hosted by a player, remain a main way to play?**
-4. **Does the world carry on with nobody in it?**
+4. **Does the world carry on with nobody in it?** Leaning no (D500): a realm nobody is in freezes, and what follows from time catches up on return.
 5. **Can players get in each other's way**: blocking a doorway, digging under someone, taking apart someone else's wall?
 
 There is no player against player (D2) and no fail state (D18).

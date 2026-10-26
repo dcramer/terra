@@ -83,6 +83,12 @@ Ground, water, weather, seasons, life and how realms join.
 | [D483](decisions/D483.md) | A theme names its own sockets, and a socket few modules take is an adjacency rule | Tech | Agent | Leaning | Amends D474 (the dressing in dungeons.md follows it). |
 | [D484](decisions/D484.md) | A dungeon is stamped as one building of cubes in a dug box, and run in from its graph | Tech | Agent | Leaning | `terra_dungeon::stamp` turns a dressed dungeon into what… |
 | [D495](decisions/D495.md) | Mining by hits, and ore in deposits | Design | Developers | Decided | **Mining is hitting the ground** with the tool in hand… |
+| [D497](decisions/D497.md) | A dungeon is a place in its realm, not a world of its own | Design | Developers | Decided | A dungeon is part of the realm it is found in… |
+| [D498](decisions/D498.md) | One copy of each dungeon, shared by the whole server | Design | Developers | Decided | Each dungeon exists once and is shared by everyone on… |
+| [D499](decisions/D499.md) | A cleared dungeon stays cleared | Design | Developers | Decided | A dungeon players have cleared stays cleared… |
+| [D500](decisions/D500.md) | A world nobody is in freezes; what follows from time catches up on return | Design | Agent | Leaning | A realm with no player in it is frozen… |
+| [D501](decisions/D501.md) | Crossing is a short fade, whatever the entrance | Design | Developers | Decided | A crossing is covered by a short fade, under 3 s… |
+| [D502](decisions/D502.md) | No building in a dungeon, and its rock cannot be dug | Design | Agent | Leaning | Players cannot build inside a dungeon, and its walls… |
 
 ## The player and survival
 
@@ -489,9 +495,9 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D443](decisions/D443.md) | A creature's paces come from its size | Tech | Agent | Leaning | A kind with no measured speeds takes its walk… |
 | [D457](decisions/D457.md) | The character controller is held by a scorecard of criteria and a ratchet, measured on a plain-Rust course | Tech | Agent | Decided | What the controller must get right is data… |
 | [D466](decisions/D466.md) | Fire is one self-contained module, and every kind's flame body is one marched flame field | Tech | Agent | Leaning | The technical design of fire-module.md, extending D415. |
-| [D468](decisions/D468.md) | A world instance is the unit loaded in and out, one to a Bevy World | Tech | Agent | Leaning | A world instance is one running copy of a world… |
+| [D468](decisions/D468.md) | A world instance is the unit loaded in and out, one to a Bevy World | Tech | Agent | Leaning | A world instance is one running copy of a realm… |
 | [D469](decisions/D469.md) | World content is scoped by default, and a module never names its instance | Tech | Agent | Leaning | On the client, what belongs to the current world is… |
-| [D470](decisions/D470.md) | Crossing to another world is a hand-off under a cover, with a return stack | Tech | Agent | Leaning | A door or portal is an entity with `Door { to, arrival`… |
+| [D470](decisions/D470.md) | Crossing to another world is a hand-off under a cover, with a return stack | Tech | Agent | Leaning | A portal is an entity with `Door { to, arrival }`… |
 | [D471](decisions/D471.md) | Asset sets by theme, a record per instance, replication by instance | Tech | Agent | Leaning | How an instance's files, saves and messages are bounded… |
 | [D482](decisions/D482.md) | The mover keeps bodies in f64 and asks in f32 offsets | Tech | Agent | Decided | The mover (D53) keeps each body's position in f64 and… |
 | [D485](decisions/D485.md) | A reflection probe smaller than every irradiance volume holding a spot gives its diffuse light | Tech | Agent | Decided | Per fragment, the smallest light probe holding it gives… |

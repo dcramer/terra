@@ -1,12 +1,12 @@
 # Dungeons by rule
 
-Status: Leaning, technical (D473, D474, D483, D484, by the agent); the generator, its sheet and the stamp are built in `terra_dungeon`, and the sandbox lays one in the forest (`--experiment dungeon`, `dungeon-mine`, `dungeon-keep`). What a dungeon is for in the game is a design question for the developers, listed at the end and not decided here. [instances.md](instances.md) says how a dungeon behind a door is loaded as its own world; this doc says how one is made.
+Status: Leaning, technical (D473, D474, D483, D484, by the agent); the generator, its sheet and the stamp are built in `terra_dungeon`, and the sandbox lays one in the forest (`--experiment dungeon`, `dungeon-mine`, `dungeon-keep`). What a dungeon is for in the game is a design question for the developers, listed at the end and not decided here. A dungeon is a place dug into its realm, as in Valheim and Enshrouded (D497), one copy shared by the whole server (D498) that stays cleared (D499), with no building and rock that cannot be dug (D502); [instances.md](instances.md) says how a realm is loaded in and out; this doc says how a dungeon is made.
 
 ## Constraints
 
 - Hundreds of variants a player tells apart, not millions (D182): a theme (crypt, mine, keep) chooses parts; a seed chooses among them by rules.
 - A new theme is data, not code (D136); rules in a plain crate (D28), the same on every machine (D41).
-- Laid in building's half-metre cubes (D181), dug into the terrain or standing alone as an instance (D468).
+- Laid in building's half-metre cubes (D181), dug into its realm's terrain (D497).
 - Checkable without a person (D69): every promise a test, the whole a sheet of numbers and maps.
 
 ## The stages
@@ -80,11 +80,10 @@ What the world lays, as plain data in a local frame (metres, x east, y up, z sou
 
 ## Open questions (design, the developers')
 
-- What a dungeon is in the game: an instance behind a door (D468), a site dug into the open world, or both.
 - Whether keys are items carried out, or objects of the dungeon.
 - Difficulty by rank (a dungeon's level) or by depth inside it.
 - The loot economy: what a dungeon gives against the open world.
-- Respawn and clearing: does a cleared dungeon fill again, and when.
+- Respawn: a cleared dungeon stays cleared by default (D499); whether some kinds fill again, and when.
 - Whether monsters form inside (magic pooling, D103).
 - One-way and secret links as player skills (perception) or always visible.
 - Whether and how doors open (by hand, on approach, a locked one by its keys); the demo stands every leaf open until then.
