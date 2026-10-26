@@ -24,9 +24,9 @@ pub struct Underfoot<'w, 's> {
 }
 
 impl Underfoot<'_, '_> {
-    /// The ground under `at`, over `root`'s level along `up` (`placement::probe`); none with no
-    /// planet, or none found.
-    pub fn under(&mut self, at: Vec3, root: Vec3, up: Vec3) -> Option<Under> {
+    /// The ground under `at`, over `root`'s level along `up`, probed from over the body's ground
+    /// `body` up from the root (`placement::probe`); none with no planet, or none found.
+    pub fn under(&mut self, at: Vec3, root: Vec3, up: Vec3, body: f32) -> Option<Under> {
         let planet = self.planet.as_deref()?;
         self.memo.keep_within(MEMO_MOST);
         let memo = RefCell::new(&mut *self.memo);
@@ -37,6 +37,6 @@ impl Underfoot<'_, '_> {
         let blocks = Obstacles {
             obstacles: self.movers.as_deref().map_or(&[][..], Movers::blocks),
         };
-        placement::probe(&(&field, &blocks), at.as_dvec3(), root.as_dvec3(), up)
+        placement::probe(&(&field, &blocks), at.as_dvec3(), root.as_dvec3(), up, body)
     }
 }

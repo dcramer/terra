@@ -28,19 +28,31 @@ const DT: f32 = 1.0 / 60.0;
 #[test]
 fn the_probe_finds_the_ground_under_a_point_over_or_under_the_roots_level() {
     for h in [-0.5, -0.2, 0.0, 0.3, 0.55, 0.65] {
-        let under = probe(&floor(h), DVec3::new(1.0, 0.2, 2.0), DVec3::ZERO, UP).unwrap();
+        let under = probe(&floor(h), DVec3::new(1.0, 0.2, 2.0), DVec3::ZERO, UP, 0.0).unwrap();
         assert!((under.height - h).abs() < 2e-3, "{h}: {under:?}");
         assert!(under.normal.dot(UP) > 0.999, "{h}: {under:?}");
     }
     // Further down than it looks, or a face it starts in: no ground.
-    assert_eq!(probe(&floor(-0.8), DVec3::ZERO, DVec3::ZERO, UP), None);
-    assert_eq!(probe(&floor(0.9), DVec3::ZERO, DVec3::ZERO, UP), None);
+    assert_eq!(probe(&floor(-0.8), DVec3::ZERO, DVec3::ZERO, UP, 0.0), None);
+    assert_eq!(probe(&floor(0.9), DVec3::ZERO, DVec3::ZERO, UP, 0.0), None);
     // On a slope, the ground under the point, and its normal.
     let deg: f32 = 30.0;
-    let under = probe(&slope(deg), DVec3::new(0.4, 0.0, 0.0), DVec3::ZERO, UP).unwrap();
+    let under = probe(&slope(deg), DVec3::new(0.4, 0.0, 0.0), DVec3::ZERO, UP, 0.0).unwrap();
     let want = 0.4 * libm::tanf(deg.to_radians());
     assert!((under.height - want).abs() < 0.01, "{under:?} vs {want}");
     assert!((under.normal.angle_between(UP).to_degrees() - deg).abs() < 1.0);
+}
+
+/// Up a stair, the figure is eased under its body (`terra_walker::Stepping`): a swinging foot's
+/// next tread, 0.9 m over the figure's root and 0.4 m over the body's ground, is found from the
+/// body's ground; a face higher than a step over the body is still none.
+#[test]
+fn the_probe_starts_over_the_bodys_ground_not_its_figures() {
+    let under = probe(&floor(0.9), DVec3::ZERO, DVec3::ZERO, UP, 0.5).unwrap();
+    assert!((under.height - 0.9).abs() < 2e-3, "{under:?}");
+    assert_eq!(probe(&floor(1.3), DVec3::ZERO, DVec3::ZERO, UP, 0.5), None);
+    // Still as deep under the root.
+    assert_eq!(probe(&floor(-0.8), DVec3::ZERO, DVec3::ZERO, UP, 0.5), None);
 }
 
 /// A flat foot on the root's level: its ankle 8 cm up, and in its own frame its ball 5 cm under
@@ -524,4 +536,36 @@ fn a_foot_locked_across_a_riser_rests_on_the_higher_tread_and_its_ball_stays_put
             "{frame}: {ball} vs {shown_ball}"
         );
     }
+}
+
+/// A foot over lower ground stands over it, past where its clip has it, by what the pelvis has
+/// not yet come down to (`Grounded::over`), and by nothing once it has: what a lock's start
+/// reads (`feet::PLANT_M`). A foot on its ground as the clip has it is over by nothing.
+#[test]
+fn a_foot_over_lower_ground_is_over_it_until_the_pelvis_comes_down() {
+    let ground = |x: f32| (if x >= 0.2 { -0.3 } else { 0.0 }, UP);
+    let feet = [flat(0.3), flat(-0.2)];
+    let under = under_of(ground, Vec3::ZERO);
+    let mut placing = Placing::default();
+    let overs: Vec<[[f32; 2]; 2]> = (0..30)
+        .map(|_| {
+            let grounded = [0, 1].map(|side| {
+                let lock = (side == 1).then_some(feet[side]);
+                placing.ground(side, leg(feet[side], lock, Vec3::ZERO), DT, &under)
+            });
+            let drop = placing.pelvis([&grounded[0], &grounded[1]], Vec3::ZERO, DT);
+            grounded.map(|g| g.over(g.placed(drop)))
+        })
+        .collect();
+    assert!(overs[0][0].iter().all(|&o| o > 0.1), "{:?}", overs[0]);
+    assert!(
+        overs.windows(2).all(|o| o[1][0][0] <= o[0][0][0] + 1e-5),
+        "{overs:?}"
+    );
+    let last = overs[overs.len() - 1];
+    assert!(last[0].iter().all(|o| o.abs() < 0.005), "{last:?}");
+    assert!(
+        overs.iter().all(|o| o[1].iter().all(|v| v.abs() < 1e-3)),
+        "{overs:?}"
+    );
 }
