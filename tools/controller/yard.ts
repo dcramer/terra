@@ -34,10 +34,15 @@ const FROM = 20;
 const TO = 2400;
 const ROLLS = 10;
 const PICTURE = "960x540";
+/// Once the route is done (a jog's by frame ~960, a sprint's ~640), the body turns where it
+/// stands, as a player tapping a way to face does: back (180 deg), then right (90 deg), a few
+/// frames' tap each, so it goes a few centimetres while it turns (turn.foot's plants). The
+/// wait before is not stuck: the route is done once its last mark is reached.
+const TURNS = ["--press", "s@1300-1306", "--press", "d@1600-1604"];
 /// The paces walked: a jog (the route's own), and a sprint, shift held throughout.
 const PACES: { name: string; args: string[] }[] = [
-  { name: "jog", args: [] },
-  { name: "sprint", args: ["--press", `shift@1-${TO + 10}`] },
+  { name: "jog", args: [...TURNS] },
+  { name: "sprint", args: ["--press", `shift@1-${TO + 10}`, ...TURNS] },
 ];
 
 const args = process.argv.slice(2);

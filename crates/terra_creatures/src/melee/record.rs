@@ -15,8 +15,13 @@
 //! written too outside a duel, as a walker (no move), so a walk is judged by the same numbers
 //! (`tools/controller/yard.ts`, the controller's filmed course); each player says how far
 //! below its body its figure is shown after a step up (`below`, `terra_walker::stepping`),
-//! whether it stands on the ground and its speed.
+//! whether it stands on the ground and its speed; and, for each foot, how far its heel (the
+//! foot bone) and ball stand over the world's ground (`sole`, `sole::gap`) beside how high its
+//! clip posed them over the clip's flat ground (`clip`), and how far its leg stayed short of the
+//! goal it was bent to and of the lock's goal alone (`short`, `short_lock`): `feet.ground`'s and
+//! `pelvis.drop`'s numbers.
 
+use super::sole::Ground;
 use super::{Fighter, Set};
 use crate::staged::Staged;
 use bevy::prelude::*;
@@ -34,6 +39,8 @@ use terra_world::start::Start;
 
 /// The balls of the feet, where a planted foot meets the ground, as the gait check reads them.
 const BALLS: [&str; 2] = ["ball_l", "ball_r"];
+/// The feet's bones, their heels as the lock curves' bake reads them (`tools/characters/markers.ts`).
+const HEELS: [&str; 2] = ["foot_l", "foot_r"];
 
 /// What happened this frame, put in by the systems it happened in.
 #[derive(Resource, Default)]
@@ -60,6 +67,7 @@ struct Out {
     file: BufWriter<File>,
     origin: Option<Vec3>,
     balls: HashMap<Entity, [Entity; 2]>,
+    heels: HashMap<Entity, [Entity; 2]>,
     /// Whether a player with no sword drawn is written as a walker: not in a duel, whose
     /// record is the fight's alone (its checks would read the walk to the draw as one).
     walkers: bool,
@@ -80,6 +88,7 @@ pub fn plugin(app: &mut App) {
         file: BufWriter::new(file),
         origin: None,
         balls: HashMap::new(),
+        heels: HashMap::new(),
         walkers,
     })
     .init_resource::<Said>()
@@ -140,6 +149,7 @@ fn write(
     names: Query<&Name>,
     start: Option<Res<Start>>,
     camera: Option<Single<(&GlobalTransform, &Projection), With<MainCamera>>>,
+    mut ground: Ground,
 ) {
     let Some(frame) = frame.filter(|frame| frame.is_changed()) else {
         return;
@@ -222,28 +232,20 @@ fn write(
         let balls = balls_of(
             &mut out, entity, root, up, &local, &children, &names, &bones,
         );
-        let mut line = json!({
-            "who": "you",
-            "feet": local(feet),
-            "facing": mm(terms.transform_vector3(facing)),
-            "move": null,
-            "t": 0.0,
-            "phase": null,
-            "cancels": false,
-            "reach": false,
-            "guard": false,
-            "stop_s": 0.0,
-            "stagger_s": 0.0,
-            "down": false,
-            "free": true,
-            "radius": null,
-            "balls": balls,
-            "kept": kept.map(|kept| kept.states()),
-            "lock": kept.map(|kept| kept.locks().map(|[curve, alpha]| [r(curve), r(alpha)])),
-            "why": kept.map(|kept| kept.whys()),
-            "gated": kept.and_then(|kept| kept.gated()),
-        });
+        let facing = mm(terms.transform_vector3(facing));
+        let mut line = walker(local(feet), facing, balls, kept);
         walking(&mut line, motion, stepping);
+        let found = (&children, &names, &bones);
+        let below = stepping.map_or(0.0, |s| s.below);
+        soles(
+            &mut line,
+            &mut out,
+            entity,
+            (up, below),
+            kept,
+            found,
+            &mut ground,
+        );
         bodies.push(line);
     }
     let mut line = json!({
@@ -269,6 +271,76 @@ fn write(
     if let Err(problem) = written {
         warn!("Melee: the fight's record could not be written: {problem}");
     }
+}
+
+/// A walker's line: a fighter's, with no move, guard or harm.
+fn walker(
+    feet: [f64; 3],
+    facing: [f64; 3],
+    balls: Vec<Value>,
+    kept: Option<&terra_walker::feet::Kept>,
+) -> Value {
+    json!({
+        "who": "you",
+        "feet": feet,
+        "facing": facing,
+        "move": null,
+        "t": 0.0,
+        "phase": null,
+        "cancels": false,
+        "reach": false,
+        "guard": false,
+        "stop_s": 0.0,
+        "stagger_s": 0.0,
+        "down": false,
+        "free": true,
+        "radius": null,
+        "balls": balls,
+        "kept": kept.map(|kept| kept.states()),
+        "lock": kept.map(|kept| kept.locks().map(|[curve, alpha]| [r(curve), r(alpha)])),
+        "why": kept.map(|kept| kept.whys()),
+        "gated": kept.and_then(|kept| kept.gated()),
+    })
+}
+
+/// What a walker's feet add to its line (the module's `sole`, `clip`, `short`, `short_lock`):
+/// each foot's heel and ball over the world's ground, and over the clip's flat ground as its
+/// clip posed them (`Kept::clip_soles`, over the body, so `below` more over the shown root).
+#[allow(clippy::too_many_arguments)]
+fn soles(
+    line: &mut Value,
+    out: &mut Out,
+    entity: Entity,
+    (up, below): (Vec3, f32),
+    kept: Option<&terra_walker::feet::Kept>,
+    (children, names, places): (&Query<&Children>, &Query<&Name>, &Query<&GlobalTransform>),
+    ground: &mut Ground,
+) {
+    let Some(kept) = kept else { return };
+    let pair = |bones: [&str; 2], found: &mut HashMap<Entity, [Entity; 2]>| {
+        if let std::collections::hash_map::Entry::Vacant(slot) = found.entry(entity)
+            && let [Some(l), Some(r)] =
+                bones.map(|name| character::find(entity, name, children, names))
+        {
+            slot.insert([l, r]);
+        }
+        found.get(&entity).copied()
+    };
+    let (Some(heels), Some(balls)) = (pair(HEELS, &mut out.heels), pair(BALLS, &mut out.balls))
+    else {
+        return;
+    };
+    let mut over = |bone: Entity| {
+        let at = places.get(bone).ok()?.translation();
+        ground.gap(at, up).map(r)
+    };
+    let sole: Vec<[Option<f64>; 2]> = (0..2)
+        .map(|side| [over(heels[side]), over(balls[side])])
+        .collect();
+    line["sole"] = json!(sole);
+    line["clip"] = json!(kept.clip_soles().map(|feet| feet.map(|h| r(h + below))));
+    line["short"] = json!(kept.shorts().map(|[short, _]| r(short)));
+    line["short_lock"] = json!(kept.shorts().map(|[_, lock]| r(lock)));
 }
 
 /// Where the balls of a body's feet are, in the start's terms, and how high over `feet`, the

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Frame } from "../sandbox/duel/checks.ts";
-import { type Walk, feet, over, smooth, steps, turn, yard } from "./yard-checks.ts";
+import { type Walk, drops, feet, ground, over, sinking, smooth, steps, turn, yard } from "./yard-checks.ts";
 
 /// A walk east at 4.2 m/s on level ground at 0 for `n` frames; `lift(i)` raises the body,
 /// `below(i)` how far under it the figure is shown, `camera(i)` the camera's height.
@@ -113,4 +113,50 @@ test("a foot sliding while the body turns in place is turn.foot's, not feet slid
   const on = of(turning(true));
   assert.match(feet([on]).line, /1 of 1 plants slid/);
   assert.match(turn([on]).line, /0 turning plants/);
+});
+
+test("the wait after the route's last mark is not stuck; a wait short of it is", () => {
+  // The last mark (12 m east) is reached at frame 151; standing from then on is after it.
+  const route = ["reached 3,0", "reached 12,0"];
+  const waits = (from: number, to: number) => walk(300, course).map((f, i) => (i > from && i < to ? { ...f, fighters: [{ ...f.fighters[0], speed: 0 }] } : f));
+  assert.ok(!/stuck/.test(yard([of(waits(151, 300), route)]).line));
+  assert.match(yard([of(waits(10, 150), route)]).line, /stuck at frame/);
+});
+
+/// A walk standing on its left foot, locked 30 frames: its heel and ball `sole(i)` m over the
+/// world's ground, its clip posing them 0.08 and 0.04 m over its flat ground, its leg short of
+/// its goal by `short` and of the lock's goal alone by `lock`.
+function standing(sole: (i: number) => number[], short = 0, lock = 0, record = true): Walk {
+  const frames = walk(30).map((f, i) => {
+    const body = f.fighters[0];
+    const extra = record ? { sole: [sole(i), [0.3, 0.3]], clip: [[0.08, 0.04], [0.3, 0.3]], short: [short, 0], short_lock: [lock, 0] } : {};
+    return { ...f, fighters: [{ ...body, balls: [{ at: [0, 0.04, 0.1], up: 0.04 }, null], kept: ["planted", "free"], ...extra } as unknown as Frame["fighters"][number]] };
+  });
+  return of(frames);
+}
+
+test("a locked sole where its clip has it passes; floating, pitched or sunk fails", () => {
+  const level = ground([standing(() => [0.08, 0.04])]);
+  assert.ok(level.ok && level.value < 1e-9, level.line);
+  // Left at the root's level over a tread 0.3 m lower: it floats.
+  const floats = ground([standing(() => [0.38, 0.34])]);
+  assert.ok(!floats.ok && Math.abs(floats.value - 0.3) < 1e-9 && /1 on steps/.test(floats.line), floats.line);
+  // Flat on a slope: the heel 4 cm into it, the ball as the clip has it.
+  const pitched = [standing(() => [0.04, 0.04])];
+  assert.ok(!ground(pitched).ok && Math.abs(ground(pitched).value - 0.04) < 1e-9, ground(pitched).line);
+  assert.ok(!sinking(pitched).ok && Math.abs(sinking(pitched).value - 0.04) < 1e-9, sinking(pitched).line);
+  // Sunk a frame alone: the plant's median holds, sinking's worst frame does not.
+  const once = [standing((i) => (i === 10 ? [0.08, 0.0] : [0.08, 0.04]))];
+  assert.ok(ground(once).ok && !sinking(once).ok, sinking(once).line);
+  assert.ok(sinking([standing(() => [0.38, 0.34])]).ok);
+  assert.match(ground([standing(() => [0.08, 0.04], 0, 0, false)]).line, /no locked plant/);
+});
+
+test("pelvis.drop counts the shortfall placement adds, not the lock's own", () => {
+  const [p95, worst] = drops([standing(() => [0.08, 0.04], 0.05, 0.05)]);
+  assert.ok(p95.ok && worst.ok && p95.value === 0 && /lock alone leaves p95 5.0 cm/.test(p95.line), p95.line);
+  const [placed, placedWorst] = drops([standing(() => [0.08, 0.04], 0.07, 0.02)]);
+  assert.ok(!placed.ok && Math.abs(placed.value - 0.05) < 1e-9 && !placedWorst.ok, placed.line);
+  const frames = standing(() => [0.08, 0.04]).frames.map((f) => ({ ...f, fighters: f.fighters.map((w) => ({ ...w, short_lock: undefined })) }));
+  assert.match(drops([of(frames as Frame[])])[0].line, /without the leg's shortfalls/);
 });

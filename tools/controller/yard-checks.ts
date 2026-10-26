@@ -5,7 +5,7 @@
 // (tools/sandbox/duel/checks.ts `sliding`). yard-checks.test.ts plants each fault in a made-up
 // walk. Node 22.18 or later; no dependencies.
 
-import { type Frame, type Plant, plants, slidOf } from "../sandbox/duel/checks.ts";
+import { type Frame, PLANT_FRAMES, type Plant, plants, slidOf } from "../sandbox/duel/checks.ts";
 
 /// A check's verdict: whether it held, its line, its number (the scorecard row's value) and
 /// how many faults it found.
@@ -14,8 +14,21 @@ export type Check = { name: string; ok: boolean; line: string; value: number; fa
 /// ground's height along the way before it was dug, a metre apart east from the start (the
 /// log's `Course: ground` line).
 export type Walk = { name: string; frames: Frame[]; route: string[]; ground: number[] };
-/// A walker's line adds its figure's lag after a step up and whether it stands on the ground.
-type Walker = Frame["fighters"][number] & { below?: number; on_ground?: boolean; speed?: number };
+/// A walker's line adds its figure's lag after a step up and whether it stands on the ground;
+/// how each foot is kept; each foot's heel and ball over the world's ground (`sole`, null where
+/// none is under it) and over the clip's flat ground as its clip posed them (`clip`); and how
+/// far each leg stayed short of the goal it was bent to (`short`) and of the lock's goal alone
+/// (`short_lock`), m.
+type Walker = Frame["fighters"][number] & {
+  below?: number;
+  on_ground?: boolean;
+  speed?: number;
+  kept?: string[];
+  sole?: (number | null)[][];
+  clip?: number[][];
+  short?: number[];
+  short_lock?: number[];
+};
 
 export const FPS = 60;
 /// The bar of criterion 6: the shown root rises no more than this share of a step a frame...
@@ -38,6 +51,8 @@ export const THROUGH_M = 0.25;
 /// Stuck: so long with the route not done and the body all but still.
 export const STUCK_S = 1.5;
 export const STILL_MS = 0.3;
+/// The route's last mark is reached this near it (the walker's ROUTE_REACHED_M, 1.5 m).
+export const DONE_M = 1.5;
 /// The mound past the slope limit (course_yard.rs MOUND): where it stands, how far its foot
 /// reaches, and how high the feet may get onto it (a step and a little).
 export const MOUND = { east: 50, south: 0, foot_m: 2.83, climb_m: 0.65 };
@@ -123,6 +138,116 @@ function walkPlants(walk: Walk, turn: boolean): Plant[] {
   return plants(frames).filter((plant) => turning(frames, plant) === turn);
 }
 
+/// feet.ground's bar: a locked sole within so much of where its clip has it over its own flat
+/// ground (docs/movement.md stage 4: feet on slopes within 2 cm); feet.sinking's, so far under.
+export const GROUND_M = 0.02;
+export const SINK_M = 0.02;
+/// pelvis.drop's bars: the shortfall placement adds to a leg, at p95 and at worst.
+export const DROP_M = 0.01;
+export const DROP_WORST_M = 0.03;
+/// Ground under a ball this far from the shown root's level is a step or a slope: its plants
+/// are counted apart, so a line says whether the check met any.
+export const UNEVEN_M = 0.05;
+
+/// A frame of a locked plant: how far its sole is off where its clip has it (the worse of the
+/// heel's and the ball's height over the world's ground against their height over the clip's
+/// flat ground), how far it is sunk past that (0 if not), the ground under the ball over the
+/// shown root, and the leg's shortfall from its goal and from the lock's goal alone.
+type Held = { off: number; sunk: number; ground: number; short?: number; lock?: number };
+type Run = { walk: string; foot: number; from: number; to: number; held: Held[] };
+
+/// Each foot's locked plants (`kept` "planted" on the ground, PLANT_FRAMES or more on end, its
+/// heel and ball over ground the record found).
+function locked(walk: Walk): Run[] {
+  const out: Run[] = [];
+  for (const foot of [0, 1]) {
+    let run: Run | undefined;
+    const close = () => {
+      if (run && run.held.length >= PLANT_FRAMES) out.push(run);
+      run = undefined;
+    };
+    for (const frame of walk.frames) {
+      const w = you(frame);
+      const sole = w?.sole?.[foot];
+      const clip = w?.clip?.[foot];
+      const found = w && w.on_ground !== false && w.kept?.[foot] === "planted" && sole && clip && typeof sole[0] === "number" && typeof sole[1] === "number";
+      if (!found || (run && frame.frame !== run.to + 1)) close();
+      if (!found) continue;
+      const [heel, ball] = [(sole[0] as number) - clip[0], (sole[1] as number) - clip[1]];
+      const up = w.balls[foot]?.up ?? (sole[1] as number);
+      const held = { off: Math.max(Math.abs(heel), Math.abs(ball)), sunk: Math.max(0, -heel, -ball), ground: up - (sole[1] as number), short: w.short?.[foot], lock: w.short_lock?.[foot] };
+      run ??= { walk: walk.name, foot, from: frame.frame, to: frame.frame, held: [] };
+      run.to = frame.frame;
+      run.held.push(held);
+    }
+    close();
+  }
+  return out;
+}
+
+const sorted = (xs: number[]) => [...xs].sort((a, b) => a - b);
+const median = (xs: number[]) => sorted(xs)[Math.floor((xs.length - 1) / 2)];
+const p95 = (xs: number[]) => sorted(xs)[Math.max(0, Math.ceil(xs.length * 0.95) - 1)];
+const cm = (m: number) => `${(m * 100).toFixed(1)} cm`;
+const where = (run: Run) => `${run.walk} ${run.foot ? "right" : "left"} foot, frames ${run.from}-${run.to}, ground ${(median(run.held.map((h) => h.ground)) * 100).toFixed(0)} cm from the root`;
+const none = (name: string): Check => ({ name, ok: false, line: "✗ no locked plant with its sole and its clip's in the records (`kept`, `sole`, `clip`)", value: NaN, faults: 1 });
+
+/// feet.ground: each locked plant's median of its sole off where its clip has it over the
+/// clip's own flat ground (heel strike and toe-off are the clip's, so they cancel); the row's
+/// number the worst plant's, m.
+export function ground(walks: Walk[]): Check {
+  const runs = walks.flatMap(locked);
+  if (!runs.length) return none("feet ground");
+  const each = runs.map((run) => ({ run, off: median(run.held.map((h) => h.off)) }));
+  const worst = each.reduce((a, b) => (b.off > a.off ? b : a));
+  const off = each.filter((one) => one.off > GROUND_M);
+  const uneven = runs.filter((run) => run.held.some((h) => Math.abs(h.ground) >= UNEVEN_M));
+  const ok = !off.length;
+  const line = `${ok ? "" : "✗ "}${runs.length} locked plants (${uneven.length} on steps or slopes), ${off.length} with the sole off past ${cm(GROUND_M)}; worst ${cm(worst.off)} (${where(worst.run)})`;
+  return { name: "feet ground", ok, line, value: worst.off, faults: off.length };
+}
+
+/// feet.sinking: how far a locked sole goes under where its clip has it over the ground, the
+/// worst frame's, m.
+export function sinking(walks: Walk[]): Check {
+  const runs = walks.flatMap(locked);
+  if (!runs.length) return none("feet sinking");
+  const each = runs.map((run) => ({ run, sunk: Math.max(...run.held.map((h) => h.sunk)) }));
+  const worst = each.reduce((a, b) => (b.sunk > a.sunk ? b : a));
+  const sunk = each.filter((one) => one.sunk > SINK_M);
+  const ok = !sunk.length;
+  const line = `${ok ? "" : "✗ "}${runs.length} locked plants, ${sunk.length} sunk past ${cm(SINK_M)}; worst ${cm(worst.sunk)} (${where(worst.run)})`;
+  return { name: "feet sinking", ok, line, value: worst.sunk, faults: sunk.length };
+}
+
+/// pelvis.drop: the shortfall foot placement adds to a locked leg (its shortfall from the goal
+/// it is bent to, less the lock's goal's alone, so the lock's own strain is not counted), over
+/// every locked frame: at p95 ("pelvis drop") and at worst ("pelvis drop worst"), m. Measured,
+/// not assumed: a record without both shortfalls fails both.
+export function drops(walks: Walk[]): [Check, Check] {
+  const runs = walks.flatMap(locked);
+  const frames = runs.flatMap((run) => run.held.map((h) => ({ run, h })));
+  const missing = frames.filter(({ h }) => h.short === undefined || h.lock === undefined);
+  if (!frames.length || missing.length) {
+    const line = `✗ ${frames.length ? `${missing.length} of ${frames.length} locked frames` : "no locked frame"} without the leg's shortfalls in the records (\`short\`, \`short_lock\`)`;
+    return [
+      { name: "pelvis drop", ok: false, line, value: NaN, faults: 1 },
+      { name: "pelvis drop worst", ok: false, line, value: NaN, faults: 1 },
+    ];
+  }
+  const added = frames.map(({ run, h }) => ({ run, add: Math.max(0, (h.short as number) - (h.lock as number)) }));
+  const at95 = p95(added.map((each) => each.add));
+  const worst = added.reduce((a, b) => (b.add > a.add ? b : a));
+  const locks = frames.map(({ h }) => h.lock as number);
+  const said = `${frames.length} locked frames in ${runs.length} plants, placement adds p95 ${cm(at95)}, worst ${cm(worst.add)} (${where(worst.run)}); the lock alone leaves p95 ${cm(p95(locks))}, worst ${cm(Math.max(...locks))}`;
+  const over = (bar: number) => added.filter((each) => each.add > bar).length;
+  const mark = (ok: boolean) => (ok ? "" : "✗ ");
+  return [
+    { name: "pelvis drop", ok: at95 <= DROP_M, line: `${mark(at95 <= DROP_M)}${said}`, value: at95, faults: over(DROP_M) },
+    { name: "pelvis drop worst", ok: worst.add <= DROP_WORST_M, line: `${mark(worst.add <= DROP_WORST_M)}${said}`, value: worst.add, faults: over(DROP_WORST_M) },
+  ];
+}
+
 /// Feet sliding by the duel's own check on each walk's plants, a turn in place's or the
 /// rest's: the row's number is the worst plant's travel, m.
 function slid(walks: Walk[], turn: boolean, name: string, of: string): Check {
@@ -159,8 +284,12 @@ export function yard(walks: Walk[]): Check {
       failed.push(`${walk.name} has no ground line in its log`);
       continue;
     }
-    // Stuck: still for STUCK_S while marks are left (the route is done once the last is reached).
-    const done = seen.findLastIndex((each) => (each.w.speed ?? 1) > STILL_MS);
+    // Stuck: still for STUCK_S while marks are left (the route is done once the body stands
+    // where its last is reached, so a wait or a turn in place after it is not stuck); with no
+    // last mark reached, done once it last moved.
+    const last = /^reached (-?\d+),(-?\d+)/.exec(marks.at(-1) ?? "");
+    const reached = last ? seen.findIndex((each) => Math.hypot(each.w.feet[0] - Number(last[1]), each.w.feet[2] - Number(last[2])) < DONE_M) : -1;
+    const done = reached >= 0 ? reached : seen.findLastIndex((each) => (each.w.speed ?? 1) > STILL_MS);
     let still = 0;
     let stuck = 0;
     for (const [i, each] of seen.entries()) {
@@ -186,4 +315,4 @@ export function yard(walks: Walk[]): Check {
   return { name: "yard", ok: !failed.length, line, value: failed.length, faults: failed.length };
 }
 
-export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), yard(walks)];
+export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), ground(walks), sinking(walks), ...drops(walks), yard(walks)];

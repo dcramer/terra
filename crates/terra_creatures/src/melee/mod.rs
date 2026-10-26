@@ -19,6 +19,7 @@ mod hud;
 mod partner;
 mod record;
 mod script;
+mod sole;
 
 use bevy::{gltf::GltfAssetLabel, prelude::*};
 use std::ops::{Deref, DerefMut};

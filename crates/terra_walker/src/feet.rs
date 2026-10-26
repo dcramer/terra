@@ -168,6 +168,14 @@ pub struct Kept {
     pub stance: bool,
     /// Off the ground last frame, so the frame it comes down is known.
     was_off: bool,
+    /// Each foot's heel (its ankle) and ball over the body's ground along its up, as the clip
+    /// posed them before the lock and the bend: the clip's own sole over its flat ground, which
+    /// the walk record holds against the world's (`feet.ground`).
+    clip_soles: [[f32; 2]; 2],
+    /// Each leg's shortfall from the goal it is bent to, m, and the shortfall the lock's goal
+    /// alone leaves: the same goal while nothing places the foot (stage 3 unit 2b will), so
+    /// what placement adds (`pelvis.drop`) is their difference.
+    shorts: [[f32; 2]; 2],
     /// Each foot's lock curve over the clips playing this frame.
     curve: [f32; 2],
     /// Each clip node's weight last frame, to tell the clips coming in from those going.
@@ -206,6 +214,16 @@ impl Kept {
     /// Why the feet were not kept at all this frame, if not.
     pub fn gated(&self) -> Option<&'static str> {
         self.gated
+    }
+
+    /// Each foot's heel and ball over the body's ground as its clip posed them (`clip_soles`).
+    pub fn clip_soles(&self) -> [[f32; 2]; 2] {
+        self.clip_soles
+    }
+
+    /// Each leg's shortfall from its goal and the lock's goal's alone, m (`shorts`).
+    pub fn shorts(&self) -> [[f32; 2]; 2] {
+        self.shorts
     }
 
     /// Each foot's lock curve this frame over the clips `player` plays (`locks`), kept for the
@@ -342,6 +360,7 @@ fn keep(
         let into_body = base.affine().inverse();
         let passing = (!stance).then(|| into_body.transform_vector3(kept.ground));
         for (side, &[thigh, calf, foot]) in legs.iter().enumerate() {
+            kept.shorts[side] = [0.0; 2];
             let Some(hips) = parents
                 .get(thigh)
                 .ok()
@@ -368,6 +387,10 @@ fn keep(
                 at: ankle,
                 turn: at_foot.rotation(),
             };
+            let ball_local = kept.balls[side].and_then(|ball| transforms.get(ball).ok());
+            let clip_ball =
+                ball_local.map_or(ankle, |ball| at_foot.transform_point(ball.translation));
+            kept.clip_soles[side] = [(ankle - ground).dot(up), (clip_ball - ground).dot(up)];
             let in_body = into_body.transform_point3(ankle);
             let swing_mps = kept.was[side].map_or(0.0, |was| match passing {
                 Some(passing) => feet::swing_mps(was, in_body, passing, Vec3::Y, dt),
@@ -384,9 +407,7 @@ fn keep(
                 off,
                 landing,
                 low: (ankle - ground).dot(up) <= feet::LOW_ANKLE_M,
-                ball: kept.balls[side]
-                    .and_then(|ball| transforms.get(ball).ok())
-                    .map_or(Vec3::ZERO, |ball| foot_local.scale * ball.translation),
+                ball: ball_local.map_or(Vec3::ZERO, |ball| foot_local.scale * ball.translation),
             };
             let other = kept.feet[1 - side].moving();
             let kept_at = kept.feet[side].update(posed, dt, other);
@@ -398,7 +419,10 @@ fn keep(
             let ahead = *base.forward();
             let pole = knee + (knee - (hip + ankle) * 0.5).normalize_or(ahead) * 0.5;
             let (to_knee, to_ankle) = feet::two_bone(hip, upper, lower, kept_at.at, pole);
-            kept.strained[side] = (to_ankle - kept_at.at).length() > 0.01;
+            let short = (to_ankle - kept_at.at).length();
+            kept.strained[side] = short > 0.01;
+            // Bent to the lock's own goal: nothing places the foot yet.
+            kept.shorts[side] = [short, short];
             let turn_thigh =
                 Quat::from_rotation_arc((knee - hip).normalize(), (to_knee - hip).normalize());
             let swung = to_knee + turn_thigh * (ankle - knee);

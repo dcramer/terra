@@ -1091,6 +1091,70 @@
    "measurable": true
   },
   {
+   "id": "feet.ground",
+   "noticed": 4,
+   "notice": "a planted foot floats over a lower step or sinks into a higher one or a slope",
+   "bar": {
+    "at_most": 0.02
+   },
+   "unit": "m, the worst locked plant's median of its sole off where its clip has it: the heel's and ball's height over the world's ground (sampled down from them, not foot placement's probe) against their height over the clip's own flat ground, the worse of the two, on the filmed course",
+   "source": "docs/movement.md stage 4 (feet on slopes within 2 cm); Unreal Foot Placement, ALS foot IK; D455",
+   "check": {
+    "by": "film",
+    "name": "feet ground"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "feet.sinking",
+   "noticed": 4,
+   "notice": "a planted foot sinks into a step or a slope",
+   "bar": {
+    "at_most": 0.02
+   },
+   "unit": "m, the worst locked frame's heel or ball under where its clip has it over the world's ground, on the filmed course",
+   "source": "docs/movement.md stage 4; Unreal Foot Placement, ALS foot IK; D455",
+   "check": {
+    "by": "film",
+    "name": "feet sinking"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "pelvis.drop",
+   "noticed": 4,
+   "notice": "a foot on a lower step hangs short of it, the leg straight",
+   "bar": {
+    "at_most": 0.01
+   },
+   "unit": "m, p95 over locked frames of the shortfall foot placement adds to a leg (its shortfall from the goal it is bent to, less the lock's goal's alone, so the lock's own strain is not counted), on the filmed course",
+   "source": "docs/movement.md stage 4; ALS pelvis offset, Unreal's MaxExtensionRatio; D455",
+   "check": {
+    "by": "film",
+    "name": "pelvis drop"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "pelvis.drop_worst",
+   "noticed": 4,
+   "notice": "a foot on a lower step hangs short of it, the leg straight",
+   "bar": {
+    "at_most": 0.03
+   },
+   "unit": "m, the worst locked frame's shortfall foot placement adds to a leg (pelvis.drop's), on the filmed course",
+   "source": "docs/movement.md stage 4; ALS pelvis offset, Unreal's MaxExtensionRatio; D455",
+   "check": {
+    "by": "film",
+    "name": "pelvis drop worst"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
    "id": "film.yard",
    "noticed": 4,
    "notice": "what passes on the plain course fails in the game, on dug ground and a base",
