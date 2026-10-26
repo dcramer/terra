@@ -27,6 +27,14 @@
 // "foot_down_r": [[0.3, 0.5]]}}}`), the game reads them as it reads the paces
 // (`terra_walker::feet::markers`). Run after a body file is exported (build_bodies.sh, clip.ts).
 //
+// A clip that keeps its root motion (a start, a stop: made.json's `travels`; its pelvis goes
+// over TRAVEL_M along the ground) also gets its distance curve, as Lyra's distance-matched
+// starts and stops carry one (UE5's Distance Curve modifier, its documentation): `distance`,
+// the pelvis's travel along the way it goes from its first frame at RATE (m, the file's units,
+// not made monotone: the game looks it up as it does), and `distance_way`, that way in the
+// pelvis's parent's space, so the game takes the travel off the pelvis (Unreal's root lock)
+// and moves the body instead.
+//
 //   node tools/characters/markers.ts assets/models/character/base.glb assets/models/character/fight.glb
 //   node tools/characters/markers.ts FILE.glb... [--print] [--check]
 //
@@ -35,7 +43,7 @@
 // dependencies.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { Glb, posed, type V3 } from "./glb.ts";
+import { dot, Glb, type Pose, posed, qinv, rot, type V3 } from "./glb.ts";
 
 /** A point moving slower than this over the clip's ground stands on it. */
 export const STILL_MPS = 0.5;
@@ -60,6 +68,9 @@ export const WALK_MPS = 2.0;
 export const RATE = 60;
 /** Low feet going back slower than this stand still: the clip does not travel. */
 const TRAVELS_MPS = 0.3;
+/** A clip whose pelvis goes this far along the ground keeps its root motion: it has a distance
+ * curve. A stride played in place goes nowhere; a one-shot's drift is under it. */
+export const TRAVEL_M = 0.5;
 /** A clip loops when each ball is this near where it started at its end. */
 const LOOP_M = 0.01;
 const FPS = 60;
@@ -80,6 +91,8 @@ export type Markers = {
   lock_r: number[];
   foot_down_l: Span[];
   foot_down_r: Span[];
+  distance?: number[];
+  distance_way?: V3;
 };
 /** One foot's bake: its curve at FPS, its plants as frame runs, its worst plant's skate before
  * a plant was split, and how many it was split. */
@@ -207,6 +220,21 @@ export function groundOf(toes: V3[][], fps: number, pace?: number): [number, num
   return [g[0] * by, g[1] * by];
 }
 
+/** The pelvis's travel along the ground (`path`, its places at `fps`, y up) for a clip that
+ * goes over TRAVEL_M from its first frame to its last: along that way at RATE to `end`, and the
+ * way in the pelvis's parent's space (`parent`, its pose at the first frame). */
+export function distanceOf(path: V3[], fps: number, end: number, parent?: Pose): { distance: number[]; way: V3 } | undefined {
+  const flat = (p: V3): V3 => [p[0] - path[0][0], 0, p[2] - path[0][2]];
+  const went = flat(path.at(-1)!);
+  const length = Math.hypot(went[0], went[2]);
+  if (length < TRAVEL_M) return undefined;
+  const ahead: V3 = [went[0] / length, 0, went[2] / length];
+  const distance = Array.from({ length: Math.round(end * RATE) + 1 }, (_, i) => round(dot(flat(path[Math.min(path.length - 1, Math.round((i / RATE) * fps))]), ahead)));
+  const local = parent ? rot(qinv(parent.r), ahead).map((x, k) => x / parent.s[k]) : ahead;
+  const n = Math.hypot(...local);
+  return { distance, way: local.map((x) => round(x / n, 1e5)) as V3 };
+}
+
 /** A foot's curve resampled from FPS to RATE. */
 const resampled = (lock: number[], fps: number, end: number) =>
   Array.from({ length: Math.round(end * RATE) + 1 }, (_, i) => round(lock[Math.min(lock.length - 1, Math.round((i / RATE) * fps))], 100));
@@ -219,14 +247,19 @@ export function bake(body: Glb): Record<string, Baked> {
   const points = FEET.map((pair) => pair.map((name) => body.named(name)));
   if (points.flat().some((b) => b < 0)) return {};
   const paces: Record<string, number> = (body.gltf.nodes.find((n: { extras?: { paces?: unknown } }) => n.extras?.paces) as { extras: { paces: Record<string, number> } } | undefined)?.extras.paces ?? {};
+  const pelvis = body.named("pelvis");
   const out: ReturnType<typeof bake> = {};
   for (const name of body.clipNames()) {
     const clip = body.clip(name)!;
     const n = Math.max(1, Math.round(clip.end * FPS));
     const paths: V3[][][] = points.map((pair) => pair.map(() => []));
+    const hips: V3[] = [];
+    let parent: Pose | undefined;
     for (let i = 0; i <= n; i++) {
       const pose = posed(body, clip, (i / n) * clip.end);
       points.forEach((pair, side) => pair.forEach((p, k) => paths[side][k].push(pose[p].t)));
+      if (pelvis >= 0) hips.push(pose[pelvis].t);
+      if (i === 0 && pelvis >= 0 && body.parentOf[pelvis] !== undefined) parent = pose[body.parentOf[pelvis]];
     }
     const fps = n / Math.max(clip.end, 1e-6);
     const loops = paths.every(([, toe]) => Math.hypot(...toe[0].map((x, k) => x - toe.at(-1)![k])) < LOOP_M);
@@ -239,6 +272,7 @@ export function bake(body: Glb): Record<string, Baked> {
     const span = (runs: [number, number][]): Span[] => runs.map(([a, b]) => [round(a / fps), round((b > n - 1 ? b - (n - 1) : b) / fps)]);
     // How long neither foot stands: a walk always has one down.
     const neither = l.lock.filter((x, i) => x <= 0 && r.lock[i] <= 0).length - (loops && l.lock[0] <= 0 && r.lock[0] <= 0 ? 1 : 0);
+    const travel = hips.length ? distanceOf(hips, fps, clip.end, parent) : undefined;
     out[name] = {
       markers: {
         length_s: round(clip.end),
@@ -247,6 +281,7 @@ export function bake(body: Glb): Record<string, Baked> {
         lock_r: resampled(r.lock, fps, clip.end),
         foot_down_l: span(l.runs),
         foot_down_r: span(r.runs),
+        ...(travel ? { distance: travel.distance, distance_way: travel.way } : {}),
       },
       skate_m: [l.skate_m, r.skate_m],
       splits: l.splits + r.splits,
@@ -281,7 +316,8 @@ export function written(file: string, markers: Record<string, Markers>): Buffer 
 function show(clip: string, b: Baked) {
   const m = b.markers;
   const each = NAMES.map((k, side) => `${k.slice(-1)} ${m[k].map(([a, z]) => `${a.toFixed(2)}-${z.toFixed(2)}`).join(" ") || "-"} skate ${(b.skate_m[side] * 100).toFixed(1)} cm`);
-  console.log(`  ${clip.padEnd(22)} ${m.length_s.toFixed(2)} s  ${each.join("  ")}  neither ${b.neither_s.toFixed(2)} s${b.splits ? `  split ${b.splits}` : ""}`);
+  const went = m.distance ? `  travels ${Math.max(...m.distance).toFixed(2)} m` : "";
+  console.log(`  ${clip.padEnd(22)} ${m.length_s.toFixed(2)} s  ${each.join("  ")}  neither ${b.neither_s.toFixed(2)} s${b.splits ? `  split ${b.splits}` : ""}${went}`);
 }
 
 /** What fails a clip's bake: a stride that skates, a walk with neither foot down. */

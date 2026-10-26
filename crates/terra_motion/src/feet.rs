@@ -33,6 +33,13 @@ pub struct Markers {
     pub lock_r: Vec<f32>,
     pub foot_down_l: Vec<[f32; 2]>,
     pub foot_down_r: Vec<[f32; 2]>,
+    /// A clip that keeps its root motion (a start, a stop): its pelvis's travel along the way it
+    /// goes, m at `rate`, its distance curve (`crate::distance`); empty for one played in place.
+    #[serde(default)]
+    pub distance: Vec<f32>,
+    /// That way in the pelvis's parent's space, so the travel is taken off the pelvis.
+    #[serde(default)]
+    pub distance_way: [f32; 3],
 }
 
 impl Markers {

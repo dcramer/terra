@@ -7,6 +7,8 @@ Idle_Talking_Loop
 Walk_Loop
 Jog_Fwd_Loop
 Sprint_Loop
+Jog_Start
+Jog_Stop
 Crouch_Idle_Loop
 Crouch_Fwd_Loop
 Jump_Start
