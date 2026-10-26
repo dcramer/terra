@@ -33,7 +33,9 @@ forearm forward, the board's face forward and out; research/2026-10-25-shield-pr
 A hold may also take `in` and `out` (clip seconds, `[from, to]` each): the part plays the `of`
 clip until `in`'s first second, eases to the held pose by its last, stays held, and eases back
 to the `of` clip over `out` (either may be left out, the part then held from the start or to
-the end). It is Unreal's Layered Blend per Bone with its weight driven by a curve, a Unity
+the end). An `out` before the `in` holds the part at both ends and plays the `of` clip
+between: the block (`Clear_Block`) eases its shield arm from the low rest into its raise and
+back to the rest as it lowers (D531). It is Unreal's Layered Blend per Bone with its weight driven by a curve, a Unity
 layer's weight: each held bone slerped in its own parent frame from the `of` clip's pose to the
 held one by a smoothstep weight, keyed every frame. The fight's light blows drop the guard so
 (the shield out to the left through the blow and back to the guard in its recovery, as
@@ -133,7 +135,9 @@ def _ease(t, window, rising):
 
 def weight(t, held):
     """How far a hold's part is held at `t` seconds into its clip: 1 throughout for a hold with
-    no `in` or `out`."""
+    no `in` or `out`; held at both ends and played between when `out` comes before `in`."""
+    if "in" in held and "out" in held and held["out"][1] <= held["in"][0]:
+        return max(_ease(t, held["out"], False), _ease(t, held["in"], True))
     w = 1.0
     if "in" in held:
         w *= _ease(t, held["in"], True)

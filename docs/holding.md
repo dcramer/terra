@@ -129,7 +129,7 @@ Items of a class share every clip, hold pose, phase, chain and button. Each item
 |---|---|---|
 | The stance rule | Any pair of grips giving a stance the table above does not, or an item allowed where its grip says no | A table test in `terra_motion` |
 | The move check, per set and side | `moves.ts`'s rows (hands or items in the body, the blade's arc, guard start and end, chains) on every set, both sides where mirrored, with the class's shortest and longest items | `node tools/characters/moves.ts --set <class.stance>`, every body template |
-| Hold over locomotion | A held item or hand in the body on any locomotion clip under any stance's hold | `moves.ts --also`, a row a clip under a hold (`Walk_Loop+Keyed_Guard`: the same mask, `glb.ts`'s `layered`) |
+| Hold over locomotion | A held item or hand in the body on any locomotion clip under any stance's hold | `moves.ts --also`, a row a clip under a hold (`Walk_Loop+Low_Guard`: the same mask, `glb.ts`'s `layered`) |
 | Second grip | The off hand more than 1 cm from the second grip after IK, or more than 8 cm before it (the clip wrong, not the IK), or an arm at full stretch | A new `moves.ts` row |
 | Mirror | A mirrored clip's left bones not the original's right ones reflected, within 1 mm and 0.1° | A test of the mirror step |
 | Takes | Two kept takes of a move closer than 10 cm in the tip's path (duplicates); phases more than a frame apart; reach more than 10 cm apart | `clip.ts --measure` |

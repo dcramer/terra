@@ -1344,7 +1344,7 @@
    "cost": "cheap",
    "id": "move.Keyed_Guard.held",
    "noticed": 5,
-   "notice": "the sword or shield passes through the body in Keyed_Guard, the game's guard",
+   "notice": "the sword or shield passes through the body in Low_Guard, the game's guard (Keyed_Guard with the shield low at the hip, D531)",
    "bar": {
     "at_most": 1
    },
@@ -1352,7 +1352,7 @@
    "source": "D447 (moves.ts HELD_CM)",
    "check": {
     "by": "moves",
-    "row": "Keyed_Guard",
+    "row": "Low_Guard",
     "measure": "held_cm"
    }
   },
@@ -1361,7 +1361,7 @@
    "cost": "cheap",
    "id": "move.Keyed_Guard.sword_in_shield",
    "noticed": 5,
-   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (Keyed_Guard)",
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield (Low_Guard, the game's guard)",
    "bar": {
     "at_most": 0
    },
@@ -1369,7 +1369,7 @@
    "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
    "check": {
     "by": "moves",
-    "row": "Keyed_Guard",
+    "row": "Low_Guard",
     "measure": "sword_shield_cm"
    }
   },
@@ -1378,7 +1378,7 @@
    "cost": "cheap",
    "id": "move.Keyed_Guard.shield_in_arm",
    "noticed": 4,
-   "notice": "the shield's board goes through the sword arm (right hand or forearm) (Keyed_Guard)",
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) (Low_Guard, the game's guard)",
    "bar": {
     "at_most": 0
    },
@@ -1386,7 +1386,7 @@
    "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
    "check": {
     "by": "moves",
-    "row": "Keyed_Guard",
+    "row": "Low_Guard",
     "measure": "shield_arm_cm"
    }
   },
@@ -1395,7 +1395,7 @@
    "cost": "cheap",
    "id": "move.Keyed_Guard.hands",
    "noticed": 4,
-   "notice": "an arm sinks into the body in Keyed_Guard, the game's guard",
+   "notice": "an arm sinks into the body in Low_Guard, the game's guard (Keyed_Guard with the shield low at the hip, D531)",
    "bar": {
     "at_most": 2
    },
@@ -1403,7 +1403,7 @@
    "source": "D447 (moves.ts HAND_CM)",
    "check": {
     "by": "moves",
-    "row": "Keyed_Guard",
+    "row": "Low_Guard",
     "measure": "hands_cm"
    }
   },
@@ -1616,7 +1616,7 @@
    "cost": "cheap",
    "id": "held.torch.Keyed_Guard",
    "noticed": 3,
-   "notice": "a torch carried in the off hand beside the sword passes through the body in Keyed_Guard, the game's guard",
+   "notice": "a torch carried in the off hand beside the sword passes through the body in Low_Guard, the game's guard (Keyed_Guard with the shield low at the hip, D531)",
    "bar": {
     "at_most": 1
    },
@@ -1624,7 +1624,7 @@
    "source": "D447 (moves.ts HELD_CM); holding.md section 6 step 3, a torch carried in the off hand (D460) with a sword",
    "check": {
     "by": "moves",
-    "row": "Keyed_Guard",
+    "row": "Low_Guard",
     "measure": "held_cm",
     "hold": [
      "socket.hand.R=assets/models/held/arming_sword.glb",
@@ -1708,7 +1708,7 @@
    "source": "D447 (moves.ts HELD_CM); holding.md section 6 step 3, a torch carried in the off hand (D460) with a sword",
    "check": {
     "by": "moves",
-    "row": "Walk_Loop+Keyed_Guard",
+    "row": "Walk_Loop+Low_Guard",
     "measure": "held_cm",
     "hold": [
      "socket.hand.R=assets/models/held/arming_sword.glb",
@@ -1729,7 +1729,7 @@
    "source": "D447 (moves.ts HELD_CM), D458 (the hold layer)",
    "check": {
     "by": "moves",
-    "row": "Walk_Loop+Keyed_Guard",
+    "row": "Walk_Loop+Low_Guard",
     "measure": "held_cm"
    }
   },
@@ -1746,7 +1746,7 @@
    "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
    "check": {
     "by": "moves",
-    "row": "Walk_Loop+Keyed_Guard",
+    "row": "Walk_Loop+Low_Guard",
     "measure": "sword_shield_cm"
    }
   },
@@ -1763,7 +1763,7 @@
    "source": "D481 (moves.ts clash, clash.ts); the developer's note on the duel film, 2026-10-25",
    "check": {
     "by": "moves",
-    "row": "Walk_Loop+Keyed_Guard",
+    "row": "Walk_Loop+Low_Guard",
     "measure": "shield_arm_cm"
    }
   },
@@ -1780,7 +1780,7 @@
    "source": "D447 (moves.ts HAND_CM), D458 (the hold layer)",
    "check": {
     "by": "moves",
-    "row": "Walk_Loop+Keyed_Guard",
+    "row": "Walk_Loop+Low_Guard",
     "measure": "hands_cm"
    }
   },
@@ -1797,7 +1797,7 @@
    "source": "D447 (moves.ts HELD_CM), D458 (the hold layer), holding.md section 6 step 4",
    "check": {
     "by": "moves",
-    "row": "Jog_Fwd_Loop+Keyed_Guard",
+    "row": "Jog_Fwd_Loop+Low_Guard",
     "measure": "held_cm"
    }
   },
@@ -1814,7 +1814,7 @@
    "source": "D447 (moves.ts HAND_CM), D458 (the hold layer), holding.md section 6 step 4",
    "check": {
     "by": "moves",
-    "row": "Jog_Fwd_Loop+Keyed_Guard",
+    "row": "Jog_Fwd_Loop+Low_Guard",
     "measure": "hands_cm"
    }
   },
@@ -1831,7 +1831,7 @@
    "source": "D447 (moves.ts HELD_CM), D458 (the hold layer), holding.md section 6 step 4",
    "check": {
     "by": "moves",
-    "row": "Sprint_Loop+Keyed_Guard",
+    "row": "Sprint_Loop+Low_Guard",
     "measure": "held_cm"
    }
   },
@@ -1848,7 +1848,7 @@
    "source": "D447 (moves.ts HAND_CM), D458 (the hold layer), holding.md section 6 step 4",
    "check": {
     "by": "moves",
-    "row": "Sprint_Loop+Keyed_Guard",
+    "row": "Sprint_Loop+Low_Guard",
     "measure": "hands_cm"
    }
   },

@@ -886,15 +886,7 @@
         },
         "roll": {
           "lowerarm_l": 47
-        },
-        "in": [
-          0.1,
-          0.3
-        ],
-        "out": [
-          1.35,
-          1.75
-        ]
+        }
       }
     ]
   },
@@ -918,15 +910,7 @@
         },
         "roll": {
           "lowerarm_l": 47
-        },
-        "in": [
-          0.0,
-          0.25
-        ],
-        "out": [
-          1.25,
-          1.65
-        ]
+        }
       }
     ]
   },
@@ -950,71 +934,7 @@
         },
         "roll": {
           "lowerarm_l": 47
-        },
-        "in": [
-          0.3,
-          0.6
-        ],
-        "out": [
-          1.9,
-          2.3
-        ]
-      }
-    ]
-  },
-  "Chained_Slash": {
-    "of": "Keyed_Slash",
-    "hold": [
-      {
-        "clip": "Keyed_Guard",
-        "bone": "clavicle_l",
-        "aim": {
-          "upperarm_l": [
-            0.55,
-            -0.75,
-            -0.38
-          ],
-          "lowerarm_l": [
-            -0.1,
-            -0.55,
-            0.83
-          ]
-        },
-        "roll": {
-          "lowerarm_l": 47
-        },
-        "out": [
-          1.35,
-          1.75
-        ]
-      }
-    ]
-  },
-  "Chained_Backhand": {
-    "of": "Keyed_Backhand",
-    "hold": [
-      {
-        "clip": "Keyed_Guard",
-        "bone": "clavicle_l",
-        "aim": {
-          "upperarm_l": [
-            0.55,
-            -0.75,
-            -0.38
-          ],
-          "lowerarm_l": [
-            -0.1,
-            -0.55,
-            0.83
-          ]
-        },
-        "roll": {
-          "lowerarm_l": 47
-        },
-        "out": [
-          1.25,
-          1.65
-        ]
+        }
       }
     ]
   },
@@ -1040,19 +960,98 @@
           "lowerarm_r": 45
         },
         "in": [
-          0.0,
+          0,
           0.25
         ],
         "out": [
           0.95,
           1.35
         ]
+      },
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "aim": {
+          "upperarm_l": [
+            0.55,
+            -0.75,
+            -0.38
+          ],
+          "lowerarm_l": [
+            -0.1,
+            -0.55,
+            0.83
+          ]
+        },
+        "roll": {
+          "lowerarm_l": 47
+        },
+        "out": [
+          0,
+          0.2
+        ],
+        "in": [
+          0.95,
+          1.35
+        ]
+      }
+    ]
+  },
+  "Low_Guard": {
+    "of": "Keyed_Guard",
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "aim": {
+          "upperarm_l": [
+            0.55,
+            -0.75,
+            -0.38
+          ],
+          "lowerarm_l": [
+            -0.1,
+            -0.55,
+            0.83
+          ]
+        },
+        "roll": {
+          "lowerarm_l": 47
+        }
+      }
+    ]
+  },
+  "Low_Strafe": {
+    "over": [
+      "Fight_Strafe_L",
+      "Fight_Strafe_R"
+    ],
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "aim": {
+          "upperarm_l": [
+            0.55,
+            -0.75,
+            -0.38
+          ],
+          "lowerarm_l": [
+            0.15,
+            -0.5,
+            0.85
+          ]
+        },
+        "roll": {
+          "lowerarm_l": 47
+        }
       }
     ]
   },
   "Strap_Grip": {
     "over": [
       "Keyed_Guard",
+      "Low_Guard",
       "Fight_Guard",
       "Fight_Strafe_L",
       "Fight_Strafe_R",
@@ -1060,8 +1059,6 @@
       "Open_Slash",
       "Open_Backhand",
       "Open_Heavy",
-      "Chained_Slash",
-      "Chained_Backhand",
       "Clear_Block",
       "Fight_Roll"
     ],
