@@ -35,7 +35,7 @@ The sword through its own shield and the shield through the sword arm are a faul
 
 The game's composed pose (D530, round 30: the duel record's `pose`, after the hold layer, foot lock, lift and strap; `tools/sandbox/duel/pose.ts`), the developer's complaints from play, each a `--film` row, first numbers on main:
 4. `film.pose.head_yaw_blows` (bar 15°): 41° left of the facing in the backhand, 35° on average through the blows, 26° on the guard; the clips' heads turn with the chest (off the hips 41°). Nothing turns the head back: a look-at on the neck and head toward the aim (Unreal's Look At / Godot's LookAtModifier3D) laid after the clips, or keys.
-5. `film.pose.shield_rest_high` (bar 10 cm): the player's board rests 28 cm over the hips on the guard (61 in the block). The guard (Keyed_Guard) carries it at the chest; Enshrouded's at the hip.
+5. `film.pose.shield_rest_high` (bar 10 cm): the player's board rests 28 cm over the hips on the guard (61 in the block). The guard (Keyed_Guard) carries it at the chest; D531 (the developers): it rests low at the hip, as Enshrouded's guard idle, and rises only while the block is held.
 6. `film.pose.shield_forearm_deg` (bar 10°) 15.6°, `film.pose.shield_forearm_off` (bar 5 cm) 12.5 cm, `film.pose.shield_strap_fist` (bar 1 cm) 17.6 cm: the strap (`heater_shield.glb`'s `strap`) hangs the board off the forearm bone, the same in every stance; task 1's re-hang.
 Not yet: arms into the body on the composed idles (skin.ts holds the move check's skin for it; the sheathed `Idle_Loop` is not in moves.ts's clips).
 

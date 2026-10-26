@@ -201,6 +201,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D504](decisions/D504.md) | The sword-and-shield set carries a strapped heater now, a round shield later | Design | Developers | Decided | The prototype's shield becomes a strapped heater or kite… |
 | [D529](decisions/D529.md) | Odd pairs in the hands | Design | Developers | Decided | From docs/holding.md's loadout model… |
 | [D530](decisions/D530.md) | Combat is also checked on the game's composed pose, from the duel's record | Tech | Agent | Decided | The duel's fight record (`--fight-log` in a `--duel`… |
+| [D531](decisions/D531.md) | The drawn shield rests low and rises only while the block is held | Design | Developers | Decided | With a shield drawn and the block not held… |
 
 ## People and the tribe
 
