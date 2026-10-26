@@ -141,7 +141,7 @@ bsdf.inputs["Emission Strength"].default_value = 1.0
 # 3. The mouth's cut: below the eyes by their spacing, as wide as they are apart and a bit,
 # ragged along its length. The faces around it are split once for a finer lip.
 mx, mz = (eyes[0].x + eyes[1].x) / 2, eyes[0].z / 2 + eyes[1].z / 2 - 1.3 * spacing
-half = 0.9 * spacing
+half = 0.7 * spacing
 
 
 def jag(x):
@@ -203,7 +203,7 @@ def new_vert(co):
 
 
 mouth_bag = material(f"{body.name}_mouth", (0.012, 0.008, 0.005), 1.0)
-splinter = material(f"{body.name}_teeth", (0.34, 0.31, 0.26), 0.85)
+splinter = material(f"{body.name}_teeth", (0.17, 0.145, 0.11), 0.85)
 gw, gh, bag_w, bag_h = 14, 8, 1.3 * half, 0.45
 grid = [[new_vert(surface(mx + u * bag_w, mz + v * bag_h)
                   + Vector((0, 0.02 + 0.28 * (1 - u * u) * (1 - v * v), 0)))
@@ -220,7 +220,7 @@ for lip, count in ((1, 7), (-1, 6)):
         root = surface(x, mz + jag(x)) + Vector((0, 0.045, 0))
         b = (0.06 + 0.05 * h) * spacing
         a, c, d = (new_vert(root + o) for o in (Vector((-b, 0, 0)), Vector((b, 0, 0)), Vector((0, b, 0))))
-        tip = new_vert(root + Vector((0.3 * b * math.sin(13 * x), -0.015, -lip * (0.25 + 0.35 * h) * spacing)))
+        tip = new_vert(root + Vector((0.3 * b * math.sin(13 * x), -0.015, -lip * (0.2 + 0.3 * h) * spacing)))
         for tri in ((a, c, d), (a, tip, c), (c, tip, d), (d, tip, a)):
             f = bm.faces.new(tri if lip > 0 else tri[::-1])
             f.material_index = splinter
@@ -229,7 +229,7 @@ bm.normal_update()
 
 # 5. The Wake shape: each lip moved off the cut, most in the middle and raggedly, curled in.
 wf = 0.95 * half
-up, down, reach = 0.35 * spacing, 0.55 * spacing, 1.1 * spacing
+up, down, reach = 0.25 * spacing, 0.4 * spacing, 1.6 * spacing
 
 
 def along(x):
@@ -278,6 +278,9 @@ if SHEET:
     for weight, glow_on, side in ((0, 0, 0), (1, 6, 0), (1, 6, 35)):
         wake.value = weight
         bsdf.inputs["Emission Strength"].default_value = glow_on
-        tiles += look.close_up(arm, "neck_01", 6 * spacing, sides=(side,), size=600)
+        # close_up names its pictures by their place in one call: each kept under its own.
+        shot = look.close_up(arm, "neck_01", 4 * spacing, sides=(side,), size=600)[0]
+        tiles.append(shot.replace(".png", f"-{len(tiles)}.png"))
+        os.replace(shot, tiles[-1])
     look.stitch(tiles, SHEET)
     print("SHEET", SHEET)

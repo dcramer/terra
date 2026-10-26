@@ -114,12 +114,19 @@ head = region({"Head"})
 top = max(head, key=lambda p: p.z)
 centre = sum(head, Vector()) / len(head)
 sockets.append(socket("socket.head", "Head", Vector((centre.x, centre.y, top.z))))
+def near(pts, off, within, least):
+    """The points `off` puts within `within`, or the `least` nearest if fewer are: a coarse
+    body (a 7 m creature in 16,000 triangles) may have no vertex in a band a person's has."""
+    inside = [p for p in pts if off(p) < within]
+    return inside if len(inside) >= least else sorted(pts, key=off)[:least]
+
+
 chest = joint("spine_03")
-back = [p for p in region({"spine_02", "spine_03"}) if abs(p.x) < 0.08 and abs(p.z - chest.z) < 0.08]
+back = near(region({"spine_02", "spine_03"}), lambda p: max(abs(p.x), abs(p.z - chest.z)), 0.08, 4)
 sockets.append(socket("socket.back", "spine_03", Vector((0, max(p.y for p in back), chest.z))))
 hips = joint("pelvis")
 for s, side in (("R", -1), ("L", 1)):
-    waist = [p for p in region({"pelvis", "spine_01"}) if abs(p.z - (hips.z + 0.05)) < 0.03]
+    waist = near(region({"pelvis", "spine_01"}), lambda p: abs(p.z - (hips.z + 0.05)), 0.03, 12)
     edge = max(waist, key=lambda p: side * p.x)
     sockets.append(socket(f"socket.belt.{s}", "pelvis", Vector((edge.x, sum(p.y for p in waist) / len(waist), edge.z))))
 print("SOCKETS", ", ".join(f"{e.name} {tuple(round(c, 3) for c in e.matrix_world.translation)}" for e in sockets))

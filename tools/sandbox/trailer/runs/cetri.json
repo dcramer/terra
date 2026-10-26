@@ -1,0 +1,11 @@
+{
+  "about": "Up the lush forest's path in the morning toward the oaks beside it: one of them, a 7 m oak like its neighbours, wakes, its eyes lighting and its trunk splitting into a mouth, lunges at the walker and comes on in slow, heavy steps (the Cetri, D534)",
+  "place": "lush",
+  "hour": 8.0,
+  "date": "07-20",
+  "seconds": 16.5,
+  "scene": "cetri",
+  "player": { "at": "9.6,13.8", "face": "19.5,38", "hidden": true },
+  "look": { "shutter": 180, "exposure_bias": 0.3 },
+  "sound": ["birds:0.8", "wind:0.4", "woods:0.8"]
+}
