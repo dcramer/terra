@@ -693,6 +693,8 @@ def char_nodes(t, cap):
     soft = t.math("MULTIPLY", soft, t.math("MULTIPLY", t.ramp(height, 0.16, 0.3), outer))
     ash = t.math("MAXIMUM", ash, soft)
     pale = t.math("MULTIPLY", soft, t.ramp(t.noise(along(0.5, (1.1, 6.3, 2.9)), 4.0, 2.0), 0.4, 0.6, 0.25, 1.0))
+    lit = t.math("MAXIMUM", t.ramp(t.attr("heat"), 0.5, 1.0), t.ramp(t.attr("face"), 0.3, 0.8))
+    ash = t.math("MULTIPLY", ash, t.math("SUBTRACT", 1.0, t.math("MULTIPLY", lit, HOT_ASH_THIN)))
     return p, amount, scorch, crack, edge, black, ash, whole, calm, deep, pale, groove
 
 
@@ -702,11 +704,12 @@ def char_nodes(t, cap):
 # it, desaturates the flame's pixels into pale yellow.
 ASH = (0.2, 0.195, 0.185)
 BLOCK_ASH = (0.22, 0.214, 0.203)
-# Round 10: and where the fire lights it most, the end in the flames and the faces turned in
-# toward the stack, the ash darker by up to this share (linear 0.11): those faces are what the
-# camp's eye sees through the flame; at noon they sit in the flame or the stack's shade, so the
-# sunlit outer ash that breaks the char into the sheet's dark pockets keeps its tone.
-HOT_ASH_DIM = 0.45
+# Round 10: where the fire lights it most, the end in the flames and the faces turned in toward
+# the stack, the ash thinner by up to this share, and the glow it dulls there freed: those faces
+# are what the camp's eye sees through the flame. Darkening that ash's tone by 45% (linear 0.11)
+# left night pale at 5.5-5.6 (build 1): the sheet's night pale rose as the logs' glow fell
+# (14.5% lit 4.4, 9% 4.9, 7% 5.4), black char and orange glow behind a flame keeping it saturated.
+HOT_ASH_THIN = 0.6
 
 
 def log_colour(t, maps_, cap):
@@ -720,8 +723,6 @@ def log_colour(t, maps_, cap):
         bark = t.vec("SCALE", t.image(maps_["diff"]).outputs["Color"], scale=t.math("MULTIPLY", t.math("SUBTRACT", 1.0, t.math("MULTIPLY", scorch, 0.65)), 0.8))
         col = t.vec("ADD", bark, t.vec("SCALE", t.vec("SUBTRACT", charred, bark), scale=amount))
     grey = t.vec("ADD", ASH, t.vec("SCALE", tuple(b - a for a, b in zip(ASH, BLOCK_ASH)), scale=pale))
-    lit = t.math("MAXIMUM", t.ramp(t.attr("heat"), 0.5, 1.0), t.ramp(t.attr("face"), 0.3, 0.8))
-    grey = t.vec("SCALE", grey, scale=t.math("SUBTRACT", 1.0, t.math("MULTIPLY", lit, HOT_ASH_DIM)))
     t.emit(t.vec("ADD", col, t.vec("SCALE", t.vec("SUBTRACT", grey, col), scale=t.math("MULTIPLY", ash, amount))))
 
 
@@ -757,7 +758,8 @@ def log_glow(t, cap):
     fade = t.ramp(height, 0.12, 0.32, 1.0, 0.45)
     seam = t.math("MAXIMUM", seam, t.math("MULTIPLY", t.math("MULTIPLY", t.ramp(edge, 0.01, 0.06, 1.0, 0.0), near), t.math("SUBTRACT", 1.0, t.math("MULTIPLY", calm, 0.5))))
     facing = t.ramp(t.attr("face"), 0.2, 0.6)
-    tip = t.math("MULTIPLY", t.ramp(t.attr("heat"), 0.7, 1.0), 0.6)
+    # Round 10: the end in the flames at 0.9 (was 0.6), what the camp's eye sees through them.
+    tip = t.math("MULTIPLY", t.ramp(t.attr("heat"), 0.7, 1.0), 0.9)
     # Round 9: glow on the undersides and in the coals, higher up in a few deep cracks: below
     # 5-20 cm outer faces 0.2 (was 0.4), 0.45 touching the bed (under 2-9 cm); above, inward faces
     # full only in deep char (0.4 elsewhere), its grain checks lit; one orange net end to end
