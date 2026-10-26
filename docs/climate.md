@@ -33,7 +33,7 @@ Each thing reads the quantities where it is:
   - Snow lies where precipitation fell below freezing, and melts with warmth and sun. Winter has snowy spells and thaws, lowlands may get rain, and mountaintops keep snow all year.
   - Water freezes after enough cold and thaws after enough warmth, so a lake can be walked on in a hard winter but not a mild one.
   - Rain wets the ground into mud.
-  - Snow and mud slow walking, and snow keeps tracks (D93). A foot of snow halves a walker's pace and wet mud takes a sixth off, frozen ground none (D328).
+  - Snow keeps tracks (D93). Neither snow nor mud slows walking: the walk keeps one speed on any ground (D149).
 - **Plants**, each by its niche ([biomes.md](biomes.md#biomes-from-rules-not-a-list)). Real plants follow warmth accumulated over days and the length of the day, and so do ours:
   - they grow when it is warm, wet and light enough;
   - they flower and fruit after enough warmth;
@@ -153,7 +153,7 @@ What changes play is the same on every machine, worked out by the shared crate: 
 - **Things that care carry a sample** (`ClimateSample`: temperature, wind, wetness, sun, snow), refreshed by a system often near a player and rarely far off, so the cost follows what is near players, not the world's size (D127).
 - **The ground bends it** (D323): a place carries how its ground faces the sun and how much drifting snow it catches, worked out by the world from the terrain, so sunny slopes are warmer and lee hollows hold snow longest, and the climate crate never reads terrain. A place's latitude is where it is, from the world's frame (`terra_land`, D331). Built: the facing (`Place::sunward`, its sunlight, warmth and melt) and the catch of drifting snow (`Place::catch`, from Winstral's Sx against the prevailing wind, `terra_land::drift`, D337).
 - **Local things bend it**, as components: a fire's heat, a shelter's walls and roof (D261), the canopy's shade (the sky occlusion volume, D270), clothing's warmth.
-- **Small systems respond, each reading samples:** a body's temperature drifts toward its surroundings (D153); a creature acts within its own band, so sleeping through the cold emerges; snow and mud slow a walker; ice holds one once thick enough.
+- **Small systems respond, each reading samples:** a body's temperature drifts toward its surroundings (D153); a creature acts within its own band, so sleeping through the cold emerges; ice holds one once thick enough.
 - **Plants are not entities that tick:** there are far too many. A plant's state is a function of its cell's counted warmth and chill, its kind's year and its own seed, worked out when it is drawn or gathered.
 - **In code (D327):** a `ClimateSample` is taken again every half second within 48 m of a player, every 3 s within 200 m, every 20 s beyond, at most 0.6 ms of a frame. `Heat` is a fire's radiant watts, spread over a sphere round it; `Sheltered` (0 to 1) takes the wind to a tenth, keeps off what falls and the sun, and holds in a fire's heat; under the canopy the sun is cut by the sky hidden, and the rain and wind to two fifths where it is closed. The past at a place goes from its day's start to the next day's through the day, so snow builds and melts by the hour. A kind's year (`terra_climate::LeafYear`) is when its leaves come out (warmth), turn and fall (chill, once the day is shorter than its length), and how much of them turn and drop; a plant's seed makes it count up to a quarter faster or slower.
 
@@ -176,7 +176,7 @@ In code (D327): two maps a kilometre across round the camera, a 32 m cell a texe
 2. **The integrated state:** snow, warmth and chill per cell, kept by the day. Built (D315).
 3. **The samples and the climate maps**, and a scripted way to set the date as `--time` sets the hour, so a year can be looked at. Built (D327): `terra_world::climate`, kinds' years in `assets/data/plant_years.ron`, and `--date 10-15` (a day of an Earth calendar, as that share of the world's year) or `--date 40` (a day of the clock); the log says what the climate is at the camera once its maps are painted.
 4. **The proof in the lush forest:** the oak's year as data, turning and dropping its leaves; snow on the ground and branches; litter after the fall. Judged as the forest was: a reference of the look in each season, films at each, and the checks every change passes (the `environment` skill). Built (D327): judged at four dates in research/2026-10-15-seasons.md, with what is left to do.
-5. **Body temperature** (D153), and snow and mud under a walker. Built (D328): the first of the effects, the stakes.
+5. **Body temperature** (D153). Built (D328): the first of the effects, the stakes.
 6. **The weather drawn:** the sky, the light, the air and what falls following the weather at the eye, storms and winter first: [weather.md](weather.md) (D418).
 
 ## Open questions
