@@ -18,7 +18,8 @@ export type Walk = { name: string; frames: Frame[]; route: string[]; ground: num
 /// how each foot is kept; each foot's heel and ball over the world's ground (`sole`, null where
 /// none is under it) and over the clip's flat ground as its clip posed them (`clip`); and how
 /// far each leg stayed short of the goal it was bent to (`short`) and of the lock's goal alone
-/// (`short_lock`), m.
+/// (`short_lock`), m; the height of the ground under each foot's heel and ball over the shown
+/// root (`under`) and its heel to its ball across the up (`span`), m (since controller unit 2c-4).
 type Walker = Frame["fighters"][number] & {
   below?: number;
   on_ground?: boolean;
@@ -28,6 +29,8 @@ type Walker = Frame["fighters"][number] & {
   clip?: number[][];
   short?: number[];
   short_lock?: number[];
+  under?: ((number | null)[] | null)[];
+  span?: (number | null)[];
 };
 
 export const FPS = 60;
@@ -190,6 +193,28 @@ export const DROP_WORST_M = 0.03;
 /// Ground under a ball this far from the shown root's level is a step or a slope: its plants
 /// are counted apart, so a line says whether the check met any.
 export const UNEVEN_M = 0.05;
+/// How far foot placement pitches a sole to its ground, deg (`terra_motion::placement::TILT_DEG`):
+/// ground under heel and ball steeper apart than this is a riser the sole straddles, resting on
+/// the higher (D455).
+export const TILT_DEG = 30;
+
+/// A locked sole's heel and ball off where its clip has them over its flat ground, m: each by
+/// its own height over the world's ground under it, but where the ground under heel and ball
+/// differs more than the sole can pitch to (a riser straddled: the sole rests on the higher,
+/// D455), the point over the lower ground is judged by the nearer of its own reading and its
+/// height over the higher ground. A floating sole still floats by its higher point, a sunk one
+/// still sinks by its own reading, and a heel left anywhere but on a tread's level is off.
+export function soleOff(sole: number[], clip: number[], under?: (number | null)[] | null, span?: number | null): number[] {
+  const own = [sole[0] - clip[0], sole[1] - clip[1]];
+  const [heel, ball] = under ?? [];
+  if (typeof heel !== "number" || typeof ball !== "number" || typeof span !== "number") return own;
+  const rise = ball - heel;
+  if (Math.abs(rise) <= Math.tan((TILT_DEG * Math.PI) / 180) * span) return own;
+  const lower = rise > 0 ? 0 : 1;
+  const over = own[lower] - Math.abs(rise);
+  own[lower] = Math.abs(over) < Math.abs(own[lower]) ? over : own[lower];
+  return own;
+}
 
 /// A frame of a locked plant: how far its sole is off where its clip has it (the worse of the
 /// heel's and the ball's height over the world's ground against their height over the clip's
@@ -217,8 +242,9 @@ function locked(walk: Walk): Run[] {
       if (!found || (run && frame.frame !== run.to + 1)) close();
       if (!found) continue;
       const [heel, ball] = [(sole[0] as number) - clip[0], (sole[1] as number) - clip[1]];
+      const [heelOff, ballOff] = soleOff(sole as number[], clip, w.under?.[foot], w.span?.[foot]);
       const up = w.balls[foot]?.up ?? (sole[1] as number);
-      const held = { off: Math.max(Math.abs(heel), Math.abs(ball)), sunk: Math.max(0, -heel, -ball), ground: up - (sole[1] as number), heel: sole[0] as number, ball: sole[1] as number, short: w.short?.[foot], lock: w.short_lock?.[foot] };
+      const held = { off: Math.max(Math.abs(heelOff), Math.abs(ballOff)), sunk: Math.max(0, -heel, -ball), ground: up - (sole[1] as number), heel: sole[0] as number, ball: sole[1] as number, short: w.short?.[foot], lock: w.short_lock?.[foot] };
       run ??= { walk: walk.name, foot, from: frame.frame, to: frame.frame, held: [] };
       run.to = frame.frame;
       run.held.push(held);
@@ -236,8 +262,8 @@ const where = (run: Run) => `${run.walk} ${run.foot ? "right" : "left"} foot, fr
 const none = (name: string): Check => ({ name, ok: false, line: "✗ no locked plant with its sole and its clip's in the records (`kept`, `sole`, `clip`)", value: NaN, faults: 1 });
 
 /// feet.ground: each locked plant's median of its sole off where its clip has it over the
-/// clip's own flat ground (heel strike and toe-off are the clip's, so they cancel); the row's
-/// number the worst plant's, m.
+/// clip's own flat ground (heel strike and toe-off are the clip's, so they cancel; a riser
+/// straddled judged as `soleOff` says); the row's number the worst plant's, m.
 export function ground(walks: Walk[]): Check {
   const runs = walks.flatMap(locked);
   if (!runs.length) return none("feet ground");

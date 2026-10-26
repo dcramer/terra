@@ -199,6 +199,40 @@ test("a locked sole where its clip has it passes; floating, pitched or sunk fail
   assert.match(ground([standing(() => [0.08, 0.04], 0, 0, false)]).line, /no locked plant/);
 });
 
+/// `standing`, the record also giving the ground under heel and ball over the root (`under`)
+/// and the heel 0.15 m behind the ball (`span`).
+function straddling(sole: number[], under: number[]): Walk {
+  const walk = standing(() => sole);
+  const frames = walk.frames.map((f) => ({ ...f, fighters: f.fighters.map((w) => ({ ...w, under: [under, null], span: [0.15, null] })) }));
+  return of(frames as Frame[]);
+}
+
+test("a sole straddling a riser rests on the higher tread; floating, sunk or hanging there fails", () => {
+  const near = (check: { value: number }, want: number) => Math.abs(check.value - want) < 1e-9;
+  // Going up: the ball on the upper tread as the clip has it, the heel over a tread 0.5 m lower
+  // at the clip's height over the upper one (a rigid sole resting on the higher ground).
+  const up = ground([straddling([0.58, 0.04], [-0.5, 0])]);
+  assert.ok(up.ok && up.value < 1e-9, up.line);
+  // Going down: the heel on the upper tread, the ball over the lower.
+  assert.ok(ground([straddling([0.08, 0.54], [0, -0.5])]).ok);
+  // The whole sole 10 cm up over the riser: the higher point floats.
+  const floats = ground([straddling([0.68, 0.14], [-0.5, 0])]);
+  assert.ok(!floats.ok && near(floats, 0.1), floats.line);
+  // The ball 3 cm into the upper tread: off, and sunk by its own reading.
+  const sunk = [straddling([0.55, 0.01], [-0.5, 0])];
+  assert.ok(!ground(sunk).ok && near(ground(sunk), 0.03), ground(sunk).line);
+  assert.ok(!sinking(sunk).ok && near(sinking(sunk), 0.03), sinking(sunk).line);
+  // The heel hanging 30 cm over the lower tread, on neither tread's level: off by 22 cm.
+  const hangs = ground([straddling([0.3, 0.04], [-0.5, 0])]);
+  assert.ok(!hangs.ok && near(hangs, 0.22), hangs.line);
+  // Level ground, and a slope the sole pitches to (3 cm over 15 cm, 11 deg): own readings, so
+  // a floating sole and a heel 4 cm into the slope still fail.
+  const level = ground([straddling([0.38, 0.34], [0, 0])]);
+  assert.ok(!level.ok && near(level, 0.3), level.line);
+  const slope = [straddling([0.04, 0.04], [-0.03, 0])];
+  assert.ok(!ground(slope).ok && near(ground(slope), 0.04) && !sinking(slope).ok, ground(slope).line);
+});
+
 test("feet.aloft fails a foot locked in the air, not a heel strike or a stance's end", () => {
   assert.ok(aloft([standing(() => [0.08, 0.04])]).ok);
   // Locked 20 cm up, coming down over 5 frames (a stop's lock): the lock's start is aloft.

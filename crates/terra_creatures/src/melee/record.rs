@@ -17,9 +17,10 @@
 //! below its body its figure is shown after a step up (`below`, `terra_walker::stepping`),
 //! whether it stands on the ground and its speed; and, for each foot, how far its heel (the
 //! foot bone) and ball stand over the world's ground (`sole`, `sole::gap`) beside how high its
-//! clip posed them over the clip's flat ground (`clip`), and how far its leg stayed short of the
-//! goal it was bent to and of the lock's goal alone (`short`, `short_lock`): `feet.ground`'s and
-//! `pelvis.drop`'s numbers.
+//! clip posed them over the clip's flat ground (`clip`), the height of the ground under each over
+//! the shown root (`under`) and the heel to the ball across the up (`span`), and how far its leg
+//! stayed short of the goal it was bent to and of the lock's goal alone (`short`, `short_lock`):
+//! `feet.ground`'s and `pelvis.drop`'s numbers.
 
 use super::Fighter;
 use super::sole::Ground;
@@ -226,7 +227,7 @@ fn write(
             last,
             &mut out,
             entity,
-            (up, 0.0),
+            (up, feet, 0.0),
             kept,
             (&children, &names, &bones),
             &mut ground,
@@ -249,7 +250,7 @@ fn write(
             &mut line,
             &mut out,
             entity,
-            (up, below),
+            (up, root, below),
             kept,
             found,
             &mut ground,
@@ -311,15 +312,17 @@ fn walker(
     })
 }
 
-/// What a walker's feet add to its line (the module's `sole`, `clip`, `short`, `short_lock`):
-/// each foot's heel and ball over the world's ground, and over the clip's flat ground as its
-/// clip posed them (`Kept::clip_soles`, over the body, so `below` more over the shown root).
+/// What a walker's feet add to its line (the module's `sole`, `clip`, `under`, `span`, `short`,
+/// `short_lock`): each foot's heel and ball over the world's ground, and over the clip's flat
+/// ground as its clip posed them (`Kept::clip_soles`, over the body, so `below` more over the
+/// shown root); the ground under heel and ball over the shown root `root` (a sole straddling a
+/// riser, `tools/controller/yard-checks.ts`), and how far apart they are across the up.
 #[allow(clippy::too_many_arguments)]
 fn soles(
     line: &mut Value,
     out: &mut Out,
     entity: Entity,
-    (up, below): (Vec3, f32),
+    (up, root, below): (Vec3, Vec3, f32),
     kept: Option<&terra_walker::feet::Kept>,
     (children, names, places): (&Query<&Children>, &Query<&Name>, &Query<&GlobalTransform>),
     ground: &mut Ground,
@@ -338,14 +341,24 @@ fn soles(
     else {
         return;
     };
-    let mut over = |bone: Entity| {
-        let at = places.get(bone).ok()?.translation();
-        ground.gap(at, up).map(r)
-    };
-    let sole: Vec<[Option<f64>; 2]> = (0..2)
-        .map(|side| [over(heels[side]), over(balls[side])])
-        .collect();
+    let at = |bone: Entity| places.get(bone).ok().map(GlobalTransform::translation);
+    let mut sole: Vec<[Option<f64>; 2]> = Vec::new();
+    let mut under: Vec<[Option<f64>; 2]> = Vec::new();
+    let mut span: Vec<Option<f64>> = Vec::new();
+    for side in 0..2 {
+        let points = [at(heels[side]), at(balls[side])];
+        let gaps = points.map(|point| ground.gap(point?, up));
+        sole.push(gaps.map(|gap| gap.map(r)));
+        // The ground under each point over the shown root: the point's height less its gap.
+        under.push([0, 1].map(|i| Some(r((points[i]? - root).dot(up) - gaps[i]?))));
+        span.push(match points {
+            [Some(heel), Some(ball)] => Some(r((ball - heel).reject_from(up).length())),
+            _ => None,
+        });
+    }
     line["sole"] = json!(sole);
+    line["under"] = json!(under);
+    line["span"] = json!(span);
     line["clip"] = json!(kept.clip_soles().map(|feet| feet.map(|h| r(h + below))));
     line["short"] = json!(kept.shorts().map(|[short, _]| r(short)));
     line["short_lock"] = json!(kept.shorts().map(|[_, lock]| r(lock)));
