@@ -32,8 +32,8 @@ test("a check runs the first time, when main moved over what it reads, or when i
 
 test("its crontab entry goes in fenced and comes out leaving every other line", () => {
   const theirs = "# theirs\n17 9 * * * backup\n";
-  const entry = cronEntry(5, "/home/x/it's", "/usr/bin:/bin", "/home/x/log");
-  assert.equal(entry, `*/5 * * * * cd '/home/x/it'\\''s' && PATH='/usr/bin:/bin' cargo xtask continuous >> '/home/x/log' 2>&1`);
+  const entry = cronEntry(5, "/home/x/it's", "/home/x/path", "/home/x/log");
+  assert.equal(entry, `*/5 * * * * cd '/home/x/it'\\''s' && PATH="$(cat '/home/x/path')" cargo xtask continuous >> '/home/x/log' 2>&1`);
   assert.match(cronEntry(120, "/h", "/p", "/l"), /^0 \*\/2 \* \* \* /);
   const installed = cronWith(theirs, entry);
   assert.ok(installed.startsWith(theirs) && installed.includes(`\n${entry}\n`));

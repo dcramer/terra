@@ -213,6 +213,8 @@ const UNITS = join(homedir(), ".config/systemd/user");
 /// The lines fencing its crontab entry, so `--uninstall` takes out only them.
 const BEGIN = "# BEGIN terra-continuous (cargo xtask continuous --uninstall removes it)";
 const END = "# END terra-continuous";
+/// Where the crontab entry's PATH is kept, beside the state.
+const PATH_FILE = (home: string) => join(home, ".git/terra-continuous/path");
 
 /// A crontab with its entry taken out, and `entry` put in when there is one.
 export function cronWith(table: string, entry?: string): string {
@@ -233,11 +235,12 @@ function quoted(text: string): string {
   return `'${text.replaceAll("'", `'\\''`)}'`;
 }
 
-/// The crontab line running it from `home` every so many minutes with `path` (cron's own PATH
-/// has no cargo or node), its lines appended to `log`.
-export function cronEntry(every: number, home: string, path: string, log: string): string {
+/// The crontab line running it from `home` every so many minutes with the PATH kept in
+/// `pathFile` (cron's own has no cargo or node, and cron refuses a line over 1,000 characters,
+/// which a shell's PATH can pass alone), its lines appended to `log`.
+export function cronEntry(every: number, home: string, pathFile: string, log: string): string {
   const when = every < 60 ? `*/${every} * * * *` : `0 */${Math.max(1, Math.round(every / 60))} * * *`;
-  return `${when} cd ${quoted(home)} && PATH=${quoted(path)} cargo xtask continuous >> ${quoted(log)} 2>&1`;
+  return `${when} cd ${quoted(home)} && PATH="$(cat ${quoted(pathFile)})" cargo xtask continuous >> ${quoted(log)} 2>&1`;
 }
 
 function crontab(): string {
@@ -265,7 +268,8 @@ function install(every: number): number {
   if (!userBus()) {
     const log = join(home, ".git/terra-continuous/cron.log");
     mkdirSync(dirname(log), { recursive: true });
-    if (!setCrontab(cronWith(crontab(), cronEntry(every, home, path, log)))) {
+    writeFileSync(PATH_FILE(home), `${path}\n`);
+    if (!setCrontab(cronWith(crontab(), cronEntry(every, home, PATH_FILE(home), log)))) {
       console.log("✗ continuous: crontab refused the entry");
       return 1;
     }
@@ -296,6 +300,7 @@ function uninstall(): number {
     console.log("✗ continuous: crontab refused the change");
     return 1;
   }
+  rmSync(PATH_FILE(mainCheckout()), { force: true });
   const timer = existsSync(join(UNITS, "terra-continuous.timer"));
   if (timer) {
     spawnSync("systemctl", ["--user", "disable", "--now", "terra-continuous.timer"], { stdio: "ignore" });
