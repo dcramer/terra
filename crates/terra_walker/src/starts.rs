@@ -56,6 +56,29 @@ fn stood(clip: &Markers, at: f32, standing: bool) -> bool {
     (standing || at >= clip.stop().0) && (0..2).all(|side| clip.lock(side, at) >= FULL)
 }
 
+/// The foot a jog stands on as it is let go, from how each foot is kept (`states`) and its
+/// clips' lock curves (`curves`): the one kept planted while the other is not; else the one its
+/// clips have down (curve FULL); else, one foot leaving the ground (its curve falling, between
+/// 0 and FULL), the other, which lands next; none in the air. A foot whose lock weight is
+/// still high while D455's rule lifts it (stepping, blending back to its clip) is not planted:
+/// a stop entered on it plants a foot that is in the air, which then glides to the clip's.
+pub(crate) fn planted(states: [&str; 2], curves: [f32; 2]) -> Option<usize> {
+    let kept = states.map(|state| state == "planted");
+    if kept[0] != kept[1] {
+        return Some(usize::from(kept[1]));
+    }
+    let down = curves.map(|curve| curve >= FULL);
+    if down[0] != down[1] {
+        return Some(usize::from(down[1]));
+    }
+    let leaving = curves.map(|curve| curve > 0.0 && curve < FULL);
+    match leaving {
+        [true, false] if !down[1] => Some(1),
+        [false, true] if !down[0] => Some(0),
+        _ => None,
+    }
+}
+
 /// Which of `stops` to play and from when, the body's stopping distance `left` in the clips'
 /// units and `planted` the foot its jog stands on (none in the air): of the times its clip
 /// has that foot locked and the other not, the one whose distance left to the clip's stop is
@@ -246,6 +269,22 @@ mod tests {
         assert_eq!(shown(Jog, Fall, false, 0.0, None), Fall);
         assert_eq!(shown(Idle, Idle, false, 0.0, None), Idle);
         assert_eq!(shown(Idle, Jog, true, 0.0, None), Jog);
+    }
+
+    #[test]
+    fn the_planted_foot_is_the_one_kept_down_else_its_clips_else_the_one_landing_next() {
+        // Kept planted on the right, the left swinging: the right.
+        assert_eq!(planted(["free", "planted"], [0.0, 1.0]), Some(1));
+        // The rule lifting the left though its clip has it down: the right, kept planted.
+        assert_eq!(planted(["stepping", "planted"], [1.0, 0.0]), Some(1));
+        // Neither kept planted: the one its clips have down.
+        assert_eq!(planted(["stepping", "releasing"], [1.0, 0.0]), Some(0));
+        // The right leaving the ground (lifted by the rule, its curve falling), the left in
+        // the air: the left lands next (the yard's sprint stop at frame 634).
+        assert_eq!(planted(["free", "blending"], [0.0, 0.803]), Some(0));
+        // Both in the air, or both down: none.
+        assert_eq!(planted(["free", "free"], [0.0, 0.0]), None);
+        assert_eq!(planted(["planted", "planted"], [1.0, 1.0]), None);
     }
 
     #[test]

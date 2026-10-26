@@ -628,15 +628,11 @@ fn clip_of(doing: Doing, stop: usize) -> &'static str {
     }
 }
 
-/// The foot a body's feet stand on (`Kept::locks`): the one locked, else the one its clips
-/// have down; none in the air.
+/// The foot a body's feet stand on (`starts::planted`, from `Kept::states` and the clips' lock
+/// curves).
 fn planted(kept: &crate::feet::Kept) -> Option<usize> {
     let [l, r] = kept.locks();
-    [1, 0]
-        .into_iter()
-        .map(|k| (l[k], r[k]))
-        .find(|(l, r)| (l - r).abs() > 0.5)
-        .map(|(l, r)| usize::from(r > l))
+    crate::starts::planted(kept.states(), [l[0], r[0]])
 }
 
 /// Where the clip `doing` shows starts, from `was`, and which stop: a stop braking on the
