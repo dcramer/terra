@@ -141,6 +141,40 @@ node.image = mask
 links.new(node.outputs["Color"], bsdf.inputs["Emission Color"])
 bsdf.inputs["Emission Strength"].default_value = 1.0
 
+# The bark graded to the forest's oaks' (D536): each channel's mean and spread, in sRGB, moved
+# to those of the oaks' bark scans as the forest tints them (lush.rs BARKS), measured on the
+# trunk's front, so asleep it is not the lighter, greener tree among them. The crown's leaves
+# keep their colour: texels of faces above the head fade out of the grade.
+def encoded(rgb):
+    return np.where(rgb <= 0.0031308, 12.92 * rgb, 1.055 * np.power(np.maximum(rgb, 0), 1 / 2.4) - 0.055)
+
+
+def scan(name, tint):
+    im = bpy.data.images.load(look.path(f"assets/materials/{name}/color.jpg"))
+    a = np.empty(im.size[0] * im.size[1] * 4, dtype=np.float32)
+    im.pixels.foreach_get(a)
+    srgb = a.reshape(-1, 4)[::7, :3]
+    lin = np.where(srgb <= 0.04045, srgb / 12.92, ((srgb + 0.055) / 1.055) ** 2.4)
+    return encoded(lin * tint)
+
+
+oaks = np.concatenate([scan("oak_bark", 0.65), scan("bark_brown_02", 0.82)])
+rgb = colour.reshape(H, W, 4)[..., :3]
+trunk_px = px[pos[:, 2] < joint["Head"].z]
+own = rgb[trunk_px[:, 1], trunk_px[:, 0]]
+gain = oaks.std(0) / np.maximum(own.std(0), 1e-3)
+graded = np.clip((rgb - own.mean(0)) * gain + oaks.mean(0), 0, 1)
+keep = np.zeros((H, W), dtype=np.float32)
+crown_top = joint["Head"].z + 0.3
+cpx, cpos, _, _ = texels([f for f in bm.faces if f.calc_center_median().z > crown_top - 0.2])
+keep[cpx[:, 1], cpx[:, 0]] = np.clip((cpos[:, 2] - crown_top) / 0.8, 0, 1)
+rgb[...] = graded + keep[..., None] * (rgb - graded)
+tex.image.pixels.foreach_set(colour)
+tex.image.update()
+tex.image.pack()
+print("BARK", "mean", " ".join(f"{v:.3f}" for v in own.mean(0)), "->", " ".join(f"{v:.3f}" for v in oaks.mean(0)),
+      "spread x", " ".join(f"{v:.2f}" for v in gain))
+
 # The crown kept on the trunk: what the conversion bound to the arms well above them (the
 # leaves and twigs over the shoulders) moved to the trunk's bone at its height, so an arm
 # raised into the crown goes in among its leaves instead of dragging them with it.
@@ -227,7 +261,7 @@ def new_vert(co):
 
 
 mouth_bag = material(f"{body.name}_mouth", (0.004, 0.003, 0.002), 1.0)
-splinter = material(f"{body.name}_teeth", (0.17, 0.145, 0.11), 0.85)
+splinter = material(f"{body.name}_teeth", (0.07, 0.055, 0.04), 0.85)
 gw, gh, bag_w, bag_h = 14, 8, 1.3 * half, 0.45
 grid = [[new_vert(surface(mx + u * bag_w, mz + v * bag_h)
                   + Vector((0, 0.02 + 0.28 * (1 - u * u) * (1 - v * v), 0)))
@@ -253,7 +287,11 @@ bm.normal_update()
 
 # 5. The Wake shape: each lip moved off the cut, most in the middle and raggedly, curled in.
 wf = 0.95 * half
-up, down, reach = 0.3 * spacing, 0.5 * spacing, 1.6 * spacing
+# Each lip's move eased out over a long reach (the lower, which falls further, the longer), so
+# the bark's picture is drawn out by a quarter at most, not by half just off the cut; the
+# upper's reach stops short of the eyes.
+up, down = 0.3 * spacing, 0.5 * spacing
+reach_up, reach_down = 1.2 * spacing, 2.6 * spacing
 
 
 def along(x):
@@ -263,13 +301,13 @@ def along(x):
 delta = {}
 for v in bm.verts:
     dz = v.co.z - (mz + jag(v.co.x))
-    if v in added or v.co.y > cy or abs(dz) > reach or abs(v.co.x - mx) > wf:
+    if v in added or v.co.y > cy or abs(dz) > max(reach_up, reach_down) or abs(v.co.x - mx) > wf:
         continue
     if v in on_slit:
         side = 1 if sum(f.calc_center_median().z for f in v.link_faces) / max(1, len(v.link_faces)) > v.co.z else -1
     else:
         side = 1 if dz > 0 else -1
-    g = (1 - abs(dz) / reach) ** 1.5
+    g = max(0.0, 1 - abs(dz) / (reach_up if side > 0 else reach_down)) ** 1.2
     f = along(v.co.x) * g
     delta[v] = Vector(((v.co.x - mx) * 0.12 * f, 0.05 * spacing * f * g * g, side * (up if side > 0 else down) * f))
 for verts, lip, x in teeth:
