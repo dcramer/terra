@@ -211,11 +211,24 @@ fn windows_temp() -> Option<PathBuf> {
     run_from("wslpath", &["-u", &windows_path]).map(PathBuf::from)
 }
 
+/// Mirrors `from` into `to`: what `from` has is copied over, and what it no longer has is
+/// removed, so a data file renamed or deleted since the last run is not still read there (a
+/// folder of move sets read whole failed on one renamed away, combat round 26).
 fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
     if !from.is_dir() {
         return Ok(());
     }
     std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(to)? {
+        let entry = entry?;
+        if !from.join(entry.file_name()).exists() {
+            if entry.path().is_dir() {
+                std::fs::remove_dir_all(entry.path())?;
+            } else {
+                std::fs::remove_file(entry.path())?;
+            }
+        }
+    }
     for entry in std::fs::read_dir(from)? {
         let entry = entry?;
         let target = to.join(entry.file_name());
