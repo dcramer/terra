@@ -107,3 +107,26 @@ Bold is a miss. All three dominant peaks are 2.17-2.19 Hz, the real puffing. Bak
 - **Vorticity bought splits back.** Doubling vorticity with more wind noise (F) took splits from 1.18-1.33 to 0.85 and lean from 8.0-8.2 to 9.5. Sheds did not move.
 
 The recommendation stands: build neither a baked loop nor a live grid yet. A sim's last miss is sheds, which needs wind that moves the air and not only the flame's gas. Mantaflow in Blender gives no inflow for that, as the probes found. The next try would be a guiding velocity field (Mantaflow's guides) or a sim in EmberGen or Houdini, whose wind is an ambient velocity. That is a step up in tooling; it is the developers' call whether sheds alone is worth it.
+
+## Round g34: the fire carried upwind through still air
+
+Question: g23's wind pushed only the flame's gas, so torn blobs rode along with their tongue. If the air itself moves past the fire, do tongues shed? Mantaflow has no ambient wind, so the whole fire (ground, logs, ember bed, camera) is carried upwind through still air, which in the fire's frame is the same thing (Galilean). The domain stays still and holds the whole path, with F's cell size, and the adaptive domain simulates only the cells round the gas. A domain that moved with the fire did not carry its gas: a 48-cell probe's flame died. The carry speed is F's settings' mean times g23's lognormal gust envelope, veering ±20°. Everything else is F's (96 cells, vorticity 0.8, flame vorticity 1.5, `time_scale` 2.5), with no wind field. Scripts are in `~/.cache/terra-review/fire/g34/tools` (g33's, with the sims' folder settable for the render worker).
+
+- **G**: mean 1.18 m/s, 0.22-3.06 m/s, 25.8 m travelled. **H**: mean 1.96 m/s, 0.36-5.11 m/s, 43.0 m travelled.
+- Baked on the render worker (Blender 5.2.3, 32 cores, both at once) in 63 and 65 min, 7.2 and 7.6 GB. Mantaflow printed "Invalid dt" on 17 and 55 steps and went on. Rendered as F was: frames 91-690, Cycles OptiX, 24 samples, flame^3, red from 0.5 to 0.85 m. That took 11 min each on the RTX 4090.
+- All three films were measured by today's motion.ts with `--seconds 20`. F measures as it did in g23.
+
+| Sim (carry m/s) | flicker med Hz | area sd/mean | born /s | life s | sheds | splits | lean deg | r at no lag | top red % | tracks | targets met |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| target | 1.83-3.83 | ≤ 0.19 | 12-19 | 0.04-0.12 | ≥ 1.0 | ≤ 1.2 | ≥ 8.8 | ≤ 0.12 | 3-47 | | |
+| F (g23; pushed gas, 1.77 m/s drift) | 2.50 | 0.19 | 13.1 | 0.05 | **0.27** | 0.85 | 9.5 | 0.05 | 11 | 261 | 8 |
+| G (1.18) | 2.33 | **0.37** | 18.3 | 0.10 | **0.33** | 0.67 | 11.2 | 0.11 | **0** | 363 | 6 |
+| H (1.96) | 2.33 (peak 0.50) | **0.31** | 12.5 | 0.08 | **0.19** | 0.55 | 11.0 | 0.02 | **0** | 248 | 6 |
+
+Bold is a miss.
+
+- **Moving air did not bring sheds.** They were 0.33 and 0.19 against F's 0.27; the target is 1.0. Shed blobs still last 0.04 s. Pushing only the gas was not what held sheds down.
+- **The flame lies low and clings to the logs.** It is about 10% shorter in frame (168 px against 185) and wraps the logs instead of standing as one body. Its top third stays under the red band's 0.5 m, so top red falls to 0. That is a render setting and could be fixed, but sheds and area could not.
+- **The gusts swing the whole flame.** Area sd/mean is 0.31-0.37, about twice F's 0.19. The carry swings from a fifth to two and a half times its mean, and the flame's size follows it. H's dominant flicker became the 0.5 Hz gust swing.
+- **Lean and births rose.** Lean was 11.0-11.2 deg against F's 9.5. G's births were 18.3 a second, near the top of the real 12-19.
+- F remains the best sim, missing sheds alone. The recommendation in g23 stands. Sheds are not a matter of which frame the wind is in, so the sim path's remaining lever is the turbulence that tears a tongue (resolution, or a solver with ambient turbulence, such as EmberGen or Houdini). Which, if either, is the developers' call.
