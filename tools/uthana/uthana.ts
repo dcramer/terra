@@ -31,7 +31,8 @@ const USAGE = `node tools/uthana/uthana.ts <command>
   character [body.glb]                 upload a rigged body (default ${BODY}); prints its id
   motion "<prompt>" -o clip.glb        make a clip on our body and save it, motion only
       --model 1|2|3 (2)  --length s (5)  --seed n  --fps 24|30|60 (30)  --in-place  --foot-ik
-      --character id (default: ${BODY} uploaded)
+      --character id (default: ${BODY} uploaded)  --loop s (its end eased into its start over s seconds)
+      --from id (loop a motion already made instead of making one)
   schema                               the arguments the live API takes for each mutation`;
 
 function auth(): string {
@@ -107,6 +108,16 @@ async function motion(prompt: string, o: { model: string; length: number; seed?:
   return data.create_text_to_motion.motion.id;
 }
 
+// A motion made a closed loop: its end eased into its start over the last `zone` seconds, the
+// length kept (docs/api/capabilities/stitch-loop-motions).
+async function looped(characterId: string, motionId: string, zone: number): Promise<string> {
+  const data = await gql<{ create_looped_motion: { motion: { id: string } } }>(
+    "mutation ($c: String!, $m: String!, $z: Float) { create_looped_motion(character_id: $c, motion_id: $m, loop_mode: \"closed\", zone_mode: \"modify\", zone_duration: $z) { motion { id name } } }",
+    { c: characterId, m: motionId, z: zone },
+  );
+  return data.create_looped_motion.motion.id;
+}
+
 async function download(characterId: string, motionId: string, out: string, fps: string, inPlace: boolean): Promise<void> {
   const query = new URLSearchParams({ fps, ...(inPlace ? { in_place: "true" } : {}) });
   const res = await fetch(`${API}/motion/animation/motion_viewer/${characterId}/${motionId}/glb/${basename(out)}?${query}`, { headers: { authorization: auth() } });
@@ -128,6 +139,8 @@ export async function main(argv: string[]): Promise<void> {
       "in-place": { type: "boolean", default: false },
       "foot-ik": { type: "boolean", default: false },
       character: { type: "string" },
+      loop: { type: "string" },
+      from: { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -147,12 +160,13 @@ export async function main(argv: string[]): Promise<void> {
       return;
     }
     case "motion": {
-      if (!arg || !v.out) throw new Failed('motion needs a prompt and -o clip.glb: node tools/uthana/uthana.ts motion "a person idles, sword in hand" -o idle.glb');
+      if ((!arg && !v.from) || !v.out) throw new Failed('motion needs a prompt and -o clip.glb: node tools/uthana/uthana.ts motion "a person idles, sword in hand" -o idle.glb');
       const length = Number(v.length);
       const characterId = v.character ?? (await character(BODY));
-      const motionId = await motion(arg, { model: v.model!, length, seed: v.seed ? Number(v.seed) : undefined, footIk: v["foot-ik"]!, character: characterId });
+      const made = v.from ?? (await motion(arg, { model: v.model!, length, seed: v.seed ? Number(v.seed) : undefined, footIk: v["foot-ik"]!, character: characterId }));
+      const motionId = v.loop ? await looped(characterId, made, Number(v.loop)) : made;
       await download(characterId, motionId, v.out, v.fps!, v["in-place"]!);
-      const dollars = Math.round(length * MODELS[v.model!].rate * 100) / 100;
+      const dollars = v.from ? 0 : Math.round(length * MODELS[v.model!].rate * 100) / 100;
       return console.log(JSON.stringify({ motion: motionId, character: characterId, dollars, files: [v.out] }));
     }
     default:

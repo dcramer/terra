@@ -24,7 +24,7 @@ The first `motion` uploads `assets/models/character/base.glb` as a character (it
 | Text-to-motion 2.0 | `2` (default) | $0.03 a second | `--seed`, `--foot-ik` |
 | Text-to-motion 3.0 | `3` | $0.10 a second | 4–10 s, a job polled every 5 s; unlocked by asking Uthana's support |
 
-`--in-place` takes out the root's horizontal motion. `schema` lists the arguments the live API takes, for when the docs and the API disagree.
+`--in-place` takes out the root's horizontal motion. `--loop 1` makes the clip a closed loop, its end eased into its start over the last second (Uthana's looping, no charge seen in the trial); `--from <motion>` loops one already made. A text-to-motion clip is not a loop until then: the trial's ended 19–67 cm off their start. `schema` lists the arguments the live API takes, for when the docs and the API disagree.
 
 ## Rights
 
