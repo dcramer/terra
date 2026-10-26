@@ -3,7 +3,7 @@
 // Each test has its own state directory and lock, and a stand-in nvidia-smi that fails, so the
 // live runs, their lock and the card are never touched.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -32,12 +32,14 @@ function machine() {
     child.stderr.on("data", (chunk) => (err += chunk));
     return new Promise((done) => child.on("close", (code) => done({ code, err, seconds: (Date.now() - started) / 1000 })));
   };
-  /// A command that logs its name and the time when it starts and ends, sleeping between.
-  const step = (name: string, seconds: number) => ["sh", "-c", `echo "${name} start $(date +%s%N)" >> ${log}; sleep ${seconds}; echo "${name} end $(date +%s%N)" >> ${log}`];
+  /// A command that logs its name and the time when it starts and ends, sleeping between (the
+  /// time from Node, as macOS's `date` has no %N).
+  const now = `$("${process.execPath}" -p 'Date.now()')`;
+  const step = (name: string, seconds: number) => ["sh", "-c", `echo "${name} start ${now}" >> ${log}; sleep ${seconds}; echo "${name} end ${now}" >> ${log}`];
   const lines = () =>
     fs.readFileSync(log, "utf8").trim().split("\n").map((line) => {
-      const [name, at, ns] = line.split(" ");
-      return { name, at, ms: Number(BigInt(ns) / 1_000_000n) };
+      const [name, at, ms] = line.split(" ");
+      return { name, at, ms: Number(ms) };
     });
   return { run, step, lines, done: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
@@ -58,7 +60,10 @@ test("two stills start at once, side by side", async () => {
   m.done();
 });
 
-test("a bench waits for the running still, and a still asked for meanwhile waits for the bench", async () => {
+// Without flock (macOS) the wrapper takes no lock and the game takes its own turn (gpu_turn).
+const noFlock = spawnSync("flock", ["--version"]).status !== 0 && "no flock here: the wrapper runs its command without the lock";
+
+test("a bench waits for the running still, and a still asked for meanwhile waits for the bench", { skip: noFlock }, async () => {
   const m = machine();
   // The bench's stall limit (3 s) is shorter than its wait: waiting for the lock is not a stall.
   const first = m.run(["still", "--", ...m.step("first", 4)]);

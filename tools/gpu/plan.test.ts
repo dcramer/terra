@@ -1,7 +1,7 @@
 // The GPU wrapper's readings of the machine and its stall rule, on made-up input whose answers are known by hand.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cpuGrowth, descendants, parseCard, parseCpu, parseLocks, parsePmon, Progress } from "./plan.ts";
+import { cpuGrowth, descendants, parseCard, parseCpu, parseLocks, parsePmon, parsePs, Progress } from "./plan.ts";
 
 test("nvidia-smi's card line is read", () => {
   assert.deepEqual(parseCard("10240, 944\n"), { totalMB: 10240, usedMB: 944 });
@@ -28,6 +28,14 @@ test("a process's CPU time is read from its stat line, its reaped children's inc
   // pid (name) state ppid pgrp session tty tpgid flags minflt cminflt majflt cmajflt utime stime cutime cstime ...
   const stat = "4242 (my game (x)) R 1 4242 4242 0 -1 4194304 10 0 0 0 300 50 7 3 20 0 1 0 999";
   assert.equal(parseCpu(stat), 360);
+});
+
+test("without /proc, each process's parent and CPU time are read from ps, hundredths of a second", () => {
+  // macOS ps: minutes past an hour, hours, days; a blank line and a garbled one skipped.
+  const text = "    1     0  25:59.39\n  338     1  88:21.15\n  400   338 1:02:03.45\n  401   400 2-00:00:00.01\n\n  junk\n";
+  const { parents, cpu } = parsePs(text);
+  assert.deepEqual([...parents], [[1, 0], [338, 1], [400, 338], [401, 400]]);
+  assert.deepEqual([...cpu], [[1, 155939], [338, 530115], [400, 372345], [401, 17280001]]);
 });
 
 test("the processes busy on the card are read from pmon, idle and header lines skipped", () => {

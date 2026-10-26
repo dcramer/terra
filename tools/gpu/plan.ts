@@ -67,6 +67,23 @@ export function parseCpu(stat: string): number {
   return Number.isFinite(ticks) ? ticks : 0;
 }
 
+/// Every process's parent and CPU time so far, hundredths of a second, where there is no /proc
+/// (macOS), from `ps -A -S -o pid=,ppid=,time=`: `-S` adds its reaped children's time, as
+/// parseCpu does, and the time reads `[dd-][hh:]mm:ss.ss`.
+export function parsePs(text: string): { parents: Map<number, number>; cpu: Map<number, number> } {
+  const parents = new Map<number, number>();
+  const cpu = new Map<number, number>();
+  for (const line of text.split("\n")) {
+    const [pid, parent, time] = line.trim().split(/\s+/);
+    const [days, clock] = time?.includes("-") ? time.split("-") : ["0", time ?? ""];
+    const seconds = clock.split(":").reduce((sum, part) => sum * 60 + Number(part), 0) + Number(days) * 86400;
+    if (!Number.isInteger(Number(pid)) || !Number.isInteger(Number(parent)) || !clock || !Number.isFinite(seconds)) continue;
+    parents.set(Number(pid), Number(parent));
+    cpu.set(Number(pid), Math.round(seconds * 100));
+  }
+  return { parents, cpu };
+}
+
 /// The processes busy on the card's cores now, from `nvidia-smi pmon -c 1 -s u` (a line a
 /// process: gpu, pid, type, sm %, ...; `-` when idle). Empty where pmon is missing, as under WSL.
 export function parsePmon(text: string): Set<number> {

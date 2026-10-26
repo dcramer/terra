@@ -60,9 +60,13 @@ function readText(file: string): string {
 
 // ---- the machine: processes, the card, the lock -----------------------------------------------
 
+/// Whether this machine has /proc (Linux, WSL); macOS has not, and `ps` says the same there.
+const PROC = fs.existsSync("/proc/self/stat");
+
 /// Every process's parent and CPU ticks so far, from /proc/<pid>/stat (the parent is its fourth
-/// field, after the name in brackets).
+/// field, after the name in brackets), or from `ps` without /proc.
 function processes(): { parents: Map<number, number>; cpu: Map<number, number> } {
+  if (!PROC) return plan.parsePs(spawnSync("ps", ["-A", "-S", "-o", "pid=,ppid=,time="], { encoding: "utf8" }).stdout ?? "");
   const parents = new Map<number, number>();
   const cpu = new Map<number, number>();
   for (const name of fs.readdirSync("/proc")) {
@@ -76,8 +80,8 @@ function processes(): { parents: Map<number, number>; cpu: Map<number, number> }
   return { parents, cpu };
 }
 
-/// Clock ticks a second, the unit of /proc's CPU times.
-const HZ = Number(spawnSync("getconf", ["CLK_TCK"], { encoding: "utf8" }).stdout) || 100;
+/// Clock ticks a second, the unit of /proc's CPU times; parsePs counts hundredths.
+const HZ = (PROC && Number(spawnSync("getconf", ["CLK_TCK"], { encoding: "utf8" }).stdout)) || 100;
 
 const commandOf = (pid: number) => readText(`/proc/${pid}/cmdline`).split("\0").join(" ").replace(/\s+/g, " ").trim();
 
