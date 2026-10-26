@@ -245,9 +245,12 @@ pub(crate) const HAZE_VISIBLE_M: f32 = 240.0;
 /// What the eye adapts round: the log brightness a scene meters at when it is as bright as
 /// the day's exposure for the hour expects (D214).
 const METERED_AS_SET: f32 = -3.6;
-/// How far the eye adapts from the day's exposure: up to one and a quarter stops brighter in deep shade (D286),
-/// as under a canopy, and one darker in glare, as every game with a forest clamps it.
-const ADAPT_BRIGHTER: f32 = 1.25;
+/// How far the eye adapts from the day's exposure: up to three quarters of a stop brighter in
+/// deep shade (D286), as under a canopy, and one darker in glare, as every game with a forest
+/// clamps it. One and a quarter matched Sons of the Forest while the sky volume lit the forest
+/// floor by the ground's bounce alone (D270's swapped sides); lit through the canopy as it is,
+/// the forest at 13:00 held the eye at that limit, 0.20 bright against the reference's 0.15.
+const ADAPT_BRIGHTER: f32 = 0.75;
 const ADAPT_DARKER: f32 = 1.0;
 /// How far it adapts brighter with the camera in a room closed and covered (D240): a room
 /// lit through its doors and windows is four to six stops darker than the day outside,
