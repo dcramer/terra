@@ -55,9 +55,9 @@ The fronts make at most the theme's heaviest rain (2.5 mm/h on the start, steady
 
 ## Open questions for the developers
 
-1. **How stormy the start is.** Recommended: as a temperate place, some 20 to 30 thunder days a year, mostly summer afternoons; winter brings snowfall and the occasional blizzard. Open.
+1. **How stormy the start is.** Recommended: as a temperate place, some 20 to 30 thunder days a year, mostly summer afternoons; winter brings snowfall and the occasional blizzard. Open. A storm's sky is heightened beyond real, with more lightning than life (D522); this asks how often storms come.
 2. **Lightning that strikes.** May a strike set a tree or a roof alight, or hit someone on a hilltop? Recommended: yes, rare and shared, a reason to shelter. Open.
 3. **Rain on the body.** Should rain soak clothing and so chill (D153), and a storm put out an open fire? Recommended: yes, through wetness, as the quantities already allow. Open.
-4. **How dark a storm may be.** Recommended: about two stops under an overcast day, never as dark as a moonlit night, so play stays readable. Open.
+4. **How dark a storm may be.** Recommended: about two stops under an overcast day, never as dark as a moonlit night, so play stays readable. Open. D522 makes a storm darker than real by deeper cloud, its light physical; this sets how far, and how far the eye opens under it.
 5. **Whiteouts.** May a blizzard cut sight to some 50 m? Recommended: yes, rarely, the hardest weather of the start. Open.
 6. **Weather at the trailer.** Should the trailer's runs keep their clear mornings, or does one become a storm or a snowfall? Recommended: one snowfall run and one storm run, once each passes review. Open.

@@ -90,9 +90,9 @@ Ground, water, weather, seasons, life and how realms join.
 | [D501](decisions/D501.md) | Crossing is a short fade, whatever the entrance | Design | Developers | Decided | A crossing is covered by a short fade, under 3 s… |
 | [D502](decisions/D502.md) | No building in a dungeon, and its rock cannot be dug | Design | Agent | Leaning | Players cannot build inside a dungeon, and its walls… |
 | [D512](decisions/D512.md) | A door is pushed open by walking into it; a locked one needs its key | Design | Developers | Decided | A door that needs no key opens when a body walks into… |
-| [D518](decisions/D518.md) | Seeing the weather coming | Design | — | Open | Recommended: the sky draws the climate's weather out to… |
-| [D520](decisions/D520.md) | The moon's cycle | Design | — | Open | Recommended: the moon has real phases over a month… |
-| [D522](decisions/D522.md) | How dramatic a storm's sky is | Design | — | Open | Recommended: storms as real storms build… |
+| [D518](decisions/D518.md) | Seeing the weather coming | Design | Developers | Decided | The sky draws the climate's weather out to the horizon… |
+| [D520](decisions/D520.md) | The moon's cycle | Design | Developers | Decided | The moon has real phases over a month… |
+| [D522](decisions/D522.md) | How dramatic a storm's sky is | Design | Developers | Decided | A storm's sky is heightened beyond real: darker… |
 
 ## The player and survival
 
@@ -427,10 +427,10 @@ The look, models, bodies and gear, textures and audio.
 | [D492](decisions/D492.md) | The sky light's diffuse light is its spherical harmonics, worked out on the CPU | Tech | Agent | Decided | The painted sky (D190, D490) is projected… |
 | [D503](decisions/D503.md) | The forest floor's litter is mixed, green in the brown | Tech | Agent | Decided | Under the canopy the grass stays as D293 grows it… |
 | [D515](decisions/D515.md) | Clouds are volumes drawn from the climate's weather map, ported from Bevy's atmosphere clouds | Tech | Agent | Leaning | Clouds are drawn as every shipped real-time cloud system… |
-| [D516](decisions/D516.md) | How real the sky looks | Design | — | Open | Recommended: clouds and the sky's light physically based… |
-| [D517](decisions/D517.md) | Which clouds the sky has, and in what order | Design | — | Open | Recommended: cumulus, stratocumulus and the overcast… |
-| [D519](decisions/D519.md) | Above the clouds | Design | — | Open | Recommended: clouds seen from below and from high ground… |
-| [D521](decisions/D521.md) | The sky's effects | Design | — | Open | Recommended: rainbows (42° round the point opposite the… |
+| [D516](decisions/D516.md) | How real the sky looks | Design | Developers | Decided | The sky is photographic and physically lit… |
+| [D517](decisions/D517.md) | Which clouds the sky has, and in what order | Design | Developers | Decided | The clouds come fair-weather first: cumulus… |
+| [D519](decisions/D519.md) | Above the clouds | Design | Developers | Decided | Clouds are flown through from the start… |
+| [D521](decisions/D521.md) | The sky's effects | Design | Developers | Decided | The sky has the real set of effects… |
 
 ## Engine and code
 
