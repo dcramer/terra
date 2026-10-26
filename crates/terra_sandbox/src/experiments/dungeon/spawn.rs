@@ -276,13 +276,16 @@ pub(super) fn push_doors(
     for (mut doorway, frame, children) in &mut doorways {
         let swing = doorway.0.swing;
         let from_world = frame.affine().inverse();
-        for &(at, velocity) in &moving {
-            let (at, velocity) = (
-                from_world.transform_point3(at),
-                from_world.transform_vector3(velocity),
-            );
-            doorway.0.step(at, velocity, DOORWAY_M[0], KEYS_HELD, dt);
-        }
+        let near: Vec<(Vec3, Vec3)> = moving
+            .iter()
+            .map(|&(at, velocity)| {
+                (
+                    from_world.transform_point3(at),
+                    from_world.transform_vector3(velocity),
+                )
+            })
+            .collect();
+        doorway.0.step(&near, DOORWAY_M[0], KEYS_HELD, dt);
         if doorway.0.swing == swing {
             continue;
         }

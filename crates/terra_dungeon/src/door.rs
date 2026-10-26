@@ -50,12 +50,17 @@ impl Door {
         self.toward != 0.0
     }
 
-    /// One step of `dt` seconds with a body at `at` moving at `velocity` (the doorway's
-    /// frame), the doorway `width` across; `keys` whether the body holds every key of its
-    /// lock. A body inside the reach in front of the leaves, across the doorway, walking at
-    /// them, pushes them away from itself.
-    pub fn step(&mut self, at: Vec3, velocity: Vec3, width: f32, keys: bool, dt: f32) {
-        if !self.opened() && self.pushed(at, velocity, width, keys) {
+    /// One step of `dt` seconds with the bodies near it, each where it is and how it moves
+    /// (the doorway's frame), the doorway `width` across; `keys` whether the bodies hold
+    /// every key of its lock. A body inside the reach in front of the leaves, across the
+    /// doorway, walking at them, pushes them away from itself; the first to push decides
+    /// the way, and the leaves swing at their own pace however many bodies there are.
+    pub fn step(&mut self, bodies: &[(Vec3, Vec3)], width: f32, keys: bool, dt: f32) {
+        if !self.opened()
+            && let Some(&(at, _)) = bodies
+                .iter()
+                .find(|&&(at, velocity)| self.pushed(at, velocity, width, keys))
+        {
             // Outside, the leaves swing into the room; inside, out of it.
             self.toward = if at.z > 0.0 { 1.0 } else { -1.0 };
         }
@@ -92,7 +97,7 @@ mod tests {
     fn walk(mut door: Door, from: Vec3, velocity: Vec3, keys: bool, seconds: f32) -> Door {
         let mut at = from;
         for _ in 0..(seconds / DT) as usize {
-            door.step(at, velocity, WIDTH, keys, DT);
+            door.step(&[(at, velocity)], WIDTH, keys, DT);
             let next = at + velocity * DT;
             at = if next.z * at.z <= 0.0 { at } else { next };
         }
@@ -130,6 +135,18 @@ mod tests {
         assert!(door.swing > 0.4 && door.swing < 0.6, "{}", door.swing);
         let door = walk(door, at, v, false, 0.3);
         assert_eq!(door.swing, 1.0);
+    }
+
+    #[test]
+    fn it_swings_at_its_own_pace_however_many_bodies_are_near() {
+        // A camera walking at it and a player standing by: open in half a second still.
+        let (at, v) = walking_in(REACH_M - 0.01);
+        let mut door = Door::shut(Lock::None);
+        let stood = (Vec3::new(0.0, 0.0, 3.0), Vec3::ZERO);
+        for _ in 0..15 {
+            door.step(&[(at, v), stood, stood], WIDTH, false, DT);
+        }
+        assert!(door.swing > 0.4 && door.swing < 0.6, "{}", door.swing);
     }
 
     #[test]
