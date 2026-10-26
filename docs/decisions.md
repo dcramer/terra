@@ -114,6 +114,13 @@ Needs, death, the body, the map and options.
 | [D477](decisions/D477.md) | Climbing is free climbing on stamina | Design | Developers | Decided | A body can climb any surface it can hold, on stamina… |
 | [D478](decisions/D478.md) | Swimming dives by looking, rises by jumping | Design | Developers | Decided | Swimming (D74): looking down and moving forward dives… |
 | [D479](decisions/D479.md) | People push each other softly, monsters hard | Design | Developers | Decided | Players and recruits push each other softly… |
+| [D505](decisions/D505.md) | What can be climbed | Design | — | Open | Recommended: every surface can be climbed… |
+| [D506](decisions/D506.md) | Climbing's stamina cost, and what happens at zero | Design | — | Open | Recommended: holding on costs a quarter of moving's… |
+| [D507](decisions/D507.md) | How a climb starts | Design | — | Open | Recommended: both ways, a jump at a face grabbing it at… |
+| [D508](decisions/D508.md) | Where a body pulls up onto a ledge | Design | — | Open | Recommended: at a climb's top and at any ledge the hands… |
+| [D509](decisions/D509.md) | How fast a body climbs | Design | — | Open | Recommended: about 1 m/s, faster on a face less steep… |
+| [D510](decisions/D510.md) | Climbing overhangs and ceilings | Design | — | Open | Recommended: a face can be climbed to about 30° past… |
+| [D511](decisions/D511.md) | A climb jump | Design | — | Open | Recommended: a lunge of about 1.5 m along the face for a… |
 
 ## Items and crafting
 
