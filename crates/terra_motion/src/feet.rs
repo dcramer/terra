@@ -200,6 +200,15 @@ impl Foot {
         matches!(self.state, State::Planted(_))
     }
 
+    /// How much the foot weighs on the ground, 0 to 1: its lock weight while it is locked or
+    /// let go, none while it steps, blends or swings free (`placement::drop` reads it).
+    pub fn weight(&self) -> f32 {
+        match self.state {
+            State::Planted(_) | State::Releasing(_) => self.alpha,
+            _ => 0.0,
+        }
+    }
+
     /// The lock weight, 0 to 1.
     pub fn alpha(&self) -> f32 {
         self.alpha

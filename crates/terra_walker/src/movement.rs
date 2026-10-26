@@ -114,6 +114,12 @@ impl Movers {
     pub fn kind(&self) -> &Kind {
         &self.kind
     }
+
+    /// The boxes the last tick gathered round the players (their base's cubes, props), as the
+    /// mover met them: what a foot stands on besides the ground (`underfoot`).
+    pub fn blocks(&self) -> &[Block] {
+        &self.lists.blocks
+    }
 }
 
 /// The props (`bodies::Solid`) filed by where they stand, and how far the widest reaches from

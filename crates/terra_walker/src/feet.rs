@@ -21,7 +21,10 @@ use bevy::{
     transform::TransformSystems,
 };
 use terra_motion::feet::{self, Foot, Markers, Pose, Posed};
+use terra_motion::placement::{self, Placing, Target};
 
+use crate::stepping::Stepping;
+use crate::underfoot::Underfoot;
 use crate::{Downed, Motion, character};
 
 /// Every clip's foot-down markers, by the clip loaded: whoever loads a body's clips registers
@@ -172,6 +175,13 @@ pub struct Kept {
     curve: [f32; 2],
     /// Each clip node's weight last frame, to tell the clips coming in from those going.
     weights: Vec<(AnimationNodeIndex, f32)>,
+    /// Each foot's place on the ground under it and the pelvis's drop, eased
+    /// (`terra_motion::placement`).
+    placing: Placing,
+    /// The pelvis as lowered last frame: the joint, its place written, and what was added.
+    pelvis: Option<(Entity, Vec3, Vec3)>,
+    /// How far each ankle stayed short of its place this frame, m (the leg straight).
+    short: [f32; 2],
     /// Why the feet were not kept this frame (no legs, no animator, no markers), if not.
     gated: Option<&'static str>,
     /// How long they have been, and whether that was logged.
@@ -201,6 +211,12 @@ impl Kept {
     /// Why each foot was left free while its curve had it locked (`Foot::why`).
     pub fn whys(&self) -> [&'static str; 2] {
         self.feet.map(|foot| foot.why())
+    }
+
+    /// How far each ankle stayed short of its place on the ground this frame, m, left then
+    /// right: a leg straightened and still short of it (the walk record's `short`).
+    pub fn shorts(&self) -> [f32; 2] {
+        self.short
     }
 
     /// Why the feet were not kept at all this frame, if not.
@@ -284,6 +300,117 @@ fn world(
     Some(place)
 }
 
+/// A leg's joints in the world as they are posed now: the hips it hangs from, the hip, knee
+/// and ankle.
+struct Leg {
+    hips: GlobalTransform,
+    thigh: GlobalTransform,
+    calf: GlobalTransform,
+    foot: GlobalTransform,
+}
+
+fn leg(
+    [thigh, calf, foot]: [Entity; 3],
+    transforms: &Query<&mut Transform>,
+    parents: &Query<&ChildOf>,
+) -> Option<Leg> {
+    let hips = world(parents.get(thigh).ok()?.parent(), transforms, parents)?;
+    let at_thigh = hips * *transforms.get(thigh).ok()?;
+    let at_calf = at_thigh * *transforms.get(calf).ok()?;
+    let at_foot = at_calf * *transforms.get(foot).ok()?;
+    Some(Leg {
+        hips,
+        thigh: at_thigh,
+        calf: at_calf,
+        foot: at_foot,
+    })
+}
+
+/// Bends a leg so its ankle goes to `goal` (D455's two-bone solve), its knee on the side the
+/// clip bends it (`ahead` if straight): how far short of it the ankle stays, m.
+fn bend(
+    joints @ [thigh, calf, foot]: [Entity; 3],
+    goal: Pose,
+    ahead: Vec3,
+    transforms: &mut Query<&mut Transform>,
+    parents: &Query<&ChildOf>,
+) -> Option<f32> {
+    let leg = leg(joints, transforms, parents)?;
+    let (hip, knee, ankle) = (
+        leg.thigh.translation(),
+        leg.calf.translation(),
+        leg.foot.translation(),
+    );
+    let (upper, lower) = ((knee - hip).length(), (ankle - knee).length());
+    let pole = knee + (knee - (hip + ankle) * 0.5).normalize_or(ahead) * 0.5;
+    let (to_knee, to_ankle) = feet::two_bone(hip, upper, lower, goal.at, pole);
+    let turn_thigh = Quat::from_rotation_arc((knee - hip).normalize(), (to_knee - hip).normalize());
+    let swung = to_knee + turn_thigh * (ankle - knee);
+    let turn_calf = Quat::from_rotation_arc(
+        (swung - to_knee).normalize(),
+        (to_ankle - to_knee).normalize(),
+    );
+    let thigh_turn = turn_thigh * leg.thigh.rotation();
+    let calf_turn = turn_calf * turn_thigh * leg.calf.rotation();
+    let mut set = |entity: Entity, rotation: Quat| {
+        if let Ok(mut transform) = transforms.get_mut(entity) {
+            transform.rotation = rotation.normalize();
+        }
+    };
+    set(thigh, leg.hips.rotation().inverse() * thigh_turn);
+    set(calf, thigh_turn.inverse() * calf_turn);
+    set(foot, calf_turn.inverse() * goal.turn);
+    Some((to_ankle - goal.at).length())
+}
+
+impl Kept {
+    /// The pelvis as the clip has it: last frame's drop taken out again where the clip did not
+    /// write the joint since (a clip that does not move the pelvis).
+    fn restore_pelvis(&mut self, transforms: &mut Query<&mut Transform>) {
+        if let Some((pelvis, written, by)) = self.pelvis.take()
+            && let Ok(mut transform) = transforms.get_mut(pelvis)
+            && transform.translation == written
+        {
+            transform.translation -= by;
+        }
+    }
+
+    /// Lowers the pelvis (the joint the thighs hang from) by `drop` along `up`.
+    fn drop_pelvis(
+        &mut self,
+        pelvis: Entity,
+        drop: f32,
+        up: Vec3,
+        transforms: &mut Query<&mut Transform>,
+        parents: &Query<&ChildOf>,
+    ) {
+        if drop <= 1e-5 {
+            return;
+        }
+        let Some(frame) = parents
+            .get(pelvis)
+            .ok()
+            .and_then(|p| world(p.parent(), transforms, parents))
+        else {
+            return;
+        };
+        let by = frame.affine().inverse().transform_vector3(-up * drop);
+        if let Ok(mut transform) = transforms.get_mut(pelvis) {
+            transform.translation += by;
+            self.pelvis = Some((pelvis, transform.translation, by));
+        }
+    }
+}
+
+/// What `keep` reads of the world for a body.
+type Bodies<'a> = (
+    Entity,
+    &'a mut Kept,
+    Option<&'a Motion>,
+    Has<Downed>,
+    Option<&'a Stepping>,
+);
+
 #[allow(clippy::too_many_arguments)]
 fn keep(
     time: Res<Time>,
@@ -292,14 +419,15 @@ fn keep(
     animators: Query<(&AnimationPlayer, &AnimationGraphHandle)>,
     targets: Query<&AnimationTargetId>,
     animated_by: Query<&AnimatedBy>,
-    mut bodies: Query<(Entity, &mut Kept, Option<&Motion>, Has<Downed>)>,
+    mut bodies: Query<Bodies<'_>>,
     children: Query<&Children>,
     names: Query<&Name>,
     parents: Query<&ChildOf>,
     mut transforms: Query<&mut Transform>,
+    mut underfoot: Underfoot,
 ) {
     let dt = time.delta_secs();
-    for (body, mut kept, motion, downed) in &mut bodies {
+    for (body, mut kept, motion, downed, stepping) in &mut bodies {
         if kept.legs.is_none() {
             let found =
                 LEGS.map(|leg| leg.map(|name| character::find(body, name, &children, &names)));
@@ -320,9 +448,9 @@ fn keep(
                 .filter(|&each| animators.contains(each));
         }
         // Each foot's lock curve over its clips, by their markers.
-        let leg = legs.map(|[.., foot]| targets.get(foot).ok().copied());
+        let leg_targets = legs.map(|[.., foot]| targets.get(foot).ok().copied());
         let player = kept.animator.and_then(|each| animators.get(each).ok());
-        let Some(curve) = kept.curve_of(body, player, &graphs, &baked, leg, dt) else {
+        let Some(curve) = kept.curve_of(body, player, &graphs, &baked, leg_targets, dt) else {
             continue;
         };
         // What a layer above set this frame lasts the frame: a body no longer a fighter's
@@ -334,6 +462,9 @@ fn keep(
         };
         let ground = base.translation();
         let up = ground.normalize_or(Vec3::Y);
+        // The clip's flat ground: the figure's root as shown, under the body after a step up.
+        let root = ground - up * stepping.map_or(0.0, |s| s.below);
+        kept.restore_pelvis(&mut transforms);
         // Down, off the ground (a jump, a fall, swimming), or let go by a layer above.
         let aloft = motion.is_some_and(|motion| !motion.on_ground);
         let off = let_go || downed || aloft;
@@ -341,32 +472,16 @@ fn keep(
         kept.was_off = aloft;
         let into_body = base.affine().inverse();
         let passing = (!stance).then(|| into_body.transform_vector3(kept.ground));
-        for (side, &[thigh, calf, foot]) in legs.iter().enumerate() {
-            let Some(hips) = parents
-                .get(thigh)
-                .ok()
-                .and_then(|p| world(p.parent(), &transforms, &parents))
-            else {
+        // Each foot kept by its lock, then put on the ground under it.
+        let mut goals: [Option<(Pose, Pose, f32)>; 2] = [None; 2];
+        for (side, &joints) in legs.iter().enumerate() {
+            let Some(leg) = leg(joints, &transforms, &parents) else {
                 continue;
             };
-            let (Ok(thigh_local), Ok(calf_local), Ok(foot_local)) = (
-                transforms.get(thigh),
-                transforms.get(calf),
-                transforms.get(foot),
-            ) else {
-                continue;
-            };
-            let at_thigh = hips * *thigh_local;
-            let at_calf = at_thigh * *calf_local;
-            let at_foot = at_calf * *foot_local;
-            let (hip, knee, ankle) = (
-                at_thigh.translation(),
-                at_calf.translation(),
-                at_foot.translation(),
-            );
+            let ankle = leg.foot.translation();
             let clip = Pose {
                 at: ankle,
-                turn: at_foot.rotation(),
+                turn: leg.foot.rotation(),
             };
             let in_body = into_body.transform_point3(ankle);
             let swing_mps = kept.was[side].map_or(0.0, |was| match passing {
@@ -375,6 +490,10 @@ fn keep(
                 None => 0.0,
             });
             kept.was[side] = Some(in_body);
+            let foot_scale = transforms.get(joints[2]).map_or(Vec3::ONE, |t| t.scale);
+            let ball = kept.balls[side]
+                .and_then(|ball| transforms.get(ball).ok())
+                .map_or(Vec3::ZERO, |ball| foot_scale * ball.translation);
             let posed = Posed {
                 pose: clip,
                 swing_mps,
@@ -384,42 +503,43 @@ fn keep(
                 off,
                 landing,
                 low: (ankle - ground).dot(up) <= feet::LOW_ANKLE_M,
-                ball: kept.balls[side]
-                    .and_then(|ball| transforms.get(ball).ok())
-                    .map_or(Vec3::ZERO, |ball| foot_local.scale * ball.translation),
+                ball,
             };
             let other = kept.feet[1 - side].moving();
             let kept_at = kept.feet[side].update(posed, dt, other);
-            if kept_at == clip {
-                kept.strained[side] = false;
+            let target = if off {
+                Target::default()
+            } else {
+                let heel = underfoot.under(kept_at.at, root, up);
+                let toe = underfoot.under(kept_at.at + kept_at.turn * ball, root, up);
+                placement::target(kept_at, ball, root, up, heel, toe)
+            };
+            let target = kept.placing.foot(side, target, dt);
+            goals[side] = Some((clip, placement::placed(kept_at, target, up), target.lift));
+        }
+        // The pelvis lowered by the lowest planted foot, so its leg reaches.
+        let lifts = goals.map(|goal| goal.map_or(0.0, |(.., lift)| lift));
+        let weights = kept.feet.map(|foot| foot.weight());
+        let wanted = if off {
+            0.0
+        } else {
+            placement::drop(lifts, weights)
+        };
+        let drop = kept.placing.pelvis(wanted, dt);
+        if let Ok(pelvis) = parents.get(legs[0][0]).map(ChildOf::parent) {
+            kept.drop_pelvis(pelvis, drop, up, &mut transforms, &parents);
+        }
+        for (side, &joints) in legs.iter().enumerate() {
+            let Some((clip, goal, _)) = goals[side] else {
+                continue;
+            };
+            if goal == clip && drop <= 1e-5 {
+                (kept.strained[side], kept.short[side]) = (false, 0.0);
                 continue;
             }
-            let (upper, lower) = ((knee - hip).length(), (ankle - knee).length());
-            let ahead = *base.forward();
-            let pole = knee + (knee - (hip + ankle) * 0.5).normalize_or(ahead) * 0.5;
-            let (to_knee, to_ankle) = feet::two_bone(hip, upper, lower, kept_at.at, pole);
-            kept.strained[side] = (to_ankle - kept_at.at).length() > 0.01;
-            let turn_thigh =
-                Quat::from_rotation_arc((knee - hip).normalize(), (to_knee - hip).normalize());
-            let swung = to_knee + turn_thigh * (ankle - knee);
-            let turn_calf = Quat::from_rotation_arc(
-                (swung - to_knee).normalize(),
-                (to_ankle - to_knee).normalize(),
-            );
-            let thigh_turn = turn_thigh * at_thigh.rotation();
-            let calf_turn = turn_calf * turn_thigh * at_calf.rotation();
-            let set = |entity: Entity, rotation: Quat, transforms: &mut Query<&mut Transform>| {
-                if let Ok(mut transform) = transforms.get_mut(entity) {
-                    transform.rotation = rotation.normalize();
-                }
-            };
-            set(
-                thigh,
-                hips.rotation().inverse() * thigh_turn,
-                &mut transforms,
-            );
-            set(calf, thigh_turn.inverse() * calf_turn, &mut transforms);
-            set(foot, calf_turn.inverse() * kept_at.turn, &mut transforms);
+            let short = bend(joints, goal, *base.forward(), &mut transforms, &parents);
+            kept.short[side] = short.unwrap_or(0.0);
+            kept.strained[side] = kept.short[side] > 0.01;
         }
     }
 }

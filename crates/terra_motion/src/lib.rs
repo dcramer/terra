@@ -27,6 +27,7 @@ pub mod course;
 pub mod feet;
 pub mod mover;
 pub mod moves;
+pub mod placement;
 pub mod script;
 pub mod stamina;
 pub mod struck;

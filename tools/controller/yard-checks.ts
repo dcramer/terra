@@ -14,8 +14,17 @@ export type Check = { name: string; ok: boolean; line: string; value: number; fa
 /// ground's height along the way before it was dug, a metre apart east from the start (the
 /// log's `Course: ground` line).
 export type Walk = { name: string; frames: Frame[]; route: string[]; ground: number[] };
-/// A walker's line adds its figure's lag after a step up and whether it stands on the ground.
-type Walker = Frame["fighters"][number] & { below?: number; on_ground?: boolean; speed?: number };
+/// A walker's line adds its figure's lag after a step up and whether it stands on the ground,
+/// the ground under each ball over the balls' root (null where none was found), how far each
+/// leg stayed short of its foot's place, and how each foot is kept.
+type Walker = Frame["fighters"][number] & {
+  below?: number;
+  on_ground?: boolean;
+  speed?: number;
+  ground?: (number | null)[];
+  short?: number[];
+  kept?: string[];
+};
 
 export const FPS = 60;
 /// The bar of criterion 6: the shown root rises no more than this share of a step a frame...
@@ -115,12 +124,83 @@ export function turning(frames: Frame[], plant: Plant): boolean {
   return went < TURN_STILL_M && (turned * 180) / Math.PI >= TURNED_DEG;
 }
 
+/// A walker's balls with their heights over the ground under each (`ground`), not over its
+/// root: on a step or a slope a planted ball is low over its own ground, not the root's.
+function grounded(f: Walker): Walker {
+  return { ...f, balls: f.balls.map((ball, i) => (ball ? { ...ball, up: ball.up - (f.ground?.[i] ?? 0) } : ball)) };
+}
+
 /// The plants of each walk's frames on the ground, a turn in place's (`turn`) or the rest's.
 function walkPlants(walk: Walk, turn: boolean): Plant[] {
   // A contact is a foot on the ground: a frame the body is in the air (off the deck's end)
   // plants nothing.
-  const frames = walk.frames.map((frame) => ({ ...frame, fighters: frame.fighters.filter((f) => (f as Walker).on_ground !== false) }));
+  const frames = walk.frames.map((frame) => ({ ...frame, fighters: frame.fighters.filter((f) => (f as Walker).on_ground !== false).map((f) => grounded(f as Walker)) }));
   return plants(frames).filter((plant) => turning(frames, plant) === turn);
+}
+
+/// A planted sole's gap to the ground under it, the bar of feet.ground (docs/movement.md stage
+/// 4: feet on slopes within 2 cm), and a leg's shortfall from its foot's place, pelvis.drop's.
+export const GROUND_M = 0.02;
+export const SHORT_M = 0.01;
+/// Ground under a ball this far from the root's level is a step or a slope: the plants on it
+/// are counted apart, so the line says the check met some.
+export const UNEVEN_M = 0.05;
+
+/// Each foot's locked runs (the record's `kept` "planted", on the ground, PLANT_FRAMES or more):
+/// its frames' ball height over the ground under it, the ground's height over the root, and
+/// the leg's shortfall.
+type Locked = { walk: string; foot: number; from: number; to: number; clear: number[]; ground: number[]; short: number[] };
+function locked(walk: Walk): Locked[] {
+  const out: Locked[] = [];
+  for (const foot of [0, 1]) {
+    let run: { frame: number; clear: number; ground: number; short: number }[] = [];
+    const close = () => {
+      if (run.length >= 4) out.push({ walk: walk.name, foot, from: run[0].frame, to: run.at(-1)!.frame, clear: run.map((e) => e.clear), ground: run.map((e) => e.ground), short: run.map((e) => e.short) });
+      run = [];
+    };
+    for (const frame of walk.frames) {
+      const w = you(frame);
+      const ground = w?.ground?.[foot];
+      const ok = w && w.on_ground !== false && w.kept?.[foot] === "planted" && w.balls[foot] && typeof ground === "number";
+      if (!ok || (run.length && frame.frame !== run.at(-1)!.frame + 1)) close();
+      if (ok) run.push({ frame: frame.frame, clear: w.balls[foot].up - ground, ground, short: w.short?.[foot] ?? 0 });
+    }
+    close();
+  }
+  return out;
+}
+
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) / 2)];
+
+/// feet.ground: each locked run's ball over the ground under it, against that foot's own
+/// height over level ground (the median over its runs on ground at the root's level, as its
+/// clip stands it): the run's median gap, the row's number the worst run's, m.
+export function ground(walks: Walk[]): Check {
+  const all = walks.flatMap(locked);
+  if (!all.length) return { name: "feet ground", ok: false, line: "✗ no planted foot with the ground under it in the records (`kept`, `ground`)", value: NaN, faults: 1 };
+  const rests = [0, 1].map((foot) => {
+    const level = all.filter((run) => run.foot === foot && run.ground.every((g) => Math.abs(g) < 0.01)).flatMap((run) => run.clear);
+    return median(level.length ? level : all.filter((run) => run.foot === foot).flatMap((run) => run.clear));
+  });
+  const gaps = all.map((run) => ({ ...run, gap: median(run.clear.map((c) => Math.abs(c - rests[run.foot]))), uneven: run.ground.some((g) => Math.abs(g) >= UNEVEN_M) }));
+  const worst = gaps.reduce((a, b) => (b.gap > a.gap ? b : a));
+  const off = gaps.filter((run) => run.gap > GROUND_M);
+  const uneven = gaps.filter((run) => run.uneven);
+  const ok = !off.length;
+  const line = `${ok ? "" : "✗ "}${gaps.length} locked plants (${uneven.length} on steps or slopes), ${off.length} with the sole off its ground past ${GROUND_M * 100} cm; worst ${(worst.gap * 100).toFixed(1)} cm (${worst.walk} ${worst.foot ? "right" : "left"} foot, frames ${worst.from}-${worst.to}, ground ${(median(worst.ground) * 100).toFixed(0)} cm from the root)`;
+  return { name: "feet ground", ok, line, value: worst.gap, faults: off.length };
+}
+
+/// pelvis.drop: a locked foot's leg straightened and still short of its foot's place (the
+/// pelvis not lowered enough for the lower foot), the row's number the worst frame's, m.
+export function reach(walks: Walk[]): Check {
+  const all = walks.flatMap(locked);
+  if (!all.length) return { name: "pelvis drop", ok: false, line: "✗ no planted foot in the records (`kept`, `short`)", value: NaN, faults: 1 };
+  const worst = all.map((run) => ({ ...run, most: Math.max(...run.short) })).reduce((a, b) => (b.most > a.most ? b : a));
+  const off = all.filter((run) => Math.max(...run.short) > SHORT_M);
+  const ok = !off.length;
+  const line = `${ok ? "" : "✗ "}${all.length} locked plants, ${off.length} with the leg short of its foot past ${SHORT_M * 100} cm; worst ${(worst.most * 100).toFixed(1)} cm (${worst.walk} ${worst.foot ? "right" : "left"} foot, frames ${worst.from}-${worst.to}, ground ${(Math.min(...worst.ground) * 100).toFixed(0)} cm from the root)`;
+  return { name: "pelvis drop", ok, line, value: worst.most, faults: off.length };
 }
 
 /// Feet sliding by the duel's own check on each walk's plants, a turn in place's or the
@@ -186,4 +266,4 @@ export function yard(walks: Walk[]): Check {
   return { name: "yard", ok: !failed.length, line, value: failed.length, faults: failed.length };
 }
 
-export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), yard(walks)];
+export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), ground(walks), reach(walks), yard(walks)];

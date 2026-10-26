@@ -15,7 +15,9 @@
 //! written too outside a duel, as a walker (no move), so a walk is judged by the same numbers
 //! (`tools/controller/yard.ts`, the controller's filmed course); each player says how far
 //! below its body its figure is shown after a step up (`below`, `terra_walker::stepping`),
-//! whether it stands on the ground and its speed.
+//! whether it stands on the ground and its speed, the ground under each ball of its feet over
+//! the same root as the balls' heights (`ground`, the walk's world probed as foot placement
+//! probes it) and how far each leg stayed short of its foot's place (`short`).
 
 use super::{Fighter, Set};
 use crate::staged::Staged;
@@ -27,6 +29,7 @@ use std::io::{BufWriter, Write};
 use terra_walker::bodies::Body;
 use terra_walker::character;
 use terra_walker::stepping::Stepping;
+use terra_walker::underfoot::Underfoot;
 use terra_walker::{Motion, Player, Stamina};
 use terra_world::planet::MainCamera;
 use terra_world::shell::{Options, ScriptFrame};
@@ -140,6 +143,7 @@ fn write(
     names: Query<&Name>,
     start: Option<Res<Start>>,
     camera: Option<Single<(&GlobalTransform, &Projection), With<MainCamera>>>,
+    mut underfoot: Underfoot,
 ) {
     let Some(frame) = frame.filter(|frame| frame.is_changed()) else {
         return;
@@ -243,6 +247,9 @@ fn write(
             "why": kept.map(|kept| kept.whys()),
             "gated": kept.and_then(|kept| kept.gated()),
         });
+        let ground = grounds(&out, entity, root, up, &bones, &mut underfoot);
+        line["ground"] = json!(ground);
+        line["short"] = json!(kept.map(|kept| kept.shorts().map(r)));
         walking(&mut line, motion, stepping);
         bodies.push(line);
     }
@@ -269,6 +276,26 @@ fn write(
     if let Err(problem) = written {
         warn!("Melee: the fight's record could not be written: {problem}");
     }
+}
+
+/// The ground under each ball of a body's feet (found by `balls_of`) over `root`, as the walk's
+/// world has it (foot placement's probe, `feet.ground`); none where none is found.
+fn grounds(
+    out: &Out,
+    entity: Entity,
+    root: Vec3,
+    up: Vec3,
+    bones: &Query<&GlobalTransform>,
+    underfoot: &mut Underfoot,
+) -> Vec<Option<f64>> {
+    out.balls.get(&entity).map_or(Vec::new(), |pair| {
+        pair.iter()
+            .map(|bone| {
+                let at = bones.get(*bone).ok()?.translation();
+                underfoot.under(at, root, up).map(|under| r(under.height))
+            })
+            .collect()
+    })
 }
 
 /// Where the balls of a body's feet are, in the start's terms, and how high over `feet`, the

@@ -1091,6 +1091,38 @@
    "measurable": true
   },
   {
+   "id": "feet.ground",
+   "noticed": 4,
+   "notice": "a planted foot floats over a lower step or sinks into a higher one or a slope",
+   "bar": {
+    "at_most": 0.02
+   },
+   "unit": "m, the worst locked plant's sole off the ground under it (its ball over that ground against the foot's own height over level ground), on the filmed course",
+   "source": "docs/movement.md stage 4 (feet on slopes within 2 cm); Unreal Foot Placement, ALS foot IK; D455",
+   "check": {
+    "by": "film",
+    "name": "feet ground"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "pelvis.drop",
+   "noticed": 4,
+   "notice": "a foot on a lower step hangs short of it, the leg straight",
+   "bar": {
+    "at_most": 0.01
+   },
+   "unit": "m, the worst locked foot's leg straightened and still short of the foot's place on the ground (the pelvis not lowered enough), on the filmed course's steps 0.1-0.5 m, stairs and slopes",
+   "source": "docs/movement.md stage 4; ALS pelvis offset, Lyra leg IK; D455",
+   "check": {
+    "by": "film",
+    "name": "pelvis drop"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
    "id": "film.yard",
    "noticed": 4,
    "notice": "what passes on the plain course fails in the game, on dug ground and a base",

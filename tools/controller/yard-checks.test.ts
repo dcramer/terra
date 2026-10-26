@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Frame } from "../sandbox/duel/checks.ts";
-import { type Walk, feet, over, smooth, steps, turn, yard } from "./yard-checks.ts";
+import { type Walk, feet, ground, over, reach, smooth, steps, turn, yard } from "./yard-checks.ts";
 
 /// A walk east at 4.2 m/s on level ground at 0 for `n` frames; `lift(i)` raises the body,
 /// `below(i)` how far under it the figure is shown, `camera(i)` the camera's height.
@@ -113,4 +113,48 @@ test("a foot sliding while the body turns in place is turn.foot's, not feet slid
   const on = of(turning(true));
   assert.match(feet([on]).line, /1 of 1 plants slid/);
   assert.match(turn([on]).line, /0 turning plants/);
+});
+
+/// A walk standing on its left foot (locked, its ball 5 cm over its sole): on level ground at
+/// the root for 30 frames, then on a tread `under` m lower, the ball `sole` m over that tread,
+/// the leg `short` m short of its foot's place there.
+function onTread(under: number, sole: number, short: number): Walk {
+  const frames = walk(60).map((f, i) => {
+    const low = i >= 30;
+    const g = low ? -under : 0;
+    const body = f.fighters[0];
+    const up = g + (low ? sole : 0.05);
+    return {
+      ...f,
+      fighters: [
+        {
+          ...body,
+          balls: [{ at: [1, up, 0.1], up }, { at: [0, 0.3, 0], up: 0.3 }],
+          ground: [g, 0],
+          kept: [low && i === 30 ? "stepping" : "planted", "free"],
+          short: [low ? short : 0, 0],
+        } as unknown as Frame["fighters"][number],
+      ],
+    };
+  });
+  return of(frames);
+}
+
+test("a planted foot off the ground under it is feet.ground's; a leg short of it pelvis.drop's", () => {
+  const put = ground([onTread(0.3, 0.05, 0)]);
+  assert.ok(put.ok && put.value < 1e-9 && /1 on steps/.test(put.line), put.line);
+  // Its sole floating where the clip had it, over the root's level, 0.3 m over the tread.
+  const floats = ground([onTread(0.3, 0.35, 0)]);
+  assert.ok(!floats.ok && Math.abs(floats.value - 0.3) < 1e-6, floats.line);
+  assert.ok(reach([onTread(0.3, 0.05, 0)]).ok);
+  const short = reach([onTread(0.3, 0.05, 0.12)]);
+  assert.ok(!short.ok && Math.abs(short.value - 0.12) < 1e-9, short.line);
+});
+
+test("feet sliding reads a ball's height over the ground under it, not over the root", () => {
+  // On a tread 0.3 m over the root the ball slides 10 cm: over the root it reads lifted, a
+  // step, and nothing slid; over its own ground it is the same plant, and slid.
+  const tread = onTread(-0.3, 0.05, 0);
+  const slides = { ...tread, frames: tread.frames.map((f, i) => ({ ...f, fighters: [{ ...f.fighters[0], balls: [{ ...f.fighters[0].balls[0], at: [i >= 30 ? 1.1 : 1, 0, 0.1] }, null] }] })) } as unknown as Walk;
+  assert.match(feet([slides]).line, /1 of 1 plants slid/);
 });
