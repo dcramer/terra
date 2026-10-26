@@ -84,6 +84,12 @@ pub(super) fn lay(
             let upslope = n.cross(Vec3::Y.cross(n).normalize_or(Vec3::X));
             let low = t.iter().map(|p| p.y).fold(f32::MAX, f32::min);
             let high = t.iter().map(|p| p.y).fold(f32::MIN, f32::max);
+            // None on a level triangle, a whole or half square's top: no course's foot
+            // crosses it, and a level cut through its own plane would lay battens along its
+            // edges and diagonals, crossing one another (gap 11).
+            if high - low < 1e-4 {
+                continue;
+            }
             let first = libm::ceilf((low - base_m) / step) as i32;
             let last = libm::floorf((high - base_m) / step) as i32;
             for course in first..=last {

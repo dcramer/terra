@@ -125,7 +125,7 @@
           "junction": "Walls or rooms crossing or overlapping",
           "rule": "Not yet closed: a floor's boards in the plane of a log wall run along or through the room, an end board in the plane of a log's sawn end where a stone wall runs through a log room, floor boards in one another where two rooms overlap, a dressed stone in the plane of a board where a hewn wall runs into a carved stone room",
           "code": ["terra_build_layout::layout::trims::ends", "terra_build_layout::layout::floors"],
-          "tests": ["terra_build_scenes::fuzz::tests::fuzz_seed_16_a_log_walls_top_split_log_ends_inside_the_end_board_against_stone"],
+          "tests": ["terra_build_scenes::fuzz::fuzz_seed_16_a_log_walls_top_split_log_ends_inside_the_end_board_against_stone"],
           "cases": [],
           "also": "the fuzz pass, seeds 12, 47, 74, 82, 185, 187, 192, 266",
           "status": "Gap 14"
@@ -463,12 +463,20 @@
           "status": "Closed"
         },
         {
-          "junction": "A roof kind laid by hand where no roof is: a whole or half square on the ground, slopes and corners stacked two high",
-          "rule": "Not yet closed: a whole or half square's boards under its deck in one another; a box of slopes or corners two cubes high draws its upper layer's edge pieces and frame 10 to 30 cm over the layer under it",
+          "junction": "A roof kind's whole or half square laid by hand on its own, its top level",
+          "rule": "No batten on a level square: no course's foot crosses it, so none is cut through its plane to lie along its triangles' edges and diagonals, crossing one another",
+          "code": ["terra_build_layout::layout::roofs::covering"],
+          "tests": ["terra_build_scenes::fuzz::fuzz_seed_36_a_roof_cube_laid_whole_on_the_ground_has_no_battens_crossing"],
+          "cases": [],
+          "status": "Closed"
+        },
+        {
+          "junction": "A roof kind laid by hand where no roof is: slopes and corners stacked two high",
+          "rule": "Not yet closed: a box of slopes or corners two cubes high draws its upper layer's edge pieces and frame 10 to 30 cm over the layer under it",
           "code": ["terra_build_layout::layout::roofs::lines", "terra_build_mesh::roofing"],
           "tests": [],
           "cases": [],
-          "also": "the fuzz pass, seeds 35, 36, 39, 54, 61, 68, 72, 115, 128, 150, 180, 184, 196, 197",
+          "also": "the fuzz pass, seeds 35, 39, 54, 61, 72, 115, 150, 180, 184, 196, 197",
           "status": "Gap 11"
         },
         {

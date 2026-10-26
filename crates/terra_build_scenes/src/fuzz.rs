@@ -835,4 +835,40 @@ mod tests {
             "{rust}"
         );
     }
+
+    #[test]
+    fn fuzz_seed_36_a_roof_cube_laid_whole_on_the_ground_has_no_battens_crossing() {
+        // Found by `cargo xtask fuzz` at seeds 36, 68 and 128, shrunk: a whole shakes cube
+        // on its own. Its top is level, and a course's level line cut through that plane
+        // laid battens along its triangles' edges and diagonals, crossing one another in one
+        // plane (gap 11).
+        let materials = baseline();
+        let kind = |name: &str| {
+            materials
+                .names
+                .iter()
+                .find(|(_, n)| n.as_str() == name)
+                .map(|(&k, _)| k)
+                .unwrap()
+        };
+        let base = build(
+            &materials.kits,
+            &[Blocks {
+                at: [6, -1, 4],
+                size: 1,
+                shape: Shape::Whole,
+                kind: kind("shakes"),
+            }],
+        );
+        let report = terra_build_mesh::inspect::inspect(
+            &base,
+            &materials.kits,
+            &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+        );
+        assert_eq!(
+            report.count(terra_build_mesh::inspect::Fault::Coplanar),
+            0,
+            "{report:?}"
+        );
+    }
 }
