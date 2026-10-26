@@ -421,80 +421,14 @@ fn animate(
         }
         let asked = acting.map_or(0, |acting| acting.asked);
         if animated.doing != doing || (act.is_some() && animated.applied != asked) {
-            let swims = matches!(doing, Doing::Swim(_)) || matches!(animated.doing, Doing::Swim(_));
-            animated.doing = doing;
-            animated.applied = asked;
-            let (clip, once, from_s, blend) = match act {
-                Some(act) => (act.clip.as_str(), act.once, act.from_s, act.blend),
-                None if swims => (doing.clip(), doing.once(), 0.0, SWIM_BLEND),
-                None => (doing.clip(), doing.once(), 0.0, BLEND),
-            };
-            let hold = act
-                .and_then(|act| act.hold.as_ref())
-                .and_then(|hold| moves.clips.get(hold));
-            // Both hands carry in a carried clip and use what they hold in any other.
-            for &grip in &animated.hands {
-                if let Ok(mut hand) = hands.get_mut(grip) {
-                    hand.0 = CARRIED_IN.contains(&clip);
-                }
-            }
-            match moves.clips.get(clip) {
-                Some(nodes) => {
-                    // The same clip again blends from itself, by its other copy.
-                    let copy = match &animated.playing {
-                        Some((name, copy, _)) if name == clip => 1 - copy,
-                        _ => 0,
-                    };
-                    let node = nodes.of(copy, hold.is_some());
-                    // The clip giving way fades from its whole weight, its mixed clip's share
-                    // given back to it first.
-                    if let Some(main) = transitions.get_main_animation() {
-                        let given: f32 = animated
-                            .mixed
-                            .iter()
-                            .filter(|m| m.main == main)
-                            .filter_map(|m| animator.animation(m.mix).map(|a| a.weight()))
-                            .sum();
-                        if let Some(main) = animator.animation_mut(main) {
-                            let whole = main.weight() + given;
-                            main.set_weight(whole);
-                        }
-                    }
-                    animated.mixed.retain(|m| m.mix != node);
-                    let playing = transitions.play(&mut animator, node, blend);
-                    if !once {
-                        playing.repeat();
-                    }
-                    if from_s > 0.0 {
-                        playing.seek_to(from_s);
-                    }
-                    animated.playing = Some((clip.to_string(), copy, hold.is_some()));
-                    if let Some(hold) = hold {
-                        crate::layer::lay(&mut animated.holds, &mut animator, hold.over, node);
-                    }
-                    if let Some((mix, share)) = act.and_then(|act| act.mix.as_ref())
-                        && let Some(both) = moves.clips.get(mix)
-                    {
-                        let taken = |node| animated.mixed.iter().any(|m| m.mix == node);
-                        let node = if taken(both.whole[0]) {
-                            both.whole[1]
-                        } else {
-                            both.whole[0]
-                        };
-                        animator
-                            .start(node)
-                            .seek_to(from_s)
-                            .set_speed(act.map_or(1.0, |act| act.speed))
-                            .set_weight(0.0);
-                        animated.mixed.push(Mixed {
-                            main: nodes.of(copy, hold.is_some()),
-                            mix: node,
-                            share: *share,
-                        });
-                    }
-                }
-                None => warn!("The figure has no clip {clip}."),
-            }
+            change(
+                &moves,
+                &mut animated,
+                &mut animator,
+                &mut transitions,
+                &mut hands,
+                (doing, act, asked),
+            );
         }
         let Some((name, copy, held)) = animated.playing.clone() else {
             continue;
@@ -540,6 +474,92 @@ fn animate(
             let rate = animator.animation(main).map_or(0.0, |a| a.speed());
             kept.stride(velocity, pace * place.scale().y, rate, warp);
         }
+    }
+}
+
+/// The clip a figure's doing or a layer's ask now shows, blended in from what played, with a
+/// hold laid over it and a clip mixed into it as asked.
+fn change(
+    moves: &Moves,
+    animated: &mut Animated,
+    animator: &mut AnimationPlayer,
+    transitions: &mut AnimationTransitions,
+    hands: &mut Query<&mut Carrying, With<Grip>>,
+    (doing, act, asked): (Doing, Option<&Act>, u32),
+) {
+    let swims = matches!(doing, Doing::Swim(_)) || matches!(animated.doing, Doing::Swim(_));
+    animated.doing = doing;
+    animated.applied = asked;
+    let (clip, once, from_s, blend) = match act {
+        Some(act) => (act.clip.as_str(), act.once, act.from_s, act.blend),
+        None if swims => (doing.clip(), doing.once(), 0.0, SWIM_BLEND),
+        None => (doing.clip(), doing.once(), 0.0, BLEND),
+    };
+    let hold = act
+        .and_then(|act| act.hold.as_ref())
+        .and_then(|hold| moves.clips.get(hold));
+    // Both hands carry in a carried clip and use what they hold in any other.
+    for &grip in &animated.hands {
+        if let Ok(mut hand) = hands.get_mut(grip) {
+            hand.0 = CARRIED_IN.contains(&clip);
+        }
+    }
+    match moves.clips.get(clip) {
+        Some(nodes) => {
+            // The same clip again blends from itself, by its other copy.
+            let copy = match &animated.playing {
+                Some((name, copy, _)) if name == clip => 1 - copy,
+                _ => 0,
+            };
+            let node = nodes.of(copy, hold.is_some());
+            // The clip giving way fades from its whole weight, its mixed clip's share
+            // given back to it first.
+            if let Some(main) = transitions.get_main_animation() {
+                let given: f32 = animated
+                    .mixed
+                    .iter()
+                    .filter(|m| m.main == main)
+                    .filter_map(|m| animator.animation(m.mix).map(|a| a.weight()))
+                    .sum();
+                if let Some(main) = animator.animation_mut(main) {
+                    let whole = main.weight() + given;
+                    main.set_weight(whole);
+                }
+            }
+            animated.mixed.retain(|m| m.mix != node);
+            let playing = transitions.play(animator, node, blend);
+            if !once {
+                playing.repeat();
+            }
+            if from_s > 0.0 {
+                playing.seek_to(from_s);
+            }
+            animated.playing = Some((clip.to_string(), copy, hold.is_some()));
+            if let Some(hold) = hold {
+                crate::layer::lay(&mut animated.holds, animator, hold.over, node);
+            }
+            if let Some((mix, share)) = act.and_then(|act| act.mix.as_ref())
+                && let Some(both) = moves.clips.get(mix)
+            {
+                let taken = |node| animated.mixed.iter().any(|m| m.mix == node);
+                let node = if taken(both.whole[0]) {
+                    both.whole[1]
+                } else {
+                    both.whole[0]
+                };
+                animator
+                    .start(node)
+                    .seek_to(from_s)
+                    .set_speed(act.map_or(1.0, |act| act.speed))
+                    .set_weight(0.0);
+                animated.mixed.push(Mixed {
+                    main: nodes.of(copy, hold.is_some()),
+                    mix: node,
+                    share: *share,
+                });
+            }
+        }
+        None => warn!("The figure has no clip {clip}."),
     }
 }
 
