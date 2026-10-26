@@ -123,7 +123,10 @@ function section(kind: number, R: number, seed = 1): Run[] {
 // mismatched grey rock, lit #B26D36-#D39558 (hue 27-30); a neutral grey moved it only to 21.
 // Brown again (campfire net round): with e9e5b733's rounded stones they scored higher from the
 // camp's eye than the grey, which read pink-lit.
-export const STONE_TONES: readonly (readonly number[])[] = [[70, 64, 54], [62, 59, 53], [78, 68, 54], [56, 53, 48], [68, 62, 52], [82, 76, 66], [64, 56, 46]];
+// A third of the way to grey (art round g39): the harsh reviewers read the ring as pink-maroon
+// plastic; its sheen and smooth shading were most of it (now matte, with a relief normal map),
+// their red lead the rest.
+export const STONE_TONES: readonly (readonly number[])[] = [[72, 67, 59], [64, 62, 57], [78, 71, 60], [58, 56, 52], [70, 65, 57], [84, 79, 71], [66, 60, 52]];
 
 /** Where its logs and stones lie, from a seed. */
 export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
@@ -571,7 +574,10 @@ function charred(w: Texel, heat: number, a: number, b: number, seed: number, gro
   // Some runs of a seam burn hot and some dull, in patches along it, so its yellow is few and
   // irregular; never past the ember's orange, whose yellow read tan by firelight (campfire glow round).
   const vary = smooth(0.3, 0.8, fbm(a * 5, b * 2.2, seed + 62));
-  const t = Math.min(0.5, deep * deep * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
+  // Capped at 0.25, deep orange to red: with the leopard spots gone (art round g39) the glow left
+  // near the flame is most of the fire's red and orange on the sheet's matte, and yellower it took
+  // the night campfire past the sheet's yellow (26-28% against 23).
+  const t = Math.min(0.25, deep * deep * hot * (0.55 + 0.6 * feet) * (0.35 + 0.9 * vary));
   const g = Math.min(1, deep + leak) * hot * char * (0.5 + 0.7 * fbm(a * 14, b * 4, seed + 60)) * (0.8 + 0.3 * id) * (0.55 + 0.7 * t);
   const tone = t < 0.5 ? mix([196, 64, 8], HOTTEST, t * 2) : mix(HOTTEST, [255, 206, 120], t * 2 - 1);
   // Where it lies in the coals its whole char glows, not its cracks alone: a broad warm gradient
@@ -640,32 +646,47 @@ function heat(l: Log, t: number, n: V3): [number, number, number] {
   // black char glowing at its ends and undersides).
   const top = smooth(0.75, 1.0, f) * (0.7 + 0.5 * under);
   // Its underside licked hot enough that its cracks glow there, seen low between the logs.
-  const lick = under * under * (0.72 + 0.3 * f) * (1 - past);
+  // Only toward the inner end, where the flames stand: licked along its whole underside, the
+  // cracks glowed as even spots from butt to tip (harsh review g38: a "leopard print").
+  const lick = under * under * (0.72 + 0.3 * f) * smooth(0.35, 0.85, f) * (1 - past);
   // Smoke and heat scorch it all over and char it black from about its middle up (fire round
   // 25: its raw upper faces read as pale planks); its outer end charred in patches through its
   // scorched bark (blind judge, campfire ember round: brown bark read as brush, not burnt logs).
   // Its char (`burnt`) apart, its upper faces only warm, their cracks dull toward the middle.
-  const all = (0.25 + 0.2 * smooth(0.5, 1, f)) * (1 - past);
+  // Warm enough to glow only over its inner third: at 0.25 along its whole length its cracks
+  // glowed in patches everywhere, an even orange spotting (harsh review g38: "leopard print";
+  // RDR2's logs are black char glowing near the flames and plain bark further out).
+  const all = 0.42 * smooth(0.6, 1, f) * (1 - past);
   // Its sides toward its neighbours, which see the coals and the flames through the gaps
   // between the logs, glow along their edges, more toward the inner end.
   const across = Math.abs(dot(n, norm(cross([0, 1, 0], l.out))));
-  const rim = smooth(0.5, 0.95, across) * smooth(0.0, 0.6, under) * (0.5 + 0.3 * f) * (1 - past);
-  // How burnt: black char all round from the stones in, as the fire has burnt it down; its bark
-  // only on its butt out past the ring, there scorched (campfire char round).
-  const burnt = 0.62 * (1 - past) + 0.12 * past;
+  const rim = smooth(0.5, 0.95, across) * smooth(0.0, 0.6, under) * (0.5 + 0.3 * f) * smooth(0.3, 0.8, f) * (1 - past);
+  // How burnt: black char over its inner half, where it has burnt, grading through scorched to
+  // its bark toward its butt (harsh review g38: charred black from the stones in, with cracks
+  // glowing all along, the logs read as a leopard print; RDR2's keep bark on their cool ends).
+  const burnt = (0.14 + 0.52 * smooth(0.2, 0.75, f)) * (1 - past) + 0.08 * past;
   // How far over the coals, where its fine crack net glows on every face, its tops too, with no
-  // broad glow there (campfire crack round).
+  // broad glow there (campfire crack round); only on the length the flames lick, never along the
+  // whole log (harsh review g38), and more on the faces toward them.
   // Not under the flame's foot, where its char stays black round the flame (as the soot is).
-  const over = smooth(0.0, 0.6, f) * (1 - 0.75 * smooth(0.72, 0.95, f)) * (1 - past);
+  const over = smooth(0.3, 0.75, f) * (1 - 0.6 * smooth(0.8, 0.98, f)) * (0.35 + 0.65 * under) * (1 - past);
   // Its glow falls with height over the coals, its char kept: leaned into a stack, the wood
   // standing in front of the flame reads as black char against it, as the photographs' does,
   // its seams lit low, where the coals heat it (logs' form round: glowing all the way up, the
   // stack read as orange-striped cobs and took the low view's soot from 0.16 to 0.06).
-  const fall = 1 - GLOW_FALL * smooth(0.1, 0.32, at[1]);
-  return [Math.max(top, foot, lick, all, rim) * fall, burnt, over * fall];
+  // Less where the flames stand round it, its inner end, whose cracks glow deep orange in them
+  // (art round g39: with its glow gone above a third of a metre, its char read as dark planks
+  // with no glowing cracks, and the sheet's red and orange fell under its band at night).
+  const fall = 1 - GLOW_FALL * smooth(0.1, 0.32, at[1]) * (1 - FLAME_REACH * smooth(0.6, 0.95, f));
+  const floor = INNER_HEAT * smooth(0.3, 0.7, f) * (1 - past);
+  return [Math.max(Math.max(top, foot, lick, all, rim) * fall, floor), burnt, over * fall];
 }
 /** How much of a log's glow is gone at the stack's top (`heat`). */
 export const GLOW_FALL = 0.7;
+/** How much of that fall the flames' reach, at a log's inner end, takes back (`heat`). */
+const FLAME_REACH = 0.8;
+/** The least heat a log's inner end, in the flames, keeps on every face (`heat`). */
+const INNER_HEAT = 0.75;
 
 /** Edge padding, as a baker dilates its islands: each unpainted texel within `reach` (here the
  * whole gutter) of an island takes its nearest painted neighbour's values, so no mip averages the
@@ -725,13 +746,16 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
           const [px, py] = [l.box[0] + (x - 2 + 0.5) / D, l.box[1] + (y - 2 + 0.5) / D];
           const r = Math.hypot(px, py);
           const w = endGrain(px, py, r, l.R, true, l.seed + end);
-          // The foot's end, out of the fire, only scorched round its bark (`heat`); the inner
-          // end over the flames charred black, its cracks glowing.
+          // The foot's end, out of the flames, cold but charred over, blackest round its bark, by
+          // the coals' heat and the smoke (`burnt`; art round g39: scorched only round its bark,
+          // its pale cut end faced the camera as fresh wood); the inner end over the flames
+          // charred black, its cracks glowing.
           const hot = end ? 0.68 + 0.16 * fbm(px * 40, py * 40, l.seed) : 0.12 + 0.2 * smooth(0.6, 1, r / l.R);
+          const burnt = end ? hot : 0.36 + 0.14 * smooth(0.5, 1, r / l.R);
           // Its char split along the radial checks and round the rings, as a log's end burns;
           // its glow falling with its height, as its length's does (`heat`).
           const fall = 1 - GLOW_FALL * smooth(0.1, 0.32, end ? l.foot[1] + l.axis[1] * l.L : l.foot[1]);
-          put(cx + x, cy + y, charred(w, hot * fall, Math.atan2(py, px) * 0.024, r, l.seed + 13, 0, Math.max(r, 0.008) / 0.024, hot, end));
+          put(cx + x, cy + y, charred(w, hot * fall, Math.atan2(py, px) * 0.024, r, l.seed + 13, 0, Math.max(r, 0.008) / 0.024, burnt, end));
         }
       }
     });
@@ -749,14 +773,22 @@ export function woodMaps(logs: Log[]): Uint8Array[] {
   return out;
 }
 
-/** The stone atlas's colour and metal-roughness maps: a tile a stone, painted by direction. */
+/** How steep the stones' relief is in their normal map, per unit of relief across a texel. */
+const STONE_RELIEF = 8;
+/** The stone atlas's colour, metal-roughness and normal maps: a tile a stone, painted by direction. */
 export function stoneMaps(stones: Stone[]): Uint8Array[] {
-  const out = [0, 1].map(() => new Uint8Array(W * W * 4).fill(255));
+  const out = [0, 1, 2].map(() => new Uint8Array(W * W * 4).fill(255));
+  // The gutter's normal flat, so no mip tilts a tile's edge.
+  for (let i = 0; i < W * W; i++) out[2].set([128, 128, 255], i * 4);
   stones.forEach((st, tile) => {
     const [tx, ty] = [(tile % (W / TILE)) * TILE, Math.floor(tile / (W / TILE)) * TILE];
+    const dir = (x: number, y: number) => unoct((x - 4 + 0.5) / (TILE - 8), (y - 4 + 0.5) / (TILE - 8));
+    // Its relief, by direction as its colour is, so no seam: pitted, granular field stone; its
+    // smooth-shaded round alone read as pink plastic by firelight (harsh review g38).
+    const relief = (d: V3) => 0.5 * n3(mul(d, 13), st.seed + 30) + 0.3 * n3(mul(d, 36), st.seed + 31) + 0.2 * n3(mul(d, 95), st.seed + 32) - 0.35 * smooth(0.62, 0.72, n3(mul(d, 22), st.seed + 33));
     for (let y = 0; y < TILE; y++) {
       for (let x = 0; x < TILE; x++) {
-        const d = unoct((x - 4 + 0.5) / (TILE - 8), (y - 4 + 0.5) / (TILE - 8));
+        const d = dir(x, y);
         const p = mul(d, 1);
         const mottle = n3(mul(p, 4), st.seed + 20), grain = n3(mul(p, 70), st.seed + 21), vein = n3(mul(p, 9), st.seed + 22);
         let c = st.tone.map((v) => v * (0.82 + 0.36 * mottle));
@@ -778,7 +810,13 @@ export function stoneMaps(stones: Stone[]): Uint8Array[] {
         c = mix(c, [78, 64, 48], 0.7 * smooth(-0.05, -0.45, d[1]));
         const o = ((ty + y) * W + tx + x) * 4;
         for (let i = 0; i < 3; i++) out[0][o + i] = Math.round(Math.min(255, c[i]));
-        out[1].set([0, Math.round((0.84 - 0.12 * soot + 0.1 * grain) * 255), 0], o);
+        // Matte: weathered field stone and soot both near fully rough (at 0.72-0.94 the
+        // firelight drew a sheen on their tops, plastic, harsh review g38).
+        out[1].set([0, Math.round((0.92 - 0.04 * soot + 0.06 * grain) * 255), 0], o);
+        // The normal from the relief, +Y up the image, as the wood's.
+        const [dx, dy] = [relief(dir(x + 1, y)) - relief(dir(x - 1, y)), relief(dir(x, y - 1)) - relief(dir(x, y + 1))];
+        const n = norm([-STONE_RELIEF * dx * 0.5, -STONE_RELIEF * dy * 0.5, 1]);
+        out[2].set([0, 1, 2].map((j) => Math.round((n[j] * 0.5 + 0.5) * 255)), o);
       }
     }
   });
@@ -840,9 +878,9 @@ export function campfire(seed = 1): Buffer {
     emissiveFactor: [1, 1, 1],
     extensions: { KHR_materials_emissive_strength: { emissiveStrength: 3 } },
   });
-  j.materials.push({ name: "Stone", pbrMetallicRoughness: { baseColorTexture: tex(image(sm[0], W / 2, true), "image/jpeg"), metallicRoughnessTexture: tex(image(sm[1], W / 4, true), "image/jpeg"), metallicFactor: 0 } });
+  j.materials.push({ name: "Stone", pbrMetallicRoughness: { baseColorTexture: tex(image(sm[0], W / 2, true), "image/jpeg"), metallicRoughnessTexture: tex(image(sm[1], W / 4, true), "image/jpeg"), metallicFactor: 0 }, normalTexture: tex(image(sm[2], W / 2, true), "image/jpeg") });
   prim(wood, 0, tangents(wood));
-  prim(stone, 1);
+  prim(stone, 1, tangents(stone));
   const pad = (4 - (len % 4)) % 4;
   if (pad) parts.push(Buffer.alloc(pad));
   len += pad;

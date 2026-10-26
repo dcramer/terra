@@ -45,6 +45,9 @@ pub struct Textures {
     pub roughness: f32,
     /// Drawn from both sides, as a thin cloth or an open shell must be.
     pub double_sided: bool,
+    /// Cut out where its colour's alpha is under this (glTF's `MASK`), as a campfire's ash
+    /// bed's ragged edge is cut into the ground; drawn whole if none.
+    pub alpha_cutoff: Option<f32>,
 }
 
 /// The textures a material draws from the first set of texture places, if it has a colour
@@ -72,6 +75,8 @@ fn textures_of(material: &gltf::Material) -> Option<Textures> {
         metallic: pbr.metallic_factor(),
         roughness: pbr.roughness_factor(),
         double_sided: material.double_sided(),
+        alpha_cutoff: (material.alpha_mode() == gltf::material::AlphaMode::Mask)
+            .then(|| material.alpha_cutoff().unwrap_or(0.5)),
     })
 }
 
@@ -210,4 +215,23 @@ pub fn bake(parts: &[Part], length: f32, held_from_end: f32, head: Option<Color>
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
     .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
     .with_inserted_indices(Indices::U32(indices))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_campfires_ash_bed_is_cut_out_by_its_alpha_and_its_wood_and_stone_drawn_whole() {
+        // tools/props/coals.ts masks the bed, so its ragged edge is cut into the ground.
+        let parts = read_model("props/Campfire.glb").unwrap();
+        let cutoff = |name: &str| {
+            let part = parts.iter().find(|p| p.material.starts_with(name));
+            part.and_then(|p| p.textures.as_ref())
+                .map(|t| t.alpha_cutoff)
+        };
+        assert_eq!(cutoff("Coals"), Some(Some(0.5)));
+        assert_eq!(cutoff("Wood"), Some(None));
+        assert_eq!(cutoff("Stone"), Some(None));
+    }
 }
