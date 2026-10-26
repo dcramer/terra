@@ -17,6 +17,7 @@ use terra_world::fire::{Kindled, Logs};
 use terra_world::flora::FloraPiece;
 use terra_world::flora_kinds::Flora;
 use terra_world::planet::Planet;
+use terra_world::shell::ScriptFrame;
 
 const TORCH: &str = "models/tools/Torch.glb";
 const CAMPFIRE: &str = "models/props/Campfire.glb";
@@ -253,12 +254,16 @@ pub(super) fn put_up(
 }
 
 /// Pushes each doorway's leaves by D512's rule with every player and camera walking at it
-/// (a film's camera walks the tour as a body would), swinging its leaves as it opens.
+/// (a film's camera walks the tour as a body would), swinging its leaves as it opens. Logs
+/// the frame a door is pushed and the frame a body passes its sill with how far open it
+/// stands then (frames counted as `--press` counts them), so a film's doors are checked
+/// from its log.
 pub(super) fn push_doors(
     time: Res<Time>,
+    script: Option<Res<ScriptFrame>>,
     bodies: Query<(Entity, &GlobalTransform), Or<(With<Player>, With<Camera3d>)>>,
     mut was: Local<HashMap<Entity, Vec3>>,
-    mut doorways: Query<(&mut Doorway, &GlobalTransform, &Children)>,
+    mut doorways: Query<(&mut Doorway, &Name, &GlobalTransform, &Children)>,
     mut leaves: Query<(&Leaf, &mut Transform)>,
 ) {
     let dt = time.delta_secs();
@@ -269,23 +274,36 @@ pub(super) fn push_doors(
         .iter()
         .map(|(body, at)| {
             let at = at.translation();
-            let before = was.insert(body, at).unwrap_or(at);
-            (at, (at - before) / dt)
+            (at, was.insert(body, at).unwrap_or(at))
         })
         .collect();
-    for (mut doorway, frame, children) in &mut doorways {
-        let swing = doorway.0.swing;
+    for (mut doorway, name, frame, children) in &mut doorways {
+        let (swing, opened) = (doorway.0.swing, doorway.0.opened());
         let from_world = frame.affine().inverse();
         let near: Vec<(Vec3, Vec3)> = moving
             .iter()
-            .map(|&(at, velocity)| {
-                (
+            .map(|&(at, before)| {
+                let (at, before) = (
                     from_world.transform_point3(at),
-                    from_world.transform_vector3(velocity),
-                )
+                    from_world.transform_point3(before),
+                );
+                (at, (at - before) / dt)
             })
             .collect();
         doorway.0.step(&near, DOORWAY_M[0], KEYS_HELD, dt);
+        let frame = script.as_ref().map_or(0, |f| f.0);
+        if !opened && doorway.0.opened() {
+            info!("Dungeon door {name} pushed at frame {frame}");
+        }
+        for &(at, velocity) in &near {
+            let before = at - velocity * dt;
+            let through =
+                at.x.abs() <= DOORWAY_M[0] * 0.5 && (-1.0..=DOORWAY_M[1] + 1.0).contains(&at.y);
+            if through && before.z * at.z < 0.0 {
+                let open = doorway.0.swing.abs();
+                info!("Dungeon door {name} passed at frame {frame}, {open:.2} open");
+            }
+        }
         if doorway.0.swing == swing {
             continue;
         }
