@@ -7,7 +7,9 @@
 @anchors stone_axe stone
 
 # Tools and weapons
+arming_sword: an arming sword, a straight double-edged steel blade with a straight iron cross guard, a grip wrapped in dark brown leather and a round iron pommel
 bow: a wooden recurve bow with a thin string
+heater_shield: a heater shield seen from the front, a leather-covered board painted dull red at its flat top and ochre toward its point, the paint chipped, with a dark rawhide rim
 hammer: a hammer with a turned wooden handle and a pale block head
 iron_axe: an iron axe, a wooden handle with a grey iron head
 iron_pickaxe: an iron pickaxe, a wooden handle with a grey iron pick head
