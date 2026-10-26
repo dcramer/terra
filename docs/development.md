@@ -31,6 +31,24 @@ It installs what Cargo cannot install for itself, when it is missing: rustup and
 
 There is no CI while we are pre-release (D37): the workflows run the full check only when started by hand. The game runs on macOS natively, and an Apple M4 Max is among the benchmark machines.
 
+### A Linux server as the development machine
+
+Claude Code can work on a Linux server of your own while you drive it from your desktop: the desktop app's SSH environments ([docs](https://code.claude.com/docs/en/desktop.md)) or Remote Control ([docs](https://code.claude.com/docs/en/remote-control.md)). Either way the shell, builds, worktrees and GPU are the server's. A checklist, in order:
+
+1. **The machine.** x86_64 or arm64 Linux (Debian or Ubuntu, for `make setup`'s packages), an NVIDIA card with its driver and Vulkan loader (`vulkaninfo --summary` from `vulkan-tools` names the card), and room for the shared seed and every worktree's build: tens of GB.
+2. **Packages.** `git`, `git-lfs`, `gh`, `curl`, `lsof` (the worktree cleanup keeps everything without it), `xvfb`, Node 22.18 or newer, and for films and icons `ffmpeg` and `imagemagick`; Blender only for model work ([Blender](#blender)). `make setup` adds rustup and Bevy's libraries.
+3. **Node and cargo on every shell's PATH.** The session hooks run `node` in a non-interactive shell, where a version manager's `activate` does not run: put its shims, and `~/.cargo/bin`, on PATH in `~/.profile` (bash) or `~/.zshenv` (zsh).
+4. **A display.** winit needs one even for `--offscreen` runs, and a server has none: run `Xvfb :1 -screen 0 1920x1080x24` as a user service and `export DISPLAY=:1` beside the PATH above. The render worker's daemon does the same for its jobs ([render-worker.md](render-worker.md)).
+5. **Git.** `git config --global user.name` and `user.email`, then `gh auth login` (with `gh auth setup-git`) or an SSH key with push access, since agents land on `main` themselves.
+6. **The clone, without GitHub's LFS bandwidth.** `GIT_LFS_SKIP_SMUDGE=1 git clone` the repository, copy your desktop checkout's `.git/lfs/objects/` into the clone's with `rsync -a --ignore-existing`, then `git lfs install --skip-repo` and `git lfs checkout` there (D525).
+7. **Set up and check.** `make setup` in the clone, then `cargo xtask doctor` until it says the machine is ready. Its "under WSL" items do not apply: off WSL the native build already uses the GPU.
+8. **Your `.env`.** Copy it from the desktop checkout (it is not in git): the token-stats key and the Tripo cookie. Worktrees read the main checkout's.
+9. **Claude Code.** Either add the server in the desktop app (the environment selector, New environment, SSH, with a host from `~/.ssh/config` that logs in without a prompt, and the clone as its folder), or on the server run `claude`, `/login`, then `claude remote-control --name terra --spawn worktree` from the clone inside tmux, and open it from claude.ai/code or the app. Remote Control needs a claude.ai sign-in, not an API key. Copy your Claude memory folder (`~/.claude/projects/<project>/memory/`) across if you keep one.
+10. **The first session.** Its hook builds the shared seed from nothing ([Worktrees](#worktrees): 17 minutes on the desktop) before the first worktree is quick. Check that worktrees land under `.claude/worktrees/`, since the cleanup removes only those (D259).
+11. **See it work.** `cargo xtask sandbox --offscreen --experiment play --shot ~/.cache/terra-review/server.png`, then look at the picture.
+
+Benchmarks taken there are that machine's (D185): don't compare them with the desktop's. If the server is also the render worker, the worker keeps to `TERRA_WORKER_DIR` with its own builds and homes, so the two never share files, only the CPU and the card.
+
 ## Everyday commands
 
 Every task and tool starts from `cargo xtask`, from anywhere in the repository; `cargo xtask tools` lists them all.
