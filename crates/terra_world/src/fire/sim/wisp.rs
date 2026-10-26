@@ -12,7 +12,7 @@
 //! from a tip of its own seed's choosing, so a fire's wisps are known at any time from its seed
 //! and its place in the loop alone, nothing kept from frame to frame, and no two fires shed alike.
 
-use super::{Placement, STRETCH, Sim};
+use super::{Placement, Sim, stretched};
 use bevy::prelude::*;
 
 /// The wisps a fire draws at once at most: one a lane. Must match `WISPS` in fire.wesl.
@@ -30,8 +30,10 @@ const TIPS: usize = 3;
 const LIFE_S: [f32; 2] = [0.04, 0.12];
 /// Its half width at birth, metres at the bake's size: about 8 cm across, a tongue tip's width,
 /// so it is as thick as the tip it left and seen as a piece of flame, not a spark (at 5 cm and a
-/// flame of 0.6 fading straight, few were seen to come free, fire round g37).
-const RADIUS_M: f32 = 0.04;
+/// flame of 0.6 fading straight, few were seen to come free, fire round g37); times the stretch,
+/// as the flame it leaves is drawn 1.4 times as tall as baked and motion.ts's least tongue grows
+/// with it (at 4 cm few showed, fire round g46).
+const RADIUS_M: f32 = 0.056;
 /// Its flame at birth, in the bake's units (the shader's BAKED_EDGE 0.08 is the drawn edge): a
 /// tongue's body's, falling away as it burns out, halfway between straight and held, so it is
 /// through the edge before its life ends (held to its last third, it was drawn the whole way,
@@ -48,11 +50,16 @@ const RISE: f32 = 0.725;
 const SMEAR_S: f32 = 0.35 / 30.0;
 /// How far its way turns over its life, radians, either way about a level axis of its own: a
 /// pocket shed from a tongue's tip rolls off in the eddy that tore it, so it curls away rather
-/// than flying straight (the bake keeps no velocity field to follow, only each tip's gas).
-const CURL: [f32; 2] = [0.4, 0.9];
+/// than flying straight (the bake keeps no velocity field to follow, only each tip's gas). At
+/// 0.4-0.9 most rose straight past the flame's top (fire round g46).
+const CURL: [f32; 2] = [1.0, 2.0];
 /// The wind the bake was simulated in (its sidecar: a gusting 1.8 m/s mean down its +x); the
 /// game's beyond it carries a wisp on downwind.
 const BAKE_WIND_MPS: f32 = 1.8;
+/// How far under its tip a wisp is born, metres at the bake's size (before the stretch): inside
+/// its tongue, where it is bright, so it is seen to leave it; born at the tip, where the flame
+/// is its dim edge, it showed free from its first frame or not at all (fire round g46).
+const DROP_M: f32 = 0.15;
 /// A tip whose gas is not rising at least so fast, m/s, sheds nothing: a shed rises away.
 const LEAST_RISE_MPS: f32 = 0.5;
 /// How far over the bake's box a wisp reaches at most, metres at the bake's size; the marcher's
@@ -114,7 +121,7 @@ impl Wisp {
             Vec3::Y
         };
         let reach = radius + speed * SMEAR_S;
-        let top = ((sim.box_min[2] + sim.box_size[2]) * STRETCH + REACH_M) * scale;
+        let top = (stretched(sim.box_min[2] + sim.box_size[2]) + REACH_M) * scale;
         if at.y + reach * way.y.abs() > top {
             return None;
         }
@@ -190,8 +197,8 @@ fn born(
     Some(Wisp {
         born,
         life,
-        from: placed.to_frame(Vec3::new(tip[0], tip[1], tip[2])) * s,
-        velocity: placed.to_frame(Vec3::new(tip[3], tip[4], tip[5])) * speed * RISE
+        from: placed.to_frame(Vec3::new(tip[0], tip[1], tip[2] - DROP_M)) * s,
+        velocity: placed.way_at(tip[2] - DROP_M, Vec3::new(tip[3], tip[4], tip[5])) * speed * RISE
             + Vec3::new(beyond.x, 0.0, beyond.y),
         curl: Vec3::new(libm::cosf(bearing), 0.0, libm::sinf(bearing)) * (turn / life),
     })

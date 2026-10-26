@@ -1,4 +1,5 @@
 use super::*;
+use crate::fire::sim::{stretch_at, stretched};
 use std::collections::BTreeSet;
 
 /// A loop whose every frame lists `tips` tips at 0.8 m, 10 cm apart down its wind, the gas
@@ -118,14 +119,18 @@ fn a_wisp_leaves_its_tip_slower_than_the_gas_curls_and_thins_through_the_edge_as
     let w = (0..200)
         .find_map(|k| born(&s, p, 0.5, Vec2::ZERO, 0, k))
         .expect("a lane sheds");
-    // The tip is 0.8 m up at the bake's middle, up stretched; the bake's 4 m/s up (stretched) and
-    // 1 m/s downwind are the fire's at its scale times its loop's rate, slowed to RISE of it, up
-    // and down the wind, which blows north at this turn.
+    // The tip is 0.8 m up at the bake's middle, the wisp born DROP_M under it, up stretched; the
+    // bake's 4 m/s up (stretched) and 1 m/s downwind are the fire's at its scale times its loop's
+    // rate, slowed to RISE of it, up and down the wind, which blows north at this turn.
     let rate = p.rate();
-    assert!(w.from.distance(Vec3::new(0.0, 0.8 * STRETCH * scale, 0.0)) < 1e-5);
+    assert!(
+        w.from
+            .distance(Vec3::new(0.0, stretched(0.8 - DROP_M) * scale, 0.0))
+            < 1e-5
+    );
     assert!(
         w.velocity
-            .distance(Vec3::new(0.0, 4.0 * STRETCH, 1.0) * scale * rate * RISE)
+            .distance(Vec3::new(0.0, 4.0 * stretch_at(0.8 - DROP_M), 1.0) * scale * rate * RISE)
             < 1e-4,
         "{}",
         w.velocity
@@ -196,7 +201,7 @@ fn a_falling_tip_sheds_nothing_and_no_wisp_is_drawn_past_the_box() {
     }
     assert!(births(&s, placed(0.0, 1.0), 0.5, 0.0, 60.0).is_empty());
     // The box tops out at 1.18 m, stretched up, the wisps 0.6 over it.
-    let top = 1.18 * STRETCH + 0.6;
+    let top = stretched(1.18) + 0.6;
     let w = Wisp {
         born: 0.0,
         life: 0.1,

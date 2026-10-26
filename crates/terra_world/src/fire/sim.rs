@@ -37,6 +37,42 @@ const BAKED_TALL: f32 = 1.5;
 /// marched campfire's 385/391, 1.26 times; stretched 1.25 with its tips thinned, 351/351 (fire
 /// round g39).
 const STRETCH: f32 = 1.4;
+/// Where in the bake's height (metres) the stretch stops: under it the bake is stretched by
+/// `LOW`, so its flame's top (`FLAME_M`) stands `STRETCH` times its own; over it, nothing, so
+/// the tongues over half the flame's height keep the bake's proportions. Stretched all the way
+/// up, they stood 1.4 times as tall and thin, and fewer were born a second (10.8/9.8 unstretched,
+/// fire round g36; 8.4/6.8 stretched, g45), as motion.ts counts them over half the height; at a
+/// knee of 0.4 m, 15.1/10.0, but they forked 1.22 a tongue a second by dusk, over filmed fires'
+/// 1.2 (fire round g46).
+const KNEE_M: f32 = 0.45;
+/// The bake's flame's own height, metres (its sidecar's `flame_height`).
+const FLAME_M: f32 = 0.78;
+/// How much the bake under the knee is stretched.
+const LOW: f32 = 1.0 + (STRETCH - 1.0) * FLAME_M / KNEE_M;
+
+/// A height in the bake (metres) at the fire's, before its scale: stretched under the knee.
+pub fn stretched(z: f32) -> f32 {
+    if z < KNEE_M {
+        z * LOW
+    } else {
+        KNEE_M * LOW + z - KNEE_M
+    }
+}
+
+/// How much a way up at height `z` in the bake is stretched: `stretched`'s slope there.
+pub fn stretch_at(z: f32) -> f32 {
+    if z < KNEE_M { LOW } else { 1.0 }
+}
+
+/// A height at the fire's (before its scale) back in the bake: `stretched` undone.
+#[cfg(test)]
+pub fn unstretched(y: f32) -> f32 {
+    if y < KNEE_M * LOW {
+        y / LOW
+    } else {
+        y - KNEE_M * LOW + KNEE_M
+    }
+}
 /// How far a fire's scale varies about its height's, either way (D493).
 const SCALE_SPREAD: f32 = 0.15;
 /// How quickly the wind a loop is turned by follows the climate's, seconds: the climate's is
@@ -188,16 +224,26 @@ impl Placement {
         Vec3::new(
             c * q.x + s * q.z,
             self.mirror * (c * q.z - s * q.x),
-            q.y / STRETCH,
+            unstretched(q.y / self.scale) * self.scale,
         ) / self.scale
     }
 
-    /// A way in the bake's box (downwind, across, up) in its fire's frame (east, up, north), not
-    /// scaled: `to_bake`'s turn, mirror and stretch undone.
+    /// A point of the bake's box (downwind, across, up) in its fire's frame (east, up, north),
+    /// not scaled: `to_bake`'s turn, mirror and stretch undone.
     pub fn to_frame(self, b: Vec3) -> Vec3 {
+        self.way_to_frame(Vec3::new(b.x, b.y, stretched(b.z)))
+    }
+
+    /// A way in the bake's box at the bake's height `z` in its fire's frame, not scaled: turned,
+    /// mirrored and its rise stretched as the bake is there.
+    pub fn way_at(self, z: f32, b: Vec3) -> Vec3 {
+        self.way_to_frame(Vec3::new(b.x, b.y, b.z * stretch_at(z)))
+    }
+
+    fn way_to_frame(self, b: Vec3) -> Vec3 {
         let (s, c) = (libm::sinf(self.turn), libm::cosf(self.turn));
         let across = self.mirror * b.y;
-        Vec3::new(c * b.x - s * across, b.z * STRETCH, s * b.x + c * across)
+        Vec3::new(c * b.x - s * across, b.z, s * b.x + c * across)
     }
 
     /// What `fire.wesl`'s `Fire::baked` reads.

@@ -204,7 +204,7 @@ fn a_fire_turns_its_loop_downwind_and_its_mirror_keeps_the_wind() {
             "{wind}: {b}"
         );
         // Up is stretched as well as scaled.
-        assert!((b.z * p.scale * STRETCH - 0.15).abs() < 1.0e-4);
+        assert!((stretched(b.z) * p.scale - 0.15).abs() < 1.0e-4);
         // Its mirror flips what is across the wind and nothing else.
         let across = Vec3::new(-wind.y, 0.0, wind.x) * 0.2;
         let flipped = Placement {
@@ -258,4 +258,17 @@ fn a_way_in_the_bake_comes_back_to_the_fires_frame() {
 fn the_shader_stretches_the_loop_as_the_wisps_are() {
     let shader = std::fs::read_to_string(crate::data::assets().join("shaders/fire.wesl")).unwrap();
     assert!(shader.contains(&format!("const BAKED_STRETCH: f32 = {STRETCH:?};")));
+    assert!(shader.contains(&format!("const BAKED_KNEE: f32 = {KNEE_M:?};")));
+    assert!(shader.contains(&format!("const BAKED_FLAME_M: f32 = {FLAME_M:?};")));
+}
+
+#[test]
+fn the_stretch_stands_the_flames_top_where_it_was_and_keeps_the_tongues_over_the_knee() {
+    // The flame's top as tall as stretched all the way, a tongue over the knee as long as baked,
+    // and the knee's height undone.
+    assert!((stretched(FLAME_M) - FLAME_M * STRETCH).abs() < 1.0e-5);
+    assert!((stretched(0.7) - stretched(0.5) - 0.2).abs() < 1.0e-5);
+    for z in [-0.05, 0.1, KNEE_M, 0.6, 1.1] {
+        assert!((unstretched(stretched(z)) - z).abs() < 1.0e-5, "{z}");
+    }
 }

@@ -1679,15 +1679,26 @@ fn baked_field(field: HearthField, slot: u32) -> HearthField {
     f.wide = s * max(fire.sim[1].x, fire.sim[1].y);
     f.scale = 1.0 / max(f.tall, 1.0e-3);
     f.reach = s * length(max(abs(lo.xy), abs(hi.xy)));
-    f.under = s * BAKED_STRETCH * max(-lo.z, 0.0) + 0.02;
+    f.under = s * BAKED_LOW * max(-lo.z, 0.0) + 0.02;
     f.lobes = 1;
     return f;
 }
 
 // How much faster than baked a baked loop plays (`sim::PLAY`, fire round g28).
 const BAKED_PLAY: f32 = 1.25;
-// How much taller than its scale a baked loop stands, up only (`sim::STRETCH`, fire round g39).
+// How much taller than its scale a baked loop's flame stands, up only (`sim::STRETCH`, fire round
+// g39): under BAKED_KNEE in the bake's height (metres) by BAKED_LOW, so its flame's top
+// (BAKED_FLAME_M) stands as tall, over it not at all, so its tongues keep the bake's proportions
+// (`sim::KNEE_M`, fire round g46). Its field's height (`tall`), which its colours are read over,
+// stays the box's stretched all the way.
 const BAKED_STRETCH: f32 = 1.4;
+const BAKED_KNEE: f32 = 0.45;
+const BAKED_FLAME_M: f32 = 0.78;
+const BAKED_LOW: f32 = 1.0 + (BAKED_STRETCH - 1.0) * BAKED_FLAME_M / BAKED_KNEE;
+// A height at a baked fire (metres, before its scale) in its bake: `sim::stretched` undone.
+fn baked_unstretched(y: f32) -> f32 {
+    return select(y - BAKED_KNEE * BAKED_LOW + BAKED_KNEE, y / BAKED_LOW, y < BAKED_KNEE * BAKED_LOW);
+}
 // Over how much of its box a baked field's heat ramp, heart and thinning tips are read: all of
 // it. Over the bake's flame's own height (0.65, its sidecar's flame_height 0.78 m of 1.19; fire
 // round g39) its tips' skin lift reached lower and the campfire by night went yellow past the
@@ -1727,9 +1738,11 @@ fn baked_tile(frame: f32) -> vec2<f32> {
 // into the bake's box (`sim::to_bake`), its flame read from both frames and blended, made the
 // field's shape by BAKED_EDGE and coloured as the lobes' is.
 fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
-    var flame = wisp_flame(p, f.slot);
+    let hg = saturate(p.y / (f.tall * BAKED_FLAME_TOP));
+    let shed = wisp_flame(p, f.slot) * (1.0 - smoothstep(WISP_FADE.x, WISP_FADE.y, p.y / f.tall));
+    var loop_flame = 0.0;
     let g = vec2(p.x, p.z);
-    let b = vec3(f.turn.x * g.x + f.turn.y * g.y, f.baked.z * (f.turn.x * g.y - f.turn.y * g.x), p.y / BAKED_STRETCH) / f.baked.w;
+    let b = vec3(f.turn.x * g.x + f.turn.y * g.y, f.baked.z * (f.turn.x * g.y - f.turn.y * g.x), baked_unstretched(p.y / f.baked.w) * f.baked.w) / f.baked.w;
     let u = (b - fire.sim[0].xyz) / fire.sim[1].xyz;
     if all(u >= vec3(0.0)) && all(u <= vec3(1.0)) {
         let cells = fire.sim[2].xyz;
@@ -1737,16 +1750,20 @@ fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
         let size = vec3<f32>(textureDimensions(sim_volume));
         let a = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.xy, 0.0) + t) / size, 0.0).r;
         let c = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.zw, 0.0) + t) / size, 0.0).r;
-        flame = max(flame, mix(a, c, f.blend));
+        loop_flame = mix(a, c, f.blend);
     }
+    let flame = max(shed, loop_flame);
     let v = (flame - BAKED_EDGE) / BAKED_SPAN;
     if v < -0.5 {
         return vec3(0.0);
     }
-    let hg = saturate(p.y / (f.tall * BAKED_FLAME_TOP));
     let drawn = field_flame(v, hg, f, BAKED_HEART);
     let thin = BAKED_THIN * (1.0 - smoothstep(0.1, 0.4, v)) * (1.0 - smoothstep(0.3, 0.6, hg));
-    return vec3(drawn.x * (1.0 + thin) * (1.0 - BAKED_TIPS * smoothstep(0.5, 1.0, hg)), baked_yellow(drawn.y), baked_yellow(drawn.z));
+    let own = smoothstep(0.0, 0.1, shed - loop_flame);
+    let dens = mix(1.0 - BAKED_TIPS * smoothstep(0.5, 1.0, hg), WISP_THICK, own);
+    let hot = own * smoothstep(0.2, 0.7, shed);
+    let heat = mix(drawn.yz, vec2(WISP_HEAT), hot);
+    return vec3(drawn.x * (1.0 + thin) * dens, baked_yellow(heat.x), baked_yellow(heat.y));
 }
 
 // How far a baked flame's yellow band, the hearth row's heats between orange and its pale core
@@ -1776,6 +1793,22 @@ const BAKED_THIN: f32 = 1.0;
 // greatest here. WISP_REACH is how far over the bake's box one reaches, metres at its size.
 const WISPS: u32 = 4u;
 const WISP_REACH: f32 = 0.6;
+// How much thicker a wisp's flame is drawn than the loop's, where it is the greater: 8 cm across,
+// the marcher's light through it covered about half (FIELD_K over its short path, thinned at its
+// height), so it drew half as bright as the tongue it left, under motion.ts's cut, and few were
+// seen to come free (sheds 0.05/0.09, fire round g45); thrice, it covers as its tongue does, not
+// thinned by BAKED_TIPS (fire round g46).
+const WISP_THICK: f32 = 3.0;
+// Over what of the field's height (`tall`) a wisp burns out, whatever its age: just over the
+// loop's flame's top (its sidecar's 0.78 m of a 1.18 m box, 0.66), so it is seen to come free of
+// its tongue but not to make the flame stand taller, which cuts the tongues counted over half its
+// height (fire rounds g37, g38, g46).
+const WISP_FADE: vec2<f32> = vec2<f32>(0.72, 0.82);
+// How hot a young wisp's middle burns: a pocket torn from inside its tongue, it burns as the
+// tongue's body did, cooling to the field's heat at its height as its flame falls with age; at
+// the field's heat at the tips (orange, ~0.8) it was under motion.ts's cut and few were seen to
+// come free (fire round g46).
+const WISP_HEAT: f32 = 0.9;
 fn wisp_flame(p: vec3<f32>, slot: u32) -> f32 {
     var most = 0.0;
     for (var i = 0u; i < WISPS; i++) {
