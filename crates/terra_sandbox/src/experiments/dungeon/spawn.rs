@@ -147,6 +147,17 @@ pub(super) fn put_up(
                 None => spawned.insert(scene(&assets, &prop.model)),
             };
         }
+        // The theme's kit (D527), each piece stretched along its own axes, then turned.
+        for piece in &stamp.pieces {
+            let placed = Transform::from_translation(piece.at)
+                .with_rotation(facing(piece.facing))
+                .with_scale(piece.scale);
+            inside.spawn((
+                Name::new(piece.model.clone()),
+                placed,
+                scene(&assets, &piece.model),
+            ));
+        }
         for light in &stamp.lights {
             match light.kind {
                 LightKind::Torch => {

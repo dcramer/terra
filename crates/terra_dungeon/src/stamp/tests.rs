@@ -239,7 +239,9 @@ fn stamps_name_models_that_exist_and_repeat() {
             };
             let stamp = stamp(&dungeon, &theme, &kind);
             let models = stamp.props.iter().map(|p| &p.model);
-            for model in models.chain(stamp.objects.iter().map(|o| &o.model)) {
+            let pieces = stamp.pieces.iter().map(|p| &p.model);
+            let objects = stamp.objects.iter().map(|o| &o.model);
+            for model in models.chain(pieces).chain(objects) {
                 assert!(root.join(model).exists(), "{}: no {model}", theme.name);
             }
             let again = super::stamp(&dungeon, &theme, &kind);

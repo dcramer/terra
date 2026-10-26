@@ -16,6 +16,7 @@
 //! - `view`: the camera's way along the tour, kept off what stands round it.
 //! - `look`: where the camera looks along it.
 
+mod kit;
 #[cfg(test)]
 mod leaf_tests;
 mod look;
@@ -73,6 +74,18 @@ pub struct Prop {
     /// The side its front faces, 0..4 = north, east, south, west.
     pub facing: usize,
     pub scale: f32,
+}
+
+/// A piece of the theme's dressed kit (D527): a vault, an arch, a pier, a niche's front,
+/// placed by its model's origin and stretched along its own axes before it is turned.
+#[derive(Clone, Debug)]
+pub struct Piece {
+    /// From the asset root: `models/props/barrow/BarrelVault.glb`.
+    pub model: String,
+    pub at: Vec3,
+    /// The side its front (+Z) faces, 0..4 = north, east, south, west.
+    pub facing: usize,
+    pub scale: Vec3,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -149,6 +162,8 @@ pub struct Stamp {
     /// In cubes, applied in order (a later fill overwrites an earlier one).
     pub ops: Vec<BuildOp>,
     pub props: Vec<Prop>,
+    /// The theme's kit over the cubes; none for a theme without one.
+    pub pieces: Vec<Piece>,
     pub lights: Vec<Light>,
     pub mobs: Vec<MobSpawn>,
     pub chests: Vec<ChestSpawn>,
@@ -188,6 +203,7 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
         digs: digs(&dungeon.layout, &looks),
         ops: Vec::new(),
         props: Vec::new(),
+        pieces: Vec::new(),
         lights: Vec::new(),
         mobs: Vec::new(),
         chests: Vec::new(),
@@ -201,6 +217,10 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
     };
     shell::lay(&dungeon.layout, &kinds, &mut out.ops);
     modules::lay(dungeon, theme, &looks, &kinds, &mut out);
+    // Before the cubes are read: a pier stands on its own column of cubes.
+    if let Some(kit) = &theme.kit {
+        kit::lay(dungeon, kit, &kinds, &mut out);
+    }
     let map = cubes(&out.ops);
     runin::run_in(dungeon, &looks, &map, &mut out);
     out

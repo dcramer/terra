@@ -134,13 +134,43 @@ pub struct Theme {
     pub trim: String,
     /// The metres clear over its corridors' floors and its rooms', under a level's 5.5 m
     /// (D527): a vaulted theme's corridor crowned at 4.5 m and its rooms at 5 m, a mine's
-    /// drifts lower. Flat ceilings of cubes until the vault kits are made.
+    /// drifts lower. Flat ceilings of cubes, under the kit's vaults where it has one.
     #[serde(default = "full_height")]
     pub headroom: (f32, f32),
+    /// The dressed pieces laid over its cubes (D527); none for a theme of plain cubes.
+    #[serde(default)]
+    pub kit: Option<Kit>,
     pub features: Features,
     pub bestiary: Vec<Mob>,
     pub loot: Vec<Loot>,
     pub modules: Vec<Module>,
+}
+
+/// A built theme's dressed kit (docs/dungeons.md#themes-d527): models from the asset root the
+/// stamp lays over the cubes, as Skyrim's kits lay pieces over their grid and a roof's
+/// covering lies over its cubes. Each piece's shape and origin is its model's (made by
+/// `tools/props/barrow.py` for the barrow halls); the cubes under it still carry what is
+/// walked into.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Kit {
+    /// A straight corridor cell's barrel vault: a 3 m span a cell long, its axis along its
+    /// Z, its origin the middle of its springing line.
+    pub barrel: String,
+    /// A 4 m bay's groin vault rising 2 m, its origin the middle of its springing; scaled to
+    /// a room's bay between its piers and walls, and by three quarters at a corridor's turn
+    /// or crossing.
+    pub groin: String,
+    /// A doorway's head on a wall's face, its front out of the wall, its origin the wall's
+    /// foot under it.
+    pub arch: String,
+    /// A pier where a hall's bays meet, a pilaster where half of it stands in a wall.
+    pub pier: String,
+    /// A burial niche's front, its origin the foot of its 2 m by 1 m opening.
+    pub niche: String,
+    /// What lies in a niche, one of them in each.
+    pub remains: Vec<String>,
+    /// The vaults' springing over the floor, metres: where the pieces were made to spring.
+    pub spring: f32,
 }
 
 fn one() -> f32 {

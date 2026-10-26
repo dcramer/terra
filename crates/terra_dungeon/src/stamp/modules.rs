@@ -134,13 +134,18 @@ pub(super) fn lay(
         let (top, m) = (kinds.head(cell.space) - 1, CELL / 2);
         let ops = &mut out.ops;
         match look.class {
+            // The kit's piers stand where a hall's bays meet instead.
+            Class::Pillar if theme.kit.is_some() => {}
             Class::Pillar => pillar(cell, look, top, kinds, ops),
-            Class::Alcove if walled(0) => {
-                f.fill(ops, [1, 0, 1], [INNER, top, 1], solid(kinds.wall));
-                for y in [1, 5].into_iter().filter(|&y| y + 2 < top) {
-                    f.fill(ops, [m - 1, y, 1], [m, y + 2, 1], None);
+            Class::Alcove if walled(0) => match &theme.kit {
+                Some(kit) => super::kit::loculi(f, cell, kit, kinds, out),
+                None => {
+                    f.fill(ops, [1, 0, 1], [INNER, top, 1], solid(kinds.wall));
+                    for y in [1, 5].into_iter().filter(|&y| y + 2 < top) {
+                        f.fill(ops, [m - 1, y, 1], [m, y + 2, 1], None);
+                    }
                 }
-            }
+            },
             Class::Collapse => collapse(cell, kinds, out),
             Class::Rubble => rubble(cell, look, out),
             Class::Basin => sink(Frame::new(cell.at, 0), cell, 0, kinds, ops),
@@ -198,18 +203,18 @@ pub(super) fn lay(
             _ => props(f, cell, look.class, &mut out.props),
         }
         if matches!(cell.space, Space::Corridor(_)) && look.class != Class::Timber {
-            corridor(cell, kinds, out);
+            corridor(cell, kinds, theme.kit.is_none(), out);
         }
     }
 }
 
 /// A corridor's run: a rib of trim across its ceiling every cell, a half metre down, where
-/// both its sides are walled, so a run reads in bays (a vault's transverse ribs, a mine's
+/// both its sides are walled and `ribbed` (a kit's barrel vault carries its own ribs), so a run reads in bays (a vault's transverse ribs, a mine's
 /// sets); and its edges worn, a fallen stone or two at a wall's foot and now and then a
 /// smaller one by the other, out of the middle where feet go. The fallen stones are rocks,
 /// each turned and sized its own way: half cubes of the wall's stone stood there before and
 /// read as blockout boxes, a step of them down every corridor (round 13's films).
-fn corridor(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
+fn corridor(cell: &Cell, kinds: &Kinds, ribbed: bool, out: &mut Stamp) {
     let walled = |d: usize| cell.sides[d] == Side::Wall;
     let along = if walled(1) && walled(3) {
         Some(0)
@@ -224,12 +229,14 @@ fn corridor(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     // Seen along the run: its walls east and west of the frame.
     let f = Frame::new(cell.at, turn);
     let top = kinds.head(cell.space) - 1;
-    f.fill(
-        &mut out.ops,
-        [1, top, CELL / 2],
-        [INNER, top, CELL / 2],
-        solid(kinds.trim),
-    );
+    if ribbed {
+        f.fill(
+            &mut out.ops,
+            [1, top, CELL / 2],
+            [INNER, top, CELL / 2],
+            solid(kinds.trim),
+        );
+    }
     let west = hash(cell.at, 400).is_multiple_of(2);
     let (foot, other) = if west {
         (1.4, CELL as f32 - 1.5)
