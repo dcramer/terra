@@ -177,11 +177,12 @@ export function chainGaps(frames: Frame[], all = runs(frames)): Check {
   return { name: "chain gaps", ok: gaps.length === 0, line, faults: gaps.length };
 }
 
-/// Feet sliding while planted: a ball of the foot within PLANTED_M of its lowest (LOWEST_SHARE) for
-/// PLANT_FRAMES frames or more is planted, and travels no more than SLIDE_M over the ground.
-/// A roll and a body knocked down are left out.
-export function sliding(frames: Frame[]): Check {
-  type Plant = { who: string; foot: number; from: number; to: number; travel: number; move: string };
+/// A plant: whose foot, its first and last frame, how far its ball travelled, the move at its middle.
+export type Plant = { who: string; foot: number; from: number; to: number; travel: number; move: string };
+
+/// Every plant: a ball of the foot within PLANTED_M of its lowest (LOWEST_SHARE) for
+/// PLANT_FRAMES frames or more. A roll and a body knocked down are left out.
+export function plants(frames: Frame[]): Plant[] {
   const plants: Plant[] = [];
   const names = [...new Set(frames.flatMap((frame) => frame.fighters.map((f) => f.who)))];
   for (const name of names)
@@ -208,11 +209,22 @@ export function sliding(frames: Frame[]): Check {
       }
       close();
     }
+  return plants;
+}
+
+/// Feet sliding while planted: every plant (`plants`) travels no more than SLIDE_M over the
+/// ground. `of` names what is counted (plants, or a kind of them).
+export function sliding(frames: Frame[], only: (plant: Plant) => boolean = () => true, of = "plants"): Check {
+  return slidOf(plants(frames).filter(only), of);
+}
+
+/// The feet-sliding verdict on plants already found.
+export function slidOf(plants: Plant[], of = "plants"): Check {
   const slid = plants.filter((plant) => plant.travel > SLIDE_M);
   const worst = worstOf(slid, (each) => each.travel);
   const line = worst
-    ? `${slid.length} of ${plants.length} plants slid past ${SLIDE_M * 100} cm, median ${(median(slid.map((each) => each.travel)) * 100).toFixed(1)} cm, worst ${(worst.travel * 100).toFixed(1)} cm (${whose(worst.who)} ${worst.foot ? "right" : "left"} foot, frames ${worst.from}-${worst.to}, ${worst.move})`
-    : `${plants.length} plants, none slid past ${SLIDE_M * 100} cm`;
+    ? `${slid.length} of ${plants.length} ${of} slid past ${SLIDE_M * 100} cm, median ${(median(slid.map((each) => each.travel)) * 100).toFixed(1)} cm, worst ${(worst.travel * 100).toFixed(1)} cm (${whose(worst.who)} ${worst.foot ? "right" : "left"} foot, frames ${worst.from}-${worst.to}, ${worst.move})`
+    : `${plants.length} ${of}, none slid past ${SLIDE_M * 100} cm`;
   return { name: "feet sliding", ok: slid.length === 0, line, faults: slid.length };
 }
 

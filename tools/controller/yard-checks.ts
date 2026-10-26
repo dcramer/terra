@@ -5,7 +5,7 @@
 // (tools/sandbox/duel/checks.ts `sliding`). yard-checks.test.ts plants each fault in a made-up
 // walk. Node 22.18 or later; no dependencies.
 
-import { type Frame, sliding } from "../sandbox/duel/checks.ts";
+import { type Frame, type Plant, plants, slidOf } from "../sandbox/duel/checks.ts";
 
 /// A check's verdict: whether it held, its line, its number (the scorecard row's value) and
 /// how many faults it found.
@@ -99,19 +99,45 @@ export function smooth(walks: Walk[]): Check {
   return { name: "step smooth", ok, line, value, faults: popped.length + late.length };
 }
 
-/// Criterion 21 by the duel's own check, on each walk's frames on the ground: the row's
-/// number is the worst plant's travel, m.
-export function feet(walks: Walk[]): Check {
+/// A plant is a turn in place when the body goes less than TURN_STILL_M over it while it
+/// turns TURNED_DEG or more: its feet are kept by turn.foot's rule (a step each ~45 deg).
+export const TURN_STILL_M = 0.2;
+export const TURNED_DEG = 20;
+
+/// Whether `plant` is a turn in place, by its body's place and facing at its ends.
+export function turning(frames: Frame[], plant: Plant): boolean {
+  const at = (frame: number) => frames.find((each) => each.frame === frame)?.fighters.find((f) => f.who === plant.who);
+  const [a, b] = [at(plant.from), at(plant.to)];
+  if (!a || !b) return false;
+  const went = Math.hypot(b.feet[0] - a.feet[0], b.feet[2] - a.feet[2]);
+  const yaw = (f: typeof a) => Math.atan2(f.facing[0], f.facing[2]);
+  const turned = Math.abs(((yaw(b) - yaw(a) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
+  return went < TURN_STILL_M && (turned * 180) / Math.PI >= TURNED_DEG;
+}
+
+/// The plants of each walk's frames on the ground, a turn in place's (`turn`) or the rest's.
+function walkPlants(walk: Walk, turn: boolean): Plant[] {
   // A contact is a foot on the ground: a frame the body is in the air (off the deck's end)
   // plants nothing.
-  const grounded = (frames: Frame[]) => frames.map((frame) => ({ ...frame, fighters: frame.fighters.filter((f) => (f as Walker).on_ground !== false) }));
-  const each = walks.map((walk) => ({ walk: walk.name, check: sliding(grounded(walk.frames)) }));
+  const frames = walk.frames.map((frame) => ({ ...frame, fighters: frame.fighters.filter((f) => (f as Walker).on_ground !== false) }));
+  return plants(frames).filter((plant) => turning(frames, plant) === turn);
+}
+
+/// Feet sliding by the duel's own check on each walk's plants, a turn in place's or the
+/// rest's: the row's number is the worst plant's travel, m.
+function slid(walks: Walk[], turn: boolean, name: string, of: string): Check {
+  const each = walks.map((walk) => ({ walk: walk.name, check: slidOf(walkPlants(walk, turn), of) }));
   const worst = (line: string) => Number(/worst ([\d.]+) cm/.exec(line)?.[1] ?? 0) / 100;
   const value = Math.max(...each.map((one) => worst(one.check.line)));
   const ok = each.every((one) => one.check.ok);
   const line = `${ok ? "" : "✗ "}${each.map((one) => `${one.walk}: ${one.check.line}`).join("; ")}`;
-  return { name: "feet sliding", ok, line, value, faults: each.reduce((sum, one) => sum + one.check.faults, 0) };
+  return { name, ok, line, value, faults: each.reduce((sum, one) => sum + one.check.faults, 0) };
 }
+
+/// Criterion 21: feet sliding, turns in place left out (`turn`).
+export const feet = (walks: Walk[]): Check => slid(walks, false, "feet sliding", "plants");
+/// turn.foot: feet sliding in a turn in place (the body all but still while it turns).
+export const turn = (walks: Walk[]): Check => slid(walks, true, "turn foot", "turning plants");
 
 /// The yard's own criteria on each walk, the row's number how many fail: every route mark
 /// reached; the trench's floor and the deck walked on; never stuck (STUCK_S all but still before the route is done); never through the
@@ -160,4 +186,4 @@ export function yard(walks: Walk[]): Check {
   return { name: "yard", ok: !failed.length, line, value: failed.length, faults: failed.length };
 }
 
-export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), yard(walks)];
+export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), yard(walks)];

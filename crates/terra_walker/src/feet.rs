@@ -4,15 +4,18 @@
 //! where it was locked while the body moves over it (a stride, a move's drive or warp, a turn
 //! to the foe), and steps when it has gone too far. A stride's clip plays in place at its pace
 //! (`pace.rs`), so its feet are read against the ground it stands on (`Kept::ground`, which the
-//! figure sets); a clip that stands is read in the body's frame. Which feet a clip has down is
-//! its own data, the foot-down markers baked into its file (`markers`, `terra_motion::feet::
-//! Markers`), read at the time each clip playing is at and weighed by its weight. Only the
+//! figure sets); a clip that stands is read in the body's frame. When a foot is locked is its
+//! clips' own data, the lock curves baked into their file (`markers`, `terra_motion::feet::
+//! Markers`), read at the time each clip playing on the legs is at and summed by its weight, as
+//! ALS sums its FootLock curves. A body whose feet cannot be kept (no legs, no animation player,
+//! no clip with markers) says so: in the fight log (`Kept::gated`) and once in the log. Only the
 //! thigh, calf and foot are turned, so nothing else that writes the joints after the animation
 //! (the body's proportions, its lift) is disturbed.
 
 use std::collections::HashMap;
 
 use bevy::{
+    animation::{AnimatedBy, AnimationTargetId},
     gltf::{Gltf, GltfNode},
     prelude::*,
     transform::TransformSystems,
@@ -56,34 +59,82 @@ pub fn markers(gltf: &Gltf, nodes: &Assets<GltfNode>) -> HashMap<String, Markers
         .unwrap_or_default()
 }
 
-/// What share of the weight playing on `animator` has each foot down by its clips' markers, at
-/// the time each is at; a clip with none is left out.
-fn down(animator: &AnimationPlayer, graph: &AnimationGraph, baked: &Baked) -> [f32; 2] {
-    let (mut down, mut whole) = ([0.0; 2], 0.0);
+/// Each foot's lock curve over the clips playing on `animator` (`Markers::lock` at the time
+/// each is at), summed by their weights, as ALS sums its FootLock curves; a clip masked off
+/// that leg (`leg`, its foot's target) or without markers is left out. Across a cross-fade only
+/// the clips coming in are read (their weight not falling since `was`, which is kept for next
+/// frame): a foot stands as the pose it goes to has it, as motion matching labels contact by
+/// the pose it blends to (inertialization) and not by the mix, which in a fade from a stride
+/// or a fall into a stance reads half-locked and so neither locks nor lets go. Why there is
+/// none, if there is none.
+fn locks(
+    animator: &AnimationPlayer,
+    graph: &AnimationGraph,
+    baked: &Baked,
+    leg: [Option<AnimationTargetId>; 2],
+    was: &mut Vec<(AnimationNodeIndex, f32)>,
+) -> Result<[f32; 2], &'static str> {
+    // [all, coming in] for each foot: the curve summed by weight, and the weight.
+    let (mut lock, mut whole, mut playing) = ([[0.0; 2]; 2], [[0.0; 2]; 2], false);
+    let mut now = Vec::with_capacity(was.len());
     for (node, active) in animator.playing_animations() {
-        let Some(AnimationNodeType::Clip(clip)) = graph.get(*node).map(|n| &n.node_type) else {
+        let Some(each) = graph.get(*node) else {
             continue;
         };
+        let AnimationNodeType::Clip(clip) = &each.node_type else {
+            continue;
+        };
+        playing = true;
         let Some(markers) = baked.0.get(&clip.id()) else {
             continue;
         };
-        let weight = active.weight();
+        let weight = active.weight() * each.weight;
         if weight <= 0.0 {
             continue;
         }
-        whole += weight;
-        for (side, share) in down.iter_mut().enumerate() {
-            if markers.down(side, active.seek_time()) {
-                *share += weight;
+        now.push((*node, weight));
+        let fading = was
+            .iter()
+            .any(|&(seen, last)| seen == *node && weight < last - 1e-4);
+        for side in 0..2 {
+            let masked = leg[side]
+                .and_then(|target| graph.mask_groups.get(&target))
+                .is_some_and(|groups| groups & each.mask != 0);
+            if masked {
+                continue;
+            }
+            let curve = markers.lock(side, active.seek_time());
+            for (k, counts) in [true, !fading].into_iter().enumerate() {
+                if counts {
+                    whole[k][side] += weight;
+                    lock[k][side] += weight * curve;
+                }
             }
         }
     }
-    if whole > 0.0 {
-        down.map(|share| share / whole)
-    } else {
-        [0.0; 2]
+    *was = now;
+    if whole[0].iter().all(|w| *w <= 0.0) {
+        return Err(if playing {
+            "no markers"
+        } else {
+            "nothing playing"
+        });
     }
+    Ok([0, 1].map(|side| {
+        let k = if whole[1][side] > 0.0 { 1 } else { 0 };
+        if whole[k][side] > 0.0 {
+            lock[k][side] / whole[k][side]
+        } else {
+            0.0
+        }
+    }))
 }
+
+/// A body whose feet cannot be kept this long says so in the log.
+const GATED_LOUD_S: f32 = 1.0;
+
+/// Each foot's ball of the foot, left then right.
+const BALLS: [&str; 2] = ["ball_l", "ball_r"];
 
 /// Each leg's hip, knee and ankle, left then right.
 const LEGS: [[&str; 3]; 2] = [
@@ -99,6 +150,8 @@ pub struct Kept {
     /// Each clip foot's place in the body's own frame last frame, for how fast it swings.
     was: [Option<Vec3>; 2],
     legs: Option<[[Entity; 3]; 2]>,
+    /// Each foot's ball of the foot, if it has one: a locked foot keeps it still.
+    balls: [Option<Entity>; 2],
     /// The animation player posing its skeleton, once found.
     animator: Option<Entity>,
     /// How fast the ground the clip's feet stand on passes under the body, in the world, m/s:
@@ -115,6 +168,15 @@ pub struct Kept {
     pub stance: bool,
     /// Off the ground last frame, so the frame it comes down is known.
     was_off: bool,
+    /// Each foot's lock curve over the clips playing this frame.
+    curve: [f32; 2],
+    /// Each clip node's weight last frame, to tell the clips coming in from those going.
+    weights: Vec<(AnimationNodeIndex, f32)>,
+    /// Why the feet were not kept this frame (no legs, no animator, no markers), if not.
+    gated: Option<&'static str>,
+    /// How long they have been, and whether that was logged.
+    gated_s: f32,
+    told: bool,
 }
 
 impl Kept {
@@ -128,6 +190,74 @@ impl Kept {
     /// How each foot is kept, left then right, as the fight log writes it.
     pub fn states(&self) -> [&'static str; 2] {
         self.feet.map(|foot| foot.state())
+    }
+
+    /// Each foot's lock curve over the clips playing, and its lock weight, as the fight log
+    /// writes them.
+    pub fn locks(&self) -> [[f32; 2]; 2] {
+        [0, 1].map(|side| [self.curve[side], self.feet[side].alpha()])
+    }
+
+    /// Why each foot was left free while its curve had it locked (`Foot::why`).
+    pub fn whys(&self) -> [&'static str; 2] {
+        self.feet.map(|foot| foot.why())
+    }
+
+    /// Why the feet were not kept at all this frame, if not.
+    pub fn gated(&self) -> Option<&'static str> {
+        self.gated
+    }
+
+    /// Each foot's lock curve this frame over the clips `player` plays (`locks`), kept for the
+    /// record; none, and why noted (`gate`), when the feet cannot be kept.
+    fn curve_of(
+        &mut self,
+        body: Entity,
+        player: Option<(&AnimationPlayer, &AnimationGraphHandle)>,
+        graphs: &Assets<AnimationGraph>,
+        baked: &Baked,
+        leg: [Option<AnimationTargetId>; 2],
+        dt: f32,
+    ) -> Option<[f32; 2]> {
+        let curve = match player {
+            None => Err("no animator"),
+            Some((animator, graph)) => match graphs.get(graph) {
+                None => Err("no graph"),
+                Some(graph) => locks(animator, graph, baked, leg, &mut self.weights),
+            },
+        };
+        let curve = match curve {
+            Ok(curve) => {
+                self.gate(body, None, dt);
+                curve
+            }
+            // A body showing its rest pose, no clip yet, stands on both feet: the clip's
+            // first pose is stepped to, not slid to.
+            Err(why @ "nothing playing") => {
+                self.gate(body, Some(why), dt);
+                [1.0; 2]
+            }
+            Err(why) => {
+                self.gate(body, Some(why), dt);
+                return None;
+            }
+        };
+        self.curve = curve;
+        Some(curve)
+    }
+
+    /// Notes why the feet are not kept this frame, and says so once it has lasted.
+    fn gate(&mut self, body: Entity, why: Option<&'static str>, dt: f32) {
+        self.gated = why;
+        let Some(why) = why else {
+            self.gated_s = 0.0;
+            return;
+        };
+        self.gated_s += dt;
+        if self.gated_s >= GATED_LOUD_S && !self.told {
+            self.told = true;
+            warn!("Feet: {body}'s feet are not kept ({why}); they go as the clip has them.");
+        }
     }
 }
 
@@ -160,6 +290,8 @@ fn keep(
     baked: Res<Baked>,
     graphs: Res<Assets<AnimationGraph>>,
     animators: Query<(&AnimationPlayer, &AnimationGraphHandle)>,
+    targets: Query<&AnimationTargetId>,
+    animated_by: Query<&AnimatedBy>,
     mut bodies: Query<(Entity, &mut Kept, Option<&Motion>, Has<Downed>)>,
     children: Query<&Children>,
     names: Query<&Name>,
@@ -172,22 +304,25 @@ fn keep(
             let found =
                 LEGS.map(|leg| leg.map(|name| character::find(body, name, &children, &names)));
             if found.iter().flatten().any(Option::is_none) {
+                kept.gate(body, Some("no legs"), dt);
                 continue;
             }
             kept.legs = Some(found.map(|leg| leg.map(Option::unwrap)));
+            kept.balls = BALLS.map(|name| character::find(body, name, &children, &names));
         }
         let Some(legs) = kept.legs else { continue };
         if kept.animator.is_none() {
-            kept.animator = children
-                .iter_descendants(body)
-                .find(|&each| animators.contains(each));
+            // The player animating its legs (not one a held thing carries).
+            kept.animator = animated_by
+                .get(legs[0][2])
+                .ok()
+                .map(|by| by.0)
+                .filter(|&each| animators.contains(each));
         }
-        // Which feet its clips have down, by their markers.
-        let Some(clips_down) = kept
-            .animator
-            .and_then(|each| animators.get(each).ok())
-            .and_then(|(animator, graph)| Some(down(animator, graphs.get(graph)?, &baked)))
-        else {
+        // Each foot's lock curve over its clips, by their markers.
+        let leg = legs.map(|[.., foot]| targets.get(foot).ok().copied());
+        let player = kept.animator.and_then(|each| animators.get(each).ok());
+        let Some(curve) = kept.curve_of(body, player, &graphs, &baked, leg, dt) else {
             continue;
         };
         // What a layer above set this frame lasts the frame: a body no longer a fighter's
@@ -243,11 +378,15 @@ fn keep(
             let posed = Posed {
                 pose: clip,
                 swing_mps,
-                down: clips_down[side],
+                lock: curve[side],
                 up,
                 strained: kept.strained[side],
                 off,
                 landing,
+                low: (ankle - ground).dot(up) <= feet::LOW_ANKLE_M,
+                ball: kept.balls[side]
+                    .and_then(|ball| transforms.get(ball).ok())
+                    .map_or(Vec3::ZERO, |ball| foot_local.scale * ball.translation),
             };
             let other = kept.feet[1 - side].moving();
             let kept_at = kept.feet[side].update(posed, dt, other);
@@ -289,9 +428,9 @@ fn keep(
 mod tests {
     use super::*;
 
-    /// The body files whose clips the game plays: every clip carries its foot-down markers
-    /// (`tools/characters/markers.ts`; a re-export without them leaves every foot free), and a
-    /// stride has each foot down for part of its cycle, not all of it.
+    /// The body files whose clips the game plays: every clip carries its foot locks
+    /// (`tools/characters/markers.ts`; a re-export without them leaves every foot free), a
+    /// stride has each foot locked for part of its cycle, not all of it, and a walk always one.
     #[test]
     fn every_clip_played_carries_its_foot_down_markers() {
         for file in [crate::appearance::BASE, crate::figure::CLIPS] {
@@ -310,14 +449,18 @@ mod tests {
                 if !paces.contains_key(&clip) {
                     continue;
                 }
+                let at = |side, i: usize| each.lock(side, each.length_s * i as f32 / 100.0);
                 for side in 0..2 {
-                    let down = (0..100)
-                        .filter(|i| each.down(side, each.length_s * *i as f32 / 100.0))
-                        .count();
+                    let down = (0..100).filter(|&i| at(side, i) >= feet::FULL).count();
                     assert!(
                         (5..95).contains(&down),
-                        "{file}: {clip}'s foot {side} is down {down}% of its stride"
+                        "{file}: {clip}'s foot {side} is locked {down}% of its stride"
                     );
+                }
+                // A walk always has a foot down (Crouch_Fwd_Loop's plants skate: to remake).
+                if paces[&clip] < 2.0 && clip != "Crouch_Fwd_Loop" {
+                    let neither = (0..100).find(|&i| at(0, i) <= 0.0 && at(1, i) <= 0.0);
+                    assert_eq!(neither, None, "{file}: {clip} has neither foot down");
                 }
             }
         }

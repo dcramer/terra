@@ -1,126 +1,258 @@
 #!/usr/bin/env node
-// Bakes each clip's foot-down markers into its file (D455): for every clip, each foot's
-// planted phases, the spans its ball of the foot stands on the ground the clip strides on,
-// named as Unreal's sync markers are (`foot_down_l`, `foot_down_r`), so the game keeps a foot
-// where it lands by the clip's own data rather than one height for every clip (a fighter's
-// stance stands its ball 3-4 cm up, a jog's rolling foot 5.6-6.5 cm). ALS- and Lyra-era rigs
-// bake the same per clip (foot-lock curves, foot-down markers); the markers will serve sync
-// groups too.
+// Bakes each clip's foot locks into its file (D455): for every clip, each foot's lock curve,
+// 0 to 1 through the clip (1 while the foot stands on the ground the clip strides on, falling
+// to 0 over RAMP_S as it leaves), and its plants as
+// spans, named as Unreal's sync markers are (`foot_down_l`, `foot_down_r`). The game keeps a
+// foot where it lands by the clip's own curve, as ALS's FootLock curves and motion matching's
+// contact labels do, rather than one height for every clip.
 //
-// A foot is down where its ball is within LOW_M of its own lowest in the clip and moves over
-// the clip's ground slower than STILL_MPS: the ground the clip's feet stand on, which for a
-// stride played in place passes under the body as its planted feet go back (the middle of the
-// foot's low ball's velocities, as pace.py measures a pace), and for a clip that stands is the
-// body.
-// A foot whose lowest is over HIGHEST_M (a jump's tuck) is never down. Spans shorter than
-// SHORTEST_S are dropped; a loop's span over its end runs on into its start, `[down, up]`
-// with `up < down`.
+// Contact is the foot's speed over the clip's ground, as motion-matching databases label it:
+// the heel (the foot bone) or the toe tip (`ball_leaf`) moving slower than STILL_MPS over the
+// ground the clip passes, which for a stride played in place goes back under the body at the
+// clip's ONE pace (the game moves the ground at a single pace: `paces`, along the way its low
+// feet go back), and for a clip that stands is the body. Height is only a loose gate, LOOSE_M
+// over that point's own lowest in the clip: a toe-off rolls the ball up 2.5-5 cm while it is
+// nearly still. A foot whose toe tip's lowest is over HIGHEST_M (a jump's tuck) never stands;
+// plants shorter than SHORTEST_S are dropped; a loop's plant over its end runs on into its
+// start (`[down, up]` with `up < down`).
+//
+// Each plant's skate (how far its standing point goes over the clip's ground from where it
+// landed) is reported. A plant that skates past SKATE_M is split there (it lands again), as a
+// lock held on would pull the foot across the ground from the clip's; a stride (a clip with a
+// pace) that skates so is a fault, and so is a walk (a pace under WALK_MPS) with a moment
+// neither foot stands: a walk always has one down. Faults are printed (`✗`) and fail --check.
 //
 // Written into the glTF extras beside the paces (`{"markers": {"Jog_Fwd_Loop": {"length_s":
-// 0.75, "foot_down_l": [[0.68, 0.12]], "foot_down_r": [[0.3, 0.5]]}}}`), the game reads them
-// as it reads the paces (`terra_walker::feet::markers`). Run after a body file is exported
-// (build_bodies.sh, clip.ts).
+// 0.75, "rate": 30, "lock_l": [1, 1, ...], "lock_r": [...], "foot_down_l": [[0.68, 0.12]],
+// "foot_down_r": [[0.3, 0.5]]}}}`), the game reads them as it reads the paces
+// (`terra_walker::feet::markers`). Run after a body file is exported (build_bodies.sh, clip.ts).
 //
 //   node tools/characters/markers.ts assets/models/character/base.glb assets/models/character/fight.glb
 //   node tools/characters/markers.ts FILE.glb... [--print] [--check]
 //
-// --print lists each clip's spans; --check writes nothing and fails if a file's markers are
-// not what it bakes now. Node 22.18 or later; no dependencies.
+// --print lists each clip's plants and skate; --check writes nothing and fails if a file's
+// markers are not what it bakes now. Either fails a clip that skates. Node 22.18 or later; no
+// dependencies.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { Glb, posed, type V3 } from "./glb.ts";
 
-/** A ball this near its lowest in the clip may be down. */
-export const LOW_M = 0.025;
-/** A ball moving slower than this over the clip's ground is down. */
-export const STILL_MPS = 0.8;
-/** A foot whose lowest is higher than this over the body's ground is never down. */
+/** A point moving slower than this over the clip's ground stands on it. */
+export const STILL_MPS = 0.5;
+/** ...or than this share of the clip's pace, if more. */
+export const STILL_SHARE = 0.2;
+/** A point this near its own lowest in the clip may stand: the loose height gate. */
+export const LOOSE_M = 0.07;
+/** A foot whose toe tip's lowest is higher than this over the body's ground never stands. */
 export const HIGHEST_M = 0.12;
-/** A down span shorter than this is a foot passing low, not a plant. */
+/** A plant starts this far back from where the foot goes still while it is this near its lowest. */
+export const TOUCH_S = 0.15;
+export const TOUCH_M = 0.04;
+/** A plant shorter than this is a foot passing low, not a plant. */
 export const SHORTEST_S = 0.05;
-/** Low balls moving slower than this together stand still: the clip does not travel. */
+/** The lock curve falls from 1 to 0 over this long once a plant ends. */
+export const RAMP_S = 0.1;
+/** A plant whose standing point goes further than this over the clip's ground fails the clip. */
+export const SKATE_M = 0.06;
+/** A stride slower than this is a walk: one foot or the other is always down. */
+export const WALK_MPS = 2.0;
+/** Lock curve samples a second. */
+export const RATE = 60;
+/** Low feet going back slower than this stand still: the clip does not travel. */
 const TRAVELS_MPS = 0.3;
 /** A clip loops when each ball is this near where it started at its end. */
 const LOOP_M = 0.01;
 const FPS = 60;
 /** A frame's velocity is over this many frames either side. */
 const SPREAD = 2;
-export const FEET = ["ball_l", "ball_r"] as const;
+/** Each foot's heel and toe tip, left then right. */
+export const FEET = [
+  ["foot_l", "ball_leaf_l"],
+  ["foot_r", "ball_leaf_r"],
+] as const;
 export const NAMES = ["foot_down_l", "foot_down_r"] as const;
 
 export type Span = [number, number];
-export type Markers = { length_s: number; foot_down_l: Span[]; foot_down_r: Span[] };
+export type Markers = {
+  length_s: number;
+  rate: number;
+  lock_l: number[];
+  lock_r: number[];
+  foot_down_l: Span[];
+  foot_down_r: Span[];
+};
+/** One foot's bake: its curve at FPS, its plants as frame runs, its worst plant's skate before
+ * a plant was split, and how many it was split. */
+export type Foot = { lock: number[]; runs: [number, number][]; skate_m: number; splits: number };
 
-const round = (x: number) => Math.round(x * 1000) / 1000;
+const round = (x: number, by = 1000) => Math.round(x * by) / by;
 
-/** One foot's down spans from its ball's path sampled at `fps` (y up, the body's ground at 0),
- * the clip's `ground` velocity (x, z), and whether the clip loops. */
-export function spans(path: V3[], fps: number, ground: [number, number], loops: boolean): Span[] {
+/** A point's velocity (x, z) at every frame over SPREAD frames either side: a loop's first and
+ * last frames are one pose, so it wraps past them; a clip played once stops at its ends. */
+function velocities(path: V3[], fps: number, loops: boolean): [number, number][] {
   const n = path.length;
-  if (n < 2) return [];
-  const lowest = Math.min(...path.map((p) => p[1]));
-  if (lowest > HIGHEST_M) return [];
-  // A frame's velocity over SPREAD frames either side (a clip keyed at 24 or 30 a second and
-  // sampled at 60 jerks frame to frame); a loop's first and last frames are one pose, so it
-  // wraps past them, and a clip played once stops at its ends.
   const at = (i: number) => (loops ? path[(((i % (n - 1)) + n - 1) % (n - 1))] : path[Math.min(n - 1, Math.max(0, i))]);
-  const down = path.map((p, i) => {
+  return path.map((_, i) => {
     const [was, now] = [at(i - SPREAD), at(i + SPREAD)];
     const span = loops ? 2 * SPREAD : Math.min(n - 1, i + SPREAD) - Math.max(0, i - SPREAD);
-    const v = [((now[0] - was[0]) * fps) / span - ground[0], ((now[2] - was[2]) * fps) / span - ground[1]];
-    return p[1] <= lowest + LOW_M && Math.hypot(v[0], v[1]) < STILL_MPS;
+    return [((now[0] - was[0]) * fps) / span, ((now[2] - was[2]) * fps) / span];
   });
-  // Runs of down frames, as frame ranges [first, last].
-  const runs: [number, number][] = [];
+}
+
+/** One foot from its heel's and toe tip's paths sampled at `fps` (y up, the body's ground at
+ * 0), the clip's `ground` velocity (x, z), and whether the clip loops. */
+export function foot(heel: V3[], toe: V3[], fps: number, ground: [number, number], loops: boolean): Foot {
+  const n = toe.length;
+  const none: Foot = { lock: new Array(n).fill(0), runs: [], skate_m: 0, splits: 0 };
+  if (n < 2) return none;
+  const lowest = (path: V3[]) => Math.min(...path.map((p) => p[1]));
+  if (lowest(toe) > HIGHEST_M) return none;
+  // Each frame, the velocity over the clip's ground of the slower of the points that may stand
+  // (none where neither may).
+  const points = [heel, toe].map((path) => ({ path, low: lowest(path) + LOOSE_M, v: velocities(path, fps, loops) }));
+  const slipping = toe.map((_, i) => {
+    const each = points.filter(({ path, low }) => path[i][1] <= low).map(({ v }): [number, number] => [v[i][0] - ground[0], v[i][1] - ground[1]]);
+    return each.sort((a, b) => Math.hypot(...a) - Math.hypot(...b))[0];
+  });
+  const slip = slipping.map((v) => (v ? Math.hypot(...v) : Infinity));
+  // How far a plant's standing point goes over the ground at most from where it landed.
+  const slid = (frames: number[]) => {
+    let [x, z, most] = [0, 0, 0];
+    for (const i of frames) {
+      x += slipping[i]![0] / fps;
+      z += slipping[i]![1] / fps;
+      most = Math.max(most, Math.hypot(x, z));
+    }
+    return most;
+  };
+  // Faster strides land and roll off with more give: the threshold grows with the pace.
+  const still = Math.max(STILL_MPS, STILL_SHARE * Math.hypot(ground[0], ground[1]));
+  const down = slip.map((s) => s < still);
+  // Runs of down frames, as frame ranges [first, last] (last may pass n - 1 over a loop's end).
+  let runs: [number, number][] = [];
   for (let i = 0; i < n; i++) {
     if (!down[i]) continue;
     if (runs.length && runs.at(-1)![1] === i - 1) runs.at(-1)![1] = i;
     else runs.push([i, i]);
   }
   // A loop's last frame is its first: a run to its end goes on into its start.
+  if (loops && runs.length === 1 && runs[0][0] === 0 && runs[0][1] >= n - 2) {
+    return { lock: new Array(n).fill(1), runs: [[0, n - 1]], skate_m: round(slid([...Array(n - 1).keys()])), splits: 0 };
+  }
   if (loops && runs.length > 1 && runs[0][0] === 0 && runs.at(-1)![1] >= n - 2) {
     const last = runs.pop()!;
     runs[0] = [last[0], runs[0][1] + n - 1];
-  } else if (loops && runs.length === 1 && runs[0][0] === 0 && runs[0][1] >= n - 2) {
-    return [[0, round((n - 1) / fps)]];
   }
-  const length = (n - 1) / fps;
-  return runs
-    .filter(([a, b]) => (b - a) / fps >= SHORTEST_S)
-    .map(([a, b]): Span => [round(a / fps), round((b / fps) % (length + 1e-9))]);
+  runs = runs.filter(([a, b]) => (b - a) / fps >= SHORTEST_S);
+  const wrap = (i: number) => (loops ? (((i % (n - 1)) + n - 1) % (n - 1)) : i);
+  // A plant whose standing point has gone SKATE_M from where it landed ends there and lands
+  // again: a lock held on would pull the foot across the ground from the clip's.
+  let skate = 0;
+  let splits = 0;
+  const plants: [number, number][] = [];
+  for (const [a, b] of runs) {
+    skate = Math.max(skate, slid([...Array(b - a + 1).keys()].map((k) => wrap(a + k))));
+    let [x, z, from] = [0, 0, a];
+    for (let i = a; i <= b; i++) {
+      x += slipping[wrap(i)]![0] / fps;
+      z += slipping[wrap(i)]![1] / fps;
+      if (Math.hypot(x, z) > SKATE_M && i > from) {
+        plants.push([from, i - 1]);
+        [x, z, from] = [0, 0, i];
+        splits++;
+      }
+    }
+    plants.push([from, b]);
+  }
+  // A plant starts at touchdown: back from where the foot goes still, while its heel or toe
+  // tip is within TOUCH_M of its lowest (a heel strike skims in before it stops), TOUCH_S at
+  // most and never into the plant before, so the game locks it where it lands.
+  const touching = (i: number) => heel[wrap(i)][1] <= lowest(heel) + TOUCH_M || toe[wrap(i)][1] <= lowest(toe) + TOUCH_M;
+  for (let k = 0; k < plants.length; k++) {
+    const [a, b] = plants[k];
+    const before = k > 0 ? plants[k - 1][1] : loops ? plants.at(-1)![1] - (n - 1) : -1;
+    let from = a;
+    while (from - 1 > before + 1 && a - (from - 1) <= TOUCH_S * fps && (loops || from - 1 >= 0) && touching(from - 1)) from--;
+    plants[k] = from < 0 ? [from + n - 1, b + n - 1] : [from, b];
+  }
+  const lock = new Array(n).fill(0);
+  for (const [a, b] of plants) {
+    for (let i = a; i <= b; i++) lock[wrap(i)] = 1;
+    // Falling to 0 over RAMP_S as the foot leaves, so the game eases it from the lock to the
+    // clip while it lifts rather than snapping it there (or sliding it while on the ground).
+    const ramp = RAMP_S * fps;
+    for (let k = 1; k < ramp && (loops || b + k < n); k++) lock[wrap(b + k)] = Math.max(lock[wrap(b + k)], 1 - k / ramp);
+  }
+  if (loops) lock[n - 1] = lock[0];
+  return { lock, runs: plants, skate_m: round(skate), splits };
 }
 
-/** The middle of a low ball's velocities (x, z), the ground a stride played in place stands
- * it on; zero for a clip that does not travel. A foot's own, as a made stride's feet may go
- * back a little faster or slower than each other: its plant is where it goes back steadily. */
-export function groundOf(path: V3[], fps: number): [number, number] {
+/** The ground a stride played in place stands its feet on (x, z): the middle of its low toe
+ * tips' velocities, both feet's together, scaled to the clip's one pace where it has one, so
+ * the feet are judged on the ground the game passes under them; zero for a clip that does not
+ * travel. */
+export function groundOf(toes: V3[][], fps: number, pace?: number): [number, number] {
   const vs: [number, number][] = [];
-  const lowest = Math.min(...path.map((p) => p[1]));
-  for (let i = 1; i < path.length; i++)
-    if (path[i][1] <= lowest + 0.05) vs.push([(path[i][0] - path[i - 1][0]) * fps, (path[i][2] - path[i - 1][2]) * fps]);
+  for (const path of toes) {
+    const lowest = Math.min(...path.map((p) => p[1]));
+    for (let i = 1; i < path.length; i++)
+      if (path[i][1] <= lowest + 0.05) vs.push([(path[i][0] - path[i - 1][0]) * fps, (path[i][2] - path[i - 1][2]) * fps]);
+  }
   if (!vs.length) return [0, 0];
   const mid = (xs: number[]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)];
   const g: [number, number] = [mid(vs.map((v) => v[0])), mid(vs.map((v) => v[1]))];
-  return Math.hypot(g[0], g[1]) < TRAVELS_MPS ? [0, 0] : g;
+  const speed = Math.hypot(g[0], g[1]);
+  if (speed < TRAVELS_MPS) return [0, 0];
+  const by = pace === undefined ? 1 : pace / speed;
+  return [g[0] * by, g[1] * by];
 }
 
-/** Every clip's markers in a body file. */
-export function bake(body: Glb): Record<string, Markers> {
-  const balls = FEET.map((name) => body.named(name));
-  if (balls.some((b) => b < 0)) return {};
-  const out: Record<string, Markers> = {};
+/** A foot's curve resampled from FPS to RATE. */
+const resampled = (lock: number[], fps: number, end: number) =>
+  Array.from({ length: Math.round(end * RATE) + 1 }, (_, i) => round(lock[Math.min(lock.length - 1, Math.round((i / RATE) * fps))], 100));
+
+export type Baked = { markers: Markers; skate_m: [number, number]; splits: number; neither_s: number; pace?: number };
+
+/** Every clip's bake in a body file: its markers, each foot's worst skate, its splits, how long
+ * neither foot stands, and its pace. */
+export function bake(body: Glb): Record<string, Baked> {
+  const points = FEET.map((pair) => pair.map((name) => body.named(name)));
+  if (points.flat().some((b) => b < 0)) return {};
+  const paces: Record<string, number> = (body.gltf.nodes.find((n: { extras?: { paces?: unknown } }) => n.extras?.paces) as { extras: { paces: Record<string, number> } } | undefined)?.extras.paces ?? {};
+  const out: ReturnType<typeof bake> = {};
   for (const name of body.clipNames()) {
     const clip = body.clip(name)!;
     const n = Math.max(1, Math.round(clip.end * FPS));
-    const paths: V3[][] = [[], []];
+    const paths: V3[][][] = points.map((pair) => pair.map(() => []));
     for (let i = 0; i <= n; i++) {
       const pose = posed(body, clip, (i / n) * clip.end);
-      balls.forEach((b, side) => paths[side].push(pose[b].t));
+      points.forEach((pair, side) => pair.forEach((p, k) => paths[side][k].push(pose[p].t)));
     }
     const fps = n / Math.max(clip.end, 1e-6);
-    const loops = paths.every((path) => Math.hypot(...path[0].map((x, k) => x - path.at(-1)![k])) < LOOP_M);
-    const [l, r] = paths.map((path) => spans(path, fps, groundOf(path, fps), loops));
-    out[name] = { length_s: round(clip.end), foot_down_l: l, foot_down_r: r };
+    const loops = paths.every(([, toe]) => Math.hypot(...toe[0].map((x, k) => x - toe.at(-1)![k])) < LOOP_M);
+    const ground = groundOf(
+      paths.map(([, toe]) => toe),
+      fps,
+      paces[name],
+    );
+    const [l, r] = paths.map(([heel, toe]) => foot(heel, toe, fps, ground, loops));
+    const span = (runs: [number, number][]): Span[] => runs.map(([a, b]) => [round(a / fps), round((b > n - 1 ? b - (n - 1) : b) / fps)]);
+    // How long neither foot stands: a walk always has one down.
+    const neither = l.lock.filter((x, i) => x <= 0 && r.lock[i] <= 0).length - (loops && l.lock[0] <= 0 && r.lock[0] <= 0 ? 1 : 0);
+    out[name] = {
+      markers: {
+        length_s: round(clip.end),
+        rate: RATE,
+        lock_l: resampled(l.lock, fps, clip.end),
+        lock_r: resampled(r.lock, fps, clip.end),
+        foot_down_l: span(l.runs),
+        foot_down_r: span(r.runs),
+      },
+      skate_m: [l.skate_m, r.skate_m],
+      splits: l.splits + r.splits,
+      pace: paces[name],
+      neither_s: round(Math.max(0, neither) / fps),
+    };
   }
   return out;
 }
@@ -146,21 +278,35 @@ export function written(file: string, markers: Record<string, Markers>): Buffer 
   return Buffer.concat([head, json, rest]);
 }
 
-function show(clip: string, m: Markers) {
-  const each = NAMES.map((k) => `${k.slice(-1)} ${m[k].map(([a, b]) => `${a.toFixed(2)}-${b.toFixed(2)}`).join(" ") || "-"}`);
-  console.log(`  ${clip.padEnd(22)} ${m.length_s.toFixed(2)} s  ${each.join("  ")}`);
+function show(clip: string, b: Baked) {
+  const m = b.markers;
+  const each = NAMES.map((k, side) => `${k.slice(-1)} ${m[k].map(([a, z]) => `${a.toFixed(2)}-${z.toFixed(2)}`).join(" ") || "-"} skate ${(b.skate_m[side] * 100).toFixed(1)} cm`);
+  console.log(`  ${clip.padEnd(22)} ${m.length_s.toFixed(2)} s  ${each.join("  ")}  neither ${b.neither_s.toFixed(2)} s${b.splits ? `  split ${b.splits}` : ""}`);
 }
 
-/** Bakes `file`'s markers into it (`write`) or only compares: its clips' count, and whether
- * the markers it carries were already what it bakes. */
-export function bakeFile(file: string, write = true, print = false): { count: number; same: boolean } {
+/** What fails a clip's bake: a stride that skates, a walk with neither foot down. */
+export function faults(clip: string, b: Baked): string[] {
+  if (b.pace === undefined) return [];
+  const out: string[] = [];
+  if (b.splits) out.push(`${clip} skates ${b.skate_m.map((s) => (s * 100).toFixed(1)).join("/")} cm a plant (over ${SKATE_M * 100})`);
+  if (b.pace < WALK_MPS && b.neither_s > 0) out.push(`${clip} walks with neither foot down ${b.neither_s.toFixed(2)} s`);
+  return out;
+}
+
+/** Bakes `file`'s markers into it (`write`) or only compares: its clips' count, whether the
+ * markers it carries were already what it bakes, the clips split, and the faults. */
+export function bakeFile(file: string, write = true, print = false): { count: number; same: boolean; split: string[]; faults: string[] } {
   const body = new Glb(file);
-  const markers = bake(body);
-  if (print) for (const [clip, m] of Object.entries(markers)) show(clip, m);
+  const baked = bake(body);
+  const markers = Object.fromEntries(Object.entries(baked).map(([clip, b]) => [clip, b.markers]));
+  if (print) for (const [clip, b] of Object.entries(baked)) show(clip, b);
+  const split = Object.entries(baked)
+    .filter(([, b]) => b.splits)
+    .map(([clip, b]) => `${clip} (${b.skate_m.map((s) => (s * 100).toFixed(1)).join("/")} cm)`);
   const had = body.gltf.nodes.map((n) => (n as { extras?: { markers?: unknown } }).extras?.markers).find(Boolean);
   const same = JSON.stringify(had) === JSON.stringify(markers);
   if (write && !same) writeFileSync(file, written(file, markers));
-  return { count: Object.keys(markers).length, same };
+  return { count: Object.keys(markers).length, same, split, faults: Object.entries(baked).flatMap(([clip, b]) => faults(clip, b)) };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -171,13 +317,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(files.length ? 0 : 1);
   }
   const check = args.includes("--check");
-  let stale = 0;
+  let failed = 0;
   for (const file of files) {
-    const { count, same } = bakeFile(file, !check, args.includes("--print"));
+    const { count, same, split, faults } = bakeFile(file, !check, args.includes("--print"));
+    if (split.length) console.log(`  ${file}: ${split.length} clips' plants split where they skate over ${SKATE_M * 100} cm: ${split.join(", ")}`);
+    for (const fault of faults) console.log(`✗ ${file}: ${fault}`);
     if (check) {
       console.log(`${same ? "✓" : "✗"} ${file}: ${count} clips${same ? "" : ", markers stale: run markers.ts on it"}`);
-      stale += same ? 0 : 1;
+      failed += same ? 0 : 1;
     } else console.log(`markers: ${file}, ${count} clips ${same ? "as baked" : "baked"}`);
+    if (check) failed += faults.length ? 1 : 0;
   }
-  process.exit(stale ? 1 : 0);
+  process.exit(failed ? 1 : 0);
 }

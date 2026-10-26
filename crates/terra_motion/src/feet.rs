@@ -17,50 +17,56 @@
 use glam::{Quat, Vec3};
 use serde::Deserialize;
 
-/// A clip's foot-down markers (D455), baked for every clip by `tools/characters/markers.ts`
-/// into its file's glTF extras: each foot's planted phases, `[down, up]` seconds into the clip
-/// (`up < down` for a span over a loop's end), where its ball stands on the ground the clip
-/// strides on, judged against the clip's own lowest and its ball's speed over that ground. Data
-/// shipped with the clips (D136), as ALS- and Lyra-era rigs bake foot-lock curves, so a
-/// fighter's stance (its ball 3-4 cm up) and a jog's rolling foot (5.6-6.5 cm) are each told by
-/// their own clip rather than one height. Named as Unreal's sync markers (foot down L/R), which
-/// sync groups will use too.
+/// A clip's foot locks (D455), baked for every clip by `tools/characters/markers.ts` into its
+/// file's glTF extras: each foot's lock curve, `rate` samples a second through the clip, 1
+/// while the foot stands on the ground the clip strides on (its heel or toe tip still over the
+/// ground passing at the clip's one pace, its height only a loose gate), falling to 0 as it
+/// rolls off its toe; and its plants as `[down, up]` seconds (`up < down` over a loop's end),
+/// named as Unreal's sync markers (foot down L/R), which sync groups will use. Data shipped with
+/// the clips (D136), as ALS's FootLock curves and motion matching's contact labels are.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Markers {
     pub length_s: f32,
+    pub rate: f32,
+    pub lock_l: Vec<f32>,
+    pub lock_r: Vec<f32>,
     pub foot_down_l: Vec<[f32; 2]>,
     pub foot_down_r: Vec<[f32; 2]>,
 }
 
 impl Markers {
-    /// Whether the clip has foot `side` (0 left, 1 right) down `t` seconds in; a time past the
-    /// clip's end (a clip played once, held at its end) is its end.
-    pub fn down(&self, side: usize, t: f32) -> bool {
-        let t = t.clamp(0.0, self.length_s);
-        let spans = if side == 0 {
-            &self.foot_down_l
+    /// Foot `side`'s (0 left, 1 right) lock curve `t` seconds in, between its samples; a time
+    /// past the clip's end (a clip played once, held at its end) is its end.
+    pub fn lock(&self, side: usize, t: f32) -> f32 {
+        let curve = if side == 0 {
+            &self.lock_l
         } else {
-            &self.foot_down_r
+            &self.lock_r
         };
-        spans.iter().any(|&[down, up]| {
-            if down <= up {
-                (down..=up).contains(&t)
-            } else {
-                t >= down || t <= up
-            }
-        })
+        let Some(&last) = curve.last() else {
+            return 0.0;
+        };
+        let at = t.clamp(0.0, self.length_s) * self.rate;
+        let i = at as usize;
+        if i + 1 >= curve.len() {
+            return last;
+        }
+        let s = at - i as f32;
+        curve[i] + (curve[i + 1] - curve[i]) * s
     }
 }
 
-/// A foot stands when at least this share of the weight playing has it down (`Posed::down`).
-pub const DOWN_SHARE: f32 = 0.5;
+/// A lock curve this near 1 is at 1: the foot stands and may be locked again.
+pub const FULL: f32 = 0.99;
 
 /// A locked foot this far from the clip's steps when the other is down; this far, at once.
 pub const REACH_M: f32 = 0.22;
 pub const MOST_M: f32 = 0.38;
-/// A locked foot turned this far from the clip's steps when the other is down; this far, at once.
-pub const TURN_DEG: f32 = 35.0;
+/// A locked foot turned this far about the up from the clip's steps when the other is down
+/// (turn in place: Lyra's and ALS's turn-in-place thresholds, about 45 deg); this far, at once.
+/// Yaw alone: the clip's foot rolling heel to toe under a lock is no turn.
+pub const TURN_DEG: f32 = 45.0;
 pub const MOST_TURN_DEG: f32 = 70.0;
 /// A body standing still this long with a foot this far from its clip's settles it (a settle
 /// step), so a stance ends as its clip stands.
@@ -79,7 +85,9 @@ pub const STEP_S: f32 = 0.16;
 pub const STEP_UP_M: (f32, f32) = (0.05, 0.09);
 /// Share of a step by which the foot is over where it lands; the rest it comes down.
 const OVER: f32 = 0.7;
-/// A blend back to the clip, when it lifts the foot or the lock is let go.
+/// The lock weight falls from 1 to 0 no faster than this (the bake's ramp, markers.ts RAMP_S).
+pub const RELEASE_S: f32 = 0.1;
+/// A blend back to the clip, when the lock is let go (a body down, a roll) or a step is cut.
 pub const BLEND_S: f32 = 0.12;
 
 /// A foot's place and turn in the world (its ankle, as the skeleton's foot bone has it).
@@ -95,6 +103,9 @@ enum State {
     Free,
     /// Locked where it landed.
     Planted(Pose),
+    /// Locked where it landed while the lock weight falls with the clip's curve: the foot eased
+    /// from the lock back to the clip by it (ALS's foot lock).
+    Releasing(Pose),
     /// Stepping from a lock to land under the clip's foot, `s` of the way.
     Stepping {
         from: Pose,
@@ -110,9 +121,9 @@ enum State {
 pub struct Posed {
     /// The foot where the clip puts it, in the world.
     pub pose: Pose,
-    /// What share of the weight of the clips playing has the foot down by their markers
-    /// (`Markers::down`), 0 to 1.
-    pub down: f32,
+    /// The clips' lock curve for the foot (`Markers::lock`), weighed by the weight of each
+    /// clip playing on the legs, 0 to 1.
+    pub lock: f32,
     /// The world's up.
     pub up: Vec3,
     /// How fast the clip moves the foot in the body's own frame, metres a second.
@@ -124,7 +135,16 @@ pub struct Posed {
     /// The body came down this frame: a foot the clip has low takes its weight however the
     /// clip swings it (a landing at a run, its foot still blending from the fall).
     pub landing: bool,
+    /// The clip has the foot on the ground (its ankle within `LOW_ANKLE_M` of the body's
+    /// ground), which a landing reads.
+    pub low: bool,
+    /// The ball of the foot in the foot's own frame, which a locked foot keeps still.
+    pub ball: Vec3,
 }
+
+/// A clip's ankle this near the body's ground has the foot on it (a flat foot's ankle stands
+/// about 10 cm up).
+pub const LOW_ANKLE_M: f32 = 0.15;
 
 /// One foot's lock.
 #[derive(Clone, Copy, Debug)]
@@ -133,6 +153,11 @@ pub struct Foot {
     last: Option<Vec3>,
     shown: Option<Pose>,
     still_s: f32,
+    /// The lock weight: falls with the clips' curve, and rises again only once it is back at 1
+    /// (ALS's FootLock alpha), so a foot let go is not taken again mid-roll.
+    alpha: f32,
+    /// What last kept the foot free while the clip had it low, as the fight log writes it.
+    why: &'static str,
 }
 
 impl Default for Foot {
@@ -142,6 +167,8 @@ impl Default for Foot {
             last: None,
             shown: None,
             still_s: 0.0,
+            alpha: 0.0,
+            why: "",
         }
     }
 }
@@ -157,11 +184,12 @@ impl Foot {
         matches!(self.state, State::Stepping { .. } | State::Blending { .. })
     }
 
-    /// How it is kept, in a word: free, planted, stepping or blending.
+    /// How it is kept, in a word: free, planted, releasing, stepping or blending.
     pub fn state(&self) -> &'static str {
         match self.state {
             State::Free => "free",
             State::Planted(_) => "planted",
+            State::Releasing(_) => "releasing",
             State::Stepping { .. } => "stepping",
             State::Blending { .. } => "blending",
         }
@@ -170,6 +198,18 @@ impl Foot {
     /// Locked where it landed.
     pub fn planted(&self) -> bool {
         matches!(self.state, State::Planted(_))
+    }
+
+    /// The lock weight, 0 to 1.
+    pub fn alpha(&self) -> f32 {
+        self.alpha
+    }
+
+    /// Why the foot was last left free while its clips' curve had it locked (`"off"`: the body
+    /// down, aloft or let go; `"swing"`: the clip's foot too fast; `"rising"`: the curve not
+    /// yet back at 1), or `""`.
+    pub fn why(&self) -> &'static str {
+        self.why
     }
 
     /// Where the foot is this frame, `dt` seconds on, from the clip's foot; `other_moving`
@@ -195,18 +235,62 @@ impl Foot {
             };
         }
         let flat = |a: Vec3, b: Vec3| (a - b).reject_from(posed.up).length();
-        let low = posed.down >= DOWN_SHARE;
-        let lifted = !low;
+        // The lock weight falls with the curve, no faster than RELEASE_S takes from 1 to 0 (a
+        // curve that drops at once, a fade's clips coming in, still eases the foot back), and
+        // rises only once it is back at 1. A body coming down stands a low foot at once.
+        let curve = posed.lock.clamp(0.0, 1.0);
+        if curve >= FULL {
+            self.alpha = curve;
+        } else if curve < self.alpha {
+            self.alpha = curve.max(self.alpha - dt / RELEASE_S);
+        }
+        if posed.landing && posed.low && !posed.off {
+            self.alpha = 1.0;
+        }
+        let full = self.alpha >= FULL;
         let gone = posed.off;
-        let stands = low && !gone && (posed.swing_mps < SWING_MPS || posed.landing);
+        let swings = posed.swing_mps >= SWING_MPS && !posed.landing;
+        let stands = full && !gone && !swings;
+        self.why = match () {
+            _ if curve < FULL || stands => "",
+            _ if gone => "off",
+            _ if swings => "swing",
+            _ => "rising",
+        };
+        if let State::Releasing(lock) = self.state {
+            if gone {
+                let from = self.shown.unwrap_or(lock);
+                self.state = State::Blending { from, s: 0.0 };
+            } else if stands {
+                // Back at 1 before it was let go: locked again where it is shown.
+                self.state = State::Planted(self.shown.unwrap_or(lock));
+            } else if self.alpha <= 0.0 {
+                self.state = State::Free;
+                return clip;
+            } else {
+                // Across by the lock weight, up as the clip lifts it at once and over an arc as
+                // high as half the way it goes (a step's, at most): a foot that went across
+                // while still on the ground would slide.
+                let across = clip.at.lerp(lock.at, self.alpha);
+                let arc = (flat(lock.at, clip.at) * 0.5).min(STEP_UP_M.1)
+                    * libm::sinf(core::f32::consts::PI * (1.0 - self.alpha));
+                return Pose {
+                    at: across + posed.up * ((clip.at - across).dot(posed.up) + arc),
+                    turn: clip.turn.slerp(lock.turn, self.alpha),
+                };
+            }
+        }
         if let State::Planted(lock) = self.state {
             let off_by = flat(lock.at, clip.at);
-            let turned = lock.turn.angle_between(clip.turn).to_degrees();
+            let turned = yaw_deg(lock.turn, clip.turn, posed.up);
             let settle = self.still_s >= SETTLE_S && off_by > SETTLE_M;
             let urgent = posed.strained || off_by > MOST_M || turned > MOST_TURN_DEG;
             let soft = off_by > REACH_M || turned > TURN_DEG || settle;
-            if gone || lifted {
+            if gone {
                 self.state = State::Blending { from: lock, s: 0.0 };
+            } else if !full {
+                self.state = State::Releasing(lock);
+                return self.step(posed, 0.0, other_moving);
             } else if urgent || (soft && !other_moving) {
                 self.state = State::Stepping {
                     from: lock,
@@ -214,7 +298,7 @@ impl Foot {
                     land: None,
                 };
             } else {
-                return lock;
+                return held(lock, clip, posed.up, posed.ball);
             }
         }
         match self.state {
@@ -224,7 +308,7 @@ impl Foot {
                 }
                 clip
             }
-            State::Planted(lock) => lock,
+            State::Planted(lock) | State::Releasing(lock) => held(lock, clip, posed.up, posed.ball),
             State::Blending { from, s } => {
                 let s = s + dt / BLEND_S;
                 if s >= 1.0 {
@@ -245,7 +329,7 @@ impl Foot {
                 }
             }
             State::Stepping { from, s, land } => {
-                if gone || lifted {
+                if gone || !full {
                     let from = self.shown.unwrap_or(from);
                     self.state = State::Blending { from, s: 0.0 };
                     return from;
@@ -275,6 +359,37 @@ impl Foot {
             }
         }
     }
+}
+
+/// A locked foot as shown: its ball of the foot where it was locked over the ground, headed as
+/// it was, at the height and with the roll the clip has it, the ankle placed from the ball
+/// (`ball`, the ball in the foot's frame): a foot locked as its heel touches flattens and rolls
+/// off its toe as the clip does, its ball never moving across, rather than hanging where it
+/// touched. The ground itself is foot IK's (movement.md stage 4).
+fn held(lock: Pose, clip: Pose, up: Vec3, ball: Vec3) -> Pose {
+    let q = lock.turn * clip.turn.inverse();
+    let along = up * Vec3::new(q.x, q.y, q.z).dot(up);
+    let heading = Quat::from_xyzw(along.x, along.y, along.z, q.w);
+    let heading = if heading.length_squared() > 1e-8 {
+        heading.normalize()
+    } else {
+        Quat::IDENTITY
+    };
+    let turn = (heading * clip.turn).normalize();
+    let (locked, clipped) = (lock.at + lock.turn * ball, clip.at + clip.turn * ball);
+    let shown = locked + up * (clipped - locked).dot(up);
+    Pose {
+        at: shown - turn * ball,
+        turn,
+    }
+}
+
+/// How far `to` is turned from `from` about `up`, degrees (the twist of the turn between them).
+pub fn yaw_deg(from: Quat, to: Quat, up: Vec3) -> f32 {
+    let q = to * from.inverse();
+    let twist = 2.0 * libm::atan2f(Vec3::new(q.x, q.y, q.z).dot(up), q.w);
+    let wrapped = libm::remainderf(twist, core::f32::consts::TAU);
+    wrapped.abs().to_degrees()
 }
 
 /// How fast the clip moves a foot over the ground its feet stand on, metres a second, which
@@ -369,12 +484,14 @@ mod tests {
             };
             let posed = Posed {
                 pose,
-                down: 1.0,
+                lock: 1.0,
                 up: Vec3::Y,
                 swing_mps: 0.0,
                 strained: false,
                 off: false,
                 landing: false,
+                low: true,
+                ball: Vec3::ZERO,
             };
             path.push(kept.update(posed, DT, false).at);
             clip.push(pose.at);
@@ -439,24 +556,27 @@ mod tests {
         // Down by the clip's markers while its ball is low.
         let on = |pose: Pose, ball_up: f32, off: bool| Posed {
             pose,
-            down: if ball_up < 0.05 { 1.0 } else { 0.0 },
+            lock: if ball_up < 0.05 { 1.0 } else { 0.0 },
             up: Vec3::Y,
             swing_mps: 0.0,
             strained: false,
             off,
             landing: false,
+            low: true,
+            ball: Vec3::ZERO,
         };
         assert_eq!(
             foot.update(on(pose(0.0, 0.0), 0.03, false), DT, false),
             pose(0.0, 0.0)
         );
         assert!(foot.planted());
-        // The clip lifts it: it blends to the clip's foot and is free by the blend's end.
+        // The clip lifts it: it eases to the clip's foot and is free by the release's end.
         let mut last = pose(0.0, 0.0);
         for _ in 0..(BLEND_S / DT) as usize + 2 {
             last = foot.update(on(pose(0.05, 0.2), 0.2, false), DT, false);
-            // Lifted as the clip lifts it before it goes across, so it never slides.
-            assert!((last.at.y - 0.2).abs() < 1e-5, "{last:?}");
+            // Lifted as the clip lifts it (and over an arc) before it goes across, so it never
+            // slides.
+            assert!(last.at.y >= 0.2 - 1e-5, "{last:?}");
         }
         assert_eq!(last, pose(0.05, 0.2));
         assert!(!foot.planted() && !foot.moving());
@@ -530,12 +650,15 @@ mod tests {
                 };
                 let posed = Posed {
                     pose,
-                    down: if lift > 0.0 { 0.0 } else { 1.0 },
+                    // The bake's curve: 1 in the stance, falling to 0 over 0.1 s as it lifts.
+                    lock: (1.0 - (phase - 0.5).max(0.0) * cycle / 0.1).max(0.0),
                     up: Vec3::Y,
                     swing_mps: swing,
                     strained: false,
                     off: false,
                     landing: false,
+                    low: true,
+                    ball: Vec3::ZERO,
                 };
                 out[side]
                     .0
@@ -577,23 +700,109 @@ mod tests {
         assert!(swing_mps(was, was + Vec3::Y * 0.04, Vec3::ZERO, Vec3::Y, 0.01) < 1e-4);
     }
 
+    /// A foot locked as its heel touches flattens and rolls as the clip does, its ball kept
+    /// where it was locked over the ground and its heading kept.
     #[test]
-    fn a_clips_markers_have_a_foot_down_through_its_spans_and_over_a_loops_end() {
-        let markers = Markers {
-            length_s: 0.75,
-            foot_down_l: vec![[0.7, 0.1]],
-            foot_down_r: vec![[0.3, 0.5]],
+    fn a_locked_foot_takes_the_clips_height_and_roll_and_keeps_its_ball_and_heading() {
+        let ball = Vec3::new(0.0, -0.07, 0.14);
+        let lock = Pose {
+            at: Vec3::new(0.0, 0.14, 0.0),
+            turn: Quat::from_rotation_y(0.5) * Quat::from_rotation_x(-0.3),
         };
-        let left: Vec<bool> = [0.0, 0.05, 0.1, 0.2, 0.69, 0.7, 0.75]
-            .map(|t| markers.down(0, t))
-            .into();
-        assert_eq!(left, [true, true, true, false, false, true, true]);
-        let right: Vec<bool> = [0.0, 0.29, 0.3, 0.4, 0.5, 0.6]
-            .map(|t| markers.down(1, t))
-            .into();
-        assert_eq!(right, [false, false, true, true, true, false]);
+        let clip = Pose {
+            at: Vec3::new(0.08, 0.10, 0.03),
+            turn: Quat::from_rotation_y(0.2) * Quat::from_rotation_x(0.3),
+        };
+        let shown = held(lock, clip, Vec3::Y, ball);
+        let flat = |v: Vec3| Vec3::new(v.x, 0.0, v.z);
+        let (was, now) = (lock.at + lock.turn * ball, shown.at + shown.turn * ball);
+        assert!((flat(now) - flat(was)).length() < 1e-5, "{shown:?}");
+        assert!((now.y - (clip.at + clip.turn * ball).y).abs() < 1e-5);
+        assert!(yaw_deg(lock.turn, shown.turn, Vec3::Y) < 0.01);
+        let pitch = |q: Quat| (q * Vec3::Z).y;
+        assert!((pitch(shown.turn) - pitch(clip.turn)).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_feet_turn_is_its_yaw_about_the_up_not_its_roll() {
+        let yaw = Quat::from_rotation_y(50f32.to_radians());
+        let roll = Quat::from_rotation_x(40f32.to_radians());
+        assert!((yaw_deg(Quat::IDENTITY, yaw, Vec3::Y) - 50.0).abs() < 0.01);
+        assert!(yaw_deg(Quat::IDENTITY, roll, Vec3::Y) < 0.01);
+        assert!((yaw_deg(roll, yaw * roll, Vec3::Y) - 50.0).abs() < 0.5);
+        let back = Quat::from_rotation_y(-170f32.to_radians());
+        assert!((yaw_deg(yaw, back, Vec3::Y) - 140.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_clips_lock_curve_is_read_between_its_samples_and_held_at_its_end() {
+        let markers = Markers {
+            length_s: 0.1,
+            rate: 30.0,
+            lock_l: vec![1.0, 1.0, 0.5, 0.0],
+            lock_r: vec![0.0, 0.0, 0.0, 1.0],
+            ..Default::default()
+        };
+        assert!((markers.lock(0, 0.05) - 0.75).abs() < 1e-4);
+        assert_eq!(markers.lock(0, 0.0), 1.0);
         // A clip played once and held at its end stays as its end has it.
-        assert!(markers.down(0, 3.0) && !markers.down(1, 3.0));
+        assert_eq!(markers.lock(0, 3.0), 0.0);
+        assert_eq!(markers.lock(1, 3.0), 1.0);
+        assert_eq!(Markers::default().lock(0, 0.3), 0.0);
+    }
+
+    /// A planted foot is eased back to the clip by the lock weight as the curve falls; the
+    /// weight does not rise with the curve until it is back at 1, and then the foot is locked
+    /// again where it is shown, not snapped to the clip (ALS's foot lock).
+    #[test]
+    fn a_lock_lets_go_by_its_curve_and_takes_the_foot_again_only_at_one() {
+        let at = |x: f32| Pose {
+            at: Vec3::new(x, 0.1, 0.0),
+            turn: Quat::IDENTITY,
+        };
+        let posed = |x: f32, lock: f32| Posed {
+            pose: at(x),
+            lock,
+            up: Vec3::Y,
+            swing_mps: 0.0,
+            strained: false,
+            off: false,
+            landing: false,
+            low: true,
+            ball: Vec3::ZERO,
+        };
+        // A frame as long as the lock takes to fall all the way, so it follows the curve.
+        const STEP: f32 = RELEASE_S;
+        let mut foot = Foot::default();
+        assert_eq!(foot.update(posed(0.0, 1.0), STEP, false).at.x, 0.0);
+        assert!(foot.planted());
+        // The body carries the clip's foot 10 cm on: the lock holds.
+        assert_eq!(foot.update(posed(0.1, 1.0), STEP, false).at.x, 0.0);
+        // The curve falls to 0.5: halfway back to the clip.
+        let half = foot.update(posed(0.1, 0.5), STEP, false);
+        assert!((half.at.x - 0.05).abs() < 1e-4, "{half:?}");
+        // Lifted over an arc as it goes: half the way it goes, at its middle.
+        assert!((half.at.y - 0.15).abs() < 1e-4, "{half:?}");
+        // It rises to 0.8 mid-roll: the weight stays, the foot goes no further back.
+        let held = foot.update(posed(0.1, 0.8), STEP, false).at.x;
+        assert!((held - 0.05).abs() < 1e-4, "{held}");
+        assert!((foot.alpha() - 0.5).abs() < 1e-4);
+        // Back at 1: locked where it is shown.
+        assert!((foot.update(posed(0.12, 1.0), STEP, false).at.x - 0.05).abs() < 1e-4);
+        assert!(foot.planted());
+        // Falling to 0 lets it go to the clip.
+        foot.update(posed(0.12, 0.3), STEP, false);
+        assert_eq!(foot.state(), "releasing");
+        assert_eq!(foot.update(posed(0.12, 0.0), STEP, false).at.x, 0.12);
+        assert_eq!(foot.state(), "free");
+        // A curve rising from 0 does not lock it before 1, and says so while the foot is low.
+        foot.update(posed(0.12, 0.995), STEP, false);
+        assert!(foot.planted());
+        // A curve dropping to 0 at once (a fade's clips coming in) still eases it back over
+        // RELEASE_S: half a frame's time, halfway.
+        foot.update(posed(0.22, 1.0), DT, false);
+        let eased = foot.update(posed(0.22, 0.0), RELEASE_S / 2.0, false).at.x;
+        assert!((eased - 0.17).abs() < 1e-3, "{eased}");
     }
 
     #[test]

@@ -1065,11 +1065,27 @@
    "bar": {
     "at_most": 0.03
    },
-   "unit": "m, the worst planted foot's travel on the filmed course (the duel's feet sliding check)",
+   "unit": "m, the worst planted foot's travel on the filmed course, turns in place left to turn.foot (the duel's feet sliding check)",
    "source": "docs/controller.md criterion 21; movement.md stage 2; D455",
    "check": {
     "by": "film",
     "name": "feet sliding"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "turn.foot",
+   "noticed": 4,
+   "notice": "feet slide as the body turns in place",
+   "bar": {
+    "at_most": 0.03
+   },
+   "unit": "m, the worst planted foot's travel while the body turns 20 deg or more going under 0.2 m, on the filmed course (the duel's feet sliding check)",
+   "source": "docs/controller.md criterion 21; D455",
+   "check": {
+    "by": "film",
+    "name": "turn foot"
    },
    "cost": "heavy",
    "measurable": true

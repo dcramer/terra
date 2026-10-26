@@ -205,6 +205,9 @@ fn write(
             "stamina": pool.map(|pool| r(pool.left)),
             "balls": balls,
             "kept": kept.map(|kept| kept.states()),
+            "lock": kept.map(|kept| kept.locks().map(|[curve, alpha]| [r(curve), r(alpha)])),
+            "why": kept.map(|kept| kept.whys()),
+            "gated": kept.and_then(|kept| kept.gated()),
         }));
         if is_player {
             let last = bodies.last_mut().expect("just pushed");
@@ -236,6 +239,9 @@ fn write(
             "radius": null,
             "balls": balls,
             "kept": kept.map(|kept| kept.states()),
+            "lock": kept.map(|kept| kept.locks().map(|[curve, alpha]| [r(curve), r(alpha)])),
+            "why": kept.map(|kept| kept.whys()),
+            "gated": kept.and_then(|kept| kept.gated()),
         });
         walking(&mut line, motion, stepping);
         bodies.push(line);

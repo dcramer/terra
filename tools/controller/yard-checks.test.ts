@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Frame } from "../sandbox/duel/checks.ts";
-import { type Walk, over, smooth, steps, yard } from "./yard-checks.ts";
+import { type Walk, feet, over, smooth, steps, turn, yard } from "./yard-checks.ts";
 
 /// A walk east at 4.2 m/s on level ground at 0 for `n` frames; `lift(i)` raises the body,
 /// `below(i)` how far under it the figure is shown, `camera(i)` the camera's height.
@@ -86,4 +86,31 @@ test("the yard: clean, a mark given up, stuck, through the ground, the mound cli
 test("heights are over the ground as it was, between the metres logged", () => {
   assert.equal(over([0, 1, 2], [1.5, 2, 0]), 0.5);
   assert.equal(over([0, 1, 2], [9, 2, 0]), 0);
+});
+
+test("a foot sliding while the body turns in place is turn.foot's, not feet sliding's", () => {
+  // Standing still a second, turning 90 deg, its left ball sliding 10 cm on the ground; then
+  // walking on with it sliding as much.
+  const turning = (moves: boolean): Frame[] =>
+    walk(60).map((f, i) => {
+      const yaw = moves ? 0 : (Math.PI / 2) * (i / 59);
+      const body = f.fighters[0];
+      return {
+        ...f,
+        fighters: [
+          {
+            ...body,
+            feet: moves ? body.feet : [0, 0, 0],
+            facing: [Math.sin(yaw), 0, Math.cos(yaw)],
+            balls: [{ at: [(moves ? body.feet[0] : 0) + (0.1 * i) / 59, 0.03, 0.1], up: 0.03 }, null],
+          } as unknown as Frame["fighters"][number],
+        ],
+      };
+    });
+  const still = of(turning(false));
+  assert.match(turn([still]).line, /1 of 1 turning plants slid/);
+  assert.match(feet([still]).line, /0 plants, none slid/);
+  const on = of(turning(true));
+  assert.match(feet([on]).line, /1 of 1 plants slid/);
+  assert.match(turn([on]).line, /0 turning plants/);
 });
