@@ -48,6 +48,10 @@ pub struct Motion {
     pub indoors: bool,
     /// The level direction the figure faces.
     pub facing: Vec3,
+    /// Swimming (the mover's `Ground::Swimming`, D478): the figure strokes rather than walks.
+    pub swimming: bool,
+    /// The mouth under water (`mover::Body::under`): a swimmer's stroke is a dive's.
+    pub under: bool,
 }
 
 impl Motion {
@@ -59,6 +63,8 @@ impl Motion {
             airborne: 0.0,
             indoors: false,
             facing,
+            swimming: false,
+            under: false,
         }
     }
 }

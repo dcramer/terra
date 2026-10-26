@@ -215,13 +215,18 @@ def facing(src, f):
     return Vector((0.0, 0.0, 1.0)).cross(Vector((across.x, across.y, 0.0))).normalized()
 
 
-def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False):
+def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False, upright=False):
     """Frames f0 to f1 of `src` as an action called `name` on `arm`, in place and looped, each
     frame of the take `k` frames of the action. A take that travels `way` degrees to the right
     of where it faces (a strafe) is turned by its travel less that; a one-shot (`once`) by where
     its body faces at the take's start (Kimodo's ahead), and not closed into a loop. One that
     `travels` (a start, a stop) keeps its hips' travel, its root motion, which the game takes off
-    by the clip's distance curve as Lyra's distance matching does (markers.ts bakes it)."""
+    by the clip's distance curve as Lyra's distance matching does (markers.ts bakes it). One
+    `upright` lies face down in the take (a swimmer's stroke: Kimodo's capture holds no water, so
+    it strokes lying on the floor) and is stood up about its hips, its head-ward way up and its
+    belly our front, at the hips' standing height: the game lays it along its stroke
+    (terra_walker::swim), so a tread and a stroke blend upright, as Unreal's swimmers are tilted
+    by their pitch rather than authored lying."""
     scene = bpy.context.scene
     src_rest = {s: world_rest(src, s) for s in MAP}
     dst_rest = {d: world_rest(arm, d) for d in MAP.values()}
@@ -244,14 +249,18 @@ def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False):
         ahead = facing(src, f0)
     turn = Matrix.Rotation(math.atan2(ahead.x, -ahead.y), 4, "Z")
     per_frame = travel * 0.0 if travels else travel / (f1 - f0)
+    # Facing -Y, a body lying face down has its head at -Y: turned -90 deg about +X, head up.
+    stand = Matrix.Rotation(math.radians(-90.0 if upright else 0.0), 4, "X")
     action = bpy.data.actions.new(name)
     arm.animation_data_create()
     arm.animation_data.action = action
     order = [bone.name for bone in arm.data.bones if bone.name in dst_rest]   # parents first
     for f in range(f0, f1 + 1):
         scene.frame_set(f)
-        worlds = {d: turn.to_quaternion() @ (src.matrix_world @ src.pose.bones[s].matrix).to_quaternion() @ src_rest[s].inverted() @ dst_rest[d] for s, d in MAP.items()}
+        worlds = {d: stand.to_quaternion() @ turn.to_quaternion() @ (src.matrix_world @ src.pose.bones[s].matrix).to_quaternion() @ src_rest[s].inverted() @ dst_rest[d] for s, d in MAP.items()}
         hips = turn @ (src.matrix_world @ src.pose.bones["Hips"].head - per_frame * (f - f0) - Vector((a.x, a.y, 0.0)))
+        if upright:
+            hips = stand @ (hips - Vector((0.0, 0.0, a.z))) + Vector((0.0, 0.0, src_hips.z))
         for d in order:
             pb = arm.pose.bones[d]
             m = Matrix.LocRotScale(hips * scale if d == "pelvis" else (arm.matrix_world @ pb.matrix).translation, worlds[d], None)
@@ -513,7 +522,8 @@ def main():
         k = 1.0
         if entry.get("still") or entry.get("once"):
             k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
-        action = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False))
+        action = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False),
+                          entry.get("upright", False))
         if entry.get("way"):
             # Which way the take went, measured: its travel from where its hips face.
             scene = bpy.context.scene

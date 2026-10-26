@@ -35,6 +35,7 @@ pub mod shake;
 pub mod skinning;
 pub mod stepping;
 pub mod strap;
+pub mod swim;
 pub mod swing;
 pub mod underfoot;
 pub mod walker;

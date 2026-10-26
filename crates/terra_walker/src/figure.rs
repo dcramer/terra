@@ -27,6 +27,9 @@ use terra_world::loading::Loading;
 pub const TEMPLATE: &str = "male";
 /// How long one animation takes to give way to the next.
 const BLEND: Duration = Duration::from_millis(180);
+/// How long a swim's clip takes to give way, wading into a swim and out, or a stroke to a
+/// tread: as long as the body takes to lie down along its stroke (`swim::Lie`).
+const SWIM_BLEND: Duration = Duration::from_millis(400);
 /// The figure's clips: the base's and the sword fight's, on the base's skeleton.
 pub const CLIPS: &str = "models/character/fight.glb";
 
@@ -48,6 +51,8 @@ enum Doing {
     Flinch,
     Roll,
     Guard,
+    /// Swimming (`swim`): treading water, a stroke at the surface or a dive.
+    Swim(crate::swim::Swim),
     /// Playing what a layer above asked (`Acting`).
     Acting,
 }
@@ -66,8 +71,17 @@ impl Doing {
             Doing::Flinch => "Hit_Chest",
             Doing::Roll => "Roll",
             Doing::Guard => "Sword_Idle",
+            Doing::Swim(swim) => swim.clip(),
             Doing::Acting => "Fight_Guard",
         }
+    }
+
+    /// Whether it strokes through the water (not treading it).
+    fn strokes(self) -> bool {
+        matches!(
+            self,
+            Doing::Swim(crate::swim::Swim::Stroke | crate::swim::Swim::Dive)
+        )
     }
 
     /// Whether it plays once and holds, rather than looping.
@@ -194,6 +208,12 @@ impl Acting {
     }
 }
 
+/// On a player: the clip its figure shows (the one coming in), for the walk's record.
+#[derive(Component, Default, Debug)]
+pub struct Shows {
+    pub clip: String,
+}
+
 /// On a player who has been given a figure.
 #[derive(Component)]
 struct Figured;
@@ -206,6 +226,7 @@ pub fn plugin(app: &mut App) {
                 prepare.run_if(not(resource_exists::<Moves>)),
                 stand.run_if(resource_exists::<Moves>),
                 animate,
+                crate::swim::lay.after(crate::stepping::show),
             )
                 .chain(),
         )
@@ -263,7 +284,9 @@ fn stand(
         return;
     };
     for player in &players {
-        commands.entity(player).insert(Figured);
+        commands
+            .entity(player)
+            .insert((Figured, Shows::default(), crate::swim::Lie::default()));
         commands
             .spawn((
                 Name::new("Figure"),
@@ -345,7 +368,18 @@ fn dress(
 fn animate(
     moves: Option<Res<Moves>>,
     time: Res<Time>,
-    players: Query<(&Motion, &Transform, &Stance, Has<Downed>, Option<&Acting>), With<Player>>,
+    mut players: Query<
+        (
+            &Motion,
+            &Transform,
+            &Stance,
+            Has<Downed>,
+            Option<&Acting>,
+            Option<&mut crate::swim::Lie>,
+            Option<&mut Shows>,
+        ),
+        With<Player>,
+    >,
     mut figures: Query<(
         &mut AnimationPlayer,
         &mut AnimationTransitions,
@@ -357,9 +391,12 @@ fn animate(
 ) {
     let Some(moves) = moves else { return };
     for (mut animator, mut transitions, mut animated, place) in &mut figures {
-        let Ok((motion, body, stance, downed, acting)) = players.get(animated.player) else {
+        let Ok((motion, body, stance, downed, acting, lie, shows)) =
+            players.get_mut(animated.player)
+        else {
             continue;
         };
+        let swim = crate::swim::swim(motion, animated.doing.strokes());
         let at = body.translation;
         let velocity = shown_velocity(
             motion.velocity,
@@ -374,14 +411,22 @@ fn animate(
             .filter(|_| !downed);
         let doing = match act {
             Some(_) => Doing::Acting,
-            None => doing(velocity.length(), motion.airborne, stance, downed),
+            None => doing(velocity.length(), motion.airborne, stance, downed, swim),
         };
+        if let Some(mut lie) = lie {
+            lie.asked = match doing {
+                Doing::Swim(swim) => crate::swim::lie(motion, Some(swim)),
+                _ => 0.0,
+            };
+        }
         let asked = acting.map_or(0, |acting| acting.asked);
         if animated.doing != doing || (act.is_some() && animated.applied != asked) {
+            let swims = matches!(doing, Doing::Swim(_)) || matches!(animated.doing, Doing::Swim(_));
             animated.doing = doing;
             animated.applied = asked;
             let (clip, once, from_s, blend) = match act {
                 Some(act) => (act.clip.as_str(), act.once, act.from_s, act.blend),
+                None if swims => (doing.clip(), doing.once(), 0.0, SWIM_BLEND),
                 None => (doing.clip(), doing.once(), 0.0, BLEND),
             };
             let hold = act
@@ -454,6 +499,11 @@ fn animate(
         let Some((name, copy, held)) = animated.playing.clone() else {
             continue;
         };
+        if let Some(mut shows) = shows
+            && shows.clip != name
+        {
+            shows.clip.clone_from(&name);
+        }
         let main = moves.clips[&name].of(copy, held);
         let Some(playing) = animator.animation_mut(main) else {
             continue;
@@ -533,9 +583,17 @@ fn shown_velocity(velocity: Vec3, from: Option<Vec3>, to: Vec3, up: Vec3, dt: f3
 }
 
 /// What a player is doing, as their figure shows it, at a speed over the ground.
-fn doing(speed: f32, airborne: f32, stance: &Stance, downed: bool) -> Doing {
+fn doing(
+    speed: f32,
+    airborne: f32,
+    stance: &Stance,
+    downed: bool,
+    swim: Option<crate::swim::Swim>,
+) -> Doing {
     if downed {
         Doing::Down
+    } else if let Some(swim) = swim {
+        Doing::Swim(swim)
     } else if stance.dodging > 0.0 {
         Doing::Roll
     } else if stance.flinch > 0.0 {
@@ -571,13 +629,13 @@ mod tests {
         let shown = |to: Vec3| shown_velocity(jog, Some(at), to, up, dt);
         let held = shown(at);
         assert_eq!(
-            doing(held.length(), 0.0, &Stance::default(), false),
+            doing(held.length(), 0.0, &Stance::default(), false, None),
             Doing::Idle
         );
         let going = shown(at + jog * dt);
         assert!((going - jog).length() < 1e-3, "{going}");
         assert_eq!(
-            doing(going.length(), 0.0, &Stance::default(), false),
+            doing(going.length(), 0.0, &Stance::default(), false, None),
             Doing::Jog
         );
         let stepping = shown(at + jog * dt + up * 0.3);

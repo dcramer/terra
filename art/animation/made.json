@@ -145,5 +145,44 @@
     "travels": true,
     "samples": 4,
     "take": 3
+  },
+  "Swim_Tread_Loop": {
+    "prompt": "A person stands upright in place, sweeping both hands slowly side to side in front of the waist, lifting the knees one after the other as if pedalling.",
+    "speed": 0,
+    "seconds": 8,
+    "seed": 2,
+    "still": true,
+    "loop": [
+      1.5,
+      4
+    ],
+    "busy": true,
+    "samples": 4
+  },
+  "Swim_Fwd_Loop": {
+    "prompt": "A person stands in place and swings both arms in big alternating forward circles over the head, like a front crawl swimmer, kicking the legs a little.",
+    "speed": 0,
+    "seconds": 8,
+    "seed": 2,
+    "still": true,
+    "loop": [
+      1.2,
+      3
+    ],
+    "busy": true,
+    "samples": 4
+  },
+  "Swim_Dive_Loop": {
+    "prompt": "A person stands in place, reaches both arms straight up over the head, then sweeps both arms out and down to the thighs together, then raises them over the head again, again and again.",
+    "speed": 0,
+    "seconds": 8,
+    "seed": 2,
+    "still": true,
+    "loop": [
+      1.5,
+      3.5
+    ],
+    "busy": true,
+    "samples": 4
   }
 }
