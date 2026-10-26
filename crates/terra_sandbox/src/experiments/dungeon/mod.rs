@@ -188,6 +188,10 @@ fn lay_out(
     for (i, &at) in stamp.look.iter().enumerate() {
         info!("Dungeon look {i}: {}", point(at));
     }
+    // Where each creature forms, on the floor, so a `--vantage` can frame one.
+    for mob in &stamp.mobs {
+        info!("Dungeon creature {} at {}", mob.species, point(mob.at));
+    }
     // How long a dolly takes from each to the next, slowed where the look turns fast.
     for (i, &seconds) in stamp.pace.iter().enumerate() {
         info!("Dungeon pace {i}: {seconds:.3}");
