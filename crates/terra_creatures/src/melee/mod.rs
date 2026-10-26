@@ -67,7 +67,7 @@ pub struct Set(pub MoveSet);
 /// which it derefs to, and what the game keeps of it: its sword hand, its blade's last place
 /// and the way its move drives it.
 #[derive(Component)]
-#[require(feet::Kept)]
+#[require(terra_walker::feet::Kept)]
 pub struct Fighter {
     pub fight: Fighting,
     /// The socket in its right hand, whose frame the sword's blade is in.

@@ -192,6 +192,8 @@ pub struct MoveSet {
     pub guard: String,
     /// What a blow that lands shows, in place of a long hit-stop (D456).
     pub landed: Landed,
+    /// How high its clips stand a planted foot (D455): a fighter's, whatever it plays.
+    pub plant: crate::feet::Plant,
     pub moves: HashMap<String, Move>,
 }
 
@@ -574,6 +576,7 @@ mod tests {
                 kit: (blade: Steel, face: Wood, boss: Iron), guard: "Guard",
                 landed: (burst: (glow_s: 0.0, glow_m: 0.0, sparks: 0, spark_mps: 0.0, spark_s: 0.0),
                          kick_deg: 0.0, kick_s: 0.0),
+                plant: (low_m: 0.055, lifted_m: 0.07),
                 moves: {
                     "first": (clip: "First", done: 2.0, cancel: 1.0, next: "second",
                               carry: (in: (0.0, 0.5), out: (1.2, 1.6))),

@@ -22,7 +22,7 @@ use terra_world::{climate::ClimateSample, lod::Viewpoint, parting::PartsPlants, 
 /// down (`Downed`), the climate where they stand (`ClimateSample`), along with what they
 /// carry, know and feel, which the layers above add.
 #[derive(Component)]
-#[require(Smoothed, Viewpoint, PartsPlants, ClimateSample)]
+#[require(Smoothed, Viewpoint, PartsPlants, ClimateSample, crate::feet::Kept)]
 pub struct Player;
 
 /// The player this machine steers: its input moves them, and the camera, the screen and
@@ -179,6 +179,7 @@ impl Plugin for WalkerPlugin {
         options::plugin(app);
         intent::plugin(app);
         figure::plugin(app);
+        crate::feet::plugin(app);
         camera::plugin(app);
         movement::plugin(app);
         app.init_resource::<Hands>()

@@ -18,6 +18,7 @@ pub mod button;
 pub mod camera;
 pub mod character;
 pub mod controls;
+pub mod feet;
 pub mod figure;
 pub mod intent;
 pub mod lift;

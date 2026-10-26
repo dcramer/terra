@@ -169,7 +169,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D451](decisions/D451.md) | The fight camera | Tech | Agent | Decided | While a weapon is drawn the player's camera frames the… |
 | [D452](decisions/D452.md) | Combat is held by a scorecard of criteria and a ratchet on their numbers | Tech | Agent | Decided | What combat must get right is data… |
 | [D453](decisions/D453.md) | The locked-on fight camera stands off the line to the target | Design | Developers | Decided | Locked on to an enemy, the fight camera… |
-| [D455](decisions/D455.md) | A fighter's planted feet are locked to the ground and step when the body leaves them | Tech | Agent | Decided | After the clip has posed a fighter and before the… |
+| [D455](decisions/D455.md) | A body's planted feet are locked to the ground and step when the body leaves them | Tech | Agent | Decided | After the clip has posed a body (a fighter, a walker… |
 | [D456](decisions/D456.md) | A landed blow flashes and kicks the camera, it does not freeze the fight | Design | Developers | Decided | A blow that lands holds the fighters for at most 0.05 s… |
 | [D459](decisions/D459.md) | What each hand holds, and how its animation is chosen, by rule from data | Tech | Agent | Leaning | The technical parts of holding.md. |
 | [D461](decisions/D461.md) | Which stances come first, after sword and shield | Design | Developers | Decided | Which of holding.md's stances are built… |

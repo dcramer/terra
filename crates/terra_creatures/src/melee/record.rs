@@ -105,7 +105,7 @@ type Them<'a> = (
     Option<&'a Motion>,
     Option<&'a Staged>,
     Option<&'a Stamina>,
-    Option<&'a super::feet::Kept>,
+    Option<&'a terra_walker::feet::Kept>,
 );
 
 /// A player walking with no sword drawn: not a fighter, written as a walker.
@@ -114,6 +114,7 @@ type Walkers<'a> = (
     &'a GlobalTransform,
     Option<&'a Motion>,
     Option<&'a Stepping>,
+    Option<&'a terra_walker::feet::Kept>,
 );
 
 /// What a player's walk adds to its line: its figure's lag after a step up, whether it
@@ -210,7 +211,7 @@ fn write(
             walking(last, motion, steps.get(entity).ok());
         }
     }
-    for (entity, place, motion, stepping) in walkers.iter().filter(|_| walk) {
+    for (entity, place, motion, stepping, kept) in walkers.iter().filter(|_| walk) {
         let feet = place.translation();
         let facing = motion.map_or(Vec3::Z, |motion| motion.facing);
         // A walker's balls over its figure's root as shown, so a step's smoothing is no dip.
@@ -234,6 +235,7 @@ fn write(
             "free": true,
             "radius": null,
             "balls": balls,
+            "kept": kept.map(|kept| kept.states()),
         });
         walking(&mut line, motion, stepping);
         bodies.push(line);

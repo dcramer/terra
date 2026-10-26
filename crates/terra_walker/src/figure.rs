@@ -333,6 +333,7 @@ fn animate(
         &GlobalTransform,
     )>,
     mut hands: Query<&mut Carrying, With<Grip>>,
+    mut feet: Query<&mut crate::feet::Kept>,
 ) {
     let Some(moves) = moves else { return };
     for (mut animator, mut transitions, mut animated, place) in &mut figures {
@@ -440,6 +441,14 @@ fn animate(
                 }
             }
             None => {}
+        }
+        // The ground a travelling clip's feet stand on passes under the body as fast as the
+        // clip strides, the way the body goes: its planted feet are kept on it (`feet`).
+        if let Ok(mut kept) = feet.get_mut(animated.player) {
+            let pace = moves.paces.get(&name).copied().unwrap_or(0.0);
+            let node = moves.clips[&name][copy];
+            let rate = animator.animation(node).map_or(0.0, |a| a.speed());
+            kept.stride(motion.velocity, pace * place.scale().y, rate);
         }
     }
 }

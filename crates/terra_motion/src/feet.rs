@@ -15,11 +15,20 @@
 //! reads the clip's pose and writes the leg (`terra_creatures::melee::feet`).
 
 use glam::{Quat, Vec3};
+use serde::Deserialize;
 
-/// The clip's ball of the foot this near its ground is on it: the plant (its ball stands about
-/// 3-4 cm over the feet in a stance); past `LIFTED_M` the clip has lifted it.
-pub const LOW_M: f32 = 0.055;
-pub const LIFTED_M: f32 = 0.07;
+/// How high a body's clips stand a planted foot (D455): the clip's ball of the foot within
+/// `low_m` of its ground is on it, the plant; past `lifted_m` the clip has lifted it, a margin
+/// over `low_m` so a foot rolling off its toe is not let go and taken again frame by frame.
+/// Data, by the clips a body plays (D136): a fighter's stance stands its ball about 3-4 cm over
+/// the feet (its move set's), a jog's or a sprint's stride 3-7 cm, rolling heel to toe (the
+/// body's kind's, `assets/data/movers.ron`).
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Plant {
+    pub low_m: f32,
+    pub lifted_m: f32,
+}
 /// A locked foot this far from the clip's steps when the other is down; this far, at once.
 pub const REACH_M: f32 = 0.22;
 pub const MOST_M: f32 = 0.38;
@@ -76,6 +85,8 @@ pub struct Posed {
     pub pose: Pose,
     /// How high the clip's ball of the foot is over the body's ground.
     pub ball_up: f32,
+    /// How high the clips playing stand a planted foot.
+    pub plant: Plant,
     /// The world's up.
     pub up: Vec3,
     /// How fast the clip moves the foot in the body's own frame, metres a second.
@@ -84,6 +95,9 @@ pub struct Posed {
     pub strained: bool,
     /// Feet not kept this frame (a body down, a roll).
     pub off: bool,
+    /// The body came down this frame: a foot the clip has low takes its weight however the
+    /// clip swings it (a landing at a run, its foot still blending from the fall).
+    pub landing: bool,
 }
 
 /// One foot's lock.
@@ -155,10 +169,10 @@ impl Foot {
             };
         }
         let flat = |a: Vec3, b: Vec3| (a - b).reject_from(posed.up).length();
-        let low = posed.ball_up <= LOW_M;
-        let lifted = posed.ball_up > LIFTED_M;
+        let low = posed.ball_up <= posed.plant.low_m;
+        let lifted = posed.ball_up > posed.plant.lifted_m;
         let gone = posed.off;
-        let stands = low && !gone && posed.swing_mps < SWING_MPS;
+        let stands = low && !gone && (posed.swing_mps < SWING_MPS || posed.landing);
         if let State::Planted(lock) = self.state {
             let off_by = flat(lock.at, clip.at);
             let turned = lock.turn.angle_between(clip.turn).to_degrees();
@@ -237,6 +251,24 @@ impl Foot {
     }
 }
 
+/// How fast the clip moves a foot over the ground its feet stand on, metres a second, which
+/// `Posed::swing_mps` takes: the foot's speed in the body's own frame, from `was` to `now`
+/// over `dt` along the ground (`up` the body's up: a step's smoothing lifts the figure under the body, not its foot over the ground), with that ground passing under the body at `ground`, in the body's frame too.
+/// A clip that travels (a walk, a jog, a strafe) is played in place at its pace (`pace.rs` in
+/// the walker), so the ground its feet stand on goes by at the body's speed over the world:
+/// its planted foot moves back under the body at that speed and stands still on that ground,
+/// however fast the body goes, while its swinging foot passes over it. For a clip that stands
+/// (a stance, a blow) `ground` is zero: the body's frame, which a drive or a turn moves and
+/// the clip's feet do not. One rule for both, so a foot is planted by the clip whatever the
+/// body does or holds (stride matching's foot locking, as Unreal's Foot Placement node reads
+/// its plant speed against the motion the animation carries; its documentation, no code).
+pub fn swing_mps(was: Vec3, now: Vec3, ground: Vec3, up: Vec3, dt: f32) -> f32 {
+    if dt <= 0.0 {
+        return 0.0;
+    }
+    ((now - was) / dt + ground).reject_from(up).length()
+}
+
 /// A two-bone limb from `root` (a hip) with bones `upper` and `lower` long, bent to reach
 /// `target`, its middle joint (a knee) on the side of `pole`: where the middle joint and the
 /// end go. A target out of reach gets the limb straight toward it; one nearer than the bones
@@ -264,6 +296,16 @@ mod tests {
     use super::*;
 
     const DT: f32 = 1.0 / 60.0;
+    /// A stance's plant, as the sword-and-shield set has it.
+    const STANCE: Plant = Plant {
+        low_m: 0.055,
+        lifted_m: 0.07,
+    };
+    /// A stride's, as a man's kind has it.
+    const STRIDE: Plant = Plant {
+        low_m: 0.075,
+        lifted_m: 0.09,
+    };
 
     /// The film's check (tools/sandbox/duel/checks.ts, `sliding`) on one foot's path: a ball
     /// within 2 cm of the ground 4 frames or more is a plant; how far each plant travelled.
@@ -312,10 +354,12 @@ mod tests {
             let posed = Posed {
                 pose,
                 ball_up: 0.035,
+                plant: STANCE,
                 up: Vec3::Y,
                 swing_mps: 0.0,
                 strained: false,
                 off: false,
+                landing: false,
             };
             path.push(kept.update(posed, DT, false).at);
             clip.push(pose.at);
@@ -380,10 +424,12 @@ mod tests {
         let on = |pose: Pose, ball_up: f32, off: bool| Posed {
             pose,
             ball_up,
+            plant: STANCE,
             up: Vec3::Y,
             swing_mps: 0.0,
             strained: false,
             off,
+            landing: false,
         };
         assert_eq!(
             foot.update(on(pose(0.0, 0.0), 0.03, false), DT, false),
@@ -418,6 +464,103 @@ mod tests {
             assert_eq!(swinging.update(posed, DT, false), at);
         }
         assert!(!swinging.planted());
+        // Coming down, it takes the body's weight, however it swings.
+        let at = pose(0.6, 0.0);
+        let landing = Posed {
+            swing_mps: 3.6,
+            landing: true,
+            ..on(at, 0.04, false)
+        };
+        assert_eq!(swinging.update(landing, DT, false), at);
+        assert!(swinging.planted());
+    }
+
+    /// A body jogging ahead at `speed` for `secs` with an in-place stride clip of `pace`
+    /// (stance and swing a half cycle each, `stride` long in the clip's frame): each foot's
+    /// path as kept with the clip's ground passing at `ground` (or not), and as the clip had it.
+    fn jog(secs: f32, speed: f32, pace: f32, stride: f32) -> [(Vec<Vec3>, Vec<Vec3>); 2] {
+        let cycle = 2.0 * stride / pace;
+        let mut feet = [Foot::default(), Foot::default()];
+        let mut was: [Option<Vec3>; 2] = [None, None];
+        let mut out: [(Vec<Vec3>, Vec<Vec3>); 2] = Default::default();
+        let mut t = 0.0;
+        while t < secs {
+            let body = Vec3::Z * speed * t;
+            let moving = [feet[0].moving(), feet[1].moving()];
+            for side in 0..2 {
+                // The clip's foot in the body's frame: back along the ground at its pace, then
+                // forward over it, lifted, leaving and landing moving back with the ground as a
+                // stride does (a Hermite curve, its ends' speed the pace's).
+                let phase = (t / cycle + side as f32 * 0.5).fract();
+                let (z, lift) = if phase < 0.5 {
+                    (stride * (0.5 - 2.0 * phase), 0.0)
+                } else {
+                    let s = 2.0 * phase - 1.0;
+                    let back = -pace * cycle * 0.5;
+                    let (s2, s3) = (s * s, s * s * s);
+                    let z = (2.0 * s3 - 3.0 * s2 + 1.0) * -stride * 0.5
+                        + (s3 - 2.0 * s2 + s) * back
+                        + (-2.0 * s3 + 3.0 * s2) * stride * 0.5
+                        + (s3 - s2) * back;
+                    (z, 0.12 * libm::sinf(core::f32::consts::PI * s))
+                };
+                let in_body = Vec3::new(if side == 0 { 0.1 } else { -0.1 }, lift, z);
+                let swing = was[side].map_or(0.0, |was| {
+                    swing_mps(was, in_body, Vec3::Z * speed, Vec3::Y, DT)
+                });
+                was[side] = Some(in_body);
+                let pose = Pose {
+                    at: body + in_body,
+                    turn: Quat::IDENTITY,
+                };
+                let posed = Posed {
+                    pose,
+                    ball_up: 0.035 + lift,
+                    plant: STRIDE,
+                    up: Vec3::Y,
+                    swing_mps: swing,
+                    strained: false,
+                    off: false,
+                    landing: false,
+                };
+                out[side]
+                    .0
+                    .push(feet[side].update(posed, DT, moving[1 - side]).at);
+                out[side].1.push(pose.at);
+            }
+            t += DT;
+        }
+        out
+    }
+
+    #[test]
+    fn a_stride_clips_planted_feet_stand_on_the_ground_it_passes_and_do_not_slide() {
+        // A jog at 4.3 m/s whose clip strides a tenth too fast: its planted feet skate.
+        let (speed, pace, stride) = (4.3, 4.73, 0.8);
+        let paths = jog(2.0, speed, pace, stride);
+        assert!(
+            paths
+                .iter()
+                .flat_map(|(_, clip)| plants(clip))
+                .any(|travel| travel > 0.03),
+            "the clip alone slides"
+        );
+        for (path, _) in &paths {
+            let kept = plants(path);
+            assert!(kept.len() >= 3, "a plant a stride: {kept:?}");
+            assert!(
+                kept.iter().all(|travel| *travel <= 0.03),
+                "no plant slid past 3 cm: {kept:?}"
+            );
+        }
+        // Read in the body's frame alone, a stride's planted foot moves back as fast as the
+        // body goes, past what a foot stood on moves; on the ground the clip's feet stand on it
+        // stands still. Standing ground (a stance, a blow) is the body's frame.
+        let (was, now) = (Vec3::new(0.0, 0.0, 0.1), Vec3::new(0.0, 0.0, 0.05));
+        assert!(swing_mps(was, now, Vec3::ZERO, Vec3::Y, 0.01) > SWING_MPS);
+        assert!(swing_mps(was, now, Vec3::Z * 5.0, Vec3::Y, 0.01) < 1e-4);
+        // A foot carried up with the figure (a step smoothed) has not moved over the ground.
+        assert!(swing_mps(was, was + Vec3::Y * 0.04, Vec3::ZERO, Vec3::Y, 0.01) < 1e-4);
     }
 
     #[test]
