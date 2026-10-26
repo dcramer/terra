@@ -125,9 +125,9 @@
           "junction": "Walls or rooms crossing or overlapping",
           "rule": "Not yet closed: a floor's boards in the plane of a log wall run along or through the room, an end board in the plane of a log's sawn end where a stone wall runs through a log room, floor boards in one another where two rooms overlap, a dressed stone in the plane of a board where a hewn wall runs into a carved stone room",
           "code": ["terra_build_layout::layout::trims::ends", "terra_build_layout::layout::floors"],
-          "tests": [],
+          "tests": ["terra_build_scenes::fuzz::tests::fuzz_seed_16_a_log_walls_top_split_log_ends_inside_the_end_board_against_stone"],
           "cases": [],
-          "also": "the fuzz pass, seeds 12, 16, 47, 82, 192, 266",
+          "also": "the fuzz pass, seeds 12, 47, 74, 82, 185, 187, 192, 266",
           "status": "Gap 14"
         },
         {

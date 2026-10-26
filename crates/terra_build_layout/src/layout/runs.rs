@@ -62,6 +62,7 @@ pub(super) fn courses(
             // How each end finishes: cut at an opening's frame, run past a corner into the
             // open air, or flush with the cube.
             let layer = ((centre + 1e-3) / CELL_M).floor() as i32;
+            let kept = layer_of_split(centre, split);
             let reach = |end: i32, outward: i32, which: u32| -> f32 {
                 let beyond = end + outward;
                 let next = if (first..=last).contains(&beyond) {
@@ -69,7 +70,7 @@ pub(super) fn courses(
                 } else {
                     Spot::Nothing
                 };
-                let cube = axis.cube(row, end, layer.max(layer_of_split(centre, split)));
+                let cube = axis.cube(row, end, layer.max(kept));
                 let corner = walls.runs(cube, axis.other());
                 let open = walls.open_beyond(axis.cube(row, beyond, cube.y));
                 // Every other course a hair shorter: courses overlap a little, one on the
@@ -84,8 +85,14 @@ pub(super) fn courses(
                     }
                     Spot::Hole => -beside_hole,
                     // Ending against another kind under an end board (`trims::ends`): its
-                    // sawn end inside the board, not in the plane of the board's face.
-                    _ if walls.board_against(axis.cube(row, beyond, cube.y)) => -kit.frame * 0.6,
+                    // sawn end inside the board, not in the plane of the board's face. Asked
+                    // of the cube its kept half lies in as well: a split log on a wall's top
+                    // has its centre on the next layer's floor, where nothing may stand.
+                    _ if walls.board_against(axis.cube(row, beyond, cube.y))
+                        || walls.board_against(axis.cube(row, beyond, kept)) =>
+                    {
+                        -kit.frame * 0.6
+                    }
                     // Uneven, but never past the overhang: short of it by up to `ragged`.
                     Spot::Nothing if corner && open => {
                         kit.overhang - unit(hash::of(&[seed, end as u32, which])) * kit.ragged()
