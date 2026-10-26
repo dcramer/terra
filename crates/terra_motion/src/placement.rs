@@ -114,6 +114,10 @@ pub struct Ground {
     pub heel: Vec3,
     pub ball: Vec3,
     pub normal: Vec3,
+    /// The ground found under heel and ball themselves: where a sole straddling a riser is
+    /// put on the higher tread (`heel`, `ball`), its point over the edge has lower ground under
+    /// it, and does not rest there (a lock's start reads it, `Grounded::over`).
+    pub found: [Vec3; 2],
 }
 
 /// One foot's placing: the ground frozen for its lock, and the ground eased to.
@@ -151,8 +155,9 @@ pub struct Grounded {
     ball_at: Vec3,
     /// The heel's and ball's ground over the root's level and the normal stood to, as eased.
     heights: (f32, f32, Vec3),
-    /// The heel's and ball's ground over the root's level as probed this frame (frozen for a
-    /// lock), before easing: where the foot would rest, which a lock's start reads (`over`).
+    /// The ground under heel and ball themselves over the root's level as probed this frame
+    /// (frozen for a lock), before easing and before a riser puts the sole on its higher tread:
+    /// what a lock's start reads (`over`).
     probed: (f32, f32),
     up: Vec3,
     hip: Vec3,
@@ -266,10 +271,32 @@ impl Placing {
             let heel = found(shown.at, under(shown.at));
             let toe = found(ball_at, under(ball_at));
             match (heel, toe) {
+                // A riser between them (heel and ball grounds steeper apart than the sole
+                // pitches to): the sole rests on the higher tread, flat on it as the tread is,
+                // its other point over the edge, as ALS aligns a foot to the normal its trace
+                // meets rather than pitching it down toward the lower tread.
+                (Some(heel), Some(toe)) if riser(heel.0, toe.0, up) => {
+                    let found = [heel.0, toe.0];
+                    if (toe.0 - heel.0).dot(up) > 0.0 {
+                        let ground = plane(toe.0, toe.1, shown.at - ball_at, up);
+                        Some(Ground {
+                            heel: ground.ball,
+                            ball: ground.heel,
+                            normal: toe.1,
+                            found,
+                        })
+                    } else {
+                        Some(Ground {
+                            found,
+                            ..plane(heel.0, heel.1, ball_at - shown.at, up)
+                        })
+                    }
+                }
                 (Some(heel), Some(toe)) => Some(Ground {
                     heel: heel.0,
                     ball: toe.0,
                     normal: sole(heel.0, toe.0, (heel.1 + toe.1).normalize_or(up), up),
+                    found: [heel.0, toe.0],
                 }),
                 (Some((at, normal)), None) => Some(plane(at, normal, ball_at - shown.at, up)),
                 (None, Some((at, normal))) => {
@@ -278,6 +305,7 @@ impl Placing {
                         heel: heel.ball,
                         ball: heel.heel,
                         normal,
+                        found: [heel.ball, heel.heel],
                     })
                 }
                 (None, None) => None,
@@ -300,6 +328,9 @@ impl Placing {
         // Heights over the root's level now; no ground found, or the foot let go: the clip's own
         // flat ground.
         let over = |at: Vec3| (at - root).dot(up);
+        let probed = target.map_or((0.0, 0.0), |ground| {
+            (over(ground.found[0]), over(ground.found[1]))
+        });
         let target = target.map_or((0.0, 0.0, up), |ground| {
             (over(ground.heel), over(ground.ball), ground.normal)
         });
@@ -339,7 +370,7 @@ impl Placing {
             shown,
             ball_at,
             heights: eased,
-            probed: (target.0, target.1),
+            probed,
             up,
             hip,
             reach,
@@ -389,7 +420,8 @@ impl Grounded {
     /// once locked; 0 for a foot let go. A lock's start reads it (`feet::PLANT_M`), so it is
     /// over the ground as probed, not as eased: as Unreal's Foot Placement plants by the
     /// trace's distance to the ground, a foot swung off a higher face whose eased ground still
-    /// holds it up is not down, nor is one whose raise onto a face lags under it.
+    /// holds it up is not down, nor is one whose raise onto a face lags under it, nor a heel
+    /// strike over the edge of a riser whose ball is still up over the higher tread.
     pub fn over(&self, placed: Pose) -> [f32; 2] {
         if self.off {
             return [0.0; 2];
@@ -413,11 +445,20 @@ fn plane(at: Vec3, normal: Vec3, reach: Vec3, up: Vec3) -> Ground {
     } else {
         0.0
     };
+    let ball = at + across + up * rise;
     Ground {
         heel: at,
-        ball: at + across + up * rise,
+        ball,
         normal,
+        found: [at, ball],
     }
+}
+
+/// Whether the ground found under a sole's heel and ball (`heel`, `ball`, world points) is a
+/// riser between two treads: steeper apart than the sole pitches to (`TILT_DEG`).
+fn riser(heel: Vec3, ball: Vec3, up: Vec3) -> bool {
+    let span = (ball - heel).reject_from(up).length();
+    (ball - heel).dot(up).abs() > span * libm::tanf(TILT_DEG.to_radians())
 }
 
 /// The normal a sole stands to on ground found under its heel and ball (`heel`, `ball`, world

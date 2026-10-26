@@ -651,3 +651,66 @@ fn a_locked_foot_is_raised_onto_its_ground_at_once() {
     let off = off_ground(locked, shown, Vec3::ZERO, &ground);
     assert!(off.iter().all(|o| o.abs() < 1e-3), "{off:?}");
 }
+
+/// A sole straddling a riser (its heel's and ball's grounds steeper apart than it pitches to)
+/// rests flat on the higher tread as the clip has it, heel or ball over the edge at the clip's
+/// height over that tread, never pitched down toward the lower one; ground no steeper than
+/// that still pitches it.
+#[test]
+fn a_sole_straddling_a_riser_keeps_the_clips_pitch_on_the_higher_tread() {
+    let span = BALL.x;
+    for rise in [0.09_f32, 0.2, 0.5, -0.09, -0.3] {
+        // Up a riser: the heel over the lower tread, the ball over the higher; down: the reverse.
+        let ground = move |x: f32| {
+            let high = if rise > 0.0 { x >= 0.06 } else { x < 0.06 };
+            (if high { rise.abs() } else { 0.0 }, UP)
+        };
+        let shown = flat(0.0);
+        for lock in [None, Some(shown)] {
+            let mut placing = Placing::default();
+            let placed = placing.foot(
+                0,
+                foot(shown, lock, Vec3::ZERO),
+                DT,
+                under_of(ground, Vec3::ZERO),
+            );
+            assert!(
+                placed.turn.angle_between(shown.turn) < 1e-3,
+                "{rise} {lock:?}: pitched {}",
+                placed.turn.angle_between(shown.turn).to_degrees()
+            );
+            let over_higher = placed.at.y - rise.abs() - shown.at.y;
+            assert!(over_higher.abs() < 1e-3, "{rise} {lock:?}: {over_higher}");
+        }
+    }
+    // Ground 25 deg apart over the sole (a slope's, not a riser's) still pitches it.
+    let rise = span * libm::tanf(25.0_f32.to_radians());
+    let ground = move |x: f32| (if x >= 0.06 { rise } else { 0.0 }, UP);
+    let placed = Placing::default().foot(
+        0,
+        foot(flat(0.0), None, Vec3::ZERO),
+        DT,
+        under_of(ground, Vec3::ZERO),
+    );
+    assert!(placed.turn.angle_between(Quat::IDENTITY).to_degrees() > 20.0);
+}
+
+/// A swinging foot over a riser rests on the higher tread, but its point over the edge hangs
+/// over the lower one and is read as over its ground there (`Grounded::over`): a heel strike
+/// over the edge is not down while its ball is still up.
+#[test]
+fn a_foot_over_a_riser_reads_its_point_over_the_edge_as_over_the_lower_tread() {
+    let ground = |x: f32| (if x >= 0.06 { 0.2 } else { 0.0 }, UP);
+    let mut placing = Placing::default();
+    let g = placing.ground(
+        0,
+        foot(flat(0.0), None, Vec3::ZERO),
+        DT,
+        under_of(ground, Vec3::ZERO),
+    );
+    let over = g.over(g.placed(0.0));
+    assert!(
+        (over[0] - 0.2).abs() < 1e-3 && over[1].abs() < 1e-3,
+        "{over:?}"
+    );
+}
