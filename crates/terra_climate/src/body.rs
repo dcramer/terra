@@ -1,6 +1,6 @@
 //! What the climate does to a body (D153, climate.md): how warm it is kept or chilled, and how
-//! the ground under it slows it. Shared (D312): every machine works out the same body
-//! temperature from the same surroundings.
+//! that slows its work, never its walk (D149). Shared (D312): every machine works out the same
+//! body temperature from the same surroundings.
 //!
 //! **Warmth** is a heat balance, as thermal comfort models make it (Fanger's, ISO 7730's):
 //! the body makes heat by working; the sun and a fire add to it; it loses heat from its
@@ -8,8 +8,6 @@
 //! Within a band the body holds itself at its normal temperature, shivering or sweating;
 //! past what those can make up, its temperature drifts toward where the surroundings push
 //! it, the farther the faster. Clothing keeps the heat in, more so dry.
-//!
-//! **Going**: deep snow and wet mud slow a walker.
 
 /// A body's temperature when nothing troubles it, in degrees Celsius.
 pub const NORMAL_C: f32 = 37.0;
@@ -113,15 +111,6 @@ pub fn pace(body_c: f32) -> f32 {
     let (below, above) = (COMFORT_C.0 - body_c, body_c - COMFORT_C.1);
     let out = (below / (COMFORT_C.0 - DANGER_C.0)).max(above / (DANGER_C.1 - COMFORT_C.1));
     (1.0 - 0.5 * out.max(0.0)).max(1.0 / 3.0)
-}
-
-/// How fast a walker can go over ground with so much snow lying and so wet, as a share of
-/// its pace on dry, bare ground: a foot of snow halves it, as a walker without snowshoes
-/// finds; mud slows it by a sixth.
-pub fn going(snow_depth_m: f32, ground_wetness: f32) -> f32 {
-    let snow = 1.0 / (1.0 + snow_depth_m.max(0.0) / 0.3);
-    let mud = 1.0 - 0.16 * ((ground_wetness - 0.7) / 0.3).clamp(0.0, 1.0);
-    (snow * mud).max(0.35)
 }
 
 #[cfg(test)]
@@ -240,17 +229,5 @@ mod tests {
         assert!((pace(DANGER_C.1) - 0.5).abs() < 1e-6);
         assert!(pace(35.5) > pace(35.0) && pace(35.5) < 1.0);
         assert_eq!(pace(25.0), 1.0 / 3.0);
-    }
-
-    #[test]
-    fn deep_snow_and_mud_slow_a_walker() {
-        assert_eq!(going(0.0, 0.3), 1.0);
-        assert!(
-            (going(0.3, 0.0) - 0.5).abs() < 1e-6,
-            "a foot of it halves it"
-        );
-        assert!(going(0.05, 0.0) > going(0.2, 0.0));
-        assert!(going(0.0, 1.0) < 0.9 && going(0.0, 1.0) > 0.8);
-        assert!(going(5.0, 1.0) >= 0.35, "never to a standstill");
     }
 }

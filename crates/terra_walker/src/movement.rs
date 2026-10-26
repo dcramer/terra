@@ -21,7 +21,6 @@ use terra_bases::{self as build, Site};
 use terra_build_layout::solids::Slab;
 use terra_build_layout::walk::Walking;
 use terra_motion::mover::{self, Block, Bodies, Capsule, Capsules, Ground, Kind, Obstacles, Sdf};
-use terra_world::climate::ClimateSample;
 use terra_world::flora;
 use terra_world::planet::{HeightMemo, Planet};
 use terra_world::spatial::SpatialHash;
@@ -172,14 +171,6 @@ fn man() -> Kind {
     .expect("movers.ron has a man")
 }
 
-/// How fast the ground under a body lets it go, as a share of its pace on dry, bare ground:
-/// deep snow and mud slow it; frozen ground, wet as it is, is no mud.
-fn going(ground: &ClimateSample) -> f32 {
-    let frozen = ground.ice_m > 0.01;
-    let wet = if frozen { 0.0 } else { ground.ground_wetness };
-    terra_climate::body::going(ground.snow_depth_m, wet)
-}
-
 /// Which way a body turns to face: as a layer above steers it, the view while it works,
 /// or the way it goes.
 fn toward(stance: &Stance, view: Vec3, wish: Vec3, up: Vec3) -> Vec3 {
@@ -193,15 +184,14 @@ fn toward(stance: &Stance, view: Vec3, wish: Vec3, up: Vec3) -> Vec3 {
 }
 
 /// What a player means this tick, as the mover's intent: the way they go, sprinting, a jump
-/// they could pay for, their pace (a guard's, a move's, the ground's) and, on the ground, a
-/// roll's or a move's drive. Starts a roll they ask for and can pay for, and runs down the
-/// stance's timers.
+/// they could pay for, their pace (a guard's or a move's; never the ground's, D149) and, on
+/// the ground, a roll's or a move's drive. Starts a roll they ask for and can pay for, and
+/// runs down the stance's timers.
 struct Asked<'a> {
     intent: &'a Intent,
     view: &'a View,
     up: Vec3,
     on_ground: bool,
-    going: f32,
     /// Ctrl and the wheel change the hammer's material while a part is in hand (D232).
     part_in_hand: bool,
 }
@@ -249,7 +239,7 @@ fn ask(
     let drive = if !asked.on_ground {
         None
     } else if rolling {
-        Some(stance.dodge_direction * DODGE_SPEED * asked.going)
+        Some(stance.dodge_direction * DODGE_SPEED)
     } else {
         steer.drive
     };
@@ -261,7 +251,7 @@ fn ask(
         },
         sprint,
         jump: intent.pressed(Action::Jump) && can,
-        scale: pace * asked.going,
+        scale: pace,
         drive,
         // Swimming (D478): forward looking down dives, jump held rises.
         pitch: if intent.held(Action::Forward) && !intent.held(Action::Back) {
@@ -367,7 +357,6 @@ type Walked<'a> = (
     &'a Intent,
     Has<Downed>,
     Option<&'a build::hammer::Hammer>,
-    Option<&'a ClimateSample>,
     Option<&'a mut Stepping>,
 );
 
@@ -470,19 +459,8 @@ fn walk(
         movers.lists.intents.clear();
         movers.lists.wishes.clear();
         movers.lists.seen.clear();
-        for (
-            entity,
-            transform,
-            motion,
-            mut stance,
-            stamina,
-            view,
-            intent,
-            downed,
-            hammer,
-            climate,
-            _,
-        ) in &mut players
+        for (entity, transform, motion, mut stance, stamina, view, intent, downed, hammer, _) in
+            &mut players
         {
             movers.lists.seen.insert(entity);
             let feet = transform.translation;
@@ -514,7 +492,6 @@ fn walk(
                 view,
                 up: feet.normalize(),
                 on_ground: motion.on_ground,
-                going: climate.map_or(1.0, going),
                 part_in_hand: hammer.is_some_and(|hammer| hammer.part_in_hand),
             };
             let asked = ask(asked, &mut stance, stamina.map(Mut::into_inner), &kind, dt);

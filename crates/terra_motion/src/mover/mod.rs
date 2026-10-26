@@ -157,8 +157,8 @@ pub struct Intent {
     pub wish: Vec3,
     pub sprint: bool,
     pub jump: bool,
-    /// Its top speed as a share of its kind's jog, sprint or swim: guarding, a move's pace,
-    /// deep snow or mud (1 for none).
+    /// Its top speed as a share of its kind's jog, sprint or swim: guarding or a move's pace
+    /// (1 for none); the ground never slows it (D149).
     pub scale: f32,
     /// A level velocity it is driven at, its own speed and way kept (a roll, a lunge); the
     /// ground and what stops it still answer.

@@ -3,6 +3,7 @@ use crate::walker::Steer;
 use bevy::ecs::system::RunSystemOnce;
 use std::time::Duration;
 use terra_core::{PlanetSpec, Seed};
+use terra_world::climate::ClimateSample;
 
 const TICK: f32 = 1.0 / 64.0;
 
@@ -85,18 +86,36 @@ fn a_jump_costs_the_same_with_a_sword_drawn_and_a_roll_is_left_to_the_stance() {
     assert_eq!(press(drawn, Action::Dodge), (full, false, false));
 }
 
+/// The walk keeps one speed on any ground (D149): held forward for two seconds, a player on
+/// dry bare ground, under a metre of snow and in soaked mud jogs as far, at a jog.
 #[test]
-fn deep_snow_and_mud_slow_a_walker_and_frozen_ground_does_not() {
-    let mut ground = ClimateSample::default();
-    assert_eq!(going(&ground), 1.0);
-    ground.snow_depth_m = 0.3;
-    assert!((going(&ground) - 0.5).abs() < 1e-6);
-    ground.snow_depth_m = 0.0;
-    ground.ground_wetness = 1.0;
-    let mud = going(&ground);
-    assert!(mud < 0.9);
-    ground.ice_m = 0.1;
-    assert_eq!(going(&ground), 1.0, "frozen hard");
+fn deep_snow_and_mud_do_not_slow_the_walk() {
+    let dry = ClimateSample::default();
+    let mut snow = dry;
+    snow.snow_depth_m = 1.0;
+    let mut mud = dry;
+    mud.ground_wetness = 1.0;
+    let ran: Vec<(f32, f32)> = [dry, snow, mud]
+        .into_iter()
+        .map(|ground| {
+            let (mut world, player) = standing(Steer::default(), Some(Action::Forward));
+            world.entity_mut(player).insert(ground);
+            let start = world.get::<Transform>(player).unwrap().translation;
+            for _ in 0..128 {
+                world.run_system_once(walk).unwrap();
+            }
+            let feet = world.get::<Transform>(player).unwrap().translation;
+            let speed = world.get::<Motion>(player).unwrap().velocity.length();
+            (
+                (feet - start).reject_from(start.normalize()).length(),
+                speed,
+            )
+        })
+        .collect();
+    for &(far, speed) in &ran {
+        assert!((speed - JOG_SPEED).abs() < 0.05, "at {speed} m/s");
+        assert!((far - ran[0].0).abs() < 1e-3, "{far} m, dry {} m", ran[0].0);
+    }
 }
 
 #[test]
