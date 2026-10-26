@@ -255,6 +255,7 @@ The camera's tonemapper is chosen by measurement, for the whole camera. Fire is 
   - The column bends what is behind by a rising noise, at most 0.15 of its half width (`BEND`): at 0.05 a blind judge saw nothing; 0.15 reads as heat shimmer (5/10 against 4.5, fire round 23); 0.25 read as marbled water.
   - Gone by 40 m. No depth test yet: a column draws over anything in front of the fire.
 - One column per fire, never many rising cards, which read as smoke. Its fault left: coarse whorls more than fine upward ripples by day.
+- **What it costs** (fire round g49, RTX 4090 alone on the worker, 1080p, the campfire 4.4 m off): one pass for every fire, 0.01 ms of GPU at 18:24, under the bench's 0.01 at 21:30. It is what Unreal (its distortion pass) and Doom (its tonemap pass) do: one screen-space pass bending the picture by what the fires leave in it, never a pass a fire. Bevy 0.20's other way in, screen-space transmission (`ScreenSpaceTransmission`, bevy_pbr's `transmission/node.rs`), copies the whole picture once a step for every view with a transmissive mesh and draws before the transparent pass, so it would cost more and leave the flames unbent. Still pictures do not show a shimmer: a judge of the haze needs film (the g47 reviewers, from stills, saw "no heat haze").
 
 ## Composites
 
