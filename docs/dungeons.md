@@ -82,6 +82,48 @@ A door stands shut until a body walks into it, then its leaves swing away from t
 - **Light underground**: a room's probe now wins over the forest's sky volume (D485) and holds what its openings let in (D486), but Bevy keeps only the 8 room probes nearest the camera, so farther boxes of the crypt's 168 still take the sky; `node tools/sandbox/indoorlight.ts` (a continuous check) fails until they don't.
 - **Taking keys**, so a locked gate stays shut in the demo until its keys are held (D512); a door's leaves as bodies the mover collides with; chests that hold their loot as storage, water surfaces in basins.
 
+## Proposed themes (Open)
+
+Status: Open, a recommendation for the developers (D412); nothing here is built. The developer asked on the desk (r-dungeons) for dungeons "more spacious and some of them be cavernous". [research/2026-10-26-dungeon-themes.md](../research/2026-10-26-dungeon-themes.md) has the comparison with Skyrim, The Witcher 3, Elden Ring, Valheim, Enshrouded, Diablo IV and Baldur's Gate 3. Their grids are about twice ours. They build caves apart from halls. They share a few themes, each a kit reused across many dungeons. Round 26's spike showed that cubes cannot fake vaults ([research/2026-10-25-dungeon-vaults.md](../research/2026-10-25-dungeon-vaults.md)). So the built themes need pieces modelled for them, and the natural ones need carved rock.
+
+**More spacious, for every built theme.** The cell grows from 3 m to 4 m: a 3 m corridor between walls a cube thick. Levels go from 4 m apart to 6 m, a slab and 5.5 m clear, so a vault springs at 2.5-3 m and its crown is at 4.5-5 m. A hall spans 2-4 cells, 8-16 m, its vaults carried on piers. The goal room may take two levels' height. The third-person camera, 3-4 m behind the body, then has room to follow without brushing walls.
+
+| Theme | Like | Scale | Architecture | Materials and props | Built from |
+|---|---|---|---|---|---|
+| **Barrow halls** (today's crypt; the keep's undercroft a dressing of it) | Skyrim's Nordic ruins, Elden Ring's catacombs, Valheim's burial chambers | 4 m cells, 3 m corridors under barrel vaults crowned at 4.5 m; halls 8-16 m on piers, groin vaults at crossings, up to 8-10 m | round or pointed arches on imposts, transverse ribs a cell apart, loculi 0.5-0.6 m deep in rows, an ossuary wall, a raised sarcophagus hall | rubble walls with ashlar for arches, piers and quoins (a second stone); bones, skulls, shrouded bodies, urns, candles, cobwebs; for the keep: limewash, timber-beamed ceilings, banners, racks | building's cubes for walls and floors, and a **dressed kit** laid over them as a roof covering lies over its cubes |
+| **Hewn mine** (today's flooded mine) | Skyrim's mines, Elden Ring's tunnels, Valheim's infested mines | drifts 2.5-3 m wide and high, tight on purpose; opening into stopes and galleries 10-20 m across and shafts 2-3 levels deep | hewn rock (tool-marked, not cubes), timber sets every 1.5-2 m (two posts and a cap), cribbing, ladders and a winch at shafts | the realm's rock and its ore veins; timber, rails, carts, lamps, flooded workings | **carved voxel terrain** (digs) for drifts and stopes, a **timber kit** standing in them |
+| **Natural caverns** (cavernous) | Skyrim's caves and ice caves, Elden Ring's caves, Valheim's troll and frost caves, Deep Rock Galactic | passages 3-6 m wide, winding and rising; chambers 15-40 m across and 8-20 m high; the goal a great cavern 50 m and more, its roof in the dark | no masonry: flowstone, ledges, rock bridges, a stream or pool, a shaft of daylight; at most a few built pieces (a stair cut in rock, a bridge) | the realm's rock and its strata; stalactites and stalagmites, crystals or glowing fungi as the light, roots, bones of what lairs there | **carved voxel terrain**: chambers as intersecting spheres and planes crumpled by noise (Deep Rock Galactic's rooms), passages as noisy tubes along the routed way; rock props, no cubes |
+| **Ancient engineered halls** | Skyrim's Dwemer ruins, The Witcher 3's elven ruins, Enshrouded's vaults | monumental: halls 12-20 m wide and 10-15 m high, galleries and balconies over them, corridors 4 m | colonnades, coffered or barrel vaults, great doors, mechanisms (gears, sluices, lifts), each made by its realm's lost people | dressed stone or metal, of the realm; machines, statues, braziers, water channels | a **larger-grid kit**, a module of 2 m or 4 m, set into a carved cavern so its outside edge is rock |
+
+**What each needs.**
+
+- **Barrow halls**:
+  - Kit pieces made with the models skill and Tripo: a barrel-vault segment over a 3 m span, a cell long; a groin vault for a crossing; a transverse rib with its springers and imposts; a square pier with a base and capital; an arch for a doorway or bay; a loculus front, empty or filled; a sarcophagus.
+  - A second stone pack, ashlar.
+  - Props: bones, skulls and shrouds.
+  - Building gains a dressed piece laid over a run of cubes.
+- **Hewn mine**:
+  - Kit: a timber set, a cribbing stack, rail straight and curved, an ore cart, a ladder, a winch.
+  - The stamp's digs turn into shaped carves (rough walls, not boxes). D502 still keeps the rock undiggable.
+- **Natural caverns**:
+  - Placement on a coarser grid (8 m cells) with volumes in place of cells. The mission graph, A* routing and the promises stay. Dressing places props rather than tiles.
+  - Props: speleothems, crystals, fungus lights, rock arches.
+  - Light comes from the cave's own glow and the player's torch.
+- **Ancient engineered halls**:
+  - Kit pieces: a column, a coffer bay, a balcony rail, a great door, and machine props.
+  - The 4 m grid with two-level halls.
+
+**The generator's sizes per theme** (data in the theme file, D136):
+
+| Theme | Cell | Level | Corridor clear | Room, in cells | Goal |
+|---|---|---|---|---|---|
+| Barrow halls | 4 m | 6 m | 3 m | 2-3, halls 3-4 | 4x4, two levels high |
+| Hewn mine | 4 m | 6 m, shafts 2-3 levels | 2.5-3 m | stopes 3-5 | a flooded gallery 4x5 |
+| Natural caverns | 8 m | 10-20 m, varying | 3-6 m | volumes of 2-5 cells | a great cavern 6x6 and up |
+| Ancient engineered halls | 4 m | 6 m, halls 2 levels | 4 m | 3-5 | 5x5, two levels high |
+
+**For the developers**: which of these four to build, and in what order (recommended: barrow halls on the new grid first, as the crypt is closest; then natural caverns, the developer's "cavernous"); whether the keep stays a theme of its own or becomes a dressing of the barrow halls; whether caverns are their own dungeons or also open into the realm's own caves (worlds.md asks whether caverns are a feature of every world).
+
 ## Open questions (design, the developers')
 
 - Whether keys are items carried out, or objects of the dungeon.
