@@ -681,8 +681,8 @@ def char_nodes(t, cap):
     ash = t.math("MAXIMUM", ash, t.math("MULTIPLY", flakes, upper))
     # Round 9: and on the upper logs' outer faces, where they burned longest, soft powdery ash in
     # patches along the grain: a noise squeezed three times along the log, its edge feathered and
-    # its body powdered by finer ones, thinning over the cracks, linear 0.2-0.26 by a slow noise
-    # (0.3 lit as pale flame at night, the sheet's night pale 5.4-6 of a held 5, build 1). Round
+    # its body powdered by finer ones, thinning over the cracks, linear 0.2-0.22 by a slow noise
+    # (0.3 and 0.26 lit as pale flame at night, the sheet's night pale 5.4-5.6 of 5.41). Round
     # 8's Voronoi blocks read as stamped tiles with grout (judge, round 8); they broke the noon
     # char into the sheet's dark pockets (5.5-5.7 of a held 5), which these patches must keep.
     feather = t.math("MULTIPLY", t.math("SUBTRACT", t.noise(g, 45.0, 2.0), 0.5), 0.3)
@@ -692,14 +692,21 @@ def char_nodes(t, cap):
     soft = t.math("MULTIPLY", t.math("MULTIPLY", patch, powder), t.math("SUBTRACT", 1.0, t.math("MULTIPLY", crack, 0.85)))
     soft = t.math("MULTIPLY", soft, t.math("MULTIPLY", t.ramp(height, 0.16, 0.3), outer))
     ash = t.math("MAXIMUM", ash, soft)
-    pale = t.math("MULTIPLY", soft, t.ramp(t.noise(along(0.5, (1.1, 6.3, 2.9)), 4.0, 2.0), 0.4, 0.6, 0.1, 0.6))
+    pale = t.math("MULTIPLY", soft, t.ramp(t.noise(along(0.5, (1.1, 6.3, 2.9)), 4.0, 2.0), 0.4, 0.6, 0.25, 1.0))
     return p, amount, scorch, crack, edge, black, ash, whole, calm, deep, pale, groove
 
 
-# Grey ash, sRGB about 125 (linear 0.2); the upper outer faces' soft patches up to about 149
-# (linear 0.3, round 8's blocks').
+# Grey ash, sRGB about 125 (linear 0.2); the upper outer faces' soft patches up to about 130
+# (linear 0.22). Round 10: at 0.26 (round 9) and 0.3 (round 8's blocks) the fire sheet's
+# campfire night pale sat on its ceiling (5.4-5.6 of 5.41): ash seen through the flame, lit by
+# it, desaturates the flame's pixels into pale yellow.
 ASH = (0.2, 0.195, 0.185)
-BLOCK_ASH = (0.3, 0.29, 0.275)
+BLOCK_ASH = (0.22, 0.214, 0.203)
+# Round 10: and where the fire lights it most, the end in the flames and the faces turned in
+# toward the stack, the ash darker by up to this share (linear 0.11): those faces are what the
+# camp's eye sees through the flame; at noon they sit in the flame or the stack's shade, so the
+# sunlit outer ash that breaks the char into the sheet's dark pockets keeps its tone.
+HOT_ASH_DIM = 0.45
 
 
 def log_colour(t, maps_, cap):
@@ -713,6 +720,8 @@ def log_colour(t, maps_, cap):
         bark = t.vec("SCALE", t.image(maps_["diff"]).outputs["Color"], scale=t.math("MULTIPLY", t.math("SUBTRACT", 1.0, t.math("MULTIPLY", scorch, 0.65)), 0.8))
         col = t.vec("ADD", bark, t.vec("SCALE", t.vec("SUBTRACT", charred, bark), scale=amount))
     grey = t.vec("ADD", ASH, t.vec("SCALE", tuple(b - a for a, b in zip(ASH, BLOCK_ASH)), scale=pale))
+    lit = t.math("MAXIMUM", t.ramp(t.attr("heat"), 0.5, 1.0), t.ramp(t.attr("face"), 0.3, 0.8))
+    grey = t.vec("SCALE", grey, scale=t.math("SUBTRACT", 1.0, t.math("MULTIPLY", lit, HOT_ASH_DIM)))
     t.emit(t.vec("ADD", col, t.vec("SCALE", t.vec("SUBTRACT", grey, col), scale=t.math("MULTIPLY", ash, amount))))
 
 
