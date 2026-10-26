@@ -22,6 +22,9 @@ export type Fighter = {
   free: boolean;
   radius: number | null;
   balls: Ball[];
+  /// Each foot's heel and ball over the world's ground under them (sampled straight down,
+  /// `terra_creatures::melee::sole`), null where none was found; older records lack it.
+  sole?: (number | null)[][];
 };
 export type Asked = { move: string; got: string };
 export type Contact = { by: string; on: string; move: string; taken: string; stop_s: number };
@@ -180,8 +183,25 @@ export function chainGaps(frames: Frame[], all = runs(frames)): Check {
 /// A plant: whose foot, its first and last frame, how far its ball travelled, the move at its middle.
 export type Plant = { who: string; foot: number; from: number; to: number; travel: number; move: string };
 
+/// A ball this far under the world's ground is in it, not on it (a free foot through a tread):
+/// its frame is no contact, counted apart where it is said (yard-checks' `Contact::under`).
+export const THROUGH_SOLE_M = 0.02;
+
+/// A ball's height for contact: over the world's ground under it where the record has it (the
+/// fighter's `sole`, D455's log for unit 2c-2: a foot lowered onto ground under the root's level
+/// read over the root came nearer its fight-wide lowest), else over the shown root (`balls.up`,
+/// older records). None where its ground was not found or it is past THROUGH_SOLE_M in it.
+export function contactUp(f: Fighter, foot: number): number | undefined {
+  const ball = f.balls[foot];
+  if (!ball) return undefined;
+  if (!f.sole) return ball.up;
+  const up = f.sole[foot]?.[1];
+  return typeof up === "number" && up >= -THROUGH_SOLE_M ? up : undefined;
+}
+
 /// Every plant: a ball of the foot within PLANTED_M of its lowest (LOWEST_SHARE) for
-/// PLANT_FRAMES frames or more. A roll and a body knocked down are left out.
+/// PLANT_FRAMES frames or more, its height over the world's ground where the record has it
+/// (`contactUp`). A roll and a body knocked down are left out.
 export function plants(frames: Frame[]): Plant[] {
   const plants: Plant[] = [];
   const names = [...new Set(frames.flatMap((frame) => frame.fighters.map((f) => f.who)))];
@@ -189,10 +209,11 @@ export function plants(frames: Frame[]): Plant[] {
     for (const foot of [0, 1]) {
       const seen = frames.flatMap((frame) => {
         const f = fighter(frame, name);
-        return f?.balls[foot] && f.move !== "roll" && !f.down ? [{ frame: frame.frame, ball: f.balls[foot], move: f.move ?? "standing" }] : [];
+        const up = f && contactUp(f, foot);
+        return f && up !== undefined && f.move !== "roll" && !f.down ? [{ frame: frame.frame, ball: f.balls[foot], up, move: f.move ?? "standing" }] : [];
       });
       if (!seen.length) continue;
-      const ups = seen.map((each) => each.ball.up).sort((a, b) => a - b);
+      const ups = seen.map((each) => each.up).sort((a, b) => a - b);
       const lowest = ups[Math.floor(LOWEST_SHARE * (ups.length - 1))];
       let run: typeof seen = [];
       const close = () => {
@@ -203,7 +224,7 @@ export function plants(frames: Frame[]): Plant[] {
         run = [];
       };
       for (const each of seen) {
-        const planted = each.ball.up <= lowest + PLANTED_M;
+        const planted = each.up <= lowest + PLANTED_M;
         if (!planted || (run.length && each.frame !== run.at(-1)!.frame + 1)) close();
         if (planted) run.push(each);
       }

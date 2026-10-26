@@ -217,10 +217,20 @@ fn write(
             "why": kept.map(|kept| kept.whys()),
             "gated": kept.and_then(|kept| kept.gated()),
         }));
+        let last = bodies.last_mut().expect("just pushed");
         if is_player {
-            let last = bodies.last_mut().expect("just pushed");
             walking(last, motion, steps.get(entity).ok());
         }
+        // Its feet over the world's ground, as a walker's: the duel reads contact there.
+        soles(
+            last,
+            &mut out,
+            entity,
+            (up, 0.0),
+            kept,
+            (&children, &names, &bones),
+            &mut ground,
+        );
     }
     for (entity, place, motion, stepping, kept) in walkers.iter().filter(|_| walk) {
         let feet = place.translation();

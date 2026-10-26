@@ -23,6 +23,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { bakeFile } from "../characters/markers.ts";
 import { type Criterion, finish, type Held, judge, readBaseline, round, type Status } from "../scorecard/ratchet.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -39,6 +40,16 @@ export function courseValues(out: string): Map<string, number> {
     if (Number.isFinite(value)) values.set(m[1], round(value));
   }
   return values;
+}
+
+/// The clip files of `files` whose baked foot-lock markers (D455, tools/characters/markers.ts)
+/// are missing or not what the bake makes now: a re-export that drops them leaves every body's
+/// feet unlocked. A clip that skates is the bake's own fault, not counted here.
+export function staleMarkers(files: string[]): string[] {
+  return files.filter((file) => {
+    const { count, same } = bakeFile(resolve(ROOT, file), false);
+    return !count || !same;
+  });
 }
 
 function main() {
@@ -65,6 +76,15 @@ function main() {
   const out = (r.stdout ?? "") + (r.stderr ?? "");
   const values = courseValues(out);
   let logged = `scorecard.ts ${process.argv.slice(2).join(" ")}\n\n$ cargo ${args.join(" ")}\n${out}`;
+
+  // The game's clip files keep their baked foot locks.
+  for (const c of criteria) {
+    const check = c.check as { by?: string; files?: string[] } | null;
+    if (check?.by !== "markers" || !check.files) continue;
+    const stale = staleMarkers(check.files);
+    values.set(c.id, stale.length);
+    if (stale.length) console.log(`  markers stale or missing (run node tools/characters/markers.ts on them): ${stale.join(", ")}`);
+  }
 
   // The bench: the mover's cost a body a tick, in release on one core (D185's CPU half).
   if (opt.bench) {

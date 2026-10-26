@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { CRITERIA, courseValues } from "./scorecard.ts";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { written } from "../characters/markers.ts";
+import { CRITERIA, courseValues, staleMarkers } from "./scorecard.ts";
 
 test("the course's numbers are read from its lines and nothing else", () => {
   const out = ["running 1 test", "scorecard\ttunnel.wall\t2", "scorecard\tjump.apex\t0.046875", "scorecard\tbad\tNaN", "test x ... ok"].join("\n");
@@ -23,8 +26,21 @@ test("every criterion has its fields, a measurable one its course check (a heavy
     assert.ok(c.noticed >= 1 && c.noticed <= 5, c.id);
     assert.ok(c.notice && c.source && "bar" in c, c.id);
     assert.ok(c.cost === "cheap" || c.cost === "heavy", c.id);
-    if (c.measurable) assert.ok(c.cost === "heavy" ? ["bench", "film"].includes(c.check?.by) : c.check?.by === "course", c.id);
+    if (c.measurable) assert.ok(c.cost === "heavy" ? ["bench", "film"].includes(c.check?.by) : ["course", "markers"].includes(c.check?.by), c.id);
     else assert.ok(c.needs, `${c.id} says what it needs`);
+    if (c.check?.by === "markers") assert.ok(c.check.files?.length, `${c.id} names its clip files`);
     if (c.check?.by === "film") assert.ok(c.check.name, `${c.id} names its film check`);
+  }
+});
+
+test("a clip file re-exported without its baked foot locks is counted, one as baked is not", () => {
+  const fight = "assets/models/character/fight.glb";
+  const dir = mkdtempSync(join(tmpdir(), "markers-"));
+  const stripped = join(dir, "fight.glb");
+  writeFileSync(stripped, written(fight, {}));
+  try {
+    assert.deepEqual(staleMarkers([fight, stripped]), [stripped]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

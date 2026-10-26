@@ -64,6 +64,7 @@ fn foot(shown: Pose, lock: Option<Pose>, root: Vec3) -> Foot {
         up: UP,
         off: false,
         hip: Vec3::new(0.0, 10.0, 0.0),
+        reach: 0.88,
     }
 }
 
@@ -140,11 +141,11 @@ fn a_foot_locked_over_a_higher_tread_is_raised_onto_it_and_keeps_that_ground_for
 }
 
 #[test]
-fn a_swinging_foot_is_raised_by_the_ground_under_its_ankle_eased_and_never_lowered() {
+fn a_swinging_foot_is_raised_by_the_ground_under_its_heel_and_ball_and_eased() {
     let mut placing = Placing::default();
     let ground = tread(0.3);
     let under = under_of(&ground, Vec3::ZERO);
-    // Over the lower side first, then over the tread: one probe a frame.
+    // Over the lower side first, then over the tread: two probes a frame, heel and ball.
     let mut probes = 0;
     let mut count = |p: Vec3| {
         probes += 1;
@@ -154,15 +155,16 @@ fn a_swinging_foot_is_raised_by_the_ground_under_its_ankle_eased_and_never_lower
         placing.foot(0, foot(flat(-0.3), None, Vec3::ZERO), DT, &mut count),
         flat(-0.3)
     );
-    // Swung 0.25 m up, clear of the tread: eased, part of the way the first frame, all of it in
-    // a few tenths of a second.
+    // Swung 0.25 m up, clear of the tread: eased, part of the way the first frame (never more
+    // than half the clip's ball's clearance behind), all of it in a few tenths of a second.
     let up = |pose: Pose| Pose {
         at: pose.at + UP * 0.25,
         ..pose
     };
     let first = placing.foot(0, foot(up(flat(0.2)), None, Vec3::ZERO), DT, &mut count);
     assert!(
-        first.at.y > ANKLE.y + 0.25 && first.at.y < ANKLE.y + 0.55,
+        first.at.y > ANKLE.y + 0.55 - 0.5 * (0.25 + ANKLE.y + BALL.y - BALL_REST_M) - 1e-4
+            && first.at.y < ANKLE.y + 0.55,
         "{first:?}"
     );
     let mut last = first;
@@ -173,20 +175,216 @@ fn a_swinging_foot_is_raised_by_the_ground_under_its_ankle_eased_and_never_lower
     // Low over the tread, it is out of the ground at once.
     let low = placing.foot(0, foot(flat(0.2), None, Vec3::ZERO), DT, &mut count);
     assert!(low.at.y >= ANKLE.y + 0.3 - 1e-4, "{low:?}");
-    assert_eq!(probes, 32);
-    // Over ground lower than the root's, or none, it stays as the clip has it (the pelvis lowers
-    // it, unit 2c).
+    assert_eq!(probes, 64);
+    // Over no ground (a drop past the probe), it stays as the clip has it.
     let mut low = Placing::default();
-    let down = under_of(|_| (-0.3, UP), Vec3::ZERO);
     for _ in 0..30 {
-        assert_eq!(
-            low.foot(1, foot(flat(0.0), None, Vec3::ZERO), DT, &down),
-            flat(0.0)
-        );
         assert_eq!(
             low.foot(0, foot(flat(0.0), None, Vec3::ZERO), DT, |_| None),
             flat(0.0)
         );
+    }
+}
+
+#[test]
+fn a_swinging_foot_whose_ball_is_over_a_higher_tread_is_raised_onto_it() {
+    // The ankle over the lower side, the ball over a tread 0.3 m up: the ball is not left in it.
+    let ground = tread(0.3);
+    let shown = flat(-0.06);
+    let placed = Placing::default().foot(
+        0,
+        foot(shown, None, Vec3::ZERO),
+        DT,
+        under_of(&ground, Vec3::ZERO),
+    );
+    let [heel, ball] = off_ground(placed, shown, Vec3::ZERO, &ground);
+    assert!(ball >= -1e-3 && heel >= -1e-3, "{heel} {ball}");
+    assert!(heel.min(ball) < 1e-3, "{heel} {ball}");
+}
+
+#[test]
+fn a_swinging_foot_stays_put_when_the_root_steps_down_under_it() {
+    // The body steps down 0.4 m at once off the tread its swinging foot is still over, the foot
+    // 0.15 m clear of it as the clip has it: the foot's place in the world does not move (its
+    // ground did not), nor does it sink toward the tread while it catches up.
+    let ground = |_: f32| (0.0, UP);
+    let mut placing = Placing::default();
+    let clear = UP * 0.15;
+    let mut settled = None;
+    for frame in 0..40 {
+        let root = if frame < 20 { Vec3::ZERO } else { -UP * 0.4 };
+        let shown = Pose {
+            at: flat(0.3).at + root + clear,
+            ..flat(0.3)
+        };
+        let placed = placing.foot(0, foot(shown, None, root), DT, under_of(&ground, root));
+        let [heel, ball] = off_ground(placed, shown, root, &ground);
+        assert!(
+            heel.abs() < 1e-3 && ball.abs() < 1e-3,
+            "{frame}: {heel} {ball}"
+        );
+        let at = *settled.get_or_insert(placed.at);
+        assert!(placed.at.distance(at) < 1e-3, "{frame}: {placed:?} vs {at}");
+    }
+}
+
+#[test]
+fn a_foot_swinging_down_onto_a_higher_tread_touches_it_only_as_the_clip_touches_down() {
+    // The clip's foot comes down to its flat ground over 12 frames as it crosses onto a tread
+    // 0.3 m up: it is raised onto the tread at once by at least half its clip's clearance, so it
+    // never rests on the tread (its ball within 2 cm of its rest) before the clip's foot does.
+    let ground = tread(0.3);
+    let mut placing = Placing::default();
+    for frame in 0..=12 {
+        let high = 0.24 * (1.0 - frame as f32 / 12.0);
+        let shown = Pose {
+            at: flat(-0.3 + 0.04 * frame as f32).at + UP * high,
+            ..flat(0.0)
+        };
+        let placed = placing.foot(
+            0,
+            foot(shown, None, Vec3::ZERO),
+            DT,
+            under_of(&ground, Vec3::ZERO),
+        );
+        // The ball's clearance over its ground, less the clip's ball's own on flat ground.
+        let ball = placed.at + placed.turn * BALL;
+        let over = ball.y - ground(ball.x).0 - (ANKLE.y + BALL.y);
+        assert!(
+            over >= LAG_SHARE * high - 1e-4,
+            "{frame}: {over} vs clip {high}"
+        );
+        if high > 0.04 {
+            assert!(over > 0.02, "{frame}: {over}");
+        }
+    }
+}
+
+/// A man's leg: the hip 0.9 m over the root's level, the leg 0.88 m long (the clip's ankle
+/// 0.82 m under the hip, its knee a little bent).
+const HIP: Vec3 = Vec3::new(0.0, 0.9, 0.0);
+const LEG: f32 = 0.88;
+
+fn leg(shown: Pose, lock: Option<Pose>, root: Vec3) -> Foot {
+    Foot {
+        hip: HIP + root + (shown.at - ANKLE - root).reject_from(UP),
+        reach: LEG,
+        ..foot(shown, lock, root)
+    }
+}
+
+/// Both feet placed and the pelvis dropped, `frames` frames at the root `root(frame)`: each
+/// frame's drop and the feet placed, their hips lowered by it.
+fn walk(
+    feet: [Pose; 2],
+    locked: [bool; 2],
+    ground: &impl Fn(f32) -> (f32, Vec3),
+    root: impl Fn(usize) -> Vec3,
+    frames: usize,
+) -> Vec<(f32, [Pose; 2], [Vec3; 2])> {
+    let mut placing = Placing::default();
+    (0..frames)
+        .map(|frame| {
+            let root = root(frame);
+            let under = under_of(ground, root);
+            let shown = [0, 1].map(|side| Pose {
+                at: feet[side].at + root,
+                ..feet[side]
+            });
+            let grounded = [0, 1].map(|side| {
+                let lock = locked[side].then_some(shown[side]);
+                placing.ground(side, leg(shown[side], lock, root), DT, &under)
+            });
+            let drop = placing.pelvis([&grounded[0], &grounded[1]], root, DT);
+            let placed = grounded.map(|g| g.placed(drop));
+            let hips = shown.map(|shown| leg(shown, None, root).hip - UP * drop);
+            (drop, placed, hips)
+        })
+        .collect()
+}
+
+#[test]
+fn a_foot_over_lower_ground_is_lowered_onto_it_and_the_pelvis_with_it_springing_and_settling() {
+    // The left foot locked over a tread 0.3 m under the root's, the right on the root's level.
+    let ground = |x: f32| (if x >= 0.2 { -0.3 } else { 0.0 }, UP);
+    let feet = [flat(0.3), flat(-0.2)];
+    for locked in [[true, true], [false, true], [true, false], [false, false]] {
+        let frames = walk(feet, locked, &ground, |_| Vec3::ZERO, 30);
+        // The pelvis drops by the lower foot's need whether that foot is locked or swinging
+        // (not weighted by the lock), never overshooting, most of the way in a tenth of a
+        // second and all of it in a fifth.
+        let drops: Vec<f32> = frames.iter().map(|(drop, ..)| *drop).collect();
+        assert!(
+            drops.windows(2).all(|d| d[1] >= d[0] - 1e-6),
+            "{locked:?} {drops:?}"
+        );
+        assert!(
+            drops.iter().all(|d| *d <= 0.3 + 1e-4),
+            "{locked:?} {drops:?}"
+        );
+        assert!(drops[6] > 0.25 && drops[12] > 0.299, "{locked:?} {drops:?}");
+        let (_, placed, _) = frames[29];
+        // The lowered foot rests on its tread as the clip has it on flat ground; the other
+        // stays on its own; neither leg reaches farther than the clip's.
+        let [heel, ball] = off_ground(placed[0], feet[0], Vec3::ZERO, &ground);
+        assert!(
+            heel.abs() < 2e-3 && ball.abs() < 2e-3,
+            "{locked:?} {heel} {ball}"
+        );
+        assert!(placed[1].at.distance(feet[1].at) < 1e-4, "{locked:?}");
+        for (frame, (_, placed, hips)) in frames.iter().enumerate() {
+            for side in 0..2 {
+                let clip = feet[side]
+                    .at
+                    .distance(leg(feet[side], None, Vec3::ZERO).hip);
+                let reach = placed[side].at.distance(hips[side]);
+                assert!(
+                    reach <= clip.max(REACH_RATIO * LEG) + 1e-4,
+                    "{frame} {side}: {reach}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_pelvis_does_not_drop_for_a_foot_over_a_drop_past_what_the_planted_leg_folds_to() {
+    // The left foot over ground 0.58 m down, the right planted on the root's level: dropping
+    // the pelvis that far would fold the right leg past `FOLD_RATIO`, so it does not drop, and
+    // the left foot is lowered only as far as its own leg reaches (it stays short).
+    let ground = |x: f32| (if x >= 0.2 { -0.58 } else { 0.0 }, UP);
+    let feet = [flat(0.3), flat(-0.2)];
+    let frames = walk(feet, [false, true], &ground, |_| Vec3::ZERO, 30);
+    let (drop, placed, hips) = frames[29];
+    assert_eq!(drop, 0.0);
+    let reach = placed[0].at.distance(hips[0]);
+    assert!(reach <= REACH_RATIO * LEG + 1e-4, "{reach}");
+    assert!(placed[0].at.y < feet[0].at.y - 0.01, "{placed:?}");
+    // Swinging over it with the other foot swinging too, nothing is stood on: it drops.
+    let frames = walk(feet, [false, false], &ground, |_| Vec3::ZERO, 30);
+    assert!(frames[29].0 > 0.57, "{}", frames[29].0);
+}
+
+#[test]
+fn a_body_stepping_down_onto_ground_its_pelvis_went_to_does_not_dip_again() {
+    // The pelvis drops 0.3 m for the left foot over the lower tread; then the body steps down
+    // onto it (its root 0.3 m lower at once), both feet with it: the pelvis's place in the
+    // world never goes under where it settled, and the drop is gone at once.
+    let ground = |x: f32| (if x >= 0.2 { -0.3 } else { 0.0 }, UP);
+    let feet = [flat(0.3), flat(0.25)];
+    let root = |frame: usize| {
+        if frame < 30 {
+            Vec3::ZERO
+        } else {
+            Vec3::new(0.0, -0.3, 0.0)
+        }
+    };
+    let frames = walk(feet, [true, false], &ground, root, 60);
+    let settled = -frames[29].0;
+    for (frame, (drop, ..)) in frames.iter().enumerate().skip(30) {
+        let pelvis = root(frame).y - drop;
+        assert!(pelvis >= settled - 1e-4, "{frame}: {pelvis} vs {settled}");
+        assert!(*drop < 1e-4, "{frame}: {drop}");
     }
 }
 

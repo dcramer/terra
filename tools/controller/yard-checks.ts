@@ -5,7 +5,7 @@
 // (tools/sandbox/duel/checks.ts `sliding`). yard-checks.test.ts plants each fault in a made-up
 // walk. Node 22.18 or later; no dependencies.
 
-import { type Frame, PLANT_FRAMES, type Plant, SLIDE_M, plants, slidOf } from "../sandbox/duel/checks.ts";
+import { type Frame, PLANT_FRAMES, type Plant, SLIDE_M, THROUGH_SOLE_M, plants, slidOf } from "../sandbox/duel/checks.ts";
 
 /// A check's verdict: whether it held, its line, its number (the scorecard row's value) and
 /// how many faults it found.
@@ -129,10 +129,6 @@ export function turning(frames: Frame[], plant: Plant): boolean {
   const turned = Math.abs(((yaw(b) - yaw(a) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
   return went < TURN_STILL_M && (turned * 180) / Math.PI >= TURNED_DEG;
 }
-
-/// A ball this far under the world's ground is in it, not on it (a free foot through a tread):
-/// its frame is no contact, counted apart (`Contact::under`), never a plant's.
-export const THROUGH_SOLE_M = 0.02;
 
 /// A frame a foot's ball was in the ground: the walk's frame, the foot, how deep, m.
 type Under = { frame: number; foot: number; depth: number };

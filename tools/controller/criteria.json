@@ -1059,6 +1059,25 @@
    "slack": 6
   },
   {
+   "id": "clips.markers",
+   "noticed": 5,
+   "notice": "a clip file the game's bodies play has lost its baked foot locks (re-exported without them): every body's feet slide",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of the game's clip files whose baked foot-lock markers are missing or not what markers.ts bakes now",
+   "source": "D455 (the baked lock curves); combat round 25's re-export of fight.glb dropped them",
+   "check": {
+    "by": "markers",
+    "files": [
+     "assets/models/character/base.glb",
+     "assets/models/character/fight.glb"
+    ]
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "feet.sliding",
    "noticed": 4,
    "notice": "feet slide over the ground at walk, jog or sprint, or in starts, stops and turns",
