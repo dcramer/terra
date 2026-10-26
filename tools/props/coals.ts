@@ -321,7 +321,9 @@ export function maps(seed = 1, arms: readonly Arm[] = []): Uint8Array[] {
       // 28-40 the firelit skirt read as a crisp pale disc inside the ring (judge, round 6).
       const burnt = 30 * skirt * (0.55 + 0.45 * n);
       const flecks = smooth(0.62, 0.7, fbm(X * 45, Z * 45, 13));
-      const grey = ((16 + 10 * n) * char * (1 - skirt) + (22 + 10 * n - 6 * smooth(0.6, 0.8, speck) + burnt) * ash) * (1 - 0.5 * flecks);
+      // Round 8: the flecks a third, and the grey never under 17: halved, the pit went under 16,
+      // where rounding drew it warm (b under 0.94 r; the coals test).
+      const grey = Math.max(17, ((16 + 10 * n) * char * (1 - skirt) + (22 + 10 * n - 6 * smooth(0.6, 0.8, speck) + burnt) * ash) * (1 - 0.35 * flecks));
       // Under the heap a crackle of glowing seams through dark ash, as a bed of coals breaks
       // into a mesh of cracks, not a lit disc (fire round 29: separate red baubles).
       const ridge = (f: number, k: number) => 1 - smooth(0.0, 0.06, Math.abs(fbm(X * f, Z * f, k) - 0.5));

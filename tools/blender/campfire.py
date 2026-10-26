@@ -595,29 +595,43 @@ def char_nodes(t, cap):
     upper = t.ramp(height, 0.16, 0.32)
     flakes = t.math("MULTIPLY", t.ramp(t.noise(t.vec("ADD", p, (4.2, 8.1, 0.7)), 9.0, 3.0), 0.52, 0.62), t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), 0.6))
     ash = t.math("MAXIMUM", ash, t.math("MULTIPLY", flakes, upper))
-    return p, amount, scorch, crack, edge, black, ash, whole, calm, deep
+    # Round 8: and on the upper logs' outer faces whole blocks of the coarse net gone pale ash,
+    # about two in five, the black cracks running on between them, a crust that reads by day
+    # without the glow: build 2's flakes, small and half grey, left the char at noon one dark mass
+    # (the fire sheet's pockets 3.7-4.5 of a held 5, which the photographs by day hold at 63-169),
+    # and at dusk "dark, blocky, char barely reading" (judge, round 7). Not inward, where the fire
+    # keeps them burning, nor low by the coals, where they glow.
+    cell = t.node("ShaderNodeSeparateColor", Color=t.node("ShaderNodeTexVoronoi", _voronoi_dimensions="3D", _feature="F1", Vector=q, Scale=40.0).outputs["Color"]).outputs["Red"]
+    outer = t.ramp(t.attr("face"), 0.15, 0.45, 1.0, 0.0)
+    inside = t.ramp(big, 0.03, 0.07)
+    block = t.math("MULTIPLY", t.math("MULTIPLY", t.ramp(cell, 0.58, 0.62), inside), t.math("MULTIPLY", t.ramp(height, 0.18, 0.3), outer))
+    ash = t.math("MAXIMUM", ash, block)
+    return p, amount, scorch, crack, edge, black, ash, whole, calm, deep, block
 
 
-# Grey ash, sRGB about 125 (linear 0.2).
+# Grey ash, sRGB about 125 (linear 0.2); the upper outer faces' whole blocks paler, about 149
+# (linear 0.3, round 8).
 ASH = (0.2, 0.195, 0.185)
+BLOCK_ASH = (0.3, 0.29, 0.275)
 
 
 def log_colour(t, maps_, cap):
     """Bark toward the butt, scorched, then black alligator char over the burning length, a grey
     ash skin in patches over the end in the flames."""
-    p, amount, scorch, crack, edge, black, ash, whole, calm, deep = char_nodes(t, cap)
+    p, amount, scorch, crack, edge, black, ash, whole, calm, deep, block = char_nodes(t, cap)
     charred = t.vec("SCALE", (1, 1, 1), scale=black)
     if cap:
         col = charred
     else:
         bark = t.vec("SCALE", t.image(maps_["diff"]).outputs["Color"], scale=t.math("MULTIPLY", t.math("SUBTRACT", 1.0, t.math("MULTIPLY", scorch, 0.65)), 0.8))
         col = t.vec("ADD", bark, t.vec("SCALE", t.vec("SUBTRACT", charred, bark), scale=amount))
-    t.emit(t.vec("ADD", col, t.vec("SCALE", t.vec("SUBTRACT", ASH, col), scale=t.math("MULTIPLY", ash, amount))))
+    grey = t.vec("ADD", ASH, t.vec("SCALE", tuple(b - a for a, b in zip(ASH, BLOCK_ASH)), scale=block))
+    t.emit(t.vec("ADD", col, t.vec("SCALE", t.vec("SUBTRACT", grey, col), scale=t.math("MULTIPLY", ash, amount))))
 
 
 def log_relief(t, cap):
     """The char's blocks raised between its cracks, for the normal map."""
-    p, amount, scorch, crack, edge, black, ash, whole, calm, deep = char_nodes(t, cap)
+    p, amount, scorch, crack, edge, black, ash, whole, calm, deep, block = char_nodes(t, cap)
     return t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), amount)
 
 
@@ -627,7 +641,7 @@ def log_glow(t, cap):
     flames, dulled under ash. A separate net drawn over the char read as a
     decal, and glow near the apex only left the fire sheet's dark pockets at 4 of a held 5-170,
     where hearth.ts's crack net over the whole log made 20 (round 2)."""
-    p, amount, scorch, crack, edge, black, ash, whole, calm, deep = char_nodes(t, cap)
+    p, amount, scorch, crack, edge, black, ash, whole, calm, deep, block = char_nodes(t, cap)
     # Seams 0.01-0.05 of a block and outer faces at an eighth: at 0.015-0.09 with half on the
     # outer faces 23% of the wood glowed, a leopard print over every charred face (round 3).
     # Round 5: seams to 0.045, fewer where the char is nearly whole, and in patches (a slow noise
