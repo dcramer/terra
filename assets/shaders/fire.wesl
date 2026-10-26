@@ -1675,17 +1675,31 @@ fn baked_field(field: HearthField, slot: u32) -> HearthField {
     f.turn = vec2(cos(f.baked.y), sin(f.baked.y));
     let lo = fire.sim[0].xyz;
     let hi = lo + fire.sim[1].xyz;
-    f.tall = s * hi.z;
+    f.tall = s * BAKED_STRETCH * hi.z;
     f.wide = s * max(fire.sim[1].x, fire.sim[1].y);
     f.scale = 1.0 / max(f.tall, 1.0e-3);
     f.reach = s * length(max(abs(lo.xy), abs(hi.xy)));
-    f.under = s * max(-lo.z, 0.0) + 0.02;
+    f.under = s * BAKED_STRETCH * max(-lo.z, 0.0) + 0.02;
     f.lobes = 1;
     return f;
 }
 
 // How much faster than baked a baked loop plays (`sim::PLAY`, fire round g28).
 const BAKED_PLAY: f32 = 1.25;
+// How much taller than its scale a baked loop stands, up only (`sim::STRETCH`, fire round g39).
+const BAKED_STRETCH: f32 = 1.4;
+// Where in its box the bake's flame tops out (its sidecar's flame_height 0.78 m of 1.19): its
+// heat ramp, heart and thinning tips are read over that height, as the marched field's over its
+// own, not over the box, where its heart stood at the flame's middle and its tips never thinned.
+const BAKED_FLAME_TOP: f32 = 0.65;
+// How much sooner in from its edge a baked field's heart burns pale (FIELD_CORE's 0.58 of its
+// shape is a flame of 0.41, which the bake's low flame seldom reaches): a pale core over the
+// coals, as the marched heart (fire round g38's reviewers: no white-yellow core).
+const BAKED_HEART: f32 = 1.5;
+// How much of its density a baked flame's tips lose, over FIELD_TOP's, from half its height up:
+// thin, see-through tips (fire round g38's reviewers: opaque orange-red); at 0.4 its tongues
+// born a second fell from 12.8 to 7.4 (fire round g39 A).
+const BAKED_TIPS: f32 = 0.2;
 
 // A baked field's two frames at `time` (`sim::frames_at`): its loop played at the root of one
 // over its scale, as a fire's puffing goes, from its own offset.
@@ -1714,7 +1728,7 @@ fn baked_tile(frame: f32) -> vec2<f32> {
 fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
     var flame = wisp_flame(p, f.slot);
     let g = vec2(p.x, p.z);
-    let b = vec3(f.turn.x * g.x + f.turn.y * g.y, f.baked.z * (f.turn.x * g.y - f.turn.y * g.x), p.y) / f.baked.w;
+    let b = vec3(f.turn.x * g.x + f.turn.y * g.y, f.baked.z * (f.turn.x * g.y - f.turn.y * g.x), p.y / BAKED_STRETCH) / f.baked.w;
     let u = (b - fire.sim[0].xyz) / fire.sim[1].xyz;
     if all(u >= vec3(0.0)) && all(u <= vec3(1.0)) {
         let cells = fire.sim[2].xyz;
@@ -1728,12 +1742,15 @@ fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
     if v < -0.5 {
         return vec3(0.0);
     }
-    let drawn = field_flame(v, saturate(p.y / f.tall), f);
-    return vec3(drawn.x * (1.0 + BAKED_THIN * (1.0 - smoothstep(0.1, 0.4, v))), drawn.yz);
+    let hg = saturate(p.y / (f.tall * BAKED_FLAME_TOP));
+    let drawn = field_flame(v, hg, f, BAKED_HEART);
+    let thin = BAKED_THIN * (1.0 - smoothstep(0.1, 0.4, v)) * (1.0 - smoothstep(0.3, 0.6, hg));
+    return vec3(drawn.x * (1.0 + thin) * (1.0 - BAKED_TIPS * smoothstep(0.5, 1.0, hg)), drawn.yz);
 }
 
 // How much thicker a baked field's thin flame is, at its edge, fading to none by 0.4 of its
-// shape in: the thin tongues near its edge read bright enough to show (fire round g28).
+// shape in: the thin tongues near its edge read bright enough to show (fire round g28); low in
+// the flame only, so its tips stay thin (fire round g39).
 const BAKED_THIN: f32 = 1.0;
 
 // A baked fire's shed wisps (D493, docs/fire-module.md's "Shed wisps"; sim/wisp.rs): up to
@@ -1823,12 +1840,13 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
     let evolve = vec3(noise3(m), noise3(m + vec3(31.7, 7.9, 13.1)), noise3(m + vec3(5.9, 19.3, 41.7))) - vec3(0.5);
     let tear = fbm3(n2 + evolve * 1.6);
     v -= FIELD_TEAR * smoothstep(0.0, 0.5, hg) * (tear - 0.36);
-    return field_flame(v, hg, f);
+    return field_flame(v, hg, f, 1.0);
 }
 
-// The field's flame where its shape is `v` (0 its edge, 1 its spine) at `hg` of its height: x
-// its density per metre, y its heat, z its heat without its top's skin lift (`field_gas`).
-fn field_flame(v: f32, hg: f32, f: HearthField) -> vec3<f32> {
+// The field's flame where its shape is `v` (0 its edge, 1 its spine) at `hg` of its height, its
+// heart reached `heart` times sooner in from its edge: x its density per metre, y its heat, z its
+// heat without its top's skin lift (`field_gas`).
+fn field_flame(v: f32, hg: f32, f: HearthField, heart: f32) -> vec3<f32> {
     // Its tips fade by thinning, not by cooling to red (g13: its top third 55-57% red against
     // filmed campfires' 3-47%).
     let dens = smoothstep(0.0, FIELD_FEATHER, v) * (1.0 - FIELD_TOP.y * smoothstep(0.5, 1.0, hg));
@@ -1840,7 +1858,7 @@ fn field_flame(v: f32, hg: f32, f: HearthField) -> vec3<f32> {
     // Its heart: deep inside its lower part the flame is thicker and burns at the ramp's pale
     // top, so a dense pale mass sits over the coals and grades to orange at the rim, its upper
     // part still see-through (fire round g9: RDR2's 12% pale from above, ours 2-4%).
-    let core = smoothstep(FIELD_CORE.x, FIELD_CORE.x + 0.12, v) * (1.0 - smoothstep(FIELD_CORE.y * 0.5, FIELD_CORE.y, hg));
+    let core = smoothstep(FIELD_CORE.x, FIELD_CORE.x + 0.12, v * heart) * (1.0 - smoothstep(FIELD_CORE.y * 0.5, FIELD_CORE.y, hg));
     let burns = 0.85 + 0.15 * f.heat;
     return vec3(dens * f.k * (1.0 + FIELD_CORE.z * core), mix(heat * burns, FIELD_CORE_HEAT, core), mix(unlifted * burns, FIELD_CORE_HEAT, core));
 }

@@ -30,6 +30,13 @@ const SET: &str = "campfire-sim";
 /// How tall a fire plays the bake at its own size (`Kindled::tall`): the staged campfire's, whose
 /// view and size g23's sim was matched to (`burns` 1.5 m, g21's film).
 const BAKED_TALL: f32 = 1.5;
+/// How much taller than its scale a fire plays the bake, up only (`fire.wesl`'s `BAKED_STRETCH`):
+/// the bake's flame stands about 0.78 m on its 0.9 m width, the marched campfire's taller, in
+/// separate tongues, and a panel judged the baked one a low mass beside it (fire round g38: 4.19
+/// against 5.08). In g21's view its top stood 306/310 px at the median (dusk/night) against the
+/// marched campfire's 385/391, 1.26 times; stretched 1.25 with its tips thinned, 351/351 (fire
+/// round g39).
+const STRETCH: f32 = 1.4;
 /// How far a fire's scale varies about its height's, either way (D493).
 const SCALE_SPREAD: f32 = 0.15;
 /// How quickly the wind a loop is turned by follows the climate's, seconds: the climate's is
@@ -178,15 +185,19 @@ impl Placement {
     #[cfg(test)]
     pub fn to_bake(self, q: Vec3) -> Vec3 {
         let (s, c) = (libm::sinf(self.turn), libm::cosf(self.turn));
-        Vec3::new(c * q.x + s * q.z, self.mirror * (c * q.z - s * q.x), q.y) / self.scale
+        Vec3::new(
+            c * q.x + s * q.z,
+            self.mirror * (c * q.z - s * q.x),
+            q.y / STRETCH,
+        ) / self.scale
     }
 
     /// A way in the bake's box (downwind, across, up) in its fire's frame (east, up, north), not
-    /// scaled: `to_bake`'s turn and mirror undone.
+    /// scaled: `to_bake`'s turn, mirror and stretch undone.
     pub fn to_frame(self, b: Vec3) -> Vec3 {
         let (s, c) = (libm::sinf(self.turn), libm::cosf(self.turn));
         let across = self.mirror * b.y;
-        Vec3::new(c * b.x - s * across, b.z, s * b.x + c * across)
+        Vec3::new(c * b.x - s * across, b.z * STRETCH, s * b.x + c * across)
     }
 
     /// What `fire.wesl`'s `Fire::baked` reads.

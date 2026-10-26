@@ -203,7 +203,8 @@ fn a_fire_turns_its_loop_downwind_and_its_mirror_keeps_the_wind() {
             (b.x * p.scale - 0.3).abs() < 1.0e-4 && b.y.abs() < 1.0e-4,
             "{wind}: {b}"
         );
-        assert!((b.z * p.scale - 0.15).abs() < 1.0e-4);
+        // Up is stretched as well as scaled.
+        assert!((b.z * p.scale * STRETCH - 0.15).abs() < 1.0e-4);
         // Its mirror flips what is across the wind and nothing else.
         let across = Vec3::new(-wind.y, 0.0, wind.x) * 0.2;
         let flipped = Placement {
@@ -251,4 +252,10 @@ fn a_way_in_the_bake_comes_back_to_the_fires_frame() {
         let q = Vec3::new(0.3, 0.8, -0.2);
         assert!(p.to_frame(p.to_bake(q)).distance(q) < 1e-5);
     }
+}
+
+#[test]
+fn the_shader_stretches_the_loop_as_the_wisps_are() {
+    let shader = std::fs::read_to_string(crate::data::assets().join("shaders/fire.wesl")).unwrap();
+    assert!(shader.contains(&format!("const BAKED_STRETCH: f32 = {STRETCH:?};")));
 }

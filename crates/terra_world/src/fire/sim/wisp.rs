@@ -4,14 +4,15 @@
 //! rounds g23, g34, g35). So a baked fire sheds its own, as shipped games add pieces over a baked
 //! flame ("secondary flame licks"): small soft ellipsoids of flame that the same marcher draws
 //! (`fire.wesl`'s `wisp_flame`), each leaving one of the tongue tips the baker lists for the
-//! frame it is born in, at the gas's velocity there plus the game's wind beyond the bake's,
-//! shrinking and thinning through the drawn flame's edge over its life.
+//! frame it is born in, at part of the gas's velocity there plus the game's wind beyond the
+//! bake's, curling off its way and shrinking and thinning through the drawn flame's edge over its
+//! life.
 //!
 //! Each fire has `WISPS` lanes, each lane a wisp at most in each `period`, born at a time and
 //! from a tip of its own seed's choosing, so a fire's wisps are known at any time from its seed
 //! and its place in the loop alone, nothing kept from frame to frame, and no two fires shed alike.
 
-use super::{Placement, Sim};
+use super::{Placement, STRETCH, Sim};
 use bevy::prelude::*;
 
 /// The wisps a fire draws at once at most: one a lane. Must match `WISPS` in fire.wesl.
@@ -32,13 +33,23 @@ const LIFE_S: [f32; 2] = [0.04, 0.12];
 /// flame of 0.6 fading straight, few were seen to come free, fire round g37).
 const RADIUS_M: f32 = 0.04;
 /// Its flame at birth, in the bake's units (the shader's BAKED_EDGE 0.08 is the drawn edge): a
-/// tongue's body's, held as a burning pocket's is and falling away as it burns out.
+/// tongue's body's, falling away as it burns out, halfway between straight and held, so it is
+/// through the edge before its life ends (held to its last third, it was drawn the whole way,
+/// fire round g38; falling straight, few were seen to come free, g39 A: sheds 0.17/0.09).
 const FLAME: f32 = 0.9;
+/// How much of its tip's gas speed a wisp keeps: a torn-off pocket of flame is slowed by the air
+/// it burns into. At the whole speed (6.3 m/s at the tips' median, 8 m/s as the loop plays) one
+/// flew half a metre straight in its tenth of a second, and three reviewers called them long
+/// straight comet streaks (fire round g38); at 0.45 few came free of their tongue (g39 A).
+const RISE: f32 = 0.725;
 /// How far along its way it reaches each side of its middle, besides its half width: the way it
-/// goes in half a 30th of a second, as a velocity-aligned sprite is stretched, so a fast wisp
-/// reads as one piece from frame to frame (a film's 30th of a second moves it 18 cm at the
-/// tips' median 5.4 m/s), not a bead that jumps.
-const SMEAR_S: f32 = 0.5 / 30.0;
+/// goes in a third of a 30th of a second, about twice as long as wide, a piece of flame, not a
+/// streak (at half a 30th it reached 17 cm each side, fire round g38).
+const SMEAR_S: f32 = 0.35 / 30.0;
+/// How far its way turns over its life, radians, either way about a level axis of its own: a
+/// pocket shed from a tongue's tip rolls off in the eddy that tore it, so it curls away rather
+/// than flying straight (the bake keeps no velocity field to follow, only each tip's gas).
+const CURL: [f32; 2] = [0.4, 0.9];
 /// The wind the bake was simulated in (its sidecar: a gusting 1.8 m/s mean down its +x); the
 /// game's beyond it carries a wisp on downwind.
 const BAKE_WIND_MPS: f32 = 1.8;
@@ -54,17 +65,37 @@ fn period() -> f32 {
     WISPS as f32 / (TIPS as f32 * TIP_RATE)
 }
 
-/// One wisp: when it was born and how long it lives (seconds on the cards' clock), and where it
-/// left from and how fast it goes (its fire's frame: east, up, north; metres, m/s).
+/// One wisp: when it was born and how long it lives (seconds on the cards' clock), where it left
+/// from and how fast it went then (its fire's frame: east, up, north; metres, m/s), and how it
+/// curls: its way turning about a level axis, the axis times the turn a second (radians).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Wisp {
     pub born: f32,
     pub life: f32,
     pub from: Vec3,
     pub velocity: Vec3,
+    pub curl: Vec3,
 }
 
 impl Wisp {
+    /// Where it is and how fast it goes `age` seconds after its birth: its velocity turned about
+    /// its curl's axis at its rate, and the way that velocity sweeps, in closed form.
+    pub fn at(&self, age: f32) -> (Vec3, Vec3) {
+        let w = self.curl.length();
+        if w < 1.0e-6 {
+            return (self.from + self.velocity * age, self.velocity);
+        }
+        let n = self.curl / w;
+        let along = n * n.dot(self.velocity);
+        let flat = self.velocity - along;
+        let side = n.cross(flat);
+        let (s, c) = (libm::sinf(w * age), libm::cosf(w * age));
+        (
+            self.from + along * age + flat * (s / w) + side * ((1.0 - c) / w),
+            along + flat * c + side * s,
+        )
+    }
+
     /// What `fire.wesl`'s `wisp_flame` reads of it at `time`: its middle and its flame, its axis
     /// (along its way, as long as it reaches) and its half width; none once it is gone or past
     /// the marcher's box.
@@ -74,21 +105,21 @@ impl Wisp {
             return None;
         }
         let t = age / self.life;
-        let at = self.from + self.velocity * age;
+        let (at, velocity) = self.at(age);
         let radius = RADIUS_M * scale * (1.0 - 0.5 * t);
-        let speed = self.velocity.length();
+        let speed = velocity.length();
         let way = if speed > 1.0e-3 {
-            self.velocity / speed
+            velocity / speed
         } else {
             Vec3::Y
         };
         let reach = radius + speed * SMEAR_S;
-        let top = (sim.box_min[2] + sim.box_size[2] + REACH_M) * scale;
+        let top = ((sim.box_min[2] + sim.box_size[2]) * STRETCH + REACH_M) * scale;
         if at.y + reach * way.y.abs() > top {
             return None;
         }
         Some([
-            at.extend(FLAME * (1.0 - t * t)),
+            at.extend(FLAME * (1.0 - 0.5 * t * (1.0 + t))),
             (way * reach).extend(radius),
         ])
     }
@@ -153,12 +184,16 @@ fn born(
     } else {
         Vec2::ZERO
     };
+    let life = (LIFE_S[0] + (LIFE_S[1] - LIFE_S[0]) * luck(2)) / placed.rate();
+    let bearing = luck(3) * core::f32::consts::TAU;
+    let turn = (CURL[0] + (CURL[1] - CURL[0]) * luck(4)) * if luck(5) < 0.5 { 1.0 } else { -1.0 };
     Some(Wisp {
         born,
-        life: (LIFE_S[0] + (LIFE_S[1] - LIFE_S[0]) * luck(2)) / placed.rate(),
+        life,
         from: placed.to_frame(Vec3::new(tip[0], tip[1], tip[2])) * s,
-        velocity: placed.to_frame(Vec3::new(tip[3], tip[4], tip[5])) * speed
+        velocity: placed.to_frame(Vec3::new(tip[3], tip[4], tip[5])) * speed * RISE
             + Vec3::new(beyond.x, 0.0, beyond.y),
+        curl: Vec3::new(libm::cosf(bearing), 0.0, libm::sinf(bearing)) * (turn / life),
     })
 }
 

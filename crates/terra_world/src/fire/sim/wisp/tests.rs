@@ -111,20 +111,22 @@ fn neighbouring_fires_shed_apart() {
 }
 
 #[test]
-fn a_wisp_leaves_its_tip_at_the_gas_speed_and_thins_through_the_edge_as_it_dies() {
+fn a_wisp_leaves_its_tip_slower_than_the_gas_curls_and_thins_through_the_edge_as_it_dies() {
     let s = sim(1);
     let turn = core::f32::consts::FRAC_PI_2;
     let (scale, p) = (1.44, placed(turn, 1.44));
     let w = (0..200)
         .find_map(|k| born(&s, p, 0.5, Vec2::ZERO, 0, k))
         .expect("a lane sheds");
-    // The tip is 0.8 m up at the bake's middle; the bake's 4 m/s up and 1 m/s downwind are the
-    // fire's at its scale times its loop's rate, up and down the wind, which blows north at this
-    // turn.
+    // The tip is 0.8 m up at the bake's middle, up stretched; the bake's 4 m/s up (stretched) and
+    // 1 m/s downwind are the fire's at its scale times its loop's rate, slowed to RISE of it, up
+    // and down the wind, which blows north at this turn.
     let rate = p.rate();
-    assert!(w.from.distance(Vec3::new(0.0, 0.8 * scale, 0.0)) < 1e-5);
+    assert!(w.from.distance(Vec3::new(0.0, 0.8 * STRETCH * scale, 0.0)) < 1e-5);
     assert!(
-        w.velocity.distance(Vec3::new(0.0, 4.0, 1.0) * scale * rate) < 1e-4,
+        w.velocity
+            .distance(Vec3::new(0.0, 4.0 * STRETCH, 1.0) * scale * rate * RISE)
+            < 1e-4,
         "{}",
         w.velocity
     );
@@ -133,15 +135,40 @@ fn a_wisp_leaves_its_tip_at_the_gas_speed_and_thins_through_the_edge_as_it_dies(
     let at = |t: f32| w.drawn(w.born + t * w.life, scale, &s);
     let [mid, axis] = at(0.0).expect("drawn at its birth");
     assert!(mid.truncate().distance(w.from) < 1e-5 && (mid.w - FLAME).abs() < 1e-6);
-    // Along its way, reaching further than it is wide.
+    // Along its way, reaching further than it is wide, but not a streak.
     assert!(axis.truncate().normalize().dot(w.velocity.normalize()) > 0.999);
-    assert!(axis.truncate().length() > axis.w);
+    assert!(axis.truncate().length() > axis.w && axis.truncate().length() < 2.5 * axis.w);
+    // Its way curls about a level axis by CURL over its life, its speed kept; its path is its
+    // turning velocity summed in small steps.
+    assert!(w.curl.y.abs() < 1e-6);
+    let curled = w.curl.length() * w.life;
+    assert!(
+        (CURL[0] - 1e-4..=CURL[1] + 1e-4).contains(&curled),
+        "{curled}"
+    );
+    let (mut q, steps) = (w.from, 2000);
+    let dt = 0.5 * w.life / steps as f32;
+    for i in 0..steps {
+        let spun = Quat::from_scaled_axis(w.curl * (i as f32 + 0.5) * dt);
+        q += spun * w.velocity * dt;
+    }
     let [half, half_axis] = at(0.5).expect("drawn halfway");
-    assert!(half.truncate().distance(w.from + w.velocity * 0.5 * w.life) < 1e-4);
-    // A burning pocket: its flame mostly held halfway through its life, as it shrinks.
-    assert!(half.w > FLAME * 0.7 && half.w < FLAME && half_axis.w < axis.w);
+    assert!(
+        half.truncate().distance(q) < 1e-4,
+        "{} {q}",
+        half.truncate()
+    );
+    let (_, v) = w.at(0.5 * w.life);
+    assert!((v.length() - w.velocity.length()).abs() < 1e-3);
+    // Turned about its axis by half its curl, halfway.
+    let spun = Quat::from_scaled_axis(w.curl * 0.5 * w.life) * w.velocity;
+    assert!(v.distance(spun) < 1e-3, "{v} {spun}");
+    assert!(v.angle_between(w.velocity) > 0.1);
+    assert!(half_axis.truncate().normalize().dot(v.normalize()) > 0.999);
+    // Its flame falls away: a little over half left halfway, as it shrinks.
+    assert!(half.w > FLAME * 0.5 && half.w < FLAME * 0.7 && half_axis.w < axis.w);
     // Its flame falls through the drawn edge (0.08) before it is gone, and then it is.
-    let late = at(0.97).expect("drawn near its end");
+    let late = at(0.95).expect("drawn near its end");
     assert!(late[0].w < 0.08);
     assert!(at(1.01).is_none());
 }
@@ -168,13 +195,15 @@ fn a_falling_tip_sheds_nothing_and_no_wisp_is_drawn_past_the_box() {
         f[0][5] = 0.2;
     }
     assert!(births(&s, placed(0.0, 1.0), 0.5, 0.0, 60.0).is_empty());
+    // The box tops out at 1.18 m, stretched up, the wisps 0.6 over it.
+    let top = 1.18 * STRETCH + 0.6;
     let w = Wisp {
         born: 0.0,
         life: 0.1,
-        from: Vec3::new(0.0, 1.7, 0.0),
+        from: Vec3::new(0.0, top - 0.02, 0.0),
         velocity: Vec3::new(0.0, 4.0, 0.0),
+        curl: Vec3::ZERO,
     };
-    // The box tops out at 1.18 m, the wisps 0.6 over it.
     assert!(w.drawn(0.0, 1.0, &s).is_none());
     assert!(w.drawn(0.0, 1.5, &s).is_some());
 }
