@@ -134,7 +134,7 @@ pub(super) fn lay(
         let (top, m) = (kinds.head(cell.space) - 1, CELL / 2);
         let ops = &mut out.ops;
         match look.class {
-            Class::Pillar => f.fill(ops, [m - 1, 0, m - 1], [m, top, m], solid(kinds.trim)),
+            Class::Pillar => pillar(cell, look, top, kinds, ops),
             Class::Alcove if walled(0) => {
                 f.fill(ops, [1, 0, 1], [INNER, top, 1], solid(kinds.wall));
                 for y in [1, 5].into_iter().filter(|&y| y + 2 < top) {
@@ -358,6 +358,25 @@ fn props(f: Frame, cell: &Cell, class: Class, props: &mut Vec<Prop>) {
         Class::Table => props.push(prop("models/props/Bench.glb", f, MID, MID, 1, 1.0)),
         Class::Vein => props.push(prop(&rock(cell.at, 1), f, MID, 1.3, 2, 0.6)),
         _ => {}
+    }
+}
+
+/// A pillar of a row running north to south (its module's aisle sockets): at the middle
+/// between two aisles; at a row's end, stood against the end wall as a respond is; none in
+/// front of a doorway. On 4 m cells a middle pillar leaves a metre to an end wall, a gap a
+/// tour squeezed through 0.5 m from both, and stood a metre in front of a doorway at the end.
+fn pillar(cell: &Cell, look: Look, top: i32, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
+    let side = |d: usize| cell.sides[(d + look.turn) % 4];
+    let (m, trim) = (CELL / 2, solid(kinds.trim));
+    if [0, 2]
+        .iter()
+        .any(|&d| !matches!(side(d), Side::Open | Side::Wall))
+    {
+        return;
+    }
+    match [0, 2].into_iter().find(|&d| side(d) == Side::Wall) {
+        Some(d) => Frame::new(cell.at, look.turn + d).fill(ops, [m - 1, 0, 1], [m, top, 2], trim),
+        None => Frame::new(cell.at, look.turn).fill(ops, [m - 1, 0, m - 1], [m, top, m], trim),
     }
 }
 
