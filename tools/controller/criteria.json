@@ -96,6 +96,21 @@
    "measurable": true
   },
   {
+   "id": "slope.stopped",
+   "noticed": 3,
+   "notice": "a body stopped by ground too steep to climb, still pressed into it, is said to move at its jog: its figure strides in place",
+   "bar": {
+    "at_most": 0.1
+   },
+   "unit": "m/s, the worst of the slopes that stop it",
+   "source": "docs/controller.md criterion 3; Unreal's walking velocity reflects the move made (PhysWalking), Lyra's pose reads it",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "slope.speed",
    "noticed": 3,
    "notice": "a body goes up a hill as fast as on the flat",

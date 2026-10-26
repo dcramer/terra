@@ -597,20 +597,37 @@ fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, look: f32, d
 /// A body's velocity with nothing into what it met. On the ground, what it can stand on and
 /// what is under its bottom sphere's centre (Jolt's supporting volume) is floor or the edge of
 /// a step it stands on, not a wall: the velocity is already along the floor, and taking a
-/// step's edge out of it would slow the body at every step and lift it there.
+/// step's edge out of it would slow the body at every step and lift it there. A face under
+/// the centre too steep to stand on that no step climbed stops it as a wall would
+/// (`slope.stopped`).
 fn unblocked(mut velocity: Vec3, on_ground: bool, body: &Body, shape: &Shape) -> Vec3 {
     let bottom = (body.position - body.frame).as_vec3() + shape.up * shape.radius;
     for t in &body.active {
         let c = &t.contact;
         let under = (c.at - bottom).dot(shape.up) < -shape.padding;
-        if on_ground && (under || !shape.too_steep(c.normal)) {
+        let steep = shape.too_steep(c.normal);
+        if on_ground && !steep {
             continue;
         }
-        if t.met || c.distance < shape.padding {
-            let into = (velocity - c.velocity).dot(c.normal);
-            if into < 0.0 {
-                velocity -= c.normal * into;
+        if !(t.met || c.distance < shape.padding) {
+            continue;
+        }
+        if on_ground && under {
+            // Under the bottom sphere's centre and too steep: a step's edge is walked up
+            // (`walk_stairs`) and kept; ground too steep to climb stops the body, its face
+            // taken as upright (Unreal's walking slides along a face it cannot walk as along a
+            // wall; Jolt's CancelVelocityTowardsSteepSlopes, the normal made level), so a body
+            // held against it is still.
+            let n = c.normal - shape.up * c.normal.dot(shape.up);
+            let into = (velocity - c.velocity).dot(n);
+            if body.stepped <= 0.0 && into < 0.0 && n.length_squared() > 1e-12 {
+                velocity -= n * into / n.length_squared();
             }
+            continue;
+        }
+        let into = (velocity - c.velocity).dot(c.normal);
+        if into < 0.0 {
+            velocity -= c.normal * into;
         }
     }
     velocity

@@ -171,6 +171,7 @@ pub(super) fn score<M: Mover>(new: &(impl Fn() -> M + Sync)) -> Vec<Measure> {
         m("penetration.max", deepest),
         m("penetration.median", median),
         m("slope.limit", (limit(&slopes) - kind.slope_limit_deg).abs()),
+        m("slope.stopped", worst(|c| matches!(c, Case::Slope(_)), 1)),
         m("step.ground", sum(|c| matches!(c, Case::Step(_)), 0)),
         m("stick.slope", sum(|c| matches!(c, Case::StickSlope), 0)),
         m("stick.stair", sum(|c| matches!(c, Case::StickStair), 0)),
@@ -425,8 +426,16 @@ fn moves<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
             for _ in 0..ticks(3.0) {
                 run.tick(|_, b| walk(b));
             }
-            let climbed = local(run.body(0).feet).x > 3.0;
-            run.outcome(vec![f32::from(u8::from(climbed))])
+            let body = run.body(0);
+            let climbed = local(body.feet).x > 3.0;
+            // Stopped by it, still pressed into it: how fast the mover says it goes, which
+            // the figure strides at.
+            let pressed = if climbed {
+                0.0
+            } else {
+                body.velocity.reject_from(body.up).length()
+            };
+            run.outcome(vec![f32::from(u8::from(climbed)), pressed])
         }
         Case::Gap(wider) => {
             let gap = 2.0 * kind.radius + wider;
