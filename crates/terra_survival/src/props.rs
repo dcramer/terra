@@ -31,13 +31,14 @@ pub use solid::{Blocked, Standing, blocked, ray_box};
 /// (terra_world::fire): their tips licking 1.3 m over the stones, 0.75 m over its low
 /// teepee of logs (0.55 m, tools/props/char.py), as a campfire's do in photographs (at 0.9 m
 /// the logs hid all but their tips, fire sheet review 3/10); at 1.5 a 3.3 m card stood them
-/// over a seated troll (fire sheet, stage 3).
+/// over a seated troll (fire sheet, stage 3). Its body is the baked loop with its shed wisps
+/// (D493, the developers' choice of fire round g28's build).
 pub const CAMPFIRE: terra_world::fire::Kindled = terra_world::fire::Kindled {
     tall: 1.3,
     wide: 0.7,
     heat: 0.9,
     logs: terra_world::fire::Logs::CAMPFIRE.below(CAMPFIRE_FOOT_M),
-    body: terra_world::fire::Body::Marched,
+    body: terra_world::fire::Body::Baked,
     light: terra_world::fire::HEARTH_LIGHT,
 };
 /// Its flames stand from so high over its foot, the embers among the stones.

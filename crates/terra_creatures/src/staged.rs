@@ -633,14 +633,20 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         entity.insert(bends);
     }
     if let Some([tall, wide, heat]) = asked.burns {
-        // On the campfire's logs, the one hearth's model there is to stage a fire on.
+        // On the campfire's logs, the one hearth's model there is to stage a fire on; on the
+        // ground it burns as the campfire does (the baked body, D493), raised on a model's head
+        // (a staged torch) as it did before.
         let logs = terra_world::fire::Logs::CAMPFIRE;
+        let body = match asked.burns_up {
+            None => terra_world::fire::Body::Baked,
+            Some(_) => terra_world::fire::Body::Marched,
+        };
         let kindled = terra_world::fire::Kindled {
             tall,
             wide,
             heat,
             logs,
-            body: terra_world::fire::Body::Marched,
+            body,
             light: terra_world::fire::HEARTH_LIGHT,
         };
         match asked.burns_up {
