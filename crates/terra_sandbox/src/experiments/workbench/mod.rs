@@ -25,6 +25,7 @@ mod sheet;
 
 use bevy::{
     asset::RecursiveDependencyLoadState,
+    camera::primitives::Aabb,
     gltf::{Gltf, GltfAssetLabel},
     prelude::*,
     remote::{BrpResult, builtin_methods::parse_some},
@@ -39,8 +40,8 @@ use terra_game::{character, planet::Planet, remote, shell::Options};
 
 /// How far apart models stand, side by side.
 const SPACING_M: f32 = 1.2;
-/// The gap between props in the row, and the height a body is taken to have when
-/// framing them.
+/// The gap between props in the row, and the height a body is taken to have until its
+/// skin is measured (`measure`).
 const PROP_GAP_M: f32 = 0.6;
 const BODY_M: f32 = 1.8;
 /// How far the camera stands from a whole figure, and from a part looked at closely.
@@ -60,6 +61,12 @@ struct Bench {
     slots: Vec<f32>,
     length: f32,
     tallest: f32,
+    /// The tallest prop, and the first model's height once its skin is measured: a body
+    /// is framed by its own size, so a 7 m creature is seen whole and looked at closely
+    /// from as far as its size asks (`measure`).
+    props_high: f32,
+    figure: f32,
+    measured: bool,
     /// It has props, so the row is wider than a figure and its sheet keeps the whole view.
     wide: bool,
     spawned: bool,
@@ -147,7 +154,7 @@ fn draw_contracts(mut gizmos: Gizmos, props: Query<(&Contract, &GlobalTransform)
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
-        .add_systems(Update, (spawn, sheet::capture).chain())
+        .add_systems(Update, (spawn, measure, sheet::capture).chain())
         .add_systems(Update, draw_contracts);
     remote::method(app, "workbench.pose", pose_method);
     remote::method(app, "workbench.shape", shape_method);
@@ -206,6 +213,7 @@ fn setup(
     } else {
         BODY_M
     };
+    let mut tallest_prop: f32 = 0.0;
     for (look, offset) in looks.iter().zip(&slots[options.models.len()..]) {
         let size = look.model.half * 2.0;
         let wrong = terra_game::play::contract::check(&look.entry);
@@ -228,6 +236,7 @@ fn setup(
             );
         }
         tallest = f32::max(tallest, size.y);
+        tallest_prop = f32::max(tallest_prop, size.y);
         let mut prop = commands.spawn((
             Name::new(format!("Workbench prop {}", look.entry.name)),
             Transform::from_translation(floor + side * *offset).with_rotation(turned),
@@ -273,6 +282,9 @@ fn setup(
         slots,
         length,
         tallest,
+        props_high: tallest_prop,
+        figure: BODY_M,
+        measured: false,
         wide: !looks.is_empty(),
         spawned: false,
         models: Vec::new(),
@@ -501,6 +513,64 @@ fn dress(
     }
 }
 
+/// Once every model's skin has bounds: how tall each stands, so the views frame bodies by
+/// their size rather than a person's.
+fn measure(
+    bench: Option<ResMut<Bench>>,
+    children: Query<&Children>,
+    boxes: Query<(&Aabb, &GlobalTransform)>,
+    mut camera: Query<&mut Transform, With<MainCamera>>,
+) {
+    let Some(mut bench) = bench else { return };
+    if bench.measured || !bench.ready() {
+        return;
+    }
+    let mut heights = Vec::new();
+    for model in &bench.models {
+        let found = children
+            .iter_descendants(model.root)
+            .filter_map(|each| boxes.get(each).ok())
+            .map(|(bounds, at)| (*bounds, *at));
+        // Skin is bounded a frame or two after its scene spawns.
+        let Some(height) = standing_height(found, bench.stand, bench.up) else {
+            return;
+        };
+        heights.push(height);
+    }
+    bench.measured = true;
+    for (index, height) in heights.iter().enumerate() {
+        info!("workbench: model {index} stands {height:.2} m tall");
+    }
+    bench.figure = heights.first().copied().unwrap_or(BODY_M);
+    bench.tallest = heights.iter().copied().fold(bench.props_high, f32::max);
+    if let Ok(mut transform) = camera.single_mut() {
+        *transform = whole_view(&bench, 30.0);
+    }
+}
+
+/// How high above `stand`, along `up`, the highest corner of any of `boxes` reaches, each
+/// box in its entity's space; `None` when there are none.
+fn standing_height(
+    boxes: impl Iterator<Item = (Aabb, GlobalTransform)>,
+    stand: Vec3,
+    up: Vec3,
+) -> Option<f32> {
+    let mut highest: Option<f32> = None;
+    for (bounds, at) in boxes {
+        let (middle, half) = (Vec3::from(bounds.center), Vec3::from(bounds.half_extents));
+        for corner in 0..8 {
+            let sign = Vec3::new(
+                if corner & 1 == 0 { -1.0 } else { 1.0 },
+                if corner & 2 == 0 { -1.0 } else { 1.0 },
+                if corner & 4 == 0 { -1.0 } else { 1.0 },
+            );
+            let height = (at.transform_point(middle + half * sign) - stand).dot(up);
+            highest = Some(highest.map_or(height, |was| f32::max(was, height)));
+        }
+    }
+    highest
+}
+
 /// Where the camera stands to see every model whole from `degrees` round their front.
 fn whole_view(bench: &Bench, degrees: f32) -> Transform {
     let target = bench.stand + bench.up * f32::max(0.9, bench.tallest * 0.5);
@@ -540,7 +610,11 @@ fn view(
         globals.get(part).ok().map(GlobalTransform::translation)
     });
     match part {
-        Some(target) => around(bench, target, degrees, FOCUS_VIEW_M, 0.15),
+        Some(target) => {
+            // A part of a body bigger than a person is looked at from as much further.
+            let scale = f32::max(1.0, bench.figure / BODY_M);
+            around(bench, target, degrees, FOCUS_VIEW_M * scale, 0.15 * scale)
+        }
         None => whole_view(bench, degrees),
     }
 }
@@ -683,4 +757,32 @@ fn pose_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     }
     pose(&bench, &clip, fraction, &mut players, &mut hands);
     Ok(json!({ "clip": clip, "fraction": fraction }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A body is as tall as the top of its highest box, wherever and however that box
+    /// is placed, measured along the ground's up.
+    #[test]
+    fn a_body_stands_as_tall_as_its_highest_box() {
+        let stand = Vec3::new(0.0, 100.0, 0.0);
+        let up = Vec3::Y;
+        // A 7 m trunk from the ground up, its box in its entity's space.
+        let trunk = (
+            Aabb::from_min_max(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 7.0, 1.0)),
+            GlobalTransform::from_translation(stand),
+        );
+        // A crown half a metre across, scaled up four times, its middle 7.5 m up.
+        let crown = (
+            Aabb::from_min_max(Vec3::splat(-0.25), Vec3::splat(0.25)),
+            GlobalTransform::from(
+                Transform::from_translation(stand + up * 7.5).with_scale(Vec3::splat(4.0)),
+            ),
+        );
+        let height = standing_height([trunk, crown].into_iter(), stand, up).unwrap();
+        assert!((height - 8.5).abs() < 1e-4, "{height}");
+        assert_eq!(standing_height(std::iter::empty(), stand, up), None);
+    }
 }
