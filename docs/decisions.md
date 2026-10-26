@@ -512,7 +512,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D482](decisions/D482.md) | The mover keeps bodies in f64 and asks in f32 offsets | Tech | Agent | Decided | The mover (D53) keeps each body's position in f64 and… |
 | [D485](decisions/D485.md) | A reflection probe smaller than every irradiance volume holding a spot gives its diffuse light | Tech | Agent | Decided | Per fragment, the smallest light probe holding it gives… |
 | [D488](decisions/D488.md) | A room shut off from the sky is seen as by night, with a dim neutral fill | Tech | Agent | Leaning | Where the air round the eye takes under a tenth or so of… |
-| [D493](decisions/D493.md) | The flame's motion would come from a baked, looping fluid simulation, sampled by the marched field | Tech | Agent | Leaning | The design is fire-module.md's last section… |
+| [D493](decisions/D493.md) | The campfire's flame's motion comes from a baked, looping fluid simulation, sampled by the marched field | Tech | Developers | Decided | The design is fire-module.md's last section… |
 | [D496](decisions/D496.md) | A fire's glow is marched short, by its own lights | Tech | Agent | Leaning | Bevy's volumetric fog shader marches a fire's glow… |
 
 ## Tools and workflow
