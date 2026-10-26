@@ -10,7 +10,9 @@
 //! built as. `cargo xtask seed` fetches and, when they changed, builds it again, holding
 //! `.git/terra-seed/lock`, so sessions starting together wait for one build rather than each
 //! building their own. Only the dependencies that changed are rebuilt; the first build takes
-//! the longest. `--refresh` runs its builds again whatever the manifests say.
+//! the longest. `--refresh` runs its builds again whatever the manifests say. Each build ends
+//! with a sweep of what the builds no longer use (`sweep`), since Cargo deletes nothing.
+//! `--renew`, in a worktree that lives long, seeds it again when the seed moved on.
 //!
 //! **The main checkout** is kept up to date by the same command: it is fast-forwarded to
 //! origin/main when it is on `main` with no changes and no commits origin/main lacks, and
@@ -28,16 +30,17 @@
 //! rebuild on either side leaves the other's alone. Everything else is copied, since Cargo and
 //! rustc rewrite fingerprints, dep-info and build-script output in place.
 
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::stage::{Said, Step};
 use crate::windows::{WINDOWS_TARGET, on_wsl};
-use crate::{Task, output, root};
+use crate::{Task, output, root, sweep};
 
 /// The task this module runs (D410).
 pub(crate) const TASKS: &[Task] = &[Task {
@@ -100,16 +103,24 @@ enum Mode {
     Child,
     /// `--refresh`: the seed's builds run again whatever the manifests say.
     Refresh,
+    /// `--renew`: a worktree's build seeded from an older seed, or not from one, is deleted
+    /// and seeded again, so a worktree that lives long (the nightly's, continuous's) links the
+    /// seed's dependencies rather than building each new one itself beside the old.
+    Renew,
 }
+
+/// The file in a worktree's `target/` naming the seed build it was seeded from.
+const SEEDED: &str = "seeded";
 
 pub fn seed(args: &[String]) -> bool {
     match args.first().map(String::as_str) {
         Some("--background") => background(),
         Some("--child") => run(Mode::Child),
         Some("--refresh") => run(Mode::Refresh),
+        Some("--renew") => run(Mode::Renew),
         None => run(Mode::Plain),
         Some(_) => {
-            eprintln!("usage: cargo xtask seed [--refresh]");
+            eprintln!("usage: cargo xtask seed [--refresh | --renew]");
             false
         }
     }
@@ -161,6 +172,16 @@ fn background() -> bool {
 }
 
 fn run(mode: Mode) -> bool {
+    run_in(&root(), mode)
+}
+
+/// Seeds another worktree, as the prune does after deleting the build of one a session still
+/// has open (D259).
+pub(super) fn reseed(worktree: &Path) -> bool {
+    run_in(worktree, Mode::Plain)
+}
+
+fn run_in(here: &Path, mode: Mode) -> bool {
     // A child's stdout is its parent's pipe, read once; everything else goes to the log.
     let child = mode == Mode::Child;
     let say = |text: String| {
@@ -170,12 +191,15 @@ fn run(mode: Mode) -> bool {
             println!("{text}");
         }
     };
-    let here = root();
+    let here = here.to_path_buf();
     let Some(main) = main_checkout() else {
         say("seed: git cannot find the main checkout".into());
         return false;
     };
     let worktree = main != here;
+    if worktree && mode == Mode::Renew && !renew(&here.join("target"), &say) {
+        return false;
+    }
 
     // This checkout's locks first, so nothing builds here while the seed is made and copied.
     let mut held = Vec::new();
@@ -260,6 +284,9 @@ fn run(mode: Mode) -> bool {
             }
         }
     }
+    if ok && let Some(stamp) = from_target.parent().and_then(Stamp::read) {
+        let _ = std::fs::write(to_target.join(SEEDED), &stamp.commit);
+    }
     say(format!(
         "seed: done in {:.0} s",
         started.elapsed().as_secs_f64()
@@ -267,6 +294,24 @@ fn run(mode: Mode) -> bool {
     drop(seed_lock);
     drop(held);
     ok
+}
+
+/// Deletes a worktree's build when the seed it was seeded from is not the seed there is now;
+/// false if a build under way keeps it.
+fn renew(target: &Path, say: &dyn Fn(String)) -> bool {
+    let seeded = std::fs::read_to_string(target.join(SEEDED)).ok();
+    let current = seed_dir()
+        .and_then(|dir| Stamp::read(&dir))
+        .map(|s| s.commit);
+    if !target.is_dir() || (seeded.is_some() && seeded == current) {
+        return true;
+    }
+    if !sweep::free_build(target) {
+        say("seed: --renew: a build is under way here, so its build is kept".into());
+        return false;
+    }
+    say("seed: --renew: this build was seeded from an older seed, so it is seeded again".into());
+    true
 }
 
 /// The profile folders the seed builds, relative to a target folder.
@@ -374,7 +419,7 @@ fn ensure(refresh: bool, child: bool, say: &dyn Fn(String)) -> Result<(PathBuf, 
     if windows() {
         builds.extend(WINDOWS_BUILDS);
     }
-    for args in builds {
+    for &args in &builds {
         let shown = format!("cargo {}", args.join(" "));
         let mut cargo = Command::new("cargo");
         cargo
@@ -396,6 +441,7 @@ fn ensure(refresh: bool, child: bool, say: &dyn Fn(String)) -> Result<(PathBuf, 
             failed.push(args.join(" "));
         }
     }
+    say(sweep(&dir, &builds, failed.is_empty()));
     Stamp {
         ok: failed.is_empty(),
         commit: commit.clone(),
@@ -416,6 +462,57 @@ fn ensure(refresh: bool, child: bool, say: &dyn Fn(String)) -> Result<(PathBuf, 
         }
     ));
     Ok((target, held))
+}
+
+/// Sweeps the seed's build of what its builds no longer use (D259), so it holds one build of
+/// origin/main rather than every build since it was made: every incremental cache, since
+/// worktrees are never seeded with one, and, when every build passed, each dependency's unit
+/// none of them names. Asked again with Cargo's JSON messages, the builds are all fresh and take
+/// seconds. Our own crates' units are left, since they are never seeded and Cargo names a
+/// binary by its copy without the hash. A worktree linked to a swept unit keeps its own link.
+/// Says what it freed.
+fn sweep(dir: &Path, builds: &[&[&str]], passed: bool) -> String {
+    let target = dir.join("target");
+    let mut live = HashSet::new();
+    let ours = workspace_packages(&dir.join("src")).unwrap_or_default();
+    let keep = |name: &str| is_ours(name, &ours);
+    let mut listed = passed && !ours.is_empty();
+    for args in builds {
+        if !listed {
+            break;
+        }
+        let messages = Command::new("cargo")
+            .args(*args)
+            .arg("--message-format=json")
+            .current_dir(dir.join("src"))
+            .env("CARGO_TARGET_DIR", &target)
+            .env_remove("RUSTUP_TOOLCHAIN")
+            .stderr(Stdio::null())
+            .output();
+        match messages {
+            Ok(out) if out.status.success() => {
+                live.extend(sweep::live_hashes(&String::from_utf8_lossy(&out.stdout)));
+            }
+            _ => listed = false,
+        }
+    }
+    let (mut incremental, mut units) = (0, 0);
+    for profile in profile_dirs(&target) {
+        let profile = target.join(profile);
+        incremental += sweep::incremental(&profile, Duration::ZERO, SystemTime::now());
+        if listed {
+            units += sweep::stale_units(&profile, &live, &keep);
+        }
+    }
+    format!(
+        "seed: swept {:.1} GB of incremental caches and {}",
+        incremental as f64 / 1e9,
+        if listed {
+            format!("{:.1} GB of units no build uses", units as f64 / 1e9)
+        } else {
+            "no units, since a build failed".into()
+        }
+    )
 }
 
 /// Checks a commit's files out into the seed's `src/`, through an index of its own, so files

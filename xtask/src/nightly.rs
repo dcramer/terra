@@ -309,8 +309,8 @@ pub(crate) fn nightly(args: &[String]) -> bool {
     passed
 }
 
-/// The run's worktree at origin/main, made the first time and seeded (D183), cleared of
-/// anything a run before left; the commit it is at.
+/// The run's worktree at origin/main, made the first time and seeded from the shared seed
+/// (D183) whenever that moved on, cleared of anything a run before left; the commit it is at.
 fn prepare(src: &Path, logs: &Path) -> Result<String, String> {
     if !src.join(".git").exists() {
         let _ = git(&root(), &["worktree", "prune"]);
@@ -339,11 +339,11 @@ fn prepare(src: &Path, logs: &Path) -> Result<String, String> {
             ));
         }
     }
-    if !src.join("target").exists() {
-        let mut seed = Command::new("cargo");
-        seed.args(["xtask", "seed"]).current_dir(src);
-        Step::new("seed", Said::Printed, logs).run(seed);
-    }
+    // Seeded again whenever the seed moved on, so main's new dependencies are linked from it
+    // rather than built here beside the old ones (D259).
+    let mut seed = Command::new("cargo");
+    seed.args(["xtask", "seed", "--renew"]).current_dir(src);
+    Step::new("seed", Said::Printed, logs).run(seed);
     git_output(src, &["rev-parse", "HEAD"])
         .map(|tip| tip.trim().to_string())
         .ok_or_else(|| "git cannot say where origin/main is".to_string())

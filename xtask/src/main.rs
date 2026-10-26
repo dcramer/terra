@@ -18,6 +18,7 @@ mod seed;
 mod session;
 mod sizes;
 mod stage;
+mod sweep;
 mod tasks;
 mod windows;
 mod worktrees;

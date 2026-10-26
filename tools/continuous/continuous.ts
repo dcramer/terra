@@ -112,8 +112,8 @@ function lock(state: string): (() => void) | undefined {
   return () => rmSync(dir, { recursive: true, force: true });
 }
 
-/// The worktree detached at `tip`, made and seeded (D183) the first time, cleared of what the
-/// last run left but its build.
+/// The worktree detached at `tip`, made the first time and seeded from the shared seed (D183)
+/// whenever that moved on, cleared of what the last run left but its build.
 function prepare(src: string, tip: string, log: string): string | undefined {
   if (!existsSync(join(src, ".git"))) {
     git(["worktree", "prune"]);
@@ -122,11 +122,11 @@ function prepare(src: string, tip: string, log: string): string | undefined {
   for (const args of [["reset", "-q", "--hard"], ["clean", "-fdq"], ["checkout", "-q", "--detach", tip]]) {
     if (!git(args, src).ok) return `git ${args.join(" ")} failed in ${src}`;
   }
-  if (!existsSync(join(src, "target"))) {
-    const fd = openSync(log, "a");
-    spawnSync("cargo", ["xtask", "seed"], { cwd: src, stdio: ["ignore", fd, fd] });
-    closeSync(fd);
-  }
+  // Seeded again whenever the seed moved on, so main's new dependencies are linked from it
+  // rather than built here beside the old ones (D259).
+  const fd = openSync(log, "a");
+  spawnSync("cargo", ["xtask", "seed", "--renew"], { cwd: src, stdio: ["ignore", fd, fd] });
+  closeSync(fd);
   return undefined;
 }
 

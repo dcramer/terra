@@ -5,14 +5,21 @@
 //! runs `--prune` in the background at most once every 15 minutes. An agent whose work is pushed runs
 //! `--done` to delete its own worktree's build at once, rather than leave it for the prune.
 //!
-//! Only worktrees under `.claude/worktrees/` are touched, never the one this runs in, never one
-//! locked, used by a running process, or used recently. The shared seed build every worktree's
-//! dependencies are linked from (`.git/terra-seed/`, D183) is not a worktree and is never
-//! touched, nor is the main checkout or its build:
+//! Only worktrees under `.claude/worktrees/` are removed or have their builds deleted, never the
+//! one this runs in, never one locked, running something from its build, or used recently. The
+//! shared seed build every worktree's dependencies are linked from (`.git/terra-seed/`, D183)
+//! is not a worktree and sweeps itself when it is built:
 //! - a subagent's (`agent-…`) whose commits are all on `main` and that has no changes, untracked
 //!   files included, is removed with its branch once it has been idle two days;
 //! - any worktree's build folder is deleted after one idle hour, since it can be built again
-//!   (`cargo xtask seed` makes that quick). Its source files are kept.
+//!   (`cargo xtask seed` makes that quick). Its source files are kept;
+//! - a worktree a session still has open (Claude Code's process sits in it, idle or not, as long
+//!   as the session is open) keeps its build a day, then has it deleted and seeded again at
+//!   once, so the session's next build still compiles only our crates;
+//! - in every build folder, the main checkout's, the nightly's and continuous's included,
+//!   rustc's incremental cache of a unit it has not compiled for a day is deleted: rustc keeps
+//!   one for every unit it ever compiled, and a unit compiled again without one is compiled in
+//!   full, once.
 //!
 //! Idle is measured from the last thing that touched it: an edit to its files, git (a commit or
 //! a checkout, not the index, which `git status` rewrites) or a build. A subagent sent another
@@ -24,7 +31,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime};
 
-use super::{Task, output, root, seed};
+use super::{Task, output, root, seed, sweep};
 
 /// The task this module runs (D410).
 pub(crate) const TASKS: &[Task] = &[Task {
@@ -41,6 +48,11 @@ const HOUR: Duration = Duration::from_secs(60 * 60);
 const AGENT_IDLE: Duration = Duration::from_secs(2 * 24 * 60 * 60);
 /// Build files can be made again; their retention is separate from source retention.
 const BUILD_IDLE: Duration = HOUR;
+/// How long a session left open keeps its worktree's build untouched: Claude Code's process
+/// sits in its worktree while the session is open, idle or not, for days.
+const SESSION_IDLE: Duration = Duration::from_secs(24 * 60 * 60);
+/// How long rustc's cache of a unit is kept in any build folder once it stops compiling it.
+const INCREMENTAL_IDLE: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub fn worktrees(args: &[String]) -> bool {
     let prune = match args {
@@ -116,11 +128,11 @@ pub fn worktrees(args: &[String]) -> bool {
             .unwrap_or_default();
         let agent = name.starts_with("agent-");
         let ours = tree.path.starts_with(&managed) && tree.path != root() && !tree.locked;
-        let in_use = tree.path.canonicalize().ok().and_then(|tree_path| {
-            active_paths
-                .as_ref()
-                .map(|paths| paths.iter().any(|path| path.starts_with(&tree_path)))
-        });
+        let in_use = tree
+            .path
+            .canonicalize()
+            .ok()
+            .and_then(|tree_path| active_paths.as_ref().map(|paths| in_use(&tree_path, paths)));
         let action = choose_action(ours, agent, merged, changes, idle, target.is_dir(), in_use);
 
         let state = [
@@ -134,9 +146,10 @@ pub fn worktrees(args: &[String]) -> bool {
         .into_iter()
         .chain(tree.locked.then(|| "locked".into()))
         .chain(match in_use {
-            Some(true) => Some("active process".into()),
+            Some(InUse::Build) => Some("running its build".into()),
+            Some(InUse::Session) => Some("session open".into()),
             None => Some("activity unknown".into()),
-            Some(false) => None,
+            Some(InUse::Nothing) => None,
         })
         .collect::<Vec<_>>()
         .join(", ");
@@ -148,17 +161,21 @@ pub fn worktrees(args: &[String]) -> bool {
             (Action::FreeBuild, false) => "would delete its build",
             (Action::Remove, true) => "removed",
             (Action::FreeBuild, true) => "build deleted",
+            (Action::Reseed, false) => "would seed its build again",
+            (Action::Reseed, true) => "build seeded again",
         };
         let done = match (action, prune) {
             (_, false) | (Action::Keep, _) => true,
             (Action::Remove, true) => remove(&main_checkout, &tree),
-            (Action::FreeBuild, true) => free_build(&target),
+            (Action::FreeBuild, true) => sweep::free_build(&target),
+            (Action::Reseed, true) => sweep::free_build(&target) && seed::reseed(&tree.path),
         };
         if prune && done {
             freed += match action {
                 Action::Remove => build + checkout,
                 Action::FreeBuild => build,
-                Action::Keep => 0,
+                Action::Reseed => build.saturating_sub(sweep::unlinked(&target)),
+                Action::Keep => trim(&target, now),
             };
         }
         ok &= done;
@@ -171,12 +188,15 @@ pub fn worktrees(args: &[String]) -> bool {
         );
     }
     if prune {
+        freed += trim(&main_checkout.join("target"), now);
         println!("worktrees: freed {}", gb(freed));
     } else {
         println!(
             "\n`cargo xtask worktrees --prune` removes a subagent's worktree once it is on main, \
-             clean and idle two days. Build folders are deleted after one idle hour. \
-             Active worktrees and unreadable states are kept. `--done` deletes this worktree's build now."
+             clean and idle two days. Build folders are deleted after one idle hour, or seeded \
+             again after a day if a session is still open there. In every build folder, the \
+             main checkout's too, rustc's incremental caches unwritten for a day are deleted. \
+             Running builds and unreadable states are kept. `--done` deletes this worktree's build now."
         );
     }
     ok
@@ -206,6 +226,41 @@ fn process_paths() -> Option<Vec<PathBuf>> {
     (!paths.is_empty()).then_some(paths)
 }
 
+/// What running processes use of a worktree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InUse {
+    Nothing,
+    /// A process sits in the worktree but runs nothing from its build: an open session.
+    Session,
+    /// A process runs from or sits in its build.
+    Build,
+}
+
+fn in_use(tree: &Path, paths: &[PathBuf]) -> InUse {
+    let target = tree.join("target");
+    if paths.iter().any(|path| path.starts_with(&target)) {
+        InUse::Build
+    } else if paths.iter().any(|path| path.starts_with(tree)) {
+        InUse::Session
+    } else {
+        InUse::Nothing
+    }
+}
+
+/// Deletes a build folder's incremental caches rustc has not written for a day, unless a build
+/// is under way in it; what that freed.
+fn trim(target: &Path, now: SystemTime) -> u64 {
+    let Some(held) = sweep::hold(target) else {
+        return 0;
+    };
+    let freed = seed::profile_dirs(target)
+        .iter()
+        .map(|profile| sweep::incremental(&target.join(profile), INCREMENTAL_IDLE, now))
+        .sum();
+    drop(held);
+    freed
+}
+
 fn choose_action(
     ours: bool,
     agent: bool,
@@ -213,11 +268,18 @@ fn choose_action(
     changes: Option<usize>,
     idle: Duration,
     has_build: bool,
-    in_use: Option<bool>,
+    in_use: Option<InUse>,
 ) -> Action {
-    if !ours || in_use != Some(false) || changes.is_none() {
-        Action::Keep
-    } else if agent && merged && changes == Some(0) && idle >= AGENT_IDLE {
+    if !ours || changes.is_none() {
+        return Action::Keep;
+    }
+    match in_use {
+        None | Some(InUse::Build) => return Action::Keep,
+        Some(InUse::Session) if has_build && idle >= SESSION_IDLE => return Action::Reseed,
+        Some(InUse::Session) => return Action::Keep,
+        Some(InUse::Nothing) => {}
+    }
+    if agent && merged && changes == Some(0) && idle >= AGENT_IDLE {
         Action::Remove
     } else if has_build && idle >= BUILD_IDLE {
         Action::FreeBuild
@@ -231,6 +293,8 @@ enum Action {
     Keep,
     Remove,
     FreeBuild,
+    /// The build deleted and seeded again, for a session still open there.
+    Reseed,
 }
 
 /// A worktree as `git worktree list` gives it.
@@ -333,29 +397,6 @@ fn remove(main: &Path, tree: &Tree) -> bool {
     }
 }
 
-/// Deletes a build folder unless a build is under way in it: every profile's Cargo locks are
-/// taken first, and a profile with none of the locks Cargo is known to take is left alone.
-fn free_build(target: &Path) -> bool {
-    let profiles = seed::profile_dirs(target);
-    if profiles.is_empty() {
-        return false;
-    }
-    let mut held = Vec::new();
-    for profile in profiles {
-        let locks: Vec<File> = seed::LOCKS
-            .iter()
-            .filter_map(|name| File::open(target.join(&profile).join(name)).ok())
-            .collect();
-        if locks.is_empty() || locks.iter().any(|file| file.try_lock().is_err()) {
-            return false;
-        }
-        held.extend(locks);
-    }
-    let removed = std::fs::remove_dir_all(target).is_ok();
-    drop(held);
-    removed
-}
-
 /// Deletes this worktree's build, for an agent whose work is pushed. If it builds here again,
 /// `cargo xtask seed` first makes that quick.
 fn done() -> bool {
@@ -374,7 +415,7 @@ fn done() -> bool {
         return true;
     }
     let bytes = usage(&target).bytes;
-    if !free_build(&target) {
+    if !sweep::free_build(&target) {
         eprintln!("worktrees: a build is under way here, or its folder could not be deleted");
         return false;
     }
@@ -417,7 +458,7 @@ fn usage(path: &Path) -> Usage {
         return Usage::default();
     };
     let own = Usage {
-        bytes: if meta.is_dir() || shared(&meta) {
+        bytes: if meta.is_dir() || sweep::shared(&meta) {
             0
         } else {
             meta.len()
@@ -432,16 +473,6 @@ fn usage(path: &Path) -> Usage {
     } else {
         own
     }
-}
-
-#[cfg(unix)]
-fn shared(meta: &std::fs::Metadata) -> bool {
-    std::os::unix::fs::MetadataExt::nlink(meta) > 1
-}
-
-#[cfg(not(unix))]
-fn shared(_: &std::fs::Metadata) -> bool {
-    false
 }
 
 fn age(idle: Duration) -> String {
@@ -545,12 +576,20 @@ mod tests {
                     changes,
                     hour - Duration::from_secs(1),
                     true,
-                    Some(false)
+                    Some(InUse::Nothing)
                 ),
                 Action::Keep
             );
             assert_eq!(
-                choose_action(true, agent, merged, changes, hour, true, Some(false)),
+                choose_action(
+                    true,
+                    agent,
+                    merged,
+                    changes,
+                    hour,
+                    true,
+                    Some(InUse::Nothing)
+                ),
                 Action::FreeBuild
             );
         }
@@ -562,7 +601,7 @@ mod tests {
                 Some(0),
                 Duration::from_secs(2 * 86400),
                 false,
-                Some(false)
+                Some(InUse::Nothing)
             ),
             Action::Remove
         );
@@ -574,7 +613,7 @@ mod tests {
                 Some(0),
                 Duration::from_secs(2 * 86400),
                 false,
-                Some(false)
+                Some(InUse::Nothing)
             ),
             Action::Keep
         );
@@ -583,20 +622,60 @@ mod tests {
     #[test]
     fn active_locked_and_unreadable_worktrees_are_kept() {
         let old = Duration::from_secs(10 * 86400);
-        for active in [Some(true), None] {
+        for active in [Some(InUse::Build), None] {
             assert_eq!(
                 choose_action(true, true, true, Some(0), old, true, active),
                 Action::Keep
             );
         }
         assert_eq!(
-            choose_action(false, true, true, Some(0), old, true, Some(false)),
+            choose_action(false, true, true, Some(0), old, true, Some(InUse::Nothing)),
             Action::Keep
         );
         assert_eq!(
-            choose_action(true, true, true, None, old, true, Some(false)),
+            choose_action(true, true, true, None, old, true, Some(InUse::Nothing)),
             Action::Keep
         );
+    }
+
+    #[test]
+    fn an_open_session_keeps_its_build_a_day_then_has_it_seeded_again() {
+        let session = Some(InUse::Session);
+        let day = Duration::from_secs(86400);
+        let just_under = day - Duration::from_secs(1);
+        assert_eq!(
+            choose_action(true, true, true, Some(0), just_under, true, session),
+            Action::Keep
+        );
+        for agent in [true, false] {
+            assert_eq!(
+                choose_action(true, agent, true, Some(0), day * 10, true, session),
+                Action::Reseed
+            );
+        }
+        assert_eq!(
+            choose_action(true, true, true, Some(0), day * 10, false, session),
+            Action::Keep
+        );
+    }
+
+    #[test]
+    fn a_process_in_the_build_is_told_from_a_session_in_the_worktree() {
+        let tree = Path::new("/r/.claude/worktrees/a");
+        let at = |p: &str| vec![PathBuf::from(p)];
+        assert_eq!(in_use(tree, &at("/r/.claude/worktrees/a")), InUse::Session);
+        assert_eq!(
+            in_use(tree, &at("/r/.claude/worktrees/a/crates")),
+            InUse::Session
+        );
+        assert_eq!(
+            in_use(
+                tree,
+                &at("/r/.claude/worktrees/a/target/release/terra_sandbox")
+            ),
+            InUse::Build
+        );
+        assert_eq!(in_use(tree, &at("/r/.claude/worktrees/ab")), InUse::Nothing);
     }
 
     #[test]
@@ -627,12 +706,12 @@ mod tests {
                 break;
             }
         }
-        assert!(!free_build(&target));
+        assert!(!sweep::free_build(&target));
         assert!(path.exists());
         child.stdin.take().unwrap().write_all(b"release\n").unwrap();
         output.read_to_string(&mut String::new()).unwrap();
         assert!(child.wait().unwrap().success());
-        assert!(free_build(&target));
+        assert!(sweep::free_build(&target));
     }
 
     #[test]
@@ -655,7 +734,7 @@ mod tests {
         std::fs::create_dir_all(&target).unwrap();
         let file = target.join("unrecognised-output");
         std::fs::write(&file, b"keep").unwrap();
-        assert!(!free_build(&target));
+        assert!(!sweep::free_build(&target));
         assert!(file.exists());
         std::fs::remove_dir_all(&target).unwrap();
     }
