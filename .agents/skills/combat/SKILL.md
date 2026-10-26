@@ -37,7 +37,7 @@ The game's composed pose (D530, round 30: the duel record's `pose`, after the ho
 4. `film.pose.head_yaw_blows` (bar 15°): 41° left of the facing in the backhand, 35° on average through the blows, 26° on the guard; the clips' heads turn with the chest (off the hips 41°). Nothing turns the head back: a look-at on the neck and head toward the aim (Unreal's Look At / Godot's LookAtModifier3D) laid after the clips, or keys.
 5. `film.pose.shield_rest_high` (bar 10 cm) passes since round 32: 8.1 cm (was 27.7; 61 in the block), the set's guard `Low_Guard` (D531). Left: the duel check counts 249 resting frames over 10 cm, the guard's own sway (the player's idle peaks at 14 cm) and the partner's walk-in (`Walk_Loop+Low_Guard`, median 13.8).
 6. `film.pose.shield_forearm_deg` (bar 10°) 15.6°, `film.pose.shield_forearm_off` (bar 5 cm) 12.5 cm, `film.pose.shield_strap_fist` (bar 1 cm) 17.6 cm: the strap (`heater_shield.glb`'s `strap`) hangs the board off the forearm bone, the same in every stance; task 1's re-hang.
-Not yet: arms into the body on the composed idles (skin.ts holds the move check's skin for it; the sheathed `Idle_Loop` is not in moves.ts's clips).
+`film.pose.arms_in_body` (bar 2 cm) passes since round 33: -1.0 cm (was 6.2, the sheathed walk's and idle's right fingers in the thigh), by `terra_walker::arms` (D535), which turns an arm out at the shoulder after the clips whenever its hand hangs at the hip, so any idle or walk (a bought one too) gets it with no clip changed.
 
 Each fighter plays the set its own hands give (holding.md step 3, round 27: `Hands`, the off hand's slot, D460); `held.torch.*` measure a torch carried in the off hand beside the sword over the guard, walk and strafes (a moves row's `hold`).
 

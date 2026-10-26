@@ -14,6 +14,7 @@
 
 use bevy::{platform::collections::HashMap, prelude::*};
 use std::collections::BTreeMap;
+use terra_walker::bend::Kept;
 
 /// A figure's bends: what each named bone is to be turned by, what it was turned by when
 /// last told, how far through the blend between them, and the bones found in its body.
@@ -27,11 +28,10 @@ pub struct Bends {
     missing: Vec<String>,
 }
 
-/// A bone being bent: its entity, and the clip's rotation and what was written over it the
-/// last frame, so a bone no clip moves is not bent again on top of its own bend.
+/// A bone being bent: its entity, and the clip's rotation and what was written over it.
 struct Bone {
     entity: Entity,
-    last: Option<(Quat, Quat)>,
+    kept: Kept,
 }
 
 /// A bend as the calls give it, degrees about the body's x, y and z.
@@ -75,13 +75,6 @@ impl Bends {
     }
 }
 
-/// A bone's own rotation, `local` under a parent turned `parent` from the body, turned by
-/// `bend` about the body's axes at its joint: what makes the bone, in the body, `bend` times
-/// where the clip put it.
-pub fn bent(parent: Quat, local: Quat, bend: Quat) -> Quat {
-    (parent.inverse() * bend * parent * local).normalize()
-}
-
 /// Each figure's bends laid over its clip, after the animation has posed it and before the
 /// pose is carried to the skin.
 pub fn bend(
@@ -122,14 +115,8 @@ pub fn bend(
             let Ok(mut transform) = transforms.get_mut(bone.entity) else {
                 continue;
             };
-            // A rotation still as written last frame was not posed again by a clip.
-            let clip = match bone.last {
-                Some((clip, written)) if transform.rotation == written => clip,
-                _ => transform.rotation,
-            };
-            let written = bent(parent, clip, turn);
-            transform.rotation = written;
-            bone.last = Some((clip, written));
+            let clip = bone.kept.clip(transform.rotation);
+            transform.rotation = bone.kept.turn(clip, parent, turn);
         }
     }
 }
@@ -155,7 +142,7 @@ fn find(figure: Entity, bends: &mut Bends, children: &Query<&Children>, names: &
                 name.to_string(),
                 Bone {
                     entity: each,
-                    last: None,
+                    kept: Kept::default(),
                 },
             );
         }
@@ -176,17 +163,6 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use std::time::Duration;
-
-    #[test]
-    fn a_bent_bone_points_where_the_bend_turns_it_in_the_body() {
-        let parent = Quat::from_euler(EulerRot::XYZ, 0.4, -1.1, 0.3);
-        let local = Quat::from_euler(EulerRot::XYZ, -0.7, 0.2, 1.3);
-        let bend = turn([10.0, -25.0, 40.0]);
-        let along = Vec3::new(0.2, -0.9, 0.1).normalize();
-        let before = parent * local * along;
-        let after = parent * bent(parent, local, bend) * along;
-        assert!((after - bend * before).length() < 1e-5);
-    }
 
     /// A figure, its body's node turned to face its way, a pelvis turned in it and an upper
     /// arm under that pointing down in the body, and some bones besides, as a model's are.

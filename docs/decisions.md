@@ -203,6 +203,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D530](decisions/D530.md) | Combat is also checked on the game's composed pose, from the duel's record | Tech | Agent | Decided | The duel's fight record (`--fight-log` in a `--duel`… |
 | [D531](decisions/D531.md) | The drawn shield rests low and rises only while the block is held | Design | Developers | Decided | With a shield drawn and the block not held… |
 | [D534](decisions/D534.md) | The Cetri, a tree that walks | Design | Developers | Decided | A monster drawn by a developer's child (creatures.md)… |
+| [D535](decisions/D535.md) | Pose fix-ups after the clips: the hanging hands kept off the hips, the head kept on the aim | Tech | Agent | Decided | After every clip and hold has posed a body… |
 
 ## People and the tribe
 
