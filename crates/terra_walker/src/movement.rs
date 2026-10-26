@@ -166,7 +166,7 @@ fn recycle<'b, T: ?Sized>(mut list: Vec<&T>) -> Vec<&'b T> {
 }
 
 /// A man's kind (D136): the player is one.
-fn man() -> Kind {
+pub(crate) fn man() -> Kind {
     Kind::parse(
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),

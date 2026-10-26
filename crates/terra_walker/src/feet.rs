@@ -165,6 +165,11 @@ pub struct Kept {
     /// the body's velocity over the ground while a clip that travels plays at its pace, zero
     /// for a clip that stands. Whoever plays the clip sets it (`figure`).
     pub ground: Vec3,
+    /// How much longer than its clip's the stride playing is shown, less 1 (`pace::gait`'s
+    /// warp): each foot's travel along the way is stretched so (`stride`).
+    warp_by: f32,
+    /// How far each planted leg asks the pelvis down to reach its warped foot, m (`warped`).
+    reach_need: [f32; 2],
     /// A layer above lets the feet go this frame (a fighter down, a roll): they go as the clip
     /// has them. Set each frame by whoever knows.
     pub let_go: bool,
@@ -204,11 +209,42 @@ pub struct Kept {
 }
 
 impl Kept {
-    /// The clip playing travels `pace` metres a second (scaled to the body) at `rate`, `way`:
+    /// The clip playing travels `pace` metres a second (scaled to the body) at `rate`, `way`,
+    /// its feet's travel along the way stretched `warp` times (`pace::gait`, stride warping):
     /// the ground its planted feet stand on passes under the body that fast (none for a clip
     /// that stands, of no pace).
-    pub fn stride(&mut self, way: Vec3, pace: f32, rate: f32) {
-        self.ground = way.normalize_or_zero() * pace * rate.abs();
+    pub fn stride(&mut self, way: Vec3, pace: f32, rate: f32, warp: f32) {
+        self.ground = way.normalize_or_zero() * pace * rate.abs() * warp;
+        self.warp_by = if pace > 0.0 { warp - 1.0 } else { 0.0 };
+    }
+
+    /// The clip's foot `ankle` and ball `ball` as a warped stride shows them (Unreal's Stride
+    /// Warping, its documentation): their place along the way the body goes, from the hip
+    /// `hip`, stretched by the warp; and how far the pelvis must come down for the leg to
+    /// reach it no farther than the clip's leg reaches its own, asked only of a foot its clip
+    /// has down (`curve` over 0), as a swinging leg is bent.
+    fn warped(
+        &self,
+        ankle: Vec3,
+        ball: Vec3,
+        hip: Vec3,
+        up: Vec3,
+        curve: f32,
+    ) -> (Vec3, Vec3, f32) {
+        let way = self.ground.reject_from(up).normalize_or_zero();
+        if self.warp_by == 0.0 || way == Vec3::ZERO {
+            return (ankle, ball, 0.0);
+        }
+        let by = way * (ankle - hip).dot(way) * self.warp_by;
+        let need = if curve > 0.0 {
+            let reach = (hip - ankle).length();
+            let from = hip - (ankle + by);
+            let (high, across) = (from.dot(up), from.reject_from(up).length_squared());
+            (high - (reach * reach - across).max(0.0).sqrt()).max(0.0)
+        } else {
+            0.0
+        };
+        (ankle + by, ball + by, need)
     }
 
     /// How each foot is kept, left then right, as the fight log writes it.
@@ -494,9 +530,11 @@ fn keep(
                 &mut underfoot,
             )
         });
+        let stride = kept.reach_need[0].max(kept.reach_need[1]);
         let drop = match &grounded {
             [Some((_, left)), Some((_, right))] => {
-                kept.placing.pelvis([left, right], frame.root, dt)
+                kept.placing
+                    .pelvis_with([left, right], frame.root, dt, stride)
             }
             _ => 0.0,
         };
@@ -548,6 +586,19 @@ impl Kept {
         let ball_local = self.balls[side].and_then(|ball| transforms.get(ball).ok());
         let clip_ball = ball_local.map_or(ankle, |ball| leg.foot.transform_point(ball.translation));
         self.clip_soles[side] = [(ankle - ground).dot(up), (clip_ball - ground).dot(up)];
+        // A stride read on the ground it passes is shown as warped: its feet stretched along
+        // the way, the lock and placement taking them from there.
+        let hip = leg.thigh.translation();
+        let (ankle, clip_ball, need) = if frame.passing.is_some() && !frame.off {
+            self.warped(ankle, clip_ball, hip, up, frame.curve[side])
+        } else {
+            (ankle, clip_ball, 0.0)
+        };
+        self.reach_need[side] = need;
+        let shown = Pose {
+            at: ankle,
+            turn: clip.turn,
+        };
         // The ball in the foot's frame at the figure's size: the joint's own scale is not all of
         // it (a body drawn 1.08 times its rig puts the ball 1.1 cm farther out than the bone's
         // offset scaled by the foot alone).
@@ -561,7 +612,7 @@ impl Kept {
         });
         self.was[side] = Some(in_body);
         let posed = Posed {
-            pose: clip,
+            pose: shown,
             swing_mps,
             lock: frame.curve[side],
             up,
@@ -579,7 +630,6 @@ impl Kept {
         // pelvis lowered.
         let (_, to_lock) = leg.solve(kept_at.at, *frame.base.forward());
         self.shorts[side][1] = (to_lock - kept_at.at).length();
-        let hip = leg.thigh.translation();
         let reach = hip.distance(leg.calf.translation()) + leg.calf.translation().distance(ankle);
         let grounded = self.placing.ground(
             side,

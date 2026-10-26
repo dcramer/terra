@@ -256,6 +256,13 @@ impl Placing {
     /// pelvis does not dip again. A root going up adds nothing: the figure eases its own steps
     /// up (`Stepping`).
     pub fn pelvis(&mut self, feet: [&Grounded; 2], root: Vec3, dt: f32) -> f32 {
+        self.pelvis_with(feet, root, dt, 0.0)
+    }
+
+    /// `pelvis`, lowered at least `stride` too while both feet are kept: what a warped stride's
+    /// planted leg needs to reach its foot as far as its clip's leg reaches (Unreal's Stride
+    /// Warping lowers the pelvis toward the warped feet).
+    pub fn pelvis_with(&mut self, feet: [&Grounded; 2], root: Vec3, dt: f32, stride: f32) -> f32 {
         let up = feet[0].up;
         let cap = feet
             .iter()
@@ -267,7 +274,7 @@ impl Placing {
             feet.iter()
                 .map(|foot| foot.need())
                 .filter(|&need| need <= cap)
-                .fold(0.0, f32::max)
+                .fold(stride.max(0.0), f32::max)
         };
         let pelvis = &mut self.pelvis;
         if let Some(was) = pelvis.root {
