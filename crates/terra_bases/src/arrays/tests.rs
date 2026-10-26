@@ -113,3 +113,93 @@ fn a_picture_twice_the_budget_is_averaged_down_and_tiles() {
     assert_eq!(out.len(), SIDE as usize * SIDE as usize * 4);
     assert!(out.chunks_exact(4).all(|p| p[0] == 100 && p[1] == 50));
 }
+
+/// Arrays as `setup` makes them, with no GPU: nothing drawn yet.
+fn arrays_alone(images: &mut Assets<Image>) -> Arrays {
+    bevy::tasks::AsyncComputeTaskPool::get_or_init(bevy::tasks::TaskPool::new);
+    Arrays::new(
+        images,
+        &mut Assets::<BuildMaterial>::default(),
+        true,
+        Quality::default(),
+        Arc::new(Layers::default()),
+        Arc::new(|_: &str| false),
+        Handle::default(),
+    )
+}
+
+/// The render world drawing each array at its asked side, the first `swapped` of them at
+/// `layers`, the rest at `before`.
+fn draw(arrays: &Arrays, swapped: usize, layers: u32, before: u32) {
+    let mut drawn = arrays.uploads.drawn.lock().unwrap();
+    for (i, (id, [side, _])) in arrays.asked().into_iter().enumerate() {
+        drawn.insert(id, Some([side, if i < swapped { layers } else { before }]));
+    }
+}
+
+#[test]
+fn grown_arrays_are_bound_again_once_all_are_drawn_and_their_new_slots_wait_for_them() {
+    let mut images = Assets::<Image>::default();
+    let mut arrays = arrays_alone(&mut images);
+    // Nothing drawn yet: the material is made again until it is.
+    assert_eq!(arrays.follow_drawn(), 0);
+    assert!(arrays.table_dirty);
+    draw(&arrays, 5, FIRST_SLOTS, FIRST_SLOTS);
+    arrays.follow_drawn();
+    arrays.table_dirty = false;
+    assert_eq!(arrays.follow_drawn(), FIRST_SLOTS);
+    assert!(!arrays.table_dirty, "settled, the material is left alone");
+
+    // Full, the arrays grow, and the next set goes into the first new slot.
+    arrays.free.clear();
+    assert!(arrays.grow(&mut images));
+    let grown = arrays.capacity;
+    assert!(grown > FIRST_SLOTS);
+    let slot = arrays.free.pop().unwrap();
+    assert!(slot >= FIRST_SLOTS);
+    arrays.slots.insert(
+        "materials/timber".into(),
+        Slot {
+            slot,
+            ready_in: 2,
+            last_used: 0.0,
+        },
+    );
+    // The render world swaps the grown copies in one a frame, as the uploads' cap leaves room
+    // (D420), and more frames pass than a written set waits.
+    for swapped in 0..5 {
+        draw(&arrays, swapped, grown, FIRST_SLOTS);
+        arrays.table_dirty = false;
+        assert_eq!(arrays.follow_drawn(), FIRST_SLOTS);
+        assert!(
+            arrays.table_dirty,
+            "made again while {} of 5 arrays are drawn at their old size",
+            5 - swapped
+        );
+        assert_eq!(
+            slot_of(arrays.slots.get("materials/timber")),
+            MISSING,
+            "a set in slot {slot} is drawn plain while a drawn copy holds {FIRST_SLOTS} slots"
+        );
+    }
+    // All swapped: made again once more, binding every grown copy, and the set ready once
+    // its write has passed.
+    draw(&arrays, 5, grown, grown);
+    let mut frames = 0;
+    let mut remade = 0;
+    while slot_of(arrays.slots.get("materials/timber")) == MISSING {
+        arrays.table_dirty = false;
+        assert_eq!(arrays.follow_drawn(), grown);
+        remade += usize::from(arrays.table_dirty);
+        frames += 1;
+        assert!(frames <= 2, "ready two frames after its copy is drawn");
+    }
+    assert_eq!(slot_of(arrays.slots.get("materials/timber")), slot as f32);
+    assert_eq!(
+        remade, 2,
+        "made again as the copies are drawn and as the set is ready"
+    );
+    arrays.table_dirty = false;
+    arrays.follow_drawn();
+    assert!(!arrays.table_dirty);
+}

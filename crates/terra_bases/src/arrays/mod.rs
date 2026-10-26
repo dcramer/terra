@@ -373,9 +373,18 @@ struct Upload {
     levels: Vec<Vec<u8>>,
 }
 
-/// The uploads waiting for the render world, shared by both worlds.
+/// The uploads waiting for the render world, and the arrays as it draws them, shared by both
+/// worlds.
 #[derive(Resource, Clone, Default)]
-struct Uploads(Arc<Mutex<Vec<Upload>>>);
+struct Uploads {
+    pending: Arc<Mutex<Vec<Upload>>>,
+    drawn: Drawn,
+}
+
+/// Each array's copy on the GPU as the render world last drew it, by its image: its side and
+/// layers, or none while it has none. The main world names the arrays, the render world fills
+/// them in (`write_layers`, `Arrays::follow_drawn`).
+type Drawn = Arc<Mutex<BTreeMap<AssetId<Image>, Option<[u32; 2]>>>>;
 
 /// A texture set's four maps, read and compressed, and its cells.
 struct Encoded {
@@ -430,6 +439,8 @@ pub struct Arrays {
     loading: BTreeMap<String, Loading>,
     uploads: Uploads,
     table_dirty: bool,
+    /// Whether an array was drawn last frame at another size than asked (`follow_drawn`).
+    behind: bool,
     /// How many layers relief mapping steps through at the preset (`Quality::relief_layers`):
     /// none at the low preset, which draws every material flat but for its normal map.
     relief: f32,
@@ -613,6 +624,7 @@ impl Arrays {
             loading: BTreeMap::new(),
             uploads: Uploads::default(),
             table_dirty: true,
+            behind: true,
             relief: quality.relief_layers(),
             damage_detail: true,
             damage_hidden: false,
@@ -777,7 +789,7 @@ impl Arrays {
         self.slots.clear();
         self.loading.clear();
         self.free = (DAMAGE_SLOT + 1..self.capacity).rev().collect();
-        if let Ok(mut uploads) = self.uploads.0.lock() {
+        if let Ok(mut uploads) = self.uploads.pending.lock() {
             uploads.clear();
         }
         let sides = self.sides;
@@ -786,6 +798,76 @@ impl Arrays {
         );
         self.table_dirty = true;
         info!("Build: texture arrays made again at {top} texels a side");
+    }
+
+    /// The arrays grown, doubled up to so many more slots at once, their new slots free; false
+    /// when they are full.
+    fn grow(&mut self, images: &mut Assets<Image>) -> bool {
+        let grown = (self.capacity + self.capacity.min(GROW_SLOTS)).min(MAX_SLOTS);
+        if grown == self.capacity {
+            return false;
+        }
+        for handle in self.images.iter().chain([&self.cells]) {
+            if let Some(mut image) = images.get_mut(handle) {
+                image.texture_descriptor.size.depth_or_array_layers = grown;
+            }
+        }
+        // So its bind group is made again with the grown arrays.
+        self.table_dirty = true;
+        self.free.extend((self.capacity..grown).rev());
+        self.capacity = grown;
+        info!("Build: the texture arrays grown to {grown} slots");
+        true
+    }
+
+    /// Each array as asked of the GPU: its image, side and layers.
+    fn asked(&self) -> [(AssetId<Image>, [u32; 2]); 5] {
+        let mut asked = [(self.cells.id(), [CELLS, self.capacity]); 5];
+        for (i, image) in self.images.iter().enumerate() {
+            asked[i] = (image.id(), [self.sides[i], self.capacity]);
+        }
+        asked
+    }
+
+    /// How many slots every array's drawn copy holds, at the side asked of it: none while any
+    /// has no copy yet or one at another side.
+    fn drawn_slots(&self) -> u32 {
+        let Ok(mut drawn) = self.uploads.drawn.lock() else {
+            return 0;
+        };
+        let asked = self.asked();
+        drawn.retain(|id, _| asked.iter().any(|(named, _)| named == id));
+        asked
+            .iter()
+            .map(|(id, [side, _])| match *drawn.entry(*id).or_insert(None) {
+                Some([drawn_side, layers]) if drawn_side == *side => layers,
+                _ => 0,
+            })
+            .min()
+            .unwrap_or(0)
+    }
+
+    /// Follows the arrays' copies the render world draws, and returns how many slots they all
+    /// hold. The material binds the copy of each array drawn when it is made, and a grown or
+    /// remade array's copy is swapped in only as a frame's uploads leave room (D420,
+    /// `terra_world::uploads`), frames later: a material made meanwhile kept the old copy, and
+    /// the sets in its new slots read its last layer, another set's pictures (the village's
+    /// timber drawn broken and see-through). So the material is made again every frame until
+    /// every array is drawn as asked, and once more the frame they are; and a set written into
+    /// a slot no drawn copy holds yet is not counted written until one does.
+    fn follow_drawn(&mut self) -> u32 {
+        let drawn = self.drawn_slots();
+        let behind = drawn < self.capacity;
+        self.table_dirty |= behind || self.behind;
+        self.behind = behind;
+        // Written last frame: ready now.
+        for slot in self.slots.values_mut() {
+            if slot.ready_in > 0 && slot.slot < drawn {
+                slot.ready_in -= 1;
+                self.table_dirty |= slot.ready_in == 0;
+            }
+        }
+        drawn
     }
 
     /// Each layer's worn set's slot and one, where it is resident, four layers an entry.
@@ -935,10 +1017,11 @@ pub fn stream(
         arrays.damage_detail = detail;
         arrays.table_dirty = true;
     }
+    let drawn = arrays.follow_drawn();
     match &mut arrays.damage {
         DamageMask::Making(task) => {
             if let Some(maps) = block_on(poll_once(task)) {
-                if let Ok(mut uploads) = arrays.uploads.0.lock() {
+                if let Ok(mut uploads) = arrays.uploads.pending.lock() {
                     for (i, levels) in maps.into_iter().enumerate() {
                         uploads.push(Upload {
                             image: arrays.images[i].id(),
@@ -956,18 +1039,11 @@ pub fn stream(
             if *frames == 0 {
                 arrays.damage = DamageMask::Ready;
                 arrays.table_dirty = true;
-            } else {
+            } else if DAMAGE_SLOT < drawn {
                 *frames -= 1;
             }
         }
         DamageMask::Ready => {}
-    }
-    // Written last frame: ready now.
-    for slot in arrays.slots.values_mut() {
-        if slot.ready_in > 0 {
-            slot.ready_in -= 1;
-            arrays.table_dirty |= slot.ready_in == 0;
-        }
     }
     let codecs = arrays.codecs;
     let sides = arrays.sides;
@@ -1062,27 +1138,14 @@ pub fn stream(
             continue;
         };
         // A slot: a free one, else the arrays grown, doubled up to so many more at once.
-        if arrays.free.is_empty() {
-            let grown = (arrays.capacity + arrays.capacity.min(GROW_SLOTS)).min(MAX_SLOTS);
-            if grown == arrays.capacity {
-                warn!("Build: the texture arrays are full at {MAX_SLOTS} sets; {path} waits");
-                continue;
-            }
-            for handle in arrays.images.iter().chain([&arrays.cells]) {
-                if let Some(mut image) = images.get_mut(handle) {
-                    image.texture_descriptor.size.depth_or_array_layers = grown;
-                }
-            }
-            // So its bind group is made again with the grown arrays.
-            arrays.table_dirty = true;
-            arrays.free.extend((arrays.capacity..grown).rev());
-            arrays.capacity = grown;
-            info!("Build: the texture arrays grown to {grown} slots");
+        if arrays.free.is_empty() && !arrays.grow(&mut images) {
+            warn!("Build: the texture arrays are full at {MAX_SLOTS} sets; {path} waits");
+            continue;
         }
         let Some(slot) = arrays.free.pop() else {
             continue;
         };
-        if let Ok(mut uploads) = arrays.uploads.0.lock() {
+        if let Ok(mut uploads) = arrays.uploads.pending.lock() {
             for (i, levels) in encoded.maps.into_iter().enumerate() {
                 uploads.push(Upload {
                     image: arrays.images[i].id(),
@@ -1165,7 +1228,16 @@ fn write_layers(
     device: Res<RenderDevice>,
     mut written: ResMut<Written>,
 ) {
-    let Ok(mut pending) = uploads.0.lock() else {
+    // Each array as drawn now, for the main world to follow (`Arrays::follow_drawn`).
+    if let Ok(mut drawn) = uploads.drawn.lock() {
+        for (id, seen) in drawn.iter_mut() {
+            *seen = gpu.get(*id).map(|image| {
+                let size = image.texture_descriptor.size;
+                [size.width, size.depth_or_array_layers]
+            });
+        }
+    }
+    let Ok(mut pending) = uploads.pending.lock() else {
         return;
     };
     // An array grown since it was last written: its old layers into the new one.
