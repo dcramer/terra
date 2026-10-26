@@ -15,6 +15,7 @@
 //! `tile`, `texel`, `to_bake`) is its copy on the CPU, which the tests hold it to.
 
 use super::{Blazes, Body, Drawn, FireMaterial, HEARTHS};
+use crate::daylight::{Clock, DAY_SECONDS};
 use bevy::{
     asset::RenderAssetUsages,
     prelude::*,
@@ -246,9 +247,44 @@ impl Placement {
         Vec3::new(c * b.x - s * across, b.z, s * b.x + c * across)
     }
 
+    /// The same fire placed on the world's clock: its offset moved on by how far that clock runs
+    /// ahead of the cards' (`LoopClock::ahead`), at its own rate, within the loop's `seconds`.
+    pub fn on_the_world(self, ahead: f64, seconds: f32) -> Placement {
+        let on = (f64::from(self.offset) + ahead * f64::from(self.rate()))
+            .rem_euclid(f64::from(seconds));
+        Placement {
+            offset: on as f32,
+            ..self
+        }
+    }
+
     /// What `fire.wesl`'s `Fire::baked` reads.
     pub fn packed(self) -> Vec4 {
         Vec4::new(self.offset, self.turn, self.mirror, self.scale)
+    }
+}
+
+/// How far the world's clock (`daylight::Clock`, in seconds of play) runs ahead of the cards'
+/// (`Time`'s, the shader's `time`, counted from the run's start), so a fire's loop plays on the
+/// world's clock from its own offset (D493): every machine at one moment shows a fire at the
+/// same place in its loop (the clock is what they share, D52), and the same fire at dusk and by
+/// night stands elsewhere in it, where played from the run's start two runs showed it pose for
+/// pose (fire round g47's reviews). Taken again whenever the world's clock moves, and kept while
+/// it is held (a shot's `hold_clock`), so the flame plays on.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LoopClock {
+    ahead: f64,
+    world: Option<f64>,
+}
+
+impl LoopClock {
+    /// How far ahead the world's clock is, at `world` seconds on it and `now` on the cards'.
+    pub fn ahead(&mut self, world: f64, now: f32) -> f64 {
+        if self.world != Some(world) {
+            self.ahead = world - f64::from(now);
+            self.world = Some(world);
+        }
+        self.ahead
     }
 }
 
@@ -372,6 +408,7 @@ pub(super) fn tell(
     mut images: ResMut<Assets<Image>>,
     mut fires: ResMut<Assets<FireMaterial>>,
     mut read: Local<Option<(Sim, Vec3)>>,
+    (clock, mut on_the_world): (Option<Res<Clock>>, Local<LoopClock>),
 ) {
     let baked = Body::Baked.told();
     if read.is_none() && !blazes.bodies.contains(&baked) {
@@ -394,6 +431,8 @@ pub(super) fn tell(
         1.0 - libm::expf(-time.delta_secs() / TURN_EASE_S),
     );
     let now = time.elapsed_secs_wrapped();
+    let world = clock.map_or(0.0, |clock| clock.time().0 * f64::from(DAY_SECONDS));
+    let ahead = on_the_world.ahead(world, now);
     let mut placed = [Vec4::ZERO; HEARTHS];
     let mut wisps = [[Vec4::ZERO; WISPS * 2]; HEARTHS];
     for (i, (blaze, _)) in blazes
@@ -405,7 +444,8 @@ pub(super) fn tell(
         .filter(|(_, (_, body))| **body == baked)
     {
         let across = downwind(blaze.at, *wind);
-        let place = Placement::of(blaze.seed, blaze.tall, across, sim.seconds());
+        let place = Placement::of(blaze.seed, blaze.tall, across, sim.seconds())
+            .on_the_world(ahead, sim.seconds());
         placed[i] = place.packed();
         let shed = wisp::alive(sim, place, blaze.seed, across, now);
         for (j, w) in shed.iter().enumerate() {

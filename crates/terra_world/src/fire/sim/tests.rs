@@ -272,3 +272,37 @@ fn the_stretch_stands_the_flames_top_where_it_was_and_keeps_the_tongues_over_the
         assert!((unstretched(stretched(z)) - z).abs() < 1.0e-5, "{z}");
     }
 }
+
+#[test]
+fn a_fire_plays_its_loop_on_the_worlds_clock_not_from_the_runs_start() {
+    let sim = Sim::read();
+    let fire = placed(1.3, 1.0);
+    let seconds = sim.seconds();
+    // A run started at `world` seconds on the world's clock, `now` seconds in, the clock held.
+    let shown = |world: f64, now: f32| {
+        let mut clock = LoopClock::default();
+        clock.ahead(world, 0.0);
+        sim.frames_at(now, fire.on_the_world(clock.ahead(world, now), seconds))
+    };
+    let hour = f64::from(DAY_SECONDS) / 24.0;
+    // The motion film's dusk and night runs, 2.5 s in: each where the world's clock puts it,
+    // so 3.6 h apart (270 s of play, 337.5 s of loop at its rate: 1.5 s on), not pose for pose.
+    let (dusk, night) = (shown(18.4 * hour, 2.5), shown(22.0 * hour, 2.5));
+    let on = (22.0 * hour * f64::from(fire.rate())).rem_euclid(f64::from(seconds)) as f32;
+    assert_eq!(night.0, sim.frames_at(2.5 + on / fire.rate(), fire).0);
+    assert_ne!(dusk.0, night.0, "dusk and night pose for pose");
+    // Two machines at one moment, one 100 s into its run and one just started: one frame.
+    let mut early = LoopClock::default();
+    early.ahead(1000.0, 0.0);
+    let a = sim.frames_at(
+        100.0,
+        fire.on_the_world(early.ahead(1100.0, 100.0), seconds),
+    );
+    let b = sim.frames_at(
+        0.5,
+        fire.on_the_world(LoopClock::default().ahead(1100.0, 0.5), seconds),
+    );
+    assert_eq!(a.0, b.0);
+    // With the clock held the flame plays on.
+    assert_ne!(shown(18.4 * hour, 2.5).0, shown(18.4 * hour, 3.0).0);
+}
