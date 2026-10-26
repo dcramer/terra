@@ -1,7 +1,7 @@
 //! The theme's dressed kit laid over the cubes (D527, docs/dungeons.md#themes-d527), as
 //! Skyrim's modular kits lay pieces over their grid: a barrel vault over each straight
 //! corridor cell, a groin vault over every room bay and at a corridor's turns and crossings
-//! (by three quarters), an arch over each doorway's head on both its faces, piers where a
+//! (by three quarters), an arch over each doorway's head on its room's face, piers where a
 //! hall's bays meet (a hall three cells or more both ways; a smaller room's bays span both
 //! its cells) and pilasters where they meet its walls, and the loculi's dressed fronts with
 //! what lies in them. Stairs are not vaulted yet. The vaults spring from `Kit::spring` and are crowned under the
@@ -70,8 +70,13 @@ pub(super) fn lay(dungeon: &Dungeon, kit: &Kit, kinds: &Kinds, out: &mut Stamp) 
             }
             Space::Stair(_) => continue,
         }
+        // A doorway's arch on its room's face only: on a corridor's, the barrel runs to the
+        // wall and frames the doorway itself, as a barrel corridor's end does; the ring there
+        // (extrados 1.72 m round its 3 m centre) stood in the barrel's 1.5 m with a dark
+        // crescent between (round 2's still).
+        let corridor = matches!(cell.space, Space::Corridor(_));
         for d in 0..4 {
-            if matches!(cell.sides[d], Side::Door(_)) {
+            if !corridor && matches!(cell.sides[d], Side::Door(_)) {
                 let f = Frame::new(cell.at, d);
                 let at = f.point(MID, 0.0, 1.0);
                 out.pieces.push(piece(&kit.arch, at, f.side(2), Vec3::ONE));
