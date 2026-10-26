@@ -68,11 +68,21 @@ pub(super) fn crease_beams(
         // hip's or a valley's high end the faces' normal leans down the crease, so the beam
         // laid under it reached past the corner into the square beyond, over the lower
         // roof there where cubes step (gap 11).
+        // At a high end, brought back so far that its whole section is inside the square,
+        // not only its line: from the corner its side reaches its half-width across and the
+        // foot of its sawn end the slope's sine of it along, past the square's edges and
+        // over the lower roof beyond where cubes step (gap 11), whether its drop or a wall
+        // it was cut at left it there.
         let back = |end: Vec3, meet: Vec3, way: Vec3, short: f32, met: bool| {
             let level_way = Vec3::new(way.x, 0.0, way.z).normalize_or_zero();
             let now = (end - meet).with_y(0.0).dot(level_way);
             if !met {
-                return end + way * ((short + (-now).max(0.0)) / level);
+                let inset = if way.y < -1e-3 {
+                    section_inside(level_way, -way.y, beam_half)
+                } else {
+                    0.0
+                };
+                return end + way * ((short + (inset - now).max(0.0)) / level);
             }
             end + way * ((short - now).max(0.0) / level)
         };
@@ -94,6 +104,22 @@ pub(super) fn crease_beams(
             wide: None,
         });
     }
+}
+
+/// How far back in plan, along `way` (level, into its square), a beam's end at a corner of
+/// its square goes so its section, `half` from its line, is inside both of the square's
+/// edges there: across, its side's reach; along, the foot of its end sawn square to a beam
+/// pitched at `rise` (the sine). Square sections reach furthest, so it is taken as one.
+fn section_inside(way: Vec3, rise: f32, half: f32) -> f32 {
+    let across = Vec3::new(-way.z, 0.0, way.x);
+    [Vec3::X, Vec3::Z]
+        .into_iter()
+        .filter(|edge| way.dot(*edge).abs() > 1e-3)
+        .map(|edge| {
+            let (along, side) = (way.dot(edge).abs(), across.dot(edge).abs());
+            half * (side + rise * along) / along
+        })
+        .fold(0.0, f32::max)
 }
 
 /// The battens, each over the roof's own cubes, joined along the face and cut where they

@@ -913,4 +913,63 @@ mod tests {
             .collect();
         assert!(out.is_empty(), "{out:#?}");
     }
+
+    #[test]
+    fn fuzz_seeds_35_54_115_outer_corners_stepping_keep_their_hip_beams_on_their_own_roof() {
+        // Found by `cargo xtask fuzz` at seeds 35, 54 and 115, shrunk: a 2x2x2 box of shakes
+        // whose top layer is four outer corners alike, so the roof steps down a cube past
+        // each corner's peak (gap 11), on its own or with a wall standing in half of it. A
+        // hip's beam, brought back plumb at its peak or cut at the wall there, still reached
+        // its own width past the corner over the lower cube beside it, its side and sawn end
+        // 11 to 12 cm over that roof.
+        let materials = baseline();
+        let kind = |name: &str| {
+            materials
+                .names
+                .iter()
+                .find(|(_, n)| n.as_str() == name)
+                .map(|(&k, _)| k)
+                .unwrap()
+        };
+        let corners = |at, facing| Blocks {
+            at,
+            size: 2,
+            shape: Shape::OuterCorner(facing),
+            kind: kind("shakes"),
+        };
+        for elements in [
+            vec![corners([9, 1, -2], Facing::East)],
+            vec![
+                Room {
+                    min: [0, 4],
+                    max: [6, 10],
+                    storey: 0,
+                    kind: kind("stone"),
+                },
+                corners([7, 5, 4], Facing::West),
+            ],
+            vec![
+                Wall {
+                    from: [3, 2],
+                    to: [10, 2],
+                    storey: 0,
+                    kind: kind("logs"),
+                },
+                corners([6, 3, 3], Facing::West),
+            ],
+        ] {
+            let base = build(&materials.kits, &elements);
+            let report = terra_build_mesh::inspect::inspect(
+                &base,
+                &materials.kits,
+                &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+            );
+            let out: Vec<_> = report
+                .findings
+                .iter()
+                .filter(|f| f.fault == terra_build_mesh::inspect::Fault::PokesOut)
+                .collect();
+            assert!(out.is_empty(), "{:?}: {out:#?}", elements.last());
+        }
+    }
 }
