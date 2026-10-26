@@ -21,6 +21,32 @@ const SCALE_RADIUS: &str = "30000";
 /// The scenes, at the hour whose long shadows cost the most.
 pub(crate) const SCENES: &[Scene] = &[
     Scene {
+        name: "crypt",
+        about: "the crypt dungeon's corridor west of its second passage, a torch 4 m ahead on its wall and two more behind: what torchlight and its one shadowed light cost (docs/fire.md)",
+        args: &[
+            "--experiment",
+            "dungeon",
+            "--time",
+            "12",
+            "--vantage",
+            "-25.47,-5.29,-64.12,-33.44,-5.88,-64.11",
+        ],
+        frames: "600",
+    },
+    Scene {
+        name: "crypt-hall",
+        about: "the crypt's goal hall from its doorway, its two fire bowls and a torch 10 m off: what a hall of kept fires costs (docs/fire.md)",
+        args: &[
+            "--experiment",
+            "dungeon",
+            "--time",
+            "12",
+            "--vantage",
+            "-53.76,-13.15,-115.6,-48.46,-14.0,-124.08",
+        ],
+        frames: "600",
+    },
+    Scene {
         name: "yard",
         about: "the flat test level with nothing on it: what the engine and the player cost",
         args: &["--experiment", "play", "--level", "yard", "--time", "17"],

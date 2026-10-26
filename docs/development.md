@@ -170,6 +170,7 @@ It builds the sandbox in the `bench` profile, a release with nothing incremental
 | `far` | Three hundred buildings in hamlets out to 2 km (`--far 300`), looked round from sixty metres up |
 | `walk` | 40 seconds' walk through the lush forest, out from the clearing and round through the trees, steered by `--route` as a player would; the world and the walker alone (`--experiment walk`), so it is the environment's cost |
 | `lake`, `lake-walk` | The mountain lake (docs/demos.md §1) on the 30 km world, its place found by `--site lake`, in early June: from up its shore across the water to the woods, the tree line and the snowy peaks, still; and the shore walked for 30 seconds. The world and the walker alone |
+| `crypt`, `crypt-hall` | The crypt dungeon (`--experiment dungeon`) at eye height, still: a corridor with a torch 4 m ahead on its wall and two behind, and the goal hall from its doorway, its two fire bowls and a torch 10 m off. What torchlight costs: each view has a fire light near enough to cast shadows ([fire.md](fire.md#lod-and-budgets)) |
 
 Each run draws offscreen at 1920x1080 (`--offscreen`), with one frame in flight as a window has, with vsync off and no frame-rate limit, so it measures how long a frame really takes; skips 240 frames for shaders and streaming to settle; and times the scene's frames against the real clock (600, 2,400 for `walk`; `--bench-frames`). A scene's result is the middle run's median and 99th percentile and the worst frame of any.
 
