@@ -250,6 +250,13 @@ ad.action = None
 for o in bpy.context.scene.objects:
     o.select_set(o in (arm, body) or o in sockets)
 bpy.context.view_layer.objects.active = arm
+# A part painted to glow (an emissive map, wake.py) ships dark, its factor 0: the game lights
+# it when the creature wakes (staged.glow, D536).
+for m in bpy.data.materials:
+    p = next((n for n in (m.node_tree.nodes if m.node_tree else []) if n.type == "BSDF_PRINCIPLED"), None)
+    if p is not None and p.inputs["Emission Color"].is_linked:
+        p.inputs["Emission Strength"].default_value = 0.0
+        print("GLOW", m.name, "ships dark")
 look.fit_textures(sys.argv)
 bpy.ops.export_scene.gltf(
     filepath=look.path(dst), export_format="GLB", use_selection=True,
