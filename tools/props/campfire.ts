@@ -68,6 +68,10 @@ const STONE_FROM: [string, number][] = [
 /// Where along the trunk scan each log is cut from (a share of its length), so no two show
 /// the same bark.
 const SECTIONS = [0.4, 0.02, 0.78, 0.21, 0.59];
+/// How far each log bows at its middle, metres: a branch is seldom straight, and five straight
+/// logs read as turned dowels (judge, round 4). Small beside its girth, so the flames' straight
+/// line up it (`Logs::CAMPFIRE`) still lies inside it.
+const BOWS = [0.012, -0.009, 0.007, -0.013, 0.01];
 /// The triangles of each part: five logs, thirteen stones, three sticks and the ground, under the
 /// budget with the coal bed's ~4,200. Their form is in their normal maps, baked from the full scans.
 export const PART_BUDGET = { log: 400, stone: 170, stick: 120, ground: 600 };
@@ -83,8 +87,9 @@ const norm = (a: V3): V3 => {
 };
 
 /** A log: its radius, its butt's middle on the ground, the way it runs up into the stack and how
- * far, how it is turned about its run, and where along the trunk scan it is cut from. */
-export type Log = { R: number; foot: V3; axis: V3; L: number; roll: number; from: number; flip: boolean };
+ * far, how it is turned about its run, where along the trunk scan it is cut from, and how far it
+ * bows sideways at its middle (metres, the side its roll turns to). */
+export type Log = { R: number; foot: V3; axis: V3; L: number; roll: number; from: number; flip: boolean; bow: number };
 /** A stone: its scan and piece, its bearing round the ring, how far out its inner face lies, its
  * longest side, its turn off the ring's line, its tilt about the ring's line and across it
  * (radians), and how much of its height is sunk in the ground. */
@@ -96,11 +101,12 @@ export type Stick = { piece: number; a: V3; b: V3 };
 export function layout(seed = 1): { logs: Log[]; stones: Stone[]; sticks: Stick[] } {
   const rnd = random(seed);
   const logs: Log[] = Array.from({ length: LOGS }, (_, i) => {
-    // Round logs 0.09-0.11 m through (a girth each, its mean the flames' `radius`): at 0.12-0.16 m
-    // they dwarfed the stones (campfire remodel judge, round 2). Leaned 20-50 deg into a stack
-    // `STACK` tall, their butts on the ground inside the stones and their burnt ends crossing a
-    // little past the middle at mixed heights.
-    const R = [0.051, 0.046, 0.05, 0.045, 0.048][i] + 0.004 * rnd();
+    // Logs 0.08-0.13 m through (a girth each, its mean the flames' `radius`), the thick ones
+    // lowest: five of one 0.1 m girth read as tubes from one mould (judge, round 4), at 0.12-0.16 m
+    // all through they dwarfed the stones (round 2). Leaned 20-50 deg into a stack `STACK` tall,
+    // their butts on the ground inside the stones and their burnt ends crossing a little past the
+    // middle at mixed heights; each bowed a centimetre or so sideways at its middle (`bow`, metres).
+    const R = [0.05, 0.061, 0.043, 0.057, 0.04][i] + 0.004 * rnd();
     const phi = TURN + (i / LOGS) * 2 * Math.PI + 0.14 * (rnd() - 0.5);
     const rb = BUTT_R + 0.03 * rnd();
     const foot: V3 = [rb * Math.cos(phi), R * 0.55, rb * Math.sin(phi)];
@@ -108,7 +114,7 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[]; sticks: Stick[
     const pt = phi + 0.6 + 0.3 * rnd(), rt = 0.04 + 0.04 * rnd();
     const end: V3 = [rt * Math.cos(pt), STACK * [1, 0.84, 0.95, 0.78, 0.9][i] - 0.6 * R, rt * Math.sin(pt)];
     const roll = rnd() * 2 * Math.PI;
-    return { R, foot, axis: norm(sub(end, foot)), L: Math.hypot(...sub(end, foot)), roll, from: SECTIONS[i], flip: i % 2 === 1 };
+    return { R, foot, axis: norm(sub(end, foot)), L: Math.hypot(...sub(end, foot)), roll, from: SECTIONS[i], flip: i % 2 === 1, bow: BOWS[i] };
   });
   // The stones round the ring nearly touching: each takes the angle its long side spans at
   // `RING_R`, the rest is shared out as gaps of 1-3 cm, one wider where the wood is fed in. A
