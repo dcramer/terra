@@ -567,7 +567,7 @@ impl Map {
         let broken = smoothstep(0.4, 0.7, self.noise(at, 37.0, 0.9));
         let moss = (ring * broken * (0.2 + 0.6 * mossy))
             .max(along * 0.5)
-            .max(floor * smoothstep(0.6, 0.88, mossy * 0.7 + here.wet * 0.4) * 0.75)
+            .max(floor * smoothstep(0.5, 0.82, mossy * 0.7 + here.wet * 0.4) * 0.75)
             * off_path.max(0.3);
         Growing {
             grass,
