@@ -221,6 +221,13 @@ fn git_setup(report: &mut Report) {
         true,
         "any cargo xtask task sets merge.rendered.driver",
     );
+    report.item(
+        "git-lfs turns the binary assets' pointers into files on checkout and back on commit (D525)",
+        output("git", &["lfs", "version"]).is_some()
+            && output("git", &["config", "--get", "filter.lfs.process"]).is_some(),
+        true,
+        "install git-lfs (`mise use -g git-lfs@latest`, or https://git-lfs.com), then `git lfs install --skip-repo` and `git lfs pull`",
+    );
 }
 
 /// Whether a `node --version` is 22.18 or later, the first to run TypeScript as it is.
