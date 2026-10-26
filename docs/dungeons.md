@@ -1,6 +1,6 @@
 # Dungeons by rule
 
-Status: Leaning, technical (D473, D474, D483, D484, by the agent); the generator, its sheet and the stamp are built in `terra_dungeon`, and the sandbox lays one in the forest (`--experiment dungeon`, `dungeon-mine`, `dungeon-keep`). What a dungeon is for in the game is a design question for the developers, listed at the end and not decided here. A dungeon is a place dug into its realm, as in Valheim and Enshrouded (D497), one copy shared by the whole server (D498) that stays cleared (D499), with no building and rock that cannot be dug (D502); [instances.md](instances.md) says how a realm is loaded in and out; this doc says how a dungeon is made.
+Status: Leaning, technical (D473, D474, D483, D484, by the agent); the generator, its sheet and the stamp are built in `terra_dungeon`, and the sandbox lays one in the forest (`--experiment dungeon`, `dungeon-mine`, `dungeon-keep`). What a dungeon is for in the game is a design question for the developers, listed at the end and not decided here. A dungeon is a place dug into its realm, as in Valheim and Enshrouded (D497), one copy shared by the whole server (D498) that stays cleared (D499), with no building and rock that cannot be dug (D502), and doors pushed open by walking into them, a locked one once its key is held (D512); [instances.md](instances.md) says how a realm is loaded in and out; this doc says how a dungeon is made.
 
 ## Constraints
 
@@ -76,7 +76,7 @@ What the world lays, as plain data in a local frame (metres, x east, y up, z sou
 ## Next
 
 - **Light underground**: a room's probe now wins over the forest's sky volume (D485) and holds what its openings let in (D486), but Bevy keeps only the 8 room probes nearest the camera, so farther boxes of the crypt's 168 still take the sky; `node tools/sandbox/indoorlight.ts` (a continuous check) fails until they don't.
-- **Door leaves** that open (a locked one when its keys are taken), chests that hold their loot as storage, water surfaces in basins.
+- **Door leaves** that open by D512 in the game, and taking keys; chests that hold their loot as storage, water surfaces in basins.
 
 ## Open questions (design, the developers')
 
@@ -86,4 +86,3 @@ What the world lays, as plain data in a local frame (metres, x east, y up, z sou
 - Respawn: a cleared dungeon stays cleared by default (D499); whether some kinds fill again, and when.
 - Whether monsters form inside (magic pooling, D103).
 - One-way and secret links as player skills (perception) or always visible.
-- Whether and how doors open (by hand, on approach, a locked one by its keys); the demo stands every leaf open until then.

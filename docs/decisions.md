@@ -89,6 +89,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D500](decisions/D500.md) | A world nobody is in freezes; what follows from time catches up on return | Design | Agent | Leaning | A realm with no player in it is frozen… |
 | [D501](decisions/D501.md) | Crossing is a short fade, whatever the entrance | Design | Developers | Decided | A crossing is covered by a short fade, under 3 s… |
 | [D502](decisions/D502.md) | No building in a dungeon, and its rock cannot be dug | Design | Agent | Leaning | Players cannot build inside a dungeon, and its walls… |
+| [D512](decisions/D512.md) | A door is pushed open by walking into it; a locked one needs its key | Design | Developers | Decided | A door that needs no key opens when a body walks into… |
 
 ## The player and survival
 
