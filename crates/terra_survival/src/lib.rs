@@ -1,9 +1,9 @@
 //! What a player carries, makes and needs (D407): the inventory, the bag and storage with
 //! their screens, the catalogue of what can be built and the registries of kinds, crafting
 //! at stations, props set down, interacting, claims and contracts, harvesting, digging and
-//! work, vitals, warmth and death, skills, wear and gains, the tiles and torchlight, piles,
-//! what a player is told, hazards, what is held and worn, the noise things make, and the
-//! item icons.
+//! work, vitals and breath, warmth and death, skills, wear and gains, the tiles and
+//! torchlight, piles, what a player is told, hazards, what is held and worn, the noise things
+//! make, and the item icons.
 //!
 //! It stands on the walker (`terra_walker`), the base on screen (`terra_bases`) and the
 //! world (`terra_world`); creatures, townsfolk and building play stand on it. The game's
@@ -14,6 +14,7 @@
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
 pub mod bag;
+pub mod breath;
 pub mod catalogue;
 pub mod claim;
 pub mod contract;

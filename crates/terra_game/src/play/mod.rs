@@ -41,8 +41,8 @@ use super::build::{self, DrivenByPlayer, Site};
 #[cfg(test)]
 use terra_survival::test_world;
 use terra_survival::{
-    bag, crafting, death, dig, gains, harvest, noise, pile, registries, skills, station_screen,
-    storage_screen, torchlight, vitals, warmth, wear, worn,
+    bag, breath, crafting, death, dig, gains, harvest, noise, pile, registries, skills,
+    station_screen, storage_screen, torchlight, vitals, warmth, wear, worn,
 };
 pub(crate) use terra_survival::{catalogue, claim, held, interact, props, storage, told};
 pub use terra_survival::{contract, inventory};
@@ -116,6 +116,7 @@ impl Plugin for GameplayPlugin {
         interact::plugin(app);
         claim::plugin(app);
         vitals::plugin(app);
+        breath::plugin(app);
         warmth::plugin(app);
         death::plugin(app);
         skills::plugin(app);
