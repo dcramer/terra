@@ -81,35 +81,54 @@ pub(super) fn doorway_axes(facing: usize) -> (Vec3, Vec3) {
 
 /// How far each leaf of the door at `sill` swings into its room (`Object::opens`): folded
 /// flat on its wall where the wall runs on a leaf's width past the jamb with the room clear in
-/// front of it, as a door in a thick wall swings back to the wall; a quarter turn, on the
-/// side wall flush with the jamb; or, where the room is solid just inside the jamb (a wall
-/// or pier narrower than the doorway), a quarter turn out of it, along the jamb.
+/// front of it, as a door in a thick wall swings back to the wall; otherwise a quarter turn,
+/// onto a side wall flush with the jamb where one runs a leaf's width into the room, else
+/// standing free. Only where the room is solid just inside the jamb (a wall or pier narrower
+/// than the doorway) or where the leaf would stand does it turn out of the room however it is
+/// pushed, along the jamb onto the corridor's wall. On 4 m cells a 1.5 m leaf is longer than the metre of wall between
+/// doorways in neighbouring cells, and a doorway or an alcove beside it leaves it nothing to
+/// fold onto: turned out of the room there instead, 7% of leaves swung towards a body pushing
+/// from the corridor, against D512's "away from whoever pushes".
 fn opens(map: &Map, sill: Vec3, facing: usize) -> [f32; 2] {
     let (across, into) = doorway_axes(facing);
     // Up the leaf: its foot, middle and head, in cubes.
     let high = DOORWAY_M[1] / CUBE;
     let ups = [1.5, high * 0.5 + 0.5, high - 0.5];
     let wide = (DOORWAY_M[0] * 0.5 / CUBE).round() as i32;
+    // A leaf lies along a face at `at(k)` for each of `ks` cubes and each height: the cube
+    // `behind` it solid, its own clear.
+    let lies = |at: &dyn Fn(i32) -> Vec3, behind: Vec3, ks: std::ops::Range<i32>| {
+        ks.into_iter().all(|k| {
+            ups.iter().all(|&up| {
+                let p = at(k) + Vec3::Y * CUBE * up;
+                !clear(map, cube_of(p + behind * CUBE * 0.5))
+                    && clear(map, cube_of(p - behind * CUBE * 0.5))
+            })
+        })
+    };
     [-1.0, 1.0].map(|side| {
         let jamb = sill + across * side * DOORWAY_M[0] * 0.5;
-        let flat = (0..wide).all(|k| {
-            let beside = jamb + across * side * CUBE * (k as f32 + 0.5);
-            ups.iter().all(|&up| {
-                let beside = beside + Vec3::Y * CUBE * up;
-                !clear(map, cube_of(beside + into * CUBE * 0.5))
-                    && clear(map, cube_of(beside + into * CUBE * 1.5))
-            })
-        });
-        let inside = jamb - across * side * CUBE * 0.5 + into * CUBE * 1.5;
+        let out = across * side;
+        // Along the room's face of its wall, past the jamb.
+        let wall = |k: i32| jamb + out * CUBE * (k as f32 + 0.5) + into * CUBE;
+        // Along the jamb's line into the room, past the wall's thickness.
+        let side_wall = |k: i32| jamb + into * CUBE * (k as f32 + 1.5);
+        let inside = jamb - out * CUBE * 0.5 + into * CUBE * 1.5;
         let blocked = ups
             .iter()
             .any(|&up| !clear(map, cube_of(inside + Vec3::Y * CUBE * up)));
         if blocked {
             -1.0
-        } else if flat {
+        } else if lies(&wall, -into, 0..wide) {
             2.0
-        } else {
+        } else if (0..wide).all(|k| {
+            let p = side_wall(k) - out * CUBE * 0.5;
+            ups.iter()
+                .all(|&up| clear(map, cube_of(p + Vec3::Y * CUBE * up)))
+        }) {
             1.0
+        } else {
+            -1.0
         }
     })
 }

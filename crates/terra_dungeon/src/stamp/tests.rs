@@ -289,8 +289,8 @@ fn frames_turn_as_modules_turn() {
 const VIEW_SEEDS: u64 = 1000;
 
 /// A door's two leaves standing open, as the game swung them before they were hung at the
-/// room's face of the wall to lie flat on it (`open_door_leaves_lie_flat_on_a_wall`): from
-/// each jamb a leaf's width into the room. The camera still keeps clear of where they stood.
+/// room's face of the wall to lie flat on it (leaf_tests.rs): from each jamb a leaf's width
+/// into the room, as a leaf with no wall to lie on still stands. The camera still keeps clear of where they stood.
 fn open_leaves(stamp: &Stamp) -> Vec<(Vec3, Vec3)> {
     let doors = stamp.objects.iter().filter(|o| o.role == ObjectRole::Door);
     doors

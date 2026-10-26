@@ -75,7 +75,7 @@ What the world lays, as plain data in a local frame (metres, x east, y up, z sou
 
 ### Doors (D512, `door.rs`)
 
-A door stands shut until a body walks into it, then its leaves swing away from that body, a quarter turn in half a second, and stay open: a body pushes when it is across the doorway, within 1.5 m in front of the leaves and walking at them faster than 0.3 m/s, so they are moving before a walker or a camera at a walk reaches them. A locked door pushes only while every key of its lock is held; a one-way door only from its free side, and once open it is open for both. Tested in `door.rs` without a GPU. The sandbox pushes with every player and camera (a film's camera walks the tour as a body would), and holds every key until taking keys is built, so its gate opens as any door.
+A door stands shut until a body walks into it, then its leaves swing away from that body, a quarter turn in half a second, and stay open (into the room each folds flat on its wall, or lies on a side wall flush with its jamb, or stands clear where neither runs; only where the room is solid just inside the jamb does a leaf turn out of the room however it is pushed, 0.6% of leaves, tested in `leaf_tests.rs`): a body pushes when it is across the doorway, within 1.5 m in front of the leaves and walking at them faster than 0.3 m/s, so they are moving before a walker or a camera at a walk reaches them. A locked door pushes only while every key of its lock is held; a one-way door only from its free side, and once open it is open for both. Tested in `door.rs` without a GPU. The sandbox pushes with every player and camera (a film's camera walks the tour as a body would), and holds every key until taking keys is built, so its gate opens as any door.
 
 ## Next
 
