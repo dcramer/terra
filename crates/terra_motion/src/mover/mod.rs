@@ -598,9 +598,16 @@ fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, look: f32, d
 /// what is under its bottom sphere's centre (Jolt's supporting volume) is floor or the edge of
 /// a step it stands on, not a wall: the velocity is already along the floor, and taking a
 /// step's edge out of it would slow the body at every step and lift it there. A face under
-/// the centre too steep to stand on that no step climbed stops it as a wall would
-/// (`slope.stopped`).
-fn unblocked(mut velocity: Vec3, on_ground: bool, body: &Body, shape: &Shape) -> Vec3 {
+/// the centre too steep to stand on that a step tried this tick refused (`refused`: no
+/// walkable ground within a step on) stops it as a wall would (`slope.stopped`); a riser or a
+/// lump's steep foot, which a step climbs or the walk rolls up, does not (`step.lump`).
+fn unblocked(
+    mut velocity: Vec3,
+    on_ground: bool,
+    refused: bool,
+    body: &Body,
+    shape: &Shape,
+) -> Vec3 {
     let bottom = (body.position - body.frame).as_vec3() + shape.up * shape.radius;
     for t in &body.active {
         let c = &t.contact;
@@ -614,13 +621,14 @@ fn unblocked(mut velocity: Vec3, on_ground: bool, body: &Body, shape: &Shape) ->
         }
         if on_ground && under {
             // Under the bottom sphere's centre and too steep: a step's edge is walked up
-            // (`walk_stairs`) and kept; ground too steep to climb stops the body, its face
-            // taken as upright (Unreal's walking slides along a face it cannot walk as along a
-            // wall; Jolt's CancelVelocityTowardsSteepSlopes, the normal made level), so a body
-            // held against it is still.
+            // (`walk_stairs`) and kept; ground too steep to climb, where the step tried found
+            // no walkable ground, stops the body, its face taken as upright (Unreal's walking
+            // slides along a face it cannot walk as along a wall; Jolt's
+            // CancelVelocityTowardsSteepSlopes, after its stair walk and only for a slope it
+            // cannot walk, the normal made level), so a body held against it is still.
             let n = c.normal - shape.up * c.normal.dot(shape.up);
             let into = (velocity - c.velocity).dot(n);
-            if body.stepped <= 0.0 && into < 0.0 && n.length_squared() > 1e-12 {
+            if refused && into < 0.0 && n.length_squared() > 1e-12 {
                 velocity -= n * into / n.length_squared();
             }
             continue;
@@ -719,22 +727,12 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
         (support, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, feet);
     }
     body.stepped = 0.0;
+    let mut unstepped = slide::Unstepped::Untried;
     if support.supported() && !swimming {
-        let stepped = slide::walk_stairs(
-            start,
-            feet,
-            wanted + press,
-            &body.active,
-            query,
-            &shape,
-            k.step_height,
-        );
-        if let Some(stepped) = stepped {
-            body.stepped = (stepped.feet - feet).dot(up);
-            feet = stepped.feet;
-            slide::contacts_at(feet, query, &shape, &mut body.active);
-            (_, normal) = slide::support(&mut body.active, Vec3::ZERO, &shape, feet);
-            support = Support::OnGround;
+        let wished = wanted + press;
+        match step_up(body, start, feet, wished, query, &shape) {
+            Ok((stepped, floor)) => (feet, normal, support) = (stepped, floor, Support::OnGround),
+            Err(why) => unstepped = why,
         }
     }
     // Perched on an edge too steep to stand on, over walkable floor within the stick distance
@@ -768,6 +766,7 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     body.velocity = unblocked(
         velocity,
         support == Support::OnGround && !jump,
+        unstepped == slide::Unstepped::Refused,
         body,
         &shape,
     );
@@ -793,6 +792,31 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
         .then(|| libm::sqrtf(falling * falling + 2.0 * g * dropped));
     landing(body, landed, level, jump, world, dt);
     swim::breathe(body, world, dt);
+}
+
+/// Jolt's stair walk from where the move left the feet: where they end and the floor's normal
+/// there, the rise kept as `Body::stepped`; or why no step was taken.
+fn step_up(
+    body: &mut Body,
+    start: Vec3,
+    feet: Vec3,
+    wished: Vec3,
+    query: &dyn Query,
+    shape: &Shape,
+) -> Result<(Vec3, Vec3), slide::Unstepped> {
+    let stepped = slide::walk_stairs(
+        start,
+        feet,
+        wished,
+        &body.active,
+        query,
+        shape,
+        body.kind.step_height,
+    )?;
+    body.stepped = (stepped.feet - feet).dot(shape.up);
+    slide::contacts_at(stepped.feet, query, shape, &mut body.active);
+    let (_, normal) = slide::support(&mut body.active, Vec3::ZERO, shape, stepped.feet);
+    Ok((stepped.feet, normal))
 }
 
 /// What a tick's end keeps of its landing and its jump: the speed it landed at and what the

@@ -519,9 +519,32 @@ pub struct Stepped {
     pub feet: Vec3,
 }
 
+/// Why no step up was taken: none was tried (the move was not blocked by what it pressed
+/// into); one was, and came down on walkable ground within the step that the move walks on
+/// without it (Jolt's step that gains no height: the foot of a lump or a slope's round); or one
+/// was, and the face is no step: too high, no step at all, or steep wherever it came down
+/// (Jolt's slope it cannot walk, whose velocity it cancels).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unstepped {
+    Untried,
+    Walkable,
+    Refused,
+}
+
+/// Why a step tried was not taken: the face is no step, its feet came down on a steep edge
+/// so far over the feet (and further on was steep too), or on walkable ground it gains nothing
+/// by.
+#[derive(Clone, Copy, Debug)]
+enum Refusal {
+    Blocked,
+    Edge(f32),
+    Walkable,
+}
+
 /// Jolt's `ExtendedUpdate` stair step and `WalkStairs`: blocked short of a level move by
 /// steep contacts, try up the step, forward, and down onto walkable ground no higher than the
-/// step, judging an edge's slope by a floor a little further on (the forward test).
+/// step, judging an edge's slope by a floor a little further on (the forward test). Not taken,
+/// it says why (`Unstepped`): only a face it refused is one the body cannot climb.
 #[allow(clippy::too_many_arguments)]
 pub fn walk_stairs(
     start: Vec3,
@@ -531,19 +554,19 @@ pub fn walk_stairs(
     query: &dyn Query,
     shape: &Shape,
     step_height: f32,
-) -> Option<Stepped> {
+) -> Result<Stepped, Unstepped> {
     let up_dir = shape.up;
     let level = |v: Vec3| v - up_dir * v.dot(up_dir);
     let wish_step = level(wished) * shape.dt;
     let wish_len = wish_step.length();
     if wish_len <= 0.0 || step_height <= 0.0 {
-        return None;
+        return Err(Unstepped::Untried);
     }
     let forward = wish_step / wish_len;
     let achieved = level(feet - start).dot(forward).max(0.0);
     let (steep, walkable) = pushed_into(active, level(wished), shape);
     if achieved + 1.0e-4 >= wish_len || (steep.is_empty() && walkable.is_empty()) {
-        return None;
+        return Err(Unstepped::Untried);
     }
     // Step toward the contact that most opposes the move, within 75 deg of it.
     let mut direction = forward;
@@ -566,7 +589,7 @@ pub fn walk_stairs(
     let mut up = up_dir * step_height;
     if let Some(hit) = query.sweep(&shape.capsule(feet), up) {
         if hit.fraction < 1.0e-6 {
-            return None;
+            return Err(Unstepped::Untried);
         }
         up *= hit.fraction;
     }
@@ -578,15 +601,19 @@ pub fn walk_stairs(
         moving: (&steep, &walkable),
         step_height,
     };
+    let unstepped = |refusal| match refusal {
+        Refusal::Walkable => Unstepped::Walkable,
+        Refusal::Blocked | Refusal::Edge(_) => Unstepped::Refused,
+    };
     match stair.climb(up, query, shape) {
-        Ok(stepped) => Some(stepped),
+        Ok(stepped) => Ok(stepped),
         // Risen the whole step, the head met what overhangs the way on (a doorway's lintel
         // over its threshold) and the feet came down on the step's edge: risen only as far as
         // clears that edge, the body passes under (`CLEAR_M`).
-        Err(Some(edge)) if edge + CLEAR_M < up.length() => {
-            stair.climb(up_dir * (edge + CLEAR_M), query, shape).ok()
-        }
-        Err(_) => None,
+        Err(Refusal::Edge(edge)) if edge + CLEAR_M < up.length() => stair
+            .climb(up_dir * (edge + CLEAR_M), query, shape)
+            .map_err(unstepped),
+        Err(refusal) => Err(unstepped(refusal)),
     }
 }
 
@@ -611,9 +638,8 @@ struct Stair<'a> {
 }
 
 impl Stair<'_> {
-    /// Up by `up`, forward, and down as far: the feet on walkable ground, or why not: the
-    /// height over the feet of the steep edge it came down on, when that was why.
-    fn climb(&self, up: Vec3, query: &dyn Query, shape: &Shape) -> Result<Stepped, Option<f32>> {
+    /// Up by `up`, forward, and down as far: the feet on walkable ground, or why not.
+    fn climb(&self, up: Vec3, query: &dyn Query, shape: &Shape) -> Result<Stepped, Refusal> {
         let Stair {
             start,
             feet,
@@ -637,7 +663,7 @@ impl Stair<'_> {
         );
         let across = level(moved - raised);
         if across.length_squared() < 1.0e-8 {
-            return Err(None);
+            return Err(Refusal::Blocked);
         }
         let progress = steep.iter().chain(walkable).any(|n| {
             let d = (up_dir * n.dot(up_dir) - *n).normalize_or_zero();
@@ -645,13 +671,13 @@ impl Stair<'_> {
                 && d.dot(across) > 0.05 * step_forward.length()
         });
         if !progress {
-            return Err(None);
+            return Err(Refusal::Blocked);
         }
         // Down, as far as it went up.
-        let (landed, contact) = floor_under(moved, -up, query, shape).ok_or(None)?;
+        let (landed, contact) = floor_under(moved, -up, query, shape).ok_or(Refusal::Blocked)?;
         let mut normal = contact.normal;
         if shape.too_steep(normal) {
-            let edge = Some((contact.at - feet).dot(up_dir));
+            let edge = Refusal::Edge((contact.at - feet).dot(up_dir));
             let test = move_shape(
                 raised,
                 direction * STEP_FORWARD_TEST / shape.dt,
@@ -671,15 +697,16 @@ impl Stair<'_> {
         }
         // Unreal's StepUp: no floor higher than the step, measured from the floor it left.
         if (contact.at - start).dot(up_dir) > step_height + TOLERANCE {
-            return Err(None);
+            return Err(Refusal::Blocked);
         }
         // Unreal's CanCharacterStepUpOn: not onto a thing that is no step, however it is met.
         let world = |at: Vec3| shape.origin + at.as_dvec3();
         if !query.steps_onto(world(contact.at), world(feet), step_height) {
-            return Err(None);
+            return Err(Refusal::Blocked);
         }
+        // Jolt's step that gains no height over the feet: walkable ground the move walks up.
         if (landed - feet).dot(normal) < 1.0e-4 {
-            return Err(None);
+            return Err(Refusal::Walkable);
         }
         Ok(Stepped { feet: landed })
     }

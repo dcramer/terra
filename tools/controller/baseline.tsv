@@ -20,6 +20,7 @@ stair.hop	15	stair.up and stair.hop's first numbers, measured on the mover after
 stair.down	0.001	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 door.hop	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 door.lintel	0	door.lintel's first number: a step under a doorway's lintel retried risen 5 cm over the edge (Stair::climb), 1.783 m short before
+step.lump	0	step.lump's first number, after stage 3 unit 1b3: the steep-face cut only where the step tried refused the face (main 7 of 60 walks stopped at a lump's foot, the yard's film.yard 1)
 ceiling.depth	0.972	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 ceiling.speed	5.5	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 gravity.landing	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run

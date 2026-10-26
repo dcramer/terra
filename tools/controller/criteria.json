@@ -322,6 +322,21 @@
    "measurable": true
   },
   {
+   "id": "step.lump",
+   "noticed": 5,
+   "notice": "jogging at a lump of ground lower than a step, its foot too steep to stand on (the filmed yard's), the body stops at its foot and walks round it",
+   "bar": {
+    "at_most": 0.0
+   },
+   "unit": "walks stopped short, of 60 (lumps 0.3-0.4 m high with feet 60-66 deg, 4 lines across, 5 starts 1 cm apart)",
+   "source": "docs/controller.md criteria 1 and 5; Jolt CharacterVirtual (CancelVelocityTowardsSteepSlopes only for a slope it cannot walk, after WalkStairs)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "ceiling.depth",
    "noticed": 3,
    "notice": "a jump in a 2 m tunnel puts the head into the roof",

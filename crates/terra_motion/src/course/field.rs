@@ -121,6 +121,8 @@ pub enum Solid {
     Block(Vec3, Vec3),
     /// Rock everywhere: a fixture dug out of it.
     Rock,
+    /// A ball of ground: its middle and radius (a lump filled into the ground).
+    Ball(Vec3, f32),
 }
 
 impl Solid {
@@ -129,6 +131,7 @@ impl Solid {
             Solid::Profile(corners) => profile(corners, Vec2::new(at.x, at.y)),
             Solid::Block(min, max) => boxed(at, *min, *max),
             Solid::Rock => -1.0e3,
+            Solid::Ball(centre, radius) => (at - *centre).length() - radius,
         }
     }
 }

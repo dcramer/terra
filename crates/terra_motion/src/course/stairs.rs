@@ -5,8 +5,10 @@
 //! a little over the ground, never rising above the higher of the two under it, and onto a
 //! threshold a step high under a lintel 2 m over it, as a base's doorway of four cubes over its
 //! floor stands (the cabin's, `cargo xtask cabin`). A step's rise is the step's alone: what is shown smooths it (`Body::stepped`), as in Unreal and Jolt.
+//! And it walks over a lump of ground lower than its step whose foot is too steep to stand on,
+//! as the filmed yard's (`cargo xtask controller --film`): a step climbs it, a slope it is not.
 
-use super::field::{Course, local, world};
+use super::field::{Course, Solid, local, world};
 use super::runs::{Outcome, Run, ground, walk};
 use super::sources::{CELL_M, DOOR_U, block, cubes, doorway};
 use super::{Kind, Measure, Mover, TICK};
@@ -58,6 +60,17 @@ const THROUGH_M: f32 = 1.0;
 const FLOOR_M: f32 = 20.0;
 /// How long a body walks a flight or through a doorway, s.
 const WALK_S: f32 = 3.0;
+/// Lumps of ground, balls filled into level ground: how far their middle is under it and
+/// their radius, m. The yard's (0.35 m high, its foot 62 deg), a lower and a higher, each
+/// lower than the kind's step and steeper at its foot than it can stand on.
+const LUMPS: [(f32, f32); 3] = [(0.3, 0.65), (0.2, 0.5), (0.4, 0.8)];
+/// Where a lump's middle is along the way, how far across from the walk's line each walk
+/// passes it, m, and how far on the walk must get.
+const LUMP_U: f32 = 3.0;
+const LUMP_ACROSS: [f32; 4] = [0.0, 0.1, 0.2, 0.3];
+const PAST_LUMP_U: f32 = 5.0;
+/// How long a body walks at a lump, s.
+const LUMP_S: f32 = 2.0;
 
 #[derive(Clone, Copy, Debug)]
 enum Source {
@@ -77,6 +90,8 @@ enum Case {
     },
     Sill(f32),
     Threshold(f32, f32, f32),
+    /// A lump (its middle's depth and radius) walked at so far across and from so far back.
+    Lump(f32, f32, f32, f32),
 }
 
 fn cases() -> Vec<Case> {
@@ -99,6 +114,13 @@ fn cases() -> Vec<Case> {
         for i in 0..PHASES {
             let from = i as f32 * PHASE_M;
             cases.push(Case::Threshold(height, before, from));
+        }
+    }
+    for (under, radius) in LUMPS {
+        for across in LUMP_ACROSS {
+            for i in 0..PHASES {
+                cases.push(Case::Lump(under, radius, across, i as f32 * PHASE_M));
+            }
         }
     }
     cases
@@ -276,6 +298,17 @@ fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
             let short = (through - local(run.body(0).feet).x).max(0.0);
             run.outcome(vec![short])
         }
+        Case::Lump(under, radius, across, from) => {
+            let lump = Solid::Ball(Vec3::new(LUMP_U, -under, 0.0), radius);
+            let course = Course::flat().with(lump);
+            let mut run = Run::new(new(), &course);
+            run.add(0, kind, world(from, 0.0, across));
+            for _ in 0..(LUMP_S / TICK) as usize {
+                run.tick(|_, b| walk(b));
+            }
+            let stopped = local(run.body(0).feet).x < PAST_LUMP_U;
+            run.outcome(vec![f32::from(u8::from(stopped))])
+        }
     }
 }
 
@@ -293,6 +326,10 @@ pub(super) fn score<M: Mover>(new: &(impl Fn() -> M + Sync)) -> (Vec<Measure>, f
     let off = all()
         .filter(|(case, _)| matches!(case, Case::Flight { up: true, .. }))
         .map(|(_, o)| o.values[1])
+        .sum::<f32>();
+    let stopped = all()
+        .filter(|(case, _)| matches!(case, Case::Lump(..)))
+        .map(|(_, o)| o.values[0])
         .sum::<f32>();
     let deepest = outcomes
         .iter()
@@ -314,6 +351,7 @@ pub(super) fn score<M: Mover>(new: &(impl Fn() -> M + Sync)) -> (Vec<Measure>, f
             "door.lintel",
             worst(&|c| matches!(c, Case::Threshold(..)), 0),
         ),
+        m("step.lump", stopped),
     ];
     (measures, deepest)
 }
@@ -334,5 +372,19 @@ mod tests {
         let course = flight(Source::Ground, 0.3, 0.5, true);
         let at = world(FACE_U + 2.0 * 0.5 + 0.25, 0.9 + 0.1, 0.0);
         assert!((course.distance(at) - 0.1).abs() < 1e-2);
+    }
+
+    #[test]
+    fn a_lump_is_lower_than_a_step_and_too_steep_to_stand_on_at_its_foot() {
+        let kind = Kind::man();
+        for (under, radius) in LUMPS {
+            let course = Course::flat().with(Solid::Ball(Vec3::new(LUMP_U, -under, 0.0), radius));
+            let top = world(LUMP_U, radius - under + 0.01, 0.0);
+            assert!((course.distance(top) - 0.01).abs() < 1e-3);
+            assert!(radius - under < kind.step_height);
+            // Its foot, where it meets the ground, leans from upright by more than the limit.
+            let foot = libm::acosf(under / radius).to_degrees();
+            assert!(foot > kind.slope_limit_deg, "{foot}");
+        }
     }
 }
