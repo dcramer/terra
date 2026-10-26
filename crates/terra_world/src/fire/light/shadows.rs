@@ -135,6 +135,82 @@ pub(super) fn parts(lumens: f32, strength: f32) -> (f32, f32) {
     }
 }
 
+/// A kept fire's light as it shines unshadowed: where it hangs without its sway, how far its
+/// flicker has it from its mean now (its lumens over its mean's), and which kept fire's it is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Still {
+    pub at: Vec3,
+    pub shines: f32,
+    pub fire: usize,
+}
+
+/// A light as its entity shows it, its fade and shadow share in its lumens, and its twin's,
+/// the unshadowed rest of one part-way (`parts`).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Shone {
+    pub own: Lit,
+    pub twin: Option<Lit>,
+}
+
+/// So much of a light's flicker and sway, from none (its mean, where it hangs) to all.
+fn flickering(lit: &Lit, flickers: f32, lumens: f32) -> Lit {
+    let mut out = lit.clone();
+    out.lumens = lumens;
+    if let Some(still) = &lit.still {
+        let mean = lumens / still.shines;
+        out.lumens = mean + (lumens - mean) * flickers;
+        out.at = still.at + (lit.at - still.at) * flickers;
+    }
+    out
+}
+
+/// What each light shows with its shadows so strong (`ShadowFade::strength`). A kept fire's
+/// light flickers and sways only as far as its fire's shadows are cast, its top light (never
+/// shadowed) as far as its key's: the unshadowed rest shines steady at its mean, where it
+/// hangs. Unshadowed, a torch's light passes through the rock round it, and its flicker
+/// pulsed the walls of the corridors beside it: the crypt tour's whole-picture brightness
+/// jumped over 5% a frame 32 times, 13 with it steady (dungeon light round 5); a wall torch lights only the dungeon's walls, as Bevy 0.20 masks no light
+/// by room. A blaze's light flickers whole.
+pub(super) fn shone(shown: &[Option<Shown>], strength: &[f32]) -> Vec<Option<Shone>> {
+    let s = |i: usize| strength.get(i).copied().unwrap_or(0.0);
+    let keys: Vec<(usize, f32)> = shown
+        .iter()
+        .enumerate()
+        .filter_map(|(i, shown)| {
+            let lit = &shown.as_ref()?.lit;
+            lit.casts.then_some((lit.still?.fire, s(i)))
+        })
+        .collect();
+    let key = |fire: usize| keys.iter().find(|k| k.0 == fire).map_or(0.0, |k| k.1);
+    shown
+        .iter()
+        .enumerate()
+        .map(|(i, shown)| {
+            let Shown { lit, fade, .. } = shown.as_ref()?;
+            let lumens = lit.lumens * fade;
+            if !lit.casts {
+                let flickers = lit.still.map_or(0.0, |still| key(still.fire));
+                return Some(Shone {
+                    own: flickering(lit, flickers, lumens),
+                    twin: None,
+                });
+            }
+            let (own, twin) = parts(lumens, s(i));
+            Some(if s(i) > 0.0 {
+                Shone {
+                    own: flickering(lit, 1.0, own),
+                    twin: (twin > 0.0).then(|| flickering(lit, 0.0, twin)),
+                }
+            } else {
+                Shone {
+                    own: flickering(lit, 0.0, own),
+                    twin: None,
+                }
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,6 +227,7 @@ mod tests {
             night_stops: 2.5,
             dusk_gain: 1.0,
             casts: true,
+            still: None,
         };
         Some(Shown {
             lit,
@@ -225,5 +302,79 @@ mod tests {
             assert!((shadowed + twin - 1000.0).abs() < 1e-3);
         }
         assert_eq!(parts(1000.0, 0.0), (1000.0, 0.0));
+    }
+
+    /// Three torches down a corridor along x, the eye by the first, its key's shadows so
+    /// strong: over ten seconds, each torch's light summed (key, top and twin) and how far its
+    /// lumens and its lights' places stray from their first.
+    fn strays(strength: f32) -> Vec<(f32, f32)> {
+        use crate::fire::{Blaze, Blazes};
+        let fire = |i: usize| Blaze {
+            at: Vec3::new(i as f32 * 3.0, 2001.5, 0.0),
+            tall: 0.45,
+            heat: 0.6,
+            seed: 0.1 + 0.3 * i as f32,
+            wide: 0.12,
+        };
+        let blazes = Blazes {
+            kept: (0..3).map(fire).collect(),
+            lights: vec![super::super::TORCH_LIGHT; 3],
+            ..default()
+        };
+        let eye = Some(Vec3::new(-1.0, 2001.6, 0.0));
+        let off = super::super::Was {
+            at: Vec3::ZERO,
+            on: false,
+            near: false,
+        };
+        let was = vec![off; super::super::LIGHTS];
+        let mut first: Vec<Option<(f32, Vec<Vec3>)>> = vec![None; 3];
+        let mut out = vec![(0.0f32, 0.0f32); 3];
+        for step in 0..2000 {
+            let t = step as f32 * 0.005;
+            let lit = super::super::lit(&blazes, t, crate::fire::BreathTier::Cards);
+            let shown = super::super::choose(lit, eye, &was, 1);
+            let strengths: Vec<f32> = shown
+                .iter()
+                .map(|s| {
+                    s.as_ref()
+                        .map_or(0.0, |s| if s.shadows { strength } else { 0.0 })
+                })
+                .collect();
+            let mut torches = vec![(0.0f32, Vec::new()); 3];
+            for shone in shone(&shown, &strengths).into_iter().flatten() {
+                for light in std::iter::once(shone.own).chain(shone.twin) {
+                    let torch = &mut torches[(light.at.x / 3.0).round() as usize];
+                    torch.0 += light.lumens;
+                    torch.1.push(light.at);
+                }
+            }
+            for (i, (lumens, at)) in torches.into_iter().enumerate() {
+                let (was_lumens, was_at) = first[i].get_or_insert_with(|| (lumens, at.clone()));
+                out[i].0 = out[i].0.max((lumens / *was_lumens - 1.0).abs());
+                for (a, b) in at.iter().zip(was_at.iter()) {
+                    out[i].1 = out[i].1.max(a.distance(*b));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_torch_flickers_its_light_only_as_far_as_its_shadows_are_cast() {
+        // The shadowed torch flickers and sways; the others, whose light passes through the
+        // rock unshadowed, shine steady where they hang.
+        let whole = strays(1.0);
+        assert!(whole[0].0 > 0.05 && whole[0].1 > 1e-3, "{whole:?}");
+        for steady in &whole[1..] {
+            assert!(steady.0 < 1e-5 && steady.1 < 1e-5, "{whole:?}");
+        }
+        // Part-way through a hand-over, it flickers part-way, its twin steady.
+        let half = strays(0.5);
+        let share = half[0].0 / whole[0].0;
+        assert!((0.3..0.7).contains(&share), "{share}: {half:?}");
+        // Its shadows gone, it shines as steady as the others.
+        let none = strays(0.0);
+        assert!(none.iter().all(|s| s.0 < 1e-5 && s.1 < 1e-5), "{none:?}");
     }
 }

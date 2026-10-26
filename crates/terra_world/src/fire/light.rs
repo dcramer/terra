@@ -425,6 +425,8 @@ pub(super) struct Lit {
     /// fire's (`choose`); each of a light's cube's six views is drawn every frame, 0.55 ms of
     /// GPU and 0.6 of render CPU a light (fire round g29).
     pub casts: bool,
+    /// A kept fire's light as it shines unshadowed, steady (`shadows::shone`).
+    pub still: Option<shadows::Still>,
 }
 
 /// A jet's light, its lumens and colour, as its breath is drawn.
@@ -477,6 +479,7 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
                     night_stops: NIGHT_STOPS,
                     dusk_gain: 1.0,
                     casts: true,
+                    still: None,
                 }
             })
         })
@@ -535,6 +538,7 @@ pub(super) fn strikes(
                     night_stops: BREATH_NIGHT_STOPS,
                     dusk_gain: 1.0,
                     casts: true,
+                    still: None,
                 }
             })
         })
@@ -572,6 +576,7 @@ fn jet_lights(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
                     night_stops: jet_stops,
                     dusk_gain: 1.0,
                     casts: true,
+                    still: None,
                     range: JET_RANGE_M,
                     radius: 0.5,
                     glow,
@@ -621,7 +626,8 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
             .kept
             .iter()
             .zip(colours)
-            .flat_map(|(blaze, &colour)| {
+            .enumerate()
+            .flat_map(|(fire, (blaze, &colour))| {
                 let flicker = Flicker::of(width(blaze));
                 let glow = glow(blaze, t);
                 let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
@@ -634,8 +640,11 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 let swayed = sway(blaze.seed, t, flicker, reach);
                 let rise = swayed.dot(up(blaze.at));
                 let swayed = swayed + up(blaze.at) * (rise.abs() - rise);
+                // Where it hangs, unswayed and at its mean (`shadows::shone`).
+                let still = |at| Some(shadows::Still { at, shines, fire });
+                let rest = blaze.at + up(blaze.at) * blaze.tall * HEARTH_LIGHT_UP;
                 let main = Lit {
-                    at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_LIGHT_UP + swayed,
+                    at: rest + swayed,
                     lumens: lumens * (1.0 - HEARTH_TOP),
                     color: colour,
                     range: HEARTH_RANGE_M,
@@ -647,15 +656,18 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     night_stops: HEARTH_NIGHT_STOPS,
                     dusk_gain: 1.0,
                     casts: true,
+                    still: still(rest),
                 };
+                let top_rest = blaze.at + up(blaze.at) * blaze.tall * HEARTH_TOP_UP;
                 let top = Lit {
                     lumens: lumens * HEARTH_TOP * HEARTH_TOP_GAIN,
-                    at: blaze.at + up(blaze.at) * blaze.tall * HEARTH_TOP_UP + swayed,
+                    at: top_rest + swayed,
                     range: HEARTH_TOP_RANGE_M,
                     radius: width(blaze) * HEARTH_TOP_SPREAD,
                     night_stops: HEARTH_TOP_NIGHT_STOPS,
                     dusk_gain: HEARTH_TOP_DUSK,
                     casts: false,
+                    still: still(top_rest),
                     ..main.clone()
                 };
                 [main, top]
@@ -702,6 +714,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 night_stops: NIGHT_STOPS,
                 dusk_gain: 1.0,
                 casts: true,
+                still: None,
             }
         })
         .collect();
@@ -906,7 +919,8 @@ pub(super) fn light(
     let mut twins = Vec::new();
     let mut told = [[0.0f32; 4]; GLOWS];
     let mut wanted = Vec::new();
-    for (i, (&entity, shown)) in drawn.lights.iter().zip(shown).enumerate() {
+    let shone = shadows::shone(&shown, &shadow_fade.strength);
+    for (i, ((&entity, shown), shone)) in drawn.lights.iter().zip(shown).zip(shone).enumerate() {
         let Ok((mut light, mut transform, mut visibility, volumetric)) = lights.get_mut(entity)
         else {
             continue;
@@ -920,15 +934,18 @@ pub(super) fn light(
             }) => {
                 // Its shadows part-way, the rest of its light is its twin's (`shadows`).
                 let strength = shadow_fade.strength.get(i).copied().unwrap_or(0.0);
-                let (own, twin) = shadows::parts(lit.lumens * fade, strength);
-                if twin > 0.0 {
-                    twins.push((lit.clone(), twin));
+                let Some(shadows::Shone { own, twin }) = shone else {
+                    continue;
+                };
+                if let Some(twin) = twin {
+                    let lumens = twin.lumens;
+                    twins.push((twin, lumens));
                 }
-                light.intensity = own;
+                light.intensity = own.lumens;
                 light.range = lit.range;
                 light.color = lit.color;
                 light.radius = lit.radius;
-                transform.translation = lit.at;
+                transform.translation = own.at;
                 *visibility = Visibility::Inherited;
                 light.shadow_maps_enabled = strength > 0.0;
                 // A kept fire's near lights shine in the air round it (`fog`), the shadowed
@@ -951,7 +968,7 @@ pub(super) fn light(
                 // each glow the eye is inside is marched over the whole screen, 3.6 ms by night
                 // a glow at a campfire 4.4 m off (fire round g29).
                 if scatters && !lit.casts {
-                    wanted.push(super::fog::Glow::of(lit.at, lit.radius, fade));
+                    wanted.push(super::fog::Glow::of(own.at, lit.radius, fade));
                 }
                 if let Some(slot) = told.get_mut(i) {
                     *slot = lit.at.extend(lit.glow * fade.max(0.01)).to_array();

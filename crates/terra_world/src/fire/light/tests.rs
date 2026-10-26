@@ -222,6 +222,7 @@ fn at(x: f32, lumens: f32) -> Lit {
         night_stops: 2.5,
         dusk_gain: 1.0,
         casts: true,
+        still: None,
     }
 }
 
@@ -316,6 +317,7 @@ fn a_hearths_pit_key_casts_its_shadows_and_its_top_light_shines_in_the_fog_unsha
     let hearth = |x: f32, casts: bool| Lit {
         kept: true,
         casts,
+        still: None,
         ..at(x, 1.0e5)
     };
     let lit = vec![
