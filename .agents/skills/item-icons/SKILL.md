@@ -44,6 +44,7 @@ When an item's file changes but its look does not (gear rebuilt with its morphs 
 
 - **Reads on the half-size sheet**: you can say what it is without its name.
 - **Matches its render**: the same thing, with nothing added. The painter is told not to add detail, but it can (an early stone axe gained a cord binding); paint again if so.
+- **A shield stands upright, point down**, front on, though its render lies on the diagonal: the developers kept the heater shield painted so (2026-10-26). Paint again one that lies along the diagonal.
 - **Keeps to the others' style**: the same painted finish, light from the upper left, a bold silhouette.
 - **Is not mistaken for its neighbours**, such as a stone axe for an iron one. If two items look alike, it is their looks or descriptions, which is design: say so.
 - Is cleanly cut out: no magenta fringe, nothing missing at the edges.
