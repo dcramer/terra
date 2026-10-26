@@ -14,6 +14,8 @@
 //! - `view`: the camera's way along the tour, kept off what stands round it.
 //! - `look`: where the camera looks along it.
 
+#[cfg(test)]
+mod leaf_tests;
 mod look;
 mod modules;
 mod runin;
@@ -122,6 +124,11 @@ pub struct Object {
     pub model: String,
     /// What a door asks before it is pushed open (D512); `None` for everything else.
     pub lock: crate::door::Lock,
+    /// How far a door's leaves swing into its room, in quarter turns (`door::leaf`), the
+    /// first hinged at the doorway's -X: two where the wall runs on a metre past the jamb,
+    /// so the leaf folds flat on it, one where a side wall stands flush with the jamb, minus
+    /// one where the room is solid just inside the jamb, so it swings out whichever way.
+    pub opens: [f32; 2],
 }
 
 /// A dungeon laid out for the game.

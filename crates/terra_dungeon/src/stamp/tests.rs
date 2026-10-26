@@ -6,11 +6,11 @@ use crate::{ModuleSet, generate};
 use std::collections::{HashSet, VecDeque};
 use terra_gen::Seed;
 
-type Map = HashMap<IVec3, Cube>;
+pub(super) type Map = HashMap<IVec3, Cube>;
 
-const SEEDS: u64 = 200;
+pub(super) const SEEDS: u64 = 200;
 
-fn kind(name: &str) -> Kind {
+pub(super) fn kind(name: &str) -> Kind {
     Kind(1 + name.len() as u16)
 }
 
@@ -288,8 +288,9 @@ fn frames_turn_as_modules_turn() {
 /// Seeds a theme the camera's view is checked over.
 const VIEW_SEEDS: u64 = 1000;
 
-/// A door's two leaves standing open, as the game swings them (spawn.rs `open`): from each
-/// jamb, a metre either side of the sill's middle, a metre into the room, 2.5 m high.
+/// A door's two leaves standing open, as the game swung them before they were hung at the
+/// room's face of the wall to lie flat on it (`open_door_leaves_lie_flat_on_a_wall`): from
+/// each jamb a metre into the room. The camera still keeps clear of where they stood.
 fn open_leaves(stamp: &Stamp) -> Vec<(Vec3, Vec3)> {
     let doors = stamp.objects.iter().filter(|o| o.role == ObjectRole::Door);
     doors

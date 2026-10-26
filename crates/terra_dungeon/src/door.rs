@@ -6,6 +6,7 @@
 //! the leaves hang in (into its corridor), so a body at z > 0 stands outside.
 
 use glam::{Vec2, Vec3};
+use std::f32::consts::{FRAC_PI_2, PI};
 
 /// How far in front of the leaves a body walking at them pushes them, in metres: a stride
 /// and an arm, so they are moving before the body (or a camera at a walk) reaches them.
@@ -24,6 +25,21 @@ pub const FILM_REACH_M: f32 = 2.0;
 /// How far ahead a filming camera reads its shot for whether it goes through a door: long
 /// enough for a shot that slows and turns in front of one.
 pub const FILM_HORIZON_S: f32 = 5.0;
+
+/// Where one of a door's two leaves hangs with the door `swing` open, in the doorway's
+/// frame: its hinge, and its turn about up for a leaf reaching +X from its hinge. Hung as a
+/// gate of its `width` is, each at one jamb reaching to the middle when shut, the second
+/// turned half round so it reaches back; and `depth` behind the sill, at the room's face of
+/// the wall, as a door in a thick wall is hung so it swings back to the wall. Into the room
+/// it turns `opens` quarter turns: two folds it flat on the wall it is hung in, one lays it
+/// on a side wall flush with its jamb; minus one turns it out of the room however it is
+/// pushed. Out of the room a quarter turn, along its jamb.
+pub fn leaf(second: bool, swing: f32, opens: f32, width: f32, depth: f32) -> (Vec3, f32) {
+    let turn = if swing > 0.0 { swing * opens } else { swing } * FRAC_PI_2;
+    let side = if second { 1.0 } else { -1.0 };
+    let hinge = Vec3::new(side * width * 0.5, 0.0, -depth);
+    (hinge, if second { PI - turn } else { turn })
+}
 
 /// What a door asks before it gives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -6,11 +6,11 @@ use super::{Pending, dir};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
 use std::collections::HashMap;
-use std::f32::consts::{FRAC_PI_2, PI};
+use std::f32::consts::FRAC_PI_2;
 use terra_creatures::creatures::{Form, Kinds};
 use terra_creatures::species::Bestiary;
 use terra_dungeon::door::{self, Door, Lock};
-use terra_dungeon::stamp::{DOORWAY_M, LightKind, ObjectRole};
+use terra_dungeon::stamp::{CUBE, DOORWAY_M, LightKind, ObjectRole};
 use terra_game::build::{Build, BuildLook, Built};
 use terra_walker::Player;
 use terra_world::cine::{Cine, Places, Subject};
@@ -62,11 +62,11 @@ pub struct DungeonObject {
     pub lock: Lock,
 }
 
-/// A doorway's door, pushed open by D512's rule; its transform at the middle of the sill,
-/// turned as the doorway faces (+Z out of the room its leaves hang in), its two leaves its
-/// children.
+/// A doorway's door, pushed open by D512's rule, and how far each leaf opens into the room
+/// (`Object::opens`); its transform at the middle of the sill, turned as the doorway faces
+/// (+Z out of the room its leaves hang in), its two leaves its children.
 #[derive(Component, Debug)]
-pub struct Doorway(pub Door);
+pub struct Doorway(pub Door, pub [f32; 2]);
 
 /// One of a doorway's two leaves: the first hinged at the jamb at -X, the second at +X.
 #[derive(Component, Debug)]
@@ -90,24 +90,14 @@ fn facing(side: usize) -> Quat {
     Quat::from_rotation_y((2.0 - side as f32) * FRAC_PI_2)
 }
 
-/// A leaf's hinge and turn in its doorway's frame with the door `swing` open (D512: 0 shut,
-/// 1 a quarter turn into the room, -1 out of it), a double door as a gate of its width is
-/// hung: each hinged at one jamb and reaching to the middle when shut, the second turned half
-/// round so it reaches back (a leaf's planks and studs are alike on both faces).
-fn leaf(second: bool, swing: f32) -> (Vec3, Quat) {
-    let half = DOORWAY_M[0] * 0.5;
-    let quarter = swing * FRAC_PI_2;
-    if second {
-        (Vec3::X * half, Quat::from_rotation_y(PI - quarter))
-    } else {
-        (-Vec3::X * half, Quat::from_rotation_y(quarter))
-    }
-}
-
-fn leaf_at(second: bool, swing: f32) -> Transform {
-    let (hinge, turn) = leaf(second, swing);
+/// A leaf's place in its doorway's frame with the door `swing` open (D512: 0 shut, 1 into
+/// the room, -1 out of it) and its leaves opening `opens` quarter turns into the room, as
+/// `door::leaf` hangs it at the room's face of the wall (a leaf's planks and studs are alike
+/// on both faces, so the second is the first turned half round).
+fn leaf_at(second: bool, swing: f32, opens: f32) -> Transform {
+    let (hinge, turn) = door::leaf(second, swing, opens, DOORWAY_M[0], CUBE);
     Transform::from_translation(hinge)
-        .with_rotation(turn)
+        .with_rotation(Quat::from_rotation_y(turn))
         .with_scale(leaf_scale())
 }
 
@@ -233,7 +223,7 @@ pub(super) fn put_up(
                 .spawn((
                     Name::new(object.name.clone()),
                     live(),
-                    Doorway(Door::shut(object.lock)),
+                    Doorway(Door::shut(object.lock), object.opens),
                     Transform::from_translation(object.at).with_rotation(turn),
                     Visibility::default(),
                 ))
@@ -243,7 +233,7 @@ pub(super) fn put_up(
                             Name::new(format!("{} leaf", object.name)),
                             Leaf { second },
                             scene(&assets, &object.model),
-                            leaf_at(second, 0.0),
+                            leaf_at(second, 0.0, object.opens[second as usize]),
                         ));
                     }
                 });
@@ -351,7 +341,11 @@ pub(super) fn push_doors(
         }
         for &child in children {
             if let Ok((leaf, mut placed)) = leaves.get_mut(child) {
-                *placed = leaf_at(leaf.second, doorway.0.swing);
+                *placed = leaf_at(
+                    leaf.second,
+                    doorway.0.swing,
+                    doorway.1[leaf.second as usize],
+                );
             }
         }
     }
@@ -393,15 +387,15 @@ mod tests {
     fn a_doorways_two_leaves_shut_fill_it_jamb_to_jamb_and_meet_in_the_middle() {
         let mut spans = Vec::new();
         for second in [false, true] {
-            let placed = leaf_at(second, 0.0);
+            let placed = leaf_at(second, 0.0, 2.0);
             // The model's corners: hinge foot and the far top corner.
             let far = placed.transform_point(Vec3::new(LEAF_M.x, LEAF_M.y, 0.0));
             let hinge = placed.translation;
             spans.push((hinge.x.min(far.x), hinge.x.max(far.x)));
             assert!((far.y - DOORWAY_M[1]).abs() < 1e-4, "height");
             assert!(
-                hinge.y.abs() < 1e-5 && far.z.abs() < 1e-4,
-                "in the sill's plane"
+                hinge.y.abs() < 1e-5 && (far.z + CUBE).abs() < 1e-4,
+                "at the room's face of the wall"
             );
         }
         spans.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -414,19 +408,27 @@ mod tests {
         assert!((spans[1].1 - half).abs() < 1e-4, "{spans:?}");
     }
 
-    /// Swung open, each leaf stands at its jamb reaching straight into the room (-Z) or out
-    /// of it (+Z), its full width, so the doorway between the jambs is clear.
+    /// Swung open, each leaf stands at its jamb, its full width, so the doorway between the
+    /// jambs is clear: out of the room (+Z) along the jamb; into it (-Z) along a side wall
+    /// flush with the jamb, or folded back flat on the wall it hangs in, reaching away from
+    /// the doorway.
     #[test]
-    fn open_leaves_stand_at_their_jambs_reaching_into_or_out_of_the_room() {
+    fn open_leaves_lie_along_their_jambs_or_flat_on_the_wall() {
         let width = DOORWAY_M[0] * 0.5;
-        for swing in [1.0, -1.0] {
+        for (swing, opens) in [(1.0, 1.0), (-1.0, 1.0), (-1.0, 2.0), (1.0, 2.0)] {
             let mut jambs = Vec::new();
             for second in [false, true] {
-                let placed = leaf_at(second, swing);
-                let reach = placed.transform_point(Vec3::X * LEAF_M.x) - placed.translation;
-                assert!(reach.x.abs() < 1e-4, "{swing}: along the jamb, {reach}");
-                assert!((reach.z + swing * width).abs() < 1e-4, "{swing}: {reach}");
-                jambs.push(placed.translation.x);
+                let placed = leaf_at(second, swing, opens);
+                let hinge = placed.translation;
+                let reach = placed.transform_point(Vec3::X * LEAF_M.x) - hinge;
+                let side = hinge.x.signum();
+                let wanted = if swing > 0.0 && opens == 2.0 {
+                    Vec3::X * side * width
+                } else {
+                    Vec3::Z * -swing * width
+                };
+                assert!(reach.distance(wanted) < 1e-4, "{swing} {opens}: {reach}");
+                jambs.push(hinge.x);
             }
             jambs.sort_by(f32::total_cmp);
             assert!((jambs[0] + width).abs() < 1e-4 && (jambs[1] - width).abs() < 1e-4);

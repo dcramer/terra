@@ -269,6 +269,7 @@ fn object(name: &str, role: ObjectRole, f: Frame, y: f32, model: &str) -> Object
         facing: f.side(2),
         model: model.to_string(),
         lock: crate::door::Lock::None,
+        opens: [1.0; 2],
     }
 }
 

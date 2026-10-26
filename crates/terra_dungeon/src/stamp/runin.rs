@@ -7,8 +7,8 @@
 use super::modules::{Class, Look};
 use super::view::Room;
 use super::{
-    CELL, CUBE, ChestSpawn, Frame, LEVEL, LIGHTS, Light, LightKind, MobSpawn, Object, ObjectRole,
-    Stamp, clear, cube_of, floor_of, hash, stands, steps,
+    CELL, CUBE, ChestSpawn, DOORWAY_M, Frame, LEVEL, LIGHTS, Light, LightKind, MobSpawn, Object,
+    ObjectRole, Stamp, clear, cube_of, floor_of, hash, stands, steps,
 };
 use crate::Dungeon;
 use crate::door::Lock;
@@ -22,7 +22,7 @@ use terra_build::Cube;
 type Map = HashMap<IVec3, Cube>;
 
 pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Stamp) {
-    doors(dungeon, out);
+    doors(dungeon, map, out);
     chests(dungeon, looks, map, out);
     mobs(dungeon, looks, map, out);
     torches(dungeon, looks, out);
@@ -36,7 +36,7 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Sta
 
 /// A leaf in the doorway at the far room of each door, locked door and one-way door; an arch
 /// and a secret way have none.
-fn doors(dungeon: &Dungeon, out: &mut Stamp) {
+fn doors(dungeon: &Dungeon, map: &Map, out: &mut Stamp) {
     let layout = &dungeon.layout;
     for (e, edge) in dungeon.graph.edges.iter().enumerate() {
         let (name, lock) = match edge.link {
@@ -58,15 +58,56 @@ fn doors(dungeon: &Dungeon, out: &mut Stamp) {
             },
             lock => lock,
         };
+        let sill = Frame::new(at, d).point(3.0, 0.0, 0.0);
         out.objects.push(Object {
             name: name.to_string(),
             role: ObjectRole::Door,
-            at: Frame::new(at, d).point(3.0, 0.0, 0.0),
+            at: sill,
             facing: d,
             model: "models/openings/StuddedDoor.glb".to_string(),
             lock,
+            opens: opens(map, sill, d),
         });
     }
+}
+
+/// A doorway's frame in the world: across (+X, the first leaf's jamb at -X) and into its
+/// room (the doorway's -Z), from the side it is in.
+pub(super) fn doorway_axes(facing: usize) -> (Vec3, Vec3) {
+    let f = Frame::new(IVec3::ZERO, facing);
+    let into = (f.point(0.0, 0.0, 1.0) - f.point(0.0, 0.0, 0.0)).normalize();
+    (Vec3::Y.cross(-into), into)
+}
+
+/// How far each leaf of the door at `sill` swings into its room (`Object::opens`): folded
+/// flat on its wall where the wall runs on two cubes past the jamb with the room clear in
+/// front of it, as a door in a thick wall swings back to the wall; a quarter turn, on the
+/// side wall flush with the jamb; or, where the room is solid just inside the jamb (a wall
+/// or pier narrower than the doorway), a quarter turn out of it, along the jamb.
+fn opens(map: &Map, sill: Vec3, facing: usize) -> [f32; 2] {
+    let (across, into) = doorway_axes(facing);
+    [-1.0, 1.0].map(|side| {
+        let jamb = sill + across * side * DOORWAY_M[0] * 0.5;
+        let flat = [0.5, 1.5].iter().all(|&k| {
+            let beside = jamb + across * side * CUBE * k;
+            [1.5, 3.5].iter().all(|&up| {
+                let beside = beside + Vec3::Y * CUBE * up;
+                !clear(map, cube_of(beside + into * CUBE * 0.5))
+                    && clear(map, cube_of(beside + into * CUBE * 1.5))
+            })
+        });
+        let inside = jamb - across * side * CUBE * 0.5 + into * CUBE * 1.5;
+        let blocked = [1.5, 3.5]
+            .iter()
+            .any(|&up| !clear(map, cube_of(inside + Vec3::Y * CUBE * up)));
+        if blocked {
+            -1.0
+        } else if flat {
+            2.0
+        } else {
+            1.0
+        }
+    })
 }
 
 /// The room's cell and side with the doorway of an edge.

@@ -325,8 +325,9 @@ impl<'a> Room<'a> {
 }
 
 /// The two leaves of a doorway's door standing open: each from its jamb, a cube in from the
-/// sill's middle either way twice, two cubes into the room it opens into (as the game hangs
-/// and swings them).
+/// sill's middle either way twice, two cubes into the room it opens into: where the game's
+/// leaves stood before they were hung to lie flat on a wall (`door::leaf`); the tours are
+/// made keeping clear of them still.
 fn leaves(sill: Vec3, facing: usize) -> [Leaf; 2] {
     let f = Frame::new(IVec3::ZERO, facing);
     let o = f.point(0.0, 0.0, 0.0);
