@@ -207,7 +207,8 @@ function plan(b: Box): number {
 
 const UNIT = "terra-render.service";
 const unitPath = () => join(homedir(), ".config/systemd/user", UNIT);
-const pathEnv = () => [join(process.execPath, ".."), join(homedir(), ".cargo/bin"), "/usr/local/bin", "/usr/bin", "/bin"].join(":");
+/// The daemon's and so its jobs' PATH; ~/.local/bin holds tools installed without sudo (ImageMagick's `magick`).
+const pathEnv = () => [join(process.execPath, ".."), join(homedir(), ".cargo/bin"), join(homedir(), ".local/bin"), "/usr/local/bin", "/usr/bin", "/bin"].join(":");
 
 /// Whether the daemon can be a systemd user service that outlives the ssh session: the user's
 /// manager answers and lingering is on (turned on here when polkit lets the user do it).

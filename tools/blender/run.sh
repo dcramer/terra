@@ -3,7 +3,9 @@
 #   tools/blender/run.sh <script.py> [--open file.blend] [args for the script...]
 #   tools/blender/run.sh --find    prints the Blender it would use, or fails if there is none
 # It uses the Blender named in tools/blender/version; from WSL, that Windows install, which
-# renders on the real GPU. Set BLENDER to use another; it must still be that version.
+# renders on the real GPU; on Linux, an official tarball of it unpacked in the account's ~/opt
+# (the render worker's, D445), else blender on the PATH. Set BLENDER to use another; it must
+# still be that version.
 set -euo pipefail
 here=$(dirname "$(realpath "$0")")
 pinned=$(tr -d '[:space:]' < "$here/version")
@@ -11,6 +13,11 @@ pinned=$(tr -d '[:space:]' < "$here/version")
 if [[ -z "${BLENDER:-}" ]]; then
   BLENDER="/mnt/c/Program Files/Blender Foundation/Blender $pinned/blender.exe"
   [[ -e "$BLENDER" ]] || { [[ -x /Applications/Blender.app/Contents/MacOS/Blender ]] && BLENDER=/Applications/Blender.app/Contents/MacOS/Blender; } || BLENDER=blender
+  # The account's home, not $HOME: a render worker job's HOME is its slot's (tools/render-worker).
+  if [[ "$BLENDER" == blender ]] && command -v getent >/dev/null; then
+    tarball=$(ls -d "$(getent passwd "$(id -u)" | cut -d: -f6)"/opt/blender-"$pinned".*-linux-x64/blender 2>/dev/null | sort -V | tail -1 || true)
+    [[ -n "$tarball" && -x "$tarball" ]] && BLENDER=$tarball
+  fi
 fi
 if [[ "${1:-}" == --find ]]; then
   [[ -e "$BLENDER" ]] || command -v "$BLENDER" >/dev/null || exit 1

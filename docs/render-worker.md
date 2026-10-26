@@ -28,7 +28,7 @@ Jobs older than `TERRA_RENDER_KEEP_DAYS` (7) are deleted with their files and re
 
 **Self-update.** `cargo xtask remote-render --update` fetches origin/main, makes sure the box has its folder, clone and Node (`bootstrap.sh`), pushes main as `refs/worker/main`, and runs the new code's own `box.ts update` from an export of it: the clone is checked out at the new commit, the new daemon must pass `--selftest` or the clone goes back to the commit before, the warm builds are queued, one for each slot, and the daemon restarts at once, or once its running jobs end (it starts no new one meanwhile). The warm builds (`cargo build -p xtask -p terra_sandbox`, the release sandbox and clippy over the workspace) then run in every slot side by side before any other job, so the next render builds, and the push hook's remote check lints, only what its commit changed. An agent that finds the worker broken lands a fix on main and runs `--update`; the developer never needs to visit.
 
-**Doctor.** `--doctor` prints a line each for the GPU (`nvidia-smi`), Vulkan (loader, NVIDIA ICD, the device when vulkan-tools is installed), Node, cargo, the libraries the sandbox builds against, ffmpeg, free disk, the settings and the daemon, and under each failure what fixes it.
+**Doctor.** `--doctor` prints a line each for the GPU (`nvidia-smi`), Vulkan (loader, NVIDIA ICD, the device when vulkan-tools is installed), Node, cargo, the libraries the sandbox builds against, ffmpeg, ImageMagick, Blender (which renderer it gets), free disk, the settings and the daemon, and under each failure what fixes it.
 
 ## When it runs
 

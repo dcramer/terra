@@ -104,6 +104,10 @@ export function doctor(b: Box): number {
   ]);
   const ffmpeg = sh("ffmpeg", ["-version"]).ok;
   line(ffmpeg || "warn", ffmpeg ? "ffmpeg" : "ffmpeg: not installed; a film job cannot encode its clip", ["sudo apt-get install -y ffmpeg"]);
+  const magick = sh("magick", ["-version"]).ok;
+  line(magick || "warn", magick ? "ImageMagick 7 (magick)" : "magick: not on the PATH; sheets and look checks cannot compose", [
+    "ImageMagick's AppImage from github.com/ImageMagick/ImageMagick/releases: --appimage-extract into ~/opt, AppRun linked as ~/.local/bin/magick",
+  ]);
 
   const fs = statfsSync(existsSync(b.dir) ? b.dir : homedir());
   const freeGb = Math.round((fs.bavail * fs.bsize) / 1024 ** 3);
