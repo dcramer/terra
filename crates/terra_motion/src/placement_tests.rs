@@ -43,6 +43,43 @@ fn the_probe_finds_the_ground_under_a_point_over_or_under_the_roots_level() {
     assert!((under.normal.angle_between(UP).to_degrees() - deg).abs() < 1.0);
 }
 
+/// On a steep slope the probe's sphere touches the ground uphill of the point, higher than the
+/// ground straight under it (by 2.7 cm on the yard's lump's 58 deg foot): it reads the ground
+/// under the point, as a line down would, not the height it touched.
+#[test]
+fn the_probe_reads_the_ground_straight_under_a_point_on_a_steep_slope() {
+    for deg in [20.0_f32, 45.0, 58.0, 70.0] {
+        let under = probe(&slope(deg), DVec3::new(0.1, 0.0, 0.0), DVec3::ZERO, UP, 0.0).unwrap();
+        let want = 0.1 * libm::tanf(deg.to_radians());
+        assert!(
+            (under.height - want).abs() < 2e-3,
+            "{deg}: {under:?} vs {want}"
+        );
+    }
+    // A point on level ground a centimetre short of a 60 deg face's foot: the sphere touches
+    // the face, whose plane runs under the floor there; the floor is read.
+    let n = Vec3::new(-libm::sinf(1.047), libm::cosf(1.047), 0.0);
+    let crease = Sdf {
+        distance: move |p: DVec3| {
+            let p = p.as_vec3();
+            p.y.min((p - Vec3::X * 0.03).dot(n))
+        },
+        steepest: 1.0,
+    };
+    let under = probe(&crease, DVec3::new(0.02, 0.0, 0.0), DVec3::ZERO, UP, 0.0).unwrap();
+    assert!(under.height.abs() < 2e-3, "{under:?}");
+    // A crack narrower than the sphere in level ground is no hole.
+    let crack = Sdf {
+        distance: move |p: DVec3| {
+            let p = p.as_vec3();
+            p.y.max(0.005 - p.x.abs()).min(p.y + 0.3)
+        },
+        steepest: 1.0,
+    };
+    let under = probe(&crack, DVec3::ZERO, DVec3::ZERO, UP, 0.0).unwrap();
+    assert!(under.height.abs() < 2e-3, "{under:?}");
+}
+
 /// Up a stair, the figure is eased under its body (`terra_walker::Stepping`): a swinging foot's
 /// next tread, 0.9 m over the figure's root and 0.4 m over the body's ground, is found from the
 /// body's ground; a face higher than a step over the body is still none.

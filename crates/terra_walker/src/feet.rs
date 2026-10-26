@@ -548,8 +548,10 @@ impl Kept {
         let ball_local = self.balls[side].and_then(|ball| transforms.get(ball).ok());
         let clip_ball = ball_local.map_or(ankle, |ball| leg.foot.transform_point(ball.translation));
         self.clip_soles[side] = [(ankle - ground).dot(up), (clip_ball - ground).dot(up)];
-        let foot_scale = transforms.get(joints[2]).map_or(Vec3::ONE, |t| t.scale);
-        let ball = ball_local.map_or(Vec3::ZERO, |ball| foot_scale * ball.translation);
+        // The ball in the foot's frame at the figure's size: the joint's own scale is not all of
+        // it (a body drawn 1.08 times its rig puts the ball 1.1 cm farther out than the bone's
+        // offset scaled by the foot alone).
+        let ball = clip.turn.inverse() * (clip_ball - ankle);
         let in_body = frame.base.affine().inverse().transform_point3(ankle);
         let dt = frame.dt;
         let swing_mps = self.was[side].map_or(0.0, |was| match frame.passing {

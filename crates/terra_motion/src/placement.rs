@@ -38,6 +38,12 @@ pub const ABOVE_M: f32 = 0.7;
 pub const BELOW_M: f32 = 0.6;
 /// The probe's radius, m: a foot's narrowest, so a crack a voxel's tenth wide is no hole.
 pub const PROBE_M: f32 = 0.02;
+/// The line read down from the probe's sphere where it stopped (`straight_under`) is a sphere
+/// this thin, m.
+pub const LINE_M: f32 = 0.001;
+/// A face the probe touches steeper than this, deg, is read at the height it touched, not
+/// where its plane crosses the probe's line (`straight_under`): a riser's or a wall's.
+pub const STEEPEST_DEG: f32 = 75.0;
 /// A foot pitches and rolls to its ground no further than this, deg.
 pub const TILT_DEG: f32 = 30.0;
 /// A foot's ground is eased to with this time constant, s (ALS eases its foot offsets at 15-30
@@ -96,15 +102,56 @@ pub fn probe<Q: Query + ?Sized>(
         origin: level,
     };
     let hit = ground.sweep(&sphere, -up * (above + BELOW_M))?;
-    let height = hit.contact.at.dot(up);
     // Met where it started: it started in the ground.
-    if hit.fraction <= 0.0 || height > above {
+    if hit.fraction <= 0.0 || hit.contact.at.dot(up) > above {
         return None;
     }
+    let normal = hit.contact.normal.normalize_or(up);
+    let centre = top - up * ((above + BELOW_M) * hit.fraction);
     Some(Under {
-        height,
-        normal: hit.contact.normal.normalize_or(up),
+        height: straight_under(ground, &sphere, centre, hit.contact.at, normal, up),
+        normal,
     })
+}
+
+/// How high the ground is straight under the probe's line (through the sphere's origin along
+/// `up`), the sphere stopped with its centre at `centre` touching the ground at `at` (both over
+/// the root's level) with `normal` there. On a slope the sphere touches uphill of its centre,
+/// higher than the ground under the foot's point by the radius's run up the slope (2.7 cm on
+/// the yard's lump's 58 deg foot), so, as Unreal's character movement reads the floor's
+/// distance under its sweep's centre by a line trace after the sweep (`ComputeFloorDist`, its
+/// documentation; no code taken), a line goes down from the centre: its ground is taken
+/// between where the touched plane crosses the line (the lowest a plane under the sphere
+/// leaves it; a crack narrower than the sphere is no hole) and where it touched (the highest
+/// the ground under it can be, as the sphere came down clear of it). Within `STILL_M` of each
+/// other (level ground), or on a face steeper than `STEEPEST_DEG`, it is read where touched.
+fn straight_under<Q: Query + ?Sized>(
+    ground: &Q,
+    sphere: &Capsule,
+    centre: Vec3,
+    at: Vec3,
+    normal: Vec3,
+    up: Vec3,
+) -> f32 {
+    let (rise, highest) = (normal.dot(up), at.dot(up));
+    if rise < libm::cosf(STEEPEST_DEG.to_radians()) {
+        return highest;
+    }
+    let plane = normal.dot(at) / rise;
+    if plane >= highest - STILL_M {
+        return highest;
+    }
+    let line = Capsule {
+        a: centre,
+        b: centre,
+        radius: LINE_M,
+        ..*sphere
+    };
+    let down = centre.dot(up) - plane + PROBE_M;
+    match ground.sweep(&line, -up * down) {
+        Some(hit) if hit.fraction > 0.0 => hit.contact.at.dot(up).clamp(plane, highest),
+        _ => plane,
+    }
 }
 
 /// The ground a foot is placed on, in the world: the points under its heel and its ball, and
