@@ -109,6 +109,8 @@ struct Animated {
     applied: u32,
     /// Clips played mixed into another (`Act::mix`), each with the one it rides on.
     mixed: Vec<Mixed>,
+    /// Where the player's body was shown last frame (`shown_velocity`).
+    shown: Option<Vec3>,
 }
 
 /// A clip played in step with another, taking its share of that one's weight as the
@@ -317,6 +319,7 @@ fn dress(
             playing: Some((Doing::Idle.clip().to_string(), 0)),
             applied: 0,
             mixed: Vec::new(),
+            shown: None,
         },
     ));
 }
@@ -325,7 +328,8 @@ fn dress(
 /// and blends their figure into it.
 fn animate(
     moves: Option<Res<Moves>>,
-    players: Query<(&Motion, &Stance, Has<Downed>, Option<&Acting>), With<Player>>,
+    time: Res<Time>,
+    players: Query<(&Motion, &Transform, &Stance, Has<Downed>, Option<&Acting>), With<Player>>,
     mut figures: Query<(
         &mut AnimationPlayer,
         &mut AnimationTransitions,
@@ -337,15 +341,24 @@ fn animate(
 ) {
     let Some(moves) = moves else { return };
     for (mut animator, mut transitions, mut animated, place) in &mut figures {
-        let Ok((motion, stance, downed, acting)) = players.get(animated.player) else {
+        let Ok((motion, body, stance, downed, acting)) = players.get(animated.player) else {
             continue;
         };
+        let at = body.translation;
+        let velocity = shown_velocity(
+            motion.velocity,
+            animated.shown,
+            at,
+            *body.up(),
+            time.delta_secs(),
+        );
+        animated.shown = Some(at);
         let act = acting
             .and_then(|acting| acting.clip.as_ref())
             .filter(|_| !downed);
         let doing = match act {
             Some(_) => Doing::Acting,
-            None => doing(motion, stance, downed),
+            None => doing(velocity.length(), motion.airborne, stance, downed),
         };
         let asked = acting.map_or(0, |acting| acting.asked);
         if animated.doing != doing || (act.is_some() && animated.applied != asked) {
@@ -437,7 +450,7 @@ fn animate(
             None if matches!(doing, Doing::Jog | Doing::Sprint) => {
                 if let Some(pace) = moves.paces.get(&name) {
                     let scale = place.scale().y;
-                    playing.set_speed(crate::pace::rate(motion.velocity.length(), *pace, scale));
+                    playing.set_speed(crate::pace::rate(velocity.length(), *pace, scale));
                 }
             }
             None => {}
@@ -448,7 +461,7 @@ fn animate(
             let pace = moves.paces.get(&name).copied().unwrap_or(0.0);
             let node = moves.clips[&name][copy];
             let rate = animator.animation(node).map_or(0.0, |a| a.speed());
-            kept.stride(motion.velocity, pace * place.scale().y, rate);
+            kept.stride(velocity, pace * place.scale().y, rate);
         }
     }
 }
@@ -476,9 +489,23 @@ fn mix(mut figures: Query<(&mut AnimationPlayer, &mut Animated)>) {
     }
 }
 
-/// What a player is doing, as their figure shows it.
-fn doing(motion: &Motion, stance: &Stance, downed: bool) -> Doing {
-    let speed = motion.velocity.length();
+/// The velocity the figure strides at: the body's over the ground, cut to how fast the shown
+/// body went over the ground since the last frame (`from` to `to`, level about `up`), so a
+/// body its mover says moves but that stands still (held against a wall or a face too steep)
+/// stands, and a frame's jump (a body put somewhere) reads no faster than the mover. Lyra's
+/// `DisplacementSpeed`, the actor's displacement over the frame, beside its velocity.
+fn shown_velocity(velocity: Vec3, from: Option<Vec3>, to: Vec3, up: Vec3, dt: f32) -> Vec3 {
+    match from {
+        Some(from) if dt > 0.0 => {
+            let went = (to - from).reject_from(up).length() / dt;
+            velocity.clamp_length_max(went)
+        }
+        _ => velocity,
+    }
+}
+
+/// What a player is doing, as their figure shows it, at a speed over the ground.
+fn doing(speed: f32, airborne: f32, stance: &Stance, downed: bool) -> Doing {
     if downed {
         Doing::Down
     } else if stance.dodging > 0.0 {
@@ -489,7 +516,7 @@ fn doing(motion: &Motion, stance: &Stance, downed: bool) -> Doing {
         Doing::Attack
     } else if stance.guarding {
         Doing::Guard
-    } else if motion.airborne > 0.12 {
+    } else if airborne > 0.12 {
         Doing::Fall
     } else if speed > 5.6 {
         Doing::Sprint
@@ -505,6 +532,36 @@ fn doing(motion: &Motion, stance: &Stance, downed: bool) -> Doing {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A body its mover says jogs but that is held still is shown standing; one that goes as
+    /// fast strides at its speed, a step's rise adds nothing, and a body put far away in a
+    /// frame strides no faster than it moves.
+    #[test]
+    fn the_figure_strides_as_fast_as_the_shown_body_goes_and_no_faster() {
+        let (dt, up, jog) = (1.0 / 60.0, Vec3::Y, Vec3::X * 4.3);
+        let at = Vec3::new(3.0, 2000.0, 1.0);
+        let shown = |to: Vec3| shown_velocity(jog, Some(at), to, up, dt);
+        let held = shown(at);
+        assert_eq!(
+            doing(held.length(), 0.0, &Stance::default(), false),
+            Doing::Idle
+        );
+        let going = shown(at + jog * dt);
+        assert!((going - jog).length() < 1e-3, "{going}");
+        assert_eq!(
+            doing(going.length(), 0.0, &Stance::default(), false),
+            Doing::Jog
+        );
+        let stepping = shown(at + jog * dt + up * 0.3);
+        assert!((stepping - jog).length() < 1e-3, "{stepping}");
+        let put = shown(at + Vec3::Z * 50.0);
+        assert!((put - jog).length() < 1e-3, "{put}");
+        let half = shown(at + jog * dt * 0.5);
+        assert!((half - jog * 0.5).length() < 1e-3, "{half}");
+        // The first frame, and a paused one, take the mover's word.
+        assert_eq!(shown_velocity(jog, None, at, up, dt), jog);
+        assert_eq!(shown_velocity(jog, Some(at), at, up, 0.0), jog);
+    }
 
     #[test]
     fn a_mixed_clip_takes_its_share_of_its_mains_weight_and_stops_with_it() {
@@ -532,6 +589,7 @@ mod tests {
                         mix: held,
                         share: 0.25,
                     }],
+                    shown: None,
                 },
             ))
             .id();
