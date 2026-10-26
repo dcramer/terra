@@ -5,11 +5,14 @@
 use super::{Pending, dir};
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAssetRoot;
-use std::f32::consts::FRAC_PI_2;
+use std::collections::HashMap;
+use std::f32::consts::{FRAC_PI_2, PI};
 use terra_creatures::creatures::{Form, Kinds};
 use terra_creatures::species::Bestiary;
+use terra_dungeon::door::{Door, Lock};
 use terra_dungeon::stamp::{DOORWAY_M, LightKind, ObjectRole};
 use terra_game::build::{Build, BuildLook, Built};
+use terra_walker::Player;
 use terra_world::fire::{Kindled, Logs};
 use terra_world::flora::FloraPiece;
 use terra_world::flora_kinds::Flora;
@@ -53,8 +56,24 @@ const LEAF_M: Vec2 = Vec2::new(0.894, 1.939);
 pub struct DungeonObject {
     pub role: ObjectRole,
     pub name: String,
-    pub locked: bool,
+    pub lock: Lock,
 }
+
+/// A doorway's door, pushed open by D512's rule; its transform at the middle of the sill,
+/// turned as the doorway faces (+Z out of the room its leaves hang in), its two leaves its
+/// children.
+#[derive(Component, Debug)]
+pub struct Doorway(pub Door);
+
+/// One of a doorway's two leaves: the first hinged at the jamb at -X, the second at +X.
+#[derive(Component, Debug)]
+pub struct Leaf {
+    second: bool,
+}
+
+/// The demo holds every key: taking keys is not built yet (how a key is held is the
+/// developers' open question, docs/dungeons.md), so its locked gate opens as any door does.
+const KEYS_HELD: bool = true;
 
 /// The dungeon's creatures, in the world, waiting for their kinds to be ready.
 #[derive(Resource)]
@@ -65,27 +84,25 @@ fn facing(side: usize) -> Quat {
     Quat::from_rotation_y((2.0 - side as f32) * FRAC_PI_2)
 }
 
-/// A doorway's two leaves, a double door as a gate of its width is hung: each hinged at one
-/// jamb and reaching to the middle, the second turned half round so it reaches back (a
-/// leaf's planks and studs are alike on both faces); where each hinge stands and how it
-/// turns, from the middle of the sill and the doorway's turn.
-fn leaves(sill: Vec3, turn: Quat) -> [(Vec3, Quat); 2] {
-    let along = turn * Vec3::X * (DOORWAY_M[0] * 0.5);
-    [
-        (sill - along, turn),
-        (
-            sill + along,
-            turn * Quat::from_rotation_y(std::f32::consts::PI),
-        ),
-    ]
+/// A leaf's hinge and turn in its doorway's frame with the door `swing` open (D512: 0 shut,
+/// 1 a quarter turn into the room, -1 out of it), a double door as a gate of its width is
+/// hung: each hinged at one jamb and reaching to the middle when shut, the second turned half
+/// round so it reaches back (a leaf's planks and studs are alike on both faces).
+fn leaf(second: bool, swing: f32) -> (Vec3, Quat) {
+    let half = DOORWAY_M[0] * 0.5;
+    let quarter = swing * FRAC_PI_2;
+    if second {
+        (Vec3::X * half, Quat::from_rotation_y(PI - quarter))
+    } else {
+        (-Vec3::X * half, Quat::from_rotation_y(quarter))
+    }
 }
 
-/// The leaves swung open into the room, each from its hinge back along its jamb, so the
-/// doorway between is clear: how a door opens, and whether a walker or a key opens it, is
-/// the developers' call (docs/dungeons.md); until then the demo's doors stand open, so a
-/// walker and the camera pass.
-fn open(sill: Vec3, turn: Quat) -> [(Vec3, Quat); 2] {
-    leaves(sill, turn).map(|(hinge, _)| (hinge, turn * Quat::from_rotation_y(FRAC_PI_2)))
+fn leaf_at(second: bool, swing: f32) -> Transform {
+    let (hinge, turn) = leaf(second, swing);
+    Transform::from_translation(hinge)
+        .with_rotation(turn)
+        .with_scale(leaf_scale())
 }
 
 /// The studded leaf stretched to half a doorway's width and its full height.
@@ -194,7 +211,7 @@ pub(super) fn put_up(
             let live = || DungeonObject {
                 role: object.role,
                 name: object.name.clone(),
-                locked: object.locked,
+                lock: object.lock,
             };
             if object.role != ObjectRole::Door {
                 inside.spawn((
@@ -205,16 +222,25 @@ pub(super) fn put_up(
                 ));
                 continue;
             }
-            for (at, turn) in open(object.at, turn) {
-                inside.spawn((
+            // Shut until a body walks into it (D512).
+            inside
+                .spawn((
                     Name::new(object.name.clone()),
                     live(),
-                    scene(&assets, &object.model),
-                    Transform::from_translation(at)
-                        .with_rotation(turn)
-                        .with_scale(leaf_scale()),
-                ));
-            }
+                    Doorway(Door::shut(object.lock)),
+                    Transform::from_translation(object.at).with_rotation(turn),
+                    Visibility::default(),
+                ))
+                .with_children(|doorway| {
+                    for second in [false, true] {
+                        doorway.spawn((
+                            Name::new(format!("{} leaf", object.name)),
+                            Leaf { second },
+                            scene(&assets, &object.model),
+                            leaf_at(second, 0.0),
+                        ));
+                    }
+                });
         }
     });
     let mobs = stamp
@@ -224,6 +250,48 @@ pub(super) fn put_up(
         .collect();
     commands.insert_resource(Mobs(mobs));
     commands.remove_resource::<Pending>();
+}
+
+/// Pushes each doorway's leaves by D512's rule with every player and camera walking at it
+/// (a film's camera walks the tour as a body would), swinging its leaves as it opens.
+pub(super) fn push_doors(
+    time: Res<Time>,
+    bodies: Query<(Entity, &GlobalTransform), Or<(With<Player>, With<Camera3d>)>>,
+    mut was: Local<HashMap<Entity, Vec3>>,
+    mut doorways: Query<(&mut Doorway, &GlobalTransform, &Children)>,
+    mut leaves: Query<(&Leaf, &mut Transform)>,
+) {
+    let dt = time.delta_secs();
+    if dt <= 0.0 {
+        return;
+    }
+    let moving: Vec<(Vec3, Vec3)> = bodies
+        .iter()
+        .map(|(body, at)| {
+            let at = at.translation();
+            let before = was.insert(body, at).unwrap_or(at);
+            (at, (at - before) / dt)
+        })
+        .collect();
+    for (mut doorway, frame, children) in &mut doorways {
+        let swing = doorway.0.swing;
+        let from_world = frame.affine().inverse();
+        for &(at, velocity) in &moving {
+            let (at, velocity) = (
+                from_world.transform_point3(at),
+                from_world.transform_vector3(velocity),
+            );
+            doorway.0.step(at, velocity, DOORWAY_M[0], KEYS_HELD, dt);
+        }
+        if doorway.0.swing == swing {
+            continue;
+        }
+        for &child in children {
+            if let Ok((leaf, mut placed)) = leaves.get_mut(child) {
+                *placed = leaf_at(leaf.second, doorway.0.swing);
+            }
+        }
+    }
 }
 
 /// Forms the dungeon's creatures where they stand, once their kinds are ready.
@@ -256,56 +324,46 @@ pub(super) fn form_mobs(
 mod tests {
     use super::*;
 
-    /// The two leaves close the doorway jamb to jamb and sill to lintel, meeting in the
-    /// middle, for every way a doorway faces.
+    /// Shut, the two leaves close the doorway jamb to jamb and sill to lintel, meeting in
+    /// the middle.
     #[test]
-    fn a_doorways_two_leaves_fill_it_jamb_to_jamb_and_meet_in_the_middle() {
-        let scale = leaf_scale();
-        for side in 0..4 {
-            let turn = facing(side);
-            let sill = Vec3::new(3.0, -2.0, 7.0);
-            let across = turn * Vec3::X;
-            let mut spans = Vec::new();
-            for (hinge, leaf) in leaves(sill, turn) {
-                // The model's corners: hinge foot and the far top corner.
-                let far = hinge + leaf * (Vec3::new(LEAF_M.x, LEAF_M.y, 0.0) * scale);
-                let (a, b) = ((hinge - sill).dot(across), (far - sill).dot(across));
-                spans.push((a.min(b), a.max(b)));
-                assert!(
-                    (far.y - hinge.y - DOORWAY_M[1]).abs() < 1e-4,
-                    "{side}: height"
-                );
-                assert!((hinge.y - sill.y).abs() < 1e-5, "{side}: on the sill");
-            }
-            spans.sort_by(|a, b| a.0.total_cmp(&b.0));
-            let half = DOORWAY_M[0] * 0.5;
-            assert!((spans[0].0 + half).abs() < 1e-4, "{side}: {spans:?}");
+    fn a_doorways_two_leaves_shut_fill_it_jamb_to_jamb_and_meet_in_the_middle() {
+        let mut spans = Vec::new();
+        for second in [false, true] {
+            let placed = leaf_at(second, 0.0);
+            // The model's corners: hinge foot and the far top corner.
+            let far = placed.transform_point(Vec3::new(LEAF_M.x, LEAF_M.y, 0.0));
+            let hinge = placed.translation;
+            spans.push((hinge.x.min(far.x), hinge.x.max(far.x)));
+            assert!((far.y - DOORWAY_M[1]).abs() < 1e-4, "height");
             assert!(
-                spans[0].1.abs() < 1e-4 && spans[1].0.abs() < 1e-4,
-                "{side}: {spans:?}"
+                hinge.y.abs() < 1e-5 && far.z.abs() < 1e-4,
+                "in the sill's plane"
             );
-            assert!((spans[1].1 - half).abs() < 1e-4, "{side}: {spans:?}");
         }
+        spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let half = DOORWAY_M[0] * 0.5;
+        assert!((spans[0].0 + half).abs() < 1e-4, "{spans:?}");
+        assert!(
+            spans[0].1.abs() < 1e-4 && spans[1].0.abs() < 1e-4,
+            "{spans:?}"
+        );
+        assert!((spans[1].1 - half).abs() < 1e-4, "{spans:?}");
     }
 
-    /// Open, each leaf stands at its jamb reaching straight into the room (away from the
-    /// way the doorway faces), its full width, so the doorway between the jambs is clear.
+    /// Swung open, each leaf stands at its jamb reaching straight into the room (-Z) or out
+    /// of it (+Z), its full width, so the doorway between the jambs is clear.
     #[test]
-    fn open_leaves_stand_at_their_jambs_reaching_into_the_room() {
-        let scale = leaf_scale();
+    fn open_leaves_stand_at_their_jambs_reaching_into_or_out_of_the_room() {
         let width = DOORWAY_M[0] * 0.5;
-        for side in 0..4 {
-            let turn = facing(side);
-            let sill = Vec3::new(3.0, -2.0, 7.0);
-            let (across, out) = (turn * Vec3::X, turn * Vec3::Z);
+        for swing in [1.0, -1.0] {
             let mut jambs = Vec::new();
-            for (hinge, leaf) in open(sill, turn) {
-                let far = hinge + leaf * (Vec3::X * LEAF_M.x * scale.x);
-                let along = (far - hinge).dot(across);
-                assert!(along.abs() < 1e-4, "{side}: along the jamb, {along}");
-                let into = -(far - hinge).dot(out);
-                assert!((into - width).abs() < 1e-4, "{side}: into the room, {into}");
-                jambs.push((hinge - sill).dot(across));
+            for second in [false, true] {
+                let placed = leaf_at(second, swing);
+                let reach = placed.transform_point(Vec3::X * LEAF_M.x) - placed.translation;
+                assert!(reach.x.abs() < 1e-4, "{swing}: along the jamb, {reach}");
+                assert!((reach.z + swing * width).abs() < 1e-4, "{swing}: {reach}");
+                jambs.push(placed.translation.x);
             }
             jambs.sort_by(f32::total_cmp);
             assert!((jambs[0] + width).abs() < 1e-4 && (jambs[1] - width).abs() < 1e-4);

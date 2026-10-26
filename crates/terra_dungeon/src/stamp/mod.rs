@@ -120,8 +120,8 @@ pub struct Object {
     pub facing: usize,
     /// From the asset root.
     pub model: String,
-    /// A door that opens when every key of its lock is held.
-    pub locked: bool,
+    /// What a door asks before it is pushed open (D512); `None` for everything else.
+    pub lock: crate::door::Lock,
 }
 
 /// A dungeon laid out for the game.

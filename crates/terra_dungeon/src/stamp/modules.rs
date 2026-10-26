@@ -268,7 +268,7 @@ fn object(name: &str, role: ObjectRole, f: Frame, y: f32, model: &str) -> Object
         at: f.point(3.0, y, 3.0),
         facing: f.side(2),
         model: model.to_string(),
-        locked: false,
+        lock: crate::door::Lock::None,
     }
 }
 

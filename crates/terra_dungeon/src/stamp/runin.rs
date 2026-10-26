@@ -11,6 +11,7 @@ use super::{
     Stamp, clear, cube_of, floor_of, hash, stands, steps,
 };
 use crate::Dungeon;
+use crate::door::Lock;
 use crate::graph::{Graph, Link};
 use crate::place::{Layout, Side, Space, opposite};
 use crate::theme::Role;
@@ -38,17 +39,24 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Sta
 fn doors(dungeon: &Dungeon, out: &mut Stamp) {
     let layout = &dungeon.layout;
     for (e, edge) in dungeon.graph.edges.iter().enumerate() {
-        let (name, locked) = match edge.link {
-            Link::Door => ("door", false),
-            Link::Locked(_) => ("locked_door", true),
-            Link::OneWay => ("one_way_door", false),
+        let (name, lock) = match edge.link {
+            Link::Door => ("door", Lock::None),
+            Link::Locked(_) => ("locked_door", Lock::Keys),
+            // Barred on `b`'s side: the room side when the leaf hangs in `b`.
+            Link::OneWay => ("one_way_door", Lock::Barred { inside: true }),
             Link::Corridor | Link::Secret => continue,
         };
-        let Some((at, d)) = [edge.b, edge.a]
+        let Some((room, (at, d))) = [edge.b, edge.a]
             .iter()
-            .find_map(|&room| doorway(layout, room, e))
+            .find_map(|&room| Some((room, doorway(layout, room, e)?)))
         else {
             continue;
+        };
+        let lock = match lock {
+            Lock::Barred { .. } => Lock::Barred {
+                inside: room == edge.b,
+            },
+            lock => lock,
         };
         out.objects.push(Object {
             name: name.to_string(),
@@ -56,7 +64,7 @@ fn doors(dungeon: &Dungeon, out: &mut Stamp) {
             at: Frame::new(at, d).point(3.0, 0.0, 0.0),
             facing: d,
             model: "models/openings/StuddedDoor.glb".to_string(),
-            locked,
+            lock,
         });
     }
 }

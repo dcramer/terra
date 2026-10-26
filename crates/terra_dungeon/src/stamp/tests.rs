@@ -149,7 +149,7 @@ fn check(theme: &Theme, dungeon: &Dungeon, s: u64) -> Numbers {
             && stamp
                 .objects
                 .iter()
-                .any(|o| o.role == ObjectRole::Door && o.locked),
+                .any(|o| o.role == ObjectRole::Door && o.lock == crate::door::Lock::Keys),
         "{at}: the gate has a locked leaf"
     );
     let looted = graph.rooms.iter().filter(|r| !r.loot.is_empty()).count();

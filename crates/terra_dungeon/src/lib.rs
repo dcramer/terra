@@ -13,6 +13,7 @@
 //! `sheet` measures many seeds and draws their maps (`cargo run -p terra_dungeon --bin
 //! dungeons`). Plain Rust, no Bevy (D28): the sandbox and the server lay what this makes.
 
+pub mod door;
 pub mod dress;
 mod font;
 pub mod graph;

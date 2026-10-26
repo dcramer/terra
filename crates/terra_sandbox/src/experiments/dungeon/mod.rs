@@ -83,7 +83,7 @@ pub fn plugin(app: &mut App, experiment: &'static str) {
             Update,
             spawn::put_up.run_if(resource_exists::<BuildLook>.and_then(resource_exists::<Pending>)),
         )
-        .add_systems(Update, spawn::form_mobs);
+        .add_systems(Update, (spawn::form_mobs, spawn::push_doors));
 }
 
 /// The side's direction in the dungeon's frame: 0..4 = north, east, south, west.
