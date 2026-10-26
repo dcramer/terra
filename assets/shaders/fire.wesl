@@ -1692,10 +1692,10 @@ const BAKED_STRETCH: f32 = 1.4;
 // heat ramp, heart and thinning tips are read over that height, as the marched field's over its
 // own, not over the box, where its heart stood at the flame's middle and its tips never thinned.
 const BAKED_FLAME_TOP: f32 = 0.65;
-// How much sooner in from its edge a baked field's heart burns pale (FIELD_CORE's 0.58 of its
-// shape is a flame of 0.41, which the bake's low flame seldom reaches): a pale core over the
-// coals, as the marched heart (fire round g38's reviewers: no white-yellow core).
-const BAKED_HEART: f32 = 1.5;
+// How much sooner in from its edge a baked field's heart burns pale: 1, as the marched field's
+// (FIELD_CORE). At 1.5 (fire round g39) its pale low core read white-yellow but put the fire
+// sheet's campfire out of its pale, night yellow and red+orange bands (fire round g40).
+const BAKED_HEART: f32 = 1.0;
 // How much of its density a baked flame's tips lose, over FIELD_TOP's, from half its height up:
 // thin, see-through tips (fire round g38's reviewers: opaque orange-red); at 0.4 its tongues
 // born a second fell from 12.8 to 7.4 (fire round g39 A).
