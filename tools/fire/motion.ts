@@ -27,7 +27,8 @@
 // - roughness: the outer outline's length (pixel edges, holes filled) over the square root of
 //   the area, per height band and whole (a square is 4, a disc 4.5 at this count);
 // - colour: pale (with white), yellow, orange and red shares per height band (measure.ts's bands),
-//   and how much the pale share changes over time.
+//   and how much the pale share changes over time;
+// - gate: those of them a film of ours is held to, against the real clips' ranges (GATE).
 //
 // --overlay writes the middle frame with the flame tinted and the base, thirds and tongue level
 // drawn, to check the flame was found. Node 22.18 or later and ffmpeg; no dependencies.
@@ -65,6 +66,28 @@ export const MAX_LAG = 0.6;
 /// The flicker spectrum's window, s: Welch's, so a longer film averages more of them. Film ours 20 s an
 /// hour and pass `--seconds 20`: a 6 s film gives too few tongues for their rates (fire round g20).
 export const SEGMENT = 6;
+
+/// The bars a film of ours is held to, from the real clips (research/2026-10-25-fire-motion.md):
+/// each measure must lie in [lo, hi]. Flicker is the median frequency, as the real clips' range
+/// was found (1.83-3.83 Hz, fire round g12), not the dominant one: a baked flame's area has a
+/// narrow swell at 0.5 Hz beside broad puffing at 2.4 Hz, and which of them peaks flips from
+/// film to film of one flame while the median holds (fire round g43).
+export const GATE: { name: string; of: (m: Motion) => number; lo: number; hi: number }[] = [
+  { name: "flick", of: (m) => m.flicker.median, lo: 1.83, hi: 3.83 },
+  { name: "area", of: (m) => m.flicker.areaCv, lo: 0, hi: 0.19 },
+  { name: "life", of: (m) => m.tongues.lifetime, lo: 0.04, hi: 0.12 },
+  { name: "splits", of: (m) => m.tongues.splits, lo: 0, hi: 1.2 },
+  { name: "lean", of: (m) => m.tongues.lean, lo: 7.6, hi: 24.5 },
+  { name: "topred", of: (m) => m.colour.red[2], lo: 0, hi: 47 },
+];
+
+/// A film against GATE: each bar's value, to the two decimals the bars and the report give, and
+/// whether it meets it.
+export const gate = (m: Motion) =>
+  GATE.map((g) => {
+    const value = Math.round(100 * g.of(m)) / 100;
+    return { name: g.name, value, met: value >= g.lo && value <= g.hi };
+  });
 
 export type Geometry = { base: number; height: number; x0: number; x1: number };
 export type Bands = [number, number, number];
@@ -474,6 +497,7 @@ export function said(name: string, m: Motion, how: string): string {
     `  rise       ${f2(m.rise.speed)} H/s by time of flight: the flicker at ${LAG_BANDS[0].join("-")} H shows at ${LAG_BANDS[1].join("-")} H ${f2(m.rise.lag * 1000, 0)} ms later (r ${f2(m.rise.r)}; r at no lag ${f2(m.rise.r0)})`,
     `  roughness  whole ${f2(m.roughness.whole, 1)}; low / mid / top ${b(m.roughness.bands, 1)}`,
     `  colour %   pale ${b(m.colour.pale, 0)}, yellow ${b(m.colour.yellow, 0)}, orange ${b(m.colour.orange, 0)}, red ${b(m.colour.red, 0)} (low / mid / top); pale sd over time ${f2(m.colour.paleSd, 1)}`,
+    `  gate       met ${gate(m).filter((g) => g.met).length} of ${GATE.length}: ${gate(m).map((g) => `${g.name} ${f2(g.value)}${g.met ? "" : "x"}`).join(" ")}`,
   ].join("\n");
 }
 

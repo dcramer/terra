@@ -1,7 +1,7 @@
 // The motion measure's numbers on clips whose answers are known by construction.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { analyse, type Clip, flicker, roughness } from "./motion.ts";
+import { analyse, type Clip, flicker, GATE, type Motion, roughness } from "./motion.ts";
 
 const FPS = 30;
 const N = 180;
@@ -116,4 +116,31 @@ test("roughness is outline over root area, and no edge where a band cuts the fla
 test("flicker finds a beat between the spectrum's bins", () => {
   const series = Array.from({ length: 300 }, (_, i) => 1000 + 100 * Math.sin(2 * Math.PI * 3.25 * (i / FPS)));
   near(flicker(series, FPS).dominant, 3.25, 0.05, "dominant Hz");
+});
+
+test("the gate's flicker is the median: a narrow swell beside broad puffing passes, a swell alone does not", () => {
+  // A 0.5 Hz swell of amplitude 100 and six puffs of amplitude `puff` on the spectrum's bins
+  // (2.0-2.83 Hz, a sixth of a hertz apart). Power goes as amplitude squared and the Hann window
+  // gives a bin's sine 2/3 of its power and each neighbour 1/6, so with puffs of 60 the swell
+  // peaks (6667 against 3600) while the half of the power (15800 of 31600) is reached in the
+  // second puff's bin, 13/6 Hz; with puffs of 20 the swell holds the half alone.
+  const series = (puff: number) =>
+    Array.from({ length: 600 }, (_, i) => {
+      const s = i / FPS;
+      let v = 1000 + 100 * Math.sin(2 * Math.PI * 0.5 * s);
+      for (let k = 12; k < 18; k++) v += puff * Math.sin(2 * Math.PI * (k / 6) * s + k);
+      return v;
+    });
+  const flick = GATE.find((g) => g.name === "flick")!;
+  const passes = (f: ReturnType<typeof flicker>) => {
+    const v = flick.of({ flicker: { dominant: f.dominant, median: f.median, areaCv: f.cv, heightCv: 0 } } as Motion);
+    return v >= flick.lo && v <= flick.hi;
+  };
+  const broad = flicker(series(60), FPS);
+  near(broad.dominant, 0.5, 0.05, "dominant Hz");
+  near(broad.median, 13 / 6, 0.01, "median Hz");
+  assert.ok(passes(broad), "puffing under a swell meets the flicker bar");
+  const swell = flicker(series(20), FPS);
+  near(swell.median, 0.5, 0.01, "median Hz");
+  assert.ok(!passes(swell), "a swell alone does not");
 });
