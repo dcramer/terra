@@ -43,15 +43,17 @@ pub(crate) fn shown(
     match (was, clip) {
         (Jog | Sprint, _) if !wish => Stop,
         (Stop, _) if wish && now != Idle => now,
-        (Stop, Some(clip)) if !stood(clip, at) => Stop,
+        (Stop, Some(clip)) if !stood(clip, at, now == Idle) => Stop,
         (Stop, _) => Idle,
         _ => now,
     }
 }
 
-/// Whether a stop's clip `at` has done its travel and stands on both feet.
-fn stood(clip: &Markers, at: f32) -> bool {
-    at >= clip.stop().0 && (0..2).all(|side| clip.lock(side, at) >= FULL)
+/// Whether a stop's clip `at` stands on both feet and is done: its travel done, or the body
+/// `standing` (a body braking harder than the clip stands before the clip's travel is done;
+/// the rest of it, its pelvis settling over feet already locked, would only hold the idle back).
+fn stood(clip: &Markers, at: f32, standing: bool) -> bool {
+    (standing || at >= clip.stop().0) && (0..2).all(|side| clip.lock(side, at) >= FULL)
 }
 
 /// Which of `stops` to play and from when, the body's stopping distance `left` in the clips'
@@ -220,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn a_stride_let_go_stops_until_its_travel_is_done_and_both_feet_stand() {
+    fn a_stride_let_go_stops_until_both_feet_stand_and_its_travel_is_done_or_the_body_stands() {
         let clip = stop(0);
         // Jogging, the wish let go: a stop, whatever the speed says.
         assert_eq!(shown(Jog, Jog, false, 0.0, None), Stop);
@@ -230,6 +232,13 @@ mod tests {
         assert_eq!(shown(Stop, Idle, false, 0.85, Some(&clip)), Stop);
         assert_eq!(shown(Stop, Idle, false, 0.95, Some(&clip)), Stop);
         assert_eq!(shown(Stop, Idle, false, 1.0, Some(&clip)), Idle);
+        // Both feet standing before its travel is done: the idle once the body stands, the
+        // stop while it still goes.
+        let mut long = stop(0);
+        long.distance = (0..=20).map(|i| i as f32 / 20.0).collect();
+        assert_eq!(shown(Stop, Idle, false, 1.2, Some(&long)), Idle);
+        assert_eq!(shown(Stop, Jog, false, 1.2, Some(&long)), Stop);
+        assert_eq!(shown(Stop, Idle, false, 0.95, Some(&long)), Stop);
         // Wished again: the stop holds until the body goes, then jogs.
         assert_eq!(shown(Stop, Idle, true, 0.5, Some(&clip)), Stop);
         assert_eq!(shown(Stop, Jog, true, 0.5, Some(&clip)), Jog);
