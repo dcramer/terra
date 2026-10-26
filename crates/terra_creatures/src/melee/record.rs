@@ -21,8 +21,8 @@
 //! goal it was bent to and of the lock's goal alone (`short`, `short_lock`): `feet.ground`'s and
 //! `pelvis.drop`'s numbers.
 
+use super::Fighter;
 use super::sole::Ground;
-use super::{Fighter, Set};
 use crate::staged::Staged;
 use bevy::prelude::*;
 use serde_json::{Value, json};
@@ -138,7 +138,6 @@ fn walking(line: &mut Value, motion: Option<&Motion>, stepping: Option<&Stepping
 
 fn write(
     frame: Option<Res<ScriptFrame>>,
-    set: Res<Set>,
     mut out: ResMut<Out>,
     mut said: ResMut<Said>,
     fighters: Query<Them<'_>>,
@@ -154,7 +153,6 @@ fn write(
     let Some(frame) = frame.filter(|frame| frame.is_changed()) else {
         return;
     };
-    let set = &set.0;
     let seen: Vec<_> = fighters.iter().collect();
     // Before the sword is drawn there is no fighter, only the script's steps and a walker.
     let player = seen.iter().find(|each| each.3).map(|each| each.1);
@@ -184,7 +182,7 @@ fn write(
             .filter(|other| other.3 != is_player)
             .map(|other| (other.1.translation() - feet).reject_from(up))
             .min_by(|a, b| a.length().total_cmp(&b.length()));
-        let now = fighter.runner.now(set);
+        let now = fighter.runner.now(&fighter.set);
         let t = fighter.runner.t();
         let reach = match (now, foe) {
             (Some(each), Some(to)) => {

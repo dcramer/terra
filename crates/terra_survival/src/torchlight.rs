@@ -2,11 +2,12 @@
 //! whoever holds it, which is what lets them see at night (D134). The torch's look is shown in
 //! hand as any held thing's is (`held`); this only sets it alight.
 
-use crate::inventory::{self, Backpack, Bar, Items};
+use crate::held::InHand;
+use crate::inventory::{self, Backpack, Bar, Gear, Items, OFF_HAND};
 use bevy::{light::NotShadowCaster, platform::collections::HashSet, prelude::*};
 use terra_walker::Player;
 use terra_walker::character::Held;
-use terra_walker::figure::Grip;
+use terra_walker::figure::{Grip, Hand};
 
 /// How bright a torch is, in lumens, and how far its light reaches.
 const TORCH_LUMENS: f32 = 160_000.0;
@@ -47,26 +48,36 @@ fn setup(
     });
 }
 
-/// Sets a torch in a player's hand alight, and puts it out when it is put away. The flame
-/// goes on the look in hand, so it moves with it.
+/// Sets a torch in either of a player's hands alight, and puts it out when it is put away or
+/// burnt out. The flame goes on the look in hand, so it moves with it.
 fn light(
     mut commands: Commands,
     look: Res<FlameLook>,
     items: Res<Items>,
-    players: Query<(&Backpack, &Bar), With<Player>>,
-    grips: Query<(Entity, &Grip)>,
+    players: Query<(&Backpack, &Bar, &Gear), With<Player>>,
+    grips: Query<(Entity, &Grip, &InHand)>,
     children: Query<&Children>,
     held: Query<(), With<Held>>,
     flames: Query<(Entity, &ChildOf), With<Flame>>,
 ) {
     // What is alight now: the look in each hand holding a torch.
     let mut alight = HashSet::new();
-    for (hand, grip) in &grips {
-        let burning = players.get(grip.player).is_ok_and(|(backpack, bar)| {
-            inventory::holding(&items, &backpack.0, &bar.0)
-                .and_then(|kind| items.tool(kind))
-                .is_some_and(|tool| tool.lights)
-        });
+    for (hand, grip, shown) in &grips {
+        let lights = shown
+            .kind()
+            .and_then(|kind| items.tool(kind))
+            .is_some_and(|tool| tool.lights);
+        // Not burnt out: the bar's item in the main hand, the off hand's slot's in the other.
+        let burning = lights
+            && players
+                .get(grip.player)
+                .is_ok_and(|(backpack, bar, gear)| match grip.hand {
+                    Hand::Main => inventory::holding(&items, &backpack.0, &bar.0) == shown.kind(),
+                    Hand::Off => gear.0.worn(OFF_HAND).is_some_and(|item| {
+                        let def = items.catalogue.get(item.kind);
+                        def.is_ok_and(|def| !item.broken(def))
+                    }),
+                });
         let in_hand = children
             .get(hand)
             .ok()

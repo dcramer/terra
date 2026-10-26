@@ -17,6 +17,7 @@ use bevy::{
     world_serialization::WorldInstanceReady,
 };
 use std::time::Duration;
+pub use terra_motion::hold::Hand;
 use terra_world::loading::Loading;
 
 /// The template the player's body is shaped as (`appearance::Appearance::template`).
@@ -91,11 +92,13 @@ impl Moves {
     }
 }
 
-/// The socket in a figure's right hand (`character::HAND_R`), and whose hand it is. What is
-/// in hand is drawn as its children, by the layers that know what it is (`held`, `melee`).
+/// A socket in a figure's hand (`character::HAND_R`, the main hand, and `HAND_L`, the off hand;
+/// every body is right-handed until D463's mirror), whose figure it is and which hand. What is
+/// in hand is drawn as its children, by the layer that knows what it is (`held`).
 #[derive(Component)]
 pub struct Grip {
     pub player: Entity,
+    pub hand: Hand,
 }
 
 /// On a figure's animation player: whose figure it is, its hand, what it is animated as
@@ -103,7 +106,7 @@ pub struct Grip {
 #[derive(Component)]
 struct Animated {
     player: Entity,
-    hand: Option<Entity>,
+    hands: Vec<Entity>,
     doing: Doing,
     playing: Option<(String, usize)>,
     applied: u32,
@@ -301,22 +304,28 @@ fn dress(
             .play(&mut animator, idle[0], Duration::ZERO)
             .repeat();
     }
-    // Whatever is in hand is held in the hand's socket (`held`).
-    let hand = crate::character::find(ready.entity, crate::character::HAND_R, &children, &names);
-    match hand {
-        Some(hand) => {
-            commands
-                .entity(hand)
-                .insert((Grip { player }, Carrying(true)));
+    // Whatever is in each hand is held in that hand's socket (`held`).
+    let mut hands = Vec::new();
+    for (socket, hand) in [
+        (crate::character::HAND_R, Hand::Main),
+        (crate::character::HAND_L, Hand::Off),
+    ] {
+        match crate::character::find(ready.entity, socket, &children, &names) {
+            Some(grip) => {
+                commands
+                    .entity(grip)
+                    .insert((Grip { player, hand }, Carrying(true)));
+                hands.push(grip);
+            }
+            None => warn!("The figure has no {socket}."),
         }
-        None => warn!("The figure has no {}.", crate::character::HAND_R),
     }
     commands.entity(entity).insert((
         AnimationGraphHandle(moves.graph.clone()),
         transitions,
         Animated {
             player,
-            hand,
+            hands,
             doing: Doing::Idle,
             playing: Some((Doing::Idle.clip().to_string(), 0)),
             applied: 0,
@@ -370,8 +379,11 @@ fn animate(
                 Some(act) => (act.clip.as_str(), act.once, act.from_s, act.blend),
                 None => (doing.clip(), doing.once(), 0.0, BLEND),
             };
-            if let Some(mut hand) = animated.hand.and_then(|hand| hands.get_mut(hand).ok()) {
-                hand.0 = CARRIED_IN.contains(&clip);
+            // Both hands carry in a carried clip and use what they hold in any other.
+            for &grip in &animated.hands {
+                if let Ok(mut hand) = hands.get_mut(grip) {
+                    hand.0 = CARRIED_IN.contains(&clip);
+                }
             }
             match moves.clips.get(clip) {
                 Some(nodes) => {
@@ -582,7 +594,7 @@ mod tests {
                 player,
                 Animated {
                     player: Entity::PLACEHOLDER,
-                    hand: None,
+                    hands: Vec::new(),
                     doing: Doing::Acting,
                     playing: None,
                     applied: 0,

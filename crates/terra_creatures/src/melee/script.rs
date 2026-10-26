@@ -4,7 +4,7 @@
 //! do and every check sees what a person's presses would give. Each step is said as it
 //! comes, with the run's frame, and kept in the fight's record (`record`).
 
-use super::{Fighter, Set, partner::Partner, record::Said};
+use super::{Fighter, partner::Partner, record::Said};
 use bevy::{input::InputSystems, prelude::*};
 use terra_motion::contact::Fighting;
 use terra_motion::script::{Intent, Script};
@@ -56,25 +56,26 @@ fn actions(intent: Intent) -> &'static [Action] {
 /// Each counted frame, the script's step and intents, pressed as keys.
 fn drive(
     frame: Res<ScriptFrame>,
-    set: Res<Set>,
     settings: Res<Settings>,
     mut driving: ResMut<Driving>,
     mut keys: ResMut<ButtonInput<KeyCode>>,
     players: Query<&Fighter, With<Player>>,
     partners: Query<&Fighter, With<Partner>>,
     said: Option<ResMut<Said>>,
+    mut sets: Local<Option<std::sync::Arc<terra_motion::moves::MoveSet>>>,
 ) {
     if !frame.is_changed() || driving.0.done() {
         return;
     }
     // Sheathed, the player is in no fight yet: free, in no move.
     let sheathed = Fighting::new(super::HEALTH);
-    let me = players
-        .iter()
-        .next()
-        .map_or(&sheathed, |fighter| &fighter.fight);
+    let player = players.iter().next();
+    let me = player.map_or(&sheathed, |fighter| &fighter.fight);
     let other = partners.iter().next().map(|fighter| &fighter.fight);
-    let tick = driving.0.tick(&set.0, me, other, 1.0 / 60.0);
+    // Sheathed, the script reads the moves of the set T draws.
+    let drawn = sets.get_or_insert_with(|| std::sync::Arc::new(super::drawn_set()));
+    let set = player.map_or(&**drawn, |fighter| &*fighter.set);
+    let tick = driving.0.tick(set, me, other, 1.0 / 60.0);
     for (intent, pressed) in tick.intents {
         for &action in actions(intent) {
             let key = settings

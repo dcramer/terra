@@ -13,11 +13,11 @@ pub fn plugin(app: &mut App) {
     app.add_systems(PostUpdate, let_go.before(bevy::app::AnimationSystems));
 }
 
-fn let_go(set: Res<super::Set>, mut fighters: Query<(&Fighter, &mut Kept)>) {
+fn let_go(mut fighters: Query<(&Fighter, &mut Kept)>) {
     for (fighter, mut kept) in &mut fighters {
         let driven = fighter
             .runner
-            .now(&set.0)
+            .now(&fighter.set)
             .is_some_and(|now| now.drive.iter().any(|&(_, mps)| mps > feet::DRIVEN_MPS));
         kept.let_go = fighter.down_s.is_some() || driven;
         kept.stance = true;

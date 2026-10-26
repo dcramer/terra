@@ -22,29 +22,33 @@ mod record;
 mod script;
 mod sole;
 
-use bevy::{gltf::GltfAssetLabel, prelude::*};
+use bevy::prelude::*;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 use std::time::Duration;
+use terra_items::ItemKind;
 use terra_motion::blade;
 use terra_motion::contact::{Fighting, NEAREST_M};
 use terra_motion::hold::{Holding, Sets};
 use terra_motion::moves::{self, Button, MoveSet, Ran};
 use terra_motion::stamina;
-use terra_survival::held::InHand;
-use terra_survival::inventory::HandsFull;
+use terra_survival::held::Hands;
+use terra_survival::inventory::{Gear, HandsFull, Items, OFF_HAND};
+use terra_survival::told::Notice;
 use terra_walker::camera::framing::FightView;
-use terra_walker::character;
 use terra_walker::controls::Action;
-use terra_walker::figure::{Act, Acting, Grip, Moves};
+use terra_walker::figure::{Act, Acting, Grip, Hand, Moves};
 use terra_walker::intent::Intent;
 use terra_walker::walker::Steer;
 use terra_walker::{Downed, Motion, Player, Stamina, Stance, View};
 use terra_world::tick::Sim;
 
-/// What T puts in each hand, main and off, by item (D405's shortcut, until the off hand's slot
-/// is built, D460): a sword in the right hand, a heater shield in the left (D504), which its
-/// file straps to the forearm by its enarmes (`terra_walker::strap`). The stance and move set
-/// come from their `hold` entries in `assets/data/items.ron`, their looks from their names.
+/// What T puts in each hand, main and off, by item (D405's shortcut, until a sword is held from
+/// the bar): a sword in the main hand, and in the off hand what the off hand's slot holds
+/// (D460), or a heater shield (D504) when it holds nothing; the sparring partner holds this
+/// pair. The stance and move set come from the hands' `hold` entries in
+/// `assets/data/items.ron`, their looks from their names (`held`), a strapped shield's on the
+/// forearm by its enarmes (`terra_walker::strap`).
 const DRAWN: (&str, &str) = ("Arming sword", "Heater shield");
 /// The folder of move sets, `<class>.<stance>.ron`.
 const SETS: &str = "moves";
@@ -57,49 +61,66 @@ pub const HEALTH: f32 = 100.0;
 const LOCK_M: f32 = 15.0;
 /// How long a beaten fighter lies before the spar starts again, seconds.
 const DOWN_S: f32 = 3.0;
-const HAND_L: &str = "socket.hand.L";
 /// The walk a drawn body goes forward and back in: the library's walk with both arms held as
 /// the guard holds them (D458), so the sword and shield stay out of the legs.
 const WALK: &str = "Fight_Walk";
 
-/// The move set, read once.
+/// Every move set, read once; each fighter plays the one its own hands pick (`set_for`).
 #[derive(Resource)]
-pub struct Set(pub MoveSet);
+pub struct MoveSets(pub Sets);
 
-/// The move set the drawn pair plays: the stance their `hold` entries give and the set looked
-/// up for it by class and stance, with the fallback (`terra_motion::hold`, docs/holding.md).
-pub fn drawn_set() -> MoveSet {
-    let items = terra_survival::kinds::read();
-    let hand = |name: &str| {
-        let kind = items.kinds.iter().find(|kind| kind.name == name);
-        let kind = kind.unwrap_or_else(|| panic!("items.ron: there is no kind called {name}"));
-        kind.hold.as_ref().map_or(Holding::Tool, Holding::Item)
-    };
-    let sets = Sets::read_folder(&terra_world::data::path(SETS))
-        .unwrap_or_else(|problem| panic!("{SETS}: {problem}"));
-    let picked = sets
-        .pick(hand(DRAWN.0), hand(DRAWN.1))
-        .unwrap_or_else(|why| panic!("Melee: {DRAWN:?} cannot be held so: {why:?}"));
-    let (name, set) = picked
-        .set
-        .unwrap_or_else(|| panic!("Melee: no set for {:?} with {DRAWN:?}", picked.stance));
-    info!("Melee: {DRAWN:?} stand {:?}, playing {name}", picked.stance);
-    set.clone()
+/// Every move set in the sets' folder.
+pub fn read_sets() -> Sets {
+    Sets::read_folder(&terra_world::data::path(SETS))
+        .unwrap_or_else(|problem| panic!("{SETS}: {problem}"))
 }
 
-/// The look of an item held in hand, by its name.
-fn look(name: &str) -> String {
-    character::held_look(&character::item_id(name))
+/// The set a pair of hands plays, and its name: the stance their `hold` entries give and the
+/// set looked up for it by class and stance, with the fallback (`terra_motion::hold`,
+/// docs/holding.md). Why not, when the pair cannot be held so or no set of the fallback is
+/// made yet (a sword with a carried torch is Single, and `sword.single` is not).
+pub fn set_for(sets: &Sets, items: &Items, hands: &Hands) -> Result<(String, MoveSet), String> {
+    let holding = |kind: Option<ItemKind>| match kind {
+        None => Holding::Nothing,
+        Some(kind) => items.hold(kind).map_or(Holding::Tool, Holding::Item),
+    };
+    let picked = sets
+        .pick(holding(hands.main), holding(hands.off))
+        .map_err(|why| format!("{why:?}"))?;
+    let (name, set) = picked
+        .set
+        .ok_or_else(|| format!("no move set is made for {:?} yet", picked.stance))?;
+    Ok((name.to_string(), set.clone()))
+}
+
+/// The pair T draws, by kind: the sword, and the off hand's slot's item or the shield.
+fn drawn(items: &Items, off: Option<ItemKind>) -> Hands {
+    Hands {
+        main: Some(items.kind(DRAWN.0)),
+        off: off.or(Some(items.kind(DRAWN.1))),
+        given: true,
+    }
+}
+
+/// The set the drawn pair plays with nothing in the off hand's slot: the sword and shield's.
+pub fn drawn_set() -> MoveSet {
+    let items = Items::default();
+    set_for(&read_sets(), &items, &drawn(&items, None))
+        .unwrap_or_else(|why| panic!("Melee: {DRAWN:?}: {why}"))
+        .1
 }
 
 /// A body in a spar, the player's or the partner's: its state in the fight by
 /// `terra_motion`'s rules (its move, health, guard, hit-stop, reeling, being down, a shove),
-/// which it derefs to, and what the game keeps of it: its sword hand, its blade's last place
-/// and the way its move drives it.
+/// which it derefs to, and what the game keeps of it: the move set its hands play, its sword
+/// hand, its blade's last place and the way its move drives it.
 #[derive(Component)]
 #[require(terra_walker::feet::Kept)]
 pub struct Fighter {
     pub fight: Fighting,
+    /// The set its hands play (`set_for`), shared so a system can hold it while it changes the
+    /// fight.
+    pub set: Arc<MoveSet>,
     /// The socket in its right hand, whose frame the sword's blade is in.
     pub hand: Option<Entity>,
     pub was: Option<blade::Edge>,
@@ -110,9 +131,10 @@ pub struct Fighter {
 }
 
 impl Fighter {
-    fn new(hand: Option<Entity>) -> Self {
+    fn new(hand: Option<Entity>, set: MoveSet) -> Self {
         Self {
             fight: Fighting::new(HEALTH),
+            set: Arc::new(set),
             hand,
             was: None,
             way: Vec3::ZERO,
@@ -134,17 +156,16 @@ impl DerefMut for Fighter {
     }
 }
 
-/// A player with a sword drawn: what they are locked on to, the looks in their hands, and
-/// the clip the stance last asked of the figure, so it is asked once.
+/// A player with a sword drawn: what they are locked on to, and the clip the stance last asked
+/// of the figure, so it is asked once. What is in their hands is their `Hands`, shown by `held`.
 #[derive(Component)]
 pub struct Drawn {
     lock: Option<Entity>,
-    looks: Vec<Entity>,
     showing: Option<(String, f32)>,
 }
 
 pub fn plugin(app: &mut App) {
-    app.insert_resource(Set(drawn_set()))
+    app.insert_resource(MoveSets(read_sets()))
         .add_systems(
             FixedUpdate,
             (draw, act, partner::think, contact::strike, contact::again)
@@ -159,11 +180,19 @@ pub fn plugin(app: &mut App) {
     script::plugin(app);
 }
 
-/// T draws a sword and shield, or sheathes them: drawn, the bar's item is put away and a
-/// sparring partner steps up if none is near.
+/// The partner's hands: the pair T draws with nothing in the off hand's slot.
+fn partner_hands(items: &Items) -> Hands {
+    drawn(items, None)
+}
+
+/// T draws a sword, with the off hand's slot's item or a shield, or sheathes them: drawn, the
+/// bar's item is put away, the hands play the set they pick, and a sparring partner steps up if
+/// none is near. A pair with no set made yet is not drawn.
+#[allow(clippy::too_many_arguments)]
 fn draw(
     mut commands: Commands,
-    assets: Res<AssetServer>,
+    items: Res<Items>,
+    sets: Res<MoveSets>,
     mut players: Query<
         (
             Entity,
@@ -172,27 +201,27 @@ fn draw(
             &Motion,
             Option<&Drawn>,
             &mut Stance,
+            &mut Hands,
+            Option<&Gear>,
         ),
         With<Player>,
     >,
-    mut grips: Query<(Entity, &Grip, &mut InHand)>,
+    grips: Query<(Entity, &Grip)>,
     partners: Query<&Transform, With<partner::Partner>>,
-    children: Query<&Children>,
-    names: Query<&Name>,
+    mut notice: ResMut<Notice>,
 ) {
-    for (player, intent, at, motion, drawn, mut stance) in &mut players {
+    for (player, intent, at, motion, drawn_now, mut stance, mut hands, gear) in &mut players {
         if !intent.pressed(Action::Draw) || intent.busy {
             continue;
         }
-        let grip = grips.iter_mut().find(|(_, grip, _)| grip.player == player);
-        let Some((hand, _, mut in_hand)) = grip else {
+        let grip = grips
+            .iter()
+            .find(|(_, grip)| grip.player == player && grip.hand == Hand::Main);
+        let Some((hand, _)) = grip else {
             continue;
         };
-        if let Some(drawn) = drawn {
-            for &look in &drawn.looks {
-                commands.entity(look).despawn();
-            }
-            in_hand.drawn = false;
+        if drawn_now.is_some() {
+            hands.given = false;
             stance.steer = Steer::default();
             commands
                 .entity(player)
@@ -201,28 +230,30 @@ fn draw(
             info!("Melee: sheathed");
             continue;
         }
-        in_hand.drawn = true;
-        let sword = character::hold(
-            &mut commands,
-            assets.load(GltfAssetLabel::Scene(0).from_asset(look(DRAWN.0))),
-            hand,
-        );
-        let mut looks = vec![sword];
-        match character::find(player, HAND_L, &children, &names) {
-            Some(left) => looks.push(character::hold(
-                &mut commands,
-                assets.load(GltfAssetLabel::Scene(0).from_asset(look(DRAWN.1))),
-                left,
-            )),
-            None => warn!("Melee: the figure has no {HAND_L}"),
-        }
+        let off = gear
+            .and_then(|gear| gear.0.worn(OFF_HAND))
+            .map(|item| item.kind);
+        let given = drawn(&items, off);
+        let (name, set) = match set_for(&sets.0, &items, &given) {
+            Ok(picked) => picked,
+            Err(why) => {
+                let pair = given.off.map_or("nothing", |off| items.name(off));
+                info!("Melee: a sword with {pair} is not drawn: {why}");
+                notice.say(format!(
+                    "No moves yet for a sword with {}",
+                    pair.to_lowercase()
+                ));
+                continue;
+            }
+        };
+        info!("Melee: {given:?} playing {name}");
+        *hands = given;
         commands.entity(player).insert((
             Drawn {
                 lock: None,
-                looks,
                 showing: None,
             },
-            Fighter::new(Some(hand)),
+            Fighter::new(Some(hand), set),
             Acting::default(),
             HandsFull,
             FightView::default(),
@@ -232,7 +263,7 @@ fn draw(
             .iter()
             .any(|place| place.translation.distance(at.translation) < 30.0);
         if !near {
-            partner::bring(&mut commands, at.translation, motion.facing);
+            partner::bring(&mut commands, at.translation, motion.facing, &items, &sets);
         }
     }
 }
@@ -261,14 +292,12 @@ type Drawing<'a> = (
 /// the moves they ask for and run, how the walk is steered, and the clip their figure shows.
 fn act(
     time: Res<Time>,
-    set: Res<Set>,
     figure: Option<Res<Moves>>,
     mut players: Query<Drawing<'_>, (With<Player>, Without<partner::Partner>)>,
     partners: Query<(Entity, &Transform), With<partner::Partner>>,
     mut said: Option<ResMut<record::Said>>,
 ) {
     let dt = time.delta_secs();
-    let set = &set.0;
     for (
         at,
         motion,
@@ -282,6 +311,8 @@ fn act(
         downed,
     ) in &mut players
     {
+        let set = Arc::clone(&fighter.set);
+        let set = &*set;
         // The keys are the sword's now: building, tools and screens wait (D405).
         intent.busy = true;
         fighter.age(dt);
@@ -624,7 +655,6 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<Time>();
         let set = drawn_set();
-        world.insert_resource(Set(set));
         let mut intent = Intent::default();
         with.into_iter().for_each(|held| intent.hold(held));
         intent.hold(action);
@@ -641,10 +671,9 @@ mod tests {
                     pitch: 0.0,
                 },
                 Stance::default(),
-                Fighter::new(None),
+                Fighter::new(None, set),
                 Drawn {
                     lock: None,
-                    looks: Vec::new(),
                     showing: None,
                 },
                 Acting::default(),
@@ -658,7 +687,7 @@ mod tests {
     #[test]
     fn a_held_block_raises_the_sets_block_clip_and_holds_it_at_its_hold() {
         let (world, player) = pressed(Action::BuildMenu, Stamina::FULL, None);
-        let block = world.resource::<Set>().0.get("block").unwrap().clone();
+        let block = drawn_set().get("block").unwrap().clone();
         let drawn = world.get::<Drawn>(player).unwrap();
         assert_eq!(drawn.showing, Some((block.clip.clone(), block.speed)));
         let acting = world.get::<Acting>(player).unwrap();
@@ -699,7 +728,6 @@ mod tests {
     fn walking(velocity: Vec3) -> String {
         let mut drawn = Drawn {
             lock: None,
-            looks: Vec::new(),
             showing: None,
         };
         let mut motion = Motion::facing(Vec3::NEG_Z);

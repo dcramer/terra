@@ -41,6 +41,8 @@ const GRAVITY: f32 = 9.81;
 pub struct Met {
     pub at: Vec3,
     pub along: Vec3,
+    /// How it bursts: the striker's set's (`landed.burst`).
+    pub burst: Shape,
 }
 
 /// The glow at a contact: how long it has shown, for how long, and how wide.
@@ -87,16 +89,19 @@ fn additive(colour: LinearRgba, image: Handle<Image>) -> StandardMaterial {
 fn spawn(
     mut met: MessageReader<Met>,
     mut commands: Commands,
-    set: Res<super::Set>,
     camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
     mut looks: Local<Option<Looks>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let shape: Shape = set.0.landed.burst;
     let eye = camera.map(|camera| camera.translation());
-    for &Met { at: met_at, along } in met.read() {
+    for &Met {
+        at: met_at,
+        along,
+        burst: shape,
+    } in met.read()
+    {
         let looks = looks.get_or_insert_with(|| {
             let image = images.add(soft_image());
             Looks {
@@ -247,7 +252,6 @@ mod tests {
         world.init_resource::<Assets<Mesh>>();
         world.init_resource::<Assets<StandardMaterial>>();
         world.init_resource::<Assets<Image>>();
-        world.insert_resource(super::super::Set(set()));
         world
     }
 
@@ -268,7 +272,11 @@ mod tests {
         let mut world = world();
         let at = GROUND + Vec3::new(0.1, 1.2, -1.0);
         let along = Vec3::NEG_X;
-        world.write_message(Met { at, along });
+        world.write_message(Met {
+            at,
+            along,
+            burst: shape,
+        });
         let systems = [
             world.register_system(spawn),
             world.register_system(glow),
@@ -340,7 +348,7 @@ mod tests {
             world.init_resource::<Messages<Noise>>();
             world.init_resource::<Notice>();
             world.init_resource::<super::super::contact::Glare>();
-            let set = world.resource::<super::super::Set>().0.clone();
+            let set = set();
             // The sword level at the chest, pointing at the struck: hilt 0.15 m and tip
             // 0.83 m out of the hand, swept from its right (+x) to across its middle.
             let hand_at = |x: f32| {
@@ -351,7 +359,7 @@ mod tests {
             };
             let was = hand_at(0.8);
             let hand = world.spawn(hand_at(0.0)).id();
-            let mut attacker = Fighter::new(Some(hand));
+            let mut attacker = Fighter::new(Some(hand), set.clone());
             attacker.was = Some(Edge {
                 hilt: was.transform_point(Vec3::Y * terra_motion::blade::HILT_M),
                 tip: was.transform_point(Vec3::Y * terra_motion::blade::TIP_M),
@@ -365,7 +373,7 @@ mod tests {
                 attacker.runner.tick(&set, FRAME_S);
             }
             world.spawn((Transform::from_translation(GROUND), attacker));
-            let mut struck = Fighter::new(None);
+            let mut struck = Fighter::new(None, set.clone());
             struck.guard_s = guard;
             // The struck body's skin, a mesh of its own with a material of its own.
             let own = world

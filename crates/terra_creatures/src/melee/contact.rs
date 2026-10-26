@@ -9,12 +9,12 @@
 
 use super::burst::Met;
 use super::partner::{Beat, Partner};
-use super::{DOWN_S, Drawn, Fighter, HEALTH, Set, show};
+use super::{DOWN_S, Drawn, Fighter, HEALTH, show};
 use crate::staged::Staged;
 use bevy::prelude::*;
 use terra_motion::blade::{self, Edge, HILT_M, TIP_M};
 use terra_motion::contact::{self as rules, Effect, Reel, Taking};
-use terra_motion::moves::{self, Phase, Taken};
+use terra_motion::moves::{self, Landed as Shows, Phase, Taken};
 use terra_motion::stamina;
 use terra_motion::struck::Struck;
 use terra_survival::noise::{Cue, Noise};
@@ -81,13 +81,14 @@ struct Landed {
     charge: f32,
     /// What it met, as it is heard; nothing when dodged.
     struck: Option<Struck>,
+    /// What it shows as it lands: the striker's set's.
+    shows: Shows,
 }
 
 /// Sweeps every blade in its blow's active frames against every other fighter, and does
 /// what each blow that reached one does.
 pub fn strike(
     mut commands: Commands,
-    set: Res<Set>,
     frame: Option<Res<ScriptFrame>>,
     mut fighters: Query<Body<'_>>,
     hands: Query<&GlobalTransform>,
@@ -98,7 +99,6 @@ pub fn strike(
     mut met: MessageWriter<Met>,
     shake: Option<ResMut<Shake>>,
 ) {
-    let set = &set.0;
     let frame = frame.map_or(0, |frame| frame.0);
     let mut seen = Vec::new();
     for (entity, place, fighter, motion, staged, _, _, _, player, pool) in &fighters {
@@ -109,7 +109,7 @@ pub fn strike(
                 hilt: hand.transform_point(Vec3::Y * HILT_M),
                 tip: hand.transform_point(Vec3::Y * TIP_M),
             });
-        let now = fighter.runner.now(set);
+        let now = fighter.runner.now(&fighter.set);
         let t = fighter.runner.t();
         let facing = motion
             .map(|motion| motion.facing)
@@ -149,9 +149,13 @@ pub fn strike(
                 .reject_from(up)
                 .normalize_or_zero();
             let facing = rules::guards(body.facing, from);
-            let Ok((_, _, fighter, ..)) = fighters.get(attacker.entity) else {
+            let (Ok((_, _, fighter, ..)), Ok((_, _, on_fighter, ..))) =
+                (fighters.get(attacker.entity), fighters.get(body.entity))
+            else {
                 continue;
             };
+            // Each by its own set: the striker's blow, the struck's guard and parry.
+            let (set, guard) = (&fighter.set, &on_fighter.set);
             let Some(each) = fighter.runner.now(set) else {
                 continue;
             };
@@ -160,16 +164,13 @@ pub fn strike(
                 body.guard_s,
                 facing,
                 each.heavy,
-                set.parry_s,
+                guard.parry_s,
             );
             // A tired blow is weaker; a guard with too little stamina for it breaks.
             let damage = each.damage * fighter.runner.might(set);
-            let (taken, charge) = stamina::guarded(set, taken, damage, body.stamina);
-            // Both fight with the set's kit; the struck body is its own.
-            let struck = fighters
-                .get(body.entity)
-                .ok()
-                .and_then(|(_, _, on, ..)| Struck::of(taken, each, &set.kit, &set.kit, on.body));
+            let (taken, charge) = stamina::guarded(guard, taken, damage, body.stamina);
+            // Each fights with its set's kit; the struck body is its own.
+            let struck = Struck::of(taken, each, &set.kit, &guard.kit, on_fighter.body);
             landed.push(Landed {
                 by,
                 on,
@@ -180,6 +181,7 @@ pub fn strike(
                 hit_stop: each.hit_stop,
                 charge,
                 struck,
+                shows: set.landed,
             });
             break;
         }
@@ -202,6 +204,8 @@ pub fn strike(
             }
         }
     }
+    // The view punches as the first blow to land this tick shows.
+    let shown = landed.first().map(|blow| blow.shows);
     let mut out = Out {
         commands: &mut commands,
         noises: &mut noises,
@@ -215,9 +219,8 @@ pub fn strike(
     }
     // A blow that lands shows by a burst where the blade met the body and a punch of the
     // view (D456, D487), not by holding the fight; the struck body keeps its own colours.
-    let shown = set.landed;
     met.write_batch(out.struck.iter().copied());
-    if let (false, Some(mut shake)) = (out.struck.is_empty(), shake) {
+    if let (false, Some(mut shake), Some(shown)) = (out.struck.is_empty(), shake, shown) {
         shake.punch(shown.kick_deg, shown.kick_s);
     }
 }
@@ -307,6 +310,7 @@ fn settle(out: &mut Out, fighters: &mut Query<Body<'_>>, seen: &[Seen], blow: La
         out.struck.push(Met {
             at: blow.at,
             along: blow.along,
+            burst: blow.shows.burst,
         });
     }
 }

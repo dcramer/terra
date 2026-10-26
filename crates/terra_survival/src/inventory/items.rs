@@ -33,6 +33,15 @@ impl Default for Items {
             if let Some(lasts) = def.lasts {
                 kind = kind.lasts(lasts);
             }
+            // A one-hander that may go in the off hand is put in the off hand's slot (D460).
+            if def.hold.as_ref().is_some_and(|hold| {
+                matches!(
+                    hold.grip,
+                    terra_motion::hold::Grip::Off | terra_motion::hold::Grip::Either
+                )
+            }) {
+                kind = kind.gear(slot_named(super::OFF_HAND_SLOT));
+            }
             if let Some(worn) = &def.worn {
                 kind = kind.gear(slot_named(&worn.slot));
                 if let Some((w, h)) = worn.backpack {

@@ -5,12 +5,13 @@
 //! stamina of its own, spent and refilled by the same rules as the player's: too tired for
 //! the heavy blow it throws a light one, and a guard it cannot pay for breaks.
 
-use super::{Fighter, Set};
+use super::Fighter;
 use crate::staged::{self, Staged};
 use bevy::prelude::*;
 use serde_json::json;
 use terra_motion::moves::MoveSet;
 use terra_motion::stamina;
+use terra_survival::inventory::Items;
 use terra_survival::vitals;
 use terra_walker::bodies::Body;
 use terra_walker::character;
@@ -72,9 +73,36 @@ impl Partner {
 }
 
 /// Stands a partner a few metres ahead of a player, facing them: the base body as the
-/// player's template, dressed, a sword in its right hand and a round shield strapped to its
-/// left forearm.
-pub fn bring(commands: &mut Commands, at: Vec3, facing: Vec3) {
+/// player's template, dressed, with its hands' items (`super::partner_hands`: a sword in its
+/// right hand and a heater shield strapped to its left forearm), playing the set they pick.
+pub fn bring(
+    commands: &mut Commands,
+    at: Vec3,
+    facing: Vec3,
+    items: &Items,
+    sets: &super::MoveSets,
+) {
+    let hands = super::partner_hands(items);
+    let (name, set) = match super::set_for(&sets.0, items, &hands) {
+        Ok(picked) => picked,
+        Err(why) => {
+            warn!("Melee: the sparring partner's hands play no set: {why}");
+            return;
+        }
+    };
+    info!("Melee: the sparring partner plays {name}");
+    let look = |kind: Option<terra_items::ItemKind>| {
+        kind.map(|kind| character::held_look(&character::item_id(items.name(kind))))
+    };
+    let mut hold = serde_json::Map::new();
+    for (socket, kind) in [
+        (character::HAND_R, hands.main),
+        (character::HAND_L, hands.off),
+    ] {
+        if let Some(file) = look(kind) {
+            hold.insert(socket.to_string(), json!(file));
+        }
+    }
     let up = at.normalize();
     let spot = at
         + facing
@@ -87,7 +115,7 @@ pub fn bring(commands: &mut Commands, at: Vec3, facing: Vec3) {
         "template": "male",
         "clips": CLIPS,
         "wears": ["shirt", "trousers", "boots", "leather_coat"],
-        "hold": { "socket.hand.R": super::look(super::DRAWN.0), "socket.hand.L": super::look(super::DRAWN.1) },
+        "hold": hold,
         "at": spot.to_array(),
         "facing": at.to_array(),
         "turn_deg_s": 260.0,
@@ -102,7 +130,8 @@ pub fn bring(commands: &mut Commands, at: Vec3, facing: Vec3) {
             Some(entity) => {
                 world.entity_mut(entity).insert((
                     Partner::default(),
-                    Fighter::new(None),
+                    Fighter::new(None, set),
+                    hands,
                     Stamina::default(),
                     Body::fixed(0.35),
                 ));
@@ -126,7 +155,6 @@ type Them<'a> = (
 /// the nearest drawn player; a blow's drive and its step in to land, in its own time.
 pub fn think(
     time: Res<Time>,
-    set: Res<Set>,
     mut partners: Query<Them<'_>, Without<Player>>,
     players: Query<(&Transform, &Fighter), (With<Player>, With<Stance>, With<super::Drawn>)>,
     children: Query<&Children>,
@@ -135,8 +163,9 @@ pub fn think(
 ) {
     let frame = frame.map_or(0, |frame| frame.0);
     let dt = time.delta_secs();
-    let set = &set.0;
     for (entity, place, mut staged, mut fighter, mut partner, mut pool) in &mut partners {
+        let set = std::sync::Arc::clone(&fighter.set);
+        let set = &*set;
         fighter.age(dt);
         if let Some(pool) = pool.as_deref_mut() {
             vitals::rest(pool, dt);

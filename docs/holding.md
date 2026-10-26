@@ -2,7 +2,7 @@
 
 Status: **accepted by the developers, 2026-10-25** ("Right model", on the review desk); D460 to D465 are decided. The architecture is technical and recorded as D459, by the agent; the questions at the end were answered by the developers (D460 to D465). The research behind it is [research/2026-10-25-loadouts-and-animation-layers.md](../research/2026-10-25-loadouts-and-animation-layers.md). It sits under [movement.md](movement.md) (the pose and fix-up layers) and [items.md](items.md) (equipment D64, the action bar D66).
 
-The developer, 2026-10-25: "we have various weapons, two arms, sometimes two handed items, sometimes two one handed items, sometimes one one handed item... sometimes one in a left arm sometimes one in the right arm (it varies right). and then how do animations work? what happens with variance? i dont know if we figured that out vs just yeeting shit into here". We had not. Today (step 2 of section 6, combat round 26) the sword and shield are items with `hold` entries, and their stance gives the one set made, `sword.shielded`, by the rule and lookup in `terra_motion::hold`. T still puts them in the hands (D405's shortcut), and only the right hand's socket shows what the bar holds (`terra_survival::held`).
+The developer, 2026-10-25: "we have various weapons, two arms, sometimes two handed items, sometimes two one handed items, sometimes one one handed item... sometimes one in a left arm sometimes one in the right arm (it varies right). and then how do animations work? what happens with variance? i dont know if we figured that out vs just yeeting shit into here". We had not. Today (steps 2 and 3 of section 6, combat rounds 26 and 27) the sword, shield and torch are items with `hold` entries; each hand's socket shows its own hand's item (`terra_survival::held`), the off hand's from the off hand's slot (D460); and each fighter plays the set its hands give, by the rule and lookup in `terra_motion::hold`. T still gives the sword, and the shield when the off hand's slot is empty (D405's shortcut).
 
 ## Constraints
 
@@ -39,7 +39,7 @@ Each of a body's two hands holds one item or nothing. A body has a **main hand**
 - **A two-hander empties the off hand**: the off item stays equipped but rides its stowed socket (a shield on the back, a blade at the hip), and comes back when the two-hander leaves, as Elden Ring does.
 - **An item that cannot go where it is put is refused by the rule**, not by the screen: a shield in the main hand, a second two-hander, a tool in the off hand. So is a pair the table does not list: a blade in the off hand with the main hand empty.
 - **Handedness is a mirror**, not a second set of data. Every set is made right-handed. A left-handed body plays it mirrored (section 2), and its items hang on the mirrored sockets, turned, never scaled by −1, so a shield's face is not drawn inside out. Whether bodies may be left-handed is D463.
-- **How items reach the hands** (D460): today the bar's picked item goes to the main hand (D66). Proposed: an **off-hand slot** on the equipment sheet (D64) holds a shield, a torch or a second blade, and is in hand whenever the main hand's item leaves the off hand free.
+- **How items reach the hands** (D460): the bar's picked item goes to the main hand (D66), and an **off-hand slot** on the equipment sheet (D64) holds a shield, a torch or a second blade, in hand whenever the main hand's item leaves the off hand free: everything but a two-hander, a tool included (the stance table pairs a tool with anything). An item goes in that slot by its `hold` grip, `Off` or `Either`.
 
 ## 2. How animation is chosen
 
@@ -141,8 +141,8 @@ Items of a class share every clip, hold pose, phase, chain and button. Each item
 
 | Today | Proposed |
 |---|---|
-| Only the right hand's socket has a `Grip`; `held` shows the bar's item in it | Both hands' sockets; each shows its own hand's item |
-| The sword and shield are items with `hold` entries (`Arming sword`, `Heater shield`), given on T (D405's shortcut) | Put in hands by the loadout (D460) |
+| Both hands' sockets have a `Grip`; each shows its own hand's item, the off hand's slot's in the off hand (D460) | Done |
+| The sword is given on T, with the shield when the off hand's slot is empty (D405's shortcut); each fighter plays the set its hands give | The sword from the bar, once a drawn sword is the bar's item |
 | One set, `sword.shielded.ron`, chosen by the stance rule and the lookup, with the partner's slower blows as moves of their own (its slash plays at a third of the player's rate, past a style's ±8%) | The partner plays it at its style's rate |
 | Buttons by the stance table, named in the set (`buttons`) | Done |
 | `Fight_Walk`, the guard's arms baked over the walk (D458) | The hold layer by mask at run time, from movement.md stage 2 |
@@ -160,7 +160,7 @@ Each step is done when its checks pass and nothing on the scorecard gets worse:
    - buttons by stance.
 
    Done when the prototype plays as it does now, from items, and the scorecard holds. Built in combat round 26, but for a set's `from` (nothing needs it until a second set) and the partner at its style's rate (a design call: today's partner blows are far slower than a style may make them).
-3. **Both hands shown from the loadout**: `held` on both sockets, and `melee` takes its looks from the hands. Done when the penetration rows hold, and a torch carried in the off hand with a sword passes the held-fit check.
+3. **Both hands shown from the loadout**: `held` on both sockets, and `melee` takes its looks from the hands. Done when the penetration rows hold, and a torch carried in the off hand with a sword passes the held-fit check. Built in combat round 27: the torch rows (`held.torch.*`, the guard, walk and strafes) pass; a sword with a torch is not drawn until a `single` set is made (D461's order).
 4. **The hold layer at run time** (movement.md stage 2), in place of `Fight_Walk`. Done when every stance's hold passes over every locomotion clip.
 5. **The second stance, two-handed** (greatsword), with second-grip IK (movement.md stage 4). It proves the model: a new class and stance by data, clips and IK. Done when the duel of two-handed against shielded passes and the grip rows pass.
 6. **Two items of one class** (the arming sword and a longer, heavier sword) on one set. Done when the timing rule holds in the duel's records.

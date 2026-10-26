@@ -45,6 +45,9 @@ pub const HIPS: &str = "pelvis";
 /// working end, +Z toward the wrist. The others (`socket.head`, `socket.back`,
 /// `socket.belt.R` and `.L`) face as the body does.
 pub const HAND_R: &str = "socket.hand.R";
+/// The left hand's socket, alike: its +Y, too, runs along a held handle (a torch's), so one look
+/// fits either hand (D128); a strapped look hangs from the forearm instead (`strap`).
+pub const HAND_L: &str = "socket.hand.L";
 
 /// The clips in which something in hand is carried rather than used.
 pub const CARRIED_IN: [&str; 10] = [

@@ -29,7 +29,9 @@ fn outfit_from_gear(
         let wears = gear
             .0
             .iter()
-            .filter_map(|(_, item)| items.catalogue.get(item?.kind).ok())
+            // What the off hand's slot holds is shown in hand (`held`), not worn.
+            .filter_map(|(_, item)| item.filter(|item| items.worn(item.kind).is_some()))
+            .filter_map(|item| items.catalogue.get(item.kind).ok())
             .map(|def| Clothing::new(character::item_id(&def.name)))
             .collect();
         let wears = Outfit(wears);

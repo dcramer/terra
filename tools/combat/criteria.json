@@ -1614,6 +1614,111 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "held.torch.Keyed_Guard",
+   "noticed": 3,
+   "notice": "a torch carried in the off hand beside the sword passes through the body in Keyed_Guard, the game's guard",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM); holding.md section 6 step 3, a torch carried in the off hand (D460) with a sword",
+   "check": {
+    "by": "moves",
+    "row": "Keyed_Guard",
+    "measure": "held_cm",
+    "hold": [
+     "socket.hand.R=assets/models/held/arming_sword.glb",
+     "socket.hand.L=assets/models/held/torch.glb"
+    ]
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "held.torch.Fight_Guard",
+   "noticed": 3,
+   "notice": "a torch carried in the off hand beside the sword passes through the body in Fight_Guard",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM); holding.md section 6 step 3, a torch carried in the off hand (D460) with a sword",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Guard",
+    "measure": "held_cm",
+    "hold": [
+     "socket.hand.R=assets/models/held/arming_sword.glb",
+     "socket.hand.L=assets/models/held/torch.glb"
+    ]
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "held.torch.Fight_Strafe_L",
+   "noticed": 3,
+   "notice": "a torch carried in the off hand beside the sword passes through the body in Fight_Strafe_L",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM); holding.md section 6 step 3, a torch carried in the off hand (D460) with a sword",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_L",
+    "measure": "held_cm",
+    "hold": [
+     "socket.hand.R=assets/models/held/arming_sword.glb",
+     "socket.hand.L=assets/models/held/torch.glb"
+    ]
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "held.torch.Fight_Strafe_R",
+   "noticed": 3,
+   "notice": "a torch carried in the off hand beside the sword passes through the body in Fight_Strafe_R",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM); holding.md section 6 step 3, a torch carried in the off hand (D460) with a sword",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Strafe_R",
+    "measure": "held_cm",
+    "hold": [
+     "socket.hand.R=assets/models/held/arming_sword.glb",
+     "socket.hand.L=assets/models/held/torch.glb"
+    ]
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "held.torch.Fight_Walk",
+   "noticed": 3,
+   "notice": "a torch carried in the off hand beside the sword passes through the body in walking drawn (Fight_Walk)",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D447 (moves.ts HELD_CM); holding.md section 6 step 3, a torch carried in the off hand (D460) with a sword",
+   "check": {
+    "by": "moves",
+    "row": "Fight_Walk",
+    "measure": "held_cm",
+    "hold": [
+     "socket.hand.R=assets/models/held/arming_sword.glb",
+     "socket.hand.L=assets/models/held/torch.glb"
+    ]
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.Fight_Walk.held",
    "noticed": 3,
    "notice": "the sword or shield passes through the body walking drawn (Fight_Walk)",

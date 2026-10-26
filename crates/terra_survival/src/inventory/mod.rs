@@ -46,16 +46,23 @@ pub use terra_world::flora_kinds::Cuttable;
 pub const BAR_SLOTS: usize = 8;
 
 /// The slots of the character sheet, by the names the items file wears things in: some of
-/// D64's standard slots so far, a pack, what is worn on the head, body, legs and feet, and a
-/// belt for a quiver (D118).
-pub const SLOTS: [(GearSlot, &str); 6] = [
+/// D64's standard slots so far, a pack, what is worn on the head, body, legs and feet, a
+/// belt for a quiver (D118), and the off hand's (D460): a shield, a torch or a second blade,
+/// in hand whenever the main hand's item leaves the off hand free (`held`). An item goes in
+/// the off hand's slot by its `hold` grip (`Off` or `Either`), not by a `worn` entry.
+pub const SLOTS: [(GearSlot, &str); 7] = [
     (GearSlot(0), "Pack"),
     (GearSlot(1), "Head"),
     (GearSlot(2), "Body"),
     (GearSlot(3), "Belt"),
     (GearSlot(4), "Legs"),
     (GearSlot(5), "Feet"),
+    (GearSlot(6), OFF_HAND_SLOT),
 ];
+/// The off hand's slot's name (D460).
+pub const OFF_HAND_SLOT: &str = "Off hand";
+/// The off hand's slot (D460).
+pub const OFF_HAND: GearSlot = SLOTS[6].0;
 #[cfg(any(test, feature = "testing"))]
 const PACK: GearSlot = SLOTS[0].0;
 

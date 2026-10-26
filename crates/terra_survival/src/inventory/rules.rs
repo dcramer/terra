@@ -289,14 +289,17 @@ pub fn give(items: &mut Items, grid: &mut Grid, kind: ItemKind, count: u32) -> u
     given
 }
 
-/// Wears everything worn that wears, by so much, as a blow taken does (D99). Returns the
+/// Wears everything worn that wears, by so much, as a blow taken does (D99): what is worn
+/// on the body, not what the off hand holds (a torch burns down by the second). Returns the
 /// kinds that broke.
 pub fn wear_worn(items: &Items, gear: &mut Equipment, amount: u16) -> Vec<ItemKind> {
     let slots: Vec<GearSlot> = gear.iter().map(|(slot, _)| slot).collect();
     slots
         .into_iter()
         .filter_map(|slot| {
-            let item = gear.worn(slot)?;
+            let item = gear
+                .worn(slot)
+                .filter(|item| items.worn(item.kind).is_some())?;
             (gear.wear(&items.catalogue, slot, amount) == Ok(true)).then_some(item.kind)
         })
         .collect()

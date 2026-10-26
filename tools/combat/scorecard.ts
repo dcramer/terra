@@ -36,7 +36,7 @@ const SET = resolve(ROOT, "assets/data/moves/sword.shielded.ron");
 const BODY_M = 1.8;
 export type CheckOf =
   | { by: "timing"; measure: string; move?: string; next?: string }
-  | { by: "moves"; row: string; measure: string }
+  | { by: "moves"; row: string; measure: string; hold?: string[] }
   | { by: "test"; crate: string; test: string }
   | { by: "measured"; crate: string; test: string }
   | { by: "film"; name: string }
@@ -156,13 +156,21 @@ function main() {
     const v = timing(set, c.check);
     if (v !== undefined) values.set(c.id, round(v));
   }
-  // The move check, on every body template.
-  if (wanted.some((c) => c.check?.by === "moves")) {
-    const json = join(logDir, "moves.json");
-    run(process.execPath, [resolve(ROOT, "tools/characters/moves.ts"), "--json", json]);
+  // The move check, on every body template: a run for each set of held looks the rows name
+  // (`hold`, moves.ts's --hold; the prototype's sword and shield when none), so other items in
+  // hand (a torch carried in the off hand, holding.md) are measured over the same clips.
+  const holds = new Map<string, Criterion[]>();
+  for (const c of wanted) if (c.check?.by === "moves") {
+    const key = JSON.stringify(c.check.hold ?? []);
+    holds.set(key, [...(holds.get(key) ?? []), c]);
+  }
+  for (const [index, [key, cs]] of [...holds].entries()) {
+    const hold: string[] = JSON.parse(key);
+    const json = join(logDir, hold.length ? `moves.${index}.json` : "moves.json");
+    run(process.execPath, [resolve(ROOT, "tools/characters/moves.ts"), "--json", json, ...hold.flatMap((h) => ["--hold", h])]);
     const rows: MovesRow[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
-    for (const c of wanted) if (c.check?.by === "moves") {
-      const v = movesValue(rows, c.check);
+    for (const c of cs) {
+      const v = c.check?.by === "moves" ? movesValue(rows, c.check) : undefined;
       if (v !== undefined) values.set(c.id, round(v));
     }
   }

@@ -122,6 +122,9 @@
             lasts: 480,
             // A burning torch is a poor club, but it is one.
             tool: (strikes: (5.0, 1.9), lights: true, hint: "Lights the way while it is in hand"),
+            // Either hand; in the off hand's slot (D460) it is carried beside a one-hander.
+            // Stand-in numbers: a 0.55 m stick of 0.6 kg, heavier at its head.
+            hold: (class: "torch", grip: Either, carried: true, length: 0.55, mass: 0.6, balance: 0.3),
         ),
         // The sparring prototype's sword and shield, drawn on T (D405) until the off hand's
         // slot is built (D460); their looks are models/held/arming_sword.glb and

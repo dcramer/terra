@@ -62,7 +62,8 @@ const { values: opt } = parseArgs({
     clips: { type: "string", default: "assets/models/character/fight.glb" },
     body: { type: "string", default: "assets/models/character/base.glb" },
     templates: { type: "string", default: "assets/models/character/templates.json" },
-    // What the prototype holds in the hands (`terra_creatures::melee`, SWORD and SHIELD).
+    // What the hands hold, socket=look (`terra_creatures::melee`, DRAWN): an off-hand look with a
+    // strap is a shield; another (a torch) is carried in the fist, with no board.
     hold: { type: "string", multiple: true, default: ["socket.hand.R=assets/models/held/arming_sword.glb", "socket.hand.L=assets/models/held/heater_shield.glb"] },
     // Bends laid over the clips, BONE=x,y,z degrees about the body's axes (staged bends); none in the prototype.
     bend: { type: "string", multiple: true, default: [] },
@@ -316,7 +317,8 @@ const held: Held[] = opt.hold!.map((h) => {
   const turned = (v: V3): V3 => (hung ? rot(hung.r, v) : v);
   const mesh = hand === "socket.hand.R" || hand === "socket.hand.L" ? meshOf(g) : undefined;
   const balls = hand === "socket.hand.R" ? sliced(mesh!, tip).map((b) => ({ ...b, p: put(b.p), r: b.r * k })) : undefined;
-  const disc = hand === "socket.hand.L" ? board(mesh!) : undefined;
+  // A shield is the off hand's strapped look; another (a torch, carried) has no board.
+  const disc = hand === "socket.hand.L" && strap ? board(mesh!) : undefined;
   const plate = disc && { centre: put(disc.centre), normal: turned(disc.normal), radius: disc.radius * k, half: disc.half * k };
   const front = turned(rot(pose.r, [0, 0, -1]));
   // A held grip's bar runs along its handle (+Y); a strapped look's hand strap runs across its
@@ -510,7 +512,7 @@ function arc(move: Move) {
 }
 
 function guard(move: Move) {
-  const shield = held.find((h) => h.hand === "socket.hand.L");
+  const shield = held.find((h) => h.board);
   if (!shield || move.hold === undefined) return undefined;
   const pose = poseOf(shapes[0], clipOf(move.clip), move.hold);
   const socket = pose[at(shield.socket)];
