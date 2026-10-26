@@ -41,6 +41,7 @@ mod pushes;
 mod runs;
 mod sources;
 mod stairs;
+mod wade;
 mod water;
 
 pub use field::{Ball, Course, Field, Frame, Solid, Water};
@@ -128,6 +129,8 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(flora);
     let (water, deepest_water) = water::score(&new);
     measures.extend(water);
+    let (wade, deepest_wade) = wade::score(&new);
+    measures.extend(wade);
     let (dive, deepest_dive) = dive::score(&new);
     measures.extend(dive);
     let (pushes, deepest_push, overlap) = pushes::score(&new);
@@ -140,6 +143,7 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
         .max(deeper)
         .max(deepest_flora)
         .max(deepest_water)
+        .max(deepest_wade)
         .max(deepest_dive)
         .max(deepest_fall);
     // What a body met besides the ground counts toward how deep it ever went.

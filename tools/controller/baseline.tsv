@@ -55,6 +55,8 @@ fit.gap	3	seeded from today's walker at 4151fe44 (2026-10-24), the first scoreca
 swim.enters	1	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 swim.shore	0	unit D: the water's first numbers (a lake walked into, waded, swum across and out; a body floated), course/water.rs
 swim.wade	0.015	unit D: the water's first numbers (a lake walked into, waded, swum across and out; a body floated), course/water.rs
+wade.speed	0	D523 wading rows: wade.speed (0 against the kind's wade share; the mover before this had none, 1.72 m/s off a man's 60%), wade.step 2.3 -> 0.623 m/s (a jog to a 2.0 swim; held: 60% of a jog is 2.58, D478's swim 2.0, for the developers)
+wade.step	0.623	D523 wading rows: wade.speed (0 against the kind's wade share; the mover before this had none, 1.72 m/s off a man's 60%), wade.step 2.3 -> 0.623 m/s (a jog to a 2.0 swim; held: 60% of a jog is 2.58, D478's swim 2.0, for the developers)
 swim.pose	0	swim.pose, new (unit SW2): the swimmer treads, strokes and dives laid along its way (D514); first number
 swim.float	0.001	unit D: the water's first numbers (a lake walked into, waded, swum across and out; a body floated), course/water.rs
 swim.dive	0.001	unit H: swimming per D478 measured (dive, rise, surface, breath, bottom, exit), first numbers

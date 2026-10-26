@@ -847,6 +847,36 @@
    "measurable": true
   },
   {
+   "id": "wade.speed",
+   "noticed": 4,
+   "notice": "a body wading does not slow with the water's depth, or slows by other than the kind's rule",
+   "bar": {
+    "at_most": 0.05
+   },
+   "unit": "m/s off the rule (jog x (1 - (1 - wade) x depth / swim depth) wading, swim speed deeper), worst of a jog on level ground under still water 0.025 to 1.375 of the swim depth, for a man and the second kind",
+   "source": "D523 (wading slows linearly to 60% of a jog at swimming depth); docs/controller.md criterion 17",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "wade.step",
+   "noticed": 4,
+   "notice": "a body's speed steps down from a jog to a swim as the water deepens",
+   "bar": {
+    "at_most": 0.15
+   },
+   "unit": "m/s, the largest change of speed between consecutive depths (a twentieth of the swim depth apart) jogged into, from ankle deep to past the swim depth, for a man and the second kind",
+   "source": "D523 (no step from a jog to a swim)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
    "id": "swim.pose",
    "noticed": 4,
    "notice": "a swimmer walks or stands upright in the water instead of treading upright, stroking along the surface and diving along its way",

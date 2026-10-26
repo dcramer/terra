@@ -76,6 +76,9 @@ pub struct Kind {
     /// under; the water's drag on it, 1/s.
     pub swim_depth: f32,
     pub float_depth: f32,
+    /// Wading, its speed falls linearly with the water's depth to this fraction of its jog at
+    /// its swim depth (D523), so it slows into a swim rather than stepping down to one.
+    pub wade: f32,
     pub water_drag: f32,
     /// A swimmer strokes down or up at most this fast, looking straight down or holding jump,
     /// m/s (D478); it dives only looking further down than `dive_from_deg`, deg.
@@ -547,7 +550,9 @@ fn approach(from: Vec3, to: Vec3, by: f32) -> Vec3 {
 }
 
 /// The level velocity a body wants this tick, and its facing turned toward its way.
-fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, look: f32, dt: f32) -> Vec3 {
+/// `wading` is the water's depth at its feet as a share of its swim depth, 1 or more swum.
+fn level_velocity(body: &mut Body, intent: &Intent, wading: f32, look: f32, dt: f32) -> Vec3 {
+    let swimming = wading > 1.0;
     let (k, up) = (body.kind, body.up);
     let level = |v: Vec3| v - up * v.dot(up);
     let wish = level(intent.wish).normalize_or_zero();
@@ -569,10 +574,12 @@ fn level_velocity(body: &mut Body, intent: &Intent, swimming: bool, look: f32, d
     let grounded = body.ground == Ground::Grounded;
     let mut top = if swimming {
         k.swim * libm::cosf(look)
-    } else if intent.sprint {
-        k.sprint
     } else {
-        k.jog
+        // Wading (D523): from its gait's speed on dry ground toward `wade` of its jog at its
+        // swim depth, never faster than the gait.
+        let gait = if intent.sprint { k.sprint } else { k.jog };
+        let deep = gait.min(k.wade * k.jog);
+        gait + (deep - gait) * wading.clamp(0.0, 1.0)
     } * intent.scale.max(0.0);
     if grounded && wish != Vec3::ZERO {
         let grade = along_floor(wish, body.normal, up).dot(up).clamp(-1.0, 1.0);
@@ -667,7 +674,8 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let g = world.gravity;
     let from_centre = (body.position - world.centre.as_dvec3()).length() as f32;
     let depth = (world.water)(body.feet).map_or(0.0, |surface| surface - from_centre);
-    let swimming = depth > k.swim_depth * k.height;
+    let wading = depth / (k.swim_depth * k.height).max(1e-3);
+    let swimming = wading > 1.0;
 
     if intent.jump {
         body.buffer = k.buffer_s + dt;
@@ -677,7 +685,7 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let jump = body.buffer > 0.0 && !swimming && (standing || coyote);
 
     let look = swim::look(&k, intent.pitch);
-    let level = level_velocity(body, intent, swimming, look, dt);
+    let level = level_velocity(body, intent, wading, look, dt);
     let vertical = body.velocity.dot(up);
     let moving = intent.wish.reject_from(up).length_squared() > 1.0e-12;
     let stroke = swimming

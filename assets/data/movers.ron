@@ -22,6 +22,8 @@
 //                            it is swept at (Jolt's 0.1 and 0.02)
 //   swim_depth               water deeper than this fraction of its height is swum (D74)
 //   float_depth              afloat, this fraction of its height is under the surface
+//   wade                     wading, its speed falls linearly with depth to this fraction of
+//                            its jog at swim depth (D523: 0.6, a placeholder for the playtest)
 //   water_drag               the water's drag on it, 1/s
 //   dive                     a swimmer moving while looking down strokes down at up to this,
 //                            m/s, looking straight down; holding jump it rises at it (D478)
@@ -71,6 +73,7 @@
         padding_m: 0.02,
         swim_depth: 0.7,
         float_depth: 0.75,
+        wade: 0.6,
         water_drag: 2.0,
         dive: 1.5,
         dive_from_deg: 15.0,
