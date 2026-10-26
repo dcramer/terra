@@ -5,6 +5,7 @@ Combat's pipeline (docs/movement.md, "The goal"): a move goes from its spec to a
 ```bash
 cargo xtask combat                   # every cheap criterion, a line each, held to baseline.tsv (about a minute)
 cargo xtask combat --film            # and the duel film's checks (the GPU: cargo xtask gpu film -- cargo xtask combat --film)
+cargo xtask combat --film --out DIR  # the film into DIR, not ~/.cache/terra-review/duel/ (two films at once share that)
 cargo xtask combat --json out.json   # the results also as JSON
 cargo xtask combat --raise "<why>"   # write the rows that got worse, or are new, with the why, in the change's commit
 cargo xtask combat --lower           # write the rows that got better: cargo xtask nightly's alone (D414)

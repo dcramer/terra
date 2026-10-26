@@ -6,6 +6,8 @@
 //                                         check on every body, the fight's rule tests and what
 //                                         they measure), seconds
 //   cargo xtask combat --film             and the duel film's checks (the GPU, minutes)
+//   cargo xtask combat --film --out DIR   the duel's film, record and checks into DIR, not
+//                                         ~/.cache/terra-review/duel (two films at once share it)
 //   cargo xtask combat --json FILE        the results also as JSON
 //   cargo xtask combat --raise "<why>"    write the rows that got worse, or are new, with why
 //   cargo xtask combat --lower            write the rows that got better (nightly's alone, D414)
@@ -128,6 +130,7 @@ function main() {
   const { values: opt } = parseArgs({
     options: {
       film: { type: "boolean", default: false },
+      out: { type: "string" },
       json: { type: "string" },
       raise: { type: "string" },
       lower: { type: "boolean", default: false },
@@ -198,7 +201,7 @@ function main() {
   }
   // The duel film's checks (tools/sandbox/duel.ts writes checks.json beside its film).
   if (opt.film) {
-    const out = join(homedir(), ".cache/terra-review/duel");
+    const out = opt.out ? resolve(opt.out) : join(homedir(), ".cache/terra-review/duel");
     const json = join(out, "checks.json");
     rmSync(json, { force: true });
     run(process.execPath, [resolve(ROOT, "tools/sandbox/duel.ts"), "--out", out]);
