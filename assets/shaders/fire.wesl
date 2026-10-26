@@ -1688,10 +1688,11 @@ fn baked_field(field: HearthField, slot: u32) -> HearthField {
 const BAKED_PLAY: f32 = 1.25;
 // How much taller than its scale a baked loop stands, up only (`sim::STRETCH`, fire round g39).
 const BAKED_STRETCH: f32 = 1.4;
-// Where in its box the bake's flame tops out (its sidecar's flame_height 0.78 m of 1.19): its
-// heat ramp, heart and thinning tips are read over that height, as the marched field's over its
-// own, not over the box, where its heart stood at the flame's middle and its tips never thinned.
-const BAKED_FLAME_TOP: f32 = 0.65;
+// Over how much of its box a baked field's heat ramp, heart and thinning tips are read: all of
+// it. Over the bake's flame's own height (0.65, its sidecar's flame_height 0.78 m of 1.19; fire
+// round g39) its tips' skin lift reached lower and the campfire by night went yellow past the
+// fire sheet's 23% (fire round g41).
+const BAKED_FLAME_TOP: f32 = 1.0;
 // How much sooner in from its edge a baked field's heart burns pale: 1, as the marched field's
 // (FIELD_CORE). At 1.5 (fire round g39) its pale low core read white-yellow but put the fire
 // sheet's campfire out of its pale, night yellow and red+orange bands (fire round g40).
