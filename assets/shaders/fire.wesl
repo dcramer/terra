@@ -1763,7 +1763,26 @@ fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
     let dens = mix(1.0 - BAKED_TIPS * smoothstep(0.5, 1.0, hg), WISP_THICK, own);
     let hot = own * smoothstep(0.2, 0.7, shed);
     let heat = mix(drawn.yz, vec2(WISP_HEAT), hot);
-    return vec3(drawn.x * (1.0 + thin) * dens, baked_yellow(heat.x), baked_yellow(heat.y));
+    return vec3(drawn.x * (1.0 + thin) * dens, baked_yellow(baked_pale(heat.x, hg)), baked_yellow(baked_pale(heat.y, hg)));
+}
+
+// How far a baked flame's white-hot root, the hearth ramp's pale core (heats over BAKED_PALE.x,
+// up to the heart's FIELD_CORE_HEAT at .y) low in the flame (fading out over .z-.w of its
+// height), is pulled down toward the core's foot, evenly so hotter stays hotter; the core higher
+// up is left as it is, so the flame's peak and the motion gate's cut stay. Seen between the
+// campfire's front logs by night, over black, that root was the fire sheet's whole night pale
+// (91% fully flame, all in its bottom two fifths: campfire round 11's map), and main sat on the
+// pale's 5.41 ceiling at 5.40, so run-to-run noise failed it about half the time (fire round g51).
+// Pulled 0.04: night pale 4.78, 4.75, 4.80 (three sheets), the core kept in its middle; noon and dusk
+// pale 0.9 and 1.3, night yellow 18.8, red+orange 76.2, above night yellow 22.2 (ceiling 23); the
+// motion film as main's (five of six at night on both: lean 7.0 and 7.1, under 7.6, since the
+// campfire's remodel). At 0.025 night pale rose to 5.5 (white went pale before pale went
+// yellow); at 0.055, 2.6, but above night yellow 23.9 failed the sheet.
+const BAKED_PALE: vec4<f32> = vec4<f32>(0.92, 0.985, 0.1, 0.3);
+const BAKED_PALE_PULL: f32 = 0.04;
+fn baked_pale(heat: f32, hg: f32) -> f32 {
+    let root = 1.0 - smoothstep(BAKED_PALE.z, BAKED_PALE.w, hg);
+    return heat - BAKED_PALE_PULL * root * saturate((heat - BAKED_PALE.x) / (BAKED_PALE.y - BAKED_PALE.x));
 }
 
 // How far a baked flame's yellow band, the hearth row's heats between orange and its pale core
