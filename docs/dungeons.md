@@ -82,9 +82,9 @@ A door stands shut until a body walks into it, then its leaves swing away from t
 - **Light underground**: a room's probe now wins over the forest's sky volume (D485) and holds what its openings let in (D486), but Bevy keeps only the 8 room probes nearest the camera, so farther boxes of the crypt's 168 still take the sky; `node tools/sandbox/indoorlight.ts` (a continuous check) fails until they don't.
 - **Taking keys**, so a locked gate stays shut in the demo until its keys are held (D512); a door's leaves as bodies the mover collides with; chests that hold their loot as storage, water surfaces in basins.
 
-## Proposed themes (Open)
+## Themes (D527)
 
-Status: Open, a recommendation for the developers (D412); nothing here is built. The developer asked on the desk (r-dungeons) for dungeons "more spacious and some of them be cavernous". [research/2026-10-26-dungeon-themes.md](../research/2026-10-26-dungeon-themes.md) has the comparison with Skyrim, The Witcher 3, Elden Ring, Valheim, Enshrouded, Diablo IV and Baldur's Gate 3. Their grids are about twice ours. They build caves apart from halls. They share a few themes, each a kit reused across many dungeons. Round 26's spike showed that cubes cannot fake vaults ([research/2026-10-25-dungeon-vaults.md](../research/2026-10-25-dungeon-vaults.md)). So the built themes need pieces modelled for them, and the natural ones need carved rock.
+Status: Decided (D527): the developers on the desk (q-dungeon-themes), "Yes, all four, bigger grid", and on the door film, "this dungeon feels too cramped, it needs to be bigger". The kits are not built yet; the bigger grid is the first step. The developer asked on the desk (r-dungeons) for dungeons "more spacious and some of them be cavernous". [research/2026-10-26-dungeon-themes.md](../research/2026-10-26-dungeon-themes.md) has the comparison with Skyrim, The Witcher 3, Elden Ring, Valheim, Enshrouded, Diablo IV and Baldur's Gate 3. Their grids are about twice ours. They build caves apart from halls. They share a few themes, each a kit reused across many dungeons. Round 26's spike showed that cubes cannot fake vaults ([research/2026-10-25-dungeon-vaults.md](../research/2026-10-25-dungeon-vaults.md)). So the built themes need pieces modelled for them, and the natural ones need carved rock.
 
 **More spacious, for every built theme.** The cell grows from 3 m to 4 m: a 3 m corridor between walls a cube thick. Levels go from 4 m apart to 6 m, a slab and 5.5 m clear, so a vault springs at 2.5-3 m and its crown is at 4.5-5 m. A hall spans 2-4 cells, 8-16 m, its vaults carried on piers. The goal room may take two levels' height. The third-person camera, 3-4 m behind the body, then has room to follow without brushing walls.
 
@@ -122,7 +122,7 @@ Status: Open, a recommendation for the developers (D412); nothing here is built.
 | Natural caverns | 8 m | 10-20 m, varying | 3-6 m | volumes of 2-5 cells | a great cavern 6x6 and up |
 | Ancient engineered halls | 4 m | 6 m, halls 2 levels | 4 m | 3-5 | 5x5, two levels high |
 
-**For the developers**: which of these four to build, and in what order (recommended: barrow halls on the new grid first, as the crypt is closest; then natural caverns, the developer's "cavernous"); whether the keep stays a theme of its own or becomes a dressing of the barrow halls; whether caverns are their own dungeons or also open into the realm's own caves (worlds.md asks whether caverns are a feature of every world).
+**Still the developers'**: the order to build them in (recommended: barrow halls on the new grid first, as the crypt is closest; then natural caverns, the developer's "cavernous"); whether the keep stays a theme of its own or becomes a dressing of the barrow halls; whether caverns are their own dungeons or also open into the realm's own caves (worlds.md asks whether caverns are a feature of every world).
 
 ## Open questions (design, the developers')
 

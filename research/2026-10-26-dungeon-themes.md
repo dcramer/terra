@@ -1,6 +1,6 @@
 # How do major games theme and scale their dungeons, and which themes should Terra's have?
 
-2026-10-26. The developer's desk answer on r-dungeons asked for these comparisons. He wants the dungeons "more spacious", and some of them "cavernous". The question has three parts. How big are other games' dungeons, in rooms, corridors and ceilings? How are they built: from kits, by hand, or as sculpted meshes or voxels? Which few themes do the games share? The themes proposed from this note are in [dungeons.md](../docs/dungeons.md#proposed-themes-open); like all design, they are the developers' call (D412).
+2026-10-26. The developer's desk answer on r-dungeons asked for these comparisons. He wants the dungeons "more spacious", and some of them "cavernous". The question has three parts. How big are other games' dungeons, in rooms, corridors and ceilings? How are they built: from kits, by hand, or as sculpted meshes or voxels? Which few themes do the games share? The themes proposed from this note, decided as D527, are in [dungeons.md](../docs/dungeons.md#themes-d527); like all design, they are the developers' call (D412).
 
 ## Answer
 
