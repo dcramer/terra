@@ -37,6 +37,11 @@ use crate::{Downed, Motion, character};
 pub struct Baked(HashMap<AssetId<AnimationClip>, Markers>);
 
 impl Baked {
+    /// A clip's markers, if it has them.
+    pub fn get(&self, clip: AssetId<AnimationClip>) -> Option<&Markers> {
+        self.0.get(&clip)
+    }
+
     /// The markers a body file carries (`markers`), for each of its clips as loaded.
     pub fn register(&mut self, gltf: &Gltf, nodes: &Assets<GltfNode>) {
         let markers = markers(gltf, nodes);
@@ -80,7 +85,7 @@ fn locks(
     baked: &Baked,
     leg: [Option<AnimationTargetId>; 2],
     was: &mut Vec<(AnimationNodeIndex, f32)>,
-) -> Result<[f32; 2], &'static str> {
+) -> Result<([f32; 2], [f32; 2]), &'static str> {
     // [all, coming in] for each foot: the curve summed by weight, and the weight.
     let (mut lock, mut whole, mut playing) = ([[0.0; 2]; 2], [[0.0; 2]; 2], false);
     let mut now = Vec::with_capacity(was.len());
@@ -127,18 +132,29 @@ fn locks(
             "nothing playing"
         });
     }
-    Ok([0, 1].map(|side| {
+    let curve = [0, 1].map(|side| {
         let k = if whole[1][side] > 0.0 { 1 } else { 0 };
         if whole[k][side] > 0.0 {
             lock[k][side] / whole[k][side]
         } else {
             0.0
         }
-    }))
+    });
+    // The share of each leg's weight its clips coming in have: under 1 while one fades out.
+    let share = [0, 1].map(|side| {
+        if whole[0][side] > 0.0 {
+            whole[1][side] / whole[0][side]
+        } else {
+            1.0
+        }
+    });
+    Ok((curve, share))
 }
 
 /// A body whose feet cannot be kept this long says so in the log.
 const GATED_LOUD_S: f32 = 1.0;
+/// A lock curve held under `feet::FULL` while a lock waits for its clips' fade (`curve_of`).
+const WAITING: f32 = 0.98;
 
 /// Each foot's ball of the foot, left then right.
 const BALLS: [&str; 2] = ["ball_l", "ball_r"];
@@ -296,8 +312,16 @@ impl Kept {
             },
         };
         let curve = match curve {
-            Ok(curve) => {
+            Ok((mut curve, share)) => {
                 self.gate(body, None, dt);
+                // A lock does not start while the clips coming in are not yet whole: the
+                // blended foot is neither theirs nor the one going out's, and a foot locked
+                // there is stepped again once the fade is done. It waits for their own foot.
+                for side in 0..2 {
+                    if share[side] < feet::FULL && self.feet[side].locked().is_none() {
+                        curve[side] = curve[side].min(WAITING);
+                    }
+                }
                 curve
             }
             // A body showing its rest pose, no clip yet, stands on both feet: the clip's

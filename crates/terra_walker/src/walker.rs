@@ -48,6 +48,9 @@ pub struct Motion {
     pub indoors: bool,
     /// The level direction the figure faces.
     pub facing: Vec3,
+    /// The level velocity the player wishes to go at, zero when they let go (Lyra's
+    /// acceleration from input): a stride let go stops (`starts`).
+    pub wish: Vec3,
 }
 
 impl Motion {
@@ -59,6 +62,7 @@ impl Motion {
             airborne: 0.0,
             indoors: false,
             facing,
+            wish: Vec3::ZERO,
         }
     }
 }
