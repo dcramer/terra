@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type Box, boxEnv, daemonInfo, git, listJobs } from "./box.ts";
+import { type Box, boxEnv, daemonInfo, git, listJobs, pathEnv } from "./box.ts";
 import { ago, boxSettings, displayPlan, gpuFix } from "./jobs.ts";
 
 const sh = (cmd: string, args: string[]) => {
@@ -104,8 +104,9 @@ export function doctor(b: Box): number {
   ]);
   const ffmpeg = sh("ffmpeg", ["-version"]).ok;
   line(ffmpeg || "warn", ffmpeg ? "ffmpeg" : "ffmpeg: not installed; a film job cannot encode its clip", ["sudo apt-get install -y ffmpeg"]);
-  const magick = sh("magick", ["-version"]).ok;
-  line(magick || "warn", magick ? "ImageMagick 7 (magick)" : "magick: not on the PATH; sheets and look checks cannot compose", [
+  // On the jobs' PATH (the daemon's), not this ssh session's.
+  const magick = spawnSync("magick", ["-version"], { env: { ...process.env, PATH: pathEnv() } }).status === 0;
+  line(magick || "warn", magick ? "ImageMagick 7 (magick)" : "magick: not on the jobs' PATH; sheets and look checks cannot compose", [
     "ImageMagick's AppImage from github.com/ImageMagick/ImageMagick/releases: --appimage-extract into ~/opt, AppRun linked as ~/.local/bin/magick",
   ]);
 
