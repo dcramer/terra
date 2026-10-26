@@ -126,7 +126,13 @@ function section(kind: number, R: number, seed = 1): Run[] {
 // A third of the way to grey (art round g39): the harsh reviewers read the ring as pink-maroon
 // plastic; its sheen and smooth shading were most of it (now matte, with a relief normal map),
 // their red lead the rest.
-export const STONE_TONES: readonly (readonly number[])[] = [[72, 67, 59], [64, 62, 57], [78, 71, 60], [58, 56, 52], [70, 65, 57], [84, 79, 71], [66, 60, 52]];
+// Grey-buff, lighter (art round 2): at a third toward grey and dark (58-84) the firelight on
+// their brown lead read terracotta-red to a harsh judge, where RDR2's ring is grey-beige
+// fieldstone, pale on its tops; their soot, smoke stain and earth still darken them by the fire.
+// Near-neutral and darker (art round 4): at 96-122 with red a little over green the firelight
+// still read them salmon at night and pinkish at dusk, so red equals green and blue sits a few
+// under (buff, not pink), 78-100, the firelight's orange left to warm them.
+export const STONE_TONES: readonly (readonly number[])[] = [[90, 90, 85], [84, 84, 81], [96, 95, 89], [78, 78, 76], [92, 91, 86], [100, 99, 93], [86, 85, 81]];
 
 /** Where its logs and stones lie, from a seed. */
 export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
@@ -167,13 +173,29 @@ export function layout(seed = 1): { logs: Log[]; stones: Stone[] } {
   // Each stone a tone of the field stone's, lighter or darker by one scale for all its channels:
   // a scale each tinted them lavender and blue (fire round 20).
   const toned = (tone: readonly number[], k: number[]) => tone.map((c) => c * (0.9 + (0.2 * (k[0] + k[1] + k[2])) / 3));
-  // Laid round the whole ring, a little uneven: the wood stands inside it.
-  for (let j = 0; j < STONES; j++) {
-    const phi = TURN + 0.3 + (2 * Math.PI * (j + 0.3 * (rnd() - 0.5))) / STONES;
-    const long = 0.08 + 0.075 * rnd();
-    const size: V3 = [long, 0.048 + 0.06 * rnd(), 0.06 + 0.05 * rnd()];
-    const r = RING_R + 0.02 * (rnd() - 0.5);
-    stones.push({ at: [r * Math.cos(phi), size[1] * 0.25, r * Math.sin(phi)], size, turn: phi + 0.6 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + stones.length, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
+  // Laid round the whole ring, the wood inside it: of mixed sizes, 0.6-1.6 of the middling, a
+  // few big ones among small, with uneven gaps between, some touching and some a hand apart, each
+  // seated its own depth in the ground (art round 2: alike in size, evenly spaced and sat on top,
+  // they read as a ring of bread rolls to a harsh judge, against RDR2's rough ring).
+  const specs = Array.from({ length: STONES }, () => {
+    const k = 0.6 + 0.6 * rnd() * rnd() + 0.4 * rnd();
+    const depth = 0.06 + 0.05 * rnd();
+    const size: V3 = [(0.09 + 0.06 * rnd()) * k, (0.05 + 0.05 * rnd()) * Math.sqrt(k), depth * (0.8 + 0.25 * k)];
+    return { size, depth, gap: 0.15 + 2.4 * rnd() * rnd() };
+  });
+  // The gaps share what the stones leave of the ring's length, by their weights.
+  const length = 2 * Math.PI * RING_R, spans = specs.reduce((a, s) => a + 2 * s.size[0], 0);
+  const per = Math.max(0, length - spans) / specs.reduce((a, s) => a + s.gap, 0);
+  let along = 0;
+  for (const { size, depth, gap } of specs) {
+    const phi = TURN + 0.3 + (along + size[0]) / RING_R;
+    along += 2 * size[0] + gap * per;
+    // A deeper stone set back by as much, so its inner face keeps to the ring and the wood clears it.
+    const r = RING_R + 0.02 * (rnd() - 0.5) + 0.03 * rnd() + (size[2] - depth);
+    // Its middle from a fifth of its height above the ground to the ground: from half to two
+    // fifths of it buried.
+    const y = size[1] * 0.2 * rnd();
+    stones.push({ at: [r * Math.cos(phi), y, r * Math.sin(phi)], size, turn: phi + 0.6 * (rnd() - 0.5), tone: toned(STONE_TONES[Math.floor(rnd() * STONE_TONES.length)], [rnd(), rnd(), rnd()]), seed: seed * 17 + stones.length, cut: norm([rnd() - 0.5, 0.6 + 0.4 * rnd(), rnd() - 0.5]) });
   }
   return { logs, stones };
 }
@@ -322,11 +344,15 @@ function stoneLocal(st: Stone, d: V3): V3 {
   // the first, so no two stones share an egg's outline. Rounded field stones, as RDR2's ring:
   // cut to angular rocks, each its own scale and depth, they scored lower from the camp's eye
   // than e9e5b733's (campfire net round).
-  const over = dot(p, st.cut) - 0.62;
-  if (over > 0) p = sub(p, mul(st.cut, over * 0.85));
+  // Cut deeper and flatter (art round 2: still read as rounded rolls), and a third face across.
+  const over = dot(p, st.cut) - 0.5;
+  if (over > 0) p = sub(p, mul(st.cut, over * 0.95));
   const cut2 = norm([-st.cut[2] + 0.6 * (hash(st.seed, 3, 1) - 0.5), 0.2, st.cut[0]]);
-  const over2 = dot(p, cut2) - (0.55 + 0.25 * hash(st.seed, 4, 1));
-  if (over2 > 0) p = sub(p, mul(cut2, over2 * 0.8));
+  const over2 = dot(p, cut2) - (0.45 + 0.25 * hash(st.seed, 4, 1));
+  if (over2 > 0) p = sub(p, mul(cut2, over2 * 0.92));
+  const cut3 = norm([st.cut[2] + 0.5 * (hash(st.seed, 5, 1) - 0.5), 0.35 * hash(st.seed, 6, 1), -st.cut[0] + 0.4]);
+  const over3 = dot(p, cut3) - (0.5 + 0.3 * hash(st.seed, 7, 1));
+  if (over3 > 0) p = sub(p, mul(cut3, over3 * 0.9));
   return [p[0] * st.size[0], p[1] * st.size[1], p[2] * st.size[2]];
 }
 // Its frame in the fire's: its long side round the ring, its depth along the radius.
@@ -793,7 +819,7 @@ export function stoneMaps(stones: Stone[]): Uint8Array[] {
         const mottle = n3(mul(p, 4), st.seed + 20), grain = n3(mul(p, 70), st.seed + 21), vein = n3(mul(p, 9), st.seed + 22);
         let c = st.tone.map((v) => v * (0.82 + 0.36 * mottle));
         c = mix(c, [58, 56, 54], smooth(0.7, 0.78, grain) * 0.8);
-        c = mix(c, [146, 140, 130], smooth(0.3, 0.22, grain) * 0.45);
+        c = mix(c, [136, 135, 129], smooth(0.3, 0.22, grain) * 0.45);
         c = mix(c, c.map((v) => v * 1.15), smooth(0.48, 0.52, vein) * (1 - smooth(0.52, 0.56, vein)));
         // Lichen on what faces up, away from the fire's heat.
         c = mix(c, [132, 138, 112], 0.55 * smooth(0.2, 0.5, d[1]) * smooth(0.6, 0.68, n3(mul(p, 6), st.seed + 23)) * smooth(-0.2, 0.3, d[2]));
