@@ -154,3 +154,15 @@ Bold is a miss. By the calls set beforehand, neither is a gain: sheds stayed und
 - **Shipped real-time fire gets its pieces from particles, not from one volume.** A flame is a SubUV flipbook on many short-lived, velocity-aligned sprites that spawn over the fuel and rise ([Epic, adding visual effects](https://dev.epicgames.com/documentation/unreal-engine/at12-adding-visual-effects-to-your-game)), so each card's tip leaves on its own. Effects built on one baked flipbook add pieces over it: Afonseca's EmberGen campfire, one flipbook on a bent plane with no particles, names "secondary flame licks" as its next step ([RTVFX sketch 48](https://realtimevfx.com/t/bruno-afonseca-sketch-48/19028)). Torches are often a teardrop mesh with scrolling UVs and a few particles to break up its outline ([Polycount](https://polycount.com/discussion/comment/1136113/)). No studio talk on RDR2's or AC's fire describes it.
 
 The sim path's sheds chase is closed for Mantaflow: wind in either frame (g23, g34), finer cells and noise (g35) all leave sheds at 0.2-0.3. F stays the bake. Sheds would come as shipped games get them, as separate short-lived pieces over the loop. docs/fire-module.md's D493 section sketches them as wisps drawn by the same marcher; nothing is built.
+
+## Round g38: the baked campfire against the marched one, judged
+
+The developers chose the baked campfire for the game (review desk `r-fire-sim`, on round g28's build), so round g38 put the campfire on the baked loop with g28's light tones, its loop played 1.25x and its thin edge thickened, and the shed wisps (rounds g36-g37), and held it to the switch's gates. On motion.ts it meets 8/6 of the nine targets, sheds 0.81/0.57 (dusk/night), and its fire sheet passes. Shedding 3.75 wisps a tip a second instead of 3 lowered sheds to 0.65/0.49: the extra wisps rise past the flame and raise the measured flame's height, so fewer tongues stand above half of it.
+
+The motion panel (D472, 16 fresh judges a build, motion strips against anchors with RDR2 at 9) scored the marched campfire 5.08 and the baked one 4.19, a difference of -0.89 [-1.07, -0.71], so the switch did not land. In the strips the baked flame is a low orange mass on the logs, where the marched one stands about twice as tall in several separate tongues. Three harsh reviewers, comparing a 12 s film of the baked campfire with RDR2's frames, scored it 3, 4 and 4 out of 10. All three named the same faults:
+
+- The logs read as a leopard print: even orange spots along their whole length, where RDR2's are charred black with glowing cracks only where the flame touches.
+- The flame is opaque orange-red, with no white-yellow core and no see-through tips. Its wisps fly off as long straight streaks.
+- The stones and the light are weak: smooth pink stones on a flat disc, and a small pool of light at night.
+
+The motion measures, which are about how the flame moves, do not see how big or how bright it is. Before the baked body is tried for the switch again, it needs the marched flame's height and brightness.
