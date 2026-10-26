@@ -52,6 +52,9 @@ pub struct Motion {
     pub swimming: bool,
     /// The mouth under water (`mover::Body::under`): a swimmer's stroke is a dive's.
     pub under: bool,
+    /// The level velocity the player wishes to go at, zero when they let go (Lyra's
+    /// acceleration from input): a stride let go stops (`starts`).
+    pub wish: Vec3,
 }
 
 impl Motion {
@@ -65,6 +68,7 @@ impl Motion {
             facing,
             swimming: false,
             under: false,
+            wish: Vec3::ZERO,
         }
     }
 }
