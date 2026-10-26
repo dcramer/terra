@@ -55,6 +55,7 @@ impl Edit {
 
     /// Whether a dig is near enough a point to change the ground there (a fill counts
     /// everywhere, `VoxelPlanet::shaped`).
+    #[cfg(test)]
     fn reaches(&self, point: Vec3) -> bool {
         let (centre, radius) = self.centre_and_radius();
         let reach = radius + EDIT_MARGIN_M;
