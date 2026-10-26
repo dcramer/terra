@@ -183,6 +183,12 @@ const REACH_M: f32 = 90.0;
 /// twelfth was too little: what is not a leaf, skin, leather and stone, was lit by the gaps'
 /// blue sky alone and read lilac (D286).
 const LEAF_GLOW: Vec3 = Vec3::new(0.18, 0.27, 0.09);
+/// What faces up sees the crowns' undersides where they hide the sky, not their sunlit
+/// flanks: lit only by what passes the leaves above, which a crown lets through as
+/// `1 - LEAVES_HIDE` of its thick, so they glow that share of the flanks'. Under a closed
+/// canopy the floor takes a few percent to a tenth of the open sky's diffuse light, as
+/// forests are measured; with the flanks' glow it took over two fifths (D286).
+const UNDERSIDE_GLOW: f32 = 1.0 - LEAVES_HIDE;
 /// A tree's trunk is about its height over this across at a person's height (a 30 m pine half
 /// a metre), for the stems that hide the low sky under the crowns.
 const GIRTH_PER: f32 = 60.0;
@@ -500,8 +506,12 @@ fn texels(seen: &Seen, sides: &[(Vec3, Vec3); 6]) -> Vec<u8> {
                 for (side, &(sky, ground)) in sides.iter().enumerate() {
                     let share = shares[side];
                     let luma = sky.dot(Vec3::new(0.2126, 0.7152, 0.0722));
-                    let light =
-                        sky * share + LEAF_GLOW * luma * (1.0 - share) + ground * ground_lit;
+                    let glow = if side == 2 {
+                        LEAF_GLOW * UNDERSIDE_GLOW
+                    } else {
+                        LEAF_GLOW
+                    };
+                    let light = sky * share + glow * luma * (1.0 - share) + ground * ground_lit;
                     let axis = side / 2;
                     let negative = side % 2 == 1;
                     let t = y + if negative { ny } else { 0 };
@@ -882,6 +892,38 @@ mod tests {
             let (up, down) = (read(Vec3::Y), read(-Vec3::Y));
             assert!(luma(up) > luma(down), "sun {sun}: up {up}, down {down}");
         }
+    }
+
+    #[test]
+    fn under_a_closed_canopy_the_floor_takes_a_few_percent_of_the_open_skys_light() {
+        // D286: forests are measured to let a few percent to a tenth of the open sky's diffuse
+        // light reach their floor; what faces up sees the crowns' shaded undersides, so it
+        // takes less than what faces the crowns' sunlit flanks, and is not black.
+        let cells = UVec3::new(2, 2, 2);
+        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        let open = crate::skylight::clear_sky(Vec3::new(0.3, 0.8, 0.5).normalize(), Quat::IDENTITY);
+        let sides = world_sides(&open);
+        let up_with = |share: f32, up: f32| {
+            let seen = Seen {
+                cells,
+                sides: vec![[share, share, share, 1.0, share, share]; 8],
+                up: vec![up; 8],
+            };
+            let data = texels(&seen, &sides);
+            let read = |n: Vec3| as_bevy_reads(&data, cells, UVec3::ONE, n);
+            (luma(read(Vec3::Y)), luma(read(Vec3::X)))
+        };
+        let (open_up, _) = up_with(1.0, 1.0);
+        let (closed_up, closed_side) = up_with(0.0, 0.0);
+        let ratio = closed_up / open_up;
+        assert!(
+            ratio > 0.01 && ratio < 0.1,
+            "floor under a closed canopy {ratio} of the open's"
+        );
+        assert!(
+            closed_side > closed_up,
+            "side {closed_side}, up {closed_up}"
+        );
     }
 
     #[test]
