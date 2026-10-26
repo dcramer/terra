@@ -1390,16 +1390,12 @@ fn pokes_out(
             // behind the face, so a covering's edge closed down on its square's side is over
             // its own square, not the next.
             let behind = middle - t.n * 0.01;
-            let top = if is_roof {
-                roofs
-                    .top_under(behind.x, behind.z, middle.y)
-                    .map_or(top, |under| under.max(top))
-            } else {
-                top
-            };
-            // A wall's own face standing up beside a roof is not in it.
-            let inside = middle - t.n * 0.01;
-            let cell = (inside / CELL_M).floor().as_ivec3();
+            let under = roofs
+                .top_under(behind.x, behind.z, middle.y)
+                .filter(|_| is_roof);
+            let top = under.map_or(top, |under| under.max(top));
+            // A wall's own face standing up beside a roof is not in it: looked for behind it.
+            let cell = (behind / CELL_M).floor().as_ivec3();
             // Dress of something standing beside the roof or on it, within a trim's reach of
             // its cube and no lower than the roof cube: a chimney's quoins over the slope
             // round it, a stack's corner uprights reaching a hair under its foot. Not a wall's
@@ -1423,9 +1419,9 @@ fn pokes_out(
                         }
                     })
             };
-            let roof_at = if cube_at(inside).is_some_and(|c| c.kind.is_roof()) {
+            let roof_at = if cube_at(behind).is_some_and(|c| c.kind.is_roof()) {
                 Some(cell)
-            } else if cube_at(inside).is_none()
+            } else if cube_at(behind).is_none()
                 && base.cube(cell - IVec3::Y).is_some_and(|c| c.kind.is_roof())
             {
                 Some(cell - IVec3::Y)
@@ -1441,7 +1437,7 @@ fn pokes_out(
                     is_roof
                         || ![-0.02f32, 0.02].iter().any(|&dx| {
                             [-0.02f32, 0.02].iter().any(|&dz| {
-                                let at = ((inside + Vec3::new(dx, 0.0, dz)) / CELL_M)
+                                let at = ((behind + Vec3::new(dx, 0.0, dz)) / CELL_M)
                                     .floor()
                                     .as_ivec3();
                                 [at, at - IVec3::Y].iter().any(|&r| {
@@ -1462,7 +1458,10 @@ fn pokes_out(
                     .map_or(0.0, |roof| roof.roof.thick)
                     .max(0.02)
             };
-            if in_roof && middle.y > top + allowed {
+            // A roof's own piece within its edge's reach out past an eave over a lower roof (a
+            // step's fascia, the boards closing it): measured from that eave (gap 11).
+            let hung = || roofs.eave_over(middle.x, middle.z, edge_reach(kit), middle.y - allowed);
+            if in_roof && middle.y > top + allowed && !(is_roof && hung().is_some()) {
                 note(t.mesh, middle.y - top - allowed, middle, "over the roof");
             }
         } else if is_roof

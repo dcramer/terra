@@ -726,6 +726,40 @@ impl Roofs {
             .max_by(|a, b| a.total_cmp(b))
     }
 
+    /// The top of an eave (a level edge with nothing beyond) a point is out past, within
+    /// `reach` of it level and no lower than `above`: where a roof steps down, its eave at
+    /// the step's top stands over the roof below, and what hangs from it (its fascia) is
+    /// that roof's edge, not over the roof below.
+    pub fn eave_over(&self, x: f32, z: f32, reach: f32, above: f32) -> Option<f32> {
+        let p = Vec2::new(x, z);
+        let near = [
+            [0.0, 0.0],
+            [reach, 0.0],
+            [-reach, 0.0],
+            [0.0, reach],
+            [0.0, -reach],
+        ];
+        near.iter()
+            .flat_map(|[dx, dz]| self.over(x + dx, z + dz))
+            .flat_map(|&q| (0..4).map(move |side| (q, side)))
+            .filter(|&(q, side)| self.beside[q][side] == Beside::Open)
+            .filter_map(|(q, side)| {
+                let (a, b) = (self.point(q, side), self.point(q, (side + 1) % 4));
+                if (a.y - b.y).abs() > 1e-4 || a.y < above {
+                    return None;
+                }
+                let (step, _, _) = SIDES[side];
+                let out = Vec2::new(step[0] as f32, step[1] as f32);
+                let (a2, b2) = (Vec2::new(a.x, a.z), Vec2::new(b.x, b.z));
+                let along = (b2 - a2).normalize_or_zero();
+                let (past, on) = ((p - a2).dot(out), (p - a2).dot(along));
+                let inside =
+                    (-1e-3..=reach).contains(&past) && (-1e-3..=STEP_M + 1e-3).contains(&on);
+                inside.then_some(a.y)
+            })
+            .max_by(|a, b| a.total_cmp(b))
+    }
+
     /// Where a wall carried up under the lowest roof over a point, whose top is no lower
     /// than `above`, is cut: the roof's deck, the plane its covering is laid on and the
     /// boards under it are drawn on, so a gable closes to the roof with no gap under it.

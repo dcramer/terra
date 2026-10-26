@@ -972,4 +972,68 @@ mod tests {
             assert!(out.is_empty(), "{:?}: {out:#?}", elements.last());
         }
     }
+
+    #[test]
+    fn fuzz_seeds_61_72_196_an_eave_at_a_steps_top_is_measured_from_its_own_roof() {
+        // Found by `cargo xtask fuzz` at seeds 61, 72 and 196, shrunk: a 2x2x2 box of slate
+        // inner corners or of shakes slopes, so the roof steps down a cube between them, on
+        // its own or beside a wall (gap 11). The higher cube's level edge at the step's top
+        // is an eave: its fascia hangs plumb out past it and the boards close the step under
+        // it, as at the top of any step, up to the step's height over the lower roof. The
+        // check measured them from that lower roof (12 to 20 cm over it, past a covering's
+        // reach), not from the eave they hang from.
+        let materials = baseline();
+        let kind = |name: &str| {
+            materials
+                .names
+                .iter()
+                .find(|(_, n)| n.as_str() == name)
+                .map(|(&k, _)| k)
+                .unwrap()
+        };
+        let blocks = |at, shape, name| Blocks {
+            at,
+            size: 2,
+            shape,
+            kind: kind(name),
+        };
+        for elements in [
+            vec![blocks(
+                [9, -1, 3],
+                Shape::InnerCorner(Facing::South),
+                "slate",
+            )],
+            vec![
+                Wall {
+                    from: [0, 2],
+                    to: [3, 2],
+                    storey: 0,
+                    kind: kind("logs"),
+                },
+                blocks([1, 4, 0], Shape::InnerCorner(Facing::West), "slate"),
+            ],
+            vec![
+                Room {
+                    min: [0, 4],
+                    max: [5, 7],
+                    storey: 0,
+                    kind: kind("hewn"),
+                },
+                blocks([2, 2, 9], Shape::Slope(Facing::North), "shakes"),
+            ],
+        ] {
+            let base = build(&materials.kits, &elements);
+            let report = terra_build_mesh::inspect::inspect(
+                &base,
+                &materials.kits,
+                &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+            );
+            let out: Vec<_> = report
+                .findings
+                .iter()
+                .filter(|f| f.fault == terra_build_mesh::inspect::Fault::PokesOut)
+                .collect();
+            assert!(out.is_empty(), "{:?}: {out:#?}", elements.last());
+        }
+    }
 }
