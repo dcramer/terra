@@ -23,6 +23,7 @@ use bevy::{
         renderer::RenderDevice,
     },
 };
+pub use wisp::WISPS;
 
 /// The bake every baked kind plays today: the campfire's (fire round g23's sim F).
 const SET: &str = "campfire-sim";
@@ -55,6 +56,10 @@ pub struct Sim {
     /// The box its cells fill, metres from the fire's foot (x downwind, z up).
     pub box_min: [f32; 3],
     pub box_size: [f32; 3],
+    /// Each frame's tongue tips, highest first: where it tops out (metres in the box) and the
+    /// gas's velocity there (m/s), whence its shed wisps leave (`wisp`, the baker's `tips`).
+    #[serde(default)]
+    pub tips: Vec<Vec<[f32; 6]>>,
 }
 
 impl Sim {
@@ -96,7 +101,6 @@ impl Sim {
 
     /// The two frames a fire placed so shows at `time` (seconds on the cards' clock), and how far
     /// from the first to the second it is (`fire.wesl`'s `baked_frames`).
-    #[cfg(test)]
     pub fn frames_at(&self, time: f32, placed: Placement) -> (u32, u32, f32) {
         let frames = self.frames as f32;
         let at =
@@ -161,7 +165,6 @@ impl Placement {
     }
 
     /// How fast it plays its loop: as the root of one over its scale (puffing at about 1.5/√D Hz).
-    #[cfg(test)]
     pub fn rate(self) -> f32 {
         1.0 / libm::sqrtf(self.scale)
     }
@@ -172,6 +175,14 @@ impl Placement {
     pub fn to_bake(self, q: Vec3) -> Vec3 {
         let (s, c) = (libm::sinf(self.turn), libm::cosf(self.turn));
         Vec3::new(c * q.x + s * q.z, self.mirror * (c * q.z - s * q.x), q.y) / self.scale
+    }
+
+    /// A way in the bake's box (downwind, across, up) in its fire's frame (east, up, north), not
+    /// scaled: `to_bake`'s turn and mirror undone.
+    pub fn to_frame(self, b: Vec3) -> Vec3 {
+        let (s, c) = (libm::sinf(self.turn), libm::cosf(self.turn));
+        let across = self.mirror * b.y;
+        Vec3::new(c * b.x - s * across, b.z, s * b.x + c * across)
     }
 
     /// What `fire.wesl`'s `Fire::baked` reads.
@@ -321,7 +332,9 @@ pub(super) fn tell(
         drawn.wind,
         1.0 - libm::expf(-time.delta_secs() / TURN_EASE_S),
     );
+    let now = time.elapsed_secs_wrapped();
     let mut placed = [Vec4::ZERO; HEARTHS];
+    let mut wisps = [[Vec4::ZERO; WISPS * 2]; HEARTHS];
     for (i, (blaze, _)) in blazes
         .kept
         .iter()
@@ -331,14 +344,23 @@ pub(super) fn tell(
         .filter(|(_, (_, body))| **body == baked)
     {
         let across = downwind(blaze.at, *wind);
-        placed[i] = Placement::of(blaze.seed, blaze.tall, across, sim.seconds()).packed();
+        let place = Placement::of(blaze.seed, blaze.tall, across, sim.seconds());
+        placed[i] = place.packed();
+        let shed = wisp::alive(sim, place, blaze.seed, across, now);
+        for (j, w) in shed.iter().enumerate() {
+            if let Some(drawn) = w.and_then(|w| w.drawn(now, place.scale, sim)) {
+                wisps[i][j * 2..j * 2 + 2].copy_from_slice(&drawn);
+            }
+        }
     }
     for handle in &drawn.fire {
         if let Some(mut material) = fires.get_mut(handle) {
             material.extension.uniform.baked = placed;
+            material.extension.uniform.wisps = wisps;
         }
     }
 }
 
 #[cfg(test)]
 mod tests;
+mod wisp;

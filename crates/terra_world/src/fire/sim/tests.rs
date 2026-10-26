@@ -236,3 +236,17 @@ fn neighbouring_fires_play_the_loop_apart() {
     );
     assert!(mirrors.iter().all(|&n| n >= 16), "mirrors: {mirrors:?}");
 }
+
+#[test]
+fn a_way_in_the_bake_comes_back_to_the_fires_frame() {
+    for (turn, mirror) in [(0.0, 1.0), (0.7, -1.0), (2.9, 1.0), (-1.4, -1.0)] {
+        let p = Placement {
+            offset: 0.0,
+            turn,
+            mirror,
+            scale: 1.0,
+        };
+        let q = Vec3::new(0.3, 0.8, -0.2);
+        assert!(p.to_frame(p.to_bake(q)).distance(q) < 1e-5);
+    }
+}

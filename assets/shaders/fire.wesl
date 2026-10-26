@@ -61,6 +61,9 @@ struct Fire {
     // The baked loop's sidecar (`sim::Sim::packed`): its box's corner and frames, its size and
     // rate, a frame's cells and how many frames a row.
     sim: array<vec4<f32>, 3>,
+    // Each hearth's shed wisps (sim/wisp.rs `Wisp::drawn`), WISPS a hearth, two a wisp: its
+    // middle in its fire's frame and its flame (0 for none), its axis and its half width.
+    wisps: array<array<vec4<f32>, 8>, 16>,
 }
 
 // Field order must match FireExtension in crates/terra_world/src/fire.rs.
@@ -1597,6 +1600,7 @@ struct HearthField {
     turn: vec2<f32>,
     tiles: vec4<f32>,
     blend: f32,
+    slot: u32,
 }
 
 fn hearth_field(slot: u32) -> HearthField {
@@ -1665,7 +1669,8 @@ fn hearth_field(slot: u32) -> HearthField {
 // box; its place in the loop this hearth's (`sim::Placement`).
 fn baked_field(field: HearthField, slot: u32) -> HearthField {
     var f = field;
-    f.baked = fire.baked[min(slot, HEARTHS - 1u)];
+    f.slot = min(slot, HEARTHS - 1u);
+    f.baked = fire.baked[f.slot];
     let s = f.baked.w;
     f.turn = vec2(cos(f.baked.y), sin(f.baked.y));
     let lo = fire.sim[0].xyz;
@@ -1704,22 +1709,45 @@ fn baked_tile(frame: f32) -> vec2<f32> {
 // into the bake's box (`sim::to_bake`), its flame read from both frames and blended, made the
 // field's shape by BAKED_EDGE and coloured as the lobes' is.
 fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
+    var flame = wisp_flame(p, f.slot);
     let g = vec2(p.x, p.z);
     let b = vec3(f.turn.x * g.x + f.turn.y * g.y, f.baked.z * (f.turn.x * g.y - f.turn.y * g.x), p.y) / f.baked.w;
     let u = (b - fire.sim[0].xyz) / fire.sim[1].xyz;
-    if any(u < vec3(0.0)) || any(u > vec3(1.0)) {
-        return vec3(0.0);
+    if all(u >= vec3(0.0)) && all(u <= vec3(1.0)) {
+        let cells = fire.sim[2].xyz;
+        let t = clamp(u * cells, vec3(0.5), cells - vec3(0.5));
+        let size = vec3<f32>(textureDimensions(sim_volume));
+        let a = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.xy, 0.0) + t) / size, 0.0).r;
+        let c = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.zw, 0.0) + t) / size, 0.0).r;
+        flame = max(flame, mix(a, c, f.blend));
     }
-    let cells = fire.sim[2].xyz;
-    let t = clamp(u * cells, vec3(0.5), cells - vec3(0.5));
-    let size = vec3<f32>(textureDimensions(sim_volume));
-    let a = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.xy, 0.0) + t) / size, 0.0).r;
-    let c = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.zw, 0.0) + t) / size, 0.0).r;
-    let v = (mix(a, c, f.blend) - BAKED_EDGE) / BAKED_SPAN;
+    let v = (flame - BAKED_EDGE) / BAKED_SPAN;
     if v < -0.5 {
         return vec3(0.0);
     }
     return field_flame(v, saturate(p.y / f.tall), f);
+}
+
+// A baked fire's shed wisps (D493, docs/fire-module.md's "Shed wisps"; sim/wisp.rs): up to
+// WISPS small flames it sheds from its loop's tongue tips, each a soft ellipsoid along its way,
+// its flame in the bake's units, so the edge, feather, ramp and depth draw it as the loop; the
+// greatest here. WISP_REACH is how far over the bake's box one reaches, metres at its size.
+const WISPS: u32 = 4u;
+const WISP_REACH: f32 = 0.6;
+fn wisp_flame(p: vec3<f32>, slot: u32) -> f32 {
+    var most = 0.0;
+    for (var i = 0u; i < WISPS; i++) {
+        let a = fire.wisps[slot][i * 2u];
+        if a.w <= 0.0 {
+            continue;
+        }
+        let b = fire.wisps[slot][i * 2u + 1u];
+        let q = p - a.xyz;
+        let along = dot(q, b.xyz) / max(dot(b.xyz, b.xyz), 1.0e-8);
+        let across = q - b.xyz * along;
+        most = max(most, a.w * (1.0 - along * along - dot(across, across) / max(b.w * b.w, 1.0e-8)));
+    }
+    return most;
 }
 
 // How far inside the field's shape a point is (across, up, across in its frame, metres): 1 on
@@ -1812,7 +1840,8 @@ fn field_flame(v: f32, hg: f32, f: HearthField) -> vec3<f32> {
 // The hull round a hearth's field, in its frame (across, up, across).
 fn field_box(f: HearthField) -> array<vec3<f32>, 2> {
     let r = f.reach;
-    return array<vec3<f32>, 2>(vec3(-r, -f.under, -r), vec3(r, f.tall * select(1.15, 1.0, f.baked.w > 0.0), r));
+    let top = select(f.tall * 1.15, f.tall + WISP_REACH * f.baked.w, f.baked.w > 0.0);
+    return array<vec3<f32>, 2>(vec3(-r, -f.under, -r), vec3(r, top, r));
 }
 
 fn hearth_hull(corner: vec3<f32>, slot: u32) -> Out {

@@ -205,6 +205,8 @@ pub struct FireUniform {
     baked: [Vec4; HEARTHS],
     /// The baked loop's sidecar as the shader reads it (`sim::Sim::packed`).
     sim: [Vec4; 3],
+    /// Each hearth's shed wisps, two a wisp (`sim::wisp::Wisp::drawn`), in slot order.
+    wisps: [[Vec4; sim::WISPS * 2]; HEARTHS],
 }
 
 /// Flames, embers and jets: drawn unlit, their light added to what is behind, on Bevy's own
