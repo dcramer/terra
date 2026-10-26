@@ -63,6 +63,16 @@ pub const DOLLY_M_S: f32 = 2.5;
 pub const TURN_MOST_PER_S: f32 = 0.785;
 /// The dolly's slowing is eased over this much of the view either side, in metres.
 const EASE_M: f32 = 1.5;
+/// Under a theme's vaults (D527) the look tilts up this much, in radians (10°: with
+/// `LOWER_M`, 4.4° up on average under the crypt's vaults where the way runs level, against
+/// 4.7° down without), so the barrel and groin vaults read: round 2's barrow
+/// reviewers saw the vaults black or out of frame at eye height with the look level, and
+/// asked 5-10° up in halls.
+pub const VAULT_TILT: f32 = 0.17;
+/// The tilt starts where the clear height over the eye is the first, in metres, and is whole
+/// at the second: the crypt's flat cubes over its vaults stand 2.9 m over a standing eye in a
+/// corridor, a doorway's head 1.4 m, so the look levels passing under one.
+pub const VAULT_HEADROOM_M: [f32; 2] = [1.6, 2.6];
 
 /// Whether the line between two points passes only open cubes, every 0.1 m.
 pub(super) fn seen(map: &Map, a: Vec3, b: Vec3) -> bool {
@@ -70,8 +80,18 @@ pub(super) fn seen(map: &Map, a: Vec3, b: Vec3) -> bool {
     (0..=steps).all(|k| clear(map, cube_of(a.lerp(b, k as f32 / steps as f32))))
 }
 
-/// A point `LOOK_M` out along the camera's look from each eye of the view.
-pub(super) fn looks(map: &Map, view: &[Vec3], objects: &[Object]) -> Vec<Vec3> {
+/// How far the cubes are clear straight over a point, up to 4 m, every 0.1 m.
+pub(super) fn headroom(map: &Map, at: Vec3) -> f32 {
+    (1..=40)
+        .map(|k| k as f32 * 0.1)
+        .find(|&up| !clear(map, cube_of(at + Vec3::Y * up)))
+        .unwrap_or(4.0)
+}
+
+/// A point `LOOK_M` out along the camera's look from each eye of the view, tilted up by
+/// `tilt` radians where the eye stands under a vault (`VAULT_TILT` for a theme with a kit,
+/// nought for one without).
+pub(super) fn looks(map: &Map, view: &[Vec3], objects: &[Object], tilt: f32) -> Vec<Vec3> {
     let n = view.len();
     if n < 2 {
         return view.to_vec();
@@ -90,7 +110,10 @@ pub(super) fn looks(map: &Map, view: &[Vec3], objects: &[Object]) -> Vec<Vec3> {
         .map(|i| {
             let to = view[(i + lead).min(n - 1)] - Vec3::Y * LOWER_M - view[i];
             if to.length() > 0.5 {
-                held = level(to.normalize(), PITCH_MOST);
+                let (h, [lo, hi]) = (headroom(map, view[i]), VAULT_HEADROOM_M);
+                let (yaw, pitch) = angles(to.normalize());
+                let up = tilt * terra_gen::smoothstep(lo, hi, h);
+                held = level(from_angles(yaw, pitch + up), PITCH_MOST);
             }
             held
         })

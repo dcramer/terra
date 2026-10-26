@@ -504,6 +504,14 @@ struct Looked {
     turned_back: usize,
     /// The steepest the look pitches, up or down, in radians.
     pitch: f32,
+    /// Looks under a vault (`look::VAULT_HEADROOM_M`'s whole tilt) and their pitches summed,
+    /// in radians.
+    vaulted: usize,
+    vault_pitch: f32,
+    /// Frames whose middle three rays of the middle row are all on a wall within `FILL_M`: a wall,
+    /// jamb or pier filling the frame near (round 2's barrow reviewers, a pier and a wall
+    /// over two thirds of the frame, the look panning across a blank wall 2-3 m off).
+    filled: usize,
     /// How long the dolly takes from the first look measured to the last, at the stamp's
     /// pace and at 2.5 m/s, in seconds.
     seconds: f32,
@@ -536,6 +544,8 @@ fn frame_rays(d: Vec3) -> impl Iterator<Item = Vec3> {
 const FRAME_RAD: f32 = 0.7;
 /// A wall at arm's length or so.
 const NEAR_M: f32 = 1.5;
+/// A wall this near across the frame's middle fills it.
+const FILL_M: f32 = 2.5;
 /// An eye this near where the eye stood over `RETRACE_ALONG_M` of the view before has come
 /// back the way it went: round 20's tour tool cut such a loop out, as a film would.
 const RETRACE_M: f32 = 0.5;
@@ -653,6 +663,19 @@ fn check_look(theme: &Theme, dungeon: &Dungeon) -> Looked {
         seen.metre_frame += (nearest < 1.0) as usize;
         seen.nearest = seen.nearest.min(nearest);
         seen.pitch = seen.pitch.max(libm::asinf(d.y.abs().min(1.0)));
+        // Under a vault where the way on runs within 5° of level: a hall or corridor, not a
+        // stair's run.
+        let level = libm::asinf((on.y / on.length()).abs().min(1.0)) < 0.09;
+        if level && super::look::headroom(&map, view[i]) >= super::look::VAULT_HEADROOM_M[1] {
+            seen.vaulted += 1;
+            seen.vault_pitch += libm::asinf(d.y.clamp(-1.0, 1.0));
+        }
+        let near = |r: Vec3| {
+            let (_, across) = hit(view[i], r, FILL_M);
+            across.y == 0 && across != IVec3::ZERO
+        };
+        // The middle three of the middle row's five, its middle 48°.
+        seen.filled += frame_rays(d).skip(6).take(3).all(near) as usize;
         if i + 1 < view.len() {
             seen.seconds += times[i + 1] - times[i];
             seen.plain_seconds += plain[i + 1] - plain[i];
@@ -690,6 +713,34 @@ fn the_camera_looks_down_the_way_ahead_not_at_walls() {
         let metre_frame = sum(&|s| s.metre_frame as f32) / samples;
         let nearest = seen.iter().map(|s| s.nearest).fold(1.5, f32::min);
         let pitch = most(&|s| s.pitch);
+        let vault_pitch = sum(&|s| s.vault_pitch) / sum(&|s| s.vaulted as f32).max(1.0);
+        let filled = sum(&|s| s.filled as f32) / samples;
+        let vaulted = sum(&|s| s.vaulted as f32) / samples;
+        println!(
+            "{}: under a vault {:.0}% of looks, pitched {:.1}° on average there; a wall filling the frame's middle within {FILL_M} m {:.2}% of frames",
+            theme.name,
+            100.0 * vaulted,
+            vault_pitch.to_degrees(),
+            100.0 * filled
+        );
+        // Under a theme's vaults the look tilts up so they read (round 2's barrow reviewers:
+        // the vaults black or out of frame at eye height, the look level; a theme without
+        // vaults looks some 4.7° down there, at the floor 4 m on).
+        if theme.kit.is_some() {
+            assert!(
+                vault_pitch > 3f32.to_radians() && vaulted > 0.3,
+                "{}: {vault_pitch} up under a vault, {vaulted} of looks",
+                theme.name
+            );
+        }
+        // No wall fills the frame's middle near (round 2's barrow film panned across a blank
+        // wall some 3 m off for 1.8 s, which no tour of 200 did within 2.5 m, and 0.1% within
+        // 4 m).
+        assert!(
+            filled <= 0.001,
+            "{}: a wall filling the frame's middle in {filled} of frames",
+            theme.name
+        );
         let retraced = sum(&|s| s.retraced as f32) / samples;
         let turned_back = sum(&|s| s.turned_back as f32) / samples;
         let slower = sum(&|s| s.seconds) / sum(&|s| s.plain_seconds);

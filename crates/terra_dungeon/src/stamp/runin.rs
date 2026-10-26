@@ -21,7 +21,7 @@ use terra_build::Cube;
 
 type Map = HashMap<IVec3, Cube>;
 
-pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Stamp) {
+pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, vaulted: bool, out: &mut Stamp) {
     doors(dungeon, map, out);
     chests(dungeon, looks, map, out);
     mobs(dungeon, looks, map, out);
@@ -30,7 +30,12 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Sta
     let room = Room::new(map, &out.objects);
     out.route = walked(map, &room, &out.route);
     out.view = room.view(&out.route);
-    out.look = super::look::looks(map, &out.view, &out.objects);
+    let tilt = if vaulted {
+        super::look::VAULT_TILT
+    } else {
+        0.0
+    };
+    out.look = super::look::looks(map, &out.view, &out.objects, tilt);
     out.pace = super::look::pace(&out.view, &out.look);
 }
 

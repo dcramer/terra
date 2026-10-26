@@ -222,7 +222,7 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
         kit::lay(dungeon, kit, &kinds, &mut out);
     }
     let map = cubes(&out.ops);
-    runin::run_in(dungeon, &looks, &map, &mut out);
+    runin::run_in(dungeon, &looks, &map, theme.kit.is_some(), &mut out);
     out
 }
 
