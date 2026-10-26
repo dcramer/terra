@@ -17,8 +17,10 @@ use crate::quality::Quality;
 use bevy::{light::VolumetricLight, prelude::*};
 
 mod glows;
+mod shadows;
 pub use glows::FireGlows;
 pub(super) use glows::plugin;
+use shadows::ShadowFade;
 
 /// How many point lights the fires are lit by (docs/fire.md's budget: 16 unshadowed and the
 /// shadowed ones), and how far round each its fire is gathered, in metres. At 12 a dungeon's
@@ -846,23 +848,23 @@ pub(super) fn light(
     blazes: Res<Blazes>,
     drawn: Res<super::Drawn>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
-    mut lights: Query<(
-        &mut PointLight,
-        &mut Transform,
-        &mut Visibility,
-        Has<VolumetricLight>,
-    )>,
+    mut lights: shadows::Lights,
     mut glows: ResMut<FireGlows>,
     mut fog: ResMut<super::fog::Glows>,
     tier: Res<super::BreathTier>,
     sky_light: Option<Res<crate::skylight::SkyLight>>,
     shut_off: Option<Res<crate::indoor::ShutOff>>,
+    mut shadow_fade: Local<ShadowFade>,
 ) {
     let t = time.elapsed_secs_wrapped();
+    // Whether a light had shadows, for `choose` to hold them on it: whether it wanted them
+    // (one waiting for another's to fade has none yet), or shone in the fog unshadowed.
     let was: Vec<Was> = drawn
         .lights
         .iter()
-        .map(|&entity| {
+        .enumerate()
+        .map(|(i, &entity)| {
+            let wanted = shadow_fade.wanted.get(i).copied().unwrap_or(false);
             lights.get(entity).map_or(
                 Was {
                     at: Vec3::ZERO,
@@ -872,7 +874,7 @@ pub(super) fn light(
                 |(light, transform, visibility, volumetric)| Was {
                     at: transform.translation,
                     on: *visibility != Visibility::Hidden,
-                    near: light.shadow_maps_enabled || volumetric,
+                    near: wanted || (volumetric && !light.shadow_maps_enabled),
                 },
             )
         })
@@ -899,6 +901,9 @@ pub(super) fn light(
         };
     }
     let shown = choose(wants, eye, &was, shadowed(*quality));
+    shadow_fade.ease(&shown, eye, shadowed(*quality), time.delta_secs());
+    shadow_fade.spawn_twins(&mut commands);
+    let mut twins = Vec::new();
     let mut told = [[0.0f32; 4]; GLOWS];
     let mut wanted = Vec::new();
     for (i, (&entity, shown)) in drawn.lights.iter().zip(shown).enumerate() {
@@ -910,19 +915,31 @@ pub(super) fn light(
             Some(Shown {
                 lit,
                 fade,
-                shadows,
                 scatters,
+                ..
             }) => {
-                light.intensity = lit.lumens * fade;
+                // Its shadows part-way, the rest of its light is its twin's (`shadows`).
+                let strength = shadow_fade.strength.get(i).copied().unwrap_or(0.0);
+                let (own, twin) = shadows::parts(lit.lumens * fade, strength);
+                if twin > 0.0 {
+                    twins.push((lit.clone(), twin));
+                }
+                light.intensity = own;
                 light.range = lit.range;
                 light.color = lit.color;
                 light.radius = lit.radius;
                 transform.translation = lit.at;
                 *visibility = Visibility::Inherited;
-                light.shadow_maps_enabled = shadows;
+                light.shadow_maps_enabled = strength > 0.0;
                 // A kept fire's near lights shine in the air round it (`fog`), the shadowed
-                // one sampling its shadows there; a blaze's stays out of the fog, where its
-                // tens of millions of lumens lit a ball of air brighter than the house (round 6).
+                // one sampling its shadows there, eased with them; a blaze's stays out of the
+                // fog, where its tens of millions of lumens lit a ball of air brighter than the
+                // house (round 6).
+                let scatters = if lit.casts {
+                    lit.kept && strength > 0.0
+                } else {
+                    scatters
+                };
                 if scatters != volumetric {
                     if scatters {
                         commands.entity(entity).insert(VolumetricLight);
@@ -950,6 +967,7 @@ pub(super) fn light(
             }
         }
     }
+    shadow_fade.show_twins(&twins, &mut lights);
     if told != glows.glows {
         glows.glows = told;
     }
