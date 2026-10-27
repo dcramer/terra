@@ -330,6 +330,7 @@ How structures are planned, built, drawn and coded.
 | [D486](decisions/D486.md) | A room's sky light is what its openings let in | Tech | Agent | Leaning | A room's light probe (D320) dims the sky's light by the… |
 | [D491](decisions/D491.md) | Space Engineers 2's ground and construction loop | Design | Developers | Decided | How blocks are built and taken down follows Space… |
 | [D494](decisions/D494.md) | Creative and survival | Design | Developers | Decided | A world is played in one of two modes. |
+| [D550](decisions/D550.md) | Three timber joints: the post between a window and a door, the end board on a door's head, the eave board at a roof's step | Design | Developers | Decided | How three joints in timber read, judged from stills on… |
 
 ## Art, characters and sound
 
