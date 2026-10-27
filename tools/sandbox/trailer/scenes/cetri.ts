@@ -167,20 +167,26 @@ const STEP_DUST = 2.0;
 /// down; round 8 kept it 27 down, just out of frame, at 3 of 4 contacts), the eyes still under
 /// its top; one slow tilt down from `early` seconds before, its shake and burst larger,
 /// `stays` seconds down after, and as slowly up (round 9's 0.35 s dip read as a whip-tilt or
-/// a cut).
-const WATCHED = { steps: 2, low: 19, early: 0.9, stays: 0.25, shake: 1.4, dust: 2.5 };
+/// a cut). Each watched step has its own `low` and `stays`: the second is the film's one
+/// full-body beat, the foot at the frame's foot and the crown over the face, held down on its
+/// landing (round 11: from 13.8 s the frame held only the face).
+const WATCHED = { steps: 2, low: [19, 23], early: 0.9, stays: [0.25, 0.45], shake: 1.4, dust: 2.5 };
 /// How far it lunges and how fast, metres and metres a second.
 const LUNGE_M = 2.0;
 const LUNGE_SPEED = 4.5;
 const COMES_SPEED = WALK.pace * WALK.rate;
 /// How far the walker flinches back at the blow and backs away while it comes on, metres:
 /// less than it gains, so it closes in (round-7 reviews: it barely advanced; round 5: the
-/// flinch cancelled the lunge); 2.1 m against its 5.1 m at Giant_Walk's 0.87 m/s. It backs away quickly at first and falters, `BACKS_EASE` the
-/// power of its ease out, so the first two steps land 5.4 m off, where a 55-degree frame holds
-/// both the foot and the eyes, and the last at 3 m.
+/// flinch cancelled the lunge); 2.5 m against its 5.1 m at Giant_Walk's 0.87 m/s. It scrambles
+/// back over `BACKS_S` seconds, `BACKS_EASE` the power of its ease out, and then stands frozen
+/// while it closes: about 7 m off at the second footfall, the most a 55-degree frame can hold
+/// of it feet up, and 3.8 m at the end. It backs `SIDE_M` to its own right as it goes, out
+/// from behind the bush left of the frame that hid the swinging leg (round 11, at 12.1 s).
 const FLINCH_M = 0.3;
-const BACKS_M = 2.1;
-const BACKS_EASE = 2.5;
+const BACKS_M = 2.5;
+const BACKS_S = 2.6;
+const BACKS_EASE = 1.6;
+const SIDE_M = 1.5;
 /// Where its face is over its feet, metres up and toward the walker: standing, lunging, thrown.
 const FACE = { up: 3.9, ahead: 0.3 };
 const FACE_LUNGES = { up: 3.5, ahead: 2.0 };
@@ -267,7 +273,7 @@ function script(s: Script) {
   // Each beat is keyed to its feet: a footfall puffs the litter where that foot lands, folds
   // the trunk onto it and holds it there a moment, nods the crown after it and shakes the eye.
   s.frame = f(BEATS.comes);
-  const away = at(flinched, BACKS_M);
+  const away = at(flinched, BACKS_M, SIDE_M);
   const way = toward([0, 0], [away[0] - lunged[0], away[1] - lunged[1]], 1);
   const left: [number, number] = [way[1], -way[0]];
   // The footfalls in the film's time.
@@ -291,10 +297,12 @@ function script(s: Script) {
   const mix = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
   const lift = (a: Vec3, m: number): Vec3 => [a[0], a[1] + m, a[2]];
   const [eye0, eye1] = [on(flinched, EYE - 0.05), on(away, EYE - 0.1)];
-  const eyeAt = (t: number) => mix(eye0, eye1, 1 - (1 - u(t)) ** BACKS_EASE);
-  // The first steps watched a little lower, the face still in frame, then up at it as it closes.
+  const backs = (t: number) => Math.min(1, Math.max(0, (t - BEATS.comes) / BACKS_S));
+  const eyeAt = (t: number) => mix(eye0, eye1, 1 - (1 - backs(t)) ** BACKS_EASE);
+  // The first steps watched a little lower, the face still in frame, then up at it as it
+  // closes, once the full-body beat has held.
   const level = (t: number) => {
-    const k = Math.min(1, Math.max(0, (t - BEATS.comes - 1.5) / 3.5));
+    const k = Math.min(1, Math.max(0, (t - BEATS.comes - 3.0) / 2.5));
     return { up: 3.3 + (FACE_NEAR.up - 3.3) * k, ahead: 0.3 + (FACE_NEAR.ahead - 0.3) * k };
   };
   const look = (t: number, dip = 0): Vec3 => {
@@ -307,18 +315,18 @@ function script(s: Script) {
     const feet = feetAt(fall.t);
     return [feet[0] + way[0] * fall.ahead + left[0] * fall.left, feet[1] + way[1] * fall.ahead + left[1] * fall.left];
   };
-  const dipFor = (fall: { t: number; left: number; ahead: number }) => {
+  const dipFor = (fall: { t: number; left: number; ahead: number }, k: number) => {
     const [e, l, foot] = [eyeAt(fall.t), look(fall.t), on(footOf(fall), 0)];
-    const pitch = Math.atan2(foot[1] - e[1], Math.hypot(foot[0] - e[0], foot[2] - e[2])) + (WATCHED.low * Math.PI) / 180;
+    const pitch = Math.atan2(foot[1] - e[1], Math.hypot(foot[0] - e[0], foot[2] - e[2])) + (WATCHED.low[k] * Math.PI) / 180;
     return Math.max(0, l[1] - (e[1] + Math.hypot(l[0] - e[0], l[2] - e[2]) * Math.tan(pitch)));
   };
-  const dips = falls.map((fall, k) => (k < WATCHED.steps ? dipFor(fall) : 0));
+  const dips = falls.map((fall, k) => (k < WATCHED.steps ? dipFor(fall, k) : 0));
   falls.forEach((fall, k) => {
     const watched = k < WATCHED.steps;
     const dip = dips[k];
     // On to this footfall from the last's shake and stay (or the walk's start); between two
     // watched steps the look stays half down rather than climbing to the face and back.
-    const from = k ? f(falls[k - 1].t) + SHAKE_FRAMES + (k - 1 < WATCHED.steps ? Math.round(WATCHED.stays * 60) : 0) : f(BEATS.comes);
+    const from = k ? f(falls[k - 1].t) + SHAKE_FRAMES + (k - 1 < WATCHED.steps ? Math.round(WATCHED.stays[k - 1] * 60) : 0) : f(BEATS.comes);
     const starts = watched ? f(fall.t - WATCHED.early) : from;
     if (watched && starts > from) {
       s.frame = from;
@@ -350,10 +358,11 @@ function script(s: Script) {
       s.glide(lift(eyeAt(t), b * drop), lift(look(t, dip), b * drop * SHAKE.pitch), SHAKE.frames[i]);
       s.frame += SHAKE.frames[i];
     });
-    // A watched one stays down a moment on the landing before the eye climbs on.
+    // A watched one stays down a moment on the landing before the eye climbs on; the last
+    // holds all the way down, the full-body beat.
     if (watched) {
-      const up = fall.t + SHAKE_FRAMES / 60 + WATCHED.stays;
-      s.glide(eyeAt(up), look(up, dip * 0.5), Math.round(WATCHED.stays * 60));
+      const up = fall.t + SHAKE_FRAMES / 60 + WATCHED.stays[k];
+      s.glide(eyeAt(up), look(up, dip * (k === WATCHED.steps - 1 ? 1 : 0.5)), Math.round(WATCHED.stays[k] * 60));
     }
   });
   // Up at the face to the end.
