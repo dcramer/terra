@@ -448,7 +448,7 @@ The look, models, bodies and gear, textures and audio.
 | [D542](decisions/D542.md) | Clips carried onto a body by each bone's turn from a retarget pose | Tech | Agent | Decided | A body's bones point at their next joint… |
 | [D545](decisions/D545.md) | A shirt hangs over the trousers | Design | Developers | Decided | A shirt is made untucked: its hem hangs past the hips… |
 | [D546](decisions/D546.md) | The attachment contract: how a held or worn look goes on a body | Tech | Agent | Decided | Every look the game puts on a character is of a kind its… |
-| [D551](decisions/D551.md) | Where a put-away weapon or tool shows on the body | Design | — | Open | Recommended: (b), what the hands' slots hold shows on… |
+| [D551](decisions/D551.md) | Where a put-away weapon or tool shows on the body | Design | Developers | Decided | What the hands' two slots hold shows on the body when… |
 
 ## Engine and code
 
