@@ -219,6 +219,9 @@ for item in look.args():
                 if head and ROLES.get(source, source) == "Metal":
                     renamed[source].node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = look.linear(head) + (1.0,)
             slot.material = renamed[source]
+    # A textured source (ours, made by tools/props: the torch) keeps its maps; a flat one takes
+    # the plain roughness below.
+    maps = any(n.type == "TEX_IMAGE" for m in renamed.values() if m.use_nodes for n in m.node_tree.nodes)
     ob = one(objects, item)
     # Its length along Blender's Z, which glTF's +Y becomes: scaled to `length`, the foot of
     # its handle at the origin, then down by where it is held.
@@ -229,7 +232,7 @@ for item in look.args():
     foot = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))
     ob.data.transform(Matrix.Translation((0, 0, -held_from_end)) @ Matrix.Scale(s, 4) @ Matrix.Translation(-foot))
     for slot in ob.material_slots:
-        if slot.material and slot.material.use_nodes:
+        if slot.material and slot.material.use_nodes and not maps:
             bsdf = slot.material.node_tree.nodes["Principled BSDF"]
             bsdf.inputs["Roughness"].default_value = 0.7
             bsdf.inputs["Metallic"].default_value = 0.0
@@ -237,5 +240,7 @@ for item in look.args():
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)
     path = os.path.join(OUT, f"{item}.glb")
-    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_extras=True)
-    print("HELD", item, f"{length} m, held {held_from_end} m from its end, carried at {carry_tilt} degrees")
+    kept = {"export_tangents": True, "export_image_format": "JPEG", "export_jpeg_quality": 85} if maps else {}
+    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_extras=True, **kept)
+    print("HELD", item, f"{length} m, held {held_from_end} m from its end, carried at {carry_tilt} degrees",
+          "its textures kept" if maps else "")
