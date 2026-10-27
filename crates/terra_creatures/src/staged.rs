@@ -174,24 +174,14 @@ struct Animates {
 }
 
 pub fn plugin(app: &mut App) {
+    figures(app);
     app.add_systems(
         Update,
         (
-            (dress, stage, animate, fireside::keep_clear).chain(),
+            fireside::keep_clear.after(animate),
             quench::quench,
             wake::ease,
         ),
-    )
-    .add_systems(
-        PostUpdate,
-        hold.after(bevy::animation::transition::advance_transitions)
-            .before(bevy::animation::animate_targets),
-    )
-    .add_systems(
-        PostUpdate,
-        pose::bend
-            .after(bevy::app::AnimationSystems)
-            .before(bevy::transform::TransformSystems::Propagate),
     );
     impact::plugin(app);
     method(app, "staged.spawn", spawn);
@@ -202,6 +192,23 @@ pub fn plugin(app: &mut App) {
     method(app, "staged.bend", bend);
     method(app, "staged.morph", wake::morph);
     method(app, "staged.glow", wake::glow);
+}
+
+/// What dresses, moves, animates and bends the figures, without the remote's methods or the
+/// fires they keep, so a headless app runs the same systems the game does.
+fn figures(app: &mut App) {
+    app.add_systems(Update, (dress, stage, animate).chain())
+        .add_systems(
+            PostUpdate,
+            hold.after(bevy::animation::transition::advance_transitions)
+                .before(bevy::animation::animate_targets),
+        )
+        .add_systems(
+            PostUpdate,
+            pose::bend
+                .after(bevy::app::AnimationSystems)
+                .before(bevy::transform::TransformSystems::Propagate),
+        );
 }
 
 /// Whether clips fit a model's skeleton: most of the bones they move are its bones, by the
@@ -848,3 +855,5 @@ fn bend(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod walk_tests;
