@@ -5,7 +5,6 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Glb } from "./glb.ts";
 
@@ -55,15 +54,8 @@ test("the mannequin holds every clip the game plays", () => {
   assert.deepEqual(faults(lengths, want, lengths), [], `${mannequin}: run clips.py`);
 });
 
-// base.glb as 867457fa, 2bad8ea4 and 59966daa left it (28 clips of 34), until the retarget
-// round rebuilds it: only this file's failure is let through, as a todo, so any rebuild makes
-// the test strict again. Delete this line once base.glb's hash differs.
-const STALE_BASE = "9e64d9bf8304d9d31558f66a4227cbce4475ed227c91fc64c79f6a8aa3b8199c";
-const sha256 = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
-
 for (const file of ["assets/models/character/fight.glb", "assets/models/character/base.glb"]) {
-  const todo = sha256(file) === STALE_BASE ? "base.glb is stale until the retarget round's rebuild" : undefined;
-  test(`${file} holds every clip the game plays, as long as the mannequin's`, { todo }, () => {
+  test(`${file} holds every clip the game plays, as long as the mannequin's`, () => {
     assert.deepEqual(faults(lengthsOf(file), want, lengthsOf(mannequin)), [], `${file}: rebuild it (build_bodies.sh)`);
   });
 }
