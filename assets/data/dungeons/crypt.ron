@@ -25,6 +25,7 @@
         pier: "models/props/barrow/Pier.glb",
         niche: "models/props/barrow/Loculus.glb",
         remains: ["models/props/barrow/Shroud.glb", "models/props/barrow/Bones.glb"],
+        sarcophagus: Some("models/props/barrow/Sarcophagus.glb"),
         spring: 2.95,
     )),
     features: (goal: "relic_dais", key: "ossuary_altar", rest: "campfire", stair: "stair"),

@@ -171,6 +171,10 @@ pub struct Kit {
     pub remains: Vec<String>,
     /// The vaults' springing over the floor, metres: where the pieces were made to spring.
     pub spring: f32,
+    /// A stone tomb over a `sarcophagus` module's 2 m by 1 m by 1 m of cubes, its origin the
+    /// middle of its base, its length along its X; the cubes alone where none is given.
+    #[serde(default)]
+    pub sarcophagus: Option<String>,
 }
 
 fn one() -> f32 {

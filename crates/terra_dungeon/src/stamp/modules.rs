@@ -156,11 +156,17 @@ pub(super) fn lay(
                 f.fill(ops, [m - 1, -1, z0], [m, -1, z1], solid(kinds.trim));
             }
             // Two metres long, a metre deep and high.
-            Class::Sarcophagus if walled(0) => {
-                f.fill(ops, [m - 2, 0, 1], [m + 1, 1, 2], solid(kinds.wall));
-            }
             Class::Sarcophagus => {
-                f.fill(ops, [m - 2, 0, m - 1], [m + 1, 1, m], solid(kinds.wall));
+                let z = if walled(0) { 1 } else { m - 1 };
+                f.fill(ops, [m - 2, 0, z], [m + 1, 1, z + 1], solid(kinds.wall));
+                if let Some(tomb) = theme.kit.as_ref().and_then(|k| k.sarcophagus.as_ref()) {
+                    out.pieces.push(super::Piece {
+                        model: tomb.clone(),
+                        at: f.point(MID, 0.0, z as f32 + 1.0),
+                        facing: f.side(2),
+                        scale: glam::Vec3::ONE,
+                    });
+                }
             }
             Class::Timber => {
                 // Each set where its cell puts it along the bay, and one in four with a post

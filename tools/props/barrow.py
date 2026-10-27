@@ -19,10 +19,14 @@ the textures rather than the triangles (art-style.md rule 1):
 - `Loculus`: a burial niche's dressed front, a sill, jambs and a lintel round an opening 2 m by
   1 m, on the face of a loculi wall. Origin the foot of the opening's middle on the wall's face.
 - `Shroud`, `Bones`: what lies in a loculus, a body bound in linen; a skull and long bones.
+- `Sarcophagus`: a stone tomb chest 2.2 m by 1.1 m on a plinth, a moulded lid and a recumbent
+  effigy on it, over the 2 m by 1 m by 1 m of cubes the crypt's `sarcophagus` module lays (its
+  cubes still what is walked into). Origin the middle of its base, its length along X. Its
+  ashlar darker than the arches', toward the Barrowstone walls round it.
 
-    tools/blender/run.sh tools/props/barrow.py
+    tools/blender/run.sh tools/props/barrow.py [Name ...]
 
-Writes them to assets/models/props/barrow/. The rubble is `castle_wall_varriation` (the crypt's
+Writes them (or only those named) to assets/models/props/barrow/. The rubble is `castle_wall_varriation` (the crypt's
 walls, Barrowstone, tinted as its pack tints them), the ashlar `large_sandstone_blocks`, bone and
 linen `white_stucco` tinted (assets/materials, README there), at their real sizes and cut to
 1024 pixels. Nothing is random from run to run.
@@ -30,6 +34,7 @@ linen `white_stucco` tinted (assets/materials, README there), at their real size
 
 import math
 import os
+import sys
 
 import bmesh
 import bpy
@@ -403,6 +408,31 @@ def bones():
     return m, [("Bone", "white_stucco", (0.72, 0.65, 0.52)), ("Socket", None, (0.03, 0.025, 0.02))]
 
 
+def sarcophagus():
+    """A plinth, a chest with a base and a cornice moulding, a lid stepped up to a slab, and on
+    it an effigy lying with its hands folded: 2.2 by 1.1 m, 1.25 m to the effigy's chest."""
+    m = Mesh()
+    m.box((-1.12, -0.57, 0.0), (1.12, 0.57, 0.12), 0, ASHLAR_M, 0.03)
+    m.box((-1.06, -0.51, 0.12), (1.06, 0.51, 0.20), 0, ASHLAR_M, 0.03)
+    m.box((-1.02, -0.47, 0.20), (1.02, 0.47, 0.82), 0, ASHLAR_M, 0.02, band=BAND)
+    m.box((-1.07, -0.52, 0.82), (1.07, 0.52, 0.90), 0, ASHLAR_M, 0.03)
+    m.box((-1.10, -0.55, 0.90), (1.10, 0.55, 1.00), 0, ASHLAR_M, 0.035)
+    m.box((-1.00, -0.44, 1.00), (1.00, 0.44, 1.06), 0, ASHLAR_M, 0.03)
+
+    def body(t):
+        head = 0.75 + 0.25 * math.cos(min(1.0, abs(t - 0.92) / 0.08) * math.pi / 2)
+        waist = 1.0 - 0.4 * max(0.0, 0.7 - t)
+        neck = 1.0 - 0.3 * math.exp(-((t - 0.83) / 0.03) ** 2)
+        return min(waist, head if t > 0.85 else 1.0) * neck
+
+    lump(m, (0.02, 0.0, 1.14), (0.86, 0.24, 0.10), 0, segs=20, rings=10, bulge=body)
+    # A cushion under the head, the hands folded on the breast, the feet on a block.
+    m.box((0.66, -0.22, 1.06), (0.94, 0.22, 1.14), 0, ASHLAR_M, 0.03)
+    lump(m, (0.40, 0.0, 1.25), (0.09, 0.12, 0.05), 0, segs=10, rings=6)
+    m.box((-0.98, -0.18, 1.06), (-0.84, 0.18, 1.24), 0, ASHLAR_M, 0.03)
+    return m, [("Ashlar", "large_sandstone_blocks", (0.66, 0.65, 0.66))]
+
+
 def export(name, built):
     m, mats = built
     bmesh.ops.remove_doubles(m.bm, verts=m.bm.verts[:], dist=1e-5)
@@ -434,6 +464,9 @@ def export(name, built):
     )
 
 
-for name, make in (("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Bones", bones)):
+ONLY = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+for name, make in (("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Bones", bones), ("Sarcophagus", sarcophagus)):
+    if ONLY and name not in ONLY:
+        continue
     reset()
     export(name, make())

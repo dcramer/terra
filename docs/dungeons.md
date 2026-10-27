@@ -98,7 +98,7 @@ Status: Decided (D527): the developers on the desk (q-dungeon-themes), "Yes, all
 **What each needs.**
 
 - **Barrow halls**:
-  - Made (`tools/props/barrow.py`, procedural in Blender, laid by the stamp's `kit.rs`): a barrel vault, a groin vault (crossings and hall bays, scaled), a doorway arch, a pier (a pilaster half in a wall), a loculus front, shrouded and bare remains; the ashlar pack `large_sandstone_blocks`. Still to make: a sarcophagus. As first planned, kit pieces made with the models skill and Tripo: a barrel-vault segment over a 3 m span, a cell long; a groin vault for a crossing; a transverse rib with its springers and imposts; a square pier with a base and capital; an arch for a doorway or bay; a loculus front, empty or filled; a sarcophagus.
+  - Made (`tools/props/barrow.py`, procedural in Blender, laid by the stamp's `kit.rs`): a barrel vault, a groin vault (crossings and hall bays, scaled), a doorway arch, a pier (a pilaster half in a wall), a loculus front, shrouded and bare remains; the ashlar pack `large_sandstone_blocks`. A sarcophagus over the `sarcophagus` module's cubes. As first planned, kit pieces made with the models skill and Tripo: a barrel-vault segment over a 3 m span, a cell long; a groin vault for a crossing; a transverse rib with its springers and imposts; a square pier with a base and capital; an arch for a doorway or bay; a loculus front, empty or filled; a sarcophagus.
   - A second stone pack, ashlar.
   - Props: bones, skulls and shrouds.
   - Building gains a dressed piece laid over a run of cubes.
