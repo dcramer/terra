@@ -57,6 +57,32 @@ const BOWL_FIRE: Kindled = Kindled {
 const BOWL_HUNG_OUT_M: f32 = 0.4;
 const BOWL_HUNG_UP_M: f32 = 0.17;
 
+/// The goal's key light, as a game lights its focal point with a light of its own (Skyrim's
+/// and Dark Souls' unseen lights over a relic): a warm spot over the relic's front, in its
+/// frame, on the relic and its plinth. Lit only by the bowls either side, the relic read as a
+/// dark box on a dark plinth between two bright fires (barrow round 17, all three reviewers).
+const GOAL_KEY_AT: Vec3 = Vec3::new(0.0, 2.6, 1.8);
+const GOAL_KEY_ON: Vec3 = Vec3::new(0.0, 0.3, 0.0);
+const GOAL_KEY_LUMENS: f32 = 200_000.0;
+const GOAL_KEY_COLOUR: Color = Color::srgb(1.0, 0.74, 0.48);
+
+fn goal_key() -> impl Bundle {
+    (
+        Name::new("Goal's key light"),
+        SpotLight {
+            color: GOAL_KEY_COLOUR,
+            intensity: GOAL_KEY_LUMENS,
+            range: 8.0,
+            radius: 0.1,
+            shadow_maps_enabled: true,
+            inner_angle: 0.25,
+            outer_angle: 0.45,
+            ..default()
+        },
+        Transform::from_translation(GOAL_KEY_AT).looking_at(GOAL_KEY_ON, Vec3::Y),
+    )
+}
+
 fn bowl_hung(side: usize) -> terra_world::fire::Hung {
     terra_world::fire::Hung(dir(side) * BOWL_HUNG_OUT_M + Vec3::Y * BOWL_HUNG_UP_M)
 }
@@ -232,12 +258,13 @@ pub(super) fn put_up(
                 lock: object.lock,
             };
             if object.role != ObjectRole::Door {
-                inside.spawn((
-                    Name::new(object.name.clone()),
-                    live(),
-                    scene(&assets, &object.model),
-                    Transform::from_translation(object.at).with_rotation(turn),
-                ));
+                let placed = Transform::from_translation(object.at).with_rotation(turn);
+                let name = Name::new(object.name.clone());
+                let mut spawned =
+                    inside.spawn((name, live(), scene(&assets, &object.model), placed));
+                if object.role == ObjectRole::Goal {
+                    spawned.with_child(goal_key());
+                }
                 continue;
             }
             // Shut until a body walks into it (D512).
