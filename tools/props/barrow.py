@@ -421,8 +421,9 @@ def lump(m, centre, radii, mat, segs=10, rings=6, bulge=None, turn=0.0):
 
 def shroud():
     """A body bound in linen, 1.7 m, lying on its back: head, shoulders, the narrowing to the
-    feet, cords round it every 0.3 m."""
+    feet, cords round it every 0.3 m. Grimed, so it lies in the dust."""
     m = Mesh()
+    m.aged = True
 
     def body(t):
         head = 0.75 + 0.25 * math.cos(min(1.0, abs(t - 0.92) / 0.08) * math.pi / 2)
@@ -435,7 +436,9 @@ def shroud():
         x = -0.6 + 0.3 * k
         t = (x / 0.85 + 1) / 2
         lump(m, (x, 0.0, 0.14), (0.025, 0.22 * body(t) + 0.012, 0.14 * body(t) + 0.012), 1, segs=12, rings=6)
-    return m, [("Linen", "white_stucco", (0.52, 0.47, 0.38)), ("Cord", "white_stucco", (0.30, 0.25, 0.18))]
+    # Linen centuries in the dust, a dun grey-brown: at 0.52 it lit to a white bolster in the
+    # torchlight, paler than the floor (dress10's stills).
+    return m, [("Linen", "white_stucco", (0.20, 0.17, 0.13)), ("Cord", "white_stucco", (0.12, 0.09, 0.06))]
 
 
 def debris():
@@ -580,7 +583,8 @@ def urns():
         lathe(m, top, [(0.0, 0.0), (0.11 * s, 0.0), (0.10 * s, 0.025 * s), (0.04 * s, 0.05 * s), (0.03 * s, 0.075 * s), (0.0, 0.08 * s)], 0, STUCCO_M, 12)
         if not lid:
             lathe(m, (x, y, 0.461 * s), [(0.0, 0.0), (0.085 * s, 0.0), (0.0, 0.001)], 1, STUCCO_M, 12)
-    return m, [("Clay", "white_stucco", (0.50, 0.33, 0.22)), ("Ash", None, (0.05, 0.045, 0.04))]
+    # A dark fired clay: at 0.50/0.33/0.22 it lit salmon-pink in the torchlight (dress10's crops).
+    return m, [("Clay", "white_stucco", (0.30, 0.17, 0.10)), ("Ash", None, (0.05, 0.045, 0.04))]
 
 
 def coffin():
@@ -651,39 +655,59 @@ def urn_fallen():
         lump(m, (x, y, 0.0), (rx, ry, rz), 2, segs=10, rings=4)
     lathe(m, (0.38, 0.17, 0.0), [(0.0, 0.0), (0.11 * s, 0.0), (0.10 * s, 0.025 * s), (0.04 * s, 0.05 * s), (0.03 * s, 0.075 * s),
                                  (0.0, 0.08 * s)], 0, STUCCO_M, 12)
-    return m, [("Clay", "white_stucco", (0.50, 0.33, 0.22)), ("Inside", None, (0.05, 0.045, 0.04)),
-               ("Ashes", "white_stucco", (0.24, 0.23, 0.21))]
+    # The ashes a dark charcoal grey: at 0.24 they lit to white blobs in the torchlight (dress10's
+    # reviewers), paler than the floor they lie on.
+    return m, [("Clay", "white_stucco", (0.30, 0.17, 0.10)), ("Inside", None, (0.05, 0.045, 0.04)),
+               ("Ashes", "white_stucco", (0.065, 0.062, 0.058))]
 
 
 def planks():
-    """Two boards of a coffin's lid broken up, 1.05 and 0.65 m by 0.24 m, 3 cm thick, lying
-    apart, each snapped at one end in a jagged break. Grimed, so they lie in the dust. Their
-    wood a step darker than the `Coffin`'s, longer on the floor."""
+    """A coffin's lid broken up and heaped: three boards, 1.1, 0.8 and 0.65 m by 0.26 m and
+    4.5 cm thick, each snapped at one end in a jagged break, two lying side by side and the
+    third thrown across the long one, one end on the floor. Grimed, so they lie in the dust. Their
+    wood a step darker than the `Coffin`'s, longer on the floor. Two thin boards lying apart
+    were a sliver from a room's width off (dress10's reviewers); heaped, they stand 0.1 m."""
     m = Mesh()
     m.aged = True
-    long_ = [(-0.55, -0.12), (0.40, -0.12), (0.46, -0.07), (0.42, -0.02), (0.52, 0.03), (0.47, 0.08), (0.50, 0.12), (-0.55, 0.12)]
-    prism(m, long_, 0.0, 0.03, 0, 0, 2.0)
+    t = 0.045
+    long_ = [(-0.58, -0.13), (0.42, -0.13), (0.48, -0.07), (0.44, -0.02), (0.55, 0.03), (0.49, 0.08), (0.52, 0.13), (-0.58, 0.13)]
+    prism(m, long_, 0.0, t, 0, 0, 2.0)
     since = len(m.bm.verts)
-    short = [(-0.30, -0.11), (0.22, -0.11), (0.30, -0.04), (0.25, 0.02), (0.33, 0.11), (-0.30, 0.11)]
-    prism(m, short, 0.0, 0.03, 0, 0, 2.0)
-    laid(m, since, turn=0.35, at=(0.02, 0.38, 0.0))
+    mid = [(-0.40, -0.13), (0.30, -0.13), (0.36, -0.05), (0.31, 0.01), (0.40, 0.13), (-0.40, 0.13)]
+    prism(m, mid, 0.0, t, 0, 0, 2.0)
+    laid(m, since, turn=0.18, at=(-0.02, 0.35, 0.0))
+    since = len(m.bm.verts)
+    short = [(-0.32, -0.12), (0.24, -0.12), (0.30, -0.06), (0.26, -0.01), (0.33, 0.06), (0.28, 0.12), (-0.32, 0.12)]
+    prism(m, short, 0.0, t, 0, 0, 2.0)
+    # Thrown across the long board, levered on its edge (y -0.13): its sawn end up over the
+    # board, its broken end down on the floor at -Y.
+    laid(m, since, tilt=0.12, turn=-1.35, at=(0.15, -0.20, 0.0375))
     return m, [("Wood", "weathered_planks", (0.40, 0.33, 0.26))]
 
 
 def stand_fallen():
-    """A wooden pricket candle stand, 1.08 m, toppled: lying on the rims of its foot and its
-    iron drip pan, its candle rolled off and out beside it. 1.1 by 0.4 m, its foot at -X."""
+    """A wrought-iron pricket candle stand, 0.73 m, toppled: a thin shaft with a knop, three
+    splayed legs (one up in the air, two on the floor) and a drip pan with its spike, lying on
+    the pan's rim and two legs' feet, its candle rolled off and out beside it. 0.75 by 0.4 m,
+    its foot at -X. The wooden stand of 1.08 m, a broad foot disc and a pan on a thick shaft,
+    read as "an oversized plunger or ladle" (dress10's reviewers)."""
     m = Mesh()
     m.aged = True
     since = len(m.bm.verts)
-    lathe(m, (0.0, 0.0, 0.0), [(0.0, 0.0), (0.14, 0.0), (0.14, 0.03), (0.06, 0.07), (0.03, 0.10), (0.025, 0.60),
-                               (0.035, 0.64), (0.025, 0.68), (0.025, 1.03), (0.0, 1.03)], 0, 1.0, 12)
-    lathe(m, (0.0, 0.0, 1.03), [(0.0, 0.0), (0.10, 0.0), (0.10, 0.03), (0.09, 0.03), (0.0, 0.01)], 1, 1.0, 12)
-    laid(m, since, tilt=math.radians(92.0), at=(-0.54, 0.0, 0.14))
+    for turn in (60.0, 180.0, 300.0):
+        leg = len(m.bm.verts)
+        m.box((0.0, -0.009, -0.007), (0.18, 0.009, 0.007), 0, 1.0)
+        laid(m, leg, tilt=math.radians(38.0), turn=math.radians(turn), at=(0.0, 0.0, 0.11))
+    lathe(m, (0.0, 0.0, 0.09), [(0.0, 0.0), (0.022, 0.0), (0.022, 0.04), (0.0, 0.04)], 0, 1.0, 10)
+    lathe(m, (0.0, 0.0, 0.13), [(0.0, 0.0), (0.011, 0.0), (0.011, 0.25), (0.019, 0.265), (0.019, 0.285), (0.011, 0.30),
+                                (0.011, 0.52), (0.0, 0.52)], 0, 1.0, 8)
+    lathe(m, (0.0, 0.0, 0.65), [(0.0, 0.0), (0.012, 0.0), (0.075, 0.012), (0.078, 0.03), (0.070, 0.03), (0.0, 0.018)], 0, 1.0, 14)
+    lathe(m, (0.0, 0.0, 0.668), [(0.0, 0.0), (0.006, 0.0), (0.0, 0.06)], 0, 1.0, 6)
+    laid(m, since, tilt=math.radians(90.0), at=(-0.36, 0.0, 0.078))
     since = len(m.bm.verts)
-    lathe(m, (0.0, 0.0, 0.0), [(0.0, 0.0), (0.035, 0.0), (0.035, 0.20), (0.028, 0.215), (0.0, 0.215)], 2, STUCCO_M, 10)
-    laid(m, since, tilt=math.radians(90.0), turn=0.5, at=(0.42, 0.22, 0.035))
-    return m, [("Wood", "weathered_planks", (0.32, 0.25, 0.19)), ("Iron", None, (0.10, 0.09, 0.085)), WAX]
+    lathe(m, (0.0, 0.0, 0.0), [(0.0, 0.0), (0.022, 0.0), (0.022, 0.14), (0.017, 0.152), (0.0, 0.152)], 1, STUCCO_M, 10)
+    laid(m, since, tilt=math.radians(90.0), turn=0.6, at=(0.30, 0.20, 0.022))
+    return m, [("Iron", None, (0.085, 0.065, 0.05)), WAX]
 
 
 def export(name, built):
