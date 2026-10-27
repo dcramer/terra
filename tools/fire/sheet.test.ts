@@ -4,8 +4,21 @@ import { test } from "node:test";
 import type { Picture } from "../sandbox/png.ts";
 import { judge, type Metrics } from "./measure.ts";
 import { measure } from "./measure.ts";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { calls, dirAt, FIRES, firesAt, floored, PRESETS, sampled, sandboxArgs, shotsOf, surround } from "./sheet.ts";
+import { calls, dirAt, FIRES, firesAt, floored, HELD_SKY, PRESETS, sampled, sandboxArgs, shotsOf, surround } from "./sheet.ts";
+
+test("every sheet run is staged under the held sky: the dome's 2D clouds, by a switch volume.rs owns", () => {
+  const held = (args: string[]) => args.some((a, i) => a === "--tune" && args[i + 1] === "sky.cloud.volume=0");
+  for (const hour of ["noon", "dusk", "night"]) for (const preset of PRESETS) assert.ok(held(sandboxArgs(hour, preset, "d", "c.jsonl")), `${hour} ${preset || "play"}`);
+  assert.deepEqual(HELD_SKY, ["--tune", "sky.cloud.volume=0"]);
+  // A run ends on a name no plugin registered (tune.rs), so it must be the switch's own, read as one.
+  const volume = readFileSync(new URL("../../crates/terra_world/src/sky/volume.rs", import.meta.url), "utf8");
+  const name = /pub static (\w+): Tunable = Tunable::new\(\s*"sky\.cloud\.volume"/.exec(volume)?.[1];
+  assert.ok(name, "volume.rs declares sky.cloud.volume");
+  assert.match(volume, new RegExp(`tune::register\\(&\\[[^\\]]*&${name}\\b`));
+  assert.match(volume, new RegExp(`${name}\\.get\\(\\) >= 0\\.5`));
+});
 
 /// A picture of one colour, with a flame-white box and, if asked, the band below it lit.
 function picture(ground: [number, number, number], lit: boolean): Picture {

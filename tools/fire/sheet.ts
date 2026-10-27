@@ -8,7 +8,8 @@
 // One scripted sandbox run an hour on the yard: a campfire (a kindled fire, `staged.spawn`
 // with `burns`), a log cabin set alight (the building fire, `fire.light`) and a dragon
 // breathing on a stone wall (its stream and the fireball where it strikes); and one more at
-// ultra (`<hour>/ultra/`) for the breath as the films draw it, marched as a volume (D430). Each fire is shot
+// ultra (`<hour>/ultra/`) for the breath as the films draw it, marched as a volume (D430). Every
+// run is staged under a held sky (`HELD_SKY`, D433): the dome's 2D clouds, not the marched ones. Each fire is shot
 // from a fixed camera five times over 2 s; at each shot `fire.seen` tells each kind's box on
 // the picture, which is the crop measured, and a row's numbers are the mean of its shots'
 // (D433). Prints one line a fire and hour, ✓ or ✗ on each number, and writes
@@ -170,13 +171,21 @@ function run(hour: string, preset: string, dir: string) {
   if (!existsSync(still(dir, last))) throw new Error(`the run at ${hour} made no still at frame ${last}: see ${join(dir, "run.log")}`);
 }
 
+/// The sky a fire gate is staged under (D433, D472): the clouds drawn by the dome's 2D layer, not
+/// marched as volumes (`sky.cloud.volume`, crates/terra_world/src/sky/volume.rs), so sky work
+/// never moves a fire's numbers. The volumetric clouds' arrival (36780a57) moved the sheet's
+/// marched ball at dusk out of its class and the motion films' dusk splits, no fire changed.
+export const HELD_SKY = ["--tune", "sky.cloud.volume=0"];
+
 /// The sandbox's options for a run at an hour and preset into `dir`: the yard, the hour, its
-/// calls, the frames its fires are shot on with their mattes, and the preset if not play's own.
+/// calls, the frames its fires are shot on with their mattes, the held sky, and the preset if
+/// not play's own.
 export function sandboxArgs(hour: string, preset: string, dir: string, callsFile: string): string[] {
   return [
     ...["--offscreen", "--clean", "--picture", PICTURE],
     ...["--experiment", "play", "--level", "yard", "--free-build", "--mute", "--at", "0,0", "--face", "0,30"],
     ...["--time", HOURS[hour] ?? hour, "--date", DATE, "--calls", callsFile, "--shots", `${join(dir, "f")}@${frames(firesAt(preset)).join(",")}`, "--flame-matte"],
+    ...HELD_SKY,
     ...(preset ? ["--quality", preset] : []),
   ];
 }

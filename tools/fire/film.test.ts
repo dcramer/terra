@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { hold, PLACEMENTS, REFERENCE } from "./film.ts";
+import { filmArgs, hold, PLACEMENTS, REFERENCE } from "./film.ts";
+import { HELD_SKY } from "./sheet.ts";
 
 const REF = { HEARTH_A: "1.0", HEARTH_C: "Color::srgb(1.0, 0.5, 0.1)" };
 
@@ -31,6 +32,13 @@ test("the gate films an odd number of placements, at least seven, each a flame s
       // apart at all are independent draws; 0.01 keeps them apart through f32's rounding.
       assert.ok(Math.min(apart, 1 - apart) > 0.01,`placements ${PLACEMENTS[i]} and ${PLACEMENTS[j]} share a seed (${seeds[i].toFixed(3)}, ${seeds[j].toFixed(3)})`);
     }
+});
+
+test("every film is staged under the fire sheet's held sky", () => {
+  const args = filmArgs("o", "o/f", "18.4", 20);
+  const at = args.indexOf("--tune");
+  assert.deepEqual(args.slice(at, at + 2), HELD_SKY);
+  assert.deepEqual(HELD_SKY, ["--tune", "sky.cloud.volume=0"]);
 });
 
 test("the reference names every hearth constant light.rs has", () => {
