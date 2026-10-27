@@ -144,6 +144,22 @@ pub struct Theme {
     pub bestiary: Vec<Mob>,
     pub loot: Vec<Loot>,
     pub modules: Vec<Module>,
+    /// What its rooms are dressed with by what they are for, over their modules' props.
+    #[serde(default)]
+    pub dressing: Vec<Dress>,
+}
+
+/// A room's dressing by its purpose (docs/dungeons.md#run-in): so many props laid against its
+/// walls, each a pick of `props`, as a level designer sets a room out by what happened there
+/// (a guard room's fallen, a treasury's offerings, a rest's stores).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Dress {
+    /// The rooms it dresses; a room of two entries' roles takes both.
+    pub roles: Vec<Role>,
+    /// Each a model under the asset root and its scale.
+    pub props: Vec<(String, f32)>,
+    /// Props a room, least and most, more in a bigger room: so many per four cells.
+    pub count: (u32, u32),
 }
 
 /// A built theme's dressed kit (docs/dungeons.md#themes-d527): models from the asset root the

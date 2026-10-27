@@ -18,6 +18,7 @@
 
 #[cfg(test)]
 mod doorway_tests;
+mod furnish;
 mod kit;
 #[cfg(test)]
 mod leaf_tests;
@@ -235,6 +236,7 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
     }
     let map = cubes(&out.ops);
     runin::run_in(dungeon, &looks, &map, theme.kit.is_some(), &mut out);
+    furnish::lay(dungeon, &theme.dressing, &looks, &map, &mut out);
     out
 }
 
