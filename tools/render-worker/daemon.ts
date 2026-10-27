@@ -13,7 +13,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSyn
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
 import { Display } from "./display.ts";
-import { boxSettings, cleanCommands, collected, displayPlan, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, plan, type Policy, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
+import { boxSettings, cleanCommands, collected, displayPlan, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -103,7 +103,7 @@ export function slotCheckout(b: Box, slot: number, rev: string): string {
 }
 
 /// Runs one job to its end in its slot: its steps in the slot's checkout, then its files into out/.
-export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }, display?: Display): Promise<Job> {
+export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }, display?: Display, pCores?: string): Promise<Job> {
   let job: Job = { ...queued, slot, state: "running", started: new Date().toISOString() };
   r.job = job;
   writeJob(b, job);
@@ -133,7 +133,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
     }
     const dpy = display && needsDisplay(job) ? await display.get() : undefined;
     if (display && needsDisplay(job)) note(`display: ${dpy ?? (display.why ? `none, ${display.why}` : display.describe())}`);
-    for (const step of steps(job)) {
+    for (const step of steps(job, pCores)) {
       if (r.cancelled) break;
       note(`${step.what}: ${step.cmd.join(" ")}`);
       if (step.run && !ran) (startedMs = Date.now()), (ran = true);
@@ -230,7 +230,10 @@ async function daemon(b: Box): Promise<number> {
   const beat = () => writeFileSync(join(b.dir, "daemon.json"), JSON.stringify({ pid: process.pid, mode, rev, since, beat: new Date().toISOString(), status, display: display.describe() }));
   const running = new Map<string, Running>();
   housekeep(b, s.keepDays);
-  say(`render daemon at ${rev}, ${mode}, pid ${process.pid}, ${s.slots.slots} slots (${s.slots.gpuSlots} for GPU jobs)`);
+  // A bench runs on the performance cores of a hybrid processor (jobs.ts `steps`).
+  const lscpu = spawnSync("lscpu", ["-p=CPU,MAXMHZ"], { encoding: "utf8" });
+  const pCores = lscpu.status === 0 && spawnSync("taskset", ["-V"]).status === 0 ? performanceCores(lscpu.stdout) : undefined;
+  say(`render daemon at ${rev}, ${mode}, pid ${process.pid}, ${s.slots.slots} slots (${s.slots.gpuSlots} for GPU jobs), benches on ${pCores ? `processors ${pCores}` : "any processor"}`);
   let wakeUp = () => {};
   watch(b.dir, (_e, name) => name === "wake" && wakeUp());
   let lastWhy = "";
@@ -247,7 +250,7 @@ async function daemon(b: Box): Promise<number> {
       const r: Running = { job, cancelled: false };
       running.set(job.id, r);
       say(`slot ${slot}: running ${job.id} (${short(job)})`);
-      runJob(b, job, slot, r, display).then((j) => {
+      runJob(b, job, slot, r, display, pCores).then((j) => {
         say(`${j.state === "done" ? "✓" : "✗"} slot ${slot}: ${j.id} ${j.state}: ${j.note}`);
         running.delete(j.id);
         wakeUp();

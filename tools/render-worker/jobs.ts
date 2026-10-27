@@ -299,12 +299,16 @@ export type Start = { job: Job; slot: number };
 /// they make every later one faster, each in the slot it warms; then the oldest queued. A GPU
 /// job waits while TERRA_RENDER_GPU_SLOTS run, and a CPU job behind it may pass. A bench has
 /// the box alone, card and cores, since a build beside it moves its frame times (D185): it waits
-/// for every running job to end, and nothing queued behind it starts meanwhile.
+/// for every running job to end, and nothing queued behind it starts meanwhile, a warm build
+/// after an update neither.
 export function plan(jobs: Job[], s: Slots): { start: Start[]; why?: string } {
   const running = jobs.filter((j) => j.state === "running");
   const busy = new Set(running.map((j) => j.slot ?? 1));
   let gpu = running.filter((j) => classOf(j) !== "cpu").length;
-  const queued = jobs.filter((j) => j.state === "queued").sort((a, b) => Number(b.kind === "warm") - Number(a.kind === "warm") || a.id.localeCompare(b.id));
+  const firstBench = jobs.filter((j) => j.state === "queued" && classOf(j) === "bench").sort((a, b) => a.id.localeCompare(b.id))[0];
+  const queued = jobs
+    .filter((j) => j.state === "queued" && (!firstBench || j.id.localeCompare(firstBench.id) <= 0))
+    .sort((a, b) => Number(b.kind === "warm") - Number(a.kind === "warm") || a.id.localeCompare(b.id));
   const pinned = (j: Job) => (j.slot && j.slot <= s.slots ? j.slot : undefined);
   const reserved = new Set(queued.map(pinned).filter((n) => n !== undefined));
   const start: Start[] = [];
@@ -430,8 +434,11 @@ export type Step = { what: string; cmd: string[]; run?: boolean };
 
 /// The box's steps for a job in its slot's checkout, a worktree of the clone its commit was
 /// pushed to, so the commit is there already: what each is, as a command, so `plan` can print
-/// them and the daemon runs them in order. The `run` steps are niced and held to the job's limit.
-export function steps(job: Job): Step[] {
+/// them and the daemon runs them in order. The `run` steps are held to the job's limit, and
+/// niced, but a bench's: it has the box alone, so it runs at the normal priority (niced, the
+/// box's own services outrank it), on the performance cores when `pCores` names them
+/// (`performanceCores`), so its main and render threads never land on an efficiency core.
+export function steps(job: Job, pCores?: string): Step[] {
   const s: Step[] = [
     { what: "check out the job's commit", cmd: ["git", "checkout", "-q", "--detach", "--force", job.rev] },
     { what: "clean all but the build", cmd: ["git", "clean", "-q", "-ffdx", "-e", "target/"] },
@@ -439,8 +446,35 @@ export function steps(job: Job): Step[] {
   if (job.patch) s.push({ what: `PATCH, not a commit: uncommitted changes on ${job.patch.base.slice(0, 9)}`, cmd: ["git", "--no-pager", "diff", "--stat", job.patch.base, job.rev] });
   if (job.cook) s.push({ what: "cook textures", cmd: ["cargo", "xtask", "cook"] });
   const runs = job.kind === "warm" ? WARM : [job.command];
-  for (const cmd of runs) s.push({ what: job.kind === "warm" ? "warm build" : "run", cmd: ["nice", "-n", "10", ...cmd], run: true });
+  const bench = job.kind === "run" && classOf(job) === "bench";
+  const prefix = bench ? (pCores ? ["taskset", "-c", pCores] : []) : ["nice", "-n", "10"];
+  for (const cmd of runs) s.push({ what: job.kind === "warm" ? "warm build" : "run", cmd: [...prefix, ...cmd], run: true });
   return s;
+}
+
+/// The performance cores of a hybrid processor, as a `taskset -c` list (`0-15`), from
+/// `lscpu -p=CPU,MAXMHZ`: the logical processors whose top clock is nearer the fastest's than
+/// the slowest's (an i9-14900K's P-cores reach 5.7-6.0 GHz, its E-cores 4.4), none when every
+/// processor tops out alike or lscpu does not say.
+export function performanceCores(lscpu: string): string | undefined {
+  const rows = lscpu
+    .split("\n")
+    .filter((line) => line.trim() && !line.startsWith("#"))
+    .map((line) => line.split(",").map(Number))
+    .filter(([cpu, mhz]) => Number.isInteger(cpu) && mhz > 0);
+  if (!rows.length) return undefined;
+  const top = Math.max(...rows.map(([, mhz]) => mhz));
+  const low = Math.min(...rows.map(([, mhz]) => mhz));
+  if (top - low < 0.1 * top) return undefined;
+  const cpus = rows.filter(([, mhz]) => mhz > (top + low) / 2).map(([cpu]) => cpu).sort((a, b) => a - b);
+  const ranges: string[] = [];
+  for (let i = 0; i < cpus.length; ) {
+    let j = i;
+    while (j + 1 < cpus.length && cpus[j + 1] === cpus[j] + 1) j++;
+    ranges.push(i === j ? `${cpus[i]}` : `${cpus[i]}-${cpus[j]}`);
+    i = j + 1;
+  }
+  return ranges.join(",");
 }
 
 // ---- A stale build, cleaned and tried again ----

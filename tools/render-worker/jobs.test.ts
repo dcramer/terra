@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boxSettings, chooseWorker, cleanCommands, collected, config, displayPlan, expired, freeDisplay, gpuFix, ID, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, plan, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
+import { boxSettings, chooseWorker, cleanCommands, collected, config, displayPlan, expired, freeDisplay, gpuFix, ID, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -132,6 +132,11 @@ test("slots: four jobs at once, the GPU cap holds and CPU jobs pass, a bench wai
   // On an empty box it starts alone, and while it runs nothing else does.
   assert.deepEqual(slotsOf(plan([bench, at(3, cpu)], s)), [["02", 1]]);
   assert.deepEqual(plan([{ ...bench, state: "running", slot: 1 }, at(3, cpu)], s), { start: [], why: "a bench has the box" });
+  // A warm build queued after it (an update) waits behind it too; one queued before goes first.
+  const warmAfter = at(4, { kind: "warm", slot: 2, class: "cpu" });
+  assert.deepEqual(plan([at(1, { ...cpu, state: "running", slot: 3 }), bench, warmAfter], s), { start: [], why: "a bench waits for the box to empty" });
+  assert.deepEqual(slotsOf(plan([bench, warmAfter], s)), [["02", 1]]);
+  assert.deepEqual(slotsOf(plan([at(1, { kind: "warm", slot: 2, class: "cpu" }), bench], s)), [["01", 2]]);
 });
 
 test("warm builds go first, each in the slot it warms, and other jobs keep off those slots", () => {
@@ -208,6 +213,24 @@ test("a job's steps: a clean checkout of its commit, cook unless told not, the c
   assert.ok(!steps(job({ cook: false })).some((x) => x.what === "cook textures"));
   const warm = steps(job({ kind: "warm" }));
   assert.deepEqual(warm.filter((x) => x.run).map((x) => x.cmd.slice(3)), WARM);
+  // A bench is never niced, and runs on the performance cores where the box has them.
+  const bench = job({ command: ["cargo", "xtask", "bench", "crypt"] });
+  assert.deepEqual(steps(bench, "0-15").at(-1)!.cmd, ["taskset", "-c", "0-15", "cargo", "xtask", "bench", "crypt"]);
+  assert.deepEqual(steps(bench).at(-1)!.cmd, ["cargo", "xtask", "bench", "crypt"]);
+  assert.deepEqual(steps(job(), "0-15").at(-1)!.cmd.slice(0, 3), ["nice", "-n", "10"]);
+});
+
+test("a hybrid processor's performance cores, from lscpu's top clocks", () => {
+  // An i9-14900K: 8 P-cores with two threads each (two favoured at 6.0 GHz, six at 5.7), 16 E-cores at 4.4.
+  const p = Array.from({ length: 16 }, (_, i) => `${i},${i < 4 ? "6000.0000" : "5700.0000"}`);
+  const e = Array.from({ length: 16 }, (_, i) => `${16 + i},4400.0000`);
+  const text = ["# The following is the parsable format", "# CPU,MAXMHZ", ...p, ...e].join("\n") + "\n";
+  assert.equal(performanceCores(text), "0-15");
+  // Interleaved numbering comes out as ranges.
+  assert.equal(performanceCores("0,5000\n1,3000\n2,5000\n3,5000\n4,3000\n"), "0,2-3");
+  // Every processor alike, or no clocks given: none.
+  assert.equal(performanceCores("0,4000\n1,4000\n"), undefined);
+  assert.equal(performanceCores("0,\n1,\n"), undefined);
 });
 
 test("a --dirty job says it runs a patch: its id, its line in lists and a step in its log, never the snapshot's sha", () => {
