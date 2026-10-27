@@ -16,8 +16,8 @@ the textures rather than the triangles (art-style.md rule 1):
   wall face under the arch's middle, its front +Z, the wall's face at Z 0.
 - `Pier`: a square ashlar pier, a plinth, its shaft and a capital at the springing, 2.95 m;
   half sunk in a wall, the same piece is a pilaster. Origin the middle of its base.
-- `Loculus`: a burial niche's dressed front, a sill, jambs and a lintel round an opening 2 m by
-  1 m, on the face of a loculi wall. Origin the foot of the opening's middle on the wall's face.
+- `Loculus`: a burial niche's front in the walls' rubble, a sill, jambs and a lintel round an
+  opening 2 m by 1 m, on the face of a loculi wall. Origin the foot of the opening's middle on the wall's face.
 - `Shroud`, `Bones`: what lies in a loculus, a body bound in linen; a skull and long bones.
 - `Sarcophagus`: a stone tomb chest 2.2 m by 1.1 m on a plinth, a moulded lid and a recumbent
   effigy on it, over the 2 m by 1 m by 1 m of cubes the crypt's `sarcophagus` module lays (its
@@ -52,7 +52,7 @@ BAND = (0.09, 0.87)
 # Barrowstone's pack tint (assets/data/packs/barrowstone.ron), so the webs meet the walls.
 RUBBLE = "castle_wall_varriation"
 RUBBLE_TINT = (0.70, 0.70, 0.72)
-# The ashlar warm and a step darker than the rubble's face, so arches, piers and niche fronts read
+# The ashlar warm and a step darker than the rubble's face, so arches and piers read
 # as the same stone dressed rather than a pale kit set in a dark wall (round 10's reviewers: cold
 # blue-grey piers against the warm walls).
 ASHLAR_TINT = (0.62, 0.56, 0.48)
@@ -354,13 +354,15 @@ def pier():
 
 
 def loculus():
-    """A niche's front: a sill, two jambs and a lintel round a 2 m by 1 m opening."""
+    """A niche's front: a sill, two jambs and a lintel round a 2 m by 1 m opening, in the
+    walls' own rubble and tint, laid proud of the wall: in the ashlar, tinted as the arches, the
+    frames read as pale cream boxes pasted on the dark walls (barrow round 16)."""
     m = Mesh()
-    m.box((-1.12, -0.10, -0.12), (1.12, 0.0, 0.02), 0, ASHLAR_M, 0.02)
+    m.box((-1.12, -0.10, -0.12), (1.12, 0.0, 0.02), 0, RUBBLE_M, 0.02)
     for s in (-1, 1):
-        m.box((min(s * 1.0, s * 1.16), -0.08, 0.0), (max(s * 1.0, s * 1.16), 0.0, 1.0), 0, ASHLAR_M, 0.02)
-    m.box((-1.18, -0.10, 1.0), (1.18, 0.0, 1.2), 0, ASHLAR_M, 0.025)
-    return m, [("Ashlar", "large_sandstone_blocks", ASHLAR_TINT)]
+        m.box((min(s * 1.0, s * 1.16), -0.08, 0.0), (max(s * 1.0, s * 1.16), 0.0, 1.0), 0, RUBBLE_M, 0.02)
+    m.box((-1.18, -0.10, 1.0), (1.18, 0.0, 1.2), 0, RUBBLE_M, 0.025)
+    return m, [("Rubble", RUBBLE, RUBBLE_TINT)]
 
 
 def lump(m, centre, radii, mat, segs=10, rings=6, bulge=None):
