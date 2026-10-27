@@ -124,6 +124,12 @@ impl Quality {
         self != Quality::Low
     }
 
+    /// Clouds marched as volumes at half resolution (docs/sky.md stage 2, D515); below high
+    /// the sky's 2D layer and deck draw them.
+    pub fn volume_clouds(self) -> bool {
+        self >= Quality::High
+    }
+
     /// How many steps the haze's light is marched in, if it is drawn at all.
     pub fn haze_steps(self) -> Option<u32> {
         match self {

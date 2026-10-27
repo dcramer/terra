@@ -9,6 +9,7 @@ import bevy_pbr::render::{
     mesh_view_bindings::view,
 };
 import super::dusk::dusk_sky;
+import super::cloud_noise::{hash, wrapped_noise};
 
 // Field order must match SkyMaterial in sky.rs.
 struct Sky {
@@ -45,6 +46,9 @@ struct Sky {
     // Whether there is a weather map, how far from this step's map to the next's, the map's
     // units a metre, and the scene's fair-weather cloud.
     map: vec4<f32>,
+    // Whether the clouds are marched as volumes (cloud_volume.wesl, high and ultra): then this
+    // draws neither the 2D layer nor the deck.
+    volumes: u32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(0)
@@ -63,13 +67,7 @@ var map_next: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(5)
 var map_sampler: sampler;
 
-// Cheap smooth noise for clouds: random values on a grid, blended between.
-fn hash(p: vec3<f32>) -> f32 {
-    let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
-    let r = q + dot(q, q.yzx + 33.33);
-    return fract((r.x + r.y) * r.z);
-}
-
+// Cheap smooth noise: random values on a grid, blended between (cloud_noise.wesl).
 fn noise(p: vec3<f32>) -> f32 {
     let cell = floor(p);
     let f = fract(p);
@@ -85,25 +83,6 @@ fn noise(p: vec3<f32>) -> f32 {
 fn billow(p: vec3<f32>) -> f32 {
     return noise(p) * 0.5 + noise(p * 2.1 + 7.0) * 0.27 + noise(p * 4.3 + 19.0) * 0.15
         + noise(p * 8.9 + 5.0) * 0.08;
-}
-
-// The clouds' lattice repeats every so many cells (clouds::PERIOD), so the clock's offsets
-// wrap there with no seam.
-const PERIOD: f32 = 256.0;
-
-fn wrapped_hash(cell: vec3<f32>) -> f32 {
-    return hash(cell - PERIOD * floor(cell / PERIOD));
-}
-
-fn wrapped_noise(p: vec3<f32>) -> f32 {
-    let cell = floor(p);
-    let f = fract(p);
-    let u = f * f * (3.0 - 2.0 * f);
-    let x00 = mix(wrapped_hash(cell), wrapped_hash(cell + vec3<f32>(1.0, 0.0, 0.0)), u.x);
-    let x10 = mix(wrapped_hash(cell + vec3<f32>(0.0, 1.0, 0.0)), wrapped_hash(cell + vec3<f32>(1.0, 1.0, 0.0)), u.x);
-    let x01 = mix(wrapped_hash(cell + vec3<f32>(0.0, 0.0, 1.0)), wrapped_hash(cell + vec3<f32>(1.0, 0.0, 1.0)), u.x);
-    let x11 = mix(wrapped_hash(cell + vec3<f32>(0.0, 1.0, 1.0)), wrapped_hash(cell + vec3<f32>(1.0, 1.0, 1.0)), u.x);
-    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
 }
 
 // Billowing noise of one of the clouds' fields (0 the shapes, 1 the deck's bellies, 2 its scud)
@@ -416,7 +395,8 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
     let body = drifting(at, 0u);
     let threshold = 1.0 - max(sky.map.w, weather.r) * 0.62;
     // Thinning toward the horizon, where the haze takes over.
-    let cloud = smoothstep(threshold - 0.12, threshold + 0.1, body) * smoothstep(0.02, 0.25, lift);
+    let cloud = smoothstep(threshold - 0.12, threshold + 0.1, body) * smoothstep(0.02, 0.25, lift)
+        * f32(sky.volumes == 0u);
     let sunward = map_way(sun - up * dot(sun, up)) * (0.12 / sky.cloud_scale.x);
     let toward = drifting(at + sunward, 0u);
     let lit = clamp((body - toward) * 4.0 + 0.55, 0.0, 1.0);
@@ -445,7 +425,7 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
     // the deck is and how rain darkens it are the weather map's, so a front's deck stands off
     // on the horizon while the sky overhead is clear (D518).
     let deck_here = 1.0 - weather.b;
-    if deck_here > 0.0 {
+    if deck_here > 0.0 && sky.volumes == 0u {
         let broad = drifting(at, 1u);
         let fine = drifting(at, 2u);
         let rain = weather.g;

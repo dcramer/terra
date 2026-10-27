@@ -16,6 +16,7 @@ mod compiles;
 mod dusk;
 mod moving;
 pub mod noise3d;
+pub mod volume;
 use bevy::{
     camera::visibility::NoFrustumCulling, light::NotShadowCaster, prelude::*, reflect::TypePath,
     render::render_resource::AsBindGroup, shader::ShaderRef,
@@ -163,6 +164,10 @@ struct SkyMaterial {
     /// the map's units a metre, and the scene's fair-weather cloud (`Sky::fair`).
     #[uniform(0)]
     map: Vec4,
+    /// Whether the clouds are marched as volumes (`volume`): then the dome draws neither the
+    /// 2D layer nor the deck.
+    #[uniform(0)]
+    volumes: u32,
     /// The air all round the camera, for the far land's haze.
     #[texture(1, dimension = "cube")]
     #[sampler(2)]
@@ -204,6 +209,7 @@ impl SkyMaterial {
         (tweaks, planet): (&Tweaks, &Planet),
         air: Option<&AirPicture>,
         clouds: &Clouds,
+        volumes: bool,
     ) -> Self {
         let air = air.map(|picture| picture.0.clone());
         let [map_now, map_next] = clouds.maps.clone().map_or([None, None], |m| m.map(Some));
@@ -248,6 +254,7 @@ impl SkyMaterial {
                 1.0 / clouds::MAP_SIDE_M,
                 sky.fair,
             ),
+            volumes: volumes as u32,
             map_now,
             map_next,
         }
@@ -261,25 +268,28 @@ pub struct SkyPlugin;
 
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<SkyMaterial>::default())
-            .init_resource::<Clouds>()
-            .init_resource::<moving::Mapping>()
-            .add_systems(Startup, spawn)
-            .add_systems(
-                Update,
-                (
-                    moving::move_clouds.after(crate::daylight::Ticking),
-                    update
-                        .run_if(
-                            resource_changed::<Sky>
-                                .or_eager(resource_changed::<Tweaks>)
-                                .or_eager(resource_changed::<Clouds>)
-                                .or_eager(resource_added::<AirPicture>),
-                        )
-                        .after(moving::move_clouds),
-                    keep_around_camera,
-                ),
-            );
+        app.add_plugins((
+            MaterialPlugin::<SkyMaterial>::default(),
+            volume::VolumePlugin,
+        ))
+        .init_resource::<Clouds>()
+        .init_resource::<moving::Mapping>()
+        .add_systems(Startup, spawn)
+        .add_systems(
+            Update,
+            (
+                moving::move_clouds.after(crate::daylight::Ticking),
+                update
+                    .run_if(
+                        resource_changed::<Sky>
+                            .or_eager(resource_changed::<Tweaks>)
+                            .or_eager(resource_changed::<Clouds>)
+                            .or_eager(resource_added::<AirPicture>),
+                    )
+                    .after(moving::move_clouds),
+                keep_around_camera,
+            ),
+        );
     }
 }
 
@@ -306,6 +316,7 @@ fn spawn(
             (&tweaks, &planet),
             None,
             &Clouds::default(),
+            false,
         ))),
         Transform::from_scale(Vec3::splat(planet.radius_m() * 20.0)),
         NotShadowCaster,
@@ -319,10 +330,12 @@ fn update(
     planet: Res<Planet>,
     air: Option<Res<AirPicture>>,
     clouds: Res<Clouds>,
+    volumes: Query<(), With<volume::CloudVolumeView>>,
     mut materials: ResMut<Assets<SkyMaterial>>,
 ) {
+    let volumes = !volumes.is_empty();
     for (_, material) in materials.iter_mut() {
-        *material = SkyMaterial::new(&sky, (&tweaks, &planet), air.as_deref(), &clouds);
+        *material = SkyMaterial::new(&sky, (&tweaks, &planet), air.as_deref(), &clouds, volumes);
     }
 }
 

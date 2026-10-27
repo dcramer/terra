@@ -22,6 +22,8 @@ pub(super) struct Clouds {
     pub offsets: [Vec4; 12],
     /// From the world to metres east, up and south of the weather map's middle.
     pub to_map: Mat4,
+    /// The weather map's middle, metres east and south of the start: the offsets' anchor.
+    pub middle: Vec2,
     /// The maps of this step of the clock and the next, and how far through the step it is.
     pub maps: Option<[Handle<Image>; 2]>,
     pub blend: f32,
@@ -32,6 +34,7 @@ impl Default for Clouds {
         Self {
             offsets: clouds::offsets(&CloudWinds::default(), 0.0, Vec2::ZERO),
             to_map: Mat4::IDENTITY,
+            middle: Vec2::ZERO,
             maps: None,
             blend: 0.0,
         }
@@ -186,6 +189,7 @@ pub(super) fn move_clouds(
             middle.as_vec2(),
         ),
         to_map: to_middle * Mat4::from(start.compute_affine().inverse()),
+        middle: middle.as_vec2(),
         maps: Some(handles),
         blend,
     });
