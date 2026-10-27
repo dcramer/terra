@@ -1795,9 +1795,12 @@ fn baked_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
     let gust = BAKED_BEND.x + BAKED_BEND.y * (2.0 * noise3(vec3(time * BAKED_BEND.z, f.seed * 3.1, 0.5)) - 1.0);
     let bent = gust * dot(f.turn, BAKED_SIDE) * p.y / (f.baked.w * fire.sim[1].x);
     let lane = noise3(vec3((across - bent + lean) * BAKED_LANES.x, hg * BAKED_LANES.y - time * BAKED_LANES.z, f.seed * 13.7));
-    let gap = BAKED_LANES.w + BAKED_TAPER * (0.5 - smoothstep(BAKED_TEAR.x, 1.0, hg));
-    let torn = smoothstep(gap - 0.25, gap + 0.25, lane);
-    let flame = max(shed, loop_flame * (1.0 - BAKED_TEAR.z * smoothstep(BAKED_TEAR.x, BAKED_TEAR.y, hg) * torn));
+    let top = smoothstep(BAKED_TOP_TEAR.x, BAKED_TOP_TEAR.y, hg);
+    let gap = BAKED_LANES.w + BAKED_TAPER * (0.5 - smoothstep(BAKED_TEAR.x, 1.0, hg)) - BAKED_TOP_TEAR.z * top;
+    let soft = mix(0.25, BAKED_TOP_TEAR.w, top);
+    let torn = smoothstep(gap - soft, gap + soft, lane);
+    let share = mix(BAKED_TEAR.z, 1.0, top);
+    let flame = max(shed, loop_flame * (1.0 - share * smoothstep(BAKED_TEAR.x, BAKED_TEAR.y, hg) * torn));
     let v = (flame - BAKED_EDGE) / BAKED_SPAN;
     if v < -0.5 {
         return vec3(0.0);
@@ -1856,6 +1859,14 @@ const BAKED_LEAN: vec3<f32> = vec3<f32>(5.0, 0.35, 0.06);
 // 9.04, 6 of 6 at both hours; bent 0.7, 10.51 at dusk but 5 of 6 at night (its lean 7.06).
 // Three judges (g64): 5.88 against main's 5.77.
 const BAKED_BEND: vec3<f32> = vec3<f32>(0.4, 0.15, 0.3);
+// The tear deepened at the top alone, where the tongues are thinnest (top fill 0.87 / 0.82 against
+// RDR2's 0.57 with the soft tear): over x-y of its height (the bake's flame ends near 0.65 of its
+// box, BAKED_FLAME_TOP), the torn share of the noise lowered by z, the tear's softness from 0.25
+// to w and the share taken off from BAKED_TEAR.z to all of it. Over 0.55-1.0, past the flame's
+// top, it moved nothing (g65 v1, v2: top fill 0.88 / 0.83, main's 0.88 / 0.82). As below (g65 v3):
+// top fill dusk / night 0.82 / 0.79, runs 1.45 / 1.49 (main 1.41 / 1.42); the motion gate's lean
+// 9.53 / 9.13, 6 of 6 at both hours; three judges 5.88 against main's 5.85.
+const BAKED_TOP_TEAR: vec4<f32> = vec4<f32>(0.35, 0.65, 0.15, 0.15);
 const BAKED_WHITE: vec4<f32> = vec4<f32>(0.7, 0.25, 1.0, 5.0);
 const BAKED_WHITE_FROM: f32 = 0.95;
 // How far the heart's glow goes to a grey of its own luminance: the ramp's hottest has too
