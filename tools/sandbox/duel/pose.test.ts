@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import type { Board } from "../../characters/clash.ts";
 import { Glb, type Q, posed, qmul } from "../../characters/glb.ts";
-import { ARMS_CM, type Eight, type PoseFrame, type Posed, armsIn, headOff, intoModel, onForearm, poseChecks, shieldHigh } from "./pose.ts";
+import { ARMS_CM, OFF_CM, type Eight, type PoseFrame, type Posed, armsIn, headOff, intoModel, onForearm, poseChecks, shieldHigh } from "./pose.ts";
 
 const body = new Glb(resolve(import.meta.dirname, "../../../assets/models/character/base.glb"));
 const atRest = posed(body, undefined, 0);
@@ -65,17 +65,25 @@ test("the aim is read in the body's own frame, however the body faces", () => {
 });
 
 test("a board lying along the forearm is square to it, a forearm's half and a strap off, its strap where it is hung", () => {
-  // Its face turned to +X (a quarter turn about the up): the forearm, along +Z, in its plane.
-  const fit = onForearm(strapped([0.25, 1.2, 0.12], aboutUp(90)), BOARD);
+  // Its face (the look's -Z) turned to +X, away from the forearm (a quarter turn about the
+  // up): the forearm, along +Z, behind it, in its plane.
+  const fit = onForearm(strapped([0.25, 1.2, 0.12], aboutUp(-90)), BOARD);
   near(fit?.deg, 0, 0.01);
-  // The forearm's middle 5 cm off the board's middle plane, 1 cm of it the board.
+  // The forearm 5 cm behind the board's middle plane, 1 cm of it the board.
   near(fit?.off, 4, 0.01);
   // The hand strap (the origin) 18 cm short of the fist and 5 cm out: sqrt(5² + 18²) cm.
   near(fit?.strap, Math.hypot(5, 18), 0.01);
 });
 
+test("a board through the forearm, the forearm out its face, fails by as far as it is through", () => {
+  // The face turned to -X, toward the forearm, 4 cm out of it: the bar and the 6 cm to its back.
+  near(onForearm(strapped([0.25, 1.2, 0.12], aboutUp(90)), BOARD)?.off, OFF_CM + 6, 0.01);
+  // The board's middle on the forearm: 1 cm into the back.
+  near(onForearm(strapped([0.2, 1.2, 0.12], aboutUp(-90)), BOARD)?.off, OFF_CM + 1, 0.01);
+});
+
 test("a board tipped off the forearm measures the tip", () => {
-  near(onForearm(strapped([0.25, 1.2, 0.12], aboutUp(70)), BOARD)?.deg, 20, 0.01);
+  near(onForearm(strapped([0.25, 1.2, 0.12], aboutUp(-70)), BOARD)?.deg, 20, 0.01);
 });
 
 test("a board's middle is measured over the hips", () => {

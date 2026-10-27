@@ -13,8 +13,8 @@
 //                  the block not held, drawn and in no move (the guard standing and walking): Enshrouded's guard
 //                  carries it at the left hip (research/2026-10-25-shield-prior-art.md).
 //   shield forearm the strapped board against the forearm it rides (elbow to wrist) in every
-//                  drawn frame: the forearm's turn off the board's plane (degrees), the forearm's
-//                  middle off the board's back (cm), and the hand strap (the look's origin, D504)
+//                  drawn frame: the forearm's turn off the board's plane (degrees), the elbow and
+//                  wrist off the board's back (cm, the worse; inside it or out its face fails), and the hand strap (the look's origin, D504)
 //                  off the fist (socket.hand.L), cm. The developer: "you'd have this wrapped
 //                  around the arm in real life ... not uniform with the arm geometry".
 //   arms in body   how deep an arm (hand, fingers, forearm, elbow, upper arm) goes into the
@@ -122,9 +122,19 @@ export function strappedBoard(pose: Posed, b?: Board): { board: Board; grip: V3;
   };
 }
 
-/// The board against the forearm it rides: the forearm's turn off its plane (deg), the
-/// forearm's middle off its back (cm, outside the board's thickness), the hand strap off the
-/// fist (cm).
+/// How far a point lies behind a board's back, opposite `face`, cm; a point inside the board or
+/// out its face reads `OFF_CM` and as far again as it would have to go to be behind it.
+export function behind(p: V3, plate: Board, face: V3): number {
+  const back = face.map((x) => -x / len(face)) as V3;
+  const gap = (dot(sub(p, plate.centre), back) - plate.half) * 100;
+  return gap >= 0 ? gap : OFF_CM - gap;
+}
+
+/// The board against the forearm it rides: the forearm's turn off its plane (deg), the forearm
+/// off its back (cm, the worse of the elbow and the wrist, outside the board's thickness), the
+/// hand strap off the fist (cm). The forearm lies behind the board (opposite its face): a joint
+/// inside the board or out its face is through it and fails (`behind`; round 35: the unsigned
+/// distance this was passed a board through the forearm).
 export function onForearm(pose: Posed, b?: Board): { deg: number; off: number; strap: number } | undefined {
   const s = strappedBoard(pose, b);
   const [elbow, wrist, fist] = ["lowerarm_l", "hand_l", "socket.hand.L"].map((n) => pose.bones[n]);
@@ -133,8 +143,7 @@ export function onForearm(pose: Posed, b?: Board): { deg: number; off: number; s
   const along = sub(w, e);
   const n = s.board.normal.map((x) => x / len(s.board.normal)) as V3;
   const deg = (Math.asin(Math.min(1, Math.abs(dot(along, n)) / len(along))) * 180) / Math.PI;
-  const middle = e.map((x, j) => (x + w[j]) / 2) as V3;
-  const off = (Math.abs(dot(sub(middle, s.board.centre), n)) - s.board.half) * 100;
+  const off = Math.max(behind(e, s.board, s.face), behind(w, s.board, s.face));
   const knuckles = (["index_01_l", "pinky_01_l"].map((k) => pose.bones[k]) as Eight[]).map((k) => (k ? eight(k).t : e)) as [V3, V3];
   return { deg, off, strap: gripOff(eight(fist).t, knuckles, s.grip, s.bar).cm };
 }
@@ -268,7 +277,7 @@ export function shieldForearm(all: Sample[], b?: Board): Check[] {
   };
   return [
     of("deg", "shield off the forearm's line", FOREARM_DEG, "°", "the forearm's turn off the board's plane"),
-    of("off", "shield off the forearm", OFF_CM, "cm", "the forearm's middle off the board's back"),
+    of("off", "shield off the forearm", OFF_CM, "cm", "the elbow or wrist off the board's back (through it fails)"),
     of("strap", "shield strap off the fist", STRAP_CM, "cm", "the hand strap off the fist"),
   ];
 }
