@@ -253,7 +253,7 @@ fn children(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// The Windows temp folder, as a path WSL can use.
-fn windows_temp() -> Option<PathBuf> {
+pub(crate) fn windows_temp() -> Option<PathBuf> {
     let run_from = |program: &str, args: &[&str]| {
         let out = Command::new(program)
             .args(args)

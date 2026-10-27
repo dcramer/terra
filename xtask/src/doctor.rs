@@ -1,6 +1,10 @@
 //! `cargo xtask doctor`: what this machine is missing to build, check and run the game.
 
+use std::path::PathBuf;
+use std::time::Duration;
+
 use crate::windows::{WINDOWS_TARGET, on_wsl};
+use crate::worktrees::{age, gb};
 use crate::{Task, output, root, seed};
 
 /// The task this module runs (D410).
@@ -27,6 +31,14 @@ impl Report {
         if !found {
             println!("            {fix}");
             self.missing_required |= required;
+        }
+    }
+
+    /// Something to look at rather than install: never makes the machine unready.
+    fn look(&mut self, label: &str, fine: bool, fix: &str) {
+        println!("  [{}] {label}", if fine { "ok     " } else { "look   " });
+        if !fine {
+            println!("            {fix}");
         }
     }
 }
@@ -146,6 +158,22 @@ pub(crate) fn doctor() -> bool {
         "cargo xtask seed fast-forwards it once it is on main with no changes and nothing unpushed",
     );
 
+    art_tools(&mut report);
+    if os == "linux" {
+        leftovers(&mut report, on_wsl);
+    }
+
+    println!();
+    if report.missing_required {
+        println!("Some required items are missing. Fix them and run `cargo xtask doctor` again.");
+    } else {
+        println!("This machine is ready.");
+    }
+    !report.missing_required
+}
+
+/// Blender, with the decoder for Tripo's models, and ImageMagick.
+fn art_tools(report: &mut Report) {
     println!("\nArt tools");
     let pinned = std::fs::read_to_string(root().join("tools/blender/version")).unwrap_or_default();
     let pinned = pinned.trim();
@@ -195,14 +223,163 @@ pub(crate) fn doctor() -> bool {
         false,
         "sudo apt install imagemagick (or brew install imagemagick)",
     );
+}
 
-    println!();
-    if report.missing_required {
-        println!("Some required items are missing. Fix them and run `cargo xtask doctor` again.");
-    } else {
-        println!("This machine is ready.");
+/// Free space under which the disks are reported: a worktree's build is several GB, the seed
+/// tens, and on 2026-10-26 117 worktrees had filled the disk to 90%.
+const DISK_FREE_GB: u64 = 50;
+/// A game, Blender or build running this long was left behind by a session that ended.
+const LONG_RUN: Duration = Duration::from_secs(12 * 60 * 60);
+
+/// What sessions left behind (D259): the disks' free space, staged Windows copies, processes
+/// whose folder was deleted under them (a polling loop in a removed worktree) and runs going
+/// for hours. It reports; it kills and deletes nothing.
+fn leftovers(report: &mut Report, on_wsl: bool) {
+    println!("\nWhat sessions left behind (D259)");
+    let prune = "cargo xtask worktrees shows what each worktree holds; --prune clears the ones agents are done with, \
+                 and staged Windows copies idle a day";
+    let mut disks = vec![("the repository's disk", root())];
+    if on_wsl {
+        disks.push(("Windows' disk (C:)", PathBuf::from("/mnt/c")));
     }
-    !report.missing_required
+    for (name, disk) in disks {
+        let df = output("df", &["-Pk", &disk.to_string_lossy()]).and_then(|text| disk_space(&text));
+        let Some((total, free)) = df else { continue };
+        report.look(
+            &format!("{name}: {} free of {}", gb(free), gb(total)),
+            free >= DISK_FREE_GB * 1_000_000_000 && free * 10 >= total,
+            prune,
+        );
+    }
+    if on_wsl {
+        let copies = crate::windows::windows_temp()
+            .and_then(|temp| std::fs::read_dir(temp.join("terra")).ok())
+            .map_or(0, Iterator::count);
+        report.look(
+            &format!("staged Windows copies of the game: {copies} (about 750 MB each)"),
+            copies <= 20,
+            prune,
+        );
+    }
+    let found = processes();
+    for (kind, label, why) in [
+        (
+            Leftover::FolderGone,
+            "no process left in a deleted folder",
+            "their folder is gone; nothing reads what they make",
+        ),
+        (
+            Leftover::LongRun,
+            "no game, Blender or build running over 12 hours",
+            "if nothing waits on them",
+        ),
+    ] {
+        let these: Vec<&Process> = found.iter().filter(|p| leftover(p) == Some(kind)).collect();
+        let mut fix = these
+            .iter()
+            .map(|p| format!("{} {}: {}\n            ", p.pid, age(p.age), p.command))
+            .collect::<String>();
+        let pids: Vec<String> = these.iter().map(|p| p.pid.to_string()).collect();
+        fix.push_str(&format!("kill {}   ({why})", pids.join(" ")));
+        report.look(label, these.is_empty(), &fix);
+    }
+}
+
+/// A `df -Pk` listing's size and free space, in bytes.
+fn disk_space(df: &str) -> Option<(u64, u64)> {
+    let fields: Vec<&str> = df.lines().nth(1)?.split_whitespace().collect();
+    let kb = |i: usize| fields.get(i)?.parse::<u64>().ok().map(|k| k * 1024);
+    Some((kb(1)?, kb(3)?))
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Leftover {
+    FolderGone,
+    LongRun,
+}
+
+/// One of this user's processes, as /proc shows it: its program (the first argument, which may
+/// hold spaces, as `Program Files` does) and its whole command line.
+struct Process {
+    pid: u32,
+    age: Duration,
+    folder_gone: bool,
+    program: String,
+    command: String,
+}
+
+/// Whether a process was left behind, and how. Claude Code sessions are the developer's to
+/// close, and this run and its parents are young.
+fn leftover(p: &Process) -> Option<Leftover> {
+    let program = p.program.as_str();
+    if program.rsplit('/').next() == Some("claude") {
+        return None;
+    }
+    if p.folder_gone {
+        return Some(Leftover::FolderGone);
+    }
+    let run = ["terra_", "blender", "cargo", "rustc", "xtask"]
+        .iter()
+        .any(|name| program.to_lowercase().contains(name));
+    (run && p.age > LONG_RUN).then_some(Leftover::LongRun)
+}
+
+/// This user's processes (others' have no readable folder), from /proc.
+fn processes() -> Vec<Process> {
+    let uptime = std::fs::read_to_string("/proc/uptime")
+        .ok()
+        .and_then(|text| text.split_whitespace().next()?.parse::<f64>().ok());
+    let Some(uptime) = uptime else {
+        return Vec::new();
+    };
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    for entry in entries.flatten() {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|n| n.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let dir = entry.path();
+        let (Ok(folder), Ok(stat), Ok(cmdline)) = (
+            std::fs::read_link(dir.join("cwd")),
+            std::fs::read_to_string(dir.join("stat")),
+            std::fs::read(dir.join("cmdline")),
+        ) else {
+            continue;
+        };
+        let Some(started) = started_s(&stat) else {
+            continue;
+        };
+        let command: String = String::from_utf8_lossy(&cmdline)
+            .replace('\0', " ")
+            .trim()
+            .chars()
+            .take(100)
+            .collect();
+        found.push(Process {
+            pid,
+            age: Duration::from_secs_f64((uptime - started).max(0.0)),
+            folder_gone: folder.to_string_lossy().ends_with(" (deleted)"),
+            program: String::from_utf8_lossy(cmdline.split(|b| *b == 0).next().unwrap_or_default())
+                .into_owned(),
+            command,
+        });
+    }
+    found
+}
+
+/// When a process started, in seconds after boot, from its /proc stat line: the 22nd field, in
+/// clock ticks of 1/100 s (Linux's USER_HZ), counted after the command's closing bracket since
+/// the command may hold spaces.
+fn started_s(stat: &str) -> Option<f64> {
+    let after = &stat[stat.rfind(')')? + 1..];
+    let ticks: f64 = after.split_whitespace().nth(19)?.parse().ok()?;
+    Some(ticks / 100.0)
 }
 
 /// What git is set up to do for the repository: the hooks (D37) and the rendered
@@ -242,7 +419,57 @@ fn node_runs_typescript(version: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::node_runs_typescript;
+    use super::{
+        Duration, Leftover, Process, disk_space, leftover, node_runs_typescript, started_s,
+    };
+
+    #[test]
+    fn a_df_listing_gives_size_and_free_bytes() {
+        let df = "Filesystem 1024-blocks Used Available Capacity Mounted on\n\
+                  /dev/sdd 1055762868 950186460 52 90% /\n";
+        assert_eq!(disk_space(df), Some((1055762868 * 1024, 52 * 1024)));
+        assert_eq!(disk_space("Filesystem\n"), None);
+    }
+
+    #[test]
+    fn a_start_is_read_after_the_commands_bracket() {
+        // pid (comm) state, then fields 4 to 21, then starttime (22nd) in ticks.
+        let stat = "42 (zsh -c until x) S 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 123456 0 0";
+        assert_eq!(started_s(stat), Some(1234.56));
+    }
+
+    #[test]
+    fn leftovers_are_runs_in_gone_folders_or_long_runs_never_a_session() {
+        let process = |command: &str, hours: u64, folder_gone: bool| Process {
+            pid: 1,
+            age: Duration::from_secs(hours * 3600),
+            folder_gone,
+            program: command.split(" -").next().unwrap_or_default().into(),
+            command: command.into(),
+        };
+        let polling = "/usr/bin/zsh -c source /home/u/.claude/shell-snapshots/s.sh && until test -f x; do sleep 3; done";
+        assert_eq!(
+            leftover(&process(polling, 1, true)),
+            Some(Leftover::FolderGone)
+        );
+        let game =
+            "/mnt/c/Users/u/AppData/Local/Temp/terra/terra_sandbox-duel/terra_sandbox.exe --duel";
+        assert_eq!(leftover(&process(game, 13, false)), Some(Leftover::LongRun));
+        assert_eq!(leftover(&process(game, 2, false)), None);
+        assert_eq!(
+            leftover(&process(
+                "/mnt/c/Program Files/Blender/blender.exe -b",
+                30,
+                false
+            )),
+            Some(Leftover::LongRun)
+        );
+        assert_eq!(
+            leftover(&process("/home/u/.local/bin/claude --resume", 90, true)),
+            None
+        );
+        assert_eq!(leftover(&process("/usr/bin/zsh", 90, false)), None);
+    }
 
     #[test]
     fn node_runs_typescript_from_22_18() {

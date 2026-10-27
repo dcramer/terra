@@ -488,7 +488,7 @@ fn usage(path: &Path) -> Usage {
     }
 }
 
-fn age(idle: Duration) -> String {
+pub(crate) fn age(idle: Duration) -> String {
     match idle.as_secs() / HOUR.as_secs() {
         0 => format!("{}m", idle.as_secs() / 60),
         hours @ 1..48 => format!("{hours}h"),
@@ -496,7 +496,7 @@ fn age(idle: Duration) -> String {
     }
 }
 
-fn gb(bytes: u64) -> String {
+pub(crate) fn gb(bytes: u64) -> String {
     match bytes {
         0 => "-".into(),
         b if b < 100_000_000 => format!("{} MB", b / 1_000_000),

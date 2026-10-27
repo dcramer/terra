@@ -21,7 +21,7 @@ A checkout made without git-lfs holds pointers where those files go: install it 
 
 It installs what Cargo cannot install for itself, when it is missing: rustup and the pinned compiler, Xcode's command line tools on macOS, and Bevy's libraries on Debian or Ubuntu (with `sudo`; under WSL also MinGW and the Windows target). It then points git at the hooks, builds the game and runs `cargo xtask doctor` (D387). Node it only checks for. `make` lists the everyday tasks, each a `cargo xtask` task; the Makefile stays that thin, and anything with logic goes in `xtask`.
 
-`cargo xtask doctor` reads the pinned compiler version from `rust-toolchain.toml`, installs nothing itself, and lists what is missing with the command that fixes each item. The first `cargo` command in the repository downloads the pinned compiler.
+`cargo xtask doctor` reads the pinned compiler version from `rust-toolchain.toml`, installs nothing itself, and lists what is missing with the command that fixes each item. The first `cargo` command in the repository downloads the pinned compiler. On Linux it also lists what sessions left behind (D259), without deleting anything: each disk under 50 GB or 10% free, under WSL the game copies staged in Windows' temp folder, processes whose folder was deleted under them (a polling loop in a removed worktree) and a game, Blender or build running over 12 hours, with their pids.
 
 | Platform | What you need beyond rustup |
 |---|---|
