@@ -14,6 +14,8 @@ tools/blender/run.sh path/to/script.py --open scene.blend [args...]
 - **Start:** without `--open`, Blender starts from its factory settings with the default scene, without anyone's preferences or add-ons.
 - **Output:** Blender's noise is filtered out. The exit code is the script's: an uncaught error gives 1, and `SystemExit(n)` gives `n`.
 
+**[campfire.py](campfire.py)** builds the campfire from the scans [tools/props/campfire.ts](../props/campfire.ts) lays out (`props.ts refine campfire` runs both): it cuts, scales and seats each log, stone and stick, chars the logs and bakes their colour, normal and crack-glow maps high to low, with the worn ground under it, written as one glTF binary for campfire.ts to add the coal bed to.
+
 **[scan.py](scan.py)** makes a scanned model, such as a Poly Haven rock or fern, placeable by the hundred: each piece welded, cut to a triangle budget with its textures kept, its foot at the origin, written as its own glTF binary. `tools/blender/run.sh tools/blender/scan.py MODEL.gltf OUT_PREFIX BUDGET [--whole] [--loose] [--crease DEG]`: `--loose` takes a set scanned as one object a loose part at a time, largest first, and `--crease` splits normals at creases rather than smoothing everywhere, as `tools/props/scans.ts` asks for the flora file's rocks.
 
 **[tips.py](tips.py)** finds where a modelled tree's leaves go, for a crown of cards grown on a modelled trunk (D235): `tools/blender/run.sh tools/blender/tips.py MODEL.glb OUT.ron [--from 0.5] [--clump 1.0]` measures how far each point is from the foot along the surface, gathers the points past `--from` of the longest path into clumps a `--clump` apart, each with the way its branch runs and a mass by side and height, and writes them as RON for `assets/data/trees`.
