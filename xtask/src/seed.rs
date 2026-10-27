@@ -76,7 +76,14 @@ const BUILDS: &[&[&str]] = &[
         "--example",
         "artifacts",
     ],
-    &["build", "-p", "terra_sandbox"],
+    // The sandbox's dev build, as xtask and the remote build it (`tasks::sandbox::dev_features`).
+    &[
+        "build",
+        "-p",
+        "terra_sandbox",
+        "--features",
+        "track_location",
+    ],
     // The sandbox optimised, which every render, shot, film and bench runs: Bevy in release
     // is 4 minutes and 2.7 GB a worktree built alone (D406).
     &["build", "--release", "-p", "terra_sandbox"],
@@ -84,7 +91,15 @@ const BUILDS: &[&[&str]] = &[
 
 /// Under WSL, the Windows builds `play`, `win` and `bench` make, on the real GPU.
 const WINDOWS_BUILDS: &[&[&str]] = &[
-    &["build", "--target", WINDOWS_TARGET, "-p", "terra_sandbox"],
+    &[
+        "build",
+        "--target",
+        WINDOWS_TARGET,
+        "-p",
+        "terra_sandbox",
+        "--features",
+        "track_location",
+    ],
     &[
         "build",
         "--target",

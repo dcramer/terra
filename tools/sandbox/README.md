@@ -28,6 +28,7 @@ r press 5 e@10:60                        # the bow, then ten frames later draw f
 r wait "An arrow hit" --timeout 20       # or fail, showing what was said instead
 r said                                   # everything said since the last action
 r diff before                            # only what changed since: ~ health: 100 -> 80, - carrying.arrow: 1
+r why Player Transform                   # what last wrote it: crates/terra_world/src/tick.rs:114 in show, frame 1029, 14 frames ago
 ```
 
 Trying values of a number in one running game, with no rebuild ([tunables](../../docs/development.md#tunables), D547):
@@ -64,6 +65,7 @@ r tune reset                             # back to their defaults: sky.cloud.hea
 | `state` | In play: where the player is and faces, their body, what they hold, carry and wear, and the creatures and people within 40 m |
 | `snap NAME` | In play: keep `state` and `build.state` as `shots/snaps/NAME.json` (D400) |
 | `diff A [B\|now] [--epsilon m] [--most N]` | What changed from snap A to B, or to the run now: a line a change, `~` changed, `+` appeared, `-` went, `#` how many changed, numbers within 0.01 the same, at most 40 lines and a count of the rest. Things in a list are matched by what they are (`id`, `name`, `who`, `what`, `kind`), and among several of a kind, nearest to nearest by `at` ([snap.ts](snap.ts)) |
+| `why ENTITY [COMPONENT] [--json]` | What changed this? (D548): who spawned an entity, given by the id `find` gives or by name (exactly, in any case, then a part of it, as `find`), and for each of its components, or those named (by type path, as Bevy's `world.*` methods name them, by name in any case, then a part of it), the line of code and the function it is in (for a system, its name) that last changed it, and on which frame and how many frames ago, the latest first. A frame is the one the change's tick fell in, for the last ten minutes of frames. Lines are kept only by a build with Bevy's `track_location`, as every dev build of the sandbox is (`r start` without `--release`, `cargo xtask sandbox`, `play`, `win`) and no release or bench build is; otherwise it gives the frames and says so. In play, the player's `Transform` is last written by `terra_world::tick`'s `show`, which draws the simulated body between fixed ticks, not by what moved the body |
 | `warp EAST,SOUTH [--facing EAST,SOUTH]` | In play: move the player, as `--warp` does, and wait until they are there |
 | `take ITEM[:COUNT] …` | In play: take raw items away, all of a kind if no count (`meat`, `stone:5`), so a test starts from a known pack |
 | `unpress` | Let go of every key held or queued by `press` |

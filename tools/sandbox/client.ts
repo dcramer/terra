@@ -133,9 +133,11 @@ export async function start(sandboxArgs: string[], { windows, realTime, foregrou
   writeFileSync(PORT_FILE, `${port} ${token}`);
   const args = ["--remote-port", String(port), "--remote-token", token, ...(realTime ? [] : ["--steady"]), ...(foreground ? [] : ["--background"]), ...sandboxArgs];
   writeMark(0);
+  // A dev build keeps the line behind every change, for `why` (D548); `win` adds it itself.
+  const profile = release ? ["--release"] : ["--features", "track_location"];
   const command = windows
     ? ["cargo", ["xtask", "win", "-p", "terra_sandbox", ...(release ? ["--release"] : []), "--copy", own(copy ?? `remote-${port}`), "--", ...args]]
-    : ["cargo", ["run", "-q", ...(release ? ["--release"] : []), "-p", "terra_sandbox", "--", ...args]];
+    : ["cargo", ["run", "-q", ...profile, "-p", "terra_sandbox", "--", ...args]];
   // Windows will not replace a program that is still closing, such as the last run of this
   // one, so a start that ends at once for that reason is tried again.
   const logPath = resolve(ROOT, "shots/remote.log");

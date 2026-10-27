@@ -41,9 +41,22 @@ fn sandbox(args: &[String]) -> bool {
     true
 }
 
-/// A package's program, with some arguments first.
+/// What a dev build of a package is built with beyond its defaults: the sandbox keeps the
+/// line of code behind every spawn and change, for the remote's `why` (D548). Never in a
+/// release or bench build, which are timed; the seed builds the same, so it is linked.
+pub(crate) fn dev_features(package: &str) -> &'static [&'static str] {
+    if package == "terra_sandbox" {
+        &["--features", "track_location"]
+    } else {
+        &[]
+    }
+}
+
+/// A package's program, in a dev build, with some arguments first.
 pub(crate) fn cargo_run(package: &str, first: &[&str], args: &[String]) -> bool {
-    let mut all = vec!["run", "-p", package, "--"];
+    let mut all = vec!["run", "-p", package];
+    all.extend(dev_features(package));
+    all.push("--");
     all.extend(first);
     all.extend(args.iter().map(String::as_str));
     run("cargo", &all)

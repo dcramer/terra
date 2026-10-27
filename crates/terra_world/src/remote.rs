@@ -40,6 +40,8 @@
 //!   `facing` (east, up, south), `size` metres square (half a metre unless told), its colour
 //!   `albedo` in linear light (0.18, an 18% grey card, unless told), rough, not metal. The
 //!   material bench stands them beside what it measures (`cargo xtask material`).
+//! - `sandbox.why {entity, component?}`: who spawned an entity, by id or name, and the line
+//!   that last changed each of its components, or those named, on which frame (`why`, D548).
 //! - `sandbox.quit`: closes the sandbox.
 //! - `sandbox.whoami`: the token it was started with (`--remote-token`), so a script can
 //!   tell the run it started from another session's on the same port.
@@ -69,6 +71,7 @@ use serde_json::{Value, json};
 use std::collections::VecDeque;
 
 mod pointer;
+mod why;
 use pointer::{Pointing, click, drive_pointer, point};
 
 /// How far from what it looks at the camera stands, unless told.
@@ -135,6 +138,7 @@ pub fn plugin(app: &mut App) {
     method(app, "sandbox.whoami", whoami);
     method(app, "world.obstacles", obstacles);
     method(app, "world.solids", solids);
+    why::plugin(app);
     crate::gpu_memory::remote(app);
     crate::tune::remote(app);
     if listen {

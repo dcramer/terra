@@ -120,7 +120,7 @@ pub(crate) fn windows_program(
     profile: &str,
     copy: Option<&str>,
 ) -> Option<(PathBuf, PathBuf)> {
-    let build = [
+    let mut build = vec![
         "build",
         "--target",
         WINDOWS_TARGET,
@@ -129,6 +129,9 @@ pub(crate) fn windows_program(
         "-p",
         package,
     ];
+    if profile == "dev" {
+        build.extend(crate::tasks::sandbox::dev_features(package));
+    }
     if !crate::stage::build(&build) {
         return None;
     }
@@ -185,7 +188,9 @@ pub(crate) fn play(args: &[String]) -> bool {
         ours.extend(game);
         return launch(&ours, true);
     }
-    let mut cargo = vec!["run", "-p", "terra_sandbox", "--"];
+    let mut cargo = vec!["run", "-p", "terra_sandbox"];
+    cargo.extend(crate::tasks::sandbox::dev_features("terra_sandbox"));
+    cargo.push("--");
     cargo.extend(game.iter().map(String::as_str));
     crate::session::play(&root().join("logs"), || run("cargo", &cargo))
 }

@@ -8,6 +8,7 @@ import { parseArgs } from "node:util";
 import * as sandbox from "./client.ts";
 import { call, describe } from "./client.ts";
 import * as snaps from "./snap.ts";
+import { describeWhy, type Why } from "./why.ts";
 
 const triple = (text: string | undefined) => {
   if (text === undefined) return undefined;
@@ -190,6 +191,17 @@ const COMMANDS: Record<string, Command> = {
         const reset = await sandbox.untune(name);
         console.log(reset.length ? `back to their defaults: ${reset.join(", ")}` : "nothing was changed");
       } else throw new Error(`tune list, get, set or reset, not ${verb}`);
+    },
+  },
+  why: {
+    usage: "why ENTITY [COMPONENT] [--json]",
+    help: "what changed this? who spawned an entity (an id as find gives it, or a name), and for each component, or the one named, the line of code and function that last changed it and on which frame",
+    options: { json: { type: "boolean", help: "the answer as the game gives it" } },
+    run: async ({ values, positionals: [entity, component] }) => {
+      if (entity === undefined) throw new Error("usage: why ENTITY [COMPONENT]");
+      const answer = (await call("sandbox.why", { entity: /^\d+$/.test(entity) ? Number(entity) : entity, component })) as Why;
+      if (values.json) print(answer);
+      else console.log(describeWhy(answer).join("\n"));
     },
   },
   shot: { usage: "shot FILE.png", help: "save a screenshot and wait for it", run: async ({ positionals: [file] }) => console.log(await sandbox.shot(file)) },
