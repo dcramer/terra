@@ -8,7 +8,7 @@ pub(crate) const TASKS: &[Task] = &[
         takes: "[args]",
         does: "the sandbox, the test environment; --list for its experiments (crates/terra_sandbox)",
         group: "Look at things",
-        run: |args| cargo_run("terra_sandbox", &[], args),
+        run: sandbox,
     },
     Task {
         name: "workbench",
@@ -25,6 +25,21 @@ pub(crate) const TASKS: &[Task] = &[
         run: |args| node("tools/sandbox/remote.ts", args),
     },
 ];
+
+/// The sandbox with what it was given; with nothing, its experiments, since the planet alone has
+/// no sky, player or game and is only what the experiments build on.
+fn sandbox(args: &[String]) -> bool {
+    if !args.is_empty() {
+        return cargo_run("terra_sandbox", &[], args);
+    }
+    if !cargo_run("terra_sandbox", &["--list"], &[]) {
+        return false;
+    }
+    println!();
+    println!("Start one with: cargo xtask sandbox --experiment <name>");
+    println!("Play the game on the GPU with: cargo xtask play");
+    true
+}
 
 /// A package's program, with some arguments first.
 pub(crate) fn cargo_run(package: &str, first: &[&str], args: &[String]) -> bool {

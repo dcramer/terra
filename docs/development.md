@@ -91,7 +91,7 @@ Every task and tool starts from `cargo xtask`, from anywhere in the repository; 
 | `cargo xtask contract` | The model contract's checker (D303, [art-style.md](art-style.md#the-model-contract)): every model the game places, its size against its catalogue `dims`, its anchor, its sockets, and a door's or shutters' fit in its hole, one line each. `check` runs the same test. |
 | `cargo test -p terra_items` | One crate's tests |
 | `cargo fmt --all` | Format everything |
-| `cargo xtask sandbox` | Open the sandbox, the test environment for graphics and utilities; anything after it goes to the sandbox, and `--list` lists its experiments. See its [README](../crates/terra_sandbox/README.md). |
+| `cargo xtask sandbox` | Open the sandbox, the test environment for graphics and utilities; anything after it goes to the sandbox. With nothing after it, it lists its experiments, since the bare planet has no sky, player or game. See its [README](../crates/terra_sandbox/README.md). |
 | `cargo xtask workbench` | Models in the game's renderer ([Developer tools](#developer-tools)) |
 | `cargo xtask remote <command>` | Drive a running sandbox live ([tools/sandbox](../tools/sandbox/README.md)) |
 | `cargo xtask contract` | The model gallery in a browser, at `http://localhost:8765/` ([tools/models](../tools/models/README.md)) |
