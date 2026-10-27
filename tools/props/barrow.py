@@ -51,7 +51,10 @@ BAND = (0.09, 0.87)
 # Barrowstone's pack tint (assets/data/packs/barrowstone.ron), so the webs meet the walls.
 RUBBLE = "castle_wall_varriation"
 RUBBLE_TINT = (0.70, 0.70, 0.72)
-ASHLAR_TINT = (0.80, 0.80, 0.82)
+# The ashlar warm and a step darker than the rubble's face, so arches, piers and niche fronts read
+# as the same stone dressed rather than a pale kit set in a dark wall (round 10's reviewers: cold
+# blue-grey piers against the warm walls).
+ASHLAR_TINT = (0.62, 0.56, 0.48)
 SPRING = 2.95
 
 
@@ -405,7 +408,7 @@ def bones():
     for k in range(5):
         lump(m, (0.22 + 0.06 * k - 0.1, -0.02 - 0.01 * k, 0.03), (0.012, 0.13, 0.012), 0, segs=6, rings=4)
     lump(m, (0.15, -0.02, 0.05), (0.09, 0.12, 0.04), 0, segs=8, rings=4)
-    return m, [("Bone", "white_stucco", (0.72, 0.65, 0.52)), ("Socket", None, (0.03, 0.025, 0.02))]
+    return m, [("Bone", "white_stucco", (0.50, 0.44, 0.34)), ("Socket", None, (0.03, 0.025, 0.02))]
 
 
 def sarcophagus():
@@ -430,7 +433,7 @@ def sarcophagus():
     m.box((0.66, -0.22, 1.06), (0.94, 0.22, 1.14), 0, ASHLAR_M, 0.03)
     lump(m, (0.40, 0.0, 1.25), (0.09, 0.12, 0.05), 0, segs=10, rings=6)
     m.box((-0.98, -0.18, 1.06), (-0.84, 0.18, 1.24), 0, ASHLAR_M, 0.03)
-    return m, [("Ashlar", "large_sandstone_blocks", (0.66, 0.65, 0.66))]
+    return m, [("Ashlar", "large_sandstone_blocks", (0.56, 0.51, 0.44))]
 
 
 def export(name, built):
