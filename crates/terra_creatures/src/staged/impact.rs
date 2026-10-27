@@ -384,10 +384,11 @@ fn dust(
     at: Vec3,
     colour: Color,
 ) {
-    // Dust is paler and greyer than the stones it comes off: the fine stuff, dry. The material
-    // under the surface can be the soil under a gravel shore, whose mud read as a brown tint
-    // over the troll, so it is mostly a dry stone grey.
-    let colour = colour.mix(&Color::srgb(0.6, 0.59, 0.56), 0.6);
+    // Dust is greyer than the stones it comes off: the fine stuff, dry. The material under the
+    // surface can be the soil under a gravel shore, whose mud read as a brown tint over the
+    // troll, so it is half a dry earth grey; a dark one, as a pale grey lit through by a low
+    // sun read as white paper or snow over the forest's litter (the Cetri's round-7 reviews).
+    let colour = colour.mix(&Color::srgb(0.4, 0.36, 0.31), 0.5);
     let size = s.size;
     for puff in 0..7u32 {
         let middle = puff == 0;
