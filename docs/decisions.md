@@ -94,6 +94,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D520](decisions/D520.md) | The moon's cycle | Design | Developers | Decided | The moon has real phases over a month… |
 | [D522](decisions/D522.md) | How dramatic a storm's sky is | Design | Developers | Decided | A storm's sky is heightened beyond real: darker… |
 | [D527](decisions/D527.md) | Four dungeon themes on a bigger grid: barrow halls, hewn mine, natural caverns, ancient engineered halls | Design | Developers | Decided | Dungeons come in four themes, each a kit reused across… |
+| [D539](decisions/D539.md) | A dungeon's rooms are dressed as room types, each a hero prop, wall props, floor clutter and a story vignette | Design | — | Open | Proposal (dungeons.md, room types)… |
 
 ## The player and survival
 

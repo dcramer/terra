@@ -67,8 +67,31 @@ What the world lays, as plain data in a local frame (metres, x east, y up, z sou
 - **Shell** in the theme's wall, floor and trim kinds: floor and ceiling slabs, a wall a cube thick where placement put one, doorways and stair ways as `Fill::Open` cubes so each space stays a closed room to building's light, stairs of 8 risers over 6 m, a parapet and lintel at the surface.
 - **Modules** to cubes and props by words in their names (pillar, alcove, rubble, basin, shore, runner, decor, ...); an unknown name is plain floor. A pillar row's pillars stand at their cells' middles, the row's end one against its end wall as a respond, none in front of a doorway (a middle one left a metre to the wall on 4 m cells, and the tour squeezed through it). A corridor walled both sides gets a trim rib across its ceiling every cell and its edges worn (a half cube or two at a wall's foot, now and then a stone).
 - **Run-in**: the graph's mobs at free spots away from doors, a chest a room with its loot, the goal object on its plinth between two fire bowls on stone pillars, so it is the brightest thing in its room, and the keys at their features (dungeon objects, not items), studded leaves at locked and one-way doors, each with its lock (a key, or the side a one-way door is barred on), up to 30 torches and braziers (a room's first, then the end walls a corridor's straight legs run into, so no vista ends in a black wall, then a second at the far end of a room of six cells or more, then a corridor's every third cell; past the cap, the rooms' own torches it cut and a torch on a side wall of each stair no torch lights yet, 2 m over its lower cell's step, so no stair is a black hole), the start on the surface and a tour of floor points to the goal by the longest way that enters no room twice, so it walks the loop and never turns round in a dead end (a key room is seen from its doorway), short of a room's middle where its way out is beside its way in, and at the corner where they cross where its doorways are on walls at right angles (round 7 of the barrow: a look swung 25° toward the middle, then 115° back out).
-- **Furnishing** (`stamp/furnish.rs`): after the run-in, a room is dressed by what it is for, as a level designer sets out a guard room with its fallen and a treasury with its grave goods: the theme's `dressing` names props by room role and so many per four cells, laid against the walls of cells whose module leaves them bare, 1.3 m off the tour, 1.6 m from a doorway and 1 m from anything standing (tested over 40 seeds: 8 rooms in 10 dressed, none within 0.9 m of the eye).
+- **Furnishing** (`stamp/furnish.rs`): after the run-in, a room is dressed by what it is for, as a level designer sets out a guard room with its fallen and a treasury with its grave goods: the theme's `dressing` names, by room role, a room type's hero prop, wall props, clutter and vignette ([room types](#room-types-and-their-dressing-d539-open-a-proposal-for-the-developers)), so many per four cells, laid against the walls of cells whose module leaves them bare, 1.3 m off the tour, 1.6 m from a doorway and 1 m from anything standing (tested over 40 seeds: 8 rooms in 10 dressed, none within 0.9 m of the eye).
 - **Promises** (tested over 200 seeds): a walker stepping up a cube and down two reaches every object, chest, mob and fire from the start; air never leaves its space but up the entrance well; every model exists.
+
+### Room types and their dressing (D539, Open: a proposal for the developers)
+
+A crypt makes sense when each room reads as a place something was done in, and something then happened in: environmental storytelling (Smith and Worch, GDC 2010, "What Happened Here?"), set dressing laid over a modular kit as Skyrim's Nordic ruins lay their clutter (Burgess and Purkeypile, GDC 2013), Diablo IV's tile sets dressed by props, interactives and light (its 2022 environment update). The shipped crypts share their room types: Skyrim's burial halls of urns and draugr in alcoves, its guard posts and robbed tombs; Elden Ring's catacombs of ossuary walls and grave candles; The Witcher 3's crypts of sarcophagi, cobwebs and looters' leavings. Their terms: a **hero prop**, the room's one focal piece; **wall props** in rhythm along its walls; **floor clutter**, small things to find in its corners; a **vignette**, a few props laid together that tell a moment.
+
+| Role | Room type | Hero (one) | Wall props | Clutter | Vignette |
+|---|---|---|---|---|---|
+| Entrance | antechamber, where mourners left offerings | offering altar | urns, candles | candles, stone | - |
+| Passage | ossuary passage | a wooden coffin | bones, urns, shrouded dead | stone, candles | - |
+| Branch | robbed tomb | its coffin, lid pushed aside | broken jars, fallen stone | goblets, bowls | the looter's leavings: a chest, spilled goblets, a lantern |
+| Guard | guard post | the guards' bench | the fallen, their axes, a lantern | bones, stone | the last stand: bones, axes, a shroud |
+| Puzzle | ossuary (holds the key) | its altar (the feature) | heaped bones, shrouds, urns | candles, bones | - |
+| Treasure, Secret | treasury of grave goods | a chest | jars, goblets, bowls, urns, chests | goblets, plates, brass | an offering: urns about a chest |
+| Shortcut | chapel | an altar | candles, a shelf of the dead's records, urns | candles | - |
+| Goal | the lord's burial chamber | the relic on its dais (the feature) | urns, jars, goblets, candles | candles | - |
+| Rest | camp of earlier delvers | the campfire (the feature) | sacks, a log, buckets | bowls, a stew pot | a bedroll's pack: a sack, a lantern, bowls |
+
+Rules (`stamp/furnish.rs`, data in the theme's `dressing`):
+- **Hero**: one a room, on the bare wall spot farthest from its doorways, so it faces the way in; a room with a feature (the goal's dais, the key's altar, the rest's fire) has that as its hero. It keeps 1.6 m clear along its wall.
+- **Wall props**: so many per four cells, against the bare walls a metre apart.
+- **Clutter**: so many a cell, in the corners where two walls meet, then the wall spots left.
+- **Vignette**: its props laid by their offsets round one wall spot, all or none.
+- **Paths clear**: everything 1.3 m off the tour, 1.6 m from a doorway's middle and apart from what stands (1 m, clutter 0.6 m), so no prop is ever in the way or the camera.
 
 ## In the sandbox
 
