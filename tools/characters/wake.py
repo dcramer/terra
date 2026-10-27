@@ -39,7 +39,7 @@ import look
 
 AMBER = (1.0, 0.52, 0.12)
 CORE = (1.0, 0.86, 0.55)  # an eye's hot middle, near white, fading out to amber
-EMBER = (0.32, 0.075, 0.012)  # the throat's glow at its deepest
+EMBER = (0.16, 0.035, 0.005)  # the throat's glow at its deepest, dark by the lips
 src = look.path(look.args()[0])
 SHEET = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--sheet=")), None)
 
@@ -294,7 +294,7 @@ for j in range(gh - 1):
 # open mouth reads in the shade; it ships dark and lights with the eyes (staged.glow).
 throat_px = 32
 gu, gv = np.meshgrid(np.linspace(-1, 1, throat_px), np.linspace(-1, 1, throat_px))
-heat = np.clip(1 - (gu ** 2 + gv ** 2), 0, 1) ** 1.5
+heat = np.clip(1 - (gu ** 2 + gv ** 2), 0, 1) ** 3
 throat = np.ones((throat_px, throat_px, 4), dtype=np.float32)
 throat[..., :3] = heat[..., None] * np.array(EMBER, dtype=np.float32)
 ember = bpy.data.images.new(f"{body.name}_throat", throat_px, throat_px, alpha=False)
