@@ -10,7 +10,7 @@ Today Bevy's physical atmosphere draws the sky's colour and the sun (D212); over
 
 ## Constraints
 
-- **Photographic, physically lit** (D516). The sky looks as Horizon Forbidden West's, RDR2's and Microsoft Flight Simulator's do; the art style's stylisation (D14) stays in the materials and the neutral grade, never in a painted or simplified sky.
+- **Photographic, physically lit** (D516). The sky looks as Horizon Forbidden West's, RDR2's and Microsoft Flight Simulator's do, with Space Engineers 2's clouds the look aimed at; clouds drift at a pace a player notices at a glance; the art style's stylisation (D14) stays in the materials and the neutral grade, never in a painted or simplified sky.
 - **The sky is the climate's picture** (D315, D418). Cloud, its kind, its base and where it moves come from the climate's quantities (cover, what falls, humidity, temperature, wind), as Microsoft Flight Simulator's clouds are its weather model's; never a sky preset or a "storm" flag.
 - **Clouds are volumes, lit by physics.** Their shades come from how light scatters in them (dark bases, bright tops, the silver lining toward the sun, bright interiors from light bouncing many times), not from painted colours, so they are right at every hour and under every sun without tuning.
 - **Clouds are a light.** The clouds drawn are the clouds that shadow the ground, dim the sun, cut shafts in the haze (D217) and light the shade through the sky light (D490, D492). The shade and the sky never disagree.
@@ -163,7 +163,7 @@ The world must hold D25's frame (13.3 ms at the 99th percentile on an RTX 3080-c
 
 ## Checks
 
-Each rule fails a check an agent runs (D69), as weather.md's table does; references are the WMO cloud atlas's photographs per kind, sky photographs at the hours filmed and frames of Horizon Forbidden West, RDR2 and Microsoft Flight Simulator.
+Each rule fails a check an agent runs (D69), as weather.md's table does; references are the WMO cloud atlas's photographs per kind, sky photographs at the hours filmed and frames of Space Engineers 2, Horizon Forbidden West, RDR2 and Microsoft Flight Simulator.
 
 | Rule | Check |
 |---|---|
