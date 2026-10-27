@@ -109,7 +109,7 @@ function script(s: Script) {
   s.glide(on(WALK[1], EYE), look(4.8), Math.round(BEATS.lunge * 60));
 
   s.frame = f(BEATS.glow);
-  s.call("staged.glow", { name: "cetri", strength: 4, blend_ms: 1600 });
+  s.call("staged.glow", { name: "cetri", strength: 2.5, blend_ms: 1600 });
   s.frame = f(BEATS.wakes);
   s.call("staged.bend", { name: "cetri", bend: ROARS, blend_ms: 2200 });
   s.call("staged.play", { name: "cetri", clip: "Troll_Roar", speed: 0.6, once: true, blend_ms: 1200 });
@@ -127,7 +127,10 @@ function script(s: Script) {
   s.frame = f(BEATS.lunge + 1.0);
   s.call("staged.bend", { name: "cetri", bend: LUNGES, blend_ms: 1100 });
   s.frame = f(BEATS.lunge);
-  const back = toward(CETRI, WALK[1], Math.hypot(WALK[1][0] - CETRI[0], WALK[1][1] - CETRI[1]) + 1);
+  // A step back and to the right (west), so the oak by the path does not stand between
+  // the walker and the lunge (round-5 still reviews: hidden behind its trunk at 8.8 s).
+  const straight = toward(CETRI, WALK[1], Math.hypot(WALK[1][0] - CETRI[0], WALK[1][1] - CETRI[1]) + 1);
+  const back: [number, number] = [straight[0] - 1.75, straight[1] + 0.45];
   s.glide(on(back, EYE - 0.15), look(4.2), 40);
   s.frame = f(BEATS.lunge) + 40;
   s.glide(on(back, EYE - 0.25), look(4.0), 5);
