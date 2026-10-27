@@ -174,11 +174,11 @@ pub struct Dress {
     /// Clutter a cell, least and most.
     #[serde(default)]
     pub litter: (u32, u32),
-    /// Debris strewn sparsely over the open floor between the walls' groups, off the tour and
-    /// the doorways (stones, broken bones), so a room's middle is not bare stone.
+    /// Debris at the walls' feet between the walls' groups, off the tour and the doorways
+    /// (stones, broken bones), where what falls or is swept aside comes to rest.
     #[serde(default)]
     pub scatter: Vec<(String, f32)>,
-    /// Scatter a cell, least and most.
+    /// Scatter every three cells, least and most.
     #[serde(default)]
     pub strewn: (u32, u32),
     /// A moment told by props laid together: each a model, its scale and its place from one

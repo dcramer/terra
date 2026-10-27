@@ -249,14 +249,14 @@ fn middles(theme: &Theme) -> (u32, u32, usize, i32, f32) {
     (rooms, strewn, pieces, all, most)
 }
 
-/// A dressed room's open middle is strewn, sparsely (barrow dress round 7: the clutter went
-/// round the props, then the corners, then the walls, so the floor between stayed bare stone):
-/// of the rooms of four cells or more, with the theme's scatter nearly all have something the
-/// dressing laid more than `MIDDLE_M` in from every wall, and far more of it than without the
-/// scatter, yet no room more than three pieces a cell there. That none stands in the eye's
-/// path or a doorway is the first test's.
+/// A room's debris lies at its walls' feet, sparsely (barrow dress round 17: strewn over the
+/// open middle since round 7, every reviewer read it as confetti): of the rooms of four cells
+/// or more, the theme's scatter adds next to nothing more than `MIDDLE_M` in from every wall,
+/// at most a piece for every twenty rooms, and over every dressed room it lays some debris but
+/// at most a piece for every three cells, a room's third rounded up. That none stands in the
+/// eye's path or a doorway is the first test's.
 #[test]
-fn a_rooms_open_middle_is_strewn() {
+fn a_rooms_debris_lies_at_its_walls_feet() {
     for theme in Theme::all(&assets()).unwrap() {
         if !theme.dressing.iter().any(|d| !d.scatter.is_empty()) {
             continue;
@@ -265,24 +265,39 @@ fn a_rooms_open_middle_is_strewn() {
         for d in &mut unstrewn.dressing {
             d.scatter.clear();
         }
-        let (rooms, strewn, pieces, cells, most) = middles(&theme);
+        let (rooms, strewn, pieces, _, _) = middles(&theme);
         let (_, before, had, _, _) = middles(&unstrewn);
+        let set = ModuleSet::new(&theme).unwrap();
+        let (mut laid, mut most) = (0, 0);
+        for s in 0..40 {
+            let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
+                continue;
+            };
+            laid += stamp(&dungeon, &theme, &kind).props.len()
+                - stamp(&dungeon, &unstrewn, &kind).props.len();
+            let dressed = (dungeon.graph.rooms.iter().zip(&dungeon.layout.rooms))
+                .filter(|(room, _)| theme.dressing.iter().any(|d| d.roles.contains(&room.role)));
+            most += dressed
+                .map(|(_, rect)| (rect.size.x * rect.size.y) as usize)
+                .map(|cells| cells.div_ceil(3))
+                .sum::<usize>();
+        }
         println!(
-            "{}: of {rooms} rooms ({cells} cells), {strewn} strewn in their middle with {pieces} \
-             pieces, at most {most:.2} a cell; without the scatter {before} with {had}",
+            "{}: of {rooms} rooms, {strewn} with something in their middle ({pieces} pieces), \
+             without the scatter {before} ({had}); the scatter laid {laid}, at most {most}",
+            theme.name
+        );
+        let added = pieces.saturating_sub(had);
+        assert!(
+            added <= rooms as usize / 20,
+            "{}: the scatter laid {added} pieces in {rooms} rooms' middles",
             theme.name
         );
         assert!(
-            strewn * 100 >= rooms * 95,
-            "{}: {strewn} of {rooms} rooms strewn",
+            laid > 0 && laid <= most,
+            "{}: {laid} pieces, at most {most}",
             theme.name
         );
-        assert!(
-            pieces >= had * 2,
-            "{}: {pieces} pieces, {had} without",
-            theme.name
-        );
-        assert!(most <= 3.0, "{}: {most:.2} pieces a cell", theme.name);
     }
 }
 
@@ -313,7 +328,7 @@ fn dressing_stands_in_groups() {
             };
             let full = stamp(&dungeon, &theme, &kind);
             let bare = stamp(&dungeon, &bare_theme, &kind);
-            // The floor's scatter apart, strewn loose by design (`a_rooms_open_middle_is_strewn`).
+            // The debris apart, strewn by design (`a_rooms_debris_lies_at_its_walls_feet`).
             let laid: Vec<Vec3> = full.props[bare.props.len()..]
                 .iter()
                 .filter(|p| {

@@ -63,13 +63,13 @@ const VIGNETTE_DRAWN: [f32; 2] = [1.0, 0.85];
 const FOCUS_M: f32 = 3.0;
 /// Clutter lies so much past what a prop keeps clear round it.
 const RING_GAP_M: f32 = 0.1;
-/// How far apart the open floor's debris keeps from each other and all else, in metres: a
-/// sparse strew, a piece or two a cell, never a carpet.
+/// How far apart the walls' feet's debris keeps from each other and all else, in metres: a
+/// sparse strew, a piece every third cell, never a carpet.
 const SCATTER_APART_M: f32 = 1.2;
 
-/// How far a piece of debris is nudged off the floor's grid of points, in metres, each way; it
-/// keeps as much farther from the tour's line than the grid's points do, since the eye swings
-/// off that line (a nudged stone 0.71 m from the eye's path at `OFF_ROUTE_M` alone).
+/// Twice how far a piece of debris is nudged along its wall at most, each way, in metres; it
+/// keeps this much farther from the tour's line than `OFF_ROUTE_M`, since the eye swings off
+/// that line.
 const SCATTER_NUDGE_M: f32 = 0.35;
 
 /// What a campfire keeps clear round it, in metres: its ring of stones and a step to sit by
@@ -538,23 +538,34 @@ impl Laying<'_> {
         }
     }
 
-    /// Debris over the open floor, last, so the groups keep their places: its points taken by
-    /// their hash over the whole room, each nudged off the floor's grid by up to
-    /// `SCATTER_NUDGE_M` so the pieces do not stand in rows, `SCATTER_APART_M` from each other
-    /// and all else, off the tour and the doorways, as a set dresser breaks up a bare floor
-    /// with a stone here and a bone there.
+    /// Debris at the walls' feet, last, so the groups keep their places: a piece for every
+    /// three cells at `strewn` a cell, by the wall spots taken by their hash and then the
+    /// corners, never the open floor, since what falls or is swept aside comes to rest against
+    /// a wall (barrow dress round 17: strewn over the middle, every reviewer read it as
+    /// confetti). Each is nudged along its wall by up to half `SCATTER_NUDGE_M` so the pieces do not
+    /// stand in rows, `SCATTER_APART_M` from each other and all else, off the tour and the
+    /// doorways.
     fn scatter(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
         let unit = |h: u32| (h & 0xffff) as f32 / 65535.0 * 2.0 - 1.0;
+        let feet: Vec<(u32, Vec3)> = (self.spots.iter())
+            .flat_map(|s| {
+                [(-0.5, 0), (0.5, 1)].map(|(along, i)| {
+                    let rank = s.rank.wrapping_add(i * 0x9e37_79b9);
+                    let along = along + unit(rank) * SCATTER_NUDGE_M * 0.5;
+                    (rank, s.offset(along, unit(rank >> 16).abs() * 0.15))
+                })
+            })
+            .chain(self.corners.iter().map(|&(rank, p, _)| (rank, p)))
+            .collect();
         for (k, dress) in (self.dresses.iter().enumerate()).filter(|(_, d)| !d.scatter.is_empty()) {
             let (least, most) = dress.strewn;
             let per = least + self.salt(580 + k as u32) % (most.saturating_sub(least) + 1);
-            let wanted = per as usize * self.cells;
+            let wanted = (per as usize * self.cells).div_ceil(3);
             let mut laid = 0;
-            for &(rank, p, _) in self.floor {
+            for &(rank, p) in &feet {
                 if laid == wanted {
                     break;
                 }
-                let p = p + Vec3::new(unit(rank), 0.0, unit(rank >> 16)) * SCATTER_NUDGE_M;
                 let off_way = off(self.place.route, p) > OFF_ROUTE_M + SCATTER_NUDGE_M;
                 if off_way && self.place.clear(p) && free(taken, p, SCATTER_APART_M) {
                     put(out, pick(&dress.scatter, rank / 7), p, (rank % 4) as usize);
