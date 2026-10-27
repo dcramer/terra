@@ -20,8 +20,13 @@ import { resolve } from "node:path";
 const windows = process.argv.includes("--windows");
 const ask = async () => (await game.call("sandbox.why", { entity: "Player", component: "Transform" })) as Why;
 
+/// The failure, what the game answered, and where to look (D556).
 function fail(why: string, answer?: Why): never {
-  throw new Error([`✗ ${why}`, ...(answer ? describeWhy(answer) : [])].join("\n"));
+  const help = [
+    "  help: what moved a body drawn between ticks is kept by crates/terra_world/src/tick.rs (take_up, put_down, show) and told by crates/terra_world/src/remote/why.rs (D548);",
+    "        their tests show it without a game: cargo test -p terra_world --features bevy/track_location tick:: remote::why",
+  ];
+  throw new Error([`✗ ${why}`, ...(answer ? describeWhy(answer) : []), ...help].join("\n"));
 }
 
 const fnAt = (place: NonNullable<Part["by"]>) => enclosingFn(readFileSync(resolve(game.ROOT, place.file), "utf8"), place.line);
@@ -37,7 +42,8 @@ try {
   await game.waitUntil("a frame past the warp", game.status, (now) => now.frame > warped.frame + 1);
   const answer = await ask();
   const part = answer.components[0];
-  if (!answer.tracked) fail("this build keeps no lines of code (built without track_location)", answer);
+  if (!answer.tracked)
+    fail("the dev build keeps no lines of code: it was built without terra_sandbox's track_location, which xtask's tasks::sandbox::dev_features passes to every dev build (D548); see why that build lacked it, don't run the check on a release build", answer);
   if (part?.name !== "Transform") fail("no Transform answered", answer);
   if (!part.drawn || part.moved === undefined) fail("the player is drawn between ticks, but why does not say what moved them", answer);
   const moved = part.moved;

@@ -30,6 +30,13 @@ use serde_json::{Value, json};
 use std::collections::VecDeque;
 use std::panic::Location;
 
+/// What an answer from a build that keeps no lines says, and how to get one that does.
+const UNTRACKED: &str = "this build keeps no lines of code, only frames: it was built without \
+    terra_sandbox's track_location, as release and bench builds are, so nothing timed carries it \
+    (D548). For the lines, run a dev build: `r start` (or `r start --windows`) without \
+    --release; `cargo xtask sandbox` and `cargo xtask win` build one too. Don't add the feature \
+    to a release or bench build.";
+
 /// How many frames' first ticks are kept: ten minutes at 60 frames a second.
 const FRAMES_KEPT: usize = 36_000;
 
@@ -108,16 +115,67 @@ struct Why {
     component: Option<String>,
 }
 
+/// How many letters must be put in, taken out or changed to make one name the other, in any
+/// case: Levenshtein's distance, as rustc's `edit_distance` (rustc_span, MIT or Apache-2.0)
+/// finds the name a misspelling meant.
+fn distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.to_lowercase().chars().collect();
+    let b: Vec<char> = b.to_lowercase().chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, x) in a.iter().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = i + 1;
+        for (j, y) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = (above + 1)
+                .min(row[j] + 1)
+                .min(diagonal + usize::from(x != y));
+            diagonal = above;
+        }
+    }
+    row[b.len()]
+}
+
+/// The names a name that matched nothing may have meant, nearest first, at most five: those
+/// a third of its letters' edits from it (rustc's bound for a suggestion), and those that
+/// hold it or that it holds, in any case.
+fn near<'a>(wanted: &str, names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
+    let lower = wanted.to_lowercase();
+    let most = wanted.chars().count().max(3) / 3;
+    let mut found: Vec<(usize, &str)> = names
+        .into_iter()
+        .filter_map(|name| {
+            let edits = distance(wanted, name);
+            let low = name.to_lowercase();
+            let holds = low.contains(&lower) || (low.len() >= 3 && lower.contains(&low));
+            (edits <= most || holds).then_some((edits, name))
+        })
+        .collect();
+    found.sort_unstable();
+    found.dedup();
+    found.into_iter().take(5).map(|(_, name)| name).collect()
+}
+
 /// The entity an id or a name means: called exactly that, then in any case, then whose name
-/// contains it, as `sandbox.find` matches; several such are refused, naming them.
+/// contains it, as `sandbox.find` matches; several such are refused, naming them, and none
+/// with the names it may have meant (D556).
 fn entity(world: &mut World, wanted: &Value) -> Result<Entity, String> {
     if let Some(bits) = wanted.as_u64() {
         return Entity::try_from_bits(bits)
             .filter(|entity| world.get_entity(*entity).is_ok())
-            .ok_or_else(|| format!("no entity {bits}"));
+            .ok_or_else(|| {
+                format!(
+                    "no entity {bits} is alive: it was despawned, or the id is from another run \
+                     (ids are not kept between runs); `r find NAME` gives the ids of those called \
+                     NAME, or ask by name: `r why NAME [COMPONENT]`"
+                )
+            });
     }
     let Some(name) = wanted.as_str() else {
-        return Err("entity is an id or a name".into());
+        return Err(format!(
+            "entity is {wanted}, but sandbox.why takes an entity's id (a number, as `r find` \
+             gives it) or its name (a string): `r why NAME [COMPONENT]`"
+        ));
     };
     let named: Vec<(Entity, String)> = world
         .query::<(Entity, &Name)>()
@@ -144,14 +202,30 @@ fn entity(world: &mut World, wanted: &Value) -> Result<Entity, String> {
                     .map(|(entity, each)| format!("{each} ({})", entity.to_bits()))
                     .collect();
                 return Err(format!(
-                    "{} entities are called {name}: {}; ask by id",
+                    "{} entities are called {name}: {}{}; sandbox.why answers of one, so ask by \
+                     its id: `r why {} [COMPONENT]`",
                     several.len(),
-                    listed.join(", ")
+                    listed.join(", "),
+                    if several.len() > 10 { ", …" } else { "" },
+                    several[0].0.to_bits()
                 ));
             }
         }
     }
-    Err(format!("no entity is called {name}"))
+    let near = near(name, named.iter().map(|(_, each)| each.as_str()));
+    if near.is_empty() {
+        Err(format!(
+            "no entity is called {name}, in any case or within a longer name; `r find PART` \
+             lists the entities whose names hold PART, with their ids"
+        ))
+    } else {
+        Err(format!(
+            "no entity is called {name}, in any case or within a longer name; did you mean {}? \
+             ask `r why \"{}\" [COMPONENT]`",
+            near.join(", "),
+            near[0]
+        ))
+    }
 }
 
 fn why(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
@@ -183,10 +257,27 @@ fn why(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
                 .iter()
                 .map(|(_, _, short, _)| short.as_str())
                 .collect();
-            return Err(super::refused(format!(
-                "it has no component called {wanted}; it has {}",
-                has.join(", ")
-            )));
+            let label = name.as_deref().map_or_else(
+                || format!("entity {}", entity.to_bits()),
+                |name| format!("{name} ({})", entity.to_bits()),
+            );
+            let near = near(wanted, has.iter().copied());
+            let ask = format!("r why {}", entity.to_bits());
+            return Err(super::refused(if near.is_empty() {
+                format!(
+                    "{label} has no component called {wanted}, by its name or a part of it; it \
+                     has {}; ask `{ask} COMPONENT` with one, or `{ask}` for all",
+                    has.join(", ")
+                )
+            } else {
+                format!(
+                    "{label} has no component called {wanted}, by its name or a part of it; did \
+                     you mean {}? ask `{ask} {}`, or `{ask}` for all {} it has",
+                    near.join(", "),
+                    near[0],
+                    has.len()
+                )
+            }));
         }
         parts.retain(|(_, path, short, _)| rank(path, short, wanted) == best);
     }
@@ -241,10 +332,12 @@ fn why(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         })
         .collect();
     components.sort_by_key(|part| part["changed"]["ago"].as_u64().unwrap_or(u64::MAX));
+    let tracked = MaybeLocation::caller().into_option().is_some();
     Ok(json!({
         "entity": entity.to_bits(),
         "name": name,
-        "tracked": MaybeLocation::caller().into_option().is_some(),
+        "tracked": tracked,
+        "note": (!tracked).then_some(UNTRACKED),
         "frame": current,
         "kept": frames.len(),
         "spawned": { "by": place(spawned_by), "when": when(spawn_tick) },
@@ -305,6 +398,79 @@ mod tests {
             1
         );
         assert_eq!(rank(path, "Transform", "Velocity"), 0);
+    }
+
+    #[test]
+    fn a_name_that_matches_nothing_is_told_the_names_it_may_have_meant() {
+        assert_eq!(distance("Transfrom", "Transform"), 2);
+        assert_eq!(distance("kitten", "SITTING"), 3);
+        let names = ["Player", "Player Camera", "Sun", "Campfire", "Tree 12"];
+        assert_eq!(near("plyer", names), ["Player"]);
+        assert_eq!(near("PLAYER CAM", names), ["Player Camera", "Player"]);
+        assert_eq!(near("camera", names), ["Player Camera"]);
+        assert!(near("Wolf", names).is_empty());
+    }
+
+    /// Each refusal names the thing asked for and says what to ask instead (D556): the names
+    /// meant by a misspelling, the id to ask by among several, and a build without the lines
+    /// says which builds keep them.
+    #[test]
+    fn a_refusal_says_what_to_ask_instead() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        plugin(&mut app);
+        let player = app
+            .world_mut()
+            .spawn((Name::new("Player"), Transform::default()))
+            .id();
+        app.world_mut().spawn(Name::new("Tree"));
+        app.world_mut().spawn(Name::new("Tree"));
+        app.update();
+        let ask = |app: &mut App, params: Value| {
+            app.world_mut()
+                .run_system_cached_with(why, Some(params))
+                .unwrap()
+        };
+        let refused = |app: &mut App, params: Value| ask(app, params).unwrap_err().message;
+        let message = refused(&mut app, json!({"entity": "Plyer"}));
+        assert!(message.contains("no entity is called Plyer"), "{message}");
+        assert!(message.contains("did you mean Player?"), "{message}");
+        assert!(
+            message.contains("`r why \"Player\" [COMPONENT]`"),
+            "{message}"
+        );
+        let message = refused(&mut app, json!({"entity": "Wolf"}));
+        assert!(message.contains("`r find PART`"), "{message}");
+        let message = refused(&mut app, json!({"entity": "Tree"}));
+        assert!(message.contains("2 entities are called Tree"), "{message}");
+        assert!(message.contains("ask by its id: `r why "), "{message}");
+        let message = refused(
+            &mut app,
+            json!({"entity": "Player", "component": "Transfrom"}),
+        );
+        let id = player.to_bits();
+        assert!(
+            message.contains(&format!("Player ({id}) has no component called Transfrom")),
+            "{message}"
+        );
+        assert!(
+            message.contains(&format!(
+                "did you mean Transform? ask `r why {id} Transform`"
+            )),
+            "{message}"
+        );
+        let message = refused(&mut app, json!({"entity": 3.5}));
+        assert!(message.contains("an entity's id"), "{message}");
+        let answer = ask(&mut app, json!({"entity": "Player"})).unwrap();
+        if answer["tracked"] == true {
+            assert!(answer["note"].is_null());
+        } else {
+            let note = answer["note"].as_str().unwrap();
+            assert!(
+                note.contains("`r start`") && note.contains("D548"),
+                "{note}"
+            );
+        }
     }
 
     /// The method itself, in a world with no window: a system that moves an entity is named

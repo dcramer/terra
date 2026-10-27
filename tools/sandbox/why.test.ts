@@ -56,6 +56,9 @@ test("the answer reads as a line a component, naming the function behind each ch
   const untracked = describeWhy(answer(false), read);
   assert.equal(untracked[1], "  Transform  frame 120, this frame");
   assert.match(untracked.at(-1)!, /built without track_location/);
+  // The game's own word on which build keeps the lines is what is printed.
+  const told = describeWhy({ ...answer(false), note: "start a dev build: `r start`" }, read);
+  assert.equal(told.at(-1), "(start a dev build: `r start`)");
 });
 
 test("a body drawn between ticks is told drawn by its drawing and moved by what moved it", () => {

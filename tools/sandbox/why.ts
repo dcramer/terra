@@ -11,7 +11,7 @@ export type When = { frame: number | null; ago: number | null };
 /// For a body drawn between ticks, what last moved where it truly stands, beside its drawing.
 export type Moved = { by: Place; changed: When; in_tick: boolean };
 export type Part = { name: string; type: string; by: Place; changed: When | null; added: When | null; immutable: boolean; drawn?: boolean; moved?: Moved | null };
-export type Why = { entity: number; name: string | null; tracked: boolean; frame: number | null; kept: number; spawned: { by: Place; when: When }; components: Part[] };
+export type Why = { entity: number; name: string | null; tracked: boolean; note?: string | null; frame: number | null; kept: number; spawned: { by: Place; when: When }; components: Part[] };
 
 const ROOT = resolve(import.meta.dirname, "../..");
 
@@ -91,6 +91,7 @@ export function describeWhy(answer: Why, read?: (file: string) => string | undef
         : `; drawn between ticks, last moved ${part.moved.in_tick ? "in a tick" : "outside the ticks"}${answer.tracked ? ` by ${where(part.moved.by, read)}` : ""}, ${when(part.moved.changed, answer.kept)}`;
     lines.push(`  ${part.name.padEnd(width)}  ${by}${when(part.changed, answer.kept)}${moved}`);
   }
-  if (!answer.tracked) lines.push("(this build does not keep lines of code: it was built without track_location, as release builds are; `r start` without --release keeps them)");
+  // The game says how to get a build that keeps them; an older build did not.
+  if (!answer.tracked) lines.push(`(${answer.note ?? "this build keeps no lines of code: it was built without track_location, as release builds are (D548); `r start` without --release keeps them"})`);
   return lines;
 }

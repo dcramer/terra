@@ -206,7 +206,7 @@ const COMMANDS: Record<string, Command> = {
     help: "what changed this? who spawned an entity (an id as find gives it, or a name), and for each component, or the one named, the line of code and function that last changed it and on which frame",
     options: { json: { type: "boolean", help: "the answer as the game gives it" } },
     run: async ({ values, positionals: [entity, component] }) => {
-      if (entity === undefined) throw new Error("usage: why ENTITY [COMPONENT]");
+      if (entity === undefined) throw new Error("why needs an entity: `why NAME [COMPONENT]` or `why ID [COMPONENT]`, as `find NAME` gives ids (e.g. `why Player Transform`)");
       const answer = (await call("sandbox.why", { entity: /^\d+$/.test(entity) ? Number(entity) : entity, component })) as Why;
       if (values.json) print(answer);
       else console.log(describeWhy(answer).join("\n"));
