@@ -20,6 +20,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
+import { imageMagick } from "./client.ts";
 import { type Picture, readPng, writePng } from "./png.ts";
 
 export type Look = {
@@ -778,8 +779,9 @@ function frames(files: string[], into: string): string[] {
       out.push(...readdirSync(into).filter((f) => f.startsWith(`${k}-`)).sort().map((f) => resolve(into, f)));
     } else {
       const png = resolve(into, `${k}-${basename(file).replace(/\.[^.]+$/, "")}.png`);
-      const done = spawnSync("magick", [file, "-resize", "1920x1080!", "-depth", "8", png]);
-      if (done.status !== 0) throw new Error(`magick ${file}: ${done.stderr}`);
+      const [command, words] = imageMagick([file, "-resize", "1920x1080!", "-depth", "8", png]);
+      const done = spawnSync(command, words);
+      if (done.status !== 0) throw new Error(`${command} ${file}: ${done.stderr}`);
       out.push(png);
     }
   });
