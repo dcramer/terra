@@ -63,6 +63,13 @@ pub struct Params {
     pub sunlight: Vec4,
     /// The tunables the march reads: [`HEAPED_COVER`], [`BODY_LOW`].
     pub tuned: Vec4,
+    /// The kinds' layers over the sea (`clouds::layers_over_sea`): base, base by rain, top, top
+    /// by cover, top by rain.
+    pub layers: [Vec4; 5],
+    /// The shells the layers are, round the air's sea under the eye (docs/sky.md#heights): the
+    /// planet's sea radius and the air's sea radius in the world's metres, and the slab's
+    /// bottom and top over the sea.
+    pub shell: Vec4,
 }
 
 /// The most a heaped column covers, so the 3D noise cuts it into heaps (Nubis's coverage
@@ -225,12 +232,13 @@ fn tell(
         Res<Tweaks>,
         ResMut<super::Sky>,
     ),
-    (clock, fields, start, air, planet): (
+    (clock, fields, start, air, planet, air_scale): (
         Option<Res<Clock>>,
         Option<Res<crate::climate::ClimateFields>>,
         Option<Res<Start>>,
         Option<Res<AirPicture>>,
         Res<Planet>,
+        Option<Res<crate::air::AirScale>>,
     ),
     camera: Option<Single<(Entity, &Camera, Has<CloudVolumeView>), With<MainCamera>>>,
     volume: Option<ResMut<CloudVolume>>,
@@ -309,6 +317,12 @@ fn tell(
     let sunlight = Vec3::from_slice(&tweaks.sun_color.to_linear().to_f32_array()[..3])
         * tweaks.sun_illuminance;
     *frame = frame.wrapping_add(1);
+    // Low layers stand over the low ground the start is on, its height over the sea.
+    let ground = start
+        .as_ref()
+        .map_or(0.0, |s| s.0.translation.length() - planet.sea_radius_m());
+    let (layers, slab) = clouds::layers_over_sea(ground);
+    let air_scale = air_scale.map_or(crate::air::AirScale(crate::air::HAZE_SCALE), |s| *s);
     let params = Params {
         to_map: clouds.to_map,
         shapes: [
@@ -328,6 +342,13 @@ fn tell(
         sun: sun.extend((1.0 / clouds::FIELD_M[0]) as f32),
         sunlight: sunlight.extend((*frame % 1024) as f32),
         tuned: Vec4::new(HEAPED_COVER.get(), BODY_LOW.get(), 0.0, 0.0),
+        layers,
+        shell: Vec4::new(
+            planet.sea_radius_m(),
+            crate::air::sea_sphere_radius_m(air_scale),
+            slab.x,
+            slab.y,
+        ),
     };
     commands.insert_resource(CloudVolume {
         params,

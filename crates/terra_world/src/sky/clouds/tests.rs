@@ -253,3 +253,24 @@ fn the_maps_middle_is_on_a_grid() {
         middle_for(Vec2::new(5900.0, 1900.0))
     );
 }
+
+#[test]
+fn every_kinds_layer_stands_over_the_ground_inside_the_slab_at_any_weather() {
+    let ground = 1317.0;
+    let (rows, slab) = layers_over_sea(ground);
+    let [bases, by_rain, tops, top_by_cover, top_by_rain] = rows;
+    for kind in 0..3usize {
+        for (cover, rain) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+            let base = bases[kind] + by_rain[kind] * rain;
+            let top = tops[kind] + top_by_cover[kind] * cover + top_by_rain[kind] * rain;
+            assert!(
+                base > ground && base + 200.0 < top,
+                "{kind}: {base} to {top}"
+            );
+            assert!(
+                slab.x <= base && top <= slab.y,
+                "{kind}: {base} to {top} in {slab}"
+            );
+        }
+    }
+}

@@ -162,6 +162,73 @@ pub fn volume_offsets(winds: &CloudWinds, seconds: f64, anchor: Vec2) -> Vec4 {
     )
 }
 
+/// The layer one kind of cloud fills (docs/sky.md's table, D544): its base and top in metres
+/// over the low ground the start stands on, the base lowered and the top raised by the rain
+/// falling from it (0 to 1) and the top by how much of the sky it covers (0 to 1).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Layer {
+    pub base_m: f32,
+    pub base_by_rain_m: f32,
+    pub top_m: f32,
+    pub top_by_cover_m: f32,
+    pub top_by_rain_m: f32,
+}
+
+/// The kinds' layers, as the weather map's kind runs from 0 to 1: the overcast deck (stratus,
+/// low and thicker the more it rains), stratocumulus (900 m, 500 m thick) and cumulus (base
+/// 1.1 km, fair-weather tops 1.7 km, piling to 3.1 km the more of the sky it covers). The one
+/// place the clouds' heights are kept: the march reads them (`layers_over_sea`).
+pub const LAYERS: [Layer; 3] = [
+    Layer {
+        base_m: 500.0,
+        base_by_rain_m: -200.0,
+        top_m: 1100.0,
+        top_by_cover_m: 0.0,
+        top_by_rain_m: 700.0,
+    },
+    Layer {
+        base_m: 900.0,
+        base_by_rain_m: 0.0,
+        top_m: 1400.0,
+        top_by_cover_m: 0.0,
+        top_by_rain_m: 0.0,
+    },
+    Layer {
+        base_m: 1100.0,
+        base_by_rain_m: 0.0,
+        top_m: 1700.0,
+        top_by_cover_m: 1400.0,
+        top_by_rain_m: 0.0,
+    },
+];
+
+/// The kinds' layers as the march takes them, over the sea for low ground `ground_m` over it:
+/// rows of base, base by rain, top, top by cover and top by rain, each with the deck's,
+/// stratocumulus's and cumulus's in x, y and z; and the slab all of them stand in, its bottom
+/// and top over the sea.
+pub fn layers_over_sea(ground_m: f32) -> ([Vec4; 5], Vec2) {
+    let row = |f: fn(&Layer) -> f32, over: f32| {
+        Vec4::new(f(&LAYERS[0]), f(&LAYERS[1]), f(&LAYERS[2]), 0.0)
+            + Vec4::new(over, over, over, 0.0)
+    };
+    let rows = [
+        row(|l| l.base_m, ground_m),
+        row(|l| l.base_by_rain_m, 0.0),
+        row(|l| l.top_m, ground_m),
+        row(|l| l.top_by_cover_m, 0.0),
+        row(|l| l.top_by_rain_m, 0.0),
+    ];
+    let bottom = LAYERS
+        .iter()
+        .map(|l| l.base_m + l.base_by_rain_m.min(0.0))
+        .fold(f32::MAX, f32::min);
+    let top = LAYERS
+        .iter()
+        .map(|l| l.top_m + l.top_by_cover_m.max(0.0) + l.top_by_rain_m.max(0.0))
+        .fold(f32::MIN, f32::max);
+    (rows, Vec2::new(bottom, top) + ground_m)
+}
+
 /// Where the weather map round an eye has its middle, metres east and south of the start: on a
 /// grid, so every eye near a place maps it alike.
 pub fn middle_for(eye: Vec2) -> Vec2 {
