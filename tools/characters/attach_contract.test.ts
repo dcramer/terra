@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { join } from "node:path";
 import { type V3 } from "./glb.ts";
-import { type Look, ROOT, against, audit, judge, judgeSockets, knownFaults, readBody, readLook } from "./attach_contract.ts";
+import { type Look, ROOT, against, audit, dataOf, judge, judgeSockets, kindOf, knownFaults, readBody, readLook } from "./attach_contract.ts";
 
 const body = readBody();
 const look = (name: string) => readLook(join(ROOT, "assets", "models", `${name}.glb`), name);
@@ -40,7 +40,7 @@ test("a sword in hand passes, and fails turned across X, off its grip, or withou
   assert.deepEqual(rules(sword), []);
   assert.deepEqual(rules(moved(sword, aboutY(90))), ["facing"]);
   assert.deepEqual(rules(moved(sword, ([x, y, z]) => [x + 0.03, y, z])), ["grip"]);
-  assert.deepEqual(rules(moved(sword, ([x, y, z]) => [x, -y, z])), ["along +Y"]);
+  assert.deepEqual(rules(moved(sword, ([x, y, z]) => [x, -y, z])), ["along +Y", "grip along"]);
   const { carry_tilt: _, ...untilted } = sword.extras;
   assert.deepEqual(rules({ ...sword, extras: untilted }), ["carry_tilt"]);
 });
@@ -85,6 +85,33 @@ test("a skinned cap passes, and fails on a joint or morph not the body's, or cov
   assert.deepEqual(rules({ ...cap, joints: [...cap.joints!, "head_x"] }), ["skin"]);
   assert.deepEqual(rules({ ...cap, targets: ["heavy"] }), ["morphs"]);
   assert.deepEqual(rules({ ...cap, extras: { ...cap.extras, covers: [3, 1024] } }), ["covers"]);
+});
+
+test("a look's kind is its data's, and a garment's its skin with no data", () => {
+  assert.equal(kindOf(look("held/stone_axe"), dataOf("held/stone_axe")), "hafted");
+  assert.equal(kindOf(look("gear/quiver"), dataOf("gear/quiver")), "belt");
+  assert.equal(kindOf(look("gear/cap"), dataOf("gear/cap")), "garment");
+  const sword = look("held/arming_sword");
+  const data = dataOf("held/arming_sword")!;
+  const { kind: _, ...unnamed } = data;
+  assert.deepEqual(judge(sword, body, unnamed).map((f) => f.rule), ["kind"]);
+  assert.deepEqual(judge(sword, body, { ...data, kind: "sabre" }).map((f) => f.rule), ["kind"]);
+  // A blade named a shield: it goes on a strap, which its data does not give.
+  assert.ok(judge(sword, body, { ...data, kind: "shield" }).some((f) => f.rule === "kind"));
+});
+
+test("a look is its kind's life size, its grip where its kind's falls", () => {
+  const knife = look("held/knife");
+  assert.deepEqual(rules(knife), ["facing"]);
+  // Six times its size, as a model left at its source's scale: a 1.56 m knife, gripped 30 cm up.
+  assert.deepEqual(rules(moved(knife, ([x, y, z]) => [6 * x, 6 * y, 6 * z])).sort(), ["facing", "grip along", "size"]);
+  // Gripped at its middle, not near its pommel: the length fit's grip_from_end mistyped.
+  assert.deepEqual(rules(moved(knife, ([x, y, z]) => [x, y - 0.08, z])), ["facing", "grip along"]);
+  const bow = look("held/bow");
+  assert.deepEqual(rules(bow).sort(), ["facing", "grip"]);
+  assert.ok(rules(moved(bow, ([x, y, z]) => [x, y + 0.3, z])).includes("grip along"), "held near a limb's tip");
+  const shield = look("held/round_shield");
+  assert.deepEqual(rules(moved(shield, ([x, y, z]) => [2 * x, 2 * y, 2 * z])), ["size"]);
 });
 
 test("a fault listed but no longer found is reported, so a fix removes its line", () => {

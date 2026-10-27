@@ -1,1 +1,1 @@
-{"source": "tools/Bow_Wooden.glb", "fit": "length", "length": 1.2, "grip_from_end": 0.6, "carry_tilt": -30}
+{"kind": "bow", "source": "tools/Bow_Wooden.glb", "fit": "length", "length": 1.2, "grip_from_end": 0.6, "carry_tilt": -30}

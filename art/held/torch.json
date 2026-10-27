@@ -1,1 +1,1 @@
-{"source": "tools/Torch.glb", "fit": "length", "length": 0.55, "grip_from_end": 0.1, "carry_tilt": 35, "note": "Carried upright, its burning head up; the flame is the game's (torchlight.rs)."}
+{"kind": "hafted", "source": "tools/Torch.glb", "fit": "length", "length": 0.55, "grip_from_end": 0.1, "carry_tilt": 35, "note": "Carried upright, its burning head up; the flame is the game's (torchlight.rs)."}

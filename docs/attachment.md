@@ -29,9 +29,29 @@ Axes at rest, in the T-pose, in the body's glTF space (+X the body's left, +Y up
 
 ## Kinds
 
-What a look is and how it goes on. A held look's kind comes from its data (`"fit"`, `"strap"`); a worn look's from its data's `"fit"`, else from its file (a skin, or a socket named).
+Each kind of thing is solved once, so a new item of a kind needs only its model and its data. An item's data names its kind, `"kind"` in `art/held/<item>.json` or `art/gear/<item>/fit.json`; a skinned look with no data is a garment. Nothing is inferred from a look's shape or its maker's fit: the check refuses a look whose data names no kind, and one whose data fits it otherwise than its kind goes on. Each kind's numbers are data, `tools/characters/attach_kinds.json`, which the check reads; the table is its summary.
 
-| Kind | Examples | Origin | Axes and facing | Its size from | Its extras | Made by |
+| Kind | Examples | Goes on (mount) | Life size | Where the grip falls, from the -Y end (butt or pommel) |
+|---|---|---|---|---|
+| `hafted` | an axe, a pickaxe, a hammer, a torch | in hand | 0.25 to 1.0 m long | 4 to 12 cm: half a fist's width (about 9 cm across the knuckles), and a knob's |
+| `blade` | a knife, a sword | in hand | 0.15 to 1.25 m long | 3 to 15 cm, and 8 to 30% of its length: the middle of the grip between pommel and guard |
+| `polearm` | a spear, a staff | in hand | 1.5 to 3.0 m long | 30 to 55% of its length: the lead hand, near the balance |
+| `bow` | a bow | in hand | 1.0 to 1.9 m long | 45 to 55% of its length: the riser's middle |
+| `shield` | a round or heater shield | strapped | 0.45 to 1.0 m at its longest | its hand strap or centre grip, given by points |
+| `hung` | a basket, a bucket | hung | 0.2 to 0.6 m at its longest | under its handle's top |
+| `belt` | a quiver; later a pouch, a sheath | rigid | 0.15 to 0.8 m at its longest | none: it hangs from its `hangs_at` |
+| `pack` | a small or large pack | skinned | made on the base | none |
+| `garment` | clothing, armour, a cap, a coif | skinned | made on the base | none |
+
+- **The grip across the handle**: the middle of the handle where the plane y = 0 cuts it, within 1.5 cm of the origin; never the middle of the model's bounds, which a head's overhang moves off the handle.
+- **Life size** is the thing's real size, a real one's range in the kind: a hatchet to a pickaxe, a knife to a longsword, a short bow to a longbow. A look outside its kind's range was left at its source's scale or is of another kind.
+- `items.ron`'s `hold.class` (holding.md) is how an item fights, a finer split for move sets (`sword`, `dagger`, `axe`, `mace`...); its kind here is how its look is made and put on.
+
+## Mounts
+
+How each kind goes on: its origin, axes and facing.
+
+| Mount | Examples | Origin | Axes and facing | Its size from | Its extras | Made by |
 |---|---|---|---|---|---|---|
 | **In hand** | tools, weapons, a torch | the grip: the middle of the handle where the fist closes on it | +Y along the handle toward the working end; its edges or striking face in the Y-Z plane, a one-sided head (an axe's bit, a hammer's face) toward -Z; +X out of the back of the right hand, so a blade's flats face ±X | its real length (`length` or the source model's own size) | `carry_tilt` | `fit_held.py`, `"fit": "length"` or `"points"` |
 | **Hung from the hand** | a basket, a bucket | the grip, a finger's width under its handle's top | it hangs down -Z from there, its long way along +Y (forward), `out` metres toward +X (out from the leg) | its source model's | `carry_tilt`, `"hold": "hung"` | `fit_held.py`, `"fit": "hung"` |
@@ -64,7 +84,7 @@ Materials are named by role (Wood, Metal, Leather, Trim), so a tint recolours on
 
 ## The check
 
-`node tools/characters/attach_contract.ts` reads every committed look in `assets/models/held` and `gear`, their data and `base.glb`, and holds each to its kind's rules above, and the body's sockets to the table; its test runs in `cargo xtask check`. Given files, it judges each by the folder it sits in. A fault known today is listed with why in `tools/characters/attach_faults.json`; a fixed one fails the test until its line is removed, so the list only shrinks.
+`node tools/characters/attach_contract.ts` reads every committed look in `assets/models/held` and `gear`, their data and `base.glb`, and holds each to its kind's rules above (its kind named, its mount's origin, axes, facing and extras, its life size, its grip across and along the handle), and the body's sockets to the table; its test runs in `cargo xtask check`. Given files, it judges each by the folder it sits in. A fault known today is listed with why in `tools/characters/attach_faults.json`; a fixed one fails the test until its line is removed, so the list only shrinks.
 
 Known today (2026-10-27): the eight looks fitted by length (both axes, both pickaxes, the hammer, the knife, the spear, the bow) lie across X, 90 degrees off, as `fit_held.py` never turns them about +Y; six of them sit 2.5 to 4.7 cm off their grip, as the length fit centres the model's bounds; and the basket predates its `hold` marker.
 

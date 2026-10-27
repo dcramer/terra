@@ -446,7 +446,7 @@ The look, models, bodies and gear, textures and audio.
 | [D540](decisions/D540.md) | The clouds move by the world's clock, drawn from a weather map of the climate | Tech | Agent | Decided | The sky's clouds are a function of the climate and the… |
 | [D542](decisions/D542.md) | Clips carried onto a body by each bone's turn from a retarget pose | Tech | Agent | Decided | A body's bones point at their next joint… |
 | [D545](decisions/D545.md) | A shirt hangs over the trousers | Design | Developers | Decided | A shirt is made untucked: its hem hangs past the hips… |
-| [D546](decisions/D546.md) | The attachment contract: how a held or worn look goes on a body | Tech | Agent | Decided | Every look the game puts on a character is one of five… |
+| [D546](decisions/D546.md) | The attachment contract: how a held or worn look goes on a body | Tech | Agent | Decided | Every look the game puts on a character is of a kind its… |
 
 ## Engine and code
 

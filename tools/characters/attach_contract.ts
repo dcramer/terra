@@ -1,7 +1,8 @@
 // The attachment contract's check (docs/attachment.md, D546): every look the game hangs on a
 // character, read from its committed file without Blender or a GPU, against the rules of its
-// kind; and the body's sockets against their table. A look's kind comes from its data
-// (art/held/<item>.json, art/gear/<item>/fit.json) and, for gear made on the body, its file.
+// kind; and the body's sockets against their table. A look's kind is named in its data
+// (art/held/<item>.json, art/gear/<item>/fit.json, "kind"; a skinned garment has none), and
+// each kind's rules (how it goes on, its life size, where its grip falls) are attach_kinds.json.
 //
 //   node tools/characters/attach_contract.ts            every look in assets/models/{held,gear}
 //   node tools/characters/attach_contract.ts FILE.glb   one look, judged by where it sits
@@ -17,8 +18,25 @@ export const ROOT = join(import.meta.dirname, "..", "..");
 const MODELS = join(ROOT, "assets", "models");
 export const BASE = join(MODELS, "character", "base.glb");
 
-/** The five ways a look goes on (docs/attachment.md, "Kinds"). */
-export type Kind = "in hand" | "hung" | "strapped" | "rigid" | "skinned";
+/** The five ways a look goes on (docs/attachment.md, "Mounts"). */
+export type Mount = "in hand" | "hung" | "strapped" | "rigid" | "skinned";
+
+/** A kind of look (docs/attachment.md, "Kinds"), from attach_kinds.json: how it goes on, its
+ * life size and where its grip falls. Each item's data names its kind. */
+export type KindRules = {
+  mount: Mount;
+  length_m?: [number, number];
+  size_m?: [number, number];
+  grip_from_end_m?: [number, number];
+  grip_share?: [number, number];
+  second?: string;
+  fits: "detector" | "person" | "body";
+};
+export const KINDS: Record<string, KindRules> = Object.fromEntries(
+  Object.entries(JSON.parse(readFileSync(join(import.meta.dirname, "attach_kinds.json"), "utf8"))).filter(([k]) => k !== "about"),
+) as Record<string, KindRules>;
+/** The kind of a skinned look with no data of its own: clothing, armour, a cap. */
+export const GARMENT = "garment";
 
 /** What the check reads of a look's file: its extras, whether it is skinned and to what, its
  * morphs, and its vertices and triangles in its own space. */
@@ -125,9 +143,16 @@ export function dataOf(look: string, root = ROOT): Record<string, unknown> | und
   return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : undefined;
 }
 
-/** A look's kind: a held thing's from its data; worn gear's from its data's fit, else from its
- * file (a skin, or a socket named). */
-export function kindOf(look: Look, data?: Record<string, unknown>): Kind | undefined {
+/** A look's kind, as its data names it ("kind"); a skinned look with no data is a garment.
+ * Undefined when neither says. */
+export function kindOf(look: Look, data?: Record<string, unknown>): string | undefined {
+  if (typeof data?.kind === "string") return data.kind;
+  if (!data && look.name.startsWith("gear/") && look.joints) return GARMENT;
+  return undefined;
+}
+
+/** How a look's data has its maker fit it, which must be how its kind goes on. */
+export function fittedAs(look: Look, data?: Record<string, unknown>): Mount | undefined {
   if (look.name.startsWith("held/")) {
     if (data?.fit === "hung") return "hung";
     if (data?.strap) return "strapped";
@@ -136,9 +161,7 @@ export function kindOf(look: Look, data?: Record<string, unknown>): Kind | undef
   const fit = data?.fit;
   if (fit === "back" || fit === "torso") return "skinned";
   if (fit === "belt" || fit === "head") return "rigid";
-  if (look.joints) return "skinned";
-  if (typeof look.extras.socket === "string") return "rigid";
-  return undefined;
+  return data ? undefined : "skinned";
 }
 
 const box = (pts: V3[]) => {
@@ -200,6 +223,28 @@ function inHand(look: Look, f: (rule: string, detail: string) => void) {
     f("facing", `its working end reaches ${(head.plusZ * 100).toFixed(1)} cm toward +Z and ${(head.minusZ * 100).toFixed(1)} cm toward -Z: its striking side faces +Z, not -Z`);
 }
 
+const within = (v: number, [lo, hi]: [number, number]) => v >= lo - 1e-6 && v <= hi + 1e-6;
+const range = ([lo, hi]: [number, number], unit = " m") => `${lo} to ${hi}${unit}`;
+
+/** Its life size for its kind: an in-hand look's length along +Y, any other's longest extent;
+ * and where an in-hand look's grip falls along it, from its -Y end (its butt or pommel). */
+function sized(look: Look, name: string, rules: KindRules, f: (rule: string, detail: string) => void) {
+  const { lo, hi } = box(look.points);
+  const length = hi[1] - lo[1];
+  const longest = Math.max(hi[0] - lo[0], length, hi[2] - lo[2]);
+  if (rules.length_m && !within(length, rules.length_m))
+    f("size", `it is ${length.toFixed(2)} m along +Y; a ${name} is ${range(rules.length_m)}`);
+  if (rules.size_m && !within(longest, rules.size_m))
+    f("size", `it is ${longest.toFixed(2)} m at its longest; a ${name} is ${range(rules.size_m)}`);
+  const end = -lo[1];
+  const off = [
+    rules.grip_from_end_m && !within(end, rules.grip_from_end_m) && `${range(rules.grip_from_end_m.map((v) => v * 100) as [number, number], " cm")} from it`,
+    rules.grip_share && length > 0 && !within(end / length, rules.grip_share) && `${range(rules.grip_share.map((v) => v * 100) as [number, number], "%")} of its length`,
+  ].filter(Boolean);
+  if (off.length)
+    f("grip along", `its grip is ${(end * 100).toFixed(1)} cm (${((100 * end) / length).toFixed(0)}% of its length) from its -Y end; a ${name}'s is ${off.join(" and ")}`);
+}
+
 function hung(look: Look, f: (rule: string, detail: string) => void) {
   const { lo, hi } = box(look.points);
   if (look.extras.hold !== "hung") f("marker", `its extras do not say {"hold": "hung"}, which its data's "fit" does`);
@@ -259,18 +304,24 @@ export function judge(look: Look, body: Body, data = dataOf(look.name)): Fault[]
   const faults: Fault[] = [];
   const f = (rule: string, detail: string) => faults.push({ look: look.name, rule, detail });
   const kind = kindOf(look, data);
-  if (!kind) return [{ look: look.name, rule: "kind", detail: "neither skinned nor naming a socket" }];
-  if (kind === "in hand" || kind === "hung" || kind === "strapped") {
+  const rules = kind === undefined ? undefined : KINDS[kind];
+  if (!kind || !rules)
+    return [{ look: look.name, rule: "kind", detail: kind ? `its data's kind ${kind} is none of attach_kinds.json's` : "its data names no kind (\"kind\"), and it is no garment (skinned, with no data)" }];
+  const mount = rules.mount;
+  const fitted = fittedAs(look, data);
+  if (fitted !== mount) f("kind", `a ${kind} goes on ${mount}, but its data has it fitted ${fitted ?? "no way known"}`);
+  if (mount === "in hand" || mount === "hung" || mount === "strapped") {
     if (look.joints) f("kind", "a held look is skinned");
     if (!num(look.extras.carry_tilt)) f("carry_tilt", "its extras have no carry_tilt");
     else if (data && data.carry_tilt !== look.extras.carry_tilt) f("marker", `its carry_tilt ${look.extras.carry_tilt} is not its data's ${data.carry_tilt}`);
-    if (kind !== "hung" && look.extras.hold === "hung") f("marker", `it says {"hold": "hung"}, which its data does not`);
+    if (mount !== "hung" && look.extras.hold === "hung") f("marker", `it says {"hold": "hung"}, which its data does not`);
   }
-  if (kind === "in hand") inHand(look, f);
-  if (kind === "hung") hung(look, f);
-  if (kind === "strapped") strapped(look, body, data, f);
-  if (kind === "rigid") rigid(look, body, f);
-  if (kind === "skinned") skinned(look, body, f);
+  if (mount === "in hand") inHand(look, f);
+  if (mount === "hung") hung(look, f);
+  if (mount === "strapped") strapped(look, body, data, f);
+  if (mount === "rigid") rigid(look, body, f);
+  if (mount === "skinned") skinned(look, body, f);
+  sized(look, kind, rules, f);
   covers(look, f);
   return faults;
 }

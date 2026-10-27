@@ -1,1 +1,1 @@
-{"source": "tools/Hammer_Small.glb", "fit": "length", "length": 0.42, "grip_from_end": 0.06, "carry_tilt": -45}
+{"kind": "hafted", "source": "tools/Hammer_Small.glb", "fit": "length", "length": 0.42, "grip_from_end": 0.06, "carry_tilt": -45}

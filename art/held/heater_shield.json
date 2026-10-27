@@ -1,4 +1,5 @@
 {
+  "kind": "shield",
   "source": "tools/HeaterShield.glb",
   "fit": "points",
   "grip": [-0.12, 0.40, -0.035],

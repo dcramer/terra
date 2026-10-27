@@ -1,1 +1,1 @@
-{"source": "tools/Pickaxe.glb", "fit": "length", "length": 0.9, "grip_from_end": 0.08, "head_colour": [0.38, 0.42, 0.48], "carry_tilt": -45}
+{"kind": "hafted", "source": "tools/Pickaxe.glb", "fit": "length", "length": 0.9, "grip_from_end": 0.08, "head_colour": [0.38, 0.42, 0.48], "carry_tilt": -45}

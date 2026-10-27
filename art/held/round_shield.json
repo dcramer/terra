@@ -1,4 +1,5 @@
 {
+  "kind": "shield",
   "source": "tools/RoundShield.glb",
   "fit": "points",
   "grip": [0, 0.405, -0.025],
