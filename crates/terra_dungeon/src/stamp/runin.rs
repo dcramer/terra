@@ -429,7 +429,12 @@ fn tour(dungeon: &Dungeon, out: &mut Stamp) {
             }
         }
         if let (Some(&from), Some(&to)) = (out.route.last(), leg.first()) {
-            out.route.push(across(from, room, to));
+            // The ways in and out: from the doorway behind to the step past it, and from the
+            // step short of the next doorway to it.
+            let came = out.route.len().checked_sub(2).map(|i| from - out.route[i]);
+            let goes = leg.get(1).map(|&next| next - to);
+            out.route
+                .push(cornered(from, came, to, goes).unwrap_or_else(|| across(from, room, to)));
         }
         out.route.extend(leg);
         room = centre(layout, b);
@@ -455,6 +460,35 @@ fn across(from: Vec3, middle: Vec3, to: Vec3) -> Vec3 {
     let at = between + toward * reach;
     Vec3::new(at.x, middle.y, at.z)
 }
+
+/// Where a room's ways in and out meet square, in plan (doorways on walls at right angles,
+/// `CORNER_SIN`), the corner where they cross, both a step or more into the room: the
+/// tour turns once, there, the way it goes on. Round 7's crypt film went in by an east door
+/// to the room's middle 2 m to the north, the look yawing 25° north after it, and out by a
+/// south door beside the way in, yawing 115° back the other way at the turn bound (45° a
+/// second, 27-29 s), the frame sliding along the bare wall between.
+fn cornered(from: Vec3, came: Option<Vec3>, to: Vec3, goes: Option<Vec3>) -> Option<Vec3> {
+    let flat = |v: Vec3| glam::Vec2::new(v.x, v.z);
+    let (d, e) = (
+        flat(came?).normalize_or_zero(),
+        flat(goes?).normalize_or_zero(),
+    );
+    let det = d.perp_dot(e);
+    if det.abs() < CORNER_SIN {
+        return None;
+    }
+    // from + d s = to - e u
+    let r = flat(to) - flat(from);
+    let (s, u) = (r.perp_dot(e) / det, d.perp_dot(r) / det);
+    (s >= DOOR_STEP_M && u >= DOOR_STEP_M).then(|| {
+        let at = flat(from) + d * s;
+        Vec3::new(at.x, from.y, at.y)
+    })
+}
+
+/// How square a room's ways in and out must meet for the tour to turn at their corner: the
+/// sine of the angle between them (60°).
+const CORNER_SIN: f32 = 0.87;
 
 /// The longest way by the graph's links from one room to another that enters no room twice,
 /// secrets left out, locks open and one-way doors only their way (a showcase walk, not a

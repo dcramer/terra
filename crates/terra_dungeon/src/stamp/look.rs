@@ -76,10 +76,11 @@ pub const LOOK_M: f32 = 4.0;
 pub const PITCH_MOST: f32 = 0.52;
 /// The dolly's pace along the view where the look turns slowly, in metres a second.
 pub const DOLLY_M_S: f32 = 2.5;
-/// The fastest the look turns at the dolly's pace, in radians a second (45°, a slow pan):
+/// The fastest the look turns at the dolly's pace, in radians a second (26°, a slow pan):
 /// the dolly slows where it would turn faster (round 17's mine film yawed 168° in 1.9 s
-/// out of a dead end at the plain 2.5 m/s, a whip pan).
-pub const TURN_MOST_PER_S: f32 = 0.785;
+/// out of a dead end at the plain 2.5 m/s, a whip pan; round 7's barrow reviewers saw 60°
+/// in 1.75 s at the old 45° as a swing along a bare wall).
+pub const TURN_MOST_PER_S: f32 = 0.45;
 /// The dolly's slowing is eased over this much of the view either side, in metres.
 const EASE_M: f32 = 1.5;
 /// Under a theme's vaults (D527) the look tilts up this much, in radians (10°: with
