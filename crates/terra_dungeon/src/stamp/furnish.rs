@@ -96,7 +96,7 @@ fn toward(p: Vec3, doors: &[Vec3]) -> usize {
     }
 }
 
-fn pick<'a>(list: &'a [(String, f32)], salt: u32) -> &'a (String, f32) {
+fn pick(list: &[(String, f32)], salt: u32) -> &(String, f32) {
     &list[salt as usize % list.len()]
 }
 
@@ -234,8 +234,40 @@ pub(super) fn lay(
                 taken.push((p, HERO_M));
             }
         }
-        // A vignette at the first spot where all of it fits.
-        for dress in dresses.iter().filter(|d| !d.vignette.is_empty()) {
+        let laying = Laying {
+            dresses: &dresses,
+            spots: &spots,
+            corners: &corners,
+            floor: &floor,
+            place: &place,
+            cells: cells.len(),
+            min: rect.min,
+        };
+        laying.vignette(&mut taken, out);
+        laying.wall_props(&mut taken, out);
+        laying.clutter(&mut taken, out);
+    }
+}
+
+/// One room's places and dressings, for laying its vignette, wall props and clutter.
+struct Laying<'a> {
+    dresses: &'a [&'a Dress],
+    spots: &'a [Spot],
+    corners: &'a [(u32, Vec3, usize)],
+    floor: &'a [(u32, Vec3, usize)],
+    place: &'a Room<'a>,
+    cells: usize,
+    min: IVec3,
+}
+
+impl Laying<'_> {
+    fn salt(&self, k: u32) -> u32 {
+        hash(self.min, k)
+    }
+
+    /// A vignette at the first spot where all of it fits.
+    fn vignette(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
+        for dress in self.dresses.iter().filter(|d| !d.vignette.is_empty()) {
             let fits = |s: &Spot| {
                 let at: Vec<Vec3> = dress
                     .vignette
@@ -243,59 +275,58 @@ pub(super) fn lay(
                     .map(|(_, _, (along, o))| s.offset(*along, *o))
                     .collect();
                 at.iter()
-                    .all(|&p| place.clear(p) && free(&taken, p, CLUTTER_APART_M))
+                    .all(|&p| self.place.clear(p) && free(taken, p, CLUTTER_APART_M))
                     .then_some(at)
             };
-            if let Some((s, at)) = spots.iter().find_map(|s| fits(s).map(|at| (*s, at))) {
+            let found = self.spots.iter().find_map(|s| fits(s).map(|at| (*s, at)));
+            if let Some((s, at)) = found {
                 for ((model, scale, _), p) in dress.vignette.iter().zip(at) {
                     put(out, &(model.clone(), *scale), p, opposite(s.d));
                     taken.push((p, CLUTTER_APART_M));
                 }
-                break;
+                return;
             }
         }
-        // Wall props, so many per four cells.
-        for (k, dress) in dresses
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| !d.props.is_empty())
-        {
+    }
+
+    /// Wall props, so many per four cells.
+    fn wall_props(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
+        for (k, dress) in (self.dresses.iter().enumerate()).filter(|(_, d)| !d.props.is_empty()) {
             let (least, most) = dress.count;
-            let per = least + salt(520 + k as u32) % (most.saturating_sub(least) + 1);
-            let wanted = (per as usize * cells.len()).div_ceil(4);
+            let per = least + self.salt(520 + k as u32) % (most.saturating_sub(least) + 1);
+            let wanted = (per as usize * self.cells).div_ceil(4);
             let mut laid = 0;
-            for s in &spots {
+            for s in self.spots {
                 if laid == wanted {
                     break;
                 }
-                if free(&taken, s.p, APART_M) {
+                if free(taken, s.p, APART_M) {
                     put(out, pick(&dress.props, s.rank), s.p, opposite(s.d));
                     taken.push((s.p, 0.0));
                     laid += 1;
                 }
             }
         }
-        // Clutter a cell: the corners first, then by the walls between what stands there.
-        for (k, dress) in dresses
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| !d.clutter.is_empty())
-        {
+    }
+
+    /// Clutter a cell: the corners first, then by the walls between what stands there.
+    fn clutter(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
+        for (k, dress) in (self.dresses.iter().enumerate()).filter(|(_, d)| !d.clutter.is_empty()) {
             let (least, most) = dress.litter;
-            let per = least + salt(550 + k as u32) % (most.saturating_sub(least) + 1);
-            let wanted = per as usize * cells.len();
+            let per = least + self.salt(550 + k as u32) % (most.saturating_sub(least) + 1);
+            let wanted = per as usize * self.cells;
             // Between the wall props and a little out from them.
-            let by_walls = spots.iter().flat_map(|s| {
+            let by_walls = self.spots.iter().flat_map(|s| {
                 let facing = (opposite(s.d) + s.rank as usize) % 4;
                 [-0.5, 0.5].map(|along| (s.rank, s.offset(along, 0.45), facing))
             });
             let mut laid = 0;
-            let candidates = corners.iter().copied().chain(by_walls);
-            for (rank, p, facing) in candidates.chain(floor.iter().copied()) {
+            let candidates = self.corners.iter().copied().chain(by_walls);
+            for (rank, p, facing) in candidates.chain(self.floor.iter().copied()) {
                 if laid == wanted {
                     break;
                 }
-                if place.clear(p) && free(&taken, p, CLUTTER_APART_M) {
+                if self.place.clear(p) && free(taken, p, CLUTTER_APART_M) {
                     put(out, pick(&dress.clutter, rank), p, facing);
                     taken.push((p, 0.0));
                     laid += 1;
