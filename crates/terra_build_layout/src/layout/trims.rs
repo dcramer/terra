@@ -12,13 +12,9 @@ use terra_build::{CELL_M, Fill};
 /// it a sill, unless the opening is at the foot of its wall, as a doorway is.
 pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mut Layout) {
     let mut holes: BTreeSet<(i32, i32)> = BTreeSet::new();
-    for (at, cube) in super::Scope::row_cubes(walls.base, axis, row) {
+    for (at, _) in super::Scope::row_cubes(walls.base, axis, row) {
         let (_, along) = axis.row_of(at);
-        // A hole with a door or shutters fitted is framed by their own frame.
-        if super::drawn_fill(&cube) != Fill::Solid
-            && walls.runs(at, axis)
-            && !super::framed(walls.base, at)
-        {
+        if boarded(walls, at, axis) {
             holes.insert((along, at.y));
         }
     }
@@ -68,7 +64,6 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
     let posts = super::runs::post_width(kit).is_some();
     let solid =
         |along: i32, layer: i32| walls.ours(axis.cube(row, along, layer)) == Some(Fill::Solid);
-    let per_cube = (CELL_M / kit.course).round() as i32;
     let depth = kit.radius() + 0.02;
     let across = axis.across();
     let mut board = |a: f32, b: f32, bottom: f32, top: f32, proud: f32| {
@@ -162,27 +157,50 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
                 low as f32 * CELL_M - kit.frame,
                 (high + 1) as f32 * CELL_M + kit.frame,
             );
-            let near = layer * per_cube;
             if upward > 0 {
                 let edge = (layer + 1) as f32 * CELL_M;
-                // Up to the middle of the first course wholly above it.
-                let head = (near - 2..near + 2 * per_cube + 2)
-                    .map(|course| axis.centre(kit, course))
-                    .find(|&centre| centre - kit.course * 0.5 >= edge - 1e-3)
-                    .map_or(edge + 0.1, |centre| centre.max(edge + 0.06));
-                board(a, b, edge, head, 0.01);
+                board(a, b, edge, head_top(kit, axis, layer), 0.01);
             } else {
                 let edge = layer as f32 * CELL_M;
-                let foot = (near - 2 * per_cube - 2..near + 2)
-                    .rev()
-                    .map(|course| axis.centre(kit, course))
-                    .find(|&centre| centre + kit.course * 0.5 <= edge + 1e-3)
-                    .map_or(edge - 0.1, |centre| centre.min(edge - 0.06));
-                board(a, b, foot, edge, 0.03);
+                board(a, b, sill_foot(kit, axis, layer), edge, 0.03);
             }
         }
     }
     layout.pieces.extend(heads);
+}
+
+/// Whether a cube of a wall running along `axis` is an opening framed with boards: open,
+/// and with no door or shutters fitted, which are framed by their own frame.
+fn boarded(walls: &Walls, at: glam::IVec3, axis: Axis) -> bool {
+    walls
+        .base
+        .cube(at)
+        .is_some_and(|cube| super::drawn_fill(&cube) != Fill::Solid)
+        && walls.runs(at, axis)
+        && !super::framed(walls.base, at)
+}
+
+/// The top of the head board over an opening whose top layer is `layer`: the middle of the
+/// first course wholly above it.
+fn head_top(kit: &Kit, axis: Axis, layer: i32) -> f32 {
+    let per_cube = (CELL_M / kit.course).round() as i32;
+    let (near, edge) = (layer * per_cube, (layer + 1) as f32 * CELL_M);
+    (near - 2..near + 2 * per_cube + 2)
+        .map(|course| axis.centre(kit, course))
+        .find(|&centre| centre - kit.course * 0.5 >= edge - 1e-3)
+        .map_or(edge + 0.1, |centre| centre.max(edge + 0.06))
+}
+
+/// The foot of the sill under an opening whose bottom layer is `layer`: the middle of the
+/// first course wholly under it.
+fn sill_foot(kit: &Kit, axis: Axis, layer: i32) -> f32 {
+    let per_cube = (CELL_M / kit.course).round() as i32;
+    let (near, edge) = (layer * per_cube, layer as f32 * CELL_M);
+    (near - 2 * per_cube - 2..near + 2)
+        .rev()
+        .map(|course| axis.centre(kit, course))
+        .find(|&centre| centre + kit.course * 0.5 <= edge + 1e-3)
+        .map_or(edge - 0.1, |centre| centre.min(edge - 0.06))
 }
 
 /// Where another kind's wall comes in square against the side of one of the kit's, as a
@@ -292,14 +310,28 @@ pub(super) fn ends(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut 
                 let (a, b) = (face, face - outward as f32 * kit.frame * 1.2);
                 let out = axis.across() * (kit.radius() + 0.03);
                 // Its foot and top a hair in from its stack's, out of the planes of a sill's
-                // underside and a split log's flat top there.
-                let low = axis.point(row, a.min(b), at.y as f32 * CELL_M + END_BOARD_IN_M) - out;
-                let high =
-                    axis.point(row, a.max(b), (top.y + 1) as f32 * CELL_M - END_BOARD_IN_M) + out;
-                layout.pieces.push(Piece::Board {
-                    min: Place::near(low.min(high)),
-                    max: Place::near(low.max(high)),
-                });
+                // underside and a split log's flat top there. Over an opening it stands on
+                // the head, and under one it stops at the sill's foot, as a jamb stops under
+                // a head: the head and the sill lap past the opening over the logs' ends, and
+                // a board from the opening's edge ran through them in the plane of their face.
+                let foot = if boarded(walls, at - glam::IVec3::Y, axis) {
+                    head_top(kit, axis, at.y - 1)
+                } else {
+                    at.y as f32 * CELL_M + END_BOARD_IN_M
+                };
+                let crown = if boarded(walls, top + glam::IVec3::Y, axis) {
+                    sill_foot(kit, axis, top.y + 1)
+                } else {
+                    (top.y + 1) as f32 * CELL_M - END_BOARD_IN_M
+                };
+                let low = axis.point(row, a.min(b), foot) - out;
+                let high = axis.point(row, a.max(b), crown) + out;
+                if crown > foot + 0.01 {
+                    layout.pieces.push(Piece::Board {
+                        min: Place::near(low.min(high)),
+                        max: Place::near(low.max(high)),
+                    });
+                }
                 // On up into the roof's cube over the stack the wall is carried up into, its
                 // top cut a hair under the roof's deck.
                 let over = top + glam::IVec3::Y;

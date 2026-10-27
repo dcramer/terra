@@ -169,6 +169,57 @@ fn fuzz_seed_16_a_log_walls_top_split_log_ends_inside_the_end_board_against_ston
 }
 
 #[test]
+fn fuzz_seed_12_an_end_board_over_a_doorway_stands_on_the_doors_head() {
+    // Found by `cargo xtask fuzz` at seed 12, shrunk: a log room's doorway beside the stone
+    // room it is built into. Over the doorway the logs end against the stone, and the end
+    // board up their ends started at the doorway's top, through the head board lapping past
+    // the opening, in the plane of its face.
+    let materials = baseline();
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .unwrap()
+    };
+    let base = build(
+        &materials.kits,
+        &[
+            Room {
+                min: [0, 1],
+                max: [6, 6],
+                storey: 0,
+                kind: kind("stone"),
+            },
+            Room {
+                min: [0, 0],
+                max: [4, 3],
+                storey: 0,
+                kind: kind("logs"),
+            },
+            Opening {
+                from: [1, 3],
+                to: [2, 3],
+                storey: 0,
+                door: true,
+            },
+        ],
+    );
+    let report = terra_build_mesh::inspect::inspect(
+        &base,
+        &materials.kits,
+        &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+    );
+    let fought: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.fault == terra_build_mesh::inspect::Fault::Coplanar)
+        .collect();
+    assert!(fought.is_empty(), "{fought:#?}");
+}
+
+#[test]
 fn a_failing_base_shrinks_to_the_element_that_fails_it() {
     // Fails while a box of hewn timber is in it: the room and the wall go, the box
     // stays, made one cube.
