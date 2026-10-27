@@ -39,7 +39,7 @@ import look
 
 AMBER = (1.0, 0.52, 0.12)
 CORE = (1.0, 0.86, 0.55)  # an eye's hot middle, near white, fading out to amber
-EMBER = (0.16, 0.035, 0.005)  # the throat's glow at its deepest, dark by the lips
+EMBER = (0.07, 0.015, 0.002)  # the throat's glow at its deepest, dark by the lips: faint, so the mouth reads as a void, not a lit decal
 src = look.path(look.args()[0])
 SHEET = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--sheet=")), None)
 
@@ -166,6 +166,9 @@ def scan(name, tint):
 
 
 oaks = np.concatenate([scan("oak_bark", 0.65), scan("bark_brown_02", 0.82)])
+# Darker and warmer again: in the film the scans' grade still stood pale grey among the
+# forest's dark brown oaks (round-5 still reviews), whose shader darkens them in its relief.
+oaks = oaks * np.array([0.84, 0.79, 0.72], dtype=np.float32)
 rgb = colour.reshape(H, W, 4)[..., :3]
 trunk_px = px[pos[:, 2] < joint["Head"].z]
 own = rgb[trunk_px[:, 1], trunk_px[:, 0]]
