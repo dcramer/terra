@@ -1,79 +1,79 @@
 id	value	why
-timing.light.idle_to_hit	0.407	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+timing.light.idle_to_hit	0.279	lowered by nightly 2026-10-27
 timing.chain.slash_backhand	0.607	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 timing.chain.backhand_finisher	0.686	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 timing.chain.blows	3	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-timing.finisher.hit_to_guard	0.783	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+timing.finisher.hit_to_guard	0.987	lowered by nightly 2026-10-27
 timing.heavy.idle_to_hit	0.613	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-timing.heavy.hit_to_guard	1.403	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-timing.heavy.total	2.016	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-timing.roll.length	0.793	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+timing.heavy.hit_to_guard	1.04	lowered by nightly 2026-10-27
+timing.heavy.total	1.587	lowered by nightly 2026-10-27
+timing.roll.length	0.6	lowered by nightly 2026-10-27
 timing.roll.roll_to_roll	0.655	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-timing.hit_stop.slash	0.1	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-timing.hit_stop.backhand	0.1	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-timing.hit_stop.finisher	0.13	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-timing.hit_stop.heavy	0.2	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+timing.hit_stop.slash	0.03	lowered by nightly 2026-10-27
+timing.hit_stop.backhand	0.03	lowered by nightly 2026-10-27
+timing.hit_stop.finisher	0.04	lowered by nightly 2026-10-27
+timing.hit_stop.heavy	0.05	lowered by nightly 2026-10-27
 timing.telegraph.partner_slash	0.933	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 timing.telegraph.partner_heavy	0.844	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 timing.spacing	0.833	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.slash.held	12.42	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.slash.sword_in_shield	25.07	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.slash.shield_in_arm	11.216	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.slash.hands	18.069	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.backhand.held	12.49	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.backhand.sword_in_shield	16.54	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.backhand.shield_in_arm	7.522	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.backhand.hands	21.977	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.finisher.held	12.42	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.finisher.sword_in_shield	25.07	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.finisher.shield_in_arm	11.216	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.finisher.hands	18.069	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.heavy.held	4.193	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.heavy.sword_in_shield	27.464	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.heavy.shield_in_arm	15.187	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
+move.slash.held	-1.975	lowered by nightly 2026-10-27
+move.slash.sword_in_shield	-7.894	lowered by nightly 2026-10-27
+move.slash.shield_in_arm	-17.078	lowered by nightly 2026-10-27
+move.slash.hands	-4.212	lowered by nightly 2026-10-27
+move.backhand.held	-2.017	lowered by nightly 2026-10-27
+move.backhand.sword_in_shield	-9.147	lowered by nightly 2026-10-27
+move.backhand.shield_in_arm	-16.716	lowered by nightly 2026-10-27
+move.backhand.hands	-7.593	lowered by nightly 2026-10-27
+move.finisher.held	-1.975	lowered by nightly 2026-10-27
+move.finisher.sword_in_shield	-7.894	lowered by nightly 2026-10-27
+move.finisher.shield_in_arm	-17.078	lowered by nightly 2026-10-27
+move.finisher.hands	-4.212	lowered by nightly 2026-10-27
+move.heavy.held	0.402	lowered by nightly 2026-10-27
+move.heavy.sword_in_shield	-8.661	lowered by nightly 2026-10-27
+move.heavy.shield_in_arm	-20.844	lowered by nightly 2026-10-27
 move.heavy.hands	-1.322	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.partner_slash.held	11.969	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.partner_slash.sword_in_shield	25.07	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.partner_slash.shield_in_arm	11.216	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.partner_slash.hands	3.198	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.partner_heavy.held	4.193	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.partner_heavy.sword_in_shield	27.464	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.partner_heavy.shield_in_arm	15.187	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
+move.partner_slash.held	-1.975	lowered by nightly 2026-10-27
+move.partner_slash.sword_in_shield	-7.894	lowered by nightly 2026-10-27
+move.partner_slash.shield_in_arm	-17.078	lowered by nightly 2026-10-27
+move.partner_slash.hands	-4.212	lowered by nightly 2026-10-27
+move.partner_heavy.held	0.402	lowered by nightly 2026-10-27
+move.partner_heavy.sword_in_shield	-8.661	lowered by nightly 2026-10-27
+move.partner_heavy.shield_in_arm	-20.844	lowered by nightly 2026-10-27
 move.partner_heavy.hands	-1.322	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.roll.held	22.802	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+move.roll.held	-4.666	lowered by nightly 2026-10-27
 move.roll.sword_in_shield	-67.652	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
 move.roll.shield_in_arm	-43.461	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
-move.roll.hands	2.625	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.block.held	6.399	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.block.sword_in_shield	19.128	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
+move.roll.hands	-3.344	lowered by nightly 2026-10-27
+move.block.held	-0.714	lowered by nightly 2026-10-27
+move.block.sword_in_shield	-10.914	lowered by nightly 2026-10-27
 move.block.shield_in_arm	-10.875	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
 move.block.hands	0.199	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.slash.contact_off	11.669	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.slash.contact_ahead	1.09	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.slash.from_guard	1.074	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.slash.to_guard	0.792	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.backhand.contact_off	61.339	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+move.slash.from_guard	0.03	lowered by nightly 2026-10-27
+move.slash.to_guard	0.03	lowered by nightly 2026-10-27
+move.backhand.contact_off	0.174	lowered by nightly 2026-10-27
 move.backhand.contact_ahead	0.743	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.backhand.from_guard	0.909	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.backhand.to_guard	0.941	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+move.backhand.from_guard	0.03	lowered by nightly 2026-10-27
+move.backhand.to_guard	0.03	lowered by nightly 2026-10-27
 move.finisher.contact_off	11.669	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.finisher.contact_ahead	1.09	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.finisher.from_guard	1.074	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.finisher.to_guard	0.87	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+move.finisher.from_guard	0.03	lowered by nightly 2026-10-27
+move.finisher.to_guard	0.03	lowered by nightly 2026-10-27
 move.heavy.contact_off	12.421	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.heavy.contact_ahead	1.497	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.heavy.from_guard	1.235	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.heavy.to_guard	1.186	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+move.heavy.from_guard	0.03	lowered by nightly 2026-10-27
+move.heavy.to_guard	0.03	lowered by nightly 2026-10-27
 move.partner_slash.contact_off	12.785	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.partner_slash.contact_ahead	1.095	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.partner_slash.from_guard	0.914	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.partner_slash.to_guard	0.792	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+move.partner_slash.from_guard	0.03	lowered by nightly 2026-10-27
+move.partner_slash.to_guard	0.03	lowered by nightly 2026-10-27
 move.partner_heavy.contact_off	12.421	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.partner_heavy.contact_ahead	1.497	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.partner_heavy.from_guard	1.235	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.partner_heavy.to_guard	1.186	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.slash.into_next	0.701	seeded from main at 705a8520 (2026-10-24), the first scorecard run
-move.backhand.into_next	0.696	seeded from main at 705a8520 (2026-10-24), the first scorecard run
+move.partner_heavy.from_guard	0.03	lowered by nightly 2026-10-27
+move.partner_heavy.to_guard	0.03	lowered by nightly 2026-10-27
+move.slash.into_next	0	lowered by nightly 2026-10-27
+move.backhand.into_next	0	lowered by nightly 2026-10-27
 move.block.shield_face	4.587	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Keyed_Guard.held	-4.382	new criterion camera.locked_off_line (D453): the locked camera stands on the line today, 0 deg off it
 move.Keyed_Guard.sword_in_shield	-2.987	new criterion D481: the sword through the fighter own shield and the shield through the sword arm, measured by the move check clash, after the developer note on the duel film 2026-10-25 (they poke and swing the sword through the shield); also the first numbers of round 13 Fight_Walk and Jump_Loop rows, which had none
@@ -142,24 +142,24 @@ film.misses	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 film.hit_stop	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
 film.framed	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
 film.camera_share	0	seeded from main at 705a8520 (2026-10-24), the first scorecard run with the duel film
-camera.locked_off_line	1	new criterion camera.locked_off_line (D453): the locked camera stands on the line today, 0 deg off it
+camera.locked_off_line	0	lowered by nightly 2026-10-27
 move.block.raise	0.528	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
 move.block.raise_ahead	0.339	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
 move.block.raise_elbow	0.354	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
 move.block.raise_still	0.013	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
 move.block.from_guard	0.03	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
 move.block.to_guard	0.03	first numbers of round 11's block raise (Keyed_Block, D450), within their bars, held by round 12's raise
-hit.flash.frames	3	first numbers of D456's hit flash and camera kick (combat round 12): the struck body lit 3 frames at 60, the view punched 0.8 deg and settled in 0.083 s
+hit.flash.frames	0	lowered by nightly 2026-10-27
 hit.kick.peak	0.8	first numbers of D456's hit flash and camera kick (combat round 12): the struck body lit 3 frames at 60, the view punched 0.8 deg and settled in 0.083 s
 hit.kick.settle	0.083	first numbers of D456's hit flash and camera kick (combat round 12): the struck body lit 3 frames at 60, the view punched 0.8 deg and settled in 0.083 s
 hit.burst.frames	3	first number of the D487 contact burst, combat round 17, the glow where the blade met the body shows 3 frames at 60, Enshrouded 3 to 4
 move.blows.shield_high	-8.841	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
-move.blows.shield_elbow	0.087	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
-move.blows.shield_face	112.131	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
-move.chain.shield_round_trip	0.439	first numbers of the shield's carry and the chain's round trip (round 20, moves.ts rows blows and chain; research/2026-10-25-shield-prior-art.md)
+move.blows.shield_elbow	0.164	lowered by nightly 2026-10-27
+move.blows.shield_face	88.329	lowered by nightly 2026-10-27
+move.chain.shield_round_trip	0	lowered by nightly 2026-10-27
 film.stagger.shield_jump	0.213	film.stagger.shield_jump, a new row (round 29): 0.47 m before the reel under the guard hold, its first number after it
-held.shield.grip_hand	22.781	held.shield.grip_hand and grip_across_palm redefined for the strapped heater (D504, D459, round 24): the fist off the heater's hand strap and the strap off the line across the palm; first numbers of the redefined rows (the fist sits on the far side of the forearm, a hand roll away)
-held.shield.grip_across_palm	89.979	held.shield.grip_hand and grip_across_palm redefined for the strapped heater (D504, D459, round 24): the fist off the heater's hand strap and the strap off the line across the palm; first numbers of the redefined rows (the fist sits on the far side of the forearm, a hand roll away)
+held.shield.grip_hand	18.099	lowered by nightly 2026-10-27
+held.shield.grip_across_palm	7.316	lowered by nightly 2026-10-27
 film.pose.head_yaw_blows	40.5	new rows film.pose.* (round 30, D530): the game's composed pose from the duel record, the developer's complaints from play (head 45 deg left in blows, shield raised off the block, heater off the forearm); their first numbers on main
 film.pose.shield_rest_high	27.7	new rows film.pose.* (round 30, D530): the game's composed pose from the duel record, the developer's complaints from play (head 45 deg left in blows, shield raised off the block, heater off the forearm); their first numbers on main
 film.pose.shield_forearm_deg	15.6	new rows film.pose.* (round 30, D530): the game's composed pose from the duel record, the developer's complaints from play (head 45 deg left in blows, shield raised off the block, heater off the forearm); their first numbers on main
