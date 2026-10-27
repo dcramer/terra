@@ -47,6 +47,17 @@ test("tells refine.py a flat thing is flat", () => {
   assert.ok(refineArgs(prop, "m", "o", "s").includes("--flat"));
 });
 
+test("gives refine.py a grade given as numbers and asks it to grime aged things", () => {
+  const prop = readProp(forge, "forge");
+  prop.grade = [0.4, 0.3, 0.2, 0.08, 0.07, 0.06];
+  prop.grime = true;
+  const args = refineArgs(prop, "m", "o", "s");
+  assert.ok(args.includes("--grade=0.4,0.3,0.2,0.08,0.07,0.06"));
+  assert.ok(args.includes("--grime"));
+  prop.grade = "another_prop";
+  assert.ok(!refineArgs(prop, "m", "o", "s").some((a) => a.startsWith("--grade=")));
+});
+
 test("gives refine.py the texture's colour for a role matched by another", () => {
   const prop = readProp(forge, "forge");
   prop.match = { Fire: [0.68, 0.24, 0.17] };

@@ -28,6 +28,7 @@ from collections import Counter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "characters"))
+sys.path.insert(0, HERE)
 
 import bmesh
 import bpy
@@ -35,6 +36,7 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 import look
+from aged import grime
 
 # --flat: a thing that lies flat, such as a rug, laid on its plane and pressed thin.
 # --along: a building kit's piece laid along its length, such as a log or a board, which the
@@ -53,6 +55,9 @@ block = "--block" in args
 # --grade=R,G,B,SR,SG,SB: the colour texture's mean and spread on the surface, per channel,
 # to match, so the pieces of a kit share one grade (docs/art-style.md).
 grade = next((tuple(map(float, a.split("=")[1].split(","))) for a in args if a.startswith("--grade=")), None)
+# --grime: aged bone or stone, dirt in its crevices and where it lies on the floor, and stain
+# over the rest (aged.py), as a vertex colour the game multiplies into its texture.
+aged = "--grime" in args
 # The model contract (docs/art-style.md): --dims=W,H,D, its width, height and depth in metres
 # along glTF's X, Y (up) and Z (front), which it is made exactly; --anchor=hinge for a leaf
 # hinged at its origin rather than standing on the middle of its base; --mirror for a leaf
@@ -69,7 +74,7 @@ sockets = {
 src, out, sheet, size, budget, turn, *given = [
     a
     for a in args
-    if a not in ("--flat", "--along", "--textured", "--block", "--mirror")
+    if a not in ("--flat", "--along", "--textured", "--block", "--mirror", "--grime")
     and not a.startswith(("--grade=", "--dims=", "--anchor=", "--socket="))
 ]
 size, budget, turn = float(size), int(budget), float(turn)
@@ -760,6 +765,11 @@ if along:
     lay_along(ob.data)
 else:
     place(ob)
+if aged:
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    grime(bm, ob.data, "REFINE")
+    bm.free()
 smooth(ob)
 bpy.context.view_layer.update()
 report = checks(ob)
@@ -776,6 +786,8 @@ bpy.ops.export_scene.gltf(
     export_format="GLB",
     use_selection=True,
     export_tangents=textured,
+    # Its grime, the active colour attribute, as COLOR_0.
+    **({"export_vertex_color": "ACTIVE"} if aged else {}),
     export_image_format="JPEG" if textured else "AUTO",
     export_jpeg_quality=JPEG_QUALITY,
 )

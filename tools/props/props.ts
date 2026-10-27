@@ -117,8 +117,13 @@ export type Prop = {
   // the same, so it reads alike turned any way.
   block?: boolean;
   // Another prop whose colour this one's texture is matched to when refined, its mean and
-  // spread on the surface, so a kit's pieces share one grade. That one is refined first.
-  grade?: string;
+  // spread on the surface, so a kit's pieces share one grade. That one is refined first. Or
+  // the grade itself, six sRGB numbers, the mean and spread of red, green and blue: for a
+  // model its generator coloured too pale or bright, such as bone whiter than the floor it lies on.
+  grade?: string | number[];
+  // Aged bone or stone: dirt in its crevices and where it lies on the floor, and stain over
+  // the rest, as a vertex colour the game multiplies into its texture (aged.py).
+  grime?: boolean;
   // Another prop whose concept it is drawn after, so the pieces of a kit share one stone,
   // one wood and one grade (docs/art-style.md, "One kit, one grade").
   reference?: string;
@@ -175,6 +180,8 @@ export function refineArgs(prop: Prop, model: string, out: string, sheet: string
     ...(prop.along ? ["--along"] : []),
     ...(prop.palette ? [] : ["--textured"]),
     ...(prop.block ? ["--block"] : []),
+    ...(prop.grime ? ["--grime"] : []),
+    ...(Array.isArray(prop.grade) ? [`--grade=${prop.grade.join(",")}`] : []),
     ...(prop.dims ? [`--dims=${prop.dims.join(",")}`] : []),
     ...(prop.anchor && prop.anchor !== "base" ? [`--anchor=${prop.anchor}`] : []),
     ...(prop.hinge === "right" ? ["--mirror"] : []),
@@ -248,7 +255,7 @@ function refine(name: string, prop: Prop) {
   // Relative paths, which a Windows Blender under WSL reads as they are (tools/blender).
   const here = (path: string) => relative(ROOT, path);
   const args = refineArgs(prop, here(glb), here(out), here(join(OUT, `${name}.png`)));
-  if (prop.grade) {
+  if (typeof prop.grade === "string") {
     const report = join(OUT, `${prop.grade}.json`);
     const colour = existsSync(report) ? JSON.parse(readFileSync(report, "utf8")).colour : undefined;
     if (!colour) throw new Error(`${name}: refine ${prop.grade} first, whose grade it matches`);
