@@ -381,8 +381,8 @@ fn climb_speed<M: Mover>(
     run.outcome(vec![speed])
 }
 
-/// 1 when the body ended as D508 says: on a climbed top or a ledge in reach, never on one
-/// with no room to stand.
+/// 1 when the body did not do as D508 says: stand on a climbed top or a ledge in reach, never
+/// on one with no room to stand.
 fn mantle<M: Mover>(new: &impl Fn() -> M, kind: &Kind, top: Top) -> Outcome {
     let reach = kind.reach;
     let (course, high, jump, after) = match top {
@@ -415,9 +415,11 @@ fn mantle<M: Mover>(new: &impl Fn() -> M, kind: &Kind, top: Top) -> Outcome {
             break;
         }
     }
+    // Stood on the top at all: the walk goes on over it, and a fast kind pulled up early walks
+    // off the top's far end before the case ends.
     let is = match top {
         Top::Roofed => stood,
-        _ => !on_top(&run.body(0), kind, high),
+        _ => !stood,
     };
     run.outcome(wrong(is))
 }
