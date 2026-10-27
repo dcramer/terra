@@ -274,11 +274,12 @@ fn fuzz_seeds_34_54_80_109_131_180_a_side_board_stops_against_the_end_board() {
 }
 
 #[test]
-fn fuzz_seed_74_a_doorways_jamb_stops_under_the_sill_of_the_window_beside_it() {
+fn fuzz_seed_74_the_post_between_a_window_and_a_doorway_runs_full_height() {
     // Found by `cargo xtask fuzz` at seed 74, shrunk: a log wall with a window beside a
     // doorway, over a stub of wall between them. The post up the doorway's side stood to
     // the window's foot, inside the sill lapping past the window, its sawn top in the
-    // plane of the sill's.
+    // plane of the sill's; then (085aed8f) it stopped under the sill. Now it runs on to the
+    // head and the sill is framed into its side (D550).
     let materials = baseline();
     let kind = |name: &str| {
         materials
@@ -328,6 +329,50 @@ fn fuzz_seed_74_a_doorways_jamb_stops_under_the_sill_of_the_window_beside_it() {
         })
         .collect();
     assert!(fought.is_empty(), "{fought:#?}");
+    // The post between the window and the doorway runs the full height, from the doorway's
+    // foot to its head, unbroken, and the window's sill is framed into its side, ending
+    // inside it (D550). The window is cube z 5 (z 2.5 to 3.0), from y 1.0 over the stub to
+    // the doorway's head at y 2.0; the doorway cube z 6.
+    use terra_build_layout::layout::Piece;
+    let kit = materials.kits.of(kind("logs")).unwrap();
+    let layout = terra_build_layout::layout::lay_among(&base, kit, &materials.kits);
+    let between = layout
+        .pieces
+        .iter()
+        .find_map(|piece| match piece {
+            Piece::Log { from, to, .. }
+                if from.metres().z == to.metres().z
+                    && from.metres().z > 2.75
+                    && from.metres().z < 3.0 =>
+            {
+                Some((from.metres(), to.metres()))
+            }
+            _ => None,
+        })
+        .expect("a post between the window and the doorway");
+    let (foot, top) = (between.0.y.min(between.1.y), between.0.y.max(between.1.y));
+    assert!(foot <= 0.0 && top >= 2.0, "the post runs y {foot} to {top}");
+    let sill = layout
+        .pieces
+        .iter()
+        .find_map(|piece| match piece.bounds() {
+            Some((min, max))
+                if matches!(piece, Piece::Board { .. })
+                    && max.y <= 1.0 + 1e-3
+                    && min.y > 0.5
+                    && max.z > 2.5 =>
+            {
+                Some((min, max))
+            }
+            _ => None,
+        })
+        .expect("the window's sill");
+    assert!(
+        sill.1.z > 2.75 && sill.1.z <= between.0.z + 1e-3,
+        "the sill ends at z {} in the post at z {}",
+        sill.1.z,
+        between.0.z
+    );
 }
 
 #[test]

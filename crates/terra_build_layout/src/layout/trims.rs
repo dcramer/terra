@@ -32,19 +32,31 @@ fn jambs(
     holes: &BTreeSet<(i32, i32)>,
     layout: &mut Layout,
 ) {
-    // A jamb whose wall beside it is itself an opening's over its top or under its foot (a
-    // window beside a doorway, over the stub of wall between them) stops at that opening's
-    // sill or stands on its head, as a jamb does under a head: the sill and the head lap
-    // past their opening over the jamb, and a jamb run to the layer's face stood in them,
-    // its end in the plane of their face. `wall` is the wall's run beside the jamb.
-    let beside = |(wall, low, high): (i32, i32, i32), (foot, top): (f32, f32)| {
+    // A jamb whose wall beside it is a stub under a window (a window beside a doorway) runs on
+    // up past the stub, through the window's layers while its own opening goes on, to the
+    // head: the post between a window and a doorway runs full height, unbroken, the window's
+    // sill framed into its side (D550, `heads_and_sills`). The run's top layer so carried on;
+    // `wall` is the wall's run beside the jamb.
+    let past_sill = |wall: i32, along: i32, high: i32| {
+        let mut top = high;
+        while holes.contains(&(wall, top + 1)) && holes.contains(&(along, top + 1)) {
+            top += 1;
+        }
+        top
+    };
+    // A jamb whose wall beside it is another opening's under its foot stands on its head, as
+    // a jamb does under a head: the head laps past its opening over the jamb, and a jamb run
+    // to the layer's face stood in it, its end in the plane of the head's face. One whose own
+    // opening ends at the stub's top, with a window over the stub beside it, stops at that
+    // window's sill, which laps over it.
+    let beside = |(wall, low, high, past): (i32, i32, i32, bool), (foot, top): (f32, f32)| {
         (
             if holes.contains(&(wall, low - 1)) {
                 head_top(kit, axis, low - 1)
             } else {
                 foot
             },
-            if holes.contains(&(wall, high + 1)) {
+            if !past && holes.contains(&(wall, high + 1)) {
                 sill_foot(kit, axis, high + 1)
             } else {
                 top
@@ -62,7 +74,8 @@ fn jambs(
                 .copied()
                 .filter(|&(along, layer)| solid(along + outward, layer))
                 .collect();
-            for (along, low, high) in runs_of(&edges, |(along, layer)| (along, layer)) {
+            for (along, low, stub) in runs_of(&edges, |(along, layer)| (along, layer)) {
+                let high = past_sill(along + outward, along, stub);
                 let face = (along + i32::from(outward > 0)) as f32 * CELL_M;
                 let middle = face + outward as f32 * width * 0.5;
                 // Down into the course under a window's sill too: the course its foot's
@@ -83,7 +96,7 @@ fn jambs(
                     super::runs::CORNER_POST_SUNK_M
                 };
                 let (foot, top) = beside(
-                    (along + outward, low, high),
+                    (along + outward, low, high, high > stub),
                     (
                         low as f32 * CELL_M - under,
                         (high + 1) as f32 * CELL_M + over,
@@ -125,7 +138,8 @@ fn jambs(
             .copied()
             .filter(|&(along, layer)| solid(along + outward, layer))
             .collect();
-        for (along, low, high) in runs_of(&edges, |(along, layer)| (along, layer)) {
+        for (along, low, stub) in runs_of(&edges, |(along, layer)| (along, layer)) {
+            let high = past_sill(along + outward, along, stub);
             let face = (along + i32::from(outward > 0)) as f32 * CELL_M;
             let (a, b) = if outward > 0 {
                 (face, face + kit.frame)
@@ -133,7 +147,7 @@ fn jambs(
                 (face - kit.frame, face)
             };
             let (foot, top) = beside(
-                (along + outward, low, high),
+                (along + outward, low, high, high > stub),
                 (low as f32 * CELL_M, (high + 1) as f32 * CELL_M),
             );
             board(a, b, foot, top, 0.0);
@@ -228,6 +242,23 @@ fn heads_and_sills(
                 let edge = (layer + 1) as f32 * CELL_M;
                 board(a, b, edge, head_top(kit, axis, layer), 0.01);
             } else {
+                // Beside a doorway, whose jamb runs on up past the stub under the window
+                // (`jambs`, D550), the sill is framed into the jamb's side: it ends at the
+                // jamb's middle, inside it, instead of lapping past the window over it.
+                let into = super::runs::post_width(kit).unwrap_or(kit.frame) * 0.5;
+                let past = |beside: i32| {
+                    holes.contains(&(beside, layer)) && holes.contains(&(beside, layer - 1))
+                };
+                let a = if past(low - 1) {
+                    low as f32 * CELL_M + into
+                } else {
+                    a
+                };
+                let b = if past(high + 1) {
+                    (high + 1) as f32 * CELL_M - into
+                } else {
+                    b
+                };
                 let edge = layer as f32 * CELL_M;
                 board(a, b, sill_foot(kit, axis, layer), edge, 0.03);
             }
