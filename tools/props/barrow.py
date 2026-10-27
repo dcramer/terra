@@ -574,7 +574,8 @@ def prism(m, outline, z0, z1, side, top, metres, bottom=None):
 
 
 # Tallow candles, the crypt's lights left by mourners: wax, the wick, the flame (emissive).
-WAX = ("Wax", "white_stucco", (0.62, 0.54, 0.40))
+# Old tallow, yellowed and grimed: at (0.62, 0.54, 0.40) each mound read as a white plate.
+WAX = ("Wax", "white_stucco", (0.45, 0.37, 0.25))
 WICK = ("Wick", None, (0.03, 0.025, 0.02))
 FLAME = ("Flame", "glow", (1.0, 0.42, 0.10))
 
@@ -596,7 +597,7 @@ def candles():
     to a hand and a half, as mourners leave them in Elden Ring's catacombs and Skyrim's halls:
     0.5 by 0.35 m, 0.36 m to the tallest flame."""
     m = Mesh()
-    lump(m, (0.0, 0.0, 0.0), (0.26, 0.18, 0.035), 0, segs=14, rings=6)
+    lump(m, (0.0, 0.0, 0.0), (0.23, 0.16, 0.03), 0, segs=14, rings=6)
     for x, y, r, h in ((-0.12, 0.05, 0.04, 0.30), (0.02, 0.08, 0.035, 0.22), (0.14, 0.02, 0.03, 0.16), (-0.03, -0.07, 0.03, 0.11),
                        (0.10, -0.09, 0.025, 0.07), (-0.18, -0.06, 0.028, 0.13), (0.20, 0.10, 0.022, 0.05)):
         candle(m, x, y, 0.02, r, h)
@@ -616,7 +617,8 @@ def altar():
     for x, y, r, h in ((-0.58, 0.05, 0.04, 0.26), (-0.50, -0.10, 0.03, 0.15), (0.56, 0.08, 0.04, 0.22), (0.62, -0.08, 0.03, 0.11)):
         candle(m, x, y, 0.95, r, h, (2, 3, 4))
     lathe(m, (0.0, 0.05, 0.962), [(0.0, 0.0), (0.07, 0.0), (0.12, 0.05), (0.11, 0.055), (0.0, 0.03)], 5, STUCCO_M, 14)
-    return m, [("Ashlar", "large_sandstone_blocks", (0.56, 0.51, 0.44)), ("Linen", "white_stucco", (0.46, 0.38, 0.28)),
+    # The runner a faded oxblood: in pale linen it read as a sheet of paper pinned to the altar.
+    return m, [("Ashlar", "large_sandstone_blocks", (0.56, 0.51, 0.44)), ("Linen", "white_stucco", (0.30, 0.13, 0.09)),
                WAX, WICK, FLAME, ("Bowl", "white_stucco", (0.36, 0.24, 0.16))]
 
 
@@ -666,7 +668,9 @@ def coffin():
     m.face([(m.bm.verts.new((x, y, floor)), (x / 2.0, y / 2.0)) for x, y in inner], 1, toward=up)
     m.face([(m.bm.verts.new((x, y, 0.0)), (x / 2.0, y / 2.0)) for x, y in plan], 0, toward=lambda p: p - Vector((0.0, 0.0, 1.0)))
     lid = [(x * 1.02, y * 1.04) for x, y in plan]
-    a, dx, dy = math.radians(9.0), -0.22, -0.16
+    # Slid toward the foot and turned, so a third of the opening shows at the head: from eye
+    # height 5 m off, a lid 22 cm aside still covered it and the coffin read as a box.
+    a, dx, dy = math.radians(12.0), -0.42, -0.12
     lid = [(x * math.cos(a) - y * math.sin(a) + dx, x * math.sin(a) + y * math.cos(a) + dy) for x, y in lid]
     prism(m, lid, 0.362, 0.42, 0, 0, 2.0)
     return m, [("Wood", "weathered_planks", (0.46, 0.38, 0.30)), ("Inside", None, (0.02, 0.018, 0.015))]
