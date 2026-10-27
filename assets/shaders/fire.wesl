@@ -1894,8 +1894,13 @@ const BAKED_BEND: vec3<f32> = vec3<f32>(0.4, 0.15, 0.3);
 // to w and the share taken off from BAKED_TEAR.z to all of it. Over 0.55-1.0, past the flame's
 // top, it moved nothing (g65 v1, v2: top fill 0.88 / 0.83, main's 0.88 / 0.82). As below (g65 v3):
 // top fill dusk / night 0.82 / 0.79, runs 1.45 / 1.49 (main 1.41 / 1.42); the motion gate's lean
-// 9.53 / 9.13, 6 of 6 at both hours; three judges 5.88 against main's 5.85.
-const BAKED_TOP_TEAR: vec4<f32> = vec4<f32>(0.35, 0.65, 0.15, 0.15);
+// 9.53 / 9.13, 6 of 6 at both hours; three judges 5.88 against main's 5.85. At seven placements
+// (fire round g76, one run each, same day) that tear forked the dusk tongues past the bar: splits
+// 1.47 and 1.38 (night lean 8.55 / 8.62); without it 1.02, but night lean 7.13. A softer tear
+// forks more (w 0.25: 1.54 / 1.31), keeping part of the flame in the gaps too (1.41 / 1.27);
+// a shallower one forks less but leans less (z 0.04: 1.03, lean 7.63). Shallower AND sharper,
+// z 0.08 and w 0.08: dusk splits 1.13, night 0.97, lean 8.92 / 8.30, 6 of 6 at both hours.
+const BAKED_TOP_TEAR: vec4<f32> = vec4<f32>(0.35, 0.65, 0.08, 0.08);
 const BAKED_WHITE: vec4<f32> = vec4<f32>(0.7, 0.25, 1.0, 5.0);
 const BAKED_WHITE_FROM: f32 = 0.95;
 // How far the heart's glow goes to a grey of its own luminance: the ramp's hottest has too
