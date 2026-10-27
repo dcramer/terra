@@ -86,6 +86,71 @@ fn height_range(samples: &[Vec3]) -> f32 {
     hi - lo
 }
 
+/// Runs until the staged `figure`'s player is given its graph by `dress`, and a plain body of
+/// the same file is in, its player playing Giant_Walk alone: the two players' entities, the
+/// staged one's and the plain body's root.
+fn come_in(app: &mut App, model: &Handle<Gltf>, figure: Entity) -> (Entity, Entity) {
+    let server = app.world().resource::<AssetServer>().clone();
+    let start = std::time::Instant::now();
+    let mut plain: Option<(Entity, Handle<AnimationGraph>, AnimationNodeIndex)> = None;
+    loop {
+        app.update();
+        let world = app.world_mut();
+        if plain.is_none() && server.is_loaded_with_dependencies(model) {
+            let gltf = world.resource::<Assets<Gltf>>().get(model).unwrap();
+            let scene = gltf.default_scene.clone().unwrap();
+            let walk = gltf.named_animations["Giant_Walk"].clone();
+            let (graph, node) = AnimationGraph::from_clip(walk);
+            let graph = world.resource_mut::<Assets<AnimationGraph>>().add(graph);
+            let root = world
+                .spawn((WorldAssetRoot(scene), Transform::default()))
+                .id();
+            plain = Some((root, graph, node));
+        }
+        let mut animators = world.query::<(Entity, &Animates)>();
+        let staged = animators
+            .iter(world)
+            .find(|(_, a)| a.staged == figure)
+            .map(|(e, _)| e);
+        let mut players = world.query_filtered::<Entity, With<AnimationPlayer>>();
+        let all: Vec<Entity> = players.iter(world).collect();
+        let reference = plain
+            .as_ref()
+            .and_then(|(root, _, _)| all.iter().copied().find(|&p| under(world, p, *root)));
+        if let (Some(staged), Some(reference), Some((root, graph, node))) =
+            (staged, reference, plain.clone())
+        {
+            world
+                .entity_mut(reference)
+                .insert(AnimationGraphHandle(graph));
+            world
+                .get_mut::<AnimationPlayer>(reference)
+                .unwrap()
+                .play(node)
+                .repeat();
+            return (staged, root);
+        }
+        assert!(start.elapsed().as_secs() < 90, "the model never came in");
+    }
+}
+
+/// How many of Giant_Walk's curve targets are bones animated by `player`, of how many.
+fn targets_found(world: &mut World, model: &Handle<Gltf>, player: Entity) -> (usize, usize) {
+    let gltf = world.resource::<Assets<Gltf>>().get(model).unwrap();
+    let walk = gltf.named_animations["Giant_Walk"].clone();
+    let clips = world.resource::<Assets<AnimationClip>>();
+    let targets: Vec<AnimationTargetId> =
+        clips.get(&walk).unwrap().curves().keys().copied().collect();
+    let mut bones = world.query::<(&AnimationTargetId, &AnimatedBy)>();
+    let on_body: Vec<AnimationTargetId> = bones
+        .iter(world)
+        .filter(|(_, by)| by.0 == player)
+        .map(|(id, _)| *id)
+        .collect();
+    let found = targets.iter().filter(|t| on_body.contains(t)).count();
+    (found, targets.len())
+}
+
 /// A headless app that loads models and plays their clips, with the stage's own systems.
 fn app() -> App {
     let assets = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
@@ -196,48 +261,7 @@ fn a_staged_walk_moves_the_hips_and_feet_as_its_clip_does_after_an_idle_and_a_ro
         ))
         .id();
 
-    // In: the staged body's player given its graph by `dress`, the plain body's its one clip.
-    let start = std::time::Instant::now();
-    let mut plain: Option<(Entity, Handle<AnimationGraph>, AnimationNodeIndex)> = None;
-    let (staged_player, plain_root) = loop {
-        app.update();
-        let world = app.world_mut();
-        if plain.is_none() && server.is_loaded_with_dependencies(&model) {
-            let gltf = world.resource::<Assets<Gltf>>().get(&model).unwrap();
-            let scene = gltf.default_scene.clone().unwrap();
-            let walk = gltf.named_animations["Giant_Walk"].clone();
-            let (graph, node) = AnimationGraph::from_clip(walk);
-            let graph = world.resource_mut::<Assets<AnimationGraph>>().add(graph);
-            let root = world
-                .spawn((WorldAssetRoot(scene), Transform::default()))
-                .id();
-            plain = Some((root, graph, node));
-        }
-        let mut animators = world.query::<(Entity, &Animates)>();
-        let staged = animators
-            .iter(world)
-            .find(|(_, a)| a.staged == figure)
-            .map(|(e, _)| e);
-        let mut players = world.query_filtered::<Entity, With<AnimationPlayer>>();
-        let all: Vec<Entity> = players.iter(world).collect();
-        let reference = plain
-            .as_ref()
-            .and_then(|(root, _, _)| all.iter().copied().find(|&p| under(world, p, *root)));
-        if let (Some(staged), Some(reference), Some((root, graph, node))) =
-            (staged, reference, plain.clone())
-        {
-            world
-                .entity_mut(reference)
-                .insert(AnimationGraphHandle(graph));
-            world
-                .get_mut::<AnimationPlayer>(reference)
-                .unwrap()
-                .play(node)
-                .repeat();
-            break (staged, root);
-        }
-        assert!(start.elapsed().as_secs() < 90, "{FILE} never came in");
-    };
+    let (staged_player, plain_root) = come_in(&mut app, &model, figure);
     let run = |app: &mut App, seconds: f32| {
         for _ in 0..(seconds * FPS) as usize {
             app.update();
@@ -267,33 +291,8 @@ fn a_staged_walk_moves_the_hips_and_feet_as_its_clip_does_after_an_idle_and_a_ro
         println!("staged plays {line}");
     }
 
-    // Whether the walk's bones are found on the staged body, by the ids its curves name.
-    let world = app.world_mut();
-    let walk = world
-        .resource::<Assets<Gltf>>()
-        .get(&model)
-        .unwrap()
-        .named_animations["Giant_Walk"]
-        .clone();
-    let targets: Vec<AnimationTargetId> = world
-        .resource::<Assets<AnimationClip>>()
-        .get(&walk)
-        .unwrap()
-        .curves()
-        .keys()
-        .copied()
-        .collect();
-    let mut bones = world.query::<(&AnimationTargetId, &AnimatedBy)>();
-    let on_body: Vec<AnimationTargetId> = bones
-        .iter(world)
-        .filter(|(_, by)| by.0 == staged_player)
-        .map(|(id, _)| *id)
-        .collect();
-    let found = targets.iter().filter(|t| on_body.contains(t)).count();
-    println!(
-        "Giant_Walk's {} targets: {found} on the staged body",
-        targets.len()
-    );
+    let (found, all) = targets_found(app.world_mut(), &model, staged_player);
+    println!("Giant_Walk's {all} targets: {found} on the staged body");
 
     // Three seconds, the walk's cycle: each bone's place in its body's frame, every frame.
     let names = ["pelvis", "foot_l", "foot_r"];
