@@ -365,7 +365,16 @@ pub(crate) fn hash(at: IVec3, salt: u32) -> u32 {
 
 /// Every cube the fills leave, by position.
 pub(crate) fn cubes(ops: &[BuildOp]) -> HashMap<IVec3, Cube> {
-    let mut map = HashMap::new();
+    // Room for every cube the fills touch, so the map never grows and rehashes on the way:
+    // a stamp's fills touch 60,000 to 90,000, most of them once.
+    let touched: i32 = ops
+        .iter()
+        .map(|op| match op {
+            BuildOp::Fill { min, max, .. } => (0..3).map(|i| max[i] - min[i] + 1).product(),
+            _ => 0,
+        })
+        .sum();
+    let mut map = HashMap::with_capacity(touched.max(0) as usize);
     for op in ops {
         if let BuildOp::Fill { min, max, cube } = op {
             for x in min[0]..=max[0] {
