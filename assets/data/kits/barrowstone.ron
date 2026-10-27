@@ -9,4 +9,16 @@
     weight: 3,
     roof_kind: Some(2049),
     dungeon_only: true,
+    // Its own weathering, Greystone's block pattern setting none (dungeons barrow r9): damp
+    // rising unevenly up a wall's foot from the floor and splashed darker at it, earthy;
+    // the rubble's outside edges worn paler where hands and shoulders brush them; faint
+    // streaks down from a doorway's head where water seeps through the vault.
+    dress: (masks: (
+        dirt: 0.8,
+        dirt_tint: (0.70, 0.66, 0.60),
+        splash: 0.35,
+        wear: 0.15,
+        streaks: 0.2,
+        streak_reach: 1.2,
+    )),
 )
