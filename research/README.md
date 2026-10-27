@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [Layered clothing: how shipped games put a shirt with trousers, tucked or not](2026-10-27-layered-clothing.md) | 2026-10-27 |
 | [Animation sourcing: a library, a service or a suit for every clip, under a licence a public repository can hold](2026-10-26-animation-sourcing.md) | 2026-10-26 |
 | [How do major games theme and scale their dungeons, and which themes should Terra's have?](2026-10-26-dungeon-themes.md) | 2026-10-26 |
 | [Selling a slow giant's weight: what shipped work does, and the Cetri's walk measured against it](2026-10-26-giant-walker-weight.md) | 2026-10-26 |
