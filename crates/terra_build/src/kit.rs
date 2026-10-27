@@ -354,9 +354,8 @@ fn joint() -> f32 {
     0.007
 }
 
-/// How a kit's walls weather (research/role-pieces.md, candidate 2's masks): dirt and damp
-/// rising unevenly from the ground, outside edges worn lighter, and timber greyed higher up
-/// where the weather reaches it. Shades of what is drawn, as each corner's colour.
+/// How a kit's walls weather (research/role-pieces.md, candidate 2's masks): dirt and damp rising
+/// from the ground, edges worn, timber greyed higher up; shades of each corner's colour.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Masks {
@@ -367,10 +366,9 @@ pub struct Masks {
     pub wear: f32,
     /// How much greyer timber is three metres up, as a fraction.
     pub weather: f32,
-    /// How much a roof's covering is greened by moss and lichen toward its eaves, where the
-    /// rain runs off and lingers, as a fraction, and what they multiply its colour by
-    /// (sRGB): greener and darker on shakes, paler on slate. On timber, toward its foot,
-    /// where the splash keeps it damp (D262 as amended).
+    /// How much a roof's covering is greened by moss and lichen toward its eaves, where the rain
+    /// lingers, as a fraction, and what they multiply its colour by (sRGB): greener and darker
+    /// on shakes, paler on slate. On timber, toward its foot, kept damp (D262 as amended).
     pub moss: f32,
     pub moss_tint: [f32; 3],
     /// How much a block kind's lifts differ in shade, as a fraction either way, and how tall
@@ -378,10 +376,9 @@ pub struct Masks {
     /// a little along the wall (D236).
     pub strata: f32,
     pub lift: f32,
-    /// How much paler a block kind's wall is from a storey's height above the ground up, kept
-    /// dry under the eaves and out of reach of the splash, its face weathered pale, as a
-    /// fraction, rising to it over so many metres below; its foot meanwhile is darkened by
-    /// the damp splashed up it (`dirt`).
+    /// How much paler a block kind's wall is from a storey's height above the ground up, dry
+    /// under the eaves and out of the splash, as a fraction, rising to it over so many metres
+    /// below; its foot meanwhile is darkened by the damp splashed up it (`dirt`).
     pub dry: f32,
     pub dry_reach: f32,
     /// How high a block kind's wall is darkened over its own foot, where the rain splashes
@@ -393,6 +390,8 @@ pub struct Masks {
     pub splash_dark: f32,
     pub streaks: f32,
     pub streak_reach: f32,
+    /// How far from a wall's foot a top (a floor) is grimed toward `dirt_tint`, in metres.
+    pub grime: f32,
 }
 
 impl Default for Masks {
@@ -413,6 +412,7 @@ impl Default for Masks {
             splash_dark: 0.0,
             streaks: 0.0,
             streak_reach: 1.5,
+            grime: 0.0,
         }
     }
 }

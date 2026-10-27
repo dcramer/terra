@@ -388,3 +388,60 @@ fn a_wall_in_a_dug_room_over_the_level_under_it_is_splashed_from_its_floor() {
     assert!(foot < 0.65, "the foot not splashed: {foot}");
     assert!((up - 1.0).abs() < 1e-4, "splashed 1.4 m up: {up}");
 }
+
+#[test]
+fn a_floor_is_grimed_along_its_walls_feet_and_clean_out_in_the_room() {
+    use terra_build::{BuildOp, Cube, Kind};
+    // A floor slab with a wall on its north edge (z 0 to 0.5 m), its top at 0, under a room.
+    let mut base = Base::default();
+    let solid = Some(Cube::new(Kind(4), Fill::Solid));
+    for (min, max) in [([0, -1, 0], [7, -1, 7]), ([0, 0, 0], [7, 7, 0])] {
+        base.apply(BuildOp::Fill {
+            min,
+            max,
+            cube: solid,
+        });
+    }
+    let shades = |grime: f32| {
+        let mut kit = terra_build::testing::kit();
+        kit.dress.masks = Masks {
+            dirt_tint: [0.5; 3],
+            grime,
+            ..Masks::default()
+        };
+        // The floor's top a hand off the wall's face, half a metre out, and 2.5 m out; and
+        // the wall's face at its foot.
+        let mut surface = Surface::default();
+        for (z, normal) in [
+            (0.55, Vec3::Y),
+            (1.0, Vec3::Y),
+            (3.0, Vec3::Y),
+            (0.5, Vec3::Z),
+        ] {
+            surface.positions.push(Vec3::new(1.8, 0.0, z));
+            surface.normals.push(normal);
+            surface.colours.push([1.0; 3]);
+        }
+        mask(&mut surface, &kit, Material::Floor, &base);
+        surface.colours.iter().map(|c| c[0]).collect::<Vec<_>>()
+    };
+    let grimed = shades(0.9);
+    assert!(
+        grimed[0] < 0.85,
+        "the floor at the wall's foot not grimed: {grimed:?}"
+    );
+    assert!(
+        grimed[0] <= grimed[1] + 1e-4,
+        "darker out than at the wall: {grimed:?}"
+    );
+    assert!(
+        (grimed[2] - 1.0).abs() < 1e-4,
+        "grimed 2.5 m out: {grimed:?}"
+    );
+    assert!(
+        (grimed[3] - 1.0).abs() < 1e-4,
+        "a wall's face grimed: {grimed:?}"
+    );
+    // None given, none laid.
+    assert!(shades(0.0).iter().all(|&c| (c - 1.0).abs() < 1e-4));
+}

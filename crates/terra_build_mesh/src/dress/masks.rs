@@ -354,6 +354,46 @@ impl Dug<'_> {
     }
 }
 
+/// The walls round a floor's top (`Masks::grime`): for each cell over a top, which cubes beside
+/// it, `reach` cells each way at its height, are solid, a bit each.
+pub(super) struct Grimed<'a> {
+    pub(super) base: &'a Base,
+    pub(super) reach: i32,
+    pub(super) walls: BTreeMap<[i32; 3], u64>,
+}
+
+impl Grimed<'_> {
+    /// How far a point of a top is from the nearest solid cube beside the cell over it, in
+    /// metres across the floor; `None` past `reach` cells.
+    pub(super) fn distance(&mut self, p: Vec3, n: Vec3) -> Option<f32> {
+        let cell = ((p + n * (CELL_M * 0.5)) / CELL_M).floor().as_ivec3();
+        let (base, r) = (self.base, self.reach);
+        let side = (2 * r + 1) as usize;
+        let offset = |k: usize| IVec3::new((k / side) as i32 - r, 0, (k % side) as i32 - r);
+        let bits = *self.walls.entry(cell.to_array()).or_insert_with(|| {
+            let mut bits = 0u64;
+            for k in 0..side * side {
+                let solid = base
+                    .cube(cell + offset(k))
+                    .is_some_and(|cube| layout::drawn_fill(&cube) == Fill::Solid);
+                if solid {
+                    bits |= 1 << k;
+                }
+            }
+            bits
+        });
+        let q = glam::Vec2::new(p.x, p.z);
+        (0..side * side)
+            .filter(|&k| bits & (1 << k) != 0)
+            .map(|k| {
+                let at = cell + offset(k);
+                let low = glam::Vec2::new(at.x as f32, at.z as f32) * CELL_M;
+                q.distance(q.clamp(low, low + CELL_M))
+            })
+            .reduce(f32::min)
+    }
+}
+
 /// A kit's masks laid over a surface it drew in a material, in its base's own space.
 pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
     let masks = &kit.dress.masks;
@@ -403,12 +443,28 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
         base,
         floors: BTreeMap::new(),
     };
+    // Reach 3 cells at most: 49 cubes round a cell, in a u64's bits.
+    let mut grimed = Grimed {
+        base,
+        reach: (libm::ceilf(masks.grime * 1.3 / CELL_M) as i32).clamp(1, 3),
+        walls: BTreeMap::new(),
+    };
     let mut shade = |p: Vec3, n: Vec3, c: &mut [f32; 3]| {
         let column = ground(p);
         let ground = dug.ground(p, n, column);
         let mut k = Vec3::from_array(masked(masks, (timber, layered), p, n, ground, &mut noise));
         if rains {
             k *= rained.shade(masks, p, n, (ground < column).then_some(ground));
+        }
+        if masks.grime > 0.0
+            && n.y > 0.7
+            && let Some(d) = grimed.distance(p, n)
+        {
+            // The edge wanders, and the grime lies in blotches, never a ruled band.
+            let reach = masks.grime * (0.7 + 0.6 * noise.at(p, 0.6, 61));
+            let blotch = 0.65 + 0.35 * noise.at(p, 0.25, 63);
+            let grime = three_halves((1.0 - d / reach).clamp(0.0, 1.0)) * blotch;
+            k = k.lerp(k * Vec3::from_array(masks.dirt_tint), grime);
         }
         *c = [c[0] * k.x, c[1] * k.y, c[2] * k.z];
     };
