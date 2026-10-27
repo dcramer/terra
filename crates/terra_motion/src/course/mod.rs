@@ -24,6 +24,8 @@
 //!   and drowning, a diver along a lake's bed and out up its shore (criterion 17, D478).
 //! - `ledge`: a swimmer climbing out onto a bank up to its kind's limit over the water, and
 //!   never onto a higher one (D523).
+//! - `climb`: faces walked and jumped at, climbed, pulled up onto, lunged up and kicked off
+//!   from; overhangs to their limit and ceilings never (D505-D511).
 //! - `fall`: falls that must not hurt (a jump, a step, a stair, a short drop), drops that
 //!   must, onto level ground and a slope, and into deep water (D476).
 //! - `pushes`: people easing apart, a man walked past one standing, a monster walking through
@@ -32,6 +34,7 @@
 //!   another, never passing through each other (criterion 1, D53).
 //! - `far`: the same walks on a world 30 km across, where f32 is 2 mm fine (criterion 22, D482).
 
+mod climb;
 mod closing;
 mod data;
 mod dive;
@@ -98,6 +101,8 @@ pub trait Mover {
     fn breath(&self, id: u32) -> f32;
     /// The share of its health drowning took in the last tick, 0 if none.
     fn drown(&self, id: u32) -> f32;
+    /// Whether a body is holding a face, climbing (D477); false for a mover that does not climb.
+    fn climbing(&self, id: u32) -> bool;
     /// Ticks its bodies on so many threads from now on, if it can share them out; one
     /// unless told.
     fn threads(&mut self, _threads: usize) {}
@@ -142,6 +147,8 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     measures.extend(pushes);
     let (closing, deepest_closing) = closing::score(&new);
     measures.extend(closing);
+    let (climb, deepest_climb) = climb::score(&new);
+    measures.extend(climb);
     let deepest = deepest
         .max(deepest_push)
         .max(deepest_closing)
@@ -151,6 +158,7 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
         .max(deepest_wade)
         .max(deepest_dive)
         .max(deepest_ledge)
+        .max(deepest_climb)
         .max(deepest_fall);
     // What a body met besides the ground counts toward how deep it ever went.
     for m in measures.iter_mut() {

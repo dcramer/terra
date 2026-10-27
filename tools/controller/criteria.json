@@ -1028,6 +1028,196 @@
    "measurable": true
   },
   {
+   "id": "climb.faces",
+   "noticed": 5,
+   "notice": "a body walking into a cliff, a dug pit's side, a base's wall, a rock or a trunk cannot climb it, or holds walkable ground, a step or another body as a face",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 16 walks (a sheer wall, a cliff dug in 0.5 m cells, a base's wall of cubes, a rock, a trunk: climbed 1 m; a 40 deg slope, a face 0.7 of a step, a body standing: never held; two kinds)",
+   "source": "D505; docs/controller.md, \"Climbing\"",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "climb.grip",
+   "noticed": 4,
+   "notice": "a face of a material that cannot be held (ice, glass, plaster) is climbed, or grip does not scale the cost",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of faces by material held against their grip",
+   "source": "D505; docs/controller.md, \"Climbing\"",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "a material's grip in the course's field and movers' query (a face's material at a contact), and the climber's stamina through the course's mover trait"
+  },
+  {
+   "id": "climb.start",
+   "noticed": 5,
+   "notice": "a climb does not start when a body jumps at a face or pushes into it, or starts sooner than half a second's push",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 8 starts (a jump at a sheer wall held within a tick of touching it; a walk into it held 0.5 s after touching, within a tick; straight and 20 deg off; two kinds)",
+   "source": "D507; docs/controller.md, \"Climbing\"",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "climb.stance",
+   "noticed": 3,
+   "notice": "a body in a fight stance grabs a face it is pushed into",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of starts in a fight stance that held the face",
+   "source": "D507; docs/controller.md, \"Climbing\"",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "a fight stance (guard) in the mover's Intent, as the game's guard sets it"
+  },
+  {
+   "id": "climb.mantle",
+   "noticed": 5,
+   "notice": "a climber cannot pull itself onto a top, or a ledge in reach from a jump, or pulls itself into a gap too low to stand in",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 8 tops (a 3 m wall climbed, ledges 0.7 and 0.9 of the hands' reach jumped at: standing on top; a ledge under a roof 0.6 of the body's height over it: never stood on; two kinds)",
+   "source": "D508 (about 2.2 m over a man's feet); docs/controller.md, \"Climbing\"; Unreal's ledge test",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "climb.speed",
+   "noticed": 4,
+   "notice": "a climber goes up a sheer face much faster or slower than its kind's speed",
+   "bar": {
+    "at_most": 0.02
+   },
+   "unit": "share off a man's 1 m/s, his feet's speed along the face between 2 and 5 m up a 12 m wall",
+   "source": "D509; docs/controller.md, \"Climbing\"; D136",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "climb.steep",
+   "noticed": 3,
+   "notice": "a face less steep is not climbed faster, or an overhang not slower",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 4 pairs out of order (faces 70, 90 and 110 deg from level, the speed along each between 1 and 3 m up; two kinds)",
+   "source": "D509; docs/controller.md, \"Climbing\"",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "climb.overhang",
+   "noticed": 4,
+   "notice": "a body hangs under an overhang past the limit or a ceiling, or cannot hold a slight one",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 14 faces (0, 15, 25 deg past vertical held and climbed 0.5 m; 35, 45, 60 never held; a ceiling jumped into never held; two kinds)",
+   "source": "D510 (about 30 deg); docs/controller.md, \"Climbing\"",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "climb.lunge",
+   "noticed": 3,
+   "notice": "a climb jump's lunge rises much more or less than its kind's",
+   "bar": {
+    "at_most": 0.02
+   },
+   "unit": "m off a man's 1.5 m, his feet's rise over 1.5 s after a jump with the stick up, 1 m up a sheer wall",
+   "source": "D511; docs/controller.md, \"Climbing\"",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "climb.kickoff",
+   "noticed": 3,
+   "notice": "jumping with the stick away from a face does not leave it",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of 2 kick-offs (1 m up a sheer wall, not holding, aloft and moving away over 1 m/s 0.2 s after; two kinds)",
+   "source": "D511; docs/controller.md, \"Climbing\"",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "climb.stamina",
+   "noticed": 4,
+   "notice": "climbing, holding, an overhang or a lunge costs other than the kind's stamina, or a climber with none left keeps holding",
+   "bar": {
+    "at_most": 0.01
+   },
+   "unit": "of the kind's cost (holding a quarter of moving, an overhang twice, a lunge its lump); ticks from zero to airborne past one",
+   "source": "D506, D510, D511; docs/controller.md, \"Climbing\"; D61",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "the climber's stamina through the course's mover trait (Mover::stamina), with the kind's climbing costs in movers.ron, and the mover's climb (mover::climb)"
+  },
+  {
+   "id": "climb.knock",
+   "noticed": 3,
+   "notice": "a staggering blow does not knock a climber off its face",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "of blows that left the climber holding a tick later",
+   "source": "D506 (as Conan Exiles); docs/controller.md, \"Climbing\"",
+   "check": null,
+   "cost": "cheap",
+   "measurable": false,
+   "needs": "a stagger through the course's mover trait (the game's staggering blow handed to the mover)"
+  },
+  {
+   "id": "cost.climb",
+   "noticed": 2,
+   "notice": "many bodies climbing slow the server's tick",
+   "bar": {
+    "at_most": 25
+   },
+   "unit": "µs a body a tick",
+   "source": "docs/controller.md, \"Climbing\"; D52, D138; docs/controller.md criterion 20",
+   "check": null,
+   "cost": "heavy",
+   "measurable": false,
+   "needs": "a climbing body in the mover's release bench (movement_bench.rs) on the course's wall, the dug cliff and the base's wall, once the mover climbs"
+  },
+  {
    "id": "stamina.costs",
    "noticed": 3,
    "notice": "sprinting, jumping or swimming costs more or less than the kind's data",

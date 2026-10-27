@@ -67,6 +67,14 @@ swim.bottom	0	unit H: swimming per D478 measured (dive, rise, surface, breath, b
 swim.exit	0	unit H: swimming per D478 measured (dive, rise, surface, breath, bottom, exit), first numbers
 swim.ledge	1	swim.ledge and swim.ledge.high, D523's climb-out rows: the mover today climbs out onto none of the banks under its kind's limit (1), and onto none over it (0)
 swim.ledge.high	0	swim.ledge and swim.ledge.high, D523's climb-out rows: the mover today climbs out onto none of the banks under its kind's limit (1), and onto none over it (0)
+climb.faces	10	climbing rows, D505-D511, before the mover climbs
+climb.start	8	climbing rows, D505-D511, before the mover climbs
+climb.mantle	6	climbing rows, D505-D511, before the mover climbs
+climb.speed	1	climbing rows, D505-D511, before the mover climbs
+climb.steep	4	climbing rows, D505-D511, before the mover climbs
+climb.overhang	6	climbing rows, D505-D511, before the mover climbs
+climb.lunge	1.5	climbing rows, D505-D511, before the mover climbs
+climb.kickoff	2	climbing rows, D505-D511, before the mover climbs
 determinism.crowd	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 far.grounded	0	the far rows' first numbers (controller stage 2 unit B3, D482): at 30 km the course's level, 20 deg up and down and 0.3 m steps walk as at 2 km, 0 ticks off; reverting D482's frames (f32 field and positions) reads 752 ticks, 6 mm, 1.72x
 far.float	0.001	the far rows' first numbers (controller stage 2 unit B3, D482): at 30 km the course's level, 20 deg up and down and 0.3 m steps walk as at 2 km, 0 ticks off; reverting D482's frames (f32 field and positions) reads 752 ticks, 6 mm, 1.72x

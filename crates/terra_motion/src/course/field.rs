@@ -123,6 +123,9 @@ pub enum Solid {
     Rock,
     /// A ball of ground: its middle and radius (a lump filled into the ground).
     Ball(Vec3, f32),
+    /// Solid inside a polygon of (`u`, `h`) corners, level across `w`: a face leaning any way,
+    /// an overhang's included, which a profile cannot hold.
+    Polygon(Vec<Vec2>),
 }
 
 impl Solid {
@@ -132,8 +135,30 @@ impl Solid {
             Solid::Block(min, max) => boxed(at, *min, *max),
             Solid::Rock => -1.0e3,
             Solid::Ball(centre, radius) => (at - *centre).length() - radius,
+            Solid::Polygon(corners) => polygon(corners, Vec2::new(at.x, at.y)),
         }
     }
+}
+
+/// The exact distance from a point to a polygon, negative inside: the nearest edge, and the
+/// sign by the crossings of a ray along `u`. Ported from Inigo Quilez's `sdPolygon`
+/// (iquilezles.org/articles/distfunctions2d, MIT).
+fn polygon(corners: &[Vec2], at: Vec2) -> f32 {
+    let mut nearest = (at - corners[0]).length_squared();
+    let mut sign = 1.0;
+    let mut j = corners.len() - 1;
+    for (i, &v) in corners.iter().enumerate() {
+        let e = corners[j] - v;
+        let w = at - v;
+        let b = w - e * (w.dot(e) / e.length_squared()).clamp(0.0, 1.0);
+        nearest = nearest.min(b.length_squared());
+        let c = [at.y >= v.y, at.y < corners[j].y, e.x * w.y > e.y * w.x];
+        if c.iter().all(|&x| x) || c.iter().all(|&x| !x) {
+            sign = -sign;
+        }
+        j = i;
+    }
+    sign * nearest.sqrt()
 }
 
 /// The exact distance from a point to the ground under a profile, negative under it.

@@ -103,6 +103,11 @@ impl Mover for Ours {
         self.0.get(id).map_or(0.0, |body| body.drown)
     }
 
+    // The mover does not climb yet (docs/controller.md, "Climbing").
+    fn climbing(&self, _id: u32) -> bool {
+        false
+    }
+
     fn threads(&mut self, threads: usize) {
         self.1 = vec![(); threads];
     }
