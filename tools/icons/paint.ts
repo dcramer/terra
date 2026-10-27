@@ -99,9 +99,13 @@ export function prompt(what: string, rendered: boolean): string {
   );
 }
 
+// ImageMagick 7 installs `magick` and may leave out the legacy `convert` (the render worker's
+// does); either takes the same arguments here.
+const MAGICK = ["magick", "convert"].find((c) => spawnSync(c, ["-version"]).status === 0);
+
 function convert(args: string[]): string {
-  const result = spawnSync("convert", args, { encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`convert ${args.join(" ")}: ${result.stderr}`);
+  const result = spawnSync(MAGICK ?? "convert", args, { encoding: "utf8" });
+  if (result.status !== 0) throw new Error(`${MAGICK} ${args.join(" ")}: ${result.stderr}`);
   return result.stdout;
 }
 
@@ -201,7 +205,7 @@ async function main(argv: string[]) {
     console.log(USAGE);
     return;
   }
-  if (spawnSync("convert", ["-version"]).status !== 0) throw new Error("needs ImageMagick: sudo apt install imagemagick");
+  if (!MAGICK) throw new Error("needs ImageMagick: sudo apt install imagemagick");
   const notes = parseNotes(readFileSync(join(HERE, "icons.txt"), "utf8"));
   const work = mkdtempSync(join(tmpdir(), "terra-icons-"));
   try {
