@@ -32,13 +32,15 @@ const TORCH_HEAD_M: f32 = 0.47;
 const WALL_TORCH_SCALE: f32 = 1.3;
 /// A wall torch leans so far out from its wall, in degrees.
 const TORCH_LEAN_DEG: f32 = 20.0;
-/// A torch's flames: a hand's width, knee-high at most, less hot than a campfire.
+/// A torch's flames: a hand's width, knee-high at most, less hot than a campfire. Its body
+/// the marched torch field (D466), as a staged torch's on its head (`staged`'s `burns_up`):
+/// the flat cards it kept were the look torch rounds t1-t8 left behind.
 const TORCH_FIRE: Kindled = Kindled {
     tall: 0.45,
     wide: 0.12,
     heat: 0.6,
     logs: Logs::NONE,
-    body: terra_world::fire::Body::Cards,
+    body: terra_world::fire::Body::Marched,
     light: terra_world::fire::TORCH_LIGHT,
     rig: terra_world::fire::Rig::Torch,
 };

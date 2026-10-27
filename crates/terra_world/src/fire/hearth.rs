@@ -89,7 +89,7 @@ impl Logs {
 /// How a kept fire's flame body is drawn, chosen by its kind (D466, docs/fire-module.md): the
 /// baked flipbook cards (its columns and tongues on the logs), or one marched flame field
 /// (`fire.wesl`'s `hearth_march`), which beat the cards for the campfire in a blind panel
-/// (fire round g4). Kinds move to the field one at a time; a torch (`TORCH_M`) keeps its card.
+/// (fire round g4). Kinds move to the field one at a time; a torch (`TORCH_M`) has (g6).
 /// Or the same field reading its shape and motion from a baked looping simulation in place of
 /// its lobes and noise (`Baked`, D493, `sim`); no kind chooses it until the developers do.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
