@@ -118,16 +118,24 @@ const REACHES = { spine_01: [22, 0, 0], spine_02: [12, 0, 0], spine_03: [4, 0, 0
 /// the trunk rolled `roll` degrees over the planted foot, the crown lagging the other way
 /// (round-5 film reviews: the steps glide); the face bowed `bow` more as it nears, so the lens
 /// below stays off the brow (at 3.3 m it was 32 degrees under the face's line); `down` the
-/// trunk's extra fold as its weight comes onto the foot, and `nod` the crown's after it.
-const comes = (roll: number, bow: number, down = 0, nod = 0) => ({
+/// trunk's extra fold as its weight comes onto the foot, and `nod` the crown's after it; `swing`
+/// degrees the left limb forward (the right back), against the stride.
+const comes = (roll: number, bow: number, down = 0, nod = 0, swing = 0) => ({
   spine_01: [8 + down, 0, roll],
   spine_02: [4 + down * 0.5, 0, -0.4 * roll],
   neck_01: [bow, 0, -0.5 * roll],
   spine_03: [nod * 0.5, 0, 0],
   Head: [nod, 0, 0],
-  upperarm_l: [-45, 0, 10],
-  upperarm_r: [10, 0, -8],
+  upperarm_l: [ARMS.reach_l - swing, 0, -ARMS.lower],
+  upperarm_r: [ARMS.reach_r + swing, 0, ARMS.lower],
 });
+/// Its limbs while it comes on: lowered `lower` degrees from where the clip hangs them (Giant_Walk
+/// hangs them 12 from the T; round 12's bend raised them 8-10 back into it, and three reviewers
+/// saw a T held through the walk), the left `reach_l` forward toward the walker and the right
+/// `reach_r`, each swung `swing` against the stride: at a footfall the limb on that side is
+/// back and the other forward, as a walker's arms are at heel strike, half way back over the
+/// step's settle.
+const ARMS = { lower: 30, reach_l: -25, reach_r: -5, swing: 16 };
 /// Its walk (Giant_Walk, keyed on its own rest by keyed_walk.py) as stride.ts --falls measures
 /// it on the exported file: the pace the file keeps (PACES), the cycle, and each footfall, the
 /// clip's second and where the foot lands, metres to the body's left and ahead of it. Keyed at
@@ -157,8 +165,10 @@ const WALK = {
 const SETTLE = { down: 3, nod: 9, nod_at: 0.3, nod_ms: 260, rebound: -4, back: 0.62, back_ms: 280, rest_ms: 450 };
 /// Each footfall's shake of the walker's eye, as a camera shake on a giant's step: down `drop`
 /// metres when it lands `near` metres off (more nearer, less further), a decaying bounce over
-/// `frames`, the view pitched with it `pitch` times as far.
-const SHAKE = { drop: 0.08, near: 4.5, bounce: [-1, 0.45, -0.2, 0.05, 0], frames: [3, 4, 4, 5, 6], pitch: 1.6 };
+/// `frames`, the view pitched with it `pitch` times as far and thrown toward the planting foot's
+/// side `jolt` times as far (the script's camera has no roll; a sideways jolt stands in for one).
+/// Round 12's 8 cm read as nothing at 12 fps (all three reviewers).
+const SHAKE = { drop: 0.13, near: 4.5, bounce: [-1, 0.45, -0.2, 0.05, 0], frames: [3, 4, 4, 5, 6], pitch: 1.6, jolt: 0.7 };
 const SHAKE_FRAMES = SHAKE.frames.reduce((a, b) => a + b, 0);
 /// How big each footfall's litter burst is: twice round 8's, which read only once in four.
 const STEP_DUST = 2.0;
@@ -337,16 +347,18 @@ function script(s: Script) {
     const foot = footOf(fall);
     // Rolled over the planted foot: a turn about ahead leans the trunk to the body's right.
     const roll = fall.left > 0 ? -4 : 4;
+    // The limb on the planting side back, the other forward.
+    const swing = fall.left > 0 ? -ARMS.swing : ARMS.swing;
     s.frame = f(fall.t);
     s.call("staged.impact", { at: on(foot, 0.05), size: watched ? WATCHED.dust : STEP_DUST, base: true });
-    s.call("staged.bend", { name: "cetri", bend: comes(roll, bow(fall.t), SETTLE.down), blend_ms: 160 });
+    s.call("staged.bend", { name: "cetri", bend: comes(roll, bow(fall.t), SETTLE.down, 0, swing), blend_ms: 160 });
     // The crown nods on after the trunk has stopped, snaps back past it, then settles.
     s.frame = f(fall.t + SETTLE.nod_at);
-    s.call("staged.bend", { name: "cetri", bend: comes(roll, bow(fall.t), SETTLE.down, SETTLE.nod), blend_ms: SETTLE.nod_ms });
+    s.call("staged.bend", { name: "cetri", bend: comes(roll, bow(fall.t), SETTLE.down, SETTLE.nod, swing), blend_ms: SETTLE.nod_ms });
     s.frame = f(fall.t + SETTLE.back);
-    s.call("staged.bend", { name: "cetri", bend: comes(roll * 0.5, bow(fall.t + 0.6), 0, SETTLE.rebound), blend_ms: SETTLE.back_ms });
+    s.call("staged.bend", { name: "cetri", bend: comes(roll * 0.5, bow(fall.t + 0.6), 0, SETTLE.rebound, swing * 0.8), blend_ms: SETTLE.back_ms });
     s.frame = f(fall.t + SETTLE.back + SETTLE.back_ms / 1000);
-    s.call("staged.bend", { name: "cetri", bend: comes(roll * 0.5, bow(fall.t + 1), 0, 0), blend_ms: SETTLE.rest_ms });
+    s.call("staged.bend", { name: "cetri", bend: comes(roll * 0.5, bow(fall.t + 1), 0, 0, -swing * 0.5), blend_ms: SETTLE.rest_ms });
     // The walker's eye shaken by it, more the nearer it lands.
     const e = eyeAt(fall.t);
     const near = Math.hypot(foot[0] - e[0], foot[1] - e[2]);
@@ -355,7 +367,9 @@ function script(s: Script) {
     let t = fall.t;
     SHAKE.bounce.forEach((b, i) => {
       t += SHAKE.frames[i] / 60;
-      s.glide(lift(eyeAt(t), b * drop), lift(look(t, dip), b * drop * SHAKE.pitch), SHAKE.frames[i]);
+      const thrown = lift(look(t, dip), b * drop * SHAKE.pitch);
+      const jolt = -b * drop * SHAKE.jolt * Math.sign(fall.left);
+      s.glide(lift(eyeAt(t), b * drop), [thrown[0] + left[0] * jolt, thrown[1], thrown[2] + left[1] * jolt], SHAKE.frames[i]);
       s.frame += SHAKE.frames[i];
     });
     // A watched one stays down a moment on the landing before the eye climbs on; the last
