@@ -72,16 +72,19 @@ const CUMULUS_EXTINCTION: f32 = 0.06;
 const DECK_EXTINCTION: f32 = 0.03;
 // The distance over which the air's haze takes the clouds (as the 2D layer fades by lift).
 const HAZE_M: f32 = 20000.0;
-// The asymmetry of light many times scattered in cloud, for the share of sunlight still flowing
-// at an optical depth from the sunlit side (the two-stream approximation: Bohren, "Multiple
-// scattering of light and some of its observable consequences", Am. J. Phys. 1987):
-// 1 / (1 + 3/4 (1 - g) tau). A thick cloud lets through a fifth at tau 40.
-const DIFFUSE_G: f32 = 0.85;
-// How much more the light many times scattered gives than once, deep in a cloud: a thick cloud's
-// sunlit side sends about 0.8 of the sun's light over pi back (its albedo), where single
-// scattering alone gives a third of that. Thin wisps and edges keep less of it (Nubis 2017's
-// in-scattering probability), which shades the billows' edges and lets their middles glow.
-const MULTIPLE: f32 = 3.0;
+// The droplets' phase's mean cosine (the fit's below, as the bevy branch's `CLOUD_MIE_MEAN_COS`):
+// light many times scattered goes on as if scattered evenly over an optical depth reduced by
+// 1 - it (similarity scaling: Joseph, Wiscombe and Weinman 1976).
+const MEAN_COS: f32 = 0.8793;
+// The diffusion's extrapolation length (the branch's `CLOUD_DIFFUSION_Z0`), for the sky's and
+// the ground's light inside a layer.
+const DIFFUSION_Z0: f32 = 0.6667;
+// How much of a column's cloud-filled depth its body fills on average: the share of the
+// coverage the 3D noise leaves, so the depth of cloud above and below a sample (`scattered`) is
+// that of the column it stands in.
+const COLUMN_FILL: f32 = 0.3;
+// The ground's albedo, for the light it sends up into a cloud's base.
+const GROUND_ALBEDO: f32 = 0.15;
 const PI: f32 = 3.14159265;
 
 // The eye, its up and its place on the map, set once a ray.
@@ -148,6 +151,9 @@ fn weather_at(metres: vec2<f32>) -> vec4<f32> {
 
 // A column of the air: how much of it the cloud's shapes cover, and the layer they fill there.
 struct Column {
+    // The share of the sky the weather covers here, and how much of the column the cloud's shapes
+    // fill.
+    cover: f32,
     coverage: f32,
     base: f32,
     thickness: f32,
@@ -165,6 +171,7 @@ fn column(metres: vec2<f32>) -> Column {
         + wrapped_noise(p * 2.1 + params.shapes[1].xyz) * 0.27) / 0.77;
     let threshold = 1.0 - cover * 0.62;
     var c: Column;
+    c.cover = cover;
     c.kind = w.b;
     // Heaped cloud leaves the noise more to cut, so it breaks into heaps; a deck is whole.
     c.coverage = remap(shapes, threshold - 0.12, threshold + 0.1) * mix(1.0, params.tuned.x, c.kind);
@@ -251,20 +258,30 @@ fn mie(cos_t: f32) -> f32 {
 }
 
 // Optical depth toward the sun from a point at `m`, `h`, the sun's cosine to the up there
-// `mu`, its way on the map `way`: six taps from 40 m growing by half again each, and one long
-// tap at a kilometre, on the body without erosion.
+// `mu`, its way on the map `way`, on the body without erosion: eight taps from 30 m growing by
+// half again each (1.5 km), and one long tap over the next 1.5 km, so a heap's whole depth
+// shades its base (the branch's march has twelve taps to 2.8 km and its shadow map beyond; six
+// taps to 0.8 km left a 2 km heap's base lit as if through less than half of it).
 fn toward_sun(c: Column, m: vec2<f32>, h: f32, mu: f32, way: vec2<f32>) -> f32 {
     var tau = 0.0;
     var along = 0.0;
-    var step = 40.0;
-    for (var k = 0u; k < 6u; k++) {
+    var step = 30.0;
+    for (var k = 0u; k < 8u; k++) {
         let s = along + step * 0.5;
         tau += shape(c, m + way * s, height_along(h, mu, s), log2(step / (SHAPE_TILE_M / NOISE_SIDE)) + 1.0) * step;
         along += step;
         step *= 1.5;
     }
-    tau += shape(c, m + way * 1000.0, height_along(h, mu, 1000.0), 3.0) * 600.0;
+    let s = along + 750.0;
+    tau += shape(c, m + way * s, height_along(h, mu, s), 3.0) * 1500.0;
     return tau * extinction(c);
+}
+
+// The second exponential integral E2(x), the share of light leaving a slab of optical depth x
+// over a hemisphere: the bevy branch's rational fit (`exp_integral_e2`, within 0.64% on 0 to 40).
+fn exp_integral_e2(x: f32) -> f32 {
+    return exp(-x) * (x * x + 1.6706291 * x + 0.13822509)
+        / (x * x * x + 3.6251676 * x * x + 2.2005648 * x + 0.13822509);
 }
 
 // Interleaved gradient noise (Jimenez 2014), turned each frame, to start each ray at its own
@@ -279,25 +296,47 @@ fn fine_step(t: f32) -> f32 {
     return clamp(t * 0.02, 20.0, 500.0);
 }
 
-// The light a sample of cloud scatters toward the eye, a metre of density 1, before extinction:
-// the sun's scattered once with its forward peak, and many times (two-stream, `MULTIPLE`); the
-// sky's from above and the ground's from below, less of each the deeper into the layer.
+// The light a sample of cloud scatters toward the eye, a metre of density 1, before extinction.
+// Ported from the bevy branch's march (clouds_raymarch.wesl, after Schneider's Nubis Cubed,
+// "Direct = Transmittance * Phase + Multiple Scattering * Secondary Phase", 2023, with its terms
+// derived and checked against a path tracer there):
+// - the sun's light scattered once, through the cloud toward it, with the droplets' phase;
+// - and many times: the sunlight left at the similarity-reduced depth toward the sun, times
+//   f / (1 - f), the series of further bounces (Hillaire 2020), f the chance light scattered
+//   here does not escape, from how deep it sits toward the sun and the eye and in its column.
+//   Light escapes a thin heap's edge, so its edges facing away from the sun are darker than its
+//   middle (the "powder" look), and little sunlight reaches a deep base;
+// - the sky's light and the ground's (its sunlit part shadowed by the cover over it), as the
+//   diffusion through the layer mixes them by the depth of cloud above and below.
+// The former two-stream share, 1 / (1 + 3/4 (1 - g) tau), is a wide deck's: it lit every heap's
+// base with a fifth of the sun however deep, so in our exposure the bases, the sides away from the
+// sun and the shade between billows all sat high in the tonemapper's shoulder, one flat white.
 struct Lights {
     sun: vec3<f32>,
     sky: vec3<f32>,
-    ground: vec3<f32>,
+    // The ground's light from the sun when not under cloud, and from the sky.
+    ground_sun: vec3<f32>,
+    ground_sky: vec3<f32>,
     phase: f32,
 }
 
-fn scattered(l: Lights, c: Column, h: f32, body: f32, tau: f32) -> vec3<f32> {
-    let iso = 1.0 / (4.0 * PI);
-    let direct = exp(-tau);
-    let flowing = 1.0 / (1.0 + 0.75 * (1.0 - DIFFUSE_G) * tau);
-    let inside = 1.0 + MULTIPLE * sqrt(clamp(body * 4.0, 0.0, 1.0));
-    let sunward = l.sun * (direct * l.phase + flowing * inside * iso);
+fn scattered(l: Lights, c: Column, h: f32, tau_sun: f32, tau_view: f32) -> vec3<f32> {
+    let k = 1.0 - MEAN_COS;
+    // The depth of cloud above and below in the column the sample stands in, as a level layer.
+    let column = extinction(c) * c.coverage * COLUMN_FILL * c.thickness;
     let lift = clamp(lift_in(c, h), 0.0, 1.0);
-    let ambient = 0.5 * (l.sky * mix(0.3, 1.0, lift) + l.ground * mix(1.0, 0.3, lift));
-    return sunward + ambient;
+    let tau_up = column * (1.0 - lift);
+    let tau_down = column * lift;
+    // The chance light scattered here escapes: the column's (the branch's plane-parallel limit,
+    // (E2 up + E2 down) / 2), or nearer an edge the local one toward the sun and the eye.
+    let p_column = 0.5 * (exp_integral_e2(k * tau_up) + exp_integral_e2(k * tau_down));
+    let p_local = 0.5 * (exp(-k * tau_sun) + exp(-k * tau_view));
+    let f = 1.0 - max(min(p_column, p_local), 6.1035e-5);
+    let multiple = exp(-k * tau_sun) * f / (1.0 - f) * (0.25 / PI);
+    let sunward = l.sun * (exp(-tau_sun) * l.phase + multiple);
+    let ground = l.ground_sun * (1.0 - c.cover) + l.ground_sky;
+    let w = (k * tau_up + DIFFUSION_Z0) / (k * (tau_up + tau_down) + 2.0 * DIFFUSION_Z0);
+    return sunward + mix(l.sky, ground, w);
 }
 
 @compute @workgroup_size(8, 8, 1)
@@ -376,7 +415,8 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     var lights: Lights;
     lights.sun = sunlight;
     lights.sky = sky;
-    lights.ground = 0.15 * (sunlight * max(height, 0.0) / PI + sky);
+    lights.ground_sun = GROUND_ALBEDO * sunlight * max(height, 0.0) / PI;
+    lights.ground_sky = GROUND_ALBEDO * sky;
     lights.phase = mie(dot(direction, sun));
     let sun_way = map_way(sun);
 
@@ -386,6 +426,8 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     var hazed = 0.0;
     var fine = false;
     var empty = 0u;
+    // The optical depth of cloud between the eye and the step.
+    var seen_through = 0.0;
     var t = t0;
     var dt = max((t1 - t0) / f32(STEPS), fine_step(t0));
     t += dt * jitter(vec2<f32>(id.xy));
@@ -424,7 +466,8 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
             // The sun's cosine to the up where the sample is, as the shells curve.
             let up_here = normalize(eye_up * (params.shell.y + eye_height) + direction * s);
             let tau = toward_sun(c, m, h, dot(sun, up_here), sun_way);
-            let lit = scattered(lights, c, h, body, tau) * sigma;
+            let lit = scattered(lights, c, h, tau, seen_through + 0.5 * sigma * dt) * sigma;
+            seen_through += sigma * dt;
             let through = exp(-sigma * dt);
             let took = transmittance * (1.0 - through);
             // The air between the eye and this sample (Hillaire 2016's aerial perspective a step).
@@ -466,7 +509,7 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
         if opacity > 0.0 {
             let at = far_at;
             // Lit as the march lights a cloud's middle: a little way in from the sunlit side.
-            let lit = scattered(lights, far, h, 0.25, 8.0);
+            let lit = scattered(lights, far, h, 8.0, 2.0);
             let clear = exp(-at / HAZE_M);
             light += transmittance * opacity * lit * clear;
             hazed += transmittance * opacity * (1.0 - clear);
