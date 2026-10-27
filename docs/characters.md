@@ -51,7 +51,7 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 
 ### Heights off the skin
 
-No layers (one piece per slot), but pieces from different slots overlap: a pack's straps cross the chest piece. Each slot has a height off the skin it stays within, so they stack without fitting every pair: chest pieces within 1.8 cm above the waist, where straps cross them (below it, a hem may stand out further); what crosses them, such as straps, solid from the skin to 2.2 cm, so it rests on bare skin and shows over a coat alike.
+No layers (one piece per slot), but pieces from different slots overlap: a pack's straps cross the chest piece. Each slot has a height off the skin it stays within, so they stack without fitting every pair: chest pieces within 1.8 cm above the waist, where straps cross them (below it, a hem may stand out further); what crosses them, such as straps, solid from the skin to 2.2 cm, so it rests on bare skin and shows over a coat alike. Where a chest piece meets the legs, it hangs over their waistband, never tucked in, so every piece looks right worn alone (D545).
 
 ### Rigid worn things (helmets, packs, quivers, belt pouches)
 
