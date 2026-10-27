@@ -304,7 +304,8 @@ pub(crate) fn nightly(args: &[String]) -> bool {
     let passed = outcomes.iter().all(|o| o.ok);
     let text = if passed {
         let _ = std::fs::write(state.join("good"), format!("{tip}\n"));
-        format!("passed at {tip} ({when}): {}\n", land(&src, &logs, &tip))
+        let landed = land(&src, &logs, &tip, &mut |path| rescore(&src, &logs, path));
+        format!("passed at {tip} ({when}): {landed}\n")
     } else {
         let good = std::fs::read_to_string(state.join("good")).ok();
         let first = outcomes.iter().find(|o| !o.ok).map_or("", |o| o.name);
@@ -545,6 +546,10 @@ fn probe(name: &str, tip: &str) -> i32 {
 enum Holds {
     /// Carried over as it was measured.
     Keep,
+    /// A scorecard's baseline whose reads changed: its stage run again on the new main,
+    /// lowering from that main's own baseline (its film rows from a film that still holds
+    /// there), and kept only if it passes there.
+    Rescore,
     /// Left to the next run.
     Drop,
     /// The size baseline, carried entry by entry (`sizes::carry_lowered`).
@@ -555,8 +560,9 @@ enum Holds {
 
 /// Whether a file a run lowered at one commit still holds on a later main: an artifacts or
 /// fuzz baseline only if nothing building's check reads changed in between (`building`, as
-/// the check's own scoping decides) and the file itself did not; the combat baseline only if
-/// nothing the scorecard reads (`scope::COMBAT`) changed.
+/// the check's own scoping decides) and the file itself did not; a scorecard's baseline as it
+/// was only if nothing the scorecard reads (`scope::COMBAT`, `scope::CONTROLLER`, the baseline
+/// among them) changed, else scored again there, as its stage takes a minute or two.
 fn holds(path: &str, since: &BTreeSet<String>, building: bool) -> Holds {
     if path == SIZES {
         Holds::Merge
@@ -569,7 +575,7 @@ fn holds(path: &str, since: &BTreeSet<String>, building: bool) -> Holds {
             scope::CONTROLLER
         };
         let read = since.iter().any(|f| reads.iter().any(|p| f.starts_with(p)));
-        if read { Holds::Drop } else { Holds::Keep }
+        if read { Holds::Rescore } else { Holds::Keep }
     } else if building || since.contains(path) {
         Holds::Drop
     } else {
@@ -606,13 +612,27 @@ fn lowered(src: &Path) -> Vec<String> {
     kept
 }
 
-/// Commits what the run lowered and pushes it to main, carrying it onto a main that moved;
-/// what the report says came of it.
-fn land(src: &Path, logs: &Path, tip: &str) -> String {
+/// A scorecard's stage run again in the run's worktree, for a baseline it lowers
+/// (`Holds::Rescore`); whether it passed.
+fn rescore(src: &Path, logs: &Path, path: &str) -> bool {
+    let name = if path == COMBAT {
+        "combat"
+    } else {
+        "controller"
+    };
+    STAGES.iter().find(|s| s.name == name).is_some_and(|stage| {
+        Step::new(&format!("{name} again"), stage.said, logs).run(command(stage.run, src))
+    })
+}
+
+/// Commits what the run lowered and pushes it to main, carrying it onto a main that moved
+/// (scoring a scorecard again with `rescore`); what the report says came of it.
+fn land(src: &Path, logs: &Path, tip: &str, rescore: &mut dyn FnMut(&str) -> bool) -> String {
     let mut changed = lowered(src);
     if changed.is_empty() {
         return "nothing to lower".into();
     }
+    let mut notes = Vec::new();
     let mut base = tip.to_string();
     for _ in 0..PUSHES {
         let message = format!(
@@ -633,8 +653,9 @@ fn land(src: &Path, logs: &Path, tip: &str) -> String {
         let ours = git_output(src, &["rev-parse", "HEAD"]).unwrap_or_default();
         let ours = ours.trim().to_string();
         if logged(src, logs, "push", &["push", "-q", "origin", "HEAD:main"]) {
+            let notes: String = notes.iter().map(|n| format!("; {n}")).collect();
             return format!(
-                "lowered and pushed as {} ({})",
+                "lowered and pushed as {} ({}){notes}",
                 short(&ours),
                 kinds(&changed)
             );
@@ -647,7 +668,7 @@ fn land(src: &Path, logs: &Path, tip: &str) -> String {
                 "lowered but not pushed: its check failed (.git/{STATE}/logs/push.log)"
             );
         }
-        carry(src, tip, &ours, &new);
+        notes.extend(carry(src, tip, &ours, &new, rescore));
         base = new;
         changed = lowered(src);
         if changed.is_empty() {
@@ -678,8 +699,14 @@ fn logged(src: &Path, logs: &Path, name: &str, args: &[&str]) -> bool {
 }
 
 /// The worktree put at a new main with what was lowered at `tip` (committed as `ours`) and
-/// still holds there.
-fn carry(src: &Path, tip: &str, ours: &str, new: &str) {
+/// still holds there, a scorecard whose reads changed scored again there; what that did.
+fn carry(
+    src: &Path,
+    tip: &str,
+    ours: &str,
+    new: &str,
+    rescore: &mut dyn FnMut(&str) -> bool,
+) -> Vec<String> {
     let list = |from: &str, to: &str| -> BTreeSet<String> {
         git_output(src, &["diff", "--name-only", "--no-renames", from, to])
             .unwrap_or_default()
@@ -694,6 +721,7 @@ fn carry(src: &Path, tip: &str, ours: &str, new: &str) {
     let _ = git(src, &["reset", "-q", "--hard"]);
     let _ = git(src, &["checkout", "-q", "--detach", new]);
     let mut render = false;
+    let mut notes = Vec::new();
     for path in &files {
         let file = src.join(path);
         match holds(path, &since, building) {
@@ -714,6 +742,16 @@ fn carry(src: &Path, tip: &str, ours: &str, new: &str) {
                 );
                 let _ = std::fs::write(&file, carried);
             }
+            Holds::Rescore if rescore(path) => {
+                notes.push(format!("{path} scored again at {}", short(new)));
+            }
+            Holds::Rescore => {
+                let _ = git(src, &["checkout", "-q", "HEAD", "--", path]);
+                notes.push(format!(
+                    "{path} left to the next run: its scorecard fails at {}",
+                    short(new)
+                ));
+            }
             Holds::Render => render = true,
             Holds::Drop => {}
         }
@@ -721,6 +759,7 @@ fn carry(src: &Path, tip: &str, ours: &str, new: &str) {
     if render {
         let _ = command(RENDER, src).stdout(Stdio::null()).status();
     }
+    notes
 }
 
 /// The last run's verdict and commit, from its report's first line, `passed at <commit> …`
@@ -738,19 +777,23 @@ fn last_run(report: &str) -> Option<(bool, &str)> {
 
 /// What a lowering holds, by kind: `3 artifacts files, the size baseline, 1 index`.
 fn kinds(changed: &[String]) -> String {
-    let sizes = changed.iter().any(|p| p == SIZES);
-    let artifacts = changed
-        .iter()
-        .filter(|p| p.as_str() != SIZES && baselines::is_baseline(p))
-        .count();
-    let indexes = changed.len() - artifacts - usize::from(sizes);
+    let named = [
+        (SIZES, "the size baseline"),
+        (COMBAT, "the combat baseline"),
+        (CONTROLLER, "the controller baseline"),
+    ];
+    let named: Vec<&str> = named
+        .into_iter()
+        .filter(|(path, _)| changed.iter().any(|p| p == path))
+        .map(|(_, said)| said)
+        .collect();
+    let artifacts = changed.iter().filter(|p| baselines::is_baseline(p)).count() - named.len();
+    let indexes = changed.len() - artifacts - named.len();
     let mut parts = Vec::new();
     if artifacts > 0 {
         parts.push(format!("{artifacts} artifacts and fuzz files"));
     }
-    if sizes {
-        parts.push("the size baseline".to_string());
-    }
+    parts.extend(named.iter().map(|said| said.to_string()));
     if indexes > 0 {
         parts.push(format!("{indexes} rendered indexes"));
     }
@@ -762,119 +805,5 @@ fn short(sha: &str) -> &str {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_probe_skips_what_does_not_build_and_stops_when_it_cannot_set_up() {
-        assert_eq!(probe_exit(true, true, true), 0);
-        assert_eq!(probe_exit(true, true, false), 1);
-        assert_eq!(probe_exit(true, false, false), 125);
-        assert_eq!(probe_exit(false, false, false), 128);
-        assert_eq!(probe_exit(false, true, true), 128);
-    }
-
-    #[test]
-    fn every_stage_holds_in_its_probe_and_lowers_only_in_the_run() {
-        for stage in STAGES {
-            assert!(!stage.hold.contains(&"--lower"), "{}", stage.name);
-            assert!(STAGES.iter().filter(|s| s.name == stage.name).count() == 1);
-        }
-        let lowering = STAGES.iter().filter(|s| s.run.contains(&"--lower")).count();
-        assert_eq!(
-            lowering, 6,
-            "artifacts quick and full, fuzz, sizes, combat and controller lower"
-        );
-    }
-
-    #[test]
-    fn the_last_run_is_read_from_its_reports_first_line() {
-        let sha = "0123456789abcdef0123456789abcdef01234567";
-        let passed = format!("passed at {sha} (2026-10-18 04:00 UTC): nothing to lower\n");
-        assert_eq!(last_run(&passed), Some((true, sha)));
-        let failed = format!("failed at {sha} (when): fuzz\n  fuzz first fails at …\n");
-        assert_eq!(last_run(&failed), Some((false, sha)));
-        assert_eq!(last_run(""), None);
-        assert_eq!(last_run("nightly at noon"), None);
-        assert_eq!(last_run("passed at main"), None);
-    }
-
-    #[test]
-    fn the_first_bad_commit_is_read_from_what_bisect_said() {
-        let said = "running probe\nnightly --probe fuzz: 1\n\
-                    abcdef1234567890 is the first bad commit\ncommit abcdef1234567890\n";
-        assert_eq!(
-            first_bad(said),
-            Some(Found::Commit("abcdef1234567890".into()))
-        );
-        let skipped = "There are only 'skip'ped commits left to test.\n\
-                       The first bad commit could be any of:\n\
-                       1111111aaaa\n2222222bbbb\nWe cannot bisect more!\n";
-        assert_eq!(
-            first_bad(skipped),
-            Some(Found::OneOf(vec![
-                "1111111aaaa".into(),
-                "2222222bbbb".into()
-            ]))
-        );
-        assert_eq!(first_bad("bisect run failed: exit code 128"), None);
-    }
-
-    #[test]
-    fn a_lowering_holds_on_a_moved_main_only_where_nothing_it_measured_changed() {
-        let fuzz = format!("{ARTIFACTS}/fuzz/seed-2.tsv");
-        let sheet = format!("{ARTIFACTS}/all/sheet.tsv");
-        let since: BTreeSet<String> = [sheet.clone()].into_iter().collect();
-        // Building unchanged: a file kept, unless the move changed that file itself.
-        assert_eq!(holds(&fuzz, &since, false), Holds::Keep);
-        assert_eq!(holds(&sheet, &since, false), Holds::Drop);
-        // Building changed: every artifacts and fuzz count is measured again next run.
-        assert_eq!(holds(&fuzz, &BTreeSet::new(), true), Holds::Drop);
-        // Sizes entry by entry whatever moved; the indexes rendered again.
-        assert_eq!(holds(SIZES, &since, true), Holds::Merge);
-        assert_eq!(holds("docs/decisions.md", &since, true), Holds::Render);
-        // The combat baseline: kept whatever building did, dropped when a move or the
-        // baseline itself changed.
-        assert_eq!(holds(COMBAT, &since, true), Holds::Keep);
-        let moved: BTreeSet<String> = ["assets/data/moves/sword.shielded.ron".to_string()].into();
-        assert_eq!(holds(COMBAT, &moved, false), Holds::Drop);
-        let raised: BTreeSet<String> = [COMBAT.to_string()].into();
-        assert_eq!(holds(COMBAT, &raised, false), Holds::Drop);
-        // The controller's likewise, by what its course and film read: a move changes combat's
-        // alone, a clip both.
-        assert_eq!(holds(CONTROLLER, &moved, false), Holds::Keep);
-        let clip: BTreeSet<String> = ["assets/models/character/base.glb".to_string()].into();
-        assert_eq!(holds(CONTROLLER, &clip, false), Holds::Drop);
-        let walked: BTreeSet<String> = ["tools/controller/criteria.json".to_string()].into();
-        assert_eq!(holds(CONTROLLER, &walked, false), Holds::Drop);
-        assert_eq!(holds(COMBAT, &walked, false), Holds::Keep);
-    }
-
-    #[test]
-    fn a_failure_reports_its_first_stage_first_and_the_hook_reads_one_block() {
-        let outcomes = [
-            Outcome {
-                name: "clippy",
-                ok: true,
-                lines: vec![],
-            },
-            Outcome {
-                name: "fuzz",
-                ok: false,
-                lines: vec!["seed 7: z-fighting 3, was 0".into()],
-            },
-            Outcome {
-                name: "docs",
-                ok: false,
-                lines: vec!["docs: 1 faults".into()],
-            },
-        ];
-        let sha = "0123456789abcdef";
-        let text = failure(sha, "now", "first fails at 0123456789 x", &outcomes);
-        let block = text.split("\n\n").next().unwrap();
-        assert!(block.starts_with(&format!("failed at {sha} (now): fuzz, docs\n")));
-        assert!(block.contains("  fuzz first fails at 0123456789 x\n    seed 7"));
-        assert!(!block.contains("docs: 1 faults"));
-        assert_eq!(last_run(&text), Some((false, sha)));
-    }
-}
+#[path = "nightly/tests.rs"]
+mod tests;
