@@ -173,11 +173,17 @@ def arc(r, steps, a0=0.0, a1=math.pi):
     return [(r * math.cos(a0 + (a1 - a0) * k / steps), r * math.sin(a0 + (a1 - a0) * k / steps)) for k in range(steps + 1)]
 
 
-def rib(m, r_in, depth, width, at, axis, mat, half=0, steps=16):
+def rib(m, r_in, depth, width, at, axis, mat, half=0, steps=16, below=None):
     """An arch ring of ashlar: intrados radius `r_in`, `depth` deep, `width` along `axis`
     ('y' or 'x') at `at`; `half` +1 or -1 keeps only the half on that side of `at`. Its
-    joints are the texture's head joints, U along the arch, the ring depth one course."""
-    c = min(0.04, depth / 4)
+    joints are the texture's head joints, U along the arch, the ring depth one course.
+    `below`, how far it stands under the web it is sunk in: its sides are then chamfered at
+    45 degrees a centimetre past that, so no side square to the axis shows. A square side
+    faces along the corridor, square to the torches on the walls by it, and took no light:
+    a black crescent round the ring (rounds 3-6's stills; not SSAO, the same at --quality
+    low, nor a face turned away, Blender's face orientation clean from the floor, round 7).
+    A chamfered rib, as Romanesque and Gothic ribs are cut, turns its sides to the floor."""
+    c = below + 0.01 if below is not None else min(0.04, depth / 4)
     lo, hi = (-width / 2, width / 2) if half == 0 else ((0.0, width / 2) if half > 0 else (-width / 2, 0.0))
     # The section, (radial out from the intrados, along), chamfered on its visible edges.
     if half == 0:
@@ -238,7 +244,7 @@ def barrel_vault():
                 row.append((Vector((side * (r - d), y, z)), (y / ASHLAR_M, BAND[0] + length_v / ASHLAR_M)))
             rows.append(row)
         m.grid(rows, 1, away=lambda p, s=side: Vector((s * (r + 0.3), p.y, p.z)))
-    rib(m, r - 0.12, 0.17, 0.5, 0.0, "y", 1)
+    rib(m, r - 0.12, 0.17, 0.5, 0.0, "y", 1, below=0.12)
     return m, [("Rubble", RUBBLE, RUBBLE_TINT), ("Ashlar", "large_sandstone_blocks", ASHLAR_TINT)]
 
 
@@ -264,7 +270,7 @@ def groin_vault():
             m.grid([low, top], 0, toward=lambda p: p * 2.0 - Vector((0, 0, p.z)))
             # Half a transverse rib on the edge, inside the bay.
             at = sign * r
-            rib(m, r - 0.14, 0.2, 0.5, at, "y" if axis == "y" else "x", 1, half=-sign, steps=16)
+            rib(m, r - 0.14, 0.2, 0.5, at, "y" if axis == "y" else "x", 1, half=-sign, steps=16, below=0.14)
     # Diagonal ribs on the groins: each over its diagonal, at a horizontal distance h from the
     # middle and z = sqrt(r² - h²/2), half an ellipse of semi-axes r√2 and r.
     ea, eb, n = r * math.sqrt(2.0), r, 24
