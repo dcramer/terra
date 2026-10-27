@@ -35,6 +35,20 @@ pub fn rate(speed: f32, pace: f32, scale: f32) -> f32 {
     (speed / (pace * scale)).clamp(SLOWEST, FASTEST)
 }
 
+/// A figure's size against its model, the `scale` its paces are taken at, from its animation
+/// player's `place` in the world and that node's `own` transform. A pace is measured in its
+/// model file's own world, through the armature object's scale (`tools/characters/pace.py`),
+/// and Bevy's glTF loader puts the animation player on the scene's root node, the armature,
+/// whose transform carries that scale (base.glb's Rig 1.078, the Cetri's 3.296): the player's
+/// world scale holds it a second time, so it is taken out.
+pub fn size(place: &GlobalTransform, own: &Transform) -> f32 {
+    let own = own.scale.y;
+    if own <= 0.0 {
+        return place.scale().y;
+    }
+    place.scale().y / own
+}
+
 /// The longest a stride is warped, against its clip's: past it a leg reaches too far, and
 /// another clip should be playing. A stride is only lengthened: a body slower than its clip
 /// plays at the slowest has a slower gait's clip to play (Lyra's walk under its jog), and its

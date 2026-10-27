@@ -560,6 +560,14 @@ fn sit(
     }
 }
 
+/// How fast a walk or jog of `pace` plays at `speed` on a body whose animation player is at
+/// `place` with its own node's transform `own`: scaled by the body's size against its model
+/// alone (`pace::size`). By the player's world scale, which carries base.glb's armature scale
+/// (1.078) again, every stride played 7% slow and its feet slid.
+fn stride_rate(speed: f32, pace: f32, place: &GlobalTransform, own: &Transform) -> f32 {
+    terra_walker::pace::rate(speed, pace, terra_walker::pace::size(place, own))
+}
+
 fn animate(
     time: Res<Time>,
     people: Query<(&Person, &Transform)>,
@@ -568,10 +576,11 @@ fn animate(
         &mut AnimationPlayer,
         &mut AnimationTransitions,
         &GlobalTransform,
+        &Transform,
     )>,
 ) {
     let dt = time.delta_secs();
-    for (mut animates, mut player, mut transitions, place) in &mut animators {
+    for (mut animates, mut player, mut transitions, place, own) in &mut animators {
         let Ok((person, at)) = people.get(animates.person) else {
             continue;
         };
@@ -598,7 +607,7 @@ fn animate(
             && dt > 0.0
             && let Some(playing) = player.animation_mut(wanted)
         {
-            playing.set_speed(terra_walker::pace::rate(step / dt, pace, place.scale().y));
+            playing.set_speed(stride_rate(step / dt, pace, place, own));
         }
         if animates.playing == Some(wanted) {
             continue;
@@ -688,5 +697,34 @@ mod tests {
             ..Worker::default()
         };
         assert_eq!(*world.get::<Worker>(bound).unwrap(), resting);
+    }
+
+    /// A walk's or jog's pace is metres a second in its model file's own world, through its
+    /// armature's scale (`tools/characters/pace.py`), and a body's animation player sits on
+    /// that armature's node, whose world scale carries it again: a body at its model's size
+    /// going at the clip's own pace plays it at its own speed, and one twice the size at twice
+    /// the speed the same. By the player's world scale, base.glb's 1.078 armature played them
+    /// at 0.93.
+    #[test]
+    fn a_body_going_at_its_strides_pace_plays_it_at_its_own_speed_whatever_its_rigs_scale() {
+        let file = model_files::json(appearance::BASE);
+        let rig = model_files::root_scale(&file);
+        assert!(rig > 1.05, "the case this covers: an armature scaled {rig}");
+        for clip in ["Walk_Loop", "Jog_Fwd_Loop"] {
+            let pace = model_files::pace(&file, clip);
+            for size in [1.0, 2.0] {
+                // The body turned to face -Z and sized, its model's armature under it.
+                let own = Transform::from_scale(Vec3::splat(rig));
+                let body = Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI))
+                    .with_scale(Vec3::splat(size));
+                let place = GlobalTransform::from(body) * own;
+                let rate = stride_rate(size * pace, pace, &place, &own);
+                assert!(
+                    (rate - 1.0).abs() < 0.02,
+                    "{clip} at {} m/s, {size} times its model's size: played at {rate}",
+                    size * pace
+                );
+            }
+        }
     }
 }

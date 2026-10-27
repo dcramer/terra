@@ -105,6 +105,21 @@ pub fn extra(json: &Value, key: &str) -> Option<Value> {
         .find_map(|(_, extras)| extras.get(key).cloned())
 }
 
+/// The uniform scale of the default scene's first root node: a rigged body's armature, the
+/// node Bevy puts its animation player on.
+pub fn root_scale(json: &Value) -> f32 {
+    let scene = json["scene"].as_u64().unwrap_or(0) as usize;
+    let root = json["scenes"][scene]["nodes"][0].as_u64().unwrap() as usize;
+    json["nodes"][root]["scale"][1].as_f64().unwrap_or(1.0) as f32
+}
+
+/// A stride clip's pace kept in a body file (`pace.rs`).
+pub fn pace(json: &Value, clip: &str) -> f32 {
+    extra(json, "paces")
+        .and_then(|paces| paces[clip].as_f64())
+        .unwrap_or_else(|| panic!("no pace for {clip}")) as f32
+}
+
 /// The `.glb` files in a folder under `assets/`, as paths under `assets/`.
 pub fn glbs(folder: &str) -> Vec<String> {
     let mut found: Vec<String> = std::fs::read_dir(asset(folder))

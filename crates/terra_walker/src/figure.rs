@@ -385,12 +385,13 @@ fn animate(
         &mut AnimationTransitions,
         &mut Animated,
         &GlobalTransform,
+        &Transform,
     )>,
     mut hands: Query<&mut Carrying, With<Grip>>,
     mut feet: Query<&mut crate::feet::Kept>,
 ) {
     let Some(moves) = moves else { return };
-    for (mut animator, mut transitions, mut animated, place) in &mut figures {
+    for (mut animator, mut transitions, mut animated, place, own) in &mut figures {
         let Ok((motion, body, stance, downed, acting, lie, shows)) =
             players.get_mut(animated.player)
         else {
@@ -460,7 +461,7 @@ fn animate(
             // The jog and sprint at the player's speed, played and warped (`pace::gait`).
             None if matches!(doing, Doing::Jog | Doing::Sprint) => {
                 if let Some(pace) = moves.paces.get(&name) {
-                    let gait = crate::pace::gait(velocity.length(), *pace, place.scale().y);
+                    let gait = stride(velocity.length(), *pace, place, own);
                     playing.set_speed(gait.rate);
                     warp = gait.warp;
                 }
@@ -472,9 +473,17 @@ fn animate(
         if let Ok(mut kept) = feet.get_mut(animated.player) {
             let pace = moves.paces.get(&name).copied().unwrap_or(0.0);
             let rate = animator.animation(main).map_or(0.0, |a| a.speed());
-            kept.stride(velocity, pace * place.scale().y, rate, warp);
+            kept.stride(velocity, pace * crate::pace::size(place, own), rate, warp);
         }
     }
+}
+
+/// How a jog or sprint of `pace` is shown at `speed` on a figure whose animation player is at
+/// `place` with its own node's transform `own`: scaled by the figure's size against its model
+/// alone (`pace::size`). By the player's world scale, which carries base.glb's armature scale
+/// (1.078) again, every stride played 7% slow and its feet slid.
+fn stride(speed: f32, pace: f32, place: &GlobalTransform, own: &Transform) -> crate::pace::Gait {
+    crate::pace::gait(speed, pace, crate::pace::size(place, own))
 }
 
 /// The clip a figure's doing or a layer's ask now shows, blended in from what played, with a
@@ -721,5 +730,35 @@ mod tests {
                 .mixed
                 .is_empty()
         );
+    }
+
+    /// A stride's pace is metres a second in its model file's own world, through its armature's
+    /// scale (`tools/characters/pace.py`), and the figure's animation player sits on that
+    /// armature's node, whose world scale carries it again: a figure at its model's size going
+    /// at its jog's or sprint's own pace plays it at its own speed, unwarped, and one twice the
+    /// size at twice the speed the same. By the player's world scale, base.glb's 1.078 armature
+    /// played them at 0.93.
+    #[test]
+    fn a_figure_going_at_its_strides_pace_plays_it_at_its_own_speed_whatever_its_rigs_scale() {
+        use crate::model_files::{json, pace, root_scale};
+        let rig = root_scale(&json(crate::appearance::BASE));
+        assert!(rig > 1.05, "the case this covers: an armature scaled {rig}");
+        let clips = json(CLIPS);
+        for clip in [Doing::Jog.clip(), Doing::Sprint.clip()] {
+            let pace = pace(&clips, clip);
+            for size in [1.0, 2.0] {
+                // The figure turned to face -Z and sized, its model's armature under it.
+                let own = Transform::from_scale(Vec3::splat(rig));
+                let figure = Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI))
+                    .with_scale(Vec3::splat(size));
+                let place = GlobalTransform::from(figure) * own;
+                let shown = stride(size * pace, pace, &place, &own);
+                assert!(
+                    (shown.rate - 1.0).abs() < 0.02 && (shown.warp - 1.0).abs() < 0.02,
+                    "{clip} at {} m/s, {size} times its model's size: {shown:?}",
+                    size * pace
+                );
+            }
+        }
     }
 }
