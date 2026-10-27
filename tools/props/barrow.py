@@ -38,7 +38,8 @@ import sys
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Vector, noise
+from mathutils.bvhtree import BVHTree
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MATERIALS = os.path.join(ROOT, "assets", "materials")
@@ -115,6 +116,8 @@ class Mesh:
     def __init__(self):
         self.bm = bmesh.new()
         self.uv = self.bm.loops.layers.uv.new("UVMap")
+        # Aged: dirt baked into its vertices' colour (`grime`), as old bone lying in a niche.
+        self.aged = False
 
     def grid(self, rows, mat, toward=None, away=None):
         """Quads between rows of (point, (u, v)), each facing toward the point `toward(p)`
@@ -375,6 +378,72 @@ def lump(m, centre, radii, mat, segs=10, rings=6, bulge=None):
     bm.free()
 
 
+# Aged bone's grime (`grime`): how far a vertex looks for what shades it, metres (about a
+# skull's radius); the dirt's colour in the crevices and where it lay on the earth, against the
+# bone's own (as a multiply of its texture and tint); and the stain's blotches, a metre across
+# so many. Old bone is never the white of a museum's cast: ivory to tobacco brown, darker and
+# earthier wherever it touched the ground or another bone (barrow round 12: "a smooth white egg
+# of a skull, the brightest thing in frame").
+GRIME_REACH = 0.12
+GRIME = (0.22, 0.17, 0.11)
+STAIN_SCALE = 14.0
+GRIME_RAYS = 64
+
+
+def hemisphere(n):
+    """`n` directions spread evenly over the sphere (a Fibonacci spiral), the same every run."""
+    golden = math.pi * (3.0 - math.sqrt(5.0))
+    out = []
+    for i in range(n):
+        z = 1.0 - (i + 0.5) / n * 2.0
+        r = math.sqrt(max(0.0, 1.0 - z * z))
+        out.append(Vector((math.cos(golden * i) * r, math.sin(golden * i) * r, z)))
+    return out
+
+
+def grime(bm, me):
+    """Each vertex's colour, the dirt of old bone: its ambient occlusion over `GRIME_REACH`
+    (rays against the bones themselves and the niche's floor at z 0, cosine weighted, as a
+    baker's AO), so the crevices between bones, the skull's underside and the sockets' rims go
+    earth brown, and blotches of stain over the rest. Written to the mesh's colour attribute,
+    which the glTF carries as COLOR_0 and the game multiplies into the bone's colour."""
+    bm.verts.ensure_lookup_table()
+    bm.normal_update()
+    tree = BVHTree.FromBMesh(bm)
+    dirs = hemisphere(GRIME_RAYS * 2)
+    shades = []
+    for v in bm.verts:
+        n = v.normal
+        p = v.co + n * 0.002
+        hit = total = 0.0
+        for d in dirs:
+            w = d.dot(n)
+            if w <= 0.0:
+                continue
+            total += w
+            near = GRIME_REACH
+            loc, _, _, dist = tree.ray_cast(p, d, GRIME_REACH)
+            if loc is not None:
+                near = min(near, dist)
+            if d.z < 0.0:
+                near = min(near, -p.z / d.z)
+            hit += w * (1.0 - near / GRIME_REACH)
+        open_ = 1.0 - hit / max(total, 1e-6)
+        stain = 0.5 + 0.5 * noise.noise(v.co * STAIN_SCALE)
+        # Darker in the crevices (open_ under 1), a little everywhere by the stain: a bone's
+        # side over the floor, a third shut in, takes some 0.4 of the dirt, a crevice all.
+        dirt = min(1.0, (1.0 - open_) * 1.4) ** 1.2
+        bone = 0.78 + 0.22 * stain
+        shades.append([bone * (1.0 - dirt) + g * dirt for g in GRIME])
+    layer = me.color_attributes.new("Grime", "FLOAT_COLOR", "POINT")
+    for i, c in enumerate(shades):
+        layer.data[i].color = (*c, 1.0)
+    me.color_attributes.active_color = layer
+    lumas = sorted(0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] for c in shades)
+    print(f"BARROW grime: {len(lumas)} vertices, luma median {lumas[len(lumas) // 2]:.2f}, "
+          f"tenth {lumas[len(lumas) // 10]:.2f}, least {lumas[0]:.2f}")
+
+
 def shroud():
     """A body bound in linen, 1.7 m, lying on its back: head, shoulders, the narrowing to the
     feet, cords round it every 0.3 m."""
@@ -401,6 +470,7 @@ def bones():
     cutlery" (barrow rounds 10 and 11, all three reviewers). The orbits and nose dark, on the
     face of the skull, where they were sunk inside it."""
     m = Mesh()
+    m.aged = True
     lump(m, (0.60, 0.02, 0.12), (0.125, 0.095, 0.115), 0, segs=14, rings=10)
     lump(m, (0.70, 0.02, 0.07), (0.06, 0.07, 0.05), 0, segs=10, rings=6)
     for s in (-1, 1):
@@ -413,7 +483,9 @@ def bones():
     for k in range(5):
         lump(m, (0.22 + 0.07 * k - 0.1, -0.03 - 0.01 * k, 0.04), (0.022, 0.14, 0.02), 0, segs=6, rings=4)
     lump(m, (0.15, -0.02, 0.06), (0.10, 0.14, 0.06), 0, segs=8, rings=4)
-    return m, [("Bone", "white_stucco", (0.50, 0.44, 0.34)), ("Socket", None, (0.03, 0.025, 0.02))]
+    # The bone's tint, its grime aside: aged ivory-brown, about 0.5 in sRGB (0.44 luma with its
+    # stain) over the stucco's 0.83, its crevices near 0.2: well under the shroud's linen (0.63).
+    return m, [("Bone", "white_stucco", (0.34, 0.28, 0.20)), ("Socket", None, (0.03, 0.025, 0.02))]
 
 
 def sarcophagus():
@@ -447,6 +519,8 @@ def export(name, built):
     bmesh.ops.triangulate(m.bm, faces=m.bm.faces[:])
     me = bpy.data.meshes.new(name)
     m.bm.to_mesh(me)
+    if m.aged:
+        grime(m.bm, me)
     m.bm.free()
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
@@ -467,6 +541,8 @@ def export(name, built):
         export_format="GLB",
         use_selection=True,
         export_tangents=True,
+        # The aged pieces' grime, their active colour attribute, as COLOR_0.
+        export_vertex_color="ACTIVE" if m.aged else "NONE",
         export_image_format="JPEG",
         export_jpeg_quality=85,
     )
