@@ -40,7 +40,7 @@ SIZE_M = 1.3
 # crown read dark blue-green beside them (round-5 still reviews).
 TINT = Vector((1.2, 1.25, 0.82))
 # The face's clear cone: its axis this far below straight ahead, and its half-angle, degrees.
-FACE_CONE = (15, 45)
+FACE_CONE = (5, 50)
 ARM = ("clavicle", "upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky")
 
 src = look.path(look.args()[0])

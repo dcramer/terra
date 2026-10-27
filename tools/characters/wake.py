@@ -42,7 +42,7 @@ AMBER = (1.0, 0.52, 0.12)
 CORE = (1.0, 0.86, 0.55)  # an eye's hot middle, near white, fading out to amber
 # The throat's glow at its deepest, dark by the lips, so the mouth reads as a hollow lit from
 # within, not a lit decal; at round 6's 0.07 it read as no hollow at all (film reviews).
-EMBER = (0.55, 0.16, 0.025)
+EMBER = (0.32, 0.08, 0.012)
 # The teeth's warm cast from it: splinters catching the ember, dimmer than the throat.
 CAUGHT = (0.13, 0.04, 0.007)
 src = look.path(look.args()[0])
@@ -333,7 +333,7 @@ for j in range(gh - 1):
 # open mouth reads in the shade; it ships dark and lights with the eyes (staged.glow).
 throat_px = 32
 gu, gv = np.meshgrid(np.linspace(-1, 1, throat_px), np.linspace(-1, 1, throat_px))
-heat = np.clip(1 - (gu ** 2 + gv ** 2), 0, 1) ** 3
+heat = np.clip(1 - (gu ** 2 + gv ** 2), 0, 1) ** 5
 throat = np.ones((throat_px, throat_px, 4), dtype=np.float32)
 throat[..., :3] = heat[..., None] * np.array(EMBER, dtype=np.float32)
 ember = bpy.data.images.new(f"{body.name}_throat", throat_px, throat_px, alpha=False)
