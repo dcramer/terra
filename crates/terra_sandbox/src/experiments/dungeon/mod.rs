@@ -192,6 +192,14 @@ fn lay_out(
     for mob in &stamp.mobs {
         info!("Dungeon creature {} at {}", mob.species, point(mob.at));
     }
+    // Where each door stands, so a film's dolly can stop short of it.
+    for door in stamp
+        .objects
+        .iter()
+        .filter(|o| o.role == stamp::ObjectRole::Door)
+    {
+        info!("Dungeon door {} at {}", door.name, point(door.at));
+    }
     // Each room's purpose, floor middle, cells and modules, so a `--vantage` can frame one.
     let set = ModuleSet::new(theme).ok();
     for (r, rect) in dungeon.layout.rooms.iter().enumerate() {
