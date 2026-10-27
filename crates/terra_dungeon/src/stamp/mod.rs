@@ -27,6 +27,8 @@ mod look;
 mod look_tests;
 mod modules;
 mod runin;
+#[cfg(test)]
+mod runin_tests;
 mod shell;
 #[cfg(test)]
 mod tests;
