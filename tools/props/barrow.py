@@ -22,8 +22,8 @@ the textures rather than the triangles (art-style.md rule 1):
 
     tools/blender/run.sh tools/props/barrow.py
 
-Writes them to assets/models/props/barrow/. The rubble is `stone_wall` (the crypt's walls,
-Greystone, tinted as its pack tints them), the ashlar `large_sandstone_blocks`, bone and
+Writes them to assets/models/props/barrow/. The rubble is `castle_wall_varriation` (the crypt's
+walls, Barrowstone, tinted as its pack tints them), the ashlar `large_sandstone_blocks`, bone and
 linen `white_stucco` tinted (assets/materials, README there), at their real sizes and cut to
 1024 pixels. Nothing is random from run to run.
 """
@@ -43,8 +43,9 @@ TEXTURE_PX = 1024
 # image (a cornice above them, a plinth below), so a piece's courses map inside that band.
 RUBBLE_M, ASHLAR_M, STUCCO_M = 2.0, 3.0, 2.0
 BAND = (0.09, 0.87)
-# Greystone's pack tint (assets/data/packs/greystone.ron), so the webs meet the walls.
-RUBBLE_TINT = (0.50, 0.53, 0.58)
+# Barrowstone's pack tint (assets/data/packs/barrowstone.ron), so the webs meet the walls.
+RUBBLE = "castle_wall_varriation"
+RUBBLE_TINT = (0.70, 0.70, 0.72)
 ASHLAR_TINT = (0.80, 0.80, 0.82)
 SPRING = 2.95
 
@@ -238,7 +239,7 @@ def barrel_vault():
             rows.append(row)
         m.grid(rows, 1, away=lambda p, s=side: Vector((s * (r + 0.3), p.y, p.z)))
     rib(m, r - 0.12, 0.17, 0.5, 0.0, "y", 1)
-    return m, [("Rubble", "stone_wall", RUBBLE_TINT), ("Ashlar", "large_sandstone_blocks", ASHLAR_TINT)]
+    return m, [("Rubble", RUBBLE, RUBBLE_TINT), ("Ashlar", "large_sandstone_blocks", ASHLAR_TINT)]
 
 
 def groin_vault():
@@ -294,7 +295,7 @@ def groin_vault():
             return centre + inward * 0.07
 
         m.grid(rows, 1, away=inside)
-    return m, [("Rubble", "stone_wall", RUBBLE_TINT), ("Ashlar", "large_sandstone_blocks", ASHLAR_TINT)]
+    return m, [("Rubble", RUBBLE, RUBBLE_TINT), ("Ashlar", "large_sandstone_blocks", ASHLAR_TINT)]
 
 
 def door_arch():
@@ -321,7 +322,7 @@ def door_arch():
     high = [(Vector((x * r_in, -0.03, 3.0 + z * r_in)), (x * r_in / ASHLAR_M + 0.3, 0.5 + z * r_in / ASHLAR_M)) for x, z in arc(1.0, steps)]
     m.grid([low, high], 1, toward=lambda p: Vector((p.x, -2.0, p.z)))
     m.box((-r_in - 0.02, -0.05, 2.86), (r_in + 0.02, 0.0, 3.04), 1, ASHLAR_M, 0.02)
-    return m, [("Rubble", "stone_wall", RUBBLE_TINT), ("Ashlar", "large_sandstone_blocks", ASHLAR_TINT)]
+    return m, [("Rubble", RUBBLE, RUBBLE_TINT), ("Ashlar", "large_sandstone_blocks", ASHLAR_TINT)]
 
 
 def pier():

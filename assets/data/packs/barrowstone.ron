@@ -1,0 +1,12 @@
+// Barrowstone's pack: Greystone's (data/packs/greystone.ron), its face coursed rubble, stones
+// of every size set in lime mortar (Poly Haven's `castle_wall_varriation`, CC0,
+// assets/materials/README.md), as a barrow's or crypt's walls are laid: round 2-5's barrow
+// reviewers read the fieldstone as uniform cobbles, no joints between. The scan is already
+// grey, so the tint only darkens it toward Greystone's value and cools it a touch.
+(
+    pack: "greystone",
+    tint: (0.70, 0.70, 0.72),
+    textures: {
+        Masonry: (path: "materials/castle_wall_varriation", metres: (2.0, 2.0), depth: 0.025),
+    },
+)

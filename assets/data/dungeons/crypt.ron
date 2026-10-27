@@ -11,7 +11,7 @@
     rooms: (11, 15),
     levels: 2,
     keys: 1,
-    walls: "Greystone",
+    walls: "Barrowstone",
     floors: "Stone",
     trim: "Stone",
     // Vaulted: a corridor crowned at 4.5 m, a room at 5 m (D527), flat cubes over the kit's

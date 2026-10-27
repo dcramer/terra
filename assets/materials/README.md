@@ -4,6 +4,7 @@ Where each material came from. Made by `cargo xtask textures` ([tools/textures](
 
 - `bark_brown_02`: Poly Haven [Bark Brown 02](https://polyhaven.com/a/bark_brown_02), CC0, 2k. 1.00 m across. Its height map, inverted and at 1k, is `depth.jpg` for relief mapping, as the lush forest's oaks and spruces wear it. `trunk_depth.jpg` is that drawn out to its full range (ImageMagick `-contrast-stretch 1.5%x1.5%`), which they are relief-mapped by (D309).
 - `birch_bark`: made from a generated image (art/textures/birch-bark.png) by `textures.ts material`. 1.00 m across.
+- `castle_wall_varriation`: Poly Haven [Castle Wall Varriation](https://polyhaven.com/a/castle_wall_varriation), CC0, 2k. 2.00 m across. Coursed rubble, stones of every size in lime mortar; Barrowstone's walls, the crypt's (data/packs/barrowstone.ron).
 - `clay_floor_001`: Poly Haven [Clay Floor 001](https://polyhaven.com/a/clay_floor_001), CC0, 2k. 2.00 m across.
 - `detail_stone`: detail texture (D362): the fine grain of `rock_surface` (Poly Haven [Rock Surface](https://polyhaven.com/a/rock_surface), CC0, 2k. 2.00 m across), its broad swells taken out, its colour grey about the middle, by `textures.ts detail`.
 - `detail_wood`: detail texture (D362): the fine grain of `rough_wood` (Poly Haven [Rough Wood](https://polyhaven.com/a/rough_wood), CC0, 2k. 0.50 m across), its broad swells taken out, its colour grey about the middle, by `textures.ts detail`.

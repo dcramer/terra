@@ -1,0 +1,12 @@
+// Barrowstone: coursed rubble in lime mortar (data/packs/barrowstone.ron), the crypt's walls
+// (data/dungeons/crypt.ron); a material of the block pattern (D290), as greystone is, built
+// and costed as it is. Made for the crypt, so not in the hammer.
+(
+    id: 8,
+    pattern: "block",
+    pack: "barrowstone",
+    cost: (steps: 1, step: [("Stone", 1, 4)]),
+    weight: 3,
+    roof_kind: Some(2049),
+    dungeon_only: true,
+)
