@@ -79,6 +79,12 @@ function packagesOf(src: string): string[] {
   return workspacePackages(read("Cargo.toml") ?? "", read, list);
 }
 
+/// The packages the checkout's Cargo.lock names, none without one.
+function lockedOf(src: string): string[] {
+  const lock = join(src, "Cargo.lock");
+  return existsSync(lock) ? [...readFileSync(lock, "utf8").matchAll(/^name = "([^"]+)"$/gm)].map((m) => m[1]) : [];
+}
+
 /// A slot's job checkout: a worktree of the worker's clone, detached, so a job's checkout and
 /// build never touch the worker's own code or another slot's. Slot 1 takes over the single job
 /// checkout's build and HOME from before slots, so it starts warm.
@@ -142,8 +148,9 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
       const from = statSync(logFile).size;
       let code = await run(cmd, src, env, log, r);
       // A build that broke on the slot's stale artifacts (a link error naming a workspace
-      // crate) is cleaned of them and run once more, as build farms retry a cache's fault.
-      const stale = code !== 0 && code !== 124 && step.run && !r.cancelled && !cleaned ? staleBuild(since(logFile, from), packagesOf(src)) : undefined;
+      // crate, or a registry crate's corrupt rlib) is cleaned of them and run once more, as
+      // build farms retry a cache's fault.
+      const stale = code !== 0 && code !== 124 && step.run && !r.cancelled && !cleaned ? staleBuild(since(logFile, from), packagesOf(src), lockedOf(src)) : undefined;
       if (stale) {
         cleaned = stale.packages.join(", ");
         note(`stale build (${stale.why}): cleaning ${cleaned} and running it again`);

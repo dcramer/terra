@@ -297,6 +297,37 @@ test("a link error naming a workspace crate is a stale build: its crates and the
   ]);
 });
 
+test("a registry crate's rlib wanting a symbol it defines itself is corrupt, and cleaned by its package name", () => {
+  // Worker slot 4 on 2026-10-27: one code unit of bevy_reflect's rlib wants an instantiation
+  // another of its own units lacks; cleaning terra_sandbox alone links the same rlib again.
+  const R = `${T}/release/deps`;
+  const corrupt = [
+    "error: linking with `cc` failed: exit status: 1",
+    `  = note: "cc" "-m64" "${R}/rustcPIhiF9/symbols.o" "${R}/{libterra_game-d674d78cd12cdca2,libbevy_reflect-f3789ba75e255a89}.rlib"`,
+    "  = note: rust-lld: error: undefined hidden symbol: <erased_serde::de::erase::Visitor<<f32 as serde_core::de::Deserialize>::deserialize::PrimitiveVisitor> as erased_serde::de::Visitor>::erased_visit_u64",
+    "          >>> referenced by bevy_reflect.9e1bd75dc8004647-cgu.01",
+    `          >>>               bevy_reflect-f3789ba75e255a89.bevy_reflect.9e1bd75dc8004647-cgu.01.rcgu.o:(anon.5f9e.38.llvm.3444) in archive ${R}/libbevy_reflect-f3789ba75e255a89.rlib`,
+    "          >>> did you mean: <erased_serde::de::erase::Visitor<<f32 as serde_core::de::Deserialize>::deserialize::PrimitiveVisitor> as erased_serde::de::Visitor>::erased_visit_f64",
+    `          >>> defined in: ${R}/libbevy_reflect-f3789ba75e255a89.rlib(bevy_reflect-f3789ba75e255a89.bevy_reflect.9e1bd75dc8004647-cgu.00.rcgu.o)`,
+    "          rust-lld: error: undefined hidden symbol: <erased_serde::de::erase::Visitor<serde_core::de::impls::BoolVisitor> as erased_serde::de::Visitor>::erased_visit_u64",
+    "          >>> referenced by bevy_reflect.9e1bd75dc8004647-cgu.01",
+    `          >>>               bevy_reflect-f3789ba75e255a89.bevy_reflect.9e1bd75dc8004647-cgu.01.rcgu.o:(anon.5f9e.65.llvm.3444) in archive ${R}/libbevy_reflect-f3789ba75e255a89.rlib`,
+    "          collect2: error: ld returned 1 exit status",
+    'error: could not compile `terra_sandbox` (bin "terra_sandbox") due to 1 previous error',
+  ].join("\n");
+  const s = staleBuild(corrupt, WORKSPACE, ["bevy_reflect", "erased-serde", "serde_core"]);
+  assert.deepEqual(s?.packages, ["bevy_reflect", "terra_sandbox"], "the corrupt rlib's crate, not erased_serde the symbol names");
+  assert.deepEqual(cleanCommands(s!), [["cargo", "clean", "--release", "-p", "bevy_reflect", "-p", "terra_sandbox"]]);
+
+  // The rlib is named by its crate; the clean names Cargo.lock's package.
+  const hyphen = corrupt.replace(/bevy_reflect/g, "erased_serde");
+  assert.deepEqual(staleBuild(hyphen, WORKSPACE, ["erased-serde"])?.packages, ["erased-serde", "terra_sandbox"]);
+
+  // A symbol one rlib wants and another defines is the code's or a version's, not corruption.
+  const other = corrupt.replace(`defined in: ${R}/libbevy_reflect-f3789ba75e255a89.rlib`, `defined in: ${R}/liberased_serde-0123456789abcdef.rlib`);
+  assert.deepEqual(staleBuild(other, WORKSPACE, ["bevy_reflect", "erased-serde"])?.packages, ["terra_sandbox"]);
+});
+
 test("an error in the code, or one naming nothing of the workspace, is not a stale build", () => {
   const typo = "error[E0308]: mismatched types\n --> crates/terra_world/src/fire.rs:10:5\nerror: could not compile `terra_world` (lib) due to 1 previous error";
   assert.equal(staleBuild(typo, WORKSPACE), undefined, "a real error is not run twice");

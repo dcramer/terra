@@ -491,12 +491,21 @@ const LINK_ERROR = /undefined reference to|undefined symbol|error: linking with|
 const SYMBOL_LINE = /undefined reference to|undefined symbol/;
 const CRATE_LINE = /error\[E0460\]|error\[E0786\]/;
 
+// lld's report under a missing symbol: the archive that wants it, and where a symbol of that
+// name (or the one it suggests) is defined.
+const WANTED_IN = /^\s*>>>.*\bin archive \S*\/lib([A-Za-z0-9_]+)-[0-9a-f]+\.rlib/;
+const DEFINED_IN = /^\s*>>> defined in: \S*\/lib([A-Za-z0-9_]+)-[0-9a-f]+\.rlib/;
+
 /// Whether a run step's output is a stale build's, and what to clean: the workspace packages
 /// (`workspace`, their names as in Cargo.toml) named in its missing symbols or crate errors,
 /// and the package that failed to compile, in the profile its paths show (both when none do).
-/// Undefined when the output has no such error or names no package of the workspace, so a
-/// registry crate is never cleaned and a real error is not run twice for nothing.
-export function staleBuild(output: string, workspace: Iterable<string>): StaleBuild | undefined {
+/// A registry crate is cleaned only when its own rlib is corrupt: lld finds the rlib wanting a
+/// symbol that lld says the same rlib defines (a code unit of it out of step with another,
+/// as a build cut short leaves it); `registry` names Cargo.lock's packages, so the clean
+/// names the package as Cargo does (erased-serde for the rlib liberased_serde).
+/// Undefined when the output has no such error or names no package to clean, so a missing
+/// system library or a real error is not run twice for nothing.
+export function staleBuild(output: string, workspace: Iterable<string>, registry: Iterable<string> = []): StaleBuild | undefined {
   const at = output.search(LINK_ERROR);
   if (at < 0) return undefined;
   const failed = output.slice(at);
@@ -508,6 +517,15 @@ export function staleBuild(output: string, workspace: Iterable<string>): StaleBu
   const byCrate = (name: string) => names.find(({ p }) => crate(p) === crate(name))?.p;
   for (const line of lines.filter((l) => CRATE_LINE.test(l))) for (const m of line.matchAll(/`([A-Za-z0-9_-]+)`/g)) if (byCrate(m[1])) named.add(byCrate(m[1]) as string);
   for (const m of failed.matchAll(/could not compile `([A-Za-z0-9_-]+)`/g)) if (byCrate(m[1])) named.add(byCrate(m[1]) as string);
+  const locked = [...registry];
+  let wanted: string | undefined;
+  for (const line of lines) {
+    if (SYMBOL_LINE.test(line)) wanted = undefined;
+    const w = line.match(WANTED_IN)?.[1];
+    if (w) wanted = w;
+    const d = line.match(DEFINED_IN)?.[1];
+    if (d && d === wanted && !byCrate(d)) named.add(locked.find((p) => crate(p) === d) ?? d);
+  }
   if (!named.size) return undefined;
   const release = /\/release\/(deps|build|incremental)\//.test(failed);
   const dev = /\/debug\/(deps|build|incremental)\//.test(failed);
