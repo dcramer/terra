@@ -81,6 +81,12 @@ fn noise(p: vec3<f32>) -> f32 {
     return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
 }
 
+// Billowing noise that stands still: the far land's ridges (`far_land`).
+fn billow(p: vec3<f32>) -> f32 {
+    return noise(p) * 0.5 + noise(p * 2.1 + 7.0) * 0.27 + noise(p * 4.3 + 19.0) * 0.15
+        + noise(p * 8.9 + 5.0) * 0.08;
+}
+
 // The clouds' lattice repeats every so many cells (clouds::PERIOD), so the clock's offsets
 // wrap there with no seam.
 const PERIOD: f32 = 256.0;

@@ -11,6 +11,8 @@ use crate::planet::{Planet, Tweaks};
 mod backlit;
 pub mod clouds;
 #[cfg(test)]
+mod compiles;
+#[cfg(test)]
 mod dusk;
 mod moving;
 use bevy::{

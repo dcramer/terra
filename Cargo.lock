@@ -6363,6 +6363,7 @@ dependencies = [
  "gltf",
  "half",
  "libm",
+ "naga",
  "objc2-foundation 0.3.2",
  "ron",
  "serde",
@@ -6372,6 +6373,7 @@ dependencies = [
  "terra_gen",
  "terra_land",
  "terra_voxel",
+ "wesl",
  "wgpu",
 ]
 
