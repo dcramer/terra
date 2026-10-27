@@ -1,0 +1,10 @@
+{
+  "source": "tools/HeaterShield.glb",
+  "fit": "points",
+  "grip": [-0.12, 0.40, -0.035],
+  "toward": [-0.41, 0.322, -0.035],
+  "out": [0, -1, 0],
+  "carry_tilt": 0,
+  "strap": {"bone": "lowerarm_l", "at": [0.0, 0.42, -0.04], "face": [0, 0, -1], "grip": [0, 1, 0]},
+  "note": "Strapped by enarmes (D504): held at its hand strap, on its back right of the middle seen from behind, where the fist closes; the forearm runs from the arm strap on the left to it (+Y, across the board, 15 degrees down toward the hand as enarmes are often set), its point toward +X. Its back view, with the straps, is art/props/heater_shield/back.png. Strapped as the round shield is, its hand strap 42 cm along the bone and 4 cm out, its point down in the guard: square across the board or nearer the elbow, its top corner went 21 cm into the spine in the heavy and the left strafe."
+}

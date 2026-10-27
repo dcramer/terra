@@ -29,7 +29,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `export_character.py` | The body as the game loads it: skeleton, sockets, our clips re-sampled on it, skin patches (`patches.py`); `--list=FILE` carries the clips of a set's list made by the clip step (keyed to a `guard`) by aim (`aim.py`, D450), its older clips as they were made |
 | `shell_garment.py` | Clothing cut from the base body, from a model of that body wearing it (`art/gear/dressed-<body>-<item>/`) |
 | `hung_garment.py` | What hangs from the body rather than lying on it, a long skirt or an apron: rings round the body and what it is worn over, the pelvis's weight falling to the thighs toward the hem, baked from the dressed model |
-| `fit_gear.py` | Rigid gear (a pack, a quiver) fitted to a body at its socket, from `art/gear/<item>/`; straps from the skin (`bands.py`) |
+| `fit_gear.py` | Rigid gear (a pack, a quiver) fitted to a body at its socket, from `art/gear/<item>/`, its numbers in `fit.json` there; straps from the skin (`bands.py`) |
 | `gear_check.py` | How much skin comes through each worn piece, through our clips; `--fix` records how far each part must move out to clear it (the clipping fixer, per morph) |
 | `build_bodies.sh` | Rebuilds every character asset the game loads from `art/`: the base, its gear, every morph, the skins, and the game's files; its whole output in `out/build.log` |
 | `build_verdict.ts BUILD.log RIG.json [STATUS]` | `build_bodies.sh`'s verdict: BUILD fail with every failure any step printed (a failed check, a floating fit, a morph job's exit, a foot marker fault `✗`, a Python error) or exited with (`run.sh` names a script that exits non-zero), a check that never finished, or a build stopped early; tested in `build_verdict.test.ts` |
@@ -49,7 +49,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `paint_skin.sh NAME FRONT` | A template's own skin, painted by Tripo on the base's mesh in its shape (`paint_skin.py`), baked onto the base's layout |
 | `compare.py` | Bodies side by side, dressed with `a.glb+b.glb` (worn or hung as in the game), at rest or held at a moment of a clip (`--pose`), or close on one bone from four sides (`--focus`) |
 | `sockets.py` | Where a body file's sockets and main joints stand, at rest or partway through a clip (`--pose`), as `SOCKETS` lines: what the sandbox workbench's `--joints` is checked against |
-| `fit_held.py` | The held look of each tool, from the models in `assets/models/tools`: free ones, and ours made by [tools/props](../props/README.md); and of what hangs from the hand by a handle (a market basket), from its prop |
+| `fit_held.py` | The held look of each tool, from the models in `assets/models/tools`: free ones, and ours made by [tools/props](../props/README.md); and of what hangs from the hand by a handle (a market basket), from its prop; each item's numbers are its data, `art/held/<item>.json` |
 
 `look.py` holds what the scripts share: paths, our palette and light, contact sheets and close-ups, and `skin_as_game`, which skins a loaded body as the game does (weight-blended, from `assets/models/character/skinning.json`).
 

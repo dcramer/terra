@@ -13,13 +13,14 @@ less than its kind should means it floats.
 Clothing, and anything worn close on the body such as a cap, is made on the body instead, by
 shell_garment.py.
 
-Reads art/gear/<model>/model.glb; writes
+Reads art/gear/<item>/model.glb and its numbers, art/gear/<item>/fit.json (below); writes
 tools/characters/out/gear/<body>/<item>.glb (look.GEAR_MADE), the item named as in the game's
-catalogue in lower case with `_` for spaces. Each piece's turn, size and fit are in PIECES,
-found by looking at the models and then at the fitted result in the workbench; run it for
-every base body.
+catalogue in lower case with `_` for spaces. A piece's turn, size and fit are found by
+looking at the model and then at the fitted result in the workbench; run it for every base
+body.
 """
 
+import json
 import math
 import os
 import sys
@@ -39,32 +40,33 @@ import skin_piece
 GEAR = os.path.join(look.ART, "gear")
 OUT = look.GEAR_MADE
 
-# item: (Tripo model, turn about Z in degrees so its front faces the body's front (-Y) and
-# its body side faces the body, how it is fitted, size as a share of the body's height, and
-# the role its material plays, which a tint in the game names to recolour it).
-PIECES = {
-    "small_pack": ("small_pack", 90, "back", 0.23, "Pack"),
-    "large_pack": ("large_pack", 90, "back", 0.31, "Pack"),
-    "quiver": ("quiver", 90, "belt", 0.34, "Leather"),  # 61 cm with its arrows, to the top of the thigh
-}
-# Where a piece hung from the belt hangs from, as a share of its height from its foot: a
-# quiver's mouth, the top of its leather tube, below the arrows standing in it. Read off the
-# item's concept, as an artist sets an attach point; the mesh alone cannot tell the tube
-# from the fanned fletching.
-HANGS_AT = {"quiver": 0.71}
-# A pack is a bag and a harness (D189): which harness each pack's bag rides on, and what each
-# harness is made from, a model of the base person wearing one, whose straps it takes its
-# look from. Many bags, few harnesses: a new pack is a bag model and a line here.
-HARNESS_OF = {"small_pack": "leather", "large_pack": "leather"}
-HARNESSES = {"leather": "art/gear/dressed-male-pack/model.glb"}
+# Each piece's numbers are data beside its model, art/gear/<item>/fit.json (docs/attachment.md,
+# D546), so a new piece is files, never an edit here:
+#   "turn"      about Z in degrees, so its front faces the body's front (-Y) and its body side
+#               the body (Tripo turns each model its own way);
+#   "fit"       how it is fitted: "back" (a pack's bag), "belt" (hung from the belt), "head",
+#               "torso";
+#   "size"      its height as a share of the body's;
+#   "role"      the role its material plays, which a tint in the game names to recolour it;
+#   "harness"   a pack's: the harness its bag rides on (D189), one of art/gear/harnesses.json,
+#               each made from a model of the base person wearing one, whose straps it takes
+#               its look from. Many bags, few harnesses: a new pack is a bag model naming one;
+#   "hangs_at"  a belt piece's: where it hangs from, as a share of its height from its foot (a
+#               quiver's mouth, the top of its leather tube, below the arrows standing in it),
+#               read off its concept as an artist sets an attach point; the mesh alone cannot
+#               tell the tube from the fanned fletching;
+#   "swing"     a loose piece's (crates/terra_walker/src/swing.rs): its stiffness, drag and
+#               gravity; its tail, where it rests, is measured from the piece itself;
+#   "note"      why, for people.
+HARNESSES = os.path.join(GEAR, "harnesses.json")
 HARNESS_TEXTURE = 2048
 HARNESS_LOOK_M = 0.04  # how far out and in from a strap the bake looks for the dressed one
-# How a loose piece swings from where it hangs (crates/terra_walker/src/swing.rs): pulled back
-# toward where it rests, losing some of its motion each step, and falling. Its tail, where
-# it rests, is measured from the piece itself.
-# Tuned live on a jogging body over the remote (Swing is reflected): 0.8 and 0.4 swung 1-9
-# degrees, stiff; 0.1 and 0.05 swung 9-14, loose. A quiver on a strap swings freely.
-SWINGS = {"quiver": {"stiffness": 0.2, "drag": 0.1, "gravity": 0.6}}
+
+
+def data(name):
+    """A piece's numbers, art/gear/<item>/fit.json."""
+    with open(os.path.join(GEAR, name, "fit.json")) as f:
+        return json.load(f)
 # A loose piece hangs nearly plumb from where it hangs, its foot a little back, resting on
 # the seat.
 HANG_TILT_DEG = 8
@@ -415,7 +417,8 @@ RESTS_M = 0.02
 OUT = os.path.join(OUT, body_name)
 os.makedirs(OUT, exist_ok=True)
 for name in names:
-    model, turn, how, size, role = PIECES[name]
+    d = data(name)
+    model, turn, how, size, role = d.get("model", name), d["turn"], d["fit"], d["size"], d["role"]
     size = size * height if size else None
     ob = import_gear(model, turn)
     ob.name = name
@@ -423,11 +426,12 @@ for name in names:
         if slot.material:
             slot.material.name = role
     if how == "back":
-        socket = fit_back(ob, size, HARNESSES[HARNESS_OF[name]])
+        with open(HARNESSES) as f:
+            socket = fit_back(ob, size, json.load(f)[d["harness"]])
     elif how == "head":
         socket = fit_head(ob)
     elif how == "belt":
-        socket = fit_belt(ob, size, HANGS_AT[name])
+        socket = fit_belt(ob, size, d["hangs_at"])
     else:
         socket = fit_torso(ob)
     # A pack hides the skin under its bag and straps as a garment does: that skin cannot be
@@ -446,13 +450,13 @@ for name in names:
     if socket:
         # Where a loose piece hangs from, before it moves: the middle of it, at the height it
         # hangs at (a quiver's mouth).
-        if name in SWINGS:
+        if "swing" in d:
             lo, hi = box(points(ob))
-            pivot = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z + HANGS_AT[name] * (hi.z - lo.z)))
+            pivot = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z + d["hangs_at"] * (hi.z - lo.z)))
         # In the socket's own space: the game puts it on the socket as it is.
         move(ob, sockets[socket].matrix_world.inverted())
         ob["socket"] = socket
-        if name in SWINGS:
+        if "swing" in d:
             # Its origin where it hangs from, which it swings about (swing.rs), and its tail at
             # its middle from there, in its own space and glTF's axes.
             at = sockets[socket].matrix_world.inverted() @ pivot
@@ -463,7 +467,7 @@ for name in names:
             below = [v.co for v in ob.data.vertices if v.co.z < 0]
             blo, bhi = box(below)
             c = (blo + bhi) / 2
-            ob["swing"] = dict(SWINGS[name], tail=[round(c.x, 4), round(c.z, 4), round(-c.y, 4)])
+            ob["swing"] = dict(d["swing"], tail=[round(c.x, 4), round(c.z, 4), round(-c.y, 4)])
         select(ob)
         bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_animations=False,
                                   export_extras=True)

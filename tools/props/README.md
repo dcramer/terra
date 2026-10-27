@@ -90,7 +90,7 @@ cargo run -p terra_sandbox -- --experiment workbench --model models/character/ba
 
 `--prop all` stands every item, door and shutter in the catalogue. A tool is checked in the hand with `--hold stone_pickaxe`, after [fit_held.py](../characters/fit_held.py) has made its held look.
 
-`cargo xtask contract` checks every model the game places against its catalogue entry, one line each: its size against `dims`, its anchor, its sockets, and for a door or shutters that its leaf fills the first hole it fits and stays within the wall (`play::contract`). `cargo xtask check` runs the same test, so a squat model, a model left where Tripo put its origin, or a door without its hinge never lands. A held tool's real length is set in `fit_held.py`'s `TOOLS`.
+`cargo xtask contract` checks every model the game places against its catalogue entry, one line each: its size against `dims`, its anchor, its sockets, and for a door or shutters that its leaf fills the first hole it fits and stays within the wall (`play::contract`). `cargo xtask check` runs the same test, so a squat model, a model left where Tripo put its origin, or a door without its hinge never lands. A held tool's real length is set in its data, `art/held/<item>.json`, which `fit_held.py` reads.
 
 | File | What it does |
 |---|---|

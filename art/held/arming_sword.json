@@ -1,0 +1,9 @@
+{
+  "source": "tools/ArmingSword.glb",
+  "fit": "points",
+  "grip": [0.002, 0.12, 0.0075],
+  "toward": [-0.03, 0.95, -0.019],
+  "out": [0, 0, 1],
+  "carry_tilt": -40,
+  "note": "Its flats out of the back of the hand and the palm, so its edges cut as the fist swings."
+}

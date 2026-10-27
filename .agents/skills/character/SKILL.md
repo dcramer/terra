@@ -133,7 +133,7 @@ The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveles
 tools/blender/run.sh tools/characters/fit_gear.py tools/characters/out/base-male-game.glb small_pack large_pack quiver
 ```
 
-Each piece's turn, size (a share of the body's height) and fit are in `PIECES`. A pack keeps only its bag from the model: its straps are made from the body's own skin (`bands.py`), along a route of rays cast from the body's joints, so they bend as the shoulders do and fit any body. Keep to the heights off the skin in `docs/characters.md`: a chest piece within 1.8 cm above the waist, straps solid from the skin to 2.2 cm, so a pack and a jerkin from different makers still stack. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front. Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does.
+Each piece's turn, size (a share of the body's height) and fit are data beside its model, `art/gear/<item>/fit.json` (the schema is in the script's head), so a new piece never edits the script. A pack keeps only its bag from the model: its straps are made from the body's own skin (`bands.py`), along a route of rays cast from the body's joints, so they bend as the shoulders do and fit any body. Keep to the heights off the skin in `docs/characters.md`: a chest piece within 1.8 cm above the waist, straps solid from the skin to 2.2 cm, so a pack and a jerkin from different makers still stack. Tripo turns each model its own way and adds parts that stand out, such as a pack's stiff strap loops, so render a new model from four sides first and set the turn that puts its front to the body's front. Read each `FIT` line: it says how much of the piece rests on the body, and `FLOATING` when too little does.
 
 **Check every piece on every body**, by numbers first:
 
@@ -145,7 +145,7 @@ It plays our clips and reports, per clip, the share of skin near each piece that
 
 Then add a row for it to `THIRD_PARTY.md`.
 
-What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, and how far it tips when carried in its glTF extras (`carry_tilt`). `tools/characters/fit_held.py` makes them; each item's length, grip and tilt are in its `TOOLS`. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
+What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, and how far it tips when carried in its glTF extras (`carry_tilt`). `tools/characters/fit_held.py` makes them; each item's source, length, grip and tilt are its data, `art/held/<item>.json`, so a new item is a file. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
 
 ## 6. Body templates: morphs of the base
 
