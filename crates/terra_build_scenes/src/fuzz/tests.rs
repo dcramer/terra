@@ -331,6 +331,65 @@ fn fuzz_seed_74_a_doorways_jamb_stops_under_the_sill_of_the_window_beside_it() {
 }
 
 #[test]
+fn fuzz_seeds_47_61_192_a_strip_under_a_decks_boards_ends_inside_the_outer_board() {
+    // Found by `cargo xtask fuzz` at seeds 47, 61 and 192, shrunk: a deck or a room's floor
+    // whose boards run on into a log wall's end. The strip under the boards' edge there
+    // stopped a hair short of its cube's face, its end in the plane of the side of the
+    // deck's outer board over it.
+    let materials = baseline();
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .unwrap()
+    };
+    for elements in [
+        vec![
+            Wall {
+                from: [0, 2],
+                to: [3, 2],
+                storey: 0,
+                kind: kind("logs"),
+            },
+            Deck {
+                min: [3, 2],
+                max: [8, 7],
+                kind: kind("hewn"),
+            },
+        ],
+        vec![
+            Wall {
+                from: [4, 4],
+                to: [11, 4],
+                storey: 0,
+                kind: kind("logs"),
+            },
+            Room {
+                min: [3, 1],
+                max: [6, 5],
+                storey: 0,
+                kind: kind("logs"),
+            },
+        ],
+    ] {
+        let base = build(&materials.kits, &elements);
+        let report = terra_build_mesh::inspect::inspect(
+            &base,
+            &materials.kits,
+            &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+        );
+        let fought: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.fault == terra_build_mesh::inspect::Fault::Coplanar)
+            .collect();
+        assert!(fought.is_empty(), "{elements:?}: {fought:#?}");
+    }
+}
+
+#[test]
 fn a_failing_base_shrinks_to_the_element_that_fails_it() {
     // Fails while a box of hewn timber is in it: the room and the wall go, the box
     // stays, made one cube.

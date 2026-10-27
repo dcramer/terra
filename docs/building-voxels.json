@@ -127,7 +127,7 @@
           "code": ["terra_build_layout::layout::trims::ends", "terra_build_layout::layout::floors"],
           "tests": ["terra_build_scenes::fuzz::fuzz_seed_16_a_log_walls_top_split_log_ends_inside_the_end_board_against_stone"],
           "cases": [],
-          "also": "the fuzz pass, seeds 12, 47, 74, 82, 185, 187, 192, 266",
+          "also": "the fuzz pass, seeds 47, 74, 82, 185, 266",
           "status": "Gap 14"
         },
         {

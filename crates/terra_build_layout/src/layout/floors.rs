@@ -52,8 +52,10 @@ const STRIP_UNDER: [i32; 2] = [6, 8];
 const STRIP_THICK: i32 = 4;
 /// How much further than the boards a strip under their edge must reach to be laid.
 const STRIP_LEAST_M: f32 = 0.004;
-/// How far short of its cube's face a strip under a deck's boards stops where it ends.
-const STRIP_END_IN_M: f32 = 0.0031;
+/// How far short of its cube's face a strip under a deck's boards stops where it ends: two
+/// ticks further in than the deck's outer board's side over it (`BOARD_EDGE_IN_M`), so its
+/// end is inside that board, not in the plane of its side.
+const STRIP_END_IN_M: f32 = 0.0078;
 /// How far back under the deck's own boards a strip under their edge starts.
 const STRIP_BACK_M: f32 = 0.0137;
 
