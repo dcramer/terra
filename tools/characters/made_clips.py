@@ -22,7 +22,10 @@ standard T-pose, at art/animation/made/<clip>.bvh, or a GLB on our own skeleton 
   - or, for an entry Uthana closed into a loop itself ("looped"), the whole take;
   - closed into a loop: the last frame the first again, the frames before it eased into it;
     its seam, how far the hands, feet and head are from where they started relative to the
-    hips before the easing, printed (cm) beside the turn of its bones (deg);
+    hips before the easing, printed (cm) beside the most a limb or the trunk turned (deg), and
+    the take's mean turn of its bones there, which chose the loop (apart);
+  - for an idle with "stand", its hips raised toward the body's rest and its head drawn back
+    over them, its feet where they stood (stand.py);
   - for a stride with "arms", its arms set to a runner's swing, its legs and spine untouched
     (swing_arms), and for one with "fist", its fingers closed that share of the way into the
     library's clenched fist (Kimodo leaves them straight).
@@ -57,6 +60,7 @@ import bpy
 from mathutils import Matrix, Quaternion, Vector
 
 import look
+import stand
 
 MADE = os.path.join(look.ART, "animation", "made")
 LIST = os.path.join(look.ART, "animation", "made.json")
@@ -235,7 +239,7 @@ def facing(src, f):
     return Vector((0.0, 0.0, 1.0)).cross(Vector((across.x, across.y, 0.0))).normalized()
 
 
-def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False):
+def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False, planted=False):
     """Frames f0 to f1 of `src` as an action called `name` on `arm`, in place and looped, each
     frame of the take `k` frames of the action. A take that travels `way` degrees to the right
     of where it faces (a strafe) is turned by its travel less that; a one-shot (`once`) by where
@@ -262,16 +266,32 @@ def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False):
         ahead = Matrix.Rotation(math.radians(way), 3, "Z") @ travel
     else:
         ahead = facing(src, f0)
-    turn = Matrix.Rotation(math.atan2(ahead.x, -ahead.y), 4, "Z")
+    turn = Matrix.Rotation(math.atan2(-ahead.x, -ahead.y), 4, "Z")
     per_frame = travel * 0.0 if travels else travel / (f1 - f0)
+
+    def drift(f):
+        # How far the body has slid by frame f, taken off its hips: a stride's travel spread
+        # evenly, or for a clip whose feet stand `planted` (an idle) how far the forefeet's
+        # midpoint has moved over the ground since f0, so they stay where they stood and the
+        # hips keep only their sway over them (Uthana's idle slid 7 cm, its feet together).
+        if not planted:
+            return per_frame * (f - f0)
+        scene.frame_set(f)
+        mid = sum((src.matrix_world @ src.pose.bones[b].head for b in ("LeftToeBase", "RightToeBase")), Vector()) / 2
+        return Vector((mid.x - mid0.x, mid.y - mid0.y, 0.0))
+
+    if planted:
+        scene.frame_set(f0)
+        mid0 = sum((src.matrix_world @ src.pose.bones[b].head for b in ("LeftToeBase", "RightToeBase")), Vector()) / 2
     action = bpy.data.actions.new(name)
     arm.animation_data_create()
     arm.animation_data.action = action
     order = [bone.name for bone in arm.data.bones if bone.name in dst_rest]   # parents first
     for f in range(f0, f1 + 1):
+        slid = drift(f)
         scene.frame_set(f)
         worlds = {d: turn.to_quaternion() @ (src.matrix_world @ src.pose.bones[s].matrix).to_quaternion() @ src_rest[s].inverted() @ dst_rest[d] for s, d in MAP.items()}
-        hips = turn @ (src.matrix_world @ src.pose.bones["Hips"].head - per_frame * (f - f0) - Vector((a.x, a.y, 0.0)))
+        hips = turn @ (src.matrix_world @ src.pose.bones["Hips"].head - slid - Vector((a.x, a.y, 0.0)))
         for d in order:
             pb = arm.pose.bones[d]
             m = Matrix.LocRotScale(hips * scale if d == "pelvis" else (arm.matrix_world @ pb.matrix).translation, worlds[d], None)
@@ -287,8 +307,8 @@ def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False):
                 pb.keyframe_insert("location", frame=(f - f0) * k)
     last = f1 - f0
     if once:
-        return action, 0.0
-    seam = seam_cm(arm, last * k)
+        return action, (0.0, 0.0)
+    seam = seam_of(arm, last * k)
     for fc in curves(action):
         gap = fc.evaluate(0) - fc.evaluate(last * k)
         for e in range(1, EASE + 1):
@@ -299,21 +319,26 @@ def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False):
 
 
 SEAM_BONES = ("hand_l", "hand_r", "foot_l", "foot_r", "Head")
+SEAM_TURNS = ("pelvis", "spine_03", "Head", "upperarm_l", "upperarm_r", "lowerarm_l", "lowerarm_r", "hand_l", "hand_r",
+              "thigh_l", "thigh_r", "calf_l", "calf_r", "foot_l", "foot_r")
 
 
-def seam_cm(arm, end):
+def seam_of(arm, end):
     """How far the hands, feet and head at frame `end` of `arm`'s action are from where they
-    are at frame 0, each relative to the hips, at most (cm): the jump a loop's last frames must
-    ease over."""
+    are at frame 0, each relative to the hips, at most (cm), and how far its limbs and trunk
+    are turned from how they were, each relative to the hips and the hips in the world, at most
+    (deg): the jump a loop's last frames must ease over."""
     scene = bpy.context.scene
 
     def marks(f):
         scene.frame_set(int(f), subframe=f - int(f))
-        hips = arm.pose.bones["pelvis"].head
-        return [arm.matrix_world.to_3x3() @ (arm.pose.bones[b].head - hips) for b in SEAM_BONES]
+        hips = arm.pose.bones["pelvis"]
+        at = [arm.matrix_world.to_3x3() @ (arm.pose.bones[b].head - hips.head) for b in SEAM_BONES]
+        turns = [hips.matrix.to_quaternion() if b == "pelvis" else hips.matrix.to_quaternion().inverted() @ arm.pose.bones[b].matrix.to_quaternion() for b in SEAM_TURNS]
+        return at, turns
 
-    a, b = marks(0), marks(end)
-    return max((p - q).length for p, q in zip(a, b)) * 100
+    (a, p), (b, q) = marks(0), marks(end)
+    return max((x - y).length for x, y in zip(a, b)) * 100, max(math.degrees(x.rotation_difference(y).angle) for x, y in zip(p, q))
 
 
 FINGERS = ("thumb", "index", "middle", "ring", "pinky")
@@ -555,7 +580,7 @@ def main():
         k = 1.0
         if entry.get("still") or entry.get("once"):
             k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
-        action, seam_at = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False))
+        action, (seam_at, seam_turn) = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False), entry.get("planted", False))
         if entry.get("way"):
             # Which way the take went, measured: its travel from where its hips face.
             scene = bpy.context.scene
@@ -573,13 +598,22 @@ def main():
                   + (f", now {now[0]} to {now[1]}" if now else ", kept"))
         if "fist" in entry:
             close_hands(action, fist, entry["fist"])
+        if entry.get("stand"):
+            ad.action = action
+            if getattr(action, "slots", None) and len(action.slots):
+                ad.action_slot = action.slots[0]
+            times = sorted({kp.co[0] for fc in curves(action) if fc.data_path == 'pose.bones["pelvis"].location' for kp in fc.keyframe_points})
+            rise, c, back = stand.stand(arm, action, times, bpy.context.view_layer.update, without_roll)
+            print(f"STAND {name}: hips raised {rise:.1f} cm (each knee's bend over {stand.KNEE_MIN:.0f} deg kept {c:.2f} of the take's), "
+                  f"head drawn back {back:.1f} cm at the neck")
         bpy.data.objects.remove(src)
         ad.action = None
         if old is not None:
             bpy.data.actions.remove(old)
         if name not in names:
             names.append(name)
-        print(f"MADE {name} from {os.path.relpath(path, look.ROOT)}: frames {f0} to {f1}, {(f1 - f0) / fps:.2f} s, seam {seam:.2f} deg, {seam_at:.1f} cm")
+        print(f"MADE {name} from {os.path.relpath(path, look.ROOT)}: frames {f0} to {f1}, {(f1 - f0) / fps:.2f} s, seam {seam_turn:.1f} deg, {seam_at:.1f} cm "
+              f"(apart {seam:.2f} deg)")
     # Every clip a track of its own again, each strip where its action starts, as clips.py
     # lays them: the importer's own tracks start a frame late, which the export would keep.
     for t in list(ad.nla_tracks):
