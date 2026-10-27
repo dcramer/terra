@@ -3,6 +3,8 @@
 
 use super::*;
 use bevy::animation::AnimatedBy;
+use bevy::mesh::VertexAttributeValues;
+use bevy::mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
 use bevy::world_serialization::WorldAssetRoot;
 use terra_core::{PlanetSpec, Seed};
 use terra_walker::model_files::{extra, json};
@@ -84,6 +86,71 @@ fn height_range(samples: &[Vec3]) -> f32 {
         (lo.min(p.y), hi.max(p.y))
     });
     hi - lo
+}
+
+/// The largest skinned mesh under `figure`: the body, not its eyes or mouth.
+fn body_skin(world: &mut World, figure: Entity) -> Entity {
+    let mut skins = world.query_filtered::<(Entity, &Mesh3d), With<SkinnedMesh>>();
+    let skins: Vec<(Entity, Handle<Mesh>)> =
+        skins.iter(world).map(|(e, m)| (e, m.0.clone())).collect();
+    let meshes = world.resource::<Assets<Mesh>>();
+    skins
+        .into_iter()
+        .filter(|(e, _)| under(world, *e, figure))
+        .max_by_key(|(_, m)| meshes.get(m).map_or(0, Mesh::count_vertices))
+        .expect("the figure has a skinned mesh")
+        .0
+}
+
+/// Where the skin round `joint` is in `frame`'s frame: the mean of the vertices it weighs most
+/// on, each skinned by the linear blend of its joints' matrices (a joint's GlobalTransform times
+/// its inverse bindpose), as Bevy's shader skins them. skinning.wesl's dual quaternions put
+/// them within 4 mm of this on the Cetri's walk (round 15's probe).
+fn skin_round(world: &World, skin: Entity, frame: Entity, joint: &str) -> Vec3 {
+    let skinned = world.get::<SkinnedMesh>(skin).unwrap();
+    let mesh = world.get::<Mesh3d>(skin).unwrap();
+    let mesh = world.resource::<Assets<Mesh>>().get(&mesh.0).unwrap();
+    let poses = world.resource::<Assets<SkinnedMeshInverseBindposes>>();
+    let poses = poses.get(&skinned.inverse_bindposes).unwrap();
+    let matrices: Vec<Mat4> = skinned
+        .joints
+        .iter()
+        .zip(poses.iter())
+        .map(|(j, pose)| Mat4::from(world.get::<GlobalTransform>(*j).unwrap().affine()) * *pose)
+        .collect();
+    let picked: Vec<bool> = skinned
+        .joints
+        .iter()
+        .map(|j| world.get::<Name>(*j).is_some_and(|n| n.as_str() == joint))
+        .collect();
+    let (
+        Some(VertexAttributeValues::Float32x3(at)),
+        Some(VertexAttributeValues::Uint16x4(index)),
+        Some(VertexAttributeValues::Float32x4(weight)),
+    ) = (
+        mesh.attribute(Mesh::ATTRIBUTE_POSITION),
+        mesh.attribute(Mesh::ATTRIBUTE_JOINT_INDEX),
+        mesh.attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT),
+    )
+    else {
+        panic!("the skin has no positions, joint indices or weights as Bevy loads them");
+    };
+    let to_frame = Mat4::from(world.get::<GlobalTransform>(frame).unwrap().affine()).inverse();
+    let (mut sum, mut n) = (Vec3::ZERO, 0);
+    for ((p, i), w) in at.iter().zip(index).zip(weight) {
+        let most = (0..4).max_by(|&a, &b| w[a].total_cmp(&w[b])).unwrap();
+        if !picked[i[most] as usize] {
+            continue;
+        }
+        let total: f32 = w.iter().sum();
+        let m = (0..4).fold(Mat4::ZERO, |m, k| {
+            m + matrices[i[k] as usize] * (w[k] / total)
+        });
+        sum += to_frame.transform_point3(m.transform_point3(Vec3::from(*p)));
+        n += 1;
+    }
+    assert!(n > 0, "no vertex of the skin is weighed most on {joint}");
+    sum / n as f32
 }
 
 /// Runs until the staged `figure`'s player is given its graph by `dress`, and a plain body of
@@ -220,7 +287,8 @@ fn playing(world: &World, player: Entity) -> Vec<String> {
 /// lifts its feet as far as the same file's Giant_Walk does on a body Bevy plays alone, one
 /// clip in its graph. That body is the answer known another way; its hips must rise and fall
 /// most of the clip's own 0.28 m (0.085 of the rig's units, scaled 3.3), so a still file fails
-/// too. Rounds 10-13 filmed legs that barely moved whatever was changed around them.
+/// too. Rounds 10-13 filmed legs that barely moved whatever was changed around them. And the
+/// skin follows its bones: round the left foot it lifts most of what the foot bone does.
 #[test]
 fn a_staged_walk_moves_the_hips_and_feet_as_its_clip_does_after_an_idle_and_a_roar() {
     const CLIP_HIPS_M: f32 = 0.28;
@@ -307,9 +375,12 @@ fn a_staged_walk_moves_the_hips_and_feet_as_its_clip_does_after_an_idle_and_a_ro
         .collect();
     let mut staged_at = vec![Vec::new(); names.len()];
     let mut plain_at = vec![Vec::new(); names.len()];
+    let skin = body_skin(app.world_mut(), figure);
+    let mut skin_at = Vec::new();
     for _ in 0..(3.0 * FPS) as usize {
         app.update();
         let world = app.world();
+        skin_at.push(skin_round(world, skin, figure, "foot_l"));
         let local = |frame: Entity, bone: Entity| {
             let frame = world
                 .get::<GlobalTransform>(frame)
@@ -341,4 +412,12 @@ fn a_staged_walk_moves_the_hips_and_feet_as_its_clip_does_after_an_idle_and_a_ro
             "staged, the walk moves its {name} {staged:.3} m; played alone, {alone:.3} m"
         );
     }
+    // The skin follows: round the left foot it lifts most of the bone's lift (0.56 of 0.62 m).
+    let skin_lift = height_range(&skin_at);
+    println!("the skin round foot_l rises and falls {skin_lift:.3} m");
+    assert!(
+        skin_lift > 0.8 * staged[1],
+        "the skin round the left foot rises {skin_lift:.3} m; its bone {:.3} m",
+        staged[1]
+    );
 }
