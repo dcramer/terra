@@ -338,8 +338,8 @@ pub(super) const BIG_ROOM_CELLS: i32 = 6;
 /// decoration first; then on the end walls a corridor's legs run into (`end_walls`); then a
 /// second in rooms of `BIG_ROOM_CELLS` or more, at the far end from the first; then one every
 /// third corridor cell, none beside a torch; until the dungeon has `LIGHTS`. Then the rooms'
-/// own torches the cap cut, and one on a side wall of each stair no torch lights yet
-/// (`stair_torch`), past the cap.
+/// own torches the cap cut, a corridor's first where the cap cut all of its, and one on a side
+/// wall of each stair no torch lights yet (`stair_torch`), past the cap.
 fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
     let layout = &dungeon.layout;
     let mut rooms: Vec<Vec<(IVec3, usize)>> = Vec::new();
@@ -430,14 +430,26 @@ fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
         }
     }
     let room = LIGHTS.saturating_sub(out.lights.len());
-    let taken: Vec<(IVec3, usize)> = lit.into_iter().take(room).collect();
+    let taken: Vec<(IVec3, usize)> = lit.iter().copied().take(room).collect();
     // A room's own torches the cap cut go past it: where the fires and braziers took most of
     // it, the last rooms' firsts went too, a treasure room of six cells left dark.
     let firsts = rooms.iter().filter_map(|found| found.first().copied());
-    let cut: Vec<(IVec3, usize)> = firsts
+    let mut cut: Vec<(IVec3, usize)> = firsts
         .chain(seconds)
         .filter(|own| !taken.contains(own))
         .collect();
+    // A corridor's first torch goes past the cap too, its end wall's or its third cell's:
+    // the big rooms' seconds queued ahead of the runs left the crypt's long corridor a
+    // blue-black box (barrow round 15).
+    for run in layout.corridors.iter().filter(|run| run.len() >= 3) {
+        let has = |t: &(IVec3, usize)| run.contains(&t.0);
+        if taken.iter().chain(&cut).any(has) {
+            continue;
+        }
+        if let Some(&first) = lit.iter().find(|t| has(t)) {
+            cut.push(first);
+        }
+    }
     out.lights
         .extend(taken.iter().copied().chain(cut).map(|(at, d)| torch(at, d)));
     // A stair's torch comes on top of the cap, the way on never dark: the flooded mine's nine

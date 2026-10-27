@@ -183,3 +183,51 @@ fn a_big_room_has_two_torches() {
     }
     assert!(failed.is_empty(), "big rooms with one torch: {failed:?}");
 }
+
+/// Whether a point stands in one of the cells, from their boxes: a cell's floor to a level up.
+fn in_cells(cells: &[IVec3], p: Vec3) -> bool {
+    cells.iter().any(|&at| {
+        let frame = Frame::new(at, 0);
+        let (a, b) = (
+            frame.point(0.0, 0.0, 0.0),
+            frame.point(CELL as f32, LEVEL as f32, CELL as f32),
+        );
+        p.cmpge(a.min(b)).all() && p.cmplt(a.max(b)).all()
+    })
+}
+
+/// A corridor of three cells or more has a light in its cells: the big rooms' second torches
+/// pushed the crypt's long corridor's past the light cap and it stood a blue-black box
+/// (barrow round 15).
+#[test]
+fn every_corridor_has_a_light() {
+    let mut failed = Vec::new();
+    for theme in Theme::all(&assets()).unwrap() {
+        let set = ModuleSet::new(&theme).unwrap();
+        let seeds: Vec<u64> = (0..SEEDS).collect();
+        let counts = terra_gen::par::map(&seeds, |&s| {
+            let dungeon = generate(&theme, &set, Seed(s)).ok()?;
+            let stamp = stamp(&dungeon, &theme, &kind);
+            let runs: Vec<&Vec<IVec3>> = (dungeon.layout.corridors.iter())
+                .filter(|run| run.len() >= 3)
+                .collect();
+            let dark = runs
+                .iter()
+                .filter(|run| !stamp.lights.iter().any(|l| in_cells(run, l.at)))
+                .count();
+            Some((runs.len(), dark))
+        });
+        let counts: Vec<_> = counts.into_iter().flatten().collect();
+        let runs: usize = counts.iter().map(|c| c.0).sum();
+        let dark: usize = counts.iter().map(|c| c.1).sum();
+        println!(
+            "{}: {runs} corridors of 3 cells or more in {} dungeons, {dark} with no light",
+            theme.name,
+            counts.len()
+        );
+        if dark > 0 {
+            failed.push(format!("{}: {dark} of {runs}", theme.name));
+        }
+    }
+    assert!(failed.is_empty(), "dark corridors: {failed:?}");
+}
