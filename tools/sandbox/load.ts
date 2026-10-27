@@ -21,6 +21,9 @@ const run = promisify(execFile);
 /// Quiet: the processors less than this busy, and the GPU, before a run, less than this.
 export const QUIET_CPU_PCT = 35;
 export const QUIET_GPU_PCT = 15;
+/// Quiet: the last minute's load average, against the logical processors, less than this; it
+/// sees threads queued for a core and tasks stalled on the disk, which a second of /proc/stat misses.
+export const QUIET_LOAD_PCT = 50;
 /// Busy during a run: everything but the run itself more than this busy on average, or more than
 /// the second at once.
 export const BUSY_DURING_CPU_PCT = 30;
@@ -31,7 +34,7 @@ const SANDBOX = "terra_sandbox";
 export const WAIT_S = 90;
 export const MOST_WAITING_S = 300;
 
-export type Load = { cpu: number; gpu?: number };
+export type Load = { cpu: number; gpu?: number; load?: number };
 export type During = { mean: number; most: number };
 
 const onWsl = (() => {
@@ -42,9 +45,10 @@ const onWsl = (() => {
   }
 })();
 
-export const quiet = (load: Load | undefined) => !load || (load.cpu < QUIET_CPU_PCT && (load.gpu === undefined || load.gpu < QUIET_GPU_PCT));
+export const quiet = (load: Load | undefined) => !load || (load.cpu < QUIET_CPU_PCT && (load.gpu === undefined || load.gpu < QUIET_GPU_PCT) && (load.load === undefined || load.load < QUIET_LOAD_PCT));
 export const busyDuring = (during: During | undefined) => !!during && (during.mean > BUSY_DURING_CPU_PCT || during.most > BUSY_DURING_MOST_PCT);
-export const describe = (load: Load) => `processors ${load.cpu.toFixed(0)}% busy${load.gpu === undefined ? "" : `, GPU ${load.gpu.toFixed(0)}%`}`;
+export const describe = (load: Load) =>
+  `processors ${load.cpu.toFixed(0)}% busy${load.gpu === undefined ? "" : `, GPU ${load.gpu.toFixed(0)}%`}${load.load === undefined ? "" : `, load average ${load.load.toFixed(0)}% of the processors`}`;
 
 /// Reads typeperf's CSV, a header and then `"time","value",...`, as its values.
 export function parseTypeperf(text: string): number[] {
@@ -123,7 +127,8 @@ async function gpuNow(): Promise<number | undefined> {
 /// The load now.
 export async function sample(): Promise<Load | undefined> {
   const [cpu, gpu] = await Promise.all([cpuNow(), gpuNow()]);
-  return cpu === undefined ? undefined : { cpu: cpu.all, gpu };
+  // WSL's load average is its virtual machine's alone; Windows' total has the rest.
+  return cpu === undefined ? undefined : { cpu: cpu.all, gpu, load: onWsl ? undefined : (100 * loadavg()[0]) / cpus().length };
 }
 
 /// Waits up to `most` seconds for a quiet machine, looking every five; the load it ran on and

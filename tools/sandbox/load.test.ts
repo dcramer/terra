@@ -22,6 +22,9 @@ test("quiet is the processors and the GPU both; busy during a run is the process
   assert.ok(quiet({ cpu: 10 }));
   assert.ok(!quiet({ cpu: 60, gpu: 2 }));
   assert.ok(!quiet({ cpu: 10, gpu: 40 }));
+  // Idle processors for a second, but more threads queued than processors.
+  assert.ok(!quiet({ cpu: 2, gpu: 0, load: 125 }));
+  assert.ok(quiet({ cpu: 2, gpu: 0, load: 10 }));
   // Unknown load is not held against a run.
   assert.ok(quiet(undefined));
   assert.ok(busyDuring({ mean: 40, most: 60 }));

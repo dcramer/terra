@@ -22,6 +22,11 @@ use std::time::{Duration, Instant};
 /// run itself takes a few of the cores, so a quiet machine is well under half busy.
 pub(crate) const QUIET_CPU_PCT: f32 = 35.0;
 pub(crate) const QUIET_GPU_PCT: f32 = 15.0;
+/// Quiet: the last minute's load average, against the logical processors, less than this. It
+/// sees what a second of `/proc/stat` misses: threads queued for a core and tasks stalled on
+/// the disk (a build swapping), and a build that paused between its crates (the worker's
+/// "processors 2% busy" samples on a box at load 40, perf round 1).
+pub(crate) const QUIET_LOAD_PCT: f32 = 50.0;
 /// Busy during a run: everything but the run itself more than this busy on average, or more
 /// than the second at once (a run of the yard with the processors half busy beside it had
 /// three times its 99th percentile).
@@ -47,18 +52,26 @@ pub(crate) struct Load {
     pub cpu_pct: f32,
     /// The GPU's busy share, where it can be read.
     pub gpu_pct: Option<f32>,
+    /// The last minute's load average against the logical processors, where it can be read.
+    pub load_pct: Option<f32>,
 }
 
 impl Load {
     pub(crate) fn quiet(&self) -> bool {
-        self.cpu_pct < QUIET_CPU_PCT && self.gpu_pct.is_none_or(|gpu| gpu < QUIET_GPU_PCT)
+        self.cpu_pct < QUIET_CPU_PCT
+            && self.gpu_pct.is_none_or(|gpu| gpu < QUIET_GPU_PCT)
+            && self.load_pct.is_none_or(|load| load < QUIET_LOAD_PCT)
     }
 
     pub(crate) fn describe(&self) -> String {
-        match self.gpu_pct {
-            Some(gpu) => format!("processors {:.0}% busy, GPU {gpu:.0}%", self.cpu_pct),
-            None => format!("processors {:.0}% busy", self.cpu_pct),
+        let mut said = format!("processors {:.0}% busy", self.cpu_pct);
+        if let Some(gpu) = self.gpu_pct {
+            said += &format!(", GPU {gpu:.0}%");
         }
+        if let Some(load) = self.load_pct {
+            said += &format!(", load average {load:.0}% of the processors");
+        }
+        said
     }
 }
 
@@ -67,6 +80,12 @@ pub(crate) fn sample() -> Option<Load> {
     Some(Load {
         cpu_pct: cpu().map(|(all, _)| all)?,
         gpu_pct: nvidia_gpu(),
+        load_pct: if crate::windows::on_wsl() {
+            // WSL's load average is its virtual machine's alone; Windows' total has the rest.
+            None
+        } else {
+            load_average()
+        },
     })
 }
 
@@ -77,7 +96,7 @@ fn cpu() -> Option<(f32, f32)> {
     } else if cfg!(target_os = "linux") {
         linux_cpu()
     } else {
-        load_average().map(|all| (all, 0.0))
+        load_average().map(|all| (all.min(100.0), 0.0))
     }
 }
 
@@ -127,6 +146,7 @@ impl Watch {
                     kept.push(Load {
                         cpu_pct: (all - ours).max(0.0),
                         gpu_pct: None,
+                        load_pct: None,
                     });
                 }
                 // In short steps, so stopping does not wait out a whole interval.
@@ -275,15 +295,24 @@ pub(crate) fn parse_proc_stat(text: &str) -> Option<(u64, u64)> {
     Some((all - idle, all))
 }
 
-/// The last minute's load against the cores, as a share: where there is nothing better.
+/// The last minute's load against the logical processors, as a share (over 100 when more
+/// wait than there are processors): `/proc/loadavg` on Linux, `sysctl` on macOS.
 fn load_average() -> Option<f32> {
-    let text = quiet_output("sysctl", &["-n", "vm.loadavg"])
-        .or_else(|| std::fs::read_to_string("/proc/loadavg").ok())?;
+    let text = std::fs::read_to_string("/proc/loadavg")
+        .ok()
+        .or_else(|| quiet_output("sysctl", &["-n", "vm.loadavg"]))?;
+    parse_loadavg(
+        &text,
+        std::thread::available_parallelism().map_or(1, |n| n.get()),
+    )
+}
+
+/// The first number of `/proc/loadavg` or macOS's `{ 1.50 1.20 1.00 }`, against `cores`.
+pub(crate) fn parse_loadavg(text: &str, cores: usize) -> Option<f32> {
     let load = text
         .split_whitespace()
         .find_map(|word| word.trim_matches('{').parse::<f32>().ok())?;
-    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-    Some((100.0 * load / cores as f32).min(100.0))
+    Some(100.0 * load / cores.max(1) as f32)
 }
 
 /// The busiest NVIDIA GPU's share, if `nvidia-smi` answers.
@@ -324,8 +353,30 @@ mod tests {
 
     #[test]
     fn quiet_is_both_processors_and_gpu() {
-        let load = |cpu_pct, gpu_pct| Load { cpu_pct, gpu_pct };
+        let load = |cpu_pct, gpu_pct| Load {
+            cpu_pct,
+            gpu_pct,
+            load_pct: None,
+        };
         assert!(load(10.0, Some(2.0)).quiet());
+        // A second of idle processors on a box whose run queue is longer than its cores.
+        let queued = Load {
+            load_pct: Some(125.0),
+            ..load(2.0, Some(0.0))
+        };
+        assert!(!queued.quiet());
+        assert!(
+            Load {
+                load_pct: Some(10.0),
+                ..queued
+            }
+            .quiet()
+        );
+        assert_eq!(
+            parse_loadavg("40.00 38.50 30.01 3/2100 999\n", 32),
+            Some(125.0)
+        );
+        assert_eq!(parse_loadavg("{ 1.50 1.20 1.00 }\n", 4), Some(37.5));
         assert!(load(10.0, None).quiet());
         assert!(!load(60.0, Some(2.0)).quiet());
         assert!(!load(10.0, Some(40.0)).quiet());
@@ -362,6 +413,7 @@ mod tests {
         };
         assert_eq!(number("QUIET_CPU_PCT"), QUIET_CPU_PCT);
         assert_eq!(number("QUIET_GPU_PCT"), QUIET_GPU_PCT);
+        assert_eq!(number("QUIET_LOAD_PCT"), QUIET_LOAD_PCT);
         assert_eq!(number("BUSY_DURING_CPU_PCT"), BUSY_DURING_CPU_PCT);
         assert_eq!(number("BUSY_DURING_MOST_PCT"), BUSY_DURING_MOST_PCT);
         assert_eq!(number("WAIT_S"), WAIT.as_secs_f32());

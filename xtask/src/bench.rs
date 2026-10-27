@@ -886,10 +886,12 @@ mod bench_tests {
         let quiet = Load {
             cpu_pct: 10.0,
             gpu_pct: Some(1.0),
+            load_pct: None,
         };
         let busy = Load {
             cpu_pct: 90.0,
             gpu_pct: Some(1.0),
+            load_pct: None,
         };
         let run = |median, before| Run {
             timing: timing(median, 9.0, 12.0),
