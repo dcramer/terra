@@ -27,6 +27,8 @@ the textures rather than the triangles (art-style.md rule 1):
 - `Candles`, `Altar`, `Urns`, `Coffin`: a room's dressing by its type (docs/dungeons.md, room
   types, D539): grave candles on their wax, an offering altar with its runner and candles,
   three lidded cinerary urns, a coffin with its lid pushed aside. Their flames glow.
+- `BoneScatter`, `Debris`: what lies strewn over a floor, broken bones and a jaw; stones fallen
+  from the walls and their grit.
     tools/blender/run.sh tools/props/barrow.py [Name ...]
 
 Writes them (or only those named) to assets/models/props/barrow/. The rubble is `castle_wall_varriation` (the crypt's
@@ -394,15 +396,17 @@ def loculus():
     return m, [("Lintel", RUBBLE, LINTEL_TINT), ("Recess", RUBBLE, RECESS_TINT)]
 
 
-def lump(m, centre, radii, mat, segs=10, rings=6, bulge=None):
+def lump(m, centre, radii, mat, segs=10, rings=6, bulge=None, turn=0.0):
     """An ellipsoid, its rings each pushed in or out by `bulge(t)` (t from one end to the
-    other along X)."""
+    other along X), turned `turn` radians about the up axis."""
     bm = bmesh.new()
     bmesh.ops.create_uvsphere(bm, u_segments=segs, v_segments=rings, radius=1.0)
+    c, s = math.cos(turn), math.sin(turn)
     for v in bm.verts:
         t = (v.co.x + 1) / 2
         k = bulge(t) if bulge else 1.0
-        v.co = Vector((v.co.x * radii[0], v.co.y * radii[1] * k, v.co.z * radii[2] * k)) + Vector(centre)
+        x, y = v.co.x * radii[0], v.co.y * radii[1] * k
+        v.co = Vector((x * c - y * s, x * s + y * c, v.co.z * radii[2] * k)) + Vector(centre)
     for f in bm.faces:
         corners = [(m.bm.verts.new(v.co.copy()), (v.co.x / STUCCO_M, (v.co.y + v.co.z) / STUCCO_M)) for v in f.verts]
         m.face(corners, mat, away=lambda _: Vector(centre))
@@ -517,6 +521,47 @@ def bones():
     # The bone's tint, its grime aside: aged ivory-brown, about 0.5 in sRGB (0.44 luma with its
     # stain) over the stucco's 0.83, its crevices near 0.2: well under the shroud's linen (0.63).
     return m, [("Bone", "white_stucco", (0.34, 0.28, 0.20)), ("Socket", None, (0.03, 0.025, 0.02))]
+
+
+def bone_scatter():
+    """Bones strewn on a floor, a body's long since kicked apart: a heap of broken shafts lying
+    across each other, at twice real thickness as `bones` (at one and a half, pale and spread
+    round a ring, they read as grains of rice laid out, barrow dress8's rooms), a knuckle at
+    one end of some, the other snapped, a jaw and a shard of skull by it, two pieces kicked
+    away; over 0.7 by 0.5 m. A shade darker than `bones`, dust-covered, and grimed as them."""
+    m = Mesh()
+    m.aged = True
+    for x, y, ln, r, a, knob, up in ((-0.05, 0.02, 0.26, 0.030, 0.3, True, 0.0), (0.02, -0.03, 0.22, 0.028, 1.9, True, 0.045),
+                                      (0.10, 0.06, 0.16, 0.024, -0.6, False, 0.0), (-0.14, -0.08, 0.12, 0.022, 2.4, False, 0.0),
+                                      (0.05, 0.14, 0.14, 0.024, 0.8, True, 0.0), (0.28, -0.14, 0.10, 0.020, 1.0, False, 0.0),
+                                      (-0.30, 0.15, 0.08, 0.020, -1.2, False, 0.0)):
+        lump(m, (x, y, r + up), (ln / 2, r, r), 0, segs=8, rings=5, turn=a)
+        if knob:
+            e = ln / 2
+            lump(m, (x + e * math.cos(a), y + e * math.sin(a), r * 1.15 + up), (r * 1.3, r * 1.5, r * 1.2), 0, segs=8, rings=5, turn=a)
+    # The jaw: two rami and the chin, a U lying on its side; a curved shard of the skull's vault.
+    for s in (-1, 1):
+        lump(m, (-0.16 + 0.045 * s, 0.17, 0.02), (0.055, 0.016, 0.02), 0, segs=6, rings=4, turn=1.57 + 0.35 * s)
+    lump(m, (-0.16, 0.115, 0.018), (0.03, 0.018, 0.018), 0, segs=6, rings=4)
+    lump(m, (0.19, -0.02, 0.016), (0.075, 0.055, 0.03), 0, segs=10, rings=5, turn=0.6)
+    return m, [("Bone", "white_stucco", (0.27, 0.22, 0.16))]
+
+
+def debris():
+    """Stones fallen from the walls and their grit, as lie on any old crypt's floor: two the
+    size of a fist and a half, four of an egg, a scatter of chips, faceted (few faces, the
+    shading's sharp edges) in the walls' rubble, over 0.7 by 0.5 m. Grimed as `bones`, so they
+    sit in the dust rather than on it."""
+    m = Mesh()
+    m.aged = True
+    for x, y, rx, ry, rz, a in ((-0.18, 0.05, 0.09, 0.07, 0.05, 0.3), (0.15, -0.08, 0.07, 0.06, 0.045, 1.9),
+                                (0.02, 0.16, 0.045, 0.035, 0.03, 0.8), (-0.28, -0.14, 0.04, 0.03, 0.025, 2.4),
+                                (0.30, 0.10, 0.035, 0.03, 0.025, 1.1), (-0.02, -0.18, 0.04, 0.028, 0.022, -0.6)):
+        lump(m, (x, y, rz * 0.7), (rx, ry, rz), 0, segs=6, rings=4, turn=a)
+    for k in range(9):
+        x, y = -0.3 + 0.075 * k, 0.2 * math.sin(k * 2.3)
+        lump(m, (x, y, 0.008), (0.016, 0.012, 0.01), 0, segs=5, rings=3, turn=k * 0.7)
+    return m, [("Rubble", RUBBLE, (0.55, 0.53, 0.52))]
 
 
 def sarcophagus():
@@ -721,7 +766,7 @@ def export(name, built):
 
 
 ONLY = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-for name, make in (("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Bones", bones), ("Sarcophagus", sarcophagus), ("Candles", candles), ("Altar", altar), ("Urns", urns), ("Coffin", coffin)):
+for name, make in (("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Bones", bones), ("Sarcophagus", sarcophagus), ("Candles", candles), ("Altar", altar), ("Urns", urns), ("Coffin", coffin), ("BoneScatter", bone_scatter), ("Debris", debris)):
     if ONLY and name not in ONLY:
         continue
     reset()
