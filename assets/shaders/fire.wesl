@@ -1168,6 +1168,9 @@ fn breath_soot(h: f32) -> vec3<f32> {
 // How much of the pixel the march found flame (not soot), for the tonemapper's film mask
 // (`FIRE_MASK`, crates/terra_world/src/fire/film.rs), as a hearth's flame says it.
 var<private> FLAME_SHARE: f32 = 0.0;
+// The march's ray's level side in a hearth's frame (east, north), across the view: a baked
+// flame's torn lanes (BAKED_LANES) run along the ray, so a gap torn is clear through the flame.
+var<private> BAKED_SIDE: vec2<f32> = vec2<f32>(1.0, 0.0);
 // Where the march's gas first hid half of what is behind it, as a depth, written for what
 // reads the depth after it (`MARCHED_DEPTH`'s `fragment`).
 var<private> BREATH_DEPTH: f32 = 0.0;
@@ -1783,9 +1786,14 @@ fn baked_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
         let c = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.zw, 0.0) + t) / size, 0.0).r;
         loop_flame = mix(a, c, f.blend);
     }
-    let lane = noise3(vec3(u.x * BAKED_LANES.x, u.z * BAKED_LANES.x, hg * BAKED_LANES.y - time * BAKED_LANES.z) + vec3(f.seed * 13.7));
-    let torn = smoothstep(BAKED_LANES.w, BAKED_LANES.w + 0.2, lane);
-    let flame = max(shed, loop_flame - BAKED_TEAR.z * smoothstep(BAKED_TEAR.x, BAKED_TEAR.y, hg) * torn);
+    let across = dot(g, BAKED_SIDE) / (f.baked.w * fire.sim[1].x);
+    let lean = (noise3(vec3(across * BAKED_LEAN.x, time * BAKED_LEAN.y, f.seed * 7.3)) - 0.5) * BAKED_LEAN.z * hg;
+    let gust = BAKED_BEND.x + BAKED_BEND.y * (2.0 * noise3(vec3(time * BAKED_BEND.z, f.seed * 3.1, 0.5)) - 1.0);
+    let bent = gust * dot(f.turn, BAKED_SIDE) * p.y / (f.baked.w * fire.sim[1].x);
+    let lane = noise3(vec3((across - bent + lean) * BAKED_LANES.x, hg * BAKED_LANES.y - time * BAKED_LANES.z, f.seed * 13.7));
+    let gap = BAKED_LANES.w + BAKED_TAPER * (0.5 - smoothstep(BAKED_TEAR.x, 1.0, hg));
+    let torn = smoothstep(gap - 0.25, gap + 0.25, lane);
+    let flame = max(shed, loop_flame * (1.0 - BAKED_TEAR.z * smoothstep(BAKED_TEAR.x, BAKED_TEAR.y, hg) * torn));
     let v = (flame - BAKED_EDGE) / BAKED_SPAN;
     if v < -0.5 {
         return vec3(0.0);
@@ -1806,12 +1814,21 @@ fn baked_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
 // colours it, its density alone covers what is behind it (`hearth_march`), never the ramp's A.
 // BAKED_SEE: how much of its density covers, 1 up to x of its height, falling to z by y, so its
 // upper flame sums its glow as thin flame does and shows what is behind (RDR2's tips).
-// BAKED_TEAR: how much of the loop's flame (not a wisp's) is taken off over x-y of its height,
-// raising its edge there, so its upper flame parts into tongues with dark between (RDR2's top
+// BAKED_TEAR: how much of the loop's flame (not a wisp's) is taken off, as a share of it, over
+// x-y of its height, so its upper flame parts into tongues with dark between (RDR2's top
 // third 0.57 of each row's span flame, ours 0.88). BAKED_LANES: only in some upright lanes
-// across the flame (x a lane's count across the sim, rising y a height and z a second; torn
-// over w to w + 0.2 of a noise), so the tongues between keep their height and lean
-// (g56: torn over the whole top, the motion gate's lean fell from 8.6 to 4.6-7.0).
+// across the view (BAKED_SIDE: a lane runs along the ray, so a gap is clear through the
+// flame; x a lane's count across the sim, rising y a height and z a second; torn over w -/+
+// 0.25 of a noise), so the tongues between keep their height and lean (g56: torn over the
+// whole top, the motion gate's lean fell from 8.6 to 4.6-7.0). Fire round g60's debug film:
+// lanes of 5 in 3D, torn over 0.55-0.75 and 0.25 taken off, tore a blob in about 9% of the top
+// third's flame and left it solid there, so the top stayed one plume (fill 0.87-0.91); 24
+// lanes across the view, 0.9 of it taken off by 0.5 of its height: 2-4 tongues (night top fill
+// 0.57, runs 2.52; dusk 0.62, 2.06). Torn over -/+0.05 and all of it off (g60 t3), the
+// tongues' sides were cut sharp and three judges took main over it (5.42 vs 5.87); over
+// -/+0.15 (t4) 5.73, and 24 lanes tapered and leaning (g61 t6) 5.82 against main's 5.78. 16
+// lanes over -/+0.25 with the taper and lean (g61 t7): a softer tear (top fill dusk 0.91,
+// night 0.75; main 0.92, 0.87), and three judges took it over main (5.97 vs 5.78, g62).
 // BAKED_WHITE: a small white-hot heart over the coals: shape over x (as the heart's FIELD_CORE),
 // under y of its height, at heat 1 by z; its glow w times brighter there, so it reads white
 // (the sheet's white band, its campfire's 0 of 5.6) rather than adding to its pale (at its
@@ -1819,8 +1836,22 @@ fn baked_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
 // its height (fire round g58: from 0.99 under 0.12 the heart, its root's heat pulled under 0.95 by
 // `baked_pale`, read white 0.1-0.2; from 0.95 under 0.25, night white 3.0 and pale 2.8).
 const BAKED_SEE: vec3<f32> = vec3<f32>(0.15, 0.55, 0.25);
-const BAKED_TEAR: vec3<f32> = vec3<f32>(0.25, 0.65, 0.25);
-const BAKED_LANES: vec4<f32> = vec4<f32>(5.0, 2.0, 0.9, 0.55);
+const BAKED_TEAR: vec3<f32> = vec3<f32>(0.2, 0.5, 0.9);
+const BAKED_LANES: vec4<f32> = vec4<f32>(16.0, 3.0, 0.9, 0.56);
+// How far the torn share of the noise moves over the tear's height: w + x/2 at its foot, w - x/2
+// at the top, so a tongue between gaps narrows to its noise's low and ends in a rounded tip
+// rather than running up the flame at one width (g60 t3/t4: flat ribbons).
+const BAKED_TAPER: f32 = 0.2;
+// Each tongue's own lean: the lanes pushed across by a slow noise (x a count across the sim, y a
+// second) times up to z of the sim's width at the top, so neighbouring tongues lean apart.
+const BAKED_LEAN: vec3<f32> = vec3<f32>(5.0, 0.35, 0.06);
+// How far the lanes bend downwind (the bake's wind, `f.turn`), as the loop's plume does: x the
+// slope (across over up) and y a gust's either way of it, z gusts a second. Upright lanes cut a
+// leaning plume into upright tongues (g62 t7: the motion gate's lean 7.29 / 6.37 against main's
+// 9.36 / 8.21; BAKED_LEAN, 1-3 cm over the flame, moved it by none). Bent 0.4 (g63/g64): 9.75 /
+// 9.04, 6 of 6 at both hours; bent 0.7, 10.51 at dusk but 5 of 6 at night (its lean 7.06).
+// Three judges (g64): 5.88 against main's 5.77.
+const BAKED_BEND: vec3<f32> = vec3<f32>(0.4, 0.15, 0.3);
 const BAKED_WHITE: vec4<f32> = vec4<f32>(0.7, 0.25, 1.0, 5.0);
 const BAKED_WHITE_FROM: f32 = 0.95;
 // How far the heart's glow goes to a grey of its own luminance: the ramp's hottest has too
@@ -2055,6 +2086,8 @@ fn hearth_march(in: VertexOutput) -> vec4<f32> {
     let o = eye - f.foot;
     let ol = vec3(dot(o, f.east), dot(o, f.up), dot(o, f.north));
     let dl = vec3(dot(dir, f.east), dot(dir, f.up), dot(dir, f.north));
+    let level = vec2(-dl.z, dl.x);
+    BAKED_SIDE = select(vec2(1.0, 0.0), level / max(length(level), 1.0e-6), dot(level, level) > 1.0e-8);
     let box = field_box(f);
     let inv = 1.0 / select(dl, vec3(1.0e-6), abs(dl) < vec3(1.0e-6));
     let t0 = (box[0] - ol) * inv;
