@@ -1036,6 +1036,7 @@ impl Plugin for ShellPlugin {
                 audio::plugin(sound),
                 FreeCameraPlugin,
                 EguiPlugin::default(),
+                crate::overlay::plugin,
                 // On by default, screenshots included, so it is there when it is needed.
                 debug::plugin(readout),
                 crate::pacing::plugin,

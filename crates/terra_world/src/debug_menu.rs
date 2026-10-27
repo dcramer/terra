@@ -161,13 +161,8 @@ fn draw(world: &mut World) {
     };
     let ctx = context.get_mut().clone();
     let (window, close) = show(&ctx, world);
-    // The window's own size in the pointer's pixels: on Windows at 150% egui's content rect
-    // came out half of it (800 of 1600) while it drew and was clicked at the window's.
-    let screen = world
-        .query_filtered::<&Window, With<bevy::window::PrimaryWindow>>()
-        .single(world)
-        .map(|w| [w.width(), w.height()])
-        .unwrap_or(ctx.content_rect().size().into());
+    // egui is drawn over the whole screen (`overlay`), so its rect is the screen's.
+    let screen = ctx.content_rect().size().into();
     let mut menu = world.resource_mut::<DebugMenu>();
     menu.window = window;
     menu.screen = screen;

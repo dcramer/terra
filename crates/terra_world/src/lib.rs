@@ -59,6 +59,7 @@ pub mod log_file;
 mod mesh_upload_tests;
 pub mod mipmaps;
 pub mod models;
+pub mod overlay;
 pub mod pacing;
 pub mod parting;
 pub mod planet;
