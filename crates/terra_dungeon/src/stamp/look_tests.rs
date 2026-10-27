@@ -105,6 +105,55 @@ const FILL_M: f32 = 2.5;
 const RETRACE_M: f32 = 0.5;
 const RETRACE_ALONG_M: f32 = 2.0;
 
+/// One theme's tours' sustained turn, asserted, and their swings back, the worst and the
+/// demo's (seed 7) printed.
+fn sustained(theme: &str, seen: &[Looked]) {
+    use super::look::TURN_MOST_PER_S;
+    let most = |f: &dyn Fn(&Looked) -> f32| seen.iter().map(f).fold(0.0, f32::max);
+    let (long_pan, swing) = (most(&|s| s.long_pan), most(&|s| s.swing));
+    let swings = seen.iter().filter(|s| s.swing > SWING_MOST).count();
+    let mut worst: Vec<&Looked> = seen.iter().collect();
+    worst.sort_by(|a, b| b.swing.total_cmp(&a.swing));
+    let demo = seen.iter().filter(|s| s.seed == 7);
+    for w in worst.iter().take(3).copied().chain(demo) {
+        let (at, eye) = w.swing_at;
+        let back = w.swing.to_degrees();
+        println!(
+            "{theme}: seed {} swings back {back:.0}° at {at:.1} s, {eye:.1}",
+            w.seed
+        );
+    }
+    println!(
+        "{theme}: turning {:.0}°/s over {LONG_PAN_S} s at most; swinging back {:.0}° within {SWING_S} s at most, over {:.0}° in {swings} of {} tours",
+        long_pan.to_degrees(),
+        swing.to_degrees(),
+        SWING_MOST.to_degrees(),
+        seen.len()
+    );
+    // Round 7's barrow film yawed 60° in 1.75 s crossing a room and its reviewers saw a
+    // swing: no sustained turn past the slow pan's bound.
+    assert!(
+        long_pan <= TURN_MOST_PER_S * 1.01,
+        "{theme}: turns {}°/s over {LONG_PAN_S} s",
+        long_pan.to_degrees()
+    );
+}
+
+/// The yaws of directions, in radians, each within half a turn of the one before.
+fn unwrapped(dirs: &[Vec3]) -> Vec<f32> {
+    let mut yaw: Vec<f32> = Vec::with_capacity(dirs.len());
+    for d in dirs {
+        let to = libm::atan2f(d.x, -d.z);
+        let Some(&was) = yaw.last() else {
+            yaw.push(to);
+            continue;
+        };
+        let (step, tau) = (to - was, std::f32::consts::TAU);
+        yaw.push(was + step - tau * libm::floorf((step + std::f32::consts::PI) / tau));
+    }
+    yaw
+}
+
 /// The look from each eye of one stamp's view, past the surface leg and short of where a
 /// film stops (3.5 m from the goal in plan): how often the way on is out of frame and the
 /// longest stretch so, how often it faces a wall near, how far down it is open (a cube met
@@ -175,13 +224,7 @@ fn check_look(theme: &Theme, dungeon: &Dungeon) -> Looked {
     };
     // The look's yaw unwrapped along the view, and how far it yaws over a window of seconds
     // from eye `i`: net, and travelled either way.
-    let mut yaw = vec![libm::atan2f(dir(0).x, -dir(0).z)];
-    for i in 1..view.len() {
-        let (d, was) = (dir(i), yaw[i - 1]);
-        let step = libm::atan2f(d.x, -d.z) - was;
-        let tau = std::f32::consts::TAU;
-        yaw.push(was + step - tau * libm::floorf((step + std::f32::consts::PI) / tau));
-    }
+    let yaw = unwrapped(&(0..view.len()).map(dir).collect::<Vec<_>>());
     let yawed = |i: usize, s: f32| {
         let end = (i + 1..view.len())
             .find(|&j| j >= stop || times[j] - times[i] >= s)
@@ -292,37 +335,7 @@ fn the_camera_looks_down_the_way_ahead_not_at_walls() {
         let (lost_m, turn) = (most(&|s| s.lost_m), most(&|s| s.turn));
         let goal_off = most(&|s| s.goal_off);
         let (pan, plain_pan) = (most(&|s| s.pan), most(&|s| s.plain_pan));
-        let (long_pan, swing) = (most(&|s| s.long_pan), most(&|s| s.swing));
-        let swings = seen.iter().filter(|s| s.swing > SWING_MOST).count();
-        let mut worst: Vec<&Looked> = seen.iter().collect();
-        worst.sort_by(|a, b| b.swing.total_cmp(&a.swing));
-        let demo = seen.iter().filter(|s| s.seed == 7);
-        for w in worst.iter().take(3).copied().chain(demo) {
-            println!(
-                "{}: seed {} swings back {:.0}° at {:.1} s, {:.1}",
-                theme.name,
-                w.seed,
-                w.swing.to_degrees(),
-                w.swing_at.0,
-                w.swing_at.1
-            );
-        }
-        println!(
-            "{}: yawing {:.0}°/s over {LONG_PAN_S} s at most; swinging back {:.0}° within {SWING_S} s at most, over {:.0}° in {swings} of {} tours",
-            theme.name,
-            long_pan.to_degrees(),
-            swing.to_degrees(),
-            SWING_MOST.to_degrees(),
-            seen.len()
-        );
-        // Round 7's barrow film yawed 60° in 1.75 s crossing a room and its reviewers saw a
-        // swing: no sustained yaw past the slow pan's bound.
-        assert!(
-            long_pan <= TURN_MOST_PER_S * 1.01,
-            "{}: yaws {}°/s over {LONG_PAN_S} s",
-            theme.name,
-            long_pan.to_degrees()
-        );
+        sustained(&theme.name, &seen);
         let walled_frame = sum(&|s| s.walled_frame as f32) / samples;
         let metre_frame = sum(&|s| s.metre_frame as f32) / samples;
         let nearest = seen.iter().map(|s| s.nearest).fold(1.5, f32::min);
