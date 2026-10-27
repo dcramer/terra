@@ -35,8 +35,10 @@ CLUMP_M = 0.55  # clumps this far apart along the outer branches
 # that run on far past the leaves; a creature's crown limbs are short, so its clumps are larger
 # and carried out past the twigs' ends, for a crown as full as the forest's oaks'.
 SIZE_M = 1.3
-# lush.rs CROWN_TINTS[0] times the veteran oaks' own (0.9, 0.95, 0.85).
-TINT = Vector((0.92 * 0.9, 0.95 * 0.95, 0.85 * 0.85))
+# lush.rs CROWN_TINTS[0] (0.92, 0.95, 0.85), raised and yellowed: the forest's leaves are lit
+# through as well (their shader's transmission), which a plain material is not, and the first
+# crown read dark blue-green beside them (round-5 still reviews).
+TINT = Vector((1.2, 1.25, 0.82))
 ARM = ("clavicle", "upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky")
 
 src = look.path(look.args()[0])
@@ -116,7 +118,7 @@ for i, (tip, _) in enumerate(tips):
     mass = mass_at[i]
     out_crown = (tip - centre).normalized() if (tip - centre).length > 1e-3 else Vector((0, 0, 1))
     for k in range(7 + dice.randrange(2)):
-        stalk = tip + along * SIZE_M * 0.15 + unit() * SIZE_M * dice.uniform(0.05, 0.3)
+        stalk = tip + along * SIZE_M * 0.05 + unit() * SIZE_M * dice.uniform(0.03, 0.15)
         out_mass = (stalk - mass).normalized() if (stalk - mass).length > 1e-3 else out_crown
         up = (along * 0.75 + unit() * 0.7 + out_mass * 0.45).normalized()
         wanted = out_mass * 0.6 + Vector((0, 0, 0.35)) + unit() * 0.55
