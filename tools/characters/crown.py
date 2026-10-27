@@ -124,6 +124,12 @@ for i, (tip, _) in enumerate(tips):
         facing = facing.normalized() if facing.length > 1e-3 else up.orthogonal().normalized()
         half = SIZE_M * dice.uniform(0.48, 0.62)
         middle = stalk + up * half * 0.75
+        # The face kept clear: no spray hangs before the eyes and mouth (the front is -y), and
+        # none below the neck, so awake the face is seen and asleep the bole stands clear.
+        reach_down = middle.z - half * 0.9
+        if reach_down < joint["neck_01"].z or (
+                middle.y - half < head.y + 0.3 and reach_down < head.z + 0.45 and abs(middle.x - head.x) < 1.5):
+            continue
         right = up.cross(facing)
         out_m = (middle - mass).normalized() if (middle - mass).length > 1e-3 else out_crown
         normal = (out_m * 0.45 + out_crown * 0.35 + facing * 0.2).normalized()
@@ -226,7 +232,7 @@ for p in body.data.polygons[:first_leaf]:
     for li in p.loop_indices:
         shade_attr.data[li].color = (1, 1, 1, 1)
 print("CROWN", f"{len(tips)} clumps, {len(normals)} cards over {len(points)} crown points,",
-      f"reach {crown_reach:.2f} m, top {top_z:.2f} m")
+      f"reach {crown_reach:.2f} m, top {top_z:.2f} m, head {head.z:.2f} m, neck {joint['neck_01'].z:.2f} m")
 
 for o in bpy.context.scene.objects:
     o.select_set(o in (arm, body))
