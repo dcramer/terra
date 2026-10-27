@@ -52,6 +52,18 @@
 //   soft_s                   how long a soft pair's overlap takes to ease to 1/e of itself, s
 //                            (a 20 cm overlap is under 1 cm in three of these); a stand-in
 //                            for review
+//   climb                    up a sheer face, m/s (D509: about 1); 0 for a kind that does
+//                            not climb (D136); faster up a face less steep, slower up an
+//                            overhang
+//   climb_side, climb_accel  along a face, m/s, and toward either, m/s² (placeholders)
+//   climb_push_s             how long a body on the ground pushes into a face before it holds
+//                            it, s (D507: half a second); a jump at a face holds it at once
+//   reach                    its hands over its feet, m: the highest ledge it pulls up onto,
+//                            from a climb or a jump (D508: about 2.2 for a man)
+//   climb_gap                the gap it is held at from a face, m (a placeholder)
+//   overhang_deg             the furthest past vertical a face it holds leans (D510: about 30)
+//   mantle_s                 how long a pull up onto a top takes, s (a placeholder)
+//   climb_jump               how far a climb jump lunges it along the face, m (D511: about 1.5)
 {
     "Man": (
         radius: 0.3,
@@ -90,5 +102,14 @@
         push: Soft,
         core_m: 0.05,
         soft_s: 0.05,
+        climb: 1.0,
+        climb_side: 0.8,
+        climb_accel: 4.0,
+        climb_push_s: 0.5,
+        reach: 2.2,
+        climb_gap: 0.05,
+        overhang_deg: 30.0,
+        mantle_s: 0.8,
+        climb_jump: 1.5,
     ),
 }

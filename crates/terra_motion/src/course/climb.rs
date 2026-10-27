@@ -6,10 +6,9 @@
 //! order by steepness (D509); overhangs held to about 30 deg past vertical and ceilings never
 //! (D510); the lunge's rise and the kick-off (D511).
 //!
-//! Every answer is known from geometry and the decisions' numbers alone, and a mover that does
-//! not climb fails every case that should climb. The decided numbers stand here for a man
-//! until the kind carries them (movers.ron's `climb`, `reach`, `climb_jump`), then the course
-//! reads them from the kind.
+//! Every answer is known from geometry and the kind's numbers alone (movers.ron's `climb`,
+//! `climb_push_s`, `reach`, `climb_jump`: for a man, the decisions'), and a mover that does
+//! not climb fails every case that should climb.
 
 use super::field::{Course, forward_at, local, side_at, world};
 use super::runs::{Outcome, Run};
@@ -25,15 +24,8 @@ const FACE_U: f32 = 8.0;
 const TOUCH_M: f32 = 0.05;
 /// How far before a face a body jumping at it presses jump, beyond its radius, m.
 const JUMP_FROM: f32 = 0.6;
-/// How long a walk into a face pushes before it grabs, s (D507).
-const PUSH_S: f32 = 0.5;
 /// How far a body's feet rose over the ground while climbing for it to have climbed, m.
 const CLIMBED_M: f32 = 1.0;
-/// The hands' reach over the feet as a share of the body's height: a man's 2.2 m (D508).
-const REACH: f32 = 2.2 / 1.8;
-/// A man's climb up a sheer face, m/s (D509), and his lunge's rise, m (D511).
-const MAN_CLIMB: f32 = 1.0;
-const MAN_LUNGE: f32 = 1.5;
 /// Overhangs held, deg past vertical, and those never (D510: about 30).
 const HELD: [f32; 3] = [0.0, 15.0, 25.0];
 const NEVER: [f32; 3] = [35.0, 45.0, 60.0];
@@ -41,7 +33,7 @@ const NEVER: [f32; 3] = [35.0, 45.0, 60.0];
 const STEEP: [f32; 3] = [70.0, 90.0, 110.0];
 /// Ledges jumped at, their tops as shares of the kind's reach over its feet (D508).
 const LEDGES: [f32; 2] = [0.7, 0.9];
-/// The slowest climb a case waits for, m/s: half D509's.
+/// The slowest climb a case waits for, as a share of the kind's up a sheer face (D509).
 const SLOWEST: f32 = 0.5;
 
 /// What a body walks into (D505).
@@ -224,6 +216,11 @@ fn gap(b: &Body, radius: f32) -> f32 {
     FACE_U - local(b.feet).x - radius
 }
 
+/// The slowest climb a case waits for, m/s.
+fn slowest(kind: &Kind) -> f32 {
+    SLOWEST * kind.climb
+}
+
 /// How long a body takes to reach the face at its jog, with slack.
 fn reach_s(kind: &Kind) -> f32 {
     FACE_U / kind.jog * 1.5 + 0.5
@@ -296,7 +293,7 @@ fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
                 run.add(1, kind, world(FACE_U + kind.radius, 0.0, 0.0));
             }
             let mut trace = Trace::default();
-            let seconds = reach_s(&kind) + PUSH_S + CLIMBED_M / SLOWEST + 1.0;
+            let seconds = reach_s(&kind) + kind.climb_push_s + CLIMBED_M / slowest(&kind) + 1.0;
             let mut walk = at_face(&kind, 0.0, false);
             for _ in 0..(seconds / TICK) as usize {
                 run.tick(|id, b| if id == 0 { walk(b) } else { Intent::default() });
@@ -323,11 +320,13 @@ fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
                 &mut run,
                 &kind,
                 &mut trace,
-                reach_s(&kind) + PUSH_S + 1.0,
+                reach_s(&kind) + kind.climb_push_s + 1.0,
                 at_face(&kind, angle, jump),
             );
             let late = match (trace.touch, trace.grab) {
-                (Some(touch), Some(grab)) => grab - touch - if jump { 0.0 } else { PUSH_S },
+                (Some(touch), Some(grab)) => {
+                    grab - touch - if jump { 0.0 } else { kind.climb_push_s }
+                }
                 _ => f32::INFINITY,
             };
             run.outcome(wrong(late.abs() > 1.5 * TICK))
@@ -359,7 +358,7 @@ fn climb_speed<M: Mover>(
     run.add(0, *kind, world(0.0, 0.0, 0.0));
     let mut walk = at_face(kind, 0.0, false);
     let mut passed: [Option<(f32, Vec3)>; 2] = [None, None];
-    let seconds = reach_s(kind) + PUSH_S + high / SLOWEST;
+    let seconds = reach_s(kind) + kind.climb_push_s + high / slowest(kind);
     for i in 0..(seconds / TICK) as usize {
         run.tick(|_, b| walk(b));
         let b = run.body(0);
@@ -385,9 +384,12 @@ fn climb_speed<M: Mover>(
 /// 1 when the body ended as D508 says: on a climbed top or a ledge in reach, never on one
 /// with no room to stand.
 fn mantle<M: Mover>(new: &impl Fn() -> M, kind: &Kind, top: Top) -> Outcome {
-    let reach = REACH * kind.height;
+    let reach = kind.reach;
     let (course, high, jump, after) = match top {
-        Top::Climbed => (face(90.0, 3.0), 3.0, false, PUSH_S + 3.0 / SLOWEST + 2.0),
+        Top::Climbed => {
+            let after = kind.climb_push_s + 3.0 / slowest(kind) + 2.0;
+            (face(90.0, 3.0), 3.0, false, after)
+        }
         Top::Ledge(share) => (face(90.0, share * reach), share * reach, true, 2.0),
         Top::Roofed => {
             let high = LEDGES[0] * reach;
@@ -435,7 +437,7 @@ fn overhang<M: Mover>(new: &impl Fn() -> M, kind: &Kind, lean: Option<f32>) -> O
     let mut run = Run::new(new(), &course);
     run.add(0, *kind, world(0.0, 0.0, 0.0));
     let mut trace = Trace::default();
-    let seconds = reach_s(kind) + PUSH_S + 2.0;
+    let seconds = reach_s(kind) + kind.climb_push_s + 2.0;
     // Under the ceiling the jump is pressed near the face's place, under the ceiling's middle.
     let walk = at_face(kind, 0.0, lean.is_none());
     drive(&mut run, kind, &mut trace, seconds, walk);
@@ -455,7 +457,7 @@ fn leave<M: Mover>(new: &impl Fn() -> M, kind: &Kind, lunge: bool) -> Outcome {
     run.add(0, *kind, world(0.0, 0.0, 0.0));
     let mut trace = Trace::default();
     let mut walk = at_face(kind, 0.0, false);
-    let seconds = reach_s(kind) + PUSH_S + CLIMBED_M / SLOWEST;
+    let seconds = reach_s(kind) + kind.climb_push_s + CLIMBED_M / slowest(kind);
     for _ in 0..(seconds / TICK) as usize {
         if trace.held(CLIMBED_M) {
             break;
@@ -520,6 +522,7 @@ pub(super) fn score<M: Mover>(new: &(impl Fn() -> M + Sync)) -> (Vec<Measure>, f
         .iter()
         .flat_map(|o| o.depths.iter().copied())
         .fold(0.0, f32::max);
+    let man = &kinds()[0];
     let m = |id, value: f32| Measure { id, value };
     (
         vec![
@@ -528,7 +531,7 @@ pub(super) fn score<M: Mover>(new: &(impl Fn() -> M + Sync)) -> (Vec<Measure>, f
             m("climb.mantle", count(&|c| matches!(c, Case::Mantle(..)))),
             m(
                 "climb.speed",
-                (one(&|c| matches!(c, Case::Speed)) - MAN_CLIMB).abs() / MAN_CLIMB,
+                (one(&|c| matches!(c, Case::Speed)) - man.climb).abs() / man.climb,
             ),
             m("climb.steep", steep),
             m(
@@ -537,7 +540,7 @@ pub(super) fn score<M: Mover>(new: &(impl Fn() -> M + Sync)) -> (Vec<Measure>, f
             ),
             m(
                 "climb.lunge",
-                (one(&|c| matches!(c, Case::Lunge)) - MAN_LUNGE).abs(),
+                (one(&|c| matches!(c, Case::Lunge)) - man.climb_jump).abs(),
             ),
             m("climb.kickoff", count(&|c| matches!(c, Case::Kickoff(..)))),
         ],

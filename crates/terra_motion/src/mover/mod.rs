@@ -108,6 +108,23 @@ pub struct Kind {
     pub core_m: f32,
     /// How long a soft pair's overlap takes to ease to a share of 1/e, s.
     pub soft_s: f32,
+    /// Climbing (D505-D511, docs/controller.md "Climbing"): up a sheer face and along one,
+    /// m/s, 0 for a kind that does not climb (D136); toward that, m/s².
+    pub climb: f32,
+    pub climb_side: f32,
+    pub climb_accel: f32,
+    /// How long a body on the ground pushes into a face before it holds it, s (D507).
+    pub climb_push_s: f32,
+    /// How far over its feet its hands reach, m: the highest ledge it pulls up onto (D508).
+    pub reach: f32,
+    /// The gap it is held at from a face, m.
+    pub climb_gap: f32,
+    /// The furthest past vertical a face it holds leans, deg (D510).
+    pub overhang_deg: f32,
+    /// How long a pull up onto a top takes, s.
+    pub mantle_s: f32,
+    /// How far a climb jump lunges it along the face, m (D511).
+    pub climb_jump: f32,
 }
 
 /// How a kind pushes (D479): people softly, giving way and never blocking; monsters hard, by

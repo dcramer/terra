@@ -51,6 +51,12 @@ pub(super) fn second(man: &Kind) -> Kind {
         breath_s: 45.0,
         breath_back_s: 6.0,
         drown_s: 15.0,
+        climb: 0.7,
+        climb_side: 0.55,
+        climb_accel: 3.0,
+        reach: 2.9,
+        mantle_s: 1.0,
+        climb_jump: 1.2,
         ..*man
     }
 }
