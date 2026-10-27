@@ -24,6 +24,9 @@ the textures rather than the triangles (art-style.md rule 1):
   cubes still what is walked into). Origin the middle of its base, its length along X. Its
   ashlar darker than the arches', toward the Barrowstone walls round it.
 
+- `Candles`, `Altar`, `Urns`, `Coffin`: a room's dressing by its type (docs/dungeons.md, room
+  types, D539): grave candles on their wax, an offering altar with its runner and candles,
+  three lidded cinerary urns, a coffin with its lid pushed aside. Their flames glow.
     tools/blender/run.sh tools/props/barrow.py [Name ...]
 
 Writes them (or only those named) to assets/models/props/barrow/. The rubble is `castle_wall_varriation` (the crypt's
@@ -74,6 +77,12 @@ def material(name, folder, tint=None, colour_only=None):
     mat.use_nodes = True
     nodes, links = mat.node_tree.nodes, mat.node_tree.links
     bsdf = nodes["Principled BSDF"]
+    if folder == "glow":
+        # A candle's flame: its own light, as the fire's cards are (refine.py's strength).
+        bsdf.inputs["Base Color"].default_value = (*tint, 1.0)
+        bsdf.inputs["Emission Color"].default_value = (*tint, 1.0)
+        bsdf.inputs["Emission Strength"].default_value = 8.0
+        return mat
     if folder is None:
         bsdf.inputs["Base Color"].default_value = (*colour_only, 1.0)
         bsdf.inputs["Roughness"].default_value = 0.95
@@ -533,6 +542,111 @@ def sarcophagus():
     return m, [("Ashlar", "large_sandstone_blocks", (0.56, 0.51, 0.44))]
 
 
+def lathe(m, centre, profile, mat, metres, segs=12):
+    """A surface turned about the vertical through `centre`, its `profile` (radius, height)
+    from the foot up; U round it and V up it at `metres` a texture's width. Faces look away
+    from the axis at the profile's middle height, so its caps face up and down."""
+    c = Vector(centre)
+    mid = c + Vector((0.0, 0.0, sum(z for _, z in profile) / len(profile)))
+    rows = []
+    for k in range(segs + 1):
+        a = 2 * math.pi * k / segs
+        rows.append([(c + Vector((r * math.cos(a), r * math.sin(a), z)), (a * 0.2 / metres, z / metres)) for r, z in profile])
+    m.grid(rows, mat, away=lambda _: mid)
+
+
+def prism(m, outline, z0, z1, side, top, metres, bottom=None):
+    """An upright prism over a plan `outline` (x, y), counter-clockwise: its sides in `side`,
+    U along the outline, its top in `top`."""
+    mid = Vector((sum(x for x, _ in outline) / len(outline), sum(y for _, y in outline) / len(outline), (z0 + z1) / 2))
+    run = 0.0
+    for k, (x, y) in enumerate(outline):
+        nx, ny = outline[(k + 1) % len(outline)]
+        ln = math.hypot(nx - x, ny - y)
+        u0, u1 = run / metres, (run + ln) / metres
+        run += ln
+        m.face([(m.bm.verts.new((x, y, z0)), (u0, z0 / metres)), (m.bm.verts.new((nx, ny, z0)), (u1, z0 / metres)),
+                (m.bm.verts.new((nx, ny, z1)), (u1, z1 / metres)), (m.bm.verts.new((x, y, z1)), (u0, z1 / metres))], side, away=lambda _: mid)
+    for z, mat in ((z1, top), (z0, side if bottom is None else bottom)):
+        m.face([(m.bm.verts.new((x, y, z)), (x / metres, y / metres)) for x, y in outline], mat, away=lambda _: mid)
+
+
+# Tallow candles, the crypt's lights left by mourners: wax, the wick, the flame (emissive).
+WAX = ("Wax", "white_stucco", (0.62, 0.54, 0.40))
+WICK = ("Wick", None, (0.03, 0.025, 0.02))
+FLAME = ("Flame", "glow", (1.0, 0.55, 0.22))
+
+
+def candle(m, x, y, z, r, h, mats=(0, 1, 2)):
+    """A candle burnt down to `h`, its top hollowed by the flame, a drip or two down its side,
+    its wick and its flame. Its materials: wax, wick, flame."""
+    wax, wick, flame = mats
+    lathe(m, (x, y, z), [(0.0, 0.0), (r, 0.0), (r, h * 0.92), (r * 0.82, h), (r * 0.3, h - 0.008), (0.0, h - 0.008)], wax, STUCCO_M, 10)
+    for k in range(2):
+        a = 1.3 + 2.4 * k + x * 7.0
+        lump(m, (x + r * math.cos(a), y + r * math.sin(a), z + h * (0.55 + 0.2 * k)), (0.009, 0.009, h * 0.16), wax, segs=6, rings=4)
+    m.box((x - 0.003, y - 0.003, z + h - 0.01), (x + 0.003, y + 0.003, z + h + 0.012), wick, 1.0)
+    lump(m, (x, y, z + h + 0.032), (0.009, 0.009, 0.024), flame, segs=6, rings=4)
+
+
+def candles():
+    """Grave candles stood on a mound of their own wax on the floor, seven of them from a stub
+    to a hand and a half, as mourners leave them in Elden Ring's catacombs and Skyrim's halls:
+    0.5 by 0.35 m, 0.36 m to the tallest flame."""
+    m = Mesh()
+    lump(m, (0.0, 0.0, 0.0), (0.26, 0.18, 0.035), 0, segs=14, rings=6)
+    for x, y, r, h in ((-0.12, 0.05, 0.04, 0.30), (0.02, 0.08, 0.035, 0.22), (0.14, 0.02, 0.03, 0.16), (-0.03, -0.07, 0.03, 0.11),
+                       (0.10, -0.09, 0.025, 0.07), (-0.18, -0.06, 0.028, 0.13), (0.20, 0.10, 0.022, 0.05)):
+        candle(m, x, y, 0.02, r, h)
+    return m, [WAX, WICK, FLAME]
+
+
+def altar():
+    """An offering altar against a wall: a stone table 1.4 by 0.6 m and 0.95 m high on a plinth,
+    a linen runner over its top and down its front, candles at its ends and a bowl between
+    them. Origin the middle of its base; its front -Y (glTF +Z), its back on the wall."""
+    m = Mesh()
+    m.box((-0.72, -0.31, 0.0), (0.72, 0.30, 0.10), 0, ASHLAR_M, 0.03)
+    m.box((-0.64, -0.25, 0.10), (0.64, 0.27, 0.85), 0, ASHLAR_M, 0.02, band=BAND)
+    m.box((-0.74, -0.31, 0.85), (0.74, 0.30, 0.95), 0, ASHLAR_M, 0.03)
+    m.box((-0.28, -0.312, 0.95), (0.28, 0.24, 0.962), 1, STUCCO_M)
+    m.box((-0.28, -0.322, 0.50), (0.28, -0.31, 0.962), 1, STUCCO_M)
+    for x, y, r, h in ((-0.58, 0.05, 0.04, 0.26), (-0.50, -0.10, 0.03, 0.15), (0.56, 0.08, 0.04, 0.22), (0.62, -0.08, 0.03, 0.11)):
+        candle(m, x, y, 0.95, r, h, (2, 3, 4))
+    lathe(m, (0.0, 0.05, 0.962), [(0.0, 0.0), (0.07, 0.0), (0.12, 0.05), (0.11, 0.055), (0.0, 0.03)], 5, STUCCO_M, 14)
+    return m, [("Ashlar", "large_sandstone_blocks", (0.56, 0.51, 0.44)), ("Linen", "white_stucco", (0.46, 0.38, 0.28)),
+               WAX, WICK, FLAME, ("Bowl", "white_stucco", (0.36, 0.24, 0.16))]
+
+
+def urns():
+    """Three cinerary urns of fired clay, lidded, 0.5, 0.4 and 0.3 m tall, the smallest's lid
+    off and lying at its foot: the ashes of the dead set against a wall. 0.9 by 0.4 m."""
+    m = Mesh()
+    m.aged = True
+    for x, y, s, lid in ((-0.22, 0.02, 1.0, True), (0.14, -0.04, 0.8, True), (0.36, 0.10, 0.6, False)):
+        prof = [(0.0, 0.0), (0.09 * s, 0.0), (0.10 * s, 0.03 * s), (0.17 * s, 0.2 * s), (0.18 * s, 0.28 * s), (0.13 * s, 0.39 * s),
+                (0.085 * s, 0.43 * s), (0.10 * s, 0.46 * s), (0.0, 0.46 * s)]
+        lathe(m, (x, y, 0.0), prof, 0, STUCCO_M, 14)
+        top = (x, y, 0.46 * s) if lid else (x + 0.14, y - 0.12, 0.0)
+        lathe(m, top, [(0.0, 0.0), (0.11 * s, 0.0), (0.10 * s, 0.025 * s), (0.04 * s, 0.05 * s), (0.03 * s, 0.075 * s), (0.0, 0.08 * s)], 0, STUCCO_M, 12)
+        if not lid:
+            lathe(m, (x, y, 0.461 * s), [(0.0, 0.0), (0.085 * s, 0.0), (0.0, 0.001)], 1, STUCCO_M, 12)
+    return m, [("Clay", "white_stucco", (0.50, 0.33, 0.22)), ("Ash", None, (0.05, 0.045, 0.04))]
+
+
+def coffin():
+    """A wooden coffin, shouldered, 1.95 by 0.62 m and 0.42 m high, its lid pushed half off by
+    a robber: the dark of its inside shows. Length along X, the head at +X."""
+    m = Mesh()
+    plan = [(-0.98, -0.20), (0.42, -0.31), (0.98, -0.23), (0.98, 0.23), (0.42, 0.31), (-0.98, 0.20)]
+    prism(m, plan, 0.0, 0.36, 0, 1, 2.0)
+    lid = [(x * 1.02, y * 1.04) for x, y in plan]
+    a, dx, dy = math.radians(9.0), -0.22, -0.16
+    lid = [(x * math.cos(a) - y * math.sin(a) + dx, x * math.sin(a) + y * math.cos(a) + dy) for x, y in lid]
+    prism(m, lid, 0.362, 0.42, 0, 0, 2.0)
+    return m, [("Wood", "weathered_planks", (0.46, 0.38, 0.30)), ("Inside", None, (0.02, 0.018, 0.015))]
+
+
 def export(name, built):
     m, mats = built
     bmesh.ops.remove_doubles(m.bm, verts=m.bm.verts[:], dist=1e-5)
@@ -569,7 +683,7 @@ def export(name, built):
 
 
 ONLY = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-for name, make in (("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Bones", bones), ("Sarcophagus", sarcophagus)):
+for name, make in (("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Bones", bones), ("Sarcophagus", sarcophagus), ("Candles", candles), ("Altar", altar), ("Urns", urns), ("Coffin", coffin)):
     if ONLY and name not in ONLY:
         continue
     reset()
