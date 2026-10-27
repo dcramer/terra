@@ -565,8 +565,9 @@ def altar():
     for x, y, r, h in ((-0.58, 0.05, 0.04, 0.26), (-0.50, -0.10, 0.03, 0.15), (0.56, 0.08, 0.04, 0.22), (0.62, -0.08, 0.03, 0.11)):
         candle(m, x, y, 0.95, r, h, (2, 3, 4))
     lathe(m, (0.0, 0.05, 0.962), [(0.0, 0.0), (0.07, 0.0), (0.12, 0.05), (0.11, 0.055), (0.0, 0.03)], 5, STUCCO_M, 14)
-    # The runner a faded oxblood: in pale linen it read as a sheet of paper pinned to the altar.
-    return m, [("Ashlar", "large_sandstone_blocks", (0.56, 0.51, 0.44)), ("Linen", "white_stucco", (0.30, 0.13, 0.09)),
+    # The runner a dark wine: in pale linen it read as a sheet of paper pinned to the altar, and
+    # as an oxblood of 0.30/0.13/0.09 it lit salmon-pink in the torchlight (dress12's rooms).
+    return m, [("Ashlar", "large_sandstone_blocks", (0.56, 0.51, 0.44)), ("Linen", "white_stucco", (0.16, 0.05, 0.06)),
                WAX, WICK, FLAME, ("Bowl", "white_stucco", (0.36, 0.24, 0.16))]
 
 
