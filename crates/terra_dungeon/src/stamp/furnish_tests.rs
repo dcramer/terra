@@ -1,6 +1,6 @@
 use super::super::tests::kind;
 use super::super::{Frame, LightKind, MID, ObjectRole, Prop, Stamp, Theme, floor_of, stamp};
-use super::{HERO_LIT_M, OFF_DOOR_M};
+use super::{HERO_LIT_M, HERO_M, OFF_DOOR_M};
 use crate::place::Side;
 use crate::theme::{Dress, assets};
 use crate::{ModuleSet, generate};
@@ -571,6 +571,55 @@ fn a_vignette_lies_by_its_rooms_focus() {
                 d.roles
             );
         }
+    }
+}
+
+/// A hero's clutter lies to one side of it, not round it (barrow dress round 18): of the
+/// clutter just past what a hero keeps clear (`HERO_M` and 0.3 m), no two pieces more than a
+/// quarter turn apart round it, in all but a few heroes. Laid on each of a ring's eight ways
+/// in turn, the crypt's heroes stood in rings of pebbles (dress round 17).
+#[test]
+fn a_heros_clutter_lies_to_one_side() {
+    for theme in Theme::all(&assets()).unwrap() {
+        if theme.dressing.is_empty() {
+            continue;
+        }
+        let set = ModuleSet::new(&theme).unwrap();
+        let clutter: Vec<&(String, f32)> = theme.dressing.iter().flat_map(|d| &d.clutter).collect();
+        let (mut heroed, mut round, mut pieces) = (0, 0, 0);
+        for s in 0..40 {
+            let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
+                continue;
+            };
+            let full = stamp(&dungeon, &theme, &kind);
+            let litter: Vec<Vec3> = (full.props.iter())
+                .filter(|p| (clutter.iter()).any(|(m, s)| *m == p.model && *s == p.scale))
+                .map(|p| p.at)
+                .collect();
+            for hero in heroes(&theme, &full) {
+                let ways: Vec<Vec2> = (litter.iter())
+                    .filter(|p| (p.y - hero.y).abs() < 1.0)
+                    .map(|p| Vec2::new(p.x - hero.x, p.z - hero.z))
+                    .filter(|v| v.length() < HERO_M + 0.3)
+                    .map(Vec2::normalize)
+                    .collect();
+                heroed += 1;
+                pieces += ways.len();
+                // Past a quarter turn, by a little more than rounding.
+                let ringed = (ways.iter()).any(|a| ways.iter().any(|b| a.dot(*b) < -0.1));
+                round += ringed as u32;
+            }
+        }
+        println!(
+            "{}: {round} of {heroed} heroes with clutter round them, {pieces} pieces by them",
+            theme.name
+        );
+        assert!(heroed > 0, "{}: no heroes", theme.name);
+        assert!(
+            round * 20 <= heroed,
+            "{}: {round} of {heroed} heroes with clutter round them",
+            theme.name
+        );
     }
 }
 

@@ -44,7 +44,10 @@ const LAMP_BY_WALL: [(f32, f32); 10] = [
     (0.0, 1.7),
     (2.0, 1.0),
 ];
-/// The directions round a laid prop where its group's clutter lies, a turn in eight.
+/// The directions round a laid prop, a turn in eight from east (+X), south (+Z) second: a
+/// hero's lamp stands on one where its wall gives no place, and its clutter on three, to one
+/// side; another prop's clutter on any (`Laying::clutter`). A prop facing `f` (0..4 = north, east, south, west) faces
+/// `RING[6 + 2f]`, mod 8.
 const RING: [(f32, f32); 8] = [
     (1.0, 0.0),
     (0.71, 0.71),
@@ -63,6 +66,9 @@ const VIGNETTE_DRAWN: [f32; 2] = [1.0, 0.85];
 const FOCUS_M: f32 = 3.0;
 /// Clutter lies so much past what a prop keeps clear round it.
 const RING_GAP_M: f32 = 0.1;
+/// How far past a hero's clearance no clutter but its own lies, in metres: its own lies
+/// `RING_GAP_M` past, on one side (`Laying::clutter`).
+const HERO_SIDE_M: f32 = 0.4;
 /// How far apart the walls' feet's debris keeps from each other and all else, in metres: a
 /// sparse strew, a piece every third cell, never a carpet.
 const SCATTER_APART_M: f32 = 1.2;
@@ -309,7 +315,7 @@ pub(super) fn lay(
         // spot), and in the far corner from it.
         let anchor = hero.or(told).or(spots.first().map(|s| s.p));
         laying.wall_props(anchor, &mut taken, out);
-        laying.clutter(first, &mut taken, out);
+        laying.clutter(first, hero, &mut taken, out);
         laying.scatter(&mut taken, out);
     }
     focus
@@ -504,41 +510,66 @@ impl Laying<'_> {
         }
     }
 
-    /// Clutter a cell, round what the room's dressing laid from `first` on, a piece by each
-    /// in turn so every group takes its share (a hero's group, a corner's, a vignette's);
-    /// then the corners, by the walls and the open floor where those give too few places.
-    fn clutter(&self, first: usize, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
+    /// Clutter a cell, by what the room's dressing laid from `first` on, a piece by each in
+    /// turn so every group takes its share (a hero's group, a corner's, a vignette's); then
+    /// between the wall props and in the corners where those give too few places, never the
+    /// open floor, where it lay alone as the confetti every reviewer named (barrow dress
+    /// round 18). By the hero it lies to one side, out on that side and then along its wall,
+    /// as a set dresser heaps clutter against a thing; laid on each of a ring's eight ways in
+    /// turn, it ringed the crypt's heroes with pebbles (dress round 17); and nothing else lies
+    /// within `HERO_SIDE_M` past the hero's clearance, so the pieces between the wall props
+    /// did not flank it from its other side. By any other prop it takes the eight ways in
+    /// turn: on three, the groups of three or more fell from 92.5 to 87% (dress round 19).
+    fn clutter(
+        &self,
+        first: usize,
+        hero: Option<Vec3>,
+        taken: &mut Vec<(Vec3, f32)>,
+        out: &mut Stamp,
+    ) {
         for (k, dress) in (self.dresses.iter().enumerate()).filter(|(_, d)| !d.clutter.is_empty()) {
             let (least, most) = dress.litter;
             let per = least + self.salt(550 + k as u32) % (most.saturating_sub(least) + 1);
             let wanted = per as usize * self.cells;
             let keep = |p: Vec3| (taken.iter().find(|t| t.0 == p)).map_or(0.0, |t| t.1);
-            let rings: Vec<Vec<(u32, Vec3, usize)>> = (out.props[first..].iter())
+            let rings: Vec<Vec<(u32, Vec3, usize, bool)>> = (out.props[first..].iter())
                 .map(|prop| {
                     let r = keep(prop.at).max(CLUTTER_APART_M) + RING_GAP_M;
                     let start = hash((prop.at / CUBE).floor().as_ivec3(), 570 + k as u32);
-                    (0..RING.len())
-                        .map(|j| {
-                            let (x, z) = RING[(start as usize + j) % RING.len()];
-                            let p = prop.at + Vec3::new(x, 0.0, z) * r;
-                            (start + j as u32, p, (prop.facing + j) % 4)
-                        })
-                        .collect()
+                    let own = hero == Some(prop.at);
+                    let at = |j: usize, way: usize| {
+                        let (x, z) = RING[way % RING.len()];
+                        let p = prop.at + Vec3::new(x, 0.0, z) * r;
+                        (start.wrapping_add(j as u32), p, (prop.facing + j) % 4, own)
+                    };
+                    if !own {
+                        // Each of the eight ways in turn, from one its hash picks.
+                        return (0..RING.len()).map(|j| at(j, start as usize + j)).collect();
+                    }
+                    // The hero's out on one side, then beside it along its wall (often the
+                    // next wall prop's place), then before it.
+                    let front = 6 + 2 * prop.facing;
+                    let turn = if start.is_multiple_of(2) { 1 } else { 7 };
+                    [1, 2, 0].map(|j| at(j, front + turn * j)).to_vec()
                 })
                 .collect();
-            let round = (0..RING.len()).flat_map(|j| rings.iter().map(move |ring| ring[j]));
+            let round = (0..RING.len())
+                .flat_map(|j| rings.iter().filter_map(move |ring| ring.get(j).copied()));
             // Between the wall props and a little out from them.
             let by_walls = self.spots.iter().flat_map(|s| {
                 let facing = (opposite(s.d) + s.rank as usize) % 4;
                 [-0.5, 0.5].map(|along| (s.rank, s.offset(along, 0.45), facing))
             });
+            let rest = (by_walls.chain(self.corners.iter().copied()))
+                .map(|(rank, p, facing)| (rank, p, facing, false));
+            let by_hero = |p: Vec3| hero.is_some_and(|h| h.distance(p) < HERO_M + HERO_SIDE_M);
             let mut laid = 0;
-            let candidates = round.chain(self.corners.iter().copied()).chain(by_walls);
-            for (rank, p, facing) in candidates.chain(self.floor.iter().copied()) {
+            for (rank, p, facing, own) in round.chain(rest) {
                 if laid == wanted {
                     break;
                 }
-                if self.place.clear(p) && free(taken, p, CLUTTER_APART_M) {
+                let mine = own || !by_hero(p);
+                if mine && self.place.clear(p) && free(taken, p, CLUTTER_APART_M) {
                     put(out, pick(&dress.clutter, rank), p, facing);
                     taken.push((p, 0.0));
                     laid += 1;
