@@ -237,9 +237,18 @@ fn top(k: &Kind, query: &dyn Query, shape: &Shape, into: Vec3) -> Option<(Vec3, 
     let rise = k.reach * (1.0 - hit.fraction) + SKIN_M;
     let over = up * rise;
     let capsule = shape.capsule(Vec3::ZERO);
-    let clear =
-        query.sweep(&capsule, over).is_none() && query.sweep(&shape.capsule(over), ahead).is_none();
+    // Over onto the top first: a face set back over a narrow top (a dug cliff's next riser)
+    // blocks that way, and the way up the face is then never asked.
+    let clear = passes(query, &shape.capsule(over), ahead) && query.sweep(&capsule, over).is_none();
     clear.then_some((over, over + ahead))
+}
+
+/// Whether a capsule sweeps all of a motion: as [`Query::sweep`], told at once by two distances
+/// where it starts clear and ends a tolerance inside something, which a sweep would have met.
+fn passes(query: &dyn Query, capsule: &Capsule, motion: Vec3) -> bool {
+    let blocked = query.apart(capsule, TOLERANCE).is_none()
+        && query.apart(&capsule.moved(motion), -TOLERANCE).is_some();
+    !blocked && query.sweep(capsule, motion).is_none()
 }
 
 /// The face a body touches, within its kind's gap, from its contacts: their normals averaged.
