@@ -22,6 +22,8 @@ mod kit;
 #[cfg(test)]
 mod leaf_tests;
 mod look;
+#[cfg(test)]
+mod look_tests;
 mod modules;
 mod runin;
 mod shell;
