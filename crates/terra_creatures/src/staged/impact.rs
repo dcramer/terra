@@ -166,7 +166,9 @@ pub(crate) fn soft_image() -> Image {
             );
             let r = (u * u + v * v).sqrt();
             let lump = 0.8 + 0.2 * libm::sinf(u * 11.0 + libm::cosf(v * 8.0) * 2.5);
-            let alpha = libm::powf((1.0 - r).max(0.0), 1.6) * lump;
+            // Steeply soft, so a puff's edge, and where the ground cuts it, never shows as a
+            // line (the Cetri's round-9 reviews: hard-edged quads at 1.6).
+            let alpha = libm::powf((1.0 - r).max(0.0), 2.6) * lump;
             data.extend([255, 255, 255, (alpha.clamp(0.0, 1.0) * 255.0) as u8]);
         }
     }
@@ -387,8 +389,9 @@ fn dust(
     // Dust is greyer than the stones it comes off: the fine stuff, dry. The material under the
     // surface can be the soil under a gravel shore, whose mud read as a brown tint over the
     // troll, so it is half a dry earth grey; a dark one, as a pale grey lit through by a low
-    // sun read as white paper or snow over the forest's litter (the Cetri's round-7 reviews).
-    let colour = colour.mix(&Color::srgb(0.4, 0.36, 0.31), 0.5);
+    // sun read as white paper or snow over the forest's litter (the Cetri's round-7 reviews),
+    // and half that, lit through, as beige or tan quads (round 9): a dark, dry earth, thin.
+    let colour = colour.mix(&Color::srgb(0.25, 0.22, 0.18), 0.6);
     let size = s.size;
     for puff in 0..7u32 {
         let middle = puff == 0;
@@ -402,7 +405,7 @@ fn dust(
             materials,
             soft,
             colour,
-            if middle { 0.6 } else { 0.5 },
+            if middle { 0.42 } else { 0.34 },
             life,
             false,
         );
