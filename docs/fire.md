@@ -375,6 +375,7 @@ Every change to fire is measured against photographs of real fire before a perso
 
 - **The references.** `refs/fire-real` holds photographs by class: campfire, building, pool fire, gas jet, flamethrower, napalm. They stay outside the repository (their licences), with their credits.
   - Their measured numbers are committed as `tools/fire/references.json`: band medians and ranges per class, as `tools/sandbox/looks/` commits look references.
+  - AAA game frames (`tools/fire/games.json`, kept in `fire/refs-games` outside the repository) set a class's colour where they lie outside its photographs' (D423, D433): measured by the same `measure` through a proxy matte cut at each frame's own ground light (`tools/fire/games.ts`), since a frame has no matte. The campfire's nine (RDR2, Sons of the Forest, Enshrouded) take its pale to 12.5%, its yellow to 0-27.8%, its orange to 91%, its red to 0.1% and its red plus orange to 60.5-100%; its shape and scale stay the photographs'.
   - Classes have only 2-4 photos today. Stage 0 brings each to at least eight.
 - **The metrics**, from MEASURED.md's method, ported into `tools/fire/measure.ts` with tests that know their answers:
   - the flame's band shares (white, pale, yellow, orange, red, and red plus orange);

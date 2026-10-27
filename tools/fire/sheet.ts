@@ -88,11 +88,9 @@ export const FIRES: Fire[] = [
   // lens is 4.8 m off, about 8.5 flame heights (the first row: 16 degrees, 6.2 m).
   // Its soot's floor is RDR2's from this view (D433): the photographs' 0.13 is from beside the
   // fire, where the logs stand dark against the flame; from above the flame stands on its lit
-  // bed and logs, and RDR2's two frames measure 0.00 and 0.00-0.01 by this rule. Its pale's
-  // ceiling is RDR2's from this view too (D433): from above its heat shows as a pale heart over
-  // the coals, 12.2% of its flame by the ground-cut proxy (fire round g8), where the
-  // photographs from beside the fire, and RDR2's seated frame (2.9%), stay under the class's 3.4.
-  { name: "campfire above", class: "campfire", frame: 420, box: "kept", eye: [-10, 2.6, 14], at: [-10, 0.65, 10], matte: true, floors: { soot: 0 }, ceilings: { pale: 12.2 } },
+  // bed and logs, and RDR2's two frames measure 0.00 and 0.00-0.01 by this rule. Its pale, RDR2's
+  // 11-12% from here, is the class's since the class's colour takes the game frames' (D423, D433).
+  { name: "campfire above", class: "campfire", frame: 420, box: "kept", eye: [-10, 2.6, 14], at: [-10, 0.65, 10], matte: true, floors: { soot: 0 } },
   { name: "house blaze", class: "structure", frame: 760, box: "blazes", eye: [4.25, 3.5, 22], at: [4.25, 2.5, 5.75], matte: false },
   { name: "breath", class: "flamethrower", frame: 960, box: "stream", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },
   { name: "fireball", class: "fireball", frame: 960, box: "ball", eye: [13, 5.5, 4], at: [35, 4.5, 6], matte: false },

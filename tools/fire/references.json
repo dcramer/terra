@@ -1,5 +1,5 @@
 {
- "about": "Real fire measured by tools/fire/measure.ts from the photographs in photos.json (node tools/fire/references.ts): per class, each number's median, least and most; a fire is held to min-max widened by each number's tolerance (METRICS).",
+ "about": "Real fire measured by tools/fire/measure.ts from the photographs in photos.json, and AAA game frames from games.json through games.ts's ground-cut proxy matte (node tools/fire/references.ts): per class, each number's median, least and most over its photographs, its colour bands taken out to its game frames' where those lie outside (D423); a fire is held to min-max widened by each number's tolerance (METRICS).",
  "classes": {
   "campfire": {
    "photos": 9,
@@ -17,27 +17,27 @@
     "pale": {
      "median": 0.221,
      "min": 0,
-     "max": 3.414
+     "max": 12.493
     },
     "yellow": {
      "median": 11.249,
-     "min": 1.605,
-     "max": 20.603
+     "min": 0,
+     "max": 27.752
     },
     "orange": {
      "median": 26.644,
      "min": 20.908,
-     "max": 67.646
+     "max": 91.197
     },
     "red": {
      "median": 54.859,
-     "min": 20.158,
+     "min": 0.116,
      "max": 72.768
     },
     "redOrange": {
      "median": 86.564,
-     "min": 73.194,
-     "max": 98.395
+     "min": 60.458,
+     "max": 100
     },
     "BR": {
      "median": 0.199,
@@ -84,7 +84,8 @@
      "min": 41.751,
      "max": 75.337
     }
-   }
+   },
+   "games": 9
   },
   "fireball": {
    "photos": 9,
@@ -1918,6 +1919,320 @@
     "fine": 6.71,
     "mid": 14.594,
     "coarse": 78.697
+   }
+  }
+ ],
+ "games": [
+  {
+   "file": "rdr2-1.jpg",
+   "game": "Red Dead Redemption 2",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 25816,
+    "white": 0.275,
+    "pale": 11.241,
+    "yellow": 11.222,
+    "orange": 58.309,
+    "red": 18.953,
+    "redOrange": 77.262,
+    "BR": 0.37,
+    "GR": 0.693,
+    "dim": 0,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 3.682,
+    "mid": 15.912,
+    "coarse": 80.407
+   }
+  },
+  {
+   "file": "rdr2-2.jpg",
+   "game": "Red Dead Redemption 2",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 28445,
+    "white": 0,
+    "pale": 2.858,
+    "yellow": 11.767,
+    "orange": 23.53,
+    "red": 61.846,
+    "redOrange": 85.375,
+    "BR": 0.176,
+    "GR": 0.516,
+    "dim": 58.692,
+    "soot": 0.008,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 6.338,
+    "mid": 23.379,
+    "coarse": 70.283
+   }
+  },
+  {
+   "file": "rdr2-3.jpg",
+   "game": "Red Dead Redemption 2",
+   "class": "excluded",
+   "light": "night",
+   "metrics": {
+    "flamePx": 3444,
+    "white": 0,
+    "pale": 0,
+    "yellow": 0.465,
+    "orange": 89.373,
+    "red": 10.163,
+    "redOrange": 99.535,
+    "BR": 0.743,
+    "GR": 0.868,
+    "dim": 0,
+    "soot": 0.429,
+    "edgeSoot": 5.305,
+    "pockets": 3.014,
+    "fine": 3.522,
+    "mid": 19.575,
+    "coarse": 76.903
+   }
+  },
+  {
+   "file": "sotf-1.jpg",
+   "game": "Sons of the Forest",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 10818,
+    "white": 0,
+    "pale": 9.623,
+    "yellow": 17.415,
+    "orange": 72.721,
+    "red": 0.24,
+    "redOrange": 72.962,
+    "BR": 0.469,
+    "GR": 0.791,
+    "dim": 0,
+    "soot": 0.17,
+    "edgeSoot": 3.068,
+    "pockets": 4.055,
+    "fine": 3.495,
+    "mid": 19.64,
+    "coarse": 76.865
+   }
+  },
+  {
+   "file": "sotf-2.jpg",
+   "game": "Sons of the Forest",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 34257,
+    "white": 0,
+    "pale": 11.79,
+    "yellow": 27.752,
+    "orange": 60.023,
+    "red": 0.435,
+    "redOrange": 60.458,
+    "BR": 0.362,
+    "GR": 0.772,
+    "dim": 2.849,
+    "soot": 0.261,
+    "edgeSoot": 17.421,
+    "pockets": 50.038,
+    "fine": 7.798,
+    "mid": 19.48,
+    "coarse": 72.722
+   }
+  },
+  {
+   "file": "sotf-3.jpg",
+   "game": "Sons of the Forest",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 28375,
+    "white": 0,
+    "pale": 12.493,
+    "yellow": 11.45,
+    "orange": 75.94,
+    "red": 0.116,
+    "redOrange": 76.056,
+    "BR": 0.433,
+    "GR": 0.753,
+    "dim": 0,
+    "soot": 0.03,
+    "edgeSoot": 2.648,
+    "pockets": 3.01,
+    "fine": 3.503,
+    "mid": 17.441,
+    "coarse": 79.056
+   }
+  },
+  {
+   "file": "sotf-4.jpg",
+   "game": "Sons of the Forest",
+   "class": "excluded",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 2607,
+    "white": 0,
+    "pale": 34.1,
+    "yellow": 7.633,
+    "orange": 55.965,
+    "red": 2.301,
+    "redOrange": 58.266,
+    "BR": 0.489,
+    "GR": 0.796,
+    "dim": 0,
+    "soot": 0.045,
+    "edgeSoot": 1.606,
+    "pockets": 3.093,
+    "fine": 3.523,
+    "mid": 19.382,
+    "coarse": 77.095
+   }
+  },
+  {
+   "file": "enshrouded-1.jpg",
+   "game": "Enshrouded",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 50871,
+    "white": 0,
+    "pale": 0,
+    "yellow": 0,
+    "orange": 91.197,
+    "red": 8.803,
+    "redOrange": 100,
+    "BR": 0.358,
+    "GR": 0.656,
+    "dim": 0,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 5.146,
+    "mid": 19.079,
+    "coarse": 75.775
+   }
+  },
+  {
+   "file": "enshrouded-2.jpg",
+   "game": "Enshrouded",
+   "class": "campfire",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 63974,
+    "white": 0,
+    "pale": 0,
+    "yellow": 0.033,
+    "orange": 48.674,
+    "red": 51.293,
+    "redOrange": 99.967,
+    "BR": 0.413,
+    "GR": 0.644,
+    "dim": 0,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 4.76,
+    "mid": 17.044,
+    "coarse": 78.196
+   }
+  },
+  {
+   "file": "enshrouded-3.jpg",
+   "game": "Enshrouded",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 49349,
+    "white": 0.446,
+    "pale": 0.043,
+    "yellow": 0.29,
+    "orange": 74.287,
+    "red": 24.935,
+    "redOrange": 99.222,
+    "BR": 0.535,
+    "GR": 0.741,
+    "dim": 0,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 5.539,
+    "mid": 17.91,
+    "coarse": 76.551
+   }
+  },
+  {
+   "file": "enshrouded-4.jpg",
+   "game": "Enshrouded",
+   "class": "campfire",
+   "light": "night",
+   "metrics": {
+    "flamePx": 70108,
+    "white": 0.489,
+    "pale": 0.09,
+    "yellow": 0.539,
+    "orange": 80.586,
+    "red": 18.296,
+    "redOrange": 98.882,
+    "BR": 0.551,
+    "GR": 0.754,
+    "dim": 0,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 6.04,
+    "mid": 19.099,
+    "coarse": 74.862
+   }
+  },
+  {
+   "file": "witcher3-1.jpg",
+   "game": "The Witcher 3",
+   "class": "excluded",
+   "light": "night",
+   "metrics": {
+    "flamePx": 2414,
+    "white": 0,
+    "pale": 1.574,
+    "yellow": 8.782,
+    "orange": 88.691,
+    "red": 0.953,
+    "redOrange": 89.644,
+    "BR": 0.697,
+    "GR": 0.867,
+    "dim": 0,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 13.007,
+    "fine": 4.372,
+    "mid": 17.526,
+    "coarse": 78.102
+   }
+  },
+  {
+   "file": "witcher3-2.jpg",
+   "game": "The Witcher 3",
+   "class": "excluded",
+   "light": "dusk",
+   "metrics": {
+    "flamePx": 39712,
+    "white": 28.621,
+    "pale": 71.379,
+    "yellow": 0,
+    "orange": 0,
+    "red": 0,
+    "redOrange": 0,
+    "BR": 0.805,
+    "GR": 0.997,
+    "dim": 0,
+    "soot": 0,
+    "edgeSoot": 0,
+    "pockets": 0,
+    "fine": 6.381,
+    "mid": 22.884,
+    "coarse": 70.734
    }
   }
  ]

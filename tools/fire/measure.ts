@@ -455,8 +455,10 @@ export const METRICS: { key: keyof Metrics; called: string; digits: number; tole
 export type Band = { median: number; min: number; max: number };
 export type References = {
   about: string;
-  classes: Record<string, { photos: number; light: Record<string, number>; bands: Record<string, Band> }>;
+  classes: Record<string, { photos: number; games?: number; light: Record<string, number>; bands: Record<string, Band> }>;
   photos: { file: string; class: string; light: string; metrics: Metrics }[];
+  /// The AAA game frames (games.json), measured through a ground-cut proxy matte (games.ts).
+  games?: { file: string; game: string; class: string; light: string; metrics: Metrics }[];
 };
 
 export const REFERENCES_FILE = resolve(import.meta.dirname, "references.json");
