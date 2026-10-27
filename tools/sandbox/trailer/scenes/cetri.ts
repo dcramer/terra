@@ -14,6 +14,9 @@ const CETRI: [number, number] = [19.5, 38];
 /// stood 1.36 times as big. Heights and lengths on its body below are the 7 m model's,
 /// scaled by it where they are used.
 const SIZE = 9.5 / 7;
+/// The trees felled round the way its feet go: those taller than it within 12 m, looked for
+/// every 4 m along it. The two oaks it walks out between are shorter, and stay.
+const FELL = { within: 12, taller: 9.5, every: 4 };
 /// A point on the path (forest.json's route, (3.7, 4.7) to (16.8, 25)): the way the walker
 /// comes from the tree. It stops as the tree wakes 7.5 m short of it, so its face is big
 /// enough to read (round-5 film reviews: eyes 10 px at 10 m), west of that line, clear of the
@@ -199,7 +202,7 @@ const STEP_DUST = 2.0;
 /// sideways as the walker's is, and puff `dust` big, for the distance: at 0.4 neither footfall
 /// read at 12 fps (round-17 reviews). The walker's eye has the walk's first step before it and
 /// the menace after.
-const SIDE = { from: 12.5, to: 15.5, off: 10.0, closes: 1.5, bearing: 40, swings: 25, up: 2.0, look: 4.0, shake: 1.0, dust: 3.0 };
+const SIDE = { from: 12.5, to: 15.5, off: 10.0, closes: 1.5, bearing: 40, swings: 25, up: 2.0, look: 4.0, shake: 1.0, dust: 4.5 };
 /// How far it lunges and how fast, metres and metres a second.
 const LUNGE_M = 2.0 * SIZE;
 const LUNGE_SPEED = 4.5;
@@ -320,6 +323,16 @@ function script(s: Script) {
   const to = feetAt(BEATS.end);
   const u = (t: number) => Math.min(1, Math.max(0, (t - BEATS.comes) / (BEATS.end - BEATS.comes)));
   const bow = (t: number) => 4 + 16 * u(t);
+  // No tree taller than it near the way its feet go, so it towers (round-17 reviews: conifers
+  // over it): felled every few metres from where it sleeps to where it ends, before the start.
+  const comesAt = s.frame;
+  s.frame = 30;
+  [[CETRI, lunged], [lunged, to]].forEach(([a, b]) => {
+    const long = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    for (let m = 0; m <= long; m += FELL.every) s.call("world.fell", { at: toward(a, b, m), within: FELL.within, taller_than: FELL.taller });
+  });
+  s.call("world.fell", { at: to, within: FELL.within, taller_than: FELL.taller });
+  s.frame = comesAt;
   s.call("staged.bend", { name: "cetri", bend: comes(0, bow(BEATS.comes)), blend_ms: 900 });
   s.call("staged.play", { name: "cetri", clip: WALK.clip, speed: WALK.rate, from_s: WALK.from, blend_ms: 900 });
   s.call("staged.move", { name: "cetri", to: [to[0], 0, to[1]], speed: COMES_SPEED, face: [away[0], 0, away[1]], base: true });
