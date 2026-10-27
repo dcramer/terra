@@ -195,9 +195,11 @@ const STEP_DUST = 2.0;
 /// were a trunk); from 12.4 s at 40-65 degrees the line is clear of every
 /// trunk. At 9.5 m tall it stands 10 m off and 2 m up: 12.5 m off and 1.2 m up, the bushes
 /// on its left hid all below its hips (round 16); at 52-65 degrees a near trunk crossed the
-/// frame's edge (round 17). Its footfalls shake it `shake` times the walker's eye's, and puff `dust` big, for
-/// the distance. The walker's eye has the walk's first step before it and the menace after.
-const SIDE = { from: 12.5, to: 15.5, off: 10.0, closes: 1.5, bearing: 40, swings: 25, up: 2.0, look: 4.0, shake: 0.4, dust: 2.5 };
+/// frame's edge (round 17). Its footfalls shake it `shake` times the walker's eye's, thrown
+/// sideways as the walker's is, and puff `dust` big, for the distance: at 0.4 neither footfall
+/// read at 12 fps (round-17 reviews). The walker's eye has the walk's first step before it and
+/// the menace after.
+const SIDE = { from: 12.5, to: 15.5, off: 10.0, closes: 1.5, bearing: 40, swings: 25, up: 2.0, look: 4.0, shake: 1.0, dust: 3.0 };
 /// How far it lunges and how fast, metres and metres a second.
 const LUNGE_M = 2.0 * SIZE;
 const LUNGE_SPEED = 4.5;
@@ -382,8 +384,11 @@ function script(s: Script) {
     const off = SIDE.off - SIDE.closes * k;
     const eye = on([feet[0] + round[0] * off, feet[1] + round[1] * off], SIDE.up);
     const shake = falls.reduce((sum, fall) => sum + (t >= fall.t ? bounce(t - fall.t) * dropAt(fall, eye) * SIDE.shake : 0), 0);
+    // Thrown sideways across the view toward the planting foot, standing in for a roll.
+    const jolt = falls.reduce((sum, fall) => sum - (t >= fall.t ? bounce(t - fall.t) * dropAt(fall, eye) * SIDE.shake * SHAKE.jolt * Math.sign(fall.left) : 0), 0);
+    const aim = on([feet[0] + way[0] * 0.8 + round[1] * jolt, feet[1] + way[1] * 0.8 - round[0] * jolt], SIDE.look + shake * SHAKE.pitch);
     s.frame = n;
-    s.cut(lift(eye, shake), on([feet[0] + way[0] * 0.8, feet[1] + way[1] * 0.8], SIDE.look + shake * SHAKE.pitch));
+    s.cut(lift(eye, shake), aim);
   }
   // The walker's eye, from `a` to `b` seconds, its first frame cut to if `cuts`: looking up at
   // it as it closes, each footfall shaking the eye, down and thrown toward the planting foot's
