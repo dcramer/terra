@@ -1,6 +1,6 @@
 # Sky
 
-Status: **design, 2026-10-26**. The developers answered its design questions on the review desk (D516 to D522, below); how the sky is drawn and checked is technical (D515, Leaning until stage 0's spike measures the code it ports). It is the sky's half of [weather.md](weather.md), which owns the light under cloud, the air, what falls and the surfaces; [climate.md](climate.md) owns the quantities. What shipped games and engines do, with sources, is [research/2026-10-26-volumetric-skies.md](../research/2026-10-26-volumetric-skies.md).
+Status: **design, 2026-10-26**. The developers answered its design questions on the review desk (D516 to D522, below); how the sky is drawn and checked is technical (D515, Leaning until stage 2 measures the ported clouds within the budget). Stage 0 measured the open Bevy branch: [research/2026-10-26-volumetric-clouds-spike.md](../research/2026-10-26-volumetric-clouds-spike.md). It is the sky's half of [weather.md](weather.md), which owns the light under cloud, the air, what falls and the surfaces; [climate.md](climate.md) owns the quantities. What shipped games and engines do, with sources, is [research/2026-10-26-volumetric-skies.md](../research/2026-10-26-volumetric-skies.md).
 
 ## Why
 
@@ -80,7 +80,7 @@ The server sends the clock (D315); every client works out the same clouds from t
 
 The world must hold D25's frame (13.3 ms at the 99th percentile on an RTX 3080-class GPU at the high preset; 30 fps on the integrated GPU at the low one). Shipped games spend about 2 ms (Horizon Zero Dawn on a PS4 at 1080p; Forbidden West's fly-through clouds hold 1080p on a PS5); the cost is held down by tracing at a quarter or half resolution and rebuilding the rest from previous frames (temporal reprojection), by leaping through empty air on a coarse distance field, and by tracing the cloud shadow map a sixteenth a frame. The eye inside or beside cloud (D519) costs most: more, shorter steps where detail is near, and reprojection that holds while the eye moves through the volume.
 
-- **High preset**: clouds, their shadow map and their shafts within 1.5 ms on the RTX 3080-class target at 1080p (so well under 1 ms on the bench's RTX 5090), under, inside and above cloud alike.
+- **High preset**: clouds, their shadow map and their shafts within 1.5 ms on the RTX 3080-class target at 1080p (so about 0.6 to 0.75 ms on the bench's RTX 5090, some 2 to 2.5 times faster), under, inside and above cloud alike. The Bevy branch as it stands takes 1.1 ms under cumulus and about 2 ms in and above the layer on the 5090, the overcast deck 0.75 ms (stage 0); its march is what must be cut, most of all inside cloud.
 - **Low preset** (integrated GPU): within 2 ms with fewer steps at quarter resolution; if it cannot, the low preset keeps a 2D layer driven by the same weather map and lighting, so the sky and the shade still agree, with fog for the inside of a cloud.
 - Measured with `cargo xtask bench` (D185) on the bench scenes and a cloudy, an overcast, an in-cloud and an above-cloud variant of `walk`, both GPUs reported.
 
@@ -111,7 +111,7 @@ Smallest first; each stage lands only when its check passes. The order of the cl
 
 | Stage | Builds | Done when |
 |---|---|---|
-| 0. Measure | A spike runs the open Bevy cloud implementation (D515) in the sandbox's lake and forest at our Bevy, cumulus and overcast, seen from below, inside and above | Its cost on both GPUs and stills from all three reviewed: port it, or port Nubis's method from the talks where it falls short |
+| 0. Measure (done, [note](../research/2026-10-26-volumetric-clouds-spike.md)) | A spike ran the open Bevy cloud implementation (D515) on its own Bevy, cumulus and overcast, seen from below, inside and above, on the RTX 5090 | Photographic, but over the budget in and above cumulus: its parts are ported and the in-cloud march cut (D515); both GPUs measured at stage 2 |
 | 1. One sky for all | Today's 2D clouds and deck move by the world's clock and the climate's wind at cloud height, the weather map from the climate's cloud to the horizon | Two runs at one clock draw the same sky |
 | 2. Volumes | Cumulus, stratocumulus and the overcast deck as one volumetric layer from the weather map, lit by sun, sky and ground, the eye inside and above it, replacing the 2D layer on the high preset | Cover, shades, inside-and-above and cost checks; stills reviewed |
 | 3. Clouds as light | The cloud shadow map on the ground and in the haze; the sky light by cover (CIE types); the sun's beam by its line through cloud | Shadow, light-under-cloud and shafts checks; a broken-sky film |

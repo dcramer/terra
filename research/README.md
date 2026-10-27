@@ -16,6 +16,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | [How do major games theme and scale their dungeons, and which themes should Terra's have?](2026-10-26-dungeon-themes.md) | 2026-10-26 |
 | [Selling a slow giant's weight: what shipped work does, and the Cetri's walk measured against it](2026-10-26-giant-walker-weight.md) | 2026-10-26 |
 | [The head on the aim while the body swings: how shipped engines lay a look-at after the clips](2026-10-26-head-look-at.md) | 2026-10-26 |
+| [The Bevy volumetric clouds branch measured against the sky's budget](2026-10-26-volumetric-clouds-spike.md) | 2026-10-26 |
 | [Volumetric clouds and a real sky: how games and engines draw them](2026-10-26-volumetric-skies.md) | 2026-10-26 |
 | [Climbing in shipped games and engines: what is climbable, what it costs, how the body follows the face](2026-10-25-climbing.md) | 2026-10-25 |
 | [Do vaults and arched niches lift the crypt demo's score?](2026-10-25-dungeon-vaults.md) | 2026-10-25 |
