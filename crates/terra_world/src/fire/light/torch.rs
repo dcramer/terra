@@ -24,6 +24,13 @@ const TORCH_RADIUS_M: f32 = 0.45;
 /// How many stops brighter it is by night: fewer than a hearth's pit light (3.6), its light
 /// all in one key.
 const TORCH_NIGHT_STOPS: f32 = 3.0;
+/// How many times more its key is keyed up against the dusk sky than a hearth's pit light
+/// (`Lit::dusk_gain`), giving way to its night stops as the night comes: at 1 the staked
+/// torch's pool at dusk took half the light the hearth's rig gave it, whose top light's gain is
+/// 9 (`HEARTH_TOP_DUSK`; near its foot 0.066 against 0.128, torch round t4). At 6 its foot takes
+/// a little more than the hearth's rig gave it at the yard's dusk, all of it from low, so it
+/// still falls off as a pool.
+const TORCH_DUSK: f32 = 6.0;
 /// The share of its light at its flames' tips, unshadowed, and how far that reaches.
 const TORCH_TIP: f32 = 0.15;
 const TORCH_TIP_RANGE_M: f32 = 3.5;
@@ -46,7 +53,7 @@ pub(super) fn lights(
         range: TORCH_RANGE_M,
         radius: TORCH_RADIUS_M,
         night_stops: TORCH_NIGHT_STOPS,
-        dusk_gain: 1.0,
+        dusk_gain: TORCH_DUSK,
         casts: true,
         still: still(rest),
         ..hearth.clone()

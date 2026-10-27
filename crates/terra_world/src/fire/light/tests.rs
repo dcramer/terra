@@ -421,33 +421,38 @@ fn on_ground_drawn(lit: &Lit, foot: Vec3, out: f32) -> f32 {
         * window
 }
 
+/// A torch staked on open ground, its head 1.2 m up (the review's staged torch), lit by a rig:
+/// the light its lights give the ground so far out from its foot at an hour (`keyed`).
+fn staked_pool(colour: Color, rig: Rig, night: f32, sky: f32) -> impl Fn(f32) -> f32 {
+    let ground = Vec3::new(0.0, 2000.0, 0.0);
+    let blazes = Blazes {
+        kept: vec![Blaze {
+            at: ground + Vec3::Y * 1.2,
+            tall: 0.55,
+            heat: 0.9,
+            seed: 0.3,
+            wide: 0.22,
+        }],
+        lights: vec![colour],
+        rigs: vec![rig],
+        ..default()
+    };
+    let lights = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
+    move |out: f32| -> f32 {
+        lights
+            .iter()
+            .map(|l| on_ground_drawn(l, ground, out) * keyed(l, night, sky))
+            .sum()
+    }
+}
+
 #[test]
 fn a_staked_torchs_night_pool_falls_off_from_its_foot_more_than_a_hearths_rig_would() {
-    // A torch staked on open ground, its head 1.2 m up (the review's staged torch), by full
-    // night: the ground half a metre from its foot takes many times the light of the ground
-    // 2.5 m out, a pool round the foot. Lit by a hearth's rig, its top light high and wide, the
-    // yard took a far evener tint (torch round t3).
-    let ground = Vec3::new(0.0, 2000.0, 0.0);
+    // By full night the ground half a metre from the staked torch's foot takes many times the
+    // light of the ground 2.5 m out, a pool round the foot. Lit by a hearth's rig, its top light
+    // high and wide, the yard took a far evener tint (torch round t3).
     let pool = |colour: Color, rig: Rig| {
-        let blazes = Blazes {
-            kept: vec![Blaze {
-                at: ground + Vec3::Y * 1.2,
-                tall: 0.55,
-                heat: 0.9,
-                seed: 0.3,
-                wide: 0.22,
-            }],
-            lights: vec![colour],
-            rigs: vec![rig],
-            ..default()
-        };
-        let lights = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
-        let on = |out: f32| -> f32 {
-            lights
-                .iter()
-                .map(|l| on_ground_drawn(l, ground, out) * keyed(l, 1.0, 36.0))
-                .sum()
-        };
+        let on = staked_pool(colour, rig, 1.0, 36.0);
         (on(0.5) / on(2.5), on(0.5))
     };
     let ((torch, at_foot), (hearth, hearth_foot)) = (
@@ -461,6 +466,27 @@ fn a_staked_torchs_night_pool_falls_off_from_its_foot_more_than_a_hearths_rig_wo
         "{torch:.1}x against a hearth rig's {hearth:.1}x"
     );
     assert!(at_foot > hearth_foot, "its foot as lit as a hearth rig's");
+}
+
+#[test]
+fn a_staked_torchs_dusk_pool_is_as_bright_at_its_foot_as_a_hearths_rig_would_light_it() {
+    // At the yard's dusk (the sun five degrees under, `night` 0.13, the sky's light on the
+    // shade 830, `HEARTH_DUSK_SKY`) the ground by the staked torch's foot takes at least the
+    // light the hearth's rig gave it, its top light keyed up 9 times (`HEARTH_TOP_DUSK`): keyed
+    // up no more than a pit light, its pool at dusk took half (torch round t4).
+    let (night, sky) = (0.13, 830.0);
+    let torch = staked_pool(TORCH_LIGHT, Rig::Torch, night, sky);
+    let hearth = staked_pool(HEARTH_LIGHT, Rig::Hearth, night, sky);
+    let (at_foot, hearth_foot) = (torch(0.5), hearth(0.5));
+    println!(
+        "torch dusk foot {at_foot:.1}, a hearth's rig {hearth_foot:.1}; falls {:.1}x to 2.5 m",
+        torch(0.5) / torch(2.5)
+    );
+    assert!(
+        at_foot >= hearth_foot,
+        "{at_foot:.1} against {hearth_foot:.1}"
+    );
+    assert!(torch(0.5) / torch(2.5) > 4.0, "no pool at dusk");
 }
 
 #[test]

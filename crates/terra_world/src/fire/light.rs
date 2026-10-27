@@ -413,7 +413,8 @@ pub(super) struct Lit {
     /// How many stops brighter it is by night (`NIGHT_STOPS`, `HEARTH_NIGHT_STOPS`, ...).
     pub night_stops: f32,
     /// How many times more it is keyed up against the dusk sky than a kept fire's pit light
-    /// (`hearth_by_hour`): a hearth's top light's `HEARTH_TOP_DUSK`, every other's 1.
+    /// (`hearth_by_hour`): a hearth's top light's `HEARTH_TOP_DUSK`, a torch's lights'
+    /// `torch::TORCH_DUSK`, every other's 1.
     pub dusk_gain: f32,
     /// Whether it may cast shadows: a hearth's top light does not (`choose`); each of a cube's
     /// six views is drawn every frame, 0.55 ms of GPU and 0.6 of render CPU (fire round g29).
