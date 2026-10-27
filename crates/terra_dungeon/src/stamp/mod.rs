@@ -110,6 +110,9 @@ pub enum LightKind {
     Campfire,
     /// A fire bowl on a pillar's top, where `at` is: the goal's pair.
     Bowl,
+    /// The small light of a lamp prop by a room's hero (its candles' or lantern's flames, the
+    /// prop laid among the stamp's props), at `at`: past the torches' cap, as a stair's torch.
+    Lamp,
 }
 
 #[derive(Clone, Debug)]

@@ -1,11 +1,12 @@
 //! A room dressed as its room type (the theme's `dressing`, docs/dungeons.md's room types,
 //! D539), as a level designer sets dressing out once the room's kit is in: its hero prop on
-//! the wall that faces the way in, a vignette that tells what happened there, wall props in
-//! rhythm along its bare walls and clutter in its corners; all off the tour and the doorways
-//! and apart from what already stands.
+//! the wall that faces the way in, lit by a lamp of its own where no torch is by it, a
+//! vignette that tells what happened there, and wall props and clutter in groups round the
+//! hero and the far corner, the walls between bare; all off the tour and the doorways and
+//! apart from what already stands.
 
 use super::modules::{Class, Look};
-use super::{CELL, CUBE, Frame, LightKind, MID, Prop, Stamp, hash, stands};
+use super::{CELL, CUBE, Frame, Light, LightKind, MID, Prop, Stamp, hash, stands};
 use crate::Dungeon;
 use crate::place::{Side, opposite};
 use crate::theme::Dress;
@@ -24,6 +25,38 @@ const APART_M: f32 = 1.0;
 const CLUTTER_APART_M: f32 = 0.6;
 /// What a hero keeps clear round it, so it reads alone: a coffin's or an altar's length.
 const HERO_M: f32 = 1.5;
+/// How near a light stands to a hero for it to read lit, in metres: a torch on the wall over
+/// it or beside it, not one across the room.
+pub(crate) const HERO_LIT_M: f32 = 3.0;
+/// A lamp's light over its prop's foot: at its flames, a candle's or a lantern's.
+const LAMP_UP_M: f32 = 0.4;
+/// Where a hero's lamp may stand from the hero's wall spot, (along, out) in metres, the first
+/// that is clear: past either end of a coffin 2 m long, then before it, then farther along.
+const LAMP_BY_WALL: [(f32, f32); 10] = [
+    (1.6, 0.0),
+    (-1.6, 0.0),
+    (1.5, 0.6),
+    (-1.5, 0.6),
+    (0.8, 1.45),
+    (-0.8, 1.45),
+    (2.2, 0.2),
+    (-2.2, 0.2),
+    (0.0, 1.7),
+    (2.0, 1.0),
+];
+/// The directions round a laid prop where its group's clutter lies, a turn in eight.
+const RING: [(f32, f32); 8] = [
+    (1.0, 0.0),
+    (0.71, 0.71),
+    (0.0, 1.0),
+    (-0.71, 0.71),
+    (-1.0, 0.0),
+    (-0.71, -0.71),
+    (0.0, -1.0),
+    (0.71, -0.71),
+];
+/// Clutter lies so much past what a prop keeps clear round it.
+const RING_GAP_M: f32 = 0.1;
 /// Out from the wall's cell edge, in cubes: 0.3 m clear of its face.
 const OUT: f32 = 1.6;
 
@@ -61,6 +94,11 @@ impl Room<'_> {
         off(self.route, p) > OFF_ROUTE_M
             && self.doors.iter().all(|d| d.distance(p) > OFF_DOOR_M)
             && stands(self.map, (p / CUBE).floor().as_ivec3())
+    }
+
+    /// How far a point is from the room's nearest doorway.
+    fn near_door(&self, p: Vec3) -> f32 {
+        (self.doors.iter().map(|d| d.distance(p))).fold(99.0, f32::min)
     }
 }
 
@@ -144,13 +182,7 @@ pub(super) fn lay(
             doors,
             map,
         };
-        let near_door = |p: Vec3| {
-            place
-                .doors
-                .iter()
-                .map(|d| d.distance(p))
-                .fold(99.0, f32::min)
-        };
+        let near_door = |p: Vec3| place.near_door(p);
         // Against each walled side of a bare cell, a metre, two and three along it; and the
         // corners where two walls meet, for clutter.
         let (mut spots, mut corners) = (Vec::new(), Vec::new());
@@ -187,7 +219,6 @@ pub(super) fn lay(
         }
         spots.sort_by_key(|s| (s.rank, s.p.to_array().map(f32::to_bits), s.d));
         corners.sort_by_key(|&(rank, p, d)| (rank, p.to_array().map(f32::to_bits), d));
-        let salt = |k: u32| hash(rect.min, k);
 
         // The hero, unless the room's feature or tomb is: the wall spot farthest from the
         // doorways, a long one's floor first.
@@ -216,24 +247,6 @@ pub(super) fn lay(
             }
         }
         floor.sort_by_key(|&(rank, p, d)| (rank, p.to_array().map(f32::to_bits), d));
-        if let Some(dress) = dresses.iter().find(|d| !d.hero.is_empty() && !featured) {
-            let mut order = spots.clone();
-            order.sort_by(|a, b| b.wide.cmp(&a.wide).then(b.door.total_cmp(&a.door)));
-            let mut open = floor.clone();
-            open.sort_by(|a, b| near_door(b.1).total_cmp(&near_door(a.1)));
-            let at = (order.iter())
-                .find(|s| free(&taken, s.p, APART_M))
-                .map(|s| (s.p, opposite(s.d)))
-                .or_else(|| {
-                    let mut open = open.iter();
-                    open.find(|o| free(&taken, o.1, APART_M))
-                        .map(|o| (o.1, o.2))
-                });
-            if let Some((p, facing)) = at {
-                put(out, pick(&dress.hero, salt(530)), p, facing);
-                taken.push((p, HERO_M));
-            }
-        }
         let laying = Laying {
             dresses: &dresses,
             spots: &spots,
@@ -243,9 +256,14 @@ pub(super) fn lay(
             cells: cells.len(),
             min: rect.min,
         };
-        laying.vignette(&mut taken, out);
-        laying.wall_props(&mut taken, out);
-        laying.clutter(&mut taken, out);
+        let first = out.props.len();
+        let hero = laying.hero(featured, &mut taken, out);
+        let told = laying.vignette(&mut taken, out);
+        // The room's groups: round its hero (or its vignette, or the feature's first wall
+        // spot), and in the far corner from it.
+        let anchor = hero.or(told).or(spots.first().map(|s| s.p));
+        laying.wall_props(anchor, &mut taken, out);
+        laying.clutter(first, &mut taken, out);
     }
 }
 
@@ -265,8 +283,70 @@ impl Laying<'_> {
         hash(self.min, k)
     }
 
-    /// A vignette at the first spot where all of it fits.
-    fn vignette(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
+    /// The hero, unless the room's feature or tomb is: the wall spot farthest from the
+    /// doorways, a long one's floor first, or else the open floor farthest from them; and its
+    /// lamp where no light stands by it.
+    fn hero(&self, featured: bool, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) -> Option<Vec3> {
+        let dress = (self.dresses.iter()).find(|d| !d.hero.is_empty() && !featured)?;
+        let mut order = self.spots.to_vec();
+        order.sort_by(|a, b| b.wide.cmp(&a.wide).then(b.door.total_cmp(&a.door)));
+        let mut open = self.floor.to_vec();
+        let near_door = |p: Vec3| self.place.near_door(p);
+        open.sort_by(|a, b| near_door(b.1).total_cmp(&near_door(a.1)));
+        let wall = order.iter().find(|s| free(taken, s.p, APART_M)).copied();
+        let (p, facing) = (wall.map(|s| (s.p, opposite(s.d)))).or_else(|| {
+            let mut open = open.iter();
+            open.find(|o| free(taken, o.1, APART_M)).map(|o| (o.1, o.2))
+        })?;
+        put(out, pick(&dress.hero, self.salt(530)), p, facing);
+        taken.push((p, HERO_M));
+        if let Some(lamp) = &dress.lamp {
+            self.light_hero(wall, p, lamp, taken, out);
+        }
+        Some(p)
+    }
+
+    /// A lamp beside the hero, past its end along its wall or before it, with its light,
+    /// where no light stands within `HERO_LIT_M` of it: as a set dresser lights a focal prop
+    /// from a source in the fiction. Lit only by a torch across the room, the crypt's robbed
+    /// tomb rendered near black (barrow dress round 2, all three reviewers).
+    fn light_hero(
+        &self,
+        wall: Option<Spot>,
+        hero: Vec3,
+        lamp: &(String, f32),
+        taken: &mut Vec<(Vec3, f32)>,
+        out: &mut Stamp,
+    ) {
+        if out.lights.iter().any(|l| l.at.distance(hero) < HERO_LIT_M) {
+            return;
+        }
+        let beside: Vec<(Vec3, usize)> = match wall {
+            Some(s) => (LAMP_BY_WALL.iter())
+                .map(|&(along, o)| (s.offset(along, o), opposite(s.d)))
+                .collect(),
+            None => (RING.iter())
+                .map(|&(x, z)| {
+                    let p = hero + Vec3::new(x, 0.0, z) * (HERO_M + RING_GAP_M);
+                    (p, toward(hero, &self.place.doors))
+                })
+                .collect(),
+        };
+        let found = (beside.into_iter())
+            .find(|&(p, _)| self.place.clear(p) && free(taken, p, CLUTTER_APART_M));
+        if let Some((p, facing)) = found {
+            put(out, lamp, p, facing);
+            taken.push((p, CLUTTER_APART_M));
+            out.lights.push(Light {
+                at: p + Vec3::Y * LAMP_UP_M,
+                kind: LightKind::Lamp,
+                facing,
+            });
+        }
+    }
+
+    /// A vignette at the first spot where all of it fits; where it stands.
+    fn vignette(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) -> Option<Vec3> {
         for dress in self.dresses.iter().filter(|d| !d.vignette.is_empty()) {
             let fits = |s: &Spot| {
                 let at: Vec<Vec3> = dress
@@ -284,19 +364,30 @@ impl Laying<'_> {
                     put(out, &(model.clone(), *scale), p, opposite(s.d));
                     taken.push((p, CLUTTER_APART_M));
                 }
-                return;
+                return Some(s.p);
             }
         }
+        None
     }
 
-    /// Wall props, so many per four cells.
-    fn wall_props(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
+    /// Wall props, so many per four cells, in two groups as a set dresser lays them: by the
+    /// room's anchor (its hero, or what stands for it) and by the wall spot farthest from it,
+    /// nearest each first, the walls between left bare. Taken by a hash along every wall
+    /// foot, the crypt's rooms read as lined with props a metre apart (barrow dress round 2).
+    fn wall_props(&self, anchor: Option<Vec3>, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
+        let Some(near) = anchor else { return };
+        let from = |p: Vec3| p.distance(near);
+        let far = (self.spots.iter().map(|s| s.p)).max_by(|a, b| from(*a).total_cmp(&from(*b)));
+        let far = far.unwrap_or(near);
+        let mut order: Vec<&Spot> = self.spots.iter().collect();
+        let group = |s: &Spot| s.p.distance(near).min(s.p.distance(far));
+        order.sort_by(|a, b| group(a).total_cmp(&group(b)));
         for (k, dress) in (self.dresses.iter().enumerate()).filter(|(_, d)| !d.props.is_empty()) {
             let (least, most) = dress.count;
             let per = least + self.salt(520 + k as u32) % (most.saturating_sub(least) + 1);
             let wanted = (per as usize * self.cells).div_ceil(4);
             let mut laid = 0;
-            for s in self.spots {
+            for &s in &order {
                 if laid == wanted {
                     break;
                 }
@@ -309,19 +400,36 @@ impl Laying<'_> {
         }
     }
 
-    /// Clutter a cell: the corners first, then by the walls between what stands there.
-    fn clutter(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
+    /// Clutter a cell, round what the room's dressing laid from `first` on, a piece by each
+    /// in turn so every group takes its share (a hero's group, a corner's, a vignette's);
+    /// then the corners, by the walls and the open floor where those give too few places.
+    fn clutter(&self, first: usize, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
         for (k, dress) in (self.dresses.iter().enumerate()).filter(|(_, d)| !d.clutter.is_empty()) {
             let (least, most) = dress.litter;
             let per = least + self.salt(550 + k as u32) % (most.saturating_sub(least) + 1);
             let wanted = per as usize * self.cells;
+            let keep = |p: Vec3| (taken.iter().find(|t| t.0 == p)).map_or(0.0, |t| t.1);
+            let rings: Vec<Vec<(u32, Vec3, usize)>> = (out.props[first..].iter())
+                .map(|prop| {
+                    let r = keep(prop.at).max(CLUTTER_APART_M) + RING_GAP_M;
+                    let start = hash((prop.at / CUBE).floor().as_ivec3(), 570 + k as u32);
+                    (0..RING.len())
+                        .map(|j| {
+                            let (x, z) = RING[(start as usize + j) % RING.len()];
+                            let p = prop.at + Vec3::new(x, 0.0, z) * r;
+                            (start + j as u32, p, (prop.facing + j) % 4)
+                        })
+                        .collect()
+                })
+                .collect();
+            let round = (0..RING.len()).flat_map(|j| rings.iter().map(move |ring| ring[j]));
             // Between the wall props and a little out from them.
             let by_walls = self.spots.iter().flat_map(|s| {
                 let facing = (opposite(s.d) + s.rank as usize) % 4;
                 [-0.5, 0.5].map(|along| (s.rank, s.offset(along, 0.45), facing))
             });
             let mut laid = 0;
-            let candidates = self.corners.iter().copied().chain(by_walls);
+            let candidates = round.chain(self.corners.iter().copied()).chain(by_walls);
             for (rank, p, facing) in candidates.chain(self.floor.iter().copied()) {
                 if laid == wanted {
                     break;

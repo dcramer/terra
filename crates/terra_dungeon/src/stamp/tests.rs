@@ -130,7 +130,10 @@ fn check(theme: &Theme, dungeon: &Dungeon, s: u64) -> Numbers {
             "{at}: a mob at {spot} out of reach"
         );
     }
-    for l in stamp.lights.iter().filter(|l| l.kind != LightKind::Torch) {
+    // A hero's lamp is dressing, laid where a prop may stand, whether walked to or not.
+    let fires =
+        (stamp.lights.iter()).filter(|l| !matches!(l.kind, LightKind::Torch | LightKind::Lamp));
+    for l in fires {
         assert!(near(&reached, l.at), "{at}: a {:?} out of reach", l.kind);
     }
     let air = closed(&dungeon.layout, &map).unwrap_or_else(|e| panic!("{at}: {e}"));

@@ -1,6 +1,6 @@
 use super::super::tests::kind;
-use super::super::{Frame, LightKind, MID, ObjectRole, Prop, Theme, floor_of, stamp};
-use super::OFF_DOOR_M;
+use super::super::{Frame, LightKind, MID, ObjectRole, Prop, Stamp, Theme, floor_of, stamp};
+use super::{HERO_LIT_M, OFF_DOOR_M};
 use crate::place::Side;
 use crate::theme::{Dress, assets};
 use crate::{ModuleSet, generate};
@@ -131,6 +131,152 @@ fn rooms_are_dressed_as_their_type_round_a_hero_off_the_way() {
         assert!(
             door > OFF_DOOR_M,
             "{}: a prop {door:.2} m from a doorway",
+            theme.name
+        );
+    }
+}
+
+/// The heroes of a theme's stamp, by their dressing's (model, scale): a treasury's hero chest
+/// is larger than its wall props' and its vignette's.
+fn heroes(theme: &Theme, stamp: &Stamp) -> Vec<Vec3> {
+    let heroic: Vec<&(String, f32)> = theme.dressing.iter().flat_map(|d| &d.hero).collect();
+    (stamp.props.iter())
+        .filter(|p| heroic.iter().any(|(m, s)| *m == p.model && *s == p.scale))
+        .map(|p| p.at)
+        .collect()
+}
+
+/// Every room's hero has a light by it (barrow dress round 3): a torch on its wall or its own
+/// lamp, within `HERO_LIT_M`. Without the lamps the crypt's robbed tombs and passages were lit
+/// only from across the room, near black in the dressed rooms' sheet.
+#[test]
+fn every_hero_has_a_light_by_it() {
+    for theme in Theme::all(&assets()).unwrap() {
+        if !theme.dressing.iter().any(|d| d.lamp.is_some()) {
+            continue;
+        }
+        let unlamped = Theme {
+            dressing: (theme.dressing.iter().cloned())
+                .map(|d| Dress { lamp: None, ..d })
+                .collect(),
+            ..theme.clone()
+        };
+        let set = ModuleSet::new(&theme).unwrap();
+        let lit = |s: &Stamp| {
+            let all = heroes(&theme, s);
+            let by = |h: &&Vec3| s.lights.iter().any(|l| l.at.distance(**h) < HERO_LIT_M);
+            (all.iter().filter(by).count(), all.len())
+        };
+        let (mut with, mut without, mut lamps) = ((0, 0), (0, 0), 0);
+        for s in 0..40 {
+            let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
+                continue;
+            };
+            let full = stamp(&dungeon, &theme, &kind);
+            let bare = stamp(&dungeon, &unlamped, &kind);
+            let (a, b) = (lit(&full), lit(&bare));
+            (with.0, with.1) = (with.0 + a.0, with.1 + a.1);
+            (without.0, without.1) = (without.0 + b.0, without.1 + b.1);
+            lamps += full
+                .lights
+                .iter()
+                .filter(|l| l.kind == LightKind::Lamp)
+                .count();
+        }
+        println!(
+            "{}: {} of {} heroes lit with their lamps ({lamps} lamps), {} of {} without",
+            theme.name, with.0, with.1, without.0, without.1
+        );
+        // A hero on a floor too crowded for its lamp stays as it was: 2 of 346 over these
+        // seeds (2026-10-27), against 200 unlit without the lamps.
+        assert!(
+            with.0 * 100 >= with.1 * 99,
+            "{}: {} of {} heroes lit",
+            theme.name,
+            with.0,
+            with.1
+        );
+    }
+}
+
+/// How far apart two props stand at most to be of one group, in metres.
+const GROUP_LINK_M: f32 = 1.7;
+
+/// A room's dressing stands in groups, as set dressers lay it (barrow dress round 3): of the
+/// props a theme's dressing laid, linked within `GROUP_LINK_M`, they stand in fewer, larger
+/// groups, most of three or more and few alone, where taken by a hash along every wall foot
+/// they stood a metre or more apart round the room.
+#[test]
+fn dressing_stands_in_groups() {
+    for theme in Theme::all(&assets()).unwrap() {
+        if theme.dressing.is_empty() {
+            continue;
+        }
+        let bare_theme = Theme {
+            dressing: Vec::new(),
+            ..theme.clone()
+        };
+        let set = ModuleSet::new(&theme).unwrap();
+        let (mut props, mut grouped, mut alone, mut groups) = (0, 0, 0, 0);
+        for s in 0..40 {
+            let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
+                continue;
+            };
+            let full = stamp(&dungeon, &theme, &kind);
+            let bare = stamp(&dungeon, &bare_theme, &kind);
+            let laid: Vec<Vec3> = full.props[bare.props.len()..]
+                .iter()
+                .map(|p| p.at)
+                .collect();
+            // Single-link groups, on one level.
+            let mut group: Vec<usize> = (0..laid.len()).collect();
+            fn root(group: &mut [usize], mut i: usize) -> usize {
+                while group[i] != i {
+                    group[i] = group[group[i]];
+                    i = group[i];
+                }
+                i
+            }
+            for i in 0..laid.len() {
+                for j in i + 1..laid.len() {
+                    let (a, b) = (laid[i], laid[j]);
+                    if (a.y - b.y).abs() < 1.0 && a.distance(b) < GROUP_LINK_M {
+                        let (ra, rb) = (root(&mut group, i), root(&mut group, j));
+                        group[ra] = rb;
+                    }
+                }
+            }
+            let mut size = vec![0; laid.len()];
+            for i in 0..laid.len() {
+                size[root(&mut group, i)] += 1;
+            }
+            for i in 0..laid.len() {
+                let n = size[root(&mut group, i)];
+                grouped += (n >= 3) as usize;
+                alone += (n == 1) as usize;
+            }
+            groups += size.iter().filter(|&&n| n > 0).count();
+            props += laid.len();
+        }
+        println!(
+            "{}: {props} props in {groups} groups, {grouped} in groups of 3 or more, {alone} alone",
+            theme.name
+        );
+        // Taken along the wall feet by a hash (d575b05c): 7667 props in 2042 groups, 87% in
+        // groups of 3 or more, 6.5% alone; in groups (2026-10-27), 7866 in 1455, 93%, 2.2%.
+        assert!(
+            props * 10 >= groups * 45,
+            "{}: {props} props in {groups} groups",
+            theme.name
+        );
+        assert!(
+            grouped * 100 >= props * 90,
+            "{}: {grouped} of {props} grouped",
+            theme.name
+        );
+        assert!(
+            alone * 100 <= props * 4,
+            "{}: {alone} of {props} alone",
             theme.name
         );
     }

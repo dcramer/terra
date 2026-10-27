@@ -178,6 +178,11 @@ pub struct Dress {
     /// wall spot, (along the wall, out from it) in metres; laid all or none.
     #[serde(default)]
     pub vignette: Vec<(String, f32, (f32, f32))>,
+    /// What lights the hero where no torch does, as a set dresser lights a focal prop from a
+    /// source in the fiction (candles by a coffin, the looter's lantern left by it): a model
+    /// laid beside the hero, with its small light (`LightKind::Lamp`).
+    #[serde(default)]
+    pub lamp: Option<(String, f32)>,
 }
 
 /// A built theme's dressed kit (docs/dungeons.md#themes-d527): models from the asset root the

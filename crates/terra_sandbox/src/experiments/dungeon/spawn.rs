@@ -10,7 +10,7 @@ use std::f32::consts::FRAC_PI_2;
 use terra_creatures::creatures::{Form, Kinds};
 use terra_creatures::species::Bestiary;
 use terra_dungeon::door::{self, Door, Lock};
-use terra_dungeon::stamp::{CUBE, DOORWAY_M, LightKind, ObjectRole};
+use terra_dungeon::stamp::{CUBE, DOORWAY_M, Light, LightKind, ObjectRole};
 use terra_game::build::{Build, BuildLook, Built};
 use terra_walker::Player;
 use terra_world::cine::{Cine, Places, Subject};
@@ -83,6 +83,26 @@ fn goal_key() -> impl Bundle {
     )
 }
 
+/// A hero's lamp (candles, a lantern by a coffin or a bench, `LightKind::Lamp`): a small warm
+/// light at its flames, as games light a focal prop from a source in the fiction, so the hero
+/// reads in a room whose torch is across it. A quarter of a wall torch's light by night and a
+/// shorter reach; unshadowed, as the fires' shadows are budgeted (`fire::light`'s `choose`)
+/// and a lamp at a hero's foot needs none to read.
+const LAMP_LUMENS: f32 = 30_000.0;
+const LAMP_RANGE_M: f32 = 4.5;
+const LAMP_COLOUR: Color = Color::srgb(1.0, 0.62, 0.30);
+
+fn lamp_light() -> PointLight {
+    PointLight {
+        color: LAMP_COLOUR,
+        intensity: LAMP_LUMENS,
+        range: LAMP_RANGE_M,
+        radius: 0.08,
+        shadow_maps_enabled: false,
+        ..default()
+    }
+}
+
 fn bowl_hung(side: usize) -> terra_world::fire::Hung {
     terra_world::fire::Hung(dir(side) * BOWL_HUNG_OUT_M + Vec3::Y * BOWL_HUNG_UP_M)
 }
@@ -146,6 +166,65 @@ fn scene(assets: &AssetServer, model: &str) -> WorldAssetRoot {
     WorldAssetRoot(assets.load(GltfAssetLabel::Scene(0).from_asset(model.to_string())))
 }
 
+/// A stamp's light as it burns: a wall torch, a brazier, a fire bowl, a hero's lamp or the
+/// rest's campfire.
+fn light_up(inside: &mut ChildSpawnerCommands, assets: &AssetServer, light: &Light) {
+    match light.kind {
+        LightKind::Torch => {
+            let out = dir(light.facing);
+            let lean = TORCH_LEAN_DEG.to_radians();
+            let up = Vec3::Y * libm::cosf(lean) + out * libm::sinf(lean);
+            let tilt = Quat::from_rotation_arc(Vec3::Y, up);
+            inside.spawn((
+                Name::new("Wall torch"),
+                scene(assets, TORCH),
+                Transform::from_translation(light.at - up * TORCH_HEAD_M)
+                    .with_rotation(tilt * facing(light.facing)),
+            ));
+            inside.spawn((
+                Name::new("Wall torch's fire"),
+                TORCH_FIRE,
+                Transform::from_translation(light.at),
+            ));
+        }
+        LightKind::Brazier => {
+            inside.spawn((
+                Name::new("Brazier's fire"),
+                terra_survival::props::CAMPFIRE,
+                Transform::from_translation(light.at - Vec3::Y * BRAZIER_DROP_M),
+            ));
+        }
+        LightKind::Bowl => {
+            // The fire's logs are laid by its scale, as the model's are.
+            let placed = Transform::from_translation(light.at)
+                .with_rotation(facing(light.facing))
+                .with_scale(Vec3::splat(BOWL_SCALE));
+            inside.spawn((Name::new("Fire bowl"), scene(assets, CAMPFIRE), placed));
+            let fire = (Name::new("Fire bowl's fire"), BOWL_FIRE);
+            inside.spawn((fire, bowl_hung(light.facing), placed));
+        }
+        LightKind::Lamp => {
+            inside.spawn((
+                Name::new("Hero's lamp light"),
+                lamp_light(),
+                Transform::from_translation(light.at),
+            ));
+        }
+        LightKind::Campfire => {
+            inside.spawn((
+                Name::new("Campfire"),
+                scene(assets, CAMPFIRE),
+                Transform::from_translation(light.at).with_rotation(facing(light.facing)),
+            ));
+            inside.spawn((
+                Name::new("Campfire's fire"),
+                terra_survival::props::CAMPFIRE,
+                Transform::from_translation(light.at),
+            ));
+        }
+    }
+}
+
 /// Lays the dungeon in cubes and spawns what stands in it, once building's look is in.
 pub(super) fn put_up(
     mut commands: Commands,
@@ -195,53 +274,7 @@ pub(super) fn put_up(
             ));
         }
         for light in &stamp.lights {
-            match light.kind {
-                LightKind::Torch => {
-                    let out = dir(light.facing);
-                    let lean = TORCH_LEAN_DEG.to_radians();
-                    let up = Vec3::Y * libm::cosf(lean) + out * libm::sinf(lean);
-                    let tilt = Quat::from_rotation_arc(Vec3::Y, up);
-                    inside.spawn((
-                        Name::new("Wall torch"),
-                        scene(&assets, TORCH),
-                        Transform::from_translation(light.at - up * TORCH_HEAD_M)
-                            .with_rotation(tilt * facing(light.facing)),
-                    ));
-                    inside.spawn((
-                        Name::new("Wall torch's fire"),
-                        TORCH_FIRE,
-                        Transform::from_translation(light.at),
-                    ));
-                }
-                LightKind::Brazier => {
-                    inside.spawn((
-                        Name::new("Brazier's fire"),
-                        terra_survival::props::CAMPFIRE,
-                        Transform::from_translation(light.at - Vec3::Y * BRAZIER_DROP_M),
-                    ));
-                }
-                LightKind::Bowl => {
-                    // The fire's logs are laid by its scale, as the model's are.
-                    let placed = Transform::from_translation(light.at)
-                        .with_rotation(facing(light.facing))
-                        .with_scale(Vec3::splat(BOWL_SCALE));
-                    inside.spawn((Name::new("Fire bowl"), scene(&assets, CAMPFIRE), placed));
-                    let fire = (Name::new("Fire bowl's fire"), BOWL_FIRE);
-                    inside.spawn((fire, bowl_hung(light.facing), placed));
-                }
-                LightKind::Campfire => {
-                    inside.spawn((
-                        Name::new("Campfire"),
-                        scene(&assets, CAMPFIRE),
-                        Transform::from_translation(light.at).with_rotation(facing(light.facing)),
-                    ));
-                    inside.spawn((
-                        Name::new("Campfire's fire"),
-                        terra_survival::props::CAMPFIRE,
-                        Transform::from_translation(light.at),
-                    ));
-                }
-            }
+            light_up(inside, &assets, light);
         }
         for chest in &stamp.chests {
             inside.spawn((

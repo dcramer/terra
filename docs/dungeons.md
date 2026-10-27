@@ -88,8 +88,9 @@ A crypt makes sense when each room reads as a place something was done in, and s
 
 Rules (`stamp/furnish.rs`, data in the theme's `dressing`):
 - **Hero**: one a room, on the bare wall spot farthest from its doorways, so it faces the way in; a room with a feature (the goal's dais, the key's altar, the rest's fire) has that as its hero. It keeps 1.6 m clear along its wall.
-- **Wall props**: so many per four cells, against the bare walls a metre apart.
-- **Clutter**: so many a cell, in the corners where two walls meet, then the wall spots left.
+- **Lamp**: where no light stands within 3 m of the hero, the type's `lamp` (lit candles) is laid beside it with a small unshadowed light of its own, as games light a focal prop from a source in the fiction (346 heroes over 40 seeds: 146 lit before, 344 after).
+- **Wall props**: so many per four cells, against the bare walls a metre apart, in two groups as set dressers lay them: nearest the hero (or the vignette) and nearest the wall spot farthest from it, the walls between bare.
+- **Clutter**: so many a cell, a piece round each prop the room's dressing laid in turn, so each group takes its share; then the corners and the wall spots left. Tested: 5.4 props a group (3.75 before), 93% in groups of three or more, 2% alone.
 - **Vignette**: its props laid by their offsets round one wall spot, all or none.
 - **Paths clear**: everything 1.3 m off the tour, 1.6 m from a doorway's middle and apart from what stands (1 m, clutter 0.6 m), so no prop is ever in the way or the camera.
 
