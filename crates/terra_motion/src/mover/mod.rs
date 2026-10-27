@@ -15,7 +15,9 @@
 //! - `grid`: the bodies' broadphase, a grid of them by place.
 //! - `lanes`: a tick's steps shared over threads, on whatever pool the caller has.
 //! - `swim`: diving, rising and breath in water (D74, D478).
+//! - `climb`: holding a face and moving over it (D505-D511).
 
+mod climb;
 mod footing;
 mod grid;
 mod lanes;
@@ -214,6 +216,8 @@ pub enum Ground {
     Steep,
     Airborne,
     Swimming,
+    /// Holding a face too steep to walk, moving over it (D505-D511, `climb`).
+    Climbing,
 }
 
 /// A body as the mover keeps it.
@@ -264,7 +268,9 @@ pub struct Body {
     /// Time left on a jump pressed in the air (the buffer).
     buffer: f32,
     /// Climbing out of water (D523): launched and still rising, so not swimming.
-    climbing: bool,
+    climbing_out: bool,
+    /// What it holds or pushes into (D507, `climb`).
+    hold: climb::Hold,
 }
 
 impl Body {
@@ -342,7 +348,8 @@ impl Bodies {
             frame: feet.as_dvec3(),
             air_s: f32::INFINITY,
             left_by_jump: false,
-            climbing: false,
+            climbing_out: false,
+            hold: climb::Hold::default(),
             buffer: 0.0,
         };
         settle(&mut body, feet.as_dvec3(), Vec3::ZERO, world);
@@ -509,6 +516,7 @@ fn settle(body: &mut Body, position: DVec3, velocity: Vec3, world: &World) {
         (Ground::Airborne, Vec3::ZERO, f32::INFINITY)
     };
     body.left_by_jump = false;
+    body.hold = climb::Hold::default();
 }
 
 /// Away from the world's centre at a place, if it is not the centre.
@@ -572,6 +580,24 @@ fn approach(from: Vec3, to: Vec3, by: f32) -> Vec3 {
     }
 }
 
+/// A body's facing turned toward a level way (unit, or zero for none) at its kind's rate.
+fn turn(body: &mut Body, way: Vec3, dt: f32) {
+    if way == Vec3::ZERO {
+        return;
+    }
+    let up = body.up;
+    let turn = body.kind.turn_deg_s.to_radians() * dt;
+    let angle = libm::acosf(body.facing.dot(way).clamp(-1.0, 1.0));
+    body.facing = if angle <= turn {
+        way
+    } else {
+        let side = up.cross(body.facing);
+        let sign = if side.dot(way) >= 0.0 { 1.0 } else { -1.0 };
+        let (s, c) = (libm::sinf(turn * sign), libm::cosf(turn * sign));
+        (body.facing * c + side * s).normalize()
+    };
+}
+
 /// The level velocity a body wants this tick, and its facing turned toward its way.
 /// `wading` is the water's depth at its feet as a share of its swim depth, 1 or more swum.
 fn level_velocity(body: &mut Body, intent: &Intent, wading: f32, look: f32, dt: f32) -> Vec3 {
@@ -579,18 +605,7 @@ fn level_velocity(body: &mut Body, intent: &Intent, wading: f32, look: f32, dt: 
     let (k, up) = (body.kind, body.up);
     let level = |v: Vec3| v - up * v.dot(up);
     let wish = level(intent.wish).normalize_or_zero();
-    if wish != Vec3::ZERO {
-        let turn = k.turn_deg_s.to_radians() * dt;
-        let angle = libm::acosf(body.facing.dot(wish).clamp(-1.0, 1.0));
-        body.facing = if angle <= turn {
-            wish
-        } else {
-            let side = up.cross(body.facing);
-            let sign = if side.dot(wish) >= 0.0 { 1.0 } else { -1.0 };
-            let (s, c) = (libm::sinf(turn * sign), libm::cosf(turn * sign));
-            (body.facing * c + side * s).normalize()
-        };
-    }
+    turn(body, wish, dt);
     if let Some(drive) = intent.drive {
         return level(drive);
     }
@@ -685,14 +700,32 @@ fn reframe(body: &mut Body) {
     body.frame = body.position;
 }
 
-/// One body's tick: velocity, collide and slide, stick, step, ground state (Jolt's
-/// `ExtendedUpdate`, with our velocity, jump and water rules).
+/// One body's tick: climbing a face it holds, or walking, swimming or in the air, and a face
+/// to hold taken after; then its breath.
 fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: f32) {
     let up = up_at(body.position, world).unwrap_or(body.up);
     body.up = up;
     let query = &footing::NoStep::new(query, up, body.kind.step_height);
     reframe(body);
     let shape = shape(body, dt);
+    if !climb::tick(body, intent, query, &shape, dt) {
+        walk(body, intent, query, &shape, world, dt);
+        climb::start(body, intent, query, &shape, dt);
+    }
+    swim::breathe(body, world, dt);
+}
+
+/// A tick off a face: velocity, collide and slide, stick, step, ground state (Jolt's
+/// `ExtendedUpdate`, with our velocity, jump and water rules).
+fn walk(
+    body: &mut Body,
+    intent: &Intent,
+    query: &dyn Query,
+    shape: &Shape,
+    world: &World,
+    dt: f32,
+) {
+    let (up, shape) = (body.up, *shape);
     let k = body.kind;
     let g = world.gravity;
     let from_centre = (body.position - world.centre.as_dvec3()).length() as f32;
@@ -828,7 +861,6 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let landed = (was_airborne && body.ground == Ground::Grounded)
         .then(|| libm::sqrtf(falling * falling + 2.0 * g * dropped));
     landing(body, landed, level, jumped, world, dt);
-    swim::breathe(body, world, dt);
 }
 
 /// Jolt's stair walk from where the move left the feet: where they end and the floor's normal

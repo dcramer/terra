@@ -103,9 +103,10 @@ impl Mover for Ours {
         self.0.get(id).map_or(0.0, |body| body.drown)
     }
 
-    // The mover does not climb yet (docs/controller.md, "Climbing").
-    fn climbing(&self, _id: u32) -> bool {
-        false
+    fn climbing(&self, id: u32) -> bool {
+        self.0
+            .get(id)
+            .is_some_and(|body| body.ground == super::Ground::Climbing)
     }
 
     fn threads(&mut self, threads: usize) {

@@ -67,6 +67,14 @@ impl Kind {
         ));
         Kind::parse(text, "Man").expect("the movers file holds a man")
     }
+
+    /// The kind with its climbing off (D136: no climb speed), for the rows that ask a face of
+    /// the walk alone (a slope too steep stops it, a thing taller than a step is not stepped
+    /// onto): a body pushing into a face for half a second holds it (D507), which climbing's
+    /// own rows ask.
+    pub fn walking(self) -> Self {
+        Kind { climb: 0.0, ..self }
+    }
 }
 
 /// A body as a mover leaves it after a tick.

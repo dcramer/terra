@@ -6,7 +6,8 @@
 //! and on a walkable slope, and is never climbed: not by way of its thin end's lower piece, by
 //! the round of a piece's edge a little over the one stood on, nor from the slope's high side
 //! (11 of its 64 walks before the rule). One no taller than a step is stepped onto from every
-//! way, as a rock is (`step.rock`).
+//! way, as a rock is (`step.rock`). Asked of the walk alone ([`Kind::walking`]): climbing one
+//! after half a second's push (D507) is climbing's to ask.
 
 use super::field::{Course, Solid as Ground, forward_at, local, side_at, world};
 use super::runs::{Outcome, Run};
@@ -145,7 +146,7 @@ fn course(case: Case) -> Course {
 /// Whether the walk went wrong: a tall thing climbed, its feet more than a step over the
 /// ground under them; or a low one not stepped onto, never lifted most of its height.
 fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
-    let kind = Kind::man();
+    let kind = Kind::man().walking();
     let course = course(case);
     let way = Vec2::from_angle(case.toward.to_radians());
     let from = -way * START_M;

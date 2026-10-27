@@ -87,12 +87,12 @@ pub(super) fn wading(
 ) -> (f32, Option<f32>) {
     let k = &body.kind;
     let wading = depth / (k.swim_depth * k.height).max(1e-3);
-    body.climbing &= body.velocity.dot(shape.up) > 0.0;
-    let climb = (wading > 1.0 && !body.climbing)
+    body.climbing_out &= body.velocity.dot(shape.up) > 0.0;
+    let climb = (wading > 1.0 && !body.climbing_out)
         .then(|| climb_out(body, intent, depth, gravity, query, shape))
         .flatten();
-    body.climbing |= climb.is_some();
-    let wading = if body.climbing {
+    body.climbing_out |= climb.is_some();
+    let wading = if body.climbing_out {
         wading.min(1.0)
     } else {
         wading

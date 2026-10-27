@@ -395,9 +395,10 @@ fn run<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
     }
 }
 
-/// The cases of walking and driving into things: steps, slopes, gaps, walls and bodies.
+/// The cases of walking and driving into things: steps, slopes, gaps, walls and bodies, asked of
+/// the walk alone ([`Kind::walking`]).
 fn moves<M: Mover>(new: &impl Fn() -> M, case: Case) -> Outcome {
-    let kind = Kind::man();
+    let kind = Kind::man().walking();
     let flat = Course::flat();
     let start = world(0.0, 0.0, 0.0);
     let ticks = |s: f32| (s / TICK) as usize;

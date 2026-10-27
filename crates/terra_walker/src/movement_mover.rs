@@ -13,15 +13,9 @@ use terra_world::planet::{HeightMemo, Planet};
 const TICK: f32 = 1.0 / 64.0;
 const GRAVITY: f32 = 16.0;
 
+/// The game's man: the walk's, his climbing off (`crate::movement::man`).
 fn man() -> Kind {
-    Kind::parse(
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../assets/data/movers.ron"
-        )),
-        "Man",
-    )
-    .expect("a man")
+    crate::movement::man()
 }
 
 /// A man walked forward over a planet for so long from a place on its ground: after each tick,

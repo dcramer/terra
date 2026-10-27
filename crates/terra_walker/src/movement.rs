@@ -165,7 +165,9 @@ fn recycle<'b, T: ?Sized>(mut list: Vec<&T>) -> Vec<&'b T> {
     list.into_iter().map(|_| unreachable!("emptied")).collect()
 }
 
-/// A man's kind (D136): the player is one.
+/// A man's kind (D136): the player is one. His climbing is off until the figure has climbing
+/// clips and the game a way to let go (docs/controller.md "Climbing", unit C8): the mover's
+/// climb is the course's alone so far.
 pub(crate) fn man() -> Kind {
     Kind::parse(
         include_str!(concat!(
@@ -174,6 +176,7 @@ pub(crate) fn man() -> Kind {
         )),
         "Man",
     )
+    .map(|man| Kind { climb: 0.0, ..man })
     .expect("movers.ron has a man")
 }
 
