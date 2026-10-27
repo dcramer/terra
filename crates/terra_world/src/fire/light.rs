@@ -643,7 +643,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 let swayed = swayed + up(blaze.at) * (rise.abs() - rise);
                 // Where it hangs, unswayed and at its mean (`shadows::shone`).
                 let still = |at| Some(shadows::Still { at, shines, fire });
-                let rest = blaze.at + up(blaze.at) * blaze.tall * HEARTH_LIGHT_UP;
+                let rest = blazes.hangs(fire, blaze, HEARTH_LIGHT_UP);
                 let main = Lit {
                     at: rest + swayed,
                     lumens: lumens * (1.0 - HEARTH_TOP),
@@ -659,7 +659,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     casts: true,
                     still: still(rest),
                 };
-                let top_rest = blaze.at + up(blaze.at) * blaze.tall * HEARTH_TOP_UP;
+                let top_rest = blazes.hangs(fire, blaze, HEARTH_TOP_UP);
                 let top = Lit {
                     lumens: lumens * HEARTH_TOP * HEARTH_TOP_GAIN,
                     at: top_rest + swayed,

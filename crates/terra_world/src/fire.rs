@@ -36,7 +36,7 @@ use bevy::{
     shader::ShaderRef,
 };
 pub use exposure::{FireExposure, LEANING_WEIGHT};
-pub use hearth::{Body, Logs};
+pub use hearth::{Body, Hung, Logs};
 
 /// Something burning, as the layer above says it: where its flames stand from (their foot,
 /// in the world), how tall they are in metres, how hot (0 to 1, a dying fire's embers to a
@@ -86,12 +86,12 @@ pub struct Blazes {
     pub blazes: Vec<Blaze>,
     pub jets: Vec<Jet>,
     kept: Vec<Blaze>,
-    /// The kept fires' logs and bodies as the shader reads them (`Logs::packed`,
-    /// `Body::told`), in `kept`'s order.
+    /// In `kept`'s order: their logs and bodies as the shader reads them (`Logs::packed`,
+    /// `Body::told`), their lights' colours (`Kindled::light`) and where they hang (`Hung`).
     hearths: Vec<[Vec4; 2]>,
     bodies: Vec<f32>,
-    /// The kept fires' light colours (`Kindled::light`), in `kept`'s order.
     lights: Vec<Color>,
+    hangs: Vec<Vec3>,
 }
 
 impl Blazes {

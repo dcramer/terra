@@ -112,12 +112,28 @@ impl Body {
     }
 }
 
+/// Where a kept fire's light hangs off its flames' axis, metres in the world, as a level
+/// designer hangs a brazier's light out from the brazier: a fire bowl on a stand, its light on
+/// its axis, lights neither the stand's faces (behind the light's plane) nor the floor at its
+/// foot (shadowed by the stand's top), a black box under its fire (barrow round 16). None, and
+/// its light hangs in its flames (`light`).
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub struct Hung(pub Vec3);
+
+impl Blazes {
+    /// Where kept fire `fire`'s light hangs, so far up its flames (`share` of their height).
+    pub(super) fn hangs(&self, fire: usize, blaze: &Blaze, share: f32) -> Vec3 {
+        let hung = self.hangs.get(fire).copied().unwrap_or(Vec3::ZERO);
+        blaze.at + hung + blaze.at.normalize_or(Vec3::Y) * blaze.tall * share
+    }
+}
+
 /// The fires kept where something kindled stands, each with a number of its own from its
 /// place, so no two flicker alike, the logs each burns on and how its body is drawn. The
 /// nearest `HEARTHS` to the eye come first and are drawn as hearths; each keeps its slot while it stays among them, so
 /// a slot's fire does not change as the eye moves (a dungeon has more torches than slots).
 pub(super) fn keep(
-    kindled: Query<(Entity, &Kindled, &GlobalTransform)>,
+    kindled: Query<(Entity, &Kindled, &GlobalTransform, Option<&Hung>)>,
     camera: Query<&GlobalTransform, With<MainCamera>>,
     mut slots: Local<Vec<Entity>>,
     mut blazes: ResMut<Blazes>,
@@ -129,7 +145,7 @@ pub(super) fn keep(
         .iter()
         .next()
         .map_or(Vec3::ZERO, |eye| eye.translation());
-    let mut fires: Vec<(Entity, &Kindled, &GlobalTransform)> = kindled.iter().collect();
+    let mut fires: Vec<_> = kindled.iter().collect();
     fires.sort_by(|a, b| {
         let (da, db) = (a.2.translation(), b.2.translation());
         da.distance_squared(eye)
@@ -147,13 +163,17 @@ pub(super) fn keep(
     fires.sort_by_key(|fire| order(fire.0));
     let hearths: Vec<[Vec4; 2]> = fires
         .iter()
-        .map(|(_, fire, placed)| fire.logs.packed(placed))
+        .map(|(_, fire, placed, _)| fire.logs.packed(placed))
         .collect();
-    let bodies: Vec<f32> = fires.iter().map(|(_, fire, _)| fire.body.told()).collect();
-    let lights: Vec<Color> = fires.iter().map(|(_, fire, _)| fire.light).collect();
+    let bodies: Vec<f32> = fires.iter().map(|(_, fire, ..)| fire.body.told()).collect();
+    let lights: Vec<Color> = fires.iter().map(|(_, fire, ..)| fire.light).collect();
+    let hangs: Vec<Vec3> = fires
+        .iter()
+        .map(|f| f.3.map_or(Vec3::ZERO, |h| h.0))
+        .collect();
     let kept: Vec<Blaze> = fires
         .iter()
-        .map(|(_, fire, at)| {
+        .map(|(_, fire, at, _)| {
             let at = at.translation();
             Blaze {
                 at,
@@ -168,11 +188,13 @@ pub(super) fn keep(
         || hearths != blazes.hearths
         || bodies != blazes.bodies
         || lights != blazes.lights
+        || hangs != blazes.hangs
     {
         blazes.kept = kept;
         blazes.lights = lights;
         blazes.hearths = hearths;
         blazes.bodies = bodies;
+        blazes.hangs = hangs;
     }
 }
 
@@ -258,5 +280,34 @@ mod tests {
         let packed = Logs::CAMPFIRE.packed(&placed);
         assert!((packed[1].x - 2.0 * Logs::CAMPFIRE.foot).abs() < 1.0e-5);
         assert!((packed[1].w - 2.0 * Logs::CAMPFIRE.top_up).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn a_hung_fires_light_hangs_off_its_flames_and_an_unhung_ones_in_them() {
+        let mut app = App::new();
+        app.init_resource::<Blazes>().add_systems(Update, keep);
+        let fire = Kindled {
+            tall: 0.7,
+            wide: 0.3,
+            heat: 1.0,
+            logs: Logs::NONE,
+            body: Body::Cards,
+            light: Color::WHITE,
+        };
+        let hung = Vec3::new(0.4, 0.17, 0.0);
+        let (near, far) = (Vec3::new(0.0, 1.0, -2.0), Vec3::new(0.0, 1.0, -9.0));
+        app.world_mut()
+            .spawn((MainCamera, GlobalTransform::default()));
+        app.world_mut()
+            .spawn((fire, Hung(hung), GlobalTransform::from_translation(near)));
+        app.world_mut()
+            .spawn((fire, GlobalTransform::from_translation(far)));
+        app.update();
+        let blazes = app.world().resource::<Blazes>();
+        let up = |at: Vec3| at.normalize() * 0.7 * 0.4;
+        let (a, b) = (blazes.kept[0], blazes.kept[1]);
+        assert_eq!(a.at, near, "the nearer first");
+        assert!(blazes.hangs(0, &a, 0.4).distance(near + hung + up(near)) < 1.0e-5);
+        assert!(blazes.hangs(1, &b, 0.4).distance(far + up(far)) < 1.0e-5);
     }
 }
