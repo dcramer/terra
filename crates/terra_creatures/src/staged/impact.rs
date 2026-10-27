@@ -4,7 +4,10 @@
 //! splash, a crown of droplets thrown up and falling back, a white spray puff and rings
 //! spreading on the water (`terra_world::rises`). A few dozen soft sprites facing the view,
 //! lit by the sun and the sky as anything else is, drawn as the build's dust is
-//! (`terra_building::loss`), and gone in under three seconds.
+//! (`terra_building::loss`), and gone in under three seconds. On ground it also kicks up the
+//! forest's leaf litter and shoves the plants round it ([`litter`]).
+
+mod litter;
 
 use super::placed;
 use bevy::{
@@ -44,6 +47,9 @@ const DRY_GROUND: Color = Color::srgb(0.46, 0.43, 0.39);
 const SPRAY: Color = Color::srgb(0.86, 0.89, 0.9);
 /// How long the longest of it lasts, seconds: nothing outlives it.
 pub const LONGEST_S: f32 = 2.6;
+/// The biggest blow asked for: a giant's footfall seen from ten metres off, some three of a
+/// troll's smash across.
+const BIGGEST: f32 = 6.0;
 
 /// A blow landing at a point, as big as `size` says (1 a troll's two-handed smash).
 #[derive(Message, Clone, Copy, Debug)]
@@ -76,6 +82,7 @@ struct Spray {
     quad: Option<Handle<Mesh>>,
     soft: Option<Handle<Image>>,
     pebble: Option<Handle<Mesh>>,
+    leaf: Option<Handle<Image>>,
     layers: Option<Vec<Color>>,
     rings: Vec<(Vec3, f32)>,
 }
@@ -120,7 +127,18 @@ struct Stone {
 pub fn plugin(app: &mut App) {
     app.init_resource::<Spray>()
         .add_message::<Impact>()
-        .add_systems(Update, (burst, rings, fly, fade, tumble));
+        .add_systems(
+            Update,
+            (
+                burst,
+                rings,
+                fly,
+                fade,
+                tumble,
+                litter::flutter,
+                litter::shudder,
+            ),
+        );
     method(app, "staged.impact", impact);
 }
 
@@ -142,7 +160,7 @@ fn impact(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let on = lands(ground, planet.water_radius_m(ground));
     world.write_message(Impact {
         at,
-        size: asked.size.unwrap_or(1.0).clamp(0.1, 3.0),
+        size: asked.size.unwrap_or(1.0).clamp(0.1, BIGGEST),
     });
     Ok(
         json!({ "done": true, "on": if matches!(on, Lands::Water(_)) { "water" } else { "ground" } }),
@@ -248,7 +266,7 @@ fn ground_colour(
             .and_then(|textures| images.get(textures.color()))
             .and_then(layer_colours);
     }
-    let made_of = planet.voxels().material(at - at.normalize() * 0.15);
+    let made_of = made_of(planet, at);
     let row = LAYER_OF
         .iter()
         .find(|(id, _)| *id == made_of)
@@ -258,6 +276,11 @@ fn ground_colour(
         .as_ref()
         .and_then(|layers| layers.get(row).copied())
         .unwrap_or(DRY_GROUND)
+}
+
+/// What the ground is made of just under a point on it.
+fn made_of(planet: &Planet, at: Vec3) -> terra_core::MaterialId {
+    planet.voxels().material(at - at.normalize() * 0.15)
 }
 
 /// A lit soft material, of a colour and thickness, for a group of sprites, faded by its own
@@ -340,6 +363,15 @@ fn burst(
                     .get_or_insert_with(|| meshes.add(Sphere::new(0.5).mesh().ico(1).unwrap()))
                     .clone();
                 stones(&mut sprites, &mut materials, pebble, at, colour);
+                // The forest's floor is soil under its litter: a heavy step kicks it up.
+                if made_of(&planet, at) == material::SOIL {
+                    let leaf = spray
+                        .leaf
+                        .get_or_insert_with(|| images.add(litter::leaf_image()))
+                        .clone();
+                    litter::leaves(&mut sprites, &mut materials, leaf, at, colour);
+                }
+                litter::shove(&mut sprites, at);
             }
         }
     }
@@ -461,7 +493,8 @@ fn stones(
         let out = s.round(s.r(i, 11));
         let velocity = out * (1.2 + 3.0 * s.r(i, 12)) * s.size.sqrt()
             + s.up * (2.5 + 3.5 * s.r(i, 13)) * s.size.sqrt();
-        let size = 0.03 + 0.06 * s.r(i, 14) * s.r(i, 15).max(0.3);
+        // Clods, under a giant's foot: bigger as the blow is past a troll's.
+        let size = (0.03 + 0.06 * s.r(i, 14) * s.r(i, 15).max(0.3)) * s.size.max(1.0).sqrt();
         let shape = Vec3::new(1.0, 0.6 + 0.4 * s.r(i, 16), 0.7 + 0.3 * s.r(i, 17)) * size;
         s.commands.spawn((
             Name::new("Impact stone"),
@@ -670,6 +703,7 @@ fn tumble(
 
 #[cfg(test)]
 mod tests {
+    use super::litter::{Leaf, Shove, flutter, shudder};
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use terra_core::{PlanetSpec, Seed};
@@ -689,7 +723,7 @@ mod tests {
     }
 
     /// A world on a smooth planet with what a burst needs, the clock stepping a sixtieth.
-    fn world() -> (World, Vec3) {
+    pub(super) fn world() -> (World, Vec3) {
         let planet = Planet::smooth(PlanetSpec {
             seed: Seed(2),
             radius_m: 2000.0,
@@ -708,7 +742,7 @@ mod tests {
         (world, ground)
     }
 
-    fn count<C: Component>(world: &mut World) -> usize {
+    pub(super) fn count<C: Component>(world: &mut World) -> usize {
         world.query_filtered::<(), With<C>>().iter(world).count()
     }
 
@@ -725,10 +759,14 @@ mod tests {
         assert!((10..=60).contains(&motes), "{motes} sprites");
         assert!(stones >= 8, "{stones} stones");
         let mut highest: f32 = 0.0;
+        // It shoves the plants round it, once.
+        assert_eq!(count::<Shove>(&mut world), 1);
         for frame in 0..60 * 3 {
             world.run_system_once(fly).unwrap();
             world.run_system_once(fade).unwrap();
             world.run_system_once(tumble).unwrap();
+            world.run_system_once(flutter).unwrap();
+            world.run_system_once(shudder).unwrap();
             if frame == 110 {
                 // By nearly two seconds every stone is down on the ground, none under it.
                 let planet = world.resource::<Planet>().clone();
@@ -746,7 +784,11 @@ mod tests {
         }
         assert!(highest > 0.5, "nothing was thrown up");
         assert_eq!(
-            count::<Mote>(&mut world) + count::<Stone>(&mut world) + count::<Fading>(&mut world),
+            count::<Mote>(&mut world)
+                + count::<Stone>(&mut world)
+                + count::<Fading>(&mut world)
+                + count::<Leaf>(&mut world)
+                + count::<Shove>(&mut world),
             0
         );
     }
