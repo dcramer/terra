@@ -5,6 +5,7 @@ Renders wait hours on the developer's one 10 GB card (D319), and rounds lose mos
 ```bash
 cargo xtask remote-render -- cargo xtask sandbox --offscreen --experiment play --shot ~/.cache/terra-review/a.png
 cargo xtask remote-render --rev <sha> -- cargo xtask trailer --cut tools/sandbox/trailer/cut.json
+cargo xtask remote-render --dirty -- cargo test -p terra_build probe -- --nocapture   # uncommitted changes, as a patch
 cargo xtask remote-render --status
 ```
 
@@ -14,13 +15,17 @@ It prints where the files landed (`~/.cache/terra-review/remote/<job>/`) and exi
 
 Everything goes over ssh to the hosts in `TERRA_WORKERS` (`.env`). Nothing on the box listens on a port.
 
-1. **Push.** The client pushes the commit (HEAD, or `--rev`; it need not be on origin) to the box's clone, `<TERRA_WORKER_DIR>/repo`, as `refs/jobs/<id>`. Uncommitted changes stay behind; it says so. Then it sends the Git LFS objects the commit points to, which a push carries only as pointers (D525): `rsync --ignore-existing` from this checkout's `.git/lfs/objects` into the clone's, so only those the box lacks travel and nothing is downloaded from GitHub; an object this machine lacks too is fetched from origin first (`git lfs fetch`). The clone's own git-lfs (`bootstrap.sh`) smudges its checkouts from that store.
+1. **Push.** The client pushes the commit (HEAD, or `--rev`; it need not be on origin) to the box's clone, `<TERRA_WORKER_DIR>/repo`, as `refs/jobs/<id>`. Uncommitted changes stay behind and it says so, unless `--dirty` ships them ([below](#a-patch-of-uncommitted-changes)). Then it sends the Git LFS objects the commit points to, which a push carries only as pointers (D525): `rsync --ignore-existing` from this checkout's `.git/lfs/objects` into the clone's, so only those the box lacks travel and nothing is downloaded from GitHub; an object this machine lacks too is fetched from origin first (`git lfs fetch`). The clone's own git-lfs (`bootstrap.sh`) smudges its checkouts from that store.
 2. **Queue.** It hands the job (commit, command, class, files to collect, time limit) to `box.ts submit` over ssh, which writes `jobs/<id>/job.json` and wakes the daemon. With several workers, the job goes to a running daemon with the fewest jobs ahead.
 3. **Run.** The daemon starts each job in a free slot (below), the oldest first (after an update, its warm builds first), when the box's settings allow. In the slot's job checkout `slots/<n>/`, a git worktree of the clone whose `target/` is kept, it checks the job's commit out clean, runs `cargo xtask cook` and then the command at `nice 10` under `timeout`, with `HOME` the slot's `homes/<n>/` and `CARGO_TARGET_DIR` the slot's `target/`, so caches carry from job to job, slots never wait on each other's cargo lock, and nothing mixes with the developer's. The environment holds no token and no ssh agent. A slot's build can go stale (an incremental release rlib missing a symbol a newer crate asks for), so a command that fails on a link error, or on rustc's E0460 or E0786, naming a workspace crate is cleaned of the crates the error names and the package that failed to compile, in the profile its paths show (`cargo clean --release -p …`), and run once more, as build farms retry a cache's fault; a `render-worker: stale build` line in the job log and the job's note (shown when it ends) say so (`jobs.ts` `staleBuild`). An error in the code is never run twice.
 4. **Collect.** What the command wrote under `~/.cache/terra-review/` while it ran (a film's `frames/` left out), or the `--collect` paths, goes into `jobs/<id>/out/` beside `job.log`.
 5. **Wait and fetch.** The client runs `box.ts wait <id>` over ssh: the box watches the job's folder and prints a line when its state changes, so nothing polls across the network. A dropped connection is tried again. Then `rsync` brings `out/` into `~/.cache/terra-review/remote/<job>/`.
 
 Jobs older than `TERRA_RENDER_KEEP_DAYS` (7) are deleted with their files and refs. `--no-wait` queues and prints the job, `--wait <job>` takes it up again, `--cancel <job>` drops a queued job or stops a running one, `--logs <job|daemon>` prints a log's end.
+
+## A patch of uncommitted changes
+
+A throwaway probe (a debug print, an A/B constant, a trace system) runs with `--dirty`, as a try server runs a patch that is never landed. The client snapshots the working tree as `git stash create` does: every change against HEAD, staged or not, and untracked files that are not ignored, added to a scratch copy of the index and committed with HEAD as parent by plumbing (`write-tree`, `commit-tree`), which runs no hook (`client.ts` `snapshot`). The snapshot is on no branch here; it goes only to the box's clone, as `refs/jobs/<id>-patch`, and expires with the job; origin and main's hooks never see it. Nothing passes it for a commit: the job's id, folder and files' folder end in `-patch`, `--status` lists it as `<base>+patch`, `job.log` opens with a `render-worker: PATCH` line and the diff's stat, `patch.diff` lies beside it, and the client's last line says it ran a patch of uncommitted changes on the base. The patch is always against HEAD (`--rev` with `--dirty` is refused). A throwaway branch or `--no-verify` is never needed; what lands is committed and checked as ever.
 
 ## The daemon
 

@@ -7,6 +7,7 @@ cargo xtask remote-render -- cargo xtask sandbox --offscreen --experiment play -
 cargo xtask remote-render --rev 1a2b3c4 --collect shot.png -- cargo xtask sandbox --offscreen --experiment play --shot shot.png
 cargo xtask remote-render --no-wait -- cargo xtask bench   # queue, print the job, return
 cargo xtask remote-render --cpu -- node tools/x.ts         # a job that never draws: any free slot
+cargo xtask remote-render --dirty -- cargo test -p x probe  # the working tree's uncommitted changes, as a patch, no hooks
 cargo xtask remote-render --wait <job>                     # wait for it and fetch its files
 cargo xtask remote-render --status                         # each box's daemon and jobs
 cargo xtask remote-render --logs <job|daemon>              # a log's last lines
