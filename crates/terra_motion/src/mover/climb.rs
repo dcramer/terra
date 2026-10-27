@@ -24,8 +24,16 @@
 //! `mantle_s`, then stands. ALS plays its clip along such a path; ours is the mover's own, a
 //! clip to be fitted to it. With no room to stand the body holds at the lip.
 //!
-//! Not yet (docs/controller.md "Climbing", units C6-C7): the lunge and the kick-off, stamina, a
-//! material's grip, the fight stance.
+//! The climb jump (D511) is Breath of the Wild's and Genshin's, as Cantão's recreation and
+//! nbertoa's system's dash describe it: jump while holding, the stick toward the face or
+//! along it, lunges the body along the face by its kind's `climb_jump`, still holding, then
+//! it climbs on; jump with the stick away from the face kicks it off backwards into the air (a
+//! wall jump, Unreal's `LaunchCharacter` off a face's normal). The lunge rises as a hop
+//! under gravity does, fast then slowing to a stop where the hands take hold again, so its
+//! time is the world's gravity's, not a number of its own.
+//!
+//! Not yet (docs/controller.md "Climbing", unit C7): stamina (the lunge's lump), a material's
+//! grip, the fight stance.
 
 use super::query::{Capsule, Contact, Query};
 use super::slide::{self, Shape, Support};
@@ -39,6 +47,9 @@ const PROBE_M: f32 = 0.05;
 const AHEAD_M: f32 = 0.6;
 /// A face is held only within 25 deg of the way the body faces (Cantão's start).
 const FACING_COS: f32 = 0.906_307_8;
+/// A jump with the stick more than this share of it away from the face kicks off (D511):
+/// within 60 deg of straight away.
+const AWAY: f32 = 0.5;
 /// How far past the lip a mantle stands the body's back, m.
 const LIP_M: f32 = 0.1;
 /// How high over the top a mantle carries the feet, m: clear of it, the walk's stick to floor
@@ -58,6 +69,26 @@ pub(super) struct Hold {
     pushed: Option<f32>,
     /// A pull-up under way (D508).
     mantle: Option<Mantle>,
+    /// A climb jump under way (D511).
+    lunge: Option<Lunge>,
+}
+
+/// A climb jump's lunge along the face: its way as a share up the face and a share along it
+/// (laid on the face each tick, so it follows a face that turns), and how long it has run, s.
+#[derive(Clone, Copy, Debug)]
+struct Lunge {
+    up: f32,
+    side: f32,
+    t: f32,
+}
+
+impl Lunge {
+    /// The share of its length a lunge has covered by `t` of its `time`: a hop under constant
+    /// gravity, from its launch speed to a stop at the end.
+    fn share(t: f32, time: f32) -> f32 {
+        let left = 1.0 - (t / time).clamp(0.0, 1.0);
+        1.0 - left * left
+    }
 }
 
 /// A pull-up onto a top: the feet's path in the world, up the face then over the lip onto
@@ -214,6 +245,7 @@ pub(super) fn tick(
     intent: &Intent,
     query: &dyn Query,
     shape: &Shape,
+    gravity: f32,
     dt: f32,
 ) -> bool {
     if body.ground != Ground::Climbing {
@@ -235,8 +267,23 @@ pub(super) fn tick(
     let side = up.cross(into);
     let wish = intent.wish.reject_from(up).normalize_or_zero();
     let upward = wish.dot(into);
+    if intent.jump && body.hold.lunge.is_none() {
+        if upward < -AWAY {
+            kick_off(body, normal, up);
+            return false;
+        }
+        // Toward the face or along it, up it if the stick is let go.
+        let way = Vec3::new(upward.max(0.0), wish.dot(side), 0.0).normalize_or(Vec3::X);
+        body.hold.lunge = Some(Lunge {
+            up: way.x,
+            side: way.y,
+            t: 0.0,
+        });
+    }
+    let lunge = body.hold.lunge;
+    let rising = upward > 0.0 || lunge.is_some_and(|l| l.up > 0.0);
     if !hands
-        && upward > 0.0
+        && rising
         && let Some((over, to)) = top(&k, query, shape, into)
     {
         let from = body.frame;
@@ -247,13 +294,24 @@ pub(super) fn tick(
             t: 0.0,
         };
         body.hold.mantle = Some(mantle);
+        body.hold.lunge = None;
         pull_up(body, mantle, query, shape, dt);
         return true;
     }
-    let pace = (1.0 + LEAN_PACE * normal.dot(up)).max(0.0);
     let rise = up.reject_from(normal).normalize_or(up);
-    let wanted = (rise * (upward * k.climb) + side * (wish.dot(side) * k.climb_side)) * pace;
-    let mut velocity = approach(body.velocity, wanted, k.climb_accel * dt);
+    let mut velocity = if let Some(mut lunge) = lunge {
+        // The lunge's tick: its length's share this tick covers, over a time a hop of that
+        // height under the world's gravity takes.
+        let time = libm::sqrtf(2.0 * k.climb_jump / gravity.max(1.0e-3));
+        let by = Lunge::share(lunge.t + dt, time) - Lunge::share(lunge.t, time);
+        lunge.t += dt;
+        body.hold.lunge = (lunge.t < time).then_some(lunge);
+        (rise * lunge.up + side * lunge.side) * (k.climb_jump * by / dt)
+    } else {
+        let pace = (1.0 + LEAN_PACE * normal.dot(up)).max(0.0);
+        let wanted = (rise * (upward * k.climb) + side * (wish.dot(side) * k.climb_side)) * pace;
+        approach(body.velocity, wanted, k.climb_accel * dt)
+    };
     let mut feet = slide::move_shape(Vec3::ZERO, velocity, dt, query, shape, &mut body.active);
     if !hands
         && feet.dot(up) > 0.0
@@ -261,6 +319,11 @@ pub(super) fn tick(
     {
         // At a lip with no room to stand on the top: held there (D508), not climbed off it.
         feet = Vec3::ZERO;
+        velocity = Vec3::ZERO;
+        body.hold.lunge = None;
+    }
+    if lunge.is_some() && body.hold.lunge.is_none() {
+        // The lunge's end: held again, still.
         velocity = Vec3::ZERO;
     }
     let down = velocity.dot(up) < 0.0;
@@ -283,6 +346,19 @@ pub(super) fn tick(
     (body.landed, body.fall, body.stepped, body.jumped) = (None, 0.0, 0.0, false);
     body.buffer = 0.0;
     true
+}
+
+/// A jump off the face with the stick away (D511): let go, launched up at the kind's jump and
+/// out from the face at its jog, as a jogging jump off the ground; the walk carries it from
+/// this tick on.
+fn kick_off(body: &mut Body, normal: Vec3, up: Vec3) {
+    let k = body.kind;
+    let away = normal.reject_from(up).normalize_or(normal);
+    body.velocity = away * k.jog + up * k.jump_speed;
+    body.ground = Ground::Airborne;
+    body.support = Support::NotSupported;
+    body.normal = Vec3::ZERO;
+    body.hold = Hold::default();
 }
 
 /// A tick of a pull-up: the feet carried along its path over the kind's `mantle_s`, then
@@ -404,6 +480,58 @@ mod tests {
         assert_eq!(ground, Ground::Grounded);
         assert!((feet.y - 3.0).abs() < 0.01, "stands at {}", feet.y);
         assert!(feet.x > 1.0 + man.radius, "on the top at x {}", feet.x);
+    }
+
+    /// A man climbing an 8 m wall 2 s, then jumping with the stick along `stick` and letting
+    /// it go: his feet before the jump, and his feet, ground state and velocity so long after.
+    fn jump_off(stick: Vec3, after: f32) -> (Vec3, Vec3, Ground, Vec3) {
+        let man = crate::course::Kind::man();
+        world_with(Some(8.0), |world| {
+            let mut bodies = Bodies::default();
+            bodies.add(0, man, Vec3::ZERO, Vec3::X, world);
+            let into = Intent {
+                wish: Vec3::X,
+                ..Intent::default()
+            };
+            for _ in 0..((0.4 + man.climb_push_s + 2.0) / DT) as usize {
+                bodies.tick(world, &[(0, into)], DT);
+            }
+            let before = bodies.get(0).expect("the body").feet;
+            let jump = Intent {
+                wish: stick,
+                jump: true,
+                ..Intent::default()
+            };
+            bodies.tick(world, &[(0, jump)], DT);
+            for _ in 0..(after / DT) as usize {
+                bodies.tick(world, &[(0, Intent::default())], DT);
+            }
+            let b = bodies.get(0).expect("the body");
+            (before, b.feet, b.ground, b.velocity)
+        })
+    }
+
+    #[test]
+    fn a_climb_jump_lunges_the_kinds_length_up_the_face_and_holds_on() {
+        let man = crate::course::Kind::man();
+        for stick in [Vec3::X, Vec3::ZERO] {
+            let (before, feet, ground, velocity) = jump_off(stick, 1.0);
+            assert_eq!(ground, Ground::Climbing, "holds after the lunge");
+            let rise = feet.y - before.y;
+            assert!(
+                (rise - man.climb_jump).abs() < 0.01,
+                "lunged {rise} m, stick {stick}"
+            );
+            assert!(velocity.length() < 1.0e-3, "still after it: {velocity}");
+        }
+    }
+
+    #[test]
+    fn a_jump_with_the_stick_away_kicks_off_the_face() {
+        let (_, feet, ground, velocity) = jump_off(-Vec3::X, 0.1);
+        assert_eq!(ground, Ground::Airborne);
+        assert!(velocity.x < -1.0, "moving away at {velocity}");
+        assert!(feet.x < 1.0 - 0.5, "off the face at {}", feet.x);
     }
 
     #[test]

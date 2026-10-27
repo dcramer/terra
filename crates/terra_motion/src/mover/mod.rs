@@ -708,7 +708,7 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     let query = &footing::NoStep::new(query, up, body.kind.step_height);
     reframe(body);
     let shape = shape(body, dt);
-    if !climb::tick(body, intent, query, &shape, dt) {
+    if !climb::tick(body, intent, query, &shape, world.gravity, dt) {
         walk(body, intent, query, &shape, world, dt);
         climb::start(body, intent, query, &shape, dt);
     }
