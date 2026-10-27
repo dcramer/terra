@@ -76,6 +76,12 @@ pub struct FireExtension {
     /// white on the screen whatever the adaptation does.
     #[storage(105, read_only)]
     pub(super) adaptation: Handle<ShaderBuffer>,
+    /// The haze in front of a card, and its density picture (`fogged`, D553).
+    #[storage(112, read_only)]
+    pub(super) haze: Handle<ShaderBuffer>,
+    #[texture(113, dimension = "3d")]
+    #[sampler(114)]
+    pub(super) haze_density: Option<Handle<Image>>,
     /// Each set's motion to its next frame, at half size, loaded unfiltered.
     #[texture(106, dimension = "2d_array")]
     pub(super) motions: Handle<Image>,

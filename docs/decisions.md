@@ -548,6 +548,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D541](decisions/D541.md) | Building meshes go up to a budget a frame, not a mesh a section past it | Tech | Agent | Decided | The sections about to be shown are put on the GPU oldest… |
 | [D543](decisions/D543.md) | GPU memory comes from the driver in blocks of 64 MiB | Tech | Agent | Decided | wgpu's allocator (gpu-allocator) takes device memory… |
 | [D548](decisions/D548.md) | What changed this? Bevy's track_location in dev builds, asked over the remote | Tech | Agent | Decided | The sandbox's dev builds are built with Bevy's… |
+| [D553](decisions/D553.md) | The fires are drawn after the haze, fogged at their own depth | Tech | Agent | Leaning | Every fire card (flames, embers, jets, the smoke and… |
 
 ## Tools and workflow
 

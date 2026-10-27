@@ -20,7 +20,8 @@ pub struct FireSmokeUniform {
     /// The wind, and how many slots are filled.
     pub wind: Vec4,
     /// x which smoke (0 over the blazes, 1 a breath's soot), y the time the puffs were let
-    /// go by, w how many of the first slots are kept fires.
+    /// go by, z 1 for the torches' smoke alone, 0 for every other (`fogged::SMOKES`), w how
+    /// many of the first slots are kept fires.
     pub kind: Vec4,
     /// The open sky's light from +X, -X, +Y, -Y, +Z and -Z of the sky's frame, as the
     /// environment map's diffuse light is (irradiance over pi), times its brightness.
@@ -47,6 +48,12 @@ pub struct FireSmokeExtension {
     /// Their map 1 (left, bottom, front, glow).
     #[texture(105, dimension = "2d_array")]
     pub far: Handle<Image>,
+    /// The haze in front of a puff, and its density picture (`fogged`, D553).
+    #[storage(106, read_only)]
+    pub haze: Handle<ShaderBuffer>,
+    #[texture(107, dimension = "3d")]
+    #[sampler(108)]
+    pub haze_density: Option<Handle<Image>>,
 }
 
 impl MaterialExtension for FireSmokeExtension {

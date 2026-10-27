@@ -27,6 +27,8 @@ import bevy_pbr::prepass::utils::prepass_depth;
 @if(!PREPASS_PIPELINE)
 import bevy_pbr::render::mesh_view_bindings::lights;
 @if(!PREPASS_PIPELINE)
+import super::fire_fog::{Haze, haze_seen, hazed_premultiplied};
+@if(!PREPASS_PIPELINE)
 
 struct Fire {
     // x which (0 flames, 1 embers, 2 jets), y how many slots are filled, z the time.
@@ -90,6 +92,13 @@ const GAS_NOISE_SIZE: f32 = 32.0;
 // The exposure the eye is adapted to (crates/terra_world/src/adaptation.rs): x the stops the
 // tonemapper multiplied the last frame by, after Bevy's auto exposure.
 @group(constants::MATERIAL_BIND_GROUP) @binding(105) var<storage, read> adapted: vec4<f32>;
+// The haze in front of a card, at its own depth (fire_fog.wesl, D553).
+@if(!PREPASS_PIPELINE)
+@group(constants::MATERIAL_BIND_GROUP) @binding(112) var<storage, read> haze: Haze;
+@if(!PREPASS_PIPELINE)
+@group(constants::MATERIAL_BIND_GROUP) @binding(113) var haze_density: texture_3d<f32>;
+@if(!PREPASS_PIPELINE)
+@group(constants::MATERIAL_BIND_GROUP) @binding(114) var haze_sampler: sampler;
 // What a fire drawn on the screen's scale is multiplied by for the main pass: the exposure
 // weight's factor (docs/fire.md, "The exposure rule"), `(k / k_dusk)^(1 - w)` for the frame's
 // exposure multiplier `k`, the camera's times the eye's adaptation, so at w = 1 it is on the
@@ -3787,7 +3796,7 @@ struct BreathOutput {
 @fragment
 fn fragment(in: VertexOutput) -> BreathOutput {
     var out: BreathOutput;
-    out.color = breath(in);
+    out.color = hazed_premultiplied(breath(in), haze_seen(haze, haze_density, haze_sampler, in.world_position.xyz));
     out.depth = BREATH_DEPTH;
     return out;
 }
@@ -3807,6 +3816,10 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
             let flame = saturate(FLAME_SHARE);
             let lit = BREATH_LIT * (1.0 - smoothstep(0.0, 0.1, flame));
             out.color = vec4(0.0, 0.0, 0.0, flame + lit_mask(lit));
+        }
+@if(!FIRE_MASK)
+        {
+            out.color = hazed_premultiplied(out.color, haze_seen(haze, haze_density, haze_sampler, in.world_position.xyz));
         }
         return out;
     }
@@ -3898,6 +3911,10 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
         // adds this to the alpha and leaves the colour.
         let flame = in.world_normal.x > 1.0 && (in.uv_b.x < 2.5 || (in.uv_b.x > 6.5 && i32(fire.kind.x + 0.5) == 0));
         out.color = vec4(0.0, 0.0, 0.0, select(0.0, min(out.color.r, 1.0), flame));
+    }
+@if(!FIRE_MASK)
+    {
+        out.color = hazed_premultiplied(out.color, haze_seen(haze, haze_density, haze_sampler, in.world_position.xyz));
     }
     return out;
 }

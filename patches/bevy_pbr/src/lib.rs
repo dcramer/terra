@@ -78,6 +78,8 @@ pub use ssao::*;
 pub use ssr::*;
 pub use transmission::*;
 pub use volumetric_fog::VolumetricFogPlugin;
+// Terra's patch (D553): the fog's pass by name, so a pass can be ordered after it.
+pub use volumetric_fog::render::volumetric_fog as volumetric_fog_pass;
 
 /// The PBR prelude.
 ///

@@ -28,6 +28,8 @@ import bevy_pbr::render::{
 };
 @if(DEPTH_PREPASS && !PREPASS_PIPELINE)
 import bevy_pbr::prepass::utils::prepass_depth;
+@if(!PREPASS_PIPELINE)
+import super::fire_fog::{Haze, haze_seen, hazed_blended};
 
 @if(PREPASS_PIPELINE)
 @group(0) @binding(1) var<uniform> globals: Globals;
@@ -62,6 +64,16 @@ var maps_sampler: sampler;
 @if(!PREPASS_PIPELINE)
 @group(constants::MATERIAL_BIND_GROUP) @binding(105)
 var far_maps: texture_2d_array<f32>;
+// The haze in front of the smoke, at its own depth (fire_fog.wesl, D553).
+@if(!PREPASS_PIPELINE)
+@group(constants::MATERIAL_BIND_GROUP) @binding(106)
+var<storage, read> haze: Haze;
+@if(!PREPASS_PIPELINE)
+@group(constants::MATERIAL_BIND_GROUP) @binding(107)
+var haze_density: texture_3d<f32>;
+@if(!PREPASS_PIPELINE)
+@group(constants::MATERIAL_BIND_GROUP) @binding(108)
+var haze_sampler: sampler;
 const SMOKE_CAMPFIRE: i32 = 0;
 const SMOKE_HOUSE: i32 = 1;
 // Which of a baked puff's 64 frames a card plays over its life: born a little open, and done
@@ -211,6 +223,11 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
         // drawn as a campfire's, its puffs half a metre to a metre wide by the fire's light, it
         // stood over the head as round orange discs (torch round t2, a critic: "like bokeh").
         let torch = tall < TORCH_M;
+        // The torches' smoke is drawn by its own material, before the fog (`fogged::SMOKES`).
+        if torch != (smoke.kind.z > 0.5) {
+            out.position = vec4(0.0, 0.0, -1.0, 1.0);
+            return out;
+        }
         let life_s = select(HEARTH_LIFE_S.x + HEARTH_LIFE_S.y * fract(seed * 3.3), TORCH_LIFE_S, torch);
         let t = fract(globals.time / life_s + j + seed * 0.37);
         let seconds = t * life_s;
@@ -529,5 +546,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var out: FragmentOutput;
     out.color = main_pass_post_lighting_processing(input, vec4(lit, alpha));
     out.color.a = alpha;
+    // The torches' smoke is fogged by the fog pass, as before (`fogged::SMOKES`).
+    if smoke.kind.z < 0.5 {
+        out.color = hazed_blended(out.color, haze_seen(haze, haze_density, haze_sampler, P));
+    }
     return out;
 }

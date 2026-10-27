@@ -234,8 +234,11 @@ pub type FireSmokeMaterial = ExtendedMaterial<StandardMaterial, FireSmokeExtensi
 #[derive(Resource)]
 struct Drawn {
     slots: Handle<ShaderBuffer>,
+    /// The haze in front of the cards (`fogged`).
+    haze: Handle<ShaderBuffer>,
     fire: [Handle<FireMaterial>; KINDS],
-    smoke: [Handle<FireSmokeMaterial>; 2],
+    /// A material for each of `fogged::SMOKES`.
+    smoke: [Handle<FireSmokeMaterial>; fogged::SMOKES.len()],
     puffs: Puffs,
     lights: Vec<Entity>,
     /// Whether each jet is on, since when it is on or off, and when it last came on, by the
@@ -333,6 +336,7 @@ pub fn plugin(app: &mut App) {
     seen::plugin(app);
     light::plugin(app);
     fog::plugin(app);
+    fogged::plugin(app);
     haze::plugin(app);
     film::plugin(app);
     matte::plugin(app);
@@ -390,7 +394,7 @@ fn spawn_cards(
     meshes: &mut Assets<Mesh>,
     count: usize,
     fire: &[Handle<FireMaterial>; KINDS],
-    smoke: &[Handle<FireSmokeMaterial>; 2],
+    smoke: &[Handle<FireSmokeMaterial>; fogged::SMOKES.len()],
 ) {
     // Drawn wherever the fires are: the cards are placed on the GPU, so no bounds would hold.
     let mut spawn = |name: &str, mesh: Mesh, material: Handle<FireMaterial>| {
@@ -401,6 +405,7 @@ fn spawn_cards(
             Transform::IDENTITY,
             NoFrustumCulling,
             NotShadowCaster,
+            fogged::AfterFog,
         ));
     };
     spawn(
@@ -456,27 +461,33 @@ fn spawn_cards(
         fire[JET_EMBERS].clone(),
     );
     spawn("Fire: drops", cards(DROPS, 1, 0.0), fire[4].clone());
-    for (name, mesh, material) in [
-        (
-            "Fire: smoke",
-            cards(count, SMOKE_CARDS, 0.0),
-            smoke[0].clone(),
-        ),
+    // The torches' smoke is the hearths' cards again under its own material, each mesh
+    // drawing its own hearths' (`fogged::SMOKES`).
+    for (name, mesh, which) in [
+        ("Fire: smoke", cards(count, SMOKE_CARDS, 0.0), 0),
         (
             "Fire: hearth smoke",
             cards(HEARTHS.min(count), HEARTH_SMOKE_CARDS, 1.0),
-            smoke[0].clone(),
+            0,
         ),
-        ("Fire: soot", cards(SOOT_PUFFS, 1, 0.0), smoke[1].clone()),
+        ("Fire: soot", cards(SOOT_PUFFS, 1, 0.0), 1),
+        (
+            "Fire: torch smoke",
+            cards(HEARTHS.min(count), HEARTH_SMOKE_CARDS, 1.0),
+            2,
+        ),
     ] {
-        commands.spawn((
+        let mut card = commands.spawn((
             Name::new(name),
             Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(material),
+            MeshMaterial3d(smoke[which].clone()),
             Transform::IDENTITY,
             NoFrustumCulling,
             NotShadowCaster,
         ));
+        if fogged::SMOKES[which].after_fog() {
+            card.insert(fogged::AfterFog);
+        }
     }
 }
 
@@ -502,6 +513,7 @@ fn setup(
     let noise = images.add(volume::noise());
     let sim = images.add(sim::unread());
     // Nothing let go yet: born an hour ago, long gone.
+    let haze = buffers.add(ShaderBuffer::from(vec![[0.0f32; 4]; fogged::HAZE_VEC4S]));
     let puffs = Puffs {
         buffer: buffers.add(ShaderBuffer::from(
             [[0.0f32, 0.0, 0.0, -3600.0], [0.0; 4]].repeat(SOOT_PUFFS + DROPS),
@@ -551,10 +563,13 @@ fn setup(
                 sim: sim.clone(),
                 puffs: puffs.buffer.clone(),
                 adaptation: adaptation.0.clone(),
+                haze: haze.clone(),
+                haze_density: None,
             },
         })
     });
-    let smoke = [0.0, 1.0].map(|kind| {
+    let smoke = fogged::SMOKES.map(|which| {
+        let kind = which.kind;
         smokes.add(FireSmokeMaterial {
             base: StandardMaterial {
                 base_color: Color::WHITE,
@@ -565,7 +580,7 @@ fn setup(
             },
             extension: FireSmokeExtension {
                 uniform: FireSmokeUniform {
-                    kind: Vec4::new(kind, 0.0, 0.0, 0.0),
+                    kind: Vec4::new(kind, 0.0, if which.torches { 1.0 } else { 0.0 }, 0.0),
                     sets: smoke_books.light_scales,
                     ..default()
                 },
@@ -573,6 +588,8 @@ fn setup(
                 puffs: puffs.buffer.clone(),
                 near: near.clone(),
                 far: far.clone(),
+                haze: haze.clone(),
+                haze_density: None,
             },
         })
     });
@@ -598,6 +615,7 @@ fn setup(
         .collect();
     commands.insert_resource(Drawn {
         slots,
+        haze,
         fire,
         smoke,
         puffs,
@@ -777,10 +795,11 @@ fn show(
     // as far as its openings let it in (D485).
     let air_lit = indoor_sky.map_or(1.0, |s| s.0);
     let (sky, sky_frame) = smoke::sky(open_sky.as_deref(), environments.iter().next(), air_lit);
-    for (kind, handle) in drawn.smoke.iter().enumerate() {
+    for (which, handle) in fogged::SMOKES.iter().zip(&drawn.smoke) {
         if let Some(mut material) = smokes.get_mut(handle) {
             material.extension.uniform.wind = drawn.wind.extend(count as f32);
-            material.extension.uniform.kind = Vec4::new(kind as f32, now, 0.0, kept as f32);
+            let torches = if which.torches { 1.0 } else { 0.0 };
+            material.extension.uniform.kind = Vec4::new(which.kind, now, torches, kept as f32);
             material.extension.uniform.sky = sky;
             material.extension.uniform.sky_frame = sky_frame;
         }
@@ -792,6 +811,7 @@ mod books;
 mod burnout;
 mod film;
 mod fog;
+mod fogged;
 mod glow;
 mod haze;
 mod hearth;
