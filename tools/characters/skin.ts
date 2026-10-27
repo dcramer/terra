@@ -3,7 +3,8 @@
 // inside the torso, head or thighs, skinned. Node 22.18 or later; no dependencies.
 
 import { readFileSync } from "node:fs";
-import { type Clip, type Glb, type Pose, type Q, type V3, dot, len, matrix, mmul, posed, qinv, rot, sub } from "./glb.ts";
+import { type Clip, type Glb, type Pose, type Q, type V3, len, matrix, mmul, posed, qinv, rot, sub } from "./glb.ts";
+import { surface, topology } from "./surface.ts";
 
 export type Shape = { name: string; positions: Float64Array; moved: Map<number, V3>; shift: Map<number, V3> };
 export type Inside = (q: V3) => { depth: number; part: string };
@@ -33,7 +34,6 @@ export function skinOf(body: Glb, templatesFile: string, only: string[] = []): {
   const skin = body.gltf.skins![0];
   const prim = body.gltf.meshes![0].primitives[0];
   const positions = body.read(prim.attributes.POSITION);
-  const normals = body.read(prim.attributes.NORMAL);
   const joints = body.read(prim.attributes.JOINTS_0);
   const weights = body.read(prim.attributes.WEIGHTS_0);
   const ibm = body.read(skin.inverseBindMatrices);
@@ -87,48 +87,45 @@ export function skinOf(body: Glb, templatesFile: string, only: string[] = []): {
     return { name, positions: pos, moved, shift };
   });
 
-  // The skinned torso, head and thighs at a pose, gridded for the nearest-vertex search.
-  const CELL = 0.1;
+  // The torso, head and thighs as a surface: the triangles whose corners are all theirs, a
+  // vertex split at a seam (its UVs) welded back into one corner, so the surface is whole.
+  const corner = new Map<string, number>();
+  const cornerOf = new Int32Array(positions.length / 3).fill(-1);
+  const first: number[] = [];
+  for (const v of hit) {
+    const key = [0, 1, 2].map((j) => Math.round(positions[v * 3 + j] * 1e5)).join(",");
+    if (!corner.has(key)) corner.set(key, first.push(v) - 1);
+    cornerOf[v] = corner.get(key)!;
+  }
+  const indices = body.read((prim as { indices?: number }).indices!);
+  const tris: number[] = [];
+  for (let t = 0; t < indices.length; t += 3) {
+    const c = [cornerOf[indices[t]], cornerOf[indices[t + 1]], cornerOf[indices[t + 2]]];
+    if (c.every((x) => x >= 0) && c[0] !== c[1] && c[1] !== c[2] && c[2] !== c[0]) tris.push(...c);
+  }
+  const top = topology(tris, first.map((v) => partOf[v]));
+
+  // The skinned torso, head and thighs at a pose, and how deep a point is inside them (positive
+  // inside): its distance to the nearest point of that skin, signed by its winding number
+  // (surface.ts). A nearest vertex's normal gave false depths where the skin cuts through itself:
+  // the female template's thumb in Walk_Loop read -6.4 then +8.8 cm as it moved 3 cm out of the hip.
   function skinned(shape: Shape, pose: Pose[]) {
     const mats = skin.joints.map((j, k) => {
       const s = shape.shift.get(j)!;
       const unbind = mmul(ibm.subarray(k * 16, k * 16 + 16) as unknown as number[], matrix({ t: [-s[0], -s[1], -s[2]], r: [0, 0, 0, 1], s: [1, 1, 1] }));
       return mmul(matrix(pose[j]), unbind);
     });
-    const grid = new Map<string, { p: V3; n: V3; part: string }[]>();
-    for (const v of hit) {
-      const p: V3 = [0, 0, 0];
-      const n: V3 = [0, 0, 0];
+    const at = new Float64Array(first.length * 3);
+    first.forEach((v, i) => {
+      const [x, y, z] = [shape.positions[v * 3], shape.positions[v * 3 + 1], shape.positions[v * 3 + 2]];
       for (let k = 0; k < 4; k++) {
         const w = weights[v * 4 + k];
         if (w === 0) continue;
         const m = mats[joints[v * 4 + k]];
-        const [x, y, z] = [shape.positions[v * 3], shape.positions[v * 3 + 1], shape.positions[v * 3 + 2]];
-        const [a, b, c] = [normals[v * 3], normals[v * 3 + 1], normals[v * 3 + 2]];
-        for (let j = 0; j < 3; j++) {
-          p[j] += w * (m[j] * x + m[4 + j] * y + m[8 + j] * z + m[12 + j]);
-          n[j] += w * (m[j] * a + m[4 + j] * b + m[8 + j] * c);
-        }
+        for (let j = 0; j < 3; j++) at[i * 3 + j] += w * (m[j] * x + m[4 + j] * y + m[8 + j] * z + m[12 + j]);
       }
-      const l = len(n) || 1;
-      const key = p.map((x) => Math.floor(x / CELL)).join(",");
-      if (!grid.has(key)) grid.set(key, []);
-      grid.get(key)!.push({ p, n: [n[0] / l, n[1] / l, n[2] / l], part: partOf[v] });
-    }
-    // How deep a point is inside the skin (positive inside), by its nearest vertex's normal.
-    return (q: V3): { depth: number; part: string } => {
-      const [cx, cy, cz] = q.map((x) => Math.floor(x / CELL));
-      let best: { p: V3; n: V3; part: string } | undefined;
-      let bestD = Infinity;
-      for (let i = -2; i <= 2; i++)
-        for (let j = -2; j <= 2; j++)
-          for (let k = -2; k <= 2; k++)
-            for (const v of grid.get(`${cx + i},${cy + j},${cz + k}`) ?? []) {
-              const d = len(sub(v.p, q));
-              if (d < bestD) (bestD = d), (best = v);
-            }
-      return best ? { depth: dot(sub(best.p, q), best.n), part: best.part } : { depth: -1, part: "" };
-    };
+    });
+    return surface(top, at);
   }
   return { shapes, skinned };
 }
