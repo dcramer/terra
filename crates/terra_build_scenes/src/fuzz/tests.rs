@@ -274,6 +274,63 @@ fn fuzz_seeds_34_54_80_109_131_180_a_side_board_stops_against_the_end_board() {
 }
 
 #[test]
+fn fuzz_seed_74_a_doorways_jamb_stops_under_the_sill_of_the_window_beside_it() {
+    // Found by `cargo xtask fuzz` at seed 74, shrunk: a log wall with a window beside a
+    // doorway, over a stub of wall between them. The post up the doorway's side stood to
+    // the window's foot, inside the sill lapping past the window, its sawn top in the
+    // plane of the sill's.
+    let materials = baseline();
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .unwrap()
+    };
+    let base = build(
+        &materials.kits,
+        &[
+            Wall {
+                from: [1, 3],
+                to: [1, 7],
+                storey: 0,
+                kind: kind("logs"),
+            },
+            Opening {
+                from: [1, 5],
+                to: [1, 5],
+                storey: 0,
+                door: false,
+            },
+            Opening {
+                from: [1, 6],
+                to: [1, 6],
+                storey: 0,
+                door: true,
+            },
+        ],
+    );
+    let report = terra_build_mesh::inspect::inspect(
+        &base,
+        &materials.kits,
+        &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+    );
+    let fought: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| {
+            matches!(
+                f.fault,
+                terra_build_mesh::inspect::Fault::Coplanar
+                    | terra_build_mesh::inspect::Fault::SeeThrough
+            )
+        })
+        .collect();
+    assert!(fought.is_empty(), "{fought:#?}");
+}
+
+#[test]
 fn a_failing_base_shrinks_to_the_element_that_fails_it() {
     // Fails while a box of hewn timber is in it: the room and the wall go, the box
     // stays, made one cube.

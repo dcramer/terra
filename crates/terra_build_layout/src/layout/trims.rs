@@ -18,6 +18,39 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
             holes.insert((along, at.y));
         }
     }
+    jambs(walls, kit, (axis, row), &holes, layout);
+    heads_and_sills(walls, kit, (axis, row), &holes, layout);
+}
+
+/// Up each side of the openings in a row (`holes`, along and layer): a jamb along every run
+/// of hole cubes with wall beside them, a post where the kit dresses jambs with them (D215),
+/// else a board.
+fn jambs(
+    walls: &Walls,
+    kit: &Kit,
+    (axis, row): (Axis, i32),
+    holes: &BTreeSet<(i32, i32)>,
+    layout: &mut Layout,
+) {
+    // A jamb whose wall beside it is itself an opening's over its top or under its foot (a
+    // window beside a doorway, over the stub of wall between them) stops at that opening's
+    // sill or stands on its head, as a jamb does under a head: the sill and the head lap
+    // past their opening over the jamb, and a jamb run to the layer's face stood in them,
+    // its end in the plane of their face. `wall` is the wall's run beside the jamb.
+    let beside = |(wall, low, high): (i32, i32, i32), (foot, top): (f32, f32)| {
+        (
+            if holes.contains(&(wall, low - 1)) {
+                head_top(kit, axis, low - 1)
+            } else {
+                foot
+            },
+            if holes.contains(&(wall, high + 1)) {
+                sill_foot(kit, axis, high + 1)
+            } else {
+                top
+            },
+        )
+    };
     // Posts up every opening's sides, where the kit dresses jambs with them (D215): from
     // the opening's foot to its head and on into the course over it.
     if let Some(width) = super::runs::post_width(kit) {
@@ -49,9 +82,16 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
                 } else {
                     super::runs::CORNER_POST_SUNK_M
                 };
+                let (foot, top) = beside(
+                    (along + outward, low, high),
+                    (
+                        low as f32 * CELL_M - under,
+                        (high + 1) as f32 * CELL_M + over,
+                    ),
+                );
                 let mut post = super::runs::log(
-                    axis.point(row, middle, low as f32 * CELL_M - under),
-                    axis.point(row, middle, (high + 1) as f32 * CELL_M + over),
+                    axis.point(row, middle, foot),
+                    axis.point(row, middle, top),
                     super::Split::Whole,
                     super::hash::of(&[row as u32, along as u32, low as u32, outward as u32, 11]),
                     None,
@@ -92,9 +132,36 @@ pub(super) fn frames(walls: &Walls, kit: &Kit, axis: Axis, row: i32, layout: &mu
             } else {
                 (face - kit.frame, face)
             };
-            board(a, b, low as f32 * CELL_M, (high + 1) as f32 * CELL_M, 0.0);
+            let (foot, top) = beside(
+                (along + outward, low, high),
+                (low as f32 * CELL_M, (high + 1) as f32 * CELL_M),
+            );
+            board(a, b, foot, top, 0.0);
         }
     }
+}
+
+/// Over the top and under the bottom of the openings in a row (`holes`, along and layer): a
+/// head and a sill, and a head under a roof's cube over the top.
+fn heads_and_sills(
+    walls: &Walls,
+    kit: &Kit,
+    (axis, row): (Axis, i32),
+    holes: &BTreeSet<(i32, i32)>,
+    layout: &mut Layout,
+) {
+    let solid =
+        |along: i32, layer: i32| walls.ours(axis.cube(row, along, layer)) == Some(Fill::Solid);
+    let depth = kit.radius() + 0.02;
+    let across = axis.across();
+    let mut board = |a: f32, b: f32, bottom: f32, top: f32, proud: f32| {
+        let (low, high) = (axis.point(row, a, bottom), axis.point(row, b, top));
+        let out = across * (depth + proud);
+        layout.pieces.push(Piece::Board {
+            min: Place::near((low - out).min(high + out)),
+            max: Place::near((low - out).max(high + out)),
+        });
+    };
     // Under a roof's cube over the top, the roof's cube is the head (docs/building-voxels.md,
     // gap 6): a head board along the opening's top under each, cut a hair under the roof's
     // deck, which comes down to the opening's top at an eave.
