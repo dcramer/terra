@@ -51,6 +51,13 @@ struct Leaf {
     y: [f32; 2],
 }
 
+/// What stands near a column of points (`Room::column`): the cubes not open, and each leaf's
+/// plan distance and heights.
+struct Column {
+    cubes: Vec<IVec3>,
+    leaves: Vec<(f32, [f32; 2])>,
+}
+
 /// What a camera keeps clear of: the cubes that are not open, and the open doors' leaves.
 pub(super) struct Room {
     map: Grid,
@@ -163,25 +170,44 @@ impl Room {
         best.1
     }
 
-    /// The distance from a point to anything not open or a leaf, up to `REACH_M`.
-    pub fn around(&self, p: Vec3) -> f32 {
-        let c = cube_of(p);
-        let mut d2 = REACH_M * REACH_M;
-        for x in -2..=2 {
-            for y in -2..=2 {
+    /// What stands near the points straight over one another from `low` to `high`: the
+    /// cubes not open within two cubes of theirs, and the leaves within `REACH_M` in plan,
+    /// gathered once for the eye's heights over a foot.
+    fn column(&self, low: Vec3, high: Vec3) -> Column {
+        let (a, b) = (cube_of(low), cube_of(high));
+        let mut cubes = Vec::new();
+        for y in a.y - 2..=b.y + 2 {
+            for x in -2..=2 {
                 for z in -2..=2 {
-                    let at = c + IVec3::new(x, y, z);
+                    let at = IVec3::new(a.x + x, y, a.z + z);
                     if !clear(&self.map, at) {
-                        let lo = at.as_vec3() * CUBE;
-                        let off = (lo - p).max(p - (lo + Vec3::splat(CUBE))).max(Vec3::ZERO);
-                        d2 = d2.min(off.length_squared());
+                        cubes.push(at);
                     }
                 }
             }
         }
-        for leaf in &self.leaves {
-            let up = (leaf.y[0] - p.y).max(p.y - leaf.y[1]).max(0.0);
-            let flat = to_leaf(p, leaf).max(0.0);
+        // A leaf `REACH_M` or more away in plan is as far all round.
+        let leaves = self
+            .leaves
+            .iter()
+            .map(|leaf| (to_leaf(low, leaf).max(0.0), leaf.y))
+            .filter(|&(flat, _)| flat < REACH_M)
+            .collect();
+        Column { cubes, leaves }
+    }
+
+    /// The distance from a point of a column to anything not open or a leaf, up to
+    /// `REACH_M`: from each cube not open within two cubes of its own.
+    fn around(&self, near: &Column, p: Vec3) -> f32 {
+        let c = cube_of(p);
+        let mut d2 = REACH_M * REACH_M;
+        for &at in near.cubes.iter().filter(|at| (at.y - c.y).abs() <= 2) {
+            let lo = at.as_vec3() * CUBE;
+            let off = (lo - p).max(p - (lo + Vec3::splat(CUBE))).max(Vec3::ZERO);
+            d2 = d2.min(off.length_squared());
+        }
+        for &(flat, y) in &near.leaves {
+            let up = (y[0] - p.y).max(p.y - y[1]).max(0.0);
             d2 = d2.min(flat * flat + up * up);
         }
         d2.sqrt()
@@ -260,6 +286,8 @@ impl Room {
     /// plan; else the one with the most room.
     fn eye(&self, feet: Vec3) -> f32 {
         let n = ((EYE_M[1] - EYE_M[0]) / EYE_STEP_M).round() as i32;
+        let at = |k: i32| feet + Vec3::Y * (EYE_M[0] + k as f32 * EYE_STEP_M);
+        let near = self.column(at(0), at(n));
         let mut best = (f32::MIN, EYE_M[0]);
         let (mut high, mut tight) = (None, None);
         for k in 0..=n {
@@ -268,7 +296,7 @@ impl Room {
             if !clear(&self.map, cube_of(p)) {
                 break;
             }
-            let room = self.around(p);
+            let room = self.around(&near, p);
             if room >= ROOM_M {
                 high = Some(e);
             } else if room >= TIGHT_M && self.across(p) >= ROOM_M {
