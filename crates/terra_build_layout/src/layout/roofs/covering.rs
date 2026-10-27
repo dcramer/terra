@@ -110,8 +110,15 @@ pub(super) fn lay(
                     let at = middle + way * (reach + past);
                     roofs.top_over(at.x, at.z, middle.y - CELL_M)
                 };
+                // Nor at a step's top, where the roof beyond is a lower one, far under this
+                // face's plane carried on (seed 180, gap 11): its corner would stand out past
+                // the step's edge. Past a hip the roof is under the plane by no more than the
+                // way past it.
+                let rise = upslope.y / way.dot(upslope).max(1e-3);
+                let own = middle.y + (reach + 0.01) * rise;
                 match (top(0.01), top(0.02)) {
-                    (Some(near), Some(far)) if far > near - CREST_FALL_M => {}
+                    (Some(near), Some(far))
+                        if far > near - CREST_FALL_M && near > own - STEP_DROP_M => {}
                     _ => continue,
                 }
                 let beside = Place::near(middle + upslope * 0.1);
@@ -127,6 +134,11 @@ pub(super) fn lay(
     }
     battens
 }
+
+/// How far under a face's plane carried on the roof just past a batten's reach may lie and
+/// still be the roof running on (past a hip, by the centimetres past it): any lower is a
+/// lower roof, a step down.
+const STEP_DROP_M: f32 = 0.1;
 
 /// How far the covering is tucked into what stands beside the roof, in metres: past any
 /// timber wall's or post's face in its cube (a log wall's is 10 cm in, a post's 11), short

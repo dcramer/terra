@@ -424,3 +424,47 @@ fn fuzz_seeds_61_72_196_an_eave_at_a_steps_top_is_measured_from_its_own_roof() {
         assert!(out.is_empty(), "{:?}: {out:#?}", elements.last());
     }
 }
+
+#[test]
+fn fuzz_seed_180_no_batten_stands_out_past_a_steps_top_under_a_wall() {
+    // Found by `cargo xtask fuzz` at seed 180, shrunk: a 2x2x2 box of shakes slopes, so
+    // the roof steps down a cube between them, with a room's log wall standing across the
+    // step (gap 11). The batten under the higher face's top course was laid as on a roof
+    // running on, as the lower roof rises on beyond the step: its corner stood 3 mm out past
+    // the step's edge and its end 4 mm past the wall, 20 cm over the lower roof.
+    let materials = baseline();
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .unwrap()
+    };
+    let elements = vec![
+        Blocks {
+            at: [6, 0, 7],
+            size: 2,
+            shape: Shape::Slope(Facing::West),
+            kind: kind("shakes"),
+        },
+        Room {
+            min: [3, 2],
+            max: [7, 6],
+            storey: 0,
+            kind: kind("logs"),
+        },
+    ];
+    let base = build(&materials.kits, &elements);
+    let report = terra_build_mesh::inspect::inspect(
+        &base,
+        &materials.kits,
+        &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+    );
+    let out: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.fault == terra_build_mesh::inspect::Fault::PokesOut)
+        .collect();
+    assert!(out.is_empty(), "{out:#?}");
+}

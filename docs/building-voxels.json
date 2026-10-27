@@ -495,13 +495,12 @@
           "status": "Closed"
         },
         {
-          "junction": "A roof kind laid by hand where no roof is: slopes and corners stacked two high",
-          "rule": "Not yet closed: where a wall stands across a step of slopes (seed 180), the boards closing the step under it reach 4 mm out past the wall's face, 20 cm over the lower roof",
-          "code": ["terra_build_layout::layout::roofs", "terra_build_mesh::roofing"],
-          "tests": [],
+          "junction": "A roof kind laid by hand where no roof is: slopes and corners stacked two high, a wall standing across the step",
+          "rule": "No batten is laid under a face's course within its reach of a step's top, where the roof beyond is a lower one far under the face's plane carried on, as none is at a crest: the top batten's corner stood out past the step's edge and its end past the wall standing across the step, over the lower roof",
+          "code": ["terra_build_layout::layout::roofs::covering"],
+          "tests": ["terra_build_scenes::fuzz::fuzz_seed_180_no_batten_stands_out_past_a_steps_top_under_a_wall"],
           "cases": [],
-          "also": "the fuzz pass, seed 180",
-          "status": "Gap 11"
+          "status": "Closed"
         },
         {
           "junction": "A roof's eave over a wall running on past it, the wall's top at the eave",
