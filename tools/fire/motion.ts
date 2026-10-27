@@ -83,9 +83,12 @@ export const GATE: { name: string; of: (m: Motion) => number; lo: number; hi: nu
 
 /// A film against GATE: each bar's value, to the two decimals the bars and the report give, and
 /// whether it meets it.
-export const gate = (m: Motion) =>
+/// Several films of one build (its fire at several placements, each a seed's offset, mirror,
+/// turn and scale) are held by the median of each measure: placement alone moved the night
+/// campfire's lean between 6.8 and 11.6 deg (fire round g52), so one film is one draw of it.
+export const gate = (...ms: Motion[]) =>
   GATE.map((g) => {
-    const value = Math.round(100 * g.of(m)) / 100;
+    const value = Math.round(100 * median(ms.map(g.of))) / 100;
     return { name: g.name, value, met: value >= g.lo && value <= g.hi };
   });
 
@@ -181,14 +184,49 @@ export function flameMasks(clip: Clip, cut: number): Uint8Array[] {
   });
 }
 
-/// The flame's base row, its height H and its columns, pooled over the clip.
-export function geometry(masks: Uint8Array[], w: number, h: number): Geometry {
+/// What is flame-coloured but does not move: a pixel flame in at least `share` of the clip's
+/// frames whose luma's sd over the clip is at most `sd` (of 255). A log's glowing crack seen
+/// through the flame's thin foot, or a filmed fire's coal bed, is flame by colour in every frame
+/// and hardly changes; flame flickers. As fire detection in video keeps only fire-coloured pixels
+/// that move (Töreyin, Dedeoğlu, Güdükbay and Çetin, "Computer vision based method for real-time
+/// fire and flame detection", Pattern Recognition Letters 27, 2006), it is left out of the
+/// flame's base (`geometry`); it stays in the masks, so the flame's area and colour keep it.
+/// Counting the glow lowered the base and raised H, so the tongue level fell into the upright
+/// body: the night campfire's lean read 6.8 deg with its logs glowing and 10.2 with them dark
+/// (fire round g52).
+export type Still = { share: number; sd: number };
+export const STILL: Still = { share: 0.95, sd: 8 };
+export function still(clip: Clip, masks: Uint8Array[], s: Still = STILL): Uint8Array {
+  const n = clip.frames.length;
+  const out = new Uint8Array(clip.w * clip.h);
+  for (let p = 0; p < out.length; p++) {
+    let on = 0;
+    let sum = 0;
+    let sq = 0;
+    for (let i = 0; i < n; i++) {
+      on += masks[i][p];
+      const f = clip.frames[i];
+      const l = luma(f[3 * p], f[3 * p + 1], f[3 * p + 2]);
+      sum += l;
+      sq += l * l;
+    }
+    const m = sum / n;
+    if (on >= s.share * n && Math.sqrt(Math.max(0, sq / n - m * m)) <= s.sd) out[p] = 1;
+  }
+  return out;
+}
+
+/// The flame's base row, its height H and its columns, pooled over the clip; the base from the
+/// pixels that move only (`still`, when given).
+export function geometry(masks: Uint8Array[], w: number, h: number, still?: Uint8Array): Geometry {
   const rows = new Float64Array(h);
+  const moving = new Float64Array(h);
   const cols = new Float64Array(w);
   for (const m of masks)
     for (let p = 0; p < w * h; p++)
       if (m[p]) {
         rows[(p / w) | 0]++;
+        if (!still?.[p]) moving[(p / w) | 0]++;
         cols[p % w]++;
       }
   const at = (hist: Float64Array, q: number) => {
@@ -197,7 +235,7 @@ export function geometry(masks: Uint8Array[], w: number, h: number): Geometry {
     for (let i = 0; i < hist.length; i++) if ((acc += hist[i]) >= q * total) return i;
     return hist.length - 1;
   };
-  const base = at(rows, 0.99);
+  const base = at(moving.some((v) => v > 0) ? moving : rows, 0.99);
   const heights = new Float64Array(base + 1);
   for (let y = 0; y <= base; y++) heights[base - y] = rows[y];
   return { base, height: Math.max(1, at(heights, 0.98)), x0: at(cols, 0.005), x1: at(cols, 0.995) };
@@ -398,10 +436,10 @@ export function colours(clip: Clip, masks: Uint8Array[], g: Geometry): Colours {
 }
 
 /// Every measure of a clip at its analysis size.
-export function analyse(clip: Clip, cut = lumaCut(clip)): Motion {
+export function analyse(clip: Clip, cut = lumaCut(clip), s: Still = STILL): Motion {
   const { w, h, fps } = clip;
   const masks = flameMasks(clip, cut);
-  const g = geometry(masks, w, h);
+  const g = geometry(masks, w, h, still(clip, masks, s));
   const area = masks.map((m) => m.reduce((a, b) => a + b, 0));
   const tall = masks.map((m) => {
     for (let p = 0; p < m.length; p++) if (m[p]) return g.base - ((p / w) | 0);
@@ -453,7 +491,8 @@ export function load(s: Source, matte?: Source, crop?: Box, cut?: number): { cli
   const small: [number, number] = [even(box.w * k), even(box.h * k)];
   const first: Clip = { w: small[0], h: small[1], fps: p.fps, frames: decode(s, box, small), mattes: matte && decode(matte, box, small, true) };
   const level = cut ?? lumaCut(first);
-  const g = geometry(flameMasks(first, level), first.w, first.h);
+  const firstMasks = flameMasks(first, level);
+  const g = geometry(firstMasks, first.w, first.h, still(first, firstMasks));
   const [sx, sy] = [box.w / small[0], box.h / small[1]];
   const H = g.height * sy;
   const x0 = Math.max(box.x, Math.round(box.x + g.x0 * sx - 0.3 * H));
@@ -471,7 +510,7 @@ export function load(s: Source, matte?: Source, crop?: Box, cut?: number): { cli
 /// The middle frame with the flame tinted and the base, thirds and tongue level drawn.
 function overlay(path: string, clip: Clip, cut: number) {
   const masks = flameMasks(clip, cut);
-  const g = geometry(masks, clip.w, clip.h);
+  const g = geometry(masks, clip.w, clip.h, still(clip, masks));
   const t = clip.frames.length >> 1;
   const rgba = new Uint8Array(clip.w * clip.h * 4);
   const lines = new Map([g.base, g.base - g.height / 3, g.base - (2 * g.height) / 3, g.base - g.height].map((y) => [Math.round(y), [255, 255, 255]]));
@@ -507,19 +546,28 @@ if (import.meta.main) {
     const i = argv.indexOf(k);
     return i >= 0 ? argv[i + 1] : undefined;
   };
-  const input = argv[0];
-  if (!input || input.startsWith("--")) {
-    console.error("usage: node tools/fire/motion.ts <video | 'dir/f-*[0-9].png'> [--box WxH+X+Y] [--matte <video|glob>] [--from S] [--seconds S] [--fps N] [--cut L] [--overlay out.png] [--json]");
+  const first = argv.findIndex((a) => a.startsWith("--"));
+  const inputs = argv.slice(0, first < 0 ? argv.length : first);
+  const mattes = argv.flatMap((a, i) => (a === "--matte" && i + 1 < argv.length ? [argv[i + 1]] : []));
+  if (!inputs.length || (mattes.length && mattes.length !== inputs.length)) {
+    console.error("usage: node tools/fire/motion.ts <video | 'dir/f-*[0-9].png'>... [--matte <video|glob>]... (a matte per clip) [--box WxH+X+Y] [--from S] [--seconds S] [--fps N] [--cut L] [--overlay out.png] [--json]");
+    console.error("  several clips: each is measured, then the gate holds the median of each measure (one build's fire at several placements)");
     process.exit(2);
   }
   const src = (path: string): Source => ({ input: path, fps: +(opt("--fps") ?? 30), from: +(opt("--from") ?? 0), seconds: +(opt("--seconds") ?? 10) });
-  const matte = opt("--matte");
   const box = opt("--box");
   const given = opt("--cut");
-  const { clip, cut, sourceHeight } = load(src(input), matte ? src(matte) : undefined, box ? parseBox(box) : undefined, given === undefined ? undefined : +given);
-  const ov = opt("--overlay");
-  if (ov) overlay(ov, clip, cut);
-  const m = analyse(clip, cut);
-  const how = `flame luma >= ${cut.toFixed(0)}${clip.mattes ? " in the matte" : ""}, ${sourceHeight.toFixed(0)} px tall in the source, measured at ${m.height} px`;
-  console.log(argv.includes("--json") ? JSON.stringify({ name: basename(input), how, ...m }, null, 1) : said(basename(input), m, how));
+  const ms = inputs.map((input, i) => {
+    const { clip, cut, sourceHeight } = load(src(input), mattes[i] ? src(mattes[i]) : undefined, box ? parseBox(box) : undefined, given === undefined ? undefined : +given);
+    const ov = opt("--overlay");
+    if (ov && i === 0) overlay(ov, clip, cut);
+    const m = analyse(clip, cut);
+    const how = `flame luma >= ${cut.toFixed(0)}${clip.mattes ? " in the matte" : ""}, ${sourceHeight.toFixed(0)} px tall in the source, measured at ${m.height} px`;
+    console.log(argv.includes("--json") ? JSON.stringify({ name: basename(input), how, ...m }, null, 1) : said(basename(input), m, how));
+    return m;
+  });
+  if (ms.length > 1 && !argv.includes("--json")) {
+    const g = gate(...ms);
+    console.log(`median of ${ms.length}: gate met ${g.filter((x) => x.met).length} of ${GATE.length}: ${g.map((x) => `${x.name} ${f2(x.value)}${x.met ? "" : "x"}`).join(" ")}`);
+  }
 }

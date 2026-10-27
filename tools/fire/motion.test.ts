@@ -1,7 +1,7 @@
 // The motion measure's numbers on clips whose answers are known by construction.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { analyse, type Clip, flicker, GATE, type Motion, roughness } from "./motion.ts";
+import { analyse, type Clip, flicker, GATE, gate, type Motion, roughness } from "./motion.ts";
 
 const FPS = 30;
 const N = 180;
@@ -64,6 +64,29 @@ test("the synthetic fire's flicker, tongues, rise, roughness and colour are foun
 test("a hand-held camera's shake leaves the tongues' rise", () => {
   const m = analyse(fire(true));
   near(m.tongues.rise * m.height, 60, 4, "the tongues' rise, px/s");
+});
+
+test("a glowing log under the flame that never changes is not its base", () => {
+  // Flame-coloured and bright in every frame, as a log's crack glowing through the flame's foot:
+  // rows 230-249 under the body, which counted as flame would lower the base by 20 px.
+  const clip = fire();
+  for (const f of clip.frames)
+    for (let y = 230; y < 250; y++)
+      for (let x = 70; x < 130; x++) f.set([255, 150, 50].map((v) => Math.round(v * grain(x, y))), 3 * (y * clip.w + x));
+  const [bare, glowing] = [analyse(fire()), analyse(clip)];
+  near(glowing.height, bare.height, 1, "H with the glow");
+  near(glowing.tongues.count, bare.tongues.count, 0.01, "tongues with the glow");
+  near(glowing.colour.red[2], bare.colour.red[2], 0.5, "the top band's red with the glow");
+  // Kept in the masks, the glow is still flame by area: it adds 60 x 20 px to every frame.
+  assert.ok(glowing.flicker.areaCv < bare.flicker.areaCv, `area sd/mean ${glowing.flicker.areaCv} against ${bare.flicker.areaCv}`);
+});
+
+test("the gate holds several films by each measure's median", () => {
+  const m = analyse(fire());
+  const at = (lean: number): Motion => ({ ...m, tongues: { ...m.tongues, lean } });
+  const lean = (ms: Motion[]) => gate(...ms).find((g) => g.name === "lean");
+  assert.deepEqual(lean([at(6.8), at(9), at(11.6)]), { name: "lean", value: 9, met: true });
+  assert.deepEqual(lean([at(6.8), at(7), at(11.6)]), { name: "lean", value: 7, met: false });
 });
 
 test("the run's matte stands in for the luma cut", () => {
