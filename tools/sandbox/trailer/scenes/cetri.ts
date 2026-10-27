@@ -248,11 +248,8 @@ function script(s: Script) {
         });
   }
   s.call("staged.spawn", { name: "cetri", model: "models/characters/cetri.glb", bend: ASLEEP, at: [CETRI[0], 0, CETRI[1]], facing: [stop[0], 0, stop[1]], scale: SIZE, turn_deg_s: 25, base: true });
-  // A lantern left burning low by the path, as a traveller sets one down: off its roots and
-  // dim, so it does not single out the one oak that will wake (round-8 film reviews: at its
-  // foot it gave the sleeping tree away); the eyes' own glow lights the face now.
-  const lantern = at(CETRI, 3.4, -2.3);
-  s.call("staged.spawn", { name: "lantern", model: "models/props/Lantern.glb", at: [lantern[0], 0, lantern[1]], facing: [stop[0], 0, stop[1]], base: true, burns: [0.1, 0.05, 0.35], burns_up: 0.2 });
+  // No lantern by the path: its flame stood as an orange stake by the walking foot in the side
+  // shot (round-17 reviews), and the eyes' own glow lights the face.
   s.frame = 40;
   // Asleep it barely stirs: its idle slowed until only the wind would move it.
   s.call("staged.play", { name: "cetri", clip: "Troll_Idle", speed: 0.04, blend_ms: 0 });
