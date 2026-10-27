@@ -1,5 +1,5 @@
 // The Cetri (D534, docs/creatures.md): walking up the lush forest's path in the morning
-// toward the oaks beside it, one of them, a 7 m oak like its neighbours, wakes: its eyes
+// toward the oaks beside it, one of them, a 9.5 m oak towering over its neighbours, wakes: its eyes
 // light, its trunk splits into a mouth, it lunges at the walker and then comes on in slow,
 // heavy steps. The camera is the walker's eye but for two of the walk's steps, filmed from beside
 // it (SIDE). Places in the start's metres, east and south.
@@ -10,12 +10,17 @@ const ROLLS = 360;
 const BEATS = { glow: 4.2, wakes: 5.0, lunge: 8.2, comes: 10.6, end: 17.6 };
 /// Where it stands: beside the path, a few metres short of the nearest grown oak (16.2, 41.2).
 const CETRI: [number, number] = [19.5, 38];
+/// How big it stands: about 9.5 m (D534, the developers: "Make it 9-10 m"), its 7 m model
+/// stood 1.36 times as big. Heights and lengths on its body below are the 7 m model's,
+/// scaled by it where they are used.
+const SIZE = 9.5 / 7;
 /// A point on the path (forest.json's route, (3.7, 4.7) to (16.8, 25)): the way the walker
 /// comes from the tree. It stops as the tree wakes 7.5 m short of it, so its face is big
 /// enough to read (round-5 film reviews: eyes 10 px at 10 m), west of that line, clear of the
 /// oak by the path that hid the lunge.
 const WAY: [number, number] = [17.2, 29.2];
-const NEAR = 7.5;
+/// 8.5 m at 9.5 m tall (7.5 at 7 m, by the root of its size, so the face stays near the frame's top).
+const NEAR = 8.5;
 /// How far west of the line it stops, how far back the walk starts, and when it stops: still
 /// before the eyes light, the last steps straight at the tree, clear of the brush that hid the
 /// wake (round-6 film reviews: a leaf clump over the face from 4 to 5.5 s).
@@ -141,7 +146,10 @@ const ARMS = { lower: 30, reach_l: -25, reach_r: -5, swing: 16 };
 /// it on the exported file: the pace the file keeps (PACES), the cycle, and each footfall, the
 /// clip's second and where the foot lands, metres to the body's left and ahead of it. Keyed at
 /// its own tempo, a 1.5 s step (a person's heavy 0.8 s, scaled by the root of a 2.9 m leg), so
-/// it plays at rate 1 with the body going at that pace and its planted feet hold; it starts at
+/// on the 7 m model it plays at rate 1 at that pace with its planted feet held; stood SIZE as
+/// big it plays at the root of that slower (a 2.9 m leg made 3.9), at SIZE times the pace over
+/// that, so the feet still hold (COMES_SPEED). The footfalls are the file's, in clip seconds and
+/// model metres; the scene scales them. It starts at
 /// `from`, the right foot in its swing, so it lands soon. The footfalls are the film's beats,
 /// as a game keys them to a clip's contact frames. Troll_Walk, which this replaces, barely lifted
 /// its feet (0.02-0.13 m clear) or sank its hips (0.02 m): rounds 6-9 scored its weight 3.
@@ -149,7 +157,7 @@ const WALK = {
   clip: "Giant_Walk",
   pace: 0.87,
   cycle: 3.0,
-  rate: 1,
+  rate: 1 / Math.sqrt(SIZE),
   from: 0.7,
   falls: [
     { at: 1.4, left: 0.63, ahead: 0.74 },
@@ -184,23 +192,26 @@ const STEP_DUST = 2.0;
 /// morning sun, so its legs stand dark against the bright backlit leaves rather than dark bark
 /// on dark bark. Nearer side-on, or on its right, the two oaks it walks out between stand in
 /// the line (flora's obstacles at (16.0, 35.9) and (20.4, 34.5): round 16's first two takes
-/// were a trunk); from 12.4 s at 40-60 degrees the line is 1.6 m or more clear of every
-/// trunk. Its footfalls shake it `shake` times the walker's eye's, and puff `dust` big, for
+/// were a trunk); from 12.4 s at 40-65 degrees the line is clear of every
+/// trunk (at 9.5 m tall, 12.5 m off, 40-65 degrees: 2.4 m). Its footfalls shake it `shake` times the walker's eye's, and puff `dust` big, for
 /// the distance. The walker's eye has the walk's first step before it and the menace after.
-const SIDE = { from: 12.4, to: 15.6, off: 10, closes: 1, bearing: 40, swings: 20, up: 1.0, look: 3.0, shake: 0.4, dust: 2.5 };
+const SIDE = { from: 12.5, to: 15.5, off: 12.5, closes: 1.5, bearing: 40, swings: 25, up: 1.2, look: 4.0, shake: 0.4, dust: 2.5 };
 /// How far it lunges and how fast, metres and metres a second.
-const LUNGE_M = 2.0;
+const LUNGE_M = 2.0 * SIZE;
 const LUNGE_SPEED = 4.5;
-const COMES_SPEED = WALK.pace * WALK.rate;
+/// At its size the clip is stood SIZE times as big and played at the root of that slower, as
+/// its own step was keyed (by the root of the leg): a 1.75 s step at 1.01 m/s; staged.rs plays
+/// a stride at the speed it goes over its pace times the figure's scale (20d474fc).
+const COMES_SPEED = WALK.pace * SIZE * WALK.rate;
 /// How far the walker flinches back at the blow and backs away while it comes on, metres:
 /// less than it gains, so it closes in (round-7 reviews: it barely advanced; round 5: the
-/// flinch cancelled the lunge); 3.5 m against its 6.1 m at Giant_Walk's 0.87 m/s. It scrambles
+/// flinch cancelled the lunge); 4.5 m against its 7.1 m at 1.01 m/s. It scrambles
 /// back over `BACKS_S` seconds, `BACKS_EASE` the power of its ease out, while the film watches
-/// the walk from the side, and then stands frozen while it closes, 3.8 m off at the end. It
+/// the walk from the side, and then stands frozen while it closes, 4 m off at the end. It
 /// backs `SIDE_M` to its own right as it goes, out from behind the bush left of the frame that
 /// hid the swinging leg (round 11, at 12.1 s).
 const FLINCH_M = 0.3;
-const BACKS_M = 3.5;
+const BACKS_M = 4.5;
 const BACKS_S = 3.6;
 const BACKS_EASE = 1.6;
 const SIDE_M = 1.5;
@@ -220,7 +231,7 @@ function script(s: Script) {
   const at = (o: [number, number], ahead: number, side = 0): [number, number] => [o[0] + d[0] * ahead + west[0] * side, o[1] + d[1] * ahead + west[1] * side];
   const stop = at(CETRI, NEAR, NEAR_WEST);
   // Where its face is, seen from an eye.
-  const face = (feet: [number, number], eye: [number, number], h = FACE): Vec3 => on(toward(feet, eye, h.ahead), h.up);
+  const face = (feet: [number, number], eye: [number, number], h = FACE): Vec3 => on(toward(feet, eye, h.ahead * SIZE), h.up * SIZE);
   s.frame = 30;
   if (!GROUND.length) {
     for (let j = 0; j < 8; j++)
@@ -234,7 +245,7 @@ function script(s: Script) {
           base: true,
         });
   }
-  s.call("staged.spawn", { name: "cetri", model: "models/characters/cetri.glb", bend: ASLEEP, at: [CETRI[0], 0, CETRI[1]], facing: [stop[0], 0, stop[1]], turn_deg_s: 25, base: true });
+  s.call("staged.spawn", { name: "cetri", model: "models/characters/cetri.glb", bend: ASLEEP, at: [CETRI[0], 0, CETRI[1]], facing: [stop[0], 0, stop[1]], scale: SIZE, turn_deg_s: 25, base: true });
   // A lantern left burning low by the path, as a traveller sets one down: off its roots and
   // dim, so it does not single out the one oak that will wake (round-8 film reviews: at its
   // foot it gave the sleeping tree away); the eyes' own glow lights the face now.
@@ -247,7 +258,7 @@ function script(s: Script) {
   // The walk up the path, looking at the oaks ahead; it slows and stops as the tree wakes.
   s.frame = 60;
   const start = at(CETRI, NEAR + WALK_M, NEAR_WEST);
-  s.cut(on(start, EYE), on(CETRI, 4.2));
+  s.cut(on(start, EYE), on(CETRI, 4.2 * SIZE));
   s.frame = ROLLS;
   s.glide(on(stop, EYE), face(CETRI, stop), Math.round(STOPS_S * 60));
 
@@ -268,7 +279,7 @@ function script(s: Script) {
   s.call("staged.bend", { name: "cetri", bend: WINDS, blend_ms: 750 });
   // The eyes flare as it gathers itself and stay hot through the lunge (round 7: out at its peak).
   s.call("staged.glow", { name: "cetri", strength: 3.4, blend_ms: 900 });
-  s.glide(on(stop, EYE), on(CETRI, FACE.up + 0.3), 60);
+  s.glide(on(stop, EYE), on(CETRI, (FACE.up + 0.3) * SIZE), 60);
   const lunged = at(CETRI, LUNGE_M, 0.2);
   s.frame = f(BEATS.lunge);
   s.call("staged.bend", { name: "cetri", bend: LUNGES, blend_ms: 420 });
@@ -328,7 +339,8 @@ function script(s: Script) {
   // Where each foot lands, and how far a footfall drops an eye standing there.
   const footOf = (fall: { t: number; left: number; ahead: number }): [number, number] => {
     const feet = feetAt(fall.t);
-    return [feet[0] + way[0] * fall.ahead + left[0] * fall.left, feet[1] + way[1] * fall.ahead + left[1] * fall.left];
+    const [ahead, side] = [fall.ahead * SIZE, fall.left * SIZE];
+    return [feet[0] + way[0] * ahead + left[0] * side, feet[1] + way[1] * ahead + left[1] * side];
   };
   const dropAt = (fall: { t: number; left: number; ahead: number }, e: Vec3) => {
     const foot = footOf(fall);
