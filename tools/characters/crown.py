@@ -39,6 +39,8 @@ SIZE_M = 1.3
 # through as well (their shader's transmission), which a plain material is not, and the first
 # crown read dark blue-green beside them (round-5 still reviews).
 TINT = Vector((1.2, 1.25, 0.82))
+# The face's clear cone: its axis this far below straight ahead, and its half-angle, degrees.
+FACE_CONE = (15, 45)
 ARM = ("clavicle", "upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky")
 
 src = look.path(look.args()[0])
@@ -77,6 +79,33 @@ for v in body.data.vertices:
 if len(points) < 50:
     sys.exit(f"CROWN only {len(points)} points above the head: no crown to dress")
 pts = np.array([p[:] for p in points])
+# A point's weights kept on the trunk: the arms' share of a crown point by the shoulders,
+# raised 150 degrees asleep, dragged its clump over the face (round-6 film reviews: a bright
+# tuft over the face until the arms came down, then a crown gone bare). A point mostly the
+# arms' takes no clump; the rest are given wholly to the trunk's bones.
+arm_share = [sum(w for n, w in ws if n.split("_")[0] in ARM) for ws in weights]
+weights = [[(n, w / max(1e-6, 1 - a)) for n, w in ws if n.split("_")[0] not in ARM] for ws, a in zip(weights, arm_share)]
+
+# The face's line of sight kept clear: no card in a cone from just behind the face out
+# toward where it is seen from, ahead and below (the walker's eye 2-8 m off), and up ahead
+# as the trunk tips at the lunge. The face is where the Wake key moves the lips.
+moved = []
+keys = body.data.shape_keys
+if keys and "Wake" in keys.key_blocks:
+    basis, wake = keys.key_blocks[0].data, keys.key_blocks["Wake"].data
+    moved = [mw @ basis[i].co for i in range(len(basis)) if (wake[i].co - basis[i].co).length > 0.01]
+if moved:
+    face = Vector((sum(v.x for v in moved) / len(moved), min(v.y for v in moved), max(v.z for v in moved)))
+else:
+    face = Vector((head.x, head.y - 0.5, joint["neck_01"].z + 0.5))
+APEX = face + Vector((0, 0.4, 0))
+AXIS = Vector((0, -1, -math.tan(math.radians(FACE_CONE[0])))).normalized()
+COS = math.cos(math.radians(FACE_CONE[1]))
+
+
+def before_face(p):
+    d = p - APEX
+    return d.length > 1e-3 and d.normalized().dot(AXIS) > COS
 base = Vector((head.x, head.y, head.z))
 reach = np.linalg.norm(pts - np.array(base[:]), axis=1)
 
@@ -84,7 +113,10 @@ reach = np.linalg.norm(pts - np.array(base[:]), axis=1)
 # of its reach and off the bole, gathered CLUMP_M apart; each leans the way its branch runs,
 # out from the foot.
 off_bole = np.hypot(pts[:, 0] - head.x, pts[:, 1] - head.y) > 0.5
-outer = pts[(reach > 0.3 * reach.max()) & (off_bole | (pts[:, 2] > head.z + 0.8))]
+# Out from a fifth of the reach, not a third: the inner limbs leafed too, so the crown seen
+# from below close by is not bare antlers (round-6 film reviews).
+bare = np.array(arm_share) > 0.25
+outer = pts[(reach > 0.2 * reach.max()) & (off_bole | (pts[:, 2] > head.z + 0.8)) & ~bare]
 cells = {}
 for p in outer:
     cells.setdefault(tuple(np.floor(p / CLUMP_M).astype(int)), []).append(p)
@@ -107,12 +139,14 @@ for k, idx in masses.items():
 # 3. The cards, as crown_cards hangs an oak's.
 tree = KDTree(len(points))
 for i, p in enumerate(points):
-    tree.insert(p, i)
+    if not bare[i]:  # a card skinned only to a point the trunk carries
+        tree.insert(p, i)
 tree.balance()
 bm = bmesh.new()
 uv = bm.loops.layers.uv.new("UVMap")
 col = bm.loops.layers.float_color.new("Leaf")
 normals, cards = [], []
+cleared = 0
 for i, (tip, _) in enumerate(tips):
     along = (tip - base).normalized()
     mass = mass_at[i]
@@ -133,6 +167,13 @@ for i, (tip, _) in enumerate(tips):
                 middle.y - half < head.y + 0.3 and reach_down < head.z + 0.45 and abs(middle.x - head.x) < 1.5):
             continue
         right = up.cross(facing)
+        side = 2 * half / math.sqrt(2)
+        du, dv = (up + right).normalized() * side, (up - right).normalized() * side
+        corners = [stalk, stalk + du, stalk + du + dv, stalk + dv]
+        if any(before_face(c) for c in (*corners, middle, stalk + du * 0.5, stalk + dv * 0.5,
+                                        stalk + du + dv * 0.5, stalk + dv + du * 0.5)):
+            cleared += 1
+            continue
         out_m = (middle - mass).normalized() if (middle - mass).length > 1e-3 else out_crown
         normal = (out_m * 0.45 + out_crown * 0.35 + facing * 0.2).normalized()
         flat = math.hypot(middle.x - centre.x, middle.y - centre.y)
@@ -145,9 +186,6 @@ for i, (tip, _) in enumerate(tips):
         tint = Vector((tint.x * TINT.x, tint.y * TINT.y, tint.z * TINT.z))
         # The picture's stalk is its bottom-left corner, its leaves out to the top right: the
         # square laid so its diagonal runs along `up` from the stalk.
-        side = 2 * half / math.sqrt(2)
-        du, dv = (up + right).normalized() * side, (up - right).normalized() * side
-        corners = [stalk, stalk + du, stalk + du + dv, stalk + dv]
         vs = [bm.verts.new(c) for c in corners]
         f = bm.faces.new(vs)
         for loop, (a, b) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
@@ -234,6 +272,7 @@ for p in body.data.polygons[:first_leaf]:
     for li in p.loop_indices:
         shade_attr.data[li].color = (1, 1, 1, 1)
 print("CROWN", f"{len(tips)} clumps, {len(normals)} cards over {len(points)} crown points,",
+      f"{cleared} kept off the face at ({face.x:.2f}, {face.y:.2f}, {face.z:.2f}),",
       f"reach {crown_reach:.2f} m, top {top_z:.2f} m, head {head.z:.2f} m, neck {joint['neck_01'].z:.2f} m")
 
 for o in bpy.context.scene.objects:
