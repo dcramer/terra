@@ -79,12 +79,12 @@ A crypt makes sense when each room reads as a place something was done in, and s
 | Entrance | antechamber, where mourners left offerings | offering altar | urns, candles | candles, stone | - |
 | Passage | ossuary passage | a wooden coffin | bones, urns, shrouded dead | stone, candles | - |
 | Branch | robbed tomb | its coffin, lid pushed aside | broken jars, fallen stone | plates, bowls | the looter's leavings: a chest, spilled bowls, a lantern |
-| Guard | guard post | the guards' bench | the fallen, their axes, a lantern | bones, stone | the last stand: bones, axes, a shroud |
+| Guard | guard post | the guards' bench | the fallen, their axes, a lantern | bones, stone | the last stand: a shroud, shields leant against the wall, axes laid down |
 | Puzzle | ossuary (holds the key) | its altar (the feature) | heaped bones, shrouds, urns | candles, bones | - |
 | Treasure, Secret | treasury of grave goods | a chest | jars, plates, bowls, urns, chests | brass, plates | an offering: urns about a chest |
 | Shortcut | chapel | an altar | candles, a shelf of the dead's records, urns | candles | - |
 | Goal | the lord's burial chamber | the relic on its dais (the feature) | urns, jars, brass, candles | candles | - |
-| Rest | camp of earlier delvers | the campfire (the feature) | a barrel, a log, buckets | bowls, tools | a bedroll's pack: a folded bedroll, a lantern, bowls |
+| Rest | camp of earlier delvers | the campfire (the feature) | a barrel, a log, buckets | bowls, tools | where one slept: a bedroll, its blanket folded, a pack, a lantern |
 
 The town's goblets read as clear glass and its stew pot and sack as glossy white tureens and skulls under torchlight (barrow dress round 2's reviewers), so the crypt lays plates, bowls and brass and the camp a barrel, tools and a folded bedroll in their place.
 

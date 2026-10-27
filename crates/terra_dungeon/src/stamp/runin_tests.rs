@@ -16,7 +16,7 @@ const SEEDS: u64 = 24;
 /// Each theme's hash of the run-in's output over `SEEDS` seeds, from the code before it was
 /// made faster.
 const HASHES: &[(&str, u64)] = &[
-    ("crypt", 3865934966304977287),
+    ("crypt", 11729436430692147427),
     ("flooded_mine", 300874927427389460),
     ("ruined_keep", 15727364600443360124),
 ];
