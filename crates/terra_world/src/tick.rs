@@ -11,8 +11,18 @@
 //! (`Smoothed`) is shown between where it stood after the last tick and where it stands
 //! after this one, by how far the frame is into the next tick. Gameplay always sees where
 //! it truly stands. This is what `bevy_transform_interpolation` does.
+//!
+//! So a body's `Transform` is last written each frame by its drawing (`show`), not by what
+//! moved it. Engines with interpolated physics keep the two apart (Unity's Rigidbody
+//! `position` and its interpolated `Transform`, Unreal's physics body and its smoothed
+//! mesh), and so does `Smoothed`: it keeps the last change to where the body truly stands
+//! made by anything but this module (`Moved`), the system in a tick or the teleport outside
+//! them, which `sandbox.why` tells beside the drawing (D548).
 
-use bevy::prelude::*;
+use bevy::{
+    ecs::change_detection::{MaybeLocation, Tick},
+    prelude::*,
+};
 
 /// The stages of a tick, in order.
 #[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -47,6 +57,39 @@ pub struct Smoothed {
     /// What was last shown, so a move made outside the ticks (a teleport) is noticed and
     /// not undone.
     shown: Option<Transform>,
+    /// The last move of where it truly stands, by anything but its drawing.
+    moved: Option<Moved>,
+    /// The change tick the start of this tick stood it where it truly is on, so a move the
+    /// tick made since is told from that.
+    restored: Tick,
+}
+
+/// A move of where a smoothed body truly stands: by which line of code (kept only by a
+/// build with Bevy's `track_location`, as the sandbox's dev builds are), on which change
+/// tick, and whether a tick made it or something outside the ticks did (a teleport).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Moved {
+    pub by: MaybeLocation,
+    pub tick: Tick,
+    pub in_tick: bool,
+}
+
+impl Smoothed {
+    /// The last move of where the body truly stands, by anything but its drawing between
+    /// ticks; None if nothing has moved it since it was spawned.
+    pub fn moved(&self) -> Option<Moved> {
+        self.moved
+    }
+}
+
+impl Moved {
+    fn of(transform: &impl DetectChanges, in_tick: bool) -> Self {
+        Self {
+            by: transform.changed_by(),
+            tick: transform.last_changed(),
+            in_tick,
+        }
+    }
 }
 
 pub fn plugin(app: &mut App) {
@@ -78,17 +121,25 @@ fn count(mut ticks: ResMut<Ticks>) {
 fn take_up(mut bodies: Query<(&mut Transform, &mut Smoothed)>) {
     for (mut transform, mut smoothed) in &mut bodies {
         let moved = smoothed.shown.is_some_and(|shown| shown != *transform);
-        if !moved && let Some(after) = smoothed.after {
+        if moved {
+            smoothed.moved = Some(Moved::of(&transform, false));
+        } else if let Some(after) = smoothed.after {
             *transform = after;
         }
+        smoothed.restored = transform.last_changed();
         smoothed.before = Some(*transform);
         smoothed.after = None;
     }
 }
 
-/// After a tick: where each body stands now.
-fn put_down(mut bodies: Query<(&Transform, &mut Smoothed)>) {
+/// After a tick: where each body stands now, and what in the tick moved it, if anything: a
+/// system that wrote the place it already stood in (as one that walks a standing body
+/// does, each tick) changed the component but did not move it.
+fn put_down(mut bodies: Query<(Ref<Transform>, &mut Smoothed)>) {
     for (transform, mut smoothed) in &mut bodies {
+        if transform.last_changed() != smoothed.restored && smoothed.before != Some(*transform) {
+            smoothed.moved = Some(Moved::of(&transform, true));
+        }
         smoothed.after = Some(*transform);
         smoothed.shown = None;
     }
@@ -104,6 +155,7 @@ fn show(time: Res<Time<Fixed>>, mut bodies: Query<(&mut Transform, &mut Smoothed
         };
         // Moved outside the ticks since: shown where it was moved to.
         if smoothed.shown.is_some_and(|shown| shown != *transform) {
+            smoothed.moved = Some(Moved::of(&transform, false));
             smoothed.before = Some(*transform);
             smoothed.after = Some(*transform);
             smoothed.shown = Some(*transform);
@@ -164,7 +216,7 @@ mod tests {
                 Smoothed {
                     before: Some(Transform::IDENTITY),
                     after: Some(after),
-                    shown: None,
+                    ..default()
                 },
             ))
             .id();
@@ -217,5 +269,58 @@ mod tests {
         world.get_mut::<Transform>(body).unwrap().translation.x = 10.0;
         world.run_system_cached(take_up).unwrap();
         assert_eq!(world.get::<Transform>(body).unwrap().translation.x, 10.0);
+    }
+
+    /// What moved a body is kept apart from its drawing: a tick's move is kept, the ticks
+    /// that follow (which stand it where it truly is again) and the drawing between them are
+    /// not counted, and a teleport outside the ticks is kept as one.
+    #[test]
+    fn a_body_keeps_what_moved_it_apart_from_its_drawing() {
+        let mut world = World::new();
+        world.insert_resource(Time::<Fixed>::from_seconds(0.1));
+        let body = world
+            .spawn((Transform::default(), Smoothed::default()))
+            .id();
+        let moved = |world: &World| world.get::<Smoothed>(body).unwrap().moved();
+        let changed = |world: &World| {
+            world
+                .entity(body)
+                .get_change_ticks::<Transform>()
+                .unwrap()
+                .changed
+        };
+        // A tick, moving it so far, then the frame's drawing; the change tick of its move.
+        let tick = |world: &mut World, step: Option<f32>| {
+            world.run_system_cached(take_up).unwrap();
+            if let Some(step) = step {
+                world.get_mut::<Transform>(body).unwrap().translation.x += step;
+            }
+            let at = changed(world);
+            world.run_system_cached(put_down).unwrap();
+            world.run_system_cached(show).unwrap();
+            at
+        };
+        tick(&mut world, None);
+        assert_eq!(moved(&world), None, "nothing has moved it");
+        let stepped = tick(&mut world, Some(1.0));
+        let by_tick = moved(&world).expect("the tick moved it");
+        assert!(by_tick.in_tick);
+        assert_eq!(by_tick.tick, stepped);
+        assert_ne!(changed(&world), stepped, "the drawing wrote it last");
+        // Ticks that do not move it, each drawing it between, one of them writing the place
+        // it stands in again: still the tick's move.
+        for step in [None, Some(0.0), None] {
+            tick(&mut world, step);
+        }
+        assert_eq!(moved(&world), Some(by_tick));
+        // A teleport between frames, outside the ticks.
+        world.get_mut::<Transform>(body).unwrap().translation.x = 10.0;
+        let teleported = changed(&world);
+        world.run_system_cached(show).unwrap();
+        let outside = moved(&world).expect("the teleport moved it");
+        assert!(!outside.in_tick);
+        assert_eq!(outside.tick, teleported);
+        tick(&mut world, None);
+        assert_eq!(moved(&world), Some(outside));
     }
 }

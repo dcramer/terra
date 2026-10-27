@@ -57,3 +57,22 @@ test("the answer reads as a line a component, naming the function behind each ch
   assert.equal(untracked[1], "  Transform  frame 120, this frame");
   assert.match(untracked.at(-1)!, /built without track_location/);
 });
+
+test("a body drawn between ticks is told drawn by its drawing and moved by what moved it", () => {
+  const read = (file: string) => (file === "src/w.rs" ? SOURCE : undefined);
+  const drawn = (tracked: boolean, moved: Why["components"][0]["moved"]): Why => {
+    const why = answer(tracked);
+    why.components = [{ ...why.components[0], by: tracked ? { file: "src/w.rs", line: 2 } : null, drawn: true, moved }];
+    return why;
+  };
+  const warped = { by: { file: "src/w.rs", line: 17 }, changed: { frame: 100, ago: 20 }, in_tick: false };
+  assert.equal(
+    describeWhy(drawn(true, warped), read)[1],
+    "  Transform  src/w.rs:2 in other, frame 120, this frame; drawn between ticks, last moved outside the ticks by src/w.rs:17 in warp, frame 100, 20 frames ago",
+  );
+  assert.equal(
+    describeWhy(drawn(false, { ...warped, by: null, in_tick: true }), read)[1],
+    "  Transform  frame 120, this frame; drawn between ticks, last moved in a tick, frame 100, 20 frames ago",
+  );
+  assert.match(describeWhy(drawn(true, null), read)[1], /; drawn between ticks, not moved since it was spawned$/);
+});

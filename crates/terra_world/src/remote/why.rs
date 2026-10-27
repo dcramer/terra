@@ -10,7 +10,12 @@
 //!
 //! Bevy stamps a change with a tick, which counts system runs, not frames; [`FrameTicks`]
 //! keeps the tick each frame began on, so a tick is told as the frame it fell in.
+//!
+//! A body drawn between ticks (`tick::Smoothed`) has its `Transform` last written by that
+//! drawing each frame, so its answer also says what last moved where it truly stands: the
+//! system in a tick, or what moved it outside the ticks, such as a teleport.
 
+use crate::tick::Smoothed;
 use bevy::{
     diagnostic::FrameCount,
     ecs::{
@@ -198,8 +203,10 @@ fn why(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         } else {
             None
         };
-        changes.push((path, short, mutable, ticks, by));
+        changes.push((id, path, short, mutable, ticks, by));
     }
+    let smoothed = world.entity(entity).get::<Smoothed>().copied();
+    let transform = world.components().component_id::<Transform>();
 
     let now = world.read_change_tick().get();
     let frames = &world.resource::<FrameTicks>().0;
@@ -210,15 +217,27 @@ fn why(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     };
     let mut components: Vec<Value> = changes
         .into_iter()
-        .map(|(path, short, mutable, ticks, by)| {
-            json!({
+        .map(|(id, path, short, mutable, ticks, by)| {
+            let mut part = json!({
                 "name": short,
                 "type": path,
                 "by": place(by),
                 "changed": ticks.map(|ticks| when(ticks.changed)),
                 "added": ticks.map(|ticks| when(ticks.added)),
                 "immutable": !mutable,
-            })
+            });
+            // Drawn between ticks: what last moved where it truly stands, too.
+            if let Some(smoothed) = smoothed.filter(|_| Some(id) == transform) {
+                part["drawn"] = json!(true);
+                part["moved"] = smoothed.moved().map_or(Value::Null, |moved| {
+                    json!({
+                        "by": place(moved.by.into_option()),
+                        "changed": when(moved.tick),
+                        "in_tick": moved.in_tick,
+                    })
+                });
+            }
+            part
         })
         .collect();
     components.sort_by_key(|part| part["changed"]["ago"].as_u64().unwrap_or(u64::MAX));
@@ -343,6 +362,84 @@ mod tests {
             );
         } else {
             assert!(part["by"].is_null());
+        }
+    }
+
+    /// A body drawn between ticks: its Transform is told as drawn by the tick's drawing, and
+    /// what moved where it truly stands beside it, first the system in a tick on its frame,
+    /// then a teleport outside the ticks on its own.
+    #[test]
+    fn a_smoothed_body_is_told_moved_by_the_tick_and_drawn_by_its_drawing() {
+        use bevy::time::TimeUpdateStrategy;
+        use std::time::Duration;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        // A tick a frame, at Bevy's 64 ticks a second.
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_micros(
+            15_625,
+        )));
+        crate::tick::plugin(&mut app);
+        plugin(&mut app);
+        app.world_mut()
+            .spawn((Name::new("Body"), Transform::default(), Smoothed::default()));
+        let in_tick = line!() + 6;
+        app.add_systems(
+            FixedUpdate,
+            |frame: Res<FrameCount>, mut moved: Query<&mut Transform, With<Smoothed>>| {
+                if frame.0 == 3 {
+                    for mut transform in &mut moved {
+                        transform.translation.x += 1.0;
+                    }
+                }
+            },
+        );
+        let outside = line!() + 6;
+        app.add_systems(
+            Update,
+            |frame: Res<FrameCount>, mut moved: Query<&mut Transform, With<Smoothed>>| {
+                if frame.0 == 8 {
+                    for mut transform in &mut moved {
+                        transform.translation.x = 10.0;
+                    }
+                }
+            },
+        );
+        let ask = |app: &mut App| {
+            app.world_mut()
+                .run_system_cached_with(
+                    why,
+                    Some(json!({"entity": "Body", "component": "Transform"})),
+                )
+                .unwrap()
+                .unwrap()["components"][0]
+                .clone()
+        };
+        for _ in 0..6 {
+            app.update();
+        }
+        let part = ask(&mut app);
+        assert_eq!(part["drawn"], true);
+        let moved = &part["moved"];
+        assert_eq!(moved["in_tick"], true, "{part}");
+        assert_eq!(moved["changed"]["frame"], 3, "{part}");
+        let tracked = MaybeLocation::caller().into_option().is_some();
+        if tracked {
+            assert_eq!(moved["by"]["file"], "crates/terra_world/src/remote/why.rs");
+            assert_eq!(moved["by"]["line"], in_tick);
+            assert_eq!(
+                part["by"]["file"], "crates/terra_world/src/tick.rs",
+                "{part}"
+            );
+        }
+        for _ in 0..6 {
+            app.update();
+        }
+        let part = ask(&mut app);
+        let moved = &part["moved"];
+        assert_eq!(moved["in_tick"], false, "{part}");
+        assert_eq!(moved["changed"]["frame"], 8, "{part}");
+        if tracked {
+            assert_eq!(moved["by"]["line"], outside);
         }
     }
 }
