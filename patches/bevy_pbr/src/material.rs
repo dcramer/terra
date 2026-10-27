@@ -63,7 +63,6 @@ use bevy_render::{
 };
 use bevy_render::{mesh::allocator::MeshAllocator, sync_world::MainEntityHashMap};
 use bevy_shader::{Shader, ShaderDefVal};
-use bevy_utils::Parallel;
 use core::{
     any::{Any, TypeId},
     hash::Hash,
@@ -740,7 +739,8 @@ fn mark_meshes_as_changed_if_their_materials_changed<M>(
 ) where
     M: Material,
 {
-    changed_meshes_query.par_iter_mut().for_each(|mut mesh| {
+    // Terra's patch (D537): one thread, as for `check_entities_needing_specialization`.
+    changed_meshes_query.iter_mut().for_each(|mut mesh| {
         mesh.set_changed();
     });
 }
@@ -922,7 +922,6 @@ pub fn check_entities_needing_specialization<M>(
             With<MeshMaterial3d<M>>,
         ),
     >,
-    mut par_local: Local<Parallel<Vec<Entity>>>,
     mut entities_needing_specialization: ResMut<EntitiesNeedingSpecialization<M>>,
     mut removed_mesh_3d_components: RemovedComponents<Mesh3d>,
     mut removed_mesh_material_3d_components: RemovedComponents<MeshMaterial3d<M>>,
@@ -933,10 +932,12 @@ pub fn check_entities_needing_specialization<M>(
     entities_needing_specialization.removed.clear();
 
     // Gather all entities that need their specializations regenerated.
-    needs_specialization
-        .par_iter()
-        .for_each(|entity| par_local.borrow_local_mut().push(entity));
-    par_local.drain_into(&mut entities_needing_specialization.changed);
+    // Terra's patch (D537): on one thread. The work an entity is a change check and a push,
+    // and this system runs once a material type (26 in the game): fanned out over the
+    // workers, each run waited on them for 0.1 to 0.4 ms whatever it found.
+    entities_needing_specialization
+        .changed
+        .extend(needs_specialization.iter());
 
     // All entities that removed their `Mesh3d` or `MeshMaterial3d` components
     // need to have their specializations removed as well.
