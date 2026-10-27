@@ -616,6 +616,7 @@ Checks, developer tools, languages and the repository.
 | [D549](decisions/D549.md) | One GPU-free test compiles every shader as the game's pipelines specialize it | Tech | Agent | Decided | Every file in `assets/shaders` is compiled and validated… |
 | [D552](decisions/D552.md) | One command fits a new held or worn item, and its look records its source's hash | Tech | Agent | Decided | A new held or worn item goes from its data to a checked… |
 | [D555](decisions/D555.md) | A render failure fails a scripted run | Tech | Agent | Decided | Every run of the sandbox and the game says each render… |
+| [D556](decisions/D556.md) | An error says what to do | Tech | Developers | Decided | Every error our code, tools, checks and gates give is… |
 
 ## Superseded and rejected
 

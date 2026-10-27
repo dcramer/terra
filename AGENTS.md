@@ -37,6 +37,7 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 - **Heavy tests run on main** (D398, D37): GPU renders, the fire sheet, look checks and benches are continuous checks (`cargo xtask continuous`, a row of `tools/continuous/checks.json`), never a hook. Keep a test to a few seconds; a sweep over many cases runs on every core (`terra_gen::par::map`, D406).
 - **Gates are quiet** (D388): a line a stage. On failure read only what follows `✗`, then `target/check/<stage>.log`. `TERRA_VERBOSE=1` shows everything.
 - **A new tool or task prints the same way** (D388): a line a stage on success, only what fixes a failure, the rest in a log it names.
+- **An error says what to do** (D556): what went wrong with the thing named, the rule it breaks and its decision, the fix wanted or the next command (and what not to do where the tempting fix is wrong); never a bare complaint.
 - **Code health is gated** (D396): split a file over 1,000 lines or a function over 150 (`cargo xtask sizes`); call a shared primitive from its home (`terra_gen::hash`), never copy it.
 
 ## Context
