@@ -660,9 +660,17 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         // ground it burns as the campfire does (the baked body, D493), raised on a model's head
         // (a staged torch) as it did before.
         let logs = terra_world::fire::Logs::CAMPFIRE;
-        let body = match asked.burns_up {
-            None => terra_world::fire::Body::Baked,
-            Some(_) => terra_world::fire::Body::Marched,
+        // Raised on a model's head it is a torch, lit by a torch's pitch light as the dungeon's
+        // are (`TORCH_LIGHT`), not a wood fire's orange (torch round t3).
+        let (body, light) = match asked.burns_up {
+            None => (
+                terra_world::fire::Body::Baked,
+                terra_world::fire::HEARTH_LIGHT,
+            ),
+            Some(_) => (
+                terra_world::fire::Body::Marched,
+                terra_world::fire::TORCH_LIGHT,
+            ),
         };
         let kindled = terra_world::fire::Kindled {
             tall,
@@ -670,7 +678,7 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             heat,
             logs,
             body,
-            light: terra_world::fire::HEARTH_LIGHT,
+            light,
         };
         match asked.burns_up {
             Some(up) => {
