@@ -30,8 +30,11 @@ from mathutils.kdtree import KDTree
 import look
 
 CELL = (0.5, 0.5)  # assets/data/foliage.ron "oakbranch": its square's top-left, a 4th across
-CLUMP_M = 0.75  # clumps this far apart along the outer branches
-SIZE_M = 0.95  # a clump's size, as the veteran oaks' tips (assets/data/trees/oak_bough.ron)
+CLUMP_M = 0.55  # clumps this far apart along the outer branches
+# A clump's size: the veteran oaks' tips are 0.95 m (assets/data/trees/oak_bough.ron) on limbs
+# that run on far past the leaves; a creature's crown limbs are short, so its clumps are larger
+# and carried out past the twigs' ends, for a crown as full as the forest's oaks'.
+SIZE_M = 1.3
 # lush.rs CROWN_TINTS[0] times the veteran oaks' own (0.9, 0.95, 0.85).
 TINT = Vector((0.92 * 0.9, 0.95 * 0.95, 0.85 * 0.85))
 ARM = ("clavicle", "upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky")
@@ -56,12 +59,13 @@ def unit():
             return v.normalized()
 
 
-# 1. The crown's points: above the head, on the trunk's bones, not the arms'.
+# 1. The crown's points: from the neck up, where its limbs fork off, on the trunk's bones,
+# not the arms'.
 head = joint["Head"]
 points, weights = [], []
 for v in body.data.vertices:
     co = mw @ v.co
-    if co.z < head.z + 0.1 or not v.groups:
+    if co.z < joint["neck_01"].z - 0.1 or not v.groups:
         continue
     top = max(v.groups, key=lambda g: g.weight)
     if names[top.group].split("_")[0] in ARM:
@@ -74,13 +78,15 @@ pts = np.array([p[:] for p in points])
 base = Vector((head.x, head.y, head.z))
 reach = np.linalg.norm(pts - np.array(base[:]), axis=1)
 
-# 2. Clumps where the branches run out: the points farther from the crown's foot than half its
-# reach, gathered CLUMP_M apart; each leans the way its branch runs, out from the foot.
-outer = pts[reach > 0.45 * reach.max()]
+# 2. Clumps where the branches run out: the points farther from the crown's foot than a third
+# of its reach and off the bole, gathered CLUMP_M apart; each leans the way its branch runs,
+# out from the foot.
+off_bole = np.hypot(pts[:, 0] - head.x, pts[:, 1] - head.y) > 0.5
+outer = pts[(reach > 0.3 * reach.max()) & (off_bole | (pts[:, 2] > head.z + 0.8))]
 cells = {}
 for p in outer:
     cells.setdefault(tuple(np.floor(p / CLUMP_M).astype(int)), []).append(p)
-tips = [(Vector(np.mean(c, 0)), len(c)) for c in cells.values() if len(c) >= 3]
+tips = [(Vector(np.mean(c, 0)), len(c)) for c in cells.values() if len(c) >= 2]
 centre = sum((t for t, _ in tips), Vector()) / len(tips)
 crown_reach = max(1.0, max(math.hypot(t.x - centre.x, t.y - centre.y) for t, _ in tips))
 top_z = max(t.z for t, _ in tips)
@@ -109,8 +115,8 @@ for i, (tip, _) in enumerate(tips):
     along = (tip - base).normalized()
     mass = mass_at[i]
     out_crown = (tip - centre).normalized() if (tip - centre).length > 1e-3 else Vector((0, 0, 1))
-    for k in range(6 + dice.randrange(2)):
-        stalk = tip - along * SIZE_M * 0.1 + unit() * SIZE_M * dice.uniform(0.05, 0.3)
+    for k in range(7 + dice.randrange(2)):
+        stalk = tip + along * SIZE_M * 0.15 + unit() * SIZE_M * dice.uniform(0.05, 0.3)
         out_mass = (stalk - mass).normalized() if (stalk - mass).length > 1e-3 else out_crown
         up = (along * 0.75 + unit() * 0.7 + out_mass * 0.45).normalized()
         wanted = out_mass * 0.6 + Vector((0, 0, 0.35)) + unit() * 0.55
