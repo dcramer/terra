@@ -7,9 +7,10 @@
 //! eased out by 40 m (D127).
 //!
 //! The flicker is a sum of three sines round its puff rate, their phases wandering slowly
-//! (`TONES`), as fast and as deep as a fire that size puffs: a pool fire
-//! of width D puffs at about 1.5 / sqrt(D) Hz (research/2026-10-16-real-time-fire-rendering.md),
-//! a torch by a third either way, a campfire by about 15%, a house fire slower and shallower.
+//! (`TONES`), as fast and as deep as a fire that size puffs: a pool fire of width D puffs at
+//! about 1.5 / sqrt(D) Hz (research/2026-10-16-real-time-fire-rendering.md), a torch by a
+//! third either way, a campfire by about 15%, a house fire slower and shallower. A torch
+//! (`TORCH_LIGHT`) is lit by its own rig (`torch`).
 
 use super::{Blaze, Blazes};
 use crate::planet::MainCamera;
@@ -19,6 +20,7 @@ use bevy::{light::VolumetricLight, prelude::*};
 mod glows;
 mod shadows;
 mod shut;
+mod torch;
 pub use glows::FireGlows;
 pub(super) use glows::plugin;
 use shadows::ShadowFade;
@@ -79,10 +81,9 @@ const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 /// (campfire low-lay round), but at 0.53 the grass round it went to hue 31, past the hearth
 /// test's 30, so 0.50 (campfire soot round).
 pub const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.50, 0.08);
-/// A pitch torch's light: hotter and yellower than wood's, about 2,700 K (Charity's table:
-/// #ffa957), as games white-balance torchlit stone to a warm off-white and keep orange for
-/// the hearth. At the campfire's (1.0, 0.5, 0.08) a dungeon's torchlit walls read one rust
-/// cast, R/G 2.5 to 4.5 (dungeon round 11, all three reviewers).
+/// A pitch torch's light, about 2,700 K (Charity's table: #ffa957), as games white-balance
+/// torchlit stone warm off-white: at the campfire's a dungeon's walls read one rust cast
+/// (dungeon round 11). It is lit by a torch's rig (`torch`), not a hearth's.
 pub const TORCH_LIGHT: Color = Color::srgb(1.0, 0.66, 0.32);
 /// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches.
 /// A campfire's 1.3 m at 0.9 heat gives 117,000 lm, about 9,000 cd: a real campfire's order
@@ -416,15 +417,13 @@ pub(super) struct Lit {
     pub glow: f32,
     /// Whether it is a kept fire's, which glows in the air round it (`fog`).
     pub kept: bool,
-    /// How many stops brighter it is by night (`NIGHT_STOPS`, `HEARTH_NIGHT_STOPS`,
-    /// `BREATH_NIGHT_STOPS`).
+    /// How many stops brighter it is by night (`NIGHT_STOPS`, `HEARTH_NIGHT_STOPS`, ...).
     pub night_stops: f32,
     /// How many times more it is keyed up against the dusk sky than a kept fire's pit light
     /// (`hearth_by_hour`): a hearth's top light's `HEARTH_TOP_DUSK`, every other's 1.
     pub dusk_gain: f32,
-    /// Whether it may cast shadows: a hearth's top light does not, its pit key casting the
-    /// fire's (`choose`); each of a light's cube's six views is drawn every frame, 0.55 ms of
-    /// GPU and 0.6 of render CPU a light (fire round g29).
+    /// Whether it may cast shadows: a hearth's top light does not (`choose`); each of a cube's
+    /// six views is drawn every frame, 0.55 ms of GPU and 0.6 of render CPU (fire round g29).
     pub casts: bool,
     /// A kept fire's light as it shines unshadowed, steady (`shadows::shone`).
     pub still: Option<shadows::Still>,
@@ -614,13 +613,11 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
     }
     let up = |at: Vec3| at.normalize_or(Vec3::Y);
     let mut lit = jet_lights(blazes, t, tier);
-    // A hearth's light hangs in the body of its flames, clear of its logs' ends, so it lights
-    // the ground round it and the faces of those sat by it, and its glow in the air (`fog`) is
-    // a halo round the flames: at 0.8 of their height, by their tips, the glow was a ball
-    // beside the fire (fire sheet review, 3/10); level with a 0.9 m teepee's ends the logs
-    // were the brightest thing by it (lake film r6), which the campfire's 0.55 m stack clears.
-    // Two lights: a shadowed key low in the pit and an unshadowed one at its flames' top
-    // (`HEARTH_TOP`).
+    // A hearth's key hangs in the body of its flames, clear of its logs' ends, so it lights the
+    // ground round it and its glow in the air (`fog`) is a halo round the flames: at 0.8 of
+    // their height the glow was a ball beside the fire (fire sheet review, 3/10); level with a
+    // 0.9 m teepee's ends the logs were the brightest thing by it (lake film r6). An unshadowed
+    // light at its flames' top lights the faces sat by it (`HEARTH_TOP`); a torch has its own.
     let colours = blazes.lights.iter().chain(std::iter::repeat(&HEARTH_LIGHT));
     lit.extend(
         blazes
@@ -659,6 +656,10 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     casts: true,
                     still: still(rest),
                 };
+                if colour == TORCH_LIGHT {
+                    let hang = |share| blazes.hangs(fire, blaze, share);
+                    return torch::lights(&main, blaze, shines, swayed, hang, still);
+                }
                 let top_rest = blazes.hangs(fire, blaze, HEARTH_TOP_UP);
                 let top = Lit {
                     lumens: lumens * HEARTH_TOP * HEARTH_TOP_GAIN,

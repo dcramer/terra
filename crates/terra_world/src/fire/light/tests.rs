@@ -422,6 +422,44 @@ fn on_ground_drawn(lit: &Lit, foot: Vec3, out: f32) -> f32 {
 }
 
 #[test]
+fn a_staked_torchs_night_pool_falls_off_from_its_foot_more_than_a_hearths_rig_would() {
+    // A torch staked on open ground, its head 1.2 m up (the review's staged torch), by full
+    // night: the ground half a metre from its foot takes many times the light of the ground
+    // 2.5 m out, a pool round the foot. Lit by a hearth's rig, its top light high and wide, the
+    // yard took a far evener tint (torch round t3).
+    let ground = Vec3::new(0.0, 2000.0, 0.0);
+    let pool = |colour: Color| {
+        let blazes = Blazes {
+            kept: vec![Blaze {
+                at: ground + Vec3::Y * 1.2,
+                tall: 0.55,
+                heat: 0.9,
+                seed: 0.3,
+                wide: 0.22,
+            }],
+            lights: vec![colour],
+            ..default()
+        };
+        let lights = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
+        let on = |out: f32| -> f32 {
+            lights
+                .iter()
+                .map(|l| on_ground_drawn(l, ground, out) * keyed(l, 1.0, 36.0))
+                .sum()
+        };
+        (on(0.5) / on(2.5), on(0.5))
+    };
+    let ((torch, at_foot), (hearth, hearth_foot)) = (pool(TORCH_LIGHT), pool(HEARTH_LIGHT));
+    println!("torch pool falls {torch:.1}x from 0.5 to 2.5 m, a hearth's rig {hearth:.1}x");
+    assert!(torch > 6.0, "a torch's pool falls only {torch:.1}x");
+    assert!(
+        torch > hearth * 1.3,
+        "{torch:.1}x against a hearth rig's {hearth:.1}x"
+    );
+    assert!(at_foot > hearth_foot, "its foot as lit as a hearth rig's");
+}
+
+#[test]
 fn a_campfires_night_pool_goes_dark_within_a_few_fire_widths() {
     // The fire sheet's campfire by full night: its pool bright by its stones and falling off
     // fast past them, as RDR2's do (to a third or a fifth from one flame height out to three;
