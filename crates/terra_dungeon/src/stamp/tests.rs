@@ -167,7 +167,8 @@ fn check(theme: &Theme, dungeon: &Dungeon, s: u64) -> Numbers {
         stamp.digs.len()
     );
     assert!(
-        stamp.lights.len() <= 40,
+        // The cap, the fires and braziers placed before it, and a torch a stair past it.
+        stamp.lights.len() <= LIGHTS + 10 + dungeon.layout.stairs.len(),
         "{at}: {} lights",
         stamp.lights.len()
     );

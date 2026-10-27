@@ -1,7 +1,8 @@
 //! The run-in: what the game spawns in the laid dungeon. Door leaves in the doorways of the
 //! links that have doors, a chest against a wall of each room with loot, the mobs of each room
-//! on free floor away from its doors, torches on walls (a room's wall decorations first, a
-//! corridor's every third cell and the end walls its legs run into, about 30 lights in all), the start on the surface and a tour
+//! on free floor away from its doors, torches on walls (a room's wall decorations first, the end
+//! walls a corridor's legs run into, each stair, a corridor's every third cell, about 30 lights
+//! in all), the start on the surface and a tour
 //! for a camera, from the stair down by the longest way that enters no room twice to the goal.
 
 use super::modules::{Class, Look};
@@ -13,7 +14,7 @@ use super::{
 use crate::Dungeon;
 use crate::door::Lock;
 use crate::graph::{Graph, Link};
-use crate::place::{Layout, STEPS, Side, Space, opposite};
+use crate::place::{Layout, STEPS, Side, Space, Stair, opposite};
 use crate::theme::Role;
 use glam::{IVec3, Vec3};
 use std::collections::{HashMap, VecDeque};
@@ -306,10 +307,35 @@ fn wall_of(layout: &Layout, c: usize, salt: u32) -> Option<usize> {
         .find(|&d| cell.sides[d] == Side::Wall)
 }
 
+/// How near a torch lights a stair's step, in metres: its own torch is 5.2 m from the far
+/// cell's middle.
+const STAIR_LIT_M: f32 = 5.5;
+
+/// A torch on a side wall of a stair's lower cell, at its middle, 2 m over the step there
+/// (`shell::steps` rises a cube a cube from two cubes in, its top at the middle two cubes
+/// up): the stair's foot and every step read in its light. Round 10's three reviewers put the
+/// entrance stair first, a black hole with no readable step, as no torch stood in a stair.
+fn stair_torch(layout: &Layout, stair: &Stair) -> Option<Light> {
+    let &foot = stair.cells.first()?;
+    let cell = &layout.cells[layout.cell(foot)?];
+    let start = hash(foot, 320) as usize;
+    let d = [1, 3]
+        .into_iter()
+        .map(|k| (stair.up + k + 2 * (start % 2)) % 4)
+        .find(|&d| cell.sides[d] == Side::Wall)?;
+    let step = MID - 2.0 + 0.5;
+    Some(Light {
+        at: Frame::new(foot, d).point(MID, step + 4.0, 1.3),
+        kind: LightKind::Torch,
+        facing: opposite(d),
+    })
+}
+
 /// Torches: one in each room (none in the rest room, which has its fire), on a wall
 /// decoration first; then on the end walls a corridor's legs run into (`end_walls`); then one
-/// every third corridor cell, none beside a torch; then a second in rooms of six cells
-/// or more; until the dungeon has `LIGHTS`.
+/// every third corridor cell, none beside a torch; then a second in rooms of six cells or more;
+/// until the dungeon has `LIGHTS`. Then one on a side wall of each stair no torch lights yet
+/// (`stair_torch`), past the cap.
 fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
     let layout = &dungeon.layout;
     let mut rooms: Vec<Vec<(IVec3, usize)>> = Vec::new();
@@ -376,6 +402,22 @@ fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
     let room = LIGHTS.saturating_sub(out.lights.len());
     out.lights
         .extend(lit.into_iter().take(room).map(|(at, d)| torch(at, d)));
+    // A stair's torch comes on top of the cap, the way on never dark: the flooded mine's nine
+    // stairs a dungeon would otherwise take the cap's last lights from its end walls. A stair
+    // whose steps another torch already lights gets none.
+    let near: Vec<Vec3> = out.lights.iter().map(|l| l.at).collect();
+    let dark = |stair: &&Stair| {
+        stair.cells.iter().take(2).any(|&at| {
+            let Some(c) = layout.cell(at) else {
+                return false;
+            };
+            let p = cell_point(layout, c) + Vec3::Y;
+            near.iter().all(|t| t.distance(p) > STAIR_LIT_M)
+        })
+    };
+    let stairs = layout.stairs.iter().filter(dark);
+    out.lights
+        .extend(stairs.filter_map(|s| stair_torch(layout, s)));
 }
 
 /// A corridor run's end walls: where a straight leg of two steps or more (stairs left out)

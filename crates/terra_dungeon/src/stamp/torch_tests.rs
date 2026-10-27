@@ -64,3 +64,55 @@ fn a_corridor_never_runs_into_a_dark_wall() {
         );
     }
 }
+
+/// Each stair cell's middle 1 m over its step, from how `shell::steps` lays the steps (a cube
+/// up each cube from two cubes in, so the middle of the `i`th cell stands `8 i + 2` cubes up).
+fn stair_points(dungeon: &Dungeon) -> Vec<Vec<Vec3>> {
+    dungeon
+        .layout
+        .stairs
+        .iter()
+        .map(|stair| {
+            // The two cells of steps; the cells above are the well and the landing.
+            let cells = stair.cells.iter().take(2).enumerate();
+            cells
+                .map(|(i, &at)| {
+                    let step = (CELL as usize * i) as f32 + MID - 2.0 + 0.5;
+                    Frame::new(at, 0).point(MID, step + 2.0, MID)
+                })
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn every_stair_is_lit() {
+    for theme in Theme::all(&assets()).unwrap() {
+        let set = ModuleSet::new(&theme).unwrap();
+        let seeds: Vec<u64> = (0..SEEDS).collect();
+        let counts = terra_gen::par::map(&seeds, |&s| {
+            let dungeon = generate(&theme, &set, Seed(s)).ok()?;
+            let stamp = stamp(&dungeon, &theme, &kind);
+            let torches: Vec<Vec3> = stamp.lights.iter().map(|l| l.at).collect();
+            let stairs = stair_points(&dungeon);
+            let dark = stairs
+                .iter()
+                .filter(|points| {
+                    points
+                        .iter()
+                        .any(|p| torches.iter().all(|t| t.distance(*p) > LIT_M))
+                })
+                .count();
+            Some((stairs.len(), dark))
+        });
+        let counts: Vec<_> = counts.into_iter().flatten().collect();
+        let stairs: usize = counts.iter().map(|c| c.0).sum();
+        let dark: usize = counts.iter().map(|c| c.1).sum();
+        println!(
+            "{}: {stairs} stairs in {} dungeons, {dark} with a step past {LIT_M} m of a torch",
+            theme.name,
+            counts.len()
+        );
+        assert_eq!(dark, 0, "{}: {dark} of {stairs} stairs dark", theme.name);
+    }
+}
