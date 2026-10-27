@@ -7,7 +7,8 @@
 //! rest are its log's `bench` lines. `cost.edits` is the body on the 2 km planet with 10,000
 //! edits made to it ([`edits`]); `cost.forest` is the same body walked through the lush
 //! yard's trees and rocks ([`forest`]); `cost.crowd` a thousand men walking through each other
-//! on the planet at 30 km ([`crowd`]).
+//! on the planet at 30 km ([`crowd`]); `cost.climb` a man climbing the course's faces
+//! ([`climb`]).
 
 use bevy::math::DVec3;
 use bevy::prelude::{Vec2, Vec3};
@@ -18,6 +19,8 @@ use terra_motion::course::field::{Course, Field, Solid, forward_at, world};
 use terra_motion::mover::{Bodies, Intent, Kind, Sdf, World};
 use terra_world::planet::{HeightMemo, Planet};
 
+#[path = "movement_bench_climb.rs"]
+mod climb;
 #[path = "movement_bench_crowd.rs"]
 mod crowd;
 #[path = "movement_bench_edits.rs"]
@@ -203,6 +206,7 @@ fn the_mover_bench_times_a_body_walking() {
         worst = worst.max(ours.micros);
     }
     println!("scorecard\tcost.body\t{worst}");
+    climb::print(&kind);
     let woods = forest::Forest::load();
     let f = forest::median(
         (0..forest::RUNS)

@@ -1244,12 +1244,14 @@
    "bar": {
     "at_most": 25
    },
-   "unit": "µs a body a tick",
+   "unit": "µs a body a climbing tick, the worst of a man climbing the course's sheer wall, dug cliff and base's wall in the mover's release bench (movement_bench_climb.rs)",
    "source": "docs/controller.md, \"Climbing\"; D52, D138; docs/controller.md criterion 20",
-   "check": null,
+   "check": {
+    "by": "bench"
+   },
    "cost": "heavy",
-   "measurable": false,
-   "needs": "a climbing body in the mover's release bench (movement_bench.rs) on the course's wall, the dug cliff and the base's wall, once the mover climbs"
+   "measurable": true,
+   "slack": 5
   },
   {
    "id": "stamina.costs",

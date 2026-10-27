@@ -130,6 +130,21 @@ pub struct Measure {
     pub value: f32,
 }
 
+/// The faces a climbing body's cost is timed on (`cost.climb`, terra_walker's mover bench):
+/// the sheer wall, the dug cliff and a base's wall of cubes, with where a body stands to walk
+/// into each (a metre short of it, facing it along [`field::forward_at`]).
+pub fn climbing_faces(kind: &Kind) -> Vec<(&'static str, Course, Vec3)> {
+    let start = field::world(climb::FACE_U - 1.0, 0.0, 0.0);
+    [
+        ("wall", climb::Face::Wall),
+        ("dug cliff", climb::Face::Cliff),
+        ("base's wall", climb::Face::Cubes),
+    ]
+    .into_iter()
+    .map(|(name, face)| (name, climb::faces(face, kind), start))
+    .collect()
+}
+
 /// How many of the crowd's reruns, on so many threads each, end otherwise than its run on one
 /// (`determinism.crowd`'s crowd): for a mover whose lanes run on a pool the course cannot name,
 /// as the game's (Bevy's compute pool, terra_walker).

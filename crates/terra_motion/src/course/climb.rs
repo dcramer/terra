@@ -19,7 +19,7 @@ use glam::{Vec2, Vec3};
 use terra_core::{Piece, Solid as Pieces};
 
 /// Where a face stands along the way, m; bodies start at 0.
-const FACE_U: f32 = 8.0;
+pub(super) const FACE_U: f32 = 8.0;
 /// A body touches a face within this of it beyond its radius, m.
 const TOUCH_M: f32 = 0.05;
 /// How far before a face a body jumping at it presses jump, beyond its radius, m.

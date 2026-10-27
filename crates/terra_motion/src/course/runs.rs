@@ -18,6 +18,10 @@ pub(super) const DROPS: [f32; 4] = [0.5, 1.0, 2.0, 4.0];
 /// The crowd: its size, and how long it runs for the determinism criterion.
 const CROWD: u32 = 24;
 const CROWD_TICKS: usize = 10_000;
+/// The crowd's climbers, side by side on the sheer face past it, crossing each other (D477),
+/// and how long each way along the face is, ticks.
+const CLIMBERS: u32 = 6;
+const CLIMB_WAY: usize = 128;
 /// How long the crowd stands once it has walked, ticks: a second, its soft pairs eased apart.
 const CROWD_SETTLE: usize = 64;
 /// The latest tick after leaving a ledge, or before landing, a jump is tried at.
@@ -755,15 +759,25 @@ fn pool() -> Course {
 
 /// The crowd course: bodies on a grid walking and sprinting across to the far side of the
 /// middle and back, through each other, for [`CROWD_TICKS`], then standing [`CROWD_SETTLE`];
+/// beside them [`CLIMBERS`] climbing the sheer face past them, up and along it each its own
+/// way, so neighbours meet, then down, until their stamina runs out and they let go;
 /// added and ticked in the order given, on the threads given. Its end state is every body's numbers' bits, by ID.
 fn crowd<M: Mover>(new: &impl Fn() -> M, order: Order) -> Outcome {
-    let flat = Course::flat();
+    let flat = super::climb::face(90.0, 8.0);
     let kind = Kind::man();
     let place = |id: u32| {
         let (col, row) = ((id % 6) as f32, (id / 6) as f32);
         Vec2::new(col * 1.5 - 3.75, row * 1.5 - 2.25)
     };
-    let mut ids: Vec<u32> = (0..CROWD).collect();
+    let climber = |id: u32| {
+        let i = id.checked_sub(CROWD)?;
+        Some(world(
+            super::climb::FACE_U - 1.0,
+            0.0,
+            (i as f32 - 0.5 * (CLIMBERS - 1) as f32) * 0.8,
+        ))
+    };
+    let mut ids: Vec<u32> = (0..CROWD + CLIMBERS).collect();
     match order {
         Order::Forward | Order::Again | Order::Threads(_) => {}
         Order::Reversed => ids.reverse(),
@@ -776,12 +790,28 @@ fn crowd<M: Mover>(new: &impl Fn() -> M, order: Order) -> Outcome {
     let mut run = Run::new(mover, &flat);
     for &id in &ids {
         let at = place(id);
-        run.add(id, kind, world(at.x, 0.0, at.y));
+        run.add(id, kind, climber(id).unwrap_or(world(at.x, 0.0, at.y)));
     }
     // Each body heads for its place mirrored through the middle, and back again.
     let mut back = vec![false; CROWD as usize];
-    for _ in 0..CROWD_TICKS {
+    for tick in 0..CROWD_TICKS {
         run.tick(|id, body| {
+            if climber(id).is_some() {
+                // Straight into the face (taking hold, up it), then up and along it one way
+                // and the other, every other climber the other way first, then down it.
+                let (way, first) = ((tick / CLIMB_WAY) % 4, if id % 2 == 0 { 0.7 } else { -0.7 });
+                let along = match way {
+                    1 => first,
+                    2 => -first,
+                    _ => 0.0,
+                };
+                let up = if way == 3 { -1.0 } else { 1.0 };
+                let wish = forward_at(body.feet) * up + side_at(body.feet) * along;
+                return Intent {
+                    wish: wish.normalize_or_zero(),
+                    ..Intent::default()
+                };
+            }
             let home = place(id);
             let goal = if back[id as usize] { home } else { -home };
             let here = local(body.feet);
@@ -804,7 +834,7 @@ fn crowd<M: Mover>(new: &impl Fn() -> M, order: Order) -> Outcome {
     }
     let settled = run.overlap_now();
     run.keep_overlap(settled);
-    let end = (0..CROWD)
+    let end = (0..CROWD + CLIMBERS)
         .flat_map(|id| {
             let body = run.body(id);
             [body.feet, body.velocity]
