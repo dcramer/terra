@@ -9,6 +9,7 @@
 //!
 //! The log gives the tour's points as `--vantage` and `--route` take them.
 
+mod interior;
 mod spawn;
 
 use bevy::prelude::*;
@@ -77,6 +78,7 @@ struct Pending {
 }
 
 pub fn plugin(app: &mut App, experiment: &'static str) {
+    interior::plugin(app);
     app.insert_resource(Wanted(experiment))
         .add_systems(Startup, lay_out)
         .add_systems(
@@ -241,6 +243,7 @@ fn lay_out(
     for (i, &seconds) in stamp.pace.iter().enumerate() {
         info!("Dungeon pace {i}: {seconds:.3}");
     }
+    commands.insert_resource(interior::Interior::new(&stamp, frame));
     commands.insert_resource(Pending { stamp, frame });
 }
 
