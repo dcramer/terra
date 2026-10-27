@@ -155,6 +155,28 @@ pub(crate) fn count_frames(
     }
 }
 
+/// A scripted run's script opens on a camera cut: on its first frame every camera's temporal
+/// history is dropped, as a renderer's camera cut drops it (Bevy's `TemporalAntiAliasing::
+/// reset`, Unreal's `bCameraCut`). The loading screen's frames are drawn too, as many as the
+/// load took on the wall clock, each blended into TAA's history at the jitter its frame count
+/// gave it, so the first script frames carried a history that differed run to run: an A/A of
+/// one build differed on every pixel of its second frame with TAA on and matched with it off
+/// (D472). The auto exposure needs no reset: the loading screen and a hold stop the game
+/// clock, and the eye adapts by the clock's step, so it stands still through them. After
+/// whatever set the reset this frame (the shot's own cuts, `cine::film`), in `Last`.
+pub(crate) fn cut_history(
+    options: Res<Options>,
+    script: Res<ScriptFrame>,
+    mut cameras: Query<&mut bevy::anti_alias::taa::TemporalAntiAliasing>,
+) {
+    if !options.scripted() || options.bench || script.0 != 1 || !script.is_changed() {
+        return;
+    }
+    for mut taa in &mut cameras {
+        taa.reset = true;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,6 +225,61 @@ mod tests {
         assert_eq!(fast, counts(1000, 4));
         // Still a frame a frame, as the jitter and the history textures take turns by it.
         assert!(fast.windows(2).all(|w| w[1].1 == w[0].1 + 1));
+    }
+
+    /// The real frames on which a scripted run's camera dropped its temporal history, counted
+    /// from the script's first frame, for a load of `loading` frames and a hold of `held`
+    /// after the third script frame, with the camera's own cut on real frame `cut`.
+    fn cuts(loading: usize, held: usize, cut: Option<usize>) -> Vec<i64> {
+        use bevy::anti_alias::taa::TemporalAntiAliasing;
+        let mut app = App::new();
+        app.insert_resource(
+            Options::from_args(["--shots", "out/x@5"].map(String::from).into_iter()).unwrap(),
+        )
+        .init_resource::<ScriptFrame>()
+        .add_systems(Last, cut_history);
+        let camera = app
+            .world_mut()
+            .spawn(TemporalAntiAliasing { reset: false })
+            .id();
+        let mut steps = vec![false; loading];
+        steps.extend([true; 3]);
+        steps.extend(vec![false; held]);
+        steps.extend([true; 8]);
+        let mut seen = Vec::new();
+        for (i, counted) in steps.into_iter().enumerate() {
+            if counted {
+                app.world_mut().resource_mut::<ScriptFrame>().0 += 1;
+            }
+            if cut == Some(i) {
+                app.world_mut()
+                    .get_mut::<TemporalAntiAliasing>(camera)
+                    .unwrap()
+                    .reset = true;
+            }
+            app.update();
+            let mut taa = app
+                .world_mut()
+                .get_mut::<TemporalAntiAliasing>(camera)
+                .unwrap();
+            if taa.reset {
+                seen.push(i as i64 - loading as i64);
+            }
+            // As the render world's extraction does once it has read it.
+            taa.reset = false;
+        }
+        seen
+    }
+
+    #[test]
+    fn a_scripted_runs_first_frame_drops_the_history_however_long_its_load_and_holds() {
+        // The script's first frame alone, however many loading frames were drawn before it.
+        assert_eq!(cuts(3, 0, None), vec![0]);
+        assert_eq!(cuts(240, 17, None), vec![0]);
+        // Not again on a hold, nor on the frames after it.
+        assert_eq!(cuts(1000, 4, None), vec![0]);
+        // A cut of the run's own is kept.
+        assert_eq!(cuts(5, 2, Some(5 + 6)), vec![0, 6]);
     }
 
     /// A scripted run's frames over `coming` (what is coming on each real frame): which

@@ -235,7 +235,8 @@ pub fn plugin(app: &mut App) {
                 watch.run_if(in_state(Screen::Loading)),
                 fade.run_if(in_state(Screen::Playing)),
             ),
-        );
+        )
+        .add_systems(Last, hold::cut_history);
     // Only the render world knows whether shaders are compiling and what it can draw; it
     // says so as it extracts.
     app.sub_app_mut(RenderApp)
