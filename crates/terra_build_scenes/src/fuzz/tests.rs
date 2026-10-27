@@ -274,6 +274,57 @@ fn fuzz_seeds_34_54_80_109_131_180_a_side_board_stops_against_the_end_board() {
 }
 
 #[test]
+fn fuzz_seed_164_a_stringer_through_a_wall_is_out_of_the_plane_of_a_door_heads_end() {
+    // Found by `cargo xtask fuzz` at seed 164, shrunk: a log room with a flight running
+    // through its wall beside a doorway. The door's head laps its frame's width past the
+    // opening into the wall over the flight, and its end lay in the plane of the stringer's
+    // inner face, both 8 cm in from the cube's side (Coplanar, Board and Floor, 243 cm²).
+    let materials = baseline();
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .unwrap()
+    };
+    let base = build(
+        &materials.kits,
+        &[
+            Room {
+                min: [2, 4],
+                max: [7, 7],
+                storey: 0,
+                kind: kind("logs"),
+            },
+            Flight {
+                foot: [6, 0, 4],
+                facing: Facing::South,
+                ramp: false,
+                kind: kind("logs"),
+            },
+            Opening {
+                from: [4, 7],
+                to: [5, 7],
+                storey: 0,
+                door: true,
+            },
+        ],
+    );
+    let report = terra_build_mesh::inspect::inspect(
+        &base,
+        &materials.kits,
+        &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+    );
+    let fought: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| matches!(f.fault, terra_build_mesh::inspect::Fault::Coplanar))
+        .collect();
+    assert!(fought.is_empty(), "{fought:#?}");
+}
+
+#[test]
 fn fuzz_seed_74_the_post_between_a_window_and_a_doorway_runs_full_height() {
     // Found by `cargo xtask fuzz` at seed 74, shrunk: a log wall with a window beside a
     // doorway, over a stub of wall between them. The post up the doorway's side stood to

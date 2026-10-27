@@ -56,8 +56,11 @@ impl Step {
 const TREAD_M: f32 = 0.07;
 const NOSING_M: f32 = 0.03;
 /// A little in, not out: a post under it, centred under it and wider, then stands out of
-/// the flight's cubes no further than a trim may (D192).
-const STRINGER_PROUD_M: f32 = -0.01;
+/// the flight's cubes no further than a trim may (D192). Its inner face then stands 8.5 cm
+/// in from the flight's side, out of the plane of the end of an opening's head or sill
+/// lapping its frame's width (`Kit::frame`, 8 cm) past the opening, where a flight runs
+/// through a wall beside a doorway (fuzz seed 164).
+const STRINGER_PROUD_M: f32 = -0.015;
 /// A stringer: how thick and how deep a board, and how far its top edge stands over the
 /// line of the treads' noses.
 const STRINGER_M: (f32, f32) = (0.07, 0.32);
