@@ -20,8 +20,9 @@
 #        assets/models/character/base.glb      the base with every morph and their offsets
 #        assets/models/character/skins/M.png   each template's skin
 #        assets/models/gear/<item>.glb         each look, with the same morphs
-# It ends with BUILD pass, or BUILD fail and the checks that failed (RIGCHECK, CLIPCHECK,
-# GEARCHECK); the full lines are in its output and the morphs' logs.
+# Everything it prints is kept in tools/characters/out/build.log, the morphs' logs with it. It
+# ends with BUILD pass, or BUILD fail and every failure a step printed or exited with
+# (build_verdict.ts), and exits 1 on a failure.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
@@ -54,6 +55,7 @@ rigged=("female base-female 1.70")
 # Templates with their own painted skin: morph and the design's front view.
 skins=("female art/characters/base-female/front.png")
 
+build() {
 echo "== 0. the clips"
 if ls art/animation/library/*.glb >/dev/null 2>&1; then
   $blender $here/clips.py | grep -E "CLIPS|Error|not in" || true
@@ -136,9 +138,16 @@ for look in $out/gear/$base/*.glb; do
 done
 wait
 echo "BUILT base.glb with morphs $morphs, $(ls $out/gear/$base/*.glb | wc -l) looks"
-# Every check's verdict, from this build's output and the morphs' logs.
-# The base's rig check, not a rigged design's (the female's own body is only the shape her
-# morph is fitted to; what ships is the base's skeleton and weights in her shape).
-failed=$( { cat "$out/build-clips.log" "$out/build-gear.log"; node -p '"RIGCHECK " + JSON.stringify(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")))' "$out/rig-check-$base.json"; for m in "${designed[@]}"; do cat "$out/build-$m.log"; done; for r in "${rigged[@]}"; do cat "$out/build-${r%% *}.log"; done; } \
-  | grep -oE '^(CLIPCHECK|GEARCHECK) .*"pass": false|^RIGCHECK \{"file":"[^"]*","pass":false|^CLIPCHECK fail|Error.*' | cut -c1-160 || true)
-if [[ -z "$failed" ]]; then echo "BUILD pass"; else echo "BUILD fail"; echo "$failed"; fi
+}
+
+# Every check's verdict, from the whole build's output, the morphs' logs in it, and whether it
+# ran to its end. The base's rig check, not a rigged design's (the female's own body is only
+# the shape her morph is fitted to; what ships is the base's skeleton and weights in her
+# shape), removed first so a check that never ran is not read from the last build.
+mkdir -p "$out"
+rm -f "$out/rig-check-$base.json"
+set +e
+( set -e; build ) 2>&1 | tee "$out/build.log"
+status=${PIPESTATUS[0]}
+set -e
+node $here/build_verdict.ts "$out/build.log" "$out/rig-check-$base.json" "$status"

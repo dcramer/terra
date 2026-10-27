@@ -54,4 +54,8 @@ backend=()
 [[ -n "${TERRA_BLENDER_GPU_BACKEND:-}" ]] && backend=(--gpu-backend "$TERRA_BLENDER_GPU_BACKEND")
 "$BLENDER" --background ${backend[@]+"${backend[@]}"} "${open[@]}" --python-exit-code 1 --python-expr "$boot" -- ${args[@]+"${args[@]}"} </dev/null 2>&1 \
   | grep -v -e '^$' -e 'DeprecationWarning' -e 'use_nodes'
-exit "${PIPESTATUS[0]}"
+status=${PIPESTATUS[0]}
+# Said on stderr, past a caller's grep of the output: a script can fail printing nothing a
+# caller looks for (sys.exit, SystemExit's message), and build_bodies.sh's verdict reads this.
+[[ $status == 0 ]] || echo "run.sh: $(basename "$script") exited $status" >&2
+exit "$status"

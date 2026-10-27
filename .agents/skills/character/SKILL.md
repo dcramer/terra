@@ -208,7 +208,7 @@ One command rebuilds every character asset the game loads from the source art in
 | `assets/models/character/templates.json` | The templates (D111): each a mix of morphs and a skin. Edited by hand |
 | `assets/models/gear/<item>.glb` | Each worn look, with the same morph targets in the same order |
 
-Run it after changing a script it calls, or after adding a morph, a skin or a piece of gear to the lists at its top. Every `RIGCHECK`, `MORPH` and `GEARCHECK` line it prints must pass. A long run: about an hour, most of it writing the items' files. Don't edit the scripts while it runs: bash reads its script as it goes, and each step loads the Python afresh, so a change mid-run mixes two versions.
+Run it after changing a script it calls, or after adding a morph, a skin or a piece of gear to the lists at its top. It ends with `BUILD pass`, or `BUILD fail` and every failure a step printed or exited with (`build_verdict.ts`); its whole output is in `tools/characters/out/build.log`. A long run: about an hour, most of it writing the items' files. Don't edit the scripts while it runs: bash reads its script as it goes, and each step loads the Python afresh, so a change mid-run mixes two versions.
 
 Rewriting the items' files changes their bytes, so `cargo xtask check` then finds their painted icons stale. If an item's look did not change, compare its render with its icon (`cargo xtask icons --renders DIR`) and keep the painting, `cargo xtask icons --keep <item>`. If it did change, paint it again (the `item-icons` playbook).
 
