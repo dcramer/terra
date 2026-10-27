@@ -710,6 +710,8 @@ BLOCK_ASH = (0.22, 0.214, 0.203)
 # left night pale at 5.5-5.6 (build 1): the sheet's night pale rose as the logs' glow fell
 # (14.5% lit 4.4, 9% 4.9, 7% 5.4), black char and orange glow behind a flame keeping it saturated.
 HOT_ASH_THIN = 0.6
+# Round g71: how brightly the hottest crack clusters glow between their seams (of a seam's 1).
+FILL = 0.3
 
 
 def log_colour(t, maps_, cap):
@@ -739,6 +741,15 @@ def log_glow(t, cap):
     decal, and glow near the apex only left the fire sheet's dark pockets at 4 of a held 5-170,
     where hearth.ts's crack net over the whole log made 20 (round 2)."""
     p, amount, scorch, crack, edge, black, ash, whole, calm, deep, pale, groove = char_nodes(t, cap)
+    # Round g71: the seams' width varied along each log by a slow noise in its grain's frame (0.55
+    # to 1.5 times), so its cracks open wide in stretches and close to threads in others: at one
+    # width and brightness from foot to top, every judge read g70's net as a leopard print.
+    g0 = t.node("ShaderNodeAttribute", _attribute_name="grain").outputs["Vector"]
+
+    def grain(k, shift):
+        return t.vec("ADD", t.vec("MULTIPLY", g0, (k, 1.0, 1.0)), shift)
+
+    edge = t.math("DIVIDE", edge, t.ramp(t.noise(grain(0.25, (4.4, 0.8, 2.6)), 4.0, 2.0), 0.35, 0.65, 0.7, 1.5))
     # Seams 0.01-0.05 of a block and outer faces at an eighth: at 0.015-0.09 with half on the
     # outer faces 23% of the wood glowed, a leopard print over every charred face (round 3).
     # Round 5: seams to 0.045, fewer where the char is nearly whole, and in patches (a slow noise
@@ -776,8 +787,31 @@ def log_glow(t, cap):
     # glowing cracks at all, where RDR2's glow in fissures across the faces it shows. Cracks
     # are lines, so they cut the dark char into more islands rather than filling it.
     outer = t.math("MULTIPLY", t.math("MULTIPLY", t.math("SUBTRACT", 1.0, facing), t.ramp(height, 0.1, 0.34, 0.7, 0.15)), t.math("ADD", 0.5, t.math("MULTIPLY", deep, 0.5)))
-    hot = t.ramp(t.attr("heat"), 0.4, 1.0) if cap else t.math("MAXIMUM", t.math("MAXIMUM", t.math("MAXIMUM", low, high), outer), tip)
+    if cap:
+        hot = t.ramp(t.attr("heat"), 0.4, 1.0)
+    else:
+        # Round g71: and in clusters, not all over: lumps of a slow noise squeezed along the grain
+        # (three times as long as wide), more of them by the coals, toward the end in the flames
+        # and in deep char, so the cracks gather where the fire touches and thin to faint runs
+        # (0.15) elsewhere. g70's net, lit alike over every outer face, read as a lattice to every
+        # judge. Gating the outer faces by `heat` too, 0 over each log's lower half, starved the
+        # noon char of the seams that break it (sheet pockets 4.7-4.9 of a held 5, g71 c3-c6).
+        heat = t.attr("heat")
+        lump = t.math("ADD", t.noise(grain(0.3, (6.1, 3.3, 0.9)), 5.0, 3.0), t.math("MULTIPLY", near, 0.18))
+        lump = t.math("ADD", lump, t.math("ADD", t.math("MULTIPLY", t.ramp(heat, 0.3, 1.0), 0.12), t.math("MULTIPLY", deep, 0.06)))
+        cluster = t.ramp(lump, 0.48, 0.62, 0.15, 1.0)
+        outer = t.math("MULTIPLY", outer, cluster)
+        high = t.math("MULTIPLY", high, t.math("ADD", 0.3, t.math("MULTIPLY", cluster, 0.7)))
+        hot = t.math("MAXIMUM", t.math("MAXIMUM", t.math("MAXIMUM", low, high), outer), tip)
     h = t.math("MULTIPLY", t.math("MULTIPLY", seam, amount), t.math("MULTIPLY", hot, t.math("ADD", 0.8, t.math("MULTIPLY", t.noise(p, 9.0), 0.2))))
+    if not cap:
+        # Its brightness varied along the log as its width is (0.5 to 1.15), and the hottest
+        # clusters' cores filled between their seams, a dull orange-red under them (RDR2's glow is
+        # filled where log meets fire, not outlined: g70's panel).
+        h = t.math("MULTIPLY", h, t.ramp(t.noise(grain(0.2, (2.2, 9.1, 4.4)), 3.0, 2.0), 0.35, 0.65, 0.7, 1.35))
+        core = t.math("MULTIPLY", t.ramp(lump, 0.62, 0.74), t.ramp(hot, 0.45, 0.9))
+        fill = t.math("MULTIPLY", t.math("MULTIPLY", core, amount), t.math("MULTIPLY", t.ramp(t.noise(p, 40.0, 2.0), 0.3, 0.7, 0.55, 1.0), FILL))
+        h = t.math("MAXIMUM", h, fill)
     h = t.math("MULTIPLY", h, t.math("SUBTRACT", 1.0, t.math("MULTIPLY", ash, 0.7)))
     t.emit(t.vec("SCALE", HOT, scale=h))
 
