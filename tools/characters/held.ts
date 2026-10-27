@@ -1,0 +1,84 @@
+// A held look hung on a body as `terra_walker::character` hangs it (D504, docs/attachment.md):
+// from the hand socket it is held in, or, strapped (a shield on the forearm), from the bone its
+// file's `strap` names. Shared by the move check (moves.ts) and the shield's board place
+// (shield_place.ts). Node 22.18 or later; no dependencies.
+
+import { type Ball, type Board, board, meshOf, sliced } from "./clash.ts";
+import { Glb, type Pose, type Q, type V3, dot, len, place, rot, sub } from "./glb.ts";
+
+// A few hundred of the look's vertices in the frame of the node it hangs from, and the blade's
+// tip. The sword (in the right hand) also as balls, the shield (in the left) as its board, for
+// the clash (clash.ts), in that frame. `front` is the way the look's painted front (its -Z)
+// looks; `up` the way its -X looks (a heater's top: its point is +X, art/held/heater_shield.json);
+// `grip` where its origin (the place it is held at) sits and `bar` the way its handle (+Y) runs,
+// or a strapped look's hand strap (+X).
+export type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; front: V3; up: V3; centre: V3; grip: V3; bar: V3; balls?: Ball[]; board?: Board };
+export type Strap = { bone: string; at: V3; face: V3; grip: V3 };
+
+// A strap's place in its bone's frame: `at` in metres (the hand socket's, which the bone's
+// scale is undone to), the look turned so its front (-Z) looks along `face` and its grip
+// (+Y) runs along `grip`.
+function strapped(strap: Strap, ratio: number): Pose {
+  const unit = (v: V3): V3 => v.map((x) => x / len(v)) as V3;
+  const y = unit(strap.grip);
+  const back = strap.face.map((x) => -x) as V3;
+  const z = unit(sub(back, y.map((x) => x * dot(back, y)) as V3));
+  const x: V3 = [y[1] * z[2] - y[2] * z[1], y[2] * z[0] - y[0] * z[2], y[0] * z[1] - y[1] * z[0]];
+  // The quaternion of the rotation whose columns are x, y and z.
+  const [m00, m11, m22] = [x[0], y[1], z[2]];
+  const trace = m00 + m11 + m22;
+  let r: Q;
+  if (trace > 0) {
+    const k = 2 * Math.sqrt(1 + trace);
+    r = [(y[2] - z[1]) / k, (z[0] - x[2]) / k, (x[1] - y[0]) / k, k / 4];
+  } else if (m00 > m11 && m00 > m22) {
+    const k = 2 * Math.sqrt(1 + m00 - m11 - m22);
+    r = [k / 4, (x[1] + y[0]) / k, (z[0] + x[2]) / k, (y[2] - z[1]) / k];
+  } else if (m11 > m22) {
+    const k = 2 * Math.sqrt(1 + m11 - m00 - m22);
+    r = [(x[1] + y[0]) / k, k / 4, (y[2] + z[1]) / k, (z[0] - x[2]) / k];
+  } else {
+    const k = 2 * Math.sqrt(1 + m22 - m00 - m11);
+    r = [(z[0] + x[2]) / k, (y[2] + z[1]) / k, k / 4, (x[1] - y[0]) / k];
+  }
+  return { t: strap.at.map((v) => v * ratio) as V3, r, s: [ratio, ratio, ratio] };
+}
+
+/** The look `file` held in `hand` (a socket's name) on `body` at its rest pose `rest`. */
+export function hang(body: Glb, rest: Pose[], hand: string, file: string): Held {
+  const g = new Glb(file);
+  const node = g.gltf.nodes.findIndex((n) => n.mesh !== undefined);
+  const strap = (g.gltf.nodes[node] as { extras?: { strap?: Strap } }).extras?.strap;
+  const socket = strap?.bone ?? hand;
+  const hung = strap ? strapped(strap, rest[body.named(hand)].s[0] / rest[body.named(strap.bone)].s[0]) : undefined;
+  const put = (p: V3): V3 => (hung ? place(hung, p) : p);
+  const pose = g.rest(node);
+  const p = g.read(g.gltf.meshes![g.gltf.nodes[node].mesh!].primitives[0].attributes.POSITION);
+  const all: V3[] = [];
+  for (let i = 0; i < p.length; i += 3) all.push(place(pose, [p[i], p[i + 1], p[i + 2]]));
+  const step = Math.max(1, Math.floor(all.length / 300));
+  const points = all.filter((_, i) => i % step === 0);
+  const tip = all.reduce((a, b) => (len(b) > len(a) ? b : a));
+  const lo: V3 = [Infinity, Infinity, Infinity];
+  const hi: V3 = [-Infinity, -Infinity, -Infinity];
+  for (const q of all) for (let j = 0; j < 3; j++) (lo[j] = Math.min(lo[j], q[j])), (hi[j] = Math.max(hi[j], q[j]));
+  const size = hi.map((x, j) => x - lo[j]);
+  const axis = size.indexOf(Math.min(...size));
+  const thin: V3 = [0, 0, 0];
+  thin[axis] = 1;
+  const centre = lo.map((x, j) => (x + hi[j]) / 2) as V3;
+  const name = file.split("/").at(-1)!.replace(".glb", "");
+  const k = hung?.s[0] ?? 1;
+  const turned = (v: V3): V3 => (hung ? rot(hung.r, v) : v);
+  const mesh = hand === "socket.hand.R" || hand === "socket.hand.L" ? meshOf(g) : undefined;
+  const balls = hand === "socket.hand.R" ? sliced(mesh!, tip).map((b) => ({ ...b, p: put(b.p), r: b.r * k })) : undefined;
+  // A shield is the off hand's strapped look; another (a torch, carried) has no board.
+  const disc = hand === "socket.hand.L" && strap ? board(mesh!) : undefined;
+  const plate = disc && { centre: put(disc.centre), normal: turned(disc.normal), radius: disc.radius * k, half: disc.half * k };
+  const front = turned(rot(pose.r, [0, 0, -1]));
+  const up = turned(rot(pose.r, [-1, 0, 0]));
+  // A held grip's bar runs along its handle (+Y); a strapped look's hand strap runs across its
+  // board, square to the forearm (+X), where the fist closes on it (D459, D504).
+  const bar = turned(rot(pose.r, strap ? [1, 0, 0] : [0, 1, 0]));
+  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, up, centre: put(centre), grip: put(pose.t), bar, balls, board: plate };
+}

@@ -33,6 +33,9 @@
 //           across the palm (index to little finger's first joints), the worst of every move
 //           and clip on every template, and the guard's first frame; a row "grip" for the
 //           scorecard (held.shield.grip_*, research/2026-10-25-shield-prior-art.md fault 3)
+//   board   each shield pose with a target (art/animation/shield_targets.json, D554): how far the
+//           board is from it in the chest's frame, cm and degrees, the worst of its clip on every
+//           template (shield_place.ts); a row "<pose> board" for the scorecard
 //   spec    a clip with a spec: from and back to the guard; one that holds the guard
 //           ("held") within a blend of it throughout; a block's shield arm up in front and
 //           still while it is "raised"
@@ -50,12 +53,14 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
-import { type Ball, type Board, board, meshOf, sliced, through } from "./clash.ts";
+import { type Ball, type Board, through } from "./clash.ts";
+import { type Held, hang } from "./held.ts";
+import { TARGETS, boardPlace, readTargets, worstOff } from "./shield_place.ts";
 import { PACE_FRAMES } from "./phases.ts";
 import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
 import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
-import { Glb, type Clip, type Pose, type Q, type V3, dot, len, place, posed, qinv, rot, sub, turn } from "./glb.ts";
+import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, rot, sub, turn } from "./glb.ts";
 
 const { values: opt } = parseArgs({
   options: {
@@ -75,6 +80,8 @@ const { values: opt } = parseArgs({
     // The clips' specs: a blow's sweep and contact (`"blow"`), by clip; a clip `X#N` (a take
     // the clip step tries) is X's.
     spec: { type: "string", default: "art/animation/sets/fight.json" },
+    // Each shield pose's board place, the one number it authors (D554, shield_place.ts).
+    targets: { type: "string", default: TARGETS },
     fps: { type: "string", default: "15" },
     // Only these body templates, comma-separated; all of them otherwise.
     template: { type: "string", default: "" },
@@ -184,81 +191,11 @@ const { shapes, skinned } = skinOf(body, opt.templates!, opt.template!.split(","
 
 const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => shaped(body, shape, clip, t, bends);
 
-// Held looks: a few hundred of their vertices in the frame of the node they hang from, and the
-// blade's tip. A look hangs from the hand socket it is held in, or, strapped (a shield on the
-// forearm), from the bone its file's `strap` names, as `terra_walker::character` hangs it.
-// The sword (in the right hand) also as balls, the shield (in the left) as its board, for the
-// clash (clash.ts), in the frame of the node they hang from.
-// `front` is the way the look's painted front (its -Z) looks, in that frame; `grip` where its
-// origin (the place it is held at) sits and `bar` the way its handle (+Y) runs, or a strapped
-// look's hand strap (+X).
-type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; front: V3; centre: V3; grip: V3; bar: V3; balls?: Ball[]; board?: Board };
-type Strap = { bone: string; at: V3; face: V3; grip: V3 };
+// Held looks, hung as `terra_walker::character` hangs them (held.ts).
 const rest = posed(body, undefined, 0);
-// A strap's place in its bone's frame: `at` in metres (the hand socket's, which the bone's
-// scale is undone to), the look turned so its front (-Z) looks along `face` and its grip
-// (+Y) runs along `grip`.
-function strapped(strap: Strap, ratio: number): Pose {
-  const unit = (v: V3): V3 => v.map((x) => x / len(v)) as V3;
-  const y = unit(strap.grip);
-  const back = strap.face.map((x) => -x) as V3;
-  const z = unit(sub(back, y.map((x) => x * dot(back, y)) as V3));
-  const x: V3 = [y[1] * z[2] - y[2] * z[1], y[2] * z[0] - y[0] * z[2], y[0] * z[1] - y[1] * z[0]];
-  // The quaternion of the rotation whose columns are x, y and z.
-  const [m00, m11, m22] = [x[0], y[1], z[2]];
-  const trace = m00 + m11 + m22;
-  let r: Q;
-  if (trace > 0) {
-    const k = 2 * Math.sqrt(1 + trace);
-    r = [(y[2] - z[1]) / k, (z[0] - x[2]) / k, (x[1] - y[0]) / k, k / 4];
-  } else if (m00 > m11 && m00 > m22) {
-    const k = 2 * Math.sqrt(1 + m00 - m11 - m22);
-    r = [k / 4, (x[1] + y[0]) / k, (z[0] + x[2]) / k, (y[2] - z[1]) / k];
-  } else if (m11 > m22) {
-    const k = 2 * Math.sqrt(1 + m11 - m00 - m22);
-    r = [(x[1] + y[0]) / k, k / 4, (y[2] + z[1]) / k, (z[0] - x[2]) / k];
-  } else {
-    const k = 2 * Math.sqrt(1 + m22 - m00 - m11);
-    r = [(z[0] + x[2]) / k, (y[2] + z[1]) / k, k / 4, (x[1] - y[0]) / k];
-  }
-  return { t: strap.at.map((v) => v * ratio) as V3, r, s: [ratio, ratio, ratio] };
-}
 const held: Held[] = opt.hold!.map((h) => {
   const [hand, file] = h.split("=");
-  const g = new Glb(file);
-  const node = g.gltf.nodes.findIndex((n) => n.mesh !== undefined);
-  const strap = (g.gltf.nodes[node] as { extras?: { strap?: Strap } }).extras?.strap;
-  const socket = strap?.bone ?? hand;
-  const hung = strap ? strapped(strap, rest[body.named(hand)].s[0] / rest[body.named(strap.bone)].s[0]) : undefined;
-  const put = (p: V3): V3 => (hung ? place(hung, p) : p);
-  const pose = g.rest(node);
-  const p = g.read(g.gltf.meshes![g.gltf.nodes[node].mesh!].primitives[0].attributes.POSITION);
-  const all: V3[] = [];
-  for (let i = 0; i < p.length; i += 3) all.push(place(pose, [p[i], p[i + 1], p[i + 2]]));
-  const step = Math.max(1, Math.floor(all.length / 300));
-  const points = all.filter((_, i) => i % step === 0);
-  const tip = all.reduce((a, b) => (len(b) > len(a) ? b : a));
-  const lo: V3 = [Infinity, Infinity, Infinity];
-  const hi: V3 = [-Infinity, -Infinity, -Infinity];
-  for (const q of all) for (let j = 0; j < 3; j++) (lo[j] = Math.min(lo[j], q[j])), (hi[j] = Math.max(hi[j], q[j]));
-  const size = hi.map((x, j) => x - lo[j]);
-  const axis = size.indexOf(Math.min(...size));
-  const thin: V3 = [0, 0, 0];
-  thin[axis] = 1;
-  const centre = lo.map((x, j) => (x + hi[j]) / 2) as V3;
-  const name = file.split("/").at(-1)!.replace(".glb", "");
-  const k = hung?.s[0] ?? 1;
-  const turned = (v: V3): V3 => (hung ? rot(hung.r, v) : v);
-  const mesh = hand === "socket.hand.R" || hand === "socket.hand.L" ? meshOf(g) : undefined;
-  const balls = hand === "socket.hand.R" ? sliced(mesh!, tip).map((b) => ({ ...b, p: put(b.p), r: b.r * k })) : undefined;
-  // A shield is the off hand's strapped look; another (a torch, carried) has no board.
-  const disc = hand === "socket.hand.L" && strap ? board(mesh!) : undefined;
-  const plate = disc && { centre: put(disc.centre), normal: turned(disc.normal), radius: disc.radius * k, half: disc.half * k };
-  const front = turned(rot(pose.r, [0, 0, -1]));
-  // A held grip's bar runs along its handle (+Y); a strapped look's hand strap runs across its
-  // board, square to the forearm (+X), where the fist closes on it (D459, D504).
-  const bar = turned(rot(pose.r, strap ? [1, 0, 0] : [0, 1, 0]));
-  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, centre: put(centre), grip: put(pose.t), bar, balls, board: plate };
+  return hang(body, rest, hand, file);
 });
 
 
@@ -641,6 +578,15 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
   row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen), ...carriedBy(pen) } });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
+// Each shield pose with a target against it (D554, shield_place.ts): the board's place in the
+// chest's frame, the worst of its clip on every template. Numbers for the scorecard, not bars here.
+if (shield)
+  for (const [name, target] of Object.entries(readTargets(opt.targets))) {
+    if (!name.split("+").every((n) => clipsFile.clip(n))) continue;
+    const off = worstOff({ shapes, at: (s, c, t) => boardPlace(poseOf(s, c, t), rest, node.spine_03, at(shield.socket), shield) }, clipOf(name), target, 1 / fps);
+    const parts = [`${off.cm.toFixed(1)} cm off (${off.cmWhere})`, `${off.deg.toFixed(1)}° off (${off.degWhere}), target from ${target.from} on ${target.template}`];
+    row(`${name}, the board against its target`, parts, [], { clip: `${name} board`, measured: { board_target_cm: off.cm, board_target_deg: off.deg } });
+  }
 if (shield && gripped.cm.cm > -Infinity) {
   // The guard's first frame, where a drawn fighter stands, and the worst of every clip.
   const atGuard = penetration(guardClip, 0, 0).grip.deg;

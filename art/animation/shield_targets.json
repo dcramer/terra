@@ -1,0 +1,13 @@
+{
+ "note": "Each shield pose's board place (D554): centre (m), face (its painted front, -Z) and up (its -X, a heater's top) in the chest's frame: spine_03's joint, turned as the chest has turned from its rest (+Y up, +Z ahead). Captured by tools/characters/shield_place.ts --at <from> --capture <pose> on <template>; the arm is solved to put the board here, so a change of bones or strap leaves it.",
+ "targets": {
+  "Low_Guard": {
+   "centre": [0.40715, -0.09737, 0.25998],
+   "face": [0.99249, -0.07943, 0.09305],
+   "up": [0.05916, 0.97734, 0.20325],
+   "from": "27fa529c",
+   "template": "male",
+   "why": "D531: the guard the developer approved on the review desk (\"Reads right\"), the shield low at the left hip, face out; captured before D542's rebuild of the bones"
+  }
+ }
+}

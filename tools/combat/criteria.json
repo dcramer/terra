@@ -1410,6 +1410,74 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "move.guard.board_target",
+   "noticed": 4,
+   "notice": "the shield is not where the guard puts it: its board in Low_Guard, the game's guard, away from the place against the chest the developer approved (D531), on some body",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "D554 (each shield pose authors the board's place in the chest's frame; the arm is solved per body to put it there); the target art/animation/shield_targets.json, captured by tools/characters/shield_place.ts; the shield-arm stage's bar (round 2: within 1 cm and 3 degrees)",
+   "check": {
+    "by": "moves",
+    "row": "Low_Guard board",
+    "measure": "board_target_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.guard.board_target_turn",
+   "noticed": 3,
+   "notice": "the shield is turned otherwise than the guard turns it: its board in Low_Guard faces or leans away from the approved guard's (D531), on some body",
+   "bar": {
+    "at_most": 3
+   },
+   "unit": "deg",
+   "source": "D554; the target art/animation/shield_targets.json (tools/characters/shield_place.ts); the shield-arm stage's bar (round 2: within 1 cm and 3 degrees)",
+   "check": {
+    "by": "moves",
+    "row": "Low_Guard board",
+    "measure": "board_target_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "clip.Keyed_Guard.sword_in_shield",
+   "noticed": 4,
+   "notice": "the sword (blade, guard or hilt) goes through the fighter's own shield in Keyed_Guard, the keyed guard as taken, whose arms the roll and the strap's fist are laid from",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the shield-arm stage's plan (Keyed_Guard's clash rows held by the ratchet from round 1)",
+   "check": {
+    "by": "moves",
+    "row": "Keyed_Guard",
+    "measure": "sword_shield_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "clip.Keyed_Guard.shield_in_arm",
+   "noticed": 3,
+   "notice": "the shield's board goes through the sword arm (right hand or forearm) in Keyed_Guard, the keyed guard as taken",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "D481 (moves.ts clash, clash.ts); the shield-arm stage's plan (Keyed_Guard's clash rows held by the ratchet from round 1)",
+   "check": {
+    "by": "moves",
+    "row": "Keyed_Guard",
+    "measure": "shield_arm_cm"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "move.Fight_Guard.held",
    "noticed": 5,
    "notice": "the sword or shield passes through the body in Fight_Guard",
