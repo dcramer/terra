@@ -199,6 +199,93 @@ fn every_hero_has_a_light_by_it() {
     }
 }
 
+/// How far in from a room's walls its open middle starts, in metres: past the wall props (0.8 m
+/// out) and the clutter round and by them.
+const MIDDLE_M: f32 = 2.0;
+
+/// A theme's rooms of four cells or more: how many, how many with something the dressing laid
+/// in their open middle, those pieces, the rooms' cells, and the most pieces a cell of a room.
+fn middles(theme: &Theme) -> (u32, u32, usize, i32, f32) {
+    let bare_theme = Theme {
+        dressing: Vec::new(),
+        ..theme.clone()
+    };
+    let set = ModuleSet::new(theme).unwrap();
+    let (mut rooms, mut strewn, mut pieces, mut all, mut most) = (0, 0, 0, 0, 0.0f32);
+    for s in 0..40 {
+        let Ok(dungeon) = generate(theme, &set, Seed(s)) else {
+            continue;
+        };
+        let full = stamp(&dungeon, theme, &kind);
+        let bare = stamp(&dungeon, &bare_theme, &kind);
+        let laid = &full.props[bare.props.len()..];
+        let layout = &dungeon.layout;
+        for (r, room) in dungeon.graph.rooms.iter().enumerate() {
+            let rect = layout.rooms[r];
+            let cells = rect.size.x * rect.size.y;
+            if cells < 4 || !theme.dressing.iter().any(|d| d.roles.contains(&room.role)) {
+                continue;
+            }
+            rooms += 1;
+            all += cells;
+            let lo = rect.min.as_vec3() * 4.0 + Vec3::splat(MIDDLE_M);
+            let size = Vec3::new(rect.size.x as f32, 0.0, rect.size.y as f32) * 4.0;
+            let hi = rect.min.as_vec3() * 4.0 + size - Vec3::splat(MIDDLE_M);
+            let floor = floor_of(rect.min.y) as f32 * super::super::CUBE;
+            let middle = (laid.iter())
+                .filter(|p| {
+                    (p.at.y - floor).abs() < 1.0
+                        && p.at.x > lo.x
+                        && p.at.x < hi.x
+                        && p.at.z > lo.z
+                        && p.at.z < hi.z
+                })
+                .count();
+            strewn += (middle > 0) as u32;
+            pieces += middle;
+            most = most.max(middle as f32 / cells as f32);
+        }
+    }
+    (rooms, strewn, pieces, all, most)
+}
+
+/// A dressed room's open middle is strewn, sparsely (barrow dress round 7: the clutter went
+/// round the props, then the corners, then the walls, so the floor between stayed bare stone):
+/// of the rooms of four cells or more, with the theme's scatter nearly all have something the
+/// dressing laid more than `MIDDLE_M` in from every wall, and far more of it than without the
+/// scatter, yet no room more than three pieces a cell there. That none stands in the eye's
+/// path or a doorway is the first test's.
+#[test]
+fn a_rooms_open_middle_is_strewn() {
+    for theme in Theme::all(&assets()).unwrap() {
+        if !theme.dressing.iter().any(|d| !d.scatter.is_empty()) {
+            continue;
+        }
+        let mut unstrewn = theme.clone();
+        for d in &mut unstrewn.dressing {
+            d.scatter.clear();
+        }
+        let (rooms, strewn, pieces, cells, most) = middles(&theme);
+        let (_, before, had, _, _) = middles(&unstrewn);
+        println!(
+            "{}: of {rooms} rooms ({cells} cells), {strewn} strewn in their middle with {pieces} \
+             pieces, at most {most:.2} a cell; without the scatter {before} with {had}",
+            theme.name
+        );
+        assert!(
+            strewn * 100 >= rooms * 95,
+            "{}: {strewn} of {rooms} rooms strewn",
+            theme.name
+        );
+        assert!(
+            pieces >= had * 2,
+            "{}: {pieces} pieces, {had} without",
+            theme.name
+        );
+        assert!(most <= 3.0, "{}: {most:.2} pieces a cell", theme.name);
+    }
+}
+
 /// How far apart two props stand at most to be of one group, in metres.
 const GROUP_LINK_M: f32 = 1.7;
 
@@ -218,14 +305,22 @@ fn dressing_stands_in_groups() {
         };
         let set = ModuleSet::new(&theme).unwrap();
         let (mut props, mut grouped, mut alone, mut groups) = (0, 0, 0, 0);
+        let scattered: Vec<&(String, f32)> =
+            theme.dressing.iter().flat_map(|d| &d.scatter).collect();
         for s in 0..40 {
             let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
                 continue;
             };
             let full = stamp(&dungeon, &theme, &kind);
             let bare = stamp(&dungeon, &bare_theme, &kind);
+            // The floor's scatter apart, strewn loose by design (`a_rooms_open_middle_is_strewn`).
             let laid: Vec<Vec3> = full.props[bare.props.len()..]
                 .iter()
+                .filter(|p| {
+                    !scattered
+                        .iter()
+                        .any(|(m, s)| *m == p.model && *s == p.scale)
+                })
                 .map(|p| p.at)
                 .collect();
             // Single-link groups, on one level.

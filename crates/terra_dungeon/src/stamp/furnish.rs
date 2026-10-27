@@ -57,6 +57,15 @@ const RING: [(f32, f32); 8] = [
 ];
 /// Clutter lies so much past what a prop keeps clear round it.
 const RING_GAP_M: f32 = 0.1;
+/// How far apart the open floor's debris keeps from each other and all else, in metres: a
+/// sparse strew, a piece or two a cell, never a carpet.
+const SCATTER_APART_M: f32 = 1.2;
+
+/// How far a piece of debris is nudged off the floor's grid of points, in metres, each way; it
+/// keeps as much farther from the tour's line than the grid's points do, since the eye swings
+/// off that line (a nudged stone 0.71 m from the eye's path at `OFF_ROUTE_M` alone).
+const SCATTER_NUDGE_M: f32 = 0.35;
+
 /// Out from the wall's cell edge, in cubes: 0.3 m clear of its face.
 const OUT: f32 = 1.6;
 
@@ -275,6 +284,7 @@ pub(super) fn lay(
         let anchor = hero.or(told).or(spots.first().map(|s| s.p));
         laying.wall_props(anchor, &mut taken, out);
         laying.clutter(first, &mut taken, out);
+        laying.scatter(&mut taken, out);
     }
 }
 
@@ -466,6 +476,33 @@ impl Laying<'_> {
                 }
                 if self.place.clear(p) && free(taken, p, CLUTTER_APART_M) {
                     put(out, pick(&dress.clutter, rank), p, facing);
+                    taken.push((p, 0.0));
+                    laid += 1;
+                }
+            }
+        }
+    }
+
+    /// Debris over the open floor, last, so the groups keep their places: its points taken by
+    /// their hash over the whole room, each nudged off the floor's grid by up to
+    /// `SCATTER_NUDGE_M` so the pieces do not stand in rows, `SCATTER_APART_M` from each other
+    /// and all else, off the tour and the doorways, as a set dresser breaks up a bare floor
+    /// with a stone here and a bone there.
+    fn scatter(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) {
+        let unit = |h: u32| (h & 0xffff) as f32 / 65535.0 * 2.0 - 1.0;
+        for (k, dress) in (self.dresses.iter().enumerate()).filter(|(_, d)| !d.scatter.is_empty()) {
+            let (least, most) = dress.strewn;
+            let per = least + self.salt(580 + k as u32) % (most.saturating_sub(least) + 1);
+            let wanted = per as usize * self.cells;
+            let mut laid = 0;
+            for &(rank, p, _) in self.floor {
+                if laid == wanted {
+                    break;
+                }
+                let p = p + Vec3::new(unit(rank), 0.0, unit(rank >> 16)) * SCATTER_NUDGE_M;
+                let off_way = off(self.place.route, p) > OFF_ROUTE_M + SCATTER_NUDGE_M;
+                if off_way && self.place.clear(p) && free(taken, p, SCATTER_APART_M) {
+                    put(out, pick(&dress.scatter, rank / 7), p, (rank % 4) as usize);
                     taken.push((p, 0.0));
                     laid += 1;
                 }
