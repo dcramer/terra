@@ -53,7 +53,9 @@ const toward = (a: [number, number], b: [number, number], m: number): [number, n
 };
 
 /// Asleep: both arms up into its crown, the hands among the branches; the legs pressed
-/// together into one trunk; a slight lean, as an old oak stands. Bends are degrees about the
+/// together into one trunk; a slight lean, as an old oak stands; the chest held up against the
+/// idle clip's hunch (spine_03 19 degrees forward), which tipped the crown's top clumps over the
+/// face from below (round-6 film reviews: a leaf tuft over it until the roar). Bends are degrees about the
 /// body's left, up and ahead (terra_creatures::staged::pose).
 const ASLEEP = {
   upperarm_l: [-8, 0, 150],
@@ -63,6 +65,8 @@ const ASLEEP = {
   thigh_l: [0, 0, -12],
   thigh_r: [0, 0, 12],
   spine_01: [2, 0, 3],
+  spine_03: [-16, 0, 0],
+  neck_01: [-6, 0, 0],
 };
 /// Awake and roaring: the arms brought down and out from the crown, the crown thrown back.
 const ROARS = { upperarm_l: [-20, 0, 35], upperarm_r: [-20, 0, -35], spine_03: [-6, 0, 0], neck_01: [-6, 0, 0] };
