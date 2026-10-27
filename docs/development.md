@@ -258,7 +258,7 @@ Over the remote, `node tools/sandbox/remote.ts debug.view <name>` sets one (`off
 
 ## Debug menu
 
-<a id="debug-menu"></a>Wanted (D81): an in-game menu, present only when the game is started with a flag, opened with the backtick key. It does what developers need while playing: warp to a place or planet, give items, change the time of day or the weather, show colliders and chunk borders, switch systems off to see what they cost. Each entry should be a command that QA for agents (D69) can send too, so the menu and the agents' tools are the same list. The menu itself is not built; its first part, the tunables, is, and the menu's list of them is its next step.
+<a id="debug-menu"></a>Wanted (D81): an in-game menu, present only when the game is started with a flag, opened with the backtick key. It does what developers need while playing: warp to a place or planet, give items, change the time of day or the weather, show colliders and chunk borders, switch systems off to see what they cost. Each entry should be a command that QA for agents (D69) can send too, so the menu and the agents' tools are the same list. The menu itself is not built; its first part, the tunables, is, and its first page is a slider for each of them, grouped by prefix, with its help line and a reset (D81).
 
 ### Tunables
 
