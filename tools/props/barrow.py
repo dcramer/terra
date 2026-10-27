@@ -18,7 +18,8 @@ the textures rather than the triangles (art-style.md rule 1):
   half sunk in a wall, the same piece is a pilaster. Origin the middle of its base.
 - `Loculus`: a burial niche's front, a heavy lintel over an opening 2 m by 1 m and a plain
   lining in its depth, in the walls' rubble a step darker and warmer, on the face of a loculi wall. Origin the foot of the opening's middle on the wall's face.
-- `Shroud`, `Bones`: what lies in a loculus, a body bound in linen; a skull and long bones.
+- `Shroud`: what lies in a loculus, a body bound in linen (its bones are the Tripo props
+  `Skull` and `BoneHeap`, art/props/barrow_skull and barrow_bone_heap).
 - `Sarcophagus`: a stone tomb chest 2.2 m by 1.1 m on a plinth, a moulded lid and a recumbent
   effigy on it, over the 2 m by 1 m by 1 m of cubes the crypt's `sarcophagus` module lays (its
   cubes still what is walked into). Origin the middle of its base, its length along X. Its
@@ -27,8 +28,10 @@ the textures rather than the triangles (art-style.md rule 1):
 - `Candles`, `Altar`, `Urns`, `Coffin`: a room's dressing by its type (docs/dungeons.md, room
   types, D539): grave candles on their wax, an offering altar with its runner and candles,
   three lidded cinerary urns, a coffin with its lid pushed aside. Their flames glow.
-- `BoneScatter`, `Debris`: what lies strewn over a floor, broken bones and a jaw; stones fallen
-  from the walls and their grit.
+- `Debris`: what lies strewn over a floor, stones fallen from the walls and their grit.
+- `UrnFallen`, `Planks`, `StandFallen`: bigger things fallen on a floor that tell what
+  happened: an urn knocked over and its ashes spilt, a coffin lid's broken boards, a candle
+  stand toppled.
     tools/blender/run.sh tools/props/barrow.py [Name ...]
 
 Writes them (or only those named) to assets/models/props/barrow/. The rubble is `castle_wall_varriation` (the crypt's
@@ -41,10 +44,13 @@ import math
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import bmesh
 import bpy
-from mathutils import Vector, noise
-from mathutils.bvhtree import BVHTree
+from mathutils import Matrix, Vector
+
+from aged import grime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MATERIALS = os.path.join(ROOT, "assets", "materials")
@@ -413,72 +419,6 @@ def lump(m, centre, radii, mat, segs=10, rings=6, bulge=None, turn=0.0):
     bm.free()
 
 
-# Aged bone's grime (`grime`): how far a vertex looks for what shades it, metres (about a
-# skull's radius); the dirt's colour in the crevices and where it lay on the earth, against the
-# bone's own (as a multiply of its texture and tint); and the stain's blotches, a metre across
-# so many. Old bone is never the white of a museum's cast: ivory to tobacco brown, darker and
-# earthier wherever it touched the ground or another bone (barrow round 12: "a smooth white egg
-# of a skull, the brightest thing in frame").
-GRIME_REACH = 0.12
-GRIME = (0.22, 0.17, 0.11)
-STAIN_SCALE = 14.0
-GRIME_RAYS = 64
-
-
-def hemisphere(n):
-    """`n` directions spread evenly over the sphere (a Fibonacci spiral), the same every run."""
-    golden = math.pi * (3.0 - math.sqrt(5.0))
-    out = []
-    for i in range(n):
-        z = 1.0 - (i + 0.5) / n * 2.0
-        r = math.sqrt(max(0.0, 1.0 - z * z))
-        out.append(Vector((math.cos(golden * i) * r, math.sin(golden * i) * r, z)))
-    return out
-
-
-def grime(bm, me):
-    """Each vertex's colour, the dirt of old bone: its ambient occlusion over `GRIME_REACH`
-    (rays against the bones themselves and the niche's floor at z 0, cosine weighted, as a
-    baker's AO), so the crevices between bones, the skull's underside and the sockets' rims go
-    earth brown, and blotches of stain over the rest. Written to the mesh's colour attribute,
-    which the glTF carries as COLOR_0 and the game multiplies into the bone's colour."""
-    bm.verts.ensure_lookup_table()
-    bm.normal_update()
-    tree = BVHTree.FromBMesh(bm)
-    dirs = hemisphere(GRIME_RAYS * 2)
-    shades = []
-    for v in bm.verts:
-        n = v.normal
-        p = v.co + n * 0.002
-        hit = total = 0.0
-        for d in dirs:
-            w = d.dot(n)
-            if w <= 0.0:
-                continue
-            total += w
-            near = GRIME_REACH
-            loc, _, _, dist = tree.ray_cast(p, d, GRIME_REACH)
-            if loc is not None:
-                near = min(near, dist)
-            if d.z < 0.0:
-                near = min(near, -p.z / d.z)
-            hit += w * (1.0 - near / GRIME_REACH)
-        open_ = 1.0 - hit / max(total, 1e-6)
-        stain = 0.5 + 0.5 * noise.noise(v.co * STAIN_SCALE)
-        # Darker in the crevices (open_ under 1), a little everywhere by the stain: a bone's
-        # side over the floor, a third shut in, takes some 0.4 of the dirt, a crevice all.
-        dirt = min(1.0, (1.0 - open_) * 1.4) ** 1.2
-        bone = 0.78 + 0.22 * stain
-        shades.append([bone * (1.0 - dirt) + g * dirt for g in GRIME])
-    layer = me.color_attributes.new("Grime", "FLOAT_COLOR", "POINT")
-    for i, c in enumerate(shades):
-        layer.data[i].color = (*c, 1.0)
-    me.color_attributes.active_color = layer
-    lumas = sorted(0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2] for c in shades)
-    print(f"BARROW grime: {len(lumas)} vertices, luma median {lumas[len(lumas) // 2]:.2f}, "
-          f"tenth {lumas[len(lumas) // 10]:.2f}, least {lumas[0]:.2f}")
-
-
 def shroud():
     """A body bound in linen, 1.7 m, lying on its back: head, shoulders, the narrowing to the
     feet, cords round it every 0.3 m."""
@@ -498,59 +438,10 @@ def shroud():
     return m, [("Linen", "white_stucco", (0.52, 0.47, 0.38)), ("Cord", "white_stucco", (0.30, 0.25, 0.18))]
 
 
-def bones():
-    """A skull at one end, long bones laid along the niche, a few ribs: a body long gone. Twice
-    as thick as a real one's and the skull a quarter larger, so they read as bones at 3-5 m:
-    at real thickness (a femur's shaft 2.5-4 cm) they were "thin sticks lying flat like
-    cutlery" (barrow rounds 10 and 11, all three reviewers). The orbits and nose dark, on the
-    face of the skull, where they were sunk inside it."""
-    m = Mesh()
-    m.aged = True
-    lump(m, (0.60, 0.02, 0.12), (0.125, 0.095, 0.115), 0, segs=14, rings=10)
-    lump(m, (0.70, 0.02, 0.07), (0.06, 0.07, 0.05), 0, segs=10, rings=6)
-    for s in (-1, 1):
-        lump(m, (0.715, 0.02 + s * 0.042, 0.135), (0.02, 0.028, 0.026), 1, segs=8, rings=5)
-    lump(m, (0.73, 0.02, 0.095), (0.012, 0.012, 0.018), 1, segs=6, rings=4)
-    for k, (x, y, ln, r) in enumerate(((-0.05, -0.09, 0.45, 0.042), (-0.1, 0.09, 0.43, 0.042), (-0.55, -0.06, 0.4, 0.038), (-0.5, 0.11, 0.38, 0.036), (0.25, 0.15, 0.3, 0.03))):
-        lump(m, (x, y, r), (ln / 2, r, r), 0, segs=10, rings=5)
-        for e in (-1, 1):
-            lump(m, (x + e * ln / 2, y, r * 1.2), (r * 1.3, r * 1.5, r * 1.25), 0, segs=8, rings=5)
-    for k in range(5):
-        lump(m, (0.22 + 0.07 * k - 0.1, -0.03 - 0.01 * k, 0.04), (0.022, 0.14, 0.02), 0, segs=6, rings=4)
-    lump(m, (0.15, -0.02, 0.06), (0.10, 0.14, 0.06), 0, segs=8, rings=4)
-    # The bone's tint, its grime aside: aged ivory-brown, about 0.5 in sRGB (0.44 luma with its
-    # stain) over the stucco's 0.83, its crevices near 0.2: well under the shroud's linen (0.63).
-    return m, [("Bone", "white_stucco", (0.34, 0.28, 0.20)), ("Socket", None, (0.03, 0.025, 0.02))]
-
-
-def bone_scatter():
-    """Bones strewn on a floor, a body's long since kicked apart: a heap of broken shafts lying
-    across each other, at twice real thickness as `bones` (at one and a half, pale and spread
-    round a ring, they read as grains of rice laid out, barrow dress8's rooms), a knuckle at
-    one end of some, the other snapped, a jaw and a shard of skull by it, two pieces kicked
-    away; over 0.7 by 0.5 m. A shade darker than `bones`, dust-covered, and grimed as them."""
-    m = Mesh()
-    m.aged = True
-    for x, y, ln, r, a, knob, up in ((-0.05, 0.02, 0.26, 0.030, 0.3, True, 0.0), (0.02, -0.03, 0.22, 0.028, 1.9, True, 0.045),
-                                      (0.10, 0.06, 0.16, 0.024, -0.6, False, 0.0), (-0.14, -0.08, 0.12, 0.022, 2.4, False, 0.0),
-                                      (0.05, 0.14, 0.14, 0.024, 0.8, True, 0.0), (0.28, -0.14, 0.10, 0.020, 1.0, False, 0.0),
-                                      (-0.30, 0.15, 0.08, 0.020, -1.2, False, 0.0)):
-        lump(m, (x, y, r + up), (ln / 2, r, r), 0, segs=8, rings=5, turn=a)
-        if knob:
-            e = ln / 2
-            lump(m, (x + e * math.cos(a), y + e * math.sin(a), r * 1.15 + up), (r * 1.3, r * 1.5, r * 1.2), 0, segs=8, rings=5, turn=a)
-    # The jaw: two rami and the chin, a U lying on its side; a curved shard of the skull's vault.
-    for s in (-1, 1):
-        lump(m, (-0.16 + 0.045 * s, 0.17, 0.02), (0.055, 0.016, 0.02), 0, segs=6, rings=4, turn=1.57 + 0.35 * s)
-    lump(m, (-0.16, 0.115, 0.018), (0.03, 0.018, 0.018), 0, segs=6, rings=4)
-    lump(m, (0.19, -0.02, 0.016), (0.075, 0.055, 0.03), 0, segs=10, rings=5, turn=0.6)
-    return m, [("Bone", "white_stucco", (0.27, 0.22, 0.16))]
-
-
 def debris():
     """Stones fallen from the walls and their grit, as lie on any old crypt's floor: two the
     size of a fist and a half, four of an egg, a scatter of chips, faceted (few faces, the
-    shading's sharp edges) in the walls' rubble, over 0.7 by 0.5 m. Grimed as `bones`, so they
+    shading's sharp edges) in the walls' rubble, over 0.7 by 0.5 m. Grimed (aged.py), so they
     sit in the dust rather than on it."""
     m = Mesh()
     m.aged = True
@@ -730,6 +621,71 @@ def coffin():
     return m, [("Wood", "weathered_planks", (0.46, 0.38, 0.30)), ("Inside", None, (0.02, 0.018, 0.015))]
 
 
+# The floor's fallen things (`UrnFallen`, `Planks`, `StandFallen`): fewer, bigger pieces that
+# tell what happened here, in place of a sprinkle of chips (the developer: "make more sense, be
+# rich, use more things"; dress9's reviewers: "program-sprinkled pebbles"). Each is built
+# standing, as its upright kin are, then laid down by `laid`.
+def laid(m, since, tilt=0.0, turn=0.0, at=(0.0, 0.0, 0.0)):
+    """The vertices added to `m` since it had `since`, tipped `tilt` radians about Y (its up
+    toward +X), turned `turn` about the up axis and moved to `at`."""
+    rot = Matrix.Rotation(turn, 3, "Z") @ Matrix.Rotation(tilt, 3, "Y")
+    m.bm.verts.ensure_lookup_table()
+    for v in m.bm.verts[since:]:
+        v.co = rot @ v.co + Vector(at)
+
+
+def urn_fallen():
+    """A cinerary urn knocked over, 0.39 m long on its belly, its mouth dipped to the floor
+    toward +X, its ashes spilt from it in a grey fan and its lid rolled off beyond: a grave
+    robbed or kicked over, told in one piece. 0.8 by 0.45 m. Its clay the `Urns`'."""
+    m = Mesh()
+    m.aged = True
+    s = 0.85
+    since = len(m.bm.verts)
+    lathe(m, (0.0, 0.0, 0.0), [(0.0, 0.0), (0.09 * s, 0.0), (0.10 * s, 0.03 * s), (0.17 * s, 0.2 * s), (0.18 * s, 0.28 * s),
+                               (0.13 * s, 0.39 * s), (0.085 * s, 0.43 * s), (0.10 * s, 0.46 * s), (0.0, 0.46 * s)], 0, STUCCO_M, 14)
+    lathe(m, (0.0, 0.0, 0.461 * s), [(0.0, 0.0), (0.085 * s, 0.0), (0.0, 0.001)], 1, STUCCO_M, 12)
+    laid(m, since, tilt=math.radians(97.0), at=(-0.30, 0.0, 0.15))
+    for x, y, rx, ry, rz in ((0.17, 0.0, 0.10, 0.09, 0.02), (0.29, 0.05, 0.09, 0.07, 0.013), (0.27, -0.08, 0.06, 0.05, 0.01),
+                             (0.40, 0.01, 0.05, 0.04, 0.008)):
+        lump(m, (x, y, 0.0), (rx, ry, rz), 2, segs=10, rings=4)
+    lathe(m, (0.38, 0.17, 0.0), [(0.0, 0.0), (0.11 * s, 0.0), (0.10 * s, 0.025 * s), (0.04 * s, 0.05 * s), (0.03 * s, 0.075 * s),
+                                 (0.0, 0.08 * s)], 0, STUCCO_M, 12)
+    return m, [("Clay", "white_stucco", (0.50, 0.33, 0.22)), ("Inside", None, (0.05, 0.045, 0.04)),
+               ("Ashes", "white_stucco", (0.24, 0.23, 0.21))]
+
+
+def planks():
+    """Two boards of a coffin's lid broken up, 1.05 and 0.65 m by 0.24 m, 3 cm thick, lying
+    apart, each snapped at one end in a jagged break. Grimed, so they lie in the dust. Their
+    wood a step darker than the `Coffin`'s, longer on the floor."""
+    m = Mesh()
+    m.aged = True
+    long_ = [(-0.55, -0.12), (0.40, -0.12), (0.46, -0.07), (0.42, -0.02), (0.52, 0.03), (0.47, 0.08), (0.50, 0.12), (-0.55, 0.12)]
+    prism(m, long_, 0.0, 0.03, 0, 0, 2.0)
+    since = len(m.bm.verts)
+    short = [(-0.30, -0.11), (0.22, -0.11), (0.30, -0.04), (0.25, 0.02), (0.33, 0.11), (-0.30, 0.11)]
+    prism(m, short, 0.0, 0.03, 0, 0, 2.0)
+    laid(m, since, turn=0.35, at=(0.02, 0.38, 0.0))
+    return m, [("Wood", "weathered_planks", (0.40, 0.33, 0.26))]
+
+
+def stand_fallen():
+    """A wooden pricket candle stand, 1.08 m, toppled: lying on the rims of its foot and its
+    iron drip pan, its candle rolled off and out beside it. 1.1 by 0.4 m, its foot at -X."""
+    m = Mesh()
+    m.aged = True
+    since = len(m.bm.verts)
+    lathe(m, (0.0, 0.0, 0.0), [(0.0, 0.0), (0.14, 0.0), (0.14, 0.03), (0.06, 0.07), (0.03, 0.10), (0.025, 0.60),
+                               (0.035, 0.64), (0.025, 0.68), (0.025, 1.03), (0.0, 1.03)], 0, 1.0, 12)
+    lathe(m, (0.0, 0.0, 1.03), [(0.0, 0.0), (0.10, 0.0), (0.10, 0.03), (0.09, 0.03), (0.0, 0.01)], 1, 1.0, 12)
+    laid(m, since, tilt=math.radians(92.0), at=(-0.54, 0.0, 0.14))
+    since = len(m.bm.verts)
+    lathe(m, (0.0, 0.0, 0.0), [(0.0, 0.0), (0.035, 0.0), (0.035, 0.20), (0.028, 0.215), (0.0, 0.215)], 2, STUCCO_M, 10)
+    laid(m, since, tilt=math.radians(90.0), turn=0.5, at=(0.42, 0.22, 0.035))
+    return m, [("Wood", "weathered_planks", (0.32, 0.25, 0.19)), ("Iron", None, (0.10, 0.09, 0.085)), WAX]
+
+
 def export(name, built):
     m, mats = built
     bmesh.ops.remove_doubles(m.bm, verts=m.bm.verts[:], dist=1e-5)
@@ -766,7 +722,7 @@ def export(name, built):
 
 
 ONLY = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-for name, make in (("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Bones", bones), ("Sarcophagus", sarcophagus), ("Candles", candles), ("Altar", altar), ("Urns", urns), ("Coffin", coffin), ("BoneScatter", bone_scatter), ("Debris", debris)):
+for name, make in (("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Sarcophagus", sarcophagus), ("Candles", candles), ("Altar", altar), ("Urns", urns), ("Coffin", coffin), ("Debris", debris), ("UrnFallen", urn_fallen), ("Planks", planks), ("StandFallen", stand_fallen)):
     if ONLY and name not in ONLY:
         continue
     reset()
