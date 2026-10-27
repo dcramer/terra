@@ -27,7 +27,7 @@ item is adding a file, never editing this script. Its "fit" says how the look is
 - "hung": a thing carried hanging from the hand by a handle over its top, as a basket is, from
   its prop: "out", how far out from the leg it hangs. The hand's socket in a hanging arm has +Z
   up the arm, +Y forward and +X out from the body, so it hangs down -Z from its handle's top,
-  its long way forward along +Y.
+  its long way forward along +Y; its extras say {"hold": "hung"}.
 
 Every item gives "source" (under assets/models) and "carry_tilt" (degrees), and may give
 "strap": strapped to the forearm rather than hung on the hand socket, said in its extras as
@@ -106,6 +106,8 @@ def hung(item):
     tip = Matrix.Rotation(math.radians(90), 4, "X")
     ob.data.transform(Matrix.Translation((out, 0, 0)) @ tip @ long_y @ Matrix.Translation(-grip))
     ob["carry_tilt"] = d["carry_tilt"]
+    # Its kind, so a reader of the file alone tells it from a look held by its handle (D546).
+    ob["hold"] = "hung"
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)
     path = os.path.join(OUT, f"{item}.glb")
