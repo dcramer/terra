@@ -12,7 +12,7 @@ use std::process::{Command, Stdio};
 pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "bench",
-        takes: "[scene…] [--runs N] [--record] [--debug] [--copy NAME]",
+        takes: "[scene…] [--runs N] [--record] [--debug] [--copy NAME] [--quality PRESET] [--tune NAME=VALUE…]",
         does: "time the benchmark scenes: release build, offscreen at 1920x1080, against the last recorded; with every scene, also lodcheck",
         group: "Play and check",
         run: bench,
@@ -304,15 +304,60 @@ fn last_recorded(csv: &str, timing: &Timing, build: &str, scene: &str) -> Option
 }
 
 /// What `cargo xtask bench` was asked: its runs, whether to record, the build, the copy,
-/// the preset and the scenes, every scene if none was named.
+/// the preset, the tunables set and the scenes, every scene if none was named.
 struct Asked {
     runs: usize,
     record: bool,
     debug: bool,
     copy: String,
     quality: Option<String>,
+    /// Each `NAME=VALUE` passed on as `--tune` (D547), sorted by name so a key reads the same
+    /// whichever order they were given in.
+    tunes: Vec<String>,
     chosen: Vec<&'static Scene>,
     all_scenes: bool,
+}
+
+/// A `--tune` assignment as its key spells it: `NAME=VALUE`, a number written the shortest
+/// way (`0.250` is `0.25`), so one value is one key. None if it is not an assignment.
+fn tune_assignment(arg: &str) -> Option<(String, String)> {
+    let (name, value) = arg.split_once('=')?;
+    let (name, value) = (name.trim(), value.trim());
+    if name.is_empty() || value.is_empty() || name.contains([',', '@', '=']) {
+        return None;
+    }
+    let value = value
+        .parse::<f64>()
+        .map_or(value.to_string(), |n| n.to_string());
+    (!value.contains([',', '@'])).then(|| (name.to_string(), value))
+}
+
+/// The name a scene's results are recorded and compared under: the scene, then any preset
+/// (`@high`), then each tunable set (`@tune:NAME=VALUE`), so a run that changed either is
+/// never compared with, or moves, the scene's plain baseline.
+fn result_key(scene: &str, quality: Option<&str>, tunes: &[String]) -> String {
+    let mut key = scene.to_string();
+    if let Some(preset) = quality {
+        key += &format!("@{preset}");
+    }
+    for tune in tunes {
+        key += &format!("@tune:{tune}");
+    }
+    key
+}
+
+/// The keys already in the results, of those a tuned run would record: a tuned key is
+/// recorded once, when it is new, as the baseline it compares against (lowering one is the
+/// nightly's alone, D414, and the nightly runs no tuned scene).
+fn recorded_already(csv: &str, keys: &[String]) -> Vec<String> {
+    keys.iter()
+        .filter(|key| {
+            csv.lines()
+                .skip(1)
+                .any(|line| line.split(',').nth(5) == Some(key.as_str()))
+        })
+        .cloned()
+        .collect()
 }
 
 fn asked(args: &[String]) -> Option<Asked> {
@@ -324,6 +369,7 @@ fn asked(args: &[String]) -> Option<Asked> {
     // A preset other than the GPU's, measured and recorded as `<scene>@<preset>`; ultra, the
     // films' (D428), is measured for its cost and held to no budget.
     let mut quality: Option<String> = None;
+    let mut tunes: Vec<(String, String)> = Vec::new();
     let mut chosen: Vec<&'static Scene> = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
@@ -341,6 +387,20 @@ fn asked(args: &[String]) -> Option<Asked> {
                 Some(name) => quality = Some(name.clone()),
                 None => {
                     eprintln!("--quality needs a preset: low, medium, high or ultra");
+                    return None;
+                }
+            },
+            "--tune" => match args.next().map(|arg| (arg, tune_assignment(arg))) {
+                Some((_, Some((name, value)))) if tunes.iter().all(|(set, _)| *set != name) => {
+                    tunes.push((name, value));
+                }
+                Some((_, Some((name, _)))) => {
+                    eprintln!("--tune sets {name} twice");
+                    return None;
+                }
+                given => {
+                    let given = given.map_or("nothing".into(), |(arg, _)| format!("`{arg}`"));
+                    eprintln!("--tune needs NAME=VALUE (D547), not {given}");
                     return None;
                 }
             },
@@ -367,12 +427,17 @@ fn asked(args: &[String]) -> Option<Asked> {
     if all_scenes {
         chosen = SCENES.iter().collect();
     }
+    tunes.sort();
     Some(Asked {
         runs,
         record,
         debug,
         copy,
         quality,
+        tunes: tunes
+            .into_iter()
+            .map(|(name, value)| format!("{name}={value}"))
+            .collect(),
         chosen,
         all_scenes,
     })
@@ -388,12 +453,28 @@ pub(crate) fn bench(args: &[String]) -> bool {
         debug,
         copy,
         quality,
+        tunes,
         chosen,
         all_scenes,
     }) = asked(args)
     else {
         return false;
     };
+    let csv = std::fs::read_to_string(root().join(BENCHMARKS)).unwrap_or_default();
+    let key = |scene: &Scene| result_key(scene.name, quality.as_deref(), &tunes);
+    if record && !tunes.is_empty() {
+        let keys: Vec<String> = chosen.iter().map(|scene| key(scene)).collect();
+        let there = recorded_already(&csv, &keys);
+        if !there.is_empty() {
+            eprintln!(
+                "--record with --tune records only a key new to {BENCHMARKS}, and {} is there \
+                 already: a tuned run is compared with its first record, never re-recorded \
+                 (lowering a baseline is the nightly's, D414). Run it without --record.",
+                there.join(", ")
+            );
+            return false;
+        }
+    }
     let build = if debug { "debug" } else { "release" };
     let Some((program, folder)) = sandbox_program(!debug, &copy) else {
         return false;
@@ -403,17 +484,13 @@ pub(crate) fn bench(args: &[String]) -> bool {
         .is_some_and(|changes| !changes.is_empty());
     let commit = if dirty { format!("{commit}+") } else { commit };
     let date = output("date", &["+%F"]).unwrap_or_default();
-    let csv = std::fs::read_to_string(root().join(BENCHMARKS)).unwrap_or_default();
 
     let mut ok = true;
     let mut lines = Vec::new();
     let mut waiting_left = load::MOST_WAITING;
     let held = quality.as_deref() != Some("ultra");
     for scene in chosen {
-        let name = match &quality {
-            Some(preset) => format!("{}@{preset}", scene.name),
-            None => scene.name.to_string(),
-        };
+        let name = key(scene);
         let mut timed: Vec<Run> = Vec::new();
         // Its runs, each after waiting (a bounded time) for a quiet machine; then, while the
         // machine is quiet, up to as many again to stand in for runs taken while it was busy.
@@ -446,7 +523,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
             };
             println!("\n> {name} {attempt}/{runs}{extra}{said}");
             let watch = load::Watch::start();
-            let timing = time_scene(&program, &folder, scene, quality.as_deref());
+            let timing = time_scene(&program, &folder, scene, quality.as_deref(), &tunes);
             let during = watch.stop();
             if let Some(during) = during {
                 println!(
@@ -514,12 +591,19 @@ pub(crate) fn bench(args: &[String]) -> bool {
         }
     }
     if let Some((_, first, _, _)) = lines.first() {
+        // The scene column as wide as its longest key, a tuned one's included.
+        let w = lines
+            .iter()
+            .map(|(name, ..)| name.len())
+            .max()
+            .unwrap_or(0)
+            .max(11);
         println!(
             "\nFrame times on {} at {}, {build} build, commit {commit}, {runs} runs each, the middle run's:",
             first.gpu, first.size
         );
         println!(
-            "  {:11} {:>8} {:>19} {:>8} {:>8} {:>6} {:>7} {:>6}  {:15}  against the last recorded",
+            "  {:w$} {:>8} {:>19} {:>8} {:>8} {:>6} {:>7} {:>6}  {:15}  against the last recorded",
             "scene",
             "median",
             "runs' medians",
@@ -544,7 +628,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
                 note.spread_pct / 2.0
             );
             println!(
-                "  {name:11} {:>5.2} ms {range:>19} {:>5.2} ms {:>5.2} ms {:>5.1}% {:>7} {:>+5.0}%  {verdict:15}  {against}",
+                "  {name:w$} {:>5.2} ms {range:>19} {:>5.2} ms {:>5.2} ms {:>5.1}% {:>7} {:>+5.0}%  {verdict:15}  {against}",
                 timing.median_ms,
                 timing.p99_ms,
                 timing.worst_ms,
@@ -553,29 +637,29 @@ pub(crate) fn bench(args: &[String]) -> bool {
                 timing.drift_pct,
             );
             for miss in &missed {
-                println!("  {:11} {miss}", "");
+                println!("  {:w$} {miss}", "");
             }
             if note.holding != 0 && note.holding != note.runs {
                 println!(
-                    "  {:11} near its target: {} of {} runs held",
+                    "  {:w$} near its target: {} of {} runs held",
                     "", note.holding, note.runs
                 );
             }
             if note.busy {
                 println!(
-                    "  {:11} taken on a busy machine (fewer than half of {} runs quiet): read it as an upper bound",
+                    "  {:w$} taken on a busy machine (fewer than half of {} runs quiet): read it as an upper bound",
                     "", note.of
                 );
             } else if note.runs < note.of {
                 println!(
-                    "  {:11} from the {} quiet runs of {}; the busy ones left out",
+                    "  {:w$} from the {} quiet runs of {}; the busy ones left out",
                     "", note.runs, note.of
                 );
             }
             if held {
                 ok &= missed.is_empty();
             } else if !missed.is_empty() {
-                println!("  {:11} ultra is measured, not held to a budget (D428)", "");
+                println!("  {:w$} ultra is measured, not held to a budget (D428)", "");
             }
         }
         println!(
@@ -649,12 +733,16 @@ fn time_scene(
     folder: &Path,
     scene: &Scene,
     quality: Option<&str>,
+    tunes: &[String],
 ) -> Option<Timing> {
     use std::io::{BufRead, BufReader};
     let mut command = Command::new(program);
     command.args(scene.args);
     if let Some(preset) = quality {
         command.args(["--quality", preset]);
+    }
+    for tune in tunes {
+        command.args(["--tune", tune]);
     }
     command
         .args(["--offscreen", "--bench", "--settle", BENCH_SETTLE])
@@ -767,168 +855,5 @@ fn time_scene(
 }
 
 #[cfg(test)]
-mod bench_tests {
-    use super::*;
-
-    fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
-        Timing {
-            gpu: "Apple M4 Max".into(),
-            size: "1920x1080 offscreen".into(),
-            median_ms,
-            p99_ms,
-            worst_ms,
-            budget_ms: 13.3,
-            over_pct: 0.0,
-            hitches: 0,
-            drift_pct: 0.0,
-            device: "DiscreteGpu".into(),
-            preset: "high".into(),
-        }
-    }
-
-    #[test]
-    fn reads_how_a_run_held_to_the_budget() {
-        let line = "SANDBOX against the 13.3 ms budget: 0.50% of frames over, 2 hitches over \
-                    26.7 ms, the game's work in the last third -3.0% on the first";
-        assert_eq!(parse_sustained(line), Some((13.3, 0.5, 2, -3.0)));
-        assert_eq!(parse_sustained("SANDBOX saved shot.png"), None);
-    }
-
-    #[test]
-    fn a_scene_holds_to_the_budget_unless_it_misses_a_gate() {
-        assert!(timing(5.0, 9.0, 20.0).misses().is_empty());
-        assert_eq!(timing(5.0, 14.0, 20.0).misses().len(), 1);
-        // Judged against the budget the run said, not one of its own.
-        let at_60 = Timing {
-            budget_ms: 16.7,
-            ..timing(5.0, 14.0, 20.0)
-        };
-        assert!(at_60.misses().is_empty());
-        // A run that never said how it held is not taken to have held.
-        let unsaid = Timing {
-            budget_ms: 0.0,
-            ..timing(5.0, 9.0, 20.0)
-        };
-        assert_eq!(unsaid.misses().len(), 1);
-        let stutters = Timing {
-            hitches: 1,
-            drift_pct: 20.0,
-            over_pct: 2.0,
-            ..timing(5.0, 9.0, 40.0)
-        };
-        assert_eq!(stutters.misses().len(), 3);
-    }
-
-    #[test]
-    fn reads_the_sandboxs_frame_times() {
-        let line = "SANDBOX frames on Apple M4 Max at 1920x1080 offscreen: median 7.51 ms, \
-                    99th percentile 15.39 ms, worst 16.40 ms";
-        let read = Timing {
-            budget_ms: 0.0,
-            device: String::new(),
-            preset: String::new(),
-            ..timing(7.51, 15.39, 16.40)
-        };
-        assert_eq!(parse_timing(line), Some(read));
-        assert_eq!(parse_timing("SANDBOX saved shot.png"), None);
-    }
-
-    #[test]
-    fn runs_combine_as_the_middle_one_and_the_worst_frame() {
-        let runs = [
-            timing(9.0, 12.0, 30.0),
-            timing(7.0, 10.0, 11.0),
-            timing(8.0, 11.0, 12.0),
-        ];
-        assert_eq!(combine(&runs), Some(timing(8.0, 11.0, 30.0)));
-        assert_eq!(combine(&[]), None);
-    }
-
-    #[test]
-    fn compares_with_the_last_result_on_the_same_kind_of_run() {
-        let csv = format!(
-            "{BENCHMARKS_HEADER}\n\
-             2026-10-12,aaa,Apple M4 Max,1920x1080 offscreen,release,forest,6.00,7,8,3\n\
-             2026-10-12,bbb,Apple M4 Max,1920x1080 offscreen,debug,forest,14.00,15,16,3\n\
-             2026-10-13,ccc,Apple M4 Max,1920x1080 offscreen,release,forest,5.00,6,7,3\n\
-             2026-10-13,ddd,Radeon,1920x1080 offscreen,release,forest,20.00,21,22,3\n"
-        );
-        let now = timing(5.5, 6.0, 7.0);
-        assert_eq!(
-            last_recorded(&csv, &now, "release", "forest"),
-            Some((5.0, "ccc".to_string()))
-        );
-        assert_eq!(last_recorded(&csv, &now, "release", "yard"), None);
-    }
-
-    #[test]
-    fn the_integrated_gpu_is_held_to_its_median_not_the_budget() {
-        let line = "SANDBOX drawn at the low preset on a IntegratedGpu GPU";
-        assert_eq!(
-            parse_drawn(line),
-            Some(("low".to_string(), "IntegratedGpu".to_string()))
-        );
-        let integrated = |median_ms| Timing {
-            device: "IntegratedGpu".into(),
-            preset: "low".into(),
-            hitches: 4,
-            ..timing(median_ms, 45.0, 90.0)
-        };
-        // Over the 13.3 ms budget at every gate, but under 33.3 ms at the median: it holds.
-        assert!(integrated(30.0).misses().is_empty());
-        assert_eq!(integrated(34.0).misses().len(), 1);
-        assert_eq!(integrated(30.0).judged_by(), "D239");
-        assert_eq!(timing(5.0, 9.0, 20.0).judged_by(), "D25");
-    }
-
-    #[test]
-    fn busy_runs_are_left_out_when_enough_are_quiet() {
-        let quiet = Load {
-            cpu_pct: 10.0,
-            gpu_pct: Some(1.0),
-            load_pct: None,
-        };
-        let busy = Load {
-            cpu_pct: 90.0,
-            gpu_pct: Some(1.0),
-            load_pct: None,
-        };
-        let run = |median, before| Run {
-            timing: timing(median, 9.0, 12.0),
-            before: Some(before),
-            during: None,
-        };
-        let (used, was_busy) = chosen_runs(&[run(5.0, quiet), run(9.0, busy), run(5.2, quiet)]);
-        assert_eq!(used.len(), 2);
-        assert!(!was_busy);
-        // Mostly busy: every run is used, and said to be busy.
-        let (used, was_busy) = chosen_runs(&[run(5.0, quiet), run(9.0, busy), run(8.0, busy)]);
-        assert_eq!(used.len(), 3);
-        assert!(was_busy);
-        // A run quiet before it but busy while it ran is busy.
-        let during = Run {
-            during: Some(During {
-                mean_cpu_pct: 80.0,
-                most_cpu_pct: 95.0,
-            }),
-            ..run(5.0, quiet)
-        };
-        assert!(during.busy());
-    }
-
-    #[test]
-    fn slower_is_past_the_runs_own_spread() {
-        let runs = [
-            timing(5.0, 9.0, 9.0),
-            timing(6.0, 9.0, 9.0),
-            timing(5.5, 9.0, 9.0),
-        ];
-        let (low, high, pct) = spread(&runs);
-        assert_eq!((low, high), (5.0, 6.0));
-        assert!((pct - 100.0 / 5.5).abs() < 0.01);
-        // 12% slower than recorded: past 10%, but within an 18% spread, so not SLOWER.
-        assert!(!slower(0.12, pct));
-        assert!(slower(0.20, pct));
-        assert!(slower(0.12, 4.0));
-    }
-}
+#[path = "bench/tests.rs"]
+mod bench_tests;
