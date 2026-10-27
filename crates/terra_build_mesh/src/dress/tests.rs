@@ -151,7 +151,7 @@ fn rain_streaks_a_wall_under_its_sill_and_open_top_not_under_a_roof_and_wets_its
         (0..40)
             .map(|i| {
                 let x = x0 + (x1 - x0) * i as f32 / 40.0;
-                rained.shade(&masks, Vec3::new(x, y, CELL_M), out).x
+                rained.shade(&masks, Vec3::new(x, y, CELL_M), out, None).x
             })
             .fold(1.0f32, f32::min)
     };
@@ -161,9 +161,13 @@ fn rain_streaks_a_wall_under_its_sill_and_open_top_not_under_a_roof_and_wets_its
     assert!(darkest(&mut rained, 0.0, 1.0, 2.6) < 0.9);
     assert!((darkest(&mut rained, 3.0, 4.0, 2.6) - 1.0).abs() < 1e-4);
     // Wet over its foot, dry a metre up.
-    let foot = rained.shade(&masks, Vec3::new(0.25, 0.05, CELL_M), out).x;
+    let foot = rained
+        .shade(&masks, Vec3::new(0.25, 0.05, CELL_M), out, None)
+        .x;
     assert!(foot < 0.65, "{foot}");
-    let up = rained.shade(&masks, Vec3::new(0.25, 1.4, CELL_M), out).x;
+    let up = rained
+        .shade(&masks, Vec3::new(0.25, 1.4, CELL_M), out, None)
+        .x;
     assert!((up - 1.0).abs() < 1e-4, "{up}");
 }
 
@@ -328,4 +332,43 @@ fn a_wall_in_a_room_dug_deep_under_its_base_is_dirtied_from_its_floor_not_as_bur
         "dirtied 2.5 m up its wall: {}",
         dug[1]
     );
+}
+
+#[test]
+fn a_wall_in_a_dug_room_over_the_level_under_it_is_splashed_from_its_floor() {
+    use terra_build::{BuildOp, Cube, Kind};
+    // A dungeon's wall as terra_dungeon stamps two levels, twenty metres under its base's
+    // level: the wall's kind running on down through the floor slab (another kind) into the
+    // wall of the level under it, so the wall's own foot is six metres under the floor.
+    let mut kit = terra_build::testing::kit();
+    kit.dress.masks = Masks {
+        dirt_tint: [0.5; 3],
+        splash: 0.35,
+        ..Masks::default()
+    };
+    let (wall, floor) = (kit.kind(), Kind(kit.kind().0 + 1));
+    let under = 40;
+    let mut base = Base::default();
+    for (min, max, kind) in [
+        ([0, -13, 0], [7, 7, 0], wall),
+        ([0, -1, 1], [7, -1, 7], floor),
+    ] {
+        base.apply(BuildOp::Fill {
+            min: [min[0], min[1] - under, min[2]],
+            max: [max[0], max[1] - under, max[2]],
+            cube: Some(Cube::new(kind, Fill::Solid)),
+        });
+    }
+    let top = -(under as f32) * CELL_M;
+    let mut surface = Surface::default();
+    for y in [0.05, 1.4] {
+        surface.positions.push(Vec3::new(1.8, top + y, CELL_M));
+        surface.normals.push(Vec3::Z);
+        surface.colours.push([1.0; 3]);
+    }
+    mask(&mut surface, &kit, Material::Masonry, &base);
+    let [foot, up] = [surface.colours[0][0], surface.colours[1][0]];
+    // Wet over the floor it stands on, dry a metre up, as a wall on its own foot.
+    assert!(foot < 0.65, "the foot not splashed: {foot}");
+    assert!((up - 1.0).abs() < 1e-4, "splashed 1.4 m up: {up}");
 }

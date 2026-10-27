@@ -279,8 +279,12 @@ impl Rained<'_> {
     }
 
     /// What a point of the wall's face is shaded by: darker over its foot, and in streaks
-    /// under a sill or an open top.
-    pub(super) fn shade(&mut self, masks: &Masks, p: Vec3, n: Vec3) -> Vec3 {
+    /// under a sill or an open top. A face in a dug room (`floor`, the top of the floor it
+    /// looks out over, `Dug::ground`) is splashed from that floor where it is over the wall's
+    /// foot: a dungeon's walls run on down through its floor slab into the walls of the level
+    /// under it, so their foot was metres under the floor and the splash never showed (barrow
+    /// rounds 11 and 12: clean wall feet everywhere).
+    pub(super) fn shade(&mut self, masks: &Masks, p: Vec3, n: Vec3, floor: Option<f32>) -> Vec3 {
         let mut k = Vec3::ONE;
         // Only the sides: a top is not splashed nor streaked.
         if n.y.abs() > 0.7 {
@@ -289,7 +293,8 @@ impl Rained<'_> {
         let cell = Self::cell(p, n);
         let tint = Vec3::from_array(masks.dirt_tint);
         if masks.splash > 0.0 {
-            let up = p.y - self.foot(cell);
+            let foot = self.foot(cell);
+            let up = p.y - floor.map_or(foot, |floor| floor.max(foot));
             let reach = masks.splash * (0.7 + 0.6 * smooth(p, 0.35, 51));
             let wet = libm::powf((1.0 - up / reach).clamp(0.0, 1.0), 0.8);
             k = k.lerp(tint, wet);
@@ -399,10 +404,11 @@ pub fn mask(surface: &mut Surface, kit: &Kit, material: Material, base: &Base) {
         floors: BTreeMap::new(),
     };
     let mut shade = |p: Vec3, n: Vec3, c: &mut [f32; 3]| {
-        let ground = dug.ground(p, n, ground(p));
+        let column = ground(p);
+        let ground = dug.ground(p, n, column);
         let mut k = Vec3::from_array(masked(masks, (timber, layered), p, n, ground, &mut noise));
         if rains {
-            k *= rained.shade(masks, p, n);
+            k *= rained.shade(masks, p, n, (ground < column).then_some(ground));
         }
         *c = [c[0] * k.x, c[1] * k.y, c[2] * k.z];
     };
