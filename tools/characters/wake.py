@@ -7,15 +7,15 @@ The face is found on the body, not given: the eyes are the darkest pair of spots
 front of the upper trunk (the colour map's painted eye holes), and the mouth sits below
 them by their spacing. As games give a face a mouth (a cut lip line, a mouth bag behind
 it, teeth on the lips, opened by a blend shape) it adds:
-  - a ragged horizontal cut, closed at rest (a frost crack), with a dark dish behind it
-    (the mouth bag) so an open mouth shows no inside of the trunk, its throat an ember that
-    lights with the eyes;
-  - splinter teeth along both lips, grained as the bark and catching the throat's ember,
-    tucked inside the trunk until the lips part;
-  - a heavy bark brow over the eyes, which sit in sockets in its shadow;
+  - a ragged horizontal cut, closed at rest (a frost crack), with a sap-dark throat behind it
+    (the mouth bag) so an open mouth shows no inside of the trunk, faintly warm far inside;
+  - splinters of the split wood along both lips, the bark's own material, nothing on them
+    glowing, tucked inside the trunk until the lips part;
+  - a heavy bark brow over the eyes, each a knot sunk deep under it in a callus rim;
   - a `Wake` shape key: the lips parted most in the middle, rolled out thick, raggedly;
-  - an emissive map, amber with a hot middle where the eye holes are painted dark, black
-    elsewhere. It ships
+  - an emissive map, a dull ember at the floor of each eye's knot, black elsewhere
+    (as the treants of WoW and D&D and The Witcher 3's leshen: a face of the bark, its eyes
+    a faint light deep in hollows, no carved grin). It ships
     dark (export_character.py exports an emissive map's factor as 0); the game lights it
     with staged.glow and opens the mouth with staged.morph (D536).
 --sheet renders the face closed, open, and open from 35 degrees, to check it at a glance.
@@ -38,14 +38,14 @@ from mathutils.kdtree import KDTree
 
 import look
 
-AMBER = (1.0, 0.52, 0.12)
-CORE = (1.0, 0.86, 0.55)  # an eye's hot middle, near white, fading out to amber
-# The throat's glow at its deepest, dark by the lips, so the mouth reads as a hollow lit from
-# within, not a lit decal; at round 6's 0.07 it read as no hollow at all (film reviews).
-EMBER = (0.45, 0.1, 0.014)
-# The teeth's warm cast from it: barely any, so the fangs stand dark against the lit throat
-# (round 8's 0.13 lit them as one orange sawtooth panel, a jack-o'-lantern's).
-CAUGHT = (0.03, 0.009, 0.002)
+# An eye's ember, far back in its knot: a dull amber middle fading to red at its edge, about
+# half round 17's brightness, which lit the whole painted slit amber round a near-white middle
+# (1.0, 0.86, 0.55) and read as a jack-o'-lantern's carved eyes (every film review since r12).
+EYE_CORE = (0.55, 0.3, 0.08)
+EYE_RIM = (0.28, 0.06, 0.008)
+# The throat's glow at its deepest: a faint warmth far inside a sap-dark split, no more. Round
+# 17's 0.45 red lit the open mouth as a jack-o'-lantern's, the teeth black against it.
+EMBER = (0.09, 0.022, 0.003)
 src = look.path(look.args()[0])
 SHEET = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--sheet=")), None)
 
@@ -127,19 +127,20 @@ spacing = eyes[1].x - eyes[0].x
 print("EYES", ", ".join(f"({e.x:.2f}, {e.z:.2f})" for e in eyes), f"{spacing:.2f} m apart, painted",
       f"{smooth[eye_l]:.3f}/{smooth[eye_r]:.3f} against the face's median {float(np.median(dark)):.3f}")
 
-# 2. The glow: amber over each eye's dark paint, fading out over an eye-sized ellipse.
+# 2. The glow: an ember at the floor of each eye's knot, a soft spot a third the size of the
+# painted slit it sits in, the paint's dark still shaping it so the two are not discs.
 glow = np.zeros((H, W, 4), dtype=np.float32)
 glow[..., 3] = 1
 ref = float(np.percentile(dark, 40))
 for e in eyes:
-    r = np.hypot((pos[:, 0] - e.x) / (0.42 * spacing), (pos[:, 2] - e.z) / (0.25 * spacing))
+    r = np.hypot((pos[:, 0] - e.x) / (0.2 * spacing), (pos[:, 2] - e.z) / (0.15 * spacing))
     near = r < 1
     floor = float(np.percentile(dark[near], 3))
-    w = np.clip((ref - dark[near]) / max(ref - floor, 1e-3), 0, 1) ** 0.7
-    w *= 1 - np.clip((r[near] - 0.6) / 0.4, 0, 1)
+    paint = np.clip((ref - dark[near]) / max(ref - floor, 1e-3), 0, 1)
+    w = (1 - r[near]) ** 1.5 * (0.4 + 0.6 * paint)
     q = px[near]
     for c in range(3):
-        hot = w * (AMBER[c] + (CORE[c] - AMBER[c]) * w ** 3)
+        hot = w * (EYE_RIM[c] + (EYE_CORE[c] - EYE_RIM[c]) * w ** 2)
         glow[q[:, 1], q[:, 0], c] = np.maximum(glow[q[:, 1], q[:, 0], c], hot)
     print("GLOW", f"{int((w > 0.5).sum())} texels lit")
 mask = bpy.data.images.new(f"{body.name}_glow", W, H, alpha=False)
@@ -226,6 +227,11 @@ brow_lo, brow_hi = mz + 0.5, eye_z + 1.6 * spacing
 region = [f for f in front_faces(brow_lo, brow_hi, mx, 1.6 * spacing + 0.15)]
 bmesh.ops.subdivide_edges(bm, edges=list({e for f in region for e in f.edges}), cuts=1, use_grid_fill=True)
 bm.normal_update()
+# The sockets split finer again, so each knot is a cup with a rim, not a dent of a few faces.
+sockets = [f for f in front_faces(eye_z - 0.6 * spacing, eye_z + 0.6 * spacing, mx, 1.2 * spacing)
+           if min((f.calc_center_median() - eye).xz.length for eye in eyes) < 0.7 * spacing]
+bmesh.ops.subdivide_edges(bm, edges=list({e for f in sockets for e in f.edges}), cuts=1, use_grid_fill=True)
+bm.normal_update()
 ridge = eye_z + 0.32 * spacing  # its crest, over the eyes
 thrust = 0.45 * spacing
 browed = 0
@@ -240,11 +246,15 @@ for v in bm.verts:
     # Sharp under the crest, an overhang; long and easing out above it into the bark.
     rise = math.exp(-((dz / (0.14 * spacing)) ** 2)) if dz < 0 else math.exp(-((dz / (0.7 * spacing)) ** 2))
     push = thrust * across * rise
-    # The sockets: each eye pressed back into the trunk under the ridge.
+    # The sockets: each eye a knot sunk deep into the trunk under the ridge, ringed by the
+    # callus bark grows round a knot, so its ember shows from ahead and hides from aside or
+    # below (round 17's 0.18 x spacing read as slits on a flat face, all reviews since r12).
     for e in eyes:
-        r = math.hypot((v.co.x - e.x) / (0.45 * spacing), (v.co.z - e.z) / (0.3 * spacing))
+        r = math.hypot((v.co.x - e.x) / (0.42 * spacing), (v.co.z - e.z) / (0.34 * spacing))
         if r < 1:
-            push -= 0.18 * spacing * (1 - r * r)
+            push -= 0.5 * spacing * (1 - r * r) ** 0.8
+        elif r < 1.6:
+            push += 0.08 * spacing * math.sin(math.pi * (r - 1) / 0.6)
     if abs(push) > 1e-4:
         v.co.y -= push
         browed += 1
@@ -265,13 +275,23 @@ bmesh.ops.subdivide_edges(bm, edges=edges, cuts=1, use_grid_fill=True)
 bm.normal_update()
 region = mouth_faces(mz - 0.3, mz + 0.3, half + 0.1)
 geom = list({g for f in region for g in (f, *f.edges, *f.verts)})
-cut = bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(0, 0, mz), plane_no=(0, 0, 1))["geom_cut"]
-slit = [e for e in cut if isinstance(e, bmesh.types.BMEdge)
-        and abs((e.verts[0].co.x + e.verts[1].co.x) / 2 - mx) < 0.95 * half]
+bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(0, 0, mz), plane_no=(0, 0, 1))
+
+
+def on_plane(v):
+    return abs(v.co.z - mz) < 1e-5 and abs(v.co.x - mx) < 0.95 * half and v.co.y < cy
+
+
+# Every edge lying in the cut's plane is split, not only those the bisect made: an edge already
+# on it is not in its geom_cut, and left whole it held the lips together there, its faces
+# stretched into a bar of bark down the middle of the open mouth (every film since round 8).
+slit = [e for e in bm.edges if on_plane(e.verts[0]) and on_plane(e.verts[1]) and len(e.link_faces) == 2]
 bmesh.ops.split_edges(bm, edges=slit)
 bm.normal_update()
-on_slit = {v for e in slit for v in e.verts}
-on_slit |= {v for v in bm.verts if abs(v.co.z - mz) < 1e-5 and abs(v.co.x - mx) < 0.95 * half and v.co.y < cy}
+on_slit = {v for v in bm.verts if on_plane(v)}
+# Which lip each copy of a cut vertex is, by its faces, taken before the jag moves it past them.
+lip_of = {v: 1 if sum(f.calc_center_median().z for f in v.link_faces) / max(1, len(v.link_faces)) > mz else -1
+          for v in on_slit}
 for v in on_slit:
     v.co.z += jag(v.co.x)
 
@@ -326,7 +346,8 @@ def new_vert(co):
     return v
 
 
-mouth_bag = material(f"{body.name}_mouth", (0.004, 0.003, 0.002), 1.0)
+# Sap-dark and a little wet, so the split's inside catches a glint of the sky, not a glow.
+mouth_bag = material(f"{body.name}_mouth", (0.012, 0.005, 0.002), 0.45)
 # A throat, not a dish: 1 m deep in the middle (round 8's 0.55 read as a flat lit panel).
 gw, gh, bag_w, bag_h, bag_d = 16, 10, 1.3 * half, 0.6, 1.0
 grid = [[new_vert(surface(mx + u * bag_w, mz + v * bag_h)
@@ -355,44 +376,58 @@ bag_tex = bag.node_tree.nodes.new("ShaderNodeTexImage")
 bag_tex.image = ember
 bag.node_tree.links.new(bag_tex.outputs["Color"], bag_bsdf.inputs["Emission Color"])
 bag_bsdf.inputs["Emission Strength"].default_value = 1.0
-# The teeth: the bark's own material, but catching the throat's ember (an emissive map of its
-# warm cast, so staged.glow lights them with the eyes); splinters a reviewer sees from 8 m.
-caught = bark.copy()
-caught.name = f"{body.name}_teeth"
-body.data.materials.append(caught)
-teeth_mat = len(body.data.materials) - 1
-cast = bpy.data.images.new(f"{body.name}_caught", 4, 4, alpha=False)
-cast.pixels.foreach_set(np.tile(np.array([*CAUGHT, 1], dtype=np.float32), 16))
-cast.pack()
-caught_bsdf = next(n for n in caught.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
-caught_tex = caught.node_tree.nodes.new("ShaderNodeTexImage")
-caught_tex.image = cast
-caught.node_tree.links.new(caught_tex.outputs["Color"], caught_bsdf.inputs["Emission Color"])
-teeth = []  # (vertices, the lip it hangs from: +1 upper, -1 lower, its x)
-# Fewer and longer than round 8's 9 and 8 (a flat sawtooth): uneven splinters, the upper lip's
-# second from each corner a fang that crosses the open gap, each raked back into the throat.
-for lip, count in ((1, 7), (-1, 6)):
+# The teeth: splinters of the split wood, not carved fangs (round 17's thirteen even pyramids,
+# lit by their own ember and black against the throat's, read as a jack-o'-lantern's sawtooth):
+# many slivers of uneven length leaning as the grain tore, some set further back than others,
+# the bark's own material, grained as the wood they broke from, and nothing on them glows.
+rng = np.random.default_rng(36)  # a fixed scatter: the same splinters every build
+wf = 0.95 * half
+teeth = []  # (vertices, the lip they move with: +1 upper, -1 lower, their x)
+torn = []
+
+
+def ring(c, side, deep, wide):
+    return [new_vert(c + side * (sx * wide) + deep * (sy * 0.45 * wide))
+            for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+
+
+def splinter(x, lip, length, wide):
+    """A sliver hanging off a lip: a flat four-sided root in the bark, a kink past halfway,
+    a point, leaning aside and raked back into the throat."""
+    lean, rake = rng.normal(0, 0.4), rng.uniform(0.15, 0.5)
+    down = Vector((math.sin(lean), 0, -lip * math.cos(lean)))
+    side = Vector((math.cos(lean), 0, lip * math.sin(lean)))
+    deep = Vector((0, 1, 0))
+    kink = side * (rng.uniform(-0.35, 0.35) * wide)
+    root = surface(x, mz + jag(x)) + deep * rng.uniform(0.045, 0.1)
+    base = ring(root, side, deep, wide)
+    mid = ring(root + down * (0.55 * length) + deep * (0.55 * rake * length) + kink, side, deep, 0.5 * wide)
+    tip = new_vert(root + down * length + deep * (rake * length) + kink * 1.6)
+    torn.append(bm.faces.new(base[::-1]))
+    for k in range(4):
+        torn.append(bm.faces.new((base[k], base[(k + 1) % 4], mid[(k + 1) % 4], mid[k])))
+        torn.append(bm.faces.new((mid[k], mid[(k + 1) % 4], tip)))
+    teeth.append(((*base, *mid, tip), lip, x))
+
+
+# Short and broad for their length, so the lips read as broken wood: long thin ones (and torn
+# fibres across the gap) read as the bars of a cage in round 18's first build.
+for lip, count in ((1, 15), (-1, 12)):
+    longest = set(rng.choice(count, 2, replace=False)) if lip > 0 else set()
     for i in range(count):
-        x = mx + (-0.8 + 1.6 * (i + 0.5 * (lip < 0) + 0.5) / (count + 0.5)) * 0.95 * half
-        h = (math.sin(91.7 * x + 7 * lip) + 1) / 2  # a fixed scatter: each tooth its own length
-        fang = lip > 0 and i in (1, count - 2)
-        root = surface(x, mz + jag(x)) + Vector((0, 0.045, 0))
-        b = (0.11 + 0.07 * h + 0.05 * fang) * spacing
-        long = (0.4 + 0.45 * h) * (1.6 if fang else 1) * spacing
-        a, c, d = (new_vert(root + o) for o in (Vector((-b, 0, 0)), Vector((b, 0, 0)), Vector((0, b, 0))))
-        tip = new_vert(root + Vector((0.3 * b * math.sin(13 * x), 0.2 * long, -lip * long)))
-        for tri in ((a, c, d), (a, tip, c), (c, tip, d), (d, tip, a)):
-            f = bm.faces.new(tri if lip > 0 else tri[::-1])
-            f.material_index = teeth_mat
-            for l in f.loops:
-                grain = bark_uv(l.vert.co)
-                if grain is not None:
-                    l[uv].uv = grain
-        teeth.append(((a, c, d, tip), lip, x))
+        x = mx + (-0.9 + 1.8 * (i + rng.uniform(0.15, 0.85)) / count) * wf
+        taper = max(0.0, 1 - ((x - mx) / wf) ** 2) ** 0.5  # shorter towards the corners
+        length = (0.1 + 0.4 * rng.random() ** 1.6) * (0.45 + 0.55 * taper) * spacing
+        splinter(x, lip, length * (1.4 if i in longest else 1), (0.06 + 0.06 * rng.random()) * spacing)
+bmesh.ops.recalc_face_normals(bm, faces=torn)
+for f in torn:
+    for l in f.loops:
+        grain = bark_uv(l.vert.co)
+        if grain is not None:
+            l[uv].uv = grain
 bm.normal_update()
 
 # 5. The Wake shape: each lip moved off the cut, most in the middle and raggedly, rolled out.
-wf = 0.95 * half
 # Each lip's move eased out over a long reach (the lower, which falls further, the longer), so
 # the bark's picture is drawn out by a quarter at most, not by half just off the cut; the
 # upper's reach stops short of the eyes.
@@ -412,22 +447,33 @@ for v in bm.verts:
     if v in added or v.co.y > cy or abs(dz) > max(reach_up, reach_down) or abs(v.co.x - mx) > wf:
         continue
     if v in on_slit:
-        side = 1 if sum(f.calc_center_median().z for f in v.link_faces) / max(1, len(v.link_faces)) > v.co.z else -1
+        side = lip_of[v]
     else:
-        side = 1 if dz > 0 else -1
+        # Its lip is the side of the plane it was cut on, not of the jagged line: a vertex of
+        # the upper lip under a stretch of the cut the jag raised went with the lower, and its
+        # faces tore into a bar of bark down the open mouth (every film since round 8).
+        side = 1 if v.co.z > mz else -1
     g = max(0.0, 1 - abs(dz) / (reach_up if side > 0 else reach_down)) ** 1.2
     f = along(v.co.x) * g
     # The lips rolled out into a thick rim, the bark nearest the cut pushed forward most
     # (round 8's curled-in lips read as the edge of a hole cut in a flat face).
     delta[v] = Vector(((v.co.x - mx) * 0.12 * f, -0.22 * spacing * f * g ** 4, side * (up if side > 0 else down) * f))
+# The splinters go with their lip, spread and rolled out with it a little less than its bark,
+# so they stay set back in the split.
 for verts, lip, x in teeth:
-    d = Vector((0, 0, lip * (up if lip > 0 else down) * along(x)))
+    a = along(x)
+    rise = up if lip > 0 else -down
+    d = Vector(((x - mx) * 0.12 * a, -0.12 * spacing * a, rise * a))
     for v in verts:
         delta[v] = d
+# Checked: no face of the bark is torn by the opening, its corners sent to both lips.
+rises = [[delta[v].z if v in delta else 0.0 for v in f.verts] for f in bm.faces if not added.intersection(f.verts)]
+torn_bark = sum(max(r) > 0.1 * up and min(r) < -0.1 * up for r in rises)
+assert not torn_bark, f"{torn_bark} faces of the bark torn across the mouth as it opens"
 bm.verts.index_update()
 delta = {v.index: d for v, d in delta.items()}
 print("MOUTH", f"at ({mx:.2f}, {mz:.2f}), {2 * half:.2f} m wide, {len(slit)} cut edges,",
-      f"{len(delta)} vertices move, {len(teeth)} teeth")
+      f"{len(delta)} vertices move, {len(teeth)} splinters")
 
 bm.transform(mw.inverted())
 inv = mw.inverted().to_3x3()
@@ -447,11 +493,11 @@ print("EXPORTED", src)
 if SHEET:
     look.stage()
     tiles = []
-    for weight, glow_on, side in ((0, 0, 0), (1, 6, 0), (1, 6, 35)):
+    # Lit as the scene lights it at the lunge (staged.glow 3.4).
+    for weight, glow_on, side in ((0, 0, 0), (1, 3.4, 0), (1, 3.4, 35)):
         wake.value = weight
         bsdf.inputs["Emission Strength"].default_value = glow_on
         bag_bsdf.inputs["Emission Strength"].default_value = glow_on
-        caught_bsdf.inputs["Emission Strength"].default_value = glow_on
         # close_up names its pictures by their place in one call: each kept under its own.
         shot = look.close_up(arm, "neck_01", 4 * spacing, sides=(side,), size=600)[0]
         tiles.append(shot.replace(".png", f"-{len(tiles)}.png"))
