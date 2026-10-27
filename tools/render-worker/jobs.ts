@@ -32,7 +32,14 @@ export type Job = {
   ended?: string;
   exit?: number;
   note?: string;
+  /// Set when the job runs uncommitted changes (`--dirty`): `rev` is then a snapshot of the
+  /// agent's working tree, a commit object made without hooks whose parent is `base`, which is
+  /// on no branch here or on origin. The id ends in `-patch`, so its files never pass for a commit's.
+  patch?: Patch;
 };
+
+/// What a `--dirty` job's snapshot changes against its base: `git diff --shortstat`, and the files.
+export type Patch = { base: string; stat: string; files: number };
 
 export const DEFAULT_MINUTES = 120;
 export const MAX_MINUTES = 480;
@@ -56,12 +63,13 @@ export const GPU_SLOTS = 3;
 /// The ref an update's commit is pushed to in the box's clone.
 export const UPDATE_REF = "refs/worker/main";
 export const jobRef = (job: Pick<Job, "id" | "kind">) => (job.kind === "warm" ? UPDATE_REF : `refs/jobs/${job.id}`);
-export const ID = /^[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$/;
+export const ID = /^[0-9]{8}-[0-9]{6}-[0-9a-f]{4}(-patch)?$/;
 
-/// `20261023-141502-a1b2`: sorts by when it was queued, and is a valid ref name.
-export function jobId(now: Date, rand: string): string {
+/// `20261023-141502-a1b2`: sorts by when it was queued, and is a valid ref name. A job that runs
+/// uncommitted changes ends in `-patch`, and so do its ref, its folder and its files' folder.
+export function jobId(now: Date, rand: string, patch = false): string {
   const t = now.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-  return `${t}-${rand.slice(0, 4)}`;
+  return `${t}-${rand.slice(0, 4)}${patch ? "-patch" : ""}`;
 }
 
 // ---- The client's settings: the environment over the checkout's .env (.env.example) ----
@@ -124,13 +132,13 @@ export function config(env: Record<string, string | undefined>, file: Record<str
 // ---- The client's arguments ----
 
 export type ClientArgs =
-  | { mode: "queue"; rev?: string; command: string[]; collect: string[]; cook: boolean; minutes: number; out?: string; wait: boolean; worker?: string; class?: "cpu" | "gpu" }
+  | { mode: "queue"; rev?: string; dirty: boolean; command: string[]; collect: string[]; cook: boolean; minutes: number; out?: string; wait: boolean; worker?: string; class?: "cpu" | "gpu" }
   | { mode: "wait"; id: string; out?: string; worker?: string }
   | { mode: "cancel" | "logs"; id: string; worker?: string }
   | { mode: "status" | "update" | "doctor"; worker?: string };
 
 export const USAGE =
-  "usage: cargo xtask remote-render [--rev <sha>] [--collect <path>]… [--minutes N] [--no-cook] [--gpu|--cpu] [--out DIR] [--no-wait] [--worker HOST] -- <command…>\n" +
+  "usage: cargo xtask remote-render [--rev <sha> | --dirty] [--collect <path>]… [--minutes N] [--no-cook] [--gpu|--cpu] [--out DIR] [--no-wait] [--worker HOST] -- <command…>\n" +
   "       cargo xtask remote-render --wait <job> | --logs <job|daemon> | --cancel <job> | --status | --update | --doctor  [--worker HOST]";
 
 export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): ClientArgs | { error: string } {
@@ -144,6 +152,7 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
   let minutes = defaultMinutes;
   let cook = true;
   let wait = true;
+  let dirty = false;
   let cls: "cpu" | "gpu" | undefined;
   let id = "";
   let mode: ClientArgs["mode"] = "queue";
@@ -168,6 +177,7 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
         if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_MINUTES) throw new Error(`--minutes is a whole number from 1 to ${MAX_MINUTES}`);
       } else if (a === "--no-cook") cook = false;
       else if (a === "--no-wait") wait = false;
+      else if (a === "--dirty") dirty = true;
       else if (a === "--gpu" || a === "--cpu") {
         if (cls && cls !== a.slice(2)) throw new Error("--gpu and --cpu together");
         cls = a.slice(2) as "gpu";
@@ -187,10 +197,11 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
   if (mode === "cancel" || mode === "logs") return { mode, id, worker };
   if (mode === "wait") return { mode, id, out, worker };
   if (!command.length) return { error: "no command: put it after --" };
+  if (dirty && rev) return { error: "--dirty runs the working tree's changes on HEAD; --rev names a commit instead" };
   for (const c of collect) {
     if (c.startsWith("/") || c.split("/").includes("..")) return { error: `--collect ${c}: a path in the checkout or under ~/, without ..` };
   }
-  return { mode, rev, command, collect, cook, minutes, out, wait, worker, ...(cls ? { class: cls } : {}) };
+  return { mode, rev, dirty, command, collect, cook, minutes, out, wait, worker, ...(cls ? { class: cls } : {}) };
 }
 
 /// Words after `cargo xtask` that only build, lint or test, and `cargo` commands that do.
@@ -425,6 +436,7 @@ export function steps(job: Job): Step[] {
     { what: "check out the job's commit", cmd: ["git", "checkout", "-q", "--detach", "--force", job.rev] },
     { what: "clean all but the build", cmd: ["git", "clean", "-q", "-ffdx", "-e", "target/"] },
   ];
+  if (job.patch) s.push({ what: `PATCH, not a commit: uncommitted changes on ${job.patch.base.slice(0, 9)}`, cmd: ["git", "--no-pager", "diff", "--stat", job.patch.base, job.rev] });
   if (job.cook) s.push({ what: "cook textures", cmd: ["cargo", "xtask", "cook"] });
   const runs = job.kind === "warm" ? WARM : [job.command];
   for (const cmd of runs) s.push({ what: job.kind === "warm" ? "warm build" : "run", cmd: ["nice", "-n", "10", ...cmd], run: true });
@@ -497,8 +509,11 @@ export const ago = (from: string, now: Date) => {
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
 };
 
+/// What a job ran: its commit, or `<base>+patch` for uncommitted changes, never the snapshot's own sha.
+export const revLabel = (job: Pick<Job, "rev" | "patch">) => (job.patch ? `${job.patch.base.slice(0, 9)}+patch` : job.rev.slice(0, 9));
+
 /// One line for a job in lists and logs.
-export const short = (job: Job) => `${job.rev.slice(0, 9)} ${classOf(job)}: ${job.kind === "warm" ? `warm builds after an update${job.slot ? ` (slot ${job.slot})` : ""}` : job.command.join(" ").slice(0, 100)}`;
+export const short = (job: Job) => `${revLabel(job)} ${classOf(job)}: ${job.kind === "warm" ? `warm builds after an update${job.slot ? ` (slot ${job.slot})` : ""}` : job.command.join(" ").slice(0, 100)}`;
 
 // ---- The box's GPU, for --doctor ----
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boxSettings, chooseWorker, cleanCommands, collected, config, displayPlan, expired, freeDisplay, gpuFix, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, plan, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
+import { boxSettings, chooseWorker, cleanCommands, collected, config, displayPlan, expired, freeDisplay, gpuFix, ID, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, plan, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -42,7 +42,7 @@ test("job ids sort by when they were queued and are valid refs", () => {
 
 test("the client's arguments: the command after --, options before it, one mode", () => {
   const a = parseClient(["--rev", "abc", "--collect", "shot.png", "--collect", "~/x", "--minutes", "30", "--no-cook", "--worker", "box-a", "--", "cargo", "xtask", "bench", "--runs", "3"]);
-  assert.deepEqual(a, { mode: "queue", rev: "abc", command: ["cargo", "xtask", "bench", "--runs", "3"], collect: ["shot.png", "~/x"], cook: false, minutes: 30, out: undefined, wait: true, worker: "box-a" });
+  assert.deepEqual(a, { mode: "queue", rev: "abc", dirty: false, command: ["cargo", "xtask", "bench", "--runs", "3"], collect: ["shot.png", "~/x"], cook: false, minutes: 30, out: undefined, wait: true, worker: "box-a" });
   assert.equal((parseClient(["--", "x"], 45) as { minutes: number }).minutes, 45, ".env's limit is the default");
   assert.equal((parseClient(["--cpu", "--", "x"]) as { class?: string }).class, "cpu");
   assert.equal((parseClient(["--", "x"]) as { class?: string }).class, undefined);
@@ -208,6 +208,24 @@ test("a job's steps: a clean checkout of its commit, cook unless told not, the c
   assert.ok(!steps(job({ cook: false })).some((x) => x.what === "cook textures"));
   const warm = steps(job({ kind: "warm" }));
   assert.deepEqual(warm.filter((x) => x.run).map((x) => x.cmd.slice(3)), WARM);
+});
+
+test("a --dirty job says it runs a patch: its id, its line in lists and a step in its log, never the snapshot's sha", () => {
+  const base = "fedcba9876543210fedcba9876543210fedcba98";
+  const p = job({ id: jobId(new Date("2026-10-23T12:00:00Z"), "beef", true), patch: { base, stat: "1 file changed, 1 insertion(+)", files: 1 } });
+  assert.equal(p.id, "20261023-120000-beef-patch");
+  assert.ok(ID.test(p.id) && ID.test(job().id) && !ID.test("20261023-120000-beef-commit"));
+  assert.match(short(p), /^fedcba987\+patch gpu: /);
+  assert.ok(!short(p).includes(p.rev.slice(0, 9)), "the snapshot's own sha is never shown as what ran");
+  assert.match(short(job()), /^012345678 gpu: /);
+  const s = steps(p);
+  assert.equal(s.findIndex((x) => x.what.startsWith("PATCH")), 2, "right after the checkout, before any build");
+  assert.deepEqual(s[2].cmd, ["git", "--no-pager", "diff", "--stat", base, p.rev]);
+  assert.ok(!steps(job()).some((x) => x.what.startsWith("PATCH")));
+  const d = parseClient(["--dirty", "--", "x"]) as { dirty: boolean; rev?: string };
+  assert.equal(d.dirty, true);
+  assert.equal((parseClient(["--", "x"]) as { dirty: boolean }).dirty, false);
+  assert.ok("error" in parseClient(["--dirty", "--rev", "abc", "--", "x"]), "the patch is against HEAD only");
 });
 
 test("a card the driver cannot reach gets the commands that fix it", () => {

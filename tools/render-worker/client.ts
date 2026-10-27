@@ -8,12 +8,12 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir, hostname, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { objects } from "../git/lfs.ts";
-import { ago, backoff, type ClientArgs, chooseWorker, config, type Job, jobClass, jobId, parseClient, parseEnvFile, type Seen, short, USAGE } from "./jobs.ts";
+import { ago, backoff, type ClientArgs, chooseWorker, config, type Job, jobClass, jobId, parseClient, parseEnvFile, type Patch, type Seen, short, USAGE } from "./jobs.ts";
 
 /// A render box as the client reaches it: over ssh, or `local`, this machine (the tests).
 export type Remote = { host: string; dir: string };
@@ -57,7 +57,7 @@ export function boxStatus(r: Remote): BoxStatus | { error: string } {
 /// Pushes the commit as the job's ref and queues the job.
 export function submit(r: Remote, cwd: string, job: Omit<Job, "id" | "kind" | "queued" | "state" | "by">): { id: string; note: string } | { error: string } {
   const now = new Date();
-  const full: Job = { ...job, id: jobId(now, randomBytes(2).toString("hex")), kind: "run", queued: now.toISOString(), state: "queued", by: `${userInfo().username}@${hostname()}` };
+  const full: Job = { ...job, id: jobId(now, randomBytes(2).toString("hex"), !!job.patch), kind: "run", queued: now.toISOString(), state: "queued", by: `${userInfo().username}@${hostname()}` };
   const push = git(cwd, ["push", "-q", gitUrl(r), `${job.rev}:refs/jobs/${full.id}`]);
   if (push.status !== 0) return { error: `git push to ${r.host}: ${lastLine(push.stderr)}` };
   const lfs = sendLfs(r, cwd, job.rev);
@@ -66,6 +66,37 @@ export function submit(r: Remote, cwd: string, job: Omit<Job, "id" | "kind" | "q
   if (res.status !== 0) return { error: why(r, res) };
   const { alive, ahead } = JSON.parse(lastLine(res.stdout)) as { alive: boolean; ahead: number };
   return { id: full.id, note: alive ? (ahead ? `${ahead} queued ahead of it` : "next") : "the daemon is not running; the job waits for it (--update starts it)" };
+}
+
+/// The working tree as a commit object for a `--dirty` job, as `git stash create` makes one: every
+/// change against HEAD, staged or not, and untracked files that are not ignored, added to a copy
+/// of the index (so the real one is untouched), written as a tree and committed with HEAD as its
+/// parent by plumbing (`write-tree`, `commit-tree`), which runs no hooks. Nothing points to it
+/// here; the push to the box names it refs/jobs/<id>-patch there, and origin never sees it.
+/// Git LFS's clean filter stores any new LFS file's object, which sendLfs then sends.
+export function snapshot(cwd: string): { rev: string; patch: Patch } | { error: string } {
+  const base = git(cwd, ["rev-parse", "--verify", "-q", "HEAD^{commit}"]).stdout.trim();
+  if (!base) return { error: "--dirty needs a HEAD commit to run the changes on" };
+  const index = resolve(cwd, git(cwd, ["rev-parse", "--git-path", "index"]).stdout.trim());
+  const scratch = `${index}.remote-render-${randomBytes(4).toString("hex")}`;
+  const env = { ...process.env, GIT_INDEX_FILE: scratch, GIT_AUTHOR_NAME: "remote-render --dirty", GIT_AUTHOR_EMAIL: "remote-render@localhost", GIT_COMMITTER_NAME: "remote-render --dirty", GIT_COMMITTER_EMAIL: "remote-render@localhost" };
+  const g = (args: string[], input?: string) => spawnSync("git", args, { cwd, encoding: "utf8", env, input });
+  try {
+    if (existsSync(index)) copyFileSync(index, scratch);
+    const add = g(["add", "-A", ":/"]);
+    if (add.status !== 0) return { error: `snapshotting the working tree: ${lastLine(add.stderr)}` };
+    const tree = g(["write-tree"]).stdout.trim();
+    if (!tree) return { error: "snapshotting the working tree: git write-tree failed" };
+    if (tree === git(cwd, ["rev-parse", `${base}^{tree}`]).stdout.trim()) return { error: `--dirty: nothing uncommitted on ${base.slice(0, 9)}; drop --dirty to run the commit` };
+    const stat = git(cwd, ["diff", "--shortstat", base, tree]).stdout.trim();
+    const files = git(cwd, ["diff", "--name-only", base, tree]).stdout.trim().split("\n").filter(Boolean).length;
+    const msg = `remote-render --dirty: uncommitted changes on ${base.slice(0, 9)}, not a commit\n\n${stat}\n`;
+    const rev = g(["commit-tree", tree, "-p", base], msg).stdout.trim();
+    if (!rev) return { error: "snapshotting the working tree: git commit-tree failed" };
+    return { rev, patch: { base, stat, files } };
+  } finally {
+    rmSync(scratch, { force: true });
+  }
 }
 
 /// Waits on the box for the job to end (the box watches it; a line when its state changes) and
@@ -124,6 +155,7 @@ export function fetchFiles(r: Remote, id: string, out: string): string | undefin
 
 function report(job: Job, host: string, out: string, fetchErr?: string): number {
   const took = job.started ? ago(job.started, new Date(job.ended ?? Date.now())) : "0m";
+  if (job.patch) host += `, PATCH of uncommitted changes on ${job.patch.base.slice(0, 9)}, not a commit`;
   if (fetchErr) console.log(`✗ render ${job.id}: ${job.state}, but its files did not come back: ${fetchErr}`);
   if (job.state === "done") {
     console.log(`✓ render ${job.id}: done in ${took} on ${host} (${job.note}); files in ${out}`);
@@ -229,10 +261,16 @@ async function run(args: ClientArgs, remotes: Remote[], cwd: string, outOf: (id:
     if (res.status === 255 || res.status === 127) console.log(`✗ ${why(r, res)}`);
     return res.status === 0 ? 0 : 1;
   }
-  const sha = git(cwd, ["rev-parse", "--verify", "-q", `${args.rev ?? "HEAD"}^{commit}`]).stdout.trim();
+  let sha = git(cwd, ["rev-parse", "--verify", "-q", `${args.rev ?? "HEAD"}^{commit}`]).stdout.trim();
   if (!sha) return console.log(`✗ remote-render: no commit ${args.rev}`), 1;
-  if (!args.rev && git(cwd, ["status", "--porcelain", "--untracked-files=no"]).stdout.trim()) {
-    console.log(`remote-render: uncommitted changes stay here; the job runs ${sha.slice(0, 9)}`);
+  let patch: Patch | undefined;
+  if (args.dirty) {
+    const snap = snapshot(cwd);
+    if ("error" in snap) return console.log(`✗ remote-render: ${snap.error}`), 1;
+    ({ rev: sha, patch } = snap);
+    console.log(`remote-render: --dirty: the job runs a patch, ${patch.stat}, on ${patch.base.slice(0, 9)}; nothing is committed here or pushed to origin`);
+  } else if (!args.rev && git(cwd, ["status", "--porcelain", "--untracked-files=no"]).stdout.trim()) {
+    console.log(`remote-render: uncommitted changes stay here (--dirty ships them); the job runs ${sha.slice(0, 9)}`);
   }
   const seen: Seen[] = remotes.map((r) => {
     const s = boxStatus(r);
@@ -243,7 +281,7 @@ async function run(args: ClientArgs, remotes: Remote[], cwd: string, outOf: (id:
   if ("error" in chosen) return console.log(`✗ remote-render: ${chosen.error}`), 1;
   const r = remotes.find((x) => x.host === chosen.host)!;
   if (chosen.note) console.log(`remote-render: ${chosen.note}`);
-  const job = { rev: sha, command: args.command, collect: args.collect, cook: args.cook, minutes: args.minutes, class: jobClass(args.command, args.class) };
+  const job = { rev: sha, command: args.command, collect: args.collect, cook: args.cook, minutes: args.minutes, class: jobClass(args.command, args.class), ...(patch ? { patch } : {}) };
   const sub = submit(r, cwd, job);
   if ("error" in sub) return console.log(`✗ remote-render: ${sub.error}`), 1;
   console.log(`render ${sub.id}: queued on ${r.host}, ${sub.note} (${short({ ...job, id: sub.id, kind: "run" } as Job)})`);

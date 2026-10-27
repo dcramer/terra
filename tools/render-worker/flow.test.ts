@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, test } from "node:test";
 import { box, readJob, slotDir, slotHome } from "./box.ts";
-import { finish, prepare, type Remote, sendLfs, submit } from "./client.ts";
+import { finish, prepare, type Remote, sendLfs, snapshot, submit } from "./client.ts";
 import { next, runJob } from "./daemon.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "render-flow-"));
@@ -226,4 +226,58 @@ test("a job's commit takes the LFS objects its pointers name to the box; one fou
   sh(agent, "add", "lost.glb");
   sh(agent, "commit", "-q", "-m", "a pointer to nothing");
   assert.match(sendLfs(r, agent, sh(agent, "rev-parse", "HEAD")) ?? "", /1 LFS objects of [0-9a-f]{9} are neither here nor on origin/);
+});
+
+test("--dirty runs the working tree's changes as a patch: no hook, no ref, the index untouched, and the job says so", async () => {
+  const probe = join(tmp, "probe");
+  mkdirSync(join(probe, "hooks"), { recursive: true });
+  sh(probe, "init", "-q", "-b", "main");
+  writeFileSync(join(probe, "a.txt"), "a\n");
+  writeFileSync(join(probe, ".gitignore"), "ignored/\nhooks/\n");
+  sh(probe, "add", ".");
+  sh(probe, "commit", "-q", "-m", "base");
+  const base = sh(probe, "rev-parse", "HEAD");
+  assert.match((snapshot(probe) as { error: string }).error, /nothing uncommitted/);
+
+  // Hooks that would refuse any commit and leave a mark: the snapshot must run none of them.
+  for (const h of ["pre-commit", "commit-msg", "post-commit"]) writeFileSync(join(probe, "hooks", h), `#!/bin/sh\ntouch "${join(tmp, "hook-ran")}"\nexit 1\n`, { mode: 0o755 });
+  sh(probe, "config", "core.hooksPath", join(probe, "hooks"));
+  writeFileSync(join(probe, "a.txt"), "probe 42\n");
+  writeFileSync(join(probe, "staged.txt"), "staged\n");
+  sh(probe, "add", "staged.txt");
+  writeFileSync(join(probe, "new.txt"), "new\n");
+  mkdirSync(join(probe, "ignored"));
+  writeFileSync(join(probe, "ignored/x.txt"), "x\n");
+  const status = sh(probe, "status", "--porcelain");
+  const snap = snapshot(probe);
+  assert.ok("rev" in snap, JSON.stringify(snap));
+  assert.ok(!existsSync(join(tmp, "hook-ran")), "no hook ran");
+  assert.equal(sh(probe, "status", "--porcelain"), status, "the index and working tree are as they were");
+  assert.equal(sh(probe, "rev-parse", "HEAD"), base, "HEAD has not moved");
+  assert.equal(sh(probe, "for-each-ref", "--contains", snap.rev), "", "no branch or ref here holds the snapshot");
+  assert.equal(sh(probe, "rev-parse", `${snap.rev}^`), base);
+  assert.deepEqual([snap.patch.base, snap.patch.files], [base, 3]);
+  assert.match(snap.patch.stat, /3 files changed/);
+
+  const read = `const fs = require("fs"); console.log("probe:", fs.readFileSync("a.txt", "utf8").trim(), fs.existsSync("staged.txt"), fs.existsSync("new.txt"), fs.existsSync("ignored/x.txt"))`;
+  const sub = submit(r, probe, job({ rev: snap.rev, patch: snap.patch, command: ["node", "-e", read] }));
+  assert.ok("id" in sub, JSON.stringify(sub));
+  assert.match(sub.id, /-patch$/);
+  assert.equal(readJob(b, sub.id)?.patch?.base, base);
+  const out = join(tmp, "out-patch");
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (l: string) => lines.push(l);
+  let code: number;
+  try {
+    [code] = await Promise.all([finish(r, sub.id, out), runJob(b, first()!)]);
+  } finally {
+    console.log = log;
+  }
+  assert.equal(code, 0, lines.join("\n"));
+  assert.match(lines.at(-1)!, new RegExp(`✓ render ${sub.id}: done .*PATCH of uncommitted changes on ${base.slice(0, 9)}, not a commit`));
+  const jobLog = readFileSync(join(out, "job.log"), "utf8");
+  assert.match(jobLog, new RegExp(`^render-worker: PATCH: this job runs uncommitted changes on ${base}`, "m"));
+  assert.match(jobLog, /^probe: probe 42 true true false$/m, "the job saw the edit, the staged and the new file, not the ignored one");
+  assert.match(readFileSync(join(out, "patch.diff"), "utf8"), /^\+probe 42$/m);
 });

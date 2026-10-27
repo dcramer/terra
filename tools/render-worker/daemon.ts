@@ -123,6 +123,14 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   try {
     note(`slot ${slot}: ${src}`);
     src = slotCheckout(b, slot, job.rev);
+    if (job.patch) {
+      // A --dirty job: say so first, and keep the patch beside the log, so its files are never
+      // taken for a commit's.
+      note(`PATCH: this job runs uncommitted changes on ${job.patch.base} (${job.patch.stat}), not a commit; the patch is patch.diff beside this log`);
+      const fd = openSync(join(out, "patch.diff"), "w");
+      spawnSync("git", ["--no-pager", "diff", "--binary", job.patch.base, job.rev], { cwd: src, stdio: ["ignore", fd, "ignore"] });
+      closeSync(fd);
+    }
     const dpy = display && needsDisplay(job) ? await display.get() : undefined;
     if (display && needsDisplay(job)) note(`display: ${dpy ?? (display.why ? `none, ${display.why}` : display.describe())}`);
     for (const step of steps(job)) {
