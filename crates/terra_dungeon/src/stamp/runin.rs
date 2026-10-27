@@ -16,7 +16,7 @@ use crate::door::Lock;
 use crate::graph::{Graph, Link};
 use crate::place::{Layout, STEPS, Side, Space, Stair, opposite};
 use crate::theme::Role;
-use glam::{IVec3, Vec3};
+use glam::{IVec3, Vec2, Vec3};
 use std::collections::{HashMap, VecDeque};
 use terra_build::Cube;
 
@@ -26,7 +26,6 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, vaulted: bool
     let grid = Grid::new(map);
     doors(dungeon, &grid, out);
     chests(dungeon, looks, &grid, out);
-    mobs(dungeon, looks, &grid, out);
     torches(dungeon, looks, out);
     tour(dungeon, out);
     let room = Room::of(grid, &out.objects);
@@ -180,15 +179,7 @@ fn spots(dungeon: &Dungeon, looks: &[Look], map: &impl Solid, room: usize) -> Ve
         .cells()
         .filter_map(|at| layout.cell(at).map(|c| (at, c)))
         .collect();
-    let doors: Vec<Vec3> = cells
-        .iter()
-        .flat_map(|&(at, c)| {
-            let sides = layout.cells[c].sides;
-            (0..4)
-                .filter(move |&d| matches!(sides[d], Side::Door(_) | Side::Way))
-                .map(move |d| Frame::new(at, d).point(MID, 0.0, 0.0))
-        })
-        .collect();
+    let doors = super::furnish::doorways(layout, &cells);
     let mut out = Vec::new();
     for &(at, _) in cells.iter().filter(|&&(_, c)| free(looks[c].class)) {
         let f = Frame::new(at, 0);
@@ -209,9 +200,22 @@ fn spots(dungeon: &Dungeon, looks: &[Look], map: &impl Solid, room: usize) -> Ve
     out
 }
 
-/// The best spot at least `gap` from everything taken, closer if none is.
-fn pick(spots: &[(Vec3, f32)], taken: &mut Vec<Vec3>, gap: f32) -> Option<Vec3> {
-    for gap in [gap, gap * 0.5, 0.0] {
+/// The best spot at least `gap` from everything taken, closer if none is: of `clear` first,
+/// then of all `spots`.
+fn pick(
+    clear: &[(Vec3, f32)],
+    spots: &[(Vec3, f32)],
+    taken: &mut Vec<Vec3>,
+    gap: f32,
+) -> Option<Vec3> {
+    let tries = [
+        (clear, gap),
+        (clear, gap * 0.5),
+        (spots, gap),
+        (spots, gap * 0.5),
+        (spots, 0.0),
+    ];
+    for (spots, gap) in tries {
         let found = spots
             .iter()
             .find(|(p, _)| taken.iter().all(|t| t.distance(*p) > gap));
@@ -267,17 +271,39 @@ fn chests(dungeon: &Dungeon, looks: &[Look], map: &impl Solid, out: &mut Stamp) 
     }
 }
 
-/// Each room's mobs, a spot each, apart and away from the doors.
-fn mobs(dungeon: &Dungeon, looks: &[Look], map: &impl Solid, out: &mut Stamp) {
+/// How far a room's mobs spawn from its focus (its hero and its vignette's pieces), in metres
+/// across the floor, where a spot that far is free: as level designers keep an encounter's
+/// spawns off a room's set piece so its story reads as the player comes in. Spawned before the
+/// dressing, the crypt's guard post's spiders stood on its fallen guard and hid it in every
+/// frame (barrow dress round 17).
+pub(crate) const FOCUS_CLEAR_M: f32 = 2.5;
+
+/// Each room's mobs, a spot each, apart and away from the doors, clear of the dressing's
+/// `focus` (`FOCUS_CLEAR_M`); after the dressing, so they stand apart from its props too.
+pub(super) fn mobs(
+    dungeon: &Dungeon,
+    looks: &[Look],
+    map: &impl Solid,
+    focus: &[Vec3],
+    out: &mut Stamp,
+) {
     let mut taken = taken(out);
+    let off_focus = |p: Vec3| {
+        focus.iter().all(|f| {
+            (f.y - p.y).abs() > 1.0 || Vec2::new(f.x - p.x, f.z - p.z).length() >= FOCUS_CLEAR_M
+        })
+    };
     for (r, room) in dungeon.graph.rooms.iter().enumerate() {
         if room.mobs.is_empty() {
             continue;
         }
         let spots = spots(dungeon, looks, map, r);
+        let clear: Vec<(Vec3, f32)> = (spots.iter().copied())
+            .filter(|&(p, _)| off_focus(p))
+            .collect();
         for group in &room.mobs {
             for _ in 0..group.count {
-                if let Some(at) = pick(&spots, &mut taken, 1.5) {
+                if let Some(at) = pick(&clear, &spots, &mut taken, 1.5) {
                     out.mobs.push(MobSpawn {
                         species: group.species.clone(),
                         at,

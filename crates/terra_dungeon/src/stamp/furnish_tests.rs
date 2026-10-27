@@ -573,3 +573,53 @@ fn a_vignette_lies_by_its_rooms_focus() {
         }
     }
 }
+
+/// A room's mobs spawn clear of its focus, its hero and its vignette's pieces, by
+/// `FOCUS_CLEAR_M` across the floor (barrow dress round 18): spawned before the dressing, the
+/// crypt's guard post's spiders stood on its fallen guard and hid it in every frame of dress
+/// round 17. Over 40 seeds, all but where a room has no free spot that far.
+#[test]
+fn a_rooms_mobs_spawn_clear_of_its_focus() {
+    use super::super::runin::FOCUS_CLEAR_M;
+    for theme in Theme::all(&assets()).unwrap() {
+        if theme.dressing.is_empty() {
+            continue;
+        }
+        let mut marked = theme.clone();
+        for d in &mut marked.dressing {
+            for (m, _, _) in &mut d.vignette {
+                *m = format!("vignette/{m}");
+            }
+        }
+        let set = ModuleSet::new(&marked).unwrap();
+        let (mut mobs, mut on, mut nearest) = (0, 0, f32::MAX);
+        for s in 0..40 {
+            let Ok(dungeon) = generate(&marked, &set, Seed(s)) else {
+                continue;
+            };
+            let full = stamp(&dungeon, &marked, &kind);
+            let mut focus = heroes(&marked, &full);
+            let told = (full.props.iter()).filter(|p| p.model.starts_with("vignette/"));
+            focus.extend(told.map(|p| p.at));
+            for m in &full.mobs {
+                let gap = (focus.iter())
+                    .filter(|f| (f.y - m.at.y).abs() < 1.0)
+                    .map(|f| Vec2::new(f.x - m.at.x, f.z - m.at.z).length())
+                    .fold(f32::MAX, f32::min);
+                mobs += 1;
+                on += (gap < FOCUS_CLEAR_M) as u32;
+                nearest = nearest.min(gap);
+            }
+        }
+        println!(
+            "{}: {on} of {mobs} mobs within {FOCUS_CLEAR_M} m of a hero or vignette, the nearest {nearest:.2} m",
+            theme.name
+        );
+        assert!(mobs > 0, "{}: no mobs", theme.name);
+        assert!(
+            on * 50 <= mobs,
+            "{}: {on} of {mobs} mobs on a room's focus",
+            theme.name
+        );
+    }
+}

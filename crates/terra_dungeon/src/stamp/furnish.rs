@@ -8,7 +8,7 @@
 use super::modules::{Class, Look, feature_at};
 use super::{CELL, CUBE, Frame, Light, LightKind, MID, Prop, Stamp, hash, stands};
 use crate::Dungeon;
-use crate::place::{Side, opposite};
+use crate::place::{Layout, Side, opposite};
 use crate::theme::Dress;
 use glam::{IVec3, Vec2, Vec3};
 use std::collections::HashMap;
@@ -19,7 +19,7 @@ use terra_build::Cube;
 pub(crate) const OFF_ROUTE_M: f32 = 1.3;
 /// From a doorway's middle, so none stands in the way in.
 pub(crate) const OFF_DOOR_M: f32 = 1.6;
-/// From what already stands (props, objects, chests, mobs, fires) and from each other.
+/// From what already stands (props, objects, chests, fires) and from each other.
 const APART_M: f32 = 1.0;
 /// Clutter from everything: small things lie closer.
 const CLUTTER_APART_M: f32 = 0.6;
@@ -157,23 +157,37 @@ fn pick(list: &[(String, f32)], salt: u32) -> &(String, f32) {
     &list[salt as usize % list.len()]
 }
 
+/// The middles of the doorways and open ways out of a room's `cells`, at the floor.
+pub(super) fn doorways(layout: &Layout, cells: &[(IVec3, usize)]) -> Vec<Vec3> {
+    (cells.iter())
+        .flat_map(|&(at, c)| {
+            let sides = layout.cells[c].sides;
+            (0..4)
+                .filter(move |&d| matches!(sides[d], Side::Door(_) | Side::Way))
+                .map(move |d| Frame::new(at, d).point(MID, 0.0, 0.0))
+        })
+        .collect()
+}
+
+/// Dresses each room, and gives back its focus: each hero's and vignette piece's place, for the
+/// mobs to keep clear of (`runin::FOCUS_CLEAR_M`).
 pub(super) fn lay(
     dungeon: &Dungeon,
     dressing: &[Dress],
     looks: &[Look],
     map: &HashMap<IVec3, Cube>,
     out: &mut Stamp,
-) {
+) -> Vec<Vec3> {
     let layout = &dungeon.layout;
     let fires = out.lights.iter().filter(|l| l.kind != LightKind::Torch);
     let keep = |l: &Light| match l.kind {
         LightKind::Campfire => (l.at, FIRE_M),
         _ => (l.at, 0.0),
     };
+    let mut focus = Vec::new();
     let mut taken: Vec<(Vec3, f32)> = (out.props.iter().map(|p| p.at))
         .chain(out.objects.iter().map(|o| o.at))
         .chain(out.chests.iter().map(|c| c.at))
-        .chain(out.mobs.iter().map(|m| m.at))
         .map(|p| (p, 0.0))
         .chain(fires.map(keep))
         .collect();
@@ -191,18 +205,9 @@ pub(super) fn lay(
             .cells()
             .filter_map(|at| layout.cell(at).map(|c| (at, c)))
             .collect();
-        let doors: Vec<Vec3> = cells
-            .iter()
-            .flat_map(|&(at, c)| {
-                let sides = layout.cells[c].sides;
-                (0..4)
-                    .filter(move |&d| matches!(sides[d], Side::Door(_) | Side::Way))
-                    .map(move |d| Frame::new(at, d).point(MID, 0.0, 0.0))
-            })
-            .collect();
         let place = Room {
             route: &route,
-            doors,
+            doors: doorways(layout, &cells),
             map,
         };
         let near_door = |p: Vec3| place.near_door(p);
@@ -292,11 +297,14 @@ pub(super) fn lay(
             }
         }
         let hero = laying.hero(featured, &mut taken, out);
+        focus.extend(hero);
         // The vignette by the room's focus: its hero, else its fire (a camp round its fire).
         let fire = (cells.iter())
             .find(|&&(_, c)| looks[c].class == Class::Rest)
             .map(|&(at, _)| Frame::new(at, 0).point(MID, 0.0, MID));
+        let pieces = out.props.len();
         let told = laying.vignette(hero.or(fire), &mut taken, out);
+        focus.extend(out.props[pieces..].iter().map(|p| p.at));
         // The room's groups: round its hero (or its vignette, or the feature's first wall
         // spot), and in the far corner from it.
         let anchor = hero.or(told).or(spots.first().map(|s| s.p));
@@ -304,6 +312,7 @@ pub(super) fn lay(
         laying.clutter(first, &mut taken, out);
         laying.scatter(&mut taken, out);
     }
+    focus
 }
 
 /// One room's places and dressings, for laying its vignette, wall props and clutter.
