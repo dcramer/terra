@@ -34,7 +34,7 @@ The mover asks one query trait, defined in `terra_motion` because the mover is t
 | Props | Each solid item's box, turned with it; hidden ones skipped | `bodies::Solid`, moved into the plain crate |
 | Trees, rocks, stumps, logs | Rounded convex pieces with their tops | `terra_core::solid` |
 
-Buildings, props and trees and rocks are the mover's obstacles (`terra_motion::mover::shapes`): a turned box (a cube, a leaf, a prop) or a solid's pieces, each its exact distance, those near a capsule answered together as one exact field, so cubes side by side have no seam. The ground stays a source apart, so a box standing on it meets it at a true corner, not a blended one.
+Buildings, props and trees and rocks are the mover's obstacles (`terra_motion::mover::shapes`): a turned box (a cube, a leaf, a prop) or a solid's pieces, each its exact distance, those near a capsule answered together as one exact field, so cubes side by side have no seam. Those near are picked from the ones kept round an earlier query of the tick's place, grown by a share and a margin, as PhysX's character controller keeps a grown volume's geometry (`volumeGrowth`): the same shapes as from all of them. The ground stays a source apart, so a box standing on it meets it at a true corner, not a blended one.
 | Other bodies | Their cores (a thin capsule on the pushbox's axis), moving | Treated as moving obstacles in the sweep, then pushed apart afterwards (step 6) |
 | Water | A medium, not a contact: the depth of the surface over a point | `Planet::water_radius_m`, and lakes and rivers when they come |
 
@@ -68,7 +68,7 @@ The server never sees any of these, and the mover never waits for them:
 
 ## Climbing
 
-Status: **decided** (D477, D505-D511, the developers, 2026-10-26: "Recommended set"); the mover holds, starts and climbs a face, faster on one less steep (`mover::climb`, `Ground::Climbing`, units C3-C4), pulls up onto a top (C5), lunges along a face or kicks off it (C6), and spends stamina, holds no face of no grip or in a fight stance and lets go at none or at a blow (C7), climbs a dug cliff over its treads at the gap (C8), on the course only: the game's man has climbing off (`terra_walker` `movement::man`) until the figure has clips, and the walk's own rows ask a man with it off (`Kind::walking`). Held: `cost.climb`, 12-34 µs a climbing tick against the bar's 25 (C9: the wall and the dug cliff under it, the base's wall over by its cubes' field); the game's walk and figure. Free climbing on stamina; the research is [research/2026-10-25-climbing.md](../research/2026-10-25-climbing.md).
+Status: **decided** (D477, D505-D511, the developers, 2026-10-26: "Recommended set"); the mover holds, starts and climbs a face, faster on one less steep (`mover::climb`, `Ground::Climbing`, units C3-C4), pulls up onto a top (C5), lunges along a face or kicks off it (C6), and spends stamina, holds no face of no grip or in a fight stance and lets go at none or at a blow (C7), climbs a dug cliff over its treads at the gap (C8), within `cost.climb`'s 25 µs a climbing tick (C9-C10: 12-23 µs), on the course only: the game's man has climbing off (`terra_walker` `movement::man`) until the figure has clips, and the walk's own rows ask a man with it off (`Kind::walking`). Held: the game's walk and figure. Free climbing on stamina; the research is [research/2026-10-25-climbing.md](../research/2026-10-25-climbing.md).
 
 ### Intent
 

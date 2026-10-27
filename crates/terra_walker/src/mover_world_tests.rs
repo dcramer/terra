@@ -122,7 +122,7 @@ fn a_bases_cube_is_stepped_onto_two_stop_a_body_and_a_flight_of_stairs_carries_i
     };
     let trace = |built: &Base| {
         let blocks = base_blocks(built, &frame);
-        let obstacles = Obstacles { obstacles: &blocks };
+        let obstacles = Obstacles::new(&blocks);
         walk(
             &planet,
             &obstacles,
@@ -203,7 +203,7 @@ fn a_shut_door_stops_a_body_in_its_doorway_and_an_open_one_lets_it_in() {
     let way = (Vec3::new(2.0, 0.0, 5.0), Vec3::NEG_Z);
     let walked = |open: bool| {
         let blocks = base_blocks(&room_with_door(open), &frame);
-        let obstacles = Obstacles { obstacles: &blocks };
+        let obstacles = Obstacles::new(&blocks);
         walk(&planet, &obstacles, &dry, &frame, way, 2.5)
     };
     let shut = last(&walked(false));
@@ -241,7 +241,7 @@ fn a_props_box_stands_from_its_foot_turned_and_a_hidden_one_is_walked_through() 
         let mut blocks = Vec::new();
         props([(&chest, &placed, &shown)], foot, 4.0, &mut blocks);
         assert_eq!(blocks.len(), usize::from(stops));
-        let obstacles = Obstacles { obstacles: &blocks };
+        let obstacles = Obstacles::new(&blocks);
         let trace = walk(
             &planet,
             &obstacles,
@@ -272,7 +272,7 @@ fn a_trunk_and_a_creature_standing_there_stop_a_man_at_their_width_and_a_person_
     let mut near = Vec::new();
     flora(&trees, frame.translation, 6.0, &mut near);
     assert_eq!(near.len(), 1);
-    let trunk = Obstacles { obstacles: &near };
+    let trunk = Obstacles::new(&near);
     let end = last(&walk(
         &planet,
         &trunk,

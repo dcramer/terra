@@ -236,9 +236,7 @@ pub fn run(forest: &Forest, kind: &Kind) -> Cost {
                 tally: &tally,
             })
             .collect();
-        let trees = Obstacles {
-            obstacles: &tallied,
-        };
+        let trees = Obstacles::new(&tallied);
         let ground = (&field, &trees);
         let world = World {
             ground: &ground,

@@ -62,9 +62,7 @@ fn with_world<R>(field: &dyn Field, then: impl FnOnce(&World) -> R) -> R {
         // The course's fixtures are exact distances outside the solid.
         steepest: 1.0,
     };
-    let obstacles = Obstacles {
-        obstacles: field.obstacles(),
-    };
+    let obstacles = Obstacles::new(field.obstacles());
     let water = |at: Vec3| field.water(at);
     let solid = (&ground, &obstacles);
     let world = World {

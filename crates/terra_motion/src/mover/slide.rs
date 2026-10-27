@@ -843,7 +843,7 @@ mod tests {
                 Vec3::new(2.0, 0.25, 1.0),
             ),
         ];
-        let query = Obstacles { obstacles: &shapes };
+        let query = Obstacles::new(&shapes);
         // On the lower floor: its floor, facing up.
         let floor = floor_stood_on(Vec3::new(-0.5, 0.0, 0.0), 0.5, &query, &shape);
         assert!(
@@ -876,7 +876,7 @@ mod tests {
                 [Vec3::X, Vec3::Y, Vec3::Z],
                 Vec3::new(0.25, 0.25, 0.25),
             )];
-            let query = Obstacles { obstacles: &shapes };
+            let query = Obstacles::new(&shapes);
             for inside in [0.0079_f32, 0.004, 0.012, 0.03] {
                 let feet = way * inside + Vec3::Y * 0.251;
                 let floor = floor_stood_on(feet, 0.05, &query, &shape)
@@ -899,7 +899,7 @@ mod tests {
                 [along, normal, Vec3::Z],
                 Vec3::new(5.0, 1.0, 2.0),
             )];
-            let query = Obstacles { obstacles: &shapes };
+            let query = Obstacles::new(&shapes);
             // The bottom sphere resting on the slope at the origin.
             let feet = normal * shape.radius - Vec3::Y * shape.radius;
             let floor = floor_stood_on(feet, 0.5, &query, &shape);

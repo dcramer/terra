@@ -16,6 +16,7 @@
 
 use super::query::{Capsule, Contact, Hit, Query, Sdf};
 use glam::{DVec3, Vec2, Vec3};
+use std::cell::RefCell;
 use terra_core::Solid;
 
 /// A box turned in the world: its middle, its three axes (orthonormal), and half its size
@@ -292,9 +293,48 @@ impl<S: Shaped + ?Sized> Shaped for &S {
 }
 
 /// Obstacles as the mover's query asks them: a slice of shapes, owned or borrowed (`&[&Solid]`
-/// out of flora's index, `&[Block]` of a base's or props').
+/// out of flora's index, `&[Block]` of a base's or props'), and those kept near the last
+/// query's reach.
+///
+/// A body's tick asks them ten or more times about one place (its probes, moves and snaps),
+/// so as PhysX's character controller keeps the geometry of a box grown round its motion
+/// (`SweepTest`'s cached bounds, `PxControllerDesc::volumeGrowth`, BSD-3) and looks the scene
+/// up again only when a motion leaves it, the shapes whose bounds come within a sphere grown
+/// round a query are kept, and a query inside that sphere picks from them alone: the same
+/// shapes in the same order as from all of them, since any whose bounds reach the query reach
+/// the sphere round it.
 pub struct Obstacles<'a, S = Obstacle> {
     pub obstacles: &'a [S],
+    kept: RefCell<Kept>,
+}
+
+/// The shapes kept for a sphere: each one's index and bounds, in the slice's order.
+struct Kept {
+    middle: Vec3,
+    reach: f32,
+    shapes: Vec<(u32, Vec3, f32)>,
+}
+
+/// How far the shapes kept for a query reach: its reach grown by a share (PhysX's
+/// `volumeGrowth`, 1.5 by default) and a margin, m, so a climbing body's probes from its feet
+/// to over its head (a metre and more either side of its middle) pick from one gathering.
+const KEPT_GROWTH: f32 = 1.5;
+const KEPT_MARGIN_M: f32 = 1.5;
+/// How much nearer than the kept sphere's edge a query's must lie, m: past the rounding of
+/// both spheres' distances.
+const KEPT_SLACK: f32 = 1.0e-3;
+
+impl<'a, S> Obstacles<'a, S> {
+    pub fn new(obstacles: &'a [S]) -> Self {
+        Self {
+            obstacles,
+            kept: RefCell::new(Kept {
+                middle: Vec3::ZERO,
+                reach: f32::NEG_INFINITY,
+                shapes: Vec::new(),
+            }),
+        }
+    }
 }
 
 /// The shapes a query may touch, nearest first, each with its parts that it may.
@@ -311,15 +351,27 @@ impl<S: Shaped> Obstacles<'_, S> {
             .as_vec3();
         let reach = (capsule.b - capsule.a).length() * 0.5 + capsule.radius + within;
         let reach = reach + motion.length() * 0.5;
-        let mut by: Vec<(f32, &S)> = self
-            .obstacles
-            .iter()
-            .filter_map(|shape| {
+        let mut kept = self.kept.borrow_mut();
+        if middle.distance(kept.middle) + reach + KEPT_SLACK > kept.reach {
+            let wide = reach * KEPT_GROWTH + KEPT_MARGIN_M;
+            kept.shapes.clear();
+            for (index, shape) in self.obstacles.iter().enumerate() {
                 let (centre, radius) = shape.bounds();
+                if centre.distance(middle) - radius < wide {
+                    kept.shapes.push((index as u32, centre, radius));
+                }
+            }
+            (kept.middle, kept.reach) = (middle, wide);
+        }
+        let mut by: Vec<(f32, &S)> = kept
+            .shapes
+            .iter()
+            .filter_map(|&(index, centre, radius)| {
                 let apart = centre.distance(middle) - radius;
-                (apart < reach).then_some((apart, shape))
+                (apart < reach).then_some((apart, &self.obstacles[index as usize]))
             })
             .collect();
+        drop(kept);
         by.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut near = Near {
             shapes: Vec::with_capacity(by.len()),
@@ -422,12 +474,7 @@ mod tests {
         let rock = Solid::of_pieces(Vec3::ZERO, vec![Piece::round(Vec2::ZERO, 0.5, 1.5)]);
         let owned = [Obstacle::Solid(rock.clone())];
         let borrowed = [&rock];
-        let (owned, borrowed) = (
-            Obstacles { obstacles: &owned },
-            Obstacles {
-                obstacles: &borrowed,
-            },
-        );
+        let (owned, borrowed) = (Obstacles::new(&owned), Obstacles::new(&borrowed));
         let capsule = Capsule::standing(Vec3::new(-2.0, 0.01, 0.0), Vec3::Y, 0.3, 1.8);
         let (a, b) = (
             owned
@@ -509,7 +556,7 @@ mod tests {
             })
         };
         let shapes = [cube(0.25), cube(0.75)];
-        let query = Obstacles { obstacles: &shapes };
+        let query = Obstacles::new(&shapes);
         // A capsule standing on the seam meets one floor, facing up.
         let capsule = Capsule::standing(Vec3::new(0.5, 0.001, 0.0), Vec3::Y, 0.3, 1.8);
         let mut out = Vec::new();
@@ -518,6 +565,49 @@ mod tests {
         assert!(out[0].normal.dot(Vec3::Y) > 0.999);
         // Swept along it, nothing stops it.
         assert!(query.sweep(&capsule, Vec3::X * 0.3).is_none());
+    }
+
+    #[test]
+    fn queries_from_the_shapes_kept_answer_as_from_all_of_them() {
+        // A wall of turned cubes, 12 by 9, asked along a winding path by capsules of every
+        // size, each query from one kept set answered as a fresh one asking all the cubes.
+        let turn = Vec3::new(0.3, 1.0, 0.2).normalize();
+        let x = Vec3::X.cross(turn).normalize();
+        let axes = [x, turn, x.cross(turn)];
+        let shapes: Vec<Obstacle> = (0..108)
+            .map(|i| {
+                Obstacle::Block(Block {
+                    centre: Vec3::new((i % 12) as f32 * 0.5, (i / 12) as f32 * 0.5, 0.0),
+                    axes,
+                    half: Vec3::splat(0.25),
+                })
+            })
+            .collect();
+        let kept = Obstacles::new(&shapes);
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        let mut asked = 0;
+        for step in 0..400 {
+            let t = step as f32 * 0.05;
+            let at = Vec3::new(
+                3.0 + 3.5 * libm::sinf(t),
+                2.0 + 2.5 * libm::cosf(t * 0.7),
+                0.6,
+            );
+            let size = (step % 5) as f32 * 0.3;
+            let capsule = Capsule::standing(at, Vec3::Y, 0.05 + size * 0.2, 0.1 + size);
+            let motion = Vec3::new(libm::cosf(t), 0.0, -0.4) * (step % 3) as f32 * 0.3;
+            let fresh = Obstacles::new(&shapes);
+            assert_eq!(kept.sweep(&capsule, motion), fresh.sweep(&capsule, motion));
+            assert_eq!(kept.apart(&capsule, 0.2), fresh.apart(&capsule, 0.2));
+            a.clear();
+            b.clear();
+            kept.contacts(&capsule, 0.1, &mut a);
+            fresh.contacts(&capsule, 0.1, &mut b);
+            assert_eq!(a, b);
+            asked += usize::from(!a.is_empty());
+        }
+        // The path meets the wall, not only the air round it.
+        assert!(asked > 50, "{asked}");
     }
 
     #[test]
@@ -532,7 +622,7 @@ mod tests {
             })
         };
         let shapes = [from(-0.25, 0.25), from(0.0, 0.5)];
-        let query = Obstacles { obstacles: &shapes };
+        let query = Obstacles::new(&shapes);
         // A thin probe a centimetre or two past the riser, within a graze step of it: the
         // riser is nearer than the top just under the top, but the step's top stops it.
         for x in [0.005, 0.0227, 0.04] {

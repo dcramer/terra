@@ -636,7 +636,7 @@ mod tests {
                 })]
             })
             .unwrap_or_default();
-        let obstacles = Obstacles { obstacles: &walls };
+        let obstacles = Obstacles::new(&walls);
         let water = |_: Vec3| None;
         let world = World {
             ground: &(&ground, &obstacles),

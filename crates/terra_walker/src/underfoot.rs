@@ -34,9 +34,7 @@ impl Underfoot<'_, '_> {
             distance: |p| planet.distance_in(p, &mut memo.borrow_mut()),
             steepest: planet.steepest(),
         };
-        let blocks = Obstacles {
-            obstacles: self.movers.as_deref().map_or(&[][..], Movers::blocks),
-        };
+        let blocks = Obstacles::new(self.movers.as_deref().map_or(&[][..], Movers::blocks));
         placement::probe(&(&field, &blocks), at.as_dvec3(), root.as_dvec3(), up, body)
     }
 }

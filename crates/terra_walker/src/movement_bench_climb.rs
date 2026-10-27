@@ -29,9 +29,7 @@ fn climb(course: &Course, start: Vec3, kind: &Kind) -> Cost {
         // The course's fixtures are exact distances outside the solid.
         steepest: 1.0,
     };
-    let obstacles = Obstacles {
-        obstacles: course.obstacles(),
-    };
+    let obstacles = Obstacles::new(course.obstacles());
     let water = |_: Vec3| None;
     let world = World {
         ground: &(&sdf, &obstacles),

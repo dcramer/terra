@@ -450,10 +450,8 @@ fn walk(
             steepest: planet.steepest(),
         };
         let water = |at: Vec3| mover_world::water(&planet, at);
-        let blocks = Obstacles {
-            obstacles: &movers.lists.blocks,
-        };
-        let trees = Obstacles { obstacles: &trees };
+        let blocks = Obstacles::new(&movers.lists.blocks);
+        let trees = Obstacles::new(&trees);
         let people = Capsules {
             bodies: &movers.lists.others,
             skip: u32::MAX,
