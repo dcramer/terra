@@ -4,5 +4,7 @@
   "into": "props/barrow",
   "dims": [0.18, 0.15, 0.22],
   "budget": 2000,
+  "grade": [0.46, 0.39, 0.29, 0.075, 0.07, 0.06],
+  "grime": true,
   "faces": 8000
 }
