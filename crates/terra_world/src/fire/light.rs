@@ -18,6 +18,7 @@ use bevy::{light::VolumetricLight, prelude::*};
 
 mod glows;
 mod shadows;
+mod shut;
 pub use glows::FireGlows;
 pub(super) use glows::plugin;
 use shadows::ShadowFade;
@@ -913,6 +914,7 @@ pub(super) fn light(
             by_night(want.night_stops, night)
         };
     }
+    shut::give_top_to_key(&mut wants, shut_off);
     let shown = choose(wants, eye, &was, shadowed(*quality));
     shadow_fade.ease(&shown, eye, shadowed(*quality), time.delta_secs());
     shadow_fade.spawn_twins(&mut commands);
