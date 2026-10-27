@@ -180,6 +180,7 @@ pub fn plugin(app: &mut App) {
         (
             fireside::keep_clear.after(animate),
             quench::quench,
+            quench::unshadow,
             wake::ease,
         ),
     );
@@ -673,7 +674,7 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         };
         match asked.burns_up {
             Some(up) => {
-                entity.with_child((
+                entity.insert(quench::HoldsUp).with_child((
                     Name::new(format!("Staged: {}'s flames", asked.name)),
                     kindled,
                     Transform::from_xyz(0.0, up, 0.0),

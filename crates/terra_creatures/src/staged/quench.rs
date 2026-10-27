@@ -53,3 +53,24 @@ pub fn quench(
         }
     }
 }
+
+/// A staged model holding its fire up on its head (a torch, `burns_up`).
+#[derive(Component)]
+pub struct HoldsUp;
+
+/// A model that holds its fire up casts no shadow, as a game's torch is left out of its own
+/// light's shadows: its light hangs a hand's breadth over its head, so the head shadowed the
+/// ground for a metre and a half round the staged torch and the yard had no pool of its light
+/// at night (torch round t2, a critic: "lights no pool on the ground").
+pub fn unshadow(
+    parts: Query<Entity, Added<Mesh3d>>,
+    parents: Query<&ChildOf>,
+    held: Query<(), With<HoldsUp>>,
+    mut commands: Commands,
+) {
+    for part in &parts {
+        if parents.iter_ancestors(part).any(|up| held.contains(up)) {
+            commands.entity(part).insert(NotShadowCaster);
+        }
+    }
+}
