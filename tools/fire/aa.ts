@@ -42,6 +42,8 @@ const size = (png: string) => {
   const [w, h] = execFileSync("ffprobe", ["-v", "error", "-i", png, "-show_entries", "stream=width,height", "-of", "csv=p=0"], { encoding: "utf8" }).trim().split(",").map(Number);
   return { w, h };
 };
+/// The script frame the gate's films roll from (film.ts's `--cine …@120`).
+const ROLL = 120;
 const sha = (path: string) => createHash("sha1").update(readFileSync(path)).digest("hex");
 
 if (import.meta.main) {
@@ -66,7 +68,14 @@ if (import.meta.main) {
     const other = new Set(frames(dirs[r]));
     const differ = names.filter((n) => other.has(n) && sha(join(a, n)) !== sha(join(b, n)));
     lines.push(`r0 against r${r}: ${names.length} files (${other.size} in r${r}), ${differ.length} differ; first ${differ.slice(0, 6).join(" ")}`);
-    for (const n of [...differ.slice(0, 4), ...differ.filter((_, i) => i % 50 === 0).slice(1, 8)]) {
+    // Frame 120 always: the gate's films start there (film.ts's roll), so it is what they see first.
+    const roll = names.filter((n) => +(/f-0*(\d+)/.exec(n)?.[1] ?? -1) === ROLL);
+    const sampled = [...differ.slice(0, 4), ...differ.filter((_, i) => i % 50 === 0).slice(1, 8)];
+    for (const n of [...new Set([...sampled, ...roll])]) {
+      if (!differ.includes(n)) {
+        lines.push(`  ${n}: matches`);
+        continue;
+      }
       const grey = n.endsWith(".matte.png");
       const { w, h } = size(join(a, n));
       const [pa, pb] = [raw(join(a, n), grey), raw(join(b, n), grey)];
