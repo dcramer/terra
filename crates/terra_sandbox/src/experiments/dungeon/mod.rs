@@ -192,6 +192,15 @@ fn lay_out(
     for mob in &stamp.mobs {
         info!("Dungeon creature {} at {}", mob.species, point(mob.at));
     }
+    // Where each prop stands and which side it faces, so a `--vantage` can frame a room's dressing.
+    for prop in &stamp.props {
+        let name = prop.model.rsplit('/').next().unwrap_or(&prop.model);
+        info!(
+            "Dungeon prop {name} at {} facing {}",
+            point(prop.at),
+            prop.facing
+        );
+    }
     // Where each door stands, so a film's dolly can stop short of it.
     for door in stamp
         .objects
