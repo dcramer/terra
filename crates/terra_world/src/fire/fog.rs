@@ -176,6 +176,13 @@ fn show(
                 if *visibility != Visibility::Hidden {
                     *visibility = Visibility::Hidden;
                 }
+                // Bevy draws a fog volume whatever its visibility (bevy_pbr 0.20's
+                // `extract_volumetric_fog` takes every `FogVolume`), so a hidden glow is
+                // emptied of air too: at its last place and density it went on dimming the
+                // air round a fire its light no longer shone in.
+                if volume.density_factor != 0.0 {
+                    volume.density_factor = 0.0;
+                }
             }
         }
     }
@@ -254,6 +261,23 @@ mod tests {
         let mut hazed = kept.clone();
         hazed.density_factor = mist;
         assert!(hides(&hazed, glow.reach) > 0.99);
+    }
+
+    #[test]
+    fn a_glow_hidden_holds_no_air_since_bevy_draws_it_hidden() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let mut stale = air(Handle::default());
+        stale.density_factor = density(&Glow::of(Vec3::ZERO, 0.2, 1.0), 1.0) / AIR_SCALE;
+        let volume = world
+            .spawn((stale, Transform::IDENTITY, Visibility::Inherited))
+            .id();
+        world.insert_resource(Volumes(vec![volume]));
+        // The fire's light stops shining in the air: no glow is wanted.
+        world.insert_resource(Glows(Vec::new()));
+        world.run_system_once(show).unwrap();
+        assert_eq!(world.get::<Visibility>(volume), Some(&Visibility::Hidden));
+        assert_eq!(world.get::<FogVolume>(volume).unwrap().density_factor, 0.0);
     }
 
     #[test]
