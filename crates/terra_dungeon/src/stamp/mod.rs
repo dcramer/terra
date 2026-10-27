@@ -30,6 +30,7 @@ mod runin;
 #[cfg(test)]
 mod runin_tests;
 mod shell;
+pub mod sight;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
