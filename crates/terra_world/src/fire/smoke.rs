@@ -50,6 +50,18 @@ pub struct FireSmokeExtension {
 }
 
 impl MaterialExtension for FireSmokeExtension {
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        _key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        if super::matte::on() {
+            super::matte::keep_smoke_out(descriptor);
+        }
+        Ok(())
+    }
+
     fn vertex_shader() -> ShaderRef {
         "shaders/fire_smoke.wesl".into()
     }

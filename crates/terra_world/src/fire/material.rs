@@ -94,13 +94,15 @@ pub struct FireExtension {
 
 /// Which pipeline a fire material is drawn with: a breath's hull is not depth tested, since
 /// its far side stands behind the wall it strikes; its shader ends each ray at what the
-/// depth prepass holds instead. The hearths' mask writes only the picture's alpha (`film`).
+/// depth prepass holds instead. The hearths' mask writes only the picture's alpha (`film`);
+/// sparks keep out of it in the matte's films (`matte`).
 #[repr(C)]
 #[derive(Eq, PartialEq, Hash, Copy, Clone)]
 pub struct FireKey {
     volume: bool,
     mask: bool,
     depth: bool,
+    spark: bool,
 }
 
 impl From<&FireExtension> for FireKey {
@@ -109,6 +111,7 @@ impl From<&FireExtension> for FireKey {
             volume: fire.volume,
             mask: fire.mask,
             depth: fire.depth,
+            spark: fire.uniform.kind.x == 1.0,
         }
     }
 }
@@ -130,6 +133,9 @@ impl MaterialExtension for FireExtension {
             && let Some(depth) = descriptor.depth_stencil.as_mut()
         {
             depth.depth_write_enabled = Some(true);
+        }
+        if key.bind_group_data.spark && super::matte::on() {
+            super::matte::keep_sparks_out(descriptor);
         }
         // A marched breath writes its depth where its gas grows dense (`MARCHED_DEPTH` in
         // fire.wesl), for the volumetric fog after it; its mask draw writes none.

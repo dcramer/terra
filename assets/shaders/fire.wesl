@@ -3663,6 +3663,13 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
         // A torch's cooling from yellow-white to a dull red as it climbs (torch round t2: one
         // size and colour, a sheet of dots).
         light = soot(select(1520.0 - t * 250.0, 1580.0 - t * 430.0, life.w > 3.25), alpha);
+        // With the flame matte asked for, how much of it shows, which its pipeline takes from
+        // the flame's share under it, its light still added whole (crates/terra_world/src/fire/
+        // matte.rs): a spark is not counted flame by what measures the flame.
+@if(FLAME_MATTE)
+        {
+            cover = smoothstep(0.0, 0.25, alpha);
+        }
     } else if kind == 4 {
         // A drop: a hot bright streak, its head hottest, cooling to red as it burns out.
         let x = abs(uv.x - 0.5) * 2.0;
