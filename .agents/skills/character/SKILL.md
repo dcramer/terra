@@ -64,7 +64,7 @@ The checker compares the rig with our skeleton and with the hand-rigged mannequi
 
 ## Clips and twist
 
-The clips come from Quaternius's Universal Animation Library 1 and 2 (current versions, bought; `art/README.md`), on a skeleton with Unreal's bone names that Tripo's rig shares. `art/animation/clips.txt` lists the ones the game plays; `clips.py` cuts them into `assets/models/character/mannequin.glb`. To add a clip, add its name there, rerun `clips.py`, then `clip_check.py`, then `build_bodies.sh`.
+The clips come from Quaternius's Universal Animation Library 1 and 2 (current versions, bought; `art/README.md`), on a skeleton with Unreal's bone names that Tripo's rig shares. `art/animation/clips.txt` lists the ones the game plays; `clips.py` cuts them into `assets/models/character/mannequin.glb`. To add a clip (or make one, `made.json`), add its name there, rerun `clips.py`, then `clip_check.py`, then `rig_check.py` on the mannequin (`tools/blender/run.sh tools/characters/rig_check.py assets/models/character/mannequin.glb`, which rewrites `art/characters/rig-baseline.json`: a clip missing from it is held to the bare limit), then `build_bodies.sh`, and commit the base and gear it writes with the clip.
 
 A combat move's clip is made from its spec in its set's list by one command (D450): `node tools/characters/clip.ts CLIP` (keys, Kimodo takes, aimed export, phases, `moves.ts`, the take kept, into a scratch set; `--into SET.ron` for the game's).
 
@@ -254,6 +254,7 @@ A worn look is made once, on the base, and every morph carries it (`carry_gear.p
 - glTF does not keep Blender's constraints, and the game plays clips: the twist step is baked into every clip by `export_character.py`, and any script that plays the mannequin's clips on a body bakes them too (`twist.bake`). A body file's clips are baked already.
 - Two files loaded in one Blender scene each bring their own copy of a clip, the second named `Name.001`: give each body its own (`compare.py` does), or one plays the other's.
 - A roll past half a turn is ambiguous in any one frame: unwrap it over the whole clip (`twist.unwrapped`), never from the first frame.
+- A loop whose arm circles (a crawl stroke) gains a whole turn of roll each time round (Codman's paradox), which no twist bone can follow and close the loop: `twist.unwrapped` takes such a clip frame by frame, as engines' twist correctives do, so the twist bone turns back once a loop where the roll passes half a turn (`test_twist.py`).
 - The edge check cannot see a pinch: a ring of skin shrinking changes no edge's length much. The `pinched` measure watches the rings at elbows, knees and wrists.
 - Scripts that `cd` lose relative paths; resolve them first (`realpath`).
 - Current Blender keeps vertex group names on the mesh: a piece built on a new mesh loses them, and the exporter writes it without a skin. Build on a copy of the body's mesh.

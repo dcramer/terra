@@ -99,6 +99,14 @@ def unwrapped(angles):
         out.append(a)
     if not out:
         return out
+    # A clip that ends more than half a turn from where it began winds: a loop whose limb
+    # circles, as an arm does in a crawl stroke, gains a whole turn of roll on the rest pose's
+    # axis each time round (Codman's paradox). No twist bone can follow that without turning
+    # back half a turn once a loop; taken frame by frame, as engines take a twist bone's roll
+    # (Unreal's twist corrective, Unity's arm twist), that turn falls where the roll passes
+    # half a turn either way, and no frame wrings the skin more than a quarter turn a step.
+    if abs(out[-1] - out[0]) > math.pi:
+        return list(angles)
     shift = min((2.0 * math.pi * k for k in range(-3, 4)), key=lambda d: max(abs(a + d) for a in out))
     return [a + shift for a in out]
 

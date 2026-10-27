@@ -1,6 +1,6 @@
 {
   "Idle_Loop": {
-    "bad_edge_share": 0.0014,
+    "bad_edge_share": 0.0006,
     "sink_m": 0.0
   },
   "Idle_Talking_Loop": {
@@ -8,16 +8,24 @@
     "sink_m": 0.0
   },
   "Walk_Loop": {
-    "bad_edge_share": 0.0024,
-    "sink_m": 0.013
+    "bad_edge_share": 0.0013,
+    "sink_m": 0.001
   },
   "Jog_Fwd_Loop": {
-    "bad_edge_share": 0.0078,
-    "sink_m": 0.006
+    "bad_edge_share": 0.0085,
+    "sink_m": 0.0
   },
   "Sprint_Loop": {
-    "bad_edge_share": 0.007,
-    "sink_m": 0.018
+    "bad_edge_share": 0.0076,
+    "sink_m": 0.0
+  },
+  "Jog_Start": {
+    "bad_edge_share": 0.0091,
+    "sink_m": 0.0
+  },
+  "Jog_Stop": {
+    "bad_edge_share": 0.0065,
+    "sink_m": 0.014
   },
   "Crouch_Idle_Loop": {
     "bad_edge_share": 0.0086,
@@ -99,6 +107,10 @@
     "bad_edge_share": 0.0111,
     "sink_m": 0.005
   },
+  "Talk_Loop": {
+    "bad_edge_share": 0.0055,
+    "sink_m": 0.0
+  },
   "Hammer_Loop": {
     "bad_edge_share": 0.0043,
     "sink_m": 0.008
@@ -107,8 +119,16 @@
     "bad_edge_share": 0.0066,
     "sink_m": 0.0
   },
-  "Talk_Loop": {
-    "bad_edge_share": 0.0055,
+  "Swim_Tread_Loop": {
+    "bad_edge_share": 0.0106,
+    "sink_m": 0.0
+  },
+  "Swim_Fwd_Loop": {
+    "bad_edge_share": 0.0079,
+    "sink_m": 0.008
+  },
+  "Swim_Dive_Loop": {
+    "bad_edge_share": 0.0043,
     "sink_m": 0.0
   }
 }
