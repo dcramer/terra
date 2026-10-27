@@ -661,16 +661,18 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         // head it is a torch: on no logs, its flames round its head's middle (on the campfire's
         // logs at the torch's scale they licked along logs a metre and a half across, a glowing
         // shell round its head), lit by a torch's pitch light and rig as the dungeon's are
-        // (`TORCH_LIGHT`, torch rounds t3 and t4).
-        let (body, light, logs) = match asked.burns_up {
+        // (`TORCH_LIGHT`, `Rig::Torch`, torch rounds t3 and t4).
+        let (body, light, rig, logs) = match asked.burns_up {
             None => (
                 terra_world::fire::Body::Baked,
                 terra_world::fire::HEARTH_LIGHT,
+                terra_world::fire::Rig::Hearth,
                 terra_world::fire::Logs::CAMPFIRE,
             ),
             Some(_) => (
                 terra_world::fire::Body::Marched,
                 terra_world::fire::TORCH_LIGHT,
+                terra_world::fire::Rig::Torch,
                 terra_world::fire::Logs::NONE,
             ),
         };
@@ -681,6 +683,7 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             logs,
             body,
             light,
+            rig,
         };
         match asked.burns_up {
             Some(up) => {

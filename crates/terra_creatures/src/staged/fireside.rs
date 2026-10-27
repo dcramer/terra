@@ -214,6 +214,7 @@ mod tests {
             logs: terra_world::fire::Logs::CAMPFIRE,
             body: terra_world::fire::Body::Marched,
             light: terra_world::fire::HEARTH_LIGHT,
+            rig: terra_world::fire::Rig::Hearth,
         },
         Kindled {
             tall: 0.6,
@@ -222,6 +223,7 @@ mod tests {
             logs: terra_world::fire::Logs::CAMPFIRE,
             body: terra_world::fire::Body::Marched,
             light: terra_world::fire::HEARTH_LIGHT,
+            rig: terra_world::fire::Rig::Hearth,
         },
         Kindled {
             tall: 3.0,
@@ -230,6 +232,7 @@ mod tests {
             logs: terra_world::fire::Logs::CAMPFIRE,
             body: terra_world::fire::Body::Marched,
             light: terra_world::fire::HEARTH_LIGHT,
+            rig: terra_world::fire::Rig::Hearth,
         },
     ];
 

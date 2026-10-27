@@ -40,6 +40,7 @@ pub const CAMPFIRE: terra_world::fire::Kindled = terra_world::fire::Kindled {
     logs: terra_world::fire::Logs::CAMPFIRE.below(CAMPFIRE_FOOT_M),
     body: terra_world::fire::Body::Baked,
     light: terra_world::fire::HEARTH_LIGHT,
+    rig: terra_world::fire::Rig::Hearth,
 };
 /// Its flames stand from so high over its foot, the embers among the stones.
 const CAMPFIRE_FOOT_M: f32 = 0.08;

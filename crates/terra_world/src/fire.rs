@@ -87,10 +87,12 @@ pub struct Blazes {
     pub jets: Vec<Jet>,
     kept: Vec<Blaze>,
     /// In `kept`'s order: their logs and bodies as the shader reads them (`Logs::packed`,
-    /// `Body::told`), their lights' colours (`Kindled::light`) and where they hang (`Hung`).
+    /// `Body::told`), their lights' colours and rigs (`Kindled::light`, `Kindled::rig`) and
+    /// where they hang (`Hung`).
     hearths: Vec<[Vec4; 2]>,
     bodies: Vec<f32>,
     lights: Vec<Color>,
+    rigs: Vec<Rig>,
     hangs: Vec<Vec3>,
 }
 
@@ -117,6 +119,8 @@ pub struct Kindled {
     /// The colour of its light, its fuel's: wood's orange (`HEARTH_LIGHT`), a pitch torch's
     /// yellower white (`TORCH_LIGHT`).
     pub light: Color,
+    /// The lights it is lit by, its kind's: a hearth's, or a torch's short pool (`Rig`).
+    pub rig: Rig,
 }
 
 /// How many blazes are drawn at most, by preset.
@@ -993,7 +997,7 @@ pub use matte::with_matte;
 pub use volume::BreathTier;
 
 pub use glow::{Glow, GlowMaterial};
-pub use light::{FireGlows, GLOWS, HEARTH_LIGHT, TORCH_LIGHT};
+pub use light::{FireGlows, GLOWS, HEARTH_LIGHT, Rig, TORCH_LIGHT};
 
 mod exposure;
 #[cfg(test)]

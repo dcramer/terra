@@ -36,6 +36,7 @@ const TORCH_FIRE: Kindled = Kindled {
     logs: Logs::NONE,
     body: terra_world::fire::Body::Cards,
     light: terra_world::fire::TORCH_LIGHT,
+    rig: terra_world::fire::Rig::Torch,
 };
 /// A brazier's fire burns in its bowl, so far under the light's point.
 const BRAZIER_DROP_M: f32 = 0.5;
@@ -49,6 +50,7 @@ const BOWL_FIRE: Kindled = Kindled {
     logs: terra_world::fire::Logs::CAMPFIRE.below(0.08),
     body: terra_world::fire::Body::Marched,
     light: terra_world::fire::HEARTH_LIGHT,
+    rig: terra_world::fire::Rig::Hearth,
 };
 /// Where a fire bowl's light hangs off its flames (`fire::Hung`): out past its stand's front,
 /// a stand half a metre square, and up, its key 0.45 m over the stand's top, so the stand's

@@ -1,4 +1,4 @@
-//! A pitch torch's light rig (its colour, `TORCH_LIGHT`): one shadowed key hung just over its
+//! A pitch torch's light rig (`Rig::Torch`): one shadowed key hung just over its
 //! head, short in reach, so it lights a pool round the torch's foot that falls off a few
 //! metres out, and a dim unshadowed light at its flames' tips for the wall or the faces over
 //! it. Shipped games light a torch with one point light at its head, short in range (Skyrim's

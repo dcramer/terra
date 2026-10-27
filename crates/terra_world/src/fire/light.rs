@@ -10,7 +10,7 @@
 //! (`TONES`), as fast and as deep as a fire that size puffs: a pool fire of width D puffs at
 //! about 1.5 / sqrt(D) Hz (research/2026-10-16-real-time-fire-rendering.md), a torch by a
 //! third either way, a campfire by about 15%, a house fire slower and shallower. A torch
-//! (`TORCH_LIGHT`) is lit by its own rig (`torch`).
+//! is lit by its own rig (`Rig::Torch`, `torch`).
 
 use super::{Blaze, Blazes};
 use crate::planet::MainCamera;
@@ -63,8 +63,20 @@ const BLAZE_LIGHT: Color = Color::srgb(1.0, 0.62, 0.3);
 pub const HEARTH_LIGHT: Color = Color::srgb(1.0, 0.50, 0.08);
 /// A pitch torch's light, about 2,700 K (Charity's table: #ffa957), as games white-balance
 /// torchlit stone warm off-white: at the campfire's a dungeon's walls read one rust cast
-/// (dungeon round 11). It is lit by a torch's rig (`torch`), not a hearth's.
+/// (dungeon round 11). A torch burns it, lit by its rig (`Rig::Torch`).
 pub const TORCH_LIGHT: Color = Color::srgb(1.0, 0.66, 0.32);
+
+/// The lights a kept fire is lit by, its kind's (`Kindled::rig`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Rig {
+    /// A campfire's or a hearth's: a shadowed key in the body of its flames and an unshadowed
+    /// light at their top for the faces sat by it (`HEARTH_TOP`).
+    #[default]
+    Hearth,
+    /// A torch's: a short shadowed key just over its head, lighting a pool round its foot, and
+    /// a dim light at its tips (`torch`).
+    Torch,
+}
 /// A kept fire's light, lumens for a metre of flame at full heat, and how far it reaches.
 /// A campfire's 1.3 m at 0.9 heat gives 117,000 lm, about 9,000 cd: a real campfire's order
 /// (some 0.5 m² of flame at 10^4 cd/m²), so the flame stays the brightest thing by it, its
@@ -443,13 +455,14 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
     // 0.9 m teepee's ends the logs were the brightest thing by it (lake film r6). An unshadowed
     // light at its flames' top lights the faces sat by it (`HEARTH_TOP`); a torch has its own.
     let colours = blazes.lights.iter().chain(std::iter::repeat(&HEARTH_LIGHT));
+    let rigs = blazes.rigs.iter().chain(std::iter::repeat(&Rig::Hearth));
     lit.extend(
         blazes
             .kept
             .iter()
-            .zip(colours)
+            .zip(colours.zip(rigs))
             .enumerate()
-            .flat_map(|(fire, (blaze, &colour))| {
+            .flat_map(|(fire, (blaze, (&colour, &rig)))| {
                 let flicker = Flicker::of(width(blaze));
                 let glow = glow(blaze, t);
                 let reach = (blaze.tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
@@ -480,7 +493,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     casts: true,
                     still: still(rest),
                 };
-                if colour == TORCH_LIGHT {
+                if rig == Rig::Torch {
                     let hang = |share| blazes.hangs(fire, blaze, share);
                     return torch::lights(&main, blaze, shines, swayed, hang, still);
                 }

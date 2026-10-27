@@ -428,7 +428,7 @@ fn a_staked_torchs_night_pool_falls_off_from_its_foot_more_than_a_hearths_rig_wo
     // 2.5 m out, a pool round the foot. Lit by a hearth's rig, its top light high and wide, the
     // yard took a far evener tint (torch round t3).
     let ground = Vec3::new(0.0, 2000.0, 0.0);
-    let pool = |colour: Color| {
+    let pool = |colour: Color, rig: Rig| {
         let blazes = Blazes {
             kept: vec![Blaze {
                 at: ground + Vec3::Y * 1.2,
@@ -438,6 +438,7 @@ fn a_staked_torchs_night_pool_falls_off_from_its_foot_more_than_a_hearths_rig_wo
                 wide: 0.22,
             }],
             lights: vec![colour],
+            rigs: vec![rig],
             ..default()
         };
         let lights = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
@@ -449,7 +450,10 @@ fn a_staked_torchs_night_pool_falls_off_from_its_foot_more_than_a_hearths_rig_wo
         };
         (on(0.5) / on(2.5), on(0.5))
     };
-    let ((torch, at_foot), (hearth, hearth_foot)) = (pool(TORCH_LIGHT), pool(HEARTH_LIGHT));
+    let ((torch, at_foot), (hearth, hearth_foot)) = (
+        pool(TORCH_LIGHT, Rig::Torch),
+        pool(HEARTH_LIGHT, Rig::Hearth),
+    );
     println!("torch pool falls {torch:.1}x from 0.5 to 2.5 m, a hearth's rig {hearth:.1}x");
     assert!(torch > 6.0, "a torch's pool falls only {torch:.1}x");
     assert!(
@@ -825,6 +829,7 @@ fn a_torch_lights_yellower_than_a_campfire_and_each_fire_by_its_own_colour() {
     let blazes = Blazes {
         kept: vec![fire(0.0), fire(8.0)],
         lights: vec![HEARTH_LIGHT, TORCH_LIGHT],
+        rigs: vec![Rig::Hearth, Rig::Torch],
         ..default()
     };
     let lit = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
@@ -862,6 +867,7 @@ fn torches(n: usize) -> Blazes {
     Blazes {
         kept: (0..n).map(fire).collect(),
         lights: vec![TORCH_LIGHT; n],
+        rigs: vec![Rig::Torch; n],
         ..default()
     }
 }

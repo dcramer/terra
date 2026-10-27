@@ -6,7 +6,7 @@
 //! flipbook campfire lays a card every log's width or so along each log's top (RealTimeVFX's
 //! campfire breakdowns; research/2026-10-23-campfire-one-body.md).
 
-use super::{Blaze, Blazes, HEARTHS, Kindled};
+use super::{Blaze, Blazes, HEARTHS, Kindled, Rig};
 use crate::planet::MainCamera;
 use bevy::prelude::*;
 
@@ -167,6 +167,7 @@ pub(super) fn keep(
         .collect();
     let bodies: Vec<f32> = fires.iter().map(|(_, fire, ..)| fire.body.told()).collect();
     let lights: Vec<Color> = fires.iter().map(|(_, fire, ..)| fire.light).collect();
+    let rigs: Vec<Rig> = fires.iter().map(|(_, fire, ..)| fire.rig).collect();
     let hangs: Vec<Vec3> = fires
         .iter()
         .map(|f| f.3.map_or(Vec3::ZERO, |h| h.0))
@@ -188,10 +189,12 @@ pub(super) fn keep(
         || hearths != blazes.hearths
         || bodies != blazes.bodies
         || lights != blazes.lights
+        || rigs != blazes.rigs
         || hangs != blazes.hangs
     {
         blazes.kept = kept;
         blazes.lights = lights;
+        blazes.rigs = rigs;
         blazes.hearths = hearths;
         blazes.bodies = bodies;
         blazes.hangs = hangs;
@@ -293,6 +296,7 @@ mod tests {
             logs: Logs::NONE,
             body: Body::Cards,
             light: Color::WHITE,
+            rig: Rig::Hearth,
         };
         let hung = Vec3::new(0.4, 0.17, 0.0);
         let (near, far) = (Vec3::new(0.0, 1.0, -2.0), Vec3::new(0.0, 1.0, -9.0));

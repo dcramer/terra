@@ -319,6 +319,7 @@ mod tests {
         let blazes = Blazes {
             kept: (0..3).map(fire).collect(),
             lights: vec![super::super::TORCH_LIGHT; 3],
+            rigs: vec![super::super::Rig::Torch; 3],
             ..default()
         };
         let eye = Some(Vec3::new(-1.0, 2001.6, 0.0));
