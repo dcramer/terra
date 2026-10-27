@@ -226,14 +226,28 @@ pub(super) fn sides(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut
                             && walls.base.in_wall(other)
                     })
             };
+            // Where the wall ends in the cube with an end board over its ends, the board up
+            // the side joint stops against the end board's inside face, as a filler butts
+            // against the trim: run on to the cube's face, it crossed the end board, their
+            // tops and feet in one plane. A stack is split where that changes.
+            let stops = |at: glam::IVec3| [-1, 1].map(|end| ended(walls, at, axis, end));
+            let joins =
+                |at: glam::IVec3, next: glam::IVec3| meets(next) && stops(next) == stops(at);
             for &at in ours {
-                if !meets(at) || meets(at - glam::IVec3::Y) {
+                if !meets(at) || joins(at, at - glam::IVec3::Y) {
                     continue;
                 }
                 let mut top = at;
-                while meets(top + glam::IVec3::Y) {
+                while joins(top, top + glam::IVec3::Y) {
                     top += glam::IVec3::Y;
                 }
+                let [before, after] = stops(at).map(|s| {
+                    if s {
+                        kit.frame * END_BOARD_WIDE
+                    } else {
+                        SIDE_BOARD_IN_M
+                    }
+                });
                 let (row, along) = axis.row_of(at);
                 let middle = axis.point(row, 0.0, 0.0).dot(axis.across());
                 let sign = outward as f32;
@@ -248,12 +262,12 @@ pub(super) fn sides(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut
                 };
                 let low = point(
                     a.min(b),
-                    along as f32 * CELL_M + SIDE_BOARD_IN_M,
+                    along as f32 * CELL_M + before,
                     at.y as f32 * CELL_M + END_BOARD_IN_M,
                 );
                 let high = point(
                     a.max(b),
-                    (along + 1) as f32 * CELL_M - SIDE_BOARD_IN_M,
+                    (along + 1) as f32 * CELL_M - after,
                     (top.y + 1) as f32 * CELL_M - END_BOARD_IN_M,
                 );
                 layout.pieces.push(Piece::Board {
@@ -273,6 +287,25 @@ const SIDE_BOARD_IN_M: f32 = 0.01;
 
 /// How far in from its stack's foot and top an end board stops.
 const END_BOARD_IN_M: f32 = 0.005;
+/// How wide an end board is, in the kit's frame boards.
+const END_BOARD_WIDE: f32 = 1.2;
+
+/// Whether a cube of the kit's wall running along `axis` ends at its face toward `outward`
+/// against a wall the kits say it ends at with a board (D232).
+fn carried(walls: &Walls, at: glam::IVec3, axis: Axis, outward: i32) -> bool {
+    walls.ours(at) == Some(Fill::Solid)
+        && walls.runs(at, axis)
+        && walls.board_against(at + axis.step() * outward)
+}
+
+/// Whether an end board stands up a cube's end toward `outward`: where it ends with a board,
+/// but not in a roof's cube the wall is carried up into, where the board is cut to the
+/// roof's deck (docs/building-voxels.md, gap 1): a board standing to the cube's top came up
+/// through the roof's covering beside a chimney.
+fn ended(walls: &Walls, at: glam::IVec3, axis: Axis, outward: i32) -> bool {
+    carried(walls, at, axis, outward) && !walls.base.cube(at).is_some_and(|c| c.kind.is_roof())
+}
+
 /// How tall a head board under a roof's cube stands at most, where the roof is high enough.
 const HEAD_UNDER_ROOF_M: f32 = 0.12;
 /// How far under a roof's deck an end board carried up into the roof is cut.
@@ -283,17 +316,8 @@ const END_BOARD_UNDER_M: f32 = 0.004;
 /// foot of each stack of such cubes to its top, where the kits say it ends there with a
 /// board (D232: the other runs through it, or neither does).
 pub(super) fn ends(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut Layout) {
-    let carried = |at: glam::IVec3, axis: Axis, outward: i32| {
-        walls.ours(at) == Some(Fill::Solid)
-            && walls.runs(at, axis)
-            && walls.board_against(at + axis.step() * outward)
-    };
-    // Not up into a roof's cube the wall is carried up into, where the board is cut to the
-    // roof's deck (docs/building-voxels.md, gap 1): a board standing to the cube's top came
-    // up through the roof's covering beside a chimney.
-    let in_roof = |at: glam::IVec3| walls.base.cube(at).is_some_and(|c| c.kind.is_roof());
-    let ends_at =
-        |at: glam::IVec3, axis: Axis, outward: i32| carried(at, axis, outward) && !in_roof(at);
+    let carried = |at: glam::IVec3, axis: Axis, outward: i32| carried(walls, at, axis, outward);
+    let ends_at = |at: glam::IVec3, axis: Axis, outward: i32| ended(walls, at, axis, outward);
     for axis in [Axis::X, Axis::Z] {
         for outward in [-1, 1] {
             for &at in ours {
@@ -307,7 +331,7 @@ pub(super) fn ends(walls: &Walls, kit: &Kit, ours: &[glam::IVec3], layout: &mut 
                 }
                 let (row, along) = axis.row_of(at);
                 let face = (along + i32::from(outward > 0)) as f32 * CELL_M;
-                let (a, b) = (face, face - outward as f32 * kit.frame * 1.2);
+                let (a, b) = (face, face - outward as f32 * kit.frame * END_BOARD_WIDE);
                 let out = axis.across() * (kit.radius() + 0.03);
                 // Its foot and top a hair in from its stack's, out of the planes of a sill's
                 // underside and a split log's flat top there. Over an opening it stands on

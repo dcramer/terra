@@ -220,6 +220,60 @@ fn fuzz_seed_12_an_end_board_over_a_doorway_stands_on_the_doors_head() {
 }
 
 #[test]
+fn fuzz_seeds_34_54_80_109_131_180_a_side_board_stops_against_the_end_board() {
+    // Found by `cargo xtask fuzz` at seeds 34, 54, 80, 109, 131 and 180: a hewn room
+    // overlapping a log room, so a hewn wall runs into the log room's inner corner and ends
+    // there against the log wall across it, with the other log wall along its side. The
+    // board filling the side joint ran on to its cube's face, through the end board over the
+    // wall's ends, their tops and feet in one plane. The rooms' floors and the log ends
+    // where the walls cross are gap 14's, so only the boards are held here, and nothing seen
+    // through where the side board now stops short.
+    let materials = baseline();
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .unwrap()
+    };
+    let base = build(
+        &materials.kits,
+        &[
+            Room {
+                min: [3, 3],
+                max: [8, 6],
+                storey: 0,
+                kind: kind("logs"),
+            },
+            Room {
+                min: [1, 4],
+                max: [8, 10],
+                storey: 0,
+                kind: kind("hewn"),
+            },
+        ],
+    );
+    let report = terra_build_mesh::inspect::inspect(
+        &base,
+        &materials.kits,
+        &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+    );
+    let fought: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| match f.fault {
+            terra_build_mesh::inspect::Fault::Coplanar => {
+                f.what.contains("Board: ") && f.what.contains("its own triangles")
+            }
+            terra_build_mesh::inspect::Fault::SeeThrough => true,
+            _ => false,
+        })
+        .collect();
+    assert!(fought.is_empty(), "{fought:#?}");
+}
+
+#[test]
 fn a_failing_base_shrinks_to_the_element_that_fails_it() {
     // Fails while a box of hewn timber is in it: the room and the wall go, the box
     // stays, made one cube.
