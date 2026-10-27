@@ -201,6 +201,10 @@ fn lay_out(
             prop.facing
         );
     }
+    // Where each fire and lamp stands, so a `--vantage` can frame a camp's fire or a goal's bowls.
+    for light in &stamp.lights {
+        info!("Dungeon light {:?} at {}", light.kind, point(light.at));
+    }
     // Where each door stands, so a film's dolly can stop short of it.
     for door in stamp
         .objects
