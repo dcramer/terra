@@ -53,14 +53,14 @@ const ASLEEP = {
   upperarm_r: [-8, 0, -150],
   lowerarm_l: [0, 0, 25],
   lowerarm_r: [0, 0, -25],
-  thigh_l: [0, 0, -4],
-  thigh_r: [0, 0, 4],
+  thigh_l: [0, 0, -12],
+  thigh_r: [0, 0, 12],
   spine_01: [2, 0, 3],
 };
 /// Awake and roaring: the arms brought down and out from the crown, the crown thrown back.
 const ROARS = { upperarm_l: [-20, 0, 35], upperarm_r: [-20, 0, -35], spine_03: [-6, 0, 0], neck_01: [-6, 0, 0] };
 /// The lunge: the whole trunk tipped forward from the hips, the crown lagging behind it.
-const LUNGES = { spine_01: [14, 0, 0], spine_02: [10, 0, 0], spine_03: [6, 0, 0], neck_01: [-5, 0, 0], Head: [-6, 0, 0] };
+const LUNGES = { spine_01: [22, 0, 0], spine_02: [12, 0, 0], spine_03: [8, 0, 0], neck_01: [-6, 0, 0], Head: [-8, 0, 0] };
 /// Coming on: still leant into its steps.
 const COMES = { spine_01: [7, 0, 0], spine_02: [4, 0, 0] };
 
@@ -101,7 +101,7 @@ function script(s: Script) {
 
   // The lunge: the trunk tips at the walker, who flinches back a few steps.
   s.frame = f(BEATS.lunge);
-  s.call("staged.play", { name: "cetri", clip: "Troll_Smash", speed: 0.7, once: true, blend_ms: 500 });
+  s.call("staged.play", { name: "cetri", clip: "Troll_Smash", speed: 0.55, once: true, blend_ms: 500 });
   s.call("staged.bend", { name: "cetri", bend: LUNGES, blend_ms: 700 });
   const back = toward(CETRI, WALK[1], Math.hypot(WALK[1][0] - CETRI[0], WALK[1][1] - CETRI[1]) + 3);
   s.glide(on(back, EYE - 0.15), look(4.2), 70);
@@ -110,8 +110,8 @@ function script(s: Script) {
   s.frame = f(BEATS.comes);
   const to = toward(CETRI, back, 4);
   s.call("staged.bend", { name: "cetri", bend: COMES, blend_ms: 900 });
-  s.call("staged.play", { name: "cetri", clip: "Troll_Walk", speed: 0.75, blend_ms: 900 });
-  s.call("staged.move", { name: "cetri", to: [to[0], 0, to[1]], speed: 0.6, base: true });
+  s.call("staged.play", { name: "cetri", clip: "Troll_Walk", speed: 0.6, blend_ms: 900 });
+  s.call("staged.move", { name: "cetri", to: [to[0], 0, to[1]], speed: 0.48, base: true });
   const away = toward(CETRI, back, Math.hypot(back[0] - CETRI[0], back[1] - CETRI[1]) + 2.5);
   s.glide(on(away, EYE - 0.1), on(to, 5), Math.round((BEATS.end - BEATS.comes) * 60));
   s.frame = f(BEATS.end);
