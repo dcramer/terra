@@ -9,7 +9,7 @@ use crate::planet::MainCamera;
 use crate::start::Start;
 use bevy::{
     asset::RenderAssetUsages,
-    image::ImageSampler,
+    image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
@@ -101,7 +101,13 @@ fn map_image() -> Image {
         TextureFormat::Rgba8Unorm,
         RenderAssetUsages::default(),
     );
-    image.sampler = ImageSampler::linear();
+    // Mirrored past its edges: the sky reaches the air's horizon, some 140 km off, and the map
+    // 32 km, so clamped its edge texels would run on to the horizon in stripes.
+    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        address_mode_u: ImageAddressMode::MirrorRepeat,
+        address_mode_v: ImageAddressMode::MirrorRepeat,
+        ..ImageSamplerDescriptor::linear()
+    });
     image
 }
 

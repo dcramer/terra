@@ -52,7 +52,8 @@ struct Params {
 @group(0) @binding(5) var map_next: texture_2d<f32>;
 @group(0) @binding(6) var air: texture_cube<f32>;
 @group(0) @binding(7) var repeating: sampler;
-@group(0) @binding(8) var clamped: sampler;
+// The weather map's, mirrored past its edges (the air's cube ignores it).
+@group(0) @binding(8) var mirrored: sampler;
 @group(0) @binding(9) var picture: texture_storage_2d<rgba16float, write>;
 
 // The 3D noise's tiles, metres (clouds::SHAPE_TILE_M, DETAIL_TILE_M), and its side in texels.
@@ -96,7 +97,7 @@ fn remap(v: f32, lo: f32, hi: f32) -> f32 {
 // left-handed, as Bevy's environment maps are).
 fn air_seen(direction: vec3<f32>) -> vec3<f32> {
     let d = vec3<f32>(direction.x, direction.y, -direction.z);
-    return textureSampleLevel(air, clamped, d, 0.0).rgb * view.exposure;
+    return textureSampleLevel(air, mirrored, d, 0.0).rgb * view.exposure;
 }
 
 // The height over the air's sea of a point `s` along a direction from one `h` over it, the
@@ -140,8 +141,8 @@ fn weather_at(metres: vec2<f32>) -> vec4<f32> {
         return vec4<f32>(params.fallback.x, params.fallback.y, params.fallback.z, 0.0);
     }
     let uv = metres * params.map.z + 0.5;
-    let now = textureSampleLevel(map_now, clamped, uv, 0.0);
-    let next = textureSampleLevel(map_next, clamped, uv, 0.0);
+    let now = textureSampleLevel(map_now, mirrored, uv, 0.0);
+    let next = textureSampleLevel(map_next, mirrored, uv, 0.0);
     return mix(now, next, params.map.y);
 }
 
@@ -308,8 +309,12 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     let uv = (vec2<f32>(id.xy) + 0.5) / vec2<f32>(size);
     let ndc = vec2<f32>(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
     let eye = view.world_position;
-    let near = view.world_from_clip * vec4<f32>(ndc, 1.0, 1.0);
-    let direction = normalize(near.xyz / near.w - eye);
+    // The ray's way from the view's own space, turned into the world's: a point on the near plane
+    // in the world less the eye is the difference of two numbers some 30 km from the planet's
+    // middle, which f32 holds to 2 mm, a 2% error over the 10 cm to the near plane, and the
+    // picture fell into blocks a degree across.
+    let near = view.view_from_clip * vec4<f32>(ndc, 1.0, 1.0);
+    let direction = normalize((view.world_from_view * vec4<f32>(near.xyz / near.w, 0.0)).xyz);
 
     // The scene's nearest depth under this half-resolution pixel (reversed: 0 is infinitely far).
     let full = textureDimensions(depth);
@@ -321,8 +326,8 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     var scene = 1.0e9;
     if nearest > 0.0 {
-        let hit = view.world_from_clip * vec4<f32>(ndc, nearest, 1.0);
-        scene = length(hit.xyz / hit.w - eye);
+        let hit = view.view_from_clip * vec4<f32>(ndc, nearest, 1.0);
+        scene = length(hit.xyz / hit.w);
     }
 
     // The eye over the air's sea, which lies under it at the planet's sea.
@@ -438,18 +443,28 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
 
     // Past the march, the layer on to the air's horizon, flat at its kind's middle height as the
     // 2D layer is drawn, from the same map and shapes, so the field never ends in a ring.
+    // A ray still inside the layer where the march ends sees it edge-on for tens of kilometres:
+    // as much of it as the weather there covers, drawn whole rather than as the columns at 32 km,
+    // which stood as walls round the eye.
     if reach > MARCH_M && transmittance >= 0.01 {
-        let s = MARCH_M;
-        let c = column(eye_map + way * s);
+        let c = column(eye_map + way * MARCH_M);
         let h = c.base + c.thickness * 0.35;
         let crossing = shell_hits(mu, h);
-        var at = select(crossing.y, crossing.x, eye_height > h && crossing.x > 0.0);
-        if crossing.x > crossing.y || at < MARCH_M {
-            at = MARCH_M;
+        let at = select(crossing.y, crossing.x, eye_height > h && crossing.x > 0.0);
+        let lift = lift_in(c, height_along(eye_height, mu, MARCH_M));
+        var opacity = 0.0;
+        var far = c;
+        var far_at = MARCH_M;
+        if lift > 0.0 && lift < 1.0 {
+            let w = weather_at(eye_map + way * MARCH_M);
+            opacity = smoothstep(0.0, 0.2, max(params.map.w, w.r)) * 0.9;
+        } else if crossing.x <= crossing.y && at >= MARCH_M && at < reach {
+            far = column(eye_map + way * at);
+            far_at = at;
+            opacity = smoothstep(0.0, 0.35, far.coverage) * 0.9;
         }
-        if at < reach {
-            let far = column(eye_map + way * at);
-            let opacity = smoothstep(0.0, 0.35, far.coverage) * 0.9;
+        if opacity > 0.0 {
+            let at = far_at;
             // Lit as the march lights a cloud's middle: a little way in from the sunlit side.
             let lit = scattered(lights, far, h, 0.25, 8.0);
             let clear = exp(-at / HAZE_M);

@@ -54,7 +54,9 @@ struct Pipeline {
     layout: BindGroupLayoutDescriptor,
     id: CachedComputePipelineId,
     repeating: Sampler,
-    clamped: Sampler,
+    // The weather map mirrored past its edges, so the sky past its 32 km never repeats its edge
+    // texels in stripes to the horizon; the air's cube ignores it.
+    mirrored: Sampler,
 }
 
 fn init_pipeline(
@@ -102,7 +104,7 @@ fn init_pipeline(
         layout,
         id,
         repeating: device.create_sampler(&linear(AddressMode::Repeat)),
-        clamped: device.create_sampler(&linear(AddressMode::ClampToEdge)),
+        mirrored: device.create_sampler(&linear(AddressMode::MirrorRepeat)),
     });
 }
 
@@ -165,7 +167,7 @@ fn prepare(
                 &map(1).texture_view,
                 &air.texture_view,
                 &pipeline.repeating,
-                &pipeline.clamped,
+                &pipeline.mirrored,
                 &target.texture_view,
             )),
         );
