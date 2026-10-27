@@ -609,6 +609,7 @@ Checks, developer tools, languages and the repository.
 | [D526](decisions/D526.md) | Paid solutions | Tech | Developers | Decided | A paid tool, library, asset, service or engine source is… |
 | [D538](decisions/D538.md) | A round agent carries the routine | Tech | Agent | Decided | A coordinator starts every build round with the `round`… |
 | [D547](decisions/D547.md) | Tunables, named numbers changed while a run goes | Tech | Agent | Decided | A value worth trying several of is a **tunable**… |
+| [D549](decisions/D549.md) | One GPU-free test compiles every shader as the game's pipelines specialize it | Tech | Agent | Decided | Every file in `assets/shaders` is compiled and validated… |
 
 ## Superseded and rejected
 

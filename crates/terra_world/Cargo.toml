@@ -37,10 +37,10 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 # wgpu's stub device, to build materials' layouts without a card (samplers_tests.rs); the
 # version Bevy draws with, its `noop` feature as Bevy's own tests use it.
 wgpu = { version = "30", default-features = false, features = ["noop"] }
-# The WESL compiler and shader validator Bevy builds its shaders with, at Bevy's versions: the
-# sky's shader is compiled and validated in a test, without a GPU (sky/compiles.rs).
+# The shader validator wgpu runs before a driver sees a shader, at Bevy's version: every
+# shader is compiled by Bevy's shader cache and validated in a test, without a GPU
+# (shaders_tests.rs, D549).
 naga = { version = "30", features = ["wgsl-in"] }
-wesl = { version = "0.6", features = ["naga-ext"] }
 
 [features]
 # Helpers for the tests of the crates above, such as measuring how loud a sound is.

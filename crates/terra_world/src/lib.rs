@@ -70,6 +70,8 @@ mod samplers_tests;
 pub mod scatter;
 pub mod scene;
 pub mod shader_patch;
+#[cfg(test)]
+mod shaders_tests;
 pub mod shell;
 pub mod shore;
 pub mod sky;
