@@ -745,6 +745,27 @@ BURN_LUMP = 0.1
 SCORCH_CRACK = 0.7
 # Round g78: the char's crust and grey patches, of their full, over burn (from, to, at from, at to).
 ASH_GATHER = (0.3, 0.7, 0.2, 1.0)
+# Round g79: the cold butts' bark, weathered oak's grey-brown (linear, sRGB about 72, 69, 65 on its
+# plates, against the scan's 0.035 at 0.8) with the scan's own detail in it, darker by this share
+# in its furrows. The scan's diffuse alone, lit by the fire, read as plain dark wood to every judge
+# of g78. Lighter plates (0.077-0.087) read more as bark but took the dark pixels the fire sheet's
+# soot/flame counts (night 0.110-0.116 of main's 0.122); these keep 0.118.
+BARK = (0.065, 0.06, 0.053)
+BARK_FURROW = 0.85
+# How much darker the scorched bark is, of the scan's.
+SCORCH_DARK = 0.65
+
+
+def bark_nodes(t):
+    """The cold butts' bark: oak's long plates (1) between their furrows (0) along the grain,
+    about 2 cm across and 8 cm along, and the fibres along their tops (0-1)."""
+    g0 = t.node("ShaderNodeAttribute", _attribute_name="grain").outputs["Vector"]
+    warp = t.vec("SUBTRACT", t.node("ShaderNodeTexNoise", Vector=g0, Scale=14.0).outputs["Color"], (0.5, 0.5, 0.5))
+    g = t.vec("ADD", g0, t.vec("SCALE", warp, scale=0.02))
+    plates = t.node("ShaderNodeTexVoronoi", _voronoi_dimensions="3D", _feature="DISTANCE_TO_EDGE", Vector=t.vec("MULTIPLY", g, (0.25, 1.0, 1.0)), Scale=50.0).outputs["Distance"]
+    ridge = t.ramp(plates, 0.0, 0.2)
+    fibre = t.noise(t.vec("MULTIPLY", g, (0.12, 1.0, 1.0)), 220.0, 2.0)
+    return ridge, fibre
 
 
 def log_colour(t, maps_, cap):
@@ -755,9 +776,19 @@ def log_colour(t, maps_, cap):
     if cap:
         col = charred
     else:
-        bark = t.vec("SCALE", t.image(maps_["diff"]).outputs["Color"], scale=t.math("MULTIPLY", t.math("SUBTRACT", 1.0, t.math("MULTIPLY", scorch, 0.65)), 0.8))
+        bark = t.vec("SCALE", t.image(maps_["diff"]).outputs["Color"], scale=t.math("MULTIPLY", t.math("SUBTRACT", 1.0, t.math("MULTIPLY", scorch, SCORCH_DARK)), 0.8))
         # Round g78: the scorched bark cracking where it begins to char, its cracks dark.
         bark = t.vec("SCALE", bark, scale=t.math("SUBTRACT", 1.0, t.math("MULTIPLY", t.math("MULTIPLY", crack, scorch), SCORCH_CRACK)))
+        # Round g79: and the unscorched bark graded to weathered grey-brown, the scan's light and
+        # dark kept, its furrows dark between the plates, fibrous along them.
+        own = t.image(maps_["diff"]).outputs["Color"]
+        lum = t.node("ShaderNodeRGBToBW", Color=own).outputs["Val"]
+        ridge, fibre = bark_nodes(t)
+        m_lin = mean_lum(maps_["diff"])
+        print(f"CAMPFIRE bark: the scan's diffuse mean linear {m_lin:.3f} (x0.8 was its tone), now {sum(BARK) / 3:.3f} on its plates")
+        shade_ = t.math("MULTIPLY", t.math("POWER", t.math("DIVIDE", lum, m_lin), 0.6), t.math("ADD", 1.0 - BARK_FURROW, t.math("MULTIPLY", ridge, BARK_FURROW)))
+        tone = t.vec("SCALE", BARK, scale=t.math("MULTIPLY", shade_, t.math("ADD", 0.85, t.math("MULTIPLY", fibre, 0.3))))
+        bark = t.vec("ADD", bark, t.vec("SCALE", t.vec("SUBTRACT", tone, bark), scale=t.math("SUBTRACT", 1.0, scorch)))
         col = t.vec("ADD", bark, t.vec("SCALE", t.vec("SUBTRACT", charred, bark), scale=amount))
     grey = t.vec("ADD", ASH, t.vec("SCALE", tuple(b - a for a, b in zip(ASH, BLOCK_ASH)), scale=pale))
     t.emit(t.vec("ADD", col, t.vec("SCALE", t.vec("SUBTRACT", grey, col), scale=t.math("MULTIPLY", ash, amount))))
@@ -767,7 +798,15 @@ def log_relief(t, cap):
     """The char's blocks raised between its cracks, for the normal map."""
     p, amount, scorch, crack, edge, black, ash, whole, calm, deep, pale, groove = char_nodes(t, cap)
     # Round g78: and the scorched bark's cracks sunk, at half the char's depth.
-    return t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), t.math("MAXIMUM", amount, t.math("MULTIPLY", scorch, 0.5)))
+    h = t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), t.math("MAXIMUM", amount, t.math("MULTIPLY", scorch, 0.5)))
+    if cap:
+        return h
+    # Round g79: and the unscorched bark's plates raised between their furrows, fibrous on top:
+    # where the char had not reached, the bark had no relief but the scan's own, faint at the
+    # camp's eye.
+    ridge, fibre = bark_nodes(t)
+    bark = t.math("ADD", t.math("MULTIPLY", ridge, 0.85), t.math("MULTIPLY", fibre, 0.15))
+    return t.math("MAXIMUM", h, t.math("MULTIPLY", bark, t.math("SUBTRACT", 1.0, scorch)))
 
 
 def log_glow(t, cap):
