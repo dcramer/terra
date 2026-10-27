@@ -397,15 +397,15 @@ impl Square {
             // but along an edge no covering carries on past, square off the roof, so the
             // sheet's edge leans out over the eave as the courses' butts do.
             let h = r.thick + r.relief * 0.5;
-            // Only along a level edge, an eave's: lifted square to the roof along a sloping one,
-            // a verge's, a point slid along the edge, into the covering tucked under a wall
-            // where the verge meets it.
+            // Only along a level edge (a verge's slid a point into covering under a wall) in the
+            // facet's plane (a hip's foot slid off the other slope into covering past its eave).
             let open_edge = |p: Vec3| {
                 (0..4).any(|side| {
                     let (a, b) = (self.corners[side], self.corners[(side + 1) % 4]);
                     self.open[side]
                         && (a.y - b.y).abs() < 1e-4
                         && (p - a).cross(b - a).length() < 1e-4 * (b - a).length().max(1e-3)
+                        && [a, b].iter().all(|&q| (q - polygon[0]).dot(n).abs() < 1e-3)
                 })
             };
             let lifted: Vec<Vec3> = polygon

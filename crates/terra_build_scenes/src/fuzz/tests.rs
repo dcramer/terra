@@ -390,6 +390,59 @@ fn fuzz_seeds_47_61_192_a_strip_under_a_decks_boards_ends_inside_the_outer_board
 }
 
 #[test]
+fn fuzz_seed_24_a_hips_foot_far_off_keeps_to_its_own_slope_by_a_wall_under_the_eave() {
+    // Found by `cargo xtask fuzz` at seed 24, shrunk: a hip roof over a stone room whose
+    // eave runs into the end of a log wall beside it, so the covering carries on past that
+    // eave under the wall. Far off, the hip's foot was slid square off the slope it climbs
+    // because it touched the other slope's open eave, and lapped down into that covering
+    // in its plane.
+    let materials = baseline();
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .unwrap()
+    };
+    let base = build(
+        &materials.kits,
+        &[
+            Wall {
+                from: [1, 2],
+                to: [3, 2],
+                storey: 0,
+                kind: kind("logs"),
+            },
+            Room {
+                min: [4, 4],
+                max: [7, 8],
+                storey: 0,
+                kind: kind("stone"),
+            },
+            Roof {
+                tile: [5, 6],
+                storey: 0,
+                style: Style::Hip,
+                along_x: Some(true),
+                kind: kind("shakes"),
+            },
+        ],
+    );
+    let report = terra_build_mesh::inspect::inspect(
+        &base,
+        &materials.kits,
+        &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+    );
+    assert_eq!(
+        report.count(terra_build_mesh::inspect::Fault::Coplanar),
+        0,
+        "{:#?}",
+        report.findings
+    );
+}
+
+#[test]
 fn a_failing_base_shrinks_to_the_element_that_fails_it() {
     // Fails while a box of hewn timber is in it: the room and the wall go, the box
     // stays, made one cube.
