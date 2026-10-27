@@ -236,9 +236,10 @@ fn stamps_name_models_that_exist_and_repeat() {
     let root = assets();
     for theme in Theme::all(&root).unwrap() {
         let set = ModuleSet::new(&theme).unwrap();
-        for s in 0..20 {
+        let seeds: Vec<u64> = (0..20).collect();
+        terra_gen::par::map(&seeds, |&s| {
             let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
-                continue;
+                return;
             };
             let stamp = stamp(&dungeon, &theme, &kind);
             let models = stamp.props.iter().map(|p| &p.model);
@@ -258,7 +259,7 @@ fn stamps_name_models_that_exist_and_repeat() {
                 "{} seed {s}: the same tour",
                 theme.name
             );
-        }
+        });
     }
 }
 
@@ -308,43 +309,95 @@ fn open_leaves(stamp: &Stamp) -> Vec<(Vec3, Vec3)> {
         .collect()
 }
 
-/// Whether a point is inside a cube not open or within 5 cm of an open leaf.
-fn solid_at(map: &Map, leaves: &[(Vec3, Vec3)], p: Vec3) -> bool {
-    !clear(map, cube_of(p))
-        || leaves.iter().any(|&(hinge, into)| {
-            let q = p - hinge;
-            let along = q.dot(into);
-            let off = (q - into * along) * Vec3::new(1.0, 0.0, 1.0);
-            (0.0..=DOORWAY_M[0] * 0.5).contains(&along)
-                && off.length() < 0.05
-                && (0.0..=DOORWAY_M[1]).contains(&q.y)
-        })
+/// What `solid_at` reads round one eye, read once for its ~800 points: whether each cube of
+/// the 4 cubes a side that hold everything within `r` of it is open, and the leaves that
+/// reach within `r` of it in plan. The same answers as the whole map and every leaf.
+struct Near<'a> {
+    map: &'a Map,
+    min: IVec3,
+    clear: [bool; 64],
+    leaves: Vec<(Vec3, Vec3)>,
 }
 
+impl<'a> Near<'a> {
+    fn new(map: &'a Map, leaves: &[(Vec3, Vec3)], p: Vec3, r: f32) -> Near<'a> {
+        let min = cube_of(p - Vec3::splat(r));
+        let clear = std::array::from_fn(|i| {
+            let i = i as i32;
+            clear(map, min + IVec3::new(i % 4, i / 4 % 4, i / 16))
+        });
+        // A point within `r` of the eye is near a leaf only if the leaf's hinge is within
+        // its width and 5 cm more of that point.
+        let reach = r + DOORWAY_M[0] * 0.5 + 0.06;
+        let leaves = leaves
+            .iter()
+            .copied()
+            .filter(|&(hinge, _)| ((hinge - p) * Vec3::new(1.0, 0.0, 1.0)).length() <= reach)
+            .collect();
+        Near {
+            map,
+            min,
+            clear,
+            leaves,
+        }
+    }
+
+    fn solid_at(&self, p: Vec3) -> bool {
+        let c = cube_of(p);
+        let i = c - self.min;
+        let open = if i.cmpge(IVec3::ZERO).all() && i.cmplt(IVec3::splat(4)).all() {
+            self.clear[(i.x + 4 * i.y + 16 * i.z) as usize]
+        } else {
+            clear(self.map, c)
+        };
+        !open || on_leaf(&self.leaves, p)
+    }
+}
+
+/// Whether a point is within 5 cm of an open leaf.
+fn on_leaf(leaves: &[(Vec3, Vec3)], p: Vec3) -> bool {
+    leaves.iter().any(|&(hinge, into)| {
+        let q = p - hinge;
+        let along = q.dot(into);
+        let off = (q - into * along) * Vec3::new(1.0, 0.0, 1.0);
+        (0.0..=DOORWAY_M[0] * 0.5).contains(&along)
+            && off.length() < 0.05
+            && (0.0..=DOORWAY_M[1]).contains(&q.y)
+    })
+}
+
+/// The ways `clear_across` and `clear_around` look: every 10° in plan, and a Fibonacci
+/// lattice of 96 on the sphere.
+static DIRECTIONS: std::sync::LazyLock<([Vec3; 36], [Vec3; 96])> = std::sync::LazyLock::new(|| {
+    let plan = std::array::from_fn(|a| {
+        let turn = a as f32 * std::f32::consts::TAU / 36.0;
+        Vec3::new(libm::cosf(turn), 0.0, libm::sinf(turn))
+    });
+    let sphere = std::array::from_fn(|i| {
+        let y = 1.0 - 2.0 * (i as f32 + 0.5) / 96.0;
+        let ring = libm::sqrtf(1.0 - y * y);
+        let a = i as f32 * 2.399_963;
+        Vec3::new(libm::cosf(a) * ring, y, libm::sinf(a) * ring)
+    });
+    (plan, sphere)
+});
+
 /// Whether every point on rings round `p` in plan out to `r`, every 0.1 m and 10°, is clear.
-fn clear_across(map: &Map, leaves: &[(Vec3, Vec3)], p: Vec3, r: f32) -> bool {
+fn clear_across(near: &Near, p: Vec3, r: f32) -> bool {
     let rings = (r / 0.1).ceil() as i32;
     (1..=rings).all(|k| {
         let radius = r * k as f32 / rings as f32;
-        (0..36).all(|a| {
-            let turn = a as f32 * std::f32::consts::TAU / 36.0;
-            let d = Vec3::new(libm::cosf(turn), 0.0, libm::sinf(turn));
-            !solid_at(map, leaves, p + d * radius)
-        })
+        DIRECTIONS.0.iter().all(|&d| !near.solid_at(p + d * radius))
     })
 }
 
 /// Whether every point on a sphere round `p` of radius `r` (a Fibonacci lattice of 96) and
 /// half way to it is clear.
-fn clear_around(map: &Map, leaves: &[(Vec3, Vec3)], p: Vec3, r: f32) -> bool {
-    const N: usize = 96;
-    (0..N).all(|i| {
-        let y = 1.0 - 2.0 * (i as f32 + 0.5) / N as f32;
-        let ring = libm::sqrtf(1.0 - y * y);
-        let a = i as f32 * 2.399_963;
-        let d = Vec3::new(libm::cosf(a) * ring, y, libm::sinf(a) * ring);
-        !solid_at(map, leaves, p + d * r) && !solid_at(map, leaves, p + d * r * 0.5)
-    })
+fn clear_around(near: &Near, p: Vec3, r: f32) -> bool {
+    DIRECTIONS
+        .1
+        .iter()
+        .all(|&d| !near.solid_at(p + d * r) && !near.solid_at(p + d * r * 0.5))
 }
 
 #[derive(Default)]
@@ -391,9 +444,11 @@ fn check_view(theme: &Theme, dungeon: &Dungeon, s: u64) -> Seen {
         let n = ((a.distance(b) / 0.1).ceil() as i32).max(1);
         for k in 0..n {
             let p = a.lerp(b, k as f32 / n as f32);
+            // Every point read below is within `ROOM_M` of the eye.
+            let near = Near::new(&map, &leaves, p, ROOM_M);
             // Where the way is narrower than twice `ROOM_M` (a corridor by a heap), the most
             // room on a line across it through the eye, which the eye must have.
-            let wide = if clear_across(&map, &leaves, p, ROOM_M - 0.02) {
+            let wide = if clear_across(&near, p, ROOM_M - 0.02) {
                 ROOM_M
             } else {
                 seen.narrow += 1;
@@ -404,13 +459,13 @@ fn check_view(theme: &Theme, dungeon: &Dungeon, s: u64) -> Seen {
                     .fold(0.0, f32::max)
                     .min(ROOM_M)
             };
-            let fault = if solid_at(&map, &leaves, p) {
+            let fault = if near.solid_at(p) {
                 Some("is in a cube or a leaf".to_string())
-            } else if !clear_across(&map, &leaves, p, wide - 0.07) {
+            } else if !clear_across(&near, p, wide - 0.07) {
                 Some(format!(
                     "passes within {wide} m of a wall or a leaf in plan"
                 ))
-            } else if !clear_around(&map, &leaves, p, TIGHT_M.min(wide) - 0.07) {
+            } else if !clear_around(&near, p, TIGHT_M.min(wide) - 0.07) {
                 Some(format!("passes within {} m of a cube", TIGHT_M.min(wide)))
             } else {
                 None
@@ -420,7 +475,7 @@ fn check_view(theme: &Theme, dungeon: &Dungeon, s: u64) -> Seen {
                     .push(format!("{at}: the eye at {p} (view {i}) {fault}"));
             }
             seen.samples += 1;
-            if !clear_around(&map, &leaves, p, ROOM_M - 0.02) {
+            if !clear_around(&near, p, ROOM_M - 0.02) {
                 seen.tight += 1;
             }
         }
