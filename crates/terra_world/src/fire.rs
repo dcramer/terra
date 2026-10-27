@@ -337,6 +337,7 @@ pub fn plugin(app: &mut App) {
     light::plugin(app);
     fog::plugin(app);
     fogged::plugin(app);
+    order::plugin(app);
     haze::plugin(app);
     film::plugin(app);
     matte::plugin(app);
@@ -397,6 +398,8 @@ fn spawn_cards(
     smoke: &[Handle<FireSmokeMaterial>; fogged::SMOKES.len()],
 ) {
     // Drawn wherever the fires are: the cards are placed on the GPU, so no bounds would hold.
+    // All stand at the origin, so their sort ties are broken by their rank, in this order.
+    let mut rank = 0..;
     let mut spawn = |name: &str, mesh: Mesh, material: Handle<FireMaterial>| {
         commands.spawn((
             Name::new(name.to_string()),
@@ -406,6 +409,7 @@ fn spawn_cards(
             NoFrustumCulling,
             NotShadowCaster,
             fogged::AfterFog,
+            order::Rank(rank.next().unwrap()),
         ));
     };
     spawn(
@@ -484,6 +488,7 @@ fn spawn_cards(
             Transform::IDENTITY,
             NoFrustumCulling,
             NotShadowCaster,
+            order::Rank(rank.next().unwrap()),
         ));
         if fogged::SMOKES[which].after_fog() {
             card.insert(fogged::AfterFog);
@@ -818,6 +823,7 @@ mod hearth;
 mod light;
 mod material;
 mod matte;
+mod order;
 mod seen;
 mod sim;
 mod smoke;
