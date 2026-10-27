@@ -90,6 +90,16 @@ pub static BODY_LOW: Tunable = Tunable::new(
     "where the clouds' body noise is stretched from: higher billows harder, 0 is no stretch",
 );
 
+/// Whether the clouds are marched as volumes where the preset allows (1) or the dome draws its
+/// 2D layer and deck instead (0), as Unreal's `r.VolumetricCloud` switches them: a gate that
+/// measures something else holds the sky still by it (the fire sheet and motion films, D433, D472).
+pub static VOLUME: Tunable = Tunable::new(
+    "sky.cloud.volume",
+    1.0,
+    0.0..=1.0,
+    "1 marches the clouds as volumes on high and ultra, 0 draws the dome's 2D clouds instead",
+);
+
 /// Everything the march reads, handed to the render world when it changes.
 #[derive(Resource, Clone, ExtractResource)]
 #[extract_app(RenderApp)]
@@ -153,7 +163,7 @@ pub(super) struct VolumePlugin;
 
 impl Plugin for VolumePlugin {
     fn build(&self, app: &mut App) {
-        tune::register(&[&HEAPED_COVER, &BODY_LOW]);
+        tune::register(&[&HEAPED_COVER, &BODY_LOW, &VOLUME]);
         app.add_plugins((
             MaterialPlugin::<VeilMaterial>::default(),
             ExtractResourcePlugin::<CloudVolume>::default(),
@@ -255,7 +265,10 @@ fn tell(
     };
     let (entity, view, marked) = *camera;
     // Over the air only, and only where the start gives the air's flat frame.
-    let on = quality.is_none_or(|q| q.volume_clouds()) && sky.over_air && start.is_some();
+    let on = quality.is_none_or(|q| q.volume_clouds())
+        && VOLUME.get() >= 0.5
+        && sky.over_air
+        && start.is_some();
     if !on {
         if marked {
             commands.entity(entity).remove::<CloudVolumeView>();
