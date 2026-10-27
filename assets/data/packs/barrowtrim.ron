@@ -1,0 +1,11 @@
+// Barrowtrim's pack: Barrowstone's coursed rubble (data/packs/barrowstone.ron), the walls'
+// own stone for the crypt's jambs, plinths and fire-bowl stands, tinted warmer and a step
+// lighter than the walls: a stand a cube across under its bowl's fire takes its light only
+// grazing, and at the walls' tint it was a black box (barrow round 16).
+(
+    pack: "greystone",
+    tint: (0.84, 0.78, 0.70),
+    textures: {
+        Masonry: (path: "materials/castle_wall_varriation", metres: (2.0, 2.0), depth: 0.025),
+    },
+)

@@ -1,0 +1,23 @@
+// Barrowtrim: the crypt's trim (data/dungeons/crypt.ron), its jambs, plinths, fire-bowl stands
+// and ribs, in the walls' coursed rubble a step warmer (data/packs/barrowtrim.ron), a kind of
+// its own so a jamb or a pier's column is told from the wall it stands in. In Fieldstone
+// they read unlit and pasted on: cream rubble strips beside the dark walls, a white jamb in
+// the vault and the goal's stands a black-and-white mottle by their fires (barrow round 15).
+// Its edges not worn paler: on a stand a cube across, the wear outlined every stone.
+(
+    id: 9,
+    pattern: "block",
+    pack: "barrowtrim",
+    cost: (steps: 1, step: [("Stone", 1, 4)]),
+    weight: 3,
+    roof_kind: Some(2049),
+    dungeon_only: true,
+    // Its dirt half the walls' and no splash: a stand or a plinth is a metre high, and at the
+    // walls' dirt and splash it was a black box by its fire.
+    dress: (masks: (
+        dirt: 0.4,
+        dirt_tint: (0.70, 0.66, 0.60),
+        streaks: 0.2,
+        streak_reach: 1.2,
+    )),
+)
