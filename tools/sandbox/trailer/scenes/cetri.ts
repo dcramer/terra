@@ -79,23 +79,31 @@ const WINDS = {
   lowerarm_l: [0, 0, 30],
   lowerarm_r: [0, 0, -30],
 };
-/// The lunge: the whole trunk tipped deep toward the walker from the hips, so the face comes
-/// down at the lens, the crown lagging behind it; the limbs swung forward and raised against
-/// the tip, reaching out at the walker beside the face (round-5 film reviews: the trunk near
-/// upright at the blow, the face hidden from 8.5 to 9.75 s). No smash clip: its arms rise
-/// over the head for its first 1.8 s.
+/// The lunge: the whole trunk tipped deep toward the walker from the hips and the crown driven
+/// on after it, so the face comes down at the lens; one limb thrown out at the lens, the other
+/// trailing back and low (round-6 film reviews: both limbs spread level read as a crucifix;
+/// round 5: the trunk near upright at the blow). No smash clip: its arms rise over the head
+/// for its first 1.8 s.
 const LUNGES = {
   spine_01: [32, 0, 0],
   spine_02: [18, 0, 0],
   spine_03: [10, 0, 0],
-  neck_01: [-6, 0, 0],
-  Head: [-8, 0, 0],
-  upperarm_l: [-40, -15, 15],
-  upperarm_r: [-40, 15, -15],
+  neck_01: [6, 0, 0],
+  Head: [4, 0, 0],
+  upperarm_l: [-75, -15, 20],
+  upperarm_r: [35, 10, 25],
 };
-/// The lunge's follow-through: the trunk carried on past it by its own weight, the crown,
-/// which lagged, whipped after it; then it settles back into LUNGES.
-const THROWN = { ...LUNGES, spine_01: [38, 0, 0], spine_02: [20, 0, 0], spine_03: [12, 0, 0], neck_01: [5, 0, 0], Head: [6, 0, 0] };
+/// The lunge's follow-through: the trunk carried on past it by its own weight, the crown
+/// whipped on after it, the leading limb at full stretch; then it settles back into LUNGES.
+const THROWN = {
+  ...LUNGES,
+  spine_01: [38, 0, 0],
+  spine_02: [20, 0, 0],
+  spine_03: [12, 0, 0],
+  neck_01: [12, 0, 0],
+  Head: [10, 0, 0],
+  upperarm_l: [-85, -15, 15],
+};
 /// Recovered from the throw, still leant at the walker, one limb reaching high and the other
 /// low, not held out level (round-6 film reviews: a scarecrow's T from 9.5 to 12 s).
 const REACHES = { spine_01: [24, 0, 0], spine_02: [14, 0, 0], spine_03: [8, 0, 0], neck_01: [-4, 0, 0], upperarm_l: [-55, 0, 25], upperarm_r: [-15, 0, -5] };
@@ -111,6 +119,13 @@ const comes = (side: number) => ({
 });
 /// Seconds between the footfalls of its slowed walk, each felt as a jolt in the walker's eye.
 const STEP_S = 1.0;
+/// How big each footfall's litter burst is, and the one the walker's eye drops to watch land
+/// (round-6 film reviews: 0.45 never read, the feet never in frame, so the steps weigh nothing).
+const STEP_DUST = 0.9;
+const WATCHED_DUST = 1.3;
+/// The footfall watched: its number, how long before it the eye drops to the root, how high
+/// it looks there, metres, and how long it stays down after the landing, seconds.
+const WATCHED = { step: 0, early: 0.3, up: 1.3, stays: 0.45 };
 /// How far it lunges and how fast, and how fast it then comes on, metres and metres a second.
 const LUNGE_M = 2.0;
 const LUNGE_SPEED = 4.5;
@@ -187,7 +202,7 @@ function script(s: Script) {
   const flinched = at(stop, FLINCH_M);
   s.frame = lands;
   s.call("staged.bend", { name: "cetri", bend: THROWN, blend_ms: 320 });
-  s.call("staged.impact", { at: on(at(lunged, 0.7), 0.05), size: 0.7, base: true });
+  s.call("staged.impact", { at: on(at(lunged, 0.7), 0.05), size: 1.0, base: true });
   s.glide(on(flinched, EYE - 0.12), face(lunged, flinched, FACE_THROWN), 12);
   s.frame = lands + 12;
   s.glide(on(flinched, EYE - 0.05), face(lunged, flinched, FACE_THROWN), 24);
@@ -213,14 +228,29 @@ function script(s: Script) {
     const t0 = BEATS.comes + 0.35 + k * STEP_S;
     const side = k % 2 ? -1 : 1;
     const [a, b] = [mix(eye0, eye1, (k + 0.1) / steps), mix(eye0, eye1, (k + 1) / steps)];
+    const foot = at(feetAt(t0), 0.3, 0.45 * side);
+    const watched = k === WATCHED.step;
+    // Once the eye drops to a root as it comes down, to see the weight land: the litter
+    // bursts, the eye jolts, then it climbs back to the face.
+    if (watched) {
+      s.frame = f(t0 - WATCHED.early);
+      s.glide(a, on(foot, WATCHED.up), Math.round(WATCHED.early * 60));
+    }
     s.frame = f(t0);
     if (k > 0) s.call("staged.bend", { name: "cetri", bend: comes(side), blend_ms: 300 });
-    s.call("staged.impact", { at: on(at(feetAt(t0), 0.3, 0.45 * side), 0.05), size: 0.45, base: true });
+    s.call("staged.impact", { at: on(foot, 0.05), size: watched ? WATCHED_DUST : STEP_DUST, base: true });
     // The first steps watched a little lower, its planted roots and their litter nearer the
     // frame and the face still in it (at the knees, round 6's second pass lost the face off
     // the top); then up at the face as it closes. The jolt grows as it nears.
     const level = (t: number) => (t < BEATS.comes + 2.5 ? { up: 3.3, ahead: 0.3 } : FACE);
-    s.glide([a[0], a[1] - 0.05 - 0.015 * k, a[2]], face(feetAt(t0), flat(a), level(t0)), 5);
+    const jolt: Vec3 = [a[0], a[1] - 0.05 - 0.015 * k - (watched ? 0.06 : 0), a[2]];
+    if (watched) {
+      s.glide(jolt, on(foot, WATCHED.up - 0.15), 5);
+      s.frame = f(t0 + WATCHED.stays);
+      s.glide(b, face(feetAt(t0 + STEP_S), flat(b), level(t0 + STEP_S)), Math.round((STEP_S - WATCHED.stays) * 60));
+      continue;
+    }
+    s.glide(jolt, face(feetAt(t0), flat(a), level(t0)), 5);
     s.frame = f(t0) + 5;
     s.glide(b, face(feetAt(t0 + STEP_S), flat(b), level(t0 + STEP_S)), Math.round(STEP_S * 60) - 5);
   }
