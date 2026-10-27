@@ -1,0 +1,15 @@
+// Flagstone's pack: Greystone's (data/packs/greystone.ron), its floors dressed rectangular
+// flags with chipped joints (Poly Haven's `large_grey_tiles`, CC0, assets/materials/README.md),
+// as a crypt's are laid: Fieldstone's crazy paving read as mud and cobbles (barrow dress
+// rounds 19-20). Its sides, where a floor's edge shows, the walls' coursed rubble. The scan is
+// already grey, so the tint only darkens it toward the walls' value. Laid at 2 m a copy, not
+// the scan's 3 m: at 3 its flags were 75 cm to a metre in the stills, slabs, not a crypt's
+// 40-60 cm flags (barrow dress round 21).
+(
+    pack: "greystone",
+    tint: (0.80, 0.80, 0.80),
+    textures: {
+        Masonry: (path: "materials/castle_wall_varriation", metres: (2.0, 2.0), depth: 0.025),
+        Floor: (path: "materials/large_grey_tiles", metres: (2.0, 2.0), depth: 0.008),
+    },
+)

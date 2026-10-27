@@ -12,7 +12,10 @@
     levels: 2,
     keys: 1,
     walls: "Barrowstone",
-    floors: "Stone",
+    // Dressed flags (data/packs/flagstone.ron): Fieldstone's crazy paving, dirtied all over,
+    // read as mud (barrow dress round 20); its ceilings kept Fieldstone's.
+    floors: "Flagstone",
+    ceilings: Some("Stone"),
     trim: "Barrowtrim",
     // Vaulted: a corridor crowned at 4.5 m, a room at 5 m (D527), flat cubes over the kit's
     // vaults, which spring at 2.95 m and hide them.
