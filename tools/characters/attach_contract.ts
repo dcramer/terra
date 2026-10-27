@@ -10,6 +10,7 @@
 // A fault already known is listed, with why, in attach_faults.json; a fix removes its line.
 // Node 22.18 or later; no dependencies.
 
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { Glb, place, posed, rot, type Pose, type V3 } from "./glb.ts";
@@ -406,9 +407,16 @@ function madeFrom(look: Look, body: Body, data: Record<string, unknown>, root: s
   const swing = data.swing as Record<string, unknown> | undefined;
   const made = look.extras.swing as Record<string, unknown> | undefined;
   if (swing && (!made || ["stiffness", "drag", "gravity"].some((k) => swing[k] !== made[k]))) f("stale", `its extras' swing ${JSON.stringify(made)} is not its data's ${JSON.stringify(swing)}`);
-  const source = typeof data.source === "string" ? join(root, "assets", "models", data.source) : undefined;
-  if (source && !existsSync(source)) f("file", `its data's source assets/models/${data.source} is not there`);
+  const [dir, item] = look.name.split("/");
+  const source =
+    dir === "held" ? (typeof data.source === "string" ? join(root, "assets", "models", data.source) : undefined) : join(root, "art", "gear", typeof data.model === "string" ? data.model : item, "model.glb");
+  if (source && !existsSync(source)) return f("file", `its data's source ${source.slice(root.length + 1)} is not there`);
+  const sha = look.extras.source_sha;
+  if (source && sha !== undefined && sha !== sourceSha(source)) f("stale", `its source ${source.slice(root.length + 1)} has changed since its look was made (source_sha ${sha})`);
 }
+
+/** The first 12 hex digits of the SHA-256 of a look's source's bytes, its extras' `source_sha`. */
+export const sourceSha = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 12);
 
 /** Its item's hold (items.ron) agrees with its kind and its look: the class one its kind fights
  * as, its length the look's, and a look held in two saying where the other hand goes. */

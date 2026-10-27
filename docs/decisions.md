@@ -612,6 +612,7 @@ Checks, developer tools, languages and the repository.
 | [D538](decisions/D538.md) | A round agent carries the routine | Tech | Agent | Decided | A coordinator starts every build round with the `round`… |
 | [D547](decisions/D547.md) | Tunables, named numbers changed while a run goes | Tech | Agent | Decided | A value worth trying several of is a **tunable**… |
 | [D549](decisions/D549.md) | One GPU-free test compiles every shader as the game's pipelines specialize it | Tech | Agent | Decided | Every file in `assets/shaders` is compiled and validated… |
+| [D552](decisions/D552.md) | One command fits a new held or worn item, and its look records its source's hash | Tech | Agent | Decided | A new held or worn item goes from its data to a checked… |
 
 ## Superseded and rejected
 

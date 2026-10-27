@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { join } from "node:path";
 import { type V3 } from "./glb.ts";
-import { type Look, ROOT, against, audit, dataOf, judge, judgeSockets, kindOf, knownFaults, readBody, readLook } from "./attach_contract.ts";
+import { type Look, ROOT, against, audit, dataOf, judge, judgeSockets, kindOf, knownFaults, readBody, readLook, sourceSha } from "./attach_contract.ts";
 
 const body = readBody();
 const read = new Map<string, Look>();
@@ -172,6 +172,13 @@ test("a look is made from its data as it stands, and its data's source is there"
   assert.deepEqual(stale("gear/quiver", { hangs_at: 0.6 }), ["stale"]);
   assert.deepEqual(stale("gear/quiver", { swing: { stiffness: 0.5, drag: 0.1, gravity: 0.6 } }), ["stale"]);
   assert.deepEqual(stale("held/arming_sword", { source: "tools/Nope.glb" }), ["file"]);
+  // Its source's hash in its extras (the fitter's): a points fit's source changed is found.
+  const sword = look("held/arming_sword");
+  const made = sourceSha(join(ROOT, "assets", "models", dataOf("held/arming_sword")!.source as string));
+  assert.deepEqual(rules({ ...sword, extras: { ...sword.extras, source_sha: made } }), []);
+  assert.deepEqual(rules({ ...sword, extras: { ...sword.extras, source_sha: "0123456789ab" } }), ["stale"]);
+  const quiver = look("gear/quiver");
+  assert.deepEqual(rules({ ...quiver, extras: { ...quiver.extras, source_sha: sourceSha(join(ROOT, "art", "gear", "quiver", "model.glb")) } }), []);
 });
 
 test("an item's hold in items.ron agrees with its look's kind and length", () => {
