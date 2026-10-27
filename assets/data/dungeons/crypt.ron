@@ -76,8 +76,8 @@
             ("models/props/VasePair.glb", 1.0), ("models/nature/Rock_6.glb", 0.35),
         ], count: (1, 2)),
         (roles: [Guard], props: [
-            ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Shroud.glb", 1.0),
-            ("models/props/AxesLaid.glb", 1.0), ("models/nature/Rock_7.glb", 0.4),
+            ("models/props/barrow/Bones.glb", 2.0), ("models/props/barrow/Shroud.glb", 1.0),
+            ("models/nature/Rock_7.glb", 0.4),
         ], count: (2, 3)),
         (roles: [Treasure, Secret, Goal], props: [
             ("models/props/VaseRow.glb", 1.0), ("models/props/Goblets.glb", 1.0),
