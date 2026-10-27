@@ -281,3 +281,42 @@ fn dressing_stands_in_groups() {
         );
     }
 }
+
+/// Every room's feature (a tomb, the key's altar) has a fire or a lamp by it, within
+/// `HERO_LIT_M` (barrow dress round 5): a torch does not count, since one hung over the
+/// crypt's antechamber's sarcophagus left it a dark box (dress round 4, all three reviewers).
+#[test]
+fn every_feature_has_a_fire_or_lamp_by_it() {
+    for theme in Theme::all(&assets()).unwrap() {
+        if !theme.dressing.iter().any(|d| d.lamp.is_some()) {
+            continue;
+        }
+        let set = ModuleSet::new(&theme).unwrap();
+        let (mut lit, mut all) = (0, 0);
+        for s in 0..40 {
+            let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
+                continue;
+            };
+            let full = stamp(&dungeon, &theme, &kind);
+            let tombs = (full.pieces.iter()).filter(|p| p.model.contains("Sarcophagus"));
+            let keys = (full.objects.iter()).filter(|o| o.role == ObjectRole::Key);
+            for at in tombs.map(|p| p.at).chain(keys.map(|o| o.at)) {
+                all += 1;
+                let fire = (full.lights.iter())
+                    .any(|l| l.kind != LightKind::Torch && l.at.distance(at) < HERO_LIT_M);
+                lit += fire as u32;
+            }
+        }
+        println!(
+            "{}: {lit} of {all} features lit by a fire or lamp",
+            theme.name
+        );
+        // A feature on a floor too crowded for its lamp stays as it was: 1 of 139 over these
+        // seeds (2026-10-27), against 0 of 139 lit before features had lamps.
+        assert!(
+            lit * 100 >= all * 95,
+            "{}: {lit} of {all} features lit",
+            theme.name
+        );
+    }
+}

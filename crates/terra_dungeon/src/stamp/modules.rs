@@ -157,7 +157,7 @@ pub(super) fn lay(
             }
             // Two metres long, a metre deep and high.
             Class::Sarcophagus => {
-                let z = if walled(0) { 1 } else { m - 1 };
+                let z = tomb_row(cell, f);
                 f.fill(ops, [m - 2, 0, z], [m + 1, 1, z + 1], solid(kinds.wall));
                 if let Some(tomb) = theme.kit.as_ref().and_then(|k| k.sarcophagus.as_ref()) {
                     out.pieces.push(super::Piece {
@@ -300,6 +300,26 @@ fn object(name: &str, role: ObjectRole, f: Frame, y: f32, model: &str) -> Object
         model: model.to_string(),
         lock: crate::door::Lock::None,
         opens: [1.0; 2],
+    }
+}
+
+/// The row a tomb stands from: against its cell's first side where that is walled.
+fn tomb_row(cell: &Cell, f: Frame) -> i32 {
+    if cell.sides[f.side(0)] != Side::Open {
+        1
+    } else {
+        CELL / 2 - 1
+    }
+}
+
+/// Where a cell's tomb or key feature stands, on its floor (the tomb's middle, the key's
+/// altar, brazier or lever), for the lamp that lights it (furnish.rs).
+pub(super) fn feature_at(cell: &Cell, look: Look) -> Option<glam::Vec3> {
+    let f = Frame::new(cell.at, look.turn);
+    match look.class {
+        Class::Sarcophagus => Some(f.point(MID, 0.0, tomb_row(cell, f) as f32 + 1.0)),
+        Class::Key => Some(f.point(MID, 0.0, MID)),
+        _ => None,
     }
 }
 

@@ -5,7 +5,7 @@
 //! hero and the far corner, the walls between bare; all off the tour and the doorways and
 //! apart from what already stands.
 
-use super::modules::{Class, Look};
+use super::modules::{Class, Look, feature_at};
 use super::{CELL, CUBE, Frame, Light, LightKind, MID, Prop, Stamp, hash, stands};
 use crate::Dungeon;
 use crate::place::{Side, opposite};
@@ -257,6 +257,17 @@ pub(super) fn lay(
             min: rect.min,
         };
         let first = out.props.len();
+        // Its feature lit by its own dressings' lamp, else the theme's (a tomb room's dressing
+        // may set none); the goal and a rest have fires of their own.
+        let lamp = (dresses.iter().copied().chain(dressing)).find_map(|d| d.lamp.as_ref());
+        let features = cells
+            .iter()
+            .filter_map(|&(_, c)| feature_at(&layout.cells[c], looks[c]));
+        for at in features {
+            if let Some(lamp) = lamp {
+                laying.light_feature(at, lamp, &mut taken, out);
+            }
+        }
         let hero = laying.hero(featured, &mut taken, out);
         let told = laying.vignette(&mut taken, out);
         // The room's groups: round its hero (or its vignette, or the feature's first wall
@@ -301,15 +312,37 @@ impl Laying<'_> {
         put(out, pick(&dress.hero, self.salt(530)), p, facing);
         taken.push((p, HERO_M));
         if let Some(lamp) = &dress.lamp {
-            self.light_hero(wall, p, lamp, taken, out);
+            let lit = out.lights.iter().any(|l| l.at.distance(p) < HERO_LIT_M);
+            if !lit {
+                self.light_hero(wall, p, lamp, taken, out);
+            }
         }
         Some(p)
     }
 
-    /// A lamp beside the hero, past its end along its wall or before it, with its light,
-    /// where no light stands within `HERO_LIT_M` of it: as a set dresser lights a focal prop
-    /// from a source in the fiction. Lit only by a torch across the room, the crypt's robbed
-    /// tomb rendered near black (barrow dress round 2, all three reviewers).
+    /// The room's feature (a tomb, the key's altar) lit as a hero is, by the first of its
+    /// dressings' lamps, where no fire or lamp stands within `HERO_LIT_M` of it. A torch does
+    /// not count: hung over a tomb it lights the wall and the lid, and the crypt's
+    /// antechamber's sarcophagus under one still read as a dark box (barrow dress round 4,
+    /// all three reviewers).
+    fn light_feature(
+        &self,
+        at: Vec3,
+        lamp: &(String, f32),
+        taken: &mut Vec<(Vec3, f32)>,
+        out: &mut Stamp,
+    ) {
+        let fire = |l: &Light| l.kind != LightKind::Torch && l.at.distance(at) < HERO_LIT_M;
+        if out.lights.iter().any(fire) {
+            return;
+        }
+        self.light_hero(None, at, lamp, taken, out);
+    }
+
+    /// A lamp beside the hero, past its end along its wall or before it, with its light: as a
+    /// set dresser lights a focal prop from a source in the fiction. Lit only by a torch
+    /// across the room, the crypt's robbed tomb rendered near black (barrow dress round 2,
+    /// all three reviewers).
     fn light_hero(
         &self,
         wall: Option<Spot>,
@@ -318,9 +351,6 @@ impl Laying<'_> {
         taken: &mut Vec<(Vec3, f32)>,
         out: &mut Stamp,
     ) {
-        if out.lights.iter().any(|l| l.at.distance(hero) < HERO_LIT_M) {
-            return;
-        }
         let beside: Vec<(Vec3, usize)> = match wall {
             Some(s) => (LAMP_BY_WALL.iter())
                 .map(|&(along, o)| (s.offset(along, o), opposite(s.d)))
