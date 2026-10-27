@@ -135,6 +135,8 @@ Every model the game places obeys one contract (D303), as a shipped game's asset
 | **Fit** | A fitted model is stretched only along the axes its kind fits along, from its anchor, so its sockets meet what the layout gives, as Unreal's spline meshes run between their start and end. A door's or shutters' leaf fits its hole across (+X from its hinge) and up: it is made for the first hole its entry fits, at which it is the model's size within the tolerance, and a larger hole stretches it. A building kit's module (a ridge, a batten, a log) fits its line along +X, from its `start` socket to its `end`, in whole copies each stretched the same to meet the line's ends. Nothing else is stretched; across and through it every fitted model keeps its size. |
 | **Kit pieces** | Every modelled piece a kit lays states its real size, a module its `dims` and its `start` and `end` sockets, and the kit checker (`cargo xtask kits`) holds it to it. Corner stones (quoins, jamb stones) are not modelled: they are made from each block material's own wall, at the sizes its pattern's numbers give, and checked against them. |
 
+What a character holds or wears keeps the same axes, its origin, facing and sockets by its kind: [the attachment contract](attachment.md) (D546).
+
 `tools/props` makes a model so from its `prop.json` (`dims`, `anchor`, `hinge`, `sockets`), `cargo xtask contract` checks every model against its entry, and `cargo xtask check` runs the same test. The workbench draws each prop's box (green when it keeps the contract, red when not), its origin as three short lines (X red, Y green, Z blue) and its sockets as yellow stars, and logs what is wrong: `--prop all` shows every one.
 
 ## Checklist

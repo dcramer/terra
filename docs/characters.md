@@ -24,7 +24,7 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 - **One skeleton.** Every body has our skeleton (D115), and every animation plays on every body.
 - **Gear is made once, on the base.** It rides the skeleton, so proportions come free, and it carries the base's morphs, copied by a tool. That is how Starfield, Red Dead Redemption 2, Final Fantasy XIV and Bannerlord fit one item to every body.
 - **The body hides what is covered.** The body is divided into patches; each item says which it covers, and those are not drawn while it is worn. The patches are the same on every body, because the mesh is.
-- **Rigid things hang on named points with fixed axes.** Every body has the same sockets, placed for that body. A sword or a helmet is made once to the socket's convention and fits every body.
+- **What does not bend hangs on named points with fixed axes.** Every body has the same sockets, placed for that body. A sword or a quiver is made once to its kind's convention and fits every body; how each kind of look goes on, with the sockets' axes and every key its file carries, is [the attachment contract](attachment.md) (D546).
 - **Generated art supplies the look, not the shape's structure.** Tripo makes a body's look; that body becomes a shape of the shared mesh with its texture copied onto the shared layout. Tripo makes a garment's look once, as the base body wearing it; that look is baked onto the garment.
 
 ### Bodies
@@ -39,7 +39,7 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 | **Hair** | A separate part bound to the head like gear (D112); hidden or swapped for a short version under a helmet | A worn look, by name | Not yet |
 
 - **A character is a few slider values** (D111): morph weights, a height and a skin tint, each clamped to what every item passes at. The named templates (`models/character/templates.json`) are presets of the same numbers, for people and tests; an NPC's values come from its seed, within its people's ranges.
-- **Sockets**, the same names and axes on every body: hands, head, back, belt.
+- **Sockets**, the same names and axes on every body: hands, head, back, belt ([the table](attachment.md#sockets)).
 
 ### Clothing and armour (they bend with the body)
 
@@ -53,17 +53,18 @@ Games that do this well don't fit items to characters. They fix a few contracts 
 
 No layers (one piece per slot), but pieces from different slots overlap: a pack's straps cross the chest piece. Each slot has a height off the skin it stays within, so they stack without fitting every pair: chest pieces within 1.8 cm above the waist, where straps cross them (below it, a hem may stand out further); what crosses them, such as straps, solid from the skin to 2.2 cm, so it rests on bare skin and shows over a coat alike. Where a chest piece meets the legs, it hangs over their waistband, never tucked in, so every piece looks right worn alone (D545).
 
-### Rigid worn things (helmets, packs, quivers, belt pouches)
+### Worn things that do not bend (caps, packs, quivers, belt pouches)
 
-- **Made once, in its socket's space**, by a rule for that socket: a helmet's inner crown at the origin, a pack's back panel on the socket's plane, a quiver's belt loop at the origin. Scaled from the body's own measure at that socket (head width, back width) when fitted to the base. No numbers per item beyond which socket.
+- **Skinned whole where the body carries it, on a socket where it hangs.** A cap or coif is made on the head as clothing is, skinned to the head; a pack's bag is skinned wholly to the upper spine, so it rides it as one piece. Only what hangs loose from the belt (a quiver; later a pouch or a sheath) is rigid on a socket ([the kinds](attachment.md#kinds)).
+- **A rigid one is made once, in its socket's space**, its origin where it hangs from (a quiver's mouth), sized as a share of the body's height on the base. Its turn, size and where it hangs are numbers per item, found by looking at its model, and kept as data beside it (`art/gear/<item>/fit.json`), read only by the tool that fits it; the game reads only the look's file.
 - **It follows the skin under it per morph**: its shift beyond the socket on each morph is recorded in its extras, and the game mixes them by the body's morph weights, so a heavy body's seat does not swallow a quiver.
 - A helmet covers the head's top and says so; hair under it is hidden or swapped for a short version (D112).
-- **A pack is a bag and a harness** (D189). The bag is any generated model, rigid on the back socket, its own straps cut away; it is fitted so its corners meet the harness's strap ends. The harness is the straps, made once per kind (leather straps, rope, a frame) on the base body like a garment, so they bend with the shoulders and carry the morphs, its path and look taken from a model of the base person wearing one. A new pack is one bag model; it names a harness. The belt is the same: a quiver, a pouch or a sheath hangs from a belt's standard points, from where it hangs on it (a quiver from its mouth).
+- **A pack is a bag and a harness** (D189). The bag is any generated model, skinned wholly to `spine_03`, the back socket's bone, its own straps cut away; it is fitted so its corners meet the harness's strap ends. The harness is the straps, made once per kind (leather straps, rope, a frame) on the base body like a garment, so they bend with the shoulders and carry the morphs, its path and look taken from a model of the base person wearing one. A new pack is one bag model; it names a harness. The belt is the same: a quiver, a pouch or a sheath hangs from a belt's standard points, from where it hangs on it (a quiver from its mouth).
 - **Loose things swing.** What hangs from a strap or a belt (a quiver, a pouch) swings about where it hangs, under gravity, damped and limited, kept off the thigh by a capsule, as spring bones do (the VRM spring-bone model; Source's jiggle bones). Its pivot and stiffness are data in its file. The same system later moves coat tails and long hair (phase 5 of the plan).
 
 ### Held things (tools, weapons)
 
-- **Made once, for every body**: the grip at the origin, the handle along +Y toward the working end, the striking edge or face toward +Z, the length real. The hand socket is placed for each body, so nothing is set per character.
+- **Made once, for every body**: the grip (the handle's middle where the fist closes) at the origin, the handle along +Y toward the working end, its edges or face in the Y-Z plane with a one-sided head toward -Z, the way a strike moves, the length real ([in hand](attachment.md#kinds), D546). The hand socket is placed for each body, so nothing is set per character. Its source, length, grip and tilt are data (`art/held/<item>.json`), read only by `fit_held.py`.
 - **Strapped to the forearm** (a shield, D504): its front toward -Z and its grip along +Y, said in its glTF extras as `strap` (`terra_walker::strap`, `tools/characters/fit_held.py`); the icon rig and the game both read its front from there.
 - How it is carried and which clips it swings with are in its file, not in code. A two-handed weapon also marks where the off hand holds it, for the arm to reach.
 
@@ -94,9 +95,10 @@ The pipeline is in [tools/characters](../tools/characters/README.md) and the ste
 The checks run on every item, on every body, through clips that bend and reach, so a person isn't the test:
 
 - **Bodies:** the rig checks against our skeleton and the mannequin, and a deformation check along every limb.
+- **The attachment contract:** every committed held and worn look against its kind's rules, and the base's sockets against their axes, from the files alone in a second (`tools/characters/attach_contract.ts`, in `cargo xtask check`; [the check](attachment.md#the-check)).
 - **Clips:** each one is one our skinning can follow.
 - **Clothing and armour:** how much skin pokes through it, frame by frame; the clipping fixer (BodySlide's, per morph, through our clips) records how far each part must move out, and a round is kept only while it helps.
-- **Rigid worn things:** how much of it rests on the body, and that it never sinks in (the first half built).
+- **Worn things that do not bend:** how much of it rests on the body, and that it never sinks in (the first half built).
 - **Held things:** that it never passes through the body or the head through the swings (not yet).
 - **A sheet of every item on every body**, for a person to look at last, not first.
 - **Every item's icon**, rendered from its look in the house style (D130) and read at slot size: a look that breaks a contract shows it here too (the `item-icons` skill).

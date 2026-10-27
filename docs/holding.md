@@ -94,7 +94,7 @@ Items of a class share every clip, hold pose, phase, chain and button. Each item
 
 | What | How | State |
 |---|---|---|
-| A held item | Made once in its grip's space: the grip at the origin, the handle along +Y, the edge toward +Z, its length real ([characters.md](characters.md#held-things-tools-weapons), D128). It rides its lead hand's socket, `socket.hand.R` or `socket.hand.L`, placed for each body | Built (right hand; the left for the shield) |
+| A held item | Made once in its grip's space: the grip at the origin, the handle along +Y, its edges in the Y-Z plane with a one-sided head toward -Z, its length real ([attachment.md](attachment.md#kinds), D546, D128). It rides its lead hand's socket, `socket.hand.R` or `socket.hand.L`, placed for each body | Built (right hand; the left for the shield) |
 | A two-handed grip | The item marks its `second` grip, metres along +Y. After the pose, the other hand is pulled onto it by two-bone IK (Godot's TwoBoneIK3D, MIT, already ported for the feet, D455), its elbow on the clip's side. A move may let go in marked windows (`free`, a spear's slide). The clips are keyed with both hands (D450), so the IK corrects centimetres, not poses | Not built |
 | A shield | On a strap on the forearm, not the hand: its file says the bone, where the strap sits, and which way its face and handle point (`strap` in its glTF extras, `terra_walker::strap`, `fit_held.py`). Recorded as part of D459. The hand closes on the handle; IK only where it is more than 1 cm off | Built |
 | A bow | Held in the off hand; while drawn, the string's middle follows the main hand, which stays on the clip | Not built |

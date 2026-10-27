@@ -127,7 +127,7 @@ tools/blender/run.sh tools/characters/shell_garment.py tools/characters/out/base
 
 The last word is its coverage, one of `COVERAGE` in the script (`chest_sleeveless`, `chest_long_sleeves`, `legs_long`, `gloves`, `feet`...): which parts of the body it covers and where its hems fall. The piece is those faces of the base body, pushed out (and as far as the dressed model stands off, for bulk), keeping the body's own weights, so it moves as the skin under it does; its colour is baked from the dressed model. Do not try to cut the piece out of the dressed model by colour or distance: Tripo paints its dressed body a shade off ours and makes it a little thinner, and every such cut came out full of holes.
 
-**Rigid worn things** (a pack, a cap, a quiver) are made as models on their own and fitted at their socket:
+**Worn things from their own models** (a pack, a quiver) are fitted to the base: a pack's bag skinned whole to the upper spine, a quiver rigid on its belt socket, each as its kind in [docs/attachment.md](../../../docs/attachment.md) says (a cap is made on the head as clothing is):
 
 ```bash
 tools/blender/run.sh tools/characters/fit_gear.py tools/characters/out/base-male-game.glb small_pack large_pack quiver
@@ -145,7 +145,7 @@ It plays our clips and reports, per clip, the share of skin near each piece that
 
 Then add a row for it to `THIRD_PARTY.md`.
 
-What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, and how far it tips when carried in its glTF extras (`carry_tilt`). `tools/characters/fit_held.py` makes them; each item's source, length, grip and tilt are its data, `art/held/<item>.json`, so a new item is a file. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
+What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, a one-sided head toward -Z, and how far it tips when carried in its glTF extras (`carry_tilt`), as its kind in [docs/attachment.md](../../../docs/attachment.md) says; `node tools/characters/attach_contract.ts` checks every look against it. `tools/characters/fit_held.py` makes them; each item's source, length, grip and tilt are its data, `art/held/<item>.json`, so a new item is a file. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
 
 ## 6. Body templates: morphs of the base
 
