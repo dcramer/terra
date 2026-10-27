@@ -8,6 +8,7 @@ cargo xtask combat --film            # and the duel film's checks (the GPU: carg
 cargo xtask combat --film --out DIR  # the film into DIR, not ~/.cache/terra-review/duel/ (two films at once share that)
 cargo xtask combat --json out.json   # the results also as JSON
 cargo xtask combat --raise "<why>"   # write the rows that got worse, or are new, with the why, in the change's commit
+cargo xtask combat --filmed          # the film rows from main's own duel film, not filming (nightly's, so it banks them)
 cargo xtask combat --lower           # write the rows that got better: cargo xtask nightly's alone (D414)
 ```
 
@@ -20,6 +21,6 @@ cargo xtask combat --lower           # write the rows that got better: cargo xta
 
 **How it reads.** A line a criterion: `✓` within its bar; `·` below its bar but no worse than held (the task list); `✗` worse than its baseline, or its check gave no number; `?` not measurable yet; `-` heavy, not run without `--film`. A criterion's number is its miss, how far outside its bar it is, so worse is always more whatever the bar; it exits 1 on a `✗` alone. The last line counts them; on a failure the `✗` lines follow it. What the steps printed is in `target/combat/scorecard.log`, moves.ts's rows in `target/combat/moves.json`.
 
-**Where it runs.** A stage of `cargo xtask check --all`; a stage of `cargo xtask nightly`, which lowers the baseline; `clip.ts --into` after writing a set, putting every file back if the set is worse; and the film on main as the `combat film` continuous check (`tools/continuous/checks.json`), whenever what `COMBAT` in `xtask/src/scope.rs` names changes. The duel film writes its checks' numbers to `checks.json` beside `checks.txt` (`tools/sandbox/duel.ts`).
+**Where it runs.** A stage of `cargo xtask check --all`; a stage of `cargo xtask nightly`, which lowers the baseline; `clip.ts --into` after writing a set, putting every file back if the set is worse; and the film on main as the `combat film` continuous check (`tools/continuous/checks.json`), whenever what `COMBAT` in `xtask/src/scope.rs` names changes. The duel film writes its checks' numbers to `checks.json` beside `checks.txt` (`tools/sandbox/duel.ts`); a film of a clean checkout keeps them by commit in `~/.cache/terra-review/combat-films/`, and nightly's `--filmed` banks the film's rows from the newest of main's history that nothing `COMBAT` names changed since (`tools/scorecard/films.ts`).
 
 The reference's pictures stay out of the repository, under `~/.cache/terra-review/refs/enshrouded-combat/`.

@@ -2,8 +2,9 @@
 //! In its own worktree, `.git/terra-nightly/src`, detached at origin/main, it runs what no hook
 //! runs whole: clippy and every test of the workspace, the slow ones too, the kit checker, the
 //! artifacts ratchet quick and over every scene, fuzz over seeds 0 to 200, the size ratchet, the
-//! combat and controller scorecards (D452, D457; the controller's bench and its filmed course's
-//! rows from a clean film of main too) and the docs check after rendering their indexes.
+//! combat and controller scorecards (D452, D457; the controller's bench, and the duel's and
+//! the filmed course's rows from a clean film of main, too) and the docs check after rendering
+//! their indexes.
 //!
 //! When every stage passes it is the one place a baseline is lowered (D414): what fell, and an
 //! index that was stale, is committed alone and pushed to main from this machine, with the
@@ -193,7 +194,9 @@ const STAGES: &[Stage] = &[
         name: "combat",
         said: Said::Printed,
         build: &[],
-        run: &["node", "tools/combat/scorecard.ts", "--lower"],
+        // The duel film's rows too, from the newest clean film of main that nothing combat
+        // reads changed since (`combat film` of continuous keeps them), as the controller's.
+        run: &["node", "tools/combat/scorecard.ts", "--lower", "--filmed"],
         hold: COMBAT_HOLD,
     },
     Stage {

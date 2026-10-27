@@ -1,8 +1,10 @@
-// The filmed course's films kept by commit (D457, D414): a film made on a clean checkout keeps
-// its checks under ~/.cache/terra-review/controller-films/<commit>/, so nightly's scorecard
+// A scorecard's films kept by commit (D457, D452, D414): a film made on a clean checkout keeps
+// its checks under ~/.cache/terra-review/<kind>-films/<commit>/, so nightly's scorecard
 // (`scorecard.ts --filmed`) banks the film's rows from main's own film, the newest one that
-// nothing the film reads (xtask/src/scope.rs `CONTROLLER`) changed since, without filming. A
-// film of a dirty checkout or of a commit main never had is never banked.
+// nothing the film reads (xtask/src/scope.rs, the kind's list) changed since, without filming.
+// A film of a dirty checkout or of a commit main never had is never banked. The controller's
+// filmed course (tools/controller/yard.ts) and combat's duel (tools/sandbox/duel.ts) each keep
+// theirs.
 // Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
@@ -12,11 +14,29 @@ import { join, resolve } from "node:path";
 import { scopePaths } from "../continuous/continuous.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
-export const FILMS = join(homedir(), ".cache/terra-review/controller-films");
-/// The most films kept; the oldest go first.
+/// The most films kept a kind; the oldest go first.
 const KEPT = 12;
 /// What a film keeps: the checks the scorecard reads and their lines.
 const KEPT_FILES = ["checks.json", "checks.txt"];
+
+/// A kind of film: where its films are kept, the scope list of what it reads, what it does not
+/// read although that list names it, and the command that films main.
+export type Kind = { dir: string; scope: string; notRead: string[]; film: string };
+
+/// The baseline is what the film's rows are held to, not what makes them: a raise or a
+/// lowering leaves a film main's.
+export const CONTROLLER_FILMS: Kind = {
+  dir: join(homedir(), ".cache/terra-review/controller-films"),
+  scope: "CONTROLLER",
+  notRead: ["tools/controller/baseline.tsv"],
+  film: "cargo xtask gpu film -- cargo xtask controller --film",
+};
+export const COMBAT_FILMS: Kind = {
+  dir: join(homedir(), ".cache/terra-review/combat-films"),
+  scope: "COMBAT",
+  notRead: ["tools/combat/baseline.tsv"],
+  film: "cargo xtask gpu film -- cargo xtask combat --film",
+};
 
 /// Where a film was made: the commit checked out, and whether the tracked files were as committed.
 export type Filmed = { commit: string; clean: boolean; when: string };
@@ -33,44 +53,46 @@ export function stamp(cwd = ROOT): Filmed {
   return { commit, clean: commit.length > 0 && dirty === "", when: new Date().toISOString() };
 }
 
+/// The stamp of a film from its start and its end: clean only if the checkout was clean and
+/// at one commit throughout.
+export function filmedThrough(before: Filmed, after: Filmed): Filmed {
+  return { ...before, clean: before.clean && after.clean && after.commit === before.commit };
+}
+
 /// Keeps a clean film's checks from `out` under its commit; a dirty one is not kept. What it did.
-export function keep(out: string, filmed: Filmed, films = FILMS): string {
+export function keep(out: string, filmed: Filmed, kind: Kind): string {
   writeFileSync(join(out, "filmed.json"), JSON.stringify(filmed, null, 1) + "\n");
   if (!filmed.clean) return `not kept for nightly: the checkout differs from ${filmed.commit.slice(0, 10)}`;
-  const dir = join(films, filmed.commit);
+  const dir = join(kind.dir, filmed.commit);
   mkdirSync(dir, { recursive: true });
   for (const file of [...KEPT_FILES, "filmed.json"]) if (existsSync(join(out, file))) copyFileSync(join(out, file), join(dir, file));
-  const all = readdirSync(films).map((name) => ({ name, at: statSync(join(films, name)).mtimeMs }));
-  for (const old of all.sort((a, b) => b.at - a.at).slice(KEPT)) rmSync(join(films, old.name), { recursive: true, force: true });
+  const all = readdirSync(kind.dir).map((name) => ({ name, at: statSync(join(kind.dir, name)).mtimeMs }));
+  for (const old of all.sort((a, b) => b.at - a.at).slice(KEPT)) rmSync(join(kind.dir, old.name), { recursive: true, force: true });
   return `kept for nightly as ${dir}`;
 }
 
-/// The baseline is what the film's rows are held to, not what makes them: a raise or a
-/// lowering leaves a film main's.
-const NOT_READ = ["tools/controller/baseline.tsv"];
-
 /// Whether a film's rows still hold after these changed files: none under what the film reads.
-export function holds(changed: string[], reads: string[]): boolean {
-  return !changed.some((file) => !NOT_READ.includes(file) && reads.some((prefix) => file.startsWith(prefix)));
+export function holds(changed: string[], reads: string[], notRead: string[]): boolean {
+  return !changed.some((file) => !notRead.includes(file) && reads.some((prefix) => file.startsWith(prefix)));
 }
 
 export type Found = { dir: string; commit: string; behind: number } | { why: string };
 
 /// The film of `head`'s own history nearest to it whose rows still hold at `head`: kept, clean,
 /// an ancestor, and nothing the film reads changed since.
-export function mainFilm(head = "HEAD", films = FILMS, cwd = ROOT): Found {
-  const reads = scopePaths(readFileSync(join(cwd, "xtask/src/scope.rs"), "utf8"), "CONTROLLER");
-  if (!reads.length) return { why: "xtask/src/scope.rs has no CONTROLLER list" };
-  const names = existsSync(films) ? readdirSync(films) : [];
+export function mainFilm(kind: Kind, head = "HEAD", cwd = ROOT): Found {
+  const reads = scopePaths(readFileSync(join(cwd, "xtask/src/scope.rs"), "utf8"), kind.scope);
+  if (!reads.length) return { why: `xtask/src/scope.rs has no ${kind.scope} list` };
+  const names = existsSync(kind.dir) ? readdirSync(kind.dir) : [];
   let best: { dir: string; commit: string; behind: number } | undefined;
   let nearestStale: { commit: string; behind: number } | undefined;
   for (const commit of names) {
-    const dir = join(films, commit);
+    const dir = join(kind.dir, commit);
     if (!existsSync(join(dir, "checks.json"))) continue;
     if (!git(["merge-base", "--is-ancestor", commit, head], cwd).ok) continue;
     const behind = Number(git(["rev-list", "--count", `${commit}..${head}`], cwd).out);
     const changed = git(["diff", "--name-only", "--no-renames", commit, head], cwd).out.split("\n").filter(Boolean);
-    if (!holds(changed, reads)) {
+    if (!holds(changed, reads, kind.notRead)) {
       if (!nearestStale || behind < nearestStale.behind) nearestStale = { commit, behind };
       continue;
     }
@@ -78,5 +100,5 @@ export function mainFilm(head = "HEAD", films = FILMS, cwd = ROOT): Found {
   }
   if (best) return best;
   const stale = nearestStale ? `; the nearest, ${nearestStale.commit.slice(0, 10)} (${nearestStale.behind} commits back), is before a change to what the film reads` : "";
-  return { why: `no clean film of this commit's history in ${films}${stale}: film main with \`cargo xtask gpu film -- cargo xtask controller --film\` on a clean checkout` };
+  return { why: `no clean film of this commit's history in ${kind.dir}${stale}: film main with \`${kind.film}\` on a clean checkout` };
 }

@@ -12,7 +12,7 @@
 //                                             minutes; `cargo xtask gpu film -- cargo xtask controller --film`)
 //   cargo xtask controller --filmed           the film's rows from main's own film, not filming: the
 //                                             newest clean one nothing it reads changed since
-//                                             (films.ts; nightly's, so it banks them)
+//                                             (tools/scorecard/films.ts; nightly's, so it banks them)
 //   cargo xtask controller --raise "<why>"    write the rows that got worse, or are new, with why
 //   cargo xtask controller --lower            write the rows that got better (nightly's, D414)
 //
@@ -27,7 +27,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { bakeFile } from "../characters/markers.ts";
-import { mainFilm } from "./films.ts";
+import { CONTROLLER_FILMS, mainFilm } from "../scorecard/films.ts";
 import { type Criterion, finish, type Held, judge, readBaseline, round, type Status } from "../scorecard/ratchet.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -133,10 +133,10 @@ function main() {
     filmValues(criteria, checks, values);
   }
   // Main's film without filming (nightly's): the newest clean film of this commit's history
-  // that nothing the film reads changed since (films.ts).
+  // that nothing the film reads changed since (tools/scorecard/films.ts).
   let filmed = false;
   if (opt.filmed && !opt.film) {
-    const found = mainFilm();
+    const found = mainFilm(CONTROLLER_FILMS);
     if ("why" in found) console.log(`  film rows not judged: ${found.why}`);
     else {
       filmed = true;

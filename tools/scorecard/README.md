@@ -1,3 +1,5 @@
 # Scorecard
 
 The ratchet every area's scorecard shares (D452, D457): `ratchet.ts` judges a criterion's number by its miss (how far outside its bar, so worse is always more), holds it to a baseline, prints a line a criterion and the summary, and raises (`--raise "<why>"`) or lowers (`--lower`, nightly's alone, D414) the baseline. Its users measure their own numbers and call `finish`: [tools/combat](../combat/README.md) (`cargo xtask combat`) and [tools/controller](../controller/README.md) (`cargo xtask controller`). Its pure parts are tested through combat's `scorecard.test.ts`.
+
+`films.ts` keeps a heavy film's checks by commit when it was made on a clean checkout (the controller's filmed course in `~/.cache/terra-review/controller-films/`, combat's duel in `combat-films/`), and finds main's own film for nightly's `--filmed`: the newest of the checkout's history that nothing the kind's scope list in `xtask/src/scope.rs` names changed since, the baseline aside, so nightly banks the film's rows without filming (D457, D452; tested in `films.test.ts`).

@@ -8,6 +8,9 @@
 //   cargo xtask combat --film             and the duel film's checks (the GPU, minutes)
 //   cargo xtask combat --film --out DIR   the duel's film, record and checks into DIR, not
 //                                         ~/.cache/terra-review/duel (two films at once share it)
+//   cargo xtask combat --filmed           the film's rows from main's own duel film, not filming:
+//                                         the newest clean one nothing it reads changed since
+//                                         (tools/scorecard/films.ts; nightly's, so it banks them)
 //   cargo xtask combat --json FILE        the results also as JSON
 //   cargo xtask combat --raise "<why>"    write the rows that got worse, or are new, with why
 //   cargo xtask combat --lower            write the rows that got better (nightly's alone, D414)
@@ -25,6 +28,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { COMBAT_FILMS, filmedThrough, keep, mainFilm, stamp } from "../scorecard/films.ts";
 import { type Criterion as Row, finish, type Held, judge, readBaseline, round, type Status, testVerdicts } from "../scorecard/ratchet.ts";
 
 // The ratchet is shared (tools/scorecard); its parts are named here too, for this scorecard's tests.
@@ -130,6 +134,7 @@ function main() {
   const { values: opt } = parseArgs({
     options: {
       film: { type: "boolean", default: false },
+      filmed: { type: "boolean", default: false },
       out: { type: "string" },
       json: { type: "string" },
       raise: { type: "string" },
@@ -150,8 +155,27 @@ function main() {
     appendFileSync(LOG, out);
     return out;
   };
-  const wanted = criteria.filter((c) => c.measurable && (c.cost === "cheap" || opt.film));
+  // Main's duel film without filming (nightly's): the newest clean film of this commit's
+  // history that nothing the film reads changed since (tools/scorecard/films.ts).
+  let filmedAt: string | undefined;
+  if (opt.filmed && !opt.film) {
+    const found = mainFilm(COMBAT_FILMS);
+    if ("why" in found) console.log(`  film rows not judged: ${found.why}`);
+    else {
+      filmedAt = found.dir;
+      console.log(`  film rows from main's film at ${found.commit.slice(0, 10)}, ${found.behind} commits back, nothing the film reads changed since`);
+    }
+  }
+  const film = opt.film || filmedAt !== undefined;
+  const wanted = criteria.filter((c) => c.measurable && (c.cost === "cheap" || film));
   const values = new Map<string, number>();
+  const filmValues = (json: string) => {
+    const checks: { name: string; faults: number; value?: number }[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
+    for (const c of wanted) if (c.check?.by === "film") {
+      const found = checks.find((each) => each.name === (c.check as { name: string }).name);
+      if (found) values.set(c.id, found.value ?? found.faults);
+    }
+  };
 
   // The move set's timings.
   const set = readSet(readFileSync(SET, "utf8"));
@@ -199,20 +223,19 @@ function main() {
       if (v !== undefined) values.set(c.id, round(v));
     }
   }
-  // The duel film's checks (tools/sandbox/duel.ts writes checks.json beside its film).
+  // The duel film's checks (tools/sandbox/duel.ts writes checks.json beside its film); a clean
+  // checkout's are kept by its commit, for nightly to bank them.
   if (opt.film) {
     const out = opt.out ? resolve(opt.out) : join(homedir(), ".cache/terra-review/duel");
     const json = join(out, "checks.json");
     rmSync(json, { force: true });
+    const before = stamp();
     run(process.execPath, [resolve(ROOT, "tools/sandbox/duel.ts"), "--out", out]);
-    const checks: { name: string; faults: number; value?: number }[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
-    for (const c of wanted) if (c.check?.by === "film") {
-      const found = checks.find((each) => each.name === (c.check as { name: string }).name);
-      if (found) values.set(c.id, found.value ?? found.faults);
-    }
-  }
+    if (existsSync(json)) console.log(`  duel film ${keep(out, filmedThrough(before, stamp()), COMBAT_FILMS)}`);
+    filmValues(json);
+  } else if (filmedAt) filmValues(join(filmedAt, "checks.json"));
 
-  const results = criteria.map((c) => (c.measurable && c.cost === "heavy" && !opt.film ? { id: c.id, status: "skipped" as Status } : judge(c, values.get(c.id), held.get(c.id))));
+  const results = criteria.map((c) => (c.measurable && c.cost === "heavy" && !film ? { id: c.id, status: "skipped" as Status } : judge(c, values.get(c.id), held.get(c.id))));
   finish({
     name: "combat",
     criteria,
@@ -222,7 +245,7 @@ function main() {
     baselineName: "tools/combat/baseline.tsv",
     log: "target/combat/scorecard.log",
     heavy: "run with --film",
-    heavyRun: opt.film,
+    heavyRun: film,
     json: opt.json,
     raise: opt.raise,
     lower: opt.lower,

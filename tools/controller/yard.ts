@@ -18,7 +18,7 @@
 //
 // Into ~/.cache/terra-review/controller-yard/ by default: yard.mp4, checks.txt, checks.json
 // (the numbers the scorecard reads), and each run's walk-<pace>.jsonl and log; a clean checkout's
-// checks are kept by its commit too, for nightly to bank (films.ts). Exits 1 when a
+// checks are kept by its commit too, for nightly to bank (tools/scorecard/films.ts). Exits 1 when a
 // check fails. Under WSL the runs are the Windows build, on the real GPU; start it as
 // `cargo xtask gpu film -- cargo xtask controller --film` (D319). Needs ffmpeg. Node 22.18 or
 // later; no dependencies.
@@ -29,7 +29,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { ROOT, buildOffscreen, offscreenPath, offscreenRun } from "../sandbox/client.ts";
 import { read } from "../sandbox/duel/checks.ts";
-import { keep, stamp } from "./films.ts";
+import { CONTROLLER_FILMS, filmedThrough, keep, stamp } from "../scorecard/films.ts";
 import { pose } from "./swim.ts";
 import { type Walk, check } from "./yard-checks.ts";
 
@@ -102,11 +102,8 @@ if (!args.includes("--check")) {
   rmSync(work, { recursive: true, force: true });
 }
 const passed = report();
-// A clean checkout's film is kept by its commit, for nightly to bank its rows (films.ts).
-if (!args.includes("--check")) {
-  const after = stamp();
-  console.log(`yard: ${keep(out, { ...filmed, clean: filmed.clean && after.clean && after.commit === filmed.commit })}`);
-}
+// A clean checkout's film is kept by its commit, for nightly to bank its rows (tools/scorecard/films.ts).
+if (!args.includes("--check")) console.log(`yard: ${keep(out, filmedThrough(filmed, stamp()), CONTROLLER_FILMS)}`);
 process.exit(passed ? 0 : 1);
 
 /// The checks on each pace's record and log, a line each, kept as checks.txt and checks.json.
