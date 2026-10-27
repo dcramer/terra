@@ -1,7 +1,7 @@
 //! The run-in: what the game spawns in the laid dungeon. Door leaves in the doorways of the
 //! links that have doors, a chest against a wall of each room with loot, the mobs of each room
 //! on free floor away from its doors, torches on walls (a room's wall decorations first, a
-//! corridor's every third cell, about 30 lights in all), the start on the surface and a tour
+//! corridor's every third cell and the end walls its legs run into, about 30 lights in all), the start on the surface and a tour
 //! for a camera, from the stair down by the longest way that enters no room twice to the goal.
 
 use super::modules::{Class, Look};
@@ -13,7 +13,7 @@ use super::{
 use crate::Dungeon;
 use crate::door::Lock;
 use crate::graph::{Graph, Link};
-use crate::place::{Layout, Side, Space, opposite};
+use crate::place::{Layout, STEPS, Side, Space, opposite};
 use crate::theme::Role;
 use glam::{IVec3, Vec3};
 use std::collections::{HashMap, VecDeque};
@@ -307,7 +307,8 @@ fn wall_of(layout: &Layout, c: usize, salt: u32) -> Option<usize> {
 }
 
 /// Torches: one in each room (none in the rest room, which has its fire), on a wall
-/// decoration first; then one every third corridor cell; then a second in rooms of six cells
+/// decoration first; then on the end walls a corridor's legs run into (`end_walls`); then one
+/// every third corridor cell, none beside a torch; then a second in rooms of six cells
 /// or more; until the dungeon has `LIGHTS`.
 fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
     let layout = &dungeon.layout;
@@ -340,8 +341,17 @@ fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
     }
     let mut lit = Vec::new();
     lit.extend(rooms.iter().filter_map(|found| found.first().copied()));
+    // The end walls before the run's every third cell, which the cap cuts first: the crypt
+    // reaches `LIGHTS` with rooms and runs alone.
+    for run in &layout.corridors {
+        let ends = end_walls(layout, run, &lit);
+        lit.extend(ends);
+    }
     for run in &layout.corridors {
         for (k, &at) in run.iter().enumerate().filter(|(k, _)| k % 3 == 1) {
+            if lit.iter().any(|&(t, _)| beside(run, at, t)) {
+                continue;
+            }
             if let Some(d) = layout
                 .cell(at)
                 .and_then(|c| wall_of(layout, c, 310 + k as u32))
@@ -366,6 +376,55 @@ fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
     let room = LIGHTS.saturating_sub(out.lights.len());
     out.lights
         .extend(lit.into_iter().take(room).map(|(at, d)| torch(at, d)));
+}
+
+/// A corridor run's end walls: where a straight leg of two steps or more (stairs left out)
+/// runs into a wall, at a turn or at the run's end beside a stair or a door in a side wall,
+/// the wall it faces (the longer leg's where both do), when no torch is in that cell: one in
+/// the next cell round a turn stands 5.7 m from it. The eye walks the leg toward that wall,
+/// and past the run's last torch it was a black rectangle (round 7's crypt film at 18.9 s,
+/// the wall at a stair head).
+fn end_walls(layout: &Layout, run: &[IVec3], lit: &[(IVec3, usize)]) -> Vec<(IVec3, usize)> {
+    let side = |a: IVec3, b: IVec3| (0..4).find(|&d| a + STEPS[d] == b);
+    // The side a leg arriving at `k` from `back` (-1 or 1 along the run) faces, and its
+    // steps straight.
+    let leg = |k: usize, back: isize| -> Option<(usize, usize)> {
+        let at = |n: isize| {
+            usize::try_from(k as isize + back * n)
+                .ok()
+                .and_then(|i| run.get(i).copied())
+        };
+        let d = side(at(1)?, run[k])?;
+        let more = (1..)
+            .take_while(
+                |&n| matches!((at(n + 1), at(n)), (Some(a), Some(b)) if side(a, b) == Some(d)),
+            )
+            .count();
+        Some((1 + more, d))
+    };
+    let mut out: Vec<(IVec3, usize)> = Vec::new();
+    for (k, &at) in run.iter().enumerate() {
+        let Some(c) = layout.cell(at) else {
+            continue;
+        };
+        if lit.iter().chain(&out).any(|&(t, _)| t == at) {
+            continue;
+        }
+        let faced = [-1, 1]
+            .into_iter()
+            .filter_map(|back| leg(k, back))
+            .filter(|&(cells, d)| cells >= 2 && layout.cells[c].sides[d] == Side::Wall)
+            .max_by_key(|&(cells, d)| (cells, d));
+        if let Some((_, d)) = faced {
+            out.push((at, d));
+        }
+    }
+    out
+}
+
+/// Whether a torch at `t` is in the run's cell `at` or the next along the run.
+fn beside(run: &[IVec3], at: IVec3, t: IVec3) -> bool {
+    t == at || (run.contains(&t) && (t - at).abs().element_sum() <= 1)
 }
 
 /// A room's middle on its floor.

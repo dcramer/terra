@@ -29,6 +29,8 @@ mod runin;
 mod shell;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod torch_tests;
 mod view;
 
 pub use runin::centre as room_centre;
