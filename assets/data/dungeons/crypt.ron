@@ -82,7 +82,7 @@
             ("models/props/barrow/Urns.glb", 1.0), ("models/props/barrow/Candles.glb", 1.0),
             ("models/props/VasePair.glb", 1.0),
          ], count: (2, 3),
-         clutter: [("models/props/barrow/Candles.glb", 0.8), ("models/props/BrassPans.glb", 1.0)], litter: (1, 1),
+         clutter: [("models/props/barrow/Candles.glb", 0.8), ("models/props/PlateStack.glb", 1.0)], litter: (1, 1),
          scatter: [("models/props/barrow/StandFallen.glb", 1.0), ("models/props/barrow/UrnFallen.glb", 1.0)], strewn: (1, 1)),
         // The ossuary passage: the dead laid along it, a coffin waiting for its niche.
         (name: "ossuary passage", roles: [Passage],
@@ -100,7 +100,7 @@
             ("models/props/VasePair.glb", 1.0), ("models/props/Chest.glb", 1.0),
             ("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0),
          ], count: (2, 3),
-         clutter: [("models/props/PlateStack.glb", 1.0), ("models/props/BowlStack.glb", 1.0), ("models/props/BrassPans.glb", 1.0)], litter: (1, 1),
+         clutter: [("models/props/PlateStack.glb", 1.0), ("models/props/BowlStack.glb", 1.0)], litter: (1, 1),
          scatter: [("models/props/barrow/Planks.glb", 1.0), ("models/props/barrow/UrnFallen.glb", 1.0), ("models/props/barrow/BoneHeap.glb", 1.0)], strewn: (1, 1),
          vignette: [
             ("models/props/Chest.glb", 1.0, (0.0, 0.05)), ("models/props/BowlStack.glb", 1.0, (0.85, 0.3)),
@@ -169,7 +169,9 @@
             ("models/props/Barrel.glb", 1.0), ("models/props/Log.glb", 1.0),
             ("models/props/Buckets.glb", 1.0),
          ], count: (2, 3),
-         clutter: [("models/props/BowlStack.glb", 1.0), ("models/props/HandTools.glb", 1.0)], litter: (1, 1),
+         // The delvers' pans by their fire: cookware is the camp's, never a tomb's (barrow
+         // dress round 22's reviewers read the pans in the tomb as an enamel kitchen's).
+         clutter: [("models/props/BowlStack.glb", 1.0), ("models/props/HandTools.glb", 1.0), ("models/props/BrassPans.glb", 1.0)], litter: (1, 1),
          scatter: [("models/props/barrow/Planks.glb", 1.0)], strewn: (1, 1),
          // A bedroll laid out from the wall (RugLong, 0.8 by 1.65 m at this scale), its blanket
          // folded at its head, the delver's pack against the wall by it, a lantern.
