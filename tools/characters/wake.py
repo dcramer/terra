@@ -150,8 +150,8 @@ bsdf.inputs["Emission Strength"].default_value = 1.0
 
 # The bark graded to the forest's oaks' (D536): each channel's mean and spread, in sRGB, moved
 # to those of the oaks' bark scans as the forest tints them (lush.rs BARKS), measured on the
-# trunk's front, so asleep it is not the lighter, greener tree among them. The crown's leaves
-# keep their colour: texels of faces above the head fade out of the grade.
+# trunk's front, so asleep it is not the lighter, greener tree among them. The crown is bare
+# limbs, graded with the rest; its leaves are the forest's cards (crown.py).
 def encoded(rgb):
     return np.where(rgb <= 0.0031308, 12.92 * rgb, 1.055 * np.power(np.maximum(rgb, 0), 1 / 2.4) - 0.055)
 
@@ -171,11 +171,7 @@ trunk_px = px[pos[:, 2] < joint["Head"].z]
 own = rgb[trunk_px[:, 1], trunk_px[:, 0]]
 gain = oaks.std(0) / np.maximum(own.std(0), 1e-3)
 graded = np.clip((rgb - own.mean(0)) * gain + oaks.mean(0), 0, 1)
-keep = np.zeros((H, W), dtype=np.float32)
-crown_top = joint["Head"].z + 0.3
-cpx, cpos, _, _ = texels([f for f in bm.faces if f.calc_center_median().z > crown_top - 0.2])
-keep[cpx[:, 1], cpx[:, 0]] = np.clip((cpos[:, 2] - crown_top) / 0.8, 0, 1)
-rgb[...] = graded + keep[..., None] * (rgb - graded)
+rgb[...] = graded
 tex.image.pixels.foreach_set(colour)
 tex.image.update()
 tex.image.pack()
