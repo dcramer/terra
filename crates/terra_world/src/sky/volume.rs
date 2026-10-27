@@ -163,7 +163,7 @@ pub(super) struct VolumePlugin;
 
 impl Plugin for VolumePlugin {
     fn build(&self, app: &mut App) {
-        tune::register(&[&HEAPED_COVER, &BODY_LOW, &VOLUME]);
+        tune::register(&[&HEAPED_COVER, &BODY_LOW, &VOLUME, &clouds::DRIFT]);
         app.add_plugins((
             MaterialPlugin::<VeilMaterial>::default(),
             ExtractResourcePlugin::<CloudVolume>::default(),

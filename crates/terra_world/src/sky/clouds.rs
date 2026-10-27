@@ -19,6 +19,7 @@ use crate::climate::ClimateFields;
 use crate::start::Start;
 use bevy::math::{DVec2, Vec2, Vec3, Vec4};
 use terra_climate::{Climate, WorldTime};
+use terra_gen::tune::Tunable;
 
 /// The 2D layer's height over the eye: a cumulus base (sky.md's table, 0.5 to 2 km).
 pub const LAYER_M: f32 = 1500.0;
@@ -101,7 +102,7 @@ impl CloudWinds {
         }
     }
 
-    /// The winds of a world's climate in the start's frame.
+    /// The winds of a world's climate in the start's frame, quickened by [`DRIFT`].
     pub fn of_world(fields: &ClimateFields, start: &Start) -> Self {
         let at = start.translation;
         let north = start.rotation.inverse() * fields.frame.north(at);
@@ -111,8 +112,31 @@ impl CloudWinds {
             Vec2::new(north.x, north.z),
             northern,
         )
+        .quickened(f64::from(DRIFT.get()))
+    }
+
+    /// These winds `by` times as fast, the way they blow kept.
+    pub fn quickened(self, by: f64) -> Self {
+        Self {
+            layer: self.layer * by,
+            scud: self.scud * by,
+        }
     }
 }
+
+/// How many times faster than the climate's wind aloft the clouds drift (D516: "should move at
+/// a very noticeable pace"). At the real wind, about 8 m/s at 1.5 km, a heap 3 km off crosses
+/// a sixth of a degree a second and its motion barely shows; at 5 times, about 40 m/s, it
+/// crosses a degree in a little over a second, so a cloud is seen to move within a few
+/// seconds. A tunable so the developers can set it by eye in a running game (D547); every
+/// machine reads the same default, so one clock still draws one sky (D540). The value is the
+/// developers' to choose.
+pub static DRIFT: Tunable = Tunable::new(
+    "sky.cloud.drift",
+    5.0,
+    0.0..=20.0,
+    "how many times faster than the real wind aloft the clouds drift: 1 is the climate's wind",
+);
 
 /// The world's seconds of play at a moment of its clock: what the clouds drift by.
 pub fn seconds(time: WorldTime) -> f64 {

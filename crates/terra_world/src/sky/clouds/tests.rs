@@ -295,3 +295,22 @@ fn heaped_and_rained_tops_stop_at_d544s_heights_over_the_sea() {
     assert!((deck - 3800.0).abs() < 0.5, "{deck}");
     assert_eq!(cumulus, 2500.0 + 1700.0);
 }
+
+#[test]
+fn the_clouds_drift_faster_than_the_wind_aloft_the_way_it_blows() {
+    // D516: a pace a player notices, faster than the real wind aloft carries them.
+    let (fields, start) = world();
+    let at = start.translation;
+    let north = start.rotation.inverse() * fields.frame.north(at);
+    let real = CloudWinds::of(
+        fields.fields.climate(),
+        Vec2::new(north.x, north.z),
+        fields.frame.latitude(at) >= 0.0,
+    );
+    let drawn = CloudWinds::of_world(&fields, &start);
+    assert!(DRIFT.get() > 1.0);
+    for (drawn, real) in [(drawn.layer, real.layer), (drawn.scud, real.scud)] {
+        assert!((drawn.length() - real.length() * f64::from(DRIFT.get())).abs() < 1e-6);
+        assert!(drawn.angle_to(real).abs() < 1e-9);
+    }
+}
