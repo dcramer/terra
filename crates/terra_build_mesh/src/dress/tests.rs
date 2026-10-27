@@ -169,6 +169,22 @@ fn rain_streaks_a_wall_under_its_sill_and_open_top_not_under_a_roof_and_wets_its
         .shade(&masks, Vec3::new(0.25, 1.4, CELL_M), out, None)
         .x;
     assert!((up - 1.0).abs() < 1e-4, "{up}");
+    // Wet darker than the dirt where its splash is darker, as wet stone is; as high.
+    let wetter = Masks {
+        splash_dark: 0.5,
+        ..masks.clone()
+    };
+    let deep = rained
+        .shade(&wetter, Vec3::new(0.25, 0.05, CELL_M), out, None)
+        .x;
+    assert!(
+        deep < foot * 0.7,
+        "the splash no darker: {deep} against {foot}"
+    );
+    let up = rained
+        .shade(&wetter, Vec3::new(0.25, 1.4, CELL_M), out, None)
+        .x;
+    assert!((up - 1.0).abs() < 1e-4, "{up}");
 }
 
 #[test]

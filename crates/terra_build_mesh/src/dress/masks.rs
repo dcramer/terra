@@ -297,7 +297,7 @@ impl Rained<'_> {
             let up = p.y - floor.map_or(foot, |floor| floor.max(foot));
             let reach = masks.splash * (0.7 + 0.6 * smooth(p, 0.35, 51));
             let wet = libm::powf((1.0 - up / reach).clamp(0.0, 1.0), 0.8);
-            k = k.lerp(tint, wet);
+            k = k.lerp(tint * (1.0 - masks.splash_dark), wet);
         }
         if masks.streaks > 0.0
             && let Some(from) = self.source(cell, masks.streak_reach)
