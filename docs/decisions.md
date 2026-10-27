@@ -332,6 +332,7 @@ How structures are planned, built, drawn and coded.
 | [D491](decisions/D491.md) | Space Engineers 2's ground and construction loop | Design | Developers | Decided | How blocks are built and taken down follows Space… |
 | [D494](decisions/D494.md) | Creative and survival | Design | Developers | Decided | A world is played in one of two modes. |
 | [D550](decisions/D550.md) | Three timber joints: the post between a window and a door, the end board on a door's head, the eave board at a roof's step | Design | Developers | Decided | How three joints in timber read, judged from stills on… |
+| [D557](decisions/D557.md) | A window or door where another wall crosses or meets its wall | Design | — | Open | Whether an opening may be cut in the cube where another… |
 
 ## Art, characters and sound
 
