@@ -245,6 +245,23 @@ function sized(look: Look, name: string, rules: KindRules, f: (rule: string, det
     f("grip along", `its grip is ${(end * 100).toFixed(1)} cm (${((100 * end) / length).toFixed(0)}% of its length) from its -Y end; a ${name}'s is ${off.join(" and ")}`);
 }
 
+/** Where the other hand goes on a kind held in two (its rules' `second` names the key): a
+ * number along +Y ("second") or a point ("nock"), in its data and, once made, its extras; for
+ * "second", on the look's handle, ahead of its -Y end and short of its working end. */
+function secondHand(look: Look, name: string, rules: KindRules, data: Record<string, unknown> | undefined, f: (rule: string, detail: string) => void) {
+  const key = rules.second;
+  if (!key) return;
+  const want = data?.[key];
+  const shaped = key === "nock" ? isV3(want) : num(want);
+  if (!shaped) return f("second", `its data gives no "${key}", where a ${name}'s other hand goes (holding.md, section 3)`);
+  if (!same(look.extras[key], want)) f("marker", `its extras' ${key} ${JSON.stringify(look.extras[key])} is not its data's ${JSON.stringify(want)}`);
+  if (key === "second") {
+    const { lo, hi } = box(look.points);
+    const at = want as number;
+    if (at < lo[1] + 0.04 || at > hi[1] - HEAD_SHARE * (hi[1] - lo[1])) f("second", `its second grip, ${at} m along +Y, is off its handle (${lo[1].toFixed(2)} to ${hi[1].toFixed(2)} m, its far quarter its working end)`);
+  }
+}
+
 function hung(look: Look, f: (rule: string, detail: string) => void) {
   const { lo, hi } = box(look.points);
   if (look.extras.hold !== "hung") f("marker", `its extras do not say {"hold": "hung"}, which its data's "fit" does`);
@@ -322,6 +339,7 @@ export function judge(look: Look, body: Body, data = dataOf(look.name)): Fault[]
   if (mount === "rigid") rigid(look, body, f);
   if (mount === "skinned") skinned(look, body, f);
   sized(look, kind, rules, f);
+  secondHand(look, kind, rules, data, f);
   covers(look, f);
   return faults;
 }

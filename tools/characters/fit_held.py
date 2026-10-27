@@ -35,6 +35,11 @@ Every item gives "source" (under assets/models) and "carry_tilt" (degrees), and 
 bone it rides on; where its origin (the grip) sits in that bone's frame, metres; and the
 directions in that frame its front (-Z) and grip (+Y) turn to. "note" says why, for people.
 
+Held in two hands, it gives where the other hand goes, in the look's own space, metres, and its
+extras say the same (docs/attachment.md, "Second grip"): "second", how far along +Y the off hand
+closes on its handle (a spear's, a greatsword's; negative behind the grip); "nock", [x, y, z], a
+bow's string's middle at rest, which the drawing hand takes.
+
 Writes assets/models/held/<item>.glb, the item named as in the game's catalogue in lower case
 with `_` for spaces.
 """
@@ -60,6 +65,13 @@ def data(item):
     """The item's numbers, art/held/<item>.json."""
     with open(os.path.join(DATA, f"{item}.json")) as f:
         return json.load(f)
+
+
+def second_hand(ob, d):
+    """Where its other hand goes, if it is held in two, into its extras as its data says."""
+    for key in ("second", "nock"):
+        if key in d:
+            ob[key] = d[key]
 
 
 # The free models' material names, by the role each part plays.
@@ -141,6 +153,7 @@ def textured(item):
     ob["carry_tilt"] = carry_tilt
     if "strap" in d:
         ob["strap"] = d["strap"]
+    second_hand(ob, d)
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)
     path = os.path.join(OUT, f"{item}.glb")
@@ -204,6 +217,7 @@ for item in look.args():
             bsdf.inputs["Roughness"].default_value = 0.7
             bsdf.inputs["Metallic"].default_value = 0.0
     ob["carry_tilt"] = carry_tilt
+    second_hand(ob, d)
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)
     path = os.path.join(OUT, f"{item}.glb")

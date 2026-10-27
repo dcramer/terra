@@ -63,6 +63,17 @@ How each kind goes on: its origin, axes and facing.
 - **Rigid on a socket.** Its node's origin is what it swings about (swing.rs): `swing.tail` is where it rests from there. Per morph, its socket's shift does not follow the skin under it, so the look records its own shift beyond the socket's at each morph's full weight (`morphs`), which the game mixes by the body's morph weights.
 - **Skinned.** Its joints are the base skeleton's, by name, and its morph targets are the base's (`female`, `heavy`, `strong`, `thin`), so the game binds it to any body's joints and drives its morphs with the body's (character.rs, D128). Parts that must not bend ride one bone whole: a pack's bag is weighted wholly to `spine_03`, its straps made from the skin (`bands.py`, D189); a cap and a coif are made on the head as clothing is.
 
+## Second grip
+
+A thing held in two hands marks where the other hand goes, as Unreal's weapons carry a left-hand IK socket (from memory: Lyra's and the shooter templates' `LHIK` bone or socket on the weapon mesh, which the hand's two-bone IK reaches after the pose). Holding.md section 3 says how the hand is pulled there and checked; this says where, in the look's own space:
+
+| Kind | Key, in its data and its extras | Value | The other hand there |
+|---|---|---|---|
+| `polearm`, and any item whose `hold` grip is `Two` (a greatsword, a great hammer) | `second` | metres along +Y from the grip, negative behind it; on the handle, at least 4 cm from its -Y end and short of its working end | its hand socket takes the look's own axes at (0, `second`, 0): +Y toward the working end, +Z toward the wrist, so the off (left) socket's +X, out of its palm, is the look's +X and the palms face opposite ways, as hands on a bat or a two-handed sword do |
+| `bow` | `nock` | [x, y, z], m: the string's middle at rest | the drawing hand takes it; while drawn the string's middle follows that hand (holding.md). The bow rides its lead hand, the off hand (`lead: Off`), so its own origin is the off hand's socket |
+
+The check requires the key of a kind that has one, and the extras to say what the data does. Today neither the spear nor the bow gives it (listed faults); the round that builds the two-handed IK sets them with the clips that use them. The `Two` items of other kinds are not checked until `items.ron`'s `hold` is read by the check.
+
 ## Extras
 
 Read from the glTF `extras` of the look's mesh node (Bevy's `GltfExtras`); Blender writes an object's custom properties there.
@@ -72,6 +83,8 @@ Read from the glTF `extras` of the look's mesh node (Bevy's `GltfExtras`); Blend
 | `carry_tilt` | every held look | degrees it tips when carried, not used: negative tips its head forward and down in a hanging hand, positive raises it | `fit_held.py` | `terra_walker::character` (`held_ready`) |
 | `hold` | a hung look | `"hung"` | `fit_held.py` | `attach_contract.ts`; tools that must tell it from a look in hand |
 | `strap` | a strapped look | `{"bone", "at", "face", "grip"}`: the bone it rides; where its origin sits in that bone's frame (m); the directions in that frame its front (-Z) and grip (+Y) turn to | `fit_held.py` from its data | `terra_walker::strap`, `tools/characters/moves.ts`, the icon rig |
+| `second` | a look held in two hands along its handle | metres along +Y where the other hand closes ("Second grip") | `fit_held.py` from its data | `attach_contract.ts`; the two-handed IK (not built) |
+| `nock` | a bow | [x, y, z], its string's middle at rest | `fit_held.py` from its data | `attach_contract.ts`; the bow's draw (not built) |
 | `socket` | a rigid look | the socket's name | `fit_gear.py` | `terra_walker::character` (dress) |
 | `morphs` | a rigid look | `{morph: [x, y, z]}`, its shift beyond its socket's at the morph's full weight, m, in the socket's space | `carry_gear.py` | `terra_walker::character` |
 | `swing` | a loose rigid look | `{"stiffness", "drag", "gravity", "tail": [x, y, z]}` | `fit_gear.py` | `terra_walker::swing` |

@@ -108,10 +108,26 @@ test("a look is its kind's life size, its grip where its kind's falls", () => {
   // Gripped at its middle, not near its pommel: the length fit's grip_from_end mistyped.
   assert.deepEqual(rules(moved(knife, ([x, y, z]) => [x, y - 0.08, z])), ["facing", "grip along"]);
   const bow = look("held/bow");
-  assert.deepEqual(rules(bow).sort(), ["facing", "grip"]);
+  assert.deepEqual(rules(bow).sort(), ["facing", "grip", "second"]);
   assert.ok(rules(moved(bow, ([x, y, z]) => [x, y + 0.3, z])).includes("grip along"), "held near a limb's tip");
   const shield = look("held/round_shield");
   assert.deepEqual(rules(moved(shield, ([x, y, z]) => [2 * x, 2 * y, 2 * z])), ["size"]);
+});
+
+test("a kind held in two says where its other hand goes, on its handle, in its data and its extras", () => {
+  const spear = look("held/spear");
+  const data = dataOf("held/spear")!;
+  const second = (d: Record<string, unknown>, l = spear) => judge(l, body, d).filter((f) => f.rule === "second" || f.rule === "marker").map((f) => f.rule);
+  assert.deepEqual(second(data), ["second"], "none given");
+  assert.deepEqual(second({ ...data, second: -0.5 }), ["marker"], "given, but its look not made again");
+  const made = { ...spear, extras: { ...spear.extras, second: -0.5 } };
+  assert.deepEqual(second({ ...data, second: -0.5 }, made), [], "50 cm behind the lead hand, on its shaft");
+  assert.deepEqual(second({ ...data, second: 0.9 }, { ...spear, extras: { ...spear.extras, second: 0.9 } }), ["second"], "on its blade");
+  const bow = look("held/bow");
+  const nock = [0, 0, -0.15];
+  assert.deepEqual(judge({ ...bow, extras: { ...bow.extras, nock } }, body, { ...dataOf("held/bow")!, nock }).filter((f) => f.rule === "second"), []);
+  // One-handed kinds need none.
+  assert.ok(!rules(look("held/arming_sword")).includes("second"));
 });
 
 test("a fault listed but no longer found is reported, so a fix removes its line", () => {
