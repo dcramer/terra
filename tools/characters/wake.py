@@ -235,8 +235,8 @@ skin = KDTree(len(bark_verts))
 for i, v in enumerate(bark_verts):
     skin.insert(v.co, i)
 skin.balance()
-bm.faces.ensure_lookup_table()
 tree = BVHTree.FromBMesh(bm)
+tree_faces = list(bm.faces)  # the tree's face indices, kept as faces are added after it
 
 
 def surface(x, z):
@@ -250,7 +250,7 @@ def bark_uv(co):
     hit, _, i, _ = tree.ray_cast(Vector((co.x, -50, co.z)), Vector((0, 1, 0)))
     if hit is None:
         return None
-    f = bm.faces[i]
+    f = tree_faces[i]
     w = poly_weights([v.co for v in f.verts], hit)
     return sum((l[uv].uv * wi for l, wi in zip(f.loops, w)), Vector((0, 0)))
 
