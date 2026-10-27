@@ -66,9 +66,10 @@ const MARCH_M: f32 = 32000.0;
 // The march's budget of samples, and how many empty fine ones return it to coarse steps.
 const STEPS: u32 = 96u;
 const EMPTY_TO_COARSE: u32 = 10u;
-// Extinction a metre at density 1: cumulus (liquid water 0.4 g/m3, droplets of 10 um, so some
-// 50 m of sight inside), and the thinner stratus deck.
-const CUMULUS_EXTINCTION: f32 = 0.06;
+// Extinction a metre at density 1: cumulus (the bevy branch's droplet optics: 1 g/m3, Warner
+// 1955's cumulus core, droplets of 10 um, so some 25 m of sight inside), and the thinner stratus
+// deck.
+const CUMULUS_EXTINCTION: f32 = 0.157;
 const DECK_EXTINCTION: f32 = 0.03;
 // The distance over which the air's haze takes the clouds (as the 2D layer fades by lift).
 const HAZE_M: f32 = 20000.0;
@@ -219,7 +220,10 @@ fn shape(c: Column, m: vec2<f32>, h: f32, lod: f32) -> f32 {
     // The remap leaves it between about 0.7 and 0.95; stretched, so a coverage cuts it
     // gradually rather than all or nothing.
     let body = remap(remap(n.r, fbm - 1.0, 1.0), params.tuned.y, 1.0);
-    return remap(body * profiled, 1.0 - c.coverage, 1.0) * c.coverage;
+    // A heap's inside is as dense as its kind's water makes it, however much of the sky the
+    // heaps cover (cut by the coverage it was a fifth of that, and from below and above a heap
+    // was 5 to 10 times too thin toward the sun); a deck still thins with its cover.
+    return remap(body * profiled, 1.0 - c.coverage, 1.0) * mix(c.coverage, 1.0, c.kind);
 }
 
 // The edges eroded by the finer Worley noise: wispy low down, billowing higher up (Nubis 2015).
