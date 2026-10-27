@@ -24,7 +24,7 @@
         arch: "models/props/barrow/DoorArch.glb",
         pier: "models/props/barrow/Pier.glb",
         niche: "models/props/barrow/Loculus.glb",
-        remains: ["models/props/barrow/Shroud.glb", "models/props/barrow/Bones.glb"],
+        remains: ["models/props/barrow/Shroud.glb", "models/props/barrow/BoneHeap.glb", "models/props/barrow/Skull.glb"],
         sarcophagus: Some("models/props/barrow/Sarcophagus.glb"),
         spring: 2.95,
     )),
@@ -80,25 +80,25 @@
             ("models/props/VasePair.glb", 1.0),
          ], count: (2, 3),
          clutter: [("models/props/barrow/Candles.glb", 0.8), ("models/nature/Rock_3.glb", 4.0)], litter: (1, 1),
-         scatter: [("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/Debris.glb", 0.8), ("models/props/barrow/BoneScatter.glb", 0.9)], strewn: (1, 1)),
+         scatter: [("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/Debris.glb", 0.8), ("models/props/barrow/BoneHeap.glb", 0.9)], strewn: (1, 1)),
         // The ossuary passage: the dead laid along it, a coffin waiting for its niche.
         (name: "ossuary passage", roles: [Passage],
          hero: [("models/props/barrow/Coffin.glb", 1.0)], lamp: Some(("models/props/barrow/Candles.glb", 1.0)),
          props: [
-            ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0),
+            ("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0),
             ("models/props/barrow/Shroud.glb", 1.0), ("models/nature/Rock_6.glb", 0.35),
          ], count: (2, 3),
          clutter: [("models/nature/Rock_3.glb", 4.0), ("models/props/barrow/Candles.glb", 0.7)], litter: (1, 1),
-         scatter: [("models/props/barrow/BoneScatter.glb", 1.0), ("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/BoneScatter.glb", 0.8)], strewn: (1, 1)),
+         scatter: [("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/BoneHeap.glb", 0.8)], strewn: (1, 1)),
         // A robbed tomb: the coffin's lid pushed aside, the looter's leavings by a chest.
         (name: "robbed tomb", roles: [Branch],
          hero: [("models/props/barrow/Coffin.glb", 1.0)], lamp: Some(("models/props/barrow/Candles.glb", 0.9)),
          props: [
             ("models/props/VasePair.glb", 1.0), ("models/nature/Rock_6.glb", 0.35),
-            ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0),
+            ("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0),
          ], count: (2, 3),
          clutter: [("models/props/PlateStack.glb", 1.0), ("models/props/BowlStack.glb", 1.0), ("models/nature/Rock_3.glb", 4.0)], litter: (1, 1),
-         scatter: [("models/props/barrow/BoneScatter.glb", 1.0), ("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/Debris.glb", 0.8)], strewn: (1, 1),
+         scatter: [("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/Debris.glb", 0.8)], strewn: (1, 1),
          vignette: [
             ("models/props/Chest.glb", 1.0, (0.0, 0.05)), ("models/props/BowlStack.glb", 1.0, (0.85, 0.3)),
             ("models/props/Lantern.glb", 1.0, (-0.8, 0.1)),
@@ -107,11 +107,11 @@
         (name: "guard post", roles: [Guard],
          hero: [("models/props/Bench.glb", 1.0)], lamp: Some(("models/props/barrow/Candles.glb", 0.8)),
          props: [
-            ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Shroud.glb", 1.0),
+            ("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Shroud.glb", 1.0),
             ("models/props/Barrel.glb", 1.0), ("models/props/Lantern.glb", 1.0),
          ], count: (2, 3),
-         clutter: [("models/props/barrow/BoneScatter.glb", 1.1), ("models/nature/Rock_7.glb", 0.4)], litter: (1, 1),
-         scatter: [("models/props/barrow/BoneScatter.glb", 1.0), ("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/BoneScatter.glb", 0.8)], strewn: (1, 1),
+         clutter: [("models/props/barrow/BoneHeap.glb", 1.1), ("models/nature/Rock_7.glb", 0.4)], litter: (1, 1),
+         scatter: [("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/BoneHeap.glb", 0.8)], strewn: (1, 1),
          vignette: [
             ("models/props/barrow/Shroud.glb", 1.0, (0.0, 0.0)), ("models/props/AxesLaid.glb", 1.0, (1.1, 0.2)),
             ("models/props/Lantern.glb", 1.0, (-1.1, 0.05)),
@@ -119,11 +119,11 @@
         // The ossuary, the key on its altar (the room's hero): the heaped dead.
         (name: "ossuary", roles: [Puzzle],
          props: [
-            ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Shroud.glb", 1.0),
+            ("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Shroud.glb", 1.0),
             ("models/props/barrow/Urns.glb", 1.0),
          ], count: (3, 4),
-         clutter: [("models/props/barrow/Candles.glb", 0.8), ("models/props/barrow/Bones.glb", 0.7), ("models/props/barrow/BoneScatter.glb", 1.1)], litter: (1, 1),
-         scatter: [("models/props/barrow/BoneScatter.glb", 1.0), ("models/props/barrow/BoneScatter.glb", 0.8), ("models/props/barrow/Debris.glb", 1.0)], strewn: (1, 2)),
+         clutter: [("models/props/barrow/Candles.glb", 0.8), ("models/props/barrow/Skull.glb", 1.2), ("models/props/barrow/BoneHeap.glb", 1.1)], litter: (1, 1),
+         scatter: [("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/BoneHeap.glb", 0.8), ("models/props/barrow/Debris.glb", 1.0)], strewn: (1, 2)),
         // A treasury of grave goods round its chest.
         (name: "treasury", roles: [Treasure, Secret],
          hero: [("models/props/Chest.glb", 1.1)], lamp: Some(("models/props/barrow/Candles.glb", 1.0)),
@@ -155,9 +155,9 @@
          ], count: (2, 3),
          clutter: [
             ("models/props/barrow/Candles.glb", 0.8), ("models/props/PlateStack.glb", 1.0),
-            ("models/props/barrow/BoneScatter.glb", 1.1),
+            ("models/props/barrow/BoneHeap.glb", 1.1),
          ], litter: (1, 1),
-         scatter: [("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/BoneScatter.glb", 1.0), ("models/props/barrow/Debris.glb", 0.8)], strewn: (1, 1)),
+         scatter: [("models/props/barrow/Debris.glb", 1.0), ("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Debris.glb", 0.8)], strewn: (1, 1)),
         // The camp of delvers who came before, round its fire.
         (name: "delvers' camp", roles: [Rest],
          props: [
