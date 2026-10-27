@@ -205,7 +205,8 @@ export function fittedAs(look: Look, data?: Record<string, unknown>): Mount | un
     return "in hand";
   }
   const fit = data?.fit;
-  if (fit === "back" || fit === "torso") return "skinned";
+  // A garment's data (gear_list.ts): made as a shell of the skin, or hung from the hips.
+  if (fit === "back" || fit === "torso" || fit === "shell" || fit === "hung") return "skinned";
   if (fit === "belt" || fit === "head") return "rigid";
   return data ? undefined : "skinned";
 }

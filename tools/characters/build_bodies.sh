@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Rebuilds every character asset the game loads from the source art in art/, for free (D112,
 # D128; the character playbook, section 7). Run it after changing any of the scripts it calls,
-# or after adding a morph, a skin or a piece of gear to the lists below.
+# or after adding a morph or a skin (bodies.sh). A worn item is its data, art/gear/<item>/fit.json,
+# read here (gear_list.ts); one item alone, on bodies this has built: build_item.sh.
 #
 #   tools/characters/build_bodies.sh
 #
@@ -27,33 +28,18 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 blender=tools/blender/run.sh here=tools/characters out=tools/characters/out
-base=base-male
+# The base, its morphs and skins (bodies.sh).
+source tools/characters/bodies.sh
 
-# Worn looks made on the base: item, its main material's role, how it is made (a coverage of
-# shell_garment.py, or a kind of hung_garment.py for what hangs: a skirt, an apron), what it is
-# made from, and its options, in order, since a piece worn over another is made after it.
+# Worn looks made on the base, each from its data, art/gear/<item>/fit.json (gear_list.ts):
+# a garment's line is item, how it is made (shell_garment.py, or hung_garment.py for what
+# hangs: a skirt, an apron), its main material's role, its coverage, what it is made from, and
+# its options, in the order made, since a piece worn over another is made after it.
 # `--shape=female`: made from a dressed model of the female (her morph's offsets, from step 2).
-garments=(
-  "leather_coat Leather chest_long_sleeves art/gear/dressed-male-outfit/model.glb"
-  "trousers Cloth legs_long art/gear/dressed-male-outfit/model.glb"
-  "smith_apron Leather smith_apron art/gear/dressed-male-smith/model.glb --over=trousers"
-  "shirt Linen chest_long_sleeves art/gear/dressed-male-smith/model.glb --over=trousers --under=smith_apron --plain"
-  "cap Wool head_cap art/gear/dressed-male-smith/model.glb --plain"
-  "boots Leather feet_ankle art/gear/dressed-male-smith/model.glb --over=trousers"
-  "shift Linen chest_long_sleeves art/gear/dressed-female-kirtle/model.glb --shape=female --plain"
-  "bodice Wool bodice art/gear/dressed-female-kirtle/model.glb --shape=female --over=shift --plain"
-  "coif Linen head_coif art/gear/dressed-female-kirtle/model.glb --shape=female --plain"
-  "shoes Leather feet art/gear/dressed-female-kirtle/model.glb --shape=female"
-  "skirt Wool skirt art/gear/dressed-female-kirtle/model.glb --shape=female --over=shift,bodice --plain"
-  "apron Linen apron art/gear/dressed-female-kirtle/model.glb --shape=female --over=skirt,shift,bodice"
-)
-hung=(skirt apron smith_apron)
-rigid=(small_pack large_pack quiver)
-# Morphs: a design kept in art/characters/base-male/morphs/NAME/model.glb, or a rigged body.
-designed=(heavy thin strong)
-rigged=("female base-female 1.70")
-# Templates with their own painted skin: morph and the design's front view.
-skins=("female art/characters/base-female/front.png")
+listed=$(node $here/gear_list.ts garments)   # a fault in the data stops the build here
+mapfile -t garments <<<"$listed"
+listed=$(node $here/gear_list.ts rigid)
+mapfile -t rigid <<<"$listed"
 
 build() {
 echo "== 0. the clips"
@@ -78,9 +64,9 @@ if printf "%s\n" "${garments[@]}" | grep -q -- "--shape=female"; then
   done
 fi
 for g in "${garments[@]}"; do
-  read -r item role coverage dressed flags <<<"$g"
+  read -r item maker role coverage dressed flags <<<"$g"
   # shellcheck disable=SC2086
-  if printf "%s\n" "${hung[@]}" | grep -qx "$coverage"; then
+  if [[ $maker == hung ]]; then
     $blender $here/hung_garment.py "$out/$base-game.glb" "$dressed" "$item" "$role" "$coverage" ${flags:-} | grep -E "^HUNG .*(hides|vertices)|EXPORTED|Error" || true
   else
     $blender $here/shell_garment.py "$out/$base-game.glb" "$dressed" "$item" "$role" "$coverage" ${flags:-} | grep -E "^SHELL .*hides|EXPORTED|Error" || true
@@ -129,7 +115,7 @@ for k in "${skins[@]}"; do
 done
 echo "== 5. the game's files"
 mkdir -p assets/models/gear
-morphs=$(printf "%s\n" "${designed[@]}" $(for r in "${rigged[@]}"; do echo "${r%% *}"; done) | sort | paste -sd, -)
+morphs=$(morph_names | paste -sd, -)
 $blender $here/export_character.py "$out/$base.glb" assets/models/character/base.glb "--morphs=$morphs" --textures=2048 | grep -E "MORPH|SOCKETS|EXPORTED|Error" || true
 node $here/mirror.ts assets/models/character/base.glb    # the mirrored clips (art/animation/mirrors.json)
 node $here/markers.ts assets/models/character/base.glb   # each clip's foot-down markers (D455)

@@ -113,7 +113,7 @@ The export also gives the body its sockets, the points what is held and worn han
 
 The game has many items and many bodies (D127), so gear is data: every worn item has one look, `assets/models/gear/<item>.glb`, made once on the base body and carrying the base's morphs, so it fits every body (D128). The item is named as in the catalogue in lower case with `_` for spaces (`leather_coat`). The game finds it by that name and puts it on as the file says: a skinned look is bound to the body's skeleton and follows its morphs; a rigid one names its socket in its glTF extras. No game code names an item, so adding gear is adding files.
 
-A piece is made on the base (below), into `tools/characters/out/gear/base-male/`, then added to the lists in `build_bodies.sh`, which checks it on every morph and writes the game's file (section 7).
+A piece is its data, `art/gear/<item>/fit.json` (its kind, how it is made and from what; a garment's `fit` is `shell` or `hung`, with its `role`, `coverage`, dressed `model`, and `over`, `under`, `plain`, `shape`; `gear_list.ts` reads them all), so adding one edits no script. `tools/characters/build_item.sh <item>` makes it alone on a full build's bodies: on the base, carried onto every morph, pushed clear, checked and written as the game's file (the quiver's binary chunk identical to the full build's). `build_bodies.sh` makes every piece from the same data (section 7).
 
 **Clothing and armour that bend with the body** (chest, legs, gloves, feet) are made on the base body, so nothing is set per character:
 
@@ -208,7 +208,7 @@ One command rebuilds every character asset the game loads from the source art in
 | `assets/models/character/templates.json` | The templates (D111): each a mix of morphs and a skin. Edited by hand |
 | `assets/models/gear/<item>.glb` | Each worn look, with the same morph targets in the same order |
 
-Run it after changing a script it calls, or after adding a morph, a skin or a piece of gear to the lists at its top. It ends with `BUILD pass`, or `BUILD fail` and every failure a step printed or exited with (`build_verdict.ts`); its whole output is in `tools/characters/out/build.log`. A long run: about an hour, most of it writing the items' files. Don't edit the scripts while it runs: bash reads its script as it goes, and each step loads the Python afresh, so a change mid-run mixes two versions.
+Run it after changing a script it calls, or after adding a morph or a skin (`bodies.sh`); a piece of gear is its data, read as it runs. It ends with `BUILD pass`, or `BUILD fail` and every failure a step printed or exited with (`build_verdict.ts`); its whole output is in `tools/characters/out/build.log`. A long run: about an hour, most of it writing the items' files. Don't edit the scripts while it runs: bash reads its script as it goes, and each step loads the Python afresh, so a change mid-run mixes two versions.
 
 Rewriting the items' files changes their bytes, so `cargo xtask check` then finds their painted icons stale. If an item's look did not change, compare its render with its icon (`cargo xtask icons --renders DIR`) and keep the painting, `cargo xtask icons --keep <item>`. If it did change, paint it again (the `item-icons` playbook).
 
