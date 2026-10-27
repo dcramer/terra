@@ -122,7 +122,14 @@ Materials are named by role (Wood, Metal, Leather, Trim), so a tint recolours on
 
 ## The check
 
-`node tools/characters/attach_contract.ts` reads every committed look in `assets/models/held` and `gear`, their data and `base.glb`, and holds each to its kind's rules above (its kind named, its mount's origin, axes, facing and extras, its life size, its grip across and along the handle), and the body's sockets to the table; its test runs in `cargo xtask check`. Given files, it judges each by the folder it sits in. A fault known today is listed with why in `tools/characters/attach_faults.json`; a fixed one fails the test until its line is removed, so the list only shrinks.
+`node tools/characters/attach_contract.ts` reads every committed look in `assets/models/held` and `gear`, their data and `base.glb`, and holds each to its kind's rules above (its kind named, its mount's origin, axes, facing and extras, its life size, its grip across and along the handle), and the body's sockets to the table; its test runs in `cargo xtask check`. It also catches what a new item gets wrong on its way in:
+
+- **Inside out**: over a quarter of its surface wound against its own normals (vertices mirrored by a script without flipping the faces).
+- **Off the body** (skinned): over 2% of its vertices more than 0.6 m from their most-weighted joint at rest (1.2 m for a `hung` garment's free hem), so made elsewhere or at another scale; or over 10% of those more than 5 cm to one side weighted to a joint of the other side (mirrored); a pack's middle under 5 cm behind the body's (its front kept as Tripo's).
+- **Stale**: its look not made from its data as it stands: a `length` fit's length and grip within 5 mm, a `hung` fit's `out`, a `belt` fit's height within 3% and `hangs_at` within 0.02, the `swing` numbers; and its data's `source` there.
+- **Its hold**: an item with a `hold` in `items.ron` fights as one of its kind's `classes` (`attach_kinds.json`), its `hold.length` within 3% of its look's, and one held `Two` gives a `second`.
+
+What it cannot catch yet: a `points` fit made from a source since changed (a hash of the source in its extras would), and the kind of an item with no `hold` (a tool), which only its size and grip bound. Given files, it judges each by the folder it sits in. A fault known today is listed with why in `tools/characters/attach_faults.json`; a fixed one fails the test until its line is removed, so the list only shrinks.
 
 Known today (2026-10-27): the eight looks fitted by length (both axes, both pickaxes, the hammer, the knife, the spear, the bow) lie across X, 90 degrees off, as `fit_held.py` never turns them about +Y; six of them sit 2.5 to 4.7 cm off their grip, as the length fit centres the model's bounds; and the basket predates its `hold` marker.
 

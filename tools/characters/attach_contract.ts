@@ -30,6 +30,7 @@ export type KindRules = {
   grip_from_end_m?: [number, number];
   grip_share?: [number, number];
   second?: string;
+  classes?: string[];
   fits: "detector" | "person" | "body";
 };
 export const KINDS: Record<string, KindRules> = Object.fromEntries(
@@ -47,10 +48,14 @@ export type Look = {
   targets: string[];
   points: V3[];
   tris: number[];
+  /** Each vertex's normal as the file gives it, placed as its vertex is; none if it gives none. */
+  normals?: (V3 | undefined)[];
+  /** A skinned look's: each vertex's most-weighted joint, by name. */
+  heaviest?: string[];
 };
 
-/** What the check reads of the body: its node names, sockets at rest, and morphs. */
-export type Body = { nodes: Set<string>; parent: Map<string, string>; sockets: Map<string, Pose>; targets: string[] };
+/** What the check reads of the body: its node names, sockets and joints at rest, morphs and height. */
+export type Body = { nodes: Set<string>; parent: Map<string, string>; sockets: Map<string, Pose>; targets: string[]; at?: Map<string, V3>; height?: number };
 
 export type Fault = { look: string; rule: string; detail: string };
 
@@ -81,6 +86,14 @@ export const HEAD_SHARE = 0.25;
 export const RIGID_NEAR_M = 0.5;
 /** Patches of skin a look may cover: 0 to 1,023 (body_mask.wesl). */
 export const PATCHES = 1024;
+/** How far a skinned look's vertex may lie from its most-weighted joint at rest. */
+export const SKIN_REACH_M = 0.6;
+/** How far to one side of the body's middle a vertex is on that side. */
+export const SIDE_M = 0.05;
+/** How far behind the body's middle (-Z) a pack's vertices lie on average, at least. */
+export const PACK_BEHIND_M = 0.05;
+/** The share of a look's surface that may face against its normals (insideOut). */
+export const INSIDE_OUT = 0.25;
 
 type Prim = { attributes: Record<string, number>; indices?: number; mode?: number };
 type GNode = { name?: string; mesh?: number; skin?: number; extras?: Record<string, unknown> };
@@ -96,25 +109,49 @@ export function readLook(file: string, name = lookName(file)): Look {
   const targets: string[] = [];
   const points: V3[] = [];
   const tris: number[] = [];
+  const normals: (V3 | undefined)[] = [];
+  const heaviest: string[] = [];
   nodes.forEach((n, i) => {
     if (n.mesh === undefined) return;
     Object.assign(extras, n.extras ?? {});
     const mesh = g.gltf.meshes![n.mesh] as { primitives: Prim[]; extras?: { targetNames?: string[] } };
     for (const t of mesh.extras?.targetNames ?? []) if (!targets.includes(t)) targets.push(t);
-    if (n.skin !== undefined) joints = g.gltf.skins![n.skin].joints.map((j) => nodes[j].name ?? "");
+    const skin = n.skin === undefined ? undefined : g.gltf.skins![n.skin].joints.map((j) => nodes[j].name ?? "");
+    if (skin) joints = skin;
+    // A normal goes as its vertex does, less the move: its node's turn and scale. A mirroring
+    // node flips the winding's front too (glTF 2.0, "Transformations": a negative determinant
+    // makes it clockwise), so the normal is flipped once more to be compared with the winding.
+    const lin = (v: V3): V3 => {
+      const [a, o] = [place(world[i], v), place(world[i], [0, 0, 0])];
+      return [a[0] - o[0], a[1] - o[1], a[2] - o[2]];
+    };
+    const [ex, ey, ez] = [lin([1, 0, 0]), lin([0, 1, 0]), lin([0, 0, 1])];
+    const mirrored = ex[0] * (ey[1] * ez[2] - ey[2] * ez[1]) - ex[1] * (ey[0] * ez[2] - ey[2] * ez[0]) + ex[2] * (ey[0] * ez[1] - ey[1] * ez[0]) < 0;
+    const turn = (v: V3): V3 => lin(mirrored ? [-v[0], -v[1], -v[2]] : v);
     for (const p of mesh.primitives) {
       if ((p.mode ?? 4) !== 4) continue;
       const at = points.length;
       const a = g.read(p.attributes.POSITION);
+      const nm = p.attributes.NORMAL === undefined ? undefined : g.read(p.attributes.NORMAL);
       for (let k = 0; k < a.length; k += 3) {
         const v: V3 = [a[k], a[k + 1], a[k + 2]];
-        points.push(n.skin === undefined ? place(world[i], v) : v);
+        points.push(skin ? v : place(world[i], v));
+        const nv: V3 | undefined = nm && [nm[k], nm[k + 1], nm[k + 2]];
+        normals.push(nv && (skin ? nv : turn(nv)));
+      }
+      if (skin && p.attributes.JOINTS_0 !== undefined && p.attributes.WEIGHTS_0 !== undefined) {
+        const [js, ws] = [g.read(p.attributes.JOINTS_0), g.read(p.attributes.WEIGHTS_0)];
+        for (let k = 0; k < js.length; k += 4) {
+          let best = k;
+          for (let m = k + 1; m < k + 4; m++) if (ws[m] > ws[best]) best = m;
+          heaviest[at + k / 4] = skin[js[best]];
+        }
       }
       const idx = p.indices === undefined ? Array.from({ length: a.length / 3 }, (_, k) => k) : g.read(p.indices);
       for (const k of idx) tris.push(at + k);
     }
   });
-  return { name, extras, joints, targets, points, tris };
+  return { name, extras, joints, targets, points, tris, normals, heaviest: joints ? heaviest : undefined };
 }
 
 /** "held/knife" from assets/models/held/knife.glb. */
@@ -128,12 +165,20 @@ export function readBody(file = BASE): Body {
   const world = posed(g, undefined, 0);
   const sockets = new Map<string, Pose>();
   const parent = new Map<string, string>();
+  const at = new Map<string, V3>();
+  let height = 0;
   nodes.forEach((n, i) => {
     if (n.name && g.parentOf[i] !== undefined) parent.set(n.name, nodes[g.parentOf[i]].name ?? "");
     if (n.name?.startsWith("socket.")) sockets.set(n.name, world[i]);
+    if (n.name) at.set(n.name, world[i].t);
+    if (n.mesh !== undefined && n.skin !== undefined)
+      for (const p of g.gltf.meshes![n.mesh].primitives) {
+        const a = g.read(p.attributes.POSITION);
+        for (let k = 1; k < a.length; k += 3) height = Math.max(height, a[k]);
+      }
   });
   const targets = (g.gltf.meshes ?? []).flatMap((m) => m.extras?.targetNames ?? []);
-  return { nodes: new Set(nodes.map((n) => n.name ?? "")), parent, sockets, targets: [...new Set(targets)] };
+  return { nodes: new Set(nodes.map((n) => n.name ?? "")), parent, sockets, targets: [...new Set(targets)], at, height };
 }
 
 /** An item's numbers, art/held/<item>.json or art/gear/<item>/fit.json, if it has any. */
@@ -173,6 +218,57 @@ const box = (pts: V3[]) => {
 const isV3 = (v: unknown) => Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === "number");
 const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** The share of a look's surface, by area, whose winding faces against its own normals: near
+ * 0 made right, near 1 inside out (its vertices mirrored or its faces flipped without the
+ * other). Undefined when its file gives no normals. */
+export function insideOut(look: Look): number | undefined {
+  if (!look.normals?.length) return undefined;
+  let [against, all] = [0, 0];
+  for (let t = 0; t + 2 < look.tris.length; t += 3) {
+    const [a, b, c] = [0, 1, 2].map((k) => look.points[look.tris[t + k]]);
+    const ns = [0, 1, 2].map((k) => look.normals![look.tris[t + k]]);
+    if (ns.some((n) => !n)) continue;
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const w = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const area = Math.hypot(w[0], w[1], w[2]);
+    if (!area) continue;
+    const d = [0, 1, 2].reduce((s, k) => s + w[k] * (ns[0]![k] + ns[1]![k] + ns[2]![k]), 0);
+    all += area;
+    if (d < 0) against += area;
+  }
+  return all ? against / all : undefined;
+}
+
+/** Which side of the body a joint is on by its name: +1 its left (+X), -1 its right, 0 neither. */
+export function sideOf(joint: string): number {
+  if (/(_l|\.L|Left|_L)$/.test(joint) || /^(left|Left)/.test(joint)) return 1;
+  if (/(_r|\.R|Right|_R)$/.test(joint) || /^(right|Right)/.test(joint)) return -1;
+  return 0;
+}
+
+/** A skinned look on the body as made on the base: the share of its vertices more than
+ * SKIN_REACH_M from their most-weighted joint at rest (made elsewhere, at another scale, or
+ * moved), and of those more than SIDE_M to one side weighted to a joint of the other side
+ * (mirrored, its left on the body's right). */
+export function onBody(look: Look, body: Body, reach = SKIN_REACH_M) {
+  if (!look.heaviest || !body.at) return undefined;
+  let [far, wrong, sided, n] = [0, 0, 0, 0];
+  look.points.forEach((p, i) => {
+    const j = look.heaviest![i];
+    const at = j === undefined ? undefined : body.at!.get(j);
+    if (!at) return;
+    n++;
+    if (Math.hypot(p[0] - at[0], p[1] - at[1], p[2] - at[2]) > reach) far++;
+    const s = sideOf(j);
+    if (s && Math.abs(p[0]) > SIDE_M) {
+      sided++;
+      if (Math.sign(p[0]) !== s) wrong++;
+    }
+  });
+  return { far: n ? far / n : 0, mirrored: sided ? wrong / sided : 0 };
+}
 
 /** Where the plane y = 0 cuts the look's triangles: the middle of the crossings' extent in X
  * and Z, the middle of the handle a fist closes on. */
@@ -262,6 +358,72 @@ function secondHand(look: Look, name: string, rules: KindRules, data: Record<str
   }
 }
 
+/** How an item is held, its `hold` in assets/data/items.ron (holding.md, section 1). */
+export type Hold = { class: string; grip: string; length?: number };
+
+/** Every item's hold in items.ron, by the id its looks are named by ("Arming sword" is
+ * arming_sword, terra_walker::character::item_id). */
+export function holds(root = ROOT): Map<string, Hold> {
+  const out = new Map<string, Hold>();
+  const text = readFileSync(join(root, "assets", "data", "items.ron"), "utf8");
+  for (const entry of text.split(/\bname: "/).slice(1)) {
+    const hold = /\bhold: \(([^)]*)\)/.exec(entry)?.[1];
+    if (!hold) continue;
+    const field = (k: string) => new RegExp(`\\b${k}: "?([\\w.]+)"?`).exec(hold)?.[1];
+    const length = field("length");
+    out.set(entry.slice(0, entry.indexOf('"')).toLowerCase().replaceAll(" ", "_"), { class: field("class") ?? "", grip: field("grip") ?? "", length: length === undefined ? undefined : Number(length) });
+  }
+  return out;
+}
+let held: Map<string, Hold> | undefined;
+/** A held look's item's hold in the committed items.ron. */
+export const holdOf = (look: string) => (look.startsWith("held/") ? (held ??= holds()).get(look.slice(5)) : undefined);
+
+/** How far a number the look is made from may differ from what its data says now. */
+export const MADE_M = 0.005;
+/** How far an item's hold.length may differ from its look's, as a share. */
+export const HOLD_SHARE = 0.03;
+
+/** Its look is made from its data as it stands: the numbers its maker reads are what the look
+ * measures (a data file changed and its look not made again, or a look made at another size). */
+function madeFrom(look: Look, body: Body, data: Record<string, unknown>, root: string, f: (rule: string, detail: string) => void) {
+  const { lo, hi } = box(look.points);
+  const was = (what: string, got: number, want: number, tol: number, unit = "m") => {
+    if (Math.abs(got - want) > tol) f("stale", `its ${what} is ${got.toFixed(3)} ${unit}, its data's ${want}: made again since?`);
+  };
+  if (data.fit === "length" && num(data.length) && num(data.grip_from_end)) {
+    was("length along +Y", hi[1] - lo[1], data.length as number, MADE_M);
+    was("grip from its -Y end", -lo[1], data.grip_from_end as number, MADE_M);
+  }
+  if (data.fit === "hung" && num(data.out)) {
+    const top = look.points.filter((p) => p[2] > hi[2] - 0.02);
+    was("handle's top across X", top.reduce((s, p) => s + p[0], 0) / top.length, data.out as number, MADE_M);
+  }
+  if (data.fit === "belt" && num(data.size) && num(data.hangs_at) && body.height) {
+    was("height", hi[1] - lo[1], (data.size as number) * body.height, 0.03 * (data.size as number) * body.height);
+    was("hanging point, as a share of its height from its foot,", -lo[1] / (hi[1] - lo[1]), data.hangs_at as number, 0.02, "");
+  }
+  const swing = data.swing as Record<string, unknown> | undefined;
+  const made = look.extras.swing as Record<string, unknown> | undefined;
+  if (swing && (!made || ["stiffness", "drag", "gravity"].some((k) => swing[k] !== made[k]))) f("stale", `its extras' swing ${JSON.stringify(made)} is not its data's ${JSON.stringify(swing)}`);
+  const source = typeof data.source === "string" ? join(root, "assets", "models", data.source) : undefined;
+  if (source && !existsSync(source)) f("file", `its data's source assets/models/${data.source} is not there`);
+}
+
+/** Its item's hold (items.ron) agrees with its kind and its look: the class one its kind fights
+ * as, its length the look's, and a look held in two saying where the other hand goes. */
+function heldAs(look: Look, kind: string, rules: KindRules, hold: Hold, data: Record<string, unknown> | undefined, f: (rule: string, detail: string) => void) {
+  if (rules.classes && !rules.classes.includes(hold.class))
+    f("hold", `its item fights as ${hold.class} (items.ron), which a ${kind} does not; a ${kind}'s classes are ${rules.classes.join(", ") || "none"}`);
+  const { lo, hi } = box(look.points);
+  const length = rules.mount === "in hand" ? hi[1] - lo[1] : Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+  if (hold.length !== undefined && Math.abs(length - hold.length) > HOLD_SHARE * hold.length)
+    f("hold", `its item's hold.length is ${hold.length} m (items.ron), its look ${length.toFixed(2)} m`);
+  if (hold.grip !== "Two" || rules.second) return;
+  if (!num(data?.second)) f("second", `its item is held in two (items.ron), but its data gives no "second", where the other hand goes`);
+  else if (!same(look.extras.second, data!.second)) f("marker", `its extras' second ${JSON.stringify(look.extras.second)} is not its data's ${data!.second}`);
+}
+
 function hung(look: Look, f: (rule: string, detail: string) => void) {
   const { lo, hi } = box(look.points);
   if (look.extras.hold !== "hung") f("marker", `its extras do not say {"hold": "hung"}, which its data's "fit" does`);
@@ -301,10 +463,22 @@ function rigid(look: Look, body: Body, f: (rule: string, detail: string) => void
     f("swing", "its swing lacks a number for stiffness, drag or gravity, or its tail");
 }
 
-function skinned(look: Look, body: Body, f: (rule: string, detail: string) => void) {
+/** The share of a skinned look's vertices that may lie out of its joints' reach, or on the
+ * other side from their joint's. */
+export const OFF_BODY = { far: 0.02, mirrored: 0.1 };
+
+function skinned(look: Look, body: Body, kind: string, f: (rule: string, detail: string) => void) {
   if (!look.joints) return f("skin", "it has no skin");
   const strange = look.joints.filter((j) => !body.nodes.has(j));
   if (strange.length) f("skin", `joints not the body's: ${strange.slice(0, 5).join(", ")}`);
+  // A loose garment's hem hangs free of the hips it is weighted to (hung_garment.py).
+  const on = onBody(look, body, look.extras.hung ? 2 * SKIN_REACH_M : SKIN_REACH_M);
+  if (on && on.far > OFF_BODY.far) f("on the body", `${(on.far * 100).toFixed(0)}% of its vertices lie over ${SKIN_REACH_M} m from their joint at rest: not made on the base, in its T-pose, at its size`);
+  if (on && on.mirrored > OFF_BODY.mirrored) f("mirrored", `${(on.mirrored * 100).toFixed(0)}% of its vertices off the middle are weighted to a joint of the body's other side`);
+  if (kind === "pack") {
+    const z = look.points.reduce((s, p) => s + p[2], 0) / look.points.length;
+    if (z > -PACK_BEHIND_M) f("facing", `its middle is ${(z * 100).toFixed(1)} cm along Z: a pack's bag lies behind the back (-Z), over ${PACK_BEHIND_M * 100} cm`);
+  }
   if (!same([...look.targets].sort(), [...body.targets].sort())) f("morphs", `its morphs (${look.targets.join(", ")}) are not the body's (${body.targets.join(", ")})`);
   if ("socket" in look.extras) f("socket", "a skinned look names a socket");
 }
@@ -317,7 +491,7 @@ function covers(look: Look, f: (rule: string, detail: string) => void) {
 }
 
 /** Every rule a look breaks for its kind. */
-export function judge(look: Look, body: Body, data = dataOf(look.name)): Fault[] {
+export function judge(look: Look, body: Body, data = dataOf(look.name), hold = holdOf(look.name), root = ROOT): Fault[] {
   const faults: Fault[] = [];
   const f = (rule: string, detail: string) => faults.push({ look: look.name, rule, detail });
   const kind = kindOf(look, data);
@@ -337,10 +511,14 @@ export function judge(look: Look, body: Body, data = dataOf(look.name)): Fault[]
   if (mount === "hung") hung(look, f);
   if (mount === "strapped") strapped(look, body, data, f);
   if (mount === "rigid") rigid(look, body, f);
-  if (mount === "skinned") skinned(look, body, f);
+  if (mount === "skinned") skinned(look, body, kind, f);
   sized(look, kind, rules, f);
   secondHand(look, kind, rules, data, f);
   covers(look, f);
+  const out = insideOut(look);
+  if (out !== undefined && out > INSIDE_OUT) f("inside out", `${(out * 100).toFixed(0)}% of its surface faces against its normals: mirrored, or its faces flipped`);
+  if (data) madeFrom(look, body, data, root, f);
+  if (hold) heldAs(look, kind, rules, hold, data, f);
   return faults;
 }
 
@@ -373,12 +551,13 @@ export function audit(root = ROOT): { looks: number; faults: Fault[] } {
   const faults = judgeSockets(body);
   let looks = 0;
   const seen = new Set<string>();
+  const items = holds(root);
   for (const dir of ["held", "gear"]) {
     for (const file of readdirSync(join(root, "assets", "models", dir)).filter((f) => f.endsWith(".glb")).sort()) {
       const look = readLook(join(root, "assets", "models", dir, file));
       seen.add(look.name);
       looks++;
-      faults.push(...judge(look, body, dataOf(look.name, root)));
+      faults.push(...judge(look, body, dataOf(look.name, root), dir === "held" ? items.get(basename(file, ".glb")) : undefined, root));
     }
   }
   for (const json of readdirSync(join(root, "art", "held")).filter((f) => f.endsWith(".json"))) {
