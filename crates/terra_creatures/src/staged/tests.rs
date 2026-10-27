@@ -211,3 +211,55 @@ fn a_figure_whose_time_runs_at_a_quarter_goes_a_quarter_as_far() {
     assert!((whole - 2.0).abs() < 0.05, "went {whole} m");
     assert!((quarter - 0.5).abs() < 0.02, "went {quarter} m");
 }
+
+/// A stride's pace is metres a second in its model file's own world, through its armature
+/// object's scale (`tools/characters/pace.py`), so a figure at its model's size going at the
+/// clip's own pace plays it at its own speed, however large the armature's scale is. The pace
+/// is known another way: the keyed walk's step length over its step time. Scaling by the
+/// animation player's world scale (which carries the armature's 3.3 again) played the Cetri's
+/// walk at 0.30 of its speed, clamped to half (round 13).
+#[test]
+fn a_figure_going_at_its_strides_pace_plays_it_at_its_own_speed_whatever_its_rigs_scale() {
+    use terra_walker::model_files::{extra, json};
+    let file = json("models/characters/cetri.glb");
+    let pace = extra(&file, "paces").unwrap()["Giant_Walk"]
+        .as_f64()
+        .unwrap() as f32;
+    let rig = file["scenes"][0]["nodes"][0].as_u64().unwrap() as usize;
+    let rig_scale = file["nodes"][rig]["scale"][1].as_f64().unwrap_or(1.0) as f32;
+    assert!(
+        rig_scale > 3.0,
+        "the case this covers: an armature scaled {rig_scale}"
+    );
+    let keyed = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../art/animation/keyed/giant_walk.json");
+    let keyed: Value = serde_json::from_str(&std::fs::read_to_string(keyed).unwrap()).unwrap();
+    let own = (keyed["step_m"].as_f64().unwrap() / keyed["step_s"].as_f64().unwrap()) as f32;
+    assert!(
+        (pace - own).abs() < 0.05 * own,
+        "the file's pace {pace} against the keyed {own}"
+    );
+    let going = |speed_now: f32, scale: f32| Staged {
+        name: "cetri".into(),
+        going: None,
+        face: Face::Way,
+        facing: Vec3::NEG_Z,
+        turn: 1.0,
+        speed_now,
+        scale,
+        asked: None,
+        asked_n: 0,
+        rate: 1.0,
+    };
+    for (speed, scale, expect) in [
+        (own, 1.0, 1.0),
+        (2.0 * own, 2.0, 1.0),
+        (0.75 * own, 1.0, 0.75),
+    ] {
+        let rate = played(&going(speed, scale), Some(pace));
+        assert!(
+            (rate - expect).abs() < 0.05,
+            "at {speed} m/s, {scale} times its model's size: played at {rate}, not {expect}"
+        );
+    }
+}

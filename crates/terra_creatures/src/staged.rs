@@ -456,6 +456,22 @@ fn stage(
     }
 }
 
+/// How fast a figure plays its clip: as asked, or a stride (one with a `pace`) at the speed it
+/// goes against that pace. A pace is metres a second in its model file's own world, as
+/// `tools/characters/pace.py` measures it through the armature object's scale (the Cetri's
+/// rig is 3.3 times its bones', the troll's 2.2), so it is scaled by the figure's size against
+/// its model alone: by the animation player's world scale, which carries the armature's own
+/// scale again, the Cetri's 0.87 m/s walk asked 0.30 of its speed and played at the slowest,
+/// half (round 13, docs/creatures.md).
+fn played(staged: &Staged, pace: Option<f32>) -> f32 {
+    match pace {
+        Some(pace) if staged.speed_now > STILL_MPS => {
+            terra_walker::pace::rate(staged.speed_now, pace, staged.scale)
+        }
+        _ => staged.asked.as_ref().map_or(1.0, |asked| asked.speed),
+    }
+}
+
 /// Each figure's clip as it was last told, blended in; a stride clip's playback at the speed
 /// it moves, so its feet keep to the ground.
 fn animate(
@@ -465,10 +481,9 @@ fn animate(
         &mut Animates,
         &mut AnimationPlayer,
         &mut AnimationTransitions,
-        &GlobalTransform,
     )>,
 ) {
-    for (mut animates, mut player, mut transitions, place) in &mut animators {
+    for (mut animates, mut player, mut transitions) in &mut animators {
         let Ok(staged) = figures.get(animates.staged) else {
             continue;
         };
@@ -513,21 +528,11 @@ fn animate(
             continue;
         };
         // As asked, or a stride at the pace it goes; either in the figure's own time.
-        let speed = match animates.paces.get(&name) {
-            Some(pace) if staged.speed_now > STILL_MPS => {
-                terra_walker::pace::rate(staged.speed_now, *pace, place.scale().y)
-            }
-            _ => staged.asked.as_ref().map_or(1.0, |asked| asked.speed),
-        };
+        let speed = played(staged, animates.paces.get(&name).copied());
         active.set_speed(speed * staged.rate);
         if let Ok(mut kept) = feet.get_mut(animates.staged) {
             let pace = animates.paces.get(&name).copied().unwrap_or(0.0);
-            kept.stride(
-                staged.facing,
-                pace * place.scale().y,
-                speed * staged.rate,
-                1.0,
-            );
+            kept.stride(staged.facing, pace * staged.scale, speed * staged.rate, 1.0);
         }
     }
 }
