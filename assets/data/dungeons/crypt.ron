@@ -136,14 +136,20 @@
         (name: "chapel", roles: [Shortcut],
          hero: [("models/props/barrow/Altar.glb", 1.0)],
          props: [("models/props/barrow/Candles.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0)], count: (2, 3),
-         clutter: [("models/props/barrow/Candles.glb", 0.8)], litter: (1, 1)),
+         clutter: [
+            ("models/props/barrow/Candles.glb", 0.8), ("models/props/BowlStack.glb", 1.0),
+            ("models/props/Goblets.glb", 1.0),
+         ], litter: (1, 1)),
         // The lord's burial chamber, the relic on its dais its hero: grave goods by the walls.
         (name: "lord's chamber", roles: [Goal],
          props: [
             ("models/props/barrow/Urns.glb", 1.0), ("models/props/VaseRow.glb", 1.0),
             ("models/props/Goblets.glb", 1.0), ("models/props/barrow/Candles.glb", 1.0),
          ], count: (2, 3),
-         clutter: [("models/props/barrow/Candles.glb", 0.8)], litter: (1, 1)),
+         clutter: [
+            ("models/props/barrow/Candles.glb", 0.8), ("models/props/PlateStack.glb", 1.0),
+            ("models/props/barrow/Bones.glb", 0.7),
+         ], litter: (1, 1)),
         // The camp of delvers who came before, round its fire.
         (name: "delvers' camp", roles: [Rest],
          props: [
