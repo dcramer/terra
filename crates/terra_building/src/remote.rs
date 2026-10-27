@@ -742,8 +742,8 @@ fn material(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let rules = world.resource::<BuildRules>().clone();
     let picked = rules
         .kind(&kind)
-        .filter(|kind| rules.names.contains_key(kind))
-        .ok_or_else(|| refused(format!("there is no material called {kind}")))?;
+        .filter(|kind| rules.hammer.contains(kind))
+        .ok_or_else(|| refused(format!("the hammer holds no material called {kind}")))?;
     for (mut builder, mut hammer) in world
         .query_filtered::<(&mut Builder, &mut terra_bases::hammer::Hammer), (With<Player>, With<LocalPlayer>)>()
         .iter_mut(world)

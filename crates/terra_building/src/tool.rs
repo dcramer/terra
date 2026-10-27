@@ -790,7 +790,7 @@ fn choose(
         // the sprint's, the roll waiting while a part is in hand. Alt and the wheel change
         // the brush's size (D226).
         if intent.held(Action::Dodge) && intent.wheel != 0 {
-            let kinds: Vec<terra_build::Kind> = rules.names.keys().copied().collect();
+            let kinds: Vec<terra_build::Kind> = rules.hammer.iter().copied().collect();
             if !kinds.is_empty() {
                 let now = builder.material.unwrap_or(look.laying);
                 let at = kinds.iter().position(|&kind| kind == now).unwrap_or(0) as i32;

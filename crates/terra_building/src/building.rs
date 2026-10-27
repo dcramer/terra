@@ -71,6 +71,7 @@ fn read_rules(look: Res<BuildLook>, mut rules: ResMut<BuildRules>) {
             .map(|kit| kit.kind())
             .collect(),
         names: kit_names(),
+        hammer: hammer(kits),
         budgets: Vec::new(),
         footing: footing_kind(kits),
         families: kits
@@ -79,6 +80,16 @@ fn read_rules(look: Res<BuildLook>, mut rules: ResMut<BuildRules>) {
             .map(|kit| (kit.kind(), plans::family(kit)))
             .collect(),
     };
+}
+
+/// The kinds the hammer offers: every kit's but one made for a dungeon theme's walls, which
+/// a player finds in the dungeon and never builds in.
+fn hammer(kits: &terra_build::kit::Kits) -> std::collections::BTreeSet<terra_build::Kind> {
+    kits.0
+        .iter()
+        .filter(|kit| !kit.dungeon_only)
+        .map(|kit| kit.kind())
+        .collect()
 }
 
 #[cfg(test)]
@@ -115,6 +126,25 @@ mod tests {
             let name = rules.name(kit.kind());
             assert_ne!(name, "plain", "kit {:?} is named in the rules", kit.kind());
             assert_eq!(rules.kind(name), Some(kit.kind()), "{name} finds its kit");
+            let offered = rules.hammer.contains(&kit.kind());
+            assert_eq!(
+                offered, !kit.dungeon_only,
+                "{name} is in the hammer unless a dungeon's"
+            );
         }
+    }
+
+    /// A kit made for a dungeon theme is not offered in the hammer; every other is.
+    #[test]
+    fn the_hammer_leaves_out_a_dungeons_kits() {
+        use terra_build::kit::{Kit, Kits};
+        let kit = |id, dungeon_only| Kit {
+            id,
+            dungeon_only,
+            ..Kit::default()
+        };
+        let kits = Kits(vec![kit(1, false), kit(7, false), kit(8, true)]);
+        let offered: Vec<u16> = hammer(&kits).into_iter().map(|kind| kind.0).collect();
+        assert_eq!(offered, [1, 7]);
     }
 }

@@ -377,7 +377,7 @@ fn copy(cx: &mut Acting, me: Actor, intent: &Intent, builder: &mut Mut<Builder>)
             .aimed
             .and_then(|cube| building.site.base.cube(cube))
             .map(|cube| cube.kind)
-            .filter(|kind| building.rules.names.contains_key(kind))
+            .filter(|kind| building.rules.hammer.contains(kind))
     {
         builder.material = Some(kind);
         building.tell(

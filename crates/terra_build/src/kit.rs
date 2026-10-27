@@ -96,6 +96,8 @@ pub struct Kit {
     pub look: crate::look::Targets,
     /// A photograph of the real material, which the bench shows it beside: its pack's.
     pub reference: Option<crate::look::Reference>,
+    /// Made for a dungeon theme's walls (`data/dungeons/`), not offered in the hammer.
+    pub dungeon_only: bool,
 }
 
 /// How a block kind's earth was packed, in its surface's shape (D236): lumps where it was
@@ -1045,6 +1047,7 @@ impl Default for Kit {
             tint: [1.0; 3],
             look: crate::look::Targets::default(),
             reference: None,
+            dungeon_only: false,
         }
     }
 }

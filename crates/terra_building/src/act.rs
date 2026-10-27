@@ -62,6 +62,8 @@ pub struct BuildRules {
     pub footed: BTreeSet<Kind>,
     /// Each kind's name, as its kit's file is called: "logs", "stone".
     pub names: BTreeMap<Kind, String>,
+    /// The kinds the hammer offers: every kit's but one made for a dungeon theme.
+    pub hammer: BTreeSet<Kind>,
     /// How many cubes a claim may have planned and not built, by how many times it has
     /// grown (D193).
     pub budgets: Vec<usize>,
