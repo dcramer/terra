@@ -770,7 +770,13 @@ def log_glow(t, cap):
     high = t.math("MULTIPLY", t.math("MULTIPLY", facing, fade), t.math("ADD", 0.4, t.math("MULTIPLY", deep, 0.6)))
     # A cap glows only at the end in the flames: the cold butt's lit whole drew a glowing ring
     # round it at night (judge, round 5).
-    hot = t.ramp(t.attr("heat"), 0.4, 1.0) if cap else t.math("MAXIMUM", t.math("MAXIMUM", low, high), tip)
+    # Round g69: and the outer faces, the ones the camp's eye sees, in their seams along the
+    # charred length's lower half, at 0.7 by the coals fading to 0.15 by 34 cm, fuller in deep
+    # char: lit only below 5-20 cm (at 0.2), every panel since g64 read the logs as having no
+    # glowing cracks at all, where RDR2's glow in fissures across the faces it shows. Cracks
+    # are lines, so they cut the dark char into more islands rather than filling it.
+    outer = t.math("MULTIPLY", t.math("MULTIPLY", t.math("SUBTRACT", 1.0, facing), t.ramp(height, 0.1, 0.34, 0.7, 0.15)), t.math("ADD", 0.5, t.math("MULTIPLY", deep, 0.5)))
+    hot = t.ramp(t.attr("heat"), 0.4, 1.0) if cap else t.math("MAXIMUM", t.math("MAXIMUM", t.math("MAXIMUM", low, high), outer), tip)
     h = t.math("MULTIPLY", t.math("MULTIPLY", seam, amount), t.math("MULTIPLY", hot, t.math("ADD", 0.8, t.math("MULTIPLY", t.noise(p, 9.0), 0.2))))
     h = t.math("MULTIPLY", h, t.math("SUBTRACT", 1.0, t.math("MULTIPLY", ash, 0.7)))
     t.emit(t.vec("SCALE", HOT, scale=h))
