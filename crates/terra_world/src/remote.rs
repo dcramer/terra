@@ -553,6 +553,7 @@ fn status(In(_): In<Option<Value>>, world: &mut World) -> BrpResult {
         "loading": *world.resource::<State<Screen>>().get() == Screen::Loading,
         "stepping": world.resource::<Steps>().left,
         "next_line": next,
+        "render_failures": crate::render_errors::RenderFailures::lines(world),
     }))
 }
 
@@ -662,6 +663,8 @@ fn shot(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     if let Some(folder) = path.parent() {
         std::fs::create_dir_all(folder).map_err(refused)?;
     }
+    // What failed to draw so far, so a picture missing something says why (render_errors).
+    let failures = crate::render_errors::RenderFailures::lines(world);
     if let Some(count) = frames {
         let count = count.min(600);
         *world.resource_mut::<Burst>() = Burst {
@@ -669,12 +672,12 @@ fn shot(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
             next: 0,
             count,
         };
-        return Ok(json!({ "path": path, "frames": count }));
+        return Ok(json!({ "path": path, "frames": count, "render_failures": failures }));
     }
     std::fs::remove_file(&path).ok();
     let shot = crate::shell::screenshot(world.get_resource::<crate::shell::Picture>());
     world.spawn(shot).observe(save_to_disk(path.clone()));
-    Ok(json!({ "path": path }))
+    Ok(json!({ "path": path, "render_failures": failures }))
 }
 
 #[derive(Deserialize)]

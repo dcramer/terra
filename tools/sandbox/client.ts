@@ -198,12 +198,27 @@ function forSandbox(path: string): string {
   return spawnSync("wslpath", ["-w", path], { encoding: "utf8" }).stdout.trim();
 }
 
-/// Saves a screenshot and waits for the file.
+/// The run's render failures already said, so each is said once (render_errors.rs).
+const failuresSaid = new Set<string>();
+/// Says on stderr each render failure not said before, and fails this process's exit: a
+/// picture of a run with one may be missing what did not draw.
+export function sayRenderFailures(failures: string[] | undefined) {
+  for (const line of failures ?? []) {
+    if (failuresSaid.has(line)) continue;
+    failuresSaid.add(line);
+    console.error(line);
+  }
+  if (failures?.length) process.exitCode = 1;
+}
+
+/// Saves a screenshot and waits for the file; any render failure of the run so far is said
+/// and fails the process's exit.
 export async function shot(file: string) {
   const path = resolve(file);
   mkdirSync(dirname(path), { recursive: true });
   await call("rpc.discover");
-  await call("sandbox.shot", { path: forSandbox(path) });
+  const reply = (await call("sandbox.shot", { path: forSandbox(path) })) as { render_failures?: string[] };
+  sayRenderFailures(reply.render_failures);
   let last = -1;
   for (let i = 0; i < 300; i++) {
     if (existsSync(path)) {
@@ -250,7 +265,7 @@ export const writeMark = (line: number) => {
   writeFileSync(MARK, String(line));
 };
 
-export type Status = { frame: number; seconds: number; paused: boolean; loading: boolean; stepping: number; next_line: number };
+export type Status = { frame: number; seconds: number; paused: boolean; loading: boolean; stepping: number; next_line: number; render_failures?: string[] };
 export type Line = { line: number; frame: number; level: string; source: string; text: string };
 
 export const status = async () => (await call("sandbox.status")) as Status;

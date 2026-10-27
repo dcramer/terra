@@ -95,7 +95,15 @@ const COMMANDS: Record<string, Command> = {
       print(await call("sandbox.click", { x, y, button: values.right ? "right" : "left", frames: number(values.frames) }));
     },
   },
-  status: { usage: "status", help: "the frame, the game's time, whether it is stopped, and the number of the next line the run will say", run: async () => print(await sandbox.status()) },
+  status: {
+    usage: "status",
+    help: "the frame, the game's time, whether it is stopped, the number of the next line the run will say, and each render failure so far (a ✗ line each after it)",
+    run: async () => {
+      const now = await sandbox.status();
+      print(now);
+      for (const line of now.render_failures ?? []) console.error(line);
+    },
+  },
   mark: { usage: "mark", help: "start `said` and `wait` from now", run: async () => void (await sandbox.markNow()) },
   said: {
     usage: "said [--containing TEXT] [--all] [--from LINE]",
@@ -204,7 +212,7 @@ const COMMANDS: Record<string, Command> = {
       else console.log(describeWhy(answer).join("\n"));
     },
   },
-  shot: { usage: "shot FILE.png", help: "save a screenshot and wait for it", run: async ({ positionals: [file] }) => console.log(await sandbox.shot(file)) },
+  shot: { usage: "shot FILE.png", help: "save a screenshot and wait for it; fails, with a ✗ line each, if anything has failed to render", run: async ({ positionals: [file] }) => console.log(await sandbox.shot(file)) },
 };
 
 function usage() {

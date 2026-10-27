@@ -1034,6 +1034,7 @@ impl Plugin for ShellPlugin {
                 crate::pacing::plugin,
                 crate::gpu_memory::plugin,
                 crate::tune::plugin,
+                crate::render_errors::plugin,
             ))
             // F1: every entity, resource and asset in the world, editable live.
             .add_plugins(
@@ -1592,12 +1593,13 @@ const CLOSING_S: u64 = 5;
 /// whatever happens as the game closes; then the process is ended, because Bevy's
 /// shutdown sometimes never finishes, waiting on its render thread (seen on macOS).
 fn finish(exit: &mut MessageWriter<AppExit>, how: AppExit) {
-    let code = if how.is_success() { 0 } else { 1 };
+    let success = how.is_success();
     exit.write(how);
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(CLOSING_S));
         println!("SANDBOX took over {CLOSING_S} s to close, so it was ended");
-        std::process::exit(code);
+        // A render failure fails the run however it ended (render_errors).
+        std::process::exit(i32::from(!success || crate::render_errors::failed()));
     });
 }
 
