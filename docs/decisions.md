@@ -95,6 +95,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D522](decisions/D522.md) | How dramatic a storm's sky is | Design | Developers | Decided | A storm's sky is heightened beyond real: darker… |
 | [D527](decisions/D527.md) | Four dungeon themes on a bigger grid: barrow halls, hewn mine, natural caverns, ancient engineered halls | Design | Developers | Decided | Dungeons come in four themes, each a kit reused across… |
 | [D539](decisions/D539.md) | A dungeon's rooms are dressed as room types, each a hero prop, wall props, floor clutter and a story vignette | Design | — | Open | Proposal (dungeons.md, room types)… |
+| [D544](decisions/D544.md) | The world's heights: how high one goes and where the clouds stand | Design | — | Open | Recommended: heights are Earth's up to 3 km over the sea… |
 
 ## The player and survival
 
