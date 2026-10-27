@@ -47,8 +47,7 @@ pub struct Blaze {
     pub tall: f32,
     pub heat: f32,
     pub seed: f32,
-    /// How wide its flame is, in metres: nought for as wide as a flame so tall is, more for
-    /// a sheet of fire over a broad burning surface.
+    /// Its flame's width, metres: nought for as wide as a flame so tall is, more for a sheet.
     pub wide: f32,
 }
 
@@ -87,8 +86,7 @@ pub struct Blazes {
     pub jets: Vec<Jet>,
     kept: Vec<Blaze>,
     /// In `kept`'s order: their logs and bodies as the shader reads them (`Logs::packed`,
-    /// `Body::told`), their lights' colours and rigs (`Kindled::light`, `Kindled::rig`) and
-    /// where they hang (`Hung`).
+    /// `Body::told`), their lights (`Kindled::light`, `rig`) and where they hang (`Hung`).
     hearths: Vec<[Vec4; 2]>,
     bodies: Vec<f32>,
     lights: Vec<Color>,
@@ -116,10 +114,9 @@ pub struct Kindled {
     pub logs: Logs,
     /// How its flame body is drawn, its kind's choice (`hearth::Body`).
     pub body: Body,
-    /// The colour of its light, its fuel's: wood's orange (`HEARTH_LIGHT`), a pitch torch's
-    /// yellower white (`TORCH_LIGHT`).
+    /// Its light's colour, its fuel's (wood's `HEARTH_LIGHT`, pitch's `TORCH_LIGHT`), and the
+    /// lights it is lit by, its kind's (a hearth's, or a torch's short pool, `Rig`).
     pub light: Color,
-    /// The lights it is lit by, its kind's: a hearth's, or a torch's short pool (`Rig`).
     pub rig: Rig,
 }
 
@@ -157,8 +154,7 @@ const JETS: usize = 2;
 /// A breath's flame sprites, as Monster Hunter World draws Zeno Jiva's (docs/fire.md,
 /// "Composites"): puffs of burning fuel along its stream, each its own age, the fireball
 /// rolling where it strikes, the blast when it first does and the soot it leaves on what it
-/// strikes, round the hot rod its hull
-/// marches. Must match `BREATH_CARDS` in fire.wesl.
+/// strikes, round the hot rod its hull marches. Must match `BREATH_CARDS` in fire.wesl.
 const BREATH_CARDS: usize = 46;
 /// What a breath leaves in the air, as a flamethrower's stream does (research/
 /// 2026-10-18-dragon-breath.md): black soot rolling off it and burning drops falling from it.
