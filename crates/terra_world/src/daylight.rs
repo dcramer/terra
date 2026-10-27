@@ -568,7 +568,7 @@ fn shine(
     mut exposure: Query<&mut Exposure, With<MainCamera>>,
     mut haze: Query<&mut DistanceFog, With<MainCamera>>,
     open: Option<Res<crate::sky_occlusion::OpenOverhead>>,
-    mut mist: Query<&mut bevy::light::FogVolume>,
+    mut mist: crate::scene::HazeVolume,
     mut grading: Query<&mut bevy::render::view::ColorGrading, With<MainCamera>>,
     mut volumetric: Query<&mut bevy::light::VolumetricFog, With<MainCamera>>,
     mut nightfall: ResMut<Nightfall>,
@@ -630,12 +630,7 @@ fn shine(
             let at = eye.translation();
             above_mist(at.length() - planet.ground_at(at).length())
         });
-    for mut fog in &mut mist {
-        let wanted = super::scene::HAZE_DENSITY * thick * above;
-        if (fog.density_factor - wanted).abs() > 1e-5 {
-            fog.density_factor = wanted;
-        }
-    }
+    super::scene::thicken_haze(&mut mist, super::scene::HAZE_DENSITY * thick * above);
     let dark = 1.0 - smoothstep(-12.0, 0.0, height);
     nightfall.set_if_neq(Nightfall(dark));
     let cast = cast.map(|c| c.0).unwrap_or_default();

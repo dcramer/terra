@@ -204,6 +204,58 @@ mod tests {
         assert!(volume.density_factor * volume.scattering > 0.0);
     }
 
+    /// How much of what lies behind it a glow's air hides, looked through from edge to edge
+    /// across its middle: Beer's law over its density ball (`falloff`), as Bevy's
+    /// `volumetric_fog.wesl` takes it, `1 - exp(-Σ step × density × (absorption + scattering))`.
+    fn hides(volume: &FogVolume, reach: f32) -> f32 {
+        const STEPS: usize = 64;
+        let step = 2.0 * reach / STEPS as f32;
+        let depth: f32 = (0..STEPS)
+            .map(|i| {
+                let r = ((i as f32 + 0.5) / STEPS as f32 * 2.0 - 1.0).abs();
+                let ball = (1.0 - r).powi(3);
+                step * volume.density_factor * ball * (volume.absorption + volume.scattering)
+            })
+            .sum();
+        1.0 - libm::expf(-depth)
+    }
+
+    #[test]
+    fn the_hour_thickens_the_haze_and_never_a_glow() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let haze = world
+            .spawn((
+                crate::scene::Haze,
+                FogVolume {
+                    absorption: 0.05,
+                    scattering: 0.5,
+                    ..default()
+                },
+            ))
+            .id();
+        let glow = Glow::of(Vec3::ZERO, 0.2, 1.0);
+        let mut air = air(Handle::default());
+        air.density_factor = density(&glow, 1.0) / AIR_SCALE;
+        let lit = world.spawn(air).id();
+        // The morning's thickest mist, as `daylight::shine` writes it.
+        let mist = crate::scene::HAZE_DENSITY * 2.2;
+        world
+            .run_system_once(move |mut haze: crate::scene::HazeVolume| {
+                crate::scene::thicken_haze(&mut haze, mist)
+            })
+            .unwrap();
+        assert_eq!(world.get::<FogVolume>(haze).unwrap().density_factor, mist);
+        // A glow's air hides under a percent of what is behind it; with the haze's density on
+        // it, its air carried 1e5 times thicker, all of it: a black ball round the torch.
+        let kept = world.get::<FogVolume>(lit).unwrap();
+        let hidden = hides(kept, glow.reach);
+        assert!(hidden < 0.01, "{hidden}");
+        let mut hazed = kept.clone();
+        hazed.density_factor = mist;
+        assert!(hides(&hazed, glow.reach) > 0.99);
+    }
+
     #[test]
     fn the_fog_shader_knows_a_glow_by_its_air_and_no_real_fog_for_one() {
         // The patched shader marches a volume short, by its point lights alone, past this

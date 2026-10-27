@@ -103,7 +103,21 @@ fn preset(mut tweaks: ResMut<Tweaks>) {
 /// leaves, as the forests of Red Dead Redemption 2 and Sons of the Forest have (D217): Bevy's
 /// volumetric fog, a box this wide and tall that follows the camera.
 #[derive(Component)]
-struct Haze;
+pub(crate) struct Haze;
+
+/// The haze's fog volume, and no other: a fire's glow (`fire::fog`) is a fog volume too, its
+/// air carried 1e5 times thicker in absorption and scattering, so the haze's density written
+/// on it made a black ball of the air round a torch (barrow film, 45 s).
+pub(crate) type HazeVolume<'w, 's> = Query<'w, 's, &'static mut FogVolume, With<Haze>>;
+
+/// Thickens the haze to so much density, the haze alone.
+pub(crate) fn thicken_haze(haze: &mut HazeVolume, density: f32) {
+    for mut fog in haze.iter_mut() {
+        if (fog.density_factor - density).abs() > 1e-5 {
+            fog.density_factor = density;
+        }
+    }
+}
 const HAZE_M: Vec3 = Vec3::new(240.0, 60.0, 240.0);
 /// How far below the ground its foot stands: where it stood under an eye at a walker's height.
 const HAZE_FOOT_M: f32 = 8.3;
