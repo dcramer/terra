@@ -21,6 +21,8 @@ Read [docs/controller.md](../../../docs/controller.md) (the design, its criteria
 3. **Score**: `cargo xtask controller`. Nothing `✗`; the criterion's number lower. Run `cargo test -p terra_motion --features course` and the mover's crate's tests.
 4. **Bank**: land on main (AGENTS.md); nightly lowers the baseline. Two rounds without a gain: stop, step back, hand off with what was tried.
 
+**What the developer saw in play comes first.** The course scores the mover alone; what a player sees is the figure after the clips, the lock and placement. So each complaint from play (feet, stride, stops, a pose) becomes a row of the in-game filmed course below, read from the walk record, that fails on main before anything is fixed, and goes to the top of the list. A course row never proves a play complaint fixed (combat's clip rows did not, 2026-10-26). A round that changes the figure puts a still from the game's own camera in its `FOR REVIEW` line.
+
 ## The task list (failing criteria, 2026-10-25 unit U4d, the mover; feet at stage 3 unit 2c-6)
 
 Every measurable row passes (45 with --bench at unit U4; 38 at round 7: stairs fixed, handoff `controller-stage2.md`, "Round 7"). What is left, ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
