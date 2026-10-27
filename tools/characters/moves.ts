@@ -60,7 +60,8 @@ import { PACE_FRAMES } from "./phases.ts";
 import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
 import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
-import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, rot, sub, turn } from "./glb.ts";
+import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
+import { keptOff } from "./arms.ts";
 
 const { values: opt } = parseArgs({
   options: {
@@ -93,6 +94,9 @@ const { values: opt } = parseArgs({
     // Carried: in the clips the game carries in (terra_walker::character::CARRIED_IN), a look in
     // hand turned its `carry_tilt` about its X, as character.rs's `tilt` turns it (fit.ts).
     carry: { type: "boolean", default: false },
+    // The hanging hands kept off the hips after the clip, as terra_walker::arms keeps them
+    // (arms.ts, D535): the walker's composed pose (fit.ts).
+    arms: { type: "boolean", default: false },
   },
 });
 
@@ -193,7 +197,15 @@ const clipOf = (name: string): Clip => {
 // and each template's morph mix and joint offsets (skin.ts).
 const { shapes, skinned } = skinOf(body, opt.templates!, opt.template!.split(",").filter(Boolean));
 
-const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => shaped(body, shape, clip, t, bends);
+// `--arms`: the hanging hands then kept off the hips as the game keeps them (arms.ts, D535).
+const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => {
+  const pose = shaped(body, shape, clip, t, bends);
+  if (!opt.arms) return pose;
+  const kept = keptOff(body, pose);
+  if (!kept.size) return pose;
+  for (const [bone, q] of bends) kept.set(bone, kept.has(bone) ? qmul(kept.get(bone)!, q) : q);
+  return shaped(body, shape, clip, t, kept);
+};
 
 // Held looks, hung as `terra_walker::character` hangs them (held.ts).
 const rest = posed(body, undefined, 0);

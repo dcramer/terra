@@ -8,7 +8,9 @@
 //!
 //! It reads the pose, so it holds over whichever idle or walk plays, a bought one too, with no
 //! clip changed: a hand already clear (the guard's, a blow's in front or above) is left as the
-//! clip has it. The composed pose's `film.pose.arms_in_body` row measures it (D530).
+//! clip has it. The composed pose's `film.pose.arms_in_body` row measures it (D530). Its twin
+//! is `tools/characters/arms.ts`, which the move check lays over the walker's clips
+//! (`moves.ts --arms`); change both.
 
 use bevy::{prelude::*, world_serialization::WorldInstanceReady};
 
