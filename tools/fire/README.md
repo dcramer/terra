@@ -7,6 +7,7 @@ node tools/fire/measure.ts <still.png> 800x500+0+420                    # a fire
 node tools/fire/measure.ts <still.png> 800x500+0+420 --class structure  # held to a class: ✗ where one falls out, exit 1
 node tools/fire/motion.ts <clip>... [--matte <matte>]... [--box WxH+X+Y] # how a filmed or rendered fire moves (research/2026-10-25-fire-motion.md); several clips (one build at several placements, a matte each) gated by their median
 node tools/fire/film.ts [out=shots/motion] [--seconds 20]                 # the motion gate (D472): the campfire at 7 placements x dusk, night, its hearth light held at main's 6741693a and the sky as the sheet's; exit 1 on a miss
+node tools/fire/aa.ts [out=shots/aa] [--at 0.9] [--hour dusk] [--runs 2] [--from 120] # the motion gate's A/A: one placement filmed twice by one build, frames compared (which differ, where, how far; diff pictures where they differ much), each film's gate values
 node tools/fire/references.ts [--fetch]                                 # measure the photographs into references.json
 cargo xtask fire [--time noon,dusk,night] [--gate] [--hold]              # the fire sheet: every fire the game draws, held to its class
 node tools/fire/bake/bake.ts <set>... | --all [--draft] [--pack]        # bake flipbooks in Blender (5.2, CPU) into assets/textures/fire/

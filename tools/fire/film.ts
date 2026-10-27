@@ -65,10 +65,10 @@ export function hold(source: string, reference = REFERENCE): { source: string; c
 /// run at one placement, so their median sat at the bar by luck and went either way (fire gate
 /// round: main dbf2f473's dusk 1.01-1.23 over four runs of three).
 export const PLACEMENTS = [0, 0.3, 0.6, 0.9, 1.2, 1.5, 1.8];
-const HOURS: [string, string][] = [["dusk", "18.4"], ["night", "22"]];
+export const HOURS: [string, string][] = [["dusk", "18.4"], ["night", "22"]];
 const CROP = "crop=600:600:500:250";
 
-function build(root: string): string[] {
+export function build(root: string): string[] {
   const path = join(root, "crates/terra_world/src/fire/light.rs");
   const was = readFileSync(path, "utf8");
   const { source, changed } = hold(was);
@@ -85,16 +85,16 @@ function build(root: string): string[] {
 /// The sandbox's options for one placement's film at an hour into `out`, its stills in `frames`:
 /// the yard, the campfire's calls, the camera, every other frame with its matte, under the sky
 /// the fire sheet holds too (`HELD_SKY`: the dome's 2D clouds, never the marched ones).
-export function filmArgs(out: string, frames: string, time: string, seconds: number): string[] {
+export function filmArgs(out: string, frames: string, time: string, seconds: number, from = 120): string[] {
   return [
     ...["--offscreen", "--clean", "--picture", "1600x900", "--experiment", "play", "--level", "yard", "--free-build", "--mute"],
     ...["--at", "0,0", "--face", "0,30", "--time", time, "--date", "09-22", "--calls", join(out, "calls.jsonl")],
-    ...["--cine", `${join(out, "shot.json")}@120`, "--shots", `${join(frames, "f")}@120-${120 + seconds * 60 - 2}/2`, "--flame-matte"],
+    ...["--cine", `${join(out, "shot.json")}@120`, "--shots", `${join(frames, "f")}@${from}-${120 + seconds * 60 - 2}/2`, "--flame-matte"],
     ...HELD_SKY,
   ];
 }
 
-function film(root: string, bin: string, out: string, dx: number, seconds: number) {
+export function film(root: string, bin: string, out: string, dx: number, seconds: number, hours = HOURS, keep = false, from = 120) {
   const C = [-10 + dx, 0, 10];
   const key = (t: number) => ({ t, at: [-10 + dx, 2.6, 13.95], look: [C[0], 0.65, 10], lens: 29, focus: "look", aperture: 5.6 });
   const shot = { about: `The motion gate's campfire, still, ${seconds} s (tools/fire/film.ts)`, seconds, keys: [key(0), key(seconds)], look: { shutter: 180 }, player: { hidden: true } };
@@ -103,11 +103,11 @@ function film(root: string, bin: string, out: string, dx: number, seconds: numbe
   writeFileSync(join(out, "shot.json"), JSON.stringify(shot, null, 1));
   writeFileSync(join(out, "calls.jsonl"), `${JSON.stringify(spawn)}\n`);
   const ff = (args: string[]) => spawnSync("ffmpeg", ["-y", "-v", "error", ...args], { encoding: "utf8" });
-  for (const [hour, time] of HOURS) {
+  for (const [hour, time] of hours) {
     const frames = join(out, `${hour}-frames`);
     rmSync(frames, { recursive: true, force: true });
     mkdirSync(frames, { recursive: true });
-    const r = spawnSync("timeout", [String(1500 + seconds * 120), bin, ...filmArgs(out, frames, time, seconds)],
+    const r = spawnSync("timeout", [String(1500 + seconds * 120), bin, ...filmArgs(out, frames, time, seconds, from)],
       { cwd: root, encoding: "utf8", env: { ...process.env, BEVY_ASSET_ROOT: root }, maxBuffer: 1 << 28 });
     writeFileSync(join(out, `${hour}-run.log`), `${r.stdout}${r.stderr}`);
     if (r.status !== 0) throw new Error(`the ${hour} run exited ${r.status}: ${join(out, `${hour}-run.log`)}`);
@@ -117,7 +117,7 @@ function film(root: string, bin: string, out: string, dx: number, seconds: numbe
     };
     enc("f-*[0-9].png", CROP, `${hour}.mkv`);
     enc("f-*.matte.png", `${CROP},format=gray`, `${hour}-matte.mkv`);
-    rmSync(frames, { recursive: true, force: true });
+    if (!keep) rmSync(frames, { recursive: true, force: true });
   }
 }
 
