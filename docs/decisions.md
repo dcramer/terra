@@ -443,7 +443,7 @@ The look, models, bodies and gear, textures and audio.
 | [D519](decisions/D519.md) | Above the clouds | Design | Developers | Decided | Clouds are flown through from the start… |
 | [D521](decisions/D521.md) | The sky's effects | Design | Developers | Decided | The sky has the real set of effects… |
 | [D532](decisions/D532.md) | Clips come from generators and free sets, not capture or bought packs | Design | Developers | Decided | The clips Kimodo makes badly (idles, sprint, swimming… |
-| [D533](decisions/D533.md) | Uthana's takes come on our body uploaded bare, lifted onto our ground and checked against its reference | Engineering | Agent | Decided | `tools/uthana` uploads a body without its animations… |
+| [D533](decisions/D533.md) | Uthana's takes come on our body uploaded bare, lifted onto our ground and checked against its reference | Tech | Agent | Decided | `tools/uthana` uploads a body without its animations… |
 | [D540](decisions/D540.md) | The clouds move by the world's clock, drawn from a weather map of the climate | Tech | Agent | Decided | The sky's clouds are a function of the climate and the… |
 | [D542](decisions/D542.md) | Clips carried onto a body by each bone's turn from a retarget pose | Tech | Agent | Decided | A body's bones point at their next joint… |
 | [D545](decisions/D545.md) | A shirt hangs over the trousers | Design | Developers | Decided | A shirt is made untucked: its hem hangs past the hips… |
