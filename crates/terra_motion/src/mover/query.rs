@@ -115,6 +115,14 @@ pub trait Query {
     /// touching or in and moves along or out of does not stop it.
     fn sweep(&self, capsule: &Capsule, motion: Vec3) -> Option<Hit>;
 
+    /// How far a capsule's surface is from the nearest of it, when nearer than `within`: its
+    /// contacts' least distance, which a source answers more cheaply where it can (no normals).
+    fn apart(&self, capsule: &Capsule, within: f32) -> Option<f32> {
+        let mut out = Vec::new();
+        self.contacts(capsule, within, &mut out);
+        out.iter().map(|c| c.distance).reduce(f32::min)
+    }
+
     /// Whether a body whose feet stand at `feet` may step up onto what it touches at `at`,
     /// world points (Unreal's `CanCharacterStepUpOn`): yes, unless a source says otherwise, as
     /// a thing of flora taller than the step does (`shapes`).
@@ -142,6 +150,13 @@ impl<A: Query + ?Sized, B: Query + ?Sized> Query for (&A, &B) {
     fn sweep(&self, capsule: &Capsule, motion: Vec3) -> Option<Hit> {
         match (self.0.sweep(capsule, motion), self.1.sweep(capsule, motion)) {
             (Some(a), Some(b)) => Some(if b.fraction < a.fraction { b } else { a }),
+            (a, b) => a.or(b),
+        }
+    }
+
+    fn apart(&self, capsule: &Capsule, within: f32) -> Option<f32> {
+        match (self.0.apart(capsule, within), self.1.apart(capsule, within)) {
+            (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
         }
     }
@@ -536,6 +551,10 @@ impl<F: Fn(DVec3) -> f32> Query for Sdf<F> {
 
     fn sweep(&self, capsule: &Capsule, motion: Vec3) -> Option<Hit> {
         march(self, capsule, motion)
+    }
+
+    fn apart(&self, capsule: &Capsule, within: f32) -> Option<f32> {
+        Distance::distance(self, capsule).filter(|&d| d < within)
     }
 }
 

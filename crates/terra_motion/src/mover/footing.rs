@@ -53,6 +53,10 @@ impl Query for NoStep<'_> {
         Some(hit)
     }
 
+    fn apart(&self, capsule: &Capsule, within: f32) -> Option<f32> {
+        self.query.apart(capsule, within)
+    }
+
     fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
         self.query.steps_onto(at, feet, step)
     }

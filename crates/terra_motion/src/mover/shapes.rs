@@ -366,6 +366,14 @@ impl<S: Shaped> Query for Obstacles<'_, S> {
         field(&near).sweep(capsule, motion)
     }
 
+    fn apart(&self, capsule: &Capsule, within: f32) -> Option<f32> {
+        let near = self.near(capsule, Vec3::ZERO, within);
+        if near.shapes.is_empty() {
+            return None;
+        }
+        field(&near).apart(capsule, within)
+    }
+
     fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
         let at32 = at.as_vec3();
         self.obstacles.iter().all(|shape| {

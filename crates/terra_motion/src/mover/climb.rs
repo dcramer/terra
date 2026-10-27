@@ -43,7 +43,7 @@
 //! (D61, `terra_walker::Stamina`) is written in before a tick and the spend taken back after.
 //! Never started in a fight stance (`Intent::fighting`, D507).
 
-use super::query::{Capsule, Contact, Query};
+use super::query::{Capsule, Contact, Query, TOLERANCE};
 use super::slide::{self, Shape, Support};
 use super::{Body, Ground, Intent, Kind, approach, turn};
 use glam::{DVec3, Vec3};
@@ -512,6 +512,9 @@ fn pull_up(body: &mut Body, mut mantle: Mantle, query: &dyn Query, shape: &Shape
 /// into, the gap from the nearest point of what it meets (a lip's corner as well as a face);
 /// kept where they are when the face is out of the sweep's reach.
 fn held(k: &Kind, query: &dyn Query, shape: &Shape, feet: Vec3, into: Vec3) -> Vec3 {
+    if in_place(k, query, shape, feet, into) {
+        return feet;
+    }
     // Backed off by up to the gap, clear of what is behind, a capsule grown by the gap is swept
     // in: it stops where the body is the gap from the first thing ahead by distance, a lip's
     // corner rounded over as well as a face met square.
@@ -530,6 +533,27 @@ fn held(k: &Kind, query: &dyn Query, shape: &Shape, feet: Vec3, into: Vec3) -> V
         return feet;
     };
     from + into * (hit.fraction * look)
+}
+
+/// How far into the face [`in_place`] looks for the distance to fall, m.
+const IN_PLACE_M: f32 = 0.01;
+
+/// Whether [`held`]'s snap would leave the feet where they are, to within its sweep's own
+/// tolerance: the nearest thing is the gap less between a tolerance and half of one away, as
+/// the snap leaves it, and it is the face ahead (nearer by nearly the whole of a step into it,
+/// not a floor beside). Two distances, where the snap is two sweeps of a march each.
+fn in_place(k: &Kind, query: &dyn Query, shape: &Shape, feet: Vec3, into: Vec3) -> bool {
+    let within = k.climb_gap + TOLERANCE;
+    let Some(here) = query.apart(&shape.capsule(feet), within) else {
+        return false;
+    };
+    let least = k.climb_gap - TOLERANCE;
+    if !(least..=least + 0.5 * TOLERANCE).contains(&here) {
+        return false;
+    }
+    query
+        .apart(&shape.capsule(feet + into * IN_PLACE_M), within)
+        .is_some_and(|ahead| here - ahead > 0.9 * IN_PLACE_M)
 }
 
 #[cfg(test)]
