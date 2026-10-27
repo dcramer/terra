@@ -253,8 +253,8 @@ function script(s: Script) {
         });
   }
   s.call("staged.spawn", { name: "cetri", model: "models/characters/cetri.glb", bend: ASLEEP, at: [CETRI[0], 0, CETRI[1]], facing: [stop[0], 0, stop[1]], scale: SIZE, turn_deg_s: 25, base: true });
-  // No lantern by the path: its flame stood as an orange stake by the walking foot in the side
-  // shot (round-17 reviews), and the eyes' own glow lights the face.
+  // No lantern by the path: the eyes' own glow lights the face. (Round 18 took it for the
+  // orange stake by the walking foot in the side shot; the stake stayed without it.)
   s.frame = 40;
   // Asleep it barely stirs: its idle slowed until only the wind would move it.
   s.call("staged.play", { name: "cetri", clip: "Troll_Idle", speed: 0.04, blend_ms: 0 });
