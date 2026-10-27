@@ -23,6 +23,8 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("docs/building-voxels.json", &["terra_build_scenes"]),
     // The kits' models and references, which the kit checker and the material bench read.
     ("art/", &["terra_build", "terra_build_mesh"]),
+    // The keyed clips' own paces, which the staged fighters' tests hold the clip files to.
+    ("art/animation/keyed/", &["terra_creatures"]),
     // The game's files (D133): the crates on Bevy load any of them through its asset server.
     (
         "assets/",
