@@ -271,7 +271,7 @@ for i, l in enumerate(spec["logs"]):
     bpy.ops.object.shade_smooth()
     # How charred each point is (by how far up the log, its underside first) and how much it
     # faces the fire: in toward the stack's middle, or down onto the coals near the bed.
-    foot, chars, faces, heats = B(l["foot"]), [], [], []
+    foot, chars, faces, heats, burns = B(l["foot"]), [], [], [], []
     for v in seg.data.vertices:
         p, n = v.co, v.normal
         t = (p - foot).dot(ax) / L
@@ -283,9 +283,13 @@ for i, l in enumerate(spec["logs"]):
         faces.append(max(n.dot(inward), -n.z * (1 - smooth(0.06, 0.2, p.z))))
         # The end in the flames burns all round, not only on its faces turned in.
         heats.append(smooth(0.55, 0.85, t))
+        # Round g77: and how far along it is from its cold butt (0) to the end in the flames (1),
+        # for the glow's fade over its whole length: `heat` is 0 over its lower half, the ash's.
+        burns.append(min(max(t, 0.0), 1.0))
     set_attr(seg, "char", chars)
     set_attr(seg, "face", faces)
     set_attr(seg, "heat", heats)
+    set_attr(seg, "burn", burns)
     # Round 9: the char laid in the log's own frame (`grain`, metres, x along its run), so its
     # cracks and ash run with the grain (judge, round 8).
     unpose = pose.inverted()
@@ -712,6 +716,9 @@ BLOCK_ASH = (0.22, 0.214, 0.203)
 HOT_ASH_THIN = 0.6
 # Round g71: how brightly the hottest crack clusters glow between their seams (of a seam's 1).
 FILL = 0.3
+# Round g77: the crack glow's fade along each log, from none at this share of the way up from its
+# butt to full at that.
+BURN_FADE = (0.05, 0.45)
 
 
 def log_colour(t, maps_, cap):
@@ -812,6 +819,11 @@ def log_glow(t, cap):
         core = t.math("MULTIPLY", t.ramp(lump, 0.62, 0.74), t.ramp(hot, 0.45, 0.9))
         fill = t.math("MULTIPLY", t.math("MULTIPLY", core, amount), t.math("MULTIPLY", t.ramp(t.noise(p, 40.0, 2.0), 0.3, 0.7, 0.55, 1.0), FILL))
         h = t.math("MAXIMUM", h, fill)
+        # Round g77: all of it fading along the log, full toward the end in the flames and out to
+        # none by its cold butt (`burn`, its share of the way up from the butt), so the char cools
+        # to bark there: lit by height and facing alone, the glow ran evenly to the logs' cold
+        # ends, a tiled lava decal to every judge of g75's panel.
+        h = t.math("MULTIPLY", h, t.ramp(t.attr("burn"), *BURN_FADE))
     h = t.math("MULTIPLY", h, t.math("SUBTRACT", 1.0, t.math("MULTIPLY", ash, 0.7)))
     t.emit(t.vec("SCALE", HOT, scale=h))
 
@@ -1028,7 +1040,7 @@ for ob, name in ((wood, "Wood"), (stone, "Stone"), (ground, "Ground")):
     ob.data.materials.append(finals[name])
     for p in ob.data.polygons:
         p.material_index = 0
-    for a in [a for a in ob.data.attributes if a.name in ("char", "face", "heat", "soot", "tone")]:
+    for a in [a for a in ob.data.attributes if a.name in ("char", "face", "heat", "burn", "soot", "tone")]:
         ob.data.attributes.remove(a)
 
 for name, ob in (("wood", wood), ("stone", stone), ("ground", ground)):
