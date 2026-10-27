@@ -58,12 +58,22 @@ import { parseArgs } from "node:util";
 import { compose, ROUGH, type Recipe, type Scan } from "./leaves.ts";
 
 const ROOT = resolve(import.meta.dirname, "..", "..");
+// ImageMagick 7's `magick`, or 6's `convert` where it is all there is: the render worker has
+// only the first (its fetch of large_grey_tiles failed on `convert`, barrow dress round 21).
+const MAGICK = (() => {
+  try {
+    execFileSync("magick", ["-version"], { stdio: "ignore" });
+    return "magick";
+  } catch {
+    return "convert";
+  }
+})();
 
 /** An image's lightness, a byte a pixel, and its size. */
 function grey(image: string, width?: number): { data: Buffer; width: number; height: number } {
   const resize = width ? ["-resize", `${width}x`] : [];
-  const size = execFileSync("convert", [image, ...resize, "-format", "%w %h", "info:"]).toString().split(" ");
-  const data = execFileSync("convert", [image, ...resize, "-colorspace", "gray", "-depth", "8", "gray:-"], {
+  const size = execFileSync(MAGICK,[image, ...resize, "-format", "%w %h", "info:"]).toString().split(" ");
+  const data = execFileSync(MAGICK,[image, ...resize, "-colorspace", "gray", "-depth", "8", "gray:-"], {
     maxBuffer: 1 << 28,
   });
   return { data, width: Number(size[0]), height: Number(size[1]) };
@@ -99,29 +109,29 @@ function material(name: string, image: string, tile: string, size: number, stren
   mkdirSync(out, { recursive: true });
   // Measured on a smaller copy, then scaled up to the full image.
   const sample = grey(image, 512);
-  const full = execFileSync("convert", [image, "-format", "%w %h", "info:"]).toString().split(" ").map(Number);
+  const full = execFileSync(MAGICK,[image, "-format", "%w %h", "info:"]).toString().split(" ").map(Number);
   let [width, height] = full;
   if (tile.includes("x")) width = Math.round((period(sample.data, sample.width, sample.height, "x") * full[0]) / sample.width);
   if (tile.includes("y")) height = Math.round((period(sample.data, sample.width, sample.height, "y") * full[1]) / sample.height);
   console.log(`${name}: repeats every ${width} by ${height} of ${full[0]} by ${full[1]}`);
   const color = join(out, "color.jpg");
-  execFileSync("convert", [image, "-crop", `${width}x${height}+0+0`, "+repage", "-resize", `${size}x`, "-quality", "92", color]);
+  execFileSync(MAGICK,[image, "-crop", `${width}x${height}+0+0`, "+repage", "-resize", `${size}x`, "-quality", "92", color]);
   // Height from lightness, softened; its slopes across and down make the normal's red and
   // green, the way up its blue (OpenGL's convention, as glTF and Bevy use).
   const slope = (kernel: string) => [
     "(", color, "-colorspace", "gray", "-blur", "0x1.5", "-define", "convolve:scale=" + strength / 8,
     "-bias", "50%", "-morphology", "Convolve", kernel, ")",
   ];
-  execFileSync("convert", [
+  execFileSync(MAGICK,[
     ...slope("3x3: -1,0,1 -2,0,2 -1,0,1"),
     ...slope("3x3: 1,2,1 0,0,0 -1,-2,-1"),
     "(", color, "-fill", "white", "-colorize", "100", ")",
     "-combine", "-quality", "92", join(out, "normal.jpg"),
   ]);
   // Its height, for parallax: how deep each part reads, lighter higher.
-  execFileSync("convert", [color, "-colorspace", "gray", "-blur", "0x2", "-normalize", "-quality", "92", join(out, "height.jpg")]);
+  execFileSync(MAGICK,[color, "-colorspace", "gray", "-blur", "0x2", "-normalize", "-quality", "92", join(out, "height.jpg")]);
   const green = Math.round(roughness * 255);
-  execFileSync("convert", ["-size", "16x16", `xc:rgb(255,${green},0)`, join(out, "arm.jpg")]);
+  execFileSync(MAGICK,["-size", "16x16", `xc:rgb(255,${green},0)`, join(out, "arm.jpg")]);
   console.log(`${name}: ${out}, ${(height / width).toFixed(3)} as tall as it is wide`);
 }
 
@@ -180,7 +190,7 @@ async function fetchMaterial(id: string, name: string, size: string) {
   const height = files.Displacement?.[size]?.png?.url;
   if (height) {
     await download(height, join(out, "height.png"));
-    execFileSync("convert", [join(out, "height.png"), "-colorspace", "gray", "-depth", "8", "-quality", "92", join(out, "height.jpg")]);
+    execFileSync(MAGICK,[join(out, "height.png"), "-colorspace", "gray", "-depth", "8", "-quality", "92", join(out, "height.jpg")]);
     execFileSync("rm", [join(out, "height.png")]);
   }
   const metres = info.dimensions ? ` ${(info.dimensions[0] / 1000).toFixed(2)} m across.` : "";
@@ -207,17 +217,17 @@ async function fetchAmbientCg(id: string, name: string, size: string) {
     const out = join(ROOT, "assets", "materials", name);
     mkdirSync(out, { recursive: true });
     const jpg = ["-quality", "92"];
-    execFileSync("convert", [map("Color"), ...jpg, join(out, "color.jpg")]);
-    execFileSync("convert", [map("NormalGL"), ...jpg, join(out, "normal.jpg")]);
+    execFileSync(MAGICK,[map("Color"), ...jpg, join(out, "color.jpg")]);
+    execFileSync(MAGICK,[map("NormalGL"), ...jpg, join(out, "normal.jpg")]);
     // Occlusion, roughness and no metal, as Bevy reads them.
     const occlusion = existsSync(map("AmbientOcclusion")) ? [map("AmbientOcclusion")] : [map("Roughness"), "-fill", "white", "-colorize", "100"];
-    execFileSync("convert", [
+    execFileSync(MAGICK,[
       "(", ...occlusion, "-colorspace", "gray", ")",
       "(", map("Roughness"), "-colorspace", "gray", ")",
       "(", map("Roughness"), "-fill", "black", "-colorize", "100", "-colorspace", "gray", ")",
       "-combine", "-colorspace", "sRGB", ...jpg, join(out, "arm.jpg"),
     ]);
-    execFileSync("convert", [map("Displacement"), "-colorspace", "gray", "-depth", "8", ...jpg, join(out, "height.jpg")]);
+    execFileSync(MAGICK,[map("Displacement"), "-colorspace", "gray", "-depth", "8", ...jpg, join(out, "height.jpg")]);
     const info = await (await fetch(`https://ambientcg.com/api/v2/full_json?id=${id}`)).json();
     const title = info.foundAssets?.[0]?.displayName ?? id;
     record(name, `ambientCG [${title}](https://ambientcg.com/a/${id}), CC0, ${size}.`);
@@ -239,7 +249,7 @@ function stack(name: string, materials: string[], size: number, occlusion: numbe
     "-evaluate", "multiply", String(occlusion), "-evaluate", "add", String(1 - occlusion), ")",
     "-compose", "Multiply", "-composite", ")",
   ]);
-  execFileSync("convert", [...colours, "-append", "-quality", "92", join(out, "color.jpg")]);
+  execFileSync(MAGICK,[...colours, "-append", "-quality", "92", join(out, "color.jpg")]);
   // With --height, each layer's height, stretched to the full range, in place of its normal's
   // blue: the shader works the normal's z out from its x and y, as a two-channel normal map
   // leaves room for, and blends the layers by height. A layer with no height map takes one
@@ -256,7 +266,7 @@ function stack(name: string, materials: string[], size: number, occlusion: numbe
       : ["(", join(dir(m), "normal.jpg"), ...square, ")"],
   );
   // No chroma subsampling, so the channels stay apart.
-  execFileSync("convert", [...normals, "-append", "-quality", "92", "-sampling-factor", "1x1", join(out, "normal.jpg")]);
+  execFileSync(MAGICK,[...normals, "-append", "-quality", "92", "-sampling-factor", "1x1", join(out, "normal.jpg")]);
   const layers = materials.map((m) => `\`${m}\` (${credited(m)?.replace(/\.$/, "") ?? "uncredited"})`);
   record(name, `a stack, in this order, ${size} pixels each, of ${layers.join("; ")}.`);
   console.log(`${name}: ${materials.length} layers in ${out}`);
@@ -265,8 +275,8 @@ function stack(name: string, materials: string[], size: number, occlusion: numbe
 /** A card atlas's normal map, four bytes a pixel, its alpha each pixel's roughness; one from
  * before roughness was kept in it, opaque, is given `ROUGH` there. */
 function normalMap(image: string): { data: Buffer; width: number } {
-  const info = execFileSync("convert", [image, "-format", "%w %[channels]", "info:"]).toString().split(" ");
-  const data = execFileSync("convert", [image, "-depth", "8", "rgba:-"], { maxBuffer: 1 << 30 });
+  const info = execFileSync(MAGICK,[image, "-format", "%w %[channels]", "info:"]).toString().split(" ");
+  const data = execFileSync(MAGICK,[image, "-depth", "8", "rgba:-"], { maxBuffer: 1 << 30 });
   if (!info[1].includes("a")) for (let i = 3; i < data.length; i += 4) data[i] = Math.round(ROUGH * 255);
   return { data, width: Number(info[0]) };
 }
@@ -276,7 +286,7 @@ function normalMap(image: string): { data: Buffer; width: number } {
  * (a normal map's alpha its roughness), scaled each on its own. */
 function resized(data: Buffer, from: number, to: number, kind: "rgba" | "rgb"): Buffer {
   const scale = (input: Buffer, format: string) =>
-    execFileSync("convert", ["-size", `${from}x${from}`, "-depth", "8", `${format}:-`, "-filter", "Lanczos", "-resize", `${to}x${to}!`, `${format}:-`], {
+    execFileSync(MAGICK,["-size", `${from}x${from}`, "-depth", "8", `${format}:-`, "-filter", "Lanczos", "-resize", `${to}x${to}!`, `${format}:-`], {
       input,
       maxBuffer: 1 << 30,
     });
@@ -298,8 +308,8 @@ function resized(data: Buffer, from: number, to: number, kind: "rgba" | "rgb"): 
 /** An image's pixels, four bytes each, and its size. */
 function rgba(image: string, size?: number): { data: Buffer; width: number; height: number } {
   const resize = size ? ["-resize", `${size}x${size}!`] : [];
-  const info = execFileSync("convert", [image, ...resize, "-format", "%w %h", "info:"]).toString().split(" ");
-  const data = execFileSync("convert", [image, ...resize, "-alpha", "on", "-depth", "8", "rgba:-"], {
+  const info = execFileSync(MAGICK,[image, ...resize, "-format", "%w %h", "info:"]).toString().split(" ");
+  const data = execFileSync(MAGICK,[image, ...resize, "-alpha", "on", "-depth", "8", "rgba:-"], {
     maxBuffer: 1 << 28,
   });
   return { data, width: Number(info[0]), height: Number(info[1]) };
@@ -482,7 +492,7 @@ function pictureCell(image: string, cell: number): Buffer {
   let cutAlready = false;
   for (let i = 3; i < source.data.length && !cutAlready; i += 4) cutAlready = source.data[i] < 255;
   const keyed = cutAlready ? source.data : keyOut(source.data, source.width, source.height);
-  return execFileSync("convert", ["-size", `${source.width}x${source.height}`, "-depth", "8", "rgba:-", "-resize", `${cell}x${cell}!`, "rgba:-"], {
+  return execFileSync(MAGICK,["-size", `${source.width}x${source.height}`, "-depth", "8", "rgba:-", "-resize", `${cell}x${cell}!`, "rgba:-"], {
     input: keyed,
     maxBuffer: 1 << 28,
   });
@@ -504,7 +514,7 @@ async function leafScan(id: string): Promise<Scan> {
     // what a card draws them at.
     const n = 2048;
     const read = (kind: string, format: string) =>
-      execFileSync("convert", [map(kind), "-resize", `${n}x${n}!`, "-depth", "8", format], { maxBuffer: 1 << 28 });
+      execFileSync(MAGICK,[map(kind), "-resize", `${n}x${n}!`, "-depth", "8", format], { maxBuffer: 1 << 28 });
     const roughness = existsSync(map("Roughness")) ? read("Roughness", "gray:-") : undefined;
     return { width: n, height: n, colour: read("Color", "rgb:-"), normal: read("NormalGL", "rgb:-"), alpha: read("Opacity", "gray:-"), roughness };
   } finally {
@@ -623,8 +633,8 @@ async function cards(name: string, entries: string[], size: number, columns: num
     const leaves = leaf === undefined ? "" : `, its leaves ${(100 * leaf).toFixed(1)}% of it long`;
     console.log(`${card}: cell ${col},${row}, its octagon ${(100 * area(shape)).toFixed(0)}% of the cell, colour ${colour.map((c) => c.toFixed(2))}${leaves}`);
   }
-  execFileSync("convert", ["-size", `${size}x${size}`, "-depth", "8", "rgba:-", join(out, "cards.png")], { input: atlas });
-  execFileSync("convert", ["-size", `${size}x${size}`, "-depth", "8", "rgba:-", join(out, "normal.png")], { input: normals });
+  execFileSync(MAGICK,["-size", `${size}x${size}`, "-depth", "8", "rgba:-", join(out, "cards.png")], { input: atlas });
+  execFileSync(MAGICK,["-size", `${size}x${size}`, "-depth", "8", "rgba:-", join(out, "normal.png")], { input: normals });
   const ron = [
     `// The leaf, frond and flower cards in assets/materials/${name}/cards.png, made from their`,
     `// pictures and recipes by \`node tools/textures/textures.ts cards\`; don't edit by hand. Each`,
@@ -684,11 +694,11 @@ function pixels(image: string, channels: 1 | 3, width: number, height: number, t
     ? ["(", image, "-resize", `${tile[0]}x${tile[1]}!`, "-write", "mpr:copy", "+delete", ")",
        "-size", `${width}x${height}`, "tile:mpr:copy"]
     : [image, "-resize", `${width}x${height}!`];
-  return execFileSync("convert", [...args, ...grey, "-depth", "8", format], { maxBuffer: 1 << 28 });
+  return execFileSync(MAGICK,[...args, ...grey, "-depth", "8", format], { maxBuffer: 1 << 28 });
 }
 
 function save(data: Buffer, channels: 1 | 3, width: number, height: number, to: string) {
-  execFileSync("convert", ["-size", `${width}x${height}`, "-depth", "8", channels === 1 ? "gray:-" : "rgb:-", "-quality", "92", to], {
+  execFileSync(MAGICK,["-size", `${width}x${height}`, "-depth", "8", channels === 1 ? "gray:-" : "rgb:-", "-quality", "92", to], {
     input: data,
   });
 }
@@ -1063,7 +1073,7 @@ function highPass(image: string, size: number, channels: 1 | 3): Float32Array {
     const args = [image, "-resize", `${size}x${size}!`];
     if (blur) args.push("-virtual-pixel", "tile", "-blur", `0x${sigma}`);
     if (channels === 1) args.push("-colorspace", "gray");
-    return execFileSync("convert", [...args, "-depth", "8", channels === 1 ? "gray:-" : "rgb:-"], { maxBuffer: 1 << 28 });
+    return execFileSync(MAGICK,[...args, "-depth", "8", channels === 1 ? "gray:-" : "rgb:-"], { maxBuffer: 1 << 28 });
   };
   const [sharp, soft] = [raw(false), raw(true)];
   const out = new Float32Array(sharp.length);
