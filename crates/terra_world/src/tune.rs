@@ -92,33 +92,45 @@ struct Set {
     value: Option<f32>,
 }
 
-fn set(In(params): In<Option<Value>>) -> BrpResult {
-    let Set { name, value } = parse_some(params)?;
-    let t = tune::named(&name).map_err(crate::remote::refused)?;
+/// Sets one, or puts it back to its default with `None`, and logs it (`Tune: NAME was -> now`)
+/// for a script's `wait`: what the remote and the debug menu (D81) both set through, so each
+/// sees what the other set. Answers what it was.
+pub fn set_logged(t: &'static Tunable, value: Option<f32>, by: SetBy) -> Result<f32, String> {
     let was = match value {
-        Some(value) => t
-            .set(value, SetBy::Remote)
-            .map_err(crate::remote::refused)?,
+        Some(value) => t.set(value, by)?,
         None => t.reset(),
     };
     info!(
-        "Tune: {} {was} -> {} (default {})",
+        "Tune: {} {was} -> {} (default {}, by {})",
         t.name,
         t.get(),
-        t.default
+        t.default,
+        t.set_by().name()
     );
+    Ok(was)
+}
+
+/// Every changed one whose name starts with `prefix` back to its default, logged; their names.
+pub fn reset_logged(prefix: &Option<String>) -> Vec<&'static str> {
+    let mut reset = Vec::new();
+    for t in starting(prefix).filter(|t| t.get() != t.default) {
+        let was = t.reset();
+        info!("Tune: {} {was} -> {} (default)", t.name, t.get());
+        reset.push(t.name);
+    }
+    reset
+}
+
+fn set(In(params): In<Option<Value>>) -> BrpResult {
+    let Set { name, value } = parse_some(params)?;
+    let t = tune::named(&name).map_err(crate::remote::refused)?;
+    let was = set_logged(t, value, SetBy::Remote).map_err(crate::remote::refused)?;
     Ok(json!({ "was": was, "tunable": answer(t) }))
 }
 
 fn reset(In(params): In<Option<Value>>) -> BrpResult {
     let Prefix { prefix } = parse_some(params.or(Some(json!({}))))?;
-    let mut reset = Vec::new();
-    for t in starting(&prefix).filter(|t| t.get() != t.default) {
-        let was = t.reset();
-        info!("Tune: {} {was} -> {} (default)", t.name, t.get());
-        reset.push(t.name);
-    }
-    Ok(json!({ "reset": reset }))
+    Ok(json!({ "reset": reset_logged(&prefix) }))
 }
 
 #[cfg(test)]

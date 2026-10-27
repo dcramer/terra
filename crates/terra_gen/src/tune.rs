@@ -48,6 +48,8 @@ pub enum SetBy {
     Default,
     CommandLine,
     Remote,
+    /// A person, on the debug menu's sliders (D81), as Unreal's `ECVF_SetByConsole`.
+    Menu,
 }
 
 impl SetBy {
@@ -56,6 +58,7 @@ impl SetBy {
             SetBy::Default => "default",
             SetBy::CommandLine => "command line",
             SetBy::Remote => "remote",
+            SetBy::Menu => "debug menu",
         }
     }
 
@@ -63,6 +66,7 @@ impl SetBy {
         match n {
             1 => SetBy::CommandLine,
             2 => SetBy::Remote,
+            3 => SetBy::Menu,
             _ => SetBy::Default,
         }
     }
