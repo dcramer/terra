@@ -117,11 +117,11 @@ fn moving_the_anchor_moves_nothing_drawn() {
     let (a, b) = (Vec2::new(0.0, 0.0), Vec2::new(4000.0, -4000.0));
     let point = Vec2::new(1234.0, 567.0);
     let (oa, ob) = (offsets(&winds, t, a), offsets(&winds, t, b));
-    for f in 0..3 {
+    for (f, &metres) in FIELD_M.iter().enumerate() {
         for (o, &(frequency, _)) in OCTAVES.iter().enumerate() {
             let i = f * 4 + o;
             let seen = |anchor: Vec2, off: Vec4| {
-                let p = (point - anchor).as_dvec2() / FIELD_M[f] * frequency;
+                let p = (point - anchor).as_dvec2() / metres * frequency;
                 DVec2::new(p.x + f64::from(off.x), p.y + f64::from(off.z))
             };
             let d = seen(a, oa[i]) - seen(b, ob[i]);
