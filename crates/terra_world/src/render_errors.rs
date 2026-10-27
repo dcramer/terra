@@ -139,9 +139,10 @@ fn shaders(descriptor: &PipelineDescriptor) -> String {
     };
     let mut names: Vec<String> = Vec::new();
     for handle in handles {
+        // An embedded path is written with Windows' separators on Windows.
         let name = handle.path().map_or_else(
             || "a shader without a path".to_string(),
-            ToString::to_string,
+            |path| path.to_string().replace('\\', "/"),
         );
         if !names.contains(&name) {
             names.push(name);
