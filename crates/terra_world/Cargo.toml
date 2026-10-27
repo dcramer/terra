@@ -41,6 +41,10 @@ wgpu = { version = "30", default-features = false, features = ["noop"] }
 [features]
 # Helpers for the tests of the crates above, such as measuring how loud a sound is.
 testing = []
+# A span a system run written as a Chrome trace (`TRACE_CHROME=<file>`), the game and the
+# render world taking turns on one thread so each span is its own world's: what
+# tools/sandbox/spans.ts reads. Never in a build that is timed.
+trace = ["bevy/trace_chrome"]
 
 [lints]
 workspace = true

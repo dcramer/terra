@@ -28,5 +28,9 @@ terra_voxel.workspace = true
 terra_walker.workspace = true
 terra_world.workspace = true
 
+[features]
+# Per-system spans for tools/sandbox/spans.ts (terra_world's `trace`).
+trace = ["terra_world/trace"]
+
 [lints]
 workspace = true

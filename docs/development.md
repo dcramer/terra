@@ -198,6 +198,16 @@ Under WSL the task builds and runs the Windows program, the only one with a real
 
 To find what a scene spends its time on, switch things off and run it again. A temporary environment variable read by the code under test is enough, removed before committing.
 
+**Which systems a frame spends.** A build with `--features trace` writes a span for every system's run to a Chrome trace (Bevy's `trace_chrome`), and runs the render world after the game on the main thread, so each span is plainly one world's. Its times are a quarter or so longer than a timed build's, so judge a change by the benchmark, never by the trace:
+
+```bash
+cargo build --release -p terra_sandbox --features trace
+TRACE_CHROME=world.json BEVY_ASSET_ROOT=$PWD target/release/terra_sandbox --experiment play --time 17 --offscreen --bench --settle 240 --bench-frames 600
+node tools/sandbox/spans.ts world.json            # --generics splits a material's systems by type
+```
+
+It prints, for the game and the render world, the frame by schedule (wall clock, as schedules run one after another), the longest systems in the slowest frames, and the systems by their 99th percentile. A parallel system's span holds its wait for the workers too, so a system that fans out tiny work looks dearer than it is: confirm with the benchmark. A trace runs to gigabytes; keep it out of the repository.
+
 ## Judging a material
 
 A change to a construction material, its scan, pack, tint, pattern, shader or the light it is seen in, is judged on the material bench (D386), not on ad hoc stills:
