@@ -60,12 +60,16 @@ struct Params {
 const SHAPE_TILE_M: f32 = 6000.0;
 const DETAIL_TILE_M: f32 = 750.0;
 const NOISE_SIDE: f32 = 64.0;
+// How many times the shapes' noise repeats over its tile (`shape`).
+const SHAPE_REPEATS: f32 = 2.0;
 // How far a ray is marched; past it the layer carries on to the air's horizon drawn flat, as the
 // 2D layer is, from the same map (`far_layer`).
 const MARCH_M: f32 = 32000.0;
 // The march's budget of samples, and how many empty fine ones return it to coarse steps.
 const STEPS: u32 = 96u;
 const EMPTY_TO_COARSE: u32 = 10u;
+// The shortest step at a heap's face and in its core.
+const FACE_STEP_M: f32 = 6.0;
 // Extinction a metre at density 1: cumulus (the bevy branch's droplet optics: 1 g/m3, Warner
 // 1955's cumulus core, droplets of 10 um, so some 25 m of sight inside), and the thinner stratus
 // deck.
@@ -160,6 +164,10 @@ struct Column {
     thickness: f32,
     kind: f32,
     rain: f32,
+    // How far up its layer this heap's top reaches (0 to 1): tallest in a heap's middle, and
+    // by the 2D shapes' finer octaves, so towers and lumps of several sizes stand on bases at
+    // one height rather than every heap rising to one flat lid.
+    top: f32,
 }
 
 fn column(metres: vec2<f32>) -> Column {
@@ -176,6 +184,14 @@ fn column(metres: vec2<f32>) -> Column {
     c.kind = w.b;
     // Heaped cloud leaves the noise more to cut, so it breaks into heaps; a deck is whole.
     c.coverage = remap(shapes, threshold - 0.12, threshold + 0.1) * mix(1.0, params.tuned.x, c.kind);
+    // The heap's top: low at its edge, and in its middle as tall as the finer octaves (630 m and
+    // 300 m, the 2D layer's third and fourth) raise it, as cumulus heaps stand as towers of
+    // several sizes over one condensation level (Nubis 2017 takes a heap's height from its
+    // weather map's height channel the same way).
+    let core = smoothstep(threshold - 0.12, threshold + 0.25, shapes);
+    let towers = wrapped_noise(p * 4.3 + params.shapes[2].xyz) * 0.6
+        + wrapped_noise(p * 8.9 + params.shapes[3].xyz) * 0.4;
+    c.top = clamp(0.15 + core * smoothstep(0.2, 0.75, towers) * 1.1, 0.15, 1.0);
     c.rain = w.g;
     // The layer by kind, from the kinds' table (clouds::LAYERS): deck, stratocumulus, cumulus.
     let base = params.layers[0].xyz + params.layers[1].xyz * c.rain;
@@ -202,7 +218,8 @@ fn profile(c: Column, h: f32) -> f32 {
     if h <= 0.0 || h >= 1.0 {
         return 0.0;
     }
-    let heaped = smoothstep(0.0, 0.07, h) * smoothstep(1.0, 0.45, h);
+    // A flat base at the condensation level, the body full to near its own top and rounded off.
+    let heaped = smoothstep(0.0, 0.04, h) * smoothstep(c.top, c.top * 0.55, h);
     let even = smoothstep(0.0, 0.15, h) * smoothstep(1.0, 0.75, h);
     return mix(even, heaped, c.kind);
 }
@@ -214,7 +231,11 @@ fn shape(c: Column, m: vec2<f32>, h: f32, lod: f32) -> f32 {
     if profiled <= 0.0 || c.coverage <= 0.0 {
         return 0.0;
     }
-    let uvw = vec3<f32>(m.x / SHAPE_TILE_M + params.volume.x, h / SHAPE_TILE_M, m.y / SHAPE_TILE_M + params.volume.y);
+    // Taken twice over the tile (3 km), so the body's billows are half the size and a 2D blob
+    // breaks into heaps of several sizes: at the tile's 6 km a heap was one smooth 2 km pillow.
+    // The offsets are shares of the tile, so doubled they still ride the wind exactly.
+    let uvw = vec3<f32>(m.x / SHAPE_TILE_M + params.volume.x, h / SHAPE_TILE_M, m.y / SHAPE_TILE_M + params.volume.y)
+        * SHAPE_REPEATS;
     let n = textureSampleLevel(noise, repeating, uvw, lod);
     let fbm = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
     // The remap leaves it between about 0.7 and 0.95; stretched, so a coverage cuts it
@@ -379,6 +400,8 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     eye_map = (params.to_map * vec4<f32>(eye, 1.0)).xz;
     let mu = dot(direction, eye_up);
     let way = map_way(direction);
+    // How wide this picture's pixel is a metre away (the march's picture is half the screen's).
+    let pixel_m = 2.0 / (view.clip_from_view[1][1] * f32(size.y));
 
     // Where the ray is inside the shells: from below it leaves the bottom's sphere and then the
     // top's; inside, it runs to the bottom if it falls to it, else out of the top; from above,
@@ -430,6 +453,9 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     var hazed = 0.0;
     var fine = false;
     var empty = 0u;
+    // The last fine sample's extinction, and how far a step a heap was found in is walked again.
+    var sigma_last = 0.0;
+    var walk_finely_to = 0.0;
     // The optical depth of cloud between the eye and the step.
     var seen_through = 0.0;
     var t = t0;
@@ -454,19 +480,35 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
             continue;
         }
         dt = min(fine_step(t), t1 - t);
+        // In and at the face of a heap, steps of about half a unit of optical depth (6 m in a
+        // cumulus core, 15 m at its face): a heap is opaque some 30 m in, and stepped at the
+        // 60 to 100 m a heap kilometres off took, each pixel's jittered sample fell inside or
+        // outside its face, lit deep or not at all, a crosshatch over every near heap.
+        if t < walk_finely_to || sigma_last > 0.0 {
+            dt = min(dt, clamp(0.5 / max(sigma_last, 0.033), FACE_STEP_M, 15.0));
+        }
         let s = t + dt * 0.5;
         let m = eye_map + way * s;
         let h = height_along(eye_height, mu, s);
         let c = column(m);
-        let lod = log2(max(dt, 1.0) / (SHAPE_TILE_M / NOISE_SIDE));
-        let body = shape(c, m, h, max(lod, 0.0));
+        // The noise's level of detail from the pixel's footprint at the sample, as the bevy
+        // branch takes it: from the step's length (20 m near, 100 m at 5 km) the detail was
+        // drawn three levels too coarse at 5 km and every edge a smooth pillow.
+        let footprint = max(s * pixel_m, 1.0);
+        let body = shape(c, m, h, max(log2(footprint * SHAPE_REPEATS / (SHAPE_TILE_M / NOISE_SIDE)), 0.0));
         var density = 0.0;
         if body > 0.0 {
-            density = eroded(c, m, h, body, max(log2(max(dt, 1.0) / (DETAIL_TILE_M / NOISE_SIDE)), 0.0));
+            density = eroded(c, m, h, body, max(log2(footprint / (DETAIL_TILE_M / NOISE_SIDE)), 0.0));
         }
         if density > 0.0 {
             empty = 0u;
             let sigma = density * extinction(c);
+            if sigma_last == 0.0 && t >= walk_finely_to && dt > 2.0 * FACE_STEP_M {
+                // A heap's face inside a long step: walk that step again finely to find it.
+                walk_finely_to = t + dt;
+                continue;
+            }
+            sigma_last = sigma;
             // The sun's cosine to the up where the sample is, as the shells curve.
             let up_here = normalize(eye_up * (params.shell.y + eye_height) + direction * s);
             let tau = toward_sun(c, m, h, dot(sun, up_here), sun_way);
@@ -480,6 +522,7 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
             hazed += took * (1.0 - clear);
             transmittance *= through;
         } else {
+            sigma_last = 0.0;
             empty += 1u;
             if empty >= EMPTY_TO_COARSE {
                 fine = false;
