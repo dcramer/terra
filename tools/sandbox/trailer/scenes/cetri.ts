@@ -99,20 +99,20 @@ function script(s: Script) {
   s.call("staged.play", { name: "cetri", clip: "Troll_Roar", speed: 0.6, once: true, blend_ms: 1200 });
   s.call("staged.morph", { name: "cetri", weights: { Wake: 1 }, blend_ms: 1400 });
 
-  // The lunge: the trunk tips at the walker, who flinches back a few steps.
+  // The lunge: the trunk tips at the walker, who flinches back a step, so it looms.
   s.frame = f(BEATS.lunge);
   s.call("staged.play", { name: "cetri", clip: "Troll_Smash", speed: 0.55, once: true, blend_ms: 500 });
   s.call("staged.bend", { name: "cetri", bend: LUNGES, blend_ms: 700 });
-  const back = toward(CETRI, WALK[1], Math.hypot(WALK[1][0] - CETRI[0], WALK[1][1] - CETRI[1]) + 3);
+  const back = toward(CETRI, WALK[1], Math.hypot(WALK[1][0] - CETRI[0], WALK[1][1] - CETRI[1]) + 1);
   s.glide(on(back, EYE - 0.15), look(4.2), 70);
 
-  // Then it comes on, slow and heavy, and the walker backs away looking up at it.
+  // Then it comes on, slow and heavy, gaining on the walker backing away looking up at it.
   s.frame = f(BEATS.comes);
   const to = toward(CETRI, back, 4);
   s.call("staged.bend", { name: "cetri", bend: COMES, blend_ms: 900 });
   s.call("staged.play", { name: "cetri", clip: "Troll_Walk", speed: 0.6, blend_ms: 900 });
   s.call("staged.move", { name: "cetri", to: [to[0], 0, to[1]], speed: 0.48, base: true });
-  const away = toward(CETRI, back, Math.hypot(back[0] - CETRI[0], back[1] - CETRI[1]) + 2.5);
+  const away = toward(CETRI, back, Math.hypot(back[0] - CETRI[0], back[1] - CETRI[1]) + 1);
   s.glide(on(away, EYE - 0.1), on(to, 5), Math.round((BEATS.end - BEATS.comes) * 60));
   s.frame = f(BEATS.end);
 }
