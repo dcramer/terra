@@ -578,6 +578,9 @@ def prism(m, outline, z0, z1, side, top, metres, bottom=None):
 WAX = ("Wax", "white_stucco", (0.45, 0.37, 0.25))
 WICK = ("Wick", None, (0.03, 0.025, 0.02))
 FLAME = ("Flame", "glow", (1.0, 0.42, 0.10))
+# The grave candles' mound: old tallow under dust, about 0.3 in sRGB over the stucco, half the
+# candles' own wax, before its grime.
+POOL = ("Pool", "white_stucco", (0.25, 0.19, 0.12))
 
 
 def candle(m, x, y, z, r, h, mats=(0, 1, 2)):
@@ -595,13 +598,19 @@ def candle(m, x, y, z, r, h, mats=(0, 1, 2)):
 def candles():
     """Grave candles stood on a mound of their own wax on the floor, seven of them from a stub
     to a hand and a half, as mourners leave them in Elden Ring's catacombs and Skyrim's halls:
-    0.5 by 0.35 m, 0.36 m to the tallest flame."""
+    0.5 by 0.35 m, 0.36 m to the tallest flame. The mound is years of tallow trodden and
+    dusted over, darker than the candles (`POOL`) and grimed as the bones are: flat, pale and
+    30 cm under the lamp's light it read as a white plate on the floor (barrow dress6, all
+    reviewers). Broken at its edge into a few runs and drops, not one disc."""
     m = Mesh()
-    lump(m, (0.0, 0.0, 0.0), (0.23, 0.16, 0.03), 0, segs=14, rings=6)
+    m.aged = True
+    lump(m, (0.0, 0.0, 0.0), (0.21, 0.15, 0.022), 3, segs=14, rings=6)
+    for x, y, rx, ry in ((0.20, -0.07, 0.07, 0.045), (-0.19, 0.09, 0.06, 0.04), (0.05, 0.16, 0.05, 0.03), (-0.26, -0.03, 0.035, 0.025)):
+        lump(m, (x, y, 0.0), (rx, ry, 0.012), 3, segs=8, rings=4)
     for x, y, r, h in ((-0.12, 0.05, 0.04, 0.30), (0.02, 0.08, 0.035, 0.22), (0.14, 0.02, 0.03, 0.16), (-0.03, -0.07, 0.03, 0.11),
                        (0.10, -0.09, 0.025, 0.07), (-0.18, -0.06, 0.028, 0.13), (0.20, 0.10, 0.022, 0.05)):
-        candle(m, x, y, 0.02, r, h)
-    return m, [WAX, WICK, FLAME]
+        candle(m, x, y, 0.015, r, h)
+    return m, [WAX, WICK, FLAME, POOL]
 
 
 def altar():
