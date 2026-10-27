@@ -90,7 +90,12 @@ fn class_of(theme: &Theme, set: &ModuleSet, variant: usize) -> Class {
         return Class::Collapse;
     }
     let name = m.name.to_lowercase();
-    let has = |words: &[&str]| words.iter().any(|w| name.contains(w));
+    // A word names a class where one of the name's words starts with it ("sarcophag" in
+    // "sarcophagus", "urn" in "urns"), never inside another: by "rack" in "cracked_flags" each
+    // cracked floor of the crypt laid a weapon rack, 21 sets of axes lying about it (dress6).
+    let has = |words: &[&str]| {
+        (name.split(['_', ' ', '-'])).any(|token| words.iter().any(|w| token.starts_with(w)))
+    };
     let classes: [(&[&str], Class); 14] = [
         (&["shore", "bank"], Class::Shore),
         (&["flood", "pool", "puddle", "water", "basin"], Class::Basin),
@@ -108,7 +113,7 @@ fn class_of(theme: &Theme, set: &ModuleSet, variant: usize) -> Class {
         (&["rack", "weapon"], Class::Rack),
         (&["trestle", "table", "bench"], Class::Table),
         (&["timber", "shoring"], Class::Timber),
-        (&["vein", "ore_"], Class::Vein),
+        (&["vein", "ore"], Class::Vein),
     ];
     if set.wet(variant) && !has(&["shore", "bank"]) {
         return Class::Basin;

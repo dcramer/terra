@@ -266,6 +266,33 @@ fn stamps_name_models_that_exist_and_repeat() {
     }
 }
 
+/// A module lays a weapon rack only where its name says rack or weapon, never by a word inside
+/// another: by "rack" in "cracked_flags" each cracked floor of the crypt laid a set of axes
+/// (barrow dress6: 21 over the crypt, lying parallel in its vault and goal room).
+#[test]
+fn a_module_lays_a_rack_only_where_its_name_says_one() {
+    for theme in Theme::all(&assets()).unwrap() {
+        let bare = Theme {
+            dressing: Vec::new(),
+            ..theme.clone()
+        };
+        let named = (theme.modules.iter())
+            .any(|m| (m.name.split('_')).any(|w| w == "rack" || w == "weapon"));
+        let set = ModuleSet::new(&theme).unwrap();
+        let mut racks = 0;
+        for s in 0..20 {
+            let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
+                continue;
+            };
+            let laid = stamp(&dungeon, &bare, &kind).props;
+            racks += (laid.iter())
+                .filter(|p| p.model.ends_with("AxesLaid.glb"))
+                .count();
+        }
+        assert_eq!(racks > 0, named, "{}: {racks} racks laid", theme.name);
+    }
+}
+
 #[test]
 fn frames_turn_as_modules_turn() {
     // A cell's north-west cube seen from the east is its north-east cube.
