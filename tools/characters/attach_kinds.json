@@ -5,7 +5,7 @@
   "polearm": {"mount": "in hand", "examples": "a spear, a staff", "length_m": [1.5, 3.0], "grip_share": [0.3, 0.55], "second": "second", "classes": ["spear", "staff"], "fits": "detector"},
   "bow": {"mount": "in hand", "examples": "a bow", "length_m": [1.0, 1.9], "grip_share": [0.45, 0.55], "second": "nock", "classes": ["bow"], "fits": "person"},
   "shield": {"mount": "strapped", "examples": "a round shield, a heater shield", "size_m": [0.45, 1.0], "classes": ["shield"], "fits": "person"},
-  "hung": {"mount": "hung", "examples": "a basket, a bucket", "size_m": [0.2, 0.6], "classes": [], "fits": "detector"},
+  "hung": {"mount": "hung", "examples": "a basket, a bucket", "size_m": [0.2, 0.6], "classes": [], "fits": "person"},
   "belt": {"mount": "rigid", "examples": "a quiver; later a pouch, a sheath", "size_m": [0.15, 0.8], "fits": "person"},
   "pack": {"mount": "skinned", "examples": "a small pack, a large pack", "fits": "person"},
   "garment": {"mount": "skinned", "examples": "clothing, armour, a cap, a coif", "fits": "body"}
