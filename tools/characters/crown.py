@@ -139,8 +139,8 @@ for i, (tip, _) in enumerate(tips):
         for loop, (a, b) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
             loop[uv].uv = (a, b)
             loop[col] = (*tint, 1.0)
+        cards.append((range(4 * len(normals), 4 * len(normals) + 4), tree.find(stalk)[1]))
         normals.append(normal)
-        cards.append((vs, tree.find(stalk)[1]))
 bm.verts.index_update()
 leaves_me = bpy.data.meshes.new("CrownLeaves")
 bm.to_mesh(leaves_me)
@@ -157,7 +157,7 @@ leaves_me.normals_split_custom_set(loop_normals)
 for vs, near in cards:
     for name, w in weights[near]:
         g = leaves.vertex_groups.get(name) or leaves.vertex_groups.new(name=name)
-        g.add([v.index for v in vs], w, "REPLACE")
+        g.add(list(vs), w, "REPLACE")
 
 # 4. Its material: the atlas's oakbranch square and its normals, cut at the atlas's alpha,
 # both sides drawn, tinted by each card's shade.
