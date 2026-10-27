@@ -530,7 +530,12 @@ impl<F: Fn(DVec3) -> f32> Query for Sdf<F> {
             if d >= reach {
                 continue;
             }
-            let (axis, least) = on.refine(&along, (t, d), (t - step).max(0.0), (t + step).min(1.0));
+            // A sphere's one sample is its least already: the section would ask it again.
+            let (axis, least) = if n == 1 {
+                (along(t), d)
+            } else {
+                on.refine(&along, (t, d), (t - step).max(0.0), (t + step).min(1.0))
+            };
             if least - capsule.radius >= within {
                 continue;
             }

@@ -43,7 +43,7 @@
 //! (D61, `terra_walker::Stamina`) is written in before a tick and the spend taken back after.
 //! Never started in a fight stance (`Intent::fighting`, D507).
 
-use super::query::{Capsule, Contact, Query, TOLERANCE};
+use super::query::{Capsule, Contact, Hit, Query, TOLERANCE};
 use super::slide::{self, Shape, Support};
 use super::{Body, Ground, Intent, Kind, approach, turn};
 use glam::{DVec3, Vec3};
@@ -177,10 +177,51 @@ fn probe_at(
         origin: shape.origin,
     };
     let look = shape.radius + k.climb_gap + AHEAD_M;
-    let hit = query.sweep(&probe, into * look)?;
+    let hit =
+        square_ahead(query, &probe, into, look).or_else(|| query.sweep(&probe, into * look))?;
     let grip = holdable(k, query, shape, &hit.contact)?;
     let off = hit.fraction * look + PROBE_M - shape.radius;
     Some((hit.contact.normal, grip, off))
+}
+
+/// How square to the way in a face is for [`square_ahead`]: within 2.6 deg.
+const SQUARE_COS: f32 = 0.999;
+
+/// A probe's sweep `into` a face square to it, told by its distance and a contact or two: the
+/// nearest thing within the look, the probe carried as far as the sweep would stop it (its
+/// tolerance in, less half of that; once more by the face's slant off square) and touching one
+/// face there, square to the way in, so that face is the first met. None where it cannot be
+/// told so (a lip, a slab, a crease, nothing near), for the sweep to answer.
+fn square_ahead(query: &dyn Query, probe: &Capsule, into: Vec3, look: f32) -> Option<Hit> {
+    let d = query.apart(probe, look)?;
+    let stop = -0.75 * TOLERANCE;
+    let mut by = d - stop;
+    if d <= TOLERANCE {
+        return None;
+    }
+    let mut touched = Vec::new();
+    for _ in 0..2 {
+        if by >= look {
+            return None;
+        }
+        touched.clear();
+        query.contacts(&probe.moved(into * by), 0.0, &mut touched);
+        let [contact] = touched[..] else {
+            return None;
+        };
+        let square = contact.normal.dot(-into);
+        if square < SQUARE_COS {
+            return None;
+        }
+        if (-TOLERANCE..=-0.5 * TOLERANCE).contains(&contact.distance) {
+            return Some(Hit {
+                fraction: by / look,
+                contact,
+            });
+        }
+        by += (contact.distance - stop) / square;
+    }
+    None
 }
 
 /// The face ahead as it is found along the level way `into` it, by probes at the feet, the
