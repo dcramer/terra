@@ -43,6 +43,39 @@ def test_a_roll_that_stays_within_half_a_turn_is_unchanged():
     assert twist.unwrapped(list(true)) == true
 
 
+def test_a_winding_loop_flips_once_a_turn_and_owns_it():
+    true = [math.radians(7 - 360 * i / 39) for i in range(40)]
+    largest, flips, owned = twist.jumps(twist.unwrapped([short(a) for a in true]), 0.5, loop=True)
+    assert flips == 1 and owned == 1, (flips, owned)
+    # Its frames turn the twist bone half of 360/39 degrees each, the flip measured the short way.
+    assert abs(largest - 0.5 * 360 / 39) < 1e-6, largest
+
+
+def test_a_winding_loop_that_dithers_across_half_a_turn_flips_more_than_it_owns():
+    # Once round, but swaying back and forth as it passes half a turn: each crossing a flip.
+    true = [math.radians(-360 * i / 80 + 25 * math.sin(2 * math.pi * 4 * i / 80)) for i in range(81)]
+    _, flips, owned = twist.jumps(twist.unwrapped([short(a) for a in true]), 0.5, loop=True)
+    assert owned == 1 and flips > owned, (flips, owned)
+
+
+def test_a_clip_that_is_no_loop_owns_no_flip():
+    # A one-off roll out past half a turn (0 to 250 degrees) ends over half a turn from its
+    # start, as a winding loop does: unwrapped takes it frame by frame, so its twist bone flips.
+    true = [math.radians(250 * i / 30) for i in range(31)]
+    _, flips, owned = twist.jumps(twist.unwrapped([short(a) for a in true]), 0.5, loop=False)
+    assert flips == 1 and owned == 0, (flips, owned)
+
+
+def test_a_flip_in_a_clips_data_is_a_big_jump():
+    # One frame's roll 150 degrees off its neighbours', as a flipped key gives.
+    true = [math.radians(20 + (150 if i == 12 else 0)) for i in range(25)]
+    largest, flips, _ = twist.jumps(twist.unwrapped(list(true)), 0.5, loop=True)
+    assert flips == 0 and abs(largest - 75) < 1e-6, (largest, flips)
+    smooth = [math.radians(60 * math.sin(2 * math.pi * i / 30)) for i in range(31)]
+    largest, flips, owned = twist.jumps(twist.unwrapped(smooth), 0.5, loop=True)
+    assert largest < 7 and flips == 0 and owned == 0, (largest, flips, owned)
+
+
 failed = 0
 for name, test in sorted(globals().copy().items()):
     if name.startswith("test_") and callable(test):

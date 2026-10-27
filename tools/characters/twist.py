@@ -111,6 +111,22 @@ def unwrapped(angles):
     return [a + shift for a in out]
 
 
+def jumps(angles, share, loop):
+    """How a twist bone keyed `share` of `angles` (as unwrapped gives them) turns between
+    frames, across the seam too for a loop: its largest turn the short way, in degrees; how
+    often it flips (turns back more than half a turn of roll at once); and how many flips are
+    the loop's own, one for each whole turn the roll winds round it. A clip that is not a loop
+    owns none: unwrapped follows it, so a flip in it is a flip in its data."""
+    steps = [b - a for a, b in zip(angles, angles[1:])]
+    if loop and angles:
+        steps.append(angles[0] - angles[-1])
+    short = [math.atan2(math.sin(d), math.cos(d)) for d in steps]
+    largest = max((share * abs(math.degrees(d)) for d in short), default=0.0)
+    flips = sum(1 for d in steps if abs(d) > math.pi)
+    wound = round(abs(sum(short)) / (2.0 * math.pi)) if loop else 0
+    return largest, flips, wound
+
+
 def rolled(arm, action):
     """One clip on `arm` with each ROLL segment's roll moved to the bone beyond it: per frame,
     the rotations of the segments and the bones beyond, and per TWIST pair (segment, bone

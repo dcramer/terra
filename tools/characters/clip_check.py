@@ -12,6 +12,10 @@ By default the game's mannequin file (clips.py) and all its clips. For each clip
     largest step between neighbouring bones is what the skin must turn across; dual
     quaternion skinning keeps its volume, but goes the short way round past half a turn.
   - the twist step itself: the hands and feet must end up exactly where the clip puts them.
+  - twist jump: how far a twist bone turns between frames as baked, the short way (across a
+    loop's seam too), and its flips, where it turns back half a turn at once. Only a loop that
+    winds (twist.unwrapped) may flip, once for each turn it winds; anywhere else a flip, or a
+    big turn in one frame, is a flip in the clip's data that the skin would show.
 Prints a CLIPCHECK line of JSON per clip, then CLIPCHECK pass or fail. With --trace, also a
 TRACE line per frame of each clip named: each limb's roll and its twist bone's share, in
 degrees, to see what the twist step did.
@@ -34,6 +38,11 @@ LIMITS = {
     "shoulder_hip_roll_deg": 30.0,  # the upper arm's or thigh's own roll, which nothing spreads
     "step_deg": 135.0,              # roll between neighbouring bones of a limb after the twist step
     "moved_deg": 0.1,               # how far the twist step may turn a hand or foot: not at all
+    # A twist bone's turn between frames, the short way. In our clips (2026-10-27) 24 degrees
+    # at most (Roll), but for Swim_Fwd_Loop's right forearm, 56, where Quaternius's hand turns
+    # 114 degrees between frames 15 and 16; a flipped key, half a turn of roll, turns it 90. A
+    # winding loop's one turn back a wound turn (twist.unwrapped) is counted apart.
+    "twist_jump_deg": 60.0,
 }
 
 args = look.args()
@@ -63,16 +72,23 @@ for action in sorted(bpy.data.actions, key=lambda a: a.name):
         for seg, to in ROOTS:
             q = arm.pose.bones[seg].matrix_basis.to_quaternion()
             root_roll = max(root_roll, abs(math.degrees(twist.split(q, twist.axis(arm, seg, to))[2])))
-    steps = {}
+    steps, jumps, flipped, unwound = {}, {}, {}, False
     for pair, turn in turns.items():
         share = shares[pair]
         if share <= 0:
             continue
         steps[pair[0]] = max(max(share, 1 - share) * abs(math.degrees(t)) for t in turn)
+        jump, flips, allowed = twist.jumps(turn, share, action.name.endswith("_Loop"))
+        jumps[pair[0]] = jump
+        if flips:
+            flipped[pair[0]] = f"{flips} of {allowed} wound"
+        unwound |= flips > allowed
     worst = max(steps.items(), key=lambda kv: kv[1]) if steps else ("", 0.0)
+    jump = max(jumps.items(), key=lambda kv: kv[1]) if jumps else ("", 0.0)
     passed = (root_roll <= LIMITS["shoulder_hip_roll_deg"] and worst[1] <= LIMITS["step_deg"]
-              and moved <= LIMITS["moved_deg"])
+              and moved <= LIMITS["moved_deg"] and jump[1] <= LIMITS["twist_jump_deg"] and not unwound)
     ok &= passed
     print("CLIPCHECK", json.dumps({"clip": action.name, "pass": passed, "shoulder_hip_roll_deg": round(root_roll, 1),
-                                   "worst_step_deg": round(worst[1], 1), "at": worst[0], "hand_foot_moved_deg": round(moved, 3)}))
+                                   "worst_step_deg": round(worst[1], 1), "at": worst[0], "hand_foot_moved_deg": round(moved, 3),
+                                   "twist_jump_deg": round(jump[1], 1), "jump_at": jump[0], "flips": flipped}))
 print("CLIPCHECK", "pass" if ok else "fail", json.dumps(LIMITS))
