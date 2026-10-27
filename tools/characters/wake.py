@@ -10,8 +10,9 @@ it, teeth on the lips, opened by a blend shape) it adds:
   - a ragged horizontal cut, closed at rest (a frost crack), with a dark dish behind it
     (the mouth bag) so an open mouth shows no inside of the trunk, its throat an ember that
     lights with the eyes;
-  - splinter teeth along both lips, grained as the bark, tucked inside the trunk until the
-    lips part;
+  - splinter teeth along both lips, grained as the bark and catching the throat's ember,
+    tucked inside the trunk until the lips part;
+  - a heavy bark brow over the eyes, which sit in sockets in its shadow;
   - a `Wake` shape key: the lips parted most in the middle, curled in, raggedly;
   - an emissive map, amber with a hot middle where the eye holes are painted dark, black
     elsewhere. It ships
@@ -39,7 +40,11 @@ import look
 
 AMBER = (1.0, 0.52, 0.12)
 CORE = (1.0, 0.86, 0.55)  # an eye's hot middle, near white, fading out to amber
-EMBER = (0.07, 0.015, 0.002)  # the throat's glow at its deepest, dark by the lips: faint, so the mouth reads as a void, not a lit decal
+# The throat's glow at its deepest, dark by the lips, so the mouth reads as a hollow lit from
+# within, not a lit decal; at round 6's 0.07 it read as no hollow at all (film reviews).
+EMBER = (0.55, 0.16, 0.025)
+# The teeth's warm cast from it: splinters catching the ember, dimmer than the throat.
+CAUGHT = (0.13, 0.04, 0.007)
 src = look.path(look.args()[0])
 SHEET = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--sheet=")), None)
 
@@ -201,14 +206,49 @@ for v in bm.verts:
     moved += 1
 print("CROWN", f"{moved} vertices over {above:.2f} m moved off the arms")
 
-# 3. The mouth's cut: below the eyes by their spacing, as wide as they are apart and a bit,
-# ragged along its length. The faces around it are split once for a finer lip.
+# 3. The mouth's cut: below the eyes by their spacing, wider than they are apart, ragged
+# along its length as bark splits on its furrows, not a carved zigzag (round-6 film reviews:
+# a jack-o'-lantern decal). The faces around it are split once for a finer lip.
 mx, mz = (eyes[0].x + eyes[1].x) / 2, eyes[0].z / 2 + eyes[1].z / 2 - 1.3 * spacing
-half = 0.9 * spacing
+half = 1.2 * spacing
+eye_z = (eyes[0].z + eyes[1].z) / 2
 
 
 def jag(x):
-    return 0.1 * spacing * math.sin(17 * x + 1.3) + 0.06 * spacing * math.sin(41 * x + 0.4)
+    return 0.07 * spacing * math.sin(9 * x + 1.3) + 0.035 * spacing * math.sin(29 * x + 0.4)
+
+
+# The brow: a heavy ridge of bark over both eyes, thrust out so the sun leaves them in its
+# shadow until they light, the eyes sunk into sockets under it (round-6 film reviews: the
+# eyes slits painted on a flat face). Its faces split once for a ridge, not a dent.
+brow_lo, brow_hi = mz + 0.5, eye_z + 1.6 * spacing
+region = [f for f in front_faces(brow_lo, brow_hi, mx, 1.6 * spacing + 0.15)]
+bmesh.ops.subdivide_edges(bm, edges=list({e for f in region for e in f.edges}), cuts=1, use_grid_fill=True)
+bm.normal_update()
+ridge = eye_z + 0.32 * spacing  # its crest, over the eyes
+thrust = 0.45 * spacing
+browed = 0
+for v in bm.verts:
+    if v.co.y > cy or not (eye_z - 0.6 * spacing < v.co.z < brow_hi) or abs(v.co.x - mx) > 1.6 * spacing:
+        continue
+    u = (v.co.x - mx) / (1.6 * spacing)
+    # Lower over the nose than over the eyes' outer ends, as a scowl.
+    crest = ridge - 0.12 * spacing * (1 - abs(u))
+    across = max(0.0, 1 - u * u) ** 0.6
+    dz = v.co.z - crest
+    # Sharp under the crest, an overhang; long and easing out above it into the bark.
+    rise = math.exp(-((dz / (0.14 * spacing)) ** 2)) if dz < 0 else math.exp(-((dz / (0.7 * spacing)) ** 2))
+    push = thrust * across * rise
+    # The sockets: each eye pressed back into the trunk under the ridge.
+    for e in eyes:
+        r = math.hypot((v.co.x - e.x) / (0.45 * spacing), (v.co.z - e.z) / (0.3 * spacing))
+        if r < 1:
+            push -= 0.18 * spacing * (1 - r * r)
+    if abs(push) > 1e-4:
+        v.co.y -= push
+        browed += 1
+bm.normal_update()
+print("BROW", f"crest {ridge:.2f} m, {thrust:.2f} m out, {browed} vertices moved")
 
 
 region = front_faces(mz - 0.5, mz + 0.5, mx, half + 0.2)
@@ -279,9 +319,9 @@ def new_vert(co):
 
 
 mouth_bag = material(f"{body.name}_mouth", (0.004, 0.003, 0.002), 1.0)
-gw, gh, bag_w, bag_h = 14, 8, 1.3 * half, 0.45
+gw, gh, bag_w, bag_h = 16, 10, 1.3 * half, 0.6
 grid = [[new_vert(surface(mx + u * bag_w, mz + v * bag_h)
-                  + Vector((0, 0.02 + 0.45 * (1 - u * u) * (1 - v * v), 0)))
+                  + Vector((0, 0.02 + 0.55 * (1 - u * u) * (1 - v * v), 0)))
          for u in np.linspace(-1, 1, gw)] for v in np.linspace(-1, 1, gh)]
 for j in range(gh - 1):
     for i in range(gw - 1):
@@ -305,18 +345,31 @@ bag_tex = bag.node_tree.nodes.new("ShaderNodeTexImage")
 bag_tex.image = ember
 bag.node_tree.links.new(bag_tex.outputs["Color"], bag_bsdf.inputs["Emission Color"])
 bag_bsdf.inputs["Emission Strength"].default_value = 1.0
+# The teeth: the bark's own material, but catching the throat's ember (an emissive map of its
+# warm cast, so staged.glow lights them with the eyes); splinters a reviewer sees from 8 m.
+caught = bark.copy()
+caught.name = f"{body.name}_teeth"
+body.data.materials.append(caught)
+teeth_mat = len(body.data.materials) - 1
+cast = bpy.data.images.new(f"{body.name}_caught", 4, 4, alpha=False)
+cast.pixels.foreach_set(np.tile(np.array([*CAUGHT, 1], dtype=np.float32), 16))
+cast.pack()
+caught_bsdf = next(n for n in caught.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+caught_tex = caught.node_tree.nodes.new("ShaderNodeTexImage")
+caught_tex.image = cast
+caught.node_tree.links.new(caught_tex.outputs["Color"], caught_bsdf.inputs["Emission Color"])
 teeth = []  # (vertices, the lip it hangs from: +1 upper, -1 lower, its x)
-for lip, count in ((1, 7), (-1, 6)):
+for lip, count in ((1, 9), (-1, 8)):
     for i in range(count):
         x = mx + (-0.8 + 1.6 * (i + 0.5 * (lip < 0) + 0.5) / (count + 0.5)) * 0.95 * half
         h = (math.sin(91.7 * x + 7 * lip) + 1) / 2  # a fixed scatter: each tooth its own length
         root = surface(x, mz + jag(x)) + Vector((0, 0.045, 0))
-        b = (0.06 + 0.05 * h) * spacing
+        b = (0.09 + 0.06 * h) * spacing
         a, c, d = (new_vert(root + o) for o in (Vector((-b, 0, 0)), Vector((b, 0, 0)), Vector((0, b, 0))))
-        tip = new_vert(root + Vector((0.3 * b * math.sin(13 * x), -0.015, -lip * (0.2 + 0.3 * h) * spacing)))
+        tip = new_vert(root + Vector((0.3 * b * math.sin(13 * x), -0.015, -lip * (0.28 + 0.34 * h) * spacing)))
         for tri in ((a, c, d), (a, tip, c), (c, tip, d), (d, tip, a)):
             f = bm.faces.new(tri if lip > 0 else tri[::-1])
-            f.material_index = 0
+            f.material_index = teeth_mat
             for l in f.loops:
                 grain = bark_uv(l.vert.co)
                 if grain is not None:
@@ -329,8 +382,10 @@ wf = 0.95 * half
 # Each lip's move eased out over a long reach (the lower, which falls further, the longer), so
 # the bark's picture is drawn out by a quarter at most, not by half just off the cut; the
 # upper's reach stops short of the eyes.
-up, down = 0.38 * spacing, 0.65 * spacing
-reach_up, reach_down = 1.2 * spacing, 2.6 * spacing
+# Opened wide enough to read from 8 m (round-6 film reviews: it never opens): the lower lip
+# drops as a jaw would, the upper lifts under the brow.
+up, down = 0.5 * spacing, 1.15 * spacing
+reach_up, reach_down = 1.2 * spacing, 3.2 * spacing
 
 
 def along(x):
@@ -380,6 +435,7 @@ if SHEET:
         wake.value = weight
         bsdf.inputs["Emission Strength"].default_value = glow_on
         bag_bsdf.inputs["Emission Strength"].default_value = glow_on
+        caught_bsdf.inputs["Emission Strength"].default_value = glow_on
         # close_up names its pictures by their place in one call: each kept under its own.
         shot = look.close_up(arm, "neck_01", 4 * spacing, sides=(side,), size=600)[0]
         tiles.append(shot.replace(".png", f"-{len(tiles)}.png"))
