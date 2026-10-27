@@ -137,7 +137,9 @@ impl Default for Stamina {
 }
 
 impl Stamina {
-    pub const FULL: f32 = 100.0;
+    /// The mover's pool (`terra_motion::mover::FULL_STAMINA`), so what it spends climbing (D506) is
+    /// of the same 100.
+    pub const FULL: f32 = terra_motion::mover::FULL_STAMINA;
 
     /// Spends stamina, if there is any to spend. Returns whether there was.
     pub fn spend(&mut self, amount: f32) -> bool {

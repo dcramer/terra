@@ -3,6 +3,7 @@
 //! mover's obstacles, their water as the medium.
 //! `cargo xtask controller` runs its test (`tools/controller/criteria.json`'s `course`).
 
+use super::query::{Capsule, Contact, Hit, Query};
 use super::{Bodies, Executor, InTurn, Obstacles, Sdf, World};
 use crate::course::{self, Field, Kind, Mover};
 use glam::{DVec3, Vec3};
@@ -39,6 +40,22 @@ impl Executor for Rayon {
     }
 }
 
+/// The course's materials as a source of the mover's query: nothing to touch, only the grip of
+/// a face where the ground or an obstacle has one (D505).
+struct Materials<'a>(&'a dyn Field);
+
+impl Query for Materials<'_> {
+    fn contacts(&self, _: &Capsule, _: f32, _: &mut Vec<Contact>) {}
+
+    fn sweep(&self, _: &Capsule, _: Vec3) -> Option<Hit> {
+        None
+    }
+
+    fn grip(&self, at: DVec3) -> f32 {
+        self.0.grip(at)
+    }
+}
+
 fn with_world<R>(field: &dyn Field, then: impl FnOnce(&World) -> R) -> R {
     let ground = Sdf {
         distance: |at: DVec3| field.distance_at(at),
@@ -49,8 +66,9 @@ fn with_world<R>(field: &dyn Field, then: impl FnOnce(&World) -> R) -> R {
         obstacles: field.obstacles(),
     };
     let water = |at: Vec3| field.water(at);
+    let solid = (&ground, &obstacles);
     let world = World {
-        ground: &(&ground, &obstacles),
+        ground: &(&solid, &Materials(field)),
         water: &water,
         gravity: field.gravity(),
         centre: Vec3::ZERO,
@@ -107,6 +125,10 @@ impl Mover for Ours {
         self.0
             .get(id)
             .is_some_and(|body| body.ground == super::Ground::Climbing)
+    }
+
+    fn stamina(&self, id: u32) -> f32 {
+        self.0.get(id).map_or(0.0, |body| body.stamina)
     }
 
     fn threads(&mut self, threads: usize) {

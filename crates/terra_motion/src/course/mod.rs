@@ -26,6 +26,9 @@
 //!   never onto a higher one (D523).
 //! - `climb`: faces walked and jumped at, climbed, pulled up onto, lunged up and kicked off
 //!   from; overhangs to their limit and ceilings never (D505-D511).
+//! - `holding`: what climbing's holding, moving, overhangs and lunges cost in stamina and
+//!   letting go at none, grip, the fight stance, knocks, the hold's gap and climbing down
+//!   (D505-D507, D510, D511).
 //! - `fall`: falls that must not hurt (a jump, a step, a stair, a short drop), drops that
 //!   must, onto level ground and a slope, and into deep water (D476).
 //! - `pushes`: people easing apart, a man walked past one standing, a monster walking through
@@ -42,6 +45,7 @@ mod fall;
 mod far;
 pub mod field;
 mod flora;
+mod holding;
 mod ledge;
 mod pushes;
 mod runs;
@@ -111,6 +115,9 @@ pub trait Mover {
     fn drown(&self, id: u32) -> f32;
     /// Whether a body is holding a face, climbing (D477); false for a mover that does not climb.
     fn climbing(&self, id: u32) -> bool;
+    /// How much stamina a body has left to climb on, of the mover's full pool (D506, D61): a
+    /// climber spends it, and lets go at none.
+    fn stamina(&self, id: u32) -> f32;
     /// Ticks its bodies on so many threads from now on, if it can share them out; one
     /// unless told.
     fn threads(&mut self, _threads: usize) {}
@@ -156,6 +163,7 @@ pub fn score<M: Mover>(new: impl Fn() -> M + Sync) -> Vec<Measure> {
     let (closing, deepest_closing) = closing::score(&new);
     measures.extend(closing);
     let (climb, deepest_climb) = climb::score(&new);
+    measures.extend(holding::score(&new));
     measures.extend(climb);
     let deepest = deepest
         .max(deepest_push)

@@ -57,6 +57,8 @@ pub(super) fn second(man: &Kind) -> Kind {
         reach: 2.9,
         mantle_s: 1.0,
         climb_jump: 1.2,
+        climb_stamina_s: 6.0,
+        climb_jump_stamina: 25.0,
         ..*man
     }
 }

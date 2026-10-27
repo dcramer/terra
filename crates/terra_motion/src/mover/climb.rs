@@ -32,8 +32,15 @@
 //! under gravity does, fast then slowing to a stop where the hands take hold again, so its
 //! time is the world's gravity's, not a number of its own.
 //!
-//! Not yet (docs/controller.md "Climbing", unit C7): stamina (the lunge's lump), a material's
-//! grip, the fight stance.
+//! Stamina (D506, D510, D511) drains as Breath of the Wild's and Genshin's climbing stamina
+//! does, and as Conan Exiles' a held climber's: each tick of moving over a face costs the
+//! kind's `climb_stamina_s` a second, holding still a quarter of it, a climb jump its lump
+//! (the lunge's ticks then as holding); twice on an overhang and over the face's grip (a
+//! material's, `Query::grip`, read where the probes touch it; 0 is never held, D505). At none
+//! the climber lets go, as at a staggering blow (`Intent::knocked`), and holds no face again
+//! until it stands or swims. The pool is the caller's (`Body::stamina`): the game's stamina
+//! (D61, `terra_walker::Stamina`) is written in before a tick and the spend taken back after.
+//! Never started in a fight stance (`Intent::fighting`, D507).
 
 use super::query::{Capsule, Contact, Query};
 use super::slide::{self, Shape, Support};
@@ -59,6 +66,12 @@ const SKIN_M: f32 = 0.03;
 /// its kind's speed, 1.34 times that up a slab 70 deg from level, 0.66 up an overhang 20 deg past
 /// vertical, half at the kind's furthest (30 deg) past it. A placeholder to tune.
 const LEAN_PACE: f32 = 1.0;
+/// Holding still costs this share of moving's stamina (D506).
+const HOLD_SHARE: f32 = 0.25;
+/// A face leaning further past vertical than this (the sine of 5 deg) is an overhang, costing
+/// [`OVERHANG_COST`] times as much (D510). A placeholder.
+const OVERHANG_SIN: f32 = 0.087_155_74;
+const OVERHANG_COST: f32 = 2.0;
 
 /// What a body holds, or has pushed into on the ground (D507).
 #[derive(Clone, Copy, Debug, Default)]
@@ -71,6 +84,8 @@ pub(super) struct Hold {
     mantle: Option<Mantle>,
     /// A climb jump under way (D511).
     lunge: Option<Lunge>,
+    /// Knocked off a face by a blow (D506): it holds none until it stands or swims.
+    knocked: bool,
 }
 
 /// A climb jump's lunge along the face: its way as a share up the face and a share along it
@@ -115,17 +130,24 @@ impl Mantle {
     }
 }
 
-/// Whether a contact is a face to hold: no other body (D505), too steep to stand on, leaning
-/// no further past vertical than the kind holds (D510), so never a ceiling.
-fn holdable(k: &Kind, shape: &Shape, c: &Contact) -> bool {
-    c.body.is_none()
+/// Whether a contact is a face to hold: no other body, of a material with grip (D505), too
+/// steep to stand on, leaning no further past vertical than the kind holds (D510), so never a
+/// ceiling. Its grip, where it is one.
+fn holdable(k: &Kind, query: &dyn Query, shape: &Shape, c: &Contact) -> Option<f32> {
+    let face = c.body.is_none()
         && shape.too_steep(c.normal)
-        && c.normal.dot(shape.up) >= -libm::sinf(k.overhang_deg.to_radians())
+        && c.normal.dot(shape.up) >= -libm::sinf(k.overhang_deg.to_radians());
+    let grip = if face {
+        query.grip(shape.origin + c.at.as_dvec3())
+    } else {
+        0.0
+    };
+    (grip > 0.0).then_some(grip)
 }
 
-/// The face's normal where a probe finds one ahead along `into`: a thin sweep from the body's
-/// axis so high over its feet.
-fn probe(k: &Kind, query: &dyn Query, shape: &Shape, high: f32, into: Vec3) -> Option<Vec3> {
+/// The face's normal and grip where a probe finds one ahead along `into`: a thin sweep from the
+/// body's axis so high over its feet.
+fn probe(k: &Kind, query: &dyn Query, shape: &Shape, high: f32, into: Vec3) -> Option<(Vec3, f32)> {
     probe_at(k, query, shape, Vec3::ZERO, high, into)
 }
 
@@ -137,7 +159,7 @@ fn probe_at(
     feet: Vec3,
     high: f32,
     into: Vec3,
-) -> Option<Vec3> {
+) -> Option<(Vec3, f32)> {
     let at = feet + shape.up * high;
     let probe = Capsule {
         a: at,
@@ -146,16 +168,20 @@ fn probe_at(
         origin: shape.origin,
     };
     let hit = query.sweep(&probe, into * (shape.radius + k.climb_gap + AHEAD_M))?;
-    holdable(k, shape, &hit.contact).then_some(hit.contact.normal)
+    let grip = holdable(k, query, shape, &hit.contact)?;
+    Some((hit.contact.normal, grip))
 }
 
-/// The face ahead: the normals the probes at the feet and at the hands find, averaged
-/// (Unreal's climbers average a sweep's hits); and whether the hands found it.
-fn face(k: &Kind, query: &dyn Query, shape: &Shape, into: Vec3) -> Option<(Vec3, bool)> {
+/// The face ahead as the probes at the feet and at the hands find it: their normals averaged
+/// (Unreal's climbers average a sweep's hits), and their grips; whether the hands found it.
+fn face(k: &Kind, query: &dyn Query, shape: &Shape, into: Vec3) -> Option<(Vec3, bool, f32)> {
     let feet = probe(k, query, shape, shape.radius, into);
     let hands = probe(k, query, shape, k.reach, into);
-    let normal = (feet.unwrap_or(Vec3::ZERO) + hands.unwrap_or(Vec3::ZERO)).try_normalize()?;
-    Some((normal, hands.is_some()))
+    let (a, ga) = feet.unwrap_or((Vec3::ZERO, 0.0));
+    let (b, gb) = hands.unwrap_or((Vec3::ZERO, 0.0));
+    let normal = (a + b).try_normalize()?;
+    let found = f32::from(u8::from(feet.is_some()) + u8::from(hands.is_some()));
+    Some((normal, hands.is_some(), (ga + gb) / found))
 }
 
 /// The top past a face whose hands' probe found none (D508): walkable ground within the kind's
@@ -186,12 +212,12 @@ fn top(k: &Kind, query: &dyn Query, shape: &Shape, into: Vec3) -> Option<(Vec3, 
 }
 
 /// The face a body touches, within its kind's gap, from its contacts: their normals averaged.
-fn touched(body: &Body, shape: &Shape) -> Option<Vec3> {
+fn touched(body: &Body, query: &dyn Query, shape: &Shape) -> Option<Vec3> {
     let k = &body.kind;
     body.active
         .iter()
         .map(|t| &t.contact)
-        .filter(|c| c.distance <= k.climb_gap && holdable(k, shape, c))
+        .filter(|c| c.distance <= k.climb_gap && holdable(k, query, shape, c).is_some())
         .map(|c| c.normal)
         .sum::<Vec3>()
         .try_normalize()
@@ -205,12 +231,22 @@ fn level_into(normal: Vec3, up: Vec3, or: Vec3) -> Vec3 {
 /// After a tick off a face, whether the body takes hold of one it touches (D507): one that
 /// rises past its step (lower is a step), within 25 deg of its facing, wished into; in the air at once, on the
 /// ground after its kind's `climb_push_s` of pushing. A kind with no climb speed never does
-/// (D136), nor a swimmer.
+/// (D136), nor a swimmer, a body with no stamina (D506), in a fight stance (D507) or knocked
+/// off a face and not yet standing.
 pub(super) fn start(body: &mut Body, intent: &Intent, query: &dyn Query, shape: &Shape, dt: f32) {
     let k = body.kind;
     let up = shape.up;
-    let can = k.climb > 0.0 && body.ground != Ground::Swimming && !body.climbing_out;
-    let Some(normal) = can.then(|| touched(body, shape)).flatten() else {
+    if matches!(body.ground, Ground::Grounded | Ground::Swimming) {
+        body.hold.knocked = false;
+    }
+    let can = k.climb > 0.0
+        && body.ground != Ground::Swimming
+        && !body.climbing_out
+        && body.stamina > 0.0
+        && !intent.fighting
+        && !intent.knocked
+        && !body.hold.knocked;
+    let Some(normal) = can.then(|| touched(body, query, shape)).flatten() else {
         body.hold.pushed = None;
         return;
     };
@@ -256,7 +292,16 @@ pub(super) fn tick(
         return true;
     }
     let (k, up) = (body.kind, shape.up);
-    let Some((normal, hands)) = face(&k, query, shape, -body.hold.normal) else {
+    if body.stamina <= 0.0 || intent.knocked {
+        // Out of stamina or knocked off (D506): let go, airborne this tick.
+        body.ground = Ground::Airborne;
+        body.hold = Hold {
+            knocked: intent.knocked,
+            ..Hold::default()
+        };
+        return false;
+    }
+    let Some((normal, hands, grip)) = face(&k, query, shape, -body.hold.normal) else {
         body.ground = Ground::Airborne;
         body.hold = Hold::default();
         return false;
@@ -298,6 +343,14 @@ pub(super) fn tick(
         pull_up(body, mantle, query, shape, dt);
         return true;
     }
+    spend(
+        body,
+        wish,
+        normal.dot(up),
+        grip,
+        lunge.is_some_and(|l| l.t == 0.0),
+        dt,
+    );
     let rise = up.reject_from(normal).normalize_or(up);
     let mut velocity = if let Some(mut lunge) = lunge {
         // The lunge's tick: its length's share this tick covers, over a time a hop of that
@@ -346,6 +399,23 @@ pub(super) fn tick(
     (body.landed, body.fall, body.stepped, body.jumped) = (None, 0.0, 0.0, false);
     body.buffer = 0.0;
     true
+}
+
+/// A tick's stamina on a face (D506, D510, D511): moving by the stick its kind's rate, holding
+/// still or lunging a quarter of it, a lunge begun its lump; twice on an overhang (`lean` the up
+/// part of the face's normal), over the face's grip.
+fn spend(body: &mut Body, wish: Vec3, lean: f32, grip: f32, lunged: bool, dt: f32) {
+    let k = body.kind;
+    let moving = wish != Vec3::ZERO && body.hold.lunge.is_none();
+    let share = if moving { 1.0 } else { HOLD_SHARE };
+    let lump = if lunged { k.climb_jump_stamina } else { 0.0 };
+    let overhang = if lean < -OVERHANG_SIN {
+        OVERHANG_COST
+    } else {
+        1.0
+    };
+    let cost = (k.climb_stamina_s * share * dt + lump) * overhang / grip;
+    body.stamina = (body.stamina - cost).max(0.0);
 }
 
 /// A jump off the face with the stick away (D511): let go, launched up at the kind's jump and

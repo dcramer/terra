@@ -42,6 +42,12 @@ pub trait Field: Sync {
         &[]
     }
 
+    /// How well its ground is held by a climber at a point (D505, the mover's `Query::grip`):
+    /// 1 for rough stone, 0 for a face that cannot be held.
+    fn grip(&self, _at: DVec3) -> f32 {
+        1.0
+    }
+
     /// Gravity's strength toward the centre, m/s².
     fn gravity(&self) -> f32 {
         GRAVITY
@@ -208,6 +214,9 @@ pub struct Course {
     /// What stands on it, answered apart from the ground.
     pub obstacles: Vec<Obstacle>,
     pub radius: f32,
+    /// Its ground's material's grip for a climber (D505, [`Field::grip`]): one material
+    /// throughout.
+    pub grip: f32,
 }
 
 impl Default for Course {
@@ -218,6 +227,7 @@ impl Default for Course {
             water: None,
             obstacles: Vec::new(),
             radius: RADIUS_M,
+            grip: 1.0,
         }
     }
 }
@@ -285,6 +295,10 @@ impl Field for Course {
 
     fn obstacles(&self) -> &[Obstacle] {
         &self.obstacles
+    }
+
+    fn grip(&self, _at: DVec3) -> f32 {
+        self.grip
     }
 }
 

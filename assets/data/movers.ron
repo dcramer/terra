@@ -64,6 +64,11 @@
 //   overhang_deg             the furthest past vertical a face it holds leans (D510: about 30)
 //   mantle_s                 how long a pull up onto a top takes, s (a placeholder)
 //   climb_jump               how far a climb jump lunges it along the face, m (D511: about 1.5)
+//   climb_stamina_s          stamina a second of moving over a face costs, of a pool of 100
+//                            (a placeholder: a man climbs about 12 m on a full pool); holding
+//                            still costs a quarter of it (D506), an overhang twice (D510), a
+//                            face of less grip more (D505)
+//   climb_jump_stamina       a climb jump's lump of stamina (D511; a placeholder)
 {
     "Man": (
         radius: 0.3,
@@ -111,5 +116,7 @@
         overhang_deg: 30.0,
         mantle_s: 0.8,
         climb_jump: 1.5,
+        climb_stamina_s: 8.0,
+        climb_jump_stamina: 20.0,
     ),
 }

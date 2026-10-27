@@ -25,7 +25,7 @@ const TOUCH_M: f32 = 0.05;
 /// How far before a face a body jumping at it presses jump, beyond its radius, m.
 const JUMP_FROM: f32 = 0.6;
 /// How far a body's feet rose over the ground while climbing for it to have climbed, m.
-const CLIMBED_M: f32 = 1.0;
+pub(super) const CLIMBED_M: f32 = 1.0;
 /// Overhangs held, deg past vertical, and those never (D510: about 30).
 const HELD: [f32; 3] = [0.0, 15.0, 25.0];
 const NEVER: [f32; 3] = [35.0, 45.0, 60.0];
@@ -38,7 +38,7 @@ const SLOWEST: f32 = 0.5;
 
 /// What a body walks into (D505).
 #[derive(Clone, Copy, Debug)]
-enum Face {
+pub(super) enum Face {
     /// The ground standing sheer, 8 m.
     Wall,
     /// A cliff dug in 0.5 m cells: risers of three cells, treads of one, to 6 m.
@@ -88,7 +88,7 @@ enum Case {
     Kickoff(usize),
 }
 
-fn kinds() -> [Kind; 2] {
+pub(super) fn kinds() -> [Kind; 2] {
     let man = Kind::man();
     [man, super::data::second(&man)]
 }
@@ -130,7 +130,7 @@ fn cases() -> Vec<Case> {
 
 /// Level ground and a face at [`FACE_U`] standing `steep` deg from level (past 90 an
 /// overhang) to a top `high` m up, the top running on 30 m.
-fn face(steep: f32, high: f32) -> Course {
+pub(super) fn face(steep: f32, high: f32) -> Course {
     let lean = libm::tanf((steep - 90.0).to_radians());
     let far = FACE_U + 30.0;
     Course::flat().with(Solid::Polygon(vec![
@@ -150,7 +150,7 @@ fn round(radius: f32, high: f32) -> Course {
     course
 }
 
-fn faces(face_: Face, kind: &Kind) -> Course {
+pub(super) fn faces(face_: Face, kind: &Kind) -> Course {
     let ground = |corners: &[(f32, f32)]| {
         Course::of(Solid::Profile(
             corners.iter().map(|&(u, h)| Vec2::new(u, h)).collect(),
@@ -192,7 +192,7 @@ fn faces(face_: Face, kind: &Kind) -> Course {
 
 /// A walk at the face, so many deg off straight, jumping once [`JUMP_FROM`] short of it if
 /// told; then on into it.
-fn at_face(kind: &Kind, angle: f32, jump: bool) -> impl FnMut(&Body) -> Intent {
+pub(super) fn at_face(kind: &Kind, angle: f32, jump: bool) -> impl FnMut(&Body) -> Intent {
     let (s, c) = (
         libm::sinf(angle.to_radians()),
         libm::cosf(angle.to_radians()),
@@ -217,12 +217,12 @@ fn gap(b: &Body, radius: f32) -> f32 {
 }
 
 /// The slowest climb a case waits for, m/s.
-fn slowest(kind: &Kind) -> f32 {
+pub(super) fn slowest(kind: &Kind) -> f32 {
     SLOWEST * kind.climb
 }
 
 /// How long a body takes to reach the face at its jog, with slack.
-fn reach_s(kind: &Kind) -> f32 {
+pub(super) fn reach_s(kind: &Kind) -> f32 {
     FACE_U / kind.jog * 1.5 + 0.5
 }
 

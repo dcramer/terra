@@ -122,6 +122,15 @@ pub trait Query {
         let _ = (at, feet, step);
         true
     }
+
+    /// How well a face at a world point is held by a climber (D505): its material's grip, 1
+    /// for rough stone, less for a smoother one (a climb's stamina costs its inverse), 0 for
+    /// one that cannot be held (ice, glass, plaster). Unreal's hit result carries its physical
+    /// material the same way. 1 unless a source says otherwise.
+    fn grip(&self, at: DVec3) -> f32 {
+        let _ = at;
+        1.0
+    }
 }
 
 impl<A: Query + ?Sized, B: Query + ?Sized> Query for (&A, &B) {
@@ -139,6 +148,10 @@ impl<A: Query + ?Sized, B: Query + ?Sized> Query for (&A, &B) {
 
     fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
         self.0.steps_onto(at, feet, step) && self.1.steps_onto(at, feet, step)
+    }
+
+    fn grip(&self, at: DVec3) -> f32 {
+        self.0.grip(at).min(self.1.grip(at))
     }
 }
 

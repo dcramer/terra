@@ -1049,12 +1049,13 @@
    "bar": {
     "at_most": 0
    },
-   "unit": "of faces by material held against their grip",
+   "unit": "of 6 faces by material (a face of no grip walked into and jumped at: never held; held still on one of grip 0.5: twice the cost within 1%; two kinds)",
    "source": "D505; docs/controller.md, \"Climbing\"",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "a material's grip in the course's field and movers' query (a face's material at a contact), and the climber's stamina through the course's mover trait"
+   "measurable": true
   },
   {
    "id": "climb.start",
@@ -1078,12 +1079,13 @@
    "bar": {
     "at_most": 0
    },
-   "unit": "of starts in a fight stance that held the face",
+   "unit": "of 4 starts in a fight stance that held the face (walked into a sheer wall and jumped at it; two kinds)",
    "source": "D507; docs/controller.md, \"Climbing\"",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "a fight stance (guard) in the mover's Intent, as the game's guard sets it"
+   "measurable": true
   },
   {
    "id": "climb.mantle",
@@ -1182,12 +1184,13 @@
    "bar": {
     "at_most": 0.01
    },
-   "unit": "of the kind's cost (holding a quarter of moving, an overhang twice, a lunge its lump); ticks from zero to airborne past one",
+   "unit": "worst share off the kind's cost over a second held 1 m up (holding a quarter of moving, on a sheer face and 15 deg past vertical, an overhang twice; a lunge its lump and holding), or ticks past one from none to letting go held still, and 1 if it took hold again with none; two kinds",
    "source": "D506, D510, D511; docs/controller.md, \"Climbing\"; D61",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "the climber's stamina through the course's mover trait (Mover::stamina), with the kind's climbing costs in movers.ron, and the mover's climb (mover::climb)"
+   "measurable": true
   },
   {
    "id": "climb.knock",
@@ -1196,12 +1199,43 @@
    "bar": {
     "at_most": 0
    },
-   "unit": "of blows that left the climber holding a tick later",
+   "unit": "of 2 blows (1 m up a sheer wall, the stick still into it) that left the climber holding a tick later, or holding again before it stood; two kinds",
    "source": "D506 (as Conan Exiles); docs/controller.md, \"Climbing\"",
-   "check": null,
+   "check": {
+    "by": "course"
+   },
    "cost": "cheap",
-   "measurable": false,
-   "needs": "a stagger through the course's mover trait (the game's staggering blow handed to the mover)"
+   "measurable": true
+  },
+  {
+   "id": "climb.hold",
+   "noticed": 3,
+   "notice": "a climber is held off a face or into it, across a dug cliff's steps",
+   "bar": {
+    "at_most": 0.01
+   },
+   "unit": "m, the worst a climber's capsule is off its kind's climb_gap from the ground (sampled every 2.5 cm of its axis) while it climbs the dug cliff of 0.5 m cells and a sheer wall, from a quarter second after taking hold until its hands near the top; two kinds",
+   "source": "docs/controller.md, \"Climbing\" (within 1 cm of climb_gap; criterion 2's 1 cm)",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
+  },
+  {
+   "id": "climb.down",
+   "noticed": 3,
+   "notice": "a climber climbing down onto the floor does not stand on it at once, or is hurt",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "ticks past one from the feet reaching the floor to standing on it, and landings that hurt (climbing down 1 m of a sheer wall; two kinds)",
+   "source": "docs/controller.md, \"Climbing\"; D476",
+   "check": {
+    "by": "course"
+   },
+   "cost": "cheap",
+   "measurable": true
   },
   {
    "id": "cost.climb",

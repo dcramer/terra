@@ -269,6 +269,10 @@ fn ask(
             0.0
         },
         rise: intent.held(Action::Jump),
+        // Climbing's fight stance (D507) and staggering blows (D506): handed in once the man
+        // climbs (his `climb` is 0 until the figure has clips).
+        fighting: false,
+        knocked: false,
     }
 }
 

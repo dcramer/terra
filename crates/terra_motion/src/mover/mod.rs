@@ -127,7 +127,16 @@ pub struct Kind {
     pub mantle_s: f32,
     /// How far a climb jump lunges it along the face, m (D511).
     pub climb_jump: f32,
+    /// Climbing's stamina (D506, D510, D511): a second of moving over a face costs this,
+    /// holding still a quarter of it, a climb jump its lump; twice on an overhang, and over a
+    /// face's grip (`Query::grip`).
+    pub climb_stamina_s: f32,
+    pub climb_jump_stamina: f32,
 }
+
+/// A body's full pool of stamina (D61): what it is added with, and the game's pool's size
+/// (`terra_walker::Stamina::FULL`).
+pub const FULL_STAMINA: f32 = 100.0;
 
 /// How a kind pushes (D479): people softly, giving way and never blocking; monsters hard, by
 /// their mass.
@@ -192,6 +201,11 @@ pub struct Intent {
     pub pitch: f32,
     /// Jump held: a swimmer rises (D478).
     pub rise: bool,
+    /// In a fight stance (the game's guard or fight mode): it takes hold of no face (D507).
+    pub fighting: bool,
+    /// A staggering blow landed on it this tick: a climber lets go, and holds no face again
+    /// until it stands or swims (D506, as Conan Exiles).
+    pub knocked: bool,
 }
 
 impl Default for Intent {
@@ -204,6 +218,8 @@ impl Default for Intent {
             drive: None,
             pitch: 0.0,
             rise: false,
+            fighting: false,
+            knocked: false,
         }
     }
 }
@@ -258,6 +274,11 @@ pub struct Body {
     pub drown: f32,
     /// How long since its last pulse of drowning, s.
     gasping: f32,
+    /// What it has left to climb on, of [`FULL_STAMINA`] (D61, D506): climbing spends it, and
+    /// at none the climber lets go. The pool is the caller's (the game's `Stamina`), written in
+    /// before a tick ([`Bodies::set_stamina`]) and what was spent taken back after; the mover
+    /// never refills it.
+    pub stamina: f32,
     support: Support,
     /// The contacts, in the frame of `frame`: the position the tick that found them began at.
     active: Vec<Touch>,
@@ -343,6 +364,7 @@ impl Bodies {
             under: false,
             drown: 0.0,
             gasping: 0.0,
+            stamina: FULL_STAMINA,
             support: Support::InAir,
             active: Vec::new(),
             frame: feet.as_dvec3(),
@@ -364,6 +386,16 @@ impl Bodies {
     pub fn get(&self, id: u32) -> Option<&Body> {
         let at = self.bodies.binary_search_by_key(&id, |b| b.id).ok()?;
         Some(&self.bodies[at])
+    }
+
+    /// Sets what a body has left to climb on: the caller's pool written in before a tick (D61).
+    /// False if there is no such body.
+    pub fn set_stamina(&mut self, id: u32, left: f32) -> bool {
+        let Ok(at) = self.bodies.binary_search_by_key(&id, |b| b.id) else {
+            return false;
+        };
+        self.bodies[at].stamina = left;
+        true
     }
 
     /// Takes a body out, as when it is gone from the world: what it was, if it was there.

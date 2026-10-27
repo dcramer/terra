@@ -56,4 +56,8 @@ impl Query for NoStep<'_> {
     fn steps_onto(&self, at: DVec3, feet: DVec3, step: f32) -> bool {
         self.query.steps_onto(at, feet, step)
     }
+
+    fn grip(&self, at: DVec3) -> f32 {
+        self.query.grip(at)
+    }
 }
