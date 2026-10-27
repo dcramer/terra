@@ -68,17 +68,27 @@ The server never sees any of these, and the mover never waits for them:
 
 ## Climbing
 
-Status: **design, Open** (2026-10-25). D477 settles free climbing on stamina; how it plays is the seven questions at the end of this section, for the developers, and nothing is built until they answer. The research is [research/2026-10-25-climbing.md](../research/2026-10-25-climbing.md).
+Status: **decided** (D477, D505-D511, the developers, 2026-10-26: "Recommended set"), not built. Free climbing on stamina; the research is [research/2026-10-25-climbing.md](../research/2026-10-25-climbing.md).
 
 ### Intent
 
 A body can hold a face too steep to walk and move over it on stamina, up a cliff, a dug pit's side, a base's wall, a rock or a trunk, and pull itself onto the top. It reads as the world does (D122): rough rock holds, a steeper face tires sooner, a tired climber lets go and falls. It is the way out of a hole dug too deep (player.md, which has no glider or hook) and a skill by doing (D88).
 
+### What was decided
+
+- **What** (D505): every surface, its material's grip scaling the cost; a few materials cannot be held (ice, glass, plaster), so a base keeps climbers out by its materials and an overhang. Other bodies are never climbed.
+- **Cost and zero** (D506): holding costs a quarter of moving; at zero the climber lets go and falls, its landing judged by D476; a staggering blow knocks a climber off (Conan Exiles), so no body hangs out of reach forever.
+- **Starting** (D507): a jump at a face grabs it at once; walking into one grabs after half a second's push; never in a fight stance.
+- **Pulling up** (D508): at a climb's top, and at any ledge the hands reach from a jump or a fall, about 2.2 m over a man's feet. No running vault.
+- **Speed** (D509): about 1 m/s up a sheer face, faster on a face less steep, slower on an overhang.
+- **Overhangs** (D510): to about 30 deg past vertical at twice the cost; never a ceiling.
+- **Climb jump** (D511): a lunge of about 1.5 m along the face for a lump of stamina; jump with the stick away kicks off backwards, leaving the face.
+
 ### Constraints
 
-- **The same sources, no new query.** It climbs what the mover already reads: the voxel ground, a base's cubes and doors, props, trees and rocks, through the one query trait (contacts near a capsule, a swept capsule). Other bodies are never climbed (movement.md question 6).
+- **The same sources, no new query.** It climbs what the mover already reads: the voxel ground, a base's cubes and doors, props, trees and rocks, through the one query trait (contacts near a capsule, a swept capsule).
 - **A mover state like swimming**: a ground state `Climbing` and a module `mover::climb` beside `mover::swim`, in `terra_motion`, Bevy-free (D28) so the server runs it and a client predicts it.
-- **Kinds as data** (D136): every number below is the kind's, in movers.ron; a kind with no climb speed does not climb, so a troll and a man differ only in their files.
+- **Kinds as data** (D136): every number below is the kind's, in movers.ron; a kind with no climb speed does not climb, so a troll and a man differ only in their files. A material's `grip` is its file's.
 - **Deterministic** (D138): fixed probes and iterations, `libm`, nothing from animation; the same bits on every machine.
 - **Cost**: a climbing body under `cost.body`'s 25 µs a tick, as a walking one.
 
@@ -87,43 +97,37 @@ A body can hold a face too steep to walk and move over it on stamina, up a cliff
 Every shipped climber (Breath of the Wild, Genshin, Conan Exiles, Palworld; Unreal's custom movement modes) is one pattern, and ours follows it:
 
 1. **The face.** Two probes ahead of the capsule, at the hands (the kind's `reach`) and at the feet, ask the contacts within `climb_gap` plus the predictive distance. The face's point and normal are their average, as Unreal's climbers average a sweep's hits; on the ground the SDF's gradient already blends a dug face's 0.5 m steps into one plane.
-2. **Starting** (question 3): a face steeper than the slope limit, not leaning past the overhang limit (question 6), rising past the step height (lower is a step, as now), within 25 deg of the way the body faces, of a material that holds (question 1), with stamina left.
+2. **Starting** (D507): a face steeper than the slope limit, not leaning past `overhang_deg` (D510), rising past the step height (lower is a step, as now), within 25 deg of the way the body faces, of a material that holds (D505), with stamina left, not in a fight stance; touched in the air, or pushed into for `climb_push_s` on the ground.
 3. **A tick of climbing**, in order: refresh the face; stop if it is gone (the body falls), or land if moving down onto walkable floor under the feet (grounded); velocity by the kind's climb acceleration toward the input laid on the face's plane (forward is up the face, the sides along it), gravity off; collide and slide as every tick does, so a corner, a beam or another body stops it as a wall stops a walker; then hold to the face: swept toward it to `climb_gap` (the stick-to-floor step turned toward the face), the facing turned to the face's normal at the turn rate. The capsule stays upright (D53); the shown body leans.
-4. **The top** (question 4): moving up, the hand probe finds no face and a walkable floor within `mantle` over the feet with room for the standing capsule (a swept check): the body is carried onto it over `mantle_s`, up then forward, along the mover's own path; a pull-up clip is fitted to that path (started at the height that matches, as Unreal's root-motion mantles are, or warped), never the other way round.
-5. **Stamina** (question 2): each tick costs the kind's rate moving, its rate holding, a climb jump its lump, scaled by the face's steepness and the material's grip; at zero the body lets go and is airborne, its landing judged by D476.
-6. **Leaving** (D510): a key lets go; jump with the stick away kicks off backwards (question 7).
+4. **The top** (D508): moving up, the hand probe finds no face and a walkable floor within `reach` over the feet with room for the standing capsule (a swept check); or, in the air, a ledge within `reach` ahead: the body is carried onto it over `mantle_s`, up then forward, along the mover's own path; a pull-up clip is fitted to that path (started at the height that matches, as Unreal's root-motion mantles are, or warped), never the other way round.
+5. **Stamina** (D506, D510, D511): each tick costs the kind's rate moving, a quarter of it holding, a climb jump its lump, doubled on an overhang and scaled by the material's grip; at zero, or on a staggering blow, the body lets go and is airborne.
+6. **Leaving** (D511): a key lets go; jump with the stick away kicks off backwards; jump with it up lunges.
 
 What is presentation, as for walking: hands and feet put on the face by IK from the same probes (Unreal's climbers trace each limb to the face and solve full-body IK), a blend by the velocity on the face (up, along), the pull-up clip, the lean to the face, the ground's foot IK off while climbing.
 
-The kind's numbers, all placeholders until the questions are answered (a man's in brackets): `climb` (1.0 m/s up), `climb_side` (0.8), `climb_accel` (4), `reach` (2.2 m, the hands over the feet), `climb_gap` (5 cm), `overhang_deg` (30 past vertical), `mantle` (2.2 m), `mantle_s` (0.8 s), `climb_jump` (1.5 m), stamina `climb_stamina_s` (8 a second), `hold_stamina_s` (2), `climb_jump_stamina` (20), so a man climbs about 12 m on a full pool of 100. A material's `grip` (its file's) scales the cost, 0 not held.
+The kind's numbers (a man's in brackets; the decided ones marked, the rest placeholders to tune): `climb` (1.0 m/s up, D509), `climb_side` (0.8), `climb_accel` (4), `climb_push_s` (0.5, D507), `reach` (2.2 m, the hands over the feet, D508), `climb_gap` (5 cm), `overhang_deg` (30 past vertical, D510), `mantle_s` (0.8 s), `climb_jump` (1.5 m, D511), stamina `climb_stamina_s` (8 a second), holding a quarter of it (D506), `climb_jump_stamina` (20), so a man climbs about 12 m on a full pool of 100.
 
-### The criteria it would add
+### Its criteria
 
-Rows of `tools/controller/criteria.json` once the design is answered, on the plain-Rust course: a sheer SDF wall 12 m high, a dug cliff of 0.5 m voxel steps with an outside and an inside corner, overhang wedges 0 to 60 deg by 5, a base's wall of cubes with a parapet, a rock, a trunk, a ledge under a low roof, and a pool's side.
+Rows of `tools/controller/criteria.json` on the plain-Rust course (`course/climb.rs`), for a man and the second kind; `?` rows say what they need. Each fails on a mover that does not climb.
 
-| Row | Bar | Source |
+| Row | Bar | Decision |
 |---|---|---|
-| `climb.start` | A face past the slope limit and above the step height is held within one tick of the start's condition, from each source; walkable ground, a step-high face, a material that does not hold and another body never | Ours; Unreal's start test |
-| `climb.speed` | Up, along and down within 2% of the kind's data, on every source, scaled by steepness as the data says | D136 |
-| `climb.hold` | Within 1 cm of `climb_gap` from the face across the dug cliff's steps and round both corners, never deeper than criterion 2's 1 cm, never let go while stamina lasts | Unreal's snap to the face |
-| `climb.overhang` | Held to `overhang_deg` within 0.5 deg, stopped as a wall beyond it, a ceiling never held | Ours |
-| `climb.mantle` | At a top within `mantle`, standing on it within one tick of `mantle_s`; a top too low for the standing capsule, or past reach, is not taken; out of the pool's side onto the bank (D478's open item) | Unreal's ledge test |
-| `climb.stamina` | Moving, holding and a climb jump cost the kind's data within 1%; at zero airborne within one tick, and its landing harmed by D476 as any fall | D61, D477 |
-| `climb.down` | Climbing down onto walkable floor is grounded within one tick, unharmed | Unreal's climb-down-to-floor |
-| `climb.jump` | The lunge's rise within 2 cm of `climb_jump`; the kick-off leaves the face airborne | Ours |
-| `cost.climb` | Under 25 µs a body a tick climbing the course's wall, the dug cliff and the base's wall (`--bench`) | D52, D138 |
+| `climb.faces` | A sheer wall, a dug cliff of 0.5 m steps, a base's wall of cubes, a rock and a trunk walked into are climbed; a walkable slope, a step-high face and another body never | D505 |
+| `climb.grip` (`?`) | A face of a material that does not hold is never held; grip scales the cost | D505 |
+| `climb.start` | A jump at a face holds it within a tick of touching; walking in, half a second's push (within a tick), never sooner | D507 |
+| `climb.stance` (`?`) | Never started in a fight stance | D507 |
+| `climb.mantle` | Standing on the top of a climbed wall, and of a ledge reached from a jump; never onto a top with no room to stand | D508 |
+| `climb.speed` | Up a sheer face within 2% of the kind's speed (a man's 1 m/s) | D509 |
+| `climb.steep` | Faster up a face less steep, slower up an overhang | D509 |
+| `climb.overhang` | Held to about 30 deg past vertical, never past 35, never a ceiling | D510 |
+| `climb.lunge` | The lunge's rise within 2 cm of the kind's (a man's 1.5 m) | D511 |
+| `climb.kickoff` | Jump with the stick away leaves the face airborne, moving away | D511 |
+| `climb.stamina` (`?`) | Holding costs a quarter of moving, an overhang twice, a lunge its lump, within 1%; at zero airborne within a tick | D506, D510, D511 |
+| `climb.knock` (`?`) | A staggering blow knocks a climber off within a tick | D506 |
+| `cost.climb` (`?`, `--bench`) | Under 25 µs a body a tick climbing the course's wall, the dug cliff and the base's wall | D52, D138 |
 
-`determinism.crowd` gains climbers. The filmed yard gains a cliff, the base's wall and a tree, and once stage 4's limb IK lands, a row for hands and feet on the face (under 3 cm off it).
-
-### Open questions for the developers
-
-1. **What can be climbed** (D505): everything alike (BotW, Conan, Palworld); everything, with a grip by material that scales the cost and a few that cannot be held (ice, glass, plaster), so a base keeps climbers out by its materials and an overhang (recommended); or only marked faces, as Enshrouded's lattices.
-2. **Its cost, and zero** (D506): holding still free (BotW, Palworld); holding a quarter of moving's cost, at zero let go and fall, and a staggering blow knocks a climber off as in Conan (recommended, since a free hold lets a body hang out of reach of a monster or a raid's defenders forever); or slide down slowly at zero.
-3. **How a climb starts** (D507): walking into the face (BotW, Genshin); jumping at it (Conan); or both, jumping grabbing at once and walking in after half a second's push, never in a fight stance (recommended).
-4. **Where a body pulls up** (D508): only at a climb's top; also any ledge the hands reach from a jump or a fall, about 2.2 m over the feet (recommended); or that and a running vault over waist-high ledges.
-5. **How fast** (D509): about 0.5 m/s; about 1 m/s, faster on a face less steep and slower on an overhang (recommended); or about 2 m/s.
-6. **Overhangs and ceilings** (D510): to vertical only; to about 30 deg past vertical at twice the cost, never a ceiling (recommended); or ceilings too.
-7. **A climb jump** (D511): none; a lunge of about 1.5 m for a lump; or the lunge and a kick-off backwards to leave the face (recommended).
+Later, with the mover's climb: `climb.hold` (within 1 cm of `climb_gap` across the dug cliff's steps and round its corners, never deeper than criterion 2's 1 cm) and `climb.down` (climbing down onto walkable floor grounded within a tick, unharmed); `determinism.crowd` gains climbers; the filmed yard gains a cliff, the base's wall and a tree, and once stage 4's limb IK lands, a row for hands and feet on the face (under 3 cm off it).
 
 ## Production criteria
 
@@ -166,6 +170,6 @@ No Enshrouded movement numbers have been measured yet; combat's measurements are
 ## Open questions for the developers
 
 1. **Fall damage** (D505): decided, D476 (by landing speed). Built: a landing takes a share of the body's health by the speed it meets the floor at along the floor's normal (`Kind::fall_harm`, `mover::Body::fall`), none below the kind's `fall_onset`, all of it at `fall_fatal`, by the fall's energy between (so linear in the height fallen past the onset's); water deep enough to swim in (the kind's swim depth) breaks it. The numbers are D476's placeholders in movers.ron (12 and 25 m/s); the game takes the harm from the player's health as a blow's (`terra_walker::movement::Fell`, `terra_creatures::combat::take_falls`). Rows `fall.*`.
-2. **Climbing** (D506): decided, D477 (free climbing on stamina). Its detail is designed in [Climbing](#climbing), whose seven questions are Open.
+2. **Climbing** (D506): decided, D477 (free climbing on stamina), its detail D505-D511 ([Climbing](#climbing)). Not built: the course has its rows (`course/climb.rs`, `climb.*`).
 3. **Swimming beyond D74** (D507): decided, D478 (dive by looking down and moving forward, rise with jump, about half a jog, about 30 s of breath). Built (`mover::swim`): a swimmer moving strokes along its look's pitch past the kind's `dive_from_deg` (15 deg for a man, so the camera's rest a little under level does not dive it), down at up to `dive` (1.5 m/s) looking straight down and level at `swim` x cos; jump held strokes up at `dive`, easing into float depth; with neither, buoyancy floats it up (Unreal's `PhysSwimming` goes along the control rotation with a `Buoyancy` share of immersion; ours floats to a depth rather than hanging neutral). Breath (`breath_s` 30) is used while the mouth (`mouth` 0.92 of height) is under, comes back in `breath_back_s` (4) at the surface, and once gone drowns a share a second (`drown_s` 10), taken as a blow's (`terra_walker::movement::Drowned`, `terra_creatures::combat::take_drowning`). Wading slows linearly with depth to `wade` (0.6) of a jog at swim depth (D523, `level_velocity`); 2.58 m/s there against a 2.0 swim leaves a 0.62 m/s step (`wade.step`, held). A swimmer at the surface swimming into a wall whose walkable top is no higher than `climb_out` (1.0 m, placeholder) over the water climbs out (D523, `swim::climb_out`): Unreal's water jump (`CheckWaterJump`: a sweep 1.2 radii ahead for the wall, a line over it at the limit 3.2 radii on), launched up just enough to clear the ledge found where Unreal launches at a fixed `OutofWaterZ`; no climb-out clip yet. A small breath bar over the vitals shows the mover's breath while the mouth is under or the breath refills, fading out once full (D523, `terra_survival::breath`). Still open for the developers: the placeholders and swimming's stamina (criterion 18).
 4. **Bodies blocking bodies** (D508): decided, D479 (people softly, monsters hard). Built: step 6, rows `push.*`. In the game players ease apart from each other and from recruits (`terra_walker::bodies`, who give way by themselves until people walk the mover); creatures still stop a player at their width, as they are not the mover's bodies yet.
