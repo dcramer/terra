@@ -8,6 +8,8 @@
 // each shown the anchors and ONE build's views, scoring each 0-10; a build's score is its judges' mean. Forced choice
 // (--choice a:b): <n> judges, each shown a|b side by side per view, half with a on the left; they pick a side.
 // Anchors: <anchors>/anchors.json, [{ "file": "rdr2.png", "score": 9, "what": "..." }], shown first at fixed scores.
+// An absolute judge writes jNN/scores.txt, then jNN/faults.txt (its three worst faults an image), which --score
+// gathers into <out>/faults.txt by build and view; the faults never enter the statistics.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { type Picture, readPng, writePng } from "../sandbox/png.ts";
@@ -27,6 +29,9 @@ export type Key = {
 
 const IMAGE = /\.(png|jpe?g)$/i;
 const SCORES = "scores.txt";
+/// Each absolute judge's worst faults an image, kept apart from its scores so they never enter the statistics.
+const FAULTS = "faults.txt";
+const FAULTS_EACH = 3;
 
 function shuffle<T>(xs: T[], r: () => number): T[] {
   for (let k = xs.length - 1; k > 0; k--) {
@@ -99,7 +104,9 @@ export function prompt(key: Key, judge: Judge, dir: string, brief: string): stri
       ...shared,
       "",
       "## Output",
-      `Write \`${out}\` as plain text, one line per scored image, exactly \`<image> <score>\` (e.g. \`${key.views[0]} 4.3\`), ${key.views.length} lines, nothing else. Then reply with one line only: \`done ${key.views.length}\`. Scores only: no notes, no review.`,
+      `First write \`${out}\` as plain text, one line per scored image, exactly \`<image> <score>\` (e.g. \`${key.views[0]} 4.3\`), ${key.views.length} lines, nothing else: scores only, no notes.`,
+      `Then write \`${join(dir, FAULTS)}\` as plain text: for each scored image, its ${FAULTS_EACH} worst faults by the brief, worst first, one line each, exactly \`<image> <fault>\` (e.g. \`${key.views[0]} the shadows are flat grey\`), ${key.views.length * FAULTS_EACH} lines, nothing else. A fault says what is wrong and where in the image, in a short sentence; it does not change a score.`,
+      `Then reply with one line only: \`done ${key.views.length}\`.`,
       "",
     ].join("\n");
   }
@@ -195,6 +202,41 @@ export function readScores(file: string, views: string[], choice: boolean): Map<
   return want.every((w) => ok(got.get(w))) ? got : undefined;
 }
 
+/// A judge's faults.txt: image -> its faults in the judge's order (lines naming no scored image are dropped).
+export function readFaults(file: string, views: string[]): Map<string, string[]> {
+  const got = new Map<string, string[]>();
+  if (!existsSync(file)) return got;
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    const m = line.trim().replace(/`/g, "").match(/^(\S+?):?\s+(.+)$/);
+    if (!m) continue;
+    const view = views.find((v) => v === m[1] || basename(v, extname(v)) === m[1]);
+    if (view) got.set(view, [...(got.get(view) ?? []), m[2].trim()]);
+  }
+  return got;
+}
+
+/// Every judge's faults, by build then view, each line tagged with its judge and that judge's score of the view.
+export function gatherFaults(out: string): string[] {
+  const key: Key = JSON.parse(readFileSync(join(out, "key.json"), "utf8"));
+  if (key.mode !== "absolute") return [];
+  const lines: string[] = [];
+  const none: string[] = [];
+  for (const b of key.builds) {
+    const judges = key.judges.filter((j) => j.build === b);
+    for (const v of key.views) {
+      lines.push(`${b} ${v}`);
+      for (const j of judges) {
+        const said = readFaults(join(out, j.id, FAULTS), key.views).get(v) ?? [];
+        const s = readScores(join(out, j.id, SCORES), key.views, false)?.get(v) ?? "-";
+        for (const f of said) lines.push(`  ${j.id} ${s.padEnd(4)} ${f}`);
+      }
+    }
+    for (const j of judges) if (readFaults(join(out, j.id, FAULTS), key.views).size === 0) none.push(j.id);
+  }
+  if (none.length) lines.push(`no faults (${none.length}): ${none.join(" ")}`);
+  return lines;
+}
+
 const f2 = (x: number) => (x >= 0 ? "+" : "") + x.toFixed(2);
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
@@ -287,6 +329,11 @@ function main() {
     const lines = score(out, compare);
     writeFileSync(join(out, "score.txt"), lines.join("\n") + "\n");
     console.log(lines.join("\n"));
+    const faults = gatherFaults(out);
+    if (faults.length) {
+      writeFileSync(join(out, FAULTS), faults.join("\n") + "\n");
+      console.log(`faults by build and view: ${join(out, FAULTS)}`);
+    }
     return;
   }
   for (const k of ["brief", "set", "out", "judges"]) if (!a.get(k)) throw new Error(`--${k} is needed (see the head of tools/review/judge.ts)`);

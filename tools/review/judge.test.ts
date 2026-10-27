@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { readPng, writePng } from "../sandbox/png.ts";
-import { type Key, make, score, sideBySide } from "./judge.ts";
+import { gatherFaults, type Key, make, score, sideBySide } from "./judge.ts";
 import { binomialP, bootstrapDiff, judgesNeeded, mean, permutationP, sd, tCritical, tP, welch, wilson } from "./stats.ts";
 
 test("mean and spread of known numbers", () => {
@@ -97,6 +97,41 @@ test("absolute panel: every judge sees one build only, and the score reads it ba
     assert.deepEqual(more.judges.slice(6), [{ id: "j07", build: "new" }]);
     assert.equal(readFileSync(join(out, "judges.txt"), "utf8").trim(), join(out, "j07", "prompt.md"));
     assert.ok(score(out).some((l) => l.startsWith("missing or malformed (1): j07")));
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("faults are asked for, gathered by build and view beside the scores, and leave the statistics alone", () => {
+  const root = fixture();
+  try {
+    const out = join(root, "f");
+    const key = make({ brief: join(root, "brief.md"), set: join(root, "set"), out, judges: 2, anchors: join(root, "anchors") });
+    const p = readFileSync(join(out, key.judges[0].id, "prompt.md"), "utf8");
+    assert.ok(p.includes(join(out, key.judges[0].id, "faults.txt")) && p.includes("6 lines"), p);
+    for (const j of key.judges) {
+      const s = j.build === "main" ? 4 : 6;
+      writeFileSync(join(out, j.id, "scores.txt"), `dusk.png ${s}\nnight.png ${s + 0.5}\n`);
+    }
+    const before = score(out);
+    const judged = key.judges.filter((j) => j.build === "new");
+    // One judge writes faults (with a dropped extension, a colon and a stray line); the other writes none.
+    writeFileSync(
+      join(out, judged[0].id, "faults.txt"),
+      "dusk.png the pool is olive on the grass\ndusk: the stones go pink\nnotes follow\nnight.png the sky is flat\n",
+    );
+    assert.deepEqual(score(out), before);
+    const lines = gatherFaults(out);
+    const at = (head: string) => lines.indexOf(head);
+    assert.ok(at("new dusk.png") >= 0 && at("new night.png") > at("new dusk.png"), lines.join("\n"));
+    assert.deepEqual(lines.slice(at("new dusk.png") + 1, at("new night.png")), [
+      `  ${judged[0].id} 6    the pool is olive on the grass`,
+      `  ${judged[0].id} 6    the stones go pink`,
+    ]);
+    assert.equal(lines[at("new night.png") + 1], `  ${judged[0].id} 6.5  the sky is flat`);
+    assert.ok(!lines.some((l) => l.includes("notes follow")));
+    const none = lines.find((l) => l.startsWith("no faults"))!;
+    assert.ok(none.includes(judged[1].id) && none.startsWith("no faults (3)"), none);
   } finally {
     rmSync(root, { recursive: true });
   }
