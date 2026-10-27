@@ -406,7 +406,14 @@ pub(super) fn tick(
         let wanted = (rise * (upward * k.climb) + side * (wish.dot(side) * k.climb_side)) * pace;
         approach(body.velocity, wanted, k.climb_accel * dt)
     };
-    let mut feet = slide::move_shape(Vec3::ZERO, velocity, dt, query, shape, &mut body.active);
+    // The move gathers contacts only nearer than half the gap: the face held off at the gap is
+    // no constraint on a move along it, and what the move goes into its sweep meets (Jolt's
+    // predictive contacts are a saving, the sweep the guarantee).
+    let moving = Shape {
+        predictive: (0.5 * k.climb_gap).max(shape.padding + TOLERANCE),
+        ..*shape
+    };
+    let mut feet = slide::move_shape(Vec3::ZERO, velocity, dt, query, &moving, &mut body.active);
     let below_hands = [shape.radius, 0.5 * (shape.radius + k.reach)];
     if !hands
         && feet.dot(up) > 0.0
