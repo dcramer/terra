@@ -607,6 +607,7 @@ Checks, developer tools, languages and the repository.
 | [D525](decisions/D525.md) | Binary assets live in Git LFS, from now on | Tech | Developers | Decided | Every binary asset and piece of source art is stored in… |
 | [D526](decisions/D526.md) | Paid solutions | Tech | Developers | Decided | A paid tool, library, asset, service or engine source is… |
 | [D538](decisions/D538.md) | A round agent carries the routine | Tech | Agent | Decided | A coordinator starts every build round with the `round`… |
+| [D547](decisions/D547.md) | Tunables, named numbers changed while a run goes | Tech | Agent | Decided | A value worth trying several of is a **tunable**… |
 
 ## Superseded and rejected
 

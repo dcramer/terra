@@ -80,6 +80,7 @@ pub mod spatial;
 pub mod start;
 pub mod terrain;
 pub mod tick;
+pub mod tune;
 #[cfg(test)]
 mod uniform_tests;
 pub mod uploads;

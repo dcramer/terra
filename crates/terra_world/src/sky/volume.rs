@@ -38,6 +38,7 @@ use bevy::{
     shader::ShaderRef,
 };
 use terra_climate::WorldTime;
+use terra_gen::tune::{self, Tunable};
 
 mod render;
 
@@ -60,7 +61,27 @@ pub struct Params {
     pub sun: Vec4,
     /// The sun's colour times its illuminance, lux, and in w the frame, for the jitter.
     pub sunlight: Vec4,
+    /// The tunables the march reads: [`HEAPED_COVER`], [`BODY_LOW`].
+    pub tuned: Vec4,
 }
+
+/// The most a heaped column covers, so the 3D noise cuts it into heaps (Nubis's coverage
+/// remap); 0.7 let the whole body through as flat-sided slabs, 0.25 cut nearly every heap.
+pub static HEAPED_COVER: Tunable = Tunable::new(
+    "sky.cloud.heaped_cover",
+    0.5,
+    0.0..=1.0,
+    "the most a heaped column covers: less cuts the heaps smaller, more joins them into slabs",
+);
+
+/// Where the body's remapped noise starts, stretched from it to span 0 to 1, so a coverage cuts
+/// it gradually rather than all or nothing (the remap leaves it between about 0.7 and 0.95).
+pub static BODY_LOW: Tunable = Tunable::new(
+    "sky.cloud.body_low",
+    0.6,
+    0.0..=0.95,
+    "where the clouds' body noise is stretched from: higher billows harder, 0 is no stretch",
+);
 
 /// Everything the march reads, handed to the render world when it changes.
 #[derive(Resource, Clone, ExtractResource)]
@@ -125,6 +146,7 @@ pub(super) struct VolumePlugin;
 
 impl Plugin for VolumePlugin {
     fn build(&self, app: &mut App) {
+        tune::register(&[&HEAPED_COVER, &BODY_LOW]);
         app.add_plugins((
             MaterialPlugin::<VeilMaterial>::default(),
             ExtractResourcePlugin::<CloudVolume>::default(),
@@ -305,6 +327,7 @@ fn tell(
         fallback: Vec4::new(sky.cloudiness, sky.deck.y, 1.0 - sky.deck.x, 0.0),
         sun: sun.extend((1.0 / clouds::FIELD_M[0]) as f32),
         sunlight: sunlight.extend((*frame % 1024) as f32),
+        tuned: Vec4::new(HEAPED_COVER.get(), BODY_LOW.get(), 0.0, 0.0),
     };
     commands.insert_resource(CloudVolume {
         params,

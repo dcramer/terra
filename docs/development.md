@@ -198,7 +198,7 @@ Under WSL the task builds and runs the Windows program, the only one with a real
 
 **Quality presets.** Each run draws at the preset chosen for its GPU, an integrated one low and any other high (D239); `cargo xtask bench --quality low|medium|high|ultra <scenes>` asks for another, recorded as `<scene>@<preset>` and compared with that alone. Ultra, the films' preset (D428), is measured for its cost and held to no budget. The integrated GPU is measured at the low preset, whose target is 30 fps (a median under 33.3 ms, D239), which the task judges it by, knowing it from the run's own line. To measure it, under WSL: `WGPU_POWER_PREF=low WSLENV=WGPU_POWER_PREF cargo xtask bench`.
 
-To find what a scene spends its time on, switch things off and run it again. A temporary environment variable read by the code under test is enough, removed before committing.
+To find what a scene spends its time on, switch things off and run it again; to try values, don't rebuild for each. Make the number a [tunable](#tunables) and try them in one running sandbox (`r tune set NAME VALUE`, then `shot`); a scripted run of the sandbox takes each as `--tune NAME=VALUE` (`cargo xtask bench` does not pass it on yet).
 
 **Which systems a frame spends.** A build with `--features trace` writes a span for every system's run to a Chrome trace (Bevy's `trace_chrome`), and runs the render world after the game on the main thread, so each span is plainly one world's. Its times are a quarter or so longer than a timed build's, so judge a change by the benchmark, never by the trace:
 
@@ -258,7 +258,27 @@ Over the remote, `node tools/sandbox/remote.ts debug.view <name>` sets one (`off
 
 ## Debug menu
 
-<a id="debug-menu"></a>Wanted (D81): an in-game menu, present only when the game is started with a flag, opened with the backtick key. It does what developers need while playing: warp to a place or planet, give items, change the time of day or the weather, show colliders and chunk borders, switch systems off to see what they cost. Each entry should be a command that QA for agents (D69) can send too, so the menu and the agents' tools are the same list. Not built.
+<a id="debug-menu"></a>Wanted (D81): an in-game menu, present only when the game is started with a flag, opened with the backtick key. It does what developers need while playing: warp to a place or planet, give items, change the time of day or the weather, show colliders and chunk borders, switch systems off to see what they cost. Each entry should be a command that QA for agents (D69) can send too, so the menu and the agents' tools are the same list. The menu itself is not built; its first part, the tunables, is, and the menu's list of them is its next step.
+
+### Tunables
+
+<a id="tunables"></a>A number worth trying several values of is a tunable (D547), as Unreal's console variables are: a static in the module that owns it, registered by its plugin, and read where it is used, so a running sandbox changes it with no rebuild or restart:
+
+```rust
+// crates/terra_world/src/sky/volume.rs
+pub static HEAPED_COVER: Tunable = Tunable::new("sky.cloud.heaped_cover", 0.5, 0.0..=1.0, "the most a heaped column covers: …");
+tune::register(&[&HEAPED_COVER, &BODY_LOW]);   // in the owner's plugin
+let cover = HEAPED_COVER.get();                // each frame it is needed; a shader gets it in its uniform
+```
+
+```bash
+r tune list sky.cloud                    # every tunable starting so: value, default, range, help
+r tune set sky.cloud.heaped_cover 0.25   # sky.cloud.heaped_cover: 0.5 -> 0.25 (default 0.5)
+r shot shots/cover-0.25.png
+r tune reset                             # every changed one back to its default
+```
+
+`--tune NAME=VALUE` (repeatable) sets one before the run starts, for a scripted run or a film; a name nothing registered or a value out of range ends the run. Every build has them, as it has the remote; a value set lasts until the run ends, so when one is right change its default in the code. Names are dotted from the owner down (`sky.cloud.body_low`). `node tools/sandbox/tunecheck.ts` checks a value reaches the picture live.
 
 ## Developer tools
 

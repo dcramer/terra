@@ -27,6 +27,7 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
+use terra_gen::tune::parse_assignment;
 
 mod picture;
 pub use picture::{PICTURE_SIZE, Picture, RenderWaits, screenshot};
@@ -82,6 +83,8 @@ usage: terra_sandbox [options]
                         fast frames are drawn, as scripted runs do
   --remote-token <text> what this run answers sandbox.whoami with, so a script knows it is
                         talking to the run it started
+  --tune <name=value>   set a tunable before the run starts (D547); repeatable;
+                        `remote.ts tune list` lists them
   --settle <frames>     frames to run before capturing or measuring, counted from when
                         loading is done (default 120)
   --loading             keep the loading screen up, to look at it
@@ -282,6 +285,8 @@ pub struct Options {
     /// Draw into a picture instead of the window (`--offscreen`); unattended, no window opens.
     pub offscreen: bool,
     pub remote_token: String,
+    /// Tunables set at the start (`--tune NAME=VALUE`, D547).
+    pub tunes: Vec<(String, f32)>,
     /// No readout on screen.
     pub clean: bool,
     /// With each of `shots`, a picture of what the lakes cover (`--water-mask`, D429).
@@ -509,6 +514,15 @@ impl Options {
         true
     }
 
+    /// `--remote-port`: listen, on this port.
+    fn listen_on(&mut self, port: &str) -> Result<(), String> {
+        self.remote = true;
+        self.remote_port = port
+            .parse()
+            .map_err(|_| "--remote-port needs a port number".to_string())?;
+        Ok(())
+    }
+
     pub fn from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
         let mut options = Options {
             experiments: Vec::new(),
@@ -527,6 +541,7 @@ impl Options {
             on_top: false,
             offscreen: false,
             remote_token: String::new(),
+            tunes: Vec::new(),
             clean: false,
             water_mask: false,
             flame_matte: false,
@@ -596,12 +611,8 @@ impl Options {
                 "--bench" => options.bench = true,
                 "--remote" => options.remote = true,
                 "--remote-token" => options.remote_token = value("--remote-token")?,
-                "--remote-port" => {
-                    options.remote = true;
-                    options.remote_port = value("--remote-port")?
-                        .parse()
-                        .map_err(|_| "--remote-port needs a port number".to_string())?;
-                }
+                "--tune" => options.tunes.push(parse_assignment(&value("--tune")?)?),
+                "--remote-port" => options.listen_on(&value("--remote-port")?)?,
                 flag if options.switch(flag) => {}
                 "--quality" => {
                     let name = value("--quality")?;
@@ -1022,6 +1033,7 @@ impl Plugin for ShellPlugin {
                 debug::plugin(readout),
                 crate::pacing::plugin,
                 crate::gpu_memory::plugin,
+                crate::tune::plugin,
             ))
             // F1: every entity, resource and asset in the world, editable live.
             .add_plugins(

@@ -136,6 +136,7 @@ pub fn plugin(app: &mut App) {
     method(app, "world.obstacles", obstacles);
     method(app, "world.solids", solids);
     crate::gpu_memory::remote(app);
+    crate::tune::remote(app);
     if listen {
         info!("remote: listening on localhost:{port}");
     }

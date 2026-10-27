@@ -421,3 +421,23 @@ export async function take(...items: string[]) {
   }
   for (const _ of items) await waitFor("Took ", { timeout: 30 });
 }
+
+/// A tunable (D547, `terra_gen::tune`): a named number the run reads where it uses it.
+export type Tunable = { name: string; value: number; default: number; min: number; max: number; doc: string; set_by: string };
+
+export const tunables = async (prefix?: string) => (await call("tune.list", { prefix })) as Tunable[];
+export const tunable = async (name: string) => (await call("tune.get", { name })) as Tunable;
+
+/// Sets a tunable, to its default when `value` is "default", and answers what it was.
+export const tune = async (name: string, value: number | "default") =>
+  (await call("tune.set", { name, value: value === "default" ? null : value })) as { was: number; tunable: Tunable };
+
+/// Resets every changed tunable whose name starts with `prefix` (all if none).
+export const untune = async (prefix?: string) => ((await call("tune.reset", { prefix })) as { reset: string[] }).reset;
+
+/// One line: `sky.cloud.body_low = 0.45 (default 0.6, 0 to 0.95, by remote): what it does`.
+export const describeTunable = (t: Tunable, width = 0) => {
+  const changed = t.value === t.default ? "" : `default ${t.default}, `;
+  const by = t.set_by === "default" ? "" : `, by ${t.set_by}`;
+  return `${t.name.padEnd(width)} = ${t.value} (${changed}${t.min} to ${t.max}${by}): ${t.doc}`;
+};

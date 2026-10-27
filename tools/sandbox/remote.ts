@@ -173,6 +173,25 @@ const COMMANDS: Record<string, Command> = {
     help: "colour the buildings by a debug view, with its legend on screen (F4 in the game): texels, roles, detail, damage, shade, normals, plan, light, off, or next or back along them",
     run: async ({ positionals: [name] }) => print(await call("debug.view", { name: name ?? "next" })),
   },
+  tune: {
+    usage: "tune list [PREFIX] | get NAME | set NAME VALUE|default | reset [PREFIX]",
+    help: "the run's tunables (D547), named numbers its code reads live: list them, read one, set one within its range (until the run ends), or put them back",
+    run: async ({ positionals: [verb, name, value] }) => {
+      if (verb === "list" || verb === undefined) {
+        const all = await sandbox.tunables(name);
+        const width = Math.max(0, ...all.map((t) => t.name.length));
+        console.log(all.length ? all.map((t) => sandbox.describeTunable(t, width)).join("\n") : `(no tunable starts with ${name})`);
+      } else if (verb === "get") console.log(sandbox.describeTunable(await sandbox.tunable(name)));
+      else if (verb === "set") {
+        if (value === undefined || (value !== "default" && Number.isNaN(Number(value)))) throw new Error("tune set NAME VALUE, a number or `default`");
+        const { was, tunable } = await sandbox.tune(name, value === "default" ? value : Number(value));
+        console.log(`${tunable.name}: ${was} -> ${tunable.value}${tunable.value === tunable.default ? " (its default)" : ` (default ${tunable.default})`}`);
+      } else if (verb === "reset") {
+        const reset = await sandbox.untune(name);
+        console.log(reset.length ? `back to their defaults: ${reset.join(", ")}` : "nothing was changed");
+      } else throw new Error(`tune list, get, set or reset, not ${verb}`);
+    },
+  },
   shot: { usage: "shot FILE.png", help: "save a screenshot and wait for it", run: async ({ positionals: [file] }) => console.log(await sandbox.shot(file)) },
 };
 
