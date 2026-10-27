@@ -1573,6 +1573,10 @@ const TORCH_SIDE_OUT: f32 = 0.3;
 const TORCH_SIDE_TALL: vec2<f32> = vec2<f32>(0.5, 0.7);
 const TORCH_SIDES: i32 = 3;
 const TORCH_THICK: f32 = 1.6;
+// A torch's sparks (`place`): what share of a hearth's spark cards a torch throws from, and on
+// what share of each one's lives it shows, so some ten are up at once, at no beat.
+const TORCH_SPARKS: f32 = 0.45;
+const TORCH_SPARK_ODDS: f32 = 0.6;
 // Torch round t1 (the panels' 3.6-4.0: one opaque orange tongue), the baked campfire's levers
 // (fire rounds g56-g58) on the torch's marched field, its own numbers so the two tune apart.
 // With the broad head (TORCH_FIELD_R) three fresh judges scored it 4.23 against main's 3.63-4.02.
@@ -3216,13 +3220,25 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     // round 2). Most die low and soon, a few ride the plume two or three flames high, as
     // RDR2's and the photographs' do.
     let own = hash(vec2(phase * 17.0 + seed, 3.0));
+    // A torch's (under `TORCH_M`) are few and each its own (torch round t2, a critic: "a steady
+    // diagonal sheet of same-size dots"): `TORCH_SPARKS` of its cards throw at all, each only on
+    // some of its lives (`TORCH_SPARK_ODDS`), so they come in ones and twos at no beat.
+    let torch = is_hearth && tall < TORCH_M;
+    if torch && hash(vec2(phase * 5.37 + seed, 9.0)) > TORCH_SPARKS {
+        return nowhere();
+    }
     // A hearth's live one to three seconds, so 20-40 are up at once over its whole cone, not a
     // few low by the flames (campfire notes #5: the photographs' and RDR2's small embers rising
-    // a flame height or two in a widening cone, winking out).
-    let life_s = mix(1.6 + 2.2 * luck, 1.1 + 2.0 * own * own, kept);
-    let t = fract(time / life_s + mix(fract(phase) * 1.37, own * 7.13, kept) + seed);
+    // a flame height or two in a widening cone, winking out). A torch's most a half second, a few
+    // two, as a pitch head's drops and flecks burn out.
+    let life_s = select(mix(1.6 + 2.2 * luck, 1.1 + 2.0 * own * own, kept), 0.45 + 1.7 * own * own * own, torch);
+    let lived = time / life_s + mix(fract(phase) * 1.37, own * 7.13, kept) + seed;
+    if torch && hash(vec2(floor(lived), phase * 3.1 + seed)) > TORCH_SPARK_ODDS {
+        return nowhere();
+    }
+    let t = fract(lived);
     let seconds = t * life_s;
-    let climb = mix(2.5 + 3.5 * luck, 1.0 + 2.6 * own * luck, kept);
+    let climb = select(mix(2.5 + 3.5 * luck, 1.0 + 2.6 * own * luck, kept), 0.4 + 1.6 * own * luck, torch);
     let rise = climb * (1.0 - exp(-seconds * 0.9)) / 0.9;
     let east = normalize(cross(up, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-4));
     let north = cross(east, up);
@@ -3232,12 +3248,18 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     let wander = slow + quick * 0.45 * kept;
     let out_from = (vec2(hash(vec2(luck, 1.0)), hash(vec2(luck, 2.0))) - 0.5) * mix(tall * 0.8, b.z * 0.6, kept);
     // A hearth's spreading out as they climb, a cone opening about one in two.
-    let sway = mix(2.0, 0.6 + 1.1 * rise, kept);
-    // A hearth's carried on the air (`ember_drift`), and its flight with it.
-    let drift = ember_drift(seconds, rise, luck, own, seed, time) * kept;
+    // A torch's wider for its small flame, each tossed its own way, not carried as one.
+    let sway = select(mix(2.0, 0.6 + 1.1 * rise, kept), 0.35 + 1.4 * rise, torch);
+    // A hearth's carried on the air (`ember_drift`), and its flight with it; a torch's less, the
+    // fire's one gust having swung them all alike into a slanted sheet.
+    let carried = kept * select(1.0, 0.5, torch);
+    let drift = ember_drift(seconds, rise, luck, own, seed, time) * carried;
     let rise_was = climb * (1.0 - exp(-max(seconds - 0.05, 0.0) * 0.9)) / 0.9;
-    let drifting = (drift - ember_drift(max(seconds - 0.05, 0.0), rise_was, luck, own, seed, time - 0.05) * kept) / 0.05;
-    let at = foot + up * (rise + tall * mix(0.3, 0.12, kept)) + east * (out_from.x + wander.x * sway * t + drift.x) + north * (out_from.y + wander.y * sway * t + drift.y) + wind * seconds * mix(0.8, 0.4, kept);
+    let drifting = (drift - ember_drift(max(seconds - 0.05, 0.0), rise_was, luck, own, seed, time - 0.05) * carried) / 0.05;
+    // A torch's from its flame's body, each taking the wind by its own size and luck.
+    let from_up = select(tall * mix(0.3, 0.12, kept), tall * 0.45, torch);
+    let downwind = select(mix(0.8, 0.4, kept), 0.1 + 0.45 * fract(luck * 5.3), torch);
+    let at = foot + up * (rise + from_up) + east * (out_from.x + wander.x * sway * t + drift.x) + north * (out_from.y + wander.y * sway * t + drift.y) + wind * seconds * downwind;
     // Stretched along its flight: up and downwind, and as the eddies toss it.
     let flight = normalize(up * (3.0 * exp(-seconds * 0.9) + 0.4) + wind * 0.8 + (east * quick.x + north * quick.y) * 2.0 * kept + (east * drifting.x + north * drifting.y) * 0.6);
     let to_eye = normalize(view.world_position - at);
@@ -3250,13 +3272,15 @@ fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     // six metres, the film's distance (lake film r5).
     // A hearth's points of one to three pixels at six metres, most small: at 0.035 to 0.06 m
     // they were blobs a few streaks of (fire review, round 2).
-    let size = mix(0.035 + 0.03 * luck, 0.014 + 0.016 * own * own, kept);
+    // A torch's mostly specks, one in ten or so a fleck three times as big.
+    let size = select(mix(0.035 + 0.03 * luck, 0.014 + 0.016 * own * own, kept), 0.008 + 0.03 * pow(hash(vec2(phase * 2.9 + seed, 4.0)), 4.0), torch);
     // A hearth's short streaks, a roof's long: drawn out five times its sparks were white
     // needles beside the flames (lake film r6's first still).
     let world = at + across * (corner.x - 0.5) * size + flight * (corner.y - 0.5) * size * mix(5.0, 2.0, kept);
     out.clip = position_world_to_clip(world);
     out.uv = corner;
-    out.life = vec4(t, heat, luck, 2.0 + kept);
+    // A torch's past 3.25, so `shade` cools it as it climbs.
+    out.life = vec4(t, heat, luck, 2.0 + kept + select(0.0, 0.5, torch));
     out.glow = glow;
     return out;
 }
@@ -3625,7 +3649,9 @@ fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, ris
             let tumble = 0.45 + 0.55 * abs(sin(time * (7.0 + luck * 11.0) + luck * 31.0));
             alpha = spark * (1.0 - smoothstep(0.82, 1.0, t)) * mix(1.0, 0.6, t) * tumble * soft;
         }
-        light = soot(1520.0 - t * 250.0, alpha);
+        // A torch's cooling from yellow-white to a dull red as it climbs (torch round t2: one
+        // size and colour, a sheet of dots).
+        light = soot(select(1520.0 - t * 250.0, 1580.0 - t * 430.0, life.w > 3.25), alpha);
     } else if kind == 4 {
         // A drop: a hot bright streak, its head hottest, cooling to red as it burns out.
         let x = abs(uv.x - 0.5) * 2.0;
