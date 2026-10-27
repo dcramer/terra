@@ -24,6 +24,7 @@ mod shut;
 mod torch;
 pub use glows::FireGlows;
 pub(super) use glows::plugin;
+#[cfg(test)]
 pub(super) use jets::{flash, jet_light};
 use jets::{flashes, jet_lights, strikes};
 use shadows::ShadowFade;
