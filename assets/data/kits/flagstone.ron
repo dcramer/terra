@@ -11,11 +11,16 @@
     dungeon_only: true,
     // No dirt: a floor's top lies at its ground, so the dirt mask multiplied every floor of
     // the crypt by its brown tint and it read as mud (barrow dress round 20). Grime instead,
-    // a dark grey along the walls' feet where the sweepings lie, fading out into the room.
+    // a dark grey-brown along the walls' feet where the sweepings lie, fading out into the
+    // room. It is a vertex mask and a flat top has its points only at its cubes' edges, half
+    // a metre apart, so it ramps from the foot to the next row of points: at 0.9 and a tint
+    // of 0.55 that was about a third darker at the foot and the stills showed nothing; at 1.0
+    // and 0.25 the corridor's floor by its walls' feet is a quarter darker on screen, its
+    // middle unchanged (barrow dress round 22).
     dress: (masks: (
         dirt: 0.0,
-        dirt_tint: (0.55, 0.53, 0.50),
-        grime: 0.9,
+        dirt_tint: (0.25, 0.23, 0.20),
+        grime: 1.0,
         wear: 0.0,
         splash: 0.0,
         streaks: 0.0,
