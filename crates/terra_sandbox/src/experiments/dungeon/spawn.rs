@@ -85,11 +85,12 @@ fn goal_key() -> impl Bundle {
 
 /// A hero's lamp (candles, a lantern by a coffin or a bench, `LightKind::Lamp`): a small warm
 /// light at its flames, as games light a focal prop from a source in the fiction, so the hero
-/// reads in a room whose torch is across it. A quarter of a wall torch's light by night and a
-/// shorter reach; unshadowed, as the fires' shadows are budgeted (`fire::light`'s `choose`)
-/// and a lamp at a hero's foot needs none to read.
-const LAMP_LUMENS: f32 = 30_000.0;
-const LAMP_RANGE_M: f32 = 4.5;
+/// reads in a room whose torch is across it. About a third of a wall torch's light by night
+/// and a shorter reach (at 30,000 lm and 4.5 m the robbed tomb's coffin still read as a dark
+/// box beside its candles, barrow dress round 3); unshadowed, as the fires' shadows are
+/// budgeted (`fire::light`'s `choose`) and a lamp at a hero's foot needs none to read.
+const LAMP_LUMENS: f32 = 60_000.0;
+const LAMP_RANGE_M: f32 = 5.5;
 const LAMP_COLOUR: Color = Color::srgb(1.0, 0.62, 0.30);
 
 fn lamp_light() -> PointLight {
