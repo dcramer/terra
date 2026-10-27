@@ -164,8 +164,11 @@ function script(s: Script) {
 
   s.frame = f(BEATS.glow);
   s.call("staged.glow", { name: "cetri", strength: 2.5, blend_ms: 1600 });
-  s.frame = f(BEATS.wakes);
+  // Its limbs first stir out of the crown as the eyes light, drawing the hands' leaves off
+  // the face (round-6 film reviews: a leaf clump over the face until 5.5 s).
+  s.frame = f(BEATS.glow + 0.2);
   s.call("staged.bend", { name: "cetri", bend: ROARS, blend_ms: 2200 });
+  s.frame = f(BEATS.wakes);
   s.call("staged.play", { name: "cetri", clip: "Troll_Roar", speed: 0.6, once: true, blend_ms: 1200 });
   s.call("staged.morph", { name: "cetri", weights: { Wake: 1 }, blend_ms: 1400 });
 
@@ -213,10 +216,10 @@ function script(s: Script) {
     s.frame = f(t0);
     if (k > 0) s.call("staged.bend", { name: "cetri", bend: comes(side), blend_ms: 300 });
     s.call("staged.impact", { at: on(at(feetAt(t0), 0.3, 0.45 * side), 0.05), size: 0.45, base: true });
-    // The first steps watched at the level of its knees, the planted root and its litter in
-    // the frame's foot and the face still in its top; then up at the face as it closes. The
-    // jolt grows as it nears.
-    const level = (t: number) => (t < BEATS.comes + 2.5 ? { up: 2.4, ahead: 0.3 } : FACE);
+    // The first steps watched a little lower, its planted roots and their litter nearer the
+    // frame and the face still in it (at the knees, round 6's second pass lost the face off
+    // the top); then up at the face as it closes. The jolt grows as it nears.
+    const level = (t: number) => (t < BEATS.comes + 2.5 ? { up: 3.3, ahead: 0.3 } : FACE);
     s.glide([a[0], a[1] - 0.05 - 0.015 * k, a[2]], face(feetAt(t0), flat(a), level(t0)), 5);
     s.frame = f(t0) + 5;
     s.glide(b, face(feetAt(t0 + STEP_S), flat(b), level(t0 + STEP_S)), Math.round(STEP_S * 60) - 5);
