@@ -72,7 +72,7 @@ export function offAxis(body: Skeleton): { bone: string; child: string; deg: num
 /** Where each chain's end lands at a pose against where the authoring skeleton's pose sends
  * it: from our chain's root, each of our segments laid along `aims` (the authoring segment's
  * direction in the model's space), cm. */
-export function chainOff(body: Skeleton, pose: Pose[], aims: (chain: string[], k: number) => V3 | undefined): Record<string, number> {
+export function chainOff(body: Skeleton, pose: Pose[], aims: (chain: string[], k: number, name?: string) => V3 | undefined): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [name, chain] of Object.entries(CHAINS)) {
     const at = chain.map((b) => body.named(b));
@@ -81,7 +81,7 @@ export function chainOff(body: Skeleton, pose: Pose[], aims: (chain: string[], k
     let ok = true;
     for (let k = 1; k < chain.length; k++) {
       const ours = sub(pose[at[k]].t, pose[at[k - 1]].t);
-      const aim = aims(chain, k);
+      const aim = aims(chain, k, name);
       if (!aim) {
         ok = false;
         break;
@@ -101,6 +101,32 @@ export const alongBone = (body: Skeleton, pose: Pose[]) => (chain: string[], k: 
 export const alongSource = (source: Skeleton, pose: Pose[]) => (chain: string[], k: number): V3 | undefined => {
   const [a, b] = [source.named(chain[k - 1]), source.named(chain[k])];
   return a < 0 || b < 0 ? undefined : sub(pose[b].t, pose[a].t);
+};
+
+/** The chains whose lines are the body's own shape, not a posture (retarget.py, D542): the
+ * torso's joints inside an upright body, and how far a foot pitches from ankle to ball. */
+export const SHAPED = new Set(["head", "toe_l", "toe_r"]);
+
+/** For a shaped chain, the direction the clip means for our segment: the source bone's turn in
+ * the model from its rest, laid on our rest segment (a foot's first turned about the up axis
+ * onto the source's, its pitch kept). Elsewhere the source's own segment. */
+export const meantBy = (body: Skeleton, source: Skeleton, pose: Pose[]) => {
+  const ours = posed(body as Glb, undefined, 0);
+  const theirs = posed(source as Glb, undefined, 0);
+  const along = alongSource(source, pose);
+  return (chain: string[], k: number, name?: string): V3 | undefined => {
+    if (!name || !SHAPED.has(name)) return along(chain, k);
+    const [a, b] = [source.named(chain[k - 1]), source.named(chain[k])];
+    const [i, j] = [body.named(chain[k - 1]), body.named(chain[k])];
+    if (a < 0 || b < 0 || i < 0 || j < 0) return undefined;
+    let line = sub(ours[j].t, ours[i].t);
+    if (name.startsWith("toe")) {
+      const src = sub(theirs[b].t, theirs[a].t);
+      const yaw = Math.atan2(src[0], src[2]) - Math.atan2(line[0], line[2]);
+      line = rot([0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2)], line);
+    }
+    return rot(qmul(pose[a].r, qinv(theirs[a].r)), line);
+  };
 };
 
 // ---- skinning: the shader's blend, ported line for line from assets/shaders/skinning.wesl.
@@ -200,7 +226,7 @@ function stageClips(body: Glb, source: Glb, files: string[], only?: string): Lin
       for (let i = 0; i <= 20; i++) {
         const t = (clip.end * i) / 20;
         const pose = posed(body, clip, t);
-        const aims = own ? alongSource(source, posed(source, own, Math.min(t, own.end))) : alongBone(body, pose);
+        const aims = own ? meantBy(body, source, posed(source, own, Math.min(t, own.end))) : alongBone(body, pose);
         for (const [k, cm] of Object.entries(chainOff(body, pose, aims))) worst[k] = Math.max(worst[k] ?? 0, cm);
       }
       rows.push({ clip: name, file: file.split("/").pop()!, by: own ? "source clip" : "bone +Y", worst });

@@ -7,9 +7,10 @@ bone on each upper arm, forearm, thigh and calf, with skin on it; ours has none,
 never move them. This:
   1. turns Tripo's model to face -Y as ours does, scales it to `height`, and welds the
      vertices glTF split at texture seams,
-  2. moves each of our joints to the matching Tripo joint, keeping our bones' directions
-     (the animations depend on them), and adds Tripo's twist bones, each facing as the bone
-     it twists (twist.py turns them),
+  2. moves each of our joints to the matching Tripo joint, turns each bone to point at its
+     moved child, its roll kept nearest (the clips are carried onto these bones by their turns
+     in the world, retarget.py), and adds Tripo's twist bones, each facing as the bone it
+     twists (twist.py turns them),
   3. keeps Tripo's weights, every bone's under its own name, at most four bones a vertex,
      normalised, lightly smoothed, and exports the mesh and skin only.
 
@@ -27,6 +28,7 @@ import bpy
 from mathutils import Matrix, Vector
 
 import look
+import retarget
 import twist
 
 FIGURE = look.FIGURE
@@ -139,6 +141,7 @@ k = joints["pelvis"].z / hips_now
 arm.scale = [c * k for c in arm.scale]
 bpy.context.view_layer.update()
 to_local = arm.matrix_world.inverted()
+children = retarget.main_children(arm)
 select_only(arm)
 bpy.ops.object.mode_set(mode="EDIT")
 eb = arm.data.edit_bones
@@ -158,6 +161,9 @@ for b in order:
     moved[b.name] = new_head - b.head
     b.head = new_head
     b.tail = new_head + d
+# Each bone turned to point at its moved child, its roll kept nearest, so a bone's +Y is its
+# limb again; the clips are carried onto these by retarget.py.
+retarget.orient(eb, children)
 bpy.ops.object.mode_set(mode="OBJECT")
 twist.add(arm, {n: to_local @ joints[n] for n, _ in twist.names() if n in joints})
 

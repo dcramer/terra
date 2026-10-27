@@ -409,7 +409,7 @@ The look, models, bodies and gear, textures and audio.
 | [D347](decisions/D347.md) | What people do, made, not taken | Tech | Agent | Decided | The clips a town's people play at their work and talk… |
 | [D356](decisions/D356.md) | The environment's style written down and checked | Tech | Agent | Decided | The art guide's Places section (docs/art-style.md)… |
 | [D359](decisions/D359.md) | Canopy shade dappled, pines' stubs snapped, a thicker middle layer under the pines | Tech | Agent | Decided | A crown's solid shadow stand-in casts a crown's shade… |
-| [D360](decisions/D360.md) | A stride carried by aim, its arms layered | Tech | Agent | Decided | A made stride (`art/animation/made.json`) is fixed over… |
+| [D360](decisions/D360.md) | A stride carried by aim, its arms layered | Tech | Agent | Decided | Amends D316; amended by D542, which carries every clip… |
 | [D368](decisions/D368.md) | Leaves checked to read as leaves, card by card and in the picture | Tech | Agent | Decided | Serves D291 and D292, and D356's rules… |
 | [D370](decisions/D370.md) | A neutral grade, the colour from the light | Design | Developers | Decided | The colour grade is neutral everywhere and at every… |
 | [D383](decisions/D383.md) | How ore shows in a rock | Design | Developers | Decided | A rock with ore in it is the plain rock… |
@@ -443,6 +443,7 @@ The look, models, bodies and gear, textures and audio.
 | [D532](decisions/D532.md) | Clips come from generators and free sets, not capture or bought packs | Design | Developers | Decided | The clips Kimodo makes badly (idles, sprint, swimming… |
 | [D533](decisions/D533.md) | Uthana's takes come on our body uploaded bare, lifted onto our ground and checked against its reference | Engineering | Agent | Decided | `tools/uthana` uploads a body without its animations… |
 | [D540](decisions/D540.md) | The clouds move by the world's clock, drawn from a weather map of the climate | Tech | Agent | Decided | The sky's clouds are a function of the climate and the… |
+| [D542](decisions/D542.md) | Clips carried onto a body by each bone's turn from a retarget pose | Tech | Agent | Decided | A body's bones point at their next joint… |
 
 ## Engine and code
 

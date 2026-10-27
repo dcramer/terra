@@ -15,6 +15,7 @@ import bpy
 from mathutils import Vector
 
 import look
+import retarget
 import twist
 
 FIGURE = look.FIGURE
@@ -31,9 +32,11 @@ for o in list(bpy.context.scene.objects):
         bpy.data.objects.remove(o)
 before = set(bpy.data.objects)
 bpy.ops.import_scene.gltf(filepath=FIGURE)  # brings the animations
+mannequin = retarget.source(next(o for o in bpy.data.objects if o not in before and o.type == "ARMATURE"))
 for o in list(bpy.data.objects):
     if o not in before:
         bpy.data.objects.remove(o)
+retarget.bake(arm, list(bpy.data.actions), mannequin)
 twist.bake(arm, list(bpy.data.actions))
 look.skin_as_game()
 look.stage()

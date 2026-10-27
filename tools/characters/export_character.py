@@ -30,15 +30,14 @@ import look
 import patches
 import lift
 import pace
+import retarget
 import twist
 
 # --clips=FILE: the clips from another mannequin file cut by clips.py, such as a set of the
 # libraries' hardest clips to check a body through; by default the game's.
 FIGURE = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--clips=")), look.FIGURE)
-# --list=FILE: a set's list (art/animation/sets/fight.json) whose clips made by the clip step
-# (an entry keyed to a "guard"), and the takes of them tried as X#N, are carried by aim (D450),
-# as clip.ts scores them; narrowed only where an entry has a "step". The list's older clips are
-# kept as they were made and measured, unaimed.
+# --list=FILE: a set's list (art/animation/sets/fight.json): its entries' holds (hold.py) and
+# steps (aim.py), the takes of them tried as X#N included, as clip.ts scores them.
 LISTED = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--list=")), None)
 src, dst = look.args()[:2]
 
@@ -196,24 +195,24 @@ if MORPHS:
         print("MORPH", m, "target added;", len(moved), "joints and sockets move")
     arm["morphs"] = json.dumps(offsets)
 
-# The clips, from the mannequin's file; its objects are thrown away, once its limbs' rest
-# lines are read for the clips aimed by them (aim.py).
+# The clips, from the mannequin's file; its objects are thrown away, once its rest is read.
 before = set(bpy.data.objects)
 bpy.ops.import_scene.gltf(filepath=FIGURE)
-mannequin = aim.segments(next(o for o in bpy.data.objects if o not in before and o.type == "ARMATURE"))
+mannequin = retarget.source(next(o for o in bpy.data.objects if o not in before and o.type == "ARMATURE"))
 for o in list(bpy.data.objects):
     if o not in before:
         bpy.data.objects.remove(o)
 actions = [a for a in bpy.data.actions]
-# The strides that ask for it carried by where the mannequin's limbs point and the feet
-# landing their step apart, not by the bones' rotations, so this body's own rest stance does
-# not carry into them (aim.py).
+# Every clip carried onto this skeleton by each bone's turn in the world, from a retarget pose
+# with the limbs pointing as the mannequin's (retarget.py, D542).
+print(f"RETARGET {len(actions)} clips, bones turned up to {retarget.bake(arm, actions, mannequin):.1f} deg")
+# The strides that ask for it with the feet landing their step apart (aim.py).
 with open(os.path.join(look.ART, "animation", "made.json")) as f:
-    steps = {name: entry["step"] for name, entry in json.load(f).items() if "step" in entry}
+    steps = {name: entry["step"] for name, entry in json.load(f).items() if entry.get("step")}
 if LISTED:
     with open(LISTED) as f:
-        steps.update({name: entry.get("step") for name, entry in json.load(f).items() if "guard" in entry or "step" in entry})
-aim.bake(arm, actions, mannequin, steps)
+        steps.update({name: entry["step"] for name, entry in json.load(f).items() if entry.get("step")})
+aim.bake(arm, actions, steps)
 # The limbs' roll moved to the hands and feet and spread over the twist bones (twist.py).
 twist.bake(arm, actions)
 # A list's clips made from another with a part held as a third holds it (hold.py): the

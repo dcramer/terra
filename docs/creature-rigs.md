@@ -33,7 +33,7 @@ A plan is a file (`art/creatures/plans/<plan>.json`), not code: its chains and t
 
 | Plan | Chains | Moved by | Today |
 |---|---|---|---|
-| Biped (people, trolls, ogres) | Our skeleton (D115) | Kimodo clips, carried by aim (D316, D360) | Done, checked |
+| Biped (people, trolls, ogres) | Our skeleton (D115) | Kimodo clips, carried by the retarget (D316, D542) | Done, checked |
 | Quadruped | Spine, neck, tail; four legs, each plantigrade, digitigrade or unguligrade; shoulder blades | Made gaits (D424) | 10 kinds, unchecked |
 | Avian | Spine, neck, tail; two legs; two wings, folded or spread | Made gaits and flight clips (D382) | 6 kinds, the hen, the dragon |
 | Serpent | One long spine, head | The spine following the head's path | None |

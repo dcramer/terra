@@ -15,7 +15,7 @@ The developer, after five rounds of the troll fight ([troll-fight.md](troll-figh
 - **Realistic but fun** (D122): weight and momentum read true; responsiveness wins where realism would be a chore.
 - **The server decides** (D51) and **shared state stays out of Bevy** (D28): where a body is, what move it is in, and whether a blow landed are simulation; the pose is presentation.
 - **Many of everything** (D127) and **kinds as data** (D136): a thousand players, crowds of people, packs of monsters; a new creature or move is a file, never code.
-- **One skeleton for people** (D115), clips made with Kimodo (D316) and carried by aim (D360); creatures that are not people are animated by rule over their own skeletons (creatures.md).
+- **One skeleton for people** (D115), clips made with Kimodo (D316) and carried onto each body by its limbs' turns from a retarget pose (D542, D360); creatures that are not people are animated by rule over their own skeletons (creatures.md).
 - **Layers** (D198): what a body does to move belongs to the walker; moves, hits and reactions to gameplay.
 
 ## The layers

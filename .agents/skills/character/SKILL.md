@@ -40,9 +40,9 @@ The last number is the character's height in metres (life size, D110). It:
 1. crops the front view, up to the first clear gap after it (`front_view.sh`), and makes a textured model (`tripo.ts model`);
 2. rigs it with Tripo's current auto-rig in its Unreal skeleton (`tripo.ts rig --skeleton unreal`, the default): the only one of Tripo's skeletons whose twist bones carry skin, with the bone names our clips use;
 3. runs the rest, which is free and is `finish_character.sh NAME HEIGHT` on its own:
-   - converts Tripo's skeleton onto ours (`convert_rig.py`): our joints move to Tripo's, our bones keep their directions, Tripo's four twist bones a side are added, Tripo's weights are kept by name, smoothed lightly, and every vertex kept to four bones;
+   - converts Tripo's skeleton onto ours (`convert_rig.py`): our joints move to Tripo's, each bone turns to point at its moved child (D542), Tripo's four twist bones a side are added, Tripo's weights are kept by name, smoothed lightly, and every vertex kept to four bones;
    - checks it (`rig_check.py`) and renders it moving (`rig_render.py`, to `tools/characters/out/NAME-sheet.png`);
-   - exports it as the game reads it (`export_character.py`, to `tools/characters/out/NAME-game.glb`): body, skeleton, sockets and all our animation clips in one file, every clip re-sampled on this character's skeleton, with the twist step baked in (`twist.py`, below). That matters: Bevy sets each joint's whole position from the clip, so the mannequin's own clips would pull our moved joints back to the mannequin's.
+   - exports it as the game reads it (`export_character.py`, to `tools/characters/out/NAME-game.glb`): body, skeleton, sockets and all our animation clips in one file, every clip carried onto this character's skeleton by its bones' turns from a retarget pose (`retarget.py`, D542) and re-sampled on it, with the twist step baked in (`twist.py`, below). That matters: Bevy sets each joint's whole position from the clip, so the mannequin's own clips would pull our moved joints back to the mannequin's.
 
 **When the conversion, checker or export improves, run `finish_character.sh` again for every character** (`art/characters/` lists them, each with its `rigged.glb`), refit their gear (step 5), and check them in the workbench. It costs nothing; only `make_character.sh` spends credits.
 
@@ -55,7 +55,7 @@ The checker compares the rig with our skeleton and with the hand-rigged mannequi
 | Check | What failing means | What to do |
 |---|---|---|
 | `skeleton` | Bones missing or with the wrong parent | Tripo's bone names no longer match ours (`RENAME` in `convert_rig.py`); Tripo's skeleton may have changed, or the rig was made with another `--skeleton` |
-| `rest_pose` | A bone points a different way from ours | Never turn bones when fitting; move joints only. Our animations assume our directions |
+| `rest_pose` | A bone does not point at its next joint | `convert_rig.py` turns each bone onto its moved child (`retarget.orient`); the clips are carried by the bones' turns (`retarget.py`, D542), which reads +Y as the limb |
 | `weights` | Unweighted vertices, or more than four bones on one | Re-run the conversion; Bevy reads only four |
 | `seams` | Copies of a vertex split at a texture seam have different weights, so the seam will open as the body moves | The weld in `convert_rig.py` was skipped or the threshold missed them |
 | `reach` | Vertices driven by a bone far from them (an arm stuck to the hip) | Usually the body was generated with limbs touching: redraw the sheet with more space between arms and body, legs apart |

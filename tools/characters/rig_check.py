@@ -6,7 +6,9 @@ for each check, and writes out/rig-check-NAME.json.
 
 Checks:
   skeleton      same bones, same parents as our skeleton
-  rest pose     every bone points the same way as in our skeleton (animations assume it)
+  rest pose     every bone points at its next joint (retarget.main_children), as our
+                skeleton's do; one without a child the same way as in our skeleton. The
+                clips are carried by the bones' turns (retarget.py), which reads +Y as the limb
   weights       every vertex weighted, at most 4 bones each, weights summing to 1
   seams         copies of a vertex split at a texture seam carry the same weights, or the
                 seam opens into a gap as the body moves
@@ -37,6 +39,7 @@ from mathutils.geometry import intersect_point_line
 
 import look
 import lift
+import retarget
 import twist
 
 FIGURE = look.FIGURE
@@ -84,6 +87,8 @@ def directions(arm):
 look.reset()
 ref_arm, ref_meshes = load(FIGURE)
 ref_dirs = directions(ref_arm)
+ref_children = retarget.main_children(ref_arm)
+mannequin = retarget.source(ref_arm)
 ref_parents = {b.name: b.parent.name if b.parent else None for b in ref_arm.data.bones}
 for m in ref_meshes:
     bpy.data.objects.remove(m)
@@ -99,7 +104,19 @@ wrong_parent = sorted(b.name for b in arm.data.bones if b.name in ref_parents an
 report["skeleton"] = {"missing": missing, "wrong_parent": wrong_parent}
 ok["skeleton"] = not missing and not wrong_parent
 dirs = directions(arm)
-angles = {n: math.degrees(dirs[n].angle(ref_dirs[n], 0)) for n in dirs if n in ref_dirs}
+heads = {b.name: b.head_local for b in arm.data.bones}
+
+
+def meant(n):
+    """Where bone `n` should point: at its next joint, or, the root and a bone without one, as
+    our skeleton's does."""
+    c = ref_children.get(n)
+    if n == "root" or c not in heads or (heads[c] - heads[n]).length < 1e-6:
+        return ref_dirs[n]
+    return (heads[c] - heads[n]).normalized()
+
+
+angles = {n: math.degrees(dirs[n].angle(meant(n), 0)) for n in dirs if n in ref_dirs}
 worst = max(angles, key=angles.get)
 report["rest_pose"] = {"worst_bone": worst, "worst_deg": round(angles[worst], 2)}
 ok["rest_pose"] = angles[worst] <= LIMITS["rest_angle_deg"]
@@ -204,6 +221,7 @@ for o in list(bpy.context.scene.objects):
         bpy.data.objects.remove(o)
 # The clips as the game plays them on this body: the limbs' roll spread over its twist bones.
 played = [a for a in (bpy.data.actions.get(n) for n in ACTIONS) if a is not None]
+retarget.bake(arm, played, mannequin)
 twist.bake(arm, played)
 look.skin_as_game(linear="--linear" in look.args())
 # And the hips lifted by its size where it meets the floor, as the export bakes them (lift.py).
