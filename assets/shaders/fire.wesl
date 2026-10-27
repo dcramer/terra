@@ -1737,7 +1737,7 @@ fn baked_tile(frame: f32) -> vec2<f32> {
 // The baked field at a point in its frame (`field_gas`'s): the point turned, mirrored and scaled
 // into the bake's box (`sim::to_bake`), its flame read from both frames and blended, made the
 // field's shape by BAKED_EDGE and coloured as the lobes' is.
-fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
+fn baked_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
     let hg = saturate(p.y / (f.tall * BAKED_FLAME_TOP));
     let shed = wisp_flame(p, f.slot) * (1.0 - smoothstep(WISP_FADE.x, WISP_FADE.y, p.y / f.tall));
     var loop_flame = 0.0;
@@ -1752,7 +1752,9 @@ fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
         let c = textureSampleLevel(sim_volume, gas_noise_sampler, (vec3(f.tiles.zw, 0.0) + t) / size, 0.0).r;
         loop_flame = mix(a, c, f.blend);
     }
-    let flame = max(shed, loop_flame);
+    let lane = noise3(vec3(u.x * BAKED_LANES.x, u.z * BAKED_LANES.x, hg * BAKED_LANES.y - time * BAKED_LANES.z) + vec3(f.seed * 13.7));
+    let torn = smoothstep(BAKED_LANES.w, BAKED_LANES.w + 0.2, lane);
+    let flame = max(shed, loop_flame - BAKED_TEAR.z * smoothstep(BAKED_TEAR.x, BAKED_TEAR.y, hg) * torn);
     let v = (flame - BAKED_EDGE) / BAKED_SPAN;
     if v < -0.5 {
         return vec3(0.0);
@@ -1763,7 +1765,36 @@ fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
     let dens = mix(1.0 - BAKED_TIPS * smoothstep(0.5, 1.0, hg), WISP_THICK, own);
     let hot = own * smoothstep(0.2, 0.7, shed);
     let heat = mix(drawn.yz, vec2(WISP_HEAT), hot);
-    return vec3(drawn.x * (1.0 + thin) * dens, baked_yellow(baked_pale(heat.x, hg)), baked_yellow(baked_pale(heat.y, hg)));
+    let white = BAKED_WHITE.z * smoothstep(BAKED_WHITE.x, BAKED_WHITE.x + 0.15, v) * (1.0 - smoothstep(0.0, BAKED_WHITE.y, hg)) * (1.0 - own);
+    let pulled = vec2(baked_yellow(baked_pale(heat.x, hg)), baked_yellow(baked_pale(heat.y, hg)));
+    return vec3(drawn.x * (1.0 + thin) * dens, mix(pulled, vec2(1.0), white));
+}
+
+// Fire round g56 (the panels' fault: one opaque orange cone, no white-hot core, no separate
+// tongues, no see-through tips). Shaded as Niagara Fluids shades gas fire: its heat (above)
+// colours it, its density alone covers what is behind it (`hearth_march`), never the ramp's A.
+// BAKED_SEE: how much of its density covers, 1 up to x of its height, falling to z by y, so its
+// upper flame sums its glow as thin flame does and shows what is behind (RDR2's tips).
+// BAKED_TEAR: how much of the loop's flame (not a wisp's) is taken off over x-y of its height,
+// raising its edge there, so its upper flame parts into tongues with dark between (RDR2's top
+// third 0.57 of each row's span flame, ours 0.88). BAKED_LANES: only in some upright lanes
+// across the flame (x a lane's count across the sim, rising y a height and z a second; torn
+// over w to w + 0.2 of a noise), so the tongues between keep their height and lean
+// (g56: torn over the whole top, the motion gate's lean fell from 8.6 to 4.6-7.0).
+// BAKED_WHITE: a small white-hot heart over the coals: shape over x (as the heart's FIELD_CORE),
+// under y of its height, at heat 1 by z; its glow w times brighter there, so it reads white
+// (the sheet's white band, its campfire's 0 of 5.6) rather than adding to its pale (at its
+// ceiling, 5.0 of 5.4).
+const BAKED_SEE: vec3<f32> = vec3<f32>(0.15, 0.55, 0.25);
+const BAKED_TEAR: vec3<f32> = vec3<f32>(0.25, 0.65, 0.25);
+const BAKED_LANES: vec4<f32> = vec4<f32>(5.0, 2.0, 0.9, 0.55);
+const BAKED_WHITE: vec4<f32> = vec4<f32>(0.7, 0.12, 1.0, 5.0);
+// How far the heart's glow goes to a grey of its own luminance: the ramp's hottest has too
+// little blue to clear the white band's least channel (235) however bright (g56: white 0.0-0.1
+// at 5 times), and a blackbody's heart past the film's shoulder reads white.
+const BAKED_WHITE_MIX: f32 = 0.6;
+fn baked_cover(hg: f32) -> f32 {
+    return mix(1.0, BAKED_SEE.z, smoothstep(BAKED_SEE.x, BAKED_SEE.y, hg));
 }
 
 // How far a baked flame's white-hot root, the hearth ramp's pale core (heats over BAKED_PALE.x,
@@ -1779,7 +1810,9 @@ fn baked_gas(p: vec3<f32>, f: HearthField) -> vec3<f32> {
 // campfire's remodel). At 0.025 night pale rose to 5.5 (white went pale before pale went
 // yellow); at 0.055, 2.6, but above night yellow 23.9 failed the sheet.
 const BAKED_PALE: vec4<f32> = vec4<f32>(0.92, 0.985, 0.1, 0.3);
-const BAKED_PALE_PULL: f32 = 0.04;
+// Pulled 0.055 since the heart reads white (BAKED_WHITE_MIX, fire round g57), its pale root
+// going as the white comes in; the above row's yellow ceiling is the game frames' 27.8 (D433).
+const BAKED_PALE_PULL: f32 = 0.055;
 fn baked_pale(heat: f32, hg: f32) -> f32 {
     let root = 1.0 - smoothstep(BAKED_PALE.z, BAKED_PALE.w, hg);
     return heat - BAKED_PALE_PULL * root * saturate((heat - BAKED_PALE.x) / (BAKED_PALE.y - BAKED_PALE.x));
@@ -1795,7 +1828,10 @@ fn baked_pale(heat: f32, hg: f32) -> f32 {
 // dusk pale 3.2-3.3 and 3.9 as before, the motion gate 6 of 6 at dusk and night. Pulled 0.03
 // from 0.80: 21.2 twice, but dusk tongue life 0.03 under the gate's 0.04 (g45/rule.md).
 const BAKED_YELLOW: vec4<f32> = vec4<f32>(0.76, 0.86, 0.88, 0.92);
-const BAKED_YELLOW_PULL: f32 = 0.05;
+// Pulled 0.02 since the class's yellow is the game frames' (D433, fire round g57): Sons of the
+// Forest's camp fires 11-28% yellow, RDR2's 11-12%, where the photographs' most was 20.6. At 0
+// (g57) night yellow 30.0, above 30.8, over the ceiling 29.75.
+const BAKED_YELLOW_PULL: f32 = 0.02;
 fn baked_yellow(heat: f32) -> f32 {
     let band = smoothstep(BAKED_YELLOW.x, BAKED_YELLOW.y, heat) * (1.0 - smoothstep(BAKED_YELLOW.z, BAKED_YELLOW.w, heat));
     return heat - BAKED_YELLOW_PULL * band;
@@ -1878,7 +1914,7 @@ fn field_shape(q: vec3<f32>, f: HearthField, time: f32) -> f32 {
 // z its heat without its top's skin lift (`FIELD_TOP_KEEP`).
 fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
     if f.baked.w > 0.0 {
-        return baked_gas(p, f);
+        return baked_gas(p, f, time);
     }
     let hg = saturate(p.y / f.tall);
     let s = f.scale;
@@ -1996,11 +2032,21 @@ fn hearth_march(in: VertexOutput) -> vec4<f32> {
         if s >= far || through < 0.01 {
             break;
         }
-        let gas = field_gas(ol + dl * s, f, time);
+        let pl = ol + dl * s;
+        let gas = field_gas(pl, f, time);
         if gas.x > 0.0 {
             let r = ramp_row(gas.y, HEARTH_ROW);
             let a = 1.0 - exp(-gas.x * min(ds, far - s));
             var flame = r.rgb * bright;
+            // A baked flame covers by its density alone, less up its height, and its white-hot
+            // heart glows brighter (BAKED_SEE, BAKED_WHITE); a marched one by the ramp's A.
+            var covered = a * r.a;
+            if f.baked.w > 0.0 {
+                covered = 1.0 - exp(-gas.x * baked_cover(saturate(pl.y / f.tall)) * min(ds, far - s));
+                let hot = smoothstep(0.99, 1.0, gas.y);
+                let grey = vec3(dot(flame, vec3(0.2126, 0.7152, 0.0722)));
+                flame = mix(flame, grey, BAKED_WHITE_MIX * hot) * (1.0 + BAKED_WHITE.w * hot);
+            }
             if gas.z < gas.y - 1.0e-4 {
                 let lum = vec3(0.2126, 0.7152, 0.0722);
                 let was = dot(ramp_row(gas.z, HEARTH_ROW).rgb, lum) / max(dot(r.rgb, lum), 1.0e-5);
@@ -2009,7 +2055,7 @@ fn hearth_march(in: VertexOutput) -> vec4<f32> {
             light += through * a * flame;
             glow += through * a * dot(flame, vec3(0.2126, 0.7152, 0.0722));
             let was = 1.0 - through;
-            through *= 1.0 - a * r.a;
+            through *= 1.0 - covered;
             if was < 0.5 && 1.0 - through >= 0.5 {
                 let at = view.clip_from_world * vec4(eye + dir * s, 1.0);
                 BREATH_DEPTH = at.z / at.w;
