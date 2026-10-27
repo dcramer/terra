@@ -67,11 +67,13 @@ const run = spawnSync(resolve(ROOT, "target/release/terra_sandbox"), ["--offscre
   env: { ...process.env, BEVY_ASSET_ROOT: ROOT },
   maxBuffer: 64 * 1024 * 1024,
 });
+// The whole log beside the film, whether the run worked or not, so what the game logged as it
+// filmed (a door pushed, a route's points) is read from it afterwards.
+const log = `${run.stdout}${run.stderr}`;
+writeFileSync(`${out}.log`, log);
 if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
-  // The whole log beside the film, and its errors here: a run that dies early, as one out of
-  // the GPU's memory does, ends with nothing but its shutdown's warnings.
-  const log = `${run.stdout}${run.stderr}`;
-  writeFileSync(`${out}.log`, log);
+  // Its errors here: a run that dies early, as one out of the GPU's memory does, ends with
+  // nothing but its shutdown's warnings.
   const errors = log.split("\n").filter((l) => /ERROR|panicked/.test(l));
   console.error([...new Set(errors)].slice(0, 10).join("\n"));
   console.error(log.split("\n").slice(-20).join("\n"));
@@ -80,10 +82,10 @@ if (run.status !== 0 || !`${run.stdout}`.includes("SANDBOX saved")) {
 }
 console.log(`film: ${Math.floor((last - first) / 2) + 1} frames drawn in ${((Date.now() - started) / 1000).toFixed(0)} s`);
 // How far a route's walker got, so a film whose walker stalled or gave up a point says so.
-const route = `${run.stdout}${run.stderr}`.split("\n").filter((l) => l.includes("Route: ")).map((l) => l.slice(l.indexOf("Route: ") + 7));
+const route = log.split("\n").filter((l) => l.includes("Route: ")).map((l) => l.slice(l.indexOf("Route: ") + 7));
 if (route.length) console.log(`film: route ${route.join(" ")}`);
 // How far a time-lapse's settlement got as it ran (D381), so one whose builders idled says so.
-for (const line of `${run.stdout}${run.stderr}`.split("\n").filter((l) => l.includes("Time-lapse at "))) {
+for (const line of log.split("\n").filter((l) => l.includes("Time-lapse at "))) {
   console.log(`film: ${line.slice(line.indexOf("Time-lapse at "))}`);
 }
 
