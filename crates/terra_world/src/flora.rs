@@ -15,6 +15,7 @@ use super::footprint::Footprint;
 use super::grown;
 use model::{Drawn, Model};
 
+mod fell;
 mod model;
 mod piece;
 mod under;
@@ -466,6 +467,7 @@ pub enum FloraSystems {
 }
 
 pub fn plugin(app: &mut App) {
+    fell::plugin(app);
     app.add_plugins(MaterialPlugin::<WindMaterial>::default())
         .add_systems(Update, (follow_wind, piece::draw))
         .init_resource::<Obstacles>()
