@@ -24,8 +24,8 @@
 //! `mantle_s`, then stands. ALS plays its clip along such a path; ours is the mover's own, a
 //! clip to be fitted to it. With no room to stand the body holds at the lip.
 //!
-//! Not yet (docs/controller.md "Climbing", units C4 and C6-C7): the speed by steepness, the
-//! lunge and the kick-off, stamina, a material's grip, the fight stance.
+//! Not yet (docs/controller.md "Climbing", units C6-C7): the lunge and the kick-off, stamina, a
+//! material's grip, the fight stance.
 
 use super::query::{Capsule, Contact, Query};
 use super::slide::{self, Shape, Support};
@@ -44,6 +44,10 @@ const LIP_M: f32 = 0.1;
 /// How high over the top a mantle carries the feet, m: clear of it, the walk's stick to floor
 /// takes the rest.
 const SKIN_M: f32 = 0.03;
+/// How much faster a body climbs a face by the up part of its normal (D509): up a sheer face at
+/// its kind's speed, 1.34 times that up a slab 70 deg from level, 0.66 up an overhang 20 deg past
+/// vertical, half at the kind's furthest (30 deg) past it. A placeholder to tune.
+const LEAN_PACE: f32 = 1.0;
 
 /// What a body holds, or has pushed into on the ground (D507).
 #[derive(Clone, Copy, Debug, Default)]
@@ -225,7 +229,8 @@ pub(super) fn tick(
         body.hold = Hold::default();
         return false;
     };
-    // The input laid on the face: forward (into it) up it, the sides along it.
+    // The input laid on the face: forward (into it) up it, the sides along it, faster on a
+    // face less steep and slower on an overhang (D509).
     let into = level_into(normal, up, body.facing);
     let side = up.cross(into);
     let wish = intent.wish.reject_from(up).normalize_or_zero();
@@ -245,8 +250,9 @@ pub(super) fn tick(
         pull_up(body, mantle, query, shape, dt);
         return true;
     }
+    let pace = (1.0 + LEAN_PACE * normal.dot(up)).max(0.0);
     let rise = up.reject_from(normal).normalize_or(up);
-    let wanted = rise * (upward * k.climb) + side * (wish.dot(side) * k.climb_side);
+    let wanted = (rise * (upward * k.climb) + side * (wish.dot(side) * k.climb_side)) * pace;
     let mut velocity = approach(body.velocity, wanted, k.climb_accel * dt);
     let mut feet = slide::move_shape(Vec3::ZERO, velocity, dt, query, shape, &mut body.active);
     if !hands
