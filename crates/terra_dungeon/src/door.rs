@@ -18,12 +18,13 @@ pub const SWING_PER_S: f32 = 2.0;
 /// How far ahead a filming camera reads its shot, in seconds: a swing and a tenth, so a door
 /// its shot walks into stands open a tenth of a second before the camera is in reach.
 pub const FILM_LEAD_S: f32 = 1.0 / SWING_PER_S + 0.1;
-/// How near a filming camera pushes, in metres from the doorway: a 20 mm lens on Super 35
-/// sees 64 degrees across, so the shut 2 m leaves fill it from 1.6 m; open from 2 m out, the
-/// leaves are out of the picture before then, from in front or the side.
-pub const FILM_REACH_M: f32 = 2.0;
+/// How near a filming camera pushes, in metres along its shot from the doorway: a 20 mm
+/// lens on Super 35 sees 64 degrees across, so the shut 2 m leaves fill it from 1.6 m, and a
+/// shot that slows to hold 3 m short while they swing (as a game's door cinematic holds) has
+/// them open as it stands there, never shut in the picture.
+pub const FILM_REACH_M: f32 = 3.5;
 /// How far ahead a filming camera reads its shot for whether it goes through a door: long
-/// enough for a shot that slows and turns in front of one.
+/// enough for a shot that slows and holds in front of one.
 pub const FILM_HORIZON_S: f32 = 5.0;
 
 /// Where one of a door's two leaves hangs with the door `swing` open, in the doorway's
@@ -95,31 +96,44 @@ impl Door {
     /// One step of `dt` seconds with a filming camera near it, which stands in for the body
     /// walking its shot: `path` is the shot's eye in the doorway's frame from now, every
     /// `every` seconds over `FILM_HORIZON_S`. The camera pushes as that body would a swing
-    /// ahead: once its eye within `FILM_LEAD_S` from now is within `FILM_REACH_M` of the
-    /// doorway, from in front or the side, if the shot goes through it. A shot read ahead,
-    /// not the camera's velocity, so one that slows to turn in front of a door has it open
-    /// as it comes.
+    /// ahead: once the shot, from where its eye is `FILM_LEAD_S` from now, goes through the
+    /// doorway within `FILM_REACH_M` along its path (in plan). By distance along the shot,
+    /// not time, so one that slows or holds short of a door has it open as it comes, and
+    /// one that turns in from the side measures the way it will walk.
     pub fn film(&mut self, path: &[Vec3], every: f32, width: f32, keys: bool, dt: f32) {
         if !self.opened()
             && let Some(&now) = path.first()
+            && let Some(along) = Door::along_to_doorway(path, every, width)
+            && along <= FILM_REACH_M
+            && self.gives(now.z > 0.0, keys)
         {
-            let half = width * 0.5;
-            let lead = ((FILM_LEAD_S / every).round() as usize).min(path.len() - 1);
-            let near = path[..=lead]
-                .iter()
-                .any(|p| Vec2::new((p.x.abs() - half).max(0.0), p.z).length() <= FILM_REACH_M);
-            let through = path.windows(2).any(|pair| {
-                let (a, b) = (pair[0], pair[1]);
-                a.z * b.z <= 0.0 && a.z != b.z && {
-                    let x = a.x + (b.x - a.x) * a.z / (a.z - b.z);
-                    x.abs() <= half
-                }
-            });
-            if near && through && self.gives(now.z > 0.0, keys) {
-                self.push(now.z > 0.0);
-            }
+            self.push(now.z > 0.0);
         }
         self.turn(dt);
+    }
+
+    /// How far in plan the shot `path` walks from its eye `FILM_LEAD_S` ahead to where it
+    /// first goes through the doorway `width` across, if it does.
+    fn along_to_doorway(path: &[Vec3], every: f32, width: f32) -> Option<f32> {
+        let lead = ((FILM_LEAD_S / every).round() as usize).min(path.len() - 1);
+        let mut along = 0.0;
+        for (i, pair) in path.windows(2).enumerate() {
+            let (a, b) = (pair[0], pair[1]);
+            // Before the lead the body is already there: what it walks counts from the lead.
+            let step = if i < lead {
+                0.0
+            } else {
+                Vec2::new(b.x - a.x, b.z - a.z).length()
+            };
+            if a.z * b.z <= 0.0 && a.z != b.z {
+                let f = a.z / (a.z - b.z);
+                if (a.x + (b.x - a.x) * f).abs() <= width * 0.5 {
+                    return Some(along + step * f);
+                }
+            }
+            along += step;
+        }
+        None
     }
 
     /// Outside, the leaves swing into the room; inside, out of it.
@@ -324,6 +338,40 @@ mod tests {
             assert_eq!(door.swing, 1.0, "{shot}: into the room");
             let open_at = open_at.unwrap_or(0.0);
             assert!(open_at > 1.6, "{shot}: open only {open_at:.2} m out");
+        }
+    }
+
+    #[test]
+    fn a_shot_holding_3_m_short_of_a_door_sees_it_open_while_it_holds() {
+        // As a tour slows to hold 3 m out while the leaves swing, then walks through.
+        let eye = Vec3::new(0.2, 1.6, 0.0);
+        let hold = eye + Vec3::Z * 3.0;
+        for (shot, hold_s) in [("held a second", 1.0), ("held two seconds", 2.0)] {
+            let path = move |t: f32| {
+                if t < 3.0 {
+                    dolly(eye + Vec3::Z * 10.0, hold, 0.0, 3.0)(t)
+                } else {
+                    dolly(hold, eye - Vec3::Z * 2.0, 3.0 + hold_s, 6.0 + hold_s)(t)
+                }
+            };
+            let mut door = Door::shut(Lock::None);
+            let mut open_by = None;
+            for k in 0..(9.0 / DT) as usize {
+                let t = k as f32 * DT;
+                let ahead: Vec<Vec3> = (0..=(FILM_HORIZON_S / EVERY) as usize)
+                    .map(|n| path(t + n as f32 * EVERY))
+                    .collect();
+                door.film(&ahead, EVERY, WIDTH, false, DT);
+                if door.swing >= 1.0 && open_by.is_none() {
+                    open_by = Some(t);
+                }
+            }
+            let open_by = open_by.unwrap_or(f32::INFINITY);
+            assert!(
+                open_by <= 3.0 + hold_s * 0.5,
+                "{shot}: fully open only at {open_by:.2} s, the hold ends at {:.1} s",
+                3.0 + hold_s
+            );
         }
     }
 
