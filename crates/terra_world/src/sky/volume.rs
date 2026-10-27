@@ -142,19 +142,27 @@ impl Plugin for VolumePlugin {
 
 /// The noise, baked once on every core.
 fn bake(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let noise = images.add(noise_image());
+    commands.insert_resource(Noise(noise));
+}
+
+/// The baked noise as a 3D image with its mips. Built uninitialised and given its data after:
+/// `Image::new` asserts the data is the top level alone (in debug builds only), and the bake
+/// carries every level.
+fn noise_image() -> Image {
     let side = noise3d::SIDE;
-    let mut image = Image::new(
+    let mut image = Image::new_uninit(
         Extent3d {
             width: side,
             height: side,
             depth_or_array_layers: side,
         },
         TextureDimension::D3,
-        noise3d::bake(),
         // Amounts, not colours.
         TextureFormat::Rgba8Unorm,
         RenderAssetUsages::RENDER_WORLD,
     );
+    image.data = Some(noise3d::bake());
     image.texture_descriptor.mip_level_count = noise3d::LEVELS;
     image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
         address_mode_u: ImageAddressMode::Repeat,
@@ -162,8 +170,7 @@ fn bake(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         address_mode_w: ImageAddressMode::Repeat,
         ..ImageSamplerDescriptor::linear()
     });
-    let noise = images.add(image);
-    commands.insert_resource(Noise(noise));
+    image
 }
 
 #[derive(Resource)]
@@ -315,5 +322,20 @@ fn keep_veil_around(
 ) {
     for mut t in &mut veil {
         t.translation = camera.translation;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The image holds every mip level the descriptor names, as the GPU upload reads them.
+    #[test]
+    fn noise_image_holds_every_level() {
+        let image = noise_image();
+        let side = noise3d::SIDE as usize;
+        let levels: usize = (0..noise3d::LEVELS).map(|l| (side >> l).pow(3) * 4).sum();
+        assert_eq!(image.data.as_ref().map(Vec::len), Some(levels));
+        assert_eq!(image.texture_descriptor.mip_level_count, noise3d::LEVELS);
     }
 }
