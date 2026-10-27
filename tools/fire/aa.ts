@@ -34,6 +34,19 @@ export function compare(a: Uint8Array, b: Uint8Array, w: number, channels = 3) {
   return { pixels, most, mean: pixels ? sum / pixels : 0, box };
 }
 
+/// The share of a picture that must differ for a frame to count as sporadic: a whole frame's
+/// light changed between the runs, not the flame-sized patches round the fire (D472). A sporadic
+/// frame differs nearly everywhere (97% in determinism5's probes), the others under a tenth.
+export const WHOLE = 0.5;
+
+/// The sporadic frames among pairs of one frame from two runs: those whose pictures differ over
+/// more than `share` of their pixels, in frame order.
+export function sporadic(pairs: Iterable<{ frame: number; a: Uint8Array; b: Uint8Array; w: number }>, share = WHOLE, channels = 3) {
+  const out: number[] = [];
+  for (const { frame, a, b, w } of pairs) if (compare(a, b, w, channels).pixels > share * (a.length / channels)) out.push(frame);
+  return out.sort((x, y) => x - y);
+}
+
 const raw = (png: string, grey: boolean) => {
   const out = execFileSync("ffmpeg", ["-v", "error", "-i", png, "-f", "rawvideo", "-pix_fmt", grey ? "gray" : "rgb24", "-"], { maxBuffer: 2 ** 28 });
   return new Uint8Array(out.buffer, out.byteOffset, out.length);
@@ -68,6 +81,14 @@ if (import.meta.main) {
     const other = new Set(frames(dirs[r]));
     const differ = names.filter((n) => other.has(n) && sha(join(a, n)) !== sha(join(b, n)));
     lines.push(`r0 against r${r}: ${names.length} files (${other.size} in r${r}), ${differ.length} differ; first ${differ.slice(0, 6).join(" ")}`);
+    // Every picture, not the sample below: the sporadic frames move from run to run (determinism5).
+    const pictures = differ.filter((n) => !n.endsWith(".matte.png"));
+    const { w } = size(join(a, names[0]));
+    const whole = sporadic((function* () {
+      for (const n of pictures) yield { frame: +/f-0*(\d+)/.exec(n)![1], a: raw(join(a, n), false), b: raw(join(b, n), false), w };
+    })());
+    const all = names.filter((n) => !n.endsWith(".matte.png")).length;
+    lines.push(`sporadic frames r0 against r${r} (over ${WHOLE * 100}% of the picture differs): ${whole.length} of ${all}: ${whole.slice(0, 40).join(" ")}`);
     // Frame 120 always: the gate's films start there (film.ts's roll), so it is what they see first.
     const roll = names.filter((n) => +(/f-0*(\d+)/.exec(n)?.[1] ?? -1) === ROLL);
     const sampled = [...differ.slice(0, 4), ...differ.filter((_, i) => i % 50 === 0).slice(1, 8)];
