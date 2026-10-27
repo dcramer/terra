@@ -1599,7 +1599,15 @@ const TORCH_WHITE: vec3<f32> = vec3<f32>(0.95, 0.6, 3.0);
 const TORCH_WARM: f32 = 0.35;
 // How much sooner in from its edge a torch's white-hot heart starts (`field_flame`'s heart): a
 // large white-yellow core hugging the head (the judge's fix; at 1, white only in specks there).
-const TORCH_HEART: f32 = 1.4;
+// Torch round t7: 1 once its foot is lifted clear of the head (`TORCH_LIFT`), where its heart
+// shows whole: at 1.4 the flame read 38% white against the photographs' 12 (at 1, 22-25).
+const TORCH_HEART: f32 = 1.0;
+// Torch round t7 (five of six judges: "a glowing orange cup", its foot an even sleeve cut flat
+// across the head): its density fades in from x of its height over y, the edge ragged by z.
+const TORCH_BASE: vec3<f32> = vec3<f32>(-0.15, 0.25, 0.3);
+// Its foot raised x of its flames' height (the head's top edge, its foot being the head's middle)
+// and its height y of what it was, so it rises off the wrap with its pale heart at its foot.
+const TORCH_LIFT: vec2<f32> = vec2<f32>(0.3, 0.85);
 fn torch_cover(hg: f32) -> f32 {
     return mix(1.0, TORCH_SEE.z, smoothstep(TORCH_SEE.x, TORCH_SEE.y, hg));
 }
@@ -1659,13 +1667,14 @@ fn hearth_field(slot: u32) -> HearthField {
     if a.w < TORCH_M {
         // A torch: as tall as it burns (`hearth`), from a little inside its head.
         f.torch = true;
+        f.foot = a.xyz + f.up * a.w * TORCH_LIFT.x;
         f.wide = select(a.w * 0.4, b.z, b.z > 0.0);
-        f.tall = a.w * TORCH_FIELD_TALL * mix(1.0, f.glow, FIELD_GLOW.x);
+        f.tall = a.w * TORCH_FIELD_TALL * TORCH_LIFT.y * mix(1.0, f.glow, FIELD_GLOW.x);
         f.scale = 1.0 / max(a.w * TORCH_FIELD_TALL, 1.0e-3);
         f.puffs = FIELD_PUFF.y * clamp(sqrt(0.7 / max(f.wide, 0.05)), 0.8, 1.5);
         f.k = FIELD_K * TORCH_THICK;
         f.reach = f.wide * 1.1;
-        f.under = f.tall * 0.12;
+        f.under = f.tall * 0.3;
         f.at[0] = vec4(0.0, 0.0, -f.tall * 0.08, f.tall * 1.08);
         f.size[0] = f.wide * TORCH_FIELD_R;
         f.lobes = 1;
@@ -2028,7 +2037,12 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
     if f.torch {
         let lane = noise3(vec3(q.x * TORCH_LANES.x * s, q.z * TORCH_LANES.x * s, hg * TORCH_LANES.y - time * TORCH_LANES.z) + luck);
         v -= TORCH_TEAR.z * smoothstep(TORCH_TEAR.x, TORCH_TEAR.y, hg) * smoothstep(TORCH_LANES.w, TORCH_LANES.w + 0.2, lane);
-        return field_flame(v, hg, f, TORCH_HEART);
+        // Its foot thins out over the head (`TORCH_BASE`) along a ragged, rising edge, so the
+        // charred wrap shows under and through it.
+        let foot = noise3(vec3(q.x * TORCH_LANES.x * s, q.z * TORCH_LANES.x * s, p.y * s * 1.5 - time * TORCH_LANES.z) + luck.yzx);
+        let edge = TORCH_BASE.x + TORCH_BASE.z * (foot - 0.5);
+        let g = field_flame(v, hg, f, TORCH_HEART);
+        return vec3(g.x * smoothstep(edge, edge + TORCH_BASE.y, p.y / f.tall), g.y, g.z);
     }
     return field_flame(v, hg, f, 1.0);
 }
