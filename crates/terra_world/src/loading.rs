@@ -120,7 +120,7 @@ impl Shaders {
 /// How many things in view the render world could not yet draw, and could, as it last said
 /// while loading.
 #[derive(Resource, Default)]
-struct Drawables {
+pub(crate) struct Drawables {
     waiting: usize,
     ready: usize,
     /// Some of those waiting, with what they wait for, to say which.
@@ -243,12 +243,21 @@ pub fn plugin(app: &mut App) {
         .add_systems(ExtractSchedule, (count_shaders, count_drawables));
 }
 
-/// Counted only while loading, which is all that reads it.
-fn count_shaders(mut main_world: ResMut<MainWorld>, pipelines: Res<PipelineCache>) {
-    let loading = main_world
+/// Whether the render world says what it cannot draw yet and which shaders compile: while
+/// loading, and all through a scripted run, whose hold waits on them as on the files and
+/// models it put in the world ([`hold::watch`]). Not a bench's, which is never held.
+fn counted(main_world: &World) -> bool {
+    main_world
         .get_resource::<State<Screen>>()
-        .is_some_and(|screen| *screen.get() == Screen::Loading);
-    if !loading {
+        .is_some_and(|screen| *screen.get() == Screen::Loading)
+        || main_world
+            .get_resource::<Options>()
+            .is_some_and(|options| options.scripted() && !options.bench)
+}
+
+/// Counted only while it is read ([`counted`]).
+fn count_shaders(mut main_world: ResMut<MainWorld>, pipelines: Res<PipelineCache>) {
+    if !counted(&main_world) {
         return;
     }
     if let Some(mut shaders) = main_world.get_resource_mut::<Shaders>() {
@@ -260,7 +269,7 @@ fn count_shaders(mut main_world: ResMut<MainWorld>, pipelines: Res<PipelineCache
 /// Counts what is in view and whether it can be drawn: its mesh and its material, with the
 /// textures the material uses, prepared on the GPU. A material whose texture is still
 /// loading is not drawn at all, so a figure in a skin still loading is missing, not plain.
-/// Counted only while loading, since it looks at everything in view.
+/// Counted only while it is read ([`counted`]), since it looks at everything in view.
 fn count_drawables(
     mut main_world: ResMut<MainWorld>,
     instances: Option<Res<RenderMaterialInstances>>,
@@ -268,11 +277,8 @@ fn count_drawables(
     placed: Option<Res<RenderMeshInstances>>,
     meshes: Option<Res<RenderAssets<RenderMesh>>>,
 ) {
-    let loading = main_world
-        .get_resource::<State<Screen>>()
-        .is_some_and(|screen| *screen.get() == Screen::Loading);
     let (true, Some(instances), Some(materials), Some(placed), Some(meshes)) =
-        (loading, instances, materials, placed, meshes)
+        (counted(&main_world), instances, materials, placed, meshes)
     else {
         return;
     };

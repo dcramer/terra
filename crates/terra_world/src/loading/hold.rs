@@ -6,12 +6,14 @@
 //! load of 40) the campfire's model had not loaded by the shot on frame 330, five seconds
 //! on, so whole hours of the fire sheet came out with no logs or stones. So a scripted run
 //! stands still while a file asked to be waited for ([`super::Loading::wait_for`]) or a
-//! model put in the world is still coming, and for the loading screen's quiet frames after:
+//! model put in the world is still coming, or anything in view cannot be drawn yet (its
+//! mesh, material or textures not on the GPU, or its shaders compiling), as the loading
+//! screen waits, and for the loading screen's quiet frames after:
 //! its frames are not counted, so no call, press or shot happens, and the game clock is
 //! held, so what a frame shows is what it shows on a fast machine. A bench is never held,
 //! since a load's hitches are what it measures.
 
-use super::{Loading, QUIET_FRAMES, Screen, asked_coming, placing};
+use super::{Drawables, Loading, QUIET_FRAMES, Screen, Shaders, asked_coming, placing};
 use crate::shell::{Options, ScriptFrame};
 use bevy::{
     diagnostic::FrameCount,
@@ -112,17 +114,26 @@ pub(crate) fn watch(
     spawner: Res<WorldInstanceSpawner>,
     models: Query<(&WorldAssetRoot, Option<&WorldInstance>)>,
     (mut clock, frame): (ResMut<Time<Virtual>>, Res<crate::shell::ScriptFrame>),
+    (drawables, shaders): (Res<Drawables>, Res<Shaders>),
 ) {
     if !options.scripted() || options.bench || *screen.get() != Screen::Playing {
         return;
     }
     let files = asked_coming(&mut loading, &assets);
     let models = placing(&assets, &spawner, &models);
-    match hold.frame(files + models, Instant::now(), &mut clock) {
+    // A model placed is not yet drawn: its meshes and textures go up over frames (at most
+    // 128 MiB a frame, D420) and its pipelines compile, as many frames as the wall clock
+    // took. Released with models placed alone, two films of one build showed a staged
+    // campfire's stones and cleared ground on script frame 4 in one and not the other (D472).
+    let drawing = drawables.waiting + shaders.compiling;
+    match hold.frame(files + models + drawing, Instant::now(), &mut clock) {
         Some(Turn::Released { waited, gave_up }) if gave_up => warn!(
-            "Script frame {} held {} s for what never came, going on without it: {files} files, {models} models.",
+            "Script frame {} held {} s for what never came, going on without it: {files} files, {models} models, {} not drawable, {} shaders: {:?}.",
             frame.0,
-            waited.as_secs()
+            waited.as_secs(),
+            drawables.waiting,
+            shaders.compiling,
+            drawables.missing.iter().take(8).collect::<Vec<_>>()
         ),
         Some(Turn::Released { waited, .. }) if waited > SAY_AFTER => info!(
             "Script frame {} held {:.1} s while what it put in the world loaded.",
@@ -330,6 +341,79 @@ mod tests {
         // Then on, a frame a frame.
         let last = frames.last().unwrap().0;
         assert_eq!(last, 3 + (15 - QUIET_FRAMES + 1));
+    }
+
+    /// A scripted run's script frame on each real frame, through the hold's own system, with
+    /// nothing coming but `waiting` things in view the render world cannot draw yet on each
+    /// frame (said as drawables, or as shaders compiling when `shaders`).
+    fn drawn(waiting: &[usize], shaders: bool) -> Vec<u32> {
+        let assets = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin {
+                file_path: assets.to_string_lossy().into_owned(),
+                watch_for_changes_override: Some(false),
+                ..default()
+            },
+        ))
+        .insert_resource(
+            Options::from_args(["--shots", "out/x@5"].map(String::from).into_iter()).unwrap(),
+        )
+        .insert_resource(State::new(Screen::Playing))
+        .init_resource::<Hold>()
+        .init_resource::<Loading>()
+        .init_resource::<WorldInstanceSpawner>()
+        .init_resource::<ScriptFrame>()
+        .init_resource::<Drawables>()
+        .init_resource::<Shaders>()
+        .add_systems(Update, watch);
+        let mut script = 0;
+        waiting
+            .iter()
+            .map(|&waiting| {
+                if shaders {
+                    app.world_mut().resource_mut::<Shaders>().compiling = waiting;
+                } else {
+                    app.world_mut().resource_mut::<Drawables>().waiting = waiting;
+                }
+                app.update();
+                if !app.world().resource::<Hold>().holds() {
+                    script += 1;
+                }
+                script
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_script_stands_still_until_what_it_put_in_the_world_can_be_drawn() {
+        // A model placed by the third frame, its meshes and textures going up (or its
+        // shaders compiling) over the next 12 frames, as many as the wall clock took.
+        for shaders in [false, true] {
+            let mut waiting = vec![0; 3];
+            waiting.extend([4; 12]);
+            waiting.extend([0; 15]);
+            let frames = drawn(&waiting, shaders);
+            assert_eq!(frames[2], 3);
+            let held = 12 + QUIET_FRAMES as usize - 1;
+            for (i, &script) in frames.iter().enumerate().skip(3).take(held) {
+                assert_eq!(
+                    script, 3,
+                    "frame {i} counted, not drawable (shaders {shaders})"
+                );
+            }
+            // The same script frames, however long the upload took.
+            let mut slow = vec![0; 3];
+            slow.extend([4; 40]);
+            slow.extend([0; 15]);
+            let slow = drawn(&slow, shaders);
+            assert_eq!(
+                frames.last(),
+                slow.last(),
+                "a slower upload moved the script"
+            );
+        }
     }
 
     #[test]
