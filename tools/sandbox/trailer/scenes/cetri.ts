@@ -63,6 +63,22 @@ const ROARS = { upperarm_l: [-20, 0, 35], upperarm_r: [-20, 0, -35], spine_03: [
 const LUNGES = { spine_01: [22, 0, 0], spine_02: [12, 0, 0], spine_03: [8, 0, 0], neck_01: [-6, 0, 0], Head: [-8, 0, 0] };
 /// Coming on: still leant into its steps.
 const COMES = { spine_01: [7, 0, 0], spine_02: [4, 0, 0] };
+/// The wind-up before the lunge, slow as a great weight is gathered: the trunk drawn back,
+/// both limbs hauled up and back over the crown.
+const WINDS = {
+  spine_01: [-9, 0, 0],
+  spine_02: [-6, 0, 0],
+  neck_01: [4, 0, 0],
+  upperarm_l: [-35, 0, 95],
+  upperarm_r: [-35, 0, -95],
+  lowerarm_l: [0, 0, 20],
+  lowerarm_r: [0, 0, -20],
+};
+/// The lunge's follow-through: the trunk carried on past it by its own weight, the crown,
+/// which lagged, whipped after it; then it settles back into LUNGES.
+const THROWN = { spine_01: [27, 0, 0], spine_02: [15, 0, 0], spine_03: [10, 0, 0], neck_01: [5, 0, 0], Head: [6, 0, 0] };
+/// Seconds between the footfalls of its slowed walk, each felt as a jolt in the walker's eye.
+const STEP_S = 1.0;
 
 function script(s: Script) {
   const f = (t: number) => ROLLS + Math.round(t * 60);
@@ -99,12 +115,24 @@ function script(s: Script) {
   s.call("staged.play", { name: "cetri", clip: "Troll_Roar", speed: 0.6, once: true, blend_ms: 1200 });
   s.call("staged.morph", { name: "cetri", weights: { Wake: 1 }, blend_ms: 1400 });
 
-  // The lunge: the trunk tips at the walker, who flinches back a step, so it looms.
+  // The lunge: a slow wind-up, then the trunk thrown at the walker, carried past by its weight,
+  // the crown whipping after it; the walker flinches back a step and the ground jolts.
+  s.frame = f(BEATS.lunge - 1.1);
+  s.call("staged.bend", { name: "cetri", bend: WINDS, blend_ms: 1000 });
   s.frame = f(BEATS.lunge);
-  s.call("staged.play", { name: "cetri", clip: "Troll_Smash", speed: 0.55, once: true, blend_ms: 500 });
-  s.call("staged.bend", { name: "cetri", bend: LUNGES, blend_ms: 700 });
+  s.call("staged.play", { name: "cetri", clip: "Troll_Smash", speed: 0.55, once: true, blend_ms: 350 });
+  s.call("staged.bend", { name: "cetri", bend: LUNGES, blend_ms: 420 });
+  s.frame = f(BEATS.lunge + 0.45);
+  s.call("staged.bend", { name: "cetri", bend: THROWN, blend_ms: 320 });
+  s.frame = f(BEATS.lunge + 1.0);
+  s.call("staged.bend", { name: "cetri", bend: LUNGES, blend_ms: 1100 });
+  s.frame = f(BEATS.lunge);
   const back = toward(CETRI, WALK[1], Math.hypot(WALK[1][0] - CETRI[0], WALK[1][1] - CETRI[1]) + 1);
-  s.glide(on(back, EYE - 0.15), look(4.2), 70);
+  s.glide(on(back, EYE - 0.15), look(4.2), 40);
+  s.frame = f(BEATS.lunge) + 40;
+  s.glide(on(back, EYE - 0.25), look(4.0), 5);
+  s.frame = f(BEATS.lunge) + 45;
+  s.glide(on(back, EYE - 0.15), look(4.2), 25);
 
   // Then it comes on, slow and heavy, gaining on the walker backing away looking up at it.
   s.frame = f(BEATS.comes);
@@ -113,7 +141,20 @@ function script(s: Script) {
   s.call("staged.play", { name: "cetri", clip: "Troll_Walk", speed: 0.6, blend_ms: 900 });
   s.call("staged.move", { name: "cetri", to: [to[0], 0, to[1]], speed: 0.48, base: true });
   const away = toward(CETRI, back, Math.hypot(back[0] - CETRI[0], back[1] - CETRI[1]) + 1);
-  s.glide(on(away, EYE - 0.1), on(to, 5), Math.round((BEATS.end - BEATS.comes) * 60));
+  // Backing away, the eye jolted down a little at each of its footfalls.
+  const steps = Math.floor((BEATS.end - BEATS.comes) / STEP_S);
+  const mix = (a: Vec3, b: Vec3, t: number): Vec3 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const [eye0, eye1] = [on(back, EYE - 0.15), on(away, EYE - 0.1)];
+  const [at0, at1] = [look(4.2), on(to, 5)];
+  for (let k = 0; k < steps; k++) {
+    const t0 = BEATS.comes + 0.35 + k * STEP_S;
+    const [a, b] = [(k + 0.1) / steps, (k + 1) / steps];
+    const jolt = mix(eye0, eye1, a);
+    s.frame = f(t0);
+    s.glide([jolt[0], jolt[1] - 0.07, jolt[2]], mix(at0, at1, a), 5);
+    s.frame = f(t0) + 5;
+    s.glide(mix(eye0, eye1, b), mix(at0, at1, b), Math.round(STEP_S * 60) - 5);
+  }
   s.frame = f(BEATS.end);
 }
 
