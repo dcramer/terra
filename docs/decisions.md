@@ -95,7 +95,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D522](decisions/D522.md) | How dramatic a storm's sky is | Design | Developers | Decided | A storm's sky is heightened beyond real: darker… |
 | [D527](decisions/D527.md) | Four dungeon themes on a bigger grid: barrow halls, hewn mine, natural caverns, ancient engineered halls | Design | Developers | Decided | Dungeons come in four themes, each a kit reused across… |
 | [D539](decisions/D539.md) | A dungeon's rooms are dressed as room types, each a hero prop, wall props, floor clutter and a story vignette | Design | — | Open | Proposal (dungeons.md, room types)… |
-| [D544](decisions/D544.md) | The world's heights: how high one goes and where the clouds stand | Design | — | Open | Recommended: heights are Earth's up to 3 km over the sea… |
+| [D544](decisions/D544.md) | The world's heights: how high one goes and where the clouds stand | Design | Developers | Decided | Heights are Earth's up to 3 km over the sea… |
 
 ## The player and survival
 
@@ -405,7 +405,7 @@ The look, models, bodies and gear, textures and audio.
 | [D317](decisions/D317.md) | Under the trees shiny things mirror leaves, not the open sky | Tech | Agent | Decided | The sky's reflection is scaled by how much sky is open… |
 | [D318](decisions/D318.md) | The lush forest a tall Scots pine stand, each pine's crown pads of needle tufts | Tech | Agent | Decided | Amends D223, D235, D247, D273, D276, D289 and D309… |
 | [D329](decisions/D329.md) | What the player wears | Design | Developers | Decided | A player starts in a leather coat with long sleeves… |
-| [D334](decisions/D334.md) | The air's scale is the world's | Tech | Agent | Decided | Its dust is as much of that haze as the day's warmth… |
+| [D334](decisions/D334.md) | The air's scale is the world's | Tech | Agent | Decided | Amends D212 and D299; D544 sets the vertical… |
 | [D336](decisions/D336.md) | Under the trees the low sky is hidden by stems, and reflections follow the sky open round the eye | Tech | Agent | Decided | The sky-occlusion bake counts a trunk under every crown… |
 | [D347](decisions/D347.md) | What people do, made, not taken | Tech | Agent | Decided | The clips a town's people play at their work and talk… |
 | [D356](decisions/D356.md) | The environment's style written down and checked | Tech | Agent | Decided | The art guide's Places section (docs/art-style.md)… |

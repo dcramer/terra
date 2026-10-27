@@ -1,6 +1,6 @@
 # Sky
 
-Status: **building, 2026-10-27**: stages 0 and 1 done, stage 2's volumetric layer drawn on the high preset and measured under and inside cloud (below); the world's heights and the clouds' proposed ([Heights](#heights), D544, Open). The developers answered its design questions on the review desk (D516 to D522, below); how the sky is drawn and checked is technical (D515, Leaning until stage 2 measures the ported clouds within the budget on both GPUs and above cloud). Stage 0 measured the open Bevy branch: [research/2026-10-26-volumetric-clouds-spike.md](../research/2026-10-26-volumetric-clouds-spike.md). It is the sky's half of [weather.md](weather.md), which owns the light under cloud, the air, what falls and the surfaces; [climate.md](climate.md) owns the quantities. What shipped games and engines do, with sources, is [research/2026-10-26-volumetric-skies.md](../research/2026-10-26-volumetric-skies.md).
+Status: **building, 2026-10-27**: stages 0 and 1 done, stage 2's volumetric layer drawn on the high preset and measured under and inside cloud (below); the world's heights and the clouds' decided ([Heights](#heights), D544: Earth's to 3 km, 2.5 to one above, the ceiling 6.2 km). The developers answered its design questions on the review desk (D516 to D522, below); how the sky is drawn and checked is technical (D515, Leaning until stage 2 measures the ported clouds within the budget on both GPUs and above cloud). Stage 0 measured the open Bevy branch: [research/2026-10-26-volumetric-clouds-spike.md](../research/2026-10-26-volumetric-clouds-spike.md). It is the sky's half of [weather.md](weather.md), which owns the light under cloud, the air, what falls and the surfaces; [climate.md](climate.md) owns the quantities. What shipped games and engines do, with sources, is [research/2026-10-26-volumetric-skies.md](../research/2026-10-26-volumetric-skies.md).
 
 ## Why
 
@@ -14,7 +14,7 @@ Today Bevy's physical atmosphere draws the sky's colour and the sun (D212); over
 - **The sky is the climate's picture** (D315, D418). Cloud, its kind, its base and where it moves come from the climate's quantities (cover, what falls, humidity, temperature, wind), as Microsoft Flight Simulator's clouds are its weather model's; never a sky preset or a "storm" flag.
 - **Clouds are volumes, lit by physics.** Their shades come from how light scatters in them (dark bases, bright tops, the silver lining toward the sun, bright interiors from light bouncing many times), not from painted colours, so they are right at every hour and under every sun without tuning.
 - **Clouds are a light.** The clouds drawn are the clouds that shadow the ground, dim the sun, cut shafts in the haze (D217) and light the shade through the sky light (D490, D492). The shade and the sky never disagree.
-- **Clouds stand at their real heights** above the ground, Earth's where the ground reaches and scaled over it ([Heights](#heights), D544, Open), so a 2.5 km peak pierces a cumulus field and a valley fills with stratus, but spread in the air's own frame (D212, D334), so a layer recedes to the horizon as it does on Earth rather than closing over a 30 km world as a ceiling.
+- **Clouds stand at their real heights** above the ground, Earth's where the ground reaches and scaled over it ([Heights](#heights), D544), so a 2.5 km peak pierces a cumulus field and a valley fills with stratus, but spread in the air's own frame (D212, D334), so a layer recedes to the horizon as it does on Earth rather than closing over a 30 km world as a ceiling.
 - **Clouds hold up from every side** (D519): from below, from peaks, from inside and from above, from the first volumetric stage.
 - **The same sky for everyone** (D52, D312). Clouds, their motion and lightning are functions of the seed and the world's clock, which is all the server sends of the weather (D315); nothing in the sky reads a machine's own run time.
 - **Port, don't invent** (D196): the method every shipped game uses (Horizon's Nubis, Frostbite, Unreal, RDR2), code from the open implementation on Bevy's own atmosphere (D515).
@@ -48,36 +48,51 @@ The eye goes into and over cloud from the first volumetric stage (D519), as in H
 
 ## Heights
 
-Proposed, **Open** (D544): the developer, 2026-10-27, "we probably also need to define how high you can go, where cloud layers should be etc" and "it should be realistic but scaled down". The numbers below are the recommendation, for the developers to answer.
+**Decided** (D544, the developers, "for now"): heights are Earth's up to 3 km over the sea, and above it each metre stands for 2.5 real ones. The developer, 2026-10-27: "we probably also need to define how high you can go, where cloud layers should be etc", "it should be realistic but scaled down"; of the first proposal (halved above 3 km, a 7 km ceiling), "might still be a LITTLE high for how big our world would be.. like where would the atmosphere edge be (aka where you'd start dying)"; of this one, "ok im fine with this decision for now".
 
 ### The scale
 
-The starting world is 30 km round its centre (D13), Earth 6,371 km: its radius is 1/212 of Earth's. Its ground is not scaled: the start's mountains stand at the Tatras' own height (valleys about 950 m over the sea, crests about 2.8 km, horns some hundreds of metres over them: `Mountains::START`, D322, D425), and the climate cools 6.5 °C a kilometre as Earth's air does ([climate.md](climate.md)), which sets the tree and snow lines. So one factor cannot scale it all: halving the mountains would undo D425, and halving the low clouds under real mountains would stand cumulus where Espy's rule and the lapse rate make no cloud. Recommended, two numbers:
+The starting world is 30 km round its centre (D13), Earth 6,371 km: its radius is 1/212 of Earth's. Its ground is not scaled: the start's mountains stand at the Tatras' own height (valleys about 950 m over the sea, crests about 2.8 km, horns to about 3.7 km: `Mountains::START`, D322, D425), and the climate cools 6.5 °C a kilometre as Earth's air does ([climate.md](climate.md)), which sets the tree and snow lines. So one factor cannot scale it all: halving the mountains would undo D425, and halving the low clouds under real mountains would stand cumulus where Espy's rule and the lapse rate make no cloud. Two numbers:
 
 - **Up to 3 km over the sea, heights are Earth's** (scale 1): all the ground reaches and the air it makes (fog, valley cloud, stratus, stratocumulus, cumulus bases), the freezing level, the tree and snow lines.
-- **Above 3 km, one metre stands for two** (scale 1/2): the free air over the highest crests, `ours = 3 km + (Earth's − 3 km) / 2`. Earth's mid-latitude tropopause, 11 km, stands at 7 km.
+- **Above 3 km, one metre stands for 2.5** (scale 1/2.5): the free air over the highest crests, `ours = 3 km + (Earth's − 3 km) / 2.5`, and back, `Earth's = 3 km + (ours − 3 km) × 2.5`.
+
+| Height | Earth | Arithmetic | Ours |
+|---|---|---|---|
+| Crests; altitude sickness begins | 2.5 to 3 km | under 3 km: the same | 2.8 to 3 km |
+| Death zone (no one lives long) | 8 km | 3 + (8 − 3) / 2.5 | **5 km** |
+| Tropopause, mid-latitude; the ceiling | 11 km, −56 °C, a fifth of the sea's pressure | 3 + 8 / 2.5 | **6.2 km** |
+| Airliners | 11 to 12 km | 3 + (8 to 9) / 2.5 | 6.2 to 6.6 km |
+| Cumulus congestus tops | 6 km | 3 + 3 / 2.5 | 4.2 km |
+| Altocumulus, altostratus | 2 to 7 km, mostly 3 to 5 | 2; 3 + 4 / 2.5; 3 + 2 / 2.5 | 2 to 4.6 km, mostly 3 to 3.8 |
+| Nimbostratus tops | 3 to 5 km | 3; 3 + 2 / 2.5 | 3 to 3.8 km |
+| Cirrus, cirrostratus | 5 to 13 km, mostly 8 to 11 | 3 + 2 / 2.5; 3 + 10 / 2.5; 3 + 5 / 2.5 | 3.8 to 7 km, mostly 5 to 6.2 |
+| Cumulonimbus anvil | at the tropopause, 10 to 13 km | 3 + (7 to 10) / 2.5 | 5.8 to 7 km; at our tropopause, 6.2 |
+| Overshooting storm tops | 16 km | 3 + 13 / 2.5 | 8.2 km, higher where heightened (D522) |
+| Armstrong limit (blood boils) | about 18 km | 3 + 15 / 2.5 | 9 km, beyond reach |
+| A black sky by day | some 30 km | 3 + 27 / 2.5 | 13.8 km, never reached |
 
 **The air's scale (D334)** stays the horizontal one: as far through the air as the farthest ground seen, about 1 (the true air) on the 30 km world with mountains, 18 on the 2 km stand-in. The vertical is this one: the air at an eye is the air of the real height its height stands for, never its height times the horizontal scale. Today `air::centre` puts an eye `scale` times its height up the air, so on the 2 km stand-in an eye 1.5 km up stands 27 km up it, where the sky is near black (sky stage 2, round 3).
 
 | | Earth | Ours |
 |---|---|---|
 | Radius | 6,371 km | 30 km (D13) |
-| Highest ground | 8.8 km; the Tatras' 2.65 km | crests about 2.8 km, horns a few hundred metres more (`Mountains::highest_m` bounds them at 5.3 km) |
-| Tropopause, mid-latitude | 11 km, −56 °C, a fifth of the sea's pressure | 7 km |
-| Highest a player goes | airliners 11 to 12 km, most birds under 3 km | 7 km, flying |
+| Highest ground | 8.8 km; the Tatras' 2.65 km | crests about 2.8 km, horns to about 3.7 km (`Mountains::highest_m` bounds them at 5.3 km; ground over 5 km would stand in the death zone) |
+| Highest a player goes | airliners 11 to 12 km, most birds under 3 km | 6.2 km, flying |
 | Horizon from the eye, 1.7 m | 4.7 km, 0.04° under the level | 319 m, 0.6° |
 | from a crest, 2.8 km | 189 km, 1.7° | 13 km, 24° |
-| from the ceiling, 7 km (11 km real) | 375 km, 3.4° | 22 km, 36° |
+| from the ceiling, 6.2 km (11 km real) | 375 km, 3.4° | 20 km, 34° |
 
 ### How high one goes
 
-- **On foot**: the highest summits, about 2.8 km and the horns over them, by climbing (D510).
+- **On foot**: the highest summits, about 2.8 km and the horns over them to about 3.7 km, by climbing (D510).
 - **Built**: no cap of its own; a building stands as high as building's rules hold it up, on whatever ground it stands.
-- **Flying**, later (fliers D382, flight in [magic.md](magic.md)): to a ceiling at the tropopause, 7 km. No wall: lift and a flier's climb fall with the air's density, as a real bird's or aircraft's do, so a climb slows to nothing there.
-- **The air thins** by the real height a height stands for: a summit's 0.7 of the sea's pressure at 3 km; 0.4 at 5 km (7 km real); about a fifth and −56 °C at the ceiling. Above 3 km the free air cools by its real height, 13 °C a kilometre of ours, so cirrus is ice where it stands. What thin, cold air does to a body (breath, stamina, frost) is a later design question, not this one.
+- **Flying**, later (fliers D382, flight in [magic.md](magic.md)): to a ceiling at the tropopause, 6.2 km. No wall: lift and a flier's climb fall with the air's density, as a real bird's or aircraft's do, so a climb slows to nothing there.
+- **The air thins** by the real height a height stands for: a summit's 0.7 of the sea's pressure at 3 km; 0.35 and −37 °C at 5 km (8 km real); about a fifth and −56 °C at the ceiling. Above 3 km the free air cools by its real height, 16 °C a kilometre of ours, so cirrus is ice where it stands.
+- **Where the air kills**, for survival: thin air's sickness from about 3 km (the crests, Earth's own height); **the death zone from 5 km**, just over the highest summits, where on Earth no one lives long without bottled air; the ceiling at 6.2 km, air no one lives in. What thin, cold air does to a body (breath, stamina, frost) is a later design question ([survival.md](survival.md)), not this one; these are the heights it would hang on.
 - **Above the ceiling**: nothing a player reaches; only the sky.
 
-**The sky from the ceiling** is 11 km's: deep blue overhead, paling to a bright band at the air's horizon 3.4° under the level, never black (that takes a real height over some 30 km, which the scale never reaches). Cumulus fields and decks lie below as sunlit floors out to the air's horizon; cirrus and anvils at the eye's level and over it. The planet's own horizon is 36° under the level, 22 km off; between it and the air's lie the far land (D273) and the cloud over it. From a 2.8 km crest the same band runs from 24° to 1.7° down, so the far land fills it from every reachable height, not only the 5° D273 gives it today.
+**The sky from the ceiling** is 11 km's: deep blue overhead, paling to a bright band at the air's horizon 3.4° under the level, never black (that takes a real height over some 30 km, 13.8 km of ours, which no one reaches). Cumulus fields and decks lie below as sunlit floors out to the air's horizon; cirrus and anvils at the eye's level and over it. The planet's own horizon is 34° under the level, 20 km off; between it and the air's lie the far land (D273) and the cloud over it. From a 2.8 km crest the same band runs from 24° to 1.7° down, so the far land fills it from every reachable height, not only the 5° D273 gives it today.
 
 ### The clouds' heights
 
@@ -89,24 +104,24 @@ Low layers stand over the ground under them (their air rises from it), middle an
 | Valley cloud (fog in a cold pool) | tops 100 to 500 m over the valley's floor; a sea of fog's about 1 km over the sea (the Swiss plateau's) | the same: on the start's mountains it fills valleys at 950 m and wraps their walls, crests standing out of it |
 | Stratus, the overcast deck | base 0 to 500 m over the ground, tops 1 to 2 km | the same |
 | Stratocumulus | base 0.5 to 2 km over the ground, 0.2 to 0.5 km thick | the same |
-| Cumulus | base by Espy's rule (125 m a degree between temperature and dew point), 0.5 to 2 km over the ground; fair-weather tops 1 to 3 km; congestus to 6 km | base and fair-weather tops the same, over the mountains' valleys 1.5 to 3 km over the sea so crests pierce them; congestus to 4.5 km |
-| Nimbostratus | base near the ground to 2 km, tops 3 to 5 km | base the same, tops 3 to 4 km |
-| Altocumulus, altostratus | 2 to 7 km, mostly 3 to 5 | 2 to 5 km, mostly 3 to 4 |
-| Cirrus, cirrostratus | 5 to 13 km, mostly 8 to 11; ice | 4 to 8 km, mostly 5.5 to 7 |
-| Cumulonimbus | base under 1.5 km (Espy's rule); the anvil at the tropopause, 10 to 13 km; overshooting tops to 16 km | base the same; the anvil at 7 km; tops to 9.5 km, higher where a storm is heightened (D522) |
+| Cumulus | base by Espy's rule (125 m a degree between temperature and dew point), 0.5 to 2 km over the ground; fair-weather tops 1 to 3 km; congestus to 6 km | base and fair-weather tops the same, over the mountains' valleys 1.5 to 3 km over the sea so crests pierce them; congestus to 4.2 km |
+| Nimbostratus | base near the ground to 2 km, tops 3 to 5 km | base the same, tops 3 to 3.8 km |
+| Altocumulus, altostratus | 2 to 7 km, mostly 3 to 5 | 2 to 4.6 km, mostly 3 to 3.8 |
+| Cirrus, cirrostratus | 5 to 13 km, mostly 8 to 11; ice | 3.8 to 7 km, mostly 5 to 6.2 |
+| Cumulonimbus | base under 1.5 km (Espy's rule); the anvil at the tropopause, 10 to 13 km; overshooting tops to 16 km | base the same; the anvil at 6.2 km; tops to 8.2 km, higher where a storm is heightened (D522) |
 
-- **Winds above 3 km** are the real height's halved, so a high layer crosses the sky at the angle a minute it does on Earth; below, D540's.
+- **Winds above 3 km** are the real height's divided by 2.5, so a high layer crosses the sky at the angle a minute it does on Earth; below, D540's.
 - **Shells follow the air's curvature, not the planet's.** Each layer is a spherical shell round the air's centre (D212, D334: Earth's radius in the air's metres, `air::INNER_RADIUS_M / scale` in the world's, its sea under the eye), its heights `length(p − centre) − radius`. So a layer reaches the air's horizon as on Earth (a 1.5 km layer's 140 km off; on the planet's own curvature it would close as a ceiling under 10 km off, [research](../research/2026-10-26-volumetric-skies.md#7-seen-from-far-and-from-high)), and agrees with the 2D layer and the far land drawn in the same frame. Near the eye the two spheres agree (the planet's ground falls d²/2R under the air's: 0.4 km at 5 km out on the 30 km world, 1.7 km at 10 km), so peaks pierce a layer and its shadows land under it; farther the ground falls away beneath it, under the horizon from the ground and behind the far land and cloud from a summit. Each eye draws its own shells over one weather map, so players agree which cloud stands over which place.
 
 ### What stage 2's fixes must do
 
 1. **Judge above and inside cloud on the 30 km world** (`--radius 30000`, at the lake or from a crest), where the air is near true; on the 2 km `play` world an eye 1.5 km up looks down on a 2 km ball, round 3's curved horizon.
-2. **The eye's height in the air** (`air::centre`) is the real height its height stands for, never times the horizontal scale, so no reachable height on any world draws the black sky. Needed whichever scale D544 settles on.
+2. **The eye's height in the air** (`air::centre`) is the real height its height stands for, never times the horizontal scale, so no reachable height on any world draws the black sky. By D544's rule: `3 km + (ours − 3 km) × 2.5` above 3 km.
 3. **The march's heights over the air's sphere**, `length(p − centre) − radius`, in place of the flat slab's `y`, so the clouds meet the air's horizon rather than floating above it.
 4. **Each kind's base and top from the table**, cumulus's base by Espy's rule over the ground, in place of one slab from 300 m to 3.6 km for all.
 5. **Past the march's 32 km** the same shell carries on to the air's horizon (as the 2D layer, from the same map), so a field never ends in a ring.
 6. **The far land fills from the planet's horizon to the air's** from every reachable height (24° down from a crest), or Bevy's air draws its own bare ground there.
-7. **Checked**: stills above cloud from a 2.8 km crest and at 5 km, the sky overhead never darker than a photograph from the real height (a summit's; an airliner's at 7 km), and no band between the layer and the far land.
+7. **Checked**: stills above cloud from a 2.8 km crest and at the 6.2 km ceiling, the sky overhead never darker than a photograph from the real height (a summit's; an airliner's at 11 km), and no band between the layer and the far land.
 
 ## Light and shade
 

@@ -52,6 +52,7 @@ Part of the game's design ([gameplay.md](gameplay.md), adopted as the source of 
 Health, stamina, hunger, thirst and breath (D61, D74), mana (D102), and body temperature, probably (D153).
 
 - **Breath is the one rule for air:** under water you use it up (D74). There are no oxygen tanks or thin-air worlds for now (D89).
+- **Heights** (D544): the air at a height is that of the real height it stands for: thin air's sickness from about 3 km (the crests), the death zone from 5 km, just over the highest summits, and the ceiling at 6.2 km, air no one lives in. What thin, cold air does to a body is open; for now breath is used only under water.
 - **Each attribute is one rule plus numbers,** and a realm's theme sets the numbers (D59). A hot realm makes thirst rise faster, and a cold one makes warmth matter more. Adding an attribute is adding one rule, which every realm then sets numbers for.
 - **In the game's model,** each attribute is a component on whoever has it: the player, and later creatures. A system that reads where you are and what you are doing changes it. The server decides them, since a thousand players cannot be trusted to report their own health (D51, D52).
 - **What weather and seasons do to them** is in [climate.md](climate.md).

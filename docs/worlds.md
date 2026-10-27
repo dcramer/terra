@@ -59,7 +59,7 @@ What makes a world that size affordable:
 - **Only what is near a player is generated in full.** The terrain is level-of-detail voxels (D9): fine where you stand, coarse further off. Objects follow the same rule.
 - **Precision.** A 32-bit float at 30 km from a world's centre has steps of about 2 mm, which is fine for drawing but not for physics far from where it was measured. So positions are kept relative to a nearby origin that moves with the player, and the server holds world-scale positions in 64-bit (D36).
 - **The sandbox cannot test this yet.** Its stand-in world scales its hills with the radius, so asking it for 30 km gives hills kilometres across. The voxel terrain (D9, [terrain.md](terrain.md)) is what will make a large world look right.
-- **Height.** The ground stands at Earth's heights on a radius 1/212 of Earth's, so from a summit the curve shows strongly; how high one goes and where the clouds stand, Earth's heights to 3 km and halved above, is proposed in [sky.md](sky.md#heights) (D544, Open).
+- **Height.** The ground stands at Earth's heights on a radius 1/212 of Earth's, so from a summit the curve shows strongly; how high one goes and where the clouds stand is in [sky.md](sky.md#heights) (D544): Earth's heights to 3 km, a metre for 2.5 above, the death zone from 5 km and the ceiling at 6.2 km.
 
 ## The starting world
 
