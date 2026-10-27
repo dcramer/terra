@@ -95,9 +95,9 @@
             ("models/props/VasePair.glb", 1.0), ("models/nature/Rock_6.glb", 0.35),
             ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0),
          ], count: (2, 3),
-         clutter: [("models/props/Goblets.glb", 1.0), ("models/props/BowlStack.glb", 1.0), ("models/nature/Rock_3.glb", 4.0)], litter: (1, 1),
+         clutter: [("models/props/PlateStack.glb", 1.0), ("models/props/BowlStack.glb", 1.0), ("models/nature/Rock_3.glb", 4.0)], litter: (1, 1),
          vignette: [
-            ("models/props/Chest.glb", 1.0, (0.0, 0.05)), ("models/props/Goblets.glb", 1.0, (0.85, 0.3)),
+            ("models/props/Chest.glb", 1.0, (0.0, 0.05)), ("models/props/BowlStack.glb", 1.0, (0.85, 0.3)),
             ("models/props/Lantern.glb", 1.0, (-0.8, 0.1)),
          ]),
         // A guard post: the guards' bench, their fallen, their last stand.
@@ -123,13 +123,13 @@
         (name: "treasury", roles: [Treasure, Secret],
          hero: [("models/props/Chest.glb", 1.1)], lamp: Some(("models/props/barrow/Candles.glb", 1.0)),
          props: [
-            ("models/props/VaseRow.glb", 1.0), ("models/props/Goblets.glb", 1.0),
+            ("models/props/VaseRow.glb", 1.0), ("models/props/PlateStack.glb", 1.0),
             ("models/props/barrow/Urns.glb", 1.0), ("models/props/BowlStack.glb", 1.0),
             ("models/props/Chest.glb", 1.0), ("models/props/BrassPans.glb", 1.0),
          ], count: (3, 4),
-         clutter: [("models/props/Goblets.glb", 1.0), ("models/props/PlateStack.glb", 1.0), ("models/props/VasePair.glb", 1.0)], litter: (1, 2),
+         clutter: [("models/props/BrassPans.glb", 1.0), ("models/props/PlateStack.glb", 1.0), ("models/props/VasePair.glb", 1.0)], litter: (1, 2),
          vignette: [
-            ("models/props/barrow/Candles.glb", 1.0, (0.0, 0.1)), ("models/props/Goblets.glb", 1.0, (0.55, 0.2)),
+            ("models/props/barrow/Candles.glb", 1.0, (0.0, 0.1)), ("models/props/BowlStack.glb", 1.0, (0.55, 0.2)),
             ("models/props/VaseRow.glb", 1.0, (-0.65, 0.0)),
          ]),
         // A chapel on the way back: an altar and its candles.
@@ -138,13 +138,13 @@
          props: [("models/props/barrow/Candles.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0)], count: (2, 3),
          clutter: [
             ("models/props/barrow/Candles.glb", 0.8), ("models/props/BowlStack.glb", 1.0),
-            ("models/props/Goblets.glb", 1.0),
+            ("models/props/PlateStack.glb", 1.0),
          ], litter: (1, 1)),
         // The lord's burial chamber, the relic on its dais its hero: grave goods by the walls.
         (name: "lord's chamber", roles: [Goal],
          props: [
             ("models/props/barrow/Urns.glb", 1.0), ("models/props/VaseRow.glb", 1.0),
-            ("models/props/Goblets.glb", 1.0), ("models/props/barrow/Candles.glb", 1.0),
+            ("models/props/BrassPans.glb", 1.0), ("models/props/barrow/Candles.glb", 1.0),
          ], count: (2, 3),
          clutter: [
             ("models/props/barrow/Candles.glb", 0.8), ("models/props/PlateStack.glb", 1.0),
@@ -153,12 +153,12 @@
         // The camp of delvers who came before, round its fire.
         (name: "delvers' camp", roles: [Rest],
          props: [
-            ("models/props/Sack.glb", 1.0), ("models/props/Log.glb", 1.0),
+            ("models/props/Barrel.glb", 1.0), ("models/props/Log.glb", 1.0),
             ("models/props/Buckets.glb", 1.0),
          ], count: (2, 3),
-         clutter: [("models/props/BowlStack.glb", 1.0), ("models/props/StewPot.glb", 1.0)], litter: (1, 1),
+         clutter: [("models/props/BowlStack.glb", 1.0), ("models/props/HandTools.glb", 1.0)], litter: (1, 1),
          vignette: [
-            ("models/props/Sack.glb", 1.0, (0.0, 0.0)), ("models/props/Lantern.glb", 1.0, (0.65, 0.15)),
+            ("models/props/FoldedCloth.glb", 1.0, (0.0, 0.0)), ("models/props/Lantern.glb", 1.0, (0.65, 0.15)),
             ("models/props/BowlStack.glb", 1.0, (-0.65, 0.1)),
          ]),
     ],

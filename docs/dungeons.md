@@ -78,13 +78,15 @@ A crypt makes sense when each room reads as a place something was done in, and s
 |---|---|---|---|---|---|
 | Entrance | antechamber, where mourners left offerings | offering altar | urns, candles | candles, stone | - |
 | Passage | ossuary passage | a wooden coffin | bones, urns, shrouded dead | stone, candles | - |
-| Branch | robbed tomb | its coffin, lid pushed aside | broken jars, fallen stone | goblets, bowls | the looter's leavings: a chest, spilled goblets, a lantern |
+| Branch | robbed tomb | its coffin, lid pushed aside | broken jars, fallen stone | plates, bowls | the looter's leavings: a chest, spilled bowls, a lantern |
 | Guard | guard post | the guards' bench | the fallen, their axes, a lantern | bones, stone | the last stand: bones, axes, a shroud |
 | Puzzle | ossuary (holds the key) | its altar (the feature) | heaped bones, shrouds, urns | candles, bones | - |
-| Treasure, Secret | treasury of grave goods | a chest | jars, goblets, bowls, urns, chests | goblets, plates, brass | an offering: urns about a chest |
+| Treasure, Secret | treasury of grave goods | a chest | jars, plates, bowls, urns, chests | brass, plates | an offering: urns about a chest |
 | Shortcut | chapel | an altar | candles, a shelf of the dead's records, urns | candles | - |
-| Goal | the lord's burial chamber | the relic on its dais (the feature) | urns, jars, goblets, candles | candles | - |
-| Rest | camp of earlier delvers | the campfire (the feature) | sacks, a log, buckets | bowls, a stew pot | a bedroll's pack: a sack, a lantern, bowls |
+| Goal | the lord's burial chamber | the relic on its dais (the feature) | urns, jars, brass, candles | candles | - |
+| Rest | camp of earlier delvers | the campfire (the feature) | a barrel, a log, buckets | bowls, tools | a bedroll's pack: a folded bedroll, a lantern, bowls |
+
+The town's goblets read as clear glass and its stew pot and sack as glossy white tureens and skulls under torchlight (barrow dress round 2's reviewers), so the crypt lays plates, bowls and brass and the camp a barrel, tools and a folded bedroll in their place.
 
 Rules (`stamp/furnish.rs`, data in the theme's `dressing`):
 - **Hero**: one a room, on the bare wall spot farthest from its doorways, so it faces the way in; a room with a feature (the goal's dais, the key's altar, the rest's fire) has that as its hero. It keeps 1.6 m clear along its wall.
