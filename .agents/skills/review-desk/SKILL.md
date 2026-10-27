@@ -38,7 +38,7 @@ Use the ArtifactData tool on the desk's `url`: `set` one document in `items` (`b
 
 ## Read answers (every turn)
 
-1. ArtifactData `query` on `items` for `status: "answered"` whose `note` does not contain "Picked up:". Answers do not notify the session, so look each turn you coordinate.
+1. ArtifactData `query` on `items` for `status: "answered"` whose `note` does not contain "Picked up:". Answers do not notify the session, so look each turn you coordinate; a hook (`tools/hooks/desk-answers.ts`) reminds you on each of the developer's messages once the session has used the desk.
 2. Act on each answer, then `update` the item, appending `Picked up: <what you did, one line>` to its `note` after the developer's text, so the next turn skips it.
 3. A review's note is the brief for the next round; a question's `answer` is the option label picked and its `note` the nuance.
 
