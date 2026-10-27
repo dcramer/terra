@@ -13,9 +13,28 @@ use bevy::{
 };
 use bevy_inspector_egui::bevy_egui::EguiGlobalSettings;
 
+/// The size of each block of GPU memory wgpu's allocator takes from the driver (D543); host
+/// memory, what uploads are staged in, comes in blocks of half that.
+pub const MEMORY_BLOCK: u64 = 64 * 1024 * 1024;
+
 /// Bevy's plugins for a run, without winit when it opens no window.
 pub fn engine(app: &mut App, windowless: bool) -> PluginGroupBuilder {
-    let engine = DefaultPlugins.build();
+    // wgpu's allocator keeps GPU memory in blocks, each a `vkAllocateMemory` the driver clears
+    // before handing over: 40 µs a MiB on RADV, so its default 256 MiB block held the render
+    // world 10 ms in whichever frame overflowed the last one (a slab's growth, castle's worst
+    // frame). Blocks of 64 MiB, a full mesh slab's page (D420), cost 2.5 ms each instead; VMA,
+    // the allocator Godot's Vulkan driver uses, likewise begins with blocks an eighth of its
+    // 256 MiB default (D543).
+    let engine = DefaultPlugins.build().set(bevy::render::RenderPlugin {
+        render_creation: bevy::render::settings::WgpuSettings {
+            memory_hints: bevy::render::settings::MemoryHints::Manual {
+                suballocated_device_memory_block_size: MEMORY_BLOCK..MEMORY_BLOCK,
+            },
+            ..default()
+        }
+        .into(),
+        ..default()
+    });
     // Traced, the render world runs after the game on the main thread, not beside it, so a
     // worker's span is plainly one world's (tools/sandbox/spans.ts).
     #[cfg(feature = "trace")]
