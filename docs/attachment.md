@@ -74,6 +74,31 @@ A thing held in two hands marks where the other hand goes, as Unreal's weapons c
 
 The check requires the key of a kind that has one, and the extras to say what the data does. Today neither the spear nor the bow gives it (listed faults); the round that builds the two-handed IK sets them with the clips that use them. The `Two` items of other kinds are not checked until `items.ron`'s `hold` is read by the check.
 
+## Under animation
+
+The facing above is static: no check yet confirms that a kind's working face (an axe's bit, a blade's edge) leads its strike in the clips its items use. The -Z side was measured once, by a scratch script; `Sword_Attack` and `Fight_Chop`, which today's game and tools play, lead flat-first (-X, 0.79 and 0.91 of the tip's motion), so a sword's flat strikes. A check needs: the clips each class strikes in (the move sets, `assets/data/moves/<class>.<stance>.ron`, with their active frames; today every blow plays `Sword_Attack`, `terra_walker::figure`); the hand socket posed through those frames on each body (`glb.ts`); a point at the look's working end; and the rule that, at speed, the point's motion leads along its one-sided side (-Z, at least 0.7 of it) or, for a two-edged blade, lies in its edge plane (no more than 0.5 of it along ±X). It is a `moves.ts` row, owned by the controls audit; the flat-first clips are the combat round's.
+
+## Stowed (D551)
+
+Open: where a put-away item shows is design (D551, raised with options). Holding.md already puts an off-hand item on a stowed socket while a two-hander is out (a shield on the back, a blade at the hip). Whatever is chosen goes on as data, never code: a kind's `stowed` in `attach_kinds.json`, `{"socket", "turn", "at"}`, the look's grip placed on `socket.back` or `socket.belt.R`/`.L` with a turn and offset in that socket's space, mirrored to the other hip for a left-handed body, an item overriding it in its own data; as the Creation Engine's `WeaponBack` and `WeaponSword` nodes and Unreal's back and hip sockets hold any weapon of a type. What the inspirations do: Kenshi shows both weapon slots, small weapons at the hip and large on the back (at most two on the back, one at the hip; [Steam](https://steamcommunity.com/app/233860/discussions/0/1728711392727520401/), [Steam](https://steamcommunity.com/app/233860/discussions/3/5234891274081830469/)); RDR2 at most four arms on the body, one a slot, the rest on the horse ([Steam](https://steamcommunity.com/app/1174180/discussions/0/3320862598764546941)); Enshrouded nothing put away but the shield, left on the arm, which players call an eyesore ([Steam](https://steamcommunity.com/app/1203620/discussions/0/568164715699705921/)). Not found for Soulmask, Medieval Dynasty or Dune: Awakening.
+
+## Fitting a new item
+
+How a new model's turn is found, by kind (`fits` in `attach_kinds.json`):
+
+- **By a detector** (`hafted`, `blade`, `polearm`, `hung`): its long axis is the vertices' principal axis; its working end the end whose cross-sections are wider; its handle the narrowest run of sections; a head's widest direction across the axis goes to Z, its further-reaching side to -Z, a blade's thinnest to ±X; its grip by its kind's rule from the butt, centred on the handle's section there, not the bounds. A person checks the workbench sheet.
+- **By a person, once** (`bow`, its draw plane and string side being its clips'; `shield`, front and hand strap; `belt`, its mouth; `pack`, Tripo's front): the turn or points in its data.
+- **Fallback**: a turn in the data always wins (`"turn"`, degrees about +Y after the length fit, or the `"points"` fit). The detector refuses rather than guesses when a measure is not decisive (the long axis under 3 times the next; the head's section under 1.5 times the handle's; a head neither one-sided by 2 cm nor even within 1 cm) and names which, and a person sets the turn once, looking at the sheet, kept in the data so the item is never fitted by hand again.
+- **Its icon in the same round**: a held look's turn, grip or size changed (its data, then `fit_held.py`) is its icon painted again in the same commit ([item-icons](../.agents/skills/item-icons/SKILL.md)): the icon rig lays a held look by its bounds, so a quarter turn shows another side, and the icons test fails on the changed look until it is.
+
+Specified here; the fitter is the controls audit's to build.
+
+## Who owns what
+
+- **This spec** (the attachment spec rounds): this doc, `attach_kinds.json`, `attach_contract.ts` and its faults list, the shape of each item's data.
+- **The controls audit** (the "Gameplay character controls audit" session): the per-body forearm socket for strapped items; sockets checked under animation, the working face leading its strike among them; the one-command fitter for a new item; the fist closing on the grip; the two-handed IK, with the spear's `second` and the bow's `nock`.
+- **The combat round**: the clips that strike flat-first.
+
 ## Extras
 
 Read from the glTF `extras` of the look's mesh node (Bevy's `GltfExtras`); Blender writes an object's custom properties there.

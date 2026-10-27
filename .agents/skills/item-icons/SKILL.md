@@ -14,6 +14,8 @@ This follows how games with many generated items do it: an authored icon per kin
 
 ## Adding an item, or changing its look
 
+A held look turned, moved on its grip or resized (its `art/held/<item>.json`, then `fit_held.py`) is a changed look: paint its icon again in the same round and commit (docs/attachment.md, "Fitting a new item"); a re-bake alone leaves a painting of the side the rig no longer shows.
+
 From the repository root:
 
 1. **Make its look**, if it has one (below), following the contracts in [docs/characters.md](../../../docs/characters.md#the-contracts).
