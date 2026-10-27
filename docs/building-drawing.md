@@ -25,7 +25,7 @@ Measured on 2026-10-14, release builds, the machine shared with other agents' bu
 | A base laid whole, a worker | a median 7 ms of the village's fifty (`cargo xtask sections`) | nothing |
 | A section cut from it | 0.03 ms | nothing |
 | A section made and merged, a worker | near a median 1.8 ms (the slowest tenth over 48 ms: a stone house's whole near section); mid 1.2 ms; far 0.6 ms. An edit's own section again from how it was drawn, 27 ms | nothing |
-| Swapped in and uploaded, main thread | every section of a change in one frame, at most 200,000 corners a frame beyond the first section | The game's main thread, with fifty buildings drawn: 13.4 ms a frame against the bare view's 9.4 (`cargo xtask bench village`, at a load of 40 on 32 cores, so the gap is high); a stone house going up a step every tenth of a second, its 8 sections laid and swapped again 288 times |
+| Swapped in and uploaded, main thread | every section of a change in one frame, put on the GPU first at most 120,000 corners a frame (40,000 for groups' details), one mesh past it at most, a mesh larger going up alone (D541) | The game's main thread, with fifty buildings drawn: 13.4 ms a frame against the bare view's 9.4 (`cargo xtask bench village`, at a load of 40 on 32 cores, so the gap is high); a stone house going up a step every tenth of a second, its 8 sections laid and swapped again 288 times |
 | Drawn | | The GPU, fifty buildings in view: 3.1 ms a frame against 2.4 bare, 1.8 million triangles in each of the depth prepass and the main pass (RTX 5090, 1080p, high) |
 
 What can go wrong at each stage, and the check that finds it, is the next section.

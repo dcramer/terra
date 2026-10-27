@@ -30,6 +30,7 @@ use terra_build_mesh::sections::{Drawn as Merged, Ghost, Reach, Shape};
 use terra_world::detail::DetailScale;
 use terra_world::planet::MainCamera;
 
+mod budget;
 pub mod detail;
 use terra_world::grown::SUN_ONLY;
 use terra_world::quality::Quality;
@@ -1057,15 +1058,14 @@ fn upload(
             .is_some_and(|&(out, newest)| change_back(done.generation, out, newest))
     };
     // What is to be shown is first put on the GPU, oldest first, within a budget of corners
-    // a frame but always something; a build's change is swapped in once all of it was put
+    // a frame but always a mesh (`budget`, D541); a build's change is swapped in once all of it was put
     // in an earlier frame, so Bevy has prepared it, and the frame it is shown on only swaps
     // entities. A scripted run puts and shows at once.
     let frame = frame.0;
     let cpu: BTreeMap<Entity, bool> = each(&mut site, &mut builds)
         .map(|build| (build.root, build.by_cubes))
         .collect();
-    let mut budget = UPLOAD_CORNERS;
-    let mut detail_budget = DETAIL_UPLOAD_CORNERS;
+    let mut budget = budget::FrameBudget::new();
     let mut unput: BTreeSet<Entity> = BTreeSet::new();
     for done in jobs.ready.iter_mut() {
         let streams = streaming
@@ -1080,20 +1080,12 @@ fn upload(
         }
         let put = match &mut done.outcome {
             Outcome::Drawn { parts, detail, .. } => {
-                // A group's detail streaming in spends its own, smaller budget.
-                let budget = if detail.is_some() {
-                    &mut detail_budget
-                } else {
-                    &mut budget
-                };
-                let mut spend = if all { usize::MAX } else { (*budget).max(1) };
-                let put = parts.put(
-                    &mut meshes,
-                    cpu.get(&done.root).copied().unwrap_or(false),
-                    &mut spend,
-                );
-                *budget = if all { *budget } else { spend.min(*budget) };
-                put
+                let cpu = cpu.get(&done.root).copied().unwrap_or(false);
+                match all {
+                    true => parts.put(&mut meshes, cpu, &mut { usize::MAX }).0,
+                    // A group's detail streaming in spends its own, smaller budget.
+                    false => budget.put(parts, &mut meshes, cpu, detail.is_some()),
+                }
             }
             Outcome::Same => true,
         };
@@ -1259,15 +1251,16 @@ impl Parts {
     }
 
     /// Puts its meshes among the meshes, its arrays' kept on the CPU too if `cpu`, until
-    /// `budget` corners are spent; whether all of them are put.
-    fn put(&mut self, meshes: &mut Assets<Mesh>, cpu: bool, budget: &mut usize) -> bool {
-        let mut all = true;
+    /// `budget` corners are spent; whether all of them are put, and how many it put.
+    fn put(&mut self, meshes: &mut Assets<Mesh>, cpu: bool, budget: &mut usize) -> (bool, usize) {
+        let (mut all, mut count) = (true, 0);
         let mut put = |staged: &mut Staged, cpu: bool| {
             if matches!(staged, Staged::Made(_)) {
                 if *budget == 0 {
                     all = false;
                 } else {
                     *budget = budget.saturating_sub(staged.put(meshes, cpu));
+                    count += 1;
                 }
             }
         };
@@ -1294,7 +1287,7 @@ impl Parts {
         for staged in self.ghosts.iter_mut().flatten() {
             put(staged, false);
         }
-        all
+        (all, count)
     }
 }
 

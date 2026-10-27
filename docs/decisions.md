@@ -539,6 +539,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D514](decisions/D514.md) | A swimmer's figure treads, strokes or dives by its swim and lies along its way | Tech | Agent | Decided | How swimming (D74, D478) is shown, presentation only… |
 | [D524](decisions/D524.md) | The ground's edits are found by a hashed grid; the operation list stays the truth | Tech | Agent | Leaning | A planet's edits (digs, fills, dug boxes and the bridges… |
 | [D537](decisions/D537.md) | Bevy's per-material change checks run on one thread | Tech | Agent | Decided | `check_entities_needing_specialization` and… |
+| [D541](decisions/D541.md) | Building meshes go up to a budget a frame, not a mesh a section past it | Tech | Agent | Decided | The sections about to be shown are put on the GPU oldest… |
 
 ## Tools and workflow
 
