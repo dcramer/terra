@@ -1,12 +1,13 @@
 // The Cetri (D534, docs/creatures.md): walking up the lush forest's path in the morning
 // toward the oaks beside it, one of them, a 7 m oak like its neighbours, wakes: its eyes
 // light, its trunk splits into a mouth, it lunges at the walker and then comes on in slow,
-// heavy steps. The camera is the walker's eye. Places in the start's metres, east and south.
+// heavy steps. The camera is the walker's eye but for two of the walk's steps, filmed from beside
+// it (SIDE). Places in the start's metres, east and south.
 import type { Script, Vec3 } from "../../qa/script.ts";
 
 const ROLLS = 360;
 /// Seconds into the film of each beat.
-const BEATS = { glow: 4.2, wakes: 5.0, lunge: 8.2, comes: 10.6, end: 16.5 };
+const BEATS = { glow: 4.2, wakes: 5.0, lunge: 8.2, comes: 10.6, end: 17.6 };
 /// Where it stands: beside the path, a few metres short of the nearest grown oak (16.2, 41.2).
 const CETRI: [number, number] = [19.5, 38];
 /// A point on the path (forest.json's route, (3.7, 4.7) to (16.8, 25)): the way the walker
@@ -172,29 +173,35 @@ const SHAKE = { drop: 0.13, near: 4.5, bounce: [-1, 0.45, -0.2, 0.05, 0], frames
 const SHAKE_FRAMES = SHAKE.frames.reduce((a, b) => a + b, 0);
 /// How big each footfall's litter burst is: twice round 8's, which read only once in four.
 const STEP_DUST = 2.0;
-/// The first `steps` footfalls are watched: the eye pitched so the planting foot sits `low`
-/// degrees under the frame's middle, in its bottom third (a 55-degree frame's edge is 27.5
-/// down; round 8 kept it 27 down, just out of frame, at 3 of 4 contacts), the eyes still under
-/// its top; one slow tilt down from `early` seconds before, its shake and burst larger,
-/// `stays` seconds down after, and as slowly up (round 9's 0.35 s dip read as a whip-tilt or
-/// a cut). Each watched step has its own `low` and `stays`: the second is the film's one
-/// full-body beat, the foot at the frame's foot and the crown over the face, held down on its
-/// landing (round 11: from 13.8 s the frame held only the face).
-const WATCHED = { steps: 2, low: [19, 23], early: 0.9, stays: [0.25, 0.45], shake: 1.4, dust: 2.5 };
+/// Two of the walk's footfalls are filmed from beside it, as a monster's reveal is (the
+/// tracking shot of a kaiju or a Colossus walking past): seen from the walker's eye head-on,
+/// the 1.6 m stride is depth motion and the 0.56 m lift 8% of the frame, half in the grass
+/// (round 15). From `from` to `to` seconds a camera `off` metres from its feet, `bearing`
+/// degrees round to its left from straight ahead of it and swinging `swings` more as it goes,
+/// `up` metres off the ground, tracks it at its pace, closing `closes` metres and looking
+/// `look` metres up its body, so the frame holds it feet to crown and each step's lift and the
+/// hips' drop read against the light. On its left the camera looks east, toward the low
+/// morning sun, so its legs stand dark against the bright backlit leaves rather than dark bark
+/// on dark bark. Nearer side-on, or on its right, the two oaks it walks out between stand in
+/// the line (flora's obstacles at (16.0, 35.9) and (20.4, 34.5): round 16's first two takes
+/// were a trunk); from 12.4 s at 40-60 degrees the line is 1.6 m or more clear of every
+/// trunk. Its footfalls shake it `shake` times the walker's eye's, and puff `dust` big, for
+/// the distance. The walker's eye has the walk's first step before it and the menace after.
+const SIDE = { from: 12.4, to: 15.6, off: 10, closes: 1, bearing: 40, swings: 20, up: 1.0, look: 3.0, shake: 0.4, dust: 2.5 };
 /// How far it lunges and how fast, metres and metres a second.
 const LUNGE_M = 2.0;
 const LUNGE_SPEED = 4.5;
 const COMES_SPEED = WALK.pace * WALK.rate;
 /// How far the walker flinches back at the blow and backs away while it comes on, metres:
 /// less than it gains, so it closes in (round-7 reviews: it barely advanced; round 5: the
-/// flinch cancelled the lunge); 2.5 m against its 5.1 m at Giant_Walk's 0.87 m/s. It scrambles
-/// back over `BACKS_S` seconds, `BACKS_EASE` the power of its ease out, and then stands frozen
-/// while it closes: about 7 m off at the second footfall, the most a 55-degree frame can hold
-/// of it feet up, and 3.8 m at the end. It backs `SIDE_M` to its own right as it goes, out
-/// from behind the bush left of the frame that hid the swinging leg (round 11, at 12.1 s).
+/// flinch cancelled the lunge); 3.5 m against its 6.1 m at Giant_Walk's 0.87 m/s. It scrambles
+/// back over `BACKS_S` seconds, `BACKS_EASE` the power of its ease out, while the film watches
+/// the walk from the side, and then stands frozen while it closes, 3.8 m off at the end. It
+/// backs `SIDE_M` to its own right as it goes, out from behind the bush left of the frame that
+/// hid the swinging leg (round 11, at 12.1 s).
 const FLINCH_M = 0.3;
-const BACKS_M = 2.5;
-const BACKS_S = 2.6;
+const BACKS_M = 3.5;
+const BACKS_S = 3.6;
 const BACKS_EASE = 1.6;
 const SIDE_M = 1.5;
 /// Where its face is over its feet, metres up and toward the walker: standing, lunging, thrown.
@@ -309,79 +316,93 @@ function script(s: Script) {
   const [eye0, eye1] = [on(flinched, EYE - 0.05), on(away, EYE - 0.1)];
   const backs = (t: number) => Math.min(1, Math.max(0, (t - BEATS.comes) / BACKS_S));
   const eyeAt = (t: number) => mix(eye0, eye1, 1 - (1 - backs(t)) ** BACKS_EASE);
-  // The first steps watched a little lower, the face still in frame, then up at it as it
-  // closes, once the full-body beat has held.
+  // Back at the walker's eye, the look climbs from its mouth to its face as it closes.
   const level = (t: number) => {
-    const k = Math.min(1, Math.max(0, (t - BEATS.comes - 3.0) / 2.5));
+    const k = Math.min(1, Math.max(0, (t - SIDE.to) / 2.0));
     return { up: 3.3 + (FACE_NEAR.up - 3.3) * k, ahead: 0.3 + (FACE_NEAR.ahead - 0.3) * k };
   };
-  const look = (t: number, dip = 0): Vec3 => {
+  const look = (t: number): Vec3 => {
     const e = eyeAt(t);
-    return lift(face(feetAt(t), [e[0], e[2]], level(t)), -dip);
+    return face(feetAt(t), [e[0], e[2]], level(t));
   };
-  // Where each foot lands, and how far the look is lowered there to hold it in the frame's
-  // bottom third: metres down at the face, none past the watched steps.
+  // Where each foot lands, and how far a footfall drops an eye standing there.
   const footOf = (fall: { t: number; left: number; ahead: number }): [number, number] => {
     const feet = feetAt(fall.t);
     return [feet[0] + way[0] * fall.ahead + left[0] * fall.left, feet[1] + way[1] * fall.ahead + left[1] * fall.left];
   };
-  const dipFor = (fall: { t: number; left: number; ahead: number }, k: number) => {
-    const [e, l, foot] = [eyeAt(fall.t), look(fall.t), on(footOf(fall), 0)];
-    const pitch = Math.atan2(foot[1] - e[1], Math.hypot(foot[0] - e[0], foot[2] - e[2])) + (WATCHED.low[k] * Math.PI) / 180;
-    return Math.max(0, l[1] - (e[1] + Math.hypot(l[0] - e[0], l[2] - e[2]) * Math.tan(pitch)));
-  };
-  const dips = falls.map((fall, k) => (k < WATCHED.steps ? dipFor(fall, k) : 0));
-  falls.forEach((fall, k) => {
-    const watched = k < WATCHED.steps;
-    const dip = dips[k];
-    // On to this footfall from the last's shake and stay (or the walk's start); between two
-    // watched steps the look stays half down rather than climbing to the face and back.
-    const from = k ? f(falls[k - 1].t) + SHAKE_FRAMES + (k - 1 < WATCHED.steps ? Math.round(WATCHED.stays[k - 1] * 60) : 0) : f(BEATS.comes);
-    const starts = watched ? f(fall.t - WATCHED.early) : from;
-    if (watched && starts > from) {
-      s.frame = from;
-      s.glide(eyeAt(fall.t - WATCHED.early), look(fall.t - WATCHED.early, k ? dips[k - 1] * 0.5 : 0), starts - from);
-    }
-    s.frame = starts;
-    s.glide(eyeAt(fall.t), look(fall.t, dip), Math.max(1, f(fall.t) - starts));
+  const dropAt = (fall: { t: number; left: number; ahead: number }, e: Vec3) => {
     const foot = footOf(fall);
+    return SHAKE.drop * Math.min(1.6, Math.max(0.7, SHAKE.near / Math.hypot(foot[0] - e[0], foot[1] - e[2])));
+  };
+  // Each footfall: a puff of litter where the foot lands, the trunk folded onto it, the crown
+  // nodding on after the trunk has stopped, snapping back past it, then settling.
+  falls.forEach((fall) => {
     // Rolled over the planted foot: a turn about ahead leans the trunk to the body's right.
     const roll = fall.left > 0 ? -4 : 4;
     // The limb on the planting side back, the other forward.
     const swing = fall.left > 0 ? -ARMS.swing : ARMS.swing;
     s.frame = f(fall.t);
-    s.call("staged.impact", { at: on(foot, 0.05), size: watched ? WATCHED.dust : STEP_DUST, base: true });
+    s.call("staged.impact", { at: on(footOf(fall), 0.05), size: fall.t > SIDE.from && fall.t < SIDE.to ? SIDE.dust : STEP_DUST, base: true });
     s.call("staged.bend", { name: "cetri", bend: comes(roll, bow(fall.t), SETTLE.down, 0, swing), blend_ms: 160 });
-    // The crown nods on after the trunk has stopped, snaps back past it, then settles.
     s.frame = f(fall.t + SETTLE.nod_at);
     s.call("staged.bend", { name: "cetri", bend: comes(roll, bow(fall.t), SETTLE.down, SETTLE.nod, swing), blend_ms: SETTLE.nod_ms });
     s.frame = f(fall.t + SETTLE.back);
     s.call("staged.bend", { name: "cetri", bend: comes(roll * 0.5, bow(fall.t + 0.6), 0, SETTLE.rebound, swing * 0.8), blend_ms: SETTLE.back_ms });
     s.frame = f(fall.t + SETTLE.back + SETTLE.back_ms / 1000);
     s.call("staged.bend", { name: "cetri", bend: comes(roll * 0.5, bow(fall.t + 1), 0, 0, -swing * 0.5), blend_ms: SETTLE.rest_ms });
-    // The walker's eye shaken by it, more the nearer it lands.
-    const e = eyeAt(fall.t);
-    const near = Math.hypot(foot[0] - e[0], foot[1] - e[2]);
-    const drop = SHAKE.drop * Math.min(1.6, Math.max(0.7, SHAKE.near / near)) * (watched ? WATCHED.shake : 1);
-    s.frame = f(fall.t);
-    let t = fall.t;
-    SHAKE.bounce.forEach((b, i) => {
-      t += SHAKE.frames[i] / 60;
-      const thrown = lift(look(t, dip), b * drop * SHAKE.pitch);
-      const jolt = -b * drop * SHAKE.jolt * Math.sign(fall.left);
-      s.glide(lift(eyeAt(t), b * drop), [thrown[0] + left[0] * jolt, thrown[1], thrown[2] + left[1] * jolt], SHAKE.frames[i]);
-      s.frame += SHAKE.frames[i];
-    });
-    // A watched one stays down a moment on the landing before the eye climbs on; the last
-    // holds all the way down, the full-body beat.
-    if (watched) {
-      const up = fall.t + SHAKE_FRAMES / 60 + WATCHED.stays[k];
-      s.glide(eyeAt(up), look(up, dip * (k === WATCHED.steps - 1 ? 1 : 0.5)), Math.round(WATCHED.stays[k] * 60));
-    }
   });
-  // Up at the face to the end.
-  s.frame = f(falls[falls.length - 1].t) + SHAKE_FRAMES;
-  s.glide(eyeAt(BEATS.end), look(BEATS.end), Math.max(1, f(BEATS.end) - s.frame));
+  // The tracking shot, set frame by frame: round to its left, keeping pace, shaken by each
+  // footfall's bounce, `t` seconds into it a share of its drop.
+  const bounce = (t: number) => {
+    let [from, was] = [0, 0];
+    for (let i = 0; i < SHAKE.bounce.length; i++) {
+      const next = from + SHAKE.frames[i] / 60;
+      if (t < next) return was + ((SHAKE.bounce[i] - was) * (t - from)) / (next - from);
+      [from, was] = [next, SHAKE.bounce[i]];
+    }
+    return 0;
+  };
+  for (let n = f(SIDE.from); n < f(SIDE.to); n++) {
+    const t = (n - ROLLS) / 60;
+    const k = (t - SIDE.from) / (SIDE.to - SIDE.from);
+    const feet = feetAt(t);
+    const a = ((SIDE.bearing + SIDE.swings * k) * Math.PI) / 180;
+    const round: [number, number] = [way[0] * Math.cos(a) + left[0] * Math.sin(a), way[1] * Math.cos(a) + left[1] * Math.sin(a)];
+    const off = SIDE.off - SIDE.closes * k;
+    const eye = on([feet[0] + round[0] * off, feet[1] + round[1] * off], SIDE.up);
+    const shake = falls.reduce((sum, fall) => sum + (t >= fall.t ? bounce(t - fall.t) * dropAt(fall, eye) * SIDE.shake : 0), 0);
+    s.frame = n;
+    s.cut(lift(eye, shake), on([feet[0] + way[0] * 0.8, feet[1] + way[1] * 0.8], SIDE.look + shake * SHAKE.pitch));
+  }
+  // The walker's eye, from `a` to `b` seconds, its first frame cut to if `cuts`: looking up at
+  // it as it closes, each footfall shaking the eye, down and thrown toward the planting foot's
+  // side, more the nearer it lands.
+  const walker = (a: number, b: number, cuts: boolean) => {
+    s.frame = f(a);
+    if (cuts) s.cut(eyeAt(a), look(a));
+    let from = f(a);
+    for (const fall of falls.filter((fall) => fall.t > a && fall.t < b)) {
+      s.frame = from;
+      s.glide(eyeAt(fall.t), look(fall.t), Math.max(1, f(fall.t) - from));
+      const drop = dropAt(fall, eyeAt(fall.t));
+      s.frame = f(fall.t);
+      let t = fall.t;
+      SHAKE.bounce.forEach((bounced, i) => {
+        t += SHAKE.frames[i] / 60;
+        const thrown = lift(look(t), bounced * drop * SHAKE.pitch);
+        const jolt = -bounced * drop * SHAKE.jolt * Math.sign(fall.left);
+        s.glide(lift(eyeAt(t), bounced * drop), [thrown[0] + left[0] * jolt, thrown[1], thrown[2] + left[1] * jolt], SHAKE.frames[i]);
+        s.frame += SHAKE.frames[i];
+      });
+      from = s.frame;
+    }
+    s.frame = from;
+    s.glide(eyeAt(b), look(b), Math.max(1, f(b) - s.frame));
+  };
+  // Its first step seen as the walker scrambles back; then from beside it; then back to the
+  // walker, frozen, as it closes to the end.
+  walker(BEATS.comes, SIDE.from, false);
+  walker(SIDE.to, BEATS.end, true);
   s.frame = f(BEATS.end);
 }
 

@@ -3,7 +3,7 @@
   "place": "lush",
   "hour": 8.0,
   "date": "07-20",
-  "seconds": 16.5,
+  "seconds": 17.6,
   "scene": "cetri",
   "player": { "at": "12.5,18.5", "face": "19.5,38", "hidden": true },
   "look": { "shutter": 90, "exposure_bias": 0.3 },
