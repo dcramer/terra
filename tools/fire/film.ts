@@ -1,6 +1,6 @@
 // The motion gate's films (D472): the yard's campfire filmed still from RDR2's camp view for 20 s at
-// dusk and at night, at three placements of its flame (the fire and camera moved together 0, 0.3 and
-// 0.6 m along x, so the view is the same and only the flame's seed changes, hearth.rs), each frame
+// dusk and at night, at seven placements of its flame (PLACEMENTS: the fire and camera moved together
+// along x, so the view is the same and only the flame's seed changes, hearth.rs), each frame
 // with its flame matte (--flame-matte, D433); then motion.ts's measures, each hour gated by their
 // median. Exit 1 when either hour misses the gate.
 //
@@ -55,7 +55,13 @@ export function hold(source: string, reference = REFERENCE): { source: string; c
   return { source: lines.join("\n"), changed };
 }
 
-const PLACEMENTS = [0, 0.3, 0.6];
+/// The flame's placements, m along x (fire and camera moved together): seven, each its own seed
+/// (hearth.rs: x * 0.731 + z * 0.377, hashed into the loop's offset, mirror, turn and scale, sim.rs).
+/// Three (0, 0.3, 0.6) were the
+/// three lowest-splitting of these seven at dusk, and one film's splits move by about 0.1 run to
+/// run at one placement, so their median sat at the bar by luck and went either way (fire gate
+/// round: main dbf2f473's dusk 1.01-1.23 over four runs of three).
+export const PLACEMENTS = [0, 0.3, 0.6, 0.9, 1.2, 1.5, 1.8];
 const HOURS: [string, string][] = [["dusk", "18.4"], ["night", "22"]];
 const CROP = "crop=600:600:500:250";
 

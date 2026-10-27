@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { hold, REFERENCE } from "./film.ts";
+import { hold, PLACEMENTS, REFERENCE } from "./film.ts";
 
 const REF = { HEARTH_A: "1.0", HEARTH_C: "Color::srgb(1.0, 0.5, 0.1)" };
 
@@ -17,6 +17,20 @@ test("every hearth constant is set to its reference, and only those", () => {
 test("a hearth constant added or gone fails the hold", () => {
   assert.throws(() => hold("const HEARTH_A: f32 = 1.0;\nconst HEARTH_C: Color = x;\nconst HEARTH_B: f32 = 2.0;", REF), /HEARTH_B is not in/);
   assert.throws(() => hold("const HEARTH_A: f32 = 1.0;", REF), /no HEARTH_C/);
+});
+
+test("the gate films an odd number of placements, at least seven, each a flame seed of its own", () => {
+  // hearth.rs's seed of a fire at (x, z), the gate's at (-10 + dx, 10).
+  const seed = (dx: number) => ((((-10 + dx) * 0.731 + 10 * 0.377) % 1) + 1) % 1;
+  assert.ok(PLACEMENTS.length >= 7 && PLACEMENTS.length % 2 === 1, `${PLACEMENTS.length} placements: the median needs an odd count of seven or more`);
+  const seeds = PLACEMENTS.map(seed);
+  for (let i = 0; i < seeds.length; i++)
+    for (let j = i + 1; j < seeds.length; j++) {
+      const apart = Math.abs(seeds[i] - seeds[j]);
+      // sim.rs hashes the seed's bits into the loop's offset, mirror, turn and scale, so seeds
+      // apart at all are independent draws; 0.01 keeps them apart through f32's rounding.
+      assert.ok(Math.min(apart, 1 - apart) > 0.01,`placements ${PLACEMENTS[i]} and ${PLACEMENTS[j]} share a seed (${seeds[i].toFixed(3)}, ${seeds[j].toFixed(3)})`);
+    }
 });
 
 test("the reference names every hearth constant light.rs has", () => {
