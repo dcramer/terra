@@ -1048,6 +1048,24 @@
       }
     ]
   },
+  "Guard_Shield_Out": {
+    "over": [
+      "Fight_Guard"
+    ],
+    "hold": [
+      {
+        "clip": "Fight_Guard",
+        "bone": "upperarm_l",
+        "aim": {
+          "upperarm_l": [
+            0.756,
+            -0.623,
+            -0.201
+          ]
+        }
+      }
+    ]
+  },
   "Strap_Grip": {
     "over": [
       "Keyed_Guard",
