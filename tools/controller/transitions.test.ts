@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Frame } from "../sandbox/duel/checks.ts";
-import { settle, starts, turns } from "./transitions.ts";
+import { settle, starts, stopped, turns } from "./transitions.ts";
 import type { Walk } from "./yard-checks.ts";
 
 type Row = { speed: number; yaw?: number; x?: number; feet?: [number, number]; kept?: [string, string] };
@@ -33,14 +33,34 @@ function walk(rows: Row[]): Walk {
 const run = (n: number): Row[] => Array.from({ length: n }, () => ({ speed: 4.3, feet: [0, 0], kept: ["free", "free"] }));
 const stand = (n: number, row: (i: number) => Partial<Row> = () => ({})): Row[] => Array.from({ length: n }, (_, i) => ({ speed: 0, ...row(i) }));
 
+/// Braking at 15 m/s² from a jog: 0.25 m/s a frame, to standing.
+const brake = (): Row[] => Array.from({ length: 17 }, (_, i) => ({ speed: Math.max(0, 4.3 - (i + 1) * 0.25) }));
+
 test("a stop whose feet rest with the body passes; a settle step half a second on fails", () => {
-  const clean = settle([walk([...run(30), ...stand(60)])]);
+  const clean = settle([walk([...run(30), ...brake(), ...stand(60)])]);
   assert.ok(clean.ok, clean.line);
   assert.equal(clean.value, 0);
-  // The right foot steps 20 cm over frames 30-36 after the body stood (frame 30).
-  const shuffled = settle([walk([...run(30), ...stand(60, (i) => ({ feet: [0, i >= 30 && i < 36 ? (i - 29) * 0.033 : i >= 36 ? 0.2 : 0] }))])]);
+  // The right foot steps 20 cm over frames 30-36 after the body stood.
+  const shuffled = settle([walk([...run(30), ...brake(), ...stand(60, (i) => ({ feet: [0, i >= 30 && i < 36 ? (i - 29) * 0.033 : i >= 36 ? 0.2 : 0] }))])]);
   assert.ok(!shuffled.ok, shuffled.line);
   assert.ok(Math.abs(shuffled.value - 35 / 60) < 0.02, shuffled.line);
+});
+
+test("a stop is braking, a wall's or a tap's by how the body lost its speed, and each row judges its own", () => {
+  // A wall: 4.3 m/s to none in a frame. A tap: 1.5 m/s at most.
+  const shuffle = (i: number): Partial<Row> => ({ feet: [0, i >= 30 && i < 36 ? (i - 29) * 0.033 : i >= 36 ? 0.2 : 0] });
+  const braking = walk([...run(30), ...brake(), ...stand(60)]);
+  const wall = walk([...run(30), ...stand(60, shuffle)]);
+  const tap = walk([...stand(10), { speed: 0.8 }, { speed: 1.5 }, { speed: 1.2 }, ...stand(60, shuffle)]);
+  const kinds = stopped([braking, wall, tap]).map((each) => each.kind);
+  assert.deepEqual(kinds, ["braking", "wall", "tap"]);
+  // The wall's and tap's shuffles are not the braking row's, and the wall's is its own row's.
+  const braked = settle([braking, wall, tap]);
+  assert.ok(braked.ok && braked.value === 0, braked.line);
+  assert.ok(braked.line.includes("wall") && braked.line.includes("tap"), braked.line);
+  const walled = settle([braking, wall, tap], "wall");
+  assert.ok(!walled.ok && Math.abs(walled.value - 35 / 60) < 0.02, walled.line);
+  assert.ok(Number.isNaN(settle([braking], "wall").value));
 });
 
 test("a start whose foot the rule steps fails; one the clip steps passes; a turning start is a turn's", () => {

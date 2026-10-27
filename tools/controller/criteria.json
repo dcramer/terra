@@ -1466,7 +1466,7 @@
    "bar": {
     "at_most": 0.3
    },
-   "unit": "s, the worst stop on the filmed course: from the body standing to the last frame a ball of a foot moves over 5 mm (a stop clip's last plant lands as its distance curve reaches zero; a blend to the idle leaves the rule's settle step a quarter second on)",
+   "unit": "s, the worst braking stop on the filmed course (not a wall's, stop.wall, or a tap's, the turn rows'; transitions.ts `stopKind`): from the body standing to the last frame a ball of a foot moves over 5 mm (a stop clip's last plant lands as its distance curve reaches zero; a blend to the idle leaves the rule's settle step a quarter second on)",
    "source": "docs/controller.md criterion 21d; Lyra's distance-matched stops; ALS's stops; D455",
    "check": {
     "by": "film",
@@ -1482,11 +1482,27 @@
    "bar": {
     "at_most": 0
    },
-   "unit": "feet stepped by D455's rule (`stepping`) in each stop on the filmed course, from 0.3 s before the body stands until it next moves or turns, both paces summed",
+   "unit": "feet stepped by D455's rule (`stepping`) in each braking stop on the filmed course (not a wall's or a tap's, transitions.ts `stopKind`), from 0.3 s before the body stands until it next moves or turns, both paces summed",
    "source": "docs/controller.md criterion 21d; Paragon's and ALS's per-foot stops; D455; D528",
    "check": {
     "by": "film",
     "name": "stop steps"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "stop.wall",
+   "noticed": 4,
+   "notice": "the feet shuffle after the body runs into something and stops",
+   "bar": {
+    "at_most": 0.3
+   },
+   "unit": "s, the worst wall stop on the filmed course (the body lost more than 2 m/s within 2 frames, transitions.ts `stopKind`): from the body standing to the last frame a ball of a foot moves over 5 mm",
+   "source": "docs/controller.md criterion 21d; ALS's transition steps; D455",
+   "check": {
+    "by": "film",
+    "name": "stop wall"
    },
    "cost": "heavy",
    "measurable": true

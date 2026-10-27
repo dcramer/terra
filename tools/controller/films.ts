@@ -45,9 +45,13 @@ export function keep(out: string, filmed: Filmed, films = FILMS): string {
   return `kept for nightly as ${dir}`;
 }
 
+/// The baseline is what the film's rows are held to, not what makes them: a raise or a
+/// lowering leaves a film main's.
+const NOT_READ = ["tools/controller/baseline.tsv"];
+
 /// Whether a film's rows still hold after these changed files: none under what the film reads.
 export function holds(changed: string[], reads: string[]): boolean {
-  return !changed.some((file) => reads.some((prefix) => file.startsWith(prefix)));
+  return !changed.some((file) => !NOT_READ.includes(file) && reads.some((prefix) => file.startsWith(prefix)));
 }
 
 export type Found = { dir: string; commit: string; behind: number } | { why: string };

@@ -34,9 +34,9 @@ import { pose } from "./swim.ts";
 import { type Walk, check } from "./yard-checks.ts";
 
 /// The frames run and filmed (every second one kept, for 30 a second): the route's start to
-/// past its end at a jog.
+/// past its end at a jog, the turns and the stops' sweep.
 const FROM = 20;
-const TO = 2400;
+const TO = 2660;
 const ROLLS = 10;
 const PICTURE = "960x540";
 /// Once the route is done (a jog's by frame ~960, a sprint's ~640), the body turns where it
@@ -46,12 +46,23 @@ const PICTURE = "960x540";
 /// of 20 deg within 0.2 m). Six frames went 0.54 m at decel 15 (D528), a stop, not a turn.
 /// The wait before is not stuck: the route is done once its last mark is reached.
 const TURNS = ["--press", "s@1300-1303", "--press", "d@1600-1603"];
+/// Then the stop's phase sweep (S0): four runs from standing, out and back along the camera's
+/// way, released after 60, 71, 82 and 93 frames (a quarter of a jog's stride apart), so each
+/// stop brakes at another phase of the stride; and a run at a full sprint, released after
+/// 1.5 s (shift held: the jog's one sprint; the sprint's every run is one). Each run then
+/// stands about 1.5 s, past a late settle step. A braking stop's settle depends on the foot
+/// the release finds (Plan v2: ~0.3 or ~0.6 s), so one release proves nothing.
+const SWEEP = [
+  ...["--press", "w@1750-1810", "--press", "s@1900-1971", "--press", "w@2060-2142", "--press", "s@2230-2323"],
+  ...["--press", "w@2420-2510"],
+];
+const SPRINTED = ["--press", "shift@2420-2510"];
 type Run = { name: string; args: string[]; to: number };
 const YARD = ["--clean", "--experiment", "controller-yard"];
 /// The paces walked: a jog (the route's own), and a sprint, shift held throughout.
 const PACES: Run[] = [
-  { name: "jog", args: [...YARD, ...TURNS], to: TO },
-  { name: "sprint", args: [...YARD, "--press", `shift@1-${TO + 10}`, ...TURNS], to: TO },
+  { name: "jog", args: [...YARD, ...TURNS, ...SWEEP, ...SPRINTED], to: TO },
+  { name: "sprint", args: [...YARD, "--press", `shift@1-${TO + 10}`, ...TURNS, ...SWEEP], to: TO },
 ];
 /// The lake: walked in off the shore until it swims (the frames to 540), slowed to tread water,
 /// dived (down held), swum under, then up to the surface (space held) and on along it.

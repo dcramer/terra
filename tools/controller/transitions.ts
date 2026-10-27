@@ -44,17 +44,26 @@ function ruleSteps(s: Seen[], from: number, to: number): number {
   return n;
 }
 
-/// Each stop: the frame the body comes to stand after going faster than a walk, and the frame
-/// it next moves or turns (or the record's end).
-export function stops(s: Seen[]): { at: number; until: number }[] {
-  const out: { at: number; until: number }[] = [];
+/// What stopped the body (S0, Plan v2): its own braking at the kind's deceleration, which a stop
+/// clip plays (stop.settle, stop.steps); a wall, the body losing more than WALL_MPS within
+/// WALL_FRAMES frames, which a transition step plays (stop.wall); or a tap to face a way, its
+/// peak under TAP_MPS, which is the turn rows' (turn.foot, turn.steps), never a stop's.
+export type StopKind = "braking" | "wall" | "tap";
+export const WALL_MPS = 2.0;
+export const WALL_FRAMES = 2;
+export const TAP_MPS = 2.0;
+
+/// Each stop: the frame the body comes to stand after going faster than a walk, the frame it
+/// next moves or turns (or the record's end), and what stopped it.
+export function stops(s: Seen[]): { at: number; until: number; kind: StopKind }[] {
+  const out: { at: number; until: number; kind: StopKind }[] = [];
   let moving = false;
   for (let i = 0; i < s.length; i++) {
     if (s[i].speed > 1.0) moving = true;
     if (moving && s[i].speed < STOPPED_MPS) {
       let j = i + 1;
       while (j < s.length && s[j].speed < STOPPED_MPS && turned(s[i].yaw, s[j].yaw) < 1) j++;
-      out.push({ at: i, until: j - 1 });
+      out.push({ at: i, until: j - 1, kind: stopKind(s, i) });
       moving = false;
       i = j - 1;
     }
@@ -62,14 +71,27 @@ export function stops(s: Seen[]): { at: number; until: number }[] {
   return out;
 }
 
-/// stop.settle: for each stop, how long after the body stands its feet still move (the last
-/// frame a ball moves more than MOVED_M), s; the row is the worst stop's.
-export function settle(walks: Walk[]): Check {
-  const said: string[] = [];
-  let worst = 0;
-  for (const walk of walks) {
+/// What stopped the body standing at `at`, from its going since it last stood.
+export function stopKind(s: Seen[], at: number): StopKind {
+  let from = at;
+  while (from > 0 && s[from - 1].speed >= STOPPED_MPS) from--;
+  const going = s.slice(from, at + 1);
+  if (Math.max(...going.map((each) => each.speed)) < TAP_MPS) return "tap";
+  for (let i = 0; i < going.length; i++)
+    for (let j = i + 1; j < going.length && going[j].frame - going[i].frame <= WALL_FRAMES; j++)
+      if (going[i].speed - going[j].speed > WALL_MPS) return "wall";
+  return "braking";
+}
+
+type Stopped = { at: string; kind: StopKind; took: number; steps: number };
+
+/// Every stop of the walks: where, what stopped it, how long after the body stands its feet
+/// still move (the last frame a ball moves more than MOVED_M), s, and the rule's steps in it
+/// (from 0.3 s before the body stands until it next moves or turns).
+export function stopped(walks: Walk[]): Stopped[] {
+  return walks.flatMap((walk) => {
     const s = seen(walk.frames);
-    for (const stop of stops(s)) {
+    return stops(s).map((stop) => {
       let last = stop.at;
       for (let i = stop.at + 1; i <= stop.until; i++) {
         const moved = s[i].balls.some((b, foot) => Math.hypot(...b.map((v, k) => v - s[i - 1].balls[foot][k])) > MOVED_M);
@@ -77,13 +99,23 @@ export function settle(walks: Walk[]): Check {
       }
       const took = (s[last].frame - s[stop.at].frame) / FPS;
       const steps = ruleSteps(s, stop.at - Math.round(0.3 * FPS), stop.until);
-      said.push(`${walk.name} frame ${s[stop.at].frame}: ${took.toFixed(2)} s, ${steps} rule steps`);
-      worst = Math.max(worst, took);
-    }
-  }
-  const ok = worst <= SETTLE_S && said.length > 0;
-  const line = `${ok ? "" : "✗ "}feet at rest ${worst.toFixed(2)} s after the body stops at worst (bar ${SETTLE_S} s): ${said.join("; ") || "no stop in the records"}`;
-  return { name: "stop settle", ok, line, value: said.length ? worst : NaN, faults: ok ? 0 : 1 };
+      return { at: `${walk.name} frame ${s[stop.at].frame}`, kind: stop.kind, took, steps };
+    });
+  });
+}
+
+const told = (each: Stopped) => `${each.at} ${each.kind}${each.kind === "tap" ? " (the turn rows')" : ""}: ${each.took.toFixed(2)} s, ${each.steps} rule steps`;
+
+/// stop.settle: the worst braking stop's settle, s; its line lists every stop with its kind.
+/// stop.wall: the worst wall stop's.
+export function settle(walks: Walk[], kind: "braking" | "wall" = "braking"): Check {
+  const all = stopped(walks);
+  const these = all.filter((each) => each.kind === kind);
+  const worst = Math.max(0, ...these.map((each) => each.took));
+  const ok = worst <= SETTLE_S && these.length > 0;
+  const listed = (kind === "braking" ? all : these).map(told).join("; ");
+  const line = `${ok ? "" : "✗ "}feet at rest ${worst.toFixed(2)} s after the body stops at worst of ${these.length} ${kind} stops (bar ${SETTLE_S} s): ${listed || "no stop in the records"}`;
+  return { name: kind === "braking" ? "stop settle" : "stop wall", ok, line, value: these.length ? worst : NaN, faults: ok ? 0 : 1 };
 }
 
 /// How far the body turns in frames `from` to `to` (indices of `s`), deg, summed a frame at a time.
@@ -152,23 +184,14 @@ export function turns(walks: Walk[]): Check {
   return { name: "turn steps", ok, line: `${ok ? "" : "✗ "}${total} feet stepped by the rule in turns from standing or slow (bar 0): ${said.join("; ") || "no turn in the records"}`, value: said.length ? total : NaN, faults: ok ? 0 : 1 };
 }
 
-/// stop.steps: the rule's steps in each stop (from 0.3 s before the body stands until it next
-/// moves or turns), summed over the walks: a stop clip braking on the planted foot steps the
-/// other itself (Paragon's, ALS's).
+/// stop.steps: the rule's steps in each braking stop, summed over the walks: a stop clip braking
+/// on the planted foot steps the other itself (Paragon's, ALS's).
 export function stopSteps(walks: Walk[]): Check {
-  const said: string[] = [];
-  let total = 0;
-  for (const walk of walks) {
-    const s = seen(walk.frames);
-    for (const stop of stops(s)) {
-      const steps = ruleSteps(s, stop.at - Math.round(0.3 * FPS), stop.until);
-      if (steps) said.push(`${walk.name} frame ${s[stop.at].frame}: ${steps}`);
-      total += steps;
-    }
-  }
+  const braking = stopped(walks).filter((each) => each.kind === "braking");
+  const total = braking.reduce((sum, each) => sum + each.steps, 0);
+  const said = braking.filter((each) => each.steps).map((each) => `${each.at}: ${each.steps}`);
   const ok = total === 0;
-  const counted = walks.some((walk) => stops(seen(walk.frames)).length);
-  return { name: "stop steps", ok, line: `${ok ? "" : "✗ "}${total} feet stepped by the rule in stops (bar 0)${said.length ? `: ${said.join("; ")}` : ""}`, value: counted ? total : NaN, faults: ok ? 0 : 1 };
+  return { name: "stop steps", ok, line: `${ok ? "" : "✗ "}${total} feet stepped by the rule in ${braking.length} braking stops (bar 0)${said.length ? `: ${said.join("; ")}` : ""}`, value: braking.length ? total : NaN, faults: ok ? 0 : 1 };
 }
 
-export const transitions = (walks: Walk[]): Check[] => [settle(walks), stopSteps(walks), starts(walks), turns(walks)];
+export const transitions = (walks: Walk[]): Check[] => [settle(walks), settle(walks, "wall"), stopSteps(walks), starts(walks), turns(walks)];
