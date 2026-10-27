@@ -1047,6 +1047,10 @@ impl Plugin for ShellPlugin {
                     .after(InputSystems),
             )
             .add_systems(Update, scripted_run)
+            .add_systems(
+                Last,
+                loading::hold::count_frames.after(bevy::diagnostic::update_frame_count),
+            )
             .add_systems(PostUpdate, keep_the_mouse_free);
         if self.0.remote || self.0.calls.is_some() {
             crate::remote::plugin(app);

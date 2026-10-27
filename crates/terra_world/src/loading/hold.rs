@@ -12,8 +12,9 @@
 //! since a load's hitches are what it measures.
 
 use super::{Loading, QUIET_FRAMES, Screen, asked_coming, placing};
-use crate::shell::Options;
+use crate::shell::{Options, ScriptFrame};
 use bevy::{
+    diagnostic::FrameCount,
     prelude::*,
     world_serialization::{WorldAssetRoot, WorldInstance, WorldInstanceSpawner},
 };
@@ -132,10 +133,77 @@ pub(crate) fn watch(
     }
 }
 
+/// Where a scripted run's frame count stands on its script's first frame: past any load's
+/// frames, so the count never goes back.
+const SCRIPT_COUNT_FROM: u32 = 1 << 20;
+
+/// A scripted run's frame count (`FrameCount`, the shaders' `globals.frame_count`) is its
+/// script's frame from the script's first frame on, and stands still while the script is
+/// held. Bevy counts every frame drawn, the loading screen's and a hold's too, and those are
+/// as many as the load took on the wall clock; what the count picks — TAA's jitter of eight
+/// (`prepare_taa_jitter`), the history textures' turn, the shadows', SSAO's, the fog's and
+/// the dither's noise — then differed run to run on one frame of one script, and a film of
+/// one build was not the same film twice (D472). Offline renderers seed their sampling by
+/// the frame being rendered for the same reason. After Bevy's count, in `Last`.
+pub(crate) fn count_frames(
+    options: Res<Options>,
+    script: Res<ScriptFrame>,
+    mut count: ResMut<FrameCount>,
+) {
+    if options.scripted() && !options.bench && script.0 > 0 {
+        count.0 = SCRIPT_COUNT_FROM + script.0;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::shell::counting;
+
+    /// The frame count on each script frame of a scripted run whose load took `loading`
+    /// frames and which is held `held` frames after its third.
+    fn counts(loading: usize, held: usize) -> Vec<(u32, u32)> {
+        let mut app = App::new();
+        app.add_plugins(bevy::diagnostic::FrameCountPlugin)
+            .insert_resource(
+                Options::from_args(["--shots", "out/x@5"].map(String::from).into_iter()).unwrap(),
+            )
+            .init_resource::<ScriptFrame>()
+            .add_systems(
+                Last,
+                count_frames.after(bevy::diagnostic::update_frame_count),
+            );
+        let mut steps = vec![false; loading];
+        steps.extend([true; 3]);
+        steps.extend(vec![false; held]);
+        steps.extend([true; 8]);
+        let mut seen = Vec::new();
+        for counted in steps {
+            if counted {
+                app.world_mut().resource_mut::<ScriptFrame>().0 += 1;
+            }
+            app.update();
+            let script = app.world().resource::<ScriptFrame>().0;
+            if counted {
+                seen.push((script, app.world().resource::<FrameCount>().0));
+            }
+        }
+        seen
+    }
+
+    #[test]
+    fn a_scripted_runs_frames_are_counted_alike_however_long_its_load_and_holds() {
+        let fast = counts(3, 0);
+        assert_eq!(fast.len(), 11);
+        assert_eq!(
+            fast,
+            counts(240, 17),
+            "a slow load and a hold moved the count"
+        );
+        assert_eq!(fast, counts(1000, 4));
+        // Still a frame a frame, as the jitter and the history textures take turns by it.
+        assert!(fast.windows(2).all(|w| w[1].1 == w[0].1 + 1));
+    }
 
     /// A scripted run's frames over `coming` (what is coming on each real frame): which
     /// script frame each real frame was, and the game clock's seconds then.
