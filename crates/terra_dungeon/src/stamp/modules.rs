@@ -10,7 +10,7 @@ use super::{
 };
 use crate::Dungeon;
 use crate::dress::{ModuleSet, RUBBLE, WATER};
-use crate::place::{Cell, Side, Space, opposite};
+use crate::place::{Cell, STEPS, Side, Space, opposite};
 use crate::theme::Theme;
 use terra_build::{BuildOp, Facing, Shape};
 
@@ -152,7 +152,13 @@ pub(super) fn lay(
                 }
             },
             Class::Collapse => collapse(cell, kinds, out),
-            Class::Rubble => rubble(cell, look, out),
+            // Fallen stone lies only under what it fell from (D539's plan): a spill beside no
+            // collapse is, in a kit's halls, a drift of the dead swept to the wall.
+            Class::Rubble => match (fallen_from(dungeon, looks, c), &theme.kit) {
+                (Some(side), _) => rubble(cell, side, out),
+                (None, Some(kit)) => drift(cell, &kit.remains, out),
+                (None, None) => rubble(cell, rubble_side(cell, look), out),
+            },
             Class::Basin => sink(Frame::new(cell.at, 0), cell, 0, kinds, ops),
             Class::Shore => shore(cell, look, kinds, ops),
             Class::Runner => {
@@ -220,12 +226,14 @@ pub(super) fn lay(
 }
 
 /// A corridor's run: a rib of trim across its ceiling every cell, a half metre down, where
-/// both its sides are walled and `ribbed` (a kit's barrel vault carries its own ribs), so a run reads in bays (a vault's transverse ribs, a mine's
+/// both its sides are walled, so a run reads in bays (a vault's transverse ribs, a mine's
 /// sets); and its edges worn, a fallen stone or two at a wall's foot and now and then a
 /// smaller one by the other, out of the middle where feet go. The fallen stones are rocks,
 /// each turned and sized its own way: half cubes of the wall's stone stood there before and
-/// read as blockout boxes, a step of them down every corridor (round 13's films).
-fn corridor(cell: &Cell, kinds: &Kinds, ribbed: bool, out: &mut Stamp) {
+/// read as blockout boxes, a step of them down every corridor (round 13's films). `bare`, a
+/// theme with no kit: a kit's barrel vault carries its own ribs, and in its halls stone lies
+/// only under a collapse (D539's plan; its corridors' stones read as confetti, dress r19).
+fn corridor(cell: &Cell, kinds: &Kinds, bare: bool, out: &mut Stamp) {
     let walled = |d: usize| cell.sides[d] == Side::Wall;
     let along = if walled(1) && walled(3) {
         Some(0)
@@ -240,14 +248,15 @@ fn corridor(cell: &Cell, kinds: &Kinds, ribbed: bool, out: &mut Stamp) {
     // Seen along the run: its walls east and west of the frame.
     let f = Frame::new(cell.at, turn);
     let top = kinds.head(cell.space) - 1;
-    if ribbed {
-        f.fill(
-            &mut out.ops,
-            [1, top, CELL / 2],
-            [INNER, top, CELL / 2],
-            solid(kinds.trim),
-        );
+    if !bare {
+        return;
     }
+    f.fill(
+        &mut out.ops,
+        [1, top, CELL / 2],
+        [INNER, top, CELL / 2],
+        solid(kinds.trim),
+    );
     let west = hash(cell.at, 400).is_multiple_of(2);
     let (foot, other) = if west {
         (1.4, CELL as f32 - 1.5)
@@ -470,30 +479,81 @@ fn collapse(cell: &Cell, kinds: &Kinds, out: &mut Stamp) {
     }
 }
 
-/// Stones fallen along the side the rubble spills from: a few big ones against it and smaller
-/// ones rolled farther out, each its own rock, turned and sized its own way. Half cubes of
-/// the wall's stone stood there before and read as blockout boxes in every film (round 13).
-fn rubble(cell: &Cell, look: Look, out: &mut Stamp) {
-    let side = (0..4)
+/// How far out from its cause fallen stone rolls at most, in metres: a graded pile, big
+/// stones at the cause's foot and smaller ones out to this, never strewn over the floor
+/// (barrow dress round 19: every rooms reviewer read loose stones as confetti).
+pub(crate) const CAUSE_M: f32 = 1.5;
+
+/// The side of a rubble cell (`c`) a collapse beside it spills over, if one does.
+pub(crate) fn fallen_from(dungeon: &Dungeon, looks: &[Look], c: usize) -> Option<usize> {
+    let cell = &dungeon.layout.cells[c];
+    (0..4).find(|&d| {
+        looks[c].sockets[d] & RUBBLE != 0
+            && dungeon
+                .layout
+                .cell(cell.at + STEPS[d])
+                .is_some_and(|n| looks[n].class == Class::Collapse)
+    })
+}
+
+/// The side a rubble cell spills from where no collapse is beside it: its rubble side, or
+/// else a wall.
+fn rubble_side(cell: &Cell, look: Look) -> usize {
+    (0..4)
         .find(|&d| look.sockets[d] & RUBBLE != 0)
         .or_else(|| (0..4).find(|&d| cell.sides[d] == Side::Wall))
-        .unwrap_or(look.turn);
+        .unwrap_or(look.turn)
+}
+
+/// The dead swept to a wall's foot: one of the kit's remains, lying along the wall.
+fn drift(cell: &Cell, remains: &[String], out: &mut Stamp) {
+    let Some(side) = (0..4).find(|&d| cell.sides[d] == Side::Wall) else {
+        return;
+    };
+    let pick = hash(cell.at, 110) as usize % (remains.len() + 1);
+    let Some(model) = remains.get(pick) else {
+        return;
+    };
+    let f = Frame::new(cell.at, side);
+    let x = MID + ((hash(cell.at, 111) % 5) as f32 - 2.0) * 0.4;
+    out.props.push(Prop {
+        model: model.clone(),
+        at: f.point(x, 0.0, 2.0),
+        facing: f.side(2),
+        scale: 1.0,
+    });
+}
+
+/// Stones fallen along the side the rubble spills from (`side`): a graded pile, a few big
+/// ones against it and smaller ones out to `CAUSE_M`, fewer and smaller the farther, each its
+/// own rock, turned and sized its own way. Half cubes of the wall's stone stood there before
+/// and read as blockout boxes in every film (round 13).
+fn rubble(cell: &Cell, side: usize, out: &mut Stamp) {
     let f = Frame::new(cell.at, side);
     let z0 = if cell.sides[side] == Side::Open {
         0.0
     } else {
         1.0
     };
+    // How far out the farthest stone's middle lies, in cubes past its first row.
+    let reach = CAUSE_M / super::CUBE - z0 - 0.4;
     let stones = 4 + hash(cell.at, 70) % 3;
     for k in 0..stones {
-        // The first two lie against the side, the rest roll out up to a metre.
+        // The first two lie against the side; the rest roll out, most of them near (the
+        // square of an even draw), the smaller the farther.
         let big = k < 2;
         let x = 1.0 + (hash(cell.at, 50 + k) % 100) as f32 / 100.0 * (CELL as f32 - 2.5);
-        let out_m = (hash(cell.at, 60 + k) % 10) as f32 / 10.0 * if big { 0.6 } else { 2.5 };
-        let scale = if big { 0.4 } else { 0.18 } + (hash(cell.at, 80 + k) % 5) as f32 * 0.05;
+        let draw = (hash(cell.at, 60 + k) % 10) as f32 / 10.0;
+        let t = if big { draw * 0.2 } else { draw * draw };
+        let jitter = (hash(cell.at, 80 + k) % 5) as f32 * 0.05;
+        let scale = if big {
+            0.4 + jitter
+        } else {
+            0.38 - 0.22 * t + jitter * 0.5
+        };
         out.props.push(Prop {
             model: rock(cell.at, 90 + k),
-            at: f.point(x, 0.0, z0 + 0.4 + out_m),
+            at: f.point(x, 0.0, z0 + 0.4 + t * reach),
             facing: (hash(cell.at, 100 + k) % 4) as usize,
             scale,
         });

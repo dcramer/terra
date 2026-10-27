@@ -622,7 +622,7 @@ fn a_mines_timber_sets_stand_each_its_own_way() {
 
 #[test]
 fn fallen_stone_is_rocks_never_a_lone_half_cube() {
-    use super::modules::{Class, looks};
+    use super::modules::{Class, fallen_from, looks};
     for theme in Theme::all(&assets()).unwrap() {
         let set = ModuleSet::new(&theme).unwrap();
         let (mut worn, mut rocks) = (0, 0);
@@ -641,7 +641,13 @@ fn fallen_stone_is_rocks_never_a_lone_half_cube() {
                 }
             }
             let classes = looks(&dungeon, &theme, &set);
-            worn += classes.iter().filter(|l| l.class == Class::Rubble).count();
+            // A kit's spill beside no collapse is a drift of the dead, not stone.
+            worn += (0..classes.len())
+                .filter(|&c| {
+                    classes[c].class == Class::Rubble
+                        && (theme.kit.is_none() || fallen_from(&dungeon, &classes, c).is_some())
+                })
+                .count();
             rocks += stamp
                 .props
                 .iter()
@@ -654,6 +660,58 @@ fn fallen_stone_is_rocks_never_a_lone_half_cube() {
             theme.name
         );
     }
+}
+
+#[test]
+fn fallen_stone_lies_only_under_its_cause() {
+    // In a kit's halls a loose stone (a rock, or debris) lies within a metre and a half of a
+    // collapse on its level, the heap it fell with, as a graded pile (D539's plan). Strewn as
+    // clutter and scatter, and drifted along corridors beside no collapse, every rooms
+    // reviewer read the stones as confetti with no source (barrow dress round 19).
+    use super::modules::{Class, looks};
+    let bound = 1.5;
+    let span = CELL as f32 * CUBE;
+    let (mut stones, mut far, mut farthest) = (0, 0, 0.0f32);
+    let themes = Theme::all(&assets()).unwrap();
+    for theme in themes.iter().filter(|t| t.kit.is_some()) {
+        let set = ModuleSet::new(theme).unwrap();
+        for s in 0..30 {
+            let Ok(dungeon) = generate(theme, &set, Seed(s)) else {
+                continue;
+            };
+            let stamp = stamp(&dungeon, theme, &kind);
+            let classes = looks(&dungeon, theme, &set);
+            let causes: Vec<(glam::Vec2, glam::Vec2, f32)> = (dungeon.layout.cells.iter())
+                .zip(&classes)
+                .filter(|(_, l)| l.class == Class::Collapse)
+                .map(|(c, _)| {
+                    let min = glam::Vec2::new(c.at.x as f32, c.at.z as f32) * span;
+                    (min, min + span, floor_of(c.at.y) as f32 * CUBE)
+                })
+                .collect();
+            let loose = |p: &&Prop| p.model.contains("Rock_") || p.model.contains("Debris");
+            for p in stamp.props.iter().filter(loose) {
+                stones += 1;
+                let at = glam::Vec2::new(p.at.x, p.at.z);
+                let near = (causes.iter())
+                    .filter(|&&(_, _, y)| p.at.y > y - 0.5 && p.at.y < y + 5.0)
+                    .map(|&(lo, hi, _)| at.distance(at.clamp(lo, hi)))
+                    .fold(f32::INFINITY, f32::min);
+                if near > bound + 0.01 {
+                    far += 1;
+                    farthest = farthest.max(near.min(99.0));
+                }
+            }
+        }
+    }
+    println!(
+        "{stones} loose stones, {far} farther than {bound} m from a collapse (the farthest {farthest:.2} m, 99 none on its level)"
+    );
+    assert!(stones > 0, "no loose stone laid: the test sees nothing");
+    assert_eq!(
+        far, 0,
+        "{far} of {stones} loose stones lie away from any collapse"
+    );
 }
 
 #[test]
