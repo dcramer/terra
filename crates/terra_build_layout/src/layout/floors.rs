@@ -340,6 +340,16 @@ impl Deck<'_> {
     /// thinnest log or beam), so no slot is left at the boards' level between their ends and
     /// the members, whatever is under them; a wall of a kind that fills its cube, at its
     /// cube's face.
+    /// Whether a cube beside the deck has boards of its own on it, which the deck's boards
+    /// do not run on over as under a wall: a flight's top step, whose tread is the deck's
+    /// edge there, or another kind's deck or its post, whose boards cover its cube, the two
+    /// decks' boards meeting at the cubes' face, never lying in one another (fuzz seed 171).
+    fn boarded_beside(&self, at: IVec3) -> bool {
+        self.walls.stair(at)
+            || self.walls.cell(at) == Some(super::Cell::Deck)
+            || post_in_deck(self.walls.base, self.walls.kits, at).is_some()
+    }
+
     fn board_reach(&self, beyond: IVec3) -> f32 {
         let base = self.walls.base;
         let alone = SIDES
@@ -690,8 +700,8 @@ impl Deck<'_> {
         // or up to the face of a wall beside the deck on its layer, over the ledger there,
         // so no slot is left along the wall between its logs and the boards.
         let reach = |at: IVec3| {
-            // Not over a flight's top step beside it, whose tread is the deck's edge there.
-            if self.walls.stair(at) {
+            // Not over a flight's top step or another deck beside it (`boarded_beside`).
+            if self.boarded_beside(at) {
                 return 0.0;
             }
             if wall_foot(at) {

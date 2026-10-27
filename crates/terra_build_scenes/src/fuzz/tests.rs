@@ -274,6 +274,44 @@ fn fuzz_seeds_34_54_80_109_131_180_a_side_board_stops_against_the_end_board() {
 }
 
 #[test]
+fn fuzz_seed_171_two_decks_of_two_kinds_meeting_keep_their_boards_to_their_own_cubes() {
+    // Found by `cargo xtask fuzz` at seed 171, shrunk: a logs deck and a hewn deck meeting
+    // side by side, the logs deck's post at its corner beside the hewn deck. The hewn deck's
+    // boards ran on under that cube as under a wall, 10 cm into the logs deck's own boards,
+    // in their plane (Coplanar, Floor against Floor, 27 cm², and far off 2134 cm²).
+    let materials = baseline();
+    let kind = |name: &str| {
+        materials
+            .names
+            .iter()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(&k, _)| k)
+            .unwrap()
+    };
+    let base = build(
+        &materials.kits,
+        &[
+            Deck {
+                min: [-3, 2],
+                max: [-1, 4],
+                kind: kind("logs"),
+            },
+            Deck {
+                min: [-1, 2],
+                max: [3, 6],
+                kind: kind("hewn"),
+            },
+        ],
+    );
+    let report = terra_build_mesh::inspect::inspect(
+        &base,
+        &materials.kits,
+        &terra_build_mesh::relief::Maps::worst(&materials.kits, false),
+    );
+    assert!(report.findings.is_empty(), "{:#?}", report.findings);
+}
+
+#[test]
 fn fuzz_seed_164_a_stringer_through_a_wall_is_out_of_the_plane_of_a_door_heads_end() {
     // Found by `cargo xtask fuzz` at seed 164, shrunk: a log room with a flight running
     // through its wall beside a doorway. The door's head laps its frame's width past the
