@@ -371,12 +371,37 @@ fn settings(
     });
 }
 
+/// The air's sea in the world's metres for a scale of its distances: the sphere the clouds'
+/// layers are shells over (docs/sky.md#heights), its sea under the eye.
+pub fn sea_sphere_radius_m(scale: AirScale) -> f32 {
+    INNER_RADIUS_M / scale.0
+}
+
+/// Up to this height over the sea, a metre of the world stands for a metre of real air
+/// (D544): all the ground reaches and the air it makes.
+const REAL_UP_TO_M: f32 = 3_000.0;
+/// Above it, each metre of the world stands for so many of real air (D544): the tropopause's
+/// 11 km at 6.2 km.
+const REAL_ABOVE: f32 = 2.5;
+
+/// The real height over the sea a height of the world stands for (D544): the same up to 3 km,
+/// two and a half times as much above.
+pub fn real_height_m(height_m: f32) -> f32 {
+    if height_m <= REAL_UP_TO_M {
+        height_m
+    } else {
+        REAL_UP_TO_M + (height_m - REAL_UP_TO_M) * REAL_ABOVE
+    }
+}
+
 /// Where the air's centre is for a camera, its distances `scale` times the world's: straight
-/// below it, so far that the camera is at the air's ground when it is at the sea, and higher
-/// as it climbs.
+/// below it, so far that the camera stands in the air at the real height its height over the
+/// sea stands for (D334, D544), never `scale` times it: at 18 an eye 1.5 km up stood 27 km up
+/// the air, its sky near black.
 fn centre(camera: Vec3, sea_radius_m: f32, scale: f32) -> Vec3 {
     let up = camera.normalize_or(Vec3::Y);
-    up * (sea_radius_m - INNER_RADIUS_M / scale)
+    let height = camera.length() - sea_radius_m;
+    camera - up * (INNER_RADIUS_M + real_height_m(height)) / scale
 }
 
 fn follow(
@@ -435,17 +460,27 @@ mod tests {
     }
 
     #[test]
-    fn the_camera_stands_at_the_airs_ground_at_sea_level_and_rises_with_it() {
-        let sea = 2000.0;
-        for up in [Vec3::Y, Vec3::new(0.3, 0.9, -0.2).normalize()] {
-            for above in [0.0, 40.0] {
-                let camera = up * (sea + above);
-                let inside = (camera - centre(camera, sea, HAZE_SCALE)) * HAZE_SCALE;
-                let height = inside.length() - INNER_RADIUS_M;
-                assert!((height - above * HAZE_SCALE).abs() < 2.0, "{height}");
-                assert!(inside.normalize().dot(up) > 0.9999);
+    fn the_camera_stands_in_the_air_at_the_real_height_it_stands_for() {
+        // At every scale, on the small planet and the 30 km world, the eye's height up the air
+        // is the real height its height over the sea stands for: 1.5 km up the 2 km world is
+        // 1.5 km up the air, not 27 km where the sky is black (sky stage 2, round 3); 5 km up
+        // is 8 km of real air (D544).
+        for (sea, scale) in [(2000.0, HAZE_SCALE), (30_000.0, 1.08)] {
+            for up in [Vec3::Y, Vec3::new(0.3, 0.9, -0.2).normalize()] {
+                for (above, real) in [(0.0, 0.0), (40.0, 40.0), (1500.0, 1500.0), (5000.0, 8000.0)]
+                {
+                    let camera = up * (sea + above);
+                    let inside = (camera - centre(camera, sea, scale)) * scale;
+                    let height = inside.length() - INNER_RADIUS_M;
+                    assert!((height - real).abs() < 2.0, "{sea} {above}: {height}");
+                    assert!(inside.normalize().dot(up) > 0.9999);
+                }
             }
         }
+        // The sky stays blue to the ceiling: 6.2 km stands for the tropopause's 11 km, far
+        // under the 30 km and more where the air's sky turns black.
+        assert!((real_height_m(6200.0) - 11_000.0).abs() < 1.0);
+        assert_eq!(real_height_m(2800.0), 2800.0);
     }
 
     #[test]
