@@ -55,6 +55,9 @@ const RING: [(f32, f32); 8] = [
     (0.0, -1.0),
     (0.71, -0.71),
 ];
+/// A vignette's pieces drawn together along its wall by these, in turn, to fit a short one:
+/// no closer, or a shroud and the axes laid by it overlap.
+const VIGNETTE_DRAWN: [f32; 2] = [1.0, 0.85];
 /// Clutter lies so much past what a prop keeps clear round it.
 const RING_GAP_M: f32 = 0.1;
 /// How far apart the open floor's debris keeps from each other and all else, in metres: a
@@ -385,26 +388,44 @@ impl Laying<'_> {
         }
     }
 
-    /// A vignette at the first spot where all of it fits; where it stands.
+    /// A vignette at the first wall spot where it fits: all of it, then drawn closer, then
+    /// its last pieces dropped one by one down to its first and one beside it; else so on
+    /// the open floor, facing the nearest doorway; where it stands. Laid all or none at a wall
+    /// spot, the crypt's guard post's, 2.2 m wide, fitted none on seed 7 (barrow dress 13).
     fn vignette(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) -> Option<Vec3> {
         for dress in self.dresses.iter().filter(|d| !d.vignette.is_empty()) {
-            let fits = |s: &Spot| {
-                let at: Vec<Vec3> = dress
-                    .vignette
-                    .iter()
-                    .map(|(_, _, (along, o))| s.offset(*along, *o))
+            let n = dress.vignette.len();
+            let tries: Vec<(usize, f32)> = (n.min(2)..=n)
+                .rev()
+                .flat_map(|keep| VIGNETTE_DRAWN.map(|k| (keep, k)))
+                .collect();
+            // Its pieces from a place on the floor, whose frame's wall side `d` it backs onto.
+            let fits = |p: Vec3, d: usize, (keep, k): (usize, f32)| {
+                let f = Frame::new(IVec3::ZERO, d);
+                let o = f.point(0.0, 0.0, 0.0);
+                let (along, away) = (f.point(1.0, 0.0, 0.0) - o, f.point(0.0, 0.0, 1.0) - o);
+                let at: Vec<Vec3> = (dress.vignette[..keep].iter())
+                    .map(|(_, _, (a, w))| p + (along * *a * k + away * *w) / CUBE)
                     .collect();
                 at.iter()
                     .all(|&p| self.place.clear(p) && free(taken, p, CLUTTER_APART_M))
-                    .then_some(at)
+                    .then_some((at, opposite(d)))
             };
-            let found = self.spots.iter().find_map(|s| fits(s).map(|at| (*s, at)));
-            if let Some((s, at)) = found {
-                for ((model, scale, _), p) in dress.vignette.iter().zip(at) {
-                    put(out, &(model.clone(), *scale), p, opposite(s.d));
-                    taken.push((p, CLUTTER_APART_M));
+            let walls = (tries.iter()).find_map(|&t| {
+                (self.spots.iter()).find_map(|s| fits(s.p, s.d, t).map(|f| (s.p, f)))
+            });
+            let found = walls.or_else(|| {
+                (tries.iter()).find_map(|&t| {
+                    (self.floor.iter())
+                        .find_map(|&(_, p, facing)| fits(p, opposite(facing), t).map(|f| (p, f)))
+                })
+            });
+            if let Some((p, (at, facing))) = found {
+                for ((model, scale, _), q) in dress.vignette.iter().zip(at) {
+                    put(out, &(model.clone(), *scale), q, facing);
+                    taken.push((q, CLUTTER_APART_M));
                 }
-                return Some(s.p);
+                return Some(p);
             }
         }
         None

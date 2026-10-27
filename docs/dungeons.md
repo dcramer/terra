@@ -94,7 +94,7 @@ Rules (`stamp/furnish.rs`, data in the theme's `dressing`):
 - **Wall props**: so many per four cells, against the bare walls a metre apart, in two groups as set dressers lay them: nearest the hero (or the vignette) and nearest the wall spot farthest from it, the walls between bare.
 - **Clutter**: so many a cell, a piece round each prop the room's dressing laid in turn, so each group takes its share; then the corners and the wall spots left. Tested: 5.4 props a group (3.75 before), 93% in groups of three or more, 2% alone.
 - **Scatter**: last, a type's `scatter` (fallen stones and their grit, broken bones) `strewn` so many a cell over the open floor the groups leave bare, each 1.2 m from all else and nudged off the floor's grid, 1.65 m off the tour. Tested over 40 seeds: of 530 rooms of four cells or more, 152 had anything 2 m in from their walls before, 517 after, two pieces a cell at most.
-- **Vignette**: its props laid by their offsets round one wall spot, all or none.
+- **Vignette**: its props laid by their offsets round one wall spot; where none fits all of it, drawn closer, then cut short from its end (its first piece and one more kept), then the same on the open floor facing the nearest doorway, so every room of its type tells it (laid all or none, the crypt's guard post's, 2.2 m wide, dropped in 3 of 40).
 - **Paths clear**: everything 1.3 m off the tour, 1.6 m from a doorway's middle and apart from what stands (1 m, clutter 0.6 m), so no prop is ever in the way or the camera.
 
 ## In the sandbox

@@ -182,7 +182,8 @@ pub struct Dress {
     #[serde(default)]
     pub strewn: (u32, u32),
     /// A moment told by props laid together: each a model, its scale and its place from one
-    /// wall spot, (along the wall, out from it) in metres; laid all or none.
+    /// wall spot, (along the wall, out from it) in metres; where it does not fit, drawn closer
+    /// or cut short from its end, its first piece kept, or laid on the open floor.
     #[serde(default)]
     pub vignette: Vec<(String, f32, (f32, f32))>,
     /// What lights the hero where no torch does, as a set dresser lights a focal prop from a

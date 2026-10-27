@@ -415,3 +415,69 @@ fn every_feature_has_a_fire_or_lamp_by_it() {
         );
     }
 }
+
+/// Every room type's vignette is told (D539): its first piece and one beside it at least, in
+/// 49 rooms of its type in 50 over 40 seeds. Laid all or none at a wall spot, the crypt's
+/// dropped without a word in 1 to 5 rooms of a type over these seeds (the guard post's, 2.2 m
+/// wide, in 3 of 40); drawn closer, cut short or on the open floor, in none (barrow dress 14,
+/// 2026-10-27).
+#[test]
+fn every_room_types_vignette_is_told() {
+    for theme in Theme::all(&assets()).unwrap() {
+        // Its vignettes' models marked, to tell them from the same models laid as props.
+        let mut marked = theme.clone();
+        for d in &mut marked.dressing {
+            for (m, _, _) in &mut d.vignette {
+                *m = format!("vignette/{m}");
+            }
+        }
+        let set = ModuleSet::new(&marked).unwrap();
+        let mut told = vec![(0u32, 0u32); marked.dressing.len()];
+        for s in 0..40 {
+            let Ok(dungeon) = generate(&marked, &set, Seed(s)) else {
+                continue;
+            };
+            let full = stamp(&dungeon, &marked, &kind);
+            for (r, room) in dungeon.graph.rooms.iter().enumerate() {
+                let rect = dungeon.layout.rooms[r];
+                let lo = rect.min.as_vec3() * 4.0;
+                let hi = lo + Vec3::new(rect.size.x as f32, 0.0, rect.size.y as f32) * 4.0;
+                let floor = floor_of(rect.min.y) as f32 * super::super::CUBE;
+                let inside = |p: Vec3| {
+                    (p.y - floor).abs() < 1.0
+                        && (lo.x..hi.x).contains(&p.x)
+                        && (lo.z..hi.z).contains(&p.z)
+                };
+                let here = |m: &str| (full.props.iter()).any(|p| p.model == m && inside(p.at));
+                for (k, d) in marked.dressing.iter().enumerate() {
+                    if d.vignette.is_empty() || !d.roles.contains(&room.role) {
+                        continue;
+                    }
+                    let laid = (d.vignette.iter()).filter(|(m, _, _)| here(m)).count();
+                    let first = here(&d.vignette[0].0);
+                    let ok = first && laid >= d.vignette.len().min(2);
+                    told[k].1 += 1;
+                    told[k].0 += ok as u32;
+                    if !ok {
+                        println!("{:?} seed {s} room {r}: {laid} pieces", d.roles);
+                    }
+                }
+            }
+        }
+        for (d, &(laid, rooms)) in marked.dressing.iter().zip(&told) {
+            if rooms == 0 {
+                continue;
+            }
+            println!(
+                "{}: the {:?} vignette told in {laid} of {rooms} rooms",
+                theme.name, d.roles
+            );
+            assert!(
+                laid * 50 >= rooms * 49,
+                "{}: the {:?} vignette in {laid} of {rooms} rooms",
+                theme.name,
+                d.roles
+            );
+        }
+    }
+}
