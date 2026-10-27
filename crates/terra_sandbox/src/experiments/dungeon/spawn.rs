@@ -46,14 +46,16 @@ const TORCH_FIRE: Kindled = Kindled {
 const BRAZIER_DROP_M: f32 = 0.5;
 /// A fire bowl by the goal: the campfire's stones and logs at this size on a pillar's top.
 const BOWL_SCALE: f32 = 0.45;
-/// Its flames: the campfire's at the bowl's size, about twice a torch's light.
+/// Its flames: the campfire's at the bowl's size, about a torch's light, burning oil in a
+/// torch's whiter light: at 0.9 heat in wood's light the pair blew the goal room out to one
+/// flat orange (barrow dress12, film and stills reviewers), so its heat, and its light, halved.
 const BOWL_FIRE: Kindled = Kindled {
     tall: 0.7,
     wide: 0.32,
-    heat: 0.9,
+    heat: 0.45,
     logs: terra_world::fire::Logs::CAMPFIRE.below(0.08),
     body: terra_world::fire::Body::Marched,
-    light: terra_world::fire::HEARTH_LIGHT,
+    light: terra_world::fire::TORCH_LIGHT,
     rig: terra_world::fire::Rig::Hearth,
 };
 /// Where a fire bowl's light hangs off its flames (`fire::Hung`): out past its stand's front,
