@@ -15,6 +15,7 @@ mod compiles;
 #[cfg(test)]
 mod dusk;
 mod moving;
+pub mod noise3d;
 use bevy::{
     camera::visibility::NoFrustumCulling, light::NotShadowCaster, prelude::*, reflect::TypePath,
     render::render_resource::AsBindGroup, shader::ShaderRef,
