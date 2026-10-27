@@ -369,7 +369,7 @@ fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
 }
 
 /// A room's middle on its floor.
-fn centre(layout: &Layout, room: usize) -> Vec3 {
+pub fn centre(layout: &Layout, room: usize) -> Vec3 {
     let rect = layout.rooms[room];
     let c = rect.centre() * (CELL as f32 * CUBE);
     Vec3::new(c.x, floor_of(rect.min.y) as f32 * CUBE, c.y)

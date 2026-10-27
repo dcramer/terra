@@ -31,6 +31,8 @@ mod shell;
 mod tests;
 mod view;
 
+pub use runin::centre as room_centre;
+
 use crate::Dungeon;
 use crate::dress::ModuleSet;
 use crate::place::{Layout, Space};

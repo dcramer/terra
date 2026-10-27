@@ -192,6 +192,30 @@ fn lay_out(
     for mob in &stamp.mobs {
         info!("Dungeon creature {} at {}", mob.species, point(mob.at));
     }
+    // Each room's purpose, floor middle, cells and modules, so a `--vantage` can frame one.
+    let set = ModuleSet::new(theme).ok();
+    for (r, rect) in dungeon.layout.rooms.iter().enumerate() {
+        let mut modules: Vec<&str> = rect
+            .cells()
+            .filter_map(|at| dungeon.layout.cell(at))
+            .filter_map(|c| {
+                let v = set
+                    .as_ref()?
+                    .variants
+                    .get(*dungeon.dressing.picks.get(c)?)?;
+                Some(theme.modules[v.module].name.as_str())
+            })
+            .collect();
+        modules.sort_unstable();
+        info!(
+            "Dungeon room {r} ({:?}): middle {}, {}x{} cells: {}",
+            dungeon.graph.rooms[r].role,
+            point(stamp::room_centre(&dungeon.layout, r) + Vec3::Y * EYE_M),
+            rect.size.x,
+            rect.size.y,
+            modules.join(" "),
+        );
+    }
     // How long a dolly takes from each to the next, slowed where the look turns fast.
     for (i, &seconds) in stamp.pace.iter().enumerate() {
         info!("Dungeon pace {i}: {seconds:.3}");
