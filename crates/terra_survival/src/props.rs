@@ -20,6 +20,9 @@ use bevy::{
 };
 use std::sync::Arc;
 use terra_bases::Site;
+
+mod charred;
+pub use charred::{Charred, charred};
 use terra_build::CELL_M;
 use terra_world::models::{Part, Textures, read_model, read_sockets};
 use terra_world::planet::Planet;
@@ -181,7 +184,15 @@ struct CheckedFor(u64);
 pub fn plugin(app: &mut App) {
     app.add_observer(solid::solid_or_not)
         .add_systems(Startup, (load, start_checking))
-        .add_systems(Update, (keep_clear, settle, (kindle, smoulder).chain()));
+        .add_systems(
+            Update,
+            (
+                keep_clear,
+                settle,
+                (kindle, smoulder).chain(),
+                charred::char_parts,
+            ),
+        );
 }
 
 /// A burning prop's part whose emissive map glows as its fire burns now, as a campfire's

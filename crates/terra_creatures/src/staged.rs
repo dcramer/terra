@@ -687,7 +687,9 @@ pub fn spawn(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         };
         match asked.burns_up {
             Some(up) => {
-                entity.insert(quench::HoldsUp).with_child((
+                // Its head black with soot and pitch, not its glTF's pale wrap (`Charred`).
+                let held = (quench::HoldsUp, terra_survival::props::Charred);
+                entity.insert(held).with_child((
                     Name::new(format!("Staged: {}'s flames", asked.name)),
                     kindled,
                     Transform::from_xyz(0.0, up, 0.0),

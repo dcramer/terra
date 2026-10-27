@@ -26,6 +26,10 @@ const CAMPFIRE: &str = "models/props/Campfire.glb";
 const CHEST: &str = "models/props/Chest.glb";
 /// The torch's head over its foot, as `terra_survival::torchlight` holds it.
 const TORCH_HEAD_M: f32 = 0.47;
+/// A wall torch is drawn larger than a held one, charred (`props::Charred`): at a hand's size,
+/// half a metre, its stave read as a thin pale grey spike down the crypt's walls (torch round
+/// t4), where a sconce's torch stands out from the stone as a dark stave under its flame.
+const WALL_TORCH_SCALE: f32 = 1.3;
 /// A wall torch leans so far out from its wall, in degrees.
 const TORCH_LEAN_DEG: f32 = 20.0;
 /// A torch's flames: a hand's width, knee-high at most, less hot than a campfire.
@@ -181,8 +185,10 @@ fn light_up(inside: &mut ChildSpawnerCommands, assets: &AssetServer, light: &Lig
             inside.spawn((
                 Name::new("Wall torch"),
                 scene(assets, TORCH),
-                Transform::from_translation(light.at - up * TORCH_HEAD_M)
-                    .with_rotation(tilt * facing(light.facing)),
+                terra_survival::props::Charred,
+                Transform::from_translation(light.at - up * TORCH_HEAD_M * WALL_TORCH_SCALE)
+                    .with_rotation(tilt * facing(light.facing))
+                    .with_scale(Vec3::splat(WALL_TORCH_SCALE)),
             ));
             inside.spawn((
                 Name::new("Wall torch's fire"),
