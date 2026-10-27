@@ -58,6 +58,9 @@ const RING: [(f32, f32); 8] = [
 /// A vignette's pieces drawn together along its wall by these, in turn, to fit a short one:
 /// no closer, or a shroud and the axes laid by it overlap.
 const VIGNETTE_DRAWN: [f32; 2] = [1.0, 0.85];
+/// How near a room's focus (its hero or fire) a vignette is laid first, in metres, from the
+/// wall spot or floor point it stands from: a hero's clearance and two wall spots.
+const FOCUS_M: f32 = 3.0;
 /// Clutter lies so much past what a prop keeps clear round it.
 const RING_GAP_M: f32 = 0.1;
 /// How far apart the open floor's debris keeps from each other and all else, in metres: a
@@ -68,6 +71,10 @@ const SCATTER_APART_M: f32 = 1.2;
 /// keeps as much farther from the tour's line than the grid's points do, since the eye swings
 /// off that line (a nudged stone 0.71 m from the eye's path at `OFF_ROUTE_M` alone).
 const SCATTER_NUDGE_M: f32 = 0.35;
+
+/// What a campfire keeps clear round it, in metres: its ring of stones and a step to sit by
+/// it, so the camp's bedroll lies beside the fire, not in it.
+const FIRE_M: f32 = 1.1;
 
 /// Out from the wall's cell edge, in cubes: 0.3 m clear of its face.
 const OUT: f32 = 1.6;
@@ -159,12 +166,16 @@ pub(super) fn lay(
 ) {
     let layout = &dungeon.layout;
     let fires = out.lights.iter().filter(|l| l.kind != LightKind::Torch);
+    let keep = |l: &Light| match l.kind {
+        LightKind::Campfire => (l.at, FIRE_M),
+        _ => (l.at, 0.0),
+    };
     let mut taken: Vec<(Vec3, f32)> = (out.props.iter().map(|p| p.at))
         .chain(out.objects.iter().map(|o| o.at))
         .chain(out.chests.iter().map(|c| c.at))
         .chain(out.mobs.iter().map(|m| m.at))
-        .chain(fires.map(|l| l.at))
         .map(|p| (p, 0.0))
+        .chain(fires.map(keep))
         .collect();
     let route = out.route.clone();
     for (r, room) in dungeon.graph.rooms.iter().enumerate() {
@@ -281,7 +292,11 @@ pub(super) fn lay(
             }
         }
         let hero = laying.hero(featured, &mut taken, out);
-        let told = laying.vignette(&mut taken, out);
+        // The vignette by the room's focus: its hero, else its fire (a camp round its fire).
+        let fire = (cells.iter())
+            .find(|&&(_, c)| looks[c].class == Class::Rest)
+            .map(|&(at, _)| Frame::new(at, 0).point(MID, 0.0, MID));
+        let told = laying.vignette(hero.or(fire), &mut taken, out);
         // The room's groups: round its hero (or its vignette, or the feature's first wall
         // spot), and in the far corner from it.
         let anchor = hero.or(told).or(spots.first().map(|s| s.p));
@@ -388,11 +403,24 @@ impl Laying<'_> {
         }
     }
 
-    /// A vignette at the first wall spot where it fits: all of it, then drawn closer, then
-    /// its last pieces dropped one by one down to its first and one beside it; else so on
-    /// the open floor, facing the nearest doorway; where it stands. Laid all or none at a wall
-    /// spot, the crypt's guard post's, 2.2 m wide, fitted none on seed 7 (barrow dress 13).
-    fn vignette(&self, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) -> Option<Vec3> {
+    /// A vignette at the first wall spot where it fits, nearest the room's `focus` first (its
+    /// hero, or its fire): all of it, then drawn closer, then its last pieces dropped one by
+    /// one down to its first and one beside it; else so on the open floor, facing the nearest
+    /// doorway; where it stands. Laid all or none at a wall spot, the crypt's guard post's,
+    /// 2.2 m wide, fitted none on seed 7 (barrow dress 13); at a spot by its hash, the camp's
+    /// bedroll lay a cell from its fire and the fallen guard across the room from the bench,
+    /// so no frame held the two (barrow dress 15).
+    fn vignette(
+        &self,
+        focus: Option<Vec3>,
+        taken: &mut Vec<(Vec3, f32)>,
+        out: &mut Stamp,
+    ) -> Option<Vec3> {
+        let (mut spots, mut floor) = (self.spots.to_vec(), self.floor.to_vec());
+        if let Some(f) = focus {
+            spots.sort_by(|a, b| a.p.distance(f).total_cmp(&b.p.distance(f)));
+            floor.sort_by(|a, b| a.1.distance(f).total_cmp(&b.1.distance(f)));
+        }
         for dress in self.dresses.iter().filter(|d| !d.vignette.is_empty()) {
             let n = dress.vignette.len();
             let tries: Vec<(usize, f32)> = (n.min(2)..=n)
@@ -411,12 +439,18 @@ impl Laying<'_> {
                     .all(|&p| self.place.clear(p) && free(taken, p, CLUTTER_APART_M))
                     .then_some((at, opposite(d)))
             };
-            let walls = (tries.iter()).find_map(|&t| {
-                (self.spots.iter()).find_map(|s| fits(s.p, s.d, t).map(|f| (s.p, f)))
+            // By the focus, as whole as fits at the nearest spot; then whole anywhere first.
+            let by = |p: Vec3| focus.is_some_and(|f| p.distance(f) < FOCUS_M);
+            let near = (spots.iter().filter(|s| by(s.p)).map(|s| (s.p, s.d)))
+                .chain((floor.iter().filter(|o| by(o.1))).map(|o| (o.1, opposite(o.2))))
+                .find_map(|(p, d)| (tries.iter()).find_map(|&t| fits(p, d, t).map(|f| (p, f))));
+            let walls = near.or_else(|| {
+                (tries.iter())
+                    .find_map(|&t| (spots.iter()).find_map(|s| fits(s.p, s.d, t).map(|f| (s.p, f))))
             });
             let found = walls.or_else(|| {
                 (tries.iter()).find_map(|&t| {
-                    (self.floor.iter())
+                    (floor.iter())
                         .find_map(|&(_, p, facing)| fits(p, opposite(facing), t).map(|f| (p, f)))
                 })
             });
@@ -532,11 +566,12 @@ impl Laying<'_> {
     }
 }
 
-/// Whether a cell's module leaves its walls bare for dressing.
+/// Whether a cell's module leaves its walls bare for dressing: a rest's fire stands in its
+/// cell's middle, its walls free for the camp laid round it.
 fn bare(class: Class) -> bool {
     matches!(
         class,
-        Class::Plain | Class::Runner | Class::Decor | Class::Pillar
+        Class::Plain | Class::Runner | Class::Decor | Class::Pillar | Class::Rest
     )
 }
 

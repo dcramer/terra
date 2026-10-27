@@ -481,3 +481,80 @@ fn every_room_types_vignette_is_told() {
         }
     }
 }
+
+/// How near a vignette's first piece lies to its room's focus to read with it, in metres,
+/// across the floor: past a hero's clearance (1.5 m) and a vignette's half width (up to
+/// 1.35 m, the guard post's) and half a metre; a camp's within its fire's cell.
+const FOCUS_M: f32 = 3.5;
+
+/// A room's vignette lies by its focus, its hero or else its fire (barrow dress round 16):
+/// laid at the first wall spot by its hash, the crypt's camp's bedroll lay a cell or more from
+/// its fire and the guard post's fallen guard across the room from the bench, so no frame held
+/// both. Of the rooms with a vignette and a focus over 40 seeds, 9 in 10 a type.
+#[test]
+fn a_vignette_lies_by_its_rooms_focus() {
+    for theme in Theme::all(&assets()).unwrap() {
+        let mut marked = theme.clone();
+        for d in &mut marked.dressing {
+            for (m, _, _) in &mut d.vignette {
+                *m = format!("vignette/{m}");
+            }
+        }
+        let set = ModuleSet::new(&marked).unwrap();
+        let mut near = vec![(0u32, 0u32, 0.0f32); marked.dressing.len()];
+        for s in 0..40 {
+            let Ok(dungeon) = generate(&marked, &set, Seed(s)) else {
+                continue;
+            };
+            let full = stamp(&dungeon, &marked, &kind);
+            let heroic = heroes(&marked, &full);
+            for (r, room) in dungeon.graph.rooms.iter().enumerate() {
+                let rect = dungeon.layout.rooms[r];
+                let lo = rect.min.as_vec3() * 4.0;
+                let hi = lo + Vec3::new(rect.size.x as f32, 0.0, rect.size.y as f32) * 4.0;
+                let floor = floor_of(rect.min.y) as f32 * super::super::CUBE;
+                let inside = |p: &Vec3| {
+                    (p.y - floor).abs() < 1.0
+                        && (lo.x..hi.x).contains(&p.x)
+                        && (lo.z..hi.z).contains(&p.z)
+                };
+                let fire = (full.lights.iter())
+                    .filter(|l| l.kind == LightKind::Campfire)
+                    .map(|l| l.at)
+                    .find(inside);
+                let Some(focus) = heroic.iter().copied().find(inside).or(fire) else {
+                    continue;
+                };
+                let flat = |p: Vec3| Vec2::new(p.x, p.z);
+                for (k, d) in marked.dressing.iter().enumerate() {
+                    if d.vignette.is_empty() || !d.roles.contains(&room.role) {
+                        continue;
+                    }
+                    let first =
+                        (full.props.iter()).find(|p| p.model == d.vignette[0].0 && inside(&p.at));
+                    let Some(first) = first else { continue };
+                    let gap = flat(first.at).distance(flat(focus));
+                    near[k].1 += 1;
+                    near[k].0 += (gap < FOCUS_M) as u32;
+                    near[k].2 = near[k].2.max(gap);
+                }
+            }
+        }
+        for (d, &(by, rooms, most)) in marked.dressing.iter().zip(&near) {
+            if rooms > 0 {
+                println!(
+                    "{}: the {:?} vignette by its focus in {by} of {rooms}, at most {most:.1} m",
+                    theme.name, d.roles
+                );
+            }
+        }
+        for (d, &(by, rooms, _)) in marked.dressing.iter().zip(&near) {
+            assert!(
+                by * 10 >= rooms * 9,
+                "{}: the {:?} vignette by its focus in {by} of {rooms} rooms",
+                theme.name,
+                d.roles
+            );
+        }
+    }
+}
