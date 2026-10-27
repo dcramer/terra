@@ -30,7 +30,11 @@ from mathutils.kdtree import KDTree
 import look
 
 CELL = (0.5, 0.5)  # assets/data/foliage.ron "oakbranch": its square's top-left, a 4th across
-CLUMP_M = 0.55  # clumps this far apart along the outer branches
+# Clumps this far apart along the outer branches: round 8's 0.55 read bare and dead beside
+# the summer oaks.
+CLUMP_M = 0.45
+# Clumps nearer the face than this are in the crown's shade, darker the nearer.
+FACE_SHADE_M = 2.0
 # A clump's size: the veteran oaks' tips are 0.95 m (assets/data/trees/oak_bough.ron) on limbs
 # that run on far past the leaves; a creature's crown limbs are short, so its clumps are larger
 # and carried out past the twigs' ends, for a crown as full as the forest's oaks'.
@@ -181,6 +185,12 @@ for i, (tip, _) in enumerate(tips):
         out = min(1, (middle - centre).length / (crown_reach * 1.1))
         in_mass = min(1, (middle - mass).length / (SIZE_M * 3))
         light = 0.44 + 0.22 * out + 0.16 * in_mass + 0.16 * rise + dice.uniform(-0.13, 0.09)
+        # The clumps by the face hang low under the rest of the crown, in its shade, as an oak's
+        # inner leaves are: darkened toward it (round-8 film reviews: a lime clump at the fork,
+        # brighter than the oaks round it, gave the sleeping tree away).
+        by_face = (middle - face).length / FACE_SHADE_M
+        if by_face < 1:
+            light *= 0.5 + 0.5 * by_face
         h = hue_of[i]
         tint = Vector((light * dice.uniform(0.95, 1.05) * h.x, light * h.y, light * dice.uniform(0.9, 1.0) * h.z))
         tint = Vector((tint.x * TINT.x, tint.y * TINT.y, tint.z * TINT.z))

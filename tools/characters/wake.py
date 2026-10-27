@@ -13,7 +13,7 @@ it, teeth on the lips, opened by a blend shape) it adds:
   - splinter teeth along both lips, grained as the bark and catching the throat's ember,
     tucked inside the trunk until the lips part;
   - a heavy bark brow over the eyes, which sit in sockets in its shadow;
-  - a `Wake` shape key: the lips parted most in the middle, curled in, raggedly;
+  - a `Wake` shape key: the lips parted most in the middle, rolled out thick, raggedly;
   - an emissive map, amber with a hot middle where the eye holes are painted dark, black
     elsewhere. It ships
     dark (export_character.py exports an emissive map's factor as 0); the game lights it
@@ -42,9 +42,10 @@ AMBER = (1.0, 0.52, 0.12)
 CORE = (1.0, 0.86, 0.55)  # an eye's hot middle, near white, fading out to amber
 # The throat's glow at its deepest, dark by the lips, so the mouth reads as a hollow lit from
 # within, not a lit decal; at round 6's 0.07 it read as no hollow at all (film reviews).
-EMBER = (0.32, 0.08, 0.012)
-# The teeth's warm cast from it: splinters catching the ember, dimmer than the throat.
-CAUGHT = (0.13, 0.04, 0.007)
+EMBER = (0.45, 0.1, 0.014)
+# The teeth's warm cast from it: barely any, so the fangs stand dark against the lit throat
+# (round 8's 0.13 lit them as one orange sawtooth panel, a jack-o'-lantern's).
+CAUGHT = (0.03, 0.009, 0.002)
 src = look.path(look.args()[0])
 SHEET = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--sheet=")), None)
 
@@ -69,8 +70,8 @@ uv = bm.loops.layers.uv.active
 deform = bm.verts.layers.deform.verify()
 
 
-def front_faces(lo, hi, cx, half):
-    return [f for f in bm.faces if f.normal.y < -0.3 and lo < f.calc_center_median().z < hi
+def front_faces(lo, hi, cx, half, facing=-0.3):
+    return [f for f in bm.faces if f.normal.y < facing and lo < f.calc_center_median().z < hi
             and abs(f.calc_center_median().x - cx) < half]
 
 
@@ -251,11 +252,18 @@ bm.normal_update()
 print("BROW", f"crest {ridge:.2f} m, {thrust:.2f} m out, {browed} vertices moved")
 
 
-region = front_faces(mz - 0.5, mz + 0.5, mx, half + 0.2)
+# The cut runs through the walls of the bole's furrows too, not only the faces turned ahead:
+# kept to those, it left the furrow between the pressed legs whole across the mouth, a bark
+# seam down its middle when it opened (round-8 film reviews).
+def mouth_faces(lo, hi, wide):
+    return [f for f in front_faces(lo, hi, mx, wide, facing=0.6) if f.calc_center_median().y < cy]
+
+
+region = mouth_faces(mz - 0.5, mz + 0.5, half + 0.2)
 edges = list({e for f in region for e in f.edges})
 bmesh.ops.subdivide_edges(bm, edges=edges, cuts=1, use_grid_fill=True)
 bm.normal_update()
-region = front_faces(mz - 0.3, mz + 0.3, mx, half + 0.1)
+region = mouth_faces(mz - 0.3, mz + 0.3, half + 0.1)
 geom = list({g for f in region for g in (f, *f.edges, *f.verts)})
 cut = bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(0, 0, mz), plane_no=(0, 0, 1))["geom_cut"]
 slit = [e for e in cut if isinstance(e, bmesh.types.BMEdge)
@@ -319,9 +327,10 @@ def new_vert(co):
 
 
 mouth_bag = material(f"{body.name}_mouth", (0.004, 0.003, 0.002), 1.0)
-gw, gh, bag_w, bag_h = 16, 10, 1.3 * half, 0.6
+# A throat, not a dish: 1 m deep in the middle (round 8's 0.55 read as a flat lit panel).
+gw, gh, bag_w, bag_h, bag_d = 16, 10, 1.3 * half, 0.6, 1.0
 grid = [[new_vert(surface(mx + u * bag_w, mz + v * bag_h)
-                  + Vector((0, 0.02 + 0.55 * (1 - u * u) * (1 - v * v), 0)))
+                  + Vector((0, 0.02 + bag_d * (1 - u * u) * (1 - v * v), 0)))
          for u in np.linspace(-1, 1, gw)] for v in np.linspace(-1, 1, gh)]
 for j in range(gh - 1):
     for i in range(gw - 1):
@@ -333,7 +342,8 @@ for j in range(gh - 1):
 # open mouth reads in the shade; it ships dark and lights with the eyes (staged.glow).
 throat_px = 32
 gu, gv = np.meshgrid(np.linspace(-1, 1, throat_px), np.linspace(-1, 1, throat_px))
-heat = np.clip(1 - (gu ** 2 + gv ** 2), 0, 1) ** 5
+# Black at the rim and hot only at the back, so the opening reads as a cavity going in.
+heat = np.clip(1 - (gu ** 2 + gv ** 2), 0, 1) ** 9
 throat = np.ones((throat_px, throat_px, 4), dtype=np.float32)
 throat[..., :3] = heat[..., None] * np.array(EMBER, dtype=np.float32)
 ember = bpy.data.images.new(f"{body.name}_throat", throat_px, throat_px, alpha=False)
@@ -359,14 +369,18 @@ caught_tex = caught.node_tree.nodes.new("ShaderNodeTexImage")
 caught_tex.image = cast
 caught.node_tree.links.new(caught_tex.outputs["Color"], caught_bsdf.inputs["Emission Color"])
 teeth = []  # (vertices, the lip it hangs from: +1 upper, -1 lower, its x)
-for lip, count in ((1, 9), (-1, 8)):
+# Fewer and longer than round 8's 9 and 8 (a flat sawtooth): uneven splinters, the upper lip's
+# second from each corner a fang that crosses the open gap, each raked back into the throat.
+for lip, count in ((1, 7), (-1, 6)):
     for i in range(count):
         x = mx + (-0.8 + 1.6 * (i + 0.5 * (lip < 0) + 0.5) / (count + 0.5)) * 0.95 * half
         h = (math.sin(91.7 * x + 7 * lip) + 1) / 2  # a fixed scatter: each tooth its own length
+        fang = lip > 0 and i in (1, count - 2)
         root = surface(x, mz + jag(x)) + Vector((0, 0.045, 0))
-        b = (0.09 + 0.06 * h) * spacing
+        b = (0.11 + 0.07 * h + 0.05 * fang) * spacing
+        long = (0.4 + 0.45 * h) * (1.6 if fang else 1) * spacing
         a, c, d = (new_vert(root + o) for o in (Vector((-b, 0, 0)), Vector((b, 0, 0)), Vector((0, b, 0))))
-        tip = new_vert(root + Vector((0.3 * b * math.sin(13 * x), -0.015, -lip * (0.28 + 0.34 * h) * spacing)))
+        tip = new_vert(root + Vector((0.3 * b * math.sin(13 * x), 0.2 * long, -lip * long)))
         for tri in ((a, c, d), (a, tip, c), (c, tip, d), (d, tip, a)):
             f = bm.faces.new(tri if lip > 0 else tri[::-1])
             f.material_index = teeth_mat
@@ -377,7 +391,7 @@ for lip, count in ((1, 9), (-1, 8)):
         teeth.append(((a, c, d, tip), lip, x))
 bm.normal_update()
 
-# 5. The Wake shape: each lip moved off the cut, most in the middle and raggedly, curled in.
+# 5. The Wake shape: each lip moved off the cut, most in the middle and raggedly, rolled out.
 wf = 0.95 * half
 # Each lip's move eased out over a long reach (the lower, which falls further, the longer), so
 # the bark's picture is drawn out by a quarter at most, not by half just off the cut; the
@@ -403,7 +417,9 @@ for v in bm.verts:
         side = 1 if dz > 0 else -1
     g = max(0.0, 1 - abs(dz) / (reach_up if side > 0 else reach_down)) ** 1.2
     f = along(v.co.x) * g
-    delta[v] = Vector(((v.co.x - mx) * 0.12 * f, 0.05 * spacing * f * g * g, side * (up if side > 0 else down) * f))
+    # The lips rolled out into a thick rim, the bark nearest the cut pushed forward most
+    # (round 8's curled-in lips read as the edge of a hole cut in a flat face).
+    delta[v] = Vector(((v.co.x - mx) * 0.12 * f, -0.22 * spacing * f * g ** 4, side * (up if side > 0 else down) * f))
 for verts, lip, x in teeth:
     d = Vector((0, 0, lip * (up if lip > 0 else down) * along(x)))
     for v in verts:
