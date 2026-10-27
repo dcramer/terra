@@ -1,37 +1,5 @@
 {
-  "held/basket": {
-    "marker": "Hung from the hand, down -Z from its handle's top, but the committed file predates fit_held.py writing {\"hold\": \"hung\"}; rebuilding it (fit_held.py basket, then its icon) removes this."
-  },
-  "held/bow": {
-    "grip": "Fitted by length, which centres the model's bounds: the riser's middle at y = 0 is 2.5 cm off the fist's.",
-    "facing": "Fitted by length, never turned about +Y: its limbs curve in X-Y. Which plane a bow is drawn in is settled with its clips, not here.",
-    "second": "No \"nock\" yet, where the drawing hand takes its string: set with the bow's draw and its plane, by the round that builds the two-handed IK (holding.md, section 3; attachment gaps 2026-10-27)."
-  },
-  "held/hammer": {
-    "grip": "Fitted by length, which centres the model's bounds: its handle is 3.6 cm off the fist's middle.",
-    "facing": "Fitted by length, never turned about +Y: its head lies across X, 90 degrees off its kind's (held for the developer's eye, 2026-10-27)."
-  },
-  "held/iron_axe": {
-    "grip": "Fitted by length, which centres the model's bounds: its handle is 4.7 cm off the fist's middle, toward +X.",
-    "facing": "Fitted by length, never turned about +Y: its bit lies toward -X, 90 degrees off -Z (held for the developer's eye, 2026-10-27)."
-  },
-  "held/iron_pickaxe": {
-    "grip": "Fitted by length, which centres the model's bounds: its handle is 4 cm off the fist's middle.",
-    "facing": "Fitted by length, never turned about +Y: its head lies across X, 90 degrees off its kind's (held for the developer's eye, 2026-10-27)."
-  },
-  "held/knife": {
-    "facing": "Fitted by length, never turned about +Y: its blade's edges lie across X, 90 degrees off the sword's (held for the developer's eye, 2026-10-27)."
-  },
   "held/spear": {
-    "facing": "Fitted by length, never turned about +Y: its blade's edges lie across X, 90 degrees off the sword's (held for the developer's eye, 2026-10-27).",
     "second": "No \"second\" yet, where the off hand closes on its shaft held in two: set with the two-handed stance's clips, by the round that builds the two-handed IK (holding.md, section 3; attachment gaps 2026-10-27)."
-  },
-  "held/stone_axe": {
-    "grip": "Fitted by length, which centres the model's bounds: its handle is 4.7 cm off the fist's middle, toward +X.",
-    "facing": "Fitted by length, never turned about +Y: its bit lies toward -X, 90 degrees off -Z (held for the developer's eye, 2026-10-27)."
-  },
-  "held/stone_pickaxe": {
-    "grip": "Fitted by length, which centres the model's bounds: its handle is 4 cm off the fist's middle.",
-    "facing": "Fitted by length, never turned about +Y: its head lies across X, 90 degrees off its kind's (held for the developer's eye, 2026-10-27)."
   }
 }

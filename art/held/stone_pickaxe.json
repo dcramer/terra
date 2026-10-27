@@ -1,1 +1,1 @@
-{"kind": "hafted", "source": "tools/Pickaxe.glb", "fit": "length", "length": 0.9, "grip_from_end": 0.08, "head_colour": [0.55, 0.53, 0.5], "carry_tilt": -45}
+{"kind": "hafted", "source": "tools/Pickaxe.glb", "fit": "length", "length": 0.9, "grip_from_end": 0.08, "turn": 90, "head_colour": [0.55, 0.53, 0.5], "carry_tilt": -45, "note": "Turned +90, not the axes' -90: its longer pick (43 cm from the handle, against 35) reaches toward the source's +X."}

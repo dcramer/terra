@@ -17,8 +17,9 @@ item is adding a file, never editing this script. Its "fit" says how the look is
 
 - "length": a model standing on the end of its handle, along its height (the free tool models
   in assets/models/tools, THIRD_PARTY.md, and ours made by tools/props): scaled to "length"
-  metres, held "grip_from_end" metres up from its foot, its working end coloured "head_colour"
-  where its material shows there.
+  metres, held "grip_from_end" metres up from its foot, centred there on its handle's section,
+  turned "turn" degrees about +Y (so a one-sided head faces -Z, a blade's edges lie in Y-Z), its
+  working end coloured "head_colour" where its material shows there.
 - "points": a textured model of ours (tools/props, "into": "tools"), kept in its own materials
   and maps: "grip", the point held at the middle of the fist; "toward", a point its handle runs
   toward at its working end (the look's +Y); "out", the direction that becomes the look's +X,
@@ -72,6 +73,23 @@ def second_hand(ob, d):
     for key in ("second", "nock"):
         if key in d:
             ob[key] = d[key]
+
+
+def handle_middle(ob):
+    """The middle of where the plane z = 0 cuts the mesh's edges, across X and Y: the handle's
+    section at the grip, as attach_contract.ts's handleAt measures it."""
+    vs = ob.data.vertices
+    cuts = []
+    for e in ob.data.edges:
+        a, b = vs[e.vertices[0]].co, vs[e.vertices[1]].co
+        if (a.z < 0) == (b.z < 0):
+            continue
+        k = a.z / (a.z - b.z)
+        cuts.append(a + (b - a) * k)
+    if not cuts:
+        raise SystemExit(f"{ob.name}: nothing crosses its grip; check its grip_from_end")
+    xs, ys = [c.x for c in cuts], [c.y for c in cuts]
+    return Vector(((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, 0))
 
 
 # The free models' material names, by the role each part plays.
@@ -211,6 +229,11 @@ for item in look.args():
     s = length / (hi.z - lo.z)
     foot = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))
     ob.data.transform(Matrix.Translation((0, 0, -held_from_end)) @ Matrix.Scale(s, 4) @ Matrix.Translation(-foot))
+    # The grip on the handle's middle where the fist closes (the plane z = 0 here, glTF's y = 0),
+    # not the bounds' middle, which a head's overhang moves off the handle (docs/attachment.md,
+    # "The grip across the handle"); then turned "turn" degrees about the handle (Blender's +Z
+    # is glTF's +Y, and a turn about it is the same turn there), so a one-sided head faces -Z.
+    ob.data.transform(Matrix.Rotation(math.radians(d.get("turn", 0)), 4, "Z") @ Matrix.Translation(-handle_middle(ob)))
     for slot in ob.material_slots:
         if slot.material and slot.material.use_nodes and not maps:
             bsdf = slot.material.node_tree.nodes["Principled BSDF"]

@@ -58,21 +58,28 @@ test("a sword in hand passes, and fails turned across X, off its grip, or withou
   assert.deepEqual(rules({ ...sword, extras: untilted }), ["carry_tilt"]);
 });
 
-test("an axe turned so its bit faces -Z and its handle sits on the origin passes", () => {
+test("an axe with its bit toward -Z and its handle on the origin passes, and fails turned or off its grip", () => {
   const axe = look("held/stone_axe");
-  assert.deepEqual(rules(axe).sort(), ["facing", "grip"]);
-  // Its handle is 4.7 cm toward +X and its bit toward -X: back onto the origin, then -X to -Z.
-  const turned = moved(moved(axe, ([x, y, z]) => [x - 0.047, y, z]), aboutY(-90));
-  assert.deepEqual(rules(turned), []);
-  assert.deepEqual(rules(moved(turned, aboutY(180))), ["facing"], "its bit toward +Z");
+  assert.deepEqual(rules(axe), []);
+  assert.deepEqual(rules(moved(axe, aboutY(90))), ["facing"], "its bit across X, as the length fit left it");
+  assert.deepEqual(rules(moved(axe, aboutY(180))), ["facing"], "its bit toward +Z");
+  assert.deepEqual(rules(moved(axe, ([x, y, z]) => [x + 0.047, y, z])), ["grip"], "the bounds' middle, 4.7 cm off its handle");
 });
 
-test("a hung basket passes once it says so, and fails standing up", () => {
+test("a hammer's face and a pickaxe's longer pick lead toward -Z", () => {
+  for (const name of ["held/hammer", "held/stone_pickaxe", "held/iron_pickaxe"]) {
+    const tool = look(name);
+    assert.deepEqual(rules(tool), [], name);
+    assert.deepEqual(rules(moved(tool, aboutY(180))), ["facing"], `${name}, its face toward +Z`);
+  }
+});
+
+test("a hung basket passes once it says so, and fails standing up or unmarked", () => {
   const basket = look("held/basket");
-  assert.deepEqual(rules(basket), ["marker"]);
-  const marked = { ...basket, extras: { ...basket.extras, hold: "hung" } };
-  assert.deepEqual(rules(marked), []);
-  assert.deepEqual(rules(mirror(marked, 2)), ["hangs", "hangs"]);
+  assert.deepEqual(rules(basket), []);
+  const { hold: _, ...unmarked } = basket.extras;
+  assert.deepEqual(rules({ ...basket, extras: unmarked }), ["marker"]);
+  assert.deepEqual(rules(mirror(basket, 2)), ["hangs", "hangs"]);
 });
 
 test("a strapped shield passes, and fails with its board behind its grip or a strap on no bone", () => {
@@ -115,13 +122,17 @@ test("a look's kind is its data's, and a garment's its skin with no data", () =>
 
 test("a look is its kind's life size, its grip where its kind's falls", () => {
   const knife = look("held/knife");
-  assert.deepEqual(rules(knife), ["facing"]);
+  assert.deepEqual(rules(knife), []);
+  assert.deepEqual(rules(moved(knife, aboutY(90))), ["facing"], "its edges across X");
   // Six times its size, as a model left at its source's scale: a 1.56 m knife, gripped 30 cm up.
-  assert.deepEqual(rules(moved(knife, ([x, y, z]) => [6 * x, 6 * y, 6 * z])).sort(), ["facing", "grip along", "size", "stale", "stale"]);
+  // (Its clip point then reaches 2 cm further toward +Z than its edge, so it may fail facing too.)
+  const big = rules(moved(knife, ([x, y, z]) => [6 * x, 6 * y, 6 * z]));
+  assert.ok(big.includes("size") && big.includes("grip along") && big.includes("stale"), big.join(", "));
   // Gripped at its middle, not near its pommel: the length fit's grip_from_end mistyped.
-  assert.deepEqual(rules(moved(knife, ([x, y, z]) => [x, y - 0.08, z])), ["facing", "grip along", "stale"]);
+  assert.deepEqual(rules(moved(knife, ([x, y, z]) => [x, y - 0.08, z])), ["grip along", "stale"]);
   const bow = look("held/bow");
-  assert.deepEqual(rules(bow).sort(), ["facing", "grip", "second"]);
+  assert.deepEqual(rules(bow), []);
+  assert.deepEqual(rules(moved(bow, ([x, y, z]) => [x + 0.025, y, z])), ["grip"], "its bounds' middle, 2.5 cm off the riser's");
   assert.ok(rules(moved(bow, ([x, y, z]) => [x, y + 0.3, z])).includes("grip along"), "held near a limb's tip");
   const shield = look("held/round_shield");
   assert.deepEqual(rules(moved(shield, ([x, y, z]) => [2 * x, 2 * y, 2 * z])), ["size"]);
