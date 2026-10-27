@@ -15,6 +15,7 @@ mod noise;
 pub mod par;
 mod rng;
 mod seed;
+pub mod tune;
 
 pub use ease::smoothstep;
 pub use noise::{Noise, layer_shift};
