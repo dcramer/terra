@@ -274,3 +274,24 @@ fn every_kinds_layer_stands_over_the_ground_inside_the_slab_at_any_weather() {
         }
     }
 }
+
+#[test]
+fn heaped_and_rained_tops_stop_at_d544s_heights_over_the_sea() {
+    // The tallest a top grows to: (deck in rain, cumulus at full cover), over the sea.
+    let tallest = |ground: f32| {
+        let (rows, _) = layers_over_sea(ground);
+        let [_, _, tops, by_cover, by_rain] = rows;
+        (tops.x + by_rain.x, tops.z + by_cover.z)
+    };
+    // Low ground: under both ceilings, the table's own growth (1.8 km and 3.1 km over it).
+    assert_eq!(tallest(200.0), (2000.0, 3300.0));
+    // The start's lake, 1.3 km up: congestus stops at 4.2 km over the sea, not 4.4.
+    let (deck, cumulus) = tallest(1317.0);
+    assert_eq!(deck, 1317.0 + 1800.0);
+    assert!((cumulus - 4200.0).abs() < 0.5, "{cumulus}");
+    // Ground at 2.5 km: nimbostratus stops at 3.8 km, and cumulus no longer piles over its
+    // fair-weather top, there already at 4.2 km.
+    let (deck, cumulus) = tallest(2500.0);
+    assert!((deck - 3800.0).abs() < 0.5, "{deck}");
+    assert_eq!(cumulus, 2500.0 + 1700.0);
+}

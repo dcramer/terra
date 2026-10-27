@@ -164,7 +164,9 @@ pub fn volume_offsets(winds: &CloudWinds, seconds: f64, anchor: Vec2) -> Vec4 {
 
 /// The layer one kind of cloud fills (docs/sky.md's table, D544): its base and top in metres
 /// over the low ground the start stands on, the base lowered and the top raised by the rain
-/// falling from it (0 to 1) and the top by how much of the sky it covers (0 to 1).
+/// falling from it (0 to 1) and the top by how much of the sky it covers (0 to 1); and the
+/// highest over the sea its top grows to, since the air over 3 km is the free air's, level over
+/// the land (D544: congestus to 4.2 km, nimbostratus to 3.8 km).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Layer {
     pub base_m: f32,
@@ -172,12 +174,15 @@ pub struct Layer {
     pub top_m: f32,
     pub top_by_cover_m: f32,
     pub top_by_rain_m: f32,
+    pub highest_over_sea_m: f32,
 }
 
-/// The kinds' layers, as the weather map's kind runs from 0 to 1: the overcast deck (stratus,
-/// low and thicker the more it rains), stratocumulus (900 m, 500 m thick) and cumulus (base
-/// 1.1 km, fair-weather tops 1.7 km, piling to 3.1 km the more of the sky it covers). The one
-/// place the clouds' heights are kept: the march reads them (`layers_over_sea`).
+/// The kinds' layers, as the weather map's kind runs from 0 to 1 (docs/sky.md's heights, D544):
+/// the overcast deck (stratus, its base 500 m over the ground and lower in rain, its tops 1.1 km
+/// and 1.8 km in rain, never over nimbostratus's 3.8 km over the sea), stratocumulus (900 m,
+/// 500 m thick) and cumulus (base 1.1 km, fair-weather tops 1.7 km, piling to 3.1 km the more of
+/// the sky it covers, never over congestus's 4.2 km over the sea). The one place the clouds'
+/// heights are kept: the march reads them (`layers_over_sea`).
 pub const LAYERS: [Layer; 3] = [
     Layer {
         base_m: 500.0,
@@ -185,6 +190,7 @@ pub const LAYERS: [Layer; 3] = [
         top_m: 1100.0,
         top_by_cover_m: 0.0,
         top_by_rain_m: 700.0,
+        highest_over_sea_m: 3800.0,
     },
     Layer {
         base_m: 900.0,
@@ -192,6 +198,7 @@ pub const LAYERS: [Layer; 3] = [
         top_m: 1400.0,
         top_by_cover_m: 0.0,
         top_by_rain_m: 0.0,
+        highest_over_sea_m: f32::INFINITY,
     },
     Layer {
         base_m: 1100.0,
@@ -199,34 +206,37 @@ pub const LAYERS: [Layer; 3] = [
         top_m: 1700.0,
         top_by_cover_m: 1400.0,
         top_by_rain_m: 0.0,
+        highest_over_sea_m: 4200.0,
     },
 ];
 
 /// The kinds' layers as the march takes them, over the sea for low ground `ground_m` over it:
 /// rows of base, base by rain, top, top by cover and top by rain, each with the deck's,
 /// stratocumulus's and cumulus's in x, y and z; and the slab all of them stand in, its bottom
-/// and top over the sea.
+/// and top over the sea. A top's growth by cover and rain is cut so it grows at most to its
+/// kind's highest over the sea.
 pub fn layers_over_sea(ground_m: f32) -> ([Vec4; 5], Vec2) {
-    let row = |f: fn(&Layer) -> f32, over: f32| {
-        Vec4::new(f(&LAYERS[0]), f(&LAYERS[1]), f(&LAYERS[2]), 0.0)
-            + Vec4::new(over, over, over, 0.0)
+    let grown = |l: &Layer| {
+        let growth = l.top_by_cover_m.max(0.0) + l.top_by_rain_m.max(0.0);
+        let room = (l.highest_over_sea_m - ground_m - l.top_m).max(0.0);
+        if growth > room { room / growth } else { 1.0 }
+    };
+    let row = |f: &dyn Fn(&Layer) -> f32, over: f32| {
+        Vec3::new(f(&LAYERS[0]), f(&LAYERS[1]), f(&LAYERS[2])) + Vec3::splat(over)
     };
     let rows = [
-        row(|l| l.base_m, ground_m),
-        row(|l| l.base_by_rain_m, 0.0),
-        row(|l| l.top_m, ground_m),
-        row(|l| l.top_by_cover_m, 0.0),
-        row(|l| l.top_by_rain_m, 0.0),
+        row(&|l| l.base_m, ground_m),
+        row(&|l| l.base_by_rain_m, 0.0),
+        row(&|l| l.top_m, ground_m),
+        row(&|l| l.top_by_cover_m * grown(l), 0.0),
+        row(&|l| l.top_by_rain_m * grown(l), 0.0),
     ];
-    let bottom = LAYERS
-        .iter()
-        .map(|l| l.base_m + l.base_by_rain_m.min(0.0))
-        .fold(f32::MAX, f32::min);
-    let top = LAYERS
-        .iter()
-        .map(|l| l.top_m + l.top_by_cover_m.max(0.0) + l.top_by_rain_m.max(0.0))
-        .fold(f32::MIN, f32::max);
-    (rows, Vec2::new(bottom, top) + ground_m)
+    let lowest = rows[0] + rows[1].min(Vec3::ZERO);
+    let highest = rows[2] + rows[3].max(Vec3::ZERO) + rows[4].max(Vec3::ZERO);
+    (
+        rows.map(|r| r.extend(0.0)),
+        Vec2::new(lowest.min_element(), highest.max_element()),
+    )
 }
 
 /// Where the weather map round an eye has its middle, metres east and south of the start: on a
