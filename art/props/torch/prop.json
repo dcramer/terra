@@ -1,9 +1,8 @@
 {
-  "palette": true,
-  "subject": "unlit hand torch standing upright: a rough wooden stick, its top wrapped in bound strips of pitch-soaked cloth tied with twine, charred black at the very top",
+  "subject": "hand torch standing upright on the end of its handle, seen flat-on: a straight rough-hewn wooden stave of weathered ash, pale grey-brown with its grain and knots, darkened and sooty toward the top; its top quarter tightly wrapped in overlapping strips of coarse linen cloth soaked in black pine pitch, the wraps thick and lumpy with glossy dripped tar, bound with two turns of twine; the cloth at the very top charred black and crumbling, cracked open on the dark wrap with thin dull orange ember seams; no flame",
   "file": "Torch",
   "into": "tools",
-  "size": 0.55,
-  "budget": 600,
-  "roles": ["Wood", "WoodDark", "ClothDark", "Rope", "Black"]
+  "dims": [0.09, 0.55, 0.09],
+  "budget": 1200,
+  "generator": "h3.1"
 }
