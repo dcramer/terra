@@ -3,6 +3,8 @@
 // file's `strap` names. Shared by the move check (moves.ts) and the shield's board place
 // (shield_place.ts). Node 22.18 or later; no dependencies.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { type Ball, type Board, board, meshOf, sliced } from "./clash.ts";
 import { Glb, type Pose, type Q, type V3, dot, len, place, rot, sub } from "./glb.ts";
 
@@ -81,4 +83,20 @@ export function hang(body: Glb, rest: Pose[], hand: string, file: string): Held 
   // board, square to the forearm (+X), where the fist closes on it (D459, D504).
   const bar = turned(rot(pose.r, strap ? [1, 0, 0] : [0, 1, 0]));
   return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, up, centre: put(centre), grip: put(pose.t), bar, balls, board: plate };
+}
+
+/** How far a look turns about its X when carried, degrees, its extras' `carry_tilt`. */
+export function carryTilt(file: string): number {
+  const g = new Glb(file);
+  const n = g.gltf.nodes.find((n) => n.mesh !== undefined) as { extras?: { carry_tilt?: number } } | undefined;
+  return n?.extras?.carry_tilt ?? 0;
+}
+
+/** The clips in which the game carries what is in hand rather than uses it, read from its
+ * source (terra_walker::character::CARRIED_IN), so the two cannot differ. */
+export function carriedClips(): string[] {
+  const rs = readFileSync(join(import.meta.dirname, "..", "..", "crates", "terra_walker", "src", "character.rs"), "utf8");
+  const list = /pub const CARRIED_IN: \[&str; \d+\] = \[([^\]]*)\]/.exec(rs);
+  if (!list) throw new Error("no CARRIED_IN in terra_walker's character.rs");
+  return [...list[1].matchAll(/"(\w+)"/g)].map((m) => m[1]);
 }

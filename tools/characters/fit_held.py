@@ -45,6 +45,7 @@ Writes assets/models/held/<item>.glb, the item named as in the game's catalogue 
 with `_` for spaces.
 """
 
+import hashlib
 import json
 import math
 import os
@@ -66,6 +67,13 @@ def data(item):
     """The item's numbers, art/held/<item>.json."""
     with open(os.path.join(DATA, f"{item}.json")) as f:
         return json.load(f)
+
+
+def source_sha(source):
+    """The first 12 hex digits of the SHA-256 of its source's bytes, its extras' source_sha
+    (D552), which attach_contract.ts compares with the source as committed."""
+    with open(os.path.join(ASSETS, source), "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()[:12]
 
 
 def second_hand(ob, d):
@@ -136,6 +144,7 @@ def hung(item):
     tip = Matrix.Rotation(math.radians(90), 4, "X")
     ob.data.transform(Matrix.Translation((out, 0, 0)) @ tip @ long_y @ Matrix.Translation(-grip))
     ob["carry_tilt"] = d["carry_tilt"]
+    ob["source_sha"] = source_sha(d["source"])
     # Its kind, so a reader of the file alone tells it from a look held by its handle (D546).
     ob["hold"] = "hung"
     bpy.ops.object.select_all(action="DESELECT")
@@ -169,6 +178,7 @@ def textured(item):
     held = Matrix(((1, 0, 0), (0, 0, 1), (0, -1, 0))).transposed()
     ob.data.transform((held @ frame.transposed()).to_4x4() @ Matrix.Translation(-grip))
     ob["carry_tilt"] = carry_tilt
+    ob["source_sha"] = source_sha(d["source"])
     if "strap" in d:
         ob["strap"] = d["strap"]
     second_hand(ob, d)
@@ -240,6 +250,7 @@ for item in look.args():
             bsdf.inputs["Roughness"].default_value = 0.7
             bsdf.inputs["Metallic"].default_value = 0.0
     ob["carry_tilt"] = carry_tilt
+    ob["source_sha"] = source_sha(d["source"])
     second_hand(ob, d)
     bpy.ops.object.select_all(action="DESELECT")
     ob.select_set(True)

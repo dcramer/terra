@@ -123,8 +123,8 @@ How a new model's turn is found, by kind (`fits` in `attach_kinds.json`):
 2. **Detect**, for a detector kind with no `turn` or `points`: read the source with `glb.ts` (no Blender), measure as above, and write the turn and grip into its data, or refuse naming the measure that was not decisive.
 3. **Make** the look with its kind's maker (`fit_held.py`; `fit_gear.py` then `carry_gear.py` for one worn item on every morph, not the whole `build_bodies.sh`), writing `source_sha` into its extras.
 4. **Check** it with `attach_contract.ts`; a fault stops here.
-5. **Show** one workbench sheet (a held look in hand from the front and side, carried and mid-swing; a worn one on the base, `heavy` and `female`), skipped when the look's bytes are those of the last sheet; its path printed for a person's look.
-6. **Icon**: paint it again (`paint.ts <item>`) when the look's bytes changed, skipped otherwise.
+5. **Moves**: a held look in hand on every body template through its class's set (with the set's partner in the other hand), else through every clip the game carries it in (`CARRIED_IN`) and the walker's use clips, turned by its `carry_tilt` where carried, as the game turns it (`moves.ts --carry`); it fails deeper than 1 cm into the body. A worn look is judged on every body by `build_item.sh`'s `gear_check`.
+6. **Show and icon**, when the look's bytes changed: it names the workbench sheet to look at (a held look in hand, carried and mid-swing; a worn one on the base, `heavy` and `female`) and the icon to paint again (`paint.ts <item>`); skipped when the bytes are the committed ones.
 
 `--turn DEG` writes a person's turn into the data and runs again from 3. Every number it finds goes into the data, so the data stays the one source and a refit needs no person.
 

@@ -54,7 +54,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, through } from "./clash.ts";
-import { type Held, hang } from "./held.ts";
+import { type Held, carriedClips, carryTilt, hang } from "./held.ts";
 import { TARGETS, boardPlace, readTargets, worstOff } from "./shield_place.ts";
 import { PACE_FRAMES } from "./phases.ts";
 import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
@@ -90,6 +90,9 @@ const { values: opt } = parseArgs({
     // bad, gaps, measured}], gaps the metres from the guard at the move's start and end, a
     // blow's only; measured each number the row was judged by, named by what it is.
     json: { type: "string" },
+    // Carried: in the clips the game carries in (terra_walker::character::CARRIED_IN), a look in
+    // hand turned its `carry_tilt` about its X, as character.rs's `tilt` turns it (fit.ts).
+    carry: { type: "boolean", default: false },
   },
 });
 
@@ -165,7 +168,8 @@ function readSet(file: string): Move[] {
 
 const clipsFile = new Glb(opt.clips!);
 const body = new Glb(opt.body!);
-const moves = readSet(opt.set!);
+// `--set none`: no moves, only the clips `--also` names (fit.ts, for a class with no set).
+const moves = opt.set === "none" ? [] : readSet(opt.set!);
 const fps = Number(opt.fps);
 const bends = new Map<string, Q>(
   opt.bend!.map((b) => {
@@ -197,6 +201,17 @@ const held: Held[] = opt.hold!.map((h) => {
   const [hand, file] = h.split("=");
   return hang(body, rest, hand, file);
 });
+// Each look's points as carried (--carry): a look on its hand socket turned its carry_tilt about
+// its X, which is the socket's (a strapped look's is 0 and stays).
+const carriedIn = opt.carry ? carriedClips() : [];
+const carriedPoints = new Map(
+  held.map((h, i) => {
+    const deg = h.socket === h.hand ? carryTilt(opt.hold![i].split("=")[1]) : 0;
+    const [c, s] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
+    return [h.name, h.points.map(([x, y, z]) => [x, y * c - z * s, y * s + z * c] as V3)];
+  }),
+);
+const pointsIn = (h: Held, clip: Clip) => (carriedIn.includes(clip.name.split("+")[0]) ? carriedPoints.get(h.name)! : h.points);
 
 
 const at = (name: string) => {
@@ -242,6 +257,8 @@ function inChest(pose: Pose[]): V3 {
 function penetration(clip: Clip, from: number, to: number, carrying: [number, number] = [from, to]) {
   let hands: Worst = { cm: -Infinity, where: "" };
   let heldW: Worst = { cm: -Infinity, where: "" };
+  // Each look's own, so a fit judges its item and not its partner (fit.ts).
+  const byLook = new Map<string, Worst>(held.map((h) => [h.name, { cm: -Infinity, where: "" }]));
   let swordW: Worst = { cm: -Infinity, where: "" };
   let armW: Worst = { cm: -Infinity, where: "" };
   // The carry: cm above the shoulder, m of the elbow below it (the least, kept negated), degrees off.
@@ -265,9 +282,11 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
       }
       for (const h of held) {
         const socket = pose[at(h.socket)];
-        for (const q of h.points) {
+        for (const q of pointsIn(h, clip)) {
           const { depth, part } = inside(place(socket, q));
-          heldW = worse(heldW, depth * 100, `${h.name} in ${part} at ${t.toFixed(2)} s, ${shape.name}`);
+          const where = `${h.name} in ${part} at ${t.toFixed(2)} s, ${shape.name}`;
+          heldW = worse(heldW, depth * 100, where);
+          byLook.set(h.name, worse(byLook.get(h.name)!, depth * 100, where));
         }
       }
       if (sword && shield) {
@@ -290,7 +309,7 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
       }
     }
   }
-  return { hands, held: heldW, sword: swordW, arm: armW, carry: { high, elbow: { cm: -elbow.cm, where: elbow.where }, face }, grip: { cm: gripCm, deg: gripDeg } };
+  return { hands, held: heldW, byLook, sword: swordW, arm: armW, carry: { high, elbow: { cm: -elbow.cm, where: elbow.where }, face }, grip: { cm: gripCm, deg: gripDeg } };
 }
 
 // Points that say where a pose is, relative to the hips: hands, forearms, head, blade tip.
@@ -375,8 +394,10 @@ const specs: Record<string, Blow> = Object.fromEntries(
     .map(([clip, e]) => [clip, e.blow ?? (e.of ? specEntries[e.of]?.blow : undefined)] as const)
     .filter((e): e is readonly [string, Blow] => !!e[1]),
 );
-const guardClip = clipOf(opt.guard ?? setGuard(opt.set!) ?? "Fight_Guard");
-const guardMarks = marks(guardClip, 0);
+const guardClip = clipOf(opt.guard ?? (moves.length ? setGuard(opt.set!) : undefined) ?? "Fight_Guard");
+const guardMarks = moves.length ? marks(guardClip, 0) : [];
+/** Each held look's own depth, `held_cm.<look>`. */
+const heldBy = (pen: Pen) => Object.fromEntries([...pen.byLook].map(([name, w]) => [`held_cm.${name}`, w.cm]));
 const byName = new Map(moves.map((m) => [m.name, m]));
 const smooth = (lo: number, hi: number, t: number) => {
   const x = Math.max(0, Math.min(1, (t - lo) / (hi - lo)));
@@ -433,7 +454,7 @@ for (const move of checked) {
   let gaps: [number, number] | undefined;
   const pen = penetration(clip, move.from, move.done, move.active);
   grips(pen, move.name);
-  const measured: Record<string, number> = { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen) };
+  const measured: Record<string, number> = { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...heldBy(pen), ...clashed(pen) };
   parts.push(`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen));
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
@@ -575,7 +596,7 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
   bad.push(...clashBad(pen));
-  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...clashed(pen), ...carriedBy(pen) } });
+  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...heldBy(pen), ...clashed(pen), ...carriedBy(pen) } });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
 // Each shield pose with a target against it (D554, shield_place.ts): the board's place in the
