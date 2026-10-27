@@ -1562,12 +1562,40 @@ const FIELD_LOBES: i32 = 7;
 // side lobe's in its width, how far out a side lobe stands and how tall it is (in the
 // middle's), and how much thicker its flame is per metre than a hearth's, as it is smaller.
 const TORCH_FIELD_TALL: f32 = 1.2;
-const TORCH_FIELD_R: f32 = 0.42;
-const TORCH_SIDE_R: f32 = 0.26;
-const TORCH_SIDE_OUT: f32 = 0.24;
+// Torch round t1: a broad teardrop as wide as the head at its foot with three lower tongues round
+// it (a judge: "one thin spike, about a third of the head's width"; was 0.42, 0.26, 0.24, two).
+const TORCH_FIELD_R: f32 = 0.6;
+const TORCH_SIDE_R: f32 = 0.32;
+const TORCH_SIDE_OUT: f32 = 0.3;
 const TORCH_SIDE_TALL: vec2<f32> = vec2<f32>(0.5, 0.7);
-const TORCH_SIDES: i32 = 2;
+const TORCH_SIDES: i32 = 3;
 const TORCH_THICK: f32 = 1.6;
+// Torch round t1 (the panels' 3.6-4.0: one opaque orange tongue), the baked campfire's levers
+// (fire rounds g56-g58) on the torch's marched field, its own numbers so the two tune apart.
+// With the broad head (TORCH_FIELD_R) three fresh judges scored it 4.23 against main's 3.63-4.02.
+// Shaded as Niagara Fluids shades gas fire: its heat colours it, its density alone covers what is
+// behind it (`hearth_march`), never the ramp's A. TORCH_SEE: how much of its density covers, 1 up
+// to x of its height, falling to z by y, so its upper flame sums its glow as thin flame does.
+// TORCH_TEAR: how much of its shape is taken off over x-y of its height, so its upper flame parts
+// into tongues with dark between; TORCH_LANES: only in some upright lanes across it (x a lane's
+// count a flame's height across, rising y a height and z a second; torn over w to w + 0.2 of a
+// noise), so the tongues between keep their height (g56: torn all over, the lean fell).
+// TORCH_WHITE: its heart (heat from x up, its core's `FIELD_CORE_HEAT`) goes y of the way to a
+// grey of its own luminance and glows z times brighter, so it reads white as a pitch torch's
+// does (the torch photographs' white, median 12%, tools/fire/references.json).
+const TORCH_SEE: vec3<f32> = vec3<f32>(0.2, 0.75, 0.3);
+const TORCH_TEAR: vec3<f32> = vec3<f32>(0.3, 0.75, 1.2);
+const TORCH_LANES: vec4<f32> = vec4<f32>(9.0, 2.0, 1.6, 0.45);
+const TORCH_WHITE: vec3<f32> = vec3<f32>(0.95, 0.6, 3.0);
+// How far a torch's cool skin is warmed toward 1 (`field_flame`): main's torch read 58-66% red
+// and 20-32% orange, the torch photographs' medians 19 and 18 with 8 yellow and 12 white.
+const TORCH_WARM: f32 = 0.35;
+// How much sooner in from its edge a torch's white-hot heart starts (`field_flame`'s heart): a
+// large white-yellow core hugging the head (the judge's fix; at 1, white only in specks there).
+const TORCH_HEART: f32 = 1.4;
+fn torch_cover(hg: f32) -> f32 {
+    return mix(1.0, TORCH_SEE.z, smoothstep(TORCH_SEE.x, TORCH_SEE.y, hg));
+}
 
 struct HearthField {
     foot: vec3<f32>,
@@ -1601,6 +1629,8 @@ struct HearthField {
     tiles: vec4<f32>,
     blend: f32,
     slot: u32,
+    // A torch's field (`TORCH_M`), shaded as gas fire is (`TORCH_SEE`): set in `hearth_field`.
+    torch: bool,
 }
 
 fn hearth_field(slot: u32) -> HearthField {
@@ -1621,6 +1651,7 @@ fn hearth_field(slot: u32) -> HearthField {
     f.k = FIELD_K;
     if a.w < TORCH_M {
         // A torch: as tall as it burns (`hearth`), from a little inside its head.
+        f.torch = true;
         f.wide = select(a.w * 0.4, b.z, b.z > 0.0);
         f.tall = a.w * TORCH_FIELD_TALL * mix(1.0, f.glow, FIELD_GLOW.x);
         f.scale = 1.0 / max(a.w * TORCH_FIELD_TALL, 1.0e-3);
@@ -1948,6 +1979,11 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
     let evolve = vec3(noise3(m), noise3(m + vec3(31.7, 7.9, 13.1)), noise3(m + vec3(5.9, 19.3, 41.7))) - vec3(0.5);
     let tear = fbm3(n2 + evolve * 1.6);
     v -= FIELD_TEAR * smoothstep(0.0, 0.5, hg) * (tear - 0.36);
+    if f.torch {
+        let lane = noise3(vec3(q.x * TORCH_LANES.x * s, q.z * TORCH_LANES.x * s, hg * TORCH_LANES.y - time * TORCH_LANES.z) + luck);
+        v -= TORCH_TEAR.z * smoothstep(TORCH_TEAR.x, TORCH_TEAR.y, hg) * smoothstep(TORCH_LANES.w, TORCH_LANES.w + 0.2, lane);
+        return field_flame(v, hg, f, TORCH_HEART);
+    }
     return field_flame(v, hg, f, 1.0);
 }
 
@@ -1968,7 +2004,11 @@ fn field_flame(v: f32, hg: f32, f: HearthField, heart: f32) -> vec3<f32> {
     // part still see-through (fire round g9: RDR2's 12% pale from above, ours 2-4%).
     let core = smoothstep(FIELD_CORE.x, FIELD_CORE.x + 0.12, v * heart) * (1.0 - smoothstep(FIELD_CORE.y * 0.5, FIELD_CORE.y, hg));
     let burns = 0.85 + 0.15 * f.heat;
-    return vec3(dens * f.k * (1.0 + FIELD_CORE.z * core), mix(heat * burns, FIELD_CORE_HEAT, core), mix(unlifted * burns, FIELD_CORE_HEAT, core));
+    // A torch's cool skin warmed toward its body's heat (`TORCH_WARM`), its hot inside the less.
+    let warm = select(0.0, TORCH_WARM, f.torch);
+    let skin = heat * burns + warm * (1.0 - heat * burns);
+    let skin_unlifted = unlifted * burns + warm * (1.0 - unlifted * burns);
+    return vec3(dens * f.k * (1.0 + FIELD_CORE.z * core), mix(skin, FIELD_CORE_HEAT, core), mix(skin_unlifted, FIELD_CORE_HEAT, core));
 }
 
 // The hull round a hearth's field, in its frame (across, up, across).
@@ -2049,6 +2089,11 @@ fn hearth_march(in: VertexOutput) -> vec4<f32> {
                 let hot = smoothstep(BAKED_WHITE_FROM, 1.0, gas.y);
                 let grey = vec3(dot(flame, vec3(0.2126, 0.7152, 0.0722)));
                 flame = mix(flame, grey, BAKED_WHITE_MIX * hot) * (1.0 + BAKED_WHITE.w * hot);
+            } else if f.torch {
+                covered = 1.0 - exp(-gas.x * torch_cover(saturate(pl.y / f.tall)) * min(ds, far - s));
+                let hot = smoothstep(TORCH_WHITE.x, 1.0, gas.y);
+                let grey = vec3(dot(flame, vec3(0.2126, 0.7152, 0.0722)));
+                flame = mix(flame, grey, TORCH_WHITE.y * hot) * (1.0 + TORCH_WHITE.z * hot);
             }
             if gas.z < gas.y - 1.0e-4 {
                 let lum = vec3(0.2126, 0.7152, 0.0722);
