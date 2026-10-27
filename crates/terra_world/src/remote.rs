@@ -111,7 +111,9 @@ pub fn plugin(app: &mut App) {
             PreUpdate,
             (
                 press_keys,
-                drive_pointer.before(PickingSystems::ProcessInput),
+                drive_pointer
+                    .before(PickingSystems::ProcessInput)
+                    .before(bevy_inspector_egui::bevy_egui::EguiPreUpdateSet::ProcessInput),
             )
                 .after(InputSystems)
                 .after(shell::scripted_presses),
@@ -141,6 +143,7 @@ pub fn plugin(app: &mut App) {
     why::plugin(app);
     crate::gpu_memory::remote(app);
     crate::tune::remote(app);
+    crate::debug_menu::remote(app);
     if listen {
         info!("remote: listening on localhost:{port}");
     }

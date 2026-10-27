@@ -458,3 +458,35 @@ export const describeTunable = (t: Tunable, width = 0) => {
   const by = t.set_by === "default" ? "" : `, by ${t.set_by}`;
   return `${t.name.padEnd(width)} = ${t.value} (${changed}${t.min} to ${t.max}${by}): ${t.doc}`;
 };
+
+/// A rectangle in the pointer's pixels, as `click` takes them: left, top, width, height.
+export type Area = [number, number, number, number];
+/// What the debug menu (D81, `--debug-menu`) shows, and where it drew each control on its last
+/// frame; `shown` is null until it has been drawn open. `screen` is the whole window in those
+/// pixels, so a shot of any size finds the menu by scaling.
+export type Menu = {
+  open: boolean;
+  page: string;
+  pages: string[];
+  search: string;
+  screen: [number, number];
+  window: Area | null;
+  shown: null | {
+    search: Area;
+    reset_all: Area;
+    groups: { prefix: string; shown: number; reset: Area }[];
+    tunables: { name: string; value: number; set_by: string; slider: Area; track: [number, number]; reset: Area }[];
+    note: string | null;
+  };
+};
+
+/// Reads the debug menu, opening or closing it, searching or turning to a page on the way.
+export const menu = async (asked: { open?: boolean; search?: string; page?: string } = {}) => (await call("debug.menu", asked)) as Menu;
+
+/// Where to click on a tunable's slider, as the menu drew it, to set it to `value`.
+export function sliderSpot(t: Tunable, row: NonNullable<Menu["shown"]>["tunables"][number], value: number): [number, number] {
+  const [least, most] = row.track;
+  const [, top, , height] = row.slider;
+  const share = t.max > t.min ? (value - t.min) / (t.max - t.min) : 0;
+  return [Math.round(least + share * (most - least)), Math.round(top + height / 2)];
+}

@@ -85,6 +85,8 @@ usage: terra_sandbox [options]
                         talking to the run it started
   --tune <name=value>   set a tunable before the run starts (D547); repeatable;
                         `remote.ts tune list` lists them
+  --debug-menu          the debug menu, opened and closed with the backtick key (D81):
+                        a slider for every tunable, its help and a reset
   --settle <frames>     frames to run before capturing or measuring, counted from when
                         loading is done (default 120)
   --loading             keep the loading screen up, to look at it
@@ -123,7 +125,7 @@ usage: terra_sandbox [options]
   --moments <fraction,…>
                         in the workbench sheet: how far through each clip to look
                         (default 0.4)
-  --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace, space, ctrl, shift, equal, minus, pageup, pagedown or an arrow
+  --press <key>@<frame> press a letter, digit, F1 to F12, esc, enter, backspace, space, ctrl, shift, equal, minus, backtick, pageup, pagedown or an arrow
                         (left, right, up, down) on a given frame, for scripted runs;
                         <key>@<from>-<to> holds it over a range of frames
   --give <item>:<count> start the play experiment carrying something extra, for
@@ -293,6 +295,8 @@ pub struct Options {
     pub water_mask: bool,
     /// With each of `shots`, the flames' matte beside it (`--flame-matte`, D433).
     pub flame_matte: bool,
+    /// The debug menu is there, on the backtick key (`--debug-menu`, D81).
+    pub debug_menu: bool,
     /// The quality preset asked for, rather than the GPU's (`--quality`).
     pub quality: Option<crate::quality::Quality>,
     /// Keep the loading screen up, to look at it.
@@ -508,6 +512,7 @@ impl Options {
             "--clean" => &mut self.clean,
             "--water-mask" => &mut self.water_mask,
             "--flame-matte" => &mut self.flame_matte,
+            "--debug-menu" => &mut self.debug_menu,
             _ => return false,
         };
         *on = true;
@@ -545,6 +550,7 @@ impl Options {
             clean: false,
             water_mask: false,
             flame_matte: false,
+            debug_menu: false,
             hold_loading: false,
             mute: false,
             sound: false,
@@ -848,7 +854,7 @@ fn parse_press(text: &str) -> Result<(KeyCode, u32, u32), String> {
 }
 
 /// The keys a script can press, in words.
-pub const KEYS: &str = "a letter, digit, F1 to F12, esc, enter, backspace, space, ctrl, shift, equal, minus, pageup, pagedown or an arrow (left, right, up, down)";
+pub const KEYS: &str = "a letter, digit, F1 to F12, esc, enter, backspace, space, ctrl, shift, equal, minus, backtick, pageup, pagedown or an arrow (left, right, up, down)";
 
 /// A key a script can press, by name: one of [`KEYS`].
 pub fn parse_key(key: &str) -> Option<KeyCode> {
@@ -903,6 +909,7 @@ pub fn parse_key(key: &str) -> Option<KeyCode> {
         None if key.eq_ignore_ascii_case("down") => KeyCode::ArrowDown,
         None if key.eq_ignore_ascii_case("equal") => KeyCode::Equal,
         None if key.eq_ignore_ascii_case("minus") => KeyCode::Minus,
+        None if key.eq_ignore_ascii_case("backtick") || key == "`" => KeyCode::Backquote,
         None if key.eq_ignore_ascii_case("pageup") => KeyCode::PageUp,
         None if key.eq_ignore_ascii_case("pagedown") => KeyCode::PageDown,
         None => {
@@ -1034,6 +1041,7 @@ impl Plugin for ShellPlugin {
                 crate::pacing::plugin,
                 crate::gpu_memory::plugin,
                 crate::tune::plugin,
+                crate::debug_menu::plugin,
                 crate::render_errors::plugin,
             ))
             // F1: every entity, resource and asset in the world, editable live.

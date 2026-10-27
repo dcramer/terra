@@ -131,10 +131,11 @@ pub fn capture_mouse(
     mouse: Res<ButtonInput<MouseButton>>,
     menu: Res<options::OptionsMenu>,
     hands: Res<Hands>,
+    debug_menu: Option<Res<terra_world::debug_menu::DebugMenu>>,
     window: Single<(&mut Window, &mut CursorOptions)>,
 ) {
     // While a menu or the inventory is open, the pointer is for pointing at it.
-    if menu.open || hands.pointer {
+    if menu.open || hands.pointer || debug_menu.is_some_and(|m| m.open) {
         return;
     }
     let (mut window, mut cursor) = window.into_inner();

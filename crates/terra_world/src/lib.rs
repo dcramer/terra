@@ -25,6 +25,7 @@ pub mod crash;
 pub mod data;
 pub mod daylight;
 pub mod debug;
+pub mod debug_menu;
 pub mod detail;
 pub mod dither;
 pub mod drift;

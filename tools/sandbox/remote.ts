@@ -201,6 +201,30 @@ const COMMANDS: Record<string, Command> = {
       } else throw new Error(`tune list, get, set or reset, not ${verb}`);
     },
   },
+  menu: {
+    usage: "menu [open|close] [--search TEXT] [--page NAME] [--json]",
+    help: "the debug menu (D81; a run started with --debug-menu, the backtick in the game): open or close it, search its tunables, and say what it shows and where each slider and reset is, to click",
+    options: { search: { type: "string", help: "words every tunable shown has in its name or help" }, page: { type: "string", help: "the page to turn to, by its tab" }, json: { type: "boolean", help: "the answer as the game gives it" } },
+    run: async ({ values, positionals: [verb] }) => {
+      if (verb !== undefined && verb !== "open" && verb !== "close") throw new Error(`menu open or menu close, or menu alone to read it; not ${verb}`);
+      const open = verb === undefined ? undefined : verb === "open";
+      let menu = await sandbox.menu({ open, search: values.search as string | undefined, page: values.page as string | undefined });
+      // What was asked is drawn on the next frames; read it once it is.
+      if (menu.open && open !== undefined) menu = await sandbox.waitUntil("the menu drawn", () => sandbox.menu(), (m) => m.shown !== null, 10);
+      if (values.json) return print(menu);
+      const at = (a: sandbox.Area) => `${Math.round(a[0] + a[2] / 2)},${Math.round(a[1] + a[3] / 2)}`;
+      console.log(`debug menu ${menu.open ? "open" : "closed"}, on ${menu.page} (pages: ${menu.pages.join(", ")})${menu.search ? `, searching "${menu.search}"` : ""}`);
+      const shown = menu.shown;
+      if (!shown) return;
+      if (shown.note) console.log(shown.note);
+      for (const group of shown.groups) {
+        console.log(`${group.prefix}.* (${group.shown}): reset at ${at(group.reset)}`);
+        for (const t of shown.tunables.filter((t) => t.name.startsWith(`${group.prefix}.`))) {
+          console.log(`  ${t.name} = ${t.value} (${t.set_by}): slider ${Math.round(t.track[0])} to ${Math.round(t.track[1])} at y ${Math.round(t.slider[1] + t.slider[3] / 2)}, reset at ${at(t.reset)}`);
+        }
+      }
+    },
+  },
   why: {
     usage: "why ENTITY [COMPONENT] [--json]",
     help: "what changed this? who spawned an entity (an id as find gives it, or a name), and for each component, or the one named, the line of code and function that last changed it and on which frame",
