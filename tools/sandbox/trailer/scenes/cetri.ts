@@ -7,7 +7,7 @@ import type { Script, Vec3 } from "../../qa/script.ts";
 
 const ROLLS = 360;
 /// Seconds into the film of each beat.
-const BEATS = { glow: 4.2, wakes: 5.0, lunge: 8.2, comes: 10.6, end: 17.6 };
+const BEATS = { stirs: 4.4, wakes: 5.0, lunge: 8.2, comes: 10.6, end: 17.6 };
 /// Where it stands: beside the path, a few metres short of the nearest grown oak (16.2, 41.2).
 const CETRI: [number, number] = [19.5, 38];
 /// How big it stands: about 9.5 m (D534, the developers: "Make it 9-10 m"), its 7 m model
@@ -261,13 +261,13 @@ function script(s: Script) {
   s.frame = ROLLS;
   s.glide(on(stop, EYE), face(CETRI, stop), Math.round(STOPS_S * 60));
 
-  s.frame = f(BEATS.glow);
-  s.call("staged.glow", { name: "cetri", strength: 2.5, blend_ms: 1600 });
-  // Its limbs first stir out of the crown as the eyes light, drawing the hands' leaves off
-  // the face (round-6 film reviews: a leaf clump over the face until 5.5 s).
-  s.frame = f(BEATS.glow + 0.2);
+  // Its limbs first stir out of the crown, drawing the hands' leaves off the face (round-6
+  // film reviews: a leaf clump over the face until 5.5 s); the eyes stay dark until it wakes
+  // (round-17 reviews: lit at 5.6 s, they gave the sleeping tree away).
+  s.frame = f(BEATS.stirs);
   s.call("staged.bend", { name: "cetri", bend: ROARS, blend_ms: 2200 });
   s.frame = f(BEATS.wakes);
+  s.call("staged.glow", { name: "cetri", strength: 2.5, blend_ms: 900 });
   s.call("staged.play", { name: "cetri", clip: "Troll_Roar", speed: 0.6, once: true, blend_ms: 1200 });
   s.call("staged.morph", { name: "cetri", weights: { Wake: 1 }, blend_ms: 1400 });
 
