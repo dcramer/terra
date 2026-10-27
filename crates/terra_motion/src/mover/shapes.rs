@@ -132,7 +132,21 @@ impl Shaped for Block {
     fn bounds(&self) -> (Vec3, f32) {
         (self.centre, self.half.length())
     }
+
+    /// A box is no nearer than the sphere round it: one whose sphere is further than `best`
+    /// (by a millimetre, past the rounding of both) is not asked, the same least as asking it.
+    fn nearest_of(&self, _: &[Part], at: DVec3, best: f32) -> f32 {
+        let d = (at - self.centre.as_dvec3()).as_vec3();
+        let reach = best + self.half.length() + BOUND_SLACK;
+        if reach > 0.0 && d.length_squared() > reach * reach {
+            return best;
+        }
+        best.min(self.distance_from(d))
+    }
 }
+
+/// How much further than its bounding sphere a box's distance is taken as no nearer, m.
+const BOUND_SLACK: f32 = 1.0e-3;
 
 impl Shaped for Solid {
     fn distance(&self, at: Vec3) -> f32 {
