@@ -8,10 +8,13 @@ front of the upper trunk (the colour map's painted eye holes), and the mouth sit
 them by their spacing. As games give a face a mouth (a cut lip line, a mouth bag behind
 it, teeth on the lips, opened by a blend shape) it adds:
   - a ragged horizontal cut, closed at rest (a frost crack), with a dark dish behind it
-    (the mouth bag) so an open mouth shows no inside of the trunk;
-  - splinter teeth along both lips, tucked inside the trunk until the lips part;
+    (the mouth bag) so an open mouth shows no inside of the trunk, its throat an ember that
+    lights with the eyes;
+  - splinter teeth along both lips, grained as the bark, tucked inside the trunk until the
+    lips part;
   - a `Wake` shape key: the lips parted most in the middle, curled in, raggedly;
-  - an emissive map, amber where the eye holes are painted dark, black elsewhere. It ships
+  - an emissive map, amber with a hot middle where the eye holes are painted dark, black
+    elsewhere. It ships
     dark (export_character.py exports an emissive map's factor as 0); the game lights it
     with staged.glow and opens the mouth with staged.morph (D536).
 --sheet renders the face closed, open, and open from 35 degrees, to check it at a glance.
@@ -28,12 +31,15 @@ import bmesh
 import bpy
 import numpy as np
 from mathutils import Vector
+from mathutils.interpolate import poly_3d_calc as poly_weights
 from mathutils.bvhtree import BVHTree
 from mathutils.kdtree import KDTree
 
 import look
 
 AMBER = (1.0, 0.52, 0.12)
+CORE = (1.0, 0.86, 0.55)  # an eye's hot middle, near white, fading out to amber
+EMBER = (0.32, 0.075, 0.012)  # the throat's glow at its deepest
 src = look.path(look.args()[0])
 SHEET = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswith("--sheet=")), None)
 
@@ -127,7 +133,8 @@ for e in eyes:
     w *= 1 - np.clip((r[near] - 0.6) / 0.4, 0, 1)
     q = px[near]
     for c in range(3):
-        glow[q[:, 1], q[:, 0], c] = np.maximum(glow[q[:, 1], q[:, 0], c], w * AMBER[c])
+        hot = w * (AMBER[c] + (CORE[c] - AMBER[c]) * w ** 3)
+        glow[q[:, 1], q[:, 0], c] = np.maximum(glow[q[:, 1], q[:, 0], c], hot)
     print("GLOW", f"{int((w > 0.5).sum())} texels lit")
 mask = bpy.data.images.new(f"{body.name}_glow", W, H, alpha=False)
 mask.pixels.foreach_set(glow.ravel())
@@ -222,18 +229,30 @@ for v in on_slit:
     v.co.z += jag(v.co.x)
 
 # 4. What the open mouth shows: a dark dish behind the cut, its rim just inside the bark, and
-# splinter teeth on both lips, each skinned as the nearest bark is.
+# splinter teeth on both lips, each skinned as the nearest bark is and grained as it.
 bark_verts = list(bm.verts)
 skin = KDTree(len(bark_verts))
 for i, v in enumerate(bark_verts):
     skin.insert(v.co, i)
 skin.balance()
+bm.faces.ensure_lookup_table()
 tree = BVHTree.FromBMesh(bm)
 
 
 def surface(x, z):
     hit = tree.ray_cast(Vector((x, -50, z)), Vector((0, 1, 0)))[0]
     return hit if hit is not None else Vector((x, joint["neck_01"].y - 0.5, z))
+
+
+def bark_uv(co):
+    """The bark's picture where `co` is seen from straight ahead: a splinter grained as the
+    wood it is broken from, not one flat colour."""
+    hit, _, i, _ = tree.ray_cast(Vector((co.x, -50, co.z)), Vector((0, 1, 0)))
+    if hit is None:
+        return None
+    f = bm.faces[i]
+    w = poly_weights([v.co for v in f.verts], hit)
+    return sum((l[uv].uv * wi for l, wi in zip(f.loops, w)), Vector((0, 0)))
 
 
 def material(name, rgb, rough):
@@ -261,15 +280,32 @@ def new_vert(co):
 
 
 mouth_bag = material(f"{body.name}_mouth", (0.004, 0.003, 0.002), 1.0)
-splinter = material(f"{body.name}_teeth", (0.07, 0.055, 0.04), 0.85)
 gw, gh, bag_w, bag_h = 14, 8, 1.3 * half, 0.45
 grid = [[new_vert(surface(mx + u * bag_w, mz + v * bag_h)
-                  + Vector((0, 0.02 + 0.28 * (1 - u * u) * (1 - v * v), 0)))
+                  + Vector((0, 0.02 + 0.45 * (1 - u * u) * (1 - v * v), 0)))
          for u in np.linspace(-1, 1, gw)] for v in np.linspace(-1, 1, gh)]
 for j in range(gh - 1):
     for i in range(gw - 1):
         f = bm.faces.new((grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]))
         f.material_index = mouth_bag
+        for l, (a, b) in zip(f.loops, ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1))):
+            l[uv].uv = (a / (gw - 1), b / (gh - 1))
+# The throat lit faintly from deep inside, an ember hottest at the back of the bag, so the
+# open mouth reads in the shade; it ships dark and lights with the eyes (staged.glow).
+throat_px = 32
+gu, gv = np.meshgrid(np.linspace(-1, 1, throat_px), np.linspace(-1, 1, throat_px))
+heat = np.clip(1 - (gu ** 2 + gv ** 2), 0, 1) ** 1.5
+throat = np.ones((throat_px, throat_px, 4), dtype=np.float32)
+throat[..., :3] = heat[..., None] * np.array(EMBER, dtype=np.float32)
+ember = bpy.data.images.new(f"{body.name}_throat", throat_px, throat_px, alpha=False)
+ember.pixels.foreach_set(throat.ravel())
+ember.pack()
+bag = body.data.materials[mouth_bag]
+bag_bsdf = bag.node_tree.nodes["Principled BSDF"]
+bag_tex = bag.node_tree.nodes.new("ShaderNodeTexImage")
+bag_tex.image = ember
+bag.node_tree.links.new(bag_tex.outputs["Color"], bag_bsdf.inputs["Emission Color"])
+bag_bsdf.inputs["Emission Strength"].default_value = 1.0
 teeth = []  # (vertices, the lip it hangs from: +1 upper, -1 lower, its x)
 for lip, count in ((1, 7), (-1, 6)):
     for i in range(count):
@@ -281,7 +317,11 @@ for lip, count in ((1, 7), (-1, 6)):
         tip = new_vert(root + Vector((0.3 * b * math.sin(13 * x), -0.015, -lip * (0.2 + 0.3 * h) * spacing)))
         for tri in ((a, c, d), (a, tip, c), (c, tip, d), (d, tip, a)):
             f = bm.faces.new(tri if lip > 0 else tri[::-1])
-            f.material_index = splinter
+            f.material_index = 0
+            for l in f.loops:
+                grain = bark_uv(l.vert.co)
+                if grain is not None:
+                    l[uv].uv = grain
         teeth.append(((a, c, d, tip), lip, x))
 bm.normal_update()
 
@@ -290,7 +330,7 @@ wf = 0.95 * half
 # Each lip's move eased out over a long reach (the lower, which falls further, the longer), so
 # the bark's picture is drawn out by a quarter at most, not by half just off the cut; the
 # upper's reach stops short of the eyes.
-up, down = 0.3 * spacing, 0.5 * spacing
+up, down = 0.38 * spacing, 0.65 * spacing
 reach_up, reach_down = 1.2 * spacing, 2.6 * spacing
 
 
@@ -340,6 +380,7 @@ if SHEET:
     for weight, glow_on, side in ((0, 0, 0), (1, 6, 0), (1, 6, 35)):
         wake.value = weight
         bsdf.inputs["Emission Strength"].default_value = glow_on
+        bag_bsdf.inputs["Emission Strength"].default_value = glow_on
         # close_up names its pictures by their place in one call: each kept under its own.
         shot = look.close_up(arm, "neck_01", 4 * spacing, sides=(side,), size=600)[0]
         tiles.append(shot.replace(".png", f"-{len(tiles)}.png"))
