@@ -430,9 +430,12 @@ pub(super) fn tick(
         body.support = support;
         (body.ground, body.normal, body.velocity) = (Ground::Grounded, floor, Vec3::ZERO);
         body.hold = Hold::default();
+        body.stale = false;
     } else {
         feet = held(&k, query, shape, feet, into);
-        slide::contacts_at(feet, query, shape, &mut body.active);
+        // The move's contacts are kept: the next climbing tick's move asks its own, and a walk
+        // asks them again where the body is (`stale`).
+        body.stale = true;
         body.support = Support::NotSupported;
         (body.normal, body.velocity) = (Vec3::ZERO, velocity);
         body.hold.normal = normal;
@@ -483,6 +486,7 @@ fn pull_up(body: &mut Body, mut mantle: Mantle, query: &dyn Query, shape: &Shape
     let share = mantle.t / k.mantle_s.max(dt);
     let feet = (mantle.at(share) - body.frame).as_vec3();
     slide::contacts_at(feet, query, shape, &mut body.active);
+    body.stale = false;
     if share >= 1.0 {
         let (support, floor) = slide::support(&mut body.active, Vec3::ZERO, shape, feet);
         body.support = support;

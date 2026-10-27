@@ -282,6 +282,10 @@ pub struct Body {
     support: Support,
     /// The contacts, in the frame of `frame`: the position the tick that found them began at.
     active: Vec<Touch>,
+    /// Whether `active` are a climbing tick's move's, from before the snap to the face: a
+    /// climbing tick's next move asks its own, so they are asked again where the body is only
+    /// when a walk is to read them.
+    stale: bool,
     frame: DVec3,
     /// Time since it last stood, and whether it left by jumping (coyote time).
     air_s: f32,
@@ -296,7 +300,8 @@ pub struct Body {
 
 impl Body {
     /// What it touched as its last tick left it, in the world: where, the normal, and whether
-    /// the move met it (for a dump of why a body stopped, `build.contacts`).
+    /// the move met it (for a dump of why a body stopped, `build.contacts`); a climber's are
+    /// its move's, before the snap to the face.
     pub fn contacts(&self) -> impl Iterator<Item = (DVec3, Vec3, bool)> + '_ {
         self.active.iter().map(|t| {
             (
@@ -367,6 +372,7 @@ impl Bodies {
             stamina: FULL_STAMINA,
             support: Support::InAir,
             active: Vec::new(),
+            stale: false,
             frame: feet.as_dvec3(),
             air_s: f32::INFINITY,
             left_by_jump: false,
@@ -741,6 +747,9 @@ fn step(body: &mut Body, intent: &Intent, query: &dyn Query, world: &World, dt: 
     reframe(body);
     let shape = shape(body, dt);
     if !climb::tick(body, intent, query, &shape, world.gravity, dt) {
+        if std::mem::take(&mut body.stale) {
+            slide::contacts_at(Vec3::ZERO, query, &shape, &mut body.active);
+        }
         walk(body, intent, query, &shape, world, dt);
         climb::start(body, intent, query, &shape, dt);
     }
