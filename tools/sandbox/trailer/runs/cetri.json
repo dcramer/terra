@@ -6,6 +6,6 @@
   "seconds": 16.5,
   "scene": "cetri",
   "player": { "at": "12.5,18.5", "face": "19.5,38", "hidden": true },
-  "look": { "shutter": 180, "exposure_bias": 0.3 },
+  "look": { "shutter": 90, "exposure_bias": 0.3 },
   "sound": ["birds:0.8", "wind:0.4", "woods:0.8"]
 }
