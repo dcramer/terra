@@ -431,6 +431,64 @@ export function steps(job: Job): Step[] {
   return s;
 }
 
+// ---- A stale build, cleaned and tried again ----
+
+/// A failed run whose build broke on a slot's stale artifacts, not on its code: what said so,
+/// the workspace packages to clean and the profiles they were built in.
+export type StaleBuild = { why: string; packages: string[]; profiles: ("release" | "dev")[] };
+
+// What a stale artifact looks like: the linker missing a symbol an old rlib lacks (GNU ld, lld,
+// mold), rustc's own link failure, or rustc finding a crate's metadata older or broken
+// (E0460, E0786). Build farms (Bazel's, Chromium's) treat these as the cache's fault: clean
+// what is named and build once more.
+const LINK_ERROR = /undefined reference to|undefined symbol|error: linking with|error\[E0460\]|error\[E0786\]/;
+const SYMBOL_LINE = /undefined reference to|undefined symbol/;
+const CRATE_LINE = /error\[E0460\]|error\[E0786\]/;
+
+/// Whether a run step's output is a stale build's, and what to clean: the workspace packages
+/// (`workspace`, their names as in Cargo.toml) named in its missing symbols or crate errors,
+/// and the package that failed to compile, in the profile its paths show (both when none do).
+/// Undefined when the output has no such error or names no package of the workspace, so a
+/// registry crate is never cleaned and a real error is not run twice for nothing.
+export function staleBuild(output: string, workspace: Iterable<string>): StaleBuild | undefined {
+  const at = output.search(LINK_ERROR);
+  if (at < 0) return undefined;
+  const failed = output.slice(at);
+  const lines = failed.split("\n");
+  const named = new Set<string>();
+  const crate = (name: string) => name.replace(/-/g, "_");
+  const names = [...workspace].map((p) => ({ p, re: new RegExp(`(?<![A-Za-z_])${crate(p)}(?![A-Za-z_])`) }));
+  for (const line of lines.filter((l) => SYMBOL_LINE.test(l))) for (const { p, re } of names) if (re.test(line)) named.add(p);
+  const byCrate = (name: string) => names.find(({ p }) => crate(p) === crate(name))?.p;
+  for (const line of lines.filter((l) => CRATE_LINE.test(l))) for (const m of line.matchAll(/`([A-Za-z0-9_-]+)`/g)) if (byCrate(m[1])) named.add(byCrate(m[1]) as string);
+  for (const m of failed.matchAll(/could not compile `([A-Za-z0-9_-]+)`/g)) if (byCrate(m[1])) named.add(byCrate(m[1]) as string);
+  if (!named.size) return undefined;
+  const release = /\/release\/(deps|build|incremental)\//.test(failed);
+  const dev = /\/debug\/(deps|build|incremental)\//.test(failed);
+  const profiles: StaleBuild["profiles"] = release && !dev ? ["release"] : dev && !release ? ["dev"] : ["release", "dev"];
+  const why = (lines.find((l) => SYMBOL_LINE.test(l) || CRATE_LINE.test(l)) ?? lines[0]).trim().replace(/\s+/g, " ").slice(0, 160);
+  return { why, packages: [...named].sort(), profiles };
+}
+
+/// The commands that clean a stale build's packages, one per profile.
+export const cleanCommands = (s: StaleBuild): string[][] =>
+  s.profiles.map((profile) => ["cargo", "clean", ...(profile === "release" ? ["--release"] : []), ...s.packages.flatMap((p) => ["-p", p])]);
+
+/// The workspace's package names from the root Cargo.toml's members (`dir/*` or `dir`) and
+/// each member's `[package] name`, read through `read` (a path in, its text or undefined out)
+/// and `list` (a folder in, its entries out).
+export function workspacePackages(rootToml: string, read: (path: string) => string | undefined, list: (dir: string) => string[]): string[] {
+  const members = rootToml.match(/^\s*members\s*=\s*\[([^\]]*)\]/m)?.[1].match(/"([^"]+)"/g)?.map((s) => s.slice(1, -1)) ?? [];
+  const dirs = members.flatMap((m) => (m.endsWith("/*") ? list(m.slice(0, -2)).map((d) => `${m.slice(0, -2)}/${d}`) : [m]));
+  const out: string[] = [];
+  for (const dir of dirs) {
+    const toml = read(`${dir}/Cargo.toml`);
+    const name = toml?.match(/^\[package\][^[]*?^\s*name\s*=\s*"([^"]+)"/ms)?.[1];
+    if (name) out.push(name);
+  }
+  return out.sort();
+}
+
 /// The whole limit of a job's run steps, in seconds, under `timeout`.
 export const limitArgs = (job: Job) => ["timeout", "-k", "30", String(job.minutes * 60)];
 

@@ -154,6 +154,63 @@ setTimeout(() => {}, 300);`;
   }
 });
 
+test("a build broken by a stale artifact is cleaned and run once more; a real error is not", async () => {
+  // A workspace of two crates, and a cargo on the PATH that only records its words: the command
+  // links only once a clean has run, as a stale rlib does.
+  mkdirSync(join(agent, "crates/terra_world"), { recursive: true });
+  mkdirSync(join(agent, "crates/terra_sandbox"), { recursive: true });
+  writeFileSync(join(agent, "Cargo.toml"), '[workspace]\nmembers = ["crates/*"]\n');
+  writeFileSync(join(agent, "crates/terra_world/Cargo.toml"), '[package]\nname = "terra_world"\n');
+  writeFileSync(join(agent, "crates/terra_sandbox/Cargo.toml"), '[package]\nname = "terra_sandbox"\n');
+  sh(agent, "add", ".");
+  sh(agent, "commit", "-q", "-m", "a workspace");
+  const ws = sh(agent, "rev-parse", "HEAD");
+  const bin = join(tmp, "bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, "cargo"), '#!/bin/sh\necho "$@" >> cleaned.txt\n', { mode: 0o755 });
+  const link = `const fs = require("fs");
+if (fs.existsSync("cleaned.txt")) { console.log("linked"); process.exit(0); }
+console.log("error: linking with \`cc\` failed: exit status: 1");
+console.log("  = note: rust-lld: error: undefined symbol: <terra_world::fire::FireGlows as bevy_ecs::component::Component>::register_required_components");
+console.log("  = note: in " + process.env.CARGO_TARGET_DIR + "/release/deps/terra_sandbox-1a.o");
+console.log("error: could not compile \`terra_sandbox\` (bin \\"terra_sandbox\\")");
+process.exit(101);`;
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path}`;
+  try {
+    const fixed = submit(r, agent, job({ rev: ws, command: ["node", "-e", link] }));
+    assert.ok("id" in fixed);
+    const done = await runJob(b, first()!);
+    assert.equal(done.state, "done", done.note);
+    assert.match(done.note ?? "", /cleaned a stale build of terra_sandbox, terra_world and ran it again/);
+    const jobLog = readFileSync(join(b.jobs, done.id, "out/job.log"), "utf8");
+    assert.match(jobLog, /render-worker: stale build \(.*undefined symbol: <terra_world::fire::FireGlows.*\): cleaning terra_sandbox, terra_world and running it again/);
+    assert.match(jobLog, /render-worker: run again: [\s\S]*linked/);
+    assert.equal(readFileSync(join(slotDir(b, 1), "cleaned.txt"), "utf8"), "clean --release -p terra_sandbox -p terra_world\n");
+
+    // Still failing after the clean: run once more only, and failed with its code.
+    const always = link.replace('fs.existsSync("cleaned.txt")', "false");
+    const stuck = submit(r, agent, job({ rev: ws, command: ["node", "-e", always] }));
+    assert.ok("id" in stuck);
+    const failed = await runJob(b, first()!);
+    assert.equal(failed.state, "failed");
+    assert.equal(failed.exit, 101);
+    assert.equal(readFileSync(join(slotDir(b, 1), "cleaned.txt"), "utf8"), "clean --release -p terra_sandbox -p terra_world\n", "one clean");
+    assert.equal(readFileSync(join(b.jobs, failed.id, "out/job.log"), "utf8").match(/render-worker: run again/g)?.length, 1, "one retry");
+
+    // A compile error in the code is not retried.
+    const typo = `console.log("error[E0308]: mismatched types"); console.log("error: could not compile \`terra_world\`"); process.exit(101);`;
+    const real = submit(r, agent, job({ rev: ws, command: ["node", "-e", typo] }));
+    assert.ok("id" in real);
+    const once = await runJob(b, first()!);
+    assert.equal(once.state, "failed");
+    assert.doesNotMatch(readFileSync(join(b.jobs, once.id, "out/job.log"), "utf8"), /stale build/);
+    assert.ok(!existsSync(join(slotDir(b, 1), "cleaned.txt")), "nothing cleaned (the step's git clean took the last one's)");
+  } finally {
+    process.env.PATH = path;
+  }
+});
+
 test("a job's commit takes the LFS objects its pointers name to the box; one found nowhere fails", () => {
   const pointer = (oid: string) => `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize 5\n`;
   const at = (root: string, oid: string) => join(root, ".git/lfs/objects", oid.slice(0, 2), oid.slice(2, 4), oid);

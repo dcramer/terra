@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boxSettings, chooseWorker, collected, config, displayPlan, expired, freeDisplay, gpuFix, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, plan, steps, takenDisplays, WARM, xvfbArgs, xvfbBackoff } from "./jobs.ts";
+import { boxSettings, chooseWorker, cleanCommands, collected, config, displayPlan, expired, freeDisplay, gpuFix, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, plan, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -214,4 +214,64 @@ test("a card the driver cannot reach gets the commands that fix it", () => {
   assert.match(gpuFix("6.8.0-146-generic", "535", false).join("\n"), /linux-modules-nvidia-535-generic[\s\S]*reboot/);
   assert.match(gpuFix("k", "535", true).join("\n"), /modprobe nvidia/);
   assert.match(gpuFix("k", undefined, false).join("\n"), /ubuntu-drivers/);
+});
+
+// ---- Stale builds ----
+
+const WORKSPACE = ["terra_build", "terra_build_layout", "terra_sandbox", "terra_world", "xtask"];
+const T = "/home/u/terra-render/slots/2/target";
+
+test("a link error naming a workspace crate is a stale build: its crates and the failing package are cleaned, in the profile its paths show", () => {
+  // rustc's link failure with lld's report, the symbol a newer terra_world has and the stale rlib lacks.
+  const lld = [
+    "   Compiling terra_sandbox v0.1.0 (/home/u/terra-render/slots/2/crates/terra_sandbox)",
+    "error: linking with `cc` failed: exit status: 1",
+    `  = note: LC_ALL="C" "cc" "${T}/release/deps/terra_sandbox-1a2b.terra_sandbox.3c4d-cgu.07.rcgu.o" "${T}/release/deps/libterra_build_layout-9f.rlib" "${T}/release/deps/libbevy_ecs-77.rlib"`,
+    "  = note: rust-lld: error: undefined symbol: <terra_world::fire::FireGlows as bevy_ecs::component::Component>::register_required_components",
+    "          >>> referenced by terra_sandbox.3c4d-cgu.07",
+    'error: could not compile `terra_sandbox` (bin "terra_sandbox") due to 1 previous error',
+  ].join("\n");
+  const s = staleBuild(lld, WORKSPACE);
+  assert.deepEqual(s?.packages, ["terra_sandbox", "terra_world"], "named in the symbol and failing, not every rlib on the command line");
+  assert.deepEqual(s?.profiles, ["release"]);
+  assert.match(s?.why ?? "", /undefined symbol: <terra_world::fire::FireGlows/);
+  assert.deepEqual(cleanCommands(s!), [["cargo", "clean", "--release", "-p", "terra_sandbox", "-p", "terra_world"]]);
+
+  // GNU ld with mangled names, in a dev build: the crate is found inside the mangling.
+  const ld = [
+    "error: linking with `cc` failed: exit status: 1",
+    `  = note: /usr/bin/ld: ${T}/debug/deps/xtask-5e.o: in function \`main':`,
+    "          undefined reference to `_ZN11terra_build4kits4load17h0123456789abcdefE'",
+    'error: could not compile `xtask` (bin "xtask")',
+  ].join("\n");
+  assert.deepEqual(staleBuild(ld, WORKSPACE), { why: "undefined reference to `_ZN11terra_build4kits4load17h0123456789abcdefE'", packages: ["terra_build", "xtask"], profiles: ["dev"] });
+
+  // rustc finding a crate's metadata from an older build; no path says the profile, so both.
+  const meta = "error[E0460]: found possibly newer version of crate `terra_world` which `terra_sandbox` depends on\nerror: could not compile `terra_sandbox`";
+  const m = staleBuild(meta, WORKSPACE);
+  assert.deepEqual(m?.packages, ["terra_sandbox", "terra_world"]);
+  assert.deepEqual(cleanCommands(m!), [
+    ["cargo", "clean", "--release", "-p", "terra_sandbox", "-p", "terra_world"],
+    ["cargo", "clean", "-p", "terra_sandbox", "-p", "terra_world"],
+  ]);
+});
+
+test("an error in the code, or one naming nothing of the workspace, is not a stale build", () => {
+  const typo = "error[E0308]: mismatched types\n --> crates/terra_world/src/fire.rs:10:5\nerror: could not compile `terra_world` (lib) due to 1 previous error";
+  assert.equal(staleBuild(typo, WORKSPACE), undefined, "a real error is not run twice");
+  assert.equal(staleBuild("thread 'main' panicked at crates/terra_world/src/cine.rs:4:1", WORKSPACE), undefined);
+  assert.equal(staleBuild("rust-lld: error: undefined symbol: vkCreateInstance\nerror: could not compile `ash`", WORKSPACE), undefined, "a registry crate is never cleaned");
+  assert.equal(staleBuild("rust-lld: error: undefined symbol: terra_buildings::x\n", WORKSPACE), undefined, "a longer name is not its prefix");
+});
+
+test("the workspace's packages come from its members' manifests", () => {
+  const files: Record<string, string> = {
+    "crates/terra_world/Cargo.toml": '[package]\nname = "terra_world"\nversion.workspace = true\n\n[dependencies]\nname = "not this"\n',
+    "crates/terra_gen/Cargo.toml": '[package]\nversion = "0.1.0"\nname = "terra_gen"\n',
+    "xtask/Cargo.toml": '[package]\nname = "xtask"\n',
+  };
+  const root = '[workspace]\nresolver = "3"\nmembers = ["crates/*", "xtask"]\nexclude = ["spike"]\n';
+  const list = (d: string) => (d === "crates" ? ["terra_world", "terra_gen", "README.md"] : []);
+  assert.deepEqual(workspacePackages(root, (p) => files[p], list), ["terra_gen", "terra_world", "xtask"]);
+  assert.deepEqual(workspacePackages("", (p) => files[p], list), []);
 });

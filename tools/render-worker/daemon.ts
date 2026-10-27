@@ -9,11 +9,11 @@
 // none. `--selftest` loads it and exits.
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, renameSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
 import { Display } from "./display.ts";
-import { boxSettings, collected, displayPlan, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, plan, type Policy, type Slots, type Start, short, steps } from "./jobs.ts";
+import { boxSettings, cleanCommands, collected, displayPlan, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, plan, type Policy, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -61,6 +61,24 @@ export function stop(r: Running): void {
   } catch {}
 }
 
+/// What a step wrote to the log since `from`, at most its last `most` bytes.
+function since(file: string, from: number, most = 4 * 1024 ** 2): string {
+  const size = statSync(file).size;
+  const start = Math.max(from, size - most);
+  const buf = Buffer.alloc(Math.max(0, size - start));
+  const fd = openSync(file, "r");
+  readSync(fd, buf, 0, buf.length, start);
+  closeSync(fd);
+  return buf.toString("utf8");
+}
+
+/// The checkout's workspace packages, none when it is no Cargo workspace.
+function packagesOf(src: string): string[] {
+  const read = (p: string) => (existsSync(join(src, p)) ? readFileSync(join(src, p), "utf8") : undefined);
+  const list = (d: string) => (existsSync(join(src, d)) ? readdirSync(join(src, d)) : []);
+  return workspacePackages(read("Cargo.toml") ?? "", read, list);
+}
+
 /// A slot's job checkout: a worktree of the worker's clone, detached, so a job's checkout and
 /// build never touch the worker's own code or another slot's. Slot 1 takes over the single job
 /// checkout's build and HOME from before slots, so it starts warm.
@@ -99,6 +117,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   let why = "";
   let startedMs = Date.now();
   let ran = false;
+  let cleaned = "";
   const home = slotHome(b, slot);
   let src = slotDir(b, slot);
   try {
@@ -112,7 +131,24 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
       if (step.run && !ran) (startedMs = Date.now()), (ran = true);
       const cmd = step.run ? [...limitArgs(job), ...step.cmd] : step.cmd;
       const env = step.run || step.cmd[0] === "cargo" ? jobEnv(process.env, home, job.id, join(src, "target"), dpy) : process.env;
-      const code = await run(cmd, src, env, log, r);
+      const from = statSync(logFile).size;
+      let code = await run(cmd, src, env, log, r);
+      // A build that broke on the slot's stale artifacts (a link error naming a workspace
+      // crate) is cleaned of them and run once more, as build farms retry a cache's fault.
+      const stale = code !== 0 && code !== 124 && step.run && !r.cancelled && !cleaned ? staleBuild(since(logFile, from), packagesOf(src)) : undefined;
+      if (stale) {
+        cleaned = stale.packages.join(", ");
+        note(`stale build (${stale.why}): cleaning ${cleaned} and running it again`);
+        const buildEnv = jobEnv(process.env, home, job.id, join(src, "target"), dpy);
+        for (const clean of cleanCommands(stale)) {
+          note(`clean: ${clean.join(" ")}`);
+          await run(clean, src, buildEnv, log, r);
+        }
+        if (!r.cancelled) {
+          note(`${step.what} again: ${step.cmd.join(" ")}`);
+          code = await run(cmd, src, env, log, r);
+        }
+      }
       if (code !== 0) {
         exit = code;
         why = r.cancelled ? "cancelled" : step.run ? (code === 124 ? `stopped at its limit of ${job.minutes} min` : `the command exited ${code}`) : `${step.what} failed`;
@@ -138,6 +174,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
     note(why);
   }
   closeSync(log);
+  if (cleaned) why += `; cleaned a stale build of ${cleaned} and ran it again`;
   job = { ...job, state: r.cancelled ? "cancelled" : exit ? "failed" : "done", exit, ended: new Date().toISOString(), note: why };
   writeJob(b, job);
   return job;
