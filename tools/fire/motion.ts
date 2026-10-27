@@ -84,11 +84,12 @@ export const GATE: { name: string; of: (m: Motion) => number; lo: number; hi: nu
 /// A film against GATE: each bar's value, to the two decimals the bars and the report give, and
 /// whether it meets it.
 /// Several films of one build (its fire at several placements, each a seed's offset, mirror,
-/// turn and scale) are held by the median of each measure: placement alone moved the night
-/// campfire's lean between 6.8 and 11.6 deg (fire round g52), so one film is one draw of it.
+/// turn and scale, each filmed twice) are held by each measure's middle-half mean (`held`):
+/// placement alone moved the night campfire's lean between 6.8 and 11.6 deg (fire round g52), so
+/// one film is one draw of it.
 export const gate = (...ms: Motion[]) =>
   GATE.map((g) => {
-    const value = Math.round(100 * median(ms.map(g.of))) / 100;
+    const value = Math.round(100 * held(ms.map(g.of))) / 100;
     return { name: g.name, value, met: value >= g.lo && value <= g.hi };
   });
 
@@ -107,8 +108,17 @@ export type Motion = {
 };
 
 const quantile = (sorted: ArrayLike<number>, q: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(q * sorted.length)))] : NaN);
-const median = (xs: number[]) => quantile([...xs].sort((a, b) => a - b), 0.5);
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+/// The mean of the middle half, a quarter (rounded down) left out at each end: an interquartile
+/// mean, as robust statistics hold a noisy sample. Two films of one build differ (D472's A/A,
+/// determinism rounds 2-3), and the seven placements' dusk splits fall in two groups (about
+/// 1.13-1.28 and 1.45-1.62), so their median was the edge of one group or the other run to run
+/// (1.32 or 1.46); one film changing group moves this by an eighth of the gap at most.
+export const held = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const k = Math.floor(s.length / 4);
+  return mean(s.slice(k, s.length - k));
+};
 const sd = (xs: number[]) => {
   const m = mean(xs);
   return Math.sqrt(mean(xs.map((x) => (x - m) ** 2)));
@@ -551,7 +561,7 @@ if (import.meta.main) {
   const mattes = argv.flatMap((a, i) => (a === "--matte" && i + 1 < argv.length ? [argv[i + 1]] : []));
   if (!inputs.length || (mattes.length && mattes.length !== inputs.length)) {
     console.error("usage: node tools/fire/motion.ts <video | 'dir/f-*[0-9].png'>... [--matte <video|glob>]... (a matte per clip) [--box WxH+X+Y] [--from S] [--seconds S] [--fps N] [--cut L] [--overlay out.png] [--json]");
-    console.error("  several clips: each is measured, then the gate holds the median of each measure (one build's fire at several placements)");
+    console.error("  several clips: each is measured, then the gate holds each measure's middle-half mean (one build's fire at several placements)");
     process.exit(2);
   }
   const src = (path: string): Source => ({ input: path, fps: +(opt("--fps") ?? 30), from: +(opt("--from") ?? 0), seconds: +(opt("--seconds") ?? 10) });
@@ -568,6 +578,6 @@ if (import.meta.main) {
   });
   if (ms.length > 1 && !argv.includes("--json")) {
     const g = gate(...ms);
-    console.log(`median of ${ms.length}: gate met ${g.filter((x) => x.met).length} of ${GATE.length}: ${g.map((x) => `${x.name} ${f2(x.value)}${x.met ? "" : "x"}`).join(" ")}`);
+    console.log(`middle-half mean of ${ms.length}: gate met ${g.filter((x) => x.met).length} of ${GATE.length}: ${g.map((x) => `${x.name} ${f2(x.value)}${x.met ? "" : "x"}`).join(" ")}`);
   }
 }

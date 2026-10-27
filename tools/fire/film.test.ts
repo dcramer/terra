@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { filmArgs, hold, PLACEMENTS, REFERENCE } from "./film.ts";
+import { filmArgs, hold, PLACEMENTS, REFERENCE, TAKES, takes } from "./film.ts";
 import { HELD_SKY } from "./sheet.ts";
 
 const REF = { HEARTH_A: "1.0", HEARTH_C: "Color::srgb(1.0, 0.5, 0.1)" };
@@ -20,10 +20,19 @@ test("a hearth constant added or gone fails the hold", () => {
   assert.throws(() => hold("const HEARTH_A: f32 = 1.0;", REF), /no HEARTH_C/);
 });
 
-test("the gate films an odd number of placements, at least seven, each a flame seed of its own", () => {
+test("the gate films each placement twice or more, each film in a folder of its own", () => {
+  const all = takes("o");
+  assert.ok(TAKES >= 2, "two films of one build differ, so a placement is filmed more than once");
+  assert.equal(all.length, PLACEMENTS.length * TAKES);
+  assert.equal(new Set(all.map((t) => t.dir)).size, all.length);
+  for (const dx of PLACEMENTS) assert.equal(all.filter((t) => t.dx === dx).length, TAKES);
+  assert.deepEqual(all.slice(6, 8).map((t) => t.dir), ["o/p09", "o/p09-2"]);
+});
+
+test("the gate films at least seven placements, each a flame seed of its own", () => {
   // hearth.rs's seed of a fire at (x, z), the gate's at (-10 + dx, 10).
   const seed = (dx: number) => ((((-10 + dx) * 0.731 + 10 * 0.377) % 1) + 1) % 1;
-  assert.ok(PLACEMENTS.length >= 7 && PLACEMENTS.length % 2 === 1, `${PLACEMENTS.length} placements: the median needs an odd count of seven or more`);
+  assert.ok(PLACEMENTS.length >= 7, `${PLACEMENTS.length} placements: seven or more`);
   const seeds = PLACEMENTS.map(seed);
   for (let i = 0; i < seeds.length; i++)
     for (let j = i + 1; j < seeds.length; j++) {

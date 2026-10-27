@@ -1,8 +1,8 @@
 // The motion gate's films (D472): the yard's campfire filmed still from RDR2's camp view for 20 s at
 // dusk and at night, at seven placements of its flame (PLACEMENTS: the fire and camera moved together
 // along x, so the view is the same and only the flame's seed changes, hearth.rs), each frame
-// with its flame matte (--flame-matte, D433); then motion.ts's measures, each hour gated by their
-// median. Exit 1 when either hour misses the gate.
+// with its flame matte (--flame-matte, D433), each placement filmed TAKES times; then motion.ts's
+// measures, each hour gated by their middle-half mean (`held`). Exit 1 when either hour misses.
 //
 // The gate measures the flame, so the light it casts is held: the build is filmed with every hearth
 // light constant of crates/terra_world/src/fire/light.rs (`HEARTH_*`) set to REFERENCE, main's at
@@ -65,6 +65,13 @@ export function hold(source: string, reference = REFERENCE): { source: string; c
 /// run at one placement, so their median sat at the bar by luck and went either way (fire gate
 /// round: main dbf2f473's dusk 1.01-1.23 over four runs of three).
 export const PLACEMENTS = [0, 0.3, 0.6, 0.9, 1.2, 1.5, 1.8];
+/// Films of each placement. Two films of one build are not the same film (aa.ts: whole frames
+/// and mattes differ run to run, determinism rounds 2-3), so a placement's splits move by up to
+/// 0.15 from one run to the next; each is filmed twice and all fourteen held together.
+export const TAKES = 2;
+/// Every film's folder: each placement's, a take each.
+export const takes = (out: string) =>
+  PLACEMENTS.flatMap((dx) => Array.from({ length: TAKES }, (_, t) => ({ dx, dir: join(out, `p${String(dx).replace(".", "")}${t ? `-${t + 1}` : ""}`) })));
 export const HOURS: [string, string][] = [["dusk", "18.4"], ["night", "22"]];
 const CROP = "crop=600:600:500:250";
 
@@ -131,9 +138,10 @@ if (import.meta.main) {
   const changed = build(root);
   console.log(`✓ built, hearth light held at main's 6741693a${changed.length ? ` (${changed.join(", ")})` : " (the build's own)"}`);
   const bin = join(root, "target/release/terra_sandbox");
-  const dirs = PLACEMENTS.map((dx) => join(OUT, `p${String(dx).replace(".", "")}`));
-  PLACEMENTS.forEach((dx, i) => film(root, bin, dirs[i], dx, seconds));
-  console.log(`✓ filmed ${PLACEMENTS.length} placements x ${HOURS.length} hours, ${seconds} s each, in ${OUT}`);
+  const all = takes(OUT);
+  const dirs = all.map((t) => t.dir);
+  for (const { dx, dir } of all) film(root, bin, dir, dx, seconds);
+  console.log(`✓ filmed ${PLACEMENTS.length} placements x ${TAKES} takes x ${HOURS.length} hours, ${seconds} s each, in ${OUT}`);
   let failed = 0;
   for (const [hour] of HOURS) {
     const ms = dirs.map((d) => {
@@ -145,7 +153,7 @@ if (import.meta.main) {
     const g = gate(...ms.map((x) => x.m));
     const met = g.filter((x) => x.met).length;
     if (met < GATE.length) failed++;
-    console.log(`${met === GATE.length ? "✓" : "✗"} ${hour}: median of ${ms.length} met ${met} of ${GATE.length}: ${g.map((x) => `${x.name} ${x.value.toFixed(2)}${x.met ? "" : "x"}`).join(" ")} (${join(OUT, `${hour}.txt`)})`);
+    console.log(`${met === GATE.length ? "✓" : "✗"} ${hour}: middle-half mean of ${ms.length} met ${met} of ${GATE.length}: ${g.map((x) => `${x.name} ${x.value.toFixed(2)}${x.met ? "" : "x"}`).join(" ")} (${join(OUT, `${hour}.txt`)})`);
   }
   process.exit(failed ? 1 : 0);
 }

@@ -1,7 +1,7 @@
 // The motion measure's numbers on clips whose answers are known by construction.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { analyse, type Clip, flicker, GATE, gate, type Motion, roughness } from "./motion.ts";
+import { analyse, type Clip, flicker, GATE, gate, held, type Motion, roughness } from "./motion.ts";
 
 const FPS = 30;
 const N = 180;
@@ -81,12 +81,26 @@ test("a glowing log under the flame that never changes is not its base", () => {
   assert.ok(glowing.flicker.areaCv < bare.flicker.areaCv, `area sd/mean ${glowing.flicker.areaCv} against ${bare.flicker.areaCv}`);
 });
 
-test("the gate holds several films by each measure's median", () => {
+test("the gate holds several films by each measure's middle-half mean", () => {
   const m = analyse(fire());
   const at = (lean: number): Motion => ({ ...m, tongues: { ...m.tongues, lean } });
   const lean = (ms: Motion[]) => gate(...ms).find((g) => g.name === "lean");
-  assert.deepEqual(lean([at(6.8), at(9), at(11.6)]), { name: "lean", value: 9, met: true });
-  assert.deepEqual(lean([at(6.8), at(7), at(11.6)]), { name: "lean", value: 7, met: false });
+  // Under four films none is left out: the mean.
+  assert.deepEqual(lean([at(6.8), at(9), at(11.6)]), { name: "lean", value: 9.13, met: true });
+  // Of eight, the lowest two and the highest two are left out, however far off.
+  assert.equal(held([0, 1, 2, 3, 4, 5, 6, 100]), 3.5);
+});
+
+test("one film changing group moves the held value little where the median jumps", () => {
+  // Seven placements filmed twice, their dusk splits in two groups as main's are (D472's log):
+  // one film of the high group reads low on another run.
+  const low = [1.13, 1.16, 1.19, 1.2, 1.22, 1.25, 1.28];
+  const high = [1.45, 1.48, 1.5, 1.52, 1.55, 1.6, 1.62];
+  const one = [...low, ...high];
+  const other = [...low, 1.24, ...high.slice(1)];
+  const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+  assert.ok(Math.abs(median(one) - median(other)) > 0.15, "the premise: the median jumps the gap");
+  assert.ok(Math.abs(held(one) - held(other)) < 0.05, `held ${held(one)} against ${held(other)}`);
 });
 
 test("the run's matte stands in for the luma cut", () => {
