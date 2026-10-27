@@ -749,11 +749,13 @@ ASH_GATHER = (0.3, 0.7, 0.2, 1.0)
 # plates, against the scan's 0.035 at 0.8) with the scan's own detail in it, darker by this share
 # in its furrows. The scan's diffuse alone, lit by the fire, read as plain dark wood to every judge
 # of g78. Lighter plates (0.077-0.087) read more as bark but took the dark pixels the fire sheet's
-# soot/flame counts (night 0.110-0.116 of main's 0.122); these keep 0.118.
+# soot/flame counts (night 0.110-0.116 of main's 0.122); these keep 0.118, and with the scorch
+# below 0.120.
 BARK = (0.065, 0.06, 0.053)
 BARK_FURROW = 0.85
-# How much darker the scorched bark is, of the scan's.
-SCORCH_DARK = 0.65
+# Round g79: how much darker the scorched bark is, of the scan's (was 0.65): the band between the
+# grey bark and the char blackened, so the bark ends at a dark scorch line.
+SCORCH_DARK = 0.9
 
 
 def bark_nodes(t):
