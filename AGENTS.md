@@ -45,6 +45,7 @@ Every byte an agent reads is paid again each turn.
 
 - **Keep context small** (D390): read by range or grep; send long output to a file and read its tail; when the context nudge fires, finish the unit of work and hand off with a summary.
 - **Delegate mechanical work** (D391): finding to `finder` (Haiku), running a check, test or benchmark to `runner` (Sonnet). Judgement, design, debugging and fixes stay on the default model.
+- **A round is a `round` agent** (D538), isolation "worktree": the brief says only the task, the skill, the bound and the handoff files; the agent's file holds the routine.
 - **A subagent's cache lasts an hour** (D397): a wait of minutes is cheap; past an hour the whole context is written again, so hand off instead.
 - **Docs short and precise**: intent, constraints and reasons, not implementation or history. Here and in skills, one line a rule with its decision; the explanation lives in the doc it cites.
 
