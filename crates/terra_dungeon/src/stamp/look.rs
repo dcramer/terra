@@ -1,4 +1,5 @@
-//! Where the camera looks along the tour: at the way `AHEAD_M` on, drawn to a room's point of
+//! Where the camera looks along the tour: at the way `AHEAD_M` on, turned toward the next
+//! doorway on the way once it is in sight and near (`LEAD_M`), drawn to a room's point of
 //! interest (the goal, a key's altar, lever or brazier) once that is in sight and near while
 //! the way on stays in frame, smoothed, and turning no faster than `TURN_PER_M` but where the
 //! way ahead itself turns faster. A cinematic
@@ -26,6 +27,24 @@ pub const AHEAD_M: f32 = 4.0;
 /// It aims this far under the eye over the way ahead, so the floor shows (a walker's gaze
 /// falls a little).
 const LOWER_M: f32 = 0.3;
+/// The next doorway the way passes draws the look's yaw from this far along the way, in
+/// metres, and holds it wholly from the second (`LEAD_OFF_RAD`): round 5's barrow film
+/// crossed a 2x2 room toward its south door looking at the blank west wall 5-7 m off for
+/// 2.5 s, the way 4 m on still bending round the room's middle. As a walker looks where they
+/// go out, and a rail camera's look-ahead target leads the turn. With a doorway 3.5-9 m on in
+/// sight, the frame's middle met a wall within 5 m in 5.7/4.1/4.3% of looks (crypt, mine,
+/// keep), 3.3/2.2/2.0% led (the plain look at the way 4 m on, unsmoothed: 2.9/1.6/1.8%).
+pub const LEAD_M: [f32; 2] = [12.0, 8.0];
+/// A doorway this far off the way on, in radians, leads the look wholly, and from the
+/// second not at all, so the way on stays in frame (the look test's 0.7 rad).
+const LEAD_OFF_RAD: [f32; 2] = [0.6, 0.9];
+/// A doorway leads the look only where the look turned to it runs clear this far either side
+/// of it, in radians, for the second's metres (`led`).
+const GRAZE_RAD: f32 = 0.15;
+const GRAZE_M: f32 = 2.0;
+/// The doorway lets the look go back to the way on from the first distance to the second, in
+/// metres, so it passes through square.
+const THROUGH_M: [f32; 2] = [1.5, 3.5];
 /// The most a point of interest turns the look off the way `AHEAD_M` on, in radians, so the
 /// way on stays in frame (a 20 mm lens's frame is some 84° across, 0.73 rad either side).
 pub const FRAME_RAD: f32 = 0.5;
@@ -88,14 +107,37 @@ pub(super) fn headroom(map: &Map, at: Vec3) -> f32 {
         .unwrap_or(4.0)
 }
 
+/// The eyes of the view nearest each doorway in plan, within 0.75 m, in order.
+pub(super) fn passes(view: &[Vec3], doorways: &[Vec3]) -> Vec<usize> {
+    let plan = |a: Vec3, b: Vec3| (a.x - b.x).hypot(a.z - b.z);
+    let mut out: Vec<usize> = doorways
+        .iter()
+        .filter_map(|&d| {
+            (0..view.len())
+                .filter(|&i| (view[i].y - d.y).abs() < 2.5)
+                .min_by(|&a, &b| plan(view[a], d).total_cmp(&plan(view[b], d)))
+                .filter(|&i| plan(view[i], d) < 0.75)
+        })
+        .collect();
+    out.sort_unstable();
+    out
+}
+
 /// A point `LOOK_M` out along the camera's look from each eye of the view, tilted up by
 /// `tilt` radians where the eye stands under a vault (`VAULT_TILT` for a theme with a kit,
-/// nought for one without).
-pub(super) fn looks(map: &Map, view: &[Vec3], objects: &[Object], tilt: f32) -> Vec<Vec3> {
+/// nought for one without), and led toward the next of `doorways` in sight.
+pub(super) fn looks(
+    map: &Map,
+    view: &[Vec3],
+    doorways: &[Vec3],
+    objects: &[Object],
+    tilt: f32,
+) -> Vec<Vec3> {
     let n = view.len();
     if n < 2 {
         return view.to_vec();
     }
+    let passes = passes(view, doorways);
     let interests: Vec<Vec3> = objects
         .iter()
         .filter(|o| matches!(o.role, ObjectRole::Goal | ObjectRole::Key))
@@ -113,6 +155,7 @@ pub(super) fn looks(map: &Map, view: &[Vec3], objects: &[Object], tilt: f32) -> 
                 let (h, [lo, hi]) = (headroom(map, view[i]), VAULT_HEADROOM_M);
                 let (yaw, pitch) = angles(to.normalize());
                 let up = tilt * terra_gen::smoothstep(lo, hi, h);
+                let yaw = led(map, view, &passes, i, yaw, pitch + up);
                 held = level(from_angles(yaw, pitch + up), PITCH_MOST);
             }
             held
@@ -149,6 +192,37 @@ pub(super) fn looks(map: &Map, view: &[Vec3], objects: &[Object], tilt: f32) -> 
         .zip(view)
         .map(|(d, &eye)| eye + d * LOOK_M)
         .collect()
+}
+
+/// The yaw of the look from eye `i` of the view, turned from the way on's toward the next
+/// doorway it passes once that is in sight and near (`LEAD_M`), where the look so turned
+/// runs clear as far as the doorway (`LOOK_M` at most): half turned toward a doorway seen
+/// past a jamb, it would face the wall beside it.
+fn led(map: &Map, view: &[Vec3], passes: &[usize], i: usize, yaw: f32, pitch: f32) -> f32 {
+    let Some(&j) = passes.iter().find(|&&j| j > i) else {
+        return yaw;
+    };
+    let along = (j - i) as f32 * STEP_M;
+    let w = terra_gen::smoothstep(LEAD_M[0], LEAD_M[1], along)
+        * terra_gen::smoothstep(THROUGH_M[0], THROUGH_M[1], along);
+    let door = view[j] - Vec3::Y * LOWER_M;
+    if w <= 0.0 || !seen(map, view[i], door) {
+        return yaw;
+    }
+    let (door_yaw, _) = angles((door - view[i]).normalize_or(Vec3::NEG_Z));
+    let off = wrapped(door_yaw - yaw);
+    let turned = yaw + off * w * terra_gen::smoothstep(LEAD_OFF_RAD[1], LEAD_OFF_RAD[0], off.abs());
+    let reach = view[i].distance(door).min(LOOK_M);
+    let clear_to = |yaw: f32, m: f32| seen(map, view[i], view[i] + from_angles(yaw, pitch) * m);
+    // And a little either side near, as the smoothing and the turn bound leave the look some
+    // 0.1 rad off it: round 6's first lead grazed a pier's or jamb's corner within 1.5 m in
+    // 0.02% more looks than the plain look did.
+    let side = [-GRAZE_RAD, GRAZE_RAD].map(|o| clear_to(turned + o, GRAZE_M));
+    if clear_to(turned, reach) && side.iter().all(|&c| c) {
+        turned
+    } else {
+        yaw
+    }
 }
 
 /// A direction pitched no more than `most` radians up or down.

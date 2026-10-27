@@ -35,7 +35,7 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, vaulted: bool
     } else {
         0.0
     };
-    out.look = super::look::looks(map, &out.view, &out.objects, tilt);
+    out.look = super::look::looks(map, &out.view, &out.doorways, &out.objects, tilt);
     out.pace = super::look::pace(&out.view, &out.look);
 }
 
@@ -416,14 +416,14 @@ fn tour(dungeon: &Dungeon, out: &mut Stamp) {
             .map(|n| (c, n))
     });
     if let Some((c, n)) = into {
-        through(layout, c, n, &mut out.route);
+        through(layout, c, n, &mut out.route, &mut out.doorways);
     }
     let mut room = centre(layout, graph.entrance());
     for (e, a, b) in showcase(graph, graph.entrance(), graph.goal()) {
         let mut leg = Vec::new();
         let cells = cells_between(layout, e, a, b);
         for pair in cells.windows(2) {
-            through(layout, pair[0], pair[1], &mut leg);
+            through(layout, pair[0], pair[1], &mut leg, &mut out.doorways);
             if !matches!(layout.cells[pair[1]].space, Space::Room(_)) {
                 leg.push(cell_point(layout, pair[1]));
             }
@@ -499,8 +499,8 @@ pub(crate) fn showcase(graph: &Graph, from: usize, to: usize) -> Vec<(usize, usi
 
 /// From one cell into the next of another space, through the doorway between them: a step
 /// short of it, its middle and a step past, so a path smoothed through the tour (a camera's)
-/// passes the doorway square, not across its jamb.
-fn through(layout: &Layout, from: usize, to: usize, route: &mut Vec<Vec3>) {
+/// passes the doorway square, not across its jamb; the doorway's middle is kept in `doors`.
+fn through(layout: &Layout, from: usize, to: usize, route: &mut Vec<Vec3>, doors: &mut Vec<Vec3>) {
     if layout.cells[from].space == layout.cells[to].space {
         return;
     }
@@ -508,6 +508,7 @@ fn through(layout: &Layout, from: usize, to: usize, route: &mut Vec<Vec3>) {
     let door = (a + b) * 0.5;
     let step = (b - a).normalize_or_zero() * DOOR_STEP_M;
     route.extend([door - step, door, door + step]);
+    doors.push(door);
 }
 
 /// The corridor and stair cells of an edge in walking order from room `a` to room `b`, after

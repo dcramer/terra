@@ -16,6 +16,8 @@
 //! - `view`: the camera's way along the tour, kept off what stands round it.
 //! - `look`: where the camera looks along it.
 
+#[cfg(test)]
+mod doorway_tests;
 mod kit;
 #[cfg(test)]
 mod leaf_tests;
@@ -174,6 +176,9 @@ pub struct Stamp {
     /// A tour a camera can follow: down the stair and by the longest way that enters no room
     /// twice to the goal, so it never turns round in a dead end.
     pub route: Vec<Vec3>,
+    /// The middles of the doorways the tour passes, at the floor, in its order: the look
+    /// leads to the next once it is in sight (`look::LEAD_M`).
+    pub doorways: Vec<Vec3>,
     /// A camera's eye along the tour every `view::STEP_M`: `view::ROOM_M` from walls, pillars
     /// and open leaves in plan, as high as `view::EYE_M` allows with that room all round
     /// (`view::TIGHT_M` at the least, under a stair's slab), smoothed.
@@ -211,6 +216,7 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
         start: Vec3::ZERO,
         start_facing: 2,
         route: Vec::new(),
+        doorways: Vec::new(),
         view: Vec::new(),
         look: Vec::new(),
         pace: Vec::new(),
