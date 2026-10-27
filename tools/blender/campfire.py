@@ -165,6 +165,10 @@ def lift(r, a=0.0):
 # or so, flat faces split at their creases, and read as square beams (judge, round 8); at 14 its
 # faces turn 26 degrees apiece, under the 50 its creases split at, and it shades round.
 SIDES = 14
+# Round g78: where each log's char begins, its share of the way up from the butt (from, to), all
+# round and on its underside over the coals; the logs are 0.45-0.53 m long.
+CHAR_START = (0.14, 0.38)
+CHAR_UNDER = (0.12, 0.26)
 
 
 def shape(l, i, x, y, z):
@@ -277,7 +281,10 @@ for i, l in enumerate(spec["logs"]):
         t = (p - foot).dot(ax) / L
         # Round 7: charred from a fifth of the way up, where it lies over the bed's coals (out
         # to 0.34 m), not from two fifths: its glow sits low now, and there it was still bark.
-        chars.append(max(smooth(0.06, 0.32, t), max(-n.z, 0) * smooth(0.0, 0.15, t)))
+        # Round g78: from about a quarter of the way up (`CHAR_START`), so each cold butt keeps a
+        # hand of whole bark (10-15 cm) going through scorched, cracked bark into the char: from
+        # 6 cm, every judge of g77 saw char to the ground and no unburnt end.
+        chars.append(max(smooth(*CHAR_START, t), max(-n.z, 0) * smooth(*CHAR_UNDER, t)))
         inward = Vector((-p.x, -p.y, 0))
         inward = inward.normalized() if inward.length > 1e-6 else Vector((0, 0, 0))
         faces.append(max(n.dot(inward), -n.z * (1 - smooth(0.06, 0.2, p.z))))
@@ -675,6 +682,13 @@ def char_nodes(t, cap):
     ash = t.math("MAXIMUM", ash, crust)
     # And patches gone ash-grey along the charred length, between the cracks.
     grey = t.math("MULTIPLY", t.ramp(t.noise(along(0.4, (9.4, 2.2, 5.6)), 5.0, 3.0), 0.6, 0.7), t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), 0.65))
+    if not cap:
+        # Round g78: the crust and grey patches gathered toward the end in the flames, the char
+        # black between them and the bark: spread evenly over all of it, the char read grey-brown
+        # to every judge of g77.
+        gather = t.ramp(t.attr("burn"), *ASH_GATHER)
+        crust, grey = t.math("MULTIPLY", crust, gather), t.math("MULTIPLY", grey, gather)
+        ash = t.math("MAXIMUM", t.math("MULTIPLY", ash, gather), crust)
     ash = t.math("MAXIMUM", ash, grey)
     # Round 7: and up the logs, where their glow has faded out, smaller patches gone grey more
     # often, cold char's matte black broken by ash (RDR2's): the fire sheet's dark pockets count
@@ -717,8 +731,20 @@ HOT_ASH_THIN = 0.6
 # Round g71: how brightly the hottest crack clusters glow between their seams (of a seam's 1).
 FILL = 0.3
 # Round g77: the crack glow's fade along each log, from none at this share of the way up from its
-# butt to full at that.
-BURN_FADE = (0.05, 0.45)
+# butt to full at that. Round g78: from where the char begins, over its visible length, so the
+# glow rises toward the flames where at (0.05, 0.45) it was full by the logs' middles.
+BURN_FADE = (0.2, 0.42)
+# Round g78: the stretch of each log (burn, from, to) over which its seams' glow rises, on the faces
+# turned in and out.
+GLOW_RISE = (0.2, 0.55)
+# Round g78: and brighter by up to this share over the end in the flames (burn 0.5-1), and more
+# of its clusters there (their lump noise raised by up to this over burn 0.3-0.9).
+BURN_GAIN = 0.35
+BURN_LUMP = 0.1
+# Round g78: how dark the scorched bark's cracks are (of its colour), where it begins to char.
+SCORCH_CRACK = 0.7
+# Round g78: the char's crust and grey patches, of their full, over burn (from, to, at from, at to).
+ASH_GATHER = (0.3, 0.7, 0.2, 1.0)
 
 
 def log_colour(t, maps_, cap):
@@ -730,6 +756,8 @@ def log_colour(t, maps_, cap):
         col = charred
     else:
         bark = t.vec("SCALE", t.image(maps_["diff"]).outputs["Color"], scale=t.math("MULTIPLY", t.math("SUBTRACT", 1.0, t.math("MULTIPLY", scorch, 0.65)), 0.8))
+        # Round g78: the scorched bark cracking where it begins to char, its cracks dark.
+        bark = t.vec("SCALE", bark, scale=t.math("SUBTRACT", 1.0, t.math("MULTIPLY", t.math("MULTIPLY", crack, scorch), SCORCH_CRACK)))
         col = t.vec("ADD", bark, t.vec("SCALE", t.vec("SUBTRACT", charred, bark), scale=amount))
     grey = t.vec("ADD", ASH, t.vec("SCALE", tuple(b - a for a, b in zip(ASH, BLOCK_ASH)), scale=pale))
     t.emit(t.vec("ADD", col, t.vec("SCALE", t.vec("SUBTRACT", grey, col), scale=t.math("MULTIPLY", ash, amount))))
@@ -738,7 +766,8 @@ def log_colour(t, maps_, cap):
 def log_relief(t, cap):
     """The char's blocks raised between its cracks, for the normal map."""
     p, amount, scorch, crack, edge, black, ash, whole, calm, deep, pale, groove = char_nodes(t, cap)
-    return t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), amount)
+    # Round g78: and the scorched bark's cracks sunk, at half the char's depth.
+    return t.math("MULTIPLY", t.math("SUBTRACT", 1.0, crack), t.math("MAXIMUM", amount, t.math("MULTIPLY", scorch, 0.5)))
 
 
 def log_glow(t, cap):
@@ -773,7 +802,9 @@ def log_glow(t, cap):
     # low in deep fissures, cold matte char and ash above.
     height = t.node("ShaderNodeSeparateXYZ", Vector=p).outputs["Z"]
     near = t.ramp(height, 0.05, 0.2, 1.0, 0.0)
-    fade = t.ramp(height, 0.12, 0.32, 1.0, 0.45)
+    # Round g78: the faces turned in brighter toward the end in the flames (`burn`), not dimmer
+    # with height: with the butts bark, the glow by height was left by the cold ends.
+    fade = t.ramp(t.attr("burn"), *GLOW_RISE, 0.45, 1.0)
     seam = t.math("MAXIMUM", seam, t.math("MULTIPLY", t.math("MULTIPLY", t.ramp(edge, 0.01, 0.06, 1.0, 0.0), near), t.math("SUBTRACT", 1.0, t.math("MULTIPLY", calm, 0.5))))
     facing = t.ramp(t.attr("face"), 0.2, 0.6)
     # Round 10: the end in the flames at 0.9 (was 0.6), what the camp's eye sees through them.
@@ -793,7 +824,9 @@ def log_glow(t, cap):
     # char: lit only below 5-20 cm (at 0.2), every panel since g64 read the logs as having no
     # glowing cracks at all, where RDR2's glow in fissures across the faces it shows. Cracks
     # are lines, so they cut the dark char into more islands rather than filling it.
-    outer = t.math("MULTIPLY", t.math("MULTIPLY", t.math("SUBTRACT", 1.0, facing), t.ramp(height, 0.1, 0.34, 0.7, 0.15)), t.math("ADD", 0.5, t.math("MULTIPLY", deep, 0.5)))
+    # Round g78: rising along the log toward the flames (`burn`), 0.3 to 1, where it fell with
+    # height from 0.7 to 0.15: the char now starts a quarter of the way up, above the coals.
+    outer = t.math("MULTIPLY", t.math("MULTIPLY", t.math("SUBTRACT", 1.0, facing), t.ramp(t.attr("burn"), *GLOW_RISE, 0.3, 1.0)), t.math("ADD", 0.5, t.math("MULTIPLY", deep, 0.5)))
     if cap:
         hot = t.ramp(t.attr("heat"), 0.4, 1.0)
     else:
@@ -806,6 +839,8 @@ def log_glow(t, cap):
         heat = t.attr("heat")
         lump = t.math("ADD", t.noise(grain(0.3, (6.1, 3.3, 0.9)), 5.0, 3.0), t.math("MULTIPLY", near, 0.18))
         lump = t.math("ADD", lump, t.math("ADD", t.math("MULTIPLY", t.ramp(heat, 0.3, 1.0), 0.12), t.math("MULTIPLY", deep, 0.06)))
+        # Round g78: more of them toward the end in the flames, all along the log.
+        lump = t.math("ADD", lump, t.math("MULTIPLY", t.ramp(t.attr("burn"), 0.3, 0.9), BURN_LUMP))
         cluster = t.ramp(lump, 0.48, 0.62, 0.15, 1.0)
         outer = t.math("MULTIPLY", outer, cluster)
         high = t.math("MULTIPLY", high, t.math("ADD", 0.3, t.math("MULTIPLY", cluster, 0.7)))
@@ -824,6 +859,7 @@ def log_glow(t, cap):
         # to bark there: lit by height and facing alone, the glow ran evenly to the logs' cold
         # ends, a tiled lava decal to every judge of g75's panel.
         h = t.math("MULTIPLY", h, t.ramp(t.attr("burn"), *BURN_FADE))
+        h = t.math("MULTIPLY", h, t.ramp(t.attr("burn"), 0.5, 1.0, 1.0, 1.0 + BURN_GAIN))
     h = t.math("MULTIPLY", h, t.math("SUBTRACT", 1.0, t.math("MULTIPLY", ash, 0.7)))
     t.emit(t.vec("SCALE", HOT, scale=h))
 
