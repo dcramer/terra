@@ -16,8 +16,8 @@ the textures rather than the triangles (art-style.md rule 1):
   wall face under the arch's middle, its front +Z, the wall's face at Z 0.
 - `Pier`: a square ashlar pier, a plinth, its shaft and a capital at the springing, 2.95 m;
   half sunk in a wall, the same piece is a pilaster. Origin the middle of its base.
-- `Loculus`: a burial niche's front in the walls' rubble, a sill, jambs and a lintel round an
-  opening 2 m by 1 m, on the face of a loculi wall. Origin the foot of the opening's middle on the wall's face.
+- `Loculus`: a burial niche's front, a heavy lintel over an opening 2 m by 1 m and a plain
+  lining in its depth, in the walls' rubble a step darker and warmer, on the face of a loculi wall. Origin the foot of the opening's middle on the wall's face.
 - `Shroud`, `Bones`: what lies in a loculus, a body bound in linen; a skull and long bones.
 - `Sarcophagus`: a stone tomb chest 2.2 m by 1.1 m on a plinth, a moulded lid and a recumbent
   effigy on it, over the 2 m by 1 m by 1 m of cubes the crypt's `sarcophagus` module lays (its
@@ -57,6 +57,10 @@ RUBBLE_TINT = (0.70, 0.70, 0.72)
 # blue-grey piers against the warm walls).
 ASHLAR_TINT = (0.62, 0.56, 0.48)
 SPRING = 2.95
+# A loculus's lintel a step darker and warmer than the walls' rubble, its recess darker still,
+# so the niche reads deep and the lintel as one heavy stone of the wall (barrow round 17).
+LINTEL_TINT = (0.60, 0.55, 0.50)
+RECESS_TINT = (0.42, 0.36, 0.31)
 
 
 def reset():
@@ -354,15 +358,29 @@ def pier():
 
 
 def loculus():
-    """A niche's front: a sill, two jambs and a lintel round a 2 m by 1 m opening, in the
-    walls' own rubble and tint, laid proud of the wall: in the ashlar, tinted as the arches, the
-    frames read as pale cream boxes pasted on the dark walls (barrow round 16)."""
+    """A niche's front: a heavy lintel over the 2 m by 1 m opening and a plain lining in its
+    half metre of depth, both in the walls' own rubble a step darker and warmer than they are
+    (the walls get dirt in the game, this piece none). A sill and jambs round the opening read
+    as thin picture frames pasted on the wall (barrow round 17); the catacombs' loculi are cut
+    plain into the rock, framed by nothing."""
     m = Mesh()
-    m.box((-1.12, -0.10, -0.12), (1.12, 0.0, 0.02), 0, RUBBLE_M, 0.02)
+    # The lintel, 0.35 m high and 0.15 m proud, bearing 0.2 m into the wall each side.
+    m.box((-1.2, -0.15, 1.0), (1.2, 0.0, 1.35), 0, RUBBLE_M, 0.04)
+    # The lining just inside the cubes' cut (0.5 m deep), facing into the opening.
+    w, d, h, e = 1.0 - 0.004, 0.5 - 0.004, 1.0 - 0.004, 0.004
+    inside = lambda _: Vector((0.0, -1.0, 0.5))
+    m.grid([[(Vector((-w, d, e)), (-w / RUBBLE_M, e / RUBBLE_M)), (Vector((w, d, e)), (w / RUBBLE_M, e / RUBBLE_M))],
+            [(Vector((-w, d, h)), (-w / RUBBLE_M, h / RUBBLE_M)), (Vector((w, d, h)), (w / RUBBLE_M, h / RUBBLE_M))]],
+           1, toward=inside)
     for s in (-1, 1):
-        m.box((min(s * 1.0, s * 1.16), -0.08, 0.0), (max(s * 1.0, s * 1.16), 0.0, 1.0), 0, RUBBLE_M, 0.02)
-    m.box((-1.18, -0.10, 1.0), (1.18, 0.0, 1.2), 0, RUBBLE_M, 0.025)
-    return m, [("Rubble", RUBBLE, RUBBLE_TINT)]
+        m.grid([[(Vector((s * w, 0.0, e)), (0.0, e / RUBBLE_M)), (Vector((s * w, d, e)), (d / RUBBLE_M, e / RUBBLE_M))],
+                [(Vector((s * w, 0.0, h)), (0.0, h / RUBBLE_M)), (Vector((s * w, d, h)), (d / RUBBLE_M, h / RUBBLE_M))]],
+               1, toward=inside)
+    for z in (e, h):
+        m.grid([[(Vector((-w, 0.0, z)), (-w / RUBBLE_M, 0.0)), (Vector((w, 0.0, z)), (w / RUBBLE_M, 0.0))],
+                [(Vector((-w, d, z)), (-w / RUBBLE_M, d / RUBBLE_M)), (Vector((w, d, z)), (w / RUBBLE_M, d / RUBBLE_M))]],
+               1, toward=lambda p: Vector((p.x, p.y, 0.5)))
+    return m, [("Lintel", RUBBLE, LINTEL_TINT), ("Recess", RUBBLE, RECESS_TINT)]
 
 
 def lump(m, centre, radii, mat, segs=10, rings=6, bulge=None):
