@@ -56,6 +56,10 @@ const BOWL_FIRE: Kindled = Kindled {
 /// the stands read as black boxes under their fires (barrow round 16).
 const BOWL_HUNG_OUT_M: f32 = 0.4;
 const BOWL_HUNG_UP_M: f32 = 0.17;
+
+fn bowl_hung(side: usize) -> terra_world::fire::Hung {
+    terra_world::fire::Hung(dir(side) * BOWL_HUNG_OUT_M + Vec3::Y * BOWL_HUNG_UP_M)
+}
 /// The studded leaf's model, hinged at its origin and reaching along +X: so wide and so high.
 const LEAF_M: Vec2 = Vec2::new(0.894, 1.939);
 
@@ -196,13 +200,8 @@ pub(super) fn put_up(
                         .with_rotation(facing(light.facing))
                         .with_scale(Vec3::splat(BOWL_SCALE));
                     inside.spawn((Name::new("Fire bowl"), scene(&assets, CAMPFIRE), placed));
-                    let hung = dir(light.facing) * BOWL_HUNG_OUT_M + Vec3::Y * BOWL_HUNG_UP_M;
-                    inside.spawn((
-                        Name::new("Fire bowl's fire"),
-                        BOWL_FIRE,
-                        terra_world::fire::Hung(hung),
-                        placed,
-                    ));
+                    let fire = (Name::new("Fire bowl's fire"), BOWL_FIRE);
+                    inside.spawn((fire, bowl_hung(light.facing), placed));
                 }
                 LightKind::Campfire => {
                     inside.spawn((
