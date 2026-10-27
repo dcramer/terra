@@ -36,4 +36,4 @@ About 21 s; every blow has a wind-up the man reads, and every landing a reaction
 - **Clips fitted to the body**: clips made on a person put the troll's hands inside its belly and the man's shield through his chest, so a figure's bones can be turned over its clips (`staged.bend`), as a retarget pose fits a clip to a heavier body: the troll's upper arms out and forward, the man's shield arm forward.
 - **The camera** is close and moving but readable, as third-person action games frame a big enemy (God of War's over-the-shoulder, Elden Ring's lock-on): low over the man's shoulder so the troll fills the frame, cut on the beats, a small shake on each heavy landing, never looking into the low sun.
 - **No music.** The game's own sound bed of the shore (water, wind, birds) only.
-- **Judged** at each round by one harsh adversarial review against the references and the brief, on a small sheet of the film's frames. Stopped at 7.5/10, or after two rounds without a gain.
+- **Judged** at each job by one harsh adversarial review against the references and the brief, on a small sheet of the film's frames. Stopped at 7.5/10, or after two jobs without a gain.

@@ -16,7 +16,7 @@ The baseline is **wood and stone, built by hand and destroyed, with infinite pre
 AGENTS.md's routine, plus for building:
 
 - At the start, check the latest commits of anyone working in the same files.
-- The hooks only format and lint (D37), and nothing scheduled runs building's full check: **every round runs it before it hands off**, `cargo xtask artifacts --ratchet` (every registered scene, about 9 minutes) and `cargo xtask fuzz` (seeds 0 to 200), with their counts in the handoff. For a change to geometry, drawing or kits, run `cargo test -p terra_build -p terra_build_mesh -p terra_build_scenes`, `cargo xtask kits` and `cargo xtask artifacts --quick --ratchet` yourself before landing.
+- The hooks only format and lint (D37), and nothing scheduled runs building's full check: **every job runs it before it hands off**, `cargo xtask artifacts --ratchet` (every registered scene, about 9 minutes) and `cargo xtask fuzz` (seeds 0 to 200), with their counts in the handoff. For a change to geometry, drawing or kits, run `cargo test -p terra_build -p terra_build_mesh -p terra_build_scenes`, `cargo xtask kits` and `cargo xtask artifacts --quick --ratchet` yourself before landing.
 
 ## Where each concern lives
 

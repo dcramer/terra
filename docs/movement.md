@@ -151,11 +151,11 @@ They added: "we probably need to build better tools so you can ensure things are
 | Clip | One command a move: its spec (start and end in the guard pose, the way its blade sweeps, its length) made from the chosen source, carried onto the base body by aim and exported; its phases written into the move set from the clip, never typed | `moves.ts` |
 | Rules | `terra_motion`'s duel test; our timings against the reference's ranges | The duel test; a timing check |
 | Look | A scripted duel in the yard, filmed from fixed cameras and the player's: a frame sheet and checks on the film (feet sliding, a gap where a chain was asked for, bodies overlapping). The player is driven by a fight script of intents (`--duel duels/yard.ron`, `terra_motion::script`), and the game writes every frame's fighters, asks and contacts (`--fight-log`, places in the start's terms as `--cine` takes them) for the checks to read; `cargo xtask duel` runs, films and checks it (tools/sandbox/duel.ts) | The film's checks |
-| Review | A blind adversarial review of the sheet against Enshrouded's frames, scored out of 10; stopped at the bar, or after two rounds without a gain | The score |
+| Review | A blind adversarial review of the sheet against Enshrouded's frames, scored out of 10; stopped at the bar, or after two jobs without a gain | The score |
 
 A `combat` skill in `.agents/skills` ties these together, so any agent runs the loop the same way.
 
-The order of work, each round bounded, the code split as D447 says:
+The order of work, each job bounded, the code split as D447 says:
 
 1. **Checks first**:
    - the penetration, arc, held-fit and chain checks over the move set, in `tools/characters`;

@@ -1,11 +1,11 @@
 ---
 name: environment
-description: Build or judge how a place looks in Terra: a biome's forest, ground cover, trees, light, shade, haze and time of day, against a measured reference of the look aimed at (another game's frames, photographs). Covers making the reference, the views and films a look is judged on, measuring before tuning, the checks every change passes (popping, collision, frame time), the adversarial review at milestones, and the traps that cost rounds before. Use when asked to make a biome or environment look better or like a game or place, to tune light, shade, fog or night, or to review how a place looks.
+description: Build or judge how a place looks in Terra: a biome's forest, ground cover, trees, light, shade, haze and time of day, against a measured reference of the look aimed at (another game's frames, photographs). Covers making the reference, the views and films a look is judged on, measuring before tuning, the checks every change passes (popping, collision, frame time), the adversarial review at milestones, and the traps that cost jobs before. Use when asked to make a biome or environment look better or like a game or place, to tune light, shade, fog or night, or to review how a place looks.
 ---
 
 # Building how a place looks
 
-The lush forest (2026-10-13 to 14) went from an adversarial score of 3/10 to over 6 by this loop, and lost most of its rounds where it was skipped: tuning by eye, fixing a reviewer's symptom without finding its cause, or measuring the wrong thing. Do it in this order. The art guide ([docs/art-style.md](../../../docs/art-style.md)) decides how anything looks, and [its Places section](../../../docs/art-style.md#places) what each place is aimed at, the numbers it is held to and the rules every place keeps, each with its measure (D356); read it first. This is how to get there and know it.
+The lush forest (2026-10-13 to 14) went from an adversarial score of 3/10 to over 6 by this loop, and lost most of its jobs where it was skipped: tuning by eye, fixing a reviewer's symptom without finding its cause, or measuring the wrong thing. Do it in this order. The art guide ([docs/art-style.md](../../../docs/art-style.md)) decides how anything looks, and [its Places section](../../../docs/art-style.md#places) what each place is aimed at, the numbers it is held to and the rules every place keeps, each with its measure (D356); read it first. This is how to get there and know it.
 
 ## 1. A reference before anything
 
@@ -52,7 +52,7 @@ Not every change: when a pass is done, a fresh subagent judges it adversarially 
 
 ## Traps found the hard way
 
-Each cost a round in the lush forest; check for them first.
+Each cost a job in the lush forest; check for them first.
 
 - **Bevy's alpha test multiplies the vertex colour's alpha into the base colour; the prepass does not.** A mesh carrying something else in its vertex alpha (the crowns' sky seen) is cut in the main pass and kept in the prepass, and stands black in its own shape (D272).
 - **Bevy's own diffuse transmission lights a leaf's far side from the open sky**, unshaded by anything; and an irradiance volume replaces the environment map's diffuse but drops its multiple-scattering term, a seam where it ends (D270, D279).

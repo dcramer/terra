@@ -1,6 +1,6 @@
 ---
 name: controller
-description: Work on Terra's character controller (the mover every body walks, jumps, steps, slides and is pushed by, docs/controller.md, D53) so that every round advances one criterion and nothing regresses. Covers the scorecard and its ratchet (cargo xtask controller, D457), the plain-Rust course in terra_motion::course and its Mover trait, the ordered task list of failing criteria, and the loop a round follows. Use for any task that changes or judges how a body moves through the world, so a brief needs to say only which criterion.
+description: Work on Terra's character controller (the mover every body walks, jumps, steps, slides and is pushed by, docs/controller.md, D53) so that every job advances one criterion and nothing regresses. Covers the scorecard and its ratchet (cargo xtask controller, D457), the plain-Rust course in terra_motion::course and its Mover trait, the ordered task list of failing criteria, and the loop a job follows. Use for any task that changes or judges how a body moves through the world, so a brief needs to say only which criterion.
 ---
 
 # Controller
@@ -10,22 +10,22 @@ Read [docs/controller.md](../../../docs/controller.md) (the design, its criteria
 ## The scorecard and the ratchet (D457)
 
 - `cargo xtask controller`: every cheap criterion of `tools/controller/criteria.json`, a line each, in seconds once built. `✓` within its bar, `·` below it but held (a task), `✗` worse than `tools/controller/baseline.tsv` (fails), `?` not measurable yet (it says what it needs), `-` heavy.
-- A number may never get worse. A trade the round chose is raised in the same commit, `cargo xtask controller --raise "<why>"`, the why naming the gain it pays for. Never hand-edit the baseline or lower it: nightly banks a gain (D414).
+- A number may never get worse. A trade the job chose is raised in the same commit, `cargo xtask controller --raise "<why>"`, the why naming the gain it pays for. Never hand-edit the baseline or lower it: nightly banks a gain (D414).
 - The course is `terra_motion::course` (feature `course`): fixtures in `field.rs`, cases and what each measures in `runs.rs`. A new criterion is a row of `criteria.json` and a `Measure` of `runs::score`; its first number goes in with `--raise "<why>"`.
 - The mover is `terra_motion::mover` (D53, ported from Jolt's `CharacterVirtual`; its kinds' numbers in `assets/data/movers.ron`), driven through `course::Mover` by `mover/course.rs`, the criteria file's `course`. The game's walk drives it (`terra_walker::movement`, unit C): the point walk it replaced and its course adapter are deleted, so the course scores the mover alone. Never change a fixture or a case to make a mover pass.
 
-## The loop, one round
+## The loop, one job
 
 1. **Pick** the top criterion of the list below (or the one the brief names).
 2. **Change** the least that moves it, in the mover.
 3. **Score**: `cargo xtask controller`. Nothing `✗`; the criterion's number lower. Run `cargo test -p terra_motion --features course` and the mover's crate's tests.
-4. **Bank**: land on main (AGENTS.md); nightly lowers the baseline. Two rounds without a gain: stop, step back, hand off with what was tried.
+4. **Bank**: land on main (AGENTS.md); nightly lowers the baseline. Two jobs without a gain: stop, step back, hand off with what was tried.
 
-**What the developer saw in play comes first.** The course scores the mover alone; what a player sees is the figure after the clips, the lock and placement. So each complaint from play (feet, stride, stops, a pose) becomes a row of the in-game filmed course below, read from the walk record, that fails on main before anything is fixed, and goes to the top of the list. A course row never proves a play complaint fixed (combat's clip rows did not, 2026-10-26). A round that changes the figure puts a still from the game's own camera in its `FOR REVIEW` line.
+**What the developer saw in play comes first.** The course scores the mover alone; what a player sees is the figure after the clips, the lock and placement. So each complaint from play (feet, stride, stops, a pose) becomes a row of the in-game filmed course below, read from the walk record, that fails on main before anything is fixed, and goes to the top of the list. A course row never proves a play complaint fixed (combat's clip rows did not, 2026-10-26). A job that changes the figure puts a still from the game's own camera in its `FOR REVIEW` line.
 
 ## The task list (failing criteria, 2026-10-25 unit U4d, the mover; feet at stage 3 unit 2c-6)
 
-Every measurable row passes (45 with --bench at unit U4; 38 at round 7: stairs fixed, handoff `controller-stage2.md`, "Round 7"). What is left, ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
+Every measurable row passes (45 with --bench at unit U4; 38 at job 7: stairs fixed, handoff `controller-stage2.md`, its section "Round 7"). What is left, ordered by `noticed`, then by how far out. Re-read it from `cargo xtask controller --json` when it moves.
 
 1. `cost.body` (passes: 22.2 µs on the course, 266 field calls a tick, bar 25; handoff "Unit A", "Unit B2", "Unit B4"): `cargo xtask controller --bench` runs the mover's release bench (`terra_walker` `movement_bench.rs`: the course and `Planet::new` at 2 and 30 km, µs and field calls a tick); and `cost.forest`, bar 50, in `movement_bench_forest.rs`: the walk scene's route on `Planet::rolling` among a fixture of the solids flora fitted there, written again from the game by `tools/controller/forest-fixture.ts` when the fitting changes, its calls a tick by source). Bodies are f64 and queries f32 offsets from a capsule's f64 origin (D482): sources take `DVec3`; the planet is asked through one `HeightMemo` a body (`Planet::distance_in(DVec3)`, `keep_within`); the march asks distances alone. 30 km now 13.2 µs / 162 calls, near 2 km's 11.0 / 153. Left for headroom: walk_stairs on a riser (500-1000 calls a tick for 4 ticks), the sweep's golden-section refine (most of a march step's calls), a shared gradient, per-tick allocations.
    `cost.edits` (bar 30, below it and held; handoff "Edit index"): the course body on the 2 km planet with 10,000 edits (`movement_bench_edits.rs`), the ground's edits found by `terra_voxel`'s hashed grid (D524, `planet/index.rs`, bit for bit the scan); ~100 ns an ask over the undug ground, the cell's hash and its ~10 links. A walk keeps its cell hot, so links in cache-line blocks and 2 m cells gained nothing (A/B pinned to a core); next, fewer asks or a body's own cell cache in its `HeightMemo`.

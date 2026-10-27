@@ -25,12 +25,12 @@ First and foremost, we are building an extremely ambitious sandbox engine, with 
 
 - **Start**: the session hook fast-forwards a clean main checkout, updates the shared seed and seeds your worktree (D183). On failure run `cargo xtask doctor` and fix it before building. Entered a worktree mid-session, or ran `--done` there: `cargo xtask seed` first.
 - **Land on `main` after each incremental change**, no pull requests: commit, `git pull --rebase origin main`, `git push origin HEAD:main`; again if main moved. Never force-push `main`, never `--no-verify`.
-- **Small commits, often** (the developers): land each step that works and is checked on its own (a test, a fix, a measured change, a tool), as it's done; never squash a round's work into one commit or hold it to the end. Unchecked work stays in the worktree.
+- **Small commits, often** (the developers): land each step that works and is checked on its own (a test, a fix, a measured change, a tool), as it's done; never squash a job's work into one commit or hold it to the end. Unchecked work stays in the worktree.
 - **Hooks only format and lint** (D37): commit runs `cargo fmt --check`, push adds the size and one-definition lints and clippy on the changed crates, in seconds. Run the tests of what you changed yourself. There is no CI while we are pre-release; the full check is `cargo xtask check --all`, by hand.
 - **Baselines**: lowering one is `cargo xtask nightly`'s alone (D414, D411).
 - **Finish, then clean up at once**: `git fetch`, `git branch -r --contains <commit>`, then `cargo xtask worktrees --done` (D259) the moment the work is on main, never left for the prune; a coordinator removes each subagent's worktree as its report arrives, once its commits are on main (`git worktree remove`; a worktree with unlanded work keeps its branch).
 - At most three or four agents build or check at once, subagents included.
-- **Every task is bounded** (D400): a brief says when the agent stops (a score bar, a number of rounds or two without a gain, a clock time, a context of about 250k at most). Do one unit of work, write a handoff file, end; the next round is a fresh agent from it. Wait on a long run started in the background by its completion notice, never a polling loop, one wait per thing. An agent you start gets the same bounds, one helper at a time.
+- **Every task is bounded** (D400): a brief says when the agent stops (a score bar, a number of jobs or two without a gain, a clock time, a context of about 250k at most). Do one unit of work, write a handoff file, end; the next job is a fresh agent from it. Wait on a long run started in the background by its completion notice, never a polling loop, one wait per thing. An agent you start gets the same bounds, one helper at a time.
 
 ## Gates and tool output
 
@@ -46,7 +46,7 @@ Every byte an agent reads is paid again each turn.
 
 - **Keep context small** (D390): read by range or grep; send long output to a file and read its tail; when the context nudge fires, finish the unit of work and hand off with a summary.
 - **Delegate mechanical work** (D391): finding to `finder` (Haiku), running a check, test or benchmark to `runner` (Sonnet). Judgement, design, debugging and fixes stay on the default model.
-- **A round is a `round` agent** (D538), isolation "worktree": the brief says only the task, the skill, the bound and the handoff files; the agent's file holds the routine.
+- **A job is a `job` agent** (D538), isolation "worktree": the brief says only the task, the skill, the bound and the handoff files (`~/.cache/terra-handoff/<topic>-j<n>.md`); the agent's file holds the routine.
 - **A subagent's cache lasts an hour** (D397): a wait of minutes is cheap; past an hour the whole context is written again, so hand off instead.
 - **Docs short and precise**: intent, constraints and reasons, not implementation or history. Here and in skills, one line a rule with its decision; the explanation lives in the doc it cites.
 

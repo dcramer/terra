@@ -91,7 +91,7 @@ The bars are set against **known-good rigs**, measured by the same tool: Quatern
 
 ## How good it would get, honestly
 
-An estimate, unmeasured until the first round runs: the share of newly generated kinds that pass the check without hand work and read as "generally good" (a harsh review at 7/10 or more for its gait), once the stages above exist. Spore's ~90% over several hundred creatures is the anchor; ours start from generated meshes, not parts Maxis built to fit, so most failures come from the mesh, not the rig: fused legs, a wing grown into the body, a tail merged with a leg.
+An estimate, unmeasured until the first job runs: the share of newly generated kinds that pass the check without hand work and read as "generally good" (a harsh review at 7/10 or more for its gait), once the stages above exist. Spore's ~90% over several hundred creatures is the anchor; ours start from generated meshes, not parts Maxis built to fit, so most failures come from the mesh, not the rig: fused legs, a wing grown into the body, a tail merged with a leg.
 
 | Plan | Generally good | What fails |
 |---|---|---|

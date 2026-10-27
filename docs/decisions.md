@@ -611,7 +611,7 @@ Checks, developer tools, languages and the repository.
 | [D472](decisions/D472.md) | Visual A/B judging scores one build per judge, against fixed anchors | Tech | Agent | Decided | A blind visual comparison by subagent judges… |
 | [D525](decisions/D525.md) | Binary assets live in Git LFS, from now on | Tech | Developers | Decided | Every binary asset and piece of source art is stored in… |
 | [D526](decisions/D526.md) | Paid solutions | Tech | Developers | Decided | A paid tool, library, asset, service or engine source is… |
-| [D538](decisions/D538.md) | A round agent carries the routine | Tech | Agent | Decided | A coordinator starts every build round with the `round`… |
+| [D538](decisions/D538.md) | A job agent carries the routine | Tech | Agent | Decided | A coordinator starts every build job… |
 | [D547](decisions/D547.md) | Tunables, named numbers changed while a run goes | Tech | Agent | Decided | A value worth trying several of is a **tunable**… |
 | [D549](decisions/D549.md) | One GPU-free test compiles every shader as the game's pipelines specialize it | Tech | Agent | Decided | Every file in `assets/shaders` is compiled and validated… |
 | [D552](decisions/D552.md) | One command fits a new held or worn item, and its look records its source's hash | Tech | Agent | Decided | A new held or worn item goes from its data to a checked… |
