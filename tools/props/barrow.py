@@ -395,19 +395,24 @@ def shroud():
 
 
 def bones():
-    """A skull at one end, long bones laid along the niche, a few ribs: a body long gone."""
+    """A skull at one end, long bones laid along the niche, a few ribs: a body long gone. Twice
+    as thick as a real one's and the skull a quarter larger, so they read as bones at 3-5 m:
+    at real thickness (a femur's shaft 2.5-4 cm) they were "thin sticks lying flat like
+    cutlery" (barrow rounds 10 and 11, all three reviewers). The orbits and nose dark, on the
+    face of the skull, where they were sunk inside it."""
     m = Mesh()
-    lump(m, (0.62, 0.02, 0.10), (0.10, 0.075, 0.09), 0, segs=12, rings=8)
-    lump(m, (0.69, 0.02, 0.06), (0.05, 0.055, 0.045), 0, segs=10, rings=6)
+    lump(m, (0.60, 0.02, 0.12), (0.125, 0.095, 0.115), 0, segs=14, rings=10)
+    lump(m, (0.70, 0.02, 0.07), (0.06, 0.07, 0.05), 0, segs=10, rings=6)
     for s in (-1, 1):
-        lump(m, (0.665, 0.02 + s * 0.03, 0.10), (0.012, 0.018, 0.018), 1, segs=8, rings=4)
-    for k, (x, y, ln, r) in enumerate(((-0.05, -0.08, 0.45, 0.022), (-0.1, 0.07, 0.43, 0.022), (-0.55, -0.05, 0.4, 0.02), (-0.5, 0.09, 0.38, 0.019), (0.25, 0.12, 0.3, 0.015))):
-        lump(m, (x, y, r), (ln / 2, r, r), 0, segs=8, rings=4)
+        lump(m, (0.715, 0.02 + s * 0.042, 0.135), (0.02, 0.028, 0.026), 1, segs=8, rings=5)
+    lump(m, (0.73, 0.02, 0.095), (0.012, 0.012, 0.018), 1, segs=6, rings=4)
+    for k, (x, y, ln, r) in enumerate(((-0.05, -0.09, 0.45, 0.042), (-0.1, 0.09, 0.43, 0.042), (-0.55, -0.06, 0.4, 0.038), (-0.5, 0.11, 0.38, 0.036), (0.25, 0.15, 0.3, 0.03))):
+        lump(m, (x, y, r), (ln / 2, r, r), 0, segs=10, rings=5)
         for e in (-1, 1):
-            lump(m, (x + e * ln / 2, y, r * 1.3), (r * 1.6, r * 1.7, r * 1.4), 0, segs=8, rings=4)
+            lump(m, (x + e * ln / 2, y, r * 1.2), (r * 1.3, r * 1.5, r * 1.25), 0, segs=8, rings=5)
     for k in range(5):
-        lump(m, (0.22 + 0.06 * k - 0.1, -0.02 - 0.01 * k, 0.03), (0.012, 0.13, 0.012), 0, segs=6, rings=4)
-    lump(m, (0.15, -0.02, 0.05), (0.09, 0.12, 0.04), 0, segs=8, rings=4)
+        lump(m, (0.22 + 0.07 * k - 0.1, -0.03 - 0.01 * k, 0.04), (0.022, 0.14, 0.02), 0, segs=6, rings=4)
+    lump(m, (0.15, -0.02, 0.06), (0.10, 0.14, 0.06), 0, segs=8, rings=4)
     return m, [("Bone", "white_stucco", (0.50, 0.44, 0.34)), ("Socket", None, (0.03, 0.025, 0.02))]
 
 
