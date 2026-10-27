@@ -12,9 +12,10 @@
 //! face from sweeps ahead, their normals averaged; a start only within 25 deg of the facing and
 //! with face where the hands are; a tick's order (refresh the face, let go if it is gone, land
 //! moving down onto floor, accelerate toward the input laid on the face, move, turn to the face,
-//! snap back to the gap by a sweep). Ours probes at the feet and at the hands (the kind's
-//! `reach`) where his traces at the capsule and the eyes.
-//!
+//! snap back to the gap by a sweep). Ours probes at the feet, the chest and the hands (the
+//! kind's `reach`) where his traces at the capsule and the eyes, level into the face so a lip's
+//! rounded corner never tilts the next tick's probes down; the snap keeps the gap by distance,
+//! so a body rounds a lip onto a face set back over it (a dug cliff's next riser).
 //!
 //! The top (D508) is a mantle as Unreal's Advanced Locomotion System (Caleb Longmire's ALS v4,
 //! its mantle system) and Cantão's ledge climb find one, written from their accounts: when the
@@ -52,6 +53,8 @@ const PROBE_M: f32 = 0.05;
 /// How far past the kind's gap the probes and the hold look for the face, m: past a dug cliff's
 /// cell (0.5 m) set back over the one held.
 const AHEAD_M: f32 = 0.6;
+/// How far past its gap a face may be and still be held at it, m (a snap's slack).
+const AT_GAP_M: f32 = 0.02;
 /// A face is held only within 25 deg of the way the body faces (Cantão's start).
 const FACING_COS: f32 = 0.906_307_8;
 /// A jump with the stick more than this share of it away from the face kicks off (D511):
@@ -145,9 +148,15 @@ fn holdable(k: &Kind, query: &dyn Query, shape: &Shape, c: &Contact) -> Option<f
     (grip > 0.0).then_some(grip)
 }
 
-/// The face's normal and grip where a probe finds one ahead along `into`: a thin sweep from the
-/// body's axis so high over its feet.
-fn probe(k: &Kind, query: &dyn Query, shape: &Shape, high: f32, into: Vec3) -> Option<(Vec3, f32)> {
+/// The face's normal and grip where a probe finds one ahead along `into`, and how far ahead of
+/// the body's capsule it is: a thin sweep from the body's axis so high over its feet.
+fn probe(
+    k: &Kind,
+    query: &dyn Query,
+    shape: &Shape,
+    high: f32,
+    into: Vec3,
+) -> Option<(Vec3, f32, f32)> {
     probe_at(k, query, shape, Vec3::ZERO, high, into)
 }
 
@@ -159,7 +168,7 @@ fn probe_at(
     feet: Vec3,
     high: f32,
     into: Vec3,
-) -> Option<(Vec3, f32)> {
+) -> Option<(Vec3, f32, f32)> {
     let at = feet + shape.up * high;
     let probe = Capsule {
         a: at,
@@ -167,21 +176,43 @@ fn probe_at(
         radius: PROBE_M,
         origin: shape.origin,
     };
-    let hit = query.sweep(&probe, into * (shape.radius + k.climb_gap + AHEAD_M))?;
+    let look = shape.radius + k.climb_gap + AHEAD_M;
+    let hit = query.sweep(&probe, into * look)?;
     let grip = holdable(k, query, shape, &hit.contact)?;
-    Some((hit.contact.normal, grip))
+    let off = hit.fraction * look + PROBE_M - shape.radius;
+    Some((hit.contact.normal, grip, off))
 }
 
-/// The face ahead as the probes at the feet and at the hands find it: their normals averaged
-/// (Unreal's climbers average a sweep's hits), and their grips; whether the hands found it.
-fn face(k: &Kind, query: &dyn Query, shape: &Shape, into: Vec3) -> Option<(Vec3, bool, f32)> {
-    let feet = probe(k, query, shape, shape.radius, into);
-    let hands = probe(k, query, shape, k.reach, into);
-    let (a, ga) = feet.unwrap_or((Vec3::ZERO, 0.0));
-    let (b, gb) = hands.unwrap_or((Vec3::ZERO, 0.0));
-    let normal = (a + b).try_normalize()?;
-    let found = f32::from(u8::from(feet.is_some()) + u8::from(hands.is_some()));
-    Some((normal, hands.is_some(), (ga + gb) / found))
+/// The face ahead as it is found along the level way `into` it, by probes at the feet, the
+/// chest (midway to the hands) and the hands.
+struct Found {
+    /// The probes' normals averaged (Unreal's climbers average a sweep's hits).
+    normal: Vec3,
+    /// Whether the hands found it.
+    hands: bool,
+    /// The probes' grips averaged.
+    grip: f32,
+    /// How far ahead of the capsule the nearest probe found it, m.
+    off: f32,
+}
+
+/// The face ahead (see [`Found`]). The chest's probe holds a face the feet have climbed past
+/// the lip of and the hands are over, as a dug cliff's next riser set back over a tread.
+fn face(k: &Kind, query: &dyn Query, shape: &Shape, into: Vec3) -> Option<Found> {
+    let probes = [
+        probe(k, query, shape, shape.radius, into),
+        probe(k, query, shape, 0.5 * (shape.radius + k.reach), into),
+        probe(k, query, shape, k.reach, into),
+    ];
+    let found = probes.iter().flatten();
+    let normal = found.clone().map(|p| p.0).sum::<Vec3>().try_normalize()?;
+    let count = found.clone().count() as f32;
+    Some(Found {
+        normal,
+        hands: probes[2].is_some(),
+        grip: found.clone().map(|p| p.1).sum::<f32>() / count,
+        off: found.map(|p| p.2).fold(f32::INFINITY, f32::min),
+    })
 }
 
 /// The top past a face whose hands' probe found none (D508): walkable ground within the kind's
@@ -301,7 +332,14 @@ pub(super) fn tick(
         };
         return false;
     }
-    let Some((normal, hands, grip)) = face(&k, query, shape, -body.hold.normal) else {
+    let ahead = level_into(body.hold.normal, up, body.facing);
+    let Some(Found {
+        normal,
+        hands,
+        grip,
+        off,
+    }) = face(&k, query, shape, ahead)
+    else {
         body.ground = Ground::Airborne;
         body.hold = Hold::default();
         return false;
@@ -327,8 +365,11 @@ pub(super) fn tick(
     }
     let lunge = body.hold.lunge;
     let rising = upward > 0.0 || lunge.is_some_and(|l| l.up > 0.0);
+    // A top is pulled up onto from its face held at the gap, not from one past it.
+    let at_gap = off <= k.climb_gap + AT_GAP_M;
     if !hands
         && rising
+        && at_gap
         && let Some((over, to)) = top(&k, query, shape, into)
     {
         let from = body.frame;
@@ -366,9 +407,12 @@ pub(super) fn tick(
         approach(body.velocity, wanted, k.climb_accel * dt)
     };
     let mut feet = slide::move_shape(Vec3::ZERO, velocity, dt, query, shape, &mut body.active);
+    let below_hands = [shape.radius, 0.5 * (shape.radius + k.reach)];
     if !hands
         && feet.dot(up) > 0.0
-        && probe_at(&k, query, shape, feet, shape.radius, -normal).is_none()
+        && below_hands
+            .iter()
+            .all(|&high| probe_at(&k, query, shape, feet, high, into).is_none())
     {
         // At a lip with no room to stand on the top: held there (D508), not climbed off it.
         feet = Vec3::ZERO;
@@ -387,7 +431,7 @@ pub(super) fn tick(
         (body.ground, body.normal, body.velocity) = (Ground::Grounded, floor, Vec3::ZERO);
         body.hold = Hold::default();
     } else {
-        feet = held(&k, query, shape, feet, -normal);
+        feet = held(&k, query, shape, feet, into);
         slide::contacts_at(feet, query, shape, &mut body.active);
         body.support = Support::NotSupported;
         (body.normal, body.velocity) = (Vec3::ZERO, velocity);
@@ -461,19 +505,27 @@ fn pull_up(body: &mut Body, mut mantle: Mantle, query: &dyn Query, shape: &Shape
 
 /// The feet moved to hold the body at its kind's gap from the face along `into` (Cantão's
 /// snap back, the stick-to-floor step turned toward the face): swept, so nothing is passed
-/// into; kept where they are when the face is out of the sweep's reach.
+/// into, the gap from the nearest point of what it meets (a lip's corner as well as a face);
+/// kept where they are when the face is out of the sweep's reach.
 fn held(k: &Kind, query: &dyn Query, shape: &Shape, feet: Vec3, into: Vec3) -> Vec3 {
-    let look = k.climb_gap + AHEAD_M;
+    // Backed off by up to the gap, clear of what is behind, a capsule grown by the gap is swept
+    // in: it stops where the body is the gap from the first thing ahead by distance, a lip's
+    // corner rounded over as well as a face met square.
     let capsule = shape.capsule(feet);
-    let Some(hit) = query.sweep(&capsule, into * look) else {
+    let behind = query
+        .sweep(&capsule, -into * k.climb_gap)
+        .map_or(1.0, |h| h.fraction)
+        * k.climb_gap;
+    let from = feet - into * behind;
+    let grown = Capsule {
+        radius: shape.radius + k.climb_gap,
+        ..shape.capsule(from)
+    };
+    let look = behind + k.climb_gap + AHEAD_M;
+    let Some(hit) = query.sweep(&grown, into * look) else {
         return feet;
     };
-    let by = hit.fraction * look - k.climb_gap;
-    if by >= 0.0 {
-        return feet + into * by;
-    }
-    let back = query.sweep(&capsule, into * by).map_or(1.0, |h| h.fraction);
-    feet + into * by * back
+    from + into * (hit.fraction * look)
 }
 
 #[cfg(test)]
