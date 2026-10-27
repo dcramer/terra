@@ -3,6 +3,11 @@ bad rig is caught by numbers instead of by eye. Prints one JSON report with a pa
 for each check, and writes out/rig-check-NAME.json.
 
     tools/blender/run.sh tools/characters/rig_check.py tools/characters/out/base-male-rigged.glb
+    tools/blender/run.sh tools/characters/rig_check.py assets/models/character/mannequin.glb [--baseline]
+
+A body's motion is judged against the mannequin's scores, art/characters/rig-baseline.json.
+The mannequin checked is held to those scores; with --baseline it rewrites them, after a clip
+is added or changed (say why in the commit).
 
 Checks:
   skeleton      same bones, same parents as our skeleton
@@ -93,7 +98,12 @@ ref_parents = {b.name: b.parent.name if b.parent else None for b in ref_arm.data
 for m in ref_meshes:
     bpy.data.objects.remove(m)
 
-arm, meshes = load(look.path(look.args()[0]))
+checked = look.path(look.args()[0])
+IS_MANNEQUIN = os.path.exists(checked) and os.path.samefile(checked, FIGURE)
+RECORD = "--baseline" in look.args()
+if RECORD and (not IS_MANNEQUIN or "--linear" in look.args()):
+    raise SystemExit(f"--baseline records the mannequin's scores ({FIGURE}) skinned as the game does, without --linear")
+arm, meshes = load(checked)
 body = max(meshes, key=lambda m: len(m.data.vertices))
 report, ok = {}, {}
 
@@ -311,6 +321,10 @@ top = sorted(where.items(), key=lambda t: -t[1])[:6]
 report["motion"] = {"actions": motion, "worst_places": top, "sink_m": round(sink, 3), "sink_at": sink_at, "standing_foot_gap_m": round(standing_gap, 3)}
 # Big moves crush some edges on any rig; judge each animation against the hand-rigged
 # mannequin's own share on the same frames (art/characters/rig-baseline.json, from checking the mannequin).
+# Rewritten only on purpose (--baseline, on the mannequin as the game skins it), as other
+# baselines are (D414): a rise in the mannequin's share loosens every body's limit for that
+# clip, so the mannequin checked without it is held to its own recorded shares instead, and a
+# clip that got worse on it (a skinning or clip change) fails rather than moving the bar.
 baseline_path = os.path.join(look.ART, "characters", "rig-baseline.json")
 baseline = json.load(open(baseline_path)) if os.path.exists(baseline_path) else {}
 moves_ok = True
@@ -319,16 +333,23 @@ for a, v in motion.items():
     base = baseline.get(a, {})
     if not isinstance(base, dict):  # a baseline from before it held each clip's sink
         base = {"bad_edge_share": base}
-    limit = max(LIMITS["bad_edge_share"] * 0.5, LIMITS["vs_mannequin"] * base["bad_edge_share"]) if base else LIMITS["bad_edge_share"]
+    if IS_MANNEQUIN and not RECORD:
+        # Its own recorded share, to the 4 places it is kept: none recorded is a fault.
+        limit = base["bad_edge_share"] + 0.0001 if base else 0.0
+    else:
+        limit = max(LIMITS["bad_edge_share"] * 0.5, LIMITS["vs_mannequin"] * base["bad_edge_share"]) if base else LIMITS["bad_edge_share"]
     over = v["sink_m"] - base.get("sink_m", 0.0)
     if over > sink_over:
         sink_over, sink_over_at = over, a
     v["limit"] = round(limit, 4)
+    if not base:
+        v["limit_from"] = "not in the baseline: run rig_check.py on the mannequin with --baseline"
     v["ok"] = v["worst_bad_edge_share"] <= limit and v["pinched"] <= LIMITS["pinch"]
     moves_ok &= v["ok"]
-if os.path.basename(look.args()[0]) == os.path.basename(FIGURE):
+if RECORD:
     with open(baseline_path, "w") as f:
         json.dump({a: {"bad_edge_share": v["worst_bad_edge_share"], "sink_m": v["sink_m"]} for a, v in motion.items()}, f, indent=2)
+    print("BASELINE written:", baseline_path)
 report["motion"]["sink_over_mannequin_m"] = round(sink_over, 3)
 report["motion"]["sink_over_at"] = sink_over_at
 ok["motion"] = moves_ok and sink_over <= LIMITS["sink_over_m"] and standing_gap <= LIMITS["foot_gap_m"]
