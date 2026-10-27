@@ -1589,11 +1589,13 @@ const TORCH_SPARK_ODDS: f32 = 0.6;
 // noise), so the tongues between keep their height (g56: torn all over, the lean fell).
 // TORCH_WHITE: its heart (heat from x up, its core's `FIELD_CORE_HEAT`) goes y of the way to a
 // grey of its own luminance and glows z times brighter, so it reads white as a pitch torch's
-// does (the torch photographs' white, median 12%, tools/fire/references.json).
+// does (the torch photographs' white, median 12%, tools/fire/references.json). Torch round t8:
+// y 0.45 (was 0.6), as its tips' fade left more of what shows its heart (white 25.6/29.6 against
+// 26.5/30.2 at 0.6, dusk/night).
 const TORCH_SEE: vec3<f32> = vec3<f32>(0.2, 0.75, 0.3);
 const TORCH_TEAR: vec3<f32> = vec3<f32>(0.3, 0.75, 1.2);
 const TORCH_LANES: vec4<f32> = vec4<f32>(9.0, 2.0, 1.6, 0.45);
-const TORCH_WHITE: vec3<f32> = vec3<f32>(0.95, 0.6, 3.0);
+const TORCH_WHITE: vec3<f32> = vec3<f32>(0.95, 0.45, 3.0);
 // How far a torch's cool skin is warmed toward 1 (`field_flame`): main's torch read 58-66% red
 // and 20-32% orange, the torch photographs' medians 19 and 18 with 8 yellow and 12 white.
 const TORCH_WARM: f32 = 0.35;
@@ -1608,6 +1610,15 @@ const TORCH_BASE: vec3<f32> = vec3<f32>(-0.15, 0.25, 0.3);
 // Its foot raised x of its flames' height (the head's top edge, its foot being the head's middle)
 // and its height y of what it was, so it rises off the wrap with its pale heart at its foot.
 const TORCH_LIFT: vec2<f32> = vec2<f32>(0.3, 0.85);
+// Torch round t8 (three of three judges: "hard card tips"): its density falls to none from x of
+// its height to its top, its edge feathered inward over y of its shape (the hearth's 0.14) from
+// TORCH_RIM.x to .y of its height up, and a noise of z cells a flame's height across takes up to
+// w of itself out of its top as holes; the product raised to TORCH_TIP_POW, as its flame burns
+// some times over white (at the power 1, even a fade to none from its foot left its crops as
+// they were; at 3 it stood a sixth shorter and 27-31% white, at 2 24-28, main's 22-25).
+const TORCH_TIP: vec4<f32> = vec4<f32>(0.5, 0.6, 20.0, 0.6);
+const TORCH_RIM: vec2<f32> = vec2<f32>(0.1, 0.4);
+const TORCH_TIP_POW: f32 = 2.0;
 fn torch_cover(hg: f32) -> f32 {
     return mix(1.0, TORCH_SEE.z, smoothstep(TORCH_SEE.x, TORCH_SEE.y, hg));
 }
@@ -2042,7 +2053,13 @@ fn field_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
         let foot = noise3(vec3(q.x * TORCH_LANES.x * s, q.z * TORCH_LANES.x * s, p.y * s * 1.5 - time * TORCH_LANES.z) + luck.yzx);
         let edge = TORCH_BASE.x + TORCH_BASE.z * (foot - 0.5);
         let g = field_flame(v, hg, f, TORCH_HEART);
-        return vec3(g.x * smoothstep(edge, edge + TORCH_BASE.y, p.y / f.tall), g.y, g.z);
+        // Its tips thin away (`TORCH_TIP`): up its height its density falls, its edge feathers
+        // wider inward and a fine rising noise takes holes from it, so a tongue ends in wisps.
+        let tip = smoothstep(TORCH_TIP.x, 1.0, hg);
+        let wisp = noise3(vec3(q.x * TORCH_TIP.z * s, q.z * TORCH_TIP.z * s, (p.y - time * FIELD_RISE.y) * TORCH_TIP.z * 0.4 * s) + luck.zxy);
+        let rim = mix(1.0, smoothstep(0.0, TORCH_TIP.y, v), smoothstep(TORCH_RIM.x, TORCH_RIM.y, hg));
+        let thins = (1.0 - tip) * rim * mix(1.0, smoothstep(TORCH_TIP.w * tip, TORCH_TIP.w * tip + 0.3, wisp), tip);
+        return vec3(g.x * pow(thins, TORCH_TIP_POW) * smoothstep(edge, edge + TORCH_BASE.y, p.y / f.tall), g.y, g.z);
     }
     return field_flame(v, hg, f, 1.0);
 }
