@@ -6,7 +6,7 @@ Status: **design, 2026-10-26**. The developers answered its design questions on 
 
 The developer, 2026-10-26: "we may need a little bit more of a skybox going on... we'd like to have things like volumetric clouds and realism for weather, but in general to have it look 'real'"; "clouds would have diff shades, there could be rain, wind, sun, moon"; "clouds wouldn't be in the skybox though they'd be in.. like in the sky itself". Clouds are volumes in the air that the sun lights and that shade the land, not a painted backdrop.
 
-Today Bevy's physical atmosphere draws the sky's colour and the sun (D212); over it `sky.wesl` draws clouds as noise on a flat layer, an overcast deck as one grey sheet (D418), stars and a moon that stands opposite the sun at every phase (D310). The clouds have no thickness, cast no shadow, do not follow the climate's wind or where the fronts are, and drift by each machine's own run time, so two players see different skies.
+Today Bevy's physical atmosphere draws the sky's colour and the sun (D212); over it `sky.wesl` draws clouds as noise on a flat layer, an overcast deck as one grey sheet (D418), stars and a moon that stands opposite the sun at every phase (D310). The clouds have no thickness and cast no shadow. Since stage 1 they drift by the world's clock on the climate's wind aloft, and their cover, deck and rain come from a weather map of the climate's cloud out to the horizon (D540), so every machine at one clock draws one sky.
 
 ## Constraints
 
@@ -112,7 +112,7 @@ Smallest first; each stage lands only when its check passes. The order of the cl
 | Stage | Builds | Done when |
 |---|---|---|
 | 0. Measure (done, [note](../research/2026-10-26-volumetric-clouds-spike.md)) | A spike ran the open Bevy cloud implementation (D515) on its own Bevy, cumulus and overcast, seen from below, inside and above, on the RTX 5090 | Photographic, but over the budget in and above cumulus: its parts are ported and the in-cloud march cut (D515); both GPUs measured at stage 2 |
-| 1. One sky for all | Today's 2D clouds and deck move by the world's clock and the climate's wind at cloud height, the weather map from the climate's cloud to the horizon | Two runs at one clock draw the same sky |
+| 1. One sky for all (done, `terra_world::sky::clouds`) | Today's 2D clouds and deck move by the world's clock and the climate's wind at cloud height, the weather map from the climate's cloud to the horizon | Two runs at one clock draw the same sky |
 | 2. Volumes | Cumulus, stratocumulus and the overcast deck as one volumetric layer from the weather map, lit by sun, sky and ground, the eye inside and above it, replacing the 2D layer on the high preset | Cover, shades, inside-and-above and cost checks; stills reviewed |
 | 3. Clouds as light | The cloud shadow map on the ground and in the haze; the sky light by cover (CIE types); the sun's beam by its line through cloud | Shadow, light-under-cloud and shafts checks; a broken-sky film |
 | 4. Night | The moon's phase, path and light; earthshine; stars from a catalogue; clouds by moonlight; D310's night retuned | Moon checks; night stills at three phases reviewed |

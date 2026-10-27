@@ -91,6 +91,11 @@ impl ClimateFields {
         }
     }
 
+    /// The sea's radius, metres from the planet's middle.
+    pub fn sea_radius_m(&self) -> f32 {
+        self.sea_radius_m
+    }
+
     /// The place a cell's past is taken at: its middle.
     pub fn cell_place(&self, cell: Cell) -> Place {
         self.place(cell.middle())

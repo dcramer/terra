@@ -9,12 +9,15 @@ use crate::planet::MainCamera;
 use crate::planet::{Planet, Tweaks};
 #[cfg(test)]
 mod backlit;
+pub mod clouds;
 #[cfg(test)]
 mod dusk;
+mod moving;
 use bevy::{
     camera::visibility::NoFrustumCulling, light::NotShadowCaster, prelude::*, reflect::TypePath,
     render::render_resource::AsBindGroup, shader::ShaderRef,
 };
+use moving::Clouds;
 
 /// What the sky looks like. Change it while running and the sky follows.
 #[derive(Resource, Clone, Debug)]
@@ -25,6 +28,9 @@ pub struct Sky {
     pub glow: Color,
     /// How much of the sky is cloud, from none to overcast.
     pub cloudiness: f32,
+    /// The fair-weather cloud the scene's own sky has under any climate: where the weather map
+    /// (`clouds`) says less, the sky draws this much.
+    pub fair: f32,
     /// The overcast deck (`weather::deck`, D418): how much of the sky it covers, how dark rain
     /// has made it, its brightness from below and the wind driving its scud.
     pub deck: Vec4,
@@ -83,6 +89,7 @@ impl Sky {
             zenith,
             glow,
             cloudiness,
+            fair: cloudiness,
             deck: Vec4::ZERO,
             brightness,
             night: 0.0,
@@ -139,10 +146,30 @@ struct SkyMaterial {
     /// The overcast deck (`Sky::deck`).
     #[uniform(0)]
     deck: Vec4,
+    /// Where the clouds' noise is at the clock, an offset per octave of each field
+    /// (`clouds::offsets`).
+    #[uniform(0)]
+    cloud_offsets: [Vec4; 12],
+    /// From the world to metres east, up and south of the weather map's middle.
+    #[uniform(0)]
+    to_map: Mat4,
+    /// The fields' noise units a metre (`clouds::FIELD_M`), and in w the layer's height.
+    #[uniform(0)]
+    cloud_scale: Vec4,
+    /// Whether there is a weather map, how far the clock is from this step's map to the next's,
+    /// the map's units a metre, and the scene's fair-weather cloud (`Sky::fair`).
+    #[uniform(0)]
+    map: Vec4,
     /// The air all round the camera, for the far land's haze.
     #[texture(1, dimension = "cube")]
     #[sampler(2)]
     air: Option<Handle<Image>>,
+    /// The weather map at this step of the clock and the next (`clouds::build_map`).
+    #[texture(3)]
+    #[sampler(5)]
+    map_now: Option<Handle<Image>>,
+    #[texture(4)]
+    map_next: Option<Handle<Image>>,
 }
 
 impl Material for SkyMaterial {
@@ -169,8 +196,15 @@ impl Material for SkyMaterial {
 }
 
 impl SkyMaterial {
-    fn new(sky: &Sky, tweaks: &Tweaks, planet: &Planet, air: Option<&AirPicture>) -> Self {
+    fn new(
+        sky: &Sky,
+        (tweaks, planet): (&Tweaks, &Planet),
+        air: Option<&AirPicture>,
+        clouds: &Clouds,
+    ) -> Self {
         let air = air.map(|picture| picture.0.clone());
+        let [map_now, map_next] = clouds.maps.clone().map_or([None, None], |m| m.map(Some));
+        let scale = |f: usize| (1.0 / clouds::FIELD_M[f]) as f32;
         let far_land = match (sky.far_land, sky.over_air && air.is_some()) {
             (Some(land), true) => {
                 let c = land.canopy.to_linear();
@@ -202,6 +236,17 @@ impl SkyMaterial {
                 .unwrap_or(tweaks.sun_direction)
                 .normalize_or(Vec3::Y),
             deck: sky.deck,
+            cloud_offsets: clouds.offsets,
+            to_map: clouds.to_map,
+            cloud_scale: Vec4::new(scale(0), scale(1), scale(2), clouds::LAYER_M),
+            map: Vec4::new(
+                if map_now.is_some() { 1.0 } else { 0.0 },
+                clouds.blend,
+                1.0 / clouds::MAP_SIDE_M,
+                sky.fair,
+            ),
+            map_now,
+            map_next,
         }
     }
 }
@@ -214,15 +259,21 @@ pub struct SkyPlugin;
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<SkyMaterial>::default())
+            .init_resource::<Clouds>()
+            .init_resource::<moving::Mapping>()
             .add_systems(Startup, spawn)
             .add_systems(
                 Update,
                 (
-                    update.run_if(
-                        resource_changed::<Sky>
-                            .or_eager(resource_changed::<Tweaks>)
-                            .or_eager(resource_added::<AirPicture>),
-                    ),
+                    moving::move_clouds.after(crate::daylight::Ticking),
+                    update
+                        .run_if(
+                            resource_changed::<Sky>
+                                .or_eager(resource_changed::<Tweaks>)
+                                .or_eager(resource_changed::<Clouds>)
+                                .or_eager(resource_added::<AirPicture>),
+                        )
+                        .after(moving::move_clouds),
                     keep_around_camera,
                 ),
             );
@@ -247,7 +298,12 @@ fn spawn(
         Name::new("Sky"),
         SkyDome,
         Mesh3d(meshes.add(dome)),
-        MeshMaterial3d(materials.add(SkyMaterial::new(&sky, &tweaks, &planet, None))),
+        MeshMaterial3d(materials.add(SkyMaterial::new(
+            &sky,
+            (&tweaks, &planet),
+            None,
+            &Clouds::default(),
+        ))),
         Transform::from_scale(Vec3::splat(planet.radius_m() * 20.0)),
         NotShadowCaster,
         NoFrustumCulling,
@@ -259,10 +315,11 @@ fn update(
     tweaks: Res<Tweaks>,
     planet: Res<Planet>,
     air: Option<Res<AirPicture>>,
+    clouds: Res<Clouds>,
     mut materials: ResMut<Assets<SkyMaterial>>,
 ) {
     for (_, material) in materials.iter_mut() {
-        *material = SkyMaterial::new(&sky, &tweaks, &planet, air.as_deref());
+        *material = SkyMaterial::new(&sky, (&tweaks, &planet), air.as_deref(), &clouds);
     }
 }
 

@@ -96,13 +96,19 @@ const CLEAR_DIFFUSE: f32 = 0.3;
 /// where a plain overcast lets through a quarter, so each millimetre an hour takes this much.
 const THICKER_PER_MM_H: f32 = 0.6;
 
+/// How far what falls has thickened cloud, 0 to 1: the share of the light under it that rain
+/// or snow at so many millimetres an hour takes away.
+pub fn thickening(falling_mm_h: f32) -> f32 {
+    1.0 - 1.0 / (1.0 + THICKER_PER_MM_H * falling_mm_h.max(0.0))
+}
+
 impl Under {
     /// Kasten and Czeplak's fit for cloud covering so much of the sky, 0 to 1: the global light
     /// is 1 - 0.75 N^3.4 of a clear sky's, and diffuse over global is 0.3 + 0.7 N², so under a
     /// full deck all of it is the sky's.
     pub fn sky(cloud: f32, falling_mm_h: f32) -> Self {
         let n = cloud.clamp(0.0, 1.0);
-        let thick = 1.0 / (1.0 + THICKER_PER_MM_H * falling_mm_h.max(0.0));
+        let thick = 1.0 - thickening(falling_mm_h);
         let total = (1.0 - 0.75 * libm::powf(n, 3.4)) * thick;
         let diffuse_share = CLEAR_DIFFUSE + (1.0 - CLEAR_DIFFUSE) * n * n;
         Self {
@@ -158,10 +164,9 @@ pub fn deck_cover(cloud: f32) -> f32 {
 /// made it, its brightness seen from below (the sky's light under it, as the shade has it, so
 /// the deck and the ground it lights agree) and the wind, which drives its scud.
 pub fn deck(weather: &Weather, sky_light: f32) -> Vec4 {
-    let thick = 1.0 / (1.0 + THICKER_PER_MM_H * weather.falling_mm_h.max(0.0));
     Vec4::new(
         deck_cover(weather.cloud),
-        1.0 - thick,
+        thickening(weather.falling_mm_h),
         sky_light,
         weather.wind_m_s,
     )

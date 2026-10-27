@@ -755,6 +755,7 @@ fn paint_sky(
     if sky.cloudiness != cloudiness {
         sky.cloudiness = cloudiness;
     }
+    sky.fair = clear;
     sky.deck = crate::weather::deck(weather, lit);
     sky.zenith = colour(light.zenith);
     sky.glow = colour(light.glow);

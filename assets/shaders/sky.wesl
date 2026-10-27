@@ -1,10 +1,12 @@
 // The sky: a soft gradient from the horizon up, clouds lit by the sun, a glow around the
 // sun, thinning to black as the camera climbs out of the air. At night, stars that turn
-// with the sky, and a moon opposite the sun.
+// with the sky, and a moon opposite the sun. The clouds move by the world's clock, never the
+// machine's (sky/clouds.rs): their noise is shifted by offsets the CPU works out from the clock
+// and the wind aloft, and their cover is the climate's, from the weather map round the eye.
 
 import bevy_pbr::render::{
     forward_io::VertexOutput,
-    mesh_view_bindings::{globals, view},
+    mesh_view_bindings::view,
 };
 import super::dusk::dusk_sky;
 
@@ -33,6 +35,16 @@ struct Sky {
     // The overcast deck (weather.rs, D418): how much of the sky it covers, how dark rain has
     // made it, its brightness seen from below, and the wind, m/s.
     deck: vec4<f32>,
+    // Each cloud field's noise offset per octave at the clock (clouds::offsets): the shapes,
+    // the deck's broad bellies, its fine scud; four octaves each.
+    cloud_offsets: array<vec4<f32>, 12>,
+    // From the world to metres east, up and south of the weather map's middle.
+    to_map: mat4x4<f32>,
+    // Each field's noise units a metre, and in w the layer's height over the eye, m.
+    cloud_scale: vec4<f32>,
+    // Whether there is a weather map, how far from this step's map to the next's, the map's
+    // units a metre, and the scene's fair-weather cloud.
+    map: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(0)
@@ -42,6 +54,14 @@ var<uniform> sky: Sky;
 var air_texture: texture_cube<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(2)
 var air_sampler: sampler;
+// The weather map (clouds::build_map) at this step of the clock and the next: cover, what
+// falls, the cloud's kind (1 heaped, 0 a deck) and the share that is snow.
+@group(constants::MATERIAL_BIND_GROUP) @binding(3)
+var map_now: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(4)
+var map_next: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(5)
+var map_sampler: sampler;
 
 // Cheap smooth noise for clouds: random values on a grid, blended between.
 fn hash(p: vec3<f32>) -> f32 {
@@ -61,9 +81,59 @@ fn noise(p: vec3<f32>) -> f32 {
     return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
 }
 
-fn billow(p: vec3<f32>) -> f32 {
-    return noise(p) * 0.5 + noise(p * 2.1 + 7.0) * 0.27 + noise(p * 4.3 + 19.0) * 0.15
-        + noise(p * 8.9 + 5.0) * 0.08;
+// The clouds' lattice repeats every so many cells (clouds::PERIOD), so the clock's offsets
+// wrap there with no seam.
+const PERIOD: f32 = 256.0;
+
+fn wrapped_hash(cell: vec3<f32>) -> f32 {
+    return hash(cell - PERIOD * floor(cell / PERIOD));
+}
+
+fn wrapped_noise(p: vec3<f32>) -> f32 {
+    let cell = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let x00 = mix(wrapped_hash(cell), wrapped_hash(cell + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+    let x10 = mix(wrapped_hash(cell + vec3<f32>(0.0, 1.0, 0.0)), wrapped_hash(cell + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+    let x01 = mix(wrapped_hash(cell + vec3<f32>(0.0, 0.0, 1.0)), wrapped_hash(cell + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+    let x11 = mix(wrapped_hash(cell + vec3<f32>(0.0, 1.0, 1.0)), wrapped_hash(cell + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
+
+// Billowing noise of one of the clouds' fields (0 the shapes, 1 the deck's bellies, 2 its scud)
+// at metres from the weather map's middle, each octave shifted by the clock (clouds::offsets).
+fn drifting(metres: vec2<f32>, field: u32) -> f32 {
+    let p = vec3<f32>(metres.x, 0.0, metres.y) * sky.cloud_scale[field];
+    let o = field * 4u;
+    return wrapped_noise(p + sky.cloud_offsets[o].xyz) * 0.5
+        + wrapped_noise(p * 2.1 + sky.cloud_offsets[o + 1u].xyz) * 0.27
+        + wrapped_noise(p * 4.3 + sky.cloud_offsets[o + 2u].xyz) * 0.15
+        + wrapped_noise(p * 8.9 + sky.cloud_offsets[o + 3u].xyz) * 0.08;
+}
+
+// Where a direction meets the clouds' layer, a layer's height over the eye and flat in the
+// air's frame, in metres east and south of the weather map's middle.
+fn on_layer(direction: vec3<f32>, eye: vec3<f32>, up: vec3<f32>, lift: f32) -> vec2<f32> {
+    let layer = direction / max(lift, 0.05);
+    let along = (layer - up * dot(layer, up)) * sky.cloud_scale.w;
+    return (sky.to_map * vec4<f32>(eye + along, 1.0)).xz;
+}
+
+// A level direction in the map's frame, east and south.
+fn map_way(direction: vec3<f32>) -> vec2<f32> {
+    return (sky.to_map * vec4<f32>(direction, 0.0)).xz;
+}
+
+// The weather over a place on the layer: the map's cover, what falls, the kind and the snow,
+// blended from this step's map to the next's; without a map, the sky's own all over.
+fn weather_at(metres: vec2<f32>) -> vec4<f32> {
+    if sky.map.x == 0.0 {
+        return vec4<f32>(sky.cloudiness, sky.deck.y, 1.0 - sky.deck.x, 0.0);
+    }
+    let uv = metres * sky.map.z + 0.5;
+    let now = textureSampleLevel(map_now, map_sampler, uv, 0.0);
+    let next = textureSampleLevel(map_next, map_sampler, uv, 0.0);
+    return mix(now, next, sky.map.y);
 }
 
 // A direction turned about an axis, the other way from how the sky has turned, so the
@@ -108,14 +178,14 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 
     // Clouds on a flat layer overhead, so they stretch out toward the horizon, drifting
     // slowly. Their sunward edges are bright and their bodies take the sky's shade.
-    let layer = direction / max(lift, 0.05);
-    let drift = vec3<f32>(globals.time * 0.004, 0.0, globals.time * 0.002);
-    let p = (layer - up * dot(layer, up)) * 0.55 + drift;
-    let body = billow(p);
-    let threshold = 1.0 - sky.cloudiness * 0.62;
+    let at = on_layer(direction, eye, up, lift);
+    let weather = weather_at(at);
+    let body = drifting(at, 0u);
+    let threshold = 1.0 - max(sky.map.w, weather.r) * 0.62;
     let cloud = smoothstep(threshold - 0.12, threshold + 0.1, body) * smoothstep(0.02, 0.2, lift);
     // Thicker toward the sun means darker; thin edges facing it catch the light.
-    let toward = billow(p + (sun - up * dot(sun, up)) * 0.12);
+    let sunward = map_way(sun - up * dot(sun, up)) * (0.12 / sky.cloud_scale.x);
+    let toward = drifting(at + sunward, 0u);
     let lit = clamp((body - toward) * 4.0 + 0.55, 0.0, 1.0);
     let shade = mix(sky.zenith.rgb * 0.75 + sky.horizon.rgb * 0.25, sky.horizon.rgb, 0.35);
     // By night the clouds are only grey shapes against the stars.
@@ -335,14 +405,14 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
     let lift = dot(direction, up);
     let toward_sun = max(dot(direction, sun), 0.0);
 
-    let layer = direction / max(lift, 0.05);
-    let drift = vec3<f32>(globals.time * 0.004, 0.0, globals.time * 0.002);
-    let p = (layer - up * dot(layer, up)) * 0.55 + drift;
-    let body = billow(p);
-    let threshold = 1.0 - sky.cloudiness * 0.62;
+    let at = on_layer(direction, eye, up, lift);
+    let weather = weather_at(at);
+    let body = drifting(at, 0u);
+    let threshold = 1.0 - max(sky.map.w, weather.r) * 0.62;
     // Thinning toward the horizon, where the haze takes over.
     let cloud = smoothstep(threshold - 0.12, threshold + 0.1, body) * smoothstep(0.02, 0.25, lift);
-    let toward = billow(p + (sun - up * dot(sun, up)) * 0.12);
+    let sunward = map_way(sun - up * dot(sun, up)) * (0.12 / sky.cloud_scale.x);
+    let toward = drifting(at + sunward, 0u);
     let lit = clamp((body - toward) * 4.0 + 0.55, 0.0, 1.0);
     // White cloud in sunlight reflects about a quarter of it toward the eye; its shaded
     // underside is lit by the sky, bluish. The sun low, the glow warms them.
@@ -365,13 +435,14 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
     // The overcast deck (D418): one grey layer lit from above and seen from below, as bright
     // as the sky's light it gives the ground. Its thicker bellies are darker and its seams
     // paler, the more so as rain thickens it; it is brightest where the sun is behind it and
-    // lowest and evenest toward the horizon. Scud under it runs with the wind.
-    if sky.deck.x > 0.0 {
-        let wind = sky.deck.w;
-        let run = vec3<f32>(globals.time, 0.0, globals.time * 0.45) * (0.0015 + 0.0009 * wind);
-        let broad = billow(p * 0.28 + run);
-        let fine = billow(p * 1.3 + run * 2.6 + 3.1);
-        let rain = sky.deck.y;
+    // lowest and evenest toward the horizon. Scud under it runs with the wind low down. Where
+    // the deck is and how rain darkens it are the weather map's, so a front's deck stands off
+    // on the horizon while the sky overhead is clear (D518).
+    let deck_here = 1.0 - weather.b;
+    if deck_here > 0.0 {
+        let broad = drifting(at, 1u);
+        let fine = drifting(at, 2u);
+        let rain = weather.g;
         let body = (broad - 0.5) * 2.4 + (fine - 0.5) * (0.8 + 1.4 * rain);
         let flat = smoothstep(0.02, 0.35, lift);
         var shade = 1.0 - clamp(body, -0.6, 1.0) * (0.22 + 0.4 * rain) * flat;
@@ -380,7 +451,7 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
         // paler and flatter.
         shade = mix(1.08, shade, flat);
         let grey = vec3<f32>(0.92, 0.95, 1.0) * sky.deck.z * shade * view.exposure;
-        let deck = sky.deck.x * smoothstep(-0.12, 0.02, lift);
+        let deck = deck_here * smoothstep(-0.12, 0.02, lift);
         colour = mix(colour, grey, deck);
         cover = mix(cover, 1.0, deck);
     }

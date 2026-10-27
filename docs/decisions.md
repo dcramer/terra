@@ -442,6 +442,7 @@ The look, models, bodies and gear, textures and audio.
 | [D521](decisions/D521.md) | The sky's effects | Design | Developers | Decided | The sky has the real set of effects… |
 | [D532](decisions/D532.md) | Clips come from generators and free sets, not capture or bought packs | Design | Developers | Decided | The clips Kimodo makes badly (idles, sprint, swimming… |
 | [D533](decisions/D533.md) | Uthana's takes come on our body uploaded bare, lifted onto our ground and checked against its reference | Engineering | Agent | Decided | `tools/uthana` uploads a body without its animations… |
+| [D540](decisions/D540.md) | The clouds move by the world's clock, drawn from a weather map of the climate | Tech | Agent | Decided | The sky's clouds are a function of the climate and the… |
 
 ## Engine and code
 
