@@ -68,7 +68,7 @@ The server never sees any of these, and the mover never waits for them:
 
 ## Climbing
 
-Status: **decided** (D477, D505-D511, the developers, 2026-10-26: "Recommended set"), not built. Free climbing on stamina; the research is [research/2026-10-25-climbing.md](../research/2026-10-25-climbing.md).
+Status: **decided** (D477, D505-D511, the developers, 2026-10-26: "Recommended set"); the mover holds, starts and climbs a face (`mover::climb`, `Ground::Climbing`, unit C3), on the course only: the game's man has climbing off (`terra_walker` `movement::man`) until the figure has clips, and the walk's own rows ask a man with it off (`Kind::walking`). Not built: speed by steepness, the top, the lunge and kick-off, stamina, grip, the stance (C4-C8). Free climbing on stamina; the research is [research/2026-10-25-climbing.md](../research/2026-10-25-climbing.md).
 
 ### Intent
 
@@ -96,8 +96,8 @@ A body can hold a face too steep to walk and move over it on stamina, up a cliff
 
 Every shipped climber (Breath of the Wild, Genshin, Conan Exiles, Palworld; Unreal's custom movement modes) is one pattern, and ours follows it:
 
-1. **The face.** Two probes ahead of the capsule, at the hands (the kind's `reach`) and at the feet, ask the contacts within `climb_gap` plus the predictive distance. The face's point and normal are their average, as Unreal's climbers average a sweep's hits; on the ground the SDF's gradient already blends a dug face's 0.5 m steps into one plane.
-2. **Starting** (D507): a face steeper than the slope limit, not leaning past `overhang_deg` (D510), rising past the step height (lower is a step, as now), within 25 deg of the way the body faces, of a material that holds (D505), with stamina left, not in a fight stance; touched in the air, or pushed into for `climb_push_s` on the ground.
+1. **The face.** Two probes ahead of the capsule, at the hands (the kind's `reach`) and at the feet: thin sweeps from its axis reaching 0.6 m past `climb_gap`, so a dug cliff's next riser set back a cell is found. The face's normal is their average, as Unreal's climbers average a sweep's hits; on the ground the SDF's gradient already blends a dug face's 0.5 m steps into one plane.
+2. **Starting** (D507): a face the capsule touches (its contacts within `climb_gap`) steeper than the slope limit, not leaning past `overhang_deg` (D510), rising past the step height (a probe there finds it; lower is a step, as now), within 25 deg of the way the body faces, of a material that holds (D505), with stamina left, not in a fight stance; touched in the air, or pushed into for `climb_push_s` on the ground.
 3. **A tick of climbing**, in order: refresh the face; stop if it is gone (the body falls), or land if moving down onto walkable floor under the feet (grounded); velocity by the kind's climb acceleration toward the input laid on the face's plane (forward is up the face, the sides along it), gravity off; collide and slide as every tick does, so a corner, a beam or another body stops it as a wall stops a walker; then hold to the face: swept toward it to `climb_gap` (the stick-to-floor step turned toward the face), the facing turned to the face's normal at the turn rate. The capsule stays upright (D53); the shown body leans.
 4. **The top** (D508): moving up, the hand probe finds no face and a walkable floor within `reach` over the feet with room for the standing capsule (a swept check); or, in the air, a ledge within `reach` ahead: the body is carried onto it over `mantle_s`, up then forward, along the mover's own path; a pull-up clip is fitted to that path (started at the height that matches, as Unreal's root-motion mantles are, or warped), never the other way round.
 5. **Stamina** (D506, D510, D511): each tick costs the kind's rate moving, a quarter of it holding, a climb jump its lump, doubled on an overhang and scaled by the material's grip; at zero, or on a staggering blow, the body lets go and is airborne.
