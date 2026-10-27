@@ -189,6 +189,60 @@ fn the_map_shows_a_front_tens_of_kilometres_off_while_the_eye_is_clear() {
 }
 
 #[test]
+fn the_volumes_noise_rides_the_layers_wind_exactly_and_the_anchor_moves_nothing() {
+    let (fields, start) = world();
+    let winds = CloudWinds::of_world(&fields, &start);
+    // A share of a tile, taken the short way round.
+    let short = |d: f32| {
+        let d = f64::from(d).rem_euclid(1.0);
+        if d > 0.5 { d - 1.0 } else { d }
+    };
+    let anchor = Vec2::new(4000.0, -8000.0);
+    for day in [0, 400, 20_000] {
+        let t = seconds(at(day, 11.0));
+        let (now, then) = (
+            volume_offsets(&winds, t, anchor),
+            volume_offsets(&winds, t + 1.0, anchor),
+        );
+        for v in now.to_array() {
+            assert!((0.0..1.0).contains(&v), "day {day}: {now:?}");
+        }
+        // The shapes and the detail both moved one second of the layer's wind, to a centimetre,
+        // and the same way the 2D shapes move (the noise is taken from upwind).
+        let shape = DVec2::new(short(then.x - now.x), short(then.y - now.y)) * SHAPE_TILE_M;
+        let detail = DVec2::new(short(then.z - now.z), short(then.w - now.w)) * DETAIL_TILE_M;
+        for moved in [shape, detail] {
+            assert!(
+                (moved + winds.layer).length() < 0.01,
+                "day {day}: {moved:?} against {:?}",
+                -winds.layer
+            );
+        }
+        let flat = moved_m(
+            &offsets(&winds, t, anchor),
+            &offsets(&winds, t + 1.0, anchor),
+        );
+        assert!((flat - shape).length() < 0.1, "{flat:?} against {shape:?}");
+    }
+    // A point seen from two anchors is the same noise.
+    let t = seconds(at(3, 14.0));
+    let (a, b) = (Vec2::ZERO, Vec2::new(4000.0, -4000.0));
+    let point = Vec2::new(1234.0, 567.0);
+    let (oa, ob) = (volume_offsets(&winds, t, a), volume_offsets(&winds, t, b));
+    for (tile, i) in [(SHAPE_TILE_M, 0), (DETAIL_TILE_M, 2)] {
+        let seen = |anchor: Vec2, off: Vec4| {
+            let p = (point - anchor).as_dvec2() / tile;
+            [p.x + f64::from(off[i]), p.y + f64::from(off[i + 1])]
+        };
+        let (sa, sb) = (seen(a, oa), seen(b, ob));
+        for k in 0..2 {
+            let d = (sa[k] - sb[k]).rem_euclid(1.0);
+            assert!(d.min(1.0 - d) < 1e-5, "tile {tile}: {sa:?} against {sb:?}");
+        }
+    }
+}
+
+#[test]
 fn the_maps_middle_is_on_a_grid() {
     assert_eq!(
         middle_for(Vec2::new(1999.0, -2001.0)),

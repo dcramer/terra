@@ -141,6 +141,27 @@ pub fn offsets(winds: &CloudWinds, seconds: f64, anchor: Vec2) -> [Vec4; 12] {
     out
 }
 
+/// How far the volumetric clouds' 3D noise (`noise3d`) repeats, metres: the shapes' tile and the
+/// edges' finer one (docs/sky.md stage 2, Nubis's shape and detail textures).
+pub const SHAPE_TILE_M: f64 = 6000.0;
+pub const DETAIL_TILE_M: f64 = 750.0;
+
+/// Where the volumetric clouds' 3D noise is at the clock (`cloud_volume.wesl`): the noise at `p`
+/// metres east and south of `anchor` is the shapes' tile at `p / SHAPE_TILE_M + (x, z)` and the
+/// detail's at `p / DETAIL_TILE_M + (y, w)`, carried by the wind at the layer as the 2D shapes
+/// are (`offsets`). Worked out in `f64` and wrapped to a share of each tile, so it stays exact on
+/// a world years old and the shader adds only small numbers.
+pub fn volume_offsets(winds: &CloudWinds, seconds: f64, anchor: Vec2) -> Vec4 {
+    let at = anchor.as_dvec2() - winds.layer * seconds;
+    let share = |v: f64, tile: f64| (v / tile).rem_euclid(1.0) as f32;
+    Vec4::new(
+        share(at.x, SHAPE_TILE_M),
+        share(at.y, SHAPE_TILE_M),
+        share(at.x, DETAIL_TILE_M),
+        share(at.y, DETAIL_TILE_M),
+    )
+}
+
 /// Where the weather map round an eye has its middle, metres east and south of the start: on a
 /// grid, so every eye near a place maps it alike.
 pub fn middle_for(eye: Vec2) -> Vec2 {
