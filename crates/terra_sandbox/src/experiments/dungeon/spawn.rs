@@ -315,7 +315,7 @@ pub(super) fn push_doors(
     if dt <= 0.0 {
         return;
     }
-    // The shot's eye from now over the horizon, when a shot holds the camera.
+    // The shot's eye from now as far as it is read ahead, when a shot holds the camera.
     let filmed: Option<Vec<Vec3>> = cine
         .as_ref()
         .filter(|cine| cine.shot.holds_camera())
@@ -328,12 +328,8 @@ pub(super) fn push_doors(
                 ground: &ground,
                 player: subject.iter().next().map(|t| t.translation),
             };
-            let reads = (door::FILM_HORIZON_S / FILM_EVERY_S) as usize;
-            Some(
-                (0..=reads)
-                    .map(|n| cine.shot.framing(t + n as f32 * FILM_EVERY_S, &places).eye)
-                    .collect(),
-            )
+            let eye = |ahead: f32| cine.shot.framing(t + ahead, &places).eye;
+            Some(door::film_path(eye, FILM_EVERY_S))
         });
     // Where each body is and was; a camera the shot holds walks it, so it pushes by the shot.
     let moving: Vec<(Vec3, Vec3, bool)> = bodies

@@ -23,9 +23,39 @@ pub const FILM_LEAD_S: f32 = 1.0 / SWING_PER_S + 0.1;
 /// shot that slows to hold 3 m short while they swing (as a game's door cinematic holds) has
 /// them open as it stands there, never shut in the picture.
 pub const FILM_REACH_M: f32 = 3.5;
-/// How far ahead a filming camera reads its shot for whether it goes through a door: long
-/// enough for a shot that slows and holds in front of one.
-pub const FILM_HORIZON_S: f32 = 5.0;
+/// A filming camera reads its shot ahead until its eye has gone so far past where it is
+/// `FILM_LEAD_S` from now, in metres (`film_path`): by distance, not time, so a shot that
+/// crawls for seconds short of a door still reads the doorway (barrow round 18's tour took
+/// 10 s over its last 3.5 m, and a 5 s read saw the sill only 2.6 m out). Twice the reach,
+/// so a shot climbing as steeply as 60 degrees still reads `FILM_REACH_M` in plan.
+pub const FILM_READ_M: f32 = 2.0 * FILM_REACH_M;
+/// The longest a filming camera reads its shot ahead, in seconds, for a shot that stands
+/// still: longer than a game's door cinematic holds.
+pub const FILM_HORIZON_S: f32 = 20.0;
+
+/// The shot a filming camera reads ahead for the doors it walks into: its eye `eye(t)`, `t`
+/// seconds from now, every `every` seconds, until it has gone `FILM_READ_M` from where it is
+/// `FILM_LEAD_S` from now, or for `FILM_HORIZON_S`. What `Door::film` takes, in the world's
+/// frame (each doorway's is the world's turned and moved, so distances are the same).
+pub fn film_path(mut eye: impl FnMut(f32) -> Vec3, every: f32) -> Vec<Vec3> {
+    let lead = (FILM_LEAD_S / every).round() as usize;
+    let reads = (FILM_HORIZON_S / every).round() as usize;
+    let mut path: Vec<Vec3> = Vec::with_capacity(lead + 1);
+    let mut gone = 0.0;
+    for n in 0..=reads {
+        let at = eye(n as f32 * every);
+        if n > lead
+            && let Some(&before) = path.last()
+        {
+            gone += at.distance(before);
+        }
+        path.push(at);
+        if gone > FILM_READ_M {
+            break;
+        }
+    }
+    path
+}
 
 /// Where one of a door's two leaves hangs with the door `swing` open, in the doorway's
 /// frame: its hinge, and its turn about up for a leaf reaching +X from its hinge. Hung as a
@@ -95,7 +125,7 @@ impl Door {
 
     /// One step of `dt` seconds with a filming camera near it, which stands in for the body
     /// walking its shot: `path` is the shot's eye in the doorway's frame from now, every
-    /// `every` seconds over `FILM_HORIZON_S`. The camera pushes as that body would a swing
+    /// `every` seconds, as far as `film_path` reads it. The camera pushes as that body would a swing
     /// ahead: once the shot, from where its eye is `FILM_LEAD_S` from now, goes through the
     /// doorway within `FILM_REACH_M` along its path (in plan). By distance along the shot,
     /// not time, so one that slows or holds short of a door has it open as it comes, and
@@ -283,9 +313,7 @@ mod tests {
         let mut open_at = None;
         for k in 0..(seconds / DT) as usize {
             let t = k as f32 * DT;
-            let path: Vec<Vec3> = (0..=(FILM_HORIZON_S / EVERY) as usize)
-                .map(|n| eye(t + n as f32 * EVERY))
-                .collect();
+            let path = film_path(|ahead| eye(t + ahead), EVERY);
             door.film(&path, EVERY, WIDTH, false, DT);
             if door.swing.abs() >= 1.0 && open_at.is_none() {
                 open_at = Some(to_doorway(eye(t)));
@@ -358,9 +386,7 @@ mod tests {
             let mut open_by = None;
             for k in 0..(9.0 / DT) as usize {
                 let t = k as f32 * DT;
-                let ahead: Vec<Vec3> = (0..=(FILM_HORIZON_S / EVERY) as usize)
-                    .map(|n| path(t + n as f32 * EVERY))
-                    .collect();
+                let ahead = film_path(|s| path(t + s), EVERY);
                 door.film(&ahead, EVERY, WIDTH, false, DT);
                 if door.swing >= 1.0 && open_by.is_none() {
                     open_by = Some(t);
@@ -373,6 +399,33 @@ mod tests {
                 3.0 + hold_s
             );
         }
+    }
+
+    #[test]
+    fn the_crypt_tours_crawl_to_its_first_door_sees_it_open_3_m_short() {
+        // The eye's distance to the sill each second as barrow round 19's probe logged it in
+        // the crypt's tour film (frames 1120 to 1480, then through the sill at 1741): it
+        // crawls from 3.6 to 2.5 m for four seconds and takes ten over its last 3.5 m.
+        let keys = [
+            (0.0, 7.0),
+            (1.0, 4.52),
+            (2.0, 3.57),
+            (3.0, 3.25),
+            (4.0, 2.99),
+            (5.0, 2.74),
+            (6.0, 2.50),
+            (10.35, 0.0),
+            (11.5, -2.0),
+        ];
+        let out = move |t: f32| {
+            let t = t.clamp(0.0, 11.5);
+            let i = keys.windows(2).position(|k| t <= k[1].0).unwrap_or(0);
+            let ((t0, z0), (t1, z1)) = (keys[i], keys[i + 1]);
+            z0 + (z1 - z0) * (t - t0) / (t1 - t0)
+        };
+        let (_, open_at) = film(move |t| Vec3::new(0.0, 1.6, out(t)), 11.5);
+        let open_at = open_at.unwrap_or(0.0);
+        assert!(open_at >= 3.0, "fully open only {open_at:.2} m out");
     }
 
     #[test]
