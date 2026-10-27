@@ -1,7 +1,7 @@
 // The tongue tracker's numbers on masks whose answers are known by construction.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { leanOf, trackTongues } from "./tongues.ts";
+import { framePieces, leanOf, trackTongues } from "./tongues.ts";
 
 const FPS = 30;
 const [W, H] = [160, 240];
@@ -78,4 +78,23 @@ test("a tongue's lean is its foot-to-tip line's angle from vertical", () => {
   near(leanOf(px, W, g.height), lean, 1.5, "lean, degrees");
   const upright = px.map((p) => Math.floor(p / W) * W + 80 + (p % W) - Math.round(80 + (100 - Math.floor(p / W)) * Math.tan((lean * Math.PI) / 180)));
   near(leanOf(upright, W, g.height), 0, 0.5, "upright, degrees");
+});
+
+test("a frame's sheared tongue reads its shear next to an upright one off the same body", () => {
+  // Fire round g63: torn upright lanes cut a leaning plume into upright tongues, and the motion
+  // gate's lean fell; so a frame of both must read each one's own angle, not their mix.
+  const mask = new Uint8Array(W * H);
+  const level = g.base - g.height / 2;
+  const lean = 20;
+  for (let y = level; y <= g.base; y++) for (let x = 30; x <= 130; x++) mask[y * W + x] = 1;
+  for (let y = 60; y < level; y++) for (let x = 40; x < 48; x++) mask[y * W + x] = 1;
+  for (let y = 70; y < level; y++) {
+    const x0 = Math.round(100 + (level - 1 - y) * Math.tan((lean * Math.PI) / 180));
+    for (let x = x0; x < x0 + 8; x++) mask[y * W + x] = 1;
+  }
+  const tongues = framePieces(mask, W, H, level, 50, g.height).filter((t) => t.attached && Number.isFinite(t.lean));
+  assert.equal(tongues.length, 2, "two tongues measured");
+  const [left, right] = [...tongues].sort((a, b) => a.cx - b.cx);
+  near(left.lean, 0, 1, "upright, degrees");
+  near(right.lean, lean, 1.5, "sheared, degrees");
 });
