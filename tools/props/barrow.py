@@ -78,10 +78,12 @@ def material(name, folder, tint=None, colour_only=None):
     nodes, links = mat.node_tree.nodes, mat.node_tree.links
     bsdf = nodes["Principled BSDF"]
     if folder == "glow":
-        # A candle's flame: its own light, as the fire's cards are (refine.py's strength).
+        # A candle's flame: its own light, under the fire cards' 8 (refine.py), since a flame a
+        # centimetre across at 8 clipped to a white speck in the crypt's adapted exposure
+        # (barrow dress2's stills); at 2 its red and green stay apart and it reads orange.
         bsdf.inputs["Base Color"].default_value = (*tint, 1.0)
         bsdf.inputs["Emission Color"].default_value = (*tint, 1.0)
-        bsdf.inputs["Emission Strength"].default_value = 8.0
+        bsdf.inputs["Emission Strength"].default_value = 2.0
         return mat
     if folder is None:
         bsdf.inputs["Base Color"].default_value = (*colour_only, 1.0)
@@ -574,7 +576,7 @@ def prism(m, outline, z0, z1, side, top, metres, bottom=None):
 # Tallow candles, the crypt's lights left by mourners: wax, the wick, the flame (emissive).
 WAX = ("Wax", "white_stucco", (0.62, 0.54, 0.40))
 WICK = ("Wick", None, (0.03, 0.025, 0.02))
-FLAME = ("Flame", "glow", (1.0, 0.55, 0.22))
+FLAME = ("Flame", "glow", (1.0, 0.42, 0.10))
 
 
 def candle(m, x, y, z, r, h, mats=(0, 1, 2)):
@@ -639,7 +641,30 @@ def coffin():
     a robber: the dark of its inside shows. Length along X, the head at +X."""
     m = Mesh()
     plan = [(-0.98, -0.20), (0.42, -0.31), (0.98, -0.23), (0.98, 0.23), (0.42, 0.31), (-0.98, 0.20)]
-    prism(m, plan, 0.0, 0.36, 0, 1, 2.0)
+    # Hollow, its boards 3 cm thick: the rim, the inner walls and the dark floor show where
+    # the lid is off, so it reads as an open coffin rather than a box painted dark on top.
+    top, floor, t = 0.36, 0.06, 0.03
+    inner = [(x - math.copysign(t, x), y - math.copysign(t, y)) for x, y in plan]
+    centre = Vector((0.0, 0.0, (top + floor) / 2))
+    up = lambda p: p + Vector((0.0, 0.0, 1.0))
+    run = 0.0
+    for k, (x, y) in enumerate(plan):
+        nx, ny = plan[(k + 1) % len(plan)]
+        u0, u1 = run / 2.0, (run + math.hypot(nx - x, ny - y)) / 2.0
+        run += math.hypot(nx - x, ny - y)
+        m.face([(m.bm.verts.new((x, y, 0.0)), (u0, 0.0)), (m.bm.verts.new((nx, ny, 0.0)), (u1, 0.0)),
+                (m.bm.verts.new((nx, ny, top)), (u1, top / 2.0)), (m.bm.verts.new((x, y, top)), (u0, top / 2.0))], 0,
+               away=lambda _: centre)
+        ix, iy = inner[k]
+        jx, jy = inner[(k + 1) % len(inner)]
+        m.face([(m.bm.verts.new((x, y, top)), (x / 2.0, y / 2.0)), (m.bm.verts.new((nx, ny, top)), (nx / 2.0, ny / 2.0)),
+                (m.bm.verts.new((jx, jy, top)), (jx / 2.0, jy / 2.0)), (m.bm.verts.new((ix, iy, top)), (ix / 2.0, iy / 2.0))], 0,
+               toward=up)
+        m.face([(m.bm.verts.new((ix, iy, floor)), (u0, floor / 2.0)), (m.bm.verts.new((jx, jy, floor)), (u1, floor / 2.0)),
+                (m.bm.verts.new((jx, jy, top)), (u1, top / 2.0)), (m.bm.verts.new((ix, iy, top)), (u0, top / 2.0))], 0,
+               toward=lambda _: centre)
+    m.face([(m.bm.verts.new((x, y, floor)), (x / 2.0, y / 2.0)) for x, y in inner], 1, toward=up)
+    m.face([(m.bm.verts.new((x, y, 0.0)), (x / 2.0, y / 2.0)) for x, y in plan], 0, toward=lambda p: p - Vector((0.0, 0.0, 1.0)))
     lid = [(x * 1.02, y * 1.04) for x, y in plan]
     a, dx, dy = math.radians(9.0), -0.22, -0.16
     lid = [(x * math.cos(a) - y * math.sin(a) + dx, x * math.sin(a) + y * math.cos(a) + dy) for x, y in lid]
