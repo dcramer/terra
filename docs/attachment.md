@@ -104,7 +104,7 @@ Decided (D551, the developers): what the two hand slots hold shows on the body w
 | `hafted` (one-handed) | the hip on the main hand's side: `socket.belt.R` |
 | `shield` | `socket.back`, first |
 | `bow`, `polearm`, any held `Two` | across `socket.back`, beside a shield there |
-| `belt` (the quiver) | where it hangs today |
+| `belt` (the quiver) | the back, on the spine (Skyrim's `QUIVER` node), worn there always, so the main hand's hip is the tool's; it hangs on the belt today, until it is fitted again |
 
 It goes on as data, never code: a kind's `stowed` in `attach_kinds.json`, `{"socket", "turn", "at"}`, the look's grip placed on that socket with a turn (degrees about the socket's X, Y, Z) and an offset (m, in the socket's space), mirrored to the other side for a left-handed body, an item overriding it in its own data; as the Creation Engine's `Prn` names the node a weapon is put away on. The turns and offsets are not set yet: the next step, with a still of each kind put away on the base, `heavy` and `female`. What the inspirations do: Kenshi shows both weapon slots, small weapons at the hip and large on the back (at most two on the back, one at the hip; [Steam](https://steamcommunity.com/app/233860/discussions/0/1728711392727520401/), [Steam](https://steamcommunity.com/app/233860/discussions/3/5234891274081830469/)); RDR2 at most four arms on the body, one a slot, the rest on the horse ([Steam](https://steamcommunity.com/app/1174180/discussions/0/3320862598764546941)); Enshrouded nothing put away but the shield, left on the arm, which players call an eyesore ([Steam](https://steamcommunity.com/app/1203620/discussions/0/568164715699705921/)). Not found for Soulmask, Medieval Dynasty or Dune: Awakening.
 
