@@ -389,9 +389,7 @@ pub struct Masks {
     /// how dark the streaks are that rain draws down it under a sill or an open top, as a
     /// fraction, and how far down they run, in metres.
     pub splash: f32,
-    /// How much darker than `dirt_tint` the splash is at the very foot, as a fraction: wet
-    /// stone is darker than the dry dirt over it. At the dirt's tint alone the crypt's wall
-    /// feet were about 11% darker over a hand's breadth, unseen (barrow round 15).
+    /// How much darker than `dirt_tint` the splash's foot is, a fraction: wet stone is darker.
     pub splash_dark: f32,
     pub streaks: f32,
     pub streak_reach: f32,
