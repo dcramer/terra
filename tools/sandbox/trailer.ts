@@ -99,12 +99,18 @@ for (const shot of shots.values()) {
     scenes.set(shot.scene, (await import(pathToFileURL(join(dirname(cutFile), "scenes", `${shot.scene}.ts`)).href)).default as Scene);
   }
 }
-const sandbox = resolve(ROOT, "target/release/terra_sandbox");
-// Without it every shot fails with no output ("undefinedundefined"), after the GPU queue's wait.
-if (!existsSync(sandbox)) {
-  console.error(`✗ trailer: ${sandbox} is missing; run cargo build --release -p terra_sandbox first`);
+const sandbox = resolve(process.env.CARGO_TARGET_DIR ?? resolve(ROOT, "target"), "release/terra_sandbox");
+// The sandbox is built first, as film.ts and the other tools do: cargo's fingerprints say
+// whether its sources (and every crate under it) are newer than the binary, so a film of new
+// code never runs an old binary (a render slot's, or one left by another branch); when it is
+// fresh the build is a no-op.
+const builtBefore = existsSync(sandbox) ? statSync(sandbox).mtimeMs : 0;
+const building = Date.now();
+if (spawnSync("cargo", ["build", "-q", "--release", "-p", "terra_sandbox"], { cwd: ROOT, stdio: "inherit" }).status !== 0 || !existsSync(sandbox)) {
+  console.error(`✗ trailer: cargo build --release -p terra_sandbox failed, or made no ${sandbox}`);
   process.exit(1);
 }
+if (statSync(sandbox).mtimeMs !== builtBefore) console.log(`trailer: built terra_sandbox for this checkout in ${Math.round((Date.now() - building) / 1000)} s`);
 
 /// A font for the cards: a light serif, as trailers' titles are, found by fontconfig.
 const font = (() => {
