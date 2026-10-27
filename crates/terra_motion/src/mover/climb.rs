@@ -230,19 +230,20 @@ pub(super) fn tick(
     let side = up.cross(into);
     let wish = intent.wish.reject_from(up).normalize_or_zero();
     let upward = wish.dot(into);
-    if !hands && upward > 0.0 {
-        if let Some((over, to)) = top(&k, query, shape, into) {
-            let from = body.frame;
-            let mantle = Mantle {
-                from,
-                over: from + over.as_dvec3(),
-                to: from + to.as_dvec3(),
-                t: 0.0,
-            };
-            body.hold.mantle = Some(mantle);
-            pull_up(body, mantle, query, shape, dt);
-            return true;
-        }
+    if !hands
+        && upward > 0.0
+        && let Some((over, to)) = top(&k, query, shape, into)
+    {
+        let from = body.frame;
+        let mantle = Mantle {
+            from,
+            over: from + over.as_dvec3(),
+            to: from + to.as_dvec3(),
+            t: 0.0,
+        };
+        body.hold.mantle = Some(mantle);
+        pull_up(body, mantle, query, shape, dt);
+        return true;
     }
     let rise = up.reject_from(normal).normalize_or(up);
     let wanted = rise * (upward * k.climb) + side * (wish.dot(side) * k.climb_side);
