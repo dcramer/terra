@@ -9,12 +9,8 @@
 //! - `view`: the tour sampled every `STEP_M`, an eye over each foot as high as `EYE_M` allows
 //!   with `ROOM_M` all round, smoothed so it never rises past what its neighbours allow.
 
-use super::{CUBE, DOORWAY_M, Frame, Object, ObjectRole, clear, cube_of, stands};
+use super::{CUBE, DOORWAY_M, Frame, Grid, Object, ObjectRole, clear, cube_of, stands};
 use glam::{IVec3, Vec2, Vec3};
-use std::collections::HashMap;
-use terra_build::Cube;
-
-type Map = HashMap<IVec3, Cube>;
 
 /// How far the camera keeps from what stands round it, in metres.
 pub const ROOM_M: f32 = 0.6;
@@ -56,19 +52,24 @@ struct Leaf {
 }
 
 /// What a camera keeps clear of: the cubes that are not open, and the open doors' leaves.
-pub(super) struct Room<'a> {
-    map: &'a Map,
+pub(super) struct Room {
+    map: Grid,
     leaves: Vec<Leaf>,
 }
 
-impl<'a> Room<'a> {
-    pub fn new(map: &'a Map, objects: &[Object]) -> Room<'a> {
+impl Room {
+    pub fn of(map: Grid, objects: &[Object]) -> Room {
         let leaves = objects
             .iter()
             .filter(|o| o.role == ObjectRole::Door)
             .flat_map(|o| leaves(o.at, o.facing))
             .collect();
         Room { map, leaves }
+    }
+
+    /// The solid cubes it keeps clear of.
+    pub fn cubes(&self) -> &Grid {
+        &self.map
     }
 
     /// The plan distance from a point to the cubes not open in its own layer and to the door
@@ -87,7 +88,7 @@ impl<'a> Room<'a> {
         for x in -2..=2 {
             for z in -2..=2 {
                 let at = c + IVec3::new(x, 0, z);
-                if !clear(self.map, at) {
+                if !clear(&self.map, at) {
                     let lo = Vec2::new(at.x as f32, at.z as f32) * CUBE;
                     let n = q.clamp(lo, lo + Vec2::splat(CUBE));
                     each(q.distance(n), n);
@@ -149,7 +150,7 @@ impl<'a> Room<'a> {
             };
             if ROOMY_AT_M
                 .iter()
-                .any(|&up| !clear(self.map, cube_of(next + Vec3::Y * up)))
+                .any(|&up| !clear(&self.map, cube_of(next + Vec3::Y * up)))
             {
                 break;
             }
@@ -170,7 +171,7 @@ impl<'a> Room<'a> {
             for y in -2..=2 {
                 for z in -2..=2 {
                     let at = c + IVec3::new(x, y, z);
-                    if !clear(self.map, at) {
+                    if !clear(&self.map, at) {
                         let lo = at.as_vec3() * CUBE;
                         let off = (lo - p).max(p - (lo + Vec3::splat(CUBE))).max(Vec3::ZERO);
                         d2 = d2.min(off.length_squared());
@@ -197,7 +198,7 @@ impl<'a> Room<'a> {
     /// (`sight`) and keeps `ROOM_M` from walls and leaves in plan, every 0.1 m.
     pub fn roomy(&self, a: Vec3, b: Vec3) -> bool {
         let steps = ((b - a).length() / 0.1).ceil().max(1.0) as i32;
-        super::runin::sight(self.map, a, b)
+        super::runin::sight(&self.map, a, b)
             && (0..=steps).all(|k| self.roomy_at(a.lerp(b, k as f32 / steps as f32)))
     }
 
@@ -214,7 +215,7 @@ impl<'a> Room<'a> {
             let q = feet + side * (k as f32 * 0.05);
             if ROOMY_AT_M
                 .iter()
-                .any(|&up| !clear(self.map, cube_of(q + Vec3::Y * up)))
+                .any(|&up| !clear(&self.map, cube_of(q + Vec3::Y * up)))
             {
                 continue;
             }
@@ -243,7 +244,7 @@ impl<'a> Room<'a> {
                     let feet = (at.as_vec3() + Vec3::new(0.5, 0.0, 0.5)) * CUBE;
                     let d = feet.distance(p);
                     if best.is_none_or(|(b, _)| d < b)
-                        && stands(self.map, at)
+                        && stands(&self.map, at)
                         && self.roomy_at(feet)
                     {
                         best = Some((d, feet));
@@ -264,7 +265,7 @@ impl<'a> Room<'a> {
         for k in 0..=n {
             let e = EYE_M[0] + k as f32 * EYE_STEP_M;
             let p = feet + Vec3::Y * e;
-            if !clear(self.map, cube_of(p)) {
+            if !clear(&self.map, cube_of(p)) {
                 break;
             }
             let room = self.around(p);

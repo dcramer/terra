@@ -8,8 +8,8 @@
 use super::modules::{Class, Look};
 use super::view::Room;
 use super::{
-    CELL, CUBE, ChestSpawn, DOORWAY_M, Frame, INNER, LEVEL, LIGHTS, Light, LightKind, MID,
-    MobSpawn, Object, ObjectRole, Stamp, clear, cube_of, floor_of, hash, stands, steps,
+    CELL, CUBE, ChestSpawn, DOORWAY_M, Frame, Grid, INNER, LEVEL, LIGHTS, Light, LightKind, MID,
+    MobSpawn, Object, ObjectRole, Solid, Stamp, clear, cube_of, floor_of, hash, stands, steps,
 };
 use crate::Dungeon;
 use crate::door::Lock;
@@ -23,13 +23,15 @@ use terra_build::Cube;
 type Map = HashMap<IVec3, Cube>;
 
 pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, vaulted: bool, out: &mut Stamp) {
-    doors(dungeon, map, out);
-    chests(dungeon, looks, map, out);
-    mobs(dungeon, looks, map, out);
+    let grid = Grid::new(map);
+    doors(dungeon, &grid, out);
+    chests(dungeon, looks, &grid, out);
+    mobs(dungeon, looks, &grid, out);
     torches(dungeon, looks, out);
     tour(dungeon, out);
-    let room = Room::new(map, &out.objects);
-    out.route = walked(map, &room, &out.route);
+    let room = Room::of(grid, &out.objects);
+    let map = room.cubes();
+    out.route = walked(&room, &out.route);
     out.view = room.view(&out.route);
     let tilt = if vaulted {
         super::look::VAULT_TILT
@@ -42,7 +44,7 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, vaulted: bool
 
 /// A leaf in the doorway at the far room of each door, locked door and one-way door; an arch
 /// and a secret way have none.
-fn doors(dungeon: &Dungeon, map: &Map, out: &mut Stamp) {
+fn doors(dungeon: &Dungeon, map: &impl Solid, out: &mut Stamp) {
     let layout = &dungeon.layout;
     for (e, edge) in dungeon.graph.edges.iter().enumerate() {
         let (name, lock) = match edge.link {
@@ -95,7 +97,7 @@ pub(super) fn doorway_axes(facing: usize) -> (Vec3, Vec3) {
 /// doorways in neighbouring cells, and a doorway or an alcove beside it leaves it nothing to
 /// fold onto: turned out of the room there instead, 7% of leaves swung towards a body pushing
 /// from the corridor, against D512's "away from whoever pushes".
-fn opens(map: &Map, sill: Vec3, facing: usize) -> [f32; 2] {
+fn opens(map: &impl Solid, sill: Vec3, facing: usize) -> [f32; 2] {
     let (across, into) = doorway_axes(facing);
     // Up the leaf: its foot, middle and head, in cubes.
     let high = DOORWAY_M[1] / CUBE;
@@ -171,7 +173,7 @@ fn taken(out: &Stamp) -> Vec<Vec3> {
 
 /// Standing spots on a room's free floor, the farthest from its doorways first, dry before
 /// wet.
-fn spots(dungeon: &Dungeon, looks: &[Look], map: &Map, room: usize) -> Vec<(Vec3, f32)> {
+fn spots(dungeon: &Dungeon, looks: &[Look], map: &impl Solid, room: usize) -> Vec<(Vec3, f32)> {
     let layout = &dungeon.layout;
     let rect = layout.rooms[room];
     let cells: Vec<(IVec3, usize)> = rect
@@ -222,7 +224,7 @@ fn pick(spots: &[(Vec3, f32)], taken: &mut Vec<Vec3>, gap: f32) -> Option<Vec3> 
 }
 
 /// A chest against a wall of each room with loot, facing in, holding the room's loot.
-fn chests(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Stamp) {
+fn chests(dungeon: &Dungeon, looks: &[Look], map: &impl Solid, out: &mut Stamp) {
     let layout = &dungeon.layout;
     let mut taken = taken(out);
     for (r, room) in dungeon.graph.rooms.iter().enumerate() {
@@ -266,7 +268,7 @@ fn chests(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Stamp) {
 }
 
 /// Each room's mobs, a spot each, apart and away from the doors.
-fn mobs(dungeon: &Dungeon, looks: &[Look], map: &Map, out: &mut Stamp) {
+fn mobs(dungeon: &Dungeon, looks: &[Look], map: &impl Solid, out: &mut Stamp) {
     let mut taken = taken(out);
     for (r, room) in dungeon.graph.rooms.iter().enumerate() {
         if room.mobs.is_empty() {
@@ -744,7 +746,7 @@ const ROUND_CUBES: i32 = 16;
 
 /// Whether the way from one point to another, at chest and eye height over it, passes no
 /// cube that is not open.
-pub(super) fn sight(map: &Map, a: Vec3, b: Vec3) -> bool {
+pub(super) fn sight(map: &impl Solid, a: Vec3, b: Vec3) -> bool {
     let steps = ((b - a).length() / 0.1).ceil().max(1.0) as i32;
     (0..=steps).all(|k| {
         let p = a.lerp(b, k as f32 / steps as f32);
@@ -761,7 +763,8 @@ pub(super) fn sight(map: &Map, a: Vec3, b: Vec3) -> bool {
 /// (else by any walk), pulled taut to the fewest straight legs that keep it (else that are
 /// clear): a navigation mesh's path, its agent radius and its string pulling. A leg with no
 /// walk round is kept as it was.
-fn walked(map: &Map, room: &Room, route: &[Vec3]) -> Vec<Vec3> {
+fn walked(room: &Room, route: &[Vec3]) -> Vec<Vec3> {
+    let map = room.cubes();
     let mut out: Vec<Vec3> = route.iter().take(2).copied().collect();
     for pair in route.windows(2).skip(1) {
         let a = *out.last().unwrap_or(&pair[0]);
@@ -799,14 +802,15 @@ fn walked(map: &Map, room: &Room, route: &[Vec3]) -> Vec<Vec3> {
         }
         out.push(b);
     }
-    unfolded(map, room, out)
+    unfolded(room, out)
 }
 
 /// The walked tour with no point where it folds back on itself, turning more than 120°: a
 /// point settled past the next, or a walk round one leg starting back along the last
 /// (round 21, a crypt's doorway: a metre on and back), left out where the leg past it keeps
 /// its room, or is clear at least.
-fn unfolded(map: &Map, room: &Room, route: Vec<Vec3>) -> Vec<Vec3> {
+fn unfolded(room: &Room, route: Vec<Vec3>) -> Vec<Vec3> {
+    let map = room.cubes();
     let mut out: Vec<Vec3> = Vec::with_capacity(route.len());
     for b in route {
         while let [.., p, m] = out[..] {
@@ -824,7 +828,7 @@ fn unfolded(map: &Map, room: &Room, route: Vec<Vec3>) -> Vec<Vec3> {
 /// The shortest walk over the cubes from one standing place to another, near them, through
 /// places `ok` lets it (the first always); or to the place nearest it, if no walker reaches
 /// it.
-fn round(map: &Map, from: IVec3, to: IVec3, ok: &dyn Fn(IVec3) -> bool) -> Vec<IVec3> {
+fn round(map: &impl Solid, from: IVec3, to: IVec3, ok: &dyn Fn(IVec3) -> bool) -> Vec<IVec3> {
     let (low, high) = (
         from.min(to) - IVec3::splat(ROUND_CUBES),
         from.max(to) + IVec3::splat(ROUND_CUBES),

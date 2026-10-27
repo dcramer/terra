@@ -384,21 +384,81 @@ pub(crate) fn cubes(ops: &[BuildOp]) -> HashMap<IVec3, Cube> {
     map
 }
 
+/// What says which cubes are solid: the cubes by position, or a `Grid` of them.
+pub(crate) trait Solid {
+    /// A solid cube here, neither air nor an opening.
+    fn solid(&self, at: IVec3) -> bool;
+}
+
+impl Solid for HashMap<IVec3, Cube> {
+    fn solid(&self, at: IVec3) -> bool {
+        self.get(&at).is_some_and(|c| c.fill == Fill::Solid)
+    }
+}
+
+impl<T: Solid + ?Sized> Solid for &T {
+    fn solid(&self, at: IVec3) -> bool {
+        (**self).solid(at)
+    }
+}
+
+/// The solid cubes of a map in a dense box round them, read by index rather than hashed: the
+/// run-in's tour and camera ask some ten million times a dungeon.
+pub(crate) struct Grid {
+    min: IVec3,
+    size: IVec3,
+    solid: Vec<bool>,
+}
+
+impl Grid {
+    pub fn new(map: &HashMap<IVec3, Cube>) -> Grid {
+        let solid = || map.iter().filter(|(_, c)| c.fill == Fill::Solid);
+        let min = solid().map(|(&at, _)| at).reduce(IVec3::min);
+        let max = solid().map(|(&at, _)| at).reduce(IVec3::max);
+        let (min, size) = match (min, max) {
+            (Some(min), Some(max)) => (min, max - min + IVec3::ONE),
+            _ => (IVec3::ZERO, IVec3::ZERO),
+        };
+        let mut grid = Grid {
+            min,
+            size,
+            solid: vec![false; size.element_product() as usize],
+        };
+        for (&at, _) in solid() {
+            let i = grid.index(at).expect("inside the box of the solid cubes");
+            grid.solid[i] = true;
+        }
+        grid
+    }
+
+    fn index(&self, at: IVec3) -> Option<usize> {
+        let p = at - self.min;
+        if p.cmplt(IVec3::ZERO).any() || p.cmpge(self.size).any() {
+            return None;
+        }
+        Some(((p.y * self.size.z + p.z) * self.size.x + p.x) as usize)
+    }
+}
+
+impl Solid for Grid {
+    fn solid(&self, at: IVec3) -> bool {
+        self.index(at).is_some_and(|i| self.solid[i])
+    }
+}
+
 /// Air or an opening: a walker passes.
-pub(crate) fn clear(map: &HashMap<IVec3, Cube>, at: IVec3) -> bool {
-    map.get(&at).is_none_or(|c| c.fill == Fill::Open)
+pub(crate) fn clear(map: &impl Solid, at: IVec3) -> bool {
+    !map.solid(at)
 }
 
 /// A walker stands here: a solid cube under it and four cubes (2 m) clear above.
-pub(crate) fn stands(map: &HashMap<IVec3, Cube>, at: IVec3) -> bool {
-    map.get(&(at - IVec3::Y))
-        .is_some_and(|c| c.fill == Fill::Solid)
-        && (0..4).all(|k| clear(map, at + IVec3::Y * k))
+pub(crate) fn stands(map: &impl Solid, at: IVec3) -> bool {
+    map.solid(at - IVec3::Y) && (0..4).all(|k| clear(map, at + IVec3::Y * k))
 }
 
 /// Where a walker standing at `at` can step: a cube along each way, up one or down two, with
 /// their head clear on the way.
-pub(crate) fn steps(map: &HashMap<IVec3, Cube>, at: IVec3) -> impl Iterator<Item = IVec3> + '_ {
+pub(crate) fn steps<M: Solid>(map: &M, at: IVec3) -> impl Iterator<Item = IVec3> + '_ {
     crate::place::STEPS.into_iter().flat_map(move |step| {
         [1, 0, -1, -2].into_iter().filter_map(move |dy| {
             let n = at + step + IVec3::Y * dy;

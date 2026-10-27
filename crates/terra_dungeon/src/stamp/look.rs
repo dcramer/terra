@@ -14,12 +14,8 @@
 //! 2.5 m faced straight on in 0.11% of looks against 3%, and more open down the look).
 
 use super::view::STEP_M;
-use super::{Object, ObjectRole, clear, cube_of};
-use glam::{IVec3, Quat, Vec3};
-use std::collections::HashMap;
-use terra_build::Cube;
-
-type Map = HashMap<IVec3, Cube>;
+use super::{Object, ObjectRole, Solid, clear, cube_of};
+use glam::{Quat, Vec3};
 
 /// How far along the way the point the camera looks at stands, in metres: near enough that
 /// a corner ahead turns the look into the way it turns into, not at its end wall.
@@ -95,13 +91,13 @@ pub const VAULT_TILT: f32 = 0.17;
 pub const VAULT_HEADROOM_M: [f32; 2] = [1.6, 2.6];
 
 /// Whether the line between two points passes only open cubes, every 0.1 m.
-pub(super) fn seen(map: &Map, a: Vec3, b: Vec3) -> bool {
+pub(super) fn seen(map: &impl Solid, a: Vec3, b: Vec3) -> bool {
     let steps = ((b - a).length() / 0.1).ceil().max(1.0) as i32;
     (0..=steps).all(|k| clear(map, cube_of(a.lerp(b, k as f32 / steps as f32))))
 }
 
 /// How far the cubes are clear straight over a point, up to 4 m, every 0.1 m.
-pub(super) fn headroom(map: &Map, at: Vec3) -> f32 {
+pub(super) fn headroom(map: &impl Solid, at: Vec3) -> f32 {
     (1..=40)
         .map(|k| k as f32 * 0.1)
         .find(|&up| !clear(map, cube_of(at + Vec3::Y * up)))
@@ -128,7 +124,7 @@ pub(super) fn passes(view: &[Vec3], doorways: &[Vec3]) -> Vec<usize> {
 /// `tilt` radians where the eye stands under a vault (`VAULT_TILT` for a theme with a kit,
 /// nought for one without), and led toward the next of `doorways` in sight.
 pub(super) fn looks(
-    map: &Map,
+    map: &impl Solid,
     view: &[Vec3],
     doorways: &[Vec3],
     objects: &[Object],
@@ -199,7 +195,7 @@ pub(super) fn looks(
 /// doorway it passes once that is in sight and near (`LEAD_M`), where the look so turned
 /// runs clear as far as the doorway (`LOOK_M` at most): half turned toward a doorway seen
 /// past a jamb, it would face the wall beside it.
-fn led(map: &Map, view: &[Vec3], passes: &[usize], i: usize, yaw: f32, pitch: f32) -> f32 {
+fn led(map: &impl Solid, view: &[Vec3], passes: &[usize], i: usize, yaw: f32, pitch: f32) -> f32 {
     let Some(&j) = passes.iter().find(|&&j| j > i) else {
         return yaw;
     };

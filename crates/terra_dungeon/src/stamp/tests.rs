@@ -418,7 +418,7 @@ fn check_view(theme: &Theme, dungeon: &Dungeon, s: u64) -> Seen {
     let stamp = stamp(dungeon, theme, &kind);
     let map = cubes(&stamp.ops);
     let leaves = open_leaves(&stamp);
-    let room = super::view::Room::new(&map, &stamp.objects);
+    let room = super::view::Room::of(Grid::new(&map), &stamp.objects);
     let feet = resample(&stamp.route, STEP_M);
     assert_eq!(feet.len(), stamp.view.len(), "{at}: an eye a foot");
     let mut seen = Seen {
