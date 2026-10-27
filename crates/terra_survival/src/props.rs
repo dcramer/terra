@@ -205,8 +205,10 @@ pub struct Embers;
 /// building's char's, build.wesl) a campfire's cracks and coals went past the tonemapper's
 /// shoulder to pink-white; at 2 they read red-orange (fire round 10). Since the firelit
 /// shoulder is taken a channel at a time (fire round 28) a brighter ember goes orange, not
-/// pink, so 4, with the coal bed's crackle (tools/props/coals.ts, fire round 29).
-const EMBER_GLOW: f32 = 7.0;
+/// pink, so 4, with the coal bed's crackle (tools/props/coals.ts, fire round 29). At 7 the
+/// logs' faces read as dark charcoal, cracks nearly unseen, beside RDR2's glowing ones (g66), so
+/// 9, its crawl (`EMBER_CRAWL`) dulling some patches below it and lifting others.
+const EMBER_GLOW: f32 = 9.0;
 /// How far a fire lights the embers of what burns: a prop's own fire stands at its foot.
 const EMBER_REACH_M: f32 = 2.0;
 /// The embers' exposure weight (docs/fire.md, "The exposure rule"): 0, physical, so by day,
@@ -214,6 +216,10 @@ const EMBER_REACH_M: f32 = 2.0;
 /// night's brightness, as a real fire's coals are dull in sunlight, not red blotches on the
 /// logs at noon (fire round 11).
 const EMBER_WEIGHT: f32 = 0.0;
+/// How the embers crawl (`fire_glow.wesl` `crawl`): how deep (0 an even glow), patches a metre,
+/// and their rate a second, so a log's cracks flare and dull a patch at a time over a second or
+/// two, as RDR2's do, rather than glowing evenly as a painted pattern (fire round g66).
+const EMBER_CRAWL: [f32; 3] = [0.8, 7.0, 0.45];
 
 /// Each burning part given its own material, so its embers flicker with its own fire, and
 /// drawn as a glow (`fire::GlowMaterial`): its glow's share of its light tonemapped as a
@@ -228,9 +234,12 @@ fn kindle(
         let Some(own) = standard.get(&material.0).cloned() else {
             continue;
         };
+        // Its embers crawl (`EMBER_CRAWL`), so its cracks flare and dull patch by patch.
         let glow = terra_world::fire::GlowMaterial {
             base: own,
-            extension: terra_world::fire::Glow::default(),
+            extension: terra_world::fire::Glow {
+                mask: Vec4::new(1.0, EMBER_CRAWL[0], EMBER_CRAWL[1], EMBER_CRAWL[2]),
+            },
         };
         commands
             .entity(entity)

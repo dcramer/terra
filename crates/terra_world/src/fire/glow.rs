@@ -21,7 +21,9 @@ pub type GlowMaterial = ExtendedMaterial<StandardMaterial, Glow>;
 /// What `shaders/fire_glow.wesl` is given. Field order must match the struct there.
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct Glow {
-    /// x how much of the glow's share goes to the mask (1 all of it).
+    /// x how much of the glow's share goes to the mask (1 all of it); y how deep its embers
+    /// crawl, patches flaring and dulling (0 an even glow; a campfire's logs' cracks), z those
+    /// patches a metre and w their rate a second.
     #[uniform(100)]
     pub mask: Vec4,
 }
@@ -75,5 +77,14 @@ mod tests {
         assert!(source.contains("out.color.a = 1.0 +"));
         assert!(source.contains("0.2126, 0.7152, 0.0722"));
         assert!(source.contains("pbr_input.material.emissive"));
+    }
+
+    #[test]
+    fn only_a_glow_given_a_crawl_crawls() {
+        // The default (the creatures' and the windows' glows) is an even one; the shader
+        // touches the emissive only past a crawl of 0.
+        assert_eq!(Glow::default().mask.y, 0.0);
+        let source = include_str!("../../../../assets/shaders/fire_glow.wesl");
+        assert!(source.contains("if glow.mask.y > 0.0"));
     }
 }
