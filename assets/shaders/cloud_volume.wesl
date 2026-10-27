@@ -60,7 +60,9 @@ const DECK_EXTINCTION: f32 = 0.03;
 // The distance over which the air's haze takes the clouds (as the 2D layer fades by lift).
 const HAZE_M: f32 = 20000.0;
 // The most a heaped column covers, so the 3D noise cuts it into heaps (Nubis's coverage remap).
-const HEAPED_COVERAGE: f32 = 0.7;
+const HEAPED_COVERAGE: f32 = 0.5;
+// Where the body's remapped noise starts, so it spans 0 to 1 (`shape`).
+const BODY_LOW: f32 = 0.6;
 // The asymmetry of light many times scattered in cloud, for the share of sunlight that diffuses
 // through a depth of it (the two-stream approximation: Bohren, "Multiple scattering of light and
 // some of its observable consequences", Am. J. Phys. 1987): 1 / (1 + 3/4 (1 - g) tau).
@@ -153,7 +155,9 @@ fn shape(c: Column, p: vec3<f32>, lod: f32) -> f32 {
     let uvw = vec3<f32>(p.x / SHAPE_TILE_M + params.volume.x, p.y / SHAPE_TILE_M, p.z / SHAPE_TILE_M + params.volume.y);
     let n = textureSampleLevel(noise, repeating, uvw, lod);
     let fbm = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
-    let body = remap(n.r, fbm - 1.0, 1.0);
+    // The remap leaves it between about 0.7 and 0.95; stretched, so a coverage cuts it
+    // gradually rather than all or nothing.
+    let body = remap(remap(n.r, fbm - 1.0, 1.0), BODY_LOW, 1.0);
     return remap(body * profiled, 1.0 - c.coverage, 1.0) * c.coverage;
 }
 
