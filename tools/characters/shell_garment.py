@@ -94,8 +94,6 @@ COVERAGE = {
     # A coif or hood: the crown down to the hairline at the front, over the ears at the sides
     # and to the nape at the back (`nape`, the share at the back), the face left open.
     "head_coif": {"bones": ("Head",), "hem": None, "crown": 0.3, "nape": 0.95},
-    # A shirt tucked in, its hem at the hips joint.
-    "chest_long_sleeves_tucked": {"bones": ("spine_", "clavicle_", "pelvis", "upperarm_", "lowerarm_"), "hem": 0.0},
     # A bodice: the body from the hips to a scoop neckline, with straps over the shoulders and
     # armholes cut round them (`neckline`: how far below the neck joint the scoop falls at the
     # front and at the back; `straps`: how far from the middle a strap starts and ends, in

@@ -37,7 +37,7 @@ garments=(
   "leather_coat Leather chest_long_sleeves art/gear/dressed-male-outfit/model.glb"
   "trousers Cloth legs_long art/gear/dressed-male-outfit/model.glb"
   "smith_apron Leather smith_apron art/gear/dressed-male-smith/model.glb --over=trousers"
-  "shirt Linen chest_long_sleeves_tucked art/gear/dressed-male-smith/model.glb --over=trousers --under=smith_apron --plain"
+  "shirt Linen chest_long_sleeves art/gear/dressed-male-smith/model.glb --over=trousers --under=smith_apron --plain"
   "cap Wool head_cap art/gear/dressed-male-smith/model.glb --plain"
   "boots Leather feet_ankle art/gear/dressed-male-smith/model.glb --over=trousers"
   "shift Linen chest_long_sleeves art/gear/dressed-female-kirtle/model.glb --shape=female --plain"
