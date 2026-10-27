@@ -26,6 +26,18 @@
     "minutes": 20
   },
   {
+    "name": "debug menu",
+    "does": "the debug menu works as a person uses it, at the high preset (D81; tools/sandbox/menucheck.ts): the backtick opens it over the game, a click on a slider sets its tunable and changes the sky, the remote's value shows on it, its reset and the backtick work",
+    "run": ["cargo", "xtask", "gpu", "still", "--", "node", "tools/sandbox/menucheck.ts", "--out", "target/check/debug-menu"],
+    "minutes": 20
+  },
+  {
+    "name": "debug menu low",
+    "does": "the same at the low preset, whose world is drawn at 0.6 of the screen and scaled up: the menu is drawn over it at the screen's own size; the drift slider, as the low sky has no heaped clouds",
+    "run": ["cargo", "xtask", "gpu", "still", "--", "node", "tools/sandbox/menucheck.ts", "--quality", "low", "--name", "sky.cloud.drift", "--value", "2", "--out", "target/check/debug-menu-low"],
+    "minutes": 20
+  },
+  {
     "name": "combat film",
     "does": "the combat scorecard with the yard duel's film (D452): every criterion of tools/combat/criteria.json, the film's checks among them, held to tools/combat/baseline.tsv",
     "run": ["cargo", "xtask", "gpu", "film", "--", "cargo", "xtask", "combat", "--film"],

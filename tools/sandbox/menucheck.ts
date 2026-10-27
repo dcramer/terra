@@ -7,11 +7,13 @@
 // remote (`tune.set`) must show on the menu's slider; the slider's reset must put it back; the
 // backtick must close it. Any step that fails exits 1, saying what it saw instead.
 //
-//   node tools/sandbox/menucheck.ts [--out ~/.cache/terra-review/debug-menu] [--name sky.cloud.heaped_cover] [--value 0.25]
+//   node tools/sandbox/menucheck.ts [--out ~/.cache/terra-review/debug-menu] [--name sky.cloud.heaped_cover] [--value 0.25] [--quality high|low]
 //
 // Under WSL it runs on the Windows GPU (`r start --windows --release`); start it as
 // `cargo xtask gpu still -- node tools/sandbox/menucheck.ts`. A line a stage; the shots and a
-// sheet of them (where ImageMagick is installed) in --out. Node 22.18 or later.
+// sheet of them (where ImageMagick is installed) in --out. Node 22.18 or later. At the low
+// preset, whose sky has no heaped clouds, slide the drift: `--quality low --name
+// sky.cloud.drift --value 2`. Both are continuous checks (tools/continuous/checks.json).
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
@@ -27,19 +29,24 @@ const { values } = parseArgs({
     out: { type: "string", default: join(homedir(), ".cache/terra-review/debug-menu") },
     name: { type: "string", default: "sky.cloud.heaped_cover" },
     value: { type: "string", default: "0.25" },
+    quality: { type: "string", default: "high" },
   },
 });
 const out = values.out as string;
 const name = values.name as string;
 const value = Number(values.value);
 /// tunecheck.ts's view: away from the sun at 15:00, where the volumetric clouds draw.
-const VIEW = ["--experiment", "play", "--fresh", "--time", "15", "--quality", "high", "--vantage-ground", "--vantage", "0,4,0,-600,450,300", "--debug-menu"];
-/// The sky over the horizon, rows of a 1080-row picture.
-const SKY = [90, 590];
-/// Below the frame-time readout, whose numbers change from frame to frame (D77).
-const BELOW_READOUT = [70, 1080];
-/// The menu must change most of what it covers when it opens, and little else; the sky beside
-/// it must change with the value (tunecheck's bar).
+const VIEW = ["--experiment", "play", "--fresh", "--time", "15", "--quality", values.quality as string, "--vantage-ground", "--vantage", "0,4,0,-600,450,300", "--debug-menu"];
+/// The sky over the horizon, as shares of the picture's height.
+const SKY = [90 / 1080, 590 / 1080];
+/// The frame-time readout (D77), whose numbers change from frame to frame, is above this, in
+/// the screen's points (the menu stands at 116).
+const READOUT = 100;
+/// The menu's shadow, around it, in points.
+const SHADOW = 24;
+/// The menu must change most of what it covers when it opens, and little else beyond what the
+/// game itself changes from one shot to the next (the far clouds' noise); the sky beside it
+/// must change with the value (tunecheck's bar).
 const COVERED = 30;
 const ELSEWHERE = 0.5;
 const MOVED = 2;
@@ -49,9 +56,10 @@ const NEAR = 0.02;
 const SETTLE_MS = 1500;
 
 type Box = [number, number, number, number];
-/// The share of pixels that changed within `rows`, inside the box or outside it.
-function changedShare(a: Grey, b: Grey, box: Box | null, inside: boolean, rows = [0, 1080]): number {
-  const [top, bottom] = rows.map((row) => Math.round((row * a.height) / 1080));
+/// The share of pixels that changed within `rows` (shares of the height), inside the box or
+/// outside it.
+function changedShare(a: Grey, b: Grey, box: Box | null, inside: boolean, rows = [0, 1]): number {
+  const [top, bottom] = rows.map((row) => Math.round(row * a.height));
   let n = 0;
   let total = 0;
   for (let y = top; y < bottom; y++) {
@@ -73,8 +81,10 @@ const verdict = (ok: boolean, line: string) => {
 };
 
 mkdirSync(out, { recursive: true });
-const shots = { closed: join(out, "closed.png"), open: join(out, "open.png"), slid: join(out, "slid.png"), remote: join(out, "remote.png") };
-let box: Box | null = null;
+const shots = { closed: join(out, "closed.png"), still: join(out, "closed-again.png"), open: join(out, "open.png"), slid: join(out, "slid.png"), remote: join(out, "remote.png") };
+/// Where the menu was drawn, in the screen's points, and the screen's size in them.
+let drawn: sandbox.Area | null = null;
+let screen = [1, 1];
 const row = (menu: sandbox.Menu) => menu.shown?.tunables.find((t) => t.name === name);
 try {
   await sandbox.start(VIEW, { windows: sandbox.onWsl, release: true });
@@ -83,6 +93,8 @@ try {
   console.log(`✓ started: ${sandbox.describeTunable(t)}`);
   await sandbox.sleep(SETTLE_MS);
   await sandbox.shot(shots.closed);
+  await sandbox.sleep(SETTLE_MS);
+  await sandbox.shot(shots.still);
 
   await sandbox.press("backtick");
   await sandbox.waitFor("Debug menu: open", { timeout: 20 });
@@ -93,10 +105,10 @@ try {
   const window = menu.window as sandbox.Area;
   await sandbox.sleep(SETTLE_MS);
   await sandbox.shot(shots.open);
-  // A shot may be smaller than the window: the menu is where it was drawn, scaled.
-  const scale = readPng(shots.open).width / menu.screen[0];
-  box = window.map((v) => Math.round(v * scale)) as Box;
-  console.log(`✓ the backtick opened it, on ${menu.page}, at ${window.map(Math.round).join(",")} (left, top, width, height)`);
+  drawn = window;
+  screen = menu.screen;
+  const shotWidth = readPng(shots.open).width;
+  console.log(`✓ the backtick opened it, on ${menu.page}, at ${window.map(Math.round).join(",")} (left, top, width, height) of a ${screen.map(Math.round).join("x")}-point screen, shot ${shotWidth} pixels wide`);
 
   const slider = row(menu)!;
   const [x, y] = sandbox.sliderSpot(t, slider, value);
@@ -126,10 +138,17 @@ try {
 } finally {
   await sandbox.stop().catch(() => {});
 }
-const [closed, open, slid] = [shots.closed, shots.open, shots.slid].map((path) => grey(readPng(path)));
+const [closed, still, open, slid] = [shots.closed, shots.still, shots.open, shots.slid].map((path) => grey(readPng(path)));
+// What is compared is the shots halved (`grey`): the menu's points are scaled to its pixels.
+const scale = closed.width / screen[0];
+const inPixels = (area: number[]) => area.map((v) => Math.round(v * scale)) as Box;
+const box = drawn && inPixels(drawn);
+const shadowed = drawn && inPixels([drawn[0] - SHADOW, drawn[1] - SHADOW, drawn[2] + 2 * SHADOW, drawn[3] + 2 * SHADOW]);
+const belowReadout = [READOUT / screen[1], 1];
 const covered = changedShare(closed, open, box, true);
-const elsewhere = changedShare(closed, open, box, false, BELOW_READOUT);
-verdict(covered >= COVERED && elsewhere <= ELSEWHERE, `opened, it is drawn over the game: ${covered.toFixed(1)}% of where it stands changed (at least ${COVERED}%), ${elsewhere.toFixed(2)}% elsewhere (at most ${ELSEWHERE}%)`);
+const elsewhere = changedShare(closed, open, shadowed, false, belowReadout);
+const noise = changedShare(closed, still, shadowed, false, belowReadout);
+verdict(covered >= COVERED && elsewhere <= noise + ELSEWHERE, `opened, it is drawn over the game: ${covered.toFixed(1)}% of where it stands changed (at least ${COVERED}%), ${elsewhere.toFixed(2)}% elsewhere (at most ${ELSEWHERE}% over the game's own ${noise.toFixed(2)}% from shot to shot)`);
 const moved = changedShare(open, slid, box, false, SKY);
 verdict(moved >= MOVED, `the sky beside it changed with the slider: ${moved.toFixed(2)}% of its pixels (at least ${MOVED}%)`);
 const sheet = join(out, "sheet.jpg");
