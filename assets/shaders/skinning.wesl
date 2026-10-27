@@ -14,7 +14,11 @@
 // rest, and every binding, as it has them. It stands in for Bevy's as the module
 // `bevy_pbr::render::skinning`, so `package` here is `bevy_pbr`. A joint matrix here may carry
 // a uniform scale (a skeleton scaled as an object, a body made taller), blended on its own;
-// never a shear.
+// never a shear. That split, scale blended linearly beside the rigid part's dual quaternions,
+// is the two-phase skinning of Kavan et al., "Geometric Skinning with Approximate Dual
+// Quaternion Blending" (ACM TOG 27(4), 2008), on joints that are not rigid. Bevy's joint matrices (joint
+// GlobalTransform x inverse bindpose, bevy_pbr render/skin.rs) carry a rig's own scale only
+// where the bindposes do not cancel it: the Cetri's Rig node scales 3.296 and its matrices 1.0.
 // TERRA_DUAL_QUATERNION_SKINNING (skinning.rs looks for this to know the shader is ours)
 
 import package::render::mesh_types::SkinnedMesh;
