@@ -112,11 +112,12 @@ const HEARTH_RANGE_M: f32 = 6.0;
 /// reach: the ground round the ring warmer, the field past it dark (fire round 23). With the
 /// top light keyed down by night (`HEARTH_TOP_NIGHT_STOPS`), 3.0: at 2.5 the logs and stones
 /// shadowing the pit light left the night pool darker than both RDR2 frames by its stones
-/// (sRGB luma 60 at a flame height out against 83 and 53; campfire pale round).
-const HEARTH_NIGHT_STOPS: f32 = 3.0;
+/// (sRGB luma 60 at a flame height out against 83 and 53; campfire pale round). 3.6 (g54): the
+/// ground past the stones luma 128 (was 98), the pool still falling 10.9 times from 1.5 to 4.5 m.
+const HEARTH_NIGHT_STOPS: f32 = 3.6;
 /// The most a kept fire is keyed up against the dusk sky (`hearth_by_hour`), whatever its own
-/// night stops: the pit light's night boost before the pale round, so the dusk stays as keyed.
-const HEARTH_DUSK_STOPS: f32 = 2.5;
+/// night stops: 3.0 (was 2.5, g54); at 3.5 the night's stones kept 0.71 of their light alike.
+const HEARTH_DUSK_STOPS: f32 = 3.0;
 /// How much wider than its flames a hearth's light is as a disc (`crate::falloff`): wider
 /// levels its fall-off over the stones at its foot, so the ground metres out takes more of the
 /// night's boost and the stones less. At 3 times its 1.3 m flames the disc's 1/(d²+r²) stayed
@@ -174,15 +175,16 @@ const HEARTH_TOP_RANGE_M: f32 = 10.0;
 /// their colour; by night it gives way to the night's stops (lake round 21). Modelled
 /// (`a_campfires_pool_reads_warm_a_few_metres_out_at_dusk`): the ground 3 m out takes half
 /// the sky's light and reads orange, a sitter's face under five times as lit as by the sky.
+/// 9 (was 7) for the dusk pool (g52); at 10 a face 2.6 m out took 5.6 times the sky's (g54).
 const HEARTH_TOP_SPREAD: f32 = 2.0;
-const HEARTH_TOP_DUSK: f32 = 7.0;
+const HEARTH_TOP_DUSK: f32 = 9.0;
 /// How many stops brighter the top light is by night, fewer than the pit light's: hung high
 /// and wide it lit the ground evenly, so at the pit light's 2.5 the night pool stood flat to
 /// three flame heights out (sRGB luma 89 at one, 59 at three), where RDR2's campfires fall to
 /// a third or a fifth (83 to 52, 53 to 32; campfire step-back, difference 2). At 1.0 the pit
-/// light's steeper fall-off leads by night, a bright core going dark within a few fire widths;
-/// by dusk it is keyed up as before (`hearth_by_hour`), and faces by the fire stay lit by it.
-const HEARTH_TOP_NIGHT_STOPS: f32 = 1.0;
+/// light's steeper fall-off leads by night (so at 1.8 with its 3.6, g54), a bright core going
+/// dark within a few fire widths; by dusk it is keyed up as before (`hearth_by_hour`).
+const HEARTH_TOP_NIGHT_STOPS: f32 = 1.8;
 /// Where a fire's light eases out with the eye's distance, metres (Valheim's 40 m).
 const LIGHT_FADE_M: [f32; 2] = [30.0, 40.0];
 /// Where a fire light's shadows are cast from, metres from the eye: switched on inside the
@@ -220,12 +222,10 @@ pub(super) fn by_night(stops: f32, night: f32) -> f32 {
 /// fire was lit 2x on its fire side and not warm, and the grass by the fire matched the far
 /// grass (lake film r15). A fire's light is weighed by the eye against the light it is seen
 /// in, as Witcher 3 keys its fires up as the sun goes, so the boost follows the sky's light
-/// down from the day: at this, the lake's dusk (1,240) takes 3.4 times, and the yard's darker
-/// dusk (830, the sun five degrees under) and the night keep their night's stops, which give
-/// them more. Below it the yard's dusk was keyed past its night's share (4.2 times at 200, 3
-/// at 280), and the stones and ground it lit inside the flame's crop took the fire sheet's
-/// dusk campfire out of its orange (20% to 17% and 18%, the flame itself unchanged).
-const HEARTH_DUSK_SKY: f32 = 360.0;
+/// down from the day: at 240 the lake's dusk (1,240) takes 5.2 times (3.4 at 360, before g54),
+/// and the yard's darker dusk (830, the sun five degrees under) keeps its night's share, 3.5 at
+/// 3.6 stops; under 239 it asks more, its lit ground taking the sheet's campfire out of orange.
+const HEARTH_DUSK_SKY: f32 = 240.0;
 
 /// How many times brighter a kept fire's light of so many night stops is at an hour: by the
 /// night's stops (`by_night`), and as the sun goes down (`Sky::twilight`, 0 with the sun six
