@@ -1784,11 +1784,14 @@ fn baked_gas(p: vec3<f32>, f: HearthField, time: f32) -> vec3<f32> {
 // BAKED_WHITE: a small white-hot heart over the coals: shape over x (as the heart's FIELD_CORE),
 // under y of its height, at heat 1 by z; its glow w times brighter there, so it reads white
 // (the sheet's white band, its campfire's 0 of 5.6) rather than adding to its pale (at its
-// ceiling, 5.0 of 5.4).
+// ceiling, 5.0 of 5.4). Glowing from heat BAKED_WHITE_FROM up (`hearth_march`), y a quarter of
+// its height (fire round g58: from 0.99 under 0.12 the heart, its root's heat pulled under 0.95 by
+// `baked_pale`, read white 0.1-0.2; from 0.95 under 0.25, night white 3.0 and pale 2.8).
 const BAKED_SEE: vec3<f32> = vec3<f32>(0.15, 0.55, 0.25);
 const BAKED_TEAR: vec3<f32> = vec3<f32>(0.25, 0.65, 0.25);
 const BAKED_LANES: vec4<f32> = vec4<f32>(5.0, 2.0, 0.9, 0.55);
-const BAKED_WHITE: vec4<f32> = vec4<f32>(0.7, 0.12, 1.0, 5.0);
+const BAKED_WHITE: vec4<f32> = vec4<f32>(0.7, 0.25, 1.0, 5.0);
+const BAKED_WHITE_FROM: f32 = 0.95;
 // How far the heart's glow goes to a grey of its own luminance: the ramp's hottest has too
 // little blue to clear the white band's least channel (235) however bright (g56: white 0.0-0.1
 // at 5 times), and a blackbody's heart past the film's shoulder reads white.
@@ -2043,7 +2046,7 @@ fn hearth_march(in: VertexOutput) -> vec4<f32> {
             var covered = a * r.a;
             if f.baked.w > 0.0 {
                 covered = 1.0 - exp(-gas.x * baked_cover(saturate(pl.y / f.tall)) * min(ds, far - s));
-                let hot = smoothstep(0.99, 1.0, gas.y);
+                let hot = smoothstep(BAKED_WHITE_FROM, 1.0, gas.y);
                 let grey = vec3(dot(flame, vec3(0.2126, 0.7152, 0.0722)));
                 flame = mix(flame, grey, BAKED_WHITE_MIX * hot) * (1.0 + BAKED_WHITE.w * hot);
             }
