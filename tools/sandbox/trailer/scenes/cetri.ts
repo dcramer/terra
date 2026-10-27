@@ -193,9 +193,11 @@ const STEP_DUST = 2.0;
 /// on dark bark. Nearer side-on, or on its right, the two oaks it walks out between stand in
 /// the line (flora's obstacles at (16.0, 35.9) and (20.4, 34.5): round 16's first two takes
 /// were a trunk); from 12.4 s at 40-65 degrees the line is clear of every
-/// trunk (at 9.5 m tall, 12.5 m off, 40-65 degrees: 2.4 m). Its footfalls shake it `shake` times the walker's eye's, and puff `dust` big, for
+/// trunk. At 9.5 m tall it stands 10 m off and 2 m up: 12.5 m off and 1.2 m up, the bushes
+/// on its left hid all below its hips (round 16); at 52-65 degrees a near trunk crossed the
+/// frame's edge (round 17). Its footfalls shake it `shake` times the walker's eye's, and puff `dust` big, for
 /// the distance. The walker's eye has the walk's first step before it and the menace after.
-const SIDE = { from: 12.5, to: 15.5, off: 12.5, closes: 1.5, bearing: 40, swings: 25, up: 1.2, look: 4.0, shake: 0.4, dust: 2.5 };
+const SIDE = { from: 12.5, to: 15.5, off: 10.0, closes: 1.5, bearing: 40, swings: 25, up: 2.0, look: 4.0, shake: 0.4, dust: 2.5 };
 /// How far it lunges and how fast, metres and metres a second.
 const LUNGE_M = 2.0 * SIZE;
 const LUNGE_SPEED = 4.5;
