@@ -408,18 +408,22 @@ fn mantle<M: Mover>(new: &impl Fn() -> M, kind: &Kind, top: Top) -> Outcome {
     let mut stood = false;
     let seconds = reach_s(kind) + after;
     for _ in 0..(seconds / TICK) as usize {
-        let i = walk(&run.body(0));
+        // Once it stands on the top the stick is let go, so it ends there: the case asks that it
+        // stays, not that it touched the top and fell back.
+        let i = if stood {
+            Intent::default()
+        } else {
+            walk(&run.body(0))
+        };
         trace.tick(&mut run, kind, i);
         stood |= on_top(&run.body(0), kind, high);
         if trace.touch.is_some_and(|t| trace.t > t + after) {
             break;
         }
     }
-    // Stood on the top at all: the walk goes on over it, and a fast kind pulled up early walks
-    // off the top's far end before the case ends.
     let is = match top {
         Top::Roofed => stood,
-        _ => !stood,
+        _ => !on_top(&run.body(0), kind, high),
     };
     run.outcome(wrong(is))
 }
