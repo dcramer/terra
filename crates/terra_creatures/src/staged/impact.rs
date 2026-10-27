@@ -36,6 +36,8 @@ const LAYER_OF: [(terra_core::MaterialId, usize); 6] = [
     (material::SCREE, 8),
     (material::GRAVEL, 9),
 ];
+/// How many puffs a burst's dust is: one in the middle, the rest a ring rolling out.
+const PUFFS: u32 = 9;
 /// The colour of ground whose textures are not in, as dry gravel is.
 const DRY_GROUND: Color = Color::srgb(0.46, 0.43, 0.39);
 /// Spray, lit white as foam and spray are.
@@ -390,10 +392,12 @@ fn dust(
     // surface can be the soil under a gravel shore, whose mud read as a brown tint over the
     // troll, so it is half a dry earth grey; a dark one, as a pale grey lit through by a low
     // sun read as white paper or snow over the forest's litter (the Cetri's round-7 reviews),
-    // and half that, lit through, as beige or tan quads (round 9): a dark, dry earth, thin.
-    let colour = colour.mix(&Color::srgb(0.25, 0.22, 0.18), 0.6);
+    // and half that, lit through, as beige or tan quads (round 9): a dark, dry earth. Thin, it
+    // read as nothing at a giant's footfall (the Cetri's round-12 reviews): denser and darker,
+    // nine puffs low along the ground.
+    let colour = colour.mix(&Color::srgb(0.18, 0.15, 0.12), 0.72);
     let size = s.size;
-    for puff in 0..7u32 {
+    for puff in 0..PUFFS {
         let middle = puff == 0;
         let life = if middle {
             2.4
@@ -405,18 +409,18 @@ fn dust(
             materials,
             soft,
             colour,
-            if middle { 0.42 } else { 0.34 },
+            if middle { 0.56 } else { 0.46 },
             life,
             false,
         );
-        let out = s.round(puff as f32 / 6.0 + 0.1 * s.r(puff, 2));
+        let out = s.round(puff as f32 / (PUFFS - 1) as f32 + 0.1 * s.r(puff, 2));
         // A ring thrown out low along the ground, as a heavy blow's dust rolls out from it,
         // not a cloud standing over it (which hung in front of the troll as a tint).
         for sprite in 0..3u32 {
             let i = puff * 3 + sprite;
             let speed = if middle { 0.4 } else { 1.8 + 1.4 * s.r(i, 3) } * size;
             let velocity =
-                out * speed + s.up * (0.1 + 0.25 * s.r(i, 4)) * size + s.round(s.r(i, 5)) * 0.3;
+                out * speed + s.up * (0.06 + 0.16 * s.r(i, 4)) * size + s.round(s.r(i, 5)) * 0.3;
             let wide = if middle { 1.3 } else { 0.8 + 0.5 * s.r(i, 6) } * size;
             s.mote(
                 &material,
