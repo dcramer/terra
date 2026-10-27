@@ -152,6 +152,8 @@ fn worth_saying(line: &str) -> Option<&str> {
         "CPU passes, ",
         "triangles a frame, ",
         "drawn, medians: ",
+        // What `--tune` set, or why the run refused it (D547).
+        "Tune: ",
     ]
     .iter()
     .find_map(|key| line.find(key))
