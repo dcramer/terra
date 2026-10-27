@@ -116,3 +116,70 @@ fn every_stair_is_lit() {
         assert_eq!(dark, 0, "{}: {dark} of {stairs} stairs dark", theme.name);
     }
 }
+
+/// Whether a point stands in a room's cells, from its cells' boxes: a cell's floor to a
+/// level up.
+fn in_room(rect: crate::place::Rect, p: Vec3) -> bool {
+    rect.cells().any(|at| {
+        let frame = Frame::new(at, 0);
+        let (a, b) = (
+            frame.point(0.0, 0.0, 0.0),
+            frame.point(CELL as f32, LEVEL as f32, CELL as f32),
+        );
+        p.cmpge(a.min(b)).all() && p.cmplt(a.max(b)).all()
+    })
+}
+
+/// A big room is lit from two places at least, its torches, braziers and fire bowls: the light
+/// cap cut the second torch of the crypt's hall and vault (barrow round 13).
+#[test]
+fn a_big_room_has_two_torches() {
+    let mut failed = Vec::new();
+    for theme in Theme::all(&assets()).unwrap() {
+        let set = ModuleSet::new(&theme).unwrap();
+        let seeds: Vec<u64> = (0..SEEDS).collect();
+        let counts = terra_gen::par::map(&seeds, |&s| {
+            let dungeon = generate(&theme, &set, Seed(s)).ok()?;
+            let stamp = stamp(&dungeon, &theme, &kind);
+            let torches: Vec<Vec3> = stamp.lights.iter().map(|l| l.at).collect();
+            let layout = &dungeon.layout;
+            let big: Vec<usize> = (0..layout.rooms.len())
+                .filter(|&r| layout.rooms[r].size.element_product() >= runin::BIG_ROOM_CELLS)
+                .filter(|&r| dungeon.graph.rooms[r].role != crate::theme::Role::Rest)
+                .collect();
+            let dim: Vec<usize> = big
+                .iter()
+                .copied()
+                .filter(|&r| {
+                    torches
+                        .iter()
+                        .filter(|&&t| in_room(layout.rooms[r], t))
+                        .count()
+                        < 2
+                })
+                .collect();
+            for &r in &dim {
+                let rect = layout.rooms[r];
+                let n = torches.iter().filter(|&&t| in_room(rect, t)).count();
+                println!(
+                    "{} seed {s}: room {r}, {:?}, {:?}, {n} lights",
+                    theme.name, rect.size, dungeon.graph.rooms[r].role
+                );
+            }
+            Some((big.len(), dim.len()))
+        });
+        let counts: Vec<_> = counts.into_iter().flatten().collect();
+        let big: usize = counts.iter().map(|c| c.0).sum();
+        let dim: usize = counts.iter().map(|c| c.1).sum();
+        println!(
+            "{}: {big} rooms of {} cells or more in {} dungeons, {dim} with under two torches",
+            theme.name,
+            runin::BIG_ROOM_CELLS,
+            counts.len()
+        );
+        if dim > 0 {
+            failed.push(format!("{}: {dim} of {big}", theme.name));
+        }
+    }
+    assert!(failed.is_empty(), "big rooms with one torch: {failed:?}");
+}

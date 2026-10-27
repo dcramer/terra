@@ -331,19 +331,35 @@ fn stair_torch(layout: &Layout, stair: &Stair) -> Option<Light> {
     })
 }
 
+/// How many cells a room has at least to take a second torch, at its far end from the first.
+pub(super) const BIG_ROOM_CELLS: i32 = 6;
+
 /// Torches: one in each room (none in the rest room, which has its fire), on a wall
-/// decoration first; then on the end walls a corridor's legs run into (`end_walls`); then one
-/// every third corridor cell, none beside a torch; then a second in rooms of six cells or more;
-/// until the dungeon has `LIGHTS`. Then one on a side wall of each stair no torch lights yet
+/// decoration first; then on the end walls a corridor's legs run into (`end_walls`); then a
+/// second in rooms of `BIG_ROOM_CELLS` or more, at the far end from the first; then one every
+/// third corridor cell, none beside a torch; until the dungeon has `LIGHTS`. Then the rooms'
+/// own torches the cap cut, and one on a side wall of each stair no torch lights yet
 /// (`stair_torch`), past the cap.
 fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
     let layout = &dungeon.layout;
     let mut rooms: Vec<Vec<(IVec3, usize)>> = Vec::new();
+    // Each room's walled cells but its stair, a niche's on a wall beside its niche: where a
+    // room's torches go when its free cells give none, or a big room's no second (a treasure
+    // room of six cells all niches or shore had no torch at all).
+    let mut walls: Vec<Vec<(IVec3, usize)>> = Vec::new();
     for (r, rect) in layout.rooms.iter().enumerate() {
         let mut found: Vec<(u32, IVec3, usize)> = Vec::new();
+        let mut walled = Vec::new();
         for at in rect.cells() {
             let Some(c) = layout.cell(at) else { continue };
             let look = looks[c];
+            // A niche's own wall is the niche: another of its walls, or none.
+            let niche = (look.class == Class::Alcove).then_some(look.turn);
+            let walls_of = (0..4).filter(|&d| layout.cells[c].sides[d] == Side::Wall);
+            let mut sides = walls_of.filter(|&d| Some(d) != niche);
+            if let Some(d) = sides.next().filter(|_| look.class != Class::Stair) {
+                walled.push((at, d));
+            }
             if !free(look.class) || matches!(look.class, Class::Alcove | Class::Shore) {
                 continue;
             }
@@ -359,11 +375,20 @@ fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
                 found.push((rank, at, d));
             }
         }
+        if found.is_empty() {
+            // A room all niches, shore, key or rubble still takes its torch on a wall.
+            found.extend(
+                walled
+                    .iter()
+                    .map(|&(at, d)| (1 + hash(at, 301) % 1000, at, d)),
+            );
+        }
         found.sort_by_key(|&(rank, at, d)| (rank, at.to_array(), d));
         if dungeon.graph.rooms[r].role == Role::Rest {
             found.clear();
         }
         rooms.push(found.into_iter().map(|(_, at, d)| (at, d)).collect());
+        walls.push(walled);
     }
     let mut lit = Vec::new();
     lit.extend(rooms.iter().filter_map(|found| found.first().copied()));
@@ -373,6 +398,24 @@ fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
         let ends = end_walls(layout, run, &lit);
         lit.extend(ends);
     }
+    // A big room's second torch before the runs' every third cell, and past the cap where the
+    // rooms and end walls reach it: queued after the runs' cells, the cap cut it, and the
+    // crypt's big rooms stood lit from one wall (barrow round 13).
+    let seconds: Vec<(IVec3, usize)> = rooms
+        .iter()
+        .enumerate()
+        .filter(|(r, _)| layout.rooms[*r].size.element_product() >= BIG_ROOM_CELLS)
+        .filter_map(|(r, found)| {
+            let &(first, _) = found.first()?;
+            let farthest = |spots: &[(IVec3, usize)]| {
+                let far = spots.iter().filter(|(at, _)| *at != first);
+                far.max_by_key(|(at, _)| (*at - first).abs().element_sum())
+                    .copied()
+            };
+            farthest(found).or_else(|| farthest(&walls[r]))
+        })
+        .collect();
+    lit.extend(&seconds);
     for run in &layout.corridors {
         for (k, &at) in run.iter().enumerate().filter(|(k, _)| k % 3 == 1) {
             if lit.iter().any(|&(t, _)| beside(run, at, t)) {
@@ -386,22 +429,17 @@ fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
             }
         }
     }
-    for (r, found) in rooms.iter().enumerate() {
-        let big = layout.rooms[r].size.element_product() >= 6;
-        let Some(&(first, _)) = found.first() else {
-            continue;
-        };
-        let far = found
-            .iter()
-            .filter(|(at, _)| *at != first)
-            .max_by_key(|(at, _)| (*at - first).abs().element_sum());
-        if let (true, Some(&second)) = (big, far) {
-            lit.push(second);
-        }
-    }
     let room = LIGHTS.saturating_sub(out.lights.len());
+    let taken: Vec<(IVec3, usize)> = lit.into_iter().take(room).collect();
+    // A room's own torches the cap cut go past it: where the fires and braziers took most of
+    // it, the last rooms' firsts went too, a treasure room of six cells left dark.
+    let firsts = rooms.iter().filter_map(|found| found.first().copied());
+    let cut: Vec<(IVec3, usize)> = firsts
+        .chain(seconds)
+        .filter(|own| !taken.contains(own))
+        .collect();
     out.lights
-        .extend(lit.into_iter().take(room).map(|(at, d)| torch(at, d)));
+        .extend(taken.iter().copied().chain(cut).map(|(at, d)| torch(at, d)));
     // A stair's torch comes on top of the cap, the way on never dark: the flooded mine's nine
     // stairs a dungeon would otherwise take the cap's last lights from its end walls. A stair
     // whose steps another torch already lights gets none.

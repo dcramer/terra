@@ -64,8 +64,8 @@ pub(crate) const INNER: i32 = CELL - 2;
 pub(crate) const MID: f32 = CELL as f32 * 0.5;
 // A stair climbs a level in its two cells: two flat columns at each end and a cube a step.
 const _: () = assert!(2 * CELL - 4 == LEVEL);
-/// Lights a dungeon gets at most, its stairs' torches aside (`runin::torches`); the renderer
-/// draws the nearest 16 fires.
+/// Lights a dungeon gets at most, its stairs' torches and the rooms' own the cap
+/// cuts aside (`runin::torches`); the renderer draws the nearest 16 fires.
 pub(crate) const LIGHTS: usize = 30;
 
 /// A box of terrain to dig away before the cubes are laid.
