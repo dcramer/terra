@@ -67,28 +67,93 @@
         (name: "campfire", sides: ["any", "any", "any", "any"], fixed: true, spaces: [Room]),
         (name: "stair", sides: ["open|wall|stair", "open|wall|stair", "open|wall|stair", "open|wall|stair"], fixed: true, spaces: [Stair], rotates: false),
     ],
-    // Rooms by what they are for (stamp/furnish.rs): props against their walls, so many per
-    // four cells. A guard room's fallen, a treasury's grave goods, the ossuary's heaped dead,
-    // a rest's stores left by those who came before; fallen stone and a few dead elsewhere.
+    // Rooms by what they are for, each a room type with a story (docs/dungeons.md's room
+    // types, D539, Open: the developers choose): a hero prop on the wall that faces the way in
+    // (none where the room's feature is its hero), a vignette, wall props so many per four
+    // cells, clutter so many a cell (stamp/furnish.rs).
     dressing: [
-        (roles: [Entrance, Passage, Branch, Shortcut], props: [
-            ("models/props/barrow/Bones.glb", 1.0), ("models/nature/Rock_3.glb", 4.0),
+        // The antechamber, where mourners left their offerings at the threshold.
+        (name: "antechamber", roles: [Entrance],
+         hero: [("models/props/barrow/Altar.glb", 1.0)],
+         props: [
+            ("models/props/barrow/Urns.glb", 1.0), ("models/props/barrow/Candles.glb", 1.0),
+            ("models/props/VasePair.glb", 1.0),
+         ], count: (2, 3),
+         clutter: [("models/props/barrow/Candles.glb", 0.8), ("models/nature/Rock_3.glb", 4.0)], litter: (1, 1)),
+        // The ossuary passage: the dead laid along it, a coffin waiting for its niche.
+        (name: "ossuary passage", roles: [Passage],
+         hero: [("models/props/barrow/Coffin.glb", 1.0)],
+         props: [
+            ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0),
+            ("models/props/barrow/Shroud.glb", 1.0), ("models/nature/Rock_6.glb", 0.35),
+         ], count: (2, 3),
+         clutter: [("models/nature/Rock_3.glb", 4.0), ("models/props/barrow/Candles.glb", 0.7)], litter: (1, 1)),
+        // A robbed tomb: the coffin's lid pushed aside, the looter's leavings by a chest.
+        (name: "robbed tomb", roles: [Branch],
+         hero: [("models/props/barrow/Coffin.glb", 1.0)],
+         props: [
             ("models/props/VasePair.glb", 1.0), ("models/nature/Rock_6.glb", 0.35),
-        ], count: (1, 2)),
-        (roles: [Guard], props: [
-            ("models/props/barrow/Bones.glb", 2.0), ("models/props/barrow/Shroud.glb", 1.0),
-            ("models/nature/Rock_7.glb", 0.4),
-        ], count: (2, 3)),
-        (roles: [Treasure, Secret, Goal], props: [
-            ("models/props/VaseRow.glb", 1.0), ("models/props/Goblets.glb", 1.0),
-            ("models/props/VasePair.glb", 1.0), ("models/props/BowlStack.glb", 1.0),
-        ], count: (1, 3)),
-        (roles: [Puzzle], props: [
+            ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0),
+         ], count: (2, 3),
+         clutter: [("models/props/Goblets.glb", 1.0), ("models/props/BowlStack.glb", 1.0), ("models/nature/Rock_3.glb", 4.0)], litter: (1, 1),
+         vignette: [
+            ("models/props/Chest.glb", 1.0, (0.0, 0.05)), ("models/props/Goblets.glb", 1.0, (0.85, 0.3)),
+            ("models/props/Lantern.glb", 1.0, (-0.8, 0.1)),
+         ]),
+        // A guard post: the guards' bench, their fallen, their last stand.
+        (name: "guard post", roles: [Guard],
+         hero: [("models/props/Bench.glb", 1.0)],
+         props: [
             ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Shroud.glb", 1.0),
-        ], count: (2, 3)),
-        (roles: [Rest], props: [
+            ("models/props/Barrel.glb", 1.0), ("models/props/Lantern.glb", 1.0),
+         ], count: (2, 3),
+         clutter: [("models/props/barrow/Bones.glb", 0.8), ("models/nature/Rock_7.glb", 0.4)], litter: (1, 1),
+         vignette: [
+            ("models/props/barrow/Shroud.glb", 1.0, (0.0, 0.0)), ("models/props/AxesLaid.glb", 1.0, (1.1, 0.2)),
+            ("models/props/Lantern.glb", 1.0, (-1.1, 0.05)),
+         ]),
+        // The ossuary, the key on its altar (the room's hero): the heaped dead.
+        (name: "ossuary", roles: [Puzzle],
+         props: [
+            ("models/props/barrow/Bones.glb", 1.0), ("models/props/barrow/Shroud.glb", 1.0),
+            ("models/props/barrow/Urns.glb", 1.0),
+         ], count: (3, 4),
+         clutter: [("models/props/barrow/Candles.glb", 0.8), ("models/props/barrow/Bones.glb", 0.7)], litter: (1, 1)),
+        // A treasury of grave goods round its chest.
+        (name: "treasury", roles: [Treasure, Secret],
+         hero: [("models/props/Chest.glb", 1.1)],
+         props: [
+            ("models/props/VaseRow.glb", 1.0), ("models/props/Goblets.glb", 1.0),
+            ("models/props/barrow/Urns.glb", 1.0), ("models/props/BowlStack.glb", 1.0),
+            ("models/props/Chest.glb", 1.0), ("models/props/BrassPans.glb", 1.0),
+         ], count: (3, 4),
+         clutter: [("models/props/Goblets.glb", 1.0), ("models/props/PlateStack.glb", 1.0), ("models/props/VasePair.glb", 1.0)], litter: (1, 2),
+         vignette: [
+            ("models/props/barrow/Candles.glb", 1.0, (0.0, 0.1)), ("models/props/Goblets.glb", 1.0, (0.55, 0.2)),
+            ("models/props/VaseRow.glb", 1.0, (-0.65, 0.0)),
+         ]),
+        // A chapel on the way back: an altar and its candles.
+        (name: "chapel", roles: [Shortcut],
+         hero: [("models/props/barrow/Altar.glb", 1.0)],
+         props: [("models/props/barrow/Candles.glb", 1.0), ("models/props/barrow/Urns.glb", 1.0)], count: (2, 3),
+         clutter: [("models/props/barrow/Candles.glb", 0.8)], litter: (1, 1)),
+        // The lord's burial chamber, the relic on its dais its hero: grave goods by the walls.
+        (name: "lord's chamber", roles: [Goal],
+         props: [
+            ("models/props/barrow/Urns.glb", 1.0), ("models/props/VaseRow.glb", 1.0),
+            ("models/props/Goblets.glb", 1.0), ("models/props/barrow/Candles.glb", 1.0),
+         ], count: (2, 3),
+         clutter: [("models/props/barrow/Candles.glb", 0.8)], litter: (1, 1)),
+        // The camp of delvers who came before, round its fire.
+        (name: "delvers' camp", roles: [Rest],
+         props: [
             ("models/props/Sack.glb", 1.0), ("models/props/Log.glb", 1.0),
-            ("models/props/Buckets.glb", 1.0), ("models/props/BowlStack.glb", 1.0),
-        ], count: (2, 3)),
+            ("models/props/Buckets.glb", 1.0),
+         ], count: (2, 3),
+         clutter: [("models/props/BowlStack.glb", 1.0), ("models/props/StewPot.glb", 1.0)], litter: (1, 1),
+         vignette: [
+            ("models/props/Sack.glb", 1.0, (0.0, 0.0)), ("models/props/Lantern.glb", 1.0, (0.65, 0.15)),
+            ("models/props/BowlStack.glb", 1.0, (-0.65, 0.1)),
+         ]),
     ],
 )

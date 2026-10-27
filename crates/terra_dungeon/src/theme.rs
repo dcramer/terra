@@ -160,6 +160,24 @@ pub struct Dress {
     pub props: Vec<(String, f32)>,
     /// Props a room, least and most, more in a bigger room: so many per four cells.
     pub count: (u32, u32),
+    /// The room type it makes, as a level designer names it (ossuary, treasury, guard post):
+    /// docs/dungeons.md, room types (D539).
+    #[serde(default)]
+    pub name: String,
+    /// The room's focal prop, one a room, on the bare wall farthest from its doorways; a room
+    /// whose feature (a dais, an altar, a fire) is its hero takes none.
+    #[serde(default)]
+    pub hero: Vec<(String, f32)>,
+    /// Small things on the floor, in the corners and then by the walls.
+    #[serde(default)]
+    pub clutter: Vec<(String, f32)>,
+    /// Clutter a cell, least and most.
+    #[serde(default)]
+    pub litter: (u32, u32),
+    /// A moment told by props laid together: each a model, its scale and its place from one
+    /// wall spot, (along the wall, out from it) in metres; laid all or none.
+    #[serde(default)]
+    pub vignette: Vec<(String, f32, (f32, f32))>,
 }
 
 /// A built theme's dressed kit (docs/dungeons.md#themes-d527): models from the asset root the

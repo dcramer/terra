@@ -1,10 +1,11 @@
-//! A room dressed by what it is for (the theme's `dressing`): props laid against its walls
-//! after the run-in, off the tour and the doorways and apart from what already stands, as a
-//! level designer sets a guard room out with its fallen and a treasury with its offerings
-//! once the room's kit is in.
+//! A room dressed as its room type (the theme's `dressing`, docs/dungeons.md's room types,
+//! D539), as a level designer sets dressing out once the room's kit is in: its hero prop on
+//! the wall that faces the way in, a vignette that tells what happened there, wall props in
+//! rhythm along its bare walls and clutter in its corners; all off the tour and the doorways
+//! and apart from what already stands.
 
 use super::modules::{Class, Look};
-use super::{Frame, LightKind, MID, Prop, Stamp, hash, stands};
+use super::{CELL, CUBE, Frame, LightKind, MID, Prop, Stamp, hash, stands};
 use crate::Dungeon;
 use crate::place::{Side, opposite};
 use crate::theme::Dress;
@@ -16,11 +17,88 @@ use terra_build::Cube;
 /// one: the eye keeps 0.5 m off walls, and a prop stands out from a wall at most 0.6 m.
 pub(crate) const OFF_ROUTE_M: f32 = 1.3;
 /// From a doorway's middle, so none stands in the way in.
-const OFF_DOOR_M: f32 = 1.6;
+pub(crate) const OFF_DOOR_M: f32 = 1.6;
 /// From what already stands (props, objects, chests, mobs, fires) and from each other.
 const APART_M: f32 = 1.0;
+/// Clutter from everything: small things lie closer.
+const CLUTTER_APART_M: f32 = 0.6;
+/// What a hero keeps clear round it, so it reads alone: a coffin's or an altar's length.
+const HERO_M: f32 = 1.5;
 /// Out from the wall's cell edge, in cubes: 0.3 m clear of its face.
 const OUT: f32 = 1.6;
+
+/// A place against a bare wall: its cell and the wall's side, how far along it and out, in
+/// cubes of the wall's frame, the point, and how far it is from the room's nearest doorway.
+#[derive(Clone, Copy)]
+struct Spot {
+    rank: u32,
+    at: IVec3,
+    d: usize,
+    x: f32,
+    p: Vec3,
+    door: f32,
+    /// Floor for a long prop: two cubes either side.
+    wide: bool,
+}
+
+impl Spot {
+    /// A point from this spot, along its wall and out from it, in metres.
+    fn offset(self, along: f32, out: f32) -> Vec3 {
+        Frame::new(self.at, self.d).point(self.x + along / CUBE, 0.0, OUT + out / CUBE)
+    }
+}
+
+/// What a room's dressing must keep clear of, and where it may stand.
+struct Room<'a> {
+    route: &'a [Vec3],
+    doors: Vec<Vec3>,
+    map: &'a HashMap<IVec3, Cube>,
+}
+
+impl Room<'_> {
+    /// Off the tour and the doorways, on a floor with headroom.
+    fn clear(&self, p: Vec3) -> bool {
+        off(self.route, p) > OFF_ROUTE_M
+            && self.doors.iter().all(|d| d.distance(p) > OFF_DOOR_M)
+            && stands(self.map, (p / CUBE).floor().as_ivec3())
+    }
+}
+
+/// Whether a point keeps `gap` from everything taken, and each taken thing's own clearance.
+fn free(taken: &[(Vec3, f32)], p: Vec3, gap: f32) -> bool {
+    taken
+        .iter()
+        .all(|&(t, keep)| t.distance(p) >= gap.max(keep))
+}
+
+fn put(out: &mut Stamp, (model, scale): &(String, f32), at: Vec3, facing: usize) {
+    out.props.push(Prop {
+        model: model.clone(),
+        at,
+        facing,
+        scale: *scale,
+    });
+}
+
+/// The side facing the nearest of `doors` from `p`, 0..4 = north, east, south, west.
+fn toward(p: Vec3, doors: &[Vec3]) -> usize {
+    let near = doors
+        .iter()
+        .min_by(|a, b| a.distance(p).total_cmp(&b.distance(p)));
+    let Some(d) = near.map(|d| *d - p) else {
+        return 2;
+    };
+    match (d.x.abs() > d.z.abs(), d.x > 0.0, d.z > 0.0) {
+        (true, true, _) => 1,
+        (true, false, _) => 3,
+        (false, _, true) => 2,
+        (false, _, false) => 0,
+    }
+}
+
+fn pick<'a>(list: &'a [(String, f32)], salt: u32) -> &'a (String, f32) {
+    &list[salt as usize % list.len()]
+}
 
 pub(super) fn lay(
     dungeon: &Dungeon,
@@ -30,14 +108,23 @@ pub(super) fn lay(
     out: &mut Stamp,
 ) {
     let layout = &dungeon.layout;
-    let mut taken: Vec<Vec3> = out.props.iter().map(|p| p.at).collect();
-    taken.extend(out.objects.iter().map(|o| o.at));
-    taken.extend(out.chests.iter().map(|c| c.at));
-    taken.extend(out.mobs.iter().map(|m| m.at));
     let fires = out.lights.iter().filter(|l| l.kind != LightKind::Torch);
-    taken.extend(fires.map(|l| l.at));
+    let mut taken: Vec<(Vec3, f32)> = (out.props.iter().map(|p| p.at))
+        .chain(out.objects.iter().map(|o| o.at))
+        .chain(out.chests.iter().map(|c| c.at))
+        .chain(out.mobs.iter().map(|m| m.at))
+        .chain(fires.map(|l| l.at))
+        .map(|p| (p, 0.0))
+        .collect();
     let route = out.route.clone();
     for (r, room) in dungeon.graph.rooms.iter().enumerate() {
+        let dresses: Vec<&Dress> = dressing
+            .iter()
+            .filter(|d| d.roles.contains(&room.role))
+            .collect();
+        if dresses.is_empty() {
+            continue;
+        }
         let rect = layout.rooms[r];
         let cells: Vec<(IVec3, usize)> = rect
             .cells()
@@ -52,49 +139,167 @@ pub(super) fn lay(
                     .map(move |d| Frame::new(at, d).point(MID, 0.0, 0.0))
             })
             .collect();
-        // Against each walled side of a plain cell, a metre, two and three along it.
-        let mut spots: Vec<(u32, Vec3, usize)> = Vec::new();
+        let place = Room {
+            route: &route,
+            doors,
+            map,
+        };
+        let near_door = |p: Vec3| {
+            place
+                .doors
+                .iter()
+                .map(|d| d.distance(p))
+                .fold(99.0, f32::min)
+        };
+        // Against each walled side of a bare cell, a metre, two and three along it; and the
+        // corners where two walls meet, for clutter.
+        let (mut spots, mut corners) = (Vec::new(), Vec::new());
         for &(at, c) in cells.iter().filter(|&&(_, c)| bare(looks[c].class)) {
-            for d in (0..4).filter(|&d| layout.cells[c].sides[d] == Side::Wall) {
+            let sides = layout.cells[c].sides;
+            for d in (0..4).filter(|&d| sides[d] == Side::Wall) {
                 let f = Frame::new(at, d);
                 for x in [2, 4, 6] {
                     let p = f.point(x as f32, 0.0, OUT);
                     let floor = (x - 1..=x).all(|x| stands(map, f.cube(x, 0, 1)));
-                    let clear = off(&route, p) > OFF_ROUTE_M
-                        && doors.iter().all(|d| d.distance(p) > OFF_DOOR_M);
-                    if floor && clear {
-                        spots.push((hash(at, 500 + 8 * d as u32 + x as u32), p, d));
+                    if floor && place.clear(p) {
+                        let wide = (x - 2..=x + 1).all(|x| x > 0 && x < CELL - 1)
+                            && (x - 2..=x + 1).all(|x| stands(map, f.cube(x, 0, 1)));
+                        let rank = hash(at, 500 + 8 * d as u32 + x as u32);
+                        let (x, door) = (x as f32, near_door(p));
+                        spots.push(Spot {
+                            rank,
+                            at,
+                            d,
+                            x,
+                            p,
+                            door,
+                            wide,
+                        });
+                    }
+                }
+                if sides[(d + 1) % 4] == Side::Wall {
+                    let p = f.point(CELL as f32 - OUT, 0.0, OUT);
+                    if place.clear(p) {
+                        corners.push((hash(at, 540 + d as u32), p, opposite(d)));
                     }
                 }
             }
         }
-        spots.sort_by_key(|&(rank, p, d)| (rank, p.to_array().map(f32::to_bits), d));
-        for (k, dress) in dressing
+        spots.sort_by_key(|s| (s.rank, s.p.to_array().map(f32::to_bits), s.d));
+        corners.sort_by_key(|&(rank, p, d)| (rank, p.to_array().map(f32::to_bits), d));
+        let salt = |k: u32| hash(rect.min, k);
+
+        // The hero, unless the room's feature or tomb is: the wall spot farthest from the
+        // doorways, a long one's floor first.
+        let featured = cells.iter().any(|&(_, c)| {
+            matches!(
+                looks[c].class,
+                Class::Goal | Class::Key | Class::Rest | Class::Sarcophagus
+            )
+        });
+        // Open floor, for what finds no bare wall: a room of niches, rubble or racks.
+        let mut floor = Vec::new();
+        for &(at, c) in &cells {
+            if matches!(looks[c].class, Class::Collapse | Class::Stair) {
+                continue;
+            }
+            let f = Frame::new(at, 0);
+            for (x, z) in [2, 4, 6].into_iter().flat_map(|x| [(x, 2), (x, 4), (x, 6)]) {
+                let p = f.point(x as f32, 0.0, z as f32);
+                if place.clear(p) {
+                    floor.push((
+                        hash(at, 560 + (x * CELL + z) as u32),
+                        p,
+                        toward(p, &place.doors),
+                    ));
+                }
+            }
+        }
+        floor.sort_by_key(|&(rank, p, d)| (rank, p.to_array().map(f32::to_bits), d));
+        if let Some(dress) = dresses.iter().find(|d| !d.hero.is_empty() && !featured) {
+            let mut order = spots.clone();
+            order.sort_by(|a, b| b.wide.cmp(&a.wide).then(b.door.total_cmp(&a.door)));
+            let mut open = floor.clone();
+            open.sort_by(|a, b| near_door(b.1).total_cmp(&near_door(a.1)));
+            let at = (order.iter())
+                .find(|s| free(&taken, s.p, APART_M))
+                .map(|s| (s.p, opposite(s.d)))
+                .or_else(|| {
+                    let mut open = open.iter();
+                    open.find(|o| free(&taken, o.1, APART_M))
+                        .map(|o| (o.1, o.2))
+                });
+            if let Some((p, facing)) = at {
+                put(out, pick(&dress.hero, salt(530)), p, facing);
+                taken.push((p, HERO_M));
+            }
+        }
+        // A vignette at the first spot where all of it fits.
+        for dress in dresses.iter().filter(|d| !d.vignette.is_empty()) {
+            let fits = |s: &Spot| {
+                let at: Vec<Vec3> = dress
+                    .vignette
+                    .iter()
+                    .map(|(_, _, (along, o))| s.offset(*along, *o))
+                    .collect();
+                at.iter()
+                    .all(|&p| place.clear(p) && free(&taken, p, CLUTTER_APART_M))
+                    .then_some(at)
+            };
+            if let Some((s, at)) = spots.iter().find_map(|s| fits(s).map(|at| (*s, at))) {
+                for ((model, scale, _), p) in dress.vignette.iter().zip(at) {
+                    put(out, &(model.clone(), *scale), p, opposite(s.d));
+                    taken.push((p, CLUTTER_APART_M));
+                }
+                break;
+            }
+        }
+        // Wall props, so many per four cells.
+        for (k, dress) in dresses
             .iter()
             .enumerate()
-            .filter(|(_, dress)| dress.roles.contains(&room.role) && !dress.props.is_empty())
+            .filter(|(_, d)| !d.props.is_empty())
         {
             let (least, most) = dress.count;
-            let spread = most.saturating_sub(least) + 1;
-            let per = least + hash(rect.min, 520 + k as u32) % spread;
+            let per = least + salt(520 + k as u32) % (most.saturating_sub(least) + 1);
             let wanted = (per as usize * cells.len()).div_ceil(4);
             let mut laid = 0;
-            for &(rank, p, d) in &spots {
+            for s in &spots {
                 if laid == wanted {
                     break;
                 }
-                if taken.iter().any(|t| t.distance(p) < APART_M) {
-                    continue;
+                if free(&taken, s.p, APART_M) {
+                    put(out, pick(&dress.props, s.rank), s.p, opposite(s.d));
+                    taken.push((s.p, 0.0));
+                    laid += 1;
                 }
-                let (model, scale) = &dress.props[rank as usize % dress.props.len()];
-                taken.push(p);
-                out.props.push(Prop {
-                    model: model.clone(),
-                    at: p,
-                    facing: opposite(d),
-                    scale: *scale,
-                });
-                laid += 1;
+            }
+        }
+        // Clutter a cell: the corners first, then by the walls between what stands there.
+        for (k, dress) in dresses
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| !d.clutter.is_empty())
+        {
+            let (least, most) = dress.litter;
+            let per = least + salt(550 + k as u32) % (most.saturating_sub(least) + 1);
+            let wanted = per as usize * cells.len();
+            // Between the wall props and a little out from them.
+            let by_walls = spots.iter().flat_map(|s| {
+                let facing = (opposite(s.d) + s.rank as usize) % 4;
+                [-0.5, 0.5].map(|along| (s.rank, s.offset(along, 0.45), facing))
+            });
+            let mut laid = 0;
+            let candidates = corners.iter().copied().chain(by_walls);
+            for (rank, p, facing) in candidates.chain(floor.iter().copied()) {
+                if laid == wanted {
+                    break;
+                }
+                if place.clear(p) && free(&taken, p, CLUTTER_APART_M) {
+                    put(out, pick(&dress.clutter, rank), p, facing);
+                    taken.push((p, 0.0));
+                    laid += 1;
+                }
             }
         }
     }
@@ -126,81 +331,5 @@ pub(crate) fn off(route: &[Vec3], p: Vec3) -> f32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::super::tests::kind;
-    use super::super::{Theme, stamp};
-    use crate::theme::assets;
-    use crate::{ModuleSet, generate};
-    use glam::Vec2;
-    use terra_gen::Seed;
-
-    /// The props a theme's dressing laid: those of its stamp not in the stamp undressed.
-    #[test]
-    fn rooms_are_dressed_by_purpose_off_the_cameras_way() {
-        for theme in Theme::all(&assets()).unwrap() {
-            if theme.dressing.is_empty() {
-                continue;
-            }
-            let bare_theme = Theme {
-                dressing: Vec::new(),
-                ..theme.clone()
-            };
-            let set = ModuleSet::new(&theme).unwrap();
-            let (mut rooms, mut dressed, mut props, mut nearest) = (0, 0, 0, f32::MAX);
-            for s in 0..40 {
-                let Ok(dungeon) = generate(&theme, &set, Seed(s)) else {
-                    continue;
-                };
-                let full = stamp(&dungeon, &theme, &kind);
-                let bare = stamp(&dungeon, &bare_theme, &kind);
-                assert_eq!(
-                    full.route, bare.route,
-                    "{} seed {s}: the same tour",
-                    theme.name
-                );
-                let laid: Vec<_> = full.props[bare.props.len()..].to_vec();
-                props += laid.len();
-                // The eye's path, not the floor's route the dressing kept off.
-                let flat = |v: glam::Vec3| Vec2::new(v.x, v.z);
-                for p in &laid {
-                    let gap = full
-                        .view
-                        .iter()
-                        .filter(|v| (v.y - p.at.y).abs() < 3.0)
-                        .map(|v| flat(*v).distance(flat(p.at)))
-                        .fold(f32::MAX, f32::min);
-                    nearest = nearest.min(gap);
-                }
-                for (r, room) in dungeon.graph.rooms.iter().enumerate() {
-                    if !theme.dressing.iter().any(|d| d.roles.contains(&room.role)) {
-                        continue;
-                    }
-                    rooms += 1;
-                    let rect = dungeon.layout.rooms[r];
-                    let lo = rect.min.as_vec3() * 4.0;
-                    let hi =
-                        lo + glam::Vec3::new(rect.size.x as f32, 0.0, rect.size.y as f32) * 4.0;
-                    let floor = super::super::floor_of(rect.min.y) as f32 * super::super::CUBE;
-                    let inside = |p: glam::Vec3| {
-                        (p.y - floor).abs() < 1.0
-                            && p.x > lo.x
-                            && p.x < hi.x
-                            && p.z > lo.z
-                            && p.z < hi.z
-                    };
-                    dressed += laid.iter().any(|p| inside(p.at)) as u32;
-                }
-            }
-            println!(
-                "{}: {props} props dressing {dressed} of {rooms} rooms, the nearest {nearest:.2} m from the eye's path",
-                theme.name
-            );
-            assert!(dressed * 10 >= rooms * 8, "{}: rooms dressed", theme.name);
-            assert!(
-                nearest > 0.9,
-                "{}: a prop {nearest:.2} m from the eye",
-                theme.name
-            );
-        }
-    }
-}
+#[path = "furnish_tests.rs"]
+mod tests;
