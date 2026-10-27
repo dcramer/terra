@@ -2,7 +2,8 @@
 //! In its own worktree, `.git/terra-nightly/src`, detached at origin/main, it runs what no hook
 //! runs whole: clippy and every test of the workspace, the slow ones too, the kit checker, the
 //! artifacts ratchet quick and over every scene, fuzz over seeds 0 to 200, the size ratchet, the
-//! combat and controller scorecards (D452, D457) and the docs check after rendering their indexes.
+//! combat and controller scorecards (D452, D457; the controller's bench and its filmed course's
+//! rows from a clean film of main too) and the docs check after rendering their indexes.
 //!
 //! When every stage passes it is the one place a baseline is lowered (D414): what fell, and an
 //! index that was stale, is committed alone and pushed to main from this machine, with the
@@ -199,7 +200,17 @@ const STAGES: &[Stage] = &[
         name: "controller",
         said: Said::Printed,
         build: &[],
-        run: &["node", "tools/controller/scorecard.ts", "--lower"],
+        // The heavy rows too (D457): the mover's bench, measured here, and the filmed course's
+        // from the newest clean film of main that nothing it reads changed since (the GPU's,
+        // `controller film` of continuous), so the ratchet bites on them; the probe holds the
+        // cheap rows alone, as an older scorecard knows no --filmed.
+        run: &[
+            "node",
+            "tools/controller/scorecard.ts",
+            "--lower",
+            "--bench",
+            "--filmed",
+        ],
         hold: CONTROLLER_HOLD,
     },
     Stage {
@@ -829,8 +840,11 @@ mod tests {
         assert_eq!(holds(COMBAT, &moved, false), Holds::Drop);
         let raised: BTreeSet<String> = [COMBAT.to_string()].into();
         assert_eq!(holds(COMBAT, &raised, false), Holds::Drop);
-        // The controller's likewise, by what its course reads: a move changes combat's alone.
+        // The controller's likewise, by what its course and film read: a move changes combat's
+        // alone, a clip both.
         assert_eq!(holds(CONTROLLER, &moved, false), Holds::Keep);
+        let clip: BTreeSet<String> = ["assets/models/character/base.glb".to_string()].into();
+        assert_eq!(holds(CONTROLLER, &clip, false), Holds::Drop);
         let walked: BTreeSet<String> = ["tools/controller/criteria.json".to_string()].into();
         assert_eq!(holds(CONTROLLER, &walked, false), Holds::Drop);
         assert_eq!(holds(COMBAT, &walked, false), Holds::Keep);

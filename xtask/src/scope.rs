@@ -169,17 +169,18 @@ pub(crate) const COMBAT: &[&str] = &[
 
 /// What the controller scorecard reads (D457, tools/controller): the course and the mover it
 /// drives (and the planet's field the walk asks it of), the walker its bench and filmed course
-/// drive (the course's yard, the walk's record), and the scorecard's own tools. A change here
-/// is measured again before a lowering of its baseline is carried, and runs the filmed course
-/// on main.
+/// drive (the course's yard, the walk's record), the figure the film shows (its clips, foot
+/// lock and placement, the soles the record samples), and the scorecard's own tools. A change
+/// here is measured again before a lowering of its baseline is carried, runs the filmed course
+/// on main, and makes a film of an older commit no longer main's (`scorecard.ts --filmed`).
 pub(crate) const CONTROLLER: &[&str] = &[
-    "crates/terra_motion/src/course/",
-    "crates/terra_motion/src/mover/",
+    "crates/terra_motion/src/",
     "assets/data/movers.ron",
+    "assets/models/character/",
     "crates/terra_world/src/planet.rs",
     "crates/terra_walker/src/",
     "crates/terra_sandbox/src/experiments/course_yard.rs",
-    "crates/terra_creatures/src/melee/record.rs",
+    "crates/terra_creatures/src/melee/",
     "tools/controller/",
     "tools/scorecard/",
 ];

@@ -10,6 +10,9 @@
 //                                             (terra_walker's movement::bench, D185's CPU half)
 //   cargo xtask controller --film             also the in-game filmed course's rows (yard.ts: the GPU,
 //                                             minutes; `cargo xtask gpu film -- cargo xtask controller --film`)
+//   cargo xtask controller --filmed           the film's rows from main's own film, not filming: the
+//                                             newest clean one nothing it reads changed since
+//                                             (films.ts; nightly's, so it banks them)
 //   cargo xtask controller --raise "<why>"    write the rows that got worse, or are new, with why
 //   cargo xtask controller --lower            write the rows that got better (nightly's, D414)
 //
@@ -24,6 +27,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { bakeFile } from "../characters/markers.ts";
+import { mainFilm } from "./films.ts";
 import { type Criterion, finish, type Held, judge, readBaseline, round, type Status } from "../scorecard/ratchet.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -52,6 +56,15 @@ export function staleMarkers(files: string[]): string[] {
   });
 }
 
+/// The film rows' numbers from a film's checks (yard.ts's checks.json), by each row's check name.
+function filmValues(criteria: Criterion[], checks: { name: string; value: number }[], values: Map<string, number>) {
+  for (const c of criteria) {
+    const check = c.check as { by?: string; name?: string } | null;
+    const found = check?.by === "film" ? checks.find((each) => each.name === check.name) : undefined;
+    if (found && Number.isFinite(found.value)) values.set(c.id, round(found.value));
+  }
+}
+
 function main() {
   const { values: opt } = parseArgs({
     options: {
@@ -60,6 +73,7 @@ function main() {
       lower: { type: "boolean", default: false },
       bench: { type: "boolean", default: false },
       film: { type: "boolean", default: false },
+      filmed: { type: "boolean", default: false },
     },
   });
   if (opt.raise !== undefined && !opt.raise.trim()) throw new Error("--raise needs its why");
@@ -116,15 +130,23 @@ function main() {
     logged += `\n$ node tools/controller/yard.ts --out ${out}\n${(y.stdout ?? "") + (y.stderr ?? "")}`;
     for (const m of (y.stdout ?? "").matchAll(/^yard: (.*)$/gm)) console.log(`  ${m[1]}`);
     const checks: { name: string; value: number }[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
-    for (const c of criteria) {
-      const check = c.check as { by?: string; name?: string } | null;
-      const found = check?.by === "film" ? checks.find((each) => each.name === check.name) : undefined;
-      if (found && Number.isFinite(found.value)) values.set(c.id, round(found.value));
+    filmValues(criteria, checks, values);
+  }
+  // Main's film without filming (nightly's): the newest clean film of this commit's history
+  // that nothing the film reads changed since (films.ts).
+  let filmed = false;
+  if (opt.filmed && !opt.film) {
+    const found = mainFilm();
+    if ("why" in found) console.log(`  film rows not judged: ${found.why}`);
+    else {
+      filmed = true;
+      console.log(`  film rows from main's film at ${found.commit.slice(0, 10)}, ${found.behind} commits back, nothing the film reads changed since`);
+      filmValues(criteria, JSON.parse(readFileSync(join(found.dir, "checks.json"), "utf8")), values);
     }
   }
   writeFileSync(log, logged);
 
-  const ran = (c: Criterion) => ({ bench: opt.bench, film: opt.film })[(c.check as { by?: string } | null)?.by ?? ""] === true;
+  const ran = (c: Criterion) => ({ bench: opt.bench, film: opt.film || filmed })[(c.check as { by?: string } | null)?.by ?? ""] === true;
   const results = criteria.map((c) => (c.measurable && c.cost === "heavy" && !ran(c) ? { id: c.id, status: "skipped" as Status } : judge(c, values.get(c.id), held.get(c.id))));
   finish({
     name: "controller",
