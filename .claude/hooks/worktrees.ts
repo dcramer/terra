@@ -7,7 +7,8 @@
 //   seed keep up with origin/main, and clearing away worktrees agents are done with
 //   (`cargo xtask worktrees --prune`, log in target/worktrees.log).
 // TERRA_NO_LOCAL_BUILDS=1 (a machine whose builds all run on the render worker) skips both seed
-// steps: nothing builds locally there, so the seed would only spend its CPU; the prune still runs.
+// steps: nothing builds locally there, so the seed would only spend its CPU. The main checkout is
+// still fast-forwarded (`git pull --ff-only` when clean), since new worktrees start from it.
 // Claude Code passes the session's folder as `cwd`; for a worktree session CLAUDE_PROJECT_DIR
 // is the main checkout, not the worktree.
 import { spawn, spawnSync } from "node:child_process";
@@ -32,6 +33,11 @@ if (local && worktree && !existsSync(join(cwd, "target"))) {
 }
 
 const main = process.env.CLAUDE_PROJECT_DIR ?? "";
+/** Whether a checkout has no changes to tracked files, so a fast-forward cannot clash with any. */
+function clean(dir: string) {
+  const status = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: dir });
+  return status.status === 0 && status.stdout.toString() === "";
+}
 const interval = 15 * 60 * 1000;
 /** Runs a task from the main checkout in the background, unless it ran in the last 15 minutes. */
 function now(task: string[], logName: string) {
@@ -48,4 +54,9 @@ function now(task: string[], logName: string) {
     .unref();
 }
 if (local) now(["seed"], "seed.log");
+else if (main !== "" && clean(main)) {
+  spawn("git", ["pull", "-q", "--ff-only"], { cwd: main, detached: true, stdio: "ignore" })
+    .on("error", () => {})
+    .unref();
+}
 now(["worktrees", "--prune"], "worktrees.log");
