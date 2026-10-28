@@ -120,6 +120,24 @@ impl Staged {
     pub fn facing(&self) -> Vec3 {
         self.facing
     }
+
+    /// A figure standing still facing a way, at its model's size, told nothing yet: a mind's
+    /// test drives it without a stage.
+    #[cfg(test)]
+    pub(crate) fn standing(name: &str, facing: Vec3) -> Self {
+        Self {
+            name: name.to_string(),
+            going: None,
+            face: Face::Way,
+            facing,
+            turn: TURN_DEG_S.to_radians(),
+            speed_now: 0.0,
+            scale: 1.0,
+            asked: None,
+            asked_n: 0,
+            rate: 1.0,
+        }
+    }
 }
 
 /// Going to a point at a speed, metres a second.

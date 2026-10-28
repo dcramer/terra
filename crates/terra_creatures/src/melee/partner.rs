@@ -203,20 +203,21 @@ pub fn think(
             .map(|(at, _)| at.translation)
             .filter(|at| at.distance(here) < 30.0)
             .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
-        let Some(foe) = foe else {
-            fighter.guard_s = None;
-            staged.tell_go(None, 0.0);
-            partner.show(&mut staged, &set.guard, 1.0, false);
-            continue;
-        };
-        let to = (foe - here).reject_from(up);
-        let far = to.length();
-        partner.closest_m = Some(partner.closest_m.map_or(far, |was| was.min(far)));
-        let toward = to / far.max(1e-3);
+        // Where the player stands from it, along the ground; with no drawn player near, the
+        // way it already faces, as far as can be.
+        let (toward, far) = foe.map_or((fighter.way, f32::MAX), |foe| {
+            let to = (foe - here).reject_from(up);
+            let far = to.length();
+            (to / far.max(1e-3), far)
+        });
+        if foe.is_some() {
+            partner.closest_m = Some(partner.closest_m.map_or(far, |was| was.min(far)));
+        }
         if fighter.shove_s > 0.0 {
             staged.tell_go(Some(here + fighter.shove), fighter.shove.length());
         }
-        // In a blow: it tracks the player through the wind-up, then commits.
+        // In a blow: it tracks the player through the wind-up, then commits. A blow running
+        // when the player sheathes plays out, so it never stands frozen mid-swing.
         if let Some(each) = fighter.runner.now(set) {
             let t = fighter.runner.t();
             let left = each.until_active(t);
@@ -242,6 +243,12 @@ pub fn think(
             }
             continue;
         }
+        let Some(foe) = foe else {
+            fighter.guard_s = None;
+            staged.tell_go(None, 0.0);
+            partner.show(&mut staged, &set.guard, 1.0, false);
+            continue;
+        };
         staged.tell_face(foe);
         partner.beat_s += dt;
         match partner.beat {
@@ -344,4 +351,67 @@ fn wind_up(
         partner.closest_m.take().unwrap_or(far),
         pool.map_or(f32::MAX, |pool| pool.left)
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{Drawn, Fighter, drawn_set};
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use std::time::Duration;
+
+    /// The move its runner is in.
+    fn blow(world: &World, partner: Entity) -> Option<String> {
+        let fighter = world.get::<Fighter>(partner).unwrap();
+        fighter.runner.name().map(str::to_string)
+    }
+
+    /// One frame of its mind at 60 a second.
+    fn tick(world: &mut World) {
+        let frame = Duration::from_secs_f32(1.0 / 60.0);
+        world.resource_mut::<Time>().advance_by(frame);
+        world.run_system_once(think).unwrap();
+    }
+
+    #[test]
+    fn a_blow_running_when_the_player_sheathes_plays_out_to_the_guard() {
+        // A drawn player 2 m off; the partner on its strike beat winds up and is a few frames
+        // into its blow when the player sheathes (the duel at frame 1130, 2026-10-28: it stood
+        // frozen mid-swing to the end of the film).
+        let mut world = World::new();
+        world.init_resource::<Time>();
+        let ground = Vec3::Y * 2000.0;
+        let player = world
+            .spawn((
+                Player,
+                Transform::from_translation(ground),
+                Stance::default(),
+                Fighter::new(None, drawn_set()),
+                Drawn {
+                    lock: None,
+                    showing: None,
+                },
+            ))
+            .id();
+        let partner = world
+            .spawn((
+                Transform::from_translation(ground + Vec3::X * 2.0),
+                Staged::standing(NAME, Vec3::NEG_X),
+                Fighter::new(None, drawn_set()),
+                Partner {
+                    beat: Beat::Strike,
+                    ..default()
+                },
+            ))
+            .id();
+        (0..6).for_each(|_| tick(&mut world));
+        assert_eq!(blow(&world, partner).as_deref(), Some("partner_slash"));
+        world.entity_mut(player).remove::<Drawn>();
+        // Ten seconds, far past any blow's length: it finishes and stands on its guard.
+        (0..600).for_each(|_| tick(&mut world));
+        assert_eq!(blow(&world, partner), None, "still in its blow");
+        let guard = drawn_set().guard;
+        let them = world.get::<Partner>(partner).unwrap();
+        assert_eq!(them.showing.as_deref(), Some(guard.as_str()));
+    }
 }
