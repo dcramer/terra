@@ -36,6 +36,7 @@ pub mod mover_world;
 pub mod options;
 pub mod pace;
 pub mod shake;
+pub mod shield_arm;
 pub mod skinning;
 pub mod stepping;
 pub mod strap;

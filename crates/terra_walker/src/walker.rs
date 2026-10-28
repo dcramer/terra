@@ -190,6 +190,7 @@ impl Plugin for WalkerPlugin {
         crate::feet::plugin(app);
         crate::arms::plugin(app);
         crate::grip::plugin(app);
+        crate::shield_arm::plugin(app);
         crate::gaze::plugin(app);
         camera::plugin(app);
         movement::plugin(app);

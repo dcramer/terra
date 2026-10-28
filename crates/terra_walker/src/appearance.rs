@@ -256,13 +256,13 @@ struct Rest(HashMap<Entity, Transform>);
 /// far it moves in its parent's space. `held` is what was last written, to tell a frame the
 /// animation set it from one it did not.
 #[derive(Component, Default)]
-struct Moved(Vec<MovedNode>);
+pub(crate) struct Moved(pub(crate) Vec<MovedNode>);
 
-struct MovedNode {
-    node: Entity,
-    rest: Vec3,
-    by: Vec3,
-    held: Option<Vec3>,
+pub(crate) struct MovedNode {
+    pub(crate) node: Entity,
+    pub(crate) rest: Vec3,
+    pub(crate) by: Vec3,
+    pub(crate) held: Option<Vec3>,
 }
 
 /// A body's appearance as worked out: how far each joint and socket moves (model space), and

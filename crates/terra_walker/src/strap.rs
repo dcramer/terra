@@ -47,9 +47,9 @@ pub fn at_fist(hand: &Transform, socket: &Transform, turn: Quat) -> (Vec3, Quat)
 /// and its turn in the true forearm's frame.
 #[derive(Component)]
 pub struct Strapped {
-    hand: Entity,
-    socket: Entity,
-    turn: Quat,
+    pub(crate) hand: Entity,
+    pub(crate) socket: Entity,
+    pub(crate) turn: Quat,
 }
 
 /// Once a held look has loaded, straps it on if its file says so (`put`).
