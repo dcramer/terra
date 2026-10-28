@@ -9,13 +9,14 @@
 //
 // A rule every made clip and every fight clip gets, not a number typed per clip:
 //   - the swing is where the foot's lock curve is 0 (markers.ts, the same bake the game reads);
-//   - the bar at mid-swing is the walk's, WALK_BAR_M, scaled by how far the foot goes over the
-//     clip's ground in that swing against the walk's, WALK_SWING_M, and never over it: a short
-//     shuffle lifts less than a stride; a clip's entry may set its own ("clear", m);
-//   - the foot wants the bar along half a sine over the swing, 0 where it leaves and lands, and
-//     is raised only where it is under that: its ankle lifted straight up by two-bone IK (the
-//     knee in the plane it bent in, the foot keeping its turn in the model), so the planted
-//     frames and every foot already clear are as they were.
+//   - the bar for the swing's highest point is the walk's, WALK_BAR_M, scaled by how far the
+//     ball goes across under the body in that swing against the walk's, WALK_SWING_M, and never
+//     over it: a short shuffle lifts less than a stride; a clip's entry may set its own ("clear", m);
+//   - a swing whose highest point is under its bar is raised by what it lacks along half a sine,
+//     0 where it leaves and lands, so its shape is kept (the walk's foot is lowest mid-swing, as
+//     real gait's is); its ankle lifted straight up by two-bone IK (the knee in the plane it bent
+//     in, the foot keeping its turn in the model), so the planted frames, and every swing already
+//     reaching its bar (the walk, jog and sprint), are as they were.
 //
 //   node tools/characters/clear.ts FILE.glb... [--dry]   (before mirror.ts and markers.ts)
 //
@@ -32,12 +33,14 @@ import { MIRRORS } from "./mirror.ts";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const LISTS = ["art/animation/made.json", "art/animation/sets/fight.json"].map((p) => resolve(ROOT, p));
 
-/** The walk's swinging foot's lowest point over its ground at mid-swing on the mannequin
- * (Walk_Loop, toe tip or heel, 2026-10-28: 0.105/0.098 m), rounded: the bar of a full stride. */
+/** The bar of a full stride: the walk's swinging foot at its highest, its heel or ball whichever
+ * is lower, over where they stand (Walk_Loop, 2026-10-28: 11.8/12.4 cm on the mannequin, 10.4/11.3
+ * on the body, whose foot is shorter and flatter, D542), taken under both so neither walk moves. */
 export const WALK_BAR_M = 0.1;
-/** How far the walk's swinging toe goes over its ground in a swing (Walk_Loop on the
- * mannequin, 2026-10-28: 1.37/1.38 m): a swing this long or longer wants the whole bar. */
-export const WALK_SWING_M = 1.35;
+/** How far the walk's ball goes across under the body from the plant before a swing to the one
+ * after (Walk_Loop, 2026-10-28: 0.88/0.80 m on the mannequin, 0.81/0.80 on the body, the shortest
+ * taken): a swing this long or longer wants the whole bar, a shorter one its share. */
+export const WALK_SWING_M = 0.8;
 /** A raise under this changes nothing: the clip is already clear. */
 export const LEAST_M = 0.002;
 
@@ -72,18 +75,21 @@ export function arc(i: number, [a, b]: Swing): number {
 
 /** Each frame's raise of a foot whose lowest point is `sole` over its ground (m, per frame),
  * its lock curve `lock`, and the bar of each of its swings `bars`: a swing whose foot never
- * rises to its bar is lifted by what it lacks along half a sine, so its highest comes to about
- * the bar and its shape is kept; a swing that reaches its bar and every planted frame are not
+ * rises to its bar is lifted along half a sine just enough that its highest comes to the bar,
+ * its shape kept; a swing that reaches its bar and every planted frame are not
  * moved. */
 export function raises(sole: number[], lock: number[], loops: boolean, bars: (s: Swing) => number): number[] {
   const n = loops ? sole.length - 1 : sole.length;
   const out = new Array(sole.length).fill(0);
   const at = (i: number) => ((i % n) + n) % n;
   for (const s of swings(lock, loops)) {
-    let peak = -Infinity;
-    for (let i = s[0]; i <= s[1]; i++) peak = Math.max(peak, sole[at(i)]);
-    const lacks = Math.max(0, bars(s) - peak);
-    for (let i = s[0]; i <= s[1]; i++) out[at(i)] = lacks * arc(i, s);
+    // The least lift along the sine that brings some frame to the bar: frame i reaches it at
+    // (bar - sole_i) / arc_i, so the swing's new highest is the bar exactly.
+    const bar = bars(s);
+    let lift = Infinity;
+    for (let i = s[0]; i <= s[1]; i++) lift = Math.min(lift, (bar - sole[at(i)]) / arc(i, s));
+    lift = Math.max(0, lift);
+    for (let i = s[0]; i <= s[1]; i++) out[at(i)] = lift * arc(i, s);
   }
   if (loops) out[n] = out[0];
   return out;
@@ -176,18 +182,20 @@ export function cleared(bytes: Buffer, clips: Lists): { out?: Buffer; done: Clea
     const b = baked[anim.name];
     if (!entry || !b) continue;
     const clip = body.clip(anim.name)!;
-    const keys = anim.samplers.map((s) => s.input).reduce((x, y) => (gltf.accessors[y].count > gltf.accessors[x].count ? y : x));
-    const times = Array.from(body.read(keys));
+    // The legs keyed again on the markers' frames, so a swing is exactly the frames whose lock is
+    // 0 and no planted frame is interpolated from a raised key (the takes' keys are often sparser:
+    // Fight_Strafe_R has 32 against 79 frames).
+    const end = Math.max(...anim.samplers.map((s) => (gltf.accessors[s.input] as { max?: number[] }).max?.[0] ?? 0));
+    const times = b.markers.lock_l.map((_, k) => Math.min(end, k / b.markers.rate));
     const poses = times.map((t) => posed(body, clip, t));
     const loops = points.every(([, toe]) => len(sub(poses[0][toe].t, poses[poses.length - 1][toe].t)) < 0.01);
-    const lockAt = (curve: number[], t: number) => curve[Math.min(curve.length - 1, Math.round(t * b.markers.rate))];
     let changed = false;
     const newPoses = poses.map((p) => p.map((x) => ({ ...x })));
     const n = loops ? times.length - 1 : times.length;
     const wrap = (i: number) => ((i % n) + n) % n;
     SIDES.forEach((s, side) => {
       const [heel, ball] = points[side];
-      const lock = times.map((t) => lockAt(side === 0 ? b.markers.lock_l : b.markers.lock_r, t));
+      const lock = side === 0 ? b.markers.lock_l : b.markers.lock_r;
       const low = [heel, ball].map((p) => Math.min(...poses.map((q) => q[p].t[1])));
       const sole = poses.map((q) => Math.min(q[heel].t[1] - low[0], q[ball].t[1] - low[1]));
       // How far the ball goes across under the body (the clip is played in place) from the
@@ -200,6 +208,7 @@ export function cleared(bytes: Buffer, clips: Lists): { out?: Buffer; done: Clea
       const up = raises(sole, lock, loops, bars);
       const most = Math.max(0, ...up);
       const all = swings(lock, loops);
+      if (!all.length) return; // a foot that never steps
       const peak = (sw: Swing, by: number[]) => Math.max(...Array.from({ length: sw[1] - sw[0] + 1 }, (_, k) => sole[wrap(sw[0] + k)] + by[wrap(sw[0] + k)]));
       const none = up.map(() => 0);
       const foot: Cleared = {
@@ -259,21 +268,6 @@ export function cleared(bytes: Buffer, clips: Lists): { out?: Buffer; done: Clea
   gltf.buffers[0].byteLength = offset;
   const bin = Buffer.concat([bytes.subarray(28 + jsonLen, 28 + jsonLen + binLen), ...extra]);
   return { out: compact(glbBytes(gltf, bin)), done, seen };
-}
-
-/** The ground the clip's planted toe passes over (x, z per second): its pace along the way its
- * planted toe goes, none for a clip played still. */
-function groundVelocity(toe: V3[], times: number[], lock: number[], pace: number): [number, number] {
-  if (!pace) return [0, 0];
-  let [x, z, t] = [0, 0, 0];
-  for (let i = 1; i < toe.length; i++) {
-    if (lock[i] < 1 || lock[i - 1] < 1) continue;
-    x += toe[i][0] - toe[i - 1][0];
-    z += toe[i][2] - toe[i - 1][2];
-    t += times[i] - times[i - 1];
-  }
-  const l = Math.hypot(x, z);
-  return l > 0 && t > 0 ? [(x / l) * pace, (z / l) * pace] : [0, 0];
 }
 
 /** Clears `file`'s listed clips in place (every clip with `all`); what it did and saw. */

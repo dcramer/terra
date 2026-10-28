@@ -51,6 +51,7 @@ export const MODULE_DATA: Record<string, string[]> = {
   "tools/characters/rig_check.py": ["art/characters/rig-baseline.json"],
   "tools/characters/fit_gear.py": ["art/gear/harnesses.json"],
   "tools/characters/mirror.ts": ["art/animation/mirrors.json"],
+  "tools/characters/clear.ts": ["art/animation/made.json", "art/animation/sets/fight.json", "art/animation/mirrors.json"],
 };
 
 export type Bodies = {
@@ -199,10 +200,11 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
     name: "export",
     section: 5,
     needs: ["base", ...morphs.map((m) => `morph:${m}`)],
-    inputs: py("export_character.py", "mirror.ts", "markers.ts"),
+    inputs: py("export_character.py", "clear.ts", "mirror.ts", "markers.ts"),
     outputs: ["assets/models/character/base.glb"],
     run: [
       blender("export_character.py", `"$out/${base}.glb" assets/models/character/base.glb "--morphs=${all}" --textures=2048`, "MORPH|SOCKETS|EXPORTED|Error"),
+      "node $here/clear.ts assets/models/character/base.glb     # a gliding swing foot lifted clear (clear.ts)",
       "node $here/mirror.ts assets/models/character/base.glb    # the mirrored clips (art/animation/mirrors.json)",
       "node $here/markers.ts assets/models/character/base.glb   # each clip's foot-down markers (D455)",
     ].join("\n"),
@@ -216,11 +218,12 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
     name: "fight",
     section: 5,
     needs: ["clips", "base"],
-    inputs: [...py("made_clips.py", "export_character.py", "hold.py", "mirror.ts", "markers.ts"), `${fight}.json`, fight],
+    inputs: [...py("made_clips.py", "export_character.py", "hold.py", "clear.ts", "mirror.ts", "markers.ts"), `${fight}.json`, fight],
     outputs: [`${OUT}/fight-mannequin.glb`, "assets/models/character/fight.glb"],
     run: [
       blender("made_clips.py", `"$out/fight-mannequin.glb" --list=${fight}.json`, "^MADE [0-9]|Error"),
       blender("export_character.py", `"$out/${base}.glb" assets/models/character/fight.glb "--clips=$out/fight-mannequin.glb" --list=${fight}.json --textures=2048`, "^(SHIELD|HOLD|EXPORTED)|Error"),
+      "node $here/clear.ts assets/models/character/fight.glb     # a gliding swing foot lifted clear (clear.ts)",
       "node $here/mirror.ts assets/models/character/fight.glb    # the mirrored clips (art/animation/mirrors.json)",
       "node $here/markers.ts assets/models/character/fight.glb   # each clip's foot-down markers (D455)",
     ].join("\n"),
