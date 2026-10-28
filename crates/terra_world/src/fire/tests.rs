@@ -122,6 +122,7 @@ fn a_fires_light_flickers_with_the_glow_its_flames_are_drawn_by() {
         heat: 0.9,
         seed: 0.3,
         wide: 0.7,
+        out: Vec3::ZERO,
     };
     let blazes = Blazes {
         kept: vec![campfire],

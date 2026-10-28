@@ -169,6 +169,7 @@ mod tests {
             heat: 1.0,
             seed: 0.0,
             wide: 4.0,
+            out: Vec3::ZERO,
         };
         let points = blaze_points(&blaze);
         let (low, high) = reach(&points, at, Vec3::Y);

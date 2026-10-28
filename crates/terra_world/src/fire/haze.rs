@@ -213,6 +213,7 @@ mod tests {
             heat: 1.0,
             seed: 0.0,
             wide: 0.8,
+            out: Vec3::ZERO,
         }
     }
 

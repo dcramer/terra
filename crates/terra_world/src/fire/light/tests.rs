@@ -153,6 +153,7 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         heat: 0.9,
         seed: 0.3,
         wide: 0.7,
+        out: Vec3::ZERO,
     };
     let blazes = Blazes {
         kept: vec![campfire],
@@ -162,6 +163,7 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
             heat: 0.9,
             seed: 0.6,
             wide: 0.0,
+            out: Vec3::ZERO,
         }],
         ..default()
     };
@@ -360,6 +362,7 @@ fn a_campfire_lights_its_stones_under_its_flame_and_the_ground_about_as_the_moon
             heat: 0.9,
             seed: 0.3,
             wide: 0.7,
+            out: Vec3::ZERO,
         }],
         ..default()
     };
@@ -435,6 +438,7 @@ fn staked_pool(colour: Color, rig: Rig, night: f32, sky: f32) -> impl Fn(f32) ->
             heat: 0.9,
             seed: 0.3,
             wide: 0.22,
+            out: Vec3::ZERO,
         }],
         lights: vec![colour],
         rigs: vec![rig],
@@ -493,52 +497,6 @@ fn a_staked_torchs_dusk_pool_is_as_bright_at_its_foot_as_a_hearths_rig_would_lig
 }
 
 #[test]
-fn a_campfires_night_pool_goes_dark_within_a_few_fire_widths() {
-    // The fire sheet's campfire by full night: its pool bright by its stones and falling off
-    // fast past them, as RDR2's do (to a third or a fifth from one flame height out to three;
-    // both lights keyed alike, 7.7 here, it stood flat on the screen).
-    let foot = Vec3::new(0.0, 2000.0, 0.0);
-    let blazes = Blazes {
-        kept: vec![Blaze {
-            at: foot,
-            tall: 1.5,
-            heat: 0.9,
-            seed: 0.3,
-            wide: 0.7,
-        }],
-        ..default()
-    };
-    let lights = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
-    let on = |out: f32| -> f32 {
-        lights
-            .iter()
-            .map(|l| on_ground_drawn(l, foot, out) * keyed(l, 1.0, 36.0))
-            .sum()
-    };
-    let fall = on(1.5) / on(4.5);
-    assert!(
-        fall > 10.0,
-        "the night pool falls only {fall:.1}x from 1.5 m to 4.5 m"
-    );
-    // The stones at its foot keep most of their light: the pit light leads by night.
-    let flat = |out: f32| -> f32 {
-        lights
-            .iter()
-            .map(|l| on_ground_drawn(l, foot, out) * by_night(HEARTH_DUSK_STOPS, 1.0))
-            .sum()
-    };
-    let stones = on(0.55) / flat(0.55);
-    assert!(
-        stones > 0.8,
-        "the stones keep {stones:.2} of their night light"
-    );
-    println!(
-        "night pool: falls {fall:.1}x from 1.5 m to 4.5 m (both keyed alike {:.1}x), stones keep {stones:.2}",
-        flat(1.5) / flat(4.5)
-    );
-}
-
-#[test]
 fn a_campfires_pool_reads_warm_a_few_metres_out_at_dusk() {
     // The lake's campfire at the lake's civil dusk (the sun 1.6 degrees under at 21:45 on
     // 07-20: night 0.13, the sky's light on the shade 1,240). Lake round 20's review measured
@@ -555,6 +513,7 @@ fn a_campfires_pool_reads_warm_a_few_metres_out_at_dusk() {
             heat: 0.9,
             seed: 0.3,
             wide: 0.9,
+            out: Vec3::ZERO,
         }],
         ..default()
     };
@@ -608,6 +567,7 @@ fn a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm() {
         heat: 0.9,
         seed: 0.3,
         wide: 0.9,
+        out: Vec3::ZERO,
     };
     let blazes = Blazes {
         kept: vec![fire],
@@ -678,6 +638,7 @@ fn a_campfires_light_reaches_the_ground_a_few_metres_out_as_a_real_fires_does() 
             heat: 0.9,
             seed: 0.3,
             wide: 0.9,
+            out: Vec3::ZERO,
         }],
         ..default()
     };
@@ -856,6 +817,7 @@ fn a_torch_lights_yellower_than_a_campfire_and_each_fire_by_its_own_colour() {
         heat: 0.8,
         seed: x * 0.1,
         wide: 0.2,
+        out: Vec3::ZERO,
     };
     let blazes = Blazes {
         kept: vec![fire(0.0), fire(8.0)],
@@ -894,6 +856,7 @@ fn torches(n: usize) -> Blazes {
         heat: 0.6,
         seed: (i as f32 * 0.37).fract(),
         wide: 0.12,
+        out: Vec3::ZERO,
     };
     Blazes {
         kept: (0..n).map(fire).collect(),
@@ -935,6 +898,7 @@ fn a_torchs_light_flickers_half_as_deep_as_its_flame_a_campfires_as_deep() {
             heat: 0.9,
             seed: 0.3,
             wide: 0.7,
+            out: Vec3::ZERO,
         }],
         ..default()
     };

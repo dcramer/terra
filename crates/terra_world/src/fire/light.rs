@@ -34,8 +34,25 @@ use shadows::ShadowFade;
 /// thirty torches, two lights each, traded the lights 22 times a second along a corridor.
 pub(super) const LIGHTS: usize = 20;
 const LIGHT_CELL_M: f32 = 9.0;
-/// How far out from the middle of all that burns a gathering's light hangs, metres.
+/// How far out from the middle of all that burns a gathering's light hangs, metres, where its
+/// blazes face no one way (a roof, a yard).
 const LIGHT_OUT_M: f32 = 3.0;
+/// How far out of the face its blazes burn on a gathering's light hangs, and how far over
+/// their foot, metres, as games hang a burning building's lights out in front of its walls
+/// rather than in its flames: hung 1.5 m over the flames' middle, a burning hoarding's light
+/// met the stone under it edge-on and lit none of it (castle round 4, every judge).
+const FACE_OUT_M: f32 = 4.0;
+const FACE_UP_M: f32 = 0.5;
+/// How much of a gathering's weight must face one way for its light to hang out of that face.
+const FACING: f32 = 0.3;
+
+/// The way a gathering's blazes face across the ground (`Blaze::out`, weighted by `weight`, its
+/// up taken out), if enough of them face one way.
+fn facing(at: Vec3, out: Vec3, weight: f32) -> Option<Vec3> {
+    let up = at.normalize_or(Vec3::Y);
+    let flat = out - up * out.dot(up);
+    (flat.length() > FACING * weight).then(|| flat.normalize())
+}
 /// A blaze's light, in lumens for a blaze a metre tall at full heat, and the most one light
 /// gives: still some times a real fire's, for the film, but no longer so much that sunlit
 /// stone round a fire goes salmon pink; a breath's brighter, as every game that draws one
@@ -467,29 +484,6 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
     // with the glow its flames are drawn by (`fire::show`).
     let mut lit = jet_lights(blazes, t, tier);
     let t = super::flame_time(t);
-    // Each cell: its weighted place, its weight, its weighted glow, its widest flame and its
-    // heaviest blaze's number.
-    let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32, f32, f32, (f32, f32))> =
-        std::collections::BTreeMap::new();
-    // Only the wild blazes are gathered: a kept fire past the nearest `HEARTHS` (a dungeon has
-    // thirty torches) lights as a kept fire still. Gathered, the far torches were lit as
-    // blazes, each cell some five torches' light hung 1.5 m up and 3 m out from the middle of
-    // all that burns, in the rock or the next corridor: 75% of the crypt's fire light and 5
-    // of its 12 lights, moving each time the nearest sixteen changed (dungeon light round).
-    for blaze in &blazes.blazes {
-        let weight = blaze.tall * blaze.heat;
-        let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
-        let cell = cells
-            .entry(key)
-            .or_insert((Vec3::ZERO, 0.0, 0.0, 0.0, (0.0, 0.0)));
-        cell.0 += blaze.at * weight;
-        cell.1 += weight;
-        cell.2 += glow(blaze, t) * weight;
-        cell.3 = cell.3.max(width(blaze));
-        if weight > cell.4.0 {
-            cell.4 = (weight, blaze.seed);
-        }
-    }
     let up = |at: Vec3| at.normalize_or(Vec3::Y);
     // A hearth's key hangs in the body of its flames, clear of its logs' ends, so it lights the
     // ground round it and its glow in the air (`fog`) is a halo round the flames: at 0.8 of
@@ -556,9 +550,42 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 [main, top]
             }),
     );
-    // Each gathering's light hangs out from the middle of all that burns, on the outside of
-    // the walls its flames stand on: at the gathering's own middle, inside a burning building,
-    // it lit the inner faces and none of the stone the eye sees (castle film r8).
+    lit.extend(gathered(blazes, t));
+    lit
+}
+
+/// The wild blazes' lights, gathered over cells, the brightest first; `t` the time the flames
+/// move by.
+fn gathered(blazes: &Blazes, t: f32) -> Vec<Lit> {
+    // Each cell: its weighted place, its weight, its weighted glow, its widest flame, its
+    // heaviest blaze's number and the way its burning faces look, weighted.
+    type Cell = (Vec3, f32, f32, f32, (f32, f32), Vec3);
+    let mut cells: std::collections::BTreeMap<[i64; 3], Cell> = std::collections::BTreeMap::new();
+    // Only the wild blazes are gathered: a kept fire past the nearest `HEARTHS` (a dungeon has
+    // thirty torches) lights as a kept fire still. Gathered, the far torches were lit as
+    // blazes, each cell some five torches' light hung 1.5 m up and 3 m out from the middle of
+    // all that burns, in the rock or the next corridor: 75% of the crypt's fire light and 5
+    // of its 12 lights, moving each time the nearest sixteen changed (dungeon light round).
+    for blaze in &blazes.blazes {
+        let weight = blaze.tall * blaze.heat;
+        let key = (blaze.at / LIGHT_CELL_M).floor().as_i64vec3().to_array();
+        let cell = cells
+            .entry(key)
+            .or_insert((Vec3::ZERO, 0.0, 0.0, 0.0, (0.0, 0.0), Vec3::ZERO));
+        cell.0 += blaze.at * weight;
+        cell.1 += weight;
+        cell.2 += glow(blaze, t) * weight;
+        cell.3 = cell.3.max(width(blaze));
+        if weight > cell.4.0 {
+            cell.4 = (weight, blaze.seed);
+        }
+        cell.5 += blaze.out * weight;
+    }
+    let up = |at: Vec3| at.normalize_or(Vec3::Y);
+    // A gathering whose blazes face no one way (`facing`) hangs its light out from the middle
+    // of all that burns, on the outside of the walls its flames stand on: at the gathering's
+    // own middle, inside a burning building, it lit the inner faces and none of the stone the
+    // eye sees (castle film r8).
     let (sum, weight) = cells
         .values()
         .fold((Vec3::ZERO, 0.0), |(s, w), c| (s + c.0, w + c.1));
@@ -579,15 +606,19 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
     let mut gathered: Vec<Lit> = cells
         .into_values()
         .filter(|cell| cell.1 > 0.0)
-        .map(|(sum, weight, glows, wide, (_, seed))| {
+        .map(|(sum, weight, glows, wide, (_, seed), out)| {
             let at = sum / weight;
             // The cell's light is the sum of its fires', each at its own flicker; it sways as
             // its biggest fire does, as far as a flame of the cell's whole height would.
             let glow = glows / weight;
             let tall = weight.sqrt();
             let reach = (tall * SWAY_A_METRE).clamp(SWAY_M[0], SWAY_M[1]);
+            let hung = match facing(at, out, weight) {
+                Some(face) => at + face * FACE_OUT_M + up(at) * FACE_UP_M,
+                None => at + outward(at) + up(at) * 1.5,
+            };
             Lit {
-                at: at + outward(at) + up(at) * 1.5 + sway(seed, t, Flicker::of(wide), reach),
+                at: hung + sway(seed, t, Flicker::of(wide), reach),
                 lumens: (weight * LUMENS_A_METRE).min(MOST_LUMENS) * glow,
                 color: BLAZE_LIGHT,
                 range: LIGHT_RANGE_M,
@@ -603,8 +634,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
         })
         .collect();
     gathered.sort_by(|a, b| b.lumens.total_cmp(&a.lumens));
-    lit.extend(gathered);
-    lit
+    gathered
 }
 
 /// How many fire lights cast shadows, by preset: one in play, four in films (docs/fire.md). A
@@ -641,23 +671,46 @@ fn smooth(from: f32, to: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// The lights to show on each light entity: the most a fire's light matters where the eye is
-/// (its lumens over its distance, eased out from 30 to 40 m), each kept on the entity that
-/// showed the nearest of last frame's, so a light's shadows stay on it as fires come and go;
-/// of the lights that may cast them (`Lit::casts`) the nearest `shadows` within 20 m cast
-/// shadows, kept to 23 m once on, and as many of the rest, a kept fire's, shine in the fog.
+/// `choose_within` at play's distances.
+#[cfg(test)]
 pub(super) fn choose(
     lit: Vec<Lit>,
     eye: Option<Vec3>,
     was: &[Was],
     shadows: usize,
 ) -> Vec<Option<Shown>> {
+    choose_within(lit, eye, was, shadows, 1.0)
+}
+
+/// How many times play's distance a fire's light reaches before it eases out, by preset: three
+/// in films, as the cinematic tier's distances are (docs/fire.md): at play's 40 m the castle
+/// fall's cameras, 35 to 50 m off, saw every burning wall's light eased out (castle round 4).
+pub fn light_reach(quality: Quality) -> f32 {
+    match quality {
+        Quality::Low | Quality::Medium | Quality::High => 1.0,
+        Quality::Ultra => 3.0,
+    }
+}
+
+/// The lights to show on each light entity: the most a fire's light matters where the eye is
+/// (its lumens over its distance, eased out from 30 to 40 m, `reach` times that in a film,
+/// `light_reach`), each kept on the entity that showed the nearest of last frame's, so a
+/// light's shadows stay on it as fires come and go; of the lights that may cast them
+/// (`Lit::casts`) the nearest `shadows` within 20 m cast shadows, kept to 23 m once on, and as
+/// many of the rest, a kept fire's, shine in the fog.
+pub(super) fn choose_within(
+    lit: Vec<Lit>,
+    eye: Option<Vec3>,
+    was: &[Was],
+    shadows: usize,
+    reach: f32,
+) -> Vec<Option<Shown>> {
     let far = |at: Vec3| eye.map_or(0.0, |eye| eye.distance(at));
     let mut wanted: Vec<(f32, Shown)> = lit
         .into_iter()
         .filter_map(|lit| {
             let d = far(lit.at);
-            let fade = 1.0 - smooth(LIGHT_FADE_M[0], LIGHT_FADE_M[1], d);
+            let fade = 1.0 - smooth(LIGHT_FADE_M[0] * reach, LIGHT_FADE_M[1] * reach, d);
             (fade > 0.0).then(|| {
                 let weight = lit.lumens * fade / (1.0 + (d / 10.0).powi(2));
                 (
@@ -800,7 +853,7 @@ pub(super) fn light(
         }
     }
     shut::give_top_to_key(&mut wants, shut_off);
-    let shown = choose(wants, eye, &was, shadowed(*quality));
+    let shown = choose_within(wants, eye, &was, shadowed(*quality), light_reach(*quality));
     shadow_fade.ease(&shown, eye, shadowed(*quality), time.delta_secs());
     shadow_fade.spawn_twins(&mut commands);
     let mut twins = Vec::new();
@@ -880,6 +933,8 @@ pub(super) fn light(
     }
 }
 
+#[cfg(test)]
+mod face_tests;
 #[cfg(test)]
 mod pool_tests;
 #[cfg(test)]

@@ -26,6 +26,7 @@ fn yard_dusk(on: impl Fn(&Lit, Vec3) -> f32) -> f32 {
             heat: 0.9,
             seed: 0.3,
             wide: 0.7,
+            out: Vec3::ZERO,
         }],
         ..default()
     };
@@ -70,4 +71,51 @@ fn a_campfires_stones_are_not_driven_past_the_white_at_dusk() {
     println!("dusk stone: {stone:.2}x the sky's");
     assert!(stone <= 6.0, "a ring stone: {stone:.2} times the sky's");
     assert!(stone >= 2.0, "a ring stone: {stone:.2} times the sky's");
+}
+
+#[test]
+fn a_campfires_night_pool_goes_dark_within_a_few_fire_widths() {
+    // The fire sheet's campfire by full night: its pool bright by its stones and falling off
+    // fast past them, as RDR2's do (to a third or a fifth from one flame height out to three;
+    // both lights keyed alike, 7.7 here, it stood flat on the screen).
+    let foot = Vec3::new(0.0, 2000.0, 0.0);
+    let blazes = Blazes {
+        kept: vec![Blaze {
+            at: foot,
+            tall: 1.5,
+            heat: 0.9,
+            seed: 0.3,
+            wide: 0.7,
+            out: Vec3::ZERO,
+        }],
+        ..default()
+    };
+    let lights = lit(&blazes, 0.0, crate::fire::BreathTier::Cards);
+    let on = |out: f32| -> f32 {
+        lights
+            .iter()
+            .map(|l| on_ground_drawn(l, foot, out) * keyed(l, 1.0, 36.0))
+            .sum()
+    };
+    let fall = on(1.5) / on(4.5);
+    assert!(
+        fall > 10.0,
+        "the night pool falls only {fall:.1}x from 1.5 m to 4.5 m"
+    );
+    // The stones at its foot keep most of their light: the pit light leads by night.
+    let flat = |out: f32| -> f32 {
+        lights
+            .iter()
+            .map(|l| on_ground_drawn(l, foot, out) * by_night(HEARTH_DUSK_STOPS, 1.0))
+            .sum()
+    };
+    let stones = on(0.55) / flat(0.55);
+    assert!(
+        stones > 0.8,
+        "the stones keep {stones:.2} of their night light"
+    );
+    println!(
+        "night pool: falls {fall:.1}x from 1.5 m to 4.5 m (both keyed alike {:.1}x), stones keep {stones:.2}",
+        flat(1.5) / flat(4.5)
+    );
 }

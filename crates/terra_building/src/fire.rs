@@ -300,6 +300,8 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> BTreeMap<
         at: Vec3,
         count: f32,
         fierce: f32,
+        /// The way its cubes' open faces look, summed.
+        out: Vec3,
     }
     let mut cells: BTreeMap<[i32; 3], Gathered> = BTreeMap::new();
     for flame in fire.flames(base) {
@@ -314,11 +316,13 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> BTreeMap<
                 out += way.as_vec3() * if way.y > 0 { 1.0 } else { 0.6 };
             }
         }
-        let at = middle + out.normalize_or_zero() * CELL_M * 0.5;
+        let out = out.normalize_or_zero();
+        let at = middle + out * CELL_M * 0.5;
         let cell = cells
             .entry(flame.at.div_euclid(IVec3::splat(BLAZE_CUBES)).to_array())
             .or_default();
         cell.at += at;
+        cell.out += out;
         cell.count += 1.0;
         cell.fierce += flame.fierce;
     }
@@ -351,6 +355,7 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> BTreeMap<
                             at: cell.at,
                             count: cell.count,
                             fierce: cell.fierce,
+                            out: cell.out,
                         },
                         0.0,
                     ),
@@ -364,6 +369,7 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> BTreeMap<
             all.at += cell.at;
             all.count += cell.count;
             all.fierce += cell.fierce;
+            all.out += cell.out;
         }
         let wide = BLAZE_CUBES as f32 * CELL_M * (keys.len() as f32).sqrt() * 1.1 * BROAD_WIDE;
         merged.insert(keys[0], (all, wide));
@@ -399,6 +405,7 @@ fn gather(fire: &Fire, base: &terra_build::Base, frame: &Transform) -> BTreeMap<
                     heat,
                     seed: (seed % 10_000) as f32 / 10_000.0,
                     wide: *wide,
+                    out: (frame.rotation * cell.out).normalize_or_zero(),
                 },
             )
         })
@@ -443,6 +450,7 @@ fn blazes(
                 heat: 1.0,
                 seed: 0.37 + 0.21 * i as f32,
                 wide: SPLASH_WIDE_M,
+                out: Vec3::ZERO,
             }));
         drawn.blazes.extend_from_slice(&fire.blazes);
     }

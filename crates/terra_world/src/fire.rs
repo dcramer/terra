@@ -45,6 +45,10 @@ pub struct Blaze {
     pub seed: f32,
     /// Its flame's width, metres: nought for as wide as a flame so tall is, more for a sheet.
     pub wide: f32,
+    /// Which way what burns faces the open air, in the world, a unit vector: a burning wall's
+    /// face, out of it; zero where no side is (a fire in the open, a hearth). Its light hangs
+    /// out that way (`light`).
+    pub out: Vec3,
 }
 
 /// A jet of flame breathed out: from where, which way, how far it reaches, how wide it

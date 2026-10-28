@@ -32,6 +32,7 @@ pub(super) fn ease(shown: &mut BTreeMap<Key, Blaze>, fire: &BTreeMap<Key, Blaze>
         now.tall += (to.tall - now.tall) * k;
         now.heat += (to.heat - now.heat) * k;
         now.wide += (to.wide - now.wide) * k;
+        now.out = (now.out + (to.out - now.out) * k).normalize_or_zero();
         now.seed = to.seed;
     }
     shown.retain(|key, now| {
@@ -65,6 +66,7 @@ mod tests {
             heat: 0.8,
             seed: 0.3,
             wide: 0.0,
+            out: Vec3::Z,
         }
     }
 

@@ -182,6 +182,7 @@ pub(super) fn keep(
                 heat: fire.heat,
                 seed: (at.x * 0.731 + at.z * 0.377).rem_euclid(1.0),
                 wide: fire.wide,
+                out: Vec3::ZERO,
             }
         })
         .collect();

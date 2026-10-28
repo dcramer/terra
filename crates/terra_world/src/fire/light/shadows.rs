@@ -316,6 +316,7 @@ mod tests {
             heat: 0.6,
             seed: 0.1 + 0.3 * i as f32,
             wide: 0.12,
+            out: Vec3::ZERO,
         };
         let blazes = Blazes {
             kept: (0..3).map(fire).collect(),
