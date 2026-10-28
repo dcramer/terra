@@ -33,6 +33,8 @@ export type KindRules = {
   second?: string;
   classes?: string[];
   fits: "detector" | "person" | "body";
+  /** The way its working end reaches further across Z: -Z (a one-sided head) unless given. */
+  faces?: "+Z" | "-Z";
 };
 export const KINDS: Record<string, KindRules> = Object.fromEntries(
   Object.entries(JSON.parse(readFileSync(join(import.meta.dirname, "attach_kinds.json"), "utf8"))).filter(([k]) => k !== "about"),
@@ -53,6 +55,8 @@ export type Look = {
   normals?: (V3 | undefined)[];
   /** A skinned look's: each vertex's most-weighted joint, by name. */
   heaviest?: string[];
+  /** The ranges of `tris` drawn in a String material (a bow's string): no handle. */
+  string?: [number, number][];
 };
 
 /** What the check reads of the body: its node names, sockets and joints at rest, morphs and height. */
@@ -96,7 +100,7 @@ export const PACK_BEHIND_M = 0.05;
 /** The share of a look's surface that may face against its normals (insideOut). */
 export const INSIDE_OUT = 0.25;
 
-type Prim = { attributes: Record<string, number>; indices?: number; mode?: number };
+type Prim = { attributes: Record<string, number>; indices?: number; mode?: number; material?: number };
 type GNode = { name?: string; mesh?: number; skin?: number; extras?: Record<string, unknown> };
 
 /** A look's file, read. Its meshes' vertices are placed by their nodes (a rigid look's node
@@ -112,6 +116,7 @@ export function readLook(file: string, name = lookName(file)): Look {
   const tris: number[] = [];
   const normals: (V3 | undefined)[] = [];
   const heaviest: string[] = [];
+  const string: [number, number][] = [];
   nodes.forEach((n, i) => {
     if (n.mesh === undefined) return;
     Object.assign(extras, n.extras ?? {});
@@ -149,10 +154,12 @@ export function readLook(file: string, name = lookName(file)): Look {
         }
       }
       const idx = p.indices === undefined ? Array.from({ length: a.length / 3 }, (_, k) => k) : g.read(p.indices);
+      const material = p.material === undefined ? undefined : (g.gltf.materials as { name?: string }[] | undefined)?.[p.material]?.name;
+      if (material?.split(".")[0] === "String") string.push([tris.length, tris.length + idx.length]);
       for (const k of idx) tris.push(at + k);
     }
   });
-  return { name, extras, joints, targets, points, tris, normals, heaviest: joints ? heaviest : undefined };
+  return { name, extras, joints, targets, points, tris, normals, heaviest: joints ? heaviest : undefined, string };
 }
 
 /** "held/knife" from assets/models/held/knife.glb. */
@@ -277,6 +284,7 @@ export function onBody(look: Look, body: Body, reach = SKIN_REACH_M) {
 export function handleAt(look: Look): [number, number] | undefined {
   const cuts: V3[] = [];
   for (let t = 0; t + 2 < look.tris.length; t += 3) {
+    if (look.string?.some(([from, to]) => t >= from && t < to)) continue;
     for (const [i, j] of [[0, 1], [1, 2], [2, 0]]) {
       const a = look.points[look.tris[t + i]];
       const b = look.points[look.tris[t + j]];
@@ -306,7 +314,7 @@ export function headReach(look: Look, handle: [number, number]) {
   };
 }
 
-function inHand(look: Look, f: (rule: string, detail: string) => void) {
+function inHand(look: Look, faces: "+Z" | "-Z", f: (rule: string, detail: string) => void) {
   const { lo, hi } = box(look.points);
   const handle = handleAt(look);
   if (!handle) return f("grip", "nothing crosses y = 0: the grip is not at the origin");
@@ -317,8 +325,8 @@ function inHand(look: Look, f: (rule: string, detail: string) => void) {
   const head = headReach(look, handle);
   if (head.x > ACROSS.ratio * head.z + ACROSS.slack_m)
     f("facing", `its working end is ${(head.x * 100).toFixed(1)} cm across X and ${(head.z * 100).toFixed(1)} cm across Z (reaching ${(head.plusX * 100).toFixed(1)} cm toward +X, ${(head.minusX * 100).toFixed(1)} toward -X): it lies across X, not in the Y-Z plane`);
-  else if (head.plusZ - head.minusZ > ONE_SIDED_M)
-    f("facing", `its working end reaches ${(head.plusZ * 100).toFixed(1)} cm toward +Z and ${(head.minusZ * 100).toFixed(1)} cm toward -Z: its striking side faces +Z, not -Z`);
+  else if ((faces === "-Z" ? head.plusZ - head.minusZ : head.minusZ - head.plusZ) > ONE_SIDED_M)
+    f("facing", `its working end reaches ${(head.plusZ * 100).toFixed(1)} cm toward +Z and ${(head.minusZ * 100).toFixed(1)} cm toward -Z: it leans ${faces === "-Z" ? "+Z, not -Z" : "-Z, not +Z"}`);
 }
 
 const within = (v: number, [lo, hi]: [number, number]) => v >= lo - 1e-6 && v <= hi + 1e-6;
@@ -523,7 +531,7 @@ export function judge(look: Look, body: Body, data = dataOf(look.name), hold = h
     else if (data && data.carry_tilt !== look.extras.carry_tilt) f("marker", `its carry_tilt ${look.extras.carry_tilt ?? "(the rule's)"} is not its data's ${data.carry_tilt ?? "(none)"}`);
     if (mount !== "hung" && look.extras.hold === "hung") f("marker", `it says {"hold": "hung"}, which its data does not`);
   }
-  if (mount === "in hand") inHand(look, f);
+  if (mount === "in hand") inHand(look, rules.faces ?? "-Z", f);
   if (mount === "hung") hung(look, f);
   if (mount === "strapped") strapped(look, body, data, f);
   if (mount === "rigid") rigid(look, body, f);

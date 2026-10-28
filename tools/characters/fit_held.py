@@ -20,7 +20,10 @@ item is adding a file, never editing this script. Its "fit" says how the look is
   in assets/models/tools, THIRD_PARTY.md, and ours made by tools/props): scaled to "length"
   metres, held "grip_from_end" metres up from its foot, centred there on its handle's section,
   turned "turn" degrees about +Y (so a one-sided head faces -Z, a blade's edges lie in Y-Z), its
-  working end coloured "head_colour" where its material shows there.
+  working end coloured "head_colour" where its material shows there. "haft", metres: a source
+  whose handle is too thick for its length (a chunky stylised tool) has it thinned about its
+  line to that thickness at the grip, swelling back to the source's own over the HAFT_BLEND_M
+  under its head, as a real haft swells into the eye (a pickaxe's is about 4 cm).
 - "points": a textured model of ours (tools/props, "into": "tools"), kept in its own materials
   and maps: "grip", the point held at the middle of the fist; "toward", a point its handle runs
   toward at its working end (the look's +Y); "out", the direction that becomes the look's +X,
@@ -101,11 +104,14 @@ def second_hand(ob, d):
 
 def handle_middle(ob):
     """The middle of where the plane z = 0 cuts the mesh's edges, across X and Y: the handle's
-    section at the grip, as attach_contract.ts's handleAt measures it."""
+    section at the grip, as attach_contract.ts's handleAt measures it. A string is no handle: a
+    bow's String faces are left out, else its grip falls midway between riser and string."""
     vs = ob.data.vertices
+    string = {i for i, s in enumerate(ob.material_slots) if s.material and s.material.name.split(".")[0] == "String"}
+    edges = {k for p in ob.data.polygons if p.material_index not in string for k in p.edge_keys}
     cuts = []
-    for e in ob.data.edges:
-        a, b = vs[e.vertices[0]].co, vs[e.vertices[1]].co
+    for e in edges:
+        a, b = vs[e[0]].co, vs[e[1]].co
         if (a.z < 0) == (b.z < 0):
             continue
         k = a.z / (a.z - b.z)
@@ -114,6 +120,40 @@ def handle_middle(ob):
         raise SystemExit(f"{ob.name}: nothing crosses its grip; check its grip_from_end")
     xs, ys = [c.x for c in cuts], [c.y for c in cuts]
     return Vector(((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, 0))
+
+
+# A haft's thinning blends back to the source's thickness over this much under its head (m);
+# the head starts where a section is HEAD_RATIO times the grip's across (detect.ts's HEAD_RATIO).
+HAFT_BLEND_M = 0.15
+HEAD_RATIO = 1.5
+
+
+def thin_haft(ob, haft):
+    """The handle, gripped at the origin and running up +Z (Blender's), thinned about its line to
+    `haft` metres across its widest at the grip; full below the blend, the source's at the head."""
+    vs = ob.data.vertices
+
+    def width(z):
+        cuts = []
+        for e in ob.data.edges:
+            a, b = vs[e.vertices[0]].co, vs[e.vertices[1]].co
+            if (a.z < z) == (b.z < z):
+                continue
+            c = a + (b - a) * ((a.z - z) / (a.z - b.z))
+            cuts.append(c)
+        return max(max(c.x for c in cuts) - min(c.x for c in cuts), max(c.y for c in cuts) - min(c.y for c in cuts)) if cuts else 0
+
+    grip = width(0)
+    top = max(v.co.z for v in vs)
+    head = next((z / 100 for z in range(1, int(top * 100)) if width(z / 100) > HEAD_RATIO * grip), top)
+    k = haft / grip
+    for v in vs:
+        if v.co.z >= head:
+            continue
+        f = k if v.co.z <= head - HAFT_BLEND_M else k + (1 - k) * (v.co.z - head + HAFT_BLEND_M) / HAFT_BLEND_M
+        v.co.x *= f
+        v.co.y *= f
+    print("HAFT", ob.name, f"{grip * 100:.1f} cm across at the grip -> {haft * 100:.1f}, its head from {head:.2f} m")
 
 
 # The free models' material names, by the role each part plays.
@@ -260,6 +300,8 @@ for item in look.args():
     # "The grip across the handle"); then turned "turn" degrees about the handle (Blender's +Z
     # is glTF's +Y, and a turn about it is the same turn there), so a one-sided head faces -Z.
     ob.data.transform(Matrix.Rotation(math.radians(d.get("turn", 0)), 4, "Z") @ Matrix.Translation(-handle_middle(ob)))
+    if "haft" in d:
+        thin_haft(ob, d["haft"])
     for slot in ob.material_slots:
         if slot.material and slot.material.use_nodes and not maps:
             bsdf = slot.material.node_tree.nodes["Principled BSDF"]
