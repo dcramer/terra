@@ -722,7 +722,7 @@ fn tint_haze(
         let veil = crate::weather::veil(light.ambient * SKY_LIGHT_GAIN * under.diffuse, set)
             * (1.0 - (1.0 - WOODED_VEIL) * wooded);
         let air = air.lerp(MOON_HAZE, dark) * level;
-        fog.color = indoor_air(colour(air.lerp(veil, deck)), air_lit);
+        fog.color = indoor_air(Color::LinearRgba(haze_under_deck(air, veil, deck)), air_lit);
         // Under a deck the near metres are kept clear of it (haze_start.rs).
         fog.directional_light_color = indoor_air(
             crate::haze_start::directional(
@@ -734,6 +734,17 @@ fn tint_haze(
         let visible = weather.visibility_m().map_or(visible, |v| v.min(visible));
         fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(visible);
     }
+}
+
+/// The haze's colour, `deck` of the way from the open air's `air` (sRGB, as the light's keys
+/// are tuned) to the deck's `veil`, which is light on screen (linear, as sky.wesl draws the
+/// deck). Read as sRGB, the veil of an eye opened under a deck, some 5 times white, was
+/// taken as 60 times, and every fell beyond a few hundred metres went white (tundra round 3).
+fn haze_under_deck(air: Vec3, veil: Vec3, deck: f32) -> LinearRgba {
+    let air = Color::srgb(air.x, air.y, air.z).to_linear();
+    let air = Vec3::new(air.red, air.green, air.blue);
+    let mixed = air.lerp(veil, deck);
+    LinearRgba::rgb(mixed.x, mixed.y, mixed.z)
 }
 
 /// Paints the sky for the hour: the weather's cloud over the clear sky's own, the deck lit
