@@ -231,7 +231,7 @@ fn sweep_staged(staged: &Path, now: SystemTime, budget: u64) -> u64 {
             (idle, sweep::unlinked(&copy), copy)
         })
         .collect();
-    copies.sort_by(|a, b| b.0.cmp(&a.0));
+    copies.sort_by_key(|(idle, _, _)| std::cmp::Reverse(*idle));
     let mut held: u64 = copies.iter().map(|(_, bytes, _)| bytes).sum();
     let mut freed = 0;
     for (idle, bytes, copy) in copies {
