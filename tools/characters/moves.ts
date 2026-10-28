@@ -54,7 +54,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, through } from "./clash.ts";
-import { type Held, carriedClips, carryTilt, frameOf, hang } from "./held.ts";
+import { type Held, carriedClips, carryHold, carryTilt, frameOf, hang } from "./held.ts";
 import { TARGETS, boardPlace, readTargets, worstOff } from "./shield_place.ts";
 import { PACE_FRAMES } from "./phases.ts";
 import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
@@ -62,6 +62,7 @@ import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shiel
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
 import { type Holding, keptOff, reach } from "./arms.ts";
+import { carryArm } from "./carry_arm.ts";
 import { fitter } from "./shield_arm.ts";
 import { type Handle, FIST_CM, close, fistOff, handRest, lookGrip, seated, tipped as tipHandle } from "./grip.ts";
 
@@ -188,12 +189,18 @@ const bends = new Map<string, Q>(
   }),
 );
 const clips = new Map<string, Clip>();
+// `--carry`: each carry pose a held look names (its `carry_hold`, D560) with the clavicle of the
+// arm it goes on, set once the looks are hung below.
+let carryPoses: [string, string][] = [];
 const clipOf = (name: string): Clip => {
   if (!clips.has(name)) {
     // `Walk_Loop+Keyed_Guard`: a locomotion clip under a stance's hold, laid by the mask.
     const [under, over] = name.split("+");
-    const c = over ? clipsFile.layered(clipOf(under), clipOf(over)) : clipsFile.clip(name);
+    let c = over ? clipsFile.layered(clipOf(under), clipOf(over)) : clipsFile.clip(name);
     if (!c) throw new Error(`no clip ${name} in ${opt.clips}`);
+    // A carried clip with no stance hold takes each carry pose on its arm alone, as
+    // terra_walker::figure lays a `CarryHold` (Nodes::over_one); the clip keeps its name.
+    if (!over && carriedIn.includes(name)) for (const [pose, root] of carryPoses) c = { ...clipsFile.layered(c, clipOf(pose), [root]), name };
     clips.set(name, c);
   }
   return clips.get(name)!;
@@ -210,11 +217,12 @@ const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => fitShield(armsKe
 // The fists closed first (`inFist`), as terra_walker::grip runs before arms::keep_off_hips.
 const armsKept = (shape: Shape, played: Clip, t: number): Pose[] => {
   const clip = inFist(shape, played);
-  const pose = shaped(body, shape, clip, t, bends);
+  const base = carriedArms(shape, clip, t);
+  const pose = shaped(body, shape, clip, t, base);
   if (!opt.arms) return pose;
   const kept = keptOff(body, pose, holdingIn(clip));
   if (!kept.size) return pose;
-  for (const [bone, q] of bends) kept.set(bone, kept.has(bone) ? qmul(kept.get(bone)!, q) : q);
+  for (const [bone, q] of base) kept.set(bone, kept.has(bone) ? qmul(kept.get(bone)!, q) : q);
   return shaped(body, shape, clip, t, kept);
 };
 
@@ -228,6 +236,22 @@ const held: Held[] = opt.hold!.map((h) => {
 // its X, which is the socket's (a strapped look's is 0 and stays).
 const carriedIn = opt.carry ? carriedClips() : [];
 const tiltOf = new Map(held.map((h, i) => [h.name, h.socket === h.hand ? carryTilt(opt.hold![i].split("=")[1]) : 0]));
+// A carry pose goes on the arm of the hand the look is in, a strapped look's on its fist's side.
+const poseOfLook = held.map((_, i) => (opt.carry ? carryHold(opt.hold![i].split("=")[1]) : undefined));
+carryPoses = held.flatMap((h, i): [string, string][] => {
+  const pose = poseOfLook[i];
+  return pose ? [[pose, `clavicle_${(h.strap?.fist ?? h.strap?.bone ?? h.hand).slice(-1).toLowerCase()}`]] : [];
+});
+const carriedPoses = new Set(held.filter((_, i) => poseOfLook[i]).map((h) => h.name));
+// A carry pose's arm held in the body's frame, not the chest's (carry_arm.ts, D560), in a carried
+// clip with no stance hold, as terra_walker::carry_arm holds it before the fists and the arms.
+const carryTurns = carryArm(body, rest, carryPoses.map(([, root]) => root));
+function carriedArms(shape: Shape, clip: Clip, t: number): Map<string, Q> {
+  if (!carryPoses.length || !carriedNow(clip) || clip.name.includes("+")) return bends;
+  const turns = carryTurns(shaped(body, shape, clip, t, bends));
+  for (const [bone, q] of bends) turns.set(bone, turns.has(bone) ? qmul(turns.get(bone)!, q) : q);
+  return turns;
+}
 const tipped = (deg: number, points: V3[]) => {
   const [c, s] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
   return points.map(([x, y, z]) => [x, y * c - z * s, y * s + z * c] as V3);
@@ -325,6 +349,9 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
   let heldW: Worst = { cm: -Infinity, where: "" };
   // Each look's own, so a fit judges its item and not its partner (fit.ts).
   const byLook = new Map<string, Worst>(held.map((h) => [h.name, { cm: -Infinity, where: "" }]));
+  // A look carried in a pose in its hand (D560, a torch's flame up): degrees its handle (+Y) is
+  // off the world's up, the worst while carried.
+  const upBy = new Map<string, Worst>(held.filter((h) => h.socket === h.hand && carriedPoses.has(h.name)).map((h) => [h.name, { cm: -Infinity, where: "" }]));
   let swordW: Worst = { cm: -Infinity, where: "" };
   let armW: Worst = { cm: -Infinity, where: "" };
   // The carry: cm above the shoulder, m of the elbow below it (the least, kept negated), degrees off.
@@ -348,6 +375,11 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
       }
       for (const h of held) {
         const socket = frame(h, pose);
+        if (upBy.has(h.name) && carriedNow(clip)) {
+          const up = rot(socket.r, [0, 1, 0]);
+          const deg = (Math.acos(Math.max(-1, Math.min(1, up[1] / len(up)))) * 180) / Math.PI;
+          upBy.set(h.name, worse(upBy.get(h.name)!, deg, `at ${t.toFixed(2)} s, ${shape.name}`));
+        }
         for (const q of pointsIn(h, clip)) {
           const { depth, part } = inside(place(socket, q));
           const where = `${h.name} in ${part} at ${t.toFixed(2)} s, ${shape.name}`;
@@ -375,7 +407,7 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
       }
     }
   }
-  return { hands, held: heldW, byLook, sword: swordW, arm: armW, carry: { high, elbow: { cm: -elbow.cm, where: elbow.where }, face }, grip: { cm: gripCm, deg: gripDeg } };
+  return { hands, held: heldW, byLook, upBy, sword: swordW, arm: armW, carry: { high, elbow: { cm: -elbow.cm, where: elbow.where }, face }, grip: { cm: gripCm, deg: gripDeg } };
 }
 
 // Points that say where a pose is, relative to the hips: hands, forearms, head, blade tip.
@@ -463,7 +495,11 @@ const specs: Record<string, Blow> = Object.fromEntries(
 const guardClip = clipOf(opt.guard ?? (moves.length ? setGuard(opt.set!) : undefined) ?? "Fight_Guard");
 const guardMarks = moves.length ? marks(guardClip, 0) : [];
 /** Each held look's own depth, `held_cm.<look>`. */
-const heldBy = (pen: Pen) => Object.fromEntries([...pen.byLook].map(([name, w]) => [`held_cm.${name}`, w.cm]));
+const heldBy = (pen: Pen) => ({
+  ...Object.fromEntries([...pen.byLook].map(([name, w]) => [`held_cm.${name}`, w.cm])),
+  // `held_up_deg.<look>`: a look carried in a pose, its handle off up (a carried clip's rows).
+  ...Object.fromEntries([...pen.upBy].filter(([, w]) => w.cm > -Infinity).map(([name, w]) => [`held_up_deg.${name}`, w.cm])),
+});
 const byName = new Map(moves.map((m) => [m.name, m]));
 const smooth = (lo: number, hi: number, t: number) => {
   const x = Math.max(0, Math.min(1, (t - lo) / (hi - lo)));
