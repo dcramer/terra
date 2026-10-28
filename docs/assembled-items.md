@@ -1,6 +1,6 @@
 # Assembled items: equipment made from parts by rules
 
-Status: proposal (D565, Open). The developers decide the design questions below; nothing is built on it until they have.
+Status: proposal (D565, Open), its answers recommended from research; the developers approve or change them. Nothing is built on it until they have.
 
 Weapons and tools are made from a few parts per kind, each made once with named connection points, and put together by rules. Every attachment is then exact by construction: a new item is a choice of parts, never a model to be fitted, measured or tuned. It is how the game reaches thousands of items without a number set by hand for any one of them, and it is D182 (hundreds of variants from parts by rules) applied to equipment.
 
@@ -39,17 +39,30 @@ A kind (one-handed haft, blade, polearm, strapped shield, bow, hung item, torch)
 
 The same idea by body slot, with what we already do for fitting (D128): pieces made on the base body with the shared skeleton, refitted to each body shape, the skin under them hidden; variety from which piece a slot takes and colour by role.
 
-## Questions for the developers
+## Recommended answers
 
-Each with the agent's recommendation.
+From Terra's goals, the prior art and what fails least, researched in [2026-10-28-assembled-equipment.md](../research/2026-10-28-assembled-equipment.md). The developers approve or change them.
 
-1. **What is assembled?** Recommended: every ordinary weapon and tool. Unique and legendary items stay whole, hand-made, and checked once by `fit.ts`.
-2. **The parts of each kind.** Recommended, three or four slots a kind: axe (handle, head, binding); sword (blade, guard, grip, pommel); spear (shaft, head, butt cap); hammer and pick (handle, head); shield (board, boss, rim, painted face); bow (stave, grip wrap, string).
-3. **What picks the parts?** Recommended: the maker's people and realm pick the style family, the material (stone, bronze, iron, steel) the finish; 20 to 40 looks a kind a player tells apart (D182).
-4. **Do parts change how an item plays?** Recommended: yes, visibly. A longer handle reaches further, a heavier head swings slower and hits harder, a wide blade cuts and a narrow one thrusts (D122). The alternative: parts are looks, numbers come from the tier.
-5. **Does the player choose parts?** Recommended: at a station, from parts known and affordable, with a preview; found and traded items come assembled in their makers' style.
-6. **Do parts wear separately?** Recommended: not yet; wear shows on the whole item.
-7. **One size for every body?** Recommended: an item has one real size; hands and arms adapt. A giant's axe is a different item.
+1. **What is assembled:** every ordinary weapon and tool. Hand-made uniques stay whole, but declare the same named points and pass the same checks. (High confidence.)
+2. **The parts:** two structural parts a kind, the working part (head, blade) and the handle, plus at most two trims (binding, pommel). Handles, shafts and strings are made by code; the head or blade sets what the item is and how it looks, as Veloren does. (High.)
+3. **What picks the parts:** the theme (the maker's people and realm) gives weighted lists per slot, as Borderlands does; the material is the finish and tier; a seed from the item's identity picks. 20 to 40 looks a kind, the count printed by the generator (D182). (Medium-high.)
+4. **Do parts change play:** yes, through physics only. Mass, balance and length come from the parts' shapes and materials and feed the existing tempo and reach rule (D459); shape gives the damage type, material the tier, and no other number sits on a part. Past the class's limits it is another class. (Medium: it must be played.)
+5. **Does the player choose:** yes, at a station, from parts learned by finding them (D92, D86), with a preview; the allowed pairings are a list per kind, its sheet approved once. (Medium.)
+6. **Separate wear:** no; wear is on the whole item (D99). (High.)
+7. **One size:** yes, one real size; hands, arms and IK adapt (D128, D546). (High.)
+
+Two questions the research adds for the developers: whether a handle can change an item's class (Veloren's long haft makes a hatchet a two-handed axe), and whether items can be taken apart to learn or reuse their parts.
+
+## Through the animations
+
+The assembled item meets a clip at one point, its grip; the parts are kept inside what the class's clips allow. No shipped game fits parts to a clip.
+
+- **Hand-driven:** a one-handed item rides the hand, as melee games do (a prop bone, `ik_hand_gun`, is the shooters' answer for two-handed guns). A two-handed item rides the lead hand; the off hand is pulled by IK onto its second grip.
+- **One reference item per class:** the item the class's clips are generated for (D459's reference), with an envelope round it (length, head mass, balance) from D459's clamp and D546's ranges. The assembler refuses an item outside its class's envelope before anything is drawn.
+- **Generated clips get an item track:** baked once per clip from the hand, its turn about the handle smoothed and the edge turned to lead the strike, the wrist solved back onto it. The checks and the off hand read the track. No shipped precedent was found for this step; it is the one to prove first.
+- **Checked offline on the envelope's two extremes** (the shortest and lightest, the longest and heaviest) on every body, with the edge-leads check. At run time only the grip, wrist and IK already in the game; no collision avoidance.
+
+The research also sets: a part is never scaled (resized blades float off their guards in Bannerlord); a join along a handle is a position and a diameter, not a free point, full points only for a shield's boss and rim and a bow's nocks; the grip, second grip and edge come from the handle's and head's own points (Bannerlord's custom swords end up held by the guard); the grip (D562) takes a code-made handle's radius and line from its numbers, not its mesh; and an item is stored as a recipe (part ids, material, seed), its look and icon derived from it and cached by its hash.
 
 ## How we know it renders right
 
@@ -78,8 +91,7 @@ The thirteen held looks become assemblies where their kind has parts, or stay as
 
 ## Order of work, once decided
 
-1. A research note confirming the prior art above.
-2. The connection-point convention and the kinds table, as data, reviewed.
-3. The part checker and the assembler.
-4. A proof: three handles and three heads of one kind assembled by rule, held and carried on every body with no number per item, on one sheet with the grid check's results. If the nine come out right, the approach holds.
-5. The grid check and kind sheets, then the other kinds one at a time.
+1. The connection-point convention, the kinds table and each class's reference item and envelope, as data, reviewed.
+2. The part checker and the assembler.
+3. A proof of the unproven step: for one class (one-handed axe), the item track baked and cleaned on three clips (a swing, a carry, a block), with three handles and three heads at the envelope's extremes, on every body; measured on the hand on the grip, the edge leading, the body clear and the elbow's angle, on one sheet. If it holds, the approach holds.
+4. The grid check and kind sheets, then the other kinds one at a time.
