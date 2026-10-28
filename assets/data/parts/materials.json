@@ -1,13 +1,13 @@
 {
-  "about": "What a recipe's material makes its working part weigh (D565: mass comes from the parts' shapes and materials and feeds D459's rule): the part's volume_m3 times its material's density. Read by the assembler (terra_items::assembly) and the part checker (tools/items/part.ts). A material here is one an item is made in today (items.ron's stone and iron tools); a new tier adds its line with its source.",
+  "about": "What a recipe's material makes its working part weigh (D565: mass comes from the parts' shapes and materials and feeds D459's rule): the part's volume_m3 times its material's density. Read by the assembler (terra_items::assembly) and the part checker (tools/items/part.ts). A material here is one an item is made in today (items.ron's stone and iron tools); a new tier adds its line with its source, a table looked up, never a recalled number.",
   "materials": {
     "iron": {
       "about": "wrought or bloomery iron, the iron tools' heads",
-      "density_kg_m3": { "value": 7870, "source": "pure iron 7.874 g/cm^3 at 20 C (CRC Handbook of Chemistry and Physics, physical constants of the elements), recalled; wrought iron's slag puts it 1 to 2% lower" }
+      "density_kg_m3": { "value": 7750, "source": "wrought iron 7750 kg/m^3 (The Engineering ToolBox, Metals and Alloys - Densities, engineeringtoolbox.com/metal-alloys-densities-d_50.html, looked up 2026-10-28), the same table's iron and steel 7850: the slag wrought iron carries makes it lighter" }
     },
     "stone": {
       "about": "knapped flint or chert, the stone tools' heads",
-      "density_kg_m3": { "value": 2600, "source": "flint and chert 2.6 g/cm^3, a little under quartz's 2.65 (mineral handbooks' specific gravity of chalcedony), recalled" }
+      "density_kg_m3": { "value": 2600, "source": "flint 2.6 x 10^3 kg/m^3 (The Engineering ToolBox, Solids - Densities, engineeringtoolbox.com/density-solids-d_1265.html, looked up 2026-10-28)" }
     }
   }
 }

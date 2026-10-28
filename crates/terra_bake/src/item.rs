@@ -395,7 +395,7 @@ mod tests {
             r#"{{"part": "test_head", "type": "axe_head", "model": "models/parts/test_head.glb", "volume_m3": {{"value": {}}}, "centre_m": [0, 0.03, 0], "bounds_m": [[-0.03, 0, -0.03], [0.03, 0.06, 0.03]],
             "points": [{{"name": "eye.lower", "type": "eye", "at": [0, 0, 0], "dir": [0, 1, 0], "size": 0.035}},
                        {{"name": "eye.upper", "type": "eye", "at": [0, 0.06, 0], "dir": [0, 1, 0], "size": 0.035}}]}}"#,
-            0.9 / 7870.0
+            1.15e-4 // about 0.9 kg in iron, inside the axe's head mass
         );
         let haft = r#"{"part": "test_haft", "type": "haft", "length_m": {"value": 0.68}, "grip_from_end_m": {"value": 0.08}, "grip_diameter_m": {"value": 0.035}, "density_kg_m3": {"value": 670}}"#;
         let collar = r#"{"part": "test_collar", "type": "collar", "model": "models/parts/test_collar.glb", "mass_kg": {"value": 0.01}, "centre_m": [0, -0.01, 0], "bounds_m": [[-0.022, -0.02, -0.022], [0.022, 0, 0.022]], "cover_m": [-0.02, 0],
