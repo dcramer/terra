@@ -24,7 +24,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, place, posed, qinv, qmul, rot, sub } from "./glb.ts";
-import { type Held, frameOf, hang } from "./held.ts";import { type Shape, shaped, skinOf } from "./skin.ts";
+import { type Held, frameOf, hang } from "./held.ts";
+import { fitter } from "./shield_arm.ts";
+import { type Shape, shaped, skinOf } from "./skin.ts";
 
 export type Place = { centre: V3; face: V3; up: V3 };
 /** A pose's target: its place, the commit and template it was captured from, and why. */
@@ -107,7 +109,9 @@ export function reader(o: { body: string; clips: string; templates: string; shie
   if (!shield.board) throw new Error(`${o.shield} has no strap: not a shield`);
   const { shapes } = skinOf(body, o.templates, o.only ?? []);
   const spine = body.named("spine_03");
-  const frame = (pose: Pose[]) => frameOf(shield, pose, (n) => body.named(n), (i) => body.parentOf[i]);  const clipOf = (name: string): Clip => {
+  const frame = (pose: Pose[]) => frameOf(shield, pose, (n) => body.named(n), (i) => body.parentOf[i]);
+  const fit = fitter(body, rest, shield);
+  const clipOf = (name: string): Clip => {
     const [under, over] = name.split("+");
     const c = over ? clipsFile.layered(clipOf(under), clipOf(over)) : clipsFile.clip(name);
     if (!c) throw new Error(`no clip ${name} in ${o.clips}`);
@@ -118,7 +122,8 @@ export function reader(o: { body: string; clips: string; templates: string; shie
     clipOf,
     has: (name: string) => name.split("+").every((n) => clipsFile.clip(n) !== undefined),
     at: (shape: Shape, clip: Clip, t: number): Place => {
-      const pose = shaped(body, shape, clip, t);
+      // As the game poses it: the shield arm fitted to the body after the clip (shield_arm.ts).
+      const pose = fit(shaped(body, shape, clip, t), shape.moved);
       return boardPlace(pose, rest, spine, frame(pose), shield);
     },
   };
