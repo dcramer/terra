@@ -22,6 +22,14 @@ import { ROOT } from "./client.ts";
 const ROLLS_AT = 300;
 /// The film keeps every second frame of the game's sixty a second.
 const STEPS_A_SECOND = 60;
+/// The lens the tour is filmed through, in millimetres on cine.rs's Super 35 filmback: 20 mm,
+/// 64 degrees across, a wide establishing lens, the one the tour's look (look.rs `FRAME_RAD`)
+/// and the doors' film reach (door.rs) are worked out for, between the game's own eye (55
+/// degrees high, some 13 mm) and cine.rs's default 35 mm. Through the 35 mm's 39 degrees the
+/// mine's round 7 views were crops: a drift's end wall 3.5 m off filled view 4 and its
+/// judges saw "the camera point-blank at bare wall", where a walker sees the drift's sets
+/// either side and the stair's way in the middle.
+export const LENS_MM = 20;
 
 type Point = [number, number, number];
 
@@ -42,7 +50,7 @@ export function shotOf(log: string, about: string) {
   }
   let t = 0;
   const keys = view.map((at, i) => {
-    const key = { t: Number(t.toFixed(3)), at, look: look[i] };
+    const key = { t: Number(t.toFixed(3)), at, look: look[i], lens: LENS_MM };
     t += pace[i];
     return key;
   });

@@ -26,6 +26,8 @@ test("a key at each eye, in order, at the time the pace brings it there", () => 
   assert.deepEqual(shot.keys[1].at, [1, 2, 3]);
   assert.deepEqual(shot.keys[2].look, [2, 1.5, 0]);
   assert.equal(shot.seconds, 1.65);
+  // Every key through the wide lens the tour's look is worked out for.
+  assert.ok(shot.keys.every((k) => k.lens === 20));
   assert.equal(shot.player.hidden, true);
 });
 
