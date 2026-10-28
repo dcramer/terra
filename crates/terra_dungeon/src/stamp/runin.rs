@@ -366,6 +366,10 @@ fn stair_torch(layout: &Layout, stair: &Stair) -> Option<Light> {
     })
 }
 
+/// How many cells a corridor has at least to be sure of a torch of its own, past the cap: a
+/// run of two between doors stands 8 m from either room's torch.
+pub(super) const LIT_RUN: usize = 2;
+
 /// How many cells a room has at least to take a second torch, at its far end from the first.
 pub(super) const BIG_ROOM_CELLS: i32 = 6;
 
@@ -475,8 +479,9 @@ fn torches(dungeon: &Dungeon, looks: &[Look], out: &mut Stamp) {
         .collect();
     // A corridor's first torch goes past the cap too, its end wall's or its third cell's:
     // the big rooms' seconds queued ahead of the runs left the crypt's long corridor a
-    // blue-black box (barrow round 15).
-    for run in layout.corridors.iter().filter(|run| run.len() >= 3) {
+    // blue-black box (barrow round 15). A drift of two cells too (`LIT_RUN`): the mine's
+    // film turned off its entrance stair into one, 8 m of black (round 8's view 0).
+    for run in layout.corridors.iter().filter(|run| run.len() >= LIT_RUN) {
         let has = |t: &(IVec3, usize)| run.contains(&t.0);
         if taken.iter().chain(&cut).any(has) {
             continue;

@@ -196,9 +196,10 @@ fn in_cells(cells: &[IVec3], p: Vec3) -> bool {
     })
 }
 
-/// A corridor of three cells or more has a light in its cells: the big rooms' second torches
+/// A corridor of two cells or more has a light in its cells: the big rooms' second torches
 /// pushed the crypt's long corridor's past the light cap and it stood a blue-black box
-/// (barrow round 15).
+/// (barrow round 15), and the mine's film turned off its entrance stair into a two-cell drift
+/// 8 m long with none (mine round 8's view 0).
 #[test]
 fn every_corridor_has_a_light() {
     let mut failed = Vec::new();
@@ -209,7 +210,7 @@ fn every_corridor_has_a_light() {
             let dungeon = generate(&theme, &set, Seed(s)).ok()?;
             let stamp = stamp(&dungeon, &theme, &kind);
             let runs: Vec<&Vec<IVec3>> = (dungeon.layout.corridors.iter())
-                .filter(|run| run.len() >= 3)
+                .filter(|run| run.len() >= 2)
                 .collect();
             let dark = runs
                 .iter()
@@ -221,7 +222,7 @@ fn every_corridor_has_a_light() {
         let runs: usize = counts.iter().map(|c| c.0).sum();
         let dark: usize = counts.iter().map(|c| c.1).sum();
         println!(
-            "{}: {runs} corridors of 3 cells or more in {} dungeons, {dark} with no light",
+            "{}: {runs} corridors of 2 cells or more in {} dungeons, {dark} with no light",
             theme.name,
             counts.len()
         );

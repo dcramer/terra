@@ -16,10 +16,10 @@ const SEEDS: u64 = 24;
 /// Each theme's hash of the run-in's output over `SEEDS` seeds, from the code before it was
 /// made faster.
 const HASHES: &[(&str, u64)] = &[
-    ("crypt", 10098323104608956526),
-    // Mine round 7: its doors its own leaf (MineDoor), 1.5 by 3 m.
-    ("flooded_mine", 10086212804724439000),
-    ("ruined_keep", 3334515048096631740),
+    // Mine round 9: every corridor of two cells or more takes its torch (`LIT_RUN`).
+    ("crypt", 10216878420822679156),
+    ("flooded_mine", 3496483401370762989),
+    ("ruined_keep", 15662779320430275328),
 ];
 
 fn of(stamp: &Stamp) -> u64 {
