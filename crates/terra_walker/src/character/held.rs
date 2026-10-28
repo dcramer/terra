@@ -90,9 +90,33 @@ impl Held {
         }
     }
 
-    /// Its turn against its parent's frame now, its tilt laid on.
+    /// Its turn against its parent's frame now, the share of its tilt it takes in the fist laid
+    /// on (`in_fist`).
     pub(crate) fn turned(&self) -> Quat {
-        self.turn * Quat::from_rotation_x(self.now.to_radians())
+        self.turn * Quat::from_rotation_x(self.in_fist().to_radians())
+    }
+
+    /// How far, degrees, it is turned in the fist now: its tilt up to `carry_hand::OBLIQUE`, a
+    /// handle run slantwise across the palm as a power grip holds it; the wrist turns the rest
+    /// (`at_wrist`), so the fingers still close round it.
+    pub fn in_fist(&self) -> f32 {
+        let most = crate::carry_hand::OBLIQUE;
+        self.now.clamp(-most, most)
+    }
+
+    /// How far, degrees, the hand holding it turns at the wrist now, about the hand socket's X
+    /// (`carry_hand`): its tilt past `in_fist`.
+    pub fn at_wrist(&self) -> f32 {
+        self.now - self.in_fist()
+    }
+
+    /// How far it has turned toward its carried tilt, 0 used to 1 carried; 0 with no tilt.
+    pub fn carried(&self) -> f32 {
+        if self.carry_tilt == 0.0 {
+            0.0
+        } else {
+            (self.now / self.carry_tilt).clamp(0.0, 1.0)
+        }
     }
 }
 

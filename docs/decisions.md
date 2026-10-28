@@ -456,6 +456,7 @@ The look, models, bodies and gear, textures and audio.
 | [D560](decisions/D560.md) | A lit torch is carried on a raised arm, flame up | Design | Developers | Decided | A lit torch is carried with its arm raised forward… |
 | [D561](decisions/D561.md) | A fire's flames move at 0.65 of the clock | Design | Developers | Decided | A hearth's flames, a campfire's and a torch's alike… |
 | [D562](decisions/D562.md) | The hands close on what they hold: a finger-only grip layer, closed by touch at run time | Tech | Agent | Decided | Whenever a hand socket holds a look… |
+| [D564](decisions/D564.md) | A tool carried by the rule tips at the wrist, little in the fist, its forearm kept down | Tech | Agent | Decided | A look in hand carried by D546's rule takes no more than… |
 
 ## Engine and code
 

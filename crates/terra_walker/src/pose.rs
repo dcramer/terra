@@ -1,6 +1,7 @@
 //! The layers that pose a body after its clips, the same in play (`WalkerPlugin`) and on the
 //! model workbench, so a still from the workbench shows what the game shows: a carried look's
-//! arm held clear of the body (`carry_arm`, D560), the arms kept off the hips (`arms`), the
+//! arm held clear of the body (`carry_arm`, D560), a tool carried by the rule tipped at the
+//! wrist with its forearm kept down (`carry_hand`, D564), the arms kept off the hips (`arms`), the
 //! fists closed on what they hold (`grip`) and the shield arm fitted to its board's place
 //! (`shield_arm`, D554). One list both call, so the two cannot drift; asked twice, it lays them
 //! once. The head's turn toward the facing (`gaze`) is play's alone: the workbench has no foe.
@@ -17,6 +18,7 @@ pub fn plugin(app: &mut App) {
     }
     app.insert_resource(PoseLayers);
     crate::carry_arm::plugin(app);
+    crate::carry_hand::plugin(app);
     crate::arms::plugin(app);
     crate::grip::plugin(app);
     crate::shield_arm::plugin(app);
@@ -38,8 +40,9 @@ pub fn system_names(
 }
 
 /// The systems the pose layers run, each in its own plugin.
-pub const SYSTEMS: [&str; 4] = [
+pub const SYSTEMS: [&str; 5] = [
     "hold_in_body",
+    "tip_carried",
     "keep_off_hips",
     "close_hands",
     "fit_shield_arm",
