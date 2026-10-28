@@ -6,6 +6,9 @@
 //! a hold plays a copy masked off the arms, and the hold's clip, held at its first pose, a copy
 //! masked off everything else, taking the weight the transitions give the clips under it. The
 //! arms then show the hold alone, and blend from and to whatever played before as the legs do.
+//!
+//! A stance's hold lays both arms; a carry's (D560, a lit torch on a raised arm) only the arm
+//! that carries, the other left to the clip, as Unreal's per-bone layer takes a branch per arm.
 
 use bevy::{
     animation::{AnimationTargetId, graph::AnimationMask},
@@ -14,34 +17,93 @@ use bevy::{
     prelude::*,
 };
 
-/// The bones a hold lays its pose on, with every bone below them: both arms from the clavicles
-/// (D458). Its twin is `tools/characters/glb.ts`'s `HOLD_MASK`, which the move check lays by.
+/// The bones a hold lays its pose on, with every bone below them: the left arm and the right
+/// from the clavicles (D458). Its twin is `tools/characters/glb.ts`'s `HOLD_MASK`, which the
+/// move check lays by.
 pub const HOLD_MASK: [&str; 2] = ["clavicle_l", "clavicle_r"];
 
-/// The mask groups: the rest of the body, and the arms a hold lays its pose on.
+/// The mask groups: the rest of the body, and each arm a hold lays its pose on.
 const REST: u32 = 0;
-const ARMS: u32 = 1;
-/// A clip played under a hold: masked off the arms.
-pub(crate) const UNDER: AnimationMask = 1 << ARMS;
-/// The hold: masked off all but the arms.
-pub(crate) const OVER: AnimationMask = 1 << REST;
+const LEFT: u32 = 1;
+const RIGHT: u32 = 2;
+/// A clip played under a stance's hold: masked off both arms.
+pub(crate) const UNDER: AnimationMask = Arms::Both.groups();
+/// A stance's hold: masked off all but the arms.
+pub(crate) const OVER: AnimationMask = Arms::Both.over();
+
+/// Which arms a hold lays its pose on: none, one (a carry's), or both (a stance's).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Arms {
+    #[default]
+    None,
+    Left,
+    Right,
+    Both,
+}
+
+impl Arms {
+    /// Its mask groups.
+    const fn groups(self) -> AnimationMask {
+        match self {
+            Arms::None => 0,
+            Arms::Left => 1 << LEFT,
+            Arms::Right => 1 << RIGHT,
+            Arms::Both => (1 << LEFT) | (1 << RIGHT),
+        }
+    }
+
+    /// A hold on these arms: masked off every other group.
+    const fn over(self) -> AnimationMask {
+        ((1 << REST) | (1 << LEFT) | (1 << RIGHT)) & !self.groups()
+    }
+
+    /// These arms and `other`'s.
+    pub fn and(self, other: Arms) -> Arms {
+        match self.groups() | other.groups() {
+            0 => Arms::None,
+            g if g == Arms::Left.groups() => Arms::Left,
+            g if g == Arms::Right.groups() => Arms::Right,
+            _ => Arms::Both,
+        }
+    }
+}
 
 /// A clip's places in a figure's graph: whole twice, so a clip played again blends from
-/// itself; masked off the arms twice, played under a hold; and on the arms alone, as a hold.
+/// itself; masked off both arms twice, played under a stance's hold; on the arms alone, as a
+/// stance's hold; and for each arm alone (left, right), masked off it twice, played under a
+/// carry's hold on it, and on it alone, as that hold.
 #[derive(Clone, Copy, Debug)]
 pub struct Nodes {
     pub whole: [AnimationNodeIndex; 2],
     pub under: [AnimationNodeIndex; 2],
     pub over: AnimationNodeIndex,
+    pub under_one: [[AnimationNodeIndex; 2]; 2],
+    pub over_one: [AnimationNodeIndex; 2],
 }
 
 impl Nodes {
-    /// The copy `copy` of the clip, whole or under a hold.
+    /// The copy `copy` of the clip, whole or under a stance's hold.
     pub fn of(&self, copy: usize, held: bool) -> AnimationNodeIndex {
-        if held {
-            self.under[copy]
-        } else {
-            self.whole[copy]
+        self.played(copy, if held { Arms::Both } else { Arms::None })
+    }
+
+    /// The copy `copy` of the clip, under holds on `arms`.
+    pub fn played(&self, copy: usize, arms: Arms) -> AnimationNodeIndex {
+        match arms {
+            Arms::None => self.whole[copy],
+            Arms::Left => self.under_one[0][copy],
+            Arms::Right => self.under_one[1][copy],
+            Arms::Both => self.under[copy],
+        }
+    }
+
+    /// The clip as a hold on one arm, `Left` or `Right` (a stance's on both for `Both`).
+    pub fn over(&self, arms: Arms) -> Option<AnimationNodeIndex> {
+        match arms {
+            Arms::None => None,
+            Arms::Left => Some(self.over_one[0]),
+            Arms::Right => Some(self.over_one[1]),
+            Arms::Both => Some(self.over),
         }
     }
 }
@@ -54,10 +116,16 @@ pub fn graph(gltf: &Gltf, nodes: &Assets<GltfNode>) -> (AnimationGraph, HashMap<
     let mut clips = HashMap::new();
     for (name, clip) in &gltf.named_animations {
         let mut add = |mask| graph.add_clip_with_mask(clip.clone(), mask, 1.0, root);
+        let (left, right) = (Arms::Left, Arms::Right);
         let nodes = Nodes {
             whole: [add(0), add(0)],
             under: [add(UNDER), add(UNDER)],
             over: add(OVER),
+            under_one: [
+                [add(left.groups()), add(left.groups())],
+                [add(right.groups()), add(right.groups())],
+            ],
+            over_one: [add(left.over()), add(right.over())],
         };
         clips.insert(name.to_string(), nodes);
     }
@@ -67,13 +135,20 @@ pub fn graph(gltf: &Gltf, nodes: &Assets<GltfNode>) -> (AnimationGraph, HashMap<
 }
 
 /// Puts every bone, by its path of names from its file's root (as the glTF loader names
-/// animation targets), in the arms' group when the path passes through `HOLD_MASK`, else in
-/// the rest's. A bone in no group could not be masked.
+/// animation targets), in its arm's group when the path passes through that arm's clavicle
+/// (`HOLD_MASK`), else in the rest's. A bone in no group could not be masked.
 pub(crate) fn mask<'a>(graph: &mut AnimationGraph, paths: impl IntoIterator<Item = &'a [Name]>) {
     for path in paths {
-        let held = path.iter().any(|name| HOLD_MASK.contains(&name.as_str()));
+        let through = |root: &str| path.iter().any(|name| name.as_str() == root);
+        let group = if through(HOLD_MASK[0]) {
+            LEFT
+        } else if through(HOLD_MASK[1]) {
+            RIGHT
+        } else {
+            REST
+        };
         let target = AnimationTargetId::from_names(path.iter());
-        graph.add_target_to_mask_group(target, if held { ARMS } else { REST });
+        graph.add_target_to_mask_group(target, group);
     }
 }
 
@@ -117,9 +192,30 @@ pub fn lay(
     over: AnimationNodeIndex,
     under: AnimationNodeIndex,
 ) {
+    lay_all(holds, animator, &[over], under);
+}
+
+/// Lays each hold of `overs` (one an arm) over `under`, which has just started.
+pub fn lay_all(
+    holds: &mut Vec<Held>,
+    animator: &mut AnimationPlayer,
+    overs: &[AnimationNodeIndex],
+    under: AnimationNodeIndex,
+) {
     for held in holds.iter_mut() {
         held.under.retain(|&node| node != under);
     }
+    for &over in overs {
+        lay_one(holds, animator, over, under);
+    }
+}
+
+fn lay_one(
+    holds: &mut Vec<Held>,
+    animator: &mut AnimationPlayer,
+    over: AnimationNodeIndex,
+    under: AnimationNodeIndex,
+) {
     match holds.iter_mut().find(|held| held.over == over) {
         Some(held) => held.under.push(under),
         None => {
@@ -260,6 +356,102 @@ mod tests {
         let player = app.world().get::<AnimationPlayer>(figure).unwrap();
         assert!(player.animation(over).is_none());
         assert!(app.world().get::<Holds>(figure).unwrap().0.is_empty());
+    }
+
+    /// A carry's hold on one arm (D560): that arm holds the carry, the other arm and the legs
+    /// walk; and two one-arm holds laid over the same clip each keep their own arm.
+    #[test]
+    fn a_hold_on_one_arm_leaves_the_other_arm_to_the_clip() {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_once()),
+            AssetPlugin::default(),
+            AnimationPlugin,
+        ));
+        app.add_systems(
+            PostUpdate,
+            (|mut figures: Query<(&mut AnimationPlayer, &mut Holds)>| {
+                for (mut animator, mut holds) in &mut figures {
+                    ride(&mut holds.0, &mut animator);
+                }
+            })
+            .after(bevy::animation::transition::advance_transitions)
+            .before(bevy::animation::animate_targets),
+        );
+        let names = |path: &[&'static str]| path.iter().map(|n| Name::new(*n)).collect::<Vec<_>>();
+        let (left, right, leg) = (
+            names(&["Rig", "spine", "clavicle_l", "hand_l"]),
+            names(&["Rig", "spine", "clavicle_r", "hand_r"]),
+            names(&["Rig", "thigh_l"]),
+        );
+        let walk = [Vec3::X, Vec3::NEG_X, Vec3::Y];
+        let torch = [Vec3::Z, Vec3::NEG_Z, Vec3::NEG_Y];
+        let shield = [Vec3::ONE, Vec3::NEG_ONE, Vec3::splat(2.0)];
+        let clip_of = |at: [Vec3; 3]| clip(&[(&left, at[0]), (&right, at[1]), (&leg, at[2])]);
+        let mut clips = app.world_mut().resource_mut::<Assets<AnimationClip>>();
+        let (walk_clip, torch_clip, shield_clip) = (
+            clips.add(clip_of(walk)),
+            clips.add(clip_of(torch)),
+            clips.add(clip_of(shield)),
+        );
+        let mut graph = AnimationGraph::new();
+        let root = graph.root;
+        let under_right =
+            graph.add_clip_with_mask(walk_clip.clone(), Arms::Right.groups(), 1.0, root);
+        let under_both = graph.add_clip_with_mask(walk_clip, Arms::Both.groups(), 1.0, root);
+        let over_right = graph.add_clip_with_mask(torch_clip, Arms::Right.over(), 1.0, root);
+        let over_left = graph.add_clip_with_mask(shield_clip, Arms::Left.over(), 1.0, root);
+        mask(
+            &mut graph,
+            [left.as_slice(), right.as_slice(), leg.as_slice()],
+        );
+        let graph = app
+            .world_mut()
+            .resource_mut::<Assets<AnimationGraph>>()
+            .add(graph);
+        let mut animator = AnimationPlayer::default();
+        let mut holds = Vec::new();
+        animator.start(under_right).repeat().set_weight(1.0);
+        lay(&mut holds, &mut animator, over_right, under_right);
+        let figure = app
+            .world_mut()
+            .spawn((animator, AnimationGraphHandle(graph), Holds(holds)))
+            .id();
+        let bone = |app: &mut App, path: &[Name]| {
+            app.world_mut()
+                .spawn((
+                    Transform::default(),
+                    AnimationTargetId::from_names(path.iter()),
+                    AnimatedBy(figure),
+                ))
+                .id()
+        };
+        let bones = [
+            bone(&mut app, &left),
+            bone(&mut app, &right),
+            bone(&mut app, &leg),
+        ];
+        let shown = |app: &App| bones.map(|b| app.world().get::<Transform>(b).unwrap().translation);
+        app.update();
+        app.update();
+        assert_eq!(shown(&app), [walk[0], torch[1], walk[2]]);
+        // Both arms carrying: the clip under both, each hold on its own arm.
+        let world = app.world_mut();
+        let mut figure_at = world.entity_mut(figure);
+        let mut animator = figure_at.take::<AnimationPlayer>().unwrap();
+        let mut holds = figure_at.take::<Holds>().unwrap();
+        animator.stop(under_right);
+        animator.start(under_both).repeat().set_weight(1.0);
+        lay_all(
+            &mut holds.0,
+            &mut animator,
+            &[over_left, over_right],
+            under_both,
+        );
+        world.entity_mut(figure).insert((animator, holds));
+        app.update();
+        app.update();
+        assert_eq!(shown(&app), [shield[0], torch[1], walk[2]]);
     }
 
     #[derive(Component)]

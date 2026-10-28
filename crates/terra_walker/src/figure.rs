@@ -12,8 +12,8 @@
 //! arms alone, for the hold. A layer above may ask for a clip in place of what walking shows
 //! (`Acting`), with a stance's hold over it, as the sword fight does (`melee`).
 
-use crate::character::{CARRIED_IN, Carrying};
-use crate::layer::Nodes;
+use crate::character::{CARRIED_IN, CarryHold, Carrying, Held};
+use crate::layer::{Arms, Nodes};
 use crate::{Downed, Motion, Player, Stance};
 use bevy::{
     gltf::GltfNode, platform::collections::HashMap, prelude::*,
@@ -125,15 +125,54 @@ struct Animated {
     player: Entity,
     hands: Vec<Entity>,
     doing: Doing,
-    /// The clip playing, which copy, and whether under a hold.
-    playing: Option<(String, usize, bool)>,
+    /// The clip playing, which copy, and the arms holds are laid on over it.
+    playing: Option<(String, usize, Arms)>,
     applied: u32,
     /// Clips played mixed into another (`Act::mix`), each with the one it rides on.
     mixed: Vec<Mixed>,
-    /// Holds laid over the clips playing (`Act::hold`), each with the clips under it.
+    /// Holds laid over the clips playing (`Act::hold`, `carry`), each with the clips under it.
     holds: Vec<crate::layer::Held>,
+    /// The carry pose each arm (left, right) takes in a carried clip, as a hold on that arm
+    /// alone: its hand's look's (`CarryHold`, D560).
+    carry: Carry,
     /// Where the player's body was shown last frame (`shown_velocity`).
     shown: Option<Vec3>,
+}
+
+/// The hold each arm (left, right) takes in a carried clip, if any: a clip's node on that arm
+/// alone (`Nodes::over_one`).
+type Carry = [Option<AnimationNodeIndex>; 2];
+
+/// The carry each arm of a figure whose hands are `hands` takes now: the carry pose of what
+/// its hand holds (`CarryHold`), while that look is there. The main hand is the right until
+/// D463's mirror, as `character::HAND_R` is.
+fn carry_of(
+    moves: &Moves,
+    hands: &[Entity],
+    grips: &Query<(&Grip, Option<&CarryHold>)>,
+    looks: &Query<(), With<Held>>,
+) -> Carry {
+    let mut carry = [None; 2];
+    for &hand in hands {
+        let Ok((grip, Some(pose))) = grips.get(hand) else {
+            continue;
+        };
+        if !looks.contains(pose.look) {
+            continue;
+        }
+        let (side, arm) = match grip.hand {
+            Hand::Off => (0, Arms::Left),
+            Hand::Main => (1, Arms::Right),
+        };
+        carry[side] = moves.clips.get(&pose.clip).and_then(|n| n.over(arm));
+    }
+    carry
+}
+
+/// The arms a carry lays holds on.
+fn carry_arms(carry: &Carry) -> Arms {
+    let side = |i: usize, arm| if carry[i].is_some() { arm } else { Arms::None };
+    side(0, Arms::Left).and(side(1, Arms::Right))
 }
 
 /// A clip played in step with another, taking its share of that one's weight as the
@@ -354,10 +393,11 @@ fn dress(
             player,
             hands,
             doing: Doing::Idle,
-            playing: Some((Doing::Idle.clip().to_string(), 0, false)),
+            playing: Some((Doing::Idle.clip().to_string(), 0, Arms::None)),
             applied: 0,
             mixed: Vec::new(),
             holds: Vec::new(),
+            carry: [None; 2],
             shown: None,
         },
     ));
@@ -388,6 +428,7 @@ fn animate(
         &Transform,
     )>,
     mut hands: Query<&mut Carrying, With<Grip>>,
+    (grips, looks): (Query<(&Grip, Option<&CarryHold>)>, Query<(), With<Held>>),
     mut feet: Query<&mut crate::feet::Kept>,
 ) {
     let Some(moves) = moves else { return };
@@ -421,7 +462,15 @@ fn animate(
             };
         }
         let asked = acting.map_or(0, |acting| acting.asked);
-        if animated.doing != doing || (act.is_some() && animated.applied != asked) {
+        // A carry pose taken up or put down (a torch lit or put away) shows at once in a
+        // carried clip, played again with the hold; in any other, at the next clip.
+        let carry = carry_of(&moves, &animated.hands, &grips, &looks);
+        let recarry = animated.carry != carry
+            && animated.playing.as_ref().is_some_and(|(name, _, arms)| {
+                *arms != Arms::Both && CARRIED_IN.contains(&name.as_str())
+            });
+        animated.carry = carry;
+        if animated.doing != doing || (act.is_some() && animated.applied != asked) || recarry {
             change(
                 &moves,
                 &mut animated,
@@ -431,7 +480,7 @@ fn animate(
                 (doing, act, asked),
             );
         }
-        let Some((name, copy, held)) = animated.playing.clone() else {
+        let Some((name, copy, arms)) = animated.playing.clone() else {
             continue;
         };
         if let Some(mut shows) = shows
@@ -439,7 +488,7 @@ fn animate(
         {
             shows.clip.clone_from(&name);
         }
-        let main = moves.clips[&name].of(copy, held);
+        let main = moves.clips[&name].played(copy, arms);
         let Some(playing) = animator.animation_mut(main) else {
             continue;
         };
@@ -520,7 +569,16 @@ fn change(
                 Some((name, copy, _)) if name == clip => 1 - copy,
                 _ => 0,
             };
-            let node = nodes.of(copy, hold.is_some());
+            // A stance's hold takes both arms; in a carried clip without one, each arm whose
+            // hand carries in a pose takes it (D560).
+            let arms = if hold.is_some() {
+                Arms::Both
+            } else if CARRIED_IN.contains(&clip) {
+                carry_arms(&animated.carry)
+            } else {
+                Arms::None
+            };
+            let node = nodes.played(copy, arms);
             // The clip giving way fades from its whole weight, its mixed clip's share
             // given back to it first.
             if let Some(main) = transitions.get_main_animation() {
@@ -543,9 +601,12 @@ fn change(
             if from_s > 0.0 {
                 playing.seek_to(from_s);
             }
-            animated.playing = Some((clip.to_string(), copy, hold.is_some()));
+            animated.playing = Some((clip.to_string(), copy, arms));
             if let Some(hold) = hold {
                 crate::layer::lay(&mut animated.holds, animator, hold.over, node);
+            } else if arms != Arms::None {
+                let overs: Vec<_> = animated.carry.iter().flatten().copied().collect();
+                crate::layer::lay_all(&mut animated.holds, animator, &overs, node);
             }
             if let Some((mix, share)) = act.and_then(|act| act.mix.as_ref())
                 && let Some(both) = moves.clips.get(mix)
@@ -562,7 +623,7 @@ fn change(
                     .set_speed(act.map_or(1.0, |act| act.speed))
                     .set_weight(0.0);
                 animated.mixed.push(Mixed {
-                    main: nodes.of(copy, hold.is_some()),
+                    main: nodes.played(copy, arms),
                     mix: node,
                     share: *share,
                 });
@@ -700,6 +761,7 @@ mod tests {
                     playing: None,
                     applied: 0,
                     holds: Vec::new(),
+                    carry: [None; 2],
                     mixed: vec![Mixed {
                         main,
                         mix: held,

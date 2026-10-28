@@ -52,6 +52,16 @@ pub fn carry_rule(ahead: f32) -> f32 {
 #[derive(Component, Default)]
 pub struct Carrying(pub bool);
 
+/// On a hand socket: the carry pose of the look it holds, its file's `carry_hold` (D560: a lit
+/// torch on a raised arm), a clip whose first pose that hand's arm takes whenever the look is
+/// carried, laid by the hold layer on that arm alone (`layer`, `figure`). A look whose file
+/// gives none is carried by the rule (`carry_rule`).
+#[derive(Component, Clone, Debug, PartialEq)]
+pub struct CarryHold {
+    pub look: Entity,
+    pub clip: String,
+}
+
 /// Something held, a child of a hand socket, or of the bone it is strapped to (`strap`).
 /// Carried, it turns `carry_tilt` degrees about its X: negative tips its working end forward
 /// and down when the arm hangs, positive raises it.
@@ -140,9 +150,11 @@ pub(crate) fn look_points(
     points
 }
 
-/// Once a held look has loaded, how far it tips when carried: its file's `carry_tilt` where it
-/// gives one, else none for a look hung from the hand or strapped (`hold`, `strap`), else the
-/// rule from how far its working end reaches (`carry_rule`).
+/// Once a held look has loaded, how it is carried: its file's `carry_hold` (a carry pose) goes
+/// on the hand socket it is held in, before a strap moves it to its bone (`CarryHold`); and how
+/// far it tips: its file's `carry_tilt` where it gives one, else none for a look hung from the
+/// hand, strapped or carried in a pose (`hold`, `strap`, `carry_hold`), else the rule from how
+/// far its working end reaches (`carry_rule`).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn held_ready(
     ready: On<WorldInstanceReady>,
@@ -153,6 +165,7 @@ pub(super) fn held_ready(
     extras: Query<&GltfExtras>,
     meshes3d: Query<&Mesh3d>,
     meshes: Res<Assets<Mesh>>,
+    mut commands: Commands,
 ) {
     let Ok(mut held) = held.get_mut(ready.entity) else {
         return;
@@ -162,9 +175,23 @@ pub(super) fn held_ready(
             .iter_descendants(ready.entity)
             .find_map(|each| extra(extras.get(each).ok()?, key))
     };
+    let pose = given("carry_hold").and_then(|c| c.as_str().map(str::to_string));
+    if let Ok(socket) = parents.get(ready.entity).map(ChildOf::parent) {
+        match &pose {
+            Some(clip) => {
+                commands.entity(socket).insert(CarryHold {
+                    look: ready.entity,
+                    clip: clip.clone(),
+                });
+            }
+            None => {
+                commands.entity(socket).remove::<CarryHold>();
+            }
+        }
+    }
     held.carry_tilt = if let Some(tilt) = given("carry_tilt").and_then(|t| t.as_f64()) {
         tilt as f32
-    } else if given("hold").is_some() || given("strap").is_some() {
+    } else if given("hold").is_some() || given("strap").is_some() || pose.is_some() {
         0.0
     } else {
         let points = look_points(
