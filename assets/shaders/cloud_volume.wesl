@@ -23,6 +23,7 @@
 
 import bevy_render::view::View;
 import super::cloud_noise::wrapped_noise;
+import super::dusk::dusk_sky;
 
 // Field order must match `Params` in sky/volume.rs.
 struct Params {
@@ -42,6 +43,9 @@ struct Params {
     layers: array<vec4<f32>, 5>,
     // The planet's sea radius and the air's in the world's metres, the slab's bottom and top.
     shell: vec4<f32>,
+    // The dusk's own colours (dusk.wesl): the horizon's, in w how much of them the sky draws;
+    // the zenith's; the glow's; toward the sun, below the horizon too.
+    dusk: array<vec4<f32>, 4>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -106,6 +110,19 @@ fn remap(v: f32, lo: f32, hi: f32) -> f32 {
 fn air_seen(direction: vec3<f32>) -> vec3<f32> {
     let d = vec3<f32>(direction.x, direction.y, -direction.z);
     return textureSampleLevel(air, mirrored, d, 0.0).rgb * view.exposure;
+}
+
+// The sky's light from a direction as the sky draws it (sky.wesl): the air's, and once the sun
+// is down the dusk's own colours over it, since the air goes dark at sunset. Lit by the air
+// alone, the clouds stood black against the dusk sky drawn round them (settlement end A at
+// 18.7 h). The dusk's are on the screen's scale already, as sky.wesl adds them.
+fn sky_seen(direction: vec3<f32>) -> vec3<f32> {
+    let share = params.dusk[0].w;
+    if share <= 0.0 {
+        return air_seen(direction);
+    }
+    let dusk = dusk_sky(direction, eye_up, params.dusk[3].xyz, params.dusk[0].rgb, params.dusk[1].rgb, params.dusk[2].rgb);
+    return air_seen(direction) + dusk * share;
 }
 
 // The height over the air's sea of a point `s` along a direction from one `h` over it, the
@@ -438,7 +455,7 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
     let height = dot(sun, eye_up);
     let sunlight = params.sunlight.rgb * smoothstep(-0.06, 0.02, height) * view.exposure;
     let level = normalize(sun - eye_up * height + vec3<f32>(1.0e-4, 0.0, 0.0));
-    let sky = (air_seen(eye_up) * 2.0 + air_seen(normalize(eye_up + level)) + air_seen(normalize(eye_up - level))) * 0.25;
+    let sky = (sky_seen(eye_up) * 2.0 + sky_seen(normalize(eye_up + level)) + sky_seen(normalize(eye_up - level))) * 0.25;
     var lights: Lights;
     lights.sun = sunlight;
     lights.sky = sky;
@@ -569,6 +586,6 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
         textureStore(picture, id.xy, vec4<f32>(0.0));
         return;
     }
-    let seen = light + air_seen(direction) * hazed;
+    let seen = light + sky_seen(direction) * hazed;
     textureStore(picture, id.xy, vec4<f32>(seen, opacity));
 }

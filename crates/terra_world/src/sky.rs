@@ -51,6 +51,11 @@ pub struct Sky {
     /// down the world's light (`Tweaks::sun_direction`) is the moon's, opposite it round the
     /// sky, and the dusk glowed toward the moon (lake film r10). Zero for the light's own way.
     pub sun: Vec3,
+    /// The sun's light (the moon's by night) as it reaches the clouds, linear, in lux: through
+    /// the air but over any deck, where the world's light (`Tweaks::sun_illuminance`) is what
+    /// is left of it under the cloud at the eye (`daylight`). The clouds' march lights them
+    /// with it and works out their own shadow (`volume`). Zero where no daylight sets it.
+    pub sun_above: Vec3,
     /// How the stars have turned with the sky: about which axis, and how far, in radians.
     pub spin_axis: Vec3,
     pub spin: f32,
@@ -97,6 +102,7 @@ impl Sky {
             night: 0.0,
             twilight: 0.0,
             sun: Vec3::ZERO,
+            sun_above: Vec3::ZERO,
             spin_axis: Vec3::Y,
             spin: 0.0,
             over_air: false,

@@ -70,6 +70,11 @@ pub struct Params {
     /// planet's sea radius and the air's sea radius in the world's metres, and the slab's
     /// bottom and top over the sea.
     pub shell: Vec4,
+    /// The dusk's own colours, which the sky draws over the air once the sun is down
+    /// (`dusk.wesl`, sky.wesl) and the air's picture lacks: the horizon's, its w how much of
+    /// them the sky draws (its brightness times its share of twilight, `Sky`); the zenith's;
+    /// the glow's; toward the sun, below the horizon too.
+    pub dusk: [Vec4; 4],
 }
 
 /// The most a heaped column covers, so the 3D noise cuts it into heaps (Nubis's coverage
@@ -327,8 +332,7 @@ fn tell(
     // Anchored at the map's middle, as the 2D shapes' offsets are.
     let anchor = clouds.middle;
     let sun = tweaks.sun_direction.normalize_or(Vec3::Y);
-    let sunlight = Vec3::from_slice(&tweaks.sun_color.to_linear().to_f32_array()[..3])
-        * tweaks.sun_illuminance;
+    let (sunlight, dusk) = lights(&sky, &tweaks, sun);
     *frame = frame.wrapping_add(1);
     // Low layers stand over the low ground the start is on, its height over the sea.
     let ground = start
@@ -356,6 +360,7 @@ fn tell(
         sunlight: sunlight.extend((*frame % 1024) as f32),
         tuned: Vec4::new(HEAPED_COVER.get(), BODY_LOW.get(), 0.0, 0.0),
         layers,
+        dusk,
         shell: Vec4::new(
             planet.sea_radius_m(),
             crate::air::sea_sphere_radius_m(air_scale),
@@ -370,6 +375,32 @@ fn tell(
         air: air.map(|a| a.0.clone()),
         target,
     });
+}
+
+/// The lights the march gives the clouds, for the sun toward `sun`: the sun's and the dusk's.
+fn lights(sky: &super::Sky, tweaks: &Tweaks, sun: Vec3) -> (Vec3, [Vec4; 4]) {
+    // The sun over the cloud, which the march shadows itself: the world's light is what the
+    // cloud at the eye leaves of it, and lit by that the tundra's heaps stood brown under a
+    // deck at 11 h (`Sky::sun_above`). The world's light where no daylight sets it.
+    let sunlight = if sky.sun_above != Vec3::ZERO {
+        sky.sun_above
+    } else {
+        Vec3::from_slice(&tweaks.sun_color.to_linear().to_f32_array()[..3]) * tweaks.sun_illuminance
+    };
+    let linear = |c: Color| {
+        let c = c.to_linear();
+        Vec3::new(c.red, c.green, c.blue)
+    };
+    // The dusk's colours as the sky draws them over the air (sky.wesl), so the clouds take
+    // the sky's light once the air's goes dark at sunset: lit by the air alone they stood
+    // black against the dusk sky round them (settlement end A at 18.7 h).
+    let dusk = [
+        linear(sky.horizon).extend(sky.brightness * sky.twilight),
+        linear(sky.zenith).extend(0.0),
+        linear(sky.glow).extend(0.0),
+        sky.sun.try_normalize().unwrap_or(sun).extend(0.0),
+    ];
+    (sunlight, dusk)
 }
 
 /// Keeps the veil round the camera, as the sky's dome is.

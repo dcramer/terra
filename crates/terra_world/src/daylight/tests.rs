@@ -335,6 +335,74 @@ fn under_a_deck_the_light_comes_from_high_overhead_and_under_a_clear_sky_from_th
     assert!(toward.dot(up) > 0.8 && toward.x > 0.0, "{toward}");
 }
 
+fn tweaks() -> Tweaks {
+    Tweaks {
+        sun_direction: Vec3::Y,
+        sun_color: Color::WHITE,
+        sun_illuminance: 0.0,
+        light_direction: Vec3::Y,
+        light_size: 0.0,
+        sea: false,
+        sea_level_m: 0.0,
+        sea_shallow: Color::WHITE,
+        sea_deep: Color::WHITE,
+        ground_low: Color::WHITE,
+        ground_high: Color::WHITE,
+        ground_steep: Color::WHITE,
+        ground_faceted: false,
+        ground_cover: 0.0,
+        grass_dry: Color::WHITE,
+        grass_lush: Color::WHITE,
+        sand: Color::WHITE,
+    }
+}
+
+#[test]
+fn the_clouds_take_the_sun_over_the_deck_the_eye_stands_under() {
+    let (path, up) = (path(), Vec3::Y);
+    let sun = Vec3::new(1.0, 0.3, 0.0).normalize();
+    let light = light_at(17.0);
+    let at = (sun, 12.0, 17.0, up);
+    let mut open = tweaks();
+    let over_open = light_the_world(
+        &mut open,
+        &path,
+        at,
+        &light,
+        crate::weather::Under::sky(0.0, 0.0),
+        0.0,
+    );
+    let mut shut = tweaks();
+    let over_shut = light_the_world(
+        &mut shut,
+        &path,
+        at,
+        &light,
+        crate::weather::Under::sky(1.0, 0.6),
+        crate::weather::deck_cover(1.0),
+    );
+    // Under a full deck in falling snow the world's light is a small share of the open sky's,
+    assert!(
+        shut.sun_illuminance < 0.3 * open.sun_illuminance,
+        "{} {}",
+        shut.sun_illuminance,
+        open.sun_illuminance
+    );
+    // yet over the deck the sun shines as over an open sky, and lights the clouds, which shade
+    // themselves: lit by what the deck leaves, the tundra's heaps stood brown at 11 h.
+    assert!(
+        over_shut.abs_diff_eq(over_open, 1e-3 * over_open.length()),
+        "{over_shut} {over_open}"
+    );
+    // Under an open sky the clouds' sun is the world's light, its colour times its lux.
+    let colour = open.sun_color.to_linear();
+    let world = Vec3::new(colour.red, colour.green, colour.blue) * open.sun_illuminance;
+    assert!(
+        over_open.abs_diff_eq(world, 1e-3 * world.length()),
+        "{over_open} {world}"
+    );
+}
+
 #[test]
 fn the_sun_casts_crisp_shadows_and_a_deck_soft_ones() {
     assert_eq!(

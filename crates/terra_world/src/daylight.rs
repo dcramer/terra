@@ -602,7 +602,7 @@ fn shine(
         .next()
         .map_or(Vec3::Y, |eye| eye.translation().normalize_or(Vec3::Y));
     let at = (clock.hour * SUN_STEPS).round() / SUN_STEPS;
-    light_the_world(
+    sky.sun_above = light_the_world(
         &mut tweaks,
         &path,
         (sun, at, height, up),
@@ -818,7 +818,8 @@ fn mist_light(
 
 /// The world's light: above the horizon the sun's, below it the moon's, its beam as thin as
 /// the cloud leaves it, and under a deck the key from high overhead (`keyed`), for the sun
-/// so many degrees up at `height`, seen by an eye whose up is `up`.
+/// so many degrees up at `height`, seen by an eye whose up is `up`. Gives the beam over the
+/// cloud, linear, in lux: what lights the clouds themselves (`Sky::sun_above`).
 fn light_the_world(
     tweaks: &mut Tweaks,
     path: &SkyPath,
@@ -826,7 +827,7 @@ fn light_the_world(
     light: &Light,
     under: crate::weather::Under,
     deck: f32,
-) {
+) -> Vec3 {
     tweaks.sun_direction = if height > -1.0 { sun } else { path.moon(at) };
     tweaks.sun_color = Color::srgb(light.light.x, light.light.y, light.light.z);
     let (direct, toward) = keyed(under, deck, tweaks.sun_direction, up);
@@ -838,6 +839,8 @@ fn light_the_world(
     tweaks.sun_illuminance = direct * beam;
     tweaks.light_direction = toward;
     tweaks.light_size = light_size(deck);
+    let colour = tweaks.sun_color.to_linear();
+    Vec3::new(colour.red, colour.green, colour.blue) * beam
 }
 
 /// How wide the world's light is as a source under a deck so much of the sky: the sun's own
