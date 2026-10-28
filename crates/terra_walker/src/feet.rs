@@ -646,10 +646,16 @@ impl Kept {
                 hip,
                 reach,
                 extent,
+                fresh: self.feet[side].fresh(),
             },
             dt,
             |at| underfoot.under(at, root, up, (ground - root).dot(up)),
         );
+        // A new lock whose own probe found the sole aloft (a heel gone over a step down's edge
+        // since the gate read the ground) is let go again; placement placed it free.
+        if grounded.refused() {
+            self.feet[side].refuse();
+        }
         Some((clip, grounded))
     }
 

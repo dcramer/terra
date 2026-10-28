@@ -182,6 +182,16 @@ pub const PLANT_M: f32 = 0.07;
 /// 2026-10-28), and taken at PLANT_M it locked a frame early, short, and slid as it let go.
 pub const SWEPT_M: f32 = 0.03;
 
+/// Whether a sole as placed hangs its ball over its ground (`Posed::over`) past `PLANT_M` more
+/// than its heel: a sole straddling a step down's edge on its heel, the ball over the lower
+/// tread. Such a foot is not down, however near its heel is: a foot stands on its ball with its
+/// heel hanging (a stair climbed on the ball of the foot), never on its heel with its forefoot
+/// over a drop, which rolls forward off the edge. A sole over its ground by heel and ball alike
+/// (a landing's foot still coming down) is the lock's gate's (`Foot::aloft`), not this.
+pub fn hangs(over: [f32; 2]) -> bool {
+    over[1] - over[0] > PLANT_M
+}
+
 /// One foot's lock.
 #[derive(Clone, Copy, Debug)]
 pub struct Foot {
@@ -202,6 +212,9 @@ pub struct Foot {
     /// The lock was taken where the foot was caught (swept down fast, or mid-blend), not
     /// where its clip came down: its step to the clip is a recovery step (`CAUGHT_STEP_S`).
     caught: bool,
+    /// A lock taken this frame from a free or blending foot: the state, rest and catch it
+    /// would have had without it, which `refuse` puts back.
+    fresh: Option<(State, Option<[f32; 2]>, bool)>,
 }
 
 impl Default for Foot {
@@ -215,6 +228,7 @@ impl Default for Foot {
             why: "",
             rest: None,
             caught: false,
+            fresh: None,
         }
     }
 }
@@ -271,6 +285,7 @@ impl Foot {
     /// Where the foot is this frame, `dt` seconds on, from the clip's foot; `other_moving`
     /// when the other foot is mid-step.
     pub fn update(&mut self, posed: Posed, dt: f32, other_moving: bool) -> Pose {
+        self.fresh = None;
         let shown = self.step(posed, dt, other_moving);
         self.shown = Some(shown);
         if self.planted() && posed.lock >= FULL {
@@ -278,6 +293,24 @@ impl Foot {
             *rest = [rest[0].min(posed.sole[0]), rest[1].min(posed.sole[1])];
         }
         shown
+    }
+
+    /// Where the foot rests (`rest`) when this frame's `update` took a new lock from a free or
+    /// blending foot, gated on last frame's ground (`PLANT_M`); else none, and none before its
+    /// first lock. Placement checks such a lock against its own probe
+    /// (`placement::Foot::fresh`).
+    pub fn fresh(&self) -> Option<[f32; 2]> {
+        self.fresh.and_then(|(_, rest, _)| rest)
+    }
+
+    /// This frame's new lock let go again (placement found the sole aloft under it,
+    /// `placement::Grounded::refused`): the foot is free or blending as it would have been, and
+    /// is left free as not yet down (`"high"`).
+    pub fn refuse(&mut self) {
+        if let Some((state, rest, caught)) = self.fresh.take() {
+            (self.state, self.rest, self.caught) = (state, rest, caught);
+            self.why = "high";
+        }
     }
 
     /// How far the foot as placed stands over where it rests (`PLANT_M`): its sole's lower
@@ -322,7 +355,7 @@ impl Foot {
         // A new lock starts only once the foot as placed is down (`PLANT_M`); a lock held, let
         // go or stepped is not a new one.
         let aloft = self.aloft(&posed);
-        let down = aloft <= PLANT_M;
+        let down = aloft <= PLANT_M && !hangs(posed.over);
         // Only a foot the clip has low takes the weight on landing however it swings; one the
         // pose still has up (a fall's foot coming forward) is not locked in the air. A foot
         // known to be down (where it rests is known) under a full curve stands however fast
@@ -392,6 +425,7 @@ impl Foot {
         match self.state {
             State::Free => {
                 if lands {
+                    self.fresh = Some((State::Free, self.rest, self.caught));
                     self.state = State::Planted(clip);
                     self.caught = caught;
                 }
@@ -402,6 +436,7 @@ impl Foot {
                 let s = s + dt / BLEND_S;
                 if s >= 1.0 {
                     self.state = if lands {
+                        self.fresh = Some((State::Free, self.rest, self.caught));
                         State::Planted(clip)
                     } else {
                         State::Free
@@ -419,6 +454,7 @@ impl Foot {
                 // Its clips have it down again and it is down: it stands where it is shown, and
                 // the step rule takes it on to the clip (a cut step's blend meeting a stop).
                 self.state = if lands {
+                    self.fresh = Some((State::Blending { from, s }, self.rest, self.caught));
                     self.caught = true;
                     State::Planted(shown)
                 } else {

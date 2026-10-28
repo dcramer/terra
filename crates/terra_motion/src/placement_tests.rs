@@ -115,6 +115,7 @@ fn foot(shown: Pose, lock: Option<Pose>, root: Vec3) -> Foot {
         hip: Vec3::new(0.0, 10.0, 0.0),
         reach: 0.88,
         extent: None,
+        fresh: None,
     }
 }
 
@@ -829,4 +830,91 @@ fn a_foot_over_a_riser_reads_its_point_over_the_edge_as_over_the_lower_tread() {
         (over[0] - 0.2).abs() < 1e-3 && over[1].abs() < 1e-3,
         "{over:?}"
     );
+}
+
+/// A lock is gated on last frame's ground (`feet::PLANT_M`), so a sole that straddled a step
+/// down's edge then, its heel on the higher tread, can be locked a frame later wholly over the
+/// lower one, still at the higher's height. Its own probe refuses it (`Foot::fresh`): it is
+/// placed free, eased down, and locked once within PLANT_M of where it rests, where it stays.
+/// Without the check (no `fresh`) the lock is taken in the air and eased 0.5 m down while
+/// locked: the yard's jog at the trench (controller R2, fault d).
+#[test]
+fn a_lock_whose_own_probe_finds_the_sole_over_a_step_down_is_refused_until_it_is_down() {
+    let ground = |x: f32| (if x >= 0.06 { -0.5 } else { 0.0 }, UP);
+    let under = under_of(ground, Vec3::ZERO);
+    let rest = [ANKLE.y, (ANKLE + BALL).y];
+    let (straddling, over_edge) = (flat(0.0), flat(0.07));
+    // A frame of one foot, as the walker places it: its ground, the pelvis dropped for it, and
+    // how far the foot placed stands over where it rests (the lock's gate).
+    let frame = |placing: &mut Placing, shown: Pose, lock: Option<Pose>, fresh| {
+        let g = placing.ground(
+            0,
+            Foot {
+                fresh,
+                ..foot(shown, lock, Vec3::ZERO)
+            },
+            DT,
+            &under,
+        );
+        let drop = placing.pelvis([&g, &g], Vec3::ZERO, DT);
+        let over = g.over(g.placed(drop));
+        (g, g.placed(drop).at.y, over[0].min(over[1]))
+    };
+    let straddled = || {
+        let mut placing = Placing::default();
+        for _ in 0..10 {
+            frame(&mut placing, straddling, None, None);
+        }
+        placing
+    };
+    // Straddling, the heel is on the higher tread: near enough by the heel, but its ball hangs
+    // over the lower tread, so it is not down (`feet::hangs`), and a lock there is refused.
+    let mut placing = straddled();
+    let (g, _, aloft) = frame(&mut placing, straddling, None, None);
+    assert!(aloft <= crate::feet::PLANT_M, "{aloft}");
+    assert!(crate::feet::hangs(g.over(g.placed(0.0))));
+    let (g, ..) = frame(&mut placing, straddling, Some(straddling), Some(rest));
+    assert!(g.refused());
+    // A sole on a step up by its ball, its heel hanging over the lower tread, stands.
+    let up_ground = |x: f32| (if x >= 0.06 { 0.2 } else { 0.0 }, UP);
+    let up_under = under_of(up_ground, Vec3::ZERO);
+    let mut up_placing = Placing::default();
+    for _ in 0..10 {
+        up_placing.ground(0, foot(straddling, None, Vec3::ZERO), DT, &up_under);
+    }
+    let leg = Foot {
+        fresh: Some(rest),
+        ..foot(straddling, Some(straddling), Vec3::ZERO)
+    };
+    let g = up_placing.ground(0, leg, DT, &up_under);
+    assert!(!g.refused() && g.locked);
+    // A frame on, the lock taken there is refused by its own probe and the foot placed free.
+    let lock = Some(over_edge);
+    let (g, _, mut aloft) = frame(&mut placing, over_edge, lock, Some(rest));
+    assert!(g.refused() && !g.locked);
+    // Free, it eases down; locked once down, it is refused no more and stays put.
+    let mut frames = 0;
+    while aloft > crate::feet::PLANT_M {
+        aloft = frame(&mut placing, over_edge, None, None).2;
+        frames += 1;
+        assert!(frames < 30, "never down: {aloft}");
+    }
+    let (g, first, _) = frame(&mut placing, over_edge, lock, Some(rest));
+    assert!(!g.refused() && g.locked, "refused once down");
+    let mut last = first;
+    for _ in 0..30 {
+        last = frame(&mut placing, over_edge, lock, None).1;
+    }
+    assert!(
+        (last - first).abs() <= crate::feet::PLANT_M,
+        "{first} -> {last}"
+    );
+    assert!((last - (ANKLE.y - 0.5)).abs() < 1e-3, "{last}");
+    // Without the check the lock is taken at the higher tread's height and eased down locked.
+    let mut placing = straddled();
+    let (_, first, _) = frame(&mut placing, over_edge, lock, None);
+    for _ in 0..30 {
+        last = frame(&mut placing, over_edge, lock, None).1;
+    }
+    assert!(first - last > 0.4, "{first} -> {last}");
 }

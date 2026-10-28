@@ -476,6 +476,21 @@ fn a_lock_starts_only_once_the_foot_as_placed_is_down() {
     }
     foot.update(posed(0.6, 0.10, 1.0, 0.03), DT, false);
     assert!(foot.planted());
+    // A lock held is no new lock; placement gates only a new one (`fresh`), and a new one
+    // refused (its own probe found the sole aloft) leaves the foot free, "high", following
+    // the clip, and is taken again once down.
+    foot.update(posed(0.6, 0.10, 1.0, 0.0), DT, false);
+    assert!(foot.planted() && foot.fresh().is_none());
+    for _ in 0..30 {
+        foot.update(posed(0.8, 0.40, 0.0, 0.0), DT, false);
+    }
+    foot.update(posed(0.9, 0.10, 1.0, 0.0), DT, false);
+    let rest = foot.fresh().expect("a new lock, its rest known");
+    assert!((rest[0] - 0.10).abs() < 1e-5, "{rest:?}");
+    foot.refuse();
+    assert!(!foot.planted() && foot.fresh().is_none() && foot.why() == "high");
+    let shown = foot.update(posed(0.92, 0.10, 1.0, 0.0), DT, false);
+    assert!(foot.planted() && shown == at(0.92, 0.10));
 }
 
 /// A planted foot is eased back to the clip by the lock weight as the curve falls; the

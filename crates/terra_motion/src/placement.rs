@@ -243,6 +243,7 @@ pub struct Grounded {
     locked: bool,
     off: bool,
     root: Vec3,
+    refused: bool,
 }
 
 /// What `Placing::ground` reads of a foot this frame.
@@ -269,6 +270,12 @@ pub struct Foot {
     /// (`Grounded::need`), as Unreal's Stride Warping pulls the pelvis down toward its warped
     /// feet so a leg is not stretched past its clip's.
     pub extent: Option<f32>,
+    /// For a lock new this frame (`feet::Foot::fresh`), where the foot rests: its heel and ball
+    /// over the clip's flat ground while locked. The lock is refused (`Grounded::refused`) when
+    /// its own probe finds the sole's lower point farther over its ground than `feet::PLANT_M`
+    /// past that: the lock's gate read last frame's ground, and a sole that straddled an edge
+    /// then (its heel on the higher tread) may be wholly over the lower one now.
+    pub fresh: Option<[f32; 2]>,
 }
 
 impl Placing {
@@ -351,7 +358,9 @@ impl Placing {
             hip,
             reach,
             extent,
+            fresh,
         } = foot;
+        let drop = self.pelvis.drop;
         let placed = &mut self.feet[side];
         let ball_at = shown.at + shown.turn * ball;
         let at_level = |at: Vec3| at - up * (at - root).dot(up);
@@ -425,7 +434,8 @@ impl Placing {
         // ground nor a swinging foot's. A foot let go (aloft) eases back to the clip over the
         // root, so a jump's rise does not leave it behind.
         let k = 1.0 - libm::expf(-dt.max(0.0) / EASE_S);
-        let eased = match placed.eased {
+        let was = placed.eased;
+        let ease_for = |locked: bool| match was {
             // Come off the edge it straddled, it is on the ground now under it at once: it
             // was over it, the edge holding it up, and does not float down.
             _ if stepped_off => target,
@@ -441,7 +451,7 @@ impl Placing {
                 // the lag is for a swinging foot, and the clip has a locked one on the ground,
                 // so it is out of its ground at once (as any foot under its ground is), never
                 // under the clip's height over it (a heel strike onto a higher tread).
-                let clear = if lock.is_some() {
+                let clear = if locked {
                     0.0
                 } else {
                     ((ball_at - root).dot(up) - BALL_REST_M).max(0.0) * LAG_SHARE
@@ -454,11 +464,10 @@ impl Placing {
                 )
             }
         };
-        placed.eased = Some((eased, root));
-        Grounded {
+        let mut grounded = Grounded {
             shown,
             ball_at,
-            heights: eased,
+            heights: ease_for(lock.is_some()),
             probed,
             up,
             hip,
@@ -467,11 +476,46 @@ impl Placing {
             locked: lock.is_some(),
             off,
             root,
+            refused: false,
+        };
+        // Refused, a new lock is placed as a free foot on the same probe (`Grounded::aloft`).
+        if let Some(rest) = fresh.filter(|_| lock.is_some() && !off)
+            && grounded.aloft(rest, drop)
+        {
+            placed.lock = None;
+            grounded.locked = false;
+            grounded.heights = ease_for(false);
+            grounded.refused = true;
         }
+        placed.eased = Some((grounded.heights, root));
+        grounded
     }
 }
 
 impl Grounded {
+    /// Whether a new lock's foot, placed with the pelvis lowered by `drop` (last frame's), is
+    /// not down on this frame's own probe, as Unreal's Foot Placement plants a foot only within
+    /// DistanceToGround of the trace it makes that frame: its sole's lower point farther over
+    /// its ground than `feet::PLANT_M` past where it rests (`rest`), or its ball hanging
+    /// (`feet::hangs`). The lock's gate read the ground found last frame, and a sole that then
+    /// straddled a step down's edge, its heel on the higher tread, may now be wholly over the
+    /// lower one at the higher's height; locked there it would be eased down while locked.
+    fn aloft(&self, rest: [f32; 2], drop: f32) -> bool {
+        let over = self.over(self.placed(drop));
+        let height = |at: Vec3| (at - self.root).dot(self.up);
+        let sole = [height(self.shown.at), height(self.ball_at)];
+        let aloft = (0..2)
+            .map(|i| sole[i] + over[i] - rest[i])
+            .fold(f32::INFINITY, f32::min);
+        aloft > crate::feet::PLANT_M || crate::feet::hangs(over)
+    }
+
+    /// A lock new this frame refused (`Foot::fresh`): the foot is placed as a free foot, and
+    /// the lock is to be let go (`feet::Foot::refuse`).
+    pub fn refused(&self) -> bool {
+        self.refused
+    }
+
     /// How far under the clip's flat ground this foot's ground is (the higher of its heel's and
     /// ball's: a sole rests on the highest under it), m: the drop it asks of the pelvis.
     pub fn need(&self) -> f32 {
