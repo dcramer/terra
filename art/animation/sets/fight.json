@@ -975,6 +975,8 @@
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
         "shield": "Low_Guard",
+        "raise": "Raised_Block",
+        "arc": 0.1,
         "aim": {
           "upperarm_l": [
             0.55,

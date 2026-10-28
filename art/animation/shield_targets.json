@@ -41,6 +41,24 @@
    "from": "27fa529c",
    "template": "male",
    "why": "The strafes' place before D542 (Low_Strafe, both strafes alike: D531's guard with the forearm a little further out, the board clear of the stepping thigh); Low_Guard's own place puts the heater in the heavy template's left thigh in Fight_Strafe_R (held 4.3 cm)"
+  },
+  "Raised_Block": {
+   "centre": [
+    0.19,
+    0.24,
+    0.33
+   ],
+   "face": [
+    0.2079,
+    -0.1699,
+    0.9633
+   ],
+   "up": [
+    0,
+    0.9848,
+    0.1736
+   ],
+   "why": "The block's raise (Clear_Block, D554), authored from the geometry, not captured: the board upright and tipped 10 deg forward before the head and chest, its face 12 deg to the left of ahead, its top at eye level; the upper arm forward at shoulder height and the forearm across the face about 14 cm in front of it, as a heater is raised. Keyed_Block's own board lay tipped 52 deg back over the head with the forearm 11 cm before the Head joint (block.held 5.7 cm)"
   }
  },
  "board": {

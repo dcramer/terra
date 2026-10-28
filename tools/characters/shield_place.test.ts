@@ -74,6 +74,8 @@ test("each captured target reproduces the board of the commit and template it wa
   const targets = readTargets();
   assert.ok(targets.Low_Guard, "Low_Guard, the developer-approved guard (D531), has a target");
   for (const [pose, target] of Object.entries(targets)) {
+    // A target authored from the geometry (Raised_Block) was captured from no commit.
+    if (!target.from) continue;
     const files = ["assets/models/character/base.glb", "assets/models/character/fight.glb", "assets/models/character/templates.json", "assets/models/held/heater_shield.glb"];
     const dir = atCommit(target.from, files);
     const r = reader({ body: join(dir, files[0]), clips: join(dir, files[1]), templates: join(dir, files[2]), shield: join(dir, files[3]), only: [target.template] });
