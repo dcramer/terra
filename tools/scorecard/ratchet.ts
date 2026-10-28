@@ -153,7 +153,7 @@ export function line(c: Criterion, r: Result, scorecard: string, heavy: string):
     better: `, better than its baseline ${fmt(r.base!)}: nightly banks it`,
     worse: `, WORSE than its baseline ${fmt(r.base!)}: undo, or ${scorecard} --raise "<why>" in this commit`,
     new: `, below its bar with no baseline: --raise "<why>" banks its first number, or nightly does`,
-    missing: ": not measured (its check gave no number; the log says why)",
+    missing: `: not measured (${r.note ?? "its check gave no number; the log says why"})`,
     unmeasured: `: not measurable yet, needs ${r.note}`,
     skipped: `: heavy, ${heavy}`,
   };

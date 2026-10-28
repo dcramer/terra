@@ -4,7 +4,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { written } from "../characters/markers.ts";
-import { CRITERIA, courseValues, staleMarkers } from "./scorecard.ts";
+import { type Criterion, judge, line } from "../scorecard/ratchet.ts";
+import { CRITERIA, courseValues, filmValues, staleMarkers } from "./scorecard.ts";
 
 test("the course's numbers are read from its lines and nothing else", () => {
   const out = ["running 1 test", "scorecard\ttunnel.wall\t2", "scorecard\tjump.apex\t0.046875", "scorecard\tbad\tNaN", "test x ... ok"].join("\n");
@@ -44,4 +45,25 @@ test("a clip file re-exported without its baked foot locks is counted, one as ba
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("a film check with no number (a run that did not finish) leaves its row unmeasured with the check's line as its note, the others judged", () => {
+  const criteria = [
+    { id: "feet.sliding", measurable: true, check: { by: "film", name: "feet sliding" } },
+    { id: "swim.pose", measurable: true, check: { by: "film", name: "swim pose" } },
+  ] as unknown as Criterion[];
+  // As yard.ts writes them: JSON writes a NaN as null.
+  const checks = JSON.parse(
+    JSON.stringify([
+      { name: "feet sliding", ok: true, line: "0 of 66 plants slid", value: 0, faults: 0 },
+      { name: "swim pose", ok: false, line: "✗ not measured: the lake run did not finish (its log lake.log)", value: NaN, faults: 1 },
+    ]),
+  );
+  const values = new Map<string, number>();
+  const notes = new Map<string, string>();
+  filmValues(criteria, checks, values, notes);
+  assert.deepEqual([...values.entries()], [["feet.sliding", 0]]);
+  assert.deepEqual([...notes.entries()], [["swim.pose", "the lake run did not finish (its log lake.log)"]]);
+  const result = { ...judge(criteria[1], values.get("swim.pose"), undefined), note: notes.get("swim.pose") };
+  assert.equal(line(criteria[1], result, "cargo xtask controller", ""), "✗ swim.pose: not measured (the lake run did not finish (its log lake.log))");
 });

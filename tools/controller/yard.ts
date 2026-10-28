@@ -19,19 +19,20 @@
 // Into ~/.cache/terra-review/controller-yard/ by default: yard.mp4, checks.txt, checks.json
 // (the numbers the scorecard reads), and each run's walk-<pace>.jsonl and log; a clean checkout's
 // checks are kept by its commit too, for nightly to bank (tools/scorecard/films.ts). Exits 1 when a
-// check fails. Under WSL the runs are the Windows build, on the real GPU; start it as
+// check fails or a run did not finish; a run that did not finish (silent for SILENT_MS, or killed)
+// leaves its own rows not measured, and the others are judged on the records they wrote. Under WSL the runs are the Windows build, on the real GPU; start it as
 // `cargo xtask gpu film -- cargo xtask controller --film` (D319). Needs ffmpeg. Node 22.18 or
 // later; no dependencies.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { ROOT, buildOffscreen, offscreenPath, offscreenRun } from "../sandbox/client.ts";
 import { read } from "../sandbox/duel/checks.ts";
 import { CONTROLLER_FILMS, filmedThrough, keep, stamp } from "../scorecard/films.ts";
 import { pose } from "./swim.ts";
-import { type Walk, check } from "./yard-checks.ts";
+import { type Check, type Walk, check } from "./yard-checks.ts";
 
 /// The frames run and filmed (every second one kept, for 30 a second): the route's start to
 /// past its end at a jog, the turns and the stops' sweep.
@@ -74,6 +75,15 @@ const LAKE: Run = {
   ],
   to: 1300,
 };
+/// How often a run's newest line is passed on, on stderr: `cargo xtask gpu` sees a run's work
+/// only as output under WSL (a Windows program's CPU and GPU use do not show there), and the
+/// runs' own output goes to their logs, so without it a film read as stalled 10 min after the
+/// build, and the lake, the longest run, was cut off about half the time.
+const PASS_ON_MS = 30000;
+let passedOn = 0;
+/// A run that says nothing for this long is stopped, so the other runs' records are still
+/// checked: under `cargo xtask gpu`'s film limit (10 min), so the film is not stopped first.
+const SILENT_MS = 8 * 60000;
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
@@ -95,27 +105,44 @@ if (!args.includes("--check")) {
   rmSync(work, { recursive: true, force: true });
   const runs = await Promise.all([...PACES, LAKE].map((pace) => film(pace, work)));
   for (const each of runs.filter((r) => !r.ok)) console.log(`yard: ✗ ${each.name} did not finish; its log: ${each.log}`);
-  if (runs.some((r) => !r.ok)) process.exit(1);
-  console.log(`yard: ran ${[...PACES, LAKE].map((p) => p.name).join(", ")} (${took()})`);
-  for (const mp4 of [sideBySide(work, PACES, "yard.mp4"), sideBySide(work, [LAKE], "lake.mp4")])
+  console.log(`yard: ran ${runs.map((r) => `${r.name}${r.ok ? "" : " (did not finish)"}`).join(", ")} (${took()})`);
+  const done = (runs: Run[]) => runs.every((pace) => finished(pace.name));
+  const films: [Run[], string][] = [[PACES, "yard.mp4"], [[LAKE], "lake.mp4"]];
+  for (const [runs, name] of films.filter(([runs]) => done(runs))) {
+    const mp4 = sideBySide(work, runs, name);
     console.log(`yard: film ${mp4}, ${(statSync(mp4).size / 1e6).toFixed(1)} MB (${took()})`);
+  }
   rmSync(work, { recursive: true, force: true });
 }
 const passed = report();
-// A clean checkout's film is kept by its commit, for nightly to bank its rows (tools/scorecard/films.ts).
-if (!args.includes("--check")) console.log(`yard: ${keep(out, filmedThrough(filmed, stamp()), CONTROLLER_FILMS)}`);
-process.exit(passed ? 0 : 1);
+// A clean checkout's whole film is kept by its commit, for nightly to bank its rows (tools/scorecard/films.ts).
+const whole = [...PACES, LAKE].every((pace) => finished(pace.name));
+if (!args.includes("--check") && whole) console.log(`yard: ${keep(out, filmedThrough(filmed, stamp()), CONTROLLER_FILMS)}`);
+process.exit(passed && whole ? 0 : 1);
+
+/// Whether a run went to its end: its log, written as it ran, says it saved its frames.
+function finished(name: string): boolean {
+  const log = join(out, `${name}.log`);
+  return existsSync(log) && readFileSync(log, "utf8").includes("SANDBOX saved");
+}
 
 /// The checks on each pace's record and log, a line each, kept as checks.txt and checks.json.
+/// A run that did not finish (stopped, or killed part way) leaves its own rows not measured,
+/// a line saying so with no number, and the others are judged on the records they wrote.
 function report(): boolean {
+  const unmeasured = (name: string, run: string): Check => ({ name, ok: false, line: `✗ not measured: the ${run} run did not finish (its log ${join(out, `${run}.log`)})`, value: NaN, faults: 1 });
+  const stopped = PACES.find((pace) => !finished(pace.name));
   const walks: Walk[] = PACES.map(({ name }) => {
+    if (stopped) return { name, frames: [], route: [], ground: [] };
     const log = readFileSync(join(out, `${name}.log`), "utf8");
     const route = [...log.matchAll(/Route: (.*?)\.?\r?$/gm)].map((m) => m[1]);
     const ground = (/Course: ground every metre east from the start: ([-\d. ]+)/.exec(log)?.[1] ?? "").trim().split(" ").map(Number);
     return { name, frames: read(join(out, `walk-${name}.jsonl`)), route, ground };
   });
-  const lake: Walk = { name: LAKE.name, frames: read(join(out, `walk-${LAKE.name}.jsonl`)), route: [], ground: [] };
-  const lines = [...check(walks), pose(lake)];
+  // A stopped run's rows by their names alone (the checks of no frames), each not measured.
+  const yard = stopped ? check(walks).map((each) => unmeasured(each.name, stopped.name)) : check(walks);
+  const swim = finished(LAKE.name) ? pose({ name: LAKE.name, frames: read(join(out, `walk-${LAKE.name}.jsonl`)), route: [], ground: [] }) : unmeasured("swim pose", LAKE.name);
+  const lines = [...yard, swim];
   const said = lines.map((each) => `${each.name}: ${each.line}`);
   for (const line of said) console.log(`yard: ${line}`);
   writeFileSync(join(out, "checks.txt"), said.join("\n") + "\n");
@@ -135,21 +162,42 @@ async function film(pace: Run, work: string): Promise<{ name: string; ok: boolea
     ...["--cine", `${offscreenPath(shot)}@${ROLLS}`, "--shots", `${offscreenPath(frames)}/f@${FROM}-${pace.to}/2`],
   ]);
   const log = join(out, `${pace.name}.log`);
-  const said = await run(command, words);
-  writeFileSync(log, `${command} ${words.join(" ")}\n\n${said}`);
+  const said = await run(pace.name, command, words, log);
   return { name: pace.name, ok: said.includes("SANDBOX saved"), log };
 }
 
-/// A run to its end; tried again while Windows will not replace a program still closing.
-async function run(command: string, words: string[]): Promise<string> {
+/// A run to its end, its output written to `log` as it comes (so a run stopped part way leaves
+/// what it said); stopped once silent for SILENT_MS; tried again while Windows will not replace a
+/// program still closing.
+async function run(name: string, command: string, words: string[], log: string): Promise<string> {
   for (let attempt = 0; ; attempt++) {
+    writeFileSync(log, `${command} ${words.join(" ")}\n\n`);
     const said = await new Promise<string>((done, fail) => {
-      const child = spawn(command, words, { cwd: ROOT, env: { ...process.env, BEVY_ASSET_ROOT: ROOT } });
+      // Its own process group, so stopping it stops the Windows program's WSL proxy too.
+      const child = spawn(command, words, { cwd: ROOT, env: { ...process.env, BEVY_ASSET_ROOT: ROOT }, detached: true });
       const chunks: Buffer[] = [];
-      child.stdout.on("data", (chunk) => chunks.push(chunk));
-      child.stderr.on("data", (chunk) => chunks.push(chunk));
+      let heard = Date.now();
+      const silent = setInterval(() => {
+        if (Date.now() - heard < SILENT_MS) return;
+        heard = Infinity;
+        const note = `\nyard: ${name} said nothing for ${SILENT_MS / 60000} min; stopped\n`;
+        (chunks.push(Buffer.from(note)), appendFileSync(log, note), process.stderr.write(note.trimStart()));
+        try {
+          process.kill(-(child.pid ?? 0), "SIGKILL");
+        } catch {}
+      }, 5000);
+      const take = (chunk: Buffer) => {
+        (chunks.push(chunk), appendFileSync(log, chunk));
+        heard = Date.now();
+        if (heard - passedOn < PASS_ON_MS) return;
+        passedOn = heard;
+        const last = chunk.toString("utf8").replace(/\x1b\[[0-9;]*m/g, "").trim().split("\n").pop() ?? "";
+        process.stderr.write(`yard: ${name}: ${last.slice(0, 120)}\n`);
+      };
+      child.stdout.on("data", take);
+      child.stderr.on("data", take);
       child.on("error", fail);
-      child.on("close", () => done(Buffer.concat(chunks).toString("utf8")));
+      child.on("close", () => (clearInterval(silent), done(Buffer.concat(chunks).toString("utf8"))));
     });
     if (attempt >= 30 || !said.includes("Could not copy the program")) return said;
     await new Promise((done) => setTimeout(done, 2000));
