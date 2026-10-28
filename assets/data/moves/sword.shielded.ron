@@ -90,9 +90,10 @@
             drive: [(0.0, 0.0), (0.25, 1.8), (0.55, 0.6), (0.75, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
         ),
-        // From the guard and back to it (Keyed_Backhand): the sword to the left shoulder by
-        // 0.4 s and flat across to the right, 1.3 m ahead at its contact, left to right. The
-        // shield low at the left side throughout (Open_Backhand, D454, D531).
+        // From the guard and back to it (Keyed_Backhand): the sword to the left shoulder and
+        // down across to the low right, a falling diagonal cut with its edge leading down and
+        // to the right (D568), left to right. The shield low at the left side throughout
+        // (Open_Backhand, D454, D531).
         "backhand": (
             clip: "Open_Backhand", from: 0.00, speed: 1.9,
             active: (0.58, 0.77), done: 1.75, cancel: 1.2, next: "finisher",
