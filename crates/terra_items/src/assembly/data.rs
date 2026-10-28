@@ -149,6 +149,10 @@ pub struct Part {
     pub grip_from_end_m: Option<Sourced<f32>>,
     pub second_from_grip_m: Option<Sourced<f32>>,
     pub grip_diameter_m: Option<Sourced<f32>>,
+    /// A code-made haft's own shape: `[up from the butt, diameter]` points (m) off its joins and
+    /// grip, such as the swell at the butt the hand closes against and the throat it tapers to
+    /// under the head; the handle runs straight between them and the joins.
+    pub profile_m: Option<Sourced<Vec<[f32; 2]>>>,
     pub density_kg_m3: Option<Sourced<f32>>,
 }
 

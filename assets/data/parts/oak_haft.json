@@ -8,5 +8,6 @@
   "length_m": { "value": 0.64, "source": "the length at which oak, the densest of the three, makes a whole axe with every head and trim (part.ts's whole stage; at 0.74 m the broad and hatchet heads put the axe past the envelope's 0.748 m and the binding put the bearded past its inertia)" },
   "grip_from_end_m": { "value": 0.08, "source": "a hand's width up from the butt, the reference axe's (the D565 step 4 plan)" },
   "grip_diameter_m": { "value": 0.035, "source": "the axe's reference haft, 35 mm (assets/data/kinds/axe.json)" },
+  "profile_m": { "value": [[0, 0.041], [0.01, 0.044], [0.022, 0.0435], [0.035, 0.039], [0.05, 0.0355], [0.42, 0.029]], "source": "a felling axe's handle: the swell-knob at the butt that keeps it from slipping out of the hand, and the slimmer throat under the head's shoulder (USDA Forest Service, An Ax to Grind, 1999, fig. 3, fs.usda.gov/eng/pubs/htmlpubs/htm99232823); the guide gives no sizes, so the knob a quarter wider than the grip and the throat a sixth slimmer, by eye against art/parts/axe/handles.png" },
   "density_kg_m3": { "value": 740, "source": "oak, English brown 740 kg/m^3 (The Engineering ToolBox, Wood Species - Densities, engineeringtoolbox.com/wood-density-d_40.html, looked up 2026-10-28)" }
 }

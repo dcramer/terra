@@ -52,7 +52,7 @@ Technical, by the agent (D566, step 1 of the order of work), for review. It sits
 
 | Part type | Made by | Its frame's origin | Its points |
 |---|---|---|---|
-| `haft` (axe, hammer, pick, torch, spear) | code | the butt's centre, +Y to its top | `butt`, `top`; its section a diameter at each join and the grip |
+| `haft` (axe, hammer, pick, torch, spear) | code | the butt's centre, +Y to its top | `butt`, `top`; its section a diameter at each join and the grip, and its own `profile_m` off them (the swell at the butt the hand closes against, the throat it tapers to under the head) |
 | `blade_handle` (sword, knife) | code | the tang's end, +Y to the shoulder | its section round the tang, from under the guard to the pommel |
 | `axe_head`, `hammer_head`, `pick_head` | model | the centre of the eye's lower opening, +Y up the eye | `eye.lower`, `eye.upper`; `edge.lower`, `edge.upper` (the bit's span on -Z), or `face`, or `tip` |
 | `spear_head`, `torch_head` | model | the socket's mouth, +Y to the tip | `socket.mouth`, `socket.bottom`; `tip` and `edge.*` (±Z), or `flame` |

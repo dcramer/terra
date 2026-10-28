@@ -139,6 +139,9 @@ pub fn assemble(lib: &Library, recipe: &Recipe) -> Result<Assembly, String> {
         working_mass(lib, work, &recipe.material)?,
         centre_of(work, head_y)?,
     )];
+    // Each join's span on the haft, where its partner sets the diameter; the haft's own profile
+    // lies off them.
+    let mut joins = vec![(work.part.as_str(), head_y + entry.at[1], len)];
     let mut lo = 0.0f32;
     let mut hi = len;
     hi = hi.max(head_y + bounds_of(work)?[1][1]);
@@ -164,11 +167,13 @@ pub fn assemble(lib: &Library, recipe: &Recipe) -> Result<Assembly, String> {
         let d = size(trim, bore)?;
         section.push([y + cover[0].max(-y), d]);
         section.push([y + cover[1], d]);
+        joins.push((trim.part.as_str(), y + cover[0].max(-y), y + cover[1]));
         placed.push((trim.part.clone(), slot.slot.as_str(), y));
         mass.push((mass_of(trim)?, centre_of(trim, y)?));
         lo = lo.min(y + bounds_of(trim)?[0][1]);
         hi = hi.max(y + bounds_of(trim)?[1][1]);
     }
+    section.extend(profile(handle, &joins, grip)?);
     section.sort_by(|a, b| a[0].total_cmp(&b[0]));
     section.dedup_by(|b, a| (b[0] - a[0]).abs() < 1e-6);
     if section[0][0] > 0.0 {
@@ -279,6 +284,39 @@ fn envelope(kind: &Kind, length: f32, head: f32, balance: f32, inertia: f32) -> 
         }
     }
     Ok(())
+}
+
+/// The haft's own profile points (`profile_m`), butt-up, each refused where a partner or the grip
+/// sets the diameter instead: a join's span (`joins`, a part and where it runs on the haft) or
+/// within a millimetre of the grip, whose diameter is `grip_diameter_m` (D562).
+fn profile(handle: &Part, joins: &[(&str, f32, f32)], grip: f32) -> Result<Vec<[f32; 2]>, String> {
+    let Some(profile) = &handle.profile_m else {
+        return Ok(Vec::new());
+    };
+    const NEAR: f32 = 0.001;
+    for &[y, d] in &profile.value {
+        let at = format!(
+            "{}'s profile_m point [{y}, {d}] (assets/data/parts/{}.json)",
+            handle.part, handle.part
+        );
+        if y < 0.0 || d <= 0.0 {
+            return Err(format!(
+                "{at}: a point is [up from the butt, diameter], both in metres and the diameter above 0; fix it"
+            ));
+        }
+        if (y - grip).abs() < NEAR {
+            return Err(format!(
+                "{at} is on the grip, whose diameter is grip_diameter_m (D562); move it off the grip or remove it"
+            ));
+        }
+        if let Some((part, from, to)) = joins.iter().find(|(_, a, b)| y > a - NEAR && y < b + NEAR)
+        {
+            return Err(format!(
+                "{at} lies in {part}'s join, {from:.3} to {to:.3} m up the haft, where {part} sets the diameter (D566); move it below the join or remove it"
+            ));
+        }
+    }
+    Ok(profile.value.clone())
 }
 
 /// The frustums between the section's joins, of the handle's wood: its mass and centre along +Y.

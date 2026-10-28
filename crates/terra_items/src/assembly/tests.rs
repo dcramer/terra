@@ -310,3 +310,45 @@ fn a_part_is_made_for_the_kinds_it_names_or_else_every_kind_with_a_slot_for_its_
     let named = ["round_shield".to_string(), "no_such_kind".to_string()];
     assert_eq!(names(kinds_for(&l, "haft", Some(&named))), ["round_shield"]);
 }
+
+/// The made-up axe with its haft given `profile` (`[up from the butt, diameter]` points).
+fn profiled(profile: &str) -> Result<Assembly, String> {
+    let shaped = format!(
+        r#"{{"part": "test_shaped_haft", "type": "haft", "length_m": {{"value": {LEN}}}, "grip_from_end_m": {{"value": {GRIP}}}, "grip_diameter_m": {{"value": {EYE}}}, "density_kg_m3": {{"value": {ASH}}}, "profile_m": {{"value": {profile}}}}}"#
+    );
+    let l = Library::from_json(TYPES, MATERIALS, &[AXE], &[&head(0.0), &shaped, COLLAR])
+        .expect("the made-up parts read");
+    assemble(
+        &l,
+        &recipe(&["test_box_head", "test_shaped_haft", "test_collar"], 1),
+    )
+}
+
+#[test]
+fn a_hafts_profile_swells_its_butt_and_weighs_in_its_mass() {
+    // A swell 4.5 cm across at the butt, easing to the eye's 3.5 cm 4 cm up: a frustum, then the
+    // straight haft to its top.
+    let a = profiled("[[0, 0.045], [0.04, 0.035]]").expect("a swollen haft assembles");
+    assert_eq!(a.section[0], [-GRIP, 0.045]);
+    assert!((a.section[1][0] - (0.04 - GRIP)).abs() < 1e-6 && (a.section[1][1] - EYE).abs() < 1e-6);
+    let (r0, r1, h) = (0.0225f32, EYE / 2.0, 0.04f32);
+    let swell = PI * h / 3.0 * (r0 * r0 + r0 * r1 + r1 * r1) * ASH;
+    let rest = PI * r1 * r1 * (LEN - h) * ASH;
+    let m = HEAD_KG + COLLAR_KG + swell + rest;
+    assert!((a.mass_kg - m).abs() < 1e-4, "{} against {m}", a.mass_kg);
+}
+
+#[test]
+fn a_profile_point_in_a_join_or_on_the_grip_is_refused() {
+    // The collar runs 2 cm under the head's eye.lower, which is LEN - PROUD - HEAD_H up the haft.
+    let e = profiled("[[0.6, 0.03]]").unwrap_err();
+    assert!(
+        e.contains("lies in test_collar's join") && e.contains("move it below the join"),
+        "{e}"
+    );
+    let e = profiled(&format!("[[{GRIP}, 0.04]]")).unwrap_err();
+    assert!(
+        e.contains("is on the grip, whose diameter is grip_diameter_m"),
+        "{e}"
+    );
+}

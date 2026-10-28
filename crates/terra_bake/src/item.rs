@@ -195,21 +195,32 @@ fn turned_handle(
     );
     let v = |y: f32| 1.0 - (y - butt) / (top - butt).max(1e-6);
     let mut uv = Vec::<[f32; 2]>::new();
-    for w in section.windows(2) {
-        let ([y0, d0], [y1, d1]) = (w[0], w[1]);
-        if y1 <= y0 {
-            continue;
-        }
-        let slope = -(d1 - d0) / 2.0 / (y1 - y0);
+    // Each span's cone slope (the normal's rise), and at each ring the mean of the spans either
+    // side, so a haft's swell and taper (its profile_m, D566) shade as one turned surface, not
+    // a band a span. The section is continuous, so no ring is a step that wants a hard edge.
+    let spans: Vec<([f32; 2], [f32; 2])> = section
+        .windows(2)
+        .map(|w| (w[0], w[1]))
+        .filter(|(a, b)| b[0] > a[0])
+        .collect();
+    let slopes: Vec<f32> = spans
+        .iter()
+        .map(|([y0, d0], [y1, d1])| -(d1 - d0) / 2.0 / (y1 - y0))
+        .collect();
+    let at_ring = |k: usize| match k {
+        0 => slopes[0],
+        k if k == slopes.len() => slopes[k - 1],
+        k => (slopes[k - 1] + slopes[k]) / 2.0,
+    };
+    for (k, &([y0, d0], [y1, d1])) in spans.iter().enumerate() {
         let base = pos.len() as u32;
         for i in 0..=SIDES {
             let (c, s) = ring(i);
-            let n = [c, slope, s];
-            let l = (c * c + slope * slope + s * s).sqrt();
-            for (y, d) in [(y0, d0), (y1, d1)] {
+            for (y, d, slope) in [(y0, d0, at_ring(k)), (y1, d1, at_ring(k + 1))] {
+                let l = (c * c + slope * slope + s * s).sqrt();
                 pos.push([c * d / 2.0, y, s * d / 2.0]);
                 uv.push([i as f32 / SIDES as f32, v(y)]);
-                nrm.push(n.map(|x| x / l));
+                nrm.push([c / l, slope / l, s / l]);
             }
         }
         for i in 0..SIDES as u32 {
@@ -466,7 +477,7 @@ mod tests {
                        {{"name": "eye.upper", "type": "eye", "at": [0, 0.06, 0], "dir": [0, 1, 0], "size": 0.035}}]}}"#,
             1.15e-4 // about 0.9 kg in iron, inside the axe's head mass
         );
-        let haft = r#"{"part": "test_haft", "type": "haft", "length_m": {"value": 0.68}, "grip_from_end_m": {"value": 0.08}, "grip_diameter_m": {"value": 0.035}, "density_kg_m3": {"value": 670}}"#;
+        let haft = r#"{"part": "test_haft", "type": "haft", "length_m": {"value": 0.68}, "grip_from_end_m": {"value": 0.08}, "grip_diameter_m": {"value": 0.035}, "profile_m": {"value": [[0, 0.045], [0.04, 0.035]]}, "density_kg_m3": {"value": 670}}"#;
         let collar = r#"{"part": "test_collar", "type": "collar", "model": "models/parts/test_collar.glb", "mass_kg": {"value": 0.01}, "centre_m": [0, -0.01, 0], "bounds_m": [[-0.022, -0.02, -0.022], [0.022, 0, 0.022]], "cover_m": [-0.02, 0],
             "points": [{"name": "bore", "type": "bore", "at": [0, 0, 0], "dir": [0, 1, 0], "size": 0.035}]}"#;
         Library::from_json(TYPES, MATERIALS, &[AXE], &[&head, haft, collar])
@@ -540,5 +551,43 @@ mod tests {
             .unwrap() as usize;
         let image = g.json["textures"][t]["source"].as_u64().unwrap() as usize;
         assert_eq!(glb::image_bytes(&g, image).unwrap(), &[2; 12]);
+    }
+
+    /// An accessor's VEC3s, read from the binary chunk.
+    fn vec3s(g: &Glb, accessor: &Value) -> Vec<[f32; 3]> {
+        let a = &g.json["accessors"][accessor.as_u64().unwrap() as usize];
+        let view = &g.json["bufferViews"][a["bufferView"].as_u64().unwrap() as usize];
+        let at = view["byteOffset"].as_u64().unwrap_or(0) as usize
+            + a["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let f =
+            |i: usize| f32::from_le_bytes(g.bin[at + 4 * i..at + 4 * i + 4].try_into().unwrap());
+        (0..a["count"].as_u64().unwrap() as usize)
+            .map(|i| [f(3 * i), f(3 * i + 1), f(3 * i + 2)])
+            .collect()
+    }
+
+    #[test]
+    fn the_turned_haft_shades_as_one_surface_its_swell_included() {
+        let (_, bytes) = item(1);
+        let g = glb::read(&bytes).unwrap();
+        let mesh = &g.json["meshes"][g.json["nodes"][0]["mesh"].as_u64().unwrap() as usize];
+        let attrs = &mesh["primitives"][0]["attributes"];
+        let (pos, nrm) = (vec3s(&g, &attrs["POSITION"]), vec3s(&g, &attrs["NORMAL"]));
+        // The swell runs 4.5 cm across at the butt to the grip's 3.5 cm 4 cm up (the test haft's
+        // profile_m), then straight: the side's normal at that ring is the two cones' mean,
+        // rising (0.125 + 0) / 2 for each unit out.
+        let ring = -0.04f32;
+        let mut met = 0;
+        for (p, n) in pos.iter().zip(&nrm) {
+            if (p[1] - ring).abs() < 1e-6 && n[1].abs() < 0.9 {
+                let out = (n[0] * n[0] + n[2] * n[2]).sqrt();
+                assert!((n[1] / out - 0.0625).abs() < 1e-4, "{n:?} at {p:?}");
+                met += 1;
+            }
+        }
+        assert!(
+            met >= 2 * SIDES,
+            "both spans' rings at the swell's top ({met})"
+        );
     }
 }
