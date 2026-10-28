@@ -7,6 +7,10 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The assembler reads the kinds and parts as JSON (assets/data/kinds, assets/data/parts; D566)
+# and writes its canonical bytes; both already built for the workspace.
+serde.workspace = true
+serde_json = "1"
 
 [dev-dependencies]
 terra_gen.workspace = true

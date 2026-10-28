@@ -6220,6 +6220,8 @@ dependencies = [
 name = "terra_items"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "terra_gen",
 ]
 

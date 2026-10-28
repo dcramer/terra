@@ -48,6 +48,11 @@ bow's string's middle at rest, which the drawing hand takes.
 
 Writes assets/models/held/<item>.glb, the item named as in the game's catalogue in lower case
 with `_` for spaces.
+
+Kept for whole models only (D565, D552): today's thirteen held looks, and uniques after. An
+assembled item is placed by terra_items::assembly from its parts' points, never fitted here;
+an item's entry goes once its kind has parts and its look is an assembly (assembled-items.md,
+What happens to today's items).
 """
 
 import hashlib

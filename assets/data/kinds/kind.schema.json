@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/dcramer/terra/assets/data/kinds/kind.schema.json",
   "title": "A kind of assembled item (D565)",
-  "description": "One file a kind, assets/data/kinds/<kind>.json: everything about a weapon or tool that is not its parts (docs/assembled-items.md, Kinds and The connection-point convention). Every situation is filled: a fact, a named mechanism, or open with its owner and reason; a blank or an unexplained open is refused. Read by the kind check (tools/items/kind.ts) and the part checker (tools/items/part.ts), and at run time by the assembler (D565 step 2), none of them built yet.",
+  "description": "One file a kind, assets/data/kinds/<kind>.json: everything about a weapon or tool that is not its parts (docs/assembled-items.md, Kinds and The connection-point convention). Every situation is filled: a fact, a named mechanism, or open with its owner and reason; a blank or an unexplained open is refused. Read by the kind check (tools/items/kind.ts) and the part checker (tools/items/part.ts), and at run time by the assembler (terra_items::assembly).",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "kind", "about", "attach_kind", "hold_class", "hands", "lead", "grip_type", "slots", "points", "held", "used", "carried", "stowed", "blocking", "animation", "reference", "envelope"],

@@ -4,6 +4,9 @@
 // rather than guesses when a measure is not decisive, and names which; a person then sets the
 // turn once (fit.ts --turn), kept in the data.
 //
+// Kept for whole models only (D565): uniques and today's looks. Assembled parts carry their
+// points (D566), so nothing about them is detected; tools/items/part.ts checks them instead.
+//
 // In the source's own glTF axes:
 // - its long axis is +Y for a length fit, else its vertices' principal axis, at least
 //   LONG_RATIO times its next extent;

@@ -74,7 +74,7 @@ Technical, by the agent (D566, step 1 of the order of work), for review. It sits
 
 ### The kinds table
 
-One file a kind, `assets/data/kinds/<kind>.json`, with its schema `kind.schema.json` beside it, which refuses a blank: every situation is a fact with its source, a mechanism that exists, or "open" with its owner (the developers' for design, technical for an agent's) and why. A kind here is one a move-set class (a reference item and its clips each), finer than D546's kind, which each file names (`attach_kind`). It lives in the asset root, not `art/`, because the assembler reads it at run time, in play and on the server, to refuse a recipe outside its kind ([pipeline note](../research/2026-10-28-assembled-items-pipeline.md), "In play"); `art/` holds data only the tool that makes a look reads. JSON, not RON like its neighbours, so the TypeScript checks read it with no parser and a JSON Schema holds it (the game's crates already use `serde_json`). Its readers, none built: the kind check and part checker (`tools/items/kind.ts`, `part.ts`, the pipeline note) and the Rust assembler with the recipe check in `terra_items` (step 2).
+One file a kind, `assets/data/kinds/<kind>.json`, with its schema `kind.schema.json` beside it, which refuses a blank: every situation is a fact with its source, a mechanism that exists, or "open" with its owner (the developers' for design, technical for an agent's) and why. A kind here is one a move-set class (a reference item and its clips each), finer than D546's kind, which each file names (`attach_kind`). It lives in the asset root, not `art/`, because the assembler reads it at run time, in play and on the server, to refuse a recipe outside its kind ([pipeline note](../research/2026-10-28-assembled-items-pipeline.md), "In play"); `art/` holds data only the tool that makes a look reads. JSON, not RON like its neighbours, so the TypeScript checks read it with no parser and a JSON Schema holds it (the game's crates already use `serde_json`). Its readers: the kind check and the part checker (`tools/items/kind.ts`, `part.ts`) and the Rust assembler (`terra_items::assembly`, step 2). The part types' templates (who makes each, its slot, its points, how it is placed, its budgets and roles) and the join rules' numbers are data beside the parts, `assets/data/parts/types.json`, read by all three; a part's own data is `assets/data/parts/<part>.json` (`part.schema.json`).
 
 The reference items' masses are stand-ins (recalled real tools, or `items.ron`'s), each with its source, replaced by the parts' weighed masses when the reference is made; the envelope is D459's clamp (the inertia within I_ref/1.15² to I_ref/0.85²) seen one number at a time: length ±10% (measured), head mass about -25% to +40%, balance solved, each at the reference's others.
 
@@ -131,8 +131,8 @@ What no check catches is a correct but ugly combination; that is what the per-ki
 
 Each one command, a line a stage, every failure naming the number, the bar and the field to change (D388, D556).
 
-- **Part checker**: a part against its template and its points.
-- **Assembler**: parts and a rule in, the item and its exact points out; the same input gives the same bytes.
+- **Part checker**: a part against its template and its points (`node tools/items/part.ts <part>`, [its README](../tools/items/README.md)).
+- **Assembler**: parts and a rule in, the item and its exact points out; the same input gives the same bytes (`terra_items::assembly::assemble`, a recipe of kind, part ids, material and seed; one placement a part, never merged). Built for the line kinds (a haft through an eye or into a socket, trims under the head and over the butt); blades, boards and staves next. Not used by the game yet: that waits for step 4's proof.
 - **Kinds table**: the kinds as data, every situation filled; a blank or an unsourced number is an error (`assets/data/kinds/`, held by `node tools/items/kind.ts` in `cargo xtask check`'s tools tests).
 - **The grid check**: layer 2 above, incremental.
 - **Kind sheets**: layer 3, with the approved set kept.
@@ -144,7 +144,7 @@ The thirteen held looks become assemblies where their kind has parts, or stay as
 ## Order of work, once decided
 
 1. The connection-point convention, the kinds table and each class's reference item and envelope, as data, reviewed. Written 2026-10-28 (above and `assets/data/kinds/`), for review.
-2. The part checker and the assembler.
+2. The part checker and the assembler. Built 2026-10-28 and proven on made-up parts (the kind check, `part.ts`, `terra_items::assembly`); the assembler places the line kinds so far.
 3. The fight clips made right first: a wrist row (flex at most 80°, extension 70°, deviation 20/35°, at most 45° a key) and an edge-leads row on the composed pose, and the keyed takes remade until they pass; the move check's pose made one path with the game's, or tested against it in full.
 4. The proof, for one class (one-handed axe): its clips keyed for the reference axe, then three heads and three handles over the envelope's grid on every body, measured on the hand on the grip, the wrist, the edge leading and the body clear, and on one sheet; the parts made from one approved style reference. If it holds, the approach holds.
 5. The grid check and kind sheets, then the other kinds one at a time, each with its clips.

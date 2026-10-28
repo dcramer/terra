@@ -3,7 +3,11 @@ for its length (a chunky stylised tool, a pickaxe's 8.6 cm where a real one's is
 thinned about its line to that thickness at the grip, swelling back to the source's own over
 the HAFT_BLEND_M under its head, as a real haft swells into the eye. The held look
 (fit_held.py, its data's "haft") and the world prop (tools/props refine.py, its prop.json's
-"haft") are thinned by this one function, so the two agree."""
+"haft") are thinned by this one function, so the two agree.
+
+Kept while a whole model's haft is thinned (D565): an assembled item's haft is made by code at
+its thickness (types.json's haft), so this leaves the item path once today's hafted looks are
+assemblies, and stays only while a world prop or a unique needs it."""
 
 # A haft's thinning blends back to the source's thickness over this much under its head (m);
 # the head starts where a section is HEAD_RATIO times the grip's across (detect.ts's HEAD_RATIO).

@@ -13,6 +13,7 @@
 //! Moving an item never makes or loses one. Only [`IdSource`] makes items, and only taking
 //! them to spend ([`Grid::take`]) removes them for good.
 
+pub mod assembly;
 mod bar;
 mod catalogue;
 mod equipment;
