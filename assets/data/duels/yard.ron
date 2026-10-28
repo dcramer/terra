@@ -25,8 +25,10 @@
         (name: "strafe", when: After(1.2), press: [Right], hold: 3.0),
         // After the fight, so its frames stay as they were: sheathed, its idle and walk, for the
         // composed-pose checks (tools/sandbox/duel/pose.ts; the drawn walk is the strafe's).
+        // The walk goes across, to the player's left, not ahead: ahead walked it into the partner
+        // 2.2 m off, chest to chest and a fist in the hip for the rest of the film (2026-10-28).
         (name: "sheathe", when: After(3.5), press: [Draw]),
-        (name: "walk sheathed", when: After(1.5), press: [Forward], hold: 1.2),
+        (name: "walk sheathed", when: After(1.5), press: [Left], hold: 1.2),
         (name: "end", when: After(2.0), press: []),
     ],
 )

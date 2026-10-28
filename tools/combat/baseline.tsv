@@ -172,6 +172,7 @@ film.pose.shield_forearm_deg	15.6	new rows film.pose.* (round 30, D530): the gam
 film.pose.shield_forearm_off	15.3	measure corrected: film.pose.shield_forearm_off is now signed (pose.ts behind), the worse of the elbow and wrist off the board's back with a joint inside the board or out its face failing, where the unsigned forearm's middle passed a board through the arm (round 35); main's hang unchanged
 film.pose.shield_strap_fist	17.5	lowered by nightly 2026-10-28
 film.pose.arms_in_body	-1	lowered by nightly 2026-10-28
+film.pose.bodies_apart	0	first number 2026-10-28
 move.Idle_Loop.hands	1.606	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Idle_Loop.held	21.403	seeded from main at 705a8520 (2026-10-24), the first scorecard run
 move.Walk_Loop.hands	6.212	seeded from main at 705a8520 (2026-10-24), the first scorecard run

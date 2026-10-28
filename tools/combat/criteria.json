@@ -3126,6 +3126,22 @@
     "by": "film",
     "name": "arms in the body at rest"
    }
+  },
+  {
+   "measurable": true,
+   "cost": "heavy",
+   "id": "film.pose.bodies_apart",
+   "noticed": 4,
+   "notice": "one body's arm pressed into the other's (the duel film of 2026-10-28: the sheathed player walked into the partner, chest to chest, the partner's sword fist in the player's hip, under the pushboxes' bar)",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "cm",
+   "source": "pose.ts APART_CM: the deepest of one body's arm points (skin.ts armPoints) into the other's torso, head or thighs, skinned as the male template, past each point's thickness, every other frame the two stand within 1.5 m, drawn or sheathed; tools/sandbox/duel/pose.ts on the duel record's composed pose (D530)",
+   "check": {
+    "by": "film",
+    "name": "bodies apart"
+   }
   }
  ]
 }
