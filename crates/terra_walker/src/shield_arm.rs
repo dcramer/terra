@@ -3,11 +3,11 @@
 //! arm differs (the female template's shoulder sits 5.4 cm in, her forearm is 2 cm shorter)
 //! carries the board centimetres off its pose's place against the chest. After the clips and
 //! the arms kept off the hips, the shoulder blade, upper arm and forearm are turned the least
-//! way that puts the strapped board back on the nearest target of
-//! `art/animation/shield_targets.json`: wholly where the base body's arm, as the clip has it,
-//! holds the board within `NEAR` of it, and not at all from `FAR`, so a pose with the board
-//! elsewhere (the block's raise, the strafes) is left as its clip has it and every shape of one
-//! pose is pulled alike.
+//! way that puts the strapped board back on its target of `art/animation/shield_targets.json`
+//! (the near targets blended by inverse distance, so a crossfade between two poses' places
+//! never snaps): wholly where the base body's arm, as the clip has it, holds the board within
+//! `NEAR` of a target, and not at all from `FAR`, so a pose with the board elsewhere (the
+//! block's raise) is left as its clip has it and every shape of one pose is pulled alike.
 //!
 //! It is the run-time correction shipped games lay over a clip for a body's proportions
 //! (Unreal's IK Rig retargeting and Control Rig hand IK): the bake gets the board close, this
@@ -36,9 +36,12 @@ pub const COST: [f64; 3] = [0.4, 0.05, 0.05];
 pub const PER_RADIAN: f64 = 180.0 / (3.0 * std::f64::consts::PI);
 /// How far off its nearest target (cm, or degrees / 3, the larger) the base body's board is
 /// pulled wholly onto it, and from how far not at all: Low_Guard's bake is 0.7 off, a strap
-/// moved 2 cm about 3; Fight_Guard's board 11 and the strafes' 15 are other poses.
+/// moved 2 cm about 3; the block's raise is far off every target.
 pub const NEAR: f64 = 5.0;
 pub const FAR: f64 = 10.0;
+/// The power of the off in the targets' blend (`between`): 4 keeps a strap moved 2 cm off the
+/// guard's target within 0.2 cm of it with the strafes' 7 cm away.
+const SHEPARD: i32 = 4;
 const STEPS: usize = 12;
 
 /// The shield poses' board places and the strapped board, as the tools keep them.
@@ -328,16 +331,34 @@ pub fn fit(reading: &Reading, board: &Place, targets: &[Place]) -> Option<[f64; 
         strap: strap_in(&base[3], &base[4]),
     };
     let at = board_at(&base_arm, board, &[0.0; 9]);
-    let (k, off) = wants
-        .iter()
-        .map(|w| off_by(&at, w))
-        .enumerate()
-        .min_by(|a, b| a.1.total_cmp(&b.1))?;
-    let w = weight_of(off);
+    let offs: Vec<f64> = wants.iter().map(|w| off_by(&at, w)).collect();
+    let w = weight_of(offs.iter().copied().fold(f64::INFINITY, f64::min));
     if w <= 0.0 {
         return None;
     }
-    Some(solve_arm(&arm, board, &wants[k]).map(|v| v * w))
+    Some(solve_arm(&arm, board, &between(&wants, &offs)).map(|v| v * w))
+}
+
+/// The targets blended by Shepard's inverse distance weighting (each by 1 / off^`SHEPARD`), so a
+/// board on one target goes to it and a board crossfading between two near ones (the guard's
+/// and the strafes', 7 cm apart, both in the pull) is pulled along between them instead of
+/// snapping from one to the other halfway.
+fn between(wants: &[Place], offs: &[f64]) -> Place {
+    let by: Vec<f64> = offs
+        .iter()
+        .map(|d| 1.0 / d.max(1e-6).powi(SHEPARD))
+        .collect();
+    let all: f64 = by.iter().sum();
+    let sum = |f: fn(&Place) -> DVec3| -> DVec3 {
+        wants.iter().zip(&by).map(|(p, b)| f(p) * (b / all)).sum()
+    };
+    let face = sum(|p| p.face).normalize();
+    let up = sum(|p| p.up);
+    Place {
+        centre: sum(|p| p.centre),
+        face,
+        up: (up - face * up.dot(face)).normalize(),
+    }
 }
 
 /// On a body with a shield arm: its chest, the arm's bones (`ARM`), its hand and fist, the

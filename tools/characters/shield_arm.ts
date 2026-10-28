@@ -3,10 +3,11 @@
 // differs (the female template's shoulder sits 5.4 cm in, her forearm is 2 cm shorter) carries
 // the board centimetres off its pose's place against the chest. After the clips, the shoulder
 // blade, upper arm and forearm are turned the least way that puts the strapped board back on
-// the nearest target of art/animation/shield_targets.json: wholly where the base body's arm,
-// as the clip has it, holds the board within NEAR of it, and not at all from FAR, so a pose with
-// the board elsewhere (the block's raise, the strafes) is left as its clip has it and every
-// shape of one pose is pulled alike.
+// its target of art/animation/shield_targets.json (the near targets blended by inverse distance,
+// so a crossfade between two poses' places never snaps): wholly where the base body's arm, as
+// the clip has it, holds the board within NEAR of a target, and not at all from FAR, so a pose
+// with the board elsewhere (the block's raise) is left as its clip has it and every shape of one
+// pose is pulled alike.
 // It is the run-time correction shipped games lay over a clip for a body's proportions (Unreal's
 // IK Rig retargeting and Control Rig hand IK): the bake gets the board close, this takes up the
 // centimetres. The solve is hold.py's (a damped Gauss-Newton over each bone's turn in its own
@@ -26,9 +27,12 @@ export const COST = [0.4, 0.05, 0.05];
 export const PER_RADIAN = 180 / (3 * Math.PI);
 /** How far off its nearest target (cm, or degrees / 3, the larger) the base body's board is
  * pulled wholly onto it, and from how far not at all: Low_Guard's bake is 0.7 off, a strap moved
- * 2 cm about 3; Fight_Guard's board 11 and the strafes' 15 are other poses, the block's raise 55. */
+ * 2 cm about 3; the block's raise is 55 off. */
 export const NEAR = 5;
 export const FAR = 10;
+/** The power of the off in the targets' blend (`between`): 4 keeps a strap moved 2 cm off the
+ * guard's target within 0.2 cm of it with the strafes' 7 cm away. */
+const SHEPARD = 4;
 const STEPS = 12;
 
 /** How far one place is from another in one number: cm, or degrees / 3, the larger. */
@@ -124,6 +128,28 @@ export function weightOf(off: number): number {
   return 1 - s * s * (3 - 2 * s);
 }
 
+/** The targets blended by Shepard's inverse distance weighting (each by 1 / off^SHEPARD), so a
+ * board on one target goes to it and a board crossfading between two near ones (the guard's and
+ * the strafes', 7 cm apart, both in the pull) is pulled along between them instead of snapping
+ * from one to the other halfway. */
+export function between(wants: Place[], offs: number[]): Place {
+  const by = offs.map((d) => 1 / Math.max(d, 1e-6) ** SHEPARD);
+  const all = by.reduce((a, b) => a + b, 0);
+  const sum = (f: (p: Place) => V3): V3 => {
+    const s: V3 = [0, 0, 0];
+    wants.forEach((p, i) => f(p).forEach((c, j) => (s[j] += (c * by[i]) / all)));
+    return s;
+  };
+  const unit = (v: V3): V3 => {
+    const n = Math.hypot(...v);
+    return [v[0] / n, v[1] / n, v[2] / n];
+  };
+  const face = unit(sum((p) => p.face));
+  const up = sum((p) => p.up);
+  const d = up[0] * face[0] + up[1] * face[1] + up[2] * face[2];
+  return { centre: sum((p) => p.centre), face, up: unit([up[0] - face[0] * d, up[1] - face[1] * d, up[2] - face[2] * d]) };
+}
+
 /** The strap's frame (held.ts `frameOf`: the true forearm's, at the fist) in the forearm's own,
  * from the forearm's, the hand's and the fist's poses (in any one frame). */
 function strapIn(lower: Pose, hand: Pose, fist: Pose): Pose {
@@ -179,11 +205,10 @@ export function fitter(body: Glb, rest: Pose[], shield: Held, o: { board?: Place
     const baseHand = base(hand, at);
     const baseArm: Arm = { parent: spineAt, locals: baseLocals, strap: strapIn(at, baseHand, base(fist, baseHand)) };
     // The base body's board, its chest at this body's (the board's place is in the chest's frame).
-    const near = wants.map((w) => offBy(boardAt(baseArm, board), w));
-    const k = near.indexOf(Math.min(...near));
-    const w = weightOf(near[k]);
+    const offs = wants.map((w) => offBy(boardAt(baseArm, board), w));
+    const w = weightOf(Math.min(...offs));
     if (w <= 0) return pose;
-    const x = solveArm(arm, board, wants[k]).map((v) => v * w);
+    const x = solveArm(arm, board, between(wants, offs)).map((v) => v * w);
     const out = [...pose];
     const turned = new Map(bones.map((b, j) => [b, { ...locals[j], r: qmul(locals[j].r, turnOf(x.slice(3 * j, 3 * j + 3))) }]));
     for (const i of below) out[i] = apply(out[parentOf(i)], turned.get(i) ?? localOf(pose[parentOf(i)], pose[i]));

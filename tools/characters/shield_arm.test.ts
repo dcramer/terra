@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Glb, type Pose, type V3, len, posed, sub } from "./glb.ts";
 import { frameOf, hang } from "./held.ts";
-import { FAR, NEAR, fitter, weightOf } from "./shield_arm.ts";
+import { FAR, NEAR, between, fitter, weightOf } from "./shield_arm.ts";
 import { boardPlace, placeOff, readBoard, readTargets } from "./shield_place.ts";
 import { shaped, skinOf } from "./skin.ts";
 
@@ -27,6 +27,19 @@ test("a board is pulled wholly onto a target near it and not at all from far", (
   assert.equal(weightOf(FAR), 0);
   const mid = weightOf((NEAR + FAR) / 2);
   assert.ok(mid > 0.4 && mid < 0.6, `${mid}`);
+});
+
+test("a board between two near targets is pulled between them, on one onto it", () => {
+  // The guard's place and one 7 cm out from it, as the strafes' is.
+  const a = readTargets().Low_Guard;
+  const b = { ...a, centre: [a.centre[0] + 0.067, a.centre[1] + 0.017, a.centre[2] - 0.021] as V3 };
+  const apart = placeOff(a, b).cm;
+  assert.equal(placeOff(between([a, b], [0, apart]), a).cm < 1e-3, true);
+  // Halfway, each as far: the blend's centre halfway too, not on either.
+  const half = between([a, b], [apart / 2, apart / 2]);
+  assert.ok(Math.abs(placeOff(half, a).cm - apart / 2) < 0.01, `${placeOff(half, a).cm} of ${apart}`);
+  // A board 2 cm off the guard's place is pulled within 0.2 cm of it, the strafes' 7 cm away.
+  assert.ok(placeOff(between([a, b], [2, apart]), a).cm < 0.2);
 });
 
 test("the guard's board lands on its target on every template, the female's included", () => {

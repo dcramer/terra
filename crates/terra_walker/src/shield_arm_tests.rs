@@ -174,6 +174,56 @@ fn a_board_far_from_every_target_is_left_as_the_clip_has_it() {
 }
 
 #[test]
+fn a_board_passing_between_two_near_targets_moves_without_a_jump() {
+    // Two poses' places as near as the guard's and the strafes' (Low_Guard, Low_Strafe, about
+    // 7 cm and 14 degrees apart), and a crossfade carrying the base body's board from one to the
+    // other: the fitted board follows it, never snapping from one target to the other.
+    let j = joints();
+    let arm = arm_of(&j);
+    let chest = Pose::of(&j[0]);
+    let x_b = [0.026, 0.0, 0.04, 0.1, -0.08, 0.13, -0.1, 0.16, 0.08];
+    let a = board_at(&arm, &board(), &[0.0; 9]);
+    let b = board_at(&arm, &board(), &x_b);
+    let apart = off_by(&a, &b);
+    assert!(
+        (6.0..9.0).contains(&apart),
+        "the case's targets {apart} apart"
+    );
+    let targets = [in_chest(&chest, &a), in_chest(&chest, &b)];
+    let mut fitted = Vec::new();
+    for n in 0..=40 {
+        let x: [f64; 9] = std::array::from_fn(|i| x_b[i] * n as f64 / 40.0);
+        let mut locals = j.map(|t| Pose::of(&t));
+        for k in 0..3 {
+            let l = &mut locals[k + 1];
+            l.r *= turn_of(DVec3::new(x[3 * k], x[3 * k + 1], x[3 * k + 2]));
+        }
+        let reading = Reading {
+            chest,
+            chest_rest: chest.r,
+            locals: [locals[1], locals[2], locals[3], locals[4], locals[5]],
+            moved: [DVec3::ZERO; 5],
+        };
+        let turned = arm_of(&std::array::from_fn(|k| Transform {
+            translation: locals[k].t.as_vec3(),
+            rotation: locals[k].r.as_quat(),
+            scale: locals[k].s.as_vec3(),
+        }));
+        let by = fit(&reading, &board(), &targets).unwrap_or([0.0; 9]);
+        fitted.push(board_at(&turned, &board(), &by));
+    }
+    let step = fitted
+        .windows(2)
+        .map(|w| off_by(&w[0], &w[1]))
+        .fold(0.0, f64::max);
+    // The base board moves about apart / 40 a step; a snap is the whole way at once.
+    assert!(
+        step < apart / 10.0,
+        "a step of {step} (targets {apart} apart)"
+    );
+}
+
+#[test]
 fn the_kept_targets_hold_the_guard_and_the_strapped_board() {
     let kept = ShieldTargets::default();
     assert!(!kept.targets.is_empty());
