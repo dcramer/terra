@@ -32,6 +32,41 @@ export function tube(outer: Ring, inner: Ring, y0: number, y1: number, material 
   return { positions, indices, materials: [material], textures: [], scaled: [] };
 }
 
+/** A glb of one mesh on one node, with the node's scale: a made-up part's model. */
+export function glbOf(m: Mesh, scale = [1, 1, 1], name = "head"): Buffer {
+  const pos = Buffer.from(new Float32Array(m.positions).buffer);
+  const idx = Buffer.from(new Uint32Array(m.indices).buffer);
+  const lo = [0, 1, 2].map((k) => Math.min(...m.positions.filter((_, i) => i % 3 === k)));
+  const hi = [0, 1, 2].map((k) => Math.max(...m.positions.filter((_, i) => i % 3 === k)));
+  const gltf = {
+    asset: { version: "2.0" },
+    scenes: [{ nodes: [0] }],
+    nodes: [{ name, mesh: 0, scale }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1, material: 0 }] }],
+    materials: [{ name: m.materials[0] }],
+    buffers: [{ byteLength: pos.length + idx.length }],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: pos.length }, { buffer: 0, byteOffset: pos.length, byteLength: idx.length }],
+    accessors: [
+      { bufferView: 0, componentType: 5126, count: m.positions.length / 3, type: "VEC3", min: lo, max: hi },
+      { bufferView: 1, componentType: 5125, count: m.indices.length, type: "SCALAR" },
+    ],
+  };
+  let json = Buffer.from(JSON.stringify(gltf));
+  json = Buffer.concat([json, Buffer.alloc((4 - (json.length % 4)) % 4, 0x20)]);
+  const bin = Buffer.concat([pos, idx]);
+  const head = Buffer.alloc(12);
+  head.writeUInt32LE(0x46546c67, 0);
+  head.writeUInt32LE(2, 4);
+  head.writeUInt32LE(12 + 8 + json.length + 8 + bin.length, 8);
+  const chunk = (b: Buffer, t: number) => {
+    const h = Buffer.alloc(8);
+    h.writeUInt32LE(b.length, 0);
+    h.writeUInt32LE(t, 4);
+    return Buffer.concat([h, b]);
+  };
+  return Buffer.concat([head, chunk(json, 0x4e4f534a), chunk(bin, 0x004e4942)]);
+}
+
 export const EYE = 0.035; // the eye across, the reference axe's grip (axe.json)
 export const HEAD_H = 0.06;
 export const boxHead = (eye = EYE, top = HEAD_H) => tube(square(0.03), circle(eye / 2), 0, top);
@@ -44,7 +79,7 @@ export const head = (over: Record<string, any> = {}) => ({
   type: "axe_head",
   about: "a made-up box head with a round eye",
   model: "models/parts/test_box_head.glb",
-  mass_kg: n(0.9),
+  volume_m3: n(0.9 / 7870), // 0.9 kg in iron (materials.json)
   centre_m: [0, 0.03, 0],
   bounds_m: [[-0.03, 0, -0.03], [0.03, HEAD_H, 0.03]],
   points: [

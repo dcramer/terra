@@ -3,9 +3,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { boxHead, collar, collarMesh, haft, head } from "./fixtures.ts";
+import { boxHead, collar, collarMesh, glbOf, haft, head } from "./fixtures.ts";
 import { type Mesh, normal, readMesh, triangles } from "./mesh.ts";
-import { checkPart, type Ctx, loadCtx, rigid } from "./part.ts";
+import { checkPart, type Ctx, loadCtx } from "./part.ts";
 
 // The real types, kinds and mounts, with only the made-up parts.
 function ctx(parts: any[], meshes: Record<string, Mesh>): Ctx {
@@ -60,10 +60,20 @@ test("a scaled part is refused, read from its glb", () => {
   assert.match(f[0], /parts are never scaled \(D566\)/);
 });
 
-test("a head outside its kind's envelope is refused with the number and the limit", () => {
-  const h = head({ mass_kg: { value: 1.5, source: "made up for the part checker's tests" } });
+test("a head outside its kind's envelope in every material is refused with each mass and the limit", () => {
+  const h = head({ volume_m3: { value: 2e-4, source: "made up for the part checker's tests" } });
   const f = faults(h, ctx([h], { test_box_head: boxHead() }), "slots");
-  assert.ok(f.some((s) => /axe: its mass 1\.5 kg is outside the axe's head mass \[0\.656,1\.28\]/.test(s)), f.join("\n"));
+  // 2e-4 m^3 is 1.574 kg of iron (7870) and 0.520 kg of stone (2600): over the band in one, under it in the other.
+  assert.ok(f.some((s) => /axe: in no material is its head inside the axe's head mass \[0\.656,1\.28\] kg \(iron 1\.574 kg, stone 0\.520 kg/.test(s)), f.join("\n"));
+  assert.deepEqual(faults(head(), good(), "slots"), [], "0.9 kg in iron is inside it");
+});
+
+test("a working part gives its volume, not a mass, and a trim its mass", () => {
+  const h = head({ mass_kg: { value: 0.9, source: "made up for the part checker's tests" } });
+  assert.ok(faults(h, ctx([h], { test_box_head: boxHead() }), "data").some((s) => /\/mass_kg is not a working part's: its mass is its volume_m3 in the recipe's material/.test(s)));
+  const c = collar();
+  delete c.mass_kg;
+  assert.ok(faults(c, ctx([c], { test_collar: collarMesh() }), "data").some((s) => /\/mass_kg is missing: a modelled trim part gives it/.test(s)));
 });
 
 test("a haft too long for its kind, or its grip off its mount's range, is refused from its numbers", () => {
@@ -101,44 +111,18 @@ test("a material not named by its role is refused", () => {
   assert.match(faults(head(), ctx([head()], { test_box_head: m }), "roles")[0], /"Material" is not a role/);
 });
 
-test("a full point's turn takes its direction and roll onto its partner's", () => {
-  const r = rigid({ dir: [0, 0, -1], up: [0, 1, 0] }, { dir: [1, 0, 0], up: [0, 1, 0] });
-  const turn = (p: number[]) => r.map((row) => row[0] * p[0] + row[1] * p[1] + row[2] * p[2]);
-  assert.deepEqual(turn([0, 0, -1]).map(Math.round), [1, 0, 0]);
-  assert.deepEqual(turn([0, 1, 0]).map(Math.round), [0, 1, 0]);
+test("the joins are where the assembler puts them, never placed here", () => {
+  const c = good();
+  // The real assembler, asked as part.ts asks it: the collar's cover top on eye.lower, the haft 4 mm proud.
+  const said = c.pairings("test_box_head", Object.values(c.parts));
+  assert.deepEqual(
+    said.map((p) => [p.partner, p.meet.meet]).sort(),
+    [["test_collar", "placed"], ["test_haft", "handle_top"]],
+  );
+  const top = said.find((p) => p.meet.meet === "handle_top")!.meet as { y: number; d: number };
+  assert.ok(Math.abs(top.y - 0.064) < 1e-6 && Math.abs(top.d - 0.035) < 1e-6);
+  // An assembler that put the collar 3 mm lower would leave a 3 mm gap: the verdict follows its placing.
+  const lower: Ctx = { ...c, pairings: (id, parts) => c.pairings(id, parts).map((p) => (p.meet.meet === "placed" ? { ...p, meet: { ...p.meet, at: [0, -0.003, 0] } } : p)) };
+  assert.ok(faults(collar(), lower, "joins").some((s) => /a 3\.0 mm gap where they meet/.test(s)));
+  assert.deepEqual(faults(collar(), c, "joins"), []);
 });
-
-// A glb of one mesh on one node named head, with the node's scale.
-function glbOf(m: Mesh, scale: number[]): Buffer {
-  const pos = Buffer.from(new Float32Array(m.positions).buffer);
-  const idx = Buffer.from(new Uint32Array(m.indices).buffer);
-  const lo = [0, 1, 2].map((k) => Math.min(...m.positions.filter((_, i) => i % 3 === k)));
-  const hi = [0, 1, 2].map((k) => Math.max(...m.positions.filter((_, i) => i % 3 === k)));
-  const gltf = {
-    asset: { version: "2.0" },
-    scenes: [{ nodes: [0] }],
-    nodes: [{ name: "head", mesh: 0, scale }],
-    meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1, material: 0 }] }],
-    materials: [{ name: m.materials[0] }],
-    buffers: [{ byteLength: pos.length + idx.length }],
-    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: pos.length }, { buffer: 0, byteOffset: pos.length, byteLength: idx.length }],
-    accessors: [
-      { bufferView: 0, componentType: 5126, count: m.positions.length / 3, type: "VEC3", min: lo, max: hi },
-      { bufferView: 1, componentType: 5125, count: m.indices.length, type: "SCALAR" },
-    ],
-  };
-  let json = Buffer.from(JSON.stringify(gltf));
-  json = Buffer.concat([json, Buffer.alloc((4 - (json.length % 4)) % 4, 0x20)]);
-  const bin = Buffer.concat([pos, idx]);
-  const head = Buffer.alloc(12);
-  head.writeUInt32LE(0x46546c67, 0);
-  head.writeUInt32LE(2, 4);
-  head.writeUInt32LE(12 + 8 + json.length + 8 + bin.length, 8);
-  const chunk = (b: Buffer, t: number) => {
-    const h = Buffer.alloc(8);
-    h.writeUInt32LE(b.length, 0);
-    h.writeUInt32LE(t, 4);
-    return Buffer.concat([h, b]);
-  };
-  return Buffer.concat([head, chunk(json, 0x4e4f534a), chunk(bin, 0x004e4942)]);
-}

@@ -9,9 +9,15 @@ use super::*;
 
 const TYPES: &str = include_str!("../../../../assets/data/parts/types.json");
 const AXE: &str = include_str!("../../../../assets/data/kinds/axe.json");
+const SHIELD: &str = include_str!("../../../../assets/data/kinds/round_shield.json");
+// Made-up densities, so the answers do not move when the real ones are refined.
+const MATERIALS: &str = r#"{"materials": {
+  "iron": {"density_kg_m3": {"value": 7800, "source": "made up for the assembler's tests"}},
+  "stone": {"density_kg_m3": {"value": 2600, "source": "made up for the assembler's tests"}}}}"#;
 
 const EYE: f32 = 0.035;
 const HEAD_H: f32 = 0.06;
+const HEAD_M3: f32 = 0.9 / 7800.0; // 0.9 kg in iron
 const HEAD_KG: f32 = 0.9;
 const COLLAR_KG: f32 = 0.01;
 const LEN: f32 = 0.68;
@@ -21,7 +27,7 @@ const PROUD: f32 = 0.004; // D566
 
 fn head(upper_x: f32) -> String {
     format!(
-        r#"{{"part": "test_box_head", "type": "axe_head", "mass_kg": {{"value": {HEAD_KG}}}, "centre_m": [0, 0.03, 0], "bounds_m": [[-0.03, 0, -0.03], [0.03, {HEAD_H}, 0.03]],
+        r#"{{"part": "test_box_head", "type": "axe_head", "volume_m3": {{"value": {HEAD_M3}}}, "centre_m": [0, 0.03, 0], "bounds_m": [[-0.03, 0, -0.03], [0.03, {HEAD_H}, 0.03]],
         "points": [
           {{"name": "eye.lower", "type": "eye", "at": [0, 0, 0], "dir": [0, 1, 0], "size": {EYE}}},
           {{"name": "eye.upper", "type": "eye", "at": [{upper_x}, {HEAD_H}, 0], "dir": [0, 1, 0], "size": {EYE}}},
@@ -43,6 +49,7 @@ fn lib(head: &str) -> Library {
     let long = haft("test_long_haft", 0.8);
     Library::from_json(
         TYPES,
+        MATERIALS,
         &[AXE],
         &[head, &haft("test_haft", LEN), &long, COLLAR],
     )
@@ -50,10 +57,14 @@ fn lib(head: &str) -> Library {
 }
 
 fn recipe(parts: &[&str], seed: u64) -> Recipe {
+    in_material(parts, "iron", seed)
+}
+
+fn in_material(parts: &[&str], material: &str, seed: u64) -> Recipe {
     Recipe {
         kind: "axe".into(),
         parts: parts.iter().map(|p| p.to_string()).collect(),
-        material: "iron".into(),
+        material: material.into(),
         seed,
     }
 }
@@ -86,7 +97,7 @@ fn a_good_axe_is_placed_by_the_convention_with_its_grip_at_the_origin() {
 fn its_mass_balance_and_inertia_are_its_parts_by_d459s_rule() {
     let a = assemble(&lib(&head(0.0)), &recipe(&GOOD, 1)).unwrap();
     let head_y = LEN - PROUD - HEAD_H;
-    let haft_kg = PI * (EYE / 2.0) * (EYE / 2.0) * LEN * ASH;
+    let haft_kg = haft_kg();
     let m = HEAD_KG + COLLAR_KG + haft_kg;
     let centre =
         (HEAD_KG * (head_y + 0.03) + COLLAR_KG * (head_y - 0.01) + haft_kg * LEN / 2.0) / m;
@@ -99,6 +110,108 @@ fn its_mass_balance_and_inertia_are_its_parts_by_d459s_rule() {
     );
     assert!((a.length_m - LEN).abs() < 1e-6);
     assert!((a.inertia_kgm2 - m * (b * b + LEN * LEN / 12.0)).abs() < 1e-4);
+}
+
+#[test]
+fn the_recipes_material_weighs_the_head_by_its_density() {
+    let l = lib(&head(0.0));
+    let iron = assemble(&l, &recipe(&GOOD, 1)).unwrap();
+    // The same head in stone weighs 2600/7800 of its iron self; the haft and collar do not change.
+    let stone_kg = HEAD_M3 * 2600.0;
+    let e = assemble(&l, &in_material(&GOOD, "stone", 1)).unwrap_err();
+    assert!(
+        e.contains(&format!(
+            "head_mass_kg {stone_kg:.4} is outside its envelope"
+        )),
+        "a 0.3 kg stone head is under the axe's band: {e}"
+    );
+    assert!((iron.mass_kg - (HEAD_KG + COLLAR_KG + haft_kg())).abs() < 1e-4);
+    let e = assemble(&l, &in_material(&GOOD, "glass", 1)).unwrap_err();
+    assert!(
+        e.contains("material glass is not in assets/data/parts/materials.json; the materials are iron, stone"),
+        "{e}"
+    );
+}
+
+#[test]
+fn every_material_gives_its_density_with_its_source() {
+    let text = include_str!("../../../../assets/data/parts/materials.json");
+    let l = Library::from_json(TYPES, text, &[], &[]).expect("materials.json reads");
+    assert!(l.materials.contains_key("iron") && l.materials.contains_key("stone"));
+    let bare = r#"{"materials": {"iron": {"density_kg_m3": {"value": 7870}}}}"#;
+    let e = Library::from_json(TYPES, bare, &[], &[]).unwrap_err();
+    assert!(e.contains("missing field `source`"), "{e}");
+}
+
+fn haft_kg() -> f32 {
+    PI * (EYE / 2.0) * (EYE / 2.0) * LEN * ASH
+}
+
+#[test]
+fn the_handle_meets_an_eye_proud_of_its_top_and_a_trim_under_its_entry() {
+    let l = lib(&head(0.0));
+    let (h, haft, collar) = (
+        &l.parts["test_box_head"],
+        &l.parts["test_haft"],
+        &l.parts["test_collar"],
+    );
+    assert_eq!(
+        meet(&l, haft, h),
+        Some(Meet::HandleTop {
+            head: "test_box_head".into(),
+            y: HEAD_H + PROUD,
+            d: EYE
+        })
+    );
+    // Its cover's top (0) against eye.lower (0): no shift, no turn.
+    assert_eq!(
+        meet(&l, collar, h),
+        Some(Meet::Placed {
+            part: "test_collar".into(),
+            onto: "test_box_head".into(),
+            at: [0.0, 0.0, 0.0],
+            turn: ONE
+        })
+    );
+    assert_eq!(meet(&l, h, collar), meet(&l, collar, h), "either order");
+    assert_eq!(
+        meet(&l, haft, collar),
+        None,
+        "a trim meets the handle at sizes only"
+    );
+    let mut names: Vec<_> = pairings(&l, "test_box_head")
+        .unwrap()
+        .into_iter()
+        .map(|p| p.partner)
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        ["test_collar", "test_haft", "test_long_haft"],
+        "every partner its kind allows, once"
+    );
+}
+
+#[test]
+fn a_seated_trim_is_turned_so_its_seat_lies_on_its_boards_point() {
+    // A boss whose seat faces -Z, rolled +Y, 1 cm behind its origin, onto a board's boss point
+    // facing +X, rolled +Y, at (0.1, 0.2, 0): the boss turns a quarter about +Y.
+    let board = r#"{"part": "test_board", "type": "round_board", "points": [
+      {"name": "boss", "type": "seat", "at": [0.1, 0.2, 0], "dir": [1, 0, 0], "up": [0, 1, 0]}]}"#;
+    let boss = r#"{"part": "test_boss", "type": "boss", "points": [
+      {"name": "seat", "type": "seat", "at": [0, 0, 0.01], "dir": [0, 0, -1], "up": [0, 1, 0]}]}"#;
+    let l = Library::from_json(TYPES, MATERIALS, &[SHIELD], &[board, boss]).unwrap();
+    let Some(Meet::Placed { at, turn, .. }) =
+        meet(&l, &l.parts["test_boss"], &l.parts["test_board"])
+    else {
+        panic!("a boss sits on its board");
+    };
+    let q = glam::Quat::from_array(turn);
+    let moved = |p: [f32; 3]| q * glam::Vec3::from(p) + glam::Vec3::from(at);
+    // The seat's point lands on the board's, its direction on the board's, its roll kept.
+    assert!(moved([0.0, 0.0, 0.01]).distance(glam::Vec3::new(0.1, 0.2, 0.0)) < 1e-6);
+    assert!((q * glam::Vec3::NEG_Z).distance(glam::Vec3::X) < 1e-6);
+    assert!((q * glam::Vec3::Y).distance(glam::Vec3::Y) < 1e-6);
 }
 
 #[test]
@@ -169,17 +282,18 @@ fn a_part_with_no_slot_or_a_missing_slot_is_refused() {
 }
 
 #[test]
-fn every_kind_on_disk_reads() {
-    let dir = format!("{}/../../assets/data/kinds", env!("CARGO_MANIFEST_DIR"));
-    let mut kinds = Vec::new();
-    for f in std::fs::read_dir(&dir).expect("the kinds' folder") {
-        let path = f.expect("an entry").path();
-        if path.extension().is_some_and(|e| e == "json") && !path.ends_with("kind.schema.json") {
-            kinds.push(std::fs::read_to_string(path).expect("a kind file"));
-        }
-    }
-    let texts: Vec<&str> = kinds.iter().map(String::as_str).collect();
-    let l = Library::from_json(TYPES, &texts, &[]).expect("every kind reads");
-    assert_eq!(l.kinds.len(), kinds.len());
-    assert!(l.kinds.contains_key("axe"));
+fn the_library_on_disk_reads() {
+    let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let l = Library::read(&assets).expect("every kind, material and part reads");
+    let kinds = std::fs::read_dir(assets.join("data/kinds"))
+        .expect("the kinds' folder")
+        .filter(|f| {
+            f.as_ref().is_ok_and(|f| {
+                let n = f.file_name();
+                n.to_string_lossy().ends_with(".json") && n != "kind.schema.json"
+            })
+        })
+        .count();
+    assert_eq!(l.kinds.len(), kinds);
+    assert!(l.kinds.contains_key("axe") && l.materials.contains_key("iron"));
 }

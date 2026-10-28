@@ -5,18 +5,27 @@
 //! research/2026-10-28-assembled-items-pipeline.md, verdict 2).
 //!
 //! Parts are placed, never merged: one placement a part, naming the part whose one mesh every
-//! item using it shares (verdict 1b). Parts on the line are placed by a shift along +Y alone and
-//! never scaled (D566). Built so far for the line kinds (a haft through a head's eye or into its
-//! socket, with trims under the head and over the butt); blades, boards and staves are refused
-//! with a message until their placing is built.
+//! item using it shares (verdict 1b). Each pair sits as `meet` says, the one placing rule (the
+//! part checker measures its joins from the same); parts on the line are placed by a shift along
+//! +Y alone and never scaled (D566). Built so far for the line kinds (a haft through a head's eye
+//! or into its socket, with trims under the head and over the butt); blades, boards and staves are
+//! refused with a message until their placing is built.
+//!
+//! The working part is made of the recipe's material: its mass is its volume times that
+//! material's density (assets/data/parts/materials.json); a trim keeps its own mass, the handle
+//! its own wood's density.
 
+mod command;
 mod data;
+mod meet;
 #[cfg(test)]
 mod tests;
 
 use std::f32::consts::PI;
 
-pub use data::{Band, Kind, Library, Part, PartType, Point, Size};
+pub use command::Command;
+pub use data::{Band, Kind, Library, Material, Part, PartType, Point, Size};
+pub use meet::{Meet, ONE, Pairing, kinds_of, meet, pairings, rigid};
 use serde::Serialize;
 
 /// What an item is made of: everything needed to make it again, byte for byte.
@@ -72,8 +81,6 @@ impl Assembly {
     }
 }
 
-const ONE: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-
 /// Puts a recipe's parts together by its kind's rules, or says why it cannot.
 pub fn assemble(lib: &Library, recipe: &Recipe) -> Result<Assembly, String> {
     let kind = lib.kinds.get(&recipe.kind).ok_or_else(|| {
@@ -108,13 +115,14 @@ pub fn assemble(lib: &Library, recipe: &Recipe) -> Result<Assembly, String> {
     let density = need(handle, handle.density_kg_m3.as_ref(), "density_kg_m3")?;
     let entry = on_line(work, entry, lib.types.rules.join_m.value)?;
     let top = on_line(work, top, lib.types.rules.join_m.value)?;
-    // The head sits so the haft's top stands proud of an eye's upper opening, or ends at a socket's bottom (D566).
-    let proud = if top.kind == "eye" {
-        lib.types.rules.proud_m.value
-    } else {
-        0.0
+    // The head sits so the haft's top is where `meet` puts it in the head's frame (D566).
+    let Some(Meet::HandleTop { y: top_y, .. }) = meet(lib, handle, work) else {
+        return Err(format!(
+            "{}: {} does not meet the handle at its top; run node tools/items/part.ts {}",
+            recipe.kind, work.part, work.part
+        ));
     };
-    let head_y = len - proud - top.at[1];
+    let head_y = len - top_y;
 
     // Butt-up coordinates first (the haft from 0 to len), shifted to the grip at the end.
     let mut section = vec![
@@ -127,7 +135,10 @@ pub fn assemble(lib: &Library, recipe: &Recipe) -> Result<Assembly, String> {
         (handle.part.clone(), "handle", 0.0),
         (work.part.clone(), "working", head_y),
     ];
-    let mut mass = vec![(mass_of(work)?, centre_of(work, head_y)?)];
+    let mut mass = vec![(
+        working_mass(lib, work, &recipe.material)?,
+        centre_of(work, head_y)?,
+    )];
     let mut lo = 0.0f32;
     let mut hi = len;
     hi = hi.max(head_y + bounds_of(work)?[1][1]);
@@ -140,12 +151,12 @@ pub fn assemble(lib: &Library, recipe: &Recipe) -> Result<Assembly, String> {
                 trim.part, trim.part
             )
         })?;
-        let y = match trim_type.place.as_deref() {
-            Some("under_entry") => head_y + entry.at[1] - cover[1],
-            Some("over_butt") => 0.0,
-            other => {
+        let y = match (trim_type.place.as_deref(), meet(lib, trim, work)) {
+            (Some("under_entry"), Some(Meet::Placed { at, .. })) => head_y + at[1],
+            (Some("over_butt"), _) => 0.0,
+            (other, _) => {
                 return Err(format!(
-                    "{}: trim {} places by {:?}, which a line item does not take",
+                    "{}: trim {} places by {:?}, which a line item does not take, or its working part has no entry",
                     recipe.kind, trim.part, other
                 ));
             }
@@ -349,6 +360,17 @@ fn need(part: &Part, v: Option<&data::Sourced<f32>>, what: &str) -> Result<f32, 
 
 fn mass_of(part: &Part) -> Result<f32, String> {
     need(part, part.mass_kg.as_ref(), "mass_kg")
+}
+
+/// The working part's mass: its volume in the recipe's material.
+fn working_mass(lib: &Library, work: &Part, material: &str) -> Result<f32, String> {
+    let m = lib.materials.get(material).ok_or_else(|| {
+        format!(
+            "material {material} is not in assets/data/parts/materials.json; the materials are {}, or add it with its density and source",
+            names(lib.materials.keys())
+        )
+    })?;
+    Ok(need(work, work.volume_m3.as_ref(), "volume_m3")? * m.density_kg_m3.value)
 }
 
 fn centre_of(part: &Part, y: f32) -> Result<f32, String> {

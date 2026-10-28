@@ -1,9 +1,11 @@
-//! What the assembler reads: the part types (`assets/data/parts/types.json`), the kinds
-//! (`assets/data/kinds/<kind>.json`) and the parts (`assets/data/parts/<part>.json`), the same
-//! files the TypeScript checks hold to their schemas (`tools/items`). Only the fields the
-//! assembler uses are read; serde ignores the rest, which the checks own.
+//! What the assembler reads: the part types (`assets/data/parts/types.json`), the materials'
+//! densities (`assets/data/parts/materials.json`), the kinds (`assets/data/kinds/<kind>.json`)
+//! and the parts (`assets/data/parts/<part>.json`), the same files the TypeScript checks hold to
+//! their schemas (`tools/items`). Only the fields the assembler uses are read; serde ignores the
+//! rest, which the checks own.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use serde::Deserialize;
 
@@ -11,6 +13,19 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Deserialize)]
 pub struct Sourced<T> {
     pub value: T,
+}
+
+/// A number that must carry its source to be read at all (a material's density).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Cited {
+    pub value: f32,
+    pub source: String,
+}
+
+/// A material a recipe names: what its working part is made of (assets/data/parts/materials.json).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Material {
+    pub density_kg_m3: Cited,
 }
 
 /// A kind's number or band, or "open" (not yet known, so not checked).
@@ -104,6 +119,8 @@ pub struct Point {
     pub kind: String,
     pub at: [f32; 3],
     pub dir: [f32; 3],
+    /// A full point's roll, square to `dir` (a seat or a nock, D566).
+    pub up: Option<[f32; 3]>,
     pub size: Option<Size>,
 }
 
@@ -112,7 +129,14 @@ pub struct Part {
     pub part: String,
     #[serde(rename = "type")]
     pub kind: String,
+    /// The kinds it is made for, when its type fits several.
+    pub kinds: Option<Vec<String>>,
+    /// Its model under the asset root, when a model makes it.
+    pub model: Option<String>,
+    /// A trim's mass: its own material, whatever the item's.
     pub mass_kg: Option<Sourced<f32>>,
+    /// A working part's volume: its mass is this times its recipe's material's density.
+    pub volume_m3: Option<Sourced<f32>>,
     pub centre_m: Option<[f32; 3]>,
     pub bounds_m: Option<[[f32; 3]; 2]>,
     pub cover_m: Option<[f32; 2]>,
@@ -131,22 +155,41 @@ impl Part {
     }
 }
 
-/// Everything an assembly may use, read once: the types, the kinds and the parts by id.
+#[derive(Clone, Debug, Deserialize)]
+struct Materials {
+    materials: BTreeMap<String, Material>,
+}
+
+/// Everything an assembly may use, read once: the types, the materials, the kinds and the parts
+/// by id.
 #[derive(Clone, Debug)]
 pub struct Library {
     pub types: Types,
+    pub materials: BTreeMap<String, Material>,
     pub kinds: BTreeMap<String, Kind>,
     pub parts: BTreeMap<String, Part>,
 }
 
+/// The data files beside the part types that are not parts.
+const NOT_PARTS: [&str; 3] = ["types.json", "materials.json", "part.schema.json"];
+
 impl Library {
-    /// From the files' text: `types.json`, every kind's and every part's.
-    pub fn from_json(types: &str, kinds: &[&str], parts: &[&str]) -> Result<Library, String> {
+    /// From the files' text: `types.json`, `materials.json`, every kind's and every part's.
+    pub fn from_json(
+        types: &str,
+        materials: &str,
+        kinds: &[&str],
+        parts: &[&str],
+    ) -> Result<Library, String> {
         let types: Types = serde_json::from_str(types).map_err(|e| {
             format!("assets/data/parts/types.json: {e}; run node tools/items/kind.ts")
         })?;
+        let materials: Materials = serde_json::from_str(materials).map_err(|e| {
+            format!("assets/data/parts/materials.json: {e}; each material gives density_kg_m3 as {{\"value\", \"source\"}}")
+        })?;
         let mut lib = Library {
             types,
+            materials: materials.materials,
             kinds: BTreeMap::new(),
             parts: BTreeMap::new(),
         };
@@ -155,11 +198,44 @@ impl Library {
                 .map_err(|e| format!("a kind: {e}; run node tools/items/kind.ts"))?;
             lib.kinds.insert(k.kind.clone(), k);
         }
+        lib.add_parts(parts.iter().copied())?;
+        Ok(lib)
+    }
+
+    /// Reads the library from the asset root's `data/parts` and `data/kinds`.
+    pub fn read(assets: &Path) -> Result<Library, String> {
+        let text =
+            |p: &Path| std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()));
+        let jsons = |dir: &Path, skip: &[&str]| -> Result<Vec<String>, String> {
+            let mut files: Vec<_> = std::fs::read_dir(dir)
+                .map_err(|e| format!("{}: {e}", dir.display()))?
+                .filter_map(|f| f.ok().map(|f| f.path()))
+                .filter(|p| {
+                    p.extension().is_some_and(|e| e == "json")
+                        && !p.file_name().is_some_and(|n| skip.iter().any(|s| n == *s))
+                })
+                .collect();
+            files.sort();
+            files.iter().map(|p| text(p)).collect()
+        };
+        let (parts, kinds) = (assets.join("data/parts"), assets.join("data/kinds"));
+        let kind_texts = jsons(&kinds, &["kind.schema.json"])?;
+        let part_texts = jsons(&parts, &NOT_PARTS)?;
+        Library::from_json(
+            &text(&parts.join("types.json"))?,
+            &text(&parts.join("materials.json"))?,
+            &kind_texts.iter().map(String::as_str).collect::<Vec<_>>(),
+            &part_texts.iter().map(String::as_str).collect::<Vec<_>>(),
+        )
+    }
+
+    /// Puts these parts in, each replacing any of its id.
+    pub fn add_parts<'a>(&mut self, parts: impl Iterator<Item = &'a str>) -> Result<(), String> {
         for text in parts {
             let p: Part = serde_json::from_str(text)
                 .map_err(|e| format!("a part: {e}; run node tools/items/part.ts <part>"))?;
-            lib.parts.insert(p.part.clone(), p);
+            self.parts.insert(p.part.clone(), p);
         }
-        Ok(lib)
+        Ok(())
     }
 }

@@ -80,6 +80,10 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("assets/data/market.ron", &["terra_town"]),
     ("assets/data/builds.ron", &["terra_town", "terra_bake"]),
     ("assets/data/life.ron", &["terra_town"]),
+    // The assembled items' kinds, part types, materials and parts (D565), read by the
+    // assembler's tests and the item writer's.
+    ("assets/data/kinds/", &["terra_items", "terra_bake"]),
+    ("assets/data/parts/", &["terra_items", "terra_bake"]),
     // The sword-and-shield move set, read by the fight's tests.
     ("assets/data/moves/", &["terra_motion"]),
     // The movers' kinds (D53), read by the mover, the controller course and the walk.

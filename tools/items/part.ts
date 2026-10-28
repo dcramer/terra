@@ -8,14 +8,25 @@
 //
 // A line a stage (D388); a failure names the field and the fix (D556).
 
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { V3 } from "../characters/glb.ts";
+import type { Q, V3 } from "../characters/glb.ts";
 import { KINDS, kindNames, PARTS, readJson, ROOT } from "./kind.ts";
-import { bounds, buried, distance, gap, IDENTITY, type Mesh, moved, normal, ray, readMesh, sharedPlanes, slice, triangles } from "./mesh.ts";
+import { bounds, buried, distance, gap, type Mesh, moved, normal, ray, readMesh, sharedPlanes, slice, triangles } from "./mesh.ts";
 import { validate } from "./schema.ts";
 
-export type Ctx = { types: Record<string, any>; rules: Record<string, any>; kinds: Record<string, any>; attach: Record<string, any>; parts: Record<string, any>; mesh: (part: any) => Mesh };
+export type Ctx = {
+  types: Record<string, any>;
+  rules: Record<string, any>;
+  materials: Record<string, any>;
+  kinds: Record<string, any>;
+  attach: Record<string, any>;
+  parts: Record<string, any>;
+  mesh: (part: any) => Mesh;
+  /** How the part sits with each partner among the parts: the assembler's, never placed here. */
+  pairings: (id: string, parts: any[]) => Pairing[];
+};
 export type Stage = { stage: string; faults: string[]; ok: string };
 
 const RAYS = 16;
@@ -30,7 +41,11 @@ export function checkPart(part: any, ctx: Ctx): Stage[] {
   const type = ctx.types[part?.type];
   const data = validate(readJson(join(PARTS, "part.schema.json")), part).map((f) => `${f.at || "/"} ${f.says}`);
   if (part && !type) data.push(`/type ${JSON.stringify(part.type)} is not a part type; use one of types.json's: ${Object.keys(ctx.types).join(", ")}`);
-  if (type?.made_by === "model") for (const k of ["model", "mass_kg", "centre_m", "bounds_m", "points"]) if (!(k in part)) data.push(`/${k} is missing: a modelled part gives it (part.schema.json)`);
+  // A working part is made in its recipe's material, so it gives its volume; a trim its own mass.
+  const [weight, not] = type?.slot === "working" ? ["volume_m3", "mass_kg"] : ["mass_kg", "volume_m3"];
+  if (type?.made_by === "model") for (const k of ["model", weight, "centre_m", "bounds_m", "points"]) if (!(k in part)) data.push(`/${k} is missing: a modelled ${type.slot} part gives it (part.schema.json)`);
+  if (type?.made_by === "model" && not in part)
+    data.push(`/${not} is not a ${type.slot} part's: ${type.slot === "working" ? "its mass is its volume_m3 in the recipe's material (materials.json)" : "a trim keeps its own material, so it gives mass_kg"}; remove it`);
   if (type?.made_by === "code") for (const k of type.numbers) if (!(k in part)) data.push(`/${k} is missing: a ${part.type} is made from it (types.json)`);
   if (type) data.push(...kindFaults(part, ctx));
   if (!stage("data", `a ${part?.type}, made by ${type?.made_by}`, data)) return stages;
@@ -185,8 +200,11 @@ function slots(part: any, ctx: Ctx): string[] {
     const kind = ctx.kinds[name];
     const slot = kind.slots.find((s: any) => s.fits.includes(part.type));
     const head = v(kind.envelope.head_mass_kg), len = v(kind.envelope.length_m);
-    if (slot.slot === "working" && Array.isArray(head) && (v(part.mass_kg) < head[0] || v(part.mass_kg) > head[1]))
-      out.push(`${name}: its mass ${v(part.mass_kg)} kg is outside the ${name}'s head mass [${head}] (assets/data/kinds/${name}.json envelope): another part, or another kind`);
+    if (slot.slot === "working" && Array.isArray(head) && part.volume_m3) {
+      const kg = Object.entries(ctx.materials).map(([m, d]: [string, any]) => [m, v(part.volume_m3) * v(d.density_kg_m3)] as const);
+      if (!kg.some(([, k]) => k >= head[0] && k <= head[1]))
+        out.push(`${name}: in no material is its head inside the ${name}'s head mass [${head}] kg (${kg.map(([m, k]) => `${m} ${k.toFixed(3)} kg`).join(", ")}; assets/data/kinds/${name}.json envelope, materials.json): another part, or another kind`);
+    }
     if (slot.slot !== "handle" || part.length_m === undefined) continue;
     if (Array.isArray(len) && v(part.length_m) > len[1]) out.push(`${name}: ${v(part.length_m)} m long, past the ${name}'s longest item ${len[1]} m (its envelope's length_m)`);
     const mount = ctx.attach[kind.attach_kind] ?? {};
@@ -199,85 +217,44 @@ function slots(part: any, ctx: Ctx): string[] {
   return out;
 }
 
-// Every pairing its kinds allow. A part made by code meets its partners at their declared sizes, so
-// those joins are the partners' openings, measured when they are checked; here what this part
-// meets is measured: a handle's top in a head's top face, a trim against its working part, a
-// seated trim on its board.
+// Every pairing its kinds allow, placed by the assembler (terra_items::assembly's `meet`, the one
+// placing rule) and measured here. A part made by code meets its partners at their declared
+// sizes, so those joins are the partners' openings, measured when they are checked; here what
+// this part meets is measured: a handle's top in a head's top face, a trim against its working
+// part, a seated trim on its board.
 function joins(part: any, ctx: Ctx): [string[], string[]] {
   const faults: string[] = [], notes: string[] = [];
-  const type = ctx.types[part.type];
   const plane_m = v(ctx.rules.plane_m), join_m = v(ctx.rules.join_m);
-  const seen = new Set<string>();
-  for (const name of fittingKinds(part, ctx)) {
-    const kind = ctx.kinds[name];
-    const mine = kind.slots.find((s: any) => s.fits.includes(part.type));
-    for (const slot of kind.slots) {
-      if (slot === mine) continue;
-      for (const t of slot.fits) {
-        const partners = Object.values(ctx.parts).filter((p: any) => p.type === t && p.part !== part.part);
-        for (const other of partners) {
-          const key = [part.part, other.part].sort().join("+");
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const pair = arrange(part, other, ctx);
-          if (!pair) continue;
-          const said = (s: string) => faults.push(`${name}, with ${other.part}: ${s}`);
-          if (pair.disc) {
-            const n = sharedDisc(pair.disc.mesh, pair.disc.y, pair.disc.r, plane_m);
-            if (n) said(`${n} faces of the head lie in the handle's top plane (y ${pair.disc.y.toFixed(4)}): the handle stands ${mm(v(ctx.rules.proud_m))} proud of eye.upper (D566), so the head's top face must not sit there; move eye.upper to the eye's real top`);
-          } else {
-            const [a, b] = [pair.a, pair.b];
-            const g = gap(a, b);
-            if (g > join_m) said(`a ${mm(g)} gap where they meet (the bar ${mm(join_m)}, D566): the points are not where the surfaces are; fix the point or the model`);
-            const deep = Math.max(buried(a, b), buried(b, a));
-            if (deep > join_m) said(`one is buried ${mm(deep)} in the other (the bar ${mm(join_m)}): fix the point or the model`);
-            const n = sharedPlanes(a, b, plane_m);
-            if (n) said(`${n} pairs of faces lie in one plane facing the same way, which flickers: offset one by more than ${mm(plane_m)}`);
-          }
-          notes.push(`${name} with ${other.part}`);
-        }
-        if (!partners.length && ctx.types[t]?.made_by === "model" && type.made_by === "model") notes.push(`${name}: no ${t} yet to join with`);
-      }
+  for (const { kind, partner, meet } of ctx.pairings(part.part, Object.values(ctx.parts))) {
+    const said = (s: string) => faults.push(`${kind}, with ${partner}: ${s}`);
+    if (meet.meet === "handle_top") {
+      const head = ctx.parts[meet.head];
+      const top = ctx.types[head.type].handle_top;
+      const n = sharedDisc(ctx.mesh(head), meet.y, meet.d / 2, plane_m);
+      if (n) said(`${n} faces of the head lie in the handle's top plane (y ${meet.y.toFixed(4)}): the handle's top sits there by D566, so the head's top face must not; move ${top} to the opening's real top`);
+    } else {
+      const [a, b] = [moved(ctx.mesh(ctx.parts[meet.part]), meet.turn, meet.at), ctx.mesh(ctx.parts[meet.onto])];
+      const g = gap(a, b);
+      if (g > join_m) said(`a ${mm(g)} gap where they meet (the bar ${mm(join_m)}, D566): the points are not where the surfaces are; fix the point or the model`);
+      const deep = Math.max(buried(a, b), buried(b, a));
+      if (deep > join_m) said(`one is buried ${mm(deep)} in the other (the bar ${mm(join_m)}): fix the point or the model`);
+      const n = sharedPlanes(a, b, plane_m);
+      if (n) said(`${n} pairs of faces lie in one plane facing the same way, which flickers: offset one by more than ${mm(plane_m)}`);
     }
+    notes.push(`${kind} with ${partner}`);
   }
   return [faults, notes];
 }
 
-// How two parts sit together, in the first part's frame, by the convention: a head on a code
-// handle (its top disc), a trim under the working part's entry, a seated trim on its board. Other
-// pairs do not touch, or meet only at declared sizes (a code handle in an opening).
-function arrange(part: any, other: any, ctx: Ctx): { disc?: { mesh: Mesh; y: number; r: number }; a: Mesh; b: Mesh } | undefined {
-  const [tp, to] = [ctx.types[part.type], ctx.types[other.type]];
-  if (tp.made_by === "code" && to.made_by === "code") return undefined;
-  if (tp.made_by === "code" || to.made_by === "code") {
-    const [model, mt] = tp.made_by === "model" ? [part, tp] : [other, to];
-    const top = mt.handle_top && pt(model, mt.handle_top);
-    if (!top || top.type !== "eye" || (tp.slot !== "handle" && to.slot !== "handle")) return undefined;
-    const mesh = ctx.mesh(model);
-    return { disc: { mesh, y: top.at[1] + v(ctx.rules.proud_m), r: top.size / 2 }, a: mesh, b: mesh };
-  }
-  const [trim, work] = tp.slot === "trim" ? [part, other] : [other, part];
-  const tt = ctx.types[trim.type], tw = ctx.types[work.type];
-  if (tt.slot !== "trim" || tw.slot !== "working") return undefined;
-  if (tt.place === "under_entry" && tw.entry) {
-    const entry = pt(work, tw.entry);
-    return { a: moved(ctx.mesh(trim), IDENTITY, [0, entry.at[1] - trim.cover_m[1], 0]), b: ctx.mesh(work) };
-  }
-  if (tt.place === "seat") {
-    const [seat, onto] = [pt(trim, "seat"), pt(work, trim.type)];
-    if (!seat || !onto) return undefined;
-    const r = rigid(seat, onto);
-    const at = [0, 1, 2].map((k) => onto.at[k] - (r[k][0] * seat.at[0] + r[k][1] * seat.at[1] + r[k][2] * seat.at[2])) as V3;
-    return { a: moved(ctx.mesh(trim), r, at), b: ctx.mesh(work) };
-  }
-  return undefined;
-}
+/** How two parts sit, as the assembler says (crates/terra_items/src/assembly/meet.rs). */
+export type Meet = { meet: "handle_top"; head: string; y: number; d: number } | { meet: "placed"; part: string; onto: string; at: V3; turn: Q };
+export type Pairing = { kind: string; partner: string; meet: Meet };
 
-/** The turn taking full point a's (dir, up) onto b's: rows of B Aᵀ. */
-export function rigid(a: any, b: any): number[][] {
-  const frame = (p: any) => [p.dir, p.up, [p.dir[1] * p.up[2] - p.dir[2] * p.up[1], p.dir[2] * p.up[0] - p.dir[0] * p.up[2], p.dir[0] * p.up[1] - p.dir[1] * p.up[0]]];
-  const [fa, fb] = [frame(a), frame(b)];
-  return [0, 1, 2].map((i) => [0, 1, 2].map((j) => fb[0][i] * fa[0][j] + fb[1][i] * fa[1][j] + fb[2][i] * fa[2][j]));
+/** The assembler's pairings of part `id` among `parts`: `assemble joins`, the parts on stdin. */
+export function assemblerPairings(id: string, parts: any[]): Pairing[] {
+  const run = spawnSync("cargo", ["run", "-q", "-p", "terra_items", "--bin", "assemble", "--", "joins", id, "--parts", "-"], { cwd: ROOT, input: JSON.stringify(parts), encoding: "utf8" });
+  if (run.status !== 0) throw new Error(`the assembler refused ${id}: ${run.stderr.trim() || run.error?.message}`);
+  return JSON.parse(run.stdout);
 }
 
 function sharedDisc(mesh: Mesh, y: number, r: number, within: number): number {
@@ -289,7 +266,7 @@ export function loadCtx(): Ctx {
   const kinds = Object.fromEntries(kindNames().map((k) => [k, readJson(join(KINDS, `${k}.json`))]));
   const parts = Object.fromEntries(
     readdirSync(PARTS)
-      .filter((f) => f.endsWith(".json") && f !== "types.json" && f !== "part.schema.json")
+      .filter((f) => f.endsWith(".json") && !["types.json", "materials.json", "part.schema.json"].includes(f))
       .map((f) => [f.slice(0, -5), readJson(join(PARTS, f))]),
   );
   const cache = new Map<string, Mesh>();
@@ -299,7 +276,8 @@ export function loadCtx(): Ctx {
     if (!cache.has(file)) cache.set(file, readMesh(file));
     return cache.get(file)!;
   };
-  return { types: t.types, rules: t.rules, kinds, attach: readJson(join(ROOT, "tools", "characters", "attach_kinds.json")), parts, mesh };
+  const materials = readJson(join(PARTS, "materials.json")).materials;
+  return { types: t.types, rules: t.rules, materials, kinds, attach: readJson(join(ROOT, "tools", "characters", "attach_kinds.json")), parts, mesh, pairings: assemblerPairings };
 }
 
 export function report(name: string, stages: Stage[]): string[] {

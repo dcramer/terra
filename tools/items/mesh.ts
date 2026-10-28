@@ -3,7 +3,7 @@
 // faces of two parts that lie in one plane. Read from a glb by tools/characters/glb.ts's reader.
 
 import { readFileSync } from "node:fs";
-import { apply, Glb, type Pose, place, type V3 } from "../characters/glb.ts";
+import { apply, Glb, type Pose, place, type Q, type V3 } from "../characters/glb.ts";
 
 export type Mesh = {
   positions: number[]; // x, y, z a vertex, in the part's frame
@@ -203,14 +203,9 @@ function overlap(a: [V3, V3, V3], b: [V3, V3, V3], n: V3): boolean {
   return true;
 }
 
-/** The mesh moved by a rotation (3x3, rows) and a shift. */
-export function moved(m: Mesh, r: number[][], t: V3): Mesh {
+/** The mesh where the assembler puts it: turned by `turn` (x y z w), then shifted by `at`. */
+export function moved(m: Mesh, turn: Q, at: V3): Mesh {
   const positions: number[] = [];
-  for (let i = 0; i < m.positions.length / 3; i++) {
-    const p = vertex(m, i);
-    positions.push(...[0, 1, 2].map((k) => r[k][0] * p[0] + r[k][1] * p[1] + r[k][2] * p[2] + t[k]));
-  }
+  for (let i = 0; i < m.positions.length / 3; i++) positions.push(...place({ t: at, r: turn, s: [1, 1, 1] }, vertex(m, i)));
   return { ...m, positions };
 }
-
-export const IDENTITY = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
