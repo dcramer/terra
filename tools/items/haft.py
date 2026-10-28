@@ -74,7 +74,7 @@ def main():
     folder, out = args[1], args[2]
     src = fitted(os.path.join(folder, "model.glb"))
     skin = lathe.rod(os.path.basename(folder.rstrip("/")) + "_skin", LENGTH, DIAMETER, SIDES)
-    lathe.bake(src, skin, "Wood", SKIN_PX, 0.0, 0.004)
+    lathe.bake(src, skin, "Wood", SKIN_PX, 0.0, 0.004, os.path.join(folder, "cutout.png"))
     bpy.data.objects.remove(src)
     export(skin, out)
 

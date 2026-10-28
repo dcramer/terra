@@ -1,9 +1,18 @@
 """Prepares a modelled part of an assembled item once (D565 step 4, D566's convention): Tripo's
 textured model of a part's cut-out welded closed, turned into its type's template frame, made its
 real size, cut to its budget, its opening cut where its prep.json marks it by hand, its points
-found from that cut and its maps kept at the part budget. Run from the repository root:
+found from that cut, and the model's look baked onto it from the model as made (lathe.bake: the
+colour with its metal off, graded to the concept cut-out's value; the normal from the model's own
+surface, so the cut's facets do not show) at the part budget. Run from the repository root:
 
-    tools/blender/run.sh tools/items/prep.py art/parts/<kind>/<part> assets/models/parts/<part>.glb OUT.json
+    tools/blender/run.sh tools/items/prep.py art/parts/<kind>/<part>
+
+It writes the model where the part's data says (assets/data/parts/<part>.json, its `model`, under
+assets/), the points it finds into that data, and renders of the part before and after its cut to
+target/prep/<part>-before.png and -after.png. The data is written first by a person (part, type,
+about, model, and a trim's density_kg_m3, part.schema.json); prep fills its points, and
+`node tools/items/part.ts --write <part>` then measures the rest on the model, so no number is
+typed or copied by hand.
 
 The part's prep.json says what a person decided and nothing measured:
   type        its part type (types.json): axe_head, or a trim on the line (collar, cap)
@@ -22,10 +31,8 @@ The part's prep.json says what a person decided and nothing measured:
   edge_band_m a head's bit: how far back from its front-most point the cutting edge runs
   budget      a head: triangles before its cuts add about 340 (art-style.md: a tool's head, 800 at most)
 
-OUT.json gets its points, in glTF's frame (+Y up, front +Z), copied into
-assets/data/parts/<part>.json; `node tools/items/part.ts --write <part>` then measures the rest on
-the model: a head's volume, a trim's mass (in the part's own density_kg_m3) and cover, and every
-part's centre and bounds.
+The points are in glTF's frame (+Y up, front +Z); part.ts --write measures a head's volume, a
+trim's mass (in the part's own density_kg_m3) and cover, and every part's centre and bounds.
 Blender's frame is glTF's turned: Blender (x, y, z) is glTF (x, z, -y).
 """
 
@@ -35,6 +42,7 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "blender"))
 sys.path.insert(0, HERE)
 
@@ -47,7 +55,8 @@ import lathe  # noqa: E402
 import pieces  # noqa: E402
 
 DENSITY = {"iron": 7750.0, "stone": 2600.0}  # assets/data/parts/materials.json, read below
-TEXTURE_PX = 1024  # types.json's texture_px: colour and normal; roughness and metal at half
+TEXTURE_PX = 1024  # types.json's texture_px: colour and normal; roughness at half
+BAKE_REACH = 0.006  # m: how far the cut part may stand off the model as made, out or in
 RAYS = 32
 UP = [0.0, 1.0, 0.0]
 
@@ -216,36 +225,24 @@ def look(ob, path):
     return shots
 
 
-def textures(ob, role):
-    mat = ob.material_slots[0].material
-    mat.name = role
-    for slot in ob.material_slots[1:]:
-        slot.material = mat
-    for image in bpy.data.images:
-        w, h = image.size
-        if not w:
-            continue
-        colour = any(
-            l.to_node.type == "NORMAL_MAP" or (l.to_node.type == "BSDF_PRINCIPLED" and l.to_socket.name == "Base Color")
-            for n in mat.node_tree.nodes
-            if n.type == "TEX_IMAGE" and n.image == image
-            for l in n.outputs["Color"].links
-        )
-        most = TEXTURE_PX if colour else TEXTURE_PX // 2
-        if max(w, h) > most:
-            image.scale(w * most // max(w, h), h * most // max(w, h))
-        # The glTF exporter's AUTO keeps a packed image's own format, Tripo's JPEG, read from its
-        # bytes when it has no path (io_scene_gltf2 image.py, __is_blender_image_a_jpeg); a .png path
-        # makes it encode PNG, which part.ts reads the size of.
-        image.file_format = "PNG"
-        image.filepath_raw = f"{bpy.path.clean_name(image.name)}.png"
-
-
 def main():
     args = sys.argv[sys.argv.index("--") + 1 :]
-    folder, out_glb, out_json = args
+    if len(args) != 1:
+        raise SystemExit("prep: use tools/blender/run.sh tools/items/prep.py art/parts/<kind>/<part>: the model goes where the part's data says, its points into that data")
+    folder = args[0]
     with open(os.path.join(folder, "prep.json")) as f:
         prep = json.load(f)
+    part = os.path.basename(folder.rstrip("/"))
+    data = os.path.join(ROOT, "assets", "data", "parts", f"{part}.json")
+    if not os.path.exists(data):
+        raise SystemExit(f"prep: {data} is missing: write the part's data first (part, type, about, model; a trim's density_kg_m3 with its source; part.schema.json), and prep fills its points")
+    with open(data) as f:
+        model = json.load(f).get("model")
+    if not model:
+        raise SystemExit(f"prep: {data} has no model: give it the file under assets/ the part is drawn from, e.g. models/parts/{part}.glb")
+    out_glb = os.path.join(ROOT, "assets", model)
+    shots = os.path.join(ROOT, "target", "prep", part)
+    os.makedirs(os.path.dirname(shots), exist_ok=True)
     with open(os.path.join(HERE, "..", "..", "assets", "data", "parts", "materials.json")) as f:
         for name, m in json.load(f)["materials"].items():
             DENSITY[name] = m["density_kg_m3"]["value"]
@@ -268,8 +265,15 @@ def main():
         scale = prep["height_m"] / (max(v.co.z for v in ob.data.vertices) - min(v.co.z for v in ob.data.vertices))
     ob.data.transform(Matrix.Scale(scale, 4))
     if "bore_m" in prep:
-        return turned_trim(ob, prep, folder, out_glb, out_json)
-    # The cut's walls and rims take about 300 triangles of the budget.
+        return turned_trim(ob, prep, part, out_glb, data, shots, os.path.join(folder, "cutout.png"))
+    # The model as made is kept as the high-poly its look is baked from (swollen as the part is,
+    # never cut): the part is cut to its budget, so Tripo's maps, made for its own normals, would
+    # show the cut's facets (the bearded head's poll in job 4c's sheet). The cut's walls and rims
+    # take about 300 triangles of the budget.
+    high = ob.copy()
+    high.data = ob.data.copy()
+    bpy.context.scene.collection.objects.link(high)
+    high.hide_render = True  # out of the before and after looks
     pieces.cut(ob, prep["budget"] - 340)
     closed(ob)
     xs = [v.co.x for v in ob.data.vertices]
@@ -311,13 +315,12 @@ def main():
             def factor(at):
                 t = steps.get(round((at - y) / 0.003), 0.0)
                 return min(3.0, max(1.0, want / t)) if t > 0.002 else 1.0
-            for v in ob.data.vertices:
+            for v in [*ob.data.vertices, *high.data.vertices]:
                 t = min(1.0, max(0.0, 1.0 - (abs(v.co.y - y) - span) / reach))
                 inside = y + max(-span, min(span, v.co.y - y))
                 v.co.x = x + (v.co.x - x) * (1.0 + (factor(inside) - 1.0) * t * t * (3 - 2 * t))
             x, across = poll_middle(ob, y)
         print(f"prep: eye {size * 100:.1f} cm at {prep['eye']['from_back_m'] * 100:.1f} cm from the back, the poll {across * 100:.1f} cm across there")
-    shots = os.path.join(os.path.dirname(os.path.abspath(out_json)), os.path.basename(folder.rstrip("/")))
     look(ob, shots + "-before")
     cut_round(ob, (x, y), size)
     look(ob, shots + "-after")
@@ -340,6 +343,7 @@ def main():
     bm.to_mesh(ob.data)
     bm.free()
     ob.data.transform(Matrix.Translation(-Vector((x, y, lo))))
+    high.data.transform(Matrix.Translation(-Vector((x, y, lo))))
     a, b = edge_points(ob, prep.get("edge_band_m", 0.03))
     points = [
         {"name": "eye.lower", "type": "eye", "at": [0.0, 0.0, 0.0], "dir": UP, "size": size},
@@ -349,11 +353,22 @@ def main():
     ]
     pieces.only(ob)
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(50.0), keep_sharp_edges=True)
-    textures(ob, prep["role"])
-    export(ob, folder, out_glb, out_json, {"points": points}, f"{stray} stray vertices dropped")
+    # Its own UVs (the cut's walls have none of Tripo's), then its look baked from the model as
+    # made, the high-to-low bake (lathe.bake), its colour graded to the concept's.
+    while ob.data.uv_layers:
+        ob.data.uv_layers.remove(ob.data.uv_layers[0])
+    ob.data.uv_layers.new(name="UVMap")
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(50.0), island_margin=0.01)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    high.hide_render = False
+    lathe.bake(high, ob, prep["role"], TEXTURE_PX, 1.0 if prep["role"] == "Metal" else 0.0, BAKE_REACH, os.path.join(folder, "cutout.png"))
+    bpy.data.objects.remove(high)
+    export(ob, part, out_glb, data, points, f"{stray} stray vertices dropped")
 
 
-def turned_trim(raw, prep, folder, out_glb, out_json):
+def turned_trim(raw, prep, part, out_glb, data, shots, concept):
     """A trim on the line, Tripo's tube with its own hole: turned as a closed lathe (lathe.py) on
     the tube's own outer profile, its bore exact at bore_m and its wall wall_m thick, the relief
     kept in proportion; the model, moved to the same radii, gives only its look, baked on."""
@@ -371,9 +386,8 @@ def turned_trim(raw, prep, folder, out_glb, out_json):
     print(f"prep: tube as made {r_in * 2000:.1f} mm hole, {r_mid * 2000:.1f} mm across; made {bore * 1000:.1f} mm bore, {(bore / 2 + wall) * 2000:.1f} mm across, {(max(zs) - min(zs)) * 1000:.1f} mm high")
     lathe.remap(raw, centre, radius)
     raw.data.transform(Matrix.Translation(-Vector((centre[0], centre[1], 0.0))))
-    ob = lathe.lathe(os.path.basename(folder.rstrip("/")), [(z, radius(r)) for z, r in profile], bore, sides)
-    shots = os.path.join(os.path.dirname(os.path.abspath(out_json)), os.path.basename(folder.rstrip("/")))
-    lathe.bake(raw, ob, prep["role"], prep.get("texture_px", 512), 1.0 if prep["role"] == "Metal" else 0.0, wall)
+    ob = lathe.lathe(part, [(z, radius(r)) for z, r in profile], bore, sides)
+    lathe.bake(raw, ob, prep["role"], prep.get("texture_px", 512), 1.0 if prep["role"] == "Metal" else 0.0, wall, concept)
     bpy.data.objects.remove(raw)
     opening_span(ob, (0.0, 0.0), bore / 2)  # refuses a bore not walled all round
     mid = (min(zs) + max(zs)) / 2
@@ -382,13 +396,12 @@ def turned_trim(raw, prep, folder, out_glb, out_json):
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(50.0), keep_sharp_edges=True)
     look(ob, shots + "-after")
     # Its mass (in the part's own density_kg_m3) and its cover, end to end of the exact bore, are
-    # measured on the model by `node tools/items/part.ts --write`, never copied from here.
-    export(ob, folder, out_glb, out_json, {
-        "points": [{"name": "bore", "type": "bore", "at": [0.0, 0.0, 0.0], "dir": UP, "size": bore}],
-    }, "turned")
+    # measured on the model by `node tools/items/part.ts --write`.
+    export(ob, part, out_glb, data, [{"name": "bore", "type": "bore", "at": [0.0, 0.0, 0.0], "dir": UP, "size": bore}], "turned")
 
 
-def export(ob, folder, out_glb, out_json, result, note):
+def export(ob, part, out_glb, data, points, note):
+    """The model where the part's data says, and the points found into that data, the rest of it kept."""
     n_open, vol = open_edges(ob)
     dims = [max(c) - min(c) for c in zip(*[v.co for v in ob.data.vertices])]
     tris = pieces.triangles(ob)
@@ -397,11 +410,14 @@ def export(ob, folder, out_glb, out_json, result, note):
         raise SystemExit(f"prep: {n_open} open edges after the cut: the part is not closed; look at {out_glb} in Blender (Select All by Trait > Non Manifold)")
     os.makedirs(os.path.dirname(os.path.abspath(out_glb)), exist_ok=True)
     pieces.only(ob)
-    ob.name = os.path.basename(folder.rstrip("/"))
+    ob.name = part
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(out_glb), export_format="GLB", use_selection=True, export_tangents=True, export_image_format="AUTO")
-    with open(out_json, "w") as f:
-        json.dump({**result, "triangles": tris}, f, indent=1)
-    print(f"prep: {out_glb}, {out_json}")
+    with open(data) as f:
+        said = json.load(f)
+    said["points"] = points
+    with open(data, "w", newline="\n") as f:  # Blender on Windows would write CRLF
+        f.write(json.dumps(said, indent=2, ensure_ascii=False) + "\n")
+    print(f"prep: {out_glb}; its points into {data}; next node tools/items/part.ts --write {part}")
 
 
 main()

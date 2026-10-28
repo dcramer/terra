@@ -8,12 +8,37 @@ decimated open tube cannot be cut, so the trim is turned instead and only its lo
 Blender's frame here: the line is Blender +Z (glTF +Y).
 """
 
+import contextlib
 import math
+import os
 
 import bmesh
 import bpy
+import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+
+
+@contextlib.contextmanager
+def no_metal(ob):
+    """ob's materials with their metal at 0 (its links cut, then put back)."""
+    kept = []
+    for mat in {s.material for s in ob.material_slots if s.material and s.material.node_tree}:
+        tree = mat.node_tree
+        for bsdf in (n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"):
+            socket = bsdf.inputs["Metallic"]
+            links = [(l.from_socket, socket) for l in socket.links]
+            kept.append((tree, socket, socket.default_value, links))
+            for l in list(socket.links):
+                tree.links.remove(l)
+            socket.default_value = 0.0
+    try:
+        yield
+    finally:
+        for tree, socket, value, links in kept:
+            socket.default_value = value
+            for a, b in links:
+                tree.links.new(a, b)
 
 
 def _tree(ob):
@@ -136,10 +161,51 @@ def rod(name, length, diameter, sides):
     return ob
 
 
-def bake(src, dst, role, px, metallic, reach):
+def concept_colour(path):
+    """The median colour (sRGB, 0 to 1) of the part on its concept cut-out: every pixel further
+    than 0.1 from the sheet's colour, the median of the cut-out's border."""
+    image = bpy.data.images.load(os.path.abspath(path))
+    w, h = image.size
+    px = np.array(image.pixels[:], dtype=np.float32).reshape(h, w, 4)[:, :, :3]
+    bpy.data.images.remove(image)
+    border = np.concatenate([px[0], px[-1], px[:, 0], px[:, -1]])
+    sheet = np.median(border, axis=0)
+    part = px.reshape(-1, 3)[np.abs(px.reshape(-1, 3) - sheet).max(axis=1) > 0.1]
+    return np.median(part, axis=0)
+
+
+def _linear(c):
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def _srgb(c):
+    return np.where(c <= 0.0031308, c * 12.92, 1.055 * np.power(np.maximum(c, 0.0), 1 / 2.4) - 0.055)
+
+
+def grade(image, want):
+    """Scales a baked colour map, per channel in linear light, so its median over the baked pixels
+    is `want`, the concept's (concept_colour). Tripo paints its shading's shadows into the colour
+    and drifts darker than the concept (the binding 47 of 255 against the sheet's leather, the
+    hickory 87): the concept sheet is the approved look (art-style.md), so the map keeps its own
+    pattern and takes the concept's value and hue."""
+    w, h = image.size
+    px = np.array(image.pixels[:], dtype=np.float32).reshape(-1, 4)
+    baked = px[:, 3] > 0.5
+    if not baked.any():
+        baked[:] = True
+    have = np.median(px[baked, :3], axis=0)
+    k = _linear(np.asarray(want)) / np.maximum(_linear(have), 1e-4)
+    px[:, :3] = np.clip(_srgb(_linear(px[:, :3]) * k), 0.0, 1.0)
+    px[:, 3] = 1.0
+    image.pixels[:] = px.ravel()
+    print(f"prep: colour graded to the concept: median {np.round(have * 255).astype(int).tolist()} -> {np.round(np.asarray(want) * 255).astype(int).tolist()} (sRGB)")
+
+
+def bake(src, dst, role, px, metallic, reach, concept=None):
     """Bakes src's colour, normal and roughness onto dst's UVs (Cycles, selected to active, rays
     `reach` out and in), into one material named for its role: colour and normal at px, roughness
-    at half, metallic a constant (a part is one material, types.json's roles)."""
+    at half, metallic a constant (a part is one material, types.json's roles). With `concept`, the
+    part's cut-out, the colour is graded to its value (grade)."""
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.device = "CPU"
@@ -153,7 +219,8 @@ def bake(src, dst, role, px, metallic, reach):
     maps = {}
     w, h = px if isinstance(px, tuple) else (px, px)
     for key, size, colour in (("colour", (w, h), True), ("normal", (w, h), False), ("rough", (w // 2, h // 2), False)):
-        image = bpy.data.images.new(f"{dst.name}_{key}", *size)
+        image = bpy.data.images.new(f"{dst.name}_{key}", *size, alpha=True)
+        image.generated_color = (0.0, 0.0, 0.0, 0.0)  # baked pixels come out opaque (grade's mask)
         image.colorspace_settings.name = "sRGB" if colour else "Non-Color"
         node = nodes.new("ShaderNodeTexImage")
         node.image = image
@@ -169,7 +236,13 @@ def bake(src, dst, role, px, metallic, reach):
     bake.margin = 4
     for key, kind, extra in (("colour", "DIFFUSE", {"pass_filter": {"COLOR"}}), ("normal", "NORMAL", {"normal_space": "TANGENT"}), ("rough", "ROUGHNESS", {})):
         nodes.active = maps[key]
-        print(f"prep: bake {key}:", bpy.ops.object.bake(type=kind, **extra))
+        # Cycles' diffuse colour is the base colour times (1 - metallic): a metal source bakes
+        # black (the iron collar's colour came out at 13 of 255). Its metal is off while the
+        # colour is baked, so the map is its base colour; dst's metal is the constant above.
+        with (no_metal(src) if key == "colour" else contextlib.nullcontext()):
+            print(f"prep: bake {key}:", bpy.ops.object.bake(type=kind, **extra))
+    if concept:
+        grade(maps["colour"].image, concept_colour(concept))
     nodes.active = maps["colour"]  # what a Workbench look draws in its colours
     links.new(maps["colour"].outputs["Color"], bsdf.inputs["Base Color"])
     nmap = nodes.new("ShaderNodeNormalMap")
