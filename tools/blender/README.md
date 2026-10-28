@@ -12,7 +12,7 @@ tools/blender/run.sh path/to/script.py --open scene.blend [args...]
 - **Paths:** relative paths are from the folder you run it in. Absolute WSL paths are turned into Windows ones for a Windows Blender.
 - **Options as arguments:** environment variables don't reach a Windows program from WSL, so pass a script its options as arguments.
 - **Start:** without `--open`, Blender starts from its factory settings with the default scene, without anyone's preferences or add-ons.
-- **Output:** Blender's noise is filtered out. The exit code is the script's: an uncaught error gives 1, and `SystemExit(n)` gives `n`.
+- **Output:** Blender's noise is filtered out. The script's output comes line by line, so its error is the last thing it says, read with `| tail`; the traceback starts at the script's own frame; a native crash prints the Python stack it died in. A script needs no handler of its own to be heard. The exit code is the script's: an uncaught error gives 1, and `SystemExit(n)` gives `n`; a failure also says `run.sh: <script> exited <n>` on stderr.
 
 **[campfire.py](campfire.py)** builds the campfire from the scans [tools/props/campfire.ts](../props/campfire.ts) lays out (`props.ts refine campfire` runs both): it cuts, scales and seats each log, stone and stick, chars the logs and bakes their colour, normal and crack-glow maps high to low, with the worn ground under it, written as one glTF binary for campfire.ts to add the coal bed to.
 

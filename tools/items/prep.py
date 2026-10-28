@@ -465,12 +465,4 @@ def export(ob, part, out_glb, data, points, note):
     print(f"prep: {out_glb}; its points into {data}; next node tools/items/part.ts --write {part}")
 
 
-try:
-    main()
-except BaseException as e:
-    # The Windows Blender's stderr does not reach run.sh's caller: say why on stdout, or prep
-    # fails saying nothing (job 5's seat).
-    import traceback
-
-    print(str(e) if isinstance(e, SystemExit) else traceback.format_exc())
-    raise
+main()

@@ -41,12 +41,34 @@ done
 # Refuses a Blender other than the pinned one, since another version can make different
 # files. Then runs the script as __main__ with its own folder on sys.path, which Blender does
 # not do for a script on a \\wsl.localhost path, so a script can import the modules beside it.
-boot="import sys, runpy, bpy
+# A script's error reaches the caller last, after what it printed: Python's output into a pipe
+# is held back in blocks, so Blender's traceback came out first, above the run's own lines,
+# where a caller reading the tail never saw it (job 5a's prep), and a crash lost the held lines
+# outright. So both streams go line by line, a traceback starts at the script's own frame,
+# and a native crash prints the Python stack it died in (faulthandler; off again once the
+# script ends, since Blender's teardown on Windows raises access violations it handles itself,
+# which faulthandler would print by the dozen).
+script_w=$(path "$script")
+boot="import sys, runpy, bpy, faulthandler, traceback
+sys.stdout.reconfigure(line_buffering=True); sys.stderr.reconfigure(line_buffering=True)
+faulthandler.enable()
 v = '%d.%d' % bpy.app.version[:2]
 if v != '$pinned':
     print('Blender %s is not the pinned %s (tools/blender/version): install it, or set BLENDER to it' % (bpy.app.version_string, '$pinned'))
     sys.exit(3)
-sys.path.insert(0, r'$(path "$(dirname "$script")")'); runpy.run_path(r'$(path "$script")', run_name='__main__')"
+sys.path.insert(0, r'$(path "$(dirname "$script")")')
+try:
+    runpy.run_path(r'$script_w', run_name='__main__')
+except SystemExit:
+    raise
+except BaseException as e:
+    tb = e.__traceback__
+    while tb is not None and tb.tb_frame.f_code.co_filename != r'$script_w':
+        tb = tb.tb_next
+    traceback.print_exception(type(e), e, tb or e.__traceback__)
+    sys.exit(1)
+finally:
+    faulthandler.disable()"
 set +e
 # TERRA_BLENDER_GPU_BACKEND (vulkan, opengl) picks the GPU backend Eevee draws with: the render
 # worker sets vulkan, since over its Xvfb Blender's OpenGL is software (llvmpipe, ~20 s a frame).
