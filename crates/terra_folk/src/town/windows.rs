@@ -7,13 +7,22 @@
 //! their doorways with a real light (`light`). Round each lit window its firelight lies on
 //! the facade as a soft warm pool (`spill`), as a light standing a little out from the hole
 //! would throw it, drawn as an additive card on the wall's face with its falloff baked into
-//! the card's vertices as a lightmap holds it, again with no light (settlement r32). Not every home is lit: only one its household
-//! is in or by, and only the share that keep a fire in the evening; a lit home's windows
-//! flicker a little as firelight does, and fade in as the sun goes down.
+//! the card's vertices as a lightmap holds it, again with no light (settlement r32). A home is lit when its household is in or by
+//! it, and then about three of its four windows, each by its room's fire or candle, in a
+//! colour and brightness of its own; a lit home's windows flicker a little as firelight does,
+//! fade in as the sun goes down, are tonemapped as a flame is, out of the dusk's grade (D415),
+//! and wear a halo turned to the eye (`window_halo.wesl`), as shipped games draw a far
+//! light's corona where bloom cannot make a few pixels read.
 
 use super::Market;
 use crate::rising::{Rises, Rising};
-use bevy::{light::NotShadowCaster, prelude::*};
+use bevy::{
+    light::NotShadowCaster,
+    pbr::{ExtendedMaterial, MaterialExtension},
+    prelude::*,
+    render::render_resource::AsBindGroup,
+    shader::ShaderRef,
+};
 use terra_bases::Built;
 use terra_build::kit::Kits;
 use terra_build::{Base, Prop};
@@ -22,18 +31,24 @@ use terra_gen::hash::{of, unit};
 use terra_gen::smoothstep;
 use terra_town::Life;
 use terra_world::daylight::{Clock, SkyPath};
+use terra_world::fire::{Glow as FireGlow, GlowMaterial};
 
-/// The share of homes whose household keeps a fire burning into the evening, its windows lit
-/// and its chimney smoking; the rest sit by embers or have gone to bed.
-const LIT_SHARE: f32 = 0.7;
+/// The share of a lit home's windows lit: the rooms its household is in, the hearth's and
+/// the one off it, are lit and a store or a loft over them is not, so a street's houses each
+/// show their own pattern of lit and dark windows, as a real street at dusk does. A home's
+/// first window is always lit.
+const WINDOW_LIT_SHARE: f32 = 0.75;
 /// The sun's height, in degrees, at which the first windows begin to glow, and at which they
 /// are at their brightest: a room goes dim well before the street does, and people light
 /// their fires and rushlights for the evening meal while the sun is still up.
 const GLOW_FROM_DEG: f32 = 28.0;
 const GLOW_FULL_DEG: f32 = 6.0;
-/// Firelight seen through a window: a room lit by a hearth and rushlights, about 2,400 K
-/// (Tanner Helland's fit of the blackbody: sRGB 255, 155, 61), in linear light.
-const WARM: Vec3 = Vec3::new(1.0, 0.328, 0.046);
+/// Firelight seen through a window, from a room lit by a low hearth and tallow, about
+/// 2,000 K, to one by a blazing hearth and wax candles, about 2,900 K (Tanner Helland's fit of
+/// the blackbody: sRGB 255, 137, 14 and 255, 177, 101), in linear light: each look takes its
+/// own between them, so no two houses' windows are one colour.
+const WARMEST: Vec3 = Vec3::new(1.0, 0.25, 0.0044);
+const COOLEST: Vec3 = Vec3::new(1.0, 0.44, 0.13);
 /// How bright a lit window is at its brightest, before the tonemapper, the same at any
 /// exposure (Bevy's default emissive exposure weight, 0), so it reads warm amber under the
 /// hue-keeping shoulder whatever the sky round it does (D430).
@@ -58,6 +73,46 @@ const SPILL_SHARE: f32 = 0.12;
 const SPILL_OUT_M: f32 = 0.05;
 /// How many rows of vertices hold the pool's falloff either side of the window.
 const SPILL_STEPS: usize = 4;
+/// A lit window's halo (`window_halo.wesl`): at its middle this share of the pane's glow,
+/// this many times the window's size across, never under this share of the view's height
+/// (about 6 pixels at 1080p), and stood this far out toward the eye so the wall does not cut
+/// it. A window a few pixels across blooms by too little to read from over the town.
+const HALO_SHARE: f32 = 0.45;
+const HALO_WIDE: f32 = 3.0;
+const HALO_LEAST: f32 = 0.006;
+const HALO_STAND_M: f32 = 0.4;
+
+/// What `shaders/window_halo.wesl` is told. Field order must match the struct there.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct HaloExtension {
+    /// Its colour at its middle, linear, before exposure; and how many times the window's
+    /// size it spans.
+    #[uniform(100)]
+    colour: Vec4,
+    /// The least share of the view's height it spans, and how far it stands toward the eye.
+    #[uniform(100)]
+    shape: Vec4,
+}
+
+impl MaterialExtension for HaloExtension {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/window_halo.wesl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "shaders/window_halo.wesl".into()
+    }
+
+    fn prepass_vertex_shader() -> ShaderRef {
+        "shaders/window_halo.wesl".into()
+    }
+
+    fn prepass_fragment_shader() -> ShaderRef {
+        "shaders/window_halo.wesl".into()
+    }
+}
+
+pub type HaloMaterial = ExtendedMaterial<StandardMaterial, HaloExtension>;
 
 /// A home's windows, as one entity under its build, their panes its children: shown while
 /// it is lit.
@@ -74,44 +129,92 @@ pub struct Home(pub usize);
 #[derive(Component)]
 struct Glazed;
 
-/// The pane every window is drawn with, a unit quad facing +Z, each look, and the pool cards
-/// made so far, one a window size.
+/// The pane every window is drawn with, a unit quad facing +Z, its halo's quad, each look,
+/// and the pool cards made so far, one a window size.
 #[derive(Resource)]
 struct Glow {
     pane: Handle<Mesh>,
+    halo: Handle<Mesh>,
     looks: Vec<Look>,
     spills: std::collections::HashMap<(i32, i32), Handle<Mesh>>,
 }
 
-/// A look of a lit window: its pane's material and its pool's, how bright and its flicker's
-/// phase.
+/// A look of a lit window: its pane's material, its pool's and its halo's, its firelight's
+/// colour, how bright and its flicker's phase.
 struct Look {
-    pane: Handle<StandardMaterial>,
+    pane: Handle<GlowMaterial>,
     spill: Handle<StandardMaterial>,
+    halo: Handle<HaloMaterial>,
+    warm: Vec3,
     level: f32,
     phase: f32,
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, make)
+    app.add_plugins(MaterialPlugin::<HaloMaterial>::default())
+        .add_systems(Startup, make)
         .add_systems(Update, (glaze, light).run_if(resource_exists::<Market>));
+}
+
+/// A halo's quad: corners at plus and minus a half, its second texture coordinates there for
+/// the shader to carry the halo's strength in.
+fn halo_quad() -> Mesh {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::mesh::{Indices, PrimitiveTopology};
+    let corners = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(
+        Mesh::ATTRIBUTE_POSITION,
+        corners.map(|[x, y]| [x, y, 0.0f32]).to_vec(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0f32, 0.0, 1.0]; 4])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, corners.to_vec())
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, vec![[0.0f32, 0.0]; 4])
+    .with_inserted_indices(Indices::U32(vec![0, 1, 2, 0, 2, 3]))
+}
+
+/// A look's firelight colour, between the warmest and the coolest, a share `t` of the way.
+fn warmth(t: f32) -> Vec3 {
+    WARMEST.lerp(COOLEST, t.clamp(0.0, 1.0))
 }
 
 fn make(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut glows: ResMut<Assets<GlowMaterial>>,
+    mut halos: ResMut<Assets<HaloMaterial>>,
 ) {
     let looks = (0..LOOKS)
         .map(|n| {
-            let pane = materials.add(StandardMaterial {
-                base_color: Color::BLACK,
-                emissive: LinearRgba::BLACK,
-                perceptual_roughness: 1.0,
-                reflectance: 0.0,
-                double_sided: true,
-                cull_mode: None,
-                ..default()
+            // Tonemapped as a flame is, out of the dusk's grade, which greyed the panes
+            // with the land round them (D415).
+            let pane = glows.add(GlowMaterial {
+                base: StandardMaterial {
+                    base_color: Color::BLACK,
+                    emissive: LinearRgba::BLACK,
+                    perceptual_roughness: 1.0,
+                    reflectance: 0.0,
+                    double_sided: true,
+                    cull_mode: None,
+                    ..default()
+                },
+                extension: FireGlow::default(),
+            });
+            let halo = halos.add(HaloMaterial {
+                base: StandardMaterial {
+                    base_color: Color::BLACK,
+                    unlit: true,
+                    alpha_mode: AlphaMode::Add,
+                    ..default()
+                },
+                extension: HaloExtension {
+                    colour: Vec4::new(0.0, 0.0, 0.0, HALO_WIDE),
+                    shape: Vec4::new(HALO_LEAST, HALO_STAND_M, 0.0, 0.0),
+                },
             });
             // Added to the wall behind it, the same at any exposure as the pane's glow.
             let spill = materials.add(StandardMaterial {
@@ -123,6 +226,8 @@ fn make(
             Look {
                 pane,
                 spill,
+                halo,
+                warm: warmth((n as f32 * 0.381_966 + 0.1) % 1.0),
                 // From a room lit by embers to one by a blazing hearth.
                 level: 0.55 + 0.75 * ((n as f32 * 0.618_034) % 1.0),
                 phase: n as f32 * 2.399,
@@ -131,6 +236,7 @@ fn make(
         .collect();
     commands.insert_resource(Glow {
         pane: meshes.add(Rectangle::new(1.0, 1.0)),
+        halo: meshes.add(halo_quad()),
         looks,
         spills: default(),
     });
@@ -159,14 +265,23 @@ pub fn at_home(life: &Life, home: usize) -> bool {
 }
 
 /// Whether a home is lit, its hearth burning with someone home: once it is up and lived in
-/// if the town is rising (D381), and only for the share of homes that keep a fire.
+/// if the town is rising (D381). Every lived-in home lights its fire for the evening meal.
 pub fn lit_home(life: &Life, rising: Option<&Rising>, home: usize) -> bool {
-    keeps_fire(home) && rising.is_none_or(|r| r.settled(home)) && at_home(life, home)
+    rising.is_none_or(|r| r.settled(home)) && at_home(life, home)
 }
 
-/// Whether a home is among the share that keep a fire into the evening.
-fn keeps_fire(home: usize) -> bool {
-    unit(of(&[home as u32, 0x7f4a_7c15])) < LIT_SHARE
+/// Whether a lit home's `n`th window is lit: its first always, about `WINDOW_LIT_SHARE` of
+/// the rest.
+fn window_lit(home: usize, n: usize) -> bool {
+    n == 0 || unit(of(&[home as u32, n as u32, 0x7f4a_7c15])) < WINDOW_LIT_SHARE
+}
+
+/// Which look a lit home's `n`th window takes: the house's own for most, so its rooms share
+/// a fire, and now and then a neighbour look, a room lit by a candle rather than the hearth.
+fn window_look(home: usize, n: usize) -> usize {
+    let own = of(&[home as u32, 24]) as usize;
+    let other = unit(of(&[home as u32, n as u32, 25])) < 0.3;
+    (own + usize::from(other) * (1 + n % (LOOKS - 1))) % LOOKS
 }
 
 /// Each window's pane in a base, in its own space ([`pane`]), with its pool card
@@ -298,11 +413,6 @@ fn glaze(
         if panes.is_empty() {
             continue;
         }
-        let look = of(&[index as u32, 24]) as usize % glow.looks.len();
-        let (material, pool) = (
-            glow.looks[look].pane.clone(),
-            glow.looks[look].spill.clone(),
-        );
         let windows = commands
             .spawn((
                 Name::new("Windows"),
@@ -312,12 +422,29 @@ fn glaze(
                 ChildOf(built.root),
             ))
             .id();
-        for (pane, (card, size)) in panes {
+        for (n, (pane, (card, size))) in panes.into_iter().enumerate() {
+            if !window_lit(index, n) {
+                continue;
+            }
+            let look = &glow.looks[window_look(index, n)];
+            let (material, pool, halo) = (look.pane.clone(), look.spill.clone(), look.halo.clone());
             commands.spawn((
                 Mesh3d(glow.pane.clone()),
-                MeshMaterial3d(material.clone()),
+                MeshMaterial3d(material),
                 pane,
                 NotShadowCaster,
+                ChildOf(windows),
+            ));
+            // The halo at the window's face, its size the window's.
+            commands.spawn((
+                Mesh3d(glow.halo.clone()),
+                MeshMaterial3d(halo),
+                Transform {
+                    scale: size.extend(1.0),
+                    ..card
+                },
+                NotShadowCaster,
+                bevy::light::NotShadowReceiver,
                 ChildOf(windows),
             ));
             // One card mesh a window size, to the centimetre, so a town's cards batch.
@@ -332,7 +459,7 @@ fn glaze(
                 .clone();
             commands.spawn((
                 Mesh3d(mesh),
-                MeshMaterial3d(pool.clone()),
+                MeshMaterial3d(pool),
                 card,
                 NotShadowCaster,
                 bevy::light::NotShadowReceiver,
@@ -361,6 +488,8 @@ fn light(
     rising: Option<Res<Rising>>,
     glow: Res<Glow>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut glows: ResMut<Assets<GlowMaterial>>,
+    mut halos: ResMut<Assets<HaloMaterial>>,
     mut windows: Query<(&Windows, &mut Visibility)>,
     mut told: Local<(Vec<f32>, f32)>,
 ) {
@@ -386,13 +515,17 @@ fn light(
             continue;
         }
         told.0[n] = value;
-        let warm = WARM * value;
-        if let Some(mut material) = materials.get_mut(&look.pane) {
-            material.emissive = LinearRgba::rgb(warm.x, warm.y, warm.z);
+        let warm = look.warm * value;
+        if let Some(mut material) = glows.get_mut(&look.pane) {
+            material.base.emissive = LinearRgba::rgb(warm.x, warm.y, warm.z);
         }
         if let Some(mut material) = materials.get_mut(&look.spill) {
             let pool = warm * SPILL_SHARE;
             material.base_color = Color::linear_rgb(pool.x, pool.y, pool.z);
+        }
+        if let Some(mut material) = halos.get_mut(&look.halo) {
+            let halo = warm * HALO_SHARE;
+            material.extension.colour = halo.extend(HALO_WIDE);
         }
     }
     if t >= told.1 {
@@ -511,9 +644,46 @@ mod tests {
         assert!(off > face && off < face + 0.1, "{off}");
     }
 
+    /// A lit home always shows a lit window, about the share of its others are lit, and its
+    /// windows are not all one look, nor every house's the same.
     #[test]
-    fn about_the_share_of_homes_keep_a_fire() {
-        let lit = (0..2000).filter(|&home| keeps_fire(home)).count() as f32 / 2000.0;
-        assert!((lit - LIT_SHARE).abs() < 0.04, "{lit}");
+    fn a_lit_homes_windows_vary_and_one_is_always_lit() {
+        assert!((0..500).all(|home| window_lit(home, 0)));
+        let lit = (0..500)
+            .flat_map(|home| (1..6).map(move |n| window_lit(home, n)))
+            .filter(|&l| l)
+            .count() as f32
+            / 2500.0;
+        assert!((lit - WINDOW_LIT_SHARE).abs() < 0.04, "{lit}");
+        let mixed = (0..500)
+            .filter(|&home| (1..6).any(|n| window_look(home, n) != window_look(home, 0)))
+            .count();
+        assert!(mixed > 250 && mixed < 500, "{mixed}");
+        let firsts: std::collections::HashSet<usize> =
+            (0..50).map(|home| window_look(home, 0)).collect();
+        assert!(firsts.len() > LOOKS / 2, "{firsts:?}");
+        assert!((0..500).all(|home| (0..6).all(|n| window_look(home, n) < LOOKS)));
+    }
+
+    /// The looks' firelight runs from a hearth's deep amber to a candle-lit room's paler
+    /// gold, each warm (red over green over blue), and no two looks one colour.
+    #[test]
+    fn the_looks_firelight_is_warm_and_varied() {
+        let warms: Vec<Vec3> = (0..LOOKS)
+            .map(|n| warmth((n as f32 * 0.381_966 + 0.1) % 1.0))
+            .collect();
+        for w in &warms {
+            assert!(w.x > w.y && w.y > w.z, "{w}");
+        }
+        for (i, a) in warms.iter().enumerate() {
+            for b in &warms[i + 1..] {
+                assert!(a.distance(*b) > 0.005, "{a} {b}");
+            }
+        }
+        let greens: Vec<f32> = warms.iter().map(|w| w.y).collect();
+        let (lo, hi) = greens
+            .iter()
+            .fold((1.0f32, 0.0f32), |(lo, hi), &g| (lo.min(g), hi.max(g)));
+        assert!(hi - lo > 0.12, "{lo} {hi}");
     }
 }
