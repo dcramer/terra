@@ -61,7 +61,7 @@ import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
 import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
-import { keptOff } from "./arms.ts";
+import { type Holding, keptOff, reach } from "./arms.ts";
 
 const { values: opt } = parseArgs({
   options: {
@@ -201,7 +201,7 @@ const { shapes, skinned } = skinOf(body, opt.templates!, opt.template!.split(","
 const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => {
   const pose = shaped(body, shape, clip, t, bends);
   if (!opt.arms) return pose;
-  const kept = keptOff(body, pose);
+  const kept = keptOff(body, pose, holdingIn(clip));
   if (!kept.size) return pose;
   for (const [bone, q] of bends) kept.set(bone, kept.has(bone) ? qmul(kept.get(bone)!, q) : q);
   return shaped(body, shape, clip, t, kept);
@@ -216,14 +216,19 @@ const held: Held[] = opt.hold!.map((h) => {
 // Each look's points as carried (--carry): a look on its hand socket turned its carry_tilt about
 // its X, which is the socket's (a strapped look's is 0 and stays).
 const carriedIn = opt.carry ? carriedClips() : [];
-const carriedPoints = new Map(
-  held.map((h, i) => {
-    const deg = h.socket === h.hand ? carryTilt(opt.hold![i].split("=")[1]) : 0;
-    const [c, s] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
-    return [h.name, h.points.map(([x, y, z]) => [x, y * c - z * s, y * s + z * c] as V3)];
-  }),
-);
-const pointsIn = (h: Held, clip: Clip) => (carriedIn.includes(clip.name.split("+")[0]) ? carriedPoints.get(h.name)! : h.points);
+const tiltOf = new Map(held.map((h, i) => [h.name, h.socket === h.hand ? carryTilt(opt.hold![i].split("=")[1]) : 0]));
+const tipped = (deg: number, points: V3[]) => {
+  const [c, s] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
+  return points.map(([x, y, z]) => [x, y * c - z * s, y * s + z * c] as V3);
+};
+const carriedPoints = new Map(held.map((h) => [h.name, tipped(tiltOf.get(h.name)!, h.points)]));
+const carriedNow = (clip: Clip) => carriedIn.includes(clip.name.split("+")[0]);
+const pointsIn = (h: Held, clip: Clip) => (carriedNow(clip) ? carriedPoints.get(h.name)! : h.points);
+// `--arms`: what each hand holds counts in its arm's spacing, as the game counts it: a look on
+// its hand socket by its reach (arms.ts), tipped when carried.
+const reaches = held.filter((h) => h.socket === h.hand).map((h) => ({ h, points: reach(h.points) }));
+const holdingIn = (clip: Clip): Holding[] =>
+  reaches.map(({ h, points }) => ({ socket: h.socket, points: carriedNow(clip) ? tipped(tiltOf.get(h.name)!, points) : points }));
 
 
 const at = (name: string) => {
