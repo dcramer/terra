@@ -623,6 +623,7 @@ Checks, developer tools, languages and the repository.
 | [D552](decisions/D552.md) | One command fits a new held or worn item, and its look records its source's hash | Tech | Agent | Decided | A new held or worn item goes from its data to a checked… |
 | [D555](decisions/D555.md) | A render failure fails a scripted run | Tech | Agent | Decided | Every run of the sandbox and the game says each render… |
 | [D556](decisions/D556.md) | An error says what to do | Tech | Developers | Decided | Every error our code, tools, checks and gates give is… |
+| [D563](decisions/D563.md) | The character build is incremental, a stamp a step | Tech | Agent | Decided | `build_bodies.sh` runs its steps as make and ninja run… |
 
 ## Superseded and rejected
 

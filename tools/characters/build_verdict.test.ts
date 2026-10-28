@@ -27,7 +27,7 @@ const CLEAN = [
   "== 5. the game's files",
   "MORPH female target added; 79 joints and sockets move",
   "markers: assets/models/character/base.glb, 34 clips baked",
-  "BUILT base.glb with morphs female,heavy, 15 looks",
+  "BUILT base.glb with morphs female,heavy, 1 looks",
 ];
 
 const failing = (extra: string[], at = 8) => verdict([...CLEAN.slice(0, at), ...extra, ...CLEAN.slice(at)].join("\n"), RIG_PASS);
@@ -62,9 +62,11 @@ test("every failure a step prints fails the build", () => {
 test("a step that stopped early, or a check that never ran, fails the build", () => {
   // The clip check died before its verdict.
   assert.match(verdict(CLEAN.filter((l) => !l.startsWith("CLIPCHECK pass")).join("\n"), RIG_PASS).join(), /CLIPCHECK never finished/);
-  // One morph's looks never checked.
+  // One morph's look never checked.
   const once = CLEAN.filter((l, i) => !(l.startsWith("GEARCHECKS") && i > 12));
-  assert.match(verdict(once.join("\n"), RIG_PASS).join(), /GEARCHECK finished on 2 bodies of 3/);
+  assert.match(verdict(once.join("\n"), RIG_PASS).join(), /GEARCHECK finished 2 times of 3 \(1 looks on 3 bodies\)/);
+  // A look on each body, but two looks were made.
+  assert.match(verdict(CLEAN.join("\n").replace("1 looks", "2 looks"), RIG_PASS).join(), /finished 3 times of 6/);
   // The build stopped before the game's files.
   assert.match(verdict(CLEAN.slice(0, -1).join("\n"), RIG_PASS).join(), /no BUILT line/);
   assert.match(verdict(CLEAN.join("\n"), RIG_PASS, 1).join(), /stopped before its end \(exit 1\)/);

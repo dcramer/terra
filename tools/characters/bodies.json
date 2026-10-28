@@ -1,0 +1,7 @@
+{
+  "note": "The bodies build_bodies.sh makes and build_item.sh carries a look onto (build_steps.ts reads it). base: the body every other is a morph of. designed: a morph from a design kept in art/characters/<base>/morphs/<name>/model.glb. rigged: a morph from a body rigged on our skeleton, finished first. skins: a template's own painted skin, from the design's front view. The worn looks are not listed here: each is its data, art/gear/<item>/fit.json (gear_list.ts).",
+  "base": { "name": "base-male", "height": 1.8 },
+  "designed": ["heavy", "thin", "strong"],
+  "rigged": [{ "morph": "female", "body": "base-female", "height": 1.7 }],
+  "skins": [{ "morph": "female", "front": "art/characters/base-female/front.png" }]
+}

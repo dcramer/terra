@@ -10,7 +10,7 @@
 import { existsSync, readFileSync } from "node:fs";
 
 /** What the build's own steps print when something failed. */
-const FAILED: RegExp[] = [
+export const FAILED: RegExp[] = [
   /^(CLIPCHECK|GEARCHECK) .*"pass": false/, // a clip, or a look on a body
   /^CLIPCHECK fail/,
   /^MORPH \S+ failed/, // a morph's job exited non-zero (build_bodies.sh step 3)
@@ -24,13 +24,16 @@ export function verdict(log: string, rig: string | undefined, status = 0): strin
   const lines = log.split("\n");
   const out = [...new Set(lines.filter((l) => FAILED.some((re) => re.test(l))).map((l) => l.slice(0, 160)))];
   if (!lines.some((l) => /^CLIPCHECK (pass|fail)\b/.test(l))) out.push("CLIPCHECK never finished: no CLIPCHECK pass or fail line");
-  // Its last line names the morphs: the base and each has its looks checked, a GEARCHECKS line.
+  // Its last line names the morphs and counts the looks: each look on the base and on each
+  // morph is checked by a run of its own (build.ts's fit step), a GEARCHECKS line each.
   const built = lines.find((l) => l.startsWith("BUILT base.glb with morphs "));
   if (!built) out.push("the build never wrote the game's files: no BUILT line");
   else {
-    const bodies = 1 + built.slice("BUILT base.glb with morphs ".length).split(" ")[0].replace(/,$/, "").split(",").filter(Boolean).length;
+    const [named, count] = built.slice("BUILT base.glb with morphs ".length).split(" ");
+    const bodies = 1 + named.replace(/,$/, "").split(",").filter(Boolean).length;
+    const want = bodies * Number(count);
     const checked = lines.filter((l) => l.startsWith("GEARCHECKS ")).length;
-    if (checked !== bodies) out.push(`GEARCHECK finished on ${checked} bodies of ${bodies}: a body's looks went unchecked`);
+    if (checked !== want) out.push(`GEARCHECK finished ${checked} times of ${want} (${count} looks on ${bodies} bodies): a look went unchecked`);
   }
   if (rig === undefined) out.push("RIGCHECK missing: the base's rig check wrote no report");
   else {
@@ -39,6 +42,19 @@ export function verdict(log: string, rig: string | undefined, status = 0): strin
       out.push(`RIGCHECK ${r.file} fails: ${Object.entries(r.checks).filter(([, ok]) => !ok).map(([c]) => c).join(", ")}`);
   }
   if (status !== 0) out.push(`the build stopped before its end (exit ${status}): read the log's last lines`);
+  return out;
+}
+
+/** build_item.sh's verdict on its item's steps' log: the look made, checked on every body and none over the bar, its game file written. */
+export function itemVerdict(log: string, bodies: number, status = 0): string[] {
+  const lines = log.split("\n");
+  const out = lines.filter((l) => /Error|^✗/.test(l)).map((l) => l.slice(0, 200));
+  const checked = lines.filter((l) => l.startsWith("GEARCHECK {"));
+  const over = checked.filter((l) => l.includes('"pass": false')).length;
+  if (checked.length !== bodies || over) out.unshift(`${checked.length} of ${bodies} bodies checked, ${over} over the bar`);
+  out.push(...lines.filter((l) => l.startsWith("GEARCHECK {") && l.includes('"pass": false')).map((l) => l.slice(0, 200)));
+  if (!lines.some((l) => l.startsWith("CARRIED"))) out.push("its game file was not written: no CARRIED line");
+  if (status !== 0) out.push(`a step failed (exit ${status})`);
   return out;
 }
 
