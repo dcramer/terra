@@ -140,6 +140,9 @@ pub struct Theme {
     /// The dressed pieces laid over its cubes (D527); none for a theme of plain cubes.
     #[serde(default)]
     pub kit: Option<Kit>,
+    /// A mine's timber stood down its drifts (D559); none for a theme without.
+    #[serde(default)]
+    pub timber: Option<Timber>,
     pub features: Features,
     pub bestiary: Vec<Mob>,
     pub loot: Vec<Loot>,
@@ -191,6 +194,18 @@ pub struct Dress {
     /// laid beside the hero, with its small light (`LightKind::Lamp`).
     #[serde(default)]
     pub lamp: Option<(String, f32)>,
+}
+
+/// A mine's timber kit (docs/dungeons.md, the hewn mine's plan): the sets the stamp stands
+/// down its drifts, as a hard-rock mine timbered them (`tools/props/mine.py`).
+#[derive(Clone, Debug, Deserialize)]
+pub struct Timber {
+    /// A drift's set: two posts and a cap across its 3 m, the lagging over and behind them
+    /// reaching half `every` each way; its origin the middle of the floor under the cap, the
+    /// cap along its X, the drift along its Z.
+    pub set: String,
+    /// Metres between sets down a drift, a whole number of them a 4 m cell.
+    pub every: f32,
 }
 
 /// A built theme's dressed kit (docs/dungeons.md#themes-d527): models from the asset root the

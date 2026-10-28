@@ -18,6 +18,9 @@
     trim: "Hewn",
     // Drifts under their timber sets at 3.5 m, stopes 5 m (D527).
     headroom: (3.5, 5.0),
+    // A set every 2 m down each straight drift, its lagging roofing it at 2.9 m, under the
+    // ceiling's cubes (tools/props/mine.py; docs/dungeons.md, the hewn mine's plan).
+    timber: Some((set: "models/props/mine/TimberSet.glb", every: 2.0)),
     features: (goal: "trapped_miner", key: "pump_lever", rest: "campfire", stair: "stair"),
     bestiary: [
         (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 2)),

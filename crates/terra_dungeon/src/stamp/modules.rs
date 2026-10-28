@@ -179,6 +179,9 @@ pub(super) fn lay(
                     });
                 }
             }
+            // The theme's timber kit stands its sets down every drift instead (`timber.rs`).
+            Class::Timber if theme.timber.is_some() && matches!(cell.space, Space::Corridor(_)) => {
+            }
             Class::Timber => {
                 // Each set where its cell puts it along the bay, and one in four with a post
                 // and its beam gone: every set whole in the bay's middle, a straight
@@ -220,7 +223,8 @@ pub(super) fn lay(
             _ => props(f, cell, look.class, &mut out.props),
         }
         if matches!(cell.space, Space::Corridor(_)) && look.class != Class::Timber {
-            corridor(cell, kinds, theme.kit.is_none(), out);
+            let bare = theme.kit.is_none();
+            corridor(cell, kinds, bare && theme.timber.is_none(), bare, out);
         }
     }
 }
@@ -230,10 +234,11 @@ pub(super) fn lay(
 /// sets); and its edges worn, a fallen stone or two at a wall's foot and now and then a
 /// smaller one by the other, out of the middle where feet go. The fallen stones are rocks,
 /// each turned and sized its own way: half cubes of the wall's stone stood there before and
-/// read as blockout boxes, a step of them down every corridor (round 13's films). `bare`, a
-/// theme with no kit: a kit's barrel vault carries its own ribs, and in its halls stone lies
-/// only under a collapse (D539's plan; its corridors' stones read as confetti, dress r19).
-fn corridor(cell: &Cell, kinds: &Kinds, bare: bool, out: &mut Stamp) {
+/// read as blockout boxes, a step of them down every corridor (round 13's films). `rib` and
+/// `stones` in a theme with no kit: a kit's barrel vault carries its own ribs, and in its halls
+/// stone lies only under a collapse (D539's plan; its corridors' stones read as confetti, dress
+/// r19); a mine's timber sets are its ribs, and rock spalls from its drifts' walls.
+fn corridor(cell: &Cell, kinds: &Kinds, rib: bool, stones: bool, out: &mut Stamp) {
     let walled = |d: usize| cell.sides[d] == Side::Wall;
     let along = if walled(1) && walled(3) {
         Some(0)
@@ -248,15 +253,17 @@ fn corridor(cell: &Cell, kinds: &Kinds, bare: bool, out: &mut Stamp) {
     // Seen along the run: its walls east and west of the frame.
     let f = Frame::new(cell.at, turn);
     let top = kinds.head(cell.space) - 1;
-    if !bare {
+    if rib {
+        f.fill(
+            &mut out.ops,
+            [1, top, CELL / 2],
+            [INNER, top, CELL / 2],
+            solid(kinds.trim),
+        );
+    }
+    if !stones {
         return;
     }
-    f.fill(
-        &mut out.ops,
-        [1, top, CELL / 2],
-        [INNER, top, CELL / 2],
-        solid(kinds.trim),
-    );
     let west = hash(cell.at, 400).is_multiple_of(2);
     let (foot, other) = if west {
         (1.4, CELL as f32 - 1.5)

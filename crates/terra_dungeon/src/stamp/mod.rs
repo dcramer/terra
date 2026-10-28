@@ -33,6 +33,7 @@ mod shell;
 pub mod sight;
 #[cfg(test)]
 mod tests;
+mod timber;
 #[cfg(test)]
 mod torch_tests;
 mod view;
@@ -240,6 +241,9 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
     // Before the cubes are read: a pier stands on its own column of cubes.
     if let Some(kit) = &theme.kit {
         kit::lay(dungeon, kit, &kinds, &mut out);
+    }
+    if let Some(timber) = &theme.timber {
+        timber::lay(dungeon, timber, &mut out);
     }
     let map = cubes(&out.ops);
     runin::run_in(dungeon, &looks, &map, theme.kit.is_some(), &mut out);
