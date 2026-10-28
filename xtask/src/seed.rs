@@ -310,6 +310,19 @@ fn run_in(here: &Path, mode: Mode) -> bool {
             }
         }
     }
+    // Only a worktree that has built nothing, whose path dependencies' units all came from the
+    // seed just now: one built here may hold a unit of a file since put back as the seed's.
+    if ok
+        && profiles.len() == seed_profiles().len()
+        && let Some(seed) = from_target.parent()
+    {
+        let dirs = paths::foreign(&here, &ours);
+        let (dated, differ) = paths::backdate(&seed.join("src"), &here, &dirs);
+        say(format!(
+            "seed: path dependencies: {dated} files dated as the seed's, {differ} that differ \
+             left to rebuild"
+        ));
+    }
     if ok && let Some(stamp) = from_target.parent().and_then(Stamp::read) {
         let _ = std::fs::write(to_target.join(SEEDED), &stamp.commit);
     }
@@ -954,6 +967,8 @@ fn lock(path: &Path) -> std::io::Result<File> {
     file.lock()?;
     Ok(file)
 }
+
+mod paths;
 
 #[cfg(test)]
 mod tests;
