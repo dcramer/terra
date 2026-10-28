@@ -1,0 +1,19 @@
+// Minefloor's pack: a mine's floor, the same hard rock as its walls (the minerock pack, over
+// which this lies) trodden and dirtied: the broken face of Poly Haven's
+// `worn_rock_natural_01` (CC0, assets/materials/README.md) darker and browner than the walls,
+// as the fines, water and lamp soot of a working drift lie on its floor (the mine anchors'
+// photos), not the orange clay of a cottage's floor (round 2's mine judges: a flat orange
+// floor, 11 mentions). Its top rolls a few centimetres over a metre and a half, enough that it
+// is not a plane, little enough that a post stands on it without a gap at its foot.
+(
+    pack: "minerock",
+    bevel: 0.05,
+    relief: 0.03,
+    tint: (0.46, 0.45, 0.47),
+    packed: Some((lumps: 0.025, lump: 1.5, ridge: 0.0, step: 0.0)),
+    textures: {
+        Masonry: (path: "materials/worn_rock_natural_01", metres: (1.5, 1.5), depth: 0.02),
+        Floor: (path: "materials/worn_rock_natural_01", metres: (1.2, 1.2), depth: 0.02),
+    },
+    colours: (light: (0.3, 0.29, 0.28)),
+)

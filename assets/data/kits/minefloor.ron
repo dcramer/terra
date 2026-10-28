@@ -1,0 +1,24 @@
+// Minefloor: a mine's trodden floor (data/packs/minefloor.ron), the flooded mine's floors
+// under its Minerock walls (data/dungeons/flooded_mine.ron, D559); a material of the block
+// pattern (D290), quarried as stone is. Made for the mine, so not in the hammer.
+(
+    id: 12,
+    pattern: "block",
+    pack: "minefloor",
+    cost: (steps: 1, step: [("Stone", 1, 4)]),
+    weight: 3,
+    roof_kind: Some(2049),
+    dungeon_only: true,
+    // No dirt: a floor's top lies at its ground, so the dirt mask darkens the whole floor
+    // (flagstone.ron, barrow dress round 20). Grime instead, dark along the walls' feet,
+    // where the fines and the drip gather, so the floor runs into the wall's foot without
+    // a hard line (round 2's mine judges: a floor/wall seam, 10 mentions).
+    dress: (masks: (
+        dirt: 0.0,
+        dirt_tint: (0.22, 0.21, 0.2),
+        grime: 1.0,
+        wear: 0.0,
+        splash: 0.0,
+        streaks: 0.0,
+    )),
+)
