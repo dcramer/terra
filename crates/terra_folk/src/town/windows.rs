@@ -114,6 +114,32 @@ impl MaterialExtension for HaloExtension {
 
 pub type HaloMaterial = ExtendedMaterial<StandardMaterial, HaloExtension>;
 
+/// What `shaders/window_spill.wesl` is told: x the look's flicker phase. Field order must
+/// match the struct there.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct SpillExtension {
+    #[uniform(100)]
+    phase: Vec4,
+}
+
+impl MaterialExtension for SpillExtension {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/window_spill.wesl".into()
+    }
+}
+
+pub type SpillMaterial = ExtendedMaterial<StandardMaterial, SpillExtension>;
+
+/// The mean of `window_flicker.wesl`'s flicker: the pane's steady glow, under its halo's
+/// flickering core. The flicker is the shaders' own, from the clock and each look's phase;
+/// writing it into the looks' materials each frame re-specialised and re-binned every pane,
+/// pool and halo of the town each frame, about 2 ms of the render world's (settlement round
+/// 3, D127).
+const FLICKER_MEAN: f32 = 0.88;
+/// How far a look's glow moves, as a share of its brightest, before its materials are
+/// written again as the sun goes down: 2% steps, too small to see, about fifty a dusk.
+const FADE_STEP: f32 = 0.02;
+
 /// A home's windows, as one entity under its build, their panes its children: shown while
 /// it is lit.
 #[derive(Component)]
@@ -143,15 +169,15 @@ struct Glow {
 /// colour, how bright and its flicker's phase.
 struct Look {
     pane: Handle<GlowMaterial>,
-    spill: Handle<StandardMaterial>,
+    spill: Handle<SpillMaterial>,
     halo: Handle<HaloMaterial>,
     warm: Vec3,
     level: f32,
-    phase: f32,
 }
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<HaloMaterial>::default())
+        .add_plugins(MaterialPlugin::<SpillMaterial>::default())
         .add_systems(Startup, make)
         .add_systems(Update, (glaze, light).run_if(resource_exists::<Market>));
 }
@@ -184,12 +210,14 @@ fn warmth(t: f32) -> Vec3 {
 fn make(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut spills: ResMut<Assets<SpillMaterial>>,
     mut glows: ResMut<Assets<GlowMaterial>>,
     mut halos: ResMut<Assets<HaloMaterial>>,
 ) {
     let looks = (0..LOOKS)
         .map(|n| {
+            // Its flicker's phase, so a street's windows do not waver together.
+            let phase = n as f32 * 2.399;
             // Tonemapped as a flame is, out of the dusk's grade, which greyed the panes
             // with the land round them (D415).
             let pane = glows.add(GlowMaterial {
@@ -213,15 +241,20 @@ fn make(
                 },
                 extension: HaloExtension {
                     colour: Vec4::new(0.0, 0.0, 0.0, HALO_WIDE),
-                    shape: Vec4::new(HALO_LEAST, HALO_STAND_M, 0.0, 0.0),
+                    shape: Vec4::new(HALO_LEAST, HALO_STAND_M, phase, 0.0),
                 },
             });
             // Added to the wall behind it, the same at any exposure as the pane's glow.
-            let spill = materials.add(StandardMaterial {
-                base_color: Color::BLACK,
-                unlit: true,
-                alpha_mode: AlphaMode::Add,
-                ..default()
+            let spill = spills.add(SpillMaterial {
+                base: StandardMaterial {
+                    base_color: Color::BLACK,
+                    unlit: true,
+                    alpha_mode: AlphaMode::Add,
+                    ..default()
+                },
+                extension: SpillExtension {
+                    phase: Vec4::new(phase, 0.0, 0.0, 0.0),
+                },
             });
             Look {
                 pane,
@@ -230,7 +263,6 @@ fn make(
                 warm: warmth((n as f32 * 0.381_966 + 0.1) % 1.0),
                 // From a room lit by embers to one by a blazing hearth.
                 level: 0.55 + 0.75 * ((n as f32 * 0.618_034) % 1.0),
-                phase: n as f32 * 2.399,
             }
         })
         .collect();
@@ -469,16 +501,18 @@ fn glaze(
     }
 }
 
-/// How a hearth's light through a window flickers, about its own brightness, at a time in
-/// seconds: a few slow waves and a quicker one, so it wavers rather than pulses.
-fn flicker(t: f32, phase: f32) -> f32 {
-    0.88 + 0.06 * libm::sinf(t * 5.3 + phase)
-        + 0.04 * libm::sinf(t * 11.7 + phase * 2.3)
-        + 0.02 * libm::sinf(t * 23.1 + phase * 4.1)
+/// Whether a look's materials are written again for its glow `value`, last written at `told`
+/// (below 0 never), its brightest `full`: when it has moved a [`FADE_STEP`] of that, or come
+/// to dark or to its brightest, or lit from dark. Each write re-specialises every window
+/// wearing the look (D127).
+fn retell(told: f32, value: f32, full: f32) -> bool {
+    let ends = (value == 0.0 || value == full || told == 0.0) && told != value;
+    told < 0.0 || ends || (told - value).abs() >= FADE_STEP * full
 }
 
 /// Each home's windows shown while it is lit, and every look's glow faded in with the dusk
-/// and flickering; the count lit written to the log every few seconds.
+/// (the flicker is the shaders', `window_flicker.wesl`); the count lit written to the log
+/// every few seconds.
 #[allow(clippy::too_many_arguments)]
 fn light(
     time: Res<Time>,
@@ -487,7 +521,7 @@ fn light(
     market: Res<Market>,
     rising: Option<Res<Rising>>,
     glow: Res<Glow>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut spills: ResMut<Assets<SpillMaterial>>,
     mut glows: ResMut<Assets<GlowMaterial>>,
     mut halos: ResMut<Assets<HaloMaterial>>,
     mut windows: Query<(&Windows, &mut Visibility)>,
@@ -510,18 +544,20 @@ fn light(
     let t = time.elapsed_secs();
     told.0.resize(glow.looks.len(), -1.0);
     for (n, look) in glow.looks.iter().enumerate() {
-        let value = GLOW * fade * look.level * flicker(t, look.phase);
-        if (told.0[n] - value).abs() < 0.004 {
+        let full = GLOW * look.level;
+        let value = full * fade;
+        if !retell(told.0[n], value, full) {
             continue;
         }
         told.0[n] = value;
         let warm = look.warm * value;
         if let Some(mut material) = glows.get_mut(&look.pane) {
-            material.base.emissive = LinearRgba::rgb(warm.x, warm.y, warm.z);
+            let pane = warm * FLICKER_MEAN;
+            material.base.emissive = LinearRgba::rgb(pane.x, pane.y, pane.z);
         }
-        if let Some(mut material) = materials.get_mut(&look.spill) {
+        if let Some(mut material) = spills.get_mut(&look.spill) {
             let pool = warm * SPILL_SHARE;
-            material.base_color = Color::linear_rgb(pool.x, pool.y, pool.z);
+            material.base.base_color = Color::linear_rgb(pool.x, pool.y, pool.z);
         }
         if let Some(mut material) = halos.get_mut(&look.halo) {
             let halo = warm * HALO_SHARE;
@@ -685,5 +721,32 @@ mod tests {
             .iter()
             .fold((1.0f32, 0.0f32), |(lo, hi), &g| (lo.min(g), hi.max(g)));
         assert!(hi - lo > 0.12, "{lo} {hi}");
+    }
+
+    /// The looks' materials are written as the sun goes down, a few dozen times a dusk, and
+    /// never while it stands still: each write re-specialises every window wearing the look.
+    #[test]
+    fn a_looks_materials_are_written_only_as_the_dusk_moves() {
+        let full = GLOW * 1.3;
+        let (mut told, mut writes) = (-1.0f32, 0);
+        // The sun from 30 degrees up to 3 under, a frame at a time over two minutes.
+        let frames = 60 * 120;
+        for frame in 0..=frames {
+            let sun = 30.0 - 33.0 * frame as f32 / frames as f32;
+            let value = full * dusk(sun);
+            if retell(told, value, full) {
+                told = value;
+                writes += 1;
+            }
+            // Never further from the glow wanted than a step.
+            assert!((told - value).abs() < FADE_STEP * full, "{told} {value}");
+        }
+        assert!((20..=80).contains(&writes), "{writes} writes a dusk");
+        assert_eq!(told, full, "full once the sun is down");
+        // At night, frame after frame, nothing.
+        assert!(!retell(full, full, full));
+        // Dark by day, and lit again the moment the glow comes back.
+        assert!(retell(0.01, 0.0, full));
+        assert!(retell(0.0, 0.001, full));
     }
 }

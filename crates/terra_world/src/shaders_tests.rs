@@ -232,6 +232,23 @@ const DRAWS: &[Draw] = &[
         ..DRAW
     },
     Draw {
+        material: "HaloExtension (terra_folk town/windows.rs), on its quad: added, NotShadowCaster",
+        vertex: Some("window_halo"),
+        fragment: Some("window_halo"),
+        prepass_vertex: Some("window_halo"),
+        prepass_fragment: Some("window_halo"),
+        alpha: &[Premultiplied],
+        meshes: &[CARDS],
+        ..DRAW
+    },
+    Draw {
+        material: "SpillExtension (terra_folk town/windows.rs), on its pool cards: added, NotShadowCaster",
+        fragment: Some("window_spill"),
+        alpha: &[Premultiplied],
+        meshes: &[&[Normals, Uvs, Colours]],
+        ..DRAW
+    },
+    Draw {
         material: "SmokeExtension (smoke.rs): blended, NotShadowCaster",
         vertex: Some("smoke"),
         fragment: Some("smoke"),

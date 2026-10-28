@@ -9,9 +9,10 @@
 
 import bevy_pbr::render::{
     mesh_functions,
-    mesh_view_bindings::view,
+    mesh_view_bindings::{view, globals},
     view_transformations::position_world_to_clip,
 };
+import super::window_flicker::flicker;
 
 @if(PREPASS_PIPELINE)
 import bevy_pbr::prepass::io::{Vertex, VertexOutput, decompress_vertex};
@@ -24,7 +25,7 @@ struct Halo {
     // window's own size.
     colour: vec4<f32>,
     // x the least it spans of the view's height, y how far it stands toward the eye in
-    // metres.
+    // metres, z its look's flicker phase (window_flicker.wesl).
     shape: vec4<f32>,
 }
 
@@ -105,6 +106,9 @@ fn fragment(in: VertexOutput) -> FragmentOutput {
     let glow = (0.6 * exp(-r2 * 14.0) + 0.4 * exp(-r2 * 4.0)) * edge * edge;
     var out: FragmentOutput;
     // Added to what is behind it, its alpha nought so the film's mask behind it stays.
-    out.color = vec4<f32>(halo.colour.rgb * glow * in.uv_b.x, 0.0);
+    // Flickering with the window's hearth, from the clock, so the material is never written
+    // for it.
+    let light = halo.colour.rgb * flicker(globals.time, halo.shape.z);
+    out.color = vec4<f32>(light * glow * in.uv_b.x, 0.0);
     return out;
 }
