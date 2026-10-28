@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { box, boxHead, collar, collarMesh, glbOf, haft, head } from "./fixtures.ts";
+import { box, boxHead, COLLAR_M3, collar, collarMesh, glbOf, haft, head, LEATHER } from "./fixtures.ts";
 import { type Mesh, normal, readMesh, triangles } from "./mesh.ts";
 import { checkPart, type Ctx, loadCtx, withMeasured } from "./part.ts";
 
@@ -45,8 +45,26 @@ test("--write measures a box's volume, centre and bounds, and the checker then h
   // A box with a face missing closes nothing: refused, not measured.
   const open = { ...b, indices: b.indices.slice(6) };
   assert.throws(() => withMeasured(bare, ctx([bare], { test_box_head: open })), /not a closed surface facing out \(4 edges/);
-  // A trim gives its own mass, so only its centre and bounds are measured.
-  assert.deepEqual(Object.keys(withMeasured(collar(), ctx([collar()], { test_collar: collarMesh() }))).filter((k) => k === "volume_m3"), []);
+});
+
+test("--write weighs a trim in its own density and measures its cover, so neither is typed by hand", () => {
+  const bare = collar();
+  for (const k of ["mass_kg", "cover_m"]) delete bare[k];
+  const c = ctx([bare], { test_collar: collarMesh() });
+  const w = withMeasured(bare, c);
+  assert.equal(w.volume_m3, undefined, "a trim keeps its own material: it gives a mass, not a volume");
+  assert.ok(Math.abs(w.mass_kg.value - COLLAR_M3 * LEATHER) < 1e-4, `${w.mass_kg.value}`);
+  assert.match(w.mass_kg.source, /cm\^3 measured on models\/parts\/test_collar\.glb by tools\/items\/part\.ts --write, at 860 kg\/m\^3: made up/);
+  assert.deepEqual(w.cover_m, [-0.02, 0]);
+  assert.deepEqual(faults(w, c, "measured"), []);
+  // Typed off its model, each is refused with --write as the fix.
+  const f = faults({ ...w, mass_kg: { value: 0.012, source: "typed in by hand" }, cover_m: [-0.011, 0] }, c, "measured");
+  assert.ok(f.some((s) => /\/mass_kg is 0\.012 kg, the model's .* --write/.test(s)) && f.some((s) => /\/cover_m is 9\.0 mm off the model's span/.test(s)), f.join("\n"));
+  // With no density it cannot be weighed: the data says so, and --write refuses.
+  const light: any = { ...bare };
+  delete light.density_kg_m3;
+  assert.ok(faults(light, ctx([light], { test_collar: collarMesh() }), "data").some((s) => /\/density_kg_m3 is missing: a trim keeps its own material/.test(s)));
+  assert.throws(() => withMeasured(light, ctx([light], { test_collar: collarMesh() })), /give its \/density_kg_m3/);
 });
 
 test("a point off the line is refused at its field", () => {

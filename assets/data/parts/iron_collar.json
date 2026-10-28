@@ -7,9 +7,13 @@
     "axe"
   ],
   "model": "models/parts/iron_collar.glb",
+  "density_kg_m3": {
+    "value": 7750,
+    "source": "wrought iron (The Engineering ToolBox, Metals and Alloys - Densities, engineeringtoolbox.com/metal-alloys-densities-d_50.html, looked up 2026-10-28), materials.json's iron"
+  },
   "mass_kg": {
     "value": 0.0409,
-    "source": "5.27 cm^3 measured by tools/items/prep.py, at 7750 kg/m^3: wrought iron (The Engineering ToolBox, Metals and Alloys - Densities, engineeringtoolbox.com/metal-alloys-densities-d_50.html, looked up 2026-10-28), materials.json's iron"
+    "source": "5.27 cm^3 measured on models/parts/iron_collar.glb by tools/items/part.ts --write, at 7750 kg/m^3: wrought iron (The Engineering ToolBox, Metals and Alloys - Densities, engineeringtoolbox.com/metal-alloys-densities-d_50.html, looked up 2026-10-28), materials.json's iron"
   },
   "cover_m": [
     -0.011,

@@ -7,9 +7,13 @@
     "axe"
   ],
   "model": "models/parts/leather_binding.glb",
+  "density_kg_m3": {
+    "value": 860,
+    "source": "leather, dry 0.86 x 10^3 kg/m^3 (The Engineering ToolBox, Solids - Densities, engineeringtoolbox.com/density-solids-d_1265.html, looked up 2026-10-28)"
+  },
   "mass_kg": {
     "value": 0.0154,
-    "source": "17.86 cm^3 measured by tools/items/prep.py, at 860 kg/m^3: leather, dry 0.86 x 10^3 kg/m^3 (The Engineering ToolBox, Solids - Densities, engineeringtoolbox.com/density-solids-d_1265.html, looked up 2026-10-28)"
+    "source": "17.86 cm^3 measured on models/parts/leather_binding.glb by tools/items/part.ts --write, at 860 kg/m^3: leather, dry 0.86 x 10^3 kg/m^3 (The Engineering ToolBox, Solids - Densities, engineeringtoolbox.com/density-solids-d_1265.html, looked up 2026-10-28)"
   },
   "cover_m": [
     -0.02,

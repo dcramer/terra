@@ -14,17 +14,17 @@
     "kinds": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z_]+$" }, "description": "The kinds it is made for, when its type fits more than one (a haft is an axe's or a spear's): its size is checked for those." },
     "model": { "type": "string", "pattern": "^models/parts/[a-z0-9_]+\\.glb$", "description": "The model under the asset root, made to its type's frame (D566)." },
     "skin": { "type": "string", "pattern": "^models/parts/[a-z0-9_]+\\.glb$", "description": "A code-made part's look under the asset root: a model whose one material, named by its role, the part is drawn in on its own UVs (tools/items/haft.py skin)." },
-    "mass_kg": { "$ref": "#/$defs/number", "description": "A trim's mass, in its own material." },
+    "mass_kg": { "$ref": "#/$defs/number", "description": "A trim's mass, its model's volume in its own density_kg_m3; written by `node tools/items/part.ts --write`." },
     "volume_m3": { "$ref": "#/$defs/number", "description": "A working part's volume: its mass is this times the density of its recipe's material (materials.json); a model's written by `node tools/items/part.ts --write`." },
     "centre_m": { "$ref": "#/$defs/v3", "description": "Its centre of mass in its frame; a model's written by `node tools/items/part.ts --write`." },
     "bounds_m": { "type": "array", "items": { "$ref": "#/$defs/v3" }, "minItems": 2, "maxItems": 2, "description": "Its least and greatest corner in its frame; a model's written by `node tools/items/part.ts --write`." },
-    "cover_m": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "A trim's span along the line, from its frame's origin: [below, above]." },
+    "cover_m": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "A trim's span along the line, from its frame's origin: [below, above]; a model's written by `node tools/items/part.ts --write`." },
     "points": { "type": "array", "items": { "$ref": "#/$defs/point" } },
     "length_m": { "$ref": "#/$defs/number" },
     "grip_from_end_m": { "$ref": "#/$defs/number" },
     "second_from_grip_m": { "$ref": "#/$defs/number" },
     "grip_diameter_m": { "$ref": "#/$defs/number" },
-    "density_kg_m3": { "$ref": "#/$defs/number" }
+    "density_kg_m3": { "$ref": "#/$defs/number", "description": "The density of a part's own material, with its source: a code-made haft's wood, or a trim's, its mass_kg weighed in it." }
   },
   "$defs": {
     "v3": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },

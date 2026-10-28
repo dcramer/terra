@@ -5,7 +5,8 @@
 // from its numbers, its joins measured on the models it meets.
 //
 //   node tools/items/part.ts <part>           assets/data/parts/<part>.json
-//   node tools/items/part.ts --write <part>   first writes its volume_m3, centre_m and bounds_m as
+//   node tools/items/part.ts --write <part>   first writes its volume_m3 (a trim its mass_kg, in its
+//                                             density_kg_m3, and cover_m), centre_m and bounds_m as
 //                                             measured on its model, so nobody types them
 //
 // A line a stage (D388); a failure names the field and the fix (D556).
@@ -50,7 +51,9 @@ export function checkPart(part: any, ctx: Ctx): Stage[] {
   const [weight, not] = type?.slot === "working" ? ["volume_m3", "mass_kg"] : ["mass_kg", "volume_m3"];
   if (type?.made_by === "model")
     for (const k of ["model", weight, "centre_m", "bounds_m", "points"])
-      if (!(k in part)) data.push(`/${k} is missing: a modelled ${type.slot} part gives it (part.schema.json)${k === "model" || k === "points" || k === "mass_kg" ? "" : `; node tools/items/part.ts --write ${part.part} measures it on the model`}`);
+      if (!(k in part)) data.push(`/${k} is missing: a modelled ${type.slot} part gives it (part.schema.json)${k === "model" || k === "points" ? "" : `; node tools/items/part.ts --write ${part.part} measures it on the model`}`);
+  if (type?.made_by === "model" && type.slot === "trim" && !("density_kg_m3" in part))
+    data.push(`/density_kg_m3 is missing: a trim keeps its own material, so it gives that material's density with its source, and node tools/items/part.ts --write ${part.part} weighs its model in it`);
   if (type?.made_by === "model" && not in part)
     data.push(`/${not} is not a ${type.slot} part's: ${type.slot === "working" ? "its mass is its volume_m3 in the recipe's material (materials.json)" : "a trim keeps its own material, so it gives mass_kg"}; remove it`);
   if (type?.made_by === "code") for (const k of type.numbers) if (!(k in part)) data.push(`/${k} is missing: a ${part.type} is made from it (types.json)`);
@@ -76,7 +79,8 @@ export function checkPart(part: any, ctx: Ctx): Stage[] {
     stage("openings", "each within 1 mm of its declared size round the line", openings(part, mesh, join_m));
     stage("budget", budgetNote(part, type, mesh, ctx), budget(type, mesh, ctx));
     stage("roles", [...new Set(mesh.materials.map((m) => m.split(".")[0]))].join(", "), roles(part, type, mesh));
-    stage("measured", `${type.slot === "working" ? "volume_m3, " : ""}centre_m and bounds_m as measured on its model`, measuredFaults(part, type, mesh, join_m));
+    const weighed = type.slot === "working" ? "volume_m3, " : type.slot === "trim" ? `mass_kg, ${type.place === "seat" ? "" : "cover_m, "}` : "";
+    stage("measured", `${weighed}centre_m and bounds_m as measured on its model`, measuredFaults(part, type, mesh, join_m));
   }
   stage("slots", kinds.made_for.join(", ") || "no kind fits it", slots(part, kinds.made_for, ctx));
   const [faults, notes] = joins(part, ctx);
@@ -130,7 +134,7 @@ function points(part: any, type: any, mesh: Mesh, ctx: Ctx): string[] {
   pair("socket.mouth", "socket.bottom");
   pair("tang.end", "shoulder");
   if (part.cover_m && part.cover_m[1] - part.cover_m[0] < v(ctx.rules.trim_cover_m)) out.push(`/cover_m spans ${mm(part.cover_m[1] - part.cover_m[0])}: a trim covers a join by at least ${mm(v(ctx.rules.trim_cover_m))} (D566)`);
-  if (type.slot === "trim" && type.place !== "seat" && !part.cover_m) out.push(`/cover_m is missing: a trim on the line says how far it covers, [below, above] its bore`);
+  if (type.slot === "trim" && type.place !== "seat" && !part.cover_m) out.push(`/cover_m is missing: a trim on the line says how far it covers, [below, above] its bore; node tools/items/part.ts --write ${part.part} measures it on the model`);
   return out;
 }
 
@@ -202,6 +206,14 @@ export function measured(part: any, type: any, mesh: Mesh): Record<string, any> 
   const r = (p: V3) => p.map((x) => Number(x.toFixed(5)) || 0); // to 10 µm, never -0
   const out: Record<string, any> = { centre_m: r(centre), bounds_m: bounds(mesh).map(r) };
   if (type.slot === "working") out.volume_m3 = { value: Number(volume.toPrecision(5)), source: `measured on ${part.model} by tools/items/part.ts --write` };
+  if (type.slot === "trim") {
+    // A trim keeps its own material: its mass is its closed volume in that density, the
+    // density's source carried; one turned on the line covers from end to end of its bore.
+    const d = part.density_kg_m3;
+    if (!d) throw new Error(`${part.part}: a trim is weighed in its own material; give its /density_kg_m3 with the source`);
+    out.mass_kg = { value: Number((volume * v(d)).toFixed(4)), source: `${(volume * 1e6).toFixed(2)} cm^3 measured on ${part.model} by tools/items/part.ts --write, at ${v(d)} kg/m^3: ${d.source}` };
+    if (type.place !== "seat") out.cover_m = [out.bounds_m[0][1], out.bounds_m[1][1]];
+  }
   return out;
 }
 
@@ -220,6 +232,10 @@ function measuredFaults(part: any, type: any, mesh: Mesh, join_m: number): strin
   if (from > join_m) out.push(`/centre_m is ${mm(from)} from the model's centre of mass: ${write}`);
   if (m.volume_m3 && Math.abs(v(part.volume_m3) / m.volume_m3.value - 1) > VOLUME_WITHIN)
     out.push(`/volume_m3 is ${v(part.volume_m3)}, the model's ${m.volume_m3.value}: ${write}`);
+  if (m.mass_kg && Math.abs(v(part.mass_kg) / m.mass_kg.value - 1) > VOLUME_WITHIN)
+    out.push(`/mass_kg is ${v(part.mass_kg)} kg, the model's ${m.mass_kg.value} kg in ${v(part.density_kg_m3)} kg/m^3: ${write}`);
+  const cover = m.cover_m && Math.max(...[0, 1].map((k) => Math.abs(m.cover_m[k] - (part.cover_m?.[k] ?? Infinity))));
+  if (cover > join_m) out.push(`/cover_m is ${Number.isFinite(cover) ? `${mm(cover)} off` : "not"} the model's span along the line: ${write}`);
   return out;
 }
 
@@ -342,14 +358,16 @@ if (import.meta.main) {
     process.exit(1);
   }
   if (write) {
+    const was = ctx.parts[name];
     try {
-      ctx.parts[name] = withMeasured(ctx.parts[name], ctx);
+      ctx.parts[name] = withMeasured(was, ctx);
     } catch (e) {
       console.log(`✗ write: ${(e as Error).message}`);
       process.exit(1);
     }
+    const changed = Object.keys(ctx.parts[name]).filter((k) => JSON.stringify(was[k]) !== JSON.stringify(ctx.parts[name][k]));
     writeFileSync(join(PARTS, `${name}.json`), `${JSON.stringify(ctx.parts[name], null, 2)}\n`);
-    console.log(`✓ write: its volume, centre and bounds as measured on ${ctx.parts[name].model} (assets/data/parts/${name}.json)`);
+    console.log(`✓ write: ${changed.join(", ") || "nothing changed"}, as measured on ${ctx.parts[name].model} (assets/data/parts/${name}.json)`);
   }
   const stages = checkPart(ctx.parts[name], ctx);
   for (const line of report(name, stages)) console.log(line);

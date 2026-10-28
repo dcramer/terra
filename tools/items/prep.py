@@ -19,12 +19,13 @@ The part's prep.json says what a person decided and nothing measured:
   bore_m      a trim: turned as a closed lathe on its model's own outer profile (lathe.py), its bore
               exact at bore_m, its wall wall_m out from it (the relief kept in proportion), its
               look baked on from the model; Tripo's tubes are open, so they cannot be cut
-  density_kg_m3  a trim's own material, {value, source}: its mass_kg is its volume in it
   edge_band_m a head's bit: how far back from its front-most point the cutting edge runs
   budget      a head: triangles before its cuts add about 340 (art-style.md: a tool's head, 800 at most)
 
-OUT.json gets its points, a trim's cover and mass, in glTF's frame (+Y up, front +Z), copied by hand
-into assets/data/parts/<part>.json; part.ts --write then measures its volume and bounds.
+OUT.json gets its points, in glTF's frame (+Y up, front +Z), copied into
+assets/data/parts/<part>.json; `node tools/items/part.ts --write <part>` then measures the rest on
+the model: a head's volume, a trim's mass (in the part's own density_kg_m3) and cover, and every
+part's centre and bounds.
 Blender's frame is glTF's turned: Blender (x, y, z) is glTF (x, z, -y).
 """
 
@@ -380,15 +381,10 @@ def turned_trim(raw, prep, folder, out_glb, out_json):
     pieces.only(ob)
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(50.0), keep_sharp_edges=True)
     look(ob, shots + "-after")
-    _, vol = open_edges(ob)
-    d = prep["density_kg_m3"]
+    # Its mass (in the part's own density_kg_m3) and its cover, end to end of the exact bore, are
+    # measured on the model by `node tools/items/part.ts --write`, never copied from here.
     export(ob, folder, out_glb, out_json, {
         "points": [{"name": "bore", "type": "bore", "at": [0.0, 0.0, 0.0], "dir": UP, "size": bore}],
-        # The bore is exact its whole height, so the trim covers from end to end.
-        "cover_m": [round(min(zs) - mid, 5), round(max(zs) - mid, 5)],
-        # A trim keeps its own material, so it gives its mass (part.schema.json): its closed
-        # volume in its own density, the density's source carried with it.
-        "mass_kg": {"value": round(abs(vol) * d["value"], 4), "source": f"{abs(vol) * 1e6:.2f} cm^3 measured by tools/items/prep.py, at {d['value']} kg/m^3: {d['source']}"},
     }, "turned")
 
 

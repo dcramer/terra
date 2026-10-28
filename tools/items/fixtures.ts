@@ -84,6 +84,10 @@ export const HEAD_H = 0.06;
 export const HEAD_M3 = HEAD_H * (0.06 * 0.06 - (N / 2) * (EYE / 2) ** 2 * Math.sin((2 * Math.PI) / N));
 export const boxHead =(eye = EYE, top = HEAD_H) => tube(square(0.03), circle(eye / 2), 0, top);
 export const collarMesh = (top = 0) => tube(circle(0.022), circle(EYE / 2), -0.02, top, "Leather");
+// The collar's, the same way: two 32-gons, 2.2 cm and the eye's radius, 2 cm high; in leather.
+const gon = (r: number) => (N / 2) * r ** 2 * Math.sin((2 * Math.PI) / N);
+export const COLLAR_M3 = 0.02 * (gon(0.022) - gon(EYE / 2));
+export const LEATHER = 860;
 
 const n = (value: number, source = "made up for the part checker's tests") => ({ value, source });
 
@@ -110,7 +114,8 @@ export const collar = (over: Record<string, any> = {}) => ({
   about: "a made-up leather collar under the head",
   kinds: ["axe"],
   model: "models/parts/test_collar.glb",
-  mass_kg: n(0.01),
+  density_kg_m3: n(LEATHER),
+  mass_kg: n(Number((COLLAR_M3 * LEATHER).toFixed(4))),
   centre_m: [0, -0.01, 0],
   bounds_m: [[-0.022, -0.02, -0.022], [0.022, 0, 0.022]],
   cover_m: [-0.02, 0],

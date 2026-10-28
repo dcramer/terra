@@ -147,7 +147,7 @@ pub fn assemble(lib: &Library, recipe: &Recipe) -> Result<Assembly, String> {
         let bore = on_line(trim, "bore", lib.types.rules.join_m.value)?;
         let cover = trim.cover_m.ok_or_else(|| {
             format!(
-                "{}: a trim on the line gives cover_m; run node tools/items/part.ts {}",
+                "{}: a trim on the line gives cover_m; run node tools/items/part.ts --write {}",
                 trim.part, trim.part
             )
         })?;
