@@ -25,9 +25,11 @@ use glam::{IVec3, Vec3};
 use std::collections::BTreeSet;
 use std::hash::Hasher;
 use std::sync::Arc;
-use terra_build::{CELL_M, kit};
+use terra_build::CELL_M;
 
+mod packed;
 mod slots;
+pub use packed::Packed;
 pub use slots::draw_slots;
 
 /// How a block kind's surface is made: from its kit.
@@ -47,56 +49,6 @@ pub struct Look {
     pub top: Option<([f32; 2], f32)>,
     /// Earth's packing (D236), if it was packed: lumps and lifts in its shape.
     pub packed: Option<Packed>,
-}
-
-/// Earth's packing in a surface's shape: its kit's `Packing`, and how tall its lifts are.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Packed {
-    pub packing: kit::Packing,
-    pub lift: f32,
-}
-
-impl Packed {
-    /// How far the surface is pushed out at a point by its packing: lumps of two sizes, and
-    /// each lift rounded out between its seams, a little flatter in its middle.
-    fn at(&self, p: Vec3, outward: Vec3, stepping: f32) -> f32 {
-        use crate::dress::smooth;
-        let k = &self.packing;
-        let lumps = if k.lumps > 0.0 {
-            let size = k.lump.max(0.05);
-            (smooth(p, size, 41) * 0.65 + smooth(p, size * 0.45, 43) * 0.35 - 0.5) * 2.0 * k.lumps
-        } else {
-            0.0
-        };
-        let ridge = if k.ridge > 0.0 {
-            let y = crate::dress::lift_at(p, self.lift.max(0.05));
-            let within = y - libm::floorf(y);
-            let belly = 1.0 - (2.0 * within - 1.0) * (2.0 * within - 1.0);
-            (libm::powf(belly, 0.6) - 0.6) * k.ridge
-        } else {
-            0.0
-        };
-        // Each lift a little proud or shy of the one under it, eased over its seam, out of
-        // a wall's upright faces and round its arrises, not up off its top, and by `stepping`
-        // of it, as near a cut it eases to nothing.
-        let step = if k.step > 0.0 && stepping > 0.0 {
-            let y = crate::dress::lift_at(p, self.lift.max(0.05));
-            let layer = libm::floorf(y);
-            let within = y - layer;
-            let own = |l: f32| {
-                (terra_gen::hash::unit(terra_gen::hash::of(&[l as i32 as u32, 61])) - 0.5)
-                    * 2.0
-                    * k.step
-            };
-            let t = (within / 0.12).clamp(0.0, 1.0);
-            let t = t * t * (3.0 - 2.0 * t);
-            let upright = ((0.2 - outward.y.abs()) / 0.2).clamp(0.0, 1.0);
-            (own(layer - 1.0) + (own(layer) - own(layer - 1.0)) * t) * upright * stepping
-        } else {
-            0.0
-        };
-        lumps + ridge + step
-    }
 }
 
 /// Where a point of a surface is against the pieces set into it (`dress::Bed::at`).
@@ -761,6 +713,7 @@ pub fn slab(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use terra_build::kit;
 
     fn look() -> Look {
         Look {
@@ -1097,49 +1050,14 @@ mod tests {
     }
 
     #[test]
-    fn packed_earths_lifts_each_stand_a_little_proud_or_shy_of_the_next() {
-        let packed = Packed {
-            packing: kit::Packing {
-                lumps: 0.0,
-                lump: 0.5,
-                ridge: 0.0,
-                step: 0.03,
-            },
-            lift: 0.5,
-        };
-        // The middle of each of eight lifts up a line on a wall: within the step either way,
-        // and not all alike, so the wall's outline steps.
-        let middles: Vec<f32> = (0..8)
-            .map(|lift| {
-                let mut p = Vec3::new(0.3, 0.0, 0.0);
-                // Up the line to where the lift's middle is, as the seams wander.
-                p.y = (0..200)
-                    .map(|i| i as f32 * 0.025)
-                    .find(|&y| {
-                        let at = crate::dress::lift_at(Vec3::new(0.3, y, 0.0), 0.5);
-                        libm::floorf(at) as i32 == lift && at - libm::floorf(at) > 0.5
-                    })
-                    .unwrap();
-                packed.at(p, Vec3::X, 1.0)
-            })
-            .collect();
-        assert!(
-            middles.iter().all(|m| m.abs() <= 0.03 + 1e-5),
-            "{middles:?}"
-        );
-        let (low, high) = middles
-            .iter()
-            .fold((f32::MAX, f32::MIN), |(l, h), &v| (l.min(v), h.max(v)));
-        assert!(high - low > 0.02, "{middles:?}");
-    }
-
-    #[test]
     fn packed_earth_stays_closed_and_its_lifts_stand_out_between_their_seams() {
         let packing = kit::Packing {
             lumps: 0.0,
             lump: 0.5,
             ridge: 0.04,
             step: 0.0,
+            facets: 0.0,
+            facet: 0.0,
         };
         let packed = Packed { packing, lift: 0.5 };
         // Up a line on the wall, the lifts' middles stand out the ridge's depth beyond the

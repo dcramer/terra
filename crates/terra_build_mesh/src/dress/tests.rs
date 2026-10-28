@@ -445,3 +445,41 @@ fn a_floor_is_grimed_along_its_walls_feet_and_clean_out_in_the_room() {
     // None given, none laid.
     assert!(shades(0.0).iter().all(|&c| (c - 1.0).abs() < 1e-4));
 }
+
+/// Along any line, faceted noise runs straight but where it crosses into the next facet,
+/// and never jumps; smooth noise bends all along (so the count tells the two apart).
+#[test]
+fn faceted_noise_is_flat_between_creases_and_never_jumps() {
+    let (size, step) = (0.5, 0.005);
+    let (mut flat, mut bent, mut smooth_flat, mut all) = (0, 0, 0, 0);
+    for line in 0..40u32 {
+        let h = |k: u32| hash::unit(hash::of(&[line, k])) * 2.0 - 1.0;
+        let from = Vec3::new(h(0), h(1), h(2)) * 7.0;
+        let along = Vec3::new(h(3), h(4), h(5)).normalize_or(Vec3::X);
+        let read = |f: fn(Vec3, f32, u32) -> f32| -> Vec<f32> {
+            (0..400)
+                .map(|i| f(from + along * (i as f32 * step), size, 47))
+                .collect()
+        };
+        let (v, s) = (read(faceted), read(smooth));
+        for i in 1..v.len() - 1 {
+            // The steepest a facet can be: across a cell from nought to one along each axis.
+            assert!(
+                (v[i + 1] - v[i]).abs() <= 1.8 * step / size,
+                "a jump on line {line}"
+            );
+            let bend = (v[i + 1] - 2.0 * v[i] + v[i - 1]).abs();
+            let smooth_bend = (s[i + 1] - 2.0 * s[i] + s[i - 1]).abs();
+            all += 1;
+            flat += usize::from(bend < 1e-5);
+            bent += usize::from(bend > 1e-3);
+            smooth_flat += usize::from(smooth_bend < 1e-5);
+        }
+    }
+    assert!(flat * 10 > all * 8, "flat at {flat} of {all} points");
+    assert!(bent * 100 > all, "creased at {bent} of {all}");
+    assert!(
+        smooth_flat * 2 < all,
+        "smooth noise flat at {smooth_flat} of {all}"
+    );
+}

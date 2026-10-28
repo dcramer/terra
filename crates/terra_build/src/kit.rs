@@ -11,6 +11,9 @@ use crate::pieces::{Material, Role, RoofPart};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+mod packing;
+pub use packing::Packing;
+
 /// A kind of construction's kit: how its walls are laid, its sizes, how its timber is
 /// shaped, and its colours and textures. Colours are as they should appear on screen
 /// (sRGB). What a file leaves out is pine's, as `logs.ron` has it.
@@ -98,25 +101,6 @@ pub struct Kit {
     pub reference: Option<crate::look::Reference>,
     /// Made for a dungeon theme's walls (`data/dungeons/`), not offered in the hammer.
     pub dungeon_only: bool,
-}
-
-/// How a block kind's earth was packed, in its surface's shape (D236): lumps where it was
-/// pressed by hand, and each lift rounded out between the seams where the next was rammed
-/// on it, the seams following its masks' `lift` and wandering as its strata do.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Packing {
-    /// How far its lumps stand out or sink, either way, in metres, and how far across one
-    /// is.
-    pub lumps: f32,
-    pub lump: f32,
-    /// How far each lift's middle stands out from the seams either side, in metres.
-    pub ridge: f32,
-    /// How far a whole lift stands out or back from the next, either way, in metres: each
-    /// rammed a little proud or shy of the one under it, so a wall's arrises and its outline
-    /// against the sky step from lift to lift.
-    #[serde(default)]
-    pub step: f32,
 }
 
 /// How a framed kind's frame is laid and drawn (D236, `layout::frames`): wattle and daub,

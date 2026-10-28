@@ -124,6 +124,40 @@ pub(crate) fn smooth(p: Vec3, size: f32, seed: u32) -> f32 {
     lerp(lerp(x00, x10, f.y), lerp(x01, x11, f.y), f.z)
 }
 
+/// Faceted noise over a lattice so many metres across, from 0 to 1: the lattice's values
+/// joined linearly over each of a cube's six tetrahedra (Freudenthal's split, the one
+/// marching tetrahedra and simplex noise use), so it is flat within each and creased where
+/// two meet, as broken rock's faces are, where `smooth` rounds every lump. The lattice is
+/// turned off the axes, so its creases never run along a wall's faces or edges.
+pub(crate) fn faceted(p: Vec3, size: f32, seed: u32) -> f32 {
+    // A fixed turn of about 40 degrees about a skew axis, as a unit quaternion.
+    let turn = Mat3::from_quat(glam::Quat::from_xyzw(0.21, 0.29, 0.12, 0.925).normalize());
+    let q = turn * (p / size);
+    let base = q.floor();
+    let f = q - base;
+    let b = base.as_ivec3();
+    let at = |c: IVec3| {
+        hash::unit(hash::of(&[
+            (b.x + c.x) as u32,
+            (b.y + c.y) as u32,
+            (b.z + c.z) as u32,
+            seed,
+        ]))
+    };
+    // From the cell's low corner to its high one along its axes, the largest fraction first:
+    // the tetrahedron the point is in, and its weights.
+    let mut axes = [0, 1, 2];
+    axes.sort_by(|&i, &j| f[j].total_cmp(&f[i]));
+    let mut corner = IVec3::ZERO;
+    let mut value = (1.0 - f[axes[0]]) * at(corner);
+    for (k, &axis) in axes.iter().enumerate() {
+        corner[axis] = 1;
+        let next = axes.get(k + 1).map_or(0.0, |&n| f[n]);
+        value += (f[axis] - next) * at(corner);
+    }
+    value
+}
+
 /// How high moss climbs a timber wall from the ground, in metres, its top wandering.
 pub(super) const TIMBER_MOSS_M: f32 = 0.7;
 

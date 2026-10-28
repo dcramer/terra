@@ -35,8 +35,8 @@ use terra_build::{Base, CELL_M, Fill};
 use terra_build_layout::layout::{self, Dir, End, Piece, TICKS};
 use terra_gen::hash;
 
+pub(crate) use masks::{faceted, lift_at, smooth};
 pub use masks::{ground_at, mask, roof_mask, sheltered};
-pub(crate) use masks::{lift_at, smooth};
 pub use profiles::{Bed, bed, trim_triangles};
 
 pub use terra_build::pieces::{Module, Pieces, Stone};
