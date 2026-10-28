@@ -1118,5 +1118,84 @@
         }
       }
     ]
+  },
+  "Carry_Torch": {
+    "of": "Idle_Loop",
+    "hold": [
+      {
+        "clip": "Idle_Loop",
+        "bone": "clavicle_r",
+        "aim": {
+          "upperarm_r": [
+            -0.4,
+            -0.55,
+            0.73
+          ],
+          "lowerarm_r": [
+            0.05,
+            0.6,
+            0.8
+          ],
+          "hand_r": [
+            0.05,
+            0.3,
+            0.95
+          ]
+        },
+        "roll": {
+          "hand_r": 66,
+          "lowerarm_twist_01_r": 33
+        }
+      },
+      {
+        "clip": "Idle_Loop",
+        "bone": "clavicle_l",
+        "aim": {
+          "upperarm_l": [
+            0.4,
+            -0.55,
+            0.73
+          ],
+          "lowerarm_l": [
+            -0.05,
+            0.6,
+            0.8
+          ],
+          "hand_l": [
+            -0.05,
+            0.3,
+            0.95
+          ]
+        },
+        "roll": {
+          "hand_l": -60,
+          "lowerarm_twist_01_l": -30
+        }
+      }
+    ]
+  },
+  "Carry_Round_Shield": {
+    "of": "Idle_Loop",
+    "hold": [
+      {
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "aim": {
+          "upperarm_l": [
+            0.725,
+            -0.582,
+            -0.38
+          ],
+          "lowerarm_l": [
+            0.046,
+            -0.557,
+            0.83
+          ]
+        },
+        "roll": {
+          "lowerarm_l": 47
+        }
+      }
+    ]
   }
 }
