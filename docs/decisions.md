@@ -151,6 +151,7 @@ Equipment, packs, tools, stations and icons.
 | [D130](decisions/D130.md) | What item icons look like | Design | Agent | Leaning | In the art style (D14, now direction D, art-style.md)… |
 | [D151](decisions/D151.md) | Expanding a station | Design | Developers | Decided | Stations are expanded and upgraded… |
 | [D460](decisions/D460.md) | Where the off hand's item comes from | Design | Developers | Decided | How a shield, a torch or a second blade gets into the… |
+| [D566](decisions/D566.md) | Assembled items' parts join on one line, made in the finished frame and never scaled; the kinds are data in assets/data/kinds | Tech | Agent | Leaning | Each part of an assembled item (D565) is made in the… |
 
 ## Lore, magic, combat and growth
 

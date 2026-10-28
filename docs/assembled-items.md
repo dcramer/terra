@@ -39,6 +39,45 @@ A kind (one-handed haft, blade, polearm, strapped shield, bow, hung item, torch)
 
 The same idea by body slot, with what we already do for fitting (D128): pieces made on the base body with the shared skeleton, refitted to each body shape, the skin under them hidden; variety from which piece a slot takes and colour by role.
 
+## The connection-point convention
+
+Technical, by the agent (D566, step 1 of the order of work), for review. It sits here, not in [attachment.md](attachment.md): attachment.md (D546) is how a finished look goes on a body; this is how parts make that look, and it ends where attachment.md begins, with the item's grip at its origin and its axes its mount's, so every check of a look reads an assembled item unchanged.
+
+- **Axes**: glTF's (D303), metres, +Y up, front +Z, +X the model's left. **Each part is made in the frame it has in the finished item**, facing as attachment.md's mount says (in hand: a one-sided head toward -Z, a blade's flats ±X; strapped: the board in X-Y, its front -Z), so no part is turned when assembled.
+- **One line**: every item has one line, its +Y: a handle's axis, a blade's tang, a shield's grip along the forearm, a bow's riser. Handles, structural joins and ring trims lie on it, so **a join along a handle is a position and a diameter** (`{name, type, y, size}`, the point at (0, y, 0) facing +Y), and assembling them is a shift along Y.
+- **A connection point** is a name, a position (m, the part's frame), a direction, a type and a size (m: a diameter; [width, thickness] for a flat tang). Types: `eye` (a hole a haft passes through), `socket` (a tube a haft's end enters), `tang` (a blade's flat tang), `bore` (a trim's hole round the line), `seat` (where a full-point trim sits), `nock` (a string's end); working points `grip`, `edge`, `tip`, `face`, `flame`. Parts join only where types pair (`eye`, `socket` and `bore` with a handle's section; `tang` with a blade's handle and a guard's slot; `seat` with its board point) and sizes match.
+- **Full points**, a position, a direction and an up (the roll), brought onto the partner's by one rigid transform, **only for a shield's boss and rim and a bow's nocks**: what sits off the line.
+- **Parts are never scaled**: a part is placed by a shift along the line or by one rigid transform, nothing else; a bigger head is another part (Bannerlord's resized blades float off their guards). A code-made handle is made at its length, not stretched.
+- **Exact by making, not tolerance**: a code-made handle takes the diameter at each join from its partner's point, linearly between them, so it fits exactly; model meets model (a guard on a blade's shoulder) within 1 mm, the part checker's bar. A haft stands 4 mm proud of its head's `eye.upper` so its end never lies in the head's top face (no two surfaces in one plane); in a `socket` it ends at the socket's bottom, unseen. A trim covers a join by at least 1 cm (a real collar's 1 to 2 cm, [parts as art](../research/2026-10-28-assembled-parts-art.md) section 3).
+
+| Part type | Made by | Its frame's origin | Its points |
+|---|---|---|---|
+| `haft` (axe, hammer, pick, torch, spear) | code | the butt's centre, +Y to its top | `butt`, `top`; its section a diameter at each join and the grip |
+| `blade_handle` (sword, knife) | code | the tang's end, +Y to the shoulder | its section round the tang, from under the guard to the pommel |
+| `axe_head`, `hammer_head`, `pick_head` | model | the centre of the eye's lower opening, +Y up the eye | `eye.lower`, `eye.upper`; `edge.lower`, `edge.upper` (the bit's span on -Z), or `face`, or `tip` |
+| `spear_head`, `torch_head` | model | the socket's mouth, +Y to the tip | `socket.mouth`, `socket.bottom`; `tip` and `edge.*` (±Z), or `flame` |
+| `sword_blade`, `knife_blade` | model | the shoulder's centre (where a guard sits), +Y to the tip | `shoulder`, `tang.end` (tangs); `edge.lower`, `edge.upper` (±Z, or -Z for one edge), `tip` |
+| `guard`, `pommel`, `collar`, `cap` | model | its bore's centre, +Y the line | `bore` (its size the line's there), and how far along Y it covers |
+| `round_board`, `heater_board` | model | the grip, where the fist closes (the strapped mount's origin) | `boss`, `rim` (full); `arm_strap` (a heater's, on the line) |
+| `boss`, `rim` | model | its `seat`, -Z out of the front | `seat` (full) |
+| `grip_bar`, `enarmes` | code | the board's origin, +Y | a length and a diameter (or a strap's width) |
+| `bow_stave` | model | the grip on the riser, +Y to the upper nock, the string toward +Z | `nock.upper`, `nock.lower` (full) |
+| `bow_string` | code | between the nocks | a diameter |
+| `basket_body` | model | its grip, 1.5 cm under the handle's top (the hung mount) | `handle_top`; `mouth` (full, for a cover) |
+
+**The item's points come from its parts'**, never from its mesh:
+
+- **Grip**: the handle's point at its kind's rule (a haft's `grip_from_end` up from its butt; a blade's handle's middle between guard and pommel; a polearm's share of its length; a board's, stave's or basket's own origin). The assembler shifts the whole item so the grip is its origin (D546), and writes the handle's line and diameter there for the grip (D562), which then reads numbers, not the mesh.
+- **Second grip**: a point on the handle at its kind's fixed distance from the grip, part of the reference item, not the envelope ([animation note](../research/2026-10-28-assembled-items-animation.md) section 3), written as the `second` extra; a bow's `nock` is the midpoint of its two nocks, the string straight at rest.
+- **Edge**: the working part's `edge.*`, `tip` or `face` carried through its placement: a span along +Y and its side (-Z for a one-sided head, ±Z for two edges). That span is the item's hit segment on its item track (the same note, section 4), in place of one sword's length for every item.
+- **Mass**: each part's data gives its mass and centre of mass (the part checker writes a model's; a handle's from its volume and wood), so the item's mass, balance and inertia about the grip are its parts'. The kinds' envelopes use D459's rule, I = m (b² + L²/12), on the reference's numbers, and the assembler applies the same rule to the item.
+
+### The kinds table
+
+One file a kind, `assets/data/kinds/<kind>.json`, with its schema `kind.schema.json` beside it, which refuses a blank: every situation is a fact with its source, a mechanism that exists, or "open" with its owner (the developers' for design, technical for an agent's) and why. A kind here is one a move-set class (a reference item and its clips each), finer than D546's kind, which each file names (`attach_kind`). It lives in the asset root, not `art/`, because the assembler reads it at run time, in play and on the server, to refuse a recipe outside its kind ([pipeline note](../research/2026-10-28-assembled-items-pipeline.md), "In play"); `art/` holds data only the tool that makes a look reads. JSON, not RON like its neighbours, so the TypeScript checks read it with no parser and a JSON Schema holds it (the game's crates already use `serde_json`). Its readers, none built: the kind check and part checker (`tools/items/kind.ts`, `part.ts`, the pipeline note) and the Rust assembler with the recipe check in `terra_items` (step 2).
+
+The reference items' masses are stand-ins (recalled real tools, or `items.ron`'s), each with its source, replaced by the parts' weighed masses when the reference is made; the envelope is D459's clamp (the inertia within I_ref/1.15² to I_ref/0.85²) seen one number at a time: length ±10% (measured), head mass about -25% to +40%, balance solved, each at the reference's others.
+
 ## Answers
 
 From Terra's goals, the prior art and what fails least, researched in [2026-10-28-assembled-equipment.md](../research/2026-10-28-assembled-equipment.md). The developers approve or change them.
@@ -94,7 +133,7 @@ Each one command, a line a stage, every failure naming the number, the bar and t
 
 - **Part checker**: a part against its template and its points.
 - **Assembler**: parts and a rule in, the item and its exact points out; the same input gives the same bytes.
-- **Kinds table**: the kinds as data, every situation filled; a blank is an error.
+- **Kinds table**: the kinds as data, every situation filled; a blank is an error (`assets/data/kinds/`, its schema written; the check that runs it is step 2's).
 - **The grid check**: layer 2 above, incremental.
 - **Kind sheets**: layer 3, with the approved set kept.
 
@@ -104,8 +143,26 @@ The thirteen held looks become assemblies where their kind has parts, or stay as
 
 ## Order of work, once decided
 
-1. The connection-point convention, the kinds table and each class's reference item and envelope, as data, reviewed.
+1. The connection-point convention, the kinds table and each class's reference item and envelope, as data, reviewed. Written 2026-10-28 (above and `assets/data/kinds/`), for review.
 2. The part checker and the assembler.
 3. The fight clips made right first: a wrist row (flex at most 80°, extension 70°, deviation 20/35°, at most 45° a key) and an edge-leads row on the composed pose, and the keyed takes remade until they pass; the move check's pose made one path with the game's, or tested against it in full.
 4. The proof, for one class (one-handed axe): its clips keyed for the reference axe, then three heads and three handles over the envelope's grid on every body, measured on the hand on the grip, the wrist, the edge leading and the body clear, and on one sheet; the parts made from one approved style reference. If it holds, the approach holds.
 5. The grid check and kind sheets, then the other kinds one at a time, each with its clips.
+
+## The kinds, in plain words
+
+The first eleven kinds, for the developers' review: the full detail is in `assets/data/kinds/`. "Hip" and "back" are where it hangs when put away (D551); the exact angle there is not set for any of them yet. "Your call" marks a question only the developers can answer.
+
+| Kind | What it is | Its parts | How it's held and used | How it's carried and put away | What exists today | What's open |
+|---|---|---|---|---|---|---|
+| Axe | one-handed axe, a tool and later a weapon | head, handle; a binding, a butt cap | one hand; swung with the shared tool swing | hangs from the hand, head down; hip, hand's side | the stone and iron axes, as tools | its own swing and guard (it hits the head in the sword's); your call: can a weapon alone block? |
+| Sword | one-handed sword | blade, grip; guard, pommel | one hand; the sword-and-shield fight | hangs from the hand, tip down; hip, other side | the arming sword and its whole fight | the sword alone (no shield) has no moves yet; your call: can it block alone? |
+| Hammer | builder's hammer | head, handle; a binding | one hand; builds | hangs from the hand; hip, hand's side | the hammer, as a tool | a real hammering motion for the player |
+| Pickaxe | pick for rock and ore | head, handle; a binding, a butt cap | one hand today; breaks rock | hangs from the hand; hip, hand's side | the stone and iron pickaxes | your call: one hand or two? (that also decides hip or back) |
+| Knife | small cutting tool | blade, handle; a bolster, a butt | one hand; cuts plants | hangs from the hand; hip, other side | the knife, as a tool | its own cutting motion |
+| Spear | long spear | head, shaft; a binding, a butt spike | two hands, or one with a shield; today swung one-handed as a tool | hangs from the hand, head tipped down off the ground; back | the spear, as a tool | the two-handed hold and moves; your call: how a spear is carried |
+| Torch | burning torch | head, stick; a binding | either hand, for light; a poor club | held up, flame high, in either hand | built: carried raised, lit | your call: put out when put away, or into the pack? |
+| Round shield | round planked shield, iron boss | board, grip bar; boss, rim | off hand, by a grip behind the boss; blocks | on the forearm at the side; back | the look and its carry pose; no item yet | checking the guard and block positions with this board (they were set with the heater) |
+| Heater shield | pointed shield on two forearm straps | board, straps; rim | off hand, on the forearm; blocks | on the forearm; back | the fight's shield, guard and block | the shield bash and fighting with a shield alone |
+| Bow | wooden bow | stave, string; a grip wrap | off hand holds, other hand draws; shoots | today hangs from the hand like a tool; back | the bow shoots as a tool, with no drawing motion | the draw and its moves; your call: how a bow is carried (the desk's bow-carry) |
+| Basket | basket hung from the hand | body with its handle; maybe a cover | one hand, hanging; carries things | hangs at the side | the look only | your call: is it an item, which hand, where it goes when put away, and do baskets vary by a cover? |

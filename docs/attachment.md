@@ -2,7 +2,7 @@
 
 Status: technical, recorded as D546 (by the agent, 2026-10-27). It extends the model contract (D303, [art-style.md](art-style.md#the-model-contract)) to what a character holds and wears, and is how every item fits every body (D128, [characters.md](characters.md#the-contracts)). Where a hand's item comes from and how the arms move with it: [holding.md](holding.md).
 
-Every look the game puts on a character is made once, to its kind's rules below, so the game puts it on any body from its file alone: no number in code or in the catalogue per item or per character. The numbers a look is made from (its source, turn, size, grip) are data beside its art, read only by the tool that makes it: `art/held/<item>.json` (`fit_held.py`), `art/gear/<item>/fit.json` and `art/gear/harnesses.json` (`fit_gear.py`).
+Every look the game puts on a character is made once, to its kind's rules below, so the game puts it on any body from its file alone: no number in code or in the catalogue per item or per character. The numbers a look is made from (its source, turn, size, grip) are data beside its art, read only by the tool that makes it: `art/held/<item>.json` (`fit_held.py`), `art/gear/<item>/fit.json` and `art/gear/harnesses.json` (`fit_gear.py`). An item assembled from parts (D565) is made by [assembled-items.md](assembled-items.md#the-connection-point-convention)'s connection points (D566) and meets this contract as any look.
 
 ## Axes
 
