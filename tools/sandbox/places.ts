@@ -62,7 +62,10 @@ export const PLACES: Record<string, Place> = {
   lake: {
     about:
       "the mountain lake (docs/demos.md §1): the 30 km world's mountains, the lake its query found, pinned (--site lake@-15.34,1.68: 1,317 m over the sea, 0.55 km²), in early June with the peaks' snow",
-    args: ["--experiment", "play", "--radius", "30000", "--site", "lake@-15.34,1.68", "--date", "06-10"],
+    // 9 June, a clear day at the site: the 10th is overcast there with snow falling from before
+    // noon, which the views showed clear only while the weather was taken at the planet's own
+    // start, where the camera stood on the first frame (weather::follow, JUMP_M).
+    args: ["--experiment", "play", "--radius", "30000", "--site", "lake@-15.34,1.68", "--date", "06-09"],
     // The start is the lake's shore nearest its deepest water, facing it: -south is over the
     // water, east to the right.
     views: [
@@ -90,7 +93,8 @@ export const PLACES: Record<string, Place> = {
   // its shore, across the water to the range, side-lit in the morning.
   "lake-range": {
     about: "the mountain lake's range (the lake's site, 80 m up its shore), held to the mountains' reference",
-    args: ["--experiment", "play", "--radius", "30000", "--site", "lake@-15.34,1.68", "--date", "06-10"],
+    // The lake's clear day (above).
+    args: ["--experiment", "play", "--radius", "30000", "--site", "lake@-15.34,1.68", "--date", "06-09"],
     views: [["range", "40,80,120,300,400,-2500"]],
     measured: ["range"],
     look: "mountains-day",
