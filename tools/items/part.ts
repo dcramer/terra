@@ -31,6 +31,8 @@ export type Ctx = {
   pairings: (id: string, parts: any[]) => Pairing[];
   /** The kinds taking a part of a type, and those it is made for: the assembler's, never worked out here. */
   kindsOf: (type: string, named?: string[]) => Kinds;
+  /** Why the assembler refuses `kind` of these parts in `material` among `parts`, or undefined when it makes it whole. */
+  refusal: (kind: string, ids: string[], material: string, parts: any[]) => string | undefined;
 };
 export type Kinds = { taking: string[]; made_for: string[] };
 export type Stage = { stage: string; faults: string[]; ok: string };
@@ -83,6 +85,8 @@ export function checkPart(part: any, ctx: Ctx): Stage[] {
     stage("measured", `${weighed}centre_m and bounds_m as measured on its model`, measuredFaults(part, type, mesh, join_m));
   }
   stage("slots", kinds.made_for.join(", ") || "no kind fits it", slots(part, kinds.made_for, ctx));
+  const [lacks, makes] = whole(part, kinds.made_for, ctx);
+  stage("whole", makes.join("; ") || "no partner to make it with yet", lacks);
   const [faults, notes] = joins(part, ctx);
   stage("joins", notes.join("; ") || "none to make", faults);
   return stages;
@@ -269,6 +273,42 @@ function slots(part: any, made_for: string[], ctx: Ctx): string[] {
   return out;
 }
 
+// A whole item with each partner of its kind (assembled-items.md, Checking a part): a handle with
+// each working part made for the kind, a working part with each handle, the least recipe (no
+// trim), in any material. The kind's envelope is on the whole item (D459), and the head sets how
+// far past the haft it reaches and what it weighs, so the assembler, the one rule, is asked
+// rather than a haft's own range kept beside it. A part no partner makes whole is refused; one
+// some partners refuse is not, the envelope refusing that recipe when it is made.
+function whole(part: any, made_for: string[], ctx: Ctx): [string[], string[]] {
+  const faults: string[] = [], notes: string[] = [];
+  const others = Object.values(ctx.parts);
+  for (const name of made_for) {
+    const kind = ctx.kinds[name];
+    const mine = kind.slots.find((s: any) => s.fits.includes(part.type))?.slot;
+    const want = mine === "handle" ? "working" : mine === "working" ? "handle" : undefined;
+    const slot = kind.slots.find((s: any) => s.slot === want);
+    if (!slot) {
+      notes.push(`a ${mine}: the ${name} is whole without it`);
+      continue;
+    }
+    const partners = others.filter((p) => p.part !== part.part && slot.fits.includes(p.type) && (!p.kinds || p.kinds.includes(name)));
+    if (partners.length === 0) continue;
+    const ok: string[] = [], refused: string[] = [];
+    for (const p of partners) {
+      const ids = mine === "handle" ? [p.part, part.part] : [part.part, p.part];
+      const why = Object.keys(ctx.materials).map((m) => ctx.refusal(name, ids, m, others));
+      if (why.some((w) => w === undefined)) ok.push(p.part);
+      else refused.push(`${p.part} (${why[0]})`);
+    }
+    if (ok.length) notes.push(`a whole ${name} with ${ok.join(", ")}${refused.length ? `; not with ${refused.join(", ")}` : ""}`);
+    else
+      faults.push(
+        `${name}: no ${slot.name} of the ${name}'s makes it a whole ${name}: ${refused.join("; ")}. ${mine === "handle" ? "Change its length_m (or grip) until one does" : "Change its size until one does"}: the kind's envelope (assets/data/kinds/${name}.json, D459) is on the whole item`,
+      );
+  }
+  return [faults, notes];
+}
+
 // Every pairing its kinds allow, placed by the assembler (terra_items::assembly's `meet`, the one
 // placing rule) and measured here. A part made by code meets its partners at their declared
 // sizes, so those joins are the partners' openings, measured when they are checked; here what
@@ -312,6 +352,18 @@ function assembler(args: string[], input?: string): any {
 /** The assembler's pairings of part `id` among `parts`: `assemble joins`, the parts on stdin. */
 export const assemblerPairings = (id: string, parts: any[]): Pairing[] => assembler(["joins", id, "--parts", "-"], JSON.stringify(parts));
 
+/** The assembler's refusal of `assemble item <kind> <ids> --material <m>`, said short, or undefined when it assembles. */
+export function assemblerRefusal(kind: string, ids: string[], material: string, parts: any[]): string | undefined {
+  try {
+    assembler(["item", kind, ...ids, "--material", material, "--parts", "-"], JSON.stringify(parts));
+    return undefined;
+  } catch (e) {
+    const said = (e as Error).message;
+    const env = said.match(/'s (\w+) ([\d.]+) is outside its envelope (\[[^\]]+\])/);
+    return env ? `in ${material} its ${env[1]} ${env[2]} is outside ${env[3]}` : said;
+  }
+}
+
 /** The assembler's kinds for a part of `type` naming `named` (terra_items::assembly's `kinds_of`). */
 export const assemblerKinds = (type: string, named: string[] = []): Kinds => assembler(["kinds", type, ...named]);
 
@@ -335,7 +387,7 @@ export function loadCtx(): Ctx {
     return cache.get(file)!;
   };
   const materials = readJson(join(PARTS, "materials.json")).materials;
-  return { types: t.types, rules: t.rules, materials, kinds, attach: readJson(join(ROOT, "tools", "characters", "attach_kinds.json")), parts, mesh, pairings: assemblerPairings, kindsOf: assemblerKinds };
+  return { types: t.types, rules: t.rules, materials, kinds, attach: readJson(join(ROOT, "tools", "characters", "attach_kinds.json")), parts, mesh, pairings: assemblerPairings, kindsOf: assemblerKinds, refusal: assemblerRefusal };
 }
 
 export function report(name: string, stages: Stage[]): string[] {

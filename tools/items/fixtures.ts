@@ -126,9 +126,9 @@ export const collar = (over: Record<string, any> = {}) => ({
 export const haft = (over: Record<string, any> = {}) => ({
   part: "test_haft",
   type: "haft",
-  about: "a made-up ash haft, the reference axe's",
+  about: "a made-up ash haft, short enough that the box head's 1.25 kg of iron swings inside the axe's inertia",
   kinds: ["axe"],
-  length_m: n(0.68),
+  length_m: n(0.62),
   grip_from_end_m: n(0.08),
   grip_diameter_m: n(0.035),
   density_kg_m3: n(670),

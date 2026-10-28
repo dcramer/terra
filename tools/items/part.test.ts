@@ -128,6 +128,20 @@ test("a haft too long for its kind, or its grip off its mount's range, is refuse
   assert.ok(faults(off, ctx([off], {}), "slots").some((s) => /grip 0\.2 m from the butt is outside a hafted look's \[0\.04,0\.12\]/.test(s)));
 });
 
+test("a haft is checked with its kind's heads: refused when no head makes a whole item in the kind's envelope", () => {
+  // The box head's top is its eye.upper and the haft stands 4 mm proud, so the axe is the haft's
+  // length: 0.62 m is inside the axe's [0.612, 0.748], 0.60 m short of it in every material.
+  const ok = good();
+  assert.equal(checkPart(haft(), ok).find((s) => s.stage === "whole")?.ok, "a whole axe with test_box_head");
+  const short = haft({ length_m: { value: 0.6, source: "made up for the part checker's tests" } });
+  const c = ctx([head(), short], { test_box_head: boxHead() });
+  assert.deepEqual(faults(short, c, "slots"), [], "alone, it is no longer than an axe");
+  const f = faults(short, c, "whole");
+  assert.ok(f.some((s) => /axe: no head of the axe's makes it a whole axe: test_box_head \(in iron its length_m 0\.6000 is outside \[0\.612, 0\.748\]\)\. Change its length_m/.test(s)), f.join("\n"));
+  // The head is held to the same: with only that haft, no haft makes it whole.
+  assert.ok(faults(head(), c, "whole").some((s) => /axe: no haft of the axe's makes it a whole axe: test_haft/.test(s)));
+});
+
 test("a haft that fits many kinds must name the ones it is made for", () => {
   const h = haft();
   delete h.kinds;

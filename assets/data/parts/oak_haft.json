@@ -2,10 +2,10 @@
   "$schema": "./part.schema.json",
   "part": "oak_haft",
   "type": "haft",
-  "about": "a long warm-brown oak haft with a few knots (art/parts/axe/handles.png)",
+  "about": "a warm-brown oak haft with a few knots (art/parts/axe/handles.png)",
   "kinds": ["axe"],
   "skin": "models/parts/oak_haft_skin.glb",
-  "length_m": { "value": 0.74, "source": "near the long end of the axe's length envelope, 0.612 to 0.748 m (assets/data/kinds/axe.json)" },
+  "length_m": { "value": 0.64, "source": "the length at which oak, the densest of the three, makes a whole axe with every head and trim (part.ts's whole stage; at 0.74 m the broad and hatchet heads put the axe past the envelope's 0.748 m and the binding put the bearded past its inertia)" },
   "grip_from_end_m": { "value": 0.08, "source": "a hand's width up from the butt, the reference axe's (the D565 step 4 plan)" },
   "grip_diameter_m": { "value": 0.035, "source": "the axe's reference haft, 35 mm (assets/data/kinds/axe.json)" },
   "density_kg_m3": { "value": 740, "source": "oak, English brown 740 kg/m^3 (The Engineering ToolBox, Wood Species - Densities, engineeringtoolbox.com/wood-density-d_40.html, looked up 2026-10-28)" }
