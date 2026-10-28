@@ -28,7 +28,7 @@ export function armPoints(P: (bone: string) => V3, s: string): [V3, number, stri
 }
 
 /** The body's templates (all, or `only` these) and its skin at a pose. */
-export function skinOf(body: Glb, templatesFile: string, only: string[] = []): { shapes: Shape[]; skinned: (shape: Shape, pose: Pose[]) => Inside } {
+export function skinOf(body: Glb, templatesFile: string, only: string[] = []): { shapes: Shape[]; skinned: (shape: Shape, pose: Pose[], how?: typeof surface) => Inside } {
   // The body: its skin, which of its vertices are torso, head or thigh (by their heaviest joint),
   // and each template's morph mix and joint offsets.
   const skin = body.gltf.skins![0];
@@ -109,7 +109,8 @@ export function skinOf(body: Glb, templatesFile: string, only: string[] = []): {
   // inside): its distance to the nearest point of that skin, signed by its winding number
   // (surface.ts). A nearest vertex's normal gave false depths where the skin cuts through itself:
   // the female template's thumb in Walk_Loop read -6.4 then +8.8 cm as it moved 3 cm out of the hip.
-  function skinned(shape: Shape, pose: Pose[]) {
+  // `how` measures it: `surface`, or its plain `reference`, to hold the one to the other (skin.test.ts).
+  function skinned(shape: Shape, pose: Pose[], how: typeof surface = surface) {
     const mats = skin.joints.map((j, k) => {
       const s = shape.shift.get(j)!;
       const unbind = mmul(ibm.subarray(k * 16, k * 16 + 16) as unknown as number[], matrix({ t: [-s[0], -s[1], -s[2]], r: [0, 0, 0, 1], s: [1, 1, 1] }));
@@ -125,7 +126,7 @@ export function skinOf(body: Glb, templatesFile: string, only: string[] = []): {
         for (let j = 0; j < 3; j++) at[i * 3 + j] += w * (m[j] * x + m[4 + j] * y + m[8 + j] * z + m[12 + j]);
       }
     });
-    return surface(top, at);
+    return how(top, at);
   }
   return { shapes, skinned };
 }
