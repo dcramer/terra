@@ -129,15 +129,46 @@ def open_edges(ob):
     return n, vol
 
 
-def cut_round(ob, centre, diameter, below=None, sides=40):
+def cut_round(ob, centre, diameter, below=None, sides=40, back=False):
     """Cuts a round opening straight up through the part at `centre` (x, y), `diameter` across:
     the eye or bore is made, so it is exactly where and as wide as its points say; or, `below` a
-    height, only beneath it (a seat)."""
+    height, only beneath it (a seat). `back`: the cut's back half runs on out past the back of the
+    part (Blender -y), so nothing behind the opening is left hanging below the seat (the hatchet's
+    poll was, a notch cut up between it and the bit, job 5)."""
     radius = diameter / 2 / math.cos(math.pi / sides)  # its flats touch the circle, never inside it
     lo = min(v.co.z for v in ob.data.vertices) - 0.05
     hi = max(v.co.z for v in ob.data.vertices) + 0.05 if below is None else below
     bpy.ops.mesh.primitive_cylinder_add(vertices=sides, radius=radius, depth=hi - lo, location=(centre[0], centre[1], (lo + hi) / 2))
-    cutter = bpy.context.active_object
+    subtract(ob, bpy.context.active_object)
+    if back:
+        past = centre[1] - min(v.co.y for v in ob.data.vertices) + 0.01
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(centre[0], centre[1] - past / 2, (lo + hi) / 2))
+        box = bpy.context.active_object
+        for v in box.data.vertices:  # a cube of 1 m about its origin, made the box behind the cut
+            v.co.x *= 2 * radius * math.cos(math.pi / sides)
+            v.co.y *= past
+            v.co.z *= hi - lo
+        subtract(ob, box)
+
+
+def cut_eye(ob, centre, size, seat):
+    """The eye cut round, straight up through the head, and the seat flat under it: the underside
+    round the eye and behind it made flat at eye.lower, as a forged head's is, so a collar under it
+    meets it in one ring and nothing of the head hangs into the collar (D566). The heights the eye
+    is walled all round between, its eye.lower and eye.upper."""
+    cut_round(ob, centre, size)
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    bm.to_mesh(ob.data)
+    bm.free()
+    lo, hi = opening_span(ob, centre, size / 2)
+    cut_round(ob, centre, 2 * seat, below=lo, sides=12, back=True)
+    return lo, hi
+
+
+def subtract(ob, cutter):
+    """Takes `cutter` away from the part (an exact boolean), and the cutter out of the scene."""
     mod = ob.modifiers.new("eye", "BOOLEAN")
     mod.operation = "DIFFERENCE"
     mod.solver = "EXACT"
@@ -298,8 +329,12 @@ def main():
             # to `across_m`, as a real head swells round its eye, easing back to the cheek.
             # Full across the eye and its walls, easing to nothing over `reach_m` past them.
             reach = prep["eye"].get("reach_m", 0.03)
-            # Each 3 mm along swells by what brings its own thickness there to `across_m`, at most
-            # threefold, so the eye has its walls all along its length.
+            # One swell for the whole span, what brings its thinnest 3 mm there to `across_m`, and
+            # a soft ceiling a little past `across_m` that the swell nears but never reaches (tanh:
+            # still rising, so no two faces are pressed into one plane, which a hard ceiling did and
+            # the boolean then emptied the part). So a thick poll and a thin neck in one span end
+            # near one width, the eye walled all along. A swell for each 3 mm, as it was, left a
+            # waist where a poll block met its neck (the broad head's, split at its eye, job 5).
             span = size / 2 + 0.006
             tree = BVHTree.FromObject(ob, bpy.context.evaluated_depsgraph_get())
             def thickness(at):
@@ -311,29 +346,39 @@ def main():
                     if a is not None and b is not None:
                         best = max(best, b.x - a.x)
                 return best
-            steps = {k: thickness(y + k * 0.003) for k in range(-int(span / 0.003) - 1, int(span / 0.003) + 2)}
-            def factor(at):
-                t = steps.get(round((at - y) / 0.003), 0.0)
-                return min(3.0, max(1.0, want / t)) if t > 0.002 else 1.0
+            steps = [thickness(y + k * 0.003) for k in range(-int(span / 0.003), int(span / 0.003) + 1)]
+            thinnest = min(t for t in steps if t > 0.002)
+            ceiling = 1.15 * want / 2
+            # The thinnest's half-width, swollen, reaches want / 2 under the ceiling.
+            factor = max(1.0, math.atanh(want / 2 / ceiling) * ceiling / (thinnest / 2))
             for v in [*ob.data.vertices, *high.data.vertices]:
                 t = min(1.0, max(0.0, 1.0 - (abs(v.co.y - y) - span) / reach))
-                inside = y + max(-span, min(span, v.co.y - y))
-                v.co.x = x + (v.co.x - x) * (1.0 + (factor(inside) - 1.0) * t * t * (3 - 2 * t))
+                d = abs(v.co.x - x)
+                f = 1.0 + (factor - 1.0) * t * t * (3 - 2 * t)
+                swollen = max(d, ceiling * math.tanh(d * f / ceiling))
+                v.co.x = x + math.copysign(swollen, v.co.x - x)
             x, across = poll_middle(ob, y)
         print(f"prep: eye {size * 100:.1f} cm at {prep['eye']['from_back_m'] * 100:.1f} cm from the back, the poll {across * 100:.1f} cm across there")
     look(ob, shots + "-before")
-    cut_round(ob, (x, y), size)
-    look(ob, shots + "-after")
-    bm = bmesh.new()
-    bm.from_mesh(ob.data)
-    bmesh.ops.triangulate(bm, faces=bm.faces)
-    bm.to_mesh(ob.data)
-    bm.free()
-    lo, hi = opening_span(ob, (x, y), size / 2)
-    # The seat: the underside round the eye made flat at eye.lower, as a forged head's is, so a
-    # collar under it meets it in one ring and nothing of the head hangs into the collar (D566).
     seat = prep["eye"].get("seat_m", 0.02)
-    cut_round(ob, (x, y), 2 * seat, below=lo, sides=12)
+    if "mass_kg" in prep:
+        # Its mass as finished: the swell adds iron the generator did not draw and the cuts take
+        # some away, so the part is made its size again about the mark, by what a trial cut takes
+        # (the broad head came out 1.16 kg of its 0.88 kg, job 5).
+        trial = ob.copy()
+        trial.data = ob.data.copy()
+        bpy.context.scene.collection.objects.link(trial)
+        cut_eye(trial, (x, y), size, seat)
+        whole = abs(open_edges(ob)[1])
+        removed = whole - abs(open_edges(trial)[1])
+        bpy.data.objects.remove(trial)
+        k = ((prep["mass_kg"] / DENSITY[prep["material"]] + removed) / whole) ** (1 / 3)
+        about = Matrix.Translation((x, y, 0.0)) @ Matrix.Scale(k, 4) @ Matrix.Translation((-x, -y, 0.0))
+        ob.data.transform(about)
+        high.data.transform(about)
+        print(f"prep: made {k:.3f} times its size for {prep['mass_kg']} kg as cut")
+    lo, hi = cut_eye(ob, (x, y), size, seat)
+    look(ob, shots + "-after")
     bm = bmesh.new()
     bm.from_mesh(ob.data)
     # The cuts split the faces round them into slivers: the flat ones (the seat, each facet of the
@@ -420,4 +465,12 @@ def export(ob, part, out_glb, data, points, note):
     print(f"prep: {out_glb}; its points into {data}; next node tools/items/part.ts --write {part}")
 
 
-main()
+try:
+    main()
+except BaseException as e:
+    # The Windows Blender's stderr does not reach run.sh's caller: say why on stdout, or prep
+    # fails saying nothing (job 5's seat).
+    import traceback
+
+    print(str(e) if isinstance(e, SystemExit) else traceback.format_exc())
+    raise
