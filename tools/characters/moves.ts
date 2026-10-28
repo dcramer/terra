@@ -57,7 +57,7 @@
 // Node 22.18 or later; no dependencies.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { againstSpec, type Blow } from "./clip_spec.ts";
+import { againstSpec, setGuard, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, through } from "./clash.ts";
 import { type Held, carriedClips, carryHold, carryTilt, frameOf, hang } from "./held.ts";
 import { TARGETS, boardPlace, readTargets, worstOff } from "./shield_place.ts";
@@ -146,12 +146,6 @@ type Move = {
   /** A chained take's row: entered from a blow's carry, not from the guard. */
   entered?: "chain";
 };
-
-/** The clip a set names as its guard (`guard: "..."` outside its moves), if any. */
-function setGuard(file: string): string | undefined {
-  const text = readFileSync(file, "utf8").replace(/\/\/.*$/gm, "");
-  return text.slice(0, text.search(/\bmoves\s*:/)).match(/\bguard:\s*"([^"]+)"/)?.[1];
-}
 
 function carryOf(body: string): Move["carry"] {
   const m = body.match(/\bcarry:\s*\(\s*in:\s*\((-?[\d.]+),\s*(-?[\d.]+)\),\s*out:\s*\((-?[\d.]+),\s*(-?[\d.]+)\)\s*\)/);
@@ -590,7 +584,7 @@ const specs: Record<string, Blow> = Object.fromEntries(
     .map(([clip, e]) => [clip, e.blow ?? (e.of ? specEntries[e.of]?.blow : undefined)] as const)
     .filter((e): e is readonly [string, Blow] => !!e[1]),
 );
-const guardClip = clipOf(opt.guard ?? (moves.length ? setGuard(opt.set!) : undefined) ?? "Fight_Guard");
+const guardClip = clipOf(opt.guard ?? (moves.length ? setGuard(readFileSync(opt.set!, "utf8")) : undefined) ?? "Fight_Guard");
 const guardMarks = moves.length ? marks(guardClip, 0) : [];
 /** Each held look's own depth, `held_cm.<look>`. */
 const heldBy = (pen: Pen) => ({

@@ -165,6 +165,12 @@ export function choose(takes: Scored[]): Scored | undefined {
 
 const round2 = (x: number) => (Math.round(x * 100) / 100).toFixed(2);
 
+/** The clip a move set's text names as its guard (`guard: "..."` outside its moves), if any. */
+export function setGuard(ron: string): string | undefined {
+  const text = ron.replace(/\/\/.*$/gm, "");
+  return text.slice(0, text.search(/\bmoves\s*:/)).match(/\bguard:\s*"([^"]+)"/)?.[1];
+}
+
 /** A move set's text with one move's clip and phases written in, the rest of the file (its
  * comments, the other moves) as it was: each field replaced where the move has it, added after
  * its clip where not; a move the set lacks is added at the end of its moves. */

@@ -4,7 +4,8 @@
 // NPZ, the guard and hand keys solved (kimodo_keys.py), Kimodo's takes made from its prompt
 // held to them, every take put onto the mannequin side by side (made_clips.py --try=CLIP#N),
 // the base body exported with every clip of the list carried by aim (export_character.py
-// --list), each take's active frames measured (phases.ts), every take scored by the move check
+// --list), each take's sword wrist held inside a person's (wrist_limit.ts, a take wanting
+// more than it cleans failing), its active frames measured (phases.ts), every take scored by the move check
 // against its spec (moves.ts --spec --json), the take kept the first that passes
 // (clip_spec.ts's choose), and its phases written into a move set.
 //
@@ -17,7 +18,7 @@
 // chosen take as its blow's move, as it is named in the scored file beside it (takes.glb);
 // moves.ts checks it with --set and --clips. --into, when every clip has a take that passes,
 // keeps each take in the list (as motion.ts --keep does), rebuilds the game's fight clips
-// (assets/models/character/fight.glb) from the list and writes the phases into that set; then
+// (assets/models/character/fight.glb) from the list, its played wrists limited, and writes the phases into that set; then
 // runs the combat scorecard (tools/combat/scorecard.ts, D452), and when any criterion is worse
 // than its baseline puts every file it wrote back as it was and refuses the set.
 // A line a stage (D388); everything the steps print goes to the log it names. Exit 1 when a
@@ -29,18 +30,22 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSy
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { choose, keysFor, readSpec, speedFor, writePhases, type Scored, type Spec } from "./clip_spec.ts";
+import { choose, keysFor, readSpec, setGuard, speedFor, writePhases, type Scored, type Spec } from "./clip_spec.ts";
 import { Glb } from "./glb.ts";
 import { KIMODO, KIMODO_ENV, MODEL, kept } from "./motion.ts";
 import { measure } from "./phases.ts";
+import { clearFile } from "./clear.ts";
 import { bakeFile } from "./markers.ts";
 import { mirrorFile } from "./mirror.ts";
+import { MOST_DEG, limitFile, wristLimited } from "./wrist_limit.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const HERE = join(ROOT, "tools", "characters");
 const BLENDER = join(ROOT, "tools", "blender", "run.sh");
 const BODY = join(HERE, "out", "base-male.glb");
 const GAME_CLIPS = join(ROOT, "assets", "models", "character", "fight.glb");
+/** The game's move set, whose guard the takes are scored against when no --into names one. */
+const GAME_SET = join(ROOT, "assets", "data", "moves", "sword.shielded.ron");
 
 /** A take's clip name in the scored file, and its move's name in the scored set. */
 export const takeName = (clip: string, n: number) => `${clip}#${n}`;
@@ -157,8 +162,31 @@ function main() {
     say(true, "body", `${rel(BODY)} converted from its rig`);
   }
   const scored = join(OUT, "takes.glb");
-  const exported = blender("export", "export_character.py", [rel(BODY), rel(scored), `--clips=${rel(mannequin)}`, `--list=${rel(LIST)}`]);
+  // Each take held as the clip the game plays of it is (Open_Slash of Keyed_Slash: the shield
+  // arm at the guard's rest, the fist on the strap), so it is scored as played: an entry made
+  // `of` a spec's clip is made of each of its takes in its place, and a hold laid `over` that
+  // clip is laid over the takes; entries of clips the scored file lacks are left out.
+  const takesOf = (clip: string) => takes.filter(({ s }) => s.name === clip).map(({ s, n }) => takeName(s.name, n));
+  const present = new Set([...guards, ...takes.map(({ s, n }) => takeName(s.name, n))]);
+  const playedAs = new Map(Object.entries(list).filter(([, e]) => specs.some((s) => s.name === e.of)).map(([name, e]) => [name, e.of as string]));
+  const scoringList: Record<string, unknown> = {};
+  for (const [name, e] of Object.entries(list)) {
+    if (playedAs.has(name)) for (const t of takesOf(playedAs.get(name)!)) scoringList[t] = { ...e, of: t };
+    else if (e.of === undefined || present.has(e.of as string))
+      scoringList[name] = Array.isArray(e.over) ? { ...e, over: (e.over as string[]).flatMap((c) => (playedAs.has(c) ? takesOf(playedAs.get(c)!) : present.has(c) ? [c] : [])) } : e;
+  }
+  const listFile = join(OUT, "list.json");
+  writeFileSync(listFile, JSON.stringify(scoringList, null, 2));
+  // The guard the takes start and end at, as the game plays it: the set's `guard` (Low_Guard,
+  // Keyed_Guard with the shield arm at rest) when the scored file carries it, else the spec's.
+  const played = setGuard(readFileSync(resolve(ROOT, values.into ?? GAME_SET), "utf8"));
+  const guard = played && scoringList[played] ? played : guards[0];
+  const exported = blender("export", "export_character.py", [rel(BODY), rel(scored), `--clips=${rel(mannequin)}`, `--list=${rel(listFile)}`]);
   say(true, "export", `${rel(scored)}: ${lines(exported, "AIM ").length} clips carried by aim`);
+  // Each take's sword wrist held inside a person's, and the guard's, as --into keeps them
+  // (wrist_limit.ts); a take wanting more than the limit cleans fails below.
+  const limits = wristLimited(readFileSync(scored), new Set([guard, ...takes.map(({ s, n }) => takeName(s.name, n))]));
+  if (limits.out) writeFileSync(scored, limits.out);
 
   // Each take's active frames, from its first frame to its last.
   const glb = new Glb(scored);
@@ -169,6 +197,8 @@ function main() {
     const wrong: string[] = [];
     if (s.blow.sweep && !p.active) wrong.push("never strikes: the tip is never fast and ahead");
     if (p.jumps.length) wrong.push(`the tip jumps at ${p.jumps.map((j) => `${j.t.toFixed(2)} s (${j.speed.toFixed(0)} m/s)`).join(", ")}`);
+    const bent = limits.refused.find((r) => r.clip === takeName(s.name, n));
+    if (bent) wrong.push(`the wrist wants ${bent.most.toFixed(0)}° of turning at ${bent.at.toFixed(2)} s, past the ${MOST_DEG}° the wrist limit cleans`);
     more.get(s.name)!.set(n, wrong);
     // Only a blow strikes: a guard's or a block's quick sword is no active span.
     const active = s.blow.sweep ? p.active : undefined;
@@ -180,7 +210,7 @@ function main() {
   const scoring = join(OUT, "score.ron");
   const json = join(OUT, "score.json");
   writeFileSync(scoring, scoringSet(measured));
-  run("moves", process.execPath, [join(HERE, "moves.ts"), "--set", scoring, "--clips", scored, "--spec", LIST, "--guard", guards[0], "--also=", "--json", json], {}, [0, 1]);
+  run("moves", process.execPath, [join(HERE, "moves.ts"), "--set", scoring, "--clips", scored, "--spec", LIST, "--guard", guard, "--also=", "--json", json], {}, [0, 1]);
   const rows: Row[] = JSON.parse(readFileSync(json, "utf8"));
   const chosen = specs.map((s) => {
     const all = scores(rows, s.name, more.get(s.name));
@@ -211,7 +241,7 @@ function main() {
   }
   const setFile = join(OUT, "moves.ron");
   writeFileSync(setFile, scratch);
-  const checked = run("set", process.execPath, [join(HERE, "moves.ts"), "--set", setFile, "--clips", scored, "--spec", LIST, "--guard", guards[0], "--also=",], {}, [0, 1]);
+  const checked = run("set", process.execPath, [join(HERE, "moves.ts"), "--set", setFile, "--clips", scored, "--spec", LIST, "--guard", guard, "--also="], {}, [0, 1]);
   const setBad = lines(checked, "✗ ").filter((l) => !/^✗ \d+ over the bars/.test(l));
   const chains = [...checked.matchAll(/ into (\w+) ([\d.]+) m/g)].map((x) => `${x[1]} ${x[2]} m`);
   const chained = chains.length ? `, chains into ${chains.join(", ")}` : "";
@@ -240,6 +270,16 @@ function main() {
     blender("into", "made_clips.py", [rel(figure), `--list=${rel(LIST)}`]);
     // The textures at the body budget (D188), as build_bodies.sh exports the base.
     blender("into", "export_character.py", [rel(BODY), rel(GAME_CLIPS), `--clips=${rel(figure)}`, `--list=${rel(LIST)}`, "--textures=2048"]);
+    // As the build's fight step: a gliding swing foot lifted clear (clear.ts), then the played
+    // clips' sword wrists held inside a person's (wrist_limit.ts).
+    clearFile(GAME_CLIPS);
+    try {
+      limitFile(GAME_CLIPS);
+    } catch (e) {
+      putBack();
+      say(false, "into", `refused, every file put back: ${(e as Error).message}`);
+      throw new Failed();
+    }
     // The mirrored clips (mirror.ts), then each clip's foot-down markers, which the game keeps
     // feet by (D455).
     mirrorFile(GAME_CLIPS);
