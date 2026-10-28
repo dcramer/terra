@@ -1572,6 +1572,22 @@
    "measurable": true
   },
   {
+   "id": "feet.glide",
+   "noticed": 4,
+   "notice": "feet slide over the ground at walk, jog or sprint, or in starts, stops and turns",
+   "bar": {
+    "at_most": 0.03
+   },
+   "unit": "m, the worst stretch's ball travel along the ground of a foot its clips have down (lock curve coming in and lock weight at 1) that the lock leaves free as a swing (going as the pose has it, its ball within 7 cm of its lowest), on the filmed course (what feet.sliding, judging kept plants, cannot see: a crossfade's foot gliding, as a wall stop's fade into Idle drags it)",
+   "source": "docs/controller.md criterion 21; D455; ALS FootLock",
+   "check": {
+    "by": "film",
+    "name": "feet glide"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
    "id": "feet.sinking",
    "noticed": 4,
    "notice": "a planted foot sinks into a step or a slope",

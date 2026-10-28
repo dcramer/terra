@@ -5,7 +5,7 @@
 // (tools/sandbox/duel/checks.ts `sliding`). yard-checks.test.ts plants each fault in a made-up
 // walk. Node 22.18 or later; no dependencies.
 
-import { type Frame, PLANT_FRAMES, type Plant, SLIDE_M, THROUGH_SOLE_M, plants, slidOf } from "../sandbox/duel/checks.ts";
+import { type Frame, LOWEST_SHARE, PLANT_FRAMES, type Plant, SLIDE_M, THROUGH_SOLE_M, plants, slidOf } from "../sandbox/duel/checks.ts";
 import { transitions } from "./transitions.ts";
 
 /// A check's verdict: whether it held, its line, its number (the scorecard row's value) and
@@ -32,6 +32,8 @@ type Walker = Frame["fighters"][number] & {
   short_lock?: number[];
   under?: ((number | null)[] | null)[];
   span?: (number | null)[];
+  lock?: number[][];
+  why?: string[];
 };
 
 export const FPS = 60;
@@ -317,6 +319,68 @@ export function aloft(walks: Walk[]): Check {
   return { name: "feet aloft", ok, line, value: worst.up, faults: up.length };
 }
 
+/// A lock curve and weight this near 1 have the foot down (`terra_motion::feet::FULL`).
+const FULL = 0.99;
+/// A ball this near its lowest over the world's ground is down (the lock's own gate,
+/// `terra_motion::feet::PLANT_M`), m.
+export const GLIDE_DOWN_M = 0.07;
+
+/// feet.glide: a foot its clips have down (their lock curve coming in and the lock weight at 1)
+/// that the lock leaves free as a swing (`why` "swing": the pose shown moves it too fast to
+/// lock, a crossfade's; `kept` free or blending, going as the pose has it, not the rule's
+/// step, which lifts it), its ball down (within GLIDE_DOWN_M of its lowest over the world's
+/// ground), so it goes over the ground with the fade rather than standing (a stop's fade into
+/// Idle at a wall drags it so, controller R2 job 4); feet.sliding judges only the plants the
+/// lock kept and sees only their tail. Each
+/// such stretch's ball travel along the ground, the row's number the worst's, m.
+export function glide(walks: Walk[]): Check {
+  type Stretch = { walk: string; foot: number; from: number; to: number; start: number[]; end: number[]; up: number[]; shows?: string };
+  const stretches: Stretch[] = [];
+  for (const walk of walks) {
+    const open: (Stretch | undefined)[] = [undefined, undefined];
+    // Each ball's lowest over the world's ground (its walk's LOWEST_SHARE), which it is down
+    // within GLIDE_DOWN_M of: a foot coming down through the air is no glide.
+    const lowest = [0, 1].map((foot) => {
+      const ups = sorted(walk.frames.flatMap((frame) => (typeof you(frame)?.sole?.[foot]?.[1] === "number" ? [you(frame)?.sole?.[foot]?.[1] as number] : [])));
+      return ups.length ? ups[Math.floor(ups.length * LOWEST_SHARE)] : undefined;
+    });
+    for (const frame of walk.frames) {
+      const w = you(frame);
+      for (const foot of [0, 1]) {
+        const lock = w?.lock?.[foot];
+        const at = w?.balls[foot]?.at;
+        const up = w?.sole?.[foot]?.[1];
+        const low = lowest[foot];
+        const down = typeof up === "number" && low !== undefined && up <= low + GLIDE_DOWN_M;
+        const going = w?.kept?.[foot] === "free" || w?.kept?.[foot] === "blending";
+        const gliding = !!w && going && down && !!lock && !!at && lock[0] >= FULL && lock[1] >= FULL && w.why?.[foot] === "swing";
+        const run = open[foot];
+        if (gliding && run && frame.frame === run.to + 1) {
+          run.to = frame.frame;
+          run.end = at as number[];
+          continue;
+        }
+        if (run) stretches.push(run);
+        open[foot] = gliding ? { walk: walk.name, foot, from: frame.frame, to: frame.frame, start: at as number[], end: at as number[], up: frame.up ?? [0, 1, 0], shows: (w as { shows?: string }).shows } : undefined;
+      }
+    }
+    for (const run of open) if (run) stretches.push(run);
+  }
+  const travel = (s: Stretch) => {
+    const d = s.end.map((v, i) => v - s.start[i]);
+    const along = d[0] * s.up[0] + d[1] * s.up[1] + d[2] * s.up[2];
+    return Math.hypot(...d.map((v, i) => v - along * s.up[i]));
+  };
+  const frames = stretches.reduce((sum, s) => sum + s.to - s.from + 1, 0);
+  const each = stretches.map((s) => ({ s, travel: travel(s) }));
+  const worst = each.reduce((a, b) => (b.travel > a.travel ? b : a), { s: undefined as Stretch | undefined, travel: 0 });
+  const over = each.filter((one) => one.travel > SLIDE_M);
+  const ok = !over.length;
+  const at = worst.s ? ` (${worst.s.walk} ${worst.s.foot ? "R" : "L"} ${worst.s.from}-${worst.s.to}${worst.s.shows ? ` ${worst.s.shows}` : ""})` : "";
+  const line = `${ok ? "" : "✗ "}${stretches.length} feet down in their clips left free as a swing, ${frames} frames, ${over.length} gliding past ${cm(SLIDE_M)}; worst ${cm(worst.travel)}${at}`;
+  return { name: "feet glide", ok, line, value: worst.travel, faults: over.length };
+}
+
 /// pelvis.drop: the shortfall foot placement adds to a locked leg (its shortfall from the goal
 /// it is bent to, less the lock's goal's alone, so the lock's own strain is not counted), over
 /// every locked frame: at p95 ("pelvis drop") and at worst ("pelvis drop worst"), m. Measured,
@@ -417,4 +481,4 @@ export function yard(walks: Walk[]): Check {
   return { name: "yard", ok: !failed.length, line, value: failed.length, faults: failed.length };
 }
 
-export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), ground(walks), sinking(walks), aloft(walks), ...drops(walks), yard(walks), ...transitions(walks)];
+export const check = (walks: Walk[]): Check[] => [smooth(walks), feet(walks), turn(walks), ground(walks), sinking(walks), aloft(walks), glide(walks), ...drops(walks), yard(walks), ...transitions(walks)];

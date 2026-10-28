@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Frame } from "../sandbox/duel/checks.ts";
-import { type Walk, aloft, drops, feet, ground, over, sinking, smooth, steps, turn, yard } from "./yard-checks.ts";
+import { type Walk, aloft, drops, feet, glide, ground, over, sinking, smooth, steps, turn, yard } from "./yard-checks.ts";
 
 /// A walk east at 4.2 m/s on level ground at 0 for `n` frames; `lift(i)` raises the body,
 /// `below(i)` how far under it the figure is shown, `camera(i)` the camera's height.
@@ -250,4 +250,29 @@ test("pelvis.drop counts the shortfall placement adds, not the lock's own", () =
   assert.ok(!placed.ok && Math.abs(placed.value - 0.05) < 1e-9 && !placedWorst.ok, placed.line);
   const frames = standing(() => [0.08, 0.04]).frames.map((f) => ({ ...f, fighters: f.fighters.map((w) => ({ ...w, short_lock: undefined })) }));
   assert.match(drops([of(frames as Frame[])])[0].line, /without the leg's shortfalls/);
+});
+
+test("feet.glide fails a foot its clip has down left free as a swing on the ground, not a lock, a step or a foot in the air", () => {
+  // The left foot: its clip locks it from frame 10, the lock leaves it free as a swing for 6
+  // frames (a fade carrying it 5 cm a frame along the ground), then plants it.
+  const glided = (why: string, speed: number, kept = "free", up = 0.04) =>
+    of(
+      walk(30).map((frame, i) => {
+        const at = [Math.min(Math.max(i - 10, 0), 5) * 0.05, 0, 0.1];
+        const ball = i >= 10 && i < 16 ? up : 0.04;
+        const w = { ...frame.fighters[0], speed, balls: [{ at }, { at: [0, 0, -0.1] }], lock: [i >= 10 ? [1, 1] : [0, 0], [1, 1]], why: [i >= 10 && i < 16 ? why : "", ""], kept: [i >= 16 ? "planted" : kept, "planted"], sole: [[0.08, ball], [0.08, 0.04]] };
+        return { ...frame, fighters: [w as unknown as Frame["fighters"][number]] };
+      }),
+    );
+  const slid = glide([glided("swing", 4.2)]);
+  assert.ok(!slid.ok && Math.abs(slid.value - 0.25) < 1e-9, slid.line);
+  assert.ok(glide([glided("", 4.2)]).ok);
+  assert.ok(glide([glided("high", 4.2)]).ok);
+  // The body stopped at a wall, the fade dragging the foot: a glide all the same.
+  assert.ok(!glide([glided("swing", 0)]).ok);
+  assert.ok(!glide([glided("swing", 4.2, "blending")]).ok);
+  // The rule's step lifts the foot over the way: no glide.
+  assert.ok(glide([glided("swing", 4.2, "stepping")]).ok);
+  // A foot coming down through the air 20 cm up: no glide.
+  assert.ok(glide([glided("swing", 4.2, "free", 0.24)]).ok);
 });
