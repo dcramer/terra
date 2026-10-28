@@ -78,7 +78,7 @@ test("each captured target reproduces the board of the commit and template it wa
     const dir = atCommit(target.from, files);
     const r = reader({ body: join(dir, files[0]), clips: join(dir, files[1]), templates: join(dir, files[2]), shield: join(dir, files[3]), only: [target.template] });
     rmSync(dir, { recursive: true });
-    const off = worstOff(r, r.clipOf(pose), target);
+    const off = worstOff(r, r.clipOf(target.clip ?? pose), target);
     assert.ok(off.cm <= CAPTURE_CM, `${pose}: the board ${off.cm.toFixed(2)} cm off its target (${off.cmWhere}) at ${target.from}`);
     assert.ok(off.deg <= CAPTURE_DEG, `${pose}: the board ${off.deg.toFixed(2)}° off its target (${off.degWhere}) at ${target.from}`);
   }

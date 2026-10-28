@@ -11,6 +11,7 @@
 //   node tools/characters/shield_place.ts                     # every shield pose on every template
 //   node tools/characters/shield_place.ts --at 27fa529c       # from that commit's assets
 //   node tools/characters/shield_place.ts --at 27fa529c --capture Low_Guard   # write its target
+//   node tools/characters/shield_place.ts --at 27fa529c --capture Fight_Strafe_L --as Low_Strafe
 //   node tools/characters/shield_place.ts --json places.json  # every number, by pose and template
 //   node tools/characters/shield_place.ts --board             # the strapped board for hold.py's shield op
 //
@@ -29,8 +30,9 @@ import { fitter } from "./shield_arm.ts";
 import { type Shape, shaped, skinOf } from "./skin.ts";
 
 export type Place = { centre: V3; face: V3; up: V3 };
-/** A pose's target: its place, the commit and template it was captured from, and why. */
-export type Target = Place & { from: string; template: string; why: string };
+/** A pose's target: its place, the commit and template it was captured from, the clip it was
+ * read on when that is not the pose's own name, and why. */
+export type Target = Place & { from: string; template: string; why: string; clip?: string };
 export type Targets = Record<string, Target>;
 export const TARGETS = "art/animation/shield_targets.json";
 
@@ -159,6 +161,9 @@ function main() {
       on: { type: "string", default: "male" },
       targets: { type: "string", default: TARGETS },
       capture: { type: "string" },
+      // The pose a captured clip's target is kept as, when it is not the clip's own name (the
+      // strafes' `Low_Strafe`, read on Fight_Strafe_L).
+      as: { type: "string" },
       board: { type: "boolean", default: false },
       why: { type: "string", default: "" },
       fps: { type: "string", default: "15" },
@@ -201,9 +206,13 @@ function main() {
     const round = (x: V3) => x.map((n) => Math.round(n * 1e5) / 1e5) as V3;
     const kept = existsSync(opt.targets!) ? JSON.parse(readFileSync(opt.targets!, "utf8")) : { targets: {} };
     const commit = execFileSync("git", ["rev-parse", "--short=8", opt.at], { encoding: "utf8" }).trim();
-    kept.targets[opt.capture] = { centre: round(p.centre), face: round(p.face), up: round(p.up), from: commit, template: on.name, why: opt.why };
+    const pose = opt.as ?? opt.capture;
+    kept.targets[pose] = {
+      centre: round(p.centre), face: round(p.face), up: round(p.up),
+      ...(pose === opt.capture ? {} : { clip: opt.capture }), from: commit, template: on.name, why: opt.why,
+    };
     writeFileSync(opt.targets!, JSON.stringify(kept, null, 1) + "\n");
-    console.log(`✓ ${opt.capture}'s target captured from ${commit} on ${on.name} into ${opt.targets}`);
+    console.log(`✓ ${pose}'s target captured from ${opt.capture} at ${commit} on ${on.name} into ${opt.targets}`);
   }
   if (opt.board) {
     if (opt.at) throw new Error("--board writes the strap of the shield as it is now: no --at");

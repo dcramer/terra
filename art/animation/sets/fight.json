@@ -1035,6 +1035,7 @@
       {
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
+        "shield": "Low_Strafe",
         "aim": {
           "upperarm_l": [
             0.55,
@@ -1053,20 +1054,29 @@
       }
     ]
   },
-  "Guard_Shield_Out": {
+  "Guard_Board": {
     "over": [
       "Fight_Guard"
     ],
     "hold": [
       {
-        "clip": "Fight_Guard",
-        "bone": "upperarm_l",
+        "clip": "Keyed_Guard",
+        "bone": "clavicle_l",
+        "shield": "Low_Guard",
         "aim": {
           "upperarm_l": [
-            0.756,
-            -0.623,
-            -0.201
+            0.55,
+            -0.75,
+            -0.38
+          ],
+          "lowerarm_l": [
+            -0.1,
+            -0.55,
+            0.83
           ]
+        },
+        "roll": {
+          "lowerarm_l": 47
         }
       }
     ]

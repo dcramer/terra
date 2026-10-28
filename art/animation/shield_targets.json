@@ -20,6 +20,27 @@
    "from": "27fa529c",
    "template": "male",
    "why": "D531: the guard the developer approved on the review desk (\"Reads right\"), the shield low at the left hip, face out; captured before D542's rebuild of the bones"
+  },
+  "Low_Strafe": {
+   "centre": [
+    0.47369,
+    -0.08049,
+    0.23904
+   ],
+   "face": [
+    0.98737,
+    -0.04617,
+    -0.15154
+   ],
+   "up": [
+    0.06708,
+    0.98845,
+    0.13591
+   ],
+   "clip": "Fight_Strafe_L",
+   "from": "27fa529c",
+   "template": "male",
+   "why": "The strafes' place before D542 (Low_Strafe, both strafes alike: D531's guard with the forearm a little further out, the board clear of the stepping thigh); Low_Guard's own place puts the heater in the heavy template's left thigh in Fight_Strafe_R (held 4.3 cm)"
   }
  },
  "board": {
