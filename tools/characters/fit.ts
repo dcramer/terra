@@ -22,7 +22,7 @@
 // Exit 1 if a stage fails. Node 22.18 or later; no dependencies.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { KINDS, ROOT, against, holdOf, judge, knownFaults, readBody, readLook } from "./attach_contract.ts";
@@ -151,6 +151,25 @@ export function setOf(name: string): { set: string; hand: "R" | "L"; clips: stri
   return set ? { set, hand, clips: "" } : { set: "none", hand, clips: (hand === "L" ? carriedClips() : walkerClips()).join(",") };
 }
 
+/** A row moves.ts measures: a move of a set, or a clip, and what it measured. */
+type MoveRow = { move?: string; clip?: string; measured?: Record<string, number> };
+
+/** Runs `node <args>` (moves.ts, writing its rows to `json`), its output added to `log`: the
+ * rows, or why there are none. The file of an earlier run is deleted first, so a run that
+ * stopped before its rows (a missing clip once did) fails here and old rows are never read as
+ * its own. moves.ts writes its rows and then exits 1 when some are over its own bars; those
+ * rows are this run's and judged by fit's. */
+export function runMoves(args: string[], json: string, log: string): MoveRow[] | string {
+  rmSync(json, { force: true });
+  const run = spawnSync(process.execPath, args, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+  appendFileSync(log, `\n$ node ${args.join(" ")}\n${run.stdout}${run.stderr}`);
+  if (existsSync(json)) return JSON.parse(readFileSync(json, "utf8")) as MoveRow[];
+  const said = `${run.stderr ?? ""}\n${run.stdout ?? ""}`.split("\n").filter((l) => l.trim());
+  const why = said.find((l) => /error/i.test(l)) ?? said.at(-1) ?? run.error?.message ?? "";
+  const how = run.status === null ? `stopped by ${run.signal}` : `exit ${run.status}`;
+  return `moves.ts wrote no rows (${how}): ${why.trim()}; see ${log.startsWith(ROOT) ? log.slice(ROOT.length + 1) : log}`;
+}
+
 function movesStage(it: Item, log: string, template?: string): boolean {
   const { set, hand, clips } = setOf(it.name);
   const look = it.look.slice(ROOT.length + 1);
@@ -159,10 +178,8 @@ function movesStage(it: Item, log: string, template?: string): boolean {
   const args = [join(ROOT, "tools", "characters", "moves.ts"), "--set", set, "--carry", "--arms", "--json", json, ...hold.flatMap((h) => ["--hold", h])];
   if (clips) args.push("--also", clips);
   if (template) args.push("--template", template);
-  const run = spawnSync(process.execPath, args, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
-  writeFileSync(log, `${readFileSync(log, "utf8")}\n$ node ${args.join(" ")}\n${run.stdout}${run.stderr}`);
-  if (!existsSync(json)) return line(false, it.name, "moves", `moves.ts wrote no rows; see ${log.slice(ROOT.length + 1)}`);
-  const rows = JSON.parse(readFileSync(json, "utf8")) as { move?: string; clip?: string; measured?: Record<string, number> }[];
+  const rows = runMoves(args, json, log);
+  if (typeof rows === "string") return line(false, it.name, "moves", rows);
   const key = `held_cm.${it.name}`;
   const deep = rows.filter((r) => r.measured?.[key] !== undefined).map((r) => ({ row: r.move ?? r.clip!, cm: r.measured![key] }));
   const over = deep.filter((r) => r.cm > HELD_CM).sort((a, b) => b.cm - a.cm);

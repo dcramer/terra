@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
-import { lookDiff, setOf } from "./fit.ts";
+import { lookDiff, runMoves, setOf } from "./fit.ts";
 
 /** A GLB of one node with these extras over this binary chunk. */
 function glb(extras: Record<string, unknown>, bin: number[], mesh = "Mesh_0"): Buffer {
@@ -42,4 +45,20 @@ test("a held item is checked in its class's set, else in the walker's clips", ()
   assert.equal(bow.hand, "L");
   assert.ok(bow.clips.split(",").includes("Sprint_Loop"));
   for (const clip of ["Interact", "Sword_Attack", "Sword_Idle"]) assert.ok(!bow.clips.split(",").includes(clip), clip);
+});
+
+test("a moves run that writes no rows fails, never reading an earlier run's", () => {
+  const dir = mkdtempSync(join(tmpdir(), "fit-moves-"));
+  const json = join(dir, "fit-x-moves.json");
+  const log = join(dir, "fit.log");
+  writeFileSync(json, JSON.stringify([{ clip: "Old_Clip", measured: { held_cm: 0.1 } }]));
+  const failed = runMoves(["-e", 'console.error("Error: no clip Missing_Clip"); process.exit(1)'], json, log);
+  assert.equal(typeof failed, "string");
+  assert.match(failed as string, /wrote no rows \(exit 1\): Error: no clip Missing_Clip/);
+  assert.ok(!existsSync(json), "the earlier run's rows are gone");
+  // Over moves.ts's own bars it writes its rows and exits 1: they are this run's.
+  const write = `require("fs").writeFileSync(${JSON.stringify(json)}, '[{"clip":"New_Clip"}]'); process.exit(1)`;
+  assert.deepEqual(runMoves(["-e", write], json, log), [{ clip: "New_Clip" }]);
+  assert.match(readFileSync(log, "utf8"), /no clip Missing_Clip/);
+  rmSync(dir, { recursive: true, force: true });
 });
