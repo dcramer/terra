@@ -6,6 +6,8 @@
 //   routine (log in the main checkout's target/seed.log), so the main checkout and the shared
 //   seed keep up with origin/main, and clearing away worktrees agents are done with
 //   (`cargo xtask worktrees --prune`, log in target/worktrees.log).
+// TERRA_NO_LOCAL_BUILDS=1 (a machine whose builds all run on the render worker) skips both seed
+// steps: nothing builds locally there, so the seed would only spend its CPU; the prune still runs.
 // Claude Code passes the session's folder as `cwd`; for a worktree session CLAUDE_PROJECT_DIR
 // is the main checkout, not the worktree.
 import { spawn, spawnSync } from "node:child_process";
@@ -21,7 +23,8 @@ try {
 // A linked worktree has a `.git` file pointing at the main checkout; the main checkout has a folder.
 const git = join(cwd, ".git");
 const worktree = cwd !== "" && existsSync(git) && statSync(git).isFile();
-if (worktree && !existsSync(join(cwd, "target"))) {
+const local = process.env.TERRA_NO_LOCAL_BUILDS !== "1";
+if (local && worktree && !existsSync(join(cwd, "target"))) {
   spawnSync("cargo", ["xtask", "seed", "--background"], {
     cwd,
     stdio: ["ignore", "inherit", "inherit"],
@@ -44,5 +47,5 @@ function now(task: string[], logName: string) {
     .on("error", () => {})
     .unref();
 }
-now(["seed"], "seed.log");
+if (local) now(["seed"], "seed.log");
 now(["worktrees", "--prune"], "worktrees.log");
