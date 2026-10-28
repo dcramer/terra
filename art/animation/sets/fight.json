@@ -176,9 +176,9 @@
     "take": 0
   },
   "Keyed_Backhand": {
-    "prompt": "A swordsman holding a sword in the right hand and a shield on the left arm swings his right arm across from his left shoulder out to the right in a flat, fast cut, then returns to his guard.",
+    "prompt": "A swordsman holding a sword in the right hand and a shield on the left arm raises the sword over his left shoulder and cuts down diagonally across his body to his lower right in a fast falling cut, then returns to his guard.",
     "speed": 0,
-    "seconds": 1.8,
+    "seconds": 2.6,
     "seed": 2,
     "samples": 8,
     "once": true,
@@ -189,86 +189,143 @@
     },
     "hand": [
       {
-        "at": 0.4,
+        "at": 0.42,
         "grip": [
-          -0.2,
-          0.42,
-          0.45
+          -0.18,
+          0.45,
+          0.42
         ],
         "blade": [
           -0.6,
-          0.3,
-          0.75
+          0.05,
+          0.8
         ],
         "edge": [
-          0.07,
-          0.94,
-          -0.32
+          -0.42,
+          0.83,
+          -0.37
         ],
-        "yaw": 30
+        "yaw": 20
       },
       {
-        "at": 0.65,
+        "at": 0.55,
         "grip": [
-          0.05,
-          0.45,
+          0,
+          0.42,
+          0.36
+        ],
+        "blade": [
+          -0.77,
+          0.32,
+          0.55
+        ],
+        "edge": [
+          -0.11,
+          0.78,
+          -0.62
+        ],
+        "yaw": 10
+      },
+      {
+        "at": 0.63,
+        "grip": [
+          0.14,
+          0.43,
           0.25
         ],
         "blade": [
-          -0.04,
-          0.99,
-          0.14
+          -0.72,
+          0.67,
+          0.17
         ],
         "edge": [
-          0.39,
-          0.14,
-          -0.91
+          0.29,
+          0.52,
+          -0.81
         ],
         "yaw": 0
       },
       {
-        "at": 0.9,
+        "at": 0.7,
         "grip": [
-          0.42,
           0.3,
-          0.25
+          0.42,
+          0.2
         ],
         "blade": [
-          0.87,
-          -0.37,
+          -0.51,
+          0.83,
+          -0.22
+        ],
+        "edge": [
+          0.66,
+          0.22,
+          -0.72
+        ],
+        "yaw": 0
+      },
+      {
+        "at": 0.85,
+        "grip": [
+          0.5,
+          0.25,
+          0.02
+        ],
+        "blade": [
+          -0.38,
+          0.86,
           -0.34
         ],
         "edge": [
-          0.46,
-          0.85,
-          0.25
+          0.6,
+          -0.05,
+          -0.8
         ],
-        "yaw": -25
+        "yaw": -15
       },
       {
-        "at": 1.3,
+        "at": 1.4,
         "grip": [
-          0.2,
-          0.35,
+          0.1,
+          0.45,
           0.15
         ],
         "blade": [
-          0.36,
-          0.72,
-          0.6
+          0.3,
+          0.27,
+          0.92
         ],
         "edge": [
-          -0.6,
-          0.67,
-          -0.44
+          -0.69,
+          0.73,
+          0.01
         ],
         "yaw": -8
+      },
+      {
+        "at": 1.9,
+        "grip": [
+          0.14,
+          0.4,
+          0.1
+        ],
+        "blade": [
+          0.03,
+          0.02,
+          1
+        ],
+        "edge": [
+          -0.4,
+          0.92,
+          0
+        ],
+        "yaw": -4
       }
     ],
     "blow": {
       "move": "backhand",
       "sweep": "left-to-right",
-      "contact": 0
+      "contact": 15
     },
     "timing": {
       "hit": [
@@ -354,7 +411,7 @@
         ]
       }
     ],
-    "take": 1
+    "take": 0
   },
   "Keyed_Slash": {
     "prompt": "A swordsman holding a sword in the right hand and a shield on the left arm raises the sword over his right shoulder and cuts down and across to his left in a fast diagonal slash, then returns to his guard.",
@@ -410,40 +467,40 @@
       {
         "at": 0.65,
         "grip": [
-          -0.25,
-          0.45,
-          0.18
+          -0.28,
+          0.48,
+          0.28
         ],
         "blade": [
-          -0.15,
-          0.98,
+          0.02,
+          0.99,
           -0.1
         ],
         "edge": [
-          -0.98,
-          -0.16,
-          -0.09
+          -0.99,
+          0.04,
+          0.16
         ],
-        "yaw": 25
+        "yaw": 35
       },
       {
         "at": 1.1,
         "grip": [
           0.05,
-          0.4,
-          0.1
+          0.45,
+          0.15
         ],
         "blade": [
-          0.05,
-          0.93,
-          0.37
+          0.17,
+          0.16,
+          0.97
         ],
         "edge": [
-          -0.59,
-          0.32,
-          -0.74
+          -0.67,
+          0.74,
+          0
         ],
-        "yaw": 8
+        "yaw": 15
       }
     ],
     "blow": {
@@ -536,7 +593,7 @@
         ]
       }
     ],
-    "take": 0
+    "take": 1
   },
   "Keyed_Heavy": {
     "prompt": "A swordsman holding a sword in the right hand and a shield on the left arm lifts the sword high above and behind his right shoulder, holds it there a moment, then brings it down hard in a big diagonal cut across to his lower left, then returns to his guard.",
@@ -564,49 +621,49 @@
           0.86
         ],
         "edge": [
-          -0.82,
-          -0.36,
-          0.44
+          -0.35,
+          0.89,
+          0.31
         ],
         "yaw": -30
       },
       {
         "at": 0.75,
         "grip": [
-          0.3,
-          0.02,
-          0.62
+          0.25,
+          0.05,
+          0.6
         ],
         "blade": [
-          0.3,
-          -0.51,
-          0.81
+          0.25,
+          -0.77,
+          0.58
         ],
         "edge": [
-          0.02,
-          0.85,
-          0.52
+          -0.75,
+          0.23,
+          0.63
         ],
-        "yaw": -40
+        "yaw": -25
       },
       {
         "at": 0.98,
         "grip": [
-          0.1,
+          -0.1,
           0.55,
-          0.28
+          0.22
         ],
         "blade": [
-          0.29,
-          0.95,
-          -0.11
+          -0.24,
+          0.62,
+          0.74
         ],
         "edge": [
-          -0.86,
-          0.21,
-          -0.46
+          -0.42,
+          0.62,
+          -0.66
         ],
-        "yaw": -5
+        "yaw": 15
       },
       {
         "at": 1.25,
@@ -630,19 +687,19 @@
       {
         "at": 1.8,
         "grip": [
-          0.05,
-          0.4,
-          0.1
+          0.08,
+          0.45,
+          0.12
         ],
         "blade": [
-          0.05,
-          0.93,
-          0.37
+          0.38,
+          0.1,
+          0.92
         ],
         "edge": [
-          -0.59,
-          0.32,
-          -0.74
+          -0.25,
+          0.97,
+          -0.01
         ],
         "yaw": 8
       }
@@ -736,7 +793,7 @@
         ]
       }
     ],
-    "take": 0
+    "take": 7
   },
   "Keyed_Block": {
     "prompt": "A person holds a sword in the right hand and a shield on the left forearm, raises the shield across in front of the chest to block a blow, holds it there, then lowers it back to the guard.",

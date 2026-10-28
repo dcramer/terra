@@ -84,10 +84,10 @@
         // stays low at the left side, where the guard rests it, out of the sword's way
         // (Open_Slash, D454, D531).
         "slash": (
-            clip: "Open_Slash", from: 0.00, speed: 1.72, active: (0.48, 0.60), done: 1.96,
-            cancel: 1.02, next: "backhand",
+            clip: "Open_Slash", from: 0.00, speed: 1.21, active: (0.32, 0.48), done: 1.96,
+            cancel: 0.70, next: "backhand",
             stamina: 10, damage: 12, hit_stop: 0.03,
-            drive: [(0.0, 0.0), (0.25, 1.8), (0.55, 0.6), (0.75, 0.0)],
+            drive: [(0.0, 0.0), (0.17, 1.8), (0.37, 0.6), (0.5, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
         ),
         // From the guard and back to it (Keyed_Backhand): the sword to the left shoulder and
@@ -95,27 +95,27 @@
         // to the right (D568), left to right. The shield low at the left side throughout
         // (Open_Backhand, D454, D531).
         "backhand": (
-            clip: "Open_Backhand", from: 0.00, speed: 1.9,
-            active: (0.58, 0.77), done: 1.75, cancel: 1.2, next: "finisher",
+            clip: "Open_Backhand", from: 0.00, speed: 2.18,
+            active: (0.57, 0.72), done: 2.58, cancel: 1.63, next: "finisher",
             stamina: 10, damage: 12, hit_stop: 0.03,
             drive: [(0.0, 0.0), (0.3, 1.8), (0.62, 0.6), (0.8, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
         ),
         // The third of the chain: the slash again, a little slower and harder.
         "finisher": (
-            clip: "Open_Slash", from: 0.0, speed: 1.5,
-            active: (0.48, 0.60), done: 1.96, cancel: 1.4, stamina: 12, damage: 18,
+            clip: "Open_Slash", from: 0.0, speed: 1.66,
+            active: (0.32, 0.48), done: 1.96, cancel: 1.4, stamina: 12, damage: 18,
             hit_stop: 0.04,
-            drive: [(0.0, 0.0), (0.25, 2.4), (0.55, 0.8), (0.8, 0.0)],
+            drive: [(0.0, 0.0), (0.17, 2.4), (0.37, 0.8), (0.53, 0.0)],
             warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.5),
         ),
         // From the guard and back to it (Keyed_Heavy, D450): the sword lifted high behind the right
         // shoulder by 0.75 s and brought down hard across to the lower left, then back on guard.
         // The shield low at the left side throughout (Open_Heavy, D454, D531).
         "heavy": (
-            clip: "Open_Heavy", from: 0.00, speed: 1.50, active: (0.82, 1.17), done: 2.38,
+            clip: "Open_Heavy", from: 0.00, speed: 1.52, active: (0.90, 1.00), done: 2.38,
             cancel: 1.95, stamina: 22, damage: 30, hit_stop: 0.05, heavy: true,
-            drive: [(0.0, 0.0), (0.5, 0.6), (0.86, 3.2), (1.22, 0.5), (1.83, 0.0)],
+            drive: [(0.0, 0.0), (0.55, 0.6), (0.95, 3.2), (1.34, 0.5), (2.01, 0.0)],
             warp: (within: 3.6, cone: 70, stop_at: 1.5, most_mps: 4.0),
         ),
         // The base's forward roll with the arms held out of the tuck (Fight_Roll, hold.py), in
@@ -135,16 +135,16 @@
         "block": (clip: "Clear_Block", from: 0.00, speed: 1.81, done: 1.38, hold: 0.60),
         // The partner's slash: the slash slowed for a long, readable wind-up.
         "partner_slash": (
-            clip: "Open_Slash", from: 0.0, speed: 0.58, active: (0.48, 0.60), done: 1.96,
+            clip: "Open_Slash", from: 0.0, speed: 0.37, active: (0.32, 0.48), done: 1.96,
             stamina: 10, damage: 15, hit_stop: 0.03,
-            drive: [(0.15, 0.0), (0.35, 1.5), (0.58, 0.4), (0.75, 0.0)],
+            drive: [(0.1, 0.0), (0.23, 1.5), (0.39, 0.4), (0.5, 0.0)],
             warp: (within: 3.0, cone: 80, stop_at: 1.5, most_mps: 3.0),
         ),
         // The partner's heavy: the big cut, its wind-up held longer.
         "partner_heavy": (
-            clip: "Open_Heavy", from: 0.0, speed: 0.95, active: (0.82, 1.17), done: 2.38,
+            clip: "Open_Heavy", from: 0.0, speed: 0.95, active: (0.90, 1.00), done: 2.38,
             stamina: 22, damage: 25, hit_stop: 0.05, heavy: true,
-            drive: [(0.0, 0.0), (0.65, 0.4), (0.86, 2.6), (1.18, 0.4), (1.7, 0.0)],
+            drive: [(0.0, 0.0), (0.72, 0.4), (0.95, 2.6), (1.3, 0.4), (1.87, 0.0)],
             warp: (within: 3.4, cone: 80, stop_at: 1.55, most_mps: 3.0),
         ),
     },
