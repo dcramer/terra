@@ -4,6 +4,12 @@
 // with its flame matte (--flame-matte, D433), each placement filmed TAKES times; then motion.ts's
 // measures, each hour gated by their middle-half mean (`held`). Exit 1 when either hour misses.
 //
+// The gate is paired (paired.ts): the base (`--base <sha>`, else where HEAD leaves origin/main) is
+// built in a worktree of its own and filmed beside the build in the same run, and a measure the
+// build misses passes when the build is no further outside its bar than the base, within the
+// run-to-run spread repeat films of one flame show. `--alone` films the build alone, bars only.
+// Each side's films are kept as `<out>/{build,base}/<hour>.json`; `--judge <out>` judges them again.
+//
 // The gate measures the flame, so the light it casts is held: the build is filmed with every hearth
 // light constant of crates/terra_world/src/fire/light.rs (`HEARTH_*`) set to REFERENCE, main's at
 // 6741693a, and the file put back after the build. A brighter pit light lit the ground behind the
@@ -12,11 +18,15 @@
 // held too, as the fire sheet's (`HELD_SKY`, D472): the dome's 2D clouds, not the marched volumes,
 // whose arrival raised the dusk splits with no fire changed.
 //
-//   node tools/fire/film.ts [out=shots/motion] [--seconds 20]   # from the checkout's root
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { analyse, gate, GATE, load, said } from "./motion.ts";
+//   node tools/fire/film.ts [out=shots/motion] [--base <sha> | --alone] [--seconds 20]   # from the checkout's root
+//   node tools/fire/film.ts --judge <out> [--alone]     # judge kept films again
+//   node tools/fire/film.ts --aa <side dir>...          # pool A/A films into gate-aa.json, print tolerances
+import { spawn, spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { analyse, GATE, load, said } from "./motion.ts";
+import { type Film, paired, type Side, told, tolerance, TOLERANCE } from "./paired.ts";
 import { HELD_SKY } from "./sheet.ts";
 
 /// The hearth light the films are lit by: main's at 6741693a, as `const NAME: type = value;`'s value.
@@ -45,7 +55,8 @@ const CONST = /^(\s*(?:pub(?:\([a-z]+\))? )?const (HEARTH_\w+): [\w:]+ = )(.+);$
 
 /// The source with every hearth constant at its reference, and which changed. Throws where the
 /// source's hearth constants are not REFERENCE's (one added or renamed): the hold would leave it free.
-export function hold(source: string, reference = REFERENCE): { source: string; changed: string[] } {
+/// `partial` (the base's light.rs, older than the build's REFERENCE) lets it lack some of them.
+export function hold(source: string, reference = REFERENCE, partial = false): { source: string; changed: string[] } {
   const seen = new Set<string>();
   const changed: string[] = [];
   const lines = source.split("\n").map((line) => {
@@ -58,7 +69,7 @@ export function hold(source: string, reference = REFERENCE): { source: string; c
     return `${m[1]}${want};`;
   });
   const missing = Object.keys(reference).filter((k) => !seen.has(k));
-  if (missing.length) throw new Error(`light.rs has no ${missing.join(", ")}: film.ts's REFERENCE is stale`);
+  if (missing.length && !partial) throw new Error(`light.rs has no ${missing.join(", ")}: film.ts's REFERENCE is stale`);
   return { source: lines.join("\n"), changed };
 }
 
@@ -79,13 +90,16 @@ export const takes = (out: string) =>
 export const HOURS: [string, string][] = [["dusk", "18.4"], ["night", "22"]];
 const CROP = "crop=600:600:500:250";
 
-export function build(root: string): string[] {
+/// Builds the checkout at `root` with its hearth light held, into `target` (its own by default; the
+/// base's worktree builds into the build's, so the dependencies are built once). `partial` as `hold`.
+export function build(root: string, target = join(root, "target"), partial = false): string[] {
   const path = join(root, "crates/terra_world/src/fire/light.rs");
   const was = readFileSync(path, "utf8");
-  const { source, changed } = hold(was);
+  const { source, changed } = hold(was, REFERENCE, partial);
   writeFileSync(path, source);
   try {
-    const b = spawnSync("cargo", ["build", "-q", "--release", "-p", "terra_sandbox"], { cwd: root, stdio: "inherit" });
+    const env = { ...process.env, CARGO_TARGET_DIR: target };
+    const b = spawnSync("cargo", ["build", "-q", "--release", "-p", "terra_sandbox"], { cwd: root, stdio: "inherit", env });
     if (b.status !== 0) throw new Error("cargo build failed");
   } finally {
     writeFileSync(path, was);
@@ -132,32 +146,142 @@ export function film(root: string, bin: string, out: string, dx: number, seconds
   }
 }
 
-if (import.meta.main) {
-  const argv = process.argv.slice(2);
-  const at = argv.indexOf("--seconds");
-  const seconds = at >= 0 ? +argv[at + 1] : 20;
-  const OUT = argv.find((a, i) => !a.startsWith("--") && argv[i - 1] !== "--seconds") ?? "shots/motion";
-  const root = process.cwd();
-  if (!existsSync(join(root, "crates/terra_world/src/fire/light.rs"))) throw new Error("run from the checkout's root");
-  const changed = build(root);
-  console.log(`✓ built, hearth light held at main's 6741693a${changed.length ? ` (${changed.join(", ")})` : " (the build's own)"}`);
-  const bin = join(root, "target/release/terra_sandbox");
-  const all = takes(OUT);
-  const dirs = all.map((t) => t.dir);
+/// Films one side's every take at each hour into `out` and measures them: `<hour>.json` (a `Side`:
+/// each film's placement and GATE values) and `<hour>.txt` (motion.ts's report of each film).
+export function filmSide(root: string, bin: string, out: string, seconds: number, rev: string) {
+  const all = takes(out);
   for (const { dx, dir } of all) film(root, bin, dir, dx, seconds);
-  console.log(`✓ filmed ${PLACEMENTS.length} placements x ${TAKES} takes x ${HOURS.length} hours, ${seconds} s each, in ${OUT}`);
+  for (const [hour] of HOURS) {
+    const ms = all.map(({ dx, dir }) => {
+      const src = (input: string) => ({ input, fps: 30, from: 0, seconds });
+      const { clip, cut } = load(src(join(dir, `${hour}.mkv`)), src(join(dir, `${hour}-matte.mkv`)));
+      return { dx, dir, m: analyse(clip, cut), cut };
+    });
+    writeFileSync(join(out, `${hour}.txt`), ms.map(({ dir, m, cut }) => said(dir, m, `flame luma >= ${cut.toFixed(0)} in the matte`)).join("\n") + "\n");
+    const side: Side = { rev, hour, films: ms.map(({ dx, dir, m }) => ({ dx, dir, v: GATE.map((g) => g.of(m)) })) };
+    writeFileSync(join(out, `${hour}.json`), JSON.stringify(side));
+  }
+}
+
+const git = (cwd: string, args: string[]) => spawnSync("git", args, { cwd, encoding: "utf8" });
+
+/// The commit the build is judged beside: `given`, else where HEAD leaves origin/main (HEAD itself
+/// on main). `same` when that is HEAD with nothing changed in the tree, so one build serves both.
+export function baseOf(root: string, given?: string): { rev: string; same: boolean } {
+  const head = git(root, ["rev-parse", "HEAD"]).stdout.trim();
+  const want = given ?? (git(root, ["merge-base", "HEAD", "origin/main"]).stdout.trim() || head);
+  const r = git(root, ["rev-parse", "--verify", "-q", `${want}^{commit}`]);
+  if (r.status !== 0) throw new Error(`no commit ${want} in this checkout: pass --base <sha> of HEAD's history`);
+  const rev = r.stdout.trim();
+  return { rev, same: rev === head && git(root, ["status", "--porcelain", "--untracked-files=no"]).stdout.trim() === "" };
+}
+
+/// The base's checkout (a worktree at target/gate/base, its own assets) and its held build, built
+/// into the build's target so the dependencies are built once, its binary kept beside it, and its
+/// textures cooked as the worker cooks a job's.
+export function prepareBase(root: string, rev: string): { dir: string; bin: string; changed: string[] } {
+  const dir = join(root, "target/gate/base");
+  git(root, ["worktree", "remove", "--force", dir]);
+  rmSync(dir, { recursive: true, force: true });
+  git(root, ["worktree", "prune"]);
+  const add = git(root, ["worktree", "add", "-q", "--detach", dir, rev]);
+  if (add.status !== 0) throw new Error(`git worktree add ${rev.slice(0, 9)}: ${add.stderr.trim()}`);
+  const target = join(root, "target");
+  const changed = build(dir, target, true);
+  const bin = join(root, "target/gate/base-sandbox");
+  copyFileSync(join(target, "release/terra_sandbox"), bin);
+  const cook = spawnSync("cargo", ["run", "-q", "--release", "-p", "terra_bake", "--"], { cwd: dir, encoding: "utf8", env: { ...process.env, CARGO_TARGET_DIR: target } });
+  if (cook.status !== 0) throw new Error(`the base's texture cook failed: ${`${cook.stdout}${cook.stderr}`.trim().split("\n").at(-1)}`);
+  return { dir, bin, changed };
+}
+
+const readSide = (dir: string, hour: string): Side => JSON.parse(readFileSync(join(dir, `${hour}.json`), "utf8"));
+
+/// Judges the films kept in `out` (build/, and base/ unless `alone`), a line an hour; the hours failed.
+export function judge(out: string, alone = false): number {
   let failed = 0;
   for (const [hour] of HOURS) {
-    const ms = dirs.map((d) => {
-      const src = (input: string) => ({ input, fps: 30, from: 0, seconds });
-      const { clip, cut } = load(src(join(d, `${hour}.mkv`)), src(join(d, `${hour}-matte.mkv`)));
-      return { d, m: analyse(clip, cut), cut };
-    });
-    writeFileSync(join(OUT, `${hour}.txt`), ms.map(({ d, m, cut }) => said(d, m, `flame luma >= ${cut.toFixed(0)} in the matte`)).join("\n") + "\n");
-    const g = gate(...ms.map((x) => x.m));
-    const met = g.filter((x) => x.met).length;
-    if (met < GATE.length) failed++;
-    console.log(`${met === GATE.length ? "✓" : "✗"} ${hour}: middle-half mean of ${ms.length} met ${met} of ${GATE.length}: ${g.map((x) => `${x.name} ${x.value.toFixed(2)}${x.met ? "" : "x"}`).join(" ")} (${join(OUT, `${hour}.txt`)})`);
+    const b = readSide(join(out, "build"), hour);
+    const a = alone ? undefined : readSide(join(out, "base"), hour);
+    const j = paired(b.films, a?.films, TOLERANCE[hour]);
+    const passed = j.filter((x) => x.pass).length;
+    const met = j.filter((x) => x.met).length;
+    if (passed < GATE.length) failed++;
+    const beside = a ? `, ${passed - met} no worse than base ${a.rev.slice(0, 9)}'s ${a.films.length} (~)` : "";
+    console.log(`${passed === GATE.length ? "✓" : "✗"} ${hour}: ${b.films.length} films met ${met} of ${GATE.length}${beside}: ${told(j)} (${join(out, "build", `${hour}.txt`)})`);
   }
-  process.exit(failed ? 1 : 0);
+  return failed;
+}
+
+/// Pools A/A sides (each a folder of `<hour>.json`, films of one flame) into gate-aa.json and
+/// prints the tolerances they give, for paired.ts's TOLERANCE.
+function pool(dirs: string[]) {
+  const path = new URL("gate-aa.json", import.meta.url);
+  const aa: { about: string; takes: number; sources: string[]; hours: Record<string, Film[]> } = existsSync(path)
+    ? JSON.parse(readFileSync(path, "utf8"))
+    : { about: "The motion gate's A/A films: repeat films of one flame, each film's placement and GATE values (paired.ts, D472)", takes: TAKES, sources: [], hours: {} };
+  for (const dir of dirs)
+    for (const [hour] of HOURS) {
+      if (!existsSync(join(dir, `${hour}.json`))) continue;
+      const s = readSide(dir, hour);
+      (aa.hours[hour] ??= []).push(...s.films.map((f) => ({ dx: f.dx, v: f.v.map((x) => Math.round(1e4 * x) / 1e4) })));
+      aa.sources.push(`${hour} ${s.rev.slice(0, 9)} ${dir}`);
+    }
+  writeFileSync(path, JSON.stringify(aa, null, 0).replace(/\{"dx"/g, '\n{"dx"') + "\n");
+  for (const [hour, films] of Object.entries(aa.hours)) console.log(`${hour}: ${films.length} films, tolerance ${JSON.stringify(tolerance(films, aa.takes))}`);
+}
+
+if (import.meta.main) {
+  const argv = process.argv.slice(2);
+  const opt = (k: string) => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : undefined);
+  const seconds = +(opt("--seconds") ?? 20);
+  if (argv[0] === "--side") {
+    // A side's films, run by the gate as a process of its own so base and build film side by side.
+    const [, root, bin, out, secs, rev] = argv;
+    filmSide(root, bin, out, +secs, rev);
+    process.exit(0);
+  }
+  if (argv[0] === "--aa") pool(argv.slice(1));
+  else if (argv[0] === "--judge") process.exit(judge(resolve(argv[1]), argv.includes("--alone")) ? 1 : 0);
+  else {
+    const OUT = resolve(argv.find((a, i) => !a.startsWith("--") && !["--seconds", "--base"].includes(argv[i - 1])) ?? "shots/motion");
+    const alone = argv.includes("--alone");
+    const root = process.cwd();
+    if (!existsSync(join(root, "crates/terra_world/src/fire/light.rs"))) throw new Error("run from the checkout's root");
+    const head = git(root, ["rev-parse", "HEAD"]).stdout.trim();
+    const base = alone ? undefined : baseOf(root, opt("--base"));
+    const held = (changed: string[]) => (changed.length ? changed.join(", ") : "the build's own");
+    let other = { root, bin: join(root, "target/gate/build-sandbox") };
+    if (base && !base.same) {
+      const b = prepareBase(root, base.rev);
+      console.log(`✓ built base ${base.rev.slice(0, 9)}, hearth light held at main's 6741693a (${held(b.changed)})`);
+      other = { root: b.dir, bin: b.bin };
+    }
+    const changed = build(root);
+    const bin = join(root, "target/release/terra_sandbox");
+    mkdirSync(join(root, "target/gate"), { recursive: true });
+    copyFileSync(bin, join(root, "target/gate/build-sandbox"));
+    console.log(`✓ built ${head.slice(0, 9)}, hearth light held at main's 6741693a (${held(changed)})`);
+    const side = (r: string, b: string, out: string, rev: string) =>
+      new Promise<number>((done) => {
+        rmSync(out, { recursive: true, force: true });
+        mkdirSync(out, { recursive: true });
+        const log = openSync(join(out, "side.log"), "w");
+        const p = spawn(process.execPath, [fileURLToPath(import.meta.url), "--side", r, b, out, String(seconds), rev], { cwd: r, stdio: ["ignore", log, log] });
+        p.on("exit", (code) => done(code ?? 1));
+      });
+    // The base films beside the build, at once, so whatever the box does meanwhile falls on both.
+    const sides = [side(root, join(root, "target/gate/build-sandbox"), join(OUT, "build"), head)];
+    if (base) sides.push(side(other.root, other.bin, join(OUT, "base"), base.rev));
+    const codes = await Promise.all(sides);
+    const bad = codes.map((c, i) => (c ? join(OUT, ["build", "base"][i], "side.log") : "")).filter(Boolean);
+    if (bad.length) {
+      console.log(`✗ films failed: ${bad.join(", ")}`);
+      process.exit(1);
+    }
+    if (base && !base.same) git(root, ["worktree", "remove", "--force", other.root]);
+    const what = base ? `the build and base ${base.rev.slice(0, 9)}${base.same ? " (HEAD, one build filmed twice)" : ""} side by side` : "the build alone";
+    console.log(`✓ filmed ${what}: ${PLACEMENTS.length} placements x ${TAKES} takes x ${HOURS.length} hours, ${seconds} s each, in ${OUT}`);
+    process.exit(judge(OUT, alone) ? 1 : 0);
+  }
 }
