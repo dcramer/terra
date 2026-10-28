@@ -213,6 +213,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D568](decisions/D568.md) | The backhand is a falling diagonal cut | Design | Developers | Decided | The sword-and-shield set's backhand… |
 | [D569](decisions/D569.md) | The block raises the shield over the face and the top of the head | Design | Developers | Decided | While the block is held (D531), the sword-and-shield… |
 | [D570](decisions/D570.md) | The sparring partner parries only when its parry is timed | Design | Developers | Decided | The sparring partner parries a blow only when its own… |
+| [D571](decisions/D571.md) | The axe's iron collar is darker than its head | Design | Developers | Open | How the iron collar (the axe's trim where the head meets… |
 
 ## People and the tribe
 
