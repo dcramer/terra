@@ -63,6 +63,7 @@ import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
 import { type Holding, keptOff, reach } from "./arms.ts";
 import { fitter } from "./shield_arm.ts";
+import { type Handle, FIST_CM, close, fistOff, handRest, lookGrip, seated, tipped as tipHandle } from "./grip.ts";
 
 const { values: opt } = parseArgs({
   options: {
@@ -98,7 +99,11 @@ const { values: opt } = parseArgs({
     // The hanging hands kept off the hips after the clip, as terra_walker::arms keeps them
     // (arms.ts, D535): the walker's composed pose (fit.ts).
     arms: { type: "boolean", default: false },
+    // The fists closed on what the hands hold, as terra_walker::grip closes them (grip.ts);
+    // `--no-grip` leaves the clips' fingers.
+    grip: { type: "boolean", default: true },
   },
+  allowNegative: true,
 });
 
 // The bars: what a person sees as wrong.
@@ -202,7 +207,9 @@ const { shapes, skinned } = skinOf(body, opt.templates!, opt.template!.split(","
 // arm fitted to the body (shield_arm.ts, D554), each as the game does after the clips.
 const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => fitShield(armsKept(shape, clip, t), shape.moved);
 // `--arms`: the hanging hands then kept off the hips as the game keeps them (arms.ts, D535).
-const armsKept = (shape: Shape, clip: Clip, t: number): Pose[] => {
+// The fists closed first (`inFist`), as terra_walker::grip runs before arms::keep_off_hips.
+const armsKept = (shape: Shape, played: Clip, t: number): Pose[] => {
+  const clip = inFist(shape, played);
   const pose = shaped(body, shape, clip, t, bends);
   if (!opt.arms) return pose;
   const kept = keptOff(body, pose, holdingIn(clip));
@@ -233,6 +240,41 @@ const pointsIn = (h: Held, clip: Clip) => (carriedNow(clip) ? carriedPoints.get(
 const reaches = held.filter((h) => h.socket === h.hand).map((h) => ({ h, points: reach(h.points) }));
 const holdingIn = (clip: Clip): Holding[] =>
   reaches.map(({ h, points }) => ({ socket: h.socket, points: carriedNow(clip) ? tipped(tiltOf.get(h.name)!, points) : points }));
+
+// The fists (grip.ts): what a hand socket holds closes its fingers on it after the clip,
+// as terra_walker::grip lays them, each template's from its own hand, the handle seated against
+// the palm for a power grip (held.ts seats the look) and tipped when carried. `--no-grip` leaves
+// the clips' fingers.
+const fists = opt.grip
+  ? held.flatMap((h, i) => {
+      const g = h.socket === h.hand ? lookGrip(opt.hold![i].split("=")[1]) : undefined;
+      if (!g) return [];
+      return [{ h, side: h.hand === "socket.hand.R" ? "r" : "l", grip: g.grip, handle: g.grip === "power" ? seated(g.handle) : g.handle }];
+    })
+  : [];
+type Fist = (typeof fists)[number];
+const handleNow = (f: Fist, clip: Clip): Handle => (carriedNow(clip) ? tipHandle(f.handle, tiltOf.get(f.h.name)!) : f.handle);
+const fistPoses = new Map<string, Map<string, Q>>();
+const fistPose = (shape: Shape, f: Fist, clip: Clip): Map<string, Q> => {
+  const key = `${shape.name} ${f.h.name} ${carriedNow(clip)}`;
+  if (!fistPoses.has(key)) {
+    const { locals, socket } = handRest(body, f.side, shape.moved);
+    fistPoses.set(key, close(locals, socket, handleNow(f, clip), f.grip, f.side));
+  }
+  return fistPoses.get(key)!;
+};
+const fisted = new Map<Clip, Map<string, Clip>>();
+function inFist(shape: Shape, clip: Clip): Clip {
+  if (!fists.length) return clip;
+  if (!fisted.has(clip)) fisted.set(clip, new Map());
+  const byShape = fisted.get(clip)!;
+  if (!byShape.has(shape.name)) {
+    const tracks = new Map(clip.tracks);
+    for (const f of fists) for (const [bone, q] of fistPose(shape, f, clip)) tracks.set(bone, { ...clip.tracks.get(bone), r: () => q });
+    byShape.set(shape.name, { ...clip, tracks });
+  }
+  return byShape.get(shape.name)!;
+}
 
 
 const at = (name: string) => {
@@ -622,6 +664,27 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
   bad.push(...clashBad(pen));
   row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...heldBy(pen), ...clashed(pen), ...carriedBy(pen) } });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
+}
+// The fists on what they hold (grip.ts fistOff): each finger bone's gap to the handle's surface,
+// either way, the worst of every move's and clip's frames on every template, by look. Numbers for
+// the scorecard (held.fist.*, bar FIST_CM), not bars here.
+if (fists.length) {
+  const measured: Record<string, number> = {};
+  const parts: string[] = [];
+  const played = [...new Set([...checked.map((m) => m.clip), ...opt.also!.split(",").filter(Boolean)])].map(clipOf);
+  for (const f of fists) {
+    let worst = { cm: 0, where: "" };
+    for (const clip of played)
+      for (const shape of shapes)
+        for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
+          const off = fistOff(body, poseOf(shape, clip, t), f.side, at(f.h.hand), handleNow(f, clip), f.grip);
+          if (Math.abs(off.cm) > Math.abs(worst.cm)) worst = { cm: off.cm, where: `${off.where}, ${clip.name} ${t.toFixed(2)} s, ${shape.name}` };
+        }
+    measured[`fist_cm.${f.h.name}`] = Math.abs(worst.cm);
+    parts.push(`${f.h.name} ${cm(worst.cm)} (${worst.where})${Math.abs(worst.cm) > FIST_CM ? ", over the bar" : ""}`);
+  }
+  measured.fist_cm = Math.max(...Object.values(measured));
+  row("fist, the fingers on what the hands hold", parts, [], { clip: "fist", measured });
 }
 // Each shield pose with a target against it (D554, shield_place.ts): the board's place in the
 // chest's frame, the worst of its clip on every template. Numbers for the scorecard, not bars here.
