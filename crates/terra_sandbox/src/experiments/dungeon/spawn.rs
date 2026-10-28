@@ -13,6 +13,7 @@ use terra_dungeon::door::{self, Door, Lock};
 use terra_dungeon::stamp::{CUBE, DOORWAY_M, Light, LightKind, ObjectRole};
 use terra_game::build::{Build, BuildLook, Built};
 use terra_walker::Player;
+use terra_walker::bodies::Solid;
 use terra_world::cine::{Cine, Places, Subject};
 use terra_world::fire::{Kindled, Logs};
 use terra_world::flora::FloraPiece;
@@ -248,7 +249,23 @@ pub(super) fn put_up(
     mut meshes: ResMut<Assets<Mesh>>,
     flora: Option<Res<Flora>>,
 ) {
-    let Pending { stamp, frame } = &*pending;
+    let Pending {
+        stamp,
+        frame,
+        blocks,
+    } = &*pending;
+    // Its pieces' solids (a mine's posts, a pier's shaft), each a walker's prop box where it
+    // stands in the world: the walk reads a solid's own transform, so none is a child of the
+    // dungeon's frame.
+    for block in blocks {
+        commands.spawn((
+            Name::new("Dungeon piece's solid"),
+            Solid { half: block.half },
+            Transform::from_translation(frame.transform_point(block.foot))
+                .with_rotation(frame.rotation * facing(block.facing)),
+            Visibility::Visible,
+        ));
+    }
     let mut build = Build::new(&mut commands, &look, *frame, "Dungeon");
     // Without kits while it is laid, so building lays no footings or door steps of its own
     // (the roof's slab would turn to footing stone, and steps would fill the dug stair).

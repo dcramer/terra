@@ -31,6 +31,11 @@
         sarcophagus: Some("models/props/barrow/Sarcophagus.glb"),
         spring: 2.95,
     )),
+    // A pier's shaft and base, 1.32 m square, stop a walker past the 1 m column of cubes
+    // under it (stamp::blocks); the vaults spring overhead, walked under.
+    solids: {
+        "models/props/barrow/Pier.glb": [(foot: (0.0, 0.0, 0.0), half: (0.66, 1.475, 0.66))],
+    },
     features: (goal: "relic_dais", key: "ossuary_altar", rest: "campfire", stair: "stair"),
     bestiary: [
         (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 2)),

@@ -75,6 +75,8 @@ struct Wanted(&'static str);
 struct Pending {
     stamp: Stamp,
     frame: Transform,
+    /// What of its pieces a walker cannot pass (`stamp::blocks`), in the dungeon's frame.
+    blocks: Vec<stamp::Blocking>,
 }
 
 pub fn plugin(app: &mut App, experiment: &'static str) {
@@ -244,7 +246,12 @@ fn lay_out(
         info!("Dungeon pace {i}: {seconds:.3}");
     }
     commands.insert_resource(interior::Interior::new(&stamp, frame));
-    commands.insert_resource(Pending { stamp, frame });
+    let blocks = stamp::blocks(&stamp, theme);
+    commands.insert_resource(Pending {
+        stamp,
+        frame,
+        blocks,
+    });
 }
 
 /// Digs the dungeon's boxes out of the ground at its frame. What grows is planted after

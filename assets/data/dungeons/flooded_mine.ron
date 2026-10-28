@@ -22,6 +22,14 @@
     // A set every 2 m down each straight drift, its lagging roofing it at 2.9 m, under the
     // ceiling's cubes (tools/props/mine.py; docs/dungeons.md, the hewn mine's plan).
     timber: Some((set: "models/props/mine/TimberSet.glb", every: 2.0)),
+    // A set's posts stop a walker (stamp::blocks): each battered from 1.30 m out at its foot
+    // to 1.24 m at its head, 11 cm round, up to the cap at 2.6 m.
+    solids: {
+        "models/props/mine/TimberSet.glb": [
+            (foot: (-1.27, 0.0, 0.0), half: (0.14, 1.3, 0.11)),
+            (foot: (1.27, 0.0, 0.0), half: (0.14, 1.3, 0.11)),
+        ],
+    },
     features: (goal: "trapped_miner", key: "pump_lever", rest: "campfire", stair: "stair"),
     bestiary: [
         (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 2)),

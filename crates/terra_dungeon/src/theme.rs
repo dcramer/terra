@@ -143,6 +143,11 @@ pub struct Theme {
     /// A mine's timber stood down its drifts (D559); none for a theme without.
     #[serde(default)]
     pub timber: Option<Timber>,
+    /// What of its pieces a walker cannot pass (D53, `stamp::blocks`), by each piece's model:
+    /// boxes in the piece's own frame, a timber set's posts or a pier's shaft. A piece named
+    /// here by none is walked through, as a vault overhead is; its cubes still stop a body.
+    #[serde(default)]
+    pub solids: std::collections::BTreeMap<String, Vec<Block>>,
     pub features: Features,
     pub bestiary: Vec<Mob>,
     pub loot: Vec<Loot>,
@@ -194,6 +199,15 @@ pub struct Dress {
     /// laid beside the hero, with its small light (`LightKind::Lamp`).
     #[serde(default)]
     pub lamp: Option<(String, f32)>,
+}
+
+/// A box of a piece a walker cannot pass, in the piece's frame (its front +Z, its origin
+/// its model's): the middle of its foot and its half size along X, Y and Z, in metres.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Block {
+    pub foot: [f32; 3],
+    pub half: [f32; 3],
 }
 
 /// A mine's timber kit (docs/dungeons.md, the hewn mine's plan): the sets the stamp stands

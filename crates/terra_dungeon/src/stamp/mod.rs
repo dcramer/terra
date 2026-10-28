@@ -31,6 +31,7 @@ mod runin;
 mod runin_tests;
 mod shell;
 pub mod sight;
+mod solids;
 #[cfg(test)]
 mod tests;
 mod timber;
@@ -39,6 +40,7 @@ mod torch_tests;
 mod view;
 
 pub use runin::centre as room_centre;
+pub use solids::{Blocking, blocks};
 
 use crate::Dungeon;
 use crate::dress::ModuleSet;
