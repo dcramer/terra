@@ -96,8 +96,10 @@ usage: terra_sandbox [options]
                         drawn as placed in play and stood beside the models, its size
                         printed; repeatable, or all for every item
   --anim <clip>         in the workbench: a clip to play; repeatable
-  --hold <item>         in the workbench: an item's held look in the right hand, named as
-                        in --give, such as stone_axe
+  --hold <item>[@<socket>]
+                        in the workbench: an item's held look in the right hand, or in
+                        the hand socket given, named as in --give, such as stone_axe or
+                        heater_shield@socket.hand.L (repeatable)
   --wear <item>         in the workbench: an item's look, on every model, named as in
                         --give, such as leather_coat (repeatable)
   --template <name>[@<height>]
@@ -387,7 +389,8 @@ pub struct Options {
     /// In the workbench: items of the builder's catalogue to stand beside the models, by
     /// name, or `all`.
     pub props: Vec<String>,
-    pub hold: Option<String>,
+    /// Each `<item>[@<hand socket>]`, in the right hand if no socket is given.
+    pub holds: Vec<String>,
     pub attaches: Vec<String>,
     pub wears: Vec<String>,
     /// In the workbench: the template each model's body is shaped as, in the order of the
@@ -590,7 +593,7 @@ impl Options {
             bench_frames: BENCH_FRAMES,
             models: Vec::new(),
             props: Vec::new(),
-            hold: None,
+            holds: Vec::new(),
             attaches: Vec::new(),
             wears: Vec::new(),
             templates: Vec::new(),
@@ -730,7 +733,7 @@ impl Options {
                 }
                 "--model" => options.models.push(value("--model")?),
                 "--prop" => options.props.push(value("--prop")?),
-                "--hold" => options.hold = Some(value("--hold")?),
+                "--hold" => options.holds.push(value("--hold")?),
                 "--attach" => options.attaches.push(value("--attach")?),
                 "--wear" => options.wears.push(value("--wear")?),
                 "--template" => options.templates.push(value("--template")?),

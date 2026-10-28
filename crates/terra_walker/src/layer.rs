@@ -111,10 +111,25 @@ impl Nodes {
 /// The graph of every clip of a file, each at its places (`Nodes`), every bone in its mask
 /// group.
 pub fn graph(gltf: &Gltf, nodes: &Assets<GltfNode>) -> (AnimationGraph, HashMap<String, Nodes>) {
+    graph_of(&[gltf], nodes)
+}
+
+/// The graph of every clip of `files`, a name given more than once taken from the first file
+/// that has it: a model's own clips, then a clips file's added on the same skeleton, as the
+/// figure plays the fight file's on the base body (the workbench, `shares_skeleton`).
+pub fn graph_of(
+    files: &[&Gltf],
+    nodes: &Assets<GltfNode>,
+) -> (AnimationGraph, HashMap<String, Nodes>) {
     let mut graph = AnimationGraph::new();
     let root = graph.root;
     let mut clips = HashMap::new();
-    for (name, clip) in &gltf.named_animations {
+    let named = first_named(files.iter().map(|gltf| {
+        gltf.named_animations
+            .iter()
+            .map(|(name, clip)| (name.as_ref(), clip))
+    }));
+    for (name, clip) in named {
         let mut add = |mask| graph.add_clip_with_mask(clip.clone(), mask, 1.0, root);
         let (left, right) = (Arms::Left, Arms::Right);
         let nodes = Nodes {
@@ -129,9 +144,38 @@ pub fn graph(gltf: &Gltf, nodes: &Assets<GltfNode>) -> (AnimationGraph, HashMap<
         };
         clips.insert(name.to_string(), nodes);
     }
-    let paths = paths(gltf, nodes);
-    mask(&mut graph, paths.iter().map(Vec::as_slice));
+    for gltf in files {
+        let paths = paths(gltf, nodes);
+        mask(&mut graph, paths.iter().map(Vec::as_slice));
+    }
     (graph, clips)
+}
+
+/// Each name of `files`' clips once, with the first file's clip of it.
+fn first_named<'a, T>(
+    files: impl IntoIterator<Item = impl IntoIterator<Item = (&'a str, T)>>,
+) -> Vec<(&'a str, T)> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for file in files {
+        for (name, clip) in file {
+            if seen.insert(name) {
+                out.push((name, clip));
+            }
+        }
+    }
+    out
+}
+
+/// Whether `model` has every bone `clips` animates by the same path of names, so `clips`'
+/// animations play on it (the glTF loader targets a bone by that path).
+pub fn shares_skeleton(model: &Gltf, clips: &Gltf, nodes: &Assets<GltfNode>) -> bool {
+    has_every_path(&paths(model, nodes), &paths(clips, nodes))
+}
+
+fn has_every_path(model: &[Vec<Name>], clips: &[Vec<Name>]) -> bool {
+    let model: HashSet<&[Name]> = model.iter().map(Vec::as_slice).collect();
+    !clips.is_empty() && clips.iter().all(|path| model.contains(path.as_slice()))
 }
 
 /// Puts every bone, by its path of names from its file's root (as the glTF loader names
@@ -264,6 +308,34 @@ mod tests {
     use bevy::animation::{AnimatedBy, AnimationPlugin, animated_field};
     use bevy::app::ScheduleRunnerPlugin;
     use bevy::asset::AssetPlugin;
+
+    #[test]
+    fn a_models_own_clip_wins_and_a_clips_files_others_are_added() {
+        let model = [("Idle_Loop", 1), ("Walk_Loop", 2)];
+        let clips = [("Idle_Loop", 10), ("Low_Guard", 11), ("Walk_Loop", 12)];
+        let mut named = first_named([model.to_vec(), clips.to_vec()]);
+        named.sort();
+        assert_eq!(
+            named,
+            vec![("Idle_Loop", 1), ("Low_Guard", 11), ("Walk_Loop", 2)]
+        );
+    }
+
+    #[test]
+    fn clips_play_on_a_model_only_with_every_bone_they_name() {
+        let path = |names: &[&'static str]| names.iter().map(|n| Name::new(*n)).collect::<Vec<_>>();
+        let body = [
+            path(&["Rig"]),
+            path(&["Rig", "pelvis"]),
+            path(&["Rig", "pelvis", "Body_Mesh"]),
+        ];
+        let fight = [path(&["Rig"]), path(&["Rig", "pelvis"])];
+        let wolf = [path(&["Wolf"]), path(&["Wolf", "pelvis"])];
+        assert!(has_every_path(&body, &fight));
+        assert!(!has_every_path(&wolf, &fight));
+        assert!(!has_every_path(&fight, &body));
+        assert!(!has_every_path(&body, &[]));
+    }
 
     /// A clip holding each named bone at its own place.
     fn clip(at: &[(&[Name], Vec3)]) -> AnimationClip {

@@ -141,7 +141,7 @@ struct Animated {
 
 /// The hold each arm (left, right) takes in a carried clip, if any: a clip's node on that arm
 /// alone (`Nodes::over_one`).
-type Carry = [Option<AnimationNodeIndex>; 2];
+pub type Carry = [Option<AnimationNodeIndex>; 2];
 
 /// The carry each arm of a figure whose hands are `hands` takes now: the carry pose of what
 /// its hand holds (`CarryHold`), while that look is there. The main hand is the right until
@@ -154,17 +154,16 @@ fn carry_of(
 ) -> Carry {
     let mut carry = [None; 2];
     for &hand in hands {
-        let Ok((grip, Some(pose))) = grips.get(hand) else {
+        let Ok((grip, pose)) = grips.get(hand) else {
             continue;
         };
-        if !looks.contains(pose.look) {
-            continue;
+        let side = match grip.hand {
+            Hand::Off => 0,
+            Hand::Main => 1,
+        };
+        if let Some(node) = carry_pose(&moves.clips, grip.hand, pose, looks) {
+            carry[side] = Some(node);
         }
-        let (side, arm) = match grip.hand {
-            Hand::Off => (0, Arms::Left),
-            Hand::Main => (1, Arms::Right),
-        };
-        carry[side] = moves.clips.get(&pose.clip).and_then(|n| n.over(arm));
     }
     carry
 }
@@ -173,6 +172,34 @@ fn carry_of(
 fn carry_arms(carry: &Carry) -> Arms {
     let side = |i: usize, arm| if carry[i].is_some() { arm } else { Arms::None };
     side(0, Arms::Left).and(side(1, Arms::Right))
+}
+
+/// The arms holds are laid on over `clip`: both under a stance's hold (`held`); in a carried
+/// clip without one, each arm whose hand carries in a pose (D560); else none.
+pub fn laid_arms(clip: &str, held: bool, carry: &Carry) -> Arms {
+    if held {
+        Arms::Both
+    } else if CARRIED_IN.contains(&clip) {
+        carry_arms(carry)
+    } else {
+        Arms::None
+    }
+}
+
+/// The carry pose of what the hand socket `hand` (`Hand::Off` the left) holds, as a hold on
+/// its arm alone in `clips`, while that look is there (`CarryHold`).
+pub fn carry_pose(
+    clips: &HashMap<String, Nodes>,
+    hand: Hand,
+    pose: Option<&CarryHold>,
+    looks: &Query<(), With<Held>>,
+) -> Option<AnimationNodeIndex> {
+    let pose = pose.filter(|pose| looks.contains(pose.look))?;
+    let arm = match hand {
+        Hand::Off => Arms::Left,
+        Hand::Main => Arms::Right,
+    };
+    clips.get(&pose.clip).and_then(|n| n.over(arm))
 }
 
 /// A clip played in step with another, taking its share of that one's weight as the
@@ -580,13 +607,7 @@ fn change(
             };
             // A stance's hold takes both arms; in a carried clip without one, each arm whose
             // hand carries in a pose takes it (D560).
-            let arms = if hold.is_some() {
-                Arms::Both
-            } else if CARRIED_IN.contains(&clip) {
-                carry_arms(&animated.carry)
-            } else {
-                Arms::None
-            };
+            let arms = laid_arms(clip, hold.is_some(), &animated.carry);
             let node = nodes.played(copy, arms);
             // The clip giving way fades from its whole weight, its mixed clip's share
             // given back to it first.
@@ -717,6 +738,20 @@ fn doing(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stance's hold takes both arms over any clip; a carry pose takes only its own arm, and
+    /// only in a carried clip (an idle, a jog), never in a blow; with nothing carried in a pose
+    /// the clip has the arms.
+    #[test]
+    fn a_carry_pose_takes_its_own_arm_in_a_carried_clip_alone() {
+        let torch: Carry = [None, Some(AnimationNodeIndex::new(7))];
+        let both: Carry = [Some(AnimationNodeIndex::new(6)), torch[1]];
+        assert_eq!(laid_arms("Jog_Fwd_Loop", false, &torch), Arms::Right);
+        assert_eq!(laid_arms("Idle_Loop", false, &both), Arms::Both);
+        assert_eq!(laid_arms("Fight_Slash", false, &torch), Arms::None);
+        assert_eq!(laid_arms("Walk_Loop", true, &torch), Arms::Both);
+        assert_eq!(laid_arms("Idle_Loop", false, &[None, None]), Arms::None);
+    }
 
     /// A body its mover says jogs but that is held still is shown standing; one that goes as
     /// fast strides at its speed, a step's rise adds nothing, and a body put far away in a

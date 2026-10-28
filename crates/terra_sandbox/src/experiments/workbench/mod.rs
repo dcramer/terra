@@ -6,8 +6,12 @@
 //! models stand side by side doing the same thing. `--anim <clip>` plays a clip
 //! (repeatable; the first plays when looking by hand); `--anim Walk_Loop+Keyed_Guard` plays a
 //! clip with another's first pose laid over its arms, as the game lays a stance's hold
-//! (`terra_walker::layer`). `--hold <item>` puts an item's held
-//! look in the right hand, `--wear <item>` puts on an item's look for each model's body, and
+//! (`terra_walker::layer`). A body on the figure's skeleton plays the figure's clips
+//! (`figure::CLIPS`, the fight file) besides its own, as in the game, so a fight pose shows on
+//! a template's shapes; a carried clip lays the carry pose of what a hand holds over that arm
+//! (`CarryHold`, D560), as the figure does. `--hold <item>[@<socket>]` puts an item's held
+//! look in the right hand or the hand socket given (repeatable, `heater_shield@socket.hand.L`
+//! for the off hand), `--wear <item>` puts on an item's look for each model's body, and
 //! `--attach <file>[@<socket>]` puts on any look, on a socket if given, otherwise as the file
 //! says (`character`). `--focus <name>` looks closely at one
 //! part. `--sheet <prefix>` saves a contact sheet per clip and exits (`sheet`). With
@@ -37,6 +41,8 @@ use terra_world::planet::MainCamera;
 
 use terra_game::appearance::{Appearance, ReportJoints};
 use terra_game::{character, planet::Planet, remote, shell::Options};
+use terra_walker::figure::{self, Carry, Hand};
+use terra_walker::layer::{self, Arms, Nodes};
 
 /// How far apart models stand, side by side.
 const SPACING_M: f32 = 1.2;
@@ -51,7 +57,12 @@ const FOCUS_VIEW_M: f32 = 0.9;
 #[derive(Resource)]
 struct Bench {
     files: Vec<Handle<Gltf>>,
+    /// The figure's clips file (`figure::CLIPS`), whose clips a model on its skeleton plays
+    /// as well as its own, as the game's figure does.
+    figure_clips: Handle<Gltf>,
     clips: Vec<String>,
+    /// The clip every model was last posed in, and where in it (`pose`).
+    posed: Option<(String, Option<f32>)>,
     /// Where the models stand, and which way is up and front there.
     stand: Vec3,
     up: Vec3,
@@ -73,31 +84,34 @@ struct Bench {
     models: Vec<Model>,
 }
 
-/// One model on the bench: where it stands, its animation player once it has one, and
-/// its clips as places in its own animation graph, by name, with their lengths.
+/// One model on the bench: where it stands, its animation player once it has one, its
+/// clips as places in its own animation graph, by name, with their lengths, every clip of
+/// its graph, and the carry pose each arm takes in a carried clip (`recarry`).
 struct Model {
     root: Entity,
     /// Its scene has been spawned; a model without animations never gets a player.
     loaded: bool,
     player: Option<Entity>,
     clips: Vec<Clip>,
+    placed: bevy::platform::collections::HashMap<String, Nodes>,
+    carry: Carry,
 }
 
-/// A clip as a model's graph has it: its name, its node, its length, and the node of the hold
-/// laid over its arms if its name gives one (`Walk_Loop+Keyed_Guard`).
-type Clip = (String, AnimationNodeIndex, f32, Option<AnimationNodeIndex>);
+/// A clip as a model's graph has it: its name, its places, its length, and the node of the
+/// hold laid over its arms if its name gives one (`Walk_Loop+Keyed_Guard`).
+struct Clip {
+    name: String,
+    nodes: Nodes,
+    length: f32,
+    hold: Option<AnimationNodeIndex>,
+}
 
 impl Bench {
-    /// Every model's player and its node and length for `clip`.
-    fn playing<'a>(
-        &'a self,
-        clip: &'a str,
-    ) -> impl Iterator<Item = (Entity, AnimationNodeIndex, f32, Option<AnimationNodeIndex>)> + 'a
-    {
-        self.models.iter().filter_map(move |model| {
-            let (_, node, length, hold) = model.clips.iter().find(|c| c.0 == clip)?;
-            Some((model.player?, *node, *length, *hold))
-        })
+    /// Whether any model plays `clip`.
+    fn plays(&self, clip: &str) -> bool {
+        self.models
+            .iter()
+            .any(|model| model.player.is_some() && model.clips.iter().any(|c| c.name == clip))
     }
 
     fn ready(&self) -> bool {
@@ -154,7 +168,7 @@ fn draw_contracts(mut gizmos: Gizmos, props: Query<(&Contract, &GlobalTransform)
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Startup, setup)
-        .add_systems(Update, (spawn, measure, sheet::capture).chain())
+        .add_systems(Update, (spawn, measure, recarry, sheet::capture).chain())
         .add_systems(Update, draw_contracts);
     remote::method(app, "workbench.pose", pose_method);
     remote::method(app, "workbench.shape", shape_method);
@@ -275,7 +289,9 @@ fn setup(
             .iter()
             .map(|path| assets.load(path.clone()))
             .collect(),
+        figure_clips: assets.load(figure::CLIPS),
         clips: options.anims.clone(),
+        posed: None,
         stand: floor,
         up,
         front,
@@ -325,6 +341,7 @@ fn spawn(
     if !bench
         .files
         .iter()
+        .chain([&bench.figure_clips])
         .all(|file| assets.is_loaded_with_dependencies(file))
     {
         return;
@@ -351,7 +368,17 @@ fn spawn(
         let mut names: Vec<&str> = gltf.named_animations.keys().map(AsRef::as_ref).collect();
         names.sort();
         info!("workbench: {path}: {} clips: {:?}", names.len(), names);
-        let (graph, nodes) = placed_clips(gltf, &gltf_nodes, &clips, &bench.clips, path);
+        // A body on the figure's skeleton plays the figure's clips too, as in the game, so a
+        // fight pose can be seen on a template's shapes (base.glb has them, fight.glb not).
+        let mut files = vec![gltf];
+        if let Some(more) = gltfs.get(&bench.figure_clips)
+            && file.id() != bench.figure_clips.id()
+            && layer::shares_skeleton(gltf, more, &gltf_nodes)
+        {
+            info!("workbench: {path}: plays {}'s clips too", figure::CLIPS);
+            files.push(more);
+        }
+        let (graph, placed, nodes) = placed_clips(&files, &gltf_nodes, &clips, &bench.clips, path);
         let graph = graphs.add(graph);
         let Some(scene) = gltf.default_scene.clone() else {
             continue;
@@ -436,16 +463,17 @@ fn spawn(
                     commands
                         .entity(entity)
                         .insert(AnimationGraphHandle(graph.clone()));
-                    if let (Ok(mut player), Some((_, node, _, hold))) =
+                    let first = model.clips.first().map(|clip| clip.name.clone());
+                    if let (Ok(mut player), Some(clip)) =
                         (players.get_mut(entity), model.clips.first())
                     {
-                        player.play(*node).repeat();
-                        if let Some(hold) = hold {
-                            player.play(*hold).pause();
-                        }
+                        lay(model, clip, None, &mut player);
                     }
                     model.player = Some(entity);
                     model.loaded = true;
+                    if bench.posed.is_none() {
+                        bench.posed = first.map(|clip| (clip, None));
+                    }
                 },
             )
             .id();
@@ -454,6 +482,8 @@ fn spawn(
             loaded: false,
             player: None,
             clips: nodes,
+            placed,
+            carry: [None; 2],
         });
     }
     bench.models = models;
@@ -471,8 +501,11 @@ fn dress(
     children: &Query<&Children>,
     names: &Query<&Name>,
 ) {
-    if let Some(item) = &options.hold {
-        match character::find(root, character::HAND_R, children, names) {
+    for given in &options.holds {
+        let (item, socket) = given
+            .split_once('@')
+            .unwrap_or((given.as_str(), character::HAND_R));
+        match character::find(root, socket, children, names) {
             Some(hand) => {
                 commands.entity(hand).insert(character::Carrying::default());
                 let file = character::held_look(item);
@@ -482,7 +515,7 @@ fn dress(
                     hand,
                 );
             }
-            None => warn!("workbench: the model has no {}", character::HAND_R),
+            None => warn!("workbench: the model has no {socket}"),
         }
     }
     for attach in &options.attaches {
@@ -619,23 +652,30 @@ fn view(
     }
 }
 
-/// A model's graph (`terra_walker::layer::graph`) and the bench's clips placed in it, a clip
-/// named `A+B` as `A` under `B`'s hold.
+/// A model's graph of the clips of `files` (`layer::graph_of`, its own file first), every clip
+/// in it, and the bench's clips placed in it, a clip named `A+B` as `A` under `B`'s hold.
 fn placed_clips(
-    gltf: &Gltf,
+    files: &[&Gltf],
     gltf_nodes: &Assets<bevy::gltf::GltfNode>,
     clips: &Assets<AnimationClip>,
     names: &[String],
     path: &str,
-) -> (AnimationGraph, Vec<Clip>) {
-    let (graph, placed) = terra_walker::layer::graph(gltf, gltf_nodes);
+) -> (
+    AnimationGraph,
+    bevy::platform::collections::HashMap<String, Nodes>,
+    Vec<Clip>,
+) {
+    let (graph, placed) = layer::graph_of(files, gltf_nodes);
     let mut nodes = Vec::new();
     for name in names {
         let (under, over) = match name.split_once('+') {
             Some((under, over)) => (under, Some(over)),
             None => (name.as_str(), None),
         };
-        let (Some(handle), Some(at)) = (gltf.named_animations.get(under), placed.get(under)) else {
+        let handle = files
+            .iter()
+            .find_map(|gltf| gltf.named_animations.get(under));
+        let (Some(handle), Some(at)) = (handle, placed.get(under)) else {
             warn!("workbench: {path} has no clip named {under}");
             continue;
         };
@@ -643,16 +683,45 @@ fn placed_clips(
         if over.is_some() && hold.is_none() {
             warn!("workbench: {path} has no clip named {name}'s hold");
         }
-        let length = clips.get(handle).map_or(1.0, AnimationClip::duration);
-        nodes.push((name.clone(), at.of(0, hold.is_some()), length, hold));
+        nodes.push(Clip {
+            name: name.clone(),
+            nodes: *at,
+            length: clips.get(handle).map_or(1.0, AnimationClip::duration),
+            hold,
+        });
     }
-    (graph, nodes)
+    (graph, placed, nodes)
+}
+
+/// Plays `clip` on `model`'s player, held at `fraction` of the way through or looping from
+/// its start, its arms laid as the game's figure lays them (`figure::laid_arms`): under the
+/// stance's hold its name gives, or in a carried clip under each arm's carry pose.
+fn lay(model: &Model, clip: &Clip, fraction: Option<f32>, player: &mut AnimationPlayer) {
+    player.stop_all();
+    let arms = figure::laid_arms(&clip.name, clip.hold.is_some(), &model.carry);
+    // Each hold at its first pose, over its arms (`terra_walker::layer`).
+    if let Some(hold) = clip.hold {
+        player.play(hold).pause();
+    } else if arms != Arms::None {
+        for over in model.carry.iter().flatten() {
+            player.play(*over).pause();
+        }
+    }
+    let node = clip.nodes.played(0, arms);
+    match fraction {
+        Some(fraction) => {
+            player.play(node).seek_to(clip.length * fraction).pause();
+        }
+        None => {
+            player.play(node).repeat();
+        }
+    }
 }
 
 /// Holds every model at `fraction` of the way through `clip`, or plays it from the start,
 /// with anything in hand carried or used as that clip has it.
 fn pose(
-    bench: &Bench,
+    bench: &mut Bench,
     clip: &str,
     fraction: Option<f32>,
     players: &mut Query<&mut AnimationPlayer>,
@@ -661,23 +730,51 @@ fn pose(
     for mut hand in hands.iter_mut() {
         hand.0 = character::CARRIED_IN.contains(&clip);
     }
-    for (entity, node, length, hold) in bench.playing(clip) {
-        let Ok(mut player) = players.get_mut(entity) else {
+    bench.posed = Some((clip.to_string(), fraction));
+    for model in &bench.models {
+        let Some(found) = model.clips.iter().find(|c| c.name == clip) else {
             continue;
         };
-        player.stop_all();
-        // The hold at its first pose, over the arms (`terra_walker::layer`).
-        if let Some(hold) = hold {
-            player.play(hold).pause();
+        if let Some(Ok(mut player)) = model.player.map(|entity| players.get_mut(entity)) {
+            lay(model, found, fraction, &mut player);
         }
-        match fraction {
-            Some(fraction) => {
-                player.play(node).seek_to(length * fraction).pause();
-            }
-            None => {
-                player.play(node).repeat();
-            }
+    }
+}
+
+/// Each model's carry poses (`CarryHold`, D560): what its hands hold once loaded, laid as the
+/// figure lays them; when they change, every model is posed again as it was.
+#[allow(clippy::too_many_arguments)]
+fn recarry(
+    bench: Option<ResMut<Bench>>,
+    children: Query<&Children>,
+    names: Query<&Name>,
+    poses: Query<&character::CarryHold>,
+    looks: Query<(), With<character::Held>>,
+    mut players: Query<&mut AnimationPlayer>,
+    mut hands: Query<&mut character::Carrying>,
+) {
+    let Some(mut bench) = bench else { return };
+    if !bench.ready() {
+        return;
+    }
+    let mut changed = false;
+    for model in &mut bench.models {
+        let mut carry = [None; 2];
+        for (side, socket, hand) in [
+            (0, character::HAND_L, Hand::Off),
+            (1, character::HAND_R, Hand::Main),
+        ] {
+            let pose = character::find(model.root, socket, &children, &names)
+                .and_then(|socket| poses.get(socket).ok());
+            carry[side] = figure::carry_pose(&model.placed, hand, pose, &looks);
         }
+        if carry != model.carry {
+            model.carry = carry;
+            changed = true;
+        }
+    }
+    if let Some((clip, fraction)) = bench.posed.clone().filter(|_| changed) {
+        pose(&mut bench, &clip, fraction, &mut players, &mut hands);
     }
 }
 
@@ -745,17 +842,17 @@ fn shape_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 fn pose_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Pose { clip, fraction } = parse_some(params)?;
     let mut state = bevy::ecs::system::SystemState::<(
-        Res<Bench>,
+        ResMut<Bench>,
         Query<&mut AnimationPlayer>,
         Query<&mut character::Carrying>,
     )>::new(world);
-    let (bench, mut players, mut hands) = state.get_mut(world).map_err(remote::refused)?;
-    if bench.playing(&clip).next().is_none() {
+    let (mut bench, mut players, mut hands) = state.get_mut(world).map_err(remote::refused)?;
+    if !bench.plays(&clip) {
         return Err(remote::refused(format!(
             "no model plays {clip}; the clips are those given with --anim"
         )));
     }
-    pose(&bench, &clip, fraction, &mut players, &mut hands);
+    pose(&mut bench, &clip, fraction, &mut players, &mut hands);
     Ok(json!({ "clip": clip, "fraction": fraction }))
 }
 

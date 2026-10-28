@@ -49,7 +49,7 @@ pub fn plugin(app: &mut App) {
 
 pub fn capture(
     mut commands: Commands,
-    bench: Option<Res<Bench>>,
+    bench: Option<ResMut<Bench>>,
     options: Res<Options>,
     picture: Option<Res<terra_world::shell::Picture>>,
     mut sheet: ResMut<Sheet>,
@@ -66,7 +66,7 @@ pub fn capture(
     ),
     mut exit: MessageWriter<AppExit>,
 ) {
-    let (Some(bench), Some(prefix)) = (bench, options.sheet.as_ref()) else {
+    let (Some(mut bench), Some(prefix)) = (bench, options.sheet.as_ref()) else {
         return;
     };
     if !terra_world::shell::counting(&options, &screen, &hold) {
@@ -97,14 +97,14 @@ pub fn capture(
         exit.write(AppExit::Success);
         return;
     }
-    let clip = &bench.clips[sheet.step / per_clip];
+    let clip = bench.clips[sheet.step / per_clip].clone();
     let within = sheet.step % per_clip;
     let (side, moment) = (
         sides[within / moments.len()],
         moments[within % moments.len()],
     );
     if sheet.waited == 0 {
-        pose(&bench, clip, Some(moment), &mut players, &mut hands);
+        pose(&mut bench, &clip, Some(moment), &mut players, &mut hands);
     }
     // Every frame, so a camera on a moving part follows it into the pose.
     if let Ok(mut transform) = camera.single_mut() {
