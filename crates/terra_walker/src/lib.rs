@@ -23,6 +23,7 @@ pub mod controls;
 pub mod feet;
 pub mod figure;
 pub mod gaze;
+pub mod grip;
 pub mod intent;
 pub mod layer;
 pub mod lift;
