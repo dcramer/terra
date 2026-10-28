@@ -22,9 +22,16 @@ use terra_build::Cube;
 
 type Map = HashMap<IVec3, Cube>;
 
-pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, vaulted: bool, out: &mut Stamp) {
+pub(super) fn run_in(
+    dungeon: &Dungeon,
+    looks: &[Look],
+    map: &Map,
+    vaulted: bool,
+    door: &str,
+    out: &mut Stamp,
+) {
     let grid = Grid::new(map);
-    doors(dungeon, &grid, out);
+    doors(dungeon, &grid, door, out);
     chests(dungeon, looks, &grid, out);
     torches(dungeon, looks, out);
     tour(dungeon, out);
@@ -42,8 +49,8 @@ pub(super) fn run_in(dungeon: &Dungeon, looks: &[Look], map: &Map, vaulted: bool
 }
 
 /// A leaf in the doorway at the far room of each door, locked door and one-way door; an arch
-/// and a secret way have none.
-fn doors(dungeon: &Dungeon, map: &impl Solid, out: &mut Stamp) {
+/// and a secret way have none; each leaf the theme's `door` model.
+fn doors(dungeon: &Dungeon, map: &impl Solid, door: &str, out: &mut Stamp) {
     let layout = &dungeon.layout;
     for (e, edge) in dungeon.graph.edges.iter().enumerate() {
         let (name, lock) = match edge.link {
@@ -71,7 +78,7 @@ fn doors(dungeon: &Dungeon, map: &impl Solid, out: &mut Stamp) {
             role: ObjectRole::Door,
             at: sill,
             facing: d,
-            model: "models/openings/StuddedDoor.glb".to_string(),
+            model: door.to_string(),
             lock,
             opens: opens(map, sill, d),
         });

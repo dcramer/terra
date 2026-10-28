@@ -105,6 +105,21 @@ pub struct Features {
     pub rest: String,
     /// Every stair cell.
     pub stair: String,
+    /// The goal is a person, not a thing (the trapped miner): the base body, dressed and
+    /// seated on the goal's block, playing its clip; `None` for a relic, a chest.
+    #[serde(default)]
+    pub figure: Option<Figure>,
+}
+
+/// A person at the goal (`Features::figure`): the base body sitting on the goal's block, as a
+/// game poses an NPC waiting to be found, never standing in its bind pose. Round 2's mine
+/// judges read the bare body T-posed on a crate as an asset that failed to load.
+#[derive(Clone, Debug, Deserialize)]
+pub struct Figure {
+    /// A clip of the base body's (`Sitting_Idle_Loop`), played over and over.
+    pub clip: String,
+    /// The looks worn over the body (`models/gear/<name>.glb`).
+    pub wears: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -148,6 +163,10 @@ pub struct Theme {
     /// here by none is walked through, as a vault overhead is; its cubes still stop a body.
     #[serde(default)]
     pub solids: std::collections::BTreeMap<String, Vec<Block>>,
+    /// The model each leaf of its doors is (two a doorway, `door::leaf`): a crypt's studded
+    /// castle door, a mine's ledged and braced planks.
+    #[serde(default = "studded_door")]
+    pub door: String,
     pub features: Features,
     pub bestiary: Vec<Mob>,
     pub loot: Vec<Loot>,
@@ -263,6 +282,10 @@ fn full_height() -> (f32, f32) {
 
 fn hewn() -> String {
     "Hewn".to_string()
+}
+
+fn studded_door() -> String {
+    "models/openings/StuddedDoor.glb".to_string()
 }
 
 fn yes() -> bool {

@@ -248,7 +248,8 @@ pub fn stamp(dungeon: &Dungeon, theme: &Theme, kind: &dyn Fn(&str) -> Kind) -> S
         timber::lay(dungeon, timber, &mut out);
     }
     let map = cubes(&out.ops);
-    runin::run_in(dungeon, &looks, &map, theme.kit.is_some(), &mut out);
+    let vaulted = theme.kit.is_some();
+    runin::run_in(dungeon, &looks, &map, vaulted, &theme.door, &mut out);
     let focus = furnish::lay(dungeon, &theme.dressing, &looks, &map, &mut out);
     // After the dressing, so the mobs keep off each room's hero and vignette.
     runin::mobs(dungeon, &looks, &Grid::new(&map), &focus, &mut out);

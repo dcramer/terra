@@ -14,7 +14,8 @@
     // The hard rock it is cut in (data/kits/minerock.ron), not laid stone: its walls, and
     // its roof over every room no room stands on.
     walls: "Minerock",
-    floors: "Earth",
+    // Its floors the same rock trodden dark (data/kits/minefloor.ron), not cob.
+    floors: "Minefloor",
     ceilings: Some("Minerock"),
     trim: "Hewn",
     // Drifts under their timber sets at 3.5 m, stopes 5 m (D527).
@@ -30,7 +31,17 @@
             (foot: (1.27, 0.0, 0.0), half: (0.14, 1.3, 0.11)),
         ],
     },
-    features: (goal: "trapped_miner", key: "pump_lever", rest: "campfire", stair: "stair"),
+    // A mine's doors are ledged and braced planks, hung to keep the air going where it is
+    // sent, not a castle's studded oak (round 2's judges, 14 mentions).
+    door: "models/openings/LedgedDoor.glb",
+    // The trapped miner sits waiting on the goal's block in his work clothes.
+    features: (
+        goal: "trapped_miner",
+        key: "pump_lever",
+        rest: "campfire",
+        stair: "stair",
+        figure: Some((clip: "Sitting_Idle_Loop", wears: ["shirt", "trousers", "boots", "cap"])),
+    ),
     bestiary: [
         (species: "Spider", roles: [Passage, Branch, Shortcut, Treasure, Puzzle], group: (1, 2)),
         (species: "Spider", roles: [Branch, Guard, Goal, Treasure], danger: 0.4, group: (3, 5), weight: 2.0),

@@ -253,6 +253,7 @@ pub(super) fn put_up(
         stamp,
         frame,
         blocks,
+        figure,
     } = &*pending;
     // Its pieces' solids (a mine's posts, a pier's shaft), each a walker's prop box where it
     // stands in the world: the walk reads a solid's own transform, so none is a child of the
@@ -323,9 +324,16 @@ pub(super) fn put_up(
             if object.role != ObjectRole::Door {
                 let placed = Transform::from_translation(object.at).with_rotation(turn);
                 let name = Name::new(object.name.clone());
+                let goal = object.role == ObjectRole::Goal;
+                if let (true, Some(figure)) = (goal, figure) {
+                    let model = &object.model;
+                    super::figure::spawn(inside, &assets, (figure, model), placed, (name, live()))
+                        .with_child(goal_key());
+                    continue;
+                }
                 let mut spawned =
                     inside.spawn((name, live(), scene(&assets, &object.model), placed));
-                if object.role == ObjectRole::Goal {
+                if goal {
                     spawned.with_child(goal_key());
                 }
                 continue;

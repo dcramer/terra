@@ -5,14 +5,20 @@
 //! the keys, the rest's fire) are objects and lights here too.
 
 use super::{
-    CELL, EDGE, Frame, INNER, Kinds, Light, LightKind, MID, Object, ObjectRole, Prop, Stamp, hash,
-    shaped, solid,
+    CELL, CUBE, EDGE, Frame, INNER, Kinds, Light, LightKind, MID, Object, ObjectRole, Prop, Stamp,
+    hash, shaped, solid,
 };
 use crate::Dungeon;
 use crate::dress::{ModuleSet, RUBBLE, WATER};
 use crate::place::{Cell, STEPS, Side, Space, opposite};
 use crate::theme::Theme;
 use terra_build::{BuildOp, Facing, Shape};
+
+/// The body a person at the goal is (`theme::Figure`).
+const FIGURE: &str = "models/character/base.glb";
+/// How far out from the goal block's front a seated figure's feet are, in metres: the base
+/// body's sitting clip lowers its hips about this far behind where it stood, onto the block.
+const SEAT_OUT_M: f32 = 0.2;
 
 /// What a cell is drawn as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -203,15 +209,17 @@ pub(super) fn lay(
             Class::Goal => {
                 f.fill(ops, [m - 1, 0, m - 1], [m, 0, m], solid(kinds.trim));
                 let name = &theme.features.goal;
-                // The trapped miner is the textured base body, not the pale untextured
-                // mannequin, which burnt pink-white between the bowls (round 16).
-                let model = if name.contains("miner") {
-                    "models/character/base.glb"
+                // A person (the trapped miner) is the textured base body, not the pale
+                // untextured mannequin, which burnt pink-white between the bowls (round 16),
+                // on the floor at the block's front, sitting back onto it (`Figure`).
+                let goal = if theme.features.figure.is_some() {
+                    let mut seated = object(name, ObjectRole::Goal, f, 0.0, FIGURE);
+                    seated.at = f.point(MID, 0.0, MID + 1.0 + SEAT_OUT_M / CUBE);
+                    seated
                 } else {
-                    "models/props/Chest.glb"
+                    object(name, ObjectRole::Goal, f, 1.0, "models/props/Chest.glb")
                 };
-                out.objects
-                    .push(object(name, ObjectRole::Goal, f, 1.0, model));
+                out.objects.push(goal);
                 goal_fires(f, cell, kinds, out);
             }
             Class::Key => key(f, theme, kinds, out),

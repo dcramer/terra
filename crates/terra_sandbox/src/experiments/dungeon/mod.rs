@@ -9,6 +9,7 @@
 //!
 //! The log gives the tour's points as `--vantage` and `--route` take them.
 
+mod figure;
 mod interior;
 mod spawn;
 
@@ -77,6 +78,8 @@ struct Pending {
     frame: Transform,
     /// What of its pieces a walker cannot pass (`stamp::blocks`), in the dungeon's frame.
     blocks: Vec<stamp::Blocking>,
+    /// The person at the goal, if it is one (`theme::Figure`).
+    figure: Option<terra_dungeon::theme::Figure>,
 }
 
 pub fn plugin(app: &mut App, experiment: &'static str) {
@@ -251,6 +254,7 @@ fn lay_out(
         stamp,
         frame,
         blocks,
+        figure: theme.features.figure.clone(),
     });
 }
 
