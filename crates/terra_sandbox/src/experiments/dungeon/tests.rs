@@ -83,3 +83,40 @@ fn no_plant_stands_inside_a_dungeons_digs() {
         );
     });
 }
+
+/// The eye opens as in a room all the way down a dungeon's stair, not only once in a room's
+/// box: the mine's first view, at the stair's foot, was dark for a second and a half as the
+/// eye was held to the outdoor band (mine round 11). Over every demo's tour, each eye under
+/// the ground's level is underground, and the first, on the surface, is not.
+#[test]
+fn a_tour_is_underground_from_the_top_of_the_stair_down() {
+    let demos: Demos = terra_world::data::read(FILE);
+    let themes = Theme::all(&terra_world::data::assets()).unwrap();
+    terra_gen::par::map(&demos.demos, |demo| {
+        let theme = themes.iter().find(|t| t.name == demo.theme).unwrap();
+        let dungeon = generate(theme, demo.seed).unwrap();
+        let stamp = stamp::stamp(&dungeon, theme, &|_| Default::default());
+        let interior = interior::Interior::new(&stamp, Transform::IDENTITY);
+        let name = &demo.experiment;
+        assert!(
+            !interior.underground(stamp.view[0]),
+            "{name}: the tour's first eye is on the surface"
+        );
+        let below: Vec<_> = stamp.view.iter().filter(|e| e.y < stamp.start.y).collect();
+        assert!(
+            below.len() * 2 > stamp.view.len(),
+            "{name}: the tour goes down"
+        );
+        let out: Vec<_> = below
+            .iter()
+            .filter(|&&&eye| !interior.underground(eye))
+            .collect();
+        assert!(
+            out.is_empty(),
+            "{name}: {} of {} eyes under the ground are not underground, the first at {:?}",
+            out.len(),
+            below.len(),
+            out.first()
+        );
+    });
+}

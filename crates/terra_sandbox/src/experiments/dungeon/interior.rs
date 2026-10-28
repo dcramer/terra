@@ -44,6 +44,8 @@ pub struct Interior {
     near: Vec<(Vec3, Vec3)>,
     /// Whether any camera draws the surface now.
     shown: bool,
+    /// The ground's level in the frame: the stair's top (`Stamp::start`).
+    ground: f32,
 }
 
 impl Interior {
@@ -65,7 +67,16 @@ impl Interior {
             to_frame: frame.compute_affine().inverse(),
             near,
             shown: true,
+            ground: stamp.start.y,
         }
+    }
+
+    /// Whether an eye in the world is under the ground in the dungeon's dug space: down its
+    /// stair as well as in its rooms, whose boxes alone said indoors (`terra_bases::light`),
+    /// so the eye held to the outdoor band all the way down (mine round 11).
+    pub(super) fn underground(&self, eye: Vec3) -> bool {
+        let p = self.to_frame.transform_point3(eye);
+        p.y < self.ground && self.sight.inside(p)
     }
 
     /// Whether a sphere in the world comes near the dungeon.
@@ -92,7 +103,7 @@ impl Interior {
 pub fn plugin(app: &mut App) {
     app.add_systems(
         PostUpdate,
-        (layer_meshes, layer_lights, switch)
+        (layer_meshes, layer_lights, switch, underground)
             .run_if(resource_exists::<Interior>)
             .after(VisibilitySystems::CalculateBounds)
             .after(VisibilitySystems::UpdateFrusta)
@@ -171,6 +182,22 @@ fn layer_lights(
             commands.entity(entity).insert(layers.with(SURFACE));
         }
     }
+}
+
+/// Tells the scene whether the eye is under the ground in the dungeon, so it opens there as
+/// in a room (`terra_world::scene::Underground`).
+fn underground(
+    interior: Res<Interior>,
+    camera: Query<&GlobalTransform, With<terra_world::planet::MainCamera>>,
+    under: Option<ResMut<terra_world::scene::Underground>>,
+) {
+    let Some(mut under) = under else {
+        return;
+    };
+    let Some(eye) = camera.iter().next().map(GlobalTransform::translation) else {
+        return;
+    };
+    under.set_if_neq(terra_world::scene::Underground(interior.underground(eye)));
 }
 
 /// Each camera of the world drops the surface while its eye is in the dungeon and sees no

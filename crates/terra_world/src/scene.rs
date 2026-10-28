@@ -59,6 +59,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(Startup, preset)
         .add_systems(PostStartup, (style_camera, style_sun, haze))
         .init_resource::<Indoors>()
+        .init_resource::<Underground>()
         .init_resource::<IndoorSky>()
         .add_systems(Update, (haze_follows, follow_quality, adapt_indoors))
         .add_systems(
@@ -279,6 +280,13 @@ const ADAPT_BRIGHTER_NIGHT: f32 = 0.4;
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Indoors(pub bool);
 
+/// Whether the camera is under the ground in dug space, a dungeon's stair as well as its
+/// rooms, which the game says: the eye opens there as in a room (D240), though a stair open
+/// to the sky at its top is in no room's box (`Indoors`) and the eye was held to the outdoor
+/// band all the way down it (mine round 11).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Underground(pub bool);
+
 /// How much of the open sky's light reaches the air round the camera, from 0 to 1, which the
 /// game says (D485): 1 outdoors; in a room closed and covered, what its openings let in
 /// (D486). The haze's sky light and the distance fog are dimmed by it: left at the forest's,
@@ -469,6 +477,7 @@ fn follow_quality(
 /// leaves; it adapts there at its own speed, as an eye does stepping through a door.
 fn adapt_indoors(
     indoors: Res<Indoors>,
+    underground: Res<Underground>,
     nightfall: Option<Res<crate::daylight::Nightfall>>,
     mut last: Local<Option<f32>>,
     camera: Query<&AutoExposure, With<MainCamera>>,
@@ -480,11 +489,11 @@ fn adapt_indoors(
     let dark = nightfall.map_or(0.0, |n| n.0);
     // Changed, or the camera's adaptation newly set up; the night in steps of a twentieth.
     let stepped = (dark * 20.0).round() / 20.0;
-    if !indoors.is_changed() && *last == Some(stepped) {
+    if !indoors.is_changed() && !underground.is_changed() && *last == Some(stepped) {
         return;
     }
     *last = Some(stepped);
-    let brighter = if indoors.0 {
+    let brighter = if indoors.0 || underground.0 {
         ADAPT_BRIGHTER_INDOORS
     } else {
         ADAPT_BRIGHTER + (ADAPT_BRIGHTER_NIGHT - ADAPT_BRIGHTER) * stepped
