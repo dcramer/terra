@@ -22,7 +22,7 @@ crates/terra_build/src/ops/tests.rs	random_operations_keep_every_rule	190
 crates/terra_build/src/plans.rs	-	1678
 crates/terra_build/src/testing/random.rs	random_op	280
 crates/terra_build_layout/src/layout/dressing.rs	shaped	269
-crates/terra_build_layout/src/layout/floors.rs	-	1216
+crates/terra_build_layout/src/layout/floors.rs	-	1168
 crates/terra_build_layout/src/layout/floors.rs	boards	272
 crates/terra_build_layout/src/layout/floors.rs	lay	284
 crates/terra_build_layout/src/layout/frames.rs	-	1374
@@ -32,7 +32,6 @@ crates/terra_build_layout/src/layout/runs.rs	courses	187
 crates/terra_build_layout/src/layout/runs.rs	eave_blocking	290
 crates/terra_build_layout/src/layout/runs.rs	under_roofs	436
 crates/terra_build_layout/src/layout/shapes.rs	board	234
-crates/terra_build_layout/src/layout/trims.rs	frames	174
 crates/terra_build_layout/tests/decks.rs	check	231
 crates/terra_build_layout/tests/rules.rs	-	1029
 crates/terra_build_mesh/examples/sections.rs	main	196
@@ -96,7 +95,7 @@ crates/terra_town/src/orca.rs	velocity	195
 crates/terra_town/src/town/paths.rs	paths	183
 crates/terra_town/src/town/svg.rs	svg	194
 crates/terra_walker/src/appearance.rs	-	1024
-crates/terra_walker/src/camera.rs	follow	216
+crates/terra_walker/src/camera.rs	follow	215
 crates/terra_walker/src/movement.rs	walk	186
 crates/terra_walker/src/options.rs	setup	256
 crates/terra_world/src/audio/synth.rs	-	1089
@@ -106,9 +105,9 @@ crates/terra_world/src/flora.rs	-	1660
 crates/terra_world/src/flora.rs	plant	502
 crates/terra_world/src/grown/tree.rs	leader	174
 crates/terra_world/src/planet.rs	-	1129
-crates/terra_world/src/remote.rs	-	1115
-crates/terra_world/src/shell.rs	-	1915
+crates/terra_world/src/remote.rs	-	1056
+crates/terra_world/src/shell.rs	-	1906
 crates/terra_world/src/shell.rs	build	161
-crates/terra_world/src/shell.rs	from_args	266
-crates/terra_world/src/shell.rs	scripted_run	321
+crates/terra_world/src/shell.rs	from_args	264
+crates/terra_world/src/shell.rs	scripted_run	283
 xtask/src/bench.rs	bench	244

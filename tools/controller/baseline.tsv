@@ -1,34 +1,34 @@
 id	value	why
-tunnel.wall	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-tunnel.body	3	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+tunnel.wall	0	lowered by nightly 2026-10-28
+tunnel.body	0	lowered by nightly 2026-10-28
 tunnel.closing	0	unit S: new row tunnel.closing (2 of 12 on main: head on and glancing at 60 m/s crossed); swept cores put both bodies back to their time of impact
 tunnel.door	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
-penetration.max	0.972	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-penetration.median	0.077	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-slope.limit	12.5	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-slope.stopped	0.469	slope.stopped, new (stage 3 unit 1b): a body held against ground too steep to climb said it moved at its jog (4.3 m/s); mover::unblocked now cuts a steep face under the bottom sphere's centre unless walk_stairs stepped it (Unreal's walking, Jolt's CancelVelocityTowardsSteepSlopes): 0.469, left on slopes within 1.5 deg past the limit
+penetration.max	0.003	lowered by nightly 2026-10-28
+penetration.median	0	lowered by nightly 2026-10-28
+slope.limit	0.25	lowered by nightly 2026-10-28
+slope.stopped	0	lowered by nightly 2026-10-28
 slope.speed	0.001	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
-step.ground	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+step.ground	0	lowered by nightly 2026-10-28
 step.building	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 step.prop	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 step.rock	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 step.flora	0	step.flora's first number: a thing of flora taller than the step is no step (footing::NoStep, Unreal's CanCharacterStepUpOn), 11 of 64 walks climbed before
 step.smooth	0.245	first numbers of the in-game filmed course (stage 1b, tools/controller/yard.ts): step.smooth 0.24 after stepping.rs holds the figure by the step as the interpolated body shows it (was a dip then a 0.22 m one-frame rise, ~73% of a 0.3 m step); film.yard 0; feet.sliding 0.90 m, locomotion has no foot lock yet (stage 3)
-stick.slope	54	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-stick.stair	27	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-stair.up	0.294	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
-stair.hop	15	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
+stick.slope	0	lowered by nightly 2026-10-28
+stick.stair	0	lowered by nightly 2026-10-28
+stair.up	0.012	lowered by nightly 2026-10-28
+stair.hop	0	lowered by nightly 2026-10-28
 stair.down	0.001	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 door.hop	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 door.lintel	0	door.lintel's first number: a step under a doorway's lintel retried risen 5 cm over the edge (Stair::climb), 1.783 m short before
 step.lump	0	step.lump's first number, after stage 3 unit 1b3: the steep-face cut only where the step tried refused the face (main 7 of 60 walks stopped at a lump's foot, the yard's film.yard 1)
-ceiling.depth	0.972	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-ceiling.speed	5.5	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+ceiling.depth	0	lowered by nightly 2026-10-28
+ceiling.speed	0	lowered by nightly 2026-10-28
 gravity.landing	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 gravity.upright	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-jump.apex	0.047	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-jump.coyote	0.1	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-jump.buffer	0.15	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+jump.apex	0	lowered by nightly 2026-10-28
+jump.coyote	0.009	lowered by nightly 2026-10-28
+jump.buffer	0.009	lowered by nightly 2026-10-28
 landing.delay	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 landing.bounce	0	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
 landing.speed	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
@@ -42,17 +42,17 @@ accel.data	0	stair.up and stair.hop's first numbers, measured on the mover after
 turn.data	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 data.kinds	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
 air.control	0	stair.up and stair.hop's first numbers, measured on the mover after round 6's edge fix (stair.up 0.805 -> 0.294, stair.hop 725 -> 15): stair cubes (0.25 m tread under a 0.3 m radius) still lose speed at one riser
-push.overlap	0.592	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-push.share	0.799	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-push.fixed	0.2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+push.overlap	0.002	lowered by nightly 2026-10-28
+push.share	0	lowered by nightly 2026-10-28
+push.fixed	0	lowered by nightly 2026-10-28
 push.soft	0	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
 push.pass	0.064	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
 push.stander	0.857	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
 push.monster	0.114	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
 push.person	0	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
 push.wall	0	unit G2, D479 pushing built: push.soft, push.pass, push.stander, push.monster, push.person and push.wall first numbers; push.overlap now a pair with a hard body after a tick and the crowd's soft pairs once stood a second (people ease apart by design); Case::Pool dug to 40 m (its top was in the air)
-fit.gap	3	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
-swim.enters	1	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+fit.gap	0	lowered by nightly 2026-10-28
+swim.enters	0	lowered by nightly 2026-10-28
 swim.shore	0	unit D: the water's first numbers (a lake walked into, waded, swum across and out; a body floated), course/water.rs
 swim.wade	0.015	unit D: the water's first numbers (a lake walked into, waded, swum across and out; a body floated), course/water.rs
 wade.speed	0	D523 wading rows: wade.speed (0 against the kind's wade share; the mover before this had none, 1.72 m/s off a man's 60%), wade.step 2.3 -> 0.623 m/s (a jog to a 2.0 swim; held: 60% of a jog is 2.58, D478's swim 2.0, for the developers)
@@ -65,43 +65,43 @@ swim.surface	0	unit H: swimming per D478 measured (dive, rise, surface, breath, 
 swim.breath	0.003	unit H: swimming per D478 measured (dive, rise, surface, breath, bottom, exit), first numbers
 swim.bottom	0	unit H: swimming per D478 measured (dive, rise, surface, breath, bottom, exit), first numbers
 swim.exit	0	unit H: swimming per D478 measured (dive, rise, surface, breath, bottom, exit), first numbers
-swim.ledge	1	swim.ledge and swim.ledge.high, D523's climb-out rows: the mover today climbs out onto none of the banks under its kind's limit (1), and onto none over it (0)
+swim.ledge	0	lowered by nightly 2026-10-28
 swim.ledge.high	0	swim.ledge and swim.ledge.high, D523's climb-out rows: the mover today climbs out onto none of the banks under its kind's limit (1), and onto none over it (0)
-climb.faces	10	climbing rows, D505-D511, before the mover climbs
+climb.faces	0	lowered by nightly 2026-10-28
 climb.grip	0	Climbing C7: climb.stamina, climb.grip, climb.stance, climb.knock, climb.down measured and at 0; climb.hold first measured at 1 (the dug cliff: a climber stalls past its first riser, where the hands' probe finds no face over a tread and the top found has no room, so it never climbs to 3.7 m; the sheer wall is 1 mm), held for C8
-climb.start	8	climbing rows, D505-D511, before the mover climbs
+climb.start	0	lowered by nightly 2026-10-28
 climb.stance	0	Climbing C7: climb.stamina, climb.grip, climb.stance, climb.knock, climb.down measured and at 0; climb.hold first measured at 1 (the dug cliff: a climber stalls past its first riser, where the hands' probe finds no face over a tread and the top found has no room, so it never climbs to 3.7 m; the sheer wall is 1 mm), held for C8
-climb.mantle	6	climbing rows, D505-D511, before the mover climbs
-climb.speed	1	climbing rows, D505-D511, before the mover climbs
-climb.steep	4	climbing rows, D505-D511, before the mover climbs
-climb.overhang	6	climbing rows, D505-D511, before the mover climbs
-climb.lunge	1.5	climbing rows, D505-D511, before the mover climbs
-climb.kickoff	2	climbing rows, D505-D511, before the mover climbs
+climb.mantle	0	lowered by nightly 2026-10-28
+climb.speed	0	lowered by nightly 2026-10-28
+climb.steep	0	lowered by nightly 2026-10-28
+climb.overhang	0	lowered by nightly 2026-10-28
+climb.lunge	0	lowered by nightly 2026-10-28
+climb.kickoff	0	lowered by nightly 2026-10-28
 climb.stamina	0	Climbing C7: climb.stamina, climb.grip, climb.stance, climb.knock, climb.down measured and at 0; climb.hold first measured at 1 (the dug cliff: a climber stalls past its first riser, where the hands' probe finds no face over a tread and the top found has no room, so it never climbs to 3.7 m; the sheer wall is 1 mm), held for C8
 climb.knock	0	Climbing C7: climb.stamina, climb.grip, climb.stance, climb.knock, climb.down measured and at 0; climb.hold first measured at 1 (the dug cliff: a climber stalls past its first riser, where the hands' probe finds no face over a tread and the top found has no room, so it never climbs to 3.7 m; the sheer wall is 1 mm), held for C8
-climb.hold	1	Climbing C7: climb.stamina, climb.grip, climb.stance, climb.knock, climb.down measured and at 0; climb.hold first measured at 1 (the dug cliff: a climber stalls past its first riser, where the hands' probe finds no face over a tread and the top found has no room, so it never climbs to 3.7 m; the sheer wall is 1 mm), held for C8
+climb.hold	0.001	lowered by nightly 2026-10-28
 climb.down	0	Climbing C7: climb.stamina, climb.grip, climb.stance, climb.knock, climb.down measured and at 0; climb.hold first measured at 1 (the dug cliff: a climber stalls past its first riser, where the hands' probe finds no face over a tread and the top found has no room, so it never climbs to 3.7 m; the sheer wall is 1 mm), held for C8
-cost.climb	136.477	cost.climb's first number (C8): a climbing tick probes the face three times, sweeps the top and the lip, snaps by a grown capsule, 1000 field calls on the ground's faces; held over its bar until the climbing tick's queries are cut
-determinism.crowd	2	seeded from today's walker at 4151fe44 (2026-10-24), the first scorecard run
+cost.climb	25.608	lowered by nightly 2026-10-28
+determinism.crowd	0	lowered by nightly 2026-10-28
 far.grounded	0	the far rows' first numbers (controller stage 2 unit B3, D482): at 30 km the course's level, 20 deg up and down and 0.3 m steps walk as at 2 km, 0 ticks off; reverting D482's frames (f32 field and positions) reads 752 ticks, 6 mm, 1.72x
 far.float	0.001	the far rows' first numbers (controller stage 2 unit B3, D482): at 30 km the course's level, 20 deg up and down and 0.3 m steps walk as at 2 km, 0 ticks off; reverting D482's frames (f32 field and positions) reads 752 ticks, 6 mm, 1.72x
 far.queries	1.01	the far rows' first numbers (controller stage 2 unit B3, D482): at 30 km the course's level, 20 deg up and down and 0.3 m steps walk as at 2 km, 0 ticks off; reverting D482's frames (f32 field and positions) reads 752 ticks, 6 mm, 1.72x
-cost.body	41.89	first number of the mover's release bench (controller stage 2 unit A): worst of course 26, planet 2 km 10, planet 30 km 42 us a tick, after the march asks distances alone and the planet's ground goes through one memo (from 51/471/1436)
-cost.edits	42.281	cost.edits's first number: the edit index (D524) takes a body on the 2 km planet with 10,000 edits from 4,848 µs a tick (every edit scanned) to this; under its bar of 30 it is a task; measured on a busy box, nightly banks a quiet number
-cost.forest	1077.597	first number of cost.forest (controller stage 2 unit C3): the mover walking the walk scene's route among 113 of the lush yard's fitted solids, 1084 us a tick (worst 7.8 ms), 17379 pieces evaluated a tick; reproduces the GPU walk scene's regression, the fix is unit C4
-cost.crowd	27.672	cost.crowd first number: a broadphase (hashed grid, Verlet lists for pushes) makes a crowd of 1,000 measurable; one core, the tick not yet on several
+cost.body	25.447	lowered by nightly 2026-10-28
+cost.edits	41.874	lowered by nightly 2026-10-28
+cost.forest	40.561	lowered by nightly 2026-10-28
+cost.crowd	3.905	lowered by nightly 2026-10-28
 clips.markers	0	clips.markers: new row, the game's clip files keep their baked foot-lock markers (unit 2c-2)
-pace.match	0.896	new row pace.match: each gait's clip pace against its kind's speed (stage 3 unit 3); the sprint's clip strides 3.9 m/s against a 7.4 sprint
-feet.sliding	0.899	first numbers of the in-game filmed course (stage 1b, tools/controller/yard.ts): step.smooth 0.24 after stepping.rs holds the figure by the step as the interpolated body shows it (was a dip then a 0.22 m one-frame rise, ~73% of a 0.3 m step); film.yard 0; feet.sliding 0.90 m, locomotion has no foot lock yet (stage 3)
+pace.match	0.6	lowered by nightly 2026-10-28
+feet.sliding	0.378	lowered by nightly 2026-10-28
 turn.foot	0	turn.foot first number (stage 3 unit 1c2): a turn in place's plants split from feet.sliding, steps at 45 deg of yaw; the yard has no turn in place yet
 stop.settle	0.717	controller S0 (Plan v2), main's film at bf18171a: stops classed braking/wall/tap and the yard's phase sweep adds 10 braking releases and 10 turns from standing, so stop.settle (braking only, now 12 stops: 0.30-0.72 s by the stride's phase, jog 2147 worst), stop.steps 26 and turn.steps 27 measure more than before; swim.pose 0.002 is main's own (U1 saw it on main's film 2ddff461), held here so the ratchet bites from main's first banked film
 stop.steps	26	controller S0 (Plan v2), main's film at bf18171a: stops classed braking/wall/tap and the yard's phase sweep adds 10 braking releases and 10 turns from standing, so stop.settle (braking only, now 12 stops: 0.30-0.72 s by the stride's phase, jog 2147 worst), stop.steps 26 and turn.steps 27 measure more than before; swim.pose 0.002 is main's own (U1 saw it on main's film 2ddff461), held here so the ratchet bites from main's first banked film
 stop.wall	0.217	controller S0 (Plan v2), main's film at bf18171a: stops classed braking/wall/tap and the yard's phase sweep adds 10 braking releases and 10 turns from standing, so stop.settle (braking only, now 12 stops: 0.30-0.72 s by the stride's phase, jog 2147 worst), stop.steps 26 and turn.steps 27 measure more than before; swim.pose 0.002 is main's own (U1 saw it on main's film 2ddff461), held here so the ratchet bites from main's first banked film
-start.steps	9	stage 3 unit 4: the transitions' rows (criterion 21d) on main 1cbeaf94's figure, which blends loops for starts, stops and turns: stop.settle, start.steps, turn.steps their first numbers
+start.steps	7	lowered by nightly 2026-10-28
 turn.steps	27	controller S0 (Plan v2), main's film at bf18171a: stops classed braking/wall/tap and the yard's phase sweep adds 10 braking releases and 10 turns from standing, so stop.settle (braking only, now 12 stops: 0.30-0.72 s by the stride's phase, jog 2147 worst), stop.steps 26 and turn.steps 27 measure more than before; swim.pose 0.002 is main's own (U1 saw it on main's film 2ddff461), held here so the ratchet bites from main's first banked film
-feet.ground	0.631	stage 3 unit 2a: first numbers of the feet's ground rows with foot placement off, the before for U2b/U2c: feet.ground and feet.sinking 0.63-0.64 m (the sprint's left foot planted into the mound past the slope limit; the trench's treads float or sink a tread's 0.5 m), pelvis.drop 0 by construction (no placement); film.yard 0 with the turn taps after the route
-feet.aloft	0.53	stage 3 unit 2c-1: feet.aloft's first number, on main at U2b (d62bf78b, fight.glb's markers baked again): 0.53 m, jog L 300-312 a foot locked over the trench's lower tread a tread up (lowering, U2c-2); 12 of 102 plants past 7 cm, the rest the stop's and landing's air locks (the lock-start gate, U2c-3)
-feet.sinking	0.643	stage 3 unit 2a: first numbers of the feet's ground rows with foot placement off, the before for U2b/U2c: feet.ground and feet.sinking 0.63-0.64 m (the sprint's left foot planted into the mound past the slope limit; the trench's treads float or sink a tread's 0.5 m), pelvis.drop 0 by construction (no placement); film.yard 0 with the turn taps after the route
+feet.ground	0.075	lowered by nightly 2026-10-28
+feet.aloft	0.482	lowered by nightly 2026-10-28
+feet.sinking	0.002	lowered by nightly 2026-10-28
 pelvis.drop	0	stage 3 unit 2a: first numbers of the feet's ground rows with foot placement off, the before for U2b/U2c: feet.ground and feet.sinking 0.63-0.64 m (the sprint's left foot planted into the mound past the slope limit; the trench's treads float or sink a tread's 0.5 m), pelvis.drop 0 by construction (no placement); film.yard 0 with the turn taps after the route
 pelvis.drop_worst	0	stage 3 unit 2a: first numbers of the feet's ground rows with foot placement off, the before for U2b/U2c: feet.ground and feet.sinking 0.63-0.64 m (the sprint's left foot planted into the mound past the slope limit; the trench's treads float or sink a tread's 0.5 m), pelvis.drop 0 by construction (no placement); film.yard 0 with the turn taps after the route
 film.yard	0	first numbers of the in-game filmed course (stage 1b, tools/controller/yard.ts): step.smooth 0.24 after stepping.rs holds the figure by the step as the interpolated body shows it (was a dip then a 0.22 m one-frame rise, ~73% of a 0.3 m step); film.yard 0; feet.sliding 0.90 m, locomotion has no foot lock yet (stage 3)
