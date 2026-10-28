@@ -1,6 +1,6 @@
 # memlimit
 
-Cargo's runner on Linux, set in `.cargo/config.toml`: every binary Cargo starts (tests, benches,
+`run.sh` is Cargo's runner on Linux, set in `.cargo/config.toml`: every binary Cargo starts (tests, benches,
 `cargo run`) runs under a cap on its heap, 32G unless `TERRA_MEM_LIMIT` says otherwise
 (`TERRA_MEM_LIMIT=0` lifts it).
 
