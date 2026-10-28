@@ -1,4 +1,4 @@
-// The hands close on what they hold, the twin of terra_walker::grip: whenever a hand
+// The hands close on what they hold (D562), the twin of terra_walker::grip: whenever a hand
 // socket holds a look, its fingers take a grip pose over whatever clip plays, a finger-only layer
 // as Lyra and ALS lay a hand pose per weapon grip on the finger chains. The pose is solved, not
 // keyed: each finger joint, knuckle first, closes from the rest pose about the handle's line

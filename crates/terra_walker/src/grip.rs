@@ -1,4 +1,4 @@
-//! The hands close on what they hold: whenever a hand socket holds a look, the hand's
+//! The hands close on what they hold (D562): whenever a hand socket holds a look, the hand's
 //! fingers take a grip pose over whatever clip plays, a finger-only layer, as Lyra and ALS lay a
 //! hand pose per weapon grip on the finger chains (docs only). The pose is solved, not keyed:
 //! each finger joint, knuckle first, closes from the rest pose about the handle's line until its

@@ -135,7 +135,7 @@ How a new model's turn is found, by kind (`fits` in `attach_kinds.json`):
 ## Who owns what
 
 - **This spec** (the attachment spec jobs): this doc, `attach_kinds.json`, `attach_contract.ts` and its faults list, the shape of each item's data.
-- **The controls audit** (the "Gameplay character controls audit" session): sockets checked under animation, the working face leading its strike among them; the one-command fitter for a new item; the fist closing on the grip; the two-handed IK, with the spear's `second` and the bow's `nock`.
+- **The controls audit** (the "Gameplay character controls audit" session): sockets checked under animation, the working face leading its strike among them; the one-command fitter for a new item; the fist closing on the grip (built, D562: a finger-only layer per grip type, power in hand, hook hung, closed by touch on the handle the look's mesh gives at y = 0, `terra_walker::grip` and `tools/characters/grip.ts`; a look's handle must be what crosses y = 0 within 5 cm of its line, so a string or a strut there is a fault of the look); the two-handed IK, with the spear's `second` and the bow's `nock`.
 - **The combat job**: the clips that strike flat-first.
 
 ## Extras

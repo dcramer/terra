@@ -455,6 +455,7 @@ The look, models, bodies and gear, textures and audio.
 | [D558](decisions/D558.md) | A campfire's ground depends on its camp: a new fire sits on grass, an old camp's ring wears to earth and ash | Design | Developers | Decided | A fire just lit sits on the ground as it was… |
 | [D560](decisions/D560.md) | A lit torch is carried on a raised arm, flame up | Design | Developers | Decided | A lit torch is carried with its arm raised forward… |
 | [D561](decisions/D561.md) | A fire's flames move at 0.65 of the clock | Design | Developers | Decided | A hearth's flames, a campfire's and a torch's alike… |
+| [D562](decisions/D562.md) | The hands close on what they hold: a finger-only grip layer, closed by touch at run time | Tech | Agent | Decided | Whenever a hand socket holds a look… |
 
 ## Engine and code
 
