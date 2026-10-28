@@ -6,7 +6,9 @@
 // GraspIt!'s auto-grasp closes each link until contact (Miller and Allen, "GraspIt!", IEEE
 // Robotics & Automation Magazine 2004). The handle is read from the look: the section of its
 // vertices across the grip (y = 0), its middle and its radius, tipped as the look is carried.
-// Grip types by mount: in hand a power grip (fingers and thumb round the handle); hung a hook
+// A power grip's look is seated with its handle on the palm (`seatOf`); the fingers bend about
+// the hand's own flexion axis however a tipped handle crosses them; the opposed thumb comes round
+// the handle, its metacarpal swung no more than it must. Grip types by mount: in hand a power grip (fingers and thumb round the handle); hung a hook
 // grip (the fingers alone, the thumb left to the clip); strapped none (the shield's arm is
 // terra_walker::strap's). Shared by the move check (moves.ts). Node 22.18 or later; no
 // dependencies.
@@ -106,6 +108,23 @@ export function lookGrip(file: string): { grip: Grip; handle: Handle } | undefin
   return grip && handle ? { grip, handle } : undefined;
 }
 
+/** Where the palm's skin lies over the handle's line, metres up the hand socket's +X (out of the
+ * back of the hand), measured on the base body's skin at rest (terra_walker::grip::PALM_M). */
+export const PALM_M = 0.021;
+
+/** A power grip's look seated against the palm: the move, in the socket's frame before any tilt,
+ * that brings its handle's line to lie on the palm (`PALM_M` less its radius up +X, on the
+ * socket's Y). The line then runs through the socket's X axis, about which a carried look is
+ * tipped, so the seat holds tipped (terra_walker::grip::seat). */
+export function seatOf(h: Handle): V3 {
+  return [PALM_M - h.r - h.at[0], -h.at[1], -h.at[2]];
+}
+
+/** The handle as its look is seated (`seatOf`), in the socket's frame before any tilt. */
+export function seated(h: Handle): Handle {
+  return { at: [PALM_M - h.r, 0, 0], way: h.way, r: h.r };
+}
+
 /** The handle turned `deg` about the look's X, as a carried look is tipped (character.rs's `tilt`). */
 export function tipped(h: Handle, deg: number): Handle {
   const q = axisAngle([1, 0, 0], deg);
@@ -145,46 +164,79 @@ export function close(locals: Map<string, Pose>, socket: Pose, handle: Handle, g
   const knuckle = apply(none, locals.get(`index_01_${side}`)!);
   const ahead = rot(knuckle.r, locals.get(`index_02_${side}`)!.t);
   const sense = Math.sign(dot(cross(line.d, sub(knuckle.t, line.c)), ahead)) || 1;
+  // The fingers bend about the hand's own flexion axis, the way an untilted handle runs (the
+  // socket's +Y), however a tilted one crosses them; the opposed thumb comes round the handle.
+  const flex = unit(rot(socket.r, [0, 1, 0]));
   const out = new Map<string, Q>();
   for (const stem of CHAINS) {
     if (stem === "thumb" && grip === "hook") continue;
-    const thumb = stem === "thumb";
     const bones = chainBones(stem, side);
-    // The thumb's base is put as it rests, in the palm, whatever the clip turns it to.
-    const first = thumb ? 1 : 0;
-    let parent = thumb ? apply(none, locals.get(bones[0])!) : none;
-    if (thumb) out.set(bones[0], locals.get(bones[0])!.r);
-    for (let k = first; k < 3; k++) {
-      const rest = locals.get(bones[k])!;
-      const child = locals.get(bones[k + 1])!.t;
-      const atRest = apply(parent, rest);
-      let from = atRest.r;
-      let u = unit(rot(from, child));
-      if (thumb && k === first) {
-        // Opposed: the thumb turned square to the handle, to come round it.
-        const flat = unit(sub(u, line.d.map((x) => x * dot(u, line.d)) as V3));
-        from = qmul(between(u, flat), from);
-        u = flat;
-      }
-      // Each joint closes about the handle's way, square to its bone.
-      const hinge = unit(sub(line.d, u.map((x) => x * dot(line.d, u)) as V3)).map((x) => x * (thumb ? -sense : sense)) as V3;
-      const turned = (deg: number): Pose => ({ t: atRest.t, r: qmul(axisAngle(hinge, deg), from), s: atRest.s });
-      // A joint past the first starts on the handle already: what touches is the rest of its bone.
-      // So does a knuckle already in it (a handle thicker than the fist was made for).
-      const on = k > first || toLine(atRest.t, atRest.t, line.c, line.d) <= reach;
-      const gap = (deg: number) => {
-        const p = turned(deg);
-        return toLine(p.t, place(p, child), line.c, line.d, on ? 0.3 : 0) - reach;
-      };
-      // The opposed thumb may start pointing into the handle: it swings clear first.
-      const opposed = thumb && k === first;
-      const deg = closing(gap, opposed ? THUMB_OPEN : OPEN, (thumb ? THUMB_MOST : FINGER_MOST)[k]);
-      const world = turned(deg);
-      out.set(bones[k], qmul(qinv(parent.r), world.r));
-      parent = world;
+    if (stem !== "thumb") {
+      for (const [b, q] of fold(locals, bones, none, 0, line, reach, flex, sense, FINGER_MOST).turns) out.set(b, q);
+      continue;
     }
+    // The thumb's base (its metacarpal, in the palm) turns no more than it must for the thumb
+    // to come round the handle: as it rests, or, where the handle crosses under it (a look
+    // tipped up the palm), swung about the hand's flexion axis to the turn that closes it best.
+    const base = locals.get(bones[0])!;
+    const m = unit(rot(base.r, locals.get(bones[1])!.t));
+    const swing = unit(sub(flex, m.map((x) => x * dot(flex, m)) as V3));
+    const across = unit(cross(m, swing));
+    const turns: number[] = [];
+    for (let i = 0; i <= (2 * THUMB_SWING) / 10; i++) turns.push((i % 2 ? 1 : -1) * Math.ceil(i / 2) * 10);
+    let best: { turns: Map<string, Q>; worst: number; r: Q; cost: number } | undefined;
+    for (const a of turns)
+      for (const b of turns) {
+        const r = qmul(axisAngle(across, b), qmul(axisAngle(swing, a), base.r));
+        const tried = fold(locals, bones, { ...base, r }, 1, line, reach, line.d, -sense, THUMB_MOST);
+        const cost = Math.abs(a) + Math.abs(b);
+        if (!best || tried.worst < best.worst - 0.002 || (tried.worst < best.worst + 0.002 && cost < best.cost)) best = { ...tried, r, cost };
+      }
+    out.set(bones[0], best!.r);
+    for (const [b, q] of best!.turns) out.set(b, q);
   }
   return out;
+}
+
+/** How far, degrees, the thumb's metacarpal may swing either way to come round a handle. */
+const THUMB_SWING = 50;
+
+/** One chain closed round the handle (`line`, `reach`) from joint `first` on: a finger's from its
+ * knuckle (`parent` the hand), the thumb's from its second joint (`parent` its metacarpal, put).
+ * Each joint closes about `axis` square to its bone, the way `sense` says. Its joints' turns
+ * against their parents, and its bones' worst gap to the handle either way. */
+function fold(locals: Map<string, Pose>, bones: string[], parent: Pose, first: number, line: { c: V3; d: V3 }, reach: number, axis: V3, sense: number, most: number[]): { turns: Map<string, Q>; worst: number } {
+  const turns = new Map<string, Q>();
+  let worst = 0;
+  for (let k = first; k < 3; k++) {
+    const rest = locals.get(bones[k])!;
+    const child = locals.get(bones[k + 1])!.t;
+    const atRest = apply(parent, rest);
+    let from = atRest.r;
+    let u = unit(rot(from, child));
+    // The opposed thumb, turned square to the handle to come round it, may start pointing into
+    // the handle: it swings clear first.
+    const opposed = first === 1 && k === 1;
+    if (opposed) {
+      const flat = unit(sub(u, line.d.map((x) => x * dot(u, line.d)) as V3));
+      from = qmul(between(u, flat), from);
+      u = flat;
+    }
+    const hinge = unit(sub(axis, u.map((x) => x * dot(axis, u)) as V3)).map((x) => x * sense) as V3;
+    const turned = (deg: number): Pose => ({ t: atRest.t, r: qmul(axisAngle(hinge, deg), from), s: atRest.s });
+    // A joint past the first starts on the handle already: what touches is the rest of its bone.
+    // So does a knuckle already in it (a handle thicker than the fist was made for).
+    const on = k > first || toLine(atRest.t, atRest.t, line.c, line.d) <= reach;
+    const gap = (deg: number) => {
+      const p = turned(deg);
+      return toLine(p.t, place(p, child), line.c, line.d, on ? 0.3 : 0) - reach;
+    };
+    const world = turned(closing(gap, opposed ? THUMB_OPEN : OPEN, most[k]));
+    turns.set(bones[k], qmul(qinv(parent.r), world.r));
+    worst = Math.max(worst, Math.abs(toLine(world.t, place(world, child), line.c, line.d) - reach));
+    parent = world;
+  }
+  return { turns, worst };
 }
 
 /** The least turn from `lo` to `most` degrees, in steps of 2 and then halved, at which the bone

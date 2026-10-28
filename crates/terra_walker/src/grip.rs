@@ -8,6 +8,11 @@
 //! grip (y = 0), its middle and its radius; the pose is solved again only when the look turns in
 //! the hand (carried or used, `character::tilt`).
 //!
+//! A power grip's look is seated with its handle on the palm (`seat`), so a thin handle sits in
+//! the fist rather than where a sword's would. The fingers bend about the hand's own flexion
+//! axis however a tipped handle crosses them; the thumb, opposed, comes round the handle, its
+//! metacarpal swung no more than it must where a handle tipped up the palm runs under it.
+//!
 //! Grips by the look's mount (docs/attachment.md): in hand a power grip, the fingers and the
 //! thumb round the handle; hung (`"hold": "hung"`) a hook grip, the fingers alone; strapped
 //! none, the shield's arm being `strap`'s. Its twin is `tools/characters/grip.ts`, which the move
@@ -36,6 +41,14 @@ const FINGER_MOST: [f32; 3] = [115.0, 105.0, 80.0];
 /// round it. Its base is not turned.
 const THUMB_OPEN: f32 = -150.0;
 const THUMB_MOST: [f32; 3] = [0.0, 150.0, 80.0];
+/// How far, degrees, the thumb's metacarpal may swing either way, about the hand's flexion axis
+/// and across it, to come round a handle (the thumb's base joint moves some 50 degrees each
+/// way; Kapandji, "The Physiology of the Joints", vol. 1).
+const THUMB_SWING: i32 = 50;
+/// Where the palm's skin lies over the handle's line, metres up the hand socket's +X (out of the
+/// back of the hand), measured on the base body's skin at rest: a power grip's handle is seated
+/// on it (`seat`).
+pub const PALM_M: f32 = 0.021;
 /// How far from the handle's line a point of its section may be, metres: more is a head or a
 /// basket's body.
 const NEAR_M: f32 = 0.05;
@@ -117,12 +130,23 @@ pub fn handle(section: &[Vec3]) -> Option<Handle> {
     })
 }
 
-/// A handle's line: a point, its unit way, and the reach of a finger's bone touching it.
+/// A power grip's look seated against the palm: where, in its socket's frame before any tilt, the
+/// look's origin goes for its handle's line to lie on the palm (`PALM_M` less its radius up +X,
+/// on the socket's Y). The line then runs through the socket's X axis, about which a carried
+/// look is tipped, so the seat turned with the look holds (`close_hands`).
+pub fn seat(handle: &Handle) -> Vec3 {
+    Vec3::new(PALM_M - handle.r, 0.0, 0.0) - handle.at
+}
+
+/// A handle's line: a point, its unit way, the reach of a finger's bone touching it, and the
+/// hand's flexion axis (the way an untilted handle runs, the socket's +Y), about which the
+/// fingers bend however a tilted handle crosses them.
 #[derive(Clone, Copy, Debug)]
 pub struct Line {
     pub c: Vec3,
     pub d: Vec3,
     pub reach: f32,
+    pub flex: Vec3,
 }
 
 impl Line {
@@ -134,6 +158,7 @@ impl Line {
             c: place.transform_point(handle.at),
             d: (place.rotation * handle.way).normalize(),
             reach: (handle.r + FINGER_M) * place.scale.x,
+            flex: (socket.rotation * Vec3::Y).normalize(),
         }
     }
 
@@ -164,60 +189,111 @@ pub fn close(chains: &[[Transform; 4]; 5], line: &Line, grip: Grip) -> [[Option<
         .dot(ahead)
         .signum();
     for (k, chain) in chains.iter().enumerate() {
-        let thumb = CHAINS[k] == "thumb";
-        if thumb && grip == Grip::Hook {
+        if CHAINS[k] != "thumb" {
+            // The fingers bend about the hand's own flexion axis, however a tilted handle
+            // crosses them.
+            let (turns, _) = fold(chain, false, Transform::IDENTITY, line, line.flex, sense);
+            out[k] = turns;
             continue;
         }
-        // The thumb's base is put as it rests, in the palm, whatever the clip turns it to.
-        let first = usize::from(thumb);
-        let mut parent = Transform::IDENTITY;
-        if thumb {
-            parent = chain[0];
-            out[k][0] = Some(chain[0].rotation);
+        if grip == Grip::Hook {
+            continue;
         }
-        for j in first..3 {
-            let at_rest = parent.mul_transform(chain[j]);
-            let child = chain[j + 1].translation;
-            let mut from = at_rest.rotation;
-            let mut u = (from * child).normalize();
-            if thumb && j == first {
-                // Opposed: the thumb turned square to the handle, to come round it.
-                let flat = (u - line.d * u.dot(line.d)).normalize();
-                from = Quat::from_rotation_arc(u, flat) * from;
-                u = flat;
+        // The thumb's base (its metacarpal, in the palm) turns no more than it must for the
+        // opposed thumb to come round the handle: as it rests, or, where the handle crosses under
+        // it (a look tipped up the palm), swung about the hand's flexion axis and across it to
+        // the turn that closes it best, the least such turn of the best.
+        let base = chain[0];
+        let m = (base.rotation * chain[1].translation).normalize();
+        let swing = (line.flex - m * line.flex.dot(m)).normalize();
+        let across = m.cross(swing).normalize();
+        let turns: Vec<i32> = (0..=2 * THUMB_SWING / 10)
+            .map(|i| if i % 2 == 1 { 1 } else { -1 } * ((i + 1) / 2) * 10)
+            .collect();
+        let mut best: Option<([Option<Quat>; 3], f32, i32)> = None;
+        for a in &turns {
+            for b in &turns {
+                let rotation = Quat::from_axis_angle(across, (*b as f32).to_radians())
+                    * Quat::from_axis_angle(swing, (*a as f32).to_radians())
+                    * base.rotation;
+                let put = Transform { rotation, ..base };
+                let (mut tried, worst) = fold(chain, true, put, line, line.d, -sense);
+                tried[0] = Some(rotation);
+                let cost = a.abs() + b.abs();
+                let better = best.as_ref().is_none_or(|(_, w, c)| {
+                    worst < *w - 0.002 || (worst < *w + 0.002 && cost < *c)
+                });
+                if better {
+                    best = Some((tried, worst, cost));
+                }
             }
-            // Each joint closes about the handle's way, square to its bone.
-            let side = if thumb { -sense } else { sense };
-            let hinge = (line.d - u * line.d.dot(u)).normalize() * side;
-            let turned = |deg: f32| Transform {
-                rotation: Quat::from_axis_angle(hinge, deg.to_radians()) * from,
-                ..at_rest
-            };
-            // A joint past the first starts on the handle already: what touches is the rest
-            // of its bone. So does a knuckle already in it (a handle thicker than the fist was
-            // made for).
-            let on = j > first
-                || line.to_segment(at_rest.translation, at_rest.translation, 0.0) <= line.reach;
-            let gap = |deg: f32| {
-                let p = turned(deg);
-                line.to_segment(
-                    p.translation,
-                    p.transform_point(child),
-                    if on { 0.3 } else { 0.0 },
-                ) - line.reach
-            };
-            let opposed = thumb && j == first;
-            let (lo, most) = if thumb {
-                (if opposed { THUMB_OPEN } else { OPEN }, THUMB_MOST[j])
-            } else {
-                (OPEN, FINGER_MOST[j])
-            };
-            let world = turned(closing(gap, lo, most));
-            out[k][j] = Some(parent.rotation.inverse() * world.rotation);
-            parent = world;
+        }
+        if let Some((turns, _, _)) = best {
+            out[k] = turns;
         }
     }
     out
+}
+
+/// One chain closed round the handle: a finger's from its knuckle (`thumb` false, `parent` the
+/// hand's frame), the thumb's from its second joint (`parent` its metacarpal, put), each joint
+/// about `axis` square to its bone, the way `sense` says. Its joints' turns against their
+/// parents (none for the thumb's metacarpal), and its bones' worst gap to the handle either way.
+fn fold(
+    chain: &[Transform; 4],
+    thumb: bool,
+    mut parent: Transform,
+    line: &Line,
+    axis: Vec3,
+    sense: f32,
+) -> ([Option<Quat>; 3], f32) {
+    let first = usize::from(thumb);
+    let most = if thumb { THUMB_MOST } else { FINGER_MOST };
+    let mut out = [None; 3];
+    let mut worst = 0.0_f32;
+    for j in first..3 {
+        let at_rest = parent.mul_transform(chain[j]);
+        let child = chain[j + 1].translation;
+        let mut from = at_rest.rotation;
+        let mut u = (from * child).normalize();
+        // The opposed thumb, turned square to the handle to come round it, may start pointing
+        // into the handle: it swings clear first.
+        let opposed = thumb && j == first;
+        if opposed {
+            let flat = (u - line.d * u.dot(line.d)).normalize();
+            from = Quat::from_rotation_arc(u, flat) * from;
+            u = flat;
+        }
+        let hinge = (axis - u * axis.dot(u)).normalize() * sense;
+        let turned = |deg: f32| Transform {
+            rotation: Quat::from_axis_angle(hinge, deg.to_radians()) * from,
+            ..at_rest
+        };
+        // A joint past the first starts on the handle already: what touches is the rest of its
+        // bone. So does a knuckle already in it (a handle thicker than the fist was made for).
+        let on = j > first
+            || line.to_segment(at_rest.translation, at_rest.translation, 0.0) <= line.reach;
+        let gap = |deg: f32| {
+            let p = turned(deg);
+            line.to_segment(
+                p.translation,
+                p.transform_point(child),
+                if on { 0.3 } else { 0.0 },
+            ) - line.reach
+        };
+        let world = turned(closing(
+            gap,
+            if opposed { THUMB_OPEN } else { OPEN },
+            most[j],
+        ));
+        out[j] = Some(parent.rotation.inverse() * world.rotation);
+        worst = worst.max(
+            (line.to_segment(world.translation, world.transform_point(child), 0.0) - line.reach)
+                .abs(),
+        );
+        parent = world;
+    }
+    (out, worst)
 }
 
 /// The least turn from `lo` to `most` degrees, in steps of 2 and then halved, at which the bone
@@ -416,7 +492,7 @@ pub fn close_hands(
                 hand.solved = None;
                 continue;
             };
-            let (Ok(grip), Ok(at), Ok(socket)) = (
+            let (Ok(grip), Ok(mut at), Ok(socket)) = (
                 gripped.get(look),
                 transforms.get(look).copied(),
                 transforms.get(hand.socket).copied(),
@@ -427,6 +503,13 @@ pub fn close_hands(
                 .solved
                 .is_some_and(|(was, turn, _)| was == look && turn == at.rotation)
             {
+                // A power grip's look seated against the palm, turned as it is turned.
+                if grip.grip == Grip::Power
+                    && let Ok(mut placed) = transforms.get_mut(look)
+                {
+                    at.translation = at.rotation * seat(&grip.handle);
+                    placed.translation = at.translation;
+                }
                 let mut chains = [[Transform::IDENTITY; 4]; 5];
                 for (chain, (bones, rest)) in
                     chains.iter_mut().zip(hand.bones.iter().zip(&hand.rest))
