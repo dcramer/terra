@@ -110,7 +110,7 @@ pub const ALL: &[Experiment] = &[
     Experiment {
         name: "workbench",
         about: "Models on a plain floor in the game's light: --model <path> to load, --anim <clip> to play, --hold and --attach for what they carry, --sheet <prefix> to capture views and exit; --remote to drive it live.",
-        add: workbench::plugin,
+        add: workbench::lit,
     },
     Experiment {
         name: "crowd",

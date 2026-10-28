@@ -175,6 +175,16 @@ fn draw_contracts(mut gizmos: Gizmos, props: Query<(&Contract, &GlobalTransform)
     }
 }
 
+/// The workbench in the world's light and air, as in play: its sky, the light the sky gives
+/// (what metal reflects: without it an iron head mirrored a black sky and read black, job 4c's
+/// axes) and the day. Apart from [`plugin`], whose tests run with no assets.
+pub fn lit(app: &mut App) {
+    if !app.is_plugin_added::<terra_world::world::WorldPlugin>() {
+        app.add_plugins(terra_world::world::WorldPlugin);
+    }
+    plugin(app);
+}
+
 pub fn plugin(app: &mut App) {
     // Posed after the clips as in play (the fists, the arms, the carry, the shield arm).
     terra_walker::pose::plugin(app);
