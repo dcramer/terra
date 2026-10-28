@@ -188,10 +188,8 @@ impl Plugin for WalkerPlugin {
         intent::plugin(app);
         figure::plugin(app);
         crate::feet::plugin(app);
-        crate::arms::plugin(app);
-        crate::carry_arm::plugin(app);
-        crate::grip::plugin(app);
-        crate::shield_arm::plugin(app);
+        // The layers that pose a body after its clips, shared with the workbench.
+        crate::pose::plugin(app);
         crate::gaze::plugin(app);
         camera::plugin(app);
         movement::plugin(app);

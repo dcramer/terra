@@ -167,6 +167,8 @@ fn draw_contracts(mut gizmos: Gizmos, props: Query<(&Contract, &GlobalTransform)
 }
 
 pub fn plugin(app: &mut App) {
+    // Posed after the clips as in play (the fists, the arms, the carry, the shield arm).
+    terra_walker::pose::plugin(app);
     app.add_systems(Startup, setup)
         .add_systems(Update, (spawn, measure, recarry, sheet::capture).chain())
         .add_systems(Update, draw_contracts);
@@ -859,6 +861,23 @@ fn pose_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The workbench poses a body after its clips with every layer play does, so its stills
+    /// show the fists closed, the shield arm fitted and the carry held as the game shows them.
+    #[test]
+    fn the_workbench_poses_a_body_with_plays_layers() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        plugin(&mut app);
+        let names = terra_walker::pose::system_names(&mut app, PostUpdate);
+        for layer in terra_walker::pose::SYSTEMS {
+            let found = names
+                .iter()
+                .filter(|n| n.ends_with(&format!("::{layer}")))
+                .count();
+            assert_eq!(found, 1, "{layer} in {names:?}");
+        }
+    }
 
     /// A body is as tall as the top of its highest box, wherever and however that box
     /// is placed, measured along the ground's up.
