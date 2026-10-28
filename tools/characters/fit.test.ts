@@ -37,4 +37,9 @@ test("a held item is checked in its class's set, else in the walker's clips", ()
   assert.equal(axe.set, "none");
   assert.equal(axe.hand, "R");
   for (const clip of ["Idle_Loop", "Walk_Loop", "Crouch_Fwd_Loop", "Jump_Land", "Interact"]) assert.ok(axe.clips.split(",").includes(clip), clip);
+  // A bow leads with the off hand (its kind's lead), carried, never swung as a sword.
+  const bow = setOf("bow");
+  assert.equal(bow.hand, "L");
+  assert.ok(bow.clips.split(",").includes("Sprint_Loop"));
+  for (const clip of ["Interact", "Sword_Attack", "Sword_Idle"]) assert.ok(!bow.clips.split(",").includes(clip), clip);
 });

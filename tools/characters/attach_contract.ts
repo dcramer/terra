@@ -35,6 +35,8 @@ export type KindRules = {
   fits: "detector" | "person" | "body";
   /** The way its working end reaches further across Z: -Z (a one-sided head) unless given. */
   faces?: "+Z" | "-Z";
+  /** The hand its grip rides in when its item names none (holding.md's `lead`): "Off" for a bow. */
+  lead?: "Main" | "Off";
 };
 export const KINDS: Record<string, KindRules> = Object.fromEntries(
   Object.entries(JSON.parse(readFileSync(join(import.meta.dirname, "attach_kinds.json"), "utf8"))).filter(([k]) => k !== "about"),

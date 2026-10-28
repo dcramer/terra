@@ -25,7 +25,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { ROOT, against, holdOf, judge, knownFaults, readBody, readLook } from "./attach_contract.ts";
+import { KINDS, ROOT, against, holdOf, judge, knownFaults, readBody, readLook } from "./attach_contract.ts";
 import { detect, sourceMesh } from "./detect.ts";
 import { carriedClips } from "./held.ts";
 
@@ -134,17 +134,21 @@ function checkStage(it: Item): boolean {
   return line(true, it.name, "check", `the attachment contract${faults.length ? `, ${faults.length} known fault${faults.length > 1 ? "s" : ""} listed` : ""}`);
 }
 
-/** The set a class fights with, and the hand its item goes in (holding.md section 2). */
+/** The set a class fights with, and the hand its item goes in (holding.md section 2): the off
+ * hand for an off-hand grip or a kind that leads with it (a bow, attach_kinds.json's "lead"),
+ * which then plays only the carried clips, as the walker's used ones swing the main hand. */
 export function setOf(name: string): { set: string; hand: "R" | "L"; clips: string } {
   const hold = holdOf(`held/${name}`);
-  const hand = hold?.grip === "Off" ? "L" : "R";
+  const data = join(ROOT, "art", "held", `${name}.json`);
+  const kind = existsSync(data) ? (JSON.parse(readFileSync(data, "utf8")) as { kind?: string }).kind : undefined;
+  const hand = hold?.grip === "Off" || (kind && KINDS[kind]?.lead === "Off") ? "L" : "R";
   const sets = join(ROOT, "assets", "data", "moves");
   const families = readFileSync(join(sets, "families.ron"), "utf8");
   const family = hold && new RegExp(`"${hold.class}":\\s*"(\\w+)"`).exec(families)?.[1];
   const files = execFileSync("git", ["ls-files", "assets/data/moves"], { cwd: ROOT, encoding: "utf8" }).split("\n");
   // A shield fights in a set whose stance is "shielded".
   const set = hold && files.find((f) => [hold.class, family].includes(f.split("/").at(-1)!.split(".")[0]) || (hold.class === "shield" && f.endsWith(".shielded.ron")));
-  return set ? { set, hand, clips: "" } : { set: "none", hand, clips: walkerClips().join(",") };
+  return set ? { set, hand, clips: "" } : { set: "none", hand, clips: (hand === "L" ? carriedClips() : walkerClips()).join(",") };
 }
 
 function movesStage(it: Item, log: string, template?: string): boolean {
