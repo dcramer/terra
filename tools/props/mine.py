@@ -36,6 +36,8 @@ FOOT_X, HEAD_X = 1.30, 1.24
 CAP_Z = 2.6
 # A set every 2 m: its lagging reaches 1 m each way, and a little past, so no seam shows sky.
 REACH = 1.04
+# The walls' lagging poles, round, butting the next set's a finger short of the half-way.
+POLE_R, SIDE_REACH = 0.065, 0.99
 # Old pine, weathered grey-brown and darkened by the mine's damp and lamp smoke.
 WOOD = ("Timber", "log_wood", (0.62, 0.54, 0.44))
 BOARD = ("Lagging", "weathered_planks", (0.55, 0.48, 0.40))
@@ -117,19 +119,28 @@ def timber_set():
         board(m, (x, -reach, top - sag), (x + w, reach, top - sag + 0.04), 1, k)
         x += w + 0.015 + 0.02 * jitter(k, 6)
         k += 1
-    # The walls' lagging behind the posts' heads, boards laid on edge against the rock, one in
-    # three missing so the rock shows through.
+    # The walls' lagging: poles laid along the drift behind the posts, between them and the
+    # rock, from a knee up to the cap, each bearing on the posts' backs as they batter in, so
+    # the rock's bulges take them in places and it shows through the gaps of the few missing
+    # (round 1's judges: boards on edge in front of the rock read as stuck flat on the wall).
+    # They butt a finger short of the next set's, which lays the same poles at the same
+    # heights, so no two overlap and flicker.
     for sx in (-1, 1):
-        face = sx * (HEAD_X + POST_R + 0.005)
-        z = 1.3
-        while z < CAP_Z - 0.05:
-            h = 0.2 + 0.04 * jitter(k, 7)
-            if jitter(k, 8) > 0.33:
-                inner, outer = sorted((face, face + sx * 0.04))
-                board(m, (inner, -REACH, z), (outer, REACH, min(z + h, CAP_Z)), 1, k)
-            z += h + 0.02
+        z = 0.35
+        while z < CAP_Z - 0.06:
+            r = POLE_R + 0.015 * (jitter(k, 7) - 0.5)
+            if jitter(k, 8) > 0.18:
+                x = sx * (post_x(z + r) + POST_R + r - 0.01)
+                log(m, (x, -SIDE_REACH, z + r), (x, SIDE_REACH, z + r), r, 0, segs=7, turn=jitter(k, 9))
+            z += 2 * r + 0.012
             k += 1
     return m, [WOOD, BOARD]
+
+
+def post_x(z):
+    """How far out from the drift's middle a post's axis is at a height: battered in from its
+    foot to its head."""
+    return FOOT_X + (HEAD_X - FOOT_X) * z / CAP_Z
 
 
 if __name__ == "__main__":
