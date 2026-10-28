@@ -4,7 +4,8 @@
 //! **The seed** is a build of origin/main kept for this alone, in the repository's git folder
 //! (`.git/terra-seed/`): origin/main's files, checked out there through an index of its own
 //! rather than as a worktree, so no worktree tool lists or clears it away (D259), and a
-//! `target/` built by the cargo commands agents' builds start with (`BUILDS`). It is current
+//! `target/` built by the cargo commands agents' builds start with (`BUILDS`, and each
+//! member's tests alone, `MEMBER_TESTS`). It is current
 //! while it was built from the manifests origin/main has (every `Cargo.toml`, `Cargo.lock`,
 //! `rust-toolchain.toml` and `.cargo/config.toml`), which decide what the dependencies are
 //! built as. `cargo xtask seed` fetches and, when they changed, builds it again, holding
@@ -88,6 +89,16 @@ const BUILDS: &[&[&str]] = &[
     // is 4 minutes and 2.7 GB a worktree built alone (D406).
     &["build", "--release", "-p", "terra_sandbox"],
 ];
+
+/// Each member's tests alone, `cargo test -p <member> --no-run`, after `BUILDS`: what a job runs
+/// for the crate it changed and what the combat and controller scorecards run (`cargo test -p
+/// terra_game --lib …`). Cargo resolves features for the packages chosen, and dev-dependencies'
+/// features only for those, so `-p terra_game` builds Bevy's render stack differently from
+/// `--workspace` (terra_world's tests ask wgpu for its `noop` backend): seeded only with the
+/// workspace's build, a fresh worktree's first combat run rebuilt 120 dependency units, 8 of
+/// its 9 minutes. Stable Cargo has no workspace-wide feature unification yet (`-Z
+/// feature-unification`), so the seed holds each member's own.
+const MEMBER_TESTS: [&str; 4] = ["test", "-p", "{member}", "--no-run"];
 
 /// Under WSL, the Windows builds `play`, `win` and `bench` make, on the real GPU.
 const WINDOWS_BUILDS: &[&[&str]] = &[
@@ -430,11 +441,8 @@ fn ensure(refresh: bool, child: bool, say: &dyn Fn(String)) -> Result<(PathBuf, 
     checkout(&dir, &commit)?;
     let started = Instant::now();
     let mut failed = Vec::new();
-    let mut builds: Vec<&[&str]> = BUILDS.to_vec();
-    if windows() {
-        builds.extend(WINDOWS_BUILDS);
-    }
-    for &args in &builds {
+    let builds = seed_builds(&workspace_packages(&dir.join("src"))?);
+    for args in &builds {
         let shown = format!("cargo {}", args.join(" "));
         let mut cargo = Command::new("cargo");
         cargo
@@ -486,7 +494,7 @@ fn ensure(refresh: bool, child: bool, say: &dyn Fn(String)) -> Result<(PathBuf, 
 /// seconds. Our own crates' units are left, since they are never seeded and Cargo names a
 /// binary by its copy without the hash. A worktree linked to a swept unit keeps its own link.
 /// Says what it freed.
-fn sweep(dir: &Path, builds: &[&[&str]], passed: bool) -> String {
+fn sweep(dir: &Path, builds: &[Vec<String>], passed: bool) -> String {
     let target = dir.join("target");
     let mut live = HashSet::new();
     let ours = workspace_packages(&dir.join("src")).unwrap_or_default();
@@ -497,7 +505,7 @@ fn sweep(dir: &Path, builds: &[&[&str]], passed: bool) -> String {
             break;
         }
         let messages = Command::new("cargo")
-            .args(*args)
+            .args(args)
             .arg("--message-format=json")
             .current_dir(dir.join("src"))
             .env("CARGO_TARGET_DIR", &target)
@@ -561,14 +569,32 @@ fn checkout(dir: &Path, commit: &str) -> Result<(), String> {
 /// `.cargo/config.toml`; and the builds the seed is made of, so a build added to `BUILDS` is
 /// built into the seed by the next session rather than by each worktree (D406).
 fn manifests(commit: &str) -> Option<String> {
-    let windows_builds: &[&[&str]] = if windows() { WINDOWS_BUILDS } else { &[] };
-    let builds: Vec<String> = BUILDS
+    // The members' builds are named by the pattern: the members are in the manifest lines.
+    let builds: Vec<String> = seed_builds(&["{member}".to_string()])
         .iter()
-        .chain(windows_builds)
         .map(|args| args.join(" "))
         .collect();
     output("git", &["ls-tree", "-r", commit])
         .map(|listing| format!("{}\nbuilds {}", manifest_lines(&listing), builds.join("; ")))
+}
+
+/// The seed's builds, in order: `BUILDS`, under WSL `WINDOWS_BUILDS`, then `MEMBER_TESTS` for
+/// each member, so each reuses what the workspace's build made of the dependencies it shares.
+fn seed_builds(members: &[String]) -> Vec<Vec<String>> {
+    let windows_builds: &[&[&str]] = if windows() { WINDOWS_BUILDS } else { &[] };
+    let fixed = BUILDS
+        .iter()
+        .chain(windows_builds)
+        .map(|args| args.iter().map(|arg| arg.to_string()).collect());
+    let mut sorted = members.to_vec();
+    sorted.sort();
+    let tests = sorted.into_iter().map(|member| {
+        MEMBER_TESTS
+            .iter()
+            .map(|arg| arg.replace("{member}", &member))
+            .collect()
+    });
+    fixed.chain(tests).collect()
 }
 
 /// The manifest lines of `git ls-tree -r`'s listing, as `<object> <path>`.
@@ -979,6 +1005,36 @@ mod tests {
             manifest_lines(listing),
             "aaa Cargo.toml\nbbb Cargo.lock\nccc crates/terra_core/Cargo.toml\n\
              ggg .cargo/config.toml\nhhh rust-toolchain.toml\niii xtask/Cargo.toml"
+        );
+    }
+
+    /// The scorecards run `cargo test -p <crate> --lib` for each crate their criteria name;
+    /// each must be a member whose own test build the seed holds, or a fresh worktree's first
+    /// run builds that crate's dependencies again.
+    #[test]
+    fn the_seed_builds_every_crate_the_scorecards_test() {
+        let builds = seed_builds(&workspace_packages(&root()).unwrap());
+        let mut named = 0;
+        for criteria in [
+            "tools/combat/criteria.json",
+            "tools/controller/criteria.json",
+        ] {
+            let text = std::fs::read_to_string(root().join(criteria)).unwrap();
+            for part in text.split("\"crate\"").skip(1) {
+                let krate = part.split('"').nth(1).unwrap();
+                let wanted = ["test", "-p", krate, "--no-run"].map(String::from);
+                assert!(
+                    builds.iter().any(|b| *b == wanted),
+                    "{criteria} tests {krate}, which the seed does not build"
+                );
+                named += 1;
+            }
+        }
+        assert!(named > 0, "no crate found in the scorecards' criteria");
+        // The workspace's own builds come first, so each member's reuses what they made.
+        assert_eq!(
+            builds[0],
+            BUILDS[0].iter().map(|s| s.to_string()).collect::<Vec<_>>()
         );
     }
 
