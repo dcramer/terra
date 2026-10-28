@@ -64,9 +64,10 @@ export class Glb {
 
   readonly file: string;
 
-  constructor(file: string) {
-    this.file = file;
-    this.bytes = readFileSync(file);
+  /** A file's path, or its bytes already read. */
+  constructor(file: string | Buffer) {
+    this.file = typeof file === "string" ? file : "(bytes)";
+    this.bytes = typeof file === "string" ? readFileSync(file) : file;
     const jsonLen = this.bytes.readUInt32LE(12);
     this.gltf = JSON.parse(this.bytes.subarray(20, 20 + jsonLen).toString());
     this.bin = 20 + jsonLen + 8;

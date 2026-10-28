@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Glb, type Pose, type Q, type V3 } from "./glb.ts";
+import { compact } from "./glb_clips.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const MIRRORS = resolve(ROOT, "art/animation/mirrors.json");
@@ -185,7 +186,8 @@ export function mirrored(file: string, mirrors: Record<string, string>): Buffer 
     c.writeUInt32LE(kind, 4);
     return c;
   };
-  return Buffer.concat([head, chunk(json.length, 0x4e4f534a), json, chunk(bin.length, 0x004e4942), bin]);
+  // The clip it replaced dropped from the buffer, so mirroring again gives the same bytes (D563).
+  return compact(Buffer.concat([head, chunk(json.length, 0x4e4f534a), json, chunk(bin.length, 0x004e4942), bin]));
 }
 
 /** Mirrors `file`'s listed clips in place; how many it made. */

@@ -7,8 +7,9 @@ baked onto the base's texture layout (D112; research/body-morphs.md).
 `out` writes tools/characters/out/NAME-bare.glb: the body of out/NAME-game.glb, bare, facing +X
 as Tripo's models do. Tripo then paints it from the design's front view (paint_skin.sh does
 both). `in` bakes out/NAME-painted.glb, which Tripo returns a unit tall and centred, back onto
-the body's own layout and writes out/NAME-game.glb with it, and the skin alone as out/NAME-skin.png
-(the game's skin for that template).
+the body's own layout and writes the body with it as out/NAME-skinned.glb, and the skin alone as
+out/NAME-skin.png (the game's skin for that template). It leaves out/NAME-game.glb as it was, so
+painting again reads the same body and gives the same bytes (D563).
 """
 
 import math
@@ -106,5 +107,5 @@ else:
     for mname, mobj in mods:
         body.modifiers.new(mname, "ARMATURE").object = mobj
     bpy.ops.object.select_all(action="SELECT")
-    bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, f"{name}-game.glb"), export_format="GLB", use_selection=True, export_animations=True, export_extras=True)
+    bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, f"{name}-skinned.glb"), export_format="GLB", use_selection=True, export_animations=True, export_extras=True)
     print("PAINTED", name)

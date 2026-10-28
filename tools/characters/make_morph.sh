@@ -22,7 +22,6 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 name=$1 base=${BASE:-base-male}
 blender=tools/blender/run.sh here=tools/characters out=tools/characters/out
-[[ -f "$out/lift-mannequin.json" ]] || $blender $here/lift.py | grep -E "^LIFT|Error" || true
 mkdir -p "$out"
 if [[ "${2:-}" == --design ]]; then
   design=$3
@@ -43,23 +42,6 @@ else
   [[ -f "$art/model.glb" ]] || node tools/tripo/tripo.ts model "$art/front.png" --faces 30000 -o "$art/model.glb" >/dev/null
   design="$art/model.glb"
 fi
-$blender $here/morph.py "$out/$base-game.glb" "$design" "$name" | grep -E "MORPH|EXPORTED|Error" || true
-$blender $here/export_character.py "$out/$name.glb" "$out/$name-game.glb" | grep -E "PATCHES|EXPORTED|Error" || true
-# The looks carried onto this body, then the clipping fixer: where the check finds skin
-# through a look in our clips (--fix), the look is carried again pushed clear there; three
-# rounds, each on the look as the last left it, as clearing one place can bare another.
-carry() {
-  looks=()
-  for look in tools/characters/out/gear/$base/*.glb; do
-    item=$(basename "$look" .glb)
-    $blender $here/carry_gear.py "$out/$base-game.glb" "$look" "$out/$name-$item.glb" "$name" | grep -E "PUSHED|Error" || true
-    looks+=("$out/$name-$item.glb")
-  done
-}
-rm -f "$out/$name"-*-push.npz "$out/$name"-*-uncover.json
-carry
-for round in 1 2 3; do
-  $blender $here/gear_check.py "$out/$name-game.glb" "${looks[@]}" --fix | grep -E "^FIX|Error" || true
-  carry
-done
-$blender $here/gear_check.py "$out/$name-game.glb" "${looks[@]}" | grep -E "^GEARCHECK|Error" || true
+# Steps 4 to 6 are the character build's own (build.ts --morph, D563): the morph and each look
+# carried onto it, pushed clear in three rounds and checked, a step each, skipped while unchanged.
+exec node tools/characters/build.ts --morph "$name" --design "$design"

@@ -483,6 +483,8 @@ def rim(piece, inward):
         e.smooth = False
     old = set(bm.verts)
     index = {v: v.index for v in bm.verts}
+    was_vert = {v: i for i, v in enumerate(bm.verts)}
+    was_face = {f: i for i, f in enumerate(bm.faces)}
     grown = bmesh.ops.extrude_edge_only(bm, edges=edge)
     source = {}
     for v in [g for g in grown["geom"] if isinstance(g, bmesh.types.BMVert)]:
@@ -493,6 +495,14 @@ def rim(piece, inward):
             e = next(e for e in f.edges if e in edge_uv)
             for l in f.loops:
                 l[uv].uv = edge_uv[e][l.vert if l.vert in old else source[l.vert]]
+    # The extrusion makes its elements in an order of their addresses in memory, another each
+    # run: put the new ones after the old in the order of the edge and vertex they grew from, so
+    # the same piece is written as the same bytes (D563). Keys are numbers (BMElemSeq.sort).
+    rank = {e: i for i, e in enumerate(edge)}
+    face_key = {f: was_face[f] if f in was_face else len(was_face) + rank[next(e for e in f.edges if e in rank)] for f in bm.faces}
+    vert_key = {v: was_vert[v] if v in was_vert else len(was_vert) + was_vert[source[v]] for v in bm.verts}
+    bm.faces.sort(key=lambda f: face_key[f])
+    bm.verts.sort(key=lambda v: vert_key[v])
     bm.normal_update()
     bm.to_mesh(piece.data)
     bm.free()

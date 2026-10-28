@@ -51,6 +51,7 @@ and is hit as a person is and smashes as a troll, the fight's man idles and roll
 import json
 import math
 import os
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -631,11 +632,25 @@ def main():
     for o in bpy.context.scene.objects:
         o.select_set(o in (arm, body))
     bpy.context.view_layer.objects.active = arm
+    # Into the file it read, only the clips made are written (glb_clips.ts): exporting the whole
+    # mannequin again would move its rest a little every time (Blender's glTF round trip), so a
+    # run with nothing changed would not give the same bytes (D563). A set (--list) is written
+    # whole into its own copy.
+    made_into = out if chosen else out + ".made.glb"
     bpy.ops.export_scene.gltf(
-        filepath=out, export_format="GLB", use_selection=True,
+        filepath=made_into, export_format="GLB", use_selection=True,
         export_animations=True, export_animation_mode="NLA_TRACKS", export_force_sampling=True,
         export_influence_nb=4,
     )
+    if not chosen:
+        try:
+            if takes:
+                put = subprocess.run(["node", os.path.join(HERE, "glb_clips.ts"), out, made_into, *takes], capture_output=True, text=True)
+                print(put.stdout.strip() or put.stderr.strip())
+                if put.returncode:
+                    raise SystemExit(f"glb_clips.ts exited {put.returncode}")
+        finally:
+            os.remove(made_into)
     print("MADE", len(takes), "clips into", os.path.relpath(out, look.ROOT))
 
 

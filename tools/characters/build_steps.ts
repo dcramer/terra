@@ -43,9 +43,9 @@ export const SECTIONS = ["== 0. the clips", "== 1. the base", "== 2. its gear", 
 
 /** What a module reads besides its imports, followed with them (look.py's is read by every Blender script). */
 export const MODULE_DATA: Record<string, string[]> = {
-  "tools/characters/look.py": ["assets/models/character/skinning.json", "art/animation/clips.txt", "tools/blender/run.sh", "tools/blender/version"],
+  "tools/characters/look.py": ["assets/models/character/skinning.json", "art/animation/clips.txt", "tools/blender/run.sh", "tools/blender/version", "assets/models/character/mannequin.glb"],
   "tools/characters/clips.py": ["art/animation/library", "art/animation/made.json"],
-  "tools/characters/made_clips.py": ["art/animation/made", "art/animation/made.json"],
+  "tools/characters/made_clips.py": ["art/animation/made", "art/animation/made.json", "tools/characters/glb_clips.ts"],
   "tools/characters/export_character.py": ["art/animation/made.json"],
   "tools/characters/hold.py": ["art/animation/shield_targets.json"],
   "tools/characters/rig_check.py": ["art/characters/rig-baseline.json"],
@@ -58,6 +58,8 @@ export type Bodies = {
   designed: string[];
   rigged: { morph: string; body: string; height: number }[];
   skins: { morph: string; front: string }[];
+  /** A designed morph's model where it is not art/characters/<base>/morphs/<name>/model.glb (make_morph.sh --design); not in bodies.json. */
+  designs?: Record<string, string>;
 };
 
 export function bodiesData(root = ROOT): Bodies {
@@ -97,7 +99,7 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
     name: "clips",
     section: 0,
     needs: [],
-    inputs: py("clips.py", "made_clips.py", "clip_check.py"),
+    inputs: [...py("clips.py", "made_clips.py", "clip_check.py", "mirror.ts")],
     outputs: [],
     inPlace: ["assets/models/character/mannequin.glb"],
     committed: true,
@@ -106,7 +108,8 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
       "  if ls art/animation/library/*.glb >/dev/null 2>&1; then",
       `    ${blender("clips.py", "", "CLIPS|Error|not in")}`,
       "  fi",
-      `  ${blender("made_clips.py", "", "^MADE|Error|no clean stride")}`,
+      `  ${blender("made_clips.py", "", "^MADE|^CLIPS|Error|no clean stride")}`,
+      "  node $here/mirror.ts assets/models/character/mannequin.glb    # a made clip's mirror made again from it",
       "fi",
       `$blender $here/clip_check.py | grep -E "^CLIPCHECK (pass|fail)|\\"pass\\": false|Error" | tee $out/build-clips.log || true`,
     ].join("\n"),
@@ -119,12 +122,13 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
   for (const r of b.rigged) steps.push({ name: `body:${r.body}`, section: 3, needs: ["base"], ...finish(r.body, r.height, `art/characters/${r.body}/rigged.glb`) });
   for (const m of [...b.designed, ...b.rigged.map((r) => r.morph)]) {
     const rigged = b.rigged.find((r) => r.morph === m);
-    const design = rigged ? `"$out/${rigged.body}-game.glb"` : `"art/characters/${base}/morphs/${m}/model.glb"`;
+    const model = b.designs?.[m] ?? `art/characters/${base}/morphs/${m}/model.glb`;
+    const design = rigged ? `"$out/${rigged.body}-game.glb"` : `"${model}"`;
     steps.push({
       name: `morph:${m}`,
       section: 3,
       needs: rigged ? ["base", `body:${rigged.body}`] : ["base"],
-      inputs: [...py("morph.py", "export_character.py"), ...(rigged ? [] : [`art/characters/${base}/morphs/${m}/model.glb`])],
+      inputs: [...py("morph.py", "export_character.py"), ...(rigged ? [] : [model])],
       outputs: [`${OUT}/${m}.glb`, `${OUT}/${m}.npz`, `${OUT}/${m}-game.glb`],
       run: [
         blender("morph.py", `"$out/${base}-game.glb" ${design} "${m}"`, "MORPH|EXPORTED|Error"),
@@ -171,25 +175,22 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
         run: fitRun(base, body, item),
       });
 
-  // A template's skin is baked onto its body and the body written again with it (paint_skin.py
-  // `in` rewrites out/M-game.glb): after every look is fitted on that body, before the game's
-  // files are carried from it. The PNG keeps no dates, so the same skin is the same bytes.
+  // A template's skin baked onto its body (paint_skin.py `in`): the game's PNG, and the body
+  // wearing it to look at (out/M-skinned.glb). The body it reads stays as the morph wrote it, so
+  // the skin reaches nothing else: the game loads the PNG by itself. The PNG keeps no dates.
   for (const s of b.skins)
     steps.push({
       name: `skin:${s.morph}`,
       section: 4,
       needs: [`morph:${s.morph}`],
-      after: looks.map((l) => `fit:${s.morph}:${l}`),
       inputs: [...py("paint_skin.sh", "paint_skin.py"), s.front, `art/characters/${base}/morphs/${s.morph}/skin.glb`],
-      outputs: [`${OUT}/${s.morph}-skin.png`, `assets/models/character/skins/${s.morph}.png`],
-      inPlace: [`${OUT}/${s.morph}-game.glb`],
+      outputs: [`${OUT}/${s.morph}-skin.png`, `assets/models/character/skins/${s.morph}.png`, `${OUT}/${s.morph}-skinned.glb`],
       run: [
         "mkdir -p assets/models/character/skins",
         `$here/paint_skin.sh ${s.morph} ${s.front}`,
-        `convert "$out/${s.morph}-skin.png" -resize "2048x2048>" -define png:exclude-chunks=date,time "assets/models/character/skins/${s.morph}.png"   # the body budget (D188)`,
+        `convert "$out/${s.morph}-skin.png" -resize "2048x2048>" -define png:exclude-chunk=date,time,tEXt,zTXt,iTXt "assets/models/character/skins/${s.morph}.png"   # the body budget (D188); no dates, so the same bytes`,
       ].join("\n"),
     });
-  const skins = b.skins.map((s) => `skin:${s.morph}`);
 
   // The game's files: the base with every morph, the clips mirrored and their foot markers
   // baked; each look with the same morphs, hiding no patch that opened on any body.
@@ -197,7 +198,7 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
   steps.push({
     name: "export",
     section: 5,
-    needs: ["base", ...morphs.map((m) => `morph:${m}`), ...skins],
+    needs: ["base", ...morphs.map((m) => `morph:${m}`)],
     inputs: py("export_character.py", "mirror.ts", "markers.ts"),
     outputs: ["assets/models/character/base.glb"],
     run: [
@@ -210,7 +211,7 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
     steps.push({
       name: `look:${item}`,
       section: 5,
-      needs: ["base", made(item), ...morphs.map((m) => `morph:${m}`), ...[base, ...morphs].map((body) => `fit:${body}:${item}`), ...skins],
+      needs: ["base", made(item), ...morphs.map((m) => `morph:${m}`), ...[base, ...morphs].map((body) => `fit:${body}:${item}`)],
       inputs: [...py("carry_gear.py"), `art/gear/${item}/fit.json`],
       outputs: [`assets/models/gear/${item}.glb`],
       run: ["mkdir -p assets/models/gear", blender("carry_gear.py", `"$out/${base}-game.glb" "$out/gear/${base}/${item}.glb" "assets/models/gear/${item}.glb" "--morphs=${all}" --textures=1024`, "CARRIED|Error")].join("\n"),
@@ -229,7 +230,7 @@ export function closure(paths: string[], root = ROOT): string[] {
   const visit = (p: string) => {
     if (seen.has(p)) return;
     seen.add(p);
-    for (const d of MODULE_DATA[p] ?? []) seen.add(d);
+    for (const d of MODULE_DATA[p] ?? []) visit(d);
     if (!/\.(py|ts)$/.test(p) || !existsSync(join(root, p))) return;
     const dir = p.slice(0, p.lastIndexOf("/"));
     const text = readFileSync(join(root, p), "utf8");

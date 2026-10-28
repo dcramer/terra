@@ -17,6 +17,7 @@ A body never goes deeper than the mannequin in any clip, so the rig check's floo
 deeper than the mannequin plus 2 cm) holds for every shape.
 """
 
+import hashlib
 import json
 import os
 import sys
@@ -69,12 +70,15 @@ CACHE = os.path.join(look.OUT, "lift-mannequin.json")
 
 
 def stamp():
-    return f"{os.path.getsize(look.FIGURE)}-{int(os.path.getmtime(look.FIGURE))}"
+    # The file's content, not its size and time: a checkout or a restored build has another
+    # time, and the build's outputs must be the same bytes from the same inputs (D563).
+    with open(look.FIGURE, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
 def measure_mannequin():
     """Measures the mannequin's lowest point at every frame of every game clip, in a scene of
-    its own, and keeps it (CACHE) beside its file's size and time. Run as this file's main,
+    its own, and keeps it (CACHE) beside its file's hash. Run as this file's main,
     once at the start of a build."""
     look.reset()
     bpy.ops.import_scene.gltf(filepath=look.FIGURE)

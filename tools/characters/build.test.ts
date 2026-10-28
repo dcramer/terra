@@ -14,7 +14,7 @@ import { bodiesData, buildSteps, closure, gearData, morphNames, type Step } from
 const ROOT = join(import.meta.dirname, "..", "..");
 
 /** first: src's first letter; second: first's, doubled; apart: reads nothing of theirs. */
-function scratch() {
+function scratch(cache?: string) {
   const root = mkdtempSync(join(tmpdir(), "terra-build-"));
   mkdirSync(join(root, "out"));
   writeFileSync(join(root, "src.txt"), "ab\n");
@@ -26,7 +26,7 @@ function scratch() {
   ];
   const run = async (s = steps, wanted?: string[]) => {
     const lines: string[] = [];
-    const b = new Builder(s, root, join(root, "out"), {}, (l) => lines.push(l));
+    const b = new Builder(s, root, join(root, "out"), {}, (l) => lines.push(l), cache);
     const ok = await b.build(wanted, 2);
     return { ok, b, states: Object.fromEntries([...b.outcomes].map(([n, o]) => [n, o.state])), lines };
   };
@@ -134,9 +134,45 @@ test("the character build's steps: every need a step, every input there, each lo
   // A garment worn over another is made after it; one drawn on the female, after her morph.
   const skirt = steps.find((s) => s.name === "garment:skirt")!;
   assert.ok(skirt.needs.includes("garment:shift") && skirt.needs.includes("morph:female"));
-  // Her skin is painted onto her body after every look is fitted on it, reading none of them.
+  // Her skin is painted on a copy of her body, changing nothing another step reads: no step waits for it.
   const skin = steps.find((s) => s.name === "skin:female")!;
-  assert.ok(skin.after!.includes("fit:female:cap") && !skin.needs.some((n) => n.startsWith("fit:")));
+  assert.ok(!skin.inPlace?.length && !steps.some((s) => s.needs.includes(skin.name) || s.after?.includes(skin.name)));
+  // Every Blender step reads the mannequin (look.FIGURE), so the step cache keys hold it.
+  assert.ok(steps.filter((s) => s.name.startsWith("fit:")).every((s) => closure(s.inputs).includes("assets/models/character/mannequin.glb")));
+});
+
+test("a fresh worktree restores from the step cache what another built from the same inputs, and builds what differs", async () => {
+  const cache = mkdtempSync(join(tmpdir(), "terra-steps-"));
+  const one = scratch(cache);
+  assert.deepEqual((await one.run()).states, { first: "built", second: "built", apart: "built" });
+  const two = scratch(cache);
+  writeFileSync(join(two.root, "other.txt"), "y\n");
+  const fresh = await two.run();
+  assert.deepEqual(fresh.states, { first: "restored", second: "restored", apart: "built" });
+  assert.match(fresh.lines.join("\n"), /↓ first restored: from the step cache/);
+  assert.equal(readFileSync(join(two.root, "out", "second.txt"), "utf8"), "a\na\n");
+  assert.equal(fresh.b.joinedLog(two.steps.map((s) => s.name)), "== 0. the clips\nFIRST\n== 1. the base\n", "its log restored with it");
+  assert.deepEqual((await two.run()).states, { first: "skipped", second: "skipped", apart: "skipped" });
+});
+
+test("a step that changes a file in place is never shared: what it reads is what it changes", async () => {
+  const cache = mkdtempSync(join(tmpdir(), "terra-steps-"));
+  const paint: Step = { name: "paint", section: 2, needs: ["first"], inputs: [], outputs: [], inPlace: ["out/first.txt"], run: "echo painted >> out/first.txt" };
+  const one = scratch(cache);
+  await one.run([one.steps[0], paint]);
+  const two = scratch(cache);
+  assert.deepEqual((await two.run([two.steps[0], paint])).states, { first: "restored", paint: "built" });
+});
+
+test("--again: a step run twice on the same inputs makes the same bytes, or says which differ", async () => {
+  const { root, steps } = scratch();
+  const clock: Step = { name: "clock", section: 1, needs: ["first"], inputs: [], outputs: ["out/clock.txt"], run: "date +%N > out/clock.txt" };
+  const lines: string[] = [];
+  const b = new Builder([...steps, clock], root, join(root, "out"), {}, (l) => lines.push(l));
+  assert.deepEqual(await b.again(["second", "apart"], 2), []);
+  assert.match(lines.join("\n"), /✓ second again: 1 outputs the same bytes/);
+  assert.deepEqual(await b.again(["clock"], 2), ["clock: out/clock.txt differs"]);
+  assert.match(await b.again(["first", "second"]).then((l) => l.join()), /reads another of the steps named/);
 });
 
 test("a script's inputs follow its imports to the data they read", () => {
