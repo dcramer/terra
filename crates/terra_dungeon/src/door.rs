@@ -18,11 +18,13 @@ pub const SWING_PER_S: f32 = 2.0;
 /// How far ahead a filming camera reads its shot, in seconds: a swing and a tenth, so a door
 /// its shot walks into stands open a tenth of a second before the camera is in reach.
 pub const FILM_LEAD_S: f32 = 1.0 / SWING_PER_S + 0.1;
-/// How near a filming camera pushes, in metres along its shot from the doorway: a 20 mm
-/// lens on Super 35 sees 64 degrees across, so the shut 2 m leaves fill it from 1.6 m, and a
-/// shot that slows to hold 3 m short while they swing (as a game's door cinematic holds) has
-/// them open as it stands there, never shut in the picture.
-pub const FILM_REACH_M: f32 = 3.5;
+/// How near a filming camera pushes, in metres along its shot from the doorway: the dungeon
+/// films' 35 mm lens on Super 35 sees 39 degrees across, so a 3 m doorway between its half
+/// metre jambs fills it from 5.6 m; pushed from 6 m, its leaves stand open before they could
+/// fill the picture (at 3.5 m, mine round 4's judges saw a shut door point-blank and a leaf
+/// mid-swing at the camera), and a shot that slows to hold 3 m short while they swing (as a
+/// game's door cinematic holds) has them open as it stands there.
+pub const FILM_REACH_M: f32 = 6.0;
 /// A filming camera reads its shot ahead until its eye has gone so far past where it is
 /// `FILM_LEAD_S` from now, in metres (`film_path`): by distance, not time, so a shot that
 /// crawls for seconds short of a door still reads the doorway (barrow round 18's tour took
@@ -366,6 +368,32 @@ mod tests {
             assert_eq!(door.swing, 1.0, "{shot}: into the room");
             let open_at = open_at.unwrap_or(0.0);
             assert!(open_at > 1.6, "{shot}: open only {open_at:.2} m out");
+        }
+    }
+
+    #[test]
+    fn a_walk_at_a_dungeon_door_sees_it_open_before_the_doorway_fills_a_35_mm_lens() {
+        // The films' 35 mm lens on Super 35 (cine.rs) sees 39 degrees across: a 3 m doorway
+        // and its two half metre jambs fill it from this far.
+        let (width, across) = (3.0, 4.0);
+        let fills = across * 0.5 / (24.89 * 0.5 / 35.0);
+        for speed in [0.8, 1.5, 2.5] {
+            let eye = move |t: f32| Vec3::new(0.3, 1.6, 14.0 - speed * t);
+            let mut door = Door::shut(Lock::None);
+            let mut open_at = None;
+            for k in 0..(16.0 / speed / DT) as usize {
+                let t = k as f32 * DT;
+                let path = film_path(|ahead| eye(t + ahead), EVERY);
+                door.film(&path, EVERY, width, false, DT);
+                if door.swing >= 1.0 && open_at.is_none() {
+                    open_at = Some(eye(t).z);
+                }
+            }
+            let open_at = open_at.unwrap_or(0.0);
+            assert!(
+                open_at > fills,
+                "at {speed} m/s fully open only {open_at:.2} m out; the doorway fills the lens from {fills:.2} m"
+            );
         }
     }
 
