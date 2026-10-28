@@ -1,6 +1,6 @@
 # Assembled items: equipment made from parts by rules
 
-Status: decided (D565, the developers approved the recommended answers on 2026-10-28). Parts are made only from one approved style reference picture.
+Status: decided (D565, the developers approved the recommended answers on 2026-10-28). Parts are made only from the approved style reference picture, `art/style/reference.png` (the developers' pick, 2026-10-28, candidate A). A theme (a realm or a people) may get its own reference later, and a part's art can be remade from a new one without changing any item's recipe.
 
 Weapons and tools are made from a few parts per kind, each made once with named connection points, and put together by rules. Every attachment is then exact by construction: a new item is a choice of parts, never a model to be fitted, measured or tuned. It is how the game reaches thousands of items without a number set by hand for any one of them, and it is D182 (hundreds of variants from parts by rules) applied to equipment.
 

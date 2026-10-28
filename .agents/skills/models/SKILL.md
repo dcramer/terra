@@ -88,4 +88,4 @@ In one commit: `art/props/<name>/` (`prop.json`, `concept.png`, `concept.prompt.
 The style guide lists what does not yet follow it ("Where the pipeline stands"). The ones that touch this skill:
 
 - **Plants are grown, not modelled** (D222), so a textured Tripo plant has no place in `flora.ron`; a modelled kind there is drawn in its kind's material, projected onto it, not its own textures.
-- **No approved image in the style yet.** Concepts are drawn from the guide's paragraph alone. Once one is approved, put it in `art/style/` as `reference.png` and `props.ts` gives it as a reference.
+- **The approved style image** is `art/style/reference.png` (the developers chose it for weapon and tool parts, D565, 2026-10-28); `props.ts` gives it as a reference. A theme may get its own reference later (D565).
