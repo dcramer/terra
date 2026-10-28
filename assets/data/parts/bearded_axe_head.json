@@ -66,8 +66,8 @@
   ],
   "centre_m": [
     -0.00036,
-    0.00714,
-    -0.04205
+    0.00723,
+    -0.04246
   ],
   "bounds_m": [
     [
@@ -82,7 +82,7 @@
     ]
   ],
   "volume_m3": {
-    "value": 0.00012844,
+    "value": 0.00012717,
     "source": "measured on models/parts/bearded_axe_head.glb by tools/items/part.ts --write"
   }
 }

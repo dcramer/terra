@@ -6,5 +6,5 @@
   "mass_kg": 0.88,
   "eye": { "from_back_m": 0.026, "size_m": 0.03, "across_m": 0.043 },
   "edge_band_m": 0.03,
-  "budget": 740
+  "budget": 700
 }

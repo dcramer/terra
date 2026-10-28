@@ -1,0 +1,9 @@
+{
+  "type": "collar",
+  "role": "Leather",
+  "turn_deg": 0,
+  "height_m": 0.04,
+  "bore_m": 0.03,
+  "wall_m": 0.0045,
+  "density_kg_m3": { "value": 860, "source": "leather, dry 0.86 x 10^3 kg/m^3 (The Engineering ToolBox, Solids - Densities, engineeringtoolbox.com/density-solids-d_1265.html, looked up 2026-10-28)" }
+}

@@ -1,0 +1,9 @@
+{
+  "type": "collar",
+  "role": "Metal",
+  "turn_deg": 0,
+  "height_m": 0.022,
+  "bore_m": 0.03,
+  "wall_m": 0.0025,
+  "density_kg_m3": { "value": 7750, "source": "wrought iron (The Engineering ToolBox, Metals and Alloys - Densities, engineeringtoolbox.com/metal-alloys-densities-d_50.html, looked up 2026-10-28), materials.json's iron" }
+}

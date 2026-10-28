@@ -1,0 +1,52 @@
+{
+  "$schema": "./part.schema.json",
+  "part": "iron_collar",
+  "type": "collar",
+  "about": "a forged iron collar under the head, a raised bead round its middle (art/parts/axe/trims.png)",
+  "kinds": [
+    "axe"
+  ],
+  "model": "models/parts/iron_collar.glb",
+  "mass_kg": {
+    "value": 0.0409,
+    "source": "5.27 cm^3 measured by tools/items/prep.py, at 7750 kg/m^3: wrought iron (The Engineering ToolBox, Metals and Alloys - Densities, engineeringtoolbox.com/metal-alloys-densities-d_50.html, looked up 2026-10-28), materials.json's iron"
+  },
+  "cover_m": [
+    -0.011,
+    0.011
+  ],
+  "points": [
+    {
+      "name": "bore",
+      "type": "bore",
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "dir": [
+        0,
+        1,
+        0
+      ],
+      "size": 0.03
+    }
+  ],
+  "centre_m": [
+    0,
+    -0.00007,
+    0
+  ],
+  "bounds_m": [
+    [
+      -0.01808,
+      -0.011,
+      -0.01808
+    ],
+    [
+      0.01808,
+      0.011,
+      0.01808
+    ]
+  ]
+}

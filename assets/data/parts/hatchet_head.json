@@ -65,9 +65,9 @@
     }
   ],
   "centre_m": [
-    -0.00051,
-    0.00793,
-    -0.03164
+    -0.00053,
+    0.00847,
+    -0.03306
   ],
   "bounds_m": [
     [
@@ -82,7 +82,7 @@
     ]
   ],
   "volume_m3": {
-    "value": 0.000099491,
+    "value": 0.000095144,
     "source": "measured on models/parts/hatchet_head.glb by tools/items/part.ts --write"
   }
 }

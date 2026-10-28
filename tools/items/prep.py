@@ -13,13 +13,18 @@ The part's prep.json says what a person decided and nothing measured:
               from shape and material); or height_m, a trim's real height along the line
   eye         a head's eye, marked by hand (research/2026-10-28-assembled-parts-art.md section 4:
               a tool cannot find it from the shape): {from_back_m, size_m}, the eye's centre that
-              far in from the back of the poll, on the poll's middle across, cut round to size_m
-  bore_m      a trim's bore, cut round its own middle to that diameter
+              far in from the back of the poll, on the poll's middle across, cut round to size_m;
+              seat_m, the underside round it cut flat at eye.lower that far out (default 2 cm), so
+              a collar under the head meets it in one ring
+  bore_m      a trim: turned as a closed lathe on its model's own outer profile (lathe.py), its bore
+              exact at bore_m, its wall wall_m out from it (the relief kept in proportion), its
+              look baked on from the model; Tripo's tubes are open, so they cannot be cut
+  density_kg_m3  a trim's own material, {value, source}: its mass_kg is its volume in it
   edge_band_m a head's bit: how far back from its front-most point the cutting edge runs
-  budget      triangles at most (art-style.md's budget for a tool's head)
+  budget      a head: triangles before its cuts add about 340 (art-style.md: a tool's head, 800 at most)
 
-OUT.json gets its points and cover in glTF's frame (+Y up, front +Z), which tools/items/prep.ts
-writes into assets/data/parts/<part>.json; part.ts --write then measures its volume and bounds.
+OUT.json gets its points, a trim's cover and mass, in glTF's frame (+Y up, front +Z), copied by hand
+into assets/data/parts/<part>.json; part.ts --write then measures its volume and bounds.
 Blender's frame is glTF's turned: Blender (x, y, z) is glTF (x, z, -y).
 """
 
@@ -30,17 +35,20 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "blender"))
+sys.path.insert(0, HERE)
 
 import bmesh  # noqa: E402
 import bpy  # noqa: E402
 from mathutils import Matrix, Vector  # noqa: E402
 from mathutils.bvhtree import BVHTree  # noqa: E402
 
+import lathe  # noqa: E402
 import pieces  # noqa: E402
 
 DENSITY = {"iron": 7750.0, "stone": 2600.0}  # assets/data/parts/materials.json, read below
 TEXTURE_PX = 1024  # types.json's texture_px: colour and normal; roughness and metal at half
 RAYS = 32
+UP = [0.0, 1.0, 0.0]
 
 
 def gltf(v):
@@ -111,13 +119,13 @@ def open_edges(ob):
     return n, vol
 
 
-def cut_round(ob, centre, diameter):
+def cut_round(ob, centre, diameter, below=None, sides=40):
     """Cuts a round opening straight up through the part at `centre` (x, y), `diameter` across:
-    the eye or bore is made, so it is exactly where and as wide as its points say."""
-    sides = 40
+    the eye or bore is made, so it is exactly where and as wide as its points say; or, `below` a
+    height, only beneath it (a seat)."""
     radius = diameter / 2 / math.cos(math.pi / sides)  # its flats touch the circle, never inside it
     lo = min(v.co.z for v in ob.data.vertices) - 0.05
-    hi = max(v.co.z for v in ob.data.vertices) + 0.05
+    hi = max(v.co.z for v in ob.data.vertices) + 0.05 if below is None else below
     bpy.ops.mesh.primitive_cylinder_add(vertices=sides, radius=radius, depth=hi - lo, location=(centre[0], centre[1], (lo + hi) / 2))
     cutter = bpy.context.active_object
     mod = ob.modifiers.new("eye", "BOOLEAN")
@@ -194,6 +202,7 @@ def look(ob, path):
     scene.collection.objects.link(cam)
     cam.data.type = "ORTHO"
     cam.data.ortho_scale = size
+    cam.data.clip_start = size / 100
     scene.camera = cam
     shots = []
     for i, (where, rot) in enumerate(((Vector((1, 0, 0)), (math.pi / 2, 0, math.pi / 2)), (Vector((0, 0, 1)), (0, 0, 0)), (Vector((0, 1, 0)), (math.pi / 2, 0, math.pi)))):
@@ -257,6 +266,8 @@ def main():
     else:
         scale = prep["height_m"] / (max(v.co.z for v in ob.data.vertices) - min(v.co.z for v in ob.data.vertices))
     ob.data.transform(Matrix.Scale(scale, 4))
+    if "bore_m" in prep:
+        return turned_trim(ob, prep, folder, out_glb, out_json)
     # The cut's walls and rims take about 300 triangles of the budget.
     pieces.cut(ob, prep["budget"] - 340)
     closed(ob)
@@ -305,9 +316,6 @@ def main():
                 v.co.x = x + (v.co.x - x) * (1.0 + (factor(inside) - 1.0) * t * t * (3 - 2 * t))
             x, across = poll_middle(ob, y)
         print(f"prep: eye {size * 100:.1f} cm at {prep['eye']['from_back_m'] * 100:.1f} cm from the back, the poll {across * 100:.1f} cm across there")
-    else:
-        x, y = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
-        size = prep["bore_m"]
     shots = os.path.join(os.path.dirname(os.path.abspath(out_json)), os.path.basename(folder.rstrip("/")))
     look(ob, shots + "-before")
     cut_round(ob, (x, y), size)
@@ -318,39 +326,85 @@ def main():
     bm.to_mesh(ob.data)
     bm.free()
     lo, hi = opening_span(ob, (x, y), size / 2)
-    origin = Vector((x, y, lo if "eye" in prep else (min(zs) + max(zs)) / 2))
-    ob.data.transform(Matrix.Translation(-origin))
-    up = [0.0, 1.0, 0.0]
-    if "eye" in prep:
-        a, b = edge_points(ob, prep.get("edge_band_m", 0.03))
-        points = [
-            {"name": "eye.lower", "type": "eye", "at": [0.0, 0.0, 0.0], "dir": up, "size": size},
-            {"name": "eye.upper", "type": "eye", "at": [0.0, round(hi - lo, 5), 0.0], "dir": up, "size": size},
-            {"name": "edge.lower", "type": "edge", "at": gltf(a), "dir": [0.0, 0.0, -1.0]},
-            {"name": "edge.upper", "type": "edge", "at": gltf(b), "dir": [0.0, 0.0, -1.0]},
-        ]
-        cover = None
-    else:
-        points = [{"name": "bore", "type": "bore", "at": [0.0, 0.0, 0.0], "dir": up, "size": size}]
-        cover = [round(lo - origin.z, 5), round(hi - origin.z, 5)]
+    # The seat: the underside round the eye made flat at eye.lower, as a forged head's is, so a
+    # collar under it meets it in one ring and nothing of the head hangs into the collar (D566).
+    seat = prep["eye"].get("seat_m", 0.02)
+    cut_round(ob, (x, y), 2 * seat, below=lo, sides=12)
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    # The cuts split the faces round them into slivers: the flat ones (the seat, each facet of the
+    # eye) merge back into one face each, UV islands kept, then the part is triangles again.
+    bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(0.5), verts=bm.verts, edges=bm.edges, delimit={"UV"})
+    bmesh.ops.triangulate(bm, faces=bm.faces, quad_method="BEAUTY", ngon_method="BEAUTY")
+    bm.to_mesh(ob.data)
+    bm.free()
+    ob.data.transform(Matrix.Translation(-Vector((x, y, lo))))
+    a, b = edge_points(ob, prep.get("edge_band_m", 0.03))
+    points = [
+        {"name": "eye.lower", "type": "eye", "at": [0.0, 0.0, 0.0], "dir": UP, "size": size},
+        {"name": "eye.upper", "type": "eye", "at": [0.0, round(hi - lo, 5), 0.0], "dir": UP, "size": size},
+        {"name": "edge.lower", "type": "edge", "at": gltf(a), "dir": [0.0, 0.0, -1.0]},
+        {"name": "edge.upper", "type": "edge", "at": gltf(b), "dir": [0.0, 0.0, -1.0]},
+    ]
     pieces.only(ob)
     bpy.ops.object.shade_smooth_by_angle(angle=math.radians(50.0), keep_sharp_edges=True)
     textures(ob, prep["role"])
+    export(ob, folder, out_glb, out_json, {"points": points}, f"{stray} stray vertices dropped")
+
+
+def turned_trim(raw, prep, folder, out_glb, out_json):
+    """A trim on the line, Tripo's tube with its own hole: turned as a closed lathe (lathe.py) on
+    the tube's own outer profile, its bore exact at bore_m and its wall wall_m thick, the relief
+    kept in proportion; the model, moved to the same radii, gives only its look, baked on."""
+    zs = [v.co.z for v in raw.data.vertices]
+    centre = ((min(v.co.x for v in raw.data.vertices) + max(v.co.x for v in raw.data.vertices)) / 2, (min(v.co.y for v in raw.data.vertices) + max(v.co.y for v in raw.data.vertices)) / 2)
+    bore, wall, sides = prep["bore_m"], prep["wall_m"], prep.get("sides", 24)
+    r_in = lathe.inner_radius(raw, centre)
+    profile = lathe.outer_profile(raw, centre, prep.get("rings", 12))
+    r_mid = sorted(r for _, r in profile)[len(profile) // 2]
+    k = wall / (r_mid - r_in)
+
+    def radius(r):
+        return bore / 2 + (r - r_in) * k if r >= r_in else r * (bore / 2) / r_in
+
+    print(f"prep: tube as made {r_in * 2000:.1f} mm hole, {r_mid * 2000:.1f} mm across; made {bore * 1000:.1f} mm bore, {(bore / 2 + wall) * 2000:.1f} mm across, {(max(zs) - min(zs)) * 1000:.1f} mm high")
+    lathe.remap(raw, centre, radius)
+    raw.data.transform(Matrix.Translation(-Vector((centre[0], centre[1], 0.0))))
+    ob = lathe.lathe(os.path.basename(folder.rstrip("/")), [(z, radius(r)) for z, r in profile], bore, sides)
+    shots = os.path.join(os.path.dirname(os.path.abspath(out_json)), os.path.basename(folder.rstrip("/")))
+    lathe.bake(raw, ob, prep["role"], prep.get("texture_px", 512), 1.0 if prep["role"] == "Metal" else 0.0, wall)
+    bpy.data.objects.remove(raw)
+    opening_span(ob, (0.0, 0.0), bore / 2)  # refuses a bore not walled all round
+    mid = (min(zs) + max(zs)) / 2
+    ob.data.transform(Matrix.Translation(-Vector((0.0, 0.0, mid))))
+    pieces.only(ob)
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(50.0), keep_sharp_edges=True)
+    look(ob, shots + "-after")
+    _, vol = open_edges(ob)
+    d = prep["density_kg_m3"]
+    export(ob, folder, out_glb, out_json, {
+        "points": [{"name": "bore", "type": "bore", "at": [0.0, 0.0, 0.0], "dir": UP, "size": bore}],
+        # The bore is exact its whole height, so the trim covers from end to end.
+        "cover_m": [round(min(zs) - mid, 5), round(max(zs) - mid, 5)],
+        # A trim keeps its own material, so it gives its mass (part.schema.json): its closed
+        # volume in its own density, the density's source carried with it.
+        "mass_kg": {"value": round(abs(vol) * d["value"], 4), "source": f"{abs(vol) * 1e6:.2f} cm^3 measured by tools/items/prep.py, at {d['value']} kg/m^3: {d['source']}"},
+    }, "turned")
+
+
+def export(ob, folder, out_glb, out_json, result, note):
     n_open, vol = open_edges(ob)
     dims = [max(c) - min(c) for c in zip(*[v.co for v in ob.data.vertices])]
     tris = pieces.triangles(ob)
-    print(f"prep: {tris} triangles, {n_open} open edges, {stray} stray vertices dropped, {vol * 1e6:.1f} cm^3, {dims[0] * 100:.1f} x {dims[2] * 100:.1f} x {dims[1] * 100:.1f} cm (x, up, along)")
+    print(f"prep: {tris} triangles, {n_open} open edges, {note}, {vol * 1e6:.1f} cm^3, {dims[0] * 100:.1f} x {dims[2] * 100:.1f} x {dims[1] * 100:.1f} cm (x, up, along)")
     if n_open:
         raise SystemExit(f"prep: {n_open} open edges after the cut: the part is not closed; look at {out_glb} in Blender (Select All by Trait > Non Manifold)")
     os.makedirs(os.path.dirname(os.path.abspath(out_glb)), exist_ok=True)
     pieces.only(ob)
     ob.name = os.path.basename(folder.rstrip("/"))
     bpy.ops.export_scene.gltf(filepath=os.path.abspath(out_glb), export_format="GLB", use_selection=True, export_tangents=True, export_image_format="AUTO")
-    result = {"points": points, "triangles": tris}
-    if cover:
-        result["cover_m"] = cover
     with open(out_json, "w") as f:
-        json.dump(result, f, indent=1)
+        json.dump({**result, "triangles": tris}, f, indent=1)
     print(f"prep: {out_glb}, {out_json}")
 
 
