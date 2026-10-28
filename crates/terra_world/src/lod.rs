@@ -40,11 +40,14 @@ pub enum Detail {
 
 impl Detail {
     /// Whether something at this detail thinks on a tick, and if so over how many
-    /// seconds: a tick's, or as many ticks' as it waited.
-    pub fn thinks(self, tick: u64, entity: Entity, dt: f32) -> Option<f32> {
+    /// seconds: a tick's, or as many ticks' as it waited. `turn` is a number of the thing's
+    /// own that spreads them over the ticks; one from its place rather than its entity keeps
+    /// it on the same ticks in every run, however many were made before it.
+    pub fn thinks(self, tick: u64, turn: u64, dt: f32) -> Option<f32> {
         match self {
             Detail::Full => Some(dt),
-            Detail::Reduced => (tick + u64::from(entity.index_u32()))
+            Detail::Reduced => tick
+                .wrapping_add(turn)
                 .is_multiple_of(REDUCED_EVERY)
                 .then_some(dt * REDUCED_EVERY as f32),
             Detail::Dormant => None,
@@ -134,9 +137,9 @@ mod tests {
 
     #[test]
     fn reduced_detail_thinks_once_in_so_many_ticks_and_takes_turns() {
-        let mut world = World::new();
         let many = REDUCED_EVERY as usize * 6;
-        let things: Vec<Entity> = (0..many).map(|_| world.spawn_empty().id()).collect();
+        // Their turns as numbers of their own, as a creature's from its home.
+        let things: Vec<u64> = (0..many as u64).map(|i| i.wrapping_mul(977)).collect();
         let dt = 1.0 / 64.0;
         let mut each = vec![0; many];
         for tick in 0..REDUCED_EVERY * 4 {

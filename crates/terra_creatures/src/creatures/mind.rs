@@ -3,7 +3,7 @@
 //! else what it gets on with (`settle`).
 
 use super::gait::{CROSSES, Pace, bolt, bolts_within};
-use super::{Bitten, CLIMB_REACH_M, Creature, Dice, State};
+use super::{Bitten, CLIMB_REACH_M, Creature, State};
 use crate::species::{Bestiary, Moves, Refuge, SpeciesDef, Temper};
 use crate::wildlife::Surroundings;
 use bevy::prelude::*;
@@ -15,7 +15,6 @@ use terra_world::cine::{Cine, Subject};
 use terra_world::flora::Trunk;
 use terra_world::lod::Detail;
 use terra_world::spatial::SpatialHash;
-use terra_world::tick::Ticks;
 
 /// How far off a creature notices a player, or keeps track of one it chases.
 pub const SENSE_M: f32 = 40.0;
@@ -64,17 +63,15 @@ impl Sense {
 #[allow(clippy::too_many_arguments)]
 pub fn think(
     time: Res<Time>,
-    ticks: Res<Ticks>,
     bestiary: Res<Bestiary>,
     around: Surroundings,
     players: Query<
         (Entity, &Transform, Option<&Motion>, Has<Subject>),
         (With<Player>, Without<Downed>),
     >,
-    mut creatures: Query<(Entity, &mut Creature, &Transform, &Detail), Without<Player>>,
+    mut creatures: Query<(&mut Creature, &Transform, &Detail), Without<Player>>,
     frights: Query<(&Frightful, &GlobalTransform)>,
     mut bitten: MessageWriter<Bitten>,
-    mut dice: ResMut<Dice>,
     mut awake: Local<SpatialHash<Entity>>,
     filming: Option<Res<Cine>>,
 ) {
@@ -89,11 +86,14 @@ pub fn think(
             .filter(|(_, _, _, filmed)| !(out_of_play && *filmed))
             .map(|(player, at, _, _)| (at.translation, player)),
     );
-    for (entity, mut creature, at, detail) in &mut creatures {
+    for (mut creature, at, detail) in &mut creatures {
         // Far from everyone it thinks less often, over the ticks it waited (D145).
-        let Some(dt) = detail.thinks(ticks.0, entity, tick) else {
+        creature.lived += 1;
+        let Some(dt) = detail.thinks(creature.lived, creature.turn(), tick) else {
             continue;
         };
+        // Its own dice, rolled here and put back (`Creature::dice`).
+        let mut dice = creature.dice.clone();
         let here = at.translation;
         let up = here.normalize();
         let nearest_player = nearest(&awake, here);
@@ -119,7 +119,7 @@ pub fn think(
         let mut away = player.map(|(_, p, motion)| {
             let from = (here - p.translation).reject_from(up);
             let heading = motion.map_or(Vec3::ZERO, |m| m.velocity.reject_from(up));
-            bolt(from, heading, up, dice.0.unit() < CROSSES)
+            bolt(from, heading, up, dice.unit() < CROSSES)
         });
         // Something frightful near (a dragon, a fire) startles a shy creature as a blow
         // does, and it goes away from it.
@@ -145,9 +145,10 @@ pub fn think(
             about,
             &sense,
             &around,
-            &mut dice.0,
+            &mut dice,
             &mut bitten,
         );
+        creature.dice = dice;
         if bestiary.hostile(creature.species) && !matches!(next, State::Chase | State::Attack(_)) {
             creature.hurt = false;
         }

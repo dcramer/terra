@@ -25,6 +25,8 @@ fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
         bolt: Vec3::ZERO,
         pace: Pace::Startled,
         progress: Default::default(),
+        dice: own_dice(Vec3::ZERO),
+        lived: 0,
     };
     assert!(creature.unaware());
     creature.state = State::Flee(2.0);
@@ -50,6 +52,8 @@ fn spider(world: &mut World, at: Vec3) -> Entity {
                 bolt: Vec3::ZERO,
                 pace: Pace::Startled,
                 progress: Default::default(),
+                dice: own_dice(at),
+                lived: 0,
             },
             Transform::from_translation(at),
         ))
@@ -60,7 +64,6 @@ fn world() -> World {
     let mut world = World::new();
     world.init_resource::<Time>();
     world.init_resource::<Messages<Bitten>>();
-    world.insert_resource(Dice(Seed(1).derive("test").rng()));
     world.insert_resource(Bestiary::read(&Default::default()));
     world.init_resource::<Ticks>();
     // What a creature asks of the world round it: the ground, its trees.
@@ -545,8 +548,8 @@ fn a_startled_bird_among_trees_may_go_up_into_a_crown_away_from_the_player() {
     }
     let mut crowns = 0;
     for seed in 0..20 {
-        world.insert_resource(Dice(Seed(seed).derive("test").rng()));
         let bird = kind(&mut world, "Chaffinch", ground);
+        world.get_mut::<Creature>(bird).unwrap().dice = Seed(seed).derive("test").rng();
         let player = test_player(&mut world, ground + Vec3::X * 2.0);
         world.run_system_once(think).unwrap();
         let State::Fly { to, .. } = state(&world, bird) else {
@@ -769,4 +772,62 @@ fn a_boar_walking_off_into_a_pocket_of_rocks_gets_out_and_never_stands_in_one() 
         out_at.is_some_and(|s| s < 15.0),
         "still in the pocket: {out_at:?}"
     );
+}
+
+#[test]
+fn a_creature_rolls_its_own_dice_and_takes_its_own_turn_whatever_formed_before_it() {
+    // One stream for every creature, and far ones thinking on ticks by their entity and the
+    // world's count, had the mine's spiders stand differently in each film of one build, as
+    // more wildlife formed first (mine round 11).
+    let ground = Vec3::Y * 2000.0;
+    let day_of = |detail: Detail, formed_first: usize| {
+        let mut world = world();
+        let fox = |world: &mut World, i: usize, way: f32| {
+            let at = ground + Vec3::Z * way * (40.0 + 6.0 * i as f32);
+            let fox = kind(world, "Red fox", at);
+            world.entity_mut(fox).insert(detail);
+        };
+        for i in 0..formed_first {
+            fox(&mut world, i, 1.0);
+        }
+        let deer = kind(&mut world, "Deer", ground);
+        world.entity_mut(deer).insert(detail);
+        // And some after it, thinking after it in a tick.
+        for i in 0..3 {
+            fox(&mut world, i, -1.0);
+        }
+        let mut path = Vec::new();
+        for _ in 0..30 * 20 {
+            world
+                .resource_mut::<Time>()
+                .advance_by(Duration::from_secs_f32(1.0 / 30.0));
+            world.run_system_once(think).unwrap();
+            world.run_system_once(walk).unwrap();
+            path.push(world.get::<Transform>(deer).unwrap().translation);
+        }
+        path
+    };
+    for detail in [Detail::Full, Detail::Reduced] {
+        let alone = day_of(detail, 0);
+        let went = alone
+            .iter()
+            .map(|at| at.distance(ground))
+            .fold(0.0, f32::max);
+        assert!(
+            went > 1.0,
+            "{detail:?}: the deer went about its day ({went:.2} m)"
+        );
+        for first in [1, 5] {
+            let after = day_of(detail, first);
+            let apart = alone
+                .iter()
+                .zip(&after)
+                .map(|(a, b)| a.distance(*b))
+                .fold(0.0, f32::max);
+            assert!(
+                apart == 0.0,
+                "{detail:?}: with {first} formed first the deer went {apart:.2} m elsewhere"
+            );
+        }
+    }
 }

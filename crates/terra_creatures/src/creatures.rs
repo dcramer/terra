@@ -130,6 +130,27 @@ pub struct Creature {
     pace: Pace,
     /// Whether it is getting on its way or stuck (`ground::step`).
     progress: ground::Progress,
+    /// What it rolls when it decides (`mind`), its own from its home (`own_dice`): one stream
+    /// shared by all drew differently for every spider once one more animal formed first
+    /// (mine round 11).
+    dice: Rng,
+    /// The ticks it has lived, which with its `turn` say when it thinks far off: the world's
+    /// count goes on through the loading, however long that took.
+    lived: u64,
+}
+
+/// A number of a creature's own, from exactly where it was put out.
+fn own_number(home: Vec3) -> u32 {
+    terra_gen::hash::of(&[home.x.to_bits(), home.y.to_bits(), home.z.to_bits()])
+}
+
+/// A creature's own dice, from where it was put out: the same in every run of the same
+/// world, whatever else formed before it or thinks before it in a tick.
+fn own_dice(home: Vec3) -> Rng {
+    Seed(31)
+        .derive("creatures")
+        .index(u64::from(own_number(home)))
+        .rng()
 }
 
 impl Creature {
@@ -151,6 +172,12 @@ impl Creature {
     /// in every run of the same world, so it tells one creature from another.
     pub fn home(&self) -> Vec3 {
         self.home
+    }
+
+    /// Which of the ticks it thinks on when far off (`Detail::thinks`), from its home, so
+    /// the same creature takes the same turn however many formed before it.
+    fn turn(&self) -> u64 {
+        u64::from(own_number(self.home))
     }
 
     /// Sitting up off the ground at a point for so long, as a bird put out on a roof's ridge.
@@ -201,6 +228,8 @@ impl Creature {
             bolt: Vec3::ZERO,
             pace: Pace::Startled,
             progress: Default::default(),
+            dice: own_dice(home),
+            lived: 0,
         }
     }
 }
@@ -247,9 +276,6 @@ struct Animates {
     playing: Option<AnimationNodeIndex>,
 }
 
-#[derive(Resource)]
-struct Dice(Rng);
-
 /// Where magic pools and the spiders live (D103).
 #[derive(Resource)]
 pub struct Lair(pub Vec3);
@@ -263,7 +289,6 @@ pub fn plugin(app: &mut App) {
     terra_survival::registries::read_with_the_rest::<Bestiary>(app);
     app.add_message::<Bitten>()
         .add_message::<Form>()
-        .insert_resource(Dice(Seed(31).derive("creatures").rng()))
         .add_plugins((appear::plugin, wake::plugin))
         .add_systems(Startup, load)
         .add_systems(
@@ -314,9 +339,10 @@ fn prepare(
     mut kinds: ResMut<Kinds>,
     bestiary: Res<Bestiary>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
-    mut dice: ResMut<Dice>,
     options: Res<terra_world::shell::Options>,
 ) {
+    // Where each of a herd stands round its home, drawn once in the bestiary's order.
+    let mut dice = Seed(31).derive("creatures").rng();
     if kinds
         .models
         .iter()
@@ -381,10 +407,9 @@ fn prepare(
                 for _ in 0..count {
                     let up = home.normalize();
                     let side = up.any_orthonormal_vector();
-                    let offset =
-                        Quat::from_axis_angle(up, dice.0.range(0.0, std::f32::consts::TAU))
-                            * side
-                            * dice.0.range(1.0, 7.0);
+                    let offset = Quat::from_axis_angle(up, dice.range(0.0, std::f32::consts::TAU))
+                        * side
+                        * dice.range(1.0, 7.0);
                     spawn(
                         &mut commands,
                         (&kinds, &bestiary),
@@ -528,6 +553,8 @@ pub fn spawn(
                 bolt: Vec3::ZERO,
                 pace: Pace::Startled,
                 progress: Default::default(),
+                dice: own_dice(feet),
+                lived: 0,
             },
             bestiary.body(species),
             Transform::from_translation(feet).looking_to(facing, up),
