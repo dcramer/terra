@@ -130,7 +130,7 @@ export function played(): Set<string> {
 /** What is wrong with the clips refused, and what to do. */
 export const refusal = (refused: Limited[]) =>
   `${refused.map((r) => `${r.clip} wants its sword hand turned ${r.most.toFixed(0)}° at ${r.at.toFixed(2)} s`).join("; ")}, ` +
-  `more than the ${MOST_DEG}° the wrist limit cleans (D565 step 3): remake the take from keys a wrist reaches (kimodo_keys.py, the clip's spec in fight.json), never widen the limit`;
+  `more than the ${MOST_DEG}° the wrist limit cleans (D565 step 3): remake the take from keys a wrist reaches (the clip's spec in fight.json, its keys judged and searched with keys.ts), never widen the limit`;
 
 /** Limits `file`'s played clips in place; throws, writing nothing, when a clip is refused. */
 export function limitFile(file: string, write = true): Limited[] {

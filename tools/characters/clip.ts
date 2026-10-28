@@ -26,12 +26,13 @@
 // says. Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { choose, keysFor, playedClip, readSpec, setGuard, speedFor, writePhases, writeShared, type Scored, type Spec } from "./clip_spec.ts";
 import { Glb } from "./glb.ts";
+import { Failed, guardNpz } from "./keys.ts";
 import { KIMODO, KIMODO_ENV, MODEL, kept } from "./motion.ts";
 import { measure } from "./phases.ts";
 import { clearFile } from "./clear.ts";
@@ -78,8 +79,6 @@ export function scores(rows: Row[], clip: string, more: Map<number, string[]> = 
 
 const EMPTY = "// Written by clip.ts: each clip's chosen take as its blow's move.\n(\n    moves: {\n    },\n)\n";
 
-class Failed extends Error {}
-
 function main() {
   const { values, positionals: clips } = parseArgs({
     allowPositionals: true,
@@ -120,18 +119,13 @@ function main() {
   });
   say(true, "spec", specs.map((s) => `${s.name} (${s.blow.move}, ${s.hand.length + s.left.length} keys, ${s.samples} takes)`).join(", "));
   const takeFile = (s: Spec, n: number) => join(OUT, s.name, s.name, `${s.name}_${String(n).padStart(2, "0")}.bvh`);
-  const guardTake = (s: Spec) => join(listDir, `${s.guard.clip}.bvh`);
 
   if (!values.measure) {
     if (!existsSync(join(KIMODO, "venv", "bin", "kimodo_gen"))) throw new Failed(`no Kimodo at ${KIMODO}: see tools/characters/README.md, "Made clips"`);
     for (const s of specs) {
       const dir = join(OUT, s.name);
       mkdirSync(dir, { recursive: true });
-      // The guard's kept take as Kimodo's NPZ, made again when the take is newer.
-      const npz = join(OUT, `${s.guard.clip}.npz`);
-      if (!existsSync(guardTake(s))) throw new Failed(`no ${rel(guardTake(s))}: keep a take of ${s.guard.clip} first (motion.ts --keep)`);
-      if (!existsSync(npz) || statSync(npz).mtimeMs < statSync(guardTake(s)).mtimeMs)
-        run("guard", join(KIMODO, "venv", "bin", "kimodo_convert"), [guardTake(s), npz, "--bvh_standard_tpose"]);
+      const npz = guardNpz(LIST, s.guard.clip, (command, args) => run("guard", command, args));
       writeFileSync(join(dir, "keys.json"), JSON.stringify(keysFor(s)));
       const keyed = run("keys", join(KIMODO, "venv", "bin", "python"), ["-I", join(HERE, "kimodo_keys.py"), npz, join(dir, "keys.json"), join(dir, "constraints.json")]);
       const short = lines(keyed, "KEY ").map((l) => Number(/([\d.]+) cm short/.exec(l)?.[1] ?? 0));

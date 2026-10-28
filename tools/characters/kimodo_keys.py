@@ -28,6 +28,13 @@ The guard pose is turned to face +Z and set on the origin, as Kimodo's canonical
 Prints a KEY line a key: where its fist and blade ended up, how far short of the grip it fell
 (a grip beyond the arm's reach is met at full stretch), the wrist's flexion and deviation and
 the forearm's twist; exits 1 after them if a key is refused.
+
+    $KIMODO_HOME/venv/bin/python -I tools/characters/kimodo_keys.py --reach GUARD.npz KEYS.json
+
+writes no constraints: KEYS.json is {"frame", "keys": [key with "side": "Right" | "Left"]} and
+one REACH line of JSON says each key's reach (the wrist, the forearm's twist, the elbow's swing
+from the guard's, the upper arm's line), the keys' bar and the guard's own hands, for
+tools/characters/keys.ts (check, search, between), which owns everything but the skeleton.
 """
 
 import json
@@ -41,7 +48,8 @@ from scipy.spatial.transform import Rotation as R
 from kimodo.skeleton import SOMASkeleton77
 
 FPS = 30
-guard_path, keys_path, out_path = sys.argv[1:4]
+REACH = sys.argv[1] == "--reach"
+guard_path, keys_path, out_path = sys.argv[2:4] + [None] if REACH else sys.argv[1:4]
 spec = json.load(open(keys_path))
 sk = SOMASkeleton77()
 names = sk.bone_order_names
@@ -257,7 +265,7 @@ def reach(key, side):
     grip = P[hand] + G[hand] @ grip_offset(side)
     short = np.linalg.norm(hips + body(key["grip"]) - grip)
     return loc, {"grip": grip - hips, "blade": G[hand] @ REF[side][0], "short": short, "flex": flex, "dev": dev, "twist": twist,
-                 "swing": swing, "past": over(flex, dev, twist)}
+                 "swing": swing, "past": over(flex, dev, twist), "elbow": unit(P[fore] - P[up])}
 
 
 def solve(key, side):
@@ -275,6 +283,42 @@ def solve(key, side):
                        f"radial {WRIST['radial']}, ulnar {WRIST['ulnar']} less {MARGIN}, twist {TWIST[0]} to {TWIST[1]})")
     return loc
 
+
+def body_list(v):
+    return [round(float(x), 4) for x in body(v)]
+
+
+def reached(key, side):
+    """A key's reach as numbers: where the fist and blade ended up (the body's frame), the wrist."""
+    _, r = reach(key, side)
+    return {"side": side, "at": key.get("at"), "grip": body_list(r["grip"]), "blade": body_list(r["blade"]), "elbow": body_list(r["elbow"]), "short": round(float(r["short"]), 4),
+            **{k: round(float(r[k]), 2) for k in ("flex", "dev", "twist", "swing", "past")}}
+
+
+def guard_hand(side):
+    """The guard's own hand as a key would give it: its grip, blade and edge (the right) or back
+    (the left); that key's reach; and the wrist on the guard's own bones, as reach measures it
+    (its elbow is swing 0)."""
+    up, fore, hand = (idx[f"{side}{b}"] for b in ("Arm", "ForeArm", "Hand"))
+    ax = AXES[side]
+    grip = P0[hand] + G0[hand] @ grip_offset(side) - hips
+    blade, back = G0[hand] @ REF[side][0], G0[hand] @ REF[side][1]
+    key = {"at": 0, "grip": body_list(grip), "blade": body_list(blade)}
+    key.update({"edge": body_list(np.cross(blade, back))} if side == "Right" else {"back": body_list(back)})
+    f = unit(P0[hand] - P0[fore])
+    flex, dev = (x - r for x, r in zip(bend(G0[hand], f, ax), REST_BEND[side]))
+    twist = ax["sup"] * twist_of(G0[up].T @ G0[hand] @ align(ax["forearm"], G0[hand].T @ f), ax["forearm"])
+    bones = {"flex": flex, "dev": dev, "twist": twist, "swing": 0, "past": over(flex, dev, twist)}
+    return {**key, "reach": reached(key, side), "bones": {**{k: round(float(v), 2) for k, v in bones.items()}, "elbow": body_list(unit(P0[fore] - P0[up]))}}
+
+
+if REACH:
+    print("REACH " + json.dumps({
+        "bar": {**{k: v - MARGIN for k, v in WRIST.items()}, "twist": TWIST},
+        "guard": {s: guard_hand(s) for s in ("Right", "Left")},
+        "keys": [reached(k, k.get("side", "Right")) for k in spec.get("keys", [])],
+    }))
+    sys.exit(0)
 
 last = round(float(spec["seconds"]) * FPS) - 1
 aa = lambda m: R.from_matrix(m.reshape(-1, 3, 3)).as_rotvec().reshape(len(names), 3).tolist()  # noqa: E731
