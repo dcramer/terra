@@ -8,6 +8,11 @@ use std::time::{Duration, SystemTime};
 
 /// How long a staged copy (`windows_program`) is kept once nothing has run from it.
 const COPY_IDLE: Duration = Duration::from_secs(24 * 60 * 60);
+/// What the staged copies may hold together (D259): past it the longest idle go first, a day
+/// or not. About twenty copies, as many as `doctor` lets pass.
+const COPY_BUDGET: u64 = 16_000_000_000;
+/// A copy run from this recently, or staged and about to start, is kept whatever the budget.
+const COPY_FRESH: Duration = Duration::from_secs(10 * 60);
 
 /// The tasks this module runs (D410).
 pub(crate) const TASKS: &[Task] = &[
@@ -202,11 +207,11 @@ pub(crate) fn yard(args: &[String]) -> bool {
     play(&game)
 }
 
-/// Deletes the staged copies in the Windows temp folder nothing has run from for a day (D259):
-/// each is a whole program and its assets, about 750 MB, named by view and worktree, so most
-/// are never run again and they filled the Windows disk. Its program goes first: Windows will
-/// not delete a program that is running (through WSL, an I/O error), so a copy in use is kept
-/// whole. What it freed.
+/// Deletes the staged copies in the Windows temp folder nothing has run from for a day, then
+/// the longest idle while together they hold more than `COPY_BUDGET` (D259): each is a whole
+/// program and its assets, about 750 MB, named by view and worktree, so most are never run
+/// again, and agents stage some 150 a day, which filled the Windows disk inside the day. What
+/// it freed.
 pub(crate) fn sweep_copies(now: SystemTime) -> u64 {
     if !on_wsl() {
         return 0;
@@ -214,24 +219,39 @@ pub(crate) fn sweep_copies(now: SystemTime) -> u64 {
     let Some(staged) = windows_temp().map(|temp| temp.join("terra")) else {
         return 0;
     };
+    sweep_staged(&staged, now, COPY_BUDGET)
+}
+
+/// `sweep_copies` on a folder of copies, with its budget.
+fn sweep_staged(staged: &Path, now: SystemTime, budget: u64) -> u64 {
+    let mut copies: Vec<(Duration, u64, PathBuf)> = children(staged)
+        .into_iter()
+        .map(|copy| {
+            let idle = now.duration_since(last_run(&copy)).unwrap_or_default();
+            (idle, sweep::unlinked(&copy), copy)
+        })
+        .collect();
+    copies.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut held: u64 = copies.iter().map(|(_, bytes, _)| bytes).sum();
     let mut freed = 0;
-    for copy in children(&staged) {
-        if now.duration_since(last_run(&copy)).unwrap_or_default() < COPY_IDLE {
-            continue;
-        }
-        let bytes = sweep::unlinked(&copy);
-        let programs = children(&copy)
-            .into_iter()
-            .filter(|path| path.extension().is_some_and(|e| e == "exe"));
-        if programs
-            .into_iter()
-            .all(|program| std::fs::remove_file(program).is_ok())
-            && std::fs::remove_dir_all(&copy).is_ok()
-        {
+    for (idle, bytes, copy) in copies {
+        let over = held > budget && idle >= COPY_FRESH;
+        if (idle >= COPY_IDLE || over) && delete_copy(&copy) {
+            held -= bytes;
             freed += bytes;
         }
     }
     freed
+}
+
+/// Deletes a staged copy, its program first: Windows will not delete a program that is running
+/// (through WSL, an I/O error), so a copy in use is kept whole.
+fn delete_copy(copy: &Path) -> bool {
+    children(copy)
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|e| e == "exe"))
+        .all(|program| std::fs::remove_file(program).is_ok())
+        && std::fs::remove_dir_all(copy).is_ok()
 }
 
 /// When a staged copy was last run from: its program is copied in at every launch, and a run
@@ -303,4 +323,51 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A copy of `bytes` whose last run was `idle` ago.
+    fn stage(staged: &Path, name: &str, bytes: usize, idle: Duration, now: SystemTime) {
+        let copy = staged.join(name);
+        std::fs::create_dir_all(copy.join("logs")).unwrap();
+        std::fs::write(copy.join("terra_sandbox.exe"), vec![0u8; bytes]).unwrap();
+        let then = now - idle;
+        for path in [copy.join("terra_sandbox.exe"), copy.join("logs"), copy] {
+            std::fs::File::open(&path)
+                .unwrap()
+                .set_modified(then)
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn copies_past_the_budget_go_longest_idle_first_and_a_fresh_one_stays() {
+        let staged = std::env::temp_dir().join(format!("xtask-copies-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&staged);
+        let now = SystemTime::now();
+        let hour = Duration::from_secs(60 * 60);
+        let size = 1000;
+        stage(&staged, "day", size, 25 * hour, now);
+        stage(&staged, "two-hours", size, 2 * hour, now);
+        stage(&staged, "one-hour", size, hour, now);
+        stage(&staged, "fresh", size, Duration::from_secs(60), now);
+        let left = || {
+            let mut names: Vec<String> = children(&staged)
+                .iter()
+                .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+                .collect();
+            names.sort();
+            names
+        };
+        // The day's goes on age alone; the next longest idle brings the four down to two.
+        assert_eq!(sweep_staged(&staged, now, 2 * size as u64), 2 * size as u64);
+        assert_eq!(left(), ["fresh", "one-hour"]);
+        // With no room at all, every copy but one run this minute goes.
+        assert_eq!(sweep_staged(&staged, now, 0), size as u64);
+        assert_eq!(left(), ["fresh"]);
+        std::fs::remove_dir_all(&staged).unwrap();
+    }
 }

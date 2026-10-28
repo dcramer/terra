@@ -237,7 +237,7 @@ const LONG_RUN: Duration = Duration::from_secs(12 * 60 * 60);
 fn leftovers(report: &mut Report, on_wsl: bool) {
     println!("\nWhat sessions left behind (D259)");
     let prune = "cargo xtask worktrees shows what each worktree holds; --prune clears the ones agents are done with, \
-                 and staged Windows copies idle a day";
+                 and staged Windows copies idle a day or past 16 GB together";
     let mut disks = vec![("the repository's disk", root())];
     if on_wsl {
         disks.push(("Windows' disk (C:)", PathBuf::from("/mnt/c")));
