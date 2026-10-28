@@ -225,7 +225,8 @@ function pool(dirs: string[]) {
       if (!existsSync(join(dir, `${hour}.json`))) continue;
       const s = readSide(dir, hour);
       (aa.hours[hour] ??= []).push(...s.films.map((f) => ({ dx: f.dx, v: f.v.map((x) => Math.round(1e4 * x) / 1e4) })));
-      aa.sources.push(`${hour} ${s.rev.slice(0, 9)} ${dir}`);
+      // A worker job's films are named by its job id, not this machine's copy of them.
+      aa.sources.push(`${hour} ${s.rev.slice(0, 9)} ${dir.replace(/^.*\/remote\/([^/]+)\//, "job $1 ")}`);
     }
   writeFileSync(path, JSON.stringify(aa, null, 0).replace(/\{"dx"/g, '\n{"dx"') + "\n");
   for (const [hour, films] of Object.entries(aa.hours)) console.log(`${hour}: ${films.length} films, tolerance ${JSON.stringify(tolerance(films, aa.takes))}`);
