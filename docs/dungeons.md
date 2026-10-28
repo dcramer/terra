@@ -151,7 +151,7 @@ Status: Decided (D527): the developers on the desk (q-dungeon-themes), "Yes, all
 | Natural caverns | 8 m | 10-20 m, varying | 3-6 m | volumes of 2-5 cells | a great cavern 6x6 and up |
 | Ancient engineered halls | 4 m | 6 m, halls 2 levels | 4 m | 3-5 | 5x5, two levels high |
 
-**Still the developers'**: the order to build them in (recommended: barrow halls on the new grid first, as the crypt is closest; then natural caverns, the developer's "cavernous"); whether the keep stays a theme of its own or becomes a dressing of the barrow halls; whether caverns are their own dungeons or also open into the realm's own caves (worlds.md asks whether caverns are a feature of every world).
+**The order** (D559): barrow halls first, then the hewn mine, "Start the mine" (the developers, desk q-barrow-next, 2026-10-28), from the crypt's kit, dressing and stamp. **Still the developers'**: the order after the mine (recommended: natural caverns, the developer's "cavernous"); whether the keep stays a theme of its own or becomes a dressing of the barrow halls; whether caverns are their own dungeons or also open into the realm's own caves (worlds.md asks whether caverns are a feature of every world).
 
 ## Open questions (design, the developers')
 
