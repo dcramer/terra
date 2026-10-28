@@ -80,6 +80,8 @@ struct Pending {
     blocks: Vec<stamp::Blocking>,
     /// The person at the goal, if it is one (`theme::Figure`).
     figure: Option<terra_dungeon::theme::Figure>,
+    /// Its door leaf model's width and height (`Theme::door_leaf`).
+    leaf: Vec2,
 }
 
 pub fn plugin(app: &mut App, experiment: &'static str) {
@@ -255,6 +257,7 @@ fn lay_out(
         frame,
         blocks,
         figure: theme.features.figure.clone(),
+        leaf: Vec2::from(theme.door_leaf),
     });
 }
 

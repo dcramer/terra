@@ -167,6 +167,11 @@ pub struct Theme {
     /// castle door, a mine's ledged and braced planks.
     #[serde(default = "studded_door")]
     pub door: String,
+    /// Its door leaf model's width and height in metres, hinged at its origin and reaching
+    /// along +X: the game scales it to half the doorway's width and its height, so a leaf
+    /// made at the doorway's size hangs unstretched (the mine's, D559).
+    #[serde(default = "studded_leaf")]
+    pub door_leaf: (f32, f32),
     pub features: Features,
     pub bestiary: Vec<Mob>,
     pub loot: Vec<Loot>,
@@ -286,6 +291,11 @@ fn hewn() -> String {
 
 fn studded_door() -> String {
     "models/openings/StuddedDoor.glb".to_string()
+}
+
+/// The studded door's leaf, as building hangs it in a house (data/builds.ron).
+fn studded_leaf() -> (f32, f32) {
+    (0.894, 1.939)
 }
 
 fn yes() -> bool {

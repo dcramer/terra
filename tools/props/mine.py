@@ -8,6 +8,9 @@ mine of the 1800s timbered them, built from the barrow kit's helpers (barrow.py)
   heads against the rock, some missing so the rock shows. The drift 2.5 m clear between the
   posts and 2.6 m under the cap. Origin the middle of the drift's floor under the cap, the cap
   along X, the drift along glTF Z.
+- `MineDoor`: a leaf of a mine's doorway, ledged and braced boards with iron straps, 1.5 m
+  wide (half the doorway) and 3 m high, so it hangs unstretched; origin the hinge's foot,
+  reaching +X.
 
     tools/blender/run.sh tools/props/mine.py [Name ...]
 
@@ -143,5 +146,100 @@ def post_x(z):
     return FOOT_X + (HEAD_X - FOOT_X) * z / CAP_Z
 
 
+# The mine's door leaf, one of a doorway's two: half of its 3 m and its full 3 m high, so the
+# game hangs it unstretched (the theme's `door_leaf`).
+LEAF_W, LEAF_H = 1.5, 3.0
+# weathered_planks' planks stand along V, their seams at these U (assets/materials/README.md):
+# a board takes one plank, a little in from its seam, so no seam crosses a board.
+SEAM_U0, SEAM_DU = 0.062, 0.1125
+# Seven boards with a finger's gap, a board's half thickness, the ledges' and braces' face.
+BOARDS, GAP, HALF_T, FACE_T = 7, 0.006, 0.018, 0.045
+LEDGES_Z, LEDGE_H = (0.32, 1.50, 2.68), 0.20
+LEDGE_X = (0.03, 1.47)
+# The braces rise from the hinge's foot to the latch's head, between the ledges.
+BRACE_X, BRACE_W = (0.17, 1.33), 0.17
+STRAP_REACH, STRAP_H, STRAP_T = 0.75, 0.05, 0.006
+# The boards' wood tinted as the drifts' lagging; the straps' iron, dark and matte.
+DOOR_WOOD = ("Planks", "weathered_planks", (0.60, 0.53, 0.45))
+IRON = ("Iron", None, (0.08, 0.075, 0.07))
+
+
+def slab(m, outline, y0, y1, mat, grain, seam, v0=0.0):
+    """A piece of wood `outline` (four (x, z) corners round it) in the leaf's plane, from y0
+    to y1 thick: its faces' grain along `grain` (a unit (x, z)) on one plank of the planks
+    texture, the plank at seam `seam`, so its width falls inside that plank."""
+    gx, gz = grain
+    qx, qz = -gz, gx
+
+    def along(x, z):
+        return x * gx + z * gz
+
+    def across(x, z):
+        return x * qx + z * qz
+
+    q0 = min(across(x, z) for x, z in outline)
+    u0 = SEAM_U0 + SEAM_DU * seam + 0.004 - q0 / PLANK_M
+    pts = [Vector((x, 0.0, z)) for x, z in outline]
+    centre = sum(pts, Vector()) / 4 + Vector((0.0, (y0 + y1) / 2, 0.0))
+
+    def uv(p, edge=None):
+        a, b = across(p.x, p.z), along(p.x, p.z)
+        if edge is not None:
+            # A side: its long way the grain or across it, its short way the thickness.
+            ex, ez = edge
+            if abs(ex * qx + ez * qz) > abs(ex * gx + ez * gz):
+                b = p.y - y0 + along(*outline[0])
+            else:
+                a = p.y - y0 + q0
+        return (u0 + a / PLANK_M, v0 + b / PLANK_M)
+
+    for y in (y0, y1):
+        corners = [Vector((x, y, z)) for x, z in outline]
+        m.face([(m.bm.verts.new(p), uv(p)) for p in corners], mat, away=lambda _: centre)
+    for i in range(4):
+        (ax, az), (bx, bz) = outline[i], outline[(i + 1) % 4]
+        ln = math.hypot(bx - ax, bz - az)
+        edge = ((bx - ax) / ln, (bz - az) / ln)
+        corners = [Vector((ax, y0, az)), Vector((bx, y0, bz)), Vector((bx, y1, bz)), Vector((ax, y1, az))]
+        m.face([(m.bm.verts.new(p), uv(p, edge)) for p in corners], mat, away=lambda _: centre)
+
+
+def rect(x0, x1, z0, z1):
+    return [(x0, z0), (x1, z0), (x1, z1), (x0, z1)]
+
+
+def mine_door():
+    """A ledged and braced door of seven boards, the leaf of a mine's doorway: hinged at its
+    origin (the hinge's foot), reaching +X its 1.5 m, 3 m up, its boards' faces 18 mm each way
+    of the plane the game hangs it in. Ledges and braces on both faces, as the doorway's second
+    leaf is this one turned half round; iron straps over the top and bottom ledges from the
+    hinge side, as a strap hinge's. As the timber of a drift's sets: real sizes, one plank of
+    the texture a board, nothing random from run to run."""
+    m = Mesh()
+    w = (LEAF_W - (BOARDS - 1) * GAP) / BOARDS
+    for k in range(BOARDS):
+        x = k * (w + GAP)
+        slab(m, rect(x, x + w, 0.0, LEAF_H), -HALF_T, HALF_T, 0, (0.0, 1.0), (3 * k) % 8, jitter(k, 11))
+    for face in (1, -1):
+        y0, y1 = sorted((face * HALF_T, face * FACE_T))
+        for i, zc in enumerate(LEDGES_Z):
+            z0, z1 = zc - LEDGE_H / 2, zc + LEDGE_H / 2
+            slab(m, rect(LEDGE_X[0], LEDGE_X[1], z0, z1), y0, y1, 0, (1.0, 0.0), (2 * i + (face > 0)) % 8, jitter(i, 12 + face))
+        for i in range(2):
+            z0 = LEDGES_Z[i] + LEDGE_H / 2
+            z1 = LEDGES_Z[i + 1] - LEDGE_H / 2
+            dx, dz = BRACE_X[1] - BRACE_X[0], z1 - z0
+            ln = math.hypot(dx, dz)
+            # Cut level at the ledges: its width across the grain, BRACE_W, is wider level.
+            half = BRACE_W / 2 * ln / dz
+            outline = [(BRACE_X[0] - half, z0), (BRACE_X[0] + half, z0), (BRACE_X[1] + half, z1), (BRACE_X[1] - half, z1)]
+            slab(m, outline, y0, y1, 0, (dx / ln, dz / ln), (5 + 3 * i + (face > 0)) % 8, jitter(i, 14 + face))
+        # The straps over the top and bottom ledges.
+        s0, s1 = sorted((face * FACE_T, face * (FACE_T + STRAP_T)))
+        for zc in (LEDGES_Z[0], LEDGES_Z[2]):
+            m.box((0.0, s0, zc - STRAP_H / 2), (STRAP_REACH, s1, zc + STRAP_H / 2), 1, 1.0)
+    return m, [DOOR_WOOD, IRON]
+
+
 if __name__ == "__main__":
-    build((("TimberSet", timber_set),), OUT)
+    build((("TimberSet", timber_set), ("MineDoor", mine_door)), OUT)

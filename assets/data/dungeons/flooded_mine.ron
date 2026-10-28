@@ -32,8 +32,11 @@
         ],
     },
     // A mine's doors are ledged and braced planks, hung to keep the air going where it is
-    // sent, not a castle's studded oak (round 2's judges, 14 mentions).
-    door: "models/openings/LedgedDoor.glb",
+    // sent, not a castle's studded oak (round 2's judges, 14 mentions); made for the mine at
+    // a leaf's real size (tools/props/mine.py), so it hangs unstretched and matte, where
+    // building's ledged door, at a house's 0.9 x 1.9 m, stretched 1.7 x 1.5 read glossy.
+    door: "models/props/mine/MineDoor.glb",
+    door_leaf: (1.5, 3.0),
     // The trapped miner sits waiting on the goal's block in his work clothes.
     features: (
         goal: "trapped_miner",

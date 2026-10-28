@@ -118,9 +118,6 @@ fn lamp_light() -> PointLight {
 fn bowl_hung(side: usize) -> terra_world::fire::Hung {
     terra_world::fire::Hung(dir(side) * BOWL_HUNG_OUT_M + Vec3::Y * BOWL_HUNG_UP_M)
 }
-/// The studded leaf's model, hinged at its origin and reaching along +X: so wide and so high.
-const LEAF_M: Vec2 = Vec2::new(0.894, 1.939);
-
 /// A dungeon object the game makes live: the goal, a key, a door leaf.
 #[derive(Component, Debug)]
 #[allow(dead_code)]
@@ -136,10 +133,12 @@ pub struct DungeonObject {
 #[derive(Component, Debug)]
 pub struct Doorway(pub Door, pub [f32; 2]);
 
-/// One of a doorway's two leaves: the first hinged at the jamb at -X, the second at +X.
+/// One of a doorway's two leaves: the first hinged at the jamb at -X, the second at +X; its
+/// model so wide and so high (`Theme::door_leaf`), hinged at its origin, reaching along +X.
 #[derive(Component, Debug)]
 pub struct Leaf {
     second: bool,
+    size: Vec2,
 }
 
 /// The demo holds every key: taking keys is not built yet (how a key is held is the
@@ -161,17 +160,18 @@ fn facing(side: usize) -> Quat {
 /// A leaf's place in its doorway's frame with the door `swing` open (D512: 0 shut, 1 into
 /// the room, -1 out of it) and its leaves opening `opens` quarter turns into the room, as
 /// `door::leaf` hangs it at the room's face of the wall (a leaf's planks and studs are alike
-/// on both faces, so the second is the first turned half round).
-fn leaf_at(second: bool, swing: f32, opens: f32) -> Transform {
+/// on both faces, so the second is the first turned half round); its model `size`.
+fn leaf_at(second: bool, swing: f32, opens: f32, size: Vec2) -> Transform {
     let (hinge, turn) = door::leaf(second, swing, opens, DOORWAY_M[0], CUBE);
     Transform::from_translation(hinge)
         .with_rotation(Quat::from_rotation_y(turn))
-        .with_scale(leaf_scale())
+        .with_scale(leaf_scale(size))
 }
 
-/// The studded leaf stretched to half a doorway's width and its full height.
-fn leaf_scale() -> Vec3 {
-    Vec3::new(DOORWAY_M[0] * 0.5 / LEAF_M.x, DOORWAY_M[1] / LEAF_M.y, 1.0)
+/// A leaf model of `size` scaled to half a doorway's width and its full height: the studded
+/// leaf stretched, one made at the doorway's size (the mine's) as it is.
+fn leaf_scale(size: Vec2) -> Vec3 {
+    Vec3::new(DOORWAY_M[0] * 0.5 / size.x, DOORWAY_M[1] / size.y, 1.0)
 }
 
 fn scene(assets: &AssetServer, model: &str) -> WorldAssetRoot {
@@ -254,6 +254,7 @@ pub(super) fn put_up(
         frame,
         blocks,
         figure,
+        leaf,
     } = &*pending;
     // Its pieces' solids (a mine's posts, a pier's shaft), each a walker's prop box where it
     // stands in the world: the walk reads a solid's own transform, so none is a child of the
@@ -351,9 +352,12 @@ pub(super) fn put_up(
                     for second in [false, true] {
                         doorway.spawn((
                             Name::new(format!("{} leaf", object.name)),
-                            Leaf { second },
+                            Leaf {
+                                second,
+                                size: *leaf,
+                            },
                             scene(&assets, &object.model),
-                            leaf_at(second, 0.0, object.opens[second as usize]),
+                            leaf_at(second, 0.0, object.opens[second as usize], *leaf),
                         ));
                     }
                 });
@@ -461,6 +465,7 @@ pub(super) fn push_doors(
                     leaf.second,
                     doorway.0.swing,
                     doorway.1[leaf.second as usize],
+                    leaf.size,
                 );
             }
         }
@@ -497,15 +502,25 @@ pub(super) fn form_mobs(
 mod tests {
     use super::*;
 
+    /// The leaf models the themes hang: the studded (and the crypt's) and the mine's, made
+    /// at the doorway's size.
+    const SIZES: [Vec2; 2] = [Vec2::new(0.894, 1.939), Vec2::new(1.5, 3.0)];
+
     /// Shut, the two leaves close the doorway jamb to jamb and sill to lintel, meeting in
-    /// the middle.
+    /// the middle, whatever the leaf model's size.
     #[test]
     fn a_doorways_two_leaves_shut_fill_it_jamb_to_jamb_and_meet_in_the_middle() {
+        for size in SIZES {
+            leaves_shut_fill_the_doorway(size);
+        }
+    }
+
+    fn leaves_shut_fill_the_doorway(size: Vec2) {
         let mut spans = Vec::new();
         for second in [false, true] {
-            let placed = leaf_at(second, 0.0, 2.0);
+            let placed = leaf_at(second, 0.0, 2.0, size);
             // The model's corners: hinge foot and the far top corner.
-            let far = placed.transform_point(Vec3::new(LEAF_M.x, LEAF_M.y, 0.0));
+            let far = placed.transform_point(Vec3::new(size.x, size.y, 0.0));
             let hinge = placed.translation;
             spans.push((hinge.x.min(far.x), hinge.x.max(far.x)));
             assert!((far.y - DOORWAY_M[1]).abs() < 1e-4, "height");
@@ -531,12 +546,15 @@ mod tests {
     #[test]
     fn open_leaves_lie_along_their_jambs_or_flat_on_the_wall() {
         let width = DOORWAY_M[0] * 0.5;
-        for (swing, opens) in [(1.0, 1.0), (-1.0, 1.0), (-1.0, 2.0), (1.0, 2.0)] {
+        for (swing, opens, size) in [(1.0, 1.0), (-1.0, 1.0), (-1.0, 2.0), (1.0, 2.0)]
+            .into_iter()
+            .flat_map(|(swing, opens)| SIZES.map(|size| (swing, opens, size)))
+        {
             let mut jambs = Vec::new();
             for second in [false, true] {
-                let placed = leaf_at(second, swing, opens);
+                let placed = leaf_at(second, swing, opens, size);
                 let hinge = placed.translation;
-                let reach = placed.transform_point(Vec3::X * LEAF_M.x) - hinge;
+                let reach = placed.transform_point(Vec3::X * size.x) - hinge;
                 let side = hinge.x.signum();
                 let wanted = if swing > 0.0 && opens == 2.0 {
                     Vec3::X * side * width

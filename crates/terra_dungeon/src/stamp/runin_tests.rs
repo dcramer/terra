@@ -17,8 +17,8 @@ const SEEDS: u64 = 24;
 /// made faster.
 const HASHES: &[(&str, u64)] = &[
     ("crypt", 10098323104608956526),
-    // Mine round 3: its doors ledged planks, its trapped miner seated off the goal's block.
-    ("flooded_mine", 11095344122565647852),
+    // Mine round 7: its doors its own leaf (MineDoor), 1.5 by 3 m.
+    ("flooded_mine", 10086212804724439000),
     ("ruined_keep", 3334515048096631740),
 ];
 
