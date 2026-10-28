@@ -54,6 +54,11 @@ const BODY_M: f32 = 1.8;
 /// How far the camera stands from a whole figure, and from a part looked at closely.
 const FIGURE_VIEW_M: f32 = 3.6;
 const FOCUS_VIEW_M: f32 = 0.9;
+/// The closest the camera comes to a small thing framed whole, such as a collar.
+const CLOSEST_M: f32 = 0.25;
+/// How far under the floor a model may reach before it is stood on it (`measure`): past a
+/// body's toes in its bounds, short of a part made about a point inside it.
+const SUNK_M: f32 = 0.02;
 
 #[derive(Resource)]
 struct Bench {
@@ -547,24 +552,36 @@ fn measure(
     children: Query<&Children>,
     boxes: Query<(&Aabb, &GlobalTransform)>,
     mut camera: Query<&mut Transform, With<MainCamera>>,
+    mut roots: Query<&mut Transform, Without<MainCamera>>,
 ) {
     let Some(mut bench) = bench else { return };
     if bench.measured || !bench.ready() {
         return;
     }
-    let mut heights = Vec::new();
+    let mut spans = Vec::new();
     for model in &bench.models {
         let found = children
             .iter_descendants(model.root)
             .filter_map(|each| boxes.get(each).ok())
             .map(|(bounds, at)| (*bounds, *at));
         // Skin is bounded a frame or two after its scene spawns.
-        let Some(height) = standing_height(found, bench.stand, bench.up) else {
+        let Some(span) = standing_span(found, bench.stand, bench.up) else {
             return;
         };
-        heights.push(height);
+        spans.push((model.root, span));
     }
     bench.measured = true;
+    // A model reaching under the floor (a part's origin at its eye, a haft's at its grip)
+    // is stood on it, so none of it is hidden; a body's feet are on it already.
+    let mut heights = Vec::new();
+    for (root, (low, high)) in spans {
+        if low < -SUNK_M
+            && let Ok(mut at) = roots.get_mut(root)
+        {
+            at.translation -= bench.up * low;
+        }
+        heights.push(high - low.min(0.0));
+    }
     for (index, height) in heights.iter().enumerate() {
         info!("workbench: model {index} stands {height:.2} m tall");
     }
@@ -575,17 +592,20 @@ fn measure(
     }
 }
 
-/// How high above `stand`, along `up`, the highest corner of any of `boxes` reaches, each
-/// box in its entity's space; `None` when there are none.
-fn standing_height(
+/// How far above `stand`, along `up`, the lowest and the highest corner of any of `boxes`
+/// reach, each box in its entity's space; `None` when there are none.
+fn standing_span(
     boxes: impl Iterator<Item = (Aabb, GlobalTransform)>,
     stand: Vec3,
     up: Vec3,
-) -> Option<f32> {
+) -> Option<(f32, f32)> {
     boxes
         .flat_map(|(bounds, at)| corners(&bounds, &at))
         .map(|corner| (corner - stand).dot(up))
-        .reduce(f32::max)
+        .fold(None, |was, h| match was {
+            Some((low, high)) => Some((f32::min(low, h), f32::max(high, h))),
+            None => Some((h, h)),
+        })
 }
 
 /// The eight corners of `bounds`, a box in the space of `at`, in the world.
@@ -653,8 +673,12 @@ fn view(
         .map(|(bounds, at)| (*bounds, *at));
     let (target, distance) = match world_box(held) {
         Some((low, high)) => {
-            let fits = (high - low).max_element() * 0.5 / libm::tanf(22.5f32.to_radians()) * 1.3;
-            ((low + high) * 0.5, f32::max(FOCUS_VIEW_M * scale, fits))
+            // Its height up a 45° frame, its breadth across a sheet's cell, 3/4 as wide.
+            let size = high - low;
+            let tall = size.dot(bench.up).abs();
+            let wide = (size - bench.up * size.dot(bench.up)).length() / 0.75;
+            let fits = f32::max(tall, wide) * 0.5 / libm::tanf(22.5f32.to_radians()) * 1.15;
+            ((low + high) * 0.5, f32::max(CLOSEST_M * scale, fits))
         }
         None => (at.translation(), FOCUS_VIEW_M * scale),
     };
@@ -939,9 +963,20 @@ mod tests {
                 Transform::from_translation(stand + up * 7.5).with_scale(Vec3::splat(4.0)),
             ),
         );
-        let height = standing_height([trunk, crown].into_iter(), stand, up).unwrap();
-        assert!((height - 8.5).abs() < 1e-4, "{height}");
-        assert_eq!(standing_height(std::iter::empty(), stand, up), None);
+        let (low, high) = standing_span([trunk, crown].into_iter(), stand, up).unwrap();
+        assert!(
+            low.abs() < 1e-4 && (high - 8.5).abs() < 1e-4,
+            "{low} {high}"
+        );
+        assert_eq!(standing_span(std::iter::empty(), stand, up), None);
+        // A part made about a point inside it, an axe head's eye, reaches under the floor
+        // by its beard: 5 cm, past SUNK_M, so the bench stands it up on the floor.
+        let head = (
+            Aabb::from_min_max(Vec3::new(-0.01, -0.05, -0.15), Vec3::new(0.01, 0.07, 0.04)),
+            GlobalTransform::from_translation(stand),
+        );
+        let (low, high) = standing_span([head].into_iter(), stand, up).unwrap();
+        assert!((low + 0.05).abs() < 1e-4 && (high - 0.07).abs() < 1e-4 && low < -SUNK_M);
     }
 
     /// A held tool is framed by the box round all its parts in the world: an axe hanging
