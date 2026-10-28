@@ -685,11 +685,12 @@ fn say(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use terra_climate::Climate;
 
-    fn fields() -> ClimateFields {
+    /// The world's climate on a small planet of 2 km whose start is up the Y axis.
+    pub(crate) fn fields() -> ClimateFields {
         let climate: Climate = crate::data::read(crate::daylight::WorldClimate::FILE);
         ClimateFields {
             fields: Arc::new(Fields::new(climate, terra_gen::Seed(1))),

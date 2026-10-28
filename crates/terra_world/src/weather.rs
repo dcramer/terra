@@ -326,6 +326,12 @@ impl Named {
 /// at half an hour a day), and how fast what is drawn follows it, a share a second.
 const EVERY_DAYS: f64 = 0.002;
 const FOLLOW: f32 = 0.25;
+/// A camera moved this far in one frame was put somewhere (a run's start or vantage, a portal),
+/// not walked or flown there: the weather is taken there at once and not eased, as at the start.
+/// The first frames can find the camera not yet at the start: a `--site` run took it at the
+/// world's own start, and the tundra read 12.7 °C, a quarter cloud and dry every frame, where
+/// its own is 1.3 °C under a deck in sleet.
+const JUMP_M: f32 = 100.0;
 /// How many days on from its date a run looks for the weather it asks for.
 const LOOKS_DAYS: i64 = 730;
 
@@ -399,14 +405,17 @@ fn follow(
     camera: Option<Single<&GlobalTransform, With<MainCamera>>>,
     mut weather: ResMut<Weather>,
     mut taken: Local<Option<(f64, Weather)>>,
+    mut was_at: Local<Option<Vec3>>,
 ) {
     let (Some(fields), Some(camera)) = (fields, camera) else {
         return;
     };
     let now = clock.time().0;
-    let first = taken.is_none();
-    if taken.is_none_or(|(when, _)| (now - when).abs() >= EVERY_DAYS) {
-        let at = camera.translation();
+    let at = camera.translation();
+    let jumped = was_at.is_some_and(|was| was.distance(at) > JUMP_M);
+    *was_at = Some(at);
+    let first = taken.is_none() || jumped;
+    if first || taken.is_none_or(|(when, _)| (now - when).abs() >= EVERY_DAYS) {
         *taken = Some((
             now,
             Weather::of(&fields.fields.at(fields.place(at), clock.time())),
@@ -427,7 +436,8 @@ fn follow(
     // Only when it has moved enough to matter, so what reads it changes only then.
     let moved = (eased.cloud - weather.cloud).abs() > 1e-3
         || (eased.falling_mm_h - weather.falling_mm_h).abs() > 1e-3
-        || (eased.wind_m_s - weather.wind_m_s).abs() > 1e-2;
+        || (eased.wind_m_s - weather.wind_m_s).abs() > 1e-2
+        || (eased.temperature_c - weather.temperature_c).abs() > 0.05;
     if moved {
         *weather = eased;
     }
@@ -472,6 +482,39 @@ fn grade(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_camera_put_somewhere_else_takes_its_weather_at_once() {
+        let fields = crate::climate::tests::fields();
+        let clock = Clock {
+            day: 280,
+            hour: 11.0,
+        };
+        // Low by the sea, then put up a 1.2 km fell: some 8 °C colder by the air's lapse.
+        let (low, high) = (Vec3::new(30.0, 2010.0, -10.0), Vec3::new(0.0, 3200.0, 0.0));
+        let there = |at: Vec3| Weather::of(&fields.fields.at(fields.place(at), clock.time()));
+        let (below, above) = (there(low), there(high));
+        assert!(
+            below.temperature_c - above.temperature_c > 3.0,
+            "{below:?} {above:?}"
+        );
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .init_resource::<Weather>()
+            .insert_resource(clock)
+            .insert_resource(fields)
+            .add_systems(Update, follow);
+        let camera = app
+            .world_mut()
+            .spawn((MainCamera, GlobalTransform::from_translation(low)))
+            .id();
+        app.update();
+        assert_eq!(*app.world().resource::<Weather>(), below);
+        *app.world_mut().get_mut::<GlobalTransform>(camera).unwrap() =
+            GlobalTransform::from_translation(high);
+        app.update();
+        assert_eq!(*app.world().resource::<Weather>(), above);
+    }
 
     #[test]
     fn a_clear_sky_is_the_clear_light_and_a_deck_leaves_only_the_skys() {
