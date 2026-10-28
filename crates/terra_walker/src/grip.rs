@@ -428,15 +428,16 @@ pub fn close_hands(
                 .is_some_and(|(was, turn, _)| was == look && turn == at.rotation)
             {
                 let mut chains = [[Transform::IDENTITY; 4]; 5];
-                for k in 0..5 {
-                    for j in 0..4 {
-                        let Ok(now) = transforms.get(hand.bones[k][j]) else {
-                            continue;
-                        };
-                        chains[k][j] = Transform {
-                            rotation: hand.rest[k][j],
-                            ..*now
-                        };
+                for (chain, (bones, rest)) in
+                    chains.iter_mut().zip(hand.bones.iter().zip(&hand.rest))
+                {
+                    for (bone, (each, rotation)) in chain.iter_mut().zip(bones.iter().zip(rest)) {
+                        if let Ok(now) = transforms.get(*each) {
+                            *bone = Transform {
+                                rotation: *rotation,
+                                ..*now
+                            };
+                        }
                     }
                 }
                 let line = Line::of(grip.handle, &socket, &at);
