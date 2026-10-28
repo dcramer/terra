@@ -18,6 +18,7 @@ pub mod bend;
 pub mod bodies;
 pub mod button;
 pub mod camera;
+pub mod carry_arm;
 pub mod character;
 pub mod controls;
 pub mod feet;

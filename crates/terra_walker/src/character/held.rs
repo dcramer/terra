@@ -52,6 +52,11 @@ pub fn carry_rule(ahead: f32) -> f32 {
 #[derive(Component, Default)]
 pub struct Carrying(pub bool);
 
+/// On a hand socket: whether its arm is in the carry pose of what it holds now (`CarryHold`
+/// laid in a carried clip with no stance hold), which `carry_arm` holds in the body's frame.
+#[derive(Component, Default)]
+pub struct CarryPosed(pub bool);
+
 /// On a hand socket: the carry pose of the look it holds, its file's `carry_hold` (D560: a lit
 /// torch on a raised arm), a clip whose first pose that hand's arm takes whenever the look is
 /// carried, laid by the hold layer on that arm alone (`layer`, `figure`). A look whose file
@@ -234,6 +239,22 @@ mod tests {
             let json = crate::model_files::json(file);
             if let Some(tilt) = crate::model_files::extra(&json, "carry_tilt") {
                 assert!(tilt.as_f64().is_some(), "{file}: carry_tilt {tilt}");
+            }
+        }
+    }
+
+    /// A carry pose named wrong is never laid, and nothing says so (D560): every look's
+    /// `carry_hold` is a clip of the figure's file.
+    #[test]
+    fn every_carry_pose_a_look_names_is_a_clip_the_figure_plays() {
+        let clips = crate::model_files::animations(&crate::model_files::json(crate::figure::CLIPS));
+        for file in crate::model_files::glbs("models/held") {
+            let json = crate::model_files::json(&file);
+            if let Some(pose) = crate::model_files::extra(&json, "carry_hold") {
+                let pose = pose
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{file}: carry_hold {pose}"));
+                assert!(clips.iter().any(|c| c == pose), "{file}: no clip {pose}");
             }
         }
     }
