@@ -13,6 +13,7 @@
     "about": { "type": "string", "minLength": 12 },
     "kinds": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z_]+$" }, "description": "The kinds it is made for, when its type fits more than one (a haft is an axe's or a spear's): its size is checked for those." },
     "model": { "type": "string", "pattern": "^models/parts/[a-z0-9_]+\\.glb$", "description": "The model under the asset root, made to its type's frame (D566)." },
+    "skin": { "type": "string", "pattern": "^models/parts/[a-z0-9_]+\\.glb$", "description": "A code-made part's look under the asset root: a model whose one material, named by its role, the part is drawn in on its own UVs (tools/items/haft.py skin)." },
     "mass_kg": { "$ref": "#/$defs/number", "description": "A trim's mass, in its own material." },
     "volume_m3": { "$ref": "#/$defs/number", "description": "A working part's volume: its mass is this times the density of its recipe's material (materials.json); a model's written by `node tools/items/part.ts --write`." },
     "centre_m": { "$ref": "#/$defs/v3", "description": "Its centre of mass in its frame; a model's written by `node tools/items/part.ts --write`." },

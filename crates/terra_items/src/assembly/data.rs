@@ -133,6 +133,9 @@ pub struct Part {
     pub kinds: Option<Vec<String>>,
     /// Its model under the asset root, when a model makes it.
     pub model: Option<String>,
+    /// A code-made part's look under the asset root: a model whose first material (one, named by
+    /// its role) the part is drawn in, on its own UVs (tools/items/haft.py).
+    pub skin: Option<String>,
     /// A trim's mass: its own material, whatever the item's.
     pub mass_kg: Option<Sourced<f32>>,
     /// A working part's volume: its mass is this times its recipe's material's density.

@@ -1,0 +1,12 @@
+{
+  "$schema": "./part.schema.json",
+  "part": "ash_haft",
+  "type": "haft",
+  "about": "a straight pale ash haft, the reference axe's length (art/parts/axe/handles.png)",
+  "kinds": ["axe"],
+  "skin": "models/parts/ash_haft_skin.glb",
+  "length_m": { "value": 0.68, "source": "the axe's reference length (assets/data/kinds/axe.json)" },
+  "grip_from_end_m": { "value": 0.08, "source": "a hand's width up from the butt, the reference axe's (the D565 step 4 plan)" },
+  "grip_diameter_m": { "value": 0.035, "source": "the axe's reference haft, 35 mm (assets/data/kinds/axe.json)" },
+  "density_kg_m3": { "value": 710, "source": "ash, European 710 kg/m^3 (The Engineering ToolBox, Wood Species - Densities, engineeringtoolbox.com/wood-density-d_40.html, looked up 2026-10-28)" }
+}

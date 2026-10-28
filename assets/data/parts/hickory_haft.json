@@ -1,0 +1,12 @@
+{
+  "$schema": "./part.schema.json",
+  "part": "hickory_haft",
+  "type": "haft",
+  "about": "a short grey-brown hickory haft, worn dark (art/parts/axe/handles.png)",
+  "kinds": ["axe"],
+  "skin": "models/parts/hickory_haft_skin.glb",
+  "length_m": { "value": 0.62, "source": "near the short end of the axe's length envelope, 0.612 to 0.748 m (assets/data/kinds/axe.json)" },
+  "grip_from_end_m": { "value": 0.08, "source": "a hand's width up from the butt, the reference axe's (the D565 step 4 plan)" },
+  "grip_diameter_m": { "value": 0.035, "source": "the axe's reference haft, 35 mm (assets/data/kinds/axe.json)" },
+  "density_kg_m3": { "value": 765, "source": "hickory 600 to 930 kg/m^3, the middle (The Engineering ToolBox, Wood Species - Densities, engineeringtoolbox.com/wood-density-d_40.html, looked up 2026-10-28)" }
+}

@@ -43,7 +43,25 @@ pub fn write(
     if let Some(s) = item.second {
         extras.insert("second".into(), json!(s[1]));
     }
-    let root = turned_handle(&mut out, &handle.part, &item.section, Value::Object(extras));
+    let skin = lib.parts.get(&handle.part).and_then(|p| p.skin.as_deref());
+    let wood = match skin {
+        Some(path) => skin_material(
+            &mut out,
+            &glb::read(&model(path)?).map_err(|e| format!("{path}: {e}"))?,
+        )
+        .map_err(|e| format!("skin of {} ({path}): {e}", handle.part))?,
+        None => push(
+            &mut out.json["materials"],
+            json!({"name": "Wood", "pbrMetallicRoughness": {"baseColorFactor": WOOD, "metallicFactor": 0.0, "roughnessFactor": 0.85}}),
+        ),
+    };
+    let root = turned_handle(
+        &mut out,
+        &handle.part,
+        &item.section,
+        Value::Object(extras),
+        wood,
+    );
     let mut roots = vec![root];
     for placed in &item.placed {
         let part = &lib.parts[&placed.part];
@@ -72,6 +90,30 @@ pub fn write(
     }
     out.json["buffers"][0]["byteLength"] = json!(out.bin.len());
     Ok(glb::write(&out))
+}
+
+/// A skin's first material, with its pictures, appended to the item: the skin merged whole, then
+/// its meshes and nodes dropped (nothing points at them), so only its look is kept.
+fn skin_material(out: &mut Glb, skin: &Glb) -> Result<usize, String> {
+    let (materials, meshes, nodes) = (
+        count_of(out, "materials"),
+        count_of(out, "meshes"),
+        count_of(out, "nodes"),
+    );
+    if count_of(skin, "materials") == 0 {
+        return Err("it has no material; make it with tools/items/haft.py skin".into());
+    }
+    merge(out, skin)?;
+    for (key, keep) in [("meshes", meshes), ("nodes", nodes)] {
+        if let Some(a) = out.json[key].as_array_mut() {
+            a.truncate(keep);
+        }
+    }
+    Ok(materials)
+}
+
+fn count_of(g: &Glb, key: &str) -> usize {
+    g.json[key].as_array().map_or(0, Vec::len)
 }
 
 /// Appends `v` to the array `at` (made one if missing) and gives its index.
@@ -117,15 +159,42 @@ fn floats(out: &mut Glb, data: &[[f32; 3]]) -> usize {
     )
 }
 
+fn uvs(out: &mut Glb, data: &[[f32; 2]]) -> usize {
+    let bytes: Vec<u8> = data
+        .iter()
+        .flatten()
+        .flat_map(|f| f.to_le_bytes())
+        .collect();
+    let v = view(out, &bytes, Some(34962));
+    push(
+        &mut out.json["accessors"],
+        json!({"bufferView": v, "componentType": 5126, "count": data.len(), "type": "VEC2"}),
+    )
+}
+
 /// The code-made handle turned from its section, `[y, diameter]` up the line: each span between
 /// two rings its own quads with the cone's normal, a cap at either end. Its node is the item's
 /// first, holding the look's extras.
-fn turned_handle(out: &mut Glb, name: &str, section: &[[f32; 2]], extras: Value) -> usize {
+fn turned_handle(
+    out: &mut Glb,
+    name: &str,
+    section: &[[f32; 2]],
+    extras: Value,
+    m: usize,
+) -> usize {
     let ring = |i: usize| {
         let a = 2.0 * std::f32::consts::PI * (i % SIDES) as f32 / SIDES as f32;
         (libm::cosf(a), libm::sinf(a))
     };
     let (mut pos, mut nrm, mut idx) = (Vec::new(), Vec::new(), Vec::<u32>::new());
+    // Its UVs as tools/items/haft.py bakes a skin on: u round from +X toward +Z, v 1 at the butt
+    // and 0 at the top, so a skin stretches over the handle by its length.
+    let (butt, top) = (
+        section.first().map_or(0.0, |s| s[0]),
+        section.last().map_or(1.0, |s| s[0]),
+    );
+    let v = |y: f32| 1.0 - (y - butt) / (top - butt).max(1e-6);
+    let mut uv = Vec::<[f32; 2]>::new();
     for w in section.windows(2) {
         let ([y0, d0], [y1, d1]) = (w[0], w[1]);
         if y1 <= y0 {
@@ -139,6 +208,7 @@ fn turned_handle(out: &mut Glb, name: &str, section: &[[f32; 2]], extras: Value)
             let l = (c * c + slope * slope + s * s).sqrt();
             for (y, d) in [(y0, d0), (y1, d1)] {
                 pos.push([c * d / 2.0, y, s * d / 2.0]);
+                uv.push([i as f32 / SIDES as f32, v(y)]);
                 nrm.push(n.map(|x| x / l));
             }
         }
@@ -159,10 +229,12 @@ fn turned_handle(out: &mut Glb, name: &str, section: &[[f32; 2]], extras: Value)
     for ([y, d], up) in ends {
         let centre = pos.len() as u32;
         pos.push([0.0, y, 0.0]);
+        uv.push([0.5, v(y)]);
         nrm.push([0.0, up, 0.0]);
         for i in 0..SIDES {
             let (c, s) = ring(i);
             pos.push([c * d / 2.0, y, s * d / 2.0]);
+            uv.push([0.5, v(y)]);
             nrm.push([0.0, up, 0.0]);
         }
         for i in 0..SIDES as u32 {
@@ -175,19 +247,16 @@ fn turned_handle(out: &mut Glb, name: &str, section: &[[f32; 2]], extras: Value)
         }
     }
     let (p, n) = (floats(out, &pos), floats(out, &nrm));
+    let t = uvs(out, &uv);
     let bytes: Vec<u8> = idx.iter().flat_map(|i| i.to_le_bytes()).collect();
     let iv = view(out, &bytes, Some(34963));
     let i = push(
         &mut out.json["accessors"],
         json!({"bufferView": iv, "componentType": 5125, "count": idx.len(), "type": "SCALAR"}),
     );
-    let m = push(
-        &mut out.json["materials"],
-        json!({"name": "Wood", "pbrMetallicRoughness": {"baseColorFactor": WOOD, "metallicFactor": 0.0, "roughnessFactor": 0.85}}),
-    );
     let mesh = push(
         &mut out.json["meshes"],
-        json!({"name": name, "primitives": [{"attributes": {"POSITION": p, "NORMAL": n}, "indices": i, "material": m}]}),
+        json!({"name": name, "primitives": [{"attributes": {"POSITION": p, "NORMAL": n, "TEXCOORD_0": t}, "indices": i, "material": m}]}),
     );
     push(
         &mut out.json["nodes"],

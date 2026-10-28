@@ -107,6 +107,35 @@ def lathe(name, profile, bore, sides):
     return ob
 
 
+def rod(name, length, diameter, sides):
+    """A closed straight rod up the line from 0 to `length`, as terra_bake's turned handle lays it
+    out (crates/terra_bake/src/item.rs): `sides` faces round, u = i / sides round from +X toward
+    +Y (glTF +X toward +Z), v = 1 at the butt and 0 at the top (glTF's v runs down the picture);
+    its ends take the picture's edge rows."""
+    bm = bmesh.new()
+    uv = bm.loops.layers.uv.new("UVMap")
+    r = diameter / 2
+    # glTF +Z is Blender -Y: the ring turns from +X toward glTF +Z as item.rs's does.
+    ring = [[bm.verts.new((r * math.cos(2 * math.pi * i / sides), -r * math.sin(2 * math.pi * i / sides), z)) for i in range(sides)] for z in (0.0, length)]
+    for i in range(sides):
+        j = (i + 1) % sides
+        f = bm.faces.new((ring[0][i], ring[0][j], ring[1][j], ring[1][i]))
+        for loop, (u, v) in zip(f.loops, ((i / sides, 1.0), ((i + 1) / sides, 1.0), ((i + 1) / sides, 0.0), (i / sides, 0.0))):
+            loop[uv].uv = (u, 1.0 - v)  # Blender's v runs up the picture
+    for k, v in ((0, 1.0), (1, 0.0)):
+        f = bm.faces.new(ring[k])
+        for loop in f.loops:
+            loop[uv].uv = (0.5, 1.0 - v)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    ob = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(ob)
+    return ob
+
+
 def bake(src, dst, role, px, metallic, reach):
     """Bakes src's colour, normal and roughness onto dst's UVs (Cycles, selected to active, rays
     `reach` out and in), into one material named for its role: colour and normal at px, roughness
@@ -122,8 +151,9 @@ def bake(src, dst, role, px, metallic, reach):
     bsdf = next(n for n in nodes if n.type == "BSDF_PRINCIPLED")
     bsdf.inputs["Metallic"].default_value = metallic
     maps = {}
-    for key, size, colour in (("colour", px, True), ("normal", px, False), ("rough", px // 2, False)):
-        image = bpy.data.images.new(f"{dst.name}_{key}", size, size)
+    w, h = px if isinstance(px, tuple) else (px, px)
+    for key, size, colour in (("colour", (w, h), True), ("normal", (w, h), False), ("rough", (w // 2, h // 2), False)):
+        image = bpy.data.images.new(f"{dst.name}_{key}", *size)
         image.colorspace_settings.name = "sRGB" if colour else "Non-Color"
         node = nodes.new("ShaderNodeTexImage")
         node.image = image

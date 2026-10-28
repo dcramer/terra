@@ -60,6 +60,15 @@ export function checkPart(part: any, ctx: Ctx): Stage[] {
   const join_m = v(ctx.rules.join_m);
   if (type.made_by === "code") {
     stage("numbers", "positive, its grip on it", codeNumbers(part));
+    if (part.skin) {
+      // Its look: one material named Wood (a handle's role), its maps within the part budget.
+      const skin = ctx.mesh({ ...part, model: part.skin });
+      const names = [...new Set(skin.materials.map((m) => m.split(".")[0]))];
+      const faults = budget({ triangles: "small_triangles" }, { ...skin, indices: [] }, ctx);
+      if (names.length !== 1 || names[0] !== "Wood") faults.push(`skin ${part.skin} has materials ${JSON.stringify(names)}: a handle's skin is one material named Wood; make it with tools/items/haft.py skin`);
+      if (skin.textures.length === 0) faults.push(`skin ${part.skin} has no pictures: it would draw the handle flat; make it with tools/items/haft.py skin`);
+      stage("skin", `${part.skin}: ${skin.textures.map((t) => `${t.name} ${t.px} px`).join(", ")}`, faults);
+    }
   } else {
     const mesh = ctx.mesh(part);
     stage("points", `${type.points.length} of ${part.type}'s, ${type.origin} at the origin`, points(part, type, mesh, ctx));
