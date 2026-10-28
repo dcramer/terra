@@ -50,9 +50,11 @@
     "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set: attachment.md Stowed's next step, a still of each kind put away on the base, heavy and female" }]
   },
   "blocking": {
-    "state": "open",
-    "how": "a tool does not block (the Tool stance's off button is the build menu, holding.md); an axe as a weapon in the Single stance might guard on its haft",
-    "open": [{ "owner": "developers", "why": "whether a one-hander alone may block, smaller (D461's second question, unanswered; Enshrouded blocks only with a shield or a two-hander)" }]
+    "state": "decided",
+    "mechanism": "move_set",
+    "decisions": ["D567", "D461"],
+    "how": "as a weapon in the Single stance it blocks alone on its haft, weaker than a shield (D567); as a tool it does not block (the Tool stance's off button is the build menu, holding.md)",
+    "open": [{ "owner": "technical", "why": "the Single stance's block clip and how much weaker its block is come with the axe's set (the combat skill)" }]
   },
   "animation": {
     "state": "open",

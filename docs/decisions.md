@@ -459,6 +459,7 @@ The look, models, bodies and gear, textures and audio.
 | [D562](decisions/D562.md) | The hands close on what they hold: a finger-only grip layer, closed by touch at run time | Tech | Agent | Decided | Whenever a hand socket holds a look… |
 | [D564](decisions/D564.md) | A tool carried by the rule tips at the wrist, little in the fist, its forearm kept down | Tech | Agent | Decided | A look in hand carried by D546's rule takes no more than… |
 | [D565](decisions/D565.md) | Weapons and tools are assembled from parts by rules | Design | Developers | Decided | Every ordinary weapon and tool is assembled from a few… |
+| [D567](decisions/D567.md) | Six kinds' holds: a one-hander blocks alone, the pickaxe is two-handed, the spear upright, the torch put out at the hip, the bow low in the left hand, the basket in the off hand | Design | Developers | Decided | The six questions the kinds table left to the developers… |
 
 ## Engine and code
 

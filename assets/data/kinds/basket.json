@@ -1,27 +1,18 @@
 {
   "$schema": "./kind.schema.json",
   "kind": "basket",
-  "about": "A basket hung from the hand by its handle, carried at the side. A look today, not yet an item.",
+  "about": "A basket carried by its handle in the off hand, hung at the side, with no lid (D567). A look today, not yet an item.",
   "attach_kind": "hung",
   "hold_class": { "class": null, "source": "a hung look has no hold class: it has no moves (attach_kinds.json's hung lists none); items.ron has no basket" },
   "hands": {
-    "value": "open",
-    "today": "the look hangs from the right hand in the checks",
-    "open": { "owner": "developers", "why": "whether a basket is an item a hand holds (Either, beside a one-hander, as a torch) and how it reaches the hand" }
+    "value": "Off",
+    "source": "D567: carried by its handle in the off hand",
+    "open": { "owner": "technical", "why": "today the look hangs from the right hand in the checks; an item for it, and hanging it from the off hand, are not built" }
   },
-  "lead": { "value": "either", "source": "D463: the hand that holds it, mirrored on a left-handed body; open with its hands (above)" },
+  "lead": { "value": "off", "source": "D567 and D463: the off hand, the right on a left-handed body" },
   "grip_type": { "value": "hook", "source": "D562: hung, a hook grip, the fingers alone round the handle" },
   "slots": [
-    { "slot": "working", "name": "body", "made_by": "model", "fits": ["basket_body"], "joins": "its handle woven in, one part, as a real basket's is; its grip a point on it" },
-    {
-      "slot": "trim",
-      "name": "cover",
-      "made_by": "model",
-      "fits": ["basket_cover"],
-      "optional": true,
-      "joins": "its seat on the body's mouth point (a full point: centre, up, the long way)",
-      "open": { "owner": "developers", "why": "whether baskets vary by a cover or a cloth at all; a trim is listed so the kind may take one" }
-    }
+    { "slot": "working", "name": "body", "made_by": "model", "fits": ["basket_body"], "joins": "its handle woven in, one part, as a real basket's is; its grip a point on it; no lid or cover (D567), so no trim" }
   ],
   "points": {
     "grip": { "state": "by rule", "how": "1.5 cm under the handle's top (D546's hung mount), on the body's handle_top point: the item's origin, hanging down -Z, its long way along +Y" },
@@ -37,9 +28,10 @@
     "how": "hung from the hand by its handle, out 5 cm from the leg (basket.json's out); a hung look does not tip (attachment.md Carried)"
   },
   "stowed": {
-    "state": "open",
-    "how": "D551 lists no socket for a hung look",
-    "open": [{ "owner": "developers", "why": "where a basket goes when the hands are freed: the pack, unseen (D551's rest), or on the body" }]
+    "state": "decided",
+    "mechanism": "pack",
+    "decisions": ["D567", "D551"],
+    "how": "put away into the pack, not shown (D567, D551's rest): no socket on the body"
   },
   "blocking": { "state": "does not apply", "how": "it is not a weapon" },
   "animation": { "state": "does not apply", "how": "no move set: a hung look only hangs from the walker's clips, the arm kept off the hip (D535)" },

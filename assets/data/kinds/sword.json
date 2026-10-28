@@ -48,9 +48,11 @@
     "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step); whether a scabbard shows is a belt look not made" }]
   },
   "blocking": {
-    "state": "open",
-    "how": "with a shield, the shield blocks (sword.shielded's Clear_Block); alone, a guard on the blade",
-    "open": [{ "owner": "developers", "why": "whether a one-hander alone may block, smaller (D461's second question, unanswered)" }]
+    "state": "decided",
+    "mechanism": "move_set",
+    "decisions": ["D567", "D461", "D459"],
+    "how": "with a shield, the shield blocks (sword.shielded's Clear_Block); alone, in the Single stance, a guard on the blade, weaker than a shield (D567)",
+    "open": [{ "owner": "technical", "why": "sword.single and its block clip, and how much weaker its block is, are not built (the combat skill)" }]
   },
   "animation": {
     "state": "built",

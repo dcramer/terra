@@ -42,15 +42,12 @@
     "how": "on a raised arm, flame up and ahead, its handle within 2.2 degrees of up and 10 cm clear of the body in every carried clip on every template (attachment.md Carried); not tipped by the rule"
   },
   "stowed": {
-    "state": "open",
+    "state": "decided",
     "mechanism": "stowed_socket",
-    "decisions": ["D551"],
+    "decisions": ["D567", "D551"],
     "socket": "socket.belt.R",
-    "how": "D551's one-handed hafted row: at the hip on the main hand's side",
-    "open": [
-      { "owner": "developers", "why": "whether a lit torch is put out when put away, or goes to the pack unseen rather than the hip" },
-      { "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step)" }
-    ]
+    "how": "put out and hung at the hip (D567), D551's one-handed hafted row: on the main hand's side",
+    "open": [{ "owner": "technical", "why": "putting the flame and its light out when stowed, and the turn and offset on the socket (attachment.md Stowed's next step), are not built" }]
   },
   "blocking": { "state": "does not apply", "how": "a carried item counts as nothing in the stance (holding.md), so it never blocks" },
   "animation": {

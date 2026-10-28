@@ -5,9 +5,9 @@
   "attach_kind": "hafted",
   "hold_class": { "class": "pickaxe", "source": "tools/characters/attach_kinds.json (hafted's classes; holding.md: tools keep their own class)" },
   "hands": {
-    "value": "open",
-    "today": "Main: every tool is held and swung in the main hand alone",
-    "open": { "owner": "developers", "why": "a real pickaxe of 0.9 m is swung in two hands; whether ours is (Two, with its own two-handed takes and a second grip) or stays one-handed is a design call" }
+    "value": "Two",
+    "source": "D567: two-handed, as a real pickaxe of 0.9 m is swung",
+    "open": { "owner": "technical", "why": "today it is held and swung in the main hand alone, as every tool: its two-handed takes and the off hand's IK onto the second grip are not built" }
   },
   "lead": { "value": "main", "source": "D463: the main hand, the left on a left-handed body; if two-handed, the main hand still leads (holding.md's lead, Main unless a bow)" },
   "grip_type": { "value": "power", "source": "D562: in hand, a power grip closed by touch on the haft" },
@@ -21,8 +21,8 @@
     "grip": { "state": "by rule", "how": "on the haft, grip_from_end up from its butt (the reference's 0.08 m; D546's hafted 0.04 to 0.12): the item's origin" },
     "second": {
       "state": "open",
-      "how": "none while one-handed; if two-handed, a point on the haft at a fixed distance from the grip, part of the reference item (research section 3)",
-      "open": { "owner": "developers", "why": "follows whether the pickaxe is two-handed (hands, above)" }
+      "how": "a point on the haft a fixed distance from the grip (toward the head), part of the reference item, not of the envelope (research/2026-10-28-assembled-items-animation.md section 3); two-handed by D567",
+      "open": { "owner": "technical", "why": "its distance is set with the pick's two-handed takes, keyed with both hands; none exist" }
     },
     "edge": { "state": "by rule", "how": "the head's longer pick's tip point (its point, on -Z, D546: the longer pick toward -Z) carried through; the shorter end is not a working edge" }
   },
@@ -32,7 +32,7 @@
     "mechanism": "tool_use",
     "decisions": ["D459"],
     "how": "a blow plays the walker's Sword_Attack and a use its Interact (terra_walker::figure); items.ron's tool.cuts and strikes say what it breaks",
-    "open": [{ "owner": "technical", "why": "a pick's own swing, keyed for the reference so its point leads (and with both hands if two-handed)" }]
+    "open": [{ "owner": "technical", "why": "a pick's own swing, keyed for the reference so its point leads, keyed with both hands (D567)" }]
   },
   "carried": {
     "state": "built",
@@ -41,15 +41,12 @@
     "how": "tipped by the carry rule, its head forward and down, no lower than 0.55 m under the grip (attachment.md Carried)"
   },
   "stowed": {
-    "state": "open",
+    "state": "decided",
     "mechanism": "stowed_socket",
-    "decisions": ["D551"],
-    "socket": "socket.belt.R",
-    "how": "one-handed hafted: at the hip on the main hand's side (D551); two-handed: across the back",
-    "open": [
-      { "owner": "developers", "why": "which of D551's rows follows whether it is two-handed (hands, above)" },
-      { "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step); a 0.9 m pick at the hip reaches below the knee" }
-    ]
+    "decisions": ["D567", "D551"],
+    "socket": "socket.back",
+    "how": "two-handed, so across the back (D567, D551's two-handed row), beside a shield there",
+    "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step); a 0.9 m pick across the back must clear the head" }]
   },
   "blocking": { "state": "does not apply", "how": "a tool does not block: the Tool stance's off button is the build menu (holding.md)" },
   "animation": {
