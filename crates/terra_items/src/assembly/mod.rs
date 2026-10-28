@@ -25,7 +25,7 @@ use std::f32::consts::PI;
 
 pub use command::Command;
 pub use data::{Band, Kind, Library, Material, Part, PartType, Point, Size};
-pub use meet::{Meet, ONE, Pairing, kinds_of, meet, pairings, rigid};
+pub use meet::{Meet, ONE, Pairing, kinds_for, kinds_of, kinds_taking, meet, pairings, rigid};
 use serde::Serialize;
 
 /// What an item is made of: everything needed to make it again, byte for byte.

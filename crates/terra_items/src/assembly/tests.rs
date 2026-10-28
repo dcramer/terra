@@ -297,3 +297,16 @@ fn the_library_on_disk_reads() {
     assert_eq!(l.kinds.len(), kinds);
     assert!(l.kinds.contains_key("axe") && l.materials.contains_key("iron"));
 }
+
+#[test]
+fn a_part_is_made_for_the_kinds_it_names_or_else_every_kind_with_a_slot_for_its_type() {
+    let l = Library::from_json(TYPES, MATERIALS, &[AXE, SHIELD], &[]).unwrap();
+    let names = |ks: Vec<&Kind>| ks.into_iter().map(|k| k.kind.clone()).collect::<Vec<_>>();
+    // axe.json's slots take a haft and a collar; round_shield.json's a grip bar and a boss.
+    assert_eq!(names(kinds_taking(&l, "haft")), ["axe"]);
+    assert_eq!(names(kinds_taking(&l, "boss")), ["round_shield"]);
+    assert!(kinds_taking(&l, "blade").is_empty());
+    assert_eq!(names(kinds_for(&l, "haft", None)), ["axe"]);
+    let named = ["round_shield".to_string(), "no_such_kind".to_string()];
+    assert_eq!(names(kinds_for(&l, "haft", Some(&named))), ["round_shield"]);
+}

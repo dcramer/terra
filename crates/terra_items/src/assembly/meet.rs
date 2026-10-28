@@ -40,12 +40,27 @@ pub struct Pairing {
 
 /// The kinds a part is made for: those it names, or every kind with a slot for its type.
 pub fn kinds_of<'a>(lib: &'a Library, part: &Part) -> Vec<&'a Kind> {
+    kinds_for(lib, &part.kind, part.kinds.as_deref())
+}
+
+/// The kinds a part of type `kind` is made for, `named` the kinds it names (the one rule the
+/// part checker asks for too, through `assemble kinds`).
+pub fn kinds_for<'a>(lib: &'a Library, kind: &str, named: Option<&[String]>) -> Vec<&'a Kind> {
+    match named {
+        Some(named) => lib
+            .kinds
+            .values()
+            .filter(|k| named.contains(&k.kind))
+            .collect(),
+        None => kinds_taking(lib, kind),
+    }
+}
+
+/// Every kind with a slot for a part of type `kind`.
+pub fn kinds_taking<'a>(lib: &'a Library, kind: &str) -> Vec<&'a Kind> {
     lib.kinds
         .values()
-        .filter(|k| match &part.kinds {
-            Some(named) => named.contains(&k.kind),
-            None => k.slots.iter().any(|s| s.fits.contains(&part.kind)),
-        })
+        .filter(|k| k.slots.iter().any(|s| s.fits.iter().any(|f| f == kind)))
         .collect()
 }
 

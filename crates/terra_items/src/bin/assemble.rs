@@ -2,6 +2,8 @@
 //! it places. A binary of terra_items rather than an xtask, so it builds from serde alone in
 //! seconds and xtask does not rebuild whenever the assembler changes.
 //!
+//!   assemble kinds <type> [<kind>...]             the kinds taking a part of <type> and those it is
+//!                                                 made for, <kind>... the ones it names
 //!   assemble joins <part>                         how <part> sits with each partner its kinds allow
 //!   assemble item <kind> <part>... [--material M] [--seed N]   the item's canonical bytes
 //!
@@ -12,7 +14,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use terra_items::assembly::{Command, assemble, pairings};
+use terra_items::assembly::{Command, Kind, assemble, kinds_for, kinds_taking, pairings};
 
 fn main() -> ExitCode {
     match run() {
@@ -27,12 +29,24 @@ fn main() -> ExitCode {
     }
 }
 
-const USAGE: &str = "use: assemble joins <part> | assemble item <kind> <part>... [--material M] [--seed N]; add --parts - to read the parts from stdin";
+const USAGE: &str = "use: assemble kinds <type> [<kind>...] | assemble joins <part> | assemble item <kind> <part>... [--material M] [--seed N]; add --parts - to read the parts from stdin";
 
 fn run() -> Result<String, String> {
     let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     let cmd = Command::parse(std::env::args().skip(1), &assets)?;
     match cmd.words.first().map(String::as_str) {
+        Some("kinds") => {
+            let [_, kind, named @ ..] = cmd.words.as_slice() else {
+                return Err(USAGE.into());
+            };
+            let names = |ks: Vec<&Kind>| ks.into_iter().map(|k| k.kind.clone()).collect::<Vec<_>>();
+            let made_for = kinds_for(&cmd.lib, kind, (!named.is_empty()).then_some(named));
+            let out = serde_json::json!({
+                "taking": names(kinds_taking(&cmd.lib, kind)),
+                "made_for": names(made_for),
+            });
+            Ok(out.to_string())
+        }
         Some("joins") => {
             let [_, part] = cmd.words.as_slice() else {
                 return Err(USAGE.into());
