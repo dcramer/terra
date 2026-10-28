@@ -343,7 +343,7 @@ export type Meet = { meet: "handle_top"; head: string; y: number; d: number } | 
 export type Pairing = { kind: string; partner: string; meet: Meet };
 
 /** The assembler's answer to `assemble <args>` (crates/terra_items/src/bin/assemble.rs), `input` on stdin. */
-function assembler(args: string[], input?: string): any {
+export function assembler(args: string[], input?: string): any {
   const run = spawnSync("cargo", ["run", "-q", "-p", "terra_items", "--bin", "assemble", "--", ...args], { cwd: ROOT, input, encoding: "utf8" });
   if (run.status !== 0) throw new Error(`the assembler refused \`assemble ${args.join(" ")}\`: ${run.stderr.trim() || run.error?.message}`);
   return JSON.parse(run.stdout);

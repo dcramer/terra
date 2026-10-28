@@ -18,6 +18,7 @@ Not here: characters, bodies and gear (the `character` skill); item icons (`item
 | Furniture, a prop or a station | `assets/models/props` | `assets/data/builds.ron`, an `Items` variant: file, `dims`, cost; a station also in `stations.ron` |
 | A door's or shutters' leaf | `assets/models/openings` (`"into": "openings"`, `"anchor": "hinge"`) | `builds.ron`'s `fittings`: model, how it hangs, `dims` of the leaf its first hole takes, the holes it fits, cost |
 | A tool or weapon | `assets/models/tools` (`"into": "tools"`), standing on the end of its handle, parts `Wood` and `Metal` | `items.ron`; its held look is made from it by `tools/characters/fit_held.py` |
+| A part of an assembled item (a head, a haft's look, a collar, D565) | `assets/models/parts`, made by `tools/items` ([its README](../../../tools/items/README.md)) | `assets/data/parts/<part>.json`; its kind's sheets by `node tools/items/sheet.ts <kind>` (step 7) |
 | An item lying on its own, such as a material | `assets/models/items/<item>.glb`, where the game looks for it (no item has one yet) | `items.ron`; its icon by `item-icons` |
 | A tree, bush, plant or flower | Not a model: grown by rules from bark and leaf cards (D222) | `assets/data/flora.ron`, a kind with `grown` (below) |
 | A rock | `assets/models/nature`, from a CC0 scan (`tools/props/scans.ts`, `art/scans.json`) | `assets/data/flora.ron`, a kind (below) |
@@ -77,7 +78,7 @@ cargo run -p terra_sandbox -- --experiment workbench --model models/character/ba
 cargo run -p terra_sandbox -- --experiment workbench --model models/character/base.glb --model models/nature/<File>.glb --sides 0 --sheet shots/<name>
 ```
 
-The first is for anything in the build catalogue, drawn as when placed; the second for any model, such as a tree, beside a body for scale. For growing things, also see them where they grow: a scripted run of the play experiment with `--at` and `--face` near them, and `--shot`. Go through the style guide's checklist, and run `cargo xtask contract`: it holds every model the game places to the model contract, its size, anchor, sockets and, for a leaf, its fit in its hole, and `cargo xtask check` runs it too. The workbench draws its box (green when it keeps the contract), origin and sockets.
+The first is for anything in the build catalogue, drawn as when placed; the second for any model, such as a tree, beside a body for scale. A part of an assembled item is seen in its kind's sheets, one command: `node tools/items/sheet.ts <kind>` assembles every working part with every handle (trims chosen so each is whole, or the refusal in its cell), renders each held in the base body's hand and each part alone on the workbench, and lays out `~/.cache/terra-review/<kind>-sheet/items.png` and `parts.png` for the review desk (assembled-items.md, How we know it renders right). For growing things, also see them where they grow: a scripted run of the play experiment with `--at` and `--face` near them, and `--shot`. Go through the style guide's checklist, and run `cargo xtask contract`: it holds every model the game places to the model contract, its size, anchor, sockets and, for a leaf, its fit in its hole, and `cargo xtask check` runs it too. The workbench draws its box (green when it keeps the contract), origin and sockets.
 
 ## 8. Commit
 

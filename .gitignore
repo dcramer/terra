@@ -15,5 +15,7 @@ cabin.ron
 spike/*/out/
 # A spike's models while it runs (spike/README.md); never kept.
 assets/models/spike/
+# A kind's sheet's assembled items (tools/items/sheet.ts), made again each run.
+assets/models/sheets/
 # A run's log (D448), and a played session's copied home.
 logs/
