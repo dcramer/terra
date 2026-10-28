@@ -8,11 +8,13 @@
 //   guard  {"clip": the set's guard clip, "frame": the frame of its take that is the pose}:
 //          keyed as the whole body at the clip's first and last frames
 //   hand   right-hand keys, each {"at": seconds, "grip": [right, ahead, up], "blade": [...],
-//          "back": [...], "yaw": degrees (+ left)}: metres and directions in the body's frame
+//          "edge": [...], "yaw": degrees (+ left)}: metres and directions in the body's frame
 //          from the hips at the guard pose; the grip is the middle of the fist, the blade the
-//          sword's line out of it, the back the back of the hand, the yaw the chest's turn
-//   left   left-hand keys, the same (the blade the forearm's line toward the fist, the back
-//          the shield's face), for a shield move
+//          sword's line out of it, the edge the way its working edge faces (the hand socket's
+//          -Z, the knuckles' side, attachment.md), which leads a strike (D565 step 3), the yaw
+//          the chest's turn; kimodo_keys.py refuses a key no wrist can turn the hand to
+//   left   left-hand keys, the same with "back" for "edge": the blade the forearm's line toward
+//          the fist, the back the shield's face, for a shield move
 //   blow   {"move": its name in the move set, "sweep": "right-to-left" | "left-to-right" |
 //          "overhead", "contact": degrees from ahead the blade crosses at its fastest
 //          (+ left), "next": the move it chains into, checked in the scratch set; "held":
@@ -27,7 +29,7 @@
 // Node 22.18 or later; no dependencies.
 
 export type V3 = [number, number, number];
-export type Key = { at: number; grip: V3; blade?: V3; back?: V3; yaw?: number };
+export type Key = { at: number; grip: V3; blade?: V3; edge?: V3; back?: V3; yaw?: number };
 export const SWEEPS = ["right-to-left", "left-to-right", "overhead"] as const;
 export type Sweep = (typeof SWEEPS)[number];
 export type Blow = { move: string; sweep?: Sweep; contact?: number; next?: string; held?: boolean; raised?: [number, number] };
@@ -74,9 +76,13 @@ export function readSpec(name: string, entry: Record<string, unknown>): Spec {
       const at = Number(k.at);
       if (!(at > 0 && at < seconds)) wrong(`${field} key ${i} at ${k.at}: inside the clip, after its first frame and before its last`);
       if (!isV3(k.grip)) wrong(`${field} key ${i}: grip is [right, ahead, up] in metres`);
-      for (const d of ["blade", "back"]) if (k[d] !== undefined && !isV3(k[d])) wrong(`${field} key ${i}: ${d} is [right, ahead, up]`);
+      // The sword hand is turned by its edge (D565 step 3), the shield hand by its board's face.
+      const turnedBy = field === "hand" ? "edge" : "back";
+      const other = field === "hand" ? "back" : "edge";
+      if (k[other] !== undefined) wrong(`${field} key ${i}: a ${field === "hand" ? "right" : "left"} hand is turned by its ${turnedBy}, not a ${other}`);
+      for (const d of ["blade", turnedBy]) if (k[d] !== undefined && !isV3(k[d])) wrong(`${field} key ${i}: ${d} is [right, ahead, up]`);
       if (k.yaw !== undefined && typeof k.yaw !== "number") wrong(`${field} key ${i}: yaw is degrees`);
-      return { at, grip: k.grip as V3, blade: k.blade as V3 | undefined, back: k.back as V3 | undefined, yaw: k.yaw as number | undefined };
+      return { at, grip: k.grip as V3, blade: k.blade as V3 | undefined, [turnedBy]: k[turnedBy] as V3 | undefined, yaw: k.yaw as number | undefined };
     });
   };
   const blow = entry.blow as { move?: unknown; sweep?: unknown; contact?: unknown; next?: unknown; held?: unknown; raised?: unknown } | undefined;

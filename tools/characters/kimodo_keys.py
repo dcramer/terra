@@ -9,16 +9,25 @@ tools/characters/clip.ts:
 GUARD.npz is the guard take as a Kimodo NPZ (kimodo_convert of its BVH). KEYS.json:
 {"frame": the guard take's frame that is the pose, "seconds": the clip's length, "hand": [key],
 "left": [key]}. A key: {"at": seconds, "grip": [right, ahead, up], "blade": [right, ahead, up],
-"back": [right, ahead, up], "yaw": degrees (+ to the left)}, metres and directions in the
-body's frame from the hips at the guard pose. The grip is the middle of the fist (the hand's
-socket); for the right hand the blade is the sword's line out of the fist and the back the
-back of the hand; for the left the blade is the forearm's line toward the fist and the back
-the shield's face. `back` defaults to the guard's own hand, turned as little as can be;
-`yaw` turns the chest about the spine before the arm reaches.
+"edge" (right) or "back" (left): [right, ahead, up], "yaw": degrees (+ to the left)}, metres
+and directions in the body's frame from the hips at the guard pose. The grip is the middle of
+the fist (the hand's socket); for the right hand the blade is the sword's line out of the fist
+and the edge the way its working edge faces (the socket's -Z, the knuckles' side, which leads a
+strike: D565 step 3); for the left the blade is the forearm's line toward the fist and the back
+the shield's face. Unset, the hand keeps the guard's turn, as little changed as can be; `yaw`
+turns the chest about the spine before the arm reaches.
+
+The arm is solved as a person's reaches (D565 step 3): of every way the elbow can swing about
+the line from the shoulder to the wrist, the one that keeps the wrist nearest straight and the
+forearm's twist in range, the upper arm rolled so the elbow bends as a hinge and the forearm
+carrying the hand's twist, so the hand bends off it only by flexion and deviation. A key no arm
+can turn the hand to within a person's wrist (wrist.ts's limits, a margin inside them for
+Kimodo's slack) is refused: its edge or blade wants changing.
 
 The guard pose is turned to face +Z and set on the origin, as Kimodo's canonical start is.
-Prints a KEY line a key: where its fist and blade ended up, and how far short of the grip it
-fell (a grip beyond the arm's reach is met at full stretch).
+Prints a KEY line a key: where its fist and blade ended up, how far short of the grip it fell
+(a grip beyond the arm's reach is met at full stretch), the wrist's flexion and deviation and
+the forearm's twist; exits 1 after them if a key is refused.
 """
 
 import json
@@ -122,8 +131,71 @@ def grip_offset(side):
     return knuckles + 0.2 * (wrist - knuckles) - wrist - 0.015 * T_UP
 
 
-def solve(key, side):
-    """The guard pose with one arm reaching for a key."""
+# A person's wrist and forearm (tools/characters/wrist.ts, AAOS adult averages), degrees, less a
+# margin Kimodo's takes stray by, so a take that meets its keys keeps the wrist in range: the
+# forearm's twist from the T-pose's palm-down, + toward palm-up (supination).
+WRIST = {"flex": 80, "ext": 70, "radial": 20, "ulnar": 35}
+MARGIN = 10
+TWIST = (-15, 180)
+
+
+def arm_axes(side):
+    """The arm's own axes at the T-pose: the upper arm's and forearm's lines, the elbow's hinge
+    (the forearm swings toward ahead about it, + bending), the hand's line to the middle
+    knuckle, out of its palm and toward its thumb, and the sign that makes twist + supination."""
+    up, fore, hand = (PT[idx[f"{side}{b}"]] for b in ("Arm", "ForeArm", "Hand"))
+    upper, forearm = unit(fore - up), unit(hand - fore)
+    hinge = unit(np.cross(forearm, T_AHEAD))
+    hinge = unit(hinge - np.dot(hinge, upper) * upper)
+    along = unit(PT[idx[f"{side}HandMiddle1"]] - hand)
+    palm = unit(-T_UP - np.dot(-T_UP, along) * along)
+    thumb = PT[idx[f"{side}HandThumb1"]] - hand
+    thumb = unit(thumb - np.dot(thumb, along) * along - np.dot(thumb, palm) * palm)
+    sup = 1.0 if np.dot(R.from_rotvec(forearm * math.pi / 2).apply(T_AHEAD), T_UP) > 0 else -1.0
+    return {"upper": upper, "forearm": forearm, "hinge": hinge, "along": along, "palm": palm, "thumb": thumb, "sup": sup}
+
+
+AXES = {s: arm_axes(s) for s in ("Right", "Left")}
+# The two lines of each hand a key sets, at the T-pose (see reach).
+REF = {"Right": (T_AHEAD, T_UP),
+       "Left": (AXES["Left"]["forearm"], unit(T_UP - np.dot(T_UP, AXES["Left"]["forearm"]) * AXES["Left"]["forearm"]))}
+
+
+def bend(hand_g, f, ax):
+    """The hand's flexion (+ toward the palm) and deviation (+ toward the thumb) off a forearm
+    along f, degrees, as wrist.ts's bendOf."""
+    h, n, a = hand_g @ ax["along"], hand_g @ ax["palm"], hand_g @ ax["thumb"]
+    fh, fn, fa = float(f @ h), float(f @ n), float(f @ a)
+    return math.degrees(math.atan2(-fn, fh)), math.degrees(math.atan2(-fa, math.hypot(fh, fn)))
+
+
+REST_BEND = {s: bend(np.eye(3), AXES[s]["forearm"], AXES[s]) for s in AXES}
+
+
+def twist_of(local, axis):
+    """The twist of a rotation about an axis, degrees (swing-twist)."""
+    x, y, z, w = R.from_matrix(local).as_quat()
+    along = float(np.dot([x, y, z], axis))
+    # The quaternion's sign is free: w >= 0 keeps the twist in -180..180, not 334 for -26.
+    return math.degrees(2 * math.atan2(along, w)) if w >= 0 else math.degrees(2 * math.atan2(-along, -w))
+
+
+def frame_of(a, b):
+    """The rotation taking the orthonormal pair (a0, b0) of the T-pose onto (a, b), as columns."""
+    return np.stack([a, b, np.cross(a, b)], axis=1)
+
+
+def over(flex, dev, twist):
+    """How far past a person's range a wrist and forearm are, degrees, the margin counted."""
+    return max(0.0, flex - (WRIST["flex"] - MARGIN), -flex - (WRIST["ext"] - MARGIN), dev - (WRIST["radial"] - MARGIN),
+               -dev - (WRIST["ulnar"] - MARGIN), TWIST[0] - twist, twist - TWIST[1])
+
+
+refused = []
+
+
+def reach(key, side):
+    """The guard pose with one arm reaching for a key, as a person reaches, and how it reached."""
     loc = guard.copy()
     if key.get("yaw"):
         G, _ = fk(loc, root)
@@ -132,44 +204,75 @@ def solve(key, side):
         loc[j] = G[parents[j]].T @ spin @ G[j]
     G, P = fk(loc, root)
     up, fore, hand = idx[f"{side}Arm"], idx[f"{side}ForeArm"], idx[f"{side}Hand"]
-    # The hand's turn from the T-pose: the blade (+Z at the T-pose, the right fist's sword
-    # pointing ahead), the back of the hand (+Y, up).
+    ax = AXES[side]
+    # The hand's turn from the T-pose, by two of its lines there: the right's blade (the sword
+    # pointing ahead) and back of the hand (up), its back from its edge (the socket's -Z, out
+    # along the arm): back = edge x blade; the left's blade the forearm's line out to the fist
+    # and its back the back of the hand, the shield's face.
     have = G[hand]
-    blade = unit(body(key["blade"])) if "blade" in key else have @ T_AHEAD
-    back = body(key["back"]) if "back" in key else have @ T_UP
+    rest = frame_of(*REF[side])
+    blade = unit(body(key["blade"])) if "blade" in key else have @ REF[side][0]
+    if "edge" in key:
+        back = np.cross(unit(body(key["edge"])), blade)
+    else:
+        back = body(key["back"]) if "back" in key else have @ REF[side][1]
     back = unit(back - np.dot(back, blade) * blade)
-    # The turn taking the T-pose's (ahead, up) onto (blade, back).
-    rest = np.stack([T_AHEAD, T_UP, np.cross(T_AHEAD, T_UP)], axis=1)
-    want_std = np.stack([blade, back, np.cross(blade, back)], axis=1) @ rest.T
+    want_std = frame_of(blade, back) @ rest.T
     target = hips + body(key["grip"]) - want_std @ grip_offset(side)
-    # Two-bone IK, the elbow kept in the plane it bends in at the guard.
+    # Two-bone IK, every swing of the elbow about the shoulder-to-wrist line tried.
     S, E, W = P[up], P[fore], P[hand]
     a, b = np.linalg.norm(E - S), np.linalg.norm(W - E)
     to = target - S
     dist = min(max(np.linalg.norm(to), abs(a - b) + 1e-3), a + b - 1e-3)
     dirn = unit(to)
-    pole = (E - S) - np.dot(E - S, dirn) * dirn
-    if np.linalg.norm(pole) < 1e-6:
-        pole = np.array([0, -1.0, 0])
-    pole = unit(pole)
+    pole0 = (E - S) - np.dot(E - S, dirn) * dirn
+    pole0 = unit(pole0) if np.linalg.norm(pole0) > 1e-6 else unit(np.cross(dirn, [1.0, 0, 0]))
+    side_way = np.cross(dirn, pole0)
     cos_a = (a * a + dist * dist - b * b) / (2 * a * dist)
-    elbow = S + a * (cos_a * dirn + math.sqrt(max(0.0, 1 - cos_a * cos_a)) * pole)
+    sin_a = math.sqrt(max(0.0, 1 - cos_a * cos_a))
     wrist = S + dirn * dist
-    d1 = align(E - S, elbow - S)
-    d2 = align(d1 @ (W - E), wrist - elbow)
+    upper_rest = frame_of(ax["upper"], ax["hinge"])
+    best = None
+    for swing in range(-180, 180, 3):
+        pole = math.cos(math.radians(swing)) * pole0 + math.sin(math.radians(swing)) * side_way
+        elbow = S + a * (cos_a * dirn + sin_a * pole)
+        u, f = unit(elbow - S), unit(wrist - elbow)
+        # The upper arm rolled so its hinge is square to the arm's bend; a straight arm keeps the guard's.
+        k = np.cross(u, f)
+        k = unit(k) if np.linalg.norm(k) > 1e-4 else unit(G[up] @ ax["hinge"] - np.dot(G[up] @ ax["hinge"], u) * u)
+        gu = frame_of(u, k) @ upper_rest.T
+        # The forearm carries the hand's twist: the hand only swings off it.
+        gf = want_std @ align(ax["forearm"], want_std.T @ f)
+        flex, dev = (x - r for x, r in zip(bend(want_std, f, ax), REST_BEND[side]))
+        twist = ax["sup"] * twist_of(gu.T @ gf, ax["forearm"])
+        cost = over(flex, dev, twist) ** 2 * 100 + (flex / 10) ** 2 + (dev / 10) ** 2 + (swing / 30) ** 2
+        if best is None or cost < best[0]:
+            best = (cost, swing, gu, gf, flex, dev, twist)
+    _, swing, gu, gf, flex, dev, twist = best
     G = G.copy()
-    G[up] = d1 @ G[up]
-    G[fore] = d2 @ d1 @ G[fore]
-    G[hand] = want_std
+    G[up], G[fore], G[hand] = gu, gf, want_std
     for j in (up, fore, hand):
         loc[j] = to_local(G, j)
     G, P = fk(loc, root)
-    got_std = G[hand]
-    grip = P[hand] + got_std @ grip_offset(side)
+    grip = P[hand] + G[hand] @ grip_offset(side)
     short = np.linalg.norm(hips + body(key["grip"]) - grip)
+    return loc, {"grip": grip - hips, "blade": G[hand] @ REF[side][0], "short": short, "flex": flex, "dev": dev, "twist": twist,
+                 "swing": swing, "past": over(flex, dev, twist)}
+
+
+def solve(key, side):
+    """A key's pose, its KEY line printed; refused past a person's wrist."""
+    loc, r = reach(key, side)
     back_of = lambda v: [round(float(x), 2) for x in (-v[0], v[2], v[1])]  # noqa: E731
-    print(f"KEY {side.lower()} at {key['at']:.2f} s: grip {back_of(grip - hips)} m, blade {back_of(got_std @ T_AHEAD)}, "
-          f"{short * 100:.1f} cm short")
+    past = r["past"]
+    print(f"KEY {side.lower()} at {key['at']:.2f} s: grip {back_of(r['grip'])} m, blade {back_of(r['blade'])}, {r['short'] * 100:.1f} cm short; "
+          f"wrist flexed {r['flex']:.0f}, deviated {r['dev']:.0f} (+ to the thumb), forearm twisted {r['twist']:.0f}, "
+          f"elbow swung {r['swing']}{f'; ✗ {past:.0f} deg past a person' if past > 0 else ''}")
+    if past > 0:
+        turned = "blade and edge" if side == "Right" else "forearm's line and back"
+        refused.append(f"{side.lower()} key at {key['at']:.2f} s: no arm turns the hand to its {turned} within a wrist (flexed {r['flex']:.0f}, "
+                       f"deviated {r['dev']:.0f}, forearm twisted {r['twist']:.0f}; limits flexed {WRIST['flex']}, extended {WRIST['ext']}, "
+                       f"radial {WRIST['radial']}, ulnar {WRIST['ulnar']} less {MARGIN}, twist {TWIST[0]} to {TWIST[1]})")
     return loc
 
 
@@ -190,5 +293,9 @@ for side, field, kind in (("Right", "hand", "right-hand"), ("Left", "left", "lef
             "local_joints_rot": [aa(p) for _, p in poses],
             "root_positions": [root.tolist() for _ in poses],
         })
+if refused:
+    for r in refused:
+        print(f"✗ {r}: change the key's edge, blade or grip in the clip's spec (clip_spec.ts), not the limits")
+    sys.exit(1)
 json.dump(keys, open(out_path, "w"))
 print(f"KEYS guard frame {frame} at 0 and {last}; hips {root[1]:.2f} m; {sum(len(k['frame_indices']) for k in keys[1:])} hand keys")
