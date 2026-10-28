@@ -48,12 +48,18 @@
     "fist": 0.6
   },
   "Idle_Loop": {
-    "prompt": "A person stands still and relaxed, weight on both feet, arms hanging loosely at the sides, breathing calmly and shifting their weight slightly.",
+    "source": "uthana",
+    "prompt": "A person stands upright in a relaxed idle, legs nearly straight, both feet planted flat about shoulder width apart and staying still, weight shifting slightly from one foot to the other, arms hanging loose at the sides a little away from the body, breathing calmly.",
     "speed": 0,
     "seconds": 8,
     "seed": 1,
     "still": true,
-    "take": 0
+    "looped": 1,
+    "planted": true,
+    "stand": true,
+    "samples": 1,
+    "take": 0,
+    "motion": "mfWjTE8fotfH"
   },
   "Talk_Loop": {
     "prompt": "A person stands upright and relaxed, talking with someone in front of them, shifting their weight from one foot to the other, gesturing with one hand and then the other at waist height, and nodding as they speak.",
