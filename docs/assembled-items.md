@@ -59,8 +59,20 @@ The assembled item meets a clip at one point, its grip; the parts are kept insid
 
 - **Hand-driven:** a one-handed item rides the hand, as melee games do (a prop bone, `ik_hand_gun`, is the shooters' answer for two-handed guns). A two-handed item rides the lead hand; the off hand is pulled by IK onto its second grip.
 - **One reference item per class:** the item the class's clips are generated for (D459's reference), with an envelope round it (length, head mass, balance) from D459's clamp and D546's ranges. The assembler refuses an item outside its class's envelope before anything is drawn.
-- **Generated clips get an item track:** baked once per clip from the hand, its turn about the handle smoothed and the edge turned to lead the strike, the wrist solved back onto it. The checks and the off hand read the track. No shipped precedent was found for this step; it is the one to prove first.
-- **Checked offline on the envelope's two extremes** (the shortest and lightest, the longest and heaviest) on every body, with the edge-leads check. At run time only the grip, wrist and IK already in the game; no collision avoidance.
+- **The clip is made right for the item before it is generated, not cleaned after:** the hand's position and turn are keyed to Kimodo for the class's reference item, so its edge leads the strike and the wrist stays in human range; afterwards only a check and at most about 15° of correction ([feasibility](../research/2026-10-28-assembled-items-animation.md): the keyed takes snap the wrist 39–90° in one key and bend it past human range today, which cleaning cannot fix). Each clip gets an item track baked from the hand, which the checks read and which is the server's hit track (one per take per body, at 120 Hz, the item's own length applied).
+- **A two-handed class needs its own takes, keyed with both hands;** IK then corrects only a few centimetres (reach at most 0.95 of the arm).
+- **The envelope is narrow:** D459's tempo clamp leaves about ±10% of length at a fixed head mass, so a kind's looks come from shape and material, not size; a much longer item is another class with its own clips.
+- **Checked over a grid of the envelope** (five lengths by three head masses), not only its ends: an axe failed in the middle of its range and passed at both ends. On every body, with wrist and edge-leads rows. At run time only the grip, wrist and IK already in the game; no collision avoidance.
+
+### Feasibility
+
+Researched 2026-10-28 in three notes: [parts as art](../research/2026-10-28-assembled-parts-art.md), [through the animations](../research/2026-10-28-assembled-items-animation.md), [engine and pipeline](../research/2026-10-28-assembled-items-pipeline.md).
+
+- **Proven or low risk:** joins hidden by a head's eye or a trim; a handle's line and thickness found by a tool (within 0.5°); parts drawn as separate shared meshes, batched (never one merged mesh per item); items stored as recipes and built by a pure Rust assembler, the same bytes every time; one-handed items riding the hand across a ±10% envelope; the full grid in about 2½ minutes on 16 cores.
+- **Needs a decision or a proof:** parts from separate Tripo runs looking like one tool (the deciding art risk; an approved style reference image first); a head's eye, which a tool cannot find from shape (2.6–3.2 cm off on axe and pick), so it comes from how the head is made or is marked once by hand; icons rendered from the recipe or painted (D130).
+- **Must be fixed first, in the fight clips themselves:** wrist snaps and out-of-range bends, and the edge that does not lead, in today's keyed takes; a wrist row on the composed pose fails on main with the sword already. And the game's hit sweep uses the sword's fixed length for every item and steps at the frame rate.
+- **Content cost:** only the sword-and-shield move set exists; every other class needs its clips, two-handed ones keyed with both hands.
+- **Check fidelity:** the move check poses in TypeScript copies of the game's pose layers, only partly tested against the Rust; they must be one path or fully tested, or a check passes what the game draws wrong.
 
 The research also sets: a part is never scaled (resized blades float off their guards in Bannerlord); a join along a handle is a position and a diameter, not a free point, full points only for a shield's boss and rim and a bow's nocks; the grip, second grip and edge come from the handle's and head's own points (Bannerlord's custom swords end up held by the guard); the grip (D562) takes a code-made handle's radius and line from its numbers, not its mesh; and an item is stored as a recipe (part ids, material, seed), its look and icon derived from it and cached by its hash.
 
@@ -93,5 +105,6 @@ The thirteen held looks become assemblies where their kind has parts, or stay as
 
 1. The connection-point convention, the kinds table and each class's reference item and envelope, as data, reviewed.
 2. The part checker and the assembler.
-3. A proof of the unproven step: for one class (one-handed axe), the item track baked and cleaned on three clips (a swing, a carry, a block), with three handles and three heads at the envelope's extremes, on every body; measured on the hand on the grip, the edge leading, the body clear and the elbow's angle, on one sheet. If it holds, the approach holds.
-4. The grid check and kind sheets, then the other kinds one at a time.
+3. The fight clips made right first: a wrist row (flex at most 80°, extension 70°, deviation 20/35°, at most 45° a key) and an edge-leads row on the composed pose, and the keyed takes remade until they pass; the move check's pose made one path with the game's, or tested against it in full.
+4. The proof, for one class (one-handed axe): its clips keyed for the reference axe, then three heads and three handles over the envelope's grid on every body, measured on the hand on the grip, the wrist, the edge leading and the body clear, and on one sheet; the parts made from one approved style reference. If it holds, the approach holds.
+5. The grid check and kind sheets, then the other kinds one at a time, each with its clips.
