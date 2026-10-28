@@ -295,31 +295,107 @@ export function mayStart(policy: Policy, minute: number, ciBusy: boolean): { ok:
 
 export type Start = { job: Job; slot: number };
 
+// ---- How long a job takes, from the jobs like it the box ran (for a bench's drain) ----
+
+/// A command with its revisions and numbers blanked, so `sh film.sh art c3` and `… c4`, or a
+/// check at another `--base`, are one kind; a warm build is its own.
+export function commandKey(job: Pick<Job, "kind" | "command">): string {
+  if (job.kind === "warm") return "warm";
+  return job.command.join(" ").replace(/\b[0-9a-f]{7,40}\b/g, "<rev>").replace(/\d+/g, "#");
+}
+
+/// How many ended jobs of a kind an estimate reads, the latest first, and how many CPU jobs of
+/// any kind stand in for a CPU job of a kind never run.
+const ESTIMATE_FROM = 5;
+const CPU_FROM = 50;
+
+/// A job's likely run time in ms from the last few of its kind (`commandKey`) the box ran to
+/// their end: `long`, the longest of them (done or failed, at most the job's own limit), says
+/// whether a job will be over in time; `short`, the shortest done, how long a running one has
+/// at least. A CPU job of a new kind is as long as the longest of the box's last CPU jobs (a
+/// test or lint, a minute or so; 5 at most in October's two busiest days); a GPU job of a new
+/// kind, or a running one of any new kind, is undefined, so nothing is guessed.
+export type Estimate = (job: Job, side: "long" | "short") => number | undefined;
+
+export function estimator(jobs: Job[]): Estimate {
+  type Run = { ms: number; done: boolean; ended: number };
+  const runs = new Map<string, Run[]>();
+  const cpu: Run[] = [];
+  for (const j of jobs) {
+    if (!j.started || !j.ended || (j.state !== "done" && j.state !== "failed")) continue;
+    const key = commandKey(j);
+    const list = runs.get(key) ?? [];
+    const run = { ms: Date.parse(j.ended) - Date.parse(j.started), done: j.state === "done", ended: Date.parse(j.ended) };
+    list.push(run);
+    runs.set(key, list);
+    if (classOf(j) === "cpu" && j.kind === "run") cpu.push(run);
+  }
+  for (const list of runs.values()) list.sort((a, b) => b.ended - a.ended).splice(ESTIMATE_FROM);
+  const cpuLong = cpu.length ? Math.max(...cpu.sort((a, b) => b.ended - a.ended).slice(0, CPU_FROM).map((r) => r.ms)) : undefined;
+  return (job, side) => {
+    const list = runs.get(commandKey(job)) ?? [];
+    if (side === "long") {
+      const long = list.length ? Math.max(...list.map((r) => r.ms)) : classOf(job) === "cpu" && job.kind === "run" ? cpuLong : undefined;
+      return long === undefined ? undefined : Math.min(long, job.minutes * 60_000);
+    }
+    const done = list.filter((r) => r.done);
+    return done.length ? Math.min(...done.map((r) => r.ms)) : undefined;
+  };
+}
+
+/// When the box will have drained of its running jobs, at the soonest the estimates allow: the
+/// latest of their earliest likely ends, `now` for any past its shortest run or of a kind never
+/// run (it may end at any moment).
+export function drainEnd(running: Job[], now: number, est: Estimate): number {
+  let end = now;
+  for (const j of running) {
+    const short = est(j, "short");
+    if (short !== undefined && j.started) end = Math.max(end, Date.parse(j.started) + short);
+  }
+  return end;
+}
+
 /// The jobs to start now, each in a free slot, and why the rest wait. Warm jobs first, since
 /// they make every later one faster, each in the slot it warms; then the oldest queued. A GPU
-/// job waits while TERRA_RENDER_GPU_SLOTS run, and a CPU job behind it may pass. A bench has
-/// the box alone, card and cores, since a build beside it moves its frame times (D185): it waits
-/// for every running job to end, and nothing queued behind it starts meanwhile, a warm build
-/// after an update neither.
-export function plan(jobs: Job[], s: Slots): { start: Start[]; why?: string } {
+/// job waits while TERRA_RENDER_GPU_SLOTS run, and a CPU job behind it may pass.
+///
+/// A bench has the box alone, card and cores, since a build beside it moves its frame times
+/// (D185, D319): it starts only on an empty box and nothing starts while it runs. Once one is
+/// queued the box drains for it. Jobs queued ahead of it keep their turn. A job behind it starts
+/// only if it will be over before the box would empty anyway: the longest of the last of its
+/// kind (`estimator`) ends before the running jobs' soonest end (`drainEnd`), so it fills a free
+/// slot and never holds the bench back. On an empty box the next bench goes ahead of the jobs
+/// queued before it since the last one (back to back) when that costs less waiting than draining
+/// again for it: those jobs times the bench's run against the bench and the jobs behind it times
+/// the drain they would make. Replayed on the box's queue of 27-28 October the rules cut the
+/// jobs' waiting by 14% and the benches' by 2%, no bench ever beside another job (D319).
+export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[]; why?: string } {
   const running = jobs.filter((j) => j.state === "running");
   const busy = new Set(running.map((j) => j.slot ?? 1));
   let gpu = running.filter((j) => classOf(j) !== "cpu").length;
-  const firstBench = jobs.filter((j) => j.state === "queued" && classOf(j) === "bench").sort((a, b) => a.id.localeCompare(b.id))[0];
-  const queued = jobs
-    .filter((j) => j.state === "queued" && (!firstBench || j.id.localeCompare(firstBench.id) <= 0))
-    .sort((a, b) => Number(b.kind === "warm") - Number(a.kind === "warm") || a.id.localeCompare(b.id));
+  const benches = jobs.filter((j) => j.state === "queued" && classOf(j) === "bench").sort((a, b) => a.id.localeCompare(b.id));
+  const queued = jobs.filter((j) => j.state === "queued").sort((a, b) => Number(b.kind === "warm") - Number(a.kind === "warm") || a.id.localeCompare(b.id));
   const pinned = (j: Job) => (j.slot && j.slot <= s.slots ? j.slot : undefined);
   const reserved = new Set(queued.map(pinned).filter((n) => n !== undefined));
   const start: Start[] = [];
   if (running.some((j) => classOf(j) === "bench")) return { start, why: queued.length ? "a bench has the box" : undefined };
-  let why: string | undefined;
+  const est = estimator(jobs);
+  if (benches.length && !busy.size) {
+    const b = benches[0];
+    const ahead = queued.filter((j) => classOf(j) !== "bench" && j.id.localeCompare(b.id) < 0);
+    const behind = queued.filter((j) => j.id.localeCompare(b.id) > 0).length;
+    const ms = (j: Job) => est(j, "long") ?? j.minutes * 60_000;
+    const drain = Math.max(0, ...ahead.map(ms));
+    if (ahead.length * ms(b) <= (1 + behind) * drain) return { start: [{ job: b, slot: 1 }], why: queued.length > 1 ? "a bench has the box" : undefined };
+  }
+  const until = benches.length ? drainEnd(running, now, est) : Infinity;
+  let why: string | undefined = benches.length ? "a bench waits for the box to empty" : undefined;
   for (const job of queued) {
     const c = classOf(job);
-    if (c === "bench") {
-      if (busy.size) why ??= "a bench waits for the box to empty";
-      else start.push({ job, slot: 1 });
-      break;
+    if (c === "bench") continue;
+    if (benches.length && job.id.localeCompare(benches[0].id) > 0) {
+      const long = est(job, "long");
+      if (long === undefined || now + long > until) continue;
     }
     if (c === "gpu" && gpu >= s.gpuSlots) {
       why ??= `the ${s.gpuSlots} GPU slots are taken`;
@@ -335,7 +411,54 @@ export function plan(jobs: Job[], s: Slots): { start: Start[]; why?: string } {
     if (c === "gpu") gpu++;
     start.push({ job, slot });
   }
+  // An empty box where none of the jobs ahead could start after all: the bench goes.
+  if (benches.length && !busy.size) return { start: [{ job: benches[0], slot: 1 }], why: queued.length > 1 ? "a bench has the box" : undefined };
   return { start, why };
+}
+
+const span = (ms: number) => ago(new Date(0).toISOString(), new Date(Math.max(0, ms)));
+
+/// What `--status` says of a bench's hold on the queue, nothing when no bench is queued or
+/// running: how long the box has been draining for benches or running them without a break,
+/// the bench running or the box's drain, the benches next, and the jobs waiting behind.
+export function benchHold(jobs: Job[], now: Date): string[] {
+  const benches = jobs.filter((j) => classOf(j) === "bench");
+  const live = benches.filter((j) => j.state === "queued" || j.state === "running");
+  if (!live.length) return [];
+  // The hold began when the first of them was queued, or earlier if a bench was running then.
+  let since = Math.min(...live.map((j) => Date.parse(j.queued)));
+  for (let again = true; again; ) {
+    again = false;
+    for (const b of benches) {
+      if (b.started && b.ended && Date.parse(b.started) < since && Date.parse(b.ended) >= since - 60_000 && Date.parse(b.queued) < since) {
+        since = Date.parse(b.queued);
+        again = true;
+      }
+    }
+  }
+  const est = estimator(jobs);
+  const t = now.getTime();
+  const running = jobs.filter((j) => j.state === "running");
+  const bench = running.find((j) => classOf(j) === "bench");
+  const queued = jobs.filter((j) => j.state === "queued").sort((a, b) => a.id.localeCompare(b.id));
+  const next = queued.filter((j) => classOf(j) === "bench");
+  const kind = (j: Job) => {
+    const long = est(j, "long");
+    return long === undefined ? "" : `, its kind took up to ${span(long)}`;
+  };
+  const out = [`bench hold: ${span(t - since)}, since ${new Date(since).toISOString().slice(11, 16)} UTC`];
+  if (bench) out.push(`  running ${bench.id} for ${ago(bench.started ?? bench.queued, now)}${kind(bench)}: ${short(bench)}`);
+  else {
+    const left = drainEnd(running, t, est) - t;
+    out.push(`  draining: ${running.length} job${running.length === 1 ? "" : "s"} still running, the box empty ${left >= 60_000 ? `in ${span(left)} at the soonest` : "any moment"}; only jobs that end before then start`);
+  }
+  if (next.length) out.push(`  benches next: ${next.map((j) => `${j.id} (waiting ${ago(j.queued, now)}${kind(j)})`).join(", ")}`);
+  const behind = queued.filter((j) => classOf(j) !== "bench");
+  if (behind.length) {
+    const n = (c: Class) => behind.filter((j) => classOf(j) === c).length;
+    out.push(`  waiting behind it: ${behind.length} job${behind.length === 1 ? "" : "s"} (${n("gpu")} GPU, ${n("cpu")} CPU), the oldest ${behind[0].id} for ${ago(behind[0].queued, now)}`);
+  }
+  return out;
 }
 
 /// Jobs to delete with their files and ref: ended, or queued, longer than `days` ago.

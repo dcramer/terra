@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { doctor } from "./doctor.ts";
-import { ago, boxSettings, classOf, ID, type Job, jobId, mayStart, parseEnvFile, plan as planJobs, short, steps, UPDATE_REF } from "./jobs.ts";
+import { ago, benchHold, boxSettings, classOf, ID, type Job, jobId, mayStart, parseEnvFile, plan as planJobs, short, steps, UPDATE_REF } from "./jobs.ts";
 
 /// `src` and `home` are the single job checkout and HOME from before slots, which slot 1 takes
 /// over (daemon.ts `slotCheckout`).
@@ -164,6 +164,7 @@ function status(b: Box, json: boolean): number {
       console.log(`  slot ${n}: ${j ? `${j.id} running ${ago(j.started ?? j.queued, now)}  ${short(j)}` : "free"}`);
     }
   }
+  for (const line of benchHold(jobs, now)) console.log(line);
   console.log("jobs:");
   for (const j of jobs) console.log(`  ${j.id} ${j.state.padEnd(9)} ${ago(j.queued, now).padStart(5)} ago  ${short(j)}${j.note ? `  [${j.note}]` : ""}`);
   if (!jobs.length) console.log("  no jobs");
