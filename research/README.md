@@ -13,6 +13,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | Note | Dated |
 |---|---|
 | [Assembled equipment: how shipped games build weapons and tools from parts, and the answers to D565's seven questions](2026-10-28-assembled-equipment.md) | 2026-10-28 |
+| [Assembled parts as real art: can we make D565's parts beautiful and join them without it looking bad?](2026-10-28-assembled-parts-art.md) | 2026-10-28 |
 | [Layered clothing: how shipped games put a shirt with trousers, tucked or not](2026-10-27-layered-clothing.md) | 2026-10-27 |
 | [Animation sourcing: a library, a service or a suit for every clip, under a licence a public repository can hold](2026-10-26-animation-sourcing.md) | 2026-10-26 |
 | [How do major games theme and scale their dungeons, and which themes should Terra's have?](2026-10-26-dungeon-themes.md) | 2026-10-26 |
