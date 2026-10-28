@@ -277,6 +277,9 @@ const UNDER_SNOW_SHARE: f32 = 0.6;
 const BURIED_SHARE: f32 = 1.0;
 // A low plant's bough's load, as a share of a crown top's.
 const LOW_LOAD: f32 = 0.7;
+// How much of a bough's load its clumps' threshold takes: at 0.1, with the load shaped on its
+// spray (`load_shape`), the crowns read mostly green.
+const LOAD_OFFSET: f32 = 0.0;
 // How far either side of its threshold a bough's load eases in.
 const LOAD_EDGE: f32 = 0.2;
 // How much of bark's colour a frost greys, where snow lies (weather round 8).
@@ -291,6 +294,19 @@ const PLASTER_HIGH: f32 = 0.85;
 // its reach, and the bark's mean occlusion, about which they do.
 const PLASTER_FURROW: f32 = 0.6;
 const PLASTER_CAVITY_MEAN: f32 = 0.65;
+// How far under the ground a plant's foot stands, metres: a grown tree's 0.15 (woods.rs), a
+// modelled one's 0.1 (flora.rs).
+const FOOT_SUNK_M: f32 = 0.12;
+// A trunk's bank of snow over the ground, metres: so much, and so many times the depth lying
+// under the crowns in its lee and on its windward side, where the wind piles it.
+// At 0.1 and up to 2.2 times the depth, the bank was a white rim of 10 to 15 cm on the windward
+// flare, the moss over it.
+const TRUNK_BANK_M: f32 = 0.22;
+const TRUNK_BANK_LEE: f32 = 0.6;
+const TRUNK_BANK_DRIFT: f32 = 2.5;
+// How far a frost dulls a trunk's moss toward the grey of its rime, over the bark's (at 0.4 the
+// band stood as green as before).
+const MOSS_FROST: f32 = 0.65;
 // How far a cap's lumps tilt its top from the sky's up.
 const CAP_LUMPS: f32 = 0.7;
 // How fast a limb's normal turns across it, per metre (one over its radius), from which it
@@ -315,37 +331,90 @@ fn climate_place(world: vec3<f32>) -> vec2<f32> {
     return clamp((parting.climate_from_world * vec4<f32>(world, 1.0)).xy, vec2<f32>(0.0), vec2<f32>(1.0));
 }
 
-// How far over a spray's upper edge, metres up the card, its picture must be empty for snow
-// to lie along that edge.
-const SHELF_M: f32 = 0.12;
-// How much wider than a pixel the picture is taken for that test: two mips up.
-const SHELF_BLUR: f32 = 4.0;
+// A load's own shape on a spray (winter round 5). Filling the card wherever the bough faced
+// up, every load was the card's outline, a flat white stencil of its needles (round 4's
+// judges: "flat white cut-out patches on cards"). Shipped snowy conifers give the load an alpha
+// of its own, "a slightly larger clumped snow area, covering most of the needles", that falls
+// off from the top of each branch to its foot, the needles below it and round its fringe dark
+// (snowy SpeedTree and Terragen conifers, Planetside's forum, 2016; the top-to-bottom snow mix
+// map of V-Ray foliage, CGArchitect's forum, 2013); RDR2's and Ghost of Yotei's snowy
+// spruces are cards painted so. Ours is taken from the card's own picture, blurred: its mass,
+// a few shoots across, where the snow pillows over the needles; finer, a cluster of needles,
+// which breaks the pillow's edge as needles poke through it; and its mass LOAD_DEPTH_M up the
+// spray, empty over the spray's top, where a load lies on a card seen from its side.
+// How far down a spray from its top, metres, a load lies on a card stood on edge.
+const LOAD_DEPTH_M: f32 = 0.14;
+// The atlas's mips the load's pillow (64 texels, some 3 cm of a spray) and its edge's break (16
+// texels, a few needles) are taken from, or the pixel's own when coarser.
+const PILLOW_MIP: f32 = 6.0;
+const BREAK_MIP: f32 = 4.0;
+// How much of the pillow's edge the needles break.
+const PILLOW_BREAK: f32 = 0.5;
+// The blurred coverage from which a load lies, to where it lies whole (at 0.4 to 0.65 the
+// crowns lost most of their white).
+const PILLOW: vec2<f32> = vec2<f32>(0.2, 0.45);
+// How much of its load a card stood on edge keeps below its top band.
+const LOAD_TOP_KEPT: f32 = 1.0;
+// How far a pillow's falling edge turns its top out from it, per unit of coverage a metre: a
+// load rounds off over its spray's edge, its rim turned from the sky and shaded, so it reads as
+// a mound with a lit top, not a flat fill.
+const PILLOW_DOME: f32 = 0.03;
+// How much darker a pillow's thin rim is than its thick middle.
+const PILLOW_RIM: f32 = 0.85;
 
-// 1 where a card's picture is empty SHELF_M straight up from this point, along the card's own
-// plane: the top edge of a spray, where a load lies (the offset-alpha test of snow on foliage
-// cards). The world's up is carried into the atlas by the screen derivatives of the point and
-// of its uv, least squares; a card lying level has no up in its plane and no shelf.
-fn shelf_edge(uv: vec2<f32>, world: vec3<f32>, sky_up: vec3<f32>) -> f32 {
+struct Load {
+    // How much of this texel the load covers.
+    cover: f32,
+    // Which way the pillow's top turns from its spray's, in the world: out over its edge.
+    dome: vec3<f32>,
+    // 1 in the pillow's thick middle, less to its rim.
+    thick: f32,
+}
+
+// The load's shape at this texel of a card (above): `level`, how far the card's face lies level
+// and turned to the sky, whose whole top the load covers, a card on edge only its upper band.
+// The world's up is carried into the atlas by the screen derivatives of the point and of its
+// uv, least squares, as is the pillow's slope out into the world.
+fn load_shape(uv: vec2<f32>, world: vec3<f32>, sky_up: vec3<f32>, level: f32) -> Load {
     let at = (pbr_bindings::material.uv_transform * vec3<f32>(uv, 1.0)).xy;
     let dwx = dpdx(world);
     let dwy = dpdy(world);
     let dux = dpdx(at);
     let duy = dpdy(at);
+    let size = vec2<f32>(textureDimensions(pbr_bindings::base_color_texture));
+    let pixel = log2(max(max(length(dux * size), length(duy * size)), 1.0));
+    let mass = textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, at, max(PILLOW_MIP, pixel + 1.0)).a;
+    let fine = textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, at, max(BREAK_MIP, pixel)).a;
+    let dmx = dpdx(mass);
+    let dmy = dpdy(mass);
     let a11 = dot(dwx, dwx);
     let a12 = dot(dwx, dwy);
     let a22 = dot(dwy, dwy);
     let det = a11 * a22 - a12 * a12;
-    if det < 1.0e-24 {
-        return 0.0;
+    var top = 1.0;
+    var dome = vec3<f32>(0.0);
+    if det > 1.0e-24 {
+        let bx = dot(dwx, sky_up);
+        let by = dot(dwy, sky_up);
+        let sx = (a22 * bx - a12 * by) / det;
+        let sy = (a11 * by - a12 * bx) / det;
+        let over = textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, at + (sx * dux + sy * duy) * LOAD_DEPTH_M, max(PILLOW_MIP, pixel + 1.0)).a;
+        top = 1.0 - smoothstep(0.25, 0.6, over);
+        let gx = (a22 * dmx - a12 * dmy) / det;
+        let gy = (a11 * dmy - a12 * dmx) / det;
+        let slope = gx * dwx + gy * dwy;
+        dome = -slope * PILLOW_DOME;
+        let lean = length(dome);
+        if lean > 1.0 {
+            dome /= lean;
+        }
     }
-    let bx = dot(dwx, sky_up);
-    let by = dot(dwy, sky_up);
-    let sx = (a22 * bx - a12 * by) / det;
-    let sy = (a11 * by - a12 * bx) / det;
-    let uv_up = (sx * dux + sy * duy) * SHELF_M;
-    // Blurred a few mips, to the spray's mass, not its needles.
-    let over = textureSampleGrad(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, at + uv_up, dux * SHELF_BLUR, duy * SHELF_BLUR).a;
-    return 1.0 - smoothstep(0.15, 0.5, over);
+    let breaks = mix(mass, fine, PILLOW_BREAK);
+    var load: Load;
+    load.cover = smoothstep(PILLOW.x, PILLOW.y, breaks) * mix(max(top, LOAD_TOP_KEPT), 1.0, level);
+    load.dome = dome;
+    load.thick = smoothstep(PILLOW.y, 1.0, mass);
+    return load;
 }
 
 // Which kind's layer of the leaves map a card is, by its atlas cell (foliage.wesl's).
@@ -515,15 +584,14 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // as shipped snow on trees is masked, by what faces up and broad coverage, the load's
         // shape is the bough's, not a noise's.
         let cover = clumps(world * LOAD_CLUMPS + 5.0) * 0.65 + clumps(world * LOAD_CLUMPS * 2.3 + 13.0) * 0.35;
-        snow = smoothstep(-LOAD_EDGE, LOAD_EDGE, load * 1.8 - 0.1 - 0.6 * cover) * smoothstep(0.0, 0.1, load);
-        // And as a shelf along each spray's upper edge, where the card's picture has nothing
-        // over it a few centimetres up: the load sits on the boughs, not scattered over their
-        // faces (weather round 9's judge: "snow sits scattered across the card face"). Only
-        // inside a clump, and on a spray facing up, with the picture taken blurred to the
-        // spray's mass: on every tuft's edge it drew each needle white, salt and pepper over
-        // the crown (the looks review's fault 4: "frosted cereal").
-        let in_clump = 1.0 - smoothstep(0.3, 0.55, cover);
-        snow = max(snow, lying * (0.4 + 0.6 * high) * in_clump * smoothstep(0.1, 0.5, bough_up) * shelf_edge(uv, world, sky_up));
+        snow = smoothstep(-LOAD_EDGE, LOAD_EDGE, load * 1.8 - LOAD_OFFSET - 0.6 * cover) * smoothstep(0.0, 0.1, load);
+        // In the load's own shape on its spray (`load_shape`): a pillow over the spray's mass
+        // and along its top, the needles round its fringe and under it dark. It takes the
+        // place of a shelf drawn along each spray's top edge where the picture was empty a
+        // few centimetres up, which whitened the fringe's needles, the opposite of a load
+        // ("frosted cereal", the looks review's fault 4), and of loads filling the card.
+        let shape = load_shape(uv, world, sky_up, smoothstep(0.45, 0.9, face_up));
+        snow *= shape.cover;
         // A load lies on top of its spray, which hides it from an eye under it: seen from
         // below, a crown's sprays read dark, the load showing only where a spray's outline is
         // seen edge-on, along its top (the looks review's fault 4: "snow sits on the undersides
@@ -548,13 +616,14 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // near white beside the blue of what faces out or down (Horizon Forbidden West's
         // snowfall); by the bough's own facing and the spray's, whichever turns more up.
         let facing = smoothstep(0.2, 0.8, max(bough_up, face_up));
-        colour = mix(colour, mix(SNOW, SNOW_TOP, facing), snow);
+        colour = mix(colour, mix(SNOW, SNOW_TOP, facing) * mix(PILLOW_RIM, 1.0, shape.thick), snow);
         lean = snow;
         // A load's top bulges up over the bough and rounds off down the crown's side, so it
         // shades with the crown's form: turned straight to the sky, every load lit alike, flat
         // white over the cards whichever side of the crown it lay on (winter round 4's judges:
-        // "white patches printed on flat leaf cards").
-        snow_up = normalize(sky_up + LOAD_ROUND * ((*input).world_normal - sky_up * dot((*input).world_normal, sky_up)));
+        // "white patches printed on flat leaf cards"). And each pillow rounds off over its
+        // spray's edge (`load_shape`'s dome).
+        snow_up = normalize(sky_up + LOAD_ROUND * ((*input).world_normal - sky_up * dot((*input).world_normal, sky_up)) + shape.dome);
     } else {
         // The deeper it lies, the more of each limb it covers, in clumps.
         // A log's or limb's upper face carries a cap with an edge, as snow has a thickness:
@@ -587,6 +656,9 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // read as a summer wood's beside the snow (weather round 7).
         let bark_grey = dot(colour, vec3<f32>(0.2126, 0.7152, 0.0722));
         colour = mix(colour, vec3<f32>(bark_grey), lying * BARK_FROST_GREY);
+        // The moss most, under its rime, where it is green over the bark's red-brown.
+        let mossy = smoothstep(0.0, 0.08, (colour.g - max(colour.r, colour.b)) / max(colour.g, 1.0e-4));
+        colour = mix(colour, vec3<f32>(bark_grey * 1.15), lying * mossy * MOSS_FROST);
         // Snow the wind drives onto a stem's windward side sticks there through a snowy spell
         // (plastered snow), a soft, uneven coat, thickest low where the drift reaches and
         // wrapping farther round the stem there, so a trunk reads white on one side and dark
@@ -629,15 +701,30 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // (winter round 2's judge).
         let held = windward * 0.85 + 0.15 * low + 0.5 * (reach - 0.5) + PLASTER_FURROW * (PLASTER_CAVITY_MEAN - cavity);
         let plaster = smoothstep(0.6, 0.7, held) * (1.0 - PLASTER_HIGH * smoothstep(PLASTER_HIGH_M.x, PLASTER_HIGH_M.y, stem_h)) * (1.0 - THIN_PLASTER * thin);
-        let bank_top = mix(0.4, 0.06, thin);
-        let bank = 1.0 - smoothstep(bank_top * 0.375, bank_top, stem_h + bank_top * 0.75 * (wander(across * 5.0 + seed) - 0.5));
+        // The bank round the foot (winter round 5; every panel: "green moss runs down to the
+        // snow with no bank or hollow"): the snow lying, drifted up against the windward bark
+        // and scoured lower in the lee, where the floor's well is (ground.wesl's drifts), as a
+        // trunk's foot stands in a snowy wood. From the ground, the plant's foot standing
+        // FOOT_SUNK_M under it: taken from the foot, the old bank of 0.15 to 0.4 m lay mostly
+        // under the floor, a white rim no one saw. Its top edge by the bark's relief, as the
+        // plaster's, and wandering round the stem; it hides the moss, frosted above it.
+        let depth = weather.r * SNOW_FULL_M * UNDER_SNOW_SHARE;
+        let drifted = smoothstep(-0.6, 0.8, windward);
+        let bank_m = mix(TRUNK_BANK_M + depth * mix(TRUNK_BANK_LEE, TRUNK_BANK_DRIFT, drifted), 0.04 + 0.5 * depth, thin) * (0.75 + 0.5 * wander(across * 3.0 + seed));
+        let over_ground = stem_h - FOOT_SUNK_M + PLASTER_FURROW * 0.15 * (cavity - PLASTER_CAVITY_MEAN);
+        let bank = (1.0 - smoothstep(bank_m - 0.03, bank_m + 0.03, over_ground)) * step(0.02, depth);
         let stuck = lying * max(plaster, bank);
         colour = mix(colour, SNOW * (0.92 + 0.08 * reach), stuck);
         // The coat faces as the stem does, round it, and hides the bark's relief: lit as snow
         // lying, turned to the sky, it was as bright on the trunk's shaded side as on its lit
         // one, a flat white decal (winter round 2's "flat white painted stripes").
         (*input).N = normalize(mix((*input).N, faces, lying * plaster * (1.0 - bank)));
-        lean = max(snow, lying * bank * 0.5);
+        // The bank's face slopes out from the bark, most where it meets the floor and
+        // steepest at its top, so it shades as a mound round the foot, not paint on the bark.
+        let rising = clamp(over_ground / max(bank_m, 0.01), 0.0, 1.0);
+        let bank_face = normalize(faces * mix(0.45, 0.95, rising) + foot_up * mix(0.9, 0.3, rising));
+        (*input).N = normalize(mix((*input).N, bank_face, lying * bank));
+        lean = snow;
         // Lit half as snow lying is, so the coat reads white, not a grey stain on the bark.
         snow = max(snow, stuck * 0.5);
     }
