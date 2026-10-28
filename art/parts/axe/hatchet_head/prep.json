@@ -1,0 +1,10 @@
+{
+  "type": "axe_head",
+  "role": "Metal",
+  "turn_deg": 180,
+  "material": "iron",
+  "mass_kg": 0.7,
+  "eye": { "from_back_m": 0.03, "size_m": 0.028, "across_m": 0.04 },
+  "edge_band_m": 0.025,
+  "budget": 800
+}
