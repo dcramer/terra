@@ -100,9 +100,18 @@ export function rebaseline(held: Map<string, Held>, results: Result[], mode: "ra
 /// Each named test's verdict from cargo's output: `test <path> ... ok`, 0 passed, 1 failed.
 export function testVerdicts(out: string): Map<string, number> {
   const verdicts = new Map<string, number>();
-  for (const m of out.matchAll(/^test (\S+) \.\.\. (ok|FAILED)/gm)) verdicts.set(m[1], m[2] === "ok" ? 0 : 1);
+  // A name that ran in two crates' tests passes only if both passed.
+  for (const m of out.matchAll(/^test (\S+) \.\.\. (ok|FAILED)/gm)) verdicts.set(m[1], Math.max(verdicts.get(m[1]) ?? 0, m[2] === "ok" ? 0 : 1));
   return verdicts;
 }
+
+/// How the scorecards build and run the Rust tests their criteria name: one cargo run over every
+/// member's lib tests, names after `--`, whatever crate a test is in. Cargo resolves the
+/// dependencies' features for the packages chosen, so `-p <crate>` for each crate built Bevy
+/// and our crates again for every selection; over the workspace, the combat and controller
+/// scorecards and `cargo test --workspace` share one build, the one the shared seed holds
+/// (D183), and a fresh worktree's first run compiles each of our crates once.
+export const TEST_BUILD = ["test", "-q", "--workspace", "--lib"];
 
 const mark: Record<Status, string> = { pass: "✓", held: "·", better: "·", worse: "✗", new: "✗", missing: "✗", unmeasured: "?", skipped: "-" };
 const fmt = (x: number) => String(round(x));

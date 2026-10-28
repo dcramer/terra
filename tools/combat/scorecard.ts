@@ -29,7 +29,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { COMBAT_FILMS, filmedThrough, keep, mainFilm, stamp } from "../scorecard/films.ts";
-import { type Criterion as Row, finish, type Held, judge, readBaseline, round, type Status, testVerdicts } from "../scorecard/ratchet.ts";
+import { type Criterion as Row, finish, type Held, judge, readBaseline, round, type Status, TEST_BUILD, testVerdicts } from "../scorecard/ratchet.ts";
 
 // The ratchet is shared (tools/scorecard); its parts are named here too, for this scorecard's tests.
 export { type Bar, barText, type Held, judge, miss, readBaseline, rebaseline, type Result, round, type Status, testVerdicts, writeBaseline } from "../scorecard/ratchet.ts";
@@ -201,24 +201,22 @@ function main() {
       if (v !== undefined) values.set(c.id, round(v));
     }
   }
-  // The rule tests, a cargo run a crate.
-  const crates = new Map<string, Criterion[]>();
-  for (const c of wanted) if (c.check?.by === "test") crates.set(c.check.crate, [...(crates.get(c.check.crate) ?? []), c]);
-  for (const [crate, cs] of crates) {
-    const names = cs.map((c) => (c.check as { test: string }).test);
-    const verdicts = testVerdicts(run("cargo", ["test", "-q", "-p", crate, "--lib", "--", "--exact", "--format=pretty", ...names]));
-    for (const c of cs) {
+  // The rule tests, and the numbers rule tests measure (printed as they pass): a cargo run each,
+  // over the workspace's lib tests (TEST_BUILD), whatever crates they are in.
+  const testing = wanted.filter((c) => c.check?.by === "test");
+  if (testing.length) {
+    const names = [...new Set(testing.map((c) => (c.check as { test: string }).test))];
+    const verdicts = testVerdicts(run("cargo", [...TEST_BUILD, "--", "--exact", "--format=pretty", ...names]));
+    for (const c of testing) {
       const v = verdicts.get((c.check as { test: string }).test);
       if (v !== undefined) values.set(c.id, v);
     }
   }
-  // The numbers rule tests measure, printed as they pass, a cargo run a crate.
-  const measuring = new Map<string, Criterion[]>();
-  for (const c of wanted) if (c.check?.by === "measured") measuring.set(c.check.crate, [...(measuring.get(c.check.crate) ?? []), c]);
-  for (const [crate, cs] of measuring) {
-    const names = [...new Set(cs.map((c) => (c.check as { test: string }).test))];
-    const measured = measuredValues(run("cargo", ["test", "-q", "-p", crate, "--lib", "--", "--exact", "--nocapture", "--test-threads=1", ...names]));
-    for (const c of cs) {
+  const measuring = wanted.filter((c) => c.check?.by === "measured");
+  if (measuring.length) {
+    const names = [...new Set(measuring.map((c) => (c.check as { test: string }).test))];
+    const measured = measuredValues(run("cargo", [...TEST_BUILD, "--", "--exact", "--nocapture", "--test-threads=1", ...names]));
+    for (const c of measuring) {
       const v = measured.get(c.id);
       if (v !== undefined) values.set(c.id, round(v));
     }

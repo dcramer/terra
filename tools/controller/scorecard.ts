@@ -28,7 +28,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { bakeFile } from "../characters/markers.ts";
 import { CONTROLLER_FILMS, mainFilm } from "../scorecard/films.ts";
-import { type Criterion, finish, type Held, judge, readBaseline, round, type Status } from "../scorecard/ratchet.ts";
+import { type Criterion, finish, type Held, judge, readBaseline, round, type Status, TEST_BUILD } from "../scorecard/ratchet.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 export const CRITERIA = resolve(import.meta.dirname, "criteria.json");
@@ -85,7 +85,7 @@ function main() {
   const log = join(logDir, "scorecard.log");
 
   // The course: one test drives the mover through every case and prints a number a criterion.
-  const args = ["test", "-q", "-p", file.course.crate, "--lib", "--", "--exact", file.course.test, "--nocapture"];
+  const args = [...TEST_BUILD, "--", "--exact", file.course.test, "--nocapture"];
   const r = spawnSync("cargo", args, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
   const out = (r.stdout ?? "") + (r.stderr ?? "");
   const values = courseValues(out);
@@ -104,7 +104,7 @@ function main() {
   for (const c of criteria) {
     const check = c.check as { by?: string; crate?: string; test?: string } | null;
     if (check?.by !== "test" || !check.crate || !check.test) continue;
-    const t = ["test", "-q", "-p", check.crate, "--lib", "--", "--exact", check.test, "--nocapture"];
+    const t = [...TEST_BUILD, "--", "--exact", check.test, "--nocapture"];
     const tr = spawnSync("cargo", t, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
     const tout = (tr.stdout ?? "") + (tr.stderr ?? "");
     logged += `\n$ cargo ${t.join(" ")}\n${tout}`;
