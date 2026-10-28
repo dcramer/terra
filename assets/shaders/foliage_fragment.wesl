@@ -304,6 +304,10 @@ const FOOT_SUNK_M: f32 = 0.12;
 const TRUNK_BANK_M: f32 = 0.22;
 const TRUNK_BANK_LEE: f32 = 0.6;
 const TRUNK_BANK_DRIFT: f32 = 2.5;
+// A thin stem's rim where it leaves the snow, metres, whatever the depth: at 0.04 plus half the
+// depth, every shrub's stems stood in white socks (winter round 5's judges: "white-painted
+// bases").
+const THIN_BANK_M: f32 = 0.03;
 // How far a frost dulls a trunk's moss toward the grey of its rime, over the bark's (at 0.4 the
 // band stood as green as before).
 const MOSS_FROST: f32 = 0.65;
@@ -710,7 +714,7 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // plaster's, and wandering round the stem; it hides the moss, frosted above it.
         let depth = weather.r * SNOW_FULL_M * UNDER_SNOW_SHARE;
         let drifted = smoothstep(-0.6, 0.8, windward);
-        let bank_m = mix(TRUNK_BANK_M + depth * mix(TRUNK_BANK_LEE, TRUNK_BANK_DRIFT, drifted), 0.04 + 0.5 * depth, thin) * (0.75 + 0.5 * wander(across * 3.0 + seed));
+        let bank_m = mix(TRUNK_BANK_M + depth * mix(TRUNK_BANK_LEE, TRUNK_BANK_DRIFT, drifted), THIN_BANK_M, thin) * (0.75 + 0.5 * wander(across * 3.0 + seed));
         let over_ground = stem_h - FOOT_SUNK_M + PLASTER_FURROW * 0.15 * (cavity - PLASTER_CAVITY_MEAN);
         let bank = (1.0 - smoothstep(bank_m - 0.03, bank_m + 0.03, over_ground)) * step(0.02, depth);
         let stuck = lying * max(plaster, bank);
