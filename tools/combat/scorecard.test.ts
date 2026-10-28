@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CRITERIA, type Criterion, judge, measuredValues, miss, movesValue, readBaseline, readSet, rebaseline, testVerdicts, timing, writeBaseline } from "./scorecard.ts";
+import { CRITERIA, type Criterion, judge, measuredValues, miss, movesValue, readBaseline, readSet, rebank, rebaseline, testVerdicts, timing, writeBaseline } from "./scorecard.ts";
 
 const c = (bar: Criterion["bar"], extra: Partial<Criterion> = {}): Criterion => ({ id: "x", noticed: 3, notice: "", bar, unit: "s", source: "", check: null, cost: "cheap", measurable: true, ...extra });
 
@@ -34,7 +34,7 @@ test("the ratchet holds a criterion at its baseline: worse fails, better and hel
   assert.equal(judge(c(null, { measurable: false }), undefined, undefined).status, "unmeasured");
 });
 
-test("a raise writes only what got worse or is new, a lowering only what got better", () => {
+test("a raise writes only what got worse, a lowering only what got better, a new row its first number", () => {
   const held = new Map([
     ["a", { value: 10, why: "first" }],
     ["b", { value: 10, why: "first" }],
@@ -43,18 +43,43 @@ test("a raise writes only what got worse or is new, a lowering only what got bet
   const results = [
     { ...judge({ ...bar, id: "a" }, 12, held.get("a")) },
     { ...judge({ ...bar, id: "b" }, 8, held.get("b")) },
+    // Not held yet: one outside its bar, one within it.
     { ...judge({ ...bar, id: "n" }, 5, undefined) },
+    { ...judge({ ...bar, id: "p" }, 0.5, undefined) },
   ];
-  const raised = rebaseline(held, results, "raise", "the slash's new wind-up");
+  const raised = rebaseline(held, results, "raise", "the slash's new wind-up", "first number 2026-10-28");
   assert.deepEqual(raised.get("a"), { value: 12, why: "the slash's new wind-up" });
   assert.deepEqual(raised.get("b"), { value: 10, why: "first" });
-  assert.equal(raised.get("n")?.value, 5);
-  const lowered = rebaseline(held, results, "lower", "nightly");
+  // A new row never takes the raise's why (e747fa20 gave six held.* rows shield_elbow's).
+  assert.deepEqual(raised.get("n"), { value: 5, why: "first number 2026-10-28" });
+  assert.deepEqual(raised.get("p"), { value: 0.5, why: "first number 2026-10-28" });
+  const lowered = rebaseline(held, results, "lower", "nightly", "first number 2026-10-28");
   assert.deepEqual(lowered.get("a"), { value: 10, why: "first" });
   assert.equal(lowered.get("b")?.value, 8);
+  // Nightly banks the new rows too, under their own why.
+  assert.deepEqual(lowered.get("n"), { value: 5, why: "first number 2026-10-28" });
+  assert.deepEqual(lowered.get("p"), { value: 0.5, why: "first number 2026-10-28" });
   const text = writeBaseline(raised, ["b", "a"]);
   assert.equal(text.split("\n")[1], "b\t10\tfirst");
   assert.deepEqual(readBaseline(text), raised);
+});
+
+test("--first writes held rows again as first numbers, their values kept, never a worse one", () => {
+  const held = new Map([
+    ["a", { value: 10, why: "another row's raise" }],
+    ["b", { value: 10, why: "another row's raise" }],
+    ["c", { value: 3, why: "kept" }],
+  ]);
+  const bar = c({ at_most: 1 });
+  const results = [judge({ ...bar, id: "a" }, 9, held.get("a")), judge({ ...bar, id: "b" }, 12, held.get("b")), judge({ ...bar, id: "c" }, 3, held.get("c"))];
+  const ok = rebank(held, results, ["a"], "first number 2026-10-28");
+  assert.deepEqual(ok.refused, []);
+  // Its value as held: lowering is nightly's.
+  assert.deepEqual(ok.next.get("a"), { value: 10, why: "first number 2026-10-28" });
+  assert.deepEqual(ok.next.get("c"), { value: 3, why: "kept" });
+  const bad = rebank(held, results, ["b", "x"], "first number 2026-10-28");
+  assert.equal(bad.refused.length, 2);
+  assert.deepEqual(bad.next.get("b"), { value: 10, why: "another row's raise" });
 });
 
 test("timings are real seconds from the move set, as the Enshrouded comparison reads them", () => {

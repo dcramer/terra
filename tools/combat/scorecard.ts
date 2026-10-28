@@ -12,8 +12,11 @@
 //                                         the newest clean one nothing it reads changed since
 //                                         (tools/scorecard/films.ts; nightly's, so it banks them)
 //   cargo xtask combat --json FILE        the results also as JSON
-//   cargo xtask combat --raise "<why>"    write the rows that got worse, or are new, with why
+//   cargo xtask combat --raise "<why>"    write the rows that got worse with why (new rows: their
+//                                         first number, under a "first number" why of their own)
 //   cargo xtask combat --lower            write the rows that got better (nightly's alone, D414)
+//   cargo xtask combat --first ID,...     write held rows again as first numbers (banked under
+//                                         another row's why), their values as held
 //
 // A line a criterion: ✓ within its bar; · below its bar and no worse than its baseline (the
 // task list, tools/combat's skill); ✗ worse than its baseline, or not measured; ? not
@@ -32,7 +35,7 @@ import { COMBAT_FILMS, filmedThrough, keep, mainFilm, stamp } from "../scorecard
 import { type Criterion as Row, finish, type Held, judge, readBaseline, round, type Status, TEST_BUILD, testVerdicts } from "../scorecard/ratchet.ts";
 
 // The ratchet is shared (tools/scorecard); its parts are named here too, for this scorecard's tests.
-export { type Bar, barText, type Held, judge, miss, readBaseline, rebaseline, type Result, round, type Status, testVerdicts, writeBaseline } from "../scorecard/ratchet.ts";
+export { type Bar, barText, type Held, judge, miss, readBaseline, rebank, rebaseline, type Result, round, type Status, testVerdicts, writeBaseline } from "../scorecard/ratchet.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 export const CRITERIA = resolve(import.meta.dirname, "criteria.json");
@@ -139,6 +142,7 @@ function main() {
       json: { type: "string" },
       raise: { type: "string" },
       lower: { type: "boolean", default: false },
+      first: { type: "string" },
     },
   });
   if (opt.raise !== undefined && !opt.raise.trim()) throw new Error("--raise needs its why");
@@ -248,6 +252,7 @@ function main() {
     json: opt.json,
     raise: opt.raise,
     lower: opt.lower,
+    first: opt.first?.split(",").filter(Boolean),
   });
 }
 

@@ -5,8 +5,9 @@
 // always a larger miss. A line a criterion: ✓ within its bar; · below it and no worse than its
 // baseline; ✗ worse than its baseline, below its bar with none, or not measured; ? not
 // measurable yet; - heavy, not run. It fails (exit 1) on a ✗ alone. `--raise "<why>"` writes
-// the rows that got worse or are new, in the change's commit; `--lower` the rows that got
-// better, nightly's alone (D414).
+// the rows that got worse with the why, in the change's commit; `--lower` the rows that got
+// better, nightly's alone (D414). Either banks a row not held yet as its "first number", never
+// under the raise's why; `--first ID,...` writes held rows again as their first numbers.
 // Node 22.18 or later; no dependencies.
 
 import { writeFileSync } from "node:fs";
@@ -81,21 +82,45 @@ export function writeBaseline(held: Map<string, Held>, order: string[]): string 
   return ["id\tvalue\twhy", ...ids.map((id) => `${id}\t${held.get(id)!.value}\t${held.get(id)!.why}`)].join("\n") + "\n";
 }
 
-/// The baseline after a raise (rows worse, or not held yet, take their value with the why) or
-/// a lowering (rows better, or within their bar and not held yet, take theirs). A raise never
-/// lowers a held row and a lowering never raises one (D414).
-export function rebaseline(held: Map<string, Held>, results: Result[], mode: "raise" | "lower", why: string): Map<string, Held> {
+/// The why of a row's first number: a row not held yet is nobody's raise or lowering.
+export const firstNumber = (day: string) => `first number ${day}`;
+
+/// The baseline after a raise (rows worse take their value with the why) or a lowering (rows
+/// better, or within their bar now and outside it before, take theirs). Either banks a row not
+/// held yet (within its bar or not) as its first number, with `first`'s why, never the raise's.
+/// A raise never lowers a held row and a lowering never raises one (D414).
+export function rebaseline(held: Map<string, Held>, results: Result[], mode: "raise" | "lower", why: string, first = firstNumber(today())): Map<string, Held> {
   const next = new Map(held);
   for (const r of results) {
     if (r.value === undefined) continue;
-    // Worse, or not held yet (new to the baseline, within its bar or not).
-    const raise = r.status === "worse" || r.status === "new" || r.base === undefined;
-    // Within its bar now: banked when it was outside it (`note`) or not held yet.
-    const lower = r.status === "better" || (r.status === "pass" && (r.base === undefined || r.note !== undefined));
+    if (r.base === undefined) {
+      next.set(r.id, { value: r.value, why: first });
+      continue;
+    }
+    const raise = r.status === "worse";
+    // Within its bar now: banked when it was outside it (`note`).
+    const lower = r.status === "better" || (r.status === "pass" && r.note !== undefined);
     if ((mode === "raise" && raise) || (mode === "lower" && lower)) next.set(r.id, { value: r.value, why });
   }
   return next;
 }
+
+/// The baseline with the rows `ids` written again as their first numbers: for a row banked under
+/// another row's why. Only a row measured and no worse than held; each refused one with why.
+export function rebank(held: Map<string, Held>, results: Result[], ids: string[], first = firstNumber(today())): { next: Map<string, Held>; refused: string[] } {
+  const next = new Map(held);
+  const refused: string[] = [];
+  for (const id of ids) {
+    const r = results.find((each) => each.id === id);
+    if (!r || r.value === undefined) refused.push(`${id}: not measured in this run`);
+    else if (!held.has(id)) refused.push(`${id}: not in the baseline (a raise or nightly banks it)`);
+    else if (r.status === "worse") refused.push(`${id}: worse than its baseline, raise it with its why`);
+    else next.set(id, { value: held.get(id)!.value, why: first });
+  }
+  return { next, refused };
+}
+
+const today = () => new Date().toISOString().slice(0, 10);
 
 /// Each named test's verdict from cargo's output: `test <path> ... ok`, 0 passed, 1 failed.
 export function testVerdicts(out: string): Map<string, number> {
@@ -127,7 +152,7 @@ export function line(c: Criterion, r: Result, scorecard: string, heavy: string):
     held: "",
     better: `, better than its baseline ${fmt(r.base!)}: nightly banks it`,
     worse: `, WORSE than its baseline ${fmt(r.base!)}: undo, or ${scorecard} --raise "<why>" in this commit`,
-    new: `, below its bar with no baseline: --raise "<why>"`,
+    new: `, below its bar with no baseline: --raise "<why>" banks its first number, or nightly does`,
     missing: ": not measured (its check gave no number; the log says why)",
     unmeasured: `: not measurable yet, needs ${r.note}`,
     skipped: `: heavy, ${heavy}`,
@@ -150,6 +175,8 @@ export type Finish = {
   json?: string;
   raise?: string;
   lower: boolean;
+  /** `--first ID,...`: write these held rows again as their first numbers (`rebank`). */
+  first?: string[];
 };
 
 /// Prints a line a criterion, writes the JSON and the raised or lowered baseline, and the
@@ -164,8 +191,17 @@ export function finish(f: Finish): void {
     const next = rebaseline(f.held, results, f.raise ? "raise" : "lower", f.raise ?? `lowered by nightly ${new Date().toISOString().slice(0, 10)}`);
     const changed = [...next.entries()].filter(([id, h]) => f.held.get(id)?.value !== h.value).length;
     writeFileSync(f.baseline, writeBaseline(next, criteria.map((c) => c.id)));
-    console.log(`${f.name}: ${f.raise ? "raised" : "lowered"} ${changed} rows of ${f.baselineName}`);
-    if (f.raise) for (const r of bad) if (r.status !== "missing") r.status = "held";
+    const firsts = [...next.keys()].filter((id) => !f.held.has(id)).length;
+    console.log(`${f.name}: ${f.raise ? "raised" : "lowered"} ${changed - firsts} rows of ${f.baselineName}, ${firsts} first numbers`);
+    for (const r of bad) if (r.status !== "missing" && (f.raise || r.status === "new")) r.status = "held";
+  } else if (f.first?.length) {
+    const { next, refused } = rebank(f.held, results, f.first);
+    for (const why of refused) console.log(`✗ ${f.name} --first ${why}`);
+    if (refused.length) process.exitCode = 1;
+    else {
+      writeFileSync(f.baseline, writeBaseline(next, criteria.map((c) => c.id)));
+      console.log(`${f.name}: ${f.first.length} rows of ${f.baselineName} written again as their first numbers`);
+    }
   }
   const still = results.filter((r) => ["worse", "new", "missing"].includes(r.status));
   const heavy = f.heavyRun ? "" : `, ${count(["skipped"])} heavy (${f.heavy})`;

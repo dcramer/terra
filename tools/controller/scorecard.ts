@@ -13,8 +13,10 @@
 //   cargo xtask controller --filmed           the film's rows from main's own film, not filming: the
 //                                             newest clean one nothing it reads changed since
 //                                             (tools/scorecard/films.ts; nightly's, so it banks them)
-//   cargo xtask controller --raise "<why>"    write the rows that got worse, or are new, with why
+//   cargo xtask controller --raise "<why>"    write the rows that got worse with why (new rows:
+//                                             their first number, a "first number" why their own)
 //   cargo xtask controller --lower            write the rows that got better (nightly's, D414)
+//   cargo xtask controller --first ID,...     write held rows again as first numbers
 //
 // The heavy criteria: the mover's bench runs with --bench (release, one core, medians); the
 // in-game filmed course with --film (yard.ts writes checks.json beside its film). What cargo printed
@@ -71,6 +73,7 @@ function main() {
       json: { type: "string" },
       raise: { type: "string" },
       lower: { type: "boolean", default: false },
+      first: { type: "string" },
       bench: { type: "boolean", default: false },
       film: { type: "boolean", default: false },
       filmed: { type: "boolean", default: false },
@@ -161,6 +164,7 @@ function main() {
     json: opt.json,
     raise: opt.raise,
     lower: opt.lower,
+    first: opt.first?.split(",").filter(Boolean),
   });
 }
 

@@ -10,8 +10,9 @@ cargo xtask gpu film -- cargo xtask controller --film   # also the in-game filme
 node tools/controller/yard.ts --check ~/.cache/terra-review/controller-yard   # its checks again on the records already made
 cargo xtask controller --filmed          # the film rows from main's own film, not filming (nightly's, so it banks them; films.ts)
 node tools/controller/forest-fixture.ts  # cost.forest's fixture again, from the game (when flora's fitting changes)
-cargo xtask controller --raise "<why>"   # write the rows that got worse, or are new, with the why, in the change's commit
-cargo xtask controller --lower           # write the rows that got better: cargo xtask nightly's alone (D414)
+cargo xtask controller --raise "<why>"   # write the rows that got worse with the why, in the change's commit; new rows as their "first number"
+cargo xtask controller --lower           # write the rows that got better, and new rows' first numbers: cargo xtask nightly's alone (D414)
+cargo xtask controller --first ID,...    # write held rows again as their first numbers (banked under another row's why)
 ```
 
 | File | What it is |

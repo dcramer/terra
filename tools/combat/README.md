@@ -7,9 +7,10 @@ cargo xtask combat                   # every cheap criterion, a line each, held 
 cargo xtask combat --film            # and the duel film's checks (the GPU: cargo xtask gpu film -- cargo xtask combat --film)
 cargo xtask combat --film --out DIR  # the film into DIR, not ~/.cache/terra-review/duel/ (two films at once share that)
 cargo xtask combat --json out.json   # the results also as JSON
-cargo xtask combat --raise "<why>"   # write the rows that got worse, or are new, with the why, in the change's commit
+cargo xtask combat --raise "<why>"   # write the rows that got worse with the why, in the change's commit; new rows as their "first number"
 cargo xtask combat --filmed          # the film rows from main's own duel film, not filming (nightly's, so it banks them)
-cargo xtask combat --lower           # write the rows that got better: cargo xtask nightly's alone (D414)
+cargo xtask combat --lower           # write the rows that got better, and new rows' first numbers: cargo xtask nightly's alone (D414)
+cargo xtask combat --first ID,...    # write held rows again as their first numbers (banked under another row's why), values as held
 ```
 
 | File | What it is |
