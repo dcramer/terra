@@ -63,8 +63,9 @@ import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
 import { type Holding, keptOff, reach } from "./arms.ts";
 import { carryArm } from "./carry_arm.ts";
+import { about, atWrist as atWristShare, elbowOpen, inFist as inFistShare, wristTurn } from "./carry_hand.ts";
 import { fitter } from "./shield_arm.ts";
-import { type Handle, FIST_CM, close, fistOff, handRest, lookGrip, seated, tipped as tipHandle } from "./grip.ts";
+import { type Handle, FIST_CM, WRAP_DEG, close, fistOff, handRest, lookGrip, seated, tipped as tipHandle } from "./grip.ts";
 
 const { values: opt } = parseArgs({
   options: {
@@ -216,13 +217,23 @@ const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => fitShield(armsKe
 // `--arms`: the hanging hands then kept off the hips as the game keeps them (arms.ts, D535).
 // The fists closed first (`inFist`), as terra_walker::grip runs before arms::keep_off_hips.
 const armsKept = (shape: Shape, played: Clip, t: number): Pose[] => {
-  const clip = inFist(shape, played);
-  const base = carriedArms(shape, clip, t);
+  const clip = atWrists(inFist(shape, played));
+  const base = new Map(carriedArms(shape, clip, t));
+  // A tool carried by the rule: its forearm kept down (carry_hand.ts), as
+  // terra_walker::carry_hand opens the elbow before the fists and the arms.
+  const elbows = elbowsOpened(shaped(body, shape, clip, t, base), clip);
+  for (const [bone, q] of elbows) base.set(bone, q);
   const pose = shaped(body, shape, clip, t, base);
   if (!opt.arms) return pose;
   const kept = keptOff(body, pose, holdingIn(clip));
   if (!kept.size) return pose;
   for (const [bone, q] of base) kept.set(bone, kept.has(bone) ? qmul(kept.get(bone)!, q) : q);
+  // The game opens the elbow in the upper arm's frame before the arm is turned out: the
+  // forearm's turn goes on after the upper arm's, so it is turned with it.
+  for (const [bone, q] of elbows) {
+    const out = kept.get(bone.replace("lowerarm", "upperarm"));
+    if (out) kept.set(bone, qmul(qmul(out, q), qinv(out)));
+  }
   return shaped(body, shape, clip, t, kept);
 };
 
@@ -256,14 +267,47 @@ const tipped = (deg: number, points: V3[]) => {
   const [c, s] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
   return points.map(([x, y, z]) => [x, y * c - z * s, y * s + z * c] as V3);
 };
-const carriedPoints = new Map(held.map((h) => [h.name, tipped(tiltOf.get(h.name)!, h.points)]));
+// The share of its tilt a look takes in the fist; the wrist takes the rest (carry_hand.ts).
+const fistTilt = (h: Held) => inFistShare(tiltOf.get(h.name)!);
+const carriedPoints = new Map(held.map((h) => [h.name, tipped(fistTilt(h), h.points)]));
 const carriedNow = (clip: Clip) => carriedIn.includes(clip.name.split("+")[0]);
+// The hands carrying a look by the rule (a tilt, no carry pose): each turned at the wrist after
+// its clip, about its socket's X, by the tilt past the fist's share, as terra_walker::carry_hand
+// turns it; and its forearm kept down (`elbowsOpened`).
+const ruled = held.filter((h, i) => h.socket === h.hand && tiltOf.get(h.name) && !poseOfLook[i]);
+const wrists = new Map<Clip, Clip>();
+function atWrists(clip: Clip): Clip {
+  if (!ruled.length || !carriedNow(clip)) return clip;
+  if (!wrists.has(clip)) {
+    const tracks = new Map(clip.tracks);
+    for (const h of ruled) {
+      const hand = `hand_${h.hand.slice(-1).toLowerCase()}`;
+      const turn = wristTurn(body.rest(body.named(h.hand)).r, atWristShare(tiltOf.get(h.name)!));
+      const track = clip.tracks.get(hand);
+      const from = track?.r ?? (() => body.rest(body.named(hand)).r);
+      tracks.set(hand, { ...track, r: (time: number) => qmul(from(time) as Q, turn) });
+    }
+    wrists.set(clip, { ...clip, tracks });
+  }
+  return wrists.get(clip)!;
+}
+function elbowsOpened(pose: Pose[], clip: Clip): Map<string, Q> {
+  const out = new Map<string, Q>();
+  if (!carriedNow(clip)) return out;
+  for (const h of ruled) {
+    const s = h.hand.slice(-1).toLowerCase();
+    const P = (n: string) => pose[body.named(n)].t;
+    const open = elbowOpen(sub(P(`lowerarm_${s}`), P(`upperarm_${s}`)), sub(P(`hand_${s}`), P(`lowerarm_${s}`)));
+    if (open) out.set(`lowerarm_${s}`, about(open.axis, -open.open));
+  }
+  return out;
+}
 const pointsIn = (h: Held, clip: Clip) => (carriedNow(clip) ? carriedPoints.get(h.name)! : h.points);
 // `--arms`: what each hand holds counts in its arm's spacing, as the game counts it: a look on
 // its hand socket by its reach (arms.ts), tipped when carried.
 const reaches = held.filter((h) => h.socket === h.hand).map((h) => ({ h, points: reach(h.points) }));
 const holdingIn = (clip: Clip): Holding[] =>
-  reaches.map(({ h, points }) => ({ socket: h.socket, points: carriedNow(clip) ? tipped(tiltOf.get(h.name)!, points) : points }));
+  reaches.map(({ h, points }) => ({ socket: h.socket, points: carriedNow(clip) ? tipped(fistTilt(h), points) : points }));
 
 // The fists (grip.ts): what a hand socket holds closes its fingers on it after the clip,
 // as terra_walker::grip lays them, each template's from its own hand, the handle seated against
@@ -277,7 +321,7 @@ const fists = opt.grip
     })
   : [];
 type Fist = (typeof fists)[number];
-const handleNow = (f: Fist, clip: Clip): Handle => (carriedNow(clip) ? tipHandle(f.handle, tiltOf.get(f.h.name)!) : f.handle);
+const handleNow = (f: Fist, clip: Clip): Handle => (carriedNow(clip) ? tipHandle(f.handle, fistTilt(f.h)) : f.handle);
 const fistPoses = new Map<string, Map<string, Q>>();
 const fistPose = (shape: Shape, f: Fist, clip: Clip): Map<string, Q> => {
   const key = `${shape.name} ${f.h.name} ${carriedNow(clip)}`;
@@ -710,16 +754,36 @@ if (fists.length) {
   const played = [...new Set([...checked.map((m) => m.clip), ...opt.also!.split(",").filter(Boolean)])].map(clipOf);
   for (const f of fists) {
     let worst = { cm: 0, where: "" };
+    let wrap = { deg: Infinity, where: "" };
     for (const clip of played)
       for (const shape of shapes)
         for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
           const off = fistOff(body, poseOf(shape, clip, t), f.side, at(f.h.hand), handleNow(f, clip), f.grip);
-          if (Math.abs(off.cm) > Math.abs(worst.cm)) worst = { cm: off.cm, where: `${off.where}, ${clip.name} ${t.toFixed(2)} s, ${shape.name}` };
+          const when = `${clip.name} ${t.toFixed(2)} s, ${shape.name}`;
+          if (Math.abs(off.cm) > Math.abs(worst.cm)) worst = { cm: off.cm, where: `${off.where}, ${when}` };
+          if (off.wrap < wrap.deg) wrap = { deg: off.wrap, where: `${off.short}, ${when}` };
         }
     measured[`fist_cm.${f.h.name}`] = Math.abs(worst.cm);
-    parts.push(`${f.h.name} ${cm(worst.cm)} (${worst.where})${Math.abs(worst.cm) > FIST_CM ? ", over the bar" : ""}`);
+    measured[`fist_wrap_deg.${f.h.name}`] = wrap.deg;
+    parts.push(`${f.h.name} ${cm(worst.cm)} (${worst.where})${Math.abs(worst.cm) > FIST_CM ? ", over the bar" : ""}, round it ${wrap.deg.toFixed(0)} deg at least (${wrap.where})${wrap.deg < WRAP_DEG ? ", short of the bar" : ""}`);
   }
-  measured.fist_cm = Math.max(...Object.values(measured));
+  // A look carried by the rule (D564): how far above level its working end rises at most, degrees
+  // (negative: always tipped down), the handle's +Y, every carried clip and template.
+  for (const h of ruled) {
+    let high = { deg: -Infinity, where: "" };
+    for (const clip of played.filter(carriedNow))
+      for (const shape of shapes)
+        for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
+          const way = rot(frame(h, poseOf(shape, clip, t)).r, tipHandle({ at: [0, 0, 0], way: [0, 1, 0], r: 0 }, fistTilt(h)).way);
+          const deg = (Math.asin(Math.max(-1, Math.min(1, way[1] / len(way)))) * 180) / Math.PI;
+          if (deg > high.deg) high = { deg, where: `${clip.name} ${t.toFixed(2)} s, ${shape.name}` };
+        }
+    if (high.deg === -Infinity) continue;
+    measured[`carried_rise_deg.${h.name}`] = high.deg;
+    parts.push(`${h.name} carried tipped ${high.deg <= 0 ? "down" : "up"}, ${Math.abs(high.deg).toFixed(0)} deg ${high.deg <= 0 ? "below" : "above"} level at the highest (${high.where})`);
+  }
+  measured.fist_cm = Math.max(...Object.entries(measured).filter(([k]) => k.startsWith("fist_cm.")).map(([, v]) => v));
+  measured.fist_wrap_deg = Math.min(...Object.entries(measured).filter(([k]) => k.startsWith("fist_wrap_deg.")).map(([, v]) => v));
   row("fist, the fingers on what the hands hold", parts, [], { clip: "fist", measured });
 }
 // Each shield pose with a target against it (D554, shield_place.ts): the board's place in the
