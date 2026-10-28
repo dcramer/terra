@@ -17,7 +17,7 @@
 // the photographs' (`widened`), and the frames' numbers are listed too. Node 22.18 or later,
 // ffmpeg; no dependencies.
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { GAMES_DIR, gameFrames, measureFrame, widened } from "./games.ts";
@@ -61,15 +61,26 @@ export function bandsOf(rows: { class: string; light: string; metrics: Metrics }
   return classes;
 }
 
-const UA = { "User-Agent": "TerraFireReferences/1.0 (photographs of real fire for a game's fire check)" };
+// The repo tools' generic agent: Wikimedia's policy asks for a tool's name and a way to reach it,
+// never anyone's own name or address.
+const UA = { "User-Agent": "terra-tools/1.0 (https://github.com/dcramer/terra; fire references)" };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/// `url`'s reply, tried six times a little further apart each time, each try given 60 s: a reply
+/// not OK (Commons' rate limit) and a try that times out or drops are both tried again.
 async function get(url: string): Promise<Response> {
+  let last = "";
   for (let i = 0; i < 6; i++) {
-    const r = await fetch(url, { headers: UA });
-    if (r.ok) return r;
+    try {
+      const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(60_000) });
+      if (r.ok) return r;
+      last = `HTTP ${r.status}`;
+    } catch (e) {
+      const err = e as Error & { cause?: Error };
+      last = err.name === "TimeoutError" ? "timed out after 60 s" : `${err.message}${err.cause ? ` (${err.cause.message})` : ""}`;
+    }
     await sleep(8000 * (i + 1));
   }
-  throw new Error(`could not fetch ${url}`);
+  throw new Error(`${url}: ${last}, six tries`);
 }
 
 /// Downloads a Commons file as the rendition at most 2000 px wide.
@@ -91,9 +102,22 @@ if (import.meta.main) {
   const photos = JSON.parse(readFileSync(PHOTOS_FILE, "utf8")) as Photo[];
   const missing = photos.filter((p) => !existsSync(join(dir, p.file)));
   if (missing.length && argv.includes("--fetch")) {
+    mkdirSync(dir, { recursive: true });
+    // One photo failing (a Commons timeout, a file renamed) does not stop the rest: each is tried,
+    // and what failed is named at the end.
+    const failed: string[] = [];
     for (const p of missing) {
-      await fetchPhoto(p, dir);
-      console.log(`fetched ${p.file}`);
+      try {
+        await fetchPhoto(p, dir);
+        console.log(`✓ fetched ${p.file}`);
+      } catch (e) {
+        failed.push(`${p.file} (${p.title}): ${(e as Error).message}`);
+      }
+    }
+    if (failed.length) {
+      console.error(`✗ ${failed.length} of ${missing.length} photos not fetched into ${dir}; nothing measured:\n  ${failed.join("\n  ")}`);
+      console.error("  run --fetch again later to fetch only these; a title not on Commons is fixed in photos.json");
+      process.exit(1);
     }
   } else if (missing.length) {
     console.error(`✗ ${missing.length} photos missing from ${dir} (${missing.map((p) => p.file).join(", ")}); --fetch downloads them`);
