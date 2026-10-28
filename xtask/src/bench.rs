@@ -29,8 +29,9 @@ pub(crate) const TASKS: &[Task] = &[
 /// Frames run before any are timed, so shaders are ready and the scene has settled.
 const BENCH_SETTLE: &str = "240";
 /// A run that has not finished in this long is stuck, and is ended; counted from when it has
-/// its turn on the GPU (D319), not while it waits for it.
-const BENCH_TIMEOUT_S: u64 = 300;
+/// its turn on the GPU (D319), not while it waits for it. The town scenes on the 30 km world
+/// load for over 300 s before their first timed frame, so 300 ended every one of them.
+const BENCH_TIMEOUT_S: u64 = 900;
 /// How much slower than the last recorded result counts as a regression to look into.
 const SLOWER_BY: f32 = 0.10;
 /// Where `--record` keeps results, one line per scene per run of the task.
