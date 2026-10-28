@@ -1,8 +1,11 @@
 // The motion films' held hearth light (film.ts, D472).
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
-import { filmArgs, hold, HOURS, PLACEMENTS, REFERENCE, TAKES, takes } from "./film.ts";
+import { baseOf, filmArgs, hold, HOURS, PLACEMENTS, REFERENCE, TAKES, takes } from "./film.ts";
 import { GATE } from "./motion.ts";
 import { type Film, paired, spread, told, tolerance, TOLERANCE } from "./paired.ts";
 import { HELD_SKY } from "./sheet.ts";
@@ -115,5 +118,24 @@ test("the gate's tolerances are those its A/A films give, for every hour and mea
   for (const [hour] of HOURS) {
     assert.ok(aa.hours[hour]?.length >= 4 * PLACEMENTS.length * TAKES, `${hour}: at least four runs' films`);
     assert.deepEqual(TOLERANCE[hour], tolerance(aa.hours[hour], TAKES), `${hour}: paired.ts TOLERANCE is not gate-aa.json's (node tools/fire/film.ts --aa prints it)`);
+  }
+});
+
+test("a base that falls to the build itself is refused unless named; a dirty tree beside HEAD is a pair", () => {
+  // A worker's --dirty job: the patch is HEAD, committed, and there is no origin/main to leave.
+  const root = mkdtempSync(join(tmpdir(), "film-base-"));
+  const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@localhost", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@localhost" };
+  const git = (...args: string[]) => assert.equal(spawnSync("git", args, { cwd: root, env }).status, 0, `git ${args.join(" ")}`);
+  try {
+    git("init", "-q");
+    writeFileSync(join(root, "light.rs"), "a\n");
+    git("add", "light.rs");
+    git("commit", "-q", "-m", "patch");
+    assert.throws(() => baseOf(root), /the base defaulted to the build itself.*--base <sha>.*--alone/s);
+    assert.equal(baseOf(root, "HEAD").same, true, "--base HEAD is an A/A run, one build filmed twice");
+    writeFileSync(join(root, "light.rs"), "b\n");
+    assert.equal(baseOf(root).same, false, "uncommitted changes are filmed beside HEAD");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

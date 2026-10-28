@@ -8,7 +8,10 @@
 // built in a worktree of its own and filmed beside the build in the same run, and a measure the
 // build misses passes when the build is no further outside its bar than the base, within the
 // run-to-run spread repeat films of one flame show. `--alone` films the build alone, bars only.
-// Each side's films are kept as `<out>/{build,base}/<hour>.json`; `--judge <out>` judges them again.
+// A base that falls to the build itself (HEAD, nothing uncommitted: on the worker, a --dirty job's
+// patch) is refused unless named (`--base HEAD`, an A/A run).
+// Each side's measures are kept as `<out>/{build,base}/<hour>.json`; `--judge <out>` judges them
+// again. The films themselves (~12 GB a run) are deleted once measured unless `--films`.
 //
 // The gate measures the flame, so the light it casts is held: the build is filmed with every hearth
 // light constant of crates/terra_world/src/fire/light.rs (`HEARTH_*`) set to REFERENCE, main's at
@@ -18,7 +21,7 @@
 // held too, as the fire sheet's (`HELD_SKY`, D472): the dome's 2D clouds, not the marched volumes,
 // whose arrival raised the dusk splits with no fire changed.
 //
-//   node tools/fire/film.ts [out=shots/motion] [--base <sha> | --alone] [--seconds 20]   # from the checkout's root
+//   node tools/fire/film.ts [out=shots/motion] [--base <sha> | --alone] [--seconds 20] [--films]   # from the checkout's root
 //   node tools/fire/film.ts --judge <out> [--alone]     # judge kept films again
 //   node tools/fire/film.ts --aa <side dir>...          # pool A/A films into gate-aa.json, print tolerances
 import { spawn, spawnSync } from "node:child_process";
@@ -148,7 +151,9 @@ export function film(root: string, bin: string, out: string, dx: number, seconds
 
 /// Films one side's every take at each hour into `out` and measures them: `<hour>.json` (a `Side`:
 /// each film's placement and GATE values) and `<hour>.txt` (motion.ts's report of each film).
-export function filmSide(root: string, bin: string, out: string, seconds: number, rev: string) {
+/// The films (lossless, about 12 GB a run) are deleted once measured unless `keepFilms`: the gate
+/// and `--judge` read only the measures, and a worker job collects whatever is left.
+export function filmSide(root: string, bin: string, out: string, seconds: number, rev: string, keepFilms = false) {
   const all = takes(out);
   for (const { dx, dir } of all) film(root, bin, dir, dx, seconds);
   for (const [hour] of HOURS) {
@@ -160,6 +165,7 @@ export function filmSide(root: string, bin: string, out: string, seconds: number
     writeFileSync(join(out, `${hour}.txt`), ms.map(({ dir, m, cut }) => said(dir, m, `flame luma >= ${cut.toFixed(0)} in the matte`)).join("\n") + "\n");
     const side: Side = { rev, hour, films: ms.map(({ dx, dir, m }) => ({ dx, dir, v: GATE.map((g) => g.of(m)) })) };
     writeFileSync(join(out, `${hour}.json`), JSON.stringify(side));
+    if (!keepFilms) for (const { dir } of all) for (const f of [`${hour}.mkv`, `${hour}-matte.mkv`]) rmSync(join(dir, f), { force: true });
   }
 }
 
@@ -167,13 +173,25 @@ const git = (cwd: string, args: string[]) => spawnSync("git", args, { cwd, encod
 
 /// The commit the build is judged beside: `given`, else where HEAD leaves origin/main (HEAD itself
 /// on main). `same` when that is HEAD with nothing changed in the tree, so one build serves both.
+/// Throws when the base was not given and is the build itself (HEAD, nothing uncommitted): on the
+/// worker a `--dirty` job's patch is HEAD and its origin/main may lack it or be absent, so the
+/// default fell to HEAD and the gate judged the build beside itself, which passes any change.
+/// An A/A run (one build filmed twice, for `--aa`) names the base: `--base HEAD`.
 export function baseOf(root: string, given?: string): { rev: string; same: boolean } {
   const head = git(root, ["rev-parse", "HEAD"]).stdout.trim();
   const want = given ?? (git(root, ["merge-base", "HEAD", "origin/main"]).stdout.trim() || head);
   const r = git(root, ["rev-parse", "--verify", "-q", `${want}^{commit}`]);
   if (r.status !== 0) throw new Error(`no commit ${want} in this checkout: pass --base <sha> of HEAD's history`);
   const rev = r.stdout.trim();
-  return { rev, same: rev === head && git(root, ["status", "--porcelain", "--untracked-files=no"]).stdout.trim() === "" };
+  const same = rev === head && git(root, ["status", "--porcelain", "--untracked-files=no"]).stdout.trim() === "";
+  if (same && given === undefined)
+    throw new Error(
+      `film.ts: the base defaulted to the build itself (${head.slice(0, 9)}, where HEAD leaves origin/main with nothing uncommitted), ` +
+        "so the paired gate (D472) would judge the build beside itself and pass any change. On the worker a --dirty job's patch is HEAD: " +
+        "pass --base <sha> of main before the change (the patch's base), or --alone to hold the build to the bars only; " +
+        "for an A/A run of one build filmed twice, say so with --base HEAD.",
+    );
+  return { rev, same };
 }
 
 /// The base's checkout (a worktree at target/gate/base, its own assets) and its held build, built
@@ -238,8 +256,8 @@ if (import.meta.main) {
   const seconds = +(opt("--seconds") ?? 20);
   if (argv[0] === "--side") {
     // A side's films, run by the gate as a process of its own so base and build film side by side.
-    const [, root, bin, out, secs, rev] = argv;
-    filmSide(root, bin, out, +secs, rev);
+    const [, root, bin, out, secs, rev, films] = argv;
+    filmSide(root, bin, out, +secs, rev, films === "--films");
     process.exit(0);
   }
   if (argv[0] === "--aa") pool(argv.slice(1));
@@ -250,7 +268,13 @@ if (import.meta.main) {
     const root = process.cwd();
     if (!existsSync(join(root, "crates/terra_world/src/fire/light.rs"))) throw new Error("run from the checkout's root");
     const head = git(root, ["rev-parse", "HEAD"]).stdout.trim();
-    const base = alone ? undefined : baseOf(root, opt("--base"));
+    let base: ReturnType<typeof baseOf> | undefined;
+    try {
+      base = alone ? undefined : baseOf(root, opt("--base"));
+    } catch (e) {
+      console.log(`✗ ${(e as Error).message}`);
+      process.exit(1);
+    }
     const held = (changed: string[]) => (changed.length ? changed.join(", ") : "the build's own");
     let other = { root, bin: join(root, "target/gate/build-sandbox") };
     if (base && !base.same) {
@@ -268,7 +292,8 @@ if (import.meta.main) {
         rmSync(out, { recursive: true, force: true });
         mkdirSync(out, { recursive: true });
         const log = openSync(join(out, "side.log"), "w");
-        const p = spawn(process.execPath, [fileURLToPath(import.meta.url), "--side", r, b, out, String(seconds), rev], { cwd: r, stdio: ["ignore", log, log] });
+        const keep = argv.includes("--films") ? ["--films"] : [];
+        const p = spawn(process.execPath, [fileURLToPath(import.meta.url), "--side", r, b, out, String(seconds), rev, ...keep], { cwd: r, stdio: ["ignore", log, log] });
         p.on("exit", (code) => done(code ?? 1));
       });
     // The base films beside the build, at once, so whatever the box does meanwhile falls on both.
@@ -282,7 +307,7 @@ if (import.meta.main) {
     }
     if (base && !base.same) git(root, ["worktree", "remove", "--force", other.root]);
     const what = base ? `the build and base ${base.rev.slice(0, 9)}${base.same ? " (HEAD, one build filmed twice)" : ""} side by side` : "the build alone";
-    console.log(`✓ filmed ${what}: ${PLACEMENTS.length} placements x ${TAKES} takes x ${HOURS.length} hours, ${seconds} s each, in ${OUT}`);
+    console.log(`✓ filmed ${what}: ${PLACEMENTS.length} placements x ${TAKES} takes x ${HOURS.length} hours, ${seconds} s each, in ${OUT} (${argv.includes("--films") ? "films kept" : "measures only; --films keeps the films"})`);
     process.exit(judge(OUT, alone) ? 1 : 0);
   }
 }
