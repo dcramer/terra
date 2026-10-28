@@ -1,5 +1,5 @@
 {
-  "about": "A time-lapse over a settlement rising in its forest clearing by a lake (D381), in one continuous establishing shot into dusk: it opens about 40 degrees down onto the first house from 16 m west of it and 13 m up as its walls go up, then backs away on one eased arc through round 24's framings, swinging about 100 degrees round the town from facing east to north-north-west, the afterglow in the left of the last frame (r32) while it rises to 40 m over the meadow and comes down again to 20 m south-west of the town, its look running out from the house to the sky over the mountain, from rest and still moving at the end. The distance grows throughout and the pitch flattens from 40 degrees down to 6 up, so the town lies whole in the lower half, the castle in the right third and the dusk sky over the mountain along the top; the lens widens from 20 to 15.5 mm. No shake: round 24's zigzag and its swing and drop at 16-18 s are gone (settlement r31, after the developer: round 24 is more dynamic, no shake, start angled, more horizontal, not crazy high).",
+  "about": "A time-lapse over a settlement rising in its forest clearing by a lake (D381), in one continuous establishing shot into dusk: it opens about 40 degrees down onto the first house from 16 m west of it and 13 m up as its walls go up, then backs away on one eased arc through round 24's framings, swinging about 100 degrees round the town from facing east to north-north-west, the afterglow in the left of the last frame (r32) while it rises to 40 m over the meadow and comes down again to 20 m south-west of the town, its look running out from the house to the sky over the mountain, from rest and still moving at the end. The distance grows throughout and the pitch flattens from 40 degrees down to 6 up, so the town lies whole in the lower half, the castle in the right third and the dusk sky over the mountain along the top; the lens widens from 20 to 15.5 mm. Since the range was raised (D544) its last 8 s swing on south-east of the town to 40 m east of r32's end and turn 50 degrees west of north, so the peaks stand against open sky with the afterglow in the left third and the lit town in the right (settlement round 2). No shake: round 24's zigzag and its swing and drop at 16-18 s are gone (settlement r31, after the developer: round 24 is more dynamic, no shake, start angled, more horizontal, not crazy high).",
   "seconds": 20,
   "keys": [
     {
@@ -28,14 +28,14 @@
     },
     {
       "t": 16,
-      "at": [-50, 34, -232],
-      "look": [-26.9, 12, -363.3],
+      "at": [-10, 32, -215],
+      "look": [-45, 14, -350],
       "lens": 16.5
     },
     {
       "t": 20,
-      "at": [-53.8, 18, -214.1],
-      "look": [-102.4, 33.7, -355.2],
+      "at": [40, 18, -200],
+      "look": [-74.9, 33.7, -296.4],
       "lens": 15.5
     }
   ],
