@@ -22,6 +22,9 @@
 //                  cm past the arm's own thickness, in the idles a person watches longest: the
 //                  drawn guard standing and walking, the sheathed idle and walk. The developer:
 //                  "the idle animation still looks stupid and the guys arms clip into the body".
+//   bodies apart   how deep one body's arms go into the other's (torso, head, thighs), cm, while
+//                  the two stand within 1.5 m, drawn or sheathed: the pushboxes are narrower
+//                  than shoulders and arms (the 2026-10-28 film's sheathed walk into the partner).
 //
 // Node 22.18 or later; no dependencies.
 
@@ -29,7 +32,7 @@ import { resolve } from "node:path";
 import { type Board, board, meshOf } from "../../characters/clash.ts";
 import { Glb, type Pose, type Q, type V3, dot, len, place, posed, qinv, rot, sub } from "../../characters/glb.ts";
 import { faceOff, gripOff } from "../../characters/shield_path.ts";
-import { armPoints, skinOf } from "../../characters/skin.ts";
+import { type Inside, armPoints, skinOf } from "../../characters/skin.ts";
 import type { Check, Fighter, Frame, Lens } from "./checks.ts";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
@@ -56,6 +59,10 @@ export const OFF_CM = 5;
 export const STRAP_CM = 1;
 /// An arm through the skin past its own thickness (moves.ts's HAND_CM).
 export const ARMS_CM = 2;
+/// How far one body's arm may go into the other's (past its own thickness), cm, and how near the
+/// two stand for it to be looked for, metres.
+export const APART_CM = 0;
+const NEAR_M = 1.5;
 /// After the block is let go or a move ends, the frames its blend back to the guard may take.
 const SETTLE = 20;
 /// A body moving faster than this, m/s, walks.
@@ -162,12 +169,28 @@ export function shieldHigh(pose: Posed, b?: Board, at = rest()): { cm: number; f
 /// its thickness, and where.
 let skin: ReturnType<typeof skinOf> | undefined;
 export function armsIn(pose: Posed): { cm: number; where: string } {
+  return deepest((bone) => eight(pose.bones[bone]).t, skinAt(pose));
+}
+
+/// How deep body `a`'s arms go into body `b`'s skin (torso, head, thighs), cm past the arm's own
+/// thickness, and where: each body's bones in its model's frame, carried through its root into
+/// the world and into the other's.
+export function armsInto(a: Posed, b: Posed): { cm: number; where: string } {
+  const [A, B] = [eight(a.root), eight(b.root)];
+  return deepest((bone) => rot(qinv(B.r), sub(place(A, eight(a.bones[bone]).t), B.t)), skinAt(b));
+}
+
+/// A posed body's skin, to ask how deep a point is in it.
+function skinAt(pose: Posed): Inside {
   const body = base();
   skin ??= skinOf(body, resolve(ROOT, "assets/models/character/templates.json"), ["male"]);
   const at = posed(body, undefined, 0);
   const poses = body.gltf.nodes.map((n, i) => (n.name && pose.bones[n.name] ? eight(pose.bones[n.name]) : at[i]));
-  const inside = skin.skinned(skin.shapes[0], poses);
-  const P = (bone: string) => eight(pose.bones[bone]).t;
+  return skin.skinned(skin.shapes[0], poses);
+}
+
+/// The deepest of both arms' points (`P` places a bone's joint) in a skin, cm past each point's pad.
+function deepest(P: (bone: string) => V3, inside: Inside): { cm: number; where: string } {
   let worst = { cm: -Infinity, where: "" };
   for (const side of ["l", "r"])
     for (const [q, pad, what] of armPoints(P, side)) {
@@ -308,10 +331,40 @@ export function armsInBody(all: Sample[]): Check | undefined {
   return { name, ok: over === 0, line, faults: over, value: r1(worst.cm) };
 }
 
+/// One body's arms in the other's (`bodies apart`): every other frame the two stand within
+/// NEAR_M, drawn or sheathed, each body's arms into the other's torso, head and thighs; its value
+/// the deepest, cm. The pushboxes (`checks.ts` overlap) are a capsule a body, narrower than the
+/// shoulders and the arms out, so two bodies chest to chest pass them while a fist is in a hip.
+export function bodiesApart(all: Sample[]): Check | undefined {
+  const name = "bodies apart";
+  const frames = new Map<number, Sample[]>();
+  for (const s of all) if (s.frame % 2 === 0) frames.set(s.frame, [...(frames.get(s.frame) ?? []), s]);
+  type Worst = { cm: number; where: string; frame: number; who: string; doing: string };
+  let worst: Worst | undefined;
+  let near = 0;
+  let over = 0;
+  for (const [frame, bodies] of frames) {
+    const [a, b] = bodies;
+    if (!a || !b) continue;
+    const [ta, tb] = [eight(a.pose.root).t, eight(b.pose.root).t];
+    if (Math.hypot(ta[0] - tb[0], ta[2] - tb[2]) > NEAR_M) continue;
+    near++;
+    const each = [{ ...armsInto(a.pose, b.pose), who: a.who, doing: a.doing }, { ...armsInto(b.pose, a.pose), who: b.who, doing: b.doing }];
+    const deeper = each[0].cm >= each[1].cm ? each[0] : each[1];
+    if (deeper.cm > APART_CM) over++;
+    if (!worst || deeper.cm > worst.cm) worst = { ...deeper, frame };
+  }
+  const bar = `(bar ${APART_CM} cm)`;
+  if (!worst) return { name, ok: true, line: `the bodies never within ${NEAR_M} m of each other ${bar}`, faults: 0, value: 0 };
+  const whose = worst.who === "you" ? "the player's" : `the ${worst.who}'s`;
+  const line = `an arm into the other body, deepest ${worst.cm.toFixed(1)} cm (${whose} ${worst.where}, ${worst.doing}, frame ${worst.frame}), over the bar in ${over} of ${near} frames within ${NEAR_M} m ${bar}`;
+  return { name, ok: over === 0, line, faults: over, value: r1(Math.max(0, worst.cm)) };
+}
+
 /// Every composed-pose check on a record; the head's also against the game camera's look when
 /// the record is the player run's.
 export function poseChecks(frames: PoseFrame[], byCamera: boolean): Check[] {
   const all = samples(frames, byCamera);
   if (!all.length) return [];
-  return [headYaw(all), shieldRest(all), ...shieldForearm(all), armsInBody(all)].filter((c): c is Check => c !== undefined);
+  return [headYaw(all), shieldRest(all), ...shieldForearm(all), armsInBody(all), bodiesApart(all)].filter((c): c is Check => c !== undefined);
 }

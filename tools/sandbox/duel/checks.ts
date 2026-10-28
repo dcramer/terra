@@ -33,7 +33,7 @@ export type Contact = { by: string; on: string; move: string; taken: string; sto
 /// The camera drawing the frame: where it is, which way it looks and its up, in the start's
 /// terms; its vertical field of view in degrees and its width over its height.
 export type Lens = { at: number[]; looking: number[]; up: number[]; vfov: number; aspect: number };
-export type Frame = { frame: number; step: string | null; asked: Asked[]; contacts: Contact[]; fighters: Fighter[]; camera?: Lens; up?: number[] };
+export type Frame = { frame: number; step: string | null; asked: Asked[]; contacts: Contact[]; fighters: Fighter[]; sheathed?: { feet: number[]; radius?: number }[]; camera?: Lens; up?: number[] };
 export type Moves = { buffer_s: number; hit_stop: Map<string, number> };
 /// A check's verdict: whether it held, its line, and how many faults it found (frames, plants,
 /// blows or contacts over its bar; 1 for a check that is held or not as a whole), the number
@@ -251,11 +251,14 @@ export function slidOf(plants: Plant[], of = "plants"): Check {
   return { name: "feet sliding", ok: slid.length === 0, line, faults: slid.length };
 }
 
-/// Pushboxes overlapping: the two fighters' feet never closer than their radii, less OVERLAP_M.
+/// Pushboxes overlapping: the two bodies' feet never closer than their radii, less OVERLAP_M.
+/// The sheathed player too (the record's `sheathed`, the player's pushbox): it is no fighter
+/// once its sword is put away, and the check read only the fighters until 2026-10-28, so the
+/// sheathed walk into the partner went unseen.
 export function overlap(frames: Frame[]): Check {
   const over: { frame: number; by: number }[] = [];
   for (const frame of frames) {
-    const [a, b] = frame.fighters;
+    const [a, b] = [...frame.fighters, ...(frame.sheathed ?? [])];
     if (!a || !b) continue;
     const by = (a.radius ?? PLAYER_RADIUS_M) + (b.radius ?? PLAYER_RADIUS_M) - flat(a.feet, b.feet);
     if (by > OVERLAP_M) over.push({ frame: frame.frame, by });

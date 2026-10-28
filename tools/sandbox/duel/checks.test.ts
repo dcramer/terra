@@ -116,6 +116,12 @@ test("bodies closer than their pushboxes allow are found", () => {
   const said = overlap(pressed);
   assert.ok(!said.ok);
   assert.match(said.line, /10\.0 cm at frame 30/);
+  // The player sheathed is no fighter: its pushbox still counts.
+  const sheathed = fight();
+  const you = sheathed[30].fighters.shift()!;
+  sheathed[30].sheathed = [{ feet: you.feet }];
+  sheathed[30].fighters[0].feet = [-0.6, 0, 0];
+  assert.match(overlap(sheathed).line, /10\.0 cm at frame 30/);
 });
 
 test("a blow in reach in its active frames must land, unless rolled through", () => {

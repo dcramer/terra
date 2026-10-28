@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import type { Board } from "../../characters/clash.ts";
 import { Glb, type Q, posed, qmul } from "../../characters/glb.ts";
-import { ARMS_CM, OFF_CM, type Eight, type PoseFrame, type Posed, armsIn, headOff, intoModel, onForearm, poseChecks, shieldHigh } from "./pose.ts";
+import { ARMS_CM, OFF_CM, type Eight, type PoseFrame, type Posed, armsIn, armsInto, headOff, intoModel, onForearm, poseChecks, shieldHigh } from "./pose.ts";
 
 const body = new Glb(resolve(import.meta.dirname, "../../../assets/models/character/base.glb"));
 const atRest = posed(body, undefined, 0);
@@ -117,4 +117,19 @@ test("arms held out from the body are clear of it, a hand laid inside the chest 
   const inside = armsIn(pose);
   assert.ok(inside.cm > ARMS_CM, `${inside.cm}`);
   assert.match(inside.where, /^hand_r in spine/);
+});
+
+test("one body's hand is found in the other's chest wherever the other stands and faces, and clear of it 2 m off", () => {
+  const a = restPose();
+  const far = restPose(0, 180);
+  far.root = e([0, 0, 2], aboutUp(180));
+  assert.ok(armsInto(a, far).cm < 0, `${armsInto(a, far).cm}`);
+  // The other turned about and stood so its chest's middle is where the first's right hand is.
+  const hand = a.bones.hand_r.slice(0, 3);
+  const chest = a.bones.spine_03.slice(0, 3);
+  const turned = restPose();
+  turned.root = e([hand[0] + chest[0], hand[1] - chest[1], hand[2] + chest[2]], aboutUp(180));
+  const into = armsInto(a, turned);
+  assert.ok(into.cm > 0, `${into.cm}`);
+  assert.match(into.where, /^hand_r in spine/);
 });
