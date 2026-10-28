@@ -153,6 +153,30 @@ Status: Decided (D527): the developers on the desk (q-dungeon-themes), "Yes, all
 
 **The order** (D559): barrow halls first, then the hewn mine, "Start the mine" (the developers, desk q-barrow-next, 2026-10-28), from the crypt's kit, dressing and stamp. **Still the developers'**: the order after the mine (recommended: natural caverns, the developer's "cavernous"); whether the keep stays a theme of its own or becomes a dressing of the barrow halls; whether caverns are their own dungeons or also open into the realm's own caves (worlds.md asks whether caverns are a feature of every world).
 
+### The hewn mine's plan (D559; its rooms D539, Open with the crypt's)
+
+A mine makes sense when every place in it was cut for a job: ore was broken in the stopes, carted down the drifts, hauled up the shaft, and water pumped out, until something stopped the work. Skyrim's mines (Redbelly, Kolskeggr) read as a working place, timber sets, carts and ore veins under lamps; Elden Ring's tunnels as a mine overrun, its carts and smithing tables among the miners' bodies; Valheim's infested mines as tight drifts opening into a great hall. Real hard-rock mines of the 1800s give the parts: drifts on 2-2.5 m sets (two posts battered in, a cap, lagging boards over them), stopes cut up along the vein, a shaft with its ladderway and a winch (a windlass or a horse whim) at its collar, rails of 0.5-0.6 m gauge and hand-pushed tubs.
+
+| Role | Room type | Hero (one) | Wall props | Clutter | Vignette |
+|---|---|---|---|---|---|
+| Entrance | shaft station, where ore was hauled up | the winch over the shaft | crates, barrels, a hung lamp | buckets, rope | a tub at the rail's end, half tipped |
+| Passage | working stope along the vein | an ore tub on its rails | ore heaps, stacked timber, lamps | ore lumps, picks | - |
+| Branch | worked-out stope, left at a cave-in | the fall of rock (a collapse) | split timber, an overturned tub | ore, splinters | the last shift: a pick in the fall, a lamp, a lunch pail |
+| Guard | the spiders' stope | a miner wrapped in web | webs, egg sacs, broken sets | bones, a dropped lamp | a tub knocked over, its ore spilt |
+| Puzzle | pump room (holds the key) | the pump and its lever (the feature) | pump rods, barrels, a tool rack | buckets, tools | - |
+| Treasure, Secret | the powder and pay store | a strongbox | powder kegs, crates, ingots | ore, ingots | the stash: a chest behind crates |
+| Shortcut | the ladderway up a raise | a ladder in its cribbing | cribbing, rope | - | - |
+| Goal | the flooded working, the miner on a ledge | the trapped miner (the feature) | sunk timbering, a tub half under | - | - |
+| Rest | the miners' crib room | the fire (the feature) | a table and benches, barrels | bowls, mugs, tools | where one slept: a bedroll, a pack, a lamp |
+
+Stages, each rendered and judged before the next:
+1. **Drifts and timber sets**: a set (two posts, a cap, lagging boards over them) every 2 m down each straight drift (`Theme::timber`, `stamp/timber.rs`, `tools/props/mine.py`), in rock walls (`Minerock`, Poly Haven's worn rock); the drift 2.5 m clear between the posts.
+2. **The room set** above, its props CC0 or made in Blender: a tub, a winch, a ladder, crates, kegs, a lamp, pick and shovel, webs.
+3. **Rails** down the drifts from the station to the stopes, tubs on them.
+4. **Shafts** 2-3 levels deep in place of the stair, with a ladderway and the winch at the collar.
+5. **Shaped carves**: rough rock in place of flat walls in the stopes (D502 keeps it undiggable).
+6. **The flooded working**: water standing in the goal's gallery and the low drifts.
+
 ## Open questions (design, the developers')
 
 - Whether keys are items carried out, or objects of the dungeon.
