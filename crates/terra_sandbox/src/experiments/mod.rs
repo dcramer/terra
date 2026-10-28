@@ -35,6 +35,7 @@ const STANDS_FOR: &[(&str, &[&str])] = &[
     ("dungeon", dungeon::WITH),
     ("dungeon-mine", dungeon::WITH),
     ("dungeon-keep", dungeon::WITH),
+    ("workbench", workbench::WITH),
 ];
 
 /// The command line with what each experiment named in it stands for put in front.
@@ -109,7 +110,7 @@ pub const ALL: &[Experiment] = &[
     },
     Experiment {
         name: "workbench",
-        about: "Models on a plain floor in the game's light: --model <path> to load, --anim <clip> to play, --hold and --attach for what they carry, --sheet <prefix> to capture views and exit; --remote to drive it live.",
+        about: "Models on a plain floor in the game's light, on the yard at noon: --model <path> to load, --anim <clip> to play, --hold and --attach for what they carry, --sheet <prefix> to capture views and exit; --remote to drive it live.",
         add: workbench::lit,
     },
     Experiment {

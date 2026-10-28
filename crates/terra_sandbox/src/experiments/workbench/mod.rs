@@ -175,6 +175,12 @@ fn draw_contracts(mut gizmos: Gizmos, props: Query<(&Contract, &GlobalTransform)
     }
 }
 
+/// What the workbench stands for: the yard, the flat test level, at noon with nothing growing
+/// on it, so the world's light and sky are the game's and no forest stands behind a model (in
+/// the world, the start's lake shore and pines filled the view behind every axe, job 4e).
+/// A run's own options come after, so `--level world` or `--time` win.
+pub const WITH: &[&str] = &["--level", "yard"];
+
 /// The workbench in the world's light and air, as in play: its sky, the light the sky gives
 /// (what metal reflects: without it an iron head mirrored a black sky and read black, job 4c's
 /// axes) and the day. Apart from [`plugin`], whose tests run with no assets.
@@ -915,5 +921,17 @@ mod tests {
                 .count();
             assert_eq!(found, 1, "{layer} in {names:?}");
         }
+    }
+
+    /// The workbench stands on the yard, where nothing grows behind a model; a run's own
+    /// `--level world` still wins.
+    #[test]
+    fn the_workbench_stands_on_the_yard_unless_the_run_says_otherwise() {
+        let options = |args: &[&str]| {
+            let args = args.iter().map(|a| a.to_string()).collect();
+            Options::from_args(crate::experiments::expanded(args).into_iter()).unwrap()
+        };
+        assert!(options(&["--experiment", "workbench"]).yard());
+        assert!(!options(&["--experiment", "workbench", "--level", "world"]).yard());
     }
 }
