@@ -211,6 +211,8 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D536](decisions/D536.md) | A creature that wakes: a Wake shape key for its mouth, an emissive map for its eyes, lit by two staged calls | Tech | Agent | Decided | A creature whose face changes when it wakes… |
 | [D554](decisions/D554.md) | A shield pose authors the board's place against the chest; the arm is solved to it | Tech | Agent | Decided | Each shield pose (the guard, the strafes' arm, the… |
 | [D568](decisions/D568.md) | The backhand is a falling diagonal cut | Design | Developers | Decided | The sword-and-shield set's backhand… |
+| [D569](decisions/D569.md) | The block raises the shield over the face and the top of the head | Design | Developers | Decided | While the block is held (D531), the sword-and-shield… |
+| [D570](decisions/D570.md) | The sparring partner parries only when its parry is timed | Design | Developers | Decided | The sparring partner parries a blow only when its own… |
 
 ## People and the tribe
 
