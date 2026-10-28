@@ -1,0 +1,23 @@
+// Minetimber: the flooded mine's trim (data/dungeons/flooded_mine.ron, D559), the cribbing of
+// squared timbers stacked up each doorway's sides and across its head, a kind of its own so a
+// jamb is told from the rock it stands in. Hewn timber's beams (data/packs/hewn_timber.ron)
+// scribed tight with no daub between, as a mine's cribbing is laid dry, and the wood the
+// grey-brown of the drifts' sets and lagging (tools/props/mine.py): in Hewn, a cottage's white
+// daub between the courses read in the dark as bright slits of light leaking through a stack
+// of crates (round 7's mine judges, views 0, 2, 5 and 6). Made for the mine, so not in the
+// hammer.
+(
+    id: 13,
+    pattern: "coursed",
+    pack: "hewn_timber",
+    cost: (steps: 2, step: [("Wood", 1, 16)]),
+    weight: 2,
+    roof_kind: Some(2048),
+    dungeon_only: true,
+    timber: (
+        joint: 0.0,
+        tint: (0.62, 0.55, 0.47),
+        end_tint: (0.36, 0.32, 0.28),
+    ),
+    colours: (chinking: (0.14, 0.13, 0.12)),
+)

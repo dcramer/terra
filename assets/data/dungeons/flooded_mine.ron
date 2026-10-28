@@ -17,7 +17,8 @@
     // Its floors the same rock trodden dark (data/kits/minefloor.ron), not cob.
     floors: "Minefloor",
     ceilings: Some("Minerock"),
-    trim: "Hewn",
+    // Its doorways' cribbing (data/kits/minetimber.ron): hewn beams laid dry, no daub.
+    trim: "Minetimber",
     // Drifts under their timber sets at 3.5 m, stopes 5 m (D527).
     headroom: (3.5, 5.0),
     // A set every 2 m down each straight drift, its lagging roofing it at 2.9 m, under the
