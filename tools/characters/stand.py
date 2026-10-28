@@ -14,6 +14,12 @@ runner's arms (D360), driven by the body's own rest alone, nothing set per clip:
   - each leg laid back onto its foot by two-bone IK, as Unreal's Two Bone IK node and leg IK
     do (the knee in the plane of the hip, the ankle and the knee it had), each foot turned as it
     was, so a planted foot stays planted;
+  - first, the bend the lower back holds over the hips throughout (spine_01 in the pelvis's
+    frame, its mean turn from rest) taken out, its sway about that kept, the chest (spine_02)
+    swung back onto the line to where the neck stood and the neck turned as it was, so the trunk
+    leans as it did: Uthana's take 0 held it 12 degrees off rest, Kimodo's idle 0.5, and the
+    back's skin came through a hip quiver (gear_check.py, 15% of its watched skin on three
+    bodies, 2026-10-28);
   - the head's mean forward offset from the hips, against rest, taken out at the neck, the
     head turned back as it was, so the face looks where it looked.
 
@@ -123,11 +129,30 @@ def drawn_back(v, left, back, up=UP):
     return Quaternion(axis, -hi)
 
 
+def held_bend(rels, rest_rel):
+    """The lower back's bend the take holds throughout: the mean, over its frames, of each
+    frame's turn of spine_01 in the pelvis's frame (`rels`) away from rest (`rest_rel`), as a
+    left turn in the pelvis's frame. Quaternions are averaged by their normalised sum, each put
+    on the same side as the first, which holds for turns of a few tens of degrees."""
+    offsets = [r @ rest_rel.inverted() for r in rels]
+    first = offsets[0]
+    total = Quaternion((0.0, 0.0, 0.0, 0.0))
+    for q in offsets:
+        total = total + (q if q.dot(first) >= 0.0 else -q)
+    return total.normalized()
+
+
+def straightened(rel, held):
+    """A frame's spine_01 turn in the pelvis's frame with the bend the take holds throughout
+    taken out: its own sway about it kept."""
+    return held.inverted() @ rel
+
+
 def stand(arm, action, times, update, without_roll):
     """The stand pass on `action`, played on `arm`, at its key `times`; `update` refreshes the
     pose and `without_roll` takes a bone's roll out (the thighs never roll: clip_check.py).
     Returns what it did: the hips raised (cm, on average), the share of each knee's bend over
-    KNEE_MIN kept, and the head drawn back (cm)."""
+    KNEE_MIN kept, the head drawn back (cm) and the lower back's held bend taken out (deg)."""
     import bpy
 
     scene = bpy.context.scene
@@ -142,6 +167,36 @@ def stand(arm, action, times, update, without_roll):
     def head_ahead(p):
         return (p["Head"] - p["pelvis"]).dot(ahead_of(p["thigh_l"] - p["thigh_r"]))
 
+    def turn_to(name, q):
+        pb = pose[name]
+        pb.matrix = mw.inverted() @ Matrix.LocRotScale((mw @ pb.matrix).translation, q, None)
+        update()
+
+    # The lower back's held bend taken out first, so what follows stands on the straightened
+    # spine.
+    world = lambda name: (mw @ pose[name].matrix).to_quaternion()  # noqa: E731
+    rest_q = {n: (mw @ arm.data.bones[n].matrix_local).to_quaternion() for n in ("pelvis", "spine_01")}
+    rest_rel = rest_q["pelvis"].inverted() @ rest_q["spine_01"]
+    rels = []
+    for t in times:
+        at(t)
+        rels.append(world("pelvis").inverted() @ world("spine_01"))
+    held = held_bend(rels, rest_rel)
+    for t, rel in zip(times, rels):
+        at(t)
+        neck, neck_q = mw @ pose["neck_01"].head, world("neck_01")
+        turn_to("spine_01", world("pelvis") @ straightened(rel, held))
+        # The chest swung back onto the line to where the neck stood, so the trunk leans as it
+        # did (gait_check's lean), and the neck turned as it was.
+        base = mw @ pose["spine_02"].head
+        swing = (mw @ pose["neck_01"].head - base).rotation_difference(neck - base)
+        turn_to("spine_02", swing @ world("spine_02"))
+        turn_to("neck_01", neck_q)
+        for name in ("spine_01", "spine_02", "neck_01"):
+            pose[name].rotation_mode = "QUATERNION"
+            pose[name].keyframe_insert("rotation_quaternion", frame=t)
+    lumbar = math.degrees(held.angle)
+
     rest_ahead = head_ahead(rest)
     was = []
     for t in times:
@@ -153,11 +208,6 @@ def stand(arm, action, times, update, without_roll):
     back = max(0.0, sum(head_ahead(p) for p, _ in was) / len(was) - rest_ahead)
     frames = [{s: (p[f"thigh_{s}"], p[f"calf_{s}"], p[f"foot_{s}"]) for s in "lr"} for p, _ in was]
     c = softness(frames, legs, rise)
-
-    def turn_to(name, q):
-        pb = pose[name]
-        pb.matrix = mw.inverted() @ Matrix.LocRotScale((mw @ pb.matrix).translation, q, None)
-        update()
 
     lifts = []
     for t, (p, turns), frame in zip(times, was, frames):
@@ -193,4 +243,4 @@ def stand(arm, action, times, update, without_roll):
             turn_to("Head", face)
             neck.keyframe_insert("rotation_quaternion", frame=t)
             head.keyframe_insert("rotation_quaternion", frame=t)
-    return sum(lifts) / len(lifts) * 100.0, c, back * 100.0
+    return sum(lifts) / len(lifts) * 100.0, c, back * 100.0, lumbar

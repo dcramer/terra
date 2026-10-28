@@ -9,7 +9,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from mathutils import Vector  # noqa: E402
+from mathutils import Quaternion, Vector  # noqa: E402
 
 import stand  # noqa: E402
 
@@ -129,6 +129,24 @@ def test_softness_raises_the_hips_as_asked_with_smaller_steps():
     assert min(now) >= stand.KNEE_MIN - 1e-3
     # Asked for nothing, nothing changes; asked for more than straight knees give, they are straight.
     assert stand.softness(frames, legs, 0.0) == 1.0 and stand.softness(frames, legs, 0.5) == 0.0
+
+
+def test_held_bend_is_taken_out_and_the_sway_about_it_kept():
+    # A lower back held 12 degrees back over its rest, swaying 2 either way about the body's
+    # left line and 3 about up: straightened, the frames sway about rest by as much.
+    rest = Quaternion(Vector((0.0, 0.0, 1.0)), math.radians(5.0))
+    left = Vector((1.0, 0.0, 0.0))
+    sways = [Quaternion(left, math.radians(a)) @ Quaternion(Vector((0.0, 0.0, 1.0)), math.radians(b))
+             for a, b in ((2.0, 0.0), (-2.0, 0.0), (0.0, 3.0), (0.0, -3.0))]
+    hold = Quaternion(left, math.radians(-12.0))
+    rels = [hold @ s @ rest for s in sways]
+    held = stand.held_bend(rels, rest)
+    assert abs(math.degrees(held.angle) - 12.0) < 0.05, math.degrees(held.angle)
+    for s, r in zip(sways, rels):
+        off = stand.straightened(r, held) @ rest.inverted()
+        assert abs(math.degrees(off.rotation_difference(s).angle)) < 0.05
+    # A back already at rest is left as it is, whichever sign its quaternions carry.
+    assert stand.held_bend([rest, -rest], rest).angle < 1e-3
 
 
 TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

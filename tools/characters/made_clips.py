@@ -604,9 +604,9 @@ def main():
             if getattr(action, "slots", None) and len(action.slots):
                 ad.action_slot = action.slots[0]
             times = sorted({kp.co[0] for fc in curves(action) if fc.data_path == 'pose.bones["pelvis"].location' for kp in fc.keyframe_points})
-            rise, c, back = stand.stand(arm, action, times, bpy.context.view_layer.update, without_roll)
-            print(f"STAND {name}: hips raised {rise:.1f} cm (each knee's bend over {stand.KNEE_MIN:.0f} deg kept {c:.2f} of the take's), "
-                  f"head drawn back {back:.1f} cm at the neck")
+            rise, c, back, lumbar = stand.stand(arm, action, times, bpy.context.view_layer.update, without_roll)
+            print(f"STAND {name}: lower back's held bend of {lumbar:.1f} deg taken out, hips raised {rise:.1f} cm "
+                  f"(each knee's bend over {stand.KNEE_MIN:.0f} deg kept {c:.2f} of the take's), head drawn back {back:.1f} cm at the neck")
         bpy.data.objects.remove(src)
         ad.action = None
         if old is not None:
