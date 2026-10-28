@@ -252,6 +252,12 @@ const BOUGH_UNDERSIDE: f32 = 0.12;
 // How many of the loads' clumps a metre, on a crown's cards: about three metres across, a few pads
 // (at 0.55 the loads flecked the crown, the looks review's fault 4).
 const LOAD_CLUMPS: f32 = 0.35;
+// How far the crown's normal faces up, from which its boughs carry a load to where they carry
+// all of it (at 0.45 to 0.9 only the crests did).
+const BOUGH_UP: vec2<f32> = vec2<f32>(0.25, 0.85);
+// How far a load's top leans out with the crown's side, as a share of the crown's normal
+// across the sky's up.
+const LOAD_ROUND: f32 = 0.6;
 // How a green leaf still on through a snowy spell is shaded, darker and cooler: an evergreen's
 // needles read near black-green beside the white (Ghost of Yotei's, Red Dead 2's spruces).
 const NEEDLES_UNDER_SNOW: vec3<f32> = vec3<f32>(0.32, 0.4, 0.45);
@@ -281,8 +287,10 @@ const PLASTER_LOW_M: vec2<f32> = vec2<f32>(0.3, 2.5);
 // The height over a stem's foot, metres, over which the windward coat thins, and how much.
 const PLASTER_HIGH_M: vec2<f32> = vec2<f32>(1.5, 6.0);
 const PLASTER_HIGH: f32 = 0.85;
-// How much of the bark's colour the windward crust covers.
-const PLASTER_CRUST: f32 = 0.8;
+// How far the bark's furrows (its occlusion under the mean) hold the windward coat out beyond
+// its reach, and the bark's mean occlusion, about which they do.
+const PLASTER_FURROW: f32 = 0.6;
+const PLASTER_CAVITY_MEAN: f32 = 0.65;
 // How far a cap's lumps tilt its top from the sky's up.
 const CAP_LUMPS: f32 = 0.7;
 // How fast a limb's normal turns across it, per metre (one over its radius), from which it
@@ -418,7 +426,7 @@ fn bare(uv: vec2<f32>, ranked: bool, world: vec3<f32>) {
 // between its kind's early and late by where it stands, each leaf a little apart; snow lying
 // on what faces up, on needles and the tops of limbs while it is cold enough to stay there;
 // and wet bark darker and glossier.
-fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, instance: u32) -> f32 {
+fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, instance: u32, cavity: f32) -> f32 {
     if wind.climate.on == 0u {
         return 0.0;
     }
@@ -453,6 +461,8 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
     // broke into specks (weather round 18).
     let bough_up = dot((*input).world_normal, sky_up);
     var snow = 0.0;
+    // How far the snow turns the normal to `snow_up`.
+    var lean = 0.0;
     // Which way a load's top faces: the sky's, but for a cap's lumps.
     var snow_up = sky_up;
     if wind.bark < 0.5 {
@@ -489,16 +499,22 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // A low bough's held under a crown top's (LOW_LOAD): at a top's, and more on its
         // level sprays, a young spruce's lowest boughs lay white to their outlines on the snow
         // (winter round 2's judge).
-        let load = lying * max(0.3 + 0.7 * high, low * LOW_LOAD) * max(smoothstep(0.45, 0.9, bough_up) * below, level);
+        // From the crown's upper flank, not only its crest: a spruce's side boughs, level
+        // sprays on its upper side, are as loaded as its top (winter round 4's judges: "the
+        // canopy is mostly green with only sparse white flecks").
+        let load = lying * max(0.3 + 0.7 * high, low * LOW_LOAD) * max(smoothstep(BOUGH_UP.x, BOUGH_UP.y, bough_up) * below, level);
         // In clumps a couple of metres across, a bough's load: finer, the white flecked the
         // needles into a variegated leaf (weather round 8) or specks (round 18). A full load
         // fills a spray's top whatever the clumps say, a thin one only their gaps. Gated by
         // the load itself, so summer's cards stay green.
-        // Three octaves, each finer about half as much: one alone read as a load on every
-        // other pad. Its edge eased over a fifth of the load, the finest octave breaking it, so
-        // a load thins into the dark needles: cut at a twentieth it filled each spray to its
-        // outline, a flat white paper cut-out (winter round 2's judge).
-        let cover = clumps(world * LOAD_CLUMPS + 5.0) * 0.55 + clumps(world * LOAD_CLUMPS * 2.3 + 13.0) * 0.3 + clumps(world * LOAD_CLUMPS * 6.1 + 29.0) * 0.15;
+        // Two octaves, the finer about half as much: one alone read as a load on every
+        // other pad. Its edge eased over a fifth of the load, so a load thins into the dark
+        // needles: cut at a twentieth it filled each spray to its outline, a flat white paper
+        // cut-out (winter round 2's judge). A third octave, half a metre across, broke each
+        // load into blotches over the cards (winter round 4's "noisy white cut-out blotches"):
+        // as shipped snow on trees is masked, by what faces up and broad coverage, the load's
+        // shape is the bough's, not a noise's.
+        let cover = clumps(world * LOAD_CLUMPS + 5.0) * 0.65 + clumps(world * LOAD_CLUMPS * 2.3 + 13.0) * 0.35;
         snow = smoothstep(-LOAD_EDGE, LOAD_EDGE, load * 1.8 - 0.1 - 0.6 * cover) * smoothstep(0.0, 0.1, load);
         // And as a shelf along each spray's upper edge, where the card's picture has nothing
         // over it a few centimetres up: the load sits on the boughs, not scattered over their
@@ -533,6 +549,12 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // snowfall); by the bough's own facing and the spray's, whichever turns more up.
         let facing = smoothstep(0.2, 0.8, max(bough_up, face_up));
         colour = mix(colour, mix(SNOW, SNOW_TOP, facing), snow);
+        lean = snow;
+        // A load's top bulges up over the bough and rounds off down the crown's side, so it
+        // shades with the crown's form: turned straight to the sky, every load lit alike, flat
+        // white over the cards whichever side of the crown it lay on (winter round 4's judges:
+        // "white patches printed on flat leaf cards").
+        snow_up = normalize(sky_up + LOAD_ROUND * ((*input).world_normal - sky_up * dot((*input).world_normal, sky_up)));
     } else {
         // The deeper it lies, the more of each limb it covers, in clumps.
         // A log's or limb's upper face carries a cap with an edge, as snow has a thickness:
@@ -586,13 +608,18 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         let radial = across / max(length(across), 1e-4);
         let standing = 1.0 - abs(dot(shape, foot_up));
         let faces = normalize(mix(shape, radial, standing));
-        // One coat over the windward face, its edge ragged and its inside holed: in patches of
-        // their own, stretched up the stem, it read as smears (the looks review's fault 4), and
-        // as patches a hand across, a camouflage of white squares, value noise's lattice drawn
-        // along the trunk's axis. The noise is taken turned off the world's axes.
+        // One coat over the windward face. Its reach round the stem wanders broadly, up it over
+        // a metre or two and from stem to stem; noise a hand or two across cut it into blots of
+        // its own, which read as paint daubs and smears on the trunks (winter round 2's judges).
+        // The noise is taken turned off the world's axes, whose lattice drew white squares.
         let windward = dot(faces, into);
         let turned = mat3x3<f32>(0.64, 0.6, -0.48, -0.48, 0.8, 0.36, 0.6, 0.0, 0.8) * (world + seed);
-        let blot = wander(turned * 1.6) * 0.65 + wander(turned * 4.1 + 7.0) * 0.35;
+        let reach = wander(turned * 0.7) * 0.7 + wander(turned * 1.9 + 7.0) * 0.3;
+        // Its edge by the bark's own relief, as terrain layers and Unreal's and Frostbite's
+        // snow layers blend by a height map rather than a mask of their own: the snow held
+        // first in the furrows and between the plates (the bark's occlusion), so the coat
+        // thins out in white lines up the furrows and the plates' dark faces, as a
+        // wind-plastered trunk does, and solid in the middle, where it is thick.
         // A quarter of the girth, the face the wind meets squarely, and mostly low, where the
         // drift reaches: at half the girth every trunk stood half white, and coated to the
         // crown, the path's judges marked it down (5.85 to 5.11).
@@ -600,18 +627,23 @@ fn seasoned(input: ptr<function, PbrInput>, uv: vec2<f32>, world: vec3<f32>, ins
         // and none banks against it, its foot only rimmed where it leaves the snow. Coated
         // and banked as a trunk is, every shrub's lower stems looked dipped in white paint
         // (winter round 2's judge).
-        let plaster = smoothstep(0.62, 0.85, windward * 0.85 + 0.8 * (blot - 0.5) + 0.15 * low) * (1.0 - PLASTER_HIGH * smoothstep(PLASTER_HIGH_M.x, PLASTER_HIGH_M.y, stem_h)) * (1.0 - THIN_PLASTER * thin);
+        let held = windward * 0.85 + 0.15 * low + 0.5 * (reach - 0.5) + PLASTER_FURROW * (PLASTER_CAVITY_MEAN - cavity);
+        let plaster = smoothstep(0.6, 0.7, held) * (1.0 - PLASTER_HIGH * smoothstep(PLASTER_HIGH_M.x, PLASTER_HIGH_M.y, stem_h)) * (1.0 - THIN_PLASTER * thin);
         let bank_top = mix(0.4, 0.06, thin);
         let bank = 1.0 - smoothstep(bank_top * 0.375, bank_top, stem_h + bank_top * 0.75 * (wander(across * 5.0 + seed) - 0.5));
         let stuck = lying * max(plaster, bank);
-        // A crust, the bark's darkest furrows showing through it where it is thin.
-        colour = mix(colour, SNOW * (0.9 + 0.1 * blot), stuck * mix(1.0, PLASTER_CRUST, plaster * (1.0 - bank)));
+        colour = mix(colour, SNOW * (0.92 + 0.08 * reach), stuck);
+        // The coat faces as the stem does, round it, and hides the bark's relief: lit as snow
+        // lying, turned to the sky, it was as bright on the trunk's shaded side as on its lit
+        // one, a flat white decal (winter round 2's "flat white painted stripes").
+        (*input).N = normalize(mix((*input).N, faces, lying * plaster * (1.0 - bank)));
+        lean = max(snow, lying * bank * 0.5);
         // Lit half as snow lying is, so the coat reads white, not a grey stain on the bark.
         snow = max(snow, stuck * 0.5);
     }
     (*input).material.base_color = vec4<f32>(colour, (*input).material.base_color.a);
     // Lit as the snow lying is, by the sky over it, not as the leaf under it.
-    (*input).N = normalize(mix((*input).N, snow_up, snow));
+    (*input).N = normalize(mix((*input).N, snow_up, lean));
     return snow;
 }
 
@@ -1158,6 +1190,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         leaf_gloss(&pbr_input, surface.a);
     }
 }
+    // The bark's occlusion, its furrows and the gaps between its plates, before the sky's and
+    // the crowns' shading: where plastered snow holds (`seasoned`).
+    var cavity = 1.0;
 @if(VERTEX_COLORS) {
     // Alpha is how much of the sky this point sees.
     let sky = in.color.a;
@@ -1182,6 +1217,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         // 1 is bark with all its moss; up to 2, bark with less (D235).
         weather(&pbr_input, in.world_position.xyz, sky, clamp(2.0 - wind.bark, 0.0, 1.0), band, rise);
         bark_micro_shadow(&pbr_input, in.position);
+        cavity = pbr_input.diffuse_occlusion.r;
     }
     if wind.bark < 0.5 && (wind.leaf.x > 0.0 || wind.leaf.y > 0.0) {
         // Leaves greyed and darkened toward a forest's, as the pictures are brighter and
@@ -1216,7 +1252,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // round 16's judge: "a sickly olive/yellow-green tint ... reads as lit leaf, not snow").
     var snowed = 0.0;
 @if(VERTEX_UVS_A)
-    snowed = seasoned(&pbr_input, in.uv, in.world_position.xyz, in.instance_index);
+    snowed = seasoned(&pbr_input, in.uv, in.world_position.xyz, in.instance_index, cavity);
     // A load lies on the crown's outside, over the leaves that hide the sky: the crown's own
     // occlusion, which dims the needles under it, left it a stop under the fog (weather round
     // 18's judges: "grey-blue and about a stop darker than the fog").
