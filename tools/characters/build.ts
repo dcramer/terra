@@ -19,11 +19,12 @@
 // The step cache (~/.cache/terra/steps, or $TERRA_STEP_CACHE; --no-cache for none) is shared by
 // every worktree: each step's outputs by its stamp's key, so a fresh worktree restores the steps
 // another built from the same inputs rather than building them again. A step's outputs must be
-// a function of its key, the same bytes every run (--again checks one).
+// a function of its key, the same bytes every run (--again checks one). After each build it is
+// kept under $TERRA_STEP_CACHE_GB (5 GB by default) by dropping the steps used longest ago.
 
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, openSync, closeSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, closeSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { FAILED, itemVerdict, verdict } from "./build_verdict.ts";
@@ -199,7 +200,7 @@ export class Builder {
   private share(s: Step, key: string, outputs: Record<string, string>, seconds: number) {
     if (!this.shareable(s)) return;
     const entry = join(this.cache!, "keys", `${key}.json`);
-    if (existsSync(entry)) return;
+    if (existsSync(entry)) return used(entry);
     try {
       for (const [p, h] of Object.entries(outputs)) this.keep(join(this.root, p), h);
       const log = existsSync(this.logOf(s)) ? this.keep(this.logOf(s)) : undefined;
@@ -216,11 +217,13 @@ export class Builder {
     if (!this.shareable(s)) return undefined;
     const now = this.readsNow(s);
     let entry: { outputs: Record<string, string>; log?: string; seconds: number };
+    const at = join(this.cache!, "keys", `${now.key}.json`);
     try {
-      entry = JSON.parse(readFileSync(join(this.cache!, "keys", `${now.key}.json`), "utf8"));
+      entry = JSON.parse(readFileSync(at, "utf8"));
     } catch {
       return undefined;
     }
+    used(at);
     const files = Object.entries(entry.outputs).map(([p, h]) => [p, h, join(this.cache!, "objects", h.slice(0, 2), h)] as const);
     const read = new Map<string, Buffer>();
     for (const [p, h, obj] of files) {
@@ -373,6 +376,78 @@ export class Builder {
 
 const clock = (s: number) => (s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`);
 
+const gb = (n: number) => `${(n / 2 ** 30).toFixed(1)} GB`;
+
+/** A cache entry's last use is its file's time: restored, kept, or found already kept by a skipped step. */
+function used(entry: string) {
+  try {
+    const t = new Date();
+    utimesSync(entry, t, t);
+  } catch {
+    // Dropped meanwhile by another build's eviction: it is kept again next time it is built.
+  }
+}
+
+/** The step cache's cap in bytes: $TERRA_STEP_CACHE_GB, 5 GB by default (a full build keeps about 1.2 GB). */
+export const cacheCap = (env = process.env) => Number(env.TERRA_STEP_CACHE_GB ?? 5) * 2 ** 30;
+
+/** Keeps the step cache under `max` bytes, as ccache and sccache keep theirs: the entries used
+ * most lately kept while their files fit, every one used longer ago dropped, then each object no
+ * entry left names. An object or a part-written file younger than `grace` is left, as another
+ * build may be keeping a step's files before it writes their entry. */
+export function evict(cache: string, max: number, grace = 3600_000, now = Date.now()) {
+  const entries: { file: string; at: number; refs: string[] }[] = [];
+  const keys = join(cache, "keys");
+  for (const name of existsSync(keys) ? readdirSync(keys) : []) {
+    const file = join(keys, name);
+    try {
+      if (!name.endsWith(".json")) {
+        if (now - statSync(file).mtimeMs > grace) rmSync(file, { force: true });
+        continue;
+      }
+      const e = JSON.parse(readFileSync(file, "utf8"));
+      entries.push({ file, at: statSync(file).mtimeMs, refs: [...Object.values(e.outputs as Record<string, string>), ...(e.log ? [e.log] : [])].filter((h) => h !== "missing") });
+    } catch {
+      rmSync(file, { force: true }); // unreadable, or gone meanwhile
+    }
+  }
+  const objects = new Map<string, { path: string; size: number; at: number }>();
+  const dir = join(cache, "objects");
+  for (const e of existsSync(dir) ? readdirSync(dir, { recursive: true, withFileTypes: true }) : [])
+    if (e.isFile()) {
+      const path = join(e.parentPath, e.name);
+      try {
+        const st = statSync(path);
+        objects.set(e.name, { path, size: st.size, at: st.mtimeMs });
+      } catch {
+        // Gone meanwhile.
+      }
+    }
+  entries.sort((a, b) => b.at - a.at);
+  const kept = new Set<string>();
+  let bytes = 0;
+  let dropped = 0;
+  let full = false;
+  for (const e of entries) {
+    const more = [...new Set(e.refs)].filter((h) => !kept.has(h)).reduce((n, h) => n + (objects.get(h)?.size ?? 0), 0);
+    if (full || bytes + more > max) {
+      full = true;
+      rmSync(e.file, { force: true });
+      dropped++;
+      continue;
+    }
+    bytes += more;
+    for (const h of e.refs) kept.add(h);
+  }
+  let freed = 0;
+  for (const [h, o] of objects)
+    if (!kept.has(h) && now - o.at > grace) {
+      rmSync(o.path, { force: true });
+      freed += o.size;
+    }
+  return { dropped, kept: entries.length - dropped, bytes, freed };
+}
+
 /** The checks its output says failed, the first named: a result, kept, not a reason to run it again. */
 function checks(log: string): string {
   const bad = log.split("\n").filter((l) => FAILED.some((re) => re.test(l)));
@@ -398,6 +473,12 @@ async function main() {
   const out = join(ROOT, "tools/characters/out");
   const cache = args.includes("--no-cache") ? undefined : (process.env.TERRA_STEP_CACHE ?? join(homedir(), ".cache", "terra", "steps"));
   const b = new Builder(steps, ROOT, out, { blender: "tools/blender/run.sh", here: "tools/characters", out: "tools/characters/out" }, undefined, cache);
+  // The cache kept under its cap once this build is done, what it used counted as used now.
+  if (cache && !plan)
+    process.on("exit", () => {
+      const e = evict(cache, cacheCap());
+      if (e.dropped || e.freed) console.log(`step cache: ${e.dropped} steps unused longest dropped, ${gb(e.freed)} freed; ${e.kept} kept in ${gb(e.bytes)} of ${gb(cacheCap())} ($TERRA_STEP_CACHE_GB)`);
+    });
   const base = bodies.base.name;
   const again = flag("--again");
   if (again) {

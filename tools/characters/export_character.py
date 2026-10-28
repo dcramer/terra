@@ -25,7 +25,6 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 import aim
-import hold
 import look
 import patches
 import lift
@@ -219,6 +218,10 @@ twist.bake(arm, actions)
 # fight's roll with the shield arm as the guard holds it. After aim and twist, so the part is
 # exactly the held clip's on this body.
 if LISTED:
+    # Imported here, as only a set's list reads it: a step exporting without one does not depend
+    # on it, so the build reruns only the fight's step when it changes (build_steps.ts closure).
+    import hold
+
     with open(LISTED) as f:
         hold.bake(arm, actions, json.load(f))
 # The hips lifted by this body's size wherever it would go deeper into the floor than the

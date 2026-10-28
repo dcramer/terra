@@ -4,11 +4,11 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Builder } from "./build.ts";
+import { Builder, evict } from "./build.ts";
 import { bodiesData, buildSteps, closure, gearData, morphNames, type Step } from "./build_steps.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -137,6 +137,12 @@ test("the character build's steps: every need a step, every input there, each lo
   // Her skin is painted on a copy of her body, changing nothing another step reads: no step waits for it.
   const skin = steps.find((s) => s.name === "skin:female")!;
   assert.ok(!skin.inPlace?.length && !steps.some((s) => s.needs.includes(skin.name) || s.after?.includes(skin.name)));
+  // The fight's clips are built from its list, its takes and its holds' shield targets.
+  const fight = steps.find((s) => s.outputs.includes("assets/models/character/fight.glb"))!;
+  assert.ok(["art/animation/sets/fight.json", "art/animation/sets/fight", "tools/characters/hold.py", "art/animation/shield_targets.json"].every((p) => closure(fight.inputs).includes(p)));
+  // Only a set's list is held (export_character.py --list): a change to the holds reaches the fight's step alone.
+  const holds = steps.filter((s) => closure(s.inputs).includes("tools/characters/hold.py")).map((s) => s.name);
+  assert.deepEqual(holds, [fight.name]);
   // Every Blender step reads the mannequin (look.FIGURE), so the step cache keys hold it.
   assert.ok(steps.filter((s) => s.name.startsWith("fit:")).every((s) => closure(s.inputs).includes("assets/models/character/mannequin.glb")));
 });
@@ -153,6 +159,41 @@ test("a fresh worktree restores from the step cache what another built from the 
   assert.equal(readFileSync(join(two.root, "out", "second.txt"), "utf8"), "a\na\n");
   assert.equal(fresh.b.joinedLog(two.steps.map((s) => s.name)), "== 0. the clips\nFIRST\n== 1. the base\n", "its log restored with it");
   assert.deepEqual((await two.run()).states, { first: "skipped", second: "skipped", apart: "skipped" });
+});
+
+test("the step cache is kept under its cap by dropping the steps used longest ago, and the files only they named", async () => {
+  const cache = mkdtempSync(join(tmpdir(), "terra-steps-"));
+  // Three builds of different inputs, one after another; the oldest then used again by a skip.
+  const runs = [];
+  for (const src of ["ab\n", "cd\n", "ef\n"]) {
+    const s = scratch(cache);
+    writeFileSync(join(s.root, "src.txt"), src);
+    await s.run();
+    runs.push(s);
+  }
+  const keys = () => readdirSync(join(cache, "keys")).length;
+  const objects = () => readdirSync(join(cache, "objects"), { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).length;
+  // first and second a build each (apart's the same every time), each output and log an object.
+  assert.equal(keys(), 3 * 2 + 1);
+  const all = objects();
+  const old = new Date(Date.now() - 10_000);
+  for (const f of readdirSync(join(cache, "keys"))) utimesSync(join(cache, "keys", f), old, old);
+  await runs[0].run(); // skipped: its entries used now
+  // A cap with room for one build's files (14 bytes: a, a a, x and the logs FIRST and empty)
+  // and no more: the first build's kept, the later two's dropped with their files.
+  const e = evict(cache, 15, 0);
+  assert.equal(e.kept, 3, "first, second and apart of the build used last");
+  assert.equal(e.dropped, 4);
+  assert.equal(e.bytes, 14);
+  assert.equal(objects(), all - 4, "c, c c, e, e e gone");
+  assert.deepEqual((await runs[0].run()).states, { first: "skipped", second: "skipped", apart: "skipped" });
+  const fresh = scratch(cache);
+  assert.deepEqual((await fresh.run()).states, { first: "restored", second: "restored", apart: "restored" }, "what it kept restores whole");
+  const later = scratch(cache);
+  writeFileSync(join(later.root, "src.txt"), "ef\n");
+  assert.equal((await later.run()).states.first, "built", "a dropped step is built again");
+  // Nothing over the cap: nothing dropped.
+  assert.equal(evict(cache, 2 ** 30, 0).dropped, 0);
 });
 
 test("a step that changes a file in place is never shared: what it reads is what it changes", async () => {
@@ -177,8 +218,10 @@ test("--again: a step run twice on the same inputs makes the same bytes, or says
 
 test("a script's inputs follow its imports to the data they read", () => {
   const read = closure(["tools/characters/export_character.py"]);
-  for (const p of ["tools/characters/look.py", "tools/characters/hold.py", "art/animation/shield_targets.json", "assets/models/character/skinning.json", "tools/blender/run.sh"])
+  for (const p of ["tools/characters/look.py", "tools/characters/twist.py", "assets/models/character/skinning.json", "tools/blender/run.sh"])
     assert.ok(read.includes(p), `export_character.py's inputs miss ${p}`);
+  assert.ok(closure(["tools/characters/hold.py"]).includes("art/animation/shield_targets.json"));
   assert.ok(closure(["tools/characters/markers.ts"]).includes("tools/characters/glb.ts"));
   assert.ok(!read.some((p) => p.includes("gear_check")), "a module it does not import");
+  assert.ok(!read.includes("tools/characters/hold.py"), "imported only under --list, inside a block");
 });

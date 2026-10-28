@@ -207,6 +207,24 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
       "node $here/markers.ts assets/models/character/base.glb   # each clip's foot-down markers (D455)",
     ].join("\n"),
   });
+  // The fight's clips (art/animation/sets/fight.json, D454), which every body plays: its takes
+  // made onto a copy of the mannequin beside the game's clips, the base exported with them, each
+  // held as its entry says (hold.py, the shield on its targets), then the mirrored clips and the
+  // foot markers baked, as clip.ts --into does.
+  const fight = "art/animation/sets/fight";
+  steps.push({
+    name: "fight",
+    section: 5,
+    needs: ["clips", "base"],
+    inputs: [...py("made_clips.py", "export_character.py", "hold.py", "mirror.ts", "markers.ts"), `${fight}.json`, fight],
+    outputs: [`${OUT}/fight-mannequin.glb`, "assets/models/character/fight.glb"],
+    run: [
+      blender("made_clips.py", `"$out/fight-mannequin.glb" --list=${fight}.json`, "^MADE [0-9]|Error"),
+      blender("export_character.py", `"$out/${base}.glb" assets/models/character/fight.glb "--clips=$out/fight-mannequin.glb" --list=${fight}.json --textures=2048`, "^(SHIELD|HOLD|EXPORTED)|Error"),
+      "node $here/mirror.ts assets/models/character/fight.glb    # the mirrored clips (art/animation/mirrors.json)",
+      "node $here/markers.ts assets/models/character/fight.glb   # each clip's foot-down markers (D455)",
+    ].join("\n"),
+  });
   for (const item of looks)
     steps.push({
       name: `look:${item}`,
@@ -224,7 +242,9 @@ export function builtLine(b: Bodies, items: Map<string, GearData>): string {
   return `BUILT base.glb with morphs ${morphNames(b).join(",")}, ${garmentOrder(items).length + rigidPieces(items).length} looks`;
 }
 
-/** Local modules a script imports (Python's import and from, TypeScript's relative from), and their data, followed through. */
+/** Local modules a script imports (Python's import and from, TypeScript's relative from), and their data, followed through.
+ * A Python import inside a block is not followed: the script reads it only on that path
+ * (export_character.py's hold.py, under --list), and a step whose command takes it names it. */
 export function closure(paths: string[], root = ROOT): string[] {
   const seen = new Set<string>();
   const visit = (p: string) => {
@@ -235,7 +255,7 @@ export function closure(paths: string[], root = ROOT): string[] {
     const dir = p.slice(0, p.lastIndexOf("/"));
     const text = readFileSync(join(root, p), "utf8");
     const found = p.endsWith(".py")
-      ? [...text.matchAll(/^\s*(?:from\s+(\w+)\s+import|import\s+([\w, ]+))/gm)].flatMap((m) => (m[1] ?? m[2]).split(",").map((s) => `${dir}/${s.trim().split(/\s+/)[0]}.py`))
+      ? [...text.matchAll(/^(?:from\s+(\w+)\s+import|import\s+([\w, ]+))/gm)].flatMap((m) => (m[1] ?? m[2]).split(",").map((s) => `${dir}/${s.trim().split(/\s+/)[0]}.py`))
       : [...text.matchAll(/from\s+"\.\/([\w.]+\.ts)"/g)].map((m) => `${dir}/${m[1]}`);
     for (const f of found) if (existsSync(join(root, f))) visit(f);
   };
