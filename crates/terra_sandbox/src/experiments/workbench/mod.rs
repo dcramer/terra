@@ -367,19 +367,7 @@ fn spawn(
         let Some(gltf) = gltfs.get(file) else {
             continue;
         };
-        let mut names: Vec<&str> = gltf.named_animations.keys().map(AsRef::as_ref).collect();
-        names.sort();
-        info!("workbench: {path}: {} clips: {:?}", names.len(), names);
-        // A body on the figure's skeleton plays the figure's clips too, as in the game, so a
-        // fight pose can be seen on a template's shapes (base.glb has them, fight.glb not).
-        let mut files = vec![gltf];
-        if let Some(more) = gltfs.get(&bench.figure_clips)
-            && file.id() != bench.figure_clips.id()
-            && layer::shares_skeleton(gltf, more, &gltf_nodes)
-        {
-            info!("workbench: {path}: plays {}'s clips too", figure::CLIPS);
-            files.push(more);
-        }
+        let files = clip_files((gltf, file), &bench.figure_clips, &gltfs, &gltf_nodes, path);
         let (graph, placed, nodes) = placed_clips(&files, &gltf_nodes, &clips, &bench.clips, path);
         let graph = graphs.add(graph);
         let Some(scene) = gltf.default_scene.clone() else {
@@ -473,9 +461,7 @@ fn spawn(
                     }
                     model.player = Some(entity);
                     model.loaded = true;
-                    if bench.posed.is_none() {
-                        bench.posed = first.map(|clip| (clip, None));
-                    }
+                    bench.posed = bench.posed.take().or(first.map(|clip| (clip, None)));
                 },
             )
             .id();
@@ -652,6 +638,30 @@ fn view(
         }
         None => whole_view(bench, degrees),
     }
+}
+
+/// The files a model's clips come from, its clips named in the log: its own, then the
+/// figure's (`figure::CLIPS`) if it is on the figure's skeleton, as in the game, so a fight
+/// pose shows on a template's shapes (base.glb has them, fight.glb no clips of the fight).
+fn clip_files<'a>(
+    (gltf, file): (&'a Gltf, &Handle<Gltf>),
+    figure_clips: &Handle<Gltf>,
+    gltfs: &'a Assets<Gltf>,
+    gltf_nodes: &Assets<bevy::gltf::GltfNode>,
+    path: &str,
+) -> Vec<&'a Gltf> {
+    let mut names: Vec<&str> = gltf.named_animations.keys().map(AsRef::as_ref).collect();
+    names.sort();
+    info!("workbench: {path}: {} clips: {:?}", names.len(), names);
+    let mut files = vec![gltf];
+    if let Some(more) = gltfs.get(figure_clips)
+        && file.id() != figure_clips.id()
+        && layer::shares_skeleton(gltf, more, gltf_nodes)
+    {
+        info!("workbench: {path}: plays {}'s clips too", figure::CLIPS);
+        files.push(more);
+    }
+    files
 }
 
 /// A model's graph of the clips of `files` (`layer::graph_of`, its own file first), every clip

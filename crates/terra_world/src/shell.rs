@@ -96,10 +96,8 @@ usage: terra_sandbox [options]
                         drawn as placed in play and stood beside the models, its size
                         printed; repeatable, or all for every item
   --anim <clip>         in the workbench: a clip to play; repeatable
-  --hold <item>[@<socket>]
-                        in the workbench: an item's held look in the right hand, or in
-                        the hand socket given, named as in --give, such as stone_axe or
-                        heater_shield@socket.hand.L (repeatable)
+  --hold <item>[@<socket>] in the workbench: an item's held look in the right hand or the
+                        socket given, such as stone_axe or heater_shield@socket.hand.L
   --wear <item>         in the workbench: an item's look, on every model, named as in
                         --give, such as leather_coat (repeatable)
   --template <name>[@<height>]
@@ -389,7 +387,6 @@ pub struct Options {
     /// In the workbench: items of the builder's catalogue to stand beside the models, by
     /// name, or `all`.
     pub props: Vec<String>,
-    /// Each `<item>[@<hand socket>]`, in the right hand if no socket is given.
     pub holds: Vec<String>,
     pub attaches: Vec<String>,
     pub wears: Vec<String>,
