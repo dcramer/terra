@@ -124,6 +124,8 @@ A smoke set (`"six_way": true`, `campfire-smoke` and `house-smoke`) is one puff,
 
 `smoke.ts` packs them as the smoke maps above, each the light over alpha (straight, for straight blending), times a `light_scale` in the sidecar. Its unit is a white Lambert surface facing the light; thin smoke lit from one side is about a quarter. Its line says the mean response from each side; `maps.png` shows the six maps, alpha and glow of four frames. Smoke has no motion vectors: its frames crossfade.
 
+A billow (`"billow"`, `blaze-smoke`) is baked without a sim by `billow.ts`, in two minutes on the worker. It voxelises lumps of pyroclastic noise (Wrenninge's *Production Volume Rendering*, 2011), each a sphere whose surface turbulence pushes out, so the lumps crease between their bumps. It lights them as bake.py does, from six axis suns through the smoke toward each, and writes bake.py's raw passes. In round 7, Mantaflow at 128 cells gave a fuzzy, evenly lit ball whose late frames filled its box. A recipe's `fit` moves and scales each frame so its puff sits in the frame's middle at a set share of it (`smoke.ts`'s `fitFrame`), and `columns` sets a sheet other than 8 across, such as a 4x4 sheet of 256 texels.
+
 `pack.ts` then:
 - scales heat so the set's 99th percentile is 0.97;
 - crossfades a loop's last frames into its first, premultiplied;

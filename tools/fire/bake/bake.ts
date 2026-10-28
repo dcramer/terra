@@ -4,6 +4,8 @@
 // (bake.py, headless through tools/blender), then packed into the flipbook format (pack.ts)
 // and written to assets/textures/fire/<set>.png, <set>.motion.png and <set>.json, with a
 // contact sheet of its raw passes measured against its class's photographs (sheet.ts).
+// A smoke set with `billow` (blaze-smoke) is not simulated either: billow.ts voxelises lumps of
+// pyroclastic noise and lights them as bake.py would, in a minute or two.
 // A set of kind "volume" (D493) is not simulated here: volume.py reads its sim's cache (the
 // recipe's `volume.cache`) and volume.ts packs the box of cells it names into a looping 3D
 // volume, <set>.dds and <set>.json, and checks the loop's seam.
@@ -19,6 +21,7 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { type BillowRecipe, bakeBillow } from "./billow.ts";
 import { pack } from "./pack.ts";
 import { sheet } from "./sheet.ts";
 import { packSmoke } from "./smoke.ts";
@@ -37,6 +40,13 @@ export type Recipe = {
   kind: "loop" | "oneshot" | "volume";
   /// Lit six ways, not glowing: smoke (smoke.ts).
   six_way?: boolean;
+  /// Frames across the sheet (8 by default); a smoke set's sheet is square.
+  columns?: number;
+  /// A smoke set whose every frame is moved and scaled so its puff sits in the middle with so
+  /// much of the frame for its radius, resampled to `frame` texels (smoke.ts's `fitFrame`).
+  fit?: { frame: number; radius: number };
+  /// A smoke set baked without a sim, as billow.ts makes one (its domain and sources unread).
+  billow?: BillowRecipe;
   /// Sim frames a rendered frame.
   step?: number;
   size: number;
@@ -108,7 +118,11 @@ function main() {
         if (!packed.seam.pass) failed = true;
         continue;
       }
-      if (!flags.has("--pack") || !existsSync(join(out, "raw.bin"))) bake(r, out);
+      if (!flags.has("--pack") || !existsSync(join(out, "raw.bin"))) {
+        const billow = r.billow;
+        if (billow) bakeBillow({ ...r, billow }, out);
+        else bake(r, out);
+      }
       const meta = JSON.parse(readFileSync(join(out, "meta.json"), "utf8"));
       const dest = flags.has("--draft") ? out : ASSETS;
       const packed = r.six_way ? packSmoke(r, out, dest) : pack(r, out, dest);

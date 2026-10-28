@@ -8,6 +8,10 @@
 //   (the smoke's mean temperature, for the hot core's own light);
 // - <set>.json: the sidecar, frames, grid, light_scale and channels.
 //
+// A recipe with `fit` (blaze-smoke) has each frame moved and scaled so its puff sits in the
+// frame's middle at a fixed share of it (`fitFrame`), so the frame's texels all go to the puff
+// and the card that draws it need not know where the bake left it.
+//
 // alpha is the glow pass's G, 1 - e^-tau exactly. Each map is the light over alpha, so straight
 // (not premultiplied) blending gives the response back; its texel is that times `light_scale`,
 // which puts the set's 99th percentile at 0.97. In bake.py's units a white Lambert surface facing
@@ -19,7 +23,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { writePng } from "../../sandbox/png.ts";
 import type { Recipe } from "./bake.ts";
-import { COLUMNS, halves, type Packed } from "./pack.ts";
+import { COLUMNS as EIGHT, halves, type Packed } from "./pack.ts";
 
 /// The six maps (right, top, back, left, bottom, front), alpha and glow of one frame.
 export type SmokeFrame = { maps: Float32Array[]; alpha: Float32Array; glow: Float32Array };
@@ -48,15 +52,80 @@ export function smokeFrame(light0: Float32Array, light1: Float32Array, glow: Flo
   return { maps, alpha, glow: heat };
 }
 
+/// Where a frame's puff is and how big: its alpha's centroid, in texels from the frame's top
+/// left corner, and the radius about it holding `share` of its alpha.
+export function puffOf(alpha: Float32Array, n: number, share = 0.9): { x: number; y: number; radius: number } {
+  let [sw, sx, sy] = [0, 0, 0];
+  for (let p = 0; p < n * n; p++) {
+    const a = alpha[p];
+    sw += a;
+    sx += a * ((p % n) + 0.5);
+    sy += a * (Math.floor(p / n) + 0.5);
+  }
+  if (sw <= 1e-6) return { x: n / 2, y: n / 2, radius: n / 4 };
+  const [x, y] = [sx / sw, sy / sw];
+  // A histogram of the alpha by distance, in half-texel rings.
+  const rings = new Float64Array(n * 2 + 2);
+  for (let p = 0; p < n * n; p++) {
+    const d = Math.hypot((p % n) + 0.5 - x, Math.floor(p / n) + 0.5 - y);
+    rings[Math.min(rings.length - 1, Math.floor(d * 2))] += alpha[p];
+  }
+  let held = 0;
+  for (let k = 0; k < rings.length; k++) {
+    held += rings[k];
+    if (held >= share * sw) return { x, y, radius: (k + 1) / 2 };
+  }
+  return { x, y, radius: n / 2 };
+}
+
+/// One frame moved and scaled so its puff (`puffOf`) sits in the middle of a frame of `m`
+/// texels with `radius` of the frame for its radius, as a blaze's card draws it (fire_smoke.wesl's
+/// `blaze_maps`): resampled premultiplied, 3x3 bilinear taps a texel, nothing outside the frame.
+export function fitFrame(fr: SmokeFrame, n: number, m: number, radius: number): SmokeFrame {
+  const puff = puffOf(fr.alpha, n);
+  const s = puff.radius / (radius * m);
+  const pre = [...fr.maps.map((map) => map.map((v, p) => v * fr.alpha[p])), fr.alpha, fr.glow.map((v, p) => v * fr.alpha[p])];
+  const tap = (img: Float32Array, x: number, y: number) => {
+    const [fx, fy] = [x - 0.5, y - 0.5];
+    const [x0, y0] = [Math.floor(fx), Math.floor(fy)];
+    const [tx, ty] = [fx - x0, fy - y0];
+    const at = (i: number, j: number) => (i < 0 || j < 0 || i >= n || j >= n ? 0 : img[j * n + i]);
+    return (at(x0, y0) * (1 - tx) + at(x0 + 1, y0) * tx) * (1 - ty) + (at(x0, y0 + 1) * (1 - tx) + at(x0 + 1, y0 + 1) * tx) * ty;
+  };
+  const out = pre.map(() => new Float32Array(m * m));
+  for (let j = 0; j < m; j++) {
+    for (let i = 0; i < m; i++) {
+      for (let c = 0; c < out.length; c++) {
+        let v = 0;
+        for (let sj = 0; sj < 3; sj++) {
+          for (let si = 0; si < 3; si++) {
+            const x = puff.x + (i + (si + 0.5) / 3 - m / 2) * s;
+            const y = puff.y + (j + (sj + 0.5) / 3 - m / 2) * s;
+            v += tap(pre[c], x, y);
+          }
+        }
+        out[c][j * m + i] = v / 9;
+      }
+    }
+  }
+  const alpha = out[6];
+  const k = (p: number) => 1 / Math.max(alpha[p], 0.02);
+  return { maps: out.slice(0, 6).map((map) => map.map((v, p) => v * k(p))), alpha, glow: out[7].map((v, p) => v * k(p)) };
+}
+
 export function packSmoke(r: Recipe, raw: string, outDir: string): Packed {
   const meta = JSON.parse(readFileSync(join(raw, "meta.json"), "utf8"));
-  const n: number = meta.size;
-  const N = n * n;
+  const baked: number = meta.size;
   const data = halves(readFileSync(join(raw, "raw.bin")));
-  const per = N * 3;
+  const per = baked * baked * 3;
   const pass = (f: number, which: number) => data.subarray((f * 3 + which) * per, (f * 3 + which + 1) * per);
-  const frames: SmokeFrame[] = [];
-  for (let f = 0; f < meta.frames; f++) frames.push(smokeFrame(pass(f, 0), pass(f, 1), pass(f, 2), N));
+  let frames: SmokeFrame[] = [];
+  for (let f = 0; f < meta.frames; f++) frames.push(smokeFrame(pass(f, 0), pass(f, 1), pass(f, 2), baked * baked));
+  const fit = r.fit;
+  if (fit) frames = frames.map((fr) => fitFrame(fr, baked, fit.frame, fit.radius));
+  const n = fit ? fit.frame : baked;
+  const N = n * n;
+  const COLUMNS = r.columns ?? EIGHT;
 
   // The scales, from the texels the smoke really covers.
   const peaks: number[] = [];
