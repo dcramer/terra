@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 import { type Clip, Glb, posed, qinv, qmul, rot, sub, type Q } from "./glb.ts";
+import { shaped, skinOf } from "./skin.ts";
 import { median, stance } from "./stance.ts";
 
 const body = new Glb(join(import.meta.dirname, "..", "..", "assets", "models", "character", "base.glb"));
@@ -63,6 +64,27 @@ test("a shin bent back at the knee bends the knee by as much", () => {
   // is their middle.
   assert.ok(Math.abs(s.kneeMost - (s.kneeRest + 20)) < 0.5, `most ${s.kneeMost}, rest ${s.kneeRest}`);
   assert.ok(Math.abs(s.knee - (s.kneeRest + 10)) < 0.5);
+});
+
+test("each template is measured against its own rest, its hips lowered 2 cm reading 2 cm low", () => {
+  // A template's morph moves its joints (the female's hips stand lower than the base's): against
+  // the base's rest its hips would read off by that, not by what the clip does.
+  const templates = join(import.meta.dirname, "..", "..", "assets", "models", "character", "templates.json");
+  const shapes = skinOf(body, templates).shapes;
+  assert.ok(shapes.length >= 2);
+  const root = body.named("root");
+  const scale = rest[body.parentOf[root]].s[1];
+  const lowered = { name: "low", end: 1, tracks: new Map([["root", { t: () => sub(body.rest(root).t, [0, 0.02 / scale, 0]) }]]) } as Clip;
+  const base = stance(body, lowered);
+  let apart = 0;
+  for (const shape of shapes) {
+    const s = stance(body, lowered, (c, t) => shaped(body, shape, c, t));
+    assert.ok(Math.abs(s.pelvis[0] + 2) < 1e-6 && Math.abs(s.pelvis[1] + 2) < 1e-6, `${shape.name} hips ${s.pelvis}`);
+    assert.ok(Math.abs(s.head) < 1e-6 && Math.abs(s.knee - s.kneeRest) < 1e-6, shape.name);
+    apart = Math.max(apart, Math.abs(s.kneeRest - base.kneeRest));
+  }
+  // Measured on the template, not the base: some template's knees stand bent apart from the base's.
+  assert.ok(apart > 0.5, `templates' rest knees within ${apart} deg of the base's`);
 });
 
 test("the median is the middle value, or the mean of the middle two", () => {

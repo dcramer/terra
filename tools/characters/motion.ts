@@ -49,7 +49,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { balance, character, download, looped, motion } from "../uthana/uthana.ts";
 import { Glb, posed } from "./glb.ts";
-import { armsInBody } from "./skin.ts";
+import { armsInBody, shaped, skinOf } from "./skin.ts";
 import { BAR, stance, stanceLine } from "./stance.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -287,7 +287,12 @@ async function main() {
         x(idle && (arms.cm > BAR.arms || arms.over > 0)) + (idle ? `; feet wander ${feet.toFixed(1)} cm${x(feet > BAR.wander)}` : ""));
       // An idle's stance against the body's rest: soft knees, low hips, a head hung forward
       // (stance.ts, its bar set on the references).
-      if (idle) console.log(`        stance: ${stanceLine(stance(body, played))}`);
+      // On the base and on every template, its morph's joints moved as the game moves them.
+      if (idle) {
+        console.log(`        stance: ${stanceLine(stance(body, played))}`);
+        for (const shape of skinOf(body, templates).shapes)
+          console.log(`        ${shape.name}: ${stanceLine(stance(body, played, (c, t) => shaped(body, shape, c, t)))}`);
+      }
     }
   }
   console.log(`keep one with: node tools/characters/motion.ts ${clip}${values.list ? ` --list ${named}` : ""} --keep N`);

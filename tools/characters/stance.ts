@@ -48,16 +48,21 @@ function ahead(body: Glb, p: ReturnType<typeof posed>) {
   return (head[0] * fwd[0] + head[2] * fwd[2]) / l;
 }
 
-/** How `clip` stands on `body`, sampled at 30 frames a second. */
-export function stance(body: Glb, clip: Clip): Stance {
-  const rest = posed(body, undefined, 0);
+/** How a body is posed by a clip at a time: the base's own (`posed`), or a template's
+ * (skin.ts `shaped`, its morph's joints moved). */
+export type Poser = (clip: Clip, t: number) => ReturnType<typeof posed>;
+
+/** How `clip` stands on `body`, sampled at 30 frames a second, posed by `at` (the base, or a
+ * template shaped from it), its rest the same poser's with no clip. */
+export function stance(body: Glb, clip: Clip, at: Poser = (c, t) => posed(body, c, t)): Stance {
+  const rest = at({ name: "rest", end: 0, tracks: new Map() }, 0);
   const restHips = rest[bone(body, "pelvis")].t[1];
   const restAhead = ahead(body, rest);
   const knees: number[] = [];
   let step = 0, lo = Infinity, hi = -Infinity, sum = 0, n = 0;
   let was: number[] | undefined;
   for (let t = 0; t <= clip.end + 1e-6; t += 1 / 30) {
-    const p = posed(body, clip, t);
+    const p = at(clip, t);
     const now = ["l", "r"].map((s) => bend(body, p, s));
     knees.push(...now);
     if (was) step = Math.max(step, ...now.map((k, i) => Math.abs(k - was![i])));
