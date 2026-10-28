@@ -12,15 +12,20 @@
 //
 //   cargo xtask duel [--out <dir>]          run, film, sheet and check
 //   cargo xtask duel --check <fight.jsonl>…  only the checks, on records already made
+//   cargo xtask duel --check [--out <dir>]   only the checks, on the runs filmed into the dir
 //
-// Into ~/.cache/terra-review/duel/ by default: duel.mp4, duel-desk.mp4, sheet.jpg,
-// checks.txt (and checks.json, its numbers), and each camera's fight-<camera>.jsonl and log.
-// Exits 1 when a check fails.
+// Into ~/.cache/terra-review/duel/ by default (--out elsewhere, so two films do not overwrite
+// each other): duel.mp4, duel-desk.mp4, sheet.jpg, checks.txt (and checks.json, its numbers),
+// and each camera's fight-<camera>.jsonl and log, written as the run goes (streamed.ts: its
+// newest line passes on every 30 s on stderr, a run silent for 8 min is stopped). Exits 1 when a
+// check fails or a run did not finish; a run that did not finish leaves its own rows not
+// measured, named (the same fight's; the player's framing and pose), the others judged, and the
+// sheet or film it is in not made.
 // Under WSL the runs are the Windows build, on the real GPU (client.ts `offscreenRun`);
 // start it as `cargo xtask gpu film -- cargo xtask duel` (D319). Needs ffmpeg and
 // ImageMagick. Node 22.18 or later; no dependencies.
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -29,6 +34,7 @@ import { type Check, type Frame, check, framed, read, readMoves, same, say, shar
 import { COLUMNS, moments } from "./duel/moments.ts";
 import { type PoseFrame, poseChecks } from "./duel/pose.ts";
 import { staggerJump } from "./duel/shield.ts";
+import { streamed } from "./streamed.ts";
 
 const MOVES = resolve(ROOT, "assets/data/moves/sword.shielded.ron");
 /// The player's share of the frame's height the game's camera is held to (D180).
@@ -64,7 +70,7 @@ const CAMERAS: Camera[] = [
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
-  console.log("duel.ts [--out <dir>] | --check <fight.jsonl>…");
+  console.log("duel.ts [--out <dir>] | --check <fight.jsonl>… | --check [--out <dir>]");
   process.exit(0);
 }
 const opt = (name: string) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
@@ -72,50 +78,86 @@ const out = resolve(opt("--out") ?? join(homedir(), ".cache/terra-review/duel"))
 const started = Date.now();
 const took = () => `${((Date.now() - started) / 1000).toFixed(0)} s`;
 
+const work = resolve(ROOT, "shots/duel");
 if (args.includes("--check")) {
-  const files = args.slice(args.indexOf("--check") + 1).filter((each) => !each.startsWith("--"));
+  const files = args.slice(args.indexOf("--check") + 1).filter((each, i, all) => !each.startsWith("--") && all[i - 1] !== "--out");
+  // No records named: the runs in `out` as they were filmed, a run its log says did not finish
+  // not measured.
+  if (!files.length) process.exit(judged().ok ? 0 : 1);
   const records = files.map((file) => ({ name: file, frames: read(file) }));
-  process.exit(report(records, undefined) ? 0 : 1);
+  process.exit(report(records, undefined, []) ? 0 : 1);
 }
 
 mkdirSync(out, { recursive: true });
 if (!buildOffscreen()) process.exit(1);
 console.log(`duel: built (${took()})`);
-const work = resolve(ROOT, "shots/duel");
 rmSync(work, { recursive: true, force: true });
 const filmed = await Promise.all(CAMERAS.map((camera) => film(camera)));
-const failed = filmed.filter((each) => !each.ok);
-if (failed.length) {
-  for (const each of failed) console.log(`duel: ✗ ${each.name} did not finish; its log: ${each.log}`);
-  process.exit(1);
+for (const each of filmed.filter((each) => !each.ok)) console.log(`duel: ✗ ${each.name} did not finish; its log: ${each.log}`);
+console.log(`duel: filmed ${filmed.map((each) => `${each.name}${each.ok ? "" : " (did not finish)"}`).join(", ")} (${took()})`);
+const { ok, records, unfinished } = judged();
+// The sheet is the side's and the three-quarter's stills, the film all four cameras': each made
+// only when its runs finished.
+const missing = (names: string[]) => unfinished.some((each) => names.includes(each.name));
+if (records.length && !missing(["side", "three-quarter"])) console.log(`duel: sheet ${contactSheet(records[0].frames)} (${took()})`);
+if (records.length && !unfinished.length) {
+  const [mp4, desk] = grid(records[0].frames);
+  console.log(`duel: film ${mp4}, ${mb(mp4)} MB; for the desk ${desk}, ${mb(desk)} MB (${took()})`);
 }
-console.log(`duel: filmed ${CAMERAS.map((c) => c.name).join(", ")} (${took()})`);
-const records = CAMERAS.map((camera) => ({ name: camera.name, frames: read(record(camera.name)) }));
-const ok = report(records, join(out, "checks.txt"));
-const sheet = contactSheet(records[0].frames);
-console.log(`duel: sheet ${sheet} (${took()})`);
-const [mp4, desk] = grid(records[0].frames);
-console.log(`duel: film ${mp4}, ${mb(mp4)} MB; for the desk ${desk}, ${mb(desk)} MB (${took()})`);
 rmSync(work, { recursive: true, force: true });
-process.exit(ok ? 0 : 1);
+process.exit(ok && !unfinished.length ? 0 : 1);
 
 function record(name: string) {
   return join(out, `fight-${name}.jsonl`);
 }
 
-/// The checks, a line each, kept in `keep` too; whether all held.
-function report(records: { name: string; frames: Frame[] }[], keep: string | undefined): boolean {
+/// Whether a camera's run went to its end: its log, written as it ran, says it saved its frames.
+function finished(name: string): boolean {
+  const log = join(out, `${name}.log`);
+  return existsSync(log) && readFileSync(log, "utf8").includes("SANDBOX saved");
+}
+
+/// The checks on the runs in `out`: the records of those that finished, the rest named.
+function judged() {
+  const unfinished = CAMERAS.filter((camera) => !finished(camera.name)).map((camera) => ({ name: camera.name, log: join(out, `${camera.name}.log`) }));
+  const records = CAMERAS.filter((camera) => finished(camera.name)).map((camera) => ({ name: camera.name, frames: read(record(camera.name)) }));
+  return { ok: report(records, join(out, "checks.txt"), unfinished), records, unfinished };
+}
+
+/// The checks, a line each, kept in `keep` too; whether all held. A run that did not finish
+/// (`unfinished`) leaves its own rows not measured, a line naming it with no number: the same
+/// fight's (it compares every run's record) and, the player's run, the game camera's framing and
+/// the composed pose. The fight's own rows read the first record that finished: the four runs
+/// are one fight.
+function report(records: { name: string; frames: Frame[] }[], keep: string | undefined, unfinished: { name: string; log: string }[]): boolean {
+  if (!records.length) {
+    console.log(`duel: ✗ not measured: no run finished (${unfinished.map((each) => each.log).join(", ")})`);
+    return false;
+  }
+  const unmeasured = (name: string, runs: { name: string; log: string }[]): Check => ({
+    name,
+    ok: false,
+    line: `not measured: ${runs.map((each) => `the ${each.name} run did not finish (its log ${each.log})`).join("; ")}`,
+    faults: 1,
+    value: NaN,
+  });
   const lines: Check[] = [];
-  if (records.length > 1) lines.push(same(records));
+  if (unfinished.length) lines.push(unmeasured("same fight", unfinished));
+  else if (records.length > 1) lines.push(same(records));
   lines.push(...check(records[0].frames, existsSync(MOVES) ? readMoves(MOVES) : undefined));
   const jump = staggerJump(records[0].frames);
   if (jump) lines.push(jump);
   lines.push(framed(records[0].frames, CENTRE, FRAMED_M));
   // The game's own camera, the player's run (or a record named for it).
   const player = records.find((each) => each.name === "player" || each.name.endsWith("player.jsonl"));
-  if (player) lines.push(share(player.frames, SHARE));
-  // The composed pose (duel/pose.ts): the player run's, its aim the game camera's look.
-  lines.push(...poseChecks((player ?? records[0]).frames as PoseFrame[], player !== undefined));
+  const stopped = unfinished.find((each) => each.name === "player");
+  // The player's rows by their names alone (as another record gives them), each not measured.
+  if (stopped) lines.push(...[share(records[0].frames, SHARE), ...poseChecks(records[0].frames as PoseFrame[], false)].map((each) => unmeasured(each.name, [stopped])));
+  else {
+    if (player) lines.push(share(player.frames, SHARE));
+    // The composed pose (duel/pose.ts): the player run's, its aim the game camera's look.
+    lines.push(...poseChecks((player ?? records[0]).frames as PoseFrame[], player !== undefined));
+  }
   const said = lines.map(say);
   for (const line of said) console.log(`duel: ${line}`);
   if (keep) writeFileSync(keep, said.join("\n") + "\n");
@@ -137,25 +179,9 @@ async function film(camera: Camera): Promise<{ name: string; ok: boolean; log: s
     ...["--cine", `${offscreenPath(shot)}@${ROLLS}`, "--shots", `${offscreenPath(frames)}/f@${FROM}-${TO}/2`],
   ]);
   const log = join(out, `${camera.name}.log`);
-  const said = await run(command, words);
-  writeFileSync(log, `${command} ${words.join(" ")}\n\n${said}`);
+  // Its output to its log as it comes, its newest line on stderr every 30 s, stopped silent for 8 min.
+  const said = await streamed({ tag: "duel", name: camera.name, command, words, log, cwd: ROOT, env: { ...process.env, BEVY_ASSET_ROOT: ROOT } });
   return { name: camera.name, ok: said.includes("SANDBOX saved"), log };
-}
-
-/// A run to its end; tried again while Windows will not replace a program still closing.
-async function run(command: string, words: string[]): Promise<string> {
-  for (let attempt = 0; ; attempt++) {
-    const said = await new Promise<string>((done, fail) => {
-      const child = spawn(command, words, { cwd: ROOT, env: { ...process.env, BEVY_ASSET_ROOT: ROOT} });
-      const chunks: Buffer[] = [];
-      child.stdout.on("data", (chunk) => chunks.push(chunk));
-      child.stderr.on("data", (chunk) => chunks.push(chunk));
-      child.on("error", fail);
-      child.on("close", () => done(Buffer.concat(chunks).toString("utf8")));
-    });
-    if (attempt >= 30 || !said.includes("Could not copy the program")) return said;
-    await new Promise((done) => setTimeout(done, 2000));
-  }
 }
 
 /// The saved frame nearest `n`: every second one from FROM.

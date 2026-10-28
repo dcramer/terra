@@ -5,7 +5,8 @@
 //   cargo xtask combat                    the cheap criteria (the move set's timings, the move
 //                                         check on every body, the fight's rule tests and what
 //                                         they measure), seconds
-//   cargo xtask combat --film             and the duel film's checks (the GPU, minutes)
+//   cargo xtask combat --film             and the duel film's checks (the GPU, minutes); a run
+//                                         that did not finish leaves its rows not measured
 //   cargo xtask combat --film --out DIR   the duel's film, record and checks into DIR, not
 //                                         ~/.cache/terra-review/duel (two films at once share it)
 //   cargo xtask combat --filmed           the film's rows from main's own duel film, not filming:
@@ -133,6 +134,20 @@ export function movesValue(rows: MovesRow[], check: { row: string; measure: stri
   return row?.measured?.[check.measure];
 }
 
+/// A duel film check as duel.ts writes it to checks.json: `value` null when its run did not finish.
+export type FilmCheck = { name: string; faults: number; value?: number | null; line?: string };
+
+/// The film rows' numbers from a duel film's checks, by each row's check name (its value, or
+/// its faults); a check with no number (null: a run that did not finish) leaves its line, which
+/// names the run, as the row's note.
+export function filmValues(criteria: Criterion[], checks: FilmCheck[], values: Map<string, number>, notes: Map<string, string>) {
+  for (const c of criteria) if (c.check?.by === "film") {
+    const found = checks.find((each) => each.name === (c.check as { name: string }).name);
+    if (found?.value === null) notes.set(c.id, (found.line ?? "").replace(/^not measured: /, ""));
+    else if (found) values.set(c.id, found.value ?? found.faults);
+  }
+}
+
 function main() {
   const { values: opt } = parseArgs({
     options: {
@@ -152,9 +167,9 @@ function main() {
   mkdirSync(logDir, { recursive: true });
   const LOG = join(logDir, "scorecard.log");
   writeFileSync(LOG, `scorecard.ts ${process.argv.slice(2).join(" ")}\n`);
-  const run = (command: string, args: string[]) => {
+  const run = (command: string, args: string[], stderrThrough = false) => {
     appendFileSync(LOG, `\n$ ${command} ${args.join(" ")}\n`);
-    const r = spawnSync(command, args, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+    const r = spawnSync(command, args, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28, stdio: ["ignore", "pipe", stderrThrough ? "inherit" : "pipe"] });
     const out = (r.stdout ?? "") + (r.stderr ?? "");
     appendFileSync(LOG, out);
     return out;
@@ -173,13 +188,8 @@ function main() {
   const film = opt.film || filmedAt !== undefined;
   const wanted = criteria.filter((c) => c.measurable && (c.cost === "cheap" || film));
   const values = new Map<string, number>();
-  const filmValues = (json: string) => {
-    const checks: { name: string; faults: number; value?: number }[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
-    for (const c of wanted) if (c.check?.by === "film") {
-      const found = checks.find((each) => each.name === (c.check as { name: string }).name);
-      if (found) values.set(c.id, found.value ?? found.faults);
-    }
-  };
+  const notes = new Map<string, string>();
+  const readFilm = (json: string) => filmValues(wanted, existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [], values, notes);
 
   // The move set's timings.
   const set = readSet(readFileSync(SET, "utf8"));
@@ -233,12 +243,18 @@ function main() {
     const json = join(out, "checks.json");
     rmSync(json, { force: true });
     const before = stamp();
-    run(process.execPath, [resolve(ROOT, "tools/sandbox/duel.ts"), "--out", out]);
-    if (existsSync(json)) console.log(`  duel film ${keep(out, filmedThrough(before, stamp()), COMBAT_FILMS)}`);
-    filmValues(json);
-  } else if (filmedAt) filmValues(join(filmedAt, "checks.json"));
+    // Its stderr, the runs' newest line every 30 s, passes straight on: `cargo xtask gpu` sees
+    // the film going by it (tools/sandbox/streamed.ts).
+    run(process.execPath, [resolve(ROOT, "tools/sandbox/duel.ts"), "--out", out], true);
+    for (const m of readFileSync(LOG, "utf8").matchAll(/^duel: (✗ .*did not finish.*|filmed .*)$/gm)) console.log(`  duel: ${m[1]}`);
+    // Only a whole film is kept for nightly: a run that did not finish leaves rows with no number.
+    const checks: FilmCheck[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
+    if (checks.length && checks.every((each) => each.value !== null)) console.log(`  duel film ${keep(out, filmedThrough(before, stamp()), COMBAT_FILMS)}`);
+    readFilm(json);
+  } else if (filmedAt) readFilm(join(filmedAt, "checks.json"));
 
   const results = criteria.map((c) => (c.measurable && c.cost === "heavy" && !film ? { id: c.id, status: "skipped" as Status } : judge(c, values.get(c.id), held.get(c.id))));
+  for (const r of results) if (r.status === "missing" && notes.has(r.id)) r.note = notes.get(r.id);
   finish({
     name: "combat",
     criteria,

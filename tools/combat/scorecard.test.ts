@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CRITERIA, type Criterion, judge, measuredValues, miss, movesValue, readBaseline, readSet, rebank, rebaseline, testVerdicts, timing, writeBaseline } from "./scorecard.ts";
+import { CRITERIA, type Criterion, filmValues, judge, measuredValues, miss, movesValue, readBaseline, readSet, rebank, rebaseline, testVerdicts, timing, writeBaseline } from "./scorecard.ts";
 
 const c = (bar: Criterion["bar"], extra: Partial<Criterion> = {}): Criterion => ({ id: "x", noticed: 3, notice: "", bar, unit: "s", source: "", check: null, cost: "cheap", measurable: true, ...extra });
 
@@ -129,4 +129,23 @@ test("every criterion is whole: an id once, a notice, a source, and a bar and ch
     if (each.measurable) assert.ok(each.bar && each.check, each.id);
     else assert.ok(each.needs, `${each.id} says what it needs to be measured`);
   }
+});
+
+test("a duel film check with no number leaves its row not measured, its line naming the run; the others valued", () => {
+  const film = (id: string, name: string) => c({ at_most: 0 }, { id, cost: "heavy", check: { by: "film", name } as Criterion["check"] });
+  const rows = [film("film.same", "same fight"), film("film.camera_share", "player framed"), film("film.sliding", "feet sliding")];
+  // As duel.ts writes them: a not-measured check's NaN is JSON's null.
+  const checks = JSON.parse(
+    JSON.stringify([
+      { name: "same fight", ok: false, faults: 1, value: NaN, line: "not measured: the player run did not finish (its log /x/player.log)" },
+      { name: "player framed", ok: false, faults: 1, value: NaN, line: "not measured: the player run did not finish (its log /x/player.log)" },
+      { name: "feet sliding", ok: false, faults: 2, line: "two slides" },
+    ]),
+  );
+  const values = new Map<string, number>();
+  const notes = new Map<string, string>();
+  filmValues(rows, checks, values, notes);
+  assert.deepEqual([...values], [["film.sliding", 2]]);
+  assert.equal(notes.get("film.camera_share"), "the player run did not finish (its log /x/player.log)");
+  assert.equal(judge(rows[1], values.get("film.camera_share"), undefined).status, "missing");
 });
