@@ -166,6 +166,24 @@ held.wrap.axe_carried	95.309	first number 2026-10-28
 held.fist.axe_carried	0.795	first number 2026-10-28
 held.carry.axe_down	7.491	first number 2026-10-28
 held.shield.grip_across_palm	31.517	the strap physical and per body (D554 round 2): grip_hand 14.5 -> 0 cm and Low_Guard's board solved onto its target (board_target 10.55 -> 9.29, block.sword_in_shield 10.6 -> 1.76); the board 12 cm nearer the elbow worsens the poses not yet solved to a target (Fight_Guard, Keyed_Guard, the block's raise), shield-arm rounds 3 and 4
+move.slash.wrist	47.128	first number 2026-10-28
+move.slash.edge_lead	-0.933	first number 2026-10-28
+move.slash.edge_flat	0.274	first number 2026-10-28
+move.backhand.wrist	86.286	first number 2026-10-28
+move.backhand.edge_lead	0.985	first number 2026-10-28
+move.backhand.edge_flat	0.171	first number 2026-10-28
+move.finisher.wrist	47.128	first number 2026-10-28
+move.finisher.edge_lead	-0.933	first number 2026-10-28
+move.finisher.edge_flat	0.274	first number 2026-10-28
+move.heavy.wrist	51.846	first number 2026-10-28
+move.heavy.edge_lead	0.828	first number 2026-10-28
+move.heavy.edge_flat	0.531	first number 2026-10-28
+move.partner_slash.wrist	47.128	first number 2026-10-28
+move.partner_slash.edge_lead	-0.933	first number 2026-10-28
+move.partner_slash.edge_flat	0.274	first number 2026-10-28
+move.partner_heavy.wrist	51.846	first number 2026-10-28
+move.partner_heavy.edge_lead	0.828	first number 2026-10-28
+move.partner_heavy.edge_flat	0.531	first number 2026-10-28
 film.pose.head_yaw_blows	8	lowered by nightly 2026-10-28
 film.pose.shield_rest_high	8.1	lowered by nightly 2026-10-28
 film.pose.shield_forearm_deg	15.6	new rows film.pose.* (round 30, D530): the game's composed pose from the duel record, the developer's complaints from play (head 45 deg left in blows, shield raised off the block, heater off the forearm); their first numbers on main

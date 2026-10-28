@@ -3033,6 +3033,312 @@
   },
   {
    "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.wrist",
+   "noticed": 4,
+   "notice": "the sword hand snaps over or bends back further than a wrist can in the slash",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "deg",
+   "source": "D565 step 3 (docs/assembled-items.md, Through the animations; research/2026-10-28-assembled-items-animation.md): a person's wrist, flexed at most 80°, extended 70°, radial 20°, ulnar 35°, turned at most 45° in a key at 24 a second (AAOS); the degrees past the nearest, on the composed pose, every template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "wrist_over_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.edge_lead",
+   "noticed": 3,
+   "notice": "the slash strikes with the back of the blade, not its edge: an axe in the same clip would hit with its poll",
+   "bar": {
+    "at_least": 0.7
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): the held look's working edge, its -Z, leads at least 0.7 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "edge_lead"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.slash.edge_flat",
+   "noticed": 3,
+   "notice": "the slash slaps with the flat of the blade",
+   "bar": {
+    "at_most": 0.5
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): a blade's flat, its ±X, at most 0.5 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "slash",
+    "measure": "edge_flat"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.wrist",
+   "noticed": 4,
+   "notice": "the sword hand snaps over or bends back further than a wrist can in the backhand",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "deg",
+   "source": "D565 step 3 (docs/assembled-items.md, Through the animations; research/2026-10-28-assembled-items-animation.md): a person's wrist, flexed at most 80°, extended 70°, radial 20°, ulnar 35°, turned at most 45° in a key at 24 a second (AAOS); the degrees past the nearest, on the composed pose, every template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "wrist_over_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.edge_lead",
+   "noticed": 3,
+   "notice": "the backhand strikes with the back of the blade, not its edge: an axe in the same clip would hit with its poll",
+   "bar": {
+    "at_least": 0.7
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): the held look's working edge, its -Z, leads at least 0.7 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "edge_lead"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.backhand.edge_flat",
+   "noticed": 3,
+   "notice": "the backhand slaps with the flat of the blade",
+   "bar": {
+    "at_most": 0.5
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): a blade's flat, its ±X, at most 0.5 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "backhand",
+    "measure": "edge_flat"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.wrist",
+   "noticed": 4,
+   "notice": "the sword hand snaps over or bends back further than a wrist can in the finisher",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "deg",
+   "source": "D565 step 3 (docs/assembled-items.md, Through the animations; research/2026-10-28-assembled-items-animation.md): a person's wrist, flexed at most 80°, extended 70°, radial 20°, ulnar 35°, turned at most 45° in a key at 24 a second (AAOS); the degrees past the nearest, on the composed pose, every template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "wrist_over_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.edge_lead",
+   "noticed": 3,
+   "notice": "the finisher strikes with the back of the blade, not its edge: an axe in the same clip would hit with its poll",
+   "bar": {
+    "at_least": 0.7
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): the held look's working edge, its -Z, leads at least 0.7 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "edge_lead"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.finisher.edge_flat",
+   "noticed": 3,
+   "notice": "the finisher slaps with the flat of the blade",
+   "bar": {
+    "at_most": 0.5
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): a blade's flat, its ±X, at most 0.5 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "finisher",
+    "measure": "edge_flat"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.wrist",
+   "noticed": 4,
+   "notice": "the sword hand snaps over or bends back further than a wrist can in the heavy blow",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "deg",
+   "source": "D565 step 3 (docs/assembled-items.md, Through the animations; research/2026-10-28-assembled-items-animation.md): a person's wrist, flexed at most 80°, extended 70°, radial 20°, ulnar 35°, turned at most 45° in a key at 24 a second (AAOS); the degrees past the nearest, on the composed pose, every template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "wrist_over_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.edge_lead",
+   "noticed": 3,
+   "notice": "the heavy blow strikes with the back of the blade, not its edge: an axe in the same clip would hit with its poll",
+   "bar": {
+    "at_least": 0.7
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): the held look's working edge, its -Z, leads at least 0.7 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "edge_lead"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.heavy.edge_flat",
+   "noticed": 3,
+   "notice": "the heavy blow slaps with the flat of the blade",
+   "bar": {
+    "at_most": 0.5
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): a blade's flat, its ±X, at most 0.5 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "heavy",
+    "measure": "edge_flat"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.wrist",
+   "noticed": 4,
+   "notice": "the sword hand snaps over or bends back further than a wrist can in the partner's slash",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "deg",
+   "source": "D565 step 3 (docs/assembled-items.md, Through the animations; research/2026-10-28-assembled-items-animation.md): a person's wrist, flexed at most 80°, extended 70°, radial 20°, ulnar 35°, turned at most 45° in a key at 24 a second (AAOS); the degrees past the nearest, on the composed pose, every template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "wrist_over_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.edge_lead",
+   "noticed": 3,
+   "notice": "the partner's slash strikes with the back of the blade, not its edge: an axe in the same clip would hit with its poll",
+   "bar": {
+    "at_least": 0.7
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): the held look's working edge, its -Z, leads at least 0.7 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "edge_lead"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_slash.edge_flat",
+   "noticed": 3,
+   "notice": "the partner's slash slaps with the flat of the blade",
+   "bar": {
+    "at_most": 0.5
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): a blade's flat, its ±X, at most 0.5 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "partner_slash",
+    "measure": "edge_flat"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.wrist",
+   "noticed": 4,
+   "notice": "the sword hand snaps over or bends back further than a wrist can in the partner's heavy blow",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "deg",
+   "source": "D565 step 3 (docs/assembled-items.md, Through the animations; research/2026-10-28-assembled-items-animation.md): a person's wrist, flexed at most 80°, extended 70°, radial 20°, ulnar 35°, turned at most 45° in a key at 24 a second (AAOS); the degrees past the nearest, on the composed pose, every template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "wrist_over_deg"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.edge_lead",
+   "noticed": 3,
+   "notice": "the partner's heavy blow strikes with the back of the blade, not its edge: an axe in the same clip would hit with its poll",
+   "bar": {
+    "at_least": 0.7
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): the held look's working edge, its -Z, leads at least 0.7 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "edge_lead"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "move.partner_heavy.edge_flat",
+   "noticed": 3,
+   "notice": "the partner's heavy blow slaps with the flat of the blade",
+   "bar": {
+    "at_most": 0.5
+   },
+   "unit": "share",
+   "source": "D565 step 3 and attachment.md (In hand): a blade's flat, its ±X, at most 0.5 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "check": {
+    "by": "moves",
+    "row": "partner_heavy",
+    "measure": "edge_flat"
+   }
+  },
+  {
+   "measurable": true,
    "cost": "heavy",
    "id": "film.pose.head_yaw_blows",
    "noticed": 5,

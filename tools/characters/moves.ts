@@ -14,6 +14,11 @@
 //   arc     a blow's tip at its fastest in its active frames: its bearing from ahead (+ left)
 //           and how far ahead, which way it sweeps, how far the hips have turned; a blow
 //           whose clip has a spec (D450, clip_spec.ts) fails a sweep or contact against it
+//   wrist   a blow's sword hand off its forearm (wrist.ts, D565 step 3): flexed at most 80°,
+//           extended 70°, radial 20°, ulnar 35°, turned at most 45° in a key at 24 a second,
+//           from its first frame to its last
+//   edge    which side of the sword leads its tip at speed in its active frames: -Z, the
+//           working edge (attachment.md), at least 0.7 of the motion, the flat (±X) at most 0.5
 //   guard   a block's shield at its hold: how far its face is turned from ahead, how far
 //           in front of the hips it stands
 //   chain   how far a move's last pose is from the next one's first, and each blow's first
@@ -66,6 +71,7 @@ import { carryArm } from "./carry_arm.ts";
 import { about, atWrist as atWristShare, elbowOpen, inFist as inFistShare, wristTurn } from "./carry_hand.ts";
 import { fitter } from "./shield_arm.ts";
 import { type Handle, FIST_CM, WRAP_DEG, close, fistOff, handRest, lookGrip, seated, tipped as tipHandle } from "./grip.ts";
+import { type WristPose, type WristWorst, EDGE, WRIST, bendOf, edgeLead, handAxes, wristPose, wristWorst } from "./wrist.ts";
 
 const { values: opt } = parseArgs({
   options: {
@@ -492,6 +498,54 @@ function arc(move: Move) {
   return { bearing, ahead: fastest.tip[2], up: fastest.tip[1], sweep, hips: fastest.hips, speed: fastest.speed, t: fastest.t, first: first ?? last, last };
 }
 
+// The lead hand's wrist over a blow, from its first frame to its last at the take's keys, and
+// which side of what it holds leads the tip through its active frames (wrist.ts, D565 step 3):
+// the worst template's. Partners' blows play the same span of a clip, so each is measured once.
+const restClip: Clip = { name: "rest", end: 0, tracks: new Map() };
+const wristRests = new Map(
+  shapes.map((shape) => {
+    const p = shaped(body, shape, restClip, 0);
+    const hand = p[at("hand_r")];
+    const axes = handAxes(hand.r, hand.t, p[at("middle_01_r")].t, p[at("thumb_01_r")].t, rot(p[at("socket.hand.R")].r, [-1, 0, 0]));
+    const w = wristPose(p, at, "r");
+    return [shape.name, { axes, rest: bendOf(w.elbow, w.wrist, w.handR, axes) }];
+  }),
+);
+const swung = new Map<string, { wrist: WristWorst; lead: number; flat: number; leadWhere: string }>();
+function swing(move: Move) {
+  const lead = held.find((h) => h.hand === "socket.hand.R")!;
+  const key = `${move.clip} ${move.from} ${move.done} ${move.active}`;
+  if (swung.has(key)) return swung.get(key)!;
+  const clip = clipOf(move.clip);
+  let wrist: WristWorst | undefined;
+  let edge = { lead: Infinity, flat: -Infinity, leadWhere: "" };
+  for (const shape of shapes) {
+    const keys: WristPose[] = [];
+    const times: number[] = [];
+    for (let t = move.from; t <= move.done + 1e-6; t += 1 / WRIST.fps) {
+      keys.push(wristPose(poseOf(shape, clip, t), at, "r"));
+      times.push(t);
+    }
+    const { axes, rest } = wristRests.get(shape.name)!;
+    const w = wristWorst(keys, axes, rest, (i) => `${times[i].toFixed(2)} s, ${shape.name}`);
+    if (!wrist || w.over > wrist.over) wrist = w;
+    const [a, b] = move.active!;
+    const steps: { moved: V3; r: Q }[] = [];
+    let was = poseOf(shape, clip, a);
+    for (let t = a + 1 / 120; t <= b + 1e-6; t += 1 / 120) {
+      const now = poseOf(shape, clip, t);
+      const [from, to] = [frame(lead, was), frame(lead, now)];
+      steps.push({ moved: sub(place(to, lead.tip), place(from, lead.tip)), r: to.r });
+      was = now;
+    }
+    const e = edgeLead(steps);
+    if (e.lead < edge.lead) edge = { ...edge, lead: e.lead, leadWhere: shape.name };
+    edge.flat = Math.max(edge.flat, e.flat);
+  }
+  swung.set(key, { wrist: wrist!, ...edge });
+  return swung.get(key)!;
+}
+
 function guard(move: Move) {
   const shield = held.find((h) => h.board);
   if (!shield || move.hold === undefined) return undefined;
@@ -628,6 +682,26 @@ for (const move of checked) {
       bad.push(...off);
     }
     if (Math.abs(a.bearing) > ARC_DEG || a.ahead < AHEAD_M) bad.push(`contact ${Math.abs(a.bearing).toFixed(0)}° ${a.bearing > 0 ? "left" : "right"} of ahead and ${a.ahead.toFixed(2)} m ahead at ${a.t.toFixed(2)} s (bar ${ARC_DEG}°, ${AHEAD_M} m)`);
+    const s = swing(move);
+    const w = s.wrist;
+    Object.assign(measured, {
+      wrist_over_deg: w.over,
+      wrist_flex_deg: w.flex,
+      wrist_ext_deg: w.ext,
+      wrist_radial_deg: w.radial,
+      wrist_ulnar_deg: w.ulnar,
+      wrist_key_deg: w.key,
+      wrist_keys_over: w.keysOver,
+      edge_lead: s.lead,
+      edge_flat: s.flat,
+    });
+    const deg = (k: "flex" | "ext" | "radial" | "ulnar" | "key") => `${w[k].toFixed(0)}° (${w.where[k]})`;
+    parts.push(`wrist flexed ${deg("flex")}, extended ${deg("ext")}, radial ${deg("radial")}, ulnar ${deg("ulnar")}, turned ${deg("key")} in a key`);
+    parts.push(`edge (-Z) leads ${s.lead.toFixed(2)} of the tip's motion at speed (${s.leadWhere}), flat ${s.flat.toFixed(2)}`);
+    if (w.over > 0)
+      bad.push(`wrist ${w.over.toFixed(0)}° past a person's in ${w.keysOver} keys (bars: flexed ${WRIST.flex}°, extended ${WRIST.ext}°, radial ${WRIST.radial}°, ulnar ${WRIST.ulnar}°, ${WRIST.key}° a key)`);
+    if (s.lead < EDGE.lead || s.flat > EDGE.flat)
+      bad.push(`its edge (-Z) leads ${s.lead.toFixed(2)} of the strike (${s.leadWhere}; bar ${EDGE.lead}), its flat ${s.flat.toFixed(2)} (bar ${EDGE.flat})`);
   }
   if (blow?.held) {
     // A clip that holds a guard (it is the guard) stays within a blend of its first pose.
