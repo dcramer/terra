@@ -82,12 +82,18 @@ test("a hung basket passes once it says so, and fails standing up or unmarked", 
   assert.deepEqual(rules(mirror(basket, 2)), ["hangs", "hangs"]);
 });
 
-test("a strapped shield passes, and fails with its board behind its grip or a strap on no bone", () => {
+test("a strapped shield passes, and fails with its board behind its grip, a strap on no bone, or one not in the fist", () => {
   const shield = look("held/round_shield");
   assert.deepEqual(rules(shield), []);
   assert.deepEqual(rules(mirror(shield, 2)), ["board"]);
   const strap = { ...(shield.extras.strap as object), bone: "lowerarm_x" };
-  assert.deepEqual(rules({ ...shield, extras: { ...shield.extras, strap } }), ["marker", "strap"]);
+  assert.deepEqual(rules({ ...shield, extras: { ...shield.extras, strap } }), ["marker", "strap", "strap"]);
+  // One place on the bone for every body (the strap before D554's round 2) is not physical.
+  const placed = { ...(shield.extras.strap as object), at: [0, 0.42, -0.04] };
+  assert.deepEqual(rules({ ...shield, extras: { ...shield.extras, strap: placed } }), ["marker", "strap"]);
+  // A fist the forearm does not carry: the right hand's.
+  const right = { ...(shield.extras.strap as object), fist: "socket.hand.R" };
+  assert.deepEqual(rules({ ...shield, extras: { ...shield.extras, strap: right } }), ["marker", "strap"]);
 });
 
 test("a rigid quiver passes in its socket's space, and fails saved in the body's or without its morphs", () => {

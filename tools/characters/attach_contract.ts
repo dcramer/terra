@@ -442,11 +442,17 @@ function hung(look: Look, f: (rule: string, detail: string) => void) {
 }
 
 function strapped(look: Look, body: Body, data: Record<string, unknown> | undefined, f: (rule: string, detail: string) => void) {
-  const strap = look.extras.strap as { bone?: string; at?: unknown; face?: unknown; grip?: unknown } | undefined;
+  // Physical and per body (D554): its hand strap in the fist, a hand socket on a hand that the
+  // strap's bone carries, wherever that body's fist is; no place on the bone set for every body.
+  const strap = look.extras.strap as { bone?: string; fist?: string; at?: unknown; face?: unknown; grip?: unknown } | undefined;
   if (!strap) return f("marker", "its extras have no strap, which its data gives");
   if (data && !same(strap, data.strap)) f("marker", "its extras' strap differs from its data's");
   if (!strap.bone || !body.nodes.has(strap.bone)) f("strap", `its strap's bone ${strap.bone} is not a bone of the body`);
-  if (!isV3(strap.at) || !isV3(strap.face) || !isV3(strap.grip)) return f("strap", "its strap's at, face and grip are not each [x, y, z]");
+  if (strap.at !== undefined) f("strap", "its strap sets a place on the bone (at), not the fist that closes on it");
+  const hand = strap.fist === undefined ? undefined : body.parent.get(strap.fist);
+  if (!strap.fist || !body.sockets.has(strap.fist) || !hand || body.parent.get(hand) !== strap.bone)
+    f("strap", `its strap's fist ${strap.fist} is not a hand socket on a hand that ${strap.bone} carries`);
+  if (!isV3(strap.face) || !isV3(strap.grip)) return f("strap", "its strap's face and grip are not each [x, y, z]");
   const [face, grip] = [strap.face as V3, strap.grip as V3];
   const d = face[0] * grip[0] + face[1] * grip[1] + face[2] * grip[2];
   if (Math.abs(Math.hypot(...face) - 1) > 0.01 || Math.abs(Math.hypot(...grip) - 1) > 0.01 || Math.abs(d) > 0.02)

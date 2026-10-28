@@ -872,6 +872,7 @@
       {
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
+        "shield": "Low_Guard",
         "aim": {
           "upperarm_l": [
             0.55,
@@ -896,6 +897,7 @@
       {
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
+        "shield": "Low_Guard",
         "aim": {
           "upperarm_l": [
             0.55,
@@ -920,6 +922,7 @@
       {
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
+        "shield": "Low_Guard",
         "aim": {
           "upperarm_l": [
             0.55,
@@ -971,6 +974,7 @@
       {
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
+        "shield": "Low_Guard",
         "aim": {
           "upperarm_l": [
             0.55,
@@ -1003,6 +1007,7 @@
       {
         "clip": "Keyed_Guard",
         "bone": "clavicle_l",
+        "shield": "Low_Guard",
         "aim": {
           "upperarm_l": [
             0.55,

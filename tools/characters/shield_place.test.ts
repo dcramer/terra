@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { type Pose, type Q, type V3, qmul, rot, turn } from "./glb.ts";
 import type { Held } from "./held.ts";
-import { type Place, atCommit, boardPlace, placeOff, readTargets, reader, worstOff } from "./shield_place.ts";
+import { type Place, atCommit, boardPlace, placeOff, readBoard, readTargets, reader, strappedBoard, worstOff } from "./shield_place.ts";
 
 const near = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} is not ${b}`);
 
@@ -36,8 +36,9 @@ const whole = (q: Q, p: Pose[]): Pose[] => p.map((n) => ({ t: rot(q, n.t), r: qm
 test("the board's place in the chest's frame is the same however the whole body turns or stands", () => {
   const rest = pose(turn([0, 0, 0]), turn([0, 0, 0]));
   const p = pose(turn([5, 20, 0]), turn([40, -10, 30]));
-  const here = boardPlace(p, rest, 0, 1, shield);
-  const turned = boardPlace(whole(turn([0, 90, 0]), pose(turn([5, 20, 0]), turn([40, -10, 30]), [2, 0, -3])), rest, 0, 1, shield);
+  const here = boardPlace(p, rest, 0, p[1], shield);
+  const w = whole(turn([0, 90, 0]), pose(turn([5, 20, 0]), turn([40, -10, 30]), [2, 0, -3]));
+  const turned = boardPlace(w, rest, 0, w[1], shield);
   near(placeOff(here, turned).cm, 0, 1e-6);
   near(placeOff(here, turned).deg, 0, 1e-3);
 });
@@ -49,9 +50,20 @@ test("the chest's frame does not depend on which way the chest bone's own axes r
   const rest = pose(turn([0, 0, 0]), turn([0, 0, 0]));
   const p = pose(turn([5, 20, 0]), turn([40, -10, 30]));
   const rebuilt = (x: Pose[]): Pose[] => [{ ...x[0], r: qmul(x[0].r, k) }, x[1]];
-  const off = placeOff(boardPlace(p, rest, 0, 1, shield), boardPlace(rebuilt(p), rebuilt(rest), 0, 1, shield));
+  const off = placeOff(boardPlace(p, rest, 0, p[1], shield), boardPlace(rebuilt(p), rebuilt(rest), 0, p[1], shield));
   near(off.cm, 0, 1e-6);
   near(off.deg, 0, 1e-3);
+});
+
+test("the strapped board hold.py solves with is the shield's own, as it is strapped now", () => {
+  const kept = readBoard();
+  assert.ok(kept, "shield_targets.json has the strapped board (shield_place.ts --board)");
+  const now = strappedBoard({ body: "assets/models/character/base.glb", shield: kept.shield });
+  const off = placeOff(kept, now);
+  assert.ok(off.cm < 0.01 && off.deg < 0.01, `the kept board is ${off.cm.toFixed(3)} cm, ${off.deg.toFixed(3)}° off ${kept.shield}'s: run shield_place.ts --board and re-bake`);
+  // It sits beyond the fist toward the elbow and out of the forearm's back, face out: a heater
+  // strapped on a forearm, not a board in the hand.
+  assert.ok(Math.hypot(...now.centre) > 0.05 && Math.hypot(...now.centre) < 0.4, `${now.centre}`);
 });
 
 // The bar a captured target is held to against the assets it was captured from.

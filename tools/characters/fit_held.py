@@ -32,9 +32,10 @@ item is adding a file, never editing this script. Its "fit" says how the look is
 
 Every item gives "source" (under assets/models) and "carry_tilt" (degrees), and may give
 "strap": strapped to the forearm rather than hung on the hand socket, said in its extras as
-{"strap": {"bone", "at", "face", "grip"}} for the game (terra_walker::strap) and moves.ts: the
-bone it rides on; where its origin (the grip) sits in that bone's frame, metres; and the
-directions in that frame its front (-Z) and grip (+Y) turn to. "note" says why, for people.
+{"strap": {"bone", "fist", "face", "grip"}} for the game (terra_walker::strap) and moves.ts: the
+bone it rides on; the hand socket whose fist closes on its origin (its hand strap), wherever that
+body's fist is; and the directions its front (-Z) and grip (+Y) turn to in the true forearm's
+frame (the bone's, turned to run from the elbow to that body's wrist). "note" says why, for people.
 
 Held in two hands, it gives where the other hand goes, in the look's own space, metres, and its
 extras say the same (docs/attachment.md, "Second grip"): "second", how far along +Y the off hand

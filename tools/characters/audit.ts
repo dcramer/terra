@@ -27,6 +27,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Clip, Glb, type Pose, type Q, type V3, dot, len, matrix, posed, qinv, qmul, rot, sub } from "./glb.ts";
+import { along } from "./held.ts";
 import { type Shape, shaped, skinOf } from "./skin.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -311,14 +312,16 @@ function stageGear(body: Glb): Line {
 
 /** A strapped look's grip line against the forearm at a pose: degrees between them, and how
  * far the wrist stands off the board's plane beyond the elbow (cm). */
-export function strapOff(pose: Pose[], bone: number, child: number, strap: { at: V3; face: V3; grip: V3 }): { deg: number; cm: number } {
+export function strapOff(pose: Pose[], bone: number, child: number, strap: { face: V3; grip: V3 }): { deg: number; cm: number } {
   const b = pose[bone];
   const s = b.s[0];
   const at = (p: V3): V3 => rot(qinv(b.r), sub(p, b.t)).map((x) => x / s) as V3;
   const wrist = at(pose[child].t);
   const elbow: V3 = [0, 0, 0];
-  const plane = (p: V3) => dot(sub(p, strap.at), unit(strap.face));
-  return { deg: angle(strap.grip, sub(wrist, elbow)), cm: Math.abs(plane(wrist) - plane(elbow)) * s * 100 };
+  // The strap's face and grip are in the true forearm's frame (held.ts `frameOf`).
+  const forearm = along(wrist);
+  const plane = (p: V3) => dot(p, unit(rot(forearm, strap.face)));
+  return { deg: angle(rot(forearm, strap.grip), sub(wrist, elbow)), cm: Math.abs(plane(wrist) - plane(elbow)) * s * 100 };
 }
 
 function stageStrap(body: Glb, shapes: Shape[]): Line {
@@ -327,7 +330,7 @@ function stageStrap(body: Glb, shapes: Shape[]): Line {
   const still: Clip = { name: "rest", end: 0, tracks: new Map() };
   for (const f of readdirSync(dir).filter((f) => f.endsWith(".glb"))) {
     const look = new Glb(`${dir}/${f}`);
-    const strap = look.gltf.nodes.map((n) => (n as { extras?: { strap?: { bone: string; at: V3; face: V3; grip: V3 } } }).extras?.strap).find(Boolean);
+    const strap = look.gltf.nodes.map((n) => (n as { extras?: { strap?: { bone: string; face: V3; grip: V3 } } }).extras?.strap).find(Boolean);
     if (!strap) continue;
     const bone = body.named(strap.bone);
     const child = body.named(strap.bone.replace("lowerarm", "hand").replace("_twist_01", ""));

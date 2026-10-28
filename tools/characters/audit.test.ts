@@ -45,12 +45,15 @@ test("the hand lands off where a clip copied bone by bone points it by the chord
   assert.ok(Math.abs(cm - 2 * 25 * Math.sin((BENT / 2) * RAD)) < 1e-6, `${cm}`);
 });
 
-test("a strap along the bone's +Y reads the forearm's turn off it", () => {
+test("a strap rides the true forearm, however far the bone's +Y lies off it (D554)", () => {
   const pose = posed(arm as never, undefined, 0);
-  const off = strapOff(pose, arm.named("lowerarm_l"), arm.named("hand_l"), { at: [0, 0.1, -0.04], face: [0, 0, -1], grip: [0, 1, 0] });
-  assert.ok(Math.abs(off.deg - BENT) < 1e-6);
-  // The wrist rises 0.25 sin(15 degrees) off the board's plane past the elbow.
-  assert.ok(Math.abs(off.cm - 25 * Math.sin(BENT * RAD)) < 1e-6);
+  // The bone's +Y is BENT degrees off the forearm; the strap's grip, given along +Y, runs along the forearm.
+  const off = strapOff(pose, arm.named("lowerarm_l"), arm.named("hand_l"), { face: [0, 0, -1], grip: [0, 1, 0] });
+  assert.ok(Math.abs(off.deg) < 1e-4, `${off.deg}`);
+  assert.ok(Math.abs(off.cm) < 1e-6, `${off.cm}`);
+  // A grip given 10 degrees off +Y reads 10 degrees off the forearm.
+  const tilted = strapOff(pose, arm.named("lowerarm_l"), arm.named("hand_l"), { face: [0, 0, -1], grip: [Math.sin(10 * RAD), Math.cos(10 * RAD), 0] });
+  assert.ok(Math.abs(tilted.deg - 10) < 1e-4, `${tilted.deg}`);
 });
 
 const turnY = (deg: number): Q => [0, Math.sin((deg * RAD) / 2), 0, Math.cos((deg * RAD) / 2)];

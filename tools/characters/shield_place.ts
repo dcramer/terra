@@ -12,6 +12,7 @@
 //   node tools/characters/shield_place.ts --at 27fa529c       # from that commit's assets
 //   node tools/characters/shield_place.ts --at 27fa529c --capture Low_Guard   # write its target
 //   node tools/characters/shield_place.ts --json places.json  # every number, by pose and template
+//   node tools/characters/shield_place.ts --board             # the strapped board for hold.py's shield op
 //
 // A line a pose: its place on the target's template at its first frame, how far it moves over the
 // clip, how far the other templates' are from it, and how far it is from its target, if it has one.
@@ -23,8 +24,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, dot, len, place, posed, qinv, qmul, rot, sub } from "./glb.ts";
-import { type Held, hang } from "./held.ts";
-import { type Shape, shaped, skinOf } from "./skin.ts";
+import { type Held, frameOf, hang } from "./held.ts";import { type Shape, shaped, skinOf } from "./skin.ts";
 
 export type Place = { centre: V3; face: V3; up: V3 };
 /** A pose's target: its place, the commit and template it was captured from, and why. */
@@ -37,10 +37,10 @@ export function chest(pose: Pose[], rest: Pose[], spine: number): { t: V3; r: Q 
   return { t: pose[spine].t, r: qmul(pose[spine].r, qinv(rest[spine].r)) };
 }
 
-/** The board's place in the chest's frame, `shield` hung from node `socket`. */
-export function boardPlace(pose: Pose[], rest: Pose[], spine: number, socket: number, shield: Held): Place {
+/** The board's place in the chest's frame, `shield` hung in `frame` (held.ts `frameOf`). */
+export function boardPlace(pose: Pose[], rest: Pose[], spine: number, frame: Pose, shield: Held): Place {
   const c = chest(pose, rest, spine);
-  const B = pose[socket];
+  const B = frame;
   const into = (v: V3): V3 => rot(qinv(c.r), v);
   return { centre: into(sub(place(B, shield.board!.centre), c.t)), face: into(rot(B.r, shield.front)), up: into(rot(B.r, shield.up)) };
 }
@@ -68,6 +68,23 @@ export function readTargets(file = TARGETS): Targets {
   return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")).targets as Targets) : {};
 }
 
+/** The strapped board in its strap's own frame (held.ts `frameOf`: the true forearm's, at the
+ * fist) on `body` at rest: its centre in metres from the fist, its face and up. hold.py's `shield`
+ * op solves the arm with it (shield_targets.json's `board`, written by `--board`). */
+export function strappedBoard(o: { body: string; shield: string }): Place {
+  const body = new Glb(o.body);
+  const rest = posed(body, undefined, 0);
+  const shield = hang(body, rest, "socket.hand.L", o.shield);
+  if (!shield.board) throw new Error(`${o.shield} has no strap: not a shield`);
+  const B = frameOf(shield, rest, (n) => body.named(n), (i) => body.parentOf[i]);
+  return { centre: rot(qinv(B.r), sub(place(B, shield.board.centre), B.t)), face: shield.front, up: shield.up };
+}
+
+/** The strapped board kept in `file` for hold.py, if there is one. */
+export function readBoard(file = TARGETS): (Place & { shield: string }) | undefined {
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).board : undefined;
+}
+
 /** The files a reading needs, as `commit` had them (through git's filters, so a model kept in LFS
  * comes out whole): each written into a scratch folder, keeping its path under it. Returns the
  * folder. */
@@ -90,8 +107,7 @@ export function reader(o: { body: string; clips: string; templates: string; shie
   if (!shield.board) throw new Error(`${o.shield} has no strap: not a shield`);
   const { shapes } = skinOf(body, o.templates, o.only ?? []);
   const spine = body.named("spine_03");
-  const socket = body.named(shield.socket);
-  const clipOf = (name: string): Clip => {
+  const frame = (pose: Pose[]) => frameOf(shield, pose, (n) => body.named(n), (i) => body.parentOf[i]);  const clipOf = (name: string): Clip => {
     const [under, over] = name.split("+");
     const c = over ? clipsFile.layered(clipOf(under), clipOf(over)) : clipsFile.clip(name);
     if (!c) throw new Error(`no clip ${name} in ${o.clips}`);
@@ -101,7 +117,10 @@ export function reader(o: { body: string; clips: string; templates: string; shie
     shapes,
     clipOf,
     has: (name: string) => name.split("+").every((n) => clipsFile.clip(n) !== undefined),
-    at: (shape: Shape, clip: Clip, t: number): Place => boardPlace(shaped(body, shape, clip, t), rest, spine, socket, shield),
+    at: (shape: Shape, clip: Clip, t: number): Place => {
+      const pose = shaped(body, shape, clip, t);
+      return boardPlace(pose, rest, spine, frame(pose), shield);
+    },
   };
 }
 
@@ -135,6 +154,7 @@ function main() {
       on: { type: "string", default: "male" },
       targets: { type: "string", default: TARGETS },
       capture: { type: "string" },
+      board: { type: "boolean", default: false },
       why: { type: "string", default: "" },
       fps: { type: "string", default: "15" },
       json: { type: "string" },
@@ -179,6 +199,15 @@ function main() {
     kept.targets[opt.capture] = { centre: round(p.centre), face: round(p.face), up: round(p.up), from: commit, template: on.name, why: opt.why };
     writeFileSync(opt.targets!, JSON.stringify(kept, null, 1) + "\n");
     console.log(`✓ ${opt.capture}'s target captured from ${commit} on ${on.name} into ${opt.targets}`);
+  }
+  if (opt.board) {
+    if (opt.at) throw new Error("--board writes the strap of the shield as it is now: no --at");
+    const b = strappedBoard({ body: opt.body!, shield: opt.shield! });
+    const round = (x: V3) => x.map((n) => Math.round(n * 1e5) / 1e5) as V3;
+    const kept = existsSync(opt.targets!) ? JSON.parse(readFileSync(opt.targets!, "utf8")) : { targets: {} };
+    kept.board = { centre: round(b.centre), face: round(b.face), up: round(b.up), shield: opt.shield };
+    writeFileSync(opt.targets!, JSON.stringify(kept, null, 1) + "\n");
+    console.log(`✓ the strapped board of ${opt.shield} written into ${opt.targets}: centre ${v(b.centre)} m from the fist`);
   }
   if (opt.json) writeFileSync(opt.json, JSON.stringify(out, null, 1) + "\n");
 }

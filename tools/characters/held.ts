@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Ball, type Board, board, meshOf, sliced } from "./clash.ts";
-import { Glb, type Pose, type Q, type V3, dot, len, place, rot, sub } from "./glb.ts";
+import { Glb, type Pose, type Q, type V3, dot, len, place, qinv, qmul, rot, sub } from "./glb.ts";
 
 // A few hundred of the look's vertices in the frame of the node it hangs from, and the blade's
 // tip. The sword (in the right hand) also as balls, the shield (in the left) as its board, for
@@ -14,12 +14,36 @@ import { Glb, type Pose, type Q, type V3, dot, len, place, rot, sub } from "./gl
 // looks; `up` the way its -X looks (a heater's top: its point is +X, art/held/heater_shield.json);
 // `grip` where its origin (the place it is held at) sits and `bar` the way its handle (+Y) runs,
 // or a strapped look's hand strap (+X).
-export type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; front: V3; up: V3; centre: V3; grip: V3; bar: V3; balls?: Ball[]; board?: Board };
-export type Strap = { bone: string; at: V3; face: V3; grip: V3 };
+export type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; front: V3; up: V3; centre: V3; grip: V3; bar: V3; balls?: Ball[]; board?: Board; strap?: Strap };
+// `at`, in place of `fist`, is the strap of files before D554's round 2 (one place on the bone
+// for every body, metres), read so shield_place.ts --at can read an older commit's assets.
+export type Strap = { bone: string; fist?: string; at?: V3; face: V3; grip: V3 };
 
-// A strap's place in its bone's frame: `at` in metres (the hand socket's, which the bone's
-// scale is undone to), the look turned so its front (-Z) looks along `face` and its grip
-// (+Y) runs along `grip`.
+/** The least turn that takes +Y onto `to`: a bone's frame turned to run along its true limb. */
+export function along(to: V3): Q {
+  const u = to.map((x) => x / len(to)) as V3;
+  const w = 1 + u[1];
+  if (w < 1e-9) return [1, 0, 0, 0];
+  const q: Q = [u[2], 0, -u[0], w];
+  const n = Math.hypot(...q);
+  return q.map((x) => x / n) as Q;
+}
+
+/** The frame a held look's points are in at `pose` (`named` a node's index by name): its hand
+ * socket's, or, strapped (terra_walker::strap), its bone's turned to run along the true forearm
+ * (elbow to the wrist, the fist's bone's joint) and moved to the fist, so the hand strap is in
+ * this body's fist and the grip along its forearm, wherever the clip has the hand. */
+export function frameOf(h: Held, pose: Pose[], named: (name: string) => number, parentOf: (i: number) => number | undefined): Pose {
+  if (!h.strap?.fist) return pose[named(h.socket)];
+  const bone = pose[named(h.strap.bone)];
+  const fist = named(h.strap.fist);
+  const wrist = pose[parentOf(fist)!].t;
+  return { t: pose[fist].t, r: qmul(bone.r, along(rot(qinv(bone.r), sub(wrist, bone.t)))), s: bone.s };
+}
+
+// A strap's turn in the true forearm's frame, the look's front (-Z) along `face` and its grip
+// (+Y) along `grip`, at the hand socket's scale against the bone's (`ratio`); its origin at the
+// frame's, the fist (`frameOf`).
 function strapped(strap: Strap, ratio: number): Pose {
   const unit = (v: V3): V3 => v.map((x) => x / len(v)) as V3;
   const y = unit(strap.grip);
@@ -43,7 +67,7 @@ function strapped(strap: Strap, ratio: number): Pose {
     const k = 2 * Math.sqrt(1 + m22 - m00 - m11);
     r = [(z[0] + x[2]) / k, (y[2] + z[1]) / k, k / 4, (x[1] - y[0]) / k];
   }
-  return { t: strap.at.map((v) => v * ratio) as V3, r, s: [ratio, ratio, ratio] };
+  return { t: strap.at ? (strap.at.map((v) => v * ratio) as V3) : [0, 0, 0], r, s: [ratio, ratio, ratio] };
 }
 
 /** The look `file` held in `hand` (a socket's name) on `body` at its rest pose `rest`. */
@@ -85,7 +109,7 @@ export function hang(body: Glb, rest: Pose[], hand: string, file: string): Held 
   // A held grip's bar runs along its handle (+Y); a strapped look's hand strap runs across its
   // board, square to the forearm (+X), where the fist closes on it (D459, D504).
   const bar = turned(rot(pose.r, strap ? [1, 0, 0] : [0, 1, 0]));
-  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, up, centre: put(centre), grip: put(pose.t), bar, balls, board: plate };
+  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, up, centre: put(centre), grip: put(pose.t), bar, balls, board: plate, strap };
 }
 
 /** terra_walker::character's carry rule: a look in hand tips its working end CARRY_DOWN degrees

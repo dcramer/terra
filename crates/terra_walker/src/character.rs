@@ -91,6 +91,11 @@ impl Held {
             fit: 1.0,
         }
     }
+
+    /// Its turn against its parent's frame now, its tilt laid on.
+    pub(crate) fn turned(&self) -> Quat {
+        self.turn * Quat::from_rotation_x(self.now.to_radians())
+    }
 }
 
 /// A character's model: the root of the base body (`appearance::BASE`), shaped by its
@@ -263,7 +268,14 @@ pub fn plugin(app: &mut App) {
     .add_observer(held_ready)
     .add_observer(crate::strap::strap)
     .add_observer(tint)
-    .add_systems(Update, tilt);
+    .add_systems(Update, tilt)
+    .add_systems(
+        PostUpdate,
+        crate::strap::follow_fist
+            .after(bevy::app::AnimationSystems)
+            .after(crate::Fitted)
+            .before(bevy::transform::TransformSystems::Propagate),
+    );
 }
 
 fn body_ready(
@@ -362,7 +374,7 @@ fn tilt(
         } else {
             held.now + (goal - held.now) * ease
         };
-        transform.rotation = held.turn * Quat::from_rotation_x(held.now.to_radians());
+        transform.rotation = held.turned();
     }
 }
 

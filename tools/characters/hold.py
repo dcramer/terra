@@ -51,12 +51,114 @@ fighter plays (D459):
         {"clip": "Keyed_Guard", "bone": "hand_l", "aim": {...}, "roll": {"hand_l": -96}}, ...]}
 """
 
+import json
 import math
+import os
 
 import bpy
-from mathutils import Matrix, Vector
+import numpy as np
+from mathutils import Matrix, Quaternion, Vector
 
 CHANNELS = ("location", "rotation_quaternion", "scale")
+TARGETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "art", "animation", "shield_targets.json")
+# The shield arm the `shield` op solves, the chest's bone the target is in, and the fist's socket.
+ARM = ("clavicle_l", "upperarm_l", "lowerarm_l", "hand_l")
+CHEST = "spine_03"
+FIST = "socket.hand.L"
+# How much a turn of each bone costs against a centimetre off the target, per radian: the
+# shoulder blade moves least, so the solve shrugs only when the arm cannot reach.
+COST = {"clavicle_l": 4.0, "upperarm_l": 0.5, "lowerarm_l": 0.5}
+# How much the board's face or up off its target weighs, per radian, against a centimetre off
+# its centre: 3 degrees as 1 cm, the move check's bars (1 cm, 3 deg) weighing alike.
+PER_RADIAN = 1.0 / math.radians(3.0)
+
+
+def _gl(v):
+    """A way in the body's glTF axes (+X left, +Y up, +Z ahead) in Blender's (Z up, ahead -Y)."""
+    return Vector((v[0], -v[2], v[1]))
+
+
+def _fk(arm, basis):
+    """The shield arm's bones (`ARM`) in the world, posed by their own location, rotation and
+    scale (`basis`, by name; a bone not in it as it is posed now), below its parent as posed."""
+    pose = arm.pose.bones
+    bones = arm.data.bones
+    M = pose[bones[ARM[0]].parent.name].matrix.copy()
+    above = bones[ARM[0]].parent.matrix_local
+    out = {}
+    for n in ARM:
+        b = bones[n]
+        M = M @ (above.inverted() @ b.matrix_local) @ basis.get(n, pose[n].matrix_basis)
+        above = b.matrix_local
+        out[n] = arm.matrix_world @ M
+    return out
+
+
+def _board(arm, world, fist, board):
+    """The strapped board in the world at the arm's pose `world`: its centre, face and up. As
+    terra_walker::strap hangs it: its origin at the fist (`fist`, the socket in the hand's
+    frame), turned in the true forearm's frame, the forearm bone's turned to run from the elbow
+    to the wrist; `board` its centre, face and up in that frame (shield_targets.json)."""
+    hand, fore = world["hand_l"], world["lowerarm_l"]
+    at = (hand @ fist).translation
+    R = fore.to_3x3().normalized()
+    R = R.col[1].rotation_difference((hand.translation - fore.translation).normalized()).to_matrix() @ R
+    return at + R @ Vector(board["centre"]), R @ Vector(board["face"]), R @ Vector(board["up"])
+
+
+def _solve(arm, name, target, board, hand):
+    """Turns the shield arm (shoulder blade, upper arm, forearm with its roll) from its pose now
+    the least way that puts the strapped board on `target` (its centre, face and up in the
+    chest's frame, shield_place.ts), the hand held at `hand` (its pose in its own frame, the
+    clips' strap grip): a damped Gauss-Newton solve over each bone's turn in its own frame, as
+    an IK control on the prop is baked to the arm in a DCC (D554). Returns how far off it ends."""
+    pose = arm.pose.bones
+    W = arm.matrix_world
+    chest = W @ pose[CHEST].matrix
+    rest = W @ arm.data.bones[CHEST].matrix_local
+    Cr = chest.to_3x3().normalized() @ rest.to_3x3().normalized().inverted()
+    want = (chest.translation + Cr @ _gl(target["centre"]), Cr @ _gl(target["face"]), Cr @ _gl(target["up"]))
+    socket = bpy.data.objects[FIST]
+    fist = (W @ pose["hand_l"].matrix).inverted() @ socket.matrix_world
+    start = {n: pose[n].matrix_basis.decompose() for n in COST}
+    turned = list(COST)
+
+    def basis(x):
+        out = {"hand_l": hand}
+        for k, n in enumerate(turned):
+            loc, rot, scale = start[n]
+            d = Vector(x[3 * k : 3 * k + 3])
+            q = Quaternion(d.normalized(), d.length) if d.length > 1e-12 else Quaternion()
+            out[n] = Matrix.LocRotScale(loc, rot @ q, scale)
+        return out
+
+    def residual(x):
+        c, f, u = _board(arm, _fk(arm, basis(x)), fist, board)
+        off = [*(100.0 * (c - want[0])), *(PER_RADIAN * (f - want[1])), *(PER_RADIAN * (u - want[2]))]
+        return np.array(off + [COST[n] * v for k, n in enumerate(turned) for v in x[3 * k : 3 * k + 3]])
+
+    x = np.zeros(3 * len(turned))
+    for _ in range(60):
+        r = residual(x)
+        J = np.empty((len(r), len(x)))
+        for j in range(len(x)):
+            e = np.zeros(len(x))
+            e[j] = 1e-5
+            J[:, j] = (residual(x + e) - r) / 1e-5
+        step = np.linalg.solve(J.T @ J + 1e-6 * np.eye(len(x)), -J.T @ r)
+        x = x + step
+        if np.linalg.norm(step) < 1e-7:
+            break
+    for n, m in basis(x).items():
+        if n in COST:
+            pose[n].matrix_basis = m
+    bpy.context.view_layer.update()
+    c, f, u = _board(arm, _fk(arm, {"hand_l": hand}), fist, board)
+    cm = (c - want[0]).length * 100.0
+    deg = max(math.degrees(f.angle(want[1])), math.degrees(u.angle(want[2])))
+    turns = ", ".join(f"{n} {math.degrees(np.linalg.norm(x[3 * k : 3 * k + 3])):.1f} deg" for k, n in enumerate(turned))
+    print(f"SHIELD {name}: the board on {target.get('pose', '')} target {cm:.2f} cm, {deg:.2f} deg off; turned {turns}")
+    return cm, deg
 
 
 def part(arm, bone):
@@ -79,9 +181,22 @@ def _use(arm, action):
         ad.action_slot = action.slots[0]
 
 
-def _held_pose(arm, by_name, name, held):
+def _held_pose(arm, by_name, name, held, entries=None):
     """A hold's part as it is to be held: each bone's location, rotation and scale in its own
     frame, at the held clip's first frame with the hold's turns laid on."""
+    hand = None
+    if "shield" in held:
+        # The hand as the clips hold it on the strap (`hand`, an entry laid over the clips).
+        grip = (entries or {}).get(held.get("hand", "Strap_Grip"))
+        if grip is None:
+            raise SystemExit(f"{name}: no entry {held.get('hand', 'Strap_Grip')} for the hand on the strap")
+        for g in grip["hold"]:
+            at = _held_pose(arm, by_name, name, g)
+            if "hand_l" in at:
+                loc, rot, scale = at["hand_l"]
+                hand = Matrix.LocRotScale(loc, rot, scale)
+        if hand is None:
+            raise SystemExit(f"{name}: {held.get('hand', 'Strap_Grip')} holds no hand_l")
     pose = arm.pose.bones
     from_clip = by_name.get(held["clip"])
     if from_clip is None:
@@ -118,6 +233,13 @@ def _held_pose(arm, by_name, name, held):
         along = (pb.tail - pb.head).normalized()
         pb.matrix = Matrix.Translation(head) @ Matrix.Rotation(math.radians(degrees), 4, along) @ Matrix.Translation(-head) @ pb.matrix
         bpy.context.view_layer.update()
+    if "shield" in held:
+        with open(TARGETS) as f:
+            kept = json.load(f)
+        target = kept["targets"].get(held["shield"])
+        if target is None or "board" not in kept:
+            raise SystemExit(f"{name}: no target {held['shield']} or no strapped board in {TARGETS}")
+        _solve(arm, name, {**target, "pose": held["shield"]}, kept["board"], hand)
     out = {}
     for n in bones:
         loc, rot, scale = pose[n].matrix_basis.decompose()
@@ -178,7 +300,7 @@ def bake(arm, actions, entries):
             raise SystemExit(f"{name}: no clip {entry['of']} to make it from")
         still, eased = {}, []
         for held in holds:
-            at = _held_pose(arm, by_name, name, held)
+            at = _held_pose(arm, by_name, name, held, entries)
             if "in" in held or "out" in held:
                 eased.append((held, at))
             else:
@@ -227,7 +349,7 @@ def bake(arm, actions, entries):
         # Every held pose is read before any clip changes: a clip held over may be the one held.
         still = {}
         for held in holds:
-            still.update(_held_pose(arm, by_name, name, held))
+            still.update(_held_pose(arm, by_name, name, held, entries))
         for clip in entry["over"]:
             action = by_name.get(clip)
             if action is None:
@@ -263,4 +385,5 @@ def _said(holds):
                      + "".join(f", {b} turned {d:+.0f} deg" for b, d in h.get("turn", {}).items())
                      + "".join(f", {b} aimed along {tuple(round(x, 2) for x in w)}" for b, w in h.get("aim", {}).items())
                      + "".join(f", {b} rolled {d:+.0f} deg" for b, d in h.get("roll", {}).items())
+                     + (f", the arm solved to {h['shield']}'s board" if "shield" in h else "")
                      + "".join(f", {k} {h[k][0]:.2f}-{h[k][1]:.2f} s" for k in ("in", "out") if k in h) for h in holds)

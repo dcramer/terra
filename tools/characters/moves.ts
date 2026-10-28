@@ -54,7 +54,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, through } from "./clash.ts";
-import { type Held, carriedClips, carryTilt, hang } from "./held.ts";
+import { type Held, carriedClips, carryTilt, frameOf, hang } from "./held.ts";
 import { TARGETS, boardPlace, readTargets, worstOff } from "./shield_place.ts";
 import { PACE_FRAMES } from "./phases.ts";
 import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
@@ -236,6 +236,8 @@ const at = (name: string) => {
   if (i < 0) throw new Error(`no ${name} in ${opt.body}`);
   return i;
 };
+// The frame a held look's points are in at a pose (held.ts): its socket's, or its strap's.
+const frame = (h: Held, pose: Pose[]): Pose => frameOf(h, pose, at, (i) => body.parentOf[i]);
 const node = Object.fromEntries(
   ["pelvis", "Head", "spine_03", "thigh_l", "thigh_r", "socket.hand.L", "index_01_l", "pinky_01_l", ...["l", "r"].flatMap((s) => [`hand_${s}`, `lowerarm_${s}`, `upperarm_${s}`, `middle_01_${s}`, `middle_02_${s}`, `index_02_${s}`, `thumb_02_${s}`])].map((n) => [n, at(n)]),
 );
@@ -262,7 +264,7 @@ const shield = held.find((h) => h.board);
 // shield arm held still against the chest keeps however the body turns.
 const chestRest = qinv(rest[node.spine_03].r);
 const chestAhead = (pose: Pose[]): V3 => rot(pose[node.spine_03].r, rot(chestRest, [0, 0, 1]));
-const shieldMiddle = (pose: Pose[]): V3 => place(pose[at(shield!.socket)], shield!.board!.centre);
+const shieldMiddle = (pose: Pose[]): V3 => place(frame(shield!, pose), shield!.board!.centre);
 function inChest(pose: Pose[]): V3 {
   const c = pose[node.spine_03];
   return rot(qinv(c.r), sub(shieldMiddle(pose), c.t)).map((x) => x / c.s[0]) as V3;
@@ -298,7 +300,7 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
         }
       }
       for (const h of held) {
-        const socket = pose[at(h.socket)];
+        const socket = frame(h, pose);
         for (const q of pointsIn(h, clip)) {
           const { depth, part } = inside(place(socket, q));
           const where = `${h.name} in ${part} at ${t.toFixed(2)} s, ${shape.name}`;
@@ -307,7 +309,7 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
         }
       }
       if (sword && shield) {
-        const [S, B] = [pose[at(sword.socket)], pose[at(shield.socket)]];
+        const [S, B] = [frame(sword, pose), frame(shield, pose)];
         const b = shield.board!;
         const disc: Board = { centre: place(B, b.centre), normal: rot(B.r, b.normal), radius: b.radius * B.s[0], half: b.half * B.s[0] };
         const blade = through(sword.balls!.map((q) => ({ ...q, p: place(S, q.p), r: q.r * S.s[0] })), disc);
@@ -371,7 +373,7 @@ function guard(move: Move) {
   const shield = held.find((h) => h.board);
   if (!shield || move.hold === undefined) return undefined;
   const pose = poseOf(shapes[0], clipOf(move.clip), move.hold);
-  const socket = pose[at(shield.socket)];
+  const socket = frame(shield, pose);
   const face = rot(socket.r, shield.thin);
   const off = (Math.acos(Math.min(1, Math.abs(face[2]) / len(face))) * 180) / Math.PI;
   const centre = sub(place(socket, shield.centre), pose[node.pelvis].t);
@@ -621,7 +623,7 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
 if (shield)
   for (const [name, target] of Object.entries(readTargets(opt.targets))) {
     if (!name.split("+").every((n) => clipsFile.clip(n))) continue;
-    const off = worstOff({ shapes, at: (s, c, t) => boardPlace(poseOf(s, c, t), rest, node.spine_03, at(shield.socket), shield) }, clipOf(name), target, 1 / fps);
+    const off = worstOff({ shapes, at: (s, c, t) => boardPlace(poseOf(s, c, t), rest, node.spine_03, frame(shield, poseOf(s, c, t)), shield) }, clipOf(name), target, 1 / fps);
     const parts = [`${off.cm.toFixed(1)} cm off (${off.cmWhere})`, `${off.deg.toFixed(1)}° off (${off.degWhere}), target from ${target.from} on ${target.template}`];
     row(`${name}, the board against its target`, parts, [], { clip: `${name} board`, measured: { board_target_cm: off.cm, board_target_deg: off.deg } });
   }
