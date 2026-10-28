@@ -6,7 +6,9 @@
 //! load of 40) the campfire's model had not loaded by the shot on frame 330, five seconds
 //! on, so whole hours of the fire sheet came out with no logs or stones. So a scripted run
 //! stands still while a file asked to be waited for ([`super::Loading::wait_for`]) or a
-//! model put in the world is still coming, or anything in view cannot be drawn yet (its
+//! model put in the world is still coming, the ground is being chosen or meshed again as the
+//! camera moves on or it is dug (`terrain`, which no frame waits for), or anything in view
+//! cannot be drawn yet (its
 //! mesh, material or textures not on the GPU, or its shaders compiling), as the loading
 //! screen waits, and for the loading screen's quiet frames after:
 //! its frames are not counted, so no call, press or shot happens, and the game clock is
@@ -114,21 +116,32 @@ pub(crate) fn watch(
     spawner: Res<WorldInstanceSpawner>,
     models: Query<(&WorldAssetRoot, Option<&WorldInstance>)>,
     (mut clock, frame): (ResMut<Time<Virtual>>, Res<crate::shell::ScriptFrame>),
-    (drawables, shaders): (Res<Drawables>, Res<Shaders>),
+    (drawables, shaders, terrain): (
+        Res<Drawables>,
+        Res<Shaders>,
+        Option<Res<crate::terrain::Terrain>>,
+    ),
 ) {
     if !options.scripted() || options.bench || *screen.get() != Screen::Playing {
         return;
     }
     let files = asked_coming(&mut loading, &assets);
+    // The ground chosen again as the camera moves on or is dug, and meshed on workers, which
+    // no frame waits for (`terrain::receive`).
+    let ground = terrain.map_or(0, |terrain| terrain.coming());
     let models = placing(&assets, &spawner, &models);
     // A model placed is not yet drawn: its meshes and textures go up over frames (at most
     // 128 MiB a frame, D420) and its pipelines compile, as many frames as the wall clock
     // took. Released with models placed alone, two films of one build showed a staged
     // campfire's stones and cleared ground on script frame 4 in one and not the other (D472).
     let drawing = drawables.waiting + shaders.compiling;
-    match hold.frame(files + models + drawing, Instant::now(), &mut clock) {
+    match hold.frame(
+        files + ground + models + drawing,
+        Instant::now(),
+        &mut clock,
+    ) {
         Some(Turn::Released { waited, gave_up }) if gave_up => warn!(
-            "Script frame {} held {} s for what never came, going on without it: {files} files, {models} models, {} not drawable, {} shaders: {:?}.",
+            "Script frame {} held {} s for what never came, going on without it: {files} files, {ground} of the ground, {models} models, {} not drawable, {} shaders: {:?}.",
             frame.0,
             waited.as_secs(),
             drawables.waiting,

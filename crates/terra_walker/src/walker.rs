@@ -195,7 +195,12 @@ impl Plugin for WalkerPlugin {
         movement::plugin(app);
         app.init_resource::<Hands>()
             .init_resource::<WarpTo>()
-            .add_systems(PostStartup, spawn)
+            // Before the camera's place is propagated, from which the first view of the
+            // ground is meshed (`terrain::FirstView`).
+            .add_systems(
+                PostStartup,
+                spawn.before(bevy::transform::TransformSystems::Propagate),
+            )
             .add_systems(
                 Update,
                 (options::toggle, camera::capture_mouse, warp, camera::zoom)
@@ -263,10 +268,11 @@ pub fn spawn(
     start: Res<Start>,
     arrive: Option<Res<ArriveAt>>,
     planet: Res<Planet>,
-    camera: Single<Entity, With<MainCamera>>,
+    camera: Single<(Entity, &mut Transform), With<MainCamera>>,
 ) {
+    let (lens, mut seen_from) = camera.into_inner();
     // The player steers the camera now.
-    commands.entity(*camera).remove::<FreeCamera>();
+    commands.entity(lens).remove::<FreeCamera>();
 
     let arrive = arrive.map_or(
         ArriveAt {
@@ -285,6 +291,11 @@ pub fn spawn(
     let feet = planet.ground_at(outside);
     let up = feet.normalize();
     let facing = (toward - outside).reject_from(up).normalize();
+    // The camera stands behind the player before the first view of the ground is meshed
+    // (`terrain::FirstView`), so that view is the one seen: left where the world put it, at
+    // the planet's own start, 15 km from a lake site, the play world meshed its first view
+    // there and then the whole view again at the player, 277 s on the async pool.
+    *seen_from = camera::resting(feet, facing);
     commands.spawn((
         Name::new("Player"),
         Player,

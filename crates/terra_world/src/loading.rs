@@ -491,8 +491,11 @@ fn watch(
         return;
     }
     if loading.quiet >= QUIET_FRAMES {
+        // By the wall clock from the app's start, as a player waits: the frames' deltas
+        // summed (`up_for`) left out the start-up schedules and a first frame of 282 s.
         info!(
-            "Loaded in {:.1} s: {}.",
+            "Loaded in {:.1} s ({:.1} s of it on the loading screen's frames): {}.",
+            real.startup().elapsed().as_secs_f32(),
             loading.up_for.as_secs_f32(),
             progress.summary()
         );

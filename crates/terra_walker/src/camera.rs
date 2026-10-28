@@ -195,6 +195,14 @@ fn eye(player: &Transform, view: &View) -> (Vec3, Vec3) {
     (player.translation + up * HEAD_M, looking)
 }
 
+/// About where the camera comes to rest behind a player standing at `feet` facing `facing`:
+/// the boom's length back from the head, before the shoulder, zoom and probes move it.
+pub(crate) fn resting(feet: Vec3, facing: Vec3) -> Transform {
+    let up = feet.normalize();
+    let head = feet + up * HEAD_M;
+    Transform::from_translation(head - facing * CAMERA_BACK_M).looking_to(facing, up)
+}
+
 /// How far behind the player the camera is, where the wheel is taking it, and how far in
 /// from that the boom is pulled by what is broad and in the way; where the lens was last frame
 /// and how far it had slid aside from the boom's end round something thin; and how long the

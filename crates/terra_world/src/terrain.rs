@@ -7,14 +7,13 @@
 //! in the background, and the ones it no longer wants stay until their replacements are
 //! ready, so the ground never shows holes. Which chunks are wanted is worked out on a
 //! worker too, as Voxel Tools updates its level-of-detail octree off the main thread: it
-//! took 17 ms of a frame every 4 m walked on a 30 km world. A scripted run waits for every
-//! chunk and every choice each frame, so the same script shows the same ground on any
-//! machine.
+//! took 17 ms of a frame every 4 m walked on a 30 km world. No frame waits for either: a
+//! scripted run is held while the ground is coming (`loading::hold`), so the same script
+//! shows the same ground on any machine.
 
 use crate::loading::{self, Progress};
 use crate::planet::MainCamera;
 use crate::planet::{GroundLook, Planet};
-use crate::shell::Options;
 use bevy::{
     asset::RenderAssetUsages,
     mesh::Indices,
@@ -39,11 +38,13 @@ pub struct Chunk;
 
 /// What is drawn, what is being meshed, and where the chunks were last chosen from.
 #[derive(Resource, Default)]
-struct Terrain {
+pub(crate) struct Terrain {
     shown: HashMap<ChunkId, Shown>,
     pending: HashMap<ChunkId, Pending>,
     wanted: HashMap<ChunkId, Sides>,
     chosen_from: Option<Vec3>,
+    /// The preset's reach the chunks were last chosen at (`Quality::ground_reach`).
+    chosen_reach: f32,
     /// How many edits the ground had when its chunks were last brought up to date.
     edits_seen: usize,
     /// The chunks wanted from a place, being worked out; and the edits made since the
@@ -64,22 +65,36 @@ struct Pending {
     task: Task<Option<Mesh>>,
 }
 
+/// The first view is meshed in this set, in `PostStartup`, from where the camera stands once
+/// its transform is propagated: whatever stands the camera where play starts (the player's
+/// spawn) goes before `TransformSystems::Propagate`, so the first view is the one seen and
+/// not meshed again where the camera is put on the first frame.
+#[derive(SystemSet, Clone, PartialEq, Eq, Hash, Debug)]
+pub struct FirstView;
+
 pub fn plugin(app: &mut App) {
     app.init_resource::<Terrain>()
-        .add_systems(PostStartup, first_view)
+        .configure_sets(
+            PostStartup,
+            FirstView.after(bevy::transform::TransformSystems::Propagate),
+        )
+        .add_systems(PostStartup, first_view.in_set(FirstView))
         .add_systems(
             Update,
             (choose, receive, track.in_set(loading::Track)).chain(),
         );
 }
 
+impl Terrain {
+    /// How much of the ground is still coming: chunks being meshed, and a choice being made.
+    pub(crate) fn coming(&self) -> usize {
+        self.pending.len() + usize::from(self.choosing.is_some())
+    }
+}
+
 /// The loading screen waits for the ground in view to be meshed.
 fn track(terrain: Res<Terrain>, mut progress: ResMut<Progress>) {
-    progress.report(
-        "Shaping the ground",
-        terrain.pending.len(),
-        terrain.shown.len(),
-    );
+    progress.report("Shaping the ground", terrain.coming(), terrain.shown.len());
 }
 
 /// Chunks this coarse and coarser split within `FAR_SPLIT` of their sizes on a world with
@@ -573,12 +588,12 @@ fn first_view(
     mut commands: Commands,
     planet: Res<Planet>,
     look: Res<GroundLook>,
-    camera: Single<&Transform, With<MainCamera>>,
+    camera: Single<&GlobalTransform, With<MainCamera>>,
     asked: Option<Res<crate::quality::Asked>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain: ResMut<Terrain>,
 ) {
-    let viewer = camera.translation;
+    let viewer = camera.translation();
     // The preset is chosen in the first frame; one asked for is known already.
     let reach = asked
         .and_then(|asked| asked.0)
@@ -612,14 +627,17 @@ fn first_view(
     info!("Meshed the first view of the ground: {count} chunks.");
     terrain.wanted = wanted;
     terrain.chosen_from = Some(viewer);
+    terrain.chosen_reach = reach;
     terrain.edits_seen = planet.voxels().edit_count();
 }
 
-/// Chooses the chunks again, on a worker, when the camera has moved on or the ground has
-/// changed, and once they are chosen starts meshing those that are new or out of date.
+/// Chooses the chunks again, on a worker, when the camera has moved on, the preset's reach
+/// or the ground has changed, and once they are chosen starts meshing those that are new or
+/// out of date. A choice started is never taken on the frame it starts, so a scripted run's
+/// frame that moved the camera or dug always shows the ground as it was, and the next is
+/// held until the new ground is drawn (`loading::hold`).
 fn choose(
     planet: Res<Planet>,
-    options: Res<Options>,
     camera: Single<&GlobalTransform, With<MainCamera>>,
     quality: Res<crate::quality::Quality>,
     mut terrain: ResMut<Terrain>,
@@ -628,8 +646,9 @@ fn choose(
     let edits = planet.voxels().edit_count();
     let reach = quality.ground_reach();
     if terrain.choosing.is_none() {
-        // A preset that meshes the ground further out chooses again where the camera is.
-        let moved = quality.is_changed()
+        // A preset that meshes the ground further out chooses again where the camera is;
+        // one that only says it changed (its first frame) does not.
+        let moved = reach != terrain.chosen_reach
             || terrain
                 .chosen_from
                 .is_none_or(|from| from.distance(viewer) > RECHOOSE_M);
@@ -644,20 +663,17 @@ fn choose(
         // again after any edit, not only when the camera moves.
         if moved {
             terrain.chosen_from = Some(viewer);
+            terrain.chosen_reach = reach;
         }
         let from = planet.clone();
         terrain.choosing =
             Some(AsyncComputeTaskPool::get().spawn(async move { wanted(&from, viewer, reach) }));
+        return;
     }
     let Some(task) = terrain.choosing.as_mut() else {
         return;
     };
-    let chosen = if options.scripted() && !options.bench {
-        Some(block_on(task))
-    } else {
-        block_on(future::poll_once(task))
-    };
-    let Some(chosen) = chosen else {
+    let Some(chosen) = block_on(future::poll_once(task)) else {
         return;
     };
     terrain.choosing = None;
@@ -701,10 +717,13 @@ fn choose(
 }
 
 /// Draws chunks whose meshes are ready, and once nothing is waiting, takes away the ones
-/// no longer wanted.
+/// no longer wanted. No frame waits for a mesh, as streamed terrain is drawn in shipped
+/// engines: the loading screen waits for the ground coming at the start ([`track`]), and a
+/// scripted run is held, its frames not counted and its clock stopped, while the ground is
+/// coming after (`loading::hold`), so it sees the same ground on any machine. Waiting here
+/// instead stalled the play world's first frame 277 s on the async pool's four threads.
 fn receive(
     mut commands: Commands,
-    options: Res<Options>,
     look: Option<Res<GroundLook>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain: ResMut<Terrain>,
@@ -715,15 +734,9 @@ fn receive(
         let Some(pending) = terrain.pending.get_mut(&id) else {
             continue;
         };
-        // A scripted run waits for each chunk, so it sees the same ground every time. A
-        // benchmark does not, so it times what a player would see: waiting stalls a frame
-        // each time the camera has moved far enough for chunks to be chosen again.
-        let ready = if options.scripted() && !options.bench {
-            Some(block_on(&mut pending.task))
-        } else {
-            block_on(future::poll_once(&mut pending.task))
+        let Some(mesh) = block_on(future::poll_once(&mut pending.task)) else {
+            continue;
         };
-        let Some(mesh) = ready else { continue };
         let sides = pending.sides;
         terrain.pending.remove(&id);
         if let Some(old) = terrain.shown.remove(&id).and_then(|shown| shown.entity) {
@@ -832,3 +845,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "terrain_tests.rs"]
+mod streaming_tests;
