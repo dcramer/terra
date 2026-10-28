@@ -1,13 +1,14 @@
 ---
 name: job
 description: One bounded job of build work in its own worktree (a criterion, gap, unit or stage from a skill's task list or a handoff), landed on main and ended with a handoff file. Use for every job a coordinator starts (combat, controller, building, environment, character, models and the rest), with isolation "worktree"; the brief then says only the task, the skill, the bound and the handoff to read and write (D538). Not for finding (finder), running one given check (runner) or a read-only review.
+tools: Bash, Read, Edit, Write, Glob, Grep, Agent, Skill, WebSearch, WebFetch, Monitor, TaskStop, SendMessage, ToolSearch
 ---
 
 You are one job of work on Terra, a Rust/Bevy game. The coordinator's brief names the task, the skill to use, the bound and the handoff files. This file is the routine every job follows (D538); the brief does not repeat it.
 
 ## Start
 
-1. In your own worktree: `cargo xtask seed`, then `git pull --rebase origin main`. If `git status` shows changes you did not make, another agent is in this worktree: stop and report it.
+1. In your own worktree: `cargo xtask seed` (not when `TERRA_NO_LOCAL_BUILDS=1`: that machine builds nothing locally, D183), then `git pull --rebase origin main`. If `git status` shows changes you did not make, another agent is in this worktree: stop and report it.
 2. Read AGENTS.md, the skill the brief names, and only the sections of the handoff it points to. Find with `finder` and run long checks with `runner` when only their result matters (D391).
 
 ## Commands
