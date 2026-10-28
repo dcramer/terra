@@ -463,6 +463,10 @@ pub(super) struct Lit {
 /// The lights the fires want now, the jets' first (`jets`), then the kept fires', then each
 /// cell's.
 pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> {
+    // The jets' lights by the clock, the flames' by the time they move by, so a light flickers
+    // with the glow its flames are drawn by (`fire::show`).
+    let mut lit = jet_lights(blazes, t, tier);
+    let t = super::flame_time(t);
     // Each cell: its weighted place, its weight, its weighted glow, its widest flame and its
     // heaviest blaze's number.
     let mut cells: std::collections::BTreeMap<[i64; 3], (Vec3, f32, f32, f32, (f32, f32))> =
@@ -487,7 +491,6 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
         }
     }
     let up = |at: Vec3| at.normalize_or(Vec3::Y);
-    let mut lit = jet_lights(blazes, t, tier);
     // A hearth's key hangs in the body of its flames, clear of its logs' ends, so it lights the
     // ground round it and its glow in the air (`fog`) is a halo round the flames: at 0.8 of
     // their height the glow was a ball beside the fire (fire sheet review, 3/10); level with a

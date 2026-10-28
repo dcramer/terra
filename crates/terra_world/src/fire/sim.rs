@@ -430,8 +430,10 @@ pub(super) fn tell(
         drawn.wind,
         1.0 - libm::expf(-time.delta_secs() / TURN_EASE_S),
     );
-    let now = time.elapsed_secs_wrapped();
-    let world = clock.map_or(0.0, |clock| clock.time().0 * f64::from(DAY_SECONDS));
+    // Both clocks at the flames' pace (`fire::PACE`), as the shader plays the loop.
+    let now = super::flame_time(time.elapsed_secs_wrapped());
+    let world =
+        clock.map_or(0.0, |clock| clock.time().0 * f64::from(DAY_SECONDS)) * f64::from(super::PACE);
     let ahead = on_the_world.ahead(world, now);
     let mut placed = [Vec4::ZERO; HEARTHS];
     let mut wisps = [[Vec4::ZERO; WISPS * 2]; HEARTHS];

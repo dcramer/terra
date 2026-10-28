@@ -168,6 +168,17 @@ const DEBRIS: usize = 36;
 const JET_SPEED_MPS: f32 = 24.0;
 /// The least a fire's smoke drifts, metres a second.
 const LEAST_DRAUGHT_MPS: f32 = 1.6;
+/// How fast the flames move against the clock (D561): every flame's loop, noise and tongues, the
+/// wisps they shed, their light's flicker and sway, the haze over them and the crawl of the
+/// embers on what burns, so they stay in step; sparks, smoke and the jets keep the clock's. The
+/// developers picked 0.65 from a film of 1, 0.8, 0.65 and 0.5 (desk q-fire-pace). Must match
+/// `FLAME_PACE` in fire.wesl and `FLAME_PACE` in tools/fire/motion.ts.
+pub const PACE: f32 = 0.65;
+
+/// The time the flames move by at `now` on the cards' clock (`Time`'s): `PACE` of it.
+fn flame_time(now: f32) -> f32 {
+    now * PACE
+}
 
 /// The fire materials: one a kind of card (the shader's `kind`), then the hearths' mask.
 const KINDS: usize = 9;
@@ -736,7 +747,12 @@ fn show(
         for blaze in blazes.all().take(count) {
             data.push([blaze.at.x, blaze.at.y, blaze.at.z, blaze.tall]);
             // Its flicker now, which its flames, embers and light all burn by (`light::glow`).
-            data.push([blaze.heat, blaze.seed, blaze.wide, light::glow(blaze, now)]);
+            data.push([
+                blaze.heat,
+                blaze.seed,
+                blaze.wide,
+                light::glow(blaze, flame_time(now)),
+            ]);
         }
         data.resize(slots(*quality) * 2, [0.0; 4]);
         *buffer = ShaderBuffer::from(data);

@@ -543,9 +543,20 @@ fn on_log(l: HearthLogs, i: f32, along: f32, foot: vec3<f32>, up: vec3<f32>, eas
     let high = foot + (east * cos(a + l.twist) + north * sin(a + l.twist)) * l.top.x + up * l.top.y;
     return mix(low, high, along) + up * l.radius * 0.8;
 }
+// How fast the flames move against the cards' clock (`fire::PACE`, D561): every flame's
+// loop, lanes, tongues and logs' heat by it; embers, jets and drops keep the cards' clock.
+const FLAME_PACE: f32 = 0.65;
+// The time the flames move by: `FLAME_PACE` of the cards' (`fire::flame_time`).
+fn flame_time() -> f32 {
+    return fire.kind.z * FLAME_PACE;
+}
+// The time cards of `kind` move by: a flame's (0) the flames', the rest the cards' own.
+fn cards_time(kind: i32) -> f32 {
+    return select(fire.kind.z, flame_time(), kind == 0);
+}
 // How hot log `stick` of a hearth burns now, 0 to 1 (`LOG_HEAT_RATE`).
 fn log_heat(stick: f32, seed: f32) -> f32 {
-    return log_heat_at(stick, seed, fire.kind.z);
+    return log_heat_at(stick, seed, flame_time());
 }
 fn log_heat_at(stick: f32, seed: f32, time: f32) -> f32 {
     return smoothstep(0.25, 0.75, noise(vec2(stick * 3.7 + seed * 11.0, time * LOG_HEAT_RATE + stick * 1.3)));
@@ -2127,7 +2138,7 @@ fn hearth_hull(corner: vec3<f32>, slot: u32) -> Out {
 }
 
 fn hearth_march(in: VertexOutput) -> vec4<f32> {
-    let time = fire.kind.z;
+    let time = flame_time();
     let f = baked_frames(hearth_field(u32(in.uv.x + 0.5)), time);
     if f.lobes == 0 {
         discard;
@@ -2820,7 +2831,7 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
     let placed = 2.0 * TONGUE_PLACES - 2.0;
     let wisp = laid.count >= 1.0 && k - TONGUE_LEADS >= placed;
     let period = (0.5 + 0.55 * fract(own * 7.13)) * select(1.0, TONGUE_WISP.z, wisp);
-    let clock = fire.kind.z / period + own * 3.0;
+    let clock = flame_time() / period + own * 3.0;
     let cycle = floor(clock);
     let age = clock - cycle;
     let pick = hash(vec2(cycle * 1.37 + k * 7.0, seed * 13.0 + k));
@@ -2901,7 +2912,7 @@ fn hearth_tongue(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f
 fn hearth_lead(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f32>, north: vec3<f32>, tall: f32, heat: f32, seed: f32, k: f32, own: f32, breathe: f32, laid: HearthLogs) -> Out {
     var out: Out;
     let period = 1.2 + 0.5 * fract(own * 7.13);
-    let clock = fire.kind.z / period + own * 3.0;
+    let clock = flame_time() / period + own * 3.0;
     let cycle = floor(clock);
     let age = clock - cycle;
     let pick = hash(vec2(cycle * 1.37 + k * 7.0, seed * 13.0 + k));
@@ -2911,7 +2922,7 @@ fn hearth_lead(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, east: vec3<f32
     let along = 0.8 + 0.14 * pick;
     let on = on_log(laid, stick, along, foot, up, east, north);
     let near = log_near(laid, stick, on, up, east, north);
-    let slow = mix(0.6, 1.0, noise(vec2(fire.kind.z * LEAD_RATE + k * 7.1, seed * 5.0 + k)));
+    let slow = mix(0.6, 1.0, noise(vec2(flame_time() * LEAD_RATE + k * 7.1, seed * 5.0 + k)));
     var h = tall * TONGUE_TALL.y * LEAD_TALL * slow * select(0.78, 1.0, k < 0.5);
     h *= breathe * (0.8 + 0.3 * age);
     let w = h * LEAD_WIDE * (0.85 + 0.3 * fract(pick * 9.1));
@@ -3125,7 +3136,7 @@ fn hearth(corner: vec2<f32>, foot: vec3<f32>, up: vec3<f32>, tall_in: f32, heat:
 
 fn place(corner: vec2<f32>, id: vec2<f32>) -> Out {
     let kind = i32(fire.kind.x + 0.5);
-    let time = fire.kind.z;
+    let time = cards_time(kind);
     let slot = u32(id.x + 0.5);
     let phase = id.y;
     let wind = fire.wind.xyz;
@@ -3365,7 +3376,7 @@ fn ember_drift(seconds: f32, rise: f32, luck: f32, own: f32, seed: f32, time: f3
 // its stack's apex height (`hearth_rise`), metres; zero for every other card.
 fn shade(uv_in: vec2<f32>, life: vec4<f32>, size: f32, soft: f32, glow: f32, rise: vec3<f32>) -> vec4<f32> {
     let kind = i32(fire.kind.x + 0.5);
-    let time = fire.kind.z;
+    let time = cards_time(kind);
     let t = life.x;
     let heat = life.y;
     let luck = life.z;

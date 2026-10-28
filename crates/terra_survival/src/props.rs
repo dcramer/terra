@@ -218,7 +218,8 @@ const EMBER_REACH_M: f32 = 2.0;
 const EMBER_WEIGHT: f32 = 0.0;
 /// How the embers crawl (`fire_glow.wesl` `crawl`): how deep (0 an even glow), patches a metre,
 /// and their rate a second, so a log's cracks flare and dull a patch at a time over a second or
-/// two, as RDR2's do, rather than glowing evenly as a painted pattern (fire round g66).
+/// two, as RDR2's do, rather than glowing evenly as a painted pattern (fire round g66). The rate
+/// is at the flames' full pace: the embers crawl at the pace the flames move (`fire::PACE`, D561).
 const EMBER_CRAWL: [f32; 3] = [0.8, 7.0, 0.45];
 
 /// Each burning part given its own material, so its embers flicker with its own fire, and
@@ -238,7 +239,12 @@ fn kindle(
         let glow = terra_world::fire::GlowMaterial {
             base: own,
             extension: terra_world::fire::Glow {
-                mask: Vec4::new(1.0, EMBER_CRAWL[0], EMBER_CRAWL[1], EMBER_CRAWL[2]),
+                mask: Vec4::new(
+                    1.0,
+                    EMBER_CRAWL[0],
+                    EMBER_CRAWL[1],
+                    EMBER_CRAWL[2] * terra_world::fire::PACE,
+                ),
             },
         };
         commands

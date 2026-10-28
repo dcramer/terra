@@ -192,8 +192,9 @@ fn a_campfires_light_flickers_with_its_flames_lights_round_it_and_a_roof_reaches
         let stone = Vec2::new(off.xz().length() + 0.55, off.y - 0.08);
         assert!(stone.x > 0.8 * stone.y, "{stone}");
         assert!(hearth.range <= 15.0 && roof.range > hearth.range);
-        // Its light is its flames' flicker: the signal the shaders are given for the fire.
-        assert!((hearth.glow - glow(&campfire, t)).abs() < 1e-6);
+        // Its light is its flames' flicker: the signal the shaders are given for the fire, at
+        // the time its flames move by (`fire::PACE`).
+        assert!((hearth.glow - glow(&campfire, crate::fire::flame_time(t))).abs() < 1e-6);
         seen = (seen.0.min(hearth.at.x), seen.1.max(hearth.at.x));
         // It never sways below where it hangs, into the logs' ends, whose shadow from a light
         // under them balloons over the ground (fire round 30).

@@ -67,15 +67,20 @@ export const MAX_LAG = 0.6;
 /// hour and pass `--seconds 20`: a 6 s film gives too few tongues for their rates (fire round g20).
 export const SEGMENT = 6;
 
+/// How fast the game's flames move against the clock (`fire::PACE` in terra_world, D561).
+export const FLAME_PACE = 0.65;
+
 /// The bars a film of ours is held to, from the real clips (research/2026-10-25-fire-motion.md):
 /// each measure must lie in [lo, hi]. Flicker is the median frequency, as the real clips' range
 /// was found (1.83-3.83 Hz, fire round g12), not the dominant one: a baked flame's area has a
 /// narrow swell at 0.5 Hz beside broad puffing at 2.4 Hz, and which of them peaks flips from
 /// film to film of one flame while the median holds (fire round g43).
+/// A tongue's lifetime is held to the real clips' bar slowed by the flames' pace (D472, D561): the
+/// developers picked a slower flame than the clips', and a tongue at pace p lives 1/p as long.
 export const GATE: { name: string; of: (m: Motion) => number; lo: number; hi: number }[] = [
   { name: "flick", of: (m) => m.flicker.median, lo: 1.83, hi: 3.83 },
   { name: "area", of: (m) => m.flicker.areaCv, lo: 0, hi: 0.19 },
-  { name: "life", of: (m) => m.tongues.lifetime, lo: 0.04, hi: 0.12 },
+  { name: "life", of: (m) => m.tongues.lifetime, lo: 0.04 / FLAME_PACE, hi: 0.12 / FLAME_PACE },
   { name: "splits", of: (m) => m.tongues.splits, lo: 0, hi: 1.2 },
   { name: "lean", of: (m) => m.tongues.lean, lo: 7.6, hi: 24.5 },
   { name: "topred", of: (m) => m.colour.red[2], lo: 0, hi: 47 },

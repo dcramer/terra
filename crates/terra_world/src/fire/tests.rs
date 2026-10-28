@@ -105,3 +105,40 @@ fn each_mask_is_drawn_after_the_flames_it_masks() {
     // And before the breaths, which stand over the flames.
     assert!(drawn_bias(MASK) < drawn_bias(5));
 }
+
+#[test]
+fn the_shader_moves_the_flames_at_the_pace_the_lights_and_loop_do() {
+    let shader = std::fs::read_to_string(crate::data::assets().join("shaders/fire.wesl")).unwrap();
+    assert!(shader.contains(&format!("const FLAME_PACE: f32 = {PACE:?};")));
+}
+
+#[test]
+fn a_fires_light_flickers_with_the_glow_its_flames_are_drawn_by() {
+    // `show` draws a kept fire's flames and embers by its glow at the flames' time; its light
+    // flickers with them, not at the clock's own pace beside them.
+    let campfire = Blaze {
+        at: Vec3::new(0.0, 100.0, 0.0),
+        tall: 1.5,
+        heat: 0.9,
+        seed: 0.3,
+        wide: 0.7,
+    };
+    let blazes = Blazes {
+        kept: vec![campfire],
+        ..default()
+    };
+    let mut apart = 0.0f32;
+    for i in 0..200 {
+        let t = 10.0 + i as f32 * 0.05;
+        let drawn = light::glow(&campfire, flame_time(t));
+        let key = &light::lit(&blazes, t, BreathTier::Cards)[0];
+        assert!(
+            (key.glow - drawn).abs() < 1e-6,
+            "at {t} s its light's glow is {}, its flames' {drawn}",
+            key.glow
+        );
+        apart = apart.max((light::glow(&campfire, t) - drawn).abs());
+    }
+    // The flames' time is not the clock's, or the check above held nothing.
+    assert!(apart > 0.01, "{apart}");
+}

@@ -1,7 +1,8 @@
 // The motion measure's numbers on clips whose answers are known by construction.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { analyse, type Clip, flicker, GATE, gate, held, type Motion, roughness } from "./motion.ts";
+import { analyse, type Clip, FLAME_PACE, flicker, GATE, gate, held, type Motion, roughness } from "./motion.ts";
 
 const FPS = 30;
 const N = 180;
@@ -180,4 +181,15 @@ test("the gate's flicker is the median: a narrow swell beside broad puffing pass
   const swell = flicker(series(20), FPS);
   near(swell.median, 0.5, 0.01, "median Hz");
   assert.ok(!passes(swell), "a swell alone does not");
+});
+
+test("the gate holds tongues at the pace the game's flames move", () => {
+  // motion.ts's FLAME_PACE is terra_world's fire::PACE (D561), so the lifetime bar follows it.
+  const rust = readFileSync(new URL("../../crates/terra_world/src/fire.rs", import.meta.url), "utf8");
+  const pace = Number(/pub const PACE: f32 = ([0-9.]+);/.exec(rust)?.[1]);
+  assert.equal(pace, FLAME_PACE);
+  const life = GATE.find((g) => g.name === "life")!;
+  // The real clips' lifetimes (0.04-0.12 s), slowed to the game's pace, meet the bar.
+  near(life.lo * FLAME_PACE, 0.04, 1e-9, "the clips' shortest");
+  near(life.hi * FLAME_PACE, 0.12, 1e-9, "the clips' longest");
 });

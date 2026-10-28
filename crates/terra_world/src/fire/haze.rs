@@ -155,7 +155,8 @@ fn columns(
             .collect();
         near.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut next = HeatHaze {
-            time: time.elapsed_secs_wrapped(),
+            // The haze over the flames moves with them (`fire::PACE`).
+            time: super::flame_time(time.elapsed_secs_wrapped()),
             aspect: lens.aspect,
             octaves: Vec4::new(OCTAVES[0].0, OCTAVES[0].1, OCTAVES[1].0, OCTAVES[1].1),
             side: Vec4::new(SIDE.0, SIDE.1, 0.0, 0.0),
