@@ -210,6 +210,44 @@ export function writePhases(
   return ron.slice(0, open + 1) + body + ron.slice(close);
 }
 
+/** The clip the game plays of a spec's take: the list's entry made `of` it (Open_Slash of
+ * Keyed_Slash, the shield arm held at the guard's rest, D454, D531), else the take itself. */
+export function playedClip(list: Record<string, unknown>, name: string): string {
+  const of = Object.entries(list).filter(([, e]) => (e as { of?: unknown })?.of === name).map(([n]) => n);
+  if (of.length > 1) throw new Error(`${of.join(", ")} are each made of ${name}: say which a move plays (one entry of a take)`);
+  return of[0] ?? name;
+}
+
+/** A move set's text with every other move that plays `clip` given the same frames: `active`
+ * and `done` are in the clip's own seconds, so a blow played from another's clip at its own
+ * speed (the finisher and the partner's slash from the slash's) strikes on the frames it does. */
+export function writeShared(ron: string, clip: string, except: string, phases: { done: number; active?: [number, number] }): string {
+  const moves = /\bmoves\s*:\s*\{/.exec(ron);
+  if (!moves) return ron;
+  const end = matching(ron, moves.index + moves[0].length - 1, "{", "}");
+  const names: string[] = [];
+  const head = /"([^"]+)"\s*:\s*\(/g;
+  head.lastIndex = moves.index;
+  for (let m = head.exec(ron); m && m.index < end; m = head.exec(ron)) {
+    const open = m.index + m[0].length - 1;
+    const close = matching(ron, open, "(", ")");
+    if (m[1] !== except && new RegExp(`\\bclip\\s*:\\s*"${clip.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`).test(ron.slice(open, close))) names.push(m[1]);
+    head.lastIndex = close;
+  }
+  for (const name of names) {
+    const open = ron.indexOf("(", new RegExp(`"${name}"\\s*:\\s*\\(`).exec(ron.slice(moves.index))!.index + moves.index);
+    const close = matching(ron, open, "(", ")");
+    let body = ron.slice(open + 1, close);
+    const fields: [string, string][] = [...(phases.active ? [["active", `(${round2(phases.active[0])}, ${round2(phases.active[1])})`] as [string, string]] : []), ["done", round2(phases.done)]];
+    for (const [key, value] of fields) {
+      const at = new RegExp(`\\b${key}\\s*:\\s*(\\([^)]*\\)|-?[\\d.]+)`);
+      body = at.test(body) ? body.replace(at, `${key}: ${value}`) : body.replace(/\bclip\s*:\s*"[^"]*"\s*,?/, (x) => `${x.replace(/,?$/, ",")} ${key}: ${value},`);
+    }
+    ron = ron.slice(0, open + 1) + body + ron.slice(close);
+  }
+  return ron;
+}
+
 /** The index of the bracket closing the one at `open`. */
 function matching(text: string, open: number, a: string, b: string): number {
   let depth = 0;

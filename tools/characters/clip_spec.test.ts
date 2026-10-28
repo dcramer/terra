@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { againstSpec, choose, readSpec, speedFor, writePhases } from "./clip_spec.ts";
+import { againstSpec, choose, playedClip, readSpec, speedFor, writePhases, writeShared } from "./clip_spec.ts";
 
 const entry = {
   prompt: "A swordsman cuts.", seconds: 1.6, seed: 2, once: true,
@@ -99,6 +99,31 @@ test("a move's speed, hold and chain are written with its phases", () => {
   assert.match(out, /"block": \(clip: "Keyed_Block#1", from: 0\.00, speed: 1\.80, done: 1\.40, hold: 0\.60\)/);
   const added = writePhases(SET, "backhand", { clip: "K#0", from: 0, done: 1.5, speed: 2.5, next: "slash" });
   assert.match(added, /"backhand": \(clip: "K#0", from: 0\.00, done: 1\.50, next: "slash", speed: 2\.50\),/);
+});
+
+test("a blow is written as the clip the game plays of its take, and every move playing that clip gets its frames", () => {
+  const list = { Keyed_Slash: { prompt: "x" }, Open_Slash: { of: "Keyed_Slash", hold: "rest" }, Keyed_Heavy: {} };
+  assert.equal(playedClip(list, "Keyed_Slash"), "Open_Slash");
+  assert.equal(playedClip(list, "Keyed_Heavy"), "Keyed_Heavy");
+  assert.throws(() => playedClip({ ...list, Low_Slash: { of: "Keyed_Slash" } }, "Keyed_Slash"), /Open_Slash, Low_Slash are each made of Keyed_Slash/);
+  const set = `(
+    moves: {
+        "slash": (clip: "Open_Slash", from: 0.00, speed: 1.72, active: (0.48, 0.60), done: 1.96, next: "finisher"),
+        // The slash again, slower.
+        "finisher": (clip: "Open_Slash", from: 0.0, speed: 1.5, active: (0.48, 0.60), done: 1.96, damage: 18),
+        "partner_slash": (
+            clip: "Open_Slash", from: 0.0, speed: 0.58, done: 1.96,
+        ),
+        "heavy": (clip: "Open_Heavy", from: 0.00, speed: 1.5, active: (0.82, 1.17), done: 2.38),
+    },
+)`;
+  let out = writePhases(set, "slash", { clip: playedClip(list, "Keyed_Slash"), from: 0, done: 1.9, active: [0.32, 0.48], speed: 1.59 });
+  out = writeShared(out, "Open_Slash", "slash", { done: 1.9, active: [0.32, 0.48] });
+  assert.match(out, /"slash": \(clip: "Open_Slash", from: 0\.00, speed: 1\.59, active: \(0\.32, 0\.48\), done: 1\.90, next: "finisher"\)/);
+  assert.match(out, /"finisher": \(clip: "Open_Slash", from: 0\.0, speed: 1\.5, active: \(0\.32, 0\.48\), done: 1\.90, damage: 18\)/);
+  assert.match(out, /clip: "Open_Slash", active: \(0\.32, 0\.48\), from: 0\.0, speed: 0\.58, done: 1\.90,/);
+  assert.match(out, /"heavy": \(clip: "Open_Heavy", from: 0\.00, speed: 1\.5, active: \(0\.82, 1\.17\), done: 2\.38\)/);
+  assert.match(out, /\/\/ The slash again, slower\./);
 });
 
 test("a move the set lacks is added to its moves", () => {

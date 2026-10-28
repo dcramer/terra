@@ -30,7 +30,7 @@ import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSy
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { choose, keysFor, readSpec, setGuard, speedFor, writePhases, type Scored, type Spec } from "./clip_spec.ts";
+import { choose, keysFor, playedClip, readSpec, setGuard, speedFor, writePhases, writeShared, type Scored, type Spec } from "./clip_spec.ts";
 import { Glb } from "./glb.ts";
 import { KIMODO, KIMODO_ENV, MODEL, kept } from "./motion.ts";
 import { measure } from "./phases.ts";
@@ -202,7 +202,9 @@ function main() {
     more.get(s.name)!.set(n, wrong);
     // Only a blow strikes: a guard's or a block's quick sword is no active span.
     const active = s.blow.sweep ? p.active : undefined;
-    return { clip: s.name, take: n, end: p.end, active, hit: s.blow.sweep ? p.fastest?.t : s.blow.raised?.[0] };
+    // A blow's hit is its active span's start, as the scorecard's timing reads Enshrouded's
+    // (research/2026-10-24-enshrouded-combat-measured.md), so the speed chosen is the one scored.
+    return { clip: s.name, take: n, end: p.end, active, hit: s.blow.sweep ? active?.[0] : s.blow.raised?.[0] };
   });
   say(true, "phases", measured.map((m) => `${takeName(m.clip, m.take)} ${m.active ? m.active.map((x) => x.toFixed(2)).join("-") : "none"} of ${m.end.toFixed(2)} s`).join(", "));
 
@@ -285,7 +287,13 @@ function main() {
     mirrorFile(GAME_CLIPS);
     bakeFile(GAME_CLIPS);
     let text = readFileSync(into, "utf8");
-    for (const { s, m } of chosen) text = writePhases(text, s.blow.move, { clip: s.name, from: 0, done: m.end, active: m.active, speed: speeds.get(s.name), hold: hold(s) });
+    // Each blow plays its take as the list holds it (Open_Slash of Keyed_Slash), and every other
+    // move playing that clip strikes on its new frames.
+    for (const { s, m } of chosen) {
+      const clip = playedClip(list, s.name);
+      text = writePhases(text, s.blow.move, { clip, from: 0, done: m.end, active: m.active, speed: speeds.get(s.name), hold: hold(s) });
+      text = writeShared(text, clip, s.blow.move, { done: m.end, active: m.active });
+    }
     writeFileSync(into, text);
     // The combat ratchet: a set that makes any criterion worse than its baseline is refused.
     appendFileSync(LOG, `\n$ node tools/combat/scorecard.ts\n`);
