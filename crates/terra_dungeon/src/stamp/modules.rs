@@ -576,7 +576,11 @@ fn rubble(cell: &Cell, side: usize, out: &mut Stamp) {
 }
 
 /// The floor a cube lower from row `from` (of the frame's north) to the south edge, up to the
-/// walls: the slab taken out and laid again a cube down.
+/// walls: the slab taken out and laid again a cube down, the walls carried down a cube to it
+/// in their own kind, and the floor a cube on past an open side, under the next cell's slab
+/// where that one stays dry. Standing over an empty cube, a wall's foot was an open edge the
+/// mesher rounded under, a pale band along every wall of a flooded room (mine round 6), and a
+/// dry slab's edge over a basin a groove at the step's foot.
 fn sink(f: Frame, cell: &Cell, from: i32, kinds: &Kinds, ops: &mut Vec<BuildOp>) {
     let walled = |d: usize| cell.sides[f.side(d)] != Side::Open;
     let x0 = if walled(3) { 1 } else { 0 };
@@ -584,7 +588,24 @@ fn sink(f: Frame, cell: &Cell, from: i32, kinds: &Kinds, ops: &mut Vec<BuildOp>)
     let z0 = if walled(0) { from.max(1) } else { from };
     let z1 = if walled(2) { INNER } else { EDGE };
     f.fill(ops, [x0, -1, z0], [x1, -1, z1], None);
+    f.fill(ops, [0, -2, from], [EDGE, -2, EDGE], solid(kinds.wall));
     f.fill(ops, [x0, -2, z0], [x1, -2, z1], solid(kinds.floor));
+    // Under the edge of what stays dry: a shore's step row, the next cell past an open side.
+    let mut under = |a: [i32; 3], b: [i32; 3]| f.fill(ops, a, b, solid(kinds.floor));
+    if from > 0 {
+        under([x0, -2, from - 1], [x1, -2, from - 1]);
+    } else if !walled(0) {
+        under([x0, -2, -1], [x1, -2, -1]);
+    }
+    if !walled(2) {
+        under([x0, -2, CELL], [x1, -2, CELL]);
+    }
+    if !walled(3) {
+        under([-1, -2, z0], [-1, -2, z1]);
+    }
+    if !walled(1) {
+        under([CELL, -2, z0], [CELL, -2, z1]);
+    }
 }
 
 /// A shore: dry on one side, a basin on the side its water is, a row of stair cubes between.

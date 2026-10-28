@@ -18,6 +18,8 @@
 
 #[cfg(test)]
 mod doorway_tests;
+#[cfg(test)]
+mod foot_tests;
 mod furnish;
 mod kit;
 #[cfg(test)]
