@@ -226,6 +226,7 @@ mod tests {
             kept: true,
             night_stops: 2.5,
             dusk_gain: 1.0,
+            dusk_reach: 1.0,
             casts: true,
             still: None,
         };

@@ -34,6 +34,10 @@ export const REFERENCE: Record<string, string> = {
   HEARTH_TOP_RANGE_M: "10.0",
   HEARTH_TOP_SPREAD: "2.0",
   HEARTH_TOP_DUSK: "7.0",
+  // The pit key's dusk gain and the top light's dusk reach (g82), as main lit before either
+  // was: no gain, and a reach past the top light's range (it keeps at most all of it).
+  HEARTH_KEY_DUSK: "1.0",
+  HEARTH_TOP_DUSK_REACH: "100.0",
   HEARTH_TOP_NIGHT_STOPS: "1.0",
   HEARTH_DUSK_SKY: "360.0",
 };

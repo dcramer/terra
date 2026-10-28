@@ -60,6 +60,7 @@ mod tests {
             kept: true,
             night_stops: 0.0,
             dusk_gain: 1.0,
+            dusk_reach: 1.0,
             casts,
             still: Some(Still {
                 at: Vec3::ZERO,

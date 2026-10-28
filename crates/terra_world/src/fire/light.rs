@@ -172,6 +172,31 @@ const HEARTH_TOP_RANGE_M: f32 = 10.0;
 /// 9 (was 7) for the dusk pool (g52); at 10 a face 2.6 m out took 5.6 times the sky's (g54).
 const HEARTH_TOP_SPREAD: f32 = 2.0;
 const HEARTH_TOP_DUSK: f32 = 9.0;
+/// How many times more the pit key is keyed up against the dusk sky (`hearth_by_hour`), as the
+/// top light is (`HEARTH_TOP_DUSK`). With the dusk's boost on the top light alone (the key 1),
+/// hung high and wide it gave the ground some 97% of its firelight and lit it evenly: on the
+/// fire sheet's dusk strip the ground fell only to 0.38 of its light by the stones three to
+/// four ring radii out (linear), to 0.71 at two, warm alike to the frame's edges, where RDR2's
+/// night pool falls to 0.40 at two and 0.14 at three to four (g80's measure). With the boost
+/// moved to the key (30, the top 3) the pool fell off, but the key, low in the flames, lights
+/// the stones' fire-facing sides square on: they took 5.5 times main's light, past the
+/// tonemapper's shoulder, and every judge's worst fault was a ring and ash bed of flat,
+/// saturated clay-orange and a brown ribbon of lit smoke over it (g82's panel faults). At 5,
+/// the pool's fall-off drawn by the top light's reach at dusk (`HEARTH_TOP_DUSK_REACH`), the
+/// stones take some 1.6 times main's and a face by the stones under five times the sky's.
+const HEARTH_KEY_DUSK: f32 = 5.0;
+/// How far the top light reaches at dusk, metres for each metre of flame: drawn in from its
+/// night's reach (`HEARTH_TOP_RANGE_M`) as `hearth_by_hour` keys it up, giving way to it as the
+/// night comes (`range_by_hour`). A light's reach is a window on its fall-off (Bevy's, after
+/// Unreal's attenuation radius, as games shape a light's pool), so at the yard's dusk the
+/// ground three metres from a 1.5 m campfire takes half the top light it took at 10 m and the
+/// field past 4.7 m none: the pool falls off past the camp, where at the full reach the
+/// ground 6 m out stood 1.15 times as lit as the far field
+/// (`a_campfires_dusk_pool_is_brightest_by_its_stones_and_falls_off_within_a_few_metres`). At
+/// 2.7 the lake's 1.95 m fire left the ground 4 m out no longer warm (red 1.15 times blue,
+/// `a_campfires_pool_reads_warm_a_few_metres_out_at_dusk`). A fire raised off the ground (a
+/// brazier) lights the ground under it by its key at dusk.
+const HEARTH_TOP_DUSK_REACH: f32 = 3.0;
 /// How many stops brighter the top light is by night, fewer than the pit light's: hung high
 /// and wide it lit the ground evenly, so at the pit light's 2.5 the night pool stood flat to
 /// three flame heights out (sRGB luma 89 at one, 59 at three), where RDR2's campfires fall to
@@ -239,6 +264,15 @@ pub(super) fn hearth_by_hour(
     let against_sky = (sky_light / HEARTH_DUSK_SKY).clamp(1.0, full) * gain;
     let down = twilight.clamp(0.0, 1.0);
     by_night(stops, night).max(1.0 + (against_sky - 1.0) * down * down)
+}
+
+/// How far a kept fire's light reaches at an hour: its range, drawn in to the share it keeps at
+/// dusk (`Lit::dusk_reach`) as the sun goes down, as `hearth_by_hour` keys it up, and given
+/// back as the night comes. By day and by night, the whole of it.
+pub(super) fn range_by_hour(range: f32, dusk_reach: f32, night: f32, twilight: f32) -> f32 {
+    let down = twilight.clamp(0.0, 1.0);
+    let dusk = (1.0 - night.clamp(0.0, 1.0)) * down * down;
+    range * (1.0 + (dusk_reach - 1.0) * dusk)
 }
 
 /// How many fire lights' places and flickers the char and embers of what burns are told.
@@ -416,6 +450,9 @@ pub(super) struct Lit {
     /// (`hearth_by_hour`): a hearth's top light's `HEARTH_TOP_DUSK`, a torch's lights'
     /// `torch::TORCH_DUSK`, every other's 1.
     pub dusk_gain: f32,
+    /// The share of its reach it keeps at dusk (`range_by_hour`): a hearth's top light's
+    /// `HEARTH_TOP_DUSK_REACH`, every other's 1.
+    pub dusk_reach: f32,
     /// Whether it may cast shadows: a hearth's top light does not (`choose`); each of a cube's
     /// six views is drawn every frame, 0.55 ms of GPU and 0.6 of render CPU (fire round g29).
     pub casts: bool,
@@ -491,7 +528,8 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     glow,
                     kept: true,
                     night_stops: HEARTH_NIGHT_STOPS,
-                    dusk_gain: 1.0,
+                    dusk_gain: HEARTH_KEY_DUSK,
+                    dusk_reach: 1.0,
                     casts: true,
                     still: still(rest),
                 };
@@ -507,6 +545,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                     radius: width(blaze) * HEARTH_TOP_SPREAD,
                     night_stops: HEARTH_TOP_NIGHT_STOPS,
                     dusk_gain: HEARTH_TOP_DUSK,
+                    dusk_reach: (blaze.tall * HEARTH_TOP_DUSK_REACH / HEARTH_TOP_RANGE_M).min(1.0),
                     casts: false,
                     still: still(top_rest),
                     ..main.clone()
@@ -554,6 +593,7 @@ pub(super) fn lit(blazes: &Blazes, t: f32, tier: super::BreathTier) -> Vec<Lit> 
                 kept: false,
                 night_stops: NIGHT_STOPS,
                 dusk_gain: 1.0,
+                dusk_reach: 1.0,
                 casts: true,
                 still: None,
             }
@@ -748,11 +788,13 @@ pub(super) fn light(
     // shadowed key (0.4 of its light by day, half of it by night) lost its light to the top
     // light and the blazes, and a dungeon's torches cast shadows 0.36 lights a frame.
     for want in &mut wants {
-        want.lumens *= if want.kept {
-            hearth_by_hour(want.night_stops, want.dusk_gain, night, twilight, sky_light)
+        if want.kept {
+            want.lumens *=
+                hearth_by_hour(want.night_stops, want.dusk_gain, night, twilight, sky_light);
+            want.range = range_by_hour(want.range, want.dusk_reach, night, twilight);
         } else {
-            by_night(want.night_stops, night)
-        };
+            want.lumens *= by_night(want.night_stops, night);
+        }
     }
     shut::give_top_to_key(&mut wants, shut_off);
     let shown = choose(wants, eye, &was, shadowed(*quality));
@@ -835,5 +877,7 @@ pub(super) fn light(
     }
 }
 
+#[cfg(test)]
+mod pool_tests;
 #[cfg(test)]
 mod tests;

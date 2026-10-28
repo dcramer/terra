@@ -79,6 +79,7 @@ pub(super) fn flashes(blazes: &Blazes, jets: &[(bool, f32, f32)], t: f32) -> Vec
                     kept: false,
                     night_stops: NIGHT_STOPS,
                     dusk_gain: 1.0,
+                    dusk_reach: 1.0,
                     casts: true,
                     still: None,
                 }
@@ -138,6 +139,7 @@ pub(super) fn strikes(
                     kept: false,
                     night_stops: BREATH_NIGHT_STOPS,
                     dusk_gain: 1.0,
+                    dusk_reach: 1.0,
                     casts: true,
                     still: None,
                 }
@@ -175,6 +177,7 @@ pub(super) fn jet_lights(blazes: &Blazes, t: f32, tier: BreathTier) -> Vec<Lit> 
                     color: jet_light,
                     night_stops: jet_stops,
                     dusk_gain: 1.0,
+                    dusk_reach: 1.0,
                     casts: true,
                     still: None,
                     range: JET_RANGE_M,

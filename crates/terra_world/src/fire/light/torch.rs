@@ -54,6 +54,7 @@ pub(super) fn lights(
         radius: TORCH_RADIUS_M,
         night_stops: TORCH_NIGHT_STOPS,
         dusk_gain: TORCH_DUSK,
+        dusk_reach: 1.0,
         casts: true,
         still: still(rest),
         ..hearth.clone()

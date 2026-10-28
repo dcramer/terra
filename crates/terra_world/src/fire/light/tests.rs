@@ -1,3 +1,4 @@
+use super::pool_tests::at_hour;
 use super::*;
 
 /// A signal sampled over twenty seconds at a millisecond: its least and most, its mean, and
@@ -221,6 +222,7 @@ fn at(x: f32, lumens: f32) -> Lit {
         kept: false,
         night_stops: 2.5,
         dusk_gain: 1.0,
+        dusk_reach: 1.0,
         casts: true,
         still: None,
     }
@@ -393,7 +395,7 @@ fn a_campfire_lights_its_stones_under_its_flame_and_the_ground_about_as_the_moon
 /// What a hearth's lights give a face so far out from the fire's foot and so high, turned to
 /// the fire: each a disc (`crate::falloff`) on a vertical face, lux per lumen of the light,
 /// eased out to nothing at its range as drawn (bevy_pbr 0.20's `getRangeFalloff`).
-fn on_face(lit: &Lit, foot: Vec3, out: f32, high: f32) -> f32 {
+pub(super) fn on_face(lit: &Lit, foot: Vec3, out: f32, high: f32) -> f32 {
     let (across, up) = (out, foot.y + high - lit.at.y);
     let d2 = across * across + up * up;
     let facing = across / libm::sqrtf(d2);
@@ -404,13 +406,13 @@ fn on_face(lit: &Lit, foot: Vec3, out: f32, high: f32) -> f32 {
 
 /// How many times a light is keyed up at an hour, as `light` keys it, the sun a degree or more
 /// under (`Sky::twilight` 1).
-fn keyed(lit: &Lit, night: f32, sky: f32) -> f32 {
+pub(super) fn keyed(lit: &Lit, night: f32, sky: f32) -> f32 {
     hearth_by_hour(lit.night_stops, lit.dusk_gain, night, 1.0, sky)
 }
 
 /// What a light gives the ground so far out from the fire's foot, as drawn: a disc
 /// (`crate::falloff`) eased out to nothing at its range (bevy_pbr 0.20's `getRangeFalloff`).
-fn on_ground_drawn(lit: &Lit, foot: Vec3, out: f32) -> f32 {
+pub(super) fn on_ground_drawn(lit: &Lit, foot: Vec3, out: f32) -> f32 {
     let h = lit.at.y - foot.y;
     let d2 = h * h + out * out;
     let f = d2 / (lit.range * lit.range);
@@ -441,7 +443,7 @@ fn staked_pool(colour: Color, rig: Rig, night: f32, sky: f32) -> impl Fn(f32) ->
     move |out: f32| -> f32 {
         lights
             .iter()
-            .map(|l| on_ground_drawn(l, ground, out) * keyed(l, night, sky))
+            .map(|l| on_ground_drawn(&at_hour(l, night, sky), ground, out))
             .sum()
     }
 }
@@ -566,7 +568,7 @@ fn a_campfires_pool_reads_warm_a_few_metres_out_at_dusk() {
                 let lights = lit(&blazes, i as f32 * 0.1, crate::fire::BreathTier::Cards);
                 let lux: f32 = lights
                     .iter()
-                    .map(|l| on_ground_drawn(l, foot, out) * keyed(l, night, sky))
+                    .map(|l| on_ground_drawn(&at_hour(l, night, sky), foot, out))
                     .sum();
                 lux / sky_on_ground / 100.0
             })
@@ -632,7 +634,7 @@ fn a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm() {
             let lights = lit(&blazes, i as f32 * 0.1, crate::fire::BreathTier::Cards);
             let lux: f32 = lights
                 .iter()
-                .map(|l| on_face(l, foot, out, high) * keyed(l, night, sky))
+                .map(|l| on_face(&at_hour(l, night, sky), foot, out, high))
                 .sum();
             share += lux / sky_on_face / 100.0;
         }
@@ -642,7 +644,9 @@ fn a_figure_sat_by_a_campfire_at_dusk_is_lit_by_it_twice_as_bright_and_warm() {
             "a face {out} m out and {high} m up: {:.2} times the sky's",
             1.0 + share
         );
-        // But not driven past the white: no more than some five times as lit.
+        // But not driven past the white: no more than some five times as lit, a metre out by
+        // the stones too (with the pit key keyed up 30 times at dusk, g80, some twelve times:
+        // the stones by it read flat clay-orange, g82).
         assert!(
             1.0 + share <= 5.0,
             "a face {out} m out and {high} m up: {:.2} times the sky's",
