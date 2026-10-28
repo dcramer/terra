@@ -112,10 +112,10 @@ fn take_slot(lock: &std::path::Path) {
         return;
     }
     let started = std::time::Instant::now();
-    let mut said = false;
+    let mut said: Option<u64> = None;
     loop {
         if let Some(free) = files.iter().position(|file| file.try_lock().is_ok()) {
-            if said {
+            if said.is_some() {
                 println!(
                     "SANDBOX got a GPU slot after {:.0} s",
                     started.elapsed().as_secs_f32()
@@ -124,9 +124,14 @@ fn take_slot(lock: &std::path::Path) {
             let _ = SLOT.set(files.swap_remove(free));
             return;
         }
-        if !said {
-            println!("SANDBOX waiting for a GPU slot: {slots} runs are drawing");
-            said = true;
+        // Said again every minute: a wait is not a hang, and a script running this run (yard.ts,
+        // `cargo xtask gpu`) takes a run that says nothing for minutes for one.
+        let minutes = started.elapsed().as_secs() / 60;
+        if said != Some(minutes) {
+            println!(
+                "SANDBOX waiting for a GPU slot: {slots} runs are drawing ({minutes} min so far)"
+            );
+            said = Some(minutes);
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
