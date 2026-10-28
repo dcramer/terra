@@ -32,6 +32,16 @@ export function tube(outer: Ring, inner: Ring, y0: number, y1: number, material 
   return { positions, indices, materials: [material], textures: [], scaled: [] };
 }
 
+/** A closed box from corner lo to corner hi, faces outward: 12 triangles. */
+export function box(lo: [number, number, number], hi: [number, number, number]): Mesh {
+  const c = (i: number) => [i & 1 ? hi[0] : lo[0], i & 2 ? hi[1] : lo[1], i & 4 ? hi[2] : lo[2]];
+  const positions = [...Array(8).keys()].flatMap(c);
+  // Each face's corners counter-clockwise seen from outside: -X, +X, -Y, +Y, -Z, +Z.
+  const faces = [[0, 4, 6, 2], [1, 3, 7, 5], [0, 1, 5, 4], [2, 6, 7, 3], [0, 2, 3, 1], [4, 5, 7, 6]];
+  const indices = faces.flatMap(([a, b, c, d]) => [a, b, c, a, c, d]);
+  return { positions, indices, materials: ["Metal"], textures: [], scaled: [] };
+}
+
 /** A glb of one mesh on one node, with the node's scale: a made-up part's model. */
 export function glbOf(m: Mesh, scale = [1, 1, 1], name = "head"): Buffer {
   const pos = Buffer.from(new Float32Array(m.positions).buffer);
@@ -69,7 +79,10 @@ export function glbOf(m: Mesh, scale = [1, 1, 1], name = "head"): Buffer {
 
 export const EYE = 0.035; // the eye across, the reference axe's grip (axe.json)
 export const HEAD_H = 0.06;
-export const boxHead = (eye = EYE, top = HEAD_H) => tube(square(0.03), circle(eye / 2), 0, top);
+// The box head's own volume, worked by hand: its 6 cm square less its eye, a 32-gon of radius r
+// (area N/2 r^2 sin(2 pi/N)), times its height.
+export const HEAD_M3 = HEAD_H * (0.06 * 0.06 - (N / 2) * (EYE / 2) ** 2 * Math.sin((2 * Math.PI) / N));
+export const boxHead =(eye = EYE, top = HEAD_H) => tube(square(0.03), circle(eye / 2), 0, top);
 export const collarMesh = (top = 0) => tube(circle(0.022), circle(EYE / 2), -0.02, top, "Leather");
 
 const n = (value: number, source = "made up for the part checker's tests") => ({ value, source });
@@ -79,7 +92,7 @@ export const head = (over: Record<string, any> = {}) => ({
   type: "axe_head",
   about: "a made-up box head with a round eye",
   model: "models/parts/test_box_head.glb",
-  volume_m3: n(0.9 / 7870), // 0.9 kg in iron (materials.json)
+  volume_m3: n(HEAD_M3),
   centre_m: [0, 0.03, 0],
   bounds_m: [[-0.03, 0, -0.03], [0.03, HEAD_H, 0.03]],
   points: [

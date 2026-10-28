@@ -67,6 +67,34 @@ export function bounds(m: Mesh): [V3, V3] {
   return [lo, hi];
 }
 
+/**
+ * The solid the surface closes: its volume and centre of mass at even density, summed over the
+ * signed tetrahedra each triangle makes with the origin (the divergence theorem; Zhang and Chen,
+ * "Efficient feature extraction for 2D/3D objects in mesh representation", ICIP 2001). Right only
+ * for a closed surface facing out, so it also counts the edges met by one face alone or by two
+ * running the same way: `open` is 0 for a solid.
+ */
+export function solid(m: Mesh): { volume: number; centre: V3; open: number } {
+  let volume = 0;
+  const moment: V3 = [0, 0, 0];
+  const edges = new Map<string, number>();
+  const key = (p: V3) => p.map((x) => Math.round(x * 1e6)).join(",");
+  for (const [a, b, c] of triangles(m)) {
+    const v = dot(a, cross(b, c)) / 6;
+    volume += v;
+    for (let k = 0; k < 3; k++) moment[k] += (v * (a[k] + b[k] + c[k])) / 4;
+    for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+      const [kp, kq] = [key(p), key(q)];
+      if (kp === kq) continue;
+      // An edge one way counts +1, the other -1 under one key: a closed, outward surface sums to 0.
+      const [lo, hi, s] = kp < kq ? [kp, kq, 1] : [kq, kp, -1];
+      edges.set(`${lo} ${hi}`, (edges.get(`${lo} ${hi}`) ?? 0) + s);
+    }
+  }
+  const open = [...edges.values()].filter((n) => n !== 0).length;
+  return { volume, centre: moment.map((x) => x / volume) as V3, open };
+}
+
 type Seg = [[number, number], [number, number]]; // two (x, z) points
 
 /** Where the surface crosses the plane at height y: segments in (x, z). */

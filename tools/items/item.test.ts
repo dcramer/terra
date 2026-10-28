@@ -19,7 +19,10 @@ function writeAxe(): string {
   writeFileSync(join(dir, "models", "parts", "test_collar.glb"), glbOf(collarMesh(), [1, 1, 1], "collar"));
   const out = join(dir, "axe.glb");
   const args = ["run", "-q", "-p", "terra_bake", "--bin", "item", "--", "axe", "test_box_head", "test_haft", "test_collar", "--parts", "-", "--models", dir, "--out", out];
-  const run = spawnSync("cargo", args, { cwd: ROOT, input: JSON.stringify([head(), haft(), collar()]), encoding: "utf8" });
+  // The box head's own volume is 1.25 kg of iron, which swings past the axe's inertia: the writer
+  // weighs what the data says, so it is told of a lighter head (1.15e-4 m^3, about 0.9 kg).
+  const light = head({ volume_m3: { value: 1.15e-4, source: "made up for the item writer's tests" } });
+  const run = spawnSync("cargo", args, { cwd: ROOT, input: JSON.stringify([light, haft(), collar()]), encoding: "utf8" });
   assert.equal(run.status, 0, run.stderr);
   return out;
 }

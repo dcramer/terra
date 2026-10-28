@@ -3,9 +3,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { boxHead, collar, collarMesh, glbOf, haft, head } from "./fixtures.ts";
+import { box, boxHead, collar, collarMesh, glbOf, haft, head } from "./fixtures.ts";
 import { type Mesh, normal, readMesh, triangles } from "./mesh.ts";
-import { checkPart, type Ctx, loadCtx } from "./part.ts";
+import { checkPart, type Ctx, loadCtx, withMeasured } from "./part.ts";
 
 // The real types, kinds and mounts, with only the made-up parts.
 function ctx(parts: any[], meshes: Record<string, Mesh>): Ctx {
@@ -23,6 +23,30 @@ test("the made-up head is what its numbers say: its top faces up, its eye round 
 test("a good head, haft and collar pass every stage", () => {
   const c = good();
   for (const p of Object.values(c.parts)) assert.deepEqual(checkPart(p, c).filter((s) => s.faults.length), [], p.part);
+});
+
+test("--write measures a box's volume, centre and bounds, and the checker then holds the data to its model", () => {
+  // A 4 x 6 x 10 cm box from (-0.02, 0, -0.05): 2.4e-4 m^3, its centre the box's middle.
+  const b = box([-0.02, 0, -0.05], [0.02, 0.06, 0.05]);
+  const bare = head();
+  for (const k of ["volume_m3", "centre_m", "bounds_m"]) delete bare[k];
+  const c = ctx([bare], { test_box_head: b });
+  assert.ok(faults(bare, c, "data").some((s) => /\/centre_m is missing.*--write test_box_head measures it/.test(s)));
+  const w = withMeasured(bare, c);
+  assert.ok(Math.abs(w.volume_m3.value - 2.4e-4) < 1e-9, `${w.volume_m3.value}`);
+  assert.match(w.volume_m3.source, /measured on models\/parts\/test_box_head\.glb/);
+  assert.deepEqual(w.centre_m, [0, 0.03, 0]);
+  assert.deepEqual(w.bounds_m, [[-0.02, 0, -0.05], [0.02, 0.06, 0.05]]);
+  assert.deepEqual(faults(w, c, "measured"), []);
+  // Data typed off its model is refused at each field, the fix being --write.
+  const typed = { ...w, centre_m: [0, 0.035, 0], volume_m3: { value: 2.5e-4, source: "typed in by hand" } };
+  const f = faults(typed, c, "measured");
+  assert.ok(f.some((s) => /\/centre_m is 5\.0 mm from the model's centre of mass: run node tools\/items\/part\.ts --write/.test(s)) && f.some((s) => /\/volume_m3 is 0\.00025, the model's 0\.00024/.test(s)), f.join("\n"));
+  // A box with a face missing closes nothing: refused, not measured.
+  const open = { ...b, indices: b.indices.slice(6) };
+  assert.throws(() => withMeasured(bare, ctx([bare], { test_box_head: open })), /not a closed surface facing out \(4 edges/);
+  // A trim gives its own mass, so only its centre and bounds are measured.
+  assert.deepEqual(Object.keys(withMeasured(collar(), ctx([collar()], { test_collar: collarMesh() }))).filter((k) => k === "volume_m3"), []);
 });
 
 test("a point off the line is refused at its field", () => {
@@ -62,10 +86,13 @@ test("a scaled part is refused, read from its glb", () => {
 
 test("a head outside its kind's envelope in every material is refused with each mass and the limit", () => {
   const h = head({ volume_m3: { value: 2e-4, source: "made up for the part checker's tests" } });
-  const f = faults(h, ctx([h], { test_box_head: boxHead() }), "slots");
-  // 2e-4 m^3 is 1.574 kg of iron (7870) and 0.520 kg of stone (2600): over the band in one, under it in the other.
-  assert.ok(f.some((s) => /axe: in no material is its head inside the axe's head mass \[0\.656,1\.28\] kg \(iron 1\.574 kg, stone 0\.520 kg/.test(s)), f.join("\n"));
-  assert.deepEqual(faults(head(), good(), "slots"), [], "0.9 kg in iron is inside it");
+  const c = ctx([h], { test_box_head: boxHead() });
+  const f = faults(h, c, "slots");
+  // 2e-4 m^3 is over 1.5 kg of iron and about half a kilo of stone: over the band in one, under it in the other.
+  const kg = (m: string) => (2e-4 * c.materials[m].density_kg_m3.value).toFixed(3);
+  const said = `axe: in no material is its head inside the axe's head mass [0.656,1.28] kg (iron ${kg("iron")} kg, stone ${kg("stone")} kg`;
+  assert.ok(f.some((s) => s.startsWith(said)), `${said}\n${f.join("\n")}`);
+  assert.deepEqual(faults(head(), good(), "slots"), [], "the box head, 1.25 kg in iron, is inside it");
 });
 
 test("a working part gives its volume, not a mass, and a trim its mass", () => {
@@ -87,6 +114,19 @@ test("a haft that fits many kinds must name the ones it is made for", () => {
   const h = haft();
   delete h.kinds;
   assert.match(faults(h, ctx([h], {}), "data")[0], /\/kinds is missing: a haft fits axe, hammer/);
+});
+
+test("the kinds a part fits are the assembler's, never worked out here", () => {
+  const c = good();
+  // The real assembler, asked as part.ts asks it: a haft is taken by these kinds' slots (assets/data/kinds).
+  assert.deepEqual(c.kindsOf("haft"), { taking: ["axe", "hammer", "pickaxe", "spear", "torch"], made_for: ["axe", "hammer", "pickaxe", "spear", "torch"] });
+  assert.deepEqual(c.kindsOf("haft", ["axe"]).made_for, ["axe"]);
+  // An assembler that said a haft fits the axe alone would leave nothing to name: the verdict follows its answer.
+  const h = haft();
+  delete h.kinds;
+  const alone: Ctx = { ...c, kindsOf: () => ({ taking: ["axe"], made_for: ["axe"] }) };
+  assert.deepEqual(faults(h, alone, "data"), []);
+  assert.equal(checkPart(h, alone).find((s) => s.stage === "slots")?.ok, "axe");
 });
 
 test("a collar whose model stops short of its cover leaves a gap under the head", () => {

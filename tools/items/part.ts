@@ -4,16 +4,18 @@
 // its partner, no two faces in one plane. A model is measured; a part made by code is checked
 // from its numbers, its joins measured on the models it meets.
 //
-//   node tools/items/part.ts <part>      assets/data/parts/<part>.json
+//   node tools/items/part.ts <part>           assets/data/parts/<part>.json
+//   node tools/items/part.ts --write <part>   first writes its volume_m3, centre_m and bounds_m as
+//                                             measured on its model, so nobody types them
 //
 // A line a stage (D388); a failure names the field and the fix (D556).
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Q, V3 } from "../characters/glb.ts";
 import { KINDS, kindNames, PARTS, readJson, ROOT } from "./kind.ts";
-import { bounds, buried, distance, gap, type Mesh, moved, normal, ray, readMesh, sharedPlanes, slice, triangles } from "./mesh.ts";
+import { bounds, buried, distance, gap, type Mesh, moved, normal, ray, readMesh, sharedPlanes, slice, solid, triangles } from "./mesh.ts";
 import { validate } from "./schema.ts";
 
 export type Ctx = {
@@ -26,7 +28,10 @@ export type Ctx = {
   mesh: (part: any) => Mesh;
   /** How the part sits with each partner among the parts: the assembler's, never placed here. */
   pairings: (id: string, parts: any[]) => Pairing[];
+  /** The kinds taking a part of a type, and those it is made for: the assembler's, never worked out here. */
+  kindsOf: (type: string, named?: string[]) => Kinds;
 };
+export type Kinds = { taking: string[]; made_for: string[] };
 export type Stage = { stage: string; faults: string[]; ok: string };
 
 const RAYS = 16;
@@ -43,11 +48,14 @@ export function checkPart(part: any, ctx: Ctx): Stage[] {
   if (part && !type) data.push(`/type ${JSON.stringify(part.type)} is not a part type; use one of types.json's: ${Object.keys(ctx.types).join(", ")}`);
   // A working part is made in its recipe's material, so it gives its volume; a trim its own mass.
   const [weight, not] = type?.slot === "working" ? ["volume_m3", "mass_kg"] : ["mass_kg", "volume_m3"];
-  if (type?.made_by === "model") for (const k of ["model", weight, "centre_m", "bounds_m", "points"]) if (!(k in part)) data.push(`/${k} is missing: a modelled ${type.slot} part gives it (part.schema.json)`);
+  if (type?.made_by === "model")
+    for (const k of ["model", weight, "centre_m", "bounds_m", "points"])
+      if (!(k in part)) data.push(`/${k} is missing: a modelled ${type.slot} part gives it (part.schema.json)${k === "model" || k === "points" || k === "mass_kg" ? "" : `; node tools/items/part.ts --write ${part.part} measures it on the model`}`);
   if (type?.made_by === "model" && not in part)
     data.push(`/${not} is not a ${type.slot} part's: ${type.slot === "working" ? "its mass is its volume_m3 in the recipe's material (materials.json)" : "a trim keeps its own material, so it gives mass_kg"}; remove it`);
   if (type?.made_by === "code") for (const k of type.numbers) if (!(k in part)) data.push(`/${k} is missing: a ${part.type} is made from it (types.json)`);
-  if (type) data.push(...kindFaults(part, ctx));
+  const kinds = type && ctx.kindsOf(part.type, part.kinds);
+  if (kinds) data.push(...kindFaults(part, kinds));
   if (!stage("data", `a ${part?.type}, made by ${type?.made_by}`, data)) return stages;
   const join_m = v(ctx.rules.join_m);
   if (type.made_by === "code") {
@@ -59,9 +67,9 @@ export function checkPart(part: any, ctx: Ctx): Stage[] {
     stage("openings", "each within 1 mm of its declared size round the line", openings(part, mesh, join_m));
     stage("budget", budgetNote(part, type, mesh, ctx), budget(type, mesh, ctx));
     stage("roles", [...new Set(mesh.materials.map((m) => m.split(".")[0]))].join(", "), roles(part, type, mesh));
-    stage("bounds", "bounds_m as measured", boundsFaults(part, mesh, join_m));
+    stage("measured", `${type.slot === "working" ? "volume_m3, " : ""}centre_m and bounds_m as measured on its model`, measuredFaults(part, type, mesh, join_m));
   }
-  stage("slots", fittingKinds(part, ctx).join(", ") || "no kind fits it", slots(part, ctx));
+  stage("slots", kinds.made_for.join(", ") || "no kind fits it", slots(part, kinds.made_for, ctx));
   const [faults, notes] = joins(part, ctx);
   stage("joins", notes.join("; ") || "none to make", faults);
   return stages;
@@ -176,27 +184,46 @@ function roles(part: any, type: any, mesh: Mesh): string[] {
     .map((r) => `material ${JSON.stringify(r)} is not a role a ${part.type} takes (${type.roles.join(", ")}; types.json): name each material by its role`);
 }
 
-function boundsFaults(part: any, mesh: Mesh, join_m: number): string[] {
-  const [lo, hi] = bounds(mesh);
-  const off = Math.max(...[0, 1, 2].flatMap((k) => [Math.abs(lo[k] - part.bounds_m[0][k]), Math.abs(hi[k] - part.bounds_m[1][k])]));
-  const r = (p: V3) => `[${p.map((x) => x.toFixed(4)).join(", ")}]`;
-  return off > join_m ? [`/bounds_m is ${mm(off)} off the model's: write [${r(lo)}, ${r(hi)}]`] : [];
+const VOLUME_WITHIN = 0.005; // a share of the measured volume: its mass is good to half a percent
+
+/** What a modelled part's data says of its model, measured on it: `--write` writes these. */
+export function measured(part: any, type: any, mesh: Mesh): Record<string, any> {
+  const { volume, centre, open } = solid(mesh);
+  if (open) throw new Error(`${part.part}: its model ${part.model} is not a closed surface facing out (${open} edges met by one face, or by two running the same way), so its volume and centre cannot be measured; close it in Blender (Select > Select All by Trait > Non Manifold, fill or flip) and export again`);
+  const r = (p: V3) => p.map((x) => Number(x.toFixed(5)) || 0); // to 10 µm, never -0
+  const out: Record<string, any> = { centre_m: r(centre), bounds_m: bounds(mesh).map(r) };
+  if (type.slot === "working") out.volume_m3 = { value: Number(volume.toPrecision(5)), source: `measured on ${part.model} by tools/items/part.ts --write` };
+  return out;
 }
 
-const typeKinds = (type: string, ctx: Ctx) => Object.keys(ctx.kinds).filter((k) => ctx.kinds[k].slots.some((s: any) => s.fits.includes(type)));
-export const fittingKinds = (part: any, ctx: Ctx): string[] => part.kinds ?? typeKinds(part.type, ctx);
+function measuredFaults(part: any, type: any, mesh: Mesh, join_m: number): string[] {
+  const write = `run node tools/items/part.ts --write ${part.part}, never type them by hand`;
+  let m: Record<string, any>;
+  try {
+    m = measured(part, type, mesh);
+  } catch (e) {
+    return [(e as Error).message];
+  }
+  const out: string[] = [];
+  const off = Math.max(...[0, 1].flatMap((c) => [0, 1, 2].map((k) => Math.abs(m.bounds_m[c][k] - part.bounds_m[c][k]))));
+  if (off > join_m) out.push(`/bounds_m is ${mm(off)} off the model's: ${write}`);
+  const from = Math.hypot(...[0, 1, 2].map((k) => m.centre_m[k] - part.centre_m[k]));
+  if (from > join_m) out.push(`/centre_m is ${mm(from)} from the model's centre of mass: ${write}`);
+  if (m.volume_m3 && Math.abs(v(part.volume_m3) / m.volume_m3.value - 1) > VOLUME_WITHIN)
+    out.push(`/volume_m3 is ${v(part.volume_m3)}, the model's ${m.volume_m3.value}: ${write}`);
+  return out;
+}
 
-function kindFaults(part: any, ctx: Ctx): string[] {
-  const all = typeKinds(part.type, ctx);
-  if (!part.kinds) return all.length > 1 ? [`/kinds is missing: a ${part.type} fits ${all.join(", ")}; name the kinds it is made for`] : [];
-  return part.kinds.filter((k: string) => !all.includes(k)).map((k: string) => `/kinds names ${k}, whose slots take no ${part.type} (assets/data/kinds/${k}.json)`);
+function kindFaults(part: any, { taking }: Kinds): string[] {
+  if (!part.kinds) return taking.length > 1 ? [`/kinds is missing: a ${part.type} fits ${taking.join(", ")}; name the kinds it is made for`] : [];
+  return part.kinds.filter((k: string) => !taking.includes(k)).map((k: string) => `/kinds names ${k}, whose slots take no ${part.type} (assets/data/kinds/${k}.json)`);
 }
 
 // Its size for each slot it fits: a working part's mass within its kind's head-mass envelope, a
 // handle's length within its kind's and its grip where the kind's mount puts it (D546).
-function slots(part: any, ctx: Ctx): string[] {
+function slots(part: any, made_for: string[], ctx: Ctx): string[] {
   const out: string[] = [];
-  for (const name of fittingKinds(part, ctx)) {
+  for (const name of made_for) {
     const kind = ctx.kinds[name];
     const slot = kind.slots.find((s: any) => s.fits.includes(part.type));
     const head = v(kind.envelope.head_mass_kg), len = v(kind.envelope.length_m);
@@ -250,12 +277,18 @@ function joins(part: any, ctx: Ctx): [string[], string[]] {
 export type Meet = { meet: "handle_top"; head: string; y: number; d: number } | { meet: "placed"; part: string; onto: string; at: V3; turn: Q };
 export type Pairing = { kind: string; partner: string; meet: Meet };
 
-/** The assembler's pairings of part `id` among `parts`: `assemble joins`, the parts on stdin. */
-export function assemblerPairings(id: string, parts: any[]): Pairing[] {
-  const run = spawnSync("cargo", ["run", "-q", "-p", "terra_items", "--bin", "assemble", "--", "joins", id, "--parts", "-"], { cwd: ROOT, input: JSON.stringify(parts), encoding: "utf8" });
-  if (run.status !== 0) throw new Error(`the assembler refused ${id}: ${run.stderr.trim() || run.error?.message}`);
+/** The assembler's answer to `assemble <args>` (crates/terra_items/src/bin/assemble.rs), `input` on stdin. */
+function assembler(args: string[], input?: string): any {
+  const run = spawnSync("cargo", ["run", "-q", "-p", "terra_items", "--bin", "assemble", "--", ...args], { cwd: ROOT, input, encoding: "utf8" });
+  if (run.status !== 0) throw new Error(`the assembler refused \`assemble ${args.join(" ")}\`: ${run.stderr.trim() || run.error?.message}`);
   return JSON.parse(run.stdout);
 }
+
+/** The assembler's pairings of part `id` among `parts`: `assemble joins`, the parts on stdin. */
+export const assemblerPairings = (id: string, parts: any[]): Pairing[] => assembler(["joins", id, "--parts", "-"], JSON.stringify(parts));
+
+/** The assembler's kinds for a part of `type` naming `named` (terra_items::assembly's `kinds_of`). */
+export const assemblerKinds = (type: string, named: string[] = []): Kinds => assembler(["kinds", type, ...named]);
 
 function sharedDisc(mesh: Mesh, y: number, r: number, within: number): number {
   return triangles(mesh).filter((t) => normal(t)[1] > Math.cos(Math.PI / 180) && t.every((p) => Math.abs(p[1] - y) < within) && t.some((p) => Math.hypot(p[0], p[2]) < r)).length;
@@ -277,19 +310,37 @@ export function loadCtx(): Ctx {
     return cache.get(file)!;
   };
   const materials = readJson(join(PARTS, "materials.json")).materials;
-  return { types: t.types, rules: t.rules, materials, kinds, attach: readJson(join(ROOT, "tools", "characters", "attach_kinds.json")), parts, mesh, pairings: assemblerPairings };
+  return { types: t.types, rules: t.rules, materials, kinds, attach: readJson(join(ROOT, "tools", "characters", "attach_kinds.json")), parts, mesh, pairings: assemblerPairings, kindsOf: assemblerKinds };
 }
 
 export function report(name: string, stages: Stage[]): string[] {
   return stages.flatMap((s) => (s.faults.length ? s.faults.map((f) => `✗ ${s.stage}: ${f} (assets/data/parts/${name}.json)`) : [`✓ ${s.stage}: ${s.ok}`]));
 }
 
+/** The part with what its model measures written over its own: `--write`'s, before it is checked. */
+export function withMeasured(part: any, ctx: Ctx): any {
+  const type = ctx.types[part.type];
+  if (type?.made_by !== "model" || !part.model) throw new Error(`${part.part}: only a modelled part with its /model is measured; a ${part.type} is ${type ? `made by ${type.made_by}` : "no part type"} (types.json)`);
+  return { ...part, ...measured(part, type, ctx.mesh(part)) };
+}
+
 if (import.meta.main) {
-  const name = process.argv[2];
+  const write = process.argv[2] === "--write";
+  const name = process.argv[write ? 3 : 2];
   const ctx = loadCtx();
   if (!name || !ctx.parts[name]) {
     console.log(`✗ part: name one of assets/data/parts/: ${Object.keys(ctx.parts).join(", ") || "(none yet: a part is assets/data/parts/<part>.json, part.schema.json)"}`);
     process.exit(1);
+  }
+  if (write) {
+    try {
+      ctx.parts[name] = withMeasured(ctx.parts[name], ctx);
+    } catch (e) {
+      console.log(`✗ write: ${(e as Error).message}`);
+      process.exit(1);
+    }
+    writeFileSync(join(PARTS, `${name}.json`), `${JSON.stringify(ctx.parts[name], null, 2)}\n`);
+    console.log(`✓ write: its volume, centre and bounds as measured on ${ctx.parts[name].model} (assets/data/parts/${name}.json)`);
   }
   const stages = checkPart(ctx.parts[name], ctx);
   for (const line of report(name, stages)) console.log(line);

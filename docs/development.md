@@ -300,7 +300,7 @@ The developers want tools that help refine each system (D71), and as many of the
 | [Tripo CLI](../tools/tripo/README.md) | `cargo xtask tripo <command>` | Everything Tripo's Studio does, on our subscription's credits (below) |
 | [Uthana CLI](../tools/uthana/README.md) | `node tools/uthana/uthana.ts motion "<prompt>" -o clip.glb` | Text-to-motion clips on our body, on paid credits (D532) |
 | [Character pipeline](../tools/characters/README.md) | `cargo xtask bodies` | Bodies, morphs, skins, worn and held looks, from `art/`; the `character` skill has the steps |
-| [Item kinds and parts](../tools/items/README.md) | `node tools/items/kind.ts`, `node tools/items/part.ts <part>` | Assembled items (D565, D566): the kinds table against its schema and D459's rule; a part against its type, points, budgets and every join its kinds allow |
+| [Item kinds and parts](../tools/items/README.md) | `node tools/items/kind.ts`, `node tools/items/part.ts [--write] <part>` | Assembled items (D565, D566): the kinds table against its schema and D459's rule; a part against its type, points, budgets and every join its kinds allow |
 | [Blender runner](../tools/blender/README.md) | `cargo xtask blender <script.py>` | Any Blender script, headless, on the Windows Blender from WSL (below) |
 | [Icon painter](../tools/icons/README.md) | `cargo xtask icons`, `cargo xtask paint-icons <item>` | Item icons: baked from each item's look, then painted in the art style |
 | [Docs check](../tools/docs/README.md) | `cargo xtask check` | Links and anchors resolve, every doc, note, spike and script is in its index, every decision file is well formed and the decisions index is their render, and every `cargo xtask` task the guides name and every path a skill names exists (D396) |
