@@ -55,7 +55,16 @@ export class Glb {
     meshes?: { primitives: { attributes: Record<string, number>; targets?: Record<string, number>[] }[]; extras?: { targetNames?: string[] } }[];
     skins?: { joints: number[]; inverseBindMatrices: number }[];
     animations?: { name: string; channels: { sampler: number; target: { node: number; path: string } }[]; samplers: { input: number; output: number }[] }[];
-    accessors: { bufferView: number; byteOffset?: number; componentType: number; count: number; type: string; normalized?: boolean; max?: number[] }[];
+    accessors: {
+      bufferView?: number;
+      byteOffset?: number;
+      componentType: number;
+      count: number;
+      type: string;
+      normalized?: boolean;
+      max?: number[];
+      sparse?: { count: number; indices: { bufferView: number; byteOffset?: number; componentType: number }; values: { bufferView: number; byteOffset?: number } };
+    }[];
     bufferViews: { byteOffset?: number; byteStride?: number }[];
   };
   readonly parentOf: number[] = [];
@@ -76,15 +85,29 @@ export class Glb {
 
   /// An accessor's values, flat, as numbers: floats as they are, normalized integers scaled
   /// to 0..1, other integers as they are.
+  /// A sparse accessor (a shape key's, as Blender writes them) is its base, zeros when it has
+  /// no buffer view, with its listed elements replaced, as the glTF spec reads it.
   read(index: number): Float64Array {
     const acc = this.gltf.accessors[index];
-    const view = this.gltf.bufferViews[acc.bufferView];
     const width = ({ SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 } as Record<string, number>)[acc.type];
-    const size = ({ 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 } as Record<number, number>)[acc.componentType];
+    const out = acc.bufferView === undefined ? new Float64Array(acc.count * width) : this.values(acc.bufferView, acc.byteOffset ?? 0, acc.count, width, acc.componentType, acc.normalized);
+    if (acc.sparse) {
+      const { count, indices, values } = acc.sparse;
+      const at = this.values(indices.bufferView, indices.byteOffset ?? 0, count, 1, indices.componentType, false);
+      const put = this.values(values.bufferView, values.byteOffset ?? 0, count, width, acc.componentType, acc.normalized);
+      for (let i = 0; i < count; i++) for (let j = 0; j < width; j++) out[at[i] * width + j] = put[i * width + j];
+    }
+    return out;
+  }
+
+  private values(viewIndex: number, offset: number, count: number, width: number, componentType: number, normalized?: boolean): Float64Array {
+    const view = this.gltf.bufferViews[viewIndex];
+    const size = ({ 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 } as Record<number, number>)[componentType];
     const stride = view.byteStride ?? width * size;
-    const start = this.bin + (view.byteOffset ?? 0) + (acc.byteOffset ?? 0);
-    const out = new Float64Array(acc.count * width);
+    const start = this.bin + (view.byteOffset ?? 0) + offset;
+    const out = new Float64Array(count * width);
     const b = this.bytes;
+    const acc = { componentType, normalized };
     const one = (at: number): number => {
       switch (acc.componentType) {
         case 5126: return b.readFloatLE(at);
@@ -95,7 +118,7 @@ export class Glb {
         default: return b.readInt16LE(at);
       }
     };
-    for (let i = 0; i < acc.count; i++) for (let j = 0; j < width; j++) out[i * width + j] = one(start + i * stride + j * size);
+    for (let i = 0; i < count; i++) for (let j = 0; j < width; j++) out[i * width + j] = one(start + i * stride + j * size);
     return out;
   }
 
