@@ -1,0 +1,79 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "axe",
+  "about": "A one-handed axe: a head on a wooden haft. Today a tool that fells trees (the stone and iron axes); later also a weapon.",
+  "attach_kind": "hafted",
+  "hold_class": { "class": "axe", "source": "tools/characters/attach_kinds.json (hafted's classes) and holding.md section 1" },
+  "hands": {
+    "value": "Main",
+    "source": "holding.md section 1: a one-hander in the main hand; a tool may not go in the off hand (the stance table)"
+  },
+  "lead": { "value": "main", "source": "D463: the main hand, the left on a left-handed body, its items on the mirrored socket (holding.md Mirroring)" },
+  "grip_type": { "value": "power", "source": "D562: in hand, a power grip closed by touch on the haft (terra_walker::grip)" },
+  "slots": [
+    { "slot": "working", "name": "head", "made_by": "model", "fits": ["axe_head"], "joins": "its eye's two openings (eye.lower, eye.upper) on the haft's line; the haft is made to their diameters and stands 4 mm proud of eye.upper" },
+    { "slot": "handle", "name": "haft", "made_by": "code", "fits": ["haft"], "joins": "a round shaft along +Y from its butt; its section follows the joins on it (the head's eye, a collar, a cap)" },
+    { "slot": "trim", "name": "binding", "made_by": "model", "fits": ["collar"], "optional": true, "joins": "its bore on the haft, its top against the head's eye.lower" },
+    { "slot": "trim", "name": "butt", "made_by": "model", "fits": ["cap"], "optional": true, "joins": "its bore over the haft's -Y end" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "on the haft, grip_from_end up from its butt (the reference's 0.08 m; D546's hafted 0.04 to 0.12), on its centreline: the item's origin" },
+    "second": { "state": "does not apply", "how": "held in one hand (hands Main); a two-handed axe is another kind with its own takes (assembled-items.md)" },
+    "edge": { "state": "by rule", "how": "the head's edge points (edge.lower, edge.upper: its bit's span along +Y, on its -Z side) carried through the head's place on the haft; the hit segment is that span (research/2026-10-28-assembled-items-animation.md section 4)" }
+  },
+  "held": {
+    "state": "open",
+    "mechanism": "hand_socket",
+    "decisions": ["D546", "D459"],
+    "how": "in the main hand's socket, its bit toward -Z; an axe has no ready pose of its own yet",
+    "open": [{ "owner": "technical", "why": "no axe set and so no guard: the reference axe goes 2.3 cm into the woman's head in the sword's guard (research/2026-10-28-assembled-items-animation.md section 1), so it needs its own, made with its set (the combat skill)" }]
+  },
+  "used": {
+    "state": "built",
+    "mechanism": "tool_use",
+    "decisions": ["D459"],
+    "how": "as a tool today: a blow plays the walker's Sword_Attack and a use its Interact (terra_walker::figure); items.ron's tool.strikes and cuts give what it does",
+    "open": [{ "owner": "technical", "why": "an axe's own blows come with its set; the edge-leads row must pass on them (assembled-items.md, Must be fixed first)" }]
+  },
+  "carried": {
+    "state": "built",
+    "mechanism": "carry_rule",
+    "decisions": ["D546", "D564"],
+    "how": "tipped by the carry rule, its head 45 degrees forward and down, at most 15 degrees in the fist and the rest at the wrist, the forearm kept down (attachment.md Carried)"
+  },
+  "stowed": {
+    "state": "decided",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.belt.R",
+    "how": "a one-handed hafted item hangs at the hip on the main hand's side, mirrored for a left-handed body",
+    "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set: attachment.md Stowed's next step, a still of each kind put away on the base, heavy and female" }]
+  },
+  "blocking": {
+    "state": "open",
+    "how": "a tool does not block (the Tool stance's off button is the build menu, holding.md); an axe as a weapon in the Single stance might guard on its haft",
+    "open": [{ "owner": "developers", "why": "whether a one-hander alone may block, smaller (D461's second question, unanswered; Enshrouded blocks only with a shield or a two-hander)" }]
+  },
+  "animation": {
+    "state": "open",
+    "mechanism": "none yet",
+    "how": "none yet: no axe.single or axe.shielded set (assets/data/moves has only sword.shielded); as a tool it plays the walker's clips",
+    "open": [{ "owner": "technical", "why": "its set and clips, keyed for the reference axe so the bit leads the strike: D565 step 4's proof is this kind" }]
+  },
+  "reference": {
+    "item": { "value": "iron_axe", "source": "today's look, art/held/iron_axe.json (assets/models/held/iron_axe.glb)" },
+    "length_m": { "value": 0.68, "source": "art/held/iron_axe.json length; the look's bounds measured 0.680" },
+    "mass_kg": { "value": 1.34, "source": "the head and a 0.035 m ash haft (670 kg/m^3, recalled) 0.68 m long, 0.44 kg; a stand-in until the reference's parts are made and weighed (step 4)" },
+    "head_mass_kg": { "value": 0.9, "source": "research/2026-10-28-assembled-items-animation.md section 1 (modelled)" },
+    "balance_m": { "value": 0.448, "source": "computed from the head at 0.62 m and the haft's middle, from the grip; a stand-in as the mass" },
+    "inertia_kgm2": { "value": 0.3205, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": 0.035, "source": "the axe look's handle across, median (research/2026-10-28-assembled-parts-art.md section 4)" }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": [0.2424, 0.4436], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [0.612, 0.748], "source": "the reference's length ±10% at a fixed head (research/2026-10-28-assembled-items-animation.md section 1, measured: axe haft 0.40 to 0.51 m)" },
+    "head_mass_kg": { "value": [0.656, 1.28], "source": "the inertia band at the reference's length and haft, solved for the head (-27% to +42%)" },
+    "balance_m": { "value": [0.378, 0.541], "source": "the inertia band at the reference's mass and length, solved for the balance" },
+    "state": "computed from stand-in masses, not measured on clips: the axe has none, and the reference fails in the sword's guard; checked over the grid (five lengths by three head masses) in step 4"
+  }
+}

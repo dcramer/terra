@@ -1,0 +1,69 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "hammer",
+  "about": "A one-handed builder's hammer: a small iron head on a short haft. The tool that builds (items.ron's Hammer); a war hammer or mace is another kind.",
+  "attach_kind": "hafted",
+  "hold_class": { "class": "hammer", "source": "tools/characters/attach_kinds.json (hafted's classes; holding.md: tools keep their own class)" },
+  "hands": { "value": "Main", "source": "holding.md section 1: a tool goes in the main hand; one in the off hand is refused by the rule" },
+  "lead": { "value": "main", "source": "D463: the main hand, the left on a left-handed body (holding.md Mirroring)" },
+  "grip_type": { "value": "power", "source": "D562: in hand, a power grip closed by touch on the haft" },
+  "slots": [
+    { "slot": "working", "name": "head", "made_by": "model", "fits": ["hammer_head"], "joins": "its eye's two openings on the haft's line; the haft made to their diameters, 4 mm proud of eye.upper" },
+    { "slot": "handle", "name": "haft", "made_by": "code", "fits": ["haft"], "joins": "a round shaft along +Y from its butt" },
+    { "slot": "trim", "name": "binding", "made_by": "model", "fits": ["collar"], "optional": true, "joins": "its bore on the haft: under the head (its straps, as today's look has 43 cm of them) or at the grip (a leather wrap)" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "on the haft, grip_from_end up from its butt (the reference's 0.06 m; D546's hafted 0.04 to 0.12): the item's origin" },
+    "second": { "state": "does not apply", "how": "held in one hand; a great hammer is another kind (holding.md's great_hammer)" },
+    "edge": { "state": "by rule", "how": "the head's face point (its striking face's centre and span along +Y, on -Z, D546) carried through; a claw on +Z is not a working edge" }
+  },
+  "held": {
+    "state": "does not apply",
+    "how": "a tool has no ready pose: the Tool stance holds no guard (holding.md), so in hand it is carried until used"
+  },
+  "used": {
+    "state": "built",
+    "mechanism": "tool_use",
+    "decisions": ["D459"],
+    "how": "the player's build plays the walker's Interact (terra_walker::figure); townsfolk building and smithing play Hammer_Loop (assets/data/life.ron)",
+    "open": [{ "owner": "technical", "why": "the player's hammering clip: Interact is a reach, not a blow; Hammer_Loop is not keyed for the reference's head, so the face's lead is unchecked" }]
+  },
+  "carried": {
+    "state": "built",
+    "mechanism": "carry_rule",
+    "decisions": ["D546", "D564"],
+    "how": "tipped by the carry rule, its head forward and down (attachment.md Carried)"
+  },
+  "stowed": {
+    "state": "decided",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.belt.R",
+    "how": "a one-handed hafted item at the hip on the main hand's side, mirrored for a left-handed body",
+    "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step)" }]
+  },
+  "blocking": { "state": "does not apply", "how": "a tool does not block: the Tool stance's off button is the build menu (holding.md, Which button does what)" },
+  "animation": {
+    "state": "built",
+    "mechanism": "tool_use",
+    "decisions": ["D459"],
+    "how": "none yet of its own: the Tool stance plays the walker's use clips (holding.md: the tool's use moves)",
+    "open": [{ "owner": "technical", "why": "a hammer's use set (holding.md's count, the tools' three), keyed for the reference" }]
+  },
+  "reference": {
+    "item": { "value": "hammer", "source": "today's look, art/held/hammer.json (tools/Hammer_Small.glb)" },
+    "length_m": { "value": 0.42, "source": "art/held/hammer.json length; the look's bounds measured 0.420" },
+    "mass_kg": { "value": 0.59, "source": "the head and a 0.025 m ash haft 0.42 m long (670 kg/m^3, recalled), 0.14 kg; a stand-in until its parts are weighed" },
+    "head_mass_kg": { "value": 0.45, "source": "a 16 oz claw hammer's head (recalled)" },
+    "balance_m": { "value": 0.284, "source": "computed from the head at 0.385 m and the haft's middle, from the grip" },
+    "inertia_kgm2": { "value": 0.056, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": 0.025, "source": "the hammer look's handle across, median (research/2026-10-28-assembled-parts-art.md section 4)" }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": [0.0424, 0.0776], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [0.378, 0.462], "source": "the reference's length ±10% at a fixed head (research/2026-10-28-assembled-items-animation.md section 1)" },
+    "head_mass_kg": { "value": [0.334, 0.631], "source": "the inertia band at the reference's length, solved for the head (-26% to +40%)" },
+    "balance_m": { "value": [0.239, 0.342], "source": "the inertia band at the reference's mass and length, solved for the balance" },
+    "state": "computed from stand-in masses; the hammer's use clips are not keyed for any item, so nothing is measured"
+  }
+}

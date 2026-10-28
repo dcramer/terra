@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dcramer/terra/assets/data/kinds/kind.schema.json",
+  "title": "A kind of assembled item (D565)",
+  "description": "One file a kind, assets/data/kinds/<kind>.json: everything about a weapon or tool that is not its parts (docs/assembled-items.md, Kinds and The connection-point convention). Every situation is filled: a fact, a named mechanism, or open with its owner and reason; a blank or an unexplained open is refused. Read by the kind check (tools/items/kind.ts) and the part checker (tools/items/part.ts), and at run time by the assembler (D565 step 2), none of them built yet.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "about", "attach_kind", "hold_class", "hands", "lead", "grip_type", "slots", "points", "held", "used", "carried", "stowed", "blocking", "animation", "reference", "envelope"],
+  "properties": {
+    "$schema": { "const": "./kind.schema.json" },
+    "kind": { "type": "string", "pattern": "^[a-z][a-z_]*$", "description": "The file's name without .json." },
+    "about": { "$ref": "#/$defs/words" },
+    "attach_kind": {
+      "description": "Its kind in the attachment contract (D546, tools/characters/attach_kinds.json): how its look is made and put on.",
+      "enum": ["hafted", "blade", "polearm", "bow", "shield", "hung"]
+    },
+    "hold_class": {
+      "description": "items.ron's hold.class (holding.md section 1): which move sets it plays. null with a why for a look that has none.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "source"],
+      "properties": {
+        "class": { "type": ["string", "null"], "pattern": "^[a-z_]+$" },
+        "source": { "$ref": "#/$defs/words" }
+      }
+    },
+    "hands": {
+      "description": "Which hands may hold it: holding.md's hold.grip (Main, Either, Off, Two), or open.",
+      "$ref": "#/$defs/fact"
+    },
+    "lead": {
+      "description": "The hand its grip rides in, main or off, mirrored on a left-handed body (D463, holding.md Mirroring).",
+      "$ref": "#/$defs/fact"
+    },
+    "grip_type": {
+      "description": "How the fingers close (D562): power in hand, hook hung, strap (no finger layer; the strap's arm).",
+      "$ref": "#/$defs/fact"
+    },
+    "slots": {
+      "description": "Its parts: one working part (head, blade, board, stave or body), one handle unless the working part carries its own, and at most two trims (D565 answer 2).",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/slot" },
+      "contains": { "type": "object", "properties": { "slot": { "const": "trim" } }, "required": ["slot"] },
+      "minContains": 0,
+      "maxContains": 2
+    },
+    "points": {
+      "description": "Where the item's own points come from (assembled-items.md, The connection-point convention): its grip, second grip and working edge.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grip", "second", "edge"],
+      "properties": {
+        "grip": { "$ref": "#/$defs/point_rule" },
+        "second": { "$ref": "#/$defs/point_rule" },
+        "edge": { "$ref": "#/$defs/point_rule" }
+      }
+    },
+    "held": { "$ref": "#/$defs/situation", "description": "In hand and ready: the stance's guard (holding.md, the hold layer's ready)." },
+    "used": { "$ref": "#/$defs/situation", "description": "Its blows or its use." },
+    "carried": { "$ref": "#/$defs/situation", "description": "In hand, walking about, not fighting: the carry rule (D564) or a carry pose (D560)." },
+    "stowed": { "$ref": "#/$defs/situation", "description": "Put away on the body (D551)." },
+    "blocking": { "$ref": "#/$defs/situation", "description": "Blocking with it, where that applies (the shield targets D554, a guard on a blade D461)." },
+    "animation": { "$ref": "#/$defs/situation", "description": "Its move set (assets/data/moves/<class>.<stance>.ron, D459), or none yet." },
+    "reference": {
+      "description": "The item its class's clips are made for (D459's reference, assembled-items.md Through the animations), each number with its source.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "length_m", "mass_kg", "head_mass_kg", "balance_m", "inertia_kgm2", "grip_diameter_m"],
+      "properties": {
+        "item": { "$ref": "#/$defs/fact" },
+        "length_m": { "$ref": "#/$defs/number" },
+        "mass_kg": { "$ref": "#/$defs/number" },
+        "head_mass_kg": { "$ref": "#/$defs/number" },
+        "balance_m": { "$ref": "#/$defs/number" },
+        "inertia_kgm2": { "$ref": "#/$defs/number" },
+        "grip_diameter_m": { "$ref": "#/$defs/number" }
+      }
+    },
+    "envelope": {
+      "description": "What an assembled item of the kind may be, round its reference: D459's tempo clamp (0.85 to 1.15) is the binding rule, I within [I_ref/1.15^2, I_ref/0.85^2]; length, head mass and balance are that band seen one number at a time, the others at the reference's. The assembler refuses an item outside it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inertia_kgm2", "length_m", "head_mass_kg", "balance_m", "state"],
+      "properties": {
+        "inertia_kgm2": { "$ref": "#/$defs/range" },
+        "length_m": { "$ref": "#/$defs/range" },
+        "head_mass_kg": { "$ref": "#/$defs/range" },
+        "balance_m": { "$ref": "#/$defs/range" },
+        "state": { "$ref": "#/$defs/words" }
+      }
+    }
+  },
+  "$defs": {
+    "words": { "type": "string", "minLength": 12, "pattern": "\\S" },
+    "open": {
+      "description": "Something not decided or not there yet: who decides (the developers for design, D412; technical for an agent) and why it is open.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "why"],
+      "properties": {
+        "owner": { "enum": ["developers", "technical"] },
+        "why": { "$ref": "#/$defs/words" }
+      }
+    },
+    "fact": {
+      "description": "A value and where it comes from; or open, with who decides and why.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "source"],
+          "properties": {
+            "value": { "type": "string", "minLength": 1, "not": { "const": "open" } },
+            "source": { "$ref": "#/$defs/words" },
+            "open": { "$ref": "#/$defs/open" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "open"],
+          "properties": {
+            "value": { "const": "open" },
+            "today": { "$ref": "#/$defs/words" },
+            "open": { "$ref": "#/$defs/open" }
+          }
+        }
+      ]
+    },
+    "number": {
+      "description": "A technical number and its source; or open with why.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "source"],
+          "properties": { "value": { "type": "number" }, "source": { "$ref": "#/$defs/words" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "open"],
+          "properties": { "value": { "const": "open" }, "open": { "$ref": "#/$defs/open" } }
+        }
+      ]
+    },
+    "range": {
+      "description": "A [low, high] band and its source; or open with why.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "source"],
+          "properties": {
+            "value": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+            "source": { "$ref": "#/$defs/words" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "open"],
+          "properties": { "value": { "const": "open" }, "open": { "$ref": "#/$defs/open" } }
+        }
+      ]
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "name", "made_by", "fits", "joins"],
+      "properties": {
+        "slot": { "enum": ["working", "handle", "trim"] },
+        "name": { "type": "string", "pattern": "^[a-z_]+$" },
+        "made_by": { "enum": ["model", "code"], "description": "A model made once to its template (the models skill), or code from numbers (a haft, a string)." },
+        "fits": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z_]+$" }, "description": "The part types that may go in it (assembled-items.md, Part types)." },
+        "optional": { "type": "boolean" },
+        "joins": { "$ref": "#/$defs/words", "description": "Which of its connection points meets which of its partner's." },
+        "open": { "$ref": "#/$defs/open" }
+      }
+    },
+    "point_rule": {
+      "description": "How one of the item's points comes from its parts' points, or does not apply (with why), or open.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "how"],
+      "properties": {
+        "state": { "enum": ["by rule", "does not apply", "open"] },
+        "how": { "$ref": "#/$defs/words" },
+        "open": { "$ref": "#/$defs/open" }
+      },
+      "if": { "properties": { "state": { "const": "open" } } },
+      "then": { "required": ["open"] }
+    },
+    "situation": {
+      "description": "How the item is in one situation: built (in the game today), decided (by a live decision, not built), open (with its owner and why) or does not apply (with why). Built and decided name their mechanism and decisions.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "how"],
+      "properties": {
+        "state": { "enum": ["built", "decided", "open", "does not apply"] },
+        "mechanism": {
+          "enum": ["hand_socket", "hung", "strap", "carry_rule", "carry_pose", "stowed_socket", "shield_targets", "move_set", "tool_use", "none yet"],
+          "description": "hand_socket: in hand on its lead hand's socket (D546); hung: hung from the hand (D546); strap: on the forearm (terra_walker::strap, D554); carry_rule: tipped by the carry rule (D546, D564); carry_pose: a fight.json clip laid on its arm while carried (D560); stowed_socket: a body socket when put away (D551); shield_targets: the board's place per shield pose, the arm solved to it (D554); move_set: a set's clips (D459); tool_use: the walker's use and strike clips (terra_walker::figure); none yet: nothing exists for it."
+        },
+        "decisions": { "type": "array", "items": { "type": "string", "pattern": "^D[0-9]+$" } },
+        "how": { "$ref": "#/$defs/words" },
+        "clip": { "type": "string" },
+        "socket": { "type": "string", "pattern": "^socket\\.[a-z]+(\\.[LR])?$" },
+        "open": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/open" } }
+      },
+      "allOf": [
+        { "if": { "properties": { "state": { "const": "open" } } }, "then": { "required": ["open"] } },
+        { "if": { "properties": { "state": { "enum": ["built", "decided"] } } }, "then": { "required": ["mechanism", "decisions"] } }
+      ]
+    }
+  }
+}

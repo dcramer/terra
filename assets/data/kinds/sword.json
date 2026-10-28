@@ -1,0 +1,78 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "sword",
+  "about": "A one-handed sword: a two-edged blade with a guard, a grip and a pommel. Today the arming sword, the only weapon with its own fight.",
+  "attach_kind": "blade",
+  "hold_class": { "class": "sword", "source": "assets/data/items.ron, the arming sword's hold" },
+  "hands": { "value": "Main", "source": "assets/data/items.ron, the arming sword's hold.grip" },
+  "lead": { "value": "main", "source": "D463: the main hand, the left on a left-handed body (holding.md Mirroring)" },
+  "grip_type": { "value": "power", "source": "D562: in hand, a power grip closed by touch on the grip" },
+  "slots": [
+    { "slot": "working", "name": "blade", "made_by": "model", "fits": ["sword_blade"], "joins": "its shoulder (the tang's section at the blade's base, flat) takes the guard's slot; its tang runs down -Y, the handle made round it to the tang's end" },
+    { "slot": "handle", "name": "grip", "made_by": "code", "fits": ["blade_handle"], "joins": "a wrapped grip round the tang from under the guard to the pommel, its length the blade's tang less both" },
+    { "slot": "trim", "name": "guard", "made_by": "model", "fits": ["guard"], "joins": "its slot on the blade's shoulder; it covers the blade's base and the grip's top" },
+    { "slot": "trim", "name": "pommel", "made_by": "model", "fits": ["pommel"], "joins": "its bore on the tang's end, below the grip" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "the middle of the code-made grip between the guard and the pommel (D546's blade rule): the item's origin" },
+    "second": { "state": "does not apply", "how": "held in one hand; a longsword held in two is another kind, with its own takes" },
+    "edge": { "state": "by rule", "how": "the blade's edge points (edge.lower at the shoulder, edge.upper at the tip, both edges, ±Z) carried through; the hit segment from the guard to the tip, replacing contact.rs's fixed 0.15 to 0.83 m" }
+  },
+  "held": {
+    "state": "built",
+    "mechanism": "move_set",
+    "decisions": ["D459", "D531"],
+    "how": "in the main hand's socket, flats ±X; the guard of sword.shielded (Low_Guard, with a shield) over locomotion by the hold layer",
+    "open": [{ "owner": "technical", "why": "the sword alone (sword.single) has no guard of its own yet; D461 orders it after two-handed" }]
+  },
+  "used": {
+    "state": "built",
+    "mechanism": "move_set",
+    "decisions": ["D459"],
+    "clip": "Open_Slash",
+    "how": "sword.shielded's slash, backhand and heavy (Open_Slash, Open_Backhand, Open_Heavy)",
+    "open": [{ "owner": "technical", "why": "the keyed takes snap the wrist 39 to 90 degrees in a key and bend it past human range, and the slash leads with one edge, the heavy with the flat: remade first (assembled-items.md, Must be fixed first; D565 step 3)" }]
+  },
+  "carried": {
+    "state": "built",
+    "mechanism": "carry_rule",
+    "decisions": ["D546", "D564"],
+    "how": "tipped by the carry rule, its tip forward and down, the tilt mostly at the wrist (attachment.md Carried)"
+  },
+  "stowed": {
+    "state": "decided",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.belt.L",
+    "how": "a one-handed blade at the hip away from the main hand, mirrored for a left-handed body",
+    "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step); whether a scabbard shows is a belt look not made" }]
+  },
+  "blocking": {
+    "state": "open",
+    "how": "with a shield, the shield blocks (sword.shielded's Clear_Block); alone, a guard on the blade",
+    "open": [{ "owner": "developers", "why": "whether a one-hander alone may block, smaller (D461's second question, unanswered)" }]
+  },
+  "animation": {
+    "state": "built",
+    "mechanism": "move_set",
+    "decisions": ["D459"],
+    "how": "sword.shielded (assets/data/moves/sword.shielded.ron), the only set; sword.single and sword.dual none yet",
+    "open": [{ "owner": "technical", "why": "sword.single after the two-handed stance (D461's order); sword.dual (D462) after" }]
+  },
+  "reference": {
+    "item": { "value": "arming_sword", "source": "today's look, art/held/arming_sword.json" },
+    "length_m": { "value": 0.95, "source": "assets/data/items.ron hold.length; the look's bounds measured 0.951" },
+    "mass_kg": { "value": 1.2, "source": "assets/data/items.ron hold.mass" },
+    "head_mass_kg": { "value": "open", "open": { "owner": "technical", "why": "items.ron gives the whole sword only; the blade's share is its part's, weighed when made (step 2)" } },
+    "balance_m": { "value": 0.12, "source": "assets/data/items.ron hold.balance" },
+    "inertia_kgm2": { "value": 0.1075, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": 0.03, "source": "a sword's grip about 3 cm across (recalled); measured on the reference's grip when made" }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": [0.0813, 0.1488], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [0.855, 1.045], "source": "the reference's length ±10% (research/2026-10-28-assembled-items-animation.md section 1: tip 0.76 to 0.93 m inside the clamp; blades of 0.60 to 1.05 m gave no new fault)" },
+    "head_mass_kg": { "value": "open", "open": { "owner": "technical", "why": "the blade's reference mass is open (above); for the whole sword the band is 0.91 to 1.66 kg at its balance" } },
+    "balance_m": { "value": [0.0, 0.221], "source": "the inertia band at the reference's mass and length, solved for the balance" },
+    "state": "length measured through sword.shielded's clips on every body (research section 1); masses from items.ron's stand-in"
+  }
+}

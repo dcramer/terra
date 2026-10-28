@@ -1,0 +1,82 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "round_shield",
+  "about": "A round shield: a board of planks with an iron boss over a centre grip, and a rim. Held in the off hand's fist behind the boss.",
+  "attach_kind": "shield",
+  "hold_class": { "class": "shield", "source": "tools/characters/attach_kinds.json (shield's classes); items.ron has no round shield item yet, only its look" },
+  "hands": { "value": "Off", "source": "holding.md section 1: a shield goes in the off hand only" },
+  "lead": { "value": "off", "source": "D463 and holding.md: the off hand, the right on a left-handed body, turned and never scaled by -1" },
+  "grip_type": { "value": "strap", "source": "D562: strapped, no finger layer; the hand holds the clips' Strap_Grip on the grip bar and the board rides the forearm (terra_walker::strap)" },
+  "slots": [
+    { "slot": "working", "name": "board", "made_by": "model", "fits": ["round_board"], "joins": "its frame's origin is the grip (the strapped mount's origin, D546); its boss and rim are full points" },
+    { "slot": "handle", "name": "grip_bar", "made_by": "code", "fits": ["grip_bar"], "joins": "a round bar along +Y through the board's origin, on its back, across the boss's hole" },
+    { "slot": "trim", "name": "boss", "made_by": "model", "fits": ["boss"], "joins": "its seat (a full point) on the board's boss point: position, out of the front (-Z) and up" },
+    { "slot": "trim", "name": "rim", "made_by": "model", "fits": ["rim"], "optional": true, "joins": "its seat (a full point) on the board's rim point; its size the board's diameter" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "the board's origin, where the fist closes on the grip bar behind the boss: the strapped look's origin, its +Y along the bar, its front -Z" },
+    "second": { "state": "does not apply", "how": "held in one hand" },
+    "edge": { "state": "by rule", "how": "its face for a block and a bash: the board's rim point (its centre and diameter) and boss point carried through" }
+  },
+  "held": {
+    "state": "built",
+    "mechanism": "shield_targets",
+    "decisions": ["D554", "D531"],
+    "clip": "Low_Guard",
+    "how": "the board at the left hip, face out, in the guard (Low_Guard's target, art/animation/shield_targets.json); the arm solved to put the strapped board there",
+    "open": [{ "owner": "technical", "why": "the targets were captured with the heater (shield_targets.json's shield); the round board's clearance in them is unmeasured" }]
+  },
+  "used": {
+    "state": "built",
+    "mechanism": "move_set",
+    "decisions": ["D459"],
+    "how": "in sword.shielded: the block (Clear_Block, a parry at its start); a bash is off-heavy in holding.md, not built",
+    "open": [{ "owner": "technical", "why": "the shield bash and shield.alone (holding.md) have no clips" }]
+  },
+  "carried": {
+    "state": "built",
+    "mechanism": "carry_pose",
+    "decisions": ["D560"],
+    "clip": "Carry_Round_Shield",
+    "how": "on the forearm at the left side, the upper arm out, 4.4 cm clear of the body (attachment.md Carried); a strapped look is not tipped"
+  },
+  "stowed": {
+    "state": "decided",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.back",
+    "how": "on the back, first, a bow or polearm beside it",
+    "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step)" }]
+  },
+  "blocking": {
+    "state": "built",
+    "mechanism": "shield_targets",
+    "decisions": ["D554"],
+    "clip": "Raised_Block",
+    "how": "the board raised before the chest (Raised_Block's target), the arm solved to it",
+    "open": [{ "owner": "technical", "why": "captured with the heater: the round board in Raised_Block is unmeasured" }]
+  },
+  "animation": {
+    "state": "built",
+    "mechanism": "move_set",
+    "decisions": ["D459"],
+    "how": "sword.shielded's shield moves and guards (assets/data/moves/sword.shielded.ron); shield.alone none yet",
+    "open": [{ "owner": "technical", "why": "shield.alone (bash, block, fists; holding.md) has no clips" }]
+  },
+  "reference": {
+    "item": { "value": "round_shield", "source": "today's look, art/held/round_shield.json (no items.ron entry)" },
+    "length_m": { "value": 0.8, "source": "the look's bounds measured 0.800 across" },
+    "mass_kg": { "value": 4.0, "source": "a planked round shield of 0.8 m (recalled: 3.5 to 5.5 kg); a stand-in until its parts are weighed" },
+    "head_mass_kg": { "value": 3.6, "source": "the board with its boss, the stand-in's mass less the bar and rim (about 0.4 kg, recalled)" },
+    "balance_m": { "value": 0.0, "source": "a centre grip: the board's centre at the grip" },
+    "inertia_kgm2": { "value": 0.2133, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": 0.03, "source": "a centre grip bar about 3 cm across (recalled); measured when made" }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": [0.1613, 0.2953], "source": "D459's tempo clamp 0.85 to 1.15 for its block and bash: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [0.72, 0.88], "source": "the reference's diameter ±10% (research/2026-10-28-assembled-items-animation.md section 1)" },
+    "head_mass_kg": { "value": [2.63, 5.14], "source": "the inertia band at the reference's diameter and balance (the whole 3.03 to 5.54 kg), less the bar and rim's 0.4 kg" },
+    "balance_m": { "value": [0.0, 0.143], "source": "the inertia band at the reference's mass and diameter, solved for the balance" },
+    "state": "computed from a stand-in mass; the round board's clearance in the shield targets is unmeasured"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "pickaxe",
+  "about": "A pickaxe: a two-ended iron head, a long pick and a shorter one, on a long haft. The tool that breaks rock and ore (the stone and iron pickaxes).",
+  "attach_kind": "hafted",
+  "hold_class": { "class": "pickaxe", "source": "tools/characters/attach_kinds.json (hafted's classes; holding.md: tools keep their own class)" },
+  "hands": {
+    "value": "open",
+    "today": "Main: every tool is held and swung in the main hand alone",
+    "open": { "owner": "developers", "why": "a real pickaxe of 0.9 m is swung in two hands; whether ours is (Two, with its own two-handed takes and a second grip) or stays one-handed is a design call" }
+  },
+  "lead": { "value": "main", "source": "D463: the main hand, the left on a left-handed body; if two-handed, the main hand still leads (holding.md's lead, Main unless a bow)" },
+  "grip_type": { "value": "power", "source": "D562: in hand, a power grip closed by touch on the haft" },
+  "slots": [
+    { "slot": "working", "name": "head", "made_by": "model", "fits": ["pick_head"], "joins": "its eye's two openings on the haft's line; the haft made to their diameters, 4 mm proud of eye.upper" },
+    { "slot": "handle", "name": "haft", "made_by": "code", "fits": ["haft"], "joins": "a round shaft along +Y from its butt; it may flare under the head, as real ones do, read at each join's own place" },
+    { "slot": "trim", "name": "binding", "made_by": "model", "fits": ["collar"], "optional": true, "joins": "its bore on the haft, its top against the head's eye.lower" },
+    { "slot": "trim", "name": "butt", "made_by": "model", "fits": ["cap"], "optional": true, "joins": "its bore over the haft's -Y end" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "on the haft, grip_from_end up from its butt (the reference's 0.08 m; D546's hafted 0.04 to 0.12): the item's origin" },
+    "second": {
+      "state": "open",
+      "how": "none while one-handed; if two-handed, a point on the haft at a fixed distance from the grip, part of the reference item (research section 3)",
+      "open": { "owner": "developers", "why": "follows whether the pickaxe is two-handed (hands, above)" }
+    },
+    "edge": { "state": "by rule", "how": "the head's longer pick's tip point (its point, on -Z, D546: the longer pick toward -Z) carried through; the shorter end is not a working edge" }
+  },
+  "held": { "state": "does not apply", "how": "a tool has no ready pose: the Tool stance holds no guard (holding.md), so in hand it is carried until used" },
+  "used": {
+    "state": "built",
+    "mechanism": "tool_use",
+    "decisions": ["D459"],
+    "how": "a blow plays the walker's Sword_Attack and a use its Interact (terra_walker::figure); items.ron's tool.cuts and strikes say what it breaks",
+    "open": [{ "owner": "technical", "why": "a pick's own swing, keyed for the reference so its point leads (and with both hands if two-handed)" }]
+  },
+  "carried": {
+    "state": "built",
+    "mechanism": "carry_rule",
+    "decisions": ["D546", "D564"],
+    "how": "tipped by the carry rule, its head forward and down, no lower than 0.55 m under the grip (attachment.md Carried)"
+  },
+  "stowed": {
+    "state": "open",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.belt.R",
+    "how": "one-handed hafted: at the hip on the main hand's side (D551); two-handed: across the back",
+    "open": [
+      { "owner": "developers", "why": "which of D551's rows follows whether it is two-handed (hands, above)" },
+      { "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step); a 0.9 m pick at the hip reaches below the knee" }
+    ]
+  },
+  "blocking": { "state": "does not apply", "how": "a tool does not block: the Tool stance's off button is the build menu (holding.md)" },
+  "animation": {
+    "state": "built",
+    "mechanism": "tool_use",
+    "decisions": ["D459"],
+    "how": "none yet of its own: the Tool stance plays the walker's use and strike clips",
+    "open": [{ "owner": "technical", "why": "a pick's use set (holding.md's count, the tools' three), keyed for the reference" }]
+  },
+  "reference": {
+    "item": { "value": "iron_pickaxe", "source": "today's look, art/held/iron_pickaxe.json" },
+    "length_m": { "value": 0.9, "source": "art/held/iron_pickaxe.json length; the look's bounds measured 0.900" },
+    "mass_kg": { "value": 1.86, "source": "the head and a 0.04 m ash haft 0.9 m long (670 kg/m^3, recalled), 0.76 kg; a stand-in until its parts are weighed" },
+    "head_mass_kg": { "value": 1.1, "source": "a 2.5 lb pick head (recalled)" },
+    "balance_m": { "value": 0.613, "source": "computed from the head at 0.86 m and the haft's middle, from the grip" },
+    "inertia_kgm2": { "value": 0.823, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": 0.04, "source": "art/held/iron_pickaxe.json haft (0.04: the source's 8.3 cm handle thinned to a real pick's)" }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": [0.6223, 1.139], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [0.81, 0.99], "source": "the reference's length ±10% at a fixed head (research/2026-10-28-assembled-items-animation.md section 1)" },
+    "head_mass_kg": { "value": [0.788, 1.584], "source": "the inertia band at the reference's length, solved for the head (-28% to +44%)" },
+    "balance_m": { "value": [0.517, 0.739], "source": "the inertia band at the reference's mass and length, solved for the balance" },
+    "state": "computed from stand-in masses; no pick clips keyed for any item, so nothing measured"
+  }
+}

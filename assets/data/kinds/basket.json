@@ -1,0 +1,62 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "basket",
+  "about": "A basket hung from the hand by its handle, carried at the side. A look today, not yet an item.",
+  "attach_kind": "hung",
+  "hold_class": { "class": null, "source": "a hung look has no hold class: it has no moves (attach_kinds.json's hung lists none); items.ron has no basket" },
+  "hands": {
+    "value": "open",
+    "today": "the look hangs from the right hand in the checks",
+    "open": { "owner": "developers", "why": "whether a basket is an item a hand holds (Either, beside a one-hander, as a torch) and how it reaches the hand" }
+  },
+  "lead": { "value": "either", "source": "D463: the hand that holds it, mirrored on a left-handed body; open with its hands (above)" },
+  "grip_type": { "value": "hook", "source": "D562: hung, a hook grip, the fingers alone round the handle" },
+  "slots": [
+    { "slot": "working", "name": "body", "made_by": "model", "fits": ["basket_body"], "joins": "its handle woven in, one part, as a real basket's is; its grip a point on it" },
+    {
+      "slot": "trim",
+      "name": "cover",
+      "made_by": "model",
+      "fits": ["basket_cover"],
+      "optional": true,
+      "joins": "its seat on the body's mouth point (a full point: centre, up, the long way)",
+      "open": { "owner": "developers", "why": "whether baskets vary by a cover or a cloth at all; a trim is listed so the kind may take one" }
+    }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "1.5 cm under the handle's top (D546's hung mount), on the body's handle_top point: the item's origin, hanging down -Z, its long way along +Y" },
+    "second": { "state": "does not apply", "how": "held in one hand" },
+    "edge": { "state": "does not apply", "how": "it does not strike" }
+  },
+  "held": { "state": "does not apply", "how": "no ready pose: it has no moves; in hand it is always hung" },
+  "used": { "state": "does not apply", "how": "no use today; what it holds is the pack's, unseen (D551's rest)" },
+  "carried": {
+    "state": "built",
+    "mechanism": "hung",
+    "decisions": ["D546"],
+    "how": "hung from the hand by its handle, out 5 cm from the leg (basket.json's out); a hung look does not tip (attachment.md Carried)"
+  },
+  "stowed": {
+    "state": "open",
+    "how": "D551 lists no socket for a hung look",
+    "open": [{ "owner": "developers", "why": "where a basket goes when the hands are freed: the pack, unseen (D551's rest), or on the body" }]
+  },
+  "blocking": { "state": "does not apply", "how": "it is not a weapon" },
+  "animation": { "state": "does not apply", "how": "no move set: a hung look only hangs from the walker's clips, the arm kept off the hip (D535)" },
+  "reference": {
+    "item": { "value": "basket", "source": "today's look, art/held/basket.json (props/MarketBasket.glb)" },
+    "length_m": { "value": 0.46, "source": "the look's longest way measured 0.460 (bounds 0.30 by 0.46 by 0.44)" },
+    "mass_kg": { "value": 0.5, "source": "an empty wicker basket of that size (recalled); a stand-in" },
+    "head_mass_kg": { "value": "open", "open": { "owner": "technical", "why": "no head: the body is the whole" } },
+    "balance_m": { "value": "open", "open": { "owner": "technical", "why": "it hangs under the grip, so its balance is below it by gravity; no swing to bound" } },
+    "inertia_kgm2": { "value": "open", "open": { "owner": "technical", "why": "no swing clip; D459's tempo does not apply" } },
+    "grip_diameter_m": { "value": "open", "open": { "owner": "technical", "why": "the woven handle's thickness, measured on the body part when made" } }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": "open", "open": { "owner": "technical", "why": "no swing (above)" } },
+    "length_m": { "value": [0.2, 0.6], "source": "D546's hung size range (attach_kinds.json); what binds it is the leg's clearance in the carried clips" },
+    "head_mass_kg": { "value": "open", "open": { "owner": "technical", "why": "no head: the body is the whole" } },
+    "balance_m": { "value": "open", "open": { "owner": "technical", "why": "it hangs, and has no swing to bound" } },
+    "state": "bounded by size only; the carried clips' clearance is checked over that range"
+  }
+}

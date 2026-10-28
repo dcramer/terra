@@ -1,0 +1,70 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "bow",
+  "about": "A bow: a wooden stave with a string, held in the off hand and drawn by the main hand. Today it shoots arrows as a tool, with no draw of its own.",
+  "attach_kind": "bow",
+  "hold_class": { "class": "bow", "source": "tools/characters/attach_kinds.json (bow's classes) and holding.md section 1" },
+  "hands": { "value": "Two", "source": "holding.md section 1: a bow is held in two hands, Two, the off hand leading" },
+  "lead": { "value": "off", "source": "holding.md's lead (Off for a bow) and attach_kinds.json's bow lead; the right on a left-handed body (D463)" },
+  "grip_type": { "value": "power", "source": "D562: in hand, a power grip closed by touch on the riser" },
+  "slots": [
+    { "slot": "working", "name": "stave", "made_by": "model", "fits": ["bow_stave"], "joins": "its frame's origin is the grip on the riser; its two nocks are full points the string runs between" },
+    { "slot": "handle", "name": "string", "made_by": "code", "fits": ["bow_string"], "joins": "a straight cord at rest from nock.lower to nock.upper, its diameter the nocks' size" },
+    { "slot": "trim", "name": "grip_wrap", "made_by": "model", "fits": ["collar"], "optional": true, "joins": "its bore round the riser at the grip, the riser's section there" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "the stave's grip point on the riser, 4.5 cm under its middle so the arrow rests on the fist (bow.json's grip): the item's origin, +Y toward the upper nock, the string toward +Z" },
+    "second": { "state": "by rule", "how": "nock, the string's middle at rest: the midpoint of the stave's two nock points (the string is straight between them), which the drawing hand takes (attachment.md Second grip)" },
+    "edge": { "state": "does not apply", "how": "a bow does not strike; what it shoots leaves from the nock point along the arrow's line" }
+  },
+  "held": {
+    "state": "open",
+    "mechanism": "none yet",
+    "how": "in the off hand's socket, with no ready pose",
+    "open": [{ "owner": "technical", "why": "a bow's ready hold and draw are not built (holding.md section 3: the bow, not built)" }]
+  },
+  "used": {
+    "state": "open",
+    "mechanism": "tool_use",
+    "how": "as a tool today it shoots on a held button (items.ron tool.shoots), with no draw clip",
+    "open": [{ "owner": "technical", "why": "the draw: the string's middle follows the main hand while drawn, the hand on the clip (holding.md section 3), not built" }]
+  },
+  "carried": {
+    "state": "open",
+    "mechanism": "carry_rule",
+    "decisions": ["D546", "D564"],
+    "how": "today tipped by the carry rule as any look in hand",
+    "open": [{ "owner": "developers", "why": "how a bow is carried: the review desk's bow-carry item is unanswered" }]
+  },
+  "stowed": {
+    "state": "decided",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.back",
+    "how": "across the back, beside a shield there",
+    "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step); the quiver on the back's spine (D551) must leave it room" }]
+  },
+  "blocking": { "state": "does not apply", "how": "a bow does not block; holding.md's Two stance blocks with the weapon, which a bow's set will replace with its draw" },
+  "animation": {
+    "state": "open",
+    "mechanism": "none yet",
+    "how": "none yet: no bow set",
+    "open": [{ "owner": "technical", "why": "bow.two (holding.md's count) with its draw, keyed with both hands" }]
+  },
+  "reference": {
+    "item": { "value": "bow", "source": "today's look, art/held/bow.json" },
+    "length_m": { "value": 1.2, "source": "art/held/bow.json length; the look's bounds measured 1.200" },
+    "mass_kg": { "value": 0.6, "source": "a wooden self bow of 1.2 m (recalled: 0.5 to 0.7 kg); a stand-in" },
+    "head_mass_kg": { "value": "open", "open": { "owner": "technical", "why": "a bow has no head: the stave is the whole; mass matters to its draw, not a swing" } },
+    "balance_m": { "value": 0.045, "source": "the stave's middle 4.5 cm above the grip (bow.json)" },
+    "inertia_kgm2": { "value": "open", "open": { "owner": "technical", "why": "D459's tempo is a swing's; what bounds a bow comes with its draw clips" } },
+    "grip_diameter_m": { "value": "open", "open": { "owner": "technical", "why": "the riser is not round; its section is the stave's, measured when made" } }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": "open", "open": { "owner": "technical", "why": "a bow is drawn, not swung; D459's tempo clamp does not bound it" } },
+    "length_m": { "value": [1.08, 1.32], "source": "the reference's length ±10%, so the drawing hand's reach to the nock stays the clips' (research section 3's IK budget, a few centimetres); D546's bow range is 1.0 to 1.9 m" },
+    "head_mass_kg": { "value": "open", "open": { "owner": "technical", "why": "no head (above)" } },
+    "balance_m": { "value": "open", "open": { "owner": "technical", "why": "not a swing's; bounded, if at all, by the draw clips" } },
+    "state": "only the length is bounded, and only as a stand-in: the draw's clips set the rest"
+  }
+}

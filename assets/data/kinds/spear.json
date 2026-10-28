@@ -1,0 +1,84 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "spear",
+  "about": "A spear: a leaf-shaped iron head on a long wooden shaft. Today a hunting spear swung as a tool; later held in one hand with a shield or in two.",
+  "attach_kind": "polearm",
+  "hold_class": { "class": "spear", "source": "tools/characters/attach_kinds.json (polearm's classes) and holding.md section 1" },
+  "hands": {
+    "value": "Two",
+    "source": "holding.md section 1 (a spear among Two's examples) and its count: spear.single, spear.shielded and spear.two",
+    "open": { "owner": "technical", "why": "today it is held and swung in the main hand alone, as a tool: the two-handed IK and the spear's second grip are not built (attachment.md Second grip, a listed fault)" }
+  },
+  "lead": { "value": "main", "source": "D463 and holding.md's lead: Main for every two-hander but a bow; the left on a left-handed body" },
+  "grip_type": { "value": "power", "source": "D562: in hand, a power grip closed by touch on the shaft; the off hand's too, on the second grip" },
+  "slots": [
+    { "slot": "working", "name": "head", "made_by": "model", "fits": ["spear_head"], "joins": "its socket (socket.mouth and socket.bottom on the shaft's line); the shaft made to their diameters, its top at socket.bottom" },
+    { "slot": "handle", "name": "shaft", "made_by": "code", "fits": ["haft"], "joins": "a round shaft along +Y from its butt" },
+    { "slot": "trim", "name": "binding", "made_by": "model", "fits": ["collar"], "optional": true, "joins": "its bore on the shaft: over the socket's mouth (its rivets' band) or at the grip" },
+    { "slot": "trim", "name": "butt", "made_by": "model", "fits": ["cap"], "optional": true, "joins": "its bore over the shaft's -Y end (a butt spike)" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "on the shaft at the reference's share of its length from the butt (0.75 of 1.8 m, 42%; D546's polearm 30 to 55%), near the balance: the item's origin" },
+    "second": {
+      "state": "open",
+      "how": "a point on the shaft a fixed distance from the grip (negative, toward the butt), part of the reference item, not of the envelope (research/2026-10-28-assembled-items-animation.md section 3), at least 4 cm from the butt (attachment.md Second grip)",
+      "open": { "owner": "technical", "why": "its distance is set with the spear's two-handed takes, keyed with both hands; none exist" }
+    },
+    "edge": { "state": "by rule", "how": "the head's tip point and its two edges (edge.lower to the tip, ±Z) carried through; the hit is a thrust along +Y first" }
+  },
+  "held": {
+    "state": "open",
+    "mechanism": "none yet",
+    "how": "in the main hand's socket today, with no ready pose",
+    "open": [{ "owner": "technical", "why": "its guards come with spear.single, spear.shielded and spear.two; D461 orders the two-handed stance next (its example a greatsword)" }]
+  },
+  "used": {
+    "state": "built",
+    "mechanism": "tool_use",
+    "decisions": ["D459"],
+    "how": "as a tool today: a blow plays the walker's Sword_Attack (terra_walker::figure); items.ron's tool.strikes, the hardest and furthest",
+    "open": [{ "owner": "technical", "why": "its thrusts and sweeps come with its sets, two-handed ones keyed with both hands" }]
+  },
+  "carried": {
+    "state": "built",
+    "mechanism": "carry_rule",
+    "decisions": ["D546", "D564"],
+    "how": "tipped by the carry rule, but no lower than 0.55 m under the grip, so its head is 32 degrees down and off the ground (attachment.md Carried)",
+    "open": [{ "owner": "developers", "why": "whether a spear is carried in one hand like this, or upright, or on the shoulder, has not been asked" }]
+  },
+  "stowed": {
+    "state": "decided",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.back",
+    "how": "a polearm across the back, beside a shield there",
+    "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step); a 1.8 m spear across the back must clear the head and the ground" }]
+  },
+  "blocking": {
+    "state": "open",
+    "how": "two-handed: blocks with the weapon (holding.md's Two stance); with a shield, the shield blocks",
+    "open": [{ "owner": "technical", "why": "no two-handed block clip; it comes with spear.two" }]
+  },
+  "animation": {
+    "state": "open",
+    "mechanism": "none yet",
+    "how": "none yet: no spear set; as a tool it plays the walker's clips",
+    "open": [{ "owner": "technical", "why": "spear.single, spear.shielded and spear.two (holding.md's count), in D461's order" }]
+  },
+  "reference": {
+    "item": { "value": "spear", "source": "today's look, art/held/spear.json" },
+    "length_m": { "value": 1.8, "source": "art/held/spear.json length; the look's bounds measured 1.800" },
+    "mass_kg": { "value": 1.1, "source": "the head and a 0.03 m ash shaft 1.8 m long (670 kg/m^3, recalled), 0.85 kg; a stand-in until its parts are weighed. The look's shaft is 4.0 cm across (research parts-art section 4), thicker than a real one" },
+    "head_mass_kg": { "value": 0.25, "source": "a hunting spearhead (recalled)" },
+    "balance_m": { "value": 0.331, "source": "computed from the head at 1.7 m and the shaft's middle, from the grip at 0.75 m" },
+    "inertia_kgm2": { "value": 0.4188, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": 0.03, "source": "a real spear shaft about 3 cm across (recalled)" }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": [0.3166, 0.5796], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [1.62, 1.98], "source": "the reference's length ±10% (research/2026-10-28-assembled-items-animation.md section 1)" },
+    "head_mass_kg": { "value": [0.111, 0.44], "source": "the inertia band at the reference's length, solved for the head (-56% to +76%: the shaft carries most of the inertia)" },
+    "balance_m": { "value": [0.131, 0.506], "source": "the inertia band at the reference's mass and length, solved for the balance" },
+    "state": "computed from stand-in masses; no spear clips; for two hands the second grip stays the reference's across the envelope (research section 3)"
+  }
+}

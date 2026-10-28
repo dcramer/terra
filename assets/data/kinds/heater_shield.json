@@ -1,0 +1,78 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "heater_shield",
+  "about": "A heater shield: a flat-topped, pointed board strapped on the forearm by two straps (enarmes), with a rim. Today's shield in the fight.",
+  "attach_kind": "shield",
+  "hold_class": { "class": "shield", "source": "assets/data/items.ron, the heater shield's hold" },
+  "hands": { "value": "Off", "source": "assets/data/items.ron, the heater shield's hold.grip" },
+  "lead": { "value": "off", "source": "D463 and holding.md: the off hand, the right on a left-handed body, turned and never scaled by -1" },
+  "grip_type": { "value": "strap", "source": "D562: strapped, no finger layer; the fist holds the clips' Strap_Grip in the hand strap and the board rides the forearm (terra_walker::strap, D504)" },
+  "slots": [
+    { "slot": "working", "name": "board", "made_by": "model", "fits": ["heater_board"], "joins": "its frame's origin is the hand strap's grip (the strapped mount's origin, D546); its rim is a full point" },
+    { "slot": "handle", "name": "enarmes", "made_by": "code", "fits": ["enarmes"], "joins": "two leather straps on its back along +Y: the hand strap at the origin and the arm strap at the board's arm_strap point, up the forearm's line" },
+    { "slot": "trim", "name": "rim", "made_by": "model", "fits": ["rim"], "optional": true, "joins": "its seat (a full point) on the board's rim point; a heater's rim fits only boards of its outline" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "the board's origin, the hand strap where the fist closes (heater_shield.json's grip): the strapped look's origin, +Y up the forearm toward the arm strap, front -Z" },
+    "second": { "state": "does not apply", "how": "held on one arm; the arm strap is on the grip's own line, not a second hand's" },
+    "edge": { "state": "by rule", "how": "its face for a block and a bash: the board's rim point (its outline and centre) carried through" }
+  },
+  "held": {
+    "state": "built",
+    "mechanism": "shield_targets",
+    "decisions": ["D554", "D531"],
+    "clip": "Low_Guard",
+    "how": "the board low at the left hip, face out, in the guard, and further out in the strafes (Low_Guard and Low_Strafe's targets, art/animation/shield_targets.json); the arm solved to put the strapped board there"
+  },
+  "used": {
+    "state": "built",
+    "mechanism": "move_set",
+    "decisions": ["D459"],
+    "how": "in sword.shielded: the block (Clear_Block, a parry at its start); a bash is off-heavy in holding.md, not built",
+    "open": [{ "owner": "technical", "why": "the shield bash and shield.alone (holding.md) have no clips" }]
+  },
+  "carried": {
+    "state": "built",
+    "mechanism": "strap",
+    "decisions": ["D546", "D554"],
+    "how": "on the forearm as the walker's carried clips leave it; a strapped look is not tipped (attachment.md Carried), and the heater names no carry pose"
+  },
+  "stowed": {
+    "state": "decided",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.back",
+    "how": "on the back, first, a bow or polearm beside it",
+    "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step)" }]
+  },
+  "blocking": {
+    "state": "built",
+    "mechanism": "shield_targets",
+    "decisions": ["D554"],
+    "clip": "Raised_Block",
+    "how": "the board raised before the chest (Raised_Block's target, captured with this shield), the arm solved to it"
+  },
+  "animation": {
+    "state": "built",
+    "mechanism": "move_set",
+    "decisions": ["D459"],
+    "how": "sword.shielded's shield moves and guards (assets/data/moves/sword.shielded.ron); shield.alone none yet",
+    "open": [{ "owner": "technical", "why": "shield.alone (bash, block, fists; holding.md) has no clips" }]
+  },
+  "reference": {
+    "item": { "value": "heater_shield", "source": "today's look, art/held/heater_shield.json" },
+    "length_m": { "value": 0.75, "source": "assets/data/items.ron hold.length; the look's bounds measured 0.762 by 0.619" },
+    "mass_kg": { "value": 3.5, "source": "assets/data/items.ron hold.mass" },
+    "head_mass_kg": { "value": 3.3, "source": "the board, items.ron's mass less the straps and rim (about 0.2 kg, recalled)" },
+    "balance_m": { "value": 0.1, "source": "assets/data/items.ron hold.balance" },
+    "inertia_kgm2": { "value": 0.1991, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": "open", "open": { "owner": "technical", "why": "a hand strap has no diameter the fingers close on (D562 lays none strapped); its width comes with the enarmes' numbers" } }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": [0.1505, 0.2755], "source": "D459's tempo clamp 0.85 to 1.15 for its block and bash: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [0.675, 0.825], "source": "the reference's length ±10% (research/2026-10-28-assembled-items-animation.md section 1)" },
+    "head_mass_kg": { "value": [2.45, 4.64], "source": "the inertia band at the reference's length and balance (the whole 2.65 to 4.84 kg), less the straps and rim's 0.2 kg" },
+    "balance_m": { "value": [0.0, 0.178], "source": "the inertia band at the reference's mass and length, solved for the balance" },
+    "state": "computed from items.ron's stand-in; the targets were captured with this shield, so the reference holds in them"
+  }
+}

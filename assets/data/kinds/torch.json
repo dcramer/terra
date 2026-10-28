@@ -1,0 +1,79 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "torch",
+  "about": "A torch: a stick with a wrapped, burning head. Carried for light in either hand, beside a one-hander; a poor club.",
+  "attach_kind": "hafted",
+  "hold_class": { "class": "torch", "source": "assets/data/items.ron, the torch's hold" },
+  "hands": { "value": "Either", "source": "assets/data/items.ron, the torch's hold.grip; carried: true, so it counts as nothing in the stance (holding.md)" },
+  "lead": { "value": "either", "source": "D460 and D463: the hand whose slot holds it, main or off, mirrored on a left-handed body; Carry_Torch serves either hand (attachment.md Carried)" },
+  "grip_type": { "value": "power", "source": "D562: in hand, a power grip closed by touch on the stick" },
+  "slots": [
+    { "slot": "working", "name": "head", "made_by": "model", "fits": ["torch_head"], "joins": "its socket (the wrap's bore: socket.mouth and socket.bottom on the stick's line); the stick made to them, its top at socket.bottom" },
+    { "slot": "handle", "name": "stick", "made_by": "code", "fits": ["haft"], "joins": "a round stick along +Y from its butt" },
+    { "slot": "trim", "name": "binding", "made_by": "model", "fits": ["collar"], "optional": true, "joins": "its bore on the stick, under the head (a cord or iron band)" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "on the stick, grip_from_end up from its butt (the reference's 0.10 m; D546's hafted 0.04 to 0.12): the item's origin" },
+    "second": { "state": "does not apply", "how": "held in one hand" },
+    "edge": {
+      "state": "open",
+      "how": "the head's flame point (where the fire sits, on its line) carried through, for the light; as a club, the head's span along +Y",
+      "open": { "owner": "technical", "why": "torchlight.rs places the flame by its own number today; reading it from the head's point comes with the assembler (step 2)" }
+    }
+  },
+  "held": {
+    "state": "built",
+    "mechanism": "carry_pose",
+    "decisions": ["D560"],
+    "clip": "Carry_Torch",
+    "how": "a carried item has no ready pose: in either hand it is always in its carry pose, flame up and ahead (holding.md: carried counts as nothing)"
+  },
+  "used": {
+    "state": "built",
+    "mechanism": "tool_use",
+    "decisions": ["D459"],
+    "how": "it lights the way while in hand (items.ron tool.lights); a blow plays the walker's Sword_Attack (items.ron tool.strikes 5.0)"
+  },
+  "carried": {
+    "state": "built",
+    "mechanism": "carry_pose",
+    "decisions": ["D560"],
+    "clip": "Carry_Torch",
+    "how": "on a raised arm, flame up and ahead, its handle within 2.2 degrees of up and 10 cm clear of the body in every carried clip on every template (attachment.md Carried); not tipped by the rule"
+  },
+  "stowed": {
+    "state": "open",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.belt.R",
+    "how": "D551's one-handed hafted row: at the hip on the main hand's side",
+    "open": [
+      { "owner": "developers", "why": "whether a lit torch is put out when put away, or goes to the pack unseen rather than the hip" },
+      { "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step)" }
+    ]
+  },
+  "blocking": { "state": "does not apply", "how": "a carried item counts as nothing in the stance (holding.md), so it never blocks" },
+  "animation": {
+    "state": "built",
+    "mechanism": "carry_pose",
+    "decisions": ["D560"],
+    "clip": "Carry_Torch",
+    "how": "no move set: a carried item only lays its arm's pose (holding.md's carried), Carry_Torch (art/animation/sets/fight.json)"
+  },
+  "reference": {
+    "item": { "value": "torch", "source": "today's look, art/held/torch.json" },
+    "length_m": { "value": 0.55, "source": "assets/data/items.ron hold.length; the look's bounds measured 0.550" },
+    "mass_kg": { "value": 0.6, "source": "assets/data/items.ron hold.mass (its comment: stand-in numbers)" },
+    "head_mass_kg": { "value": "open", "open": { "owner": "technical", "why": "items.ron gives the whole torch only; the head's share is its part's, weighed when made" } },
+    "balance_m": { "value": 0.3, "source": "assets/data/items.ron hold.balance (heavier at its head)" },
+    "inertia_kgm2": { "value": 0.0691, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": 0.04, "source": "a torch stick about 4 cm across (recalled); measured on the reference's stick when made" }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": [0.0523, 0.0957], "source": "D459's tempo clamp 0.85 to 1.15, for its blow: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [0.495, 0.605], "source": "the reference's length ±10% (research/2026-10-28-assembled-items-animation.md section 1); Carry_Torch holds it upright, so its clearance is checked across this band" },
+    "head_mass_kg": { "value": "open", "open": { "owner": "technical", "why": "the head's reference mass is open (above); for the whole torch the band is 0.45 to 0.83 kg at its balance" } },
+    "balance_m": { "value": [0.249, 0.366], "source": "the inertia band at the reference's mass and length, solved for the balance" },
+    "state": "computed from items.ron's stand-in; the carry pose's clearance measured on the one look only"
+  }
+}

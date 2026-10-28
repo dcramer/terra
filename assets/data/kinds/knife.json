@@ -1,0 +1,67 @@
+{
+  "$schema": "./kind.schema.json",
+  "kind": "knife",
+  "about": "A knife: a short single-edged blade in a wooden or bone handle. The tool that cuts plants and flesh; a dagger is a weapon class of its own.",
+  "attach_kind": "blade",
+  "hold_class": { "class": "knife", "source": "tools/characters/attach_kinds.json (blade's classes; holding.md: tools keep their own class)" },
+  "hands": { "value": "Main", "source": "holding.md section 1: a tool goes in the main hand" },
+  "lead": { "value": "main", "source": "D463: the main hand, the left on a left-handed body (holding.md Mirroring)" },
+  "grip_type": { "value": "power", "source": "D562: in hand, a power grip closed by touch on the handle" },
+  "slots": [
+    { "slot": "working", "name": "blade", "made_by": "model", "fits": ["knife_blade"], "joins": "its shoulder (the tang's section at the blade's base) takes the handle or a guard; its tang runs down -Y" },
+    { "slot": "handle", "name": "handle", "made_by": "code", "fits": ["blade_handle"], "joins": "a handle round the tang from the shoulder (or under a guard) to the tang's end" },
+    { "slot": "trim", "name": "bolster", "made_by": "model", "fits": ["guard"], "optional": true, "joins": "its slot on the blade's shoulder" },
+    { "slot": "trim", "name": "butt", "made_by": "model", "fits": ["pommel"], "optional": true, "joins": "its bore on the tang's end" }
+  ],
+  "points": {
+    "grip": { "state": "by rule", "how": "the middle of the handle between shoulder (or bolster) and end (D546's blade rule): the item's origin" },
+    "second": { "state": "does not apply", "how": "held in one hand" },
+    "edge": { "state": "by rule", "how": "the blade's edge points (edge.lower, edge.upper along +Y, its one edge on -Z) carried through" }
+  },
+  "held": { "state": "does not apply", "how": "a tool has no ready pose: the Tool stance holds no guard (holding.md), so in hand it is carried until used" },
+  "used": {
+    "state": "built",
+    "mechanism": "tool_use",
+    "decisions": ["D459"],
+    "how": "a cut plays the walker's Sword_Attack and a use its Interact (terra_walker::figure); items.ron's tool.cuts say what it cuts",
+    "open": [{ "owner": "technical", "why": "a knife's own cut, keyed so its edge leads" }]
+  },
+  "carried": {
+    "state": "built",
+    "mechanism": "carry_rule",
+    "decisions": ["D546", "D564"],
+    "how": "tipped by the carry rule, its point forward and down (attachment.md Carried)"
+  },
+  "stowed": {
+    "state": "decided",
+    "mechanism": "stowed_socket",
+    "decisions": ["D551"],
+    "socket": "socket.belt.L",
+    "how": "a one-handed blade at the hip away from the main hand, mirrored for a left-handed body",
+    "open": [{ "owner": "technical", "why": "the turn and offset on the socket are not set (attachment.md Stowed's next step); a sheath is a belt look not made" }]
+  },
+  "blocking": { "state": "does not apply", "how": "a tool does not block: the Tool stance's off button is the build menu (holding.md)" },
+  "animation": {
+    "state": "built",
+    "mechanism": "tool_use",
+    "decisions": ["D459"],
+    "how": "none yet of its own: the Tool stance plays the walker's use and strike clips",
+    "open": [{ "owner": "technical", "why": "a knife's use set (holding.md's count, the tools' three)" }]
+  },
+  "reference": {
+    "item": { "value": "knife", "source": "today's look, art/held/knife.json" },
+    "length_m": { "value": 0.26, "source": "art/held/knife.json length; the look's bounds measured 0.260" },
+    "mass_kg": { "value": 0.1, "source": "the blade and a 0.019 m wooden handle 0.11 m long (670 kg/m^3, recalled), 0.02 kg; a stand-in until its parts are weighed" },
+    "head_mass_kg": { "value": 0.08, "source": "a 15 cm knife blade (recalled; the look's blade alone measured 15.9 by 4.4 by 1.3 cm, research/2026-10-28-assembled-parts-art.md section 4)" },
+    "balance_m": { "value": 0.104, "source": "computed from the blade's middle at 0.18 m and the handle's middle, from the grip" },
+    "inertia_kgm2": { "value": 0.0017, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "grip_diameter_m": { "value": 0.019, "source": "the knife look's handle across, median (research/2026-10-28-assembled-parts-art.md section 4)" }
+  },
+  "envelope": {
+    "inertia_kgm2": { "value": [0.0013, 0.0023], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
+    "length_m": { "value": [0.234, 0.286], "source": "the reference's length ±10% (research/2026-10-28-assembled-items-animation.md section 1)" },
+    "head_mass_kg": { "value": [0.061, 0.109], "source": "the inertia band at the reference's length, solved for the blade (-23% to +36%)" },
+    "balance_m": { "value": [0.083, 0.131], "source": "the inertia band at the reference's mass and length, solved for the balance" },
+    "state": "computed from stand-in masses; no knife clips keyed for any item"
+  }
+}
