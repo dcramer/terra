@@ -11,7 +11,7 @@
 // It is the run-time correction shipped games lay over a clip for a body's proportions (Unreal's
 // IK Rig retargeting and Control Rig hand IK): the bake gets the board close, this takes up the
 // centimetres. The solve is hold.py's (a damped Gauss-Newton over each bone's turn in its own
-// frame, 3 degrees weighing as 1 cm). Twin of terra_walker::shield_arm; change both.
+// frame, 3 degrees weighing as 1 cm), with Levenberg-Marquardt where that is left far off. Twin of terra_walker::shield_arm; change both.
 // Node 22.18 or later; no dependencies.
 
 import { type Glb, type Pose, type Q, type V3, apply, place, qinv, qmul, rot, sub } from "./glb.ts";
@@ -34,6 +34,9 @@ export const FAR = 10;
  * guard's target within 0.2 cm of it with the strafes' 7 cm away. */
 const SHEPARD = 4;
 const STEPS = 12;
+/** How near (cm, or degrees / 3) a Gauss-Newton solve must end to be kept without a
+ * Levenberg-Marquardt one: half the move check's bar. */
+const CLOSE = 0.5;
 
 /** How far one place is from another in one number: cm, or degrees / 3, the larger. */
 export const offBy = (a: Place, b: Place) => {
@@ -103,9 +106,8 @@ export function solveArm(arm: Arm, board: Place, want: Place): number[] {
     for (let j = 0; j < 9; j++) r.push(COST[Math.floor(j / 3)] * x[j]);
     return r;
   };
-  let x = new Array(9).fill(0);
-  for (let step = 0; step < STEPS; step++) {
-    const r = residual(x);
+  const sq = (r: number[]) => r.reduce((s, v) => s + v * v, 0);
+  const jacobian = (x: number[], r: number[]) => {
     const J = r.map(() => new Array(9).fill(0));
     for (let j = 0; j < 9; j++) {
       const e = [...x];
@@ -113,13 +115,44 @@ export function solveArm(arm: Arm, board: Place, want: Place): number[] {
       const rj = residual(e);
       for (let i = 0; i < r.length; i++) J[i][j] = (rj[i] - r[i]) / 1e-6;
     }
-    const A = Array.from({ length: 9 }, (_, a) => Array.from({ length: 9 }, (_, b) => J.reduce((s, row) => s + row[a] * row[b], 0) + (a === b ? 1e-6 : 0)));
-    const g = Array.from({ length: 9 }, (_, a) => -J.reduce((s, row, i) => s + row[a] * r[i], 0));
-    const d = solveLinear(A, g);
-    x = x.map((v, j) => v + d[j]);
-    if (Math.hypot(...d) < 1e-7) break;
+    return J;
+  };
+  const stepOf = (J: number[][], r: number[], damp: number) =>
+    solveLinear(
+      Array.from({ length: 9 }, (_, a) => Array.from({ length: 9 }, (_, b) => J.reduce((s, row) => s + row[a] * row[b], 0) + (a === b ? damp : 0))),
+      Array.from({ length: 9 }, (_, a) => -J.reduce((s, row, i) => s + row[a] * r[i], 0)),
+    );
+  const start = sq(residual(new Array(9).fill(0)));
+  let gn = new Array(9).fill(0);
+  let settled = false;
+  for (let step = 0; step < STEPS && !settled; step++) {
+    const r = residual(gn);
+    const d = stepOf(jacobian(gn, r), r, 1e-6);
+    gn = gn.map((v, j) => v + d[j]);
+    settled = Math.hypot(...d) < 1e-7;
   }
-  return x;
+  const off = residual(gn);
+  if ((settled && sq(off) <= start) || Math.max(Math.hypot(...off.slice(0, 3)), Math.hypot(...off.slice(3, 6)), Math.hypot(...off.slice(6, 9))) <= CLOSE) return gn;
+  // Thrown further than it started or left far off (a place at the arm's full stretch or past
+  // it: a short arm's raised block): Levenberg-Marquardt, a step kept only when it brings the
+  // board nearer, else damped harder and tried again; the nearer of the two kept.
+  let x = new Array(9).fill(0);
+  let r = residual(x);
+  let J = jacobian(x, r);
+  let damp = 1e-6;
+  for (let step = 0; step < 2 * STEPS; step++) {
+    const d = stepOf(J, r, damp);
+    const tried = x.map((v, j) => v + d[j]);
+    const rt = residual(tried);
+    if (sq(rt) > sq(r)) {
+      damp *= 10;
+      continue;
+    }
+    [x, r, damp] = [tried, rt, Math.max(damp / 10, 1e-6)];
+    if (Math.hypot(...d) < 1e-7) break;
+    J = jacobian(x, r);
+  }
+  return sq(residual(gn)) < sq(r) ? gn : x;
 }
 
 /** How wholly a board `off` (offBy) from its target is pulled onto it: 1 within NEAR, 0 from FAR. */

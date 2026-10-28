@@ -57,6 +57,35 @@ fn the_solve_puts_an_arms_board_on_a_place_it_can_reach() {
     assert!(cm < 0.2 && deg < 0.6, "{cm} cm, {deg} deg off");
 }
 
+#[test]
+fn a_place_out_of_reach_leaves_the_board_nearer_it_never_thrown_off() {
+    // A short arm's raised block: places 0.6 m from the board's in every way round, which no
+    // arm of these bones reaches. Each solve ends nearer than it started, as Levenberg-Marquardt
+    // keeps only the steps that bring the board nearer.
+    let arm = arm_of(&joints());
+    let start = board_at(&arm, &board(), &[0.0; 9]);
+    let turn = |a: f64| DQuat::from_euler(EulerRot::XYZ, a, 0.7 * a, -0.4 * a);
+    for k in 0..24 {
+        let a = k as f64 * std::f64::consts::TAU / 24.0;
+        let q = turn(a);
+        let want = Place {
+            centre: start.centre + q * DVec3::new(0.6, 0.0, 0.0),
+            face: q * start.face,
+            up: q * start.up,
+        };
+        let before = place_off(&start, &want);
+        let after = place_off(
+            &board_at(&arm, &board(), &solve_arm(&arm, &board(), &want)),
+            &want,
+        );
+        let one = |(cm, deg): (f64, f64)| cm.max(deg / 3.0);
+        assert!(
+            one(after) < one(before),
+            "way {k}: {after:?} off after the solve, {before:?} before"
+        );
+    }
+}
+
 /// A body of `joints` with a shield strapped at its fist, the guard's target where the base
 /// body's board is with its fist `base_fist` from where `joints` has it, and the shape moving
 /// its hand by `hand_by`: (world, body, the arm's bones, the target in the body).

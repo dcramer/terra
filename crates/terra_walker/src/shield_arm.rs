@@ -12,7 +12,8 @@
 //! It is the run-time correction shipped games lay over a clip for a body's proportions
 //! (Unreal's IK Rig retargeting and Control Rig hand IK): the bake gets the board close, this
 //! takes up the centimetres. The solve is hold.py's (a damped Gauss-Newton over each bone's
-//! turn in its own frame, 3 degrees weighing as 1 cm), in f64 as the tools solve it. Its twin is
+//! turn in its own frame, 3 degrees weighing as 1 cm), with Levenberg-Marquardt where that is
+//! left far off, in f64 as the tools solve it. Its twin is
 //! `tools/characters/shield_arm.ts`, which the move check lays over the clips; change both.
 
 use bevy::{
@@ -43,6 +44,9 @@ pub const FAR: f64 = 10.0;
 /// guard's target within 0.2 cm of it with the strafes' 7 cm away.
 const SHEPARD: i32 = 4;
 const STEPS: usize = 12;
+/// How near (cm, or degrees / 3) a Gauss-Newton solve must end to be kept without a
+/// Levenberg-Marquardt one: half the move check's bar.
+const CLOSE: f64 = 0.5;
 
 /// The shield poses' board places and the strapped board, as the tools keep them.
 const TARGETS: &str = include_str!("../../../art/animation/shield_targets.json");
@@ -230,36 +234,76 @@ pub fn solve_arm(arm: &Arm, board: &Place, want: &Place) -> [f64; 9] {
         }
         r
     };
-    let mut x = [0.0; 9];
-    for _ in 0..STEPS {
-        let r = residual(&x);
+    let sq = |r: &[f64; 18]| r.iter().map(|v| v * v).sum::<f64>();
+    let jacobian = |x: &[f64; 9], r: &[f64; 18]| {
         let mut jac = [[0.0; 9]; 18];
         for j in 0..9 {
-            let mut e = x;
+            let mut e = *x;
             e[j] += 1e-6;
             let rj = residual(&e);
             for i in 0..18 {
                 jac[i][j] = (rj[i] - r[i]) / 1e-6;
             }
         }
+        jac
+    };
+    let step_of = |jac: &[[f64; 9]; 18], r: &[f64; 18], damp: f64| {
         let mut a = [[0.0; 9]; 9];
         let mut g = [0.0; 9];
         for p in 0..9 {
             for q in 0..9 {
                 a[p][q] = (0..18).map(|i| jac[i][p] * jac[i][q]).sum::<f64>();
             }
-            a[p][p] += 1e-6;
+            a[p][p] += damp;
             g[p] = -(0..18).map(|i| jac[i][p] * r[i]).sum::<f64>();
         }
-        let d = solve_linear(a, g);
+        solve_linear(a, g)
+    };
+    let norm = |d: &[f64; 9]| d.iter().map(|v| v * v).sum::<f64>().sqrt();
+    let start = sq(&residual(&[0.0; 9]));
+    let mut gn = [0.0; 9];
+    let mut settled = false;
+    for _ in 0..STEPS {
+        let r = residual(&gn);
+        let d = step_of(&jacobian(&gn, &r), &r, 1e-6);
         for j in 0..9 {
-            x[j] += d[j];
+            gn[j] += d[j];
         }
-        if d.iter().map(|v| v * v).sum::<f64>().sqrt() < 1e-7 {
+        if norm(&d) < 1e-7 {
+            settled = true;
             break;
         }
     }
-    x
+    let off = residual(&gn);
+    let part = |k: usize| off[k..k + 3].iter().map(|v| v * v).sum::<f64>().sqrt();
+    if (settled && sq(&off) <= start) || part(0).max(part(3)).max(part(6)) <= CLOSE {
+        return gn;
+    }
+    // Thrown further than it started or left far off (a place at the arm's full stretch or past
+    // it: a short arm's raised block): Levenberg-Marquardt, a step kept only when it brings the
+    // board nearer, else damped harder and tried again; the nearer of the two kept.
+    let mut x = [0.0; 9];
+    let mut r = residual(&x);
+    let mut jac = jacobian(&x, &r);
+    let mut damp = 1e-6;
+    for _ in 0..2 * STEPS {
+        let d = step_of(&jac, &r, damp);
+        let mut tried = x;
+        for j in 0..9 {
+            tried[j] += d[j];
+        }
+        let rt = residual(&tried);
+        if sq(&rt) > sq(&r) {
+            damp *= 10.0;
+            continue;
+        }
+        (x, r, damp) = (tried, rt, (damp / 10.0).max(1e-6));
+        if norm(&d) < 1e-7 {
+            break;
+        }
+        jac = jacobian(&x, &r);
+    }
+    if sq(&residual(&gn)) < sq(&r) { gn } else { x }
 }
 
 /// A place's turn as three square axes: its face, its up made square to it, and their cross.
