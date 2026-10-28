@@ -92,7 +92,7 @@ const { values: opt } = parseArgs({
     // blow's only; measured each number the row was judged by, named by what it is.
     json: { type: "string" },
     // Carried: in the clips the game carries in (terra_walker::character::CARRIED_IN), a look in
-    // hand turned its `carry_tilt` about its X, as character.rs's `tilt` turns it (fit.ts).
+    // hand turned its `carry_tilt` about its X, as character/held.rs's `tilt` turns it (fit.ts).
     carry: { type: "boolean", default: false },
     // The hanging hands kept off the hips after the clip, as terra_walker::arms keeps them
     // (arms.ts, D535): the walker's composed pose (fit.ts).

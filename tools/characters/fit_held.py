@@ -3,9 +3,10 @@ the game puts in a hand socket as it is (character.rs), or, strapped (a shield, 
 forearm's bone where its extras say.
 
 Each look is one mesh with the place it is held at the origin and its handle along +Y toward
-its working end, as a hand socket expects, and says in its glTF extras how far it tips when
-carried rather than used: {"carry_tilt": -45} tips its head forward and down in a hanging
-hand, positive raises it. Body-independent: a hand socket is the same on every body.
+its working end, as a hand socket expects. Carried rather than used, the game tips it by a rule
+(terra_walker::character::carry_rule); a "carry_tilt" in its data, written to its glTF extras,
+wins over the rule: -45 tips its head forward and down in a hanging hand, positive raises it.
+None needs one today. Body-independent: a hand socket is the same on every body.
 
 Its materials are named by role (Wood, Metal, Trim, String), so a colour given for a role
 reaches every part of it: here, a stone or iron head; in the game, a tint (character.rs).
@@ -30,7 +31,7 @@ item is adding a file, never editing this script. Its "fit" says how the look is
   up the arm, +Y forward and +X out from the body, so it hangs down -Z from its handle's top,
   its long way forward along +Y; its extras say {"hold": "hung"}.
 
-Every item gives "source" (under assets/models) and "carry_tilt" (degrees), and may give
+Every item gives "source" (under assets/models), and may give "carry_tilt" (degrees) and
 "strap": strapped to the forearm rather than hung on the hand socket, said in its extras as
 {"strap": {"bone", "fist", "face", "grip"}} for the game (terra_walker::strap) and moves.ts: the
 bone it rides on; the hand socket whose fist closes on its origin (its hand strap), wherever that
@@ -75,6 +76,15 @@ def source_sha(source):
     (D552), which attach_contract.ts compares with the source as committed."""
     with open(os.path.join(ASSETS, source), "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()[:12]
+
+
+def carried(ob, d):
+    """Its data's "carry_tilt", into its extras, only where given: the game carries every
+    other look by its rule (terra_walker::character::carry_rule). Says how, for the HELD line."""
+    if "carry_tilt" not in d:
+        return "by the rule"
+    ob["carry_tilt"] = d["carry_tilt"]
+    return f"at {d['carry_tilt']} degrees, its data's"
 
 
 def second_hand(ob, d):
@@ -144,7 +154,7 @@ def hung(item):
     long_y = Matrix.Rotation(math.radians(90), 4, "Z") if hi.x - lo.x > hi.y - lo.y else Matrix()
     tip = Matrix.Rotation(math.radians(90), 4, "X")
     ob.data.transform(Matrix.Translation((out, 0, 0)) @ tip @ long_y @ Matrix.Translation(-grip))
-    ob["carry_tilt"] = d["carry_tilt"]
+    carried(ob, d)
     ob["source_sha"] = source_sha(d["source"])
     # Its kind, so a reader of the file alone tells it from a look held by its handle (D546).
     ob["hold"] = "hung"
@@ -160,7 +170,7 @@ def textured(item):
     """A textured model held by its points: its grip at the origin, its handle toward its
     working end along +Y, its own materials and maps kept."""
     d = data(item)
-    source, grip, toward, x, carry_tilt = d["source"], d["grip"], d["toward"], d["out"], d["carry_tilt"]
+    source, grip, toward, x = d["source"], d["grip"], d["toward"], d["out"]
     look.reset()
     bpy.ops.import_scene.gltf(filepath=os.path.join(ASSETS, source))
     objects = [o for o in bpy.context.scene.objects if o.type == "MESH"]
@@ -178,7 +188,7 @@ def textured(item):
     frame = Matrix((out, along, out.cross(along))).transposed()
     held = Matrix(((1, 0, 0), (0, 0, 1), (0, -1, 0))).transposed()
     ob.data.transform((held @ frame.transposed()).to_4x4() @ Matrix.Translation(-grip))
-    ob["carry_tilt"] = carry_tilt
+    tilt = carried(ob, d)
     ob["source_sha"] = source_sha(d["source"])
     if "strap" in d:
         ob["strap"] = d["strap"]
@@ -188,7 +198,7 @@ def textured(item):
     path = os.path.join(OUT, f"{item}.glb")
     bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_extras=True,
                               export_tangents=True, export_image_format="JPEG", export_jpeg_quality=85)
-    print("HELD", item, f"from {source}, its textures kept, carried at {carry_tilt} degrees")
+    print("HELD", item, f"from {source}, its textures kept, carried {tilt}")
 
 
 os.makedirs(OUT, exist_ok=True)
@@ -201,7 +211,7 @@ for item in look.args():
         textured(item)
         continue
     d = data(item)
-    source, length, held_from_end, carry_tilt = d["source"], d["length"], d["grip_from_end"], d["carry_tilt"]
+    source, length, held_from_end = d["source"], d["length"], d["grip_from_end"]
     head = d.get("head_colour")
     look.reset()
     bpy.ops.import_scene.gltf(filepath=os.path.join(ASSETS, source))
@@ -250,7 +260,7 @@ for item in look.args():
             bsdf = slot.material.node_tree.nodes["Principled BSDF"]
             bsdf.inputs["Roughness"].default_value = 0.7
             bsdf.inputs["Metallic"].default_value = 0.0
-    ob["carry_tilt"] = carry_tilt
+    tilt = carried(ob, d)
     ob["source_sha"] = source_sha(d["source"])
     second_hand(ob, d)
     bpy.ops.object.select_all(action="DESELECT")
@@ -258,5 +268,5 @@ for item in look.args():
     path = os.path.join(OUT, f"{item}.glb")
     kept = {"export_tangents": True, "export_image_format": "JPEG", "export_jpeg_quality": 85} if maps else {}
     bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_extras=True, **kept)
-    print("HELD", item, f"{length} m, held {held_from_end} m from its end, carried at {carry_tilt} degrees",
+    print("HELD", item, f"{length} m, held {held_from_end} m from its end, carried {tilt}",
           "its textures kept" if maps else "")

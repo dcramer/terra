@@ -10,8 +10,10 @@ import { type Glb, type Pose, type Q, type V3, place } from "./glb.ts";
 
 /** terra_walker::arms's numbers: keep the hand OUT hip joints' distances from the middle; a hand
  * wholly by the hip up to LOW over the hip joint and not at all from HIGH, wholly within NEAR
- * ahead or behind it and not at all from FAR; MOST degrees at most. */
+ * ahead or behind it and not at all from FAR; MOST degrees at most; what the hand holds HELD
+ * metres further out than the hand. */
 export const OUT = 2.0;
+export const HELD = 0.04;
 const [LOW, HIGH, NEAR, FAR] = [0.12, 0.22, 0.2, 0.32];
 const MOST = 25.0;
 
@@ -75,7 +77,11 @@ export function keptOff(body: Glb, pose: Pose[], holding: Holding[] = []): Map<s
     for (const h of holding) {
       if (h.socket !== socket) continue;
       const S = pose[body.gltf.nodes.findIndex((n) => n.name === socket)];
-      for (const q of h.points) points.push(place(S, q));
+      // Kept HELD further out than the hand: counted that much nearer the middle.
+      for (const q of h.points) {
+        const w = place(S, q);
+        points.push([w[0] - side * HELD, w[1], w[2]]);
+      }
     }
     const angle = turnOut(side, at(`upperarm_${s}`), points, at(`thigh_${s}`), at("pelvis"));
     if (angle !== 0) bends.set(`upperarm_${s}`, [0, 0, Math.sin(angle / 2), Math.cos(angle / 2)]);

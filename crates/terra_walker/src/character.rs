@@ -17,11 +17,16 @@
 //! one material.
 //!
 //! Something held is used at one angle and carried at another: swung, the grip holds it as
-//! a hand would to strike; walking or standing, it tips forward and down (`Held`). A shield
-//! is strapped to the forearm instead, where its file says (`strap`).
+//! a hand would to strike; walking or standing, it tips forward and down (`Held`, in `held`).
+//! A shield is strapped to the forearm instead, where its file says (`strap`).
 //!
 //! Shared by the experiments that show characters, so a tool in the workbench sits as it
 //! does in play.
+
+mod held;
+
+pub(crate) use held::look_points;
+pub use held::{CARRIED_IN, CARRY_DOWN, CARRY_REACH, Carrying, Held, carry_rule};
 
 use bevy::{
     gltf::{GltfExtras, GltfMaterialName},
@@ -48,55 +53,6 @@ pub const HAND_R: &str = "socket.hand.R";
 /// The left hand's socket, alike: its +Y, too, runs along a held handle (a torch's), so one look
 /// fits either hand (D128); a strapped look hangs from the forearm instead (`strap`).
 pub const HAND_L: &str = "socket.hand.L";
-
-/// The clips in which something in hand is carried rather than used.
-pub const CARRIED_IN: [&str; 10] = [
-    "Idle_Loop",
-    "Idle_Talking_Loop",
-    "Walk_Loop",
-    "Jog_Fwd_Loop",
-    "Sprint_Loop",
-    "Jump_Start",
-    "Jump_Loop",
-    "Jump_Land",
-    "Crouch_Idle_Loop",
-    "Crouch_Fwd_Loop",
-];
-/// How quickly something in hand turns between carried and used, in seconds.
-const TURN_S: f32 = 0.12;
-
-/// On a hand socket: whether what it holds is being carried (`CARRIED_IN`) or used.
-#[derive(Component, Default)]
-pub struct Carrying(pub bool);
-
-/// Something held, a child of a hand socket, or of the bone it is strapped to (`strap`).
-/// Carried, it turns `carry_tilt` degrees about its X: negative tips its working end forward
-/// and down when the arm hangs, positive raises it.
-#[derive(Component)]
-pub struct Held {
-    pub carry_tilt: f32,
-    now: f32,
-    /// Its turn and scale against its parent's frame before any tilt: none on a hand socket;
-    /// strapped, the strap's turn and the socket's scale against the bone's.
-    pub(crate) turn: Quat,
-    pub(crate) fit: f32,
-}
-
-impl Held {
-    pub fn new(carry_tilt: f32) -> Self {
-        Held {
-            carry_tilt,
-            now: 0.0,
-            turn: Quat::IDENTITY,
-            fit: 1.0,
-        }
-    }
-
-    /// Its turn against its parent's frame now, its tilt laid on.
-    pub(crate) fn turned(&self) -> Quat {
-        self.turn * Quat::from_rotation_x(self.now.to_radians())
-    }
-}
 
 /// A character's model: the root of the base body (`appearance::BASE`), shaped by its
 /// `Appearance`. Its parent is the character, whose gear it wears.
@@ -265,10 +221,10 @@ pub fn plugin(app: &mut App) {
     .add_systems(Update, mask_bodies)
     .add_observer(put_on)
     .add_observer(body_ready)
-    .add_observer(held_ready)
+    .add_observer(held::held_ready)
     .add_observer(crate::strap::strap)
     .add_observer(tint)
-    .add_systems(Update, tilt)
+    .add_systems(Update, held::tilt)
     .add_systems(
         PostUpdate,
         crate::strap::follow_fist
@@ -355,29 +311,6 @@ fn mask_bodies(
     }
 }
 
-/// Turns what is held toward its carried or used angle.
-fn tilt(
-    time: Res<Time>,
-    hands: Query<&Carrying>,
-    mut held: Query<(&mut Held, &mut Transform, &ChildOf)>,
-) {
-    let ease = 1.0 - libm::expf(-time.delta_secs() / TURN_S);
-    for (mut held, mut transform, parent) in &mut held {
-        let carried = hands.get(parent.parent()).is_ok_and(|hand| hand.0);
-        let goal = if carried { held.carry_tilt } else { 0.0 };
-        // Settled: left alone, so what hangs from it is not moved again for nothing.
-        if held.now == goal {
-            continue;
-        }
-        held.now = if (goal - held.now).abs() < 0.01 {
-            goal
-        } else {
-            held.now + (goal - held.now) * ease
-        };
-        transform.rotation = held.turned();
-    }
-}
-
 /// The first of `root`'s descendants called `name`.
 pub fn find(
     root: Entity,
@@ -432,24 +365,6 @@ pub(crate) fn extra(extras: &GltfExtras, key: &str) -> Option<serde_json::Value>
 /// The socket a rigid look names in its glTF extras.
 fn socket_in(extras: &GltfExtras) -> Option<String> {
     Some(extra(extras, "socket")?.as_str()?.to_string())
-}
-
-/// Once a held look has loaded, takes how far it tips when carried from its file.
-fn held_ready(
-    ready: On<WorldInstanceReady>,
-    mut held: Query<&mut Held>,
-    children: Query<&Children>,
-    extras: Query<&GltfExtras>,
-) {
-    let Ok(mut held) = held.get_mut(ready.entity) else {
-        return;
-    };
-    if let Some(tilt) = children
-        .iter_descendants(ready.entity)
-        .find_map(|each| extra(extras.get(each).ok()?, "carry_tilt")?.as_f64())
-    {
-        held.carry_tilt = tilt as f32;
-    }
 }
 
 /// Once a tinted look has loaded, gives each part whose role has a colour a material in that
@@ -971,18 +886,6 @@ mod tests {
                 let covers: Vec<u32> =
                     serde_json::from_value(covers).unwrap_or_else(|e| panic!("{file}: {e}"));
                 assert!(covers.iter().all(|patch| *patch < PATCHES), "{file}");
-            }
-        }
-    }
-
-    #[test]
-    fn every_held_look_says_how_it_tips_in_a_number() {
-        let looks = crate::model_files::glbs("models/held");
-        assert!(!looks.is_empty());
-        for file in &looks {
-            let json = crate::model_files::json(file);
-            if let Some(tilt) = crate::model_files::extra(&json, "carry_tilt") {
-                assert!(tilt.as_f64().is_some(), "{file}: carry_tilt {tilt}");
             }
         }
     }

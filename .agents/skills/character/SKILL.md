@@ -145,7 +145,7 @@ It plays our clips and reports, per clip, the share of skin near each piece that
 
 Then add a row for it to `THIRD_PARTY.md`.
 
-What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, a one-sided head toward -Z, and how far it tips when carried in its glTF extras (`carry_tilt`), as its kind in [docs/attachment.md](../../../docs/attachment.md) says; `node tools/characters/attach_contract.ts` checks every look against it. `tools/characters/fit_held.py` makes them; each item's source, length, grip and tilt are its data, `art/held/<item>.json`, so a new item is a file. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
+What is held is the same idea, without a body: one look per item, `models/held/<item>.glb`, with the grip at the origin, the handle along +Y toward the working end, a one-sided head toward -Z, as its kind in [docs/attachment.md](../../../docs/attachment.md) says, carried tipped by the game's rule (its "Carried"; no `carry_tilt` needed, one in the data wins); `node tools/characters/attach_contract.ts` checks every look against it. `tools/characters/fit_held.py` makes them; each item's source, length and grip are its data, `art/held/<item>.json`, so a new item is a file. Check a held look in the workbench with `--hold <item>` through a carried clip and a swing.
 
 ## 6. Body templates: morphs of the base
 

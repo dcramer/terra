@@ -10,18 +10,15 @@
 //! clip changed: a hand already clear (the guard's, a blow's in front or above) is left as the
 //! clip has it. What the hand holds counts as the hand does, as ALS's arm spacing counts a held
 //! item: an axe's haft carried past the thigh turns the arm out until the haft clears it, by a
-//! few points that bound the look (`Reach`), so each item keeps its `carry_tilt` and no clip
-//! changes. The composed pose's `film.pose.arms_in_body` row measures it (D530). Its twin
+//! few points that bound the look (`Reach`), kept `HELD` further out than the hand's own, so
+//! each item keeps its carried tilt and no clip changes. The composed pose's `film.pose.arms_in_body` row measures it (D530). Its twin
 //! is `tools/characters/arms.ts`, which the move check lays over the walker's clips
 //! (`moves.ts --arms`); change both.
 
-use bevy::{
-    math::Affine3A, mesh::VertexAttributeValues, prelude::*,
-    world_serialization::WorldInstanceReady,
-};
+use bevy::{prelude::*, world_serialization::WorldInstanceReady};
 
 use crate::bend::{Kept, find, in_body};
-use crate::character::{Body, HAND_L, HAND_R, Held};
+use crate::character::{Body, HAND_L, HAND_R, Held, look_points};
 
 /// How far from the body's middle a hanging hand is kept, in hip joints' distances from it:
 /// twice puts the fingers a hand's breadth outside the thigh's joint, clear of the thigh's
@@ -34,6 +31,11 @@ const LOW: f32 = 0.12;
 const HIGH: f32 = 0.22;
 const NEAR: f32 = 0.20;
 const FAR: f32 = 0.32;
+/// How much further out than the hand, metres, what it holds is kept: `OUT`'s line is a hip
+/// joint's, and a look's points (surface, where the hand's are joints) carried down the thigh
+/// met the heavy and female templates' flesh 1 to 2.4 cm inside it; 4 cm clears every carried
+/// look on every template (the move check, item-attach job 5), 2 cm left the hammer at 0.6.
+pub const HELD: f32 = 0.04;
 /// The most an arm is turned out, degrees.
 pub const MOST: f32 = 25.0;
 
@@ -160,29 +162,7 @@ fn held_reach(
     if !held.contains(root) {
         return;
     }
-    let mut points = Vec::new();
-    for each in children.iter_descendants(root) {
-        let Some(mesh) = meshes3d.get(each).ok().and_then(|m| meshes.get(&m.0)) else {
-            continue;
-        };
-        let Some(VertexAttributeValues::Float32x3(at)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
-        else {
-            continue;
-        };
-        let mut place = Affine3A::IDENTITY;
-        let mut node = each;
-        while node != root {
-            place = transforms
-                .get(node)
-                .map_or(Affine3A::IDENTITY, |t| t.compute_affine())
-                * place;
-            let Ok(up) = parents.get(node) else {
-                break;
-            };
-            node = up.parent();
-        }
-        points.extend(at.iter().map(|&p| place.transform_point3(Vec3::from(p))));
-    }
+    let points = look_points(root, &children, &parents, &transforms, &meshes3d, &meshes);
     commands.entity(root).insert(Reach(reach(&points)));
 }
 
@@ -236,7 +216,9 @@ pub fn keep_off_hips(
             for look in holding.into_iter().flatten() {
                 if let Ok(Reach(reach)) = reaches.get(*look) {
                     let place = in_body(*look, root, &parents, &transforms);
-                    points.extend(reach.iter().map(|&p| place.transform_point3(p)));
+                    // Kept `HELD` further out than the hand: counted that much nearer the middle.
+                    let nearer = Vec3::X * side * HELD;
+                    points.extend(reach.iter().map(|&p| place.transform_point3(p) - nearer));
                 }
             }
             let Ok(up) = parents.get(upper) else {
@@ -383,14 +365,21 @@ mod tests {
         // Holding nothing, the clear hands are left as the clip has them.
         assert_eq!(turned(false).0, [0.0, 0.0]);
         // Holding the haft, the left arm turns out (+z) until the haft's points by the hip are
-        // `OUT` hip widths from the middle; the right, holding nothing, is left.
+        // `OUT` hip widths and `HELD` from the middle; the right, holding nothing, is left.
         let ([left, right], haft) = turned(true);
         assert!(left > 0.0 && left <= MOST.to_radians(), "{left}");
         assert_eq!(right, 0.0);
         let shoulder = Vec3::new(0.15, 1.45, 0.0);
+        let mut least = f32::MAX;
         for p in haft.into_iter().filter(|p| p.y < 0.94 + LOW && p.z < NEAR) {
             let swung = Quat::from_rotation_z(left) * (p - shoulder) + shoulder;
-            assert!(swung.x >= 0.19, "{p} only to {swung} after {left}");
+            least = least.min(swung.x);
+            assert!(swung.x >= 0.19 + HELD, "{p} only to {swung} after {left}");
         }
+        // Held only as far as a hand would be, it would stop short of `HELD` beyond.
+        assert!(
+            least < 0.2 + HELD + 0.02,
+            "turned further than it needs: {least}"
+        );
     }
 }

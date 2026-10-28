@@ -147,8 +147,8 @@ export function carryTilt(file: string): number {
 /** The clips in which the game carries what is in hand rather than uses it, read from its
  * source (terra_walker::character::CARRIED_IN), so the two cannot differ. */
 export function carriedClips(): string[] {
-  const rs = readFileSync(join(import.meta.dirname, "..", "..", "crates", "terra_walker", "src", "character.rs"), "utf8");
+  const rs = readFileSync(join(import.meta.dirname, "..", "..", "crates", "terra_walker", "src", "character", "held.rs"), "utf8");
   const list = /pub const CARRIED_IN: \[&str; \d+\] = \[([^\]]*)\]/.exec(rs);
-  if (!list) throw new Error("no CARRIED_IN in terra_walker's character.rs");
+  if (!list) throw new Error("no CARRIED_IN in terra_walker's character/held.rs");
   return [...list[1].matchAll(/"(\w+)"/g)].map((m) => m[1]);
 }

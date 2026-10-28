@@ -48,14 +48,16 @@ test("the base body's sockets lie on their bones with the table's axes", () => {
   assert.ok(judgeSockets({ ...body, sockets: turned }).some((f) => f.rule === "socket.hand.R"));
 });
 
-test("a sword in hand passes, and fails turned across X, off its grip, or without its tilt", () => {
+test("a sword in hand passes, and fails turned across X, off its grip, or with a tilt its data lacks", () => {
   const sword = look("held/arming_sword");
   assert.deepEqual(rules(sword), []);
   assert.deepEqual(rules(moved(sword, aboutY(90))), ["facing"]);
   assert.deepEqual(rules(moved(sword, ([x, y, z]) => [x + 0.03, y, z])), ["grip"]);
   assert.deepEqual(rules(mirror(sword, 1)), ["along +Y", "grip along"]);
-  const { carry_tilt: _, ...untilted } = sword.extras;
-  assert.deepEqual(rules({ ...sword, extras: untilted }), ["carry_tilt"]);
+  // Carried by the rule, it needs none; one its data does not give is stale, a word is no tilt.
+  assert.equal(sword.extras.carry_tilt, undefined);
+  assert.deepEqual(rules({ ...sword, extras: { ...sword.extras, carry_tilt: -30 } }), ["marker"]);
+  assert.deepEqual(rules({ ...sword, extras: { ...sword.extras, carry_tilt: "down" } }), ["carry_tilt"]);
 });
 
 test("an axe with its bit toward -Z and its handle on the origin passes, and fails turned or off its grip", () => {

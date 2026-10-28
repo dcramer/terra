@@ -5,7 +5,6 @@
   "grip": [0, 0.405, -0.025],
   "toward": [0.4, 0.405, -0.025],
   "out": [0, 1, 0],
-  "carry_tilt": 0,
   "strap": {"bone": "lowerarm_l", "fist": "socket.hand.L", "face": [0, 0, -1], "grip": [0, 1, 0]},
   "note": "A centre grip, held in the left hand across its planks just behind the board, the knuckles up into the boss: its face away from the wrist (-Z), the forearm square to the board behind it, so with the fist forward it covers the forearm and body. Its planks run along +X. Strapped on lowerarm_l, which follows the forearm but not the hand's roll (on lowerarm_twist_01_l, which takes half of it, the block's face turns 27 degrees off ahead): its face out of the little-finger side, ahead when the forearm is raised across the body (5 degrees off at the block's hold); its grip bar along the forearm, in the body's own fist (D554)."
 }

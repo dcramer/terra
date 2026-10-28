@@ -48,7 +48,7 @@ Movement.md's pose layer, filled per stance. Every layer is chosen by rule, from
 | Layer | What it holds | Shared by | Chosen by |
 |---|---|---|---|
 | **Locomotion** (whole body) | Idle, walk, jog, sprint, strafes, starts, stops, turns, jump, fall, land | Every person, whatever is held | Speed and direction (blend spaces, movement.md) |
-| **Hold** (arms and upper spine, by mask) | The stance's arms over locomotion: **ready** (the guard; a shield rests low at the hip and only the block raises it, D531) and **carried** (relaxed, the item tilted, today's `carry_tilt`) | Every item of a class in a stance | The stance; ready while fighting, carried otherwise |
+| **Hold** (arms and upper spine, by mask) | The stance's arms over locomotion: **ready** (the guard; a shield rests low at the hip and only the block raises it, D531) and **carried** (relaxed, the item tipped by the carry rule, attachment.md "Carried") | Every item of a class in a stance | The stance; ready while fighting, carried otherwise |
 | **Move** (whole body or upper, as the move says) | A blow, a block, a roll, a use | The set | The button, the chain, the runner (movement.md layer 3) |
 | **Additive** | Breath, sway, lean, flinch, per-person style | Everyone | Always, small (section 4) |
 | **Fix-up** | Off hand onto a two-handed grip, shield on its strap, feet (D455), look | Everyone | After the pose (section 3) |

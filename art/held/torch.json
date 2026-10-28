@@ -1,1 +1,1 @@
-{"kind": "hafted", "source": "tools/Torch.glb", "fit": "length", "length": 0.55, "grip_from_end": 0.1, "carry_tilt": 35, "note": "Carried upright, its burning head up; the flame is the game's (torchlight.rs)."}
+{"kind": "hafted", "source": "tools/Torch.glb", "fit": "length", "length": 0.55, "grip_from_end": 0.1, "note": "The flame is the game's (torchlight.rs). Carried by the rule, its head forward and down: upright, a bent arm's sprint put it 9.5 cm into the neck; carried upright it wants a carry pose (the arm raised, as ALS's torch overlay).", "turn": 0}
