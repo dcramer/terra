@@ -366,6 +366,30 @@ fn on_daylight_locus(c: Vec3) -> Vec3 {
     daylight(2e6 / (warm + cold)) * luma
 }
 
+/// The open sky's light for shaded snow (ground.wesl's `SNOW_SHADE_SKY`): the zenith's colour
+/// and the painted sky's diffuse light facing up (+Y, sky and ground), linear, each at a
+/// luminance of one and to a hundredth, w 1, so the ground's material changes when the sky's
+/// colour does by a shade, not every frame as the sun moves; nothing, w 0, before there is a sky.
+pub(crate) fn snow_light(sky: Option<&Sky>, open: Option<&OpenSky>) -> [Vec4; 2] {
+    let (Some(sky), Some(open)) = (sky, open) else {
+        return [Vec4::ZERO; 2];
+    };
+    let chroma = |c: Vec3| {
+        let luma = c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        if luma <= 1e-6 {
+            Vec3::ONE
+        } else {
+            (c / luma * 100.0).round() / 100.0
+        }
+    };
+    let zenith = sky.zenith.to_linear();
+    let zenith = chroma(Vec3::new(zenith.red, zenith.green, zenith.blue));
+    [
+        zenith.extend(1.0),
+        chroma(open.sky[2] + open.ground[2]).extend(1.0),
+    ]
+}
+
 /// The same for a colour given as sRGB.
 pub(crate) fn srgb_on_daylight_locus(srgb: Vec3) -> Vec3 {
     let linear = Color::srgb(srgb.x, srgb.y, srgb.z).to_linear();

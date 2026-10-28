@@ -405,8 +405,7 @@ struct Sea;
 #[derive(Component)]
 struct Sun;
 
-/// The camera the world is seen through. Other cameras, such as the one that draws item
-/// icons (`icons`), draw into images; queries for the view ask for this one.
+/// The camera the world is seen through; others, as the item icons' (`icons`), draw into images.
 #[derive(Component)]
 #[require(crate::parting::CameraSubject)]
 pub struct MainCamera;
@@ -483,10 +482,9 @@ pub struct GroundExtension {
     cover_more: Option<Handle<Image>>,
     #[texture(114)]
     cover_stood: Option<Handle<Image>>,
-    /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): from a point
-    /// in the world to its place on the maps, whether there are maps, and the leaves map's
-    /// layer for the broadleaves whose fallen leaves lie on it, or -1. The maps are painted
-    /// again in place, so the material changes only when these do.
+    /// What the climate leaves round the camera (`climate::ClimateMaps`, D327): from a point in
+    /// the world to its place on the maps, whether there are maps, and the leaves map's layer of
+    /// the fallen broadleaves, or -1; painted again in place, so the material keeps.
     #[uniform(100)]
     climate_from_world: Mat4,
     #[uniform(100)]
@@ -497,10 +495,9 @@ pub struct GroundExtension {
     climate_ground: Option<Handle<Image>>,
     #[texture(110, dimension = "2d_array")]
     climate_leaves: Option<Handle<Image>>,
-    /// The heath past the trees round the land's middle (`terra_land::heath`, `LandMap`):
-    /// the middle's direction and the planet's radius; east and the map's width in metres;
-    /// north and whether there is a map; the leaves map's layers of the heath's dwarf shrubs
-    /// and of grass, for their colour now, and the shrubs' autumn colour.
+    /// The heath past the trees round the land's middle (`terra_land::heath`, `LandMap`): the
+    /// middle's direction and the planet's radius; east and the map's width in metres; north and
+    /// whether there is a map; the leaves map's layers of dwarf shrubs and grass, and autumn's.
     #[uniform(100)]
     land_middle: Vec4,
     #[uniform(100)]
@@ -515,14 +512,16 @@ pub struct GroundExtension {
     heath_autumn: Vec4,
     #[texture(112, dimension = "2d_array")]
     land_map: Option<Handle<Image>>,
-    /// The land's horizon round the camera (`crate::horizon`, D416), read as the land map is:
-    /// what the sun is under past the shadow map's reach is shaded.
+    /// The land's horizon round the camera (`crate::horizon`, D416), read as the land map is;
+    /// then the open sky's light for shaded snow (`skylight::snow_light`).
     #[uniform(100)]
     horizon_middle: Vec4,
     #[uniform(100)]
     horizon_east: Vec4,
     #[uniform(100)]
     horizon_north: Vec4,
+    #[uniform(100)]
+    snow_light: [Vec4; 2],
     #[texture(115, dimension = "2d_array")]
     horizon_map: Option<Handle<Image>>,
 }
@@ -753,6 +752,7 @@ impl GroundExtension {
             horizon_middle: horizon.0,
             horizon_east: horizon.1,
             horizon_north: horizon.2,
+            snow_light: [Vec4::ZERO; 2],
             horizon_map: horizon.3,
         }
     }
@@ -961,6 +961,7 @@ fn apply_tweaks(
     quality: Res<crate::quality::Quality>,
     land: Option<Res<LandMap>>,
     horizon: Option<Res<crate::horizon::HorizonPicture>>,
+    open: Option<Res<crate::skylight::OpenSky>>,
 ) {
     let toward_sun = tweaks
         .light_direction
@@ -978,15 +979,14 @@ fn apply_tweaks(
         Visibility::Hidden
     };
 
-    // The ground changes only when its tweaks do, not with the sun, so it is left alone
-    // otherwise: a changed material is prepared again, and every chunk drawn with it.
-    let no_land = LandMap::default();
-    let land = land.as_deref().unwrap_or(&no_land);
+    // Only its tweaks and the sky's colour change the ground: a changed material is prepared again.
+    let land = land.as_deref().cloned().unwrap_or_default();
     let no_horizon = crate::horizon::HorizonPicture::default();
     let horizon = horizon.as_deref().unwrap_or(&no_horizon);
-    let ground = GroundExtension::new(
-        &planet, &tweaks, &textures, &cover, &climate, *quality, land, horizon,
+    let mut ground = GroundExtension::new(
+        &planet, &tweaks, &textures, &cover, &climate, *quality, &land, horizon,
     );
+    ground.snow_light = crate::skylight::snow_light(sky.as_deref(), open.as_deref());
     let stale: Vec<_> = ground_materials
         .iter()
         .filter(|(_, material)| material.extension != ground)

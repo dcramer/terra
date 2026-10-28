@@ -1,5 +1,25 @@
 use super::*;
 
+#[test]
+fn shaded_snow_is_told_the_skys_colour_at_a_luminance_of_one() {
+    assert_eq!(snow_light(None, None), [Vec4::ZERO; 2]);
+    let dusk = Sky::by_day(
+        Color::srgb(0.95, 0.55, 0.38),
+        Color::srgb(0.16, 0.24, 0.52),
+        Color::srgb(1.0, 0.45, 0.22),
+        0.0,
+        1.0,
+    );
+    let open = clear_sky(sun_at(2.0), Quat::IDENTITY);
+    let [zenith, up] = snow_light(Some(&dusk), Some(&open));
+    let luma = |c: Vec4| c.truncate().dot(Vec3::new(0.2126, 0.7152, 0.0722));
+    for c in [zenith, up] {
+        assert!((luma(c) - 1.0).abs() < 0.01 && c.w == 1.0, "{c}");
+    }
+    // A dusk's zenith is blue, however red its horizon: what the shaded snow is to take.
+    assert!(zenith.z > 2.0 * zenith.y && zenith.y > zenith.x, "{zenith}");
+}
+
 /// The light from a way, the hue worked out for it alone.
 fn toward(c: &Colours, d: Vec3) -> Vec3 {
     c.light(&c.lit(), d, c.hue(d.y.max(0.0)))

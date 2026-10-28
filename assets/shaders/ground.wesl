@@ -34,6 +34,10 @@ import bevy_pbr::render::{
 };
 // Bevy declares `fog` only for a camera with `DistanceFog` (as its pbr_functions guards it).
 @if(!PREPASS_PIPELINE && DISTANCE_FOG) import bevy_pbr::render::mesh_view_bindings::fog;
+@if(!PREPASS_PIPELINE && IRRADIANCE_VOLUME) import bevy_pbr::{
+    render::clustered_forward as clustering,
+    light_probe::irradiance_volume,
+};
 import super::horizon::horizon_lit;
 
 // Field order must match GroundExtension in planet.rs.
@@ -77,6 +81,9 @@ struct Ground {
     horizon_middle: vec4<f32>,
     horizon_east: vec4<f32>,
     horizon_north: vec4<f32>,
+    // The open sky's light for shaded snow (skylight.rs `snow_light`): the zenith's colour, and
+    // the open sky's diffuse light facing up, each at a luminance of one; w is 1 once known.
+    snow_light: array<vec4<f32>, 2>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -134,11 +141,17 @@ const HORIZON_SOFT: f32 = 0.008;
 // or the forest's shaded snow read lilac (the looks review, hue 236-255 at noon, 300 at dusk).
 // At 0.7 the forest's snow under a deck read grey beside the haze (weather round 2).
 const SNOW: vec3<f32> = vec3<f32>(0.85, 0.89, 0.89);
-// What of the sky's light shaded snow gives back, by channel: light that comes back from
-// shaded snow has wandered deep in the pack, where the ice takes red (the blue of a hole dug
-// in snow), so snow in shade is white-blue and in the sun warm white, as photographs and Sons
-// of the Forest's snow show, never the sky's averaged lilac.
-const SNOW_SKY: vec3<f32> = vec3<f32>(0.84, 1.0, 1.0);
+// How much of the zenith's blue the light on shaded snow takes, the rest white: snow in shade
+// is lit by the open sky overhead and by the snow round it, whose light, many times scattered
+// in the pack, is the sky's own made paler. A level face sees the sky mostly overhead, so its
+// shade is the zenith's blue at noon and at dusk alike, as photographs of snow show (hue
+// 206-256), never what the forest's light holds besides: re-tinting that ambient by one
+// constant left the noon shade mint (hue 144, the crowns' green glow less its red) and the
+// dusk's magenta (hue 290, the low sun's lilac sky; winter round 2). The zenith is far more
+// saturated than any light on the ground, so a small share: at 0.18 the winter walk's shade
+// measured hue 214-226 and b/g 1.07-1.14 at noon and dusk (photographs 1.03-1.16); 0.06 left
+// it grey (b/g 1.00).
+const SNOW_SHADE_SKY: f32 = 0.18;
 // Fresh fallen oak leaves, linear: a warm mid brown, lighter and redder than the floor's
 // old umber litter.
 const FRESH_LITTER: vec3<f32> = vec3<f32>(0.13, 0.072, 0.03);
@@ -1247,6 +1260,8 @@ fn fragment(
     // How much snow lies here, the far rock's or the weather's: a far wall's folds dim its
     // rock's sky light and not its snow's (D434).
     var snowed = 0.0;
+    // The weather's snow lying on the ground here, whose shade takes the open sky's light.
+    var lying = 0.0;
     // Rock shows through from about 30 degrees, as soil and grass hold on gentler slopes.
     let steep = 1.0 - smoothstep(0.8, 0.9, flatness);
 
@@ -2261,7 +2276,7 @@ fn fragment(
     colour = mix(colour, RIME, rime * 0.5);
     let sparkle = 0.94 + 0.12 * noise(world * 9.0 + 3.0);
     colour = mix(colour, SNOW * sparkle, snow);
-    pbr_input.diffuse_occlusion *= mix(vec3<f32>(1.0), SNOW_SKY, snow);
+    lying = snow;
     pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.8, snow);
     // The snow's own surface: drifted in soft swells a metre or two across, and grained finer.
     let geometric = normalize(in.world_normal);
@@ -2500,6 +2515,27 @@ fn fragment(
             let lit = horizon_lit(horizon_map, map_sampler, ground.horizon_middle, ground.horizon_east, ground.horizon_north, in.world_position.xyz, sun.direction_to_light, HORIZON_SOFT);
             pbr_input.directional_shadow_factor = mix(1.0, lit, fade);
         }
+    }
+    // Shaded snow takes the open sky's light (SNOW_SHADE_SKY): the diffuse light Bevy will
+    // give this pixel, the forest's sky volume's (D270) or else the open sky's, is tinted to
+    // the zenith's blue made paler, its luminance kept, so only its colour changes.
+    if lying > 0.0 && ground.snow_light[0].w > 0.0 {
+        var ambient = ground.snow_light[1].rgb;
+        @if(IRRADIANCE_VOLUME) {
+            let view_z = dot(vec4<f32>(view.view_from_world[0].z, view.view_from_world[1].z, view.view_from_world[2].z, view.view_from_world[3].z), in.world_position);
+            let cluster = clustering::view_fragment_cluster_index(pbr_input.frag_coord.xy, view_z, pbr_input.is_orthographic);
+            var ranges = clustering::unpack_clusterable_object_index_ranges(cluster);
+            if !irradiance_volume::smaller_reflection_probe_holds(in.world_position.xyz, &ranges) {
+                let held = irradiance_volume::irradiance_volume_light(in.world_position.xyz, pbr_input.N, &ranges);
+                if any(held > vec3<f32>(0.0)) {
+                    ambient = held;
+                }
+            }
+        }
+        let luma = vec3<f32>(0.2126, 0.7152, 0.0722);
+        let wanted = mix(vec3<f32>(1.0), ground.snow_light[0].rgb, SNOW_SHADE_SKY);
+        let tint = wanted / max(dot(wanted, luma), 1e-4) * dot(ambient, luma) / max(ambient, vec3<f32>(1e-5));
+        pbr_input.diffuse_occlusion *= mix(vec3<f32>(1.0), clamp(tint, vec3<f32>(0.0), vec3<f32>(6.0)), lying);
     }
     out.color = apply_pbr_lighting(pbr_input);
     // Aerial perspective: past a kilometre and a half a range fades toward the air's blue-grey
