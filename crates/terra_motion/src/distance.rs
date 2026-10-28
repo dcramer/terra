@@ -147,10 +147,52 @@ impl Markers {
         Some((side, ((t - at) / (next - at).max(1e-3)).clamp(0.0, 1.0)))
     }
 
+    /// A loop's plants (foot, seconds), in order, every one: in a loop a plant at its first
+    /// instant is a step like any other.
+    fn loop_steps(&self) -> Vec<(usize, f32)> {
+        let mut out: Vec<(usize, f32)> = [&self.foot_down_l, &self.foot_down_r]
+            .into_iter()
+            .enumerate()
+            .flat_map(|(side, spans)| spans.iter().map(move |span| (side, span[0])))
+            .collect();
+        out.sort_by(|a, b| a.1.total_cmp(&b.1));
+        out
+    }
+
+    /// Where a loop is in its steps `t` seconds in, as `phase` has it but round the loop's end:
+    /// before its first plant it is on from its last plant of the cycle before, after its last
+    /// on to its first of the next. None if it has no plant.
+    pub fn phase_in_loop(&self, t: f32) -> Option<(usize, f32)> {
+        let steps = self.loop_steps();
+        let length = self.length_s.max(1e-3);
+        let t = t.rem_euclid(length);
+        let (&(last_side, last_at), &(_, first_at)) = (steps.last()?, steps.first()?);
+        let (side, at, next) = match steps.iter().rposition(|&(_, at)| at <= t) {
+            Some(i) => {
+                let next = steps.get(i + 1).map_or(first_at + length, |s| s.1);
+                (steps[i].0, steps[i].1, next)
+            }
+            None => (last_side, last_at - length, first_at),
+        };
+        Some((side, ((t - at) / (next - at).max(1e-3)).clamp(0.0, 1.0)))
+    }
+
+    /// Sync groups' marker sync (Unreal's sync markers): the time in this loop at the same step
+    /// as `from` is `t` seconds in, the same foot planted last and as far on to the next plant,
+    /// so a stride loop taking over from another is not restarted out of step with its feet.
+    /// None if either has no plants of that foot.
+    pub fn synced(&self, from: &Markers, t: f32) -> Option<f32> {
+        let (side, share) = from.phase_in_loop(t)?;
+        self.loop_steps()
+            .iter()
+            .any(|&(s, _)| s == side)
+            .then(|| self.time_in_loop(side, share))
+    }
+
     /// The time in this loop as far (`share`, 0 to 1) from foot `side`'s plant to the next
     /// plant as a phase (`phase`) has it; its start if it has no such plant.
     pub fn time_in_loop(&self, side: usize, share: f32) -> f32 {
-        let steps = self.steps();
+        let steps = self.loop_steps();
         let Some(i) = steps.iter().position(|&(s, _)| s == side) else {
             return 0.0;
         };
@@ -255,6 +297,42 @@ mod tests {
         // Halfway from the left's (0.7) to the right's (1.1 round the end): 0.9, so 0.1.
         assert!((jog.time_in_loop(0, 0.5) - 0.1).abs() < 1e-4);
         assert!((jog.time_in_loop(1, 0.5) - 0.5).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_loop_taking_over_from_another_keeps_the_step_round_its_end() {
+        // The jog above, and a sprint 1.0 s long with the left down at 0.1 and the right at 0.6.
+        let jog = Markers {
+            length_s: 0.8,
+            foot_down_l: vec![[0.7, 0.1]],
+            foot_down_r: vec![[0.3, 0.5]],
+            ..Default::default()
+        };
+        let sprint = Markers {
+            length_s: 1.0,
+            foot_down_l: vec![[0.1, 0.4]],
+            foot_down_r: vec![[0.6, 0.9]],
+            ..Default::default()
+        };
+        // Past the jog's last plant and before its first, the phase goes on round the end:
+        // 0.75 and 0.1 are an eighth and half of the way from the left's (0.7) to the right's (1.1).
+        let (side, share) = jog.phase_in_loop(0.75).unwrap();
+        assert_eq!(side, 0);
+        assert!((share - 0.125).abs() < 1e-4, "{share}");
+        let (side, share) = jog.phase_in_loop(0.1).unwrap();
+        assert_eq!(side, 0);
+        assert!((share - 0.5).abs() < 1e-4, "{share}");
+        // The sprint taking over then has the same foot as far from its plant to the next:
+        // the left from 0.1 to 0.6, the right from 0.6 to 1.1 round its end.
+        for (t, want) in [(0.75, 0.1625), (0.1, 0.35), (0.4, 0.725)] {
+            let at = sprint.synced(&jog, t).unwrap();
+            assert!(
+                (at - want).abs() < 1e-4,
+                "jog {t} -> sprint {at}, not {want}"
+            );
+        }
+        // A loop without plants has no step to keep.
+        assert_eq!(sprint.synced(&Markers::default(), 0.3), None);
     }
 
     #[test]

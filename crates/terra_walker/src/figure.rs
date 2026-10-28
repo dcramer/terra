@@ -20,6 +20,7 @@ use bevy::{
     world_serialization::WorldInstanceReady,
 };
 use std::time::Duration;
+use terra_motion::feet::Markers;
 pub use terra_motion::hold::Hand;
 use terra_world::loading::Loading;
 
@@ -100,6 +101,9 @@ pub struct Moves {
     clips: HashMap<String, Nodes>,
     /// The stride clips' own paces (`pace.rs`), so their feet do not slide.
     paces: HashMap<String, f32>,
+    /// Every clip's foot-down markers (`feet::markers`), by which a stride loop taking over
+    /// from another is put in step with it (`synced`).
+    markers: HashMap<String, Markers>,
 }
 
 impl Moves {
@@ -333,6 +337,9 @@ fn prepare(
         graph: graphs.add(graph),
         clips,
         paces: crate::pace::paces(gltf, &gltf_nodes).into_iter().collect(),
+        markers: crate::feet::markers(gltf, &gltf_nodes)
+            .into_iter()
+            .collect(),
     });
 }
 
@@ -598,6 +605,17 @@ fn change(
             posed.0 = carried && hold.is_none() && animated.carry[side].is_some();
         }
     }
+    // A stride loop taking over from another goes on at the same step (sync groups).
+    let synced = act
+        .is_none()
+        .then(|| {
+            let (from, ..) = animated.playing.as_ref()?;
+            let t = animator
+                .animation(transitions.get_main_animation()?)?
+                .seek_time();
+            synced(&moves.markers, &moves.paces, from, t, clip)
+        })
+        .flatten();
     match moves.clips.get(clip) {
         Some(nodes) => {
             // The same clip again blends from itself, by its other copy.
@@ -631,6 +649,9 @@ fn change(
             if from_s > 0.0 {
                 playing.seek_to(from_s);
             }
+            if let Some(at) = synced {
+                playing.seek_to(at);
+            }
             animated.playing = Some((clip.to_string(), copy, arms));
             if let Some(hold) = hold {
                 crate::layer::lay(&mut animated.holds, animator, hold.over, node);
@@ -661,6 +682,25 @@ fn change(
         }
         None => warn!("The figure has no clip {clip}."),
     }
+}
+
+/// Where stride loop `to` starts when it takes over from stride loop `from`, `t` seconds in:
+/// at the same step by their foot-down markers (`Markers::synced`), as Unreal's sync groups
+/// keep a group's clips on one marker phase. Restarted at its first instant, as every switch
+/// was, the foot coming down stood still in the body's frame through the fade, read as a
+/// swing by the lock, and slid with the body (sprint 29.6 cm on the yard film). None, so it
+/// starts as any clip does, unless both are stride loops with markers.
+fn synced(
+    markers: &HashMap<String, Markers>,
+    paces: &HashMap<String, f32>,
+    from: &str,
+    t: f32,
+    to: &str,
+) -> Option<f32> {
+    if !paces.contains_key(from) || !paces.contains_key(to) {
+        return None;
+    }
+    markers.get(to)?.synced(markers.get(from)?, t)
 }
 
 /// Each mixed clip takes its share of the weight the transitions gave the clip it rides on,
@@ -751,6 +791,45 @@ mod tests {
         assert_eq!(laid_arms("Fight_Slash", false, &torch), Arms::None);
         assert_eq!(laid_arms("Walk_Loop", true, &torch), Arms::Both);
         assert_eq!(laid_arms("Idle_Loop", false, &[None, None]), Arms::None);
+    }
+
+    /// A switch between the jog and the sprint (either way) goes on at the same step, on the
+    /// figure's own clips: the foot just planted in the one giving way is just planted in the
+    /// one taking over, as far on to the next plant. Restarted at 0 (as every switch was), the
+    /// sprint came in with the other foot down and the planted one slid (sprint 29.6 cm).
+    #[test]
+    fn a_switch_from_jog_to_sprint_keeps_the_planted_foots_phase() {
+        let json = crate::model_files::json(CLIPS);
+        let markers: HashMap<String, Markers> =
+            serde_json::from_value(crate::model_files::extra(&json, "markers").unwrap()).unwrap();
+        let paces: HashMap<String, f32> =
+            serde_json::from_value(crate::model_files::extra(&json, "paces").unwrap()).unwrap();
+        for (from, to) in [
+            ("Jog_Fwd_Loop", "Sprint_Loop"),
+            ("Sprint_Loop", "Jog_Fwd_Loop"),
+        ] {
+            let (was, now) = (&markers[from], &markers[to]);
+            // Each plant of the one giving way, just after it comes down.
+            let downs = [&was.foot_down_l, &was.foot_down_r];
+            for (side, spans) in downs.into_iter().enumerate() {
+                for span in spans {
+                    let t = span[0] + 0.02;
+                    let at = synced(&markers, &paces, from, t, to).unwrap();
+                    assert!(
+                        now.lock(side, at) >= terra_motion::feet::FULL,
+                        "{from} {t:.3} -> {to} {at:.3}: foot {side} is not planted"
+                    );
+                    let (a, b) = (was.phase_in_loop(t), now.phase_in_loop(at));
+                    let ((sa, pa), (sb, pb)) = (a.unwrap(), b.unwrap());
+                    assert!(sa == sb && (pa - pb).abs() < 1e-3, "{a:?} -> {b:?}");
+                }
+            }
+        }
+        // Into or out of a clip that is no stride loop, a clip starts at its start.
+        assert_eq!(
+            synced(&markers, &paces, "Idle_Loop", 0.3, "Jog_Fwd_Loop"),
+            None
+        );
     }
 
     /// A body its mover says jogs but that is held still is shown standing; one that goes as
