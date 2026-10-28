@@ -224,7 +224,11 @@ def textures(ob, role):
         most = TEXTURE_PX if colour else TEXTURE_PX // 2
         if max(w, h) > most:
             image.scale(w * most // max(w, h), h * most // max(w, h))
+        # The glTF exporter's AUTO keeps a packed image's own format, Tripo's JPEG, read from its
+        # bytes when it has no path (io_scene_gltf2 image.py, __is_blender_image_a_jpeg); a .png path
+        # makes it encode PNG, which part.ts reads the size of.
         image.file_format = "PNG"
+        image.filepath_raw = f"{bpy.path.clean_name(image.name)}.png"
 
 
 def main():

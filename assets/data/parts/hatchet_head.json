@@ -1,0 +1,88 @@
+{
+  "$schema": "./part.schema.json",
+  "part": "hatchet_head",
+  "type": "axe_head",
+  "about": "a small wrought-iron hatchet head, a long straight cheek to a short bit (art/parts/axe/heads.png)",
+  "model": "models/parts/hatchet_head.glb",
+  "points": [
+    {
+      "name": "eye.lower",
+      "type": "eye",
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "dir": [
+        0,
+        1,
+        0
+      ],
+      "size": 0.028
+    },
+    {
+      "name": "eye.upper",
+      "type": "eye",
+      "at": [
+        0,
+        0.02275,
+        0
+      ],
+      "dir": [
+        0,
+        1,
+        0
+      ],
+      "size": 0.028
+    },
+    {
+      "name": "edge.lower",
+      "type": "edge",
+      "at": [
+        -0.00081,
+        -0.055,
+        -0.08455
+      ],
+      "dir": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "name": "edge.upper",
+      "type": "edge",
+      "at": [
+        -0.00035,
+        0.04401,
+        -0.09439
+      ],
+      "dir": [
+        0,
+        0,
+        -1
+      ]
+    }
+  ],
+  "centre_m": [
+    -0.00051,
+    0.00793,
+    -0.03164
+  ],
+  "bounds_m": [
+    [
+      -0.02082,
+      -0.055,
+      -0.10137
+    ],
+    [
+      0.02073,
+      0.04401,
+      0.03
+    ]
+  ],
+  "volume_m3": {
+    "value": 0.000099491,
+    "source": "measured on models/parts/hatchet_head.glb by tools/items/part.ts --write"
+  }
+}

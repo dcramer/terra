@@ -3,8 +3,8 @@
   "role": "Metal",
   "turn_deg": 180,
   "material": "iron",
-  "mass_kg": 1.15,
-  "eye": { "from_back_m": 0.024, "size_m": 0.03, "across_m": 0.043 },
+  "mass_kg": 0.88,
+  "eye": { "from_back_m": 0.026, "size_m": 0.03, "across_m": 0.043 },
   "edge_band_m": 0.03,
-  "budget": 800
+  "budget": 740
 }

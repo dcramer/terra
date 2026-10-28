@@ -1,0 +1,88 @@
+{
+  "$schema": "./part.schema.json",
+  "part": "bearded_axe_head",
+  "type": "axe_head",
+  "about": "a wrought-iron bearded head, its beard hooked down below the eye (art/parts/axe/heads.png)",
+  "model": "models/parts/bearded_axe_head.glb",
+  "points": [
+    {
+      "name": "eye.lower",
+      "type": "eye",
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "dir": [
+        0,
+        1,
+        0
+      ],
+      "size": 0.03
+    },
+    {
+      "name": "eye.upper",
+      "type": "eye",
+      "at": [
+        0,
+        0.04125,
+        0
+      ],
+      "dir": [
+        0,
+        1,
+        0
+      ],
+      "size": 0.03
+    },
+    {
+      "name": "edge.lower",
+      "type": "edge",
+      "at": [
+        0.00028,
+        -0.09625,
+        -0.08508
+      ],
+      "dir": [
+        0,
+        0,
+        -1
+      ]
+    },
+    {
+      "name": "edge.upper",
+      "type": "edge",
+      "at": [
+        -0.00002,
+        0.05016,
+        -0.10282
+      ],
+      "dir": [
+        0,
+        0,
+        -1
+      ]
+    }
+  ],
+  "centre_m": [
+    -0.00036,
+    0.00714,
+    -0.04205
+  ],
+  "bounds_m": [
+    [
+      -0.02326,
+      -0.09625,
+      -0.10796
+    ],
+    [
+      0.02175,
+      0.05016,
+      0.025
+    ]
+  ],
+  "volume_m3": {
+    "value": 0.00012844,
+    "source": "measured on models/parts/bearded_axe_head.glb by tools/items/part.ts --write"
+  }
+}
