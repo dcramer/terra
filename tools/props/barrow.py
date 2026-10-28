@@ -711,7 +711,8 @@ def stand_fallen():
     return m, [("Iron", None, (0.085, 0.065, 0.05)), WAX]
 
 
-def export(name, built):
+def export(name, built, out=None):
+    out = out or OUT
     m, mats = built
     bmesh.ops.remove_doubles(m.bm, verts=m.bm.verts[:], dist=1e-5)
     bmesh.ops.triangulate(m.bm, faces=m.bm.faces[:])
@@ -733,9 +734,9 @@ def export(name, built):
     size = hi - lo
     print(f"BARROW {name}: {tris} triangles, {size.x:.2f} x {size.z:.2f} x {size.y:.2f} m (x, up, z), "
           f"up {lo.z:.2f} to {hi.z:.2f}, {len(mats)} materials")
-    os.makedirs(OUT, exist_ok=True)
+    os.makedirs(out, exist_ok=True)
     bpy.ops.export_scene.gltf(
-        filepath=os.path.join(OUT, f"{name}.glb"),
+        filepath=os.path.join(out, f"{name}.glb"),
         export_format="GLB",
         use_selection=True,
         export_tangents=True,
@@ -746,9 +747,16 @@ def export(name, built):
     )
 
 
-ONLY = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-for name, make in (("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Sarcophagus", sarcophagus), ("Candles", candles), ("Altar", altar), ("Urns", urns), ("Coffin", coffin), ("Debris", debris), ("UrnFallen", urn_fallen), ("Planks", planks), ("StandFallen", stand_fallen)):
-    if ONLY and name not in ONLY:
-        continue
-    reset()
-    export(name, make())
+def build(pieces, out=None):
+    """Exports each (name, make) of `pieces`, or only those named after `--`, to `out`."""
+    only = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    for name, make in pieces:
+        if only and name not in only:
+            continue
+        reset()
+        export(name, make(), out)
+
+
+# Run, not imported: the mine's kit (mine.py) builds from these helpers.
+if __name__ == "__main__":
+    build((("BarrelVault", barrel_vault), ("GroinVault", groin_vault), ("DoorArch", door_arch), ("Pier", pier), ("Loculus", loculus), ("Shroud", shroud), ("Sarcophagus", sarcophagus), ("Candles", candles), ("Altar", altar), ("Urns", urns), ("Coffin", coffin), ("Debris", debris), ("UrnFallen", urn_fallen), ("Planks", planks), ("StandFallen", stand_fallen)))

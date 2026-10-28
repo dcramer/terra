@@ -99,4 +99,5 @@ cargo run -p terra_sandbox -- --experiment workbench --model models/character/ba
 | `fronts.py` | Each model from the front, for the `fronts` sheet |
 | `fence.py` | The town's fence modules, wattle and split rail, built in Blender from the kits' own materials rather than generated (D346): `tools/blender/run.sh tools/props/fence.py` |
 | `barrow.py` | The barrow halls' dressed kit (D527): barrel and groin vaults, arches, piers and burial niches built from curves and profiles in Blender, laid over the dungeon stamp's cubes as Skyrim's modular kits are |
+| `mine.py` | The hewn mine's timber kit (D559): a drift's timber set, two battered posts, a cap and lagging boards over and behind them, stood every 2 m down a mine's drifts by the stamp (`stamp/timber.rs`); built from barrow.py's helpers |
 | `goods.ts`, `goods.py` | A market stall's goods from CC0 scans, by the recipes in `art/goods.json` (D352), above |
