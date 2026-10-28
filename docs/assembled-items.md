@@ -133,7 +133,7 @@ Each one command, a line a stage, every failure naming the number, the bar and t
 
 - **Part checker**: a part against its template and its points.
 - **Assembler**: parts and a rule in, the item and its exact points out; the same input gives the same bytes.
-- **Kinds table**: the kinds as data, every situation filled; a blank is an error (`assets/data/kinds/`, its schema written; the check that runs it is step 2's).
+- **Kinds table**: the kinds as data, every situation filled; a blank or an unsourced number is an error (`assets/data/kinds/`, held by `node tools/items/kind.ts` in `cargo xtask check`'s tools tests).
 - **The grid check**: layer 2 above, incremental.
 - **Kind sheets**: layer 3, with the approved set kept.
 

@@ -54,11 +54,11 @@
     "mass_kg": { "value": 0.1, "source": "the blade and a 0.019 m wooden handle 0.11 m long (670 kg/m^3, recalled), 0.02 kg; a stand-in until its parts are weighed" },
     "head_mass_kg": { "value": 0.08, "source": "a 15 cm knife blade (recalled; the look's blade alone measured 15.9 by 4.4 by 1.3 cm, research/2026-10-28-assembled-parts-art.md section 4)" },
     "balance_m": { "value": 0.104, "source": "computed from the blade's middle at 0.18 m and the handle's middle, from the grip" },
-    "inertia_kgm2": { "value": 0.0017, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
+    "inertia_kgm2": { "value": 0.001645, "source": "D459's I = m (b^2 + L^2/12) on the numbers above" },
     "grip_diameter_m": { "value": 0.019, "source": "the knife look's handle across, median (research/2026-10-28-assembled-parts-art.md section 4)" }
   },
   "envelope": {
-    "inertia_kgm2": { "value": [0.0013, 0.0023], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
+    "inertia_kgm2": { "value": [0.001244, 0.002277], "source": "D459's tempo clamp 0.85 to 1.15: I_ref/1.15^2 to I_ref/0.85^2" },
     "length_m": { "value": [0.234, 0.286], "source": "the reference's length ±10% (research/2026-10-28-assembled-items-animation.md section 1)" },
     "head_mass_kg": { "value": [0.061, 0.109], "source": "the inertia band at the reference's length, solved for the blade (-23% to +36%)" },
     "balance_m": { "value": [0.083, 0.131], "source": "the inertia band at the reference's mass and length, solved for the balance" },

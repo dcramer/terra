@@ -1,0 +1,38 @@
+{
+  "about": "The part types of assembled items (D565, D566; docs/assembled-items.md, The connection-point convention): for each, who makes it, its slot, the point at its frame's origin, the points it must declare, how it is placed and its budgets. Read by the part checker (tools/items/part.ts), the kind check (tools/items/kind.ts) and the assembler (terra_items::assembly). A part's own data is assets/data/parts/<part>.json (part.schema.json).",
+  "rules": {
+    "join_m": { "value": 0.001, "source": "D566: model meets model within 1 mm, the part checker's bar; a measured opening within 1 mm of its declared size" },
+    "proud_m": { "value": 0.004, "source": "D566: a haft stands 4 mm proud of its head's eye.upper, so its end never lies in the head's top face" },
+    "trim_cover_m": { "value": 0.01, "source": "D566: a trim covers a join by at least 1 cm (research/2026-10-28-assembled-parts-art.md section 3)" },
+    "plane_m": { "value": 0.0002, "source": "two faces closer than 0.2 mm, facing the same line and overlapping, are one plane (z-fighting at a metre's view, the convention's no two surfaces in one plane)" },
+    "roles": { "value": ["Wood", "Metal", "Leather", "String", "Trim", "Fire"], "source": "fit_held.py's ROLES (Wood, Metal, Trim, String), terra_walker::character's Tint (Leather) and art-style.md (a part named Fire glows): a material's name before any '.'" },
+    "small_triangles": { "value": [300, 800], "source": "docs/art-style.md's budget table: a small item, a tool's head" },
+    "board_triangles": { "value": [600, 1500], "source": "docs/art-style.md's budget table: a prop, as a board is of a chair's size" },
+    "texture_px": { "value": 1024, "source": "docs/art-style.md: 1K colour and normal maps for a model under 1.5 m (D304); roughness and metal at half" },
+    "textures": { "value": 3, "source": "one map set a part, colour, normal and roughness-metal, so parts share a pipeline (research/2026-10-28-assembled-items-pipeline.md verdict 1c)" }
+  },
+  "types": {
+    "haft": { "made_by": "code", "slot": "handle", "numbers": ["length_m", "grip_from_end_m", "grip_diameter_m", "density_kg_m3"] },
+    "blade_handle": { "made_by": "code", "slot": "handle", "numbers": ["grip_diameter_m", "density_kg_m3"] },
+    "grip_bar": { "made_by": "code", "slot": "handle", "numbers": ["length_m", "grip_diameter_m", "density_kg_m3"] },
+    "enarmes": { "made_by": "code", "slot": "handle", "numbers": ["length_m", "grip_diameter_m", "density_kg_m3"] },
+    "bow_string": { "made_by": "code", "slot": "handle", "numbers": ["grip_diameter_m", "density_kg_m3"] },
+    "axe_head": { "made_by": "model", "slot": "working", "origin": "eye.lower", "entry": "eye.lower", "handle_top": "eye.upper", "points": [["eye.lower", "eye"], ["eye.upper", "eye"], ["edge.lower", "edge"], ["edge.upper", "edge"]], "roles": ["Metal", "Wood", "Leather"], "triangles": "small_triangles" },
+    "hammer_head": { "made_by": "model", "slot": "working", "origin": "eye.lower", "entry": "eye.lower", "handle_top": "eye.upper", "points": [["eye.lower", "eye"], ["eye.upper", "eye"], ["face", "face"]], "roles": ["Metal", "Wood"], "triangles": "small_triangles" },
+    "pick_head": { "made_by": "model", "slot": "working", "origin": "eye.lower", "entry": "eye.lower", "handle_top": "eye.upper", "points": [["eye.lower", "eye"], ["eye.upper", "eye"], ["tip", "tip"]], "roles": ["Metal"], "triangles": "small_triangles" },
+    "spear_head": { "made_by": "model", "slot": "working", "origin": "socket.mouth", "entry": "socket.mouth", "handle_top": "socket.bottom", "points": [["socket.mouth", "socket"], ["socket.bottom", "socket"], ["tip", "tip"]], "roles": ["Metal"], "triangles": "small_triangles" },
+    "torch_head": { "made_by": "model", "slot": "working", "origin": "socket.mouth", "entry": "socket.mouth", "handle_top": "socket.bottom", "points": [["socket.mouth", "socket"], ["socket.bottom", "socket"], ["flame", "flame"]], "roles": ["Wood", "Trim", "Fire"], "triangles": "small_triangles" },
+    "sword_blade": { "made_by": "model", "slot": "working", "origin": "shoulder", "entry": "shoulder", "points": [["shoulder", "tang"], ["tang.end", "tang"], ["edge.lower", "edge"], ["edge.upper", "edge"], ["tip", "tip"]], "roles": ["Metal"], "triangles": "small_triangles" },
+    "knife_blade": { "made_by": "model", "slot": "working", "origin": "shoulder", "entry": "shoulder", "points": [["shoulder", "tang"], ["tang.end", "tang"], ["edge.lower", "edge"], ["edge.upper", "edge"], ["tip", "tip"]], "roles": ["Metal"], "triangles": "small_triangles" },
+    "round_board": { "made_by": "model", "slot": "working", "origin": "grip", "points": [["boss", "seat"], ["rim", "seat"]], "roles": ["Wood", "Leather", "Metal"], "triangles": "board_triangles" },
+    "heater_board": { "made_by": "model", "slot": "working", "origin": "grip", "points": [["rim", "seat"], ["arm_strap", "bore"]], "roles": ["Wood", "Leather", "Metal"], "triangles": "board_triangles" },
+    "bow_stave": { "made_by": "model", "slot": "working", "origin": "grip", "points": [["nock.upper", "nock"], ["nock.lower", "nock"]], "roles": ["Wood", "Leather", "String"], "triangles": "small_triangles" },
+    "basket_body": { "made_by": "model", "slot": "working", "origin": "grip", "points": [["handle_top", "grip"]], "roles": ["Wood"], "triangles": "board_triangles" },
+    "collar": { "made_by": "model", "slot": "trim", "origin": "bore", "place": "under_entry", "points": [["bore", "bore"]], "roles": ["Leather", "Metal", "String", "Trim"], "triangles": "small_triangles" },
+    "guard": { "made_by": "model", "slot": "trim", "origin": "bore", "place": "under_entry", "points": [["bore", "bore"]], "roles": ["Metal", "Trim"], "triangles": "small_triangles" },
+    "cap": { "made_by": "model", "slot": "trim", "origin": "bore", "place": "over_butt", "points": [["bore", "bore"]], "roles": ["Metal", "Trim"], "triangles": "small_triangles" },
+    "pommel": { "made_by": "model", "slot": "trim", "origin": "bore", "place": "over_butt", "points": [["bore", "bore"]], "roles": ["Metal", "Trim"], "triangles": "small_triangles" },
+    "boss": { "made_by": "model", "slot": "trim", "origin": "seat", "place": "seat", "points": [["seat", "seat"]], "roles": ["Metal"], "triangles": "small_triangles" },
+    "rim": { "made_by": "model", "slot": "trim", "origin": "seat", "place": "seat", "points": [["seat", "seat"]], "roles": ["Metal", "Leather"], "triangles": "small_triangles" }
+  }
+}
