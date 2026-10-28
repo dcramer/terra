@@ -124,6 +124,10 @@ export type Prop = {
   // Aged bone or stone: dirt in its crevices and where it lies on the floor, and stain over
   // the rest, as a vertex colour the game multiplies into its texture (aged.py).
   grime?: boolean;
+  // A tool's haft thinned to this many metres across where a hand holds it, swelling back to
+  // the model's own under its head (tools/characters/haft.py, as its held look is): a stylised
+  // pickaxe's 8.6 cm haft, twice a real one's.
+  haft?: number;
   // Another prop whose concept it is drawn after, so the pieces of a kit share one stone,
   // one wood and one grade (docs/art-style.md, "One kit, one grade").
   reference?: string;
@@ -181,6 +185,7 @@ export function refineArgs(prop: Prop, model: string, out: string, sheet: string
     ...(prop.palette ? [] : ["--textured"]),
     ...(prop.block ? ["--block"] : []),
     ...(prop.grime ? ["--grime"] : []),
+    ...(prop.haft ? [`--haft=${prop.haft}`] : []),
     ...(Array.isArray(prop.grade) ? [`--grade=${prop.grade.join(",")}`] : []),
     ...(prop.dims ? [`--dims=${prop.dims.join(",")}`] : []),
     ...(prop.anchor && prop.anchor !== "base" ? [`--anchor=${prop.anchor}`] : []),

@@ -37,6 +37,7 @@ from mathutils import Matrix, Vector
 
 import look
 from aged import grime
+from haft import line_at, thin_haft
 
 # --flat: a thing that lies flat, such as a rug, laid on its plane and pressed thin.
 # --along: a building kit's piece laid along its length, such as a log or a board, which the
@@ -58,6 +59,11 @@ grade = next((tuple(map(float, a.split("=")[1].split(","))) for a in args if a.s
 # --grime: aged bone or stone, dirt in its crevices and where it lies on the floor, and stain
 # over the rest (aged.py), as a vertex colour the game multiplies into its texture.
 aged = "--grime" in args
+# --haft=M: a tool standing on the end of its handle has its haft thinned to M metres across
+# where a hand holds it, HAFT_GRIP_M up from its foot, swelling back to the model's own under
+# its head (haft.py, as fit_held.py thins its held look, which holds it there too).
+haft = next((float(a.split("=")[1]) for a in args if a.startswith("--haft=")), None)
+HAFT_GRIP_M = 0.08
 # The model contract (docs/art-style.md): --dims=W,H,D, its width, height and depth in metres
 # along glTF's X, Y (up) and Z (front), which it is made exactly; --anchor=hinge for a leaf
 # hinged at its origin rather than standing on the middle of its base; --mirror for a leaf
@@ -75,7 +81,7 @@ src, out, sheet, size, budget, turn, *given = [
     a
     for a in args
     if a not in ("--flat", "--along", "--textured", "--block", "--mirror", "--grime")
-    and not a.startswith(("--grade=", "--dims=", "--anchor=", "--socket="))
+    and not a.startswith(("--grade=", "--dims=", "--anchor=", "--socket=", "--haft="))
 ]
 size, budget, turn = float(size), int(budget), float(turn)
 # Below this longest side, in metres, a prop is small and its textures 1K (TEXTURE_PX).
@@ -765,6 +771,8 @@ if along:
     lay_along(ob.data)
 else:
     place(ob)
+if haft:
+    thin_haft(ob, haft, HAFT_GRIP_M, line_at(ob, HAFT_GRIP_M))
 if aged:
     bm = bmesh.new()
     bm.from_mesh(ob.data)
