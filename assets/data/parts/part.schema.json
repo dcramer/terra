@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dcramer/terra/assets/data/parts/part.schema.json",
+  "title": "A part of an assembled item (D565, D566)",
+  "description": "One file a part, assets/data/parts/<part>.json: its type (types.json), and either its model with its points, mass and bounds, or, for a part made by code, its numbers. Checked by tools/items/part.ts; read by the assembler (terra_items::assembly).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["part", "type", "about"],
+  "properties": {
+    "$schema": { "const": "./part.schema.json" },
+    "part": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "The file's name without .json: the recipe's part id." },
+    "type": { "type": "string", "pattern": "^[a-z_]+$", "description": "Its part type, a key of types.json's types." },
+    "about": { "type": "string", "minLength": 12 },
+    "kinds": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z_]+$" }, "description": "The kinds it is made for, when its type fits more than one (a haft is an axe's or a spear's): its size is checked for those." },
+    "model": { "type": "string", "pattern": "^models/parts/[a-z0-9_]+\\.glb$", "description": "The model under the asset root, made to its type's frame (D566)." },
+    "mass_kg": { "$ref": "#/$defs/number" },
+    "centre_m": { "$ref": "#/$defs/v3", "description": "Its centre of mass in its frame." },
+    "bounds_m": { "type": "array", "items": { "$ref": "#/$defs/v3" }, "minItems": 2, "maxItems": 2, "description": "Its least and greatest corner in its frame, written by the part checker." },
+    "cover_m": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "A trim's span along the line, from its frame's origin: [below, above]." },
+    "points": { "type": "array", "items": { "$ref": "#/$defs/point" } },
+    "length_m": { "$ref": "#/$defs/number" },
+    "grip_from_end_m": { "$ref": "#/$defs/number" },
+    "second_from_grip_m": { "$ref": "#/$defs/number" },
+    "grip_diameter_m": { "$ref": "#/$defs/number" },
+    "density_kg_m3": { "$ref": "#/$defs/number" }
+  },
+  "$defs": {
+    "v3": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "number": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "source"],
+      "properties": { "value": { "type": "number" }, "source": { "type": "string", "minLength": 12 } }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "at", "dir"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z_]+(\\.[a-z]+)?$" },
+        "type": { "enum": ["eye", "socket", "tang", "bore", "seat", "nock", "grip", "edge", "tip", "face", "flame"] },
+        "at": { "$ref": "#/$defs/v3" },
+        "dir": { "$ref": "#/$defs/v3" },
+        "up": { "$ref": "#/$defs/v3", "description": "A full point's roll (a seat or a nock, D566)." },
+        "size": { "oneOf": [{ "type": "number" }, { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }], "description": "m: a diameter, or [width, thickness] for a flat tang." }
+      }
+    }
+  }
+}

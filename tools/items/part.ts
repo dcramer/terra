@@ -1,0 +1,321 @@
+// The part checker (D565 step 2, D566): one part of an assembled item against its type's template
+// (assets/data/parts/types.json), its points, its size for every slot it fits, its budgets and
+// material roles, and a clean join with every partner its kinds allow: no gap, nothing buried in
+// its partner, no two faces in one plane. A model is measured; a part made by code is checked
+// from its numbers, its joins measured on the models it meets.
+//
+//   node tools/items/part.ts <part>      assets/data/parts/<part>.json
+//
+// A line a stage (D388); a failure names the field and the fix (D556).
+
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import type { V3 } from "../characters/glb.ts";
+import { KINDS, kindNames, PARTS, readJson, ROOT } from "./kind.ts";
+import { bounds, buried, distance, gap, IDENTITY, type Mesh, moved, normal, ray, readMesh, sharedPlanes, slice, triangles } from "./mesh.ts";
+import { validate } from "./schema.ts";
+
+export type Ctx = { types: Record<string, any>; rules: Record<string, any>; kinds: Record<string, any>; attach: Record<string, any>; parts: Record<string, any>; mesh: (part: any) => Mesh };
+export type Stage = { stage: string; faults: string[]; ok: string };
+
+const RAYS = 16;
+const mm = (m: number) => `${(m * 1000).toFixed(1)} mm`;
+const v = (x: any) => x?.value;
+const pt = (part: any, name: string) => part.points?.find((p: any) => p.name === name);
+const hole = (size: any) => (Array.isArray(size) ? size : [size, size]); // [across Z, across X]
+
+export function checkPart(part: any, ctx: Ctx): Stage[] {
+  const stages: Stage[] = [];
+  const stage = (name: string, ok: string, faults: string[]) => (stages.push({ stage: name, faults, ok }), faults.length === 0);
+  const type = ctx.types[part?.type];
+  const data = validate(readJson(join(PARTS, "part.schema.json")), part).map((f) => `${f.at || "/"} ${f.says}`);
+  if (part && !type) data.push(`/type ${JSON.stringify(part.type)} is not a part type; use one of types.json's: ${Object.keys(ctx.types).join(", ")}`);
+  if (type?.made_by === "model") for (const k of ["model", "mass_kg", "centre_m", "bounds_m", "points"]) if (!(k in part)) data.push(`/${k} is missing: a modelled part gives it (part.schema.json)`);
+  if (type?.made_by === "code") for (const k of type.numbers) if (!(k in part)) data.push(`/${k} is missing: a ${part.type} is made from it (types.json)`);
+  if (type) data.push(...kindFaults(part, ctx));
+  if (!stage("data", `a ${part?.type}, made by ${type?.made_by}`, data)) return stages;
+  const join_m = v(ctx.rules.join_m);
+  if (type.made_by === "code") {
+    stage("numbers", "positive, its grip on it", codeNumbers(part));
+  } else {
+    const mesh = ctx.mesh(part);
+    stage("points", `${type.points.length} of ${part.type}'s, ${type.origin} at the origin`, points(part, type, mesh, ctx));
+    stage("scale", "none: placed by a shift or one rigid turn", mesh.scaled.map((n) => `node ${n} carries a scale: parts are never scaled (D566); apply it in Blender (Object > Apply > Scale) and export again, or make a bigger part`));
+    stage("openings", "each within 1 mm of its declared size round the line", openings(part, mesh, join_m));
+    stage("budget", budgetNote(part, type, mesh, ctx), budget(type, mesh, ctx));
+    stage("roles", [...new Set(mesh.materials.map((m) => m.split(".")[0]))].join(", "), roles(part, type, mesh));
+    stage("bounds", "bounds_m as measured", boundsFaults(part, mesh, join_m));
+  }
+  stage("slots", fittingKinds(part, ctx).join(", ") || "no kind fits it", slots(part, ctx));
+  const [faults, notes] = joins(part, ctx);
+  stage("joins", notes.join("; ") || "none to make", faults);
+  return stages;
+}
+
+function codeNumbers(part: any): string[] {
+  const out: string[] = [];
+  for (const [k, x] of Object.entries(part)) if (k.endsWith("_m") || k.endsWith("_m3")) if (typeof v(x) === "number" && k !== "second_from_grip_m" && !(v(x) > 0)) out.push(`/${k} is ${v(x)}: it must be above 0`);
+  const [len, grip, second] = [v(part.length_m), v(part.grip_from_end_m), v(part.second_from_grip_m)];
+  if (len !== undefined && grip !== undefined && grip >= len) out.push(`/grip_from_end_m ${grip} is not on a handle ${len} m long; put the grip on it`);
+  if (len !== undefined && grip !== undefined && second !== undefined && (grip + second < 0 || grip + second > len))
+    out.push(`/second_from_grip_m ${second} puts the second grip ${(grip + second).toFixed(3)} m from the butt, off a handle ${len} m long`);
+  return out;
+}
+
+function points(part: any, type: any, mesh: Mesh, ctx: Ctx): string[] {
+  const out: string[] = [];
+  const join_m = v(ctx.rules.join_m);
+  const want = new Map<string, string>(type.points);
+  for (const [name, t] of want) {
+    const p = pt(part, name);
+    if (!p) out.push(`/points has no ${name}: a ${part.type} declares ${[...want.keys()].join(", ")} (docs/assembled-items.md, the part-type table)`);
+    else if (p.type !== t) out.push(`/points ${name} is a ${p.type}; on a ${part.type} it is a ${t}`);
+  }
+  for (const p of part.points) {
+    if (!want.has(p.name)) out.push(`/points ${p.name} is not a ${part.type}'s point; remove it or name it as types.json does`);
+    const len = Math.hypot(...p.dir);
+    if (Math.abs(len - 1) > 1e-3) out.push(`/points ${p.name}.dir has length ${len.toFixed(3)}; make it a unit direction`);
+    if (["eye", "socket", "tang", "bore"].includes(p.type)) {
+      if (Math.hypot(p.at[0], p.at[2]) > join_m) out.push(`/points ${p.name}.at is ${mm(Math.hypot(p.at[0], p.at[2]))} off the line (x = z = 0): a join along a handle lies on it (D566)`);
+      if (Math.abs(p.dir[1] - 1) > 1e-3) out.push(`/points ${p.name}.dir is [${p.dir}]: a join on the line faces +Y (D566)`);
+      if (!(Math.min(...hole(p.size ?? 0)) > 0)) out.push(`/points ${p.name}.size is missing or not above 0: a join on the line has its diameter (or [width, thickness] for a tang)`);
+    }
+    if (p.type === "seat" || p.type === "nock") {
+      if (!p.up || Math.abs(Math.hypot(...p.up) - 1) > 1e-3 || Math.abs(p.up.reduce((s: number, x: number, i: number) => s + x * p.dir[i], 0)) > 1e-3)
+        out.push(`/points ${p.name}.up must be a unit direction square to its dir: a full point has its roll (D566)`);
+      const off = distance(mesh, p.at);
+      if (off > join_m) out.push(`/points ${p.name} is ${mm(off)} off the model's surface; put it on the surface its partner meets`);
+    }
+  }
+  const origin = type.origin === "grip" ? undefined : pt(part, type.origin);
+  if (origin && Math.hypot(...origin.at) > join_m) out.push(`/points ${type.origin}.at is [${origin.at}]: a ${part.type}'s frame has its origin at ${type.origin} (D566); move the model, not the point`);
+  const pair = (lo: string, hi: string) => {
+    const [a, b] = [pt(part, lo), pt(part, hi)];
+    if (a && b && !(a.at[1] < b.at[1])) out.push(`/points ${hi} must be above ${lo} along +Y`);
+  };
+  pair("edge.lower", "edge.upper");
+  pair("eye.lower", "eye.upper");
+  pair("socket.mouth", "socket.bottom");
+  pair("tang.end", "shoulder");
+  if (part.cover_m && part.cover_m[1] - part.cover_m[0] < v(ctx.rules.trim_cover_m)) out.push(`/cover_m spans ${mm(part.cover_m[1] - part.cover_m[0])}: a trim covers a join by at least ${mm(v(ctx.rules.trim_cover_m))} (D566)`);
+  if (type.slot === "trim" && type.place !== "seat" && !part.cover_m) out.push(`/cover_m is missing: a trim on the line says how far it covers, [below, above] its bore`);
+  return out;
+}
+
+// The model's own openings, measured: an eye or socket from its lower point to its upper, a trim's
+// bore over its cover, a tang's flat across Z and X. The handle is made to the declared sizes, so a
+// wall further out is a gap round it and one further in buries it.
+function openings(part: any, mesh: Mesh, join_m: number): string[] {
+  const out: string[] = [];
+  const spans: [any, any][] = [];
+  for (const [lo, hi] of [["eye.lower", "eye.upper"], ["socket.mouth", "socket.bottom"], ["tang.end", "shoulder"]]) if (pt(part, lo) && pt(part, hi)) spans.push([pt(part, lo), pt(part, hi)]);
+  const bore = pt(part, "bore");
+  if (bore && part.cover_m) spans.push([{ ...bore, at: [0, part.cover_m[0], 0] }, { ...bore, at: [0, part.cover_m[1], 0] }]);
+  for (const [a, b] of spans) {
+    const tang = a.type === "tang";
+    for (const s of [0, 0.25, 0.5, 0.75, 1]) {
+      const y = a.at[1] + s * (b.at[1] - a.at[1]) + (s === 0 ? 5e-4 : s === 1 ? -5e-4 : 0);
+      const [wa, wb] = [hole(a.size), hole(b.size)];
+      const want = [wa[0] + s * (wb[0] - wa[0]), wa[1] + s * (wb[1] - wa[1])].map((d) => d / 2);
+      const segs = slice(mesh, y);
+      const where = `${a.name.split(".")[0]} at y ${y.toFixed(4)}`;
+      if (tang) {
+        const reach = (dx: number, dz: number) => Math.max(0, ...segs.flatMap((g) => g.map(([x, z]) => x * dx + z * dz)));
+        for (const [dx, dz, w, across] of [[0, 1, want[0], "Z"], [0, -1, want[0], "Z"], [1, 0, want[1], "X"], [-1, 0, want[1], "X"]] as const) {
+          const r = reach(dx, dz);
+          if (Math.abs(r - w) > join_m) out.push(`${where}: the tang reaches ${mm(r)} across ${across}, its points say ${mm(w)}: the handle round it would ${r > w ? "bury it" : "stand off it"}; fix the tang's size or the model`);
+        }
+        continue;
+      }
+      const rs = [...Array(RAYS).keys()].map((i) => ray(segs, Math.cos((2 * Math.PI * i) / RAYS), Math.sin((2 * Math.PI * i) / RAYS)));
+      if (rs.some((r) => !Number.isFinite(r))) {
+        out.push(`${where}: no wall all round the line: the opening is not where ${a.name} and ${b.name} say; move the points onto it, or the model so its opening is on +Y`);
+        break;
+      }
+      const lo = Math.min(...rs), hi = Math.max(...rs), r = want[0];
+      if (hi - r > join_m) out.push(`${where}: the opening reaches ${mm(hi)} from the line where its points say ${mm(r)}: a ${mm(hi - r)} gap round the handle; fix ${a.name}'s or ${b.name}'s size, or the model`);
+      if (r - lo > join_m) out.push(`${where}: the wall comes ${mm(lo)} from the line where its points say ${mm(r)}: the handle would be buried ${mm(r - lo)} in it; fix the size or the model`);
+    }
+  }
+  return out;
+}
+
+const budgetOf = (type: any, ctx: Ctx) => v(ctx.rules[type.triangles]);
+const budgetNote = (part: any, type: any, mesh: Mesh, ctx: Ctx) => `${mesh.indices.length / 3} triangles (at most ${budgetOf(type, ctx)[1]}), ${mesh.textures.length} textures`;
+
+function budget(type: any, mesh: Mesh, ctx: Ctx): string[] {
+  const out: string[] = [];
+  const [tris, [, most]] = [mesh.indices.length / 3, budgetOf(type, ctx)];
+  if (tris > most) out.push(`${tris} triangles, over the ${most} of its budget (${ctx.rules[type.triangles].source}); cut it in the clean-up (the models skill)`);
+  if (mesh.textures.length > v(ctx.rules.textures)) out.push(`${mesh.textures.length} textures, over ${v(ctx.rules.textures)}: ${ctx.rules.textures.source}`);
+  for (const t of mesh.textures)
+    if (t.px === undefined) out.push(`texture ${t.name} is not a PNG in the glb, so its size cannot be read; export it as PNG`);
+    else if (t.px > v(ctx.rules.texture_px)) out.push(`texture ${t.name} is ${t.px} px, over ${v(ctx.rules.texture_px)} (${ctx.rules.texture_px.source})`);
+  return out;
+}
+
+function roles(part: any, type: any, mesh: Mesh): string[] {
+  return mesh.materials
+    .map((m) => m.split(".")[0])
+    .filter((r) => !type.roles.includes(r))
+    .map((r) => `material ${JSON.stringify(r)} is not a role a ${part.type} takes (${type.roles.join(", ")}; types.json): name each material by its role`);
+}
+
+function boundsFaults(part: any, mesh: Mesh, join_m: number): string[] {
+  const [lo, hi] = bounds(mesh);
+  const off = Math.max(...[0, 1, 2].flatMap((k) => [Math.abs(lo[k] - part.bounds_m[0][k]), Math.abs(hi[k] - part.bounds_m[1][k])]));
+  const r = (p: V3) => `[${p.map((x) => x.toFixed(4)).join(", ")}]`;
+  return off > join_m ? [`/bounds_m is ${mm(off)} off the model's: write [${r(lo)}, ${r(hi)}]`] : [];
+}
+
+const typeKinds = (type: string, ctx: Ctx) => Object.keys(ctx.kinds).filter((k) => ctx.kinds[k].slots.some((s: any) => s.fits.includes(type)));
+export const fittingKinds = (part: any, ctx: Ctx): string[] => part.kinds ?? typeKinds(part.type, ctx);
+
+function kindFaults(part: any, ctx: Ctx): string[] {
+  const all = typeKinds(part.type, ctx);
+  if (!part.kinds) return all.length > 1 ? [`/kinds is missing: a ${part.type} fits ${all.join(", ")}; name the kinds it is made for`] : [];
+  return part.kinds.filter((k: string) => !all.includes(k)).map((k: string) => `/kinds names ${k}, whose slots take no ${part.type} (assets/data/kinds/${k}.json)`);
+}
+
+// Its size for each slot it fits: a working part's mass within its kind's head-mass envelope, a
+// handle's length within its kind's and its grip where the kind's mount puts it (D546).
+function slots(part: any, ctx: Ctx): string[] {
+  const out: string[] = [];
+  for (const name of fittingKinds(part, ctx)) {
+    const kind = ctx.kinds[name];
+    const slot = kind.slots.find((s: any) => s.fits.includes(part.type));
+    const head = v(kind.envelope.head_mass_kg), len = v(kind.envelope.length_m);
+    if (slot.slot === "working" && Array.isArray(head) && (v(part.mass_kg) < head[0] || v(part.mass_kg) > head[1]))
+      out.push(`${name}: its mass ${v(part.mass_kg)} kg is outside the ${name}'s head mass [${head}] (assets/data/kinds/${name}.json envelope): another part, or another kind`);
+    if (slot.slot !== "handle" || part.length_m === undefined) continue;
+    if (Array.isArray(len) && v(part.length_m) > len[1]) out.push(`${name}: ${v(part.length_m)} m long, past the ${name}'s longest item ${len[1]} m (its envelope's length_m)`);
+    const mount = ctx.attach[kind.attach_kind] ?? {};
+    const [g, l] = [v(part.grip_from_end_m), v(part.length_m)];
+    if (mount.grip_from_end_m && (g < mount.grip_from_end_m[0] || g > mount.grip_from_end_m[1]))
+      out.push(`${name}: its grip ${g} m from the butt is outside a ${kind.attach_kind} look's [${mount.grip_from_end_m}] (tools/characters/attach_kinds.json, D546)`);
+    if (mount.grip_share && (g / l < mount.grip_share[0] || g / l > mount.grip_share[1]))
+      out.push(`${name}: its grip at ${(g / l).toFixed(2)} of its length is outside a ${kind.attach_kind} look's [${mount.grip_share}] (tools/characters/attach_kinds.json, D546)`);
+  }
+  return out;
+}
+
+// Every pairing its kinds allow. A part made by code meets its partners at their declared sizes, so
+// those joins are the partners' openings, measured when they are checked; here what this part
+// meets is measured: a handle's top in a head's top face, a trim against its working part, a
+// seated trim on its board.
+function joins(part: any, ctx: Ctx): [string[], string[]] {
+  const faults: string[] = [], notes: string[] = [];
+  const type = ctx.types[part.type];
+  const plane_m = v(ctx.rules.plane_m), join_m = v(ctx.rules.join_m);
+  const seen = new Set<string>();
+  for (const name of fittingKinds(part, ctx)) {
+    const kind = ctx.kinds[name];
+    const mine = kind.slots.find((s: any) => s.fits.includes(part.type));
+    for (const slot of kind.slots) {
+      if (slot === mine) continue;
+      for (const t of slot.fits) {
+        const partners = Object.values(ctx.parts).filter((p: any) => p.type === t && p.part !== part.part);
+        for (const other of partners) {
+          const key = [part.part, other.part].sort().join("+");
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const pair = arrange(part, other, ctx);
+          if (!pair) continue;
+          const said = (s: string) => faults.push(`${name}, with ${other.part}: ${s}`);
+          if (pair.disc) {
+            const n = sharedDisc(pair.disc.mesh, pair.disc.y, pair.disc.r, plane_m);
+            if (n) said(`${n} faces of the head lie in the handle's top plane (y ${pair.disc.y.toFixed(4)}): the handle stands ${mm(v(ctx.rules.proud_m))} proud of eye.upper (D566), so the head's top face must not sit there; move eye.upper to the eye's real top`);
+          } else {
+            const [a, b] = [pair.a, pair.b];
+            const g = gap(a, b);
+            if (g > join_m) said(`a ${mm(g)} gap where they meet (the bar ${mm(join_m)}, D566): the points are not where the surfaces are; fix the point or the model`);
+            const deep = Math.max(buried(a, b), buried(b, a));
+            if (deep > join_m) said(`one is buried ${mm(deep)} in the other (the bar ${mm(join_m)}): fix the point or the model`);
+            const n = sharedPlanes(a, b, plane_m);
+            if (n) said(`${n} pairs of faces lie in one plane facing the same way, which flickers: offset one by more than ${mm(plane_m)}`);
+          }
+          notes.push(`${name} with ${other.part}`);
+        }
+        if (!partners.length && ctx.types[t]?.made_by === "model" && type.made_by === "model") notes.push(`${name}: no ${t} yet to join with`);
+      }
+    }
+  }
+  return [faults, notes];
+}
+
+// How two parts sit together, in the first part's frame, by the convention: a head on a code
+// handle (its top disc), a trim under the working part's entry, a seated trim on its board. Other
+// pairs do not touch, or meet only at declared sizes (a code handle in an opening).
+function arrange(part: any, other: any, ctx: Ctx): { disc?: { mesh: Mesh; y: number; r: number }; a: Mesh; b: Mesh } | undefined {
+  const [tp, to] = [ctx.types[part.type], ctx.types[other.type]];
+  if (tp.made_by === "code" && to.made_by === "code") return undefined;
+  if (tp.made_by === "code" || to.made_by === "code") {
+    const [model, mt] = tp.made_by === "model" ? [part, tp] : [other, to];
+    const top = mt.handle_top && pt(model, mt.handle_top);
+    if (!top || top.type !== "eye" || (tp.slot !== "handle" && to.slot !== "handle")) return undefined;
+    const mesh = ctx.mesh(model);
+    return { disc: { mesh, y: top.at[1] + v(ctx.rules.proud_m), r: top.size / 2 }, a: mesh, b: mesh };
+  }
+  const [trim, work] = tp.slot === "trim" ? [part, other] : [other, part];
+  const tt = ctx.types[trim.type], tw = ctx.types[work.type];
+  if (tt.slot !== "trim" || tw.slot !== "working") return undefined;
+  if (tt.place === "under_entry" && tw.entry) {
+    const entry = pt(work, tw.entry);
+    return { a: moved(ctx.mesh(trim), IDENTITY, [0, entry.at[1] - trim.cover_m[1], 0]), b: ctx.mesh(work) };
+  }
+  if (tt.place === "seat") {
+    const [seat, onto] = [pt(trim, "seat"), pt(work, trim.type)];
+    if (!seat || !onto) return undefined;
+    const r = rigid(seat, onto);
+    const at = [0, 1, 2].map((k) => onto.at[k] - (r[k][0] * seat.at[0] + r[k][1] * seat.at[1] + r[k][2] * seat.at[2])) as V3;
+    return { a: moved(ctx.mesh(trim), r, at), b: ctx.mesh(work) };
+  }
+  return undefined;
+}
+
+/** The turn taking full point a's (dir, up) onto b's: rows of B Aᵀ. */
+export function rigid(a: any, b: any): number[][] {
+  const frame = (p: any) => [p.dir, p.up, [p.dir[1] * p.up[2] - p.dir[2] * p.up[1], p.dir[2] * p.up[0] - p.dir[0] * p.up[2], p.dir[0] * p.up[1] - p.dir[1] * p.up[0]]];
+  const [fa, fb] = [frame(a), frame(b)];
+  return [0, 1, 2].map((i) => [0, 1, 2].map((j) => fb[0][i] * fa[0][j] + fb[1][i] * fa[1][j] + fb[2][i] * fa[2][j]));
+}
+
+function sharedDisc(mesh: Mesh, y: number, r: number, within: number): number {
+  return triangles(mesh).filter((t) => normal(t)[1] > Math.cos(Math.PI / 180) && t.every((p) => Math.abs(p[1] - y) < within) && t.some((p) => Math.hypot(p[0], p[2]) < r)).length;
+}
+
+export function loadCtx(): Ctx {
+  const t = readJson(join(PARTS, "types.json"));
+  const kinds = Object.fromEntries(kindNames().map((k) => [k, readJson(join(KINDS, `${k}.json`))]));
+  const parts = Object.fromEntries(
+    readdirSync(PARTS)
+      .filter((f) => f.endsWith(".json") && f !== "types.json" && f !== "part.schema.json")
+      .map((f) => [f.slice(0, -5), readJson(join(PARTS, f))]),
+  );
+  const cache = new Map<string, Mesh>();
+  const mesh = (p: any) => {
+    const file = join(ROOT, "assets", p.model);
+    if (!existsSync(file)) throw new Error(`${p.part}: its model ${p.model} is not under assets/; make it (the models skill) or fix /model`);
+    if (!cache.has(file)) cache.set(file, readMesh(file));
+    return cache.get(file)!;
+  };
+  return { types: t.types, rules: t.rules, kinds, attach: readJson(join(ROOT, "tools", "characters", "attach_kinds.json")), parts, mesh };
+}
+
+export function report(name: string, stages: Stage[]): string[] {
+  return stages.flatMap((s) => (s.faults.length ? s.faults.map((f) => `✗ ${s.stage}: ${f} (assets/data/parts/${name}.json)`) : [`✓ ${s.stage}: ${s.ok}`]));
+}
+
+if (import.meta.main) {
+  const name = process.argv[2];
+  const ctx = loadCtx();
+  if (!name || !ctx.parts[name]) {
+    console.log(`✗ part: name one of assets/data/parts/: ${Object.keys(ctx.parts).join(", ") || "(none yet: a part is assets/data/parts/<part>.json, part.schema.json)"}`);
+    process.exit(1);
+  }
+  const stages = checkPart(ctx.parts[name], ctx);
+  for (const line of report(name, stages)) console.log(line);
+  const bad = stages.filter((s) => s.faults.length).length;
+  console.log(bad ? `✗ ${name}: ${bad} of ${stages.length} stages refused` : `✓ ${name}: fits its type and every join its kinds allow`);
+  process.exit(bad ? 1 : 0);
+}
