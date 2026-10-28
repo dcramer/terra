@@ -208,6 +208,74 @@ def opening_span(ob, centre, r):
     return lo_z + 0.0005, hi_z - 0.0005
 
 
+def eye_half_width(ob, centre, size):
+    """The thinnest the part is round where its eye will be cut: from the eye's line out to its
+    side (Blender +-x), over the eye's length along the head (y within size / 2) and the heights
+    the line runs through the part, 1.5 mm in from each end (part.ts's eye wall stage measures
+    the cut head; this is what the swell can see before the cut)."""
+    x, y = centre
+    tree = BVHTree.FromObject(ob, bpy.context.evaluated_depsgraph_get())
+    zs = [v.co.z for v in ob.data.vertices]
+    best = math.inf
+    for k in range(-10, 11):
+        at = y + k * size / 20
+        bottom = tree.ray_cast(Vector((x, at, min(zs) - 0.01)), Vector((0, 0, 1)), 1.0)[0]
+        top = tree.ray_cast(Vector((x, at, max(zs) + 0.01)), Vector((0, 0, -1)), 1.0)[0]
+        if bottom is None or top is None or top.z - bottom.z < 0.004:
+            continue
+        for j in range(21):
+            z = bottom.z + 0.0015 + (top.z - bottom.z - 0.003) * j / 20
+            for dx in (1.0, -1.0):
+                hit = tree.ray_cast(Vector((x, at, z)), Vector((dx, 0.0, 0.0)), 1.0)[0]
+                if hit is not None:
+                    best = min(best, abs(hit.x - x))
+    return best
+
+
+def swell(ob, high, centre, size, want, reach):
+    """The generator draws a cheek's thickness, not a poll's: the poll swollen round the eye until
+    its thinnest there (eye_half_width) is `want` / 2 out from the line, as a real head swells
+    round its eye, full across the eye and its walls, easing back to the cheek over `reach` past
+    them. One factor for the whole span under a soft ceiling a little past `want` that it nears
+    but never reaches (tanh: still rising, so no two faces are pressed into one plane, which a
+    hard ceiling did and the boolean then emptied the part): a thick poll and a thin neck in one
+    span end near one width. A factor for each 3 mm left a waist where a poll block met its neck
+    (the broad head's, split at its eye, job 5); one from the thickest height of the thinnest
+    3 mm left it thin at its other heights (0.6 mm walls, job 5b), hence the thinnest anywhere."""
+    x, y = centre
+    thinnest = eye_half_width(ob, centre, size)
+    if thinnest >= want / 2:
+        return
+    span = size / 2 + 0.006
+    ceiling = 1.15 * want / 2
+    factor = math.atanh(want / 2 / ceiling) * ceiling / thinnest  # thinnest, swollen, is want / 2
+    for v in [*ob.data.vertices, *high.data.vertices]:
+        t = min(1.0, max(0.0, 1.0 - (abs(v.co.y - y) - span) / reach))
+        d = abs(v.co.x - x)
+        f = 1.0 + (factor - 1.0) * t * t * (3 - 2 * t)
+        swollen = max(d, ceiling * math.tanh(d * f / ceiling))
+        v.co.x = x + math.copysign(swollen, v.co.x - x)
+    print(f"prep: swollen round the eye from {thinnest * 2000:.1f} mm across at its thinnest (x{factor:.2f})")
+
+
+def to_mass(ob, high, centre, size, seat, volume):
+    """The part made its mass as finished, `volume` of its material once cut: the swell adds metal
+    the generator did not draw and the cuts take some away, so it is scaled about the mark by what
+    a trial cut takes (the broad head came out 1.16 kg of its 0.88 kg, job 5)."""
+    trial = ob.copy()
+    trial.data = ob.data.copy()
+    bpy.context.scene.collection.objects.link(trial)
+    cut_eye(trial, centre, size, seat)
+    whole = abs(open_edges(ob)[1])
+    removed = whole - abs(open_edges(trial)[1])
+    bpy.data.objects.remove(trial)
+    k = ((volume + removed) / whole) ** (1 / 3)
+    about = Matrix.Translation((centre[0], centre[1], 0.0)) @ Matrix.Scale(k, 4) @ Matrix.Translation((-centre[0], -centre[1], 0.0))
+    ob.data.transform(about)
+    high.data.transform(about)
+    print(f"prep: made {k:.3f} times its size for its mass as cut")
+
+
 def poll_middle(ob, y, band=0.005):
     """The middle across (x) of the part near y: an eye is cut on the poll's middle."""
     xs = [v.co.x for v in ob.data.vertices if abs(v.co.y - y) < band]
@@ -321,62 +389,22 @@ def main():
                 row.append(f"{cm}: {(max(p.x for p in near) - min(p.x for p in near)) * 100:.1f}/{(max(p.z for p in near) - min(p.z for p in near)) * 100:.1f}")
         print("prep: cm from the back: across/up cm, " + ", ".join(row))
         y = min(ys) + prep["eye"]["from_back_m"]  # the back of the poll is glTF +Z, Blender -y
-        x, across = poll_middle(ob, y)
+        x, _ = poll_middle(ob, y)
         size = prep["eye"]["size_m"]
         want = prep["eye"].get("across_m")
-        if want and want > across:
-            # The generator draws a cheek's thickness, not a poll's: swell the poll round the eye
-            # to `across_m`, as a real head swells round its eye, easing back to the cheek.
-            # Full across the eye and its walls, easing to nothing over `reach_m` past them.
-            reach = prep["eye"].get("reach_m", 0.03)
-            # One swell for the whole span, what brings its thinnest 3 mm there to `across_m`, and
-            # a soft ceiling a little past `across_m` that the swell nears but never reaches (tanh:
-            # still rising, so no two faces are pressed into one plane, which a hard ceiling did and
-            # the boolean then emptied the part). So a thick poll and a thin neck in one span end
-            # near one width, the eye walled all along. A swell for each 3 mm, as it was, left a
-            # waist where a poll block met its neck (the broad head's, split at its eye, job 5).
-            span = size / 2 + 0.006
-            tree = BVHTree.FromObject(ob, bpy.context.evaluated_depsgraph_get())
-            def thickness(at):
-                best = 0.0
-                for k in range(41):
-                    z = min(zs) + (max(zs) - min(zs)) * k / 40
-                    a = tree.ray_cast(Vector((x - 1, at, z)), Vector((1, 0, 0)), 2.0)[0]
-                    b = tree.ray_cast(Vector((x + 1, at, z)), Vector((-1, 0, 0)), 2.0)[0]
-                    if a is not None and b is not None:
-                        best = max(best, b.x - a.x)
-                return best
-            steps = [thickness(y + k * 0.003) for k in range(-int(span / 0.003), int(span / 0.003) + 1)]
-            thinnest = min(t for t in steps if t > 0.002)
-            ceiling = 1.15 * want / 2
-            # The thinnest's half-width, swollen, reaches want / 2 under the ceiling.
-            factor = max(1.0, math.atanh(want / 2 / ceiling) * ceiling / (thinnest / 2))
-            for v in [*ob.data.vertices, *high.data.vertices]:
-                t = min(1.0, max(0.0, 1.0 - (abs(v.co.y - y) - span) / reach))
-                d = abs(v.co.x - x)
-                f = 1.0 + (factor - 1.0) * t * t * (3 - 2 * t)
-                swollen = max(d, ceiling * math.tanh(d * f / ceiling))
-                v.co.x = x + math.copysign(swollen, v.co.x - x)
-            x, across = poll_middle(ob, y)
-        print(f"prep: eye {size * 100:.1f} cm at {prep['eye']['from_back_m'] * 100:.1f} cm from the back, the poll {across * 100:.1f} cm across there")
-    look(ob, shots + "-before")
     seat = prep["eye"].get("seat_m", 0.02)
-    if "mass_kg" in prep:
-        # Its mass as finished: the swell adds iron the generator did not draw and the cuts take
-        # some away, so the part is made its size again about the mark, by what a trial cut takes
-        # (the broad head came out 1.16 kg of its 0.88 kg, job 5).
-        trial = ob.copy()
-        trial.data = ob.data.copy()
-        bpy.context.scene.collection.objects.link(trial)
-        cut_eye(trial, (x, y), size, seat)
-        whole = abs(open_edges(ob)[1])
-        removed = whole - abs(open_edges(trial)[1])
-        bpy.data.objects.remove(trial)
-        k = ((prep["mass_kg"] / DENSITY[prep["material"]] + removed) / whole) ** (1 / 3)
-        about = Matrix.Translation((x, y, 0.0)) @ Matrix.Scale(k, 4) @ Matrix.Translation((-x, -y, 0.0))
-        ob.data.transform(about)
-        high.data.transform(about)
-        print(f"prep: made {k:.3f} times its size for {prep['mass_kg']} kg as cut")
+    # Swollen round the eye, then made its mass as cut, twice: making it its mass scales the
+    # swell down with the rest (the broad head's 4.3 cm came out 3.7, its eye walls 0.6 mm,
+    # job 5b), so the second swell brings the walls back and the second mass takes only a
+    # percent or so off them.
+    for _ in range(2):
+        if want:
+            swell(ob, high, (x, y), size, want, prep["eye"].get("reach_m", 0.03))
+        if "mass_kg" in prep:
+            to_mass(ob, high, (x, y), size, seat, prep["mass_kg"] / DENSITY[prep["material"]])
+    across = 2 * eye_half_width(ob, (x, y), size)
+    print(f"prep: eye {size * 100:.1f} cm at {prep['eye']['from_back_m'] * 100:.1f} cm from the back, the poll at least {across * 100:.1f} cm across round it")
+    look(ob, shots + "-before")
     lo, hi = cut_eye(ob, (x, y), size, seat)
     look(ob, shots + "-after")
     bm = bmesh.new()

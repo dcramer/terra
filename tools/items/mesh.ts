@@ -115,17 +115,22 @@ export function slice(m: Mesh, y: number): Seg[] {
 }
 
 /** How far a ray from the line, along (dx, dz), runs before it meets the slice; Infinity if never. */
-export function ray(segs: Seg[], dx: number, dz: number): number {
-  let best = Infinity;
+export const ray = (segs: Seg[], dx: number, dz: number): number => hits(segs, dx, dz)[0] ?? Infinity;
+
+/** Every distance along the ray from the line (dx, dz) at which it crosses the slice, nearest
+ * first; a crossing through a vertex two segments share is counted once. */
+export function hits(segs: Seg[], dx: number, dz: number): number[] {
+  const ts: number[] = [];
   for (const [[ax, az], [bx, bz]] of segs) {
     const [ex, ez] = [bx - ax, bz - az];
     const den = dx * ez - dz * ex;
     if (Math.abs(den) < 1e-12) continue;
     const t = (ax * ez - az * ex) / den;
     const s = (ax * dz - az * dx) / den;
-    if (t > 0 && s >= 0 && s <= 1) best = Math.min(best, t);
+    if (t > 0 && s >= 0 && s <= 1) ts.push(t);
   }
-  return best;
+  ts.sort((a, b) => a - b);
+  return ts.filter((t, i) => i === 0 || t - ts[i - 1] > 1e-9);
 }
 
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];

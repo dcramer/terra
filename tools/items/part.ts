@@ -16,7 +16,7 @@ import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Q, V3 } from "../characters/glb.ts";
 import { KINDS, kindNames, PARTS, readJson, ROOT } from "./kind.ts";
-import { bounds, buried, distance, gap, type Mesh, moved, normal, ray, readMesh, sharedPlanes, slice, solid, triangles } from "./mesh.ts";
+import { bounds, buried, distance, gap, hits, type Mesh, moved, normal, ray, readMesh, sharedPlanes, slice, solid, triangles } from "./mesh.ts";
 import { validate } from "./schema.ts";
 
 export type Ctx = {
@@ -79,6 +79,11 @@ export function checkPart(part: any, ctx: Ctx): Stage[] {
     stage("points", `${type.points.length} of ${part.type}'s, ${type.origin} at the origin`, points(part, type, mesh, ctx));
     stage("scale", "none: placed by a shift or one rigid turn", mesh.scaled.map((n) => `node ${n} carries a scale: parts are never scaled (D566); apply it in Blender (Object > Apply > Scale) and export again, or make a bigger part`));
     stage("openings", "each within 1 mm of its declared size round the line", openings(part, mesh, join_m));
+    if (pt(part, "eye.lower") && pt(part, "eye.upper")) {
+      const min = v(ctx.rules.eye_wall_m);
+      const w = eyeWall(part, mesh);
+      stage("eye wall", `thinnest ${mm(w.wall)} round the eye (at least ${mm(min)})`, w.wall < min ? [`the eye's wall is ${mm(w.wall)} thick ${w.where}, under types.json's eye_wall_m ${mm(min)}: it reads cut through there and would split; fix the head at its cause in tools/items/prep.py (the eye's swell, its size or mark in prep.json) and prep it again, never by moving its points`] : []);
+    }
     stage("budget", budgetNote(part, type, mesh, ctx), budget(type, mesh, ctx));
     stage("roles", [...new Set(mesh.materials.map((m) => m.split(".")[0]))].join(", "), roles(part, type, mesh));
     const weighed = type.slot === "working" ? "volume_m3, " : type.slot === "trim" ? `mass_kg, ${type.place === "seat" ? "" : "cover_m, "}` : "";
@@ -178,6 +183,26 @@ function openings(part: any, mesh: Mesh, join_m: number): string[] {
     }
   }
   return out;
+}
+
+const WALL_RAYS = 64; // 5.6 degrees apart: a thin spot a few mm wide at the eye's radius is met
+const WALL_SLICES = 9;
+
+/** The thinnest wall round a head's eye: on each of WALL_SLICES slices from eye.lower to eye.upper,
+ * each of WALL_RAYS rays out from the line runs from the eye's wall to the head's outside. */
+export function eyeWall(part: any, mesh: Mesh): { wall: number; where: string } {
+  const [a, b] = [pt(part, "eye.lower").at[1], pt(part, "eye.upper").at[1]];
+  let best = { wall: Infinity, where: "" };
+  for (let k = 0; k < WALL_SLICES; k++) {
+    const y = a + 5e-4 + (k / (WALL_SLICES - 1)) * (b - a - 1e-3);
+    const segs = slice(mesh, y);
+    for (let i = 0; i < WALL_RAYS; i++) {
+      const [dx, dz] = [Math.cos((2 * Math.PI * i) / WALL_RAYS), Math.sin((2 * Math.PI * i) / WALL_RAYS)];
+      const ts = hits(segs, dx, dz);
+      if (ts.length >= 2 && ts[1] - ts[0] < best.wall) best = { wall: ts[1] - ts[0], where: `${mm(y - a)} up from eye.lower, toward (x ${dx.toFixed(2)}, z ${dz.toFixed(2)})` };
+    }
+  }
+  return best;
 }
 
 const budgetOf = (type: any, ctx: Ctx) => v(ctx.rules[type.triangles]);

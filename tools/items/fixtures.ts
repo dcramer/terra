@@ -82,7 +82,7 @@ export const HEAD_H = 0.06;
 // The box head's own volume, worked by hand: its 6 cm square less its eye, a 32-gon of radius r
 // (area N/2 r^2 sin(2 pi/N)), times its height.
 export const HEAD_M3 = HEAD_H * (0.06 * 0.06 - (N / 2) * (EYE / 2) ** 2 * Math.sin((2 * Math.PI) / N));
-export const boxHead =(eye = EYE, top = HEAD_H) => tube(square(0.03), circle(eye / 2), 0, top);
+export const boxHead = (eye = EYE, top = HEAD_H, half = 0.03) => tube(square(half), circle(eye / 2), 0, top);
 export const collarMesh = (top = 0) => tube(circle(0.022), circle(EYE / 2), -0.02, top, "Leather");
 // The collar's, the same way: two 32-gons, 2.2 cm and the eye's radius, 2 cm high; in leather.
 const gon = (r: number) => (N / 2) * r ** 2 * Math.sin((2 * Math.PI) / N);

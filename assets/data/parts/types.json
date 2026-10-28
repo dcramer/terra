@@ -4,6 +4,7 @@
     "join_m": { "value": 0.001, "source": "D566: model meets model within 1 mm, the part checker's bar; a measured opening within 1 mm of its declared size" },
     "proud_m": { "value": 0.004, "source": "D566: a haft stands 4 mm proud of its head's eye.upper, so its end never lies in the head's top face" },
     "trim_cover_m": { "value": 0.01, "source": "D566: a trim covers a join by at least 1 cm (research/2026-10-28-assembled-parts-art.md section 3)" },
+    "eye_wall_m": { "value": 0.004, "source": "a forged hatchet head is 25-30 mm thick round a 16 mm eye (BeaverCraft's AX5 head), so its eye walls are 4.5-7 mm of steel; thinner reads cut through at arm's length and would split in use (job 5a's broad head, 0.4 mm)" },
     "plane_m": { "value": 0.0002, "source": "two faces closer than 0.2 mm, facing the same line and overlapping, are one plane (z-fighting at a metre's view, the convention's no two surfaces in one plane)" },
     "roles": { "value": ["Wood", "Metal", "Leather", "String", "Trim", "Fire"], "source": "fit_held.py's ROLES (Wood, Metal, Trim, String), terra_walker::character's Tint (Leather) and art-style.md (a part named Fire glows): a material's name before any '.'" },
     "small_triangles": { "value": [300, 800], "source": "docs/art-style.md's budget table: a small item, a tool's head" },

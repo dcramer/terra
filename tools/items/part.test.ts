@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { box, boxHead, COLLAR_M3, collar, collarMesh, glbOf, haft, head, LEATHER } from "./fixtures.ts";
+import { box, boxHead, COLLAR_M3, collar, collarMesh, EYE, glbOf, HEAD_H, haft, head, LEATHER } from "./fixtures.ts";
 import { type Mesh, normal, readMesh, triangles } from "./mesh.ts";
 import { checkPart, type Ctx, loadCtx, withMeasured } from "./part.ts";
 
@@ -85,6 +85,13 @@ test("a point of the wrong type, and a missing one, are refused", () => {
 test("an eye wider than its points say is a gap round the haft", () => {
   const f = faults(head(), ctx([head(), haft()], { test_box_head: boxHead(0.04) }), "openings");
   assert.ok(f.some((s) => /2\.5 mm gap round the handle/.test(s)), f.join("\n"));
+});
+
+test("an eye wall thinner than eye_wall_m is refused with its thickness and side; the good head's passes", () => {
+  // A 3.8 cm square round the 3.5 cm eye: 1.5 mm of wall where the square's sides cross X and Z.
+  const f = faults(head(), ctx([head(), haft()], { test_box_head: boxHead(EYE, HEAD_H, 0.019) }), "eye wall");
+  assert.ok(f.some((s) => /eye's wall is 1\.5 mm thick .* under types\.json's eye_wall_m 4\.0 mm/.test(s)), f.join("\n"));
+  assert.deepEqual(faults(head(), good(), "eye wall"), []);
 });
 
 test("an eye narrower than its points say buries the haft", () => {
