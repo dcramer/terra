@@ -291,13 +291,32 @@ fn the_clock_starts_on_the_sun_the_art_was_made_for_and_then_follows_the_year() 
 }
 
 #[test]
-fn the_sun_warms_as_it_sinks_toward_a_black_bodys_colour() {
-    // Below the art's 20 degrees the sun's light loses green and more blue the lower it
-    // stands, so a meadow it lights turns olive rather than staying lawn green (settlement
-    // r21: green 0.94 at 12 degrees left the end of the dusk film reading as afternoon).
-    let mut last = light_at(20.0).light;
-    for height in [16.0, 12.0, 8.0, 4.0, 0.0] {
+fn the_sun_is_given_above_the_air_and_the_air_alone_warms_it_as_it_sinks() {
+    // D212: one colour at every height of the sun, since the air (Bevy's atmosphere on the
+    // ground and in the sky, `air::sun_through` for the rest) reddens it on its way down.
+    // Warm keys on top reddened the light twice: the tundra's sky brown at a 10-degree sun.
+    let above = light_at(60.0).light;
+    for height in [20.0, 16.0, 12.0, 8.0, 4.0, 0.0] {
+        // Blended between keys, the same colour comes back to within a float's rounding.
         let light = light_at(height).light;
+        assert!(
+            light.abs_diff_eq(above, 1e-4),
+            "{height}: {light} not {above}"
+        );
+    }
+    // What reaches the ground, red-normalised in sRGB, loses green and more blue the lower
+    // the sun, so a meadow it lights turns olive rather than staying lawn green (settlement
+    // r21: green 0.94 at 12 degrees left the end of the dusk film reading as afternoon).
+    let ground = |height: f32| {
+        let c = Color::srgb(above.x, above.y, above.z).to_linear();
+        let lit =
+            Vec3::new(c.red, c.green, c.blue) * crate::air::sun_through(height.to_radians(), 1.0);
+        let c = Color::linear_rgb(1.0, lit.y / lit.x, lit.z / lit.x).to_srgba();
+        Vec3::new(c.red, c.green, c.blue)
+    };
+    let mut last = ground(20.0);
+    for height in [16.0, 12.0, 8.0, 4.0, 1.0] {
+        let light = ground(height);
         assert!(
             light.y < last.y && light.z < last.z,
             "{height}: {light} after {last}"
@@ -305,9 +324,33 @@ fn the_sun_warms_as_it_sinks_toward_a_black_bodys_colour() {
         assert!(light.z < light.y, "{height}: blue under green");
         last = light;
     }
-    // A sun 12 degrees up is about 3,800 K: green near three quarters of red.
-    let twelve = light_at(12.0).light;
-    assert!(twelve.y / twelve.x < 0.82, "{twelve}");
+    // A sun 12 degrees up measures some 4,000 to 4,500 K: green well under red, as a black
+    // body's (sRGB green 0.83 of red at 4,500 K), not the near-white 0.94 of r21.
+    let twelve = ground(12.0);
+    assert!(twelve.y < 0.86, "{twelve}");
+    // Under a low sun the ground stays as bright as the warm keys left it (`held`): the key at
+    // 6 degrees, its colour times its lux, as bright as (1, 0.69, 0.44) at 30,000 lux.
+    let luminance = |c: Color| {
+        let c = c.to_linear();
+        0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue
+    };
+    let six = light_at(6.0);
+    let now = luminance(Color::srgb(above.x, above.y, above.z)) * six.illuminance;
+    let before = luminance(Color::srgb(1.0, 0.69, 0.44)) * 30_000.0;
+    assert!((now - before).abs() < 1e-3 * before, "{now} {before}");
+    // The clouds' sun is reddened by the air the lower the sun, as the ground's is, but against
+    // a sun overhead: their light at a high sun is as it was tuned (the lake's clouds at 13 h
+    // went flat and yellow under the whole column's transmittance), and below the horizon none.
+    let low = through_the_air(Vec3::new(1.0, 0.1, 0.0), Vec3::Y, 1.0);
+    let high = through_the_air(Vec3::Y, Vec3::Y, 1.0);
+    assert!(high.abs_diff_eq(Vec3::ONE, 1e-5), "{high}");
+    assert!(low.z / low.x < 0.5, "{low}");
+    let raised = through_the_air(Vec3::new(1.0, 1.0, 0.0), Vec3::Y, 1.0);
+    assert!(raised.min_element() > 0.7, "{raised}");
+    assert_eq!(
+        through_the_air(Vec3::new(1.0, -0.2, 0.0), Vec3::Y, 1.0),
+        Vec3::ZERO
+    );
 }
 
 #[test]
