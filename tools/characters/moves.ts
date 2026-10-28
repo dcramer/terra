@@ -62,6 +62,7 @@ import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shiel
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
 import { type Holding, keptOff, reach } from "./arms.ts";
+import { fitter } from "./shield_arm.ts";
 
 const { values: opt } = parseArgs({
   options: {
@@ -197,8 +198,11 @@ const clipOf = (name: string): Clip => {
 // and each template's morph mix and joint offsets (skin.ts).
 const { shapes, skinned } = skinOf(body, opt.templates!, opt.template!.split(",").filter(Boolean));
 
+// The pose as the game composes it: the hanging hands kept off the hips (`--arms`), then the shield
+// arm fitted to the body (shield_arm.ts, D554), each as the game does after the clips.
+const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => fitShield(armsKept(shape, clip, t), shape.moved);
 // `--arms`: the hanging hands then kept off the hips as the game keeps them (arms.ts, D535).
-const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => {
+const armsKept = (shape: Shape, clip: Clip, t: number): Pose[] => {
   const pose = shaped(body, shape, clip, t, bends);
   if (!opt.arms) return pose;
   const kept = keptOff(body, pose, holdingIn(clip));
@@ -258,6 +262,7 @@ function swordArm(P: (n: string) => V3): Ball[] {
 }
 const sword = held.find((h) => h.balls);
 const shield = held.find((h) => h.board);
+const fitShield = shield ? fitter(body, rest, shield) : (pose: Pose[]) => pose;
 
 // Where the shield is carried (shield_path.ts): the board's middle as the clash hangs it, the
 // chest's forward (spine_03's, ahead at rest), and the middle in the chest's frame, which a
