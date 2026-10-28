@@ -163,15 +163,27 @@ fn facing(side: usize) -> Quat {
 /// on both faces, so the second is the first turned half round); its model `size`.
 fn leaf_at(second: bool, swing: f32, opens: f32, size: Vec2) -> Transform {
     let (hinge, turn) = door::leaf(second, swing, opens, DOORWAY_M[0], CUBE);
-    Transform::from_translation(hinge)
-        .with_rotation(Quat::from_rotation_y(turn))
+    let turn = Quat::from_rotation_y(turn);
+    Transform::from_translation(hinge - turn * Vec3::X * LAP_M)
+        .with_rotation(turn)
         .with_scale(leaf_scale(size))
 }
 
-/// A leaf model of `size` scaled to half a doorway's width and its full height: the studded
-/// leaf stretched, one made at the doorway's size (the mine's) as it is.
+/// How far a shut leaf laps its jamb past the doorway's edge, in metres, its hinge stile
+/// reaching that far behind the hinge, as a door hung on a wall's face laps its opening: the
+/// jamb's timbers stop a few centimetres short of the opening's edge, and round 7's mine
+/// stills showed a lit strip of the room beyond between each leaf and its jamb. Swung a
+/// quarter turn the lap stands in the jamb; folded flat it stands over the doorway's edge.
+const LAP_M: f32 = 0.08;
+
+/// A leaf model of `size` scaled to half a doorway's width and its lap, and its full height:
+/// the studded leaf stretched, one made at the doorway's size (the mine's) nearly as it is.
 fn leaf_scale(size: Vec2) -> Vec3 {
-    Vec3::new(DOORWAY_M[0] * 0.5 / size.x, DOORWAY_M[1] / size.y, 1.0)
+    Vec3::new(
+        (DOORWAY_M[0] * 0.5 + LAP_M) / size.x,
+        DOORWAY_M[1] / size.y,
+        1.0,
+    )
 }
 
 fn scene(assets: &AssetServer, model: &str) -> WorldAssetRoot {
@@ -530,7 +542,8 @@ mod tests {
             );
         }
         spans.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let half = DOORWAY_M[0] * 0.5;
+        // Each laps its jamb, past the doorway's edge.
+        let half = DOORWAY_M[0] * 0.5 + LAP_M;
         assert!((spans[0].0 + half).abs() < 1e-4, "{spans:?}");
         assert!(
             spans[0].1.abs() < 1e-4 && spans[1].0.abs() < 1e-4,
@@ -553,7 +566,8 @@ mod tests {
             let mut jambs = Vec::new();
             for second in [false, true] {
                 let placed = leaf_at(second, swing, opens, size);
-                let hinge = placed.translation;
+                // The hinge, its lap behind it.
+                let hinge = placed.transform_point(Vec3::X * LAP_M / placed.scale.x);
                 let reach = placed.transform_point(Vec3::X * size.x) - hinge;
                 let side = hinge.x.signum();
                 let wanted = if swing > 0.0 && opens == 2.0 {
