@@ -216,6 +216,14 @@ half = 1.2 * spacing
 eye_z = (eyes[0].z + eyes[1].z) / 2
 
 
+def edges_of(faces):
+    """The faces' edges, each once, in the mesh's order: a set's order is of their addresses in
+    memory, another each run, and subdivide_edges makes its vertices and faces in the order it is
+    given, so the same face is written as the same bytes (D563), as skin_piece.rim sorts."""
+    bm.edges.index_update()
+    return sorted({e for f in faces for e in f.edges}, key=lambda e: e.index)
+
+
 def jag(x):
     return 0.07 * spacing * math.sin(9 * x + 1.3) + 0.035 * spacing * math.sin(29 * x + 0.4)
 
@@ -225,12 +233,12 @@ def jag(x):
 # eyes slits painted on a flat face). Its faces split once for a ridge, not a dent.
 brow_lo, brow_hi = mz + 0.5, eye_z + 1.6 * spacing
 region = [f for f in front_faces(brow_lo, brow_hi, mx, 1.6 * spacing + 0.15)]
-bmesh.ops.subdivide_edges(bm, edges=list({e for f in region for e in f.edges}), cuts=1, use_grid_fill=True)
+bmesh.ops.subdivide_edges(bm, edges=edges_of(region), cuts=1, use_grid_fill=True)
 bm.normal_update()
 # The sockets split finer again, so each knot is a cup with a rim, not a dent of a few faces.
 sockets = [f for f in front_faces(eye_z - 0.6 * spacing, eye_z + 0.6 * spacing, mx, 1.2 * spacing)
            if min((f.calc_center_median() - eye).xz.length for eye in eyes) < 0.7 * spacing]
-bmesh.ops.subdivide_edges(bm, edges=list({e for f in sockets for e in f.edges}), cuts=1, use_grid_fill=True)
+bmesh.ops.subdivide_edges(bm, edges=edges_of(sockets), cuts=1, use_grid_fill=True)
 bm.normal_update()
 ridge = eye_z + 0.32 * spacing  # its crest, over the eyes
 thrust = 0.45 * spacing
@@ -270,11 +278,11 @@ def mouth_faces(lo, hi, wide):
 
 
 region = mouth_faces(mz - 0.5, mz + 0.5, half + 0.2)
-edges = list({e for f in region for e in f.edges})
-bmesh.ops.subdivide_edges(bm, edges=edges, cuts=1, use_grid_fill=True)
+bmesh.ops.subdivide_edges(bm, edges=edges_of(region), cuts=1, use_grid_fill=True)
 bm.normal_update()
 region = mouth_faces(mz - 0.3, mz + 0.3, half + 0.1)
-geom = list({g for f in region for g in (f, *f.edges, *f.verts)})
+bm.verts.index_update()
+geom = [*region, *edges_of(region), *sorted({v for f in region for v in f.verts}, key=lambda v: v.index)]
 bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(0, 0, mz), plane_no=(0, 0, 1))
 
 
