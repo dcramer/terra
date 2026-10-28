@@ -25,6 +25,8 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("art/", &["terra_build", "terra_build_mesh"]),
     // The keyed clips' own paces, which the staged fighters' tests hold the clip files to.
     ("art/animation/keyed/", &["terra_creatures"]),
+    // The shield poses' board places, which the shield arm's tests fit to (D554).
+    ("art/animation/shield_targets.json", &["terra_walker"]),
     // The game's files (D133): the crates on Bevy load any of them through its asset server.
     (
         "assets/",
