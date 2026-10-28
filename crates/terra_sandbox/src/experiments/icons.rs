@@ -9,6 +9,9 @@
 //! `--renders <folder>` also writes every render there, for the painter. `--sheet <prefix>`
 //! also lays the icons out on empty slots and saves `<prefix>.png` at the size rendered and
 //! `<prefix>-half.png` at half, a backpack cell on a plain display. Then it exits.
+//!
+//! `--keep <item>` with nothing else to write renders nothing ([`keep_alone`]): a painting is
+//! kept by fingerprinting its look's file, which needs no window and no GPU.
 
 use std::path::{Path, PathBuf};
 
@@ -49,8 +52,63 @@ pub fn plugin(app: &mut App) {
         .add_systems(Update, finish);
 }
 
+/// The checkout's assets, also for a Windows copy run from WSL (`cargo xtask win`), so the
+/// icons and the manifest it writes land in the checkout, not in the copy.
 fn assets() -> PathBuf {
-    terra_world::data::assets()
+    terra_world::data::source_assets()
+}
+
+/// `--keep` with nothing to render (no `--renders`, no `--sheet`): records each kept item's
+/// painting as made from its look as it is now, opens no window, and gives the run's end.
+/// None when the baker is to run. Under WSL the baker's window never came up on the CPU
+/// renderer, and the fingerprint hashes the look's file, so rendering was never needed.
+pub fn keep_alone(options: &Options) -> Option<AppExit> {
+    let alone = options.experiments.iter().any(|name| name == "icons")
+        && !options.keeps.is_empty()
+        && options.renders.is_none()
+        && options.sheet.is_none();
+    if !alone {
+        return None;
+    }
+    let (found, _) = catalogue();
+    let mut lines = manifest();
+    for item in &options.keeps {
+        let Some((_, icon)) = found.iter().find(|(found, _)| found == item) else {
+            eprintln!("ICONS ✗ {item} is not an item with a look");
+            return Some(AppExit::error());
+        };
+        let Some(line) = lines
+            .iter_mut()
+            .find(|line| &line.item == item && line.painted)
+        else {
+            eprintln!("ICONS ✗ {item} has no painting to keep; `cargo xtask icons` renders it");
+            return Some(AppExit::error());
+        };
+        keep(line, &icon.look);
+    }
+    Some(if write_manifest(&lines) {
+        AppExit::Success
+    } else {
+        AppExit::error()
+    })
+}
+
+/// Records a painting as made from `look` as it is now.
+fn keep(line: &mut Baked, look: &str) {
+    let bytes = std::fs::read(assets().join(look)).unwrap_or_default();
+    line.look = Some(look.to_string());
+    line.fingerprint = Some(icons::fingerprint(&bytes));
+    println!("ICONS kept the painting of {}, now from {look}", line.item);
+}
+
+/// Whether an item's line in the manifest says its icon is made from its look as it is now.
+#[cfg(test)]
+fn fresh(line: &Baked, item: &str, icon: &Icon) -> bool {
+    let look = std::fs::read(assets().join(&icon.look)).unwrap_or_default();
+    line.item == item
+        && line.look.as_ref() == Some(&icon.look)
+        && line.fingerprint == Some(icons::fingerprint(&look))
+        && (line.painted || line.style == Some(icons::STYLE))
 }
 
 /// Every item in the catalogue whose look exists, with its id and what its icon is
@@ -149,13 +207,7 @@ fn bake(rendered: &[(&Wanted, &[u8])], keeps: &[String]) {
             .iter_mut()
             .find(|baked| &baked.item == item && keeps.contains(item))
         {
-            let look = std::fs::read(assets().join(&wanted.icon.look)).unwrap_or_default();
-            kept.look = Some(wanted.icon.look.clone());
-            kept.fingerprint = Some(icons::fingerprint(&look));
-            println!(
-                "ICONS kept the painting of {item}, now from {}",
-                wanted.icon.look
-            );
+            keep(kept, &wanted.icon.look);
             continue;
         }
         if lines.iter().any(|baked| &baked.item == item) {
@@ -184,16 +236,28 @@ fn bake(rendered: &[(&Wanted, &[u8])], keeps: &[String]) {
             println!("ICONS removed {name}");
         }
     }
+    write_manifest(&lines);
+}
+
+/// Writes the manifest, saying how many icons are rendered and painted; false if it could
+/// not.
+fn write_manifest(lines: &[Baked]) -> bool {
     let text: String = lines.iter().map(|baked| baked.line() + "\n").collect();
     let manifest = assets().join(icons::MANIFEST);
     match std::fs::write(&manifest, text) {
-        Ok(()) => println!(
-            "ICONS {} rendered, {} painted, in {}",
-            lines.iter().filter(|baked| !baked.painted).count(),
-            lines.iter().filter(|baked| baked.painted).count(),
-            folder.display()
-        ),
-        Err(error) => error!("icons: could not write {}: {error}", manifest.display()),
+        Ok(()) => {
+            println!(
+                "ICONS {} rendered, {} painted, in {}",
+                lines.iter().filter(|baked| !baked.painted).count(),
+                lines.iter().filter(|baked| baked.painted).count(),
+                manifest.display()
+            );
+            true
+        }
+        Err(error) => {
+            eprintln!("ICONS ✗ could not write {}: {error}", manifest.display());
+            false
+        }
     }
 }
 
@@ -357,6 +421,22 @@ mod tests {
         assert!(checked > 0);
     }
 
+    /// Keeping a painting whose look changed makes its line fresh again, with no render.
+    #[test]
+    fn keeping_a_painting_records_its_look_as_it_is_now() {
+        let (found, _) = catalogue();
+        let painted = manifest()
+            .into_iter()
+            .find(|line| line.painted && line.look.is_some());
+        let mut line = painted.expect("a painted icon with a look");
+        let (item, icon) = found.iter().find(|(item, _)| item == &line.item).unwrap();
+        line.look = Some("models/elsewhere.glb".into());
+        line.fingerprint = Some(1);
+        assert!(!fresh(&line, item, icon));
+        keep(&mut line, &icon.look);
+        assert!(fresh(&line, item, icon));
+    }
+
     /// Every item whose look exists has an icon made from that look as it is now: rendered
     /// in the style as it is now, or painted from it. Every icon in the manifest exists.
     /// When this fails, run `cargo xtask icons` (or paint again, `tools/icons`) and commit
@@ -367,14 +447,7 @@ mod tests {
         let (found, _) = catalogue();
         let mut stale = Vec::new();
         for (item, icon) in &found {
-            let look = std::fs::read(assets().join(&icon.look)).unwrap_or_default();
-            let fresh = baked.iter().any(|line| {
-                &line.item == item
-                    && line.look.as_ref() == Some(&icon.look)
-                    && line.fingerprint == Some(icons::fingerprint(&look))
-                    && (line.painted || line.style == Some(icons::STYLE))
-            });
-            if !fresh {
+            if !baked.iter().any(|line| fresh(line, item, icon)) {
                 stale.push(item.clone());
             }
         }

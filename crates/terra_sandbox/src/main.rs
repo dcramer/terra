@@ -58,6 +58,10 @@ fn main() -> AppExit {
         }
         return AppExit::Success;
     }
+    // A painting kept with nothing to render, no window (`icons::keep_alone`).
+    if let Some(done) = experiments::icons::keep_alone(&options) {
+        return done;
+    }
 
     let mut app = App::new();
     app.add_plugins((

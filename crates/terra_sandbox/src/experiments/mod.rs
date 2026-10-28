@@ -10,7 +10,7 @@ mod crowd;
 mod dungeon;
 mod forest;
 mod forest_walk;
-mod icons;
+pub(crate) mod icons;
 mod look;
 mod lush;
 mod scatter;

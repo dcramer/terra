@@ -66,12 +66,10 @@ pub(crate) const TASKS: &[Task] = &[
     },
     Task {
         name: "icons",
-        takes: "[args]",
-        // Every item's icon rendered and written into assets/icons. It opens a window for the
-        // few seconds it takes; under WSL the CPU renderer is enough.
-        does: "bake every item's icon from its look into assets/icons (D129)",
+        takes: "[--keep <item>]… [--renders <dir>] [--sheet <prefix>]",
+        does: "bake every item's icon from its look into assets/icons (D129); under WSL on the Windows GPU; --keep alone renders nothing",
         group: "Make art",
-        run: |args| cargo_run("terra_sandbox", &["--experiment", "icons"], args),
+        run: icons,
     },
     Task {
         name: "paint-icons",
@@ -81,3 +79,63 @@ pub(crate) const TASKS: &[Task] = &[
         run: |args| node("tools/icons/paint.ts", args),
     },
 ];
+
+/// The icon baker. `--keep` with nothing else to write renders nothing (the sandbox keeps the
+/// painting by fingerprinting its look's file), so it runs here. A render under WSL runs on
+/// the Windows GPU through the GPU wrapper (D319), as WSL's CPU renderer never brought the
+/// baker's window up (0.4% CPU for minutes, `--offscreen` too); the copy writes its icons and
+/// manifest into the checkout (`terra_world::data::source_assets`), and `--renders` and
+/// `--sheet` are given to it as Windows names them.
+fn icons(args: &[String]) -> bool {
+    let renders = args.iter().any(|a| a == "--renders" || a == "--sheet");
+    let keeps = args.iter().any(|a| a == "--keep");
+    if (keeps && !renders) || !crate::windows::on_wsl() {
+        return cargo_run("terra_sandbox", &["--experiment", "icons"], args);
+    }
+    let mut all: Vec<String> = [
+        "tools/gpu/gpu.ts",
+        "bake",
+        "--",
+        "cargo",
+        "xtask",
+        "win",
+        "-p",
+        "terra_sandbox",
+        "--",
+        "--experiment",
+        "icons",
+        "--offscreen",
+    ]
+    .map(String::from)
+    .to_vec();
+    let mut path_next = false;
+    for arg in args {
+        if path_next {
+            let folder = all.last().is_some_and(|flag| flag == "--renders");
+            let Some(windows) = windows_path(arg, folder) else {
+                eprintln!("icons: ✗ could not name {arg} for Windows (wslpath -w)");
+                return false;
+            };
+            all.push(windows);
+        } else {
+            all.push(arg.clone());
+        }
+        path_next = arg == "--renders" || arg == "--sheet";
+    }
+    run_owned("node", &all)
+}
+
+/// A path as Windows names it, relative ones from the root, where the Linux run starts too:
+/// a folder made first, a file's folder made and its name put back, as `wslpath -w` names
+/// only what exists.
+fn windows_path(path: &str, folder: bool) -> Option<String> {
+    let path = crate::root().join(path);
+    if folder {
+        std::fs::create_dir_all(&path).ok()?;
+        return crate::output("wslpath", &["-w", &path.to_string_lossy()]);
+    }
+    let (parent, name) = (path.parent()?, path.file_name()?.to_string_lossy());
+    std::fs::create_dir_all(parent).ok()?;
+    let parent = crate::output("wslpath", &["-w", &parent.to_string_lossy()])?;
+    Some(format!("{parent}\\{name}"))
+}

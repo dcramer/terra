@@ -40,7 +40,9 @@ From the repository root:
 
 **Automatic.** The manifest records the look and render style each icon came from. `every_icon_is_made_from_its_current_look` (run by `cargo xtask check`) fails when a look has changed since its icon was rendered or painted, or the render style since it was rendered: bake (`cargo xtask icons`) or paint it again, and commit.
 
-When an item's file changes but its look does not (gear rebuilt with its morphs by `tools/characters/build_bodies.sh`), compare its render with its painting (`cargo xtask icons --renders DIR`), and if they match keep the painting: `cargo xtask icons --keep <item>` records the file as it is now.
+When an item's file changes but its look does not (gear rebuilt with its morphs by `tools/characters/build_bodies.sh`), compare its render with its painting (`cargo xtask icons --renders DIR`), and if they match keep the painting: `cargo xtask icons --keep <item>` records the file as it is now, in a second and with no render or window (it fingerprints the look's file; never by hand).
+
+Under WSL `cargo xtask icons` renders on the Windows GPU (`cargo xtask win`, through `cargo xtask gpu bake`), writing the icons and manifest into the checkout and `--renders`/`--sheet` where you name them; WSL's own CPU renderer never brings the baker up.
 
 **By eye, on the review sheet.** A good icon:
 

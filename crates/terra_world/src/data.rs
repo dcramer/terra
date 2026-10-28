@@ -32,6 +32,16 @@ pub fn assets() -> PathBuf {
         .map_or_else(|| base.join("assets"), |dir| dir.join("assets"))
 }
 
+/// The checkout's assets: `assets()`, or, for a Windows copy run from WSL (`cargo xtask win`),
+/// the source's own, which it names in `TERRA_SOURCE_ASSETS`, so a tool writing assets (the
+/// icon baker) writes them into the checkout and not into the copy.
+pub fn source_assets() -> PathBuf {
+    std::env::var_os("TERRA_SOURCE_ASSETS")
+        .map(PathBuf::from)
+        .filter(|path| path.is_dir())
+        .unwrap_or_else(assets)
+}
+
 /// The asset source of pictures read on the CPU only, such as building's texture arrays read
 /// them (D290): the same folder as `assets()`, as `cpu://<path>`. Bevy keeps one asset per
 /// path, and the first load's settings win, so a picture read CPU-only and the same picture
