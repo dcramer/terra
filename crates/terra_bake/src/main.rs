@@ -3,13 +3,13 @@
 //! block-compressed KTX2 with their mipmaps, into the cache the game reads them from
 //! (`terra_core::cooked`). What is cooked already is kept; `--force` cooks everything again.
 
-mod glb;
 mod picture;
 
 use picture::{Block, Layer};
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use terra_bake::glb;
 use terra_core::cooked::{self, Cook, Kind};
 
 /// The widest a model's map is kept: a body's budget (D188's), the most any model has.

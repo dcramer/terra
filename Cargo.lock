@@ -6007,9 +6007,11 @@ dependencies = [
  "ctt",
  "image",
  "ktx2",
+ "libm",
  "rayon",
  "serde_json",
  "terra_core",
+ "terra_items",
  "zstd",
 ]
 
@@ -6220,6 +6222,7 @@ dependencies = [
 name = "terra_items"
 version = "0.1.0"
 dependencies = [
+ "glam",
  "serde",
  "serde_json",
  "terra_gen",

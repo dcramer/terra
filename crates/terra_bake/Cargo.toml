@@ -1,6 +1,8 @@
 [package]
 name = "terra_bake"
-description = "The texture bake (D188): models', materials' and the fire's pictures cooked into BC7, BC5 and BC4 KTX2 with mipmaps, `cargo xtask cook`."
+description = "The texture bake (D188): models', materials' and the fire's pictures cooked into BC7, BC5 and BC4 KTX2 with mipmaps, `cargo xtask cook`; and an assembled item written as a model (`--bin item`, D565)."
+# `cargo run -p terra_bake` is the bake; the item writer is `--bin item`.
+default-run = "terra_bake"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +12,9 @@ publish.workspace = true
 ctt.workspace = true
 image.workspace = true
 terra_core.workspace = true
+# The item bin writes the assembler's placements as a model (D565).
+terra_items.workspace = true
+libm.workspace = true
 # Already built for ctt's encoders; cooks the files side by side.
 rayon = "1"
 serde_json = "1"
