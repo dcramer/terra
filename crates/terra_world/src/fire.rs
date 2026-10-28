@@ -134,7 +134,10 @@ pub fn slots(quality: Quality) -> usize {
 /// was a grey smudge round a campfire's tips (fire round 8).
 const FLAME_CARDS: usize = 3;
 const EMBER_CARDS: usize = 5;
-const SMOKE_CARDS: usize = 4;
+/// A blaze's smoke is so many overlapping billows let go close behind one another, so its
+/// column is one smoke (at four it was a file of separate puffs, castle round 5); must match
+/// `BLAZE_PUFFS` in fire_smoke.wesl.
+const SMOKE_CARDS: usize = 8;
 /// The fires kept where something kindled stands, a campfire or a hearth, are drawn as a
 /// campfire is in footage and in the games that draw one well (The Witcher 3, Red Dead
 /// Redemption 2, Kingdom Come): several tongues of flame of their own heights over a bed of

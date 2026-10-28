@@ -35,6 +35,15 @@ fn a_hearth_draws_as_many_cards_as_the_shader_lays_out() {
 }
 
 #[test]
+fn a_blazes_smoke_spaces_its_column_by_as_many_puffs_as_it_draws() {
+    // The shader spaces the puffs up the column and draws each out to reach the next by its
+    // count: told fewer than there are, they would bunch; more, gaps would open between them.
+    let shader =
+        std::fs::read_to_string(crate::data::assets().join("shaders/fire_smoke.wesl")).unwrap();
+    assert!(shader.contains(&format!("const BLAZE_PUFFS: f32 = {SMOKE_CARDS}.0;")));
+}
+
+#[test]
 fn a_blast_flashes_for_a_moment_then_is_gone() {
     assert!(light::flash(0.0) > 0.99);
     assert!(light::flash(0.1) > 0.0 && light::flash(0.1) < light::flash(0.02));
