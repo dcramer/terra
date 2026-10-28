@@ -1,6 +1,6 @@
 # Assembled items: equipment made from parts by rules
 
-Status: proposal (D565, Open), its answers recommended from research; the developers approve or change them. Nothing is built on it until they have.
+Status: decided (D565, the developers approved the recommended answers on 2026-10-28). Parts are made only from one approved style reference picture.
 
 Weapons and tools are made from a few parts per kind, each made once with named connection points, and put together by rules. Every attachment is then exact by construction: a new item is a choice of parts, never a model to be fitted, measured or tuned. It is how the game reaches thousands of items without a number set by hand for any one of them, and it is D182 (hundreds of variants from parts by rules) applied to equipment.
 
@@ -39,7 +39,7 @@ A kind (one-handed haft, blade, polearm, strapped shield, bow, hung item, torch)
 
 The same idea by body slot, with what we already do for fitting (D128): pieces made on the base body with the shared skeleton, refitted to each body shape, the skin under them hidden; variety from which piece a slot takes and colour by role.
 
-## Recommended answers
+## Answers
 
 From Terra's goals, the prior art and what fails least, researched in [2026-10-28-assembled-equipment.md](../research/2026-10-28-assembled-equipment.md). The developers approve or change them.
 
