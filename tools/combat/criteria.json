@@ -2899,6 +2899,44 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "held.fist.sword",
+   "noticed": 4,
+   "notice": "the sword hand's fingers are off the hilt: the fist hangs open round it or closes through it",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "the developer, 2026-10-27: \"hes not gripping items\"; terra_walker::grip (grip.ts fistOff: each finger bone's gap to the handle's surface, padded by a finger's half-thickness, either way, every move and clip on every template); docs/holding.md section 3",
+   "check": {
+    "by": "moves",
+    "row": "fist",
+    "measure": "fist_cm.arming_sword"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "held.fist.torch",
+   "noticed": 3,
+   "notice": "a torch carried in the off hand beside the sword: the fingers are off its handle",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "the developer, 2026-10-27: \"hes not gripping items\"; terra_walker::grip (grip.ts fistOff); holding.md section 6 step 3, a torch carried in the off hand (D460) with a sword",
+   "check": {
+    "by": "moves",
+    "row": "fist",
+    "measure": "fist_cm.torch",
+    "hold": [
+     "socket.hand.R=assets/models/held/arming_sword.glb",
+     "socket.hand.L=assets/models/held/torch.glb"
+    ]
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "held.shield.grip_across_palm",
    "noticed": 3,
    "notice": "the fist cannot close on the shield's hand strap: the strap, across the board square to the forearm, runs into the hand instead of across the palm",
