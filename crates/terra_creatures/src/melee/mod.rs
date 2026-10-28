@@ -579,7 +579,8 @@ fn steer(
             }
         }
         steer.drive = Some(fighter.way * speed * rate);
-        steer.face = Some(fighter.way);
+        // Turned by the blow's aim, so a cut that comes down off its ahead meets the target.
+        steer.face = Some(each.aim_turn(here.normalize()) * fighter.way);
     } else if !fighter.free() || fighter.shove_s > 0.0 {
         steer.drive = Some(if fighter.shove_s > 0.0 {
             fighter.shove

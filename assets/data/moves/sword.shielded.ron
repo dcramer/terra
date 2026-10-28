@@ -34,6 +34,8 @@
 //   warp      how a blow closes on a target in front during its wind-up (Motion Warping):
 //             one within `within` metres and `cone` degrees of its facing is turned to and
 //             stepped toward until `stop_at` metres away, no faster than `most_mps`
+//   aim       degrees the body faces off the way it strikes, + to its left: a take whose cut
+//             comes down off its ahead turns into it, so its blade meets the target (D573)
 //   invulnerable   when blows pass through the body (a roll's i-frames)
 //   hold      where the clip is held while the button stays down (a block)
 //   brace     for a block: from where in the clip a blow taken on it plays, pushed back
@@ -111,12 +113,14 @@
         ),
         // From the guard and back to it (Keyed_Heavy, D450): the sword lifted high behind the right
         // shoulder by 0.75 s and brought down hard across to the lower left, then back on guard.
-        // The shield low at the left side throughout (Open_Heavy, D454, D531).
+        // The shield low at the left side throughout (Open_Heavy, D454, D531). Its take's cut
+        // comes down about 15 deg left of ahead and reaches 1.45 m, so the body turns 15 deg
+        // right into it and steps in to 1.4 m (D573).
         "heavy": (
             clip: "Open_Heavy", from: 0.00, speed: 1.52, active: (0.90, 1.00), done: 2.38,
             cancel: 1.95, stamina: 22, damage: 30, hit_stop: 0.05, heavy: true,
             drive: [(0.0, 0.0), (0.55, 0.6), (0.95, 3.2), (1.34, 0.5), (2.01, 0.0)],
-            warp: (within: 3.6, cone: 70, stop_at: 1.5, most_mps: 4.0),
+            warp: (within: 3.6, cone: 70, stop_at: 1.4, most_mps: 4.0), aim: -15,
         ),
         // The base's forward roll with the arms held out of the tuck (Fight_Roll, hold.py), in
         // place in its clip: the body driven 3.3 m along the way asked, blows passing through
@@ -145,7 +149,7 @@
             clip: "Open_Heavy", from: 0.0, speed: 0.95, active: (0.90, 1.00), done: 2.38,
             stamina: 22, damage: 25, hit_stop: 0.05, heavy: true,
             drive: [(0.0, 0.0), (0.72, 0.4), (0.95, 2.6), (1.3, 0.4), (1.87, 0.0)],
-            warp: (within: 3.4, cone: 80, stop_at: 1.55, most_mps: 3.0),
+            warp: (within: 3.4, cone: 80, stop_at: 1.4, most_mps: 3.0), aim: -15,
         ),
     },
 )

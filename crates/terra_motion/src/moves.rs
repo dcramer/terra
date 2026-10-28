@@ -49,6 +49,11 @@ pub struct Move {
     pub hold: Option<f32>,
     #[serde(default)]
     pub stamina: f32,
+    /// Degrees the body faces off the way it strikes, + to its left about the up: a take whose
+    /// cut comes down off its ahead is turned so its blade meets what it is aimed at, as
+    /// Unreal's Motion Warping turns a root to a warp target's rotation (D573).
+    #[serde(default)]
+    pub aim: f32,
 }
 
 fn one() -> f32 {
@@ -146,6 +151,11 @@ impl Move {
         let (from, _) = self.active?;
         let left = self.at_clip(from) - t;
         (left > 0.0).then_some(left)
+    }
+
+    /// The turn from the way a blow strikes to the way its body faces (`aim`), about `up`.
+    pub fn aim_turn(&self, up: glam::Vec3) -> glam::Quat {
+        glam::Quat::from_axis_angle(up.normalize_or(glam::Vec3::Y), self.aim.to_radians())
     }
 
     /// Whether a body so far off (feet to feet, metres) and so many degrees off ahead is one
@@ -545,6 +555,18 @@ mod tests {
     }
 
     #[test]
+    fn an_aimed_blow_faces_its_aim_to_the_left_of_the_way_it_strikes() {
+        let mut heavy = set().get("heavy").unwrap().clone();
+        heavy.aim = 20.0;
+        // Facing +Z, a body's left is +X (Bevy's right-handed, Y up).
+        let faced = heavy.aim_turn(glam::Vec3::Y) * glam::Vec3::Z;
+        assert!(faced.x > 0.0, "{faced}");
+        assert!((faced.angle_between(glam::Vec3::Z).to_degrees() - 20.0).abs() < 1e-3);
+        heavy.aim = 0.0;
+        assert_eq!(heavy.aim_turn(glam::Vec3::Y) * glam::Vec3::Z, glam::Vec3::Z);
+    }
+
+    #[test]
     fn a_blow_reaches_what_stands_in_its_step_ins_cone_and_reach_and_a_roll_nothing() {
         let set = set();
         let slash = set.get("slash").unwrap();
@@ -587,6 +609,7 @@ mod tests {
             invulnerable: None,
             hold: None,
             stamina: 0.0,
+            aim: 0.0,
         };
         // Clip seconds 0.2 + 2t: active from t = 0.2 to 0.3, over at 0.6.
         assert!((slash.lasts() - 0.6).abs() < 1e-6);

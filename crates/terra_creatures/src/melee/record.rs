@@ -196,7 +196,9 @@ fn write(
         let t = fighter.runner.t();
         let reach = match (now, foe) {
             (Some(each), Some(to)) => {
-                let off = facing.reject_from(up).angle_between(to).to_degrees();
+                // Off the way it strikes: its facing turned back by its aim.
+                let way = each.aim_turn(up).inverse() * facing;
+                let off = way.reject_from(up).angle_between(to).to_degrees();
                 each.in_reach(to.length(), if off.is_nan() { 0.0 } else { off })
             }
             _ => false,

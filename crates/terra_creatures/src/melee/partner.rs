@@ -230,7 +230,7 @@ pub fn think(
             {
                 speed += super::moves::warp_speed(far, warp.stop_at, left, warp.most_mps);
             }
-            staged.tell_face(here + fighter.way);
+            staged.tell_face(here + each.aim_turn(up) * fighter.way);
             // Never into the player: a blow's drive stops at arm's length.
             if far < super::NEAREST_M {
                 speed = 0.0;

@@ -58,7 +58,7 @@ A body's kind names its **move set** (`assets/data/moves/*.ron`): locomotion cli
 - its clip, and whether its root motion drives the body;
 - its phases, **measured by the tools** from the clip, never typed: wind-up from the clip's start of motion, active frames from when the weapon's tip (followed through the skeleton) sweeps forward of the body, recovery after;
 - its cancel windows (into a dodge, a block, the next move in a chain), its hit-stop and its poise;
-- its warp limits (how far and how much turn toward a target, and in which frames);
+- its warp limits (how far and how much turn toward a target, and in which frames), and its aim: how far its body faces off the way it strikes, for a cut that lands off the clip's ahead (D573);
 - what it strikes with (a held item's socket, or bones), its damage and stamina, its sounds and effects by name.
 
 A **reaction set** per kind: additive flinches per zone, a stagger, a knockdown, a death, chosen by the blow's poise damage against the body's poise. A new move is a Kimodo prompt (`art/animation/sets/*.json`, made to start and end in its set's guard pose) and a few lines; a new creature is a body, a plan, a size, its volumes and its move set.

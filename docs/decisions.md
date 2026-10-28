@@ -215,6 +215,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D570](decisions/D570.md) | The sparring partner parries only when its parry is timed | Design | Developers | Decided | The sparring partner parries a blow only when its own… |
 | [D571](decisions/D571.md) | The axe's iron collar is darker than its head | Design | Developers | Open | How the iron collar (the axe's trim where the head meets… |
 | [D572](decisions/D572.md) | The axe proof's animations: a ready pose and the felling chop first | Design | Developers | Open | Which animations the one-handed axe gets for D565 step… |
+| [D573](decisions/D573.md) | A blow's aim turns its body into a cut that lands off its ahead | Tech | Agent | Decided | A move may say `aim`, degrees its body faces off the way… |
 
 ## People and the tribe
 
