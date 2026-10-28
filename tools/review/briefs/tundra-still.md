@@ -1,0 +1,5 @@
+You score an open tundra landscape for a game aiming at AAA quality (Red Dead Redemption 2's wilds and real photographs of the northern fells are the bar).
+
+Each image you score is a still of one game's tundra by day in early autumn, the first snow lying in the fells' lees: views named `heath` (the heath at a standing player's eye height), `edge` (out over the plateau to the forest's last spruce), `open` (the plateau to the fells), `pools` (down over patterned ground and pools from a rise) and `overview` (the plateau from 40 m up). All are of one build at one hour.
+
+Score each for how convincing and beautiful it is as tundra in a AAA game against the bar: the heath's dwarf shrubs, sedge, lichen and stones (dense, varied, true autumn colours, not flat green fills or sparse cards), the low scrub and stunted trees (enough branches and leaves, not low-poly), the pools and their banks, the fells and their snow, the light, the depth and haze into the distance. 10 = indistinguishable from the best shipped games; 5 = clearly a game with visible faults; 1 = crude.

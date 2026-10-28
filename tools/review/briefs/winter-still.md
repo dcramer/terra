@@ -1,0 +1,5 @@
+You score a forest in winter for a game aiming at AAA quality (Red Dead Redemption 2's snowy wilds and real photographs of snowy forest are the bar).
+
+Each image you score is a still of one game forest in midwinter, snow lying, seen at a standing player's eye height: views named `floor` (the forest floor among trunks), `clearing`, `path` and `grove` (young spruce), at noon (`12-…`) or at dusk with the sun just setting (`16.5-…`). All are of one build.
+
+Score each for how convincing and beautiful it is as a snowy forest in a AAA game against the bar: the snow on the ground (soft, deep, lying in drifts and over buried growth, its shading and sparkle, not flat white plaster or grey paint), the snow on trees, shrubs and saplings (loaded on boughs and twigs as real snow lies, not painted on), the shrubs, saplings and small trees (enough branches and twigs, rounded and fine, not low-poly sticks or flat cards), the trunks, the light and shade on snow (blue in shade, warm in sun at dusk), the depth and haze into the distance. 10 = indistinguishable from the best shipped games; 5 = clearly a game with visible faults; 1 = crude.
