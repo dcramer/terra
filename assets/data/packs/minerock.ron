@@ -1,0 +1,50 @@
+// Minerock's pack: the hard rock a mine is cut in, hewn and blasted, not laid (D559, the
+// hewn mine's plan in docs/dungeons.md): Poly Haven's `worn_rock_natural_01` (CC0,
+// assets/materials/README.md), a broken rock face with no joints, at 1.5 m (its 2 m
+// scan's facets read as stones 75 cm across, over the 60 cm the pack check lets a block's
+// stones be, and a broken face looks alike a little smaller), its tan
+// multiplied toward the blue-grey of a hard-rock drift's walls (the mine anchors' photos)
+// and darkened by the damp and the lamp smoke. Round 1's mine judges read the fieldstone
+// as mortared castle masonry. Its face bulges and sinks by a hand either way over a metre
+// and more, so a wall's outline wanders as a cut face does, not a plane; its arrises are
+// rounded broad, broken off as rock is round a drift's corners. Nothing dressed: no plinth,
+// coping, quoins or jambs (round 1: masonry kerbs and a pale seam at the floor), a
+// doorway's jambs and head the theme's timber.
+(
+    bevel: 0.16,
+    relief: 0.06,
+    tint: (0.56, 0.62, 0.78),
+    packed: Some((lumps: 0.11, lump: 1.1, ridge: 0.0, step: 0.0)),
+    textures: {
+        Masonry: (path: "materials/worn_rock_natural_01", metres: (1.5, 1.5), depth: 0.035),
+        Floor: (path: "materials/worn_rock_natural_01", metres: (1.4, 1.4), depth: 0.015),
+    },
+    dress: (
+        roles: {
+            Crest: None,
+            Nose: None,
+            Sill: None,
+            Head: None,
+            Soffit: None,
+            Foot: None,
+            Meet: None,
+            Border: None,
+            Arris: None,
+            Jamb: None,
+        },
+        tint: (0.56, 0.62, 0.78),
+        // Damp risen up a drift's foot and darker at it, the bedding faintly banded, and
+        // streaks where water seeps down from the roof; the rock not worn pale by hands.
+        masks: (
+            dirt: 0.7,
+            dirt_tint: (0.62, 0.6, 0.57),
+            splash: 0.5,
+            splash_dark: 0.5,
+            strata: 0.05,
+            lift: 1.1,
+            streaks: 0.35,
+            streak_reach: 1.6,
+        ),
+    ),
+    colours: (light: (0.42, 0.41, 0.4)),
+)

@@ -1,0 +1,12 @@
+// Minerock: the hard rock a mine is cut in (data/packs/minerock.ron), the flooded mine's
+// walls and roof (data/dungeons/flooded_mine.ron, D559); a material of the block pattern
+// (D290), quarried as stone is. Made for the mine, so not in the hammer.
+(
+    id: 11,
+    pattern: "block",
+    pack: "minerock",
+    cost: (steps: 1, step: [("Stone", 1, 4)]),
+    weight: 3,
+    roof_kind: Some(2049),
+    dungeon_only: true,
+)

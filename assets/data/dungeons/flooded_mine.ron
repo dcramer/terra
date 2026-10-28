@@ -11,10 +11,11 @@
     rooms: (12, 16),
     levels: 3,
     keys: 1,
-    walls: "Stone",
+    // The hard rock it is cut in (data/kits/minerock.ron), not laid stone: its walls, and
+    // its roof over every room no room stands on.
+    walls: "Minerock",
     floors: "Earth",
-    // The rock the mine is cut in, over every room no room stands on.
-    ceilings: Some("Stone"),
+    ceilings: Some("Minerock"),
     trim: "Hewn",
     // Drifts under their timber sets at 3.5 m, stopes 5 m (D527).
     headroom: (3.5, 5.0),
