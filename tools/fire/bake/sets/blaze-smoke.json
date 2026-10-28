@@ -6,9 +6,9 @@
   "size": 320,
   "frames": 16,
   "columns": 4,
-  "fit": { "frame": 256, "radius": 0.4 },
+  "fit": { "frame": 256, "radius": 0.34 },
   "fps": 8,
-  "billow": { "seed": 7, "lumps": 9, "density": 14, "amplitude": 0.45, "frequency": 2.6 },
+  "billow": { "seed": 7, "lumps": 9, "density": 14, "amplitude": 0.2, "frequency": 2.2 },
   "domain": {},
   "sources": [],
   "camera": { "center": [0, 0], "extent": 3.0 }

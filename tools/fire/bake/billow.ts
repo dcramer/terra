@@ -10,8 +10,8 @@
 // the smoke toward it (a sweep along its axis), seen by an orthographic camera looking +Y. So it
 // writes bake.py's raw passes (light0, light1, glow) and meta.json, and smoke.ts packs them as
 // it packs a sim's: a white Lambert surface facing a sun is 1, thin smoke lit from one side 1/4.
-// Over the frames the billow ages: its lumps move out and grow, their bumps roll up over them,
-// its skin softens and it thins; the young core is hot (glow).
+// Over the frames the billow ages: it rolls, its lumps move out and grow, their bumps roll up
+// over them, its skin softens and frays, and it thins and opens; the young core is hot (glow).
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -87,53 +87,112 @@ function turbulence(x: number, y: number, z: number, octaves: number) {
   return Math.min(1, (2.2 * s) / norm);
 }
 
+/// Signed fractal noise: noise summed over octaves, over the sum of their weights (about -0.5
+/// to 0.5).
+function fbm(x: number, y: number, z: number, octaves: number) {
+  let [s, a, f, norm] = [0, 1, 1, 0];
+  for (let o = 0; o < octaves; o++) {
+    s += a * noise(x * f, y * f, z * f);
+    norm += a;
+    a *= 0.5;
+    f *= 2.03;
+  }
+  return s / norm;
+}
+
+type V3 = [number, number, number];
 /// A lump at one age: its middle, radius, and its surface's push by direction, a latitude-
-/// longitude table.
-type Lump = { c: [number, number, number]; r: number; reach: number; table: Float32Array };
-const TW = 256;
-const TH = 128;
+/// longitude table `tw` by `th`.
+type Lump = { c: V3; r: number; reach: number; table: Float32Array; tw: number; th: number };
+
+// How the billow ages (castle round 8). Round 7's pushed each lump's surface out by five octaves
+// of turbulence by direction alone, so its fine bumps became needles along the radius (a
+// hedgehog's outline, streaks across its face), stayed opaque to its last frame and barely
+// changed over 16. Now:
+// - a lump's push is two octaves at a fifth of its radius (big rounded bumps; at 0.45 of it
+//   three octaves still drew cliffs along the radius), and its lumps on lumps are a second
+//   tier of a dozen small pyroclastic spheres sat on each lump's outer side;
+// - the skin is roughened in 3D, by a noise added to the distance inside it, so it frays
+//   across the surface as well as out;
+// - the whole billow rolls about X, its front climbing over its top (a smoke column's
+//   ring vortex), by ROLL over its life, and each lump drifts out at its own rate;
+// - it thins (THIN of its density gone by its last frame) and opens: a slow 3D noise eats
+//   holes through it as it ages (HOLES), its skin softening from 3 cm to a quarter metre.
+const PUSH_OCTAVES = 2;
+const DETAIL = 12;
+const ROLL = 1.6;
+const THIN = 0.7;
+const HOLES = 0.6;
+
+/// A pyroclastic lump's push table: its bumps turned by `spin` about X as it ages.
+function lumpTable(b: BillowRecipe, k: number, age: number, freq: number, amp: number, spin: number, tw: number, th: number) {
+  const [cr, sr] = [Math.cos(spin), Math.sin(spin)];
+  const table = new Float32Array(tw * th);
+  let most = 0;
+  for (let v = 0; v < th; v++) {
+    const t = ((v + 0.5) / th) * Math.PI;
+    for (let u = 0; u < tw; u++) {
+      const ph = (u / tw) * 2 * Math.PI;
+      const d = [Math.sin(t) * Math.cos(ph), Math.sin(t) * Math.sin(ph), Math.cos(t)];
+      // Turned about X: the front's bumps climb toward the top.
+      const y = d[1] * cr - d[2] * sr;
+      const z = d[1] * sr + d[2] * cr;
+      const push = 1 + amp * turbulence(d[0] * freq + k * 17.3, y * freq + k * 5.1, z * freq - age * 0.6, PUSH_OCTAVES);
+      table[v * tw + u] = push;
+      most = Math.max(most, push);
+    }
+  }
+  return { table, most };
+}
+
+/// A point turned about X by `a`: for a > 0 the front (toward the camera, -Y) climbs.
+function roll(p: V3, a: number): V3 {
+  const [c, s] = [Math.cos(a), Math.sin(a)];
+  return [p[0], p[1] * c + p[2] * s, p[2] * c - p[1] * s];
+}
 
 function lumpsAt(b: BillowRecipe, age: number): Lump[] {
   const rand = mulberry(b.seed * 7919 + 1);
-  const main = 0.5 * (1 + 0.15 * age);
+  const main = 0.45 * (1 + 0.1 * age);
+  const turn = ROLL * age;
   const out: Lump[] = [];
-  const add = (c: [number, number, number], r: number, k: number) => {
-    // Its bumps roll up over it as it ages, and grow.
-    const roll = age * 0.9;
-    const [cr, sr] = [Math.cos(roll), Math.sin(roll)];
-    const amp = b.amplitude * (1 + 0.35 * age);
-    const table = new Float32Array(TW * TH);
-    let most = 0;
-    for (let v = 0; v < TH; v++) {
-      const th = ((v + 0.5) / TH) * Math.PI;
-      for (let u = 0; u < TW; u++) {
-        const ph = (u / TW) * 2 * Math.PI;
-        const d = [Math.sin(th) * Math.cos(ph), Math.sin(th) * Math.sin(ph), Math.cos(th)];
-        // Turned about X: the front's bumps climb toward the top.
-        const y = d[1] * cr - d[2] * sr;
-        const z = d[1] * sr + d[2] * cr;
-        const f = b.frequency;
-        const t = turbulence(d[0] * f + k * 17.3, y * f + k * 5.1, z * f - age * 0.4, 5);
-        const push = 1 + amp * t;
-        table[v * TW + u] = push;
-        most = Math.max(most, push);
-      }
-    }
-    out.push({ c, r, reach: r * most, table });
+  const amp = b.amplitude * (1 + 0.3 * age);
+  const add = (c: V3, r: number, k: number, tier: number) => {
+    const [tw, th] = tier === 0 ? [256, 128] : [128, 64];
+    const f = b.frequency * (tier === 0 ? 1 : 1.3);
+    const { table, most } = lumpTable(b, k, age, f, amp * (tier === 0 ? 1 : 0.7), turn * (1.2 + 0.3 * tier), tw, th);
+    out.push({ c, r, reach: r * most, table, tw, th });
   };
-  add([0, 0, 0], main, 0);
+  const parents: { c: V3; r: number; out: V3 | null }[] = [{ c: [0, 0, 0], r: main, out: null }];
   for (let k = 1; k <= b.lumps; k++) {
     const az = rand() * 2 * Math.PI;
     const el = -0.25 + rand() * 1.35;
-    const dist = main * (0.6 + 0.2 * rand()) * (1 + 0.35 * age);
-    const r = main * (0.42 + 0.3 * rand()) * (1 + 0.3 * age);
-    const c: [number, number, number] = [dist * Math.cos(el) * Math.cos(az), dist * Math.cos(el) * Math.sin(az), dist * Math.sin(el)];
-    add(c, r, k);
+    const drift = 0.2 + 0.45 * rand();
+    const dist = main * (0.6 + 0.2 * rand()) * (1 + drift * age);
+    const r = main * (0.42 + 0.3 * rand()) * (1 + 0.25 * age);
+    const dir: V3 = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)];
+    parents.push({ c: roll([dist * dir[0], dist * dir[1], dist * dir[2]], turn), r, out: roll(dir, turn) });
+  }
+  parents.forEach((p, k) => add(p.c, p.r, k, 0));
+  // Lumps on lumps: a few small ones on each lump's outer side, rolling with it.
+  let k = parents.length;
+  for (const p of parents) {
+    for (let j = 0; j < DETAIL; j++) {
+      const [u, v] = [rand() * 2 - 1, rand() * 2 * Math.PI];
+      const w = Math.sqrt(1 - u * u);
+      let dir: V3 = roll([w * Math.cos(v), w * Math.sin(v), u], turn);
+      const o = p.out;
+      if (o && dir[0] * o[0] + dir[1] * o[1] + dir[2] * o[2] < -0.1) dir = [-dir[0], -dir[1], -dir[2]];
+      const at = p.r * (0.85 + 0.15 * rand());
+      const r = p.r * (0.22 + 0.14 * rand()) * (1 + 0.3 * age);
+      add([p.c[0] + dir[0] * at, p.c[1] + dir[1] * at, p.c[2] + dir[2] * at], r, k++, 1);
+    }
   }
   return out;
 }
 
 function push(l: Lump, dx: number, dy: number, dz: number, d: number) {
+  const [TW, TH] = [l.tw, l.th];
   const th = Math.acos(Math.max(-1, Math.min(1, dz / d)));
   let ph = Math.atan2(dy, dx);
   if (ph < 0) ph += 2 * Math.PI;
@@ -183,33 +242,54 @@ export function bakeBillow(r: Recipe & { billow: BillowRecipe }, out: string) {
   const heat = new Float32Array(V);
   const T = new Float32Array(V);
   const raw = new Uint16Array(r.frames * 3 * n * n * 3);
+  // How far inside the nearest lump's surface each voxel is (negative outside).
+  const sd = new Float32Array(V);
   for (let f = 0; f < r.frames; f++) {
     const age = f / Math.max(1, r.frames - 1);
     rho.fill(0);
     heat.fill(0);
-    // Its skin softens and it thins as it ages.
-    const soft = 0.05 + 0.22 * age;
-    const thick = 1 - 0.55 * age;
+    sd.fill(-1e9);
+    // Its skin softens, roughens and frays, and it thins and opens, as it ages.
+    const soft = 0.03 + 0.22 * age;
+    const rough = 0.05 + 0.1 * age;
+    const thick = 1 - THIN * age;
+    const holes = HOLES * age * age - 0.25;
+    const band = rough + 1e-3;
     const lumps = lumpsAt(b, age);
     for (const l of lumps) {
-      const lo = (c: number, N: number, d: number) => Math.max(0, Math.floor((c - l.reach + e / 2) / d));
-      const hi = (c: number, N: number, d: number) => Math.min(N - 1, Math.ceil((c + l.reach + e / 2) / d));
-      for (let z = lo(l.c[2], NZ, dx); z <= hi(l.c[2], NZ, dx); z++) {
+      const reach = l.reach + band;
+      const lo = (c: number, d: number) => Math.max(0, Math.floor((c - reach + e / 2) / d));
+      const hi = (c: number, N: number, d: number) => Math.min(N - 1, Math.ceil((c + reach + e / 2) / d));
+      for (let z = lo(l.c[2], dx); z <= hi(l.c[2], NZ, dx); z++) {
         const pz = at(z, NZ) - l.c[2];
-        for (let y = lo(l.c[1], NY, dy); y <= hi(l.c[1], NY, dy); y++) {
+        for (let y = lo(l.c[1], dy); y <= hi(l.c[1], NY, dy); y++) {
           const py = at(y, NY) - l.c[1];
-          for (let x = lo(l.c[0], NX, dx); x <= hi(l.c[0], NX, dx); x++) {
+          for (let x = lo(l.c[0], dx); x <= hi(l.c[0], NX, dx); x++) {
             const px = at(x, NX) - l.c[0];
             const d = Math.hypot(px, py, pz);
-            if (d >= l.reach || d < 1e-6) continue;
-            const s = l.r * push(l, px, py, pz, d);
-            const v = thick * Math.min(1, Math.max(0, (s - d) / soft));
+            if (d >= reach || d < 1e-6) continue;
+            const s = l.r * push(l, px, py, pz, d) - d;
             const i = idx(x, y, z);
-            if (v > rho[i]) rho[i] = v;
+            if (s > sd[i]) sd[i] = s;
           }
         }
       }
     }
+    // The skin roughened in 3D, and holes eaten through: noise fixed in the smoke as it rolls
+    // (sampled where the voxel was before the roll), drifting slowly through it.
+    const turn = ROLL * age;
+    for (let z = 0; z < NZ; z++)
+      for (let y = 0; y < NY; y++)
+        for (let x = 0; x < NX; x++) {
+          const i = idx(x, y, z);
+          let s = sd[i];
+          if (s <= -band) continue;
+          const p = roll([at(x, NX), at(y, NY), at(z, NZ)], -turn);
+          if (s < band + soft) s += rough * 2 * fbm(p[0] * 6 + 31.7, p[1] * 6 - age * 0.5, p[2] * 6 + 3.3, 3);
+          if (s <= 0) continue;
+          const open = Math.min(1, Math.max(0, (fbm(p[0] * 1.6 - 11.1, p[1] * 1.6 + 7.9, p[2] * 1.6 - age * 0.3, 2) + 0.35 - holes) / 0.35));
+          rho[i] = thick * Math.min(1, s / soft) * open;
+        }
     // The young core is hot: its heat falls off from the middle and with age.
     const hot = (1 - age) ** 2;
     for (let z = 0; z < NZ; z++)

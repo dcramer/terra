@@ -27,6 +27,8 @@ import { COLUMNS as EIGHT, halves, type Packed } from "./pack.ts";
 
 /// The six maps (right, top, back, left, bottom, front), alpha and glow of one frame.
 export type SmokeFrame = { maps: Float32Array[]; alpha: Float32Array; glow: Float32Array };
+/// The most cover a fitted frame may have on its border (a straight cut is not seen below it).
+const EDGE = 0.02;
 
 const quantile = (values: number[], q: number) => {
   const s = Float32Array.from(values).sort();
@@ -166,13 +168,17 @@ export function packSmoke(r: Recipe, raw: string, outDir: string): Packed {
   // What the line says: how much of a frame the smoke covers at its thickest, how bright its
   // sides are against one another (lit from the camera's side against from behind: a thick puff
   // is far brighter in front), and its tallest reach.
-  let [cover, reach] = [0, 0];
+  // And the most cover on a frame's border: fire_smoke.wesl clamps a fitted frame's samples
+  // inside it, so smoke there is cut by a straight line (castle round 8).
+  let [cover, reach, edge] = [0, 0, 0];
   const side = [0, 0, 0, 0, 0, 0];
   let sw = 0;
   for (const fr of frames) {
     let [c, top] = [0, n];
     for (let p = 0; p < N; p++) {
       const a = fr.alpha[p];
+      const [x, y] = [p % n, Math.floor(p / n)];
+      if (x === 0 || y === 0 || x === n - 1 || y === n - 1) edge = Math.max(edge, a);
       if (a > 0.1) {
         c++;
         top = Math.min(top, Math.floor(p / n));
@@ -185,6 +191,11 @@ export function packSmoke(r: Recipe, raw: string, outDir: string): Packed {
   }
   const mean = side.map((s) => s / Math.max(1e-6, sw));
   const pct = (v: number) => `${Math.round(v * 100)}%`;
+  if (r.fit && edge > EDGE) {
+    throw new Error(
+      `${r.name}: a fitted frame's smoke reaches its border (alpha ${edge.toFixed(2)}, at most ${EDGE}), and fire_smoke.wesl's blaze_maps would cut it with a straight edge. Lower the recipe's fit.radius (now ${r.fit.radius}) so the puff's outer lumps stay inside its frame.`,
+    );
+  }
   const sidecar = {
     set: r.name,
     about: r.about,
@@ -203,7 +214,7 @@ export function packSmoke(r: Recipe, raw: string, outDir: string): Packed {
   };
   writeFileSync(join(outDir, `${r.name}.json`), `${JSON.stringify(sidecar, null, 2)}\n`);
   const line =
-    `${count} frames, cover at most ${pct(cover)}, reach ${pct(reach)}, light x${lightScale.toFixed(2)}, ` +
+    `${count} frames, cover at most ${pct(cover)}, reach ${pct(reach)}, edge ${edge.toFixed(3)}, light x${lightScale.toFixed(2)}, ` +
     `mean response R/T/B/L/Bo/F ${mean.map((m) => m.toFixed(2)).join("/")}`;
   return { frames: [], size: n, line, sidecar };
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fitFlow, halves, warpError } from "./pack.ts";
-import { fitFrame, puffOf, smokeFrame } from "./smoke.ts";
+import { fitFrame, packSmoke, puffOf, smokeFrame } from "./smoke.ts";
 import { bakeBillow, half } from "./billow.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,6 +35,42 @@ test("a billow is opaque in its middle, clear at the frame's corner, and shades 
   };
   assert.ok(half_(fr.maps[1], true) > 2 * half_(fr.maps[1], false), "lit from the top");
   assert.ok(half_(fr.maps[4], false) > 2 * half_(fr.maps[4], true), "lit from below");
+});
+
+test("a billow thins and opens as it ages: its last frame is see-through where its first is solid", () => {
+  const out = mkdtempSync(join(tmpdir(), "billow-"));
+  const r = { name: "t", size: 48, frames: 2, camera: { center: [0, 0], extent: 3 }, billow: { seed: 7, lumps: 4, density: 14, amplitude: 0.45, frequency: 2.6 } };
+  bakeBillow(r as unknown as Recipe & { billow: typeof r.billow }, out);
+  const data = halves(readFileSync(join(out, "raw.bin")));
+  rmSync(out, { recursive: true });
+  const n = 48;
+  const per = n * n * 3;
+  // The mean alpha over the texels a frame covers at all, and the share of them it covers
+  // nearly solid.
+  const cover = (f: number) => {
+    const fr = smokeFrame(data.subarray((f * 3) * per, (f * 3 + 1) * per), data.subarray((f * 3 + 1) * per, (f * 3 + 2) * per), data.subarray((f * 3 + 2) * per, (f * 3 + 3) * per), n * n);
+    const held = fr.alpha.filter((a) => a > 0.02);
+    return { mean: held.reduce((s, a) => s + a, 0) / held.length, solid: held.filter((a) => a > 0.95).length / held.length };
+  };
+  const [young, old] = [cover(0), cover(1)];
+  assert.ok(young.solid > 0.5, `young solid ${young.solid}`);
+  assert.ok(old.solid < 0.1, `old solid ${old.solid}`);
+  assert.ok(old.mean < 0.6 * young.mean, `mean alpha young ${young.mean}, old ${old.mean}`);
+});
+
+test("a fitted smoke set whose puff reaches its frame's border is refused, one inside it packed", () => {
+  const raw = mkdtempSync(join(tmpdir(), "billow-"));
+  const out = mkdtempSync(join(tmpdir(), "packed-"));
+  const r = { name: "t", class: "smoke", kind: "oneshot", six_way: true, size: 48, frames: 1, columns: 1, camera: { center: [0, 0], extent: 3 }, billow: { seed: 7, lumps: 4, density: 14, amplitude: 0.2, frequency: 2.2 } };
+  bakeBillow(r as unknown as Recipe & { billow: typeof r.billow }, raw);
+  try {
+    // Its 90% radius at 0.6 of the frame puts its outer lumps past the border; at 0.3, inside.
+    assert.throws(() => packSmoke({ ...r, fit: { frame: 32, radius: 0.6 } } as unknown as Recipe, raw, out), /reaches its border/);
+    packSmoke({ ...r, fit: { frame: 32, radius: 0.3 } } as unknown as Recipe, raw, out);
+  } finally {
+    rmSync(raw, { recursive: true });
+    rmSync(out, { recursive: true });
+  }
 });
 
 test("a six-way frame's alpha is the glow pass's G and each map its light over alpha", () => {
