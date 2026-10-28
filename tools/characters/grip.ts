@@ -285,22 +285,53 @@ export function handRest(body: Glb, side: string, moved: Map<number, V3> = new M
   return { locals, socket: local(side === "r" ? "socket.hand.R" : "socket.hand.L") };
 }
 
+/** How far round the handle's line a finger comes, degrees: the turn about the line from its
+ * knuckle to its tip, through its joints (`at`, knuckle first, the tip last), each step the
+ * least turn between them. A finger lying alongside the handle, or bent short of it, turns
+ * little round it, however near its bones are; one closed round it turns past its far side. */
+export function wrapOf(at: V3[], c: V3, d: V3): number {
+  const across = (p: V3): V3 => {
+    const v = sub(p, c);
+    return sub(v, d.map((x) => x * dot(v, d)) as V3);
+  };
+  let turn = 0;
+  for (let k = 1; k < at.length; k++) {
+    const [a, b] = [across(at[k - 1]), across(at[k])];
+    turn += Math.atan2(dot(cross(a, b), d), dot(a, b));
+  }
+  return Math.abs((turn * 180) / Math.PI);
+}
+
 /** How far a hand's fingers are from their place on the handle (each bone padded by a finger's
  * half-thickness against the handle's surface), cm, the worst either way and where: on `pose`
  * (the body's nodes in one space), the look's handle on the socket node `socket`. The thumb's
- * base (in the palm) is not counted; a hook grip counts no thumb. */
-export function fistOff(body: Glb, pose: Pose[], side: string, socket: number, handle: Handle, grip: Grip): { cm: number; where: string } {
+ * base (in the palm) is not counted; a hook grip counts no thumb. Near is not closed: a finger
+ * lying along a handle run slantwise across the palm is as near it as one round it, so `wrap` is
+ * the least a finger comes round the handle (`wrapOf`), the bar `WRAP_DEG`, and `short` that
+ * finger. */
+export function fistOff(body: Glb, pose: Pose[], side: string, socket: number, handle: Handle, grip: Grip): { cm: number; where: string; wrap: number; short: string } {
   const S = pose[socket];
   const line = inFrame(handle, S);
   const pad = FINGER_M * S.s[0];
-  let worst = { cm: 0, where: "" };
+  let worst = { cm: 0, where: "", wrap: Infinity, short: "" };
   for (const stem of CHAINS) {
     if (stem === "thumb" && grip === "hook") continue;
     const bones = chainBones(stem, side);
     for (let k = stem === "thumb" ? 1 : 0; k < 3; k++) {
       const off = (toLine(pose[body.named(bones[k])].t, pose[body.named(bones[k + 1])].t, line.c, line.d) - line.r - pad) * 100;
-      if (Math.abs(off) > Math.abs(worst.cm)) worst = { cm: off, where: bones[k] };
+      if (Math.abs(off) > Math.abs(worst.cm)) worst = { ...worst, cm: off, where: bones[k] };
     }
+    if (stem === "thumb") continue;
+    const wrap = wrapOf(bones.map((b) => pose[body.named(b)].t), line.c, line.d);
+    if (wrap < worst.wrap) worst = { ...worst, wrap, short: bones[0] };
   }
   return worst;
 }
+
+/** The least a finger closed round a handle comes round it from its knuckle, degrees: near a
+ * quarter turn puts its tip past the handle's side, onto the side away from the knuckle. Every
+ * look held square in the fist closes 98 to 165 degrees round its handle on the base body (the
+ * sword 89 on the thin template); one slid 45 degrees slantwise across the palm (a carried tilt
+ * about the palm's middle) left the index 25 round and the ring 46, the fingers bent beside the
+ * handle, not round it (the developer's still, 2026-10-28). */
+export const WRAP_DEG = 80;

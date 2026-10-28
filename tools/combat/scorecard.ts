@@ -42,7 +42,7 @@ const SET = resolve(ROOT, "assets/data/moves/sword.shielded.ron");
 const BODY_M = 1.8;
 export type CheckOf =
   | { by: "timing"; measure: string; move?: string; next?: string }
-  | { by: "moves"; row: string; measure: string; hold?: string[] }
+  | { by: "moves"; row: string; measure: string; hold?: string[]; args?: string[] }
   | { by: "test"; crate: string; test: string }
   | { by: "measured"; crate: string; test: string }
   | { by: "film"; name: string }
@@ -185,16 +185,17 @@ function main() {
   }
   // The move check, on every body template: a run for each set of held looks the rows name
   // (`hold`, moves.ts's --hold; the prototype's sword and shield when none), so other items in
-  // hand (a torch carried in the off hand, holding.md) are measured over the same clips.
+  // hand (a torch carried in the off hand, holding.md) are measured over the same clips; with
+  // `args`, moves.ts's other options too (a tool carried through the walker's clips, `--carry`).
   const holds = new Map<string, Criterion[]>();
   for (const c of wanted) if (c.check?.by === "moves") {
-    const key = JSON.stringify(c.check.hold ?? []);
+    const key = JSON.stringify([c.check.hold ?? [], c.check.args ?? []]);
     holds.set(key, [...(holds.get(key) ?? []), c]);
   }
   for (const [index, [key, cs]] of [...holds].entries()) {
-    const hold: string[] = JSON.parse(key);
-    const json = join(logDir, hold.length ? `moves.${index}.json` : "moves.json");
-    run(process.execPath, [resolve(ROOT, "tools/characters/moves.ts"), "--json", json, ...hold.flatMap((h) => ["--hold", h])]);
+    const [hold, args]: [string[], string[]] = JSON.parse(key);
+    const json = join(logDir, hold.length || args.length ? `moves.${index}.json` : "moves.json");
+    run(process.execPath, [resolve(ROOT, "tools/characters/moves.ts"), "--json", json, ...hold.flatMap((h) => ["--hold", h]), ...args]);
     const rows: MovesRow[] = existsSync(json) ? JSON.parse(readFileSync(json, "utf8")) : [];
     for (const c of cs) {
       const v = c.check?.by === "moves" ? movesValue(rows, c.check) : undefined;
