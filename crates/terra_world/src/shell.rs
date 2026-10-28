@@ -110,9 +110,9 @@ usage: terra_sandbox [options]
   --joints              in the workbench: print where each model's joints and sockets
                         stand once shaped, to compare with the export's
   --attach <file>[@<socket>]
-                        in the workbench: any look, on a socket such as socket.back, or
-                        without one as its file says (repeatable)
-  --focus <name>        in the workbench: look closely at a part, such as socket.hand.R
+                        in the workbench: any look, on a socket such as socket.back (on a
+                        hand, held as in play), or without one as its file says (repeatable)
+  --focus <name>        in the workbench: look closely at a part and what it holds, or a model without it whole
   --sheet <prefix>      in the workbench: capture each clip, save one picture of it per
                         clip as <prefix>-<clip>.png, then exit
   --renders <folder>    in the icon baker: also write every item's render here, for

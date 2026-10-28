@@ -58,7 +58,10 @@ pub fn capture(
     mut camera: Query<&mut Transform, With<MainCamera>>,
     children: Query<&Children>,
     names: Query<&Name>,
-    globals: Query<&GlobalTransform>,
+    (globals, boxes): (
+        Query<&GlobalTransform>,
+        Query<(&bevy::camera::primitives::Aabb, &GlobalTransform)>,
+    ),
     mut frames: Local<u32>,
     (screen, hold): (
         Res<State<terra_world::loading::Screen>>,
@@ -114,7 +117,7 @@ pub fn capture(
             side,
             &children,
             &names,
-            &globals,
+            (&globals, &boxes),
         );
     }
     sheet.waited += 1;

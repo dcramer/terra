@@ -12,9 +12,10 @@
 //! (`CarryHold`, D560), as the figure does. `--hold <item>[@<socket>]` puts an item's held
 //! look in the right hand or the hand socket given (repeatable, `heater_shield@socket.hand.L`
 //! for the off hand), `--wear <item>` puts on an item's look for each model's body, and
-//! `--attach <file>[@<socket>]` puts on any look, on a socket if given, otherwise as the file
-//! says (`character`). `--focus <name>` looks closely at one
-//! part. `--sheet <prefix>` saves a contact sheet per clip and exits (`sheet`). With
+//! `--attach <file>[@<socket>]` puts on any look, on a socket if given (held as play holds
+//! it, on a hand), otherwise as the file says (`character`). `--focus <name>` looks closely
+//! at one part and whole at what it holds, or at a whole model without it (`--focus whole`,
+//! a part's model), of the first model. `--sheet <prefix>` saves a contact sheet per clip and exits (`sheet`). With
 //! `--remote`, `workbench.pose {clip, fraction}` holds every model at a moment of a clip, and
 //! `workbench.shape {model, template | morphs, skin}` reshapes a model's body live
 //! (`appearance`): a template by name, or any mix of morphs, such as `{"heavy": 0.5}`.
@@ -514,6 +515,11 @@ fn dress(
         let model = assets.load(GltfAssetLabel::Scene(0).from_asset(file.to_string()));
         match socket {
             Some(socket) => match character::find(root, socket, children, names) {
+                // On a hand it is held as play holds a thing, its carry pose from its file.
+                Some(hand) if socket == character::HAND_R || socket == character::HAND_L => {
+                    commands.entity(hand).insert(character::Carrying::default());
+                    character::hold(commands, model, hand);
+                }
                 Some(at) => {
                     character::hang(commands, model, at);
                 }
@@ -576,20 +582,24 @@ fn standing_height(
     stand: Vec3,
     up: Vec3,
 ) -> Option<f32> {
-    let mut highest: Option<f32> = None;
-    for (bounds, at) in boxes {
-        let (middle, half) = (Vec3::from(bounds.center), Vec3::from(bounds.half_extents));
-        for corner in 0..8 {
-            let sign = Vec3::new(
-                if corner & 1 == 0 { -1.0 } else { 1.0 },
-                if corner & 2 == 0 { -1.0 } else { 1.0 },
-                if corner & 4 == 0 { -1.0 } else { 1.0 },
-            );
-            let height = (at.transform_point(middle + half * sign) - stand).dot(up);
-            highest = Some(highest.map_or(height, |was| f32::max(was, height)));
-        }
-    }
-    highest
+    boxes
+        .flat_map(|(bounds, at)| corners(&bounds, &at))
+        .map(|corner| (corner - stand).dot(up))
+        .reduce(f32::max)
+}
+
+/// The eight corners of `bounds`, a box in the space of `at`, in the world.
+fn corners(bounds: &Aabb, at: &GlobalTransform) -> impl Iterator<Item = Vec3> + use<> {
+    let (middle, half) = (Vec3::from(bounds.center), Vec3::from(bounds.half_extents));
+    let at = *at;
+    (0..8u32).map(move |corner| {
+        let sign = Vec3::new(
+            if corner & 1 == 0 { -1.0 } else { 1.0 },
+            if corner & 2 == 0 { -1.0 } else { 1.0 },
+            if corner & 4 == 0 { -1.0 } else { 1.0 },
+        );
+        at.transform_point(middle + half * sign)
+    })
 }
 
 /// Where the camera stands to see every model whole from `degrees` round their front.
@@ -616,28 +626,50 @@ fn around(bench: &Bench, target: Vec3, degrees: f32, distance: f32, height: f32)
         .looking_at(target, bench.up)
 }
 
-/// The camera for a view from `degrees`: on the `--focus` part of the first model if
-/// there is one, otherwise on every model whole.
+/// The camera for a view from `degrees`: with a `--focus`, close on that part of the first
+/// model and whole what it holds, or on the model itself if it has no such part; otherwise
+/// on every model whole.
 fn view(
     bench: &Bench,
     focus: Option<&str>,
     degrees: f32,
     children: &Query<&Children>,
     names: &Query<&Name>,
-    globals: &Query<&GlobalTransform>,
+    (globals, boxes): (&Query<&GlobalTransform>, &Query<(&Aabb, &GlobalTransform)>),
 ) -> Transform {
-    let part = focus.zip(bench.models.first()).and_then(|(name, model)| {
-        let part = character::find(model.root, name, children, names)?;
-        globals.get(part).ok().map(GlobalTransform::translation)
+    // A model without the part (a part model, `--focus whole`) is itself looked at closely.
+    let part = focus.zip(bench.models.first()).map(|(name, model)| {
+        character::find(model.root, name, children, names).unwrap_or(model.root)
     });
-    match part {
-        Some(target) => {
-            // A part of a body bigger than a person is looked at from as much further.
-            let scale = f32::max(1.0, bench.figure / BODY_M);
-            around(bench, target, degrees, FOCUS_VIEW_M * scale, 0.15 * scale)
+    let Some((part, at)) = part.and_then(|part| Some((part, globals.get(part).ok()?))) else {
+        return whole_view(bench, degrees);
+    };
+    // A part of a body bigger than a person is looked at from as much further.
+    let scale = f32::max(1.0, bench.figure / BODY_M);
+    // What it holds is seen end to end: a tool in a hand framed whole, not the hand alone.
+    let held = children
+        .iter_descendants(part)
+        .filter_map(|each| boxes.get(each).ok())
+        .map(|(bounds, at)| (*bounds, *at));
+    let (target, distance) = match world_box(held) {
+        Some((low, high)) => {
+            let fits = (high - low).max_element() * 0.5 / libm::tanf(22.5f32.to_radians()) * 1.3;
+            ((low + high) * 0.5, f32::max(FOCUS_VIEW_M * scale, fits))
         }
-        None => whole_view(bench, degrees),
-    }
+        None => (at.translation(), FOCUS_VIEW_M * scale),
+    };
+    around(bench, target, degrees, distance, 0.15 * scale)
+}
+
+/// The world's least and greatest corner round all of `boxes`, each in its entity's space
+/// (a socket's held look); `None` when there are none.
+fn world_box(boxes: impl Iterator<Item = (Aabb, GlobalTransform)>) -> Option<(Vec3, Vec3)> {
+    boxes
+        .flat_map(|(bounds, at)| corners(&bounds, &at))
+        .fold(None, |was, point| match was {
+            Some((low, high)) => Some((Vec3::min(low, point), Vec3::max(high, point))),
+            None => Some((point, point)),
+        })
 }
 
 /// The files a model's clips come from, its clips named in the log: its own, then the
@@ -910,5 +942,34 @@ mod tests {
         let height = standing_height([trunk, crown].into_iter(), stand, up).unwrap();
         assert!((height - 8.5).abs() < 1e-4, "{height}");
         assert_eq!(standing_height(std::iter::empty(), stand, up), None);
+    }
+
+    /// A held tool is framed by the box round all its parts in the world: an axe hanging
+    /// head down from a hand, its haft and its head turned half over, spans both.
+    #[test]
+    fn a_held_look_is_boxed_round_all_its_parts() {
+        let hand = Vec3::new(0.3, 1.0, 0.0);
+        let down = Quat::from_rotation_x(std::f32::consts::PI);
+        let haft = (
+            Aabb::from_min_max(Vec3::new(-0.02, -0.08, -0.02), Vec3::new(0.02, 0.6, 0.02)),
+            GlobalTransform::from(Transform::from_translation(hand).with_rotation(down)),
+        );
+        let head = (
+            Aabb::from_min_max(Vec3::new(-0.01, 0.0, -0.12), Vec3::new(0.01, 0.1, 0.03)),
+            GlobalTransform::from(
+                Transform::from_translation(hand - Vec3::Y * 0.55).with_rotation(down),
+            ),
+        );
+        let (low, high) = world_box([haft, head].into_iter()).unwrap();
+        // The head, turned over, hangs 0.55 to 0.65 m below the hand; the haft's butt 8 cm above it.
+        assert!(
+            (low.y - 0.35).abs() < 1e-4 && (high.y - 1.08).abs() < 1e-4,
+            "{low} {high}"
+        );
+        assert!(
+            (low.z + 0.03).abs() < 1e-4 && (high.z - 0.12).abs() < 1e-4,
+            "{low} {high}"
+        );
+        assert_eq!(world_box(std::iter::empty()), None);
     }
 }
