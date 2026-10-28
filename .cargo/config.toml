@@ -5,3 +5,7 @@ xtask = "run --quiet --package xtask --"
 # Every binary loads its files from the one assets/ folder at the root (D133). A build run
 # outside Cargo, such as the Windows copy, finds assets/ next to itself instead.
 BEVY_ASSET_ROOT = { value = ".", relative = true }
+
+# A runaway test fails alone instead of taking WSL's memory (tools/memlimit).
+[target.'cfg(target_os = "linux")']
+runner = "tools/memlimit/run.sh"
