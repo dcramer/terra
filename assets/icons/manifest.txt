@@ -2,7 +2,7 @@ arming_sword painted models/held/arming_sword.glb a43f55ac49fd8aa2 -
 arrow painted - - -
 berries painted - - -
 boots painted models/gear/boots.glb 6ec8bafa4ea10f1e -
-bow painted models/held/bow.glb 8ad186cf7f4fbc44 -
+bow painted models/held/bow.glb 0ffe099e8c29c635 -
 cooked_meat painted - - -
 fibre painted - - -
 hammer painted models/held/hammer.glb b4a471d94ebb61e3 -
@@ -10,7 +10,7 @@ heater_shield painted models/held/heater_shield.glb 79d8f9b6685fc67b -
 hide painted - - -
 iron painted - - -
 iron_axe painted models/held/iron_axe.glb 7ac973f99c210d67 -
-iron_pickaxe painted models/held/iron_pickaxe.glb f37557ae442e02b2 -
+iron_pickaxe painted models/held/iron_pickaxe.glb 3a4538e0b88c44dc -
 knife painted models/held/knife.glb 280711dce2babf9c -
 large_pack painted models/gear/large_pack.glb c2dc86d0f34cbea1 -
 leather_coat painted models/gear/leather_coat.glb 12cab133e0f9a503 -
@@ -21,7 +21,7 @@ small_pack painted models/gear/small_pack.glb 5b5acf66a9864fa6 -
 spear painted models/held/spear.glb e7af5e407a9935be -
 stone painted - - -
 stone_axe painted models/held/stone_axe.glb 987ba533cdf64aa8 -
-stone_pickaxe painted models/held/stone_pickaxe.glb b767cb6a5c9c79a3 -
+stone_pickaxe painted models/held/stone_pickaxe.glb 89288e80782c76c9 -
 torch painted models/held/torch.glb 40b7906e1551a7cf -
 trousers painted models/gear/trousers.glb d78effe431724ce6 -
 wood painted - - -
