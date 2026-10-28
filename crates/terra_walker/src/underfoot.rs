@@ -24,6 +24,14 @@ pub struct Underfoot<'w, 's> {
 }
 
 impl Underfoot<'_, '_> {
+    /// The steepest ground a foot stands on, deg (`placement::Foot::walkable_deg`): the walk's
+    /// kind's slope limit; with no walk, no limit.
+    pub fn walkable_deg(&self) -> f32 {
+        self.movers
+            .as_deref()
+            .map_or(90.0, |movers| movers.kind().slope_limit_deg)
+    }
+
     /// The ground under `at`, over `root`'s level along `up`, probed from over the body's ground
     /// `body` up from the root (`placement::probe`); none with no planet, or none found.
     pub fn under(&mut self, at: Vec3, root: Vec3, up: Vec3, body: f32) -> Option<Under> {

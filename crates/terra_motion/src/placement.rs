@@ -76,6 +76,11 @@ pub const FOLD_RATIO: f32 = 0.4;
 pub struct Under {
     pub height: f32,
     pub normal: Vec3,
+    /// The normal of the ground straight under the point, where a line was read down to it
+    /// (`straight_under`): the sphere's `normal` is where it touched, which short of a face's
+    /// foot is the face's over level ground. None where the height is the sphere's own (level
+    /// ground, a face steeper than `STEEPEST_DEG`, a line that met nothing between).
+    pub straight: Option<Vec3>,
 }
 
 /// The ground under `at` (a world point), probed by `ground`, the mover's own query: a sphere
@@ -108,9 +113,11 @@ pub fn probe<Q: Query + ?Sized>(
     }
     let normal = hit.contact.normal.normalize_or(up);
     let centre = top - up * ((above + BELOW_M) * hit.fraction);
+    let (height, straight) = straight_under(ground, &sphere, centre, hit.contact.at, normal, up);
     Some(Under {
-        height: straight_under(ground, &sphere, centre, hit.contact.at, normal, up),
+        height,
         normal,
+        straight,
     })
 }
 
@@ -125,6 +132,7 @@ pub fn probe<Q: Query + ?Sized>(
 /// leaves it; a crack narrower than the sphere is no hole) and where it touched (the highest
 /// the ground under it can be, as the sphere came down clear of it). Within `STILL_M` of each
 /// other (level ground), or on a face steeper than `STEEPEST_DEG`, it is read where touched.
+/// With it, the normal the line met, where it met the ground between (`Under::straight`).
 fn straight_under<Q: Query + ?Sized>(
     ground: &Q,
     sphere: &Capsule,
@@ -132,14 +140,14 @@ fn straight_under<Q: Query + ?Sized>(
     at: Vec3,
     normal: Vec3,
     up: Vec3,
-) -> f32 {
+) -> (f32, Option<Vec3>) {
     let (rise, highest) = (normal.dot(up), at.dot(up));
     if rise < libm::cosf(STEEPEST_DEG.to_radians()) {
-        return highest;
+        return (highest, None);
     }
     let plane = normal.dot(at) / rise;
     if plane >= highest - STILL_M {
-        return highest;
+        return (highest, None);
     }
     let line = Capsule {
         a: centre,
@@ -149,8 +157,13 @@ fn straight_under<Q: Query + ?Sized>(
     };
     let down = centre.dot(up) - plane + PROBE_M;
     match ground.sweep(&line, -up * down) {
-        Some(hit) if hit.fraction > 0.0 => hit.contact.at.dot(up).clamp(plane, highest),
-        _ => plane,
+        Some(hit) if hit.fraction > 0.0 => {
+            let met = hit.contact.at.dot(up);
+            let normal = hit.contact.normal.normalize_or(up);
+            let between = met > plane - STILL_M && met < highest + STILL_M;
+            (met.clamp(plane, highest), between.then_some(normal))
+        }
+        _ => (plane, None),
     }
 }
 
@@ -165,6 +178,9 @@ pub struct Ground {
     /// put on the higher tread (`heel`, `ball`), its point over the edge has lower ground under
     /// it, and does not rest there (a lock's start reads it, `Grounded::over`).
     pub found: [Vec3; 2],
+    /// How far the foot is moved across the up to keep it off a face steeper than it stands on
+    /// (`off_face`): its toe at the face, not in it.
+    pub back: Vec3,
 }
 
 /// One foot's placing: the ground frozen for its lock, and the ground eased to.
@@ -176,6 +192,8 @@ struct Placed {
     /// The heel's and ball's ground over the root's level and its normal as eased, and the
     /// root they were over.
     eased: Option<((f32, f32, Vec3), Vec3)>,
+    /// The foot's move off a face (`Ground::back`), as eased.
+    back: Vec3,
 }
 
 impl Placed {
@@ -276,6 +294,10 @@ pub struct Foot {
     /// past that: the lock's gate read last frame's ground, and a sole that straddled an edge
     /// then (its heel on the higher tread) may be wholly over the lower one now.
     pub fresh: Option<[f32; 2]>,
+    /// The steepest ground the foot stands on, deg: the body's kind's slope limit
+    /// (`mover::Kind::slope_limit_deg`), as Unreal's foot placement honours its walkable floor
+    /// angle. A face steeper than this the foot is never raised onto (`off_face`).
+    pub walkable_deg: f32,
 }
 
 impl Placing {
@@ -359,59 +381,13 @@ impl Placing {
             reach,
             extent,
             fresh,
+            walkable_deg,
         } = foot;
         let drop = self.pelvis.drop;
         let placed = &mut self.feet[side];
         let ball_at = shown.at + shown.turn * ball;
-        let at_level = |at: Vec3| at - up * (at - root).dot(up);
-        let found = |at: Vec3, under: Option<Under>| {
-            under.map(|under| (at_level(at) + up * under.height, under.normal))
-        };
-        // The ground under the heel (the ankle) and the ball, as a rigid sole stands on it.
-        let mut sole_ground = || {
-            let heel = found(shown.at, under(shown.at));
-            let toe = found(ball_at, under(ball_at));
-            match (heel, toe) {
-                // A riser between them (heel and ball grounds steeper apart than the sole
-                // pitches to): the sole rests on the higher tread, flat on it as the tread is,
-                // its other point over the edge, as ALS aligns a foot to the normal its trace
-                // meets rather than pitching it down toward the lower tread.
-                (Some(heel), Some(toe)) if riser(heel.0, toe.0, up) => {
-                    let found = [heel.0, toe.0];
-                    if (toe.0 - heel.0).dot(up) > 0.0 {
-                        let ground = plane(toe.0, toe.1, shown.at - ball_at, up);
-                        Some(Ground {
-                            heel: ground.ball,
-                            ball: ground.heel,
-                            normal: toe.1,
-                            found,
-                        })
-                    } else {
-                        Some(Ground {
-                            found,
-                            ..plane(heel.0, heel.1, ball_at - shown.at, up)
-                        })
-                    }
-                }
-                (Some(heel), Some(toe)) => Some(Ground {
-                    heel: heel.0,
-                    ball: toe.0,
-                    normal: sole(heel.0, toe.0, (heel.1 + toe.1).normalize_or(up), up),
-                    found: [heel.0, toe.0],
-                }),
-                (Some((at, normal)), None) => Some(plane(at, normal, ball_at - shown.at, up)),
-                (None, Some((at, normal))) => {
-                    let heel = plane(at, normal, shown.at - ball_at, up);
-                    Some(Ground {
-                        heel: heel.ball,
-                        ball: heel.heel,
-                        normal,
-                        found: [heel.ball, heel.heel],
-                    })
-                }
-                (None, None) => None,
-            }
-        };
+        let walkable = libm::cosf(walkable_deg.to_radians());
+        let mut sole_ground = || sole_ground([shown.at, ball_at], root, up, walkable, &mut under);
         let (target, stepped_off) = match lock {
             _ if off => (None, false),
             Some(lock) => placed.locked(lock.at, up, sole_ground),
@@ -426,6 +402,7 @@ impl Placing {
         let probed = target.map_or((0.0, 0.0), |ground| {
             (over(ground.found[0]), over(ground.found[1]))
         });
+        let back_to = target.map_or(Vec3::ZERO, |ground| ground.back);
         let target = target.map_or((0.0, 0.0, up), |ground| {
             (over(ground.heel), over(ground.ball), ground.normal)
         });
@@ -464,9 +441,18 @@ impl Placing {
                 )
             }
         };
+        // Kept off a face (`off_face`), moved across the up, eased as its ground is.
+        let back = match was {
+            Some(_) if !stepped_off => placed.back + (back_to - placed.back) * k,
+            _ => back_to,
+        };
+        placed.back = back;
         let mut grounded = Grounded {
-            shown,
-            ball_at,
+            shown: Pose {
+                at: shown.at + back,
+                ..shown
+            },
+            ball_at: ball_at + back,
             heights: ease_for(lock.is_some()),
             probed,
             up,
@@ -602,7 +588,154 @@ fn plane(at: Vec3, normal: Vec3, reach: Vec3, up: Vec3) -> Ground {
         ball,
         normal,
         found: [at, ball],
+        back: Vec3::ZERO,
     }
+}
+
+/// The ground under a sole's heel (the ankle) and ball (`at`, world points), probed by `under`,
+/// as a rigid sole stands on it: off a face steeper than walkable (`off_face`), on the higher
+/// tread of a riser it straddles, else pitched between them.
+fn sole_ground(
+    at: [Vec3; 2],
+    root: Vec3,
+    up: Vec3,
+    walkable: f32,
+    under: &mut impl FnMut(Vec3) -> Option<Under>,
+) -> Option<Ground> {
+    let [heel_at, ball_at] = at;
+    let mut found = |at: Vec3| {
+        let level = at - up * (at - root).dot(up);
+        under(at).map(|under| (level + up * under.height, under.normal, under.straight))
+    };
+    let (heel, toe) = (found(heel_at), found(ball_at));
+    if let (Some(heel), Some(toe)) = (heel, toe)
+        && let Some(ground) = off_face(heel, toe, at, root, up, walkable)
+    {
+        return Some(ground);
+    }
+    let (heel, toe) = (
+        heel.map(|(at, n, _)| (at, n)),
+        toe.map(|(at, n, _)| (at, n)),
+    );
+    match (heel, toe) {
+        // A riser between them (heel and ball grounds steeper apart than the sole pitches
+        // to): the sole rests on the higher tread, flat on it as the tread is, its other point
+        // over the edge, as ALS aligns a foot to the normal its trace meets rather than
+        // pitching it down toward the lower tread.
+        (Some(heel), Some(toe)) if riser(heel.0, toe.0, up) => {
+            let found = [heel.0, toe.0];
+            if (toe.0 - heel.0).dot(up) > 0.0 {
+                let ground = plane(toe.0, toe.1, heel_at - ball_at, up);
+                Some(Ground {
+                    heel: ground.ball,
+                    ball: ground.heel,
+                    normal: toe.1,
+                    found,
+                    back: Vec3::ZERO,
+                })
+            } else {
+                Some(Ground {
+                    found,
+                    ..plane(heel.0, heel.1, ball_at - heel_at, up)
+                })
+            }
+        }
+        (Some(heel), Some(toe)) => Some(Ground {
+            heel: heel.0,
+            ball: toe.0,
+            normal: sole(heel.0, toe.0, (heel.1 + toe.1).normalize_or(up), up),
+            found: [heel.0, toe.0],
+            back: Vec3::ZERO,
+        }),
+        (Some((at, normal)), None) => Some(plane(at, normal, ball_at - heel_at, up)),
+        (None, Some((at, normal))) => {
+            let heel = plane(at, normal, heel_at - ball_at, up);
+            Some(Ground {
+                heel: heel.ball,
+                ball: heel.heel,
+                normal,
+                found: [heel.ball, heel.heel],
+                back: Vec3::ZERO,
+            })
+        }
+        (None, None) => None,
+    }
+}
+
+/// The toes reach this far past the ball of the foot, m: a foot kept off a face stops with its
+/// ball so far short of the face's foot (`off_face`).
+pub const TOE_M: f32 = 0.05;
+
+/// A foot is moved off a face (`off_face`) no farther than this, m.
+pub const BACK_MOST_M: f32 = 0.35;
+
+/// The ground a sole stands on when one of its points, heel or ball (`heel`, `ball`: the ground
+/// found under each, its normal where touched and straight under it), is over a face steeper
+/// than walkable (`walkable`, the cosine of the slope limit) and higher than the other: as
+/// Unreal's foot placement takes no floor its character could not stand on, the sole stands on
+/// the lower ground, pitched by that ground's own normal, moved back across the up
+/// (`Ground::back`, from `at`, the heel's and ball's places) until the point over the face is
+/// `TOE_M` short of the face's foot, the crease where its plane meets the ground's: its toe at
+/// the face, never raised up it or into it. The lower point's ground is its own where it is
+/// walkable; on the face's foot too (steep, or touched steep and read where touched), it is the
+/// body's own floor, the clip's flat ground at `root`. None where no point is over such a face
+/// higher than the other.
+fn off_face(
+    heel: (Vec3, Vec3, Option<Vec3>),
+    ball: (Vec3, Vec3, Option<Vec3>),
+    at: [Vec3; 2],
+    root: Vec3,
+    up: Vec3,
+    walkable: f32,
+) -> Option<Ground> {
+    let steep = |point: &(Vec3, Vec3, Option<Vec3>)| point.2.is_some_and(|n| n.dot(up) < walkable);
+    let higher = (ball.0 - heel.0).dot(up) > 0.0;
+    let (stand, face, ball_on_face) = match (steep(&heel), steep(&ball)) {
+        (_, true) if higher => (heel, ball, true),
+        (true, _) if !higher => (ball, heel, false),
+        _ => return None,
+    };
+    let (from, to) = if ball_on_face {
+        (at[0], at[1])
+    } else {
+        (at[1], at[0])
+    };
+    let face_normal = face.2?;
+    let (stand, normal) = match stand.2.unwrap_or(stand.1) {
+        normal if normal.dot(up) >= walkable => (stand.0, normal),
+        _ => (from - up * (from - root).dot(up), up),
+    };
+    let across = (to - from).reject_from(up);
+    let length = across.length();
+    let rise = (face.0 - stand).dot(up);
+    if length < 1e-3 || rise <= STILL_M {
+        return None;
+    }
+    let ahead = across / length;
+    // Rise per metre along the sole of the ground stood on and of the face.
+    let grade = |n: Vec3| -n.dot(ahead) / n.dot(up).max(1e-3);
+    let (ground, steeper) = (grade(normal), grade(face_normal));
+    if steeper - ground < 1e-3 {
+        return None;
+    }
+    // The crease, along the sole from the stood point, and the move putting the face's point
+    // `TOE_M` short of it.
+    let crease = (steeper * length - rise) / (steeper - ground);
+    let back = (length - (crease - TOE_M)).clamp(0.0, BACK_MOST_M);
+    let stood = stand - ahead * back - up * (ground * back);
+    let placed = plane(stood, normal, to - from, up);
+    let back = -ahead * back;
+    Some(if ball_on_face {
+        Ground { back, ..placed }
+    } else {
+        Ground {
+            heel: placed.ball,
+            ball: placed.heel,
+            normal,
+            found: [placed.ball, placed.heel],
+            back,
+        }
+    })
 }
 
 /// Whether the ground found under a sole's heel and ball (`heel`, `ball`, world points) is a

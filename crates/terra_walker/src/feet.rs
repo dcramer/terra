@@ -634,6 +634,7 @@ impl Kept {
         // pelvis lowered.
         let (_, to_lock) = leg.solve(kept_at.at, *frame.base.forward());
         self.shorts[side][1] = (to_lock - kept_at.at).length();
+        let walkable_deg = underfoot.walkable_deg();
         let grounded = self.placing.ground(
             side,
             placement::Foot {
@@ -647,6 +648,7 @@ impl Kept {
                 reach,
                 extent,
                 fresh: self.feet[side].fresh(),
+                walkable_deg,
             },
             dt,
             |at| underfoot.under(at, root, up, (ground - root).dot(up)),

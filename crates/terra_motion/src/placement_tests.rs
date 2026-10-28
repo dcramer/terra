@@ -116,6 +116,7 @@ fn foot(shown: Pose, lock: Option<Pose>, root: Vec3) -> Foot {
         reach: 0.88,
         extent: None,
         fresh: None,
+        walkable_deg: 50.0,
     }
 }
 
@@ -126,6 +127,7 @@ fn under_of(ground: impl Fn(f32) -> (f32, Vec3), root: Vec3) -> impl Fn(Vec3) ->
         Some(Under {
             height: height - root.y,
             normal,
+            straight: Some(normal),
         })
     }
 }
@@ -917,4 +919,65 @@ fn a_lock_whose_own_probe_finds_the_sole_over_a_step_down_is_refused_until_it_is
         last = frame(&mut placing, over_edge, lock, None).1;
     }
     assert!(first - last > 0.4, "{first} -> {last}");
+}
+
+/// A foot stopped against a face steeper than its kind walks (the yard's mound, 65 deg, its
+/// ball over the face) stands on the lower ground, pitched by it, its toe at the face: never
+/// raised up the face (fault (e), controller R2 job 8; Unreal's walkable floor angle). A face
+/// it walks (45 deg) still takes the foot up.
+#[test]
+fn a_foot_is_kept_off_a_face_steeper_than_walkable_with_its_toe_at_the_face() {
+    let face = |deg: f32| {
+        let n = Vec3::new(
+            -libm::sinf(deg.to_radians()),
+            libm::cosf(deg.to_radians()),
+            0.0,
+        );
+        Sdf {
+            distance: move |p: DVec3| {
+                let p = p.as_vec3();
+                p.y.min((p - Vec3::X * 0.03).dot(n))
+            },
+            steepest: 1.0,
+        }
+    };
+    let shown = flat(0.0);
+    let ball = |pose: Pose| pose.at + pose.turn * BALL;
+    let steep = face(65.0);
+    let under = |at: Vec3| probe(&steep, at.as_dvec3(), DVec3::ZERO, UP, 0.0);
+    // Placed as the clip has it, the ball would be 0.19 m into the face.
+    assert!((steep.distance)(ball(shown).as_dvec3()) < -0.05);
+    let mut placing = Placing::default();
+    let mut placed = placing.foot(0, foot(shown, None, Vec3::ZERO), DT, under);
+    let first = placed;
+    for _ in 0..30 {
+        placed = placing.foot(0, foot(shown, Some(shown), Vec3::ZERO), DT, under);
+    }
+    // On the floor at the clip's heights, unpitched; locked, it stays where it was put.
+    assert!((placed.at.y - ANKLE.y).abs() < 2e-3, "{placed:?}");
+    assert!((ball(placed).y - ball(shown).y).abs() < 2e-3, "{placed:?}");
+    assert!(
+        placed.turn.angle_between(Quat::IDENTITY) < 0.01,
+        "{placed:?}"
+    );
+    assert!(
+        placed.at.distance(first.at) < 1e-3,
+        "{first:?} -> {placed:?}"
+    );
+    // Its ball `TOE_M` short of the face's foot, out of the face.
+    let want = 0.03 - TOE_M;
+    assert!((ball(placed).x - want).abs() < 0.01, "{placed:?} vs {want}");
+    assert!((steep.distance)(ball(placed).as_dvec3()) > 0.0);
+    // Its heel up the face's foot too, it is moved back onto the body's floor.
+    let shown = flat(0.06);
+    let placed = Placing::default().foot(0, foot(shown, None, Vec3::ZERO), DT, under);
+    assert!((placed.at.y - ANKLE.y).abs() < 2e-3, "{placed:?}");
+    assert!((ball(placed).x - want).abs() < 0.01, "{placed:?} vs {want}");
+    // A walkable face takes the ball up it, the foot where the clip has it.
+    let walked = face(45.0);
+    let under = |at: Vec3| probe(&walked, at.as_dvec3(), DVec3::ZERO, UP, 0.0);
+    let mut placing = Placing::default();
+    let placed = placing.foot(0, foot(shown, None, Vec3::ZERO), DT, under);
+    assert!(ball(placed).y > ball(shown).y + 0.05, "{placed:?}");
+    assert!((ball(placed).x - ball(shown).x).abs() < 0.03, "{placed:?}");
 }
