@@ -12,7 +12,7 @@ import { join, resolve } from "node:path";
 import { after, test } from "node:test";
 import { box, readJob, slotDir, slotHome } from "./box.ts";
 import { finish, prepare, type Remote, sendLfs, snapshot, submit } from "./client.ts";
-import { next, runJob } from "./daemon.ts";
+import { next, type Running, runJob, stop } from "./daemon.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "render-flow-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -226,6 +226,44 @@ test("a job's commit takes the LFS objects its pointers name to the box; one fou
   sh(agent, "add", "lost.glb");
   sh(agent, "commit", "-q", "-m", "a pointer to nothing");
   assert.match(sendLfs(r, agent, sh(agent, "rev-parse", "HEAD")) ?? "", /1 LFS objects of [0-9a-f]{9} are neither here nor on origin/);
+});
+
+test("a bench builds ahead in its slot, waits built until the box is empty, then runs; one cancelled while it waits ends", async () => {
+  const mark = `require("fs").writeFileSync("timed.txt", String(Date.now()))`;
+  const sub = submit(r, agent, job({ class: "bench", command: ["node", "-e", mark], collect: ["timed.txt"] }));
+  const other = submit(r, agent, job({ class: "cpu", command: ["node", "-e", "setTimeout(() => {}, 200)"] }));
+  assert.ok("id" in sub && "id" in other);
+  const starts = next(b, policy, undefined, slots).start;
+  assert.deepEqual(starts.map((s) => s.job.id), [sub.id], "the bench starts building, the job behind it of a kind never run waits");
+  let built: ReturnType<typeof readJob>;
+  let sawRun = true;
+  const rb: Running = { job: starts[0].job, cancelled: false };
+  rb.ready = () => {
+    built = readJob(b, sub.id);
+    sawRun = existsSync(join(slotDir(b, starts[0].slot), "timed.txt"));
+    // Built, on a box empty but for it: it is let go.
+    const n = next(b, policy, undefined, slots);
+    assert.equal(n.go?.id, sub.id);
+    rb.go!();
+  };
+  const ended = await runJob(b, starts[0].job, starts[0].slot, rb);
+  assert.equal(built?.phase, "ready");
+  assert.ok(!sawRun, "the bench's command waits for the box");
+  assert.equal(ended.state, "done", ended.note);
+  assert.equal(ended.phase, "timed");
+  assert.ok(ended.started! <= ended.prepared! && ended.prepared! <= ended.timed!);
+  assert.ok(Number(readFileSync(join(b.jobs, sub.id, "out/timed.txt"), "utf8")) >= Date.parse(ended.timed!), "it ran once let go");
+  const log = readFileSync(join(b.jobs, sub.id, "out/job.log"), "utf8");
+  assert.match(log, /built ahead in \d+ s; waiting for the box to empty\n.*the timed run has it alone\nrender-worker: run: node -e/);
+  await runJob(b, next(b, policy, undefined, slots).start[0].job);
+
+  const again = submit(r, agent, job({ class: "bench", command: ["node", "-e", mark] }));
+  assert.ok("id" in again);
+  const rc: Running = { job: first()!, cancelled: false };
+  rc.ready = () => stop(rc);
+  const cancelled = await runJob(b, rc.job, 1, rc);
+  assert.equal(cancelled.state, "cancelled");
+  assert.equal(cancelled.phase, "ready");
 });
 
 test("--dirty runs the working tree's changes as a patch: no hook, no ref, the index untouched, and the job says so", async () => {

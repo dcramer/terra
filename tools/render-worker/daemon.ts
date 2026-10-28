@@ -13,7 +13,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSyn
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
 import { Display } from "./display.ts";
-import { boxSettings, cleanCommands, collected, displayPlan, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
+import { boxSettings, classOf, cleanCommands, collected, displayPlan, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -42,8 +42,9 @@ export function gather(job: Job, src: string, home: string, startedMs: number): 
   return found;
 }
 
-/// The running job's child, so a cancel can stop its whole process group.
-export type Running = { job: Job; child?: ChildProcess; cancelled: boolean };
+/// The running job's child, so a cancel can stop its whole process group. A bench built ahead
+/// calls `ready` and waits until the daemon calls its `go` (`plan` says when).
+export type Running = { job: Job; child?: ChildProcess; cancelled: boolean; ready?: () => void; go?: () => void };
 
 function run(cmd: string[], cwd: string, env: NodeJS.ProcessEnv, log: number, r: Running): Promise<number> {
   return new Promise((done) => {
@@ -59,6 +60,7 @@ export function stop(r: Running): void {
   try {
     if (r.child?.pid) process.kill(-r.child.pid, "SIGTERM");
   } catch {}
+  r.go?.();
 }
 
 /// What a step wrote to the log since `from`, at most its last `most` bytes.
@@ -110,7 +112,8 @@ export function slotCheckout(b: Box, slot: number, rev: string): string {
 
 /// Runs one job to its end in its slot: its steps in the slot's checkout, then its files into out/.
 export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }, display?: Display, pCores?: string): Promise<Job> {
-  let job: Job = { ...queued, slot, state: "running", started: new Date().toISOString() };
+  const bench = queued.kind === "run" && classOf(queued) === "bench";
+  let job: Job = { ...queued, slot, state: "running", started: new Date().toISOString(), ...(bench ? { phase: "prep" as const } : {}) };
   r.job = job;
   writeJob(b, job);
   const out = outDir(b, job.id);
@@ -141,16 +144,36 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
     if (display && needsDisplay(job)) note(`display: ${dpy ?? (display.why ? `none, ${display.why}` : display.describe())}`);
     for (const step of steps(job, pCores)) {
       if (r.cancelled) break;
+      if (bench && !step.prep && job.phase === "prep") {
+        // Built: hold the slot until the box is empty but for this bench, then time it alone.
+        job = { ...job, phase: "ready", prepared: new Date().toISOString() };
+        r.job = job;
+        writeJob(b, job);
+        note(`built ahead in ${Math.round((Date.parse(job.prepared as string) - Date.parse(job.started as string)) / 1000)} s; waiting for the box to empty`);
+        await new Promise<void>((resolve) => {
+          r.go = () => {
+            r.go = undefined;
+            if (r.cancelled) return resolve();
+            job = { ...job, phase: "timed", timed: new Date().toISOString() };
+            r.job = job;
+            writeJob(b, job);
+            note(`the box is empty after ${Math.round((Date.parse(job.timed as string) - Date.parse(job.prepared as string)) / 1000)} s: the timed run has it alone`);
+            resolve();
+          };
+          r.ready?.();
+        });
+        if (r.cancelled) break;
+      }
       note(`${step.what}: ${step.cmd.join(" ")}`);
       if (step.run && !ran) (startedMs = Date.now()), (ran = true);
-      const cmd = step.run ? [...limitArgs(job), ...step.cmd] : step.cmd;
-      const env = step.run || step.cmd[0] === "cargo" ? jobEnv(process.env, home, job.id, join(src, "target"), dpy) : process.env;
+      const cmd = step.run || step.build ? [...limitArgs(job), ...step.cmd] : step.cmd;
+      const env = step.run || step.build || step.cmd[0] === "cargo" ? jobEnv(process.env, home, job.id, join(src, "target"), dpy) : process.env;
       const from = statSync(logFile).size;
       let code = await run(cmd, src, env, log, r);
       // A build that broke on the slot's stale artifacts (a link error naming a workspace
       // crate, or a registry crate's corrupt rlib) is cleaned of them and run once more, as
       // build farms retry a cache's fault.
-      const stale = code !== 0 && code !== 124 && step.run && !r.cancelled && !cleaned ? staleBuild(since(logFile, from), packagesOf(src), lockedOf(src)) : undefined;
+      const stale = code !== 0 && code !== 124 && (step.run || step.build) && !r.cancelled && !cleaned ? staleBuild(since(logFile, from), packagesOf(src), lockedOf(src)) : undefined;
       if (stale) {
         cleaned = stale.packages.join(", ");
         note(`stale build (${stale.why}): cleaning ${cleaned} and running it again`);
@@ -207,11 +230,11 @@ export function housekeep(b: Box, keepDays: number, now = new Date(), mine: Read
   }
 }
 
-/// The jobs the policy and the free slots let start now, each with its slot, and why the rest
-/// wait.
-export function next(b: Box, policy: Policy, ciLock: string | undefined, slots: Slots, now = new Date()): { start: Start[]; why?: string } {
+/// The jobs the policy and the free slots let start now, each with its slot, the bench built
+/// ahead to let go to its timed run, and why the rest wait.
+export function next(b: Box, policy: Policy, ciLock: string | undefined, slots: Slots, now = new Date()): { start: Start[]; go?: Job; why?: string } {
   const jobs = listJobs(b);
-  if (!jobs.some((j) => j.state === "queued")) return { start: [] };
+  if (!jobs.some((j) => j.state === "queued" || (j.state === "running" && j.phase === "ready"))) return { start: [] };
   const may = mayStart(policy, now.getHours() * 60 + now.getMinutes(), policy.afterCi && ciBusy(ciLock, now.getTime()));
   return may.ok ? plan(jobs, slots) : { start: [], why: may.why };
 }
@@ -252,9 +275,15 @@ async function daemon(b: Box): Promise<number> {
       say("restarting on new code");
       return 0;
     }
-    const n = restart ? { start: [], why: "restarting on new code once its jobs end" } : next(b, s.policy, s.ciLock, s.slots);
+    // Restarting, nothing new starts, but a bench built ahead still has its timed run.
+    const planned = next(b, s.policy, s.ciLock, s.slots);
+    const n = restart ? { start: [], go: planned.go, why: "restarting on new code once its jobs end" } : planned;
+    if (n.go) {
+      say(`slot ${n.go.slot}: ${n.go.id} has the box for its timed run`);
+      running.get(n.go.id)?.go?.();
+    }
     for (const { job, slot } of n.start) {
-      const r: Running = { job, cancelled: false };
+      const r: Running = { job, cancelled: false, ready: () => wakeUp() };
       running.set(job.id, r);
       say(`slot ${slot}: running ${job.id} (${short(job)})`);
       runJob(b, job, slot, r, display, pCores).then((j) => {

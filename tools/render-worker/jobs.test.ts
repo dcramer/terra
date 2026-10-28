@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { benchHold, boxSettings, chooseWorker, cleanCommands, collected, commandKey, config, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
+import { benchHold, boxSettings, buildAhead, chooseWorker, cleanCommands, collected, commandKey, config, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -123,17 +123,25 @@ test("slots: four jobs at once, the GPU cap holds and CPU jobs pass, a bench wai
   // A job queued before classes is classed by its command (a trailer: GPU).
   assert.deepEqual(plan([...running, at(4)], s).start, []);
 
-  // A bench waits for the box to empty, and a job behind it of a kind never run waits too.
+  // A bench builds in a free slot while the box drains for it; a job behind it of a kind never
+  // run waits.
   const bench = at(2, { class: "bench" });
   const b1 = plan([at(1, { ...cpu, state: "running", slot: 3 }), bench, at(3, cpu)], s);
-  assert.deepEqual(b1, { start: [], why: "a bench waits for the box to empty" });
-  // On an empty box it starts alone, and while it runs nothing else does.
-  assert.deepEqual(slotsOf(plan([bench, at(3, cpu)], s)), [["02", 1]]);
+  assert.deepEqual(slotsOf(b1), [["02", 1]]);
+  assert.equal(b1.why, "a bench waits for the box to empty");
+  // Built, it holds its slot until the box is empty but for it, then is let go to its timed run,
+  // and while that runs nothing else starts.
+  const built = { ...bench, state: "running" as const, slot: 1, phase: "ready" as const };
+  assert.deepEqual(plan([at(1, { ...cpu, state: "running", slot: 3 }), built, at(3, cpu)], s), { start: [], why: "a bench waits for the box to empty" });
+  assert.deepEqual(plan([built, at(3, cpu)], s), { start: [], go: built, why: "a bench has the box" });
+  assert.deepEqual(plan([{ ...built, phase: "timed" }, at(3, cpu)], s), { start: [], why: "a bench has the box" });
+  // A bench started before phases is in its timed run.
   assert.deepEqual(plan([{ ...bench, state: "running", slot: 1 }, at(3, cpu)], s), { start: [], why: "a bench has the box" });
-  // A warm build queued after it (an update) waits behind it too.
-  const warmAfter = at(4, { kind: "warm", slot: 2, class: "cpu" });
-  assert.deepEqual(plan([at(1, { ...cpu, state: "running", slot: 3 }), bench, warmAfter], s), { start: [], why: "a bench waits for the box to empty" });
-  assert.deepEqual(slotsOf(plan([bench, warmAfter], s)), [["02", 1]]);
+  // On an empty box it starts building, and a GPU job behind of a kind never run waits for it.
+  assert.deepEqual(slotsOf(plan([bench, at(3, gpu)], s)), [["02", 1]]);
+  // A warm build queued after it (an update) waits behind it too, and keeps its own slot.
+  const warmAfter = at(4, { kind: "warm", slot: 1, class: "cpu" });
+  assert.deepEqual(slotsOf(plan([at(1, { ...cpu, state: "running", slot: 3 }), bench, warmAfter], s)), [["02", 2]]);
 });
 
 // ---- A bench's drain, and benches back to back (D319) ----
@@ -166,20 +174,23 @@ test("while the box drains for a bench, only jobs that will be over before it ha
   const film = at(0, "sh film.sh 2", { class: "gpu", state: "running", started: iso(0), slot: 1 });
   const bench = at(1, "cargo xtask bench crypt", { class: "bench" });
   const behind = [at(2, "cargo test -p a", { class: "cpu" }), at(3, "sh long.sh", { class: "gpu" }), at(4, "node new.ts", { class: "gpu" }), at(5, "sh still.sh", { class: "gpu" }), at(6, "cargo test -p b", { class: "cpu" })];
-  // The film has 25 minutes left at the least: the test, the still and the new test (as long as
-  // the longest CPU job, a minute) fill the free slots; the 40-minute job and the new GPU kind wait.
+  // The film has 25 minutes left at the least: the bench builds in a slot, and the test, the
+  // still and the new test (as long as the longest CPU job, a minute) may fill the free ones;
+  // the 40-minute job and the new GPU kind wait.
   const p = plan([...history, film, bench, ...behind], s4, T0 + 5 * 60_000);
-  assert.deepEqual(ids(p), ["cargo test -p a", "sh still.sh", "cargo test -p b"]);
+  assert.deepEqual(ids(p), ["cargo xtask bench crypt", "cargo test -p a", "sh still.sh"]);
   assert.equal(p.why, "a bench waits for the box to empty");
+  const building = { ...bench, state: "running" as const, started: iso(2), slot: 2, phase: "prep" as const };
+  assert.deepEqual(ids(plan([...history, film, building, ...behind], s4, T0 + 5 * 60_000)), ["cargo test -p a", "sh still.sh"]);
   // Two minutes before the film's soonest end the three-minute still no longer fits.
-  assert.deepEqual(ids(plan([...history, film, bench, ...behind], s4, T0 + 28 * 60_000)), ["cargo test -p a", "cargo test -p b"]);
+  assert.deepEqual(ids(plan([...history, film, building, ...behind], s4, T0 + 28 * 60_000)), ["cargo test -p a", "cargo test -p b"]);
   // Past its shortest run the film may end any moment: nothing behind the bench starts.
-  assert.deepEqual(plan([...history, film, bench, ...behind], s4, T0 + 31 * 60_000).start, []);
+  assert.deepEqual(plan([...history, film, building, ...behind], s4, T0 + 31 * 60_000).start, []);
   // A running job of a kind never run gives no end to fill up to.
-  assert.deepEqual(plan([...history, { ...film, command: ["node", "other.ts"] }, bench, ...behind], s4, T0 + 5 * 60_000).start, []);
-  // A job queued ahead of the bench keeps its turn, however long.
+  assert.deepEqual(plan([...history, { ...film, command: ["node", "other.ts"] }, building, ...behind], s4, T0 + 5 * 60_000).start, []);
+  // A job queued ahead of the bench keeps its turn, however long, and the bench builds after it.
   const ahead = at(0.5, "sh long.sh", { class: "gpu", id: "20261028-120030-0000" });
-  assert.deepEqual(ids(plan([...history, film, ahead, bench], s4, T0 + 5 * 60_000)), ["sh long.sh"]);
+  assert.deepEqual(ids(plan([...history, film, ahead, bench], s4, T0 + 5 * 60_000)), ["sh long.sh", "cargo xtask bench crypt"]);
 });
 
 test("benches queued together run back to back on the drained box; a job between goes first only when cheaper", () => {
@@ -195,10 +206,56 @@ test("benches queued together run back to back on the drained box; a job between
   const between = at(0.5, "sh film.sh 3", { class: "gpu", id: "20261028-120030-0000" });
   const b5 = at(1, "cargo xtask bench crypt", { class: "bench" });
   assert.deepEqual(ids(plan([...history, between, b5], s4, T0 + 5 * 60_000)), ["cargo xtask bench crypt"]);
-  // A one-minute test between them waits less than the 20-minute bench would make it: it goes first.
+  // A one-minute test between them waits less than the 20-minute bench would make it: it goes
+  // first, the bench building beside it.
   const test1 = at(0.5, "cargo test -p a", { class: "cpu", id: "20261028-120030-0000" });
   const b20 = at(1, "cargo xtask bench town", { class: "bench" });
-  assert.deepEqual(ids(plan([...history, test1, b20], s4, T0 + 5 * 60_000)), ["cargo test -p a"]);
+  assert.deepEqual(ids(plan([...history, test1, b20], s4, T0 + 5 * 60_000)), ["cargo test -p a", "cargo xtask bench town"]);
+  // Built before the test is over, the bench is let go only once it is.
+  const built = { ...b20, state: "running" as const, started: iso(5), prepared: iso(6), slot: 2, phase: "ready" as const };
+  assert.equal(plan([...history, { ...test1, state: "running", started: iso(5), slot: 1 }, built], s4, T0 + 6 * 60_000).go, undefined);
+  assert.equal(plan([...history, built], s4, T0 + 7 * 60_000).go, built);
+});
+
+test("a bench builds ahead: what its command will build, before a timed run that has the box alone", () => {
+  // What it builds is what the bench would build first, in the same profile.
+  const sandbox = (profile: string) => ["cargo", "build", "-q", "--profile", profile, "-p", "terra_sandbox"];
+  const xtask = ["cargo", "build", "-q", "-p", "xtask"];
+  assert.deepEqual(buildAhead("cargo xtask bench crypt --runs 3".split(" ")), [xtask, sandbox("bench")]);
+  assert.deepEqual(buildAhead("cargo xtask bench crypt --debug".split(" ")), [xtask, sandbox("dev")]);
+  assert.deepEqual(buildAhead("cargo xtask gpu bench -- cargo xtask bench town".split(" ")), [xtask, sandbox("bench")]);
+  assert.deepEqual(buildAhead("cargo xtask gpu bench -- node castlejob/bench.ts run cc5f952b".split(" ")), [xtask], "another command's builds stay in its run");
+  // Every step before the run is the build ahead; the run alone is timed, on the performance cores.
+  const s = steps(job({ class: "bench", command: "cargo xtask bench crypt".split(" ") }), "0-15");
+  assert.deepEqual(s.map((x) => [x.what, !!x.prep]), [["check out the job's commit", true], ["clean all but the build", true], ["cook textures", true], ["build ahead of the box", true], ["build ahead of the box", true], ["run", false]]);
+  assert.deepEqual(s[4].cmd, ["nice", "-n", "10", ...sandbox("bench")]);
+  assert.ok(s[4].build && !s[4].run);
+  assert.ok(!steps(job()).some((x) => x.prep || x.build), "only a bench builds ahead");
+
+  // Its build and its timed run are timed apart: the build is one kind for every bench.
+  const done = ran(-100, "cargo xtask bench crypt", 12, { class: "bench", phase: "timed", prepared: iso(-98), timed: iso(-95) });
+  const est = estimator([done, ran(-60, "cargo xtask bench town", 30, { class: "bench", phase: "timed", prepared: iso(-57), timed: iso(-50) })]);
+  assert.equal(est(at(0, "cargo xtask bench crypt", { class: "bench" }), "long"), 7 * 60_000, "the timed run, from the box empty to its end");
+  assert.equal(est(at(0, "cargo xtask bench walk", { class: "bench", phase: "prep" }), "short"), 2 * 60_000, "the shortest build of any bench");
+  assert.equal(est(at(0, "cargo xtask bench walk", { class: "bench", phase: "prep" }), "long"), 3 * 60_000);
+
+  // On a box empty but for the bench building, a job behind it fills a slot only if it is over
+  // by the build's soonest end; a job ahead of it goes first when that is cheaper (D319).
+  const building = at(1, "cargo xtask bench crypt", { class: "bench", state: "running", started: iso(1), slot: 1, phase: "prep" });
+  const quick = ran(-30, "cargo test -p a", 1, { class: "cpu" });
+  const behind = at(2, "cargo test -p a", { class: "cpu" });
+  assert.deepEqual(ids(plan([done, quick, building, behind], s4, T0 + 1.5 * 60_000)), ["cargo test -p a"], "a minute fits in the two the build takes");
+  assert.deepEqual(plan([done, quick, building, behind], s4, T0 + 2.5 * 60_000).start, [], "not once half a minute is left");
+  const older = at(0.5, "cargo test -p a", { class: "cpu", id: "20261028-120030-0000" });
+  assert.deepEqual(ids(plan([done, quick, older, building], s4, T0 + 1.5 * 60_000)), ["cargo test -p a"], "a minute's test ahead goes before a 7-minute bench");
+  const film = ran(-200, "sh film.sh 1", 40, { class: "gpu" });
+  const olderFilm = at(0.5, "sh film.sh 2", { class: "gpu", id: "20261028-120030-0000" });
+  assert.deepEqual(plan([done, film, olderFilm, building], s4, T0 + 1.5 * 60_000).start, [], "a 40-minute film ahead waits for it");
+
+  // --status says what the bench does in its slot.
+  assert.match(benchHold([done, building, behind], new Date(T0 + 2 * 60_000)).join("\n"), /building 20261028-120100-0001 ahead in slot 1 for 1m/);
+  const ready = { ...building, phase: "ready" as const, prepared: iso(2) };
+  assert.match(benchHold([done, ready, behind], new Date(T0 + 3 * 60_000)).join("\n"), /20261028-120100-0001 built in slot 1 1m ago, its timed run next/);
 });
 
 test("replayed on random queues, a bench never runs beside another job and every job runs", () => {
@@ -214,12 +271,24 @@ test("replayed on random queues, a bench never runs beside another job and every
       jobs.push(at(q, command, { class: c, id: `20261028-${String(100000 + n).padStart(6, "0")}-${String(n).padStart(4, "0")}`, queued: iso(q), minutes: 120 }));
       end.set(jobs[n].id, Math.ceil(took * (0.5 + rand())));
     }
+    // A bench builds for 1 to 2 minutes in its slot, waits built, then times its run alone.
     for (let t = 0; t < 5000 && jobs.some((j) => j.state !== "done"); t++) {
-      for (const j of jobs) if (j.state === "running" && Date.parse(j.started!) + end.get(j.id)! * 60_000 <= T0 + t * 60_000) Object.assign(j, { state: "done", ended: iso(t) });
-      const visible = jobs.filter((j) => Date.parse(j.queued) <= T0 + t * 60_000);
-      for (const { job: j, slot } of plan(visible, s4, T0 + t * 60_000).start) Object.assign(j, { state: "running", started: iso(t), slot });
+      const now = T0 + t * 60_000;
+      for (const j of jobs) {
+        if (j.state !== "running") continue;
+        if (j.phase === "prep" && Date.parse(j.started!) + (1 + (end.get(j.id)! % 2)) * 60_000 <= now) Object.assign(j, { phase: "ready", prepared: iso(t) });
+        else if (Date.parse(j.timed ?? j.started!) + end.get(j.id)! * 60_000 <= now && j.phase !== "prep" && j.phase !== "ready") Object.assign(j, { state: "done", ended: iso(t) });
+      }
+      const visible = jobs.filter((j) => Date.parse(j.queued) <= now);
+      const p = plan(visible, s4, now);
+      if (p.go) {
+        assert.equal(p.start.length, 0, "nothing starts with the bench let go");
+        Object.assign(p.go, { phase: "timed", timed: iso(t) });
+      }
+      for (const { job: j, slot } of p.start) Object.assign(j, { state: "running", started: iso(t), slot, ...(j.class === "bench" ? { phase: "prep" } : {}) });
       const running = jobs.filter((j) => j.state === "running");
-      assert.ok(!(running.length > 1 && running.some((j) => j.class === "bench")), `round ${round}, minute ${t}: a bench ran beside ${running.length - 1} jobs`);
+      assert.ok(!(running.length > 1 && running.some((j) => j.phase === "timed")), `round ${round}, minute ${t}: a bench was timed beside ${running.length - 1} jobs`);
+      assert.ok(running.filter((j) => j.class === "bench").length <= 1, `round ${round}, minute ${t}: two benches held slots`);
     }
     assert.ok(jobs.every((j) => j.state === "done"), `round ${round}: every job ran`);
   }

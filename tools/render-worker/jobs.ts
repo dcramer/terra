@@ -30,6 +30,13 @@ export type Job = {
   state: State;
   started?: string;
   ended?: string;
+  /// A running bench's part (`benchPhase`): `prep` checks out, cooks and builds in its slot
+  /// beside other jobs, `ready` holds its slot built until the box is empty, `timed` has the
+  /// box alone for its measured run. Absent on a bench started before phases: `timed`.
+  phase?: "prep" | "ready" | "timed";
+  /// When a bench was built and ready, and when its timed run began.
+  prepared?: string;
+  timed?: string;
   exit?: number;
   note?: string;
   /// Set when the job runs uncommitted changes (`--dirty`): `rev` is then a snapshot of the
@@ -225,6 +232,12 @@ export function jobClass(command: string[], flag?: "cpu" | "gpu"): Class {
 /// A job's class: as queued, or for one queued before classes, from its command.
 export const classOf = (job: Pick<Job, "class" | "command" | "kind">): Class => job.class ?? (job.kind === "warm" ? "cpu" : jobClass(job.command));
 
+/// A running bench's part: `timed` unless it says (one started before phases had the box alone).
+export const benchPhase = (job: Pick<Job, "phase">) => job.phase ?? "timed";
+
+/// Whether a running job holds the box alone: a bench in its timed run.
+const alone = (job: Job) => classOf(job) === "bench" && benchPhase(job) === "timed";
+
 // ---- Which worker takes a job ----
 
 /// What the client learns from a worker before queueing.
@@ -298,9 +311,12 @@ export type Start = { job: Job; slot: number };
 // ---- How long a job takes, from the jobs like it the box ran (for a bench's drain) ----
 
 /// A command with its revisions and numbers blanked, so `sh film.sh art c3` and `… c4`, or a
-/// check at another `--base`, are one kind; a warm build is its own.
-export function commandKey(job: Pick<Job, "kind" | "command">): string {
+/// check at another `--base`, are one kind; a warm build is its own, and so is a bench's build
+/// ahead of its turn, whatever the bench (the same cook and build of the sandbox).
+export const PREP = "bench prep";
+export function commandKey(job: Pick<Job, "kind" | "command" | "phase">): string {
   if (job.kind === "warm") return "warm";
+  if (job.phase === "prep") return PREP;
   return job.command.join(" ").replace(/\b[0-9a-f]{7,40}\b/g, "<rev>").replace(/\d+/g, "#");
 }
 
@@ -321,13 +337,20 @@ export function estimator(jobs: Job[]): Estimate {
   type Run = { ms: number; done: boolean; ended: number };
   const runs = new Map<string, Run[]>();
   const cpu: Run[] = [];
+  const add = (key: string, run: Run) => runs.set(key, [...(runs.get(key) ?? []), run]);
   for (const j of jobs) {
     if (!j.started || !j.ended || (j.state !== "done" && j.state !== "failed")) continue;
-    const key = commandKey(j);
-    const list = runs.get(key) ?? [];
-    const run = { ms: Date.parse(j.ended) - Date.parse(j.started), done: j.state === "done", ended: Date.parse(j.ended) };
-    list.push(run);
-    runs.set(key, list);
+    const ended = Date.parse(j.ended);
+    // A bench built ahead is two runs: its build (to when it was ready, or to its end if it
+    // failed there) and its timed run, the part that has the box.
+    if (j.phase) {
+      const built = j.prepared ? Date.parse(j.prepared) : ended;
+      add(PREP, { ms: built - Date.parse(j.started), done: !!j.prepared, ended: built });
+      if (j.timed) add(commandKey({ ...j, phase: undefined }), { ms: ended - Date.parse(j.timed), done: j.state === "done", ended });
+      continue;
+    }
+    const run = { ms: ended - Date.parse(j.started), done: j.state === "done", ended };
+    add(commandKey(j), run);
     if (classOf(j) === "cpu" && j.kind === "run") cpu.push(run);
   }
   for (const list of runs.values()) list.sort((a, b) => b.ended - a.ended).splice(ESTIMATE_FROM);
@@ -359,41 +382,69 @@ export function drainEnd(running: Job[], now: number, est: Estimate): number {
 /// they make every later one faster, each in the slot it warms; then the oldest queued. A GPU
 /// job waits while TERRA_RENDER_GPU_SLOTS run, and a CPU job behind it may pass.
 ///
-/// A bench has the box alone, card and cores, since a build beside it moves its frame times
-/// (D185, D319): it starts only on an empty box and nothing starts while it runs. Once one is
-/// queued the box drains for it. Jobs queued ahead of it keep their turn. A job behind it starts
-/// only if it will be over before the box would empty anyway: the longest of the last of its
-/// kind (`estimator`) ends before the running jobs' soonest end (`drainEnd`), so it fills a free
-/// slot and never holds the bench back. On an empty box the next bench goes ahead of the jobs
-/// queued before it since the last one (back to back) when that costs less waiting than draining
-/// again for it: those jobs times the bench's run against the bench and the jobs behind it times
-/// the drain they would make. Replayed on the box's queue of 27-28 October the rules cut the
-/// jobs' waiting by 14% and the benches' by 2%, no bench ever beside another job (D319).
-export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[]; why?: string } {
+/// A bench has the box alone, card and cores, for its timed run, since a build beside it moves
+/// its frame times (D185, D319): that run starts only on a box empty but for it and nothing
+/// starts while it runs. What comes before it, the checkout, the cook and the build of what it
+/// times (`buildAhead`), needs no quiet box and changes nothing measured (the same binary,
+/// built in the same slot), so the first queued bench does it in a slot of its own as a CPU
+/// job at its turn while the box drains (`prep`), then holds that slot built (`ready`) and is
+/// let go (`go`) once the rest of the box is empty: its time alone is only the timed run.
+///
+/// Once a bench is queued the box drains for it. Jobs queued ahead of it keep their turn. A job
+/// behind it starts only if it will be over before the box would empty anyway: the longest of
+/// the last of its kind (`estimator`) ends before the running jobs' soonest end and the bench's
+/// build (`drainEnd`), so it fills a free slot and never holds the bench back. On a box empty
+/// but for the bench, it goes ahead of the jobs queued before it since the last one (back to
+/// back) when that costs less waiting than draining again for it: those jobs times the bench's
+/// run against the bench and the jobs behind it times the drain they would make. Replayed on
+/// the box's queue of 27-28 October the drain rules cut the jobs' waiting by 14% and the
+/// benches' by 2%, no bench ever beside another job (D319).
+export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[]; go?: Job; why?: string } {
   const running = jobs.filter((j) => j.state === "running");
   const busy = new Set(running.map((j) => j.slot ?? 1));
-  let gpu = running.filter((j) => classOf(j) !== "cpu").length;
-  const benches = jobs.filter((j) => j.state === "queued" && classOf(j) === "bench").sort((a, b) => a.id.localeCompare(b.id));
   const queued = jobs.filter((j) => j.state === "queued").sort((a, b) => Number(b.kind === "warm") - Number(a.kind === "warm") || a.id.localeCompare(b.id));
+  const start: Start[] = [];
+  if (running.some(alone)) return { start, why: queued.length ? "a bench has the box" : undefined };
+  // The bench building or built ahead (one at a time), else the first queued.
+  const held = running.find((j) => classOf(j) === "bench");
+  const others = running.filter((j) => j !== held);
+  let gpu = others.filter((j) => classOf(j) !== "cpu").length;
+  const benches = queued.filter((j) => classOf(j) === "bench").sort((a, b) => a.id.localeCompare(b.id));
+  const bench = held ?? benches[0];
   const pinned = (j: Job) => (j.slot && j.slot <= s.slots ? j.slot : undefined);
   const reserved = new Set(queued.map(pinned).filter((n) => n !== undefined));
-  const start: Start[] = [];
-  if (running.some((j) => classOf(j) === "bench")) return { start, why: queued.length ? "a bench has the box" : undefined };
   const est = estimator(jobs);
-  if (benches.length && !busy.size) {
-    const b = benches[0];
-    const ahead = queued.filter((j) => classOf(j) !== "bench" && j.id.localeCompare(b.id) < 0);
-    const behind = queued.filter((j) => j.id.localeCompare(b.id) > 0).length;
-    const ms = (j: Job) => est(j, "long") ?? j.minutes * 60_000;
+  const busyWhy = queued.length ? "a bench has the box" : undefined;
+  let first = false;
+  if (bench && !others.length) {
+    const ahead = queued.filter((j) => classOf(j) !== "bench" && j.id.localeCompare(bench.id) < 0);
+    const behind = queued.filter((j) => j.id.localeCompare(bench.id) > 0).length;
+    const ms = (j: Job) => est({ ...j, phase: undefined }, "long") ?? j.minutes * 60_000;
     const drain = Math.max(0, ...ahead.map(ms));
-    if (ahead.length * ms(b) <= (1 + behind) * drain) return { start: [{ job: b, slot: 1 }], why: queued.length > 1 ? "a bench has the box" : undefined };
+    first = ahead.length * ms(bench) <= (1 + behind) * drain;
+    if (first && held?.phase === "ready") return { start, go: held, why: busyWhy };
   }
-  const until = benches.length ? drainEnd(running, now, est) : Infinity;
-  let why: string | undefined = benches.length ? "a bench waits for the box to empty" : undefined;
+  // When the box will be empty for the bench: the others drained and the bench built.
+  const built = (j: Job, from: number) => Math.max(now, from + (est({ ...j, phase: "prep" }, "short") ?? 0));
+  let until = !bench ? Infinity : Math.max(drainEnd(others, now, est), held?.phase === "prep" && held.started ? built(held, Date.parse(held.started)) : now);
+  let why: string | undefined = bench ? "a bench waits for the box to empty" : undefined;
   for (const job of queued) {
     const c = classOf(job);
-    if (c === "bench") continue;
-    if (benches.length && job.id.localeCompare(benches[0].id) > 0) {
+    if (c === "bench") {
+      if (job !== bench) continue;
+      const slot = Array.from({ length: s.slots }, (_, i) => i + 1).find((n) => !busy.has(n) && !reserved.has(n));
+      if (!slot) {
+        why = `the bench waits for a slot to build in; all ${s.slots} slots are taken`;
+        continue;
+      }
+      busy.add(slot);
+      start.push({ job, slot });
+      until = Math.max(until, built(job, now));
+      continue;
+    }
+    // The bench goes ahead of the jobs queued before it on the box empty for it.
+    if (bench && first && job.id.localeCompare(bench.id) < 0) continue;
+    if (bench && job.id.localeCompare(bench.id) > 0) {
       const long = est(job, "long");
       if (long === undefined || now + long > until) continue;
     }
@@ -411,8 +462,8 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
     if (c === "gpu") gpu++;
     start.push({ job, slot });
   }
-  // An empty box where none of the jobs ahead could start after all: the bench goes.
-  if (benches.length && !busy.size) return { start: [{ job: benches[0], slot: 1 }], why: queued.length > 1 ? "a bench has the box" : undefined };
+  // A box empty but for the built bench, where none of the jobs ahead could start after all: it goes.
+  if (held?.phase === "ready" && !others.length && !start.length) return { start, go: held, why: busyWhy };
   return { start, why };
 }
 
@@ -439,7 +490,9 @@ export function benchHold(jobs: Job[], now: Date): string[] {
   const est = estimator(jobs);
   const t = now.getTime();
   const running = jobs.filter((j) => j.state === "running");
-  const bench = running.find((j) => classOf(j) === "bench");
+  const bench = running.find(alone);
+  const held = running.find((j) => classOf(j) === "bench" && !alone(j));
+  const others = running.filter((j) => j !== held);
   const queued = jobs.filter((j) => j.state === "queued").sort((a, b) => a.id.localeCompare(b.id));
   const next = queued.filter((j) => classOf(j) === "bench");
   const kind = (j: Job) => {
@@ -447,10 +500,12 @@ export function benchHold(jobs: Job[], now: Date): string[] {
     return long === undefined ? "" : `, its kind took up to ${span(long)}`;
   };
   const out = [`bench hold: ${span(t - since)}, since ${new Date(since).toISOString().slice(11, 16)} UTC`];
-  if (bench) out.push(`  running ${bench.id} for ${ago(bench.started ?? bench.queued, now)}${kind(bench)}: ${short(bench)}`);
+  if (bench) out.push(`  running ${bench.id} for ${ago(bench.timed ?? bench.started ?? bench.queued, now)}${kind(bench)}: ${short(bench)}`);
   else {
-    const left = drainEnd(running, t, est) - t;
-    out.push(`  draining: ${running.length} job${running.length === 1 ? "" : "s"} still running, the box empty ${left >= 60_000 ? `in ${span(left)} at the soonest` : "any moment"}; only jobs that end before then start`);
+    if (held?.phase === "prep") out.push(`  building ${held.id} ahead in slot ${held.slot} for ${ago(held.started ?? held.queued, now)}: ${short(held)}`);
+    if (held?.phase === "ready") out.push(`  ${held.id} built in slot ${held.slot} ${ago(held.prepared ?? held.queued, now)} ago, its timed run next: ${short(held)}`);
+    const left = drainEnd(others, t, est) - t;
+    out.push(`  draining: ${others.length} job${others.length === 1 ? "" : "s"} still running, the box empty ${left >= 60_000 ? `in ${span(left)} at the soonest` : "any moment"}; only jobs that end before then start`);
   }
   if (next.length) out.push(`  benches next: ${next.map((j) => `${j.id} (waiting ${ago(j.queued, now)}${kind(j)})`).join(", ")}`);
   const behind = queued.filter((j) => classOf(j) !== "bench");
@@ -553,7 +608,31 @@ export function collected(relative: string, mtimeMs: number, startedMs: number):
   return mtimeMs >= startedMs - 1000;
 }
 
-export type Step = { what: string; cmd: string[]; run?: boolean };
+/// `run`: the job's command (or a warm build). `prep`: a bench's step before its timed run,
+/// done in its slot beside other jobs. `build`: a build ahead of a bench, held to the job's
+/// limit and in the job's environment as a run is, so the run finds it fresh.
+export type Step = { what: string; cmd: string[]; run?: boolean; prep?: boolean; build?: boolean };
+
+/// What a bench's command will build before it times anything, built ahead in its slot with
+/// the same arguments, profile and environment, so the bench's own build finds it fresh and
+/// the binary timed is the one it would have built: xtask for any `cargo xtask`, and for
+/// `cargo xtask bench` (alone or after `cargo xtask gpu bench --`) the sandbox in the bench
+/// profile, the dev one with `--debug` (xtask/src/bench.rs `sandbox_program`). Another
+/// command's own builds stay in its timed run.
+export function buildAhead(command: string[]): string[][] {
+  const builds: string[][] = [];
+  for (let i = 0; i + 1 < command.length; i++) {
+    if (command[i] !== "cargo" || command[i + 1] !== "xtask") continue;
+    if (!builds.length) builds.push(["cargo", "build", "-q", "-p", "xtask"]);
+    const rest = command.slice(i + 2);
+    const words = rest.filter((w) => !w.startsWith("-"));
+    if (words[0] === "bench") {
+      const profile = rest.includes("--debug") ? "dev" : "bench";
+      return [...builds, ["cargo", "build", "-q", "--profile", profile, "-p", "terra_sandbox"]];
+    }
+  }
+  return builds;
+}
 
 /// The box's steps for a job in its slot's checkout, a worktree of the clone its commit was
 /// pushed to, so the commit is there already: what each is, as a command, so `plan` can print
@@ -561,6 +640,8 @@ export type Step = { what: string; cmd: string[]; run?: boolean };
 /// niced, but a bench's: it has the box alone, so it runs at the normal priority (niced, the
 /// box's own services outrank it), on the performance cores when `pCores` names them
 /// (`performanceCores`), so its main and render threads never land on an efficiency core.
+/// A bench's steps before its run are `prep`, with its builds ahead (`buildAhead`), niced:
+/// they run while the box drains, and only the run has the box (`plan`).
 export function steps(job: Job, pCores?: string): Step[] {
   const s: Step[] = [
     { what: "check out the job's commit", cmd: ["git", "checkout", "-q", "--detach", "--force", job.rev] },
@@ -570,6 +651,10 @@ export function steps(job: Job, pCores?: string): Step[] {
   if (job.cook) s.push({ what: "cook textures", cmd: ["cargo", "xtask", "cook"] });
   const runs = job.kind === "warm" ? WARM : [job.command];
   const bench = job.kind === "run" && classOf(job) === "bench";
+  if (bench) {
+    for (const cmd of buildAhead(job.command)) s.push({ what: "build ahead of the box", cmd: ["nice", "-n", "10", ...cmd], build: true });
+    for (const step of s) step.prep = true;
+  }
   const prefix = bench ? (pCores ? ["taskset", "-c", pCores] : []) : ["nice", "-n", "10"];
   for (const cmd of runs) s.push({ what: job.kind === "warm" ? "warm build" : "run", cmd: [...prefix, ...cmd], run: true });
   return s;

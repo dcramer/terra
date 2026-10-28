@@ -158,10 +158,11 @@ function status(b: Box, json: boolean): number {
   console.log(d ? `daemon: ${d.alive ? "running" : "not running"} (${d.mode}, at ${d.rev}, since ${ago(d.since, now)} ago, last word ${ago(d.beat, now)} ago): ${d.status}` : "daemon: never started (cargo xtask remote-render --update)");
   const s = boxSettings(boxEnv(b));
   if (!("error" in s)) {
-    console.log(`slots: ${s.slots.slots}, of them ${s.slots.gpuSlots} for GPU jobs; a bench has the box alone`);
+    console.log(`slots: ${s.slots.slots}, of them ${s.slots.gpuSlots} for GPU jobs; a bench builds in a slot, then has the box alone for its timed run`);
     for (let n = 1; n <= s.slots.slots; n++) {
       const j = jobs.find((j) => j.state === "running" && (j.slot ?? 1) === n);
-      console.log(`  slot ${n}: ${j ? `${j.id} running ${ago(j.started ?? j.queued, now)}  ${short(j)}` : "free"}`);
+      const doing = j?.phase === "prep" ? "building ahead" : j?.phase === "ready" ? "built, waits for the box" : "running";
+      console.log(`  slot ${n}: ${j ? `${j.id} ${doing} ${ago(j.started ?? j.queued, now)}  ${short(j)}` : "free"}`);
     }
   }
   for (const line of benchHold(jobs, now)) console.log(line);
@@ -201,6 +202,7 @@ function plan(b: Box): number {
   const p = planJobs(listJobs(b), s.slots);
   console.log(`render-box: ${!may.ok ? `would wait: ${may.why}` : p.start.length ? `would start ${p.start.length} now` : "would start nothing now"}${p.why ? `; ${p.why}` : ""}`);
   for (const { job, slot } of p.start) for (const st of steps(job)) console.log(`  ${job.id} in slot ${slot}, ${st.what}: ${st.cmd.join(" ")}`);
+  if (p.go) console.log(`  ${p.go.id}, built in slot ${p.go.slot}, would start its timed run`);
   return 0;
 }
 
