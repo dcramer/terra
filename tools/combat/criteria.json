@@ -2937,6 +2937,86 @@
   {
    "measurable": true,
    "cost": "cheap",
+   "id": "held.wrap.sword",
+   "noticed": 1,
+   "notice": "the sword hand's fingers bent near the hilt but not round it",
+   "bar": {
+    "at_least": 80
+   },
+   "unit": "deg",
+   "source": "the developer's still of the carried axe, 2026-10-28: the handle sits under bent fingers, not in a closed fist, where held.fist read 0.8 cm; grip.ts wrapOf: how far round the handle's line each finger comes from its knuckle, the least, every move and clip on every template (WRAP_DEG)",
+   "check": {
+    "by": "moves",
+    "row": "fist",
+    "measure": "fist_wrap_deg.arming_sword"
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "held.wrap.axe_carried",
+   "noticed": 1,
+   "notice": "an axe carried at a jog: the handle under bent fingers, not in a closed fist",
+   "bar": {
+    "at_least": 80
+   },
+   "unit": "deg",
+   "source": "the developer's still, 2026-10-28 (review-desk stills, grip-axe-jog-before-after): the iron axe in the right hand through the walker's carried clips (terra_walker::character::CARRIED_IN), tipped by the carry rule, the arms kept off the hips (fit.ts's run); grip.ts wrapOf",
+   "check": {
+    "by": "moves",
+    "row": "fist",
+    "measure": "fist_wrap_deg.iron_axe",
+    "hold": [
+     "socket.hand.R=assets/models/held/iron_axe.glb"
+    ],
+    "args": ["--set", "none", "--carry", "--arms", "--also", "Idle_Loop,Idle_Talking_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Jump_Start,Jump_Loop,Jump_Land,Crouch_Idle_Loop,Crouch_Fwd_Loop"]
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "held.fist.axe_carried",
+   "noticed": 1,
+   "notice": "an axe carried at a jog: the fingers off its handle",
+   "bar": {
+    "at_most": 1
+   },
+   "unit": "cm",
+   "source": "the developer's still, 2026-10-28; as held.wrap.axe_carried, grip.ts fistOff",
+   "check": {
+    "by": "moves",
+    "row": "fist",
+    "measure": "fist_cm.iron_axe",
+    "hold": [
+     "socket.hand.R=assets/models/held/iron_axe.glb"
+    ],
+    "args": ["--set", "none", "--carry", "--arms", "--also", "Idle_Loop,Idle_Talking_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Jump_Start,Jump_Loop,Jump_Land,Crouch_Idle_Loop,Crouch_Fwd_Loop"]
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
+   "id": "held.carry.axe_down",
+   "noticed": 1,
+   "notice": "an axe carried at a jog came up level, pointing ahead, as the forearm swung up",
+   "bar": {
+    "at_most": 10
+   },
+   "unit": "deg",
+   "source": "the developer's still, 2026-10-28 (D564): how far above level the carried axe's working end rises at most, every carried clip and template (moves.ts carried_rise_deg; negative is tipped down). The jog's forearm swing raised it to +37 deg before carry_hand; a jump's arms swing up and lift it a little above level, so the bar is a little",
+   "check": {
+    "by": "moves",
+    "row": "fist",
+    "measure": "carried_rise_deg.iron_axe",
+    "hold": [
+     "socket.hand.R=assets/models/held/iron_axe.glb"
+    ],
+    "args": ["--set", "none", "--carry", "--arms", "--also", "Idle_Loop,Idle_Talking_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Jump_Start,Jump_Loop,Jump_Land,Crouch_Idle_Loop,Crouch_Fwd_Loop"]
+   }
+  },
+  {
+   "measurable": true,
+   "cost": "cheap",
    "id": "held.shield.grip_across_palm",
    "noticed": 3,
    "notice": "the fist cannot close on the shield's hand strap: the strap, across the board square to the forearm, runs into the hand instead of across the palm",
