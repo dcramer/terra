@@ -129,14 +129,31 @@ sctk_adwaita=off";
 /// nothing to enter.
 const SCHEDULES_ONLY: &str = ",bevy_ecs=warn,bevy_ecs::schedule::schedule=info";
 
-/// The log plugin's filter.
+/// In a Tracy build (D577), the frame mark Bevy's renderer sends Tracy as an event each frame.
+const TRACY_FRAMES: &str = ",bevy_render::renderer=info";
+
+/// The log plugin's filter. A Tracy build (`tracy`, D577) lets every system's span through,
+/// for Tracy's timeline, and the renderer's frame mark.
 pub fn filter() -> String {
-    let systems = crate::recorder::reporting();
+    let tracy = cfg!(feature = "tracy");
+    let systems = tracy || crate::recorder::reporting();
     format!(
-        "{},{QUIET}{}",
+        "{},{QUIET}{}{}",
         bevy::log::DEFAULT_FILTER,
-        if systems { "" } else { SCHEDULES_ONLY }
+        if systems { "" } else { SCHEDULES_ONLY },
+        if tracy { TRACY_FRAMES } else { "" }
     )
+}
+
+/// Whether an event is Tracy's frame mark, which is for Tracy, not the log (Bevy keeps it
+/// out of its own console the same way).
+pub(crate) fn frame_mark(event: &Event<'_>) -> bool {
+    cfg!(feature = "tracy")
+        && event
+            .metadata()
+            .fields()
+            .field("tracy.frame_mark")
+            .is_some()
 }
 
 /// For the log plugin's `custom_layer`: starts the record and hands the log its writers,
@@ -168,6 +185,9 @@ struct Writer(Record);
 
 impl<S: Subscriber> Layer<S> for Writer {
     fn on_event(&self, event: &Event<'_>, _: Context<'_, S>) {
+        if frame_mark(event) {
+            return;
+        }
         let metadata = event.metadata();
         self.0
             .add(*metadata.level(), metadata.target(), said(event));

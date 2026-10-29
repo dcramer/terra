@@ -22,6 +22,7 @@ mod sizes;
 mod stage;
 mod sweep;
 mod tasks;
+mod tracy;
 mod windows;
 mod worktrees;
 

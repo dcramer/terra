@@ -8,6 +8,7 @@
 //! played last. Whatever `play` does (cook first, the release build by default, D581), the
 //! launcher does: it ends in `windows::start`.
 
+use crate::tracy::Mode;
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::PathBuf;
 
@@ -101,16 +102,22 @@ impl Build {
 /// is `auto`, the GPU's own preset (D239).
 const QUALITIES: [&str; 4] = ["low", "medium", "high", "ultra"];
 
-/// What the session measures (docs/launcher.md, "Diagnosing performance"): nothing, or a
-/// session report written as the game exits (D576, `cargo xtask profile`).
+/// What the session measures (docs/launcher.md, "Diagnosing performance"): nothing, a
+/// session report written as the game exits (D576, `cargo xtask profile`), or that and
+/// Tracy's profiler watching it live (D577, `cargo xtask profile play --tracy`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Profiling {
     #[default]
     Off,
     Report,
+    Live,
 }
 
-const PROFILINGS: [(Profiling, &str); 2] = [(Profiling::Off, "off"), (Profiling::Report, "report")];
+const PROFILINGS: [(Profiling, &str); 3] = [
+    (Profiling::Off, "off"),
+    (Profiling::Report, "report"),
+    (Profiling::Live, "live"),
+];
 
 impl Profiling {
     fn word(self) -> &'static str {
@@ -118,6 +125,14 @@ impl Profiling {
             .iter()
             .find(|p| p.0 == self)
             .map_or("off", |p| p.1)
+    }
+
+    /// As the screen shows it.
+    fn shown(self) -> &'static str {
+        match self {
+            Profiling::Live => "live (Tracy)",
+            other => other.word(),
+        }
     }
 
     fn from_word(word: &str) -> Option<Profiling> {
@@ -256,10 +271,9 @@ impl Request {
                 }
                 "--profiling" => {
                     let word = args.next().map_or("", String::as_str);
-                    request.profiling = Some(
-                        Profiling::from_word(word)
-                            .ok_or(format!("--profiling is off or report, not `{word}` (D576)"))?,
-                    );
+                    request.profiling = Some(Profiling::from_word(word).ok_or(format!(
+                        "--profiling is off, report or live, not `{word}` (D576, D577)"
+                    ))?);
                 }
                 "--last" => request.last = true,
                 "--menu" => request.menu = true,
@@ -330,7 +344,7 @@ pub(crate) fn play(args: &[String]) -> bool {
         Ok(request) => request,
         Err(why) => {
             eprintln!(
-                "✗ play: {why}. `cargo xtask play [continue|new|creative|yard] [--build optimised|debug] [--quality auto|low|medium|high|ultra] [--profiling off|report] [--last] [--menu] [-- game args]`."
+                "✗ play: {why}. `cargo xtask play [continue|new|creative|yard] [--build optimised|debug] [--quality auto|low|medium|high|ultra] [--profiling off|report|live] [--last] [--menu] [-- game args]`."
             );
             return false;
         }
@@ -371,7 +385,8 @@ pub(crate) fn play(args: &[String]) -> bool {
     let game = launch.game_args(&request.game);
     match launch.profiling {
         Profiling::Off => crate::windows::start(launch.build, game),
-        Profiling::Report => crate::profile::report(launch.build, &game, "play"),
+        Profiling::Report => crate::profile::report(launch.build, &game, "play", Mode::Off),
+        Profiling::Live => crate::profile::report(launch.build, &game, "play", Mode::Live),
     }
 }
 
@@ -507,7 +522,7 @@ fn options(launch: &mut Launch, out: &mut dyn Write, read: &mut Ask<'_>) -> Opti
     let answer = read(
         out,
         &format!(
-            "Profiling: off, or report (what the session spent its time on, written when you quit) [{}] ",
+            "Profiling: off, report (what the session spent its time on, written when you quit) or live (Tracy: watch every system as it runs) [{}] ",
             launch.profiling.word()
         ),
     )?;
@@ -515,15 +530,24 @@ fn options(launch: &mut Launch, out: &mut dyn Write, read: &mut Ask<'_>) -> Opti
         match pick(&answer, &words).and_then(Profiling::from_word) {
             Some(profiling) => {
                 launch.profiling = profiling;
-                if profiling == Profiling::Report {
-                    let _ = writeln!(
-                        out,
-                        "A report build times every system, so its frames run about a sixth slower; its first launch builds it, a few minutes."
-                    );
+                let said = match profiling {
+                    Profiling::Off => None,
+                    Profiling::Report => Some(
+                        "A report build times every system, so its frames run about a sixth slower; its first launch builds it, a few minutes.",
+                    ),
+                    Profiling::Live => Some(
+                        "Tracy's profiler opens beside the game and shows every system as it runs, and the report is written when you quit. Its first launch fetches Tracy and builds the game again, a few minutes.",
+                    ),
+                };
+                if let Some(said) = said {
+                    let _ = writeln!(out, "{said}");
                 }
             }
             None => {
-                let _ = writeln!(out, "`{answer}` is not off or report; profiling is kept.");
+                let _ = writeln!(
+                    out,
+                    "`{answer}` is not off, report or live; profiling is kept."
+                );
             }
         }
     }
@@ -550,7 +574,7 @@ fn screen(launch: &Launch, last: Option<Choice>, header: &str) -> String {
         "  Build: {}   Quality: {}   Profiling: {}      o  change these",
         launch.build.word(),
         launch.quality.unwrap_or("auto (the GPU's preset)"),
-        launch.profiling.word()
+        launch.profiling.shown()
     ));
     lines.push(String::new());
     lines.push(format!(

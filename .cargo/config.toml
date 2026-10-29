@@ -5,6 +5,10 @@ xtask = "run --quiet --package xtask --"
 # Every binary loads its files from the one assets/ folder at the root (D133). A build run
 # outside Cargo, such as the Windows copy, finds assets/ next to itself instead.
 BEVY_ASSET_ROOT = { value = ".", relative = true }
+# A C++ dependency of the Windows build (Tracy's client in a `tracy` build, D577) links
+# MinGW's libstdc++ into the program (the `cc` crate reads this), so the copy run from
+# Windows' temp folder needs no MinGW DLL beside it; without it the game does not start.
+CXXSTDLIB_STATIC_x86_64_pc_windows_gnu = "1"
 
 # A runaway test fails alone instead of taking WSL's memory (tools/memlimit).
 [target.'cfg(target_os = "linux")']

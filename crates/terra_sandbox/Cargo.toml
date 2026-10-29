@@ -31,6 +31,8 @@ terra_world.workspace = true
 [features]
 # The frame recorder's freeze lines (terra_world's `hitch-log`, D576).
 hitch-log = ["terra_world/hitch-log"]
+# Tracy's client, for the Tracy profiler (terra_world's `tracy`, D577).
+tracy = ["terra_world/tracy"]
 # Bevy keeps the line of code behind every spawn and component change, for the remote's
 # `sandbox.why` (`r why`, D548). On in every dev build of the sandbox (xtask, the remote's
 # `start` and the seed pass it), never in a release or bench build, which are timed.

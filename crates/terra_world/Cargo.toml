@@ -27,6 +27,10 @@ terra_core.workspace = true
 terra_gen.workspace = true
 terra_land.workspace = true
 terra_voxel.workspace = true
+# Only in the `tracy` feature, and only to switch on `only-localhost` in the client Bevy's
+# `trace_tracy` brings: the game then listens and announces itself on 127.0.0.1 alone, so a
+# profiling build is not open to the network nor asks Windows' firewall to let it (D577).
+tracy-client = { version = "0.19", optional = true, default-features = false, features = ["only-localhost"] }
 
 # macOS's App Nap throttles a run whose window is hidden, as scripted runs' are; the run
 # asks it not to (shell::stay_awake). Already built for Bevy's windowing (winit).
@@ -48,6 +52,10 @@ testing = []
 # Bevy's spans compiled in, so the frame recorder (recorder.rs, D576) says what ran long in a
 # freeze. Not in every build: compiled in, it cost the `world` scene 9.7 to 11.5 ms a frame.
 hitch-log = ["bevy/trace"]
+# Tracy's client (Bevy's `trace_tracy`, D577): every span, systems included, sent to the
+# Tracy profiler live or to `tracy-capture`. A profiling build only, never one handed out; it
+# has Bevy's spans, so the recorder runs as in `hitch-log`.
+tracy = ["hitch-log", "bevy/trace_tracy", "dep:tracy-client"]
 
 [lints]
 workspace = true

@@ -254,8 +254,9 @@ pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
     move |app: &mut App| {
         // Timing render passes takes GPU counters, which Metal cannot time anyway and runs
         // out of as new pipelines appear, losing the device and quitting the game. On macOS
-        // the render and GPU times show as "-".
-        if !cfg!(target_os = "macos") {
+        // the render and GPU times show as "-". Bevy's RenderPlugin adds it itself in a Tracy
+        // build (`tracing-tracy`, D577), and a plugin added twice panics.
+        if !cfg!(target_os = "macos") && !app.is_plugin_added::<RenderDiagnosticsPlugin>() {
             app.add_plugins(RenderDiagnosticsPlugin);
         }
         app.add_plugins((

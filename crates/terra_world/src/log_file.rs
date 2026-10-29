@@ -167,6 +167,9 @@ struct FileWriter {
 
 impl<S: Subscriber> Layer<S> for FileWriter {
     fn on_event(&self, event: &Event<'_>, _: Context<'_, S>) {
+        if crate::record::frame_mark(event) {
+            return;
+        }
         let metadata = event.metadata();
         let line = format!(
             "{} f{} {} {}: {}\n",

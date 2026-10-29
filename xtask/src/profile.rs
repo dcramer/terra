@@ -3,16 +3,19 @@
 //! a person, and prints the head of the session report it writes as it exits: the load's
 //! longest steps, the frames, the slowest of them with what held them, the costliest systems.
 //! The whole report, about a hundred lines, is kept in the checkout's `logs/` for an agent.
-//! The launcher's `Profiling: report` plays through the same path.
+//! The launcher's `Profiling: report` plays through the same path. With `--tracy` (D577) the
+//! build is a Tracy build: a walk is also captured by `tracy-capture` and its costliest zones
+//! printed; a game played opens Tracy's profiler on it, live (the launcher's `Profiling: live`).
 
 use crate::launcher::Build;
+use crate::tracy::Mode;
 use crate::{Task, output, root};
 
 /// The tasks this module runs (D410).
 pub(crate) const TASKS: &[Task] = &[Task {
     name: "profile",
-    takes: "[walk|play] [--seconds 60] [--build optimised|debug] [-- game args]",
-    does: "what a session spends (D576): build with the frame recorder, walk play-walk's route by script for --seconds (walk, the default) or play until you quit (play) on the real GPU, and print the session report's head; the whole report lands in logs/",
+    takes: "[walk|play] [--seconds 60] [--build optimised|debug] [--tracy] [-- game args]",
+    does: "what a session spends (D576): build with the frame recorder, walk play-walk's route by script for --seconds (walk, the default) or play until you quit (play) on the real GPU, and print the session report's head; the whole report lands in logs/. --tracy (D577): a Tracy build; a walk also keeps a capped Tracy capture in logs/ and prints its costliest zones, a game played opens Tracy's profiler live",
     group: "Play and check",
     run: profile,
 }];
@@ -25,8 +28,7 @@ const KEPT: usize = 10;
 const HEAD_LINES: usize = 4;
 
 fn profile(args: &[String]) -> bool {
-    let usage =
-        "`cargo xtask profile [walk|play] [--seconds 60] [--build optimised|debug] [-- game args]`";
+    let usage = "`cargo xtask profile [walk|play] [--seconds 60] [--build optimised|debug] [--tracy] [-- game args]`";
     let (ours, extra) = match args.iter().position(|a| a == "--") {
         Some(at) => (&args[..at], &args[at + 1..]),
         None => (args, &[][..]),
@@ -34,9 +36,11 @@ fn profile(args: &[String]) -> bool {
     let mut walk = true;
     let mut seconds = 60u32;
     let mut build = Build::Optimised;
+    let mut tracy = false;
     let mut ours = ours.iter();
     while let Some(arg) = ours.next() {
         match arg.as_str() {
+            "--tracy" => tracy = true,
             "walk" => walk = true,
             "play" => walk = false,
             "--seconds" => match ours.next().and_then(|s| s.parse().ok()) {
@@ -72,7 +76,12 @@ fn profile(args: &[String]) -> bool {
         game.extend(extra.iter().cloned());
         game
     };
-    report(build, &game, if walk { "walk" } else { "play" })
+    let tracy = match (tracy, walk) {
+        (false, _) => Mode::Off,
+        (true, true) => Mode::Capture(seconds + crate::tracy::LOAD_BOUND_S),
+        (true, false) => Mode::Live,
+    };
+    report(build, &game, if walk { "walk" } else { "play" }, tracy)
 }
 
 /// The game's arguments for a scripted walk: `play-walk`'s new game and route (D578),
@@ -94,23 +103,52 @@ pub(crate) fn walk_args(seconds: u32, extra: &[String]) -> Vec<String> {
 
 /// Runs the game with the session report on, played when `kind` is `play` (its output in the
 /// terminal and its log brought home) and otherwise walked quietly, then keeps the report in
-/// `logs/` and prints its head and path.
-pub(crate) fn report(build: Build, game: &[String], kind: &str) -> bool {
+/// `logs/` and prints its head and path. With Tracy (`tracy`), a Tracy build, its profiler
+/// opened first or a capture taken beside it (`crate::tracy`).
+pub(crate) fn report(build: Build, game: &[String], kind: &str, tracy: Mode) -> bool {
     let played = kind == "play";
     let mut args = game.to_vec();
     args.push(format!("--profile-report={REPORT}"));
+    let tools = match tracy {
+        Mode::Off => None,
+        Mode::Live | Mode::Capture(_) => match crate::tracy::fetch() {
+            Some(folder) => Some(folder),
+            None => return false,
+        },
+    };
+    let mut capture = None;
+    if let Some(folder) = &tools {
+        match tracy {
+            Mode::Live => crate::tracy::open_profiler(folder),
+            Mode::Capture(seconds) => {
+                capture = crate::tracy::Capture::start(folder, seconds, kind);
+                if capture.is_none() {
+                    return false;
+                }
+            }
+            Mode::Off => {}
+        }
+    }
     let game = crate::windows::Game {
         package: "terra_sandbox",
         profile: build.profile(),
-        features: Some("hitch-log"),
-        copy: Some("profile"),
+        features: Some(if tools.is_some() {
+            "tracy"
+        } else {
+            "hitch-log"
+        }),
+        copy: Some(if tools.is_some() { "tracy" } else { "profile" }),
         args: &args,
         output: (!played).then_some("profile-output.log"),
         played,
     };
     let Some((ok, folder)) = game.run() else {
+        if let Some(capture) = capture {
+            capture.abandon();
+        }
         return false;
     };
+    let captured = capture.is_none_or(crate::tracy::Capture::finish);
     let Ok(text) = std::fs::read_to_string(folder.join(REPORT)) else {
         eprintln!(
             "✗ profile: the game wrote no report at {}; its output is {}.",
@@ -152,7 +190,7 @@ pub(crate) fn report(build: Build, game: &[String], kind: &str) -> bool {
             folder.join("profile-output.log").display()
         );
     }
-    ok
+    ok && captured
 }
 
 /// The report's head: its first line, and the first lines of each section after.

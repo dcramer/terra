@@ -107,7 +107,7 @@ fn a_flag_the_launcher_cannot_read_is_refused_with_what_it_takes() {
     let why = Request::parse(&args(&["--quality", "epic"])).unwrap_err();
     assert!(why.contains("low, medium, high or ultra"), "{why}");
     let why = Request::parse(&args(&["--profiling", "loud"])).unwrap_err();
-    assert!(why.contains("off or report"), "{why}");
+    assert!(why.contains("off, report or live"), "{why}");
 }
 
 #[test]
@@ -237,6 +237,10 @@ fn options_change_the_build_quality_and_profiling_by_word_or_its_first_letters()
         Some(launch(Choice::Creative, Build::Optimised, None))
     );
     assert!(shown.contains("`epic` is not a preset"), "{shown}");
+    // Live is Tracy's, and says so on the screen.
+    let (chosen, shown) = drive(Launch::default(), "o\n\n\nlive\n\n");
+    assert_eq!(chosen.map(|launch| launch.profiling), Some(Profiling::Live));
+    assert!(shown.contains("Profiling: live (Tracy)"), "{shown}");
 }
 
 #[test]

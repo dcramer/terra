@@ -159,6 +159,13 @@ pub(crate) fn doctor() -> bool {
     );
 
     art_tools(&mut report);
+    println!("\nProfiling");
+    let tracy = crate::tracy::matches();
+    report.look(
+        tracy.as_ref().unwrap_or_else(|why| why),
+        tracy.is_ok(),
+        "Tracy's profiler and the game's client must be one version (D577)",
+    );
     if os == "linux" {
         leftovers(&mut report, on_wsl);
     }
