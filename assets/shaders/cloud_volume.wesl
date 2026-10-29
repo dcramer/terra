@@ -561,9 +561,9 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
 
     // Past the march, the layer on to the air's horizon, flat at its kind's middle height as the
     // 2D layer is drawn, from the same map and shapes, so the field never ends in a ring.
-    // A ray still inside the layer where the march ends sees it edge-on for tens of kilometres:
-    // as much of it as the weather there covers, drawn whole rather than as the columns at 32 km,
-    // which stood as walls round the eye.
+    // A ray still inside the layer where the march ends, above its sheet, sees it edge-on for
+    // tens of kilometres: drawn as one band rather than as the columns at 32 km, which stood as
+    // walls round the eye.
     if reach > MARCH_M && transmittance >= 0.01 {
         let c = column(eye_map + way * MARCH_M);
         let h = c.base + c.thickness * 0.35;
@@ -573,9 +573,13 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
         var opacity = 0.0;
         var far = c;
         var far_at = MARCH_M;
-        if lift > 0.0 && lift < 1.0 {
-            let w = weather_at(eye_map + way * MARCH_M);
-            opacity = smoothstep(0.0, 0.2, max(params.map.w, w.r)) * 0.9;
+        if lift >= 0.35 && lift < 1.0 {
+            // Past the sheet's height at the march's end: the heaps there, by their shapes'
+            // coverage as below it, thinning to nothing at the layer's top, so the band meets the
+            // sheet below it without a seam and fades out above. Drawn by the weather's flat
+            // cover, it stood as bright tiles a map texel wide on the horizon, edged top and
+            // bottom (tundra round 11).
+            opacity = smoothstep(0.0, 0.35, c.coverage) * 0.9 * smoothstep(1.0, 0.35, lift);
         } else if crossing.x <= crossing.y && at >= MARCH_M && at < reach {
             far = column(eye_map + way * at);
             far_at = at;
