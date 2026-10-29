@@ -718,7 +718,7 @@ fn append_line(path: &Path, header: &str, line: &str) -> bool {
 fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, PathBuf)> {
     let profile = if release { "bench" } else { "dev" };
     if on_wsl() {
-        return windows_program("terra_sandbox", profile, Some(copy));
+        return windows_program("terra_sandbox", profile, None, Some(copy));
     }
     if !crate::stage::build(&["build", "--profile", profile, "-p", "terra_sandbox"]) {
         return None;

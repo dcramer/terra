@@ -32,7 +32,7 @@ pub(crate) const TASKS: &[Task] = &[
     },
     Task {
         name: "win",
-        takes: "-p <package> [--release] [--copy <name>] [-- args]",
+        takes: "-p <package> [--release] [--features <list>] [--copy <name>] [-- args]",
         does: "under WSL, build for Windows and run it there, on the real GPU",
         group: "This machine",
         run: win,
@@ -71,20 +71,30 @@ fn launch(args: &[String], played: bool) -> bool {
         .iter()
         .position(|a| a == "--copy")
         .and_then(|i| ours.get(i + 1));
+    // Cargo features for the build, such as `trace` for a Chrome trace of every system's run
+    // (`TRACE_CHROME=trace.json WSLENV=TRACE_CHROME`, written in the copy's folder).
+    let features = ours
+        .iter()
+        .position(|a| a == "--features")
+        .and_then(|i| ours.get(i + 1));
     let Some(package) = ours
         .iter()
         .position(|a| a == "-p")
         .and_then(|i| ours.get(i + 1))
     else {
         eprintln!(
-            "usage: cargo xtask win -p <package> [--release] [--copy <name>] [-- program args]"
+            "usage: cargo xtask win -p <package> [--release] [--features <list>] [--copy <name>] [-- program args]"
         );
         return false;
     };
 
     let profile = if release { "release" } else { "dev" };
-    let Some((program, run_dir)) = windows_program(package, profile, copy.map(String::as_str))
-    else {
+    let Some((program, run_dir)) = windows_program(
+        package,
+        profile,
+        features.map(String::as_str),
+        copy.map(String::as_str),
+    ) else {
         return false;
     };
     let exe_name = format!("{package}.exe");
@@ -123,6 +133,7 @@ fn launch(args: &[String], played: bool) -> bool {
 pub(crate) fn windows_program(
     package: &str,
     profile: &str,
+    features: Option<&str>,
     copy: Option<&str>,
 ) -> Option<(PathBuf, PathBuf)> {
     let mut build = vec![
@@ -136,6 +147,9 @@ pub(crate) fn windows_program(
     ];
     if profile == "dev" {
         build.extend(crate::tasks::sandbox::dev_features(package));
+    }
+    if let Some(features) = features {
+        build.extend(["--features", features]);
     }
     if !crate::stage::build(&build) {
         return None;

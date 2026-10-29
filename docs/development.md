@@ -210,6 +210,12 @@ TRACE_CHROME=world.json BEVY_ASSET_ROOT=$PWD target/release/terra_sandbox --expe
 node tools/sandbox/spans.ts world.json            # --generics splits a material's systems by type
 ```
 
+Under WSL the Linux build draws on the CPU, so trace the Windows build on the real GPU; the trace lands in its copy's folder (`cargo xtask win` prints it):
+
+```bash
+TRACE_CHROME=world.json WSLENV=TRACE_CHROME cargo xtask gpu still -- cargo xtask win -p terra_sandbox --release --features trace --copy trace -- --experiment play --time 17 --offscreen --bench --settle 240 --bench-frames 600
+```
+
 It prints, for the game and the render world, the frame by schedule (wall clock, as schedules run one after another), the longest systems in the slowest frames, and the systems by their 99th percentile. A parallel system's span holds its wait for the workers too, so a system that fans out tiny work looks dearer than it is: confirm with the benchmark. A trace runs to gigabytes; keep it out of the repository.
 
 ## Judging a material
