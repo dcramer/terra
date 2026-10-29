@@ -18,7 +18,7 @@ use crate::shell::Options;
 use crate::sky::Sky;
 use bevy::{camera::Exposure, pbr::DistanceFog, prelude::*};
 use eye::{SNOW_DARK_ADAPTS, open_exposure, wooded_night_ev};
-use keys::keys;
+use keys::{air_sun_gain, keys};
 use std::f32::consts::TAU;
 use terra_gen::smoothstep;
 
@@ -346,6 +346,7 @@ pub fn plugin(app: &mut App) {
                 follow_the_date,
                 seen_from_the_camera,
                 shine,
+                air_sun,
             )
                 .chain()
                 .in_set(Ticking),
@@ -414,6 +415,23 @@ fn seen_from_the_camera(
 
 fn tick(time: Res<Time>, mut clock: ResMut<Clock>) {
     clock.advance(time.delta_secs());
+}
+
+/// The sun the air scatters for the hour, brighter than the world's at a low sun (D212,
+/// `keys::air_sun_gain`); set only when it changes, which redraws the air's tables.
+fn air_sun(
+    clock: Res<Clock>,
+    path: Option<Res<SkyPath>>,
+    mut air: Query<&mut bevy::pbr::AtmosphereSettings, With<MainCamera>>,
+) {
+    let Some(path) = path else { return };
+    let height = path.height(clock.hour);
+    let gain = air_sun_gain(height, light_at(height).illuminance);
+    for mut settings in &mut air {
+        if (settings.sun_gain - gain).abs() > 1.0e-4 {
+            settings.sun_gain = gain;
+        }
+    }
 }
 
 /// Lights the world for the hour: the sun or the moon, the sky and the shade.

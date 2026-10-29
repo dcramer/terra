@@ -85,7 +85,7 @@ pub(super) fn keys() -> [(f32, Light); 7] {
             0.0,
             Light {
                 light: ABOVE_AIR,
-                illuminance: 30_000.0 * held(w0),
+                illuminance: LOW_SUN_LUX * held(w0),
                 warm: w0,
                 horizon: v(0.95, 0.55, 0.38),
                 zenith: v(0.16, 0.24, 0.52),
@@ -102,7 +102,7 @@ pub(super) fn keys() -> [(f32, Light); 7] {
             6.0,
             Light {
                 light: ABOVE_AIR,
-                illuminance: 30_000.0 * held(w6),
+                illuminance: LOW_SUN_LUX * held(w6),
                 warm: w6,
                 horizon: v(1.0, 0.64, 0.42),
                 zenith: v(0.2, 0.36, 0.72),
@@ -119,7 +119,7 @@ pub(super) fn keys() -> [(f32, Light); 7] {
             12.0,
             Light {
                 light: ABOVE_AIR,
-                illuminance: 30_000.0 * held(w12),
+                illuminance: LOW_SUN_LUX * held(w12),
                 warm: w12,
                 horizon: v(1.0, 0.72, 0.5),
                 zenith: v(0.21, 0.4, 0.78),
@@ -136,7 +136,7 @@ pub(super) fn keys() -> [(f32, Light); 7] {
             20.0,
             Light {
                 light: ABOVE_AIR,
-                illuminance: 30_000.0 * held(w20),
+                illuminance: LOW_SUN_LUX * held(w20),
                 warm: w20,
                 horizon: v(0.92, 0.86, 0.78),
                 zenith: v(0.22, 0.44, 0.84),
@@ -154,7 +154,7 @@ pub(super) fn keys() -> [(f32, Light); 7] {
             Light {
                 light: ABOVE_AIR,
                 warm: ABOVE_AIR,
-                illuminance: 32_000.0,
+                illuminance: HIGH_SUN_LUX,
                 horizon: v(0.86, 0.9, 0.96),
                 zenith: v(0.2, 0.44, 0.86),
                 glow: v(1.0, 0.92, 0.8),
@@ -180,4 +180,28 @@ fn held(warm: Vec3) -> f32 {
         0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue
     };
     luminance(warm) / luminance(ABOVE_AIR)
+}
+
+/// The low sun's illuminance above the air, lux, before `held` dims it for the ground.
+const LOW_SUN_LUX: f32 = 30_000.0;
+/// The high sun's, from the 60-degree key up, which is not held.
+const HIGH_SUN_LUX: f32 = 32_000.0;
+/// Between these heights of the sun, degrees, the air's sun goes from the held one to the
+/// one above the air (`air_sun_gain`).
+const AIR_SUN_FROM: f32 = 4.0;
+const AIR_SUN_TO: f32 = 12.0;
+
+/// How much brighter than the world's sun, `lux` with the sun `height` degrees up, is the sun
+/// the air scatters into its sky, its haze and the environment map drawn from them (D212).
+/// `held` dims the low sun on the ground, which also takes the painted sky light on top;
+/// Bevy's atmosphere draws its sky in proportion to the same dimmed sun, so at a 12-degree
+/// sun the tundra's shaded snow stood brighter than the open sky over it (sky sRGB 0.38
+/// against the photographs' 0.78, tundra round 11). The air takes the sun above the air
+/// instead from AIR_SUN_TO degrees up, eased from the held one at AIR_SUN_FROM, so the
+/// sunset's sky the dusks were made under (town, fire, settlement) keeps its brightness.
+pub(super) fn air_sun_gain(height: f32, lux: f32) -> f32 {
+    let above =
+        LOW_SUN_LUX + (HIGH_SUN_LUX - LOW_SUN_LUX) * ((height - 20.0) / 40.0).clamp(0.0, 1.0);
+    let unheld = (above / lux.max(1.0)).max(1.0);
+    1.0 + (unheld - 1.0) * terra_gen::smoothstep(AIR_SUN_FROM, AIR_SUN_TO, height)
 }

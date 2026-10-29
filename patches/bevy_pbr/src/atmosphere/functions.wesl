@@ -219,7 +219,8 @@ fn sample_local_inscattering(local_scattering: vec3<f32>, ray_dir: vec3<f32>, wo
 
         inscattering += (*light).color.rgb * (scattering_factor + multiscattering_factor);
     }
-    return inscattering;
+    // Terra's patch (D212): the air scatters the sun as it is above the air.
+    return inscattering * settings.sun_gain;
 }
 
 fn sample_sun_radiance(ray_dir_ws: vec3<f32>) -> vec3<f32> {

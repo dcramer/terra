@@ -341,6 +341,11 @@ pub struct AtmosphereSettings {
 
     /// The rendering method to use for the atmosphere.
     pub rendering_method: AtmosphereMode,
+
+    /// Terra's patch (D212): how much brighter than the directional lights the sun is that
+    /// the air scatters (its sky, its haze and the environment map drawn from them), the sun
+    /// disc and the lights on surfaces left as they are. 1 is Bevy's own.
+    pub sun_gain: f32,
 }
 
 impl Default for AtmosphereSettings {
@@ -358,6 +363,7 @@ impl Default for AtmosphereSettings {
             aerial_view_lut_max_distance: 3.2e4,
             sky_max_samples: 16,
             rendering_method: AtmosphereMode::LookupTexture,
+            sun_gain: 1.0,
         }
     }
 }
@@ -377,6 +383,8 @@ pub struct GpuAtmosphereSettings {
     pub aerial_view_lut_max_distance: f32,
     pub sky_max_samples: u32,
     pub rendering_method: u32,
+    // Terra's patch (D212).
+    pub sun_gain: f32,
 }
 
 impl Default for GpuAtmosphereSettings {
@@ -400,6 +408,7 @@ impl From<AtmosphereSettings> for GpuAtmosphereSettings {
             aerial_view_lut_max_distance: s.aerial_view_lut_max_distance,
             sky_max_samples: s.sky_max_samples,
             rendering_method: s.rendering_method as u32,
+            sun_gain: s.sun_gain,
         }
     }
 }

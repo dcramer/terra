@@ -23,6 +23,8 @@ struct AtmosphereSettings {
     aerial_view_lut_max_distance: f32,
     sky_max_samples: u32,
     rendering_method: u32,
+    // Terra's patch (D212): the scattered sun's gain over the directional lights'.
+    sun_gain: f32,
 }
 
 /// "Atmosphere space" uses local up for the zenith so the horizon-detail

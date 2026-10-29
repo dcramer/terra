@@ -515,3 +515,39 @@ fn under_a_full_deck_the_haze_is_as_bright_on_screen_as_the_deck_is_drawn() {
     let open = haze_under_deck(Vec3::new(0.5, 0.5, 0.5), veil, 0.0);
     assert!((open.red - Color::srgb(0.5, 0.5, 0.5).to_linear().red).abs() < 1e-6);
 }
+
+#[test]
+fn the_air_scatters_the_sun_above_the_air_by_day_and_the_held_sun_at_sunset() {
+    let air = |height: f32| {
+        air_sun_gain(height, light_at(height).illuminance) * light_at(height).illuminance
+    };
+    // By day the air's sun is the sun above the air at every height, though the ground's is
+    // held dimmer under 20 degrees: 30,000 lux at 12 and 20 degrees, 32,000 at 60.
+    for (height, lux) in [
+        (12.0, 30_000.0),
+        (16.0, 30_000.0),
+        (20.0, 30_000.0),
+        (60.0, 32_000.0),
+    ] {
+        assert!((air(height) - lux).abs() < 1.0, "{height}: {}", air(height));
+    }
+    assert!(
+        light_at(12.0).illuminance < 25_000.0,
+        "the ground's low sun is held"
+    );
+    // At sunset and by night it is the world's own light, as the dusks were made under.
+    for height in [-18.0, -3.0, 0.0, 3.0] {
+        let world = light_at(height).illuminance;
+        assert!((air(height) - world).abs() < 1e-3 * world, "{height}");
+    }
+    // Between, it rises without a step.
+    let mut last = air(3.0);
+    for tenth in 31..=120 {
+        let now = air(tenth as f32 / 10.0);
+        assert!(
+            now >= last - 1.0 && now - last < 600.0,
+            "{tenth}: {last} {now}"
+        );
+        last = now;
+    }
+}
