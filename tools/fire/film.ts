@@ -195,7 +195,7 @@ export function baseOf(root: string, given?: string): { rev: string; same: boole
 }
 
 /// The base's checkout (a worktree at target/gate/base, its own assets) and its held build, built
-/// into the build's target so the dependencies are built once, its binary kept beside it, and its
+/// into the build's target so the dependencies are built once (its own when patches/ differ), its binary kept beside it, and its
 /// textures cooked as the worker cooks a job's.
 export function prepareBase(root: string, rev: string): { dir: string; bin: string; changed: string[] } {
   const dir = join(root, "target/gate/base");
@@ -204,7 +204,12 @@ export function prepareBase(root: string, rev: string): { dir: string; bin: stri
   git(root, ["worktree", "prune"]);
   const add = git(root, ["worktree", "add", "-q", "--detach", dir, rev]);
   if (add.status !== 0) throw new Error(`git worktree add ${rev.slice(0, 9)}: ${add.stderr.trim()}`);
-  const target = join(root, "target");
+  // A crate we patch (patches/) that differs between the two gets a target of its own: cargo
+  // hashes a path dependency by its path from the workspace root, the same in both checkouts, and
+  // judges it fresh by mtime, so the build would link the base's copy (tundra round 12: the
+  // build's new bevy_pbr field went missing).
+  const own = git(root, ["diff", "--quiet", rev, "--", "patches"]).status !== 0;
+  const target = join(root, own ? "target/gate/base-target" : "target");
   const changed = build(dir, target, true);
   const bin = join(root, "target/gate/base-sandbox");
   copyFileSync(join(target, "release/terra_sandbox"), bin);
