@@ -308,11 +308,35 @@ pub(crate) fn play(args: &[String]) -> bool {
             launch
         }
     };
-    let game = launch.game_args(&request.game);
-    match launch.profiling {
-        Profiling::Off => crate::windows::start(launch.build, game),
-        Profiling::Report => crate::profile::report(launch.build, &game, "play", Mode::Off),
-        Profiling::Live => crate::profile::report(launch.build, &game, "play", Mode::Live),
+    let mut launch = launch;
+    loop {
+        let game = launch.game_args(&request.game);
+        let (ok, code) = match launch.profiling {
+            Profiling::Off => crate::windows::start(launch.build, game),
+            Profiling::Report => crate::profile::report(launch.build, &game, "play", Mode::Off),
+            Profiling::Live => crate::profile::report(launch.build, &game, "play", Mode::Live),
+        };
+        match again(code) {
+            Some(choice) => launch.choice = choice,
+            None => return ok,
+        }
+    }
+}
+
+/// The game's exit codes asking to be started again, as the title screen's choices need a
+/// fresh process (`terra_game::play::title`, D579): the yard is another level, made as the
+/// game starts, and a world left for the title screen cannot be emptied in place. The game
+/// is started again here, with the same build and profiling, so a session stays in one
+/// terminal and each of its games is reported.
+const AGAIN_ON_TITLE: i32 = 75;
+const AGAIN_ON_YARD: i32 = 76;
+
+/// What to play next, if the game asked to be started again: `Some(None)` the title screen.
+fn again(code: Option<i32>) -> Option<Option<Choice>> {
+    match code {
+        Some(AGAIN_ON_TITLE) => Some(None),
+        Some(AGAIN_ON_YARD) => Some(Some(Choice::Yard)),
+        _ => None,
     }
 }
 

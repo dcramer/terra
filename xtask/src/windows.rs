@@ -199,6 +199,14 @@ impl Ended {
         self == Ended::Ok
     }
 
+    /// The exit code it failed with, if it ran and failed.
+    pub(crate) fn code(self) -> Option<i32> {
+        match self {
+            Ended::Failed(code) => code,
+            _ => None,
+        }
+    }
+
     /// In words, for an error: "exited with code 101 (a Rust panic)".
     pub(crate) fn words(self) -> String {
         match self {
@@ -297,9 +305,9 @@ pub(crate) fn profile_folder(profile: &str) -> &str {
 /// running at the same time does not get in the way. Its log, with the other GPU runs beside
 /// it, ends in the checkout's `logs/` (`session`). The optimised build is the release
 /// profile, the default (D581): the debug build loaded in 25 s, not 15, and drew a frame in
-/// 13.5 ms, not 10.
-pub(crate) fn start(build: crate::launcher::Build, game: Vec<String>) -> bool {
-    Game {
+/// 13.5 ms, not 10. Gives whether it ended well, and its exit code if it failed.
+pub(crate) fn start(build: crate::launcher::Build, game: Vec<String>) -> (bool, Option<i32>) {
+    let ended = Game {
         package: "terra_sandbox",
         profile: build.profile(),
         features: None,
@@ -309,7 +317,8 @@ pub(crate) fn start(build: crate::launcher::Build, game: Vec<String>) -> bool {
         played: true,
     }
     .run()
-    .is_some_and(|(ended, _)| ended.ok())
+    .map(|(ended, _)| ended);
+    (ended.is_some_and(Ended::ok), ended.and_then(Ended::code))
 }
 
 /// Cooks the textures (D188, `cargo xtask cook`) so the game played draws them cooked: read

@@ -219,3 +219,16 @@ fn q_or_the_end_of_input_quits_without_playing() {
     assert_eq!(chosen, None);
     assert!(shown.contains("`2` is not one of these"), "{shown}");
 }
+
+#[test]
+fn the_game_asking_to_start_again_plays_the_title_screen_or_the_yard() {
+    assert_eq!(again(Some(AGAIN_ON_TITLE)), Some(None));
+    assert_eq!(again(Some(AGAIN_ON_YARD)), Some(Some(Choice::Yard)));
+    // Ending well, failing, or killed: the session is over.
+    assert_eq!(again(None), None);
+    assert_eq!(again(Some(1)), None);
+    // Started again on the title screen, the game is asked for it.
+    let mut launch = launch(Some(Choice::Continue), Build::Optimised);
+    launch.choice = again(Some(AGAIN_ON_TITLE)).unwrap();
+    assert!(launch.game_args(&[]).contains(&TITLE.to_string()));
+}

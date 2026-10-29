@@ -14,6 +14,7 @@
 mod menu;
 mod view;
 
+use super::daylight::Clock;
 use super::options::OptionsMenu;
 use super::worlds::{self, Root};
 use crate::shell::Options;
@@ -38,7 +39,14 @@ pub fn plugin(app: &mut App) {
     app.init_resource::<Chosen>()
         .add_systems(PostStartup, open.run_if(|choice: Res<Choice>| choice.title))
         .add_systems(OnEnter(Screen::Title), (view::show, hold))
-        .add_systems(OnExit(Screen::Title), view::hide)
+        .add_systems(OnExit(Screen::Title), (view::hide, release))
+        .add_systems(OnEnter(Screen::Playing), offer)
+        .add_systems(
+            Update,
+            quit_to_title
+                .after(super::options::MenuSystems)
+                .run_if(in_state(Screen::Playing)),
+        )
         .add_systems(
             PreUpdate,
             keys.after(crate::shell::scripted_presses)
@@ -64,9 +72,62 @@ fn open(mut commands: Commands, root: Option<Res<Root>>) {
     commands.insert_resource(Title(Menu::new(worlds)));
 }
 
-/// Nothing happens in the world while it waits behind the screen.
-fn hold(mut time: ResMut<Time<Virtual>>) {
+/// Where the title screen's camera stands and what it looks at, in metres east, up and
+/// south of the start, its heights above the ground under each (`--vantage-ground`'s terms):
+/// out over the start's lake to its wooded shore, as Valheim and Enshrouded open on a still
+/// view of their world rather than over the player's shoulder.
+const VISTA: (Vec3, Vec3) = (Vec3::new(0.0, 8.0, 0.0), Vec3::new(-4.0, 10.0, 90.0));
+
+/// The hour the title screen shows, late afternoon, the shore lit warm across the water; a
+/// world chosen gets its own hour back.
+const HOUR: f32 = 17.0;
+
+/// The camera and hour the run had before the title screen took them, given back when it
+/// goes.
+#[derive(Resource)]
+struct Before {
+    vantage: Option<(Vec3, Vec3)>,
+    ground: bool,
+    hour: f32,
+}
+
+/// Nothing happens in the world while it waits behind the screen, and a fixed camera looks
+/// over it at its hour, which also puts the game's interface away
+/// (`Options::shows_interface`). A run given its own fixed camera or hour keeps it.
+fn hold(
+    mut commands: Commands,
+    mut time: ResMut<Time<Virtual>>,
+    mut options: ResMut<Options>,
+    mut clock: ResMut<Clock>,
+) {
     time.pause();
+    commands.insert_resource(Before {
+        vantage: options.vantage,
+        ground: options.vantage_ground,
+        hour: clock.hour,
+    });
+    if options.vantage.is_none() {
+        options.vantage = Some(VISTA);
+        options.vantage_ground = true;
+    }
+    if options.time.is_none() {
+        clock.hour = HOUR;
+    }
+}
+
+/// The camera goes back to following the player, and the world to its hour.
+fn release(
+    mut commands: Commands,
+    before: Option<Res<Before>>,
+    mut options: ResMut<Options>,
+    mut clock: ResMut<Clock>,
+) {
+    if let Some(before) = before {
+        options.vantage = before.vantage;
+        options.vantage_ground = before.ground;
+        clock.hour = before.hour;
+        commands.remove_resource::<Before>();
+    }
 }
 
 /// Keys move about the title screen and choose; then the game sees none of them, unless the
@@ -175,8 +236,8 @@ fn act(
             title.0.deleted(left);
         }
         Act::Yard => {
-            yard();
-            exit.write(AppExit::Success);
+            info!("{}", again("the yard", AGAIN_ON_YARD));
+            exit.write(AppExit::from_code(AGAIN_ON_YARD));
         }
         Act::Settings => settings.open = true,
         Act::Quit => {
@@ -185,17 +246,58 @@ fn act(
     }
 }
 
-/// The yard is another level, made when the game starts, so the game starts again on it,
-/// with the same command line but for the title screen.
-fn yard() {
-    let args = std::env::args().skip(1).filter(|arg| arg != "--title");
-    let started = std::env::current_exe().and_then(|exe| {
-        std::process::Command::new(exe)
-            .args(args)
-            .args(["--level", "yard"])
-            .spawn()
-    });
-    if let Err(problem) = started {
-        warn!("Could not start the yard: {problem}");
+/// The exit codes asking `cargo xtask play` to start the game again (its launcher's `again`
+/// reads the same numbers), on the title screen or on the yard. The yard is another level,
+/// made as the game starts, and a world played cannot yet be emptied in place for another,
+/// so each needs a fresh game; the launcher starts it in the same terminal, with the same
+/// build and profiling, so one session (and its reports) runs on (D579).
+pub const AGAIN_ON_TITLE: u8 = 75;
+pub const AGAIN_ON_YARD: u8 = 76;
+
+/// What the log says as the game ends to start again.
+fn again(on: &str, code: u8) -> String {
+    format!(
+        "Ending to start again on {on} (exit code {code}): `cargo xtask play` starts it; a game started otherwise just ends (D579)."
+    )
+}
+
+/// While a world is played, the options menu offers to quit to the title screen.
+fn offer(mut menu: ResMut<OptionsMenu>) {
+    menu.offers_title = true;
+}
+
+/// Quit to title: the game is saved as it ends (`save`'s `save_on_exit`) and starts again on
+/// the title screen.
+fn quit_to_title(mut menu: ResMut<OptionsMenu>, mut exit: MessageWriter<AppExit>) {
+    if std::mem::take(&mut menu.quit_to_title) {
+        info!("{}", again("the title screen", AGAIN_ON_TITLE));
+        exit.write(AppExit::from_code(AGAIN_ON_TITLE));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What the game does in a frame where quit to title was or was not chosen: how it
+    /// ends, and whether the request is still there.
+    fn quitting(asked: bool) -> (Vec<AppExit>, bool) {
+        let mut world = World::new();
+        world.init_resource::<Messages<AppExit>>();
+        let mut menu = OptionsMenu::default();
+        menu.offers_title = true;
+        menu.quit_to_title = asked;
+        world.insert_resource(menu);
+        world.run_system_cached(quit_to_title).unwrap();
+        let exits = world.resource_mut::<Messages<AppExit>>().drain().collect();
+        (exits, world.resource::<OptionsMenu>().quit_to_title)
+    }
+
+    #[test]
+    fn quit_to_title_ends_the_game_asking_to_start_again_on_the_title_screen() {
+        let (exits, still_asked) = quitting(true);
+        assert_eq!(exits, vec![AppExit::from_code(AGAIN_ON_TITLE)]);
+        assert!(!still_asked, "the request is taken, so it is done once");
+        assert_eq!(quitting(false).0, vec![]);
     }
 }

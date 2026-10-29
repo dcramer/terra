@@ -84,7 +84,7 @@ fn profile(args: &[String]) -> bool {
         (true, true) => Mode::Capture(seconds + crate::tracy::LOAD_BOUND_S),
         (true, false) => Mode::Live,
     };
-    report(build, &game, if walk { "walk" } else { "play" }, tracy)
+    report(build, &game, if walk { "walk" } else { "play" }, tracy).0
 }
 
 /// The game's arguments for a scripted walk: `play-walk`'s new game and route (D578),
@@ -107,8 +107,14 @@ pub(crate) fn walk_args(seconds: u32, extra: &[String]) -> Vec<String> {
 /// Runs the game with the session report on, played when `kind` is `play` (its output in the
 /// terminal and its log brought home) and otherwise walked quietly, then keeps the report in
 /// `logs/` and prints its head and path. With Tracy (`tracy`), a Tracy build, its profiler
-/// opened first or a capture taken beside it (`crate::tracy`).
-pub(crate) fn report(build: Build, game: &[String], kind: &str, tracy: Mode) -> bool {
+/// opened first or a capture taken beside it (`crate::tracy`). Gives whether all went well,
+/// and the game's exit code if it failed (the launcher starts it again on some, D579).
+pub(crate) fn report(
+    build: Build,
+    game: &[String],
+    kind: &str,
+    tracy: Mode,
+) -> (bool, Option<i32>) {
     let played = kind == "play";
     let mut args = game.to_vec();
     args.push(format!("--profile-report={REPORT}"));
@@ -116,7 +122,7 @@ pub(crate) fn report(build: Build, game: &[String], kind: &str, tracy: Mode) -> 
         Mode::Off => None,
         Mode::Live | Mode::Capture(_) => match crate::tracy::fetch() {
             Some(folder) => Some(folder),
-            None => return false,
+            None => return (false, None),
         },
     };
     let mut capture = None;
@@ -126,7 +132,7 @@ pub(crate) fn report(build: Build, game: &[String], kind: &str, tracy: Mode) -> 
             Mode::Capture(seconds) => {
                 capture = crate::tracy::Capture::start(folder, seconds, kind);
                 if capture.is_none() {
-                    return false;
+                    return (false, None);
                 }
             }
             Mode::Off => {}
@@ -149,7 +155,7 @@ pub(crate) fn report(build: Build, game: &[String], kind: &str, tracy: Mode) -> 
         if let Some(capture) = capture {
             capture.abandon();
         }
-        return false;
+        return (false, None);
     };
     let ok = ended.ok();
     let captured = capture.is_none_or(crate::tracy::Capture::finish);
@@ -161,7 +167,7 @@ pub(crate) fn report(build: Build, game: &[String], kind: &str, tracy: Mode) -> 
             Some(std::fs::read_to_string(&output).unwrap_or_default())
         };
         eprintln!("{}", no_report(ended, said.as_deref(), &output));
-        return false;
+        return (false, ended.code());
     };
     let _ = std::fs::remove_file(folder.join(REPORT));
     let stamp = output("date", &["+%Y%m%d-%H%M%S"]).unwrap_or_default();
@@ -192,7 +198,7 @@ pub(crate) fn report(build: Build, game: &[String], kind: &str, tracy: Mode) -> 
             folder.join("profile-output.log").display()
         );
     }
-    ok && captured
+    (ok && captured, ended.code())
 }
 
 /// What to say when the game wrote no report (D556): how it ended, and its output's last

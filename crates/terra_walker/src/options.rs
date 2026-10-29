@@ -42,6 +42,11 @@ pub struct OptionsMenu {
     refused: bool,
     /// A press was taken for a control this frame, and is not also a click on the menu.
     taken: bool,
+    /// Whether the menu offers to quit to the title screen: set by a game that has one
+    /// while it is being played (D579).
+    pub offers_title: bool,
+    /// Quit to the title screen was chosen, for the game to do; it takes it.
+    pub quit_to_title: bool,
 }
 
 /// Whether changes are saved. A scripted run saves nothing.
@@ -208,6 +213,8 @@ enum Control {
     Bind(Action, usize),
     Reset,
     Close,
+    /// Save and leave for the title screen, as shipped games' pause menus offer.
+    Title,
 }
 
 /// Text that shows something that can change.
@@ -487,20 +494,40 @@ fn setup(mut commands: Commands) {
                                     });
                                 });
                         });
-                    panel
-                        .spawn(Node {
-                            align_items: AlignItems::Center,
-                            justify_content: JustifyContent::SpaceBetween,
-                            ..default()
-                        })
-                        .with_children(|bottom| {
-                            bottom.spawn((Shows::Note, Text::new(""), normal.clone(), white));
-                            bottom.spawn(button(Control::Close, 150.0)).with_child((
-                                Text::new("Back to the game"),
-                                normal.clone(),
-                                white,
-                            ));
-                        });
+                    bottom_row(panel, button, &normal);
+                });
+        });
+}
+
+/// The menu's last row: what to do now on the left, and the ways out on the right: quit to
+/// the title screen (when the game offers it) and back to the game.
+fn bottom_row<B: Bundle>(
+    panel: &mut ChildSpawnerCommands,
+    button: impl Fn(Control, f32) -> B,
+    normal: &TextFont,
+) {
+    let white = TextColor(Color::WHITE);
+    panel
+        .spawn(Node {
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::SpaceBetween,
+            ..default()
+        })
+        .with_children(|bottom| {
+            bottom.spawn((Shows::Note, Text::new(""), normal.clone(), white));
+            bottom
+                .spawn(Node {
+                    column_gap: px(10),
+                    ..default()
+                })
+                .with_children(|ends| {
+                    ends.spawn((button(Control::Title, 150.0), Visibility::Hidden))
+                        .with_child((Text::new("Quit to title"), normal.clone(), white));
+                    ends.spawn(button(Control::Close, 150.0)).with_child((
+                        Text::new("Back to the game"),
+                        normal.clone(),
+                        white,
+                    ));
                 });
         });
 }
@@ -611,6 +638,12 @@ fn press(
                 menu.listening = None;
                 continue;
             }
+            Control::Title => {
+                menu.open = false;
+                menu.listening = None;
+                menu.quit_to_title = menu.offers_title;
+                continue;
+            }
         }
         if saving.0 {
             settings.save();
@@ -622,7 +655,16 @@ fn draw(
     menu: Res<OptionsMenu>,
     settings: Res<Settings>,
     mut screen: Single<&mut Visibility, With<Screen>>,
-    mut buttons: Query<(&Hovered, Has<Pressed>, &Control, &mut BackgroundColor)>,
+    mut buttons: Query<
+        (
+            &Hovered,
+            Has<Pressed>,
+            &Control,
+            &mut BackgroundColor,
+            &mut Visibility,
+        ),
+        Without<Screen>,
+    >,
     mut texts: Query<(&Shows, &mut Text)>,
     rate: Res<ScreenRate>,
 ) {
@@ -637,7 +679,14 @@ fn draw(
     if !menu.open {
         return;
     }
-    for (hovered, pressed, control, mut background) in &mut buttons {
+    for (hovered, pressed, control, mut background, mut visible) in &mut buttons {
+        if *control == Control::Title {
+            visible.set_if_neq(if menu.offers_title {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            });
+        }
         let waiting = matches!(control, Control::Bind(action, slot) if menu.listening == Some((*action, *slot)));
         let colour = if waiting {
             PICKED
