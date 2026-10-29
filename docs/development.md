@@ -146,6 +146,14 @@ It cross-compiles the package, copies the program and its assets to the Windows 
 
 Keep debug builds on the workspace's default profile: full debug information produces a file Windows refuses to load.
 
+### Diagnosing performance
+
+Start here when something is slow; each line is the one command for what you saw. [launcher.md](launcher.md) is the design that makes each of these one step (D575 to D578); its build plan rewrites these lines as it lands.
+
+- **A slow load, or a freeze while playing**: the session's log (`logs/`, its path the last line `cargo xtask play` prints) has `Loaded in`, the minute's frame times and a warning for frames over twice the budget; hand it to an agent. To learn which systems, trace the build that was played ([below](#measuring-performance), "Which systems a frame spends").
+- **A low frame rate in a place**: `cargo xtask bench <scene>` if a scene shows it ([Measuring performance](#measuring-performance)); then the trace, or switch things off with [tunables](#tunables).
+- **Did my change make it slower**: `cargo xtask bench <scenes>` against the last result, never a trace.
+
 ### Measuring performance
 
 Performance is judged one way, so numbers compare between changes, machines and days (D185):

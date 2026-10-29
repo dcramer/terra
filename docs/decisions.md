@@ -131,6 +131,7 @@ Needs, death, the body, the map and options.
 | [D511](decisions/D511.md) | A climb jump | Design | Developers | Decided | Recommended: a lunge of about 1.5 m along the face for a… |
 | [D523](decisions/D523.md) | At the water's edge: wading slows, a swimmer climbs out, breath is shown | Design | Developers | Decided | Wading slows the walk linearly with depth to 60% of a… |
 | [D528](decisions/D528.md) | A runner stops in about two steps | Design | Developers | Decided | A body decelerates at about 15 m/s² (was 40)… |
+| [D579](decisions/D579.md) | The game's front screen | Design | — | Open | Should the game open on a front screen of its own… |
 
 ## Items and crafting
 
@@ -567,6 +568,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D548](decisions/D548.md) | What changed this? Bevy's track_location in dev builds, asked over the remote | Tech | Agent | Decided | The sandbox's dev builds are built with Bevy's… |
 | [D553](decisions/D553.md) | The fires are drawn after the haze, fogged at their own depth | Tech | Agent | Leaning | Every fire card (flames, embers, jets, the smoke and… |
 | [D574](decisions/D574.md) | The climate's fronts are tens of kilometres across | Tech | Agent | Decided | The start's climate (`assets/data/climate.ron`) makes… |
+| [D580](decisions/D580.md) | How long a load may take | Design | — | Open | What load time the game holds to, as D25's 13.3 ms holds… |
 
 ## Tools and workflow
 
@@ -635,6 +637,10 @@ Checks, developer tools, languages and the repository.
 | [D555](decisions/D555.md) | A render failure fails a scripted run | Tech | Agent | Decided | Every run of the sandbox and the game says each render… |
 | [D556](decisions/D556.md) | An error says what to do | Tech | Developers | Decided | Every error our code, tools, checks and gates give is… |
 | [D563](decisions/D563.md) | The character build is incremental, a stamp a step | Tech | Agent | Decided | `build_bodies.sh` runs its steps as make and ninja run… |
+| [D575](decisions/D575.md) | The launcher is a menu in the terminal, in `cargo xtask play` | Tech | Agent | Decided | `make play` opens a launcher: when `cargo xtask play`… |
+| [D576](decisions/D576.md) | Every build logs what ran long in a freeze; a session's report is written by the game | Tech | Agent | Leaning | A frame recorder in `terra_world`, a `tracing` layer… |
+| [D577](decisions/D577.md) | Tracy is the profiler for the detail | Tech | Agent | Decided | A `tracy` feature on `terra_sandbox`… |
+| [D578](decisions/D578.md) | A play benchmark measures the load and the freezes of a walk | Tech | Agent | Decided | `cargo xtask bench` gets a scene timed from the… |
 
 ## Superseded and rejected
 

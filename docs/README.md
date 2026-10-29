@@ -91,6 +91,7 @@ The source of truth, then the docs about the game as a whole, then one doc per p
 | [engine.md](engine.md) | The engine's parts, what each needs, and the parallel tracks they are built in. |
 | [terrain.md](terrain.md) | Brief for the first component, the voxel terrain crate. |
 | [development.md](development.md) | Setting up a machine, everyday commands, seeing and measuring output, developer tools, and QA our agents can run. |
+| [launcher.md](launcher.md) | Design (D575 to D580): the launcher behind `make play` (what to play, the build, quality, profiling, remembered, every choice a flag), and diagnosing performance: the hitch log in every build, a session's report written by the game, Tracy for the detail, the play benchmark of load and freezes, and the build plan. |
 | [ci-agent.md](ci-agent.md) | The CI agent: the container that runs the slow checks whenever main moves and files what breaks as GitHub issues. |
 | [render-worker.md](render-worker.md) | The render worker: the GPU box that takes agents' renders (films, sheets, shots, benches) over ssh at a commit and hands back their files. |
 | [trailer.md](trailer.md) | The trailer: one run through each of the four places, the hour and route of each and why, and how it is filmed (D357). |
