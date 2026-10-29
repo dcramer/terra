@@ -2964,6 +2964,19 @@ pub fn per_view_shadow_pass<const IS_LATE: bool>(
 ) {
     let view_lights = view.into_inner();
 
+    // Terra's patch (D582): the late pass draws only a shadow view with occlusion culling
+    // (`view_shadow_pass`), so without one it builds no indirect parameters and opens no
+    // encoder, as `late_prepass_build_indirect_parameters` runs only with `OcclusionCulling`.
+    if IS_LATE
+        && !view_lights.lights.iter().any(|&light| {
+            view_light_query
+                .get(light)
+                .is_ok_and(|(_, _, occlusion_culling, ..)| occlusion_culling)
+        })
+    {
+        return;
+    }
+
     let diagnostics = ctx.diagnostic_recorder();
     let diagnostics = diagnostics.as_deref();
     let time_span = diagnostics.time_span(ctx.command_encoder(), "per_view_shadow_pass");
@@ -2980,6 +2993,10 @@ pub fn per_view_shadow_pass<const IS_LATE: bool>(
         else {
             continue;
         };
+        // Terra's patch (D582): see above; a view without occlusion culling has no late pass.
+        if IS_LATE && !occlusion_culling {
+            continue;
+        }
 
         // Make sure to build indirect parameters here, as the normal
         // `*_prepass_build_indirect_parameters` functions only run for root

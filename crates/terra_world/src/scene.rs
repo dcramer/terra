@@ -12,7 +12,10 @@ use bevy::{
     camera::{Exposure, visibility::RenderLayers},
     core_pipeline::prepass::NormalPrepass,
     core_pipeline::tonemapping::Tonemapping,
-    light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap},
+    light::{
+        CascadeShadowConfigBuilder, DirectionalLightShadowMap, SimulationLightSystems,
+        cascade::Cascades,
+    },
     pbr::{ContactShadows, DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
     post_process::bloom::Bloom,
     prelude::*,
@@ -62,6 +65,12 @@ pub fn plugin(app: &mut App) {
         .init_resource::<Underground>()
         .init_resource::<IndoorSky>()
         .add_systems(Update, (haze_follows, follow_quality, adapt_indoors))
+        .add_systems(
+            PostUpdate,
+            cascades_for_world_views
+                .after(SimulationLightSystems::UpdateDirectionalLightCascades)
+                .before(SimulationLightSystems::UpdateLightFrusta),
+        )
         .add_systems(
             Update,
             far_ranges.run_if(resource_added::<crate::start::Sited>),
@@ -383,6 +392,26 @@ fn style_camera(
     ));
 }
 
+/// Cascades only for a camera that sees what a sun lights (D582): Bevy builds a sun's cascades
+/// for every active camera, so the interface's camera, which draws no layer of the world,
+/// had four of its own, each culling every caster each frame, though the render world never
+/// draws them (`prepare_lights` skips a view whose layers miss the light's).
+fn cascades_for_world_views(
+    cameras: Query<(Entity, Option<&RenderLayers>), With<Camera>>,
+    mut suns: Query<(&mut Cascades, Option<&RenderLayers>), With<DirectionalLight>>,
+) {
+    for (mut cascades, sun_layers) in &mut suns {
+        let sun_layers = sun_layers.unwrap_or_default();
+        for (camera, layers) in &cameras {
+            if !layers.unwrap_or_default().intersects(sun_layers)
+                && cascades.cascades.contains_key(&camera)
+            {
+                cascades.cascades.remove(&camera);
+            }
+        }
+    }
+}
+
 /// Puts the quality preset into effect (D239), at the start and whenever it changes: the
 /// sun's shadow map and cascades, shade in corners and contact shadows, and the haze's
 /// shafts of light.
@@ -500,5 +529,38 @@ fn adapt_indoors(
     };
     if let Some(mut curve) = curves.get_mut(&adapting.compensation_curve) {
         *curve = compensation(brighter, ADAPT_DARKER);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::light::cascade::Cascade;
+
+    /// A camera that draws no layer the sun lights (the interface's) keeps no cascades of
+    /// the sun's; the world's camera, and one sharing a layer with the sun, keep theirs.
+    #[test]
+    fn only_a_camera_seeing_the_suns_layers_keeps_its_cascades() {
+        let mut world = World::new();
+        let main = world.spawn(Camera::default()).id();
+        let interface = world.spawn((Camera::default(), RenderLayers::none())).id();
+        let shown = world
+            .spawn((Camera::default(), RenderLayers::layer(3)))
+            .id();
+        let both = world
+            .spawn((Camera::default(), RenderLayers::from_layers(&[0, 3])))
+            .id();
+        let mut cascades = Cascades::default();
+        for camera in [main, interface, shown, both] {
+            cascades
+                .cascades
+                .insert(camera, vec![Cascade::default(); 4]);
+        }
+        let sun = world.spawn((DirectionalLight::default(), cascades)).id();
+        world.run_system_once(cascades_for_world_views).unwrap();
+        let kept = &world.get::<Cascades>(sun).unwrap().cascades;
+        assert!(kept.contains_key(&main) && kept.contains_key(&both));
+        assert!(!kept.contains_key(&interface) && !kept.contains_key(&shown));
     }
 }
