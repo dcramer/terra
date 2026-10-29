@@ -709,15 +709,25 @@ fn boot_print(p: vec2<f32>, kind: f32) -> vec3<f32> {
 
 // The deepest print over a point `st` metres along and across one heading's lanes, 0 to 1,
 // and how it changes a metre along and across them.
+//
+// Only the prints that can reach the point are tried (winter round 12: trying three lanes and
+// two prints in each cost 0.35 ms a frame on the RTX 4090's winter path view). A print reaches
+// at most 0.2 m from its middle (the largest sole and heel grown by the waist's blend, times
+// size 1.12), so with its jitter at most 0.24 m along from its slot, under half the shortest
+// step: only the nearest slot along. Across, a lane's prints reach at most 0.48 m from its
+// nominal middle (its own offset, the straddle and jitter), under a lane's width: only the
+// point's own lane and the nearer neighbour. The picture is the same as trying them all.
 fn walkers_at(st: vec2<f32>, sector: f32, worn: f32) -> vec3<f32> {
     let keep = 0.95 * smoothstep(0.15, 0.8, worn);
     var best = vec3<f32>(0.0);
     for (var walkers = 0u; walkers < 2u; walkers++) {
         let older = f32(walkers);
         let shift = hash(vec3<f32>(sector, older, 3.0));
-        let lane0 = floor(st.y / PRINT_LANE_M + shift);
-        for (var l = 0u; l < 3u; l++) {
-            let lane = lane0 + f32(l) - 1.0;
+        let across = st.y / PRINT_LANE_M + shift;
+        let lane0 = floor(across);
+        let side = select(1.0, -1.0, across - lane0 < 0.5);
+        for (var l = 0u; l < 2u; l++) {
+            let lane = lane0 + f32(l) * side;
             let id = vec3<f32>(lane, sector * 7.0 + older * 131.0, 17.0);
             if hash(id) >= PRINT_LANE_SHARE {
                 continue;
@@ -736,32 +746,29 @@ fn walkers_at(st: vec2<f32>, sector: f32, worn: f32) -> vec3<f32> {
             // In the walker's own frame: on along its way, left across it.
             let u = st.x * dir - 2.0 * step_m * hash(id + vec3<f32>(0.0, 9.0, 0.0));
             let v = (st.y - centre) * dir;
-            let n0 = floor(u / step_m);
-            for (var m = 0u; m < 2u; m++) {
-                let n = n0 + f32(m);
-                let pid = id + vec3<f32>(0.0, 0.0, n * 1.37);
-                let q = vec4<f32>(hash(pid + vec3<f32>(3.0, 0.0, 0.0)), hash(pid + vec3<f32>(5.0, 0.0, 0.0)), hash(pid + vec3<f32>(7.0, 0.0, 0.0)), hash(pid + vec3<f32>(9.0, 0.0, 0.0)));
-                if q.x >= keep {
-                    continue;
-                }
-                let left = select(-1.0, 1.0, n - 2.0 * floor(n * 0.5) < 0.5);
-                let d = vec2<f32>(u - n * step_m - (q.y - 0.5) * 0.08, v - left * straddle - (q.z - 0.5) * 0.05);
-                let turn = left * toe + (q.w - 0.5) * 0.16;
-                let cs = vec2<f32>(cos(turn), sin(turn));
-                let p = vec2<f32>(d.x * cs.x + d.y * cs.y, d.y * cs.x - d.x * cs.y) / size;
-                let e = boot_print(p, kind);
-                let sdf = e.x * size;
-                if sdf > 0.004 {
-                    continue;
-                }
-                let depth = age * mix(0.7, 1.0, hash(pid + vec3<f32>(11.0, 0.0, 0.0)));
-                let t = clamp((sdf + soft) / (soft + 0.004), 0.0, 1.0);
-                let h = depth * (1.0 - t * t * (3.0 - 2.0 * t));
-                if h > best.x {
-                    let dh = -depth * 6.0 * t * (1.0 - t) / (soft + 0.004);
-                    let g = vec2<f32>(e.y * cs.x - e.z * cs.y, e.y * cs.y + e.z * cs.x) * dir;
-                    best = vec3<f32>(h, g * dh);
-                }
+            let n = floor(u / step_m + 0.5);
+            let pid = id + vec3<f32>(0.0, 0.0, n * 1.37);
+            let q = vec4<f32>(hash(pid + vec3<f32>(3.0, 0.0, 0.0)), hash(pid + vec3<f32>(5.0, 0.0, 0.0)), hash(pid + vec3<f32>(7.0, 0.0, 0.0)), hash(pid + vec3<f32>(9.0, 0.0, 0.0)));
+            if q.x >= keep {
+                continue;
+            }
+            let left = select(-1.0, 1.0, n - 2.0 * floor(n * 0.5) < 0.5);
+            let d = vec2<f32>(u - n * step_m - (q.y - 0.5) * 0.08, v - left * straddle - (q.z - 0.5) * 0.05);
+            let turn = left * toe + (q.w - 0.5) * 0.16;
+            let cs = vec2<f32>(cos(turn), sin(turn));
+            let p = vec2<f32>(d.x * cs.x + d.y * cs.y, d.y * cs.x - d.x * cs.y) / size;
+            let e = boot_print(p, kind);
+            let sdf = e.x * size;
+            if sdf > 0.004 {
+                continue;
+            }
+            let depth = age * mix(0.7, 1.0, hash(pid + vec3<f32>(11.0, 0.0, 0.0)));
+            let t = clamp((sdf + soft) / (soft + 0.004), 0.0, 1.0);
+            let h = depth * (1.0 - t * t * (3.0 - 2.0 * t));
+            if h > best.x {
+                let dh = -depth * 6.0 * t * (1.0 - t) / (soft + 0.004);
+                let g = vec2<f32>(e.y * cs.x - e.z * cs.y, e.y * cs.y + e.z * cs.x) * dir;
+                best = vec3<f32>(h, g * dh);
             }
         }
     }
