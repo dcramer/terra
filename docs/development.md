@@ -184,6 +184,7 @@ It builds the sandbox in the `bench` profile, a release with nothing incremental
 | `castle`, `castle-field` | One base of a castle, some 140,000 cubes (`--castle`, `terra_build::castle`), walked through its gate, and seen from 270 m across a field |
 | `far` | Three hundred buildings in hamlets out to 2 km (`--far 300`), looked round from sixty metres up |
 | `walk` | 40 seconds' walk through the lush forest, out from the clearing and round through the trees, steered by `--route` as a player would; the world and the walker alone (`--experiment walk`), so it is the environment's cost |
+| `forest-run` | The forest walk demo (`--experiment forest-walk`, D467) sprinted down the forest film's path at summer noon, wildlife about: the whole game in the lush forest at a player's fastest, the standing measure of its frame time |
 | `lake`, `lake-walk` | The mountain lake (docs/demos.md §1) on the 30 km world, its place found by `--site lake`, in early June: from up its shore across the water to the woods, the tree line and the snowy peaks, still; and the shore walked for 30 seconds. The world and the walker alone |
 | `crypt`, `crypt-hall` | The crypt dungeon (`--experiment dungeon`) at eye height, still: a corridor with a torch 4 m ahead on its wall and two behind, and the goal hall from its doorway, its two fire bowls and a torch 10 m off. What torchlight costs: each view has a fire light near enough to cast shadows ([fire.md](fire.md#lod-and-budgets)) |
 
