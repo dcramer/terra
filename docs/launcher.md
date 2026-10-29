@@ -1,6 +1,6 @@
 # The launcher and diagnosing performance
 
-Status: the agents' technical design (D575 to D578), nothing built yet; two design questions for the developers are Open (D579, D580). Tools, so [development.md](development.md) is where each part is used once it lands.
+Status: the agents' technical design (D575 to D578); build plan steps 1 and 2 built (the frame recorder behind `hitch-log`, `play-walk`), the rest not yet; two design questions for the developers are Open (D579, D580). Tools, so [development.md](development.md) is where each part is used once it lands.
 
 The developer, 2026-10-29: `make play` should open a launcher a normal person can use, to continue, start a new game, play creative or the yard, and choose profiling, the build and the quality preset; it remembers the last choice, and scripts and agents drive it by flags (D69). And performance should be easy to diagnose: perf round 1 (`~/.cache/terra-handoff/perf-j1.md`) took a trace build, the Windows build launched by hand (`cargo xtask win --features trace`), a 17 GB Chrome trace grepped down before `tools/sandbox/spans.ts` could read it, and a raised Node heap, to learn that the first frame spent 5.1 s in `terra_world::mipmaps` and that 1 to 3 s freezes every 10 to 20 s in the developer's play never showed in a release run.
 
@@ -106,7 +106,7 @@ No trace file for the report; Tracy's captures capped by `-s` and compressed; th
 Each step lands alone, checked, in order:
 
 1. **The hitch log**: the frame recorder, `bevy/trace` in every build, freeze lines, the hitch warning's system and the load's steps; tests on the recorder's buffers and report without a GPU; the cost measured on `world` and `town300` and stated in the commit (D576 to Decided or to schedules only).
-2. **The play benchmark**: `play-walk`, load and freeze columns, the cook-cache check, a first baseline recorded; the debug-against-optimised A/B written to the perf handoff.
+2. **The play benchmark** (done 2026-10-29): `play-walk`, load and freeze columns, the cook-cache check, a first baseline recorded (RTX 5090: load 13.3 s, no freeze); the debug-against-optimised A/B written to the perf handoff.
 3. **The launcher**, once the cook and build change to `make play` has landed: the menu, remembered launch, flags, the confirmation before a new game; `make` shortcuts unchanged.
 4. **The session report and the `profile` task**: the report checked against spans.ts on one recorded run, then the Chrome `trace` feature, its recipe and spans.ts deleted; the launcher's `Profiling: report`.
 5. **Tracy**: the `tracy` feature, the fetched profiler and its doctor check, `profile --tracy`'s capped capture, the launcher's `Profiling: tracy`.
