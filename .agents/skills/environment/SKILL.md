@@ -25,6 +25,7 @@ A look is aimed at something you can measure, never at memory or adjectives.
 
 ## 3. Measure, find the cause, then change one thing
 
+- **An A/B against main on the worker names main by its sha** (D445): a `--dirty` job's HEAD there is the patched commit, so the script takes `git rev-parse origin/main`, run here, as an argument, never `HEAD` or `main` (sky round 2's A/B compared the patch with itself; [tools/render-worker](../../../tools/render-worker/README.md)).
 - **Before tuning, measure where the gap is**: the look numbers, crops of the thing at 1 to 5 m beside the reference's, luminance spread inside a crop, frame differences for motion.
 - **Find what draws a pixel** by colouring a shader's output (a throwaway edit: everything the foliage shader draws red); find which light makes it so by turning one source off at a time **in code**, rebuilt, shot with `--vantage` and `--shots`. Removing or changing camera components over the remote protocol does not take effect, and `daylight` rewrites the lights every frame: such a test shows nothing changed and misleads.
 - **Mind the eye**: auto exposure re-normalises every frame, so a change that darkens one thing brightens the rest. Compare ratios inside one frame (a sun fleck against the shade beside it), or the reference's numbers, not one number before and after.

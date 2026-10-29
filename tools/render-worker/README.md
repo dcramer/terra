@@ -8,6 +8,7 @@ cargo xtask remote-render --rev 1a2b3c4 --collect shot.png -- cargo xtask sandbo
 cargo xtask remote-render --no-wait -- cargo xtask bench   # queue, print the job, return
 cargo xtask remote-render --cpu -- node tools/x.ts         # a job that never draws: any free slot
 cargo xtask remote-render --dirty -- cargo test -p x probe  # the working tree's uncommitted changes, as a patch, no hooks
+cargo xtask remote-render --dirty -- sh ab.sh $(git rev-parse origin/main)  # an A/B: main by its sha (below)
 cargo xtask remote-render --wait <job>                     # wait for it and fetch its files
 cargo xtask remote-render --status                         # each box's daemon and jobs
 cargo xtask remote-render --logs <job|daemon>              # a log's last lines
@@ -17,6 +18,7 @@ cargo xtask remote-render --doctor                         # what each box lacks
 ```
 
 - **Files back**: what the command wrote under `~/.cache/terra-review/` while it ran (a film's `frames/` left out), or the `--collect` paths instead (in the checkout, or `~/…`; one path a `--collect`, repeated for more, a comma list refused; a path not there when the job ends is named in the log and the job's last line), in `~/.cache/terra-review/remote/<job>/` beside `job.log`. Output: a line when the job's state changes, the folder at the end; on a failure the log's last lines. Exit code: the command's (124 at its `--minutes` limit).
+- **An A/B on the box names main by its sha**: a `--dirty` job's HEAD there is the patched commit (its parent your local HEAD, which need not be main), so a script that builds or checks out main beside the patch takes main's sha as an argument (`git rev-parse origin/main` here), never `HEAD`, `HEAD~1` or `main` ([docs](../../docs/render-worker.md)).
 - **Files**: `client.ts` is the xtask; `box.ts` the box's commands, which the client runs over ssh; `daemon.ts` the daemon that runs jobs; `display.ts` the Xvfb it keeps for them; `doctor.ts` the box's checks; `bootstrap.sh` makes a box's folder and installs Node there; `jobs.ts` the decisions as pure functions (`jobs.test.ts`). `flow.test.ts` runs the whole path with a scratch folder for a box (`TERRA_WORKERS=local`, no ssh) in about two seconds. Node 22.18 or later, git, ssh, rsync; no dependencies.
 
 ## Settings
