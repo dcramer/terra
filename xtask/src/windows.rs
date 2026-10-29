@@ -72,7 +72,7 @@ pub(crate) fn win(args: &[String]) -> bool {
         return false;
     };
     let release = ours.iter().any(|a| a == "--release");
-    Game {
+    let ended = Game {
         package,
         profile: if release { "release" } else { "dev" },
         features: None,
@@ -83,8 +83,20 @@ pub(crate) fn win(args: &[String]) -> bool {
         output: None,
         played: false,
     }
-    .run()
-    .is_some_and(|(ended, _)| ended.ok())
+    .run();
+    // Ended badly, it says how and ends with the program's own code (a game asking to be
+    // started again ends with 75 or 76, `launcher::again`), so a caller reads that, not 1.
+    match ended {
+        None => false,
+        Some((ended, _)) if ended.ok() => true,
+        Some((ended, _)) => {
+            eprintln!("✗ win: {package} {}", ended.words());
+            match ended.code() {
+                Some(code) => std::process::exit(code),
+                None => false,
+            }
+        }
+    }
 }
 
 /// A program built and run on the real GPU: under WSL the Windows build, in a copy of its own

@@ -308,18 +308,24 @@ pub(crate) fn play(args: &[String]) -> bool {
             launch
         }
     };
-    let mut launch = launch;
+    let (mut launch, mut extra) = (launch, request.game);
     loop {
-        let game = launch.game_args(&request.game);
+        let game = launch.game_args(&extra);
         let (ok, code) = match launch.profiling {
             Profiling::Off => crate::windows::start(launch.build, game),
             Profiling::Report => crate::profile::report(launch.build, &game, "play", Mode::Off),
             Profiling::Live => crate::profile::report(launch.build, &game, "play", Mode::Live),
         };
-        match again(code) {
-            Some(choice) => launch.choice = choice,
-            None => return ok,
+        if !again(code, &mut launch, &mut extra) {
+            return ok;
         }
+        let on = launch.choice.map_or("the title screen", |choice| {
+            CHOICES.iter().find(|c| c.0 == choice).map_or("", |c| c.1)
+        });
+        println!(
+            "play: the game asked to be started again (exit code {}): playing {on}, with the same build and profiling.",
+            code.unwrap_or_default()
+        );
     }
 }
 
@@ -331,13 +337,18 @@ pub(crate) fn play(args: &[String]) -> bool {
 const AGAIN_ON_TITLE: i32 = 75;
 const AGAIN_ON_YARD: i32 = 76;
 
-/// What to play next, if the game asked to be started again: `Some(None)` the title screen.
-fn again(code: Option<i32>) -> Option<Option<Choice>> {
-    match code {
-        Some(AGAIN_ON_TITLE) => Some(None),
-        Some(AGAIN_ON_YARD) => Some(Some(Choice::Yard)),
-        _ => None,
-    }
+/// Whether the game, ended with `code`, asked to be started again, and if so what it plays
+/// next: the title screen (no choice) or the yard. The launch's choice decides that now, so
+/// a `--title` among the game's own arguments (how a script opens the title screen) goes,
+/// or the yard asked for would open on the title screen again.
+fn again(code: Option<i32>, launch: &mut Launch, extra: &mut Vec<String>) -> bool {
+    launch.choice = match code {
+        Some(AGAIN_ON_TITLE) => None,
+        Some(AGAIN_ON_YARD) => Some(Choice::Yard),
+        _ => return false,
+    };
+    extra.retain(|arg| arg != TITLE);
+    true
 }
 
 /// The menu's first line: the game, and the branch and commit it is built from.

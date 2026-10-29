@@ -220,15 +220,46 @@ fn q_or_the_end_of_input_quits_without_playing() {
     assert!(shown.contains("`2` is not one of these"), "{shown}");
 }
 
+/// The game's own number for a restart, read from where it is defined
+/// (`terra_game::play::title`), so the launcher and the game cannot drift apart.
+fn games_code(name: &str) -> i32 {
+    let source = include_str!("../../../crates/terra_game/src/play/title.rs");
+    let line = source
+        .lines()
+        .find(|line| line.starts_with(&format!("pub const {name}: u8 = ")))
+        .unwrap_or_else(|| panic!("terra_game's title.rs defines {name}"));
+    line.trim_end_matches(';')
+        .rsplit(' ')
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+/// What the launcher plays after a game that ended with `code`, given as a script gives it:
+/// no choice word, the game's title screen and a few presses.
+fn after(code: Option<i32>) -> Option<Vec<String>> {
+    let mut launch = launch(Some(Choice::Continue), Build::Optimised);
+    let mut extra = args(&["--title", "--press", "enter@140", "--shots", "a@120,400"]);
+    again(code, &mut launch, &mut extra).then(|| launch.game_args(&extra))
+}
+
 #[test]
 fn the_game_asking_to_start_again_plays_the_title_screen_or_the_yard() {
-    assert_eq!(again(Some(AGAIN_ON_TITLE)), Some(None));
-    assert_eq!(again(Some(AGAIN_ON_YARD)), Some(Some(Choice::Yard)));
-    // Ending well, failing, or killed: the session is over.
-    assert_eq!(again(None), None);
-    assert_eq!(again(Some(1)), None);
-    // Started again on the title screen, the game is asked for it.
-    let mut launch = launch(Some(Choice::Continue), Build::Optimised);
-    launch.choice = again(Some(AGAIN_ON_TITLE)).unwrap();
-    assert!(launch.game_args(&[]).contains(&TITLE.to_string()));
+    assert_eq!(games_code("AGAIN_ON_TITLE"), AGAIN_ON_TITLE);
+    assert_eq!(games_code("AGAIN_ON_YARD"), AGAIN_ON_YARD);
+    let rest = ["--press", "enter@140", "--shots", "a@120,400"];
+    // The yard, and only the yard: the first game's `--title` is not given again.
+    let yard = [&["--experiment", "play", "--level", "yard"][..], &rest].concat();
+    assert_eq!(after(Some(games_code("AGAIN_ON_YARD"))), Some(args(&yard)));
+    // The title screen, asked for once.
+    let title = [&["--experiment", "play", "--title"][..], &rest].concat();
+    assert_eq!(
+        after(Some(games_code("AGAIN_ON_TITLE"))),
+        Some(args(&title))
+    );
+    // Ending well, failing, panicking, or killed: the session is over.
+    for code in [None, Some(0), Some(1), Some(101)] {
+        assert_eq!(after(code), None, "{code:?}");
+    }
 }
