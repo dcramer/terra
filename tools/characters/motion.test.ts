@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { constraints, path, uthanaArgs, wanted } from "./motion.ts";
+import { constraints, locoArgs, path, uthanaArgs, wanted } from "./motion.ts";
 
 test("a take's path runs straight ahead at the clip's speed, a point a frame", () => {
   const [constraint] = path(3.2, 6);
@@ -47,4 +47,12 @@ test("an Uthana take is made by 3.0 unless its entry names a model; 2.0 takes a 
   // 3.0 makes 4 to 10 whole seconds; 2.0 is not held to it.
   assert.throws(() => uthanaArgs({ seed: 1, seconds: 12 }, 0));
   assert.equal(uthanaArgs({ model: "2", seed: 1, seconds: 12 }, 0).length, 12);
+});
+
+test("a locomotion take runs at its entry's speed, five stride pairs unless it says, in its style or the nth of its styles", () => {
+  assert.deepEqual(locoArgs({ speed: 4.3 }, 0), { speed: 4.3, strides: 5, style: "neutral_male_a" });
+  assert.deepEqual(locoArgs({ speed: 1.3, strides: 3, style: "proud" }, 2), { speed: 1.3, strides: 3, style: "proud" });
+  // A list of styles: take n in the nth, round again past its end.
+  assert.equal(locoArgs({ speed: 1.3, style: ["a", "b"] }, 1).style, "b");
+  assert.equal(locoArgs({ speed: 1.3, style: ["a", "b"] }, 2).style, "a");
 });

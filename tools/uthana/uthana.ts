@@ -40,6 +40,9 @@ const USAGE = `node tools/uthana/uthana.ts <command>
       --model 1|2|3 (2)  --length s (5)  --seed n  --fps 24|30|60 (30)  --in-place  --foot-ik
       --body file.glb (default the base body)  --loop s (its end eased into its start over s seconds)
       --from id (a motion already made, looped by --loop or else downloaded again, free)
+  loco -o clip.glb                     a walk or run by Uthana's locomotion ($0.02 a second), looping, checked
+      --speed m/s (1.2)  --strides 1-5 (4)  --style id (neutral_male_a)  --fps  --in-place  --body
+  styles                               the styles loco takes
   schema                               the arguments the live API takes for each mutation`;
 
 function auth(): string {
@@ -116,6 +119,26 @@ export async function motion(prompt: string, o: { model: string; length: number;
   return data.create_text_to_motion.motion.id;
 }
 
+/** A walk or run made by Uthana's locomotion 1.0 ($0.02 a second, uthana.com/pricing): `strides`
+ * left-and-right pairs (1 to 5) at `speed` m/s straight ahead, in a style from `styles()`, its
+ * last frame its first (docs/api/capabilities/locomotion). Returns at once, no job. */
+export async function locomotion(characterId: string, o: { speed: number; strides: number; style: string }): Promise<string> {
+  if (!(o.speed >= 0.25 && o.speed <= 8)) throw new Failed(`locomotion runs at 0.25 to 8 m/s, not ${o.speed}`);
+  if (!(Number.isInteger(o.strides) && o.strides >= 1 && o.strides <= 5)) throw new Failed(`locomotion makes 1 to 5 stride pairs, not ${o.strides}`);
+  const data = await gql<{ create_locomotion: { motion: { id: string } } }>(
+    "mutation ($c: String!, $n: Int, $v: Float, $s: String, $a: Float) { create_locomotion(character_id: $c, strides: $n, move_speed: $v, style_id: $s, travel_angle: $a) { motion { id name } } }",
+    { c: characterId, n: o.strides, v: o.speed, s: o.style, a: 0 },
+  );
+  return data.create_locomotion.motion.id;
+}
+
+/** The styles Uthana's locomotion walks and runs in (docs/api/capabilities/locomotion). */
+export async function styles(): Promise<string[]> {
+  const data = await gql<{ locomotion_styles: unknown }>("query { locomotion_styles }");
+  const list = data.locomotion_styles;
+  return Array.isArray(list) ? list.map((s) => (typeof s === "string" ? s : JSON.stringify(s))) : [JSON.stringify(list)];
+}
+
 /** What is left of the account's pay-as-you-go credit, dollars: a call's cost is the fall in it. */
 export async function balance(): Promise<number> {
   const data = await gql<{ org: { payg_total_usd: string } }>("{ org { payg_total_usd } }");
@@ -187,6 +210,9 @@ export async function main(argv: string[]): Promise<void> {
       body: { type: "string" },
       loop: { type: "string" },
       from: { type: "string" },
+      speed: { type: "string", default: "1.2" },
+      strides: { type: "string", default: "4" },
+      style: { type: "string", default: "neutral_male_a" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -198,6 +224,8 @@ export async function main(argv: string[]): Promise<void> {
     }
     case "character":
       return console.log(JSON.stringify({ character: await character(arg ?? BODY) }));
+    case "styles":
+      return console.log((await styles()).join("\n"));
     case "schema": {
       const data = await gql<{ __schema: { mutationType: { fields: { name: string; args: { name: string }[] }[] } } }>(
         "{ __schema { mutationType { fields { name args { name } } } } }",
@@ -214,6 +242,17 @@ export async function main(argv: string[]): Promise<void> {
       const made = v.from ?? (await motion(arg, { model: v.model!, length, seed: v.seed ? Number(v.seed) : undefined, footIk: v["foot-ik"]!, character: characterId }));
       const motionId = v.loop ? await looped(characterId, made, Number(v.loop)) : made;
       // What it cost, by the account's credit (generating and looping are both charged).
+      const dollars = Math.round((before - (await balance())) * 10000) / 10000;
+      console.log(JSON.stringify({ motion: motionId, character: characterId, dollars }));
+      const { lift, stand } = await download(motionId, v.out, { fps: v.fps!, inPlace: v["in-place"]!, body });
+      return console.log(JSON.stringify({ lift: round(lift), stand: Object.fromEntries(Object.entries(stand).map(([k, x]) => [k, round(x)])), files: [v.out] }));
+    }
+    case "loco": {
+      if (!v.out) throw new Failed("loco needs -o clip.glb: node tools/uthana/uthana.ts loco --speed 3.7 --style neutral_male_a -o jog.glb");
+      const body = v.body ?? BODY;
+      const characterId = await character(body);
+      const before = await balance();
+      const motionId = await locomotion(characterId, { speed: Number(v.speed), strides: Number(v.strides), style: v.style! });
       const dollars = Math.round((before - (await balance())) * 10000) / 10000;
       console.log(JSON.stringify({ motion: motionId, character: characterId, dollars }));
       const { lift, stand } = await download(motionId, v.out, { fps: v.fps!, inPlace: v["in-place"]!, body });
