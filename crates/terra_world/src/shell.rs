@@ -15,7 +15,7 @@ use bevy::{
         common_conditions::input_toggle_active,
         mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
     },
-    log::{DEFAULT_FILTER, LogPlugin},
+    log::LogPlugin,
     prelude::*,
     render::{RenderApp, renderer::RenderAdapterInfo, view::screenshot::save_to_disk},
     time::TimeUpdateStrategy,
@@ -222,12 +222,6 @@ usage: terra_sandbox [options]
   --picture <width>x<height>
                         an offscreen run's picture this size rather than 1920x1080, such
                         as 2560x1440";
-
-/// Engine messages that say what is normal, kept out of the log so what is left is worth
-/// reading. Warnings and errors still come through. `RUST_LOG` replaces all of this.
-const QUIET: &str = "\
-bevy_render=warn,bevy_pbr=warn,bevy_winit=warn,bevy_egui=warn,bevy_diagnostic=warn,\
-sctk_adwaita=off";
 
 /// Frames to wait after loading before measuring or capturing by default, so the camera
 /// and anything that eases in have settled.
@@ -513,6 +507,8 @@ impl Options {
             "--water-mask" => &mut self.water_mask,
             "--flame-matte" => &mut self.flame_matte,
             "--debug-menu" => &mut self.debug_menu,
+            // Read by the log's filter (`record::filter`, D576).
+            "--system-spans" => return true,
             _ => return false,
         };
         *on = true;
@@ -1017,7 +1013,7 @@ impl Plugin for ShellPlugin {
                 ..default()
             })
             .set(LogPlugin {
-                filter: format!("{DEFAULT_FILTER},{QUIET}"),
+                filter: record::filter(),
                 // What the log keeps is kept in memory too, for a script to ask about.
                 custom_layer: record::layer,
                 ..default()

@@ -116,6 +116,28 @@ impl Record {
     }
 }
 
+/// Engine messages that say what is normal, kept out of the log so what is left is worth
+/// reading. Warnings and errors still come through. `RUST_LOG` replaces all of this. The
+/// render thread's span, `pipelined_rendering`'s, is let through for the frame recorder (D576).
+const QUIET: &str = "\
+bevy_render=warn,bevy_render::pipelined_rendering=info,bevy_pbr=warn,bevy_winit=warn,bevy_egui=warn,bevy_diagnostic=warn,\
+sctk_adwaita=off";
+
+/// Bevy's spans of each system run off and those of each schedule run on, unless
+/// `--system-spans` or a Chrome trace build, so a `hitch-log` build (D576) names schedules
+/// unless asked for systems. A span disabled when it is made costs nothing to enter.
+const SCHEDULES_ONLY: &str = ",bevy_ecs=warn,bevy_ecs::schedule::schedule=info";
+
+/// The log plugin's filter.
+pub fn filter() -> String {
+    let systems = cfg!(feature = "trace") || std::env::args().any(|arg| arg == "--system-spans");
+    format!(
+        "{},{QUIET}{}",
+        bevy::log::DEFAULT_FILTER,
+        if systems { "" } else { SCHEDULES_ONLY }
+    )
+}
+
 /// For the log plugin's `custom_layer`: starts the record and hands the log its writers,
 /// the record's and the log file's (`log_file`). They sit behind the log's filter, so they
 /// keep what the log keeps.
@@ -131,6 +153,8 @@ pub fn layer(app: &mut App) -> Option<BoxedLayer> {
         );
     let mut writers: Vec<BoxedLayer> = vec![Box::new(Writer(record.clone()))];
     writers.extend(crate::log_file::layer(&record, &kind));
+    // What ran long in a slow frame, said in the log (D576).
+    writers.push(crate::recorder::layer(app));
     app.insert_resource(record).add_systems(First, count_frames);
     Some(Box::new(writers))
 }

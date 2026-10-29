@@ -65,6 +65,7 @@ pub mod parting;
 pub mod planet;
 pub mod quality;
 pub mod record;
+pub mod recorder;
 pub mod remote;
 pub mod render_errors;
 pub mod rises;

@@ -472,6 +472,7 @@ fn watch(
     mut status: Single<&mut Text, With<Status>>,
     mut next: ResMut<NextState<Screen>>,
     (drawables, names): (Res<Drawables>, Query<(Option<&Name>, Option<&ChildOf>)>),
+    recorder: Option<Res<crate::recorder::Recorder>>,
 ) {
     // What was said this frame; next frame is said afresh.
     let progress = std::mem::take(&mut *progress);
@@ -493,8 +494,14 @@ fn watch(
     if loading.quiet >= QUIET_FRAMES {
         // By the wall clock from the app's start, as a player waits: the frames' deltas
         // summed (`up_for`) left out the start-up schedules and a first frame of 282 s.
+        // Its longest systems, summed over its frames and threads, say why it took that
+        // long without a trace (the frame recorder, D576).
+        let longest = recorder
+            .map(|recorder| recorder.longest_so_far())
+            .filter(|longest| !longest.is_empty())
+            .map_or(String::new(), |longest| format!(" Longest: {longest}."));
         info!(
-            "Loaded in {:.1} s ({:.1} s of it on the loading screen's frames): {}.",
+            "Loaded in {:.1} s ({:.1} s of it on the loading screen's frames): {}.{longest}",
             real.startup().elapsed().as_secs_f32(),
             loading.up_for.as_secs_f32(),
             progress.summary()

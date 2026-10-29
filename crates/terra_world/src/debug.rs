@@ -531,13 +531,18 @@ fn spread(samples: &[Sample], value: impl Fn(&Sample) -> Option<f32>) -> Option<
     Spread::of(samples.iter().filter_map(value).collect())
 }
 
-/// Once a minute, how the last minute went; and, now and then, how often it stuttered.
-fn report(mut frames: ResMut<Frames>) {
+/// Once a minute, how the last minute went; and, now and then, how often it stuttered and
+/// which system was longest in most of those frames (the frame recorder's, D576).
+fn report(mut frames: ResMut<Frames>, recorder: Option<Res<crate::recorder::Recorder>>) {
     let Some(&Sample { at: now, .. }) = frames.samples.back() else {
         return;
     };
     if frames.count <= WARM_UP_FRAMES {
         frames.last_summary = Some(now);
+        // The load's hitches are its own (`Loaded in` names its longest systems).
+        if let Some(recorder) = &recorder {
+            recorder.take_hitches();
+        }
         return;
     }
     if !frames.software
@@ -548,8 +553,13 @@ fn report(mut frames: ResMut<Frames>) {
     {
         let worst = frames.stutters.iter().fold(0.0f32, |a, &b| a.max(b));
         let count = frames.stutters.len();
+        let longest = recorder
+            .and_then(|recorder| recorder.take_hitches())
+            .map_or(String::new(), |(system, most, of)| {
+                format!("; the longest in {most} of {of}: {system}")
+            });
         warn!(
-            "{count} {} took over {STUTTER_MS:.0} ms since the last report, the worst {worst:.1} ms.",
+            "{count} {} took over {STUTTER_MS:.0} ms since the last report, the worst {worst:.1} ms{longest}.",
             if count == 1 { "frame" } else { "frames" }
         );
         frames.stutters.clear();

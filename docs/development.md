@@ -150,7 +150,7 @@ Keep debug builds on the workspace's default profile: full debug information pro
 
 Start here when something is slow; each line is the one command for what you saw. [launcher.md](launcher.md) is the design that makes each of these one step (D575 to D578); its build plan rewrites these lines as it lands.
 
-- **A slow load, or a freeze while playing**: the session's log (`logs/`, its path the last line `cargo xtask play` prints) has `Loaded in`, the minute's frame times and a warning for frames over twice the budget; hand it to an agent. To learn which systems, trace the build that was played ([below](#measuring-performance), "Which systems a frame spends").
+- **A slow load, or a freeze while playing**: the session's log (`logs/`, its path the last line `cargo xtask play` prints) has `Loaded in`, the minute's frame times and a warning for frames over twice the budget; hand it to an agent. To learn which systems, trace the build that was played ([below](#measuring-performance), "Which systems a frame spends"). To have the log say what ran long in each freeze (100 ms or more) and in the load, build with the frame recorder's spans: `cargo xtask win -p terra_sandbox --release --features hitch-log -- <game args>`, adding `--system-spans` to the game's arguments to name systems rather than schedules (D576; not in every build, as it costs about 15% of a frame).
 - **A low frame rate in a place**: `cargo xtask bench <scene>` if a scene shows it ([Measuring performance](#measuring-performance)); then the trace, or switch things off with [tunables](#tunables).
 - **Did my change make it slower**: `cargo xtask bench <scenes>` against the last result, never a trace.
 
