@@ -93,8 +93,8 @@ export const takes = (out: string) =>
 export const HOURS: [string, string][] = [["dusk", "18.4"], ["night", "22"]];
 const CROP = "crop=600:600:500:250";
 
-/// Builds the checkout at `root` with its hearth light held, into `target` (its own by default; the
-/// base's worktree builds into the build's, so the dependencies are built once). `partial` as `hold`.
+/// Builds the checkout at `root` with its hearth light held, into `target` (its own by default;
+/// never another checkout's, `prepareBase`). `partial` as `hold`.
 export function build(root: string, target = join(root, "target"), partial = false): string[] {
   const path = join(root, "crates/terra_world/src/fire/light.rs");
   const was = readFileSync(path, "utf8");
@@ -195,8 +195,8 @@ export function baseOf(root: string, given?: string): { rev: string; same: boole
 }
 
 /// The base's checkout (a worktree at target/gate/base, its own assets) and its held build, built
-/// into the build's target so the dependencies are built once (its own when patches/ differ), its binary kept beside it, and its
-/// textures cooked as the worker cooks a job's.
+/// into a target of its own (target/gate/base-target, kept between runs so the registry's crates
+/// build once), its binary kept beside it, and its textures cooked as the worker cooks a job's.
 export function prepareBase(root: string, rev: string): { dir: string; bin: string; changed: string[] } {
   const dir = join(root, "target/gate/base");
   git(root, ["worktree", "remove", "--force", dir]);
@@ -204,12 +204,14 @@ export function prepareBase(root: string, rev: string): { dir: string; bin: stri
   git(root, ["worktree", "prune"]);
   const add = git(root, ["worktree", "add", "-q", "--detach", dir, rev]);
   if (add.status !== 0) throw new Error(`git worktree add ${rev.slice(0, 9)}: ${add.stderr.trim()}`);
-  // A crate we patch (patches/) that differs between the two gets a target of its own: cargo
-  // hashes a path dependency by its path from the workspace root, the same in both checkouts, and
-  // judges it fresh by mtime, so the build would link the base's copy (tundra round 12: the
-  // build's new bevy_pbr field went missing).
-  const own = git(root, ["diff", "--quiet", rev, "--", "patches"]).status !== 0;
-  const target = join(root, own ? "target/gate/base-target" : "target");
+  // The base builds into a target of its own, never the build's: cargo gives a path crate (the
+  // workspace's and patches/') the same unit in any checkout of the workspace, and judges it
+  // fresh by the files its last build read, named relative to the target when they lie under
+  // it, as this worktree does. So the build linked the base's copy of every crate whose files
+  // the gate did not touch, and a gate that failed before removing this worktree left the
+  // build's target linking it on later jobs (tundra rounds 12 and 14: bevy_pbr's new field
+  // missing on worker slot 3 for hours).
+  const target = join(root, "target/gate/base-target");
   const changed = build(dir, target, true);
   const bin = join(root, "target/gate/base-sandbox");
   copyFileSync(join(target, "release/terra_sandbox"), bin);
