@@ -4,7 +4,7 @@
 // with rsync. No GPU, no network; a few seconds.
 
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,7 +12,7 @@ import { join, resolve } from "node:path";
 import { after, test } from "node:test";
 import { box, readJob, slotDir, slotHome } from "./box.ts";
 import { finish, prepare, type Remote, sendLfs, snapshot, submit } from "./client.ts";
-import { next, type Running, runJob, stop } from "./daemon.ts";
+import { next, reapOrphans, type Running, runJob, stop } from "./daemon.ts";
 
 const tmp = mkdtempSync(join(tmpdir(), "render-flow-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
@@ -384,4 +384,72 @@ test("--dirty runs the working tree's changes as a patch: no hook, no ref, the i
   assert.match(jobLog, new RegExp(`^render-worker: PATCH: this job runs uncommitted changes on ${base}`, "m"));
   assert.match(jobLog, /^probe: probe 42 true true false$/m, "the job saw the edit, the staged and the new file, not the ignored one");
   assert.match(readFileSync(join(out, "patch.diff"), "utf8"), /^\+probe 42$/m);
+});
+
+// A process is gone once it has no /proc entry, or only a zombie's waiting for its new parent.
+const gone = (pid: number) => !existsSync(`/proc/${pid}`) || /\) Z /.test(readFileSync(`/proc/${pid}/stat`, "utf8"));
+const until = async (ok: () => boolean, ms = 5000) => {
+  for (const end = Date.now() + ms; !ok() && Date.now() < end; ) await new Promise((r) => setTimeout(r, 50));
+  return ok();
+};
+// A script's background loop that leaves the job's process group, as `setsid sh -c 'while :; …'
+// &` did in the job cancelled on 2026-10-29 that held slot 4's gpu.lock for 2 h 46 min after it.
+const loop = (then: string) => ["sh", "-c", `setsid sh -c 'echo $$ > loop.pid; while :; do sleep 1; done' & while [ ! -s loop.pid ]; do sleep 0.05; done; ${then}`];
+const procs = !existsSync("/proc/self/environ") && "no /proc here";
+
+test("a cancelled job's background loop that left its process group is stopped too, and its log says nothing of it is left", { skip: procs }, async () => {
+  const sub = submit(r, agent, job({ command: loop("sleep 60") }));
+  assert.ok("id" in sub);
+  const pidFile = join(slotDir(b, 1), "loop.pid");
+  rmSync(pidFile, { force: true });
+  const rc: Running = { job: first()!, cancelled: false };
+  const ending = runJob(b, rc.job, 1, rc);
+  assert.ok(await until(() => existsSync(pidFile) && readFileSync(pidFile, "utf8").trim() !== ""), "the loop started");
+  const pid = Number(readFileSync(pidFile, "utf8"));
+  stop(rc, 1000);
+  const ended = await ending;
+  assert.equal(ended.state, "cancelled");
+  assert.ok(await until(() => gone(pid)), `the loop (pid ${pid}) is stopped`);
+  const log = readFileSync(join(b.jobs, sub.id, "out/job.log"), "utf8");
+  assert.match(log, new RegExp(`render-worker: cancelled: stopped \\d+ processes of the job still running \\(.*pid ${pid} \`sh -c echo .*\\); nothing of the job is left`));
+});
+
+test("a job whose command ends leaving a loop behind ends it, and says so; a restarted daemon stops a job's orphans", { skip: procs }, async () => {
+  const sub = submit(r, agent, job({ command: loop("true") }));
+  assert.ok("id" in sub);
+  const pidFile = join(slotDir(b, 1), "loop.pid");
+  rmSync(pidFile, { force: true });
+  const ended = await runJob(b, first()!);
+  assert.equal(ended.state, "done", ended.note);
+  assert.match(ended.note ?? "", /; stopped \d+ of its processes left running$/);
+  const pid = Number(readFileSync(pidFile, "utf8"));
+  assert.ok(await until(() => gone(pid)), `the loop (pid ${pid}) is stopped`);
+  assert.match(readFileSync(join(b.jobs, sub.id, "out/job.log"), "utf8"), /render-worker: the job ended: stopped \d+ process(es)? of the job still running .*What a job starts in the background/);
+
+  // One with nothing left says so.
+  const clean = submit(r, agent, job({ command: ["true"] }));
+  assert.ok("id" in clean);
+  assert.equal((await runJob(b, first()!)).state, "done");
+  assert.match(readFileSync(join(b.jobs, clean.id, "out/job.log"), "utf8"), new RegExp(`render-worker: the job ended: nothing of the job is left running \\(no process carries TERRA_RENDER_JOB=${clean.id}\\)`));
+
+  // A daemon that starts finds a process of a job it does not run (its last self ran it) and
+  // stops it; one naming no job of this box it leaves alone.
+  const orphan = spawn("sh", ["-c", "while :; do sleep 1; done"], { detached: true, stdio: "ignore", env: { ...process.env, TERRA_RENDER_JOB: sub.id } });
+  const stranger = spawn("sh", ["-c", "sleep 30"], { detached: true, stdio: "ignore", env: { ...process.env, TERRA_RENDER_JOB: "20991231-000000-0000" } });
+  orphan.unref();
+  stranger.unref();
+  await until(() => existsSync(`/proc/${orphan.pid}/environ`) && readFileSync(`/proc/${orphan.pid}/environ`, "utf8").includes(sub.id));
+  const log = console.log;
+  console.log = quiet;
+  let found: { pid: number }[] = [];
+  try {
+    found = await reapOrphans(b, new Set(), 1000);
+  } finally {
+    console.log = log;
+  }
+  assert.ok(found.some((p) => p.pid === orphan.pid), JSON.stringify(found));
+  assert.ok(await until(() => gone(orphan.pid!)), "the orphan is stopped");
+  assert.ok(!gone(stranger.pid!), "a process naming no job of this box is left alone");
+  process.kill(stranger.pid!, "SIGKILL");
+  assert.match(readFileSync(join(b.jobs, sub.id, "out/job.log"), "utf8"), /render-worker: found running after its job ended .*: stopped \d+ process(es)? of the job still running/);
 });

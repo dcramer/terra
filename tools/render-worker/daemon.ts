@@ -13,7 +13,8 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSyn
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
 import { Display } from "./display.ts";
-import { boxSettings, classOf, cleanCommands, collected, displayPlan, expired, incrementalClears, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, rustcIce, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
+import { killNow, type Proc, reap, reaped, scan } from "./reap.ts";
+import { boxSettings, classOf, cleanCommands, collected, displayPlan, expired, ID, incrementalClears, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, rustcIce, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -44,9 +45,10 @@ export function gather(job: Job, src: string, home: string, startedMs: number, m
   return found;
 }
 
-/// The running job's child, so a cancel can stop its whole process group. A bench built ahead
+/// The running job's child, so a cancel can stop its whole process group, and the stopping of
+/// what of the job left the group (reap.ts), which the job's end waits for. A bench built ahead
 /// calls `ready` and waits until the daemon calls its `go` (`plan` says when).
-export type Running = { job: Job; child?: ChildProcess; cancelled: boolean; ready?: () => void; go?: () => void };
+export type Running = { job: Job; child?: ChildProcess; cancelled: boolean; ready?: () => void; go?: () => void; reaping?: Promise<{ found: Proc[]; left: Proc[] }> };
 
 function run(cmd: string[], cwd: string, env: NodeJS.ProcessEnv, log: number, r: Running): Promise<number> {
   return new Promise((done) => {
@@ -57,12 +59,31 @@ function run(cmd: string[], cwd: string, env: NodeJS.ProcessEnv, log: number, r:
   });
 }
 
-export function stop(r: Running): void {
+/// Cancels a job: TERM to its step's process group, and every process carrying its cookie,
+/// in the group or out of it, TERMed then KILLed (reap.ts).
+export function stop(r: Running, graceMs?: number): void {
   r.cancelled = true;
   try {
     if (r.child?.pid) process.kill(-r.child.pid, "SIGTERM");
   } catch {}
+  const id = r.job.id;
+  r.reaping ??= reap((j) => j === id, graceMs);
   r.go?.();
+}
+
+/// Stops the processes of this box's jobs that no running job of this daemon owns (a daemon
+/// restarted during them, or anything a job's end missed), saying so in each job's log.
+export async function reapOrphans(b: Box, mine: ReadonlySet<string>, graceMs?: number): Promise<Proc[]> {
+  const ours = (j: string) => !mine.has(j) && ID.test(j) && existsSync(join(b.jobs, j));
+  if (!scan(ours).length) return [];
+  const r = await reap(ours, graceMs);
+  for (const id of new Set(r.found.map((p) => p.job))) {
+    const log = join(outDir(b, id), "job.log");
+    const one = { found: r.found.filter((p) => p.job === id), left: r.left.filter((p) => p.job === id) };
+    if (existsSync(dirname(log))) appendFileSync(log, `render-worker: ${reaped(id, one, "found running after its job ended (the daemon restarted during it, or it escaped its end)")}\n`);
+    say(`${one.left.length ? "✗" : "✓"} ${id}: ${reaped(id, one, "orphans")}`);
+  }
+  return r.found;
 }
 
 /// What a step wrote to the log since `from`, at most its last `most` bytes.
@@ -112,6 +133,18 @@ export function slotCheckout(b: Box, slot: number, rev: string): string {
   return dir;
 }
 
+/// Ends whatever of a job still runs, in its process group or out of it, once its steps are
+/// done, and says in its log that nothing of it is left (or what is); what to add to its note.
+async function endProcesses(id: string, r: Running, why: string, note: (line: string) => void): Promise<string> {
+  const ended = r.cancelled ? "cancelled" : why.startsWith("stopped at its limit") ? "timed out" : "the job ended";
+  const early = r.reaping ? await r.reaping : { found: [], left: [] };
+  const last = await reap((j) => j === id);
+  const found = [...early.found, ...last.found.filter((p) => !early.found.some((q) => q.pid === p.pid))];
+  note(reaped(id, { found, left: last.left }, ended));
+  if (last.left.length) return `${last.left.length} of its processes still run after SIGKILL (job.log names them)`;
+  return last.found.length ? `stopped ${last.found.length} of its processes left running` : "";
+}
+
 /// Runs one job to its end in its slot: its steps in the slot's checkout, then its files into out/.
 export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }, display?: Display, pCores?: string): Promise<Job> {
   const bench = queued.kind === "run" && classOf(queued) === "bench";
@@ -130,6 +163,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   let ran = false;
   let cleaned = "";
   let iced = "";
+  let strays = "";
   const absent: string[] = [];
   const home = slotHome(b, slot);
   let src = slotDir(b, slot);
@@ -227,6 +261,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
         break;
       }
     }
+    strays = await endProcesses(job.id, r, why, note);
     const files = job.kind === "run" ? gather(job, src, home, startedMs, (p) => absent.push(p)) : [];
     for (const p of absent) note(`--collect ${p}: not there when the job ended (${p.startsWith("~/") ? `under the slot's HOME, ${home}` : `in the checkout, ${src}`}), so nothing came from it; check the path the command writes, one path a --collect`);
     for (const [from, name] of files) {
@@ -245,10 +280,12 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
     exit ||= 1;
     why = (e as Error).message;
     note(why);
+    strays ||= await endProcesses(job.id, r, why, note);
   }
   closeSync(log);
   if (cleaned) why += `; cleaned a stale build of ${cleaned} and ran it again`;
   if (iced) why += `; ${iced}`;
+  if (strays) why += `; ${strays}`;
   if (absent.length) why += `; not there to collect: ${absent.join(", ")}`;
   job = { ...job, state: r.cancelled ? "cancelled" : exit ? "failed" : "done", exit, ended: new Date().toISOString(), note: why };
   writeJob(b, job);
@@ -288,14 +325,16 @@ async function daemon(b: Box): Promise<number> {
     return 1;
   }
   const display = new Display(dp, say);
-  process.on("exit", () => display.stop());
+  const running = new Map<string, Running>();
+  // A daemon stopped mid-job takes its jobs' processes with it (systemd would kill its cgroup,
+  // the supervisor would not); one that dies uncleanly leaves them to the next (`reapOrphans`).
+  process.on("exit", () => (display.stop(), killNow((j) => running.has(j))));
   for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => process.exit(128 + (sig === "SIGTERM" ? 15 : 2)));
   const rev = git(b.repo, ["rev-parse", "--short=9", "HEAD"]).stdout.trim();
   const since = new Date().toISOString();
   const mode = process.env.TERRA_RENDER_MODE ?? "by hand";
   let status = "starting";
   const beat = () => writeFileSync(join(b.dir, "daemon.json"), JSON.stringify({ pid: process.pid, mode, rev, since, beat: new Date().toISOString(), status, display: display.describe() }));
-  const running = new Map<string, Running>();
   housekeep(b, s.keepDays);
   // A bench runs on the performance cores of a hybrid processor (jobs.ts `steps`).
   const lscpu = spawnSync("lscpu", ["-p=CPU,MAXMHZ"], { encoding: "utf8" });
@@ -306,6 +345,7 @@ async function daemon(b: Box): Promise<number> {
   let lastWhy = "";
   for (;;) {
     housekeep(b, s.keepDays, new Date(), new Set(running.keys()));
+    await reapOrphans(b, new Set(running.keys()));
     const restart = existsSync(join(b.dir, "restart"));
     if (restart && !running.size) {
       rmSync(join(b.dir, "restart"), { force: true });
