@@ -155,8 +155,17 @@ pub(crate) fn windows_program(
         eprintln!("Could not find the Windows temp folder. Is Windows interop enabled?");
         return None;
     };
+    let program = run_dir.join(&exe_name);
     let staged = std::fs::create_dir_all(&run_dir)
-        .and_then(|()| std::fs::copy(&built, run_dir.join(&exe_name)).map(|_| ()))
+        .and_then(|()| copy_changed(&built, &program))
+        // Not copied, it is touched: the sweep reads its time as the copy's last run.
+        .and_then(|copied| match copied {
+            true => Ok(()),
+            false => std::fs::File::options()
+                .write(true)
+                .open(&program)
+                .and_then(|file| file.set_modified(SystemTime::now())),
+        })
         // A Bevy program looks for its assets next to itself.
         .and_then(|()| copy_dir(&root().join("assets"), &run_dir.join("assets")));
     if let Err(error) = staged {
@@ -254,7 +263,7 @@ fn delete_copy(copy: &Path) -> bool {
         && std::fs::remove_dir_all(copy).is_ok()
 }
 
-/// When a staged copy was last run from: its program is copied in at every launch, and a run
+/// When a staged copy was last run from: its program is copied in or touched at every launch, and a run
 /// writes its logs and shots beside it.
 fn last_run(copy: &Path) -> SystemTime {
     let mut paths = vec![copy.to_path_buf()];
@@ -319,10 +328,27 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
         if entry.path().is_dir() {
             copy_dir(&entry.path(), &target)?;
         } else {
-            std::fs::copy(entry.path(), target)?;
+            copy_changed(&entry.path(), &target)?;
         }
     }
     Ok(())
+}
+
+/// Copies `from` to `to` unless `to` already holds it: the same size, written since `from`
+/// was. Says whether it copied. The program (730 MB in a dev build) and the assets (500 MB)
+/// went over WSL's share whole at every launch, about 20 s before the game started; most
+/// launches change neither. A copy is written after its source, so a source saved since, or
+/// put back by git (which writes the time of the checkout), is newer and copied again.
+fn copy_changed(from: &Path, to: &Path) -> std::io::Result<bool> {
+    let source = from.metadata()?;
+    if let Ok(copy) = to.metadata()
+        && copy.len() == source.len()
+        && copy.modified()? >= source.modified()?
+    {
+        return Ok(false);
+    }
+    std::fs::copy(from, to)?;
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -369,5 +395,41 @@ mod tests {
         assert_eq!(sweep_staged(&staged, now, 0), size as u64);
         assert_eq!(left(), ["fresh"]);
         std::fs::remove_dir_all(&staged).unwrap();
+    }
+
+    #[test]
+    fn a_copy_is_made_again_only_when_its_source_changed() {
+        let dir = std::env::temp_dir().join(format!("xtask-copy-changed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (from, to) = (dir.join("from"), dir.join("to"));
+        let write = |text: &str, age: u64| {
+            std::fs::write(&from, text).unwrap();
+            let then = SystemTime::now() - Duration::from_secs(age);
+            std::fs::File::options()
+                .write(true)
+                .open(&from)
+                .unwrap()
+                .set_modified(then)
+                .unwrap();
+        };
+        write("one", 60);
+        assert!(copy_changed(&from, &to).unwrap(), "no copy yet");
+        assert!(!copy_changed(&from, &to).unwrap(), "unchanged since");
+        // Saved since the copy, at the same size: copied again.
+        write("two", 0);
+        std::fs::File::options()
+            .write(true)
+            .open(&to)
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(30))
+            .unwrap();
+        assert!(copy_changed(&from, &to).unwrap(), "saved since the copy");
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "two");
+        // Another size, though older than the copy (put back from an older file): copied.
+        write("three", 3600);
+        assert!(copy_changed(&from, &to).unwrap(), "another size");
+        assert_eq!(std::fs::read_to_string(&to).unwrap(), "three");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
