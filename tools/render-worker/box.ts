@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { doctor } from "./doctor.ts";
-import { ago, benchHold, boxSettings, classOf, ID, type Job, jobId, mayStart, parseEnvFile, plan as planJobs, short, steps, UPDATE_REF } from "./jobs.ts";
+import { ago, benchHold, boxSettings, classOf, ID, type Job, jobId, mayStart, parseEnvFile, plan as planJobs, recentJobs, short, steps, UPDATE_REF } from "./jobs.ts";
 
 /// `src` and `home` are the single job checkout and HOME from before slots, which slot 1 takes
 /// over (daemon.ts `slotCheckout`).
@@ -146,7 +146,7 @@ async function waitFor(b: Box, id: string): Promise<number> {
   }
 }
 
-function status(b: Box, json: boolean): number {
+function status(b: Box, json: boolean, all = false): number {
   const d = daemonInfo(b);
   const jobs = listJobs(b);
   const rev = git(b.repo, ["rev-parse", "--short=9", "HEAD"]).stdout.trim();
@@ -166,8 +166,9 @@ function status(b: Box, json: boolean): number {
     }
   }
   for (const line of benchHold(jobs, now)) console.log(line);
-  console.log("jobs:");
-  for (const j of jobs) console.log(`  ${j.id} ${j.state.padEnd(9)} ${ago(j.queued, now).padStart(5)} ago  ${short(j)}${j.note ? `  [${j.note}]` : ""}`);
+  const shown = all ? jobs : recentJobs(jobs, now);
+  console.log(shown.length < jobs.length ? `jobs (the last day's, and every one queued or running; ${jobs.length - shown.length} older: --status --all):` : "jobs:");
+  for (const j of shown) console.log(`  ${j.id} ${j.state.padEnd(9)} ${ago(j.queued, now).padStart(5)} ago  ${short(j)}${j.note ? `  [${j.note}]` : ""}`);
   if (!jobs.length) console.log("  no jobs");
   return 0;
 }
@@ -327,14 +328,14 @@ async function main(argv: string[]): Promise<number> {
   const [cmd, arg] = at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv;
   if (cmd === "submit") return submit(b, readFileSync(0, "utf8"));
   if (cmd === "wait" && ID.test(arg ?? "")) return waitFor(b, arg);
-  if (cmd === "status") return status(b, arg === "--json");
+  if (cmd === "status") return status(b, arg === "--json", arg === "--all");
   if (cmd === "logs" && (arg === "daemon" || ID.test(arg ?? ""))) return logs(b, arg);
   if (cmd === "cancel" && ID.test(arg ?? "")) return cancel(b, arg);
   if (cmd === "update" && /^[0-9a-f]{7,40}$/.test(arg ?? "")) return update(b, arg);
   if (cmd === "install") return console.log(`✓ render-box: the daemon runs as ${install(b)}`), 0;
   if (cmd === "plan") return plan(b);
   if (cmd === "doctor") return doctor(b);
-  console.log("usage: node box.ts [--dir DIR] submit | wait <id> | status [--json] | logs <id|daemon> | cancel <id> | update <sha> | install | plan | doctor");
+  console.log("usage: node box.ts [--dir DIR] submit | wait <id> | status [--json|--all] | logs <id|daemon> | cancel <id> | update <sha> | install | plan | doctor");
   return 2;
 }
 

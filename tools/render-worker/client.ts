@@ -241,7 +241,7 @@ async function run(args: ClientArgs, remotes: Remote[], cwd: string, outOf: (id:
     let bad = 0;
     for (const r of remotes) {
       if (remotes.length > 1) console.log(`== ${r.host}`);
-      const res = onBox(r, boxCmd(r, [args.mode]), undefined, true);
+      const res = onBox(r, boxCmd(r, [args.mode, ...(args.mode === "status" && args.all ? ["--all"] : [])]), undefined, true);
       if (res.status === 255 || res.status === 127) console.log(`✗ ${why(r, res)}`);
       if (res.status !== 0) bad++;
     }

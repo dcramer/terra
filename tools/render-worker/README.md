@@ -10,7 +10,7 @@ cargo xtask remote-render --cpu -- node tools/x.ts         # a job that never dr
 cargo xtask remote-render --dirty -- cargo test -p x probe  # the working tree's uncommitted changes, as a patch, no hooks
 cargo xtask remote-render --dirty -- sh ab.sh $(git rev-parse origin/main)  # an A/B: main by its sha (below)
 cargo xtask remote-render --wait <job>                     # wait for it and fetch its files
-cargo xtask remote-render --status                         # each box's daemon and jobs
+cargo xtask remote-render --status                         # each box's daemon, slots and the last day's jobs (--all: every one kept)
 cargo xtask remote-render --logs <job|daemon>              # a log's last lines
 cargo xtask remote-render --cancel <job>                   # drop a queued job, stop a running one
 cargo xtask remote-render --update                         # bring the boxes to origin/main and restart their daemons

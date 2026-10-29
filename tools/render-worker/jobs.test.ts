@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { benchHold, boxSettings, buildAhead, chooseWorker, cleanCommands, collected, commandKey, config, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, rustcIce, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
+import { benchHold, boxSettings, buildAhead, chooseWorker, cleanCommands, collected, commandKey, config, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, recentJobs, rustcIce, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -48,6 +48,8 @@ test("the client's arguments: the command after --, options before it, one mode"
   assert.equal((parseClient(["--", "x"]) as { class?: string }).class, undefined);
   assert.ok("error" in parseClient(["--cpu", "--gpu", "--", "x"]));
   assert.deepEqual(parseClient(["--status"]), { mode: "status", worker: undefined });
+  assert.deepEqual(parseClient(["--status", "--all"]), { mode: "status", worker: undefined, all: true });
+  assert.ok("error" in parseClient(["--update", "--all"]));
   assert.deepEqual(parseClient(["--update", "--worker", "b"]), { mode: "update", worker: "b" });
   assert.deepEqual(parseClient(["--wait", "20261023-120000-aaaa", "--out", "d"]), { mode: "wait", id: "20261023-120000-aaaa", out: "d", worker: undefined });
   assert.deepEqual(parseClient(["--logs", "daemon"]), { mode: "logs", id: "daemon", worker: undefined });
@@ -144,6 +146,16 @@ test("slots: four jobs at once, the GPU cap holds and CPU jobs pass, a bench wai
   // A warm build queued after it (an update) waits behind it too, and keeps its own slot.
   const warmAfter = at(4, { kind: "warm", slot: 1, class: "cpu" });
   assert.deepEqual(slotsOf(plan([at(1, { ...cpu, state: "running", slot: 3 }), bench, warmAfter], s)), [["02", 2]]);
+});
+
+test("--status lists every live job and the last day's ended, at least the last ten", () => {
+  const now = new Date("2026-10-29T12:00:00.000Z");
+  const old = Array.from({ length: 30 }, (_, i) => job({ id: `20261025-1000${String(i).padStart(2, "0")}-aaaa`, queued: "2026-10-25T10:00:00.000Z", state: "done" }));
+  const live = job({ id: "20261025-110000-bbbb", queued: "2026-10-25T11:00:00.000Z", state: "queued" });
+  const today = job({ id: "20261029-110000-cccc", queued: "2026-10-29T11:00:00.000Z", state: "failed" });
+  const shown = recentJobs([...old, live, today], now);
+  assert.deepEqual(shown, [...old.slice(-9), live, today]);
+  assert.equal(recentJobs([...old, live, today], now, 24, 1).length, 2);
 });
 
 // ---- A bench's drain, and benches back to back (D319) ----

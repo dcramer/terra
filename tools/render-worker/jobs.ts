@@ -142,11 +142,11 @@ export type ClientArgs =
   | { mode: "queue"; rev?: string; dirty: boolean; command: string[]; collect: string[]; cook: boolean; minutes: number; out?: string; wait: boolean; worker?: string; class?: "cpu" | "gpu" }
   | { mode: "wait"; id: string; out?: string; worker?: string }
   | { mode: "cancel" | "logs"; id: string; worker?: string }
-  | { mode: "status" | "update" | "doctor"; worker?: string };
+  | { mode: "status" | "update" | "doctor"; worker?: string; all?: boolean };
 
 export const USAGE =
   "usage: cargo xtask remote-render [--rev <sha> | --dirty] [--collect <path>]… [--minutes N] [--no-cook] [--gpu|--cpu] [--out DIR] [--no-wait] [--worker HOST] -- <command…>\n" +
-  "       cargo xtask remote-render --wait <job> | --logs <job|daemon> | --cancel <job> | --status | --update | --doctor  [--worker HOST]";
+  "       cargo xtask remote-render --wait <job> | --logs <job|daemon> | --cancel <job> | --status [--all] | --update | --doctor  [--worker HOST]";
 
 export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): ClientArgs | { error: string } {
   const dash = argv.indexOf("--");
@@ -160,6 +160,7 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
   let cook = true;
   let wait = true;
   let dirty = false;
+  let all = false;
   let cls: "cpu" | "gpu" | undefined;
   let id = "";
   let mode: ClientArgs["mode"] = "queue";
@@ -185,6 +186,7 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
       } else if (a === "--no-cook") cook = false;
       else if (a === "--no-wait") wait = false;
       else if (a === "--dirty") dirty = true;
+      else if (a === "--all") all = true;
       else if (a === "--gpu" || a === "--cpu") {
         if (cls && cls !== a.slice(2)) throw new Error("--gpu and --cpu together");
         cls = a.slice(2) as "gpu";
@@ -200,7 +202,9 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
     return { error: (e as Error).message };
   }
   if (worker !== undefined && !HOST.test(worker)) return { error: `--worker ${worker}: not an ssh host` };
-  if (mode === "status" || mode === "update" || mode === "doctor") return { mode, worker };
+  if (all && mode !== "status") return { error: "--all goes with --status: every job the box keeps, not only the last day's" };
+  if (mode === "status") return { mode, worker, ...(all ? { all } : {}) };
+  if (mode === "update" || mode === "doctor") return { mode, worker };
   if (mode === "cancel" || mode === "logs") return { mode, id, worker };
   if (mode === "wait") return { mode, id, out, worker };
   if (!command.length) return { error: "no command: put it after --" };
@@ -516,6 +520,16 @@ export function benchHold(jobs: Job[], now: Date): string[] {
     out.push(`  waiting behind it: ${behind.length} job${behind.length === 1 ? "" : "s"} (${n("gpu")} GPU, ${n("cpu")} CPU), the oldest ${behind[0].id} for ${ago(behind[0].queued, now)}`);
   }
   return out;
+}
+
+/// The jobs `--status` lists without `--all`, in their order: every one queued or running, and
+/// of the ended those queued in the last `hours`, or the last `least` of them if fewer.
+export function recentJobs(jobs: Job[], now: Date, hours = 24, least = 10): Job[] {
+  const ended = jobs.filter((j) => j.state !== "queued" && j.state !== "running");
+  const since = now.getTime() - hours * 3600_000;
+  const keep = new Set(ended.filter((j) => Date.parse(j.queued) >= since));
+  for (const j of ended.slice(-least)) keep.add(j);
+  return jobs.filter((j) => j.state === "queued" || j.state === "running" || keep.has(j));
 }
 
 /// Jobs to delete with their files and ref: ended, or queued, longer than `days` ago.
