@@ -79,7 +79,10 @@ fn ridge(k: u32, round: vec2<f32>, dip: f32, hills: f32, peaks: f32) -> Ridge {
     // a row of needles: only in the highest massifs now, the saddles and shoulders between
     // at 45 to 60 percent of their height (the r18 review).
     let spires = 0.3 + 0.7 * pow(crest * 0.55 + fine * 0.25 + jag * 0.13 + grit * 0.07, 1.3) * mix(0.6, 1.0, shape);
-    let shoulder = 0.45 + 0.15 * shape + 0.06 * fine;
+    // Shoulders broken by their own knolls and notches: with the fine crests a sixteenth of
+    // them, where no massif rose the nearest ridge's top ran level for tens of degrees, a
+    // flat band under the range (mountains rounds 4 to 6's judges).
+    let shoulder = 0.42 + 0.15 * shape + 0.12 * fine + 0.05 * jag;
     let range = mix(shoulder, max(spires, shoulder), smoothstep(0.5, 0.9, massif)) * height;
     let rolling = smoothstep(0.25, 0.85, shape);
     let top = base + hills * rising[k] * mix(rolling, range, peaks)

@@ -11,7 +11,6 @@ import bevy_pbr::render::{
 import super::dusk::dusk_sky;
 import super::cloud_noise::{hash, noise, wrapped_noise};
 import super::far_land::{RIDGES, RIDGE_HILLS, PEAK_LIFT, around, horizon_dip, ridge};
-@if(!PREPASS_PIPELINE && DISTANCE_FOG) import bevy_pbr::render::mesh_view_bindings::fog;
 import super::overcast::overcast_seen;
 
 // Field order must match SkyMaterial in sky.rs.
@@ -212,10 +211,11 @@ const LAND_AIR: vec3<f32> = vec3<f32>(0.5, 0.76, 1.32);
 // The far snow by day, as dim as the ground's past 6 km (ground.wesl's FAR_DIM times 0.9),
 // which stands in for its faces turned from the sun: undimmed, it lit the whole band.
 const LAND_FAR_SNOW_DIM: f32 = 0.56;
-// The share of a ridge's height over the planet's horizon, from it, over which its foot fades
-// by day into the haze the world's own ground ends in there (Bevy's distance fog, whole): the
-// nearest ridge stood on the far shore with a hard flat foot (mountains round 4's judges).
+// The share of a ridge's height over the nearer ridges' tops, from them, over which its foot
+// fades by day into its haze, and how far at the foot: each ridge stood on the one before it
+// with a hard flat foot (mountains rounds 4 to 6's judges).
 const LAND_FOOT: f32 = 0.45;
+const LAND_MIST: f32 = 0.7;
 // After sunset, how bright the haze before the far land is against the horizon's band, and
 // how far it is turned toward the zenith's blue.
 const EARTH_SHADOW: f32 = 0.6;
@@ -303,6 +303,7 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     let behind_luma = max(dot(behind, vec3<f32>(0.2126, 0.7152, 0.0722)), 1.0e-5);
     var colour = vec3<f32>(0.0);
     var cover = 0.0;
+    var nearer = -dip;
     for (var k = 0u; k < RIDGES; k++) {
         let f = f32(k);
         let shaped = ridge(k, round, dip, hills, sky.far_peaks);
@@ -349,11 +350,14 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         let haze = mix(mix(behind, air, day_peaks), cool, DUSK_COOL * sky.twilight * (0.35 + 0.65 * shadow))
             * mix(1.0, mix(0.85, EARTH_SHADOW, shadow), sky.twilight);
         var seen = backlit_ridge(mix(haze, land, left), behind, cool, f / f32(RIDGES - 1u), snowy, grain, rim, dusk, toward);
-        // Its foot, over the planet's horizon where the world's own ground ends in the haze.
-        @if(!PREPASS_PIPELINE && DISTANCE_FOG) {
-            let foot = 1.0 - smoothstep(-dip, -dip + LAND_FOOT * max(top + dip, 1.0e-5), rise);
-            seen = mix(seen, fog.base_color.rgb, foot * day_peaks);
-        }
+        // Its foot, over the nearer ridges' tops (the planet's horizon under the nearest), lost
+        // in the air filling the valley between them, so each ridge stands crisp at its crest
+        // and fades down into the haze before the next, as Red Dead Redemption 2's and
+        // Bohinj's ranges do layer by layer: faded from the planet's horizon alone, under the
+        // world's ground and the nearer ridges in every view, no foot showed (mountains round 6).
+        let foot = 1.0 - smoothstep(nearer, nearer + LAND_FOOT * max(top - nearer, 1.0e-5), rise);
+        seen = mix(seen, haze, foot * LAND_MIST * day_peaks);
+        nearer = max(nearer, top);
         let take = inside * (1.0 - cover);
         colour += seen * take;
         cover += take;
