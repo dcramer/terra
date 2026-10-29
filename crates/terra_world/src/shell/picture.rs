@@ -51,6 +51,10 @@ fn make_picture(mut commands: Commands, mut images: ResMut<Assets<Image>>, optio
     );
     // So it can be read back for a screenshot.
     image.texture_descriptor.usage |= TextureUsages::COPY_SRC;
+    // Drawn into, so nothing to upload: as made, its zeros waited their turn under the upload
+    // cap (D420) behind the start's textures, so its cameras got no view until the sixth
+    // frame, by when Bevy's upscaling blocked 1.1 s on its pipeline behind the load's others.
+    image.data = None;
     commands.insert_resource(Picture(images.add(image)));
 }
 

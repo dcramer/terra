@@ -160,6 +160,9 @@ fn follow(
         Some(TextureFormat::Rgba8UnormSrgb),
     );
     image.texture_descriptor.usage |= TextureUsages::COPY_SRC;
+    // Drawn into, so nothing to upload or to wait under the upload cap for (D420; the
+    // offscreen picture's comment, `shell::picture`).
+    image.data = None;
     let image = images.add(image);
     *target = RenderTarget::Image(ImageRenderTarget {
         handle: image.clone(),
