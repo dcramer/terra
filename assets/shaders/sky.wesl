@@ -10,6 +10,7 @@ import bevy_pbr::render::{
 };
 import super::dusk::dusk_sky;
 import super::cloud_noise::{hash, wrapped_noise};
+import super::overcast::overcast_seen;
 
 // Field order must match SkyMaterial in sky.rs.
 struct Sky {
@@ -434,9 +435,10 @@ fn over_air(mesh: VertexOutput) -> vec4<f32> {
         var shade = 1.0 - clamp(body, -0.6, 1.0) * (0.22 + 0.4 * rain) * flat;
         shade *= 1.0 + 0.5 * pow(toward_sun, 6.0) * (1.0 - rain);
         // Toward the horizon one sees the deck's underside from far off, through more air:
-        // paler and flatter.
-        shade = mix(1.08, shade, flat);
-        let grey = vec3<f32>(0.92, 0.95, 1.0) * sky.deck.z * shade * view.exposure;
+        // flatter, and as the overcast sky is, a third as bright as overhead, where the haze
+        // under it meets it (overcast.wesl, D418).
+        shade = mix(1.0, shade, flat);
+        let grey = vec3<f32>(0.92, 0.95, 1.0) * sky.deck.z * overcast_seen(lift) * shade * view.exposure;
         let deck = deck_here * smoothstep(-0.12, 0.02, lift);
         colour = mix(colour, grey, deck);
         cover = mix(cover, 1.0, deck);

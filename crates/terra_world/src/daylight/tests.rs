@@ -499,10 +499,12 @@ fn a_closed_rooms_air_takes_none_of_the_skys_colour_and_the_open_air_all_of_it()
 fn under_a_full_deck_the_haze_is_as_bright_on_screen_as_the_deck_is_drawn() {
     // The tundra's start under its deck: the eye opened to EV 7, the sky's light some 1,100.
     let (ev100, sky_light) = (7.0, 1_100.0);
-    // As sky.wesl draws the deck's underside: its grey times its light times the view's
-    // exposure, Bevy's 1 / (1.2 * 2^EV), light on screen.
+    // As sky.wesl draws the deck's underside at the horizon, where the haze meets it: its grey
+    // times its light, the overcast sky's there, times the view's exposure, Bevy's
+    // 1 / (1.2 * 2^EV), light on screen.
     let exposure = 1.0 / (1.2 * libm::exp2f(ev100));
-    let drawn = crate::weather::DECK_GREY * sky_light * exposure;
+    let drawn =
+        crate::weather::DECK_GREY * sky_light * crate::skylight::overcast_seen(0.0) * exposure;
     let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
     let veil = crate::weather::veil(sky_light, ev100);
     let haze = haze_under_deck(Vec3::new(0.6, 0.65, 0.7), veil, 1.0);

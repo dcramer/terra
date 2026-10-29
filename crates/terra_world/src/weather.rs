@@ -173,10 +173,13 @@ pub fn deck(weather: &Weather, sky_light: f32) -> Vec4 {
 }
 
 /// The haze's colour under a deck whose light is so bright, for an eye exposed at so many EV:
-/// the deck's brightness on screen, as Bevy mixes the haze in after the exposure.
+/// the deck's brightness on screen at the horizon, where the haze meets it, as Bevy mixes the
+/// haze in after the exposure. The overcast sky there is a third of its zenith's
+/// (`skylight::overcast_seen`); at the deck's light itself the far land under snowfall stood
+/// in a haze six times white (tundra round 4).
 pub fn veil(sky_light: f32, ev100: f32) -> Vec3 {
     let exposure = 1.0 / (1.2 * libm::exp2f(ev100));
-    DECK_GREY * sky_light * exposure * VEIL
+    DECK_GREY * sky_light * exposure * crate::skylight::overcast_seen(0.0) * VEIL
 }
 
 /// The shade's colour from the sky, toward the deck's grey at its own brightness as the deck

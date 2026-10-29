@@ -534,3 +534,33 @@ fn the_cube_as_bevy_samples_it_is_brightest_and_warmest_toward_the_sun() {
         );
     }
 }
+
+#[test]
+fn the_decks_shader_draws_the_overcast_sky_the_ground_is_lit_by() {
+    // overcast.wesl keeps its own copy of the zenith's share; the two must agree, or the
+    // decks stand brighter or darker than the light they shed (D418).
+    let source =
+        std::fs::read_to_string(crate::data::assets().join("shaders/overcast.wesl")).unwrap();
+    let zenith: f32 = source
+        .split("const OVERCAST_ZENITH: f32 = ")
+        .nth(1)
+        .and_then(|rest| rest.split(';').next())
+        .and_then(|n| n.trim().parse().ok())
+        .expect("overcast.wesl names OVERCAST_ZENITH");
+    assert!(
+        (zenith - overcast_seen(1.0)).abs() < 1e-5,
+        "{zenith} against {}",
+        overcast_seen(1.0)
+    );
+    // Three times brighter overhead than at the horizon, its mean over the upper hemisphere
+    // (cosine-weighted) the even clear sky's.
+    assert!((overcast_seen(1.0) / overcast_seen(0.0) - 3.0).abs() < 1e-5);
+    let steps = 1000;
+    let mean: f32 = (0..steps)
+        .map(|k| {
+            let s = (k as f32 + 0.5) / steps as f32;
+            overcast_seen(s) * 2.0 * s / steps as f32
+        })
+        .sum();
+    assert!((mean - CLEAR_MEAN).abs() < 1e-4, "{mean}");
+}

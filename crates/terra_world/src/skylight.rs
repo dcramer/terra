@@ -438,6 +438,14 @@ fn even_clear(e: f32) -> f32 {
 /// Its cosine-weighted mean over the upper hemisphere: 1.15 - 0.35 * 2 / 3.
 const CLEAR_MEAN: f32 = 1.15 - 0.35 * 2.0 / 3.0;
 
+/// The overcast sky's brightness seen at a height (its sine), as a share of the sky's light on
+/// open ground: the CIE's standard overcast sky (Moon and Spencer 1942, L = Lz (1 + 2 sin e)
+/// / 3), its mean the even clear sky's, 7 / 9 of its zenith's. The decks are drawn so
+/// (`overcast.wesl`) and the haze under them takes the horizon's (D418).
+pub fn overcast_seen(sine: f32) -> f32 {
+    CLEAR_MEAN * 9.0 / 7.0 * (1.0 + 2.0 * sine.clamp(0.0, 1.0)) / 3.0
+}
+
 /// The way in the painting's frame that a texel of a cube's face, +X, -X, +Y, -Y, +Z, -Z, is
 /// read for, not of unit length. The faces are laid as the GPU's cube maps are (the Vulkan and
 /// WebGPU face selection), but Bevy reads them left-handed: it turns the world's way into the
@@ -596,8 +604,7 @@ impl Colours {
             let (f, aureole) = indicatrix(d.dot(self.sun));
             let phi = gradation(e);
             let clear = even_clear(e) + (lit.clear * f * phi - even_clear(e)) * self.day;
-            // The even clear sky's mean over the overcast law's, 7 / 9.
-            let overcast = CLEAR_MEAN * 9.0 / 7.0 * (1.0 + 2.0 * e) / 3.0;
+            let overcast = overcast_seen(e);
             let luminance = clear + (overcast - clear) * self.overcast;
             let sunward = (1.0 - self.overcast) * self.day * lit.clear * aureole * phi
                 / luminance.max(1e-6)
