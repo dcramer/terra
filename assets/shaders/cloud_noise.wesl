@@ -25,3 +25,16 @@ fn wrapped_noise(p: vec3<f32>) -> f32 {
     let x11 = mix(wrapped_hash(cell + vec3<f32>(0.0, 1.0, 1.0)), wrapped_hash(cell + vec3<f32>(1.0, 1.0, 1.0)), u.x);
     return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
 }
+
+// The same on a lattice that never repeats, for what stands still: the sky's stars and the
+// far land's ridges (sky.wesl, far_land.wesl).
+fn noise(p: vec3<f32>) -> f32 {
+    let cell = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let x00 = mix(hash(cell), hash(cell + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+    let x10 = mix(hash(cell + vec3<f32>(0.0, 1.0, 0.0)), hash(cell + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+    let x01 = mix(hash(cell + vec3<f32>(0.0, 0.0, 1.0)), hash(cell + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+    let x11 = mix(hash(cell + vec3<f32>(0.0, 1.0, 1.0)), hash(cell + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}

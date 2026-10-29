@@ -9,7 +9,8 @@ import bevy_pbr::render::{
     mesh_view_bindings::view,
 };
 import super::dusk::dusk_sky;
-import super::cloud_noise::{hash, wrapped_noise};
+import super::cloud_noise::{hash, noise, wrapped_noise};
+import super::far_land::{RIDGES, RIDGE_HILLS, PEAK_LIFT, around, horizon_dip, ridge};
 import super::overcast::overcast_seen;
 
 // Field order must match SkyMaterial in sky.rs.
@@ -68,23 +69,6 @@ var map_next: texture_2d<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(5)
 var map_sampler: sampler;
 
-// Cheap smooth noise: random values on a grid, blended between (cloud_noise.wesl).
-fn noise(p: vec3<f32>) -> f32 {
-    let cell = floor(p);
-    let f = fract(p);
-    let u = f * f * (3.0 - 2.0 * f);
-    let x00 = mix(hash(cell), hash(cell + vec3<f32>(1.0, 0.0, 0.0)), u.x);
-    let x10 = mix(hash(cell + vec3<f32>(0.0, 1.0, 0.0)), hash(cell + vec3<f32>(1.0, 1.0, 0.0)), u.x);
-    let x01 = mix(hash(cell + vec3<f32>(0.0, 0.0, 1.0)), hash(cell + vec3<f32>(1.0, 0.0, 1.0)), u.x);
-    let x11 = mix(hash(cell + vec3<f32>(0.0, 1.0, 1.0)), hash(cell + vec3<f32>(1.0, 1.0, 1.0)), u.x);
-    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
-}
-
-// Billowing noise that stands still: the far land's ridges (`far_land`).
-fn billow(p: vec3<f32>) -> f32 {
-    return noise(p) * 0.5 + noise(p * 2.1 + 7.0) * 0.27 + noise(p * 4.3 + 19.0) * 0.15
-        + noise(p * 8.9 + 5.0) * 0.08;
-}
 
 // Billowing noise of one of the clouds' fields (0 the shapes, 1 the deck's bellies, 2 its scud)
 // at metres from the weather map's middle, each octave shifted by the clock (clouds::offsets).
@@ -205,15 +189,8 @@ fn air_seen(direction: vec3<f32>) -> vec3<f32> {
     return textureSampleLevel(air_texture, air_sampler, d, 0.0).rgb * view.exposure;
 }
 
-// Each ridge of the far land, nearest first: where it stands between the planet's own
-// horizon below and the air's above (0 at the planet's, 1 at the air's), how high its hills
-// rise as a share of the farthest's, and how much of the land's own colour the haze leaves.
-const RIDGES: u32 = 4u;
-const RIDGE_AT: array<f32, 4> = array<f32, 4>(0.12, 0.5, 0.8, 1.0);
-const RIDGE_HILLS: array<f32, 4> = array<f32, 4>(0.45, 0.55, 0.75, 1.0);
-// How much taller a range's far peaks stand than a forest's hills of the same `hills`: as
-// tall, they rose a degree past the lake's far treeline and barely registered (r16 review).
-const PEAK_LIFT: f32 = 1.9;
+// How much of the land's own colour the haze leaves each ridge of the far land, nearest first
+// (their shapes are far_land.wesl's).
 const RIDGE_LEFT: array<f32, 4> = array<f32, 4>(0.55, 0.34, 0.18, 0.08);
 // After sunset, how bright the haze before the far land is against the horizon's band, and
 // how far it is turned toward the zenith's blue.
@@ -262,16 +239,13 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     if hills <= 0.0 || lift > sin(hills * 1.3 * mix(1.0, PEAK_LIFT, sky.far_peaks)) {
         return vec4<f32>(0.0);
     }
-    var at = RIDGE_AT;
-    var rising = RIDGE_HILLS;
     var leaves = RIDGE_LEFT;
+    var rising = RIDGE_HILLS;
     let r = sky.radius_m;
-    let dip = acos(clamp(r / (r + max(length(eye) - r, 0.3)), 0.0, 1.0));
-    // Round the horizon: a point on a circle, so the noise along it has no seam.
+    let dip = horizon_dip(eye, r);
+    let round = around(direction, up);
     let east = normalize(cross(up, vec3<f32>(0.0, 0.0, 1.0)));
-    let north = cross(east, up);
     let level = normalize(direction - up * lift + east * 1.0e-5);
-    let round = vec2<f32>(dot(level, east), dot(level, north));
     // The air just over the horizon: Bevy's tables darken the air's light below it, most of
     // all straight ahead, as if its own ground showed through.
     // After sunset the dusk's own colour there, as the sky draws it just over the horizon
@@ -303,45 +277,16 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     var cover = 0.0;
     for (var k = 0u; k < RIDGES; k++) {
         let f = f32(k);
-        // A range's nearer ridges stand over the horizon too, behind the world's own slopes,
-        // where a forest's lie between the planet's horizon and the air's: with them below it
-        // only the farthest showed, as pale as the sky.
-        let base = -dip * (1.0 - at[k]) * (1.0 - 0.85 * sky.far_peaks);
-        // Hills along the ridge, and the crowns on them, finer and lower the farther.
-        let p = vec3<f32>(round * (5.0 + 4.0 * f), f * 13.7);
-        let shape = billow(p) * 0.85 + billow(p * 3.7 + 3.0) * 0.15;
-        let crowns = noise(vec3<f32>(round * (260.0 + 240.0 * f), f * 5.1));
-        // A range's crests, sharp where two slopes meet, never down to the horizon, so peak
-        // stands behind peak along all of it (a ridged noise, as terrain generators make them).
-        // Bent along the bearing, so a crest leans and its two flanks differ, and in massifs
-        // and saddles a few tens of degrees wide: one crest frequency at one height read as a
-        // row of identical pale triangles (lake film r16, the far right half).
-        let bend = vec3<f32>((noise(p * 0.9 + 41.0) - 0.5) * 1.4, (noise(p * 0.9 + 47.0) - 0.5) * 1.4, 0.0);
-        let q = p + bend;
-        // Half as many crests as round 18's, which stood as an even row of needles.
-        let crest = 1.0 - abs(noise(q * 1.8 + 11.0) * 2.0 - 1.0);
-        let fine = 1.0 - abs(noise(q * 4.3 + 23.0) * 2.0 - 1.0);
-        let jag = 1.0 - abs(noise(q * 14.3 + 31.0) * 2.0 - 1.0);
-        let grit = 1.0 - abs(noise(q * 33.7 + 37.0) * 2.0 - 1.0);
-        let massif = smoothstep(0.2, 0.8, noise(vec3<f32>(round * (1.2 + 0.5 * f), f * 9.1 + 5.0)));
-        let height = mix(1.0, (0.35 + 0.8 * massif) * PEAK_LIFT, sky.far_peaks);
-        // Octave over octave, so a flank breaks in shoulders and gendarmes, not one straight line.
-        // Spires only in a massif's heart, over broad shoulders and saddles between: spires
-        // everywhere stood as an even saw blade (the r17 review), and in every massif's heart as
-        // a row of needles: only in the highest massifs now, the saddles and shoulders between
-        // at 45 to 60 percent of their height (the r18 review).
-        let spires = 0.3 + 0.7 * pow(crest * 0.55 + fine * 0.25 + jag * 0.13 + grit * 0.07, 1.3) * mix(0.6, 1.0, shape);
-        let shoulder = 0.45 + 0.15 * shape + 0.06 * fine;
-        let range = mix(shoulder, max(spires, shoulder), smoothstep(0.5, 0.9, massif)) * height;
-        let rolling = smoothstep(0.25, 0.85, shape);
-        let ridge = base + hills * rising[k] * mix(rolling, range, sky.far_peaks)
-            + hills * (0.06 / (1.0 + f)) * crowns * (1.0 - sky.far_peaks);
-        let inside = clamp((ridge - rise) / pixel + 0.5, 0.0, 1.0);
+        let shaped = ridge(k, round, dip, hills, sky.far_peaks);
+        let base = shaped.base;
+        let crest = shaped.crest;
+        let top = shaped.top;
+        let inside = clamp((top - rise) / pixel + 0.5, 0.0, 1.0);
         if inside <= 0.0 {
             continue;
         }
         // Mist settles below each ridge's crest, paler toward the valley behind the next.
-        let deep = smoothstep(0.0, max(dip * 0.35, 0.004), ridge - rise);
+        let deep = smoothstep(0.0, max(dip * 0.35, 0.004), top - rise);
         // A range's ridges keep more of their own dark the nearer, against the glow behind
         // them (Bohinj at dusk: 46 against the sky's 133).
         // A range's farther ridges sink into the haze faster than a forest's: the nearest
@@ -362,7 +307,7 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         // Toward the set sun only the crests catch its glow, as a rim, and the faces seen are
         // the shaded ones.
         let caps = lit * (FAR_SNOW / max(canopy, vec3<f32>(1.0e-3))) + FAR_SNOW * behind * CAP_GLOW * sky.twilight * (1.0 - 0.85 * backlit);
-        let rim = 1.0 - smoothstep(0.0, RIM_PIXELS * pixel, ridge - rise);
+        let rim = 1.0 - smoothstep(0.0, RIM_PIXELS * pixel, top - rise);
         let land = mix(lit * (0.8 + 0.4 * grain), caps * (0.9 + 0.2 * grain), snowy);
         // Its haze: the farthest ridge nearly the sky behind it, a nearer one deeper in the
         // earth's shadow, dimmer and bluer, so the range reads in layers.

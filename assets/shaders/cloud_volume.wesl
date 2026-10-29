@@ -24,6 +24,7 @@
 import bevy_render::view::View;
 import super::cloud_noise::wrapped_noise;
 import super::dusk::dusk_sky;
+import super::far_land::hides;
 
 // Field order must match `Params` in sky/volume.rs.
 struct Params {
@@ -46,6 +47,9 @@ struct Params {
     // The dusk's own colours (dusk.wesl): the horizon's, in w how much of them the sky draws;
     // the zenith's; the glow's; toward the sun, below the horizon too.
     dusk: array<vec4<f32>, 4>,
+    // The land beyond the world's edge the sky draws (far_land.wesl): x its hills' height,
+    // radians (0 for none), y 1 for a range's peaks, z the planet's radius.
+    far_land: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -442,6 +446,13 @@ fn march(@builtin(global_invocation_id) id: vec3<u32>) {
         t1 = min(t1, sea.x);
     }
     t1 = min(t1, scene);
+    // The far land past the planet's horizon stands in the sky, which writes no depth: the
+    // march stops at the horizon where a ridge hides the ray, so the clouds behind a range are
+    // not laid over it (they stood in it as if it were glass, mountains round 3).
+    let r = params.far_land.z;
+    if params.far_land.x > 0.0 && hides(direction, eye_up, eye, r, params.far_land.x, params.far_land.y) {
+        t1 = min(t1, sqrt(2.0 * r * max(length(eye) - r, 0.3)));
+    }
     let reach = t1;
     t1 = min(t1, MARCH_M);
     if t1 <= t0 && reach <= t0 {

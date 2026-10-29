@@ -75,6 +75,10 @@ pub struct Params {
     /// them the sky draws (its brightness times its share of twilight, `Sky`); the zenith's;
     /// the glow's; toward the sun, below the horizon too.
     pub dusk: [Vec4; 4],
+    /// The land beyond the world's edge the sky draws (`Sky::far_land`, far_land.wesl), which
+    /// the march stops at: its hills' height in radians (0 for none), 1 for a range's peaks,
+    /// the planet's radius.
+    pub far_land: Vec4,
 }
 
 /// The most a heaped column covers, so the 3D noise cuts it into heaps (Nubis's coverage
@@ -367,6 +371,14 @@ fn tell(
             slab.x,
             slab.y,
         ),
+        far_land: sky.far_land.map_or(Vec4::ZERO, |land| {
+            Vec4::new(
+                land.hills.to_radians().max(1e-4),
+                land.peaks,
+                planet.radius_m(),
+                0.0,
+            )
+        }),
     };
     commands.insert_resource(CloudVolume {
         params,
