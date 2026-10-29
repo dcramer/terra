@@ -16,9 +16,10 @@ const SEEDS: u64 = 24;
 /// Each theme's hash of the run-in's output over `SEEDS` seeds, from the code before it was
 /// made faster.
 const HASHES: &[(&str, u64)] = &[
-    // Mine round 9: every corridor of two cells or more takes its torch (`LIT_RUN`).
+    // Mine round 9: every corridor of two cells or more takes its torch (`LIT_RUN`); mine
+    // round 15: the mine dressed (bare timbered walls, big heroes' footprints, cramped heroes).
     ("crypt", 10216878420822679156),
-    ("flooded_mine", 3496483401370762989),
+    ("flooded_mine", 6565467217788639954),
     ("ruined_keep", 15662779320430275328),
 ];
 

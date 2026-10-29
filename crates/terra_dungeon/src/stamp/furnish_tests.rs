@@ -1,14 +1,28 @@
 use super::super::tests::kind;
 use super::super::{Frame, LightKind, MID, ObjectRole, Prop, Stamp, Theme, floor_of, stamp};
-use super::{HERO_LIT_M, HERO_M, OFF_DOOR_M};
+use super::{HERO_LIT_M, HERO_M, OFF_DOOR_M, corners};
 use crate::place::Side;
-use crate::theme::{Dress, assets};
+use crate::theme::{Dress, Foot, assets};
 use crate::{ModuleSet, generate};
 use glam::{Vec2, Vec3};
 use terra_gen::Seed;
 
 fn has(list: &[(String, f32)], p: &Prop) -> bool {
     list.iter().any(|(m, _)| *m == p.model)
+}
+
+/// A room most of whose floor is under water (the mine's flooded workings): the water's, with
+/// no floor to dress; over 40 seeds every mine room that took no hero was one, each with at
+/// most a cell of shore.
+fn flooded(dungeon: &crate::Dungeon, set: &ModuleSet, rect: crate::place::Rect) -> bool {
+    let cells = &dungeon.layout.cells;
+    let (mut wet, mut all) = (0, 0);
+    for at in rect.cells() {
+        all += 1;
+        let i = cells.iter().position(|c| c.at == at);
+        wet += i.is_some_and(|i| set.wet(dungeon.dressing.picks[i])) as u32;
+    }
+    wet * 2 > all
 }
 
 /// Every room of a dressed role gets its type's set (D539): a hero prop of its type, or a
@@ -54,14 +68,21 @@ fn rooms_are_dressed_as_their_type_round_a_hero_off_the_way() {
                         .map(|d| Frame::new(cell.at, d).point(MID, 0.0, 0.0))
                 })
                 .collect();
-            let heroic: Vec<&(String, f32)> = theme.dressing.iter().flat_map(|d| &d.hero).collect();
+            let heroic: Vec<(&String, Option<Foot>)> = (theme.dressing.iter())
+                .flat_map(|d| d.hero.iter().map(|(m, _)| (m, d.hero_foot)))
+                .collect();
             for p in laid {
                 nearest = nearest.min(eye(p.at));
                 let level = doors.iter().filter(|d| (d.y - p.at.y).abs() < 1.0);
                 door = level.map(|d| d.distance(p.at)).fold(door, f32::min);
-                if heroic.iter().any(|(m, _)| *m == p.model) {
-                    let along = if p.facing % 2 == 0 { Vec3::X } else { Vec3::Z };
-                    for end in [p.at - along, p.at + along] {
+                if let Some((_, foot)) = heroic.iter().find(|(m, _)| **m == p.model) {
+                    // A coffin's ends a metre either side across its front, a big hero's
+                    // whole footprint (a cart's far side included).
+                    let foot = foot.unwrap_or(Foot {
+                        half: (1.0, 0.0),
+                        turned: false,
+                    });
+                    for end in corners(p.at, p.facing, foot, 0.0) {
                         ends = ends.min(eye(end));
                     }
                 }
@@ -70,11 +91,11 @@ fn rooms_are_dressed_as_their_type_round_a_hero_off_the_way() {
                 let dresses: Vec<&Dress> = (theme.dressing.iter())
                     .filter(|d| d.roles.contains(&room.role))
                     .collect();
-                if dresses.is_empty() {
+                let rect = layout.rooms[r];
+                if dresses.is_empty() || flooded(&dungeon, &set, rect) {
                     continue;
                 }
                 rooms += 1;
-                let rect = layout.rooms[r];
                 let lo = rect.min.as_vec3() * 4.0;
                 let hi = lo + Vec3::new(rect.size.x as f32, 0.0, rect.size.y as f32) * 4.0;
                 let floor = floor_of(rect.min.y) as f32 * super::super::CUBE;
@@ -455,6 +476,9 @@ fn every_room_types_vignette_is_told() {
             let full = stamp(&dungeon, &marked, &kind);
             for (r, room) in dungeon.graph.rooms.iter().enumerate() {
                 let rect = dungeon.layout.rooms[r];
+                if flooded(&dungeon, &set, rect) {
+                    continue;
+                }
                 let lo = rect.min.as_vec3() * 4.0;
                 let hi = lo + Vec3::new(rect.size.x as f32, 0.0, rect.size.y as f32) * 4.0;
                 let floor = floor_of(rect.min.y) as f32 * super::super::CUBE;

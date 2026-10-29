@@ -8,9 +8,9 @@
 use super::modules::{Class, Look, feature_at};
 use super::{CELL, CUBE, Frame, Light, LightKind, MID, Prop, Stamp, hash, stands};
 use crate::Dungeon;
-use crate::place::{Layout, Side, opposite};
-use crate::theme::Dress;
-use glam::{IVec3, Vec2, Vec3};
+use crate::place::{Layout, Rect, Side, opposite};
+use crate::theme::{Dress, Foot};
+use glam::{IVec2, IVec3, Vec2, Vec3};
 use std::collections::HashMap;
 use terra_build::Cube;
 
@@ -19,6 +19,13 @@ use terra_build::Cube;
 pub(crate) const OFF_ROUTE_M: f32 = 1.3;
 /// From a doorway's middle, so none stands in the way in.
 pub(crate) const OFF_DOOR_M: f32 = 1.6;
+/// How far out from a wall a wall prop stands at most, from its middle, in metres.
+const WALL_PROP_M: f32 = 0.6;
+/// How far a big hero's corners keep from the tour's line (`Foot`): as far as a wall prop's
+/// outer edge does.
+const CORNER_OFF_ROUTE_M: f32 = OFF_ROUTE_M - WALL_PROP_M;
+/// How far a wall prop's middle stands clear of its wall's face at a wall spot (`OUT`).
+const SPOT_CLEAR_M: f32 = 0.3;
 /// From what already stands (props, objects, chests, fires) and from each other.
 const APART_M: f32 = 1.0;
 /// Clutter from everything: small things lie closer.
@@ -28,6 +35,9 @@ const HERO_M: f32 = 1.5;
 /// How near a light stands to a hero for it to read lit, in metres: a torch on the wall over
 /// it or beside it, not one across the room.
 pub(crate) const HERO_LIT_M: f32 = 3.0;
+/// The rings round a hero its lamp is tried on, in metres, where none beside it is clear: its
+/// light at the farthest is still within `HERO_LIT_M` of it.
+const LAMP_RINGS_M: [f32; 2] = [2.2, 2.8];
 /// A lamp's light over its prop's foot: at its flames, a candle's or a lantern's.
 const LAMP_UP_M: f32 = 0.4;
 /// Where a hero's lamp may stand from the hero's wall spot, (along, out) in metres, the first
@@ -109,7 +119,14 @@ impl Spot {
 /// What a room's dressing must keep clear of, and where it may stand.
 struct Room<'a> {
     route: &'a [Vec3],
+    /// The eye's path, which swings off the route through a room (`Stamp::view`).
+    view: &'a [Vec3],
+    /// The room's own doorways, which it faces and ranks its places by.
     doors: Vec<Vec3>,
+    /// Every doorway its dressing keeps clear of: its own and its neighbour cells'. A way
+    /// open on one side only is in the next cell's list alone, and the mine's hand tools lay
+    /// 1.03 m from one (mine dressing round 15).
+    ways: Vec<Vec3>,
     map: &'a HashMap<IVec3, Cube>,
 }
 
@@ -117,14 +134,91 @@ impl Room<'_> {
     /// Off the tour and the doorways, on a floor with headroom.
     fn clear(&self, p: Vec3) -> bool {
         off(self.route, p) > OFF_ROUTE_M
-            && self.doors.iter().all(|d| d.distance(p) > OFF_DOOR_M)
+            && self.ways.iter().all(|d| d.distance(p) > OFF_DOOR_M)
             && stands(self.map, (p / CUBE).floor().as_ivec3())
+    }
+
+    /// Whether a big hero (`Foot`) standing at `p` facing `facing` keeps its corners on the
+    /// floor, off the tour and the eye's path and off the doorways, just in from its sides.
+    fn holds(&self, p: Vec3, facing: usize, foot: Foot) -> bool {
+        corners(p, facing, foot, 0.05).iter().all(|&c| {
+            off(self.route, c) > CORNER_OFF_ROUTE_M
+                && off(self.view, c) > CORNER_OFF_ROUTE_M
+                && self
+                    .ways
+                    .iter()
+                    .all(|d| d.distance(c) > OFF_DOOR_M - WALL_PROP_M)
+                && stands(self.map, (c / CUBE).floor().as_ivec3())
+        })
     }
 
     /// How far a point is from the room's nearest doorway.
     fn near_door(&self, p: Vec3) -> f32 {
         (self.doors.iter().map(|d| d.distance(p))).fold(99.0, f32::min)
     }
+
+    /// Against each walled side of a bare cell, a metre, two and three along it; and the
+    /// corners where two walls meet, for clutter; each in its hash's order.
+    fn wall_places(
+        &self,
+        layout: &Layout,
+        cells: &[(IVec3, usize)],
+        looks: &[Look],
+    ) -> (Vec<Spot>, Vec<(u32, Vec3, usize)>) {
+        let map = self.map;
+        let (mut spots, mut corners) = (Vec::new(), Vec::new());
+        for &(at, c) in cells {
+            let sides = layout.cells[c].sides;
+            let bare = |d: usize| sides[d] == Side::Wall && bare(looks[c], d);
+            for d in (0..4).filter(|&d| bare(d)) {
+                let f = Frame::new(at, d);
+                for x in [2, 4, 6] {
+                    let p = f.point(x as f32, 0.0, OUT);
+                    let floor = (x - 1..=x).all(|x| stands(map, f.cube(x, 0, 1)));
+                    if floor && self.clear(p) {
+                        let wide = (x - 2..=x + 1).all(|x| x > 0 && x < CELL - 1)
+                            && (x - 2..=x + 1).all(|x| stands(map, f.cube(x, 0, 1)));
+                        let rank = hash(at, 500 + 8 * d as u32 + x as u32);
+                        let (x, door) = (x as f32, self.near_door(p));
+                        spots.push(Spot {
+                            rank,
+                            at,
+                            d,
+                            x,
+                            p,
+                            door,
+                            wide,
+                        });
+                    }
+                }
+                if bare((d + 1) % 4) {
+                    let p = f.point(CELL as f32 - OUT, 0.0, OUT);
+                    if self.clear(p) {
+                        corners.push((hash(at, 540 + d as u32), p, opposite(d)));
+                    }
+                }
+            }
+        }
+        spots.sort_by_key(|s| (s.rank, s.p.to_array().map(f32::to_bits), s.d));
+        corners.sort_by_key(|&(rank, p, d)| (rank, p.to_array().map(f32::to_bits), d));
+        (spots, corners)
+    }
+}
+
+/// The corners of a big hero's footprint standing at `p` with its front (+Z) facing `facing`
+/// (0..4 = north, east, south, west), `inset` in from its sides, at the floor.
+pub(crate) fn corners(p: Vec3, facing: usize, foot: Foot, inset: f32) -> [Vec3; 4] {
+    // Its half sizes across (X) and on its front (Z): turned, its length is on its front.
+    let (hx, hz) = if foot.turned {
+        (foot.half.1, foot.half.0)
+    } else {
+        foot.half
+    };
+    let front = [-Vec3::Z, Vec3::X, Vec3::Z, -Vec3::X][facing % 4];
+    let across = Vec3::new(front.z, 0.0, -front.x);
+    let (hx, hz) = (hx - inset, hz - inset);
+    [(-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0), (1.0, 1.0)]
+        .map(|(a, b)| p + across * a * hx + front * b * hz)
 }
 
 /// Whether a point keeps `gap` from everything taken, and each taken thing's own clearance.
@@ -197,7 +291,7 @@ pub(super) fn lay(
         .map(|p| (p, 0.0))
         .chain(fires.map(keep))
         .collect();
-    let route = out.route.clone();
+    let (route, view) = (out.route.clone(), out.view.clone());
     for (r, room) in dungeon.graph.rooms.iter().enumerate() {
         let dresses: Vec<&Dress> = dressing
             .iter()
@@ -211,48 +305,21 @@ pub(super) fn lay(
             .cells()
             .filter_map(|at| layout.cell(at).map(|c| (at, c)))
             .collect();
+        let round = Rect {
+            min: rect.min - IVec3::new(1, 0, 1),
+            size: rect.size + IVec2::splat(2),
+        };
+        let by: Vec<(IVec3, usize)> = (round.cells())
+            .filter_map(|at| layout.cell(at).map(|c| (at, c)))
+            .collect();
         let place = Room {
             route: &route,
+            view: &view,
             doors: doorways(layout, &cells),
+            ways: doorways(layout, &by),
             map,
         };
-        let near_door = |p: Vec3| place.near_door(p);
-        // Against each walled side of a bare cell, a metre, two and three along it; and the
-        // corners where two walls meet, for clutter.
-        let (mut spots, mut corners) = (Vec::new(), Vec::new());
-        for &(at, c) in cells.iter().filter(|&&(_, c)| bare(looks[c].class)) {
-            let sides = layout.cells[c].sides;
-            for d in (0..4).filter(|&d| sides[d] == Side::Wall) {
-                let f = Frame::new(at, d);
-                for x in [2, 4, 6] {
-                    let p = f.point(x as f32, 0.0, OUT);
-                    let floor = (x - 1..=x).all(|x| stands(map, f.cube(x, 0, 1)));
-                    if floor && place.clear(p) {
-                        let wide = (x - 2..=x + 1).all(|x| x > 0 && x < CELL - 1)
-                            && (x - 2..=x + 1).all(|x| stands(map, f.cube(x, 0, 1)));
-                        let rank = hash(at, 500 + 8 * d as u32 + x as u32);
-                        let (x, door) = (x as f32, near_door(p));
-                        spots.push(Spot {
-                            rank,
-                            at,
-                            d,
-                            x,
-                            p,
-                            door,
-                            wide,
-                        });
-                    }
-                }
-                if sides[(d + 1) % 4] == Side::Wall {
-                    let p = f.point(CELL as f32 - OUT, 0.0, OUT);
-                    if place.clear(p) {
-                        corners.push((hash(at, 540 + d as u32), p, opposite(d)));
-                    }
-                }
-            }
-        }
-        spots.sort_by_key(|s| (s.rank, s.p.to_array().map(f32::to_bits), s.d));
-        corners.sort_by_key(|&(rank, p, d)| (rank, p.to_array().map(f32::to_bits), d));
+        let (spots, corners) = place.wall_places(layout, &cells, looks);
 
         // The hero, unless the room's feature or tomb is: the wall spot farthest from the
         // doorways, a long one's floor first.
@@ -302,14 +369,24 @@ pub(super) fn lay(
                 laying.light_feature(at, lamp, &mut taken, out);
             }
         }
-        let hero = laying.hero(featured, &mut taken, out);
-        focus.extend(hero);
         // The vignette by the room's focus: its hero, else its fire (a camp round its fire).
+        // Where the room is too cramped for its first hero, the vignette goes down first and
+        // the smaller hero beside it: laid after the hero, the mine's worked-out stope's last
+        // shift fitted nowhere by its stand-in hero in 6 of 42 rooms (mine dressing round 14).
         let fire = (cells.iter())
             .find(|&&(_, c)| looks[c].class == Class::Rest)
             .map(|&(at, _)| Frame::new(at, 0).point(MID, 0.0, MID));
+        let cramped = !featured && laying.cramped(&taken);
         let pieces = out.props.len();
-        let told = laying.vignette(hero.or(fire), &mut taken, out);
+        let early = cramped
+            .then(|| laying.vignette(fire, &mut taken, out))
+            .flatten();
+        let story = pieces..out.props.len();
+        let hero = laying.hero(featured, early, &mut taken, out);
+        focus.extend(hero);
+        let pieces = out.props.len();
+        let told = early.or_else(|| laying.vignette(hero.or(fire), &mut taken, out));
+        focus.extend(out.props[story].iter().map(|p| p.at));
         focus.extend(out.props[pieces..].iter().map(|p| p.at));
         // The room's groups: round its hero (or its vignette, or the feature's first wall
         // spot), and in the far corner from it.
@@ -339,28 +416,92 @@ impl Laying<'_> {
 
     /// The hero, unless the room's feature or tomb is: the wall spot farthest from the
     /// doorways, a long one's floor first, or else the open floor farthest from them; and its
-    /// lamp where no light stands by it.
-    fn hero(&self, featured: bool, taken: &mut Vec<(Vec3, f32)>, out: &mut Stamp) -> Option<Vec3> {
-        let dress = (self.dresses.iter()).find(|d| !d.hero.is_empty() && !featured)?;
+    /// lamp where no light stands by it. The room's dressings with a hero are tried in turn, so
+    /// a theme names a smaller hero after a big one for a room too cramped for it: the mine's
+    /// cart fitted none of 12 small rooms the tour crosses every way (mine dressing round 14).
+    fn hero(
+        &self,
+        featured: bool,
+        near: Option<Vec3>,
+        taken: &mut Vec<(Vec3, f32)>,
+        out: &mut Stamp,
+    ) -> Option<Vec3> {
+        if featured {
+            return None;
+        }
+        let mut heroic = self.dresses.iter().filter(|d| !d.hero.is_empty());
+        let (dress, wall, p, facing) =
+            heroic.find_map(|d| self.stand(d, near, taken).map(|(w, p, f)| (d, w, p, f)))?;
+        put(out, pick(&dress.hero, self.salt(530)), p, facing);
+        taken.push((p, HERO_M));
+        if let Some(lamp) = &dress.lamp {
+            let lit = out.lights.iter().any(|l| l.at.distance(p) < HERO_LIT_M);
+            // Where nothing beside it is clear, a ring farther out, still by it: 4 of the
+            // mine's 372 heroes stood unlit in rooms cramped by the tour (mine dressing 15).
+            if !lit && !self.light_hero(wall, p, lamp, taken, out) {
+                (LAMP_RINGS_M.iter()).any(|&r| self.light_ring(p, r, lamp, taken, out));
+            }
+        }
+        Some(p)
+    }
+
+    /// Whether the room's first hero stands nowhere in it, so a smaller one after it must.
+    fn cramped(&self, taken: &[(Vec3, f32)]) -> bool {
+        let first = self.dresses.iter().find(|d| !d.hero.is_empty());
+        first.is_some_and(|d| self.stand(d, None, taken).is_none())
+    }
+
+    /// Where a dressing's hero stands, and the wall spot it stands at if any: the wall spot
+    /// farthest from the doorways, a long one's floor first, or else the open floor farthest
+    /// from them, where it keeps from what is taken (and a big one fits); else none. By a
+    /// vignette laid first (`near`), the nearest places to it first.
+    fn stand(
+        &self,
+        dress: &Dress,
+        near: Option<Vec3>,
+        taken: &[(Vec3, f32)],
+    ) -> Option<(Option<Spot>, Vec3, usize)> {
         let mut order = self.spots.to_vec();
         order.sort_by(|a, b| b.wide.cmp(&a.wide).then(b.door.total_cmp(&a.door)));
         let mut open = self.floor.to_vec();
         let near_door = |p: Vec3| self.place.near_door(p);
         open.sort_by(|a, b| near_door(b.1).total_cmp(&near_door(a.1)));
-        let wall = order.iter().find(|s| free(taken, s.p, APART_M)).copied();
-        let (p, facing) = (wall.map(|s| (s.p, opposite(s.d)))).or_else(|| {
-            let mut open = open.iter();
-            open.find(|o| free(taken, o.1, APART_M)).map(|o| (o.1, o.2))
-        })?;
-        put(out, pick(&dress.hero, self.salt(530)), p, facing);
-        taken.push((p, HERO_M));
-        if let Some(lamp) = &dress.lamp {
-            let lit = out.lights.iter().any(|l| l.at.distance(p) < HERO_LIT_M);
-            if !lit {
-                self.light_hero(wall, p, lamp, taken, out);
-            }
+        if let Some(n) = near {
+            order.sort_by(|a, b| a.p.distance(n).total_cmp(&b.p.distance(n)));
+            open.sort_by(|a, b| a.1.distance(n).total_cmp(&b.1.distance(n)));
         }
-        Some(p)
+        let laid = |s: &Spot| self.at_wall(s, dress.hero_foot);
+        let wall = (order.iter())
+            .find(|s| laid(s).is_some_and(|(p, _)| free(taken, p, APART_M)))
+            .copied();
+        // On the open floor, a big one facing the doorway or across it, where it fits: laid
+        // by its middle alone, the mine's cart stood 0.46 m from the eye (mine dressing 14).
+        let fits = |&(_, p, facing): &(u32, Vec3, usize)| match dress.hero_foot {
+            None => Some((p, facing)),
+            Some(foot) => [facing, (facing + 1) % 4]
+                .into_iter()
+                .find(|&f| self.place.holds(p, f, foot))
+                .map(|f| (p, f)),
+        };
+        let (p, facing) = (wall.and_then(|s| laid(&s))).or_else(|| {
+            let mut open = open.iter().filter(|o| free(taken, o.1, APART_M));
+            open.find_map(fits)
+        })?;
+        Some((wall, p, facing))
+    }
+
+    /// Where a hero stands at a wall spot and which way it faces: a wall prop's at the spot,
+    /// facing out; a big one's (`Foot`) out from the wall by its depth, turned along it if its
+    /// model is long on its front, where its corners stand on the floor and keep off the tour
+    /// and the doorways; else none.
+    fn at_wall(&self, s: &Spot, foot: Option<Foot>) -> Option<(Vec3, usize)> {
+        let Some(Foot { half, turned }) = foot else {
+            return Some((s.p, opposite(s.d)));
+        };
+        let p = s.offset(0.0, (half.1 - SPOT_CLEAR_M).max(0.0));
+        let facing = (opposite(s.d) + turned as usize) % 4;
+        (self.place.clear(p) && self.place.holds(p, facing, Foot { half, turned }))
+            .then_some((p, facing))
     }
 
     /// The room's feature (a tomb, the key's altar) lit as a hero is, by the first of its
@@ -393,29 +534,53 @@ impl Laying<'_> {
         lamp: &(String, f32),
         taken: &mut Vec<(Vec3, f32)>,
         out: &mut Stamp,
-    ) {
+    ) -> bool {
         let beside: Vec<(Vec3, usize)> = match wall {
             Some(s) => (LAMP_BY_WALL.iter())
                 .map(|&(along, o)| (s.offset(along, o), opposite(s.d)))
                 .collect(),
-            None => (RING.iter())
-                .map(|&(x, z)| {
-                    let p = hero + Vec3::new(x, 0.0, z) * (HERO_M + RING_GAP_M);
-                    (p, toward(hero, &self.place.doors))
-                })
-                .collect(),
+            None => return self.light_ring(hero, HERO_M + RING_GAP_M, lamp, taken, out),
         };
-        let found = (beside.into_iter())
+        self.light_at(beside, lamp, taken, out)
+    }
+
+    /// A lamp on a ring `r` round the hero, facing the nearest doorway, where one is clear.
+    fn light_ring(
+        &self,
+        hero: Vec3,
+        r: f32,
+        lamp: &(String, f32),
+        taken: &mut Vec<(Vec3, f32)>,
+        out: &mut Stamp,
+    ) -> bool {
+        let facing = toward(hero, &self.place.doors);
+        let ring = RING
+            .iter()
+            .map(|&(x, z)| (hero + Vec3::new(x, 0.0, z) * r, facing));
+        self.light_at(ring.collect(), lamp, taken, out)
+    }
+
+    /// The lamp and its light at the first of `places` clear and free; whether one was.
+    fn light_at(
+        &self,
+        places: Vec<(Vec3, usize)>,
+        lamp: &(String, f32),
+        taken: &mut Vec<(Vec3, f32)>,
+        out: &mut Stamp,
+    ) -> bool {
+        let found = (places.into_iter())
             .find(|&(p, _)| self.place.clear(p) && free(taken, p, CLUTTER_APART_M));
-        if let Some((p, facing)) = found {
-            put(out, lamp, p, facing);
-            taken.push((p, CLUTTER_APART_M));
-            out.lights.push(Light {
-                at: p + Vec3::Y * LAMP_UP_M,
-                kind: LightKind::Lamp,
-                facing,
-            });
-        }
+        let Some((p, facing)) = found else {
+            return false;
+        };
+        put(out, lamp, p, facing);
+        taken.push((p, CLUTTER_APART_M));
+        out.lights.push(Light {
+            at: p + Vec3::Y * LAMP_UP_M,
+            kind: LightKind::Lamp,
+            facing,
+        });
+        true
     }
 
     /// A vignette at the first wall spot where it fits, nearest the room's `focus` first (its
@@ -617,13 +782,18 @@ impl Laying<'_> {
     }
 }
 
-/// Whether a cell's module leaves its walls bare for dressing: a rest's fire stands in its
-/// cell's middle, its walls free for the camp laid round it.
-fn bare(class: Class) -> bool {
-    matches!(
-        class,
-        Class::Plain | Class::Runner | Class::Decor | Class::Pillar | Class::Rest
-    )
+/// Whether a cell's module leaves its wall on side `d` bare for dressing: a rest's fire stands
+/// in its cell's middle, its walls free for the camp laid round it, and a timber set's posts
+/// stand in its walls' line; a store's barrels and a vein's rock stand against its first wall
+/// alone. With the timber sets, stores and veins all walled off, 30 of the mine's 453 rooms
+/// had no wall for their props (mine dressing round 14).
+fn bare(look: Look, d: usize) -> bool {
+    match look.class {
+        Class::Plain | Class::Runner | Class::Decor | Class::Pillar | Class::Rest => true,
+        Class::Timber => true,
+        Class::Stores | Class::Vein => d != look.turn % 4,
+        _ => false,
+    }
 }
 
 /// How far a point is from the tour's line, across the floor, of its legs within a level's

@@ -200,6 +200,10 @@ pub struct Dress {
     /// whose feature (a dais, an altar, a fire) is its hero takes none.
     #[serde(default)]
     pub hero: Vec<(String, f32)>,
+    /// The hero's footprint where it is bigger than a wall prop (one 0.6 m deep at most); none,
+    /// a wall prop's.
+    #[serde(default)]
+    pub hero_foot: Option<Foot>,
     /// Small things on the floor, in the corners and then by the walls.
     #[serde(default)]
     pub clutter: Vec<(String, f32)>,
@@ -223,6 +227,20 @@ pub struct Dress {
     /// laid beside the hero, with its small light (`LightKind::Lamp`).
     #[serde(default)]
     pub lamp: Option<(String, f32)>,
+}
+
+/// A big hero's footprint at its wall spot (a hand cart): it stands out from the wall by its
+/// depth, its corners on the floor and off the tour, as a set dresser parks a cart against the
+/// rock rather than through it. Laid as a wall prop, the mine's 2.7 m cart stood 1 m into the
+/// rock and 2 m into the room (mine dressing round 11).
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Foot {
+    /// Half its length along its wall and half its depth out from it, in metres, at its scale.
+    pub half: (f32, f32),
+    /// Whether its model is long on its front (+Z): turned a quarter to lie along the wall.
+    #[serde(default)]
+    pub turned: bool,
 }
 
 /// A box of a piece a walker cannot pass, in the piece's frame (its front +Z, its origin

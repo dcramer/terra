@@ -82,4 +82,100 @@
         (name: "campfire", sides: ["any", "any", "any", "any"], fixed: true, spaces: [Room]),
         (name: "stair", sides: ["open|wall|stair", "open|wall|stair", "open|wall|stair", "open|wall|stair"], fixed: true, spaces: [Stair], rotates: false),
     ],
+    // Rooms by the job they were cut for (docs/dungeons.md, the hewn mine's plan, D559; its
+    // room types D539, Open with the crypt's): a first set from the props there are, each lit
+    // by a miner's lantern. The winch, the ore tub on its rails, the ladder, webs, powder kegs
+    // and ingots wait for their models; a hand cart stands for the tub, at 0.8 (2.2 m with its
+    // shafts) and laid along its wall, half its 1.1 m width out from it.
+    dressing: [
+        // The shaft station, where ore was brought to be hauled up: a cart, the stores.
+        (name: "shaft station", roles: [Entrance],
+         hero: [("models/props/HandCart.glb", 0.8)], hero_foot: Some((half: (1.08, 0.56), turned: true)),
+         lamp: Some(("models/props/Lantern.glb", 1.0)),
+         props: [
+            ("models/props/Barrel.glb", 1.0), ("models/props/Buckets.glb", 1.0),
+            ("models/props/Sack.glb", 1.0), ("models/props/ToolBucket.glb", 1.0),
+         ], count: (2, 3),
+         clutter: [("models/props/Buckets.glb", 0.8), ("models/props/HandTools.glb", 1.0)], litter: (1, 1),
+         scatter: [("models/props/barrow/Planks.glb", 1.0)], strewn: (1, 1)),
+        // A working stope along the vein: the cart, timber stacked to be set, the tools.
+        (name: "working stope", roles: [Passage],
+         hero: [("models/props/HandCart.glb", 0.8)], hero_foot: Some((half: (1.08, 0.56), turned: true)),
+         lamp: Some(("models/props/Lantern.glb", 1.0)),
+         props: [
+            ("models/props/Log.glb", 1.0), ("models/props/barrow/Planks.glb", 1.0),
+            ("models/props/ToolBucket.glb", 1.0), ("models/props/Barrel.glb", 1.0),
+         ], count: (2, 3),
+         clutter: [("models/props/HandTools.glb", 1.0), ("models/props/Buckets.glb", 0.8)], litter: (1, 1),
+         scatter: [("models/props/barrow/Planks.glb", 1.0)], strewn: (1, 1)),
+        // A worked-out stope, left when the roof came in: split timber, the last shift's things.
+        (name: "worked-out stope", roles: [Branch],
+         hero: [("models/props/HandCart.glb", 0.8)], hero_foot: Some((half: (1.08, 0.56), turned: true)),
+         lamp: Some(("models/props/Lantern.glb", 0.9)),
+         props: [("models/props/barrow/Planks.glb", 1.0), ("models/props/Log.glb", 1.0), ("models/props/Barrel.glb", 1.0)], count: (2, 3),
+         clutter: [("models/props/HandTools.glb", 1.0)], litter: (1, 1),
+         scatter: [("models/props/barrow/Planks.glb", 1.0)], strewn: (1, 1),
+         // The last shift: the tools laid down, a pot for their meal, a sack.
+         vignette: [
+            ("models/props/HandTools.glb", 1.05, (0.0, 0.3)), ("models/props/StewPot.glb", 0.8, (0.75, 0.25)),
+            ("models/props/Sack.glb", 1.0, (-0.75, 0.0)),
+         ]),
+        // The spiders' stope: a miner's body wrapped where it was caught, the bones of others.
+        (name: "spiders' stope", roles: [Guard],
+         hero: [("models/props/barrow/Shroud.glb", 1.0)], lamp: Some(("models/props/Lantern.glb", 0.9)),
+         props: [("models/props/barrow/BoneHeap.glb", 1.0), ("models/props/barrow/Planks.glb", 1.0), ("models/props/Barrel.glb", 1.0)], count: (2, 3),
+         clutter: [("models/props/barrow/Skull.glb", 1.15), ("models/props/barrow/BoneHeap.glb", 1.0)], litter: (1, 1),
+         scatter: [("models/props/barrow/Planks.glb", 1.0)], strewn: (1, 1),
+         // A dropped load: the bucket, the tools, a skull by them.
+         vignette: [
+            ("models/props/Buckets.glb", 0.9, (0.0, 0.2)), ("models/props/HandTools.glb", 1.05, (0.8, 0.35)),
+            ("models/props/barrow/Skull.glb", 1.1, (-0.6, 0.4)),
+         ]),
+        // The pump room, its lever the hero: barrels, buckets, the fitter's tools.
+        (name: "pump room", roles: [Puzzle],
+         props: [
+            ("models/props/Barrel.glb", 1.0), ("models/props/Buckets.glb", 1.0),
+            ("models/props/ToolBucket.glb", 1.0), ("models/props/Workbench.glb", 1.0),
+         ], count: (2, 3),
+         clutter: [("models/props/HandTools.glb", 1.0), ("models/props/Buckets.glb", 0.8)], litter: (1, 1),
+         scatter: [("models/props/barrow/Planks.glb", 1.0)], strewn: (1, 1)),
+        // The powder and pay store: a strongbox among the stores.
+        (name: "powder and pay store", roles: [Treasure, Secret],
+         hero: [("models/props/Chest.glb", 1.0)], lamp: Some(("models/props/Lantern.glb", 1.0)),
+         props: [("models/props/Barrel.glb", 1.0), ("models/props/Chest.glb", 0.9), ("models/props/Sack.glb", 1.0)], count: (2, 3),
+         clutter: [("models/props/Sack.glb", 0.8)], litter: (1, 1),
+         // The stash: a chest kept behind the barrels.
+         vignette: [
+            ("models/props/Chest.glb", 0.9, (0.0, 0.0)), ("models/props/Barrel.glb", 1.0, (0.85, 0.45)),
+            ("models/props/Barrel.glb", 1.0, (-0.8, 0.45)),
+         ]),
+        // The way up a raise, timber kept for its cribbing.
+        (name: "ladderway", roles: [Shortcut],
+         hero: [("models/props/Log.glb", 1.1)], lamp: Some(("models/props/Lantern.glb", 0.9)),
+         props: [("models/props/Log.glb", 1.0), ("models/props/barrow/Planks.glb", 1.0)], count: (1, 2),
+         scatter: [("models/props/barrow/Planks.glb", 1.0)], strewn: (1, 1)),
+        // The flooded working, the trapped miner its hero: what he had with him.
+        (name: "flooded working", roles: [Goal],
+         props: [("models/props/Barrel.glb", 1.0), ("models/props/barrow/Planks.glb", 1.0)], count: (1, 2),
+         clutter: [("models/props/Buckets.glb", 0.8)], litter: (1, 1)),
+        // The miners' crib room round its fire: where they ate, and where one slept.
+        (name: "crib room", roles: [Rest],
+         props: [("models/props/Bench.glb", 1.0), ("models/props/Barrel.glb", 1.0), ("models/props/Stool.glb", 1.0)], count: (2, 3),
+         clutter: [("models/props/BowlStack.glb", 1.0), ("models/props/StewPot.glb", 1.0), ("models/props/HandTools.glb", 1.0)], litter: (1, 1),
+         // A bedroll laid out from the wall, its blanket folded at its head, the miner's
+         // pack by it, a lantern.
+         vignette: [
+            ("models/props/RugLong.glb", 0.55, (0.0, 0.5)), ("models/props/FoldedCloth.glb", 0.8, (0.0, -0.12)),
+            ("models/props/Sack.glb", 1.0, (0.8, 0.0)), ("models/props/Lantern.glb", 1.0, (-0.75, 0.1)),
+         ]),
+        // Where the tour crosses a small room every way and the cart fits nowhere off it, a
+        // smaller hero (the room's other dressing as above): a big barrel of the stores at the
+        // shaft, timber to be set in a stope.
+        (name: "cramped shaft station", roles: [Entrance],
+         hero: [("models/props/Barrel.glb", 1.2)], hero_foot: Some((half: (0.35, 0.35))),
+         lamp: Some(("models/props/Lantern.glb", 1.0)), props: [], count: (0, 0)),
+        (name: "cramped stope", roles: [Passage, Branch],
+         hero: [("models/props/Log.glb", 1.1)], hero_foot: Some((half: (0.94, 0.25))),
+         lamp: Some(("models/props/Lantern.glb", 1.0)), props: [], count: (0, 0)),
+    ],
 )
