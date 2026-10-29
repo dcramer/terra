@@ -60,6 +60,7 @@ pub mod conifers;
 mod far;
 mod floor;
 mod footing;
+mod lump;
 mod overgrowth;
 mod seasons;
 mod shade;
@@ -72,6 +73,7 @@ mod thicket;
 use card::{Card, Leaf};
 use floor::{Crowns, Stand};
 use footing::{Footing, Shapes, SolidShape, Trunk};
+use lump::{crown_clumps, lumps_of};
 use species::{Form, Species};
 
 type Foliage = ExtendedMaterial<StandardMaterial, FoliageExtension>;
@@ -2277,86 +2279,6 @@ fn crown_stand_in(cards: &[Vec<Card>]) -> Build {
         }
     }
     build
-}
-
-/// What a crown's shadow is cast from farther off: a rounded lump for each branch, as
-/// big as most of its leaves, solid so the GPU can skip what is hidden. The light no
-/// longer comes through in flecks, which nobody sees at that distance.
-fn crown_clumps(tree: &Tree, scale: f32, shadow: bool) -> Build {
-    let mut build = Build {
-        offset_in_colour: shadow,
-        ..default()
-    };
-    for (centre, radii) in lumps_of(tree, scale) {
-        lump(&mut build, centre, radii);
-    }
-    build
-}
-
-/// A crown's lumps, one a branch, as big as most of its leaves times `scale`: their middles
-/// and half sizes, in the tree's own frame.
-fn lumps_of(tree: &Tree, scale: f32) -> Vec<(Vec3, Vec3)> {
-    (0..tree.branches)
-        .filter_map(|branch| {
-            let tips: Vec<(Vec3, f32)> = tree
-                .tips
-                .iter()
-                .zip(&tree.branch_of)
-                .filter(|(_, of)| **of == branch)
-                .map(|(tip, _)| *tip)
-                .collect();
-            if tips.is_empty() {
-                return None;
-            }
-            let count = tips.len() as f32;
-            let centre = tips.iter().fold(Vec3::ZERO, |sum, (tip, _)| sum + *tip) / count;
-            let size = tips.iter().map(|(_, size)| *size).sum::<f32>() / count;
-            let spread = tips
-                .iter()
-                .map(|(tip, _)| (*tip - centre).abs())
-                .fold(Vec3::ZERO, Vec3::max);
-            let radii = (spread * 0.8 + Vec3::splat(size * 0.6)) * Vec3::new(1.0, 0.75, 1.0);
-            Some((centre, radii * scale))
-        })
-        .collect()
-}
-
-/// A rough ball: rings of six round, four rings high.
-fn lump(build: &mut Build, centre: Vec3, radii: Vec3) {
-    let base = build.positions.len() as u32;
-    let (around, rings) = (6, 4);
-    for ring in 0..=rings {
-        let tilt = ring as f32 / rings as f32 * std::f32::consts::PI;
-        for step in 0..around {
-            let turn = step as f32 / around as f32 * TAU;
-            let normal = Vec3::new(
-                libm::sinf(tilt) * libm::cosf(turn),
-                libm::cosf(tilt),
-                libm::sinf(tilt) * libm::sinf(turn),
-            );
-            let index = build.vertex(
-                centre + normal * radii,
-                normal,
-                Vec2::ZERO,
-                Vec2::ZERO,
-                Vec3::ONE,
-            );
-            // Its offset from the lump's middle, for the shader to grow it from (D234).
-            if build.offset_in_colour {
-                let offset = normal * radii;
-                build.colours[index as usize] = [offset.x, offset.y, offset.z, 1.0];
-            }
-        }
-    }
-    for ring in 0..rings {
-        for step in 0..around {
-            let a = base + ring * around + step;
-            let b = base + ring * around + (step + 1) % around;
-            build
-                .indices
-                .extend([a, a + around, b, b, a + around, b + around]);
-        }
-    }
 }
 
 /// A tree's crown as the sky's light sees it (D270): an ellipsoid round its leaves, from
