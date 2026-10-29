@@ -978,6 +978,8 @@ const FAR_DIM: f32 = 0.62;
 const LIT_ROCK: vec3<f32> = vec3<f32>(1.24, 1.05, 0.78);
 const LIT_FAR_WALL: f32 = 0.78;
 const LIT_FAR_DIM: f32 = 0.72;
+// A far wall's rock with no direct light to shade, at dusk: how much of the far dim it keeps.
+const DUSK_WALL: f32 = 1.0;
 // Past a few kilometres the lit faces' lift gives way to the air again (aerial perspective on the
 // lit side, round 15): lifted to the horizon, the summits under the skyline stood as bright as
 // the sky (the far gate fell from 0.111 to 0.053 in round 14).
@@ -1687,7 +1689,14 @@ fn fragment(
             // the sunlit faces far less than the shade since the aerial perspective holds the far
             // gate (round 14): dimmed alike, the range read overcast against a sunny meadow.
             let lit_lift = lit * lit_near(far_off);
-            let far_wall = mix(1.0, mix(0.44, LIT_FAR_WALL, lit_lift), smoothstep(300.0, 900.0, far_off)) * mix(1.0, mix(FAR_DIM, LIT_FAR_DIM, lit_lift), smoothstep(1000.0, 6000.0, far_off));
+            var far_wall = mix(1.0, mix(0.44, LIT_FAR_WALL, lit_lift), smoothstep(300.0, 900.0, far_off)) * mix(1.0, mix(FAR_DIM, LIT_FAR_DIM, lit_lift), smoothstep(1000.0, 6000.0, far_off));
+            // Both stand in for the sun's light on some faces and not others, as the far snow's
+            // darkenings do, so they go with the direct light's strength as those do (`by_sun`):
+            // at dusk, the snow undimmed and the rock dimmed as if in the sun's shade, a range
+            // stood near-black rock under snow 40 times as bright, read as unlit (mountains
+            // round 4's judges; the albedos are about 4 times apart).
+            far_wall = mix(DUSK_WALL, far_wall, by_sun);
+            aspect = mix(vec3<f32>(1.0), aspect, by_sun);
             face_tint = mix(vec3<f32>(1.0), weathered * band_tone * far_wall * aspect, rocky);
         }
         // Far off, a mountain's ground is meshed tens of metres a cell, too coarse for the
