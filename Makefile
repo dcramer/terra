@@ -15,7 +15,7 @@ WSL := $(shell grep -qi microsoft /proc/version 2>/dev/null && echo yes)
 ARGS ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help setup system rust node hooks build update play fresh yard doctor tools check quick test fmt bench clean
+.PHONY: help setup system rust node hooks build update play fresh creative yard doctor tools check quick test fmt bench clean
 
 help: ## List these targets
 	@echo "Terra. On a new machine: make setup, then make play."
@@ -83,6 +83,9 @@ play: ## Play the game; your world is kept between runs
 
 fresh: ## Play a new game
 	cargo xtask play --fresh $(ARGS)
+
+creative: ## Play your world with building free (the stand-in for creative mode, D494)
+	cargo xtask play --free-build $(ARGS)
 
 yard: ## Play the yard: a flat level for building, free and instant, nothing saved
 	cargo xtask yard $(ARGS)
