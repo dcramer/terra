@@ -129,11 +129,13 @@ pub fn keep_on_aim(
         let head_turn = Quat::from_rotation_y(by * (1.0 - NECK));
         let neck_written = gaze.kept[0].turn(neck, neck_parent, neck_turn);
         let head_written = gaze.kept[1].turn(head, neck_parent * neck_written, head_turn);
-        if let Ok(mut t) = transforms.get_mut(gaze.neck) {
-            t.rotation = neck_written;
-        }
-        if let Ok(mut t) = transforms.get_mut(gaze.head) {
-            t.rotation = head_written;
+        // Written only when it turns: a write marks the skeleton's tree dirty for propagation.
+        for (joint, rotation) in [(gaze.neck, neck_written), (gaze.head, head_written)] {
+            if let Ok(mut t) = transforms.get_mut(joint)
+                && t.rotation != rotation
+            {
+                t.rotation = rotation;
+            }
         }
     }
 }
@@ -209,6 +211,22 @@ mod tests {
             if chest.abs() <= FREE {
                 assert!((off - chest).abs() < 0.1, "chest {chest}: head {off}");
             }
+            // Held where it is, a frame writes neither joint, so the propagation leaves the
+            // skeleton alone.
+            let changed = |world: &World| {
+                world
+                    .entity(head)
+                    .get_ref::<Transform>()
+                    .unwrap()
+                    .last_changed()
+            };
+            let before = changed(&world);
+            world.run_system_once(keep_on_aim).unwrap();
+            assert_eq!(
+                changed(&world),
+                before,
+                "chest {chest}: an unturned head was written"
+            );
         }
     }
 

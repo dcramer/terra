@@ -673,8 +673,13 @@ fn hold_joints(mut bodies: Query<&mut Moved>, mut transforms: Query<&mut Transfo
             } else {
                 transform.translation
             };
-            transform.translation = from + node.by;
-            node.held = Some(transform.translation);
+            // Written only when it moves: a write marks the skeleton's tree dirty, and the
+            // propagation then walks every bone of it (a town's still bodies, 4,900 a frame).
+            let wanted = from + node.by;
+            if transform.translation != wanted {
+                transform.translation = wanted;
+            }
+            node.held = Some(wanted);
         }
     }
 }
@@ -894,6 +899,18 @@ mod tests {
         let animated = Vec3::new(0.0, 1.2, 0.05);
         assert!(frame(&mut world, Some(animated)).distance(animated + by) < 1e-6);
         assert!(frame(&mut world, None).distance(rest + by) < 1e-6);
+        // A frame that leaves it where it is writes nothing, so its skeleton is not walked
+        // again by the transform propagation.
+        let changed = |world: &World| {
+            world
+                .entity(joint)
+                .get_ref::<Transform>()
+                .unwrap()
+                .last_changed()
+        };
+        let before = changed(&world);
+        frame(&mut world, None);
+        assert_eq!(changed(&world), before, "an unmoved joint was written");
     }
 
     #[test]
