@@ -720,6 +720,8 @@ fn sandbox_program(release: bool, copy: &str) -> Option<(PathBuf, PathBuf)> {
     if on_wsl() {
         return windows_program("terra_sandbox", profile, None, Some(copy));
     }
+    // Cooked textures, as a player's game draws (windows_program cooks for the WSL build).
+    crate::windows::cook();
     if !crate::stage::build(&["build", "--profile", profile, "-p", "terra_sandbox"]) {
         return None;
     }

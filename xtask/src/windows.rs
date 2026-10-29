@@ -129,13 +129,16 @@ fn launch(args: &[String], played: bool) -> bool {
 
 /// Builds a package for Windows in a cargo profile (`dev`, `release` or `bench`) and copies
 /// it, with the assets, to a folder of its own in the Windows temp folder. Windows cannot use
-/// a WSL folder as a working directory. Gives the program and its folder.
+/// a WSL folder as a working directory. The textures are cooked first (`cook`), so every
+/// Windows run (`play`, `win`, `bench`) draws as a player's game does, whatever ran before.
+/// Gives the program and its folder.
 pub(crate) fn windows_program(
     package: &str,
     profile: &str,
     features: Option<&str>,
     copy: Option<&str>,
 ) -> Option<(PathBuf, PathBuf)> {
+    cook();
     let mut build = vec![
         "build",
         "--target",
@@ -210,7 +213,6 @@ pub(crate) fn profile_folder(profile: &str) -> &str {
 pub(crate) fn play(args: &[String]) -> bool {
     let mut game: Vec<String> = vec!["--experiment".into(), "play".into()];
     game.extend(args.iter().cloned());
-    cook();
     if on_wsl() {
         let mut ours: Vec<String> = ["-p", "terra_sandbox", "--release", "--copy", "play", "--"]
             .map(String::from)
@@ -218,6 +220,7 @@ pub(crate) fn play(args: &[String]) -> bool {
         ours.extend(game);
         return launch(&ours, true);
     }
+    cook();
     let mut cargo = vec!["run", "--release", "-p", "terra_sandbox", "--"];
     cargo.extend(game.iter().map(String::as_str));
     crate::session::play(&root().join("logs"), || run("cargo", &cargo))
@@ -229,8 +232,9 @@ pub(crate) fn play(args: &[String]) -> bool {
 /// cook. Under WSL the Windows build reads its own cache (`%LOCALAPPDATA%\terra\cooked`,
 /// `terra_core::cooked::cache_folder`), so what is cooked is mirrored there. What is cooked
 /// already is kept on both sides, so a launch with nothing new takes about a second. A cook
-/// that fails is said and the game plays from the source, as on a fresh checkout.
-fn cook() {
+/// that fails is said and the game plays from the source, as on a fresh checkout. Bench's
+/// numbers depended on whether `play` had filled the cache until bench and `win` cooked too.
+pub(crate) fn cook() {
     if !crate::stage::build(&["run", "-q", "--release", "-p", "terra_bake"]) {
         eprintln!(
             "  The game plays with its textures read as made, slower to load; `cargo xtask cook` shows why the cook failed (D188)."
@@ -252,7 +256,7 @@ fn cook() {
         Ok(0) => {}
         Ok(copied) => println!("cook: {copied} cooked files copied to {}", to.display()),
         Err(error) => eprintln!(
-            "✗ cook: copying the cooked textures to {} failed ({error}); the Windows build reads those missing as made. Run `cargo xtask play` again.",
+            "✗ cook: copying the cooked textures to {} failed ({error}); the Windows build reads those missing as made. Run `cargo xtask cook` and this command again.",
             to.display()
         ),
     }
