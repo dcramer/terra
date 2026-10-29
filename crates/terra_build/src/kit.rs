@@ -20,6 +20,9 @@ pub use packing::Packing;
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Kit {
+    /// Its file's name, `logs` for `logs.ron`, as `read` found it; empty if made in code.
+    #[serde(skip)]
+    pub name: String,
     /// The kind of construction it lays (D181): the number the cubes it lays carry.
     pub id: u16,
     /// How its walls are laid: as long members, or as blocks.
@@ -732,6 +735,15 @@ pub enum Pattern {
 pub struct Kits(pub Vec<Kit>);
 
 impl Kits {
+    /// Each kit's kind by its file's name (`logs`, `stone`), as they were read: settlements
+    /// name their materials so, where reading the files again cost the load most of a second.
+    pub fn names(&self) -> BTreeMap<Kind, String> {
+        self.0
+            .iter()
+            .map(|kit| (kit.kind(), kit.name.clone()))
+            .collect()
+    }
+
     /// The kind footings and door steps are laid in (D194, D206): the first block kind by its
     /// id that is not framed, stone.
     pub fn footing(&self) -> Option<&Kit> {
@@ -1001,6 +1013,7 @@ impl Default for Kit {
     /// Pine, as `assets/data/kits/logs.ron` has it; for tests.
     fn default() -> Self {
         Kit {
+            name: String::new(),
             id: 1,
             pattern: Pattern::Logs,
             diameter: 0.3,
@@ -1057,6 +1070,8 @@ impl Kit {
         let own =
             crate::layers::own_textures(&text, read).map_err(|why| format!("{path}: {why}"))?;
         kit.dress_in_own_stone(&own);
+        let file = path.rsplit('/').next().unwrap_or(path);
+        kit.name = file.strip_suffix(".ron").unwrap_or(file).to_string();
         Ok(kit)
     }
 
@@ -1446,6 +1461,7 @@ pub(crate) mod tests {
             damage: BTreeMap::new(),
             look: crate::look::Targets::default(),
             reference: None,
+            name: String::new(),
             ..file
         };
         assert_eq!(pine, Kit::default());

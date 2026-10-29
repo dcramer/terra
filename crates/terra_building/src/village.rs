@@ -124,13 +124,9 @@ pub(super) fn lay(
 /// settlement's data names it, and the roof each takes (D290), from the kit files the bases
 /// find. The scale scenes and the remote's castle and burg read it.
 pub(crate) fn village_kinds(kits: &terra_build::kit::Kits) -> Option<terra_town::village::Palette> {
-    terra_town::village::Palette::from_files(
-        &terra_bases::kit_assets(),
-        &terra_bases::kit_names(),
-        kits,
-    )
-    .map_err(|why| error!("{why}"))
-    .ok()
+    terra_town::village::Palette::from_files(&terra_bases::kit_assets(), &kits.names(), kits)
+        .map_err(|why| error!("{why}"))
+        .ok()
 }
 
 fn time_operations(base: &Base, rules: &Rules) -> Vec<f32> {

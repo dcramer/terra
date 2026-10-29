@@ -8,7 +8,7 @@ use crate::act::{BuildRules, Offcuts};
 use crate::{act, fire, going_up, loss, props, remote, sheet, village};
 use bevy::prelude::*;
 use terra_bases::memory;
-use terra_bases::{BuildLook, footing_kind, kit_names, plans};
+use terra_bases::{BuildLook, footing_kind, plans};
 use terra_build::kit::Pattern;
 
 /// Marks that building play is in place over the base, so asking for it twice is safe.
@@ -70,7 +70,7 @@ fn read_rules(look: Res<BuildLook>, mut rules: ResMut<BuildRules>) {
             .filter(|kit| kit.pattern == Pattern::Masonry && kit.framing.is_none())
             .map(|kit| kit.kind())
             .collect(),
-        names: kit_names(),
+        names: kits.names(),
         hammer: hammer(kits),
         budgets: Vec::new(),
         footing: footing_kind(kits),

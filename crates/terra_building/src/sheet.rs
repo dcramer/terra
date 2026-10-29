@@ -164,7 +164,7 @@ pub(super) fn lay(
     };
     let laying = kits.0.first().map_or(Kind::PLAIN, |kit| kit.kind());
     let stone = kits.footing().map(|kit| kit.kind());
-    let names = terra_bases::kit_names();
+    let names = kits.names();
     let (placed, count) = placed(&kits, &names);
     let mut sheet = Laying {
         commands: &mut commands,

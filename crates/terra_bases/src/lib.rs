@@ -376,16 +376,10 @@ fn modified() -> Option<SystemTime> {
         .max()
 }
 
-/// Each kit's kind, by its file's name: `logs`, `stone`.
+/// Each kit's kind, by its file's name: `logs`, `stone`, every file read; with the kits at
+/// hand, `Kits::names`.
 pub fn kit_names() -> BTreeMap<Kind, String> {
-    kit_paths()
-        .iter()
-        .filter_map(|path| {
-            let kit = read_kit(path)?;
-            let name = path.file_stem()?.to_string_lossy().to_string();
-            Some((kit.kind(), name))
-        })
-        .collect()
+    read_kits().map(|kits| kits.names()).unwrap_or_default()
 }
 
 /// Reads every kit. A mistake in one is said in the log and that kit left out; `None` if

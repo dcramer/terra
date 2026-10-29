@@ -324,13 +324,9 @@ fn found(
 /// settlement's data names it, and the roof each takes (D290), from the kit files the bases
 /// find. The town and the village read it.
 pub(crate) fn village_kinds(kits: &terra_build::kit::Kits) -> Option<terra_town::village::Palette> {
-    terra_town::village::Palette::from_files(
-        &terra_bases::kit_assets(),
-        &terra_bases::kit_names(),
-        kits,
-    )
-    .map_err(|why| error!("{why}"))
-    .ok()
+    terra_town::village::Palette::from_files(&terra_bases::kit_assets(), &kits.names(), kits)
+        .map_err(|why| error!("{why}"))
+        .ok()
 }
 
 fn site_for(
@@ -343,42 +339,50 @@ fn site_for(
     // alone, the village by the mountain lake went down on its bed, 20 m under its water.
     let dry = |point: Vec3| point.length() > planet.water_near_m(point) + 1.5;
     let samples = reaches(buildings);
-    let mut best: Option<(f32, Vec3, Vec3)> = None;
-    for radius in [75.0_f32, 95.0, 115.0] {
-        for step in 0..16 {
-            let angle = step as f32 / 16.0 * std::f32::consts::TAU;
-            let middle =
-                planet.ground_at(start.at(radius * libm::cosf(angle), radius * libm::sinf(angle)));
-            if !dry(middle) || middle.distance(lair) < 80.0 {
+    let places: Vec<(f32, f32)> = [75.0_f32, 95.0, 115.0]
+        .into_iter()
+        .flat_map(|radius| (0..16).map(move |step| (radius, step as f32 / 16.0)))
+        .collect();
+    // Each place on a core of its own (D406; some 27,000 heights, 60 ms on one), its best
+    // turn the first of the most level, and of the places the first best, as one by one.
+    let bests = terra_gen::par::map(&places, |&(radius, round)| {
+        let angle = round * std::f32::consts::TAU;
+        let middle =
+            planet.ground_at(start.at(radius * libm::cosf(angle), radius * libm::sinf(angle)));
+        if !dry(middle) || middle.distance(lair) < 80.0 {
+            return None;
+        }
+        let up = middle.normalize();
+        let north = up.cross(Vec3::Y).normalize_or(up.any_orthonormal_vector());
+        let mut best: Option<(f32, Vec3, Vec3)> = None;
+        for turn in 0..8 {
+            let east = Quat::from_axis_angle(up, turn as f32 / 8.0 * std::f32::consts::PI) * north;
+            let south = east.cross(up);
+            let mut heights = Vec::with_capacity(samples.len());
+            let mut wet = false;
+            for &[e, s] in &samples {
+                let ground = planet.ground_at(middle + east * e + south * s);
+                wet |= !dry(ground);
+                heights.push(ground.length());
+            }
+            if wet {
                 continue;
             }
-            let up = middle.normalize();
-            let north = up.cross(Vec3::Y).normalize_or(up.any_orthonormal_vector());
-            for turn in 0..8 {
-                let east =
-                    Quat::from_axis_angle(up, turn as f32 / 8.0 * std::f32::consts::PI) * north;
-                let south = east.cross(up);
-                let mut heights = Vec::with_capacity(samples.len());
-                let mut wet = false;
-                for &[e, s] in &samples {
-                    let ground = planet.ground_at(middle + east * e + south * s);
-                    wet |= !dry(ground);
-                    heights.push(ground.length());
-                }
-                if wet {
-                    continue;
-                }
-                let (low, high) = heights
-                    .iter()
-                    .fold((f32::MAX, f32::MIN), |(l, h), &x| (l.min(x), h.max(x)));
-                let score = high - low;
-                if best.as_ref().is_none_or(|(least, _, _)| score < *least) {
-                    best = Some((score, middle, east));
-                }
+            let (low, high) = heights
+                .iter()
+                .fold((f32::MAX, f32::MIN), |(l, h), &x| (l.min(x), h.max(x)));
+            let score = high - low;
+            if best.as_ref().is_none_or(|(least, _, _)| score < *least) {
+                best = Some((score, middle, east));
             }
         }
-    }
-    best.map(|(_, middle, east)| (middle, east))
+        best
+    });
+    bests
+        .into_iter()
+        .flatten()
+        .reduce(|best, next| if next.0 < best.0 { next } else { best })
+        .map(|(_, middle, east)| (middle, east))
 }
 
 /// Where the village reaches, in its own metres east and south: along the street, and at
@@ -530,6 +534,26 @@ pub fn fit_all(
 mod tests {
     use super::*;
     use terra_town::village::Kinds;
+
+    /// The village's materials are named from the kits as read, not by reading every file
+    /// again (most of a second of the load): each name is its file's, and the palette reads.
+    #[test]
+    fn the_village_names_its_materials_from_the_kits_as_read() {
+        let kits = terra_bases::read_kits().expect("the shipped materials");
+        let names = kits.names();
+        assert_eq!(names.len(), kits.0.len());
+        for name in names.values() {
+            let file = terra_bases::kit_assets()
+                .join(format!("{}/{name}.ron", terra_build::kit::MATERIALS));
+            assert!(
+                file.is_file(),
+                "{name} is not a material's file: {}",
+                file.display()
+            );
+        }
+        assert!(names.values().any(|name| name == "logs"));
+        assert!(village_kinds(&kits).is_some());
+    }
 
     #[test] // Slow: about a minute (the mountain world's land round the lake, the village).
     fn the_village_by_the_mountain_lake_stands_on_dry_land_not_its_bed() {
