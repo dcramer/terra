@@ -465,7 +465,14 @@ impl Recorder {
             .join(", ")
     }
 
-    /// The load ended `seconds` after the start: the session report names its longest steps
+    /// Another load begins, a world chosen on the title screen (D579): its longest steps are
+    /// summed afresh, so they are its own and not the first load's.
+    pub fn loading_again(&self) {
+        self.0.drain();
+        self.0.state().totals.clear();
+    }
+
+    /// The load ended `seconds` after it began: the session report names its longest steps
     /// and times the frames from here.
     pub fn loaded(&self, seconds: f32) {
         self.0.drain();

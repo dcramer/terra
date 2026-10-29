@@ -102,6 +102,11 @@ pub struct Loading {
     shown: f32,
     /// How long the screen has been up, in real time.
     up_for: Duration,
+    /// When a load after the first began, by the real clock: a world chosen on the title
+    /// screen is timed from the choice, not from the start (D579).
+    began: Option<Duration>,
+    /// Whether a load has ended since the start.
+    ended_once: bool,
 }
 
 impl Loading {
@@ -111,6 +116,15 @@ impl Loading {
     pub fn wait_for(&mut self, file: impl Into<UntypedAssetId>) {
         self.files.push(file.into());
         self.asked += 1;
+    }
+
+    /// How long this load has taken: the first from the app's start, a later one from when
+    /// it began.
+    fn took(&self, real: &Time<Real>) -> Duration {
+        match self.began {
+            Some(began) => real.elapsed().saturating_sub(began),
+            None => real.startup().elapsed(),
+        }
     }
 }
 
@@ -395,7 +409,14 @@ fn cover(
     mut loading: ResMut<Loading>,
     mut drawables: ResMut<Drawables>,
     old: Query<Entity, With<Cover>>,
+    (real, recorder): (Res<Time<Real>>, Option<Res<crate::recorder::Recorder>>),
 ) {
+    if loading.ended_once {
+        loading.began = Some(real.elapsed());
+        if let Some(recorder) = &recorder {
+            recorder.loading_again();
+        }
+    }
     // Loading again while the last screen is still fading.
     for entity in &old {
         commands.entity(entity).despawn();
@@ -508,8 +529,10 @@ fn watch(
         // By the wall clock from the app's start, as a player waits: the frames' deltas
         // summed (`up_for`) left out the start-up schedules and a first frame of 282 s.
         // Its longest systems, summed over its frames and threads, say why it took that
-        // long without a trace (the frame recorder, D576).
-        let seconds = real.startup().elapsed().as_secs_f32();
+        // long without a trace (the frame recorder, D576). A load after the first, a world
+        // chosen on the title screen, from when it began.
+        let seconds = loading.took(&real).as_secs_f32();
+        loading.ended_once = true;
         if let Some(recorder) = &recorder {
             recorder.loaded(seconds);
         }
@@ -517,8 +540,13 @@ fn watch(
             .map(|recorder| recorder.longest_so_far())
             .filter(|longest| !longest.is_empty())
             .map_or(String::new(), |longest| format!(" Longest: {longest}."));
+        let since = if loading.began.is_some() {
+            " since the world was chosen"
+        } else {
+            ""
+        };
         info!(
-            "Loaded in {seconds:.1} s ({:.1} s of it on the loading screen's frames): {}.{longest}",
+            "Loaded in {seconds:.1} s{since} ({:.1} s of it on the loading screen's frames): {}.{longest}",
             loading.up_for.as_secs_f32(),
             progress.summary()
         );
@@ -730,6 +758,25 @@ mod tests {
             assert!(!frame(&mut world, 0, 3, 0.1).0);
         }
         assert!(frame(&mut world, 0, 3, 0.1).0);
+    }
+
+    #[test]
+    fn a_later_load_is_timed_from_when_it_began_not_from_the_start() {
+        let mut world = screen();
+        // The first load ends after 100 s of frames, and the title screen waits.
+        for _ in 0..=QUIET_FRAMES {
+            frame(&mut world, 0, 1, 10.0);
+        }
+        assert!(world.resource::<Loading>().ended_once);
+        // A world is chosen: the screen goes up again, and loads for 3 s.
+        world.run_system_cached(cover).unwrap();
+        world
+            .resource_mut::<Time<Real>>()
+            .update_with_duration(Duration::from_secs(3));
+        let took = world
+            .resource::<Loading>()
+            .took(world.resource::<Time<Real>>());
+        assert_eq!(took, Duration::from_secs(3));
     }
 
     #[test]
