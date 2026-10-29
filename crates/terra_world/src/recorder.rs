@@ -6,7 +6,8 @@
 //! feature, compiled in by the `hitch-log` feature: in every build it cost `world` 9.7 to
 //! 11.5 ms a frame, so it is not), of each world's update (`main app`, and the render thread's
 //! `sub app` RenderApp) and of any span of ours (a `terra…` target), and keeps them in a
-//! buffer a thread; a system drains them at each frame's start. A frame of 100 ms or more
+//! buffer a thread; a system drains them at each frame's start. Without Bevy's spans, marks
+//! between each world's schedules time the schedules and the update (`marks`). A frame of 100 ms or more
 //! (a freeze) gets a warning naming the world that held it, its five longest systems and
 //! the time outside any of them; the hitches' warning (`debug`) names the system longest in
 //! most hitches; the `Loaded in` line (`loading`) names the load's longest systems.
@@ -15,6 +16,7 @@
 //! `t.HitchFrameTimeThreshold` to the log with the stats that ran long in it. With
 //! `--profile-report=<file>` it also writes the session report (`report`).
 
+mod marks;
 mod report;
 
 use crate::debug::STUTTER_MS;
@@ -62,7 +64,7 @@ const COMMANDS: &str = " (commands)";
 const SCHEDULE: &str = " schedule";
 
 /// Which world ran a system, so a freeze names only the systems of the world that held it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Held {
     Game,
     Render,
@@ -89,10 +91,14 @@ pub fn layer(app: &mut App) -> BoxedLayer {
         .add_plugins(Worlds(shared.clone()))
         .add_systems(First, explain)
         .add_systems(Last, write_at_exit);
-    if shared.report.lock().is_ok_and(|report| report.is_some()) && !cfg!(feature = "hitch-log") {
-        warn!(
-            "--profile-report: this build has no spans to report (Bevy's `trace`); build with the `hitch-log` feature, as `cargo xtask profile` does (D576)."
-        );
+    if !cfg!(feature = "hitch-log") {
+        // Without Bevy's spans, its schedules are timed by marks between them.
+        app.add_plugins(marks::Marks(shared.clone()));
+        if shared.report.lock().is_ok_and(|report| report.is_some()) {
+            warn!(
+                "--profile-report: this build times schedules, not systems (they need Bevy's `trace`); for systems build with the `hitch-log` feature, as `cargo xtask profile` does (D576)."
+            );
+        }
     }
     Box::new(Spans(shared))
 }
@@ -125,6 +131,9 @@ struct Names {
     index: HashMap<String, u32>,
     world: Vec<Option<Held>>,
     render: HashSet<String>,
+    /// Names given their world when made (`name_in`), which the render world's own names
+    /// leave as they are.
+    fixed: HashSet<u32>,
 }
 
 /// One run of a span, in nanoseconds from the recorder's start, and its own time: what
@@ -237,15 +246,43 @@ impl Shared {
         index
     }
 
+    /// The number a name of `world`'s is kept under, apart from the same name in the other
+    /// world (both run a `First`).
+    fn name_in(&self, shown: String, world: Held) -> u32 {
+        let mut names = self.names();
+        let key = format!("{shown}\0{world:?}");
+        if let Some(&index) = names.index.get(&key) {
+            return index;
+        }
+        let index = names.shown.len() as u32;
+        names.world.push(Some(world));
+        names.index.insert(key, index);
+        names.fixed.insert(index);
+        names.shown.push(shown);
+        index
+    }
+
+    /// A buffer of spans drained with the threads' (`marks`).
+    fn buffer(&self) -> Arc<Mutex<Vec<Span>>> {
+        let done: Arc<Mutex<Vec<Span>>> = Arc::default();
+        self.threads
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(done.clone());
+        done
+    }
+
     /// The render world's schedules and their systems, read once the app is built.
     fn mark_render(&self, render: HashSet<String>) {
         let mut names = self.names();
         let names = &mut *names;
-        for (shown, world) in names.shown.iter().zip(names.world.iter_mut()) {
+        let shown = names.shown.iter().zip(names.world.iter_mut());
+        for (index, (shown, world)) in shown.enumerate() {
             let system = (shown.strip_suffix(COMMANDS))
                 .or(shown.strip_suffix(SCHEDULE))
                 .unwrap_or(shown);
-            if world.is_some() && render.contains(system) {
+            if world.is_some() && render.contains(system) && !names.fixed.contains(&(index as u32))
+            {
                 *world = Some(Held::Render);
             }
         }
@@ -409,13 +446,12 @@ impl Recorder {
     /// every frame and thread since the start.
     pub fn longest_so_far(&self) -> String {
         self.0.drain();
+        // Steps, not the schedules they ran in, as the session report's load says them.
         let mut totals: Vec<(u32, u64)> = {
             let state = self.0.state();
-            state
-                .totals
-                .iter()
-                .enumerate()
-                .skip(2)
+            let names = self.0.names();
+            (state.totals.iter().enumerate().skip(2))
+                .filter(|&(name, _)| !report::is_schedule(&names, name as u32))
                 .map(|(name, &ns)| (name as u32, ns))
                 .collect()
         };
@@ -524,11 +560,11 @@ fn freeze_line(shared: &Shared, frame: u32, slow: &Slow) -> String {
         .map(|&(name, ns)| format!("{} {}", shared.shown(name), ms(ns)))
         .collect::<Vec<_>>();
     format!(
-        "freeze: frame {frame} took {}, held by {}: {}; {} outside its systems (a wait on the GPU, a lock or the other world, or work on the task pools).",
+        "freeze: frame {frame} took {}, held by {}: {}; {} outside anything timed (a wait on the GPU, a lock or the other world, or work on the task pools).",
         ms(slow.frame_ns),
         slow.held.said(),
         if longest.is_empty() {
-            "no system timed".to_string()
+            "nothing timed".to_string()
         } else {
             longest.join(", ")
         },
@@ -597,16 +633,10 @@ impl Spans {
             let at = match locals.iter().position(|local| local.owner == self.0.owner) {
                 Some(at) => at,
                 None => {
-                    let done: Arc<Mutex<Vec<Span>>> = Arc::default();
-                    self.0
-                        .threads
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner())
-                        .push(done.clone());
                     locals.push(Local {
                         owner: self.0.owner,
                         open: Vec::new(),
-                        done,
+                        done: self.0.buffer(),
                     });
                     locals.len() - 1
                 }
@@ -866,7 +896,7 @@ mod tests {
         );
         assert!(
             line.starts_with(
-                "freeze: frame 41230 took 1840 ms, held by the game world: terra_folk::settlement::found 1710 ms, terra_world::flora::plant 4.1 ms; 60 ms outside its systems"
+                "freeze: frame 41230 took 1840 ms, held by the game world: terra_folk::settlement::found 1710 ms, terra_world::flora::plant 4.1 ms; 60 ms outside anything timed"
             ),
             "{line}"
         );

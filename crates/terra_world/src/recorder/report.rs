@@ -232,10 +232,17 @@ impl Report {
         let keep =
             self.slowest.len() < SLOWEST || self.slowest.last().is_some_and(|slow| ns > slow.ns);
         if keep {
-            let mut longest: Vec<(u32, u64)> = (self.open.iter())
-                .filter(|&(&name, _)| !is_schedule(names, name))
-                .map(|(&name, &ns)| (name, ns))
-                .collect();
+            // Its systems, or its schedules in a build that times only those (`marks`).
+            let timed = |schedules: bool| -> Vec<(u32, u64)> {
+                (self.open.iter())
+                    .filter(|&(&name, _)| is_schedule(names, name) == schedules)
+                    .map(|(&name, &ns)| (name, ns))
+                    .collect()
+            };
+            let mut longest = timed(false);
+            if longest.is_empty() {
+                longest = timed(true);
+            }
             longest.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
             longest.truncate(SLOWEST_SYSTEMS);
             let slow = Slow {
@@ -412,7 +419,7 @@ impl Report {
     }
 }
 
-fn is_schedule(names: &Names, name: u32) -> bool {
+pub(super) fn is_schedule(names: &Names, name: u32) -> bool {
     names
         .shown
         .get(name as usize)
@@ -484,6 +491,19 @@ mod tests {
             end: end_ms * MS,
             own: (end_ms - start_ms) * MS,
         }
+    }
+
+    #[test]
+    fn a_slow_frame_with_no_system_timed_names_its_schedules() {
+        let names = names(&[("Update schedule", Some(Held::Game))]);
+        let mut report = Report::new(PathBuf::new());
+        let mut spans = vec![
+            span(GAME_FRAME, 0, 1),
+            span(2, 1, 40),
+            span(GAME_FRAME, 1, 50),
+        ];
+        report.add(&mut spans, &names);
+        assert_eq!(report.slowest[0].longest, vec![(2, 39 * MS)]);
     }
 
     #[test]

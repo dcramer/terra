@@ -638,7 +638,7 @@ Checks, developer tools, languages and the repository.
 | [D556](decisions/D556.md) | An error says what to do | Tech | Developers | Decided | Every error our code, tools, checks and gates give is… |
 | [D563](decisions/D563.md) | The character build is incremental, a stamp a step | Tech | Agent | Decided | `build_bodies.sh` runs its steps as make and ninja run… |
 | [D575](decisions/D575.md) | The launcher is a menu in the terminal, in `cargo xtask play` | Tech | Agent | Decided | `make play` opens a launcher: when `cargo xtask play`… |
-| [D576](decisions/D576.md) | Every build logs what ran long in a freeze; a session's report is written by the game | Tech | Agent | Leaning | A frame recorder in `terra_world`, a `tracing` layer… |
+| [D576](decisions/D576.md) | Every build logs what ran long in a freeze; a session's report is written by the game | Tech | Agent | Decided | A frame recorder in `terra_world` keeps each frame's… |
 | [D577](decisions/D577.md) | Tracy is the profiler for the detail | Tech | Agent | Decided | A `tracy` feature on `terra_sandbox`… |
 | [D578](decisions/D578.md) | A play benchmark measures the load and the freezes of a walk | Tech | Agent | Decided | `cargo xtask bench` gets a scene timed from the… |
 | [D581](decisions/D581.md) | `make play` runs the release build | Tech | Agent | Decided | `cargo xtask play` (`make play`, `yard`) builds and runs… |
