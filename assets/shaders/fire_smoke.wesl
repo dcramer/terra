@@ -76,6 +76,7 @@ var haze_density: texture_3d<f32>;
 var haze_sampler: sampler;
 const SMOKE_CAMPFIRE: i32 = 0;
 const SMOKE_HOUSE: i32 = 1;
+const SMOKE_BLAZE: i32 = 2;
 // Which of a baked puff's 64 frames a card plays over its life: born a little open, and done
 // before the puff outgrows its frame (by frame 35 both sets' reach the frame's edge; the card
 // grows itself as it climbs). And how thin a hearth's wisp is against its baked puff.
@@ -113,16 +114,20 @@ const SOOT_SOFT: f32 = 0.6;
 // How many kept fires are drawn as hearths (crates/terra_world/src/fire.rs HEARTHS).
 const HEARTHS: u32 = 16u;
 // A blaze's column (castle round 6): so many puffs a blaze (fire.rs's `SMOKE_CARDS`); its baked
-// ball, which sits low in its frame and is a quarter of it wide when young, fitted to so much
-// of its card's width either side of its middle; drawn out at most so far along its rise; the
-// frames of the baked puff it plays, from a soft young billow (the first frames' ball has a
-// hard rim, and read as a ringed dot) until it nears its frame's edge; and each puff's cover,
-// so the three or four overlapping anywhere in the column sum to the thick smoke one was.
+// billow (blaze-smoke, castle round 7), which the bake fits to so much of its frame's width
+// either side of its middle (its recipe's `fit`, 0.34: at 0.4 its outer lumps reached the
+// frame's border and were cut straight, round 8), so of its card's; drawn out at most so far
+// along its rise; the frames of the billow it plays, all 16 of its 4x4 sheet of 256 texels;
+// and each puff's cover, so the three or four overlapping anywhere in the column sum to the
+// thick smoke one was. Until round 7 it played frames 10-30 of house-smoke's 128-texel ball,
+// which a 10 m card drew blurred and round.
 const BLAZE_PUFFS: f32 = 8.0;
-const BLAZE_BALL: f32 = 0.4;
+const BLAZE_BALL: f32 = 0.34;
 const BLAZE_STRETCH: f32 = 1.8;
-const BLAZE_FROM: f32 = 10.0;
-const BLAZE_TO: f32 = 30.0;
+const BLAZE_FROM: f32 = 0.0;
+const BLAZE_TO: f32 = 14.999;
+const BLAZE_GRID: f32 = 4.0;
+const BLAZE_TEXELS: f32 = 256.0;
 const BLAZE_THICK: f32 = 0.45;
 // How much of a blaze's puff's cover a rolling noise eats, young and old.
 const BLAZE_ERODE: vec2<f32> = vec2(0.25, 0.55);
@@ -380,20 +385,16 @@ fn frame_maps(layer: i32, f: f32, uv: vec2<f32>) -> array<vec4<f32>, 2> {
     );
 }
 
-// A frame of the blaze's baked puff, its ball moved to the card's middle and fitted to
-// `BLAZE_BALL` of it: the ball sits a quarter of the frame under its middle, its radius (90%
-// of its cover) 0.17 of the frame at frame 10 and 0.35 at frame 30 (measured on
-// house-smoke.png). Drawn as it lies, a young puff's card was four times the smoke in it.
+// A frame of the blaze's billow, frame `f` of its 4x4 sheet: the bake already sat it in the
+// frame's middle at `BLAZE_BALL` of it (smoke.ts's `fitFrame`), so it is drawn as it lies.
 @if(!PREPASS_PIPELINE)
 fn blaze_maps(f: f32, uv: vec2<f32>) -> array<vec4<f32>, 2> {
-    let cell = vec2(f % 8.0, floor(f / 8.0));
-    let ball = 0.172 + 0.009 * (f - BLAZE_FROM);
-    let centre = vec2(0.5, 0.73 - 0.0015 * (f - BLAZE_FROM));
-    let inside = clamp(centre + vec2(uv.x - 0.5, 0.5 - uv.y) * (ball / BLAZE_BALL), vec2(0.5 / 128.0), vec2(1.0 - 0.5 / 128.0));
-    let at = (cell + inside) / 8.0;
+    let cell = vec2(f % BLAZE_GRID, floor(f / BLAZE_GRID));
+    let inside = clamp(vec2(uv.x, 1.0 - uv.y), vec2(0.5 / BLAZE_TEXELS), vec2(1.0 - 0.5 / BLAZE_TEXELS));
+    let at = (cell + inside) / BLAZE_GRID;
     return array(
-        textureSampleLevel(near_maps, maps_sampler, at, SMOKE_HOUSE, 0.0),
-        textureSampleLevel(far_maps, maps_sampler, at, SMOKE_HOUSE, 0.0),
+        textureSampleLevel(near_maps, maps_sampler, at, SMOKE_BLAZE, 0.0),
+        textureSampleLevel(far_maps, maps_sampler, at, SMOKE_BLAZE, 0.0),
     );
 }
 
@@ -516,7 +517,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if alpha < 0.004 {
         discard;
     }
-    let scale = select(smoke.sets.y, smoke.sets.x, hearth);
+    let scale = select(select(smoke.sets.y, smoke.sets.x, hearth), smoke.sets.z, blaze);
     let near_m = vec4(near.rgb / scale, near.a);
     let far_m = vec4(far.rgb / scale, far.a);
     // Young smoke from a big timber fire near black (soot's albedo 0.03 to 0.05,
@@ -535,6 +536,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // only its young, sooty underside, so takes the grey, never the pale that firelight turned
     // salmon.
     var albedo_sky = albedo;
+    // A blaze's billow by the sun and sky a dark grey, so its lit tops show its lumps (round 8:
+    // at soot's 0.03 the baked billows' shading went unseen, the column a black mass).
+    if blaze {
+        albedo_sky = mix(vec3(0.09, 0.085, 0.08), vec3(0.28, 0.27, 0.26), smoothstep(0.1, 0.8, t));
+    }
     // And what its wisp gives back of the sun and sky past single scattering: the bake is single
     // scattering, which leaves a wisp of a near-white medium as dark as soot, where its light
     // scattered again and again is several times as much (Wrenninge 2013's octaves, Hillaire

@@ -91,9 +91,9 @@ fn whole() -> f32 {
 }
 
 /// The smoke's puffs, a layer each in this order (`fire_smoke.wesl`'s `SMOKE_*`): a hearth's
-/// thin wisp and a blaze's thick soot, a breath's soot drawn from the second. 4 MB of the
-/// GPU's a map a set.
-pub const SMOKE_SETS: [&str; 2] = ["campfire-smoke", "house-smoke"];
+/// thin wisp, a breath's thick soot, and a blaze's billow (16 frames of 256 texels, each
+/// fitted to its frame, castle round 7). 4 MB of the GPU's a map a set.
+pub const SMOKE_SETS: [&str; 3] = ["campfire-smoke", "house-smoke", "blaze-smoke"];
 
 /// A smoke set's sidecar, as `tools/fire/bake/smoke.ts` writes it.
 #[derive(Deserialize, Debug)]
@@ -112,7 +112,7 @@ pub struct SmokeBooks {
     pub near: Image,
     /// Map 1 (left, bottom, front, glow).
     pub far: Image,
-    /// Each set's [`SmokeSidecar::light_scale`], x y in the order of [`SMOKE_SETS`].
+    /// Each set's [`SmokeSidecar::light_scale`], x y z in the order of [`SMOKE_SETS`].
     pub light_scales: Vec4,
 }
 
@@ -123,20 +123,28 @@ pub fn smoke_sidecar(set: &str) -> SmokeSidecar {
         .unwrap_or_else(|problem| panic!("Could not read {}: {problem}", path.display()));
     let read: SmokeSidecar = serde_json::from_str(&text)
         .unwrap_or_else(|problem| panic!("{}: {problem}", path.display()));
+    let (frames, frame) = smoke_grid(set);
     assert!(
-        read.frames == FRAMES
-            && read.columns == COLUMNS
-            && read.rows * read.columns == read.frames
-            && read.frame == SMOKE_FRAME
+        read.frames == frames
+            && read.columns * read.columns == frames
+            && read.rows == read.columns
+            && read.frame == frame
             && read.light_scale > 0.0,
-        "{}: fire_smoke.wesl reads {FRAMES} frames of {SMOKE_FRAME} texels, {COLUMNS} across",
+        "{}: fire_smoke.wesl reads {frames} frames of {frame} texels, a square sheet of them",
         path.display()
     );
     read
 }
 
-/// Texels a smoke frame across, as `fire_smoke.wesl` keeps its samples inside one.
-const SMOKE_FRAME: u32 = 128;
+/// A smoke set's frames and texels a frame across, as `fire_smoke.wesl` reads them: every set a
+/// layer of one 1,024-texel sheet, the blaze's 16 frames of 256, the rest 64 of 128.
+fn smoke_grid(set: &str) -> (u32, u32) {
+    if set == "blaze-smoke" {
+        (16, 256)
+    } else {
+        (FRAMES, 1024 / COLUMNS)
+    }
+}
 
 /// Reads the smoke's sets: at startup, once, as the smoke cannot draw without them.
 pub fn read_smoke() -> SmokeBooks {
@@ -151,7 +159,12 @@ pub fn read_smoke() -> SmokeBooks {
     SmokeBooks {
         near: maps(""),
         far: maps(".opposite"),
-        light_scales: Vec4::new(sidecars[0].light_scale, sidecars[1].light_scale, 0.0, 0.0),
+        light_scales: Vec4::new(
+            sidecars[0].light_scale,
+            sidecars[1].light_scale,
+            sidecars[2].light_scale,
+            0.0,
+        ),
     }
 }
 

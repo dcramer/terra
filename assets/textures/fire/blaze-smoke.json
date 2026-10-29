@@ -1,0 +1,26 @@
+{
+  "set": "blaze-smoke",
+  "about": "One billow of a burning building's smoke column: lumps on lumps of soot, each a pyroclastic sphere creased between its bumps (billow.ts), self-shadowed and lit six ways as shipped games' six-way smoke flipbooks are (Unity's VFX Graph six-way samples), its bumps rolling up over it as it ages and opens. The blaze's column is 8 of these; each frame is fitted to its frame (fit), so a 10 m card draws the billow whole at 256 texels, a 4x4 sheet in one layer.",
+  "kind": "oneshot",
+  "class": "smoke",
+  "frames": 16,
+  "columns": 4,
+  "rows": 4,
+  "frame": 256,
+  "fps": 8,
+  "metres": 3,
+  "reach": 0.938,
+  "channels": "map 0 (<set>.png): R right +X, G top +Z, B back +Y, A alpha; map 1 (<set>.opposite.png): R left, G bottom, B front, A glow",
+  "light_scale": 3.9195,
+  "baked": {
+    "heat_scale": 4.1936,
+    "mean_response": [
+      0.094,
+      0.078,
+      0.047,
+      0.087,
+      0.086,
+      0.139
+    ]
+  }
+}
