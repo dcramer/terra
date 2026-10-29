@@ -128,7 +128,7 @@ const BLAZE_FROM: f32 = 0.0;
 const BLAZE_TO: f32 = 14.999;
 const BLAZE_GRID: f32 = 4.0;
 const BLAZE_TEXELS: f32 = 256.0;
-const BLAZE_THICK: f32 = 0.45;
+const BLAZE_THICK: f32 = 0.6;
 // How much of a blaze's puff's cover a rolling noise eats, young and old.
 const BLAZE_ERODE: vec2<f32> = vec2(0.25, 0.55);
 
@@ -342,7 +342,16 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     // A small fire's smoke thin, a big one's thick: at the same cover the debris's and the
     // dying blazes' smoke stood as dark dots in the sky (castle round 5, still c). Its thickness
     // in the fraction past its heat (`luck`'s place, which the fragment does not read).
-    let thick = mix(0.3, 1.0, smoothstep(0.4, 1.6, tall));
+    // And thinned out when the eye comes within its reach, as Unreal's camera-distance fade
+    // works on a sprite's position rather than its pixels. A card whose middle passes a few
+    // metres from the eye fills the picture with one billow, turned off its column (its frame
+    // from `going` and `to_eye`, near parallel there), its rim a long straight line: the black
+    // wall ending in a hard vertical edge of castle round 8's still d, on main and named by
+    // every judge. A probe tinting it by cause found neither the fade by each pixel's distance
+    // (which leaves a rim metres off), nor the depth fade, nor a card seen edge on, but one
+    // card's uv running smoothly across the wall to that edge (castle round 9).
+    let reach = 0.43 * size * stretch;
+    let thick = mix(0.3, 1.0, smoothstep(0.4, 1.6, tall)) * smoothstep(0.5, 1.0, length(view.world_position - middle) / reach);
     out.uv_b = vec2(t, min(thick, 0.999) + floor(heat * 15.0 + 0.5) * 2.0);
 @if(PREPASS_PIPELINE) {
 @if(NORMAL_PREPASS_OR_DEFERRED_PREPASS)
@@ -502,6 +511,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let n = 0.65 * smooth_noise(q) + 0.35 * smooth_noise(q * 2.3 + vec2(5.2, 1.3));
         let erode = mix(BLAZE_ERODE.x, BLAZE_ERODE.y, t);
         cover = clamp((cover - erode * n) / (1.0 - erode), 0.0, 1.0);
+        // Its body near solid and its edge short, so the front billows hide those behind and
+        // their outlines and lit tops show: each a soft veil, three or four summed to one smooth
+        // smear (castle round 8's judges, main and the new billows alike).
+        cover = smoothstep(0.0, 0.6, cover);
         let r = length(in.uv - vec2(0.5)) * 2.0;
         cover *= 1.0 - smoothstep(0.7, 0.98, r);
         // Thin round the camera, so a film's eye inside the column sees into it, not a wall.
@@ -539,7 +552,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // A blaze's billow by the sun and sky a dark grey, so its lit tops show its lumps (round 8:
     // at soot's 0.03 the baked billows' shading went unseen, the column a black mass).
     if blaze {
-        albedo_sky = mix(vec3(0.09, 0.085, 0.08), vec3(0.28, 0.27, 0.26), smoothstep(0.1, 0.8, t));
+        albedo_sky = mix(vec3(0.21, 0.195, 0.18), vec3(0.46, 0.45, 0.43), smoothstep(0.1, 0.8, t));
     }
     // And what its wisp gives back of the sun and sky past single scattering: the bake is single
     // scattering, which leaves a wisp of a near-white medium as dark as soot, where its light
@@ -619,6 +632,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // (campfire notes #5), where the references' wood smoke stays a dull grey-brown haze.
     if hearth {
         sky = vec3(dot(sky, vec3(0.2126, 0.7152, 0.0722)));
+    }
+    // A blaze's thick column shades itself from most of the sky (its own smoke all round), so
+    // its billows' sunward tops stand out from their shaded undersides.
+    if blaze {
+        sky *= 0.7;
     }
     light += sky;
     // Its hot core's own light, where it is young over the fire: dimly in a hearth's first half
