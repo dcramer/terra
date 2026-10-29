@@ -1650,6 +1650,70 @@
    },
    "cost": "heavy",
    "measurable": true
+  },
+  {
+   "id": "bones.feet.worst",
+   "noticed": 4,
+   "notice": "on flat ground the legs bend and the feet tip in a stride the clip never made",
+   "bar": {
+    "at_most": 5
+   },
+   "unit": "degrees, the most the foot lock turns a bone off its clip in a frame, standing, jogging or sprinting on the flat yard with the hammer in hand or none (tools/controller/bones.ts)",
+   "source": "D584 (foot placement on flat ground bends a leg a few degrees at most); D455; Unreal Foot Placement, ALS foot IK",
+   "check": {
+    "by": "film",
+    "name": "bones feet worst"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "bones.feet.mean",
+   "noticed": 4,
+   "notice": "on flat ground the foot lock bends the legs all the time, not only to catch a slip",
+   "bar": {
+    "at_most": 2
+   },
+   "unit": "degrees, the foot lock's turn of the bone it bends most, averaged over every frame of a motion, the worst motion of bones.feet.worst's (tools/controller/bones.ts)",
+   "source": "D584; D455; Unreal Foot Placement, ALS foot IK",
+   "check": {
+    "by": "film",
+    "name": "bones feet mean"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "bones.carry_hand.mean",
+   "noticed": 3,
+   "notice": "a carried tool's forearm and wrist are turned by a rule every frame, not posed by a clip",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "degrees, carry_hand's turn of the bone it turns most, averaged over a motion, the worst of bones.feet.worst's motions (tools/controller/bones.ts); D584 retires it once a carry clip holds the tool",
+   "source": "D584; D564",
+   "check": {
+    "by": "film",
+    "name": "bones carry_hand mean"
+   },
+   "cost": "heavy",
+   "measurable": true
+  },
+  {
+   "id": "bones.arms.mean",
+   "noticed": 3,
+   "notice": "the arms are pushed off the hips by a rule, not swung as the clip swings them",
+   "bar": {
+    "at_most": 0
+   },
+   "unit": "degrees, keep_off_hips's turn of the bone it turns most, averaged over a motion, the worst of bones.feet.worst's motions (tools/controller/bones.ts); D584 retires it once the clips keep the hands clear",
+   "source": "D584; D535",
+   "check": {
+    "by": "film",
+    "name": "bones arms mean"
+   },
+   "cost": "heavy",
+   "measurable": true
   }
  ]
 }

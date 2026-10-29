@@ -191,6 +191,8 @@ impl Plugin for WalkerPlugin {
         // The layers that pose a body after its clips, shared with the workbench.
         crate::pose::plugin(app);
         crate::gaze::plugin(app);
+        // How far each of them moves the player's bones (`--bone-audit`, D584).
+        crate::bone_audit::plugin(app);
         camera::plugin(app);
         movement::plugin(app);
         app.init_resource::<Hands>()

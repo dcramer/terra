@@ -16,6 +16,7 @@ pub mod appearance;
 pub mod arms;
 pub mod bend;
 pub mod bodies;
+pub mod bone_audit;
 pub mod button;
 pub mod camera;
 pub mod carry_arm;

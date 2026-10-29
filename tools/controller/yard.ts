@@ -11,6 +11,8 @@
 // through, the steep mound climbed). The two films side by side, named, in one film. Beside them
 // a lake (the play world's, the yard has no water) is swum out into, along the surface, dived
 // and surfaced, filmed alone (lake.mp4), and swim.ts measures the swimmer's pose from its record.
+// And the bone audit's run on the bare yard (bones.ts, into bones/): how far each pose layer
+// turns the player's bones off the clips, standing, jogging and sprinting on the flat.
 //
 //   cargo xtask controller --film                  run, film and check, then the scorecard
 //   node tools/controller/yard.ts [--out <dir>]    the run, film and checks alone
@@ -35,6 +37,7 @@ import { read } from "../sandbox/duel/checks.ts";
 import { streamed } from "../sandbox/streamed.ts";
 import { CONTROLLER_FILMS, filmedThrough, keep, stamp } from "../scorecard/films.ts";
 import { pose } from "./swim.ts";
+import { report as bonesReport, run as bonesRun } from "./bones.ts";
 import { type Check, type Walk, check } from "./yard-checks.ts";
 
 /// The frames run and filmed (every second one kept, for 30 a second): the route's start to
@@ -97,7 +100,8 @@ if (!args.includes("--check")) {
   console.log(`yard: built (${took()})`);
   const work = resolve(ROOT, "shots/controller-yard");
   rmSync(work, { recursive: true, force: true });
-  const runs = await Promise.all([...PACES, LAKE].map((pace) => film(pace, work)));
+  // Beside them the bone audit's run on the bare yard (bones.ts), its own record in bones/.
+  const runs = await Promise.all([...[...PACES, LAKE].map((pace) => film(pace, work)), bonesRun(join(out, "bones")).then((r) => ({ name: "bones", ...r }))]);
   for (const each of runs.filter((r) => !r.ok)) console.log(`yard: ✗ ${each.name} did not finish; its log: ${each.log}`);
   console.log(`yard: ran ${runs.map((r) => `${r.name}${r.ok ? "" : " (did not finish)"}`).join(", ")} (${took()})`);
   const done = (runs: Run[]) => runs.every((pace) => finished(pace.name));
@@ -110,7 +114,7 @@ if (!args.includes("--check")) {
 }
 const passed = report();
 // A clean checkout's whole film is kept by its commit, for nightly to bank its rows (tools/scorecard/films.ts).
-const whole = [...PACES, LAKE].every((pace) => finished(pace.name));
+const whole = [...PACES, LAKE].every((pace) => finished(pace.name)) && finished("bones/bones");
 if (!args.includes("--check") && whole) console.log(`yard: ${keep(out, filmedThrough(filmed, stamp()), CONTROLLER_FILMS)}`);
 process.exit(passed && whole ? 0 : 1);
 
@@ -136,7 +140,7 @@ function report(): boolean {
   // A stopped run's rows by their names alone (the checks of no frames), each not measured.
   const yard = stopped ? check(walks).map((each) => unmeasured(each.name, stopped.name)) : check(walks);
   const swim = finished(LAKE.name) ? pose({ name: LAKE.name, frames: read(join(out, `walk-${LAKE.name}.jsonl`)), route: [], ground: [] }) : unmeasured("swim pose", LAKE.name);
-  const lines = [...yard, swim];
+  const lines = [...yard, swim, ...bonesReport(join(out, "bones"), finished("bones/bones"))];
   const said = lines.map((each) => `${each.name}: ${each.line}`);
   for (const line of said) console.log(`yard: ${line}`);
   writeFileSync(join(out, "checks.txt"), said.join("\n") + "\n");
