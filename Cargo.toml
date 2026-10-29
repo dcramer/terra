@@ -76,6 +76,8 @@ bevy_mesh = { path = "patches/bevy_mesh" }
 # A reflection probe smaller than every irradiance volume holding a fragment gives its diffuse
 # light, so a closed room's probe wins over a forest's sky volume (D485).
 bevy_pbr = { path = "patches/bevy_pbr" }
+# A multidrawn batch set's bin buffers written to the GPU only when they changed (D583).
+bevy_render = { path = "patches/bevy_render" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
