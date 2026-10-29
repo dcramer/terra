@@ -55,6 +55,7 @@ use terra_world::grown::Cards;
 use terra_world::planet::Planet;
 use terra_world::sky_occlusion::{self, SkyOccluders};
 
+mod card;
 pub mod conifers;
 mod far;
 mod floor;
@@ -68,6 +69,7 @@ mod sun_tests;
 mod tally;
 mod thicket;
 
+use card::{Card, Leaf};
 use floor::{Crowns, Stand};
 use footing::{Footing, Shapes, SolidShape, Trunk};
 use species::{Form, Species};
@@ -159,30 +161,6 @@ const VETERAN_TRUNK_M: f32 = 2.0;
 const FILED_M: f32 = 8.0;
 /// Where the leaves' picture is cut: more opaque than this is leaf.
 const LEAF_CUT: f32 = 0.45;
-/// A card's picture: its cell in its atlas, how far across the cell is, and the octagon
-/// round its leaves in the atlas's coordinates.
-#[derive(Clone, Copy)]
-struct Leaf {
-    cell: Vec2,
-    across: f32,
-    outline: [(f32, f32); 8],
-}
-
-impl Leaf {
-    /// A card of the shared atlas grown plants use (`assets/data/foliage.ron`, D222).
-    fn of(cards: &Cards, name: &str) -> Self {
-        let card = cards.get(name);
-        let mut outline = [(0.0, 0.0); 8];
-        for (to, from) in outline.iter_mut().zip(&card.outline) {
-            *to = *from;
-        }
-        Self {
-            cell: card.cell,
-            across: card.across,
-            outline,
-        }
-    }
-}
 /// How the crowns' leaves are shaded (D247): their pictures neither greyed nor darkened,
 /// since the atlas's leaves are graded to living leaves' colour (D292), where once they were
 /// greyed and darkened by 15% from a pale pastel; how brightly a leaf glows lit through
@@ -2266,14 +2244,15 @@ fn crown_near(cards: &[Vec<Card>], keep: usize) -> Build {
 }
 
 /// A crown far off: `keep` cards a clump, the first of its near crown's, grown as they are
-/// there when the rest have dropped out (D223): two (D318).
+/// there when the rest have dropped out (D223): two (D318), each the rectangle round its
+/// leaves rather than their octagon (`Card::draw_far`).
 fn crown_far(cards: &[Vec<Card>], keep: usize) -> Build {
     let mut build = Build::default();
     for tip in cards {
         let keep = keep.min(tip.len());
         let grow = libm::powf(tip.len() as f32 / keep as f32, 0.55);
         for card in &tip[..keep] {
-            card.draw(&mut build, grow);
+            card.draw_far(&mut build, grow);
         }
     }
     build
@@ -2376,61 +2355,6 @@ fn lump(build: &mut Build, centre: Vec3, radii: Vec3) {
             build
                 .indices
                 .extend([a, a + around, b, b, a + around, b + around]);
-        }
-    }
-}
-
-/// One leaf card in a crown: where it is, which way it faces, how big, its picture, and
-/// how it is lit and moves.
-#[derive(Clone, Copy)]
-struct Card {
-    middle: Vec3,
-    right: Vec3,
-    up: Vec3,
-    half: f32,
-    normal: Vec3,
-    tint: Vec3,
-    sway: Vec2,
-    flip: f32,
-    /// How much of the sky it sees, least deep in the crown (D216).
-    sky: f32,
-    leaf: Leaf,
-}
-
-impl Card {
-    /// Draws it, `grow` times its size; `rank`, its place and its clump's count, for a crown
-    /// whose cards drop out with distance.
-    fn draw(&self, build: &mut Build, grow: f32) {
-        self.draw_ranked(build, grow, None);
-    }
-
-    fn draw_ranked(&self, build: &mut Build, grow: f32, rank: Option<(usize, usize, usize)>) {
-        let half = self.half * grow;
-        let base = build.positions.len() as u32;
-        for (u, v) in self.leaf.outline {
-            let atlas = Vec2::new(u, v);
-            let own = (atlas - self.leaf.cell) / self.leaf.across;
-            let corner = self.middle
-                + self.right * (own.x * 2.0 - 1.0) * half * self.flip
-                + self.up * (1.0 - own.y * 2.0) * half;
-            let index = build.vertex(corner, self.normal, atlas, self.sway, self.tint);
-            build.colours[index as usize][3] = self.sky;
-            if build.offset_in_colour {
-                let offset = corner - self.middle;
-                build.colours[index as usize] = [offset.x, offset.y, offset.z, 1.0];
-            }
-            if let Some((k, n, keep)) = rank {
-                let offset = corner - self.middle;
-                build.dropping.push([
-                    offset.x,
-                    offset.y,
-                    offset.z,
-                    k as f32 + n as f32 / 100.0 + keep as f32 / 1000.0,
-                ]);
-            }
-        }
-        for i in 1..self.leaf.outline.len() as u32 - 1 {
-            build.indices.extend([base, base + i, base + i + 1]);
         }
     }
 }
