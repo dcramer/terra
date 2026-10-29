@@ -54,6 +54,8 @@ test("the client's arguments: the command after --, options before it, one mode"
   for (const bad of [["--rev", "abc"], ["--minutes", "9999", "--", "x"], ["--wait"], ["--cancel", "x;rm"], ["--collect", "../etc", "--", "x"], ["--frob", "--", "x"], ["--status", "--doctor"], ["--worker", "-oX", "--status"]]) {
     assert.ok("error" in parseClient(bad), bad.join(" "));
   }
+  // A comma list is one path nowhere: refused, saying to repeat --collect.
+  assert.deepEqual(parseClient(["--collect", "a.png,shots/b", "--", "x"]), { error: "--collect a.png,shots/b: one path a --collect; repeat it for each (--collect a.png --collect shots/b)" });
 });
 
 test("a job goes to a running daemon with the shortest queue, else waits on a box that answers", () => {

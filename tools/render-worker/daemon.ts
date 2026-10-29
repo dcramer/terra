@@ -25,12 +25,14 @@ function walk(path: string, out: string[]): void {
 }
 
 /// The files a job hands back, as [source, name under out/]: what the command wrote under each
-/// collected path since it started, `~/.cache/terra-review/` left off their names.
-export function gather(job: Job, src: string, home: string, startedMs: number): [string, string][] {
+/// collected path since it started, `~/.cache/terra-review/` left off their names; `missing`,
+/// when given, takes each `--collect` path that is not there when the job ends.
+export function gather(job: Job, src: string, home: string, startedMs: number, missing?: (path: string) => void): [string, string][] {
   const review = join(home, ".cache/terra-review");
   const roots = job.collect.length ? job.collect.map((p) => (p.startsWith("~/") ? join(home, p.slice(2)) : join(src, p))) : [review];
   const found: [string, string][] = [];
-  for (const root of roots) {
+  for (const [i, root] of roots.entries()) {
+    if (job.collect.length && !existsSync(root)) missing?.(job.collect[i]);
     const files: string[] = [];
     walk(root, files);
     for (const f of files) {
@@ -128,6 +130,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   let ran = false;
   let cleaned = "";
   let iced = "";
+  const absent: string[] = [];
   const home = slotHome(b, slot);
   let src = slotDir(b, slot);
   try {
@@ -213,7 +216,8 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
         break;
       }
     }
-    const files = job.kind === "run" ? gather(job, src, home, startedMs) : [];
+    const files = job.kind === "run" ? gather(job, src, home, startedMs, (p) => absent.push(p)) : [];
+    for (const p of absent) note(`--collect ${p}: not there when the job ended (${p.startsWith("~/") ? `under the slot's HOME, ${home}` : `in the checkout, ${src}`}), so nothing came from it; check the path the command writes, one path a --collect`);
     for (const [from, name] of files) {
       const to = join(out, name);
       mkdirSync(dirname(to), { recursive: true });
@@ -234,6 +238,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   closeSync(log);
   if (cleaned) why += `; cleaned a stale build of ${cleaned} and ran it again`;
   if (iced) why += `; ${iced}`;
+  if (absent.length) why += `; not there to collect: ${absent.join(", ")}`;
   job = { ...job, state: r.cancelled ? "cancelled" : exit ? "failed" : "done", exit, ended: new Date().toISOString(), note: why };
   writeJob(b, job);
   return job;

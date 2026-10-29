@@ -207,6 +207,8 @@ export function parseClient(argv: string[], defaultMinutes = DEFAULT_MINUTES): C
   if (dirty && rev) return { error: "--dirty runs the working tree's changes on HEAD; --rev names a commit instead" };
   for (const c of collect) {
     if (c.startsWith("/") || c.split("/").includes("..")) return { error: `--collect ${c}: a path in the checkout or under ~/, without ..` };
+    // A comma list would be taken for one path that is nowhere, and collect nothing.
+    if (c.includes(",")) return { error: `--collect ${c}: one path a --collect; repeat it for each (${c.split(",").filter(Boolean).map((p) => `--collect ${p.trim()}`).join(" ")})` };
   }
   return { mode, rev, dirty, command, collect, cook, minutes, out, wait, worker, ...(cls ? { class: cls } : {}) };
 }

@@ -109,6 +109,14 @@ test("--collect takes a path in the checkout; a failing command fails with its c
   assert.equal(await quietly(() => finish(r, shot.id, join(tmp, "out2"))), 0);
   assert.equal(readFileSync(join(tmp, "out2/shot.png"), "utf8"), "a\n");
 
+  // A path the command never wrote is reported, beside what did come back.
+  const half = submit(r, agent, job({ collect: ["shot.png", "shots/never.png"] }));
+  assert.ok("id" in half);
+  const halfDone = await runJob(b, first()!);
+  assert.equal(halfDone.state, "done");
+  assert.match(halfDone.note ?? "", /^1 files, 0 MB; not there to collect: shots\/never\.png$/);
+  assert.match(readFileSync(join(b.jobs, half.id, "out/job.log"), "utf8"), /render-worker: --collect shots\/never\.png: not there when the job ended \(in the checkout, .*\), so nothing came from it/);
+
   const failing = submit(r, agent, job({ command: ["sh", "-c", "exit 3"] }));
   assert.ok("id" in failing);
   await runJob(b, first()!);
