@@ -162,6 +162,21 @@ setTimeout(() => {}, 300);`;
   }
 });
 
+test("a checkout a job left inside the slot's build is removed before the next job, and its log says so", async () => {
+  const left = submit(r, agent, job({ command: ["git", "worktree", "add", "-q", "--detach", "target/gate/base", "HEAD"] }));
+  assert.ok("id" in left);
+  assert.equal((await runJob(b, first()!)).state, "done");
+  const base = join(slotDir(b, 1), "target/gate/base");
+  assert.ok(existsSync(join(base, "a.txt")), "the first job left its checkout in the build");
+  const after = submit(r, agent, job({ command: ["node", "-e", "require('fs').existsSync('target/gate/base') && process.exit(7)"] }));
+  assert.ok("id" in after);
+  const ran = await runJob(b, first()!);
+  assert.equal(ran.state, "done", ran.note);
+  assert.ok(!existsSync(base));
+  assert.ok(!sh(b.repo, "worktree", "list").includes("target/gate/base"), "git forgets it too");
+  assert.match(readFileSync(join(b.jobs, after.id, "out/job.log"), "utf8"), /render-worker: a checkout left in the slot's build, target\/gate\/base: removed/);
+});
+
 test("a build broken by a stale artifact is cleaned and run once more; a real error is not", async () => {
   // A workspace of two crates, and a cargo on the PATH that only records its words: the command
   // links only once a clean has run, as a stale rlib does.

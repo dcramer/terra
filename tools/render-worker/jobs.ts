@@ -731,6 +731,24 @@ const CRATE_LINE = /error\[E0460\]|error\[E0786\]/;
 
 // lld's report under a missing symbol: the archive that wants it, and where a symbol of that
 // name (or the one it suggests) is defined.
+/// The checkouts git keeps inside a slot's build (`target`, absolute), from `git worktree list
+/// --porcelain`. One there (the fire gate's base, target/gate/base) outlives the job's
+/// `git clean -e target/`, and a crate cargo built from it into the slot's target is judged
+/// fresh by that checkout's files ever after, not the slot's: cargo names a source under the
+/// target relative to the target in its dep-info, and gives a path crate the same unit in any
+/// checkout of the workspace. So the slot links the other checkout's code, whatever its own
+/// files say (job 20261029-172237-b5ec: bevy_pbr's new field missing for hours after a
+/// failed gate left its base at 799be03c). Removing it leaves those files missing, which cargo
+/// takes as stale, so the crate builds anew from the slot's.
+export function checkoutsInBuild(porcelain: string, target: string): string[] {
+  const inside = target.replace(/\/+$/, "") + "/";
+  return porcelain
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => line.slice("worktree ".length).trim())
+    .filter((path) => path.startsWith(inside));
+}
+
 const WANTED_IN = /^\s*>>>.*\bin archive \S*\/lib([A-Za-z0-9_]+)-[0-9a-f]+\.rlib/;
 const DEFINED_IN = /^\s*>>> defined in: \S*\/lib([A-Za-z0-9_]+)-[0-9a-f]+\.rlib/;
 

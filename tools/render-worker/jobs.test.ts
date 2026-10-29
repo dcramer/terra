@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { benchHold, boxSettings, buildAhead, chooseWorker, cleanCommands, collected, commandKey, config, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, recentJobs, rustcIce, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
+import { benchHold, boxSettings, buildAhead, checkoutsInBuild, chooseWorker, cleanCommands, collected, commandKey, config, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, recentJobs, rustcIce, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -620,4 +620,16 @@ test("the workspace's packages come from its members' manifests", () => {
   const list = (d: string) => (d === "crates" ? ["terra_world", "terra_gen", "README.md"] : []);
   assert.deepEqual(workspacePackages(root, (p) => files[p], list), ["terra_gen", "terra_world", "xtask"]);
   assert.deepEqual(workspacePackages("", (p) => files[p], list), []);
+});
+
+test("a checkout inside the slot's build is found, one beside it or the slot itself is not", () => {
+  const list = [
+    ...["worktree /box/repo", "HEAD 3740b8755", "detached", ""],
+    ...["worktree /box/slots/3", "HEAD 7dc14197", "detached", ""],
+    ...["worktree /box/slots/3/target/gate/base", "HEAD 799be03c", "detached", ""],
+    ...["worktree /box/slots/3/targets/x", "", "worktree /box/slots/4/target/gate/base", ""],
+  ].join("\n");
+  assert.deepEqual(checkoutsInBuild(list, "/box/slots/3/target"), ["/box/slots/3/target/gate/base"]);
+  assert.deepEqual(checkoutsInBuild(list, "/box/slots/3/target/"), ["/box/slots/3/target/gate/base"]);
+  assert.deepEqual(checkoutsInBuild(list, "/box/slots/1/target"), []);
 });

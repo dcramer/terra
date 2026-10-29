@@ -14,7 +14,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
 import { Display } from "./display.ts";
 import { killNow, type Proc, reap, reaped, scan } from "./reap.ts";
-import { boxSettings, classOf, cleanCommands, collected, displayPlan, expired, ID, incrementalClears, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, rustcIce, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
+import { boxSettings, checkoutsInBuild, classOf, cleanCommands, collected, displayPlan, expired, ID, incrementalClears, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, rustcIce, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -133,6 +133,20 @@ export function slotCheckout(b: Box, slot: number, rev: string): string {
   return dir;
 }
 
+/// Removes the checkouts a job left inside the slot's build (`checkoutsInBuild`), so no crate
+/// cargo built from one stands in for the slot's own; says so in the job's log.
+function clearBuildCheckouts(b: Box, src: string, note: (line: string) => void): void {
+  const found = checkoutsInBuild(git(b.repo, ["worktree", "list", "--porcelain"]).stdout, join(src, "target"));
+  for (const dir of found) {
+    note(
+      `a checkout left in the slot's build, ${relative(src, dir)}: removed, as cargo would go on judging the crates built from it by its files, not this checkout's, and link its code (a failed fire gate's base, or a script's worktree under target/; put one outside target/ with a target of its own)`,
+    );
+    git(b.repo, ["worktree", "remove", "--force", dir]);
+    rmSync(dir, { recursive: true, force: true });
+  }
+  if (found.length) git(b.repo, ["worktree", "prune"]);
+}
+
 /// Ends whatever of a job still runs, in its process group or out of it, once its steps are
 /// done, and says in its log that nothing of it is left (or what is); what to add to its note.
 async function endProcesses(id: string, r: Running, why: string, note: (line: string) => void): Promise<string> {
@@ -170,6 +184,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   try {
     note(`slot ${slot}: ${src}`);
     src = slotCheckout(b, slot, job.rev);
+    clearBuildCheckouts(b, src, note);
     if (job.patch) {
       // A --dirty job: say so first, and keep the patch beside the log, so its files are never
       // taken for a commit's.
