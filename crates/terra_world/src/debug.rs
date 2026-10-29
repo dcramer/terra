@@ -437,12 +437,17 @@ pub fn last_tenth(series: &std::collections::BTreeMap<String, Vec<f32>>, scale: 
     top.join(", ")
 }
 
-/// A render pass's time from the frame last timed, if it ran in it.
+/// A render pass's time from the frame last timed, if it ran in it: the sum of every span of
+/// its name in that frame. Bevy names a span, not a pass, and writes each span of a frame as a
+/// measurement at one instant, so a pass that ran twice (once a view, or an early and a late
+/// pass of one name, as `per_view_shadow_pass` before D582) has two, and the last alone would
+/// hide the first.
 pub fn timed_then(diagnostic: &bevy::diagnostic::Diagnostic, then: Instant) -> Option<f64> {
     diagnostic
-        .measurement()
+        .measurements()
         .filter(|m| m.time == then)
         .map(|m| m.value)
+        .reduce(|sum, value| sum + value)
 }
 
 /// The render passes' times, summed over the outermost ones so nothing counts twice, of
@@ -885,6 +890,28 @@ mod tests {
             costliest(&mut series, CPU_PASS),
             "auxiliary_views 2.00, ssao 0.50"
         );
+    }
+
+    #[test]
+    fn a_pass_run_twice_in_a_frame_counts_both_runs() {
+        use bevy::diagnostic::{Diagnostic, DiagnosticMeasurement, DiagnosticPath};
+        let path = DiagnosticPath::new("render/per_view_shadow_pass/elapsed_gpu");
+        let mut store = DiagnosticsStore::default();
+        store.add(Diagnostic::new(path.clone()));
+        let earlier = Instant::now();
+        let then = earlier + std::time::Duration::from_millis(16);
+        let pass = store.get_mut(&path).unwrap();
+        // A frame before, then an early run of 0.34 ms and a late one of 0.03 in one frame.
+        for (time, value) in [(earlier, 9.0), (then, 0.34), (then, 0.03)] {
+            pass.add_measurement(DiagnosticMeasurement { time, value });
+        }
+        let pass = store.get(&path).unwrap();
+        assert!((timed_then(pass, then).unwrap() - 0.37).abs() < 1e-9);
+        assert_eq!(passes_timed(&store), Some(then));
+        assert!((render_times(&store, "elapsed_gpu").unwrap() - 0.37).abs() < 1e-6);
+        // A pass that did not run in the frame last timed has no time in it.
+        let later = then + std::time::Duration::from_millis(16);
+        assert_eq!(timed_then(pass, later), None);
     }
 
     #[test]
