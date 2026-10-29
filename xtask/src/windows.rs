@@ -84,7 +84,7 @@ pub(crate) fn win(args: &[String]) -> bool {
         played: false,
     }
     .run()
-    .is_some_and(|(ok, _)| ok)
+    .is_some_and(|(ended, _)| ended.ok())
 }
 
 /// A program built and run on the real GPU: under WSL the Windows build, in a copy of its own
@@ -107,9 +107,9 @@ pub(crate) struct Game<'a> {
 }
 
 impl Game<'_> {
-    /// Builds and runs it. Gives whether it succeeded and the folder it ran in, or `None`
-    /// when it could not be built or staged (said already).
-    pub(crate) fn run(&self) -> Option<(bool, PathBuf)> {
+    /// Builds and runs it. Gives how it ended and the folder it ran in, or `None` when it
+    /// could not be built or staged (said already).
+    pub(crate) fn run(&self) -> Option<(Ended, PathBuf)> {
         let (program, run_dir) = if on_wsl() {
             windows_program(self.package, self.profile, self.features, self.copy)?
         } else {
@@ -151,6 +151,7 @@ impl Game<'_> {
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join(":");
+        let ended = std::cell::Cell::new(Ended::NotStarted);
         let game = || {
             let mut command = Command::new(&program);
             command.args(self.args).current_dir(&run_dir);
@@ -167,14 +168,49 @@ impl Game<'_> {
             {
                 command.stdout(out).stderr(err);
             }
-            command.status().is_ok_and(|status| status.success())
+            ended.set(match command.status() {
+                Ok(status) if status.success() => Ended::Ok,
+                Ok(status) => Ended::Failed(status.code()),
+                Err(_) => Ended::NotStarted,
+            });
+            ended.get() == Ended::Ok
         };
-        let ok = if self.played {
-            crate::session::play(&run_dir.join("logs"), game)
+        if self.played {
+            crate::session::play(&run_dir.join("logs"), game);
         } else {
-            game()
-        };
-        Some((ok, run_dir))
+            game();
+        }
+        Some((ended.get(), run_dir))
+    }
+}
+
+/// How a program run by `Game` ended.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Ended {
+    Ok,
+    /// It ran and failed, with its exit code (`None`: ended by a signal).
+    Failed(Option<i32>),
+    /// It could not be started at all.
+    NotStarted,
+}
+
+impl Ended {
+    pub(crate) fn ok(self) -> bool {
+        self == Ended::Ok
+    }
+
+    /// In words, for an error: "exited with code 101 (a Rust panic)".
+    pub(crate) fn words(self) -> String {
+        match self {
+            Ended::Ok => "exited cleanly".into(),
+            Ended::NotStarted => "could not be started".into(),
+            Ended::Failed(None) => "was killed by a signal".into(),
+            Ended::Failed(Some(101)) => {
+                "exited with code 101, a Rust panic: its output's `panicked at` line says where"
+                    .into()
+            }
+            Ended::Failed(Some(code)) => format!("exited with code {code}"),
+        }
     }
 }
 
@@ -273,7 +309,7 @@ pub(crate) fn start(build: crate::launcher::Build, game: Vec<String>) -> bool {
         played: true,
     }
     .run()
-    .is_some_and(|(ok, _)| ok)
+    .is_some_and(|(ended, _)| ended.ok())
 }
 
 /// Cooks the textures (D188, `cargo xtask cook`) so the game played draws them cooked: read

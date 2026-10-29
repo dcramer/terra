@@ -10,6 +10,7 @@
 use crate::launcher::Build;
 use crate::tracy::Mode;
 use crate::{Task, output, root};
+use std::path::Path;
 
 /// The tasks this module runs (D410).
 pub(crate) const TASKS: &[Task] = &[Task {
@@ -26,6 +27,8 @@ const REPORT: &str = "profile-report.txt";
 const KEPT: usize = 10;
 /// How many lines of each of the report's sections the task prints.
 const HEAD_LINES: usize = 4;
+/// How many of the game's last lines of output a failure prints.
+const OUTPUT_LINES: usize = 12;
 
 fn profile(args: &[String]) -> bool {
     let usage = "`cargo xtask profile [walk|play] [--seconds 60] [--build optimised|debug] [--tracy] [-- game args]`";
@@ -142,23 +145,22 @@ pub(crate) fn report(build: Build, game: &[String], kind: &str, tracy: Mode) -> 
         output: (!played).then_some("profile-output.log"),
         played,
     };
-    let Some((ok, folder)) = game.run() else {
+    let Some((ended, folder)) = game.run() else {
         if let Some(capture) = capture {
             capture.abandon();
         }
         return false;
     };
+    let ok = ended.ok();
     let captured = capture.is_none_or(crate::tracy::Capture::finish);
     let Ok(text) = std::fs::read_to_string(folder.join(REPORT)) else {
-        eprintln!(
-            "✗ profile: the game wrote no report at {}; its output is {}.",
-            folder.join(REPORT).display(),
-            if played {
-                "above".to_string()
-            } else {
-                folder.join("profile-output.log").display().to_string()
-            }
-        );
+        let output = folder.join("profile-output.log");
+        let said = if played {
+            None
+        } else {
+            Some(std::fs::read_to_string(&output).unwrap_or_default())
+        };
+        eprintln!("{}", no_report(ended, said.as_deref(), &output));
         return false;
     };
     let _ = std::fs::remove_file(folder.join(REPORT));
@@ -193,6 +195,43 @@ pub(crate) fn report(build: Build, game: &[String], kind: &str, tracy: Mode) -> 
     ok && captured
 }
 
+/// What to say when the game wrote no report (D556): how it ended, and its output's last
+/// lines (`said`, `None` when it went to the terminal above), or that it said nothing, which
+/// is a program that never started (a DLL missing, as libstdc++ was in perf round 10).
+fn no_report(ended: crate::windows::Ended, said: Option<&str>, output: &Path) -> String {
+    let mut text = format!(
+        "✗ profile: the game {} without writing its session report.",
+        ended.words()
+    );
+    let Some(said) = said else {
+        text.push_str(" Its output is above.");
+        return text;
+    };
+    let lines: Vec<&str> = said
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    if lines.is_empty() {
+        text.push_str(&format!(
+            " It printed nothing ({}), so it likely never started: a DLL it needs is missing, or it was stopped at once. Open the program in {} by hand to see Windows' own error, and run `cargo xtask doctor`.",
+            output.display(),
+            output.parent().unwrap_or(output).display()
+        ));
+        return text;
+    }
+    let from = lines.len().saturating_sub(OUTPUT_LINES);
+    let last: Vec<String> = lines[from..]
+        .iter()
+        .map(|line| format!("  {line}"))
+        .collect();
+    text.push_str(&format!(
+        " Its last lines, from {}:\n{}",
+        output.display(),
+        last.join("\n")
+    ));
+    text
+}
+
 /// The report's head: its first line, and the first lines of each section after.
 pub(crate) fn head(text: &str) -> String {
     let mut lines = Vec::new();
@@ -206,6 +245,26 @@ pub(crate) fn head(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_report_names_how_the_game_ended_and_its_last_lines() {
+        use crate::windows::Ended;
+        let output = Path::new("/tmp/run/profile-output.log");
+        let said: String = (1..=20).map(|n| format!("line {n}\n\n")).collect();
+        let text = no_report(Ended::Failed(Some(101)), Some(&said), output);
+        assert!(text.contains("code 101, a Rust panic"), "{text}");
+        assert!(
+            text.contains("  line 20") && text.contains("  line 9\n"),
+            "{text}"
+        );
+        assert!(!text.contains("line 8\n"), "{text}");
+        let silent = no_report(Ended::Failed(Some(53)), Some(" \n"), output);
+        assert!(
+            silent.contains("code 53") && silent.contains("never started"),
+            "{silent}"
+        );
+        assert!(no_report(Ended::Ok, None, output).ends_with("above."));
+    }
 
     #[test]
     fn the_head_keeps_each_sections_first_lines() {
