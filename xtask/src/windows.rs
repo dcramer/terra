@@ -245,8 +245,7 @@ pub(crate) fn cook() {
         return;
     }
     let from = crate::session::cache_folder().join("cooked");
-    let Some(to) = windows_folder("LOCALAPPDATA").map(|local| local.join("terra").join("cooked"))
-    else {
+    let Some(to) = cooked_folder() else {
         eprintln!(
             "✗ cook: could not find the Windows %LOCALAPPDATA% to copy the cooked textures to; the Windows build reads them as made. Is Windows interop enabled?"
         );
@@ -259,6 +258,16 @@ pub(crate) fn cook() {
             "✗ cook: copying the cooked textures to {} failed ({error}); the Windows build reads those missing as made. Run `cargo xtask cook` and this command again.",
             to.display()
         ),
+    }
+}
+
+/// Where the game run from here reads its cooked textures (`terra_core::cooked::folder`):
+/// under WSL the Windows build's `%LOCALAPPDATA%\terra\cooked`, otherwise the cache's own.
+pub(crate) fn cooked_folder() -> Option<PathBuf> {
+    if on_wsl() {
+        windows_folder("LOCALAPPDATA").map(|local| local.join("terra").join("cooked"))
+    } else {
+        Some(crate::session::cache_folder().join("cooked"))
     }
 }
 

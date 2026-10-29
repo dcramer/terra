@@ -1,6 +1,6 @@
 use super::*;
 
-fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
+pub(crate) fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
     Timing {
         gpu: "Apple M4 Max".into(),
         size: "1920x1080 offscreen".into(),
@@ -11,6 +11,9 @@ fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
         over_pct: 0.0,
         hitches: 0,
         drift_pct: 0.0,
+        freezes: 0,
+        from_start: false,
+        load_s: None,
         device: "DiscreteGpu".into(),
         preset: "high".into(),
     }
@@ -20,7 +23,11 @@ fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
 fn reads_how_a_run_held_to_the_budget() {
     let line = "SANDBOX against the 13.3 ms budget: 0.50% of frames over, 2 hitches over \
                     26.7 ms, the game's work in the last third -3.0% on the first";
-    assert_eq!(parse_sustained(line), Some((13.3, 0.5, 2, -3.0)));
+    assert_eq!(parse_sustained(line), Some((13.3, 0.5, 2, 0, -3.0)));
+    let line = "SANDBOX against the 13.3 ms budget: 0.50% of frames over, 2 hitches over \
+                    26.7 ms, 1 freezes of 100 ms or more, the game's work in the last third \
+                    -3.0% on the first";
+    assert_eq!(parse_sustained(line), Some((13.3, 0.5, 2, 1, -3.0)));
     assert_eq!(parse_sustained("SANDBOX saved shot.png"), None);
 }
 

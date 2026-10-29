@@ -170,6 +170,7 @@ It builds the sandbox in the `bench` profile, a release with nothing incremental
 |---|---|
 | `yard` | The flat test level with nothing on it: what the engine and the player cost |
 | `world` | The game where a new one starts: ground, sea, trees, grass, creatures |
+| `play-walk` | A new game timed from the program's start (D578): the load (`Loaded in`, compared with the last recorded, not held to a budget), then a 60 s walk by `--route` out through ground not yet streamed, every frame timed, held to no **freeze** (a frame of 100 ms or more). Run warm: it fails if the cook cache is empty (D188). With `--debug`, the debug build for comparison; only the optimised build is ratcheted |
 | `forest` | The lush forest spike, standing still ([research/lush-forest-spike.md](../research/lush-forest-spike.md)) |
 | `forest-walk` | The same, walking down a path: grass built as the player goes, trees changing detail |
 | `village` | Fifty buildings on the yard, every kind, roof and plan (`--village`), seen from the village's corner: what building costs to draw ([building-plan.md](building-plan.md#checking-it)). It also says how long its sections took to lay and merge on the workers, and its operations to apply |

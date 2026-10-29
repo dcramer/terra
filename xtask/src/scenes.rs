@@ -59,6 +59,24 @@ pub(crate) const SCENES: &[Scene] = &[
         frames: "600",
     },
     Scene {
+        name: "play-walk",
+        about: "a new game timed from the program's start: the load, then a 60 s walk out through ground not yet streamed (D578)",
+        args: &[
+            "--experiment",
+            "play",
+            "--time",
+            "17",
+            "--route",
+            "0,-150",
+            "--route",
+            "150,-150",
+            "--route",
+            "150,0",
+        ],
+        // 60 s at the scripted 1/60 s a frame.
+        frames: "3600",
+    },
+    Scene {
         name: "forest",
         about: "the lush forest spike: thousands of trees of leaf cards, grass, bushes",
         args: &[

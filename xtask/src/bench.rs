@@ -36,8 +36,7 @@ const BENCH_TIMEOUT_S: u64 = 900;
 const SLOWER_BY: f32 = 0.10;
 /// Where `--record` keeps results, one line per scene per run of the task.
 const BENCHMARKS: &str = "research/benchmarks.csv";
-const BENCHMARKS_HEADER: &str =
-    "date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches,drift_pct";
+const BENCHMARKS_HEADER: &str = "date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches,drift_pct,load_s,freezes";
 /// What a scene must hold to on the machine it runs on, against the frame budget (D25)
 /// the sandbox judged its frames by and says (`terra_world::debug::FRAME_BUDGET_MS`, the
 /// one place it is set): at most this share of frames over it, no hitch (a frame over
@@ -62,6 +61,11 @@ struct Timing {
     over_pct: f32,
     hitches: u32,
     drift_pct: f32,
+    /// Frames of `play::FREEZE_MS` or more; and for a play scene (D578), timed from the
+    /// program's start, the load's seconds, from its `Loaded in` line.
+    freezes: u32,
+    from_start: bool,
+    load_s: Option<f32>,
     /// The kind of GPU it ran on as wgpu says it (`DiscreteGpu`, `IntegratedGpu`) and the
     /// preset it drew at, from the run's own line; empty if it did not say.
     device: String,
@@ -79,9 +83,22 @@ impl Timing {
         if self.integrated() { "D239" } else { "D25" }
     }
 
-    /// What the scene missed of its target, if anything: the integrated GPU's median at the
-    /// low preset (D239), or every gate of the frame budget (D25).
+    /// What the scene missed of its target, if anything: a play scene's walk, through ground
+    /// streaming in, no freeze (D578); the integrated GPU's median at the low preset (D239);
+    /// or every gate of the frame budget (D25).
     fn misses(&self) -> Vec<String> {
+        if self.from_start {
+            return (self.freezes > 0)
+                .then(|| {
+                    format!(
+                        "{} freezes of {:.0} ms or more",
+                        self.freezes,
+                        play::FREEZE_MS
+                    )
+                })
+                .into_iter()
+                .collect();
+        }
         if self.integrated() {
             return if self.median_ms > INTEGRATED_MEDIAN_MS {
                 vec![format!(
@@ -111,19 +128,24 @@ impl Timing {
 }
 
 /// Reads `SANDBOX against the 13.3 ms budget: 0.50% of frames over, 2 hitches over
-/// 26.7 ms, the last third +3.0% on the first`, as the budget, the share over, hitches and
-/// drift.
-fn parse_sustained(line: &str) -> Option<(f32, f32, u32, f32)> {
+/// 26.7 ms, 1 freezes of 100 ms or more, the last third +3.0% on the first`, as the budget,
+/// the share over, hitches, freezes (none where a sandbox before them does not say) and drift.
+fn parse_sustained(line: &str) -> Option<(f32, f32, u32, u32, f32)> {
     let rest = line.strip_prefix("SANDBOX against the ")?;
     let (budget, rest) = rest.split_once(" ms budget: ")?;
     let (over, rest) = rest.split_once("% of frames over, ")?;
     let (hitches, rest) = rest.split_once(" hitches over ")?;
+    let freezes = match rest.split_once(" freezes of ") {
+        Some((before, _)) => before.rsplit(' ').next()?.parse().ok()?,
+        None => 0,
+    };
     let (_, drift) = rest.split_once("in the last third ")?;
     let drift = drift.strip_suffix("% on the first")?;
     Some((
         budget.parse().ok()?,
         over.parse().ok()?,
         hitches.parse().ok()?,
+        freezes,
         drift.parse().ok()?,
     ))
 }
@@ -155,6 +177,8 @@ fn worth_saying(line: &str) -> Option<&str> {
         "drawn, medians: ",
         // What `--tune` set, or why the run refused it (D547).
         "Tune: ",
+        // How long the load took, a play scene's second number (D578).
+        "Loaded in ",
     ]
     .iter()
     .find_map(|key| line.find(key))
@@ -188,6 +212,9 @@ fn parse_timing(line: &str) -> Option<Timing> {
         over_pct: 0.0,
         hitches: 0,
         drift_pct: 0.0,
+        freezes: 0,
+        from_start: false,
+        load_s: None,
         device: String::new(),
         preset: String::new(),
     })
@@ -287,6 +314,10 @@ fn combine(runs: &[Timing]) -> Option<Timing> {
         over_pct: middle(|t| t.over_pct),
         hitches: runs.iter().map(|t| t.hitches).max().unwrap_or(0),
         drift_pct: middle(|t| t.drift_pct),
+        freezes: runs.iter().map(|t| t.freezes).max().unwrap_or(0),
+        load_s: first
+            .load_s
+            .map(|_| middle(|t| t.load_s.unwrap_or(f32::NAN))),
         ..first.clone()
     })
 }
@@ -482,6 +513,10 @@ pub(crate) fn bench(args: &[String]) -> bool {
     let Some((program, folder)) = sandbox_program(!debug, &copy) else {
         return false;
     };
+    // After the build, which cooks: a play scene is timed warm (D578).
+    if chosen.iter().any(|scene| play::from_start(scene)) && !play::cooked_present() {
+        return false;
+    }
     let commit = output("git", &["rev-parse", "--short", "HEAD"]).unwrap_or_default();
     let dirty = output("git", &["status", "--porcelain", "--untracked-files=no"])
         .is_some_and(|changes| !changes.is_empty());
@@ -577,19 +612,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
         };
         lines.push((name.clone(), timing.clone(), against, note));
         if record {
-            let row = format!(
-                "{date},{commit},{},{},{build},{},{:.2},{:.2},{:.2},{},{:.2},{},{:.1}",
-                timing.gpu,
-                timing.size,
-                name,
-                timing.median_ms,
-                timing.p99_ms,
-                timing.worst_ms,
-                used.len(),
-                timing.over_pct,
-                timing.hitches,
-                timing.drift_pct
-            );
+            let row = csv_row([&date, &commit, build, &name], &timing, used.len());
             ok &= append_line(&root().join(BENCHMARKS), BENCHMARKS_HEADER, &row);
         }
     }
@@ -639,6 +662,10 @@ pub(crate) fn bench(args: &[String]) -> bool {
                 timing.hitches,
                 timing.drift_pct,
             );
+            if timing.from_start {
+                let said = play::said(&csv, timing, build, name, SLOWER_BY);
+                println!("  {:w$} {said}", "");
+            }
             for miss in &missed {
                 println!("  {:w$} {miss}", "");
             }
@@ -692,6 +719,26 @@ pub(crate) fn bench(args: &[String]) -> bool {
         ok &= run("node", &["tools/sandbox/lodcheck.ts"]);
     }
     ok
+}
+
+/// A scene's line in `BENCHMARKS`, under `BENCHMARKS_HEADER`, from its date, commit, build
+/// and name: the load empty for a scene that does not time one.
+fn csv_row([date, commit, build, name]: [&str; 4], timing: &Timing, runs: usize) -> String {
+    format!(
+        "{date},{commit},{},{},{build},{name},{:.2},{:.2},{:.2},{runs},{:.2},{},{:.1},{},{}",
+        timing.gpu,
+        timing.size,
+        timing.median_ms,
+        timing.p99_ms,
+        timing.worst_ms,
+        timing.over_pct,
+        timing.hitches,
+        timing.drift_pct,
+        timing
+            .load_s
+            .map_or(String::new(), |load| format!("{load:.1}")),
+        timing.freezes,
+    )
 }
 
 /// Adds a line to a file, starting it with a header if it is new.
@@ -749,8 +796,11 @@ fn time_scene(
     for tune in tunes {
         command.args(["--tune", tune]);
     }
+    // A play scene is timed from its first playable frame, the load said apart (D578).
+    let from_start = play::from_start(scene);
+    let settle = if from_start { "0" } else { BENCH_SETTLE };
     command
-        .args(["--offscreen", "--bench", "--settle", BENCH_SETTLE])
+        .args(["--offscreen", "--bench", "--settle", settle])
         .args(["--bench-frames", scene.frames])
         .current_dir(folder);
     // Run outside Cargo, a Bevy program looks for assets/ next to itself, which is where
@@ -795,15 +845,16 @@ fn time_scene(
                 (timing.preset, timing.device) = (preset, device);
             } else if let Some(said) = worth_saying(&line) {
                 println!("  {said}");
-            } else if let (Some(timing), Some((budget, over, hitches, drift))) =
+            } else if let (Some(timing), Some((budget, over, hitches, freezes, drift))) =
                 (&mut timing, parse_sustained(&line))
             {
                 (
                     timing.budget_ms,
                     timing.over_pct,
                     timing.hitches,
+                    timing.freezes,
                     timing.drift_pct,
-                ) = (budget, over, hitches, drift);
+                ) = (budget, over, hitches, freezes, drift);
             }
         }
         timing
@@ -828,7 +879,9 @@ fn time_scene(
     // Each time sections were laid again as the camera moved, said as one line: how many
     // times, and how long they took to be on screen.
     let mut streamed: Vec<f32> = Vec::new();
+    let mut load_s = None;
     for line in said.join().unwrap_or_default() {
+        load_s = load_s.or(play::parse_load(&line));
         match line
             .strip_prefix("Builds streamed in: ")
             .and_then(|ms| ms.trim_end_matches(" ms").parse().ok())
@@ -846,7 +899,8 @@ fn time_scene(
             streamed[streamed.len() - 1]
         );
     }
-    let timing = reader.join().ok()??;
+    let mut timing = reader.join().ok()??;
+    (timing.from_start, timing.load_s) = (from_start, load_s);
     println!(
         "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms; {:.2}% over budget, {} hitches, {:+.1}% by the end",
         timing.median_ms,
@@ -858,6 +912,9 @@ fn time_scene(
     );
     Some(timing)
 }
+
+#[path = "bench/play.rs"]
+mod play;
 
 #[cfg(test)]
 #[path = "bench/tests.rs"]
