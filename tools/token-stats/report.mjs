@@ -3,7 +3,7 @@
 // with the credits our Tripo tools recorded. See README.md. No dependencies: Node 18 or later.
 //
 //   node tools/token-stats/report.mjs             send messages not yet sent
-//   node tools/token-stats/report.mjs --full      send every message again
+//   node tools/token-stats/report.mjs --full      read every transcript whole and send every message again
 //   node tools/token-stats/report.mjs --dry-run   print this person's totals, sending nothing
 //   node tools/token-stats/report.mjs --stats     print everyone's totals
 //   node tools/token-stats/report.mjs --hook      send in the background, at most once a minute; run by
@@ -15,7 +15,7 @@
 
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -39,8 +39,11 @@ export const SPENDS = join(process.env.XDG_STATE_HOME || join(homedir(), ".local
 // on the early lines, and again in every session resumed or forked from its own,
 // under the new session's id and sometimes a later timestamp. So each message keeps
 // the largest of each count and the earliest day, and the server keys on the id too.
-export function addTranscript(text, roots, messages) {
-  let started = null;
+//
+// `started` is where the transcript's session started, when an earlier part of it was
+// read already. Gives it for the next part, null if no line has said yet, or false when
+// the session started outside the roots.
+export function addTranscript(text, roots, messages, started = null) {
   for (const line of text.split("\n")) {
     if (started === null && !line.includes('"cwd"')) continue;
     if (started !== null && !line.includes('"usage"')) continue;
@@ -53,7 +56,7 @@ export function addTranscript(text, roots, messages) {
     if (started === null) {
       if (typeof entry?.cwd !== "string") continue;
       started = entry.cwd;
-      if (!roots.some((root) => inside(started, root))) return;
+      if (!roots.some((root) => inside(started, root))) return false;
     }
     const message = entry?.message;
     const usage = message?.usage;
@@ -63,22 +66,31 @@ export function addTranscript(text, roots, messages) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
     const session = typeof entry.sessionId === "string" ? entry.sessionId : "";
 
-    const counts = {
+    keep(messages, {
+      id: message.id,
+      session,
+      day,
+      model: message.model,
       input: usage.input_tokens ?? 0,
       output: usage.output_tokens ?? 0,
       cache_read: usage.cache_read_input_tokens ?? 0,
       cache_write: usage.cache_creation_input_tokens ?? 0,
-    };
-    const known = messages.get(message.id);
-    if (!known) {
-      messages.set(message.id, { id: message.id, session, day, model: message.model, ...counts });
-      continue;
-    }
-    for (const [key, n] of Object.entries(counts)) known[key] = Math.max(known[key], n);
-    if (day < known.day || (day === known.day && session < known.session)) {
-      known.day = day;
-      known.session = session;
-    }
+    });
+  }
+  return started;
+}
+
+// Adds one record of a message: its largest counts, its earliest day.
+function keep(messages, row) {
+  const known = messages.get(row.id);
+  if (!known) {
+    messages.set(row.id, { ...row });
+    return;
+  }
+  for (const key of ["input", "output", "cache_read", "cache_write"]) known[key] = Math.max(known[key], row[key]);
+  if (row.day < known.day || (row.day === known.day && row.session < known.session)) {
+    known.day = row.day;
+    known.session = row.session;
   }
 }
 
@@ -135,10 +147,64 @@ export function transcripts(roots) {
   return files;
 }
 
-export function collect(roots) {
+// Every message in the transcripts. `read` holds what each transcript gave when last read,
+// and how far it was read, and is brought up to date: a transcript is only ever added to,
+// so a run reads what was written since. Reading them all whole every minute was 2.5 GB,
+// 9 s and 1 GB of memory a run, on a machine busy with builds. A transcript shorter than
+// it was is read again from the start; a line not yet finished is read next time.
+export function collect(roots, read = {}) {
   const messages = new Map();
-  for (const file of transcripts(roots)) addTranscript(readFileSync(file, "utf8"), roots, messages);
+  const files = transcripts(roots);
+  for (const file of Object.keys(read)) if (!files.includes(file)) delete read[file];
+  for (const file of files) {
+    const size = statSync(file).size;
+    let known = read[file];
+    if (!known || known.size > size) known = { size: 0, started: null, rows: [] };
+    if (size > known.size && known.started !== false) {
+      const bytes = readBytes(file, known.size, size);
+      const whole = bytes.lastIndexOf(10) + 1;
+      if (whole > 0) {
+        const mine = new Map(known.rows.map((row) => [row.id, row]));
+        const text = bytes.subarray(0, whole).toString("utf8");
+        const started = addTranscript(text, roots, mine, known.started);
+        known = { size: known.size + whole, started, rows: started === false ? [] : [...mine.values()] };
+      }
+    }
+    read[file] = known;
+    for (const row of known.rows) keep(messages, row);
+  }
   return [...messages.values()].sort((a, b) => a.day.localeCompare(b.day) || a.id.localeCompare(b.id));
+}
+
+function readBytes(file, from, to) {
+  const fd = openSync(file, "r");
+  try {
+    const bytes = Buffer.alloc(to - from);
+    return bytes.subarray(0, readSync(fd, bytes, 0, bytes.length, from));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// Where `collect` keeps what it read, for the roots it read for.
+function readFile(roots) {
+  const name = createHash("sha256").update(roots.join("\n")).digest("hex").slice(0, 16);
+  return join(CACHE, `read-${name}.json`);
+}
+
+// Losing it costs one run that reads everything, never a wrong count.
+function loadRead(file) {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveRead(file, read) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(`${file}.${process.pid}.tmp`, JSON.stringify(read));
+  renameSync(`${file}.${process.pid}.tmp`, file);
 }
 
 export function totals(messages) {
@@ -293,7 +359,11 @@ async function main(args) {
     console.log(table(rows, [...group.split(","), ...counts]));
     return;
   }
-  const messages = collect(roots());
+  const from = roots();
+  const readAt = readFile(from);
+  const read = args.includes("--full") ? {} : loadRead(readAt);
+  const messages = collect(from, read);
+  saveRead(readAt, read);
   const spent = spends();
   if (args.includes("--dry-run")) {
     console.log(table(totals(messages), ["day", "model", ...counts]));

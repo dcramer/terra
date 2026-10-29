@@ -1,8 +1,10 @@
 // Run with `node --test tools/token-stats/report.test.mjs`.
 import assert from "node:assert/strict";
-import { sep } from "node:path";
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, sep } from "node:path";
 import { test } from "node:test";
-import { addTranscript, parseEnv, readSpends, spendTotals, totals } from "./report.mjs";
+import { addTranscript, collect, parseEnv, readSpends, spendTotals, totals } from "./report.mjs";
 
 const ROOT = `${sep}src${sep}terra`;
 const ROOTS = [ROOT];
@@ -90,4 +92,39 @@ test("reads each recorded task once, at its largest count and earliest day", () 
     { day: "2026-10-10", service: "tripo-studio", credits: 35, tasks: 1 },
     { day: "2026-10-11", service: "tripo-api", credits: 50, tasks: 1 },
   ]);
+});
+
+test("reads only what a transcript gained since the last run, and gets what a whole read gets", () => {
+  const home = mkdtempSync(join(tmpdir(), "token-stats-"));
+  const before = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = home;
+  try {
+    const folder = join(home, "projects", ROOT.replace(/[^A-Za-z0-9]/g, "-"));
+    mkdirSync(folder, { recursive: true });
+    const ours = join(folder, "a.jsonl");
+    const elsewhere = join(folder, "b.jsonl");
+    writeFileSync(ours, line({ output: 1 }) + "\n");
+    writeFileSync(elsewhere, line({ id: "msg_x", cwd: `${sep}src${sep}terra-old` }) + "\n");
+    const read = {};
+    assert.deepEqual(collect(ROOTS, read).map((m) => [m.id, m.output]), [["msg_1", 1]]);
+
+    // The message's final usage and a new one, the new one's line not yet finished.
+    const next = line({ id: "msg_2", output: 7 });
+    appendFileSync(ours, line({ output: 333 }) + "\n" + next.slice(0, 20));
+    appendFileSync(elsewhere, line({ id: "msg_y", cwd: ROOT }) + "\n");
+    assert.deepEqual(collect(ROOTS, read).map((m) => [m.id, m.output]), [["msg_1", 333]]);
+
+    appendFileSync(ours, next.slice(20) + "\n");
+    const parts = collect(ROOTS, read);
+    assert.deepEqual(parts.map((m) => [m.id, m.output]), [["msg_1", 333], ["msg_2", 7]]);
+    assert.deepEqual(parts, collect(ROOTS, {}), "the same as reading every transcript whole");
+
+    // A transcript written again shorter is read from its start.
+    writeFileSync(ours, line({ id: "msg_3" }) + "\n");
+    assert.deepEqual(collect(ROOTS, read).map((m) => m.id), ["msg_3"]);
+  } finally {
+    if (before === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = before;
+    rmSync(home, { recursive: true, force: true });
+  }
 });
