@@ -32,6 +32,39 @@ pub(super) struct Pick(usize);
 #[derive(Component, Clone, Copy)]
 pub(super) struct Cross(usize);
 
+/// The view darkened at its edges and deeply down its left, under the choices, as
+/// Enshrouded's and Valheim's menus lie over their worlds: the choices read over the
+/// brightest ground, and the world shows clear on the right.
+fn shading() -> BackgroundGradient {
+    let shade = |alpha: f32| SHADE.with_alpha(alpha);
+    BackgroundGradient(vec![
+        RadialGradient::new(
+            UiPosition::CENTER,
+            RadialGradientShape::FarthestCorner,
+            vec![
+                ColorStop::new(shade(0.0), percent(50)),
+                ColorStop::new(shade(0.55), percent(100)),
+            ],
+        )
+        .into(),
+        LinearGradient::to_right(vec![
+            ColorStop::new(shade(0.88), percent(0)),
+            ColorStop::new(shade(0.80), percent(22)),
+            ColorStop::new(shade(0.45), percent(36)),
+            ColorStop::new(shade(0.0), percent(56)),
+        ])
+        .into(),
+    ])
+}
+
+/// Letters lifted off the world behind by a soft dark shadow.
+fn lifted() -> TextShadow {
+    TextShadow {
+        offset: Vec2::new(0.0, 2.0),
+        color: Color::srgba(0.0, 0.0, 0.0, 0.7),
+    }
+}
+
 pub(super) fn show(mut commands: Commands) {
     commands
         .spawn((
@@ -42,50 +75,49 @@ pub(super) fn show(mut commands: Commands) {
                 height: percent(100),
                 ..default()
             },
+            shading(),
             // Over the game's screens, under the options menu (1000) for Settings.
             GlobalZIndex(900),
         ))
         .with_children(|root| {
-            root.spawn((
-                Node {
-                    width: px(WIDTH + 260.0),
-                    height: percent(100),
-                    flex_direction: FlexDirection::Column,
-                    padding: UiRect::new(px(96), px(0), percent(14), px(48)),
-                    ..default()
-                },
-                BackgroundGradient::from(LinearGradient::to_right(vec![
-                    ColorStop::auto(SHADE),
-                    ColorStop::percent(SHADE.with_alpha(0.6), 55.0),
-                    ColorStop::auto(SHADE.with_alpha(0.0)),
-                ])),
-            ))
-            .with_children(|side| {
-                side.spawn((
-                    Text::new("TERRA"),
-                    TextFont::from_font_size(72.0),
-                    LetterSpacing::Px(22.0),
-                    TextColor(TITLE),
-                    Node {
-                        margin: UiRect::bottom(px(56)),
-                        ..default()
-                    },
-                ));
-                side.spawn((
-                    Column,
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: px(6),
-                        flex_grow: 1.0,
-                        ..default()
-                    },
-                ));
-                side.spawn((
-                    Text::new("Up and down to pick, Enter to choose, Esc to go back"),
-                    TextFont::from_font_size(14.0),
-                    TextColor(GREYED),
-                ));
-            });
+            root.spawn((Node {
+                width: px(WIDTH + 260.0),
+                height: percent(100),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::new(px(96), px(0), percent(14), px(48)),
+                ..default()
+            },))
+                .with_children(|side| {
+                    side.spawn((
+                        Text::new("TERRA"),
+                        TextFont::from_font_size(72.0),
+                        LetterSpacing::Px(22.0),
+                        TextColor(TITLE),
+                        TextShadow {
+                            offset: Vec2::new(0.0, 3.0),
+                            color: Color::srgba(0.0, 0.0, 0.0, 0.6),
+                        },
+                        Node {
+                            margin: UiRect::bottom(px(56)),
+                            ..default()
+                        },
+                    ));
+                    side.spawn((
+                        Column,
+                        Node {
+                            flex_direction: FlexDirection::Column,
+                            row_gap: px(6),
+                            flex_grow: 1.0,
+                            ..default()
+                        },
+                    ));
+                    side.spawn((
+                        Text::new("Up and down to pick, Enter to choose, Esc to go back"),
+                        TextFont::from_font_size(14.0),
+                        TextColor(QUIET),
+                        lifted(),
+                    ));
+                });
         });
 }
 
@@ -154,6 +186,7 @@ pub(super) fn draw(
                     Text::new(heading),
                     TextFont::from_font_size(22.0),
                     TextColor(QUIET),
+                    lifted(),
                     Node {
                         margin: UiRect::bottom(px(14)),
                         ..default()
@@ -285,12 +318,14 @@ fn choice(column: &mut ChildSpawnerCommands, menu: &Menu, at: usize, item: Item)
                 Text::new(main),
                 TextFont::from_font_size(22.0),
                 TextColor(colour),
+                lifted(),
             ));
             if let Some(under) = under {
                 words.spawn((
                     Text::new(under),
                     TextFont::from_font_size(14.0),
                     TextColor(if usable { QUIET } else { GREYED }),
+                    lifted(),
                 ));
             }
         });

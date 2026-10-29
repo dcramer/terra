@@ -249,6 +249,22 @@ struct Readout;
 #[derive(Component)]
 struct ReadoutDetail;
 
+/// The readout's panel, put away while the title screen shows (D579).
+#[derive(Component)]
+struct ReadoutPanel;
+
+fn hide_on_title(
+    screen: Option<Res<State<crate::loading::Screen>>>,
+    mut panel: Single<&mut Visibility, With<ReadoutPanel>>,
+) {
+    let title = screen.is_some_and(|screen| *screen.get() == crate::loading::Screen::Title);
+    panel.set_if_neq(if title {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    });
+}
+
 /// Adds the readout and the log of frame times. `on_screen` is off for screenshots.
 pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
     move |app: &mut App| {
@@ -284,7 +300,7 @@ pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
         .add_systems(Last, (end_update, report).chain());
         if on_screen {
             app.add_systems(Startup, spawn_readout)
-                .add_systems(Update, toggle_detail)
+                .add_systems(Update, (toggle_detail, hide_on_title))
                 .add_systems(Last, (show, draw_graphs).after(end_update));
         }
     }
@@ -599,6 +615,7 @@ fn spawn_readout(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let (width, height) = (GRAPH_FRAMES * BAR_PX, GRAPH_PX);
     let readout = commands
         .spawn((
+            ReadoutPanel,
             Node {
                 position_type: PositionType::Absolute,
                 left: px(8),
