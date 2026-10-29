@@ -3,13 +3,13 @@
 //! creatures are not saved: they come from the world's rules, and what was cut or killed
 //! grows back, as the world heals outside claims (D94).
 //!
-//! The save is a RON file beside the settings, written every half minute, on F5, and when
-//! the game closes, and read when it starts. Scripted runs never touch it unless given
-//! `--save <file>`, so a script does the same on every machine; `--fresh` starts over.
+//! The save is a RON file in its world's folder (`worlds`, D579), written every half minute,
+//! on F5, and when the game closes, and read when the world is chosen. Scripted runs never
+//! touch one unless given `--save <file>` or `--worlds=<dir>`, so a script does the same on
+//! every machine; `--fresh` starts a new world, or that file over.
 
 use super::catalogue::Builds;
 use super::claim::Claim;
-use super::controls::Settings;
 use super::crafting::{Recipes, Worker, Works};
 use super::daylight::Clock;
 use super::inventory::{self, Backpack, Bar, Gear, Items, SLOTS};
@@ -162,34 +162,22 @@ struct Waiting {
     claim_step: Option<usize>,
 }
 
+/// Which save is read and written is chosen by `worlds`, at the start or on the title
+/// screen; it is read once chosen.
 pub fn plugin(app: &mut App) {
+    let choice = terra_world::choice::Choice::from_args(std::env::args());
     app.init_resource::<Waiting>()
-        .add_systems(Startup, choose_path)
+        .insert_resource(choice)
+        .add_systems(Startup, super::worlds::choose)
         .add_systems(
             Update,
             (
-                load.run_if(run_once),
+                load.run_if(resource_added::<SavePath>),
                 (restore_people, restore_claim, autosave).run_if(resource_exists::<SavePath>),
             )
                 .chain(),
         )
         .add_systems(Last, save_on_exit.run_if(resource_exists::<SavePath>));
-}
-
-fn choose_path(mut commands: Commands, options: Res<Options>) {
-    let path = match &options.save {
-        // The yard, the flat test level, is never saved, and never touches a save.
-        _ if options.yard() => None,
-        Some(path) => Some(path.clone()),
-        None if options.scripted() => None,
-        None => Settings::path().map(|settings| settings.with_file_name("save.ron")),
-    };
-    if let Some(path) = path {
-        if options.fresh {
-            let _ = std::fs::remove_file(&path);
-        }
-        commands.insert_resource(SavePath(path));
-    }
 }
 
 #[allow(clippy::too_many_arguments)]

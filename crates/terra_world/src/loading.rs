@@ -69,12 +69,24 @@ const QUIET: Color = Color::srgba(0.88, 0.86, 0.80, 0.55);
 const TRACK: Color = Color::srgba(1.0, 1.0, 1.0, 0.08);
 const FILL: Color = Color::srgb(0.85, 0.62, 0.32);
 
-/// Which screen the game is on. Only loading and playing so far.
+/// Which screen the game is on.
 #[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Screen {
     #[default]
     Loading,
+    /// The game's title screen (D579), over the world it loaded, the clock held.
+    Title,
     Playing,
+}
+
+/// The screen the game goes to once loaded: playing, unless a title screen asked for itself.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct Then(pub Screen);
+
+impl Default for Then {
+    fn default() -> Self {
+        Self(Screen::Playing)
+    }
 }
 
 /// What the loading screen is waiting for, beyond what it finds in the world for itself.
@@ -233,7 +245,7 @@ pub fn plugin(app: &mut App) {
             (
                 (files, models, pictures, drawables, shaders).in_set(Track),
                 watch.run_if(in_state(Screen::Loading)),
-                fade.run_if(in_state(Screen::Playing)),
+                fade.run_if(not(in_state(Screen::Loading))),
             ),
         )
         .add_systems(Last, hold::cut_history);
@@ -470,10 +482,11 @@ fn watch(
     options: Res<Options>,
     mut bar: Single<&mut Node, With<Bar>>,
     mut status: Single<&mut Text, With<Status>>,
-    mut next: ResMut<NextState<Screen>>,
+    (mut next, then): (ResMut<NextState<Screen>>, Option<Res<Then>>),
     (drawables, names): (Res<Drawables>, Query<(Option<&Name>, Option<&ChildOf>)>),
     recorder: Option<Res<crate::recorder::Recorder>>,
 ) {
+    let then = then.map_or(Screen::Playing, |then| then.0);
     // What was said this frame; next frame is said afresh.
     let progress = std::mem::take(&mut *progress);
     loading.up_for += real.delta();
@@ -509,7 +522,7 @@ fn watch(
             loading.up_for.as_secs_f32(),
             progress.summary()
         );
-        next.set(Screen::Playing);
+        next.set(then);
         return;
     }
     let cap = give_up(&options);
@@ -521,7 +534,7 @@ fn watch(
             progress.summary(),
             waiting_for(&drawables, &names)
         );
-        next.set(Screen::Playing);
+        next.set(then);
     } else if waited > GIVE_UP
         && (waited - real.delta()).as_secs() / SAY_EVERY.as_secs()
             != waited.as_secs() / SAY_EVERY.as_secs()

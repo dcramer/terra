@@ -18,8 +18,8 @@ const COPY_FRESH: Duration = Duration::from_secs(10 * 60);
 pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "play",
-        takes: "[continue|new|creative|yard] [--build optimised|debug] [--quality auto|low|medium|high|ultra] [--profiling off|report] [--last] [--menu] [-- game args]",
-        does: "the launcher (D575): in a terminal with nothing given, a menu of what to play and how, the last launch preselected; otherwise play what the flags say on the real GPU, wherever you are",
+        takes: "[continue|new|creative|yard] [--build optimised|debug] [--profiling off|report|live] [--last] [--menu] [-- game args]",
+        does: "the launcher (D575): in a terminal with nothing given, a menu of the build's choices, then the game on its title screen (D579); a word (continue, new, creative, yard) plays it straight in on the real GPU, wherever you are, as does no terminal (continue)",
         group: "Play and check",
         run: crate::launcher::play,
     },

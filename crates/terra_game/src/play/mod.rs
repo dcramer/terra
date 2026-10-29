@@ -24,6 +24,8 @@ pub use props::{
 mod save;
 mod sounds;
 mod soundscape;
+mod title;
+pub mod worlds;
 
 // Building play, its own crate since D407, by its old names here.
 use terra_building::{build_menu, dial, tool};
@@ -144,6 +146,7 @@ impl Plugin for GameplayPlugin {
         held::plugin(app);
         worn::plugin(app);
         save::plugin(app);
+        title::plugin(app);
         // A crash capsule says which save the run keeps (terra_world::crash).
         app.add_systems(PostStartup, |path: Option<Res<save::SavePath>>| {
             if let Some(path) = path {
@@ -244,7 +247,8 @@ fn equip(
     ));
 }
 
-/// Tells the walker what the screens and the builder have of the player's hands.
+/// Tells the walker what the screens and the builder have of the player's hands. The title
+/// screen has all of them.
 fn claim_hands(
     screen: Res<inventory::InventoryScreen>,
     build_menu: Res<build_menu::BuildMenu>,
@@ -252,15 +256,17 @@ fn claim_hands(
     builds: Res<catalogue::Builds>,
     builder: Option<Single<&tool::Builder, IsLocalPlayer>>,
     mut hands: ResMut<Hands>,
+    shown: Option<Res<State<terra_world::loading::Screen>>>,
 ) {
     let wheel = builder.is_some_and(|builder| builder.wants_wheel(&builds));
+    let title = shown.is_some_and(|shown| title::up(&shown));
     hands.set_if_neq(Hands {
-        busy: screen.open,
+        busy: screen.open || title,
         choosing: dial.open || build_menu.open,
-        pointer: screen.open || build_menu.open,
-        arrows: build_menu.open,
-        mouse: dial.open,
-        wheel: wheel || screen.open,
+        pointer: screen.open || build_menu.open || title,
+        arrows: build_menu.open || title,
+        mouse: dial.open || title,
+        wheel: wheel || screen.open || title,
     });
 }
 

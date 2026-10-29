@@ -1,73 +1,50 @@
-//! The launcher behind `cargo xtask play` and `make play` (D575, docs/launcher.md): what to
-//! play (Continue, New game, Creative, the yard) and how (the build, the quality preset),
-//! chosen in a menu in the terminal or by flags. The menu only fills in the flags, so a
-//! script or agent chooses the same by flags (D69); it shows only when `play` is given
-//! nothing in a terminal, or `--menu`. The last launch from the menu is kept in
-//! `~/.config/terra/launch.json`, preselected the next time and played again by `--last`;
-//! a run given flags never reads it, so a script's run does not depend on what someone
-//! played last. Whatever `play` does (cook first, the release build by default, D581), the
-//! launcher does: it ends in `windows::start`.
+//! The launcher behind `cargo xtask play` and `make play` (D575, docs/launcher.md): the
+//! build's choices (the build, profiling), in a menu in the terminal or by flags, and then
+//! the game, which opens on its own title screen for what to play (D579). A word chooses
+//! what to play instead and goes straight in, for scripts and the `make` shortcuts:
+//! `continue`, `new` (a new world), `creative` (the Creative world played last, or a new
+//! one) or `yard`. The menu only fills in the flags, so a script or agent chooses the same
+//! by flags (D69); it shows only when `play` is given nothing in a terminal, or `--menu`.
+//! The last options from the menu are kept in `~/.config/terra/launch.json`, preselected the
+//! next time and played again by `--last`; a run given flags never reads it, so a script's
+//! run does not depend on what someone played last. Whatever `play` does (cook first, the
+//! release build by default, D581), the launcher does: it ends in `windows::start`.
 
 use crate::tracy::Mode;
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::PathBuf;
 
-/// What to play.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// What to play, chosen on the command line rather than on the title screen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Choice {
-    /// The world kept between runs.
-    #[default]
+    /// The world played last (made if there is none).
     Continue,
-    /// A new world, replacing the saved one (`--fresh`).
+    /// A new world, beside the others (`--fresh`).
     New,
-    /// The world kept, building free (`--free-build`, the stand-in for creative, D494).
+    /// The Creative world played last, or a new one (`--creative`, D494).
     Creative,
     /// The flat test level for building, nothing saved (`--level yard`).
     Yard,
 }
 
-const CHOICES: [(Choice, &str, &str, &str); 4] = [
-    (
-        Choice::Continue,
-        "continue",
-        "Continue",
-        "your world, kept between runs",
-    ),
-    (
-        Choice::New,
-        "new",
-        "New game",
-        "a new world; replaces your saved one",
-    ),
-    (
-        Choice::Creative,
-        "creative",
-        "Creative",
-        "your world, building free",
-    ),
-    (
-        Choice::Yard,
-        "yard",
-        "The yard",
-        "a flat level for building, nothing saved",
-    ),
+/// Each choice's word and the game's arguments for it.
+const CHOICES: [(Choice, &str, &[&str]); 4] = [
+    (Choice::Continue, "continue", &[]),
+    (Choice::New, "new", &["--fresh"]),
+    (Choice::Creative, "creative", &["--creative"]),
+    (Choice::Yard, "yard", &["--level", "yard"]),
 ];
 
-impl Choice {
-    /// Its word on the command line and in `launch.json`.
-    fn word(self) -> &'static str {
-        CHOICES
-            .iter()
-            .find(|c| c.0 == self)
-            .map_or("continue", |c| c.1)
-    }
+/// The game's argument for its title screen, when nothing is chosen in a terminal.
+const TITLE: &str = "--title";
 
+impl Choice {
     fn from_word(word: &str) -> Option<Choice> {
         CHOICES.iter().find(|c| c.1 == word).map(|c| c.0)
     }
 
-    fn title(self) -> &'static str {
-        CHOICES.iter().find(|c| c.0 == self).map_or("", |c| c.2)
+    fn game_args(self) -> &'static [&'static str] {
+        CHOICES.iter().find(|c| c.0 == self).map_or(&[], |c| c.2)
     }
 }
 
@@ -97,10 +74,6 @@ impl Build {
             .map_or("optimised", |b| b.1)
     }
 }
-
-/// The quality presets the game takes by `--quality` (`terra_world::quality`); none chosen
-/// is `auto`, the GPU's own preset (D239).
-const QUALITIES: [&str; 4] = ["low", "medium", "high", "ultra"];
 
 /// What the session measures (docs/launcher.md, "Diagnosing performance"): nothing, a
 /// session report written as the game exits (D576, `cargo xtask profile`), or that and
@@ -140,13 +113,12 @@ impl Profiling {
     }
 }
 
-/// One launch: what to play and how.
+/// One launch: what to play, if chosen here, and how.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Launch {
-    pub(crate) choice: Choice,
+    /// None: the game's title screen chooses.
+    pub(crate) choice: Option<Choice>,
     pub(crate) build: Build,
-    /// A preset of `QUALITIES`, or `None` for auto.
-    pub(crate) quality: Option<&'static str>,
     pub(crate) profiling: Profiling,
 }
 
@@ -154,47 +126,23 @@ impl Launch {
     /// The game's arguments for it, `extra` (given after the choices) last.
     pub(crate) fn game_args(&self, extra: &[String]) -> Vec<String> {
         let mut args: Vec<String> = vec!["--experiment".into(), "play".into()];
-        args.extend(
-            match self.choice {
-                Choice::Continue => &[][..],
-                Choice::New => &["--fresh"][..],
-                Choice::Creative => &["--free-build"][..],
-                Choice::Yard => &["--level", "yard"][..],
-            }
-            .iter()
-            .map(|arg| arg.to_string()),
-        );
-        if let Some(quality) = self.quality {
-            args.extend(["--quality".into(), quality.into()]);
-        }
+        let chosen = self.choice.map_or(&[TITLE][..], Choice::game_args);
+        args.extend(chosen.iter().map(|arg| arg.to_string()));
         args.extend(extra.iter().cloned());
         args
     }
 
-    /// As kept in `launch.json`: a new game is kept as Continue, so playing the last launch
-    /// again plays the world it made rather than replacing it.
-    fn remembered(&self) -> Launch {
-        let choice = match self.choice {
-            Choice::New => Choice::Continue,
-            other => other,
-        };
-        Launch {
-            choice,
-            ..self.clone()
-        }
-    }
-
+    /// As kept in `launch.json`: the build's choices; what to play is the title screen's.
     fn to_json(&self) -> String {
         format!(
-            "{{\n  \"choice\": \"{}\",\n  \"build\": \"{}\",\n  \"quality\": \"{}\",\n  \"profiling\": \"{}\"\n}}\n",
-            self.choice.word(),
+            "{{\n  \"build\": \"{}\",\n  \"profiling\": \"{}\"\n}}\n",
             self.build.word(),
-            self.quality.unwrap_or("auto"),
             self.profiling.word()
         )
     }
 
-    /// Reads what `to_json` wrote; a key missing or not understood is its default.
+    /// Reads what `to_json` wrote; a key missing or not understood is its default, and one
+    /// an older launcher kept (`choice`, `quality`) is passed over.
     fn from_json(text: &str) -> Launch {
         let value = |key: &str| -> Option<String> {
             let rest = &text[text.find(&format!("\"{key}\""))? + key.len() + 2..];
@@ -203,13 +151,10 @@ impl Launch {
             Some(rest[..rest.find('"')?].to_string())
         };
         Launch {
-            choice: value("choice")
-                .and_then(|word| Choice::from_word(&word))
-                .unwrap_or_default(),
+            choice: None,
             build: value("build")
                 .and_then(|word| BUILDS.iter().find(|b| b.1 == word).map(|b| b.0))
                 .unwrap_or_default(),
-            quality: value("quality").and_then(|word| quality(&word)),
             profiling: value("profiling")
                 .and_then(|word| Profiling::from_word(&word))
                 .unwrap_or_default(),
@@ -217,22 +162,16 @@ impl Launch {
     }
 }
 
-fn quality(word: &str) -> Option<&'static str> {
-    QUALITIES.iter().copied().find(|preset| *preset == word)
-}
-
 /// What `play` was given.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Request {
     choice: Option<Choice>,
     build: Option<Build>,
-    /// `Some(None)` for `--quality auto`.
-    quality: Option<Option<&'static str>>,
     profiling: Option<Profiling>,
     last: bool,
     menu: bool,
     /// Everything else, for the game: after `--`, or any argument not the launcher's, as
-    /// `make play ARGS="--time 18:00"` passes them.
+    /// `make play ARGS="--time 18:00"` passes them (`--quality` among them, the game's).
     game: Vec<String>,
 }
 
@@ -260,15 +199,6 @@ impl Request {
                         }
                     });
                 }
-                "--quality" => {
-                    let word = args.next().map_or("", String::as_str);
-                    request.quality = Some(match word {
-                        "auto" => None,
-                        word => Some(quality(word).ok_or(format!(
-                            "--quality is auto, low, medium, high or ultra, not `{word}` (D239)"
-                        ))?),
-                    });
-                }
                 "--profiling" => {
                     let word = args.next().map_or("", String::as_str);
                     request.profiling = Some(Profiling::from_word(word).ok_or(format!(
@@ -292,7 +222,7 @@ impl Request {
 /// What `play` does with a request.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Plan {
-    /// Show the menu, this launch preselected.
+    /// Show the menu, these options preselected.
     Menu(Launch),
     /// Play this, with no menu.
     Play(Launch),
@@ -300,8 +230,9 @@ pub(crate) enum Plan {
 
 /// Decides from the request, whether stdin and stdout are a terminal, and the remembered
 /// launch: the menu for nothing given in a terminal or for `--menu`; otherwise play, from
-/// the defaults (or the remembered launch for `--last`) with the flags given over it. With
-/// no terminal (an agent, a script) and nothing given, the defaults play, never the menu.
+/// the defaults (or the remembered options for `--last`) with the flags given over them.
+/// With no word, a terminal opens the game on its title screen and no terminal (an agent,
+/// a script) plays Continue, never the menu nor the title screen.
 pub(crate) fn plan(request: &Request, terminal: bool, remembered: Option<Launch>) -> Plan {
     let menu = request.menu || (terminal && request.is_empty());
     let mut launch = if menu || request.last {
@@ -309,14 +240,11 @@ pub(crate) fn plan(request: &Request, terminal: bool, remembered: Option<Launch>
     } else {
         Launch::default()
     };
-    if let Some(choice) = request.choice {
-        launch.choice = choice;
-    }
+    launch.choice = request
+        .choice
+        .or((!terminal && !menu).then_some(Choice::Continue));
     if let Some(build) = request.build {
         launch.build = build;
-    }
-    if let Some(quality) = request.quality {
-        launch.quality = quality;
     }
     if let Some(profiling) = request.profiling {
         launch.profiling = profiling;
@@ -344,7 +272,7 @@ pub(crate) fn play(args: &[String]) -> bool {
         Ok(request) => request,
         Err(why) => {
             eprintln!(
-                "✗ play: {why}. `cargo xtask play [continue|new|creative|yard] [--build optimised|debug] [--quality auto|low|medium|high|ultra] [--profiling off|report|live] [--last] [--menu] [-- game args]`."
+                "✗ play: {why}. `cargo xtask play [continue|new|creative|yard] [--build optimised|debug] [--profiling off|report|live] [--last] [--menu] [-- game args]`."
             );
             return false;
         }
@@ -354,14 +282,12 @@ pub(crate) fn play(args: &[String]) -> bool {
         .ok()
         .map(|text| Launch::from_json(&text));
     let terminal = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
-    let last = remembered.as_ref().map(|launch| launch.choice);
     let launch = match plan(&request, terminal, remembered) {
         Plan::Play(launch) => launch,
         Plan::Menu(preselected) => {
             let stdin = std::io::stdin();
             let chosen = menu(
                 preselected,
-                last,
                 &header(),
                 &mut stdin.lock(),
                 &mut std::io::stdout(),
@@ -372,10 +298,10 @@ pub(crate) fn play(args: &[String]) -> bool {
             let kept = path
                 .parent()
                 .map_or(Ok(()), std::fs::create_dir_all)
-                .and_then(|()| std::fs::write(&path, launch.remembered().to_json()));
+                .and_then(|()| std::fs::write(&path, launch.to_json()));
             if let Err(why) = kept {
                 eprintln!(
-                    "play: could not keep this launch in {} ({why}); the next opens on Continue.",
+                    "play: could not keep these options in {} ({why}); the next launch opens on the defaults.",
                     path.display()
                 );
             }
@@ -409,13 +335,11 @@ fn header() -> String {
     )
 }
 
-/// The menu (docs/launcher.md, "What it shows"), a line read at a time: Enter plays the
-/// preselected launch, a number plays that choice (New game asks first), `o` changes the
-/// build and quality, `q` or the end of input quits with `None`. `last`, the remembered
-/// launch's choice, is marked.
+/// The menu (docs/launcher.md, "What it shows"), a line read at a time: Enter plays with
+/// these options, on the game's title screen; `o` changes the build and profiling; `q` or
+/// the end of input quits with `None`.
 pub(crate) fn menu(
     mut launch: Launch,
-    last: Option<Choice>,
     header: &str,
     input: &mut impl BufRead,
     out: &mut impl Write,
@@ -430,44 +354,21 @@ pub(crate) fn menu(
         }
     };
     loop {
-        let _ = writeln!(out, "{}", screen(&launch, last, header));
-        let answer = read(out, "> ")?;
-        let choice = match answer.as_str() {
-            "" => launch.choice,
+        let _ = writeln!(out, "{}", screen(&launch, header));
+        match read(out, "> ")?.as_str() {
+            "" => return Some(launch),
             "q" => return None,
-            "o" => {
-                options(&mut launch, out, &mut read)?;
-                continue;
-            }
-            number => match number
-                .parse::<usize>()
-                .ok()
-                .and_then(|n| CHOICES.get(n.wrapping_sub(1)))
-            {
-                Some(choice) => choice.0,
-                None => {
-                    let _ = writeln!(out, "`{number}` is not one of these: 1-4, o, q, or Enter.");
-                    continue;
-                }
-            },
-        };
-        if choice == Choice::New {
-            let sure = read(
-                out,
-                "New game deletes your saved world for good. Start a new one? (y/N) ",
-            )?;
-            if sure != "y" && sure != "yes" {
-                let _ = writeln!(out, "Your world is kept.");
-                continue;
+            "o" => options(&mut launch, out, &mut read)?,
+            other => {
+                let _ = writeln!(out, "`{other}` is not one of these: Enter, o or q.");
             }
         }
-        return Some(Launch { choice, ..launch });
     }
 }
 
 type Ask<'a> = dyn FnMut(&mut dyn Write, &str) -> Option<String> + 'a;
 
-/// The options (`o`): the build and the quality, each kept by Enter or chosen by a word or
+/// The options (`o`): the build and profiling, each kept by Enter or chosen by a word or
 /// its first letters.
 fn options(launch: &mut Launch, out: &mut dyn Write, read: &mut Ask<'_>) -> Option<()> {
     let pick = |answer: &str, words: &[&'static str]| -> Option<&'static str> {
@@ -499,22 +400,6 @@ fn options(launch: &mut Launch, out: &mut dyn Write, read: &mut Ask<'_>) -> Opti
                     out,
                     "`{answer}` is not optimised or debug; the build is kept."
                 );
-            }
-        }
-    }
-    let words = ["auto", "low", "medium", "high", "ultra"];
-    let answer = read(
-        out,
-        &format!(
-            "Quality: auto, low, medium, high or ultra [{}] ",
-            launch.quality.unwrap_or("auto")
-        ),
-    )?;
-    if !answer.is_empty() {
-        match pick(&answer, &words) {
-            Some(word) => launch.quality = quality(word),
-            None => {
-                let _ = writeln!(out, "`{answer}` is not a preset; the quality is kept.");
             }
         }
     }
@@ -555,33 +440,21 @@ fn options(launch: &mut Launch, out: &mut dyn Write, read: &mut Ask<'_>) -> Opti
 }
 
 /// The menu's screen.
-fn screen(launch: &Launch, last: Option<Choice>, header: &str) -> String {
-    let mut lines = vec![String::new(), header.to_string(), String::new()];
-    for (number, (choice, _, title, what)) in CHOICES.iter().enumerate() {
-        let mark = if Some(*choice) == last {
-            "  <- last time"
-        } else {
-            ""
-        };
-        lines.push(
-            format!("  {}  {title:<12}  {what:<42}{mark}", number + 1)
-                .trim_end()
-                .to_string(),
-        );
-    }
-    lines.push(String::new());
-    lines.push(format!(
-        "  Build: {}   Quality: {}   Profiling: {}      o  change these",
-        launch.build.word(),
-        launch.quality.unwrap_or("auto (the GPU's preset)"),
-        launch.profiling.shown()
-    ));
-    lines.push(String::new());
-    lines.push(format!(
-        "Enter plays {}.  1-4 choose, o options, q quit.",
-        launch.choice.title()
-    ));
-    lines.join("\n")
+fn screen(launch: &Launch, header: &str) -> String {
+    [
+        String::new(),
+        header.to_string(),
+        String::new(),
+        format!(
+            "  Build: {}   Profiling: {}      o  change these",
+            launch.build.word(),
+            launch.profiling.shown()
+        ),
+        String::new(),
+        "Enter plays: the game opens on its title screen (worlds, settings).  o options, q quit."
+            .to_string(),
+    ]
+    .join("\n")
 }
 
 /// Says when a build has not been made on this machine, so its first launch builds it.

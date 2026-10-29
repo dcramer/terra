@@ -17,7 +17,7 @@ cargo run -p terra_sandbox -- --experiment walk --experiment lush --level yard -
 cargo xtask play
 ```
 
-`cargo xtask play` runs it on the real GPU wherever you are (under WSL, the Windows build, in a copy of its own) and keeps your game between runs. In a terminal it first shows the launcher (D575): continue, a new game, creative or the yard, and the build; `cargo xtask play new` starts over with no menu, and any of the options above go to the game.
+`cargo xtask play` runs it on the real GPU wherever you are (under WSL, the Windows build, in a copy of its own) and keeps your worlds between runs. In a terminal it first shows the launcher's build choices (D575), then the game opens on its title screen (D579, `play::title`): Continue, your worlds (play one, or delete it after a confirmation), a new world with its name and mode, Survival or Creative (building free, D494), the yard, Settings and Quit. Each world is a folder under `worlds/` in the settings folder (`play::worlds`), its save and `world.ron`; the save from before worlds becomes the world "My world". `cargo xtask play continue`, `new` (a new world) and `creative` go straight in, as the game's `--world=<name>`, `--fresh` and `--creative` do; a run of the game without `--title` never shows the title screen, and a scripted one keeps no worlds unless given `--worlds=<dir>`. Any of the options above go to the game.
 
 The tech demo of the MVP's loop (docs/prototypes.md): a meadow by a lake, a little before sunset, and a player who arrives with a few tools and nothing built. You steer an animated figure in third person. It walks on the planet, climbs the steps to a building's door, is held up by floors, stopped by walls, windows, trees and boulders, and let through doors.
 

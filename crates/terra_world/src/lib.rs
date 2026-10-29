@@ -17,6 +17,7 @@ pub mod air;
 pub mod air_start;
 pub mod audio;
 pub mod cache;
+pub mod choice;
 pub mod cine;
 pub mod climate;
 pub mod cooked;

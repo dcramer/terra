@@ -152,7 +152,7 @@ usage: terra_sandbox [options]
   --fight-log <file.jsonl>
                         write each fighter's state every frame, one line of JSON each:
                         moves asked and running, contacts, feet, places (melee, D69)
-  --fresh              start the play experiment over, throwing away its saved game
+  --fresh              a new world (with --save, that file started over); see choice.rs
   --no-lair             no lair of combat creatures (the spider nest) beside the place,
                         as every demo's and film's place (tools/sandbox/places.ts, D421)
   --free-build          building in the play experiment costs nothing, every cost met
@@ -508,8 +508,8 @@ impl Options {
             "--water-mask" => &mut self.water_mask,
             "--flame-matte" => &mut self.flame_matte,
             "--debug-menu" => &mut self.debug_menu,
-            // The session report's file and length, read by the frame recorder (D576).
-            flag if crate::recorder::takes(flag) => return true,
+            // Read by the frame recorder (D576) and the game's choice of world (D579).
+            flag if crate::recorder::takes(flag) || crate::choice::takes(flag) => return true,
             _ => return false,
         };
         *on = true;
@@ -1620,7 +1620,7 @@ fn finish(exit: &mut MessageWriter<AppExit>, how: AppExit) {
 /// while what the script put in the world is still coming (`loading::hold`), or while the
 /// loading screen is held up to be looked at.
 pub fn counting(options: &Options, screen: &State<Screen>, hold: &loading::Hold) -> bool {
-    (*screen.get() == Screen::Playing && !hold.holds()) || options.hold_loading
+    (*screen.get() != Screen::Loading && !hold.holds()) || options.hold_loading
 }
 
 /// Whether this is Linux under Windows.

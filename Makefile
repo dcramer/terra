@@ -78,13 +78,13 @@ update: ## Get the latest from GitHub, then build it
 
 # --- Everyday --------------------------------------------------------------------------------
 
-play: ## The launcher: continue, a new game, creative or the yard, and the build; Enter plays the last
+play: ## The launcher: the build and profiling, then the game's title screen (your worlds, a new one, the yard)
 	cargo xtask play $(ARGS)
 
-fresh: ## Play a new game, replacing your saved one (no menu)
+fresh: ## Play a new world, beside your others (no menu, no title screen)
 	cargo xtask play new $(ARGS)
 
-creative: ## Play your world with building free (the stand-in for creative mode, D494)
+creative: ## Play your Creative world, building free (D494), or a new one if you have none
 	cargo xtask play creative $(ARGS)
 
 yard: ## Play the yard: a flat level for building, free and instant, nothing saved
