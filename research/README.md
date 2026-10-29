@@ -13,6 +13,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 | Note | Dated |
 |---|---|
 | [How do shipped games make hewn mine walls read as broken rock, and which way suits Terra's mine?](2026-10-29-hewn-rock-walls.md) | 2026-10-29 |
+| [Why does our characters' skeleton move wrong: the source clips, the carry onto our body, or the game's layers?](2026-10-29-why-the-skeleton-moves-wrong.md) | 2026-10-29 |
 | [Assembled equipment: how shipped games build weapons and tools from parts, and the answers to D565's seven questions](2026-10-28-assembled-equipment.md) | 2026-10-28 |
 | [Assembled items through the animations: can hand-driven items with an item track per clip work without per-item tuning?](2026-10-28-assembled-items-animation.md) | 2026-10-28 |
 | [Assembled items: can our engine and tools carry D565, as one simple pipeline with no per-item fitting](2026-10-28-assembled-items-pipeline.md) | 2026-10-28 |
