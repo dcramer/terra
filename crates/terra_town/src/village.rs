@@ -134,22 +134,21 @@ impl Palette {
     }
 
     /// A settlement's palette from the files under `assets`, as the game finds the kits
-    /// (`terra_bases::kit_assets`), `names` each kit's kind by its file's name
-    /// (`terra_bases::kit_names`). Building play and the townsfolk ask it here, so no crate
-    /// below them needs the town.
+    /// (`terra_bases::kit_assets`), each material named by its kit's file as read
+    /// (`Kit::name`). The one way the game asks it: building play and the townsfolk call it
+    /// here, so no crate below them needs the town.
     pub fn from_files(
         assets: &std::path::Path,
-        names: &std::collections::BTreeMap<Kind, String>,
         kits: &terra_build::kit::Kits,
     ) -> Result<Palette, String> {
         let read = |file: &str| {
             std::fs::read_to_string(assets.join(file)).map_err(|why| format!("{file}: {why}"))
         };
         let named = |name: &str| {
-            names
+            kits.0
                 .iter()
-                .find(|(_, n)| n.as_str() == name)
-                .map(|(kind, _)| *kind)
+                .find(|kit| kit.name == name)
+                .map(|kit| kit.kind())
         };
         Palette::read(&read, &named, kits)
     }

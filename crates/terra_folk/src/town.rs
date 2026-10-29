@@ -15,7 +15,7 @@ use terra_gen::smoothstep;
 use terra_survival::catalogue::Builds;
 use terra_survival::props::{self, Models, Theirs};
 use terra_town::town::{Size, ThingKind};
-use terra_town::{Animals, Life, Plan};
+use terra_town::{Animals, Life, Plan, village::Palette};
 use terra_world::daylight::{Clock, DAY_SECONDS};
 use terra_world::flora::ClearAround;
 use terra_world::footprint::Footprint;
@@ -979,12 +979,9 @@ fn lay(
     let (Some(site), Some(look)) = (site, look) else {
         return;
     };
-    let Some(palette) = look
-        .kits
-        .as_deref()
-        .and_then(crate::settlement::village_kinds)
-    else {
-        warn!("Town: the town needs the settlement's kits.");
+    let kits = look.kits.as_deref().ok_or(String::from("no kits"));
+    let palette = kits.and_then(|kits| Palette::from_files(&terra_bases::kit_assets(), kits));
+    let Ok(palette) = palette.inspect_err(|why| warn!("Town: no materials: {why}")) else {
         return;
     };
     let plan = std::fs::read_to_string(terra_world::data::path("life.ron"))

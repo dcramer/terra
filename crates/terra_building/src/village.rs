@@ -120,15 +120,6 @@ pub(super) fn lay(
 
 /// How long operations on a house take to apply and check, as a player's do: a window
 /// cut into a wall, a step of it taken out, and both undone, each in milliseconds.
-/// The kinds a village is built of (`terra_town::village`): each role's material as the
-/// settlement's data names it, and the roof each takes (D290), from the kit files the bases
-/// find. The scale scenes and the remote's castle and burg read it.
-pub(crate) fn village_kinds(kits: &terra_build::kit::Kits) -> Option<terra_town::village::Palette> {
-    terra_town::village::Palette::from_files(&terra_bases::kit_assets(), &kits.names(), kits)
-        .map_err(|why| error!("{why}"))
-        .ok()
-}
-
 fn time_operations(base: &Base, rules: &Rules) -> Vec<f32> {
     let cx = Context::free(rules);
     let mut base = base.clone();
@@ -190,9 +181,12 @@ pub(super) fn lay_scale(
     let Some(kits) = read_kits().map(Arc::new) else {
         return;
     };
-    let Some(kinds) = village_kinds(&kits) else {
-        warn!("The scale scenes need a log, a stone and a hewn timber kit.");
-        return;
+    let kinds = match terra_town::village::Palette::from_files(&terra_bases::kit_assets(), &kits) {
+        Ok(kinds) => kinds,
+        Err(why) => {
+            warn!("The scale scenes need a log, a stone and a hewn timber kit: {why}");
+            return;
+        }
     };
     let started = Instant::now();
     let mut buildings: Vec<(Building, [f32; 2])> = Vec::new();

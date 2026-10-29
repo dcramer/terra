@@ -24,6 +24,7 @@ use terra_survival::claim::Village;
 use terra_survival::interact::{Interactable, Interacted};
 use terra_survival::props::{self, Models, Theirs};
 use terra_survival::told::Told;
+use terra_town::village::Palette;
 use terra_world::daylight::{Clock, SkyPath};
 use terra_world::flora::ClearAround;
 use terra_world::footprint::Footprint;
@@ -138,9 +139,9 @@ fn found(
     mut arrive: MessageWriter<Arrive>,
     mut clear: MessageWriter<ClearAround>,
 ) {
-    let kinds = look.kits.as_deref().and_then(village_kinds);
-    let Some(kinds) = kinds else {
-        warn!("The village needs a log, a stone and a hewn timber kit.");
+    let kits = look.kits.as_deref().ok_or(String::from("no kits"));
+    let kinds = kits.and_then(|kits| Palette::from_files(&build::kit_assets(), kits));
+    let Ok(kinds) = kinds.inspect_err(|why| warn!("The village has no materials: {why}")) else {
         return;
     };
     let seed = planet.seed().derive("village").0 as u32;
@@ -320,15 +321,6 @@ fn found(
 /// street stand on the most level ground, all of it dry, out of the sea and every lake, and
 /// well away from the lair, so it sits on the land rather than on tall footings down a
 /// hillside. The same on every machine: the planet and the village's plan decide it.
-/// The kinds a village is built of (`terra_town::village`): each role's material as the
-/// settlement's data names it, and the roof each takes (D290), from the kit files the bases
-/// find. The town and the village read it.
-pub(crate) fn village_kinds(kits: &terra_build::kit::Kits) -> Option<terra_town::village::Palette> {
-    terra_town::village::Palette::from_files(&terra_bases::kit_assets(), &kits.names(), kits)
-        .map_err(|why| error!("{why}"))
-        .ok()
-}
-
 fn site_for(
     planet: &Planet,
     start: &Start,
@@ -552,7 +544,11 @@ mod tests {
             );
         }
         assert!(names.values().any(|name| name == "logs"));
-        assert!(village_kinds(&kits).is_some());
+        if let Err(why) =
+            terra_town::village::Palette::from_files(&terra_bases::kit_assets(), &kits)
+        {
+            panic!("the village's palette does not read from the kits as read: {why}");
+        }
     }
 
     #[test] // Slow: about a minute (the mountain world's land round the lake, the village).

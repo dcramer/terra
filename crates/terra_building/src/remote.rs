@@ -270,18 +270,21 @@ fn example(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
         .kits
         .clone()
         .ok_or_else(|| refused("there are no kits"))?;
+    let palette = || {
+        terra_town::village::Palette::from_files(&terra_bases::kit_assets(), &kits).map_err(|why| {
+            refused(format!(
+                "the {name} needs the settlement's materials: {why}"
+            ))
+        })
+    };
     let ops = match name.as_str() {
         "castle" => {
-            let kinds = crate::village::village_kinds(&kits)
-                .ok_or_else(|| refused("the castle needs the settlement's materials"))?;
-            let first = kinds.first();
+            let first = palette()?.first();
             terra_build::castle::castle(first.masonry, first.beams, first.masonry_roof)
         }
         // The castle built to burn (D377), in the materials its parts are of.
         "burg" => {
-            let kinds = crate::village::village_kinds(&kits)
-                .ok_or_else(|| refused("the burg needs the settlement's materials"))?
-                .first();
+            let kinds = palette()?.first();
             terra_build::burg::burg(terra_build::burg::Materials {
                 stone: kinds.masonry,
                 beams: kinds.beams,
