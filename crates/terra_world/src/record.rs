@@ -124,14 +124,14 @@ bevy_render=warn,bevy_render::pipelined_rendering=info,bevy_pbr=warn,bevy_winit=
 sctk_adwaita=off";
 
 /// Bevy's spans of each system run off and those of each schedule run on, unless
-/// the session report is asked for (`--profile-report=<file>`) or a Chrome trace build, so a
-/// `hitch-log` build (D576) names schedules unless a report wants systems. A span disabled
-/// when it is made costs nothing to enter.
+/// the session report is asked for (`--profile-report=<file>`), so a `hitch-log` build (D576)
+/// names schedules unless a report wants systems. A span disabled when it is made costs
+/// nothing to enter.
 const SCHEDULES_ONLY: &str = ",bevy_ecs=warn,bevy_ecs::schedule::schedule=info";
 
 /// The log plugin's filter.
 pub fn filter() -> String {
-    let systems = cfg!(feature = "trace") || crate::recorder::reporting();
+    let systems = crate::recorder::reporting();
     format!(
         "{},{QUIET}{}",
         bevy::log::DEFAULT_FILTER,

@@ -914,7 +914,6 @@ dependencies = [
  "indexmap",
  "log",
  "nonmax",
- "rand",
  "serde",
  "slotmap",
  "smallvec",
@@ -1359,7 +1358,6 @@ dependencies = [
  "bevy_platform",
  "bevy_utils",
  "tracing",
- "tracing-chrome",
  "tracing-error",
  "tracing-log",
  "tracing-oslog",
@@ -6565,17 +6563,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "tracing-chrome"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf0a738ed5d6450a9fb96e86a23ad808de2b727fd1394585da5cdd6788ffe724"
-dependencies = [
- "serde_json",
- "tracing-core",
- "tracing-subscriber",
 ]
 
 [[package]]

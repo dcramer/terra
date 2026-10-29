@@ -212,21 +212,7 @@ Under WSL the task builds and runs the Windows program, the only one with a real
 
 To find what a scene spends its time on, switch things off and run it again; to try values, don't rebuild for each. Make the number a [tunable](#tunables) and try them in one running sandbox (`r tune set NAME VALUE`, then `shot`). To know what a value costs, `cargo xtask bench <scenes> --tune NAME=VALUE` (repeatable) passes it to every scene's run and records and compares it as `<scene>@tune:NAME=VALUE` (after any `@<preset>`, several in name order), so it is never compared with the scene's plain baseline nor moves it; bench the scene without it for the other side of the A/B. With `--record` it is refused unless the key is new to `research/benchmarks.csv`: a tuned key's first record is what it is compared with after.
 
-**Which systems a frame spends.** A build with `--features trace` writes a span for every system's run to a Chrome trace (Bevy's `trace_chrome`), and runs the render world after the game on the main thread, so each span is plainly one world's. Its times are a quarter or so longer than a timed build's, so judge a change by the benchmark, never by the trace:
-
-```bash
-cargo build --release -p terra_sandbox --features trace
-TRACE_CHROME=world.json BEVY_ASSET_ROOT=$PWD target/release/terra_sandbox --experiment play --time 17 --offscreen --bench --settle 240 --bench-frames 600
-node tools/sandbox/spans.ts world.json            # --generics splits a material's systems by type
-```
-
-Under WSL the Linux build draws on the CPU, so trace the Windows build on the real GPU; the trace lands in its copy's folder (`cargo xtask win` prints it):
-
-```bash
-TRACE_CHROME=world.json WSLENV=TRACE_CHROME cargo xtask gpu still -- cargo xtask win -p terra_sandbox --release --features trace --copy trace -- --experiment play --time 17 --offscreen --bench --settle 240 --bench-frames 600
-```
-
-It prints, for the game and the render world, the frame by schedule (wall clock, as schedules run one after another), the longest systems in the slowest frames, and the systems by their 99th percentile. A parallel system's span holds its wait for the workers too, so a system that fans out tiny work looks dearer than it is: confirm with the benchmark. A trace runs to gigabytes; keep it out of the repository.
+**Which systems a frame spends.** `cargo xtask profile` ([Diagnosing performance](#diagnosing-performance)): the session report names each world's schedules, the slowest frames' systems and the systems by 99th percentile. Its build times every system, so judge a change by the benchmark, never by the report.
 
 ## Judging a material
 

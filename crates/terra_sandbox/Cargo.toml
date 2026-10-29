@@ -29,8 +29,6 @@ terra_walker.workspace = true
 terra_world.workspace = true
 
 [features]
-# Per-system spans for tools/sandbox/spans.ts (terra_world's `trace`).
-trace = ["terra_world/trace"]
 # The frame recorder's freeze lines (terra_world's `hitch-log`, D576).
 hitch-log = ["terra_world/hitch-log"]
 # Bevy keeps the line of code behind every spawn and component change, for the remote's

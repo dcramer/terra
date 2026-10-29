@@ -35,10 +35,6 @@ pub fn engine(app: &mut App, windowless: bool) -> PluginGroupBuilder {
         .into(),
         ..default()
     });
-    // Traced, the render world runs after the game on the main thread, not beside it, so a
-    // worker's span is plainly one world's (tools/sandbox/spans.ts).
-    #[cfg(feature = "trace")]
-    let engine = engine.disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>();
     if !windowless {
         return engine;
     }
