@@ -650,45 +650,143 @@ const RIPPLE_NEAR_M: vec2<f32> = vec2<f32>(8.0, 40.0);
 const GLINT_PER_M: f32 = 65.0;
 const GLINT_SHARE: f32 = 0.04;
 // Footprints in a path's packed snow (the looks review: "the path drawn as hard blotches";
-// Red Dead 2's and Sons of the Forest's trails are pocked by boots): ovals a boot long pressed
-// a few centimetres in, each turned near the path's way, one to a cell PRINT_CELL_M wide in
-// `share` of the cells. Gives how deep the deepest print over a point is, 0 to 1, and how
-// that changes a metre, in the world. A cell's print stays inside the cells beside it on the
-// point's own side, so eight cells hold every print that can reach a point.
-const PRINT_CELL_M: f32 = 0.34;
-const PRINT_HALF_M: vec2<f32> = vec2<f32>(0.14, 0.055);
+// Red Dead 2's and Sons of the Forest's trails are pocked by boots), laid as walkers leave
+// them: each a trail of left and right boots a step apart and a straddle across, toes turned
+// out, in a lane of its own along the path's way (winter round 8's judges: one oval stamped
+// the same in every cell, "identical footprint decals"). A walker has its own step, straddle,
+// toe-out, boot (one of three soles) and size, and goes one way or the other; each print is
+// jittered in place, turn and depth, and some are missing where the path is less worn. A
+// second set of walkers, older, is half filled by what has fallen and blown since. As shipped
+// snow trails are (The Long Dark's and Red Dead 2's: a gait's prints, a handful of boot
+// shapes, rotation and depth jittered, never one stamp a cell).
+//
+// The trails run straight in world-fixed lanes at one of PRINT_SECTORS headings, the nearest
+// the path's; where the path turns past one, the next heading's trails fade in over
+// PRINT_SECTOR_BLEND of a sector, so a trail never slides as the eye moves. Gives how deep the
+// deepest print over a point is, 0 to 1, and how that changes a metre, in the world.
+const PRINT_SECTORS: f32 = 12.0;
+const PRINT_SECTOR_BLEND: vec2<f32> = vec2<f32>(0.3, 0.7);
+// A lane's width, metres, and the share of lanes a walker took, either set.
+const PRINT_LANE_M: f32 = 0.55;
+const PRINT_LANE_SHARE: f32 = 0.7;
+// A walker's step (one print to the next, the other foot's), half its straddle, metres, and how
+// far its toes turn out, radians: in snow a step is short and the feet wide.
+const PRINT_STEP_M: vec2<f32> = vec2<f32>(0.56, 0.74);
+const PRINT_STRADDLE_M: vec2<f32> = vec2<f32>(0.07, 0.12);
+const PRINT_TOE_OUT: vec2<f32> = vec2<f32>(0.04, 0.26);
 const PRINT_DEPTH_M: f32 = 0.035;
-fn prints_at(world: vec3<f32>, normal: vec3<f32>, along: vec3<f32>, share: f32) -> vec4<f32> {
-    let p = world / PRINT_CELL_M;
-    let base = floor(p);
-    let side = select(vec3<f32>(-1.0), vec3<f32>(1.0), fract(p) > vec3<f32>(0.5));
-    let across = cross(normal, along);
+const PRINT_PI: f32 = 3.14159265;
+
+// An ellipse's distance from `p`, roughly (exact on its axes), in metres, and its gradient.
+fn print_ellipse(p: vec2<f32>, r: vec2<f32>) -> vec3<f32> {
+    let q = p / r;
+    let k = max(length(q), 1e-4);
+    let m = min(r.x, r.y);
+    return vec3<f32>((k - 1.0) * m, q / r / k * m);
+}
+
+// A boot's print, toe along +x, its middle at 0: the sole and the heel, smoothly joined at the
+// waist; `kind` 0 a walking boot, 1 a round fur boot, 2 a narrow long one. Its distance and
+// gradient.
+fn boot_print(p: vec2<f32>, kind: f32) -> vec3<f32> {
+    var sole = vec3<f32>(0.035, 0.085, 0.052);
+    var heel = vec3<f32>(-0.095, 0.05, 0.043);
+    var waist = 0.03;
+    if kind >= 2.0 {
+        sole = vec3<f32>(0.045, 0.095, 0.046);
+        heel = vec3<f32>(-0.1, 0.045, 0.038);
+        waist = 0.02;
+    } else if kind >= 1.0 {
+        sole = vec3<f32>(0.03, 0.095, 0.058);
+        heel = vec3<f32>(-0.08, 0.06, 0.05);
+        waist = 0.05;
+    }
+    let a = print_ellipse(p - vec2<f32>(sole.x, 0.0), sole.yz);
+    let b = print_ellipse(p - vec2<f32>(heel.x, 0.0), heel.yz);
+    let h = clamp(0.5 + 0.5 * (b.x - a.x) / waist, 0.0, 1.0);
+    return vec3<f32>(mix(b.x, a.x, h) - waist * h * (1.0 - h), mix(b.yz, a.yz, h));
+}
+
+// The deepest print over a point `st` metres along and across one heading's lanes, 0 to 1,
+// and how it changes a metre along and across them.
+fn walkers_at(st: vec2<f32>, sector: f32, worn: f32) -> vec3<f32> {
+    let keep = 0.95 * smoothstep(0.15, 0.8, worn);
+    var best = vec3<f32>(0.0);
+    for (var walkers = 0u; walkers < 2u; walkers++) {
+        let older = f32(walkers);
+        let shift = hash(vec3<f32>(sector, older, 3.0));
+        let lane0 = floor(st.y / PRINT_LANE_M + shift);
+        for (var l = 0u; l < 3u; l++) {
+            let lane = lane0 + f32(l) - 1.0;
+            let id = vec3<f32>(lane, sector * 7.0 + older * 131.0, 17.0);
+            if hash(id) >= PRINT_LANE_SHARE {
+                continue;
+            }
+            let r = vec4<f32>(hash(id + vec3<f32>(0.0, 1.0, 0.0)), hash(id + vec3<f32>(0.0, 2.0, 0.0)), hash(id + vec3<f32>(0.0, 3.0, 0.0)), hash(id + vec3<f32>(0.0, 4.0, 0.0)));
+            let r2 = vec4<f32>(hash(id + vec3<f32>(0.0, 5.0, 0.0)), hash(id + vec3<f32>(0.0, 6.0, 0.0)), hash(id + vec3<f32>(0.0, 7.0, 0.0)), hash(id + vec3<f32>(0.0, 8.0, 0.0)));
+            let dir = select(-1.0, 1.0, r.x < 0.5);
+            let centre = (lane + 0.5 + (r.y - 0.5) * 0.5 - shift) * PRINT_LANE_M;
+            let step_m = mix(PRINT_STEP_M.x, PRINT_STEP_M.y, r.z);
+            let straddle = mix(PRINT_STRADDLE_M.x, PRINT_STRADDLE_M.y, r.w);
+            let toe = mix(PRINT_TOE_OUT.x, PRINT_TOE_OUT.y, r2.x);
+            let kind = floor(r2.y * 2.999);
+            let size = mix(0.88, 1.12, r2.z);
+            let age = mix(mix(0.8, 1.0, r2.w), mix(0.3, 0.55, r2.w), older);
+            let soft = mix(0.05, 0.018, age);
+            // In the walker's own frame: on along its way, left across it.
+            let u = st.x * dir - 2.0 * step_m * hash(id + vec3<f32>(0.0, 9.0, 0.0));
+            let v = (st.y - centre) * dir;
+            let n0 = floor(u / step_m);
+            for (var m = 0u; m < 2u; m++) {
+                let n = n0 + f32(m);
+                let pid = id + vec3<f32>(0.0, 0.0, n * 1.37);
+                let q = vec4<f32>(hash(pid + vec3<f32>(3.0, 0.0, 0.0)), hash(pid + vec3<f32>(5.0, 0.0, 0.0)), hash(pid + vec3<f32>(7.0, 0.0, 0.0)), hash(pid + vec3<f32>(9.0, 0.0, 0.0)));
+                if q.x >= keep {
+                    continue;
+                }
+                let left = select(-1.0, 1.0, n - 2.0 * floor(n * 0.5) < 0.5);
+                let d = vec2<f32>(u - n * step_m - (q.y - 0.5) * 0.08, v - left * straddle - (q.z - 0.5) * 0.05);
+                let turn = left * toe + (q.w - 0.5) * 0.16;
+                let cs = vec2<f32>(cos(turn), sin(turn));
+                let p = vec2<f32>(d.x * cs.x + d.y * cs.y, d.y * cs.x - d.x * cs.y) / size;
+                let e = boot_print(p, kind);
+                let sdf = e.x * size;
+                if sdf > 0.004 {
+                    continue;
+                }
+                let depth = age * mix(0.7, 1.0, hash(pid + vec3<f32>(11.0, 0.0, 0.0)));
+                let t = clamp((sdf + soft) / (soft + 0.004), 0.0, 1.0);
+                let h = depth * (1.0 - t * t * (3.0 - 2.0 * t));
+                if h > best.x {
+                    let dh = -depth * 6.0 * t * (1.0 - t) / (soft + 0.004);
+                    let g = vec2<f32>(e.y * cs.x - e.z * cs.y, e.y * cs.y + e.z * cs.x) * dir;
+                    best = vec3<f32>(h, g * dh);
+                }
+            }
+        }
+    }
+    return best;
+}
+
+fn trail_at(world: vec3<f32>, along: vec3<f32>, worn: f32) -> vec4<f32> {
+    let level = level_axes();
+    let heading = atan2(dot(along, level[1]), dot(along, level[0]));
+    let f = fract(heading / PRINT_PI) * PRINT_SECTORS;
+    let k0 = floor(f);
+    let w = smoothstep(PRINT_SECTOR_BLEND.x, PRINT_SECTOR_BLEND.y, f - k0);
     var best = vec4<f32>(0.0);
-    for (var i = 0u; i < 8u; i++) {
-        let c = base + side * vec3<f32>(f32(i & 1u), f32((i >> 1u) & 1u), f32((i >> 2u) & 1u));
-        if hash(c) >= share {
+    for (var j = 0u; j < 2u; j++) {
+        let weight = select(1.0 - w, w, j == 1u);
+        if weight <= 0.0 {
             continue;
         }
-        let jitter = vec3<f32>(
-            hash(c + vec3<f32>(11.0, 0.0, 0.0)),
-            hash(c + vec3<f32>(0.0, 11.0, 0.0)),
-            hash(c + vec3<f32>(0.0, 0.0, 11.0)),
-        );
-        let d = world - (c + 0.25 + 0.5 * jitter) * PRINT_CELL_M;
-        let turn = (hash(c + vec3<f32>(0.0, 0.0, 23.0)) - 0.5) * 0.7;
-        let a = along * cos(turn) + across * sin(turn);
-        let b = cross(normal, a);
-        let u = dot(d, a) / PRINT_HALF_M.x;
-        let v = dot(d, b) / PRINT_HALF_M.y;
-        let r = sqrt(u * u + v * v);
-        // Older prints half filled by what has fallen and blown since.
-        let fresh = 0.4 + 0.6 * hash(c + vec3<f32>(0.0, 23.0, 0.0));
-        let h = (1.0 - smoothstep(0.55, 1.0, r)) * fresh;
-        if r < 1.0 && h > best.x {
-            let t = clamp((r - 0.55) / 0.45, 0.0, 1.0);
-            let dh_dr = -6.0 * t * (1.0 - t) / 0.45 * fresh;
-            let dr = (a * (u / PRINT_HALF_M.x) + b * (v / PRINT_HALF_M.y)) / max(r, 1e-4);
-            best = vec4<f32>(h, dr * dh_dr);
+        let sector = (k0 + f32(j)) % PRINT_SECTORS;
+        let phi = sector / PRINT_SECTORS * PRINT_PI;
+        let a = level[0] * cos(phi) + level[1] * sin(phi);
+        let c = level[1] * cos(phi) - level[0] * sin(phi);
+        let found = walkers_at(vec2<f32>(dot(world, a), dot(world, c)), sector, worn);
+        if found.x * weight > best.x {
+            best = vec4<f32>(found.x * weight, (a * found.y + c * found.z) * weight);
         }
     }
     return best;
@@ -2402,7 +2500,7 @@ fn fragment(
         // Footprints, as many as the path is worn, each a hollow whose far wall faces the eye,
         // packed darker and hidden from some of the sky; past where a pixel spans a few
         // centimetres only their mean darkening is left, which would otherwise shimmer.
-        let print = prints_at(world, geometric, along, 0.35 * worn);
+        let print = trail_at(world, along, worn);
         let sharp = 1.0 - smoothstep(0.02, 0.06, pixel_m);
         let pressed = mix(0.2 * worn, print.x, sharp);
         colour *= 1.0 - 0.07 * pressed * snow;
