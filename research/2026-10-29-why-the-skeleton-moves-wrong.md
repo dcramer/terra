@@ -1,13 +1,13 @@
 # Why does our characters' skeleton move wrong: the source clips, the carry onto our body, or the game's layers?
 
-2026-10-29. The developer: "the skeleton just doesnt move right", and "one issue we've had is you twist joints and do weird shit instead of applying the animation? like swimming looks stupid". This note puts a known-good motion (Quaternius's Universal Animation Library walk and jog, the versions we shipped before 2026-10-14, taken from `mannequin.glb` at `5667c078~1`) through each stage beside ours, and measures how far every run-time layer moves every bone off what the clip says. It changes no clip.
+2026-10-29. The developer: "the skeleton just doesnt move right", and "one issue we've had is you twist joints and do weird shit instead of applying the animation? like swimming looks stupid". This note puts a reference motion (Quaternius's hand-keyed Universal Animation Library walk and jog, the versions we shipped before 2026-10-14, taken from `mannequin.glb` at `5667c078~1`) through each stage beside ours, and measures how far every run-time layer moves every bone off what the clip says. It changes no clip.
 
 ## Short answer
 
 It is mostly **the clips themselves** (c), with **two run-time layers** (a) adding to it while moving. The carry onto our body (b) is not at fault.
 
 - **The carry is faithful.** Quaternius's walk and jog on our body point every limb the same way as on his mannequin, frame by frame: 0.0 degrees apart on the upper arms, forearms, hands, thighs and shins. The only differences are fixed and do not move: the collarbones point 41 degrees apart, the feet 6 and the palms 8, all the same in every frame. These come from the two bodies' rest shapes, not from motion.
-- **Our clips are worse than the known-good ones before the game touches them.**
+- **Our clips have their own faults before the game touches them** (the lean comparisons below are against Quaternius's hand-keyed clips, which lean more than a person does: see the correction under "What I recommend").**
   - The **swim** is the worst. It was keyed standing up, because Kimodo cannot make swimming: a high-knee march with the arms windmilling out to the sides. The knees bend up to 168 degrees and the thighs lift to 95. When the game lays the body down 80 degrees, that becomes a person kneeling and pedalling in the air, not a swimmer kicking. Tilting the body can never turn it into a crawl.
   - The **walk** (Kimodo) is a plausible walk, but stiff and upright. Quaternius's leans 11 degrees into the step; ours leans 0 to 2. Our knee never softens as the heel lands (3 degrees against 9 to 14). Our hips turn lopsidedly, 10 degrees one way and 4 the other. Our arms swing a little less.
   - The **jog** has Kimodo's legs under arms written by a formula (`swing_arms` in `made_clips.py`). It runs bolt upright, leaning 11 to 16 degrees where Quaternius's leans 23 to 29, and the head tips back.
@@ -110,13 +110,11 @@ On top of that, while the player runs, two of the game's own layers wrench the l
 
 As shipped games do it:
 
-1. **Motion-captured locomotion and swimming, carried by our existing pipe.** Use clips captured from people for the walk, jog, sprint, idle and swims, not generated ones. Candidates:
-   - Quaternius's current library for walk and jog: we own it, it is CC0, and it is proven faithful above.
-   - A paid capture pack with real swimming, such as MoCap Online's or Kevin Iglesias's (these need the developers' purchase, D526).
-
-   Mixamo's swims are free but carry Adobe's terms. Epic's Game Animation Sample is only licensed for Unreal. Checks: put each through `clip_check.py`, then a film like these beside the mannequin.
-2. **Stop rewriting clips by rule.** Retire `swing_arms` and `stand.py` once the source is captured. Keep twist baking, loop closing, mirroring and markers.
+1. **Clips made for the motion, carried by our existing pipe, judged on a person's gait (gait-lab norms), not on another library.**
+   - **Correction (captured-loco j1, D584 amended):** Quaternius's walk and jog are hand-keyed by an animator, not captured. They are the very clips D316 replaced on 2026-10-15 for leaning 23-29 degrees and bouncing 23 cm ("an ape charging"), and UAL1 v3.0 / UAL2 v2.2 add no other walk or jog. They prove the carry, not the gait. Our walk and jog lean is within a person's; their faults are the jog's formula arms and the walk's stiff knee and lopsided hips.
+   - Swims, a jog with its own arms, a softer walk and an idle come from Uthana's text-to-motion (D532; no store packs), each judged on gait norms and filmed beside ours.
+2. **Stop rewriting clips by rule.** Retire `swing_arms` and `stand.py` once a jog and idle replace them. Keep twist baking, loop closing, mirroring and markers.
 3. **Turn the foot lock and the carried-tool rule down to what a game's would do, then measure again** with the audit in this note. Look first at why the lock bends a leg 10 to 18 degrees on flat ground while jogging: a pace mismatch, the lock's step threshold, or the clip's own foot slide. The carried tool wants an arm pose captured for carrying it (an overlay), not a forearm turned every frame.
-4. **The fight clips** go the same way, in a later job. A captured or hand-keyed sword set (Quaternius's sword clips, or a paid pack) carried by our pipe, with run-time hand IK only.
+4. **The fight clips** go the same way, in a later job. A sword set made for each blow (generated or hand-keyed) carried by our pipe, with run-time hand IK only.
 
-What it takes: one job to gather captured candidates and film them beside ours with these tools; a decision by the developers on a paid pack; then one job each to swap the locomotion and the swims, and to cut the run-time layers down.
+What it takes: one job each for the swims, the jog's arms and the walk's knee (Uthana), and the run-time layers cut down, each checked with the bone audit and a film.
