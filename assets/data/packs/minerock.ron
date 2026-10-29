@@ -5,7 +5,7 @@
 // stones be, and a broken face looks alike a little smaller), its tan
 // multiplied toward the blue-grey of a hard-rock drift's walls (the mine anchors' photos)
 // and darkened by the damp and the lamp smoke. Round 1's mine judges read the fieldstone
-// as mortared castle masonry. Its face bulges and sinks by a hand either way over a metre
+// as mortared castle masonry. Its face bulges and sinks a few centimetres either way over a metre
 // and more, so a wall's outline wanders as a cut face does, not a plane; its arrises are
 // rounded broad, broken off as rock is round a drift's corners. Nothing dressed: no plinth,
 // coping, quoins or jambs (round 1: masonry kerbs and a pale seam at the floor), a
@@ -14,9 +14,12 @@
     bevel: 0.16,
     relief: 0.06,
     tint: (0.56, 0.62, 0.78),
-    // Broken in flat facets some 40 cm across meeting at creases, over the face's wander
-    // (round 8's judges read the lumps alone as "smooth plaster").
-    packed: Some((lumps: 0.08, lump: 1.3, ridge: 0.0, step: 0.0, facets: 0.08, facet: 0.8)),
+    // Broken in flat facets some 30 cm across meeting at creases, sunk up to 20 cm behind
+    // the face as a blasted drift's overbreak is (10-30 cm past its neat line), over a
+    // slighter wander: round 8's judges read the lumps alone as "smooth plaster", round 10's
+    // 8 cm either way still did. Facets and lumps sink under 25 cm, half a cube, so a wall a
+    // cube thick between two drifts stays closed.
+    packed: Some((lumps: 0.04, lump: 1.3, ridge: 0.0, step: 0.0, facets: 0.2, facet: 0.6)),
     textures: {
         Masonry: (path: "materials/worn_rock_natural_01", metres: (1.5, 1.5), depth: 0.035),
         Floor: (path: "materials/worn_rock_natural_01", metres: (1.4, 1.4), depth: 0.015),

@@ -1063,7 +1063,7 @@ mod tests {
         // Up a line on the wall, the lifts' middles stand out the ridge's depth beyond the
         // seams, and no further.
         let along: Vec<f32> = (0..400)
-            .map(|i| packed.at(Vec3::new(0.3, i as f32 * 0.01, 0.0), Vec3::X, 1.0))
+            .map(|i| packed.at(Vec3::new(0.3, i as f32 * 0.01, 0.0), Vec3::X, 1.0, 1.0))
             .collect();
         let (low, high) = along
             .iter()

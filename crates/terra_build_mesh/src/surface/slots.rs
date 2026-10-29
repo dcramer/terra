@@ -417,14 +417,7 @@ impl<'a> Neighbourhood<'a> {
 
 /// How far a point's relief is faded by the inside edges near it.
 fn fade(p: Vec3, edges: &[(Vec3, Vec3)]) -> f32 {
-    edges
-        .iter()
-        .map(|&(from, to)| {
-            let along = (to - from).normalize();
-            let t = (p - from).dot(along).clamp(0.0, CELL_M);
-            (p.distance(from + along * t) / INSIDE_FADE_M).min(1.0)
-        })
-        .fold(1.0_f32, f32::min)
+    super::packed::fade_over(p, edges, INSIDE_FADE_M)
 }
 
 // Where a cube's faces' points fall across it along an axis, as fractions of a cube: a
@@ -885,12 +878,13 @@ fn gather_round(
         face_edges,
         ..
     } = scratch;
+    let reach = super::packed::edge_reach(look.packed);
     face_edges.clear();
     face_edges.extend(cube_edges.iter().copied().filter(|&(from, to)| {
         let gap = (from.min(to) - face_high)
             .max(face_low - from.max(to))
             .max(Vec3::ZERO);
-        gap.length() < INSIDE_FADE_M
+        gap.length() < reach
     }));
 }
 
@@ -1206,9 +1200,9 @@ impl Drafting<'_> {
         } else {
             1.0
         };
-        let packed = look
-            .packed
-            .map_or(0.0, |packed| packed.at(p, outward, stepping));
+        let packed = look.packed.map_or(0.0, |k| {
+            k.at(p, outward, stepping, k.clear(p, self.face_edges))
+        });
         // Flat but for its packing: its stone's relief is drawn from its maps.
         let relief = 0.0;
         let mut out = (relief + packed) * faded;

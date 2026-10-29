@@ -17,9 +17,13 @@ pub struct Packing {
     /// against the sky step from lift to lift.
     #[serde(default)]
     pub step: f32,
-    /// How far its broken faces stand out or sink, either way, in metres, and how far
-    /// across one is: hard rock split along its joints in flat facets meeting at creases,
-    /// not pressed in lumps (the mine's walls, round 8's judges: "smooth plaster").
+    /// How far its broken faces sink behind the face, in metres, and how far across one is:
+    /// hard rock split along its joints in flat facets meeting at creases, not pressed in
+    /// lumps (the mine's walls, round 8's judges: "smooth plaster"). Only ever behind, as a
+    /// blasted drift's overbreak lies beyond its neat line, so nothing stood against the
+    /// wall is swallowed; eased in over half a facet from an inside corner, so the faces
+    /// either side of it meet. With `lumps`, under half a cube, or a wall a cube thick
+    /// sunk from both sides opens.
     #[serde(default)]
     pub facets: f32,
     #[serde(default)]

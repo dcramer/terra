@@ -12,9 +12,20 @@ pub struct Packed {
 }
 
 impl Packed {
+    /// How far round an inside corner its facets ease in: half a facet, as the faces either
+    /// side of a corner meet on it (`clear` in [`Packed::at`]).
+    pub(super) fn facet_ease(&self) -> f32 {
+        if self.packing.facets > 0.0 {
+            self.packing.facet.max(0.05) * 0.5
+        } else {
+            0.0
+        }
+    }
+
     /// How far the surface is pushed out at a point by its packing: lumps of two sizes, and
-    /// each lift rounded out between its seams, a little flatter in its middle.
-    pub(super) fn at(&self, p: Vec3, outward: Vec3, stepping: f32) -> f32 {
+    /// each lift rounded out between its seams, a little flatter in its middle; its facets
+    /// sunk by `clear` of their depth (0 on an inside corner, 1 [`Packed::facet_ease`] off).
+    pub(super) fn at(&self, p: Vec3, outward: Vec3, stepping: f32, clear: f32) -> f32 {
         use crate::dress::smooth;
         let k = &self.packing;
         let lumps = if k.lumps > 0.0 {
@@ -52,15 +63,51 @@ impl Packed {
         };
         // Broken faces on the walls and the roof, eased to nothing up a floor's top: there the
         // dug ground lies 3 cm over the cubes, and the facets stood up through it in pale
-        // patches (mine round 10).
+        // patches (mine round 10). Sunk only, so a post or a prop stood at the face is never
+        // swallowed (round 10's either way, at 8 cm, did not read as broken rock), and eased
+        // in from an inside corner: there the inside fade's 6 cm would fold a deep facet's
+        // edge into a fin.
         let facets = if k.facets > 0.0 {
             let off_top = (1.0 - outward.y).clamp(0.0, 1.0);
-            (crate::dress::faceted(p, k.facet.max(0.05), 47) - 0.5) * 2.0 * k.facets * off_top
+            let clear = clear.clamp(0.0, 1.0);
+            let eased = clear * clear * (3.0 - 2.0 * clear);
+            -crate::dress::faceted(p, k.facet.max(0.05), 47) * k.facets * off_top * eased
         } else {
             0.0
         };
         lumps + ridge + step + facets
     }
+
+    /// How clear a point is of the inside edges near it for its facets: `clear` in
+    /// [`Packed::at`], 1 where it has none.
+    pub(super) fn clear(&self, p: Vec3, edges: &[(Vec3, Vec3)]) -> f32 {
+        let ease = self.facet_ease();
+        if ease > 0.0 {
+            fade_over(p, edges, ease)
+        } else {
+            1.0
+        }
+    }
+}
+
+/// How far a point is from the inside edges near it, as a share of `reach`, up to 1.
+pub(super) fn fade_over(p: Vec3, edges: &[(Vec3, Vec3)], reach: f32) -> f32 {
+    edges
+        .iter()
+        .map(|&(from, to)| {
+            let along = (to - from).normalize();
+            let t = (p - from).dot(along).clamp(0.0, terra_build::CELL_M);
+            (p.distance(from + along * t) / reach).min(1.0)
+        })
+        .fold(1.0_f32, f32::min)
+}
+
+/// How far off a face its inside edges are gathered: the inside fade's reach, or a
+/// packing's facets' ease (`Packed::facet_ease`) within the cubes round it, which
+/// `near_inside` looks through.
+pub(super) fn edge_reach(packed: Option<Packed>) -> f32 {
+    let ease = packed.map_or(0.0, |packed| packed.facet_ease());
+    super::INSIDE_FADE_M.max(ease.min(terra_build::CELL_M))
 }
 
 #[cfg(test)]
@@ -93,7 +140,7 @@ mod tests {
                         libm::floorf(at) as i32 == lift && at - libm::floorf(at) > 0.5
                     })
                     .unwrap();
-                packed.at(p, Vec3::X, 1.0)
+                packed.at(p, Vec3::X, 1.0, 1.0)
             })
             .collect();
         assert!(
@@ -115,14 +162,14 @@ mod tests {
             lump: 0.5,
             ridge: 0.0,
             step: 0.0,
-            facets: 0.08,
+            facets: 0.12,
             facet: 0.8,
         };
         let packed = Packed { packing, lift: 0.5 };
         let spread = |outward: Vec3| {
             let along: Vec<f32> = (0..400)
                 .map(|i| Vec3::new(i as f32 * 0.02, 0.3, i as f32 * 0.013))
-                .map(|p| packed.at(p, outward, 1.0))
+                .map(|p| packed.at(p, outward, 1.0, 1.0))
                 .collect();
             let (low, high) = along
                 .iter()
@@ -136,5 +183,43 @@ mod tests {
             spread(Vec3::NEG_Y)
         );
         assert!(spread(Vec3::Y) < 1e-6, "a floor: {}", spread(Vec3::Y));
+    }
+
+    /// A blasted drift's broken rock lies behind its neat line, never in front of it: the
+    /// facets only sink, by up to their depth, so a timber post or a prop stood at the face
+    /// keeps clear of the rock (round 10's either way stood 8 cm proud of it); and they ease
+    /// in from an inside corner, nothing on it, all of it half a facet off.
+    #[test]
+    fn facets_sink_behind_the_face_and_ease_in_from_an_inside_corner() {
+        let packing = kit::Packing {
+            lumps: 0.0,
+            lump: 0.5,
+            ridge: 0.0,
+            step: 0.0,
+            facets: 0.2,
+            facet: 0.6,
+        };
+        let packed = Packed { packing, lift: 0.5 };
+        let wall: Vec<f32> = (0..2000)
+            .map(|i| Vec3::new(i as f32 * 0.011, 0.3 + (i % 37) as f32 * 0.05, 0.0))
+            .map(|p| packed.at(p, Vec3::Z, 1.0, 1.0))
+            .collect();
+        let (low, high) = wall
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(l, h), &v| (l.min(v), h.max(v)));
+        assert!(high <= 1e-6, "proud of the face by {high}");
+        assert!(low >= -0.2 - 1e-6, "sunk past the depth, {low}");
+        assert!(high - low > 0.12, "broken over only {}", high - low);
+        assert!((packed.facet_ease() - 0.3).abs() < 1e-6);
+        for i in 0..50 {
+            let p = Vec3::new(i as f32 * 0.07, 0.7, 0.0);
+            assert!(packed.at(p, Vec3::Z, 1.0, 0.0).abs() < 1e-6);
+            let (near, off) = (
+                packed.at(p, Vec3::Z, 1.0, 0.3),
+                packed.at(p, Vec3::Z, 1.0, 1.0),
+            );
+            // A third of the way out, eased in: 0.3² (3 - 0.6) of the way down.
+            assert!((near - off * 0.216).abs() < 1e-6, "{near} {off}");
+        }
     }
 }
