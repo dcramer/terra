@@ -75,11 +75,14 @@ const SPILL_OUT_M: f32 = 0.05;
 const SPILL_STEPS: usize = 4;
 /// A lit window's halo (`window_halo.wesl`): at its middle this share of the pane's glow,
 /// this many times the window's size across, never under this share of the view's height
-/// (about 6 pixels at 1080p), and stood this far out toward the eye so the wall does not cut
-/// it. A window a few pixels across blooms by too little to read from over the town.
-const HALO_SHARE: f32 = 0.45;
+/// (about 22 pixels at 1080p, its glow's core a few), and stood at least this far out toward
+/// the eye, further as the card grows and the wall turns away, so neither the wall nor the
+/// eaves cut it. A window a few pixels across blooms by too little to read from over the town.
+/// The share is over one: the card's light is spread over a disc many times the pane's size,
+/// and at 0.45 its glow did not show over the town (settlement round 6).
+const HALO_SHARE: f32 = 1.125;
 const HALO_WIDE: f32 = 3.0;
-const HALO_LEAST: f32 = 0.006;
+const HALO_LEAST: f32 = 0.02;
 const HALO_STAND_M: f32 = 0.4;
 
 /// What `shaders/window_halo.wesl` is told. Field order must match the struct there.

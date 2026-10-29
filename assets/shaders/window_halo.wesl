@@ -47,12 +47,19 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let to_eye = to_eye_far / max(far, 1e-3);
     // How square to the eye the window is: none from behind its wall or edge on.
     let square = clamp(dot(facing, to_eye), 0.0, 1.0);
-    let at = middle + to_eye * min(halo.shape.y, far * 0.5);
     // Its size: the window's own, widened, and never under so much of the view's height.
     let own = sqrt(wide * tall) * halo.colour.w;
     // view.clip_from_view[1][1] is 1 over the tangent of half the view's height.
     let least = halo.shape.x * 2.0 * far / view.clip_from_view[1][1];
     let size = max(own, least);
+    // Stood toward the eye far enough that its wall cuts none of it: a disc half `size`
+    // across, turned to the eye, reaches its half size times the tangent of how far the eye
+    // is off square back toward the wall, and the eaves over a window about its half size
+    // out. Stood out only 0.4 m, a far window's card, metres across, went mostly into its
+    // wall and eaves and its glow did not show (settlement round 5).
+    let slant = sqrt(max(1.0 - square * square, 0.0)) / max(square, 0.25);
+    let stand = max(halo.shape.y, size * 0.5 * max(slant, 1.0));
+    let at = middle + to_eye * min(stand, far * 0.5);
     var right = cross(view.world_from_view[1].xyz, to_eye);
     if dot(right, right) < 1.0e-6 {
         right = vec3<f32>(1.0, 0.0, 0.0);
@@ -68,7 +75,7 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     // corona still reads as a point of warm light.
     out.uv = vertex.position.xy * 2.0;
     let spread = own / size;
-    out.uv_b = vec2<f32>(square * sqrt(square) * mix(spread, 1.0, 0.35), 0.0);
+    out.uv_b = vec2<f32>(square * sqrt(square) * mix(spread, 1.0, 0.5), 0.0);
 @if(PREPASS_PIPELINE) {
 @if(NORMAL_PREPASS_OR_DEFERRED_PREPASS)
     out.world_normal = to_eye;
