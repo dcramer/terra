@@ -593,6 +593,7 @@ fn first_view(
     mut meshes: ResMut<Assets<Mesh>>,
     mut terrain: ResMut<Terrain>,
 ) {
+    let started = std::time::Instant::now();
     let viewer = camera.translation();
     // The preset is chosen in the first frame; one asked for is known already.
     let reach = asked
@@ -624,7 +625,11 @@ fn first_view(
         let entity = show(&mut commands, &mut meshes, &look, id, mesh);
         terrain.shown.insert(id, Shown { sides, entity });
     }
-    info!("Meshed the first view of the ground: {count} chunks.");
+    // How long, on how many threads: what a change to a chunk's meshing or colouring costs.
+    let secs = started.elapsed().as_secs_f32();
+    info!(
+        "Meshed the first view of the ground: {count} chunks in {secs:.2} s on {threads} threads."
+    );
     terrain.wanted = wanted;
     terrain.chosen_from = Some(viewer);
     terrain.chosen_reach = reach;
