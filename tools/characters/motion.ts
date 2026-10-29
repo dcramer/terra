@@ -28,7 +28,8 @@
 // An entry with source "uthana" is made by Uthana's text-to-motion 3.0 on our own body instead
 // (prompt, seconds: a whole number from 4 to 10, at $0.10 a second), or by the model it names
 // (model "2", text-to-motion 2.0 at $0.03 a second, each take seeded from seed on, with
-// foot_ik), with looped (seconds) for
+// foot_ik), or for a walk or run by Uthana's locomotion (model "loco", $0.02 a second: speed,
+// strides, style or a list of styles, one a take; no prompt), with looped (seconds) for
 // a clip Uthana closes into a loop itself, easing its end into its start over that long, kept
 // whole. Its takes are GLBs; a take already made is never made again (each is paid for), so
 // --samples N makes more. What each cost, by the account's credit, is printed and kept in
@@ -47,7 +48,8 @@ import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { balance, character, download, looped, motion } from "../uthana/uthana.ts";
+import { balance, character, download, locomotion, looped, motion } from "../uthana/uthana.ts";
+import { Refused } from "../uthana/carry.ts";
 import { Glb, posed } from "./glb.ts";
 import { armsInBody, shaped, skinOf } from "./skin.ts";
 import { BAR, stance, stanceLine } from "./stance.ts";
@@ -68,13 +70,22 @@ type Entry = {
   prompt: string; speed: number; seconds: number; seed: number; take?: number; samples?: number;
   still?: boolean; loop?: [number, number]; busy?: boolean; way?: number; once?: boolean; span?: [number, number];
   speeds?: [number, number][]; travels?: boolean;
-  source?: "uthana"; looped?: number; motion?: string; model?: "1" | "2" | "3"; foot_ik?: boolean;
+  source?: "uthana"; looped?: number; motion?: string; model?: "1" | "2" | "3" | "loco"; foot_ik?: boolean;
+  style?: string | string[]; strides?: number;
 };
 
 /** A take of an Uthana entry: the motion made, its prompt, the model and seed that made it, the
  * one looped from it, the dollars both cost, and how high its feet were lifted onto our ground
  * (uthana/carry.ts `lift`, m). */
-type Made = { motion: string; prompt?: string; model?: string; seed?: number; looped?: string; dollars: number; lift?: number };
+type Made = { motion: string; prompt?: string; model?: string; seed?: number; style?: string; looped?: string; dollars: number; lift?: number };
+
+/** What makes take `n` of a locomotion entry (model "loco", Uthana's locomotion 1.0): the
+ * entry's speed, its stride pairs (5, the most, so made_clips.py has strides past the take's
+ * first second to choose from), and its style, or the nth of its styles. */
+export function locoArgs(entry: Pick<Entry, "speed" | "strides" | "style">, n: number) {
+  const styles = [entry.style ?? "neutral_male_a"].flat();
+  return { speed: entry.speed, strides: entry.strides ?? 5, style: styles[n % styles.length] };
+}
 
 /** What makes take `n` of an Uthana entry: its model (3.0 unless it says) and, for the models
  * that take one (1.0 and 2.0), a seed a take on from the entry's, and its foot IK. */
@@ -91,7 +102,8 @@ export function wanted(samples: number, made: (n: number) => boolean): number[] 
 
 /** Makes the Uthana takes of `entry` that are missing, each at `file(n)`; returns their log. */
 async function uthanaTakes(entry: Entry, samples: number, file: (n: number) => string, log: string): Promise<Record<number, Made>> {
-  uthanaArgs(entry, 0);
+  const loco = entry.model === "loco";
+  if (!loco) uthanaArgs(entry, 0);
   const made: Record<number, Made> = existsSync(log) ? JSON.parse(readFileSync(log, "utf8")) : {};
   // The log's folder first: a take paid for is written down before anything else can fail.
   mkdirSync(dirname(log), { recursive: true });
@@ -102,8 +114,14 @@ async function uthanaTakes(entry: Entry, samples: number, file: (n: number) => s
     // but not looped yet is looped.
     if (!made[n] || (entry.looped && !made[n].looped)) {
       const before = await balance();
-      const how = uthanaArgs(entry, n);
-      made[n] ??= { motion: await motion(entry.prompt, { ...how, character: id }), prompt: entry.prompt, model: how.model, ...(how.seed === undefined ? {} : { seed: how.seed }), dollars: 0 };
+      if (loco) {
+        // Uthana's locomotion: a walk or run at the entry's speed in a style, no prompt.
+        const how = locoArgs(entry, n);
+        made[n] ??= { motion: await locomotion(id, how), model: "loco", style: how.style, dollars: 0 };
+      } else {
+        const how = uthanaArgs(entry, n);
+        made[n] ??= { motion: await motion(entry.prompt, { ...how, character: id }), prompt: entry.prompt, model: how.model, ...(how.seed === undefined ? {} : { seed: how.seed }), dollars: 0 };
+      }
       save();
       if (entry.looped && !made[n].looped) made[n].looped = await looped(id, made[n].motion, entry.looped);
       const after = await balance();
@@ -111,10 +129,16 @@ async function uthanaTakes(entry: Entry, samples: number, file: (n: number) => s
       save();
       console.log(`take ${n}: Uthana motion ${made[n].motion}${made[n].looped ? `, looped ${made[n].looped}` : ""}, $${made[n].dollars} (left $${after.toFixed(2)})`);
     }
-    // Carried onto our body and checked against Uthana's reference; a take that does not stand is refused.
-    const { lift } = await download(made[n].looped ?? made[n].motion, file(n), { fps: String(FPS), inPlace: false });
-    made[n].lift = Math.round(lift * 10000) / 10000;
-    save();
+    // Carried onto our body and checked against Uthana's reference; a take that does not stand
+    // is refused, said, and the next take made.
+    try {
+      const { lift } = await download(made[n].looped ?? made[n].motion, file(n), { fps: String(FPS), inPlace: false });
+      made[n].lift = Math.round(lift * 10000) / 10000;
+      save();
+    } catch (e) {
+      if (!(e instanceof Refused)) throw e;
+      console.log(`take ${n}: ✗ ${e.message}`);
+    }
   }
   return made;
 }
