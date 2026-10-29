@@ -205,21 +205,20 @@ pub(crate) fn profile_folder(profile: &str) -> &str {
 /// Plays the tech demo as a person would: the sandbox's play experiment, with its save
 /// kept between runs. Under WSL the Windows build runs, in a copy of its own, so a
 /// scripted test running at the same time does not get in the way. Its log, with the
-/// other GPU runs beside it, ends in the checkout's `logs/` (`session`).
+/// other GPU runs beside it, ends in the checkout's `logs/` (`session`). It is the release
+/// build (D581): the debug build loaded in 25 s, not 15, and drew a frame in 13.5 ms, not 10.
 pub(crate) fn play(args: &[String]) -> bool {
     let mut game: Vec<String> = vec!["--experiment".into(), "play".into()];
     game.extend(args.iter().cloned());
     cook();
     if on_wsl() {
-        let mut ours: Vec<String> = ["-p", "terra_sandbox", "--copy", "play", "--"]
+        let mut ours: Vec<String> = ["-p", "terra_sandbox", "--release", "--copy", "play", "--"]
             .map(String::from)
             .to_vec();
         ours.extend(game);
         return launch(&ours, true);
     }
-    let mut cargo = vec!["run", "-p", "terra_sandbox"];
-    cargo.extend(crate::tasks::sandbox::dev_features("terra_sandbox"));
-    cargo.push("--");
+    let mut cargo = vec!["run", "--release", "-p", "terra_sandbox", "--"];
     cargo.extend(game.iter().map(String::as_str));
     crate::session::play(&root().join("logs"), || run("cargo", &cargo))
 }

@@ -641,6 +641,7 @@ Checks, developer tools, languages and the repository.
 | [D576](decisions/D576.md) | Every build logs what ran long in a freeze; a session's report is written by the game | Tech | Agent | Leaning | A frame recorder in `terra_world`, a `tracing` layer… |
 | [D577](decisions/D577.md) | Tracy is the profiler for the detail | Tech | Agent | Decided | A `tracy` feature on `terra_sandbox`… |
 | [D578](decisions/D578.md) | A play benchmark measures the load and the freezes of a walk | Tech | Agent | Decided | `cargo xtask bench` gets a scene timed from the… |
+| [D581](decisions/D581.md) | `make play` runs the release build | Tech | Agent | Decided | `cargo xtask play` (`make play`, `yard`) builds and runs… |
 
 ## Superseded and rejected
 
