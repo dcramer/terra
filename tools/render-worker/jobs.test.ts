@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { benchHold, boxSettings, buildAhead, chooseWorker, cleanCommands, collected, commandKey, config, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, incrementalIce, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
+import { benchHold, boxSettings, buildAhead, chooseWorker, cleanCommands, collected, commandKey, config, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, rustcIce, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -527,27 +527,57 @@ Caused by:
   process didn't exit successfully: \`rustc --crate-name terra_folk --edition=2024 crates/terra_folk/src/lib.rs -C incremental=${target}/release/incremental -C strip=debuginfo\` (exit status: 101)`;
 
 test("rustc crashing in its incremental cache names the crate and the folder its rustc used", () => {
-  const ice = incrementalIce(ICE_LOG("/box/slots/3/target"), "/box/slots/3/target");
+  const ice = rustcIce(ICE_LOG("/box/slots/3/target"), "/box/slots/3/target");
   assert.deepEqual(ice, {
     why: "rustc panicked in <rustc_middle::dep_graph::serialized::SerializedDepGraph>::decode",
+    cache: true,
     crates: ["terra_folk"],
     dirs: ["/box/slots/3/target/release/incremental"],
   });
   const list = () => ["terra_folk-1br3qhgka38wn", "terra_folk-1j6p413myu8dy", "terra_folk_x-02a72n5hq7z0c", "terra_world-0hom6yfkb85ag"];
   assert.deepEqual(incrementalClears(ice!, list), ["/box/slots/3/target/release/incremental/terra_folk-1br3qhgka38wn", "/box/slots/3/target/release/incremental/terra_folk-1j6p413myu8dy"], "the crate's sessions, not a longer name's");
   // A folder outside the slot's target is never named; with none left, release's and dev's.
-  const elsewhere = incrementalIce(ICE_LOG("/other/target"), "/box/slots/3/target");
+  const elsewhere = rustcIce(ICE_LOG("/other/target"), "/box/slots/3/target");
   assert.deepEqual(elsewhere?.dirs, ["/box/slots/3/target/debug/incremental", "/box/slots/3/target/release/incremental"]);
   // No crate named: the folders whole.
-  const unnamed = incrementalIce(ICE_LOG("/t").replace(/error: could not compile.*/, ""), "/t");
+  const unnamed = rustcIce(ICE_LOG("/t").replace(/error: could not compile.*/, ""), "/t");
   assert.deepEqual(incrementalClears(unnamed!, list), ["/t/release/incremental"]);
 });
 
-test("an ICE elsewhere in rustc, or a failure that is no ICE, is not the incremental cache's", () => {
-  const typeck = "  12:  0x1 - rustc_hir_typeck[ab]::check\nerror: the compiler unexpectedly panicked. This is a bug\nerror: could not compile `terra_world`";
-  assert.equal(incrementalIce(typeck, "/t"), undefined, "an ICE in the type checker is a rustc bug the code hits: running it again would not help");
-  assert.equal(incrementalIce("error[E0308]: mismatched types\nerror: could not compile `terra_world`", "/t"), undefined);
-  assert.equal(incrementalIce("note: rustc_incremental was mentioned\nerror: could not compile `terra_world`", "/t"), undefined, "no ICE, no retry");
+// Slot 1's crash on 2026-10-29 (job 20261029-023426-a1cb-patch, a script's cargo build, so no
+// rustc command line), cut to its telling lines; CARGO_INCREMENTAL=0 built it.
+const QUERY_ICE_LOG = `thread 'rustc' panicked at compiler/rustc_middle/src/query/plumbing.rs:331:9:
+  18:     0x772aa7d7ac30 - rustc_query_impl[bdb42d22f02e134a]::query_impl::needs_drop_raw::execute_query_incr::__rust_end_short_backtrace
+  19:     0x772aa896b825 - rustc_codegen_ssa[20a34f9232644acf]::mir::codegen_mir::<rustc_codegen_llvm[49149b7e7b12cc7]::builder::GenericBuilder>
+
+error: the compiler unexpectedly panicked. This is a bug
+
+note: rustc 1.97.1 (8bab26f4f 2026-07-14) running on x86_64-unknown-linux-gnu
+
+note: compiler flags: --crate-type lib -C opt-level=3 -C embed-bitcode=no -C incremental=[REDACTED] -C strip=debuginfo
+
+query stack during panic:
+#0 [is_copy_raw] computing whether \`bevy_ptr::MovingPtr<'_, core::mem::maybe_uninit::MaybeUninit<pooling::Mote>>\` is \`Copy\`
+#1 [needs_drop_raw] computing whether \`bevy_ptr::MovingPtr<'_, core::mem::maybe_uninit::MaybeUninit<pooling::Mote>>\` needs drop
+end of query stack
+error: could not compile \`terra_folk\` (lib) due to 1 previous error`;
+
+test("any ICE is rustc's crash, named by its query, by where it panicked, or plainly", () => {
+  assert.deepEqual(rustcIce(QUERY_ICE_LOG, "/box/slots/1/target"), {
+    why: "rustc panicked in its is_copy_raw query, computing whether `bevy_ptr::MovingPtr<'_, core::mem::maybe_uninit::MaybeUninit<pooling::Mote>>` is `Copy`",
+    cache: false,
+    crates: ["terra_folk"],
+    dirs: ["/box/slots/1/target/debug/incremental", "/box/slots/1/target/release/incremental"],
+  });
+  const typeck = "thread 'rustc' panicked at compiler/rustc_hir_typeck/src/lib.rs:12:5:\n  12:  0x1 - rustc_hir_typeck[ab]::check\nerror: the compiler unexpectedly panicked. This is a bug\nerror: could not compile `terra_world`";
+  assert.deepEqual(rustcIce(typeck, "/t"), { why: "rustc panicked at compiler/rustc_hir_typeck/src/lib.rs:12:5", cache: false, crates: ["terra_world"], dirs: ["/t/debug/incremental", "/t/release/incremental"] });
+  assert.equal(rustcIce("error: internal compiler error: no type for node\nerror: could not compile `terra_world`", "/t")?.why, "rustc panicked");
+});
+
+test("a failure that is no ICE is not rustc's crash", () => {
+  assert.equal(rustcIce("error[E0308]: mismatched types\nerror: could not compile `terra_world`", "/t"), undefined);
+  assert.equal(rustcIce("note: rustc_incremental was mentioned\n#0 [is_copy_raw] computing\nerror: could not compile `terra_world`", "/t"), undefined, "no ICE, no retry");
+  assert.equal(rustcIce("thread 'main' panicked at crates/terra_folk/src/lib.rs:3:1:\nerror: test failed", "/t"), undefined, "the game panicking is no ICE");
 });
 
 test("the workspace's packages come from its members' manifests", () => {

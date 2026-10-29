@@ -13,7 +13,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSyn
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
 import { Display } from "./display.ts";
-import { boxSettings, classOf, cleanCommands, collected, displayPlan, expired, incrementalClears, incrementalIce, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
+import { boxSettings, classOf, cleanCommands, collected, displayPlan, expired, incrementalClears, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, rustcIce, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -175,22 +175,33 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
       const from = statSync(logFile).size;
       let code = await run(cmd, src, env, log, r);
       const failed = code !== 0 && code !== 124 && (step.run || step.build) && !r.cancelled;
-      // rustc crashing on the slot's incremental cache (an ICE in rustc_incremental) is the
-      // cache's fault: its sessions of the crates named are removed and the step runs once more
+      // rustc crashing (any ICE) is often its incremental state's fault, a corrupt session or
+      // a query answered from it: the crates' sessions are removed and the step runs once more
       // without incremental, so a cache that breaks again cannot fail it twice.
-      const ice = failed && !iced ? incrementalIce(since(logFile, from), join(src, "target")) : undefined;
+      const ice = failed && !iced ? rustcIce(since(logFile, from), join(src, "target")) : undefined;
       if (ice) {
         const gone = incrementalClears(ice, (d) => (existsSync(d) ? readdirSync(d) : []));
         const named = ice.crates.length ? ice.crates.join(", ") : "every crate";
-        iced = `rustc crashed on slot ${slot}'s incremental cache of ${named}: removed it and ran it again with CARGO_INCREMENTAL=0`;
+        iced = ice.cache
+          ? `rustc crashed on slot ${slot}'s incremental cache of ${named}: removed it and ran it again with CARGO_INCREMENTAL=0`
+          : `rustc crashed (an ICE) on slot ${slot} building ${named}: removed its incremental sessions and ran it again with CARGO_INCREMENTAL=0`;
+        const sessions = `${named}'s incremental sessions (${gone.length ? gone.map((p) => relative(src, p)).join(", ") : "none left"})`;
         note(
-          `rustc crashed on its incremental cache (${ice.why}), not on the code: removing ${named}'s incremental sessions (${gone.length ? gone.map((p) => relative(src, p)).join(", ") : "none left"}) and running it again with CARGO_INCREMENTAL=0. ` +
-            `Nothing to do: the next incremental build makes the cache anew. If the run below crashes too, the toolchain is at fault, not the cache (reinstall it on the box with rustup).`,
+          ice.cache
+            ? `rustc crashed on its incremental cache (${ice.why}), not on the code: removing ${sessions} and running it again with CARGO_INCREMENTAL=0. ` +
+                `Nothing to do: the next incremental build makes the cache anew. If the run below crashes too, the toolchain is at fault, not the cache (reinstall it on the box with rustup).`
+            : `rustc crashed, an internal compiler error (${ice.why}), which an incremental build can hit where one without incremental does not: removing ${sessions} and running it again with CARGO_INCREMENTAL=0. ` +
+                `If the run below crashes too, it is a rustc bug the code hits, not the slot: work round it in the code or on another toolchain, with the query stack above.`,
         );
         for (const p of gone) rmSync(p, { recursive: true, force: true });
         if (!r.cancelled) {
           note(`${step.what} again, CARGO_INCREMENTAL=0: ${step.cmd.join(" ")}`);
+          const again = statSync(logFile).size;
           code = await run(cmd, src, { ...env, CARGO_INCREMENTAL: "0" }, log, r);
+          if (code !== 0 && !r.cancelled && rustcIce(since(logFile, again), join(src, "target"))) {
+            iced += "; it crashed again without incremental, a rustc bug the code hits, not the slot";
+            note("rustc crashed again with CARGO_INCREMENTAL=0: a rustc bug the code hits, not the slot's cache; work round it in the code or on another toolchain");
+          }
         }
       }
       // A build that broke on the slot's stale artifacts (a link error naming a workspace

@@ -248,6 +248,33 @@ process.exit(101);`;
   const failed = await runJob(b, first()!);
   assert.equal(failed.state, "failed");
   assert.equal(readFileSync(join(b.jobs, failed.id, "out/job.log"), "utf8").match(/render-worker: run again/g)?.length, 1, "one retry");
+  assert.match(failed.note ?? "", /it crashed again without incremental, a rustc bug the code hits, not the slot/);
+});
+
+test("any rustc ICE clears the crate's sessions of both profiles and runs once more without incremental", async () => {
+  // A script's cargo build crashing in a query, as slot 1's terra_folk did on 2026-10-29: no
+  // rustc command line shows, so release's and dev's folders are cleared of the crate.
+  const crash = `if (process.env.CARGO_INCREMENTAL === "0") { console.log("built"); process.exit(0); }
+console.log("  18:     0x7 - rustc_query_impl[bd]::query_impl::needs_drop_raw::execute_query_incr");
+console.log("error: the compiler unexpectedly panicked. This is a bug");
+console.log("query stack during panic:");
+console.log("#0 [is_copy_raw] computing whether \`bevy_ptr::MovingPtr<'_, pooling::Mote>\` is \`Copy\`");
+console.log("error: could not compile \`terra_folk\` (lib) due to 1 previous error");
+process.exit(101);`;
+  const target = join(slotDir(b, 1), "target");
+  for (const d of ["release/incremental/terra_folk-1br3qhgka38wn", "debug/incremental/terra_folk-0aa", "release/incremental/terra_world-0hom6yfkb85ag"]) mkdirSync(join(target, d, "s-1"), { recursive: true });
+  const queued = submit(r, agent, job({ command: ["node", "-e", crash] }));
+  assert.ok("id" in queued);
+  const done = await runJob(b, first()!);
+  assert.equal(done.state, "done", done.note);
+  assert.match(done.note ?? "", /rustc crashed \(an ICE\) on slot 1 building terra_folk: removed its incremental sessions and ran it again with CARGO_INCREMENTAL=0/);
+  const jobLog = readFileSync(join(b.jobs, done.id, "out/job.log"), "utf8");
+  assert.match(jobLog, /render-worker: rustc crashed, an internal compiler error \(rustc panicked in its is_copy_raw query, computing whether `bevy_ptr::MovingPtr<'_, pooling::Mote>` is `Copy`\)/);
+  assert.match(jobLog, /removing terra_folk's incremental sessions \(target\/debug\/incremental\/terra_folk-0aa, target\/release\/incremental\/terra_folk-1br3qhgka38wn\)/);
+  assert.match(jobLog, /render-worker: run again, CARGO_INCREMENTAL=0: [\s\S]*built/);
+  assert.deepEqual(readdirSync(join(target, "debug/incremental")), []);
+  const left = readdirSync(join(target, "release/incremental"));
+  assert.ok(left.includes("terra_world-0hom6yfkb85ag") && !left.some((d) => d.startsWith("terra_folk-")), `only the crashed crate's sessions go: ${left}`);
 });
 
 test("a job's commit takes the LFS objects its pointers name to the box; one found nowhere fails", () => {

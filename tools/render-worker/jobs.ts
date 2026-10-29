@@ -748,26 +748,31 @@ export function staleBuild(output: string, workspace: Iterable<string>, registry
 export const cleanCommands = (s: StaleBuild): string[][] =>
   s.profiles.map((profile) => ["cargo", "clean", ...(profile === "release" ? ["--release"] : []), ...s.packages.flatMap((p) => ["-p", p])]);
 
-// ---- A corrupt incremental cache, cleared and built without it ----
+// ---- rustc crashing (an ICE): its incremental sessions cleared, built without them ----
 
-/// A failed run whose rustc panicked in its incremental cache (an internal compiler error
-/// with rustc_incremental's frames, as `SerializedDepGraph::decode` reading a session it cannot
-/// parse): what said so, the crates that failed to compile (their names as in rustc's
-/// `incremental/<crate>-<hash>` folders), and the incremental folders their rustc used, all
-/// under the slot's target.
-export type IncrementalIce = { why: string; crates: string[]; dirs: string[] };
+/// A failed run whose rustc panicked (an internal compiler error): what said so, whether the
+/// panic was in reading the incremental cache itself (rustc_incremental's frames, as
+/// `SerializedDepGraph::decode` on a session it cannot parse), the crates that failed to
+/// compile (their names as in rustc's `incremental/<crate>-<hash>` folders), and the
+/// incremental folders their rustc used, all under the slot's target.
+export type RustcIce = { why: string; cache: boolean; crates: string[]; dirs: string[] };
 
 const ICE = /the compiler unexpectedly panicked|error: internal compiler error/;
 const INCREMENTAL_FRAME = /rustc_incremental\b|dep_graph::serialized|SerializedDepGraph/;
 
-/// Whether a run step's output is rustc crashing on its incremental cache, not on the code:
-/// an ICE whose backtrace passes through rustc_incremental. The folders are the
-/// `-C incremental=` paths of the failed rustc commands that lie under `target`; when none
-/// shows, release's and dev's. Undefined for any other failure, an ICE elsewhere included.
-export function incrementalIce(output: string, target: string): IncrementalIce | undefined {
+/// Whether a run step's output is rustc crashing, an ICE. Any ICE counts, not only one in
+/// rustc_incremental: a query rustc answers from its incremental state can panic where a build
+/// without it does not (slot 1's terra_folk on 2026-10-29: `is_copy_raw` over
+/// `bevy_ptr::MovingPtr<MaybeUninit<pooling::Mote>>` under `execute_query_incr`, built with
+/// CARGO_INCREMENTAL=0), so one more run without incremental is worth its build. The folders
+/// are the `-C incremental=` paths of the failed rustc commands that lie under `target`; when
+/// none shows, release's and dev's. Undefined for any failure that is no ICE.
+export function rustcIce(output: string, target: string): RustcIce | undefined {
   if (!ICE.test(output)) return undefined;
-  const frame = output.split("\n").find((l) => INCREMENTAL_FRAME.test(l));
-  if (!frame) return undefined;
+  const lines = output.split("\n");
+  const frame = lines.find((l) => INCREMENTAL_FRAME.test(l));
+  const query = lines.map((l) => l.match(/^#0 \[(\w+)\] (.*)$/)).find((m) => m);
+  const at = lines.map((l) => l.match(/^thread '[^']*' panicked at (\S+)/)).find((m) => m);
   const crates = new Set([...output.matchAll(/could not compile `([A-Za-z0-9_-]+)`/g)].map((m) => m[1].replace(/-/g, "_")));
   const dirs = new Set<string>();
   for (const m of output.matchAll(/-C incremental=(\/[^\s`'"]+)/g)) {
@@ -775,14 +780,19 @@ export function incrementalIce(output: string, target: string): IncrementalIce |
     if (d.startsWith(`${target}/`) && !d.split("/").includes("..")) dirs.add(d);
   }
   if (!dirs.size) for (const p of ["release", "debug"]) dirs.add(`${target}/${p}/incremental`);
-  const why = `rustc panicked in ${frame.replace(/^\s*\d+:\s*(0x[0-9a-f]+\s*-\s*)?/, "").replace(/\[[0-9a-f]+\]/g, "").trim().slice(0, 120)}`;
-  return { why, crates: [...crates].sort(), dirs: [...dirs].sort() };
+  const why = frame
+    ? `rustc panicked in ${frame.replace(/^\s*\d+:\s*(0x[0-9a-f]+\s*-\s*)?/, "").replace(/\[[0-9a-f]+\]/g, "").trim().slice(0, 120)}`
+    : query
+      ? `rustc panicked in its ${query[1]} query, ${query[2].trim().slice(0, 140)}`
+      : at
+        ? `rustc panicked at ${at[1].replace(/:$/, "")}`
+        : "rustc panicked";
+  return { why, cache: !!frame, crates: [...crates].sort(), dirs: [...dirs].sort() };
 }
 
-/// What to remove for an incremental ICE: each named crate's sessions (`<crate>-<hash>`) in
-/// each folder, through `list` (a folder in, its entries out); every folder whole when no crate
-/// is named.
-export function incrementalClears(ice: IncrementalIce, list: (dir: string) => string[]): string[] {
+/// What to remove for an ICE: each named crate's sessions (`<crate>-<hash>`) in each folder,
+/// through `list` (a folder in, its entries out); every folder whole when no crate is named.
+export function incrementalClears(ice: RustcIce, list: (dir: string) => string[]): string[] {
   if (!ice.crates.length) return [...ice.dirs];
   return ice.dirs.flatMap((d) =>
     list(d)
