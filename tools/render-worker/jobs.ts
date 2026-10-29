@@ -6,8 +6,10 @@
 export type State = "queued" | "running" | "done" | "failed" | "cancelled";
 
 /// What a job takes of the box: `cpu` a slot (builds, tests, lints), `gpu` a slot and a share
-/// of the card (renders; at most TERRA_RENDER_GPU_SLOTS at once), `bench` the box alone.
-export type Class = "cpu" | "gpu" | "bench";
+/// of the card (renders; at most TERRA_RENDER_GPU_SLOTS at once), `bench` the box alone,
+/// `check` (the push hook's `cargo xtask check`) a slot like a CPU job, but one that may start
+/// while the box drains for a bench, so long as the drain still waits on other jobs (`plan`).
+export type Class = "cpu" | "gpu" | "bench" | "check";
 
 export type Job = {
   id: string;
@@ -222,13 +224,16 @@ const CPU_XTASK = ["check", "sizes", "seed", "decision"];
 const CPU_CARGO = ["build", "check", "clippy", "doc", "fmt", "test", "tree"];
 
 /// A job's class from its command, `--gpu` or `--cpu` overriding: a bench (`cargo xtask bench`,
-/// `cargo xtask gpu bench`) always has the box alone; cargo's builds, tests and lints, and
-/// `cargo xtask check`, are CPU; anything else (a trailer, the sandbox, a script) may draw.
+/// `cargo xtask gpu bench`) always has the box alone; the push hook's check (`cargo xtask
+/// check`, the command itself and not `--all`'s tests, `--cpu` or not) is a check; cargo's
+/// builds, tests and lints, and `cargo xtask check --all`, are CPU; anything else (a trailer,
+/// the sandbox, a script) may draw.
 export function jobClass(command: string[], flag?: "cpu" | "gpu"): Class {
   const cargo = command.indexOf("cargo");
   const words = command.slice(cargo + 1).filter((w) => !w.startsWith("-") && !w.startsWith("+"));
   const xtask = cargo >= 0 && words[0] === "xtask";
   if (xtask && (words[1] === "bench" || (words[1] === "gpu" && words[2] === "bench"))) return "bench";
+  if (cargo === 0 && xtask && words[1] === "check" && !command.includes("--all") && flag !== "gpu") return "check";
   if (flag) return flag;
   if (cargo < 0) return "gpu";
   if (xtask) return CPU_XTASK.includes(words[1]) ? "cpu" : "gpu";
@@ -243,6 +248,9 @@ export const benchPhase = (job: Pick<Job, "phase">) => job.phase ?? "timed";
 
 /// Whether a running job holds the box alone: a bench in its timed run.
 const alone = (job: Job) => classOf(job) === "bench" && benchPhase(job) === "timed";
+
+/// A job that takes only cores, no card: a CPU job or a check.
+const cpuLike = (job: Pick<Job, "class" | "command" | "kind">) => ["cpu", "check"].includes(classOf(job));
 
 // ---- Which worker takes a job ----
 
@@ -357,14 +365,14 @@ export function estimator(jobs: Job[]): Estimate {
     }
     const run = { ms: ended - Date.parse(j.started), done: j.state === "done", ended };
     add(commandKey(j), run);
-    if (classOf(j) === "cpu" && j.kind === "run") cpu.push(run);
+    if (cpuLike(j) && j.kind === "run") cpu.push(run);
   }
   for (const list of runs.values()) list.sort((a, b) => b.ended - a.ended).splice(ESTIMATE_FROM);
   const cpuLong = cpu.length ? Math.max(...cpu.sort((a, b) => b.ended - a.ended).slice(0, CPU_FROM).map((r) => r.ms)) : undefined;
   return (job, side) => {
     const list = runs.get(commandKey(job)) ?? [];
     if (side === "long") {
-      const long = list.length ? Math.max(...list.map((r) => r.ms)) : classOf(job) === "cpu" && job.kind === "run" ? cpuLong : undefined;
+      const long = list.length ? Math.max(...list.map((r) => r.ms)) : cpuLike(job) && job.kind === "run" ? cpuLong : undefined;
       return long === undefined ? undefined : Math.min(long, job.minutes * 60_000);
     }
     const done = list.filter((r) => r.done);
@@ -414,7 +422,7 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
   // The bench building or built ahead (one at a time), else the first queued.
   const held = running.find((j) => classOf(j) === "bench");
   const others = running.filter((j) => j !== held);
-  let gpu = others.filter((j) => classOf(j) !== "cpu").length;
+  let gpu = others.filter((j) => !cpuLike(j)).length;
   const benches = queued.filter((j) => classOf(j) === "bench").sort((a, b) => a.id.localeCompare(b.id));
   const bench = held ?? benches[0];
   const pinned = (j: Job) => (j.slot && j.slot <= s.slots ? j.slot : undefined);
@@ -434,6 +442,12 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
   const built = (j: Job, from: number) => Math.max(now, from + (est({ ...j, phase: "prep" }, "short") ?? 0));
   let until = !bench ? Infinity : Math.max(drainEnd(others, now, est), held?.phase === "prep" && held.started ? built(held, Date.parse(held.started)) : now);
   let why: string | undefined = bench ? "a bench waits for the box to empty" : undefined;
+  // A check (the push hook's) behind the bench starts whatever its length while the box still
+  // waits on a job that is not a check: it is a few minutes against a drain of up to hours
+  // (estimates miss a long render), and the bench goes once the checks running end. Never
+  // beside the timed run: one beside it, even on the cores the bench does not take, slowed
+  // crypt's frames 27% (D445).
+  const draining = others.some((j) => classOf(j) !== "check");
   for (const job of queued) {
     const c = classOf(job);
     if (c === "bench") {
@@ -450,7 +464,7 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
     }
     // The bench goes ahead of the jobs queued before it on the box empty for it.
     if (bench && first && job.id.localeCompare(bench.id) < 0) continue;
-    if (bench && job.id.localeCompare(bench.id) > 0) {
+    if (bench && job.id.localeCompare(bench.id) > 0 && !(c === "check" && draining)) {
       const long = est(job, "long");
       if (long === undefined || now + long > until) continue;
     }
@@ -517,7 +531,7 @@ export function benchHold(jobs: Job[], now: Date): string[] {
   const behind = queued.filter((j) => classOf(j) !== "bench");
   if (behind.length) {
     const n = (c: Class) => behind.filter((j) => classOf(j) === c).length;
-    out.push(`  waiting behind it: ${behind.length} job${behind.length === 1 ? "" : "s"} (${n("gpu")} GPU, ${n("cpu")} CPU), the oldest ${behind[0].id} for ${ago(behind[0].queued, now)}`);
+    out.push(`  waiting behind it: ${behind.length} job${behind.length === 1 ? "" : "s"} (${n("gpu")} GPU, ${n("cpu") + n("check")} CPU), the oldest ${behind[0].id} for ${ago(behind[0].queued, now)}`);
   }
   return out;
 }
@@ -574,7 +588,7 @@ export function jobEnv(env: Record<string, string | undefined>, home: string, id
 /// Whether a job needs a display: winit's event loop wants one even offscreen, so every GPU job
 /// and bench, and any sandbox run (a `--cpu` one too). Warm builds never open one.
 export function needsDisplay(job: Pick<Job, "class" | "command" | "kind">): boolean {
-  return job.kind === "run" && (classOf(job) !== "cpu" || job.command.some((w) => w === "sandbox" || w.includes("terra_sandbox")));
+  return job.kind === "run" && (!cpuLike(job) || job.command.some((w) => w === "sandbox" || w.includes("terra_sandbox")));
 }
 
 /// How the box gives jobs a display. TERRA_RENDER_DISPLAY (`:1`) fixes one. Unset or empty: the

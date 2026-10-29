@@ -98,7 +98,12 @@ test("a job's class: from its command unless --gpu or --cpu says; a bench always
   assert.equal(jobClass(["cargo", "test", "-p", "terra_gen"]), "cpu");
   assert.equal(jobClass(["cargo", "+nightly", "clippy", "--workspace"]), "cpu");
   assert.equal(jobClass(["cargo", "-q", "check"]), "cpu");
-  assert.equal(jobClass(["cargo", "xtask", "check", "--base", "abc"]), "cpu");
+  // The push hook's check is a check, --cpu (as remote-check.ts asks) or not; --all's tests are not.
+  assert.equal(jobClass(["cargo", "xtask", "check", "--base", "abc"]), "check");
+  assert.equal(jobClass(["cargo", "xtask", "check", "--base", "abc"], "cpu"), "check");
+  assert.equal(jobClass(["cargo", "xtask", "check", "--all"]), "cpu");
+  assert.equal(jobClass(["cargo", "xtask", "check"], "gpu"), "gpu");
+  assert.equal(jobClass(["sh", "-c", "cargo xtask check"]), "gpu", "only the command itself");
   assert.equal(jobClass(["node", "tools/sandbox/film.ts"]), "gpu", "anything else may draw");
   assert.equal(jobClass(["node", "x.ts"], "cpu"), "cpu");
   assert.equal(jobClass(["cargo", "test"], "gpu"), "gpu");
@@ -202,6 +207,19 @@ test("while the box drains for a bench, only jobs that will be over before it ha
   assert.deepEqual(plan([...history, film, building, ...behind], s4, T0 + 31 * 60_000).start, []);
   // A running job of a kind never run gives no end to fill up to.
   assert.deepEqual(plan([...history, { ...film, command: ["node", "other.ts"] }, building, ...behind], s4, T0 + 5 * 60_000).start, []);
+  // A push check starts whatever its length while the film still runs, past its shortest run
+  // too, or of a kind never run; a CPU job of its length does not.
+  const check = at(7, "cargo xtask check --base abc", { class: "check" });
+  assert.deepEqual(ids(plan([...history, film, building, ...behind, check], s4, T0 + 31 * 60_000)), ["cargo xtask check --base abc"]);
+  assert.deepEqual(ids(plan([...history, { ...film, command: ["node", "other.ts"] }, building, check], s4, T0 + 5 * 60_000)), ["cargo xtask check --base abc"]);
+  // Once only checks hold the box, the built bench waits for them, and no new check starts.
+  const checking = { ...check, state: "running" as const, started: iso(30), slot: 3 };
+  const ready = { ...building, phase: "ready" as const, prepared: iso(4) };
+  const next = at(8, "cargo xtask check --base def", { class: "check" });
+  const p2 = plan([...history, checking, ready, next], s4, T0 + 31 * 60_000);
+  assert.equal(p2.go, undefined);
+  assert.deepEqual(p2.start, []);
+  assert.equal(plan([...history, { ...checking, state: "done", ended: iso(31) }, ready, next], s4, T0 + 32 * 60_000).go, ready);
   // A job queued ahead of the bench keeps its turn, however long, and the bench builds after it.
   const ahead = at(0.5, "sh long.sh", { class: "gpu", id: "20261028-120030-0000" });
   assert.deepEqual(ids(plan([...history, film, ahead, bench], s4, T0 + 5 * 60_000)), ["sh long.sh", "cargo xtask bench crypt"]);
@@ -275,7 +293,7 @@ test("a bench builds ahead: what its command will build, before a timed run that
 test("replayed on random queues, a bench never runs beside another job and every job runs", () => {
   let seed = 7;
   const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
-  const kinds: [string, Job["class"], number][] = [["cargo test -p a", "cpu", 1], ["cargo clippy", "cpu", 4], ["sh film.sh", "gpu", 40], ["sh still.sh", "gpu", 3], ["node probe.ts", "gpu", 12], ["cargo xtask bench crypt", "bench", 6], ["cargo xtask bench town", "bench", 20]];
+  const kinds: [string, Job["class"], number][] = [["cargo test -p a", "cpu", 1], ["cargo clippy", "cpu", 4], ["sh film.sh", "gpu", 40], ["sh still.sh", "gpu", 3], ["node probe.ts", "gpu", 12], ["cargo xtask check --base x", "check", 2], ["cargo xtask bench crypt", "bench", 6], ["cargo xtask bench town", "bench", 20]];
   for (let round = 0; round < 20; round++) {
     const jobs: Job[] = [];
     const end = new Map<string, number>();

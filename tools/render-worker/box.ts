@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { doctor } from "./doctor.ts";
-import { ago, benchHold, boxSettings, classOf, ID, type Job, jobId, mayStart, parseEnvFile, plan as planJobs, recentJobs, short, steps, UPDATE_REF } from "./jobs.ts";
+import { ago, benchHold, boxSettings, ID, type Job, jobClass, jobId, mayStart, parseEnvFile, plan as planJobs, recentJobs, short, steps, UPDATE_REF } from "./jobs.ts";
 
 /// `src` and `home` are the single job checkout and HOME from before slots, which slot 1 takes
 /// over (daemon.ts `slotCheckout`).
@@ -106,7 +106,11 @@ function submit(b: Box, text: string): number {
   if (!ID.test(job.id) || !Array.isArray(job.command) || readJob(b, job.id)) return fail(`bad or repeated job ${job.id}`);
   const at = git(b.repo, ["rev-parse", "-q", "--verify", `refs/jobs/${job.id}^{commit}`]).stdout.trim();
   if (at !== job.rev) return fail(`refs/jobs/${job.id} is not ${job.rev.slice(0, 9)} in ${b.repo}; push it first`);
-  writeJob(b, { ...job, kind: "run", class: classOf({ command: job.command, kind: "run", class: ["cpu", "gpu", "bench"].includes(job.class ?? "") ? job.class : undefined }), slot: undefined, state: "queued", queued: new Date().toISOString() });
+  // The class the client asks, but the push hook's check is one whatever it says (an old
+  // client's "cpu" too) and only that command is.
+  const flag = job.class === "cpu" || job.class === "gpu" ? job.class : undefined;
+  const cls = job.class === "bench" ? "bench" : jobClass(job.command, flag);
+  writeJob(b, { ...job, kind: "run", class: cls, slot: undefined, state: "queued", queued: new Date().toISOString() });
   wake(b);
   const d = daemonInfo(b);
   const ahead = listJobs(b).filter((j) => j.id < job.id && j.state === "queued").length;
