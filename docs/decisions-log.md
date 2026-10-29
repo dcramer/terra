@@ -1075,3 +1075,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-10-29**: D577 added (by the agent, technical): Tracy 0.14.1, which the pinned Bevy's `trace_tracy` speaks, is the profiler for the detail, live or a capped capture.
 - **2026-10-29**: D578 added (by the agent, technical): a play benchmark, `play-walk`, measures a warm load and a walk's freezes from the program's start, ratcheted with the other scenes.
 - **2026-10-29**: D579 and D580 raised (Open, for the developers): the game's own front screen and its worlds; how long a load may take (recommended 10 s warm).
+- **2026-10-29**: D188 amended (by the agent, technical; perf round 2): `cargo xtask play` and `yard` run the cook first and, under WSL, copy it to the Windows build's cache (`%LOCALAPPDATA%\terra\cooked`); nothing had run it, so play drew every picture uncooked. Debug build on the developer's save: load 29.5 to 25.1 s, GPU peak 4,107 to 1,856 MiB.

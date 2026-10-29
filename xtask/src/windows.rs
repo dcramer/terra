@@ -209,6 +209,7 @@ pub(crate) fn profile_folder(profile: &str) -> &str {
 pub(crate) fn play(args: &[String]) -> bool {
     let mut game: Vec<String> = vec!["--experiment".into(), "play".into()];
     game.extend(args.iter().cloned());
+    cook();
     if on_wsl() {
         let mut ours: Vec<String> = ["-p", "terra_sandbox", "--copy", "play", "--"]
             .map(String::from)
@@ -221,6 +222,68 @@ pub(crate) fn play(args: &[String]) -> bool {
     cargo.push("--");
     cargo.extend(game.iter().map(String::as_str));
     crate::session::play(&root().join("logs"), || run("cargo", &cargo))
+}
+
+/// Cooks the textures (D188, `cargo xtask cook`) so the game played draws them cooked: read
+/// from the source, every model's and material's picture was mipmapped on the CPU at load
+/// (5.1 s of the developer's 25 to 30 s) and went to the GPU uncompressed, as nothing ran the
+/// cook. Under WSL the Windows build reads its own cache (`%LOCALAPPDATA%\terra\cooked`,
+/// `terra_core::cooked::cache_folder`), so what is cooked is mirrored there. What is cooked
+/// already is kept on both sides, so a launch with nothing new takes about a second. A cook
+/// that fails is said and the game plays from the source, as on a fresh checkout.
+fn cook() {
+    if !crate::stage::build(&["run", "-q", "--release", "-p", "terra_bake"]) {
+        eprintln!(
+            "  The game plays with its textures read as made, slower to load; `cargo xtask cook` shows why the cook failed (D188)."
+        );
+        return;
+    }
+    if !on_wsl() {
+        return;
+    }
+    let from = crate::session::cache_folder().join("cooked");
+    let Some(to) = windows_folder("LOCALAPPDATA").map(|local| local.join("terra").join("cooked"))
+    else {
+        eprintln!(
+            "✗ cook: could not find the Windows %LOCALAPPDATA% to copy the cooked textures to; the Windows build reads them as made. Is Windows interop enabled?"
+        );
+        return;
+    };
+    match mirror_cooked(&from, &to) {
+        Ok(0) => {}
+        Ok(copied) => println!("cook: {copied} cooked files copied to {}", to.display()),
+        Err(error) => eprintln!(
+            "✗ cook: copying the cooked textures to {} failed ({error}); the Windows build reads those missing as made. Run `cargo xtask play` again.",
+            to.display()
+        ),
+    }
+}
+
+/// Copies to `to` each cooked file of `from` it lacks; says how many. A file's name is the
+/// key of the bytes it was cooked from (`terra_core::cooked`), so one there is never stale and
+/// none is removed: other checkouts' keys stay. Each is written beside its name and renamed,
+/// so a game or a second copy running at once never reads half a file.
+fn mirror_cooked(from: &Path, to: &Path) -> std::io::Result<usize> {
+    std::fs::create_dir_all(to)?;
+    let mut copied = 0;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let target = to.join(&name);
+        if !entry.file_type()?.is_file()
+            || name.to_string_lossy().ends_with(".part")
+            || target
+                .metadata()
+                .is_ok_and(|t| t.len() == entry.metadata().map_or(0, |m| m.len()))
+        {
+            continue;
+        }
+        let part = to.join(format!("{}.part", name.to_string_lossy()));
+        std::fs::copy(entry.path(), &part)?;
+        std::fs::rename(&part, &target)?;
+        copied += 1;
+    }
+    Ok(copied)
 }
 
 /// Plays the yard, the flat test level for working on building (`--level yard`).
@@ -302,6 +365,12 @@ fn children(dir: &Path) -> Vec<PathBuf> {
 
 /// The Windows temp folder, as a path WSL can use.
 pub(crate) fn windows_temp() -> Option<PathBuf> {
+    windows_folder("TEMP")
+}
+
+/// A folder Windows names in an environment variable (`TEMP`, `LOCALAPPDATA`), as a path WSL
+/// can use.
+fn windows_folder(variable: &str) -> Option<PathBuf> {
     let run_from = |program: &str, args: &[&str]| {
         let out = Command::new(program)
             .args(args)
@@ -314,7 +383,7 @@ pub(crate) fn windows_temp() -> Option<PathBuf> {
             .success()
             .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
-    let windows_path = run_from("cmd.exe", &["/c", "echo %TEMP%"])?;
+    let windows_path = run_from("cmd.exe", &["/c", &format!("echo %{variable}%")])?;
     run_from("wslpath", &["-u", &windows_path]).map(PathBuf::from)
 }
 
@@ -444,6 +513,38 @@ mod tests {
         write("three", 3600);
         assert!(copy_changed(&from, &to).unwrap(), "another size");
         assert_eq!(std::fs::read_to_string(&to).unwrap(), "three");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_cooked_files_missing_are_copied_and_the_rest_kept() {
+        let dir = std::env::temp_dir().join(format!("xtask-mirror-cooked-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (from, to) = (dir.join("linux"), dir.join("windows"));
+        std::fs::create_dir_all(&from).unwrap();
+        std::fs::create_dir_all(&to).unwrap();
+        std::fs::write(from.join("a.ktx2"), "cooked a").unwrap();
+        std::fs::write(from.join("b.glb"), "cooked b").unwrap();
+        // A file the cook is still writing is not copied.
+        std::fs::write(from.join("c.ktx2.part"), "half").unwrap();
+        // Another checkout's key, and one cut short by a copy that stopped.
+        std::fs::write(to.join("other.ktx2"), "theirs").unwrap();
+        std::fs::write(to.join("b.glb"), "cut").unwrap();
+        assert_eq!(mirror_cooked(&from, &to).unwrap(), 2, "a missing, b short");
+        assert_eq!(
+            std::fs::read_to_string(to.join("a.ktx2")).unwrap(),
+            "cooked a"
+        );
+        assert_eq!(
+            std::fs::read_to_string(to.join("b.glb")).unwrap(),
+            "cooked b"
+        );
+        assert!(
+            to.join("other.ktx2").exists(),
+            "another checkout's key stays"
+        );
+        assert!(!to.join("c.ktx2.part").exists() && !to.join("c.ktx2").exists());
+        assert_eq!(mirror_cooked(&from, &to).unwrap(), 0, "nothing new");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

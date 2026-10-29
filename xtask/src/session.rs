@@ -140,11 +140,16 @@ fn runs_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("TERRA_GPU_DIR") {
         return PathBuf::from(dir).join("runs");
     }
-    let cache = std::env::var_os("XDG_CACHE_HOME")
+    cache_folder().join("gpu").join("runs")
+}
+
+/// Terra's folder in the user's cache, as the game names it (`terra_core::cooked::cache_folder`).
+pub(crate) fn cache_folder() -> PathBuf {
+    std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
-        .unwrap_or_default();
-    cache.join("terra").join("gpu").join("runs")
+        .unwrap_or_default()
+        .join("terra")
 }
 
 fn runs_on_file(dir: &Path) -> Vec<Run> {
