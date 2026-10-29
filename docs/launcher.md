@@ -70,7 +70,7 @@ A **frame recorder** in `terra_world`: a `tracing` layer that takes the enter an
 
 This is what `tools/sandbox/spans.ts` prints from a Chrome trace, computed while the game runs, so no trace file is written at all. Once the report agrees with spans.ts on one recorded run, the `trace` feature (Chrome), the trace recipe and spans.ts are deleted (clean as you go).
 
-**One command**: `cargo xtask profile [--walk <scene>|--play] [--seconds 60] [--build optimised|debug] [-- game args]` builds, runs the play experiment on the real GPU (under WSL the Windows build, as `play` does), either walking a bench scene's route by script or played by a person until they quit, capped at `--seconds`, and prints the report's head and its path. An agent hands the path on; the developer reads ten lines.
+**One command** (planned, step 4): an xtask task `profile [--walk <scene>|--play] [--seconds 60] [--build optimised|debug] [-- game args]` builds, runs the play experiment on the real GPU (under WSL the Windows build, as `play` does), either walking a bench scene's route by script or played by a person until they quit, capped at `--seconds`, and prints the report's head and its path. An agent hands the path on; the developer reads ten lines.
 
 ### Live: Tracy (D577)
 
@@ -80,7 +80,7 @@ This is what `tools/sandbox/spans.ts` prints from a Chrome trace, computed while
 - **Licence**: Tracy is BSD 3-clause and `rust_tracy_client` MIT or Apache 2.0, both allowed (D196). Its client is compiled only into profiling builds, never into one we hand out; one that is would carry Tracy's notice.
 - **The build**: a `tracy` feature on `terra_sandbox` (`bevy/trace_tracy`, with `trace` already in every build). Not `trace_tracy_memory`, whose allocation tracking slows every allocation.
 - **Live**: the launcher's `Profiling: tracy` builds with it, starts the game and `tracy-profiler.exe -a 127.0.0.1`, which connects at once. Under WSL both run in Windows and meet on Windows' own localhost, so WSL's network is not in the way.
-- **A capture**: `cargo xtask profile --tracy` runs `tracy-capture -o <file>.tracy -s <seconds>` beside the game (Windows' own under WSL), the length capped, in Tracy's compressed format, far smaller than Chrome's JSON; `tracy-csvexport` turns it into a zone a line for an agent. Context switches and sampling need the game run as administrator on Windows; spans do not.
+- **A capture** (planned, step 5): the `profile` task's `--tracy` runs `tracy-capture -o <file>.tracy -s <seconds>` beside the game (Windows' own under WSL), the length capped, in Tracy's compressed format, far smaller than Chrome's JSON; `tracy-csvexport` turns it into a zone a line for an agent. Context switches and sampling need the game run as administrator on Windows; spans do not.
 - A Tracy build's times run a little long; judge a change by the benchmark, never by Tracy.
 
 ### The play benchmark (D578)
@@ -108,7 +108,7 @@ Each step lands alone, checked, in order:
 1. **The hitch log**: the frame recorder, `bevy/trace` in every build, freeze lines, the hitch warning's system and the load's steps; tests on the recorder's buffers and report without a GPU; the cost measured on `world` and `town300` and stated in the commit (D576 to Decided or to schedules only).
 2. **The play benchmark**: `play-walk`, load and freeze columns, the cook-cache check, a first baseline recorded; the debug-against-optimised A/B written to the perf handoff.
 3. **The launcher**, once the cook and build change to `make play` has landed: the menu, remembered launch, flags, the confirmation before a new game; `make` shortcuts unchanged.
-4. **The session report and `cargo xtask profile`**: the report checked against spans.ts on one recorded run, then the Chrome `trace` feature, its recipe and spans.ts deleted; the launcher's `Profiling: report`.
+4. **The session report and the `profile` task**: the report checked against spans.ts on one recorded run, then the Chrome `trace` feature, its recipe and spans.ts deleted; the launcher's `Profiling: report`.
 5. **Tracy**: the `tracy` feature, the fetched profiler and its doctor check, `profile --tracy`'s capped capture, the launcher's `Profiling: tracy`.
 
 ## Open questions for the developers (D579, D580)
