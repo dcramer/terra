@@ -185,7 +185,7 @@ fn load(
     mut commands: Commands,
     path: Option<Res<SavePath>>,
     mut clock: ResMut<Clock>,
-    options: Res<crate::shell::Options>,
+    options: Res<Options>,
     mut planet: ResMut<Planet>,
     models: Res<Models>,
     (builds, recipes): (Res<Builds>, Res<Recipes>),
