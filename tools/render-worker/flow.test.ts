@@ -211,6 +211,37 @@ process.exit(101);`;
   }
 });
 
+test("rustc crashing on the slot's incremental cache clears the crate's sessions and runs once more without incremental", async () => {
+  // A build that crashes in rustc_incremental while it runs incrementally, as slot 3's did.
+  const crash = `const fs = require("fs");
+if (process.env.CARGO_INCREMENTAL === "0") { console.log("built"); process.exit(0); }
+const inc = process.env.CARGO_TARGET_DIR + "/release/incremental";
+console.log("  13:     0x7 - rustc_incremental[42cf]::persist::load::setup_dep_graph");
+console.log("error: the compiler unexpectedly panicked. This is a bug");
+console.log("error: could not compile \`terra_folk\` (lib)");
+console.log("  process didn't exit successfully: \`rustc --crate-name terra_folk -C incremental=" + inc + "\` (exit status: 101)");
+process.exit(101);`;
+  const inc = join(slotDir(b, 1), "target/release/incremental");
+  for (const d of ["terra_folk-1br3qhgka38wn", "terra_folk_x-02a72n5hq7z0c", "terra_world-0hom6yfkb85ag"]) mkdirSync(join(inc, d, "s-1"), { recursive: true });
+  const queued = submit(r, agent, job({ command: ["node", "-e", crash] }));
+  assert.ok("id" in queued);
+  const done = await runJob(b, first()!);
+  assert.equal(done.state, "done", done.note);
+  assert.match(done.note ?? "", /rustc crashed on slot 1's incremental cache of terra_folk: removed it and ran it again with CARGO_INCREMENTAL=0/);
+  const jobLog = readFileSync(join(b.jobs, done.id, "out/job.log"), "utf8");
+  assert.match(jobLog, /render-worker: rustc crashed on its incremental cache \(rustc panicked in rustc_incremental::persist::load::setup_dep_graph\), not on the code: removing terra_folk's incremental sessions \(target\/release\/incremental\/terra_folk-1br3qhgka38wn\)/);
+  assert.match(jobLog, /render-worker: run again, CARGO_INCREMENTAL=0: [\s\S]*built/);
+  assert.deepEqual(readdirSync(inc).sort(), ["terra_folk_x-02a72n5hq7z0c", "terra_world-0hom6yfkb85ag"], "only the crashed crate's sessions go");
+
+  // Crashing without incremental too: run once more only, and failed.
+  const always = crash.replace('process.env.CARGO_INCREMENTAL === "0"', "false");
+  const stuck = submit(r, agent, job({ command: ["node", "-e", always] }));
+  assert.ok("id" in stuck);
+  const failed = await runJob(b, first()!);
+  assert.equal(failed.state, "failed");
+  assert.equal(readFileSync(join(b.jobs, failed.id, "out/job.log"), "utf8").match(/render-worker: run again/g)?.length, 1, "one retry");
+});
+
 test("a job's commit takes the LFS objects its pointers name to the box; one found nowhere fails", () => {
   const pointer = (oid: string) => `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize 5\n`;
   const at = (root: string, oid: string) => join(root, ".git/lfs/objects", oid.slice(0, 2), oid.slice(2, 4), oid);

@@ -13,7 +13,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSyn
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
 import { Display } from "./display.ts";
-import { boxSettings, classOf, cleanCommands, collected, displayPlan, expired, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
+import { boxSettings, classOf, cleanCommands, collected, displayPlan, expired, incrementalClears, incrementalIce, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -127,6 +127,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   let startedMs = Date.now();
   let ran = false;
   let cleaned = "";
+  let iced = "";
   const home = slotHome(b, slot);
   let src = slotDir(b, slot);
   try {
@@ -170,10 +171,29 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
       const env = step.run || step.build || step.cmd[0] === "cargo" ? jobEnv(process.env, home, job.id, join(src, "target"), dpy) : process.env;
       const from = statSync(logFile).size;
       let code = await run(cmd, src, env, log, r);
+      const failed = code !== 0 && code !== 124 && (step.run || step.build) && !r.cancelled;
+      // rustc crashing on the slot's incremental cache (an ICE in rustc_incremental) is the
+      // cache's fault: its sessions of the crates named are removed and the step runs once more
+      // without incremental, so a cache that breaks again cannot fail it twice.
+      const ice = failed && !iced ? incrementalIce(since(logFile, from), join(src, "target")) : undefined;
+      if (ice) {
+        const gone = incrementalClears(ice, (d) => (existsSync(d) ? readdirSync(d) : []));
+        const named = ice.crates.length ? ice.crates.join(", ") : "every crate";
+        iced = `rustc crashed on slot ${slot}'s incremental cache of ${named}: removed it and ran it again with CARGO_INCREMENTAL=0`;
+        note(
+          `rustc crashed on its incremental cache (${ice.why}), not on the code: removing ${named}'s incremental sessions (${gone.length ? gone.map((p) => relative(src, p)).join(", ") : "none left"}) and running it again with CARGO_INCREMENTAL=0. ` +
+            `Nothing to do: the next incremental build makes the cache anew. If the run below crashes too, the toolchain is at fault, not the cache (reinstall it on the box with rustup).`,
+        );
+        for (const p of gone) rmSync(p, { recursive: true, force: true });
+        if (!r.cancelled) {
+          note(`${step.what} again, CARGO_INCREMENTAL=0: ${step.cmd.join(" ")}`);
+          code = await run(cmd, src, { ...env, CARGO_INCREMENTAL: "0" }, log, r);
+        }
+      }
       // A build that broke on the slot's stale artifacts (a link error naming a workspace
       // crate, or a registry crate's corrupt rlib) is cleaned of them and run once more, as
       // build farms retry a cache's fault.
-      const stale = code !== 0 && code !== 124 && (step.run || step.build) && !r.cancelled && !cleaned ? staleBuild(since(logFile, from), packagesOf(src), lockedOf(src)) : undefined;
+      const stale = failed && !ice && code !== 0 && !r.cancelled && !cleaned ? staleBuild(since(logFile, from), packagesOf(src), lockedOf(src)) : undefined;
       if (stale) {
         cleaned = stale.packages.join(", ");
         note(`stale build (${stale.why}): cleaning ${cleaned} and running it again`);
@@ -213,6 +233,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   }
   closeSync(log);
   if (cleaned) why += `; cleaned a stale build of ${cleaned} and ran it again`;
+  if (iced) why += `; ${iced}`;
   job = { ...job, state: r.cancelled ? "cancelled" : exit ? "failed" : "done", exit, ended: new Date().toISOString(), note: why };
   writeJob(b, job);
   return job;

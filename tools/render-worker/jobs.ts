@@ -746,6 +746,49 @@ export function staleBuild(output: string, workspace: Iterable<string>, registry
 export const cleanCommands = (s: StaleBuild): string[][] =>
   s.profiles.map((profile) => ["cargo", "clean", ...(profile === "release" ? ["--release"] : []), ...s.packages.flatMap((p) => ["-p", p])]);
 
+// ---- A corrupt incremental cache, cleared and built without it ----
+
+/// A failed run whose rustc panicked in its incremental cache (an internal compiler error
+/// with rustc_incremental's frames, as `SerializedDepGraph::decode` reading a session it cannot
+/// parse): what said so, the crates that failed to compile (their names as in rustc's
+/// `incremental/<crate>-<hash>` folders), and the incremental folders their rustc used, all
+/// under the slot's target.
+export type IncrementalIce = { why: string; crates: string[]; dirs: string[] };
+
+const ICE = /the compiler unexpectedly panicked|error: internal compiler error/;
+const INCREMENTAL_FRAME = /rustc_incremental\b|dep_graph::serialized|SerializedDepGraph/;
+
+/// Whether a run step's output is rustc crashing on its incremental cache, not on the code:
+/// an ICE whose backtrace passes through rustc_incremental. The folders are the
+/// `-C incremental=` paths of the failed rustc commands that lie under `target`; when none
+/// shows, release's and dev's. Undefined for any other failure, an ICE elsewhere included.
+export function incrementalIce(output: string, target: string): IncrementalIce | undefined {
+  if (!ICE.test(output)) return undefined;
+  const frame = output.split("\n").find((l) => INCREMENTAL_FRAME.test(l));
+  if (!frame) return undefined;
+  const crates = new Set([...output.matchAll(/could not compile `([A-Za-z0-9_-]+)`/g)].map((m) => m[1].replace(/-/g, "_")));
+  const dirs = new Set<string>();
+  for (const m of output.matchAll(/-C incremental=(\/[^\s`'"]+)/g)) {
+    const d = m[1].replace(/\/+$/, "");
+    if (d.startsWith(`${target}/`) && !d.split("/").includes("..")) dirs.add(d);
+  }
+  if (!dirs.size) for (const p of ["release", "debug"]) dirs.add(`${target}/${p}/incremental`);
+  const why = `rustc panicked in ${frame.replace(/^\s*\d+:\s*(0x[0-9a-f]+\s*-\s*)?/, "").replace(/\[[0-9a-f]+\]/g, "").trim().slice(0, 120)}`;
+  return { why, crates: [...crates].sort(), dirs: [...dirs].sort() };
+}
+
+/// What to remove for an incremental ICE: each named crate's sessions (`<crate>-<hash>`) in
+/// each folder, through `list` (a folder in, its entries out); every folder whole when no crate
+/// is named.
+export function incrementalClears(ice: IncrementalIce, list: (dir: string) => string[]): string[] {
+  if (!ice.crates.length) return [...ice.dirs];
+  return ice.dirs.flatMap((d) =>
+    list(d)
+      .filter((name) => ice.crates.some((c) => name.startsWith(`${c}-`) && !name.slice(c.length + 1).includes("-")))
+      .map((name) => `${d}/${name}`),
+  );
+}
+
 /// The workspace's package names from the root Cargo.toml's members (`dir/*` or `dir`) and
 /// each member's `[package] name`, read through `read` (a path in, its text or undefined out)
 /// and `list` (a folder in, its entries out).
