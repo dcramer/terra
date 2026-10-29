@@ -192,6 +192,15 @@ fn air_seen(direction: vec3<f32>) -> vec3<f32> {
 // How much of the land's own colour the haze leaves each ridge of the far land, nearest first
 // (their shapes are far_land.wesl's).
 const RIDGE_LEFT: array<f32, 4> = array<f32, 4>(0.55, 0.34, 0.18, 0.08);
+// By day a range's ridges stand past the planet's horizon, the nearest at its distance and
+// each farther one this share of it again, and keep no more of their own colour than the
+// ground's aerial perspective leaves there (ground.wesl's AERIAL_FROM_M and AERIAL_M, the
+// clear day's): keeping 70 to 99 percent of its dark forest's colour, the nearest stood near
+// black past the lake's far shore while the peaks 4 to 8 km off before it kept about 60 percent,
+// a void band every judge named (mountains round 3).
+const RIDGE_APART: f32 = 0.6;
+const LAND_AERIAL_FROM_M: f32 = 250.0;
+const LAND_AERIAL_M: f32 = 9000.0;
 // After sunset, how bright the haze before the far land is against the horizon's band, and
 // how far it is turned toward the zenith's blue.
 const EARTH_SHADOW: f32 = 0.6;
@@ -246,6 +255,8 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
     let round = around(direction, up);
     let east = normalize(cross(up, vec3<f32>(0.0, 0.0, 1.0)));
     let level = normalize(direction - up * lift + east * 1.0e-5);
+    // The planet's horizon's distance, past which the ridges stand.
+    let horizon_m = sqrt(2.0 * r * max(length(eye) - r, 0.3));
     // The air just over the horizon: Bevy's tables darken the air's light below it, most of
     // all straight ahead, as if its own ground showed through.
     // After sunset the dusk's own colour there, as the sky draws it just over the horizon
@@ -292,8 +303,12 @@ fn far_land(direction: vec3<f32>, up: vec3<f32>, eye: vec3<f32>, sunlight: vec3<
         // A range's farther ridges sink into the haze faster than a forest's: the nearest
         // keeps most of its dark, the farthest is a shade off the sky, as Flat Iron Lake's
         // ranges in Red Dead Redemption 2 fade layer by layer (lake film r16).
-        let left = min(leaves[k] * (1.0 + 0.8 * sky.far_peaks), 1.0) * mix(1.0, 0.7, deep)
-            * mix(1.0, 1.0 - FAR_FADE * f / f32(RIDGES - 1u), sky.far_peaks);
+        // By day no more than the ground's aerial perspective leaves at the ridge's distance.
+        let ridge_m = horizon_m * (1.0 + RIDGE_APART * f);
+        let aerial_left = exp(-max(ridge_m - LAND_AERIAL_FROM_M, 0.0) / LAND_AERIAL_M);
+        let left = min(min(leaves[k] * (1.0 + 0.8 * sky.far_peaks), 1.0) * mix(1.0, 0.7, deep)
+            * mix(1.0, 1.0 - FAR_FADE * f / f32(RIDGES - 1u), sky.far_peaks),
+            mix(1.0, aerial_left, sky.far_peaks * (1.0 - sky.twilight)));
         // The crowns' light and shade, finer the farther.
         let grain = noise(vec3<f32>(round * (420.0 + 400.0 * f), rise * (420.0 + 400.0 * f) + f * 3.3));
         // A range's high crests hold snow, brighter than its rock and forest under the same
