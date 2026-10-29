@@ -41,7 +41,7 @@ function machine() {
       const [name, at, ms] = line.split(" ");
       return { name, at, ms: Number(ms) };
     });
-  return { run, step, lines, done: () => fs.rmSync(dir, { recursive: true, force: true }) };
+  return { dir, env, run, step, lines, done: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
 const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
@@ -79,6 +79,35 @@ test("a bench waits for the running still, and a still asked for meanwhile waits
   );
   assert.match(l.err, /waits for a benchmark/);
   m.done();
+});
+
+// A run's background process that outlives it keeps the lock's file open, so a bench waits on it:
+// as a cancelled render job's setsid clippy loop held slot 4's lock for 2 h 46 min on 2026-10-29.
+const noProc = (noFlock || (!fs.existsSync("/proc/self/fdinfo") && "no /proc here")) as string | false;
+
+test("a holder left by an ended run is named, with its folder and what to do, by the status and the bench waiting on it", { skip: noProc }, async () => {
+  const m = machine();
+  m.env.TERRA_GPU_OUTSIDE_S = "1";
+  const pidFile = path.join(m.dir, "stray.pid");
+  const left = await m.run(["still", "--", "sh", "-c", `setsid sh -c 'echo $$ > ${pidFile}; exec sleep 30' >/dev/null 2>&1 & while [ ! -s ${pidFile} ]; do sleep 0.05; done`]);
+  assert.equal(left.code, 0, left.err);
+  const stray = Number(fs.readFileSync(pidFile, "utf8"));
+  try {
+    const bench = m.run(["bench", "--", ...m.step("bench", 0)]);
+    await pause(2500);
+    const status = spawnSync(process.execPath, [GPU, "--status"], { env: m.env, encoding: "utf8" });
+    assert.match(status.stdout, new RegExp(`✗ outside: .*gpu\\.lock held outside any run for \\d+s by pid ${stray} \`sleep 30\` in ${process.cwd()}, started by the \`cargo xtask gpu\` run of wrapper pid \\d+, which has ended`));
+    assert.match(status.stdout, new RegExp(`stop it: kill -- -${stray} \\(it and what it started\\)`));
+    process.kill(stray, "SIGTERM");
+    const b = await bench;
+    assert.equal(b.code, 0, b.err);
+    assert.match(b.err, new RegExp(`gpu: ✗ bench waits \\d+s: .*by pid ${stray} \`sleep 30\``), "the bench's log names the holder");
+  } finally {
+    try {
+      process.kill(stray, "SIGKILL");
+    } catch {}
+    m.done();
+  }
 });
 
 test("a silent job that burns CPU runs to its end; a silent sleep is stopped at the limit", async () => {

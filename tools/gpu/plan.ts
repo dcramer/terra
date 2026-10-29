@@ -142,6 +142,72 @@ export class Progress {
   }
 }
 
+// ---- who holds the lock outside any run ------------------------------------------------------
+
+/// How a process's open file holds a lock, from /proc/<pid>/fdinfo/<fd>: the file's `ino:` line
+/// and a `lock:` line for each lock on that open file, a waiter's marked `->`. A process that
+/// inherited the descriptor holds the lock as its taker did: /proc/locks names only the taker,
+/// which may be long dead, as `flock` was when a background loop it started held on.
+export function parseFdinfo(text: string, inode: number): "holds" | "waits" | "open" | null {
+  if (!new RegExp(`^ino:\\s+${inode}$`, "m").test(text)) return null;
+  const locks = text.split("\n").filter((line) => line.startsWith("lock:"));
+  if (locks.some((line) => !line.includes("->"))) return "holds";
+  return locks.length ? "waits" : "open";
+}
+
+/// A process's group and start, clock ticks after boot, from its /proc/<pid>/stat line (fields 5
+/// and 22).
+export function parseStat(stat: string): { pgrp: number; start: number } {
+  const fields = (stat.split(")").pop() ?? "").trim().split(/\s+/);
+  return { pgrp: Number(fields[2]), start: Number(fields[19]) };
+}
+
+/// A process holding the lock, as `--status` and a waiting bench name it.
+export interface Holding {
+  pid: number;
+  pgrp: number;
+  cmd: string;
+  cwd: string;
+  /// How long it has run, ms.
+  ageMs: number;
+  /// The wrapper whose command started it (its TERRA_GPU_JOB) and the render job it ran in
+  /// (TERRA_RENDER_JOB), from its environment.
+  gpuJob?: number;
+  renderJob?: string;
+}
+
+/// A holder outside any run longer than this is named with what to do.
+export const OUTSIDE_MS = 3 * 60000;
+
+/// The holders no live run owns: neither a live run's wrapper or command, nor started by one.
+export function outside(holding: Holding[], runs: { pid: number; child?: number }[], live: (pid: number) => boolean): Holding[] {
+  const ours = new Set(runs.flatMap((r) => [r.pid, r.child ?? 0]));
+  return holding.filter((h) => !ours.has(h.pid) && !(h.gpuJob && ours.has(h.gpuJob) && live(h.gpuJob)));
+}
+
+/// One holder a process group, its oldest (a loop's shell, not the cargo it runs now), with how
+/// many more of its group hold the lock too.
+export function byGroup(holding: Holding[]): (Holding & { others: number })[] {
+  const groups = new Map<number, Holding[]>();
+  for (const h of holding) groups.set(h.pgrp, [...(groups.get(h.pgrp) ?? []), h]);
+  return [...groups.values()].map((g) => ({ ...g.reduce((a, b) => (b.ageMs > a.ageMs ? b : a)), others: g.length - 1 }));
+}
+
+/// What holds the lock outside any run, whose it was, and what to do (D556).
+export function advise(h: Holding & { others?: number }, lock: string): string {
+  const whose = h.gpuJob
+    ? `started by the \`cargo xtask gpu\` run of wrapper pid ${h.gpuJob}, which has ended`
+    : "started outside `cargo xtask gpu` (a game, bench or flock run by hand)";
+  const job = (h.renderJob ? `, in render job ${h.renderJob}` : "") + (h.others ? ` (and ${h.others} more of its process group)` : "");
+  const stop = h.pgrp === h.pid ? `kill -- -${h.pid} (it and what it started)` : `kill ${h.pid}`;
+  return (
+    `${lock} held outside any run for ${age(h.ageMs)} by pid ${h.pid} \`${h.cmd.slice(0, 120)}\` in ${h.cwd || "?"}, ${whose}${job}: ` +
+    `a process a run started in the background keeps the lock's file open after the run ends, and every bench waits on it (D319). ` +
+    `If it is left over from an ended run, stop it: ${stop}${h.renderJob ? ` (if render job ${h.renderJob} has ended, its daemon should have stopped it: see cargo xtask remote-render --status, and --update a daemon older than reap.ts)` : ""}; ` +
+    `if it is a run someone started by hand, wait for it.`
+  );
+}
+
 /// A duration for a person: 40s, 3m10s, 2h05m.
 export function age(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));

@@ -22,6 +22,9 @@ const LOCK = process.env.TERRA_GPU_LOCK || path.join(CACHE, "gpu.lock");
 const WANT = path.join(path.dirname(LOCK), "gpu.want");
 const POLL_MS = 1000;
 const SAY_EVERY_MS = 5 * 60000;
+/// How long a holder no run owns holds the lock before it is named with what to do (plan.ts;
+/// TERRA_GPU_OUTSIDE_S for the tests).
+const OUTSIDE_MS = Number(process.env.TERRA_GPU_OUTSIDE_S) * 1000 || plan.OUTSIDE_MS;
 
 /// A run's file: what is needed to find and describe it.
 interface Run {
@@ -98,6 +101,54 @@ function holders(): plan.Holder[] {
     return [];
   }
 }
+
+/// Every process holding the lock through a descriptor of its file, its own or one it inherited
+/// (/proc/<pid>/fd and fdinfo), with its group, age, folder and the run and render job its
+/// environment names. Empty without /proc.
+function holding(): plan.Holding[] {
+  let ino: number;
+  let real: string;
+  try {
+    if (!PROC) return [];
+    ino = fs.statSync(LOCK).ino;
+    real = fs.realpathSync(LOCK);
+  } catch {
+    return [];
+  }
+  const boot = Date.now() - Number(readText("/proc/uptime").split(" ")[0]) * 1000;
+  const found: plan.Holding[] = [];
+  for (const name of fs.readdirSync("/proc")) {
+    if (!/^\d+$/.test(name)) continue;
+    let fds: string[];
+    try {
+      fds = fs.readdirSync(`/proc/${name}/fd`);
+    } catch {
+      continue;
+    }
+    const opens = (fd: string) => {
+      try {
+        return fs.readlinkSync(`/proc/${name}/fd/${fd}`) === real && plan.parseFdinfo(readText(`/proc/${name}/fdinfo/${fd}`), ino) === "holds";
+      } catch {
+        return false;
+      }
+    };
+    if (!fds.some(opens)) continue;
+    const pid = Number(name);
+    const { pgrp, start } = plan.parseStat(readText(`/proc/${name}/stat`));
+    const env = readText(`/proc/${name}/environ`).split("\0");
+    const value = (key: string) => env.find((e) => e.startsWith(`${key}=`))?.slice(key.length + 1) || undefined;
+    let cwd = "";
+    try {
+      cwd = fs.readlinkSync(`/proc/${name}/cwd`);
+    } catch {}
+    const ageMs = Date.now() - (boot + (start / HZ) * 1000);
+    found.push({ pid, pgrp, cmd: commandOf(pid), cwd, ageMs, gpuJob: Number(value("TERRA_GPU_JOB")) || undefined, renderJob: value("TERRA_RENDER_JOB") });
+  }
+  return found;
+}
+
+/// The lock's holders no live run owns, one a process group.
+const strays = () => plan.byGroup(plan.outside(holding(), runs(), alive));
 
 /// The benchmarks that want the card: a want-file whose wrapper lives (a dead one's is removed),
 /// and anything else waiting for the lock alone (the game's own bench, a `flock -x` by hand).
@@ -189,11 +240,17 @@ function execute(run: Run, stallMin: number, watch: string[]): Promise<number> {
   run.child = child.pid;
   save(run);
   if (run.class === "bench") fs.writeFileSync(want(), String(child.pid));
+  let named = 0;
   const sample = setInterval(() => {
     const now = Date.now();
     if (run.started === undefined) {
       if (flock && holders().some((h) => h.pid === child.pid && h.waiting)) {
         progress.output(now);
+        // Waiting minutes on a holder no run owns: name it and what to do, every 5 minutes.
+        if (now - run.asked >= OUTSIDE_MS && now - named >= SAY_EVERY_MS) {
+          named = now;
+          for (const h of strays().filter((h) => h.ageMs >= OUTSIDE_MS)) say(`✗ ${run.class} waits ${plan.age(now - run.asked)}: ${plan.advise(h, LOCK)}`);
+        }
         return;
       }
       run.started = now;
@@ -290,9 +347,15 @@ function status(): number {
     console.log(`  ${state} ${r.class.padEnd(5)}${out}  pid ${r.pid}  ${path.basename(r.cwd)}  ${r.cmd.join(" ").slice(0, 100)}`);
   }
   const children = new Set(ours.map((r) => r.child));
-  for (const h of holders().filter((h) => !children.has(h.pid))) {
+  // With /proc, holders are read from who has the lock's file open, since /proc/locks names
+  // only the lock's taker, which may be dead while what it started holds on.
+  for (const h of holders().filter((h) => !children.has(h.pid) && (h.waiting || !PROC))) {
     const how = h.waiting ? "waits for gpu.lock alone" : h.write ? "holds gpu.lock alone" : "holds gpu.lock shared";
     console.log(`  outside ${how}  pid ${h.pid}  ${commandOf(h.pid).slice(0, 120)}`);
+  }
+  for (const h of strays()) {
+    if (h.ageMs >= OUTSIDE_MS) console.log(`  ✗ outside: ${plan.advise(h, LOCK)}`);
+    else console.log(`  outside holds gpu.lock ${plan.age(h.ageMs).padStart(6)}  pid ${h.pid}  ${h.cwd}  ${h.cmd.slice(0, 100)}`);
   }
   return 0;
 }

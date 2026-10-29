@@ -1,7 +1,39 @@
 // The GPU wrapper's readings of the machine and its stall rule, on made-up input whose answers are known by hand.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cpuGrowth, descendants, parseCard, parseCpu, parseLocks, parsePmon, parsePs, Progress } from "./plan.ts";
+import { advise, byGroup, cpuGrowth, descendants, type Holding, outside, parseCard, parseCpu, parseFdinfo, parseLocks, parsePmon, parsePs, parseStat, Progress } from "./plan.ts";
+
+test("an open file of the lock holds it, waits for it, or neither, from its fdinfo", () => {
+  const held = "pos:\t0\nflags:\t0100000\nmnt_id:\t64\nino:\t28142848\nlock:\t1: FLOCK  ADVISORY  READ 2036242 00:1c:28142848 0 EOF\n";
+  assert.equal(parseFdinfo(held, 28142848), "holds");
+  assert.equal(parseFdinfo(held, 4), null);
+  assert.equal(parseFdinfo("ino:\t28142848\nlock:\t1: -> FLOCK  ADVISORY  WRITE 9 00:1c:28142848 0 EOF\n", 28142848), "waits");
+  assert.equal(parseFdinfo("pos:\t0\nino:\t28142848\n", 28142848), "open");
+  assert.equal(parseFdinfo("ino:\t281428480\n", 28142848), null);
+});
+
+test("a process's group and start are read from its stat line", () => {
+  const stat = "3345881 (sh) S 1 3345881 3345881 0 -1 4194560 1 2 0 0 3 4 0 0 39 19 1 0 98765432 1000 200 18446744073709551615";
+  assert.deepEqual(parseStat(stat), { pgrp: 3345881, start: 98765432 });
+});
+
+test("a holder outside every live run is named with whose it was and what to do", () => {
+  const loop: Holding = { pid: 3345881, pgrp: 3345881, cmd: "sh -c while :; do cargo clippy; done", cwd: "/w/slots/4", ageMs: 166 * 60000, gpuJob: 500, renderJob: "20261029-083350-269b-patch" };
+  const mine: Holding = { ...loop, pid: 601, pgrp: 601, gpuJob: 600 };
+  const flock: Holding = { ...loop, pid: 700, gpuJob: 600 };
+  const runs = [{ pid: 600, child: 700 }];
+  const live = (pid: number) => pid === 600;
+  assert.deepEqual(outside([loop, mine, flock], runs, live).map((h) => h.pid), [3345881], "a live run's command and what it started are its own");
+  // A run on file whose wrapper died no longer owns what it started.
+  assert.deepEqual(outside([mine], runs, () => false).map((h) => h.pid), [601]);
+  const clippy: Holding = { ...loop, pid: 3399999, cmd: "cargo clippy", ageMs: 60000 };
+  assert.deepEqual(byGroup([clippy, loop, mine]).map((h) => [h.pid, h.others]), [[3345881, 1], [601, 0]], "a group is named by its oldest");
+  const said = advise(loop, "gpu.lock");
+  assert.match(said, /^gpu.lock held outside any run for 2h46m by pid 3345881 `sh -c while/);
+  assert.match(said, /in \/w\/slots\/4, started by the `cargo xtask gpu` run of wrapper pid 500, which has ended, in render job 20261029-083350-269b-patch:/);
+  assert.match(said, /stop it: kill -- -3345881/);
+  assert.match(advise({ ...loop, pgrp: 1, gpuJob: undefined, renderJob: undefined }, "gpu.lock"), /started outside `cargo xtask gpu`.*stop it: kill 3345881; if it is a run someone started by hand, wait for it\.$/);
+});
 
 test("nvidia-smi's card line is read", () => {
   assert.deepEqual(parseCard("10240, 944\n"), { totalMB: 10240, usedMB: 944 });
