@@ -22,7 +22,7 @@ help: ## List these targets
 	@echo
 	@grep -hE '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-8s %s\n", $$1, $$2}'
 	@echo
-	@echo "Pass a task's options with ARGS, e.g. make play ARGS=\"--time 18:00\"."
+	@echo "Pass a task's options with ARGS, e.g. make play ARGS=\"--build debug --time 18:00\" (any skips the menu)."
 	@echo "Every other task: make tools."
 
 # --- Getting a machine ready ----------------------------------------------------------------
@@ -78,17 +78,17 @@ update: ## Get the latest from GitHub, then build it
 
 # --- Everyday --------------------------------------------------------------------------------
 
-play: ## Play the game; your world is kept between runs
+play: ## The launcher: continue, a new game, creative or the yard, and the build; Enter plays the last
 	cargo xtask play $(ARGS)
 
-fresh: ## Play a new game
-	cargo xtask play --fresh $(ARGS)
+fresh: ## Play a new game, replacing your saved one (no menu)
+	cargo xtask play new $(ARGS)
 
 creative: ## Play your world with building free (the stand-in for creative mode, D494)
-	cargo xtask play --free-build $(ARGS)
+	cargo xtask play creative $(ARGS)
 
 yard: ## Play the yard: a flat level for building, free and instant, nothing saved
-	cargo xtask yard $(ARGS)
+	cargo xtask play yard $(ARGS)
 
 doctor: ## Say what this machine is missing, with the command that fixes each
 	cargo xtask doctor

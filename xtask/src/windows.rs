@@ -18,15 +18,15 @@ const COPY_FRESH: Duration = Duration::from_secs(10 * 60);
 pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "play",
-        takes: "[--fresh] [game args]",
-        does: "play the tech demo on the real GPU, wherever you are; --fresh starts a new game",
+        takes: "[continue|new|creative|yard] [--build optimised|debug] [--quality auto|low|medium|high|ultra] [--last] [--menu] [-- game args]",
+        does: "the launcher (D575): in a terminal with nothing given, a menu of what to play and how, the last launch preselected; otherwise play what the flags say on the real GPU, wherever you are",
         group: "Play and check",
-        run: play,
+        run: crate::launcher::play,
     },
     Task {
         name: "yard",
         takes: "[game args]",
-        does: "play the yard, a flat test level for building: nothing on it, building free and instant, nothing saved",
+        does: "play the yard, a flat test level for building: nothing on it, building free and instant, nothing saved (`play yard`)",
         group: "Play and check",
         run: yard,
     },
@@ -205,23 +205,33 @@ pub(crate) fn profile_folder(profile: &str) -> &str {
     }
 }
 
-/// Plays the tech demo as a person would: the sandbox's play experiment, with its save
-/// kept between runs. Under WSL the Windows build runs, in a copy of its own, so a
-/// scripted test running at the same time does not get in the way. Its log, with the
-/// other GPU runs beside it, ends in the checkout's `logs/` (`session`). It is the release
-/// build (D581): the debug build loaded in 25 s, not 15, and drew a frame in 13.5 ms, not 10.
-pub(crate) fn play(args: &[String]) -> bool {
-    let mut game: Vec<String> = vec!["--experiment".into(), "play".into()];
-    game.extend(args.iter().cloned());
+/// Plays the sandbox with `game`'s arguments as a person would, what the launcher chose
+/// (`launcher`). Under WSL the Windows build runs, in a copy of its own, so a scripted test
+/// running at the same time does not get in the way. Its log, with the other GPU runs beside
+/// it, ends in the checkout's `logs/` (`session`). The optimised build is the release
+/// profile, the default (D581): the debug build loaded in 25 s, not 15, and drew a frame in
+/// 13.5 ms, not 10.
+pub(crate) fn start(build: crate::launcher::Build, game: Vec<String>) -> bool {
+    let release = build == crate::launcher::Build::Optimised;
     if on_wsl() {
-        let mut ours: Vec<String> = ["-p", "terra_sandbox", "--release", "--copy", "play", "--"]
+        let mut ours: Vec<String> = ["-p", "terra_sandbox", "--copy", "play"]
             .map(String::from)
             .to_vec();
+        if release {
+            ours.push("--release".into());
+        }
+        ours.push("--".into());
         ours.extend(game);
         return launch(&ours, true);
     }
     cook();
-    let mut cargo = vec!["run", "--release", "-p", "terra_sandbox", "--"];
+    let mut cargo = vec!["run", "-p", "terra_sandbox"];
+    if release {
+        cargo.push("--release");
+    } else {
+        cargo.extend(crate::tasks::sandbox::dev_features("terra_sandbox"));
+    }
+    cargo.push("--");
     cargo.extend(game.iter().map(String::as_str));
     crate::session::play(&root().join("logs"), || run("cargo", &cargo))
 }
@@ -298,11 +308,11 @@ fn mirror_cooked(from: &Path, to: &Path) -> std::io::Result<usize> {
     Ok(copied)
 }
 
-/// Plays the yard, the flat test level for working on building (`--level yard`).
+/// Plays the yard, the flat test level for working on building: the launcher's `play yard`.
 pub(crate) fn yard(args: &[String]) -> bool {
-    let mut game: Vec<String> = vec!["--level".into(), "yard".into()];
-    game.extend(args.iter().cloned());
-    play(&game)
+    let mut ours = vec!["yard".to_string()];
+    ours.extend(args.iter().cloned());
+    crate::launcher::play(&ours)
 }
 
 /// Deletes the staged copies in the Windows temp folder nothing has run from for a day, then

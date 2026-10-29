@@ -9,6 +9,7 @@ mod bench;
 mod build;
 mod check;
 mod doctor;
+mod launcher;
 mod load;
 mod nightly;
 mod primitives;
