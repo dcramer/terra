@@ -1,6 +1,6 @@
 # The launcher and diagnosing performance
 
-Status: the agents' technical design (D575 to D578); build plan steps 1 to 3 built (the frame recorder: schedules in every build, systems behind `hitch-log`; `play-walk`, the launcher without its profiling option), the rest not yet; two design questions for the developers are Open (D579, D580). Tools, so [development.md](development.md) is where each part is used once it lands.
+Status: the agents' technical design (D575 to D578) and the developers' title screen with its worlds (D579, Decided 2026-10-30); build plan steps 1 to 5 built, step 6 (the title screen) being built; the load's budget is Open for the developers (D580). Tools, so [development.md](development.md) is where each part is used once it lands.
 
 The developer, 2026-10-29: `make play` should open a launcher a normal person can use, to continue, start a new game, play creative or the yard, and choose profiling, the build and the quality preset; it remembers the last choice, and scripts and agents drive it by flags (D69). And performance should be easy to diagnose: perf round 1 (`~/.cache/terra-handoff/perf-j1.md`) took a trace build, the Windows build launched by hand (`cargo xtask win --features trace`), a 17 GB Chrome trace grepped down before `tools/sandbox/spans.ts` could read it, and a raised Node heap, to learn that the first frame spent 5.1 s in `terra_world::mipmaps` and that 1 to 3 s freezes every 10 to 20 s in the developer's play never showed in a release run.
 
@@ -21,29 +21,34 @@ We take: a **launch profile** (what to play, build configuration, profiling, qua
 - **Builds run where the code is.** Under WSL the build runs in Linux and the game in Windows; xtask already builds, cooks, stages the copy and starts it (`xtask/src/windows.rs`). A window on the Windows side would have to call back into WSL to build; one in WSL would look foreign and is a second program for macOS and Linux. The terminal works everywhere `make play` does.
 - **One path for people and scripts.** The menu only fills in the flags `cargo xtask play` already takes; whatever it can choose, a flag chooses (D69).
 
-Rejected: a native launcher window (two programs, a WSL bridge, nothing it shows that a terminal cannot); the game's own front screen for the build's choices (too late, see above). The player's choices (continue, new, creative) belong in the game's front screen in the end; that is design and Open (D579). Until then the launcher holds them.
+Rejected: a native launcher window (two programs, a WSL bridge, nothing it shows that a terminal cannot); the game's own front screen for the build's choices (too late, see above). The player's choices are the game's title screen's (D579, [below](#the-title-screen-d579)).
 
-**What it shows.** One screen, the last launch preselected, so Enter alone plays again:
+**What it shows.** One screen of the build's choices, the last ones preselected, so Enter alone plays again, on the game's title screen:
 
 ```
 Terra   main 3f2a1c
 
-  1  Continue      your world, kept between runs        <- last time
-  2  New game      a new world; replaces your saved one
-  3  Creative      your world, building free (D494)
-  4  The yard      a flat level for building, nothing saved
+  Build: optimised   Profiling: off      o  change these
 
-  Build: optimised   Quality: auto (high)   Profiling: off      o  change these
-
-Enter plays Continue.  1-4 choose, o options, q quit.
+Enter plays: the game opens on its title screen.  o options, q quit.
 ```
 
-- **Options** (`o`): build `debug` or `optimised`; quality `auto` (the GPU's preset, D239), `low`, `medium`, `high` or `ultra`; profiling `off`, `report` (a session report, below) or `live` (a Tracy build with Tracy's profiler open beside the game, and the report too; shown `live (Tracy)`). A choice that needs a build not yet made says so and how long the first takes (a Tracy build compiles Bevy again, minutes; switching back is a link).
-- **New game** asks once before it deletes the save (`--fresh` removes `save.ron`, `terra_game::play::save`).
-- **Remembered** in `~/.config/terra/launch.json` (outside the repository, one per machine): the last choice and options. No named profiles until someone asks for a second.
-- **Flags**: `cargo xtask play [continue|new|creative|yard] [--build debug|optimised] [--quality <preset>] [--profiling off|report|live] [--last] [-- game args]`. Any choice on the command line, or no terminal (stdin not a TTY, as for agents and scripts), skips the menu; a choice left out is the default, not the remembered one, so a script's run never depends on what someone played last. `--last` plays the remembered launch; `--menu` shows the menu anyway. `ARGS` passes through `make` as now.
-- **Make**: `make play` is `cargo xtask play $(ARGS)` as today; `make fresh`, `make creative` and `make yard` stay as one-line shortcuts that pass their choice (D387: the Makefile holds no logic).
+- **Options** (`o`): build `debug` or `optimised`; profiling `off`, `report` (a session report, below) or `live` (a Tracy build with Tracy's profiler open beside the game, and the report too; shown `live (Tracy)`). A choice that needs a build not yet made says so and how long the first takes (a Tracy build compiles Bevy again, minutes; switching back is a link). The quality preset is the game's own setting (its options menu), so the launcher no longer asks; `--quality` still goes to the game.
+- **Remembered** in `~/.config/terra/launch.json` (outside the repository, one per machine): the last options. No named profiles until someone asks for a second.
+- **Flags**: `cargo xtask play [continue|new|creative|yard] [--build debug|optimised] [--profiling off|report|live] [--last] [-- game args]`. A word chooses what to play and goes straight in, no title screen: `continue` the world played last, `new` a new world, `creative` the creative world played last (a new one if there is none), `yard` the yard. With no word the game opens on its title screen in a terminal and plays `continue` with none (stdin not a TTY, as for agents and scripts). Any argument, or no terminal, skips the menu; an option left out is the default, not the remembered one, so a script's run never depends on what someone played last. `--last` plays the remembered options; `--menu` shows the menu anyway. `ARGS` passes through `make` as now.
+- **Make**: `make play` is `cargo xtask play $(ARGS)` as today; `make fresh`, `make creative` and `make yard` stay as one-line shortcuts that pass their word (D387: the Makefile holds no logic).
 - **Whatever `play` does, the launcher does.** Another job is changing how `make play` cooks textures (D188) and may make it an optimised build by default; the launcher is a menu over that path, so it is built after that lands and takes its default build from it.
+
+## The title screen (D579)
+
+The player's choices live in the game, as in Minecraft, Valheim and Enshrouded, which keep a list of worlds, each made with a name and its mode and deleted only after asking.
+
+- **What it shows**: the world itself behind it, loaded as the first view of a new game is (the meadow by the lake before sunset, the clock held), darkened on the left under a column of choices: **Continue** (the world played last, by name; greyed out when there is none), **Worlds** (the list, the last played first, each with its mode and when it was played: Enter or a click plays it, Delete or its ✕ asks "Delete <name> for good?" before it does), **New world** (a name, filled with the next free "World n", and Survival or Creative, D494, kept with the world; Create plays it), **The yard**, **Settings** (the options menu, D80) and **Quit**.
+- **Input**: mouse and keyboard (arrows or W and S to move, Enter or Space to choose, Esc back, typing into the name). The game has no gamepad support yet; when it gets one, the title screen takes it with the rest.
+- **Worlds on disk**: a folder each under `worlds/` in the player's settings folder, holding the save (`save.ron`, as before) and `world.ron` (its name, mode, when made and last played). The save from before worlds is moved, untouched, into the first world, "My world", the first time the game finds no worlds; no converter (D353).
+- **How a choice plays**: the title screen is a `Screen` between the first load and play, the clock held. A world's save is read only once it is chosen; the game then loads again round where its player stands, as the loading screen does for any screen (D135). A Creative world builds free (`--free-build`'s rule). The yard is another level, so it starts the game again on it.
+- **When it shows**: only when asked, `--title`, which `cargo xtask play` passes when nothing is chosen in a terminal; a run with no `--title` plays as before, so no script, test, bench or agent's run meets it. `--worlds <dir>` keeps a run's worlds elsewhere (a scripted run keeps none without it), and `--world <name>`, `--fresh` (a new world) and `--creative` choose without the screen.
+- **Not yet**: quitting back to the title screen from play (the options menu quits the game), and a seed: the land is one world for now, so a seed would choose nothing.
 
 ## Diagnosing performance
 
@@ -112,9 +117,8 @@ Each step lands alone, checked, in order:
 3. **The launcher** (done 2026-10-29, `xtask/src/launcher.rs`): the menu, remembered launch, flags, the confirmation before a new game; `make` shortcuts unchanged. The profiling option and `--profiling` come with steps 4 and 5, which give it something to choose. A new game is remembered as Continue, so `--last` or Enter after one plays the world it made rather than replacing it again.
 4. **The session report and the `profile` task** (report, task and launcher option built 2026-10-29, `terra_world::recorder::report`, `xtask/src/profile.rs`; on one walk recorded both ways, the report agreed with spans.ts within 2% on each world's update and schedules and named the same slowest frames and systems; the Chrome `trace` feature, its recipe and spans.ts then deleted, so the report is the one way to profile, done): the launcher's `Profiling: report`.
 5. **Tracy** (built 2026-10-29, perf round 10, `xtask/src/tracy.rs`): the `tracy` feature, the fetched profiler and its doctor check, `profile walk --tracy`'s capped capture summarised by `tracy-csvexport`, the launcher's `Profiling: live (Tracy)`.
+6. **The title screen and its worlds** (D579): the worlds on disk and the save moved into the first; the `Title` screen in the play experiment (`terra_game::play::title`); the launcher down to the build's choices, its words going straight in; a scripted run pressing through the title screen into a world and into a new Creative one.
 
-## Open questions for the developers (D579, D580)
+## Open questions for the developers (D580)
 
-- Should the game get its own front screen (title screen) with Continue, New game and Creative, as shipped games have, with the launcher keeping only the build's choices? And should Creative be chosen there, a world's mode (D494), or when a world is made?
-- One world or several: should New game keep the old world rather than replace it?
 - How long may a load take, warm, on the developers' machines (D580)? A budget for the play benchmark, as 13.3 ms is for a frame; recommended 10 s.

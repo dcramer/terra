@@ -131,7 +131,7 @@ Needs, death, the body, the map and options.
 | [D511](decisions/D511.md) | A climb jump | Design | Developers | Decided | Recommended: a lunge of about 1.5 m along the face for a… |
 | [D523](decisions/D523.md) | At the water's edge: wading slows, a swimmer climbs out, breath is shown | Design | Developers | Decided | Wading slows the walk linearly with depth to 60% of a… |
 | [D528](decisions/D528.md) | A runner stops in about two steps | Design | Developers | Decided | A body decelerates at about 15 m/s² (was 40)… |
-| [D579](decisions/D579.md) | The game's front screen | Design | — | Open | Should the game open on a front screen of its own… |
+| [D579](decisions/D579.md) | The game's title screen and its worlds | Design | Developers | Decided | The game opens on a title screen of its own… |
 
 ## Items and crafting
 
