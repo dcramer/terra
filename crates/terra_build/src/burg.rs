@@ -51,8 +51,8 @@ const KEEP_STONE: i32 = 30;
 const KEEP_LACING: i32 = 5;
 
 type Box3 = ([i32; 3], [i32; 3]);
-/// A roof to put up once the walls stand: its footprint, the storey under it, its style, which
-/// way its ridge runs, and its covering.
+/// A roof to put up once the walls stand: its footprint, the layer its lowest cubes lie on
+/// (the first over its walls' tops), its style, which way its ridge runs, and its covering.
 type Roof = (BTreeSet<[i32; 2]>, i32, Style, Option<bool>, Kind);
 
 #[derive(Default)]
@@ -80,10 +80,12 @@ impl Plan {
         self.clear(([x0 + thick, y0, z0 + thick], [x1 - thick, y1, z1 - thick]));
     }
 
+    /// A roof over a box of columns, its lowest cubes on `layer`, the first over its walls'
+    /// tops.
     fn roof(
         &mut self,
         [x0, z0, x1, z1]: [i32; 4],
-        storey: i32,
+        layer: i32,
         style: Style,
         along_x: Option<bool>,
         kind: Kind,
@@ -91,7 +93,7 @@ impl Plan {
         let footprint = (x0..=x1)
             .flat_map(|x| (z0..=z1).map(move |z| [x, z]))
             .collect();
-        self.roofs.push((footprint, storey, style, along_x, kind));
+        self.roofs.push((footprint, layer, style, along_x, kind));
     }
 
     /// Windows a cube wide and two high every `every` cubes along each side of a ring, at
@@ -157,7 +159,10 @@ impl Plan {
         );
         self.ring(jetty, stone, stone + 5, 1, m.beams);
         self.windows(jetty, stone + 2, 1, 4);
-        self.roof(jetty, (stone + 6) / 6 - 1, Style::Hip, None, m.shakes);
+        // On the jetty's walls' tops, whatever the stone's height: laid on the storey a whole
+        // number of them would make it, a stone of 22 or 64 had its roof inside the jetty's
+        // walls, its eaves under them (settlement round 4).
+        self.roof(jetty, stone + STOREY_CUBES, Style::Hip, None, m.shakes);
     }
 
     /// A gatehouse of stone round `[gx0, gz0, gx1, z1]`, three cubes thick to a tower's
@@ -179,16 +184,22 @@ impl Plan {
         );
         self.ring(jetty, TOWER_STONE, TOWER_STONE + 5, 1, m.beams);
         self.windows(jetty, TOWER_STONE + 2, 1, 4);
-        self.roof(jetty, 4, Style::Hip, None, m.shakes);
+        self.roof(
+            jetty,
+            TOWER_STONE + STOREY_CUBES,
+            Style::Hip,
+            None,
+            m.shakes,
+        );
     }
 
     /// Its shortcuts, the roofs last, each over what stands by then.
     fn finish(self) -> Vec<BuildOp> {
         let mut walls = Base::from_shortcuts(&self.ops);
         let mut ops = self.ops;
-        for (footprint, storey, style, along_x, kind) in self.roofs {
+        for (footprint, layer, style, along_x, kind) in self.roofs {
             let height = roofer::field(&footprint, style, along_x);
-            let roofed = roofer::put_up(&walls, &footprint, storey, kind, &height);
+            let roofed = roofer::put_up_on(&walls, &footprint, layer, kind, &height);
             walls.apply_shortcuts(&roofed);
             ops.extend(roofed);
         }
@@ -301,7 +312,7 @@ fn ward(m: Materials, heights: Heights) -> Vec<BuildOp> {
     plan.windows(hall, 8, 1, 4);
     plan.windows(hall, 14, 1, 4);
     plan.clear(([-3, 0, hall[3] - 1], [-2, 3, hall[3]]));
-    plan.roof(hall, 2, Style::Gable, Some(true), m.shakes);
+    plan.roof(hall, 18, Style::Gable, Some(true), m.shakes);
     // Sheds of logs along the east and west walls, under shakes.
     for (sx0, sx1) in [
         (x0 + THICK + 1, x0 + THICK + 7),
@@ -313,7 +324,7 @@ fn ward(m: Materials, heights: Heights) -> Vec<BuildOp> {
             let door = (sz0 + sz1) / 2;
             let face = if sx0 < 0 { sx1 } else { sx0 };
             plan.clear(([face, 0, door], [face, 3, door + 1]));
-            plan.roof(shed, 0, Style::Gable, Some(false), m.shakes);
+            plan.roof(shed, STOREY_CUBES, Style::Gable, Some(false), m.shakes);
         }
     }
     plan.finish()
@@ -468,7 +479,7 @@ fn hoardings(
             }
             plan.roof(
                 [sx0, sz0, sx1, sz1],
-                HIGH / 6,
+                HIGH + STOREY_CUBES,
                 Style::Gable,
                 Some(along_x),
                 m.shakes,
@@ -538,6 +549,33 @@ mod tests {
         assert!(count(M.stone) > 20_000, "{} stone", count(M.stone));
         for kind in [M.beams, M.logs, M.shakes] {
             assert!(count(kind) > 200, "{} of {kind:?}", count(kind));
+        }
+    }
+
+    /// A tower's roof sits on its jetty's walls' tops, whatever the height of its stone: a
+    /// stone not a whole number of storeys high had its roof laid inside the jetty's walls
+    /// (the town's keep, 64, and its wall towers, 22; settlement round 4).
+    #[test]
+    fn a_towers_roof_sits_on_its_jettys_walls() {
+        for stone in [22, TOWER_STONE, KEEP_STONE, CROWN.towers, CROWN.keep] {
+            let mut plan = Plan::default();
+            plan.tower([0, 0], TOWER, TOWER_WALL, stone, LACING, &M);
+            let base = Base::from_shortcuts(&plan.finish());
+            let lowest = base
+                .cubes()
+                .filter(|(_, c)| c.kind == M.shakes)
+                .map(|(at, _)| at.y)
+                .min();
+            let walls_top = base
+                .cubes()
+                .filter(|(_, c)| c.kind == M.beams)
+                .map(|(at, _)| at.y)
+                .max();
+            assert_eq!(
+                (lowest, walls_top),
+                (Some(stone + 6), Some(stone + 5)),
+                "stone {stone}: the roof's lowest cube and the jetty's top"
+            );
         }
     }
 

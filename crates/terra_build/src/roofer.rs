@@ -261,11 +261,29 @@ pub fn put_up(
     kind: crate::Kind,
     height: &dyn Fn(Vec2) -> f32,
 ) -> Vec<crate::BuildOp> {
+    let layer = crate::wall_layer(storey) + crate::STOREY_CUBES;
+    put_up_on(base, footprint, layer, kind, height)
+}
+
+/// [`put_up`] with the roof's lowest cubes on any `layer`, the first over its walls' tops,
+/// for walls not a whole number of storeys high (a tower's jetty over stone of 22 cubes):
+/// the flat roof cleared from a column whose six layers under it hold no wall.
+pub fn put_up_on(
+    base: &crate::Base,
+    footprint: &BTreeSet<[i32; 2]>,
+    layer: i32,
+    kind: crate::Kind,
+    height: &dyn Fn(Vec2) -> f32,
+) -> Vec<crate::BuildOp> {
     use crate::{BuildOp, Cube, Fill, STOREY_CUBES};
-    let layer = crate::wall_layer(storey) + STOREY_CUBES;
     let mut ops = Vec::new();
     for &[x, z] in footprint {
-        if base.filling(IVec3::new(x, storey, z)).is_none() {
+        // As `Base::filling` reads a storey's tile: no cube but a roof's under its top layer.
+        let walled = (layer - STOREY_CUBES..layer - 1).any(|y| {
+            base.cube(IVec3::new(x, y, z))
+                .is_some_and(|cube| !cube.kind.is_roof())
+        });
+        if !walled {
             ops.push(BuildOp::Fill {
                 min: [x, layer - 1, z],
                 max: [x, layer - 1, z],
