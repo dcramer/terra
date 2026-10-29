@@ -75,8 +75,10 @@ fn profile(args: &[String]) -> bool {
     report(build, &game, if walk { "walk" } else { "play" })
 }
 
-/// The game's arguments for a scripted walk of `seconds`: `play-walk`'s new game and route
-/// (D578), offscreen, timed from the start, a sixtieth of a second a frame.
+/// The game's arguments for a scripted walk: `play-walk`'s new game and route (D578),
+/// offscreen, timed from the start, a sixtieth of a second of play a frame, ended by the
+/// recorder `seconds` by the clock after the load, however fast frames are drawn; the
+/// bench's frames, at a thousand a second, only bound it.
 pub(crate) fn walk_args(seconds: u32, extra: &[String]) -> Vec<String> {
     let scene = crate::scenes::SCENES
         .iter()
@@ -85,7 +87,8 @@ pub(crate) fn walk_args(seconds: u32, extra: &[String]) -> Vec<String> {
     let mut game: Vec<String> = scene.iter().map(|arg| arg.to_string()).collect();
     game.extend(extra.iter().cloned());
     game.extend(["--offscreen", "--bench", "--settle", "0", "--bench-frames"].map(String::from));
-    game.push((seconds * 60).to_string());
+    game.push((seconds * 1000).to_string());
+    game.push(format!("--profile-seconds={seconds}"));
     game
 }
 
@@ -176,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn a_walk_is_play_walks_route_timed_from_the_start_for_its_seconds() {
+    fn a_walk_is_play_walks_route_ended_by_the_clock_after_its_seconds() {
         let game = walk_args(30, &["--quality".into(), "low".into()]);
         let joined = game.join(" ");
         assert!(
@@ -184,7 +187,9 @@ mod tests {
             "{joined}"
         );
         assert!(
-            joined.ends_with("--quality low --offscreen --bench --settle 0 --bench-frames 1800"),
+            joined.ends_with(
+                "--quality low --offscreen --bench --settle 0 --bench-frames 30000 --profile-seconds=30"
+            ),
             "{joined}"
         );
     }

@@ -103,6 +103,8 @@ pub fn reporting() -> bool {
     report::asked().is_some()
 }
 
+pub use report::takes;
+
 static OWNERS: AtomicUsize = AtomicUsize::new(0);
 
 struct Shared {
@@ -435,6 +437,7 @@ impl Recorder {
         if let Some(report) = report.as_mut() {
             let totals = self.0.state().totals.clone();
             report.loaded(seconds, &totals, &self.0.names());
+            report.ends = report::seconds().map(|after| self.0.now() + (after * 1e9) as u64);
         }
     }
 
@@ -459,6 +462,7 @@ fn explain(
     recorder: Res<Recorder>,
     frame: Res<FrameCount>,
     adapter: Option<Res<RenderAdapterInfo>>,
+    mut exits: MessageWriter<AppExit>,
 ) {
     recorder.0.drain();
     let slow = recorder.0.slow_frames();
@@ -467,6 +471,10 @@ fn explain(
         .write_report(&about(adapter.as_deref()), |written, now| {
             now.saturating_sub(written) >= report::EVERY_NS
         });
+    let ends = recorder.0.report().as_ref().and_then(|report| report.ends);
+    if ends.is_some_and(|ends| recorder.0.now() >= ends) {
+        exits.write(AppExit::Success);
+    }
     // Frame times mean nothing drawn on the CPU, as `debug` says.
     if adapter.is_some_and(|adapter| format!("{:?}", adapter.device_type) == "Cpu") {
         return;

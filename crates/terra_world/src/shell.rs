@@ -508,8 +508,8 @@ impl Options {
             "--water-mask" => &mut self.water_mask,
             "--flame-matte" => &mut self.flame_matte,
             "--debug-menu" => &mut self.debug_menu,
-            // The session report's file, read by the frame recorder (`recorder::report`, D576).
-            flag if flag.starts_with("--profile-report=") => return true,
+            // The session report's file and length, read by the frame recorder (D576).
+            flag if crate::recorder::takes(flag) => return true,
             _ => return false,
         };
         *on = true;

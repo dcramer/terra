@@ -32,11 +32,26 @@ pub(super) const EVERY_NS: u64 = 10_000_000_000;
 /// The game's argument naming the report's file.
 const FLAG: &str = "--profile-report=";
 
+/// The game's argument ending a reported session that many seconds after the load.
+const SECONDS: &str = "--profile-seconds=";
+
 /// The file `--profile-report=<file>` names, if the game was given it.
 pub fn asked() -> Option<PathBuf> {
     std::env::args()
         .find_map(|arg| arg.strip_prefix(FLAG).map(PathBuf::from))
         .filter(|path| !path.as_os_str().is_empty())
+}
+
+/// Whether `flag` is one of the report's, which the shell leaves to it.
+pub fn takes(flag: &str) -> bool {
+    flag.starts_with(FLAG) || flag.starts_with(SECONDS)
+}
+
+/// How long the session runs after its load, by the clock, if it was given
+/// `--profile-seconds=<seconds>` (`cargo xtask profile walk`, whose frames are a sixtieth
+/// of a second of play however long they take to draw).
+pub(super) fn seconds() -> Option<f64> {
+    std::env::args().find_map(|arg| arg.strip_prefix(SECONDS)?.parse().ok())
 }
 
 /// A histogram of times in nanoseconds: sixteen buckets a power of two (about 4% wide), from
@@ -138,6 +153,8 @@ pub(super) struct Report {
     names: Vec<Hist>,
     slowest: Vec<Slow>,
     pub(super) written: u64,
+    /// When the session ends, on the recorder's clock (`--profile-seconds`), once loaded.
+    pub(super) ends: Option<u64>,
 }
 
 impl Report {
@@ -155,6 +172,7 @@ impl Report {
             names: Vec::new(),
             slowest: Vec::new(),
             written: 0,
+            ends: None,
         }
     }
 
@@ -466,6 +484,13 @@ mod tests {
             end: end_ms * MS,
             own: (end_ms - start_ms) * MS,
         }
+    }
+
+    #[test]
+    fn the_shell_leaves_the_reports_arguments_to_it() {
+        assert!(takes("--profile-report=report.txt"));
+        assert!(takes("--profile-seconds=60"));
+        assert!(!takes("--profile"));
     }
 
     #[test]
