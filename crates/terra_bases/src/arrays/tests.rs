@@ -203,3 +203,114 @@ fn grown_arrays_are_bound_again_once_all_are_drawn_and_their_new_slots_wait_for_
     arrays.follow_drawn();
     assert!(!arrays.table_dirty);
 }
+
+/// A frame writes maps up to its budget, always at least one however large, and a set whose
+/// maps wait their turn is not counted written, so it is never drawn from a slot half
+/// written (perf round 11).
+#[test]
+fn a_frame_writes_maps_to_its_budget_and_a_set_waiting_for_its_turn_is_not_ready() {
+    let mut budget = Budget::new();
+    assert!(budget.admits(WRITE_BYTES * 2), "one map always");
+    assert!(!budget.admits(1 << 20), "then nothing over the budget");
+    let mut budget = Budget::new();
+    let maps = [
+        WRITE_BYTES / 2,
+        WRITE_BYTES / 4,
+        WRITE_BYTES / 2,
+        WRITE_BYTES / 8,
+    ];
+    let written: Vec<bool> = maps.iter().map(|&bytes| budget.admits(bytes)).collect();
+    assert_eq!(written, [true, true, false, true]);
+
+    let mut images = Assets::<Image>::default();
+    let mut arrays = arrays_alone(&mut images);
+    draw(&arrays, 5, FIRST_SLOTS, FIRST_SLOTS);
+    let slot = arrays.free.pop().unwrap();
+    arrays.slots.insert(
+        "materials/timber".into(),
+        Slot {
+            slot,
+            ready_in: 2,
+            last_used: 0.0,
+        },
+    );
+    arrays.uploads.pending.lock().unwrap().push(Upload {
+        image: arrays.images[0].id(),
+        side: 4,
+        slot,
+        codec: Codec::Raw(4),
+        levels: vec![vec![0; 64]],
+    });
+    for _ in 0..5 {
+        arrays.follow_drawn();
+    }
+    assert_eq!(
+        slot_of(arrays.slots.get("materials/timber")),
+        MISSING,
+        "drawn plain while a map waits to be written"
+    );
+    arrays.uploads.pending.lock().unwrap().clear();
+    arrays.follow_drawn();
+    arrays.follow_drawn();
+    assert_eq!(slot_of(arrays.slots.get("materials/timber")), slot as f32);
+}
+
+/// A texture set's picture read on the worker (`picture`) is what the asset server's image
+/// loader gave `stream` before it read them itself (perf round 11): the same texels, size and
+/// channels; a picture that is not there is none.
+#[test]
+fn a_picture_read_on_the_worker_is_what_the_image_loader_reads() {
+    let assets = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        AssetPlugin {
+            file_path: assets.to_string_lossy().into_owned(),
+            watch_for_changes_override: Some(false),
+            ..default()
+        },
+        ImagePlugin::default(),
+    ));
+    // Registered by the renderer in the game.
+    app.register_asset_loader(bevy::image::ImageLoader::new(
+        bevy::image::CompressedImageFormats::NONE,
+    ));
+    let server = app.world().resource::<AssetServer>().clone();
+    let files = [
+        "materials/detail_wood/arm.jpg",
+        "materials/detail_stone/arm.jpg",
+    ];
+    let handles: Vec<Handle<Image>> = files
+        .iter()
+        .map(|file| {
+            server
+                .load_builder()
+                .with_settings(|settings: &mut bevy::image::ImageLoaderSettings| {
+                    settings.is_srgb = true;
+                    settings.asset_usage = RenderAssetUsages::MAIN_WORLD;
+                })
+                .load(*file)
+        })
+        .collect();
+    for _ in 0..1000 {
+        app.update();
+        let images = app.world().resource::<Assets<Image>>();
+        if handles.iter().all(|handle| images.get(handle).is_some()) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    let images = app.world().resource::<Assets<Image>>();
+    for (file, handle) in files.iter().zip(&handles) {
+        let loaded = images
+            .get(handle)
+            .and_then(pixels)
+            .unwrap_or_else(|| panic!("{file}: {:?}", server.get_load_state(handle)));
+        let read = block_on(picture(&server, file)).expect("read on the worker");
+        assert_eq!(read, loaded, "{file}");
+    }
+    assert_eq!(
+        block_on(picture(&server, "materials/no_such_set/arm.jpg")),
+        None
+    );
+}

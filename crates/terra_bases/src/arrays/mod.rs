@@ -11,8 +11,9 @@
 //!
 //! **Residency**: a texture set is on the GPU only while a section laid near uses it, as
 //! texture streaming keeps only what is near. When a section is laid with a set that is not
-//! resident, its textures are read and compressed on a worker and written into a free slot
-//! of the arrays, layer by layer (`write_layers`, in the render world), and the section is
+//! resident, its textures are read and compressed on a worker (`read`) and written into a free
+//! slot of the arrays, layer by layer, a few a frame (`write_layers`, in the render world, to
+//! `WRITE_BYTES` a frame), and the section is
 //! put on screen once they are there; a set no laid section has used for a few seconds
 //! gives its slot back. The arrays grow by doubling, their slots copied, to 256 at most.
 //! A table in the material maps each layer to its slot, its parallax depth and reflectance.
@@ -25,6 +26,11 @@ pub mod bc;
 mod cache;
 
 pub mod damage;
+
+mod read;
+
+pub use read::pixels;
+use read::{encode, picture};
 
 use bc::Codec;
 use bevy::{
@@ -381,6 +387,47 @@ struct Uploads {
     drawn: Drawn,
 }
 
+impl Uploads {
+    /// The slots with maps still waiting to be written.
+    fn waiting(&self) -> BTreeSet<u32> {
+        self.pending
+            .lock()
+            .map(|pending| pending.iter().map(|upload| upload.slot).collect())
+            .unwrap_or_default()
+    }
+}
+
+/// How many bytes of texture sets `write_layers` writes in a frame, as texture streaming
+/// spreads its uploads over frames: at least one map, else
+/// no more than this. A set at 2,048 is about 12 MiB, so a set or two a frame, where writing
+/// every set made ready at once took 9 to 13 ms of a frame (perf round 11).
+const WRITE_BYTES: usize = 16 << 20;
+
+/// What `write_layers` has left to write this frame.
+struct Budget {
+    left: usize,
+    wrote: bool,
+}
+
+impl Budget {
+    fn new() -> Self {
+        Budget {
+            left: WRITE_BYTES,
+            wrote: false,
+        }
+    }
+
+    /// Whether a map of so many bytes is written this frame, and if so, counts it.
+    fn admits(&mut self, bytes: usize) -> bool {
+        if self.wrote && bytes > self.left {
+            return false;
+        }
+        self.left = self.left.saturating_sub(bytes);
+        self.wrote = true;
+        true
+    }
+}
+
 /// Each array's copy on the GPU as the render world last drew it, by its image: its side and
 /// layers, or none while it has none. The main world names the arrays, the render world fills
 /// them in (`write_layers`, `Arrays::follow_drawn`).
@@ -394,11 +441,9 @@ struct Encoded {
     kept: bool,
 }
 
-enum Loading {
-    /// Its pictures being read: colour, normal, ARM and height (none if it has no height).
-    Reading([Option<Handle<Image>>; 4], f32),
-    Encoding(Task<Option<Encoded>>),
-}
+/// A texture set being read and compressed on a worker, its pictures read there too: none
+/// when they could not be read (said).
+type Loading = Task<Option<Encoded>>;
 
 /// A layer's slot in the table where its set is resident and written; else [`MISSING`],
 /// never another set's, nor the damage mask's in `DAMAGE_SLOT`: a set still being read in
@@ -685,30 +730,32 @@ impl Arrays {
                 continue;
             }
             let path = set.path.clone();
-            let read = |file: &str, srgb: bool| -> Handle<Image> {
-                assets
-                    .load_builder()
-                    .with_settings(move |settings: &mut bevy::image::ImageLoaderSettings| {
-                        settings.is_srgb = srgb;
-                        settings.asset_usage = RenderAssetUsages::MAIN_WORLD;
-                    })
-                    .load(format!("{path}/{file}"))
-            };
-            let height =
-                (self.exists)(&format!("{path}/height.jpg")).then(|| read("height.jpg", false));
-            let share = set.share;
-            self.loading.insert(
-                path.clone(),
-                Loading::Reading(
-                    [
-                        Some(read("color.jpg", true)),
-                        Some(read("normal.jpg", false)),
-                        Some(read("arm.jpg", false)),
-                        height,
-                    ],
-                    share,
-                ),
-            );
+            // Colour, normal, ARM and height (none if it has none), each read on a worker of
+            // its own.
+            let files = [
+                Some("color.jpg"),
+                Some("normal.jpg"),
+                Some("arm.jpg"),
+                (self.exists)(&format!("{path}/height.jpg")).then_some("height.jpg"),
+            ];
+            let reads = files.map(|file| {
+                file.map(|file| {
+                    let (assets, file) = (assets.clone(), format!("{path}/{file}"));
+                    AsyncComputeTaskPool::get().spawn(async move { picture(&assets, &file).await })
+                })
+            });
+            let (share, sides, codecs) = (set.share, self.sides, self.codecs);
+            let task = AsyncComputeTaskPool::get().spawn(async move {
+                let mut maps = Vec::with_capacity(4);
+                for read in reads {
+                    match read {
+                        Some(read) => maps.push(Some(read.await?)),
+                        None => maps.push(None),
+                    }
+                }
+                Some(encode(maps, sides, codecs, share))
+            });
+            self.loading.insert(path, task);
         }
     }
 
@@ -860,9 +907,11 @@ impl Arrays {
         let behind = drawn < self.capacity;
         self.table_dirty |= behind || self.behind;
         self.behind = behind;
-        // Written last frame: ready now.
+        // Written last frame: ready now; one whose maps wait their turn (`write_layers`) is
+        // not written yet.
+        let waiting = self.uploads.waiting();
         for slot in self.slots.values_mut() {
-            if slot.ready_in > 0 && slot.slot < drawn {
+            if slot.ready_in > 0 && slot.slot < drawn && !waiting.contains(&slot.slot) {
                 slot.ready_in -= 1;
                 self.table_dirty |= slot.ready_in == 0;
             }
@@ -973,28 +1022,13 @@ fn to_side(data: &[u8], width: u32, height: u32, channels: usize, side: u32) -> 
     out
 }
 
-/// A loaded picture's first level's bytes, its size and channels a texel.
-pub fn pixels(image: &Image) -> Option<(Vec<u8>, u32, u32, usize)> {
-    let size = image.texture_descriptor.size;
-    let data = image.data.as_ref()?;
-    let texels = (size.width * size.height) as usize;
-    let channels = image
-        .texture_descriptor
-        .format
-        .block_copy_size(None)
-        .map_or(4, |b| b as usize)
-        .clamp(1, 4);
-    let bytes = texels * channels;
-    (data.len() >= bytes).then(|| (data[..bytes].to_vec(), size.width, size.height, channels))
-}
-
-/// Reads and compresses what is asked for, writes what is ready into the arrays, gives back
-/// the slots of what has not been used for a while, and keeps the table up to date.
+/// Takes what the workers have read and compressed (`Arrays::want`) and writes it into the
+/// arrays, gives back the slots of what has not been used for a while, and keeps the table up
+/// to date.
 pub fn stream(
     mut arrays: ResMut<Arrays>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<BuildMaterial>>,
-    assets: Res<AssetServer>,
     time: Res<Time<Real>>,
     quality: Res<Quality>,
 ) {
@@ -1018,6 +1052,7 @@ pub fn stream(
         arrays.table_dirty = true;
     }
     let drawn = arrays.follow_drawn();
+    let damage_written = DAMAGE_SLOT < drawn && !arrays.uploads.waiting().contains(&DAMAGE_SLOT);
     match &mut arrays.damage {
         DamageMask::Making(task) => {
             if let Some(maps) = block_on(poll_once(task)) {
@@ -1039,97 +1074,20 @@ pub fn stream(
             if *frames == 0 {
                 arrays.damage = DamageMask::Ready;
                 arrays.table_dirty = true;
-            } else if DAMAGE_SLOT < drawn {
+            } else if damage_written {
                 *frames -= 1;
             }
         }
         DamageMask::Ready => {}
     }
     let codecs = arrays.codecs;
-    let sides = arrays.sides;
     let mut finished = Vec::new();
-    for (path, loading) in &mut arrays.loading {
-        match loading {
-            Loading::Reading(handles, share) => {
-                let share = *share;
-                let failed = handles.iter().flatten().any(|handle| {
-                    matches!(
-                        assets.get_load_state(handle),
-                        Some(bevy::asset::LoadState::Failed(_))
-                    )
-                });
-                if failed {
-                    error!("Build: the textures of {path} did not load");
-                    finished.push((path.clone(), None));
-                    continue;
-                }
-                if !handles
-                    .iter()
-                    .flatten()
-                    .all(|handle| images.get(handle).is_some())
-                {
-                    continue;
-                }
-                let maps: Vec<Option<(Vec<u8>, u32, u32, usize)>> = handles
-                    .iter()
-                    .map(|handle| handle.as_ref().and_then(|h| images.get(h)).and_then(pixels))
-                    .collect();
-                let task = AsyncComputeTaskPool::get().spawn(async move {
-                    // Compressed before and kept: read back (`cache`).
-                    let kept = cache::file(cache::key(&maps, sides, codecs, share));
-                    if let Some((maps, cells)) = kept.as_deref().and_then(cache::read) {
-                        return Some(Encoded {
-                            maps,
-                            cells,
-                            kept: true,
-                        });
-                    }
-                    let mut out: [Vec<Vec<u8>>; 4] = Default::default();
-                    let mut found = Vec::new();
-                    for (i, map) in maps.into_iter().enumerate() {
-                        // Its stones or shingles, from its height as read (D305), as the
-                        // CPU finds them from the same picture; none, one cell.
-                        if i == 3 {
-                            found = match &map {
-                                Some((data, w, h, channels)) => terra_build_mesh::cells::label(
-                                    data,
-                                    *w as usize,
-                                    *h as usize,
-                                    *channels,
-                                    share,
-                                ),
-                                None => [128u8, 128, 128, 255].repeat((CELLS * CELLS) as usize),
-                            };
-                        }
-                        let side = sides[i];
-                        let base = match map {
-                            Some((data, w, h, channels)) => to_side(&data, w, h, channels, side),
-                            // No height: flat.
-                            None => vec![0u8; (side * side * 4) as usize],
-                        };
-                        out[i] = bc::chain(&base, side, MIPS[i])
-                            .iter()
-                            .enumerate()
-                            .map(|(level, pixels)| codecs[i].encode(pixels, side >> level))
-                            .collect();
-                    }
-                    let stored = (out, found);
-                    if let Some(path) = &kept {
-                        cache::write(path, &stored);
-                    }
-                    Some(Encoded {
-                        maps: stored.0,
-                        cells: stored.1,
-                        kept: false,
-                    })
-                });
-                *loading = Loading::Encoding(task);
+    for (path, task) in &mut arrays.loading {
+        if let Some(encoded) = block_on(poll_once(task)) {
+            if encoded.is_none() {
+                error!("Build: the textures of {path} did not load");
             }
-            Loading::Encoding(task) => {
-                if let Some(encoded) = block_on(poll_once(task)) {
-                    finished.push((path.clone(), encoded));
-                }
-            }
+            finished.push((path.clone(), encoded));
         }
     }
     for (path, encoded) in finished {
@@ -1282,11 +1240,14 @@ fn write_layers(
     }
     // An array made again at another side lets its old texture go.
     written.0.retain(|id, _| gpu.get(*id).is_some());
+    let mut budget = Budget::new();
     pending.retain(|upload| {
         let Some(image) = gpu.get(upload.image) else {
             return true;
         };
-        if image.texture_descriptor.size.depth_or_array_layers <= upload.slot {
+        if image.texture_descriptor.size.depth_or_array_layers <= upload.slot
+            || !budget.admits(upload.levels.iter().map(Vec::len).sum())
+        {
             return true;
         }
         for (level, data) in upload.levels.iter().enumerate() {
