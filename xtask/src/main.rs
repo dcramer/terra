@@ -13,6 +13,7 @@ mod launcher;
 mod load;
 mod nightly;
 mod primitives;
+mod profile;
 mod scenes;
 mod scope;
 mod seed;
@@ -42,6 +43,7 @@ struct Task {
 const MODULES: &[&[Task]] = &[
     doctor::TASKS,
     windows::TASKS,
+    profile::TASKS,
     tasks::play::TASKS,
     bench::TASKS,
     check::TASKS,

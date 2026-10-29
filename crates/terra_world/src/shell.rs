@@ -508,8 +508,8 @@ impl Options {
             "--water-mask" => &mut self.water_mask,
             "--flame-matte" => &mut self.flame_matte,
             "--debug-menu" => &mut self.debug_menu,
-            // Read by the log's filter (`record::filter`, D576).
-            "--system-spans" => return true,
+            // The session report's file, read by the frame recorder (`recorder::report`, D576).
+            flag if flag.starts_with("--profile-report=") => return true,
             _ => return false,
         };
         *on = true;

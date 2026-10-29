@@ -61,7 +61,7 @@ A **frame recorder** in `terra_world`: a `tracing` layer that takes the enter an
 
 ### The session report (D576)
 
-`--profile-report <file>` (the launcher's `Profiling: report`) has the recorder also keep, in memory and bounded, each frame's schedule times and its longest systems, and a histogram a system; when the game exits it writes a report of at most about a hundred lines and the task prints its head:
+`--profile-report=<file>` (the launcher's `Profiling: report`; it also switches the system spans on, `record::filter`) has the recorder also keep, in memory and bounded, each frame's schedule times and its longest systems, and a histogram a system; when the game exits it writes a report of at most about a hundred lines and the task prints its head:
 
 - the load's longest steps;
 - the frame by schedule, median and 99th percentile, game and render world;
@@ -70,7 +70,9 @@ A **frame recorder** in `terra_world`: a `tracing` layer that takes the enter an
 
 This is what `tools/sandbox/spans.ts` prints from a Chrome trace, computed while the game runs, so no trace file is written at all. Once the report agrees with spans.ts on one recorded run, the `trace` feature (Chrome), the trace recipe and spans.ts are deleted (clean as you go).
 
-**One command** (planned, step 4): an xtask task `profile [--walk <scene>|--play] [--seconds 60] [--build optimised|debug] [-- game args]` builds, runs the play experiment on the real GPU (under WSL the Windows build, as `play` does), either walking a bench scene's route by script or played by a person until they quit, capped at `--seconds`, and prints the report's head and its path. An agent hands the path on; the developer reads ten lines.
+It is written every ten seconds as well as at exit, so a session that crashes or is killed still leaves one; a frame is the time from one end of the game world's update to the next, and a span counts in the frame it ends in (a system by its own time, a schedule by its wall clock). Each name's times a frame are kept as a histogram (sixteen buckets a power of two, about 4%), so a session of any length costs a few megabytes at most.
+
+**One command** (built, step 4): `cargo xtask profile [walk|play] [--seconds 60] [--build optimised|debug] [-- game args]` builds with `hitch-log`, runs the play experiment on the real GPU (under WSL the Windows build, as `play` does, in a copy of its own), either walking `play-walk`'s new game and route offscreen for `--seconds` (`walk`, the default) or played by a person until they quit (`play`, no cap: the report is bounded however long), and prints the report's head (each section's first lines) and the path of the whole in `logs/`, the newest ten of each kind kept. An agent hands the path on; the developer reads twenty lines.
 
 ### Live: Tracy (D577)
 
@@ -108,7 +110,7 @@ Each step lands alone, checked, in order:
 1. **The hitch log**: the frame recorder, `bevy/trace` in every build, freeze lines, the hitch warning's system and the load's steps; tests on the recorder's buffers and report without a GPU; the cost measured on `world` and `town300` and stated in the commit (D576 to Decided or to schedules only).
 2. **The play benchmark** (done 2026-10-29): `play-walk`, load and freeze columns, the cook-cache check, a first baseline recorded (RTX 5090: load 13.3 s, no freeze); the debug-against-optimised A/B written to the perf handoff.
 3. **The launcher** (done 2026-10-29, `xtask/src/launcher.rs`): the menu, remembered launch, flags, the confirmation before a new game; `make` shortcuts unchanged. The profiling option and `--profiling` come with steps 4 and 5, which give it something to choose. A new game is remembered as Continue, so `--last` or Enter after one plays the world it made rather than replacing it again.
-4. **The session report and the `profile` task**: the report checked against spans.ts on one recorded run, then the Chrome `trace` feature, its recipe and spans.ts deleted; the launcher's `Profiling: report`.
+4. **The session report and the `profile` task** (report, task and launcher option built 2026-10-29, `terra_world::recorder::report`, `xtask/src/profile.rs`; on one walk recorded both ways, the report agreed with spans.ts within 2% on each world's update and schedules and named the same slowest frames and systems): then the Chrome `trace` feature, its recipe and spans.ts deleted; the launcher's `Profiling: report`.
 5. **Tracy**: the `tracy` feature, the fetched profiler and its doctor check, `profile --tracy`'s capped capture, the launcher's `Profiling: tracy`.
 
 ## Open questions for the developers (D579, D580)

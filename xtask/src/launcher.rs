@@ -42,7 +42,7 @@ const CHOICES: [(Choice, &str, &str, &str); 4] = [
         Choice::Creative,
         "creative",
         "Creative",
-        "your world, building free (D494)",
+        "your world, building free",
     ),
     (
         Choice::Yard,
@@ -81,6 +81,14 @@ pub(crate) enum Build {
 const BUILDS: [(Build, &str); 2] = [(Build::Optimised, "optimised"), (Build::Debug, "debug")];
 
 impl Build {
+    /// Its cargo profile.
+    pub(crate) fn profile(self) -> &'static str {
+        match self {
+            Build::Optimised => "release",
+            Build::Debug => "dev",
+        }
+    }
+
     fn word(self) -> &'static str {
         BUILDS
             .iter()
@@ -93,6 +101,30 @@ impl Build {
 /// is `auto`, the GPU's own preset (D239).
 const QUALITIES: [&str; 4] = ["low", "medium", "high", "ultra"];
 
+/// What the session measures (docs/launcher.md, "Diagnosing performance"): nothing, or a
+/// session report written as the game exits (D576, `cargo xtask profile`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Profiling {
+    #[default]
+    Off,
+    Report,
+}
+
+const PROFILINGS: [(Profiling, &str); 2] = [(Profiling::Off, "off"), (Profiling::Report, "report")];
+
+impl Profiling {
+    fn word(self) -> &'static str {
+        PROFILINGS
+            .iter()
+            .find(|p| p.0 == self)
+            .map_or("off", |p| p.1)
+    }
+
+    fn from_word(word: &str) -> Option<Profiling> {
+        PROFILINGS.iter().find(|p| p.1 == word).map(|p| p.0)
+    }
+}
+
 /// One launch: what to play and how.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Launch {
@@ -100,6 +132,7 @@ pub(crate) struct Launch {
     pub(crate) build: Build,
     /// A preset of `QUALITIES`, or `None` for auto.
     pub(crate) quality: Option<&'static str>,
+    pub(crate) profiling: Profiling,
 }
 
 impl Launch {
@@ -138,10 +171,11 @@ impl Launch {
 
     fn to_json(&self) -> String {
         format!(
-            "{{\n  \"choice\": \"{}\",\n  \"build\": \"{}\",\n  \"quality\": \"{}\"\n}}\n",
+            "{{\n  \"choice\": \"{}\",\n  \"build\": \"{}\",\n  \"quality\": \"{}\",\n  \"profiling\": \"{}\"\n}}\n",
             self.choice.word(),
             self.build.word(),
-            self.quality.unwrap_or("auto")
+            self.quality.unwrap_or("auto"),
+            self.profiling.word()
         )
     }
 
@@ -161,6 +195,9 @@ impl Launch {
                 .and_then(|word| BUILDS.iter().find(|b| b.1 == word).map(|b| b.0))
                 .unwrap_or_default(),
             quality: value("quality").and_then(|word| quality(&word)),
+            profiling: value("profiling")
+                .and_then(|word| Profiling::from_word(&word))
+                .unwrap_or_default(),
         }
     }
 }
@@ -176,6 +213,7 @@ pub(crate) struct Request {
     build: Option<Build>,
     /// `Some(None)` for `--quality auto`.
     quality: Option<Option<&'static str>>,
+    profiling: Option<Profiling>,
     last: bool,
     menu: bool,
     /// Everything else, for the game: after `--`, or any argument not the launcher's, as
@@ -215,6 +253,13 @@ impl Request {
                             "--quality is auto, low, medium, high or ultra, not `{word}` (D239)"
                         ))?),
                     });
+                }
+                "--profiling" => {
+                    let word = args.next().map_or("", String::as_str);
+                    request.profiling = Some(
+                        Profiling::from_word(word)
+                            .ok_or(format!("--profiling is off or report, not `{word}` (D576)"))?,
+                    );
                 }
                 "--last" => request.last = true,
                 "--menu" => request.menu = true,
@@ -259,6 +304,9 @@ pub(crate) fn plan(request: &Request, terminal: bool, remembered: Option<Launch>
     if let Some(quality) = request.quality {
         launch.quality = quality;
     }
+    if let Some(profiling) = request.profiling {
+        launch.profiling = profiling;
+    }
     if menu {
         Plan::Menu(launch)
     } else {
@@ -282,7 +330,7 @@ pub(crate) fn play(args: &[String]) -> bool {
         Ok(request) => request,
         Err(why) => {
             eprintln!(
-                "✗ play: {why}. `cargo xtask play [continue|new|creative|yard] [--build optimised|debug] [--quality auto|low|medium|high|ultra] [--last] [--menu] [-- game args]`."
+                "✗ play: {why}. `cargo xtask play [continue|new|creative|yard] [--build optimised|debug] [--quality auto|low|medium|high|ultra] [--profiling off|report] [--last] [--menu] [-- game args]`."
             );
             return false;
         }
@@ -320,7 +368,11 @@ pub(crate) fn play(args: &[String]) -> bool {
             launch
         }
     };
-    crate::windows::start(launch.build, launch.game_args(&request.game))
+    let game = launch.game_args(&request.game);
+    match launch.profiling {
+        Profiling::Off => crate::windows::start(launch.build, game),
+        Profiling::Report => crate::profile::report(launch.build, &game, "play"),
+    }
 }
 
 /// The menu's first line: the game, and the branch and commit it is built from.
@@ -451,6 +503,30 @@ fn options(launch: &mut Launch, out: &mut dyn Write, read: &mut Ask<'_>) -> Opti
             }
         }
     }
+    let words = PROFILINGS.map(|p| p.1);
+    let answer = read(
+        out,
+        &format!(
+            "Profiling: off, or report (what the session spent its time on, written when you quit) [{}] ",
+            launch.profiling.word()
+        ),
+    )?;
+    if !answer.is_empty() {
+        match pick(&answer, &words).and_then(Profiling::from_word) {
+            Some(profiling) => {
+                launch.profiling = profiling;
+                if profiling == Profiling::Report {
+                    let _ = writeln!(
+                        out,
+                        "A report build times every system, so its frames run about a sixth slower; its first launch builds it, a few minutes."
+                    );
+                }
+            }
+            None => {
+                let _ = writeln!(out, "`{answer}` is not off or report; profiling is kept.");
+            }
+        }
+    }
     Some(())
 }
 
@@ -471,9 +547,10 @@ fn screen(launch: &Launch, last: Option<Choice>, header: &str) -> String {
     }
     lines.push(String::new());
     lines.push(format!(
-        "  Build: {}   Quality: {}      o  change these",
+        "  Build: {}   Quality: {}   Profiling: {}      o  change these",
         launch.build.word(),
-        launch.quality.unwrap_or("auto (the GPU's preset)")
+        launch.quality.unwrap_or("auto (the GPU's preset)"),
+        launch.profiling.word()
     ));
     lines.push(String::new());
     lines.push(format!(

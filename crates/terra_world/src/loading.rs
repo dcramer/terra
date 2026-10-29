@@ -496,13 +496,16 @@ fn watch(
         // summed (`up_for`) left out the start-up schedules and a first frame of 282 s.
         // Its longest systems, summed over its frames and threads, say why it took that
         // long without a trace (the frame recorder, D576).
+        let seconds = real.startup().elapsed().as_secs_f32();
+        if let Some(recorder) = &recorder {
+            recorder.loaded(seconds);
+        }
         let longest = recorder
             .map(|recorder| recorder.longest_so_far())
             .filter(|longest| !longest.is_empty())
             .map_or(String::new(), |longest| format!(" Longest: {longest}."));
         info!(
-            "Loaded in {:.1} s ({:.1} s of it on the loading screen's frames): {}.{longest}",
-            real.startup().elapsed().as_secs_f32(),
+            "Loaded in {seconds:.1} s ({:.1} s of it on the loading screen's frames): {}.{longest}",
             loading.up_for.as_secs_f32(),
             progress.summary()
         );

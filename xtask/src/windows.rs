@@ -1,7 +1,7 @@
 //! Running on the real GPU from WSL (D185): the Windows build of a program, its assets
 //! copied beside it, and `play` and `yard`, which use it wherever you are.
 
-use crate::{Task, root, run, sweep};
+use crate::{Task, root, sweep};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime};
@@ -18,7 +18,7 @@ const COPY_FRESH: Duration = Duration::from_secs(10 * 60);
 pub(crate) const TASKS: &[Task] = &[
     Task {
         name: "play",
-        takes: "[continue|new|creative|yard] [--build optimised|debug] [--quality auto|low|medium|high|ultra] [--last] [--menu] [-- game args]",
+        takes: "[continue|new|creative|yard] [--build optimised|debug] [--quality auto|low|medium|high|ultra] [--profiling off|report] [--last] [--menu] [-- game args]",
         does: "the launcher (D575): in a terminal with nothing given, a menu of what to play and how, the last launch preselected; otherwise play what the flags say on the real GPU, wherever you are",
         group: "Play and check",
         run: crate::launcher::play,
@@ -32,7 +32,7 @@ pub(crate) const TASKS: &[Task] = &[
     },
     Task {
         name: "win",
-        takes: "-p <package> [--release] [--features <list>] [--copy <name>] [-- args]",
+        takes: "-p <package> [--release] [--copy <name>] [-- args]",
         does: "under WSL, build for Windows and run it there, on the real GPU",
         group: "This machine",
         run: win,
@@ -49,11 +49,6 @@ pub(crate) const WINDOWS_TARGET: &str = "x86_64-pc-windows-gnu";
 /// from WSL. Windows cannot use a WSL folder as a working directory, so the program is
 /// copied to the Windows temp folder and run from there.
 pub(crate) fn win(args: &[String]) -> bool {
-    launch(args, false)
-}
-
-/// `win`, and for a session someone plays, its log finished and brought home (`session`).
-fn launch(args: &[String], played: bool) -> bool {
     if !on_wsl() {
         eprintln!(
             "`cargo xtask win` is only for WSL. Elsewhere, `cargo run` already uses the GPU."
@@ -64,67 +59,123 @@ fn launch(args: &[String], played: bool) -> bool {
         Some(i) => (&args[..i], &args[i + 1..]),
         None => (args, &[][..]),
     };
-    let release = ours.iter().any(|a| a == "--release");
-    // A named copy runs from its own folder, so test runs never collide with a copy
-    // someone is playing: Windows will not replace a program that is running.
-    let copy = ours
-        .iter()
-        .position(|a| a == "--copy")
-        .and_then(|i| ours.get(i + 1));
-    // Cargo features for the build, such as `trace` for a Chrome trace of every system's run
-    // (`TRACE_CHROME=trace.json WSLENV=TRACE_CHROME`, written in the copy's folder).
-    let features = ours
-        .iter()
-        .position(|a| a == "--features")
-        .and_then(|i| ours.get(i + 1));
-    let Some(package) = ours
-        .iter()
-        .position(|a| a == "-p")
-        .and_then(|i| ours.get(i + 1))
-    else {
+    let value = |name: &str| {
+        ours.iter()
+            .position(|a| a == name)
+            .and_then(|i| ours.get(i + 1))
+            .map(String::as_str)
+    };
+    let Some(package) = value("-p") else {
         eprintln!(
-            "usage: cargo xtask win -p <package> [--release] [--features <list>] [--copy <name>] [-- program args]"
+            "usage: cargo xtask win -p <package> [--release] [--copy <name>] [-- program args]"
         );
         return false;
     };
-
-    let profile = if release { "release" } else { "dev" };
-    let Some((program, run_dir)) = windows_program(
+    let release = ours.iter().any(|a| a == "--release");
+    Game {
         package,
-        profile,
-        features.map(String::as_str),
-        copy.map(String::as_str),
-    ) else {
-        return false;
-    };
-    let exe_name = format!("{package}.exe");
-    println!(
-        "\n> {exe_name} {}   (in {})",
-        program_args.join(" "),
-        run_dir.display()
-    );
-    // The kits' files are read from the source's assets, through WSL's share, so one saved
-    // while the copy runs is seen (WSLENV's `/p` gives Windows the path as it names it).
-    let wslenv = std::env::var("WSLENV").unwrap_or_default();
-    let wslenv = [wslenv.as_str(), "TERRA_SOURCE_ASSETS/p"]
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(":");
-    let game = || {
-        Command::new(program)
-            .args(program_args)
-            .current_dir(&run_dir)
-            .env("TERRA_SOURCE_ASSETS", root().join("assets"))
-            .env("WSLENV", wslenv)
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
-    };
-    if played {
-        return crate::session::play(&run_dir.join("logs"), game);
+        profile: if release { "release" } else { "dev" },
+        features: None,
+        // A named copy runs from its own folder, so test runs never collide with a copy
+        // someone is playing: Windows will not replace a program that is running.
+        copy: value("--copy"),
+        args: program_args,
+        output: None,
+        played: false,
     }
-    game()
+    .run()
+    .is_some_and(|(ok, _)| ok)
+}
+
+/// A program built and run on the real GPU: under WSL the Windows build, in a copy of its own
+/// in the Windows temp folder (`windows_program`); elsewhere the native build, run from the
+/// checkout.
+pub(crate) struct Game<'a> {
+    pub(crate) package: &'a str,
+    /// The cargo profile: `dev`, `release` or `bench`.
+    pub(crate) profile: &'a str,
+    /// Cargo features beyond the profile's own, such as `hitch-log` for the session report.
+    pub(crate) features: Option<&'a str>,
+    /// The copy's name under WSL, so runs never collide: Windows will not replace a program
+    /// that is running.
+    pub(crate) copy: Option<&'a str>,
+    pub(crate) args: &'a [String],
+    /// A file in the folder it runs in that takes its output, instead of the terminal.
+    pub(crate) output: Option<&'a str>,
+    /// A session someone plays: its log finished and brought home (`session`).
+    pub(crate) played: bool,
+}
+
+impl Game<'_> {
+    /// Builds and runs it. Gives whether it succeeded and the folder it ran in, or `None`
+    /// when it could not be built or staged (said already).
+    pub(crate) fn run(&self) -> Option<(bool, PathBuf)> {
+        let (program, run_dir) = if on_wsl() {
+            windows_program(self.package, self.profile, self.features, self.copy)?
+        } else {
+            cook();
+            let mut build = vec!["build", "--profile", self.profile, "-p", self.package];
+            if self.profile == "dev" {
+                build.extend(crate::tasks::sandbox::dev_features(self.package));
+            }
+            if let Some(features) = self.features {
+                build.extend(["--features", features]);
+            }
+            if !crate::stage::build(&build) {
+                return None;
+            }
+            let folder = root().join("target").join(profile_folder(self.profile));
+            (folder.join(self.package), root())
+        };
+        println!(
+            "\n> {} {}   (in {})",
+            program.file_name().unwrap_or_default().to_string_lossy(),
+            self.args.join(" "),
+            run_dir.display()
+        );
+        let output = match self.output {
+            Some(name) => match std::fs::File::create(run_dir.join(name)) {
+                Ok(file) => Some(file),
+                Err(why) => {
+                    eprintln!("Could not write {} ({why}).", run_dir.join(name).display());
+                    return None;
+                }
+            },
+            None => None,
+        };
+        // The kits' files are read from the source's assets, through WSL's share, so one saved
+        // while the copy runs is seen (WSLENV's `/p` gives Windows the path as it names it).
+        let wslenv = std::env::var("WSLENV").unwrap_or_default();
+        let wslenv = [wslenv.as_str(), "TERRA_SOURCE_ASSETS/p"]
+            .into_iter()
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(":");
+        let game = || {
+            let mut command = Command::new(&program);
+            command.args(self.args).current_dir(&run_dir);
+            if on_wsl() {
+                command
+                    .env("TERRA_SOURCE_ASSETS", root().join("assets"))
+                    .env("WSLENV", &wslenv);
+            } else {
+                // Run outside Cargo, a Bevy program looks for assets/ next to itself.
+                command.env("BEVY_ASSET_ROOT", &run_dir);
+            }
+            if let Some(file) = &output
+                && let (Ok(out), Ok(err)) = (file.try_clone(), file.try_clone())
+            {
+                command.stdout(out).stderr(err);
+            }
+            command.status().is_ok_and(|status| status.success())
+        };
+        let ok = if self.played {
+            crate::session::play(&run_dir.join("logs"), game)
+        } else {
+            game()
+        };
+        Some((ok, run_dir))
+    }
 }
 
 /// Builds a package for Windows in a cargo profile (`dev`, `release` or `bench`) and copies
@@ -212,28 +263,17 @@ pub(crate) fn profile_folder(profile: &str) -> &str {
 /// profile, the default (D581): the debug build loaded in 25 s, not 15, and drew a frame in
 /// 13.5 ms, not 10.
 pub(crate) fn start(build: crate::launcher::Build, game: Vec<String>) -> bool {
-    let release = build == crate::launcher::Build::Optimised;
-    if on_wsl() {
-        let mut ours: Vec<String> = ["-p", "terra_sandbox", "--copy", "play"]
-            .map(String::from)
-            .to_vec();
-        if release {
-            ours.push("--release".into());
-        }
-        ours.push("--".into());
-        ours.extend(game);
-        return launch(&ours, true);
+    Game {
+        package: "terra_sandbox",
+        profile: build.profile(),
+        features: None,
+        copy: Some("play"),
+        args: &game,
+        output: None,
+        played: true,
     }
-    cook();
-    let mut cargo = vec!["run", "-p", "terra_sandbox"];
-    if release {
-        cargo.push("--release");
-    } else {
-        cargo.extend(crate::tasks::sandbox::dev_features("terra_sandbox"));
-    }
-    cargo.push("--");
-    cargo.extend(game.iter().map(String::as_str));
-    crate::session::play(&root().join("logs"), || run("cargo", &cargo))
+    .run()
+    .is_some_and(|(ok, _)| ok)
 }
 
 /// Cooks the textures (D188, `cargo xtask cook`) so the game played draws them cooked: read
@@ -392,7 +432,7 @@ pub(crate) fn windows_temp() -> Option<PathBuf> {
 
 /// A folder Windows names in an environment variable (`TEMP`, `LOCALAPPDATA`), as a path WSL
 /// can use.
-fn windows_folder(variable: &str) -> Option<PathBuf> {
+pub(crate) fn windows_folder(variable: &str) -> Option<PathBuf> {
     let run_from = |program: &str, args: &[&str]| {
         let out = Command::new(program)
             .args(args)

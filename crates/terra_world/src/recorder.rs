@@ -12,7 +12,10 @@
 //! most hitches; the `Loaded in` line (`loading`) names the load's longest systems.
 //!
 //! After Unreal's hitch log (`stat DumpHitches`), which writes a frame over
-//! `t.HitchFrameTimeThreshold` to the log with the stats that ran long in it.
+//! `t.HitchFrameTimeThreshold` to the log with the stats that ran long in it. With
+//! `--profile-report=<file>` it also writes the session report (`report`).
+
+mod report;
 
 use crate::debug::STUTTER_MS;
 use bevy::{
@@ -84,8 +87,20 @@ pub fn layer(app: &mut App) -> BoxedLayer {
     let shared = Arc::new(Shared::new());
     app.insert_resource(Recorder(shared.clone()))
         .add_plugins(Worlds(shared.clone()))
-        .add_systems(First, explain);
+        .add_systems(First, explain)
+        .add_systems(Last, write_at_exit);
+    if shared.report.lock().is_ok_and(|report| report.is_some()) && !cfg!(feature = "hitch-log") {
+        warn!(
+            "--profile-report: this build has no spans to report (Bevy's `trace`); build with the `hitch-log` feature, as `cargo xtask profile` does (D576)."
+        );
+    }
     Box::new(Spans(shared))
+}
+
+/// Whether the session report was asked for (`--profile-report=<file>`), which wants every
+/// system's span (`record::filter`).
+pub fn reporting() -> bool {
+    report::asked().is_some()
 }
 
 static OWNERS: AtomicUsize = AtomicUsize::new(0);
@@ -97,6 +112,8 @@ struct Shared {
     names: Mutex<Names>,
     threads: Mutex<Vec<Arc<Mutex<Vec<Span>>>>>,
     state: Mutex<State>,
+    /// The session report, when asked for.
+    report: Mutex<Option<report::Report>>,
 }
 
 /// A span's name as shown, and its world when known (ours and unknown ones are either).
@@ -153,6 +170,34 @@ impl Shared {
             names: Mutex::new(names),
             threads: Mutex::default(),
             state: Mutex::default(),
+            report: Mutex::new(report::asked().map(report::Report::new)),
+        }
+    }
+
+    fn report(&self) -> MutexGuard<'_, Option<report::Report>> {
+        self.report
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Writes the session report, if asked for, when `due` says so; says once if it cannot.
+    fn write_report(&self, about: &str, due: impl Fn(u64, u64) -> bool) {
+        let now = self.now();
+        let mut report = self.report();
+        let Some(report) = report.as_mut().filter(|report| due(report.written, now)) else {
+            return;
+        };
+        let first = report.written == 0;
+        report.written = now;
+        let text = report.text(about, &self.names());
+        let part = report.path().with_extension("part");
+        let written =
+            std::fs::write(&part, text).and_then(|()| std::fs::rename(&part, report.path()));
+        if let (Err(why), true) = (written, first) {
+            warn!(
+                "Could not write the session report to {} ({why}); give --profile-report= a folder that exists (D576).",
+                report.path().display()
+            );
         }
     }
 
@@ -212,12 +257,17 @@ impl Shared {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone();
+        let mut report = self.report();
+        let mut batch = Vec::new();
         let mut state = self.state();
         let state = &mut *state;
         for thread in threads {
             let mut done = thread
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if report.is_some() {
+                batch.extend_from_slice(&done);
+            }
             for span in done.drain(..) {
                 let name = span.name as usize;
                 if state.totals.len() <= name {
@@ -241,6 +291,9 @@ impl Shared {
                 .is_some_and(|oldest| now.saturating_sub(oldest.end) > KEEP_NS)
         {
             state.recent.pop_front();
+        }
+        if let Some(report) = report.as_mut() {
+            report.add(&mut batch, &self.names());
         }
     }
 
@@ -374,6 +427,17 @@ impl Recorder {
             .join(", ")
     }
 
+    /// The load ended `seconds` after the start: the session report names its longest steps
+    /// and times the frames from here.
+    pub fn loaded(&self, seconds: f32) {
+        self.0.drain();
+        let mut report = self.0.report();
+        if let Some(report) = report.as_mut() {
+            let totals = self.0.state().totals.clone();
+            report.loaded(seconds, &totals, &self.0.names());
+        }
+    }
+
     /// The system longest in most hitches since last asked, how many of them, and of how
     /// many; forgotten once asked.
     pub fn take_hitches(&self) -> Option<(String, u32, u32)> {
@@ -398,6 +462,11 @@ fn explain(
 ) {
     recorder.0.drain();
     let slow = recorder.0.slow_frames();
+    recorder
+        .0
+        .write_report(&about(adapter.as_deref()), |written, now| {
+            now.saturating_sub(written) >= report::EVERY_NS
+        });
     // Frame times mean nothing drawn on the CPU, as `debug` says.
     if adapter.is_some_and(|adapter| format!("{:?}", adapter.device_type) == "Cpu") {
         return;
@@ -410,6 +479,33 @@ fn explain(
             "{}",
             freeze_line(&recorder.0, frame.0.saturating_sub(1), &slow)
         );
+    }
+}
+
+/// The session report's first line: the GPU and the build.
+fn about(adapter: Option<&RenderAdapterInfo>) -> String {
+    let gpu = adapter.map_or("no GPU yet".to_string(), |adapter| {
+        format!("{} ({:?})", adapter.name, adapter.backend)
+    });
+    let build = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "optimised"
+    };
+    format!("{gpu}, the {build} build")
+}
+
+/// Writes the session report as the game exits.
+fn write_at_exit(
+    recorder: Res<Recorder>,
+    mut exits: MessageReader<AppExit>,
+    adapter: Option<Res<RenderAdapterInfo>>,
+) {
+    if exits.read().next().is_some() {
+        recorder.0.drain();
+        recorder
+            .0
+            .write_report(&about(adapter.as_deref()), |_, _| true);
     }
 }
 

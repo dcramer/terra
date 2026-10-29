@@ -13,6 +13,7 @@ fn launch(choice: Choice, build: Build, quality: Option<&'static str>) -> Launch
         choice,
         build,
         quality,
+        profiling: Profiling::Off,
     }
 }
 
@@ -81,6 +82,13 @@ fn flags_choose_what_the_menu_would() {
         plan(&request(&["new"]), true, None),
         Plan::Play(launch(Choice::New, Build::Optimised, None))
     );
+    assert_eq!(
+        plan(&request(&["--profiling", "report"]), false, None),
+        Plan::Play(Launch {
+            profiling: Profiling::Report,
+            ..Launch::default()
+        })
+    );
 }
 
 #[test]
@@ -98,6 +106,8 @@ fn a_flag_the_launcher_cannot_read_is_refused_with_what_it_takes() {
     assert!(why.contains("optimised or debug"), "{why}");
     let why = Request::parse(&args(&["--quality", "epic"])).unwrap_err();
     assert!(why.contains("low, medium, high or ultra"), "{why}");
+    let why = Request::parse(&args(&["--profiling", "loud"])).unwrap_err();
+    assert!(why.contains("off or report"), "{why}");
 }
 
 #[test]
@@ -159,7 +169,10 @@ fn last_plays_the_remembered_launch_with_any_flag_over_it() {
 
 #[test]
 fn the_launch_is_kept_and_read_back_and_a_new_game_is_kept_as_continue() {
-    let played = launch(Choice::Yard, Build::Debug, Some("medium"));
+    let played = Launch {
+        profiling: Profiling::Report,
+        ..launch(Choice::Yard, Build::Debug, Some("medium"))
+    };
     assert_eq!(Launch::from_json(&played.remembered().to_json()), played);
     let new = launch(Choice::New, Build::Optimised, None);
     assert_eq!(
@@ -204,15 +217,21 @@ fn a_new_game_asks_before_it_deletes_the_save() {
 }
 
 #[test]
-fn options_change_the_build_and_quality_by_word_or_its_first_letters() {
-    let (chosen, shown) = drive(Launch::default(), "o\nd\nlow\n\n");
+fn options_change_the_build_quality_and_profiling_by_word_or_its_first_letters() {
+    let (chosen, shown) = drive(Launch::default(), "o\nd\nlow\nr\n\n");
     assert_eq!(
         chosen,
-        Some(launch(Choice::Continue, Build::Debug, Some("low")))
+        Some(Launch {
+            profiling: Profiling::Report,
+            ..launch(Choice::Continue, Build::Debug, Some("low"))
+        })
     );
-    assert!(shown.contains("Build: debug   Quality: low"), "{shown}");
+    assert!(
+        shown.contains("Build: debug   Quality: low   Profiling: report"),
+        "{shown}"
+    );
     // Enter keeps each; a word it does not know says so and keeps it too.
-    let (chosen, shown) = drive(Launch::default(), "o\n\nepic\n3\n");
+    let (chosen, shown) = drive(Launch::default(), "o\n\nepic\n\n3\n");
     assert_eq!(
         chosen,
         Some(launch(Choice::Creative, Build::Optimised, None))

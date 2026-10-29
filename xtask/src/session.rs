@@ -259,7 +259,7 @@ pub(crate) fn finish(watch: &Watch, start: u64, logs: &Path, home: &Path) -> Opt
 
 /// The logs of the same kind as `newest` (its name past the time, `YYYYMMDD-HHMMSS-`) beyond
 /// the newest `kept`.
-fn older(names: &[String], newest: &str, kept: usize) -> Vec<String> {
+pub(crate) fn older(names: &[String], newest: &str, kept: usize) -> Vec<String> {
     let kind = |name: &str| {
         name.get(16..).map(|kind| {
             kind.split('~')
