@@ -795,3 +795,7 @@ fn scroll_controls(
         .max(0.0);
     position.y = (position.y - step).clamp(0.0, most);
 }
+
+#[cfg(test)]
+#[path = "options_tests.rs"]
+mod tests;
