@@ -208,7 +208,7 @@ Essences, ranks, skills, fighting, creatures and threats.
 | [D530](decisions/D530.md) | Combat is also checked on the game's composed pose, from the duel's record | Tech | Agent | Decided | The duel's fight record (`--fight-log` in a `--duel`… |
 | [D531](decisions/D531.md) | The drawn shield rests low and rises only while the block is held | Design | Developers | Decided | With a shield drawn and the block not held… |
 | [D534](decisions/D534.md) | The Cetri, a tree that walks | Design | Developers | Decided | A monster drawn by a developer's child (creatures.md)… |
-| [D535](decisions/D535.md) | Pose fix-ups after the clips: the hanging hands kept off the hips, the head kept on the aim | Tech | Agent | Decided | After every clip and hold has posed a body… |
+| [D535](decisions/D535.md) | Pose fix-ups after the clips: the hanging hands kept off the hips, the head kept on the aim | Tech | Agent | Decided | > Amended by D584 (2026-10-29): the fix-ups for hands… |
 | [D536](decisions/D536.md) | A creature that wakes: a Wake shape key for its mouth, an emissive map for its eyes, lit by two staged calls | Tech | Agent | Decided | A creature whose face changes when it wakes… |
 | [D554](decisions/D554.md) | A shield pose authors the board's place against the chest; the arm is solved to it | Tech | Agent | Decided | Each shield pose (the guard, the strafes' arm, the… |
 | [D568](decisions/D568.md) | The backhand is a falling diagonal cut | Design | Developers | Decided | The sword-and-shield set's backhand… |
@@ -467,6 +467,7 @@ The look, models, bodies and gear, textures and audio.
 | [D564](decisions/D564.md) | A tool carried by the rule tips at the wrist, little in the fist, its forearm kept down | Tech | Agent | Decided | A look in hand carried by D546's rule takes no more than… |
 | [D565](decisions/D565.md) | Weapons and tools are assembled from parts by rules | Design | Developers | Decided | Every ordinary weapon and tool is assembled from a few… |
 | [D567](decisions/D567.md) | Six kinds' holds: a one-hander blocks alone, the pickaxe is two-handed, the spear upright, the torch put out at the hip, the bow low in the left hand, the basket in the off hand | Design | Developers | Decided | The six questions the kinds table left to the developers… |
+| [D584](decisions/D584.md) | A body moves as its clip says; the game adds only foot placement, look-at and hand IK | Tech | Agent | Decided | What a body shows is the clip made for what it does… |
 
 ## Engine and code
 
