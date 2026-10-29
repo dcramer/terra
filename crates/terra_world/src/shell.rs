@@ -2,6 +2,7 @@
 //! scripted modes that let a run be checked without anyone watching.
 
 use crate::debug::{FRAME_BUDGET_MS, STUTTER_MS};
+use crate::recorder::FREEZE_MS;
 use crate::{
     audio, debug,
     loading::{self, Screen},
@@ -1391,8 +1392,8 @@ fn scripted_run(
                 adapter.device_type
             );
             println!(
-                "SANDBOX against the {FRAME_BUDGET_MS:.1} ms budget: {:.2}% of frames over, {} hitches over {:.1} ms, the game's work in the last third {:+.1}% on the first",
-                sustained.over_pct, sustained.hitches, STUTTER_MS, sustained.drift_pct
+                "SANDBOX against the {FRAME_BUDGET_MS:.1} ms budget: {:.2}% of frames over, {} hitches over {STUTTER_MS:.1} ms, {} freezes of {FREEZE_MS:.0} ms or more, the game's work in the last third {:+.1}% on the first",
+                sustained.over_pct, sustained.hitches, sustained.freezes, sustained.drift_pct
             );
             // Where the time goes: the medians of the game's systems, the render passes on
             // the CPU, and the GPU, so a slow frame says which to work on.
@@ -1541,7 +1542,8 @@ fn take_shots(
 }
 
 /// How a run of frames, in the order they were drawn, holds to the frame budget: the share
-/// over it, the hitches (frames over twice it), and the drift, how much slower the last
+/// over it, the hitches (frames over twice it), the freezes (`recorder::FREEZE_MS` or
+/// more, a play scene's gate, D578), and the drift, how much slower the last
 /// third of the game's own work ran than the first, which leaks, heat and a throttled
 /// machine show as. It is the game's work, not the frame, so a walk past more or fewer
 /// trees is not taken for one.
@@ -1549,6 +1551,7 @@ fn take_shots(
 pub struct Sustained {
     pub over_pct: f32,
     pub hitches: usize,
+    pub freezes: usize,
     pub drift_pct: f32,
 }
 
@@ -1567,6 +1570,7 @@ impl Sustained {
         Self {
             over_pct: 100.0 * over as f32 / frame_ms.len().max(1) as f32,
             hitches,
+            freezes: frame_ms.iter().filter(|&&ms| ms >= FREEZE_MS).count(),
             drift_pct: if first > 0.0 {
                 100.0 * (last / first - 1.0)
             } else {
@@ -1630,13 +1634,13 @@ mod tests {
 
     #[test]
     fn a_run_holds_to_the_budget_by_its_share_over_its_hitches_and_its_drift() {
-        // Three thirds: steady at 8 ms, then two frames over budget and one hitch, then 10 ms.
+        // Three thirds: steady at 8 ms, then three frames over, a hitch and a freeze, then 10.
         let mut frames = vec![8.0; 30];
-        frames.extend([8.0, 20.0, 40.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0]);
+        frames.extend([8.0, 20.0, 40.0, 8.0, 8.0, 100.0, 8.0, 8.0, 8.0, 8.0]);
         frames.extend(vec![10.0; 30]);
         let sustained = Sustained::of(&frames, None);
-        assert_eq!(sustained.hitches, 1);
-        assert!((sustained.over_pct - 200.0 / 70.0).abs() < 1e-3);
+        assert_eq!((sustained.hitches, sustained.freezes), (2, 1));
+        assert!((sustained.over_pct - 300.0 / 70.0).abs() < 1e-3);
         assert!((sustained.drift_pct - 25.0).abs() < 1e-3);
         // With the game's work measured, the drift is its.
         let game = vec![2.0; 70];
