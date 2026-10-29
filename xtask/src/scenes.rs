@@ -543,8 +543,9 @@ pub(crate) const SCENES: &[Scene] = &[
             SCALE_RADIUS,
             "--site",
             "tundra@-15.54,10.52",
+            // The tundra place's day (tools/sandbox/places.ts, D574).
             "--date",
-            "10-08",
+            "1499",
             "--time",
             "13",
             "--route",

@@ -566,6 +566,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D543](decisions/D543.md) | GPU memory comes from the driver in blocks of 64 MiB | Tech | Agent | Decided | wgpu's allocator (gpu-allocator) takes device memory… |
 | [D548](decisions/D548.md) | What changed this? Bevy's track_location in dev builds, asked over the remote | Tech | Agent | Decided | The sandbox's dev builds are built with Bevy's… |
 | [D553](decisions/D553.md) | The fires are drawn after the haze, fogged at their own depth | Tech | Agent | Leaning | Every fire card (flames, embers, jets, the smoke and… |
+| [D574](decisions/D574.md) | The climate's fronts are tens of kilometres across | Tech | Agent | Decided | The start's climate (`assets/data/climate.ron`) makes… |
 
 ## Tools and workflow
 

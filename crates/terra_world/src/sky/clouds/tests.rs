@@ -314,3 +314,85 @@ fn the_clouds_drift_faster_than_the_wind_aloft_the_way_it_blows() {
         assert!(drawn.angle_to(real).abs() < 1e-9);
     }
 }
+
+/// Sums for the correlation of the cover with itself so many squares east.
+#[derive(Clone, Copy, Default)]
+struct Alike {
+    a: f64,
+    b: f64,
+    aa: f64,
+    bb: f64,
+    ab: f64,
+    n: f64,
+}
+
+impl Alike {
+    fn add(&mut self, a: f64, b: f64) {
+        self.a += a;
+        self.b += b;
+        self.aa += a * a;
+        self.bb += b * b;
+        self.ab += a * b;
+        self.n += 1.0;
+    }
+
+    fn correlation(&self) -> f64 {
+        let (a, b) = (self.a / self.n, self.b / self.n);
+        (self.ab / self.n - a * b)
+            / ((self.aa / self.n - a * a) * (self.bb / self.n - b * b)).sqrt()
+    }
+}
+
+#[test]
+fn the_maps_cover_changes_over_a_fronts_width_not_from_square_to_square() {
+    // On a demo's world (30 km, D321) the map's 500 m squares must agree with their
+    // neighbours, so the camera's weather (one point) and the volume (the map, blended) say
+    // one sky; and a deck or a clearing is tens of kilometres across, as a front's cloud
+    // shield is, rather than one square among clear ones (tundra round 4: 0 and 255 side by
+    // side).
+    let fields = ClimateFields::for_tests_round(Vec::new(), 30_100.0);
+    let start = Start(Transform::from_translation(Vec3::Y * fields.sea_radius_m()));
+    // The middle of the map, where its squares are about 500 m on the ground too.
+    let (from, to) = (24usize, 104usize);
+    let side = MAP_TEXELS as usize;
+    let mut steps = Vec::new();
+    let mut alike = [Alike::default(); 64];
+    for k in 0..24i64 {
+        let hours = k * 61;
+        let map = build_map(
+            &fields,
+            &start,
+            Vec2::ZERO,
+            at(hours / 24, (hours % 24) as f64),
+        );
+        let cover = |x: usize, y: usize| f64::from(map[(y * side + x) * 4]) / 255.0;
+        for y in from..to {
+            for x in from..to {
+                steps.push((cover(x + 1, y) - cover(x, y)).abs());
+                steps.push((cover(x, y + 1) - cover(x, y)).abs());
+                for (lag, sums) in alike.iter_mut().enumerate().take(side - x) {
+                    sums.add(cover(x, y), cover(x + lag, y));
+                }
+            }
+        }
+    }
+    steps.sort_by(f64::total_cmp);
+    let mean = steps.iter().sum::<f64>() / steps.len() as f64;
+    let tail = steps[steps.len() * 99 / 100];
+    // How far off the cover is only half as like itself: about a front's width.
+    let width_km = alike
+        .iter()
+        .position(|sums| sums.correlation() < 0.5)
+        .map_or(f32::INFINITY, |lag| lag as f32 * MAP_TEXEL_M / 1000.0);
+    eprintln!(
+        "cover from square to square: mean {mean:.3}, 99th percentile {tail:.3}; half as alike {width_km} km off"
+    );
+    assert!(
+        mean < 0.03 && tail < 0.12,
+        "neighbouring squares' cover differs by {mean:.3} on average, {tail:.3} at the 99th percentile"
+    );
+    assert!(
+        (8.0..=40.0).contains(&width_km),
+        "the cover is half as alike {width_km} km off, where a front is tens of kilometres"
+    );
+}

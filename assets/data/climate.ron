@@ -36,8 +36,11 @@
         annual_swing: 0.1,
         most_humid: 0.0,
     ),
+    // A front's cloud shield tens of kilometres across, so the sky's 500 m weather map changes
+    // little from square to square and a deck stands as one (tundra round 5, D574); at 3 km it
+    // was noise at the map's own scale.
     fronts: (
-        size_m: 3000.0,
+        size_m: 30000.0,
         spell_days: 3.0,
     ),
 )

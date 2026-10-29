@@ -62,7 +62,8 @@ export const PLACES: Record<string, Place> = {
   lake: {
     about:
       "the mountain lake (docs/demos.md §1): the 30 km world's mountains, the lake its query found, pinned (--site lake@-15.34,1.68: 1,317 m over the sea, 0.55 km²), in early June with the peaks' snow",
-    // 9 June, a clear day at the site: the 10th is overcast there with snow falling from before
+    // 9 June, a clear day at the site (the developers' choice), under the climate's fronts tens
+    // of kilometres across too (D574): the 10th is overcast there with snow falling from before
     // noon, which the views showed clear only while the weather was taken at the planet's own
     // start, where the camera stood on the first frame (weather::follow, JUMP_M).
     args: ["--experiment", "play", "--radius", "30000", "--site", "lake@-15.34,1.68", "--date", "06-09"],
@@ -104,7 +105,10 @@ export const PLACES: Record<string, Place> = {
   tundra: {
     about:
       "the tundra (docs/demos.md §2): the fell plateau its query found 10.5 km north of the start, pinned (--site tundra@-15.54,10.52), in early October, the heath's autumn colours and the first snow lying in the lees",
-    args: ["--experiment", "play", "--radius", "30000", "--site", "tundra@-15.54,10.52", "--date", "10-08"],
+    // Day 1499 of the clock, 3 October of its fifth year: the open heath bare and the lees
+    // holding 10 cm of the first snow, the fells above white, clear at 11 h (D574). With the
+    // fronts tens of kilometres across the first year's 8 October lies under 26 cm everywhere.
+    args: ["--experiment", "play", "--radius", "30000", "--site", "tundra@-15.54,10.52", "--date", "1499"],
     // The start faces the closed forest's edge, 1.9 km off: -south is toward it, the open
     // plateau and the fells with their snow behind.
     views: [

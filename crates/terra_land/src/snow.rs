@@ -6,7 +6,7 @@
 //!
 //! The weather's fronts differ from place to place; a table folded at one place takes that
 //! place's weather for the whole region, which on a region of a few kilometres is the same
-//! weather (fronts are 3 km across and drift over it). The ground's shelter from the wind bends
+//! weather (fronts are tens of kilometres across, D574). The ground's shelter from the wind bends
 //! it too (D323): a table is folded at a scoured rise's catch, open ground's and a lee hollow's
 //! (`drift`), and a place's snow is blended between them by its own.
 
