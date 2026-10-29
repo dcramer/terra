@@ -2310,8 +2310,12 @@ fn fragment(
                 // the rock's colour too, a share of it, so they show where the sun lights the
                 // face as well, as Battlefield 3 put its terrain's occlusion in the colour.
                 // Lifted a little where the wall is open, so its mean tone holds while its
-                // folds darken.
-                colour *= mix(1.0, in.color.a * FOLD_LIFT, FOLD_TINT * smoothstep(300.0, 900.0, far_off) * (1.0 - snow));
+                // folds darken. The colour's share stands in for the sun the folds hide, so it
+                // goes with the direct light (`by_sun`), as occlusion darkens only the light it
+                // hides (UE's material AO, the indirect light alone): at dusk, the sky alone
+                // lighting the wall, it dimmed that light twice over, the sky light's own
+                // dimming below and again in the colour (mountains round 9).
+                colour *= mix(1.0, in.color.a * FOLD_LIFT, FOLD_TINT * by_sun * smoothstep(300.0, 900.0, far_off) * (1.0 - snow));
             }
         }
         colour *= mix(vec3<f32>(1.0), face_tint, (1.0 - snow) * (1.0 - scree));
