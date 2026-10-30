@@ -14,6 +14,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 |---|---|
 | [Who gets good character animation with AI agents doing the work, and how (deep survey)](2026-10-30-agent-driven-animation-deep.md) | 2026-10-30 |
 | [How do others get good character animation when AI agents do the work?](2026-10-30-agent-driven-animation.md) | 2026-10-30 |
+| [Why do the fight clips look bad: the source takes, the offline bends, or the game's layers?](2026-10-30-why-the-fight-clips-look-bad.md) | 2026-10-30 |
 | [How do shipped games make hewn mine walls read as broken rock, and which way suits Terra's mine?](2026-10-29-hewn-rock-walls.md) | 2026-10-29 |
 | [Why does our characters' skeleton move wrong: the source clips, the carry onto our body, or the game's layers?](2026-10-29-why-the-skeleton-moves-wrong.md) | 2026-10-29 |
 | [Assembled equipment: how shipped games build weapons and tools from parts, and the answers to D565's seven questions](2026-10-28-assembled-equipment.md) | 2026-10-28 |
