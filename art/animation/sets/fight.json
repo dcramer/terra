@@ -1008,11 +1008,11 @@
   },
   "Swap_Light_D": {
     "of": "Q_Light_D",
-    "hold": [{ "clip": "Keyed_Guard", "bone": "pelvis", "out": [0, 0.4], "in": [1.1, 1.36] }, { "clip": "Keyed_Guard", "bone": "clavicle_l", "shield": "Low_Strafe", "aim": { "upperarm_l": [0.55, -0.75, -0.38], "lowerarm_l": [0.15, -0.5, 0.85] }, "roll": { "lowerarm_l": 47 } }]
+    "hold": [{ "clip": "Keyed_Guard", "bone": "pelvis", "out": [0, 0.4], "in": [1.1, 1.36] }, { "clip": "Keyed_Guard", "bone": "clavicle_l", "frame": "upright", "shield": "Low_Strafe", "aim": { "upperarm_l": [0.55, -0.75, -0.38], "lowerarm_l": [0.15, -0.5, 0.85] }, "roll": { "lowerarm_l": 47 } }]
   },
   "Swap_Heavy_D": {
     "of": "Q_Heavy_D",
-    "hold": [{ "clip": "Keyed_Guard", "bone": "pelvis", "out": [0, 0.6], "in": [1.3, 1.62] }, { "clip": "Keyed_Guard", "bone": "clavicle_l", "shield": "Low_Strafe", "aim": { "upperarm_l": [0.55, -0.75, -0.38], "lowerarm_l": [0.15, -0.5, 0.85] }, "roll": { "lowerarm_l": 47 } }]
+    "hold": [{ "clip": "Keyed_Guard", "bone": "pelvis", "out": [0, 0.6], "in": [1.3, 1.62] }, { "clip": "Keyed_Guard", "bone": "clavicle_l", "frame": "upright", "shield": "Low_Strafe", "aim": { "upperarm_l": [0.55, -0.75, -0.38], "lowerarm_l": [0.15, -0.5, 0.85] }, "roll": { "lowerarm_l": 47 } }]
   },
   "Clear_Block": {
     "of": "Keyed_Block",

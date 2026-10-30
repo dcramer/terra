@@ -3155,12 +3155,12 @@
    "cost": "cheap",
    "id": "move.finisher.edge_lead",
    "noticed": 3,
-   "notice": "the finisher strikes with the back of the blade, not its edge: an axe in the same clip would hit with its poll",
+   "notice": "the finisher strikes with the back of the blade, not its edge (an axe in the same clip would hit with its poll), or, a thrust, not with its point",
    "bar": {
     "at_least": 0.7
    },
    "unit": "share",
-   "source": "D565 step 3 and attachment.md (In hand): the held look's working edge, its -Z, leads at least 0.7 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts)",
+   "source": "D565 step 3 and attachment.md (In hand): the held look's working edge, its -Z, leads at least 0.7 of the tip's motion across the handle at speed in the active frames, the worst template (moves.ts, wrist.ts); a thrust (the tip driven more along the handle than across it) by its point, +Y, its share of the whole motion",
    "check": {
     "by": "moves",
     "row": "finisher",

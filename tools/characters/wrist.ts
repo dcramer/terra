@@ -98,13 +98,27 @@ export function wristWorst(keys: WristPose[], axes: HandAxes, rest: { flex: numb
 /** Which side of a held look leads its tip's motion across its handle (+Y), over a blow's active
  * frames: each step's motion in the look's frame (`r`, its rotation then), weighted by how far it
  * moves across the handle, counting only steps at half the window's top speed or more. `lead`
- * is the share along -Z (the working edge, attachment.md), `flat` the share along ±X. */
-export function edgeLead(steps: { moved: V3; r: Q }[]): { lead: number; flat: number } {
-  const across = steps.map((s) => rot(qinv(s.r), s.moved)).map(([x, , z]) => ({ x, z, m: Math.hypot(x, z) }));
+ * is the share along -Z (the working edge, attachment.md), `flat` the share along ±X.
+ *
+ * A thrust strikes with the point: when the fast steps carry the tip further along +Y (toward
+ * the working end) than across the handle, the blow is judged by its point (`point`), `lead`
+ * the share of the whole motion along +Y and `flat` the share along ±X, since which way the
+ * edge drifts across a thrust is incidental (Quaternius's lunge, `Swap_Light_D`, led its back
+ * edge 0.9 of its little sideways motion while its point drove ahead). */
+export function edgeLead(steps: { moved: V3; r: Q }[]): { lead: number; flat: number; point: boolean } {
+  const local = steps.map((s) => rot(qinv(s.r), s.moved));
+  const speed = local.map((v) => len(v));
+  const quick = local.filter((_, i) => speed[i] >= Math.max(0, ...speed) / 2 && speed[i] > 0);
+  const ahead = quick.reduce((s, v) => s + v[1], 0);
+  if (ahead > quick.reduce((s, [x, , z]) => s + Math.hypot(x, z), 0)) {
+    const whole = quick.reduce((s, v) => s + len(v), 0) || 1;
+    return { lead: ahead / whole, flat: quick.reduce((s, v) => s + Math.abs(v[0]), 0) / whole, point: true };
+  }
+  const across = local.map(([x, , z]) => ({ x, z, m: Math.hypot(x, z) }));
   const top = Math.max(0, ...across.map((a) => a.m));
   const fast = across.filter((a) => a.m >= top / 2 && a.m > 0);
   const total = fast.reduce((s, a) => s + a.m, 0) || 1;
-  return { lead: fast.reduce((s, a) => s - a.z, 0) / total, flat: fast.reduce((s, a) => s + Math.abs(a.x), 0) / total };
+  return { lead: fast.reduce((s, a) => s - a.z, 0) / total, flat: fast.reduce((s, a) => s + Math.abs(a.x), 0) / total, point: false };
 }
 
 /** A wrist's pose from a posed body: `n` the nodes' poses, `at` a bone's index. */

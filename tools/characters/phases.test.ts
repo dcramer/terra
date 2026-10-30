@@ -75,7 +75,10 @@ test("a bought blow led in from the guard makes no swing of its own before it st
   // `out`). Eased too fast, the tip whips round the body at 30-60 m/s, a swing before the blow
   // (fight-swap j5's finisher, 39 m/s in 0.14 s); eased over the clip's own calm start, it moves
   // as the blow's wind-up. Through that ease, up to where the tip speeds up into the strike
-  // without a pause, the tip's pace stays under half the strike's.
+  // without a pause, the tip's pace stays under two thirds of the strike's: a whip from the ease
+  // ran at twice the strike or more, while a bought blow's own wind-up runs to half of it
+  // (Heavy_D raises the sword overhead at 17 m/s before its 33 m/s chop, the clip with no ease),
+  // so half would call the clip's own wind-up a whip.
   const set = JSON.parse(readFileSync("art/animation/sets/fight.json", "utf8")) as Record<string, { hold?: { bone: string; out?: [number, number] }[] }>;
   const glb = new Glb("assets/models/character/fight.glb");
   const swaps = Object.entries(set).filter(([name]) => name.startsWith("Swap_"));
@@ -87,7 +90,7 @@ test("a bought blow led in from the guard makes no swing of its own before it st
     let rise = p.frames.findIndex((f) => f.t >= p.active[0] - 1e-6);
     while (rise > 0 && p.frames[rise - 1].pace < p.frames[rise].pace) rise--;
     const lead = p.frames.slice(0, rise).filter((f) => f.t <= ease[1] + 1e-6).reduce((a, b) => Math.max(a, b.pace), 0);
-    return lead < 0.5 * p.fastest.pace ? [] : [`${name}: the tip at ${lead.toFixed(1)} m/s through its ease from the guard (0-${ease[1]} s), its strike ${p.fastest.pace.toFixed(1)}`];
+    return lead < (2 / 3) * p.fastest.pace ? [] : [`${name}: the tip at ${lead.toFixed(1)} m/s through its ease from the guard (0-${ease[1]} s), its strike ${p.fastest.pace.toFixed(1)}`];
   });
   assert.deepEqual(whips, []);
 });
