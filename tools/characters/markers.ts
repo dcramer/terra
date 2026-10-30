@@ -35,8 +35,13 @@
 // pelvis's parent's space, so the game takes the travel off the pelvis (Unreal's root lock)
 // and moves the body instead.
 //
+// A blow played in place whose root motion is kept apart (`--roots=RM.glb`, a pack's _RM clips
+// of the same names, as the move's `drive` is made from them by root_drive.ts) is judged on the
+// ground that root motion passes under it, frame by frame, so a lunge's planted foot stands while
+// the body goes ahead; it loses its pace, as it travels by its drive and not at the body's speed.
+//
 //   node tools/characters/markers.ts assets/models/character/base.glb assets/models/character/fight.glb
-//   node tools/characters/markers.ts FILE.glb... [--print] [--check]
+//   node tools/characters/markers.ts FILE.glb... [--roots=RM.glb] [--print] [--check]
 //
 // --print lists each clip's plants and skate; --check writes nothing and fails if a file's
 // markers are not what it bakes now. Either fails a clip that skates. Node 22.18 or later; no
@@ -114,9 +119,11 @@ function velocities(path: V3[], fps: number, loops: boolean): [number, number][]
 }
 
 /** One foot from its heel's and toe tip's paths sampled at `fps` (y up, the body's ground at
- * 0), the clip's `ground` velocity (x, z), and whether the clip loops. */
-export function foot(heel: V3[], toe: V3[], fps: number, ground: [number, number], loops: boolean): Foot {
+ * 0), the clip's `ground` velocity (x, z), one for the clip or one a frame (a clip driven by its
+ * root motion), and whether the clip loops. */
+export function foot(heel: V3[], toe: V3[], fps: number, ground: [number, number] | [number, number][], loops: boolean): Foot {
   const n = toe.length;
+  const under = (i: number): [number, number] => (typeof ground[0] === "number" ? (ground as [number, number]) : (ground as [number, number][])[i]);
   const none: Foot = { lock: new Array(n).fill(0), runs: [], skate_m: 0, splits: 0 };
   if (n < 2) return none;
   const lowest = (path: V3[]) => Math.min(...path.map((p) => p[1]));
@@ -125,7 +132,7 @@ export function foot(heel: V3[], toe: V3[], fps: number, ground: [number, number
   // (none where neither may).
   const points = [heel, toe].map((path) => ({ path, low: lowest(path) + LOOSE_M, v: velocities(path, fps, loops) }));
   const slipping = toe.map((_, i) => {
-    const each = points.filter(({ path, low }) => path[i][1] <= low).map(({ v }): [number, number] => [v[i][0] - ground[0], v[i][1] - ground[1]]);
+    const each = points.filter(({ path, low }) => path[i][1] <= low).map(({ v }): [number, number] => [v[i][0] - under(i)[0], v[i][1] - under(i)[1]]);
     return each.sort((a, b) => Math.hypot(...a) - Math.hypot(...b))[0];
   });
   const slip = slipping.map((v) => (v ? Math.hypot(...v) : Infinity));
@@ -140,8 +147,7 @@ export function foot(heel: V3[], toe: V3[], fps: number, ground: [number, number
     return most;
   };
   // Faster strides land and roll off with more give: the threshold grows with the pace.
-  const still = Math.max(STILL_MPS, STILL_SHARE * Math.hypot(ground[0], ground[1]));
-  const down = slip.map((s) => s < still);
+  const down = slip.map((s, i) => s < Math.max(STILL_MPS, STILL_SHARE * Math.hypot(...under(i))));
   // Runs of down frames, as frame ranges [first, last] (last may pass n - 1 over a loop's end).
   let runs: [number, number][] = [];
   for (let i = 0; i < n; i++) {
@@ -221,6 +227,21 @@ export function groundOf(toes: V3[][], fps: number, pace?: number): [number, num
   return [g[0] * by, g[1] * by];
 }
 
+/** The ground under a clip played in place whose root motion is kept apart (a pack's _RM file,
+ * `roots`, its clip of the same name with the travel on the node "root"), a velocity (x, z) at
+ * each of `n + 1` frames over `end` seconds: the root's own, backward, as a planted foot of the
+ * in-place clip goes back under the body while the game drives the body ahead by that motion
+ * (Unreal's root motion from animation; the move's `drive`, root_drive.ts). In the body's
+ * metres: the root's travel scaled as the body's skeleton is against the pack's. */
+export function rootGround(body: Glb, roots: Glb, clip: string, n: number, end: number): [number, number][] {
+  const root = roots.named("root");
+  const c = roots.clip(clip)!;
+  const scaleOf = (g: Glb, at: Pose[]) => at[g.parentOf[g.named("pelvis")]]?.s[0] ?? 1;
+  const by = scaleOf(body, posed(body, body.clip(clip)!, 0)) / scaleOf(roots, posed(roots, c, 0));
+  const path = Array.from({ length: n + 1 }, (_, i) => posed(roots, c, Math.min(c.end, (i / n) * end))[root].t.map((x) => x * by) as V3);
+  return velocities(path, n / Math.max(end, 1e-6), false).map(([x, z]) => [-x, -z]);
+}
+
 /** The pelvis's travel along the ground (`path`, its places at `fps`, y up) for a clip that
  * goes over TRAVEL_M from its first frame to its last: along that way at RATE to `end`, and the
  * way in the pelvis's parent's space (`parent`, its pose at the first frame). */
@@ -241,11 +262,13 @@ export function distanceOf(path: V3[], fps: number, end: number, parent?: Pose):
 const resampled = (lock: number[], fps: number, end: number) =>
   Array.from({ length: Math.round(end * RATE) + 1 }, (_, i) => round(lock[Math.min(lock.length - 1, Math.round((i / RATE) * fps))], 100));
 
-export type Baked = { markers: Markers; skate_m: [number, number]; splits: number; neither_s: number; pace?: number };
+export type Baked = { markers: Markers; skate_m: [number, number]; splits: number; neither_s: number; pace?: number; rooted?: boolean };
 
 /** Every clip's bake in a body file: its markers, each foot's worst skate, its splits, how long
- * neither foot stands, and its pace. */
-export function bake(body: Glb): Record<string, Baked> {
+ * neither foot stands, and its pace. A clip `roots` has (its root motion kept apart, `rootGround`)
+ * is judged on the ground that motion passes under it, and has no pace: it travels by its root
+ * motion, not at the body's speed. */
+export function bake(body: Glb, roots?: Glb): Record<string, Baked> {
   const points = FEET.map((pair) => pair.map((name) => body.named(name)));
   if (points.flat().some((b) => b < 0)) return {};
   const paces: Record<string, number> = (body.gltf.nodes.find((n: { extras?: { paces?: unknown } }) => n.extras?.paces) as { extras: { paces: Record<string, number> } } | undefined)?.extras.paces ?? {};
@@ -265,12 +288,16 @@ export function bake(body: Glb): Record<string, Baked> {
       if (i === 0 && pelvis >= 0 && body.parentOf[pelvis] !== undefined) parent = pose[body.parentOf[pelvis]];
     }
     const fps = n / Math.max(clip.end, 1e-6);
-    const loops = paths.every(([, toe]) => Math.hypot(...toe[0].map((x, k) => x - toe.at(-1)![k])) < LOOP_M);
-    const ground = groundOf(
-      paths.map(([, toe]) => toe),
-      fps,
-      paces[name],
-    );
+    // A clip with its root motion apart is a one-shot that goes somewhere, never a loop.
+    const loops = !roots?.clip(name) && paths.every(([, toe]) => Math.hypot(...toe[0].map((x, k) => x - toe.at(-1)![k])) < LOOP_M);
+    const rooted = roots?.clip(name) !== undefined;
+    const ground = rooted
+      ? rootGround(body, roots!, name, n, clip.end)
+      : groundOf(
+          paths.map(([, toe]) => toe),
+          fps,
+          paces[name],
+        );
     const [l, r] = paths.map(([heel, toe]) => foot(heel, toe, fps, ground, loops));
     const span = (runs: [number, number][]): Span[] => runs.map(([a, b]) => [round(a / fps), round((b > n - 1 ? b - (n - 1) : b) / fps)]);
     // How long neither foot stands: a walk always has one down.
@@ -288,7 +315,8 @@ export function bake(body: Glb): Record<string, Baked> {
       },
       skate_m: [l.skate_m, r.skate_m],
       splits: l.splits + r.splits,
-      pace: paces[name],
+      pace: rooted ? undefined : paces[name],
+      rooted,
       neither_s: round(Math.max(0, neither) / fps),
     };
   }
@@ -296,14 +324,16 @@ export function bake(body: Glb): Record<string, Baked> {
 }
 
 /** `file` with `markers` written into the extras of the node that carries its paces (else its
- * scene's first node): its JSON chunk rewritten, its binary chunk as it was. */
-export function written(file: string, markers: Record<string, Markers>): Buffer {
+ * scene's first node), the paces of the clips `rooted` dropped (they travel by their root motion):
+ * its JSON chunk rewritten, its binary chunk as it was. */
+export function written(file: string, markers: Record<string, Markers>, rooted: string[] = []): Buffer {
   const bytes = readFileSync(file);
   const jsonLen = bytes.readUInt32LE(12);
   const gltf = JSON.parse(bytes.subarray(20, 20 + jsonLen).toString());
   const carrier =
     gltf.nodes.find((n: { extras?: { paces?: unknown } }) => n.extras?.paces) ?? gltf.nodes[gltf.scenes?.[gltf.scene ?? 0]?.nodes?.[0] ?? 0];
   carrier.extras = { ...(carrier.extras ?? {}), markers };
+  for (const clip of rooted) delete carrier.extras.paces?.[clip];
   let json = Buffer.from(JSON.stringify(gltf));
   if (json.length % 4) json = Buffer.concat([json, Buffer.alloc(4 - (json.length % 4), 0x20)]);
   const rest = bytes.subarray(20 + jsonLen);
@@ -334,17 +364,19 @@ export function faults(clip: string, b: Baked): string[] {
 
 /** Bakes `file`'s markers into it (`write`) or only compares: its clips' count, whether the
  * markers it carries were already what it bakes, the clips split, and the faults. */
-export function bakeFile(file: string, write = true, print = false): { count: number; same: boolean; split: string[]; faults: string[] } {
+export function bakeFile(file: string, write = true, print = false, roots?: string): { count: number; same: boolean; split: string[]; faults: string[] } {
   const body = new Glb(file);
-  const baked = bake(body);
+  const baked = bake(body, roots ? new Glb(roots) : undefined);
   const markers = Object.fromEntries(Object.entries(baked).map(([clip, b]) => [clip, b.markers]));
+  const rooted = Object.keys(baked).filter((clip) => baked[clip].rooted);
+  const paced = (body.gltf.nodes.find((n: { extras?: { paces?: unknown } }) => n.extras?.paces) as { extras: { paces: Record<string, number> } } | undefined)?.extras.paces ?? {};
   if (print) for (const [clip, b] of Object.entries(baked)) show(clip, b);
   const split = Object.entries(baked)
     .filter(([, b]) => b.splits)
     .map(([clip, b]) => `${clip} (${b.skate_m.map((s) => (s * 100).toFixed(1)).join("/")} cm)`);
   const had = body.gltf.nodes.map((n) => (n as { extras?: { markers?: unknown } }).extras?.markers).find(Boolean);
-  const same = JSON.stringify(had) === JSON.stringify(markers);
-  if (write && !same) writeFileSync(file, written(file, markers));
+  const same = JSON.stringify(had) === JSON.stringify(markers) && !rooted.some((clip) => clip in paced);
+  if (write && !same) writeFileSync(file, written(file, markers, rooted));
   return { count: Object.keys(markers).length, same, split, faults: Object.entries(baked).flatMap(([clip, b]) => faults(clip, b)) };
 }
 
@@ -352,13 +384,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
   const files = args.filter((a) => !a.startsWith("--"));
   if (!files.length || args.includes("--help")) {
-    console.log("markers.ts FILE.glb... [--print] [--check]");
+    console.log("markers.ts FILE.glb... [--roots=RM.glb] [--print] [--check]");
     process.exit(files.length ? 0 : 1);
   }
   const check = args.includes("--check");
+  const roots = args.find((a) => a.startsWith("--roots="))?.slice("--roots=".length);
   let failed = 0;
   for (const file of files) {
-    const { count, same, split, faults } = bakeFile(file, !check, args.includes("--print"));
+    const { count, same, split, faults } = bakeFile(file, !check, args.includes("--print"), roots);
     if (split.length) console.log(`  ${file}: ${split.length} clips' plants split where they skate over ${SKATE_M * 100} cm: ${split.join(", ")}`);
     for (const fault of faults) console.log(`✗ ${file}: ${fault}`);
     if (check) {

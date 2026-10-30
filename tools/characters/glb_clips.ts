@@ -310,17 +310,23 @@ if (import.meta.main) {
   if (process.argv[2] === "--only") {
     const [out, source, ...names] = process.argv.slice(3);
     if (!out || !source || !names.length) {
-      console.log("usage: node tools/characters/glb_clips.ts --only OUT.glb SOURCE.glb CLIP...");
+      console.log("usage: node tools/characters/glb_clips.ts --only OUT.glb SOURCE.glb CLIP|NEW=A+B...");
       process.exit(2);
     }
-    const bytes = onlyClips(readFileSync(source), names);
+    let from = readFileSync(source);
+    const kept = names.map((n) => {
+      const [name, parts] = n.split("=");
+      if (parts) from = joinClips(from, name, parts.split("+"));
+      return name;
+    });
+    const bytes = onlyClips(from, kept);
     writeFileSync(out, bytes);
     console.log(`CLIPS kept ${names.length} of ${source} in ${out}, ${(bytes.length / 1024).toFixed(0)} KB, the skeleton and no mesh`);
     process.exit(0);
   }
   const [target, source, ...given] = process.argv.slice(2);
   if (!target || !source || !given.length) {
-    console.log("usage: node tools/characters/glb_clips.ts TARGET.glb SOURCE.glb CLIP|NEW=A+B...\n       node tools/characters/glb_clips.ts --only OUT.glb SOURCE.glb CLIP...");
+    console.log("usage: node tools/characters/glb_clips.ts TARGET.glb SOURCE.glb CLIP|NEW=A+B...\n       node tools/characters/glb_clips.ts --only OUT.glb SOURCE.glb CLIP|NEW=A+B...");
     process.exit(2);
   }
   const before = readFileSync(target);

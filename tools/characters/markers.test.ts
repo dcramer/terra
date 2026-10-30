@@ -3,8 +3,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bake, distanceOf, foot, groundOf, HIGHEST_M, RATE, SKATE_M, WALK_MPS } from "./markers.ts";
-import { Glb, type V3 } from "./glb.ts";
+import { bake, distanceOf, foot, groundOf, HIGHEST_M, RATE, SKATE_M, TOUCH_S, WALK_MPS } from "./markers.ts";
+import { Glb, posed, type V3 } from "./glb.ts";
 
 const FPS = 60;
 
@@ -89,6 +89,38 @@ test("the game's walks have a foot down at every moment, and its strides do not 
     }
     for (const clip of ["Jog_Fwd_Loop", "Sprint_Loop"]) assert.equal(baked[clip].splits, 0, `${file}: ${clip} skates ${baked[clip].skate_m}`);
   }
+});
+
+test("a blow played in place whose root motion is kept apart plants its feet where the root-motion clip's stand still", () => {
+  // Quaternius's lunge (Sword_Light_D) steps 1.65 m in a tenth of a second: judged in place, a
+  // foot goes back fast under the body and neither seems down for half a second; judged on the
+  // ground its root motion passes, a foot is always down, and each plant's foot, in the clip
+  // that keeps the root motion, stays within a skate of where it landed.
+  const [inPlace, rm] = ["art/animation/ual2_fight.glb", "art/animation/ual2_fight_rm.glb"].map((f) => new Glb(f));
+  const clip = "Sword_Light_D";
+  const alone = bake(inPlace)[clip];
+  assert.ok(alone.neither_s > 0.3, `judged in place, neither foot down ${alone.neither_s} s`);
+  const rooted = bake(inPlace, rm)[clip];
+  assert.ok(rooted.rooted && rooted.pace === undefined, "a rooted clip has no pace");
+  assert.ok(rooted.neither_s <= 0.05, `judged on its root motion, neither foot down ${rooted.neither_s} s`);
+  const c = rm.clip(clip)!;
+  const spans = [rooted.markers.foot_down_l, rooted.markers.foot_down_r];
+  // The standing point is the heel or the toe tip, whichever stays (a foot turns on its heel).
+  [["foot_l", "ball_leaf_l"], ["foot_r", "ball_leaf_r"]].forEach((points, side) => {
+    for (const [a, b] of spans[side]) {
+      const end = b < a ? c.end : b;
+      const moved = points.map((name) => {
+        const at = (t: number) => posed(rm, c, t)[rm.named(name)].t;
+        // A plant starts up to TOUCH_S before the foot goes still, as it skims in to land.
+        const from = Math.min(end, a + TOUCH_S);
+        const first = at(from);
+        let most = 0;
+        for (let t = from; t <= end; t += 1 / 60) most = Math.max(most, Math.hypot(at(t)[0] - first[0], at(t)[2] - first[2]));
+        return most;
+      });
+      assert.ok(Math.min(...moved) < 2 * SKATE_M, `${points} planted ${a}-${b} s move ${moved.map((m) => m.toFixed(3))} m in the root-motion clip`);
+    }
+  });
 });
 
 test("a clip that keeps its root motion has its pelvis's travel along the way it goes, in its parent's space; one that stays has none", () => {
