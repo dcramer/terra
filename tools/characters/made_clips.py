@@ -26,6 +26,9 @@ standard T-pose, at art/animation/made/<clip>.bvh, or a GLB on our own skeleton 
     the take's mean turn of its bones there, which chose the loop (apart);
   - for an idle with "stand", its hips raised toward the body's rest and its head drawn back
     over them, its feet where they stood (stand.py);
+  - for a swim made lying in the water with "afloat" (m), raised as one so its hips' mean height
+    is that over the ground: where the swimmer's mover floats the body, so the game lays
+    nothing down (D584);
   - for a stride with "arms", its arms set to a runner's swing, its legs and spine untouched
     (swing_arms), and for one with "fist", its fingers closed that share of the way into the
     library's clenched fist (Kimodo leaves them straight).
@@ -240,13 +243,15 @@ def facing(src, f):
     return Vector((0.0, 0.0, 1.0)).cross(Vector((across.x, across.y, 0.0))).normalized()
 
 
-def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False, planted=False):
+def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False, planted=False, afloat=None):
     """Frames f0 to f1 of `src` as an action called `name` on `arm`, in place and looped, each
     frame of the take `k` frames of the action. A take that travels `way` degrees to the right
     of where it faces (a strafe) is turned by its travel less that; a one-shot (`once`) by where
     its body faces at the take's start (Kimodo's ahead), and not closed into a loop. One that
     `travels` (a start, a stop) keeps its hips' travel, its root motion, which the game takes off
-    by the clip's distance curve as Lyra's distance matching does (markers.ts bakes it)."""
+    by the clip's distance curve as Lyra's distance matching does (markers.ts bakes it). A swim
+    made lying (`afloat`, m) is raised as one so its hips' mean height is that over the ground:
+    where the body floats, as the swimmer's mover holds it (terra_walker::swim)."""
     scene = bpy.context.scene
     src_rest = {s: world_rest(src, s) for s in MAP}
     dst_rest = {d: world_rest(arm, d) for d in MAP.values()}
@@ -281,9 +286,17 @@ def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False, 
         mid = sum((src.matrix_world @ src.pose.bones[b].head for b in ("LeftToeBase", "RightToeBase")), Vector()) / 2
         return Vector((mid.x - mid0.x, mid.y - mid0.y, 0.0))
 
+    rise = Vector()
+    if afloat is not None:
+        heights = []
+        for f in range(f0, f1 + 1):
+            scene.frame_set(f)
+            heights.append((src.matrix_world @ src.pose.bones["Hips"].head).z * scale)
+        rise = Vector((0.0, 0.0, afloat - sum(heights) / len(heights)))
+        print(f"AFLOAT {name}: hips raised {rise.z * 100:+.1f} cm to a mean {afloat:.2f} m over the ground")
     if planted:
         scene.frame_set(f0)
-        mid0 = sum((src.matrix_world @ src.pose.bones[b].head for b in ("LeftToeBase", "RightToeBase")), Vector()) / 2
+        mid0 =sum((src.matrix_world @ src.pose.bones[b].head for b in ("LeftToeBase", "RightToeBase")), Vector()) / 2
     action = bpy.data.actions.new(name)
     arm.animation_data_create()
     arm.animation_data.action = action
@@ -295,7 +308,7 @@ def retarget(src, arm, name, f0, f1, k=1.0, way=0.0, once=False, travels=False, 
         hips = turn @ (src.matrix_world @ src.pose.bones["Hips"].head - slid - Vector((a.x, a.y, 0.0)))
         for d in order:
             pb = arm.pose.bones[d]
-            m = Matrix.LocRotScale(hips * scale if d == "pelvis" else (arm.matrix_world @ pb.matrix).translation, worlds[d], None)
+            m = Matrix.LocRotScale(hips * scale + rise if d == "pelvis" else (arm.matrix_world @ pb.matrix).translation, worlds[d], None)
             pb.matrix = arm.matrix_world.inverted() @ m
             if d in NO_ROLL:
                 # Its children are set after it, to their own world rotations, so the roll
@@ -581,7 +594,7 @@ def main():
         k = 1.0
         if entry.get("still") or entry.get("once"):
             k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
-        action, (seam_at, seam_turn) = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False), entry.get("planted", False))
+        action, (seam_at, seam_turn) = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False), entry.get("planted", False), entry.get("afloat"))
         if entry.get("way"):
             # Which way the take went, measured: its travel from where its hips face.
             scene = bpy.context.scene
