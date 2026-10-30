@@ -13,6 +13,7 @@
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
 pub mod appearance;
+pub mod arm_swing;
 pub mod arms;
 pub mod bend;
 pub mod bodies;

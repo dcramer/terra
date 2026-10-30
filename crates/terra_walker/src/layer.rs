@@ -71,7 +71,8 @@ impl Arms {
 /// A clip's places in a figure's graph: whole twice, so a clip played again blends from
 /// itself; masked off both arms twice, played under a stance's hold; on the arms alone, as a
 /// stance's hold; and for each arm alone (left, right), masked off it twice, played under a
-/// carry's hold on it, and on it alone, as that hold.
+/// carry's hold on it, and on it alone, as that hold. A stride loop with an arm's additive swing
+/// (`swing_of`) has it for each copy and arm, `swing[copy][arm]`, under the additive node.
 #[derive(Clone, Copy, Debug)]
 pub struct Nodes {
     pub whole: [AnimationNodeIndex; 2],
@@ -79,6 +80,19 @@ pub struct Nodes {
     pub over: AnimationNodeIndex,
     pub under_one: [[AnimationNodeIndex; 2]; 2],
     pub over_one: [AnimationNodeIndex; 2],
+    pub swing: [[Option<AnimationNodeIndex>; 2]; 2],
+}
+
+/// The loop and arm (0 left, 1 right) an additive swing clip is of, by its name
+/// (`<loop>.Arm_L_Add`, `<loop>.Arm_R_Add`), as `tools/characters/additive.ts` bakes them: an
+/// arm's rotations in the loop less the loop's mean pose of them. None for any other clip.
+pub fn swing_of(name: &str) -> Option<(&str, usize)> {
+    let (clip, arm) = name.rsplit_once('.')?;
+    match arm {
+        "Arm_L_Add" => Some((clip, 0)),
+        "Arm_R_Add" => Some((clip, 1)),
+        _ => None,
+    }
 }
 
 impl Nodes {
@@ -121,16 +135,40 @@ pub fn graph_of(
     files: &[&Gltf],
     nodes: &Assets<GltfNode>,
 ) -> (AnimationGraph, HashMap<String, Nodes>) {
-    let mut graph = AnimationGraph::new();
-    let root = graph.root;
-    let mut clips = HashMap::new();
     let named = first_named(files.iter().map(|gltf| {
         gltf.named_animations
             .iter()
             .map(|(name, clip)| (name.as_ref(), clip))
     }));
+    let (mut graph, clips) = graph_named(named);
+    for gltf in files {
+        let paths = paths(gltf, nodes);
+        mask(&mut graph, paths.iter().map(Vec::as_slice));
+    }
+    (graph, clips)
+}
+
+/// The graph of the clips `named`, each at its places (`Nodes`), its bones in no mask group yet.
+///
+/// The clips blend under one blend node, the body's pose, which is the first child of an
+/// additive node: an arm's swing clips (`swing_of`) are its other children, each masked to its
+/// arm, so a swing is added to the pose the clips and holds blend (Bevy's additive blend
+/// accumulates each child after the first onto it, `slerp(1, delta, weight) * pose`), inside
+/// the graph and not as a layer after it (D584). Ported from ALS v4's overlay layering, whose
+/// `Arm_R_Add` adds the locomotion's arm over an overlay pose.
+fn graph_named(
+    named: Vec<(&str, &Handle<AnimationClip>)>,
+) -> (AnimationGraph, HashMap<String, Nodes>) {
+    let mut graph = AnimationGraph::new();
+    let added = graph.add_additive_blend(1.0, graph.root);
+    // Made before any swing, so Bevy (children in the order of their indices) takes it first.
+    let body = graph.add_blend(1.0, added);
+    let mut clips = HashMap::new();
+    let (swings, named): (Vec<_>, Vec<_>) = named
+        .into_iter()
+        .partition(|(name, _)| swing_of(name).is_some());
     for (name, clip) in named {
-        let mut add = |mask| graph.add_clip_with_mask(clip.clone(), mask, 1.0, root);
+        let mut add = |mask| graph.add_clip_with_mask(clip.clone(), mask, 1.0, body);
         let (left, right) = (Arms::Left, Arms::Right);
         let nodes = Nodes {
             whole: [add(0), add(0)],
@@ -141,12 +179,21 @@ pub fn graph_of(
                 [add(right.groups()), add(right.groups())],
             ],
             over_one: [add(left.over()), add(right.over())],
+            swing: [[None; 2]; 2],
         };
         clips.insert(name.to_string(), nodes);
     }
-    for gltf in files {
-        let paths = paths(gltf, nodes);
-        mask(&mut graph, paths.iter().map(Vec::as_slice));
+    for (name, clip) in swings {
+        let Some((of, arm)) = swing_of(name) else {
+            continue;
+        };
+        let Some(nodes) = clips.get_mut(of) else {
+            continue;
+        };
+        let over = [Arms::Left, Arms::Right][arm].over();
+        for copy in 0..2 {
+            nodes.swing[copy][arm] = Some(graph.add_clip_with_mask(clip.clone(), over, 1.0, added));
+        }
     }
     (graph, clips)
 }
@@ -524,6 +571,128 @@ mod tests {
         app.update();
         app.update();
         assert_eq!(shown(&app), [shield[0], torch[1], walk[2]]);
+    }
+
+    /// A clip turning each named bone to its own rotation.
+    fn turned(at: &[(&[Name], Quat)]) -> AnimationClip {
+        let mut clip = AnimationClip::default();
+        for (path, turn) in at {
+            clip.add_curve_to_target(
+                AnimationTargetId::from_names(path.iter()),
+                AnimatableCurve::new(
+                    animated_field!(Transform::rotation),
+                    ConstantCurve::new(Interval::UNIT, *turn),
+                ),
+            );
+        }
+        clip
+    }
+
+    /// The carried arm's swing (ALS's `Arm_R_Add`): a loop's additive clip on the arm, played
+    /// at a share, turns the carry pose the hold lays by that share of its delta, on the left
+    /// (the parent's frame), and touches neither the legs nor the other arm; at no weight the
+    /// arm holds the carry pose as laid.
+    #[test]
+    fn an_arms_swing_is_added_over_its_carry_pose_by_its_share() {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_once()),
+            AssetPlugin::default(),
+            AnimationPlugin,
+        ));
+        let names = |path: &[&'static str]| path.iter().map(|n| Name::new(*n)).collect::<Vec<_>>();
+        let (left, right, leg) = (
+            names(&["Rig", "spine", "clavicle_l", "upperarm_l"]),
+            names(&["Rig", "spine", "clavicle_r", "upperarm_r"]),
+            names(&["Rig", "thigh_l"]),
+        );
+        let walk = [
+            Quat::from_rotation_x(0.3),
+            Quat::from_rotation_x(-0.3),
+            Quat::from_rotation_z(0.2),
+        ];
+        let carry = Quat::from_rotation_y(0.8) * Quat::from_rotation_z(-0.4);
+        let delta = Quat::from_rotation_x(0.6);
+        let mut clips = app.world_mut().resource_mut::<Assets<AnimationClip>>();
+        let walk_clip = clips.add(turned(&[
+            (&left, walk[0]),
+            (&right, walk[1]),
+            (&leg, walk[2]),
+        ]));
+        let carry_clip = clips.add(turned(&[(&right, carry)]));
+        let swing_clip = clips.add(turned(&[(&right, delta)]));
+        let (mut graph, nodes) = graph_named(vec![
+            ("Walk_Loop.Arm_R_Add", &swing_clip),
+            ("Walk_Loop", &walk_clip),
+            ("Carry_Tool", &carry_clip),
+        ]);
+        mask(
+            &mut graph,
+            [left.as_slice(), right.as_slice(), leg.as_slice()],
+        );
+        let (walking, holding) = (nodes["Walk_Loop"], nodes["Carry_Tool"]);
+        assert!(holding.swing[0][1].is_none() && walking.swing[0][0].is_none());
+        let swing = walking.swing[0][1].expect("the walk's right arm swings");
+        let graph = app
+            .world_mut()
+            .resource_mut::<Assets<AnimationGraph>>()
+            .add(graph);
+        let under = walking.played(0, Arms::Right);
+        let mut animator = AnimationPlayer::default();
+        animator.start(under).repeat().set_weight(1.0);
+        animator
+            .start(holding.over(Arms::Right).unwrap())
+            .set_weight(1.0);
+        animator.start(swing).repeat().set_weight(0.0);
+        let figure = app
+            .world_mut()
+            .spawn((animator, AnimationGraphHandle(graph)))
+            .id();
+        let bone = |app: &mut App, path: &[Name]| {
+            app.world_mut()
+                .spawn((
+                    Transform::default(),
+                    AnimationTargetId::from_names(path.iter()),
+                    AnimatedBy(figure),
+                ))
+                .id()
+        };
+        let bones = [
+            bone(&mut app, &left),
+            bone(&mut app, &right),
+            bone(&mut app, &leg),
+        ];
+        let shown = |app: &App| bones.map(|b| app.world().get::<Transform>(b).unwrap().rotation);
+        let near = |a: Quat, b: Quat| a.dot(b).abs() > 1.0 - 1e-6;
+        // The graph is threaded on the first update.
+        app.update();
+        for share in [0.0, 0.5, 1.0] {
+            app.world_mut()
+                .get_mut::<AnimationPlayer>(figure)
+                .unwrap()
+                .animation_mut(swing)
+                .unwrap()
+                .set_weight(share);
+            app.update();
+            let [l, r, g] = shown(&app);
+            let wanted = Quat::IDENTITY.slerp(delta, share) * carry;
+            assert!(near(r, wanted), "share {share}: {r} against {wanted}");
+            assert!(near(l, walk[0]) && near(g, walk[2]), "share {share}");
+        }
+    }
+
+    #[test]
+    fn a_swing_clip_is_known_by_its_loop_and_arm() {
+        assert_eq!(
+            swing_of("Jog_Fwd_Loop.Arm_L_Add"),
+            Some(("Jog_Fwd_Loop", 0))
+        );
+        assert_eq!(
+            swing_of("Jog_Fwd_Loop.Arm_R_Add"),
+            Some(("Jog_Fwd_Loop", 1))
+        );
+        assert_eq!(swing_of("Jog_Fwd_Loop"), None);
+        assert_eq!(swing_of("Jog_Fwd_Loop.Arm_X_Add"), None);
     }
 
     #[derive(Component)]

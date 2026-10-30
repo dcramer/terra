@@ -1,0 +1,4 @@
+{
+  "from": ["Idle_Loop", "Walk_Loop", "Jog_Fwd_Loop", "Sprint_Loop", "Crouch_Fwd_Loop"],
+  "bones": ["upperarm"]
+}

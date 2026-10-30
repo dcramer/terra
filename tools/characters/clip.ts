@@ -38,6 +38,7 @@ import { measure } from "./phases.ts";
 import { clearFile } from "./clear.ts";
 import { bakeFile } from "./markers.ts";
 import { mirrorFile } from "./mirror.ts";
+import { additiveFile } from "./additive.ts";
 import { MOST_DEG, limitFile, wristLimited } from "./wrist_limit.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -279,6 +280,7 @@ function main() {
     // The mirrored clips (mirror.ts), then each clip's foot-down markers, which the game keeps
     // feet by (D455).
     mirrorFile(GAME_CLIPS);
+    additiveFile(GAME_CLIPS);
     bakeFile(GAME_CLIPS);
     let text = readFileSync(into, "utf8");
     // Each blow plays its take as the list holds it (Open_Slash of Keyed_Slash), and every other

@@ -1181,6 +1181,7 @@
   "Carry_Torch": {
     "of": "Idle_Loop",
     "upright": true,
+    "swing": 0.25,
     "hold": [
       {
         "clip": "Idle_Loop",
@@ -1236,6 +1237,7 @@
   },
   "Carry_Tool": {
     "of": "Idle_Loop",
+    "swing": 0.5,
     "hold": [
       {
         "clip": "Idle_Loop",
@@ -1263,6 +1265,7 @@
   "Carry_Round_Shield": {
     "of": "Idle_Loop",
     "upright": true,
+    "swing": 0.25,
     "hold": [
       {
         "clip": "Keyed_Guard",

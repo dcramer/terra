@@ -105,6 +105,8 @@ pub struct Moves {
     /// Every clip's foot-down markers (`feet::markers`), by which a stride loop taking over
     /// from another is put in step with it (`synced`).
     markers: HashMap<String, Markers>,
+    /// Each carry pose's share of the stride's arm swing (`arm_swing`).
+    swings: HashMap<String, f32>,
 }
 
 impl Moves {
@@ -140,6 +142,10 @@ struct Animated {
     /// The carry pose each arm (left, right) takes in a carried clip, as a hold on that arm
     /// alone: its hand's look's (`CarryHold`, D560).
     carry: Carry,
+    /// Each arm's carry pose's share of the stride's swing, and the swings playing
+    /// (`arm_swing`).
+    swung: [f32; 2],
+    swings: Vec<crate::arm_swing::Swing>,
     /// Where the player's body was shown last frame (`shown_velocity`).
     shown: Option<Vec3>,
 }
@@ -149,15 +155,16 @@ struct Animated {
 pub type Carry = [Option<AnimationNodeIndex>; 2];
 
 /// The carry each arm of a figure whose hands are `hands` takes now: the carry pose of what
-/// its hand holds (`CarryHold`), while that look is there. The main hand is the right until
-/// D463's mirror, as `character::HAND_R` is.
+/// its hand holds (`CarryHold`), while that look is there, and that pose's share of the
+/// stride's swing (`arm_swing`). The main hand is the right until D463's mirror, as
+/// `character::HAND_R` is.
 fn carry_of(
     moves: &Moves,
     hands: &[Entity],
     grips: &Query<(&Grip, Option<&CarryHold>)>,
     looks: &Query<(), With<Held>>,
-) -> Carry {
-    let mut carry = [None; 2];
+) -> (Carry, [f32; 2]) {
+    let (mut carry, mut swung) = ([None; 2], [0.0; 2]);
     for &hand in hands {
         let Ok((grip, pose)) = grips.get(hand) else {
             continue;
@@ -168,9 +175,13 @@ fn carry_of(
         };
         if let Some(node) = carry_pose(&moves.clips, grip.hand, pose, looks) {
             carry[side] = Some(node);
+            swung[side] = pose
+                .and_then(|pose| moves.swings.get(&pose.clip))
+                .copied()
+                .unwrap_or(0.0);
         }
     }
-    carry
+    (carry, swung)
 }
 
 /// The arms a carry lays holds on.
@@ -305,7 +316,8 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             PostUpdate,
-            mix.after(bevy::animation::transition::advance_transitions)
+            // After the clips advance, so a swing takes its loop's seek time this frame.
+            mix.after(bevy::animation::advance_animations)
                 .before(bevy::animation::animate_targets),
         );
 }
@@ -343,6 +355,7 @@ fn prepare(
         markers: crate::feet::markers(gltf, &gltf_nodes)
             .into_iter()
             .collect(),
+        swings: crate::arm_swing::shares(gltf, &gltf_nodes),
     });
 }
 
@@ -437,6 +450,8 @@ fn dress(
             mixed: Vec::new(),
             holds: Vec::new(),
             carry: [None; 2],
+            swung: [0.0; 2],
+            swings: Vec::new(),
             shown: None,
         },
     ));
@@ -503,12 +518,13 @@ fn animate(
         let asked = acting.map_or(0, |acting| acting.asked);
         // A carry pose taken up or put down (a torch lit or put away) shows at once in a
         // carried clip, played again with the hold; in any other, at the next clip.
-        let carry = carry_of(&moves, &animated.hands, &grips, &looks);
-        let recarry = animated.carry != carry
+        let (carry, swung) = carry_of(&moves, &animated.hands, &grips, &looks);
+        let recarry = (animated.carry != carry || animated.swung != swung)
             && animated.playing.as_ref().is_some_and(|(name, _, arms)| {
                 *arms != Arms::Both && CARRIED_IN.contains(&name.as_str())
             });
         animated.carry = carry;
+        animated.swung = swung;
         if animated.doing != doing || (act.is_some() && animated.applied != asked) || recarry {
             change(
                 &moves,
@@ -598,14 +614,15 @@ fn change(
     // Both hands carry in a carried clip and use what they hold in any other; an arm whose hand
     // carries in a pose, with no stance's hold over it, is held so in the body (`carry_arm`).
     let carried = CARRIED_IN.contains(&clip);
+    let posed = [0, 1].map(|side| carried && hold.is_none() && animated.carry[side].is_some());
     for &grip in &animated.hands {
-        if let Ok((mut hand, mut posed, grip)) = hands.get_mut(grip) {
+        if let Ok((mut hand, mut is_posed, grip)) = hands.get_mut(grip) {
             hand.0 = carried;
             let side = match grip.hand {
                 Hand::Off => 0,
                 Hand::Main => 1,
             };
-            posed.0 = carried && hold.is_none() && animated.carry[side].is_some();
+            is_posed.0 = posed[side];
         }
     }
     // A stride loop taking over from another goes on at the same step (sync groups).
@@ -662,6 +679,15 @@ fn change(
                 let overs: Vec<_> = animated.carry.iter().flatten().copied().collect();
                 crate::layer::lay_all(&mut animated.holds, animator, &overs, node);
             }
+            // Each arm carrying in a pose swings as the stride's arm does, at its share.
+            let swung = animated.swung;
+            crate::arm_swing::start(
+                &mut animated.swings,
+                animator,
+                (nodes, copy, node),
+                posed,
+                swung,
+            );
             if let Some((mix, share)) = act.and_then(|act| act.mix.as_ref())
                 && let Some(both) = moves.clips.get(mix)
             {
@@ -711,6 +737,7 @@ fn synced(
 fn mix(mut figures: Query<(&mut AnimationPlayer, &mut Animated)>) {
     for (mut animator, mut animated) in &mut figures {
         crate::layer::ride(&mut animated.holds, &mut animator);
+        crate::arm_swing::ride(&mut animated.swings, &mut animator);
         animated.mixed.retain(|m| {
             let Some(whole) = animator.animation(m.main).map(|a| a.weight()) else {
                 animator.stop(m.mix);
@@ -896,6 +923,8 @@ mod tests {
                     applied: 0,
                     holds: Vec::new(),
                     carry: [None; 2],
+                    swung: [0.0; 2],
+                    swings: Vec::new(),
                     mixed: vec![Mixed {
                         main,
                         mix: held,

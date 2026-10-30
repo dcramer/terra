@@ -27,6 +27,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Clip, Glb, type Pose, type Q, type V3, dot, len, matrix, posed, qinv, qmul, rot, sub } from "./glb.ts";
+import { isAdditive } from "./additive.ts";
 import { along } from "./held.ts";
 import { type Shape, shaped, skinOf } from "./skin.ts";
 
@@ -220,7 +221,8 @@ function stageClips(body: Glb, source: Glb, files: string[], only?: string): Lin
   for (const file of files) {
     const g = file === body.file ? body : new Glb(file);
     for (const name of g.clipNames()) {
-      if (only && name !== only) continue;
+      // An arm's additive swing (additive.ts) is a delta, not a pose to stand a body in.
+      if ((only && name !== only) || isAdditive(name)) continue;
       const clip = g.clip(name)!;
       const own = source.clip(name);
       const worst: Record<string, number> = {};

@@ -68,6 +68,7 @@ import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
 import { type Holding, keptOff, reach } from "./arms.ts";
 import { carryArm } from "./carry_arm.ts";
+import { sharesIn, swung as armSwung } from "./additive.ts";
 import { about, atWrist as atWristShare, elbowOpen, inFist as inFistShare, wristTurn } from "./carry_hand.ts";
 import { fitter } from "./shield_arm.ts";
 import { type Handle, FIST_CM, WRAP_DEG, close, fistOff, handRest, lookGrip, seated, tipped as tipHandle } from "./grip.ts";
@@ -193,6 +194,7 @@ const clips = new Map<string, Clip>();
 // `--carry`: each carry pose a held look names (its `carry_hold`, D560) with the clavicle of the
 // arm it goes on, set once the looks are hung below.
 let carryPoses: [string, string][] = [];
+const swingShares = sharesIn(clipsFile);
 const clipOf = (name: string): Clip => {
   if (!clips.has(name)) {
     // `Walk_Loop+Keyed_Guard`: a locomotion clip under a stance's hold, laid by the mask.
@@ -201,7 +203,13 @@ const clipOf = (name: string): Clip => {
     if (!c) throw new Error(`no clip ${name} in ${opt.clips}`);
     // A carried clip with no stance hold takes each carry pose on its arm alone, as
     // terra_walker::figure lays a `CarryHold` (Nodes::over_one); the clip keeps its name.
-    if (!over && carriedIn.includes(name)) for (const [pose, root] of carryPoses) c = { ...clipsFile.layered(c, clipOf(pose), [root]), name };
+    // Its arm then swings as the stride's does, at the pose's share (additive.ts), as the game's
+    // graph adds the loop's additive clip over the hold.
+    if (!over && carriedIn.includes(name))
+      for (const [pose, root] of carryPoses) {
+        c = { ...clipsFile.layered(c, clipOf(pose), [root]), name };
+        c = armSwung(clipsFile, c, root.slice(-1) === "l" ? "L" : "R", swingShares[pose] ?? 0);
+      }
     clips.set(name, c);
   }
   return clips.get(name)!;
