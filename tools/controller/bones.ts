@@ -41,11 +41,11 @@ export type Table = Map<string, Map<string, Map<string, Bone>>>;
 /// after it starts, past the blend into it.
 export const MOTIONS: Motion[] = [
   { name: "idle, hammer", from: 90, to: 300, speed: [0, 0.2] },
-  { name: "jog, hammer", from: 390, to: 780, speed: [2.5, 5.27] },
-  { name: "sprint, hammer", from: 870, to: 1140, speed: [5.27, 9.5] },
+  { name: "jog, hammer", from: 390, to: 780, speed: [2.5, 5.0] },
+  { name: "sprint, hammer", from: 870, to: 1140, speed: [5.0, 9.5] },
   { name: "idle, empty", from: 1380, to: 1590, speed: [0, 0.2] },
-  { name: "jog, empty", from: 1680, to: 2070, speed: [2.5, 5.27] },
-  { name: "sprint, empty", from: 2160, to: 2430, speed: [5.27, 9.5] },
+  { name: "jog, empty", from: 1680, to: 2070, speed: [2.5, 5.0] },
+  { name: "sprint, empty", from: 2160, to: 2430, speed: [5.0, 9.5] },
 ];
 const PRESSES = ["w@300-1140", "shift@780-1140", "6@1260", "w@1590-2430", "shift@2070-2430"];
 /// Stills from the game's camera: a frame of each moving motion and the end, which ends the run.

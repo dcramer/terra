@@ -34,10 +34,10 @@ use terra_world::tick::{Sim, Smoothed};
 const BLEND: Duration = Duration::from_millis(220);
 /// How close the spiders may be while a prisoner is freed.
 const GUARDED_M: f32 = 16.0;
-/// How fast someone walks and jogs: their clips' own paces (D585), the jog a little over to
-/// catch up with a player jogging (`terra_walker::movement::JOG_SPEED`).
+/// How fast someone walks and jogs: the walk its clip's own pace (D585), the jog a little over
+/// a player's jog (`terra_motion::gaits::JOG`) to catch up, within what D585 shows its clip at.
 const WALK_MPS: f32 = terra_town::WALK_PACE;
-const JOG_MPS: f32 = terra_town::JOG_PACE * (1.0 + terra_town::GAIT_SPREAD);
+const JOG_MPS: f32 = terra_motion::gaits::JOG * 1.03;
 
 /// What someone is doing.
 #[derive(Clone, Copy, PartialEq, Debug)]

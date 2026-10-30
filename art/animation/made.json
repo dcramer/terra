@@ -6,28 +6,27 @@
     "seed": 1,
     "take": 1
   },
+  "Crouch_Fwd_Loop": {
+    "prompt": "A person walks forward slowly in a low crouch, knees deeply bent, sneaking quietly.",
+    "speed": 0.8,
+    "seconds": 8,
+    "seed": 41,
+    "samples": 4,
+    "take": 0
+  },
   "Jog_Fwd_Loop": {
-    "prompt": "A person jogs forward with long strides, arms bent and swinging at the sides.",
-    "speed": 5,
-    "seconds": 6,
-    "seed": 5,
+    "source": "uthana",
+    "model": "loco",
+    "prompt": "",
+    "style": "neutral_male_a",
+    "speed": 4.3,
+    "strides": 5,
+    "seconds": 0,
+    "seed": 0,
+    "samples": 3,
+    "fist": 0.6,
     "take": 2,
-    "step": 0.1,
-    "arms": {
-      "swing": [
-        30,
-        50
-      ],
-      "elbow": [
-        65,
-        100
-      ],
-      "tuck": 12,
-      "wrist": 8,
-      "across": 8,
-      "palm": 30
-    },
-    "fist": 0.95
+    "motion": "mSfmPwBk97U1"
   },
   "Sprint_Loop": {
     "prompt": "A person sprints forward at full speed, leaning forward, arms driving hard back and forth.",

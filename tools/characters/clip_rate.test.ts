@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { Glb } from "./glb.ts";
+import { Glb, posed } from "./glb.ts";
 
 type Entry = { still?: boolean; once?: boolean; looped?: number; span?: [number, number] };
 type Joint = { name: string; parent: number; offset: number[]; channels: string[]; at: number };
@@ -67,14 +67,28 @@ function track(take: ReturnType<typeof bvh>, joint: string): number[][] {
 /** The take's stride (s): the middle of the times between left heel strikes past its first
  * second, a strike found as made_clips.py's `stride` finds it (the foot within 5 cm of its
  * lowest and slower than 0.75 m/s over the ground, after it was not). */
-function stride(take: ReturnType<typeof bvh>): number {
-  const foot = track(take, "LeftFoot");
+function stride({ foot, dt }: { foot: number[][]; dt: number }): number {
   const low = Math.min(...foot.map((p) => p[1]));
-  const planted = foot.map((p, k) => k > 0 && p[1] < low + 5 && (Math.hypot(p[0] - foot[k - 1][0], p[2] - foot[k - 1][2]) / 100) / take.dt < 0.75);
-  const strikes = planted.flatMap((on, k) => (on && !planted[k - 1] && k * take.dt >= 1 && k < foot.length - 5 ? [k] : []));
-  const gaps = strikes.slice(1).map((b, i) => (b - strikes[i]) * take.dt).filter((s) => s >= 0.4 && s <= 1.5).sort((a, b) => a - b);
+  const planted = foot.map((p, k) => k > 0 && p[1] < low + 0.05 && Math.hypot(p[0] - foot[k - 1][0], p[2] - foot[k - 1][2]) / dt < 0.75);
+  const strikes = planted.flatMap((on, k) => (on && !planted[k - 1] && k * dt >= 1 && k < foot.length - 5 ? [k] : []));
+  const gaps = strikes.slice(1).map((b, i) => (b - strikes[i]) * dt).filter((s) => s >= 0.4 && s <= 1.5).sort((a, b) => a - b);
   assert.ok(gaps.length, `no left heel strikes a stride apart in the take (strikes at frames ${strikes})`);
   return gaps[Math.floor(gaps.length / 2)];
+}
+
+/** A take's left foot over its frames, metres, Y up, and its frame time (s): a BVH take's own
+ * frames (Kimodo's, in centimetres), or a GLB take (Uthana's, on our skeleton) sampled at
+ * Kimodo's 30 a second, as motion.ts downloads it. */
+function leftFoot(file: string): { foot: number[][]; dt: number } {
+  if (file.endsWith(".bvh")) {
+    const take = bvh(file);
+    return { foot: track(take, "LeftFoot").map((p) => p.map((x) => x / 100)), dt: take.dt };
+  }
+  const take = new Glb(file);
+  const clip = take.clip(take.clipNames()[0])!;
+  const at = take.named("foot_l");
+  const dt = 1 / 30;
+  return { foot: Array.from({ length: Math.floor(clip.end / dt) + 1 }, (_, k) => posed(take, clip, k * dt)[at].t), dt };
 }
 
 /** How long a GLB take lasts (s): its longest track. */
@@ -116,7 +130,7 @@ for (const set of SETS) {
         assert.ok(Math.abs(clip.end - whole) <= WHOLE_WITHIN_S,
           `${name} lasts ${clip.end.toFixed(3)} s but its take ${whole.toFixed(3)} s (${(clip.end / whole).toFixed(2)} times): ${fix}`);
       } else {
-        const take = bvh(file);
+        const take = leftFoot(file);
         const made = stride(take);
         assert.ok(Math.abs(clip.end / made - 1) <= STRIDE_WITHIN,
           `${name}'s stride lasts ${clip.end.toFixed(3)} s but its take's ${made.toFixed(3)} s at ${(1 / take.dt).toFixed(0)} fps (${(clip.end / made).toFixed(2)} times, so it plays at ${(made / clip.end).toFixed(2)} of its cadence): ${fix}`);

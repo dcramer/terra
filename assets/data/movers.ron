@@ -74,7 +74,7 @@
         radius: 0.3,
         height: 1.8,
         mass: 75.0,
-        jog: 4.535,
+        jog: 4.0,
         sprint: 6.0,
         swim: 2.0,
         accel: 30.0,

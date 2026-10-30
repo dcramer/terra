@@ -33,7 +33,7 @@ const THRESHOLD_M: f32 = 0.9;
 /// The walk's and jog's paces on the base body (m/s, `terra_motion::gaits`) and a walker's
 /// spread off them (D585).
 pub const WALK_PACE: f32 = terra_motion::gaits::WALK;
-pub const JOG_PACE: f32 = terra_motion::gaits::JOG;
+pub const JOG_PACE: f32 = terra_motion::gaits::JOG_PACE;
 pub const GAIT_SPREAD: f32 = 0.08;
 
 /// How detailed someone is kept, by how near the nearest viewer is.

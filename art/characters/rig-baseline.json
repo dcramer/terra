@@ -12,8 +12,8 @@
     "sink_m": 0.001
   },
   "Jog_Fwd_Loop": {
-    "bad_edge_share": 0.0085,
-    "sink_m": 0.0
+    "bad_edge_share": 0.0073,
+    "sink_m": 0.028
   },
   "Sprint_Loop": {
     "bad_edge_share": 0.0076,
@@ -32,8 +32,8 @@
     "sink_m": 0.002
   },
   "Crouch_Fwd_Loop": {
-    "bad_edge_share": 0.0088,
-    "sink_m": 0.008
+    "bad_edge_share": 0.0096,
+    "sink_m": 0.0
   },
   "Jump_Start": {
     "bad_edge_share": 0.0068,
