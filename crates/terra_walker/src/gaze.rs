@@ -28,9 +28,10 @@ pub const MOST: f32 = 70.0;
 /// head on it, Unity's body and head weights).
 pub const NECK: f32 = 0.4;
 /// The head's tilt off upright, degrees, over which the turn is let go: all of it to `HELD`,
-/// none past `LET_GO`.
-const HELD: f32 = 35.0;
-const LET_GO: f32 = 60.0;
+/// none past `LET_GO`. A bowed head is not a tumble: a chop's head nods 66 degrees (Quaternius's
+/// Sword_Heavy_D in the duel's record, its tilt nearly all pitch), a roll's goes past 150.
+const HELD: f32 = 70.0;
+const LET_GO: f32 = 90.0;
 
 /// On a body whose model has a neck and a head: those bones, the head's ahead and up in its own
 /// frame (from its rest), and what was written over each.
@@ -258,6 +259,24 @@ mod tests {
             // The chest is the clip's: the swing itself is left alone.
             let turned = world.get::<Transform>(chest_bone).unwrap().rotation;
             assert!(turned.angle_between(Quat::from_rotation_y(chest.to_radians())) < 1e-4);
+        }
+    }
+
+    /// A heavy chop bows the head 64-66° while the chest stands turned off the aim (the duel's
+    /// record of Quaternius's Sword_Heavy_D: 64° left, the look-at let go as for a tumble). The
+    /// head still comes back to the aim, its nod the clip's.
+    #[test]
+    fn a_head_bowed_in_a_chop_stays_on_the_aim() {
+        for chest in [45.0, -45.0_f32] {
+            let mut world = World::new();
+            let (root, _, head) = body(&mut world, chest);
+            let neck = world.get::<ChildOf>(head).unwrap().parent();
+            world.get_mut::<Transform>(neck).unwrap().rotation =
+                Quat::from_rotation_x(66.0_f32.to_radians());
+            world.get_mut::<Transform>(head).unwrap().rotation = Quat::IDENTITY;
+            world.run_system_once(keep_on_aim).unwrap();
+            let off = head_off(&mut world, root, head);
+            assert!(off.abs() <= FREE + 0.1, "chest {chest}: head {off}");
         }
     }
 
