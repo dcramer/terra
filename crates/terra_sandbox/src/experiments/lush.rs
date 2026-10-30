@@ -783,10 +783,13 @@ impl Looks {
             extension: shrinking(SHADOW_HANDOVER_M, [0.0, 0.0]),
         });
         // The lumps cast a crown's broken, soft-rimmed shade, not discs (D359): alpha-tested, so
-        // the shadow pass runs the fragment shader that breaks them up.
+        // the shadow pass runs the fragment shader that breaks them up. They cast from their
+        // half away from the sun, their front faces culled, as shadow casters often are against
+        // acne: the shade they have always cast, the crowns' cards inside them left lit.
         looks.shadow_lumps = materials.add(Foliage {
             base: StandardMaterial {
                 alpha_mode: AlphaMode::Mask(0.5),
+                cull_mode: Some(bevy::render::render_resource::Face::Front),
                 ..default()
             },
             extension: FoliageExtension {

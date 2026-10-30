@@ -92,13 +92,15 @@ fn lump(build: &mut Build, centre: Vec3, radii: Vec3) {
             }
         }
     }
+    // Wound anticlockwise seen from outside, the front face Bevy keeps, so back-face culling
+    // drops the far half and the near one is lit by normals that face the eye.
     for ring in 0..rings {
         for step in 0..around {
             let a = base + ring * around + step;
             let b = base + ring * around + (step + 1) % around;
             build
                 .indices
-                .extend([a, a + around, b, b, a + around, b + around]);
+                .extend([a, b, a + around, b, b + around, a + around]);
         }
     }
 }
@@ -122,8 +124,8 @@ fn far_lump(build: &mut Build, centre: Vec3, radii: Vec3) {
         .collect::<Vec<_>>();
     for step in 0..6 {
         let (a, b) = (ring[step], ring[(step + 1) % 6]);
-        // Wound as the ball's are, so the same side faces out.
-        build.indices.extend([top, a, b, a, bottom, b]);
+        // Wound as the ball's are, anticlockwise seen from outside.
+        build.indices.extend([top, b, a, a, b, bottom]);
     }
 }
 
@@ -173,10 +175,46 @@ mod tests {
         hits as f32 * cell * cell
     }
 
-    /// Far off, a lump is drawn in a quarter of the ball's triangles, its outward side
-    /// facing out as the ball's does, covering within a few hundredths what the ball covers
-    /// seen from either side and from above: where it is a few pixels, the crown it makes
-    /// looks as big as it did.
+    /// Every face of a lump, near ball and far pyramid, is its front seen from outside: wound
+    /// anticlockwise there, as Bevy's front face is, and facing the way its corners' normals
+    /// do. So back-face culling keeps the half toward the eye, lit by normals facing it, not
+    /// the far inside of each lump with its normals turned away (forest perf round 3).
+    #[test]
+    fn every_face_of_a_lump_points_out() {
+        let (centre, radii) = (Vec3::new(3.0, 11.0, -2.0), Vec3::new(1.4, 0.9, 1.1));
+        let (mut ball, mut far) = (Build::default(), Build::default());
+        lump(&mut ball, centre, radii);
+        far_lump(&mut far, centre, radii);
+        for (name, build) in [("ball", &ball), ("far lump", &far)] {
+            let mut faced = 0;
+            for t in build.indices.chunks(3) {
+                let [a, b, c] = [t[0], t[1], t[2]].map(|i| Vec3::from(build.positions[i as usize]));
+                let front = (b - a).cross(c - a);
+                if front.length() < 1.0e-6 {
+                    continue;
+                }
+                let out = (a + b + c) / 3.0 - centre;
+                assert!(front.dot(out) > 0.0, "a {name}'s face {t:?} points in");
+                let normals = t
+                    .iter()
+                    .map(|i| Vec3::from(build.normals[*i as usize]))
+                    .sum::<Vec3>();
+                assert!(
+                    front.dot(normals) > 0.0,
+                    "a {name}'s face {t:?} faces from its normals"
+                );
+                faced += 1;
+            }
+            assert!(
+                faced >= build.triangles() / 2,
+                "a {name} has {faced} faces with area"
+            );
+        }
+    }
+
+    /// Far off, a lump is drawn in a quarter of the ball's triangles, covering within a few
+    /// hundredths what the ball covers seen from either side and from above: where it is a
+    /// few pixels, the crown it makes looks as big as it did.
     #[test]
     fn a_far_lump_covers_what_the_ball_does_in_a_quarter_of_its_triangles() {
         let radii = Vec3::new(1.0, 0.75, 1.0);
@@ -184,23 +222,6 @@ mod tests {
         lump(&mut ball, Vec3::ZERO, radii);
         far_lump(&mut far, Vec3::ZERO, radii);
         assert_eq!(far.triangles() * 4, ball.triangles());
-        // Every triangle that has an area is wound the same way round the middle, in both,
-        // so the same side of each is culled.
-        let facings = |build: &Build| -> Vec<f32> {
-            triangles(build)
-                .into_iter()
-                .map(|[a, b, c]| ((b - a).cross(c - a), a + b + c))
-                .filter(|(normal, _)| normal.length() > 1.0e-6)
-                .map(|(normal, middle)| normal.dot(middle).signum())
-                .collect()
-        };
-        let way = facings(&ball)[0];
-        assert!(
-            facings(&ball)
-                .iter()
-                .chain(&facings(&far))
-                .all(|f| *f == way)
-        );
         for axis in 0..3 {
             let (seen_ball, seen_far) = (covered(&ball, axis, 1.2), covered(&far, axis, 1.2));
             let off = (seen_far / seen_ball - 1.0).abs();
