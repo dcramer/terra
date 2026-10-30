@@ -544,7 +544,7 @@ fn parries(set: &MoveSet, lands_at: u32) {
 /// B rolls into A's slash: the blade passes through it in the roll's i-frames.
 fn dodges(set: &MoveSet, lands_at: u32) {
     let a = vec![(When::Frame(0), Press::Light)];
-    let b = vec![(When::Frame(lands_at - 17), Press::Roll)];
+    let b = vec![(When::Frame(lands_at.saturating_sub(17)), Press::Roll)];
     let duel = Duel::new(set, a, b).run(lands_at + 40);
     let log = duel.told();
     let contacts = duel.contacts();
