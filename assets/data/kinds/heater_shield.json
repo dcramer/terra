@@ -33,9 +33,10 @@
   },
   "carried": {
     "state": "built",
-    "mechanism": "strap",
-    "decisions": ["D546", "D554"],
-    "how": "on the forearm as the walker's carried clips leave it; a strapped look is not tipped (attachment.md Carried), and the heater names no carry pose"
+    "mechanism": "carry_pose",
+    "decisions": ["D546", "D554", "D560"],
+    "clip": "Carry_Round_Shield",
+    "how": "on the forearm at the left side, the upper arm out, in the round shield's carry pose (upright), 10 cm clear of the body at worst (a jump's start; it went 5-15 cm in with the walker's arm); a strapped look is not tipped (attachment.md Carried)"
   },
   "stowed": {
     "state": "decided",

@@ -6,5 +6,6 @@
   "toward": [-0.41, 0.322, -0.035],
   "out": [0, -1, 0],
   "strap": {"bone": "lowerarm_l", "fist": "socket.hand.L", "face": [0, 0, -1], "grip": [0, 1, 0]},
+  "carry_hold": "Carry_Round_Shield",
   "note": "Strapped by enarmes (D504): held at its hand strap, on its back right of the middle seen from behind, where the fist closes; the forearm runs from the arm strap on the left to it (+Y, across the board, 15 degrees down toward the hand as enarmes are often set), its point toward +X. Its back view, with the straps, is art/props/heater_shield/back.png. Strapped physically (D554): its hand strap in the body's own fist, its grip along that body's forearm, its front away from the forearm; where the board sits is the pose's, the arm solved to put it there (art/animation/shield_targets.json)."
 }
