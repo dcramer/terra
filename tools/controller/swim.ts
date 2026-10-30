@@ -1,8 +1,7 @@
 // A swimmer's pose on the controller's filmed lake (yard.ts's lake run; docs/controller.md "What
 // is presentation", D478): while it swims, the figure shows a swim clip and lies along the way it
-// goes, upright treading water, level stroking at the surface (but for its head and shoulders
-// out), pitched along a dive, as shipped swimmers are tilted by their pitch (Unreal's, BotW's,
-// Subnautica's). Measured on the run's walk record (`swimming`, `shows`, `torso`, `going`), not
+// goes, upright treading water, level stroking at the surface, pitched along a dive: the strokes
+// made lying and pitched by their way, as shipped swimmers are (Unreal's, Subnautica's; D514). Measured on the run's walk record (`swimming`, `shows`, `torso`, `going`), not
 // by eye. A line a check (D388). Node 22.18 or later; no dependencies.
 
 import type { Frame } from "../sandbox/duel/checks.ts";

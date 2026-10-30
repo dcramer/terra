@@ -29,7 +29,8 @@ pub const TEMPLATE: &str = "male";
 /// How long one animation takes to give way to the next.
 const BLEND: Duration = Duration::from_millis(180);
 /// How long a swim's clip takes to give way, wading into a swim and out, or a stroke to a
-/// tread: as long as the body takes to lie down along its stroke (`swim::Lie`).
+/// tread: long enough that the blend from an upright clip to a stroke made lying reads as the
+/// body lying down in the water, as `swim::Pitch` eases its pitch.
 const SWIM_BLEND: Duration = Duration::from_millis(400);
 /// The figure's clips: the base's and the sword fight's, on the base's skeleton.
 pub const CLIPS: &str = "models/character/fight.glb";
@@ -361,7 +362,7 @@ fn stand(
     for player in &players {
         commands
             .entity(player)
-            .insert((Figured, Shows::default(), crate::swim::Lie::default()));
+            .insert((Figured, Shows::default(), crate::swim::Pitch::default()));
         commands
             .spawn((
                 Name::new("Figure"),
@@ -453,7 +454,7 @@ fn animate(
             &Stance,
             Has<Downed>,
             Option<&Acting>,
-            Option<&mut crate::swim::Lie>,
+            Option<&mut crate::swim::Pitch>,
             Option<&mut Shows>,
         ),
         With<Player>,
@@ -471,7 +472,7 @@ fn animate(
 ) {
     let Some(moves) = moves else { return };
     for (mut animator, mut transitions, mut animated, place, own) in &mut figures {
-        let Ok((motion, body, stance, downed, acting, lie, shows)) =
+        let Ok((motion, body, stance, downed, acting, pitch, shows)) =
             players.get_mut(animated.player)
         else {
             continue;
@@ -493,9 +494,9 @@ fn animate(
             Some(_) => Doing::Acting,
             None => doing(velocity.length(), motion.airborne, stance, downed, swim),
         };
-        if let Some(mut lie) = lie {
-            lie.asked = match doing {
-                Doing::Swim(swim) => crate::swim::lie(motion, Some(swim)),
+        if let Some(mut pitch) = pitch {
+            pitch.asked = match doing {
+                Doing::Swim(swim) => crate::swim::pitch(motion, Some(swim)),
                 _ => 0.0,
             };
         }
