@@ -32,7 +32,11 @@ export type Place = {
   lair?: boolean;
 };
 
-export const PLACES: Record<string, Place> = {
+// Not exported: a tool takes a place by `place`, which applies the rules every run of it keeps
+// (D421's `--no-lair`). The looks check read this table directly and shot every place with
+// the spider nest, its violet glow in the tundra's pool and the village on its heath (tundra
+// round 16).
+const PLACES: Record<string, Place> = {
   lush: {
     about: "the lush forest: a tall conifer stand with oaks, on the yard's rolling ground (D301)",
     args: ["--experiment", "play", "--experiment", "lush", "--level", "yard"],

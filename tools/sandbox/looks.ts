@@ -18,7 +18,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ROOT } from "./client.ts";
 import { type Bands, type Look, type Reference, bands, look, reference, waterMask } from "./look.ts";
-import { PLACES, place } from "./places.ts";
+import { place } from "./places.ts";
 import { readPng } from "./png.ts";
 
 /// How a number is held: within a tolerance either side of the reference's, at most a
@@ -191,7 +191,8 @@ if (import.meta.main) {
   let failed = 0;
   const all: { place: string; j: Judged }[] = [];
   for (const n of names) {
-    const where = PLACES[n];
+    // As every tool runs it (`place`): without the combat lair (D421).
+    const where = place(n);
     const hour = arg("--time") ?? kept.places[n].time;
     const ref = reference(where.look);
     let files: Map<string, string>;

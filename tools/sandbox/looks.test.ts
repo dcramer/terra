@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { reference } from "./look.ts";
 import { MEASURES, judge, numbers, shown, style } from "./looks.ts";
-import { PLACES } from "./places.ts";
+import { place } from "./places.ts";
 
 const views = (values: number[]) => values.map((v, k) => ({ view: `v${k}`, numbers: { x: v } }));
 
@@ -56,8 +56,7 @@ test("every place's style names a place, a reference with every number held, a k
   for (const title of Object.values(kept.rules)) assert.ok(guide.includes(title), `docs/art-style.md does not state "${title}"`);
   assert.ok(Object.keys(kept.places).length > 0);
   for (const [name, held] of Object.entries(kept.places)) {
-    const where = PLACES[name];
-    assert.ok(where, `no place called ${name}`);
+    const where = place(name);
     assert.ok(/^\d{1,2}$/.test(held.time), name);
     const ref = reference(where.look);
     const target = numbers(ref.look, ref.bands);
@@ -69,6 +68,17 @@ test("every place's style names a place, a reference with every number held, a k
       assert.equal(given.length, 1, `${name}: ${measure} is held one way`);
       assert.ok((given[0] as number) > 0, `${name}: ${measure}'s tolerance`);
     }
+  }
+});
+
+test("every place the looks check holds is shot without the combat lair, as every demo is (D421)", async () => {
+  // The check took its places from the table itself, so the tundra was measured and judged
+  // with the spider nest's violet glow in its pool and the village on its heath.
+  const tools = await import("./places.ts");
+  assert.ok(!("PLACES" in tools), "places.ts hands out its places only through `place`");
+  for (const name of Object.keys(style().places)) {
+    const args = place(name).args;
+    assert.ok(args.includes("--no-lair"), `${name}: ${args.join(" ")}`);
   }
 });
 
