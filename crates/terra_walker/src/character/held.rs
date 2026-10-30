@@ -1,6 +1,7 @@
-//! Something held is used at one angle and carried at another: swung, the grip holds it as a
-//! hand would to strike; walking or standing, it tips forward and down by its file's
-//! `carry_tilt`, or else by the carry rule (`carry_rule`, docs/attachment.md, "Carried").
+//! Something held is used in one pose and carried in another: swung, the grip holds it as a
+//! hand would to strike; walking or standing, its arm takes the carry pose its file names
+//! (`carry_hold`, docs/attachment.md, "Carried"), the look untipped in the fist, unless its
+//! file gives a `carry_tilt`.
 
 use super::extra;
 use bevy::{
@@ -24,30 +25,6 @@ pub const CARRIED_IN: [&str; 10] = [
 /// How quickly something in hand turns between carried and used, in seconds.
 const TURN_S: f32 = 0.12;
 
-/// Carried, a look in hand whose file gives no `carry_tilt` tips its working end this far,
-/// degrees, forward and down from the hanging fist, as a tool hangs from a relaxed hand, so
-/// a new item needs no number set by hand (docs/attachment.md, "Carried"). 45 clears every
-/// look in hand on every template in every carried clip with the arm spacing (`arms::HELD`);
-/// level or raised, a bent arm's sprint turns the working end back into the head (the move
-/// check's sweep, item-attach job 5).
-pub const CARRY_DOWN: f32 = 45.0;
-/// ...but its working end no further than this below the grip, metres: the hanging fist is
-/// about 0.75 m up on the base, so a long look (a spear) tips less and stays off the ground.
-pub const CARRY_REACH: f32 = 0.55;
-
-/// The tilt a look in hand whose working end reaches `ahead` metres up its handle from the
-/// grip is carried at, by the rule (`CARRY_DOWN`, `CARRY_REACH`). Its twin is
-/// `tools/characters/held.ts`'s `carryRule`.
-pub fn carry_rule(ahead: f32) -> f32 {
-    let most = libm::sinf(CARRY_DOWN.to_radians());
-    let down = if ahead > CARRY_REACH {
-        (CARRY_REACH / ahead).min(most)
-    } else {
-        most
-    };
-    -libm::asinf(down).to_degrees()
-}
-
 /// On a hand socket: whether what it holds is being carried (`CARRIED_IN`) or used.
 #[derive(Component, Default)]
 pub struct Carrying(pub bool);
@@ -59,8 +36,8 @@ pub struct CarryPosed(pub bool);
 
 /// On a hand socket: the carry pose of the look it holds, its file's `carry_hold` (D560: a lit
 /// torch on a raised arm), a clip whose first pose that hand's arm takes whenever the look is
-/// carried, laid by the hold layer on that arm alone (`layer`, `figure`). A look whose file
-/// gives none is carried by the rule (`carry_rule`).
+/// carried, laid by the hold layer on that arm alone (`layer`, `figure`). Every look held in
+/// the fist names one (`every_look_in_hand_names_a_carry_pose`).
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct CarryHold {
     pub look: Entity,
@@ -95,33 +72,9 @@ impl Held {
         }
     }
 
-    /// Its turn against its parent's frame now, the share of its tilt it takes in the fist laid
-    /// on (`in_fist`).
+    /// Its turn against its parent's frame now, its tilt laid on.
     pub(crate) fn turned(&self) -> Quat {
-        self.turn * Quat::from_rotation_x(self.in_fist().to_radians())
-    }
-
-    /// How far, degrees, it is turned in the fist now: its tilt up to `carry_hand::OBLIQUE`, a
-    /// handle run slantwise across the palm as a power grip holds it; the wrist turns the rest
-    /// (`at_wrist`), so the fingers still close round it.
-    pub fn in_fist(&self) -> f32 {
-        let most = crate::carry_hand::OBLIQUE;
-        self.now.clamp(-most, most)
-    }
-
-    /// How far, degrees, the hand holding it turns at the wrist now, about the hand socket's X
-    /// (`carry_hand`): its tilt past `in_fist`.
-    pub fn at_wrist(&self) -> f32 {
-        self.now - self.in_fist()
-    }
-
-    /// How far it has turned toward its carried tilt, 0 used to 1 carried; 0 with no tilt.
-    pub fn carried(&self) -> f32 {
-        if self.carry_tilt == 0.0 {
-            0.0
-        } else {
-            (self.now / self.carry_tilt).clamp(0.0, 1.0)
-        }
+        self.turn * Quat::from_rotation_x(self.now.to_radians())
     }
 }
 
@@ -186,19 +139,13 @@ pub(crate) fn look_points(
 
 /// Once a held look has loaded, how it is carried: its file's `carry_hold` (a carry pose) goes
 /// on the hand socket it is held in, before a strap moves it to its bone (`CarryHold`); and how
-/// far it tips: its file's `carry_tilt` where it gives one, else none for a look hung from the
-/// hand, strapped or carried in a pose (`hold`, `strap`, `carry_hold`), else the rule from how
-/// far its working end reaches (`carry_rule`).
-#[allow(clippy::too_many_arguments)]
+/// far it tips: its file's `carry_tilt` where it gives one, else none.
 pub(super) fn held_ready(
     ready: On<WorldInstanceReady>,
     mut held: Query<&mut Held>,
     children: Query<&Children>,
     parents: Query<&ChildOf>,
-    transforms: Query<&Transform>,
     extras: Query<&GltfExtras>,
-    meshes3d: Query<&Mesh3d>,
-    meshes: Res<Assets<Mesh>>,
     mut commands: Commands,
 ) {
     let Ok(mut held) = held.get_mut(ready.entity) else {
@@ -224,40 +171,27 @@ pub(super) fn held_ready(
             }
         }
     }
-    held.carry_tilt = if let Some(tilt) = given("carry_tilt").and_then(|t| t.as_f64()) {
-        tilt as f32
-    } else if given("hold").is_some() || given("strap").is_some() || pose.is_some() {
-        0.0
-    } else {
-        let points = look_points(
-            ready.entity,
-            &children,
-            &parents,
-            &transforms,
-            &meshes3d,
-            &meshes,
-        );
-        carry_rule(points.iter().map(|p| p.y).fold(0.0, f32::max))
-    };
+    held.carry_tilt = given("carry_tilt")
+        .and_then(|t| t.as_f64())
+        .map_or(0.0, |tilt| tilt as f32);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    /// A short look's working end tips `CARRY_DOWN`; a long one's no lower than `CARRY_REACH`
-    /// under the grip, found from where its end lands rather than the formula.
+    /// A look held in the fist is carried in a pose its file names (D584's holding as an
+    /// overlay from a clip): none is left to hang from the clip's hand as it was used, tipped by
+    /// nothing. A look hung from the hand or strapped is carried as its hold or strap places it.
     #[test]
-    fn a_look_in_hand_is_carried_tipped_down_but_its_end_kept_off_the_ground() {
-        for ahead in [0.1, 0.3, 0.6, 0.7] {
-            assert!((carry_rule(ahead) + CARRY_DOWN).abs() < 1e-4, "{ahead}");
-        }
-        for ahead in [0.9, 1.05, 1.6] {
-            let tilt = carry_rule(ahead).to_radians();
-            // The end of the handle in a hanging hand's frame: +Y forward, +Z up the arm.
-            let end = Quat::from_rotation_x(tilt) * Vec3::Y * ahead;
-            assert!((end.z + CARRY_REACH).abs() < 1e-4, "{ahead}: {end}");
-            assert!(tilt < 0.0 && tilt > -CARRY_DOWN.to_radians());
+    fn every_look_in_hand_names_a_carry_pose() {
+        for file in crate::model_files::glbs("models/held") {
+            let json = crate::model_files::json(&file);
+            let has = |key| crate::model_files::extra(&json, key).is_some();
+            assert!(
+                has("carry_hold") || has("hold") || has("strap"),
+                "{file}: a look in the fist names no carry pose; give its art/held/<item>.json a \
+                 \"carry_hold\" (a pose of art/animation/sets/fight.json: Carry_Tool for a \
+                 one-handed tool) and fit it again (node tools/characters/fit.ts <item>)"
+            );
         }
     }
 

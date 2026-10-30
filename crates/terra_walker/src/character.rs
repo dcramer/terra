@@ -26,9 +26,7 @@
 mod held;
 
 pub(crate) use held::look_points;
-pub use held::{
-    CARRIED_IN, CARRY_DOWN, CARRY_REACH, CarryHold, CarryPosed, Carrying, Held, carry_rule,
-};
+pub use held::{CARRIED_IN, CarryHold, CarryPosed, Carrying, Held};
 
 use bevy::{
     gltf::{GltfExtras, GltfMaterialName},

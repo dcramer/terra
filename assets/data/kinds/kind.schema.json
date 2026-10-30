@@ -200,8 +200,8 @@
       "properties": {
         "state": { "enum": ["built", "decided", "open", "does not apply"] },
         "mechanism": {
-          "enum": ["hand_socket", "hung", "strap", "carry_rule", "carry_pose", "stowed_socket", "pack", "shield_targets", "move_set", "tool_use", "none yet"],
-          "description": "hand_socket: in hand on its lead hand's socket (D546); hung: hung from the hand (D546); strap: on the forearm (terra_walker::strap, D554); carry_rule: tipped by the carry rule (D546, D564); carry_pose: a fight.json clip laid on its arm while carried (D560); stowed_socket: a body socket when put away (D551); pack: put into the pack when put away, not shown (D551's rest); shield_targets: the board's place per shield pose, the arm solved to it (D554); move_set: a set's clips (D459); tool_use: the walker's use and strike clips (terra_walker::figure); none yet: nothing exists for it."
+          "enum": ["hand_socket", "hung", "strap", "carry_pose", "stowed_socket", "pack", "shield_targets", "move_set", "tool_use", "none yet"],
+          "description": "hand_socket: in hand on its lead hand's socket (D546); hung: hung from the hand (D546); strap: on the forearm (terra_walker::strap, D554); carry_pose: a fight.json clip laid on its arm while carried (D560); stowed_socket: a body socket when put away (D551); pack: put into the pack when put away, not shown (D551's rest); shield_targets: the board's place per shield pose, the arm solved to it (D554); move_set: a set's clips (D459); tool_use: the walker's use and strike clips (terra_walker::figure); none yet: nothing exists for it."
         },
         "decisions": { "type": "array", "items": { "type": "string", "pattern": "^D[0-9]+$" } },
         "how": { "$ref": "#/$defs/words" },

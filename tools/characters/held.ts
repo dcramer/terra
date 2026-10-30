@@ -117,20 +117,7 @@ export function hang(body: Glb, rest: Pose[], hand: string, file: string): Held 
   return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, up, centre: put(centre), grip: put(pose.t), bar, balls, board: plate, strap };
 }
 
-/** terra_walker::character's carry rule: a look in hand tips its working end CARRY_DOWN degrees
- * forward and down, its end no lower than CARRY_REACH metres under the grip. */
-export const CARRY_DOWN = 45;
-export const CARRY_REACH = 0.55;
-
-/** The tilt a look in hand whose working end reaches `ahead` metres up its handle is carried at
- * (terra_walker::character::carry_rule). */
-export function carryRule(ahead: number): number {
-  const most = Math.sin((CARRY_DOWN * Math.PI) / 180);
-  const down = ahead > CARRY_REACH ? Math.min(CARRY_REACH / ahead, most) : most;
-  return (-Math.asin(down) * 180) / Math.PI;
-}
-
-type CarryExtras = { carry_tilt?: number; carry_hold?: string; carry_upright?: boolean; hold?: unknown; strap?: unknown };
+type CarryExtras = { carry_tilt?: number; carry_hold?: string; carry_upright?: boolean };
 const extrasOf = (g: Glb, node: number): CarryExtras => (g.gltf.nodes[node] as { extras?: CarryExtras }).extras ?? {};
 
 /** The carry pose a look names (its extras' `carry_hold`, D560): the clip whose first pose the
@@ -152,22 +139,12 @@ export function carryUpright(file: string): boolean {
 }
 
 /** How far a look turns about its X when carried, degrees, as terra_walker::character's
- * `held_ready` finds it: its extras' `carry_tilt` where given, else none for a look hung,
- * strapped or carried in a pose, else the carry rule from how far up +Y its points reach. */
+ * `held_ready` finds it: its extras' `carry_tilt` where given, else none. */
 export function carryTilt(file: string): number {
   const g = new Glb(file);
   const node = g.gltf.nodes.findIndex((n) => n.mesh !== undefined);
-  if (node < 0) return 0;
-  const extras = extrasOf(g, node);
-  if (typeof extras.carry_tilt === "number") return extras.carry_tilt;
-  if (extras.hold !== undefined || extras.strap !== undefined || extras.carry_hold !== undefined) return 0;
-  const pose = g.rest(node);
-  let ahead = 0;
-  for (const prim of g.gltf.meshes![g.gltf.nodes[node].mesh!].primitives) {
-    const p = g.read(prim.attributes.POSITION);
-    for (let i = 0; i < p.length; i += 3) ahead = Math.max(ahead, place(pose, [p[i], p[i + 1], p[i + 2]])[1]);
-  }
-  return carryRule(ahead);
+  const tilt = node < 0 ? undefined : extrasOf(g, node).carry_tilt;
+  return typeof tilt === "number" ? tilt : 0;
 }
 
 /** The clips in which the game carries what is in hand rather than uses it, read from its

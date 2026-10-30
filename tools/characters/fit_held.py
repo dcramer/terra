@@ -3,10 +3,10 @@ the game puts in a hand socket as it is (character.rs), or, strapped (a shield, 
 forearm's bone where its extras say.
 
 Each look is one mesh with the place it is held at the origin and its handle along +Y toward
-its working end, as a hand socket expects. Carried rather than used, the game tips it by a rule
-(terra_walker::character::carry_rule); a "carry_tilt" in its data, written to its glTF extras,
-wins over the rule: -45 tips its head forward and down in a hanging hand, positive raises it.
-None needs one today. Body-independent: a hand socket is the same on every body.
+its working end, as a hand socket expects. Carried rather than used, its arm takes the carry
+pose its data names ("carry_hold", a pose of art/animation/sets/fight.json, D584); a
+"carry_tilt" in its data, written to its glTF extras, tips it in the fist besides: -45 tips its
+head forward and down in a hanging hand, positive raises it. None needs one today. Body-independent: a hand socket is the same on every body.
 
 Its materials are named by role (Wood, Metal, Trim, String), so a colour given for a role
 reaches every part of it: here, a stone or iron head; in the game, a tint (character.rs).
@@ -89,9 +89,8 @@ def source_sha(source):
 
 def carried(ob, d):
     """Its data's "carry_hold" (a carry pose, the clip whose first pose the arm holding it takes
-    while it is carried, D560) or "carry_tilt", into its extras, only where given: the game
-    carries every other look by its rule (terra_walker::character::carry_rule). Says how, for
-    the HELD line. A pose its set's data marks `upright` (art/animation/sets/fight.json: the
+    while it is carried, D560) or "carry_tilt", into its extras, only where given (the game
+    holds every look in the fist to naming a pose, held.rs). Says how, for the HELD line. A pose its set's data marks `upright` (art/animation/sets/fight.json: the
     torch's, held flame up) goes in as `carry_upright`, its arm then held in the body's frame
     (terra_walker::carry_arm); any other pose's arm leans with the chest."""
     if "carry_hold" in d:
@@ -105,7 +104,7 @@ def carried(ob, d):
             return f"in its carry pose {d['carry_hold']}, upright"
         return f"in its carry pose {d['carry_hold']}"
     if "carry_tilt" not in d:
-        return "by the rule"
+        return "untipped"
     ob["carry_tilt"] = d["carry_tilt"]
     return f"at {d['carry_tilt']} degrees, its data's"
 

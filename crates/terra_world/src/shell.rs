@@ -157,7 +157,7 @@ usage: terra_sandbox [options]
                         a debug switch, in play and the workbench: turn off layers that
                         change every body after its clips, to see the clip as it is
                         (none: every pose layer, the body's fit kept): carry_arm, joints
-                        and lift (the fit), carry_hand, grip, feet, arms, shield_arm,
+                        and lift (the fit), grip, feet, arms, shield_arm,
                         gaze, swim; a wrong name lists what each does
   --fight-log <file.jsonl>
                         write each fighter's state every frame, one line of JSON each:

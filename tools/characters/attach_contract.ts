@@ -528,9 +528,9 @@ export function judge(look: Look, body: Body, data = dataOf(look.name), hold = h
   if (fitted !== mount) f("kind", `a ${kind} goes on ${mount}, but its data has it fitted ${fitted ?? "no way known"}`);
   if (mount === "in hand" || mount === "hung" || mount === "strapped") {
     if (look.joints) f("kind", "a held look is skinned");
-    // Carried by the game's rule (terra_walker::character::carry_rule) unless its data gives one.
+    // Untipped in the fist unless its data gives a tilt (its arm takes its carry pose, D584).
     if (look.extras.carry_tilt !== undefined && !num(look.extras.carry_tilt)) f("carry_tilt", `its extras' carry_tilt ${look.extras.carry_tilt} is no number`);
-    else if (data && data.carry_tilt !== look.extras.carry_tilt) f("marker", `its carry_tilt ${look.extras.carry_tilt ?? "(the rule's)"} is not its data's ${data.carry_tilt ?? "(none)"}`);
+    else if (data && data.carry_tilt !== look.extras.carry_tilt) f("marker", `its carry_tilt ${look.extras.carry_tilt ?? "(none)"} is not its data's ${data.carry_tilt ?? "(none)"}`);
     if (mount !== "hung" && look.extras.hold === "hung") f("marker", `it says {"hold": "hung"}, which its data does not`);
   }
   if (mount === "in hand") inHand(look, rules.faces ?? "-Z", f);

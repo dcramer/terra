@@ -1684,22 +1684,6 @@
    "measurable": true
   },
   {
-   "id": "bones.carry_hand.mean",
-   "noticed": 3,
-   "notice": "a carried tool's forearm and wrist are turned by a rule every frame, not posed by a clip",
-   "bar": {
-    "at_most": 0
-   },
-   "unit": "degrees, carry_hand's turn of the bone it turns most, averaged over a motion, the worst of bones.feet.worst's motions (tools/controller/bones.ts); D584 retires it once a carry clip holds the tool",
-   "source": "D584; D564",
-   "check": {
-    "by": "film",
-    "name": "bones carry_hand mean"
-   },
-   "cost": "heavy",
-   "measurable": true
-  },
-  {
    "id": "bones.arms.mean",
    "noticed": 3,
    "notice": "the arms are pushed off the hips by a rule, not swung as the clip swings them",

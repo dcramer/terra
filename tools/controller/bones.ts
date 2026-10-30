@@ -67,11 +67,10 @@ const FLAT_M = 0.02;
 
 /// The checks the controller's rows read (criteria.json `bones.*`), with their bars: on flat
 /// ground the foot lock bends a leg a few degrees at most (D584), and the per-pose fix-ups
-/// D584 retires (the carried forearm turned, the arms kept off the hips) are to move nothing.
+/// D584 retires (the arms kept off the hips) are to move nothing.
 export const CHECKS: { name: string; layer: string; of: "worst" | "mean"; most: number }[] = [
   { name: "bones feet worst", layer: "feet", of: "worst", most: 5 },
   { name: "bones feet mean", layer: "feet", of: "mean", most: 2 },
-  { name: "bones carry_hand mean", layer: "carry_hand", of: "mean", most: 0 },
   { name: "bones arms mean", layer: "arms", of: "mean", most: 0 },
 ];
 
@@ -135,7 +134,7 @@ export function layerWorst(table: Table, layer: string): { worst: [string, strin
 }
 
 /// The layers as the game names them, in its order (terra_walker::bone_audit::LAYERS).
-export const LAYERS = ["carry_arm", "fitted", "carry_hand", "grip", "feet", "arms", "shield_arm", "gaze"];
+export const LAYERS = ["carry_arm", "fitted", "grip", "feet", "arms", "shield_arm", "gaze"];
 
 /// A line a layer: its worst bone and degrees, the bone it bends most on average, and the
 /// farthest it moves one, each with its motion.

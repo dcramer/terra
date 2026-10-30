@@ -16,12 +16,11 @@ use terra_world::shell::{Options, ScriptFrame};
 
 /// The layers in the order they pose a body (each after the one before it), as the record
 /// names them: the arm held clear for a carry, the fit to the body (its joints held, its lift),
-/// the carried tool tipped at the wrist, the fists closed, the feet kept, the arms kept off
-/// the hips, the shield arm fitted, the head turned toward the aim.
-pub const LAYERS: [&str; 8] = [
+/// the fists closed, the feet kept, the arms kept off the hips, the shield arm fitted, the head
+/// turned toward the aim.
+pub const LAYERS: [&str; 7] = [
     "carry_arm",
     "fitted",
-    "carry_hand",
     "grip",
     "feet",
     "arms",
@@ -80,23 +79,20 @@ pub fn add(app: &mut App, path: &Path) {
                 .before(crate::Fitted),
             snap::<2>
                 .after(crate::Fitted)
-                .before(crate::carry_hand::tip_carried),
-            snap::<3>
-                .after(crate::carry_hand::tip_carried)
                 .before(crate::grip::close_hands),
-            snap::<4>
+            snap::<3>
                 .after(crate::grip::close_hands)
                 .before(crate::feet::keep),
-            snap::<5>
+            snap::<4>
                 .after(crate::feet::keep)
                 .before(crate::arms::keep_off_hips),
-            snap::<6>
+            snap::<5>
                 .after(crate::arms::keep_off_hips)
                 .before(crate::shield_arm::fit_shield_arm),
-            snap::<7>
+            snap::<6>
                 .after(crate::shield_arm::fit_shield_arm)
                 .before(crate::gaze::keep_on_aim),
-            (snap::<8>, write)
+            (snap::<7>, write)
                 .chain()
                 .after(crate::gaze::keep_on_aim)
                 .before(TransformSystems::Propagate),
@@ -292,8 +288,8 @@ mod tests {
                 }
             })
             .in_set(crate::pose::Layer::Feet)
-            .after(snap::<4>)
-            .before(snap::<5>),
+            .after(snap::<3>)
+            .before(snap::<4>),
         );
         let body = app.world_mut().spawn((Audited, Transform::default())).id();
         for (name, y) in [("pelvis", 1.0), ("calf_l", 0.5), ("foot_l", 0.1)] {
