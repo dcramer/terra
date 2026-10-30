@@ -1,7 +1,7 @@
 //! The layers that pose a body after its clips, the same in play (`WalkerPlugin`) and on the
-//! model workbench, so a still from the workbench shows what the game shows: a carried look's
-//! arm held clear of the body (`carry_arm`, D560), a tool carried by the rule tipped at the
-//! wrist with its forearm kept down (`carry_hand`, D564), the arms kept off the hips (`arms`), the
+//! model workbench, so a still from the workbench shows what the game shows: an upright carry
+//! pose's arm held in the body's frame (`carry_arm`, D560), the spear and the bow carried by
+//! the rule tipped at the wrist (`carry_hand`, D564), the arms kept off the hips (`arms`), the
 //! fists closed on what they hold (`grip`) and the shield arm fitted to its board's place
 //! (`shield_arm`, D554). One list both call, so the two cannot drift; asked twice, it lays them
 //! once. The head's turn toward the facing (`gaze`) is play's alone: the workbench has no foe.
@@ -70,13 +70,15 @@ impl Layer {
     /// What it does, and its system.
     pub const fn what(self) -> &'static str {
         match self {
-            Layer::CarryArm => "a carried look's arm held clear of the body (D560, hold_in_body)",
+            Layer::CarryArm => {
+                "an upright carry pose's arm held in the body's frame (D560, hold_in_body)"
+            }
             Layer::Joints => "the joints moved to the body's own proportions (a fit, hold_joints)",
             Layer::Lift => {
                 "a thicker body lifted to meet the floor as the clip's (a fit, lift_bodies)"
             }
             Layer::CarryHand => {
-                "a carried tool tipped at the wrist, its forearm kept down (D564, tip_carried)"
+                "a spear or bow tipped at the wrist, its forearm kept down (D564, tip_carried)"
             }
             Layer::Grip => "the fingers closed on what the hand holds (hand IK, close_hands)",
             Layer::Feet => "the foot lock and foot placement (D455, feet::keep)",

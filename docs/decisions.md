@@ -464,7 +464,7 @@ The look, models, bodies and gear, textures and audio.
 | [D560](decisions/D560.md) | A lit torch is carried on a raised arm, flame up | Design | Developers | Decided | A lit torch is carried with its arm raised forward… |
 | [D561](decisions/D561.md) | A fire's flames move at 0.65 of the clock | Design | Developers | Decided | A hearth's flames, a campfire's and a torch's alike… |
 | [D562](decisions/D562.md) | The hands close on what they hold: a finger-only grip layer, closed by touch at run time | Tech | Agent | Decided | Whenever a hand socket holds a look… |
-| [D564](decisions/D564.md) | A tool carried by the rule tips at the wrist, little in the fist, its forearm kept down | Tech | Agent | Decided | A look in hand carried by D546's rule takes no more than… |
+| [D564](decisions/D564.md) | A tool carried by the rule tips at the wrist, little in the fist, its forearm kept down | Tech | Agent | Decided | Superseded for the one-handed tools… |
 | [D565](decisions/D565.md) | Weapons and tools are assembled from parts by rules | Design | Developers | Decided | Every ordinary weapon and tool is assembled from a few… |
 | [D567](decisions/D567.md) | Six kinds' holds: a one-hander blocks alone, the pickaxe is two-handed, the spear upright, the torch put out at the hip, the bow low in the left hand, the basket in the off hand | Design | Developers | Decided | The six questions the kinds table left to the developers… |
 | [D584](decisions/D584.md) | A body moves as its clip says; the game adds only foot placement, look-at and hand IK | Tech | Agent | Decided | What a body shows is the clip made for what it does… |

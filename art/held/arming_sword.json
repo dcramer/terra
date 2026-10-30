@@ -1,5 +1,6 @@
 {
   "kind": "blade",
+  "carry_hold": "Carry_Tool",
   "source": "tools/ArmingSword.glb",
   "fit": "points",
   "grip": [0.002, 0.12, 0.0075],

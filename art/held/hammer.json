@@ -1,1 +1,1 @@
-{"kind": "hafted", "source": "tools/Hammer_Small.glb", "fit": "length", "length": 0.42, "grip_from_end": 0.06, "turn": 90, "note": "Turned +90, not the axes' -90: its face reaches toward the source's +X, the bound back toward -X."}
+{"kind": "hafted", "carry_hold": "Carry_Tool","source": "tools/Hammer_Small.glb", "fit": "length", "length": 0.42, "grip_from_end": 0.06, "turn": 90, "note": "Turned +90, not the axes' -90: its face reaches toward the source's +X, the bound back toward -X."}

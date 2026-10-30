@@ -1,3 +1,9 @@
+//! Only the spear and the bow are carried by the rule now, and this layer goes with them: a
+//! one-handed tool takes the `Carry_Tool` pose (its look's `carry_hold`, D584's holding as an
+//! overlay from a clip), so nothing here moves it. Delete this module, `Layer::CarryHand`,
+//! `Held::in_fist`/`at_wrist` and its twin `tools/characters/carry_hand.ts` once a long-tool
+//! carry pose (animation.md's order of work, step 3) takes the spear and the bow.
+//!
 //! A tool carried by the rule (`character::carry_rule`) tips forward and down with the hand and
 //! the arm, not by sliding its handle across the palm (D564). Its tilt, turned all about the
 //! palm's middle, ran the handle 45 degrees slantwise across the palm, from under the index's

@@ -1,3 +1,9 @@
+//! It stays until the jog is retaken (animation.md's order of work, step 2): the jog's arms
+//! are a formula's (D584's listed fault), and without this layer its empty left hand goes 3.6
+//! cm into the female's thigh (moves.ts, Jog_Fwd_Loop at 0.40 s; bar 2). A carry pose does
+//! not replace it, since a static pose on an empty hand would freeze the arm's swing. Then
+//! measure the empty hands without `--arms` and delete it with its twin `arms.ts`.
+//!
 //! The hanging hands kept off the hips (D535): after every clip and hold has posed a body,
 //! an upper arm whose hand hangs by the hip closer to the body's middle than `OUT` times the
 //! hip joint's own distance from it is turned out from the body at the shoulder just enough to

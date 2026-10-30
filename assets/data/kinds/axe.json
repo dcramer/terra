@@ -37,9 +37,10 @@
   },
   "carried": {
     "state": "built",
-    "mechanism": "carry_rule",
-    "decisions": ["D546", "D564"],
-    "how": "tipped by the carry rule, its head 45 degrees forward and down, at most 15 degrees in the fist and the rest at the wrist, the forearm kept down (attachment.md Carried)"
+    "mechanism": "carry_pose",
+    "decisions": ["D560", "D584"],
+    "clip": "Carry_Tool",
+    "how": "in the one-handed tool's carry pose, the arm hanging a little out, the hand turned back at the wrist so the head points forward and down, the arm leaning with the chest (attachment.md Carried)"
   },
   "stowed": {
     "state": "decided",

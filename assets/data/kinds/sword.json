@@ -35,9 +35,10 @@
   },
   "carried": {
     "state": "built",
-    "mechanism": "carry_rule",
-    "decisions": ["D546", "D564"],
-    "how": "tipped by the carry rule, its tip forward and down, the tilt mostly at the wrist (attachment.md Carried)"
+    "mechanism": "carry_pose",
+    "decisions": ["D560", "D584"],
+    "clip": "Carry_Tool",
+    "how": "in the one-handed tool's carry pose, its tip forward and down (attachment.md Carried)"
   },
   "stowed": {
     "state": "decided",

@@ -1,1 +1,1 @@
-{"kind": "blade", "source": "tools/Knife.glb", "fit": "length", "length": 0.26, "grip_from_end": 0.05, "turn": -90}
+{"kind": "blade", "carry_hold": "Carry_Tool","source": "tools/Knife.glb", "fit": "length", "length": 0.26, "grip_from_end": 0.05, "turn": -90}
