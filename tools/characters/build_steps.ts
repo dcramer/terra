@@ -51,6 +51,7 @@ export const MODULE_DATA: Record<string, string[]> = {
   "tools/characters/rig_check.py": ["art/characters/rig-baseline.json"],
   "tools/characters/fit_gear.py": ["art/gear/harnesses.json"],
   "tools/characters/mirror.ts": ["art/animation/mirrors.json"],
+  "tools/characters/additive.ts": ["art/animation/swings.json", "art/animation/sets/fight.json"],
   "tools/characters/clear.ts": ["art/animation/made.json", "art/animation/sets/fight.json", "art/animation/mirrors.json"],
 };
 
@@ -225,7 +226,7 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
     name: "fight",
     section: 5,
     needs: ["clips", "base"],
-    inputs: [...py("made_clips.py", "export_character.py", "hold.py", "clear.ts", "wrist_limit.ts", "mirror.ts", "markers.ts"), `${fight}.json`, fight],
+    inputs: [...py("made_clips.py", "export_character.py", "hold.py", "clear.ts", "wrist_limit.ts", "mirror.ts", "additive.ts", "markers.ts"), `${fight}.json`, fight],
     outputs: [`${OUT}/fight-mannequin.glb`, "assets/models/character/fight.glb"],
     run: [
       blender("made_clips.py", `"$out/fight-mannequin.glb" --list=${fight}.json`, "^MADE [0-9]|Error"),
@@ -233,6 +234,7 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
       "node $here/clear.ts assets/models/character/fight.glb     # a gliding swing foot lifted clear (clear.ts)",
       "node $here/wrist_limit.ts assets/models/character/fight.glb   # the played sword wrists inside a person's (D565)",
       "node $here/mirror.ts assets/models/character/fight.glb    # the mirrored clips (art/animation/mirrors.json)",
+      "node $here/additive.ts assets/models/character/fight.glb  # the carried arm's swings (art/animation/swings.json)",
       "node $here/markers.ts assets/models/character/fight.glb   # each clip's foot-down markers (D455)",
     ].join("\n"),
   });

@@ -43,6 +43,7 @@
 // dependencies.
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { isAdditive } from "./additive.ts";
 import { dot, Glb, type Pose, posed, qinv, rot, type V3 } from "./glb.ts";
 
 /** A point moving slower than this over the clip's ground stands on it. */
@@ -250,7 +251,8 @@ export function bake(body: Glb): Record<string, Baked> {
   const paces: Record<string, number> = (body.gltf.nodes.find((n: { extras?: { paces?: unknown } }) => n.extras?.paces) as { extras: { paces: Record<string, number> } } | undefined)?.extras.paces ?? {};
   const pelvis = body.named("pelvis");
   const out: ReturnType<typeof bake> = {};
-  for (const name of body.clipNames()) {
+  // An arm's additive swing (additive.ts) stands no foot: it rides on its loop.
+  for (const name of body.clipNames().filter((name) => !isAdditive(name))) {
     const clip = body.clip(name)!;
     const n = Math.max(1, Math.round(clip.end * FPS));
     const paths: V3[][][] = points.map((pair) => pair.map(() => []));
