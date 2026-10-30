@@ -27,7 +27,7 @@ import { streamed } from "../sandbox/streamed.ts";
 import type { Check } from "./yard-checks.ts";
 
 /// A frame of the record: the bones each layer moved, `[degrees, centimetres]` by bone name.
-export type Line = { frame: number; speed: number; up: number; layers: Record<string, Record<string, [number, number]>> };
+export type Line = { frame: number; speed: number; up: number; kept?: [string, string] | null; layers: Record<string, Record<string, [number, number]>> };
 /// A motion: the frames it is judged over (its start's blend past) and the speeds it holds.
 export type Motion = { name: string; from: number; to: number; speed: [number, number] };
 /// What a layer did to a bone over a motion: its worst turn, its mean turn over every frame of

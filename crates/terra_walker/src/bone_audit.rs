@@ -174,7 +174,7 @@ fn write(
     mut audit: ResMut<Audit>,
     frame: Option<Res<ScriptFrame>>,
     bodies: Query<(&ChildOf, &GlobalTransform), With<Audited>>,
-    players: Query<(&crate::Motion, &GlobalTransform)>,
+    players: Query<(&crate::Motion, &GlobalTransform, Option<&crate::feet::Kept>)>,
 ) {
     let Some(frame) = frame.filter(|frame| frame.is_changed()) else {
         return;
@@ -196,13 +196,17 @@ fn write(
         .iter()
         .next()
         .and_then(|(parent, _)| players.get(parent.parent()).ok());
-    let (speed, up) = player.map_or((0.0, 0.0), |(motion, place)| {
+    let (speed, up) = player.map_or((0.0, 0.0), |(motion, place, _)| {
         (motion.velocity.length(), place.translation().length())
     });
+    // How the foot lock kept each foot, left then right (`feet::Kept::states`): which of its
+    // states bent a leg.
+    let kept = player.and_then(|(.., kept)| kept).map(|kept| kept.states());
     let line = json!({
         "frame": frame.0,
         "speed": (speed as f64 * 100.0).round() / 100.0,
         "up": (up as f64 * 1000.0).round() / 1000.0,
+        "kept": kept,
         "layers": layers,
     });
     let written = writeln!(audit.file, "{line}").and_then(|()| audit.file.flush());
