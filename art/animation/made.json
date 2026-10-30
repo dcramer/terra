@@ -110,14 +110,14 @@
     "speeds": [
       [
         0,
-        3.7
+        5
       ],
       [
         1.6,
-        3.7
+        5
       ],
       [
-        2.2,
+        2.4,
         0
       ]
     ],
@@ -126,7 +126,7 @@
     "once": true,
     "travels": true,
     "samples": 4,
-    "take": 1
+    "take": 2
   },
   "Jog_Start": {
     "prompt": "A person stands still, then starts jogging forward.",
@@ -141,8 +141,8 @@
         0
       ],
       [
-        1.5,
-        3.7
+        1.7,
+        5
       ]
     ],
     "seconds": 3.5,
@@ -150,7 +150,7 @@
     "once": true,
     "travels": true,
     "samples": 4,
-    "take": 3
+    "take": 2
   },
   "Swim_Tread_Loop": {
     "source": "uthana",
