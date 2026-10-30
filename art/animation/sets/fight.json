@@ -998,6 +998,22 @@
       }
     ]
   },
+  "Swap_Light_A": {
+    "of": "Q_Light_A",
+    "hold": [{ "clip": "Keyed_Guard", "bone": "clavicle_l", "shield": "Low_Guard", "aim": { "upperarm_l": [0.55, -0.75, -0.38], "lowerarm_l": [-0.1, -0.55, 0.83] }, "roll": { "lowerarm_l": 47 } }]
+  },
+  "Swap_Light_B": {
+    "of": "Q_Light_B",
+    "hold": [{ "clip": "Keyed_Guard", "bone": "clavicle_l", "shield": "Low_Guard", "aim": { "upperarm_l": [0.55, -0.75, -0.38], "lowerarm_l": [-0.1, -0.55, 0.83] }, "roll": { "lowerarm_l": 47 } }]
+  },
+  "Swap_Light_C": {
+    "of": "Q_Light_C",
+    "hold": [{ "clip": "Keyed_Guard", "bone": "clavicle_l", "shield": "Low_Guard", "aim": { "upperarm_l": [0.55, -0.75, -0.38], "lowerarm_l": [-0.1, -0.55, 0.83] }, "roll": { "lowerarm_l": 47 } }]
+  },
+  "Swap_Heavy_D": {
+    "of": "Q_Heavy_D",
+    "hold": [{ "clip": "Keyed_Guard", "bone": "clavicle_l", "shield": "Low_Guard", "aim": { "upperarm_l": [0.55, -0.75, -0.38], "lowerarm_l": [-0.1, -0.55, 0.83] }, "roll": { "lowerarm_l": 47 } }]
+  },
   "Clear_Block": {
     "of": "Keyed_Block",
     "hold": [
@@ -1152,7 +1168,12 @@
       "Open_Backhand",
       "Open_Heavy",
       "Clear_Block",
-      "Fight_Roll"
+      "Fight_Roll",
+      "Swap_Light_A",
+      "Swap_Light_B",
+      "Swap_Light_C",
+      "Swap_Heavy_D",
+      "Q_Block"
     ],
     "hold": [
       {
