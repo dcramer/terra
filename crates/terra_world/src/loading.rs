@@ -23,7 +23,12 @@
 //!
 //! Another screen, such as a title screen, enters `Screen::Loading` to get the same screen
 //! for whatever it starts.
+//!
+//! A crossing to another world (D470) is covered by a short fade instead (D501, D72): the
+//! window goes dark ([`cross_in_the_dark`]), the world is crossed, the same screen waits on
+//! the next world with nothing on it but the dark, and fades away as at the start.
 
+use crate::instance::{Cross, Entered, WorldSpec};
 use crate::shell::Options;
 use bevy::{
     asset::{LoadState, UntypedAssetId},
@@ -45,6 +50,8 @@ pub use hold::Hold;
 const QUIET_FRAMES: u32 = 10;
 /// How long the screen takes to fade once the game starts.
 const FADE_S: f32 = 0.4;
+/// How long the window takes to go dark before a crossing (D501: the whole fade under 3 s).
+const DARKEN_S: f32 = 0.3;
 /// Something that never loads should not keep the player out for good.
 const GIVE_UP: Duration = Duration::from_secs(60);
 /// A scripted run's pictures and films must not start with anything missing, as pines
@@ -241,6 +248,52 @@ struct Status;
 #[derive(Component)]
 struct Fading(f32);
 
+/// The window going dark before a crossing, with how far it has gone, from 0 to 1, and the
+/// world crossed to once it is dark.
+#[derive(Component)]
+struct Darkening(f32, Option<WorldSpec>);
+
+/// Crosses to another world under the short fade (D501): the window goes dark, then the
+/// world is left and the next entered, the loading screen up over it with nothing on it.
+pub fn cross_in_the_dark(commands: &mut Commands, to: WorldSpec) {
+    commands.spawn((
+        Name::new("Crossing"),
+        Cover,
+        Darkening(0.0, Some(to)),
+        Node {
+            position_type: PositionType::Absolute,
+            width: percent(100),
+            height: percent(100),
+            ..default()
+        },
+        BackgroundColor(BACKDROP.with_alpha(0.0)),
+        GlobalZIndex(i32::MAX - 2),
+    ));
+}
+
+/// Darkens the window, then crosses: at once in a scripted run, so its pictures and films
+/// never hang on a half-dark frame.
+fn darken(
+    mut commands: Commands,
+    real: Res<Time<Real>>,
+    options: Res<Options>,
+    mut dark: Query<(&mut Darkening, &mut BackgroundColor)>,
+) {
+    for (mut darkening, mut colour) in &mut dark {
+        darkening.0 = if options.scripted() {
+            1.0
+        } else {
+            darkening.0 + real.delta_secs() / DARKEN_S
+        };
+        colour.0 = BACKDROP.with_alpha(darkening.0.min(1.0));
+        if darkening.0 >= 1.0
+            && let Some(to) = darkening.1.take()
+        {
+            commands.queue(Cross(to));
+        }
+    }
+}
+
 pub fn plugin(app: &mut App) {
     app.init_state::<Screen>()
         .init_resource::<Loading>()
@@ -260,6 +313,7 @@ pub fn plugin(app: &mut App) {
                 (files, models, pictures, drawables, shaders).in_set(Track),
                 watch.run_if(in_state(Screen::Loading)),
                 fade.run_if(not(in_state(Screen::Loading))),
+                darken,
             ),
         )
         .add_systems(Last, hold::cut_history);
@@ -410,7 +464,14 @@ fn cover(
     mut drawables: ResMut<Drawables>,
     old: Query<Entity, With<Cover>>,
     (real, recorder): (Res<Time<Real>>, Option<Res<crate::recorder::Recorder>>),
+    entered: Option<Res<Entered>>,
 ) {
+    // A crossing's cover is the dark alone (D501); the title and bar are the start's.
+    let shown = if entered.is_some_and(|entered| entered.0 > 1) {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
     if loading.ended_once {
         loading.began = Some(real.elapsed());
         if let Some(recorder) = &recorder {
@@ -459,6 +520,7 @@ fn cover(
                 },
                 TextColor(TITLE),
                 Fades(TITLE),
+                shown,
             ));
             screen
                 .spawn((
@@ -470,6 +532,7 @@ fn cover(
                     },
                     BackgroundColor(TRACK),
                     Fades(TRACK),
+                    shown,
                 ))
                 .with_children(|track| {
                     track.spawn((
@@ -490,6 +553,7 @@ fn cover(
                 TextFont::from_font_size(14.0),
                 TextColor(QUIET),
                 Fades(QUIET),
+                shown,
             ));
         });
 }
@@ -743,6 +807,50 @@ mod tests {
             .unwrap()
             .width;
         (started, bar)
+    }
+
+    /// What of the screen goes up for the world entered so many-th: the visibility of its
+    /// words.
+    fn covered(entered: u32) -> Vec<Visibility> {
+        let mut world = screen();
+        world.insert_resource(Entered(entered));
+        world.run_system_cached(cover).unwrap();
+        world.flush();
+        let mut words = world.query_filtered::<&Visibility, (With<Text>, With<Fades>)>();
+        words.iter(&world).copied().collect()
+    }
+
+    /// The start shows the title and the bar; a crossing (D501) the dark alone.
+    #[test]
+    fn a_crossing_is_covered_by_the_dark_alone() {
+        let start = covered(1);
+        assert_eq!(start.len(), 2, "the title and the status");
+        assert!(start.iter().all(|shown| *shown == Visibility::Inherited));
+        let crossing = covered(2);
+        assert_eq!(crossing.len(), 2);
+        assert!(crossing.iter().all(|shown| *shown == Visibility::Hidden));
+    }
+
+    /// The window goes dark, then the world is crossed, once.
+    #[test]
+    fn the_window_goes_dark_then_crosses() {
+        use crate::instance::{InstanceKey, Travel};
+        let mut world = screen_for(&["--shot", "x.png"]);
+        world.insert_resource(NextState::<Travel>::default());
+        let to = WorldSpec {
+            key: InstanceKey(7),
+            kind: "tundra".into(),
+            seed: 7,
+        };
+        cross_in_the_dark(&mut world.commands(), to.clone());
+        world.flush();
+        world.run_system_cached(darken).unwrap();
+        world.flush();
+        assert_eq!(world.get_resource::<WorldSpec>(), Some(&to));
+        world.remove_resource::<WorldSpec>();
+        world.run_system_cached(darken).unwrap();
+        world.flush();
+        assert!(!world.contains_resource::<WorldSpec>(), "crossed once");
     }
 
     #[test]
