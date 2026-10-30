@@ -1,3 +1,5 @@
 # Quaternius's animation libraries as bought, kept by each developer and not committed
 # (the paid tiers; art/README.md says where to get them).
 library/
+# The fight-swap trial (branch only): UAL2 as bought, its sword clips joined into the fight set.
+bought/

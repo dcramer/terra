@@ -124,6 +124,8 @@ export function played(): Set<string> {
   const out = new Set<string>();
   for (const f of readdirSync(MOVES).filter((f) => f.endsWith(".ron")))
     for (const m of readFileSync(resolve(MOVES, f), "utf8").matchAll(/\b(?:clip|guard): "([^"]+)"/g)) out.add(m[1]);
+  // The fight-swap trial (branch only): Quaternius's clips play as made, their wrists untouched.
+  for (const c of out) if (/^(Swap|Q)_/.test(c)) out.delete(c);
   return out;
 }
 

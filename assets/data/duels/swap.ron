@@ -1,0 +1,15 @@
+// The fight-swap trial's duel (tools/sandbox/duel.ts --script duels/swap.ron): the light chain,
+// a heavy that lands (the yard's is parried) and a block, each once, for ours against the trial
+// side by side. The heavy goes first, before the partner has raised its guard.
+(
+    steps: [
+        (name: "draw", when: After(0.5), press: [Draw]),
+        (name: "lock on", when: After(1.5), press: [Lock]),
+        (name: "heavy", when: After(0.6), press: [Heavy]),
+        (name: "light 1", when: After(2.4), press: [Light]),
+        (name: "light 2", when: Chain(0.12), press: [Light]),
+        (name: "light 3", when: Chain(0.12), press: [Light]),
+        (name: "block", when: Blow(0.6), press: [Guard], hold: 1.2),
+        (name: "end", when: After(2.5), press: []),
+    ],
+)
