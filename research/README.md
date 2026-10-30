@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [Uthana sword blows](2026-10-31-uthana-sword-blows.md) | 2026-10-31 |
 | [Why the bought blows slide](2026-10-31-why-the-bought-blows-slide.md) | 2026-10-31 |
 | [Who gets good character animation with AI agents doing the work, and how (deep survey)](2026-10-30-agent-driven-animation-deep.md) | 2026-10-30 |
 | [How do others get good character animation when AI agents do the work?](2026-10-30-agent-driven-animation.md) | 2026-10-30 |
