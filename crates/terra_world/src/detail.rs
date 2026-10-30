@@ -10,7 +10,10 @@
 //! (`tools/sandbox/lodcheck.ts`).
 
 use crate::shell::{Options, ScriptFrame};
-use bevy::{camera::visibility::VisibilityRange, prelude::*};
+use bevy::{
+    camera::visibility::VisibilityRange, ecs::entity::EntityHashMap,
+    platform::collections::HashMap, prelude::*,
+};
 
 /// Every distance at which detail changes is its own, as authored, times this.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
@@ -27,12 +30,14 @@ impl Default for DetailScale {
 struct Authored(VisibilityRange);
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<DetailScale>().add_systems(
-        PostUpdate,
-        (sweep, remember, rescale, guard)
-            .chain()
-            .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
-    );
+    app.init_resource::<DetailScale>()
+        .init_resource::<InUse>()
+        .add_systems(
+            PostUpdate,
+            (sweep, remember, rescale, guard)
+                .chain()
+                .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
+        );
 }
 
 /// Gives an object already ranged new distances, as authored: they are scaled as a new
@@ -84,39 +89,81 @@ fn scaled(range: &VisibilityRange, by: f32) -> VisibilityRange {
     }
 }
 
-/// Counts the distinct ranges in use when they change, and says so, as an error a check
+/// What tells two ranges apart for Bevy's slots.
+type RangeKey = [u32; 4];
+
+fn key(r: &VisibilityRange) -> RangeKey {
+    [
+        r.start_margin.start,
+        r.start_margin.end,
+        r.end_margin.start,
+        r.end_margin.end,
+    ]
+    .map(f32::to_bits)
+}
+
+/// The distinct ranges in use, kept up as ranges are given, changed and taken away, so a
+/// change to one costs the change alone, never a walk over every ranged object (D127).
+#[derive(Resource, Default)]
+struct InUse {
+    of: EntityHashMap<RangeKey>,
+    users: HashMap<RangeKey, u32>,
+}
+
+impl InUse {
+    fn set(&mut self, entity: Entity, range: &VisibilityRange) {
+        let new = key(range);
+        if let Some(old) = self.of.insert(entity, new) {
+            if old == new {
+                return;
+            }
+            self.drop_one(old);
+        }
+        *self.users.entry(new).or_default() += 1;
+    }
+
+    fn remove(&mut self, entity: Entity) {
+        if let Some(old) = self.of.remove(&entity) {
+            self.drop_one(old);
+        }
+    }
+
+    fn drop_one(&mut self, key: RangeKey) {
+        if let Some(users) = self.users.get_mut(&key) {
+            *users -= 1;
+            if *users == 0 {
+                self.users.remove(&key);
+            }
+        }
+    }
+
+    fn distinct(&self) -> usize {
+        self.users.len()
+    }
+}
+
+/// Counts the distinct ranges in use as they change, and says so, as an error a check
 /// fails on, if they are past [`TOO_MANY_RANGES`].
 fn guard(
-    ranged: Query<&VisibilityRange>,
-    changed: Query<(), Changed<VisibilityRange>>,
+    changed: Query<(Entity, &VisibilityRange), Changed<VisibilityRange>>,
+    mut removed: RemovedComponents<VisibilityRange>,
+    mut in_use: ResMut<InUse>,
     mut said: Local<bool>,
 ) {
-    if changed.is_empty() {
-        return;
+    // Removals first: a range taken away and given again this frame is changed as well.
+    for entity in removed.read() {
+        in_use.remove(entity);
     }
-    let distinct = distinct(ranged.iter());
+    for (entity, range) in &changed {
+        in_use.set(entity, range);
+    }
+    let distinct = in_use.distinct();
     if distinct > TOO_MANY_RANGES && !*said {
         error!(
             "{distinct} distinct detail ranges are in use, past {TOO_MANY_RANGES}: Bevy draws at most 65,535 and culls the rest wrongly (D230)"
         );
         *said = true;
     }
-}
-
-fn distinct<'a>(ranges: impl Iterator<Item = &'a VisibilityRange>) -> usize {
-    let key = |r: &VisibilityRange| {
-        [
-            r.start_margin.start,
-            r.start_margin.end,
-            r.end_margin.start,
-            r.end_margin.end,
-        ]
-        .map(f32::to_bits)
-    };
-    ranges
-        .map(key)
-        .collect::<std::collections::HashSet<_>>()
-        .len()
 }
 
 /// Over a scripted run\'s sweep, sets the scale for its frame, the clock held still so
@@ -222,9 +269,67 @@ mod tests {
                 })
             })
             .collect();
-        let count = distinct(ranges.iter());
+        let count = recount(ranges.iter());
         assert!(count < 6_000, "{count} distinct ranges");
         assert!(count < TOO_MANY_RANGES);
+    }
+
+    /// The distinct ranges counted afresh, the other way to know the answer.
+    fn recount<'a>(ranges: impl Iterator<Item = &'a VisibilityRange>) -> usize {
+        ranges
+            .map(key)
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+    }
+
+    fn range(end: f32) -> VisibilityRange {
+        VisibilityRange {
+            start_margin: 0.0..0.0,
+            end_margin: end - 5.0..end,
+            use_aabb: false,
+        }
+    }
+
+    #[test]
+    fn the_ranges_in_use_are_kept_as_they_are_given_changed_and_taken_away() {
+        let mut app = App::new();
+        app.init_resource::<InUse>().add_systems(Update, guard);
+        let world = app.world_mut();
+        let things: Vec<Entity> = (0..40)
+            .map(|i| world.spawn(range(10.0 * (i % 7) as f32)).id())
+            .collect();
+        let tallied = |app: &mut App| {
+            let world = app.world_mut();
+            let kept = world.resource::<InUse>().distinct();
+            let afresh = recount(world.query::<&VisibilityRange>().iter(world));
+            assert_eq!(kept, afresh);
+            kept
+        };
+        app.update();
+        assert_eq!(tallied(&mut app), 7);
+        // A change to a range in use by others, then to one used by no one else.
+        *app.world_mut()
+            .get_mut::<VisibilityRange>(things[0])
+            .unwrap() = range(500.0);
+        app.update();
+        assert_eq!(tallied(&mut app), 8);
+        // The only user of a range despawned, a range taken away, and one taken away and
+        // given again in the same frame.
+        app.world_mut().despawn(things[0]);
+        app.world_mut()
+            .entity_mut(things[1])
+            .remove::<VisibilityRange>();
+        app.world_mut()
+            .entity_mut(things[2])
+            .remove::<VisibilityRange>()
+            .insert(range(600.0));
+        app.update();
+        tallied(&mut app);
+        for &thing in &things[3..] {
+            app.world_mut().despawn(thing);
+        }
+        app.update();
+        assert_eq!(tallied(&mut app), 1);
     }
 
     #[test]
