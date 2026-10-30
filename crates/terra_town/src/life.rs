@@ -29,9 +29,10 @@ const PASSED_M: f32 = 0.7;
 const ARRIVED_M: f32 = 0.2;
 /// How near a door or a gate counts as through it.
 const THRESHOLD_M: f32 = 0.9;
-/// The walk's and jog's paces on the base body (m/s) and a walker's spread off them (D585).
-pub const WALK_PACE: f32 = 1.099;
-pub const JOG_PACE: f32 = 3.678;
+/// The walk's and jog's paces on the base body (m/s, `terra_motion::gaits`) and a walker's
+/// spread off them (D585).
+pub const WALK_PACE: f32 = terra_motion::gaits::WALK;
+pub const JOG_PACE: f32 = terra_motion::gaits::JOG;
 pub const GAIT_SPREAD: f32 = 0.08;
 
 /// How detailed someone is kept, by how near the nearest viewer is.
@@ -153,6 +154,8 @@ const SPOT_CLEAR_M: f32 = 0.7;
 const SQUEEZE_S: f32 = 2.0;
 /// How long before they edge past those standing about, too.
 const EDGE_S: f32 = 2.0;
+/// How often someone held up is routed again from where they are.
+const REROUTE_S: f32 = 3.0;
 /// Slower than this, a walker stands: the body plays a walk only above it, at the speed the
 /// ground passes (`pace.rs`), so its feet do not slide.
 pub const STANDING_MPS: f32 = 0.12;
@@ -1249,16 +1252,19 @@ impl Life {
                     break;
                 }
             }
-            // Headway: anyone held for a while is routed again from where they are.
+            // Headway: anyone held for a while is routed again from where they are, once
+            // each REROUTE_S, still held: their squeezing and edging past go on meanwhile.
+            let was = p.held;
             if p.at.distance(p.held_at) > 0.5 {
                 p.held = 0.0;
                 p.held_at = p.at;
             } else {
                 p.held += step;
             }
+            let held = p.held;
             if p.next >= p.route.len() {
                 self.arrive(index, hours);
-            } else if self.people[index].held > 3.0 {
+            } else if (held / REROUTE_S).floor() > (was / REROUTE_S).floor() {
                 let Some(spot) = self.people[index].spot else {
                     continue;
                 };
@@ -1266,8 +1272,6 @@ impl Life {
                 let p = &mut self.people[index];
                 p.route = route;
                 p.next = 0;
-                p.held = 0.0;
-                p.held_at = p.at;
             }
         }
     }
