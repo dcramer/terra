@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { Glb, posed } from "./glb.ts";
 import { glbDiff } from "./glb_diff.ts";
-import { joinClips, onlyClips, putClips } from "./glb_clips.ts";
+import { cutClips, joinClips, onlyClips, putClips } from "./glb_clips.ts";
 
 const MANNEQUIN = join(import.meta.dirname, "..", "..", "assets/models/character/mannequin.glb");
 
@@ -82,6 +82,9 @@ test("a pack cut to two clips puts them in as the whole pack does, and holds not
   const fromCut = putClips(m, joinClips(cut, "Joined", names), ["Joined"]);
   assert.deepEqual(values(fromCut), values(whole));
   assert.throws(() => onlyClips(m, ["No_Such_Clip"]), /No_Such_Clip/);
+  const joined = new Glb(cutClips(m, [`Joined=${names.join("+")}`, names[0]]));
+  assert.deepEqual(joined.clipNames().toSorted(), ["Joined", names[0]].toSorted());
+  assert.ok(Math.abs(joined.clip("Joined")!.end - names.reduce((sum, n) => sum + new Glb(m).clip(n)!.end, 0)) < 0.1, "a NEW=A+B clip runs as long as its parts");
 });
 
 /** A JSON chunk's header and body, padded. */

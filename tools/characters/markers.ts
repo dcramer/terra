@@ -41,7 +41,7 @@
 // the body goes ahead; it loses its pace, as it travels by its drive and not at the body's speed.
 //
 //   node tools/characters/markers.ts assets/models/character/base.glb assets/models/character/fight.glb
-//   node tools/characters/markers.ts FILE.glb... [--roots=RM.glb] [--print] [--check]
+//   node tools/characters/markers.ts FILE.glb... [--roots=RM.glb] [--plants=TAKE=CLIP,...] [--print] [--check]
 //
 // --print lists each clip's plants and skate; --check writes nothing and fails if a file's
 // markers are not what it bakes now. Either fails a clip that skates. Node 22.18 or later; no
@@ -49,6 +49,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { isAdditive } from "./additive.ts";
+import { scaleAgainst } from "./root_drive.ts";
 import { dot, Glb, type Pose, posed, qinv, rot, type V3 } from "./glb.ts";
 
 /** A point moving slower than this over the clip's ground stands on it. */
@@ -236,8 +237,7 @@ export function groundOf(toes: V3[][], fps: number, pace?: number): [number, num
 export function rootGround(body: Glb, roots: Glb, clip: string, n: number, end: number): [number, number][] {
   const root = roots.named("root");
   const c = roots.clip(clip)!;
-  const scaleOf = (g: Glb, at: Pose[]) => at[g.parentOf[g.named("pelvis")]]?.s[0] ?? 1;
-  const by = scaleOf(body, posed(body, body.clip(clip)!, 0)) / scaleOf(roots, posed(roots, c, 0));
+  const by = scaleAgainst(body, roots);
   const path = Array.from({ length: n + 1 }, (_, i) => posed(roots, c, Math.min(c.end, (i / n) * end))[root].t.map((x) => x * by) as V3);
   return velocities(path, n / Math.max(end, 1e-6), false).map(([x, z]) => [-x, -z]);
 }
@@ -267,8 +267,11 @@ export type Baked = { markers: Markers; skate_m: [number, number]; splits: numbe
 /** Every clip's bake in a body file: its markers, each foot's worst skate, its splits, how long
  * neither foot stands, and its pace. A clip `roots` has (its root motion kept apart, `rootGround`)
  * is judged on the ground that motion passes under it, and has no pace: it travels by its root
- * motion, not at the body's speed. */
-export function bake(body: Glb, roots?: Glb): Record<string, Baked> {
+ * motion, not at the body's speed. A take in `plants` stands where the clip it names stands: a
+ * take that eases the whole body (a `pelvis` hold, fight.json) carries both feet along with the
+ * hips, so its own feet read as swinging over ground they never left, and a foot unlocked rides
+ * the ease (D455). */
+export function bake(body: Glb, roots?: Glb, plants: Record<string, string> = {}): Record<string, Baked> {
   const points = FEET.map((pair) => pair.map((name) => body.named(name)));
   if (points.flat().some((b) => b < 0)) return {};
   const paces: Record<string, number> = (body.gltf.nodes.find((n: { extras?: { paces?: unknown } }) => n.extras?.paces) as { extras: { paces: Record<string, number> } } | undefined)?.extras.paces ?? {};
@@ -320,6 +323,20 @@ export function bake(body: Glb, roots?: Glb): Record<string, Baked> {
       neither_s: round(Math.max(0, neither) / fps),
     };
   }
+  return standing(out, plants);
+}
+
+/** `baked` with each take of `plants` standing where the clip it names stands, its own travel
+ * kept: it takes the plants of a clip of its own length, in this file. */
+export function standing(baked: Record<string, Baked>, plants: Record<string, string>): Record<string, Baked> {
+  const out = { ...baked };
+  for (const [take, source] of Object.entries(plants)) {
+    const [own, from] = [out[take], out[source]];
+    if (!own || !from) throw new Error(`markers: --plants names ${take}=${source}, and ${own ? source : take} is not a clip of this file: name clips it has (D455)`);
+    if (own.markers.length_s !== from.markers.length_s) throw new Error(`markers: ${take} (${own.markers.length_s} s) cannot stand as ${source} (${from.markers.length_s} s): a take takes the plants of a clip of its own length (D455)`);
+    const { length_s, distance, distance_way } = own.markers;
+    out[take] = { ...from, markers: { ...from.markers, length_s, distance, distance_way } };
+  }
   return out;
 }
 
@@ -364,9 +381,9 @@ export function faults(clip: string, b: Baked): string[] {
 
 /** Bakes `file`'s markers into it (`write`) or only compares: its clips' count, whether the
  * markers it carries were already what it bakes, the clips split, and the faults. */
-export function bakeFile(file: string, write = true, print = false, roots?: string): { count: number; same: boolean; split: string[]; faults: string[] } {
+export function bakeFile(file: string, write = true, print = false, roots?: string | Buffer, plants: Record<string, string> = {}): { count: number; same: boolean; split: string[]; faults: string[] } {
   const body = new Glb(file);
-  const baked = bake(body, roots ? new Glb(roots) : undefined);
+  const baked = bake(body, roots ? new Glb(roots) : undefined, plants);
   const markers = Object.fromEntries(Object.entries(baked).map(([clip, b]) => [clip, b.markers]));
   const rooted = Object.keys(baked).filter((clip) => baked[clip].rooted);
   const paced = (body.gltf.nodes.find((n: { extras?: { paces?: unknown } }) => n.extras?.paces) as { extras: { paces: Record<string, number> } } | undefined)?.extras.paces ?? {};
@@ -384,14 +401,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
   const files = args.filter((a) => !a.startsWith("--"));
   if (!files.length || args.includes("--help")) {
-    console.log("markers.ts FILE.glb... [--roots=RM.glb] [--print] [--check]");
+    console.log("markers.ts FILE.glb... [--roots=RM.glb] [--plants=TAKE=CLIP,...] [--print] [--check]");
     process.exit(files.length ? 0 : 1);
   }
   const check = args.includes("--check");
   const roots = args.find((a) => a.startsWith("--roots="))?.slice("--roots=".length);
+  const plants = Object.fromEntries((args.find((a) => a.startsWith("--plants="))?.slice("--plants=".length).split(",") ?? []).map((pair) => pair.split("=")));
   let failed = 0;
   for (const file of files) {
-    const { count, same, split, faults } = bakeFile(file, !check, args.includes("--print"), roots);
+    const { count, same, split, faults } = bakeFile(file, !check, args.includes("--print"), roots, plants);
     if (split.length) console.log(`  ${file}: ${split.length} clips' plants split where they skate over ${SKATE_M * 100} cm: ${split.join(", ")}`);
     for (const fault of faults) console.log(`✗ ${file}: ${fault}`);
     if (check) {

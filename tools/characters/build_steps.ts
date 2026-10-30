@@ -89,6 +89,14 @@ function fitRun(base: string, body: string, item: string): string {
   return [`rm -f "$out/${body}-${item}-push.npz" "$out/${body}-${item}-uncover.json"`, carry, "for round in 1 2 3; do", `  ${check(true)}`, `  ${carry}`, "done", check(false)].join("\n");
 }
 
+/** What a clip file's foot markers are baked with beyond the file (D455): `roots` cut from a
+ * committed pack (`clips` as glb_clips.ts takes them), `plants` the takes that stand as a clip. */
+export type MarkerBake = { pack: string; clips: string[]; plants: Record<string, string> };
+
+/** Each clip file baked with more than itself, which the build's step and the scorecard's check
+ * both read, so a file baked right never reads stale. */
+export const MARKER_BAKES: Record<string, MarkerBake> = {};
+
 /** The steps of the whole build, in build.log's order; `items` the worn looks' data (gear_list.ts). */
 export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
   const base = b.base.name;

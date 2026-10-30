@@ -306,6 +306,17 @@ export function onlyClips(source: Buffer, names: string[]): Buffer {
   return compact(glbBytes({ ...rest, nodes, animations }, bin));
 }
 
+/** `onlyClips` of the named clips, each a clip of `source` or NEW=A+B, the parts joined first. */
+export function cutClips(source: Buffer, names: string[]): Buffer {
+  let from = source;
+  const kept = names.map((n) => {
+    const [name, parts] = n.split("=");
+    if (parts) from = joinClips(from, name, parts.split("+"));
+    return name;
+  });
+  return onlyClips(from, kept);
+}
+
 if (import.meta.main) {
   if (process.argv[2] === "--only") {
     const [out, source, ...names] = process.argv.slice(3);
@@ -313,13 +324,7 @@ if (import.meta.main) {
       console.log("usage: node tools/characters/glb_clips.ts --only OUT.glb SOURCE.glb CLIP|NEW=A+B...");
       process.exit(2);
     }
-    let from = readFileSync(source);
-    const kept = names.map((n) => {
-      const [name, parts] = n.split("=");
-      if (parts) from = joinClips(from, name, parts.split("+"));
-      return name;
-    });
-    const bytes = onlyClips(from, kept);
+    const bytes = cutClips(readFileSync(source), names);
     writeFileSync(out, bytes);
     console.log(`CLIPS kept ${names.length} of ${source} in ${out}, ${(bytes.length / 1024).toFixed(0)} KB, the skeleton and no mesh`);
     process.exit(0);

@@ -30,6 +30,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { MARKER_BAKES } from "../characters/build_steps.ts";
+import { cutClips } from "../characters/glb_clips.ts";
 import { bakeFile } from "../characters/markers.ts";
 import { CONTROLLER_FILMS, mainFilm } from "../scorecard/films.ts";
 import { type Criterion, finish, type Held, judge, readBaseline, round, type Status, TEST_BUILD } from "../scorecard/ratchet.ts";
@@ -51,11 +53,14 @@ export function courseValues(out: string): Map<string, number> {
 }
 
 /// The clip files of `files` whose baked foot-lock markers (D455, tools/characters/markers.ts)
-/// are missing or not what the bake makes now: a re-export that drops them leaves every body's
-/// feet unlocked. A clip that skates is the bake's own fault, not counted here.
+/// are missing or not what the build's bake makes now (its MARKER_BAKES): a re-export that drops
+/// them leaves every body's feet unlocked. A clip that skates is the bake's own fault, not
+/// counted here.
 export function staleMarkers(files: string[]): string[] {
   return files.filter((file) => {
-    const { count, same } = bakeFile(resolve(ROOT, file), false);
+    const bake = MARKER_BAKES[file];
+    const roots = bake && cutClips(readFileSync(resolve(ROOT, bake.pack)), bake.clips);
+    const { count, same } = bakeFile(resolve(ROOT, file), false, false, roots, bake?.plants);
     return !count || !same;
   });
 }

@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bake, distanceOf, foot, groundOf, HIGHEST_M, RATE, SKATE_M, TOUCH_S, WALK_MPS } from "./markers.ts";
+import { type Baked, bake, distanceOf, foot, groundOf, HIGHEST_M, RATE, SKATE_M, standing, TOUCH_S, WALK_MPS } from "./markers.ts";
 import { Glb, posed, type V3 } from "./glb.ts";
 
 const FPS = 60;
@@ -121,6 +121,28 @@ test("a blow played in place whose root motion is kept apart plants its feet whe
       assert.ok(Math.min(...moved) < 2 * SKATE_M, `${points} planted ${a}-${b} s move ${moved.map((m) => m.toFixed(3))} m in the root-motion clip`);
     }
   });
+});
+
+test("a take given a clip's plants stands where that clip stands, keeps its own travel, and is refused a clip it lacks or of another length", () => {
+  const baked = (length_s: number, lock: number, distance: number): Baked => ({
+    markers: { length_s, rate: RATE, lock_l: [lock, 0], lock_r: [0, lock], foot_down_l: [[0, lock]], foot_down_r: [[lock, 1]], distance: [0, distance], distance_way: [0, 0, distance] },
+    skate_m: [lock, lock],
+    splits: 0,
+    neither_s: lock,
+  });
+  const clips = { Take: baked(1, 0.2, 3), Clip: baked(1, 0.7, 9), Short: baked(0.5, 0.4, 1) };
+  const out = standing(clips, { Take: "Clip" });
+  const { length_s, distance, distance_way, ...stands } = out.Take.markers;
+  const { length_s: _l, distance: _d, distance_way: _w, ...clipStands } = clips.Clip.markers;
+  assert.deepEqual(stands, clipStands);
+  assert.deepEqual([length_s, distance, distance_way], [1, [0, 3], [0, 0, 3]]);
+  assert.deepEqual([out.Take.skate_m, out.Take.neither_s], [clips.Clip.skate_m, clips.Clip.neither_s]);
+  assert.deepEqual([out.Clip, clips.Take.markers.lock_l], [clips.Clip, [0.2, 0]], "the clip is unchanged, the bake it came from unwritten");
+  assert.throws(() => standing(clips, { Take: "Nothing" }), /Nothing is not a clip/);
+  assert.throws(() => standing(clips, { Nothing: "Clip" }), /Nothing is not a clip/);
+  assert.throws(() => standing(clips, { Take: "Short" }), /of its own length/);
+  // bake reads them too, on a body's real clips.
+  assert.throws(() => bake(new Glb("art/animation/ual2_fight.glb"), undefined, { Sword_Light_D: "Sword_Heavy_D" }), /of its own length/);
 });
 
 test("a clip that keeps its root motion has its pelvis's travel along the way it goes, in its parent's space; one that stays has none", () => {
