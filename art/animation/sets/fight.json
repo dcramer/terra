@@ -1233,6 +1233,32 @@
       }
     ]
   },
+  "Carry_Tool": {
+    "of": "Idle_Loop",
+    "hold": [
+      {
+        "clip": "Idle_Loop",
+        "bone": "clavicle_r",
+        "aim": {
+          "upperarm_r": [
+            -0.27,
+            -0.95,
+            0.12
+          ],
+          "lowerarm_r": [
+            -0.16,
+            -0.84,
+            0.5
+          ],
+          "hand_r": [
+            -0.12,
+            -0.96,
+            -0.22
+          ]
+        }
+      }
+    ]
+  },
   "Carry_Round_Shield": {
     "of": "Idle_Loop",
     "hold": [

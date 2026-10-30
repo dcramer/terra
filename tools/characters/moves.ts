@@ -835,9 +835,9 @@ if (fists.length) {
     measured[`fist_wrap_deg.${f.h.name}`] = wrap.deg;
     parts.push(`${f.h.name} ${cm(worst.cm)} (${worst.where})${Math.abs(worst.cm) > FIST_CM ? ", over the bar" : ""}, round it ${wrap.deg.toFixed(0)} deg at least (${wrap.where})${wrap.deg < WRAP_DEG ? ", short of the bar" : ""}`);
   }
-  // A look carried by the rule (D564): how far above level its working end rises at most, degrees
+  // A look carried in hand (D564): how far above level its working end rises at most, degrees
   // (negative: always tipped down), the handle's +Y, every carried clip and template.
-  for (const h of ruled) {
+  for (const h of held.filter((h) => h.socket === h.hand && opt.carry)) {
     let high = { deg: -Infinity, where: "" };
     for (const clip of played.filter(carriedNow))
       for (const shape of shapes)
