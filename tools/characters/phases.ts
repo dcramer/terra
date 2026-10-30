@@ -7,8 +7,10 @@
 // metres in front of the hips and moving faster than --speed m/s, its fastest moment in it and
 // where it is then; --trace prints every frame. `measure` is the same for a caller (clip.ts).
 // A strike is a sweep: its speed is the tip's over a few frames (PACE_FRAMES either side), and
-// it lasts STRIKE_S at least, so a tip that jumps for a frame or two (a pop in a made take) is
-// no strike but a jump, listed apart (`jumps`).
+// the sweep lasts STRIKE_S at least, so a tip that jumps for a frame or two (a pop in a made take)
+// is no strike but a jump, listed apart (`jumps`). The sweep is timed whole, not only its part
+// ahead: a fast blow's tip (40-80 m/s, a bought take's) passes the front in 2-4 frames of a sweep
+// that lasts far longer, and is a strike over those frames.
 //
 //   node tools/characters/phases.ts assets/models/character/fight.glb Fight_Slash Fight_Backhand
 //   node tools/characters/phases.ts <file.glb> <clip>… [--socket socket.hand.R] [--tip 0.83] [--speed 4] [--ahead 0.5] [--trace]
@@ -72,19 +74,24 @@ export function paced(tips: { t: number; tip: V3 }[], step: number): Frame[] {
   });
 }
 
-/** The striking span of `frames`: of the sweeps lasting STRIKE_S at least, their tip ahead and
- * at pace, the one through the fastest moment; and the frames whose tip jumps. */
+/** The striking span of `frames`: within the sweeps at pace lasting STRIKE_S at least, the runs
+ * of frames whose tip is ahead, the one through the fastest moment; and the frames whose tip
+ * jumps. */
 export function strike(frames: Frame[], o: { speed: number; ahead: number }): Omit<Phases, "clip" | "end"> {
   const jumps = frames.filter((f) => f.speed > JUMP_MPS && f.speed > JUMP_TIMES * f.pace);
-  const strikes = (f: Frame) => f.tip[2] > o.ahead && f.pace > o.speed;
-  const runs: [number, number][] = [];
-  for (let i = 0; i < frames.length; i++) {
-    if (!strikes(frames[i])) continue;
-    let j = i;
-    while (j + 1 < frames.length && strikes(frames[j + 1])) j++;
-    if (frames[j].t - frames[i].t >= STRIKE_S - 1e-6) runs.push([i, j]);
-    i = j;
-  }
+  const spans = (from: number, to: number, keep: (f: Frame) => boolean) => {
+    const out: [number, number][] = [];
+    for (let i = from; i <= to; i++) {
+      if (!keep(frames[i])) continue;
+      let j = i;
+      while (j + 1 <= to && keep(frames[j + 1])) j++;
+      out.push([i, j]);
+      i = j;
+    }
+    return out;
+  };
+  const sweeps = spans(0, frames.length - 1, (f) => f.pace > o.speed).filter(([i, j]) => frames[j].t - frames[i].t >= STRIKE_S - 1e-6);
+  const runs = sweeps.flatMap(([i, j]) => spans(i, j, (f) => f.tip[2] > o.ahead));
   if (runs.length === 0) return { frames, jumps };
   const top = ([a, b]: [number, number]) => frames.slice(a, b + 1).reduce((x, y) => (y.pace > x.pace ? y : x));
   const best = runs.reduce((a, b) => (top(b).pace > top(a).pace ? b : a));

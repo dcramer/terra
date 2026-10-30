@@ -762,11 +762,22 @@ for (const move of checked) {
   if (move.next) {
     const next = byName.get(move.next);
     if (next) {
-      // At its end the shield is back at the guard: the next plays what it would from there.
-      const g = gap(marks(clip, move.done), marks(takesAfter(move, move.done, next).clip, next.from));
-      parts.push(`into ${move.next} ${g.toFixed(2)} m`);
+      // The next can start anywhere from the cancel (where a press buffered into the window
+      // starts it) to the end: the join is where this blow comes nearest the next's first pose,
+      // the end for a blow that returns to the guard, the cancel for a chain made as one (a
+      // bought set's, whose next blow begins where this one's own part ends). The worst press
+      // is the round trip's row below.
+      let join = { m: Infinity, t: move.done };
+      const presses = [move.done];
+      for (let t = move.cancel ?? move.done; t < move.done - 1e-6; t += move.speed / 60) presses.push(t);
+      for (const t of presses) {
+        const m = gap(marks(clip, t), marks(takesAfter(move, t, next).clip, next.from));
+        if (m < join.m) join = { m, t };
+      }
+      const g = join.m;
+      parts.push(`into ${move.next} ${g.toFixed(2)} m at ${join.t.toFixed(2)} s`);
       measured.into_next_m = g;
-      if (g > CHAIN_M) bad.push(`its last pose is ${g.toFixed(2)} m from ${move.next}'s first`);
+      if (g > CHAIN_M) bad.push(`its nearest pose to ${move.next}'s first, from its cancel to its end, is ${g.toFixed(2)} m away`);
       if (next.clip === move.clip && next.from === move.from) bad.push(`chains into ${move.next}, the same clip from the same place`);
     }
   }

@@ -36,3 +36,17 @@ test("a pop beside a real sweep leaves the sweep the strike", () => {
   assert.ok(p.active && p.active[0] > 0.5, `span ${p.active}`);
   assert.equal(p.jumps.length > 0, true);
 });
+
+test("a fast sweep round the body strikes over the few frames its tip passes the front", () => {
+  // A bought take's blow: the tip swung round the hips on a 1.2 m circle, a half turn from the
+  // right side through the front to the left in 0.1 s, eased in and out (57 m/s at its fastest),
+  // ahead of 0.5 m for about 50 ms, under STRIKE_S, of a sweep at pace for longer.
+  const ease = (u: number) => u * u * (3 - 2 * u);
+  const turn = (t: number) => Math.PI * ease(Math.min(1, Math.max(0, (t - 0.5) / 0.1)));
+  const frames = [...Array(73).keys()].map((i) => ({ t: i * STEP, tip: [1.2 * Math.cos(turn(i * STEP)), 0, 1.2 * Math.sin(turn(i * STEP))] as V3 }));
+  const p = strike(paced(frames, STEP), bar);
+  assert.ok(p.active, "the sweep strikes");
+  assert.ok(p.active[0] > 0.505 && p.active[1] < 0.595, `span ${p.active}: the frames ahead, inside the sweep`);
+  assert.ok(p.fastest!.tip[2] > 0.5 && p.fastest!.pace > 25, `fastest ${p.fastest!.pace} m/s, ${p.fastest!.tip[2]} m ahead`);
+  assert.equal(p.jumps.length, 0, "a sweep, not a jump");
+});
