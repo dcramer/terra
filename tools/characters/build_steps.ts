@@ -222,30 +222,38 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
   // held as its entry says (hold.py, the shield on its targets), then the mirrored clips and the
   // foot markers baked, as clip.ts --into does.
   const fight = "art/animation/sets/fight";
-  const SWAP = [
-    "Q_Light_A=Sword_Light_A+Sword_Light_A_Rec",
-    "Q_Light_B=Sword_Light_B+Sword_Light_B_Rec",
-    "Q_Light_D=Sword_Light_D",
-    "Q_Heavy_D=Sword_Heavy_D",
-    "Q_Block=Shield_OneShot",
+  // Quaternius's UAL2 blows the set plays (D532), each joined to its recovery, from the committed
+  // cuts of the pack (art/animation/ual2_fight.glb in place; _rm.glb the same keeping their root
+  // motion, which the foot markers judge them by). A take held as one (`Swap_*`, its `of`) has
+  // the same root motion. A blow leads in from our guard: its first pose held LEAD seconds while
+  // its take (`Swap_*`) eases the whole body to it from the guard, as a montage blends in,
+  // since Quaternius's blows start from his stance and not ours.
+  const LEAD = 0.08;
+  const UAL2: [string, string][] = [
+    ["Light_A", `${LEAD}+Sword_Light_A+Sword_Light_A_Rec`],
+    ["Light_B", `${LEAD}+Sword_Light_B+Sword_Light_B_Rec`],
+    ["Light_D", `${LEAD}+Sword_Light_D`],
+    ["Heavy_D", `${LEAD}+Sword_Heavy_D`],
+    ["Block", "Shield_OneShot"],
   ];
+  const bought = UAL2.map(([name, parts]) => `Q_${name}=${parts}`).join(" ");
+  const rooted = UAL2.flatMap(([name, parts]) => [`Q_${name}=${parts}`, `Swap_${name}=${parts}`]).join(" ");
   steps.push({
     name: "fight",
     section: 5,
     needs: ["clips", "base"],
-    inputs: [...py("made_clips.py", "export_character.py", "hold.py", "clear.ts", "wrist_limit.ts", "mirror.ts", "additive.ts", "markers.ts"), `${fight}.json`, fight, "art/animation/bought/UAL2.glb"],
+    inputs: [...py("made_clips.py", "export_character.py", "hold.py", "clear.ts", "wrist_limit.ts", "mirror.ts", "additive.ts", "markers.ts"), `${fight}.json`, fight, "art/animation/ual2_fight.glb", "art/animation/ual2_fight_rm.glb"],
     outputs: [`${OUT}/fight-mannequin.glb`, "assets/models/character/fight.glb"],
     run: [
       blender("made_clips.py", `"$out/fight-mannequin.glb" --list=${fight}.json`, "^MADE [0-9]|Error"),
-      // The fight-swap trial (branch only): Quaternius's UAL2 sword clips as bought, each blow
-      // joined to its recovery, beside the takes.
-      `node $here/glb_clips.ts "$out/fight-mannequin.glb" art/animation/bought/UAL2.glb ${SWAP.join(" ")}`,
+      `node $here/glb_clips.ts "$out/fight-mannequin.glb" art/animation/ual2_fight.glb ${bought}`,
+      `node $here/glb_clips.ts --only "$out/fight-roots.glb" art/animation/ual2_fight_rm.glb ${rooted}`,
       blender("export_character.py", `"$out/${base}.glb" assets/models/character/fight.glb "--clips=$out/fight-mannequin.glb" --list=${fight}.json --textures=2048`, "^(SHIELD|HOLD|EXPORTED)|Error"),
       "node $here/clear.ts assets/models/character/fight.glb     # a gliding swing foot lifted clear (clear.ts)",
       "node $here/wrist_limit.ts assets/models/character/fight.glb   # the played sword wrists inside a person's (D565)",
       "node $here/mirror.ts assets/models/character/fight.glb    # the mirrored clips (art/animation/mirrors.json)",
       "node $here/additive.ts assets/models/character/fight.glb  # the carried arm's swings (art/animation/swings.json)",
-      "node $here/markers.ts assets/models/character/fight.glb   # each clip's foot-down markers (D455)",
+      `node $here/markers.ts assets/models/character/fight.glb "--roots=$out/fight-roots.glb"   # each clip's foot-down markers (D455)`,
     ].join("\n"),
   });
   // The creatures (bodies.json `creatures`): each converted from its own rig as a creature's

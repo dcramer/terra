@@ -49,6 +49,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { isAdditive } from "./additive.ts";
+import { scaleAgainst } from "./root_drive.ts";
 import { dot, Glb, type Pose, posed, qinv, rot, type V3 } from "./glb.ts";
 
 /** A point moving slower than this over the clip's ground stands on it. */
@@ -236,8 +237,7 @@ export function groundOf(toes: V3[][], fps: number, pace?: number): [number, num
 export function rootGround(body: Glb, roots: Glb, clip: string, n: number, end: number): [number, number][] {
   const root = roots.named("root");
   const c = roots.clip(clip)!;
-  const scaleOf = (g: Glb, at: Pose[]) => at[g.parentOf[g.named("pelvis")]]?.s[0] ?? 1;
-  const by = scaleOf(body, posed(body, body.clip(clip)!, 0)) / scaleOf(roots, posed(roots, c, 0));
+  const by = scaleAgainst(body, roots);
   const path = Array.from({ length: n + 1 }, (_, i) => posed(roots, c, Math.min(c.end, (i / n) * end))[root].t.map((x) => x * by) as V3);
   return velocities(path, n / Math.max(end, 1e-6), false).map(([x, z]) => [-x, -z]);
 }
