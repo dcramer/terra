@@ -4,9 +4,8 @@ forearm's bone where its extras say.
 
 Each look is one mesh with the place it is held at the origin and its handle along +Y toward
 its working end, as a hand socket expects. Carried rather than used, its arm takes the carry
-pose its data names ("carry_hold", a pose of art/animation/sets/fight.json, D584); a
-"carry_tilt" in its data, written to its glTF extras, tips it in the fist besides: -45 tips its
-head forward and down in a hanging hand, positive raises it. None needs one today. Body-independent: a hand socket is the same on every body.
+pose its data names ("carry_hold", a pose of art/animation/sets/fight.json, D584), the look
+untipped in the fist (D546). Body-independent: a hand socket is the same on every body.
 
 Its materials are named by role (Wood, Metal, Trim, String), so a colour given for a role
 reaches every part of it: here, a stone or iron head; in the game, a tint (character.rs).
@@ -34,8 +33,7 @@ item is adding a file, never editing this script. Its "fit" says how the look is
   up the arm, +Y forward and +X out from the body, so it hangs down -Z from its handle's top,
   its long way forward along +Y; its extras say {"hold": "hung"}.
 
-Every item gives "source" (under assets/models), and may give "carry_tilt" (degrees) and
-"strap": strapped to the forearm rather than hung on the hand socket, said in its extras as
+Every item gives "source" (under assets/models), and may give "strap": strapped to the forearm rather than hung on the hand socket, said in its extras as
 {"strap": {"bone", "fist", "face", "grip"}} for the game (terra_walker::strap) and moves.ts: the
 bone it rides on; the hand socket whose fist closes on its origin (its hand strap), wherever that
 body's fist is; and the directions its front (-Z) and grip (+Y) turn to in the true forearm's
@@ -89,8 +87,8 @@ def source_sha(source):
 
 def carried(ob, d):
     """Its data's "carry_hold" (a carry pose, the clip whose first pose the arm holding it takes
-    while it is carried, D560) or "carry_tilt", into its extras, only where given (the game
-    holds every look in the fist to naming a pose, held.rs). Says how, for the HELD line. A pose its set's data marks `upright` (art/animation/sets/fight.json: the
+    while it is carried, D560) into its extras, where given (the game holds every look in the
+    fist to naming a pose, held.rs). Says how, for the HELD line. A pose its set's data marks `upright` (art/animation/sets/fight.json: the
     torch's, held flame up) goes in as `carry_upright`, its arm then held in the body's frame
     (terra_walker::carry_arm); any other pose's arm leans with the chest."""
     if "carry_hold" in d:
@@ -103,10 +101,9 @@ def carried(ob, d):
             ob["carry_upright"] = True
             return f"in its carry pose {d['carry_hold']}, upright"
         return f"in its carry pose {d['carry_hold']}"
-    if "carry_tilt" not in d:
-        return "untipped"
-    ob["carry_tilt"] = d["carry_tilt"]
-    return f"at {d['carry_tilt']} degrees, its data's"
+    if "carry_tilt" in d:
+        raise SystemExit("carry_tilt: nothing tips a look in the fist (D546); give a carry_hold instead")
+    return "untipped"
 
 
 def second_hand(ob, d):

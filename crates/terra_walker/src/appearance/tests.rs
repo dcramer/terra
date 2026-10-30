@@ -17,7 +17,7 @@ fn a_body_is_as_tall_as_it_says_and_holds_things_at_their_own_size() {
         .id();
     let hand = world.spawn((Transform::default(), ChildOf(body))).id();
     let held = world
-        .spawn((Held::new(0.0), Transform::default(), ChildOf(hand)))
+        .spawn((Held::default(), Transform::default(), ChildOf(hand)))
         .id();
     world.run_system_once(size_bodies).unwrap();
     world.run_system_once(keep_held_size).unwrap();

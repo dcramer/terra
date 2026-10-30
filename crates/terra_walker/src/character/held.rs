@@ -1,7 +1,6 @@
 //! Something held is used in one pose and carried in another: swung, the grip holds it as a
 //! hand would to strike; walking or standing, its arm takes the carry pose its file names
-//! (`carry_hold`, docs/attachment.md, "Carried"), the look untipped in the fist, unless its
-//! file gives a `carry_tilt`.
+//! (`carry_hold`, docs/attachment.md, "Carried"), the look untipped in the fist.
 
 use super::extra;
 use bevy::{
@@ -22,13 +21,6 @@ pub const CARRIED_IN: [&str; 10] = [
     "Crouch_Idle_Loop",
     "Crouch_Fwd_Loop",
 ];
-/// How quickly something in hand turns between carried and used, in seconds.
-const TURN_S: f32 = 0.12;
-
-/// On a hand socket: whether what it holds is being carried (`CARRIED_IN`) or used.
-#[derive(Component, Default)]
-pub struct Carrying(pub bool);
-
 /// On a hand socket: whether its arm is in the carry pose of what it holds now (`CarryHold`
 /// laid in a carried clip with no stance hold), which `carry_arm` holds in the body's frame.
 #[derive(Component, Default)]
@@ -50,54 +42,20 @@ pub struct CarryHold {
 }
 
 /// Something held, a child of a hand socket, or of the bone it is strapped to (`strap`).
-/// Carried, it turns `carry_tilt` degrees about its X: negative tips its working end forward
-/// and down when the arm hangs, positive raises it.
 #[derive(Component)]
 pub struct Held {
-    pub carry_tilt: f32,
-    now: f32,
-    /// Its turn and scale against its parent's frame before any tilt: none on a hand socket;
-    /// strapped, the strap's turn and the socket's scale against the bone's.
+    /// Its turn and scale against its parent's frame: none on a hand socket; strapped, the
+    /// strap's turn and the socket's scale against the bone's.
     pub(crate) turn: Quat,
     pub(crate) fit: f32,
 }
 
-impl Held {
-    pub fn new(carry_tilt: f32) -> Self {
+impl Default for Held {
+    fn default() -> Self {
         Held {
-            carry_tilt,
-            now: 0.0,
             turn: Quat::IDENTITY,
             fit: 1.0,
         }
-    }
-
-    /// Its turn against its parent's frame now, its tilt laid on.
-    pub(crate) fn turned(&self) -> Quat {
-        self.turn * Quat::from_rotation_x(self.now.to_radians())
-    }
-}
-
-/// Turns what is held toward its carried or used angle.
-pub(super) fn tilt(
-    time: Res<Time>,
-    hands: Query<&Carrying>,
-    mut held: Query<(&mut Held, &mut Transform, &ChildOf)>,
-) {
-    let ease = 1.0 - libm::expf(-time.delta_secs() / TURN_S);
-    for (mut held, mut transform, parent) in &mut held {
-        let carried = hands.get(parent.parent()).is_ok_and(|hand| hand.0);
-        let goal = if carried { held.carry_tilt } else { 0.0 };
-        // Settled: left alone, so what hangs from it is not moved again for nothing.
-        if held.now == goal {
-            continue;
-        }
-        held.now = if (goal - held.now).abs() < 0.01 {
-            goal
-        } else {
-            held.now + (goal - held.now) * ease
-        };
-        transform.rotation = held.turned();
     }
 }
 
@@ -138,19 +96,18 @@ pub(crate) fn look_points(
 }
 
 /// Once a held look has loaded, how it is carried: its file's `carry_hold` (a carry pose) goes
-/// on the hand socket it is held in, before a strap moves it to its bone (`CarryHold`); and how
-/// far it tips: its file's `carry_tilt` where it gives one, else none.
+/// on the hand socket it is held in, before a strap moves it to its bone (`CarryHold`).
 pub(super) fn held_ready(
     ready: On<WorldInstanceReady>,
-    mut held: Query<&mut Held>,
+    held: Query<(), With<Held>>,
     children: Query<&Children>,
     parents: Query<&ChildOf>,
     extras: Query<&GltfExtras>,
     mut commands: Commands,
 ) {
-    let Ok(mut held) = held.get_mut(ready.entity) else {
+    if !held.contains(ready.entity) {
         return;
-    };
+    }
     let given = |key| {
         children
             .iter_descendants(ready.entity)
@@ -171,9 +128,6 @@ pub(super) fn held_ready(
             }
         }
     }
-    held.carry_tilt = given("carry_tilt")
-        .and_then(|t| t.as_f64())
-        .map_or(0.0, |tilt| tilt as f32);
 }
 
 #[cfg(test)]
@@ -195,15 +149,20 @@ mod tests {
         }
     }
 
+    /// Nothing tips a look in the fist any more (its carry pose holds it, D546): a look whose
+    /// file still gives a `carry_tilt` would be carried other than its maker meant, unsaid.
     #[test]
-    fn every_held_look_says_how_it_tips_in_a_number() {
+    fn no_held_look_gives_a_carry_tilt() {
         let looks = crate::model_files::glbs("models/held");
         assert!(!looks.is_empty());
         for file in &looks {
             let json = crate::model_files::json(file);
-            if let Some(tilt) = crate::model_files::extra(&json, "carry_tilt") {
-                assert!(tilt.as_f64().is_some(), "{file}: carry_tilt {tilt}");
-            }
+            assert!(
+                crate::model_files::extra(&json, "carry_tilt").is_none(),
+                "{file}: gives a carry_tilt, which nothing reads; tip the look by its carry pose \
+                 (\"carry_hold\" in art/held/<item>.json) and fit it again (node \
+                 tools/characters/fit.ts <item>)"
+            );
         }
     }
 

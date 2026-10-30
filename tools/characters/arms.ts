@@ -63,7 +63,7 @@ export function reach(points: V3[]): V3[] {
 }
 
 /** What a hand holds, for keptOff: its socket's name and its reach in the socket's frame, as
- * the game poses it (carried, tipped by its carry_tilt). */
+ * the game poses it. */
 export type Holding = { socket: string; points: V3[] };
 
 /** The bends that keep a posed body's hanging hands, and what they hold, off its hips, each

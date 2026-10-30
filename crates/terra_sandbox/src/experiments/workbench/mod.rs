@@ -521,7 +521,6 @@ fn dress(
             .unwrap_or((given.as_str(), character::HAND_R));
         match character::find(root, socket, children, names) {
             Some(hand) => {
-                commands.entity(hand).insert(character::Carrying::default());
                 let file = character::held_look(item);
                 character::hold(
                     commands,
@@ -542,7 +541,6 @@ fn dress(
             Some(socket) => match character::find(root, socket, children, names) {
                 // On a hand it is held as play holds a thing, its carry pose from its file.
                 Some(hand) if socket == character::HAND_R || socket == character::HAND_L => {
-                    commands.entity(hand).insert(character::Carrying::default());
                     character::hold(commands, model, hand);
                 }
                 Some(at) => {
@@ -797,18 +795,13 @@ fn lay(model: &Model, clip: &Clip, fraction: Option<f32>, player: &mut Animation
     }
 }
 
-/// Holds every model at `fraction` of the way through `clip`, or plays it from the start,
-/// with anything in hand carried or used as that clip has it.
+/// Holds every model at `fraction` of the way through `clip`, or plays it from the start.
 fn pose(
     bench: &mut Bench,
     clip: &str,
     fraction: Option<f32>,
     players: &mut Query<&mut AnimationPlayer>,
-    hands: &mut Query<&mut character::Carrying>,
 ) {
-    for mut hand in hands.iter_mut() {
-        hand.0 = character::CARRIED_IN.contains(&clip);
-    }
     bench.posed = Some((clip.to_string(), fraction));
     for model in &bench.models {
         let Some(found) = model.clips.iter().find(|c| c.name == clip) else {
@@ -830,7 +823,6 @@ fn recarry(
     poses: Query<&character::CarryHold>,
     looks: Query<(), With<character::Held>>,
     mut players: Query<&mut AnimationPlayer>,
-    mut hands: Query<&mut character::Carrying>,
 ) {
     let Some(mut bench) = bench else { return };
     if !bench.ready() {
@@ -860,7 +852,7 @@ fn recarry(
         }
     }
     if let Some((clip, fraction)) = bench.posed.clone().filter(|_| changed) {
-        pose(&mut bench, &clip, fraction, &mut players, &mut hands);
+        pose(&mut bench, &clip, fraction, &mut players);
     }
 }
 
@@ -927,18 +919,15 @@ fn shape_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
 
 fn pose_method(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     let Pose { clip, fraction } = parse_some(params)?;
-    let mut state = bevy::ecs::system::SystemState::<(
-        ResMut<Bench>,
-        Query<&mut AnimationPlayer>,
-        Query<&mut character::Carrying>,
-    )>::new(world);
-    let (mut bench, mut players, mut hands) = state.get_mut(world).map_err(remote::refused)?;
+    let mut state =
+        bevy::ecs::system::SystemState::<(ResMut<Bench>, Query<&mut AnimationPlayer>)>::new(world);
+    let (mut bench, mut players) = state.get_mut(world).map_err(remote::refused)?;
     if !bench.plays(&clip) {
         return Err(remote::refused(format!(
             "no model plays {clip}; the clips are those given with --anim"
         )));
     }
-    pose(&mut bench, &clip, fraction, &mut players, &mut hands);
+    pose(&mut bench, &clip, fraction, &mut players);
     Ok(json!({ "clip": clip, "fraction": fraction }))
 }
 

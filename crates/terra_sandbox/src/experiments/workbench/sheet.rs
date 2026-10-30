@@ -54,7 +54,6 @@ pub fn capture(
     picture: Option<Res<terra_world::shell::Picture>>,
     mut sheet: ResMut<Sheet>,
     mut players: Query<&mut AnimationPlayer>,
-    mut hands: Query<&mut terra_game::character::Carrying>,
     mut camera: Query<&mut Transform, With<MainCamera>>,
     children: Query<&Children>,
     names: Query<&Name>,
@@ -107,7 +106,7 @@ pub fn capture(
         moments[within % moments.len()],
     );
     if sheet.waited == 0 {
-        pose(&mut bench, &clip, Some(moment), &mut players, &mut hands);
+        pose(&mut bench, &clip, Some(moment), &mut players);
     }
     // Every frame, so a camera on a moving part follows it into the pose.
     if let Ok(mut transform) = camera.single_mut() {

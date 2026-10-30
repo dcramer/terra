@@ -26,7 +26,7 @@
 mod held;
 
 pub(crate) use held::look_points;
-pub use held::{CARRIED_IN, CarryHold, CarryPosed, Carrying, Held};
+pub use held::{CARRIED_IN, CarryHold, CarryPosed, Held};
 
 use bevy::{
     gltf::{GltfExtras, GltfMaterialName},
@@ -224,7 +224,6 @@ pub fn plugin(app: &mut App) {
     .add_observer(held::held_ready)
     .add_observer(crate::strap::strap)
     .add_observer(tint)
-    .add_systems(Update, held::tilt)
     .add_systems(
         PostUpdate,
         crate::strap::follow_fist
@@ -343,14 +342,14 @@ pub fn wear(commands: &mut Commands, model: Handle<WorldAsset>, body: Entity) ->
         .id()
 }
 
-/// Puts a held thing's look in `hand`, a hand socket. Once it has loaded it tips, when
-/// carried, as its file says (`carry_tilt` in its glTF extras). Returns the look's root.
+/// Puts a held thing's look in `hand`, a hand socket. Once it has loaded, its arm takes the
+/// carry pose its file names when carried (`held_ready`). Returns the look's root.
 pub fn hold(commands: &mut Commands, model: Handle<WorldAsset>, hand: Entity) -> Entity {
     commands
         .spawn((
             WorldAssetRoot(model),
             Transform::default(),
-            Held::new(0.0),
+            Held::default(),
             ChildOf(hand),
         ))
         .id()

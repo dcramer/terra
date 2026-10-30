@@ -23,12 +23,12 @@ function glb(extras: Record<string, unknown>, bin: number[], mesh = "Mesh_0"): B
 }
 
 test("a look made again says which of its parts changed", () => {
-  const was = glb({ carry_tilt: -45 }, [1, 2, 3, 4]);
+  const was = glb({ out: 0.12 }, [1, 2, 3, 4]);
   assert.equal(lookDiff(was, was), "the committed file's bytes");
-  assert.equal(lookDiff(glb({ carry_tilt: -45, source_sha: "0dd80ed77a80" }, [1, 2, 3, 4]), was), 'its binary chunk the same; extras source_sha "0dd80ed77a80" added');
-  assert.equal(lookDiff(glb({ carry_tilt: -30 }, [1, 2, 3, 5, 6, 7, 8, 9]), was), "its binary chunk changed (8 bytes, was 4); extras carry_tilt -30, was -45");
+  assert.equal(lookDiff(glb({ out: 0.12, source_sha: "0dd80ed77a80" }, [1, 2, 3, 4]), was), 'its binary chunk the same; extras source_sha "0dd80ed77a80" added');
+  assert.equal(lookDiff(glb({ out: 0.2 }, [1, 2, 3, 5, 6, 7, 8, 9]), was), "its binary chunk changed (8 bytes, was 4); extras out 0.2, was 0.12");
   // Made in a scene of its own, Blender names its mesh with another suffix.
-  assert.equal(lookDiff(glb({ carry_tilt: -45 }, [1, 2, 3, 4], "Mesh_0.001"), was), "its binary chunk the same; its glTF meshes otherwise changed");
+  assert.equal(lookDiff(glb({ out: 0.12 }, [1, 2, 3, 4], "Mesh_0.001"), was), "its binary chunk the same; its glTF meshes otherwise changed");
 });
 
 test("a held item is checked in its class's set, else in the walker's clips", () => {

@@ -528,9 +528,8 @@ export function judge(look: Look, body: Body, data = dataOf(look.name), hold = h
   if (fitted !== mount) f("kind", `a ${kind} goes on ${mount}, but its data has it fitted ${fitted ?? "no way known"}`);
   if (mount === "in hand" || mount === "hung" || mount === "strapped") {
     if (look.joints) f("kind", "a held look is skinned");
-    // Untipped in the fist unless its data gives a tilt (its arm takes its carry pose, D584).
-    if (look.extras.carry_tilt !== undefined && !num(look.extras.carry_tilt)) f("carry_tilt", `its extras' carry_tilt ${look.extras.carry_tilt} is no number`);
-    else if (data && data.carry_tilt !== look.extras.carry_tilt) f("marker", `its carry_tilt ${look.extras.carry_tilt ?? "(none)"} is not its data's ${data.carry_tilt ?? "(none)"}`);
+    // Untipped in the fist: its arm takes its carry pose (D546, D584), and nothing reads a tilt.
+    if (look.extras.carry_tilt !== undefined || data?.carry_tilt !== undefined) f("marker", "it gives a carry_tilt, which nothing reads (D546): drop it from its data and fit it again (node tools/characters/fit.ts <item>)");
     if (mount !== "hung" && look.extras.hold === "hung") f("marker", `it says {"hold": "hung"}, which its data does not`);
   }
   if (mount === "in hand") inHand(look, rules.faces ?? "-Z", f);

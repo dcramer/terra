@@ -132,7 +132,7 @@ fn put(
     held.fit = fit;
     held.turn = turn;
     transform.translation = at;
-    transform.rotation = held.turned();
+    transform.rotation = held.turn;
     commands.entity(look).insert((
         ChildOf(bone),
         Strapped {
@@ -158,7 +158,7 @@ pub(crate) fn follow_fist(
         if held.turn != turn {
             held.turn = turn;
         }
-        let rotation = held.turned();
+        let rotation = held.turn;
         if transform.translation != at || transform.rotation != rotation {
             transform.translation = at;
             transform.rotation = rotation;
@@ -240,7 +240,7 @@ mod tests {
             ))
             .id();
         let look = world
-            .spawn((Held::new(0.0), Transform::default(), ChildOf(socket)))
+            .spawn((Held::default(), Transform::default(), ChildOf(socket)))
             .id();
         world.spawn((
             GltfExtras {

@@ -117,7 +117,7 @@ export function hang(body: Glb, rest: Pose[], hand: string, file: string): Held 
   return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, up, centre: put(centre), grip: put(pose.t), bar, balls, board: plate, strap };
 }
 
-type CarryExtras = { carry_tilt?: number; carry_hold?: string; carry_upright?: boolean };
+type CarryExtras = { carry_hold?: string; carry_upright?: boolean };
 const extrasOf = (g: Glb, node: number): CarryExtras => (g.gltf.nodes[node] as { extras?: CarryExtras }).extras ?? {};
 
 /** The carry pose a look names (its extras' `carry_hold`, D560): the clip whose first pose the
@@ -136,15 +136,6 @@ export function carryUpright(file: string): boolean {
   const g = new Glb(file);
   const node = g.gltf.nodes.findIndex((n) => n.mesh !== undefined);
   return node >= 0 && extrasOf(g, node).carry_upright === true;
-}
-
-/** How far a look turns about its X when carried, degrees, as terra_walker::character's
- * `held_ready` finds it: its extras' `carry_tilt` where given, else none. */
-export function carryTilt(file: string): number {
-  const g = new Glb(file);
-  const node = g.gltf.nodes.findIndex((n) => n.mesh !== undefined);
-  const tilt = node < 0 ? undefined : extrasOf(g, node).carry_tilt;
-  return typeof tilt === "number" ? tilt : 0;
 }
 
 /** The clips in which the game carries what is in hand rather than uses it, read from its

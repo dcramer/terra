@@ -59,7 +59,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, setGuard, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, through } from "./clash.ts";
-import { type Held, carriedClips, carryHold, carryTilt, carryUpright, frameOf, hang } from "./held.ts";
+import { type Held, carriedClips, carryHold, carryUpright, frameOf, hang } from "./held.ts";
 import { TARGETS, boardPlace, readTargets, worstOff } from "./shield_place.ts";
 import { PACE_FRAMES } from "./phases.ts";
 import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
@@ -70,7 +70,7 @@ import { type Holding, keptOff, reach } from "./arms.ts";
 import { carryArm } from "./carry_arm.ts";
 import { sharesIn, swung as armSwung } from "./additive.ts";
 import { fitter } from "./shield_arm.ts";
-import { type Handle, FIST_CM, WRAP_DEG, close, fistOff, handRest, lookGrip, seated, tipped as tipHandle } from "./grip.ts";
+import { FIST_CM, WRAP_DEG, close, fistOff, handRest, lookGrip, seated } from "./grip.ts";
 import { type WristPose, type WristWorst, EDGE, WRIST, bendOf, edgeLead, handAxes, wristPose, wristWorst } from "./wrist.ts";
 
 const { values: opt } = parseArgs({
@@ -102,7 +102,7 @@ const { values: opt } = parseArgs({
     // blow's only; measured each number the row was judged by, named by what it is.
     json: { type: "string" },
     // Carried: in the clips the game carries in (terra_walker::character::CARRIED_IN), a look in
-    // hand turned its `carry_tilt` about its X, as character/held.rs's `tilt` turns it (fit.ts).
+    // hand has its arm in the carry pose its look names (carry_hold), as the game lays it (fit.ts).
     carry: { type: "boolean", default: false },
     // The hanging hands kept off the hips after the clip, as terra_walker::arms keeps them
     // (arms.ts, D535): the walker's composed pose (fit.ts).
@@ -228,7 +228,7 @@ const armsKept = (shape: Shape, played: Clip, t: number): Pose[] => {
   const base = carriedArms(shape, clip, t);
   const pose = shaped(body, shape, clip, t, base);
   if (!opt.arms) return pose;
-  const kept = keptOff(body, pose, holdingIn(clip));
+  const kept = keptOff(body, pose, holding);
   if (!kept.size) return pose;
   for (const [bone, q] of base) kept.set(bone, kept.has(bone) ? qmul(kept.get(bone)!, q) : q);
   return shaped(body, shape, clip, t, kept);
@@ -240,10 +240,9 @@ const held: Held[] = opt.hold!.map((h) => {
   const [hand, file] = h.split("=");
   return hang(body, rest, hand, file);
 });
-// Each look's points as carried (--carry): a look on its hand socket turned its carry_tilt about
-// its X, which is the socket's (a strapped look's is 0 and stays).
+// The clips a look is carried in (--carry), its arm in its carry pose; the look untipped in the
+// fist (D546).
 const carriedIn = opt.carry ? carriedClips() : [];
-const tiltOf = new Map(held.map((h, i) => [h.name, h.socket === h.hand ? carryTilt(opt.hold![i].split("=")[1]) : 0]));
 // A carry pose goes on the arm of the hand the look is in, a strapped look's on its fist's side.
 const poseOfLook = held.map((_, i) => (opt.carry ? carryHold(opt.hold![i].split("=")[1]) : undefined));
 carryPoses = held.flatMap((h, i): [string, string][] => {
@@ -265,24 +264,14 @@ function carriedArms(shape: Shape, clip: Clip, t: number): Map<string, Q> {
   for (const [bone, q] of bends) turns.set(bone, turns.has(bone) ? qmul(turns.get(bone)!, q) : q);
   return turns;
 }
-const tipped = (deg: number, points: V3[]) => {
-  const [c, s] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
-  return points.map(([x, y, z]) => [x, y * c - z * s, y * s + z * c] as V3);
-};
-// A look's carried tilt, all of it in the fist (its data's `carry_tilt`, else none).
-const tiltIn = (h: Held) => tiltOf.get(h.name)!;
-const carriedPoints = new Map(held.map((h) => [h.name, tipped(tiltIn(h), h.points)]));
 const carriedNow = (clip: Clip) => carriedIn.includes(clip.name.split("+")[0]);
-const pointsIn = (h: Held, clip: Clip) => (carriedNow(clip) ? carriedPoints.get(h.name)! : h.points);
 // `--arms`: what each hand holds counts in its arm's spacing, as the game counts it: a look on
-// its hand socket by its reach (arms.ts), tipped when carried.
-const reaches = held.filter((h) => h.socket === h.hand).map((h) => ({ h, points: reach(h.points) }));
-const holdingIn = (clip: Clip): Holding[] =>
-  reaches.map(({ h, points }) => ({ socket: h.socket, points: carriedNow(clip) ? tipped(tiltIn(h), points) : points }));
+// its hand socket by its reach (arms.ts).
+const holding: Holding[] = held.filter((h) => h.socket === h.hand).map((h) => ({ socket: h.socket, points: reach(h.points) }));
 
 // The fists (grip.ts): what a hand socket holds closes its fingers on it after the clip,
 // as terra_walker::grip lays them, each template's from its own hand, the handle seated against
-// the palm for a power grip (held.ts seats the look) and tipped when carried. `--no-grip` leaves
+// the palm for a power grip (held.ts seats the look). `--no-grip` leaves
 // the clips' fingers.
 const fists = opt.grip
   ? held.flatMap((h, i) => {
@@ -292,13 +281,12 @@ const fists = opt.grip
     })
   : [];
 type Fist = (typeof fists)[number];
-const handleNow = (f: Fist, clip: Clip): Handle => (carriedNow(clip) ? tipHandle(f.handle, tiltIn(f.h)) : f.handle);
 const fistPoses = new Map<string, Map<string, Q>>();
-const fistPose = (shape: Shape, f: Fist, clip: Clip): Map<string, Q> => {
-  const key = `${shape.name} ${f.h.name} ${carriedNow(clip)}`;
+const fistPose = (shape: Shape, f: Fist): Map<string, Q> => {
+  const key = `${shape.name} ${f.h.name}`;
   if (!fistPoses.has(key)) {
     const { locals, socket } = handRest(body, f.side, shape.moved);
-    fistPoses.set(key, close(locals, socket, handleNow(f, clip), f.grip, f.side));
+    fistPoses.set(key, close(locals, socket, f.handle, f.grip, f.side));
   }
   return fistPoses.get(key)!;
 };
@@ -309,7 +297,7 @@ function inFist(shape: Shape, clip: Clip): Clip {
   const byShape = fisted.get(clip)!;
   if (!byShape.has(shape.name)) {
     const tracks = new Map(clip.tracks);
-    for (const f of fists) for (const [bone, q] of fistPose(shape, f, clip)) tracks.set(bone, { ...clip.tracks.get(bone), r: () => q });
+    for (const f of fists) for (const [bone, q] of fistPose(shape, f)) tracks.set(bone, { ...clip.tracks.get(bone), r: () => q });
     byShape.set(shape.name, { ...clip, tracks });
   }
   return byShape.get(shape.name)!;
@@ -395,7 +383,7 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
           const deg = (Math.acos(Math.max(-1, Math.min(1, up[1] / len(up)))) * 180) / Math.PI;
           upBy.set(h.name, worse(upBy.get(h.name)!, deg, `at ${t.toFixed(2)} s, ${shape.name}`));
         }
-        for (const q of pointsIn(h, clip)) {
+        for (const q of h.points) {
           const { depth, part } = inside(place(socket, q));
           const where = `${h.name} in ${part} at ${t.toFixed(2)} s, ${shape.name}`;
           heldW = worse(heldW, depth * 100, where);
@@ -808,7 +796,7 @@ if (fists.length) {
     for (const clip of played)
       for (const shape of shapes)
         for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
-          const off = fistOff(body, poseOf(shape, clip, t), f.side, at(f.h.hand), handleNow(f, clip), f.grip);
+          const off = fistOff(body, poseOf(shape, clip, t), f.side, at(f.h.hand), f.handle, f.grip);
           const when = `${clip.name} ${t.toFixed(2)} s, ${shape.name}`;
           if (Math.abs(off.cm) > Math.abs(worst.cm)) worst = { cm: off.cm, where: `${off.where}, ${when}` };
           if (off.wrap < wrap.deg) wrap = { deg: off.wrap, where: `${off.short}, ${when}` };
@@ -824,7 +812,7 @@ if (fists.length) {
     for (const clip of played.filter(carriedNow))
       for (const shape of shapes)
         for (let t = 0; t <= clip.end + 1e-6; t += 1 / fps) {
-          const way = rot(frame(h, poseOf(shape, clip, t)).r, tipHandle({ at: [0, 0, 0], way: [0, 1, 0], r: 0 }, tiltIn(h)).way);
+          const way = rot(frame(h, poseOf(shape, clip, t)).r, [0, 1, 0]);
           const deg = (Math.asin(Math.max(-1, Math.min(1, way[1] / len(way)))) * 180) / Math.PI;
           if (deg > high.deg) high = { deg, where: `${clip.name} ${t.toFixed(2)} s, ${shape.name}` };
         }

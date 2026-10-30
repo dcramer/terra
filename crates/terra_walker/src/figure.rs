@@ -12,7 +12,7 @@
 //! arms alone, for the hold. A layer above may ask for a clip in place of what walking shows
 //! (`Acting`), with a stance's hold over it, as the sword fight does (`melee`).
 
-use crate::character::{CARRIED_IN, CarryHold, CarryPosed, Carrying, Held};
+use crate::character::{CARRIED_IN, CarryHold, CarryPosed, Held};
 use crate::layer::{Arms, Nodes};
 use crate::{Downed, Motion, Player, Stance};
 use bevy::{
@@ -428,11 +428,9 @@ fn dress(
     ] {
         match crate::character::find(ready.entity, socket, &children, &names) {
             Some(grip) => {
-                commands.entity(grip).insert((
-                    Grip { player, hand },
-                    Carrying(true),
-                    CarryPosed(false),
-                ));
+                commands
+                    .entity(grip)
+                    .insert((Grip { player, hand }, CarryPosed(false)));
                 hands.push(grip);
             }
             None => warn!("The figure has no {socket}."),
@@ -481,7 +479,7 @@ fn animate(
         &GlobalTransform,
         &Transform,
     )>,
-    mut hands: Query<(&mut Carrying, &mut CarryPosed, &Grip)>,
+    mut hands: Query<(&mut CarryPosed, &Grip)>,
     (grips, looks): (Query<(&Grip, Option<&CarryHold>)>, Query<(), With<Held>>),
     mut feet: Query<&mut crate::feet::Kept>,
 ) {
@@ -597,7 +595,7 @@ fn change(
     animated: &mut Animated,
     animator: &mut AnimationPlayer,
     transitions: &mut AnimationTransitions,
-    hands: &mut Query<(&mut Carrying, &mut CarryPosed, &Grip)>,
+    hands: &mut Query<(&mut CarryPosed, &Grip)>,
     (doing, act, asked): (Doing, Option<&Act>, u32),
 ) {
     let swims = matches!(doing, Doing::Swim(_)) || matches!(animated.doing, Doing::Swim(_));
@@ -616,8 +614,7 @@ fn change(
     let carried = CARRIED_IN.contains(&clip);
     let posed = [0, 1].map(|side| carried && hold.is_none() && animated.carry[side].is_some());
     for &grip in &animated.hands {
-        if let Ok((mut hand, mut is_posed, grip)) = hands.get_mut(grip) {
-            hand.0 = carried;
+        if let Ok((mut is_posed, grip)) = hands.get_mut(grip) {
             let side = match grip.hand {
                 Hand::Off => 0,
                 Hand::Main => 1,

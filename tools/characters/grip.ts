@@ -120,15 +120,9 @@ export function seatOf(h: Handle): V3 {
   return [PALM_M - h.r - h.at[0], -h.at[1], -h.at[2]];
 }
 
-/** The handle as its look is seated (`seatOf`), in the socket's frame before any tilt. */
+/** The handle as its look is seated (`seatOf`), in the socket's frame. */
 export function seated(h: Handle): Handle {
   return { at: [PALM_M - h.r, 0, 0], way: h.way, r: h.r };
-}
-
-/** The handle turned `deg` about the look's X, as a carried look is tipped (character.rs's `tilt`). */
-export function tipped(h: Handle, deg: number): Handle {
-  const q = axisAngle([1, 0, 0], deg);
-  return { at: rot(q, h.at), way: rot(q, h.way), r: h.r };
 }
 
 /** The handle's line in a frame where the socket sits at `socket`. */
