@@ -103,16 +103,12 @@ impl Default for RenderVisibilityRanges {
 }
 
 impl RenderVisibilityRanges {
-    /// Clears the per-frame entity table in preparation for a new frame.
-    ///
-    /// `range_to_index` and `buffer` are deliberately *not* cleared: the
-    /// GPU-driven path bakes a range's buffer index into the mesh's
-    /// `MeshInputUniform` at extraction and only refreshes it on re-extraction,
-    /// so a range must keep the same index for the lifetime of the app or
-    /// still-visible meshes would end up pointing at the wrong slot.
-    fn clear(&mut self) {
-        self.entities.clear();
-    }
+    // Terra's patch (D587): `clear` is gone, the table kept entity by entity
+    // (`extract_visibility_ranges`). `range_to_index` and `buffer` are never
+    // cleared: the GPU-driven path bakes a range's buffer index into the mesh's
+    // `MeshInputUniform` at extraction and only refreshes it on re-extraction,
+    // so a range must keep the same index for the lifetime of the app or
+    // still-visible meshes would end up pointing at the wrong slot.
 
     /// Inserts a new entity into the [`RenderVisibilityRanges`].
     fn insert(&mut self, entity: MainEntity, visibility_range: &VisibilityRange) {
@@ -200,18 +196,21 @@ impl RenderVisibilityRanges {
 
 /// Extracts all [`VisibilityRange`] components from the main world to the
 /// render world and inserts them into [`RenderVisibilityRanges`].
+///
+/// Terra's patch (D587): only the entities whose range was added, changed or
+/// taken away this frame are written, the taken away first, so one removed and
+/// given a range again in the frame keeps it; upstream cleared the table and
+/// read every ranged entity again whenever any one changed, 2.4 ms in a frame
+/// that spawns or fades a few ranged meshes among the town's 147,000.
 pub fn extract_visibility_ranges(
     mut render_visibility_ranges: ResMut<RenderVisibilityRanges>,
-    visibility_ranges_query: Extract<Query<(Entity, &VisibilityRange)>>,
-    changed_ranges_query: Extract<Query<Entity, Changed<VisibilityRange>>>,
+    changed_ranges_query: Extract<Query<(Entity, &VisibilityRange), Changed<VisibilityRange>>>,
     mut removed_visibility_ranges: Extract<RemovedComponents<VisibilityRange>>,
 ) {
-    if changed_ranges_query.is_empty() && removed_visibility_ranges.read().next().is_none() {
-        return;
+    for entity in removed_visibility_ranges.read() {
+        render_visibility_ranges.entities.remove(&MainEntity::from(entity));
     }
-
-    render_visibility_ranges.clear();
-    for (entity, visibility_range) in visibility_ranges_query.iter() {
+    for (entity, visibility_range) in changed_ranges_query.iter() {
         render_visibility_ranges.insert(entity.into(), visibility_range);
     }
     render_visibility_ranges.rebuild_buffer_if_dirty();
@@ -262,4 +261,114 @@ pub fn write_render_visibility_ranges(
         .buffer
         .write_buffer(&render_device, &render_queue);
     render_visibility_ranges.buffer_dirty = false;
+}
+
+/// Terra's patch (D587): the table kept entity by entity holds what a fresh
+/// read of every ranged entity would.
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MainWorld;
+    use bevy_ecs::{system::SystemState, world::World};
+
+    type Params = (
+        ResMut<'static, RenderVisibilityRanges>,
+        Extract<'static, 'static, Query<'static, 'static, (Entity, &'static VisibilityRange), Changed<VisibilityRange>>>,
+        Extract<'static, 'static, RemovedComponents<'static, 'static, VisibilityRange>>,
+    );
+
+    fn range(n: u32) -> VisibilityRange {
+        let at = 10.0 * (n % 5) as f32;
+        if n % 2 == 0 {
+            VisibilityRange::abrupt(at, at + 50.0)
+        } else {
+            VisibilityRange {
+                start_margin: at..at + 5.0,
+                end_margin: at + 50.0..at + 60.0,
+                use_aabb: false,
+            }
+        }
+    }
+
+    /// Every ranged entity of the main world, and only those, is in the table
+    /// with its range's slot.
+    fn agrees(render: &mut World) {
+        let mut main = render.remove_resource::<MainWorld>().unwrap();
+        let ranged: Vec<(Entity, VisibilityRange)> = main
+            .query::<(Entity, &VisibilityRange)>()
+            .iter(&main)
+            .map(|(e, r)| (e, r.clone()))
+            .collect();
+        let table = render.resource::<RenderVisibilityRanges>();
+        assert_eq!(table.entities.len(), ranged.len(), "the table's entities");
+        for (entity, range) in &ranged {
+            let info = table
+                .entities
+                .get(&MainEntity::from(*entity))
+                .expect("a ranged entity is in the table");
+            assert_eq!(Some(&info.buffer_index), table.range_to_index.get(range));
+            assert_eq!(info.is_abrupt, range.is_abrupt());
+        }
+        main.clear_trackers();
+        render.insert_resource(main);
+    }
+
+    #[test]
+    fn ranges_kept_as_they_change_match_a_fresh_read() {
+        let mut render = World::new();
+        render.insert_resource(MainWorld::default());
+        render.insert_resource(RenderVisibilityRanges::default());
+        let mut state = SystemState::<Params>::new(&mut render);
+        let mut extract = |render: &mut World| {
+            let (table, changed, removed) = state.get_mut(render).unwrap();
+            extract_visibility_ranges(table, changed, removed);
+            state.apply(render);
+            agrees(render);
+        };
+        let mut spawned = Vec::new();
+        for frame in 0..40u32 {
+            {
+                let mut main = render.resource_mut::<MainWorld>();
+                // Spawned, some with a range and some without.
+                for n in 0..(frame % 4) {
+                    let e = if (frame + n) % 3 == 0 {
+                        main.spawn_empty().id()
+                    } else {
+                        main.spawn(range(frame + n)).id()
+                    };
+                    spawned.push(e);
+                }
+                let alive: Vec<Entity> = spawned
+                    .iter()
+                    .copied()
+                    .filter(|e| main.get_entity(*e).is_ok())
+                    .collect();
+                for (i, e) in alive.iter().enumerate() {
+                    match (frame as usize + i) % 11 {
+                        // A range changed, or given to one without.
+                        0 => {
+                            main.entity_mut(*e).insert(range(frame * 7 + i as u32));
+                        }
+                        // A range taken away.
+                        1 => {
+                            main.entity_mut(*e).remove::<VisibilityRange>();
+                        }
+                        // Despawned.
+                        2 if frame % 3 == 0 => {
+                            main.despawn(*e);
+                        }
+                        // Taken away and given again in one frame.
+                        3 => {
+                            main.entity_mut(*e).remove::<VisibilityRange>();
+                            main.entity_mut(*e).insert(range(frame + 3));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            extract(&mut render);
+        }
+        let kept = render.resource::<RenderVisibilityRanges>().entities.len();
+        assert!(kept > 5, "the run kept {kept} ranged entities");
+    }
 }
