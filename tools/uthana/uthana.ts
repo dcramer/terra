@@ -47,7 +47,9 @@ const USAGE = `node tools/uthana/uthana.ts <command>
   loco -o clip.glb                     a walk or run by Uthana's locomotion ($0.02 a second), looping, checked
       --speed m/s (1.2)  --strides 1-5 (4)  --style id (neutral_male_a)  --fps  --in-place  --body
   styles                               the styles loco takes
-  schema                               the arguments the live API takes for each mutation`;
+  stitch <id[:from-to]> <id[:from-to]> -o clip.glb   two motions joined by Uthana's transition ($0.01 a second), checked
+      --over s (0.5)  --fps  --in-place  --body
+  schema                              the arguments the live API takes for each mutation`;
 
 function auth(): string {
   let key: string;
@@ -199,6 +201,30 @@ export async function looped(characterId: string, motionId: string, zone: number
   return data.create_looped_motion.motion.id;
 }
 
+/** A stretch of a motion for `stitch`: `id`, or `id:from-to` in seconds, either end left open. */
+export function stretch(spec: string): { motion_id: string; range?: { start_seconds?: number; end_seconds?: number } } {
+  const [motion_id, span] = spec.split(":");
+  if (!span) return { motion_id };
+  const [from, to] = span.split("-");
+  if (!/^[\d.]*$/.test(from) || !/^[\d.]*$/.test(to ?? "")) throw new Failed(`${spec}: a stretch is motion:from-to in seconds, either end left open`);
+  return { motion_id, range: { ...(from ? { start_seconds: Number(from) } : {}), ...(to ? { end_seconds: Number(to) } : {}) } };
+}
+
+/** The three steps Uthana's `stitch` takes (docs/api/capabilities/stitch-loop-motions): a
+ * stretch, a transition of 0.1-3 s its model makes (quantized to 20 Hz), a stretch. */
+export function stitchSteps(first: string, second: string, over: number): Record<string, unknown>[] {
+  if (!(over >= 0.1 && over <= 3)) throw new Failed(`a transition runs 0.1 to 3 s, not ${over}`);
+  return [{ type: "motion", ...stretch(first) }, { type: "transition", duration_seconds: over }, { type: "motion", ...stretch(second) }];
+}
+
+/** Two motions joined by Uthana's transition model, $0.01 a second of what comes out. */
+export async function stitched(characterId: string, first: string, second: string, over: number): Promise<string> {
+  const data = await gql<{ stitch: { motion: { id: string } } }>("mutation ($i: StitchInput!) { stitch(input: $i) { motion { id name } } }", {
+    i: { character_id: characterId, steps: stitchSteps(first, second, over) },
+  });
+  return data.stitch.motion.id;
+}
+
 // `playback` is Uthana's playback_speed (0.1-2): a video filmed slowed is downloaded at its
 // real speed, 2 for one shot at 50 a second and shown at 25.
 async function fetched(characterId: string, motionId: string, fps: string, inPlace: boolean, playback = 1): Promise<Buffer> {
@@ -242,7 +268,7 @@ export async function download(motionId: string, out: string, o: { fps: string; 
 const round = (x: number) => Math.round(x * 1000) / 1000;
 
 export async function main(argv: string[]): Promise<void> {
-  const { values: v, positionals: [command, arg] } = parseArgs({
+  const { values: v, positionals: [command, arg, second] } = parseArgs({
     args: argv,
     allowPositionals: true,
     options: {
@@ -256,6 +282,7 @@ export async function main(argv: string[]): Promise<void> {
       body: { type: "string" },
       loop: { type: "string" },
       from: { type: "string" },
+      over: { type: "string", default: "0.5" },
       playback: { type: "string", default: "1" },
       most: { type: "string", default: "0.5" },
       speed: { type: "string", default: "1.2" },
@@ -278,8 +305,19 @@ export async function main(argv: string[]): Promise<void> {
       const data = await gql<{ __schema: { mutationType: { fields: { name: string; args: { name: string }[] }[] } } }>(
         "{ __schema { mutationType { fields { name args { name } } } } }",
       );
-      for (const f of data.__schema.mutationType.fields) if (/motion|character/.test(f.name)) console.log(`${f.name}(${f.args.map((a) => a.name).join(", ")})`);
+      for (const f of data.__schema.mutationType.fields) if (/motion|character|stitch/.test(f.name)) console.log(`${f.name}(${f.args.map((a) => a.name).join(", ")})`);
       return;
+    }
+    case "stitch": {
+      if (!arg || !second || !v.out) throw new Failed("stitch needs two motions and -o clip.glb: node tools/uthana/uthana.ts stitch mGuard:0-0.6 mBlow:0.5- --over 0.4 -o blow.glb");
+      const body = v.body ?? BODY;
+      const characterId = await character(body);
+      const before = await balance();
+      const motionId = await stitched(characterId, arg, second, Number(v.over));
+      const dollars = Math.round((before - (await balance())) * 10000) / 10000;
+      console.log(JSON.stringify({ motion: motionId, character: characterId, dollars }));
+      const { lift, stand } = await download(motionId, v.out, { fps: v.fps!, inPlace: v["in-place"]!, body });
+      return console.log(JSON.stringify({ lift: round(lift), stand: Object.fromEntries(Object.entries(stand).map(([k, x]) => [k, round(x)])), files: [v.out] }));
     }
     case "motion": {
       if ((!arg && !v.from) || !v.out) throw new Failed('motion needs a prompt and -o clip.glb: node tools/uthana/uthana.ts motion "a person idles, sword in hand" -o idle.glb');

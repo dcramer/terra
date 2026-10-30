@@ -29,6 +29,10 @@ A walk or run comes from Uthana's locomotion instead ($0.02 a second, 2026-10-29
 
 `--in-place` takes out the root's horizontal motion. `--loop 1` makes the clip a closed loop, its end eased into its start over the last second (Uthana's looping, no charge seen in the trial); `--from <motion>` loops one already made. A text-to-motion clip is not a loop until then: the trial's ended 19–67 cm off their start. `schema` lists the arguments the live API takes, for when the docs and the API disagree.
 
+`stitch <id[:from-to]> <id[:from-to]> --over s -o clip.glb` joins two motions by Uthana's transition model ($0.01 a second of what comes out, `stitch`, transition 0.1-3 s), checked as `motion`'s are, the way to start a take from another take's stance. The motions must be Uthana's own: a clip of ours baked in by `create_motion_from_gltf` is taken, free, and downloads on our body, but Uthana cannot retarget it, to its reference or into a stitch (`u_naive_retarget failed`, 2026-10-30, in our file's shape and in a downloaded take's).
+
+In text-to-motion 2.0 the `--seed` sets the performance more than the words do: on sword blows the same seed with other words gave the same lunge, so vary the seed as well as the wording.
+
 ## Rights
 
 Clips made with paid credits are ours ("you own all right, title, and interest in and to the Customer Outputs generated under such Paid Plan", uthana.com/terms), so they may sit in the repository and steer Kimodo. Free-plan clips are Uthana's under CC BY 4.0: don't use the free plan. Uthana may train on what we make.

@@ -5,7 +5,18 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { Glb, posed, type Clip, type Q, type V3 } from "../characters/glb.ts";
 import { against, ballHeight, bare, faults, glbOf, lift, lifted, withSkin } from "./carry.ts";
-import { BODY, videoRefused } from "./uthana.ts";
+import { BODY, stitchSteps, videoRefused } from "./uthana.ts";
+
+test("a stitch is a stretch, a transition, a stretch, either end of a stretch left open", () => {
+  assert.deepEqual(stitchSteps("mA:0-0.3", "mB:0.5-", 0.4), [
+    { type: "motion", motion_id: "mA", range: { start_seconds: 0, end_seconds: 0.3 } },
+    { type: "transition", duration_seconds: 0.4 },
+    { type: "motion", motion_id: "mB", range: { start_seconds: 0.5 } },
+  ]);
+  assert.deepEqual(stitchSteps("mA", "mB", 1)[2], { type: "motion", motion_id: "mB" });
+  assert.throws(() => stitchSteps("mA", "mB", 4), /0\.1 to 3 s/);
+  assert.throws(() => stitchSteps("mA:soon", "mB", 1), /motion:from-to/);
+});
 
 const parts = (glb: Buffer) => {
   const jsonLen = glb.readUInt32LE(12);
