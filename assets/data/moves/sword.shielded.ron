@@ -85,31 +85,41 @@
         // and down across to the left, 1.3 m ahead at its contact, right to left. The shield
         // stays low at the left side, where the guard rests it, out of the sword's way
         // (Open_Slash, D454, D531).
+        // THE FIGHT-SWAP TRIAL (branch wip/fight-swap, not main): the light chain, the heavy and
+        // the block are Quaternius's UAL2 clips as made (Swap_*: each blow joined to its _Rec,
+        // the shield arm held at the guard's as the Open_* are; Q_Block his Shield_OneShot),
+        // played at their own speed. Each drive is the clip's root motion (root_drive.ts on
+        // UAL2_RM.glb), so the body steps as the clip does; active from the tip's sweep past the
+        // front (phases.ts --trace), stop_at so the tip meets the target at its reach plus the
+        // root's travel to the hit. The chain cancels where Quaternius's next blow begins.
         "slash": (
-            clip: "Open_Slash", from: 0.00, speed: 1.21, active: (0.32, 0.48), done: 1.96,
-            cancel: 0.70, next: "backhand",
+            clip: "Swap_Light_A", from: 0.00, speed: 1.0, active: (0.18, 0.30), done: 0.87,
+            cancel: 0.37, next: "backhand",
             stamina: 10, damage: 12, hit_stop: 0.03,
-            drive: [(0.0, 0.0), (0.17, 1.8), (0.37, 0.6), (0.5, 0.0)],
-            warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
+            drive: [(0.04, 0.58), (0.11, 2.99), (0.18, 1.31), (0.26, 0.06), (0.33, -0.65), (0.40, 0.0)],
+            warp: (within: 3.2, cone: 70, stop_at: 1.65, most_mps: 4.0),
         ),
         // From the guard and back to it (Keyed_Backhand): the sword to the left shoulder and
         // down across to the low right, a falling diagonal cut with its edge leading down and
         // to the right (D568), left to right. The shield low at the left side throughout
         // (Open_Backhand, D454, D531).
         "backhand": (
-            clip: "Open_Backhand", from: 0.00, speed: 2.18,
-            active: (0.57, 0.72), done: 2.58, cancel: 1.63, next: "finisher",
+            clip: "Swap_Light_B", from: 0.00, speed: 1.0,
+            active: (0.20, 0.29), done: 1.00, cancel: 0.43, next: "finisher",
             stamina: 10, damage: 12, hit_stop: 0.03,
-            drive: [(0.0, 0.0), (0.3, 1.8), (0.62, 0.6), (0.8, 0.0)],
-            warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
+            drive: [(0.04, 1.62), (0.11, 2.23), (0.18, 0.87), (0.25, 0.50), (0.33, -0.05), (0.40, -0.17), (0.47, 0.0)],
+            warp: (within: 3.2, cone: 70, stop_at: 1.3, most_mps: 4.0),
         ),
         // The third of the chain: the slash again, a little slower and harder.
+        // TRIAL (fight-swap j3): Quaternius's Sword_Light_D, a lunging thrust with no spin (the
+        // hips -91..35 deg, the head -32..12 deg off ahead; Light_C turned the hips 378 deg),
+        // in place of Light_C, whose spin slid the feet 110 cm and turned the head 107 deg.
         "finisher": (
-            clip: "Open_Slash", from: 0.0, speed: 1.66,
-            active: (0.32, 0.48), done: 1.96, cancel: 1.4, stamina: 12, damage: 18,
+            clip: "Swap_Light_D", from: 0.0, speed: 1.0,
+            active: (0.23, 0.32), done: 1.67, cancel: 1.4, stamina: 12, damage: 18,
             hit_stop: 0.04,
-            drive: [(0.0, 0.0), (0.17, 2.4), (0.37, 0.8), (0.53, 0.0)],
-            warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.5),
+            drive: [(0.02, 1.24), (0.05, 1.02), (0.08, 0.77), (0.12, 0.68), (0.15, 0.78), (0.18, 1.09), (0.22, 1.59), (0.25, 4.71), (0.28, 11.67), (0.32, 6.25), (0.35, -0.10), (0.38, -0.27), (0.42, -0.40), (0.45, -0.48), (0.48, -0.52), (0.52, -0.51), (0.55, -0.45), (0.58, -0.36), (0.62, -0.22), (0.65, -0.12), (0.68, -0.10), (0.75, -0.06), (0.85, -0.02), (0.98, 0.0), (1.02, 0.29), (1.05, 0.83), (1.08, 1.27), (1.12, 1.62), (1.15, 1.89), (1.18, 2.06), (1.22, 2.15), (1.25, 2.15), (1.28, 2.06), (1.32, 1.88), (1.35, 1.63), (1.38, 1.38), (1.42, 1.15), (1.45, 0.93), (1.48, 0.74), (1.52, 0.56), (1.55, 0.41), (1.58, 0.27), (1.62, 0.15), (1.65, 0.0)],
+            warp: (within: 3.2, cone: 70, stop_at: 1.2, most_mps: 4.5),
         ),
         // From the guard and back to it (Keyed_Heavy, D450): the sword lifted high behind the right
         // shoulder by 0.75 s and brought down hard across to the lower left, then back on guard.
@@ -117,10 +127,10 @@
         // comes down about 15 deg left of ahead and reaches 1.45 m, so the body turns 15 deg
         // right into it and steps in to 1.4 m (D573).
         "heavy": (
-            clip: "Open_Heavy", from: 0.00, speed: 1.52, active: (0.90, 1.00), done: 2.38,
+            clip: "Swap_Heavy_D", from: 0.00, speed: 1.0, active: (0.55, 0.68), done: 2.33,
             cancel: 1.95, stamina: 22, damage: 30, hit_stop: 0.05, heavy: true,
-            drive: [(0.0, 0.0), (0.55, 0.6), (0.95, 3.2), (1.34, 0.5), (2.01, 0.0)],
-            warp: (within: 3.6, cone: 70, stop_at: 1.4, most_mps: 4.0), aim: -15,
+            drive: [(0.03, -0.43), (0.10, -0.02), (0.17, -0.19), (0.23, -0.18), (0.30, 0.26), (0.37, 1.05), (0.43, 2.05), (0.50, 3.01), (0.57, 5.65), (0.63, 2.37), (0.70, 0.02), (0.77, 0.0), (1.23, 0.0), (1.30, 0.32), (1.37, 0.85), (1.43, 1.17), (1.50, 1.31), (1.57, 1.25), (1.63, 1.01), (1.70, 0.68), (1.77, 0.42), (1.83, 0.25), (1.90, 0.13), (1.97, 0.05), (2.03, 0.0)],
+            warp: (within: 4.0, cone: 70, stop_at: 2.2, most_mps: 4.0),
         ),
         // The base's forward roll with the arms held out of the tuck (Fight_Roll, hold.py), in
         // place in its clip: the body driven 3.3 m along the way asked, blows passing through
@@ -136,7 +146,7 @@
         // Clear_Block is that take with the sword arm held out of the board's way (D454) and the
         // shield arm eased from the low rest into the raise by 0.2 s and back to it as it
         // lowers (D531).
-        "block": (clip: "Clear_Block", from: 0.00, speed: 1.81, done: 1.38, hold: 0.60),
+        "block": (clip: "Q_Block", from: 0.00, speed: 1.0, done: 0.83, hold: 0.30),
         // The partner's slash: the slash slowed for a long, readable wind-up.
         "partner_slash": (
             clip: "Open_Slash", from: 0.0, speed: 0.37, active: (0.32, 0.48), done: 1.96,
