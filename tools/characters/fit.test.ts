@@ -45,6 +45,11 @@ test("a held item is checked in its class's set, else in the walker's clips", ()
   assert.equal(bow.hand, "L");
   assert.ok(bow.clips.split(",").includes("Sprint_Loop"));
   for (const clip of ["Interact", "Sword_Attack", "Sword_Idle"]) assert.ok(!bow.clips.split(",").includes(clip), clip);
+  // A strapped shield with no item (the round shield) rides its strap's fist, the left, not
+  // the right hand through the walker's use clips (13.8 cm into the body in Interact before).
+  const round = setOf("round_shield");
+  assert.equal(round.hand, "L");
+  for (const clip of ["Interact", "Sword_Attack"]) assert.ok(!round.clips.split(",").includes(clip), clip);
 });
 
 test("a moves run that writes no rows fails, never reading an earlier run's", () => {

@@ -140,8 +140,9 @@ function checkStage(it: Item): boolean {
 export function setOf(name: string): { set: string; hand: "R" | "L"; clips: string } {
   const hold = holdOf(`held/${name}`);
   const data = join(ROOT, "art", "held", `${name}.json`);
-  const kind = existsSync(data) ? (JSON.parse(readFileSync(data, "utf8")) as { kind?: string }).kind : undefined;
-  const hand = hold?.grip === "Off" || (kind && KINDS[kind]?.lead === "Off") ? "L" : "R";
+  const { kind, strap } = existsSync(data) ? (JSON.parse(readFileSync(data, "utf8")) as { kind?: string; strap?: { fist?: string } }) : {};
+  // A strapped look rides its strap's fist (a shield's left), whether or not an item names it.
+  const hand = strap?.fist ? (strap.fist.endsWith(".L") ? "L" : "R") : hold?.grip === "Off" || (kind && KINDS[kind]?.lead === "Off") ? "L" : "R";
   const sets = join(ROOT, "assets", "data", "moves");
   const families = readFileSync(join(sets, "families.ron"), "utf8");
   const family = hold && new RegExp(`"${hold.class}":\\s*"(\\w+)"`).exec(families)?.[1];
