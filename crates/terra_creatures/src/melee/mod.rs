@@ -562,15 +562,13 @@ fn steer(
     };
     if let Some(each) = fighter.runner.now(set) {
         let t = fighter.runner.t();
-        let mut speed = each.drive_at(t);
-        if let (Some(warp), Some(target), Some(left)) = (each.warp, target, each.until_active(t)) {
+        let warped = each.warp.zip(target).and_then(|(warp, target)| {
             let to = target - here;
             let far = to.length();
             let cone = libm::cosf(warp.cone.to_radians());
-            if far < warp.within && fighter.way.dot(to / far.max(1e-3)) > cone {
-                speed += moves::warp_speed(far, warp.stop_at, left, warp.most_mps);
-            }
-        }
+            (far < warp.within && fighter.way.dot(to / far.max(1e-3)) > cone).then_some(far)
+        });
+        let mut speed = each.warped_drive(t, warped);
         // Never into the partner: a blow's drive toward them stops at arm's length.
         if let Some(nearest) = nearest.filter(|_| each.damage > 0.0) {
             let to = (nearest - here).reject_from(here.normalize());

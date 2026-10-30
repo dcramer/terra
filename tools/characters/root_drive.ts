@@ -5,7 +5,9 @@
 // its planted feet stay put (docs/movement.md "Root motion"; Unreal's root motion from
 // animation). Clips joined by + are one after another, as glb_clips.ts joins them.
 //
-//   node tools/characters/root_drive.ts RM.glb CLIP[+CLIP...] [--every=SECONDS]
+//   node tools/characters/root_drive.ts RM.glb CLIP[+CLIP...] [--every=SECONDS] [--body=BODY.glb]
+//
+// --body scales the drive to that body's skeleton against the pack's, as its in-place feet are.
 //
 // RM.glb is a file whose clips keep their root motion on the node "root" (a pack's _RM file).
 // Prints the drive and how far it goes; a root that turns or strays sideways is named, since a
@@ -40,6 +42,15 @@ export function rootDrive(g: Glb, clips: string[], every: number): { drive: [num
   return { drive: samples, ahead, aside };
 }
 
+/** How much bigger `body`'s skeleton stands than `pack`'s: their pelvises' parents' scale. */
+export function scaleAgainst(body: Glb, pack: Glb): number {
+  const scale = (g: Glb) => {
+    const rest = posed(g, g.clip(g.clipNames()[0])!, 0);
+    return rest[g.parentOf[g.named("pelvis")]]?.s[0] ?? 1;
+  };
+  return scale(body) / scale(pack);
+}
+
 /** How far a drive goes: its keys joined by straight lines, held at its ends from 0 to `end`. */
 export function driven(drive: [number, number][], end: number): number {
   let d = drive[0][0] * drive[0][1];
@@ -53,11 +64,17 @@ if (import.meta.main) {
   const every = Number(args.find((a) => a.startsWith("--every="))?.split("=")[1] ?? 1 / 30);
   const [file, clips] = args.filter((a) => !a.startsWith("--"));
   if (!file || !clips) {
-    console.log("usage: node tools/characters/root_drive.ts RM.glb CLIP[+CLIP...] [--every=SECONDS]");
+    console.log("usage: node tools/characters/root_drive.ts RM.glb CLIP[+CLIP...] [--every=SECONDS] [--body=BODY.glb]");
     process.exit(2);
   }
   const g = new Glb(file);
-  const { drive, ahead, aside } = rootDrive(g, clips.split("+"), every);
+  const body = args.find((a) => a.startsWith("--body="))?.split("=")[1];
+  const { drive: raw, ahead, aside } = rootDrive(g, clips.split("+"), every);
+  // In the body's metres: the pack's skeleton scaled as the body's is (the fight body's 1.078),
+  // so the drive goes as far as the body's in-place feet go back.
+  const by = body ? scaleAgainst(new Glb(body), g) : 1;
+  const drive = raw.map(([t, v]): [number, number] => [t, v * by]);
+  if (body) console.log(`// scaled ${by.toFixed(3)} to ${body}'s skeleton`);
   console.log(`drive: [${drive.map(([t, v]) => `(${t.toFixed(2)}, ${v.toFixed(2)})`).join(", ")}],`);
   const end = clips.split("+").reduce((s, c) => s + (g.clip(c)?.end ?? 0), 0);
   console.log(`// ${clips}: the root goes ${ahead.toFixed(2)} m ahead in ${end.toFixed(2)} s, the drive ${driven(drive, end).toFixed(2)} m${aside > 0.05 ? `; the root strays ${aside.toFixed(2)} m aside, which a drive does not follow` : ""}`);

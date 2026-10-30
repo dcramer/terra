@@ -347,6 +347,9 @@ def bake(arm, actions, entries):
                 eased.append((held, at))
             else:
                 still.update(at)
+        # A part held throughout wins over an eased hold's on its bones: a blow eased in from the
+        # guard and out to it as a whole body (`pelvis`) keeps its shield arm held low throughout.
+        eased = [(held, {n: v for n, v in at.items() if n not in still}) for held, at in eased]
         fps = bpy.context.scene.render.fps / bpy.context.scene.render.fps_base
         first, last = (int(round(f)) for f in src.frame_range)
         played = _sampled(arm, src, {n for _, at in eased for n in at}, first, last) if eased else {}

@@ -224,12 +224,8 @@ pub fn think(
             if left.is_some() {
                 fighter.way = toward;
             }
-            let mut speed = each.drive_at(t);
-            if let (Some(warp), Some(left)) = (each.warp, left)
-                && far < warp.within
-            {
-                speed += super::moves::warp_speed(far, warp.stop_at, left, warp.most_mps);
-            }
+            let near = each.warp.is_some_and(|warp| far < warp.within);
+            let mut speed = each.warped_drive(t, near.then_some(far));
             staged.tell_face(here + each.aim_turn(up) * fighter.way);
             // Never into the player: a blow's drive stops at arm's length.
             if far < super::NEAREST_M {
