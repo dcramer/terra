@@ -16,9 +16,7 @@
 
 use bevy::{
     asset::RenderAssetUsages,
-    diagnostic::{
-        DiagnosticsStore, EntityCountDiagnosticsPlugin, SystemInformationDiagnosticsPlugin,
-    },
+    diagnostic::{DiagnosticsStore, SystemInformationDiagnosticsPlugin},
     image::ImageSampler,
     prelude::*,
     render::{
@@ -32,6 +30,8 @@ use std::{
     collections::VecDeque,
     time::{Duration, Instant},
 };
+
+mod entities;
 
 /// The frame rate the game is made to hold (D25), at the high preset on the developers'
 /// RTX 3080 at 1080p, at its 99th percentile.
@@ -276,7 +276,7 @@ pub fn plugin(on_screen: bool) -> impl Fn(&mut App) {
             app.add_plugins(RenderDiagnosticsPlugin);
         }
         app.add_plugins((
-            EntityCountDiagnosticsPlugin::default(),
+            entities::plugin,
             SystemInformationDiagnosticsPlugin,
             // How much the GPU holds of meshes, which a benchmark reports.
             MeshAllocatorDiagnosticPlugin,
