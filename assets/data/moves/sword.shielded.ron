@@ -81,46 +81,54 @@
     // heavy (the shield bash) is not made yet.
     buttons: (main: "slash", main_heavy: "heavy", off: "block", dodge: "roll"),
     moves: {
-        // From the guard and back to it (Keyed_Slash, D450): over the right shoulder by 0.25 s
-        // and down across to the left, 1.3 m ahead at its contact, right to left. The shield
-        // stays low at the left side, where the guard rests it, out of the sword's way
-        // (Open_Slash, D454, D531).
+        // The light chain and the heavy are Quaternius's UAL2 clips as made (Swap_*: each blow
+        // joined to its _Rec, the shield arm held at the guard's, D532), played at their own
+        // speed. Each leads in 0.08 s from our guard, eased on over the clip's calm start (0.1-0.6
+        // s, so the lead is the blow's wind-up and not a swing of its own), and
+        // eases back to it as a montage blends in and out (fight.json's whole-body hold), so a
+        // time here is the clip's plus that lead. Each drive is the clip's root motion
+        // (root_drive.ts on ual2_fight_rm.glb with the lead, scaled to the body's skeleton),
+        // faded by the blend-out's weight and ended at done, so the body steps as the clip
+        // does; active from the tip's sweep past the front (phases.ts --trace). The warp brings
+        // the body to stop_at as the blade crosses the front (the active span's middle):
+        // the tip's reach there plus 0.15 m into the foe, at most 1.55 m, inside the reach the
+        // duel's blade gives every blow (1.33 m and the body's 0.27). Done is where the
+        // blend-out is back on guard; the chain cancels just before.
+        // The slash: Sword_Light_A, over the right shoulder and across to the left, 1.5 m ahead
+        // at its contact.
         "slash": (
-            clip: "Open_Slash", from: 0.00, speed: 1.21, active: (0.32, 0.48), done: 1.96,
-            cancel: 0.70, next: "backhand",
+            clip: "Swap_Light_A", from: 0.00, speed: 1.0, active: (0.26, 0.38), done: 0.62,
+            cancel: 0.57, next: "backhand",
             stamina: 10, damage: 12, hit_stop: 0.03,
-            drive: [(0.0, 0.0), (0.17, 1.8), (0.37, 0.6), (0.5, 0.0)],
-            warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
+            drive: [(0.00, 0.00), (0.10, 0.00), (0.13, 0.81), (0.16, 2.78), (0.20, 3.70), (0.23, 2.94), (0.26, 1.51), (0.30, -0.28), (0.33, 0.22), (0.36, 0.04), (0.40, -0.80), (0.43, -0.76), (0.46, 0.00)],
+            warp: (within: 3.2, cone: 70, stop_at: 1.55, most_mps: 4.0),
         ),
-        // From the guard and back to it (Keyed_Backhand): the sword to the left shoulder and
-        // down across to the low right, a falling diagonal cut with its edge leading down and
-        // to the right (D568), left to right. The shield low at the left side throughout
-        // (Open_Backhand, D454, D531).
+        // The backhand: Sword_Light_B, from the left shoulder across to the low right, 1.25 m
+        // ahead at its contact.
         "backhand": (
-            clip: "Open_Backhand", from: 0.00, speed: 2.18,
-            active: (0.57, 0.72), done: 2.58, cancel: 1.63, next: "finisher",
+            clip: "Swap_Light_B", from: 0.00, speed: 1.0,
+            active: (0.28, 0.37), done: 0.66, cancel: 0.62, next: "finisher",
             stamina: 10, damage: 12, hit_stop: 0.03,
-            drive: [(0.0, 0.0), (0.3, 1.8), (0.62, 0.6), (0.8, 0.0)],
-            warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.0),
+            drive: [(0.00, 0.00), (0.08, 0.00), (0.10, 0.53), (0.13, 2.84), (0.16, 2.56), (0.20, 2.48), (0.23, 1.78), (0.26, 0.70), (0.30, 0.30), (0.33, 0.59), (0.36, 0.66), (0.40, 0.29), (0.43, -0.74), (0.46, -0.20), (0.50, -0.07), (0.53, 0.00)],
+            warp: (within: 3.2, cone: 70, stop_at: 1.4, most_mps: 4.0),
         ),
-        // The third of the chain: the slash again, a little slower and harder.
+        // The third of the chain: Sword_Light_D, a lunging thrust with no spin (the hips
+        // -91..35 deg, the head -32..12 deg off ahead; Light_C turned the hips 378 deg and slid
+        // the feet 110 cm), 1.76 m ahead at its contact.
         "finisher": (
-            clip: "Open_Slash", from: 0.0, speed: 1.66,
-            active: (0.32, 0.48), done: 1.96, cancel: 1.4, stamina: 12, damage: 18,
+            clip: "Swap_Light_D", from: 0.0, speed: 1.0,
+            active: (0.31, 0.40), done: 1.36, cancel: 1.30, stamina: 12, damage: 18,
             hit_stop: 0.04,
-            drive: [(0.0, 0.0), (0.17, 2.4), (0.37, 0.8), (0.53, 0.0)],
-            warp: (within: 3.2, cone: 70, stop_at: 1.45, most_mps: 4.5),
+            drive: [(0.00, 0.00), (0.08, 0.00), (0.10, 1.33), (0.13, 1.10), (0.16, 0.83), (0.20, 0.73), (0.23, 0.84), (0.26, 1.17), (0.30, 1.72), (0.33, 5.08), (0.36, 12.57), (0.40, 6.74), (0.43, -0.11), (0.46, -0.29), (0.50, -0.43), (0.53, -0.52), (0.56, -0.56), (0.60, -0.55), (0.63, -0.49), (0.66, -0.39), (0.70, -0.23), (0.73, -0.13), (0.76, -0.11), (0.80, -0.09), (0.83, -0.07), (0.86, -0.05), (0.90, -0.04), (0.93, -0.02), (0.96, -0.01), (1.00, -0.01), (1.03, 0.00), (1.06, 0.00), (1.10, 0.32), (1.13, 0.86), (1.16, 1.16), (1.20, 1.20), (1.23, 1.02), (1.26, 0.69), (1.30, 0.35), (1.33, 0.09), (1.36, 0.00)],
+            warp: (within: 3.2, cone: 70, stop_at: 1.55, most_mps: 4.5),
         ),
-        // From the guard and back to it (Keyed_Heavy, D450): the sword lifted high behind the right
-        // shoulder by 0.75 s and brought down hard across to the lower left, then back on guard.
-        // The shield low at the left side throughout (Open_Heavy, D454, D531). Its take's cut
-        // comes down about 15 deg left of ahead and reaches 1.45 m, so the body turns 15 deg
-        // right into it and steps in to 1.4 m (D573).
+        // The heavy: Sword_Heavy_D, the sword raised high and brought straight down ahead with a
+        // long step in, 1.46 m ahead at its contact.
         "heavy": (
-            clip: "Open_Heavy", from: 0.00, speed: 1.52, active: (0.90, 1.00), done: 2.38,
-            cancel: 1.95, stamina: 22, damage: 30, hit_stop: 0.05, heavy: true,
-            drive: [(0.0, 0.0), (0.55, 0.6), (0.95, 3.2), (1.34, 0.5), (2.01, 0.0)],
-            warp: (within: 3.6, cone: 70, stop_at: 1.4, most_mps: 4.0), aim: -15,
+            clip: "Swap_Heavy_D", from: 0.00, speed: 1.0, active: (0.63, 0.76), done: 1.62,
+            cancel: 1.50, stamina: 22, damage: 30, hit_stop: 0.05, heavy: true,
+            drive: [(0.00, 0.00), (0.08, 0.00), (0.10, -0.62), (0.13, -0.31), (0.16, -0.08), (0.20, 0.04), (0.23, -0.13), (0.26, -0.28), (0.30, -0.28), (0.33, -0.11), (0.36, 0.17), (0.40, 0.40), (0.43, 0.85), (0.46, 1.41), (0.50, 1.95), (0.53, 2.48), (0.56, 2.99), (0.60, 3.50), (0.63, 3.94), (0.66, 8.24), (0.70, 3.52), (0.73, 1.58), (0.76, 0.03), (0.80, 0.01), (0.83, 0.00), (1.33, 0.00), (1.36, 0.17), (1.40, 0.40), (1.43, 0.51), (1.46, 0.50), (1.50, 0.40), (1.53, 0.26), (1.56, 0.12), (1.60, 0.02), (1.62, 0.00)],
+            warp: (within: 4.0, cone: 70, stop_at: 1.55, most_mps: 4.0),
         ),
         // The base's forward roll with the arms held out of the tuck (Fight_Roll, hold.py), in
         // place in its clip: the body driven 3.3 m along the way asked, blows passing through

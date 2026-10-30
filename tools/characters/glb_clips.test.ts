@@ -70,6 +70,21 @@ test("two clips joined play the first and then the second, at its own times", ()
   }
 });
 
+test("a pause before a part holds its first pose that long, and the part plays after it", () => {
+  const m = readFileSync(MANNEQUIN);
+  const g = new Glb(m);
+  const a = g.clip("Jump_Start")!;
+  const led = new Glb(putClips(m, joinClips(m, "Led", ["0.2", a.name]), ["Led"])).clip("Led")!;
+  assert.ok(Math.abs(led.end - (0.2 + a.end)) < 1e-4, `${led.end} = 0.2 + ${a.end}`);
+  const pelvis = g.named("pelvis");
+  for (const [at, t] of [[0, 0], [0, 0.1], [0, 0.2], [0.5 * a.end, 0.2 + 0.5 * a.end]]) {
+    const want = posed(g, a, at)[pelvis];
+    const got = posed(g, led, t)[pelvis];
+    for (const k of [0, 1, 2]) assert.ok(Math.abs(want.t[k] - got.t[k]) < 1e-4, `at ${t} s: ${got.t} against ${want.t}`);
+  }
+  assert.throws(() => joinClips(m, "Bad", [a.name, "0.1"]), /ends on a pause/);
+});
+
 test("a pack cut to two clips puts them in as the whole pack does, and holds nothing else", () => {
   const m = readFileSync(MANNEQUIN);
   const names = ["Jump_Start", "Jump_Loop"];

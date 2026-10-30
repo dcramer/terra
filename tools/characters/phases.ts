@@ -65,6 +65,14 @@ export function measure(glb: Glb, name: string, o: Options = {}): Phases | undef
 
 const dist = (a: V3, b: V3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
+/** Where a blow lands: of its active frames' tips (the body's space, +Z ahead), the one
+ * furthest ahead, the point of its arc nearest what stands before it. A sweep lands there as
+ * it crosses the front, a thrust at its full reach. Its fastest frame is no stand-in: a fast
+ * take's tip (40-80 m/s) is fastest a frame or two past the front, 60 deg round the side. */
+export function contactOf<T extends { tip: V3 }>(frames: T[]): T | undefined {
+  return frames.reduce<T | undefined>((best, f) => (!best || f.tip[2] > best.tip[2] ? f : best), undefined);
+}
+
 /** Each tip's speed from the frame before, and its pace over PACE_FRAMES frames either side. */
 export function paced(tips: { t: number; tip: V3 }[], step: number): Frame[] {
   return tips.map(({ t, tip }, i) => {

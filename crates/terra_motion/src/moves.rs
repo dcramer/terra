@@ -542,6 +542,66 @@ pub fn warp_speed(distance: f32, stop_at: f32, until_active: f32, most_mps: f32)
     ((distance - stop_at) / until_active.max(0.05)).clamp(0.0, most_mps)
 }
 
+/// A drive going less than this before its warp ends steps in by `warp_speed` instead.
+const WARP_DRIVE_M: f32 = 0.1;
+/// A blow's drive is warped at most this many times as far.
+const WARP_MOST: f32 = 3.0;
+
+impl Move {
+    /// The body's speed ahead at `t` (the move's own seconds), its drive warped toward a target
+    /// `distance` metres off in its warp's cone and reach, or as it is with none (`None`).
+    ///
+    /// Motion Warping's skew warp, as Unreal Engine's Motion Warping plugin documents it (its
+    /// root motion modifier scales the root motion left in the warp window so the root ends on
+    /// the warp target, the window ending at the hit): until the blade crosses the front, the
+    /// middle of its active span, the drive left before then is scaled so the body stands
+    /// `stop_at` from the target there, so a lunge from too near stops short of the body
+    /// before it rather than running through it, and one from further steps further. Each
+    /// frame scales what is left, so it lands however the target moves. A take with too little
+    /// drive in its window to scale (in place) steps in by `warp_speed` through its wind-up
+    /// instead, as before.
+    pub fn warped_drive(&self, t: f32, distance: Option<f32>) -> f32 {
+        let drive = self.drive_at(t);
+        let (Some(warp), Some(distance)) = (self.warp, distance) else {
+            return drive;
+        };
+        let Some((from, to)) = self.active else {
+            return drive;
+        };
+        let end = self.at_clip(0.5 * (from + to));
+        if t >= end {
+            return drive;
+        }
+        let need = (distance - warp.stop_at).max(0.0);
+        if self.drive_between(0.0, end) >= WARP_DRIVE_M {
+            let left = self.drive_between(t, end);
+            return if left > 1e-4 {
+                drive * (need / left).min(WARP_MOST)
+            } else {
+                0.0
+            };
+        }
+        match self.until_active(t) {
+            Some(until) => drive + warp_speed(distance, warp.stop_at, until, warp.most_mps),
+            None => drive,
+        }
+    }
+
+    /// How far the drive goes ahead from `a` to `b` (the move's own seconds), backward steps
+    /// counted off.
+    pub fn drive_between(&self, a: f32, b: f32) -> f32 {
+        const STEP: f32 = 1.0 / 240.0;
+        let mut went = 0.0;
+        let mut t = a;
+        while t < b {
+            let dt = STEP.min(b - t);
+            went += self.drive_at(t + 0.5 * dt) * dt;
+            t += dt;
+        }
+        went
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -552,6 +612,78 @@ mod tests {
             "/../../assets/data/moves/sword.shielded.ron"
         );
         MoveSet::read(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    /// A lunge stepping 1.5 m in a tenth of a second as its blade strikes (Quaternius's thrust's
+    /// shape), its warp stopping it 1.2 m from what it is aimed at.
+    fn lunge() -> Move {
+        let mut m = set().get("finisher").unwrap().clone();
+        m.from = 0.0;
+        m.speed = 1.0;
+        m.active = Some((0.25, 0.45));
+        m.drive = vec![
+            (0.0, 0.0),
+            (0.2, 0.0),
+            (0.25, 10.0),
+            (0.35, 10.0),
+            (0.4, 0.0),
+        ];
+        m.warp = Some(Warp {
+            within: 4.0,
+            cone: 70.0,
+            stop_at: 1.2,
+            most_mps: 4.0,
+        });
+        m
+    }
+
+    /// How far off its target a body is as the lunge's blade crosses the front (the middle of
+    /// its active span), started `from` it.
+    fn lunged(m: &Move, from: f32, target: bool) -> f32 {
+        let dt = 1.0 / 60.0;
+        let mut far = from;
+        let (a, b) = m.active.unwrap();
+        for frame in 0..(m.at_clip(0.5 * (a + b)) / dt).round() as u32 {
+            let t = frame as f32 * dt;
+            far -= m.warped_drive(t, target.then_some(far)) * dt;
+        }
+        far
+    }
+
+    #[test]
+    fn a_warped_lunge_stops_at_its_reach_from_near_or_far_and_never_runs_through() {
+        let m = lunge();
+        let stop = m.warp.unwrap().stop_at;
+        assert!((m.drive_between(0.0, 0.4) - 1.5).abs() < 0.01);
+        // With nothing to land on, the drive as it is.
+        let dt = 1.0 / 60.0;
+        let mid = m.at_clip(0.35);
+        let unwarped: f32 = (0..(mid / dt).round() as u32)
+            .map(|frame| m.drive_at(frame as f32 * dt) * dt)
+            .sum();
+        assert!(
+            unwarped > 0.75,
+            "the drive steps {unwarped} m by the strike"
+        );
+        assert!((lunged(&m, 10.0, false) - (10.0 - unwarped)).abs() < 1e-4);
+        // Nearer than its step, it steps less; further, more: it stops at its reach either way.
+        for from in [1.5, 2.0, 2.7, 3.5] {
+            let far = lunged(&m, from, true);
+            assert!(
+                (far - stop).abs() < 0.03,
+                "from {from} m it ends {far:.3} m off"
+            );
+        }
+        // Already inside its reach, it steps no nearer.
+        assert!(lunged(&m, 1.0, true) >= 1.0 - 1e-4);
+        // A take with no drive to scale steps in by the wind-up's speed instead.
+        let mut still = m.clone();
+        still.drive = vec![(0.0, 0.0)];
+        let far = lunged(&still, 2.0, true);
+        assert!(
+            (far - stop).abs() < 0.05,
+            "in place from 2 m it ends {far:.3} m off"
+        );
     }
 
     #[test]

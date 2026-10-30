@@ -49,6 +49,11 @@ the rest's at both ends and the raise's between, so the block's board goes from 
 before the face and back by its own way, not by its bones' angles; `arc` (metres) bows that way
 ahead of the chest at its middle, as a breakdown key would, so the board clears the thigh. Each
 frame's solve starts from the last's arm, so the arm follows the board without flipping.
+With `frame` (`upright`, or a bone) the board is kept where the target puts it against the chest
+at the held clip's first pose, but in that frame, the arm solved to it every frame from the
+last's. `upright` is the chest's place on the hips' heading with no lean (`_frame`): a bought
+blow that bends the torso (Quaternius's Heavy_D chop) would carry a chest-held board up past the
+shoulder, and one that turns the chest ahead of the hips would bring it round into them.
 
 An entry with `over` (a list of clips) in place of `of` lays its holds over each of those clips
 in place, after the clips made from others so they take it too, held throughout (no `in` or
@@ -73,6 +78,8 @@ TARGETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "
 # The shield arm the `shield` op solves, the chest's bone the target is in, and the fist's socket.
 ARM = ("clavicle_l", "upperarm_l", "lowerarm_l", "hand_l")
 CHEST = "spine_03"
+HIPS = "pelvis"
+UPRIGHT = "upright"
 FIST = "socket.hand.L"
 # How much a turn of each bone costs against a centimetre off the target, per radian: the
 # shoulder blade moves least, so the solve shrugs only when the arm cannot reach.
@@ -115,18 +122,48 @@ def _board(arm, world, fist, board):
     return at + R @ Vector(board["centre"]), R @ Vector(board["face"]), R @ Vector(board["up"])
 
 
-def _solve(arm, name, target, board, hand, say=True):
+def _frame(arm, bone):
+    """A bone's place now and its turn from its rest: the frame a board target is written in.
+    `upright` is the chest's place on the hips' heading, with no lean: a chop bends the chest
+    over the legs, and its own frame would swing the board up past the shoulder; and it turns
+    the chest ahead of the hips, and its own heading would bring the board round into them."""
+    W = arm.matrix_world
+
+    def turned(name):
+        posed = W @ arm.pose.bones[name].matrix
+        rest = W @ arm.data.bones[name].matrix_local
+        return posed.translation, posed.to_3x3().normalized() @ rest.to_3x3().normalized().inverted()
+
+    if bone != UPRIGHT:
+        return turned(bone)
+    ahead = turned(HIPS)[1] @ _gl((0.0, 0.0, 1.0))
+    return turned(CHEST)[0], Matrix.Rotation(math.atan2(ahead.x, -ahead.y), 3, "Z")
+
+
+def _rebase(arm, target, to):
+    """A board target in the chest's frame (shield_targets.json) written in bone `to`'s frame
+    instead, at the pose now: the same place against the body, kept by another bone."""
+    (ct, Cr), (tt, Tr) = _frame(arm, CHEST), _frame(arm, to)
+    back = Tr.inverted()
+
+    def gl(b):
+        return [b[0], b[2], -b[1]]
+
+    centre = gl(back @ (ct + Cr @ _gl(target["centre"]) - tt))
+    return {**target, "centre": centre, "face": gl(back @ Cr @ _gl(target["face"])), "up": gl(back @ Cr @ _gl(target["up"]))}
+
+
+def _solve(arm, name, target, board, hand, say=True, frame=CHEST):
     """Turns the shield arm (shoulder blade, upper arm, forearm with its roll) from its pose now
     the least way that puts the strapped board on `target` (its centre, face and up in the
-    chest's frame, shield_place.ts), the hand held at `hand` (its pose in its own frame, the
-    clips' strap grip): a damped Gauss-Newton solve over each bone's turn in its own frame, as
-    an IK control on the prop is baked to the arm in a DCC (D554). Returns how far off it ends."""
+    chest's frame, shield_place.ts, or in bone `frame`'s), the hand held at `hand` (its pose in
+    its own frame, the clips' strap grip): a damped Gauss-Newton solve over each bone's turn in
+    its own frame, as an IK control on the prop is baked to the arm in a DCC (D554). Returns how
+    far off it ends."""
     pose = arm.pose.bones
     W = arm.matrix_world
-    chest = W @ pose[CHEST].matrix
-    rest = W @ arm.data.bones[CHEST].matrix_local
-    Cr = chest.to_3x3().normalized() @ rest.to_3x3().normalized().inverted()
-    want = (chest.translation + Cr @ _gl(target["centre"]), Cr @ _gl(target["face"]), Cr @ _gl(target["up"]))
+    at, Cr = _frame(arm, frame)
+    want = (at + Cr @ _gl(target["centre"]), Cr @ _gl(target["face"]), Cr @ _gl(target["up"]))
     socket = bpy.data.objects[FIST]
     fist = (W @ pose["hand_l"].matrix).inverted() @ socket.matrix_world
     start = {n: pose[n].matrix_basis.decompose() for n in COST}
@@ -146,7 +183,11 @@ def _solve(arm, name, target, board, hand, say=True):
         off = [*(100.0 * (c - want[0])), *(PER_RADIAN * (f - want[1])), *(PER_RADIAN * (u - want[2]))]
         return np.array(off + [COST[n] * v for k, n in enumerate(turned) for v in x[3 * k : 3 * k + 3]])
 
+    # Levenberg-Marquardt: a step is taken only if it lowers the error, and the damping rises
+    # until one does, so a target past the arm's reach ends at the nearest pose rather than
+    # flung off by the near-singular Jacobian of a straight arm (Buss 2004, damped least squares).
     x = np.zeros(3 * len(turned))
+    damping = 1e-6
     for _ in range(60):
         r = residual(x)
         J = np.empty((len(r), len(x)))
@@ -154,8 +195,15 @@ def _solve(arm, name, target, board, hand, say=True):
             e = np.zeros(len(x))
             e[j] = 1e-5
             J[:, j] = (residual(x + e) - r) / 1e-5
-        step = np.linalg.solve(J.T @ J + 1e-6 * np.eye(len(x)), -J.T @ r)
-        x = x + step
+        while damping < 1e9:
+            step = np.linalg.solve(J.T @ J + damping * np.eye(len(x)), -J.T @ r)
+            if np.linalg.norm(residual(x + step)) < np.linalg.norm(r):
+                x = x + step
+                damping = max(1e-6, damping / 3.0)
+                break
+            damping *= 10.0
+        else:
+            break
         if np.linalg.norm(step) < 1e-7:
             break
     for n, m in basis(x).items():
@@ -297,6 +345,30 @@ def _ease(t, window, rising):
     return s if rising else 1.0 - s
 
 
+def _blend(a, b, w):
+    """A slerp from `a` to `b` by `w` that keeps the way their signs say. Blender's own takes
+    the short way round, so a played bone crossing 180 degrees from the held pose jumps to the
+    other way in one frame (Heavy_D's wrist, 105 degrees in a key where the clip has 31);
+    `a`'s sign kept continuous along the clip (`_steady`), the blend stays continuous."""
+    d = max(-1.0, min(1.0, a.dot(b)))
+    th = math.acos(d)
+    s = math.sin(th)
+    if s < 1e-6:
+        return a.copy() if w < 0.5 else b.copy()
+    return Quaternion((math.sin((1.0 - w) * th) / s) * Vector(a) + (math.sin(w * th) / s) * Vector(b))
+
+
+def _steady(rots, to):
+    """`rots`, a bone's turns frame by frame, each signed as the frame before's, the first on
+    `to`'s side: the same turns, a path a blend can follow without a jump."""
+    out, was = [], to
+    for q in rots:
+        q = -q if q.dot(was) < 0.0 else q
+        out.append(q)
+        was = q
+    return out
+
+
 def weight(t, held):
     """How far a hold's part is held at `t` seconds into its clip: 1 throughout for a hold with
     no `in` or `out`; held at both ends and played between when `out` comes before `in`."""
@@ -343,10 +415,13 @@ def bake(arm, actions, entries):
         still, eased = {}, []
         for held in holds:
             at = _held_pose(arm, by_name, name, held, entries)
-            if "in" in held or "out" in held:
+            if "in" in held or "out" in held or "frame" in held:
                 eased.append((held, at))
             else:
                 still.update(at)
+        # A part held throughout wins over an eased hold's on its bones: a blow eased in from the
+        # guard and out to it as a whole body (`pelvis`) keeps its shield arm held low throughout.
+        eased = [(held, {n: v for n, v in at.items() if n not in still}) for held, at in eased]
         fps = bpy.context.scene.render.fps / bpy.context.scene.render.fps_base
         first, last = (int(round(f)) for f in src.frame_range)
         played = _sampled(arm, src, {n for _, at in eased for n in at}, first, last) if eased else {}
@@ -373,18 +448,43 @@ def bake(arm, actions, entries):
                     raise SystemExit(f"{name}: a raise needs the shield's rest target (`shield`)")
                 raised = (*_targets(name, held["shield"], held["raise"]), _strap_hand(arm, by_name, name, held, entries))
                 _use(arm, action)  # reading the strap's hand played its clip
-            worst = 0.0
+            # A board kept in another bone's frame (`frame`, the hips' for a bought blow that
+            # bends the chest): its target written in that bone's frame at the held clip's first
+            # pose, and the arm solved to it every frame from the held arm.
+            kept = None
+            if "frame" in held:
+                if "shield" not in held or "raise" in held:
+                    raise SystemExit(f"{name}: a board kept in {held['frame']}'s frame needs a `shield` target and no `raise`")
+                (target,), board = _targets(name, held["shield"])
+                hand = _strap_hand(arm, by_name, name, held, entries)
+                _use(arm, by_name[held["clip"]])
+                bpy.context.scene.frame_set(int(round(by_name[held["clip"]].frame_range[0])))
+                kept = (_rebase(arm, target, held["frame"]), board, hand)
+                _use(arm, action)
+            worst, worst_at = 0.0, 0.0
             solved = {}
+            steady = {n: _steady([played[f][n][1] for f in range(first, last + 1)], at[n][1]) for n in at}
             for f in range(first, last + 1):
                 w = weight((f - first) / fps, held)
-                if raised:
+                if raised or kept:
                     bpy.context.scene.frame_set(f)
-                for n, (loc, rot, scale) in at.items():
-                    ploc, prot, pscale = played[f][n]
+                now = at
+                if kept:
+                    # From the last frame's arm, as a raise's, so the arm takes the nearest way.
+                    for n, (loc, rot, scale) in at.items():
+                        pose[n].matrix_basis = solved.get(n, Matrix.LocRotScale(loc, rot, scale))
+                    bpy.context.view_layer.update()
+                    cm, deg = _solve(arm, name, kept[0], kept[1], kept[2], say=False, frame=held["frame"])
+                    solved = {n: pose[n].matrix_basis.copy() for n in COST}
+                    if max(cm, deg / 3.0) > worst:
+                        worst, worst_at = max(cm, deg / 3.0), (f - first) / fps
+                    now = {n: tuple(v.copy() for v in solved[n].decompose()) if n in COST else at[n] for n in at}
+                for n, (loc, rot, scale) in now.items():
+                    ploc, _, pscale = played[f][n]
                     pb = pose[n]
                     pb.rotation_mode = "QUATERNION"
                     pb.location = ploc.lerp(loc, w)
-                    pb.rotation_quaternion = prot.slerp(rot, w)
+                    pb.rotation_quaternion = _blend(steady[n][f - first], rot, w)
                     pb.scale = pscale.lerp(scale, w)
                 if raised:
                     (rest, up), board, hand = raised
@@ -401,6 +501,8 @@ def bake(arm, actions, entries):
                         pose[n].keyframe_insert(channel, frame=f, group=n)
             if raised:
                 print(f"SHIELD {name}: the board eased {held['shield']} to {held['raise']} and back, every frame within {worst:.2f} cm (or 3x deg) of the way")
+            if kept:
+                print(f"SHIELD {name}: the board kept on {held['shield']} in {held['frame']}'s frame, every frame within {worst:.2f} cm (or 3x deg) of it, the worst at {worst_at:.2f} s")
         _key_still(arm, still, start, end)
         actions.append(action)
         made.append(action)
@@ -455,4 +557,5 @@ def _said(holds):
                      + "".join(f", {b} rolled {d:+.0f} deg" for b, d in h.get("roll", {}).items())
                      + (f", the arm solved to {h['shield']}'s board" if "shield" in h else "")
                      + (f", raised to {h['raise']}'s" if "raise" in h else "")
+                     + (f", kept in {h['frame']}'s frame" if "frame" in h else "")
                      + "".join(f", {k} {h[k][0]:.2f}-{h[k][1]:.2f} s" for k in ("in", "out") if k in h) for h in holds)

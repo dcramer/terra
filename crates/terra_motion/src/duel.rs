@@ -217,13 +217,8 @@ impl<'a> Duel<'a> {
             let far = to.abs();
             if let Some(each) = body.fight.runner.now(set) {
                 let t = body.fight.runner.t();
-                let mut speed = each.drive_at(t);
-                if let (Some(warp), Some(left)) = (each.warp, each.until_active(t))
-                    && far < warp.within
-                    && body.way * to > 0.0
-                {
-                    speed += moves::warp_speed(far, warp.stop_at, left, warp.most_mps);
-                }
+                let ahead = each.warp.is_some_and(|w| far < w.within) && body.way * to > 0.0;
+                let mut speed = each.warped_drive(t, ahead.then_some(far));
                 if each.damage > 0.0 && far < NEAREST_M && body.way * to > 0.0 {
                     speed = speed.min(0.0);
                 }

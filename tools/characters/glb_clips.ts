@@ -229,16 +229,28 @@ export function putClips(target: Buffer, source: Buffer, names: string[], report
  * `source` with a clip `name` added that plays `parts` one after another (a blow and then its
  * recovery, as a montage plays its sections): each channel's keys of every part, the next part's
  * shifted by the lengths before it, a key landing on the time of the one before dropped. Every
- * part must move what the first moves, keyed linearly or stepped.
+ * part must move what the first moves, keyed linearly or stepped. A part that is a number is a
+ * pause of that many seconds on the next part's first pose: a lead-in, where a blow taken from
+ * another stance is eased into from the guard (hold.py's `out`) before it plays.
  */
 export function joinClips(source: Buffer, name: string, parts: string[]): Buffer {
   const { json, bin } = chunks(source);
   const g = new Glb(source);
-  const anims = parts.map((p) => {
+  const pauses = new Map<Anim, number>();
+  let pause = 0;
+  const anims: Anim[] = [];
+  for (const p of parts) {
+    if (/^\d+(\.\d+)?$/.test(p)) {
+      pause += Number(p);
+      continue;
+    }
     const a = json.animations?.find((x) => x.name === p);
     if (!a) throw new Error(`glb_clips: no clip ${p} in the source to join into ${name}`);
-    return a;
-  });
+    if (pause) pauses.set(a, pause);
+    pause = 0;
+    anims.push(a);
+  }
+  if (pause) throw new Error(`glb_clips: ${name} ends on a pause; a pause holds the first pose of the part after it`);
   const length = (a: Anim) => Math.max(...a.samplers.map((s) => g.read(s.input).at(-1) ?? 0));
   const data: Buffer[] = [bin.length % 4 ? Buffer.concat([bin, Buffer.alloc(4 - (bin.length % 4))]) : bin];
   let offset = data[0].length;
@@ -271,6 +283,14 @@ export function joinClips(source: Buffer, name: string, parts: string[]): Buffer
       const t = g.read(sm.input);
       const v = g.read(sm.output);
       const w = WIDTH[type];
+      const held = pauses.get(a);
+      if (held) {
+        if (!(times.length && at <= times[times.length - 1] + 1e-5)) {
+          times.push(at);
+          for (let j = 0; j < w; j++) values.push(v[j]);
+        }
+        at += held;
+      }
       for (let k = 0; k < t.length; k++) {
         if (times.length && at + t[k] <= times[times.length - 1] + 1e-5) continue;
         times.push(at + t[k]);
