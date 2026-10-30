@@ -30,10 +30,10 @@ test("a layer turning a bone 20 degrees on every frame reads 20, worst and mean"
   assert.equal(worst.value, 20);
   assert.equal(worst.ok, false);
   // Only the foot lock's: the other layers read nothing and pass.
-  assert.equal(checks.find((c) => c.name === "bones arms mean")!.value, 0);
-  assert.ok(checks.find((c) => c.name === "bones arms mean")!.ok);
+  assert.equal(checks.find((c) => c.name === "bones carry_hand mean")!.value, 0);
+  assert.ok(checks.find((c) => c.name === "bones carry_hand mean")!.ok);
   assert.match(summary(tally(lines)).find((l) => l.startsWith("feet"))!, /worst calf_l 20°/);
-  assert.equal(summary(tally(lines)).find((l) => l.startsWith("arms")), "arms: still");
+  assert.equal(summary(tally(lines)).find((l) => l.startsWith("gaze")), "gaze: still");
 });
 
 test("on half the frames its mean halves and its worst holds", () => {

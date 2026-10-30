@@ -61,14 +61,12 @@ pub fn plugin(app: &mut App) {
     app.add_observer(find_hands).add_systems(
         PostUpdate,
         // On the pose the clips, the holds and the fit gave; before the fists (which close in
-        // the hand's frame, whatever turns it) and the arms kept off the hips (which count the
-        // look where the hand carries it).
+        // the hand's frame, whatever turns it).
         tip_carried
             .in_set(crate::pose::Layer::CarryHand)
             .after(bevy::app::AnimationSystems)
             .after(crate::Fitted)
             .before(crate::grip::close_hands)
-            .before(crate::arms::keep_off_hips)
             .before(TransformSystems::Propagate),
     );
 }

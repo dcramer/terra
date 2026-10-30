@@ -2,7 +2,7 @@
 //! fight.glb, whose shield arm hold.py's `shield` op solved on the base body, so a body whose
 //! arm differs (the female template's shoulder sits 5.4 cm in, her forearm is 2 cm shorter)
 //! carries the board centimetres off its pose's place against the chest. After the clips and
-//! the arms kept off the hips, the shoulder blade, upper arm and forearm are turned the least
+//! the fists, the shoulder blade, upper arm and forearm are turned the least
 //! way that puts the strapped board back on its target of `art/animation/shield_targets.json`
 //! (the near targets blended by inverse distance, so a crossfade between two poses' places
 //! never snaps): wholly where the base body's arm, as the clip has it, holds the board within
@@ -424,7 +424,7 @@ pub fn plugin(app: &mut App) {
             PostUpdate,
             fit_shield_arm
                 .in_set(crate::pose::Layer::ShieldArm)
-                .after(crate::arms::keep_off_hips)
+                .after(crate::grip::close_hands)
                 .before(TransformSystems::Propagate),
         );
 }

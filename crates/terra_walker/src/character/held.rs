@@ -27,7 +27,7 @@ const TURN_S: f32 = 0.12;
 /// Carried, a look in hand whose file gives no `carry_tilt` tips its working end this far,
 /// degrees, forward and down from the hanging fist, as a tool hangs from a relaxed hand, so
 /// a new item needs no number set by hand (docs/attachment.md, "Carried"). 45 clears every
-/// look in hand on every template in every carried clip with the arm spacing (`arms::HELD`);
+/// look in hand on every template in every carried clip;
 /// level or raised, a bent arm's sprint turns the working end back into the head (the move
 /// check's sweep, item-attach job 5).
 pub const CARRY_DOWN: f32 = 45.0;

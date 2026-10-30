@@ -2969,7 +2969,7 @@
     "hold": [
      "socket.hand.R=assets/models/held/iron_axe.glb"
     ],
-    "args": ["--set", "none", "--carry", "--arms", "--also", "Idle_Loop,Idle_Talking_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Jump_Start,Jump_Loop,Jump_Land,Crouch_Idle_Loop,Crouch_Fwd_Loop"]
+    "args": ["--set", "none", "--carry", "--also", "Idle_Loop,Idle_Talking_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Jump_Start,Jump_Loop,Jump_Land,Crouch_Idle_Loop,Crouch_Fwd_Loop"]
    }
   },
   {
@@ -2990,7 +2990,7 @@
     "hold": [
      "socket.hand.R=assets/models/held/iron_axe.glb"
     ],
-    "args": ["--set", "none", "--carry", "--arms", "--also", "Idle_Loop,Idle_Talking_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Jump_Start,Jump_Loop,Jump_Land,Crouch_Idle_Loop,Crouch_Fwd_Loop"]
+    "args": ["--set", "none", "--carry", "--also", "Idle_Loop,Idle_Talking_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Jump_Start,Jump_Loop,Jump_Land,Crouch_Idle_Loop,Crouch_Fwd_Loop"]
    }
   },
   {
@@ -3011,7 +3011,7 @@
     "hold": [
      "socket.hand.R=assets/models/held/iron_axe.glb"
     ],
-    "args": ["--set", "none", "--carry", "--arms", "--also", "Idle_Loop,Idle_Talking_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Jump_Start,Jump_Loop,Jump_Land,Crouch_Idle_Loop,Crouch_Fwd_Loop"]
+    "args": ["--set", "none", "--carry", "--also", "Idle_Loop,Idle_Talking_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Jump_Start,Jump_Loop,Jump_Land,Crouch_Idle_Loop,Crouch_Fwd_Loop"]
    }
   },
   {
