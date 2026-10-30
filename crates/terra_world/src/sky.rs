@@ -5,6 +5,7 @@
 //! The sun's place in it follows the sandbox's tweaks.
 
 use crate::air::AirPicture;
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::MainCamera;
 use crate::planet::{Planet, Tweaks};
 #[cfg(test)]
@@ -112,7 +113,7 @@ impl Sky {
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-struct SkyMaterial {
+pub(crate) struct SkyMaterial {
     #[uniform(0)]
     horizon: LinearRgba,
     #[uniform(0)]
@@ -275,11 +276,9 @@ impl Plugin for SkyPlugin {
         app.add_plugins((
             MaterialPlugin::<SkyMaterial>::default(),
             volume::VolumePlugin,
-        ))
-        .init_resource::<Clouds>()
-        .init_resource::<moving::Mapping>()
-        .add_systems(Startup, spawn)
-        .add_systems(
+        ));
+        entering(app);
+        app.add_systems(
             Update,
             (
                 moving::move_clouds.after(crate::daylight::Ticking),
@@ -295,6 +294,13 @@ impl Plugin for SkyPlugin {
             ),
         );
     }
+}
+
+/// What of the sky is the world's (D469): the dome, the clouds' place and their weather maps.
+pub(crate) fn entering(app: &mut App) {
+    app.init_world_resource::<Clouds>()
+        .init_world_resource::<moving::Mapping>()
+        .add_systems(OnEnter(InWorld), spawn.in_set(Building::Place));
 }
 
 fn spawn(

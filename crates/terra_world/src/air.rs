@@ -22,6 +22,7 @@
 //! dusk, so from sunset that sky draws the dusk's and the night's colours (`daylight`).
 
 use crate::daylight::{Clock, SkyPath};
+use crate::instance::{Building, InWorld, InstanceApp, WorldScoped};
 use crate::planet::{MainCamera, Planet, Tweaks};
 use bevy::{
     light::{
@@ -158,19 +159,15 @@ fn clear_cold_air(
     scale: Option<Res<AirScale>>,
     air: Query<&Atmosphere, With<Air>>,
     mut media: ResMut<Assets<ScatteringMedium>>,
-    mut done: Local<bool>,
     mut commands: Commands,
 ) {
     let (Some(fields), Some(scale)) = (fields, scale) else {
         return;
     };
-    if *done {
-        return;
-    }
     let Ok(atmosphere) = air.single() else {
         return;
     };
-    *done = true;
+    commands.insert_resource(ColdAirCleared);
     let place = fields.place(start.translation);
     let mean = fields.fields.day(place, clock.time().day()).mean_c();
     let haze = haze_for(mean);
@@ -204,11 +201,24 @@ struct Pictured;
 /// the horizon, which is where it changes most.
 const PICTURE: u32 = 128;
 
+/// The day's warmth has thinned the world's haze (`clear_cold_air`), once a world.
+#[derive(Resource)]
+struct ColdAirCleared;
+
+/// The air of the world the run is in: its atmosphere, its scale and dust and the picture of
+/// it are the world's (D469); the camera's tables are set again for each world's air.
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, spawn)
-        .add_systems(Update, (settings, picture, clear_cold_air))
-        .add_systems(Update, discs)
-        .add_systems(PostUpdate, follow.after(TransformSystems::Propagate));
+    entering(app);
+    app.add_systems(
+        Update,
+        (
+            settings,
+            picture,
+            clear_cold_air.run_if(not(resource_exists::<ColdAirCleared>)),
+        ),
+    )
+    .add_systems(Update, discs)
+    .add_systems(PostUpdate, follow.after(TransformSystems::Propagate));
 }
 
 /// The air's make-up, as Hillaire's paper gives Earth's: its gases' Rayleigh scattering
@@ -248,6 +258,15 @@ fn medium(dust: f32) -> ScatteringMedium {
     .with_label("terra_air")
 }
 
+/// What of the air is the world's (D469).
+pub(crate) fn entering(app: &mut App) {
+    app.world_resource::<AirScale>()
+        .world_resource::<AirDust>()
+        .world_resource::<AirPicture>()
+        .world_resource::<ColdAirCleared>()
+        .add_systems(OnEnter(InWorld), spawn.in_set(Building::Place));
+}
+
 fn spawn(mut commands: Commands, mut media: ResMut<Assets<ScatteringMedium>>, planet: Res<Planet>) {
     let scale = AirScale::for_world(planet.radius_m(), planet.relief_m());
     commands.insert_resource(scale);
@@ -278,6 +297,7 @@ fn spawn(mut commands: Commands, mut media: ResMut<Assets<ScatteringMedium>>, pl
             size: UVec2::splat(PICTURE),
         },
         SyncToRenderWorld::default(),
+        WorldScoped,
     ));
 }
 
@@ -336,7 +356,8 @@ fn settings(
     let (Some(camera), Some(scale)) = (camera.iter().next(), scale) else {
         return;
     };
-    if *applied == Some(*quality) {
+    // Again in each world entered: its air's scale is new.
+    if *applied == Some(*quality) && !scale.is_added() {
         return;
     }
     *applied = Some(*quality);

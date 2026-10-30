@@ -14,6 +14,7 @@ use super::moving::Clouds;
 use super::noise3d;
 use crate::air::AirPicture;
 use crate::daylight::Clock;
+use crate::instance::InstanceApp;
 use crate::planet::{MainCamera, Planet, Tweaks};
 use crate::quality::Quality;
 use crate::start::Start;
@@ -179,7 +180,9 @@ impl Plugin for VolumePlugin {
             ExtractComponentPlugin::<CloudVolumeView>::default(),
             render::RenderPlugin,
         ))
+        // The noise is every world's; the march's place and maps are the world's (D469).
         .add_systems(Startup, bake)
+        .world_resource::<CloudVolume>()
         .add_systems(Update, keep_veil_around)
         .add_systems(
             PostUpdate,

@@ -23,6 +23,7 @@
 //! through the day, so snow builds and melts by the hour rather than at midnight.
 
 use crate::daylight::{Clock, LATITUDE, WorldClimate};
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::lod::Viewpoint;
 use crate::planet::{MainCamera, Planet};
 use crate::sky_occlusion::SkySeen;
@@ -290,6 +291,12 @@ const FROST_C: (f32, f32) = (1.0, -3.0);
 #[derive(Resource)]
 struct SampleCache(PastCache);
 
+impl Default for SampleCache {
+    fn default() -> Self {
+        Self(PastCache::new(SAMPLE_CELLS))
+    }
+}
+
 /// The maps being drawn and painted.
 #[derive(Resource)]
 struct Painting {
@@ -313,13 +320,22 @@ struct Painted {
     cache: PastCache,
 }
 
+/// The climate of the world the run is in: its fields, their maps and caches and its snow
+/// are the world's (D469), read from its planet on entering it.
 pub fn plugin(app: &mut App) {
+    entering(app);
     app.register_type::<ClimateSample>()
-        .init_resource::<ClimateMaps>()
-        .init_resource::<SnowCover>()
-        .insert_resource(SampleCache(PastCache::new(SAMPLE_CELLS)))
-        .add_systems(Startup, read_fields)
         .add_systems(Update, (sample, paint).after(crate::daylight::Ticking));
+}
+
+/// What of the climate is the world's (D469).
+pub(crate) fn entering(app: &mut App) {
+    app.init_world_resource::<ClimateMaps>()
+        .init_world_resource::<SnowCover>()
+        .init_world_resource::<SampleCache>()
+        .world_resource::<ClimateFields>()
+        .world_resource::<Painting>()
+        .add_systems(OnEnter(InWorld), read_fields.in_set(Building::Place));
 }
 
 fn read_fields(

@@ -8,6 +8,7 @@
 
 use crate::climate::ClimateFields;
 use crate::daylight::Clock;
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::MainCamera;
 use bevy::prelude::*;
 
@@ -28,9 +29,16 @@ const WILDEST: f32 = 2.2;
 /// Taken again this often, in days of the clock: a few seconds at half an hour a day.
 const EVERY_DAYS: f64 = 0.002;
 
+/// The wind of the world the run is in (D469), and the snow it lifts round the start.
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, follow.after(crate::daylight::Ticking))
-        .add_systems(PostStartup, blown_snow);
+    entering(app);
+    app.add_systems(Update, follow.after(crate::daylight::Ticking));
+}
+
+/// What of the wind is the world's (D469).
+pub(crate) fn entering(app: &mut App) {
+    app.world_resource::<WorldWind>()
+        .add_systems(OnEnter(InWorld), blown_snow.in_set(Building::View));
 }
 
 /// Blown snow is looked for this far round the start, on a grid this fine, and at most so many
@@ -100,7 +108,8 @@ fn follow(
         return;
     };
     let now = clock.time().0;
-    if last.is_some_and(|when| (now - when).abs() < EVERY_DAYS) {
+    // At once in a world just entered, which has no wind yet.
+    if wind.is_some() && last.is_some_and(|when| (now - when).abs() < EVERY_DAYS) {
         return;
     }
     *last = Some(now);

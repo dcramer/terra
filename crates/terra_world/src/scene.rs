@@ -2,6 +2,7 @@
 //! camera: its exposure, its film response and the effects that seat things in the world,
 //! shade in corners and contact shadows (D212).
 
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::MainCamera;
 use crate::planet::Tweaks;
 use crate::quality::Quality;
@@ -50,17 +51,14 @@ pub const HAZE_AMBIENT: f32 = 0.015;
 /// The haze's sky light's colour under the trees, through the leaves (D266).
 pub const HAZE_TINT: Vec3 = Vec3::new(0.55, 0.62, 0.5);
 
+/// The light, air and sky of the world the run is in (D469): its sky and haze are the
+/// world's, its land's colours set as it is made, and its sun and the camera styled again
+/// for each world.
 pub fn plugin(app: &mut App) {
-    app.add_plugins((SkyPlugin, AutoExposurePlugin))
-        .insert_resource(Sky {
-            // The sky's colour is the air's (`air`); this draws the clouds over it.
-            over_air: true,
-            ..Sky::by_day(HORIZON, ZENITH, Color::srgb(1.0, 0.74, 0.46), 0.55, 1.6)
-        })
-        // Shade is lit by the sky (`skylight`), so it comes out cool against the warm sun.
-        .insert_resource(DirectionalLightShadowMap { size: 2048 })
-        .add_systems(Startup, preset)
-        .add_systems(PostStartup, (style_camera, style_sun, haze))
+    app.add_plugins((SkyPlugin, AutoExposurePlugin));
+    entering(app);
+    // Shade is lit by the sky (`skylight`), so it comes out cool against the warm sun.
+    app.insert_resource(DirectionalLightShadowMap { size: 2048 })
         .init_resource::<Indoors>()
         .init_resource::<Underground>()
         .init_resource::<IndoorSky>()
@@ -89,6 +87,40 @@ fn far_ranges(sited: Res<crate::start::Sited>, mut sky: ResMut<Sky>) {
             hills: 5.0,
             peaks: 1.0,
         });
+    }
+}
+
+/// What of the scene is the world's (D469).
+pub(crate) fn entering(app: &mut App) {
+    // The first world's sky is made here, so an experiment can change it as it is built;
+    // each later world's on entering it.
+    app.insert_resource(day_sky())
+        .world_resource::<Sky>()
+        .add_systems(
+            OnEnter(InWorld),
+            (
+                (
+                    sky_of_the_world,
+                    preset.after(crate::planet::entering::land),
+                )
+                    .in_set(Building::Land),
+                (style_camera, style_sun, haze).in_set(Building::View),
+            ),
+        );
+}
+
+/// The scene's sky by day: its colour is the air's (`air`); this draws the clouds over it.
+fn day_sky() -> Sky {
+    Sky {
+        over_air: true,
+        ..Sky::by_day(HORIZON, ZENITH, Color::srgb(1.0, 0.74, 0.46), 0.55, 1.6)
+    }
+}
+
+/// Each world's sky, made afresh on entering it; the first world's was made with the app.
+fn sky_of_the_world(sky: Option<Res<Sky>>, mut commands: Commands) {
+    if sky.is_none() {
+        commands.insert_resource(day_sky());
     }
 }
 
@@ -414,10 +446,10 @@ fn cascades_for_world_views(
 
 /// Puts the quality preset into effect (D239), at the start and whenever it changes: the
 /// sun's shadow map and cascades, shade in corners and contact shadows, and the haze's
-/// shafts of light.
+/// shafts of light. Again for each world's sun.
 fn follow_quality(
     quality: Res<Quality>,
-    mut applied: Local<Option<Quality>>,
+    mut applied: Local<Option<(Quality, Entity)>>,
     mut commands: Commands,
     camera: Query<Entity, With<MainCamera>>,
     mut sun: Query<(Entity, &mut DirectionalLight)>,
@@ -426,10 +458,10 @@ fn follow_quality(
     let (Some(camera), Ok((sun, mut light))) = (camera.iter().next(), sun.single_mut()) else {
         return;
     };
-    if *applied == Some(*quality) {
+    if *applied == Some((*quality, sun)) {
         return;
     }
-    *applied = Some(*quality);
+    *applied = Some((*quality, sun));
     let shadows = quality.shadows();
     if map.size != shadows.map {
         map.size = shadows.map;

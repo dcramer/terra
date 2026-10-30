@@ -13,6 +13,7 @@
 //! say; the numbers here are a proposal (prototypes.md).
 
 use super::skylight::SkyLight;
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::{MainCamera, Planet, Tweaks};
 use crate::shell::Options;
 use crate::sky::Sky;
@@ -330,13 +331,12 @@ fn moonlight(height: f32) -> f32 {
     light_at(height.min(-6.0)).illuminance * t * t * (3.0 - 2.0 * t)
 }
 
+/// The day of the world the run is in: its clock, its sun's path and its night are the
+/// world's (D469), set on entering it; the climate's rules are every world's.
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Clock>()
-        .init_resource::<Nightfall>()
-        .insert_resource(WorldClimate(crate::data::read(WorldClimate::FILE)))
+    entering(app);
+    app.insert_resource(WorldClimate(crate::data::read(WorldClimate::FILE)))
         .register_type::<Clock>()
-        .add_systems(Startup, set_clock)
-        .add_systems(PostStartup, find_sky)
         // On the yard, the flat test level, the sun stands still.
         .add_systems(
             Update,
@@ -353,13 +353,28 @@ pub fn plugin(app: &mut App) {
         );
 }
 
+/// What of the day is the world's (D469).
+pub(crate) fn entering(app: &mut App) {
+    app.world_resource::<Clock>()
+        .world_resource::<SkyPath>()
+        .init_world_resource::<Nightfall>()
+        .add_systems(
+            OnEnter(InWorld),
+            (
+                set_clock.in_set(Building::Land),
+                find_sky.in_set(Building::View),
+            ),
+        );
+}
+
 /// The clock moving on and the world lit for it: what reads the clock runs after.
 #[derive(SystemSet, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Ticking;
 
 /// A scripted run may set the hour and the date; otherwise it is the morning of the clock's
-/// first day, or what a save says, or on the yard, noon.
-fn set_clock(options: Res<Options>, climate: Res<WorldClimate>, mut clock: ResMut<Clock>) {
+/// first day, or what a save says, or on the yard, noon. Each world's clock starts so.
+fn set_clock(options: Res<Options>, climate: Res<WorldClimate>, mut commands: Commands) {
+    let mut clock = Clock::default();
     if options.yard() {
         clock.hour = 12.0;
     }
@@ -369,6 +384,7 @@ fn set_clock(options: Res<Options>, climate: Res<WorldClimate>, mut clock: ResMu
     if let Some(date) = options.date {
         clock.day = date.day(&climate.0.year);
     }
+    commands.insert_resource(clock);
 }
 
 fn find_sky(

@@ -18,6 +18,7 @@
 
 use crate::climate::ClimateFields;
 use crate::daylight::{Clock, Ticking};
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::MainCamera;
 use crate::shell::Options;
 use crate::start::Start;
@@ -340,13 +341,19 @@ const LOOKS_DAYS: i64 = 730;
 
 pub fn plugin(app: &mut App) {
     let file = WeatherFile::read();
-    app.init_resource::<Weather>()
-        .init_resource::<WeatherGrade>()
-        .init_resource::<SnowOpens>()
-        .insert_resource(SnowLyingOpens(file.snow_lying_opens_ev))
+    entering(app);
+    // The named weathers are every world's.
+    app.insert_resource(SnowLyingOpens(file.snow_lying_opens_ev))
         .insert_resource(Names(file.named))
-        .add_systems(PostStartup, pick_day)
         .add_systems(Update, (follow, grade).chain().before(Ticking));
+}
+
+/// What of the weather is the world's (D469): the weather and its grade.
+pub(crate) fn entering(app: &mut App) {
+    app.init_world_resource::<Weather>()
+        .init_world_resource::<WeatherGrade>()
+        .init_world_resource::<SnowOpens>()
+        .add_systems(OnEnter(InWorld), pick_day.in_set(Building::View));
 }
 
 /// A run asking for a weather moves its clock on to the first day whose hour has it at the start.
@@ -417,7 +424,8 @@ fn follow(
     let at = camera.translation();
     let jumped = was_at.is_some_and(|was| was.distance(at) > JUMP_M);
     *was_at = Some(at);
-    let first = taken.is_none() || jumped;
+    // A world's weather is new on entering it, and starts in its own.
+    let first = taken.is_none() || jumped || weather.is_added();
     if first || taken.is_none_or(|(when, _)| (now - when).abs() >= EVERY_DAYS) {
         *taken = Some((
             now,
@@ -461,7 +469,7 @@ fn grade(
     mut started: Local<bool>,
 ) {
     let wanted = grade_of(&names.0, &weather);
-    let t = if *started {
+    let t = if *started && !graded.is_added() {
         1.0 - libm::expf(-time.delta_secs() * FOLLOW * 4.0)
     } else {
         1.0

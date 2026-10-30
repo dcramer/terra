@@ -5,6 +5,7 @@
 
 use crate::air::AirPicture;
 use crate::daylight::Clock;
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::Planet;
 use crate::rises::{RISES, Rises};
 use crate::sky::Sky;
@@ -258,9 +259,10 @@ impl LakeExtension {
     }
 }
 
+/// The lakes of the world the run is in, their water's look and mist the world's (D469).
 pub fn plugin(app: &mut App) {
+    entering(app);
     app.add_plugins(MaterialPlugin::<LakeMaterial>::default())
-        .add_systems(Startup, spawn)
         .add_plugins(MaterialPlugin::<MistMaterial>::default())
         .add_systems(
             Update,
@@ -405,6 +407,13 @@ fn mist_follows_the_morning(
     {
         m.extension.wind = wanted;
     }
+}
+
+/// What of the lakes is the world's (D469).
+pub(crate) fn entering(app: &mut App) {
+    app.world_resource::<LakeLook>()
+        .world_resource::<LakeMist>()
+        .add_systems(OnEnter(InWorld), spawn.in_set(Building::Place));
 }
 
 fn spawn(

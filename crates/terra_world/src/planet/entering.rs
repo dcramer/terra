@@ -86,8 +86,9 @@ pub fn tweaks(yard: bool) -> Tweaks {
 }
 
 /// Puts a world's land in: the first world's was made as the app was built, for what
-/// start-up reads of it; every later one is made here from its spec.
-pub(super) fn land(world: &mut World) {
+/// start-up reads of it; every later one is made here from its spec. What sets the land's
+/// colours goes after it, in `Building::Land`.
+pub(crate) fn land(world: &mut World) {
     if world.contains_resource::<Planet>() {
         return;
     }

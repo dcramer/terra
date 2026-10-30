@@ -40,6 +40,8 @@ use bevy::{
 
 pub mod census;
 #[cfg(test)]
+mod round_trip;
+#[cfg(test)]
 mod tests;
 
 pub use census::Census;
@@ -322,6 +324,30 @@ pub fn plugin(app: &mut App) {
                 .run_if(not(resource_exists::<State<Screen>>)),
         );
     census::plugin(app);
+}
+
+/// A run of a layer alone (a test of the base, the fire) entering a world as the game does:
+/// the states, this plugin, and a crossing to a world queued at the start, so what a module
+/// builds on entering is there from the first frame. Before any entity with a `Transform`.
+pub fn in_a_world(app: &mut App) {
+    if !app.is_plugin_added::<bevy::state::app::StatesPlugin>() {
+        app.add_plugins(bevy::state::app::StatesPlugin);
+    }
+    app.add_plugins(plugin)
+        .add_systems(Startup, |mut commands: Commands| {
+            commands.queue(Cross(WorldSpec {
+                key: InstanceKey(0),
+                kind: "world".into(),
+                seed: 1,
+            }));
+        });
+}
+
+/// The start and the crossing to the first world, run by hand, for a test of a layer alone
+/// that drives its schedules itself (after [`in_a_world`]).
+pub fn start_by_hand(world: &mut World) {
+    world.run_schedule(Startup);
+    world.run_schedule(Crossing);
 }
 
 /// Entering: the loading screen goes up again for every world after the first (D135), the
