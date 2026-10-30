@@ -88,9 +88,7 @@ function glbLength(file: string): number {
 const SETS = [
   { list: "art/animation/made.json", takes: "art/animation/made", body: "assets/models/character/base.glb" },
   { list: "art/animation/sets/fight.json", takes: "art/animation/sets/fight", body: "assets/models/character/fight.glb" },
-  // Not yet art/animation/sets/troll.json on assets/models/characters/troll.glb: that file is
-  // exported by hand outside the build (its colour factor set after, 1e1a8615), and its
-  // Troll_Walk still plays at 0.8 of its take. Add it here when the troll is made again.
+  { list: "art/animation/sets/troll.json", takes: "art/animation/sets/troll", body: "assets/models/characters/troll.glb" },
 ];
 /** A stride may be a frame or two off its take's middle one (the loop is the pair of strikes
  * whose poses best match), well inside the tenth D585 holds a gait to; 24 fps keys of a 30 fps

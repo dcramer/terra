@@ -36,6 +36,7 @@ Run everything from the repository root. Blender scripts run headless through [t
 | `twist.py` | The twist step: a limb's roll moved to the hand and foot and halved on the twist bones, baked into each clip as it is sampled for a body |
 | `test_twist.py` | Tests of the twist step's roll (`twist.unwrapped`) on rolls whose answer is known another way, in Blender's Python (`tools/blender/run.sh tools/characters/test_twist.py`) |
 | `retarget.py` | Clips carried from the mannequin's skeleton onto a body's by each bone's rotation in the world from a retarget pose (D542), as Unreal's IK Retargeter does: the body's limb segments pointed as the mannequin's at rest, the rest kept |
+| `tint.ts FILE.glb R,G,B` | Lays a base colour factor on every material of an exported creature (`bodies.json` `creatures`' `colour`), the last of its build step `creature:<name>` |
 | `wake.py NAME.glb [--sheet=PNG]` | A creature that wakes gets its face, found on the body: a mouth that splits open (a cut, a throat behind it, splinters on its lips, a blend shape) and eyes that can glow; run after `convert_rig.py`, before `export_character.py` |
 | `crown.py NAME.glb [--sheet=PNG]` | A tree creature's bare crown dressed with the forest's oak leaf cards (D536), placed and shaded as the forest's oaks are, each skinned to the limb it grows on; run after `wake.py`, before `export_character.py` |
 | `deform_check.py` | Rings of skin along every limb through the clips: how much each squeezes, flattens and turns |

@@ -59,9 +59,16 @@ export type Bodies = {
   designed: string[];
   rigged: { morph: string; body: string; height: number }[];
   skins: { morph: string; front: string }[];
+  /** Creatures on our skeleton, not morphs of the base: each its own rig, its set's clips. */
+  creatures?: Creature[];
   /** A designed morph's model where it is not art/characters/<base>/morphs/<name>/model.glb (make_morph.sh --design); not in bodies.json. */
   designs?: Record<string, string>;
 };
+
+/** A creature: `art/characters/<name>/rigged.glb` converted as a creature's at its height and
+ * triangle budget, exported with the game's clips and its set's (`art/animation/sets/<set>`)
+ * to `assets/models/characters/<name>.glb`, its colour factor laid on (tint.ts). */
+export type Creature = { name: string; height: number; triangles: number; set: string; colour: [number, number, number] };
 
 export function bodiesData(root = ROOT): Bodies {
   return JSON.parse(readFileSync(join(root, HERE, "bodies.json"), "utf8"));
@@ -229,6 +236,29 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
       "node $here/markers.ts assets/models/character/fight.glb   # each clip's foot-down markers (D455)",
     ].join("\n"),
   });
+  // The creatures (bodies.json `creatures`): each converted from its own rig as a creature's
+  // (its hands and feet kept, its triangle budget), checked, its set's takes made onto a copy of
+  // the mannequin beside the game's clips, exported with both, and its colour laid on. Windows'
+  // Blender sees the conversion's options only through WSLENV.
+  for (const c of b.creatures ?? []) {
+    const set = `art/animation/sets/${c.set}`;
+    const game = `assets/models/characters/${c.name}.glb`;
+    steps.push({
+      name: `creature:${c.name}`,
+      section: 5,
+      needs: ["clips", "base"],
+      inputs: [...py("convert_rig.py", "rig_check.py", "made_clips.py", "export_character.py", "tint.ts"), `art/characters/${c.name}/rigged.glb`, `${set}.json`, set],
+      outputs: [`${OUT}/${c.name}.glb`, `${OUT}/${c.set}-mannequin.glb`, game],
+      run: [
+        `export CREATURE=1 TRIANGLES=${c.triangles} WSLENV=CREATURE:TRIANGLES`,
+        blender("convert_rig.py", `art/characters/${c.name}/rigged.glb ${c.name} ${c.height.toFixed(2)} 2`, "WEIGHTS|TRIANGLES|EXPORTED|Error"),
+        blender("rig_check.py", `"$out/${c.name}.glb"`, "RIGCHECK"),
+        blender("made_clips.py", `"$out/${c.set}-mannequin.glb" --list=${set}.json`, "^MADE [0-9]|Error"),
+        blender("export_character.py", `"$out/${c.name}.glb" ${game} "--clips=$out/${c.set}-mannequin.glb" --list=${set}.json --textures=2048`, "^(SOCKETS|EXPORTED)|Error"),
+        `node $here/tint.ts ${game} ${c.colour.join(",")}`,
+      ].join("\n"),
+    });
+  }
   for (const item of looks)
     steps.push({
       name: `look:${item}`,
