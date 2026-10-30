@@ -1,20 +1,25 @@
-//! The carried arm held in the body's frame (D560): an arm the hold layer lays a carry pose on
-//! (a look's `carry_hold`, `figure`'s one-arm hold, `layer::Nodes::over_one`) keeps that pose's
+//! The upright carried arm held in the body's frame (D560): an arm the hold layer lays an
+//! upright carry pose on (a look's `carry_hold` whose pose its set's data marks `upright`,
+//! `CarryHold::upright`; `figure`'s one-arm hold, `layer::Nodes::over_one`) keeps that pose's
 //! turn against the body, not against the chest, so a torch held flame up stays up through a
 //! sprint's lean, a crouch's hunch and a jump's landing, where the layer alone, laying the arm
 //! in its parent's frame, tipped it up to 83 degrees off with the chest.
 //!
-//! It is the mesh space rotation blend shipped overlay layers lay an arm with (Unreal's Layered
-//! Blend per Bone, "Mesh Space Rotation Blend", which ALS's overlay layers use for the arms;
-//! docs only): the shoulder blade's turn in the body is the carry pose's on the chest as it
-//! stands at rest, whatever the clip does to the chest, and the shoulder still goes where the
-//! chest takes it. Its twin is `tools/characters/carry_arm.ts`, which the move check lays over
-//! the carried clips (`moves.ts --carry`); change both.
+//! Which frame an overlay's arm is laid in is the overlay's own data, as in ALS (Advanced
+//! Locomotion System; docs only), whose overlay poses each carry an arm's local-space and
+//! mesh-space curves (`Arm_R_LS`, `Arm_R_MS`), and Lyra's Layered Blend per Bone with "Mesh
+//! Space Rotation Blend" set per branch. Mesh space, here the body's frame: the shoulder
+//! blade's turn in the body is the carry pose's on the chest as it stands at rest, whatever
+//! the clip does to the chest, and the shoulder still goes where the chest takes it. Local
+//! space, the hold layer alone: the arm leans with the chest, as a hanging tool's Carry_Tool
+//! does (held in the body's frame, a jump's start raised the thigh 9.8 cm into its hammer;
+//! leaning with the chest, 2.2). Its twin is `tools/characters/carry_arm.ts`, which the move
+//! check lays over the carried clips (`moves.ts --carry`); change both.
 
 use bevy::{prelude::*, world_serialization::WorldInstanceReady};
 
 use crate::bend::{Kept, find, in_body};
-use crate::character::{Body, CarryPosed, HAND_L, HAND_R};
+use crate::character::{Body, CarryHold, CarryPosed, HAND_L, HAND_R};
 
 /// On a body whose model has both arms: each side's (left, right) hand socket, shoulder blade
 /// and the chest it hangs from, the chest's turn in the body at rest, and what was written.
@@ -86,17 +91,20 @@ fn find_arms(
     });
 }
 
-/// Each arm in a carry pose turned at its shoulder blade by the chest's turn from its rest,
-/// undone.
+/// Each arm in an upright carry pose turned at its shoulder blade by the chest's turn from its
+/// rest, undone.
 pub fn hold_in_body(
     mut bodies: Query<(Entity, &mut CarryArms)>,
-    posed: Query<&CarryPosed>,
+    posed: Query<(&CarryPosed, &CarryHold)>,
     parents: Query<&ChildOf>,
     mut transforms: Query<&mut Transform>,
 ) {
     for (root, mut arms) in &mut bodies {
         for side in &mut arms.sides {
-            if !posed.get(side.socket).is_ok_and(|p| p.0) {
+            if !posed
+                .get(side.socket)
+                .is_ok_and(|(posed, hold)| posed.0 && hold.upright)
+            {
                 continue;
             }
             let chest = in_body(side.chest, root, &parents, &transforms)
@@ -120,8 +128,9 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
 
     /// A body with a chest leaning `lean` degrees forward from its rest, a shoulder blade on it
-    /// as the carry pose turns it, and a hand socket below, carrying in a pose or not.
-    fn body(world: &mut World, lean: f32, carried: bool) -> (Entity, Entity) {
+    /// as the carry pose turns it, and a hand socket below, carrying in a pose or not, the pose
+    /// upright (the torch's) or not (a hanging tool's).
+    fn body(world: &mut World, lean: f32, carried: bool, upright: bool) -> (Entity, Entity) {
         let root = world
             .spawn(Transform::from_rotation(Quat::from_rotation_y(
                 std::f32::consts::PI,
@@ -148,6 +157,12 @@ mod tests {
                 CarryPosed(carried),
             ))
             .id();
+        let look = world.spawn(ChildOf(socket)).id();
+        world.entity_mut(socket).insert(CarryHold {
+            look,
+            clip: "Carry_Torch".into(),
+            upright,
+        });
         let side = |socket| Side {
             socket,
             clavicle,
@@ -179,12 +194,12 @@ mod tests {
     #[test]
     fn a_carried_arm_keeps_its_turn_in_the_body_however_the_chest_leans() {
         let mut upright = World::new();
-        let (root, clavicle) = body(&mut upright, 0.0, true);
+        let (root, clavicle) = body(&mut upright, 0.0, true, true);
         upright.run_system_once(hold_in_body).unwrap();
         let held = turn_in_body(&mut upright, root, clavicle);
         for lean in [-20.0, 30.0, 60.0, 80.0_f32] {
             let mut world = World::new();
-            let (root, clavicle) = body(&mut world, lean, true);
+            let (root, clavicle) = body(&mut world, lean, true, true);
             for _ in 0..3 {
                 world.run_system_once(hold_in_body).unwrap();
             }
@@ -197,14 +212,17 @@ mod tests {
         }
     }
 
-    /// An arm not in a carry pose (a stance's hold, a used look) leans with the chest.
+    /// An arm not in a carry pose (a stance's hold, a used look), or in one not marked upright
+    /// (a hanging tool's Carry_Tool), leans with the chest: the hold layer's local space.
     #[test]
-    fn an_arm_not_carried_in_a_pose_is_left_as_the_clip_has_it() {
-        let mut world = World::new();
-        let (root, clavicle) = body(&mut world, 40.0, false);
-        let before = turn_in_body(&mut world, root, clavicle);
-        world.run_system_once(hold_in_body).unwrap();
-        let after = turn_in_body(&mut world, root, clavicle);
-        assert_eq!(after, before);
+    fn an_arm_not_carried_upright_is_left_as_the_clip_has_it() {
+        for (carried, upright) in [(false, true), (true, false)] {
+            let mut world = World::new();
+            let (root, clavicle) = body(&mut world, 40.0, carried, upright);
+            let before = turn_in_body(&mut world, root, clavicle);
+            world.run_system_once(hold_in_body).unwrap();
+            let after = turn_in_body(&mut world, root, clavicle);
+            assert_eq!(after, before, "carried {carried}, upright {upright}");
+        }
     }
 }

@@ -91,9 +91,18 @@ def carried(ob, d):
     """Its data's "carry_hold" (a carry pose, the clip whose first pose the arm holding it takes
     while it is carried, D560) or "carry_tilt", into its extras, only where given: the game
     carries every other look by its rule (terra_walker::character::carry_rule). Says how, for
-    the HELD line."""
+    the HELD line. A pose its set's data marks `upright` (art/animation/sets/fight.json: the
+    torch's, held flame up) goes in as `carry_upright`, its arm then held in the body's frame
+    (terra_walker::carry_arm); any other pose's arm leans with the chest."""
     if "carry_hold" in d:
         ob["carry_hold"] = d["carry_hold"]
+        with open(os.path.join(HERE, "..", "..", "art", "animation", "sets", "fight.json")) as f:
+            pose = json.load(f).get(d["carry_hold"])
+        if pose is None:
+            raise SystemExit(f"carry_hold {d['carry_hold']}: no such clip in art/animation/sets/fight.json")
+        if pose.get("upright"):
+            ob["carry_upright"] = True
+            return f"in its carry pose {d['carry_hold']}, upright"
         return f"in its carry pose {d['carry_hold']}"
     if "carry_tilt" not in d:
         return "by the rule"

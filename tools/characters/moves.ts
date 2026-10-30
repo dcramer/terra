@@ -59,7 +59,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { againstSpec, setGuard, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, through } from "./clash.ts";
-import { type Held, carriedClips, carryHold, carryTilt, frameOf, hang } from "./held.ts";
+import { type Held, carriedClips, carryHold, carryTilt, carryUpright, frameOf, hang } from "./held.ts";
 import { TARGETS, boardPlace, readTargets, worstOff } from "./shield_place.ts";
 import { PACE_FRAMES } from "./phases.ts";
 import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
@@ -254,11 +254,16 @@ carryPoses = held.flatMap((h, i): [string, string][] => {
   return pose ? [[pose, `clavicle_${(h.strap?.fist ?? h.strap?.bone ?? h.hand).slice(-1).toLowerCase()}`]] : [];
 });
 const carriedPoses = new Set(held.filter((_, i) => poseOfLook[i]).map((h) => h.name));
-// A carry pose's arm held in the body's frame, not the chest's (carry_arm.ts, D560), in a carried
-// clip with no stance hold, as terra_walker::carry_arm holds it before the fists and the arms.
-const carryTurns = carryArm(body, rest, carryPoses.map(([, root]) => root));
+// An upright carry pose's arm (its look's `carry_upright`, the torch's) held in the body's frame,
+// not the chest's (carry_arm.ts, D560), in a carried clip with no stance hold, as
+// terra_walker::carry_arm holds it before the fists and the arms; any other pose's arm leans
+// with the chest, as the hold layer lays it.
+const uprightRoots = held.flatMap((h, i) =>
+  poseOfLook[i] && carryUpright(opt.hold![i].split("=")[1]) ? [`clavicle_${(h.strap?.fist ?? h.strap?.bone ?? h.hand).slice(-1).toLowerCase()}`] : [],
+);
+const carryTurns = carryArm(body, rest, uprightRoots);
 function carriedArms(shape: Shape, clip: Clip, t: number): Map<string, Q> {
-  if (!carryPoses.length || !carriedNow(clip) || clip.name.includes("+")) return bends;
+  if (!uprightRoots.length || !carriedNow(clip) || clip.name.includes("+")) return bends;
   const turns = carryTurns(shaped(body, shape, clip, t, bends));
   for (const [bone, q] of bends) turns.set(bone, turns.has(bone) ? qmul(turns.get(bone)!, q) : q);
   return turns;

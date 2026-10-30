@@ -130,7 +130,7 @@ export function carryRule(ahead: number): number {
   return (-Math.asin(down) * 180) / Math.PI;
 }
 
-type CarryExtras = { carry_tilt?: number; carry_hold?: string; hold?: unknown; strap?: unknown };
+type CarryExtras = { carry_tilt?: number; carry_hold?: string; carry_upright?: boolean; hold?: unknown; strap?: unknown };
 const extrasOf = (g: Glb, node: number): CarryExtras => (g.gltf.nodes[node] as { extras?: CarryExtras }).extras ?? {};
 
 /** The carry pose a look names (its extras' `carry_hold`, D560): the clip whose first pose the
@@ -140,6 +140,15 @@ export function carryHold(file: string): string | undefined {
   const node = g.gltf.nodes.findIndex((n) => n.mesh !== undefined);
   const hold = node < 0 ? undefined : extrasOf(g, node).carry_hold;
   return typeof hold === "string" ? hold : undefined;
+}
+
+/** Whether a look's carry pose is held upright (its extras' `carry_upright`, from the pose's
+ * `upright` in its set's data): its arm then keeps its turn in the body's frame (carry_arm.ts);
+ * any other pose's arm leans with the chest, as terra_walker::carry_arm reads it. */
+export function carryUpright(file: string): boolean {
+  const g = new Glb(file);
+  const node = g.gltf.nodes.findIndex((n) => n.mesh !== undefined);
+  return node >= 0 && extrasOf(g, node).carry_upright === true;
 }
 
 /** How far a look turns about its X when carried, degrees, as terra_walker::character's

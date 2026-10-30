@@ -65,6 +65,11 @@ pub struct CarryPosed(pub bool);
 pub struct CarryHold {
     pub look: Entity,
     pub clip: String,
+    /// Whether the pose must stay upright however the chest leans (its file's `carry_upright`,
+    /// from the pose's `upright` in art/animation/sets/fight.json: the torch's flame held up),
+    /// its arm then held in the body's frame (`carry_arm`); else the arm leans with the chest,
+    /// as the hold layer lays it (a hanging tool's Carry_Tool).
+    pub upright: bool,
 }
 
 /// Something held, a child of a hand socket, or of the bone it is strapped to (`strap`).
@@ -211,6 +216,7 @@ pub(super) fn held_ready(
                 commands.entity(socket).insert(CarryHold {
                     look: ready.entity,
                     clip: clip.clone(),
+                    upright: given("carry_upright").and_then(|u| u.as_bool()) == Some(true),
                 });
             }
             None => {
@@ -280,6 +286,32 @@ mod tests {
                     .unwrap_or_else(|| panic!("{file}: carry_hold {pose}"));
                 assert!(clips.iter().any(|c| c == pose), "{file}: no clip {pose}");
             }
+        }
+    }
+
+    /// Whether a carry pose stays upright is the pose's data (its `upright` in its set,
+    /// art/animation/sets/fight.json), copied into each look naming it when the look is fitted;
+    /// a look fitted before its pose changed says so here, not as an arm in the wrong frame.
+    #[test]
+    fn every_look_carries_its_pose_upright_as_its_set_says() {
+        let set = crate::model_files::asset("../art/animation/sets/fight.json");
+        let set: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&set).unwrap()).unwrap();
+        for file in crate::model_files::glbs("models/held") {
+            let json = crate::model_files::json(&file);
+            let Some(pose) = crate::model_files::extra(&json, "carry_hold") else {
+                continue;
+            };
+            let pose = pose.as_str().unwrap();
+            let wanted = set[pose]["upright"].as_bool() == Some(true);
+            let has = crate::model_files::extra(&json, "carry_upright").and_then(|u| u.as_bool());
+            assert_eq!(
+                has == Some(true),
+                wanted,
+                "{file}: its pose {pose} is {}upright in art/animation/sets/fight.json but the look \
+                 says otherwise; fit it again (node tools/characters/fit.ts <item>)",
+                if wanted { "" } else { "not " }
+            );
         }
     }
 }
