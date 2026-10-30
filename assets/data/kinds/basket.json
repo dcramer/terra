@@ -23,9 +23,10 @@
   "used": { "state": "does not apply", "how": "no use today; what it holds is the pack's, unseen (D551's rest)" },
   "carried": {
     "state": "built",
-    "mechanism": "hung",
-    "decisions": ["D546"],
-    "how": "hung from the hand by its handle, out 5 cm from the leg (basket.json's out); a hung look does not tip (attachment.md Carried)"
+    "mechanism": "carry_pose",
+    "decisions": ["D546", "D560", "D584"],
+    "clip": "Carry_Basket",
+    "how": "hung from the hand by its handle at the side, the arm a little out and the forearm a little forward (Carry_Basket, either arm, leaning with the chest), out 5 cm from the leg (basket.json's out); a hung look does not tip (attachment.md Carried)"
   },
   "stowed": {
     "state": "decided",
@@ -34,7 +35,7 @@
     "how": "put away into the pack, not shown (D567, D551's rest): no socket on the body"
   },
   "blocking": { "state": "does not apply", "how": "it is not a weapon" },
-  "animation": { "state": "does not apply", "how": "no move set: a hung look only hangs from the walker's clips, the arm kept off the hip (D535)" },
+  "animation": { "state": "does not apply", "how": "no move set: a hung look hangs from its carry pose over the walker's clips" },
   "reference": {
     "item": { "value": "basket", "source": "today's look, art/held/basket.json (props/MarketBasket.glb)" },
     "length_m": { "value": 0.46, "source": "the look's longest way measured 0.460 (bounds 0.30 by 0.46 by 0.44)" },
