@@ -12,6 +12,7 @@ use bevy::{
 };
 use serde::Deserialize;
 use std::time::Duration;
+use terra_motion::feet::Markers;
 use terra_town::town::ThingKind;
 use terra_town::{Detail, Shows};
 use terra_walker::bodies::Body;
@@ -137,6 +138,30 @@ struct Clips {
     jog: AnimationNodeIndex,
     walk_pace: f32,
     jog_pace: f32,
+    /// The walk's and the jog's foot-down markers (D455), by their nodes.
+    strides: Vec<(AnimationNodeIndex, Markers)>,
+}
+
+impl Clips {
+    /// Where clip `to` starts taking over from `from` (the clip playing and how far in): a
+    /// walk into a jog or back at the same step (`Markers::synced`, D585's one stride clock,
+    /// as the player's figure does), so the planted foot stays planted; anything else from
+    /// its own point drawn from `seed`, so not all are in step.
+    fn start_at(
+        &self,
+        from: Option<(AnimationNodeIndex, f32)>,
+        to: AnimationNodeIndex,
+        seed: u32,
+    ) -> f32 {
+        let stride = |node| {
+            self.strides
+                .iter()
+                .find(|(n, _)| *n == node)
+                .map(|(_, m)| m)
+        };
+        from.and_then(|(from, t)| stride(to)?.synced(stride(from)?, t))
+            .unwrap_or_else(|| draw(seed, 99) * 2.0)
+    }
 }
 
 /// On a body's animation player: whose it is, what it plays, and how many frames apart its
@@ -266,6 +291,11 @@ fn prepare(
         names.iter().cloned().zip(nodes.iter().copied()).collect();
     let paces = terra_walker::pace::paces(gltf, &gltf_nodes);
     let pace = |name: &str| paces.get(name).copied().unwrap_or(1.0);
+    let mut markers = terra_walker::feet::markers(gltf, &gltf_nodes);
+    let strides = ["Walk_Loop", "Jog_Fwd_Loop"]
+        .into_iter()
+        .filter_map(|name| Some((named[name], markers.remove(name)?)))
+        .collect();
     figure.ready = Some(Ready {
         scene,
         graph: graphs.add(graph),
@@ -276,6 +306,7 @@ fn prepare(
             jog: named["Jog_Fwd_Loop"],
             walk_pace: pace("Walk_Loop"),
             jog_pace: pace("Jog_Fwd_Loop"),
+            strides,
             named,
         },
     });
@@ -557,11 +588,14 @@ fn animate(
             gait.running += usize::from(run);
         }
         if plays.playing != Some(wanted) {
+            let from = plays
+                .playing
+                .and_then(|from| Some((from, player.animation(from)?.seek_time())));
+            let at = clips.start_at(from, wanted, one.index as u32);
             plays.playing = Some(wanted);
             transitions.play(&mut player, wanted, BLEND).repeat();
-            // Not all in step: each from its own point in the clip.
             if let Some(active) = player.animation_mut(wanted) {
-                active.seek_to(draw(one.index as u32, 99) * 2.0);
+                active.seek_to(at);
             }
         }
         let every = plays.every as f32;
@@ -867,5 +901,64 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A townsperson going from a walk into a jog or back goes on at the same step, on the
+    /// body file's own clips (D585's one stride clock): the foot just planted in the one
+    /// giving way is planted in the one taking over, as far on to the next plant. Started at
+    /// a drawn point, as before, the other foot came down and the planted one slid.
+    #[test]
+    fn a_walk_into_a_jog_and_back_keeps_the_planted_foots_phase() {
+        let json = terra_walker::model_files::json(appearance::BASE);
+        let mut markers: std::collections::HashMap<String, Markers> =
+            serde_json::from_value(terra_walker::model_files::extra(&json, "markers").unwrap())
+                .unwrap();
+        let (idle, walk, jog) = (
+            AnimationNodeIndex::new(1),
+            AnimationNodeIndex::new(2),
+            AnimationNodeIndex::new(3),
+        );
+        let clips = Clips {
+            named: HashMap::default(),
+            idle,
+            walk,
+            jog,
+            walk_pace: 1.0,
+            jog_pace: 1.0,
+            strides: vec![
+                (walk, markers.remove("Walk_Loop").unwrap()),
+                (jog, markers.remove("Jog_Fwd_Loop").unwrap()),
+            ],
+        };
+        let stride = |node| &clips.strides.iter().find(|(n, _)| *n == node).unwrap().1;
+        let mut checked = 0;
+        for (from, to) in [(walk, jog), (jog, walk)] {
+            let (was, now) = (stride(from), stride(to));
+            for (side, spans) in [&was.foot_down_l, &was.foot_down_r].into_iter().enumerate() {
+                // Each plant just after it comes down, not one still down over the seam.
+                let wraps = spans.iter().any(|span| span[1] < span[0]);
+                for span in spans.iter().filter(|span| !(wraps && span[0] <= 1e-4)) {
+                    let t = span[0] + 0.02;
+                    for seed in 0..8 {
+                        let at = clips.start_at(Some((from, t)), to, seed);
+                        assert!(
+                            now.lock(side, at) >= terra_motion::feet::FULL,
+                            "{from:?} {t:.3} -> {to:?} {at:.3}: foot {side} is not planted"
+                        );
+                        let (sa, pa) = was.phase_in_loop(t).unwrap();
+                        let (sb, pb) = now.phase_in_loop(at).unwrap();
+                        assert!(sa == sb && (pa - pb).abs() < 1e-3, "{from:?} -> {to:?}");
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(
+            checked >= 16,
+            "the walk and jog have too few plants: {checked}"
+        );
+        // From an idle, or into one, each starts at its own drawn point.
+        assert_eq!(clips.start_at(Some((idle, 0.3)), jog, 5), draw(5, 99) * 2.0);
+        assert_eq!(clips.start_at(None, walk, 5), draw(5, 99) * 2.0);
     }
 }

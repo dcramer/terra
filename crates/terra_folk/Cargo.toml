@@ -21,6 +21,8 @@ terra_core.workspace = true
 # Creatures (D407): a town's animals are tame creatures, and its lairs and perches wildlife's.
 terra_creatures.workspace = true
 terra_gen.workspace = true
+# The clips' foot-down markers (`Markers::synced`): a walk and a jog share one stride clock (D585).
+terra_motion.workspace = true
 # What a player carries, makes and needs (D407): props, stations, the claim, what a player is told.
 terra_survival.workspace = true
 # Settlements: a town laid out and its people's days (D324).
@@ -32,6 +34,8 @@ terra_world.workspace = true
 [dev-dependencies]
 # The land round a town, for the test that no house stands in a lake.
 terra_land.workspace = true
+# The body file's clip markers, read in the stride clock's test.
+serde_json = "1"
 # The model files' contents, for the tests of the townsfolk's data.
 terra_walker = { workspace = true, features = ["testing"] }
 # Measuring the town's murmur.
