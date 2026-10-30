@@ -16,6 +16,8 @@ ron.workspace = true
 # What a town is built of and how: its buildings' parts, kits and shortcuts, and the
 # burg its walls are of; the buildings themselves are `village` here (D407).
 terra_build.workspace = true
+# A man's walk and jog speeds, fitted to their clips, which the player's share (D585).
+terra_motion.workspace = true
 
 [lints]
 workspace = true

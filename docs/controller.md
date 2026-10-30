@@ -45,7 +45,7 @@ Ceilings need nothing special: a capsule's top meets a roof as its side meets a 
 Each kind's file holds these numbers. A man's stand-ins are shown in brackets: today's walker's values, Jolt's defaults, or the industry's.
 
 - **Capsule**: radius (0.3 m), height (1.8 m), mass (75 kg).
-- **Speeds** for walk, jog, sprint and swim (jog 3.7, sprint 4.6 m/s, today's values, each fitted to its clip's own speed, D585), with acceleration and deceleration on the ground and in water, and a turn rate.
+- **Speeds** for walk, jog, sprint and swim (jog 4.535, sprint 6.0 m/s, today's values, each fitted to its clip's own speed, `terra_motion::gaits`, D585), with acceleration and deceleration on the ground and in water, and a turn rate.
 - **Step height**: 0.55 m. That is one voxel of dug ground (0.5 m) with padding, so a one-voxel ledge is walked up, as today's terrain rule allows. It also covers every building stair.
 - **Slopes**: the walkable limit (50 deg, Jolt's default and today's 1.2 rise to run), and a speed curve by gradient, uphill and downhill.
 - **Jump**: launch speed (6.0 m/s, about 1.1 m apex), coyote time (0.1 s), buffer (0.15 s), and air control as a fraction of ground acceleration.

@@ -26,15 +26,14 @@ use terra_world::planet::{HeightMemo, Planet};
 use terra_world::spatial::SpatialHash;
 use terra_world::tick::Sim;
 
-/// A man's jog and sprint, as his kind has them (`assets/data/movers.ron`, tested): each its
-/// clip's own speed within a tenth (D585, `pace::matched`, tested), the jog as made, the sprint
-/// as fast as its clip goes until a clip made at a sprinter's speed comes (it was 7.4 from a
-/// clip of 3.9, and its legs bent).
-pub const JOG_SPEED: f32 = 3.7;
-pub const SPRINT_SPEED: f32 = 4.6;
-/// The speed over which a body is sprinting, halfway from the jog to the sprint: what its
-/// figure shows (`figure::doing`) and what tires it (`terra_survival`'s effort) change there.
-pub const SPRINT_FROM: f32 = (JOG_SPEED + SPRINT_SPEED) / 2.0;
+/// A man's jog and sprint, as his kind has them (`assets/data/movers.ron`, tested), from
+/// `terra_motion::gaits` (D585): each its clip's own speed within a tenth (`pace::matched`,
+/// tested).
+pub const JOG_SPEED: f32 = terra_motion::gaits::JOG;
+pub const SPRINT_SPEED: f32 = terra_motion::gaits::SPRINT;
+/// The speed over which a body is sprinting: what its figure shows (`figure::doing`) and what
+/// tires it (`terra_survival`'s effort) change there.
+pub const SPRINT_FROM: f32 = terra_motion::gaits::SPRINT_FROM;
 const GRAVITY: f32 = 16.0;
 /// What a jump costs, spent when the mover jumps, not on the press (its buffer and coyote
 /// time decide).

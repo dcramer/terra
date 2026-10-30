@@ -426,7 +426,9 @@ def swing_arms(arm, action, spec):
     across = spec.get("across", 90.0)
     palm = spec.get("palm")
     tuck = spec.get("tuck", 90.0)
-    frames = range(int(round(action.frame_range[0])), int(round(action.frame_range[1])) + 1)
+    # Its keys' times, a take frame each, which are the scene's frames only for a take at the
+    # scene's rate.
+    frames = sorted({kp.co[0] for fc in curves(action) if fc.data_path == 'pose.bones["pelvis"].location' for kp in fc.keyframe_points})
     ad = arm.animation_data
     ad.action = action
     if getattr(action, "slots", None) and len(action.slots):
@@ -445,7 +447,7 @@ def swing_arms(arm, action, spec):
 
     took = {s: [] for s in "lr"}
     for f in frames:
-        scene.frame_set(f)
+        scene.frame_set(int(f), subframe=f - int(f))
         for s in "lr":
             took[s].append(swing_of(s))
     n = len(frames) - 1   # the last frame is the first again
@@ -472,7 +474,7 @@ def swing_arms(arm, action, spec):
 
     for s in "lr":
         for k, f in enumerate(frames):
-            scene.frame_set(f)
+            scene.frame_set(int(f), subframe=f - int(f))
             down, ahead = trunk()
             shoulder, elbow, wrist_at = (mw @ pose[b].head for b in (f"upperarm_{s}", f"lowerarm_{s}", f"hand_{s}"))
             knuckle = mw @ pose[f"middle_01_{s}"].head
@@ -586,14 +588,11 @@ def main():
         old = bpy.data.actions.get(name)
         if old is not None:
             old.name = name + ".old"
-        # A clip that stays where it stands plays at the take's own pace: its frames, Kimodo's 30
-        # a second, keyed at the scene's, rounded so the loop is a whole number of frames, which
-        # the exporter samples. A stride keeps a key a frame, as made: the game plays it at the
-        # pace its feet set (pace.py), and fewer keys a stride would blur its contacts.
-        # A one-shot plays at the take's own pace too: it does not travel at a pace the feet set.
-        k = 1.0
-        if entry.get("still") or entry.get("once"):
-            k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
+        # Every clip plays at its take's own pace (D585): its frames, Kimodo's 30 a second, keyed
+        # at the scene's (`k` of its frames a take frame), rounded so the loop is a whole number
+        # of frames, which the exporter samples. A stride keyed a take frame to a scene frame
+        # played at 0.8 of the cadence it was made at (clip_rate.test.ts holds it).
+        k = round((f1 - f0) * bpy.context.scene.render.fps / bpy.context.scene.render.fps_base / fps) / (f1 - f0)
         action, (seam_at, seam_turn) = retarget(src, arm, name, f0, f1, k, entry.get("way", 0.0), entry.get("once", False), entry.get("travels", False), entry.get("planted", False), entry.get("afloat"))
         if entry.get("way"):
             # Which way the take went, measured: its travel from where its hips face.

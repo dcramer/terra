@@ -185,7 +185,7 @@ function sandboxArgs(shot: Shot): string[] {
 }
 
 /// The player's jog, metres a second (play's movement.rs, JOG_SPEED).
-const JOG = 4.3;
+const JOG = 4.535;
 
 /// Why a run's route is too short for its film, or undefined: a player who reaches its last
 /// spot stands there idle for the rest of it, which on film reads as a figure not animated.

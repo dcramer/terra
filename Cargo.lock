@@ -6345,6 +6345,7 @@ dependencies = [
  "serde",
  "terra_build",
  "terra_gen",
+ "terra_motion",
 ]
 
 [[package]]

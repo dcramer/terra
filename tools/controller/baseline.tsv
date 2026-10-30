@@ -56,7 +56,7 @@ swim.enters	0	lowered by nightly 2026-10-28
 swim.shore	0	unit D: the water's first numbers (a lake walked into, waded, swum across and out; a body floated), course/water.rs
 swim.wade	0.015	unit D: the water's first numbers (a lake walked into, waded, swum across and out; a body floated), course/water.rs
 wade.speed	0	D523 wading rows: wade.speed (0 against the kind's wade share; the mover before this had none, 1.72 m/s off a man's 60%), wade.step 2.3 -> 0.623 m/s (a jog to a 2.0 swim; held: 60% of a jog is 2.58, D478's swim 2.0, for the developers)
-wade.step	0.623	D523 wading rows: wade.speed (0 against the kind's wade share; the mover before this had none, 1.72 m/s off a man's 60%), wade.step 2.3 -> 0.623 m/s (a jog to a 2.0 swim; held: 60% of a jog is 2.58, D478's swim 2.0, for the developers)
+wade.step	0.766	clip-fps j1: the man's jog moved 3.7 -> 4.535 m/s to its clip's true pace (strides were keyed at 0.8 of their takes' speed); wade.step 0.623 -> 0.766 scales with the jog (0.623 x 4.535/3.7 = 0.764); climb.mantle 0 -> 1 of 8 tops, a ledge jumped at from the faster jog (at_face jumps at JUMP_FROM, reach_s from kind.jog), left for the next job
 swim.pose	0.002	controller S0 (Plan v2), main's film at bf18171a: stops classed braking/wall/tap and the yard's phase sweep adds 10 braking releases and 10 turns from standing, so stop.settle (braking only, now 12 stops: 0.30-0.72 s by the stride's phase, jog 2147 worst), stop.steps 26 and turn.steps 27 measure more than before; swim.pose 0.002 is main's own (U1 saw it on main's film 2ddff461), held here so the ratchet bites from main's first banked film
 swim.float	0.001	unit D: the water's first numbers (a lake walked into, waded, swum across and out; a body floated), course/water.rs
 swim.dive	0.001	unit H: swimming per D478 measured (dive, rise, surface, breath, bottom, exit), first numbers
@@ -71,7 +71,7 @@ climb.faces	0	lowered by nightly 2026-10-28
 climb.grip	0	Climbing C7: climb.stamina, climb.grip, climb.stance, climb.knock, climb.down measured and at 0; climb.hold first measured at 1 (the dug cliff: a climber stalls past its first riser, where the hands' probe finds no face over a tread and the top found has no room, so it never climbs to 3.7 m; the sheer wall is 1 mm), held for C8
 climb.start	0	lowered by nightly 2026-10-28
 climb.stance	0	Climbing C7: climb.stamina, climb.grip, climb.stance, climb.knock, climb.down measured and at 0; climb.hold first measured at 1 (the dug cliff: a climber stalls past its first riser, where the hands' probe finds no face over a tread and the top found has no room, so it never climbs to 3.7 m; the sheer wall is 1 mm), held for C8
-climb.mantle	0	lowered by nightly 2026-10-28
+climb.mantle	1	clip-fps j1: the man's jog moved 3.7 -> 4.535 m/s to its clip's true pace (strides were keyed at 0.8 of their takes' speed); wade.step 0.623 -> 0.766 scales with the jog (0.623 x 4.535/3.7 = 0.764); climb.mantle 0 -> 1 of 8 tops, a ledge jumped at from the faster jog (at_face jumps at JUMP_FROM, reach_s from kind.jog), left for the next job
 climb.speed	0	lowered by nightly 2026-10-28
 climb.steep	0	lowered by nightly 2026-10-28
 climb.overhang	0	lowered by nightly 2026-10-28
