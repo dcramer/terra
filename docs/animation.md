@@ -21,7 +21,7 @@ This is the method every job that changes how a body moves follows. D584 holds t
 | One skeleton, retargeting | Ours: carried onto every body by D542, measured faithful to 0.0° |
 | Animation director, daily reviews | The developer, by eye, on the review desk: a before/after film from the game's own camera for every change |
 | Animation graph with blend spaces | figure.rs's states, blending clips by speed and direction |
-| Motion matching (Ubisoft, Unreal 5) | Not for us: it needs hours of capture. Blend spaces need a handful of clips. |
+| Motion matching (Ubisoft, Unreal 5) | Not first: blend spaces need a handful of clips and come first. Motion matching is possible later; Kansei ran it in Rust on 7-25 minutes of generated clips (research/2026-10-30-agent-driven-animation-deep.md). |
 | Post-process: foot IK, look-at, hand IK | The same three layers and nothing else (D584) |
 
 ## The method
@@ -29,6 +29,8 @@ This is the method every job that changes how a body moves follows. D584 holds t
 1. **The speed comes from the clip.** Every moving clip is made at the speed the game moves the body, or the game moves the body at the clip's own speed.
    - Small mismatches are covered by playing a little faster or slower, at most 10%. Stretching the stride, at most 10% (Unreal's stride warping keeps to this range).
    - A gait that needs more gets its own clip: walk, jog, sprint, each at its own speed, blended by speed.
+   - Each clip's speed is measured from its planted foot. Where the clamp can't reach the game's speed, change the game's speed or make a new clip; never stretch past it (others did the same: project-whiskeyjack moved 4.0 to 4.6 m/s rather than stretch).
+   - All gaits share one stride clock (sync groups, phase-locked at the same foot's touchdown), so blending two gaits never crosses the feet.
    - Which speeds the game uses is a design call. A film shows what each choice looks like.
 2. **A clip is made for what it shows.** A swim is made lying in the water; a carry made carrying; a blow made striking. Nothing stands in for something else.
 3. **A wrong clip is replaced or retaken, never patched.** No layer, offline script or fix-up bends a clip to hide a fault. Wrist limits, reach solvers and formula arms are retired as their clips are replaced.
