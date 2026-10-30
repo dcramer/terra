@@ -7,7 +7,7 @@
   "hands": {
     "value": "Off",
     "source": "D567: carried by its handle in the off hand",
-    "open": { "owner": "technical", "why": "today the look hangs from the right hand in the checks; an item for it, and hanging it from the off hand, are not built" }
+    "open": { "owner": "technical", "why": "an item for it is not built; its look hangs from the off hand by its kind's lead (attach_kinds.json's hung) in the checks and in the townsfolk's holds" }
   },
   "lead": { "value": "off", "source": "D567 and D463: the off hand, the right on a left-handed body" },
   "grip_type": { "value": "hook", "source": "D562: hung, a hook grip, the fingers alone round the handle" },

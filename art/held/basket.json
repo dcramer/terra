@@ -1,1 +1,1 @@
-{"kind": "hung", "source": "props/MarketBasket.glb", "fit": "hung", "out": 0.05, "carry_hold": "Carry_Basket"}
+{"kind": "hung", "source": "props/MarketBasket.glb", "fit": "hung", "out": -0.05, "carry_hold": "Carry_Basket", "note": "Hung in the off hand (D567, the hung kind's lead): out is along the left hand socket's +X, its palm, toward the leg, so -0.05 hangs it 5 cm out from the leg."}

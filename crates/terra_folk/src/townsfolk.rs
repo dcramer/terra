@@ -85,21 +85,30 @@ fn worn(list: &[Garment], seed: u32) -> Vec<(usize, &Garment)> {
 struct Looks {
     mix: f32,
     roles: std::collections::BTreeMap<String, Look>,
-    /// What is carried in the right hand for an activity, on the way to it and while doing
-    /// it, by held item (`models/held/<item>.glb`): the smith's hammer, the guard's spear.
+    /// What is carried for an activity, on the way to it and while doing it: the smith's
+    /// hammer in the main hand, a browser's basket in the off (D567).
     #[serde(default)]
-    holds: std::collections::BTreeMap<String, String>,
+    holds: std::collections::BTreeMap<String, Carried>,
+}
+
+/// A held item (`models/held/<item>.glb`) and the hand it is carried in.
+#[derive(Deserialize, Clone, PartialEq, Debug)]
+struct Carried {
+    item: String,
+    hand: terra_motion::hold::Hand,
 }
 
 /// The held items by activity, as the looks say them.
 #[derive(Resource, Default)]
-struct Holds(std::collections::BTreeMap<String, String>);
+struct Holds(std::collections::BTreeMap<String, Carried>);
 
-/// A body's right hand, once its model is in, and what it holds now.
+/// A body's hands' sockets (the right is the main hand), once its model is in, and what it
+/// carries now.
 #[derive(Component)]
 struct Hand {
-    socket: Entity,
-    showing: Option<String>,
+    main: Entity,
+    off: Entity,
+    showing: Option<Carried>,
 }
 
 /// A held item's look in someone's hand.
@@ -419,11 +428,13 @@ fn spawn(mut commands: Commands, figure: Res<Figure>, market: Res<Market>, mut d
                       children: Query<&Children>,
                       names: Query<&Name>,
                       players: Query<(), With<AnimationPlayer>>| {
-                    if let Some(socket) =
-                        character::find(ready.entity, character::HAND_R, &children, &names)
+                    let find = |name| character::find(ready.entity, name, &children, &names);
+                    if let (Some(main), Some(off)) =
+                        (find(character::HAND_R), find(character::HAND_L))
                     {
                         commands.entity(folk).insert(Hand {
-                            socket,
+                            main,
+                            off,
                             showing: None,
                         });
                     }
@@ -628,18 +639,23 @@ fn hold(
             continue;
         }
         hand.showing = wanted.cloned();
-        for look in children
-            .iter_descendants(hand.socket)
+        for look in [hand.main, hand.off]
+            .into_iter()
+            .flat_map(|socket| children.iter_descendants(socket))
             .filter(|&each| in_hand.contains(each))
         {
             commands.entity(look).despawn();
         }
-        if let Some(item) = wanted {
-            let file = character::held_look(item);
+        if let Some(carried) = wanted {
+            let file = character::held_look(&carried.item);
+            let socket = match carried.hand {
+                terra_motion::hold::Hand::Main => hand.main,
+                terra_motion::hold::Hand::Off => hand.off,
+            };
             let look = character::hold(
                 &mut commands,
                 assets.load(bevy::gltf::GltfAssetLabel::Scene(0).from_asset(file)),
-                hand.socket,
+                socket,
             );
             commands.entity(look).insert(InHand);
         }
@@ -865,15 +881,30 @@ mod tests {
             &std::fs::read_to_string(terra_walker::model_files::asset("data/life.ron")).unwrap(),
         )
         .unwrap();
-        for (activity, item) in &looks.holds {
+        for (activity, carried) in &looks.holds {
             assert!(
                 plan.activities.contains_key(activity),
                 "holds: no activity {activity}"
             );
-            let file = character::held_look(item);
+            let file = character::held_look(&carried.item);
             assert!(
                 terra_walker::model_files::asset(&file).exists(),
                 "holds: no {file}"
+            );
+            // A hung look (a basket) is carried by its handle in the off hand (D567), as its
+            // kind's lead says (tools/characters/attach_kinds.json); anything else in the main.
+            let hung =
+                terra_walker::model_files::extra(&terra_walker::model_files::json(&file), "hold")
+                    .is_some_and(|hold| hold == "hung");
+            let hand = if hung {
+                terra_motion::hold::Hand::Off
+            } else {
+                terra_motion::hold::Hand::Main
+            };
+            assert_eq!(
+                carried.hand, hand,
+                "holds: {activity}'s {} is carried in the {hand:?} hand (D567: a hung look in the off hand, the rest in the main); set its hand in data/townsfolk.ron",
+                carried.item
             );
         }
         for role in &plan.roles {

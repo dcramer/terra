@@ -29,9 +29,11 @@ item is adding a file, never editing this script. Its "fit" says how the look is
   out of the back of a right hand and the palm of a left. Points and directions in metres in
   the source's glTF axes (X, Y up, Z its front), as the workbench and props.ts's sheets show.
 - "hung": a thing carried hanging from the hand by a handle over its top, as a basket is, from
-  its prop: "out", how far out from the leg it hangs. The hand's socket in a hanging arm has +Z
-  up the arm, +Y forward and +X out from the body, so it hangs down -Z from its handle's top,
-  its long way forward along +Y; its extras say {"hold": "hung"}.
+  its prop: "out", how far its handle's top is moved along the hand socket's +X. The socket in a
+  hanging arm has +Z up the arm, +Y forward and +X out from the body in the right hand but in
+  toward the leg in the left (the back of a right hand, the palm of a left), so a look for the
+  off hand (a basket, D567) gives a negative "out" to hang out from the leg. It hangs down -Z
+  from its handle's top, its long way forward along +Y; its extras say {"hold": "hung"}.
 
 Every item gives "source" (under assets/models), and may give "strap": strapped to the forearm rather than hung on the hand socket, said in its extras as
 {"strap": {"bone", "fist", "face", "grip"}} for the game (terra_walker::strap) and moves.ts: the

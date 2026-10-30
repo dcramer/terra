@@ -50,6 +50,8 @@ test("a held item is checked in its class's set, else in the walker's clips", ()
   const round = setOf("round_shield");
   assert.equal(round.hand, "L");
   for (const clip of ["Interact", "Sword_Attack"]) assert.ok(!round.clips.split(",").includes(clip), clip);
+  // A hung basket is carried by its handle in the off hand (D567; its kind's lead), not the right.
+  assert.equal(setOf("basket").hand, "L");
 });
 
 test("a moves run that writes no rows fails, never reading an earlier run's", () => {

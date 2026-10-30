@@ -1333,8 +1333,8 @@
         "bone": "clavicle_r",
         "aim": {
           "upperarm_r": [
-            -0.36,
-            -0.93,
+            -0.42,
+            -0.91,
             0.0
           ],
           "lowerarm_r": [
@@ -1354,8 +1354,8 @@
         "bone": "clavicle_l",
         "aim": {
           "upperarm_l": [
-            0.36,
-            -0.93,
+            0.42,
+            -0.91,
             0.0
           ],
           "lowerarm_l": [

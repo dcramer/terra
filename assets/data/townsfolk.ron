@@ -16,14 +16,15 @@
     },
     // A body's mix: a template, and up to this much of one other template's morphs.
     mix: 0.45,
-    // What is carried in the right hand for an activity, on the way to it and at it, by held
-    // item (models/held/<item>.glb), so what someone is about shows from across the square.
+    // What is carried for an activity, on the way to it and at it, by held item
+    // (models/held/<item>.glb) and hand, so what someone is about shows from across the square:
+    // a tool or weapon in the main hand (the right), a basket by its handle in the off (D567).
     holds: {
-        "Smith": "hammer",
-        "Build": "hammer",
-        "Chop": "iron_axe",
-        "Guard": "spear",
-        "Browse": "basket",
+        "Smith": (item: "hammer", hand: Main),
+        "Build": (item: "hammer", hand: Main),
+        "Chop": (item: "iron_axe", hand: Main),
+        "Guard": (item: "spear", hand: Main),
+        "Browse": (item: "basket", hand: Off),
     },
     roles: {
         "trader": (
