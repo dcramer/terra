@@ -10,6 +10,7 @@ cargo xtask gpu film -- cargo xtask controller --film   # also the in-game filme
 cargo xtask gpu film -- cargo xtask controller --film --out ~/.cache/terra-review/<topic>   # the same, its film and records elsewhere
 node tools/controller/yard.ts --check ~/.cache/terra-review/controller-yard   # its checks again on the records already made
 cargo xtask gpu still -- node tools/controller/bones.ts   # the bone audit alone (D584): a line a pose layer, its table in ~/.cache/terra-review/bones/bones.txt; the film runs it too (bones.* rows); tested in bones.test.ts
+cargo xtask gpu film -- node tools/controller/layers.ts   # the bone audit's run three times side by side, every pose layer, none (the clip) and D584's three (`--pose-layers`, terra_walker::pose), a column's audit each; ~/.cache/terra-review/layers-off/
 cargo xtask controller --filmed          # the film rows from main's own film, not filming (nightly's, so it banks them; films.ts)
 node tools/controller/forest-fixture.ts  # cost.forest's fixture again, from the game (when flora's fitting changes)
 cargo xtask controller --raise "<why>"   # write the rows that got worse with the why, in the change's commit; new rows as their "first number"

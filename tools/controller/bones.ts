@@ -56,7 +56,8 @@ const STILLS: [string, number][] = [
   ["sprint-empty", 2300],
   ["end", 2440],
 ];
-const RUN = [
+/// The run's words but its records: the bare yard, the start facing west, the presses.
+export const RUN = [
   ...["--clean", "--experiment", "play", "--level", "yard", "--no-lair", "--time", "12"],
   ...["--at", "0,0", "--face", "-40,0", "--steady", "--picture", "960x540"],
   ...PRESSES.flatMap((press) => ["--press", press]),
