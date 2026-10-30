@@ -6,6 +6,14 @@
     "seed": 1,
     "take": 1
   },
+  "Crouch_Fwd_Loop": {
+    "prompt": "A person walks forward slowly in a low crouch, knees deeply bent, sneaking quietly.",
+    "speed": 0.8,
+    "seconds": 8,
+    "seed": 41,
+    "samples": 4,
+    "take": 0
+  },
   "Jog_Fwd_Loop": {
     "prompt": "A person jogs forward with long strides, arms bent and swinging at the sides.",
     "speed": 5,

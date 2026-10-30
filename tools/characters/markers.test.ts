@@ -84,8 +84,6 @@ test("the game's walks have a foot down at every moment, and its strides do not 
     const walks = Object.entries(baked).filter(([, b]) => b.pace !== undefined && b.pace < WALK_MPS && b.pace > 0.5);
     assert.ok(walks.length >= (file.includes("fight") ? 4 : 1), `${file}: its walks ${walks.map(([c]) => c)}`);
     for (const [clip, b] of walks) {
-      // Crouch_Fwd_Loop's plants drift 8 cm on the pace it is played at: a clip to remake.
-      if (clip === "Crouch_Fwd_Loop") continue;
       assert.equal(b.neither_s, 0, `${file}: ${clip} has neither foot down ${b.neither_s} s`);
       assert.equal(b.splits, 0, `${file}: ${clip} skates ${b.skate_m}`);
     }

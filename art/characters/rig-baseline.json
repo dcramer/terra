@@ -32,8 +32,8 @@
     "sink_m": 0.002
   },
   "Crouch_Fwd_Loop": {
-    "bad_edge_share": 0.0088,
-    "sink_m": 0.008
+    "bad_edge_share": 0.0096,
+    "sink_m": 0.0
   },
   "Jump_Start": {
     "bad_edge_share": 0.0068,
