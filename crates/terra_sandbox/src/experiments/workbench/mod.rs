@@ -9,7 +9,8 @@
 //! (`terra_walker::layer`). A body on the figure's skeleton plays the figure's clips
 //! (`figure::CLIPS`, the fight file) besides its own, as in the game, so a fight pose shows on
 //! a template's shapes; a carried clip lays the carry pose of what a hand holds over that arm
-//! (`CarryHold`, D560), as the figure does. `--hold <item>[@<socket>]` puts an item's held
+//! (`CarryHold`, D560) and swings it with the stride at the pose's share (`arm_swing`), as
+//! the figure does. `--hold <item>[@<socket>]` puts an item's held
 //! look in the right hand or the hand socket given (repeatable, `heater_shield@socket.hand.L`
 //! for the off hand), `--wear <item>` puts on an item's look for each model's body, and
 //! `--attach <file>[@<socket>]` puts on any look, on a socket if given (held as play holds
@@ -104,6 +105,10 @@ struct Model {
     clips: Vec<Clip>,
     placed: bevy::platform::collections::HashMap<String, Nodes>,
     carry: Carry,
+    /// Each carry pose's share of the stride's arm swing (`arm_swing::shares`), and each arm's
+    /// (left, right) for the pose it carries in now, as the figure swings a carried arm.
+    shares: bevy::platform::collections::HashMap<String, f32>,
+    swung: [f32; 2],
 }
 
 /// A clip as a model's graph has it: its name, its places, its length, and the node of the
@@ -374,18 +379,7 @@ fn spawn(
         return;
     }
     bench.spawned = true;
-    if bench.clips.is_empty() {
-        let first = bench.files.first().and_then(|file| gltfs.get(file));
-        bench.clips = ["Idle_Loop", "Walk_Loop"]
-            .into_iter()
-            .filter(|name| first.is_some_and(|gltf| gltf.named_animations.contains_key(*name)))
-            .map(String::from)
-            .collect();
-    }
-    // A model without animations is still looked at, as it stands.
-    if bench.clips.is_empty() {
-        bench.clips.push("still".to_string());
-    }
+    default_clips(&mut bench, &gltfs);
     let side = bench.up.cross(bench.front);
     let mut models = Vec::new();
     for (index, (file, path)) in bench.files.iter().zip(&options.models).enumerate() {
@@ -394,6 +388,11 @@ fn spawn(
         };
         let files = clip_files((gltf, file), &bench.figure_clips, &gltfs, &gltf_nodes, path);
         let (graph, placed, nodes) = placed_clips(&files, &gltf_nodes, &clips, &bench.clips, path);
+        let shares = files
+            .iter()
+            .map(|file| terra_walker::arm_swing::shares(file, &gltf_nodes))
+            .find(|shares| !shares.is_empty())
+            .unwrap_or_default();
         let graph = graphs.add(graph);
         let Some(scene) = gltf.default_scene.clone() else {
             continue;
@@ -497,6 +496,8 @@ fn spawn(
             clips: nodes,
             placed,
             carry: [None; 2],
+            shares,
+            swung: [0.0; 2],
         });
     }
     bench.models = models;
@@ -698,6 +699,22 @@ fn clip_files<'a>(
     files
 }
 
+/// The clips played when none are asked for: the first model's idle and walk, or, for a model
+/// without animations, "still", so it is looked at as it stands.
+fn default_clips(bench: &mut Bench, gltfs: &Assets<Gltf>) {
+    if bench.clips.is_empty() {
+        let first = bench.files.first().and_then(|file| gltfs.get(file));
+        bench.clips = ["Idle_Loop", "Walk_Loop"]
+            .into_iter()
+            .filter(|name| first.is_some_and(|gltf| gltf.named_animations.contains_key(*name)))
+            .map(String::from)
+            .collect();
+    }
+    if bench.clips.is_empty() {
+        bench.clips.push("still".to_string());
+    }
+}
+
 /// A model's graph of the clips of `files` (`layer::graph_of`, its own file first), every clip
 /// in it, and the bench's clips placed in it, a clip named `A+B` as `A` under `B`'s hold.
 fn placed_clips(
@@ -754,12 +771,28 @@ fn lay(model: &Model, clip: &Clip, fraction: Option<f32>, player: &mut Animation
         }
     }
     let node = clip.nodes.played(0, arms);
-    match fraction {
-        Some(fraction) => {
-            player.play(node).seek_to(clip.length * fraction).pause();
-        }
-        None => {
-            player.play(node).repeat();
+    // Each arm carrying in a pose swings as the stride's arm does, at its pose's share, in step
+    // with the clip (`terra_walker::arm_swing`), as in play.
+    let swings = (clip.hold.is_none() && arms != Arms::None)
+        .then(|| {
+            (0..2).filter_map(|side| {
+                let share = model.swung[side];
+                (model.carry[side].is_some() && share > 0.0)
+                    .then_some((clip.nodes.swing[0][side]?, share))
+            })
+        })
+        .into_iter()
+        .flatten()
+        .chain([(node, 1.0)]);
+    for (played, weight) in swings {
+        let active = player.play(played).set_weight(weight);
+        match fraction {
+            Some(fraction) => {
+                active.seek_to(clip.length * fraction).pause();
+            }
+            None => {
+                active.repeat();
+            }
         }
     }
 }
@@ -805,7 +838,7 @@ fn recarry(
     }
     let mut changed = false;
     for model in &mut bench.models {
-        let mut carry = [None; 2];
+        let (mut carry, mut swung) = ([None; 2], [0.0; 2]);
         for (side, socket, hand) in [
             (0, character::HAND_L, Hand::Off),
             (1, character::HAND_R, Hand::Main),
@@ -813,9 +846,16 @@ fn recarry(
             let pose = character::find(model.root, socket, &children, &names)
                 .and_then(|socket| poses.get(socket).ok());
             carry[side] = figure::carry_pose(&model.placed, hand, pose, &looks);
+            if carry[side].is_some() {
+                swung[side] = pose
+                    .and_then(|pose| model.shares.get(&pose.clip))
+                    .copied()
+                    .unwrap_or(0.0);
+            }
         }
-        if carry != model.carry {
+        if carry != model.carry || swung != model.swung {
             model.carry = carry;
+            model.swung = swung;
             changed = true;
         }
     }
