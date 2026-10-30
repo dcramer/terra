@@ -333,7 +333,8 @@ impl Kept {
 pub fn plugin(app: &mut App) {
     app.init_resource::<Baked>().add_systems(
         PostUpdate,
-        keep.after(bevy::app::AnimationSystems)
+        keep.in_set(crate::pose::Layer::Feet)
+            .after(bevy::app::AnimationSystems)
             .after(crate::Fitted)
             .before(TransformSystems::Propagate),
     );

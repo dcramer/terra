@@ -114,6 +114,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             PostUpdate,
             keep_off_hips
+                .in_set(crate::pose::Layer::Arms)
                 .after(bevy::app::AnimationSystems)
                 .after(crate::Fitted)
                 .before(TransformSystems::Propagate),

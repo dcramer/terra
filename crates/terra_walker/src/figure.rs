@@ -296,7 +296,9 @@ pub fn plugin(app: &mut App) {
                 prepare.run_if(not(resource_exists::<Moves>)),
                 stand.run_if(resource_exists::<Moves>),
                 animate,
-                crate::swim::lay.after(crate::stepping::show),
+                crate::swim::lay
+                    .in_set(crate::pose::Layer::Swim)
+                    .after(crate::stepping::show),
             )
                 .chain(),
         )

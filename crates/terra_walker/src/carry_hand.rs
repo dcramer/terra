@@ -58,6 +58,7 @@ pub fn plugin(app: &mut App) {
         // the hand's frame, whatever turns it) and the arms kept off the hips (which count the
         // look where the hand carries it).
         tip_carried
+            .in_set(crate::pose::Layer::CarryHand)
             .after(bevy::app::AnimationSystems)
             .after(crate::Fitted)
             .before(crate::grip::close_hands)

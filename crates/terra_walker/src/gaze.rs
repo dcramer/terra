@@ -50,6 +50,7 @@ pub fn plugin(app: &mut App) {
         // the arms off the hips), before propagation and the duel record's read in `Last`
         // (D530): the head is turned on the pose as drawn.
         keep_on_aim
+            .in_set(crate::pose::Layer::Gaze)
             .after(bevy::app::AnimationSystems)
             .after(crate::Fitted)
             .after(crate::feet::keep)

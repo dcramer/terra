@@ -84,7 +84,12 @@ pub fn plugin(app: &mut App) {
         .add_observer(find_lifts)
         .add_systems(Update, name_clips)
         .configure_sets(PostUpdate, crate::fitted())
-        .add_systems(PostUpdate, lift_bodies.in_set(crate::Fitted));
+        .add_systems(
+            PostUpdate,
+            lift_bodies
+                .in_set(crate::Fitted)
+                .in_set(crate::pose::Layer::Lift),
+        );
 }
 
 /// When a body's model is in: the node carrying its file's lifts, if it has any.

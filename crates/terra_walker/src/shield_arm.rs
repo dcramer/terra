@@ -423,6 +423,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             PostUpdate,
             fit_shield_arm
+                .in_set(crate::pose::Layer::ShieldArm)
                 .after(crate::arms::keep_off_hips)
                 .before(TransformSystems::Propagate),
         );

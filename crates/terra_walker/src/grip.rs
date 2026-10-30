@@ -356,6 +356,7 @@ pub fn plugin(app: &mut App) {
             // After the clips and the fit, before the arms are kept off the hips (which count
             // the hand's points) and the propagation the duel record reads (D530).
             close_hands
+                .in_set(crate::pose::Layer::Grip)
                 .after(bevy::app::AnimationSystems)
                 .after(crate::Fitted)
                 .before(crate::arms::keep_off_hips)

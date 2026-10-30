@@ -229,11 +229,49 @@ mod tests {
     /// alone: the layers before and after it read nothing.
     #[test]
     fn a_layer_turning_a_bone_20_degrees_reads_20_as_its_own() {
-        let path = std::env::temp_dir().join(format!("bone-audit-{}.jsonl", std::process::id()));
+        let lines = audited(crate::pose::Switch::default(), "on");
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        for line in &lines {
+            let layers = line["layers"].as_object().unwrap();
+            assert_eq!(layers.keys().collect::<Vec<_>>(), ["feet"], "{line}");
+            let feet = &layers["feet"];
+            assert!(
+                (feet["calf_l"][0].as_f64().unwrap() - 20.0).abs() < 0.11,
+                "{line}"
+            );
+            assert!(
+                (feet["pelvis"][1].as_f64().unwrap() - 3.0).abs() < 0.11,
+                "{line}"
+            );
+            assert!(feet.get("foot_l").is_none(), "{line}");
+        }
+    }
+
+    /// The same layer turned off by the switch (`--pose-layers off=feet`) leaves the clip's
+    /// pose as it was: the audit reads nothing for it, and the other layers off leave it on.
+    #[test]
+    fn a_layer_switched_off_leaves_the_clips_pose_alone() {
+        use crate::pose::{Layer, Switch};
+        let lines = audited(Switch::off([Layer::Feet]), "off");
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        for line in &lines {
+            assert!(line["layers"].as_object().unwrap().is_empty(), "{line}");
+        }
+        let others = Layer::ALL.into_iter().filter(|&l| l != Layer::Feet);
+        let lines = audited(Switch::off(others), "others");
+        assert!(lines.iter().all(|l| l["layers"].get("feet").is_some()));
+    }
+
+    /// The audit's lines over two frames of a stand-in layer in the foot lock's place and
+    /// set, under `switch`: turning `calf_l` 20 degrees and moving `pelvis` 3 cm.
+    fn audited(switch: crate::pose::Switch, tag: &str) -> Vec<Value> {
+        let path =
+            std::env::temp_dir().join(format!("bone-audit-{}-{tag}.jsonl", std::process::id()));
         let mut app = App::new();
         app.add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_once()));
         app.init_resource::<ScriptFrame>();
         add(&mut app, &path);
+        crate::pose::configure(&mut app, switch);
         app.add_systems(First, |mut frame: ResMut<ScriptFrame>| frame.0 += 1);
         // In the foot lock's place: after the snapshot before it, before the one after it.
         app.add_systems(
@@ -249,6 +287,7 @@ mod tests {
                     }
                 }
             })
+            .in_set(crate::pose::Layer::Feet)
             .after(snap::<4>)
             .before(snap::<5>),
         );
@@ -274,24 +313,8 @@ mod tests {
         drop(app);
         let text = std::fs::read_to_string(&path).unwrap();
         std::fs::remove_file(&path).ok();
-        let lines: Vec<Value> = text
-            .lines()
+        text.lines()
             .map(|l| serde_json::from_str(l).unwrap())
-            .collect();
-        assert_eq!(lines.len(), 2, "{text}");
-        for line in &lines {
-            let layers = line["layers"].as_object().unwrap();
-            assert_eq!(layers.keys().collect::<Vec<_>>(), ["feet"], "{line}");
-            let feet = &layers["feet"];
-            assert!(
-                (feet["calf_l"][0].as_f64().unwrap() - 20.0).abs() < 0.11,
-                "{line}"
-            );
-            assert!(
-                (feet["pelvis"][1].as_f64().unwrap() - 3.0).abs() < 0.11,
-                "{line}"
-            );
-            assert!(feet.get("foot_l").is_none(), "{line}");
-        }
+            .collect()
     }
 }

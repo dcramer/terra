@@ -304,7 +304,12 @@ pub fn plugin(app: &mut App) {
                 .chain(),
         )
         .configure_sets(PostUpdate, crate::fitted())
-        .add_systems(PostUpdate, hold_joints.in_set(crate::Fitted));
+        .add_systems(
+            PostUpdate,
+            hold_joints
+                .in_set(crate::Fitted)
+                .in_set(crate::pose::Layer::Joints),
+        );
 }
 
 /// Records the rest pose of each body and look as it appears.

@@ -153,6 +153,12 @@ usage: terra_sandbox [options]
                         write how far each pose layer turned each bone of the player's
                         body off its clip every frame, one line of JSON each
                         (tools/controller/bones.ts, D584)
+  --pose-layers <all|none|off=<name>,…|only=<name>,…>
+                        a debug switch, in play and the workbench: turn off layers that
+                        change every body after its clips, to see the clip as it is
+                        (none: every pose layer, the body's fit kept): carry_arm, joints
+                        and lift (the fit), carry_hand, grip, feet, arms, shield_arm,
+                        gaze, swim; a wrong name lists what each does
   --fight-log <file.jsonl>
                         write each fighter's state every frame, one line of JSON each:
                         moves asked and running, contacts, feet, places (melee, D69)
@@ -325,6 +331,8 @@ pub struct Options {
     pub fight_log: Option<PathBuf>,
     /// Where the player's bone audit is written every frame (`--bone-audit`, D584).
     pub bone_audit: Option<PathBuf>,
+    /// Which pose layers run (`--pose-layers`, read by `terra_walker::pose::Switch`).
+    pub pose_layers: Option<String>,
     /// Remote calls a scripted run makes on given frames (`remote::Calls`).
     pub calls: Option<PathBuf>,
     /// Where a benchmark writes every timed frame's times.
@@ -584,6 +592,7 @@ impl Options {
             duel: None,
             fight_log: None,
             bone_audit: None,
+            pose_layers: None,
             calls: None,
             frame_times: None,
             fresh: false,
@@ -668,6 +677,7 @@ impl Options {
                 }
                 "--date" => options.date = Some(Date::parse(&value("--date")?)?),
                 "--weather" => options.weather = Some(value("--weather")?),
+                "--pose-layers" => options.pose_layers = Some(value("--pose-layers")?),
                 "--site" => options.site = Some(value("--site")?),
                 "--at" => options.start_at = Some(east_south("--at", &value("--at")?)?),
                 "--face" => options.start_facing = Some(east_south("--face", &value("--face")?)?),
