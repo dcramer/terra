@@ -11,8 +11,8 @@
 
 /// Walk_Loop's pace, m/s.
 pub const WALK: f32 = 1.375;
-/// Jog_Fwd_Loop's pace, m/s.
-pub const JOG: f32 = 4.535;
+/// Jog_Fwd_Loop's pace, m/s: Uthana's locomotion take, made at 4.3 m/s on its own body (2026-10-30).
+pub const JOG: f32 = 3.442;
 /// Sprint_Loop (pace 5.10 m/s) at the most D585 shows it: 1.1 times as fast, stride x1.07.
 pub const SPRINT: f32 = 6.0;
 /// The speed over which a body is sprinting, halfway from the jog to the sprint: what its

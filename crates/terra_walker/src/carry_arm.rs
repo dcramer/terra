@@ -40,7 +40,7 @@ pub fn plugin(app: &mut App) {
     app.add_observer(find_arms).add_systems(
         PostUpdate,
         // On the pose the clips and holds gave, before the fit and every fix-up after it (the
-        // fists, the arms kept off the hips, the shield arm, the head), which read it as held.
+        // fists, the shield arm, the head), which read it as held.
         hold_in_body
             .in_set(crate::pose::Layer::CarryArm)
             .after(bevy::app::AnimationSystems)

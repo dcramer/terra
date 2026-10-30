@@ -776,8 +776,8 @@ mod tests {
                         "{file}: {clip}'s foot {side} is locked {down}% of its stride"
                     );
                 }
-                // A walk always has a foot down (Crouch_Fwd_Loop's plants skate: to remake).
-                if paces[&clip] < 2.0 && clip != "Crouch_Fwd_Loop" {
+                // A walk always has a foot down.
+                if paces[&clip] < 2.0 {
                     let neither = (0..100).find(|&i| at(0, i) <= 0.0 && at(1, i) <= 0.0);
                     assert_eq!(neither, None, "{file}: {clip} has neither foot down");
                 }

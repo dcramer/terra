@@ -16,15 +16,14 @@ use terra_world::shell::{Options, ScriptFrame};
 
 /// The layers in the order they pose a body (each after the one before it), as the record
 /// names them: the arm held clear for a carry, the fit to the body (its joints held, its lift),
-/// the carried tool tipped at the wrist, the fists closed, the feet kept, the arms kept off
-/// the hips, the shield arm fitted, the head turned toward the aim.
-pub const LAYERS: [&str; 8] = [
+/// the carried tool tipped at the wrist, the fists closed, the feet kept, the shield arm
+/// fitted, the head turned toward the aim.
+pub const LAYERS: [&str; 7] = [
     "carry_arm",
     "fitted",
     "carry_hand",
     "grip",
     "feet",
-    "arms",
     "shield_arm",
     "gaze",
 ];
@@ -89,14 +88,11 @@ pub fn add(app: &mut App, path: &Path) {
                 .before(crate::feet::keep),
             snap::<5>
                 .after(crate::feet::keep)
-                .before(crate::arms::keep_off_hips),
-            snap::<6>
-                .after(crate::arms::keep_off_hips)
                 .before(crate::shield_arm::fit_shield_arm),
-            snap::<7>
+            snap::<6>
                 .after(crate::shield_arm::fit_shield_arm)
                 .before(crate::gaze::keep_on_aim),
-            (snap::<8>, write)
+            (snap::<7>, write)
                 .chain()
                 .after(crate::gaze::keep_on_aim)
                 .before(TransformSystems::Propagate),

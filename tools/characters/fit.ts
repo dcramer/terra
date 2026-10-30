@@ -175,7 +175,7 @@ function movesStage(it: Item, log: string, template?: string): boolean {
   const look = it.look.slice(ROOT.length + 1);
   const hold = set === "none" ? [`socket.hand.${hand}=${look}`] : (["R", "L"] as const).map((h) => `socket.hand.${h}=${h === hand ? look : PARTNER[h]}`);
   const json = join(OUT, `fit-${it.name}-moves.json`);
-  const args = [join(ROOT, "tools", "characters", "moves.ts"), "--set", set, "--carry", "--arms", "--json", json, ...hold.flatMap((h) => ["--hold", h])];
+  const args = [join(ROOT, "tools", "characters", "moves.ts"), "--set", set, "--carry", "--json", json, ...hold.flatMap((h) => ["--hold", h])];
   if (clips) args.push("--also", clips);
   if (template) args.push("--template", template);
   const rows = runMoves(args, json, log);
