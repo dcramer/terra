@@ -374,6 +374,96 @@ fn a_locked_foot_takes_the_clips_height_and_roll_and_keeps_its_ball_and_heading(
     assert!((pitch(shown.turn) - pitch(clip.turn)).abs() < 1e-4);
 }
 
+/// A foot let go as it rolls off its toe keeps the clip's roll (D584): the release eases from
+/// the foot as held (its ball where it stood, the clip's pitch) to the clip's, never back to the
+/// flat foot it locked as the heel struck, and its ball never goes back behind where it stood.
+#[test]
+fn a_foot_let_go_as_it_rolls_off_its_toe_keeps_the_clips_roll() {
+    let ball = Vec3::new(0.0, -0.07, 0.14);
+    let stood = Vec3::new(0.1, 0.0, 0.0);
+    let mut foot = Foot::default();
+    let (mut worst_turn, mut released) = (0.0f32, false);
+    for i in 0..30 {
+        let t = i as f32 * DT;
+        // The heel rises from 0.1 s to a 60 deg roll at 0.25 s; the ball stands until the
+        // curve falls from 0.2 s over RELEASE_S, then lifts and swings on.
+        let pitch = ((t - 0.1) / 0.15).clamp(0.0, 1.0) * 60f32.to_radians();
+        let gone = (t - 0.2).max(0.0);
+        let ball_at = stood + Vec3::new(0.0, gone * 0.5, gone * 3.0);
+        let turn = Quat::from_rotation_x(pitch);
+        let clip = Pose {
+            at: ball_at - turn * ball,
+            turn,
+        };
+        let posed = Posed {
+            pose: clip,
+            lock: (1.0 - gone / RELEASE_S).clamp(0.0, 1.0),
+            up: Vec3::Y,
+            swing_mps: 0.0,
+            strained: false,
+            off: false,
+            landing: false,
+            low: true,
+            ball,
+            sole: [clip.at.y, ball_at.y],
+            over: [0.0; 2],
+        };
+        let shown = foot.update(posed, DT, false);
+        released |= foot.state() == "releasing";
+        worst_turn = worst_turn.max(shown.turn.angle_between(clip.turn).to_degrees());
+        let shown_ball = shown.at + shown.turn * ball;
+        assert!(
+            shown_ball.z > stood.z - 0.005 && shown_ball.z < ball_at.z + 0.005,
+            "{t:.3} s: the ball at {} m, between where it stood ({}) and the clip's ({})",
+            shown_ball.z,
+            stood.z,
+            ball_at.z
+        );
+    }
+    assert!(released, "the lock was let go by its curve");
+    assert!(
+        worst_turn < 0.5,
+        "the foot turned {worst_turn} deg off the clip's"
+    );
+}
+
+/// A release whose curve comes back to 1 with the foot lifted (a stop's Idle coming in as the
+/// jog's foot rises) locks it only once it is down, never in the air.
+#[test]
+fn a_released_foot_lifted_as_its_curve_comes_back_locks_only_once_down() {
+    let posed = |lift: f32, lock: f32| Posed {
+        pose: Pose {
+            at: Vec3::new(0.0, 0.1 + lift, 0.0),
+            turn: Quat::IDENTITY,
+        },
+        lock,
+        up: Vec3::Y,
+        swing_mps: 0.0,
+        strained: false,
+        off: false,
+        landing: false,
+        low: lift < 0.05,
+        ball: Vec3::ZERO,
+        sole: [0.1 + lift, 0.1 + lift],
+        over: [0.0; 2],
+    };
+    let mut foot = Foot::default();
+    for _ in 0..10 {
+        foot.update(posed(0.0, 1.0), DT, false);
+    }
+    assert!(foot.planted(), "{}", foot.state());
+    for i in 1..=3 {
+        foot.update(posed(0.1 * i as f32, 0.0), DT, false);
+    }
+    assert_eq!(foot.state(), "releasing");
+    foot.update(posed(0.3, 1.0), DT, false);
+    assert!(!foot.planted(), "locked 0.3 m up: {}", foot.state());
+    for i in (0..3).rev() {
+        foot.update(posed(0.1 * i as f32, 1.0), DT, false);
+    }
+    assert!(foot.planted(), "down again: {}", foot.state());
+}
+
 #[test]
 fn a_feet_turn_is_its_yaw_about_the_up_not_its_roll() {
     let yaw = Quat::from_rotation_y(50f32.to_radians());

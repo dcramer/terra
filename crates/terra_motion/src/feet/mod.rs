@@ -323,6 +323,53 @@ impl Foot {
         })
     }
 
+    /// A lock being let go (`State::Releasing`) this frame: the foot as shown, or none once it
+    /// has left the release for a blend or a lock, which `step` goes on with. `gone`, `stands`
+    /// and `lands` are `step`'s.
+    fn release(
+        &mut self,
+        lock: Pose,
+        posed: &Posed,
+        gone: bool,
+        stands: bool,
+        lands: bool,
+    ) -> Option<Pose> {
+        let clip = posed.pose;
+        if gone {
+            let from = self.shown.unwrap_or(lock);
+            self.state = State::Blending { from, s: 0.0 };
+        } else if lands {
+            // Back at 1 before it was let go, and down: locked again where it is shown.
+            self.state = State::Planted(self.shown.unwrap_or(lock));
+        } else if stands {
+            // Back at 1 with the foot lifted (a stop's Idle coming in as the release lifts it):
+            // never locked in the air, but blended to the clip and locked as it lands, as any
+            // new lock is (`PLANT_M`).
+            let from = self.shown.unwrap_or(lock);
+            self.state = State::Blending { from, s: 0.0 };
+        } else if self.alpha <= 0.0 {
+            self.state = State::Free;
+            return Some(clip);
+        } else {
+            // From the foot as held (its ball where it was locked, its heading, the clip's
+            // height, pitch and roll) to the clip's, across by the lock weight, up as the clip
+            // lifts it at once and over an arc as high as half the way it goes (a step's, at
+            // most): a foot that went across while still on the ground would slide. Never from
+            // the lock's own pose, its ankle and turn as the heel struck: the clip has rolled off
+            // its toe by then, and easing back to that flat foot bent the jog's ankle 100 deg
+            // (D584's bone audit).
+            let kept = held(lock, clip, posed.up, posed.ball);
+            let across = clip.at.lerp(kept.at, self.alpha);
+            let arc = ((kept.at - clip.at).reject_from(posed.up).length() * 0.5).min(STEP_UP_M.1)
+                * libm::sinf(core::f32::consts::PI * (1.0 - self.alpha));
+            return Some(Pose {
+                at: across + posed.up * ((clip.at - across).dot(posed.up) + arc),
+                turn: clip.turn.slerp(kept.turn, self.alpha),
+            });
+        }
+        None
+    }
+
     fn step(&mut self, posed: Posed, dt: f32, other_moving: bool) -> Pose {
         let clip = posed.pose;
         let speed = match self.last {
@@ -378,28 +425,10 @@ impl Foot {
             _ if stands => "high",
             _ => "rising",
         };
-        if let State::Releasing(lock) = self.state {
-            if gone {
-                let from = self.shown.unwrap_or(lock);
-                self.state = State::Blending { from, s: 0.0 };
-            } else if stands {
-                // Back at 1 before it was let go: locked again where it is shown.
-                self.state = State::Planted(self.shown.unwrap_or(lock));
-            } else if self.alpha <= 0.0 {
-                self.state = State::Free;
-                return clip;
-            } else {
-                // Across by the lock weight, up as the clip lifts it at once and over an arc as
-                // high as half the way it goes (a step's, at most): a foot that went across
-                // while still on the ground would slide.
-                let across = clip.at.lerp(lock.at, self.alpha);
-                let arc = (flat(lock.at, clip.at) * 0.5).min(STEP_UP_M.1)
-                    * libm::sinf(core::f32::consts::PI * (1.0 - self.alpha));
-                return Pose {
-                    at: across + posed.up * ((clip.at - across).dot(posed.up) + arc),
-                    turn: clip.turn.slerp(lock.turn, self.alpha),
-                };
-            }
+        if let State::Releasing(lock) = self.state
+            && let Some(shown) = self.release(lock, &posed, gone, stands, lands)
+        {
+            return shown;
         }
         if let State::Planted(lock) = self.state {
             let off_by = flat(lock.at, clip.at);
