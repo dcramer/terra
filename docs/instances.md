@@ -1,6 +1,6 @@
 # World instances: loading worlds in and out
 
-Status: Leaning, technical (D468 to D471, by the agent); nothing built yet. The developers' answers on dungeons (D497 to D502) are at the end: a dungeon is a place in its realm, as in Valheim and Enshrouded, so the unit loaded in and out is a realm, crossed to through a portal. [worlds.md](worlds.md) says what the realms are as places; this doc says how a world is loaded, run, left and freed.
+Status: Leaning, technical (D468 to D471, by the agent); the first slice's `terra_world::instance` is built (states, scoping, leaving, the census and its leak test), the modules not yet moved onto it. The developers' answers on dungeons (D497 to D502) are at the end: a dungeon is a place in its realm, as in Valheim and Enshrouded, so the unit loaded in and out is a realm, crossed to through a portal. [worlds.md](worlds.md) says what the realms are as places; this doc says how a world is loaded, run, left and freed.
 
 Asked for by the developers: "when we talk about a dungeon, you could imagine you going to that world unloads the current world on the client and loads that dungeon - we need a system for that and we need it well compartmentalized." Then, asked whether a dungeon is its own world: "hm i think its more like valheim/enshrouded actually" (D497).
 
@@ -58,9 +58,9 @@ One pattern for entities, one for resources, one for components a world puts on 
 3. **Components a world puts on a global entity are declared too:** `app.world_component::<Atmosphere>()`. Leaving removes them from every entity. This is the sky, haze, exposure and grading on the global camera.
 4. **Caches that outlive a world hold `AssetId`s, not strong handles**, or are world resources themselves; a global resource holding strong handles to a world's assets is a leak by construction.
 
-The states: `Travel` is `Entering`, `Playing` or `Leaving`, and a computed state `InWorld` is on while entering and playing, so content spawned while entering is scoped too. The first world of a run is entered the same way as any other: one path.
+The states: `Travel` is `Away`, `Entering`, `Playing` or `Leaving`, and a computed state `InWorld` is on while entering and playing, so content spawned while entering is scoped too. The first world of a run is entered the same way as any other, by the `Cross` command with its spec: one path. A run starts `Away`, in no world, because Bevy runs a state's first `OnEnter` before `PreStartup`, before the camera and settings exist; a run with no world (the workbench) stays there. Entering puts the loading screen up again (D135), the clock held, and `Playing` begins when it comes down; leaving lasts a frame, then the next world is entered, or none.
 
-**The census** (`terra_world::instance::Census`) counts entities by archetype (sorted component names), by `WorldScoped`, `Global` and neither; `Assets<T>` length per registered type; the resources present; and, on screen, the GPU memory by label (`gpu_memory`). It is read as `world.census` through the remote probe, so `r snap` and `r diff` show what a crossing changed.
+**The census** (`terra_world::instance::Census`) counts entities by archetype (sorted component names), by `WorldScoped`, `Global` and neither; `Assets<T>` length per type registered for reflection, and per type a module names (`app.census_assets::<T>()`); the resources present; and, on screen, the GPU memory by label (`gpu_memory`) and the process's resident memory. It is read as `world.census` through the remote probe, so `r snap` and `r diff` show what a crossing changed (the counts; the memory is measured, not compared exactly).
 
 What each part changes:
 
@@ -110,7 +110,7 @@ In the sandbox, with no server: a portal in the forest that unloads the forest a
 
 - **`terra_world::instance`**: `WorldSpec`, `Travel` and `InWorld`, `WorldScoped` and `Global`, `world_resource` and `world_component`, leaving and entering, `Census` and `world.census`.
 - **The modules the forest walk uses** moved onto it, as in the table above.
-- **A second realm**: a small world of another seed and theme from those the sandbox already has (the tundra's), with an arrival beside the portal back; its seed from the forest's seed and the portal's place (`terra_gen::hash`).
+- **A second realm**: a small world of another seed and theme from those the sandbox already has (the tundra's), with an arrival beside the portal back; its seed from the forest's seed and the portal's place (`terra_gen::hash`). It is a **placeholder playground** for world loading, the developers' "more alien style world" made only from parts and parameters the generator already has (another seed, an odd sky and sun colour, a palette shift on the ground and plants, different light), with nothing new that lasts. **What an alien realm looks like is an Open design question**, the developers' to answer; the playground answers none of it.
 - **The portal**: in the forest near the start, crossing on interact under the short fade (D501).
 - **An experiment, `portal`**, standing for the forest walk with the portal (D467's way), with keys to cross for scripted runs.
 

@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ROOT, call, status } from "./client.ts";
 
-export type Snap = { name: string; taken: string; frame: number | null; seconds: number | null; state?: unknown; build?: unknown };
+export type Snap = { name: string; taken: string; frame: number | null; seconds: number | null; state?: unknown; build?: unknown; census?: unknown };
 export type Options = { epsilon?: number; most?: number };
 
 /// A list's things are matched by the first of these they have, rather than by place in
@@ -116,7 +116,7 @@ export function changes(a: unknown, b: unknown, epsilon = 0.01): string[] {
 /// What changed between two snaps, headed by which they are, at most `most` changes and a
 /// count of the rest.
 export function diff(a: Snap, b: Snap, { epsilon = 0.01, most = 40 }: Options = {}): string[] {
-  const found = changes({ state: a.state, build: a.build }, { state: b.state, build: b.build }, epsilon);
+  const found = changes({ state: a.state, build: a.build, census: a.census }, { state: b.state, build: b.build, census: b.census }, epsilon);
   const frame = (s: Snap) => (s.frame === null ? "" : ` (frame ${s.frame})`);
   const head = `${a.name}${frame(a)} -> ${b.name}${frame(b)}: ${found.length ? `${found.length} change${found.length === 1 ? "" : "s"}` : "nothing changed"}`;
   const shown = found.slice(0, most);
@@ -132,12 +132,20 @@ const optional = async (method: string) => {
   }
 };
 
+/// The census's counts (D469), without the memory it measures beside them, which moves
+/// every frame: what a crossing left behind or took away shows in a diff, not noise.
+export const counted = (census: unknown) => {
+  if (!isObject(census)) return census;
+  const { gpu: _gpu, resident_mib: _resident, ...counts } = census;
+  return counts;
+};
+
 /// What the running sandbox says is true now.
 export async function take(name: string): Promise<Snap> {
   const now = await status().catch(() => undefined);
   const [state, build] = [await optional("play.state"), await optional("build.state")];
   if (state === undefined && build === undefined) throw new Error("the run answers neither play.state nor build.state; snaps are of the play experiment");
-  return { name, taken: new Date().toISOString(), frame: now?.frame ?? null, seconds: now?.seconds ?? null, state, build };
+  return { name, taken: new Date().toISOString(), frame: now?.frame ?? null, seconds: now?.seconds ?? null, state, build, census: counted(await optional("world.census")) };
 }
 
 const SNAPS = resolve(ROOT, "shots/snaps");

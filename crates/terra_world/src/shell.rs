@@ -952,6 +952,40 @@ pub fn parse_key(key: &str) -> Option<KeyCode> {
 
 pub struct ShellPlugin(pub Options);
 
+/// The window a run opens, as its options say.
+fn window(options: &Options) -> Window {
+    Window {
+        title: "Terra sandbox".into(),
+        // The application id the desktop knows the window by: an unattended run's its own, so
+        // a desktop can put such windows out of the way (a Hyprland rule sends `terra-unattended`
+        // to a hidden workspace) while a window someone plays in stays where they are.
+        name: Some(
+            if options.unattended() {
+                "terra-unattended"
+            } else {
+                "terra"
+            }
+            .into(),
+        ),
+        // An unattended run needs nobody's attention, and should not take the keyboard
+        // away from whatever is in front, nor sit on top of it.
+        focused: !options.unattended(),
+        window_level: match (options.unattended(), options.on_top) {
+            (true, true) => WindowLevel::AlwaysOnTop,
+            (true, false) => WindowLevel::AlwaysOnBottom,
+            (false, _) => WindowLevel::Normal,
+        },
+        resolution: (1600u32, 900u32).into(),
+        // Vsync hides how long a frame really takes, so benchmarks turn it off.
+        present_mode: if options.bench {
+            PresentMode::AutoNoVsync
+        } else {
+            PresentMode::AutoVsync
+        },
+        ..default()
+    }
+}
+
 impl Plugin for ShellPlugin {
     fn build(&self, app: &mut App) {
         if self.0.scripted() {
@@ -973,36 +1007,7 @@ impl Plugin for ShellPlugin {
             options.vantage_ground = false;
         }
         let readout = !options.clean;
-        let window = Window {
-            title: "Terra sandbox".into(),
-            // The application id the desktop knows the window by: an unattended run's its own, so
-            // a desktop can put such windows out of the way (a Hyprland rule sends `terra-unattended`
-            // to a hidden workspace) while a window someone plays in stays where they are.
-            name: Some(
-                if options.unattended() {
-                    "terra-unattended"
-                } else {
-                    "terra"
-                }
-                .into(),
-            ),
-            // An unattended run needs nobody's attention, and should not take the keyboard
-            // away from whatever is in front, nor sit on top of it.
-            focused: !options.unattended(),
-            window_level: match (options.unattended(), options.on_top) {
-                (true, true) => WindowLevel::AlwaysOnTop,
-                (true, false) => WindowLevel::AlwaysOnBottom,
-                (false, _) => WindowLevel::Normal,
-            },
-            resolution: (1600u32, 900u32).into(),
-            // Vsync hides how long a frame really takes, so benchmarks turn it off.
-            present_mode: if options.bench {
-                PresentMode::AutoNoVsync
-            } else {
-                PresentMode::AutoVsync
-            },
-            ..default()
-        };
+        let window = window(&options);
         if options.unattended() {
             // Its window does not take focus, and a window out of focus is normally only
             // drawn sixty times a second. An unattended run is drawn as fast as it will go.
@@ -1054,6 +1059,8 @@ impl Plugin for ShellPlugin {
             } else {
                 engine.disable::<AudioPlugin>()
             })
+            // World instances first, before any entity with a `Transform` exists (D469).
+            .add_plugins(crate::instance::plugin)
             .add_plugins((
                 loading::plugin,
                 crate::mipmaps::plugin,

@@ -498,6 +498,17 @@ fn memory(In(params): In<Option<Value>>, world: &mut World) -> BrpResult {
     }))
 }
 
+/// The allocator now, by label, every label: for the census (`instance::census`), which
+/// compares one world's memory with what it was on an earlier visit. None without a GPU.
+pub fn now(world: &World) -> Option<Value> {
+    let shared = world.get_resource::<Shared>()?;
+    let state = shared
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    Some(sample_json(&state.now, usize::MAX))
+}
+
 fn say_on_exit(world: &mut World, mut said: Local<bool>) {
     let exited = world
         .get_resource::<Messages<AppExit>>()
