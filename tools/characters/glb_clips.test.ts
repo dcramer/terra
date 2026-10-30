@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { Glb, posed } from "./glb.ts";
 import { glbDiff } from "./glb_diff.ts";
-import { joinClips, putClips } from "./glb_clips.ts";
+import { joinClips, onlyClips, putClips } from "./glb_clips.ts";
 
 const MANNEQUIN = join(import.meta.dirname, "..", "..", "assets/models/character/mannequin.glb");
 
@@ -68,6 +68,20 @@ test("two clips joined play the first and then the second, at its own times", ()
     const got = posed(g, joined, t)[pelvis];
     for (const k of [0, 1, 2]) assert.ok(Math.abs(want.t[k] - got.t[k]) < 1e-4, `${clip.name} at ${at.toFixed(2)} s: ${want.t} against ${got.t}`);
   }
+});
+
+test("a pack cut to two clips puts them in as the whole pack does, and holds nothing else", () => {
+  const m = readFileSync(MANNEQUIN);
+  const names = ["Jump_Start", "Jump_Loop"];
+  const cut = onlyClips(m, names);
+  const c = new Glb(cut);
+  assert.deepEqual(c.clipNames().sort(), [...names].sort());
+  assert.equal(c.gltf.meshes, undefined, "no mesh");
+  assert.ok(cut.length < m.length / 4, `${m.length} -> ${cut.length} bytes`);
+  const whole = putClips(m, joinClips(m, "Joined", names), ["Joined"]);
+  const fromCut = putClips(m, joinClips(cut, "Joined", names), ["Joined"]);
+  assert.deepEqual(values(fromCut), values(whole));
+  assert.throws(() => onlyClips(m, ["No_Such_Clip"]), /No_Such_Clip/);
 });
 
 /** A JSON chunk's header and body, padded. */

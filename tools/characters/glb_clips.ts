@@ -288,10 +288,39 @@ export function joinClips(source: Buffer, name: string, parts: string[]): Buffer
 /** The file with data nothing reads dropped from its buffer. */
 export const compact = (bytes: Buffer): Buffer => putClips(bytes, bytes, []);
 
+/**
+ * Only the skeleton and the named clips of `source`: no mesh, skin, material or image, every
+ * other clip dropped, the nodes and their rest kept, so `putClips` reads it as it reads the
+ * whole pack. A bought library is cut to what the game plays this way and that is committed.
+ */
+export function onlyClips(source: Buffer, names: string[]): Buffer {
+  const { json, bin } = chunks(source) as { json: Gltf & Record<string, unknown>; bin: Buffer };
+  const missing = names.filter((n) => !json.animations?.some((a) => a.name === n));
+  if (missing.length) throw new Error(`glb_clips: no clip ${missing.join(", ")} in the source; name its clips as the pack does`);
+  const { meshes: _m, skins: _s, materials: _ma, textures: _t, images: _i, samplers: _sa, ...rest } = json;
+  const nodes = json.nodes.map((n) => {
+    const { mesh: _nm, skin: _ns, ...node } = n as Record<string, unknown>;
+    return node;
+  });
+  const animations = (json.animations ?? []).filter((a) => names.includes(a.name));
+  return compact(glbBytes({ ...rest, nodes, animations }, bin));
+}
+
 if (import.meta.main) {
+  if (process.argv[2] === "--only") {
+    const [out, source, ...names] = process.argv.slice(3);
+    if (!out || !source || !names.length) {
+      console.log("usage: node tools/characters/glb_clips.ts --only OUT.glb SOURCE.glb CLIP...");
+      process.exit(2);
+    }
+    const bytes = onlyClips(readFileSync(source), names);
+    writeFileSync(out, bytes);
+    console.log(`CLIPS kept ${names.length} of ${source} in ${out}, ${(bytes.length / 1024).toFixed(0)} KB, the skeleton and no mesh`);
+    process.exit(0);
+  }
   const [target, source, ...given] = process.argv.slice(2);
   if (!target || !source || !given.length) {
-    console.log("usage: node tools/characters/glb_clips.ts TARGET.glb SOURCE.glb CLIP|NEW=A+B...");
+    console.log("usage: node tools/characters/glb_clips.ts TARGET.glb SOURCE.glb CLIP|NEW=A+B...\n       node tools/characters/glb_clips.ts --only OUT.glb SOURCE.glb CLIP...");
     process.exit(2);
   }
   const before = readFileSync(target);
