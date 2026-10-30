@@ -51,7 +51,7 @@ Each step ends with a film on the desk and the developer's yes before the next s
 2. **The locomotion set at matched speeds:** idle, walk, jog, sprint, from the pick in step 1.
    - The game's speeds are set to the clips', or clips are retaken at the game's speeds (a design call, from the film).
    - Then starts, stops and turns, from the same source.
-3. **Carry overlays:** a pose from a clip for each way of holding. They replace carry_hand and arms (the per-frame twists), which are deleted.
+3. **Carry overlays:** a pose from a clip for each way of holding. They replace carry_hand and arms (the per-frame twists), which are deleted. The carried arm swings with the stride by the loop's own additive arm clip at the pose's share (D584's log, 2026-10-30).
 4. **Swims:** done 2026-10-30 (Uthana, lying in the water). Open faults: the quiver shows skin in the dive, and the tread reads as a squat.
 5. **The fight set:** each blow made striking, from the bought packs where they have it, Uthana otherwise. Hand IK only, by the same ladder (raw, carried, in game).
 6. **Then attachments and assembled items resume** (D565), on bodies that move right.

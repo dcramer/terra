@@ -45,6 +45,8 @@ impl Baked {
                 Some(each) => {
                     self.0.insert(clip.id(), each.clone());
                 }
+                // An arm's additive swing plants no foot (`arm_swing`).
+                None if crate::layer::swing_of(name).is_some() => {}
                 None => {
                     warn!("The clip {name} has no foot-down markers (tools/characters/markers.ts).")
                 }
@@ -754,7 +756,12 @@ mod tests {
             .unwrap();
             let paces: HashMap<String, f32> =
                 serde_json::from_value(crate::model_files::extra(&json, "paces").unwrap()).unwrap();
-            for clip in crate::model_files::animations(&json) {
+            // An arm's additive swing plants no foot: it plays over its loop (`arm_swing`).
+            let played = crate::model_files::animations(&json);
+            for clip in played
+                .into_iter()
+                .filter(|c| crate::layer::swing_of(c).is_none())
+            {
                 let each = markers
                     .get(&clip)
                     .unwrap_or_else(|| panic!("{file}: {clip} has no markers"));
