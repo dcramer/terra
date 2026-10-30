@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { paced, strike } from "./phases.ts";
+import { contactOf, paced, strike } from "./phases.ts";
 import type { V3 } from "./glb.ts";
 
 const STEP = 1 / 60;
@@ -49,4 +49,21 @@ test("a fast sweep round the body strikes over the few frames its tip passes the
   assert.ok(p.active[0] > 0.505 && p.active[1] < 0.595, `span ${p.active}: the frames ahead, inside the sweep`);
   assert.ok(p.fastest!.tip[2] > 0.5 && p.fastest!.pace > 25, `fastest ${p.fastest!.pace} m/s, ${p.fastest!.tip[2]} m ahead`);
   assert.equal(p.jumps.length, 0, "a sweep, not a jump");
+});
+
+test("a blow lands where its tip is furthest ahead: a sweep at the front, a thrust at full reach", () => {
+  // A sweep round the body, 1.3 m from the hips, right to left; fastest past the front, 60 deg
+  // round the left, as a bought take's often is.
+  const sweep = [-90, -45, 0, 30, 60, 90].map((deg, i) => {
+    const r = (deg * Math.PI) / 180;
+    return { t: i / 60, tip: [1.3 * Math.sin(r), 0, 1.3 * Math.cos(r)] as V3, speed: deg === 60 ? 80 : 30 };
+  });
+  const fastest = sweep.reduce((a, b) => (b.speed > a.speed ? b : a));
+  assert.ok(Math.abs((Math.atan2(fastest.tip[0], fastest.tip[2]) * 180) / Math.PI) > 35, "its fastest frame is off to the side");
+  const hit = contactOf(sweep)!;
+  assert.ok(Math.abs(hit.tip[0]) < 1e-6 && Math.abs(hit.tip[2] - 1.3) < 1e-6, `lands ahead: ${hit.tip}`);
+  // A thrust out to the right of ahead and in to 1.75 m, then drawn back.
+  const thrust = [0.2, 0.9, 1.5, 1.75, 1.6, 1.2].map((z, i) => ({ t: i / 60, tip: [-0.3, 0.3, z] as V3 }));
+  assert.equal(contactOf(thrust)!.tip[2], 1.75);
+  assert.equal(contactOf([]), undefined);
 });
