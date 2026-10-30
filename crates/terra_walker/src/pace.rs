@@ -9,8 +9,17 @@ use std::collections::HashMap;
 use bevy::gltf::{Gltf, GltfNode};
 use bevy::prelude::*;
 
-/// The slowest and fastest a clip is played, against its own speed: past these it looks
-/// wrong whatever its feet do, and another clip should be playing.
+/// How far a gait's clip may be stretched to its speed (docs/animation.md rule 1, D585): at the
+/// speed its gait moves a body, a clip plays at most this share faster or slower than made and
+/// its stride is warped at most this share longer (Unreal's stride warping keeps to this
+/// range). A speed past both wants its own clip, or the game's speed fitted to the clip
+/// (project-whiskeyjack moved its jog rather than stretch it), never a longer stretch:
+/// `matched` says which clip and speed break it.
+pub const MATCHED: f32 = 0.1;
+
+/// The slowest and fastest a clip is played, against its own speed, between its gait's speeds
+/// alone (a start, a stop, a change of gait): past these it looks wrong whatever its feet do,
+/// and another clip should be playing.
 const SLOWEST: f32 = 0.5;
 const FASTEST: f32 = 1.6;
 
@@ -50,10 +59,11 @@ pub fn size(place: &GlobalTransform, own: &Transform) -> f32 {
 }
 
 /// The longest a stride is warped, against its clip's: past it a leg reaches too far, and
-/// another clip should be playing. A stride is only lengthened: a body slower than its clip
-/// plays at the slowest has a slower gait's clip to play (Lyra's walk under its jog), and its
-/// locked feet hold it meanwhile (a start, a landing's slowing).
-const LONGEST_STRIDE: f32 = 1.4;
+/// another clip should be playing (`MATCHED`; it was 1.4, and the sprint's legs bent). A stride
+/// is only lengthened: a body slower than its clip plays at the slowest has a slower gait's
+/// clip to play (Lyra's walk under its jog), and its locked feet hold it meanwhile (a start, a
+/// landing's slowing).
+const LONGEST_STRIDE: f32 = 1.0 + MATCHED;
 
 /// How a stride clip is shown at a speed: played `rate` times as fast and its feet's travel
 /// along the way stretched `warp` times (stride warping), so the ground its planted feet stand
@@ -74,11 +84,12 @@ impl Gait {
 
 /// How to show a stride clip of `pace` (metres a second, on a body of the base's height) for a
 /// body `scale` times that height moving at `speed`, as Lyra matches a cycle to the capsule's
-/// speed: played as fast as the speed asks within `SLOWEST`-`FASTEST` first, and what the play
-/// rate cannot cover taken by warping the stride (Unreal's Stride Warping, its documentation:
-/// stride scale = locomotion speed over the animation's), up to `LONGEST_STRIDE`. A man's sprint at 7.4 m/s from a 3.9 m/s clip of 2.4 steps a second of
-/// 1.6 m is shown at about 3.8 steps a second of 1.9 m, a real sprinter's; a jog within the
-/// play rate is not warped. Standing still plays slowest, unwarped.
+/// speed: played up to `MATCHED` faster first, then its stride warped up to `LONGEST_STRIDE`
+/// (Unreal's Stride Warping, its documentation: stride scale = locomotion speed over the
+/// animation's), then played faster still, to `FASTEST`, only for a speed between gaits (a
+/// change of gait, a start); slower than its clip, played slower to `SLOWEST`, unwarped. A gait
+/// at its own speed is shown within `MATCHED` of as made (`matched`). Standing still plays
+/// slowest, unwarped.
 pub fn gait(speed: f32, pace: f32, scale: f32) -> Gait {
     if pace <= 0.0 || scale <= 0.0 {
         return Gait::AS_MADE;
@@ -90,11 +101,36 @@ pub fn gait(speed: f32, pace: f32, scale: f32) -> Gait {
             warp: 1.0,
         };
     }
-    let rate = need.clamp(SLOWEST, FASTEST);
+    let warp = (need / need.clamp(SLOWEST, 1.0 + MATCHED)).clamp(1.0, LONGEST_STRIDE);
     Gait {
-        rate,
-        warp: (need / rate).clamp(1.0, LONGEST_STRIDE),
+        rate: (need / warp).clamp(SLOWEST, FASTEST),
+        warp,
     }
+}
+
+/// Whether a gait's clip `clip` of `pace` is shown within `MATCHED` of as made at its gait's
+/// own `speed` (on a body of the base's height), and if not, what breaks the rule and what to
+/// do (docs/animation.md rule 1, D585).
+pub fn matched(clip: &str, pace: f32, speed: f32) -> Result<Gait, String> {
+    let shown = gait(speed, pace, 1.0);
+    let off = stretch(speed, pace, 1.0);
+    if off <= MATCHED + 1e-4 {
+        return Ok(shown);
+    }
+    let (low, high) = (
+        pace * (1.0 - MATCHED),
+        pace * (1.0 + MATCHED) * LONGEST_STRIDE,
+    );
+    Err(format!(
+        "{clip} (made at {pace:.2} m/s) is shown at {speed:.2} m/s played x{:.2}, stride x{:.2}, \
+         {:.0}% off as made, past the {:.0}% a gait's clip may be stretched (docs/animation.md \
+         rule 1, D585): move the gait's speed within {low:.2}-{high:.2} m/s, or make the clip at \
+         {speed:.2} m/s (motion.ts); never widen MATCHED or the stride warp",
+        shown.rate,
+        shown.warp,
+        off * 100.0,
+        MATCHED * 100.0
+    ))
 }
 
 /// How far from as made a stride clip of `pace` is shown at `speed` (`gait`), the larger of
@@ -118,15 +154,17 @@ mod tests {
     use super::*;
 
     /// `pace.match` (docs/controller.md criterion 21c): each gait's clip in the figure's file
-    /// against the speed a man moves while it plays, the worst `stretch`; printed for the
-    /// controller's scorecard.
+    /// against the speed a man moves while it plays, the worst `stretch`, printed for the
+    /// controller's scorecard; and each within `MATCHED` of as made (D585), or the test fails
+    /// naming the clip and the speed.
     #[test]
-    fn the_gaits_stride_as_fast_as_a_man_moves() {
+    fn each_gait_is_shown_within_a_tenth_of_its_clip_at_its_speed() {
         let clips = crate::model_files::json(crate::figure::CLIPS);
         let paces: HashMap<String, f32> =
             serde_json::from_value(crate::model_files::extra(&clips, "paces").unwrap()).unwrap();
         let man = crate::movement::man();
         let mut worst = 0.0f32;
+        let mut broken = Vec::new();
         for (clip, speed) in [("Jog_Fwd_Loop", man.jog), ("Sprint_Loop", man.sprint)] {
             let pace = paces.get(clip).copied().unwrap_or(0.0);
             let shown = gait(speed, pace, 1.0);
@@ -136,35 +174,43 @@ mod tests {
                 shown.rate, shown.warp
             );
             worst = worst.max(each);
+            broken.extend(matched(clip, pace, speed).err());
         }
         println!("scorecard\tpace.match\t{worst}");
-        assert!(worst.is_finite(), "a gait with no pace");
+        assert!(broken.is_empty(), "{}", broken.join("\n"));
     }
 
     #[test]
-    fn a_stride_is_played_faster_first_and_warped_for_the_rest() {
+    fn a_stride_is_played_a_tenth_faster_then_warped_a_tenth_then_faster_between_gaits() {
         // A clip made at the speed is shown as made.
         assert_eq!(gait(4.0, 4.0, 1.0), Gait::AS_MADE);
         assert_eq!(stretch(4.0, 4.0, 1.0), 0.0);
-        // Within the play rate's span, played faster or slower, never warped.
-        assert_eq!(gait(5.0, 4.0, 1.0).warp, 1.0);
-        assert!((gait(5.0, 4.0, 1.0).rate - 1.25).abs() < 1e-5);
-        // A sprint at nearly twice its clip's pace: played as fast as it may be, its stride
-        // warped the rest, matching the speed.
-        let sprint = gait(7.4, 3.9, 1.0);
-        assert_eq!(sprint.rate, FASTEST);
-        assert!(
-            sprint.warp > 1.1 && sprint.warp < LONGEST_STRIDE,
-            "{sprint:?}"
-        );
-        assert!((3.9 * sprint.rate * sprint.warp - 7.4).abs() < 1e-4);
-        assert!(stretch(7.4, 3.9, 1.0) <= FASTEST - 1.0 + 1e-5);
-        // Past both, the ground passes faster than the stride shown and the stretch says so.
+        // Within a tenth, played faster or slower, never warped.
+        assert_eq!(gait(4.3, 4.0, 1.0).warp, 1.0);
+        assert!((gait(4.3, 4.0, 1.0).rate - 1.075).abs() < 1e-5);
+        assert!((gait(3.7, 4.0, 1.0).rate - 0.925).abs() < 1e-5);
+        // Past it, played a tenth faster and the rest warped, up to a tenth longer: still
+        // matched, the ground passing as fast as the stride shown.
+        let warped = gait(4.6, 4.0, 1.0);
+        assert!((warped.rate - 1.1).abs() < 1e-5, "{warped:?}");
+        assert!((4.0 * warped.rate * warped.warp - 4.6).abs() < 1e-4);
+        assert!(matched("a jog", 4.0, 4.6).is_ok());
+        // Past both, played faster still, a speed between gaits, where no gait may stand.
+        let between = gait(5.6, 4.0, 1.0);
+        assert_eq!(between.warp, LONGEST_STRIDE);
+        assert!((4.0 * between.rate * between.warp - 5.6).abs() < 1e-4);
+        let why = matched("Sprint_Loop", 3.9, 7.4).unwrap_err();
+        assert!(why.contains("Sprint_Loop") && why.contains("7.40"), "{why}");
+        // A slower speed is played slower, never shortened.
+        assert!(matched("a jog", 4.0, 3.5).is_err());
+        assert_eq!(gait(3.5, 4.0, 1.0).warp, 1.0);
+        // Past every limit, the ground passes faster than the stride shown and the stretch
+        // says so.
         let fast = gait(FASTEST * LONGEST_STRIDE * 1.5, 1.0, 1.0);
         assert_eq!((fast.rate, fast.warp), (FASTEST, LONGEST_STRIDE));
         assert!(stretch(FASTEST * LONGEST_STRIDE * 1.5, 1.0, 1.0) >= 0.5 - 1e-5);
         // A taller body takes longer strides: the same speed asks less of its clip.
-        assert!(gait(7.4, 3.9, 1.1).warp < gait(7.4, 3.9, 1.0).warp);
+        assert!(gait(4.6, 4.0, 1.1).warp < gait(4.6, 4.0, 1.0).warp);
         // Standing still plays slowest, unwarped; no pace is no stride to show.
         assert_eq!(gait(0.0, 3.9, 1.0).warp, 1.0);
         assert_eq!(gait(3.0, 0.0, 1.0), Gait::AS_MADE);

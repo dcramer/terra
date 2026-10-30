@@ -30,8 +30,8 @@ pub mod check;
 
 pub use animals::{Animal, Animals};
 pub use life::{
-    Arrival, Detail, FULL_M, JOG_PACE, Life, Person, REDUCED_M, Record, Shows, Spot, State,
-    WALK_PACE,
+    Arrival, Detail, FULL_M, GAIT_SPREAD, JOG_PACE, Life, Person, REDUCED_M, Record, Shows, Spot,
+    State, WALK_PACE,
 };
 pub use plan::Plan;
 

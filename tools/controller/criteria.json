@@ -1422,7 +1422,7 @@
    "check": {
     "by": "test",
     "crate": "terra_walker",
-    "test": "pace::tests::the_gaits_stride_as_fast_as_a_man_moves"
+    "test": "pace::tests::each_gait_is_shown_within_a_tenth_of_its_clip_at_its_speed"
    },
    "cost": "cheap",
    "measurable": true

@@ -767,7 +767,7 @@ fn doing(
         Doing::Guard
     } else if airborne > 0.12 {
         Doing::Fall
-    } else if speed > 5.6 {
+    } else if speed > crate::movement::SPRINT_FROM {
         Doing::Sprint
     } else if speed > 0.5 {
         Doing::Jog
@@ -801,21 +801,29 @@ mod tests {
     /// one taking over, as far on to the next plant. Restarted at 0 (as every switch was), the
     /// sprint came in with the other foot down and the planted one slid (sprint 29.6 cm).
     #[test]
-    fn a_switch_from_jog_to_sprint_keeps_the_planted_foots_phase() {
+    fn a_switch_between_gaits_keeps_the_planted_foots_phase() {
         let json = crate::model_files::json(CLIPS);
         let markers: HashMap<String, Markers> =
             serde_json::from_value(crate::model_files::extra(&json, "markers").unwrap()).unwrap();
         let paces: HashMap<String, f32> =
             serde_json::from_value(crate::model_files::extra(&json, "paces").unwrap()).unwrap();
+        // Every pair of gaits, the walk too (D585's one stride clock): the clock is each
+        // clip's plants (`Markers::synced`), so one foot is down in both.
         for (from, to) in [
             ("Jog_Fwd_Loop", "Sprint_Loop"),
             ("Sprint_Loop", "Jog_Fwd_Loop"),
+            ("Walk_Loop", "Jog_Fwd_Loop"),
+            ("Jog_Fwd_Loop", "Walk_Loop"),
+            ("Walk_Loop", "Sprint_Loop"),
+            ("Sprint_Loop", "Walk_Loop"),
         ] {
             let (was, now) = (&markers[from], &markers[to]);
-            // Each plant of the one giving way, just after it comes down.
+            // Each plant of the one giving way, just after it comes down (not a foot still
+            // down over the loop's seam, a span at 0 beside one that wraps round its end).
             let downs = [&was.foot_down_l, &was.foot_down_r];
             for (side, spans) in downs.into_iter().enumerate() {
-                for span in spans {
+                let wraps = spans.iter().any(|span| span[1] < span[0]);
+                for span in spans.iter().filter(|span| !(wraps && span[0] <= 1e-4)) {
                     let t = span[0] + 0.02;
                     let at = synced(&markers, &paces, from, t, to).unwrap();
                     assert!(
@@ -840,7 +848,7 @@ mod tests {
     /// frame strides no faster than it moves.
     #[test]
     fn the_figure_strides_as_fast_as_the_shown_body_goes_and_no_faster() {
-        let (dt, up, jog) = (1.0 / 60.0, Vec3::Y, Vec3::X * 4.3);
+        let (dt, up, jog) = (1.0 / 60.0, Vec3::Y, Vec3::X * crate::movement::JOG_SPEED);
         let at = Vec3::new(3.0, 2000.0, 1.0);
         let shown = |to: Vec3| shown_velocity(jog, Some(at), to, up, dt);
         let held = shown(at);

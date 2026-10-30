@@ -122,7 +122,7 @@ pub fn effort(motion: &Motion, stance: &Stance) -> Effort {
     let speed = motion.velocity.length();
     if stance.since_acting < 0.3 {
         Effort::Working
-    } else if speed > 5.6 {
+    } else if speed > terra_walker::movement::SPRINT_FROM {
         Effort::Sprinting
     } else if speed > 0.5 {
         Effort::Moving

@@ -468,6 +468,7 @@ The look, models, bodies and gear, textures and audio.
 | [D565](decisions/D565.md) | Weapons and tools are assembled from parts by rules | Design | Developers | Decided | Every ordinary weapon and tool is assembled from a few… |
 | [D567](decisions/D567.md) | Six kinds' holds: a one-hander blocks alone, the pickaxe is two-handed, the spear upright, the torch put out at the hip, the bow low in the left hand, the basket in the off hand | Design | Developers | Decided | The six questions the kinds table left to the developers… |
 | [D584](decisions/D584.md) | A body moves as its clip says; the game adds only foot placement, look-at and hand IK | Tech | Agent | Decided | What a body shows is the clip made for what it does… |
+| [D585](decisions/D585.md) | A gait's clip is shown within a tenth of as made at its speed; the game's speeds are fitted to the clips | Tech | Agent | Decided | Every gait (walk, jog, sprint) is played at the speed… |
 
 ## Engine and code
 

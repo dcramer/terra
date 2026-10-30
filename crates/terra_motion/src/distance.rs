@@ -148,12 +148,21 @@ impl Markers {
     }
 
     /// A loop's plants (foot, seconds), in order, every one: in a loop a plant at its first
-    /// instant is a step like any other.
+    /// instant is a step like any other, unless it is the foot still down from a plant that
+    /// wraps round the loop's end (a span ending before it starts), which is no step: the
+    /// walk's right foot, down over its seam, read as planted at 0 beside the left and synced
+    /// the walk's left plant to the jog's right (D585's one stride clock).
     fn loop_steps(&self) -> Vec<(usize, f32)> {
         let mut out: Vec<(usize, f32)> = [&self.foot_down_l, &self.foot_down_r]
             .into_iter()
             .enumerate()
-            .flat_map(|(side, spans)| spans.iter().map(move |span| (side, span[0])))
+            .flat_map(|(side, spans)| {
+                let wraps = spans.iter().any(|span| span[1] < span[0]);
+                spans
+                    .iter()
+                    .filter(move |span| !(wraps && span[0] <= 1e-4))
+                    .map(move |span| (side, span[0]))
+            })
             .collect();
         out.sort_by(|a, b| a.1.total_cmp(&b.1));
         out

@@ -29,10 +29,10 @@ const PASSED_M: f32 = 0.7;
 const ARRIVED_M: f32 = 0.2;
 /// How near a door or a gate counts as through it.
 const THRESHOLD_M: f32 = 0.9;
-/// The walk's and jog's own paces on the base body, metres a second (`pace.rs`): a walker's
-/// speed is a share of these, so its feet do not slide.
-pub const WALK_PACE: f32 = 1.112;
-pub const JOG_PACE: f32 = 2.325;
+/// The walk's and jog's paces on the base body (m/s) and a walker's spread off them (D585).
+pub const WALK_PACE: f32 = 1.099;
+pub const JOG_PACE: f32 = 3.678;
+pub const GAIT_SPREAD: f32 = 0.08;
 
 /// How detailed someone is kept, by how near the nearest viewer is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -592,13 +592,13 @@ impl Life {
                 } else {
                     0.94 + unit(&[seed, 3, id]) * 0.12
                 };
-                let stride = 1.0 + unit(&[seed, 4, id]) * 0.18;
+                let spread = |n: u32| 1.0 + (unit(&[seed, n, id]) * 2.0 - 1.0) * GAIT_SPREAD;
                 people.push(Person {
                     home: doors[home],
                     scale,
                     radius: RADIUS_M * if child { 0.8 } else { 1.0 },
-                    walk: WALK_PACE * scale * stride,
-                    run: JOG_PACE * scale * (1.0 + unit(&[seed, 5, id]) * 0.15),
+                    walk: WALK_PACE * scale * spread(4),
+                    run: JOG_PACE * scale * spread(5),
                     lane: (unit(&[seed, 6, id]) - 0.5) * 1.8,
                     ..draft
                 });

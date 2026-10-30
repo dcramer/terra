@@ -26,7 +26,7 @@ This is the method every job that changes how a body moves follows. D584 holds t
 
 ## The method
 
-1. **The speed comes from the clip.** Every moving clip is made at the speed the game moves the body, or the game moves the body at the clip's own speed.
+1. **The speed comes from the clip** (D585, held by `terra_walker::pace::matched` and its tests). Every moving clip is made at the speed the game moves the body, or the game moves the body at the clip's own speed.
    - Small mismatches are covered by playing a little faster or slower, at most 10%. Stretching the stride, at most 10% (Unreal's stride warping keeps to this range).
    - A gait that needs more gets its own clip: walk, jog, sprint, each at its own speed, blended by speed.
    - Each clip's speed is measured from its planted foot. Where the clamp can't reach the game's speed, change the game's speed or make a new clip; never stretch past it (others did the same: project-whiskeyjack moved 4.0 to 4.6 m/s rather than stretch).

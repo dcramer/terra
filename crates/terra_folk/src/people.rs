@@ -34,8 +34,10 @@ use terra_world::tick::{Sim, Smoothed};
 const BLEND: Duration = Duration::from_millis(220);
 /// How close the spiders may be while a prisoner is freed.
 const GUARDED_M: f32 = 16.0;
-const WALK_MPS: f32 = 1.5;
-const JOG_MPS: f32 = 4.6;
+/// How fast someone walks and jogs: their clips' own paces (D585), the jog a little over to
+/// catch up with a player jogging (`terra_walker::movement::JOG_SPEED`).
+const WALK_MPS: f32 = terra_town::WALK_PACE;
+const JOG_MPS: f32 = terra_town::JOG_PACE * (1.0 + terra_town::GAIT_SPREAD);
 
 /// What someone is doing.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -726,5 +728,33 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The town's walk and jog paces are the base body's clips' own, and every speed someone
+    /// walks or jogs at, here or in a town, is shown within a tenth of its clip (D585): the
+    /// walk was played 1.37 times as fast as made, and the town's runners at 0.63.
+    #[test]
+    fn people_walk_and_jog_within_a_tenth_of_their_clips() {
+        let file = model_files::json(appearance::BASE);
+        let mut broken = Vec::new();
+        for (clip, town) in [
+            ("Walk_Loop", terra_town::WALK_PACE),
+            ("Jog_Fwd_Loop", terra_town::JOG_PACE),
+        ] {
+            let pace = model_files::pace(&file, clip);
+            assert!(
+                (town / pace - 1.0).abs() < 0.01,
+                "terra_town's pace for {clip} is {town}, its clip's {pace}: set it to the clip's"
+            );
+            let spread = terra_town::GAIT_SPREAD;
+            for speed in [town * (1.0 - spread), town * (1.0 + spread)] {
+                broken.extend(terra_walker::pace::matched(clip, pace, speed).err());
+            }
+        }
+        for (clip, speed) in [("Walk_Loop", WALK_MPS), ("Jog_Fwd_Loop", JOG_MPS)] {
+            let pace = model_files::pace(&file, clip);
+            broken.extend(terra_walker::pace::matched(clip, pace, speed).err());
+        }
+        assert!(broken.is_empty(), "{}", broken.join("\n"));
     }
 }

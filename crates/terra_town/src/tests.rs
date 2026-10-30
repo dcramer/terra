@@ -101,7 +101,11 @@ fn everyone_has_a_home_and_a_role_and_owners_own_what_they_work() {
         if life.role(index) == "child" {
             assert!(person.scale < 0.8 && person.walk < crate::WALK_PACE);
         }
-        assert!(person.walk < crate::WALK_PACE * person.scale * 1.6);
+        let walk = person.walk / (crate::WALK_PACE * person.scale);
+        let run = person.run / (crate::JOG_PACE * person.scale);
+        for share in [walk, run] {
+            assert!((share - 1.0).abs() <= crate::GAIT_SPREAD + 1e-5, "{share}");
+        }
     }
     // Every home is lived in, by the plan's household at most.
     let (_, most) = life.plan.household;
@@ -349,8 +353,11 @@ fn a_town_started_settled_is_in_mid_flow_not_stood_still() {
     let viewer = square(&settled);
     settled.start_settled(8.5, viewer);
     let settled = walking_after(&mut settled, 8.5);
+    // Settled, well over the cold town's walkers: 1.75 times since walkers go at the walk
+    // clip's own pace (D585), about a tenth slower, so the cold town's first trips take
+    // longer too (20.3 against 10.8 walkers, 1.87 times; the bar was 2).
     assert!(
-        settled > cold * 2.0 && settled >= 3.0,
+        settled > cold * 1.75 && settled >= 3.0,
         "walking: {settled} settled, {cold} cold"
     );
 }
