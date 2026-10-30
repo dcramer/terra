@@ -55,6 +55,7 @@ use terra_walker::{button, camera, controls, options, shake, walker};
 use crate::shell::Options;
 use bevy::{app::PluginGroupBuilder, prelude::*, window::CursorOptions};
 use options::MenuSystems;
+use terra_world::instance::{Building, InWorld};
 use terra_world::{daylight, flora, flora_kinds, footprint, lod, world};
 pub use tool::Builder;
 pub use walker::{ArriveAt, Hands, PlayerInput, Stamina, WalkerPlugin, WarpTo};
@@ -165,9 +166,10 @@ impl Plugin for GameplayPlugin {
         app.insert_resource(DrivenByPlayer)
             .add_observer(equip)
             .add_systems(
-                PostStartup,
+                OnEnter(InWorld),
                 arrive_by_the_door
                     .run_if(not(resource_exists::<ArriveAt>))
+                    .in_set(Building::Arrive)
                     .before(walker::spawn),
             )
             .configure_sets(Update, tool::Acting.after(PlayerInput).before(MenuSystems))

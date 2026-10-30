@@ -6,14 +6,15 @@
 //! `assets/shaders/ground.wesl` and the sea's in `assets/shaders/water.wesl`; both reload
 //! when saved.
 
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::shell::Options;
 use crate::sky::Sky;
 use sea::{WaterExtension, sea_waves};
 
+pub mod entering;
 mod sea;
 use bevy::math::DVec3;
 use bevy::{
-    camera_controller::free_camera::FreeCamera,
     image::{ImageArrayLayout, ImageLoaderSettings},
     input::common_conditions::input_toggle_active,
     light::NotShadowCaster,
@@ -405,9 +406,9 @@ struct Sea;
 #[derive(Component)]
 struct Sun;
 
-/// The camera the world is seen through; others, as the item icons' (`icons`), draw into images.
+/// The camera the world is seen through, outliving every world (D469); others draw into images.
 #[derive(Component)]
-#[require(crate::parting::CameraSubject)]
+#[require(crate::parting::CameraSubject, crate::instance::Global)]
 pub struct MainCamera;
 
 pub type GroundMaterial = ExtendedMaterial<StandardMaterial, GroundExtension>;
@@ -758,70 +759,28 @@ impl GroundExtension {
     }
 }
 
+/// The planet, its start and its ground: the land of every world entered (D469), made from
+/// its spec. The first world's is made here too, for what start-up still reads of it; the
+/// systems that read it at start-up move to entering a module at a time (docs/instances.md).
 pub fn plugin(app: &mut App) {
     let options = app.world().resource::<Options>();
-    let (radius_m, yard, rolling) = (options.radius_m, options.yard(), options.rolling);
-    let spec = PlanetSpec {
-        seed: Seed(1),
-        radius_m,
-    };
-    crate::crash::note("seed", spec.seed.0);
-    let mut planet = if yard && rolling {
-        Planet::rolling(spec)
-    } else if yard {
-        Planet::smooth(spec)
-    } else {
-        Planet::new(spec)
-    };
-    let tweaks = Tweaks {
-        sun_direction: Vec3::new(0.5, 0.75, 0.45),
-        sun_color: Color::WHITE,
-        sun_illuminance: 12_000.0,
-        light_direction: Vec3::ZERO,
-        light_size: 0.0,
-        sea: !yard,
-        sea_level_m: SEA_LEVEL_M,
-        sea_shallow: Color::srgb(0.1, 0.38, 0.5),
-        sea_deep: Color::srgb(0.02, 0.1, 0.24),
-        ground_low: Color::srgb(0.42, 0.33, 0.26),
-        ground_high: Color::srgb(0.72, 0.66, 0.58),
-        ground_steep: Color::srgb(0.3, 0.27, 0.25),
-        ground_faceted: false,
-        ground_cover: 0.0,
-        grass_dry: Color::srgb(0.6, 0.58, 0.26),
-        grass_lush: Color::srgb(0.3, 0.5, 0.2),
-        sand: Color::srgb(0.84, 0.74, 0.55),
-    };
-    // On a world with mountains, the land round the start is worked out before anything stands
-    // on it (D322): its lakes, seasons and snow on the clock's date. A site the land's rules
-    // make is found first, and the start stood on its shore once its lakes are known.
-    let day = {
-        let options = app.world().resource::<Options>();
-        let climate: terra_climate::Climate =
-            crate::data::read(crate::daylight::WorldClimate::FILE);
-        options.date.map_or(0, |date| date.day(&climate.year))
-    };
-    let start = match app.world().resource::<Options>().site.clone() {
-        Some(name) => {
-            let found = crate::start::find_site(&planet, &name);
-            planet.look_round(found.middle(), ROUND_M, day);
-            planet.clear_woods(|land| found.clearings(land));
-            app.insert_resource(crate::start::Sited(found));
-            found.start(&planet)
-        }
-        None => {
-            let start = crate::start::Start::choose(&planet, yard);
-            if planet.has_mountains() {
-                planet.look_round(start.translation, ROUND_M, day);
-            }
-            start
-        }
-    };
+    let (planet, start, sited) = entering::land_of(&entering::first_world(options), options);
+    let tweaks = entering::tweaks(options.yard());
+    if let Some(sited) = sited {
+        app.insert_resource(sited);
+    }
     app.insert_resource(planet)
         .insert_resource(start)
         .insert_resource(tweaks)
-        .init_resource::<GroundCoverMap>()
-        .init_resource::<crate::climate::ClimateMaps>()
+        .world_resource::<Planet>()
+        .world_resource::<crate::start::Start>()
+        .world_resource::<crate::start::Sited>()
+        .world_resource::<Tweaks>()
+        .world_resource::<GroundTextures>()
+        .world_resource::<LandMap>()
+        .world_resource::<GroundLook>()
+        .init_world_resource::<GroundCoverMap>()
+        .init_world_resource::<crate::climate::ClimateMaps>()
         // The ground is drawn at a quality, chosen by the world layer when it runs; the
         // default otherwise, as on the workbench.
         .init_resource::<crate::quality::Quality>()
@@ -840,7 +799,18 @@ pub fn plugin(app: &mut App) {
             ResourceInspectorPlugin::<Tweaks>::default()
                 .run_if(input_toggle_active(false, KeyCode::F2)),
         )
-        .add_systems(Startup, setup)
+        .add_systems(
+            Startup,
+            (entering::spawn_camera, entering::cross_to_the_first),
+        )
+        .add_systems(
+            OnEnter(InWorld),
+            (
+                entering::land.in_set(Building::Land),
+                setup.in_set(Building::Place),
+                entering::stand_the_camera.in_set(Building::Arrive),
+            ),
+        )
         .add_systems(Update, sea_waves)
         .add_systems(
             Update,
@@ -866,7 +836,6 @@ fn setup(
     mut images: ResMut<Assets<Image>>,
     assets: Res<AssetServer>,
 ) {
-    let radius_m = planet.radius_m();
     let textures = GroundTextures::load(&assets);
     let land = planet
         .round()
@@ -913,28 +882,6 @@ fn setup(
         Sun,
         DirectionalLight {
             shadow_maps_enabled: true,
-            ..default()
-        },
-    ));
-
-    // Stand a little above the ground, looking out along it.
-    let start = planet.start();
-    let up = start.normalize();
-    let along = up.cross(Vec3::X).normalize();
-    commands.spawn((
-        Name::new("Camera"),
-        MainCamera,
-        Camera3d::default(),
-        Projection::Perspective(PerspectiveProjection {
-            near: 0.2,
-            far: radius_m * 40.0,
-            ..default()
-        }),
-        Transform::from_translation(start + up * 25.0).looking_to(along - up * 0.25, up),
-        // Speeds suited to a planet rather than a room. The scroll wheel changes them.
-        FreeCamera {
-            walk_speed: 30.0,
-            run_speed: 300.0,
             ..default()
         },
     ));

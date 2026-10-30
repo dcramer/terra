@@ -11,6 +11,7 @@
 //! scripted run is held while the ground is coming (`loading::hold`), so the same script
 //! shows the same ground on any machine.
 
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::loading::{self, Progress};
 use crate::planet::MainCamera;
 use crate::planet::{GroundLook, Planet};
@@ -65,20 +66,18 @@ struct Pending {
     task: Task<Option<Mesh>>,
 }
 
-/// The first view is meshed in this set, in `PostStartup`, from where the camera stands once
-/// its transform is propagated: whatever stands the camera where play starts (the player's
-/// spawn) goes before `TransformSystems::Propagate`, so the first view is the one seen and
-/// not meshed again where the camera is put on the first frame.
+/// The first view of each world is meshed in this set, on entering it, from where the
+/// camera stands once its transform is propagated: whatever stands the camera where play
+/// starts (the player's arrival) goes in `Building::Arrive`, so the first view is the one
+/// seen and not meshed again where the camera is put on the first frame.
 #[derive(SystemSet, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct FirstView;
 
+/// The ground of the world the run is in: its chunks shown and coming are the world's (D469).
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Terrain>()
-        .configure_sets(
-            PostStartup,
-            FirstView.after(bevy::transform::TransformSystems::Propagate),
-        )
-        .add_systems(PostStartup, first_view.in_set(FirstView))
+    app.init_world_resource::<Terrain>()
+        .configure_sets(OnEnter(InWorld), FirstView.in_set(Building::View))
+        .add_systems(OnEnter(InWorld), first_view.in_set(FirstView))
         .add_systems(
             Update,
             (choose, receive, track.in_set(loading::Track)).chain(),

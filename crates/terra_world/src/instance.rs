@@ -19,13 +19,23 @@
 //!
 //! Crossing is one path for every world, the first of a run included: queue [`Cross`] with
 //! the spec of the world to go to. From [`Travel::Away`] it enters; from a world it leaves
-//! first. Entering puts the loading screen up again (D135), with the game clock held, and
-//! [`Travel::Playing`] begins when it comes down.
+//! first, and both happen in one frame, before its `Update` ([`Crossing`]). A world is built
+//! in `OnEnter(InWorld)`, in the order of [`Building`]. Entering puts the loading screen up
+//! again (D135), with the game clock held, and [`Travel::Playing`] begins when it comes down.
 
 use crate::loading::Screen;
 use bevy::{
-    ecs::{entity_disabling::Disabled, lifecycle::HookContext, query::Allow, world::DeferredWorld},
+    app::MainScheduleOrder,
+    ecs::{
+        entity_disabling::Disabled, lifecycle::HookContext, query::Allow, schedule::ScheduleLabel,
+        world::DeferredWorld,
+    },
     prelude::*,
+    state::state::FreelyMutableState,
+    transform::{
+        StaticTransformOptimizations, TransformSystems,
+        systems::{mark_dirty_trees, propagate_parent_transforms, sync_simple_transforms},
+    },
 };
 
 pub mod census;
@@ -60,7 +70,8 @@ pub enum Travel {
     /// Modules build the world's resources and spawn its content; the loading screen is up.
     Entering,
     Playing,
-    /// The world's content is despawned and its resources removed, for a frame.
+    /// The world's content is despawned and its resources removed; the next is entered in
+    /// the same frame ([`Crossing`]).
     Leaving,
 }
 
@@ -118,6 +129,48 @@ impl Global {
     }
 }
 
+/// The order a world is built in on entering, in `OnEnter(InWorld)`, as the start-up
+/// schedules ordered it before worlds came and went: what a module did in `Startup` goes in
+/// [`Building::Place`], in `PostStartup` in [`Building::View`], after the body and camera
+/// stand at the arrival and their places are propagated.
+#[derive(SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Building {
+    /// The world's resources made afresh, and the land from its spec: the planet, the start.
+    Land,
+    /// What stands in the world from the first: the sea, the sun, the sky, the lakes.
+    Place,
+    /// This machine's body and the camera stood at the arrival.
+    Arrive,
+    /// What is made round where the viewer stands: the first view of the ground, the woods.
+    View,
+}
+
+/// Where a crossing asked for is carried out at once (D469): right after `Startup`, so the
+/// first world is built once the camera and settings exist and before anything after
+/// start-up looks at it, and right after each frame's state transitions, so a world is left
+/// and the next entered in the one frame. No world's system ever runs a frame without its
+/// resources: `Res<Planet>` alone is read by 87 systems.
+#[derive(ScheduleLabel, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Crossing;
+
+/// Carries the crossing through: leaving, entering and the loading screen put up are a
+/// state transition each.
+fn carry_out(world: &mut World) {
+    fn pending<S: FreelyMutableState>(world: &World) -> bool {
+        world
+            .get_resource::<NextState<S>>()
+            .is_some_and(|next| !matches!(next, NextState::Unchanged))
+    }
+    let mut crossing = false;
+    for _ in 0..4 {
+        if !(pending::<Travel>(world) || crossing && pending::<Screen>(world)) {
+            return;
+        }
+        crossing = true;
+        world.run_schedule(StateTransition);
+    }
+}
+
 /// The world to go to once the one the run is in has been left.
 #[derive(Resource)]
 struct Bound(WorldSpec);
@@ -166,6 +219,9 @@ pub trait InstanceApp {
     /// A resource the world owns: built on entering, from [`WorldSpec`], in
     /// `OnEnter(InWorld)`; removed on leaving, which drops its handles and cancels its tasks.
     fn world_resource<R: Resource>(&mut self) -> &mut Self;
+    /// A world resource made afresh on entering each world, as `init_resource` makes one
+    /// at the start: the state a module keeps of the world it is in.
+    fn init_world_resource<R: Resource + FromWorld>(&mut self) -> &mut Self;
     /// A component the world puts on global entities, such as the sky on the camera;
     /// removed from every entity on leaving.
     fn world_component<C: Component>(&mut self) -> &mut Self;
@@ -183,6 +239,16 @@ impl InstanceApp for App {
             }));
         }
         self
+    }
+
+    fn init_world_resource<R: Resource + FromWorld>(&mut self) -> &mut Self {
+        self.world_resource::<R>().add_systems(
+            OnEnter(InWorld),
+            (|world: &mut World| {
+                world.init_resource::<R>();
+            })
+            .in_set(Building::Land),
+        )
     }
 
     fn world_component<C: Component>(&mut self) -> &mut Self {
@@ -216,6 +282,33 @@ fn take_off<C: Component>(world: &mut World) {
 /// another once the other is in use (`ArchetypeExists`), a loud failure at start.
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Transform, WorldScoped>();
+    app.init_schedule(Crossing);
+    let mut order = app.world_mut().resource_mut::<MainScheduleOrder>();
+    order.insert_startup_after(Startup, Crossing);
+    order.insert_after(StateTransition, Crossing);
+    app.add_systems(Crossing, carry_out)
+        .configure_sets(
+            OnEnter(InWorld),
+            (
+                (Building::Land, Building::Place, Building::Arrive)
+                    .chain()
+                    .before(TransformSystems::Propagate),
+                Building::View.after(TransformSystems::Propagate),
+            ),
+        )
+        // The body and camera's places propagated before the view is made round them, as
+        // at the start (`PostStartup`).
+        .add_systems(
+            OnEnter(InWorld),
+            (
+                mark_dirty_trees,
+                propagate_parent_transforms,
+                sync_simple_transforms,
+            )
+                .chain()
+                .in_set(TransformSystems::Propagate)
+                .run_if(resource_exists::<StaticTransformOptimizations>),
+        );
     app.init_state::<Travel>()
         .add_computed_state::<InWorld>()
         .init_resource::<Owned>()

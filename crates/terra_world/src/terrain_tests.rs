@@ -16,17 +16,29 @@ fn app() -> App {
     });
     let start = planet.start();
     let mut app = App::new();
-    app.add_plugins(TaskPoolPlugin::default())
-        .insert_resource(planet)
-        .insert_resource(GroundLook(Handle::default()))
-        .insert_resource(Assets::<Mesh>::default())
-        .insert_resource(crate::quality::Quality::High)
-        .insert_resource(Progress::default())
-        .insert_resource(
-            Options::from_args(["--shot", "x.png"].map(String::from).into_iter()).unwrap(),
-        )
-        .add_plugins(plugin);
+    app.add_plugins((
+        TaskPoolPlugin::default(),
+        bevy::state::app::StatesPlugin,
+        crate::instance::plugin,
+    ))
+    .insert_resource(planet)
+    .insert_resource(GroundLook(Handle::default()))
+    .insert_resource(Assets::<Mesh>::default())
+    .insert_resource(crate::quality::Quality::High)
+    .insert_resource(Progress::default())
+    .insert_resource(Options::from_args(["--shot", "x.png"].map(String::from).into_iter()).unwrap())
+    .add_plugins(plugin);
     stand(&mut app, start + start.normalize() * 2.0);
+    // The first view is meshed on entering the world.
+    let world = crate::instance::WorldSpec {
+        key: crate::instance::InstanceKey(0),
+        kind: "world".into(),
+        seed: 1,
+    };
+    app.world_mut()
+        .commands()
+        .queue(crate::instance::Cross(world));
+    app.world_mut().flush();
     app
 }
 

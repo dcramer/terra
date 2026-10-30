@@ -12,6 +12,7 @@ use crate::controls::Action;
 use crate::intent::Intent;
 use crate::{camera, figure, intent, movement, options};
 use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
+use terra_world::instance::{Building, Entered, InWorld, InstanceApp};
 use terra_world::planet::{MainCamera, Planet};
 use terra_world::shell::{Options, ScriptFrame};
 use terra_world::start::Start;
@@ -28,7 +29,10 @@ pub struct Player;
 /// The player this machine steers: its input moves them, and the camera, the screen and
 /// what is heard follow them. Systems driven by input or drawing the screen act on this
 /// one; the world's own systems, such as creatures and stations, act on every [`Player`].
+/// Their body outlives every world (D469), carried from one to the next with its figure and
+/// what it holds; another player's is the world's.
 #[derive(Component)]
+#[require(terra_world::instance::Global)]
 pub struct LocalPlayer;
 
 /// The query filter for this machine's player. It names [`Player`] as well, so Bevy can
@@ -197,12 +201,11 @@ impl Plugin for WalkerPlugin {
         movement::plugin(app);
         app.init_resource::<Hands>()
             .init_resource::<WarpTo>()
-            // Before the camera's place is propagated, from which the first view of the
-            // ground is meshed (`terrain::FirstView`).
-            .add_systems(
-                PostStartup,
-                spawn.before(bevy::transform::TransformSystems::Propagate),
-            )
+            // On entering each world, before the camera's place is propagated, from which
+            // the first view of the ground is meshed (`terrain::FirstView`).
+            .add_systems(OnEnter(InWorld), spawn.in_set(Building::Arrive))
+            // Where to arrive is the world's: the next is arrived at as its crossing says.
+            .world_resource::<ArriveAt>()
             .add_systems(
                 Update,
                 (options::toggle, camera::capture_mouse, warp, camera::zoom)
@@ -245,10 +248,11 @@ pub struct Hands {
     pub wheel: bool,
 }
 
-/// Where this machine's player first stands, and the point they face. Something above the
-/// walker can set it before `PostStartup`, as building does to stand them outside the
-/// base's door. Without it they stand at the start, facing south. `--at` and `--face`
-/// override either.
+/// Where this machine's player stands on entering a world, and the point they face: the
+/// world's, gone with it. Something above the walker can set it before
+/// `Building::Arrive`, as building does to stand them outside the base's door and a
+/// crossing to stand them at its arrival. Without it they stand at the start, facing
+/// south. `--at` and `--face` override either in the first world.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct ArriveAt {
     pub at: Vec3,
@@ -261,16 +265,18 @@ pub struct ArriveAt {
 #[derive(Resource, Default)]
 pub struct WarpTo(pub Option<((f32, f32), Option<(f32, f32)>)>);
 
-/// This machine's player: a body standing where `ArriveAt` says, with the camera theirs.
+/// This machine's player: a body standing where `ArriveAt` says, with the camera theirs,
+/// made in the first world and carried to each after (D469), standing again where it says.
 /// Whatever the layers above give a player (what they carry, know and feel) they add when
 /// a [`LocalPlayer`] appears.
 pub fn spawn(
     mut commands: Commands,
-    options: Res<Options>,
+    (options, entered): (Res<Options>, Res<Entered>),
     start: Res<Start>,
     arrive: Option<Res<ArriveAt>>,
     planet: Res<Planet>,
-    camera: Single<(Entity, &mut Transform), With<MainCamera>>,
+    camera: Single<(Entity, &mut Transform), (With<MainCamera>, Without<LocalPlayer>)>,
+    body: Option<Single<Entity, With<LocalPlayer>>>,
 ) {
     let (lens, mut seen_from) = camera.into_inner();
     // The player steers the camera now.
@@ -283,13 +289,17 @@ pub fn spawn(
         },
         |arrive| *arrive,
     );
-    // For testing, a run can start somewhere else (--at), facing a given spot (--face).
-    let outside = options
-        .start_at
-        .map_or(arrive.at, |(east, south)| start.at(east, south));
-    let toward = options
-        .start_facing
-        .map_or(arrive.toward, |(east, south)| start.at(east, south));
+    // For testing, a run can start somewhere else (--at), facing a given spot (--face): its
+    // first world only, as a crossing says where the next is arrived at.
+    let first = entered.0 <= 1;
+    let outside = match options.start_at {
+        Some((east, south)) if first => start.at(east, south),
+        _ => arrive.at,
+    };
+    let toward = match options.start_facing {
+        Some((east, south)) if first => start.at(east, south),
+        _ => arrive.toward,
+    };
     let feet = planet.ground_at(outside);
     let up = feet.normalize();
     let facing = (toward - outside).reject_from(up).normalize();
@@ -298,10 +308,7 @@ pub fn spawn(
     // the planet's own start, 15 km from a lake site, the play world meshed its first view
     // there and then the whole view again at the player, 277 s on the async pool.
     *seen_from = camera::resting(feet, facing);
-    commands.spawn((
-        Name::new("Player"),
-        Player,
-        LocalPlayer,
+    let standing = (
         View {
             forward: facing,
             pitch: -0.08,
@@ -309,6 +316,16 @@ pub fn spawn(
         Motion::facing(facing),
         Stance::default(),
         Transform::from_translation(feet).looking_to(facing, up),
+    );
+    if let Some(body) = body {
+        commands.entity(*body).insert(standing);
+        return;
+    }
+    commands.spawn((
+        Name::new("Player"),
+        Player,
+        LocalPlayer,
+        standing,
         Visibility::default(),
         // What a shot films as the player (`--cine`).
         terra_world::cine::Subject,
@@ -533,6 +550,20 @@ fn warp(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// This machine's body is carried from world to world, another player's is the world's.
+    #[test]
+    fn this_machines_player_outlives_every_world() {
+        use terra_world::instance::{Global, WorldScoped};
+        let mut world = World::new();
+        world.register_required_components::<Transform, WorldScoped>();
+        let mine = world.spawn((LocalPlayer, Transform::default())).id();
+        let theirs = world.spawn((Player, Transform::default())).id();
+        world.flush();
+        let mine = world.entity(mine);
+        assert!(mine.contains::<Global>() && !mine.contains::<WorldScoped>());
+        assert!(world.entity(theirs).contains::<WorldScoped>());
+    }
 
     /// Walked at a jog down a smoothed route, a spot every 4 m, wandering a little either
     /// side of a straight line, as a path's laid points do, the walk turns smoothly: never

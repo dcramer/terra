@@ -85,7 +85,14 @@ fn app(leaky: bool) -> App {
         .world_component::<Tint>()
         .census_assets::<Stuff>()
         .add_systems(Startup, start)
-        .add_systems(OnEnter(InWorld), build);
+        .add_systems(OnEnter(InWorld), build.in_set(Building::Place))
+        // The first world is built before anything after start-up looks at it, and a
+        // world's systems never run a frame without its resources, a crossing included.
+        .add_systems(PostStartup, |_: Res<Grove>| {})
+        .add_systems(
+            Update,
+            (|_: Res<Grove>| {}).run_if(not(in_state(Travel::Away))),
+        );
     settle(&mut app);
     app
 }
@@ -211,4 +218,51 @@ fn a_global_given_a_transform_later_stays_global() {
     assert!(!app.world().entity(late).contains::<WorldScoped>());
     let placed = app.world_mut().spawn(Transform::default()).id();
     assert!(app.world().entity(placed).contains::<WorldScoped>());
+}
+
+/// A world is left and the next entered within one frame, before its `Update`.
+#[test]
+fn a_crossing_takes_one_frame() {
+    let mut app = app(false);
+    app.world_mut().commands().queue(Cross(spec(2, "tundra")));
+    app.world_mut().flush();
+    app.update();
+    assert_eq!(app.world().resource::<WorldSpec>().kind, "tundra");
+    assert_eq!(app.world().resource::<Entered>().0, 2);
+    let there = names(&mut app);
+    assert!(
+        there.iter().any(|name| name == "tree of tundra"),
+        "{there:?}"
+    );
+    assert!(
+        !there.iter().any(|name| name == "tree of forest"),
+        "{there:?}"
+    );
+}
+
+/// A world resource is made afresh in each world, as at the start.
+#[test]
+fn a_world_resource_is_made_afresh_on_entering() {
+    #[derive(Resource, Default)]
+    struct Steps(u32);
+    let mut app = app(false);
+    app.init_world_resource::<Steps>();
+    app.add_systems(Update, |mut steps: ResMut<Steps>| steps.0 += 1);
+    cross(&mut app, spec(2, "tundra"));
+    let walked = app.world().resource::<Steps>().0;
+    assert!(walked > 0);
+    cross(&mut app, spec(1, "forest"));
+    assert!(app.world().resource::<Steps>().0 <= walked, "made afresh");
+}
+
+#[test]
+fn the_main_camera_outlives_every_world() {
+    let mut app = app(false);
+    let camera = app
+        .world_mut()
+        .spawn((crate::planet::MainCamera, Transform::default()))
+        .id();
+    app.world_mut().flush();
+    let camera = app.world().entity(camera);
+    assert!(camera.contains::<Global>() && !camera.contains::<WorldScoped>());
 }
