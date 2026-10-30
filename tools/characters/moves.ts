@@ -11,8 +11,9 @@
 //           hilt) goes through the shield's board, and the board through the sword arm (right
 //           hand and forearm); a bar for every move and clip, scored (tools/combat) for every
 //           move
-//   arc     a blow's tip at its fastest in its active frames: its bearing from ahead (+ left)
-//           and how far ahead, which way it sweeps, how far the hips have turned; a blow
+//   arc     a blow's contact, its tip furthest ahead in its active frames (phases.ts
+//           contactOf): its bearing from ahead (+ left) and how far ahead, which way it
+//           sweeps, how far the hips have turned; a blow
 //           whose clip has a spec (D450, clip_spec.ts) fails a sweep or contact against it
 //   wrist   a blow's sword hand off its forearm (wrist.ts, D565 step 3): flexed at most 80°,
 //           extended 70°, radial 20°, ulnar 35°, turned at most 45° in a key at 24 a second,
@@ -61,7 +62,7 @@ import { againstSpec, setGuard, type Blow } from "./clip_spec.ts";
 import { type Ball, type Board, through } from "./clash.ts";
 import { type Held, carriedClips, carryHold, carryUpright, frameOf, hang } from "./held.ts";
 import { TARGETS, boardPlace, readTargets, worstOff } from "./shield_place.ts";
-import { PACE_FRAMES } from "./phases.ts";
+import { contactOf, PACE_FRAMES } from "./phases.ts";
 import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
 import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
@@ -430,6 +431,7 @@ function arc(move: Move) {
   const sword = held.find((h) => h.hand === "socket.hand.R")!;
   const start = poseOf(shapes[0], clip, move.from)[node.pelvis].t;
   let fastest = { speed: -1, tip: [0, 0, 0] as V3, t: 0, hips: 0 };
+  const frames: { speed: number; tip: V3; t: number; hips: number }[] = [];
   let first: V3 | undefined;
   let last: V3 = [0, 0, 0];
   const [a, b] = move.active!;
@@ -443,12 +445,15 @@ function arc(move: Move) {
     const across = sub(pose[node.thigh_l].t, pose[node.thigh_r].t);
     const hips = (Math.atan2(-across[2], across[0]) * 180) / Math.PI;
     if (speed > fastest.speed) fastest = { speed, tip, t, hips };
+    frames.push({ speed, tip, t, hips });
     first ??= tip;
     last = tip;
   }
-  const bearing = (Math.atan2(fastest.tip[0], fastest.tip[2]) * 180) / Math.PI;
+  // It lands where its tip is furthest ahead (phases.ts contactOf), not at its fastest.
+  const hit = contactOf(frames) ?? fastest;
+  const bearing = (Math.atan2(hit.tip[0], hit.tip[2]) * 180) / Math.PI;
   const sweep = first && last[0] > first[0] ? "to the left" : "to the right";
-  return { bearing, ahead: fastest.tip[2], up: fastest.tip[1], sweep, hips: fastest.hips, speed: fastest.speed, t: fastest.t, first: first ?? last, last };
+  return { bearing, ahead: hit.tip[2], up: hit.tip[1], sweep, hips: hit.hips, speed: fastest.speed, t: hit.t, first: first ?? last, last };
 }
 
 // The lead hand's wrist over a blow, from its first frame to its last at the take's keys, and

@@ -24,6 +24,13 @@ export function rootDrive(g: Glb, clips: string[], every: number): { drive: [num
   let ahead = 0;
   let aside = 0;
   for (const name of clips) {
+    // A number part is a pause, as glb_clips.ts joins it: the body stands that many seconds.
+    if (/^\d+(\.\d+)?$/.test(name)) {
+      const pause = Number(name);
+      if (pause > 0) samples.push([t0, 0], [t0 + pause, 0]);
+      t0 += pause;
+      continue;
+    }
     const clip = g.clip(name);
     if (!clip) throw new Error(`root_drive: ${g.file} has no clip ${name}`);
     const at = (t: number) => posed(g, clip, Math.min(clip.end, Math.max(0, t)))[root].t;
@@ -76,6 +83,6 @@ if (import.meta.main) {
   const drive = raw.map(([t, v]): [number, number] => [t, v * by]);
   if (body) console.log(`// scaled ${by.toFixed(3)} to ${body}'s skeleton`);
   console.log(`drive: [${drive.map(([t, v]) => `(${t.toFixed(2)}, ${v.toFixed(2)})`).join(", ")}],`);
-  const end = clips.split("+").reduce((s, c) => s + (g.clip(c)?.end ?? 0), 0);
+  const end = clips.split("+").reduce((s, c) => s + (/^\d+(\.\d+)?$/.test(c) ? Number(c) : (g.clip(c)?.end ?? 0)), 0);
   console.log(`// ${clips}: the root goes ${ahead.toFixed(2)} m ahead in ${end.toFixed(2)} s, the drive ${driven(drive, end).toFixed(2)} m${aside > 0.05 ? `; the root strays ${aside.toFixed(2)} m aside, which a drive does not follow` : ""}`);
 }

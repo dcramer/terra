@@ -553,21 +553,22 @@ impl Move {
     ///
     /// Motion Warping's skew warp, as Unreal Engine's Motion Warping plugin documents it (its
     /// root motion modifier scales the root motion left in the warp window so the root ends on
-    /// the warp target): until the blade's active span ends, the drive left before then is
-    /// scaled so the body stands `stop_at` from the target as it ends, so a lunge from too
-    /// near stops short of the body before it rather than running through it, and one from
-    /// further steps further. Each frame scales what is left, so it lands however the target
-    /// moves. A take with too little drive in its window to scale (in place) steps in
-    /// by `warp_speed` through its wind-up instead, as before.
+    /// the warp target, the window ending at the hit): until the blade crosses the front, the
+    /// middle of its active span, the drive left before then is scaled so the body stands
+    /// `stop_at` from the target there, so a lunge from too near stops short of the body
+    /// before it rather than running through it, and one from further steps further. Each
+    /// frame scales what is left, so it lands however the target moves. A take with too little
+    /// drive in its window to scale (in place) steps in by `warp_speed` through its wind-up
+    /// instead, as before.
     pub fn warped_drive(&self, t: f32, distance: Option<f32>) -> f32 {
         let drive = self.drive_at(t);
         let (Some(warp), Some(distance)) = (self.warp, distance) else {
             return drive;
         };
-        let Some((_, to)) = self.active else {
+        let Some((from, to)) = self.active else {
             return drive;
         };
-        let end = self.at_clip(to);
+        let end = self.at_clip(0.5 * (from + to));
         if t >= end {
             return drive;
         }
@@ -619,7 +620,7 @@ mod tests {
         let mut m = set().get("finisher").unwrap().clone();
         m.from = 0.0;
         m.speed = 1.0;
-        m.active = Some((0.25, 0.4));
+        m.active = Some((0.25, 0.45));
         m.drive = vec![
             (0.0, 0.0),
             (0.2, 0.0),
@@ -636,11 +637,13 @@ mod tests {
         m
     }
 
-    /// How far off its target a body ends at the lunge's active end, started `from` it.
+    /// How far off its target a body is as the lunge's blade crosses the front (the middle of
+    /// its active span), started `from` it.
     fn lunged(m: &Move, from: f32, target: bool) -> f32 {
         let dt = 1.0 / 60.0;
         let mut far = from;
-        for frame in 0..(m.at_clip(m.active.unwrap().1) / dt).round() as u32 {
+        let (a, b) = m.active.unwrap();
+        for frame in 0..(m.at_clip(0.5 * (a + b)) / dt).round() as u32 {
             let t = frame as f32 * dt;
             far -= m.warped_drive(t, target.then_some(far)) * dt;
         }
@@ -653,7 +656,16 @@ mod tests {
         let stop = m.warp.unwrap().stop_at;
         assert!((m.drive_between(0.0, 0.4) - 1.5).abs() < 0.01);
         // With nothing to land on, the drive as it is.
-        assert!((lunged(&m, 10.0, false) - 8.5).abs() < 0.03);
+        let dt = 1.0 / 60.0;
+        let mid = m.at_clip(0.35);
+        let unwarped: f32 = (0..(mid / dt).round() as u32)
+            .map(|frame| m.drive_at(frame as f32 * dt) * dt)
+            .sum();
+        assert!(
+            unwarped > 0.75,
+            "the drive steps {unwarped} m by the strike"
+        );
+        assert!((lunged(&m, 10.0, false) - (10.0 - unwarped)).abs() < 1e-4);
         // Nearer than its step, it steps less; further, more: it stops at its reach either way.
         for from in [1.5, 2.0, 2.7, 3.5] {
             let far = lunged(&m, from, true);

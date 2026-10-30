@@ -234,7 +234,6 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
     ["Light_B", `${LEAD}+Sword_Light_B+Sword_Light_B_Rec`],
     ["Light_D", `${LEAD}+Sword_Light_D`],
     ["Heavy_D", `${LEAD}+Sword_Heavy_D`],
-    ["Block", "Shield_OneShot"],
   ];
   const bought = UAL2.map(([name, parts]) => `Q_${name}=${parts}`).join(" ");
   const rooted = UAL2.flatMap(([name, parts]) => [`Q_${name}=${parts}`, `Swap_${name}=${parts}`]).join(" ");
