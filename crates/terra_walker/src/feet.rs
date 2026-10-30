@@ -646,7 +646,10 @@ impl Kept {
                 off: frame.off,
                 hip,
                 reach,
-                extent,
+                // Only a foot stood on pulls the pelvis down to reach it: one let go is lifting
+                // off behind, and a warped sprint's dropped the pelvis 14 cm as it went, bending
+                // the free leg's knee 50-70 deg (D584's bone audit).
+                extent: extent.filter(|_| self.feet[side].planted()),
                 fresh: self.feet[side].fresh(),
             },
             dt,

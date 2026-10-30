@@ -464,6 +464,38 @@ fn a_released_foot_lifted_as_its_curve_comes_back_locks_only_once_down() {
     assert!(foot.planted(), "down again: {}", foot.state());
 }
 
+/// A leg the solve cannot straighten to its foot steps at once only when the foot is off the
+/// clip's: the clip's own foot out of reach (a warped sprint's at its stance's end) is reached
+/// no better by stepping to it.
+#[test]
+fn a_strained_leg_steps_only_with_its_foot_off_the_clips() {
+    let posed = |x: f32| Posed {
+        pose: Pose {
+            at: Vec3::new(x, 0.1, 0.0),
+            turn: Quat::IDENTITY,
+        },
+        lock: 1.0,
+        up: Vec3::Y,
+        swing_mps: 0.0,
+        strained: true,
+        off: false,
+        landing: false,
+        low: true,
+        ball: Vec3::ZERO,
+        sole: [0.1, 0.1],
+        over: [0.0; 2],
+    };
+    let mut foot = Foot::default();
+    for _ in 0..10 {
+        foot.update(posed(0.0), DT, false);
+    }
+    assert!(foot.planted(), "{}", foot.state());
+    foot.update(posed(STRAINED_M - 0.02), DT, false);
+    assert!(foot.planted(), "stepped 3 cm: {}", foot.state());
+    foot.update(posed(STRAINED_M + 0.01), DT, false);
+    assert_eq!(foot.state(), "stepping");
+}
+
 #[test]
 fn a_feet_turn_is_its_yaw_about_the_up_not_its_roll() {
     let yaw = Quat::from_rotation_y(50f32.to_radians());

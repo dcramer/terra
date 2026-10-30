@@ -75,6 +75,12 @@ pub const MOST_M: f32 = 0.38;
 /// Yaw alone: the clip's foot rolling heel to toe under a lock is no turn.
 pub const TURN_DEG: f32 = 45.0;
 pub const MOST_TURN_DEG: f32 = 70.0;
+/// A leg the solve straightened steps at once only with its foot's ball this far off the
+/// clip's: a clip's own foot out of reach (a warped sprint's at its stance's end, the right leg
+/// 2-3 cm short every stride; a start's foot just landed by a step) is reached no better by
+/// stepping to it, and the sprint's step cut by the curve falling left a blend that bent the
+/// knee 75 deg (D584's bone audit).
+pub const STRAINED_M: f32 = 0.05;
 /// A body standing still this long with a foot this far from its clip's settles it (a settle
 /// step), so a stance ends as its clip stands.
 pub const SETTLE_M: f32 = 0.06;
@@ -431,24 +437,35 @@ impl Foot {
             return shown;
         }
         if let State::Planted(lock) = self.state {
-            let off_by = flat(lock.at, clip.at);
+            // The foot as shown (held) against the clip's: a step or a blend goes from it, not
+            // from the lock's own pose, whose ankle as the heel struck is off the clip's once
+            // the clip rolls the foot onto its ball, however still that ball stands. How far
+            // off it is is the ball's, the point the lock holds: an ankle's would count the
+            // heading too, which `turned` judges (a wall stop's foot 5 cm off its clip's read
+            // past SETTLE_M by its ankle and took a settle step).
+            let kept = held(lock, clip, posed.up, posed.ball);
+            let off_by = flat(
+                kept.at + kept.turn * posed.ball,
+                clip.at + clip.turn * posed.ball,
+            );
             let turned = yaw_deg(lock.turn, clip.turn, posed.up);
             let settle = self.still_s >= SETTLE_S && off_by > SETTLE_M;
-            let urgent = posed.strained || off_by > MOST_M || turned > MOST_TURN_DEG;
+            let strained = posed.strained && off_by > STRAINED_M;
+            let urgent = strained || off_by > MOST_M || turned > MOST_TURN_DEG;
             let soft = off_by > REACH_M || turned > TURN_DEG || settle;
             if gone {
-                self.state = State::Blending { from: lock, s: 0.0 };
+                self.state = State::Blending { from: kept, s: 0.0 };
             } else if !full {
                 self.state = State::Releasing(lock);
                 return self.step(posed, 0.0, other_moving);
             } else if urgent || (soft && !other_moving) {
                 self.state = State::Stepping {
-                    from: lock,
+                    from: kept,
                     s: 0.0,
                     land: None,
                 };
             } else {
-                return held(lock, clip, posed.up, posed.ball);
+                return kept;
             }
         }
         match self.state {
