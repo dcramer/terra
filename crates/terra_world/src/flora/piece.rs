@@ -19,8 +19,9 @@ pub struct FloraPiece {
     pub model: String,
 }
 
-/// Each piece's mesh, built once a kind and model, and the one material they share.
-#[derive(Default)]
+/// Each piece's mesh, built once a kind and model, and the one material they share: the
+/// world's, so its handles go with it (D469).
+#[derive(Resource, Default)]
 pub(super) struct Built {
     meshes: HashMap<(usize, String), Option<Handle<Mesh>>>,
     material: Option<Handle<WindMaterial>>,
@@ -34,7 +35,7 @@ pub(super) fn draw(
     assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WindMaterial>>,
-    mut built: Local<Built>,
+    mut built: ResMut<Built>,
 ) {
     let Some(flora) = flora else {
         return;

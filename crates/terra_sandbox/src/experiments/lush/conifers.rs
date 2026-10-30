@@ -20,6 +20,7 @@ use bevy::prelude::*;
 use std::sync::Arc;
 use terra_world::detail::DetailScale;
 use terra_world::grown::Cards;
+use terra_world::instance::{Building, InWorld};
 use terra_world::planet::Planet;
 use terra_world::start::Start;
 use terra_world::woods::{ConiferModels, Conifers, Drawn, Planted, Planting, TreeKind};
@@ -42,8 +43,12 @@ pub fn plugin(app: &mut App) {
                 terra_world::quality::follow_relief::<Foliage>.run_if(resource_exists::<Conifers>),
             );
     }
-    app.add_systems(PostStartup, grow_conifers.before(Planting))
-        .add_systems(Update, follow_detail);
+    // In each world entered, before its woods are planted (D469).
+    app.add_systems(
+        OnEnter(InWorld),
+        grow_conifers.in_set(Building::View).before(Planting),
+    )
+    .add_systems(Update, follow_detail);
 }
 
 /// The lush forest's conifers, grown, and which of them each kind of tree is drawn from.

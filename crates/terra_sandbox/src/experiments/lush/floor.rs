@@ -37,7 +37,6 @@ use bevy::{
 use placements::{PLACEMENTS, Placement};
 use std::f32::consts::{PI, TAU};
 use terra_gen::{Noise, Rng, Seed};
-use terra_world::climate::SnowCover;
 use terra_world::cover::Growing;
 use terra_world::detail::DetailScale;
 use terra_world::flora::Growth;
@@ -46,6 +45,7 @@ use terra_world::grown::build::{self as grown_build, Placing};
 use terra_world::grown::{Cards, plants};
 use terra_world::planet::Planet;
 use terra_world::sky_occlusion::SkyOccluders;
+use terra_world::{climate::SnowCover, instance::Building::View, instance::InWorld};
 
 /// A rock's scanned material with moss over what faces the sky (`mossy.wesl`).
 pub(super) type Mossy = ExtendedMaterial<StandardMaterial, MossExtension>;
@@ -108,8 +108,8 @@ pub(super) fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<Mossy>::default())
         .init_resource::<MossyScans>()
         .init_resource::<FloorShadows>()
-        // After the scene has set the open world's soil.
-        .add_systems(PostStartup, forest_soil)
+        // After the scene has set the open world's soil, in each world entered.
+        .add_systems(OnEnter(InWorld), forest_soil.in_set(View))
         .add_systems(
             Update,
             (

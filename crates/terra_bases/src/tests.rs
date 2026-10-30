@@ -4,6 +4,7 @@
 use super::*;
 use terra_core::{PlanetSpec, Seed};
 use terra_world::shell::Options;
+use terra_world::start::Start;
 
 /// An app with what the base stands on, as the shell gives it (input, the base's materials),
 /// and nothing of the world's layer above the planet: none of its resources (the scene's
@@ -29,6 +30,8 @@ fn alone() -> App {
     app.insert_resource(Options::from_args(std::iter::empty()).unwrap())
         .insert_resource(Start(Transform::from_translation(planet.start())))
         .insert_resource(planet);
+    // The base is laid out on entering a world (D469).
+    terra_world::instance::in_a_world(&mut app);
     plugin(&mut app);
     app.world_mut()
         .spawn((MainCamera, Transform::default(), GlobalTransform::default()));

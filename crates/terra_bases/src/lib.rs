@@ -26,7 +26,6 @@ use terra_build::{Base, BuildOp, CELL_M, Cube, Kind, Panel, Rules, STOREY_M, exa
 use terra_core::Operation;
 use terra_world::footprint::Footprint;
 use terra_world::planet::{MainCamera, Planet};
-use terra_world::start::Start;
 
 pub mod arrays;
 pub mod atlases;
@@ -35,6 +34,7 @@ pub mod footing;
 pub use draw::PlanGhost;
 pub mod hammer;
 pub mod hlod;
+mod laying;
 pub mod layout;
 pub mod light;
 pub mod maps;
@@ -278,7 +278,8 @@ fn keep_footprint(
     mut seen: Local<Option<u64>>,
     mut footprint: Single<&mut Footprint, With<SiteFootprint>>,
 ) {
-    if *seen != Some(site.revision) {
+    // A world's site is new on entering it, whatever its revision.
+    if *seen != Some(site.revision) || site.is_added() {
         *seen = Some(site.revision);
         footprint.set_if_neq(site.footprint.clone());
     }
@@ -487,10 +488,7 @@ pub fn plugin(app: &mut App) {
         .init_resource::<terra_world::skylight::OpenSky>();
     app.insert_resource(Added)
         .add_systems(Startup, (setup, make_arrays).chain())
-        .add_systems(
-            PostStartup,
-            keep_footprint.before(terra_world::flora::FloraSystems::Plant),
-        )
+        .add_plugins(laying::plugin)
         .add_systems(
             Update,
             (keep_footprint, give_footprints).before(terra_world::flora::FloraSystems::Clear),
@@ -942,19 +940,15 @@ pub fn frame_at(point: Vec3, like: &Transform) -> Transform {
     }
 }
 
+/// The kits' look and the build keys' readout, for every world.
 pub fn setup(
     mut commands: Commands,
-    planet: Res<Planet>,
-    start: Res<Start>,
     options: Res<terra_world::shell::Options>,
     driven: Option<Res<DrivenByPlayer>>,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut ghosts: Option<ResMut<Assets<draw::GhostMaterial>>>,
     assets: Res<AssetServer>,
 ) {
-    // The base is first laid at the start, whether or not anything is built there.
-    let frame = **start;
     let look = BuildLook {
         looks: draw::Looks::new(&mut materials, ghosts.as_deref_mut()),
         kits: read_kits().map(Arc::new),
@@ -991,26 +985,7 @@ pub fn setup(
         timer: Timer::from_seconds(1.0, TimerMode::Repeating),
         asking: None,
     });
-    let mut build = Build::new(&mut commands, &look, frame, "Base");
-    // The player's base is built by plans, drawn as far as each cube is in.
-    build.by_cubes = driven.is_some();
-    build.by_plans = driven.is_some();
-    let operations = if driven.is_some() {
-        Vec::new()
-    } else {
-        example(look.laying)
-    };
-    build.replace_with(&operations, &mut commands, &planet, &mut meshes);
     commands.insert_resource(look);
-    commands.spawn((
-        Name::new("Base footprint"),
-        SiteFootprint,
-        build.footprint.clone(),
-    ));
-    commands.insert_resource(Site {
-        build,
-        camera_placed: false,
-    });
 
     // A player brings their own readout and aiming mark.
     if driven.is_some() {

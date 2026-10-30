@@ -602,6 +602,8 @@ mod tests {
         app.insert_resource(Options::from_args(std::iter::empty()).unwrap())
             .insert_resource(Start(Transform::from_translation(planet.start())))
             .insert_resource(planet);
+        // The base is laid out on entering a world (D469).
+        terra_world::instance::in_a_world(&mut app);
         crate::building::plugin(&mut app);
         app.world_mut()
             .spawn((MainCamera, Transform::default(), GlobalTransform::default()));

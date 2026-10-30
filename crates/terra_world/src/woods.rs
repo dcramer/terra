@@ -11,6 +11,7 @@
 
 use crate::flora_kinds::Flora;
 use crate::grown::{self, Cards};
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::Planet;
 use crate::start::Start;
 use bevy::{
@@ -74,7 +75,8 @@ pub trait ConiferModels: Send + Sync + 'static {
 #[derive(Resource, Clone)]
 pub struct Conifers(pub Arc<dyn ConiferModels>);
 
-/// Where the woods are planted, at `PostStartup`: whatever fills in `Conifers` runs before it.
+/// Where the woods are planted, on entering a world (`Building::View`): whatever fills in
+/// `Conifers` runs before it.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Planting;
 
@@ -166,8 +168,11 @@ impl MaterialExtension for FarExtension {
 }
 
 pub fn plugin(app: &mut App) {
+    // The woods and the conifers they are drawn from are the world's (D469).
     app.add_plugins(MaterialPlugin::<FarWoods>::default())
-        .add_systems(PostStartup, plant.in_set(Planting))
+        .world_resource::<Conifers>()
+        .configure_sets(OnEnter(InWorld), Planting.in_set(Building::View))
+        .add_systems(OnEnter(InWorld), plant.in_set(Planting))
         .add_systems(
             Update,
             see_horizon.run_if(resource_exists_and_changed::<crate::horizon::HorizonPicture>),

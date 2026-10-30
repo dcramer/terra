@@ -15,6 +15,7 @@ use super::footprint::Footprint;
 use super::grown;
 use model::{Drawn, Model};
 
+mod entering;
 mod fell;
 mod model;
 mod piece;
@@ -468,17 +469,9 @@ pub enum FloraSystems {
 
 pub fn plugin(app: &mut App) {
     fell::plugin(app);
+    entering::plugin(app);
     app.add_plugins(MaterialPlugin::<WindMaterial>::default())
         .add_systems(Update, (follow_wind, piece::draw))
-        .init_resource::<Obstacles>()
-        .init_resource::<Trunks>()
-        // The yard, the flat test level, has nothing growing on it.
-        .add_systems(
-            PostStartup,
-            plant
-                .run_if(crate::shell::in_the_world)
-                .in_set(FloraSystems::Plant),
-        )
         .add_message::<ClearAround>()
         .add_message::<MowAround>()
         .add_systems(

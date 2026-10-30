@@ -21,6 +21,7 @@ pub mod litter;
 
 use crate::detail::DetailScale;
 use crate::footprint::Footprint;
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::{MainCamera, Planet};
 use crate::start::Start;
 use bevy::{
@@ -262,14 +263,20 @@ struct Meadow {
 pub fn plugin(app: &mut App) {
     app.add_plugins(MaterialPlugin::<GrassMaterial>::default())
         .add_plugins(MaterialPlugin::<litter::LitterMaterial>::default())
-        .init_resource::<BareGround>()
+        // The cover, its rules and its meadow are the world's (D469).
+        .init_world_resource::<BareGround>()
+        .world_resource::<CoverRules>()
+        .world_resource::<Meadow>()
         .add_systems(
             Update,
             (grow, measure, follow_climate)
                 .chain()
                 .run_if(resource_exists::<CoverRules>),
         )
-        .add_systems(PostStartup, heath::grow_the_lands)
+        .add_systems(
+            OnEnter(InWorld),
+            heath::grow_the_lands.in_set(Building::View),
+        )
         .add_plugins(floor::plugin);
 }
 

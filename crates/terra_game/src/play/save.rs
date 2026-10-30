@@ -745,14 +745,14 @@ mod tests {
     use terra_build::BuildOp;
     use terra_core::{PlanetSpec, Seed};
 
-    /// A world with what saving and loading need: the planet, the registries, the base
-    /// and the props' models, set up as the game sets them up, with no one in it yet.
+    /// What saving and loading need, set up as the game sets them up, with no one in it yet.
     fn game() -> App {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, AssetPlugin::default()))
             .init_asset::<Mesh>()
             .init_asset::<StandardMaterial>()
             .init_asset::<Image>();
+        terra_world::instance::in_a_world(&mut app);
         let planet = Planet::new(PlanetSpec {
             seed: Seed(1),
             radius_m: 2000.0,
@@ -767,7 +767,7 @@ mod tests {
         registries::plugin(&mut app);
         crate::build::building::plugin(&mut app);
         props::plugin(&mut app);
-        app.world_mut().run_schedule(Startup);
+        terra_world::instance::start_by_hand(app.world_mut());
         app
     }
 

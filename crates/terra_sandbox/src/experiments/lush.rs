@@ -52,6 +52,7 @@ use terra_world::detail::DetailScale;
 use terra_world::flora::Growth;
 use terra_world::flora_kinds::Flora;
 use terra_world::grown::Cards;
+use terra_world::instance::InstanceApp;
 use terra_world::planet::Planet;
 use terra_world::sky_occlusion::{self, SkyOccluders};
 
@@ -300,6 +301,8 @@ pub fn plugin(app: &mut App) {
         seasons::plugin,
     ))
     .init_resource::<Unmipped>()
+    // The forest is the world's (D469): planted again in each world entered.
+    .world_resource::<Forest>()
     .add_systems(
         Update,
         (
