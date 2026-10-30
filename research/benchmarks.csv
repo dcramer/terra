@@ -65,3 +65,17 @@ date,commit,gpu,size,build,scene,median_ms,p99_ms,worst_ms,runs,over_pct,hitches
 2026-10-16,100f47a8+,AMD Radeon(TM) Graphics,1920x1080 offscreen,release,town300,50.09,62.18,1369.54,3,100.00,1200,-3.7
 2026-10-29,9d3b6126,NVIDIA GeForce RTX 5090,1920x1080 offscreen,release,play-walk,11.16,16.37,43.84,3,9.00,8,-6.8,13.3,0
 2026-10-29,7e684666+,NVIDIA GeForce RTX 5090,1920x1080 offscreen,release,play-walk,11.21,17.59,84.16,3,16.14,7,-9.7,12.7,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,world,5.73,8.05,8.91,2,0.00,0,3.8,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,walk,7.72,9.03,10.25,2,0.00,0,11.1,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,town-day,11.57,17.20,19.54,2,15.50,0,2.3,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,town-dusk,10.34,14.48,16.65,2,2.92,0,4.4,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,town300,5.19,17.57,29.68,2,1.42,2,2.4,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,castle,4.32,19.81,24.04,2,2.67,0,4.6,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,castle-field,4.70,5.43,7.19,2,0.00,0,2.7,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,lake,10.04,11.78,14.09,2,0.17,0,3.9,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,lake-walk,11.10,13.59,16.25,2,1.50,0,7.4,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,tundra-walk,9.52,11.94,13.65,2,0.06,0,7.8,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,crypt,8.11,12.46,14.75,2,0.33,0,13.8,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,crypt-hall,8.13,13.04,22.28,2,0.50,0,13.3,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,forest-run,8.63,12.21,23.95,2,0.42,0,7.0,,0
+2026-10-30,4fd34bc5,NVIDIA GeForce RTX 4090,1920x1080 offscreen,release,play-walk,5.68,9.83,23.90,2,0.11,0,-1.1,8.8,0
