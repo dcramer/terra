@@ -70,9 +70,15 @@ enum Top {
     Climbed,
     /// A ledge jumped at, its top a share of the kind's reach.
     Ledge(f32),
-    /// A ledge in reach under a roof too low to stand under (never taken).
+    /// A ledge in reach under a roof too low to stand under (never taken), [`ROOF_M`] deep.
     Roofed,
 }
+
+/// How far the roofed ledge's roof reaches back from its face, m. The roof's face is the
+/// ledge's face going on up, so a climber passes the ledge, climbs onto the roof and runs on;
+/// past the roof's end it may drop onto the ledge's top in the open, which is not taking the
+/// ledge (at a jog of 4.5 m/s it gets there within the case's time).
+const ROOF_M: f32 = 10.0;
 
 #[derive(Clone, Copy, Debug)]
 enum Case {
@@ -396,7 +402,7 @@ fn mantle<M: Mover>(new: &impl Fn() -> M, kind: &Kind, top: Top) -> Outcome {
             let roof = high + 0.6 * kind.height;
             let course = face(90.0, high).with(Solid::Block(
                 Vec3::new(FACE_U, roof, -10.0),
-                Vec3::new(FACE_U + 10.0, roof + 0.5, 10.0),
+                Vec3::new(FACE_U + ROOF_M, roof + 0.5, 10.0),
             ));
             (course, high, true, 4.0)
         }
@@ -406,6 +412,7 @@ fn mantle<M: Mover>(new: &impl Fn() -> M, kind: &Kind, top: Top) -> Outcome {
     let mut trace = Trace::default();
     let mut walk = at_face(kind, 0.0, jump);
     let mut stood = false;
+    let mut under_roof = false;
     let seconds = reach_s(kind) + after;
     for _ in 0..(seconds / TICK) as usize {
         // Once it stands on the top the stick is let go, so it ends there: the case asks that it
@@ -416,13 +423,15 @@ fn mantle<M: Mover>(new: &impl Fn() -> M, kind: &Kind, top: Top) -> Outcome {
             walk(&run.body(0))
         };
         trace.tick(&mut run, kind, i);
-        stood |= on_top(&run.body(0), kind, high);
+        let b = run.body(0);
+        stood |= on_top(&b, kind, high);
+        under_roof |= on_top(&b, kind, high) && local(b.feet).x < FACE_U + ROOF_M;
         if trace.touch.is_some_and(|t| trace.t > t + after) {
             break;
         }
     }
     let is = match top {
-        Top::Roofed => stood,
+        Top::Roofed => under_roof,
         _ => !on_top(&run.body(0), kind, high),
     };
     run.outcome(wrong(is))
