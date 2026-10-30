@@ -55,3 +55,19 @@ test("an edge leads when the tip moves toward its -Z, whatever the look is turne
   near(edgeLead([toward([-1, 0, 0]), toward([0.4, 0, 0])]).lead, 1);
   assert.ok(turnBetween(id, qmul(r, r)) - 180 < 1e-6);
 });
+
+test("a thrust is judged by its point, not by which way its edge drifts", () => {
+  const r = about([0, 1, 0], 90); // the look's -Z is the world's -X, its +X the world's -Z
+  const toward = (v: V3) => ({ moved: v, r });
+  // The point driven ahead (+Y, up here) with its back edge (+Z, the world's +X) drifting a little:
+  // judged by the edge, it would lead with its back (-1).
+  const thrust = edgeLead([toward([0.2, 1, 0]), toward([0.1, 0.9, 0])]);
+  assert.ok(thrust.point);
+  assert.ok(thrust.lead > 0.95 && thrust.lead <= 1, `${thrust.lead}`);
+  near(thrust.flat, 0);
+  // The point pulled back (-Y) is no thrust; a slash moving mostly across stays judged by its edge.
+  assert.ok(!edgeLead([toward([0, -1, 0])]).point);
+  const slash = edgeLead([toward([-1, 0.4, 0]), toward([-1, 0.3, 0])]);
+  assert.ok(!slash.point);
+  near(slash.lead, 1);
+});
