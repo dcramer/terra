@@ -831,3 +831,34 @@ fn a_creature_rolls_its_own_dice_and_takes_its_own_turn_whatever_formed_before_i
         }
     }
 }
+
+#[test] // About ten seconds: the tundra's land round its start, 600 m of it.
+fn the_lair_is_not_put_down_in_the_tundras_pool() {
+    // The tundra as its place is shot (`--radius 30000 --site tundra@-15.54,10.52`): the spider
+    // nest went down in an inland pool, its glow under the water, since only the sea was kept
+    // off it (tundra round 17).
+    let mut planet = Planet::new(terra_core::PlanetSpec {
+        seed: Seed(1),
+        radius_m: 30_000.0,
+    });
+    let found = terra_world::start::find_site(&planet, "tundra@-15.54,10.52");
+    planet.look_round(found.middle(), 600.0, 0);
+    let start = found.start(&planet);
+    let lair = lair_site(&planet, &start).expect("no dry ground round the tundra for the lair");
+    // The nest and the ground a few metres round it, all out of the water.
+    let up = lair.normalize();
+    let side = up.any_orthonormal_vector();
+    for k in 0..=8 {
+        let reach = if k == 0 { 0.0 } else { 3.0 };
+        let turn = Quat::from_axis_angle(up, k as f32 * std::f32::consts::TAU / 8.0);
+        let ground = planet.ground_at(lair + turn * side * reach);
+        assert!(
+            !planet.under_sea(ground),
+            "the lair at {:.0} m east and {:.0} m south of the start has ground {reach} m off \
+             {:.2} m under water",
+            start.local(lair).x,
+            start.local(lair).z,
+            planet.water_radius_m(ground) - ground.length()
+        );
+    }
+}

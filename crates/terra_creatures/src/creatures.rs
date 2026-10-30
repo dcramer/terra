@@ -327,6 +327,22 @@ fn load(
     });
 }
 
+/// Whether ground stands clear of water to make a home on: over the sea, and over a lake's or a
+/// pool's water and the cell of drawn water past its edge (`Planet::water_near_m`, D322). Only
+/// the sea was kept off, so on the tundra the spider nest went down in an inland pool, its glow
+/// under the water (tundra round 17).
+fn dry(planet: &Planet, point: Vec3) -> bool {
+    point.length() > planet.water_near_m(point) + 0.6
+}
+
+/// Where the lair is, if any: the first of its hollows round the start on dry ground.
+fn lair_site(planet: &Planet, start: &Start) -> Option<Vec3> {
+    [(70.0, -60.0), (-80.0, -70.0), (90.0, 20.0), (-90.0, 10.0)]
+        .into_iter()
+        .map(|(east, south)| planet.ground_at(start.at(east, south)))
+        .find(|&point| dry(planet, point))
+}
+
 /// Once the models are in, builds their animation graphs and puts the creatures out.
 #[allow(clippy::too_many_arguments)]
 fn prepare(
@@ -364,13 +380,8 @@ fn prepare(
     // Herds in the meadow, and those that keep a lair in a hollow further off, each as
     // many as its kind says.
     let on_ground = |east: f32, south: f32| planet.ground_at(start.at(east, south));
-    let dry = |point: Vec3| point.length() > planet.sea_radius_m() + 0.6;
-    let lair = [(70.0, -60.0), (-80.0, -70.0), (90.0, 20.0), (-90.0, 10.0)]
-        .into_iter()
-        .map(|(east, south)| on_ground(east, south))
-        .find(|&point| dry(point))
-        // A demo's or film's place has none (D421): play keeps it.
-        .filter(|_| !options.no_lair);
+    // A demo's or film's place has none (D421): play keeps it.
+    let lair = lair_site(&planet, &start).filter(|_| !options.no_lair);
     // Where they like it first, then the nearest dry ground on rings further out, so a
     // world with water at all four still has a herd, away from the lair.
     let rings = (3..=9).flat_map(|ring| {
@@ -386,7 +397,7 @@ fn prepare(
         .into_iter()
         .chain(rings)
         .map(|(east, south)| on_ground(east, south))
-        .find(|&point| dry(point) && lair.is_none_or(|lair| point.distance(lair) > 40.0));
+        .find(|&point| dry(&planet, point) && lair.is_none_or(|lair| point.distance(lair) > 40.0));
     let local = |point: Vec3| start.local(point);
     if let Some(home) = herd {
         // They graze in the open, as the village says.
