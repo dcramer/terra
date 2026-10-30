@@ -24,6 +24,8 @@ The first `motion` uploads `assets/models/character/base.glb` (or `--body`) as a
 | Text-to-motion 2.0 | `2` (default) | $0.03 a second | `--seed`, `--foot-ik` |
 | Text-to-motion 3.0 | `3` | $0.10 a second | 4–10 s, a job polled every 5 s; unlocked by asking Uthana's support |
 
+`video clip.mp4 -o clip.glb` makes a clip from a video of one person (video-to-motion 2.0, $0.05 a second of video sent, 2-60 s, .mp4/.mov/.avi), on our body and checked as `motion`'s are. Trim the video to the stretch wanted first (`ffmpeg -ss -t`): it refuses one costing over `--most` dollars (0.5). Uthana asks for a still camera, the whole body in frame and one person. `--playback 2` downloads a video filmed slowed twice (50 a second shown at 25) at its real speed; the take's speed comes from the video's clock, so know it. A file sent again within a day returns the same job, uncharged.
+
 `--in-place` takes out the root's horizontal motion. `--loop 1` makes the clip a closed loop, its end eased into its start over the last second (Uthana's looping, no charge seen in the trial); `--from <motion>` loops one already made. A text-to-motion clip is not a loop until then: the trial's ended 19–67 cm off their start. `schema` lists the arguments the live API takes, for when the docs and the API disagree.
 
 ## Rights

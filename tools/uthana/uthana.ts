@@ -7,6 +7,7 @@
 //
 // Node 22.18 or later; no dependencies.
 
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -40,7 +41,10 @@ const USAGE = `node tools/uthana/uthana.ts <command>
       --model 1|2|3 (2)  --length s (5)  --seed n  --fps 24|30|60 (30)  --in-place  --foot-ik
       --body file.glb (default the base body)  --loop s (its end eased into its start over s seconds)
       --from id (a motion already made, looped by --loop or else downloaded again, free)
-  schema                               the arguments the live API takes for each mutation`;
+  video clip.mp4 -o clip.glb           a clip from a video of one person (2-60 s, $0.05 a second sent), checked
+      --playback x (1; 2 for a video slowed twice)  --fps  --in-place  --loop s  --from id  --body  as for motion
+      --most $ (0.5: refuses a longer video)
+  schema                              the arguments the live API takes for each mutation`;
 
 function auth(): string {
   let key: string;
@@ -100,20 +104,60 @@ export async function motion(prompt: string, o: { model: string; length: number;
       "mutation ($p: String!, $m: String!, $c: String, $l: Float) { create_text_to_motion_job(prompt: $p, model: $m, character_id: $c, length: $l) { job { id status } } }",
       { p: prompt, m: model.id, c: o.character, l: Math.round(o.length) },
     );
-    const started = Date.now();
-    for (;;) {
-      await sleep(5000);
-      const { job } = await gql<{ job: { status: string; result?: { result?: { id: string } } } }>("query ($j: String) { job(job_id: $j) { id status result } }", { j: made.create_text_to_motion_job.job.id });
-      if (job.status === "FINISHED" && job.result?.result?.id) return job.result.result.id;
-      if (job.status === "FAILED") throw new Failed(`the job failed: ${JSON.stringify(job.result).slice(0, 200)}`);
-      if (Date.now() - started > 300_000) throw new Failed("the job took over 5 minutes");
-    }
+    return await finished(made.create_text_to_motion_job.job.id);
   }
   const data = await gql<{ create_text_to_motion: { motion: { id: string } } }>(
     "mutation ($p: String!, $m: String, $c: String, $l: Float, $s: Int, $f: Boolean) { create_text_to_motion(prompt: $p, model: $m, character_id: $c, length: $l, seed: $s, foot_ik: $f) { motion { id name } } }",
     { p: prompt, m: model.id, c: o.character, l: o.length, s: o.seed, f: o.footIk },
   );
   return data.create_text_to_motion.motion.id;
+}
+
+/** A job's motion once it has finished, polled every 5 s as the docs ask. */
+async function finished(jobId: string): Promise<string> {
+  const started = Date.now();
+  for (;;) {
+    await sleep(5000);
+    const { job } = await gql<{ job: { status: string; result?: { result?: { id: string } } } }>("query ($j: String) { job(job_id: $j) { id status result } }", { j: jobId });
+    if (job.status === "FINISHED" && job.result?.result?.id) return job.result.result.id;
+    if (job.status === "FAILED") throw new Failed(`the job failed: ${JSON.stringify(job.result).slice(0, 200)}`);
+    if (Date.now() - started > 600_000) throw new Failed(`job ${jobId} took over 10 minutes: poll it again later, it is not charged twice (a file sent again within a day returns the same job)`);
+  }
+}
+
+// Video-to-motion's input limits (docs/api/capabilities/video-to-motion, 2026-10-30): charged
+// by the second of video sent ($0.05), so a video is trimmed to what is wanted first.
+const VIDEO = { types: /\.(mp4|mov|avi)$/i, seconds: [2, 60] };
+export const VIDEO_RATE = 0.05;
+
+/** Why a video of `seconds` is not sent at a cap of `most` dollars, or null: Uthana takes 2-60 s,
+ * and charges for every second sent, so a long one is refused before it costs anything. */
+export function videoRefused(file: string, seconds: number, most: number): string | null {
+  if (seconds < VIDEO.seconds[0] || seconds > VIDEO.seconds[1]) return `${file} runs ${seconds.toFixed(2)} s; Uthana takes 2-60 s: trim it with ffmpeg (-ss, -t)`;
+  const dollars = seconds * VIDEO_RATE;
+  if (dollars > most) return `${file} runs ${seconds.toFixed(2)} s, $${dollars.toFixed(2)} at $${VIDEO_RATE} a second, over --most ${most}: trim it to the stretch wanted, or raise --most`;
+  return null;
+}
+
+/** A video's length in seconds, by ffprobe. */
+function videoSeconds(file: string): number {
+  const probe = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8" });
+  const seconds = Number(probe.stdout.trim());
+  if (probe.status !== 0 || !Number.isFinite(seconds)) throw new Failed(`ffprobe could not read ${file}: ${probe.stderr.slice(0, 200)} (install ffmpeg)`);
+  return seconds;
+}
+
+/** A motion from a video of one person, whole body in frame, from a still camera
+ * (create_video_to_motion, model video-to-motion-2.0), retargeted onto `character`. */
+export async function video(file: string, o: { character: string; name: string }): Promise<string> {
+  if (!VIDEO.types.test(file)) throw new Failed(`${file}: Uthana takes .mp4, .mov or .avi; convert it with ffmpeg first`);
+  const query = "mutation ($file: Upload!, $n: String!, $c: String) { create_video_to_motion(file: $file, motion_name: $n, character_id: $c) { job { id status } } }";
+  const form = new FormData();
+  form.append("operations", JSON.stringify({ query, variables: { file: null, n: o.name, c: o.character } }));
+  form.append("map", JSON.stringify({ 0: ["variables.file"] }));
+  form.append("0", new Blob([readFileSync(file)]), basename(file));
+  const made = await gql<{ create_video_to_motion: { job: { id: string } } }>(query, {}, form);
+  return await finished(made.create_video_to_motion.job.id);
 }
 
 /** What is left of the account's pay-as-you-go credit, dollars: a call's cost is the fall in it. */
@@ -132,8 +176,10 @@ export async function looped(characterId: string, motionId: string, zone: number
   return data.create_looped_motion.motion.id;
 }
 
-async function fetched(characterId: string, motionId: string, fps: string, inPlace: boolean): Promise<Buffer> {
-  const query = new URLSearchParams({ fps, ...(inPlace ? { in_place: "true" } : {}) });
+// `playback` is Uthana's playback_speed (0.1-2): a video filmed slowed is downloaded at its
+// real speed, 2 for one shot at 50 a second and shown at 25.
+async function fetched(characterId: string, motionId: string, fps: string, inPlace: boolean, playback = 1): Promise<Buffer> {
+  const query = new URLSearchParams({ fps, ...(inPlace ? { in_place: "true" } : {}), ...(playback !== 1 ? { playback_speed: String(playback) } : {}) });
   const res = await fetch(`${API}/motion/animation/motion_viewer/${characterId}/${motionId}/glb/clip.glb?${query}`, { headers: { authorization: auth() } });
   if (!res.ok) throw new Failed(`download failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
   return Buffer.from(await res.arrayBuffer());
@@ -143,12 +189,12 @@ async function fetched(characterId: string, motionId: string, fps: string, inPla
  * made_clips.py: the body's skin added, its feet put on our ground (`lift`), and checked against
  * the same motion on Uthana's reference character (`against`; downloads are free). A take that
  * does not stand as the reference does is saved beside `out` as `.refused.glb` and refused. */
-export async function download(motionId: string, out: string, o: { fps: string; inPlace: boolean; body?: string }): Promise<{ lift: number; stand: Stand }> {
+export async function download(motionId: string, out: string, o: { fps: string; inPlace: boolean; body?: string; playback?: number }): Promise<{ lift: number; stand: Stand }> {
   const body = o.body ?? BODY;
-  const ours = await fetched(await character(body), motionId, o.fps, o.inPlace);
+  const ours = await fetched(await character(body), motionId, o.fps, o.inPlace, o.playback);
   const dir = mkdtempSync(join(tmpdir(), "uthana-"));
   const refFile = join(dir, "reference.glb");
-  writeFileSync(refFile, await fetched(REFERENCE, motionId, o.fps, o.inPlace));
+  writeFileSync(refFile, await fetched(REFERENCE, motionId, o.fps, o.inPlace, o.playback));
   const figure = new Glb(body);
   const reference = new Glb(refFile);
   const by = lift(figure, reference);
@@ -187,6 +233,8 @@ export async function main(argv: string[]): Promise<void> {
       body: { type: "string" },
       loop: { type: "string" },
       from: { type: "string" },
+      playback: { type: "string", default: "1" },
+      most: { type: "string", default: "0.5" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -217,6 +265,23 @@ export async function main(argv: string[]): Promise<void> {
       const dollars = Math.round((before - (await balance())) * 10000) / 10000;
       console.log(JSON.stringify({ motion: motionId, character: characterId, dollars }));
       const { lift, stand } = await download(motionId, v.out, { fps: v.fps!, inPlace: v["in-place"]!, body });
+      return console.log(JSON.stringify({ lift: round(lift), stand: Object.fromEntries(Object.entries(stand).map(([k, x]) => [k, round(x)])), files: [v.out] }));
+    }
+    case "video": {
+      if ((!arg && !v.from) || !v.out) throw new Failed("video needs a video and -o clip.glb: node tools/uthana/uthana.ts video sprint.mp4 -o sprint.glb");
+      const body = v.body ?? BODY;
+      const characterId = await character(body);
+      let made = v.from;
+      const before = await balance();
+      if (!made) {
+        const refused = videoRefused(arg, videoSeconds(arg), Number(v.most));
+        if (refused) throw new Failed(refused);
+        made = await video(arg, { character: characterId, name: basename(arg).replace(/\.[^.]+$/, "") });
+      }
+      const motionId = v.loop ? await looped(characterId, made, Number(v.loop)) : made;
+      const dollars = Math.round((before - (await balance())) * 10000) / 10000;
+      console.log(JSON.stringify({ motion: motionId, made, character: characterId, dollars }));
+      const { lift, stand } = await download(motionId, v.out, { fps: v.fps!, inPlace: v["in-place"]!, body, playback: Number(v.playback) });
       return console.log(JSON.stringify({ lift: round(lift), stand: Object.fromEntries(Object.entries(stand).map(([k, x]) => [k, round(x)])), files: [v.out] }));
     }
     default:

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { Glb, posed, type Clip, type Q, type V3 } from "../characters/glb.ts";
 import { against, ballHeight, bare, faults, glbOf, lift, lifted, withSkin } from "./carry.ts";
-import { BODY } from "./uthana.ts";
+import { BODY, videoRefused } from "./uthana.ts";
 
 const parts = (glb: Buffer) => {
   const jsonLen = glb.readUInt32LE(12);
@@ -106,4 +106,13 @@ test("feet sunk to the reference's forefoot height are refused, and standing at 
   const wrong = faults(against(figure, still({ root: { t: sunk(by) } }), reference, rest));
   assert.match(wrong.join("; "), /feet -3\.0 cm into the ground/);
   assert.deepEqual(faults(against(figure, still({ root: { t: sunk(0) } }), reference, rest)), []);
+});
+
+test("a video is sent only within Uthana's 2-60 s and the dollars allowed", () => {
+  assert.equal(videoRefused("run.mp4", 2.12, 0.5), null);
+  assert.match(videoRefused("run.mp4", 1.5, 0.5) ?? "", /2-60 s/);
+  assert.match(videoRefused("run.mp4", 61, 10) ?? "", /2-60 s/);
+  // 12 s at $0.05 a second is $0.60, over a cap of $0.50.
+  assert.match(videoRefused("run.mp4", 12, 0.5) ?? "", /over --most 0.5/);
+  assert.equal(videoRefused("run.mp4", 12, 1), null);
 });
