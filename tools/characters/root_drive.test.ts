@@ -47,3 +47,11 @@ test("clips joined are driven one after the other", () => {
   assert.ok(Math.abs(driven(drive, 1.5) - 0.5) < 0.03, `the drive goes ${driven(drive, 1.5)} m`);
   assert.ok(drive.every(([t, v]) => (t < 0.5 ? Math.abs(v - 2) < 1e-3 : Math.abs(v + 0.5) < 1e-3)), "2 m/s for the blow, back at 0.5 after");
 });
+
+test("a number part is a pause the body stands through, as glb_clips joins it", () => {
+  const g = rooted({ Blow: [[0, 0.5], [0, 1]] });
+  const { drive, ahead } = rootDrive(g, ["0.25", "Blow"], 1 / 30);
+  assert.ok(Math.abs(ahead - 1) < 1e-5);
+  assert.ok(Math.abs(driven(drive, 0.75) - 1) < 0.03, `the drive goes ${driven(drive, 0.75)} m`);
+  assert.ok(drive.every(([t, v]) => (t <= 0.25 ? v === 0 : Math.abs(v - 2) < 1e-3)), "still for the pause, then 2 m/s");
+});
