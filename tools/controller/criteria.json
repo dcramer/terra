@@ -1698,22 +1698,6 @@
    },
    "cost": "heavy",
    "measurable": true
-  },
-  {
-   "id": "bones.arms.mean",
-   "noticed": 3,
-   "notice": "the arms are pushed off the hips by a rule, not swung as the clip swings them",
-   "bar": {
-    "at_most": 0
-   },
-   "unit": "degrees, keep_off_hips's turn of the bone it turns most, averaged over a motion, the worst of bones.feet.worst's motions (tools/controller/bones.ts); D584 retires it once the clips keep the hands clear",
-   "source": "D584; D535",
-   "check": {
-    "by": "film",
-    "name": "bones arms mean"
-   },
-   "cost": "heavy",
-   "measurable": true
   }
  ]
 }

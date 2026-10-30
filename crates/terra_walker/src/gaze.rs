@@ -47,14 +47,14 @@ pub fn plugin(app: &mut App) {
     app.add_observer(find_head).add_systems(
         PostUpdate,
         // Last of the pose writers (the clips and hold layer, the fit and lift, the foot lock,
-        // the arms off the hips), before propagation and the duel record's read in `Last`
-        // (D530): the head is turned on the pose as drawn.
+        // the fists), before propagation and the duel record's read in `Last` (D530): the
+        // head is turned on the pose as drawn.
         keep_on_aim
             .in_set(crate::pose::Layer::Gaze)
             .after(bevy::app::AnimationSystems)
             .after(crate::Fitted)
             .after(crate::feet::keep)
-            .after(crate::arms::keep_off_hips)
+            .after(crate::grip::close_hands)
             .before(TransformSystems::Propagate),
     );
 }

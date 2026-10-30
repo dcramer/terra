@@ -14,7 +14,6 @@
 
 pub mod appearance;
 pub mod arm_swing;
-pub mod arms;
 pub mod bend;
 pub mod bodies;
 pub mod bone_audit;

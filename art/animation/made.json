@@ -6,27 +6,22 @@
     "seed": 1,
     "take": 1
   },
+  "Crouch_Fwd_Loop": {
+    "prompt": "A person walks forward slowly in a low crouch, knees deeply bent, sneaking quietly.",
+    "speed": 0.8,
+    "seconds": 8,
+    "seed": 41,
+    "samples": 4,
+    "take": 0
+  },
   "Jog_Fwd_Loop": {
-    "prompt": "A person jogs forward with long strides, arms bent and swinging at the sides.",
+    "prompt": "A person jogs forward at a steady pace, arms swinging naturally.",
     "speed": 5,
     "seconds": 6,
-    "seed": 5,
-    "take": 2,
+    "seed": 11,
+    "samples": 4,
+    "take": 0,
     "step": 0.1,
-    "arms": {
-      "swing": [
-        30,
-        50
-      ],
-      "elbow": [
-        65,
-        100
-      ],
-      "tuck": 12,
-      "wrist": 8,
-      "across": 8,
-      "palm": 30
-    },
     "fist": 0.95
   },
   "Sprint_Loop": {

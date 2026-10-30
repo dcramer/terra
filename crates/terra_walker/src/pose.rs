@@ -1,7 +1,7 @@
 //! The layers that pose a body after its clips, the same in play (`WalkerPlugin`) and on the
 //! model workbench, so a still from the workbench shows what the game shows: an upright carry
 //! pose's arm held in the body's frame (`carry_arm`, D560), the spear and the bow carried by
-//! the rule tipped at the wrist (`carry_hand`, D564), the arms kept off the hips (`arms`), the
+//! the rule tipped at the wrist (`carry_hand`, D564), the
 //! fists closed on what they hold (`grip`) and the shield arm fitted to its board's place
 //! (`shield_arm`, D554). One list both call, so the two cannot drift; asked twice, it lays them
 //! once. The head's turn toward the facing (`gaze`) is play's alone: the workbench has no foe.
@@ -19,7 +19,7 @@ pub struct PoseLayers;
 /// A layer that changes a body after its clips, as `--pose-layers` names it. Its systems are
 /// in its set, which runs while [`Switch`] has it on. Not among them, as they are not after
 /// the clip: the hold layer (a stance's arms laid over the clips by a mask, part of what the
-/// clips play), the stride's arms and narrowing (D360, baked into the clips) and a blow's aim
+/// clips play), the stride's narrowing (D360, baked into the clips) and a blow's aim
 /// (D573, the root turned); nor what moves the body or a look but no bone (the step's
 /// smoothing, a held tool's tilt, the shield on its strap, loose things swinging).
 #[derive(bevy::ecs::schedule::SystemSet, Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -30,7 +30,6 @@ pub enum Layer {
     CarryHand,
     Grip,
     Feet,
-    Arms,
     ShieldArm,
     Gaze,
     Swim,
@@ -38,14 +37,13 @@ pub enum Layer {
 
 impl Layer {
     /// Every layer, in the order they pose a body.
-    pub const ALL: [Layer; 10] = [
+    pub const ALL: [Layer; 9] = [
         Layer::CarryArm,
         Layer::Joints,
         Layer::Lift,
         Layer::CarryHand,
         Layer::Grip,
         Layer::Feet,
-        Layer::Arms,
         Layer::ShieldArm,
         Layer::Gaze,
         Layer::Swim,
@@ -60,7 +58,6 @@ impl Layer {
             Layer::CarryHand => "carry_hand",
             Layer::Grip => "grip",
             Layer::Feet => "feet",
-            Layer::Arms => "arms",
             Layer::ShieldArm => "shield_arm",
             Layer::Gaze => "gaze",
             Layer::Swim => "swim",
@@ -82,7 +79,6 @@ impl Layer {
             }
             Layer::Grip => "the fingers closed on what the hand holds (hand IK, close_hands)",
             Layer::Feet => "the foot lock and foot placement (D455, feet::keep)",
-            Layer::Arms => "the arms kept off the hips (D535, keep_off_hips)",
             Layer::ShieldArm => "the shield arm fitted to its board's place (D554, fit_shield_arm)",
             Layer::Gaze => "the head and neck turned toward the aim (look-at, keep_on_aim)",
             Layer::Swim => "a swimmer's whole figure laid along its stroke (D478, swim::lay)",
@@ -213,7 +209,6 @@ pub fn plugin(app: &mut App) {
     switch(app);
     crate::carry_arm::plugin(app);
     crate::carry_hand::plugin(app);
-    crate::arms::plugin(app);
     crate::grip::plugin(app);
     crate::shield_arm::plugin(app);
 }
@@ -234,10 +229,9 @@ pub fn system_names(
 }
 
 /// The systems the pose layers run, each in its own plugin.
-pub const SYSTEMS: [&str; 5] = [
+pub const SYSTEMS: [&str; 4] = [
     "hold_in_body",
     "tip_carried",
-    "keep_off_hips",
     "close_hands",
     "fit_shield_arm",
 ];
@@ -279,7 +273,6 @@ mod tests {
             (Layer::CarryHand, "tip_carried"),
             (Layer::Grip, "close_hands"),
             (Layer::Feet, "keep"),
-            (Layer::Arms, "keep_off_hips"),
             (Layer::ShieldArm, "fit_shield_arm"),
             (Layer::Gaze, "keep_on_aim"),
             (Layer::Swim, "lay"),
@@ -319,8 +312,8 @@ mod tests {
         let only = Switch::parse("only=feet,gaze,grip").unwrap();
         let on: Vec<_> = Layer::ALL.into_iter().filter(|&l| only.on(l)).collect();
         assert_eq!(on, [Layer::Grip, Layer::Feet, Layer::Gaze]);
-        let off = Switch::parse("off=carry_hand, arms").unwrap();
-        assert_eq!(off.names_off(), ["carry_hand", "arms"]);
+        let off = Switch::parse("off=carry_hand, gaze").unwrap();
+        assert_eq!(off.names_off(), ["carry_hand", "gaze"]);
         let none = Switch::parse("none").unwrap();
         assert_eq!(
             Layer::ALL

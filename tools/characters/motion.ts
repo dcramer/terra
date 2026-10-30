@@ -264,7 +264,15 @@ async function main() {
     if (!existsSync(take(n))) continue;
     const figure = join(dir, `try_${n}.glb`);
     copyFileSync(join(ROOT, "assets", "models", "character", "mannequin.glb"), figure);
-    const made = run(BLENDER, [join(HERE, "made_clips.py"), figure, `--try=${clip}:${take(n)}`, ...set]);
+    // A take with no clean stride (it stumbles, or its heels never strike) is said and passed
+    // over; the other takes are still measured.
+    let made: string;
+    try {
+      made = run(BLENDER, [join(HERE, "made_clips.py"), figure, `--try=${clip}:${take(n)}`, ...set]);
+    } catch {
+      console.log(`take ${n}: made_clips.py refused it (its reason is above) ✗`);
+      continue;
+    }
     const gait = run(BLENDER, [join(HERE, "gait_check.py"), figure, `--clips=${clip}`]);
     const check = run(BLENDER, [join(HERE, "clip_check.py"), figure, clip]);
     const lines = (text: string, start: string) => text.split("\n").filter((l) => l.startsWith(start));

@@ -66,7 +66,6 @@ import { type Shape, armPoints, shaped, skinOf } from "./skin.ts";
 import { MOVE_BLEND_S, ROUND_TRIP_S, faceOff, gripOff, roundTrip } from "./shield_path.ts";
 import { parseArgs } from "node:util";
 import { Glb, type Clip, type Pose, type Q, type V3, len, place, posed, qinv, qmul, rot, sub, turn } from "./glb.ts";
-import { type Holding, keptOff, reach } from "./arms.ts";
 import { carryArm } from "./carry_arm.ts";
 import { sharesIn, swung as armSwung } from "./additive.ts";
 import { about, atWrist as atWristShare, elbowOpen, inFist as inFistShare, wristTurn } from "./carry_hand.ts";
@@ -105,9 +104,6 @@ const { values: opt } = parseArgs({
     // Carried: in the clips the game carries in (terra_walker::character::CARRIED_IN), a look in
     // hand turned its `carry_tilt` about its X, as character/held.rs's `tilt` turns it (fit.ts).
     carry: { type: "boolean", default: false },
-    // The hanging hands kept off the hips after the clip, as terra_walker::arms keeps them
-    // (arms.ts, D535): the walker's composed pose (fit.ts).
-    arms: { type: "boolean", default: false },
     // The fists closed on what the hands hold, as terra_walker::grip closes them (grip.ts);
     // `--no-grip` leaves the clips' fingers.
     grip: { type: "boolean", default: true },
@@ -219,30 +215,18 @@ const clipOf = (name: string): Clip => {
 // and each template's morph mix and joint offsets (skin.ts).
 const { shapes, skinned } = skinOf(body, opt.templates!, opt.template!.split(",").filter(Boolean));
 
-// The pose as the game composes it: the hanging hands kept off the hips (`--arms`), then the shield
-// arm fitted to the body (shield_arm.ts, D554), each as the game does after the clips.
-const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => fitShield(armsKept(shape, clip, t), shape.moved);
-// `--arms`: the hanging hands then kept off the hips as the game keeps them (arms.ts, D535).
-// The fists closed first (`inFist`), as terra_walker::grip runs before arms::keep_off_hips.
-const armsKept = (shape: Shape, played: Clip, t: number): Pose[] => {
+// The pose as the game composes it: the clip with the fists closed (`inFist`), the carried arm
+// and wrist, then the shield arm fitted to the body (shield_arm.ts, D554), each as the game
+// does after the clips.
+const poseOf = (shape: Shape, clip: Clip, t: number): Pose[] => fitShield(carried(shape, clip, t), shape.moved);
+const carried = (shape: Shape, played: Clip, t: number): Pose[] => {
   const clip = atWrists(inFist(shape, played));
   const base = new Map(carriedArms(shape, clip, t));
   // A tool carried by the rule: its forearm kept down (carry_hand.ts), as
-  // terra_walker::carry_hand opens the elbow before the fists and the arms.
+  // terra_walker::carry_hand opens the elbow before the fists.
   const elbows = elbowsOpened(shaped(body, shape, clip, t, base), clip);
   for (const [bone, q] of elbows) base.set(bone, q);
-  const pose = shaped(body, shape, clip, t, base);
-  if (!opt.arms) return pose;
-  const kept = keptOff(body, pose, holdingIn(clip));
-  if (!kept.size) return pose;
-  for (const [bone, q] of base) kept.set(bone, kept.has(bone) ? qmul(kept.get(bone)!, q) : q);
-  // The game opens the elbow in the upper arm's frame before the arm is turned out: the
-  // forearm's turn goes on after the upper arm's, so it is turned with it.
-  for (const [bone, q] of elbows) {
-    const out = kept.get(bone.replace("lowerarm", "upperarm"));
-    if (out) kept.set(bone, qmul(qmul(out, q), qinv(out)));
-  }
-  return shaped(body, shape, clip, t, kept);
+  return shaped(body, shape, clip, t, base);
 };
 
 // Held looks, hung as `terra_walker::character` hangs them (held.ts).
@@ -316,11 +300,6 @@ function elbowsOpened(pose: Pose[], clip: Clip): Map<string, Q> {
   return out;
 }
 const pointsIn = (h: Held, clip: Clip) => (carriedNow(clip) ? carriedPoints.get(h.name)! : h.points);
-// `--arms`: what each hand holds counts in its arm's spacing, as the game counts it: a look on
-// its hand socket by its reach (arms.ts), tipped when carried.
-const reaches = held.filter((h) => h.socket === h.hand).map((h) => ({ h, points: reach(h.points) }));
-const holdingIn = (clip: Clip): Holding[] =>
-  reaches.map(({ h, points }) => ({ socket: h.socket, points: carriedNow(clip) ? tipped(fistTilt(h), points) : points }));
 
 // The fists (grip.ts): what a hand socket holds closes its fingers on it after the clip,
 // as terra_walker::grip lays them, each template's from its own hand, the handle seated against
