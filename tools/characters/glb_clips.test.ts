@@ -8,9 +8,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Glb } from "./glb.ts";
+import { Glb, posed } from "./glb.ts";
 import { glbDiff } from "./glb_diff.ts";
-import { putClips } from "./glb_clips.ts";
+import { joinClips, putClips } from "./glb_clips.ts";
 
 const MANNEQUIN = join(import.meta.dirname, "..", "..", "assets/models/character/mannequin.glb");
 
@@ -53,6 +53,21 @@ test("a clip changed in the source arrives changed, and nothing else moves", () 
     else assert.deepEqual(v, before.get(k), k);
   }
   assert.ok(glbDiff(MANNEQUIN, MANNEQUIN).length === 0);
+});
+
+test("two clips joined play the first and then the second, at its own times", () => {
+  const m = readFileSync(MANNEQUIN);
+  const g = new Glb(m);
+  const [a, b] = ["Jump_Start", "Jump_Loop"].map((n) => g.clip(n)!);
+  const joined = new Glb(putClips(m, joinClips(m, "Joined", [a.name, b.name]), ["Joined"])).clip("Joined")!;
+  assert.ok(Math.abs(joined.end - (a.end + b.end)) < 1e-4, `${joined.end} = ${a.end} + ${b.end}`);
+  const pelvis = g.named("pelvis");
+  const cases = [[a, 0.5 * a.end, 0.5 * a.end], [b, 0.3 * b.end, a.end + 0.3 * b.end], [b, b.end, a.end + b.end]] as const;
+  for (const [clip, at, t] of cases) {
+    const want = posed(g, clip, at)[pelvis];
+    const got = posed(g, joined, t)[pelvis];
+    for (const k of [0, 1, 2]) assert.ok(Math.abs(want.t[k] - got.t[k]) < 1e-4, `${clip.name} at ${at.toFixed(2)} s: ${want.t} against ${got.t}`);
+  }
 });
 
 /** A JSON chunk's header and body, padded. */

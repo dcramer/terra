@@ -10,7 +10,7 @@
 // and the four films in a 2x2 grid with the step's name, with a copy under 15 MB for the
 // review desk.
 //
-//   cargo xtask duel [--out <dir>]          run, film, sheet and check
+//   cargo xtask duel [--out <dir>] [--script duels/<file>.ron]   run, film, sheet and check
 //   cargo xtask duel --check <fight.jsonl>…  only the checks, on records already made
 //   cargo xtask duel --check [--out <dir>]   only the checks, on the runs filmed into the dir
 //
@@ -39,7 +39,6 @@ import { streamed } from "./streamed.ts";
 const MOVES = resolve(ROOT, "assets/data/moves/sword.shielded.ron");
 /// The player's share of the frame's height the game's camera is held to (D180).
 const SHARE: number[] = JSON.parse(readFileSync(resolve(ROOT, "tools/combat/refs/enshrouded.json"), "utf8")).targets.camera_player_share;
-const SCRIPT = "duels/yard.ron";
 /// The frames filmed, every second one kept for 30 a second: from before the draw to past
 /// the script's end (the end at frame 1123 before round 30 added a sheathed idle and walk after the fight, 1333 since).
 const FROM = 20;
@@ -70,11 +69,13 @@ const CAMERAS: Camera[] = [
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
-  console.log("duel.ts [--out <dir>] | --check <fight.jsonl>… | --check [--out <dir>]");
+  console.log("duel.ts [--out <dir>] [--script duels/<file>.ron] | --check <fight.jsonl>… | --check [--out <dir>]");
   process.exit(0);
 }
 const opt = (name: string) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const out = resolve(opt("--out") ?? join(homedir(), ".cache/terra-review/duel"));
+/// The fight script the player follows (assets/data/duels): the yard's unless --script names another.
+const SCRIPT = opt("--script") ?? "duels/yard.ron";
 const started = Date.now();
 const took = () => `${((Date.now() - started) / 1000).toFixed(0)} s`;
 

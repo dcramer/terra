@@ -7,6 +7,9 @@
 //
 //   node tools/characters/glb_clips.ts TARGET.glb SOURCE.glb CLIP...
 //
+// A clip given as `NEW=A+B` is the source's A and then its B joined into one clip named NEW
+// (`joinClips`: a blow and its recovery played as one move).
+//
 // Each clip's channels go to the target's node of the same name. Where the source's rest
 // frame for a node differs from the target's (a bone Blender rolled), the keys are carried into
 // the target's frame, so the clip poses the body as it did in the source. A clip the target has
@@ -222,18 +225,84 @@ export function putClips(target: Buffer, source: Buffer, names: string[], report
   return glbBytes(json, Buffer.concat(parts));
 }
 
+/**
+ * `source` with a clip `name` added that plays `parts` one after another (a blow and then its
+ * recovery, as a montage plays its sections): each channel's keys of every part, the next part's
+ * shifted by the lengths before it, a key landing on the time of the one before dropped. Every
+ * part must move what the first moves, keyed linearly or stepped.
+ */
+export function joinClips(source: Buffer, name: string, parts: string[]): Buffer {
+  const { json, bin } = chunks(source);
+  const g = new Glb(source);
+  const anims = parts.map((p) => {
+    const a = json.animations?.find((x) => x.name === p);
+    if (!a) throw new Error(`glb_clips: no clip ${p} in the source to join into ${name}`);
+    return a;
+  });
+  const length = (a: Anim) => Math.max(...a.samplers.map((s) => g.read(s.input).at(-1) ?? 0));
+  const data: Buffer[] = [bin.length % 4 ? Buffer.concat([bin, Buffer.alloc(4 - (bin.length % 4))]) : bin];
+  let offset = data[0].length;
+  const accessors = [...json.accessors];
+  const bufferViews = [...json.bufferViews];
+  const floats = (values: number[], type: string, bounds: boolean) => {
+    const b = Buffer.alloc(values.length * 4);
+    values.forEach((x, k) => b.writeFloatLE(x, k * 4));
+    bufferViews.push({ buffer: 0, byteOffset: offset, byteLength: b.length });
+    data.push(b);
+    offset += b.length;
+    accessors.push({ bufferView: bufferViews.length - 1, componentType: 5126, count: values.length / WIDTH[type], type, ...(bounds ? { min: [Math.min(...values)], max: [Math.max(...values)] } : {}) });
+    return accessors.length - 1;
+  };
+  const joined: Anim = { name, channels: [], samplers: [] };
+  for (const ch of anims[0].channels) {
+    const times: number[] = [];
+    const values: number[] = [];
+    let at = 0;
+    let type = "";
+    let interpolation: string | undefined;
+    for (const a of anims) {
+      const c = a.channels.find((x) => x.target.node === ch.target.node && x.target.path === ch.target.path);
+      const what = `${json.nodes[ch.target.node].name} ${ch.target.path}`;
+      if (!c) throw new Error(`glb_clips: ${a.name} does not move ${what}, which ${anims[0].name} does; join clips that key the same channels`);
+      const sm = a.samplers[c.sampler];
+      if (sm.interpolation === "CUBICSPLINE") throw new Error(`glb_clips: ${a.name}'s ${what} is a cubic spline; only linear or stepped keys join`);
+      interpolation = sm.interpolation;
+      type = json.accessors[sm.output].type;
+      const t = g.read(sm.input);
+      const v = g.read(sm.output);
+      const w = WIDTH[type];
+      for (let k = 0; k < t.length; k++) {
+        if (times.length && at + t[k] <= times[times.length - 1] + 1e-5) continue;
+        times.push(at + t[k]);
+        for (let j = 0; j < w; j++) values.push(v[k * w + j]);
+      }
+      at += length(a);
+    }
+    joined.samplers.push({ input: floats(times, "SCALAR", true), output: floats(values, type, false), interpolation });
+    joined.channels.push({ sampler: joined.samplers.length - 1, target: ch.target });
+  }
+  const out = { ...json, accessors, bufferViews, buffers: [{ ...json.buffers[0], byteLength: offset }], animations: [...(json.animations ?? []).filter((a) => a.name !== name), joined] };
+  return glbBytes(out, Buffer.concat(data));
+}
+
 /** The file with data nothing reads dropped from its buffer. */
 export const compact = (bytes: Buffer): Buffer => putClips(bytes, bytes, []);
 
 if (import.meta.main) {
-  const [target, source, ...names] = process.argv.slice(2);
-  if (!target || !source || !names.length) {
-    console.log("usage: node tools/characters/glb_clips.ts TARGET.glb SOURCE.glb CLIP...");
+  const [target, source, ...given] = process.argv.slice(2);
+  if (!target || !source || !given.length) {
+    console.log("usage: node tools/characters/glb_clips.ts TARGET.glb SOURCE.glb CLIP|NEW=A+B...");
     process.exit(2);
   }
   const before = readFileSync(target);
   const report: Report = { turned: [], apart: 0 };
-  const out = putClips(before, readFileSync(source), names, report);
+  let from = readFileSync(source);
+  const names = given.map((n) => {
+    const [name, parts] = n.split("=");
+    if (parts) from = joinClips(from, name, parts.split("+"));
+    return name;
+  });
+  const out = putClips(before, from, names, report);
   if (!out.equals(before)) writeFileSync(target, out);
   const turned = report.turned.length ? `; ${report.turned.length} bones' frames turned in the source, keys carried into the target's (${report.turned.slice(0, 4).join(", ")} deg)` : "";
   console.log(`CLIPS put ${names.length} into ${target}${out.equals(before) ? ", the same bytes as it had" : ""}; the source's joints within ${(report.apart * 1000).toFixed(2)} mm of the target's${turned}`);
