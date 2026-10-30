@@ -86,10 +86,12 @@ impl Quality {
                 most_m: 1_200.0,
             },
             Quality::High => Shadows {
-                // Unreal's default cascade (`r.Shadow.MaxCSMResolution`): 64 MiB for the four, not
-                // 256 at 4096 (D420).
+                // Unreal's default cascade (`r.Shadow.MaxCSMResolution`): 16 MiB a cascade, not
+                // 64 at 4096 (D420). Three to 300 m, split at about 24 and 85 m: a fourth, split
+                // at 56 and 129 m, cost the forest run half a millisecond of GPU for shadows a
+                // little sharper from 24 to 130 m (D586).
                 map: 2048,
-                cascades: 4,
+                cascades: 3,
                 first_m: 24.0,
                 most_m: 300.0,
             },

@@ -573,6 +573,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D580](decisions/D580.md) | How long a load may take | Design | — | Open | What load time the game holds to, as D25's 13.3 ms holds… |
 | [D582](decisions/D582.md) | The sun's shadows are prepared only for views that draw them | Tech | Agent | Decided | Two pieces of shadow work Bevy 0.20 did every frame and… |
 | [D583](decisions/D583.md) | A multidrawn batch set's bin buffers are written only when they change | Tech | Agent | Decided | Bevy 0.20's `write_binned_instance_buffers` wrote each… |
+| [D586](decisions/D586.md) | High's sun shadows in three cascades | Tech | Agent | Decided | The high preset draws the sun's shadows in three… |
 
 ## Tools and workflow
 
