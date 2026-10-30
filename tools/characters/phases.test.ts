@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contactOf, paced, strike } from "./phases.ts";
-import type { V3 } from "./glb.ts";
+import { readFileSync } from "node:fs";
+import { contactOf, measure, paced, strike } from "./phases.ts";
+import { Glb, type V3 } from "./glb.ts";
 
 const STEP = 1 / 60;
 // A tip a metre ahead, going `at(t)` metres to the left at time t, for `seconds`.
@@ -66,4 +67,27 @@ test("a blow lands where its tip is furthest ahead: a sweep at the front, a thru
   const thrust = [0.2, 0.9, 1.5, 1.75, 1.6, 1.2].map((z, i) => ({ t: i / 60, tip: [-0.3, 0.3, z] as V3 }));
   assert.equal(contactOf(thrust)!.tip[2], 1.75);
   assert.equal(contactOf([]), undefined);
+});
+
+test("a bought blow led in from the guard makes no swing of its own before it strikes", () => {
+  // Quaternius's blows (fight.json `Swap_*`) start from his stance, the hips turned up to 105
+  // deg from our guard's, and the whole body is eased to it from the guard (the `pelvis` hold's
+  // `out`). Eased too fast, the tip whips round the body at 30-60 m/s, a swing before the blow
+  // (fight-swap j5's finisher, 39 m/s in 0.14 s); eased over the clip's own calm start, it moves
+  // as the blow's wind-up. Through that ease, up to where the tip speeds up into the strike
+  // without a pause, the tip's pace stays under half the strike's.
+  const set = JSON.parse(readFileSync("art/animation/sets/fight.json", "utf8")) as Record<string, { hold?: { bone: string; out?: [number, number] }[] }>;
+  const glb = new Glb("assets/models/character/fight.glb");
+  const swaps = Object.entries(set).filter(([name]) => name.startsWith("Swap_"));
+  assert.ok(swaps.length >= 4, "the set's bought blows");
+  const whips = swaps.flatMap(([name, entry]) => {
+    const ease = entry.hold!.find((h) => h.bone === "pelvis")!.out!;
+    const p = measure(glb, name)!;
+    if (!p.fastest || !p.active) return [`${name} never strikes`];
+    let rise = p.frames.findIndex((f) => f.t >= p.active[0] - 1e-6);
+    while (rise > 0 && p.frames[rise - 1].pace < p.frames[rise].pace) rise--;
+    const lead = p.frames.slice(0, rise).filter((f) => f.t <= ease[1] + 1e-6).reduce((a, b) => Math.max(a, b.pace), 0);
+    return lead < 0.5 * p.fastest.pace ? [] : [`${name}: the tip at ${lead.toFixed(1)} m/s through its ease from the guard (0-${ease[1]} s), its strike ${p.fastest.pace.toFixed(1)}`];
+  });
+  assert.deepEqual(whips, []);
 });

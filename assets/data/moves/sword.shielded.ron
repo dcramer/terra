@@ -83,7 +83,8 @@
     moves: {
         // The light chain and the heavy are Quaternius's UAL2 clips as made (Swap_*: each blow
         // joined to its _Rec, the shield arm held at the guard's, D532), played at their own
-        // speed. Each leads in 0.08 s from our guard and
+        // speed. Each leads in 0.08 s from our guard, eased on over the clip's calm start (0.1-0.6
+        // s, so the lead is the blow's wind-up and not a swing of its own), and
         // eases back to it as a montage blends in and out (fight.json's whole-body hold), so a
         // time here is the clip's plus that lead. Each drive is the clip's root motion
         // (root_drive.ts on ual2_fight_rm.glb with the lead, scaled to the body's skeleton),

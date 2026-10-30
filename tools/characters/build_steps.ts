@@ -227,7 +227,9 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
   // motion, which the foot markers judge them by). A take held as one (`Swap_*`, its `of`) has
   // the same root motion. A blow leads in from our guard: its first pose held LEAD seconds while
   // its take (`Swap_*`) eases the whole body to it from the guard, as a montage blends in,
-  // since Quaternius's blows start from his stance and not ours.
+  // since Quaternius's blows start from his stance and not ours (the hips turned up to 105 deg).
+  // The ease runs on over the clip's calm start (fight.json's `pelvis` hold `out`), so the tip
+  // moves as the blow's wind-up and not a swing of its own (phases.test.ts).
   const LEAD = 0.08;
   const UAL2: [string, string][] = [
     ["Light_A", `${LEAD}+Sword_Light_A+Sword_Light_A_Rec`],
