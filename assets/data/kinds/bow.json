@@ -30,11 +30,11 @@
     "open": [{ "owner": "technical", "why": "the draw: the string's middle follows the main hand while drawn, the hand on the clip (holding.md section 3), not built" }]
   },
   "carried": {
-    "state": "decided",
-    "mechanism": "carry_rule",
-    "decisions": ["D567", "D546", "D564"],
-    "how": "low in the left hand (its lead, the off hand; the right on a left-handed body), its top tipped forward (D567); today tipped by the carry rule as any look in hand",
-    "open": [{ "owner": "technical", "why": "the carry rule's case for a bow (low in the off hand, top forward) is not built, nor carrying in the off hand" }]
+    "state": "built",
+    "mechanism": "carry_pose",
+    "decisions": ["D567", "D560", "D584"],
+    "clip": "Carry_Bow",
+    "how": "low in the left hand (its lead, the off hand), its top tipped forward about 50 degrees from upright and a little in, the lower limb out past the thigh, held in the body's frame (D567; attachment.md Carried)"
   },
   "stowed": {
     "state": "decided",

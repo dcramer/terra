@@ -1,1 +1,1 @@
-{"kind": "polearm", "source": "tools/Spear.glb", "fit": "length", "length": 1.8, "grip_from_end": 0.75, "turn": -90}
+{"kind": "polearm", "carry_hold": "Carry_Spear", "source": "tools/Spear.glb", "fit": "length", "length": 1.8, "grip_from_end": 0.75, "turn": -90}

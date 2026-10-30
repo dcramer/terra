@@ -40,11 +40,11 @@
     "open": [{ "owner": "technical", "why": "its thrusts and sweeps come with its sets, two-handed ones keyed with both hands" }]
   },
   "carried": {
-    "state": "decided",
-    "mechanism": "carry_rule",
-    "decisions": ["D567", "D546", "D564"],
-    "how": "upright at the side in the lead hand, point up (D567); today the carry rule tips it instead, no lower than 0.55 m under the grip, its head 32 degrees down (attachment.md Carried)",
-    "open": [{ "owner": "technical", "why": "the carry rule's upright case for a spear (its tilt point up, the arm at the side, the shaft clear of the leg) is not built" }]
+    "state": "built",
+    "mechanism": "carry_pose",
+    "decisions": ["D567", "D560", "D584"],
+    "clip": "Carry_Spear",
+    "how": "upright at the side in the main hand, point up (D567): the forearm forward, the shaft within 5 degrees of upright, held in the body's frame (attachment.md Carried)"
   },
   "stowed": {
     "state": "decided",
