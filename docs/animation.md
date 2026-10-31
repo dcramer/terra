@@ -54,7 +54,17 @@ Each step ends with a film on the desk and the developer's yes before the next s
 3. **Carry overlays:** a pose from a clip for each way of holding. They replace carry_hand and arms (the per-frame twists), which are deleted: carry_hand went 2026-10-30, once the spear and the bow took `Carry_Spear` and `Carry_Bow`; arms stays until the jog is retaken. The carried arm swings with the stride by the loop's own additive arm clip at the pose's share (D584's log, 2026-10-30).
 4. **Swims:** done 2026-10-30 (Uthana, lying in the water). Open faults: the quiver shows skin in the dive, and the tread reads as a squat.
 5. **The fight set:** each blow made striking, from the bought packs where they have it, Uthana otherwise. Hand IK only, by the same ladder (raw, carried, in game).
-6. **Then attachments and assembled items resume** (D565), on bodies that move right.
+   - Tried and parked, 2026-10-31: Quaternius's blows and Uthana's both failed to mesh (research/2026-10-31-why-the-bought-blows-slide.md, research/2026-10-31-uthana-sword-blows.md). The game keeps our keyed blows until the developers come back to it; the Quaternius set is parked on origin/wip/fight-swap-j9.
+6. **Then attachments and assembled items resume** (D565), on bodies that move right. Resumed 2026-10-31 on the developer's word.
+
+## Our example to follow
+
+The developer, 2026-10-31: "continue to use that repo we found as an example of how to do some things since we're noobs". [Siroko/kansei](https://github.com/Siroko/kansei) is an engine built by agents, in Rust, with motion matching on generated clips, and its motion holds up beside Epic's. Before a job builds how a body moves, it looks at how Kansei does the same thing.
+
+- Its licence is MIT, so per D196 we may port its code with its notice and name it as the source, or write our own from its method.
+- A shallow copy for searching lives at `~/.cache/terra-ref/kansei` (`git clone --depth 1`, never committed).
+- Worth copying so far: a foot-slide table over one scripted course (`scripts/foot-slide.mjs`); one style prompt shared across a pack of clips; a known-good reference on screen beside ours; bought motion kept in a private folder and linked in, never committed where its licence does not allow a public repository (its AGENTS.md).
+- It has no held items, so it says nothing on attachments.
 
 ## What we stop doing
 
