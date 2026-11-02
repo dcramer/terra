@@ -158,6 +158,7 @@ Equipment, packs, tools, stations and icons.
 | [D151](decisions/D151.md) | Expanding a station | Design | Developers | Decided | Stations are expanded and upgraded… |
 | [D460](decisions/D460.md) | Where the off hand's item comes from | Design | Developers | Decided | How a shield, a torch or a second blade gets into the… |
 | [D566](decisions/D566.md) | Assembled items' parts join on one line, made in the finished frame and never scaled; the kinds are data in assets/data/kinds | Tech | Agent | Decided | Each part of an assembled item (D565) is made in the… |
+| [D602](decisions/D602.md) | The starting kit's clothes are Quaternius's Ranger outfit | Design | Developers | Decided | The v0 starting kit's clothes are Quaternius's Ranger… |
 
 ## Lore, magic, combat and growth
 
@@ -477,7 +478,7 @@ The look, models, bodies and gear, textures and audio.
 | [D593](decisions/D593.md) | The base body's arms and legs are stretched in the character pipeline | Design | Agent | Leaning | The base body's arms are lengthened to a 1.86 m reach… |
 | [D597](decisions/D597.md) | Trees sway as a hierarchy: trunk, each branch about its own root with its own phase, leaf clusters on their stalks | Tech | — | Open | Open: whether to replace the one bend every vertex of a… |
 | [D599](decisions/D599.md) | Characters are built on Quaternius's bodies and outfits, in our paint | Design | Developers | Decided | Terra's people are built on Quaternius's base bodies… |
-| [D600](decisions/D600.md) | What shows in an empty clothing slot on Quaternius's bodies | Design | — | Open | Open: Quaternius's outfits replace the body rather than… |
+| [D600](decisions/D600.md) | What shows in an empty clothing slot on Quaternius's bodies | Design | Developers | Decided | **The swap.** Each clothing slot always holds one piece… |
 
 ## Engine and code
 

@@ -8,6 +8,9 @@ The people of v0: the player's body, what it wears, how it stands and moves, as 
 - **Their parts stay as made**: meshes, UVs, normals, weights, the split into pieces and the bones are never changed by our tools (no clipping pushes, stretch, scale, retopology or decimation). We add paint (new maps on their UVs) and new pieces they lack; a new piece that clips is fixed, never theirs. A check proves every imported piece matches its source vertex for vertex. The developers: "just dont fuck up their parts/etc".
 - **D588**: moves no source does well are keyed from a generated pose sheet ([keyed-moves.md](keyed-moves.md)). The idle in the game today is one, on the old body.
 - **No twist bones** (D599): their 65 joints and weights stay as made; a forearm wringing in a sword swing goes back to the developers with the film.
+- **The swap** (D600): an empty slot shows a bare piece cut exactly from a copy of their body.
+- **The starting kit's clothes are the Ranger outfit** (D602): coat = its body and arms, its leggings, its boots.
+- **Their elbows and wrists hold without twist bones**: shown their man through our clips, the developer: "looks good".
 - **One game copy a machine** (D319): the game refuses a second copy, naming the one running and what to do; `--multirun` allows exactly one more for a two-player test; the filming tools film in turn, the render box keeps its three slots. Built (`terra_world::single_instance`, one-copy j2).
 - **The paint direction holds**: shown the repainted Ranger beside theirs, the developer: "looks the same tbqh so i guess thats good?" At play distance our paint reads as theirs does, so job 4 refines, it does not push.
 
@@ -63,8 +66,6 @@ The switch as bounded jobs (the research note's "The switch in jobs" has the det
 
 ## Open with the developers
 
-- **An empty slot** (D600, Open): a bare piece swapped in (the developers' leaning) or their full body under, hidden while covered; both to be tried on the man before they choose. Both measured with stills (char-switch j5, the hidden body fixed in j5b, numbers in D600), on the desk for their choice: they look the same, so the agents now recommend the hidden body by region (their body uncut, as D599 asks, and one mask with our gear), at 9k more triangles sent. Next from `~/.cache/terra-handoff/char-switch-j5b.md`, then `char-switch-j6.md`. The packs ship bare pieces for the head and for the head with bare arms (`UpperBody`) only, so the swap works within the rule for the arms; a bare torso, legs or feet would be a cut of their body, a piece of ours, or the body under.
-- **The starting kit's trousers**: the leather coat is their Ranger body and arms; under it the Peasant trousers' waistband shows 1–2 cm at the hips in the sprint, sword stance and jumps, the Ranger leggings do not (the research note's "Pieces of two outfits worn together"). On the desk, recommending the Ranger leggings.
 - Their man's arms (fingertips 2.2 cm above the 99th percentile) stay as made under the rule; D599 withdrew the stretch.
 
 ## Later, past v0
