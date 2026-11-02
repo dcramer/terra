@@ -24,7 +24,7 @@ The earlier MVP (D105, [prototypes.md](prototypes.md)) asks whether the core loo
 
 ## The demo arc
 
-The developers' outline, 2026-11-01, with the details still theirs (Q7, Q8):
+The developers' outline, 2026-11-01, with the details still theirs (Q7 to Q9):
 
 1. **Prepare**: the player gets ready for the boss by "some stuff (maybe level up or something, progress around? find clues?)".
 2. **Beat the boss**, in the main world. A magic mark imprints on your arm (D590).
@@ -35,9 +35,9 @@ The arc is a line through the engine, not a progression system: it should add as
 
 | Track | What the arc adds |
 |---|---|
-| Land, Realms | The boss's place and the gate placed from the seed, each reachable on every seed |
+| Land, Realms | The troll's cave (D591) and the gate placed from the seed, each reachable on every seed |
 | Realms | A gate that starts shut and opens, its state saved with the realm and shared by everyone in the world |
-| Animation, Creatures | One boss: a big body, its attacks and tells, and fights that two players can share |
+| Animation, Creatures | One boss, the troll: it starts from the troll fight's 4 m body and clips (D402), made for a film, and needs its attacks, tells and a fight two players can share, in a cave |
 | Play | The mark (D590): a fact on the character, kept by the server and read by the gate, shown on the arm. It is a small general record of marks, not a case for one boss, since a new mark is data (D136) |
 | Server | The fight's outcome and the gate's state decided once, for everyone, and kept across a disconnect |
 | Proof | Scripted runs open the gate directly, so testing a crossing never means beating the boss; the session runs the whole arc once |
@@ -102,8 +102,8 @@ The proof that a realm is data. instances.md's playground proves loading and not
 ### Land (3)
 
 - **Have**: smooth voxels, dug and saved (`terra_voxel`). The land by its rules (`terra_land`). Forest, mountain lake, tundra and town, made as demos on the 30 km world at places their queries found. `play` itself runs a 2 km world with one seed; mountains need `--radius 30000` (Q4).
-- **Need**: the generator holding up on *any* seed, not on the demos' pinned places: a walkable start, biomes reached by walking, a blend between them, the gate reachable. The moving origin (D36), which is not built, though the mover is already in 64-bit (D482). Streaming and load times at that size.
-- **Done when**: a sweep over at least 100 seeds (`cargo xtask fields`, by CPU, `terra_gen::par::map`) finds every world valid, and a walked film crosses three biomes with no visible seam. Terrain still digs everywhere.
+- **Need**: the generator holding up on *any* seed, not on the demos' pinned places: a walkable start, biomes reached by walking, a blend between them, the gate reachable. Natural caves (D591): generated, streamed from below as well as round the player, lit underground, with a camera that works in tight space and a chamber that fits a 4 m troll on every seed. The moving origin (D36), which is not built, though the mover is already in 64-bit (D482). Streaming and load times at that size.
+- **Done when**: a sweep over at least 100 seeds (`cargo xtask fields`, by CPU, `terra_gen::par::map`) finds every world valid, a walked film crosses three biomes with no visible seam, and another goes from the surface down into a cave. Terrain still digs everywhere.
 
 ### Living world (3)
 
@@ -152,7 +152,7 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
   - **Always a client.** Even solo, the drawn game is a client of a server. Otherwise there are two code paths.
   - **Two realms at once.** One player can be in each realm, so a host's server runs both while its own client draws one. instances.md's split (a headless `App` per instance on the server, the client's world in the main `World`) means a host holds its realm twice. Measure that memory before building on it.
   - Sending by area, a snapshot then changes, others shown between ticks, late join, leaving and rejoining mid-fight, and a version check on connect.
-  - Each player's character kept by the server under an identity (Q1).
+  - Each player's character kept by the server (D592) under an identity (Q1). When the host leaves, the session ends for everyone with a plain message and the world is saved; there is no handing over to another player. A server running alone is the answer for a world that stays up.
   - Every action checked: in reach, owned, allowed (D51).
   - Text chat and a player list.
 - **Done when**: engine.md's test passes (two peers end the same, a late joiner catches up), then four clients for 30 minutes at 100 ms and 1% loss show no lasting mismatch, with the bytes per player per second reported.
@@ -163,7 +163,7 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 - **Need**: a choice of engine, since Bevy's has no reverb or muffling. Candidates: `bevy_seedling`, already named in audio.md, Steam Audio, and FMOD or Wwise as paid options (D526); the first job checks each against Bevy 0.20 and reports. Then, by the developers' three words:
   - **Directional**: front from back and above from below, not only left from right.
   - **Distance**: a curve per kind, far sounds losing their highs and arriving late (thunder at 343 m/s, as weather.md wants).
-  - **Ambient**: a bed per biome and realm, blended by place; caves and rooms sounding like themselves (audio.md's question 5).
+  - **Ambient**: a bed per biome and realm, blended by place; caves and rooms sounding like themselves (audio.md's question 5), which caves bring into v0 (D591).
   - **The pipeline**: a clip goes from a source to the game through one step that names, measures and checks it. Others' noises arrive from the server.
 - **Done when**: a test renders a moving source to a file and measures its level, side and tone against position, with no person listening; then the developers approve a listening film in each realm.
 
@@ -204,7 +204,7 @@ Each track gets a bounded plan of its own, and a skill or scorecard if it lacks 
 
 ## Questions for the developers
 
-Design calls, each with a recommendation; none is settled until they say so. Q1 to Q4 and Q9, Q10 shape the engine; Q7, Q8, Q11 and Q12 shape the demo; Q13 shapes the plan.
+Design calls, each with a recommendation; none is settled until they say so. Q1 to Q4 shape the engine; Q7 to Q9 shape the demo.
 
 | # | Question | Recommended |
 |---|---|---|
@@ -215,11 +215,7 @@ Design calls, each with a recommendation; none is settled until they say so. Q1 
 | Q5 | How many biomes? | At least three in the first realm (forest, mountain lake, tundra) and two in the second |
 | Q6 | Which options has a new world? | Name, mode and seed. No more until there is something to tune |
 | Q7 | What does a player do to reach the boss? | Nothing new: skills by doing (D88) and gear crafted in the first realm, with a boss that starting gear cannot beat. The gate is found early, dark and shut, so a player knows what they are after. The boss's place is found by looking, with no markers (D92): something on the land seen from far off. Clues only if a playtest shows players lost |
-| Q8 | What is the boss, and where? | One great monster at the heart of the worst place magic pools (creatures.md's question 3, D103), never coming back once beaten. Start from the 4 m troll of the troll fight (D402), whose model and clips were made for a film |
-| Q9 | What happens when the host leaves? | The session ends for everyone with a plain message and the world is saved. No handing over to another player. Friends' characters are kept with the host's world. A server running alone is the answer for a world that stays up |
-| Q10 | Are there caves? | One natural kind, small. worlds.md leaves this open, and adding them later changes the generator, streaming and light underground, the engine's voxel core. Sea and lakes stay as they are; rivers wait |
-| Q11 | How does the boss fight work? | A second player doesn't make it stronger. It heals when nobody is left near it. No bar or name over it, as player.md's rule; its body shows how it fares |
-| Q12 | How does the demo end? | A short notice the first time a player crosses, and they keep playing |
-| Q13 | Is there a date, who owns each track, and what goes first if it slips? | Content before foundations: the relay, then front-and-back sound, then the second realm's second biome and kinds. The date and owners are the developers' |
+| Q8 | How does the boss fight work? | A second player doesn't make it stronger. It heals when nobody is left near it. No bar or name over it, as player.md's rule; its body shows how it fares |
+| Q9 | How does the demo end? | A short notice the first time a player crosses, and they keep playing |
 
 Open decisions v0 will meet, by track: D134 day length (Living world), D436 and D438 monsters (Animation), D580 load time (Land, Front), D588 pose sheets (Animation), audio.md's music and voices (Sound).

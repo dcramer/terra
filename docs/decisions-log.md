@@ -1122,3 +1122,6 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-01**: D590 amended (by the developers: "yeah its a small general record"): marks are a small general record on the character, a new mark being data.
 - **2026-11-01**: D589 amended (by the agent): docs/v0-goals.md gains budgets, a design first for Server, Sound and Creatures, and five more questions (the host leaving, caves, the boss fight, the demo's end, the date and what goes first).
 - **2026-11-01**: D589 amended (on the developers' word): Windows is v0's first build, not a limit; survival's rules are the same in both realms; old saves stay unsupported until further notice (D353); no licence pass, since "if you can see them we own them".
+- **2026-11-01**: D591 decided (by the developers: "we want natural caves as part of core world design, so the troll can live in one"): caves are in the world's generation and in v0, the troll is the demo's boss and lives in one.
+- **2026-11-01**: D592 decided (by the developers: "characters get saved on the server"): a character's record is kept by its server, with the world.
+- **2026-11-01**: D589 amended (on the developers' word: "we dont care about dates etc"): no date, owners or cut order in v0's plan; docs/v0-goals.md's questions cut to nine.

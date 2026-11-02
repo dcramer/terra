@@ -101,6 +101,6 @@ Open: which kinds of weather there are, and whether they hurt, help or only look
 1. Answered: **how many worlds.** No fixed limit (D17).
 2. Answered: **how worlds differ.** In the obvious ways (gravity, air, temperature, terrain, water, life, magic), each a theme (D59). Whether any differ in less obvious ways, such as day length or resources found nowhere else, is settled theme by theme.
 3. Answered in part: **how is the next world reached?** Likely by a portal you find, with other ways over time (D72).
-4. **Caverns**: a feature of some worlds or all? Do they hold anything the surface does not?
+4. Answered in part: **caverns.** Natural caves are part of core world design, a world's theme setting how many and how big (D591). What they hold besides the troll's is open.
 5. **Water**: does it flow, or only sit at a level? The sea sits at its level (D75); whether it pours into a hole dug below that level is the open part.
 6. Answered in part: worlds differ in size, set by their theme. The numbers above are a proposal to walk and judge (D13).

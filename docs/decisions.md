@@ -45,6 +45,7 @@ What we are building, its tenets, scope and players.
 | [D187](decisions/D187.md) | What we are building | Design | Developers | Decided | First and foremost, an extremely ambitious sandbox… |
 | [D589](decisions/D589.md) | The v0 milestone | Design | — | Open | Recommended: the next milestone is v0… |
 | [D590](decisions/D590.md) | Beating the demo's boss imprints a mark on you | Design | Developers | Decided | In v0's demo (D589) the boss leaves no item… |
+| [D592](decisions/D592.md) | Characters are saved on the server | Design | Developers | Decided | A character's record is kept by the server it plays on… |
 
 ## Worlds and realms
 
@@ -99,6 +100,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D539](decisions/D539.md) | A dungeon's rooms are dressed as room types, each a hero prop, wall props, floor clutter and a story vignette | Design | — | Open | Proposal (dungeons.md, room types)… |
 | [D544](decisions/D544.md) | The world's heights: how high one goes and where the clouds stand | Design | Developers | Decided | Heights are Earth's up to 3 km over the sea… |
 | [D559](decisions/D559.md) | The hewn mine is the second dungeon theme built, after the barrow halls | Design | Developers | Decided | The dungeon themes of D527 are built in this order so… |
+| [D591](decisions/D591.md) | Natural caves are part of core world design | Design | Developers | Decided | Natural caves are part of how a world is generated… |
 
 ## The player and survival
 
