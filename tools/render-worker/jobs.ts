@@ -7,8 +7,8 @@ export type State = "queued" | "running" | "done" | "failed" | "cancelled";
 
 /// What a job takes of the box: `cpu` a slot (builds, tests, lints), `gpu` a slot and a share
 /// of the card (renders; at most TERRA_RENDER_GPU_SLOTS at once), `bench` the box alone,
-/// `check` (the push hook's `cargo xtask check`) a slot like a CPU job, but one that may start
-/// while the box drains for a bench, so long as the drain still waits on other jobs (`plan`).
+/// `check` (the push hook's `cargo xtask check`) a slot like a CPU job, but first in the queue,
+/// in a check slot of its own, and while the box drains for a bench (`plan`).
 export type Class = "cpu" | "gpu" | "bench" | "check";
 
 export type Job = {
@@ -291,15 +291,21 @@ export function inWindow(w: Window, minute: number): boolean {
 export type Policy = { window?: Window; afterCi: boolean };
 /// `benchWait`: minutes the first queued bench waits for the box to empty on its own before it
 /// drains it (`plan`), BENCH_WAIT unless TERRA_RENDER_BENCH_WAIT says; 0 drains at once.
-export type Slots = { slots: number; gpuSlots: number; benchWait?: number };
+/// `checkSlots`: slots past `slots`, numbered after them, that only checks take (`plan`),
+/// CHECK_SLOTS unless TERRA_RENDER_CHECK_SLOTS says; absent, none.
+export type Slots = { slots: number; gpuSlots: number; benchWait?: number; checkSlots?: number };
 export const BENCH_WAIT = 30;
+export const CHECK_SLOTS = 1;
+/// Every slot the box keeps: the job slots and, after them, the check slots.
+export const allSlots = (s: Pick<Slots, "slots" | "checkSlots">) => s.slots + (s.checkSlots ?? 0);
 
 /// The box's settings (its environment over the .env of the worker's clone there):
 /// TERRA_RENDER_WINDOW (`22:00-08:00`, empty any hour), TERRA_RENDER_CI_LOCK (a CI agent's lock
 /// file; no job starts while it is held), TERRA_RENDER_AFTER_CI (0 ignores that lock) and
 /// TERRA_RENDER_KEEP_DAYS, TERRA_RENDER_SLOTS (jobs at once, default 4) and
 /// TERRA_RENDER_GPU_SLOTS (of them, GPU jobs at once, default 3, at most the slots) and
-/// TERRA_RENDER_BENCH_WAIT (minutes a bench waits before it drains the box, default 30, 0 at once).
+/// TERRA_RENDER_BENCH_WAIT (minutes a bench waits before it drains the box, default 30, 0 at once)
+/// and TERRA_RENDER_CHECK_SLOTS (slots past those only the push hook's checks take, default 1).
 export function boxSettings(env: Record<string, string | undefined>): { policy: Policy; ciLock?: string; keepDays: number; slots: Slots } | { error: string } {
   const window = parseWindow(env.TERRA_RENDER_WINDOW ?? "");
   if (window && "error" in window) return window;
@@ -311,11 +317,13 @@ export function boxSettings(env: Record<string, string | undefined>): { policy: 
   if (!gpuSlots) return { error: "TERRA_RENDER_GPU_SLOTS: a whole number from 1 to 32" };
   const benchWait = env.TERRA_RENDER_BENCH_WAIT === "0" ? 0 : whole(env.TERRA_RENDER_BENCH_WAIT, BENCH_WAIT, 240);
   if (benchWait === undefined) return { error: "TERRA_RENDER_BENCH_WAIT: whole minutes from 0 to 240 (D445)" };
+  const checkSlots = env.TERRA_RENDER_CHECK_SLOTS === "0" ? 0 : whole(env.TERRA_RENDER_CHECK_SLOTS, CHECK_SLOTS, 8);
+  if (checkSlots === undefined) return { error: "TERRA_RENDER_CHECK_SLOTS: a whole number from 0 to 8, the slots kept for the push hook's checks (D445)" };
   return {
     policy: { window, afterCi: (env.TERRA_RENDER_AFTER_CI ?? "1") !== "0" },
     ciLock: env.TERRA_RENDER_CI_LOCK || undefined,
     keepDays,
-    slots: { slots, gpuSlots: Math.min(gpuSlots, slots), benchWait },
+    slots: { slots, gpuSlots: Math.min(gpuSlots, slots), benchWait, checkSlots },
   };
 }
 
@@ -435,7 +443,10 @@ export function drainEnd(running: Job[], now: number, est: Estimate): number {
 export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[]; go?: Job; why?: string } {
   const running = jobs.filter((j) => j.state === "running");
   const busy = new Set(running.map((j) => j.slot ?? 1));
-  const queued = jobs.filter((j) => j.state === "queued").sort((a, b) => Number(b.kind === "warm") - Number(a.kind === "warm") || a.id.localeCompare(b.id));
+  // Warm builds first, then checks (a push waits on each), then the oldest.
+  const rank = (j: Job) => (j.kind === "warm" ? 0 : classOf(j) === "check" ? 1 : 2);
+  const queued = jobs.filter((j) => j.state === "queued").sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
+  const checkQueued = queued.some((j) => classOf(j) === "check");
   const start: Start[] = [];
   if (running.some(alone)) return { start, why: queued.length ? "a bench has the box" : undefined };
   // The bench building or built ahead (one at a time), else the first queued.
@@ -449,7 +460,7 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
   // built on a box empty but for it, where holding jobs back drains nothing. (Draining at once
   // for an unbuilt bench on an empty box too, back to back, replayed worse: 143 h and 25 h.)
   const bench = next && ((!others.length && next.phase === "ready") || now - Date.parse(next.queued) >= wait) ? next : undefined;
-  const pinned = (j: Job) => (j.slot && j.slot <= s.slots ? j.slot : undefined);
+  const pinned = (j: Job) => (j.slot && j.slot <= allSlots(s) ? j.slot : undefined);
   const reserved = new Set(queued.map(pinned).filter((n) => n !== undefined));
   const est = estimator(jobs);
   const busyWhy = queued.length ? "a bench has the box" : undefined;
@@ -460,18 +471,20 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
     const ms = (j: Job) => est({ ...j, phase: undefined }, "long") ?? j.minutes * 60_000;
     const drain = Math.max(0, ...ahead.map(ms));
     first = ahead.length * ms(bench) <= (1 + behind) * drain;
-    if (first && held?.phase === "ready") return { start, go: held, why: busyWhy };
+    if (first && held?.phase === "ready" && !checkQueued) return { start, go: held, why: busyWhy };
   }
   // When the box will be empty for the bench: the others drained and the bench built.
   const built = (j: Job, from: number) => Math.max(now, from + (est({ ...j, phase: "prep" }, "short") ?? 0));
   let until = !bench ? Infinity : Math.max(drainEnd(others, now, est), held?.phase === "prep" && held.started ? built(held, Date.parse(held.started)) : now);
   let why: string | undefined = bench ? "a bench waits for the box to empty" : undefined;
-  // A check (the push hook's) behind the bench starts whatever its length while the box still
-  // waits on a job that is not a check: it is a few minutes against a drain of up to hours
-  // (estimates miss a long render), and the bench goes once the checks running end. Never
-  // beside the timed run: one beside it, even on the cores the bench does not take, slowed
-  // crypt's frames 27% (D445).
-  const draining = others.some((j) => classOf(j) !== "check");
+  // A check (the push hook's) never waits on the queue, as CI farms keep runners for their fast
+  // lane: it goes ahead of every job but the warm builds, into a check slot (past the job slots,
+  // which nothing else takes) or else any free one, and starts whatever its length while the
+  // box drains for a bench, even on a box that holds only checks and the built bench, which
+  // goes once no check runs or waits: a check is a minute or two (p90 1.3 on 2 November), and
+  // one waiting held a push 14 to 53 minutes while main moved on (D445). Never beside the timed
+  // run: one beside it, even on the cores the bench does not take, slowed crypt's frames 27%.
+  const free = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i + 1).find((n) => !busy.has(n) && !reserved.has(n));
   for (const job of queued) {
     const c = classOf(job);
     if (c === "bench") {
@@ -487,8 +500,8 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
       continue;
     }
     // The bench goes ahead of the jobs queued before it on the box empty for it.
-    if (bench && first && job.id.localeCompare(bench.id) < 0) continue;
-    if (bench && job.id.localeCompare(bench.id) > 0 && !(c === "check" && draining)) {
+    if (bench && first && c !== "check" && job.id.localeCompare(bench.id) < 0) continue;
+    if (bench && job.id.localeCompare(bench.id) > 0 && c !== "check") {
       // A kind never run is as long as its limit, which `timeout` holds it to (--minutes; Slurm's
       // backfill takes a job's time limit so).
       if (now + (est(job, "long") ?? job.minutes * 60_000) > until) continue;
@@ -498,9 +511,9 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
       continue;
     }
     const want = pinned(job);
-    const slot = want ?? Array.from({ length: s.slots }, (_, i) => i + 1).find((n) => !busy.has(n) && !reserved.has(n));
+    const slot = want ?? (c === "check" ? (free(s.slots, allSlots(s)) ?? free(0, s.slots)) : free(0, s.slots));
     if (!slot || busy.has(slot)) {
-      why ??= `all ${s.slots} slots are taken`;
+      why ??= c === "check" ? `all ${allSlots(s)} slots are taken, the check slots too` : `all ${s.slots} slots are taken`;
       continue;
     }
     busy.add(slot);

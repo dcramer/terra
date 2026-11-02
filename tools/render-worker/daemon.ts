@@ -18,7 +18,7 @@ import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotD
 import { Display } from "./display.ts";
 import { type DiskSettings, type DiskState, diskFull, diskSettings, fullMark, gb, type JobUse, KEEP, level, lowMark, type Prune, prune, pruneOrder, pruneTo, type SlotUse, type Space, space } from "./guard.ts";
 import { killNow, type Proc, reap, reaped, scan } from "./reap.ts";
-import { boxSettings, checkoutsInBuild, classOf, cleanCommands, collected, displayPlan, expired, ID, incrementalClears, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, rustcIce, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
+import { allSlots, boxSettings, checkoutsInBuild, classOf, cleanCommands, collected, displayPlan, expired, ID, incrementalClears, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, rustcIce, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
 
 const say = (line: string) => console.log(`${new Date().toISOString().slice(0, 19)} ${line}`);
 
@@ -523,14 +523,14 @@ async function daemon(b: Box): Promise<number> {
   // A bench runs on the performance cores of a hybrid processor (jobs.ts `steps`).
   const lscpu = spawnSync("lscpu", ["-p=CPU,MAXMHZ"], { encoding: "utf8" });
   const pCores = lscpu.status === 0 && spawnSync("taskset", ["-V"]).status === 0 ? performanceCores(lscpu.stdout) : undefined;
-  say(`render daemon at ${rev}, ${mode}, pid ${process.pid}, ${s.slots.slots} slots (${s.slots.gpuSlots} for GPU jobs), benches on ${pCores ? `processors ${pCores}` : "any processor"}`);
+  say(`render daemon at ${rev}, ${mode}, pid ${process.pid}, ${s.slots.slots} slots (${s.slots.gpuSlots} for GPU jobs) and ${s.slots.checkSlots ?? 0} for checks, benches on ${pCores ? `processors ${pCores}` : "any processor"}`);
   let wakeUp = () => {};
   watch(b.dir, (_e, name) => name === "wake" && wakeUp());
   let lastWhy = "";
   for (;;) {
     // Housekeeping and the disk's check before any job starts (guard.ts); a full disk stops
     // new jobs, not the daemon.
-    const full = await keeper.pass(s.keepDays, running, s.slots.slots);
+    const full = await keeper.pass(s.keepDays, running, allSlots(s.slots));
     const restart = existsSync(join(b.dir, "restart"));
     if (restart && !running.size && !keeper.unsaved.size) {
       rmSync(join(b.dir, "restart"), { force: true });
@@ -574,7 +574,7 @@ async function daemon(b: Box): Promise<number> {
         stop(r);
       }
     }
-    const busy = running.size ? `${running.size} of ${s.slots.slots} slots running` : "idle";
+    const busy = running.size ? `${running.size} of ${allSlots(s.slots)} slots running` : "idle";
     status = n.why ? `${busy}; a job waits: ${n.why}` : busy;
     if ((n.why ?? "") !== lastWhy && n.why) say(`a job waits: ${n.why}`);
     lastWhy = n.why ?? "";

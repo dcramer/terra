@@ -20,7 +20,7 @@ import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { doctor } from "./doctor.ts";
 import { DISK, type DiskSettings, type DiskState, DOWN_MS, diskLine, diskSettings, health, type Problem, space } from "./guard.ts";
-import { ago, benchHold, boxSettings, ID, type Job, jobClass, jobId, mayStart, parseEnvFile, plan as planJobs, recentJobs, short, steps, UPDATE_REF } from "./jobs.ts";
+import { ago, allSlots, benchHold, boxSettings, ID, type Job, jobClass, jobId, mayStart, parseEnvFile, plan as planJobs, recentJobs, short, steps, UPDATE_REF } from "./jobs.ts";
 
 /// `src` and `home` are the single job checkout and HOME from before slots, which slot 1 takes
 /// over (daemon.ts `slotCheckout`).
@@ -182,11 +182,12 @@ function status(b: Box, json: boolean, all = false): number {
   const stale = d?.alive ? "" : " (stale: the daemon is down)";
   const s = boxSettings(boxEnv(b));
   if (!("error" in s)) {
-    console.log(`slots: ${s.slots.slots}, of them ${s.slots.gpuSlots} for GPU jobs; a bench builds in a slot, waits up to ${s.slots.benchWait} min for the box to empty on its own, then drains it and has it alone for its timed run`);
-    for (let n = 1; n <= s.slots.slots; n++) {
+    const checks = s.slots.checkSlots ? `, and ${s.slots.checkSlots} more only for the push hook's checks` : "";
+    console.log(`slots: ${s.slots.slots}, of them ${s.slots.gpuSlots} for GPU jobs${checks}; a check goes ahead of the queue; a bench builds in a slot, waits up to ${s.slots.benchWait} min for the box to empty on its own, then drains it and has it alone for its timed run`);
+    for (let n = 1; n <= allSlots(s.slots); n++) {
       const j = jobs.find((j) => j.state === "running" && (j.slot ?? 1) === n);
       const doing = j?.phase === "prep" ? "building ahead" : j?.phase === "ready" ? "built, waits for the box" : "running";
-      console.log(`  slot ${n}: ${j ? `${j.id} ${doing}${stale} ${ago(j.started ?? j.queued, now)}  ${short(j)}` : "free"}`);
+      console.log(`  slot ${n}${n > s.slots.slots ? " (checks)" : ""}: ${j ?`${j.id} ${doing}${stale} ${ago(j.started ?? j.queued, now)}  ${short(j)}` : "free"}`);
     }
   }
   for (const line of benchHold(jobs, now, "error" in s ? undefined : s.slots.benchWait)) console.log(line);
