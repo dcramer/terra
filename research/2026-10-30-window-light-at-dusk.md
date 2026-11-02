@@ -29,7 +29,9 @@ What it measured (RTX 4090, 4 fresh judges a build on the settlement-dusk brief,
 
 At the judged distances, a pane a few pixels across, neither the pool nor the wider halo reads. So it was not landed; the patch is kept in the handoff (settlement-j9).
 
+- **Round 10**, on top of the dusk sky opened with the eye (D432, settlement j10): the panel was 4 fresh judges a build at 18.7 h. Main scored 3.48, the sky fix alone 3.67 and the fix with the volumes 3.75. The volumes over the fix gained +0.08 [-0.47, +0.32], p 0.60, so they were again not landed. The judges still called the panes "flat orange squares, no glow" and the meadow "bright green as by day".
+
 ## What is left
 
-- **The land is too bright for the hour.** Judges call the meadow "lit bright as by day" at 18.7 h. Window light reads in contrast with the land round it, so that is the next lever (FOUND in the settlement-j8 handoff).
+- **The land is too bright for the hour.** Judges call the meadow "lit bright as by day" at 18.7 h. Window light reads in contrast with the land round it, so that is the next lever (FOUND in the settlement-j8 handoff). The sky now matches the land (D432), but the land is still exposed 1.5 stops open (D338). A probe kept the far-seeing eye at the key through the civil twilight. It took the end view's meadow from 74,70,48 to 68,64,49 and the town's street from 97,74,74 to 77,56,55, and the windows' halos read. It has not been judged.
 - **The windows are all alike.** Every judge names "one tone and size on every house": panes that differ in brightness and warmth within and between homes, curtains or mullions.
