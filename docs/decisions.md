@@ -580,6 +580,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D583](decisions/D583.md) | A multidrawn batch set's bin buffers are written only when they change | Tech | Agent | Decided | Bevy 0.20's `write_binned_instance_buffers` wrote each… |
 | [D586](decisions/D586.md) | High's sun shadows in three cascades | Tech | Agent | Decided | The high preset draws the sun's shadows in three… |
 | [D587](decisions/D587.md) | The render world's visibility ranges are kept as they change, not read again whole | Tech | Agent | Decided | Bevy 0.20's `extract_visibility_ranges` cleared its… |
+| [D594](decisions/D594.md) | The volumetric fog's ray direction is turned from view space, not taken as two world positions' difference | Tech | Agent | Decided | Bevy 0.20's `volumetric_fog.wesl` took each pixel's ray… |
 
 ## Tools and workflow
 

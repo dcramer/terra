@@ -41,8 +41,8 @@ import package::render::view_transformations::{
     depth_ndc_to_view_z,
     frag_coord_to_ndc,
     position_ndc_to_view,
-    position_ndc_to_world,
-    position_view_to_world
+    position_view_to_world,
+    direction_view_to_world
 };
 import bevy_render::maths::orthonormalize;
 import package::render::clustered_forward as clustering;
@@ -208,7 +208,15 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let Rd_ndc = vec3(frag_coord_to_ndc(position).xy, 1.0);
     let Rd_view = normalize(position_ndc_to_view(Rd_ndc));
     var Ro_world = position_view_to_world(view_start_pos.xyz);
-    let Rd_world = normalize(position_ndc_to_world(Rd_ndc) - view.world_position);
+    // Terra's patch (D594): the ray's direction turned from view space, not the near plane's
+    // point less the camera's. On a world kilometres across both are tens of kilometres from
+    // the origin, where a float is 2 mm apart, and their difference, a tenth of a metre long,
+    // snapped the direction to a grid that laid a lattice of diamonds a score of pixels wide
+    // over the haze, wherever the density texture made the march depend on its direction
+    // (tundra round 18). Bevy's main after 0.20 takes this line as it is here; its atmosphere's
+    // `uv_to_ray_direction` and Unreal's camera-relative "translated world" space (Large World
+    // Coordinates) do the same for this reason.
+    let Rd_world = normalize(direction_view_to_world(Rd_view));
 
     // Offset by jitter.
     let jitter = interleaved_gradient_noise(position.xy, globals.frame_count) * jitter_strength;
