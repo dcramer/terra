@@ -14,6 +14,9 @@ use crate::grown::{self, Cards};
 use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::Planet;
 use crate::start::Start;
+use crate::streaming::Streaming;
+use bevy::platform::time::Instant;
+use bevy::tasks::{Task, block_on, futures_lite::future::poll_once};
 use bevy::{
     asset::RenderAssetUsages,
     camera::{primitives::Aabb, visibility::NoAutoAabb},
@@ -176,11 +179,16 @@ pub fn plugin(app: &mut App) {
     // The woods and the conifers they are drawn from are the world's (D469).
     app.add_plugins(MaterialPlugin::<FarWoods>::default())
         .world_resource::<Conifers>()
+        .init_world_resource::<FarCards>()
+        .init_resource::<Streaming>()
         .configure_sets(OnEnter(InWorld), Planting.in_set(Building::View))
         .add_systems(OnEnter(InWorld), plant.in_set(Planting))
         .add_systems(
             Update,
-            see_horizon.run_if(resource_exists_and_changed::<crate::horizon::HorizonPicture>),
+            (
+                see_horizon.run_if(resource_exists_and_changed::<crate::horizon::HorizonPicture>),
+                (stream_cards.run_if(resource_exists::<FarCards>)).run_if(crate::streaming::lifted),
+            ),
         );
 }
 
@@ -274,14 +282,15 @@ fn planted(tree: &Tree) -> Planted {
     }
 }
 
-/// The trees the woods stand round `middle`: the grown ones near, every tree as a card out to
-/// `COARSE_M` but the start's clearing, and coarser cards past it to `FAR_M`, none in a snowbed.
+/// The trees the woods stand round `middle` before the loading screen lifts: the grown ones
+/// near and every tree as a card out to `COARSE_M` but the start's clearing, none in a
+/// snowbed. The coarser cards past it come after ([`coarse_squares`]).
 fn stood(
     planet: &Planet,
     round: &terra_land::round::Round,
     middle: Vec3,
     seed: terra_gen::Seed,
-) -> (Vec<Tree>, Vec<Tree>, Vec<Tree>) {
+) -> (Vec<Tree>, Vec<Tree>) {
     let woods = Woods::of(round);
     let began = std::time::Instant::now();
     // The cards stand for every tree, the grown ones too, as an impostor stands for its
@@ -293,24 +302,127 @@ fn stood(
         .into_iter()
         .filter(|tree| tree.at.distance(middle) > CLEAR_M)
         .collect();
-    let coarse = woods.trees(
+    let laid = began.elapsed().as_secs_f32();
+    let (near, mid) = (off_snowbeds(planet, near), off_snowbeds(planet, mid));
+    info!(
+        "Woods: laid out in {laid:.1} s, {:.1} s more off the walls' snowbeds",
+        began.elapsed().as_secs_f32() - laid
+    );
+    (near, mid)
+}
+
+/// The coarser cards past `COARSE_M` to `FAR_M`, none in a snowbed, merged a square at a
+/// time: worked out after the loading screen lifts, on the streaming pool, as they were 60%
+/// of the woods' laying. With how many trees they stand for.
+fn coarse_squares(planet: &Planet, middle: Vec3, seed: terra_gen::Seed) -> Squares {
+    let Some(round) = planet.round() else {
+        return default();
+    };
+    let coarse = Woods::of(round).trees(
         middle,
         COARSE_M,
         FAR_M,
         SPACING_M * 2.0,
         seed.derive("coarse"),
     );
-    let laid = began.elapsed().as_secs_f32();
-    let (near, mid, coarse) = (
-        off_snowbeds(planet, near),
-        off_snowbeds(planet, mid),
-        off_snowbeds(planet, coarse),
-    );
+    let coarse = off_snowbeds(planet, coarse);
+    let land = &round.land;
+    let (east, north) = (land.frame.east(middle), land.frame.north(middle));
+    let cards = coarse.iter().map(|tree| Card {
+        tree: *tree,
+        widen: 1.35,
+        grown: None,
+    });
+    let squares = squares(middle, east, north, cards);
+    let merged = squares.into_values().map(|cards| merged(&cards)).collect();
+    (merged, coarse.len())
+}
+
+/// Cards in the squares of `SQUARE_M` about `middle` that they are merged in.
+fn squares(
+    middle: Vec3,
+    east: Vec3,
+    north: Vec3,
+    cards: impl Iterator<Item = Card>,
+) -> HashMap<(i32, i32), Vec<Card>> {
+    let mut squares: HashMap<(i32, i32), Vec<Card>> = HashMap::default();
+    for card in cards {
+        let offset = card.tree.at - middle;
+        let at = Vec2::new(offset.dot(east), offset.dot(north));
+        let square = (at / SQUARE_M).floor().as_ivec2();
+        squares.entry((square.x, square.y)).or_default().push(card);
+    }
+    squares
+}
+
+/// The woods' coarse cards, asked for as the woods are planted and streamed in once the
+/// loading screen lifts ([`stream_cards`]); a scripted run is held for them (`loading::hold`).
+#[derive(Resource, Default)]
+pub(crate) struct FarCards {
+    asked: Option<(Vec3, terra_gen::Seed, Handle<FarWoods>)>,
+    making: Option<(Task<Squares>, Handle<FarWoods>, Instant)>,
+}
+
+/// The far cards' squares, each its mesh, middle and bounds, and how many trees they hold.
+type Squares = (Vec<(Mesh, Vec3, Aabb)>, usize);
+
+impl FarCards {
+    /// Whether they are still to come.
+    pub(crate) fn coming(&self) -> usize {
+        usize::from(self.asked.is_some() || self.making.is_some())
+    }
+}
+
+/// Lays and merges the coarse cards on the streaming pool once the loading screen has lifted,
+/// and puts them in the world when they are made.
+fn stream_cards(
+    mut commands: Commands,
+    planet: Res<Planet>,
+    streaming: Res<Streaming>,
+    mut cards: ResMut<FarCards>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    if let Some((middle, seed, material)) = cards.asked.take() {
+        let planet = planet.clone();
+        let task = (streaming.0).spawn(async move { coarse_squares(&planet, middle, seed) });
+        cards.making = Some((task, material, Instant::now()));
+        return;
+    }
+    let Some((task, ..)) = cards.making.as_mut() else {
+        return;
+    };
+    let Some((squares, trees)) = block_on(poll_once(task)) else {
+        return;
+    };
+    let Some((_, material, since)) = cards.making.take() else {
+        return;
+    };
+    let count = squares.len();
+    for (mesh, middle, aabb) in squares {
+        commands.spawn(far_square(meshes.add(mesh), material.clone(), middle, aabb));
+    }
     info!(
-        "Woods: laid out in {laid:.1} s, {:.1} s more off the walls' snowbeds",
-        began.elapsed().as_secs_f32() - laid
+        "Woods: {trees} coarse cards from {COARSE_M:.0} to {FAR_M:.0} m in {count} squares, streamed in {:.1} s after the loading screen lifted",
+        since.elapsed().as_secs_f32()
     );
-    (near, mid, coarse)
+}
+
+/// A square of far cards, as one entity.
+fn far_square(
+    mesh: Handle<Mesh>,
+    material: Handle<FarWoods>,
+    middle: Vec3,
+    aabb: Aabb,
+) -> impl Bundle {
+    (
+        Name::new("Far woods"),
+        Mesh3d(mesh),
+        MeshMaterial3d(material),
+        Transform::from_translation(middle),
+        aabb,
+        NoAutoAabb,
+        NotShadowCaster,
+    )
 }
 
 /// The trees off the snowbeds a range's walls feed their benches and scree
@@ -365,6 +477,7 @@ fn plant(
     mut trunks: ResMut<crate::flora::Trunks>,
     parting: Option<Res<crate::parting::Parting>>,
     sited: Option<Res<crate::start::Sited>>,
+    mut far_cards: ResMut<FarCards>,
 ) {
     let Some(round) = planet.round() else {
         return;
@@ -375,7 +488,7 @@ fn plant(
         .and_then(|sited| sited.woods_middle(&planet))
         .unwrap_or(start.translation);
     let seed = planet.seed().derive("woods");
-    let (near, mid, coarse) = stood(&planet, round, middle, seed);
+    let (near, mid) = stood(&planet, round, middle, seed);
 
     // Near: grown conifers, each its kind's at its stature, drawn by what the layer above
     // gave, or the flora's pine.
@@ -442,46 +555,19 @@ fn plant(
         ),
     });
     let (east, north) = (land.frame.east(middle), land.frame.north(middle));
-    let mut squares: HashMap<(i32, i32), Vec<Card>> = HashMap::default();
-    for (tree, widen) in mid
-        .iter()
-        .map(|t| (t, 1.0))
-        .chain(coarse.iter().map(|t| (t, 1.35)))
-    {
-        let offset = tree.at - middle;
-        let at = Vec2::new(offset.dot(east), offset.dot(north));
-        squares
-            .entry((
-                (at.x / SQUARE_M).floor() as i32,
-                (at.y / SQUARE_M).floor() as i32,
-            ))
-            .or_default()
-            .push(Card {
-                tree: *tree,
-                widen,
-                grown: grown.get(&foot_key(tree.at)).copied(),
-            });
-    }
+    let cards = mid.iter().map(|tree| Card {
+        tree: *tree,
+        widen: 1.0,
+        grown: grown.get(&foot_key(tree.at)).copied(),
+    });
+    let squares = squares(middle, east, north, cards);
     let square_count = squares.len();
     for (_, cards) in squares {
         let (mesh, middle, aabb) = merged(&cards);
-        commands.spawn((
-            Name::new("Far woods"),
-            Mesh3d(meshes.add(mesh)),
-            MeshMaterial3d(material.clone()),
-            Transform::from_translation(middle),
-            aabb,
-            NoAutoAabb,
-            NotShadowCaster,
-        ));
+        commands.spawn(far_square(meshes.add(mesh), material.clone(), middle, aabb));
     }
-    say_planted(
-        near.len(),
-        mid.len() + coarse.len(),
-        square_count,
-        &drawn_as,
-        began,
-    );
+    far_cards.asked = Some((middle, seed, material));
+    say_planted(near.len(), mid.len(), square_count, &drawn_as, began);
 }
 
 /// What the woods planted, and how each kind's grown trees were drawn.
@@ -497,7 +583,7 @@ fn say_planted(
         .map(|k| drawn_as[k].iter().sum::<usize>() - drawn_as[k][k])
         .sum();
     info!(
-        "Woods: {near} grown trees within {NEAR_M:.0} m ({} oaks, {} pines and {} spruces drawn as their kind, {other} as another), {far} far ones to {FAR_M:.0} m in {squares} squares, in {:.1} s",
+        "Woods: {near} grown trees within {NEAR_M:.0} m ({} oaks, {} pines and {} spruces drawn as their kind, {other} as another), {far} far ones to {COARSE_M:.0} m in {squares} squares, in {:.1} s; the coarser to {FAR_M:.0} m after the loading screen",
         mine(0),
         mine(1),
         mine(2),

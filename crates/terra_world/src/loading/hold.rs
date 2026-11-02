@@ -116,10 +116,11 @@ pub(crate) fn watch(
     spawner: Res<WorldInstanceSpawner>,
     models: Query<(&WorldAssetRoot, Option<&WorldInstance>)>,
     (mut clock, frame): (ResMut<Time<Virtual>>, Res<crate::shell::ScriptFrame>),
-    (drawables, shaders, terrain): (
+    (drawables, shaders, terrain, cards): (
         Res<Drawables>,
         Res<Shaders>,
         Option<Res<crate::terrain::Terrain>>,
+        Option<Res<crate::woods::FarCards>>,
     ),
 ) {
     if !options.scripted() || options.bench || *screen.get() != Screen::Playing {
@@ -127,8 +128,10 @@ pub(crate) fn watch(
     }
     let files = asked_coming(&mut loading, &assets);
     // The ground chosen again as the camera moves on or is dug, and meshed on workers, which
-    // no frame waits for (`terrain::receive`).
-    let ground = terrain.map_or(0, |terrain| terrain.coming());
+    // no frame waits for (`terrain::receive`); and what of the start's view streams in after
+    // the loading screen (`crate::streaming`), the woods' far cards with the far ground.
+    let ground =
+        terrain.map_or(0, |terrain| terrain.coming()) + cards.map_or(0, |cards| cards.coming());
     let models = placing(&assets, &spawner, &models);
     // A model placed is not yet drawn: its meshes and textures go up over frames (at most
     // 128 MiB a frame, D420) and its pipelines compile, as many frames as the wall clock
