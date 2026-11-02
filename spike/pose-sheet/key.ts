@@ -20,7 +20,8 @@
 // nothing kept from the guard, the same both sides: the upper arm degrees out from straight down
 // and forward of it, turned in about its length (the forearm swings toward the thigh's front),
 // the elbow bent, the palm rolled from facing the thigh (+ toward the front). `fingers` is the
-// degrees each finger curls over its three joints, the little finger most (the resting cascade).
+// degrees each finger curls over its three joints, the little finger most (the resting cascade);
+// `thumb` the degrees its last joint bends.
 // `loop` makes the curve run on through the seam; the last key must equal the first.
 // `start` {pelvis, chest, head, shoulders, stance, turn_out, knees} sets the start pose afresh (below, where it is made).
 
@@ -366,6 +367,15 @@ function restArm(l: Pose[], side: "r" | "l", turned: Q) {
       bend(l, bone, about(cross(dir, palm), spec.fingers * k * JOINT_SHARE[j]), w);
     }
   }
+  // The thumb keeps the guard's base and middle joint, which lay its tip against the side of the
+  // index finger as a resting hand's does, but the guard holds its last joint straight (3 to 8
+  // degrees); `thumb` bends it this much, in the plane of the middle joint's bend.
+  if (spec.thumb === undefined) return;
+  const w = fk(l);
+  const at = (n: string) => w[b(n)].t;
+  const [d1, d2, d3] = [sub(at("thumb_02"), at("thumb_01")), sub(at("thumb_03"), at("thumb_02")), sub(at("thumb_04_leaf"), at("thumb_03"))];
+  const has = deg(Math.acos(Math.max(-1, Math.min(1, dot(norm(d2), norm(d3))))));
+  bend(l, b("thumb_03"), about(cross(d1, d2), spec.thumb - has), w);
 }
 
 function pose(t: number): Pose[] {

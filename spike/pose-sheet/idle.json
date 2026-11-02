@@ -30,6 +30,7 @@
   "palm": 0
  },
  "fingers": 90,
+ "thumb": 18,
  "keys": [
   {
    "t": 0,
