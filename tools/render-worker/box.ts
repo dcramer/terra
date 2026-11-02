@@ -182,14 +182,14 @@ function status(b: Box, json: boolean, all = false): number {
   const stale = d?.alive ? "" : " (stale: the daemon is down)";
   const s = boxSettings(boxEnv(b));
   if (!("error" in s)) {
-    console.log(`slots: ${s.slots.slots}, of them ${s.slots.gpuSlots} for GPU jobs; a bench builds in a slot, then has the box alone for its timed run`);
+    console.log(`slots: ${s.slots.slots}, of them ${s.slots.gpuSlots} for GPU jobs; a bench builds in a slot, waits up to ${s.slots.benchWait} min for the box to empty on its own, then drains it and has it alone for its timed run`);
     for (let n = 1; n <= s.slots.slots; n++) {
       const j = jobs.find((j) => j.state === "running" && (j.slot ?? 1) === n);
       const doing = j?.phase === "prep" ? "building ahead" : j?.phase === "ready" ? "built, waits for the box" : "running";
       console.log(`  slot ${n}: ${j ? `${j.id} ${doing}${stale} ${ago(j.started ?? j.queued, now)}  ${short(j)}` : "free"}`);
     }
   }
-  for (const line of benchHold(jobs, now)) console.log(line);
+  for (const line of benchHold(jobs, now, "error" in s ? undefined : s.slots.benchWait)) console.log(line);
   const shown = all ? jobs : recentJobs(jobs, now);
   console.log(shown.length < jobs.length ? `jobs (the last day's, and every one queued or running; ${jobs.length - shown.length} older: --status --all):` : "jobs:");
   for (const j of shown) console.log(`  ${j.id} ${j.state.padEnd(9)} ${ago(j.queued, now).padStart(5)} ago  ${short(j)}${j.state === "running" ? stale : ""}${j.note ? `  [${j.note}]` : ""}`);

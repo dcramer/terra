@@ -39,6 +39,7 @@ Every setting is in [`.env.example`](../../.env.example) with its default. The c
 | `TERRA_RENDER_MEDIA_DAYS` | box | 3 | Days after its end a job's collected files may be pruned when the disk is low; its `job.json` and `job.log` stay. |
 | `TERRA_RENDER_SLOTS` | box | 4 | Jobs at once, each in a slot: a worktree checkout `slots/<n>`, its build, and `homes/<n>` its HOME. |
 | `TERRA_RENDER_GPU_SLOTS` | box | 3 | Of them, GPU jobs at once; a bench builds in a slot while the box drains, then has the box alone for its timed run; the push hook's check (`cargo xtask check`, class `check`) may start while it drains, never beside the timed run. A job's class comes from its command, or `--gpu`/`--cpu`. |
+| `TERRA_RENDER_BENCH_WAIT` | box | 30 | Minutes the first queued bench waits for the box to empty on its own, every job starting as usual and the bench building in a slot nobody wants, before it drains the box for its timed run; 0 drains at once (D445). |
 | `TERRA_RENDER_DISPLAY` | box | auto | The X display a job that draws gets (`:1`). Empty: the daemon's own `WAYLAND_DISPLAY`/`DISPLAY`, else one Xvfb the daemon starts on a free number from `:99` when a job first needs it, starts again if it dies and stops when it exits (`display.ts`). |
 | `TERRA_REMOTE_CHECKS` | push hook | 0 | 1 runs the push hook's check on the worker at each commit pushed (`tools/git/remote-check.ts`). |
 

@@ -289,13 +289,17 @@ export function inWindow(w: Window, minute: number): boolean {
 }
 
 export type Policy = { window?: Window; afterCi: boolean };
-export type Slots = { slots: number; gpuSlots: number };
+/// `benchWait`: minutes the first queued bench waits for the box to empty on its own before it
+/// drains it (`plan`), BENCH_WAIT unless TERRA_RENDER_BENCH_WAIT says; 0 drains at once.
+export type Slots = { slots: number; gpuSlots: number; benchWait?: number };
+export const BENCH_WAIT = 30;
 
 /// The box's settings (its environment over the .env of the worker's clone there):
 /// TERRA_RENDER_WINDOW (`22:00-08:00`, empty any hour), TERRA_RENDER_CI_LOCK (a CI agent's lock
 /// file; no job starts while it is held), TERRA_RENDER_AFTER_CI (0 ignores that lock) and
 /// TERRA_RENDER_KEEP_DAYS, TERRA_RENDER_SLOTS (jobs at once, default 4) and
-/// TERRA_RENDER_GPU_SLOTS (of them, GPU jobs at once, default 3, at most the slots).
+/// TERRA_RENDER_GPU_SLOTS (of them, GPU jobs at once, default 3, at most the slots) and
+/// TERRA_RENDER_BENCH_WAIT (minutes a bench waits before it drains the box, default 30, 0 at once).
 export function boxSettings(env: Record<string, string | undefined>): { policy: Policy; ciLock?: string; keepDays: number; slots: Slots } | { error: string } {
   const window = parseWindow(env.TERRA_RENDER_WINDOW ?? "");
   if (window && "error" in window) return window;
@@ -305,11 +309,13 @@ export function boxSettings(env: Record<string, string | undefined>): { policy: 
   if (!slots) return { error: "TERRA_RENDER_SLOTS: a whole number from 1 to 32" };
   const gpuSlots = whole(env.TERRA_RENDER_GPU_SLOTS, GPU_SLOTS, 32);
   if (!gpuSlots) return { error: "TERRA_RENDER_GPU_SLOTS: a whole number from 1 to 32" };
+  const benchWait = env.TERRA_RENDER_BENCH_WAIT === "0" ? 0 : whole(env.TERRA_RENDER_BENCH_WAIT, BENCH_WAIT, 240);
+  if (benchWait === undefined) return { error: "TERRA_RENDER_BENCH_WAIT: whole minutes from 0 to 240 (D445)" };
   return {
     policy: { window, afterCi: (env.TERRA_RENDER_AFTER_CI ?? "1") !== "0" },
     ciLock: env.TERRA_RENDER_CI_LOCK || undefined,
     keepDays,
-    slots: { slots, gpuSlots: Math.min(gpuSlots, slots) },
+    slots: { slots, gpuSlots: Math.min(gpuSlots, slots), benchWait },
   };
 }
 
@@ -413,7 +419,11 @@ export function drainEnd(running: Job[], now: number, est: Estimate): number {
 /// job at its turn while the box drains (`prep`), then holds that slot built (`ready`) and is
 /// let go (`go`) once the rest of the box is empty: its time alone is only the timed run.
 ///
-/// Once a bench is queued the box drains for it. Jobs queued ahead of it keep their turn. A job
+/// A bench first waits `benchWait` minutes for the box to empty on its own while every job
+/// starts as usual, building in a slot nobody wants, and goes if the box empties around it
+/// built; draining at once left slots idle for hours beside a long render (2026-11-02), and the
+/// wait, replayed on the box's queue of 26-29 October and of 1-2 November, cut the other jobs'
+/// waiting by 15 h in each for 2.4 h and 0.7 h more of the benches' (D445). Then the box drains. Jobs queued ahead of it keep their turn. A job
 /// behind it starts only if it will be over before the box would empty anyway: the longest of
 /// the last of its kind (`estimator`) ends before the running jobs' likely end and the bench's
 /// build (`drainEnd`), so it fills a free slot and never holds the bench back. On a box empty
@@ -433,7 +443,12 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
   const others = running.filter((j) => j !== held);
   let gpu = others.filter((j) => !cpuLike(j)).length;
   const benches = queued.filter((j) => classOf(j) === "bench").sort((a, b) => a.id.localeCompare(b.id));
-  const bench = held ?? benches[0];
+  const next = held ?? benches[0];
+  const wait = (s.benchWait ?? BENCH_WAIT) * 60_000;
+  // The bench the box drains for: the next, once it has waited its turn (`benchWait`), or one
+  // built on a box empty but for it, where holding jobs back drains nothing. (Draining at once
+  // for an unbuilt bench on an empty box too, back to back, replayed worse: 143 h and 25 h.)
+  const bench = next && ((!others.length && next.phase === "ready") || now - Date.parse(next.queued) >= wait) ? next : undefined;
   const pinned = (j: Job) => (j.slot && j.slot <= s.slots ? j.slot : undefined);
   const reserved = new Set(queued.map(pinned).filter((n) => n !== undefined));
   const est = estimator(jobs);
@@ -492,6 +507,14 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
     if (c === "gpu") gpu++;
     start.push({ job, slot });
   }
+  // A bench still in its wait builds in a slot no other job wants now, and goes if the box
+  // empties on its own meanwhile.
+  if (next && !bench) {
+    const slot = Array.from({ length: s.slots }, (_, i) => i + 1).find((n) => !busy.has(n) && !reserved.has(n));
+    if (next.state === "queued" && slot) start.push({ job: next, slot });
+    const left = Math.max(1, Math.ceil((Date.parse(next.queued) + wait - now) / 60_000));
+    why ??= `a bench waits for the box to empty on its own, and drains it in ${left} min`;
+  }
   // A box empty but for the built bench, where none of the jobs ahead could start after all: it goes.
   if (held?.phase === "ready" && !others.length && !start.length) return { start, go: held, why: busyWhy };
   return { start, why };
@@ -501,8 +524,9 @@ const span = (ms: number) => ago(new Date(0).toISOString(), new Date(Math.max(0,
 
 /// What `--status` says of a bench's hold on the queue, nothing when no bench is queued or
 /// running: how long the box has been draining for benches or running them without a break,
-/// the bench running or the box's drain, the benches next, and the jobs waiting behind.
-export function benchHold(jobs: Job[], now: Date): string[] {
+/// the bench running, its wait for the box to empty on its own (`waitMinutes`, the box's
+/// `benchWait`) or the box's drain, the benches next, and the jobs waiting behind.
+export function benchHold(jobs: Job[], now: Date, waitMinutes = BENCH_WAIT): string[] {
   const benches = jobs.filter((j) => classOf(j) === "bench");
   const live = benches.filter((j) => j.state === "queued" || j.state === "running");
   if (!live.length) return [];
@@ -534,8 +558,14 @@ export function benchHold(jobs: Job[], now: Date): string[] {
   else {
     if (held?.phase === "prep") out.push(`  building ${held.id} ahead in slot ${held.slot} for ${ago(held.started ?? held.queued, now)}: ${short(held)}`);
     if (held?.phase === "ready") out.push(`  ${held.id} built in slot ${held.slot} ${ago(held.prepared ?? held.queued, now)} ago, its timed run next: ${short(held)}`);
-    const left = drainEnd(others, t, est) - t;
-    out.push(`  draining: ${others.length} job${others.length === 1 ? "" : "s"} running, the box likely empty ${left >= 60_000 ? `in ${span(left)}` : "any moment"}; only jobs that end before then start`);
+    const first = held ?? next[0];
+    const drainsAt = first ? Date.parse(first.queued) + waitMinutes * 60_000 : t;
+    const jobsRunning = `${others.length} job${others.length === 1 ? "" : "s"} running`;
+    if (drainsAt > t && !(held?.phase === "ready" && !others.length)) out.push(`  waiting for the box to empty on its own: ${jobsRunning}, every job starts as usual; it drains for the bench in ${span(drainsAt - t)} (TERRA_RENDER_BENCH_WAIT)`);
+    else {
+      const left = drainEnd(others, t, est) - t;
+      out.push(`  draining: ${jobsRunning}, the box likely empty ${left >= 60_000 ? `in ${span(left)}` : "any moment"}; only jobs that end before then start`);
+    }
   }
   if (next.length) out.push(`  benches next: ${next.map((j) => `${j.id} (waiting ${ago(j.queued, now)}${kind(j)})`).join(", ")}`);
   const behind = queued.filter((j) => classOf(j) !== "bench");

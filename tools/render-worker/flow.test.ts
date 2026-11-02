@@ -33,7 +33,8 @@ const rev = sh(agent, "rev-parse", "HEAD");
 const r: Remote = { host: "local", dir: join(tmp, "box") };
 const b = box(r.dir);
 const policy = { afterCi: true };
-const slots = { slots: 4, gpuSlots: 3 };
+// A bench drains the box at once here; its wait for the box to empty on its own is jobs.test.ts's.
+const slots = { slots: 4, gpuSlots: 3, benchWait: 0 };
 const first = (lock?: string) => next(b, policy, lock, slots).start[0]?.job;
 const quiet = () => {};
 
