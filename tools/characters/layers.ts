@@ -9,11 +9,12 @@
 // Both pieces are posed on the outer file's skeleton by the clips of `--clips` (the mannequin's
 // by default), carried across as retarget.py carries them (D542, in short): each bone's turn in
 // the world from the clip skeleton's rest laid on the body's rest, the pelvis moved as the
-// clip's, scaled by the two pelvises' heights; then skinned. For each vertex of the inner
-// piece near the outer at rest, a ray from the nearest point on the bone it follows most out
-// through the vertex: the outer met before the vertex and not after it is a poke-through, by
-// the distance between; met beyond it, covered. The inner's top edge (its open boundary within
-// 3 cm of its highest point) should be covered in every frame.
+// clip's, scaled by the two pelvises' heights, the root carried with it (in place); then
+// skinned. For each vertex of the inner piece near the outer at rest, a ray from the nearest
+// point on the bone it follows most out through the vertex: the outer met before the vertex
+// and not after it is a poke-through, by the distance between; met beyond it, covered. The
+// inner's top edge (its open boundary within 3 cm of its highest point) should be covered in
+// every frame.
 //
 // Node 22.18 or later; no dependencies.
 
@@ -52,6 +53,18 @@ export function retargeted(body: Glb, from: Glb, clip: Clip | undefined, t: numb
   };
   body.gltf.nodes.forEach((_, i) => at(i));
   return out;
+}
+
+/** The clip played in place, as the game moves the body itself (pace.py): the mannequin's
+ *  travelling clips carry the pelvis metres away while its root bone stays, and their full body
+ *  weights its feet a little to the root (3% at the heel), which would leave those vertices
+ *  tens of centimetres behind. The root is carried along the ground with the pelvis, from where
+ *  it stands in `still` (the body at rest). */
+export function inPlace(joints: Map<string, Pose>, still: Map<string, Pose>): Map<string, Pose> {
+  const [pelvis, root, rest] = [joints.get("pelvis"), joints.get("root"), still.get("pelvis")];
+  if (!pelvis || !root || !rest) return joints;
+  joints.set("root", { ...root, t: [root.t[0] + pelvis.t[0] - rest.t[0], root.t[1], root.t[2] + pelvis.t[2] - rest.t[2]] });
+  return joints;
 }
 
 const add = (a: V3, b: V3): V3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -313,7 +326,8 @@ export function pair(outerFile: string, innerFile: string, clipsFile = MANNEQUIN
   const near = within(inner, outer, 0.08);
   const edge = topEdge(inner);
   const tris = trianglesNear(outer, inner, [...new Set([...near, ...edge])], 0.15);
-  const one = (clip: Clip | undefined, t: number) => layered(inner, outer, retargeted(body, from, clip, t), children, near, edge, tris);
+  const still = retargeted(body, body, undefined, 0);
+  const one = (clip: Clip | undefined, t: number) => layered(inner, outer, inPlace(retargeted(body, from, clip, t), still), children, near, edge, tris);
   return { body, from, outer, inner, one };
 }
 

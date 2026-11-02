@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { Glb, type Pose, posed } from "./glb.ts";
 import type { Piece } from "./intact.ts";
-import { cover, Grid, layered, retargeted, skinned, topEdge } from "./layers.ts";
+import { cover, Grid, inPlace, layered, retargeted, skinned, topEdge } from "./layers.ts";
 
 const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
@@ -93,4 +93,38 @@ test("a grid walk measures as trying every triangle does", () => {
   assert.equal(f.poking, brute.poking);
   assert.ok(Math.abs(f.worst - brute.worst) < 1e-9, `${f.worst} against ${brute.worst}`);
   assert.equal(f.uncovered, brute.uncovered);
+});
+
+test("a travelling clip played in place leaves no skin weighted to the root behind", () => {
+  // Their full body weights its heels a little to the root; a travelling clip carries the pelvis
+  // 2 m on while the root bone stays. The boot follows the pelvis alone, the heel 3% the root.
+  const on = (p: Piece, w: [string, number][]): Piece => ({
+    ...p,
+    weights: p.weights.map(() => new Map(w)),
+    bind: new Map([
+      ["pelvis", I],
+      ["root", I],
+    ]),
+  });
+  const heel = on(tube(0.1, 0.2, 0.6), [
+    ["pelvis", 0.97],
+    ["root", 0.03],
+  ]);
+  const boot = on(tube(0.12, 0.1, 0.8), [["pelvis", 1]]);
+  const pose = (t: [number, number, number]): Pose => ({ t, r: [0, 0, 0, 1], s: [1, 1, 1] });
+  const rest = new Map([
+    ["root", pose([0, 0, 0])],
+    ["pelvis", pose([0, 1, 0])],
+  ]);
+  const away = () => new Map([...rest, ["pelvis", pose([2, 1, 0.5])]]);
+  const all = Array.from({ length: heel.count }, (_, i) => i);
+  const tris = Array.from({ length: boot.tris.length / 3 }, (_, k) => 3 * k);
+  const worn = (joints: Map<string, Pose>) => layered(heel, boot, joints, new Map(), all, topEdge(heel), tris);
+  // Left behind, the heel lags 6 cm, through the boot by about 4.
+  assert.ok(worn(away()).worst > 0.03, `travelling: ${worn(away()).worst}`);
+  const f = worn(inPlace(away(), rest));
+  assert.equal(f.worst, 0);
+  assert.equal(f.uncovered, 0);
+  // Only the ground plane is carried: the root keeps its height.
+  assert.deepEqual(inPlace(away(), rest).get("root")!.t, [2, 0, 0.5]);
 });

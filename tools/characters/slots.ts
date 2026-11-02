@@ -36,7 +36,7 @@ import { readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Clip, Glb, type Pose, type V3 } from "./glb.ts";
 import { type Piece, pieces } from "./intact.ts";
-import { anchor, cover, type Frame, Grid, hits, joined, MANNEQUIN, openEdge, retargeted, skinned, within } from "./layers.ts";
+import { anchor, cover, type Frame, Grid, hits, inPlace, joined, MANNEQUIN, openEdge, retargeted, skinned, within } from "./layers.ts";
 
 const at = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
 const UBC = at("../../art/characters/quaternius/universal-base-characters/");
@@ -303,17 +303,6 @@ export function figures(sex: string, outfits: Record<Slot, string>) {
     });
   }
   return { skel, figures: out };
-}
-
-/** The clip played in place, as the game moves the body itself (pace.py): the mannequin's
- *  travelling clips carry the pelvis metres away while its root bone stays, and their full body
- *  weights its feet a little to the root (3% at the heel), which would leave those vertices
- *  tens of centimetres behind. The root is carried along the ground with the pelvis. */
-function inPlace(joints: Map<string, Pose>, still: Map<string, Pose>): Map<string, Pose> {
-  const [pelvis, root, rest] = [joints.get("pelvis"), joints.get("root"), still.get("pelvis")];
-  if (!pelvis || !root || !rest) return joints;
-  joints.set("root", { ...root, t: [root.t[0] + pelvis.t[0] - rest.t[0], root.t[1], root.t[2] + pelvis.t[2] - rest.t[2]] });
-  return joints;
 }
 
 type Tally = { rest: Look; frames: number; poked: number; opened: number; holed: number; rimmed: number; worst: { poke: [number, string]; open: [number, string]; through: [number, string]; rim: [number, string] }; clips: Record<string, [number, number, number]> };
