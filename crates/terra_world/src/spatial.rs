@@ -64,15 +64,37 @@ impl<T> SpatialHash<T> {
 
     /// Everything within `reach` of a point, and perhaps a little further: whatever is in
     /// the cubes that reach touches. The caller measures for itself.
+    ///
+    /// A reach of many cubes asks the cubes held instead, when there are fewer of them than
+    /// cubes in its box: a box grows as the cube of its reach, so a creature's 40 m senses
+    /// over 4 m cubes looked up 9,261 cubes for one player, and fifty creatures at the lake
+    /// spent a frame's budget on it each tick.
     pub fn near(&self, at: Vec3, reach: f32) -> impl Iterator<Item = &(Vec3, T)> {
         let low = self.cube(at - Vec3::splat(reach));
         let high = self.cube(at + Vec3::splat(reach));
-        (low.x..=high.x)
-            .flat_map(move |x| {
-                (low.y..=high.y)
-                    .flat_map(move |y| (low.z..=high.z).map(move |z| IVec3::new(x, y, z)))
-            })
-            .filter_map(|cube| self.cubes.get(&cube))
+        let side = |a: i32, b: i32| (i64::from(b) - i64::from(a) + 1).max(0);
+        let boxed = side(low.x, high.x)
+            .saturating_mul(side(low.y, high.y))
+            .saturating_mul(side(low.z, high.z));
+        let held = boxed > self.cubes.len() as i64;
+        let from_held = held.then(|| {
+            self.cubes
+                .iter()
+                .filter(move |(cube, _)| cube.cmpge(low).all() && cube.cmple(high).all())
+                .map(|(_, things)| things)
+        });
+        let from_box = (!held).then(|| {
+            (low.x..=high.x)
+                .flat_map(move |x| {
+                    (low.y..=high.y)
+                        .flat_map(move |y| (low.z..=high.z).map(move |z| IVec3::new(x, y, z)))
+                })
+                .filter_map(|cube| self.cubes.get(&cube))
+        });
+        from_held
+            .into_iter()
+            .flatten()
+            .chain(from_box.into_iter().flatten())
             .flatten()
     }
 
@@ -111,6 +133,28 @@ mod tests {
         assert!(found.contains(&"across a cube's edge"));
         assert!(!found.contains(&"far"));
         assert_eq!(hash.len(), 3);
+    }
+
+    #[test]
+    fn a_reach_of_more_cubes_than_are_held_finds_what_the_cubes_it_touches_hold() {
+        // A creature's senses over a few players: the box is thousands of cubes, the hash
+        // holds three, so the held cubes are asked instead, finding the same.
+        let mut hash = SpatialHash::new(4.0);
+        let things = [
+            Vec3::new(30.0, 20.0, -25.0),
+            Vec3::new(-39.0, 0.5, 1.0),
+            Vec3::new(41.0, 0.0, 0.0),
+            Vec3::new(400.0, 0.0, 0.0),
+        ];
+        for (i, at) in things.iter().enumerate() {
+            hash.insert(*at, i);
+        }
+        let mut found: Vec<usize> = hash.near(Vec3::ZERO, 40.0).map(|(_, i)| *i).collect();
+        found.sort_unstable();
+        // The fourth is ten times the reach off; the third is past it, in a cube it touches.
+        assert_eq!(found, [0, 1, 2]);
+        assert_eq!(hash.near(Vec3::ZERO, f32::INFINITY).count(), 4);
+        assert_eq!(hash.near(Vec3::X * 2000.0, 40.0).count(), 0);
     }
 
     #[test]
