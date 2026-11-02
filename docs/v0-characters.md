@@ -1,6 +1,6 @@
 # v0 characters: log and next steps
 
-The people of v0: the player's body, what it wears, how it stands and moves, as [v0-goals.md](v0-goals.md) asks of them (the creator of a few sliders so two players tell each other apart, D111; equipping gear; the boss's mark shown on the arm, D590; locomotion and fight sets earning the developers' yes). How characters are made is [characters.md](characters.md); this page is where the work stands and what comes next, kept short, newest last. Pick-up point for whoever continues it.
+The people of v0: the player's body, what it wears, how it stands and moves, as [v0-goals.md](v0-goals.md) asks of them (the creator of a few choices so two players tell each other apart, D111; equipping gear; the boss's mark shown on the arm, D590; locomotion and fight sets earning the developers' yes). How characters are made is [characters.md](characters.md); this page is where the work stands and what comes next, kept short, newest last. Pick-up point for whoever continues it.
 
 ## Decided
 
@@ -54,7 +54,7 @@ The switch as bounded jobs (the research note's "The switch in jobs" has the det
 4. **The paint as a tool**: our materials on their UVs, the Ranger's first pass refined.
 5. **The starting kit as outfit data**: their pieces where they have them, new pieces made on their body where not.
 6. **The fight on the new bodies**: `cargo xtask combat` and the carry poses against their baselines.
-7. **Into the game**, one body a sex, the arm left clear for the mark; the creator's few choices (D111, Leaning: sex, skin tone, eye colour, hair; no height or build).
+7. **Into the game**, one body a sex, the arm left clear for the mark; the creator's few choices (D111: sex, skin tone, eye colour, hair; no height or build).
 8. **Delete the Tripo base** and the scripts it alone needed (`stretch.py`, the clipping fixer's use on bought pieces).
 
 ## Open with the developers
