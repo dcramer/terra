@@ -53,6 +53,8 @@ test("every failure a step prints fails the build", () => {
     ["✗ assets/models/character/base.glb: Crouch_Fwd_Loop skates 8.2/6.4 cm a plant (over 6)"],
     // A look on the female, from her morph's log.
     ['GEARCHECK {"item": "tools/characters/out/female-skirt.glb", "body": "female", "pass": false}'],
+    // A body outside a real man's proportions (proportions.py, D593).
+    ["PROPORTIONS fail base-male-game.glb: reach 1.68 m, below the 1st percentile's 1.75 m (a real man's 1.86 m). Every body ..."],
   ]) {
     const found = failing(lines);
     assert.ok(found.length > 0, `passed with: ${lines.join(" / ")}`);
