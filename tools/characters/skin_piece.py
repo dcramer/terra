@@ -14,6 +14,7 @@ The new vertices a cut makes take their weights and every float layer from the t
 their edge, so a piece keeps moving as the skin under it does.
 """
 
+import json
 import math
 import os
 
@@ -25,6 +26,7 @@ from mathutils.bvhtree import BVHTree
 from mathutils.kdtree import KDTree
 
 import look
+import stretch
 
 
 def flags(argv):
@@ -118,11 +120,23 @@ def mirrored(source):
     return copy
 
 
-def line_up(path, skin, top, match):
+def stretch_plan(body=None, shape=None):
+    """The stretch the body a dressed model is lined up with was given as it was converted
+    (stretch.py, D593): `body`'s (the base's when not given), or for a rigged morph's shape (the
+    female, by bodies.json) her own body's. A design morph's body was stretched as the base was."""
+    with open(os.path.join(look.HERE, "bodies.json")) as f:
+        bodies = json.load(f)
+    name = next((r["body"] for r in bodies["rigged"] if r["morph"] == shape), body or bodies["base"]["name"])
+    with open(os.path.join(look.OUT, f"{name}-stretch.json")) as f:
+        return json.load(f)
+
+
+def line_up(path, skin, top, match, plan):
     """Imports a model of the base person wearing something (Tripo's, facing +X), turned to
-    face -Y as ours do, scaled to the body's height `top`, and nudged until its bare skin meets
-    the body's (`skin`, a BVH tree of it): skin within `match` of ours is what lines it up.
-    Returns it, one mesh in world space."""
+    face -Y as ours do, scaled to the body's height `top`, stretched as the body was (`plan`,
+    from `stretch_plan`), and nudged until its bare skin meets the body's (`skin`, a BVH tree
+    of it): skin within `match` of ours is what lines it up. Returns it, one mesh in world
+    space."""
     before = set(bpy.context.scene.objects)
     bpy.ops.import_scene.gltf(filepath=path)
     new = [o for o in bpy.context.scene.objects if o not in before]
@@ -137,6 +151,10 @@ def line_up(path, skin, top, match):
             bpy.data.objects.remove(o)
     zs = [v.co.z for v in dressed.data.vertices]
     dressed.data.transform(Matrix.Scale(top / (max(zs) - min(zs)), 4) @ Matrix.Translation((0, 0, -min(zs))))
+    co = np.zeros(len(dressed.data.vertices) * 3)
+    dressed.data.vertices.foreach_get("co", co)
+    dressed.data.vertices.foreach_set("co", stretch.line_up(plan, co.reshape(-1, 3)).reshape(-1))
+    dressed.data.update()
     for _ in range(6):
         sample = list(dressed.data.vertices)[::5]
         hits = [skin.find_nearest(v.co, match) for v in sample]

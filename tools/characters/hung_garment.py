@@ -141,7 +141,7 @@ heights = np.array([morphed_z(z) for z in heights_b])
 print("HUNG", item, kind, f"from {top_b:.2f} to {hem_b:.2f} m on the base, {heights[0]:.2f} to {heights[-1]:.2f} on {SHAPE or 'it'}")
 
 # The dressed model, lined up with this skin; and what it is worn over and under.
-dressed = skin_piece.line_up(look.path(dressed_path), skin_tree, float(skin[:, 2].max()), 0.03)
+dressed = skin_piece.line_up(look.path(dressed_path), skin_tree, float(skin[:, 2].max()), 0.03, skin_piece.stretch_plan(body_name, SHAPE))
 dressed_tree = BVHTree.FromPolygons([v.co for v in dressed.data.vertices], [tuple(p.vertices) for p in dressed.data.polygons])
 over_pts = np.concatenate([skin_piece.made(body_name, o, base, delta)[1] for o in OVER]) if OVER else np.zeros((0, 3))
 under_trees = [skin_piece.made(body_name, u, base, delta)[0] for u in UNDER]
@@ -229,7 +229,6 @@ if KIND["shape"] == "around":
             if heights_b[k] < hips_b:
                 radius[k] = np.maximum(radius[k], radius[k - 1] + FLARE * (heights[k - 1] - heights[k]))
     for k, z in enumerate(heights):
-        print("DEBUGR", k, round(float(z), 3), [round(float(radius[k, j]), 3) for j in (0, cols // 8, cols // 4, 3 * cols // 8, cols // 2)], [round(float(least[k, j]), 3) for j in (0, cols // 4, cols // 2)])
         grid[k, :, 0] = middle[0] + dirs[:, 0] * radius[k]
         grid[k, :, 1] = middle[1] + dirs[:, 1] * radius[k]
         grid[k, :, 2] = z
@@ -275,7 +274,12 @@ piece.modifiers.clear()
 bm = bmesh.new()
 bm.from_mesh(piece.data)
 bmesh.ops.delete(bm, geom=bm.verts[:], context="VERTS")
-verts = [[bm.verts.new(Vector(grid[k, j])) for j in range(cols)] for k in range(rings)]
+# The rings are in the world; the mesh is in the body's own space, which its skeleton scales
+# (1.12 on the stretched base): written as they stand, the piece came out that much bigger
+# about the floor, a waistband at the belly (D593).
+to_mesh = mw.inverted()
+verts = [[bm.verts.new(to_mesh @ Vector(grid[k, j])) for j in range(cols)] for k in range(rings)]
+inside = to_mesh @ Vector((middle[0], middle[1], 0.0))
 # One unwrap of its own, none of the body's (its texture's and its patches').
 for layer in list(bm.loops.layers.uv.values()):
     bm.loops.layers.uv.remove(layer)
@@ -293,7 +297,7 @@ bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
 bm.verts.ensure_lookup_table()
 # Faces out: the first ring's middle is inside, so its faces look away from it.
 f = bm.faces[0]
-if (f.calc_center_median() - Vector((middle[0], middle[1], f.calc_center_median().z))).dot(f.normal) < 0:
+if (f.calc_center_median() - Vector((inside.x, inside.y, f.calc_center_median().z))).dot(f.normal) < 0:
     bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
 bm.to_mesh(piece.data)
 for layer in [l for l in piece.data.uv_layers if l.name != "grid"]:

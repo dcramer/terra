@@ -6,7 +6,8 @@ are made on (`look.FIGURE`, cut by clips.py), which uses Unreal's names. Tripo a
 bone on each upper arm, forearm, thigh and calf, with skin on it; ours has none, and the clips
 never move them. This:
   1. turns Tripo's model to face -Y as ours does, scales it to `height`, and welds the
-     vertices glTF split at texture seams,
+     vertices glTF split at texture seams; gives a person's body a person's hands, and arms and
+     legs (stretch.py, D593), and later feet (CREATURE=1 keeps a creature's own),
   2. moves each of our joints to the matching Tripo joint, turns each bone to point at its
      moved child, its roll kept nearest (the clips are carried onto these bones by their turns
      in the world, retarget.py), and adds Tripo's twist bones, each facing as the bone it
@@ -17,6 +18,7 @@ never move them. This:
     tools/blender/run.sh tools/characters/convert_rig.py art/characters/base-male/rigged.glb base-male 1.80
 """
 
+import json
 import math
 import os
 import sys
@@ -25,10 +27,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 
 import look
 import retarget
+import stretch
 import twist
 
 FIGURE = look.FIGURE
@@ -101,6 +105,20 @@ if TRIANGLES and made_tris > TRIANGLES:
 # generated body a person's, which would shrink a troll's broad feet to a man's.
 PERSON = os.environ.get("CREATURE", "") in ("", "0")
 
+
+def skin():
+    """The body's points and edges, as arrays."""
+    co = np.zeros(len(body.data.vertices) * 3)
+    body.data.vertices.foreach_get("co", co)
+    edges = np.zeros(len(body.data.edges) * 2, dtype=np.int32)
+    body.data.edges.foreach_get("vertices", edges)
+    return co.reshape(-1, 3), edges.reshape(-1, 2)
+
+
+# The stretch (1c) scales the whole body down once its legs have grown, and the hands with it:
+# each hand is made a person's share of the height it will stand at then.
+shrink = stretch.plan(*skin(), {n: tuple(p) for n, p in joints.items()}, height)["scale"] if PERSON else 1.0
+
 # 1b. Hands a person's size. Generated bodies come with big hands, wrist to fingertip 12% of the
 # height or more, against a man's 10.8% (the adversarial review, 2026-10-15: "a hand covers half
 # the chest"). Each hand is scaled toward its wrist, its skin by how much the hand's and fingers'
@@ -113,7 +131,7 @@ for s in ("l", "r") if PERSON else ():
     groups = {g.index for g in body.vertex_groups if g.name in ours}
     share = {v.index: sum(g.weight for g in v.groups if g.group in groups) for v in body.data.vertices}
     reach = max(abs(body.data.vertices[i].co.x - wrist.x) for i, w in share.items() if w > 0.5)
-    k = min(1.0, HAND_LENGTH * height / reach)
+    k = min(1.0, HAND_LENGTH * height / shrink / reach)
     for i, w in share.items():
         if w > 0:
             t = min(1.0, w)
@@ -121,8 +139,29 @@ for s in ("l", "r") if PERSON else ():
             v.co = wrist + (v.co - wrist) * (1.0 - (1.0 - k) * t * t * (3 - 2 * t))
     for n in ours - {f"hand_{s}"}:
         joints[n] = wrist + (joints[n] - wrist) * k
-    print("HANDS", s, f"{reach * 100:.1f} cm wrist to fingertip, scaled to {reach * k * 100:.1f} cm")
+    print("HANDS", s, f"{reach * 100:.1f} cm wrist to fingertip, scaled to {reach * k * shrink * 100:.1f} cm at its height")
 body.data.update()
+
+# 1c. A person's arms and legs (D593). Generated bodies come with a reach below a real man's 1st
+# percentile and the crotch low (research/2026-11-01-why-the-torso-looks-wrong.md): the arms are
+# stretched to a 1.86 m reach and the legs made 10% longer, the whole body scaled back to its
+# height (stretch.py), skin and joints by the same warp. Its plan is kept beside the body
+# (out/NAME-stretch.json), for its designs and dressed models to be stretched alike.
+before, edges = skin()
+if PERSON:
+    plan = stretch.plan(before, edges, {n: tuple(p) for n, p in joints.items()}, height)
+    body.data.vertices.foreach_set("co", stretch.apply(plan, before).reshape(-1))
+    body.data.update()
+    joints = {n: Vector(stretch.apply(plan, np.array(p))) for n, p in joints.items()}
+    os.makedirs(OUT, exist_ok=True)
+    with open(os.path.join(OUT, f"{name}-stretch.json"), "w") as f:
+        json.dump(plan, f, indent=1)
+    print("STRETCH", f"legs {plan['stretch']:.2f}, arms {plan['arm']:.3f} shoulder to wrist, scaled {plan['scale']:.3f}")
+    # The stretch moved the skin: its normals are worked out again from it (Tripo's are kept as
+    # custom normals, which would light the old shape).
+    select_only(body)
+    bpy.ops.mesh.customdata_custom_splitnormals_clear()
+    body.data.shade_smooth()
 
 # 2. Our skeleton, its pose cleared, joints moved to Tripo's, directions kept.
 bpy.ops.import_scene.gltf(filepath=FIGURE)
@@ -203,6 +242,39 @@ if SMOOTH:
     bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
     bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
     bpy.ops.object.mode_set(mode="OBJECT")
+
+# 3a. The flank freed from the arm (D593). Tripo weighs the ribs below the armpit to the upper arm
+# and clavicle, which the stretched arm drags out as a step in the flank: from the armpit's
+# height down (1.38 to 1.24 m on a 1.80 m body, as it stood before its stretch) that skin's arm
+# and clavicle weight eases over to the upper spine, leaving the arm's own skin alone.
+if PERSON:
+    at = height / 1.80
+    top_z, low_z, floor_z = 1.38 * at, 1.24 * at, 1.0 * at
+    named = {g.index: g.name for g in body.vertex_groups}
+    arm_bones = ("upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky")
+    spine = body.vertex_groups.get("spine_03") or body.vertex_groups.new(name="spine_03")
+    freed = 0
+    for v in body.data.vertices:
+        z = before[v.index, 2]
+        total = sum(g.weight for g in v.groups) or 1.0
+        if z >= top_z or z < floor_z or sum(g.weight for g in v.groups if named[g.group].startswith(arm_bones)) / total > 0.75:
+            continue
+        t = max(0.0, min(1.0, (z - low_z) / (top_z - low_z)))
+        keep = t * t * (3 - 2 * t)
+        moved = 0.0
+        for g in v.groups:
+            if named[g.group].startswith(("upperarm", "clavicle")):
+                moved += g.weight * (1 - keep)
+                g.weight *= keep
+        if moved:
+            spine.add([v.index], moved, "ADD")
+            freed += 1
+    select_only(body)
+    bpy.ops.object.mode_set(mode="WEIGHT_PAINT")
+    bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
+    bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    print("FLANK", f"{freed} vertices' arm weight eased to the upper spine")
 
 # 3b. Feet as wide as a person's. Generated bodies come with short broad feet, 16 cm across
 # on a 1.8 m man, which read as clown shoes (the developers, 2026-10-15: "too large feet"); a

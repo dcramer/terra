@@ -50,6 +50,7 @@ export const MODULE_DATA: Record<string, string[]> = {
   "tools/characters/hold.py": ["art/animation/shield_targets.json"],
   "tools/characters/rig_check.py": ["art/characters/rig-baseline.json"],
   "tools/characters/proportions.py": ["art/characters/proportions.json"],
+  "tools/characters/skin_piece.py": ["tools/characters/bodies.json"],
   "tools/characters/fit_gear.py": ["art/gear/harnesses.json"],
   "tools/characters/mirror.ts": ["art/animation/mirrors.json"],
   "tools/characters/additive.ts": ["art/animation/swings.json", "art/animation/sets/fight.json"],
@@ -109,7 +110,7 @@ export function buildSteps(b: Bodies, items: Map<string, GearData>): Step[] {
   const looks = [...garments, ...rigid].sort();
   const finish = (name: string, height: number, art: string): Omit<Step, "name" | "section" | "needs"> => ({
     inputs: [...py("finish_character.sh", "convert_rig.py", "lift.py", "rig_check.py", "rig_render.py", "export_character.py", "proportions.py"), art],
-    outputs: [`${OUT}/${name}.glb`, `${OUT}/rig-check-${name}.json`, `${OUT}/${name}-game.glb`],
+    outputs: [`${OUT}/${name}.glb`, `${OUT}/${name}-stretch.json`, `${OUT}/rig-check-${name}.json`, `${OUT}/${name}-game.glb`],
     run: `$here/finish_character.sh ${name} ${height.toFixed(2)}`,
   });
 

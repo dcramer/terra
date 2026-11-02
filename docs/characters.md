@@ -94,7 +94,7 @@ The pipeline is in [tools/characters](../tools/characters/README.md) and the ste
 
 The checks run on every item, on every body, through clips that bend and reach, so a person isn't the test:
 
-- **Bodies:** the rig checks against our skeleton and the mannequin, and a deformation check along every limb.
+- **Bodies:** the rig checks against our skeleton and the mannequin, and a deformation check along every limb; their proportions (reach, where the fingertips hang, the crotch) against ANSUR II's men (`proportions.py`). Generated bodies come with short arms and a low crotch, so the pipeline stretches every person's arms and legs and scales them back to their height, and their designs and dressed models by the same warp (`stretch.py`, D593).
 - **The attachment contract:** every committed held and worn look against its kind's rules, and the base's sockets against their axes, from the files alone in a second (`tools/characters/attach_contract.ts`, in `cargo xtask check`; [the check](attachment.md#the-check)).
 - **Clips:** each one is one our skinning can follow.
 - **Clothing and armour:** how much skin pokes through it, frame by frame; the clipping fixer (BodySlide's, per morph, through our clips) records how far each part must move out, and a round is kept only while it helps.

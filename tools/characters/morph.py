@@ -5,7 +5,8 @@ change of shape of the base's own mesh (D112; how and why in research/body-morph
 
 BASE is the base body as exported (tools/characters/out/base-male-game.glb, by build_bodies.sh). DESIGN is either
   - a Tripo model of a design of the base person (art/characters/base-male/morphs/NAME/model.glb):
-    it is turned to face -Y, scaled to the base's height, feet on the ground, centred, and only
+    it is turned to face -Y, scaled to the base's height, stretched as the base was (its plan,
+    out/BASE-stretch.json, D593), feet on the ground, centred, and only
     its largest connected part is kept (a generated model can carry a slab of its backdrop); or
   - a body already rigged on our skeleton (another base, such as base-female.glb): it stands as
     the base does, and its own joints give the morph its proportions.
@@ -31,6 +32,7 @@ base (with the base's vertex positions, to find them again) and its joint offset
 weight, rigged and without clips or sockets, for export_character.py.
 """
 
+import json
 import math
 import os
 import sys
@@ -45,6 +47,7 @@ from mathutils.bvhtree import BVHTree
 from mathutils.kdtree import KDTree
 
 import look
+import stretch
 
 OUT = look.OUT
 base_path, design_path, name = look.args()[:3]
@@ -148,6 +151,10 @@ used = np.unique([i for poly in polys for i in poly])
 if DJ is None:
     P = P @ np.array(Matrix.Rotation(-math.pi / 2, 3, "Z")).T
     P *= (V[:, 2].max() - V[:, 2].min()) / (P[used, 2].max() - P[used, 2].min())
+    # Drawn as the base person was, short arms and all: stretched as the base was (stretch.py,
+    # D593), so the morph is a change of flesh, never of the limbs' length.
+    with open(os.path.join(OUT, f"{look.body_name(base_path)}-stretch.json")) as f:
+        P[used] = stretch.line_up(json.load(f), P[used])
     P[:, 2] -= P[used, 2].min() - V[:, 2].min()
     for a in (0, 1):
         P[:, a] += (V[:, a].max() + V[:, a].min()) / 2 - (P[used, a].max() + P[used, a].min()) / 2

@@ -15,6 +15,7 @@ export const FAILED: RegExp[] = [
   /^CLIPCHECK fail/,
   /^MORPH \S+ failed/, // a morph's job exited non-zero (build_bodies.sh step 3)
   /FLOATING/, // a rigid look resting on nothing (fit_gear.py)
+  /^PROPORTIONS fail/, // a body's reach, fingertips or crotch outside a real man's (proportions.py, D593)
   /^✗ /, // a clip's foot-down markers (markers.ts)
   /^run\.sh: .* exited \d+/, // a Blender script that failed, even silently (SystemExit, sys.exit)
   /Traceback|Error/, // Python's, and Blender's "Error: script failed"
