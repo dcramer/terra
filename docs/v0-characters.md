@@ -7,7 +7,9 @@ The people of v0: the player's body, what it wears, how it stands and moves, as 
 - **D599**: Terra's people are built on Quaternius's base bodies and modular outfits, in our own paint. The developers, 2026-11-02: "the quarternius stuff is clearly good, and its way better than our stuff. so you're going to stick with it. but we might have an issue w/ clothing/etc".
 - **Their parts stay as made**: meshes, UVs, normals, weights, the split into pieces and the bones are never changed by our tools (no clipping pushes, stretch, scale, retopology or decimation). We add paint (new maps on their UVs) and new pieces they lack; a new piece that clips is fixed, never theirs. A check proves every imported piece matches its source vertex for vertex. The developers: "just dont fuck up their parts/etc".
 - **D588**: moves no source does well are keyed from a generated pose sheet ([keyed-moves.md](keyed-moves.md)). The idle in the game today is one, on the old body.
-- **One game copy a machine**, a switch allowing exactly one more for a two-player test (amending D319, being built).
+- **No twist bones** (D599): their 65 joints and weights stay as made; a forearm wringing in a sword swing goes back to the developers with the film.
+- **One game copy a machine** (D319), a switch allowing exactly one more for a two-player test; the filming tools film in turn, the render box keeps its three slots. Being built from `~/.cache/terra-handoff/one-copy-j1.md`.
+- **The paint direction holds**: shown the repainted Ranger beside theirs, the developer: "looks the same tbqh so i guess thats good?" At play distance our paint reads as theirs does, so job 4 refines, it does not push.
 
 ## Licences
 
@@ -47,10 +49,8 @@ The switch as bounded jobs (the research note's "The switch in jobs" has the det
 
 ## Open with the developers
 
-- **An empty slot.** Their outfits replace the body, so what shows when a player takes the coat off? Recommended: their whole body stays underneath and our existing skin hiding hides what a worn piece covers, with no change to their meshes. Does that count as changing their parts?
-- **Twist bones.** Job 2 as planned re-points their bones and moves forearm and shin weights onto twist bones, which changes their bones and weights. Recommended: keep theirs exactly and drop the twist bones, unless a film shows their forearm wringing in a sword swing.
-- Is the repainted Ranger the right direction for "our paint"?
-- One game copy a machine: should the five tools that film several copies at once film in turn, and does the render box count as its own machine?
+- **An empty slot** (D600, Open): a bare piece swapped in (the developers' leaning) or their full body under, hidden while covered; both to be tried on the man before they choose.
+- **The starting kit's trousers**: the leather coat is their Ranger body and arms; under it the Peasant trousers' waistband shows 1–2 cm at the hips in the sprint, sword stance and jumps, the Ranger leggings do not (the research note's "Pieces of two outfits worn together"). On the desk, recommending the Ranger leggings.
 - Their man's arms (fingertips 2.2 cm above the 99th percentile) stay as made under the rule; D599 withdrew the stretch.
 
 ## Later, past v0

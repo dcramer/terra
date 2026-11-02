@@ -477,6 +477,7 @@ The look, models, bodies and gear, textures and audio.
 | [D593](decisions/D593.md) | The base body's arms and legs are stretched in the character pipeline | Design | Agent | Leaning | The base body's arms are lengthened to a 1.86 m reach… |
 | [D597](decisions/D597.md) | Trees sway as a hierarchy: trunk, each branch about its own root with its own phase, leaf clusters on their stalks | Tech | — | Open | Open: whether to replace the one bend every vertex of a… |
 | [D599](decisions/D599.md) | Characters are built on Quaternius's bodies and outfits, in our paint | Design | Developers | Decided | Terra's people are built on Quaternius's base bodies… |
+| [D600](decisions/D600.md) | What shows in an empty clothing slot on Quaternius's bodies | Design | — | Open | Open: Quaternius's outfits replace the body rather than… |
 
 ## Engine and code
 
