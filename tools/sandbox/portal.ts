@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+// The portal's census (docs/instances.md "The test that proves nothing leaks", D469): one run
+// of `--experiment portal` that crosses to the placeholder realm and back five times, reading
+// the census in the forest before the first trip and after each return, and in the realm, and
+// holds it to the doc's rules: after trips 2 to 5 the forest's entities by archetype, assets by
+// type and resources equal trip 1's exactly, and the GPU's memory and the process's resident
+// memory are within 2% of trip 1's; in the realm, what of the forest is still there is listed;
+// the forest's state before the first trip and after the last differs only in the player's
+// place. Says each crossing's time, as the game measured it (step through to play).
+//
+//   node tools/sandbox/portal.ts [--trips 5] [--settle 5] [--debug]
+//
+// A release build unless --debug. Node 22.18 or later; no dependencies.
+
+import { call, describe, said, start, stop, press, waitSeconds, waitUntil } from "./client.ts";
+import * as snaps from "./snap.ts";
+
+const args = process.argv.slice(2);
+const value = (flag: string, fallback: number) => {
+  const at = args.indexOf(flag);
+  return at >= 0 ? Number(args[at + 1]) : fallback;
+};
+const TRIPS = value("--trips", 5);
+// Game seconds let pass in each world before its census, for what streams in round the eye.
+const SETTLE_S = value("--settle", 5);
+const MEMORY_SLACK = 0.02;
+
+type Census = {
+  entities: Record<string, number>;
+  assets: Record<string, number>;
+  resources: string[];
+  world: { key: number; kind: string; seed: number } | null;
+  travel: string | null;
+  entered: number | null;
+  gpu: { allocated_mib: number; reserved_mib: number } | null;
+  resident_mib: number | null;
+};
+const census = async () => (await call("world.census")) as Census;
+// What is compared: the counts, without how many worlds the run has entered.
+const counts = (c: Census) => {
+  const { entered: _entered, ...rest } = snaps.counted(c) as Record<string, unknown>;
+  return rest;
+};
+
+let entered = 0;
+let line = 0;
+/// Through the nearest portal, then the census once the next world plays and has settled.
+async function cross(): Promise<{ census: Census; took: string }> {
+  entered += 1;
+  await press("n");
+  await waitUntil(`world ${entered} to be played`, census, (c) => c.entered === entered && c.travel === "Playing", 900);
+  await waitSeconds(SETTLE_S);
+  const heard = await said(line, "Portal: crossed", 4);
+  line = heard.next_line;
+  const took = heard.lines.map((l) => l.text.replace(/^.*Portal: /, "")).join("; ") || "(no crossing said)";
+  return { census: await census(), took };
+}
+
+const within = (a: number | null | undefined, b: number | null | undefined) => a != null && b != null && Math.abs(b - a) <= MEMORY_SLACK * a;
+const memory = (c: Census) => `gpu ${c.gpu?.allocated_mib ?? "?"} MiB allocated, ${c.gpu?.reserved_mib ?? "?"} reserved; resident ${c.resident_mib ?? "?"} MiB`;
+
+await start(["--offscreen", "--mute", "--experiment", "portal"], { release: !args.includes("--debug") });
+let failed = false;
+try {
+  await waitSeconds(SETTLE_S);
+  const before = await snaps.take("before");
+  const first = await census();
+  line = (await said(0, undefined, 1)).next_line;
+  console.log(`forest: ${first.world?.kind} ${first.world?.key}, ${Object.values(first.entities).reduce((a, b) => a + b, 0)} entities, ${memory(first)}`);
+  let trip1: Census | undefined;
+  for (let trip = 1; trip <= TRIPS; trip++) {
+    const there = await cross();
+    const realm = there.census;
+    console.log(`trip ${trip} out: ${there.took}; ${realm.world?.kind} ${realm.world?.key}, ${memory(realm)}`);
+    if (trip === 1) {
+      const kept = first.resources.filter((r) => realm.resources.includes(r));
+      const gone = first.resources.filter((r) => !realm.resources.includes(r));
+      const assets = Object.entries(first.assets).filter(([type, n]) => (realm.assets[type] ?? 0) >= n && n > 0);
+      console.log(`  in the realm: ${gone.length} of the forest's ${first.resources.length} resources gone, ${kept.length} present in both; ${assets.length} asset types at least as many as the forest's`);
+    }
+    const back = await cross();
+    const home = back.census;
+    console.log(`trip ${trip} back: ${back.took}; ${memory(home)}`);
+    if (home.world?.key !== first.world?.key) {
+      console.log(`  FAIL: back in ${home.world?.kind} ${home.world?.key}, not the forest`);
+      failed = true;
+    }
+    if (!trip1) {
+      trip1 = home;
+      const changed = snaps.changes(counts(first), counts(home));
+      console.log(`  against before the first trip (caches may fill): ${changed.length} changes${changed.length ? ": " + changed.slice(0, 12).join("; ") : ""}`);
+      continue;
+    }
+    const changed = snaps.changes(counts(trip1), counts(home));
+    const steady = within(trip1.gpu?.allocated_mib, home.gpu?.allocated_mib) && within(trip1.resident_mib, home.resident_mib);
+    console.log(`  against trip 1: ${changed.length ? `FAIL ${changed.length} changes: ${changed.slice(0, 20).join("; ")}` : "counts equal"}; memory ${steady ? "within 2%" : "FAIL past 2%"}`);
+    failed ||= changed.length > 0 || !steady;
+  }
+  const after = await snaps.take("after");
+  const diff = snaps.diff({ ...before, census: undefined }, { ...after, census: undefined }, { most: 30 });
+  console.log(`forest's state, before the first trip to after the last: ${diff.join("\n  ")}`);
+} catch (error) {
+  failed = true;
+  console.log(`FAIL: ${error instanceof Error ? error.message : error}`);
+  const { lines } = await said(0, "Portal", 40).catch(() => ({ lines: [] }));
+  for (const l of lines) console.log(`  ${describe(l)}`);
+} finally {
+  await stop().catch(() => undefined);
+}
+console.log(failed ? "portal: FAIL" : "portal: ok");
+process.exit(failed ? 1 : 0);
