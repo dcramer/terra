@@ -11,25 +11,36 @@
 //              build_item.sh on a full build's bodies), against the committed file's bytes
 //   4. check   attach_contract.ts on the look, its listed known faults allowed
 //   5. moves   a held look in hand on every body template through every clip of its class
-//              (moves.ts): its class's set with the set's partner in the other hand, else the
-//              walker's clips, carried as the game carries; how deep the look goes into the body
+//              (moves.ts, a template a process): its class's set with the set's partner in the
+//              other hand, else the walker's clips, carried as the game carries; how deep the
+//              look goes into the body, and which of its points, where and when
 //   6. show    its sheet and icon to make again, when the look's bytes changed
+//
+// The make and moves stages are keyed on everything they read (fit_cache.ts: the item's data,
+// its source's bytes, their scripts and every script those reach, the bodies and clips), so one
+// whose inputs have not changed is not run again but its result put back. Items run side by
+// side, and within an item the move check's templates, a process a core.
 //
 //   node tools/characters/fit.ts iron_axe            # a held item
 //   node tools/characters/fit.ts quiver              # a worn item (needs build_bodies.sh's bodies)
+//   node tools/characters/fit.ts --all               # every item with data
 //   node tools/characters/fit.ts hammer --turn 90    # a person's turn, kept in its data
+//   node tools/characters/fit.ts knife --fresh       # every stage run, the cache not read
 //
 // Exit 1 if a stage fails. Node 22.18 or later; no dependencies.
 
-import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { KINDS, ROOT, against, holdOf, judge, knownFaults, readBody, readLook } from "./attach_contract.ts";
 import { detect, sourceMesh } from "./detect.ts";
+import { Cache, closure, key } from "./fit_cache.ts";
 import { carriedClips } from "./held.ts";
 
 const OUT = join(ROOT, "tools", "characters", "out");
+const CHARS = join(ROOT, "tools", "characters");
 /** A held look through the body, cm (moves.ts's HELD_CM). */
 const HELD_CM = 1;
 /** The walker's clips that use what is in hand (terra_walker::figure's Doing::clip), played
@@ -38,12 +49,46 @@ const USED = ["Interact", "Sword_Attack", "Sword_Idle"];
 const walkerClips = () => [...carriedClips(), ...USED];
 /** moves.ts's own hands: the fighter's sword and shield, a set's partners. */
 const PARTNER = { R: "assets/models/held/arming_sword.glb", L: "assets/models/held/heater_shield.glb" };
+const rel = (f: string) => (f.startsWith(ROOT) ? f.slice(ROOT.length + 1) : f);
 
 type Item = { name: string; worn: boolean; file: string; data: Record<string, unknown>; look: string };
+/** One item's run: its lines, printed together when it is done, and its log. */
+type Ctx = { cache: Cache; fresh: boolean; templates: string[]; lines: string[]; log: string };
 
-/** A stage's line: ✓ or ✗, the item, the stage, what it found. */
-function line(ok: boolean, item: string, stage: string, what: string): boolean {
-  console.log(`${ok ? "✓" : "✗"} ${item} ${stage}: ${what}`);
+// Processes side by side, as many as the machine has cores less two (a Blender, a move check each).
+let free = Math.max(2, availableParallelism() - 2);
+const queued: (() => void)[] = [];
+async function slot<T>(f: () => Promise<T>): Promise<T> {
+  if (free > 0) free--;
+  else await new Promise<void>((r) => queued.push(r));
+  try {
+    return await f();
+  } finally {
+    const next = queued.shift();
+    if (next) next();
+    else free++;
+  }
+}
+type Ran = { status: number | null; signal: string | null; stdout: string; stderr: string; error?: string };
+/** Runs a command in a slot, its output kept whole. */
+const exec = (cmd: string, args: string[]) =>
+  slot(
+    () =>
+      new Promise<Ran>((done) => {
+        const p = spawn(cmd, args, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
+        const [out, err]: Buffer[][] = [[], []];
+        let error: string | undefined;
+        p.stdout.on("data", (b) => out.push(b));
+        p.stderr.on("data", (b) => err.push(b));
+        p.on("error", (e) => (error = e.message));
+        p.on("close", (status, signal) => done({ status, signal, stdout: Buffer.concat(out).toString(), stderr: Buffer.concat(err).toString(), error }));
+      }),
+  );
+
+/** A stage's line: ✓ or ✗, the item, the stage, what it found, and its time or that it was kept. */
+function line(ctx: Ctx, ok: boolean, item: string, stage: string, what: string, since?: number): boolean {
+  const took = since === undefined ? "" : since < 0 ? " [cached]" : ` [${((performance.now() - since) / 1000).toFixed(1)} s]`;
+  ctx.lines.push(`${ok ? "✓" : "✗"} ${item} ${stage}: ${what}${took}`);
   return ok;
 }
 
@@ -53,6 +98,13 @@ function writeData(file: string, d: Record<string, unknown>) {
   writeFileSync(file, `${v(d)}\n`);
 }
 
+/** Every item with data: art/held/*.json and art/gear/<item>/fit.json, sorted. */
+export function allItems(root = ROOT): string[] {
+  const held = readdirSync(join(root, "art", "held")).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5));
+  const worn = readdirSync(join(root, "art", "gear")).filter((d) => existsSync(join(root, "art", "gear", d, "fit.json")));
+  return [...held, ...worn].sort();
+}
+
 function read(name: string): Item | string {
   const held = join(ROOT, "art", "held", `${name}.json`);
   const worn = join(ROOT, "art", "gear", name, "fit.json");
@@ -60,29 +112,29 @@ function read(name: string): Item | string {
   if (!existsSync(held) && !worn_) return `no data: neither art/held/${name}.json nor art/gear/${name}/fit.json`;
   const file = worn_ ? worn : held;
   const data = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-  if (!data.kind) return `${file.slice(ROOT.length + 1)} names no kind`;
+  if (!data.kind) return `${rel(file)} names no kind`;
   const source = worn_ ? join(ROOT, "art", "gear", name, "model.glb") : join(ROOT, "assets", "models", data.source as string);
-  if (!worn_ && !existsSync(source)) return `its source ${source.slice(ROOT.length + 1)} is not there`;
+  if (!worn_ && !existsSync(source)) return `its source ${rel(source)} is not there`;
   const look = join(ROOT, "assets", "models", worn_ ? "gear" : "held", `${name}.glb`);
   return { name, worn: worn_, file, data, look };
 }
 
 /** Detect, or keep what the data gives; writes what it finds into the data. */
-function detectStage(it: Item, turn?: number): boolean {
+function detectStage(ctx: Ctx, it: Item, turn?: number): boolean {
   const d = it.data;
-  if (it.worn) return line(true, it.name, "detect", `a ${d.kind} is fitted on the body by its data`);
+  if (it.worn) return line(ctx, true, it.name, "detect", `a ${d.kind} is fitted on the body by its data`);
   if (turn !== undefined) {
     d.turn = turn;
     writeData(it.file, d);
-    return line(true, it.name, "detect", `a person's turn, ${turn}°, written into its data`);
+    return line(ctx, true, it.name, "detect", `a person's turn, ${turn}°, written into its data`);
   }
-  if (d.fit !== "length" || d.turn !== undefined) return line(true, it.name, "detect", d.fit === "length" ? `its data's turn, ${d.turn}°, kept` : `its data's "${d.fit}" fit kept`);
+  if (d.fit !== "length" || d.turn !== undefined) return line(ctx, true, it.name, "detect", d.fit === "length" ? `its data's turn, ${d.turn}°, kept` : `its data's "${d.fit}" fit kept`);
   const f = detect(sourceMesh(d.source as string), d.kind as string, d.fit as string, d.length as number);
-  if (!f.ok) return line(false, it.name, "detect", `${f.why}; set its turn once: fit.ts ${it.name} --turn DEG`);
+  if (!f.ok) return line(ctx, false, it.name, "detect", `${f.why}; set its turn once: fit.ts ${it.name} --turn DEG`);
   d.turn = f.turn;
   if (d.grip_from_end === undefined) d.grip_from_end = f.grip_from_end;
   writeData(it.file, d);
-  return line(true, it.name, "detect", `turn ${f.turn}°, grip ${d.grip_from_end} m from its end, into its data (${f.measures})`);
+  return line(ctx, true, it.name, "detect", `turn ${f.turn}°, grip ${d.grip_from_end} m from its end, into its data (${f.measures})`);
 }
 
 /** What changed between two looks' files: nothing, or which of its parts. */
@@ -106,32 +158,54 @@ export function lookDiff(a: Buffer, b: Buffer): string {
   return said.join("; ");
 }
 
-/** Make the look by its kind's maker; true and whether its bytes changed. */
-function makeStage(it: Item, log: string): [boolean, boolean] {
+/** What a look's maker reads: its scripts and every script they reach, Blender's version, the
+ * item's data and source; for a worn item every worn item's data (their layering), its own
+ * files and the full build's bodies. */
+export function makeInputs(it: Pick<Item, "name" | "worn" | "file" | "data">, root = ROOT): string[] {
+  const chars = join(root, "tools", "characters");
+  const blender = join(root, "tools", "blender", "version");
+  if (!it.worn) return [...closure(join(chars, "fit_held.py"), root), blender, it.file, join(root, "assets", "models", it.data.source as string)];
+  const gear = join(root, "art", "gear");
+  const out = join(chars, "out");
+  const bodies = existsSync(out) ? readdirSync(out).filter((f) => f.endsWith("-game.glb") || (f.endsWith(".npz") && !f.endsWith("-push.npz"))).map((f) => join(out, f)) : [];
+  const data = readdirSync(gear).map((d) => join(gear, d, "fit.json")).filter((f) => existsSync(f));
+  const own = readdirSync(join(gear, it.name)).map((f) => join(gear, it.name, f));
+  return [...closure(join(chars, "build_item.sh"), root), blender, ...data, ...own, ...bodies];
+}
+
+/** Make the look by its kind's maker, or put back the one its inputs made before; true, and
+ * whether its bytes differ from the committed file's. */
+async function makeStage(ctx: Ctx, it: Item): Promise<[boolean, boolean]> {
+  const t0 = performance.now();
   const was = (() => {
     try {
-      return execFileSync("git", ["cat-file", "--filters", `HEAD:${it.look.slice(ROOT.length + 1)}`], { cwd: ROOT, maxBuffer: 1 << 30, stdio: ["ignore", "pipe", "ignore"] });
+      return execFileSync("git", ["cat-file", "--filters", `HEAD:${rel(it.look)}`], { cwd: ROOT, maxBuffer: 1 << 30, stdio: ["ignore", "pipe", "ignore"] });
     } catch {
       return undefined;
     }
   })();
-  const [cmd, args] = it.worn ? [join(ROOT, "tools", "characters", "build_item.sh"), [it.name]] : [join(ROOT, "tools", "blender", "run.sh"), [join(ROOT, "tools", "characters", "fit_held.py"), it.name]];
-  const run = spawnSync(cmd, args, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
-  writeFileSync(log, `$ ${cmd} ${args.join(" ")}\n${run.stdout}${run.stderr}`);
-  // build_item.sh's last line: "✓ ITEM pass: made, carried onto N bodies and checked, ...".
-  const made = it.worn ? new RegExp(`^✓ ${it.name} pass\\b`, "m").test(run.stdout) :new RegExp(`^HELD ${it.name}\\b`, "m").test(run.stdout);
-  if (run.status !== 0 || !made || !existsSync(it.look)) return [line(false, it.name, "make", `its maker failed; see ${log.slice(ROOT.length + 1)}`), false];
+  const k = key("make", ROOT, makeInputs(it));
+  const kept = ctx.fresh ? undefined : ctx.cache.get(k, ROOT);
+  if (!kept) {
+    const [cmd, args] = it.worn ? [join(CHARS, "build_item.sh"), [it.name]] : [join(ROOT, "tools", "blender", "run.sh"), [join(CHARS, "fit_held.py"), it.name]];
+    const run = await exec(cmd, args);
+    appendFileSync(ctx.log, `$ ${cmd} ${args.join(" ")}\n${run.stdout}${run.stderr}\n`);
+    // build_item.sh's last line: "✓ ITEM pass: made, carried onto N bodies and checked, ...".
+    const made = it.worn ? new RegExp(`^✓ ${it.name} pass\\b`, "m").test(run.stdout) : new RegExp(`^HELD ${it.name}\\b`, "m").test(run.stdout);
+    if (run.status !== 0 || !made || !existsSync(it.look)) return [line(ctx, false, it.name, "make", `its maker failed; see ${rel(ctx.log)}`, t0), false];
+    ctx.cache.put(k, ROOT, { ok: true, line: "" }, [it.look]);
+  }
   const now = readFileSync(it.look);
   const diff = was ? lookDiff(now, was) : "a new look";
-  return [line(true, it.name, "make", `${it.look.slice(ROOT.length + 1)}: ${diff}`), !was || !now.equals(was)];
+  return [line(ctx, true, it.name, "make", `${rel(it.look)}: ${diff}`, kept ? -1 : t0), !was || !now.equals(was)];
 }
 
-function checkStage(it: Item): boolean {
+function checkStage(ctx: Ctx, it: Item): boolean {
   const look = readLook(it.look);
   const faults = judge(look, readBody());
   const { unlisted } = against(faults, knownFaults());
-  if (unlisted.length) return line(false, it.name, "check", unlisted.map((f) => `${f.rule}: ${f.detail}`).join("; "));
-  return line(true, it.name, "check", `the attachment contract${faults.length ? `, ${faults.length} known fault${faults.length > 1 ? "s" : ""} listed` : ""}`);
+  if (unlisted.length) return line(ctx, false, it.name, "check", unlisted.map((f) => `${f.rule}: ${f.detail}`).join("; "));
+  return line(ctx, true, it.name, "check", `the attachment contract${faults.length ? `, ${faults.length} known fault${faults.length > 1 ? "s" : ""} listed` : ""}`);
 }
 
 /** The set a class fights with, and the hand its item goes in (holding.md section 2): the off
@@ -152,74 +226,128 @@ export function setOf(name: string): { set: string; hand: "R" | "L"; clips: stri
   return set ? { set, hand, clips: "" } : { set: "none", hand, clips: (hand === "L" ? carriedClips() : walkerClips()).join(",") };
 }
 
-/** A row moves.ts measures: a move of a set, or a clip, and what it measured. */
-type MoveRow = { move?: string; clip?: string; measured?: Record<string, number> };
+/** A row moves.ts measures: a move of a set, or a clip, what it measured and where (moves.ts --json). */
+type MoveRow = { move?: string; clip?: string; measured?: Record<string, number>; where?: Record<string, string> };
 
 /** Runs `node <args>` (moves.ts, writing its rows to `json`), its output added to `log`: the
  * rows, or why there are none. The file of an earlier run is deleted first, so a run that
  * stopped before its rows (a missing clip once did) fails here and old rows are never read as
  * its own. moves.ts writes its rows and then exits 1 when some are over its own bars; those
  * rows are this run's and judged by fit's. */
-export function runMoves(args: string[], json: string, log: string): MoveRow[] | string {
+export async function runMoves(args: string[], json: string, log: string): Promise<MoveRow[] | string> {
   rmSync(json, { force: true });
-  const run = spawnSync(process.execPath, args, { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+  const run = await exec(process.execPath, args);
   appendFileSync(log, `\n$ node ${args.join(" ")}\n${run.stdout}${run.stderr}`);
   if (existsSync(json)) return JSON.parse(readFileSync(json, "utf8")) as MoveRow[];
-  const said = `${run.stderr ?? ""}\n${run.stdout ?? ""}`.split("\n").filter((l) => l.trim());
-  const why = said.find((l) => /error/i.test(l)) ?? said.at(-1) ?? run.error?.message ?? "";
+  const said = `${run.stderr}\n${run.stdout}`.split("\n").filter((l) => l.trim());
+  const why = said.find((l) => /error/i.test(l)) ?? said.at(-1) ?? run.error ?? "";
   const how = run.status === null ? `stopped by ${run.signal}` : `exit ${run.status}`;
-  return `moves.ts wrote no rows (${how}): ${why.trim()}; see ${log.startsWith(ROOT) ? log.slice(ROOT.length + 1) : log}`;
+  return `moves.ts wrote no rows (${how}): ${why.trim()}; see ${rel(log)}`;
 }
 
-function movesStage(it: Item, log: string, template?: string): boolean {
+/** What the move check reads besides its scripts and the files it is given: every file of ours
+ * its scripts name ("assets/…", "art/…": its default body, clips, set, spec, targets) and the
+ * walker's held.rs (held.ts's carried clips), with the data that picks its set and hand. */
+export function movesReads(scripts: string[], root = ROOT): string[] {
+  const named = new Set<string>();
+  for (const s of scripts) for (const [, f] of readFileSync(s, "utf8").matchAll(/"((?:assets|art)\/[\w./-]+\.(?:json|ron|glb|npz))"/g)) named.add(join(root, f));
+  const more = ["crates/terra_walker/src/character/held.rs", "assets/data/items.ron", "assets/data/moves/families.ron", "tools/characters/attach_kinds.json"];
+  return [...named, ...more.map((f) => join(root, f))].sort();
+}
+
+/** One move check: these args on one template, kept by its inputs; its rows, or why none. */
+async function movesRun(ctx: Ctx, it: Item, args: string[], files: string[], template: string): Promise<{ rows: MoveRow[] | string; kept: boolean }> {
+  const scripts = closure(join(CHARS, "moves.ts"), ROOT);
+  const k = key("moves", ROOT, [...scripts, ...movesReads(scripts), it.file, ...files], [args, template]);
+  const kept = ctx.fresh ? undefined : ctx.cache.get(k, ROOT);
+  if (kept) return { rows: kept.data as MoveRow[], kept: true };
+  const json = join(OUT, `fit-${it.name}-${template}-moves.json`);
+  const rows = await runMoves([join(CHARS, "moves.ts"), ...args, "--template", template, "--json", json], json, ctx.log);
+  if (typeof rows !== "string") ctx.cache.put(k, ROOT, { ok: true, line: "", data: rows });
+  return { rows, kept: false };
+}
+
+type Deep = { row: string; cm: number; where: string };
+/** Each row's deepest for this look over every template's run, and where it went in. */
+export function deepest(runs: MoveRow[][], name: string): Deep[] {
+  const by = new Map<string, Deep>();
+  const k = `held_cm.${name}`;
+  for (const rows of runs)
+    for (const r of rows) {
+      const cm = r.measured?.[k];
+      if (cm === undefined) continue;
+      const row = r.move ?? r.clip!;
+      if (!by.has(row) || cm > by.get(row)!.cm) by.set(row, { row, cm, where: r.where?.[k] ?? "" });
+    }
+  return [...by.values()];
+}
+
+async function movesStage(ctx: Ctx, it: Item): Promise<boolean> {
+  const t0 = performance.now();
   const { set, hand, clips } = setOf(it.name);
-  const look = it.look.slice(ROOT.length + 1);
+  const look = rel(it.look);
   const hold = set === "none" ? [`socket.hand.${hand}=${look}`] : (["R", "L"] as const).map((h) => `socket.hand.${h}=${h === hand ? look : PARTNER[h]}`);
-  const json = join(OUT, `fit-${it.name}-moves.json`);
-  const args = [join(ROOT, "tools", "characters", "moves.ts"), "--set", set, "--carry", "--arms", "--json", json, ...hold.flatMap((h) => ["--hold", h])];
+  const args = ["--set", set, "--carry", "--arms", ...hold.flatMap((h) => ["--hold", h])];
   if (clips) args.push("--also", clips);
-  if (template) args.push("--template", template);
-  const rows = runMoves(args, json, log);
-  if (typeof rows === "string") return line(false, it.name, "moves", rows);
-  const key = `held_cm.${it.name}`;
-  const deep = rows.filter((r) => r.measured?.[key] !== undefined).map((r) => ({ row: r.move ?? r.clip!, cm: r.measured![key] }));
+  const files = [...hold.map((h) => join(ROOT, h.split("=")[1])), ...(set === "none" ? [] : [join(ROOT, set)])];
+  const runs = await Promise.all(ctx.templates.map((t) => movesRun(ctx, it, args, files, t)));
+  const since = runs.every((r) => r.kept) ? -1 : t0;
+  const failed = runs.find((r) => typeof r.rows === "string");
+  if (failed) return line(ctx, false, it.name, "moves", failed.rows as string, since);
+  const deep = deepest(
+    runs.map((r) => r.rows as MoveRow[]),
+    it.name,
+  );
   const over = deep.filter((r) => r.cm > HELD_CM).sort((a, b) => b.cm - a.cm);
-  const worst = deep.reduce((a, b) => (b.cm > a.cm ? b : a), { row: "", cm: -Infinity });
-  const where = `${deep.length} rows of ${set === "none" ? "the walker's clips" : set.split("/").at(-1)} in ${hand === "R" ? "the right" : "the left"} hand`;
-  if (over.length) return line(false, it.name, "moves", `${where}: into the body ${over.map((r) => `${r.cm.toFixed(1)} cm in ${r.row}`).join(", ")} (bar ${HELD_CM} cm)`);
-  return line(true, it.name, "moves", `${where}: ${worst.cm.toFixed(1)} cm deepest (${worst.row}), bar ${HELD_CM} cm`);
+  const worst = deep.reduce((a, b) => (b.cm > a.cm ? b : a), { row: "", cm: -Infinity, where: "" });
+  const where = `${deep.length} rows of ${set === "none" ? "the walker's clips" : set.split("/").at(-1)} in ${hand === "R" ? "the right" : "the left"} hand on ${ctx.templates.length} ${ctx.templates.length === 1 ? "body" : "bodies"}`;
+  if (over.length) return line(ctx, false, it.name, "moves", `${where}: into the body ${over.map((r) => `${r.cm.toFixed(1)} cm in ${r.row}${r.where ? ` (${r.where})` : ""}`).join(", ")} (bar ${HELD_CM} cm)`, since);
+  return line(ctx, true, it.name, "moves", `${where}: ${worst.cm.toFixed(1)} cm deepest (${worst.row}), bar ${HELD_CM} cm`, since);
+}
+
+/** One item through every stage; its lines and whether it passed. */
+async function fitItem(name: string, opt: { turn?: number; fresh: boolean; templates: string[]; cache: Cache }): Promise<{ lines: string[]; ok: boolean }> {
+  const ctx: Ctx = { cache: opt.cache, fresh: opt.fresh, templates: opt.templates, lines: [], log: join(OUT, `fit-${name}.log`) };
+  writeFileSync(ctx.log, "");
+  const it = read(name);
+  if (typeof it === "string") return { lines: ctx.lines, ok: line(ctx, false, name, "read", it) };
+  line(ctx, true, name, "read", `${rel(it.file)}, a ${it.data.kind}`);
+  if (!detectStage(ctx, it, opt.turn)) return { lines: ctx.lines, ok: false };
+  const [made, changed] = await makeStage(ctx, it);
+  if (!made || !checkStage(ctx, it)) return { lines: ctx.lines, ok: false };
+  let ok = true;
+  if (it.worn) line(ctx, true, name, "moves", "a worn look has no held rows; build_item.sh's gear_check judged it on every body");
+  else ok = await movesStage(ctx, it);
+  if (changed) line(ctx, true, name, "show", `its look changed: look at it (cargo xtask workbench --sheet ${it.worn ? "--wear" : "--hold"} ${name}) and paint its icon again (node tools/icons/paint.ts ${name}, or cargo xtask icons --keep)`);
+  else line(ctx, true, name, "show", "its look's bytes are the committed ones: sheet and icon kept");
+  return { lines: ctx.lines, ok };
 }
 
 if (import.meta.main) {
-  const { values: opt, positionals: items } = parseArgs({ allowPositionals: true, options: { turn: { type: "string" }, template: { type: "string" } } });
+  const { values: opt, positionals } = parseArgs({
+    allowPositionals: true,
+    options: { turn: { type: "string" }, template: { type: "string" }, all: { type: "boolean", default: false }, fresh: { type: "boolean", default: false } },
+  });
+  const items = opt.all ? allItems() : positionals;
   if (!items.length) {
-    console.error("usage: node tools/characters/fit.ts ITEM... [--turn DEG] [--template male,...]");
+    console.error("usage: node tools/characters/fit.ts ITEM... | --all [--turn DEG] [--template male,...] [--fresh]");
     process.exit(2);
   }
   mkdirSync(OUT, { recursive: true });
-  let failed = 0;
-  for (const name of items) {
-    const it = read(name);
-    if (typeof it === "string") {
-      line(false, name, "read", it);
-      failed++;
-      continue;
-    }
-    line(true, name, "read", `${it.file.slice(ROOT.length + 1)}, a ${it.data.kind}`);
-    const log = join(OUT, `fit-${name}.log`);
-    if (!detectStage(it, opt.turn === undefined ? undefined : Number(opt.turn))) {
-      failed++;
-      continue;
-    }
-    const [made, changed] = makeStage(it, log);
-    if (!made || !checkStage(it)) {
-      failed++;
-      continue;
-    }
-    if (it.worn) line(true, name, "moves", "a worn look has no held rows; build_item.sh's gear_check judged it on every body");
-    else if (!movesStage(it, log, opt.template)) failed++;
-    if (changed) line(true, name, "show", `its look changed: look at it (cargo xtask workbench --sheet ${it.worn ? "--wear" : "--hold"} ${name}) and paint its icon again (node tools/icons/paint.ts ${name}, or cargo xtask icons --keep)`);
-    else line(true, name, "show", "its look's bytes are the committed ones: sheet and icon kept");
-  }
+  const t0 = performance.now();
+  const templates = opt.template ? opt.template.split(",") : Object.keys(JSON.parse(readFileSync(join(ROOT, "assets", "models", "character", "templates.json"), "utf8")));
+  const cache = new Cache(join(OUT, "fit-cache"));
+  const turn = opt.turn === undefined ? undefined : Number(opt.turn);
+  // Every item side by side; each one's lines together, as it finishes.
+  const results = await Promise.all(
+    items.map((name) =>
+      fitItem(name, { turn, fresh: opt.fresh!, templates, cache }).then((r) => {
+        for (const l of r.lines) console.log(l);
+        return r;
+      }),
+    ),
+  );
+  const failed = results.filter((r) => !r.ok).length;
+  console.log(`${failed ? "✗" : "✓"} ${items.length - failed} of ${items.length} fitted in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
   process.exit(failed ? 1 : 0);
 }

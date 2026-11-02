@@ -134,6 +134,8 @@ How a new model's turn is found, by kind (`fits` in `attach_kinds.json`):
 
 `--turn DEG` writes a person's turn into the data and runs again from 3. Every number it finds goes into the data, so the data stays the one source and a refit needs no person.
 
+Make and moves are keyed on the hash of everything they read (`fit_cache.ts`, as Unreal's derived-data cache keys a cooked asset): the item's data and source, the stage's scripts and every script they reach, the bodies, clips and templates. A stage whose key is kept is not run; its verdict and the files it wrote come back by their bytes, so a rerun with nothing changed takes a fraction of a second; `--fresh` runs every stage. Items (`--all`, every item with data) run side by side, and the move check a template a process. A moves failure names, from `moves.ts --json`'s `where`, which point of the look (its own frame, cm from the grip) went into which part, in which clip, when and on which body.
+
 ## Who owns what
 
 - **This spec** (the attachment spec jobs): this doc, `attach_kinds.json`, `attach_contract.ts` and its faults list, the shape of each item's data.
