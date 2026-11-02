@@ -102,37 +102,52 @@ function holders(): plan.Holder[] {
   }
 }
 
+/// The lock file's inode and real path, to know its descriptors in /proc; null without either.
+function lockFile(): { ino: number; real: string } | null {
+  try {
+    return PROC ? { ino: fs.statSync(LOCK).ino, real: fs.realpathSync(LOCK) } : null;
+  } catch {
+    return null;
+  }
+}
+
+/// Whether a process holds the lock through a descriptor of its file (/proc/<pid>/fd and fdinfo).
+/// A waiter's descriptor carries no lock line. /proc/locks cannot say: it skips a lock whose taker
+/// has died (it shows that pid as 0), and with it every waiter queued behind that lock.
+function holdsLock(pid: number | string, file: { ino: number; real: string }): boolean {
+  let fds: string[];
+  try {
+    fds = fs.readdirSync(`/proc/${pid}/fd`);
+  } catch {
+    return false;
+  }
+  return fds.some((fd) => {
+    try {
+      return fs.readlinkSync(`/proc/${pid}/fd/${fd}`) === file.real && plan.parseFdinfo(readText(`/proc/${pid}/fdinfo/${fd}`), file.ino) === "holds";
+    } catch {
+      return false;
+    }
+  });
+}
+
+/// Whether a run's `flock` still waits for the lock: alive and not yet holding it.
+function waits(pid: number): boolean {
+  const file = lockFile();
+  if (!file) return holders().some((h) => h.pid === pid && h.waiting);
+  return alive(pid) && !holdsLock(pid, file);
+}
+
 /// Every process holding the lock through a descriptor of its file, its own or one it inherited
 /// (/proc/<pid>/fd and fdinfo), with its group, age, folder and the run and render job its
 /// environment names. Empty without /proc.
 function holding(): plan.Holding[] {
-  let ino: number;
-  let real: string;
-  try {
-    if (!PROC) return [];
-    ino = fs.statSync(LOCK).ino;
-    real = fs.realpathSync(LOCK);
-  } catch {
-    return [];
-  }
+  const file = lockFile();
+  if (!file) return [];
   const boot = Date.now() - Number(readText("/proc/uptime").split(" ")[0]) * 1000;
   const found: plan.Holding[] = [];
   for (const name of fs.readdirSync("/proc")) {
     if (!/^\d+$/.test(name)) continue;
-    let fds: string[];
-    try {
-      fds = fs.readdirSync(`/proc/${name}/fd`);
-    } catch {
-      continue;
-    }
-    const opens = (fd: string) => {
-      try {
-        return fs.readlinkSync(`/proc/${name}/fd/${fd}`) === real && plan.parseFdinfo(readText(`/proc/${name}/fdinfo/${fd}`), ino) === "holds";
-      } catch {
-        return false;
-      }
-    };
-    if (!fds.some(opens)) continue;
+    if (!holdsLock(name, file)) continue;
     const pid = Number(name);
     const { pgrp, start } = plan.parseStat(readText(`/proc/${name}/stat`));
     const env = readText(`/proc/${name}/environ`).split("\0");
@@ -247,7 +262,7 @@ function execute(run: Run, stallMin: number, watch: string[]): Promise<number> {
   const sample = setInterval(() => {
     const now = Date.now();
     if (run.started === undefined) {
-      if (flock && holders().some((h) => h.pid === child.pid && h.waiting)) {
+      if (flock && waits(child.pid ?? 0)) {
         progress.output(now);
         // Waiting minutes on a holder no run owns: name it and what to do, every 5 minutes.
         if (now - run.asked >= OUTSIDE_MS && now - named >= SAY_EVERY_MS) {
