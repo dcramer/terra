@@ -97,3 +97,29 @@ The developer asked for the arms in, then: "remember this is a test of our new p
 - **A new gate catches the fault.** `rest.ts` fails today's `Idle_Loop` on both hands (left palm 46% forward, wrists 26 and 27 cm out) with bars from `Walk_Loop`.
 - **Two gates pull against each other.** Arms 12 degrees in leave the right wrist 19 cm out against the 18 cm bar, and at 15 degrees the hand goes 2.9 cm into the thigh on the female template. The clip keeps 12: hands clear of every body (0.2 cm), `rest.ts` still ✗ on the right by a centimetre.
 - **Still inherited.** The head stays turned as in `Idle_Loop`'s first pose, where the sheet looks ahead, and the feet stand closer than the sheet's. The left leg reaches full stretch at one point. Fingers don't move. The look and the game are unjudged.
+
+## The idle on the longer body, from a neutral start
+
+2026-11-02. The developer, on the longer body (D593): "He looks fine but his pose is atupid there". The stupid part was the start pose, `Idle_Loop`'s first frame: head turned 26 degrees to his right, shoulders 4 to 7 cm higher over the chest than the walk carries them, the right foot tucked 6 cm inside the hip. A key can't fix a start pose, since every key is measured from it, so `key.ts` gained `start`: the chest's roll levelled, the head set facing ahead (2 degrees down from the bind pose), the shoulders at `Walk_Loop`'s mean, and the balls of the feet 22 cm apart under the hips. The arms keep the way they hung, then `arms_in` and `palms` set them.
+
+- **The sheet was drawn from that start**, one of two allowed, with the brief that worked before. It kept the layout and the poses (a hip shift onto one straight leg, the other knee soft and its heel up, a breath, the other side), but drew in a painted style with outlines, which the prompt's "clear outlines" invited. For reading poses that doesn't matter. It put the first shift on his left where the brief said right; the keys follow the sheet.
+- **Two rounds of layover.** The first had the free knee too straight; a heel lift of 11 degrees in place of 7 matched the sheet. The sheet's free knee still drops further in than ours, which reads as posing in an idle.
+- **The arm settings retuned for the longer arms**: `arms_in` right 11, left 15 (were 12 and 12). The two gates still pull: at 12 the right hand touches the female thigh (0.1 cm in), at 11 it is clear by 0.8 cm with the wrist at 18 cm against the 18 cm bar.
+
+| | Today's `Idle_Loop` | `Sheet_Idle` |
+|---|---|---|
+| Head turned at the start | 26 deg right | 0 |
+| Shoulders over the chest at the start, right / left | 16.5 / 18.5 cm | 12.5 / 12.4 cm (walk 13.5 / 11.4) |
+| `rest.ts`, palm forward at most, right / left | 13% / 46% ✗ | -14% / -16% ✓ |
+| `rest.ts`, wrist out from the hip, right / left | 28 / 30 cm ✗ | 18 / 17 cm ✓ |
+| `moves.ts` hands, deepest into any template | -7.5 cm | -0.8 cm |
+| Seam, worst joint | 0.030 cm | 0.000 cm |
+| Ball of the foot, left / right, range | 2.0 / 2.0 cm | 0.4 / 0.0 cm |
+| Hips / chest / head, range | 2.5 / 3.1 / 5.2 cm | 6.0 / 3.6 / 4.6 cm |
+| Hands, left / right, range | 11.7 / 6.1 cm | 5.1 / 5.1 cm |
+
+**Does it still blend?** The game crossfades from the idle into the walk, jog, guard and the rest, from whatever moment it is in. `blend.ts` takes, for each of the idle's moments, the nearest pose of the other clip by the head, shoulders, elbows, hands and knees about the hips. From the start pose: walk 8.5 → 4.5 cm, jog 14.9 → 14.9, `Sword_Idle` 21.1 → 23.8, `Low_Guard` 21.6 → 22.0, `Interact` 8.7 → 10.9. Nearer the walk by half, the others within 3 cm of today's; the arms nearer the sides are what move it from the guard and the reach.
+
+Not carried by a clip swap: the carry poses made of the idle (`Carry_Torch` and the rest, `hold.py`) and its arm swing (`Idle_Loop.Arm_*_Add`, `additive.ts`) are built from `Idle_Loop` by the `fight` step, so landing the clip means rebuilding them from it and checking every carried look again (`moves.ts --carry`). The in-game film below swapped the clip and rebuilt the arm swing, not the carry poses.
+
+**In the game.** The first time the flow reached the game: the clip put into `base.glb` and `fight.glb` on a working copy (`glb_clips.ts`, `additive.ts`, `markers.ts`), the player filmed standing on the yard with empty hands (an empty slot pressed, since he starts holding the hammer, whose carry pose overrides the arm), from one fixed camera (`--cine`), then today's the same way, and the files put back. The game's pose layers (feet, gaze, the fit) run over the clip and change nothing the eye catches: the arms stay near the sides, the shoulders low, the pack's bedroll now showing over the lowered shoulder. A camera's `lens` in a `--cine` shot is not a 35 mm lens: 35 gives 22.6 degrees high, so a man at 3.4 m wants about 20. The look is the developer's to judge.

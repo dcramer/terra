@@ -26,7 +26,7 @@ Moves with a clear start and end that no source does well: blows first, then a t
 
 It is not for walking, running or swimming. Those are long cycles that bought clips already do well, and a person keying them by hand is slow in any studio.
 
-A small loop such as an idle goes through the same steps with less from the sheet: its panels barely differ, so the sheet gives the idea and the keys give the numbers ([the try](../research/2026-11-01-pose-sheet-blow.md#the-idle-one-flow)). It starts on the clip's own first pose, its last key equals its first, and its speed runs on through the seam (`loop`). Its empty arms hang from the chest (`hang`). `mesh.ts` is for blows; a loop's gates are the seam, the feet and `moves.ts`'s `hands` row, with `--also` naming the clip.
+A small loop such as an idle goes through the same steps with less from the sheet: its panels barely differ, so the sheet gives the idea and the keys give the numbers ([the try](../research/2026-11-01-pose-sheet-blow.md#the-idle-one-flow)). It starts on a neutral pose of its own (`start`: head ahead, the walk's shoulders, feet under the hips), not the old clip's first frame, whose faults it would copy; its last key equals its first, and its speed runs on through the seam (`loop`). Its empty arms hang from the chest (`hang`). `mesh.ts` is for blows; a loop's gates are the seam, the feet and `moves.ts`'s `hands` row, with `--also` naming the clip.
 
 ## Why it should hold up
 
@@ -40,7 +40,7 @@ A small loop such as an idle goes through the same steps with less from the shee
 One move, one owner. Each step says what stops the job.
 
 1. **Brief the move.** Say what it does in the fight: where it starts and ends, the hit's moment, how far the body travels, which foot steps, and which reference item it is made for (D565).
-2. **Look at the start pose before anything else.** A keyed move inherits its start pose's faults: today's idle had its palms out and arms wide, and the keyed idle copied both until the developer saw them. Judge the start pose first, and name in the brief what must differ.
+2. **Look at the start pose before anything else.** A keyed move inherits its start pose's faults: today's idle had its palms out, arms wide, head turned and shoulders raised, and the keyed idle copied them until the developer saw them. Judge the start pose first, name in the brief what must differ, and set it with `start` in the keys. A new start must still blend with what the game plays from it: measure how far it stands from those clips' nearest poses, against the old start (`spike/pose-sheet/blend.ts`).
 
    **Render the start.** Our body in its start pose, from two sides, with the item in hand (`tools/characters/clip_sheet.ts`).
 3. **Make the sheet.** `node tools/tripo/tripo.ts image "…" --ref guard.png --model gpt-image-2.5 --aspect 16:9`. The prompt asks for:
@@ -71,7 +71,8 @@ One move, one owner. Each step says what stops the job.
 - `spike/pose-sheet/key.ts`: keys to clip, for the player's body and one guard. It sets the hips, chest, head, shoulders, sword hand and its blade, the shield's offset, and each foot and heel, and solves the arms and legs to reach them.
 - `spike/pose-sheet/stills.py`: the stills for step 5.
 - `spike/pose-sheet/slash.json` and `slash-sheet.jpg`: the worked example.
-- `spike/pose-sheet/idle.json` and `idle-sheet.jpg`: a loop, with `loop` and `hang`.
+- `spike/pose-sheet/idle.json` and `idle-sheet.jpg`: a loop, with `loop`, `hang` and a neutral `start`.
+- `spike/pose-sheet/rest.ts` and `blend.ts`: empty hands hanging as a person's do, and a start's distance from the clips the game blends into.
 
 ## What it still lacks
 
