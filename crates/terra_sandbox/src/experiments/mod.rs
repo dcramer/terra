@@ -13,6 +13,7 @@ mod forest_walk;
 pub(crate) mod icons;
 mod look;
 mod lush;
+mod portal;
 mod scatter;
 mod town;
 mod workbench;
@@ -32,6 +33,7 @@ pub struct Experiment {
 const STANDS_FOR: &[(&str, &[&str])] = &[
     ("controller-yard", course_yard::WITH),
     ("forest-walk", forest_walk::WITH),
+    ("portal", portal::WITH),
     ("dungeon", dungeon::WITH),
     ("dungeon-mine", dungeon::WITH),
     ("dungeon-keep", dungeon::WITH),
@@ -75,6 +77,11 @@ pub const ALL: &[Experiment] = &[
         name: "forest-walk",
         about: "A walk in the lush forest with its wildlife: F6 summer or winter, F7 dawn, noon, dusk or night, J and L an hour back or on, F8 the next weather, P a feedback picture and note, O the help. The same as play and lush on the yard at the forest film's path.",
         add: forest_walk::plugin,
+    },
+    Experiment {
+        name: "portal",
+        about: "The forest walk with a portal a few steps ahead, to a placeholder realm of another seed, light and colours, and one back there (docs/instances.md): F on it or N, the nearest, crosses under the short fade.",
+        add: portal::plugin,
     },
     Experiment {
         name: "scatter",

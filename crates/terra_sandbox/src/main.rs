@@ -71,7 +71,14 @@ fn main() -> AppExit {
         character::plugin,
         appearance::plugin,
     ));
+    let mut added: Vec<&str> = Vec::new();
     for name in &options.experiments {
+        // Named twice, as play is by the launcher and by an experiment that stands for it
+        // (`cargo xtask play new -- --experiment portal`): added once.
+        if added.contains(&name.as_str()) {
+            continue;
+        }
+        added.push(name);
         let Some(experiment) = experiments::ALL.iter().find(|e| e.name == name) else {
             eprintln!("No experiment called `{name}`. Run with --list to see them.");
             return AppExit::error();

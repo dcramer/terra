@@ -14,6 +14,9 @@ mod rules;
 #[cfg(test)]
 mod tests;
 
+/// The walk's date, the portal's too.
+pub use rules::SUMMER;
+
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::prelude::*;
 use terra_world::climate::{ClimateFields, SnowCover};
