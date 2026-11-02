@@ -322,13 +322,13 @@ const MIST_FOOT_M: f32 = 1.5;
 
 /// A lake's mist banks as one mesh: a card standing on its water every `MIST_EVERY_M`, by
 /// the lake's own cells, its place and size jittered.
-fn mist_mesh(waters: &Waters, lake: usize) -> Option<Mesh> {
+fn mist_mesh(waters: &Waters, lake: usize, seed: terra_gen::Seed) -> Option<Mesh> {
     let region = waters.region();
     let level = waters.lake_radius_m(lake);
     let every = (MIST_EVERY_M / region.cell_m).round().max(1.0) as usize;
     let (mut positions, mut normals, mut corners, mut sizes, mut indices) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
-    let mut seed = terra_gen::Seed(0x5EED_0000 + lake as u64).rng();
+    let mut seed = seed.derive("lake mist").index(lake as u64).rng();
     for (c, r) in waters.cells_of(lake) {
         if c % every != 0 || r % every != 0 {
             continue;
@@ -490,7 +490,7 @@ fn spawn(
             continue;
         }
         if lake.area_m2 >= MISTY_M2
-            && let Some(banks) = mist_mesh(waters, index)
+            && let Some(banks) = mist_mesh(waters, index, planet.seed())
         {
             commands.spawn((
                 Name::new(format!("Lake {index} mist")),
