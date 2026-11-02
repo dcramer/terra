@@ -39,7 +39,7 @@ use terra_world::flora::ClearAround;
 use terra_world::flora::{Obstacles, Trunk, Trunks};
 use terra_world::loading::Loading;
 use terra_world::lod::Detail;
-use terra_world::planet::Planet;
+use terra_world::planet::{HeightMemo, Planet};
 use terra_world::start::Start;
 use terra_world::tick::{Sim, Smoothed};
 
@@ -633,6 +633,9 @@ const CLIMB_REACH_M: f32 = 14.0;
 const CLIMB_MPS: f32 = 2.2;
 /// How far from a trunk's bark a climber's middle is.
 const CLINGS_M: f32 = 0.06;
+/// The most lattice points the creatures' ground memo keeps before it starts over: a few
+/// dozen a creature where it stands, for a hundred or so about at once.
+const GROUND_MEMO_MOST: usize = 4096;
 
 /// Moves each creature by what it is doing: over the ground, afloat, on the wing or up a
 /// trunk.
@@ -643,8 +646,13 @@ fn walk(
     players: Query<&Transform, With<Player>>,
     mut creatures: Query<(&mut Creature, &mut Transform, &Detail), Without<Player>>,
     (trunks, obstacles): (Res<Trunks>, Res<Obstacles>),
+    mut memo: Local<HeightMemo>,
 ) {
     let dt = time.delta_secs().min(0.1);
+    // The ground each asks, through the land's lattice points it asked last tick (D53, as
+    // a body's mover does): unmemoised, fifty at the lake took a tick past its budget.
+    memo.keep_within(GROUND_MEMO_MOST);
+    let memo = &mut *memo;
     for (mut creature, mut at, detail) in &mut creatures {
         if !detail.moves() {
             continue;
@@ -656,8 +664,8 @@ fn walk(
         let scale = at.scale;
         match creature.state {
             State::Fly { from, to, along } => {
-                *at =
-                    fly_on(&mut creature, about, &planet, (from, to, along), dt).with_scale(scale);
+                *at = fly_on(&mut creature, about, (&planet, memo), (from, to, along), dt)
+                    .with_scale(scale);
                 continue;
             }
             State::Climb { trunk, height } => {
@@ -668,8 +676,8 @@ fn walk(
                     // Across the ground to its foot first.
                     let way = toward(trunk.foot);
                     creature.facing = way;
-                    let next =
-                        planet.ground_at(here + way * gait::keeps_to(about.run_mps, about) * dt);
+                    let next = planet
+                        .ground_at_in(here + way * gait::keeps_to(about.run_mps, about) * dt, memo);
                     *at = Transform::from_translation(next)
                         .looking_to(way, next.normalize())
                         .with_scale(scale);
@@ -688,8 +696,8 @@ fn walk(
                 cling(&mut at, &creature, trunk, going_up);
                 if creature.aloft <= 0.0 && height <= 0.0 {
                     // Down: on the ground again, facing away from the trunk.
-                    let ground =
-                        planet.ground_at(trunk.foot + creature.side * (trunk.radius_m + 0.3));
+                    let ground = planet
+                        .ground_at_in(trunk.foot + creature.side * (trunk.radius_m + 0.3), memo);
                     creature.facing = creature.side;
                     *at = Transform::from_translation(ground)
                         .looking_to(creature.side, ground.normalize())
@@ -735,7 +743,7 @@ fn walk(
         let place = ground::step(
             &mut creature,
             about,
-            ((&*trunks, &*obstacles), &planet),
+            ((&*trunks, &*obstacles), &planet, memo),
             (here, at.forward().as_vec3()),
             (direction, speed),
             dt,
@@ -761,7 +769,7 @@ pub fn wing_mps(about: &crate::species::SpeciesDef) -> f32 {
 fn fly_on(
     creature: &mut Creature,
     about: &crate::species::SpeciesDef,
-    planet: &Planet,
+    (planet, memo): (&Planet, &mut HeightMemo),
     (from, to, along): (Vec3, Vec3, f32),
     dt: f32,
 ) -> Transform {
@@ -773,7 +781,7 @@ fn fly_on(
     let s = along;
     let lift = (length * 0.12).clamp(1.5, 14.0) * libm::sinf(std::f32::consts::PI * s);
     let line = from.lerp(to, s);
-    let ground = planet.ground_at(line);
+    let ground = planet.ground_at_in(line, memo);
     let high =
         (line.length() + lift).max(ground.length() + 0.4 * libm::sinf(std::f32::consts::PI * s));
     let point = line.normalize() * high;

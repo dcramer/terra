@@ -11,7 +11,7 @@ use super::{Creature, State};
 use crate::species::{Moves, SpeciesDef};
 use bevy::prelude::*;
 use terra_world::flora::{Obstacles, Trunks};
-use terra_world::planet::Planet;
+use terra_world::planet::{HeightMemo, Planet};
 
 /// A creature trying to go that has made less than a quarter of the way its pace would take it
 /// in so long, seconds, is stuck.
@@ -97,7 +97,7 @@ pub fn way_out(rounds: &[(Vec3, f32)], here: Vec3, want: Vec3, radius: f32) -> V
 pub fn step(
     creature: &mut Creature,
     about: &SpeciesDef,
-    (solids, planet): ((&Trunks, &Obstacles), &Planet),
+    (solids, planet, memo): ((&Trunks, &Obstacles), &Planet, &mut HeightMemo),
     (here, facing_now): (Vec3, Vec3),
     (want, want_mps): (Vec3, f32),
     dt: f32,
@@ -130,18 +130,21 @@ pub fn step(
             (about.body.nose_m(), about.body.rear_m()),
         );
     }
-    // Each keeps to its own: walkers out of water deeper than they wade, swimmers in it.
-    let depth = |point: Vec3| planet.water_radius_m(point) - planet.ground_at(point).length();
+    // Each keeps to its own: walkers out of water deeper than they wade, swimmers in it. The
+    // ground is asked through the memo, once where it would go and again only if it stays.
+    let mut ground = planet.ground_at_in(next, memo);
+    let depth = |ground: Vec3, point: Vec3| planet.water_radius_m(point) - ground.length();
     let swims = matches!(about.moves, Moves::Swims(_));
     let kept = if swims {
-        depth(next) > 0.3
+        depth(ground, next) > 0.3
     } else if about.wades_m > 0.0 {
-        depth(next) < about.wades_m
+        depth(ground, next) < about.wades_m
     } else {
-        depth(next) < -0.2
+        depth(ground, next) < -0.2
     };
     if !kept {
         next = here;
+        ground = planet.ground_at_in(next, memo);
         if let State::Wander(_) = creature.state {
             creature.state = State::Idle(1.0);
         }
@@ -151,10 +154,10 @@ pub fn step(
     }
     match about.moves {
         // Afloat: on the water's surface, its feet under it.
-        Moves::Swims(feet_m) if depth(next) > 0.0 => {
+        Moves::Swims(feet_m) if depth(ground, next) > 0.0 => {
             next.normalize() * (planet.water_radius_m(next) - feet_m)
         }
-        _ => planet.ground_at(next),
+        _ => ground,
     }
 }
 

@@ -59,7 +59,7 @@ pub const FACES: [(Vec3, Vec3, Vec3); 6] = [
 /// (`distance`): the nearest surface straight up or down from it, toward or away from the
 /// centre. `Planet::ground_at` asks it of the voxel ground; the controller course (D53,
 /// `terra_motion::course`) of its fixtures.
-pub fn surface_through(point: Vec3, distance: impl Fn(Vec3) -> f32) -> Vec3 {
+pub fn surface_through(point: Vec3, mut distance: impl FnMut(Vec3) -> f32) -> Vec3 {
     let up = point.normalize_or(Vec3::Y);
     let inside = distance(point) < 0.0;
     // Out of the ground the surface is looked for below; in it, above. Each step is as
@@ -163,6 +163,15 @@ impl Planet {
     /// above as well as below, as in a hole that has been dug.
     pub fn ground_at(&self, point: Vec3) -> Vec3 {
         surface_through(point, |at| self.ground.distance(at))
+    }
+
+    /// [`Planet::ground_at`] through a memo of the land's lattice points
+    /// ([`Planet::distance_in`]), for what asks the ground again and again near where it
+    /// asked last: a creature's step asked it three times a tick, unmemoised about 0.2 ms
+    /// each at the lake on the large planet, so fifty creatures took a tick past its budget.
+    /// Keep the memo from tick to tick and bound it with `HeightMemo::keep_within`.
+    pub fn ground_at_in(&self, point: Vec3, memo: &mut HeightMemo) -> Vec3 {
+        surface_through(point, |at| self.distance_in(at.as_dvec3(), memo))
     }
 
     /// Whether the ground at a point has been dug or filled, rather than lying where it was
@@ -977,6 +986,14 @@ mod tests {
         });
         assert!(!taken.is_empty());
         let floor = planet.ground_at(ground + up * 0.5);
+        // Through a memo kept from ask to ask, the same ground, in the hole and round it.
+        let mut memo = HeightMemo::default();
+        for off in [Vec3::ZERO, Vec3::X * 1.3, Vec3::Z * 3.7, Vec3::X * -9.0] {
+            let at = ground + off + up * 0.5;
+            let memoised = planet.ground_at_in(at, &mut memo);
+            let apart = memoised.distance(planet.ground_at(at));
+            assert!(apart < 0.01, "{apart} m apart at {off}");
+        }
         assert!(
             (floor.distance(ground) - 2.0).abs() < 0.05,
             "{}",
