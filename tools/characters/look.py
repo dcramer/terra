@@ -146,6 +146,52 @@ def join(src):
     return arm, skinned
 
 
+# A mesh spanning less of the figure's height than this is a piece, not a whole body.
+WHOLE_SHARE = 0.8
+
+
+# A face of a dressed figure with another face this close outside it is under a layer: skin
+# under the tunic, the tunic under a belt, a belt's own inner side.
+UNDER_M = 0.03
+
+
+def worn_over():
+    """The surface a worn look is fitted to and checked against, in a figure imported whole: its
+    body, or, for a figure dressed in pieces where no mesh spans it (Quaternius's head-only body
+    in their outfit pieces, D599), its outside: every skinned mesh joined into one, `Figure`,
+    less each face with another within UNDER_M outside it, so a pack is fitted over what he
+    wears, its straps laid on his tunic and belts and never on a layer under them, which would
+    show through. The join is in this run's scene alone; their files stay as made."""
+    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH" and any(m.type == "ARMATURE" for m in o.modifiers)]
+    heights = {o: [(o.matrix_world @ v.co).z for v in o.data.vertices] for o in meshes}
+    largest = max(meshes, key=lambda o: len(o.data.vertices))
+    top = max(max(z) for z in heights.values())
+    foot = min(min(z) for z in heights.values())
+    if max(heights[largest]) - min(heights[largest]) >= WHOLE_SHARE * (top - foot):
+        return largest
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in meshes:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = meshes[0]
+    bpy.ops.object.join()
+    figure = bpy.context.view_layer.objects.active
+    figure.name = "Figure"
+    figure["dressed"] = True
+    import bmesh
+    from mathutils.bvhtree import BVHTree
+    bm = bmesh.new()
+    bm.from_mesh(figure.data)
+    bm.normal_update()
+    tree = BVHTree.FromBMesh(bm)
+    under = [f for f in bm.faces if tree.ray_cast(f.calc_center_median() + f.normal * 1e-4, f.normal, UNDER_M)[0] is not None]
+    bmesh.ops.delete(bm, geom=under, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bm.to_mesh(figure.data)
+    bm.free()
+    print("FIGURE", len(meshes), "meshes joined,", len(under), "faces under a layer left out")
+    return figure
+
+
 # Weight-blended skinning, as the game does it (crates/terra_walker/src/skinning.rs): dual
 # quaternions, which keep a limb's volume through a roll and a knee's or elbow's through a deep
 # bend, but for the skin the joints in `linear_joints` move: round the hips, across the wide

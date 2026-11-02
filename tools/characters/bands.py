@@ -59,6 +59,107 @@ def path(body, rays):
     return out
 
 
+# Rounds of evening a ribbon's line out, ends held: enough that it turns no tighter than its
+# width (some 5 cm round, from the chest down onto the side), where a ribbon folds on itself.
+RIBBON_SMOOTH_ROUNDS = 60
+RIBBON_ACROSS = 5          # points across a ribbon where the surface under it is found
+RIBBON_RAMP_M = 0.06       # a ribbon rises to clear what stands under it over this length
+
+
+def ribbon(body, rays, width, offset, name, material, inner):
+    """A new object: a strap laid over `body` along `rays`, as a strap is laid over clothes,
+    not cut from them: a solid ribbon `width` wide, from `inner` to `offset` off the highest
+    surface under its width, rising over a belt or a shoulder flap within RIBBON_RAMP_M rather
+    than following each layer's edge, its line evened out. Each vertex takes the skin weights
+    of the surface beneath it. For a figure dressed in pieces (look.worn_over), whose low,
+    layered outside a band cut from it would follow edge by edge."""
+    tree = tree_of(body)
+    mw = body.matrix_world
+    line = [p.copy() for p in path(body, rays)]
+    # Evened out and laid back on the surface in turn: evening alone cuts a corner round the
+    # body through it.
+    for _ in range(RIBBON_SMOOTH_ROUNDS):
+        line = [line[0]] + [(line[i - 1] + 2 * line[i] + line[i + 1]) / 4 for i in range(1, len(line) - 1)] + [line[-1]]
+        line = [on_skin(tree, p) for p in line]
+    # The surface's facing, evened along the line too, so the ribbon does not twist where it
+    # steps from one layer onto another.
+    normals = [tree.find_nearest(p)[1].normalized() for p in line]
+    reach = max(1, int(RIBBON_RAMP_M / STEP_M))
+    normals = [sum(normals[max(0, i - reach): i + reach + 1], Vector()).normalized() for i in range(len(line))]
+    frames = []
+    for i, p in enumerate(line):
+        t = (line[min(i + 1, len(line) - 1)] - line[max(i - 1, 0)]).normalized()
+        n = normals[i]
+        s = t.cross(n).normalized()
+        frames.append((p, t, s.cross(t).normalized(), s))
+    # The highest surface under the ribbon's width at each point, along its normal.
+    height = []
+    for p, _, n, s in frames:
+        h = 0.0
+        for k in range(RIBBON_ACROSS):
+            q = p + s * (width * (k / (RIBBON_ACROSS - 1) - 0.5))
+            hit = tree.ray_cast(q + n * 0.08, -n, 0.16)
+            if hit[0] is not None:
+                h = max(h, (hit[0] - p).dot(n))
+        height.append(h)
+    height = [max(height[max(0, i - reach): i + reach + 1]) for i in range(len(height))]
+    for _ in range(reach):
+        height = [height[0]] + [max(height[i], (height[i - 1] + height[i] + height[i + 1]) / 3) for i in range(1, len(height) - 1)] + [height[-1]]
+    # Its corners: four a point (outside left and right, inside right and left), a closed tube.
+    bm = bmesh.new()
+    rings = []
+    for (p, _, n, s), h in zip(frames, height):
+        ring = []
+        for lift, side in ((offset, -0.5), (offset, 0.5), (inner, 0.5), (inner, -0.5)):
+            ring.append(bm.verts.new(p + n * (h + lift) + s * (width * side)))
+        rings.append(ring)
+    uv_at = {}
+    length = 0.0
+    for i, ring in enumerate(rings):
+        if i:
+            length += (frames[i][0] - frames[i - 1][0]).length
+        for k, v in enumerate(ring):
+            uv_at[v] = (k in (1, 2), length / width)
+    for a, b in zip(rings[:-1], rings[1:]):
+        for k in range(4):
+            bm.faces.new((a[k], a[(k + 1) % 4], b[(k + 1) % 4], b[k]))
+    bm.faces.new(list(reversed(rings[0])))
+    bm.faces.new(rings[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.normal_update()
+    uv = bm.loops.layers.uv.new("UVMap")
+    for f in bm.faces:
+        for loop in f.loops:
+            u, v = uv_at[loop.vert]
+            loop[uv].uv = (float(u), v)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    piece = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(piece)
+    piece.matrix_world = mw.copy()
+    inv = mw.inverted()
+    for v in me.vertices:
+        v.co = inv @ v.co
+    # Each vertex weighted as the surface under it: the nearest face's corners, nearer more.
+    names = {g.index: g.name for g in body.vertex_groups}
+    for g in body.vertex_groups:
+        piece.vertex_groups.new(name=g.name)
+    for v in me.vertices:
+        at, _, face, _ = tree.find_nearest(mw @ v.co)
+        corners = body.data.polygons[face].vertices
+        share = [1.0 / max((mw @ body.data.vertices[c].co - at).length, 1e-4) for c in corners]
+        total = {}
+        for c, w in zip(corners, share):
+            for g in body.data.vertices[c].groups:
+                total[g.group] = total.get(g.group, 0.0) + w * g.weight
+        whole = sum(total.values()) or 1.0
+        for g, w in total.items():
+            piece.vertex_groups[names[g]].add([v.index], w / whole, "REPLACE")
+    me.materials.append(material)
+    return piece
+
+
 def band(body, rays, width, offset, name, material, inner=None):
     """A new object: the band along `rays` over `body`, `width` wide, its outside `offset` off
     the skin. With `inner`, it is solid from `inner` off the skin up to `offset`: a strap worn

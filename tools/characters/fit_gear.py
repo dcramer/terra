@@ -77,7 +77,9 @@ body_name = look.body_name(body_path)
 look.reset()
 bpy.ops.import_scene.gltf(filepath=look.path(body_path))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
-body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
+body = look.worn_over()
+# A figure dressed in pieces: its gear is laid over what it wears (look.worn_over).
+dressed = bool(body.get("dressed"))
 # Each vertex's patch of skin (patches.py), which a piece may hide.
 patch_of = patches.of(body) or {}
 arm.animation_data_clear()
@@ -182,6 +184,8 @@ def pull_in(ob, direction, gap):
 # (shell_garment.py's BULK_M); what is worn over them, a pack's straps, reaches past it.
 CHEST_M = 0.018
 OVER_CHEST_M = 0.022
+# Over a figure dressed in pieces the straps lie on its clothes, so need clear only them.
+OVER_CLOTHES_M = 0.010
 
 
 def fit_back(ob, height, harness):
@@ -233,20 +237,38 @@ def fit_back(ob, height, harness):
             ((3.0 * x, 0.0, chest - 0.13), (-side, 0, 0)),       # in onto the side, under the arm
             ((0.6 * x, 1.0, chest - 0.18), (0, -1, 0)),          # under the bag's lower part, in from behind
         ]
-        # Solid from just off the skin to above the thickest chest piece (OVER_CHEST_M).
-        straps.append(bands.band(body, route, width=0.045, offset=OVER_CHEST_M, inner=0.006,
-                                 name=f"strap.{side}", material=leather))
+        if dressed:
+            # Over what he wears, laid on its outside rather than cut from it (bands.ribbon).
+            straps.append(bands.ribbon(body, route, width=0.045, offset=OVER_CLOTHES_M, inner=0.003,
+                                       name=f"strap.{side}", material=leather))
+        else:
+            # Solid from just off the skin to above the thickest chest piece (OVER_CHEST_M).
+            straps.append(bands.band(body, route, width=0.045, offset=OVER_CHEST_M, inner=0.006,
+                                     name=f"strap.{side}", material=leather))
     # The harness's look, from the dressed model's straps.
     bpy.ops.object.select_all(action="DESELECT")
     for o in straps:
         o.select_set(True)
     bpy.context.view_layer.objects.active = straps[0]
     bpy.ops.object.join()
-    dressed = skin_piece.line_up(look.path(harness), bands.tree_of(body), height_of_body, 0.03, skin_piece.stretch_plan())
     # Its own role, so a tint can recolour it apart from the bag and its icon can leave it out
     # (it is made on the body, and hangs loose without one).
-    skin_piece.bake(straps[0], dressed, f"{ob.name}_harness", "Harness", HARNESS_TEXTURE, HARNESS_LOOK_M)
-    bpy.data.objects.remove(dressed)
+    if dressed:
+        # The harness model is of our base person, whose straps lie elsewhere on another
+        # figure: baked there, they took his skin. Plain leather until the paint (D599).
+        straps[0].data.materials.clear()
+        harness_look = bpy.data.materials.new("Harness")
+        harness_look.use_nodes = True
+        colour = look.linear(look.PALETTE["Leather"]) + (1.0,)
+        harness_look.diffuse_color = colour
+        bsdf = harness_look.node_tree.nodes["Principled BSDF"]
+        bsdf.inputs["Base Color"].default_value = colour
+        bsdf.inputs["Roughness"].default_value = 0.8
+        straps[0].data.materials.append(harness_look)
+    else:
+        model = skin_piece.line_up(look.path(harness), bands.tree_of(body), height_of_body, 0.03, skin_piece.stretch_plan())
+        skin_piece.bake(straps[0], model, f"{ob.name}_harness", "Harness", HARNESS_TEXTURE, HARNESS_LOOK_M)
+        bpy.data.objects.remove(model)
     bpy.ops.object.select_all(action="DESELECT")
     for o in (ob, straps[0]):
         o.select_set(True)

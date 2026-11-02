@@ -58,7 +58,7 @@ body_name = look.body_name(body_path)
 look.reset()
 bpy.ops.import_scene.gltf(filepath=look.path(body_path))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
-body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
+body = look.worn_over()
 sockets = {o.name: o for o in bpy.context.scene.objects if o.name.startswith("socket.")}
 patch_of = patches.of(body) or {}
 actions = {a.name.split(".")[0]: a for a in bpy.data.actions}

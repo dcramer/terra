@@ -315,6 +315,10 @@ export function joined(ps: Piece[]): Piece {
 
 export type Run = { rest: Frame; worst: Frame & { clip: string; t: number }; open: Frame & { clip: string; t: number }; frames: number; poked: number; holed: number; clips: Map<string, { poke: number; open: number }> };
 
+/** How far past an inner vertex a ray looks for the outer covering it: as far as a pack's bag
+ *  stands off the back (fit_gear.py's REACH_BACK_M). */
+const REACH_M = 0.3;
+
 /** Two files' pieces made ready to measure, and one frame measured: `one(clip, t)`. */
 export function pair(outerFile: string, innerFile: string, clipsFile = MANNEQUIN) {
   const body = new Glb(outerFile);
@@ -327,7 +331,16 @@ export function pair(outerFile: string, innerFile: string, clipsFile = MANNEQUIN
   const edge = topEdge(inner);
   const tris = trianglesNear(outer, inner, [...new Set([...near, ...edge])], 0.15);
   const still = retargeted(body, body, undefined, 0);
-  const one = (clip: Clip | undefined, t: number) => layered(inner, outer, inPlace(retargeted(body, from, clip, t), still), children, near, edge, tris);
+  const listed = new Set(tris);
+  const buf: number[] = [];
+  // The outer's triangles filed in a grid each frame, so a ray tries only those it passes (a
+  // pack's bag and straps are thousands): as trying every one listed, tested so.
+  const one = (clip: Clip | undefined, t: number) => {
+    const joints = inPlace(retargeted(body, from, clip, t), still);
+    const vo = skinned(outer, joints);
+    const grid = new Grid(vo, outer.tris, (k) => listed.has(k));
+    return cover(inner, skinned(inner, joints), vo, outer.tris, (o, d, l) => grid.along(o, d, l + REACH_M, buf), joints, children, near, edge);
+  };
   return { body, from, outer, inner, one };
 }
 
@@ -367,6 +380,14 @@ if (import.meta.main) {
   const r = measure(args[0], args[1], clips, frames);
   const name = (f: string) => f.split("/").pop()!.replace(/\.gltf$|\.glb$/, "");
   const mm = (m: number) => `${(m * 1000).toFixed(1)} mm`;
+  // Where the worst pokes are, on the inner piece at rest (glTF's axes: y up, z forward).
+  const { inner } = pair(args[0], args[1], clips);
+  const where = (i: number) => {
+    const [bone] = [...inner.weights[i]].reduce((a, b) => (b[1] > a[1] ? b : a), ["", -1]);
+    return `${bone} (${[0, 1, 2].map((c) => inner.pos[3 * i + c].toFixed(3)).join(", ")})`;
+  };
+  if (r.rest.at >= 0) console.log(`  worst at rest at ${where(r.rest.at)}`);
+  if (r.worst.at >= 0) console.log(`  worst in the clips at ${where(r.worst.at)}`);
   console.log(
     `${name(args[0])} over ${name(args[1])}: at rest poke ${mm(r.rest.worst)}, top edge uncovered ${r.rest.uncovered}/${r.rest.edge}; ` +
       `through ${r.frames} frames of ${r.clips.size} clips: poke-through past 2 mm in ${r.poked} (worst ${mm(r.worst.worst)}, ${r.worst.poking} vertices past 2 mm, ${r.worst.clip}@${r.worst.t.toFixed(2)}), ` +
