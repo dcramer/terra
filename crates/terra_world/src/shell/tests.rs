@@ -197,6 +197,15 @@ fn explains_bad_options() {
     assert!(parse(&["--radius"]).unwrap_err().contains("needs a value"));
     assert!(parse(&["--radius", "big"]).unwrap_err().contains("number"));
     assert!(
+        parse(&["--seed", "-1"])
+            .unwrap_err()
+            .contains("whole number")
+    );
+    // The first world's seed is the one given, or the first (D596).
+    let first = |args: &[&str]| crate::planet::entering::first_world(&parse(args).unwrap()).seed;
+    assert_eq!(first(&["--seed", "42"]), 42);
+    assert_eq!(first(&[]), crate::planet::entering::FIRST_SEED);
+    assert!(
         parse(&["--press", "ff@3"])
             .unwrap_err()
             .contains("like f@60")

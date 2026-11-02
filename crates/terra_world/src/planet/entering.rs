@@ -8,12 +8,17 @@ use crate::start::{Sited, Start};
 use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
 use terra_core::{PlanetSpec, Seed};
 
-/// The world a run begins in: the planet of seed 1, or the yard, the flat test level.
+/// The seed of a run given none, and of every world kept from before worlds had their own.
+pub const FIRST_SEED: u64 = 1;
+
+/// The world a run begins in: the home realm of the world's seed (D596), which is the world's
+/// own (another realm's derives from it, `terra_gen::hash`), or the yard, the flat test level.
+/// The seed is `--seed`, or the kept world's, chosen before this (`choice::Choosing`).
 pub fn first_world(options: &Options) -> WorldSpec {
     WorldSpec {
         key: InstanceKey(0),
         kind: if options.yard() { "yard" } else { "world" }.into(),
-        seed: 1,
+        seed: options.seed.unwrap_or(FIRST_SEED),
     }
 }
 

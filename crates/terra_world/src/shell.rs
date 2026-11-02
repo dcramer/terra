@@ -39,6 +39,7 @@ usage: terra_sandbox [options]
   --experiment <name>   switch on an experiment (repeatable)
   --list                list the experiments and exit
   --radius <metres>     planet radius (default 2000)
+  --seed <n>            the world's seed, its only input (default 1; a kept world has its own)
   --shot <file.png>     save a screenshot once the scene has settled, then exit
   --detail-sweep <from>-<to>@<frame>-<frame>
                         hold the clock and the wind still and sweep how far detail reaches,
@@ -271,6 +272,9 @@ pub struct Options {
     pub experiments: Vec<String>,
     pub list: bool,
     pub radius_m: f32,
+    /// The world's seed (`--seed`), its only input (D596): every realm's and system's seed
+    /// derives from it. A world kept on disk says its own (`terra_game::play::worlds`).
+    pub seed: Option<u64>,
     pub shot: Option<PathBuf>,
     /// Screenshots on chosen frames of one run (`--shots`).
     pub shots: Option<Shots>,
@@ -561,6 +565,7 @@ impl Options {
             experiments: Vec::new(),
             list: false,
             radius_m: 2000.0,
+            seed: None,
             shot: None,
             shots: None,
             detail_sweep: None,
@@ -777,6 +782,7 @@ impl Options {
                         .parse()
                         .map_err(|_| "--radius needs a number of metres".to_string())?;
                 }
+                "--seed" => options.seed = Some(seed(&value("--seed")?)?),
                 "--settle" => {
                     options.settle_frames = value("--settle")?
                         .parse()
@@ -841,6 +847,16 @@ impl Options {
     pub fn sound_on(&self) -> bool {
         !self.unattended() && !self.mute && (self.sound || !on_wsl())
     }
+}
+
+/// A world's seed, a whole number from 0 to 18446744073709551615.
+fn seed(text: &str) -> Result<u64, String> {
+    text.trim().parse().map_err(|_| {
+        format!(
+            "--seed wants a whole number from 0 to {}, not `{text}`",
+            u64::MAX
+        )
+    })
 }
 
 /// Numbers written like 30,120,210.

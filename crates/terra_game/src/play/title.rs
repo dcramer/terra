@@ -26,6 +26,7 @@ use bevy::{
 use menu::{Act, Item, Menu, Page};
 use terra_world::choice::Choice;
 use terra_world::loading::{Screen, Then};
+use terra_world::planet::entering::FIRST_SEED;
 
 /// The title screen's state while it is up.
 #[derive(Resource)]
@@ -213,11 +214,21 @@ fn act(
             if let Err(problem) = world.played(worlds::now()) {
                 warn!("Could not mark {} played: {problem}", world.meta.name);
             }
+            let loaded = options.seed.unwrap_or(FIRST_SEED);
+            if world.meta.seed != loaded {
+                warn!(
+                    "{} is of seed {}, the land behind the title screen of seed {loaded}: crossing to it from here is not made yet; start the game with --world=\"{}\" to play it on its own land (D596).",
+                    world.meta.name, world.meta.seed, world.meta.name
+                );
+            }
             play(&mut commands, &mut options, Some(world));
         }
         Act::Make { name, creative } => {
+            // Made from the seed of the land loaded behind the screen, which it then plays:
+            // a seed of its own waits on crossing to its land from here (D596).
+            let seed = options.seed.unwrap_or(FIRST_SEED);
             // A run keeping no worlds (a script's, without --worlds) plays one unsaved.
-            let made = root.map(|root| worlds::make(&root.0, &name, creative, worlds::now()));
+            let made = root.map(|root| worlds::make(&root.0, &name, creative, seed, worlds::now()));
             match made {
                 Some(Err(problem)) => warn!("Could not make the world {name}: {problem}"),
                 Some(Ok(world)) => play(&mut commands, &mut options, Some(world)),

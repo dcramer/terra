@@ -1,6 +1,6 @@
 //! A player's worlds (D579): several, each a folder under `worlds/` in the settings folder
 //! holding its save (`save.ron`, read and written by `save`) and `world.ron`, its name, its
-//! mode and when it was made and last played. Made with a name and its mode, Survival or
+//! mode, its seed (D596: the world is made from it alone) and when it was made and last played. Made with a name and its mode, Survival or
 //! Creative (D494), kept with it; never replaced; deleted only when asked, after asking.
 //! As Minecraft's singleplayer list, Valheim's and Enshrouded's worlds.
 //!
@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use terra_world::choice::Choice;
+use terra_world::planet::entering::FIRST_SEED;
 
 const META: &str = "world.ron";
 const SAVE: &str = "save.ron";
@@ -29,9 +30,17 @@ pub struct Meta {
     pub name: String,
     /// Creative builds free (D494); survival pays. Chosen when the world is made.
     pub creative: bool,
+    /// What the world is made from, its only input (D596), chosen when it is made and never
+    /// changed; a world kept from before worlds had seeds was made from the first.
+    #[serde(default = "first_seed")]
+    pub seed: u64,
     /// Seconds since 1970, when made and when last played.
     pub made: u64,
     pub played: u64,
+}
+
+fn first_seed() -> u64 {
+    FIRST_SEED
 }
 
 /// A world on disk.
@@ -92,8 +101,14 @@ pub fn list(root: &Path) -> Vec<World> {
     worlds
 }
 
-/// Makes a world of that name and mode, in a folder named after it, never over another.
-pub fn make(root: &Path, name: &str, creative: bool, now: u64) -> std::io::Result<World> {
+/// Makes a world of that name, mode and seed, in a folder named after it, never over another.
+pub fn make(
+    root: &Path,
+    name: &str,
+    creative: bool,
+    seed: u64,
+    now: u64,
+) -> std::io::Result<World> {
     let taken: Vec<String> = std::fs::read_dir(root)
         .into_iter()
         .flatten()
@@ -105,6 +120,7 @@ pub fn make(root: &Path, name: &str, creative: bool, now: u64) -> std::io::Resul
     let meta = Meta {
         name: name.trim().to_string(),
         creative,
+        seed,
         made: now,
         played: now,
     };
@@ -159,15 +175,22 @@ pub fn adopt(root: &Path, old: &Path, now: u64) -> std::io::Result<Option<World>
     if !old.exists() || !list(root).is_empty() {
         return Ok(None);
     }
-    let world = make(root, FIRST, false, now)?;
+    let world = make(root, FIRST, false, FIRST_SEED, now)?;
     std::fs::rename(old, world.save())?;
     Ok(Some(world))
 }
 
 /// Which world a run plays without the title screen, by its command line: the one named,
 /// a new one (`--fresh`), the Creative one played last or a new one (`--creative`), or the
-/// one played last, made if there is none.
-pub fn pick(root: &Path, choice: &Choice, fresh: bool, now: u64) -> std::io::Result<World> {
+/// one played last, made if there is none. A world made is made from `seed`; one found keeps
+/// its own.
+pub fn pick(
+    root: &Path,
+    choice: &Choice,
+    fresh: bool,
+    seed: u64,
+    now: u64,
+) -> std::io::Result<World> {
     let worlds = list(root);
     let found = if let Some(name) = &choice.world {
         worlds
@@ -187,7 +210,7 @@ pub fn pick(root: &Path, choice: &Choice, fresh: bool, now: u64) -> std::io::Res
                 Some(name) => name.clone(),
                 None => next_name(&list(root), choice.creative),
             };
-            make(root, &name, choice.creative, now)
+            make(root, &name, choice.creative, seed, now)
         }
     }
 }
@@ -200,11 +223,23 @@ pub struct Root(pub PathBuf);
 #[derive(Resource, Clone)]
 pub struct Playing(pub World);
 
-/// Plays a world: its save, and its mode.
+/// Plays a world: its save, its mode and its seed, which a `--seed` never overrides.
 pub fn play(commands: &mut Commands, options: &mut Options, world: World) {
-    info!("Playing {} ({}).", world.meta.name, world.dir.display());
+    info!(
+        "Playing {} ({}), seed {}.",
+        world.meta.name,
+        world.dir.display(),
+        world.meta.seed
+    );
+    if options.seed.is_some_and(|asked| asked != world.meta.seed) {
+        warn!(
+            "{} was made from seed {}, which it keeps: --seed makes only a new world (--fresh) (D596).",
+            world.meta.name, world.meta.seed
+        );
+    }
     commands.insert_resource(SavePath(world.save()));
     options.free_build |= world.meta.creative;
+    options.seed = Some(world.meta.seed);
     commands.insert_resource(Playing(world));
 }
 
@@ -241,9 +276,14 @@ pub fn choose(mut commands: Commands, mut options: ResMut<Options>, choice: Res<
     }
     commands.insert_resource(Root(root.clone()));
     if choice.title {
+        // The title screen opens over the world Continue plays, so it is loaded already.
+        if options.seed.is_none() {
+            options.seed = list(&root).first().map(|world| world.meta.seed);
+        }
         return;
     }
-    match pick(&root, &choice, options.fresh, now()) {
+    let seed = options.seed.unwrap_or(FIRST_SEED);
+    match pick(&root, &choice, options.fresh, seed, now()) {
         Ok(world) => play(&mut commands, &mut options, world),
         Err(problem) => warn!("No world to play in {}: {problem}", root.display()),
     }

@@ -168,7 +168,10 @@ pub fn plugin(app: &mut App) {
     let choice = terra_world::choice::Choice::from_args(std::env::args());
     app.init_resource::<Waiting>()
         .insert_resource(choice)
-        .add_systems(Startup, super::worlds::choose)
+        .add_systems(
+            Startup,
+            super::worlds::choose.in_set(terra_world::choice::Choosing),
+        )
         .add_systems(
             Update,
             (

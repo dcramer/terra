@@ -26,6 +26,11 @@ pub struct Choice {
     pub worlds: Option<PathBuf>,
 }
 
+/// Where, at the start, the world a run plays is chosen (`terra_game::play::worlds::choose`),
+/// its seed set on the options (D596), before the run crosses to its first world.
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Choosing;
+
 /// Whether a flag is one of these, for the shell to let through.
 pub fn takes(flag: &str) -> bool {
     flag == TITLE || flag == CREATIVE || flag.starts_with(WORLD) || flag.starts_with(WORLDS)

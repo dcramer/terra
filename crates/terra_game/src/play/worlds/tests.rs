@@ -1,5 +1,8 @@
 use super::*;
 
+/// The seed the tests' worlds are made from, not the first, so a seed lost on the way shows.
+const SEED: u64 = 0xDEC0_DE5E_ED00_0001;
+
 /// An empty folder of its own for a test's worlds.
 fn folder_for(test: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("terra-worlds-{test}-{}", std::process::id()));
@@ -15,9 +18,9 @@ fn names(root: &Path) -> Vec<String> {
 #[test]
 fn a_new_world_never_replaces_another_and_the_last_played_comes_first() {
     let root = folder_for("list");
-    make(&root, "World 1", false, 10).unwrap();
-    make(&root, "world 1", true, 20).unwrap();
-    make(&root, "Hill fort", false, 30).unwrap();
+    make(&root, "World 1", false, SEED, 10).unwrap();
+    make(&root, "world 1", true, SEED, 20).unwrap();
+    make(&root, "Hill fort", false, SEED, 30).unwrap();
     assert_eq!(names(&root), ["Hill fort", "world 1", "World 1"]);
     let mut first = list(&root).pop().unwrap();
     first.played(40).unwrap();
@@ -44,8 +47,8 @@ fn a_folder_name_is_the_name_plainly_and_never_one_taken() {
 fn a_new_world_is_offered_the_first_name_not_taken() {
     let root = folder_for("names");
     assert_eq!(next_name(&list(&root), false), "World 1");
-    make(&root, "World 1", false, 1).unwrap();
-    make(&root, "World 3", false, 1).unwrap();
+    make(&root, "World 1", false, SEED, 1).unwrap();
+    make(&root, "World 3", false, SEED, 1).unwrap();
     assert_eq!(next_name(&list(&root), false), "World 2");
     assert_eq!(next_name(&list(&root), true), "Creative 1");
     std::fs::remove_dir_all(root).unwrap();
@@ -54,9 +57,9 @@ fn a_new_world_is_offered_the_first_name_not_taken() {
 #[test]
 fn deleting_a_world_takes_its_save_and_leaves_the_others() {
     let root = folder_for("delete");
-    let doomed = make(&root, "Doomed", false, 1).unwrap();
+    let doomed = make(&root, "Doomed", false, SEED, 1).unwrap();
     std::fs::write(doomed.save(), "(version: 2)").unwrap();
-    make(&root, "Kept", false, 2).unwrap();
+    make(&root, "Kept", false, SEED, 2).unwrap();
     doomed.delete().unwrap();
     assert_eq!(names(&root), ["Kept"]);
     assert!(!doomed.dir.exists());
@@ -93,38 +96,63 @@ fn the_command_line_picks_the_world_the_title_screen_would() {
         ..Choice::default()
     };
     // Nothing yet: Continue makes the first world.
-    let first = pick(&root, &choice(false, None), false, 1).unwrap();
+    let first = pick(&root, &choice(false, None), false, SEED, 1).unwrap();
     assert_eq!(
         (first.meta.name.as_str(), first.meta.creative),
         ("World 1", false)
     );
     // --creative: a new Creative world, then the same one again.
-    let creative = pick(&root, &choice(true, None), false, 2).unwrap();
+    let creative = pick(&root, &choice(true, None), false, SEED, 2).unwrap();
     assert_eq!(
         (creative.meta.name.as_str(), creative.meta.creative),
         ("Creative 1", true)
     );
     assert_eq!(
-        pick(&root, &choice(true, None), false, 3).unwrap().dir,
+        pick(&root, &choice(true, None), false, SEED, 3)
+            .unwrap()
+            .dir,
         creative.dir
     );
     // Continue: the one played last, which is the Creative one now.
     assert_eq!(
-        pick(&root, &choice(false, None), false, 4).unwrap().dir,
+        pick(&root, &choice(false, None), false, SEED, 4)
+            .unwrap()
+            .dir,
         creative.dir
     );
     // --fresh: always another.
-    let fresh = pick(&root, &choice(false, None), true, 5).unwrap();
+    let fresh = pick(&root, &choice(false, None), true, SEED, 5).unwrap();
     assert_eq!(fresh.meta.name, "World 2");
     // --world=<name>: that one, or made.
     assert_eq!(
-        pick(&root, &choice(false, Some("world 1")), false, 6)
+        pick(&root, &choice(false, Some("world 1")), false, SEED, 6)
             .unwrap()
             .dir,
         first.dir
     );
-    let named = pick(&root, &choice(false, Some("Hill fort")), false, 7).unwrap();
+    let named = pick(&root, &choice(false, Some("Hill fort")), false, SEED, 7).unwrap();
     assert_eq!(named.meta.name, "Hill fort");
     assert_eq!(list(&root).len(), 4);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_world_keeps_the_seed_it_was_made_from_and_one_from_before_seeds_has_the_first() {
+    let root = folder_for("seed");
+    make(&root, "Seeded", false, SEED, 1).unwrap();
+    assert_eq!(list(&root)[0].meta.seed, SEED);
+    // Found again, it keeps its own, whatever a new world would be made from.
+    let found = Choice {
+        world: Some("Seeded".into()),
+        ..Choice::default()
+    };
+    assert_eq!(pick(&root, &found, false, 7, 2).unwrap().meta.seed, SEED);
+    // A world.ron written before worlds had seeds.
+    std::fs::create_dir_all(root.join("old")).unwrap();
+    let before = "(name: \"Old\", creative: false, made: 1, played: 1)";
+    std::fs::write(root.join("old").join(META), before).unwrap();
+    let kept = list(&root);
+    let old = kept.iter().find(|w| w.meta.name == "Old").unwrap();
+    assert_eq!(old.meta.seed, FIRST_SEED);
     std::fs::remove_dir_all(root).unwrap();
 }

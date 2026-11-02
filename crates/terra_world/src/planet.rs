@@ -804,7 +804,10 @@ pub fn plugin(app: &mut App) {
         )
         .add_systems(
             Startup,
-            (entering::spawn_camera, entering::cross_to_the_first),
+            (
+                entering::spawn_camera,
+                entering::cross_to_the_first.after(crate::choice::Choosing),
+            ),
         )
         .add_systems(
             OnEnter(InWorld),
