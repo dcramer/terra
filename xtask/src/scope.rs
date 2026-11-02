@@ -27,6 +27,8 @@ pub(crate) const READ_BY: &[(&str, &[&str])] = &[
     ("art/animation/keyed/", &["terra_creatures"]),
     // The shield poses' board places, which the shield arm's tests fit to (D554).
     ("art/animation/shield_targets.json", &["terra_walker"]),
+    // The fight set's poses, whose upright and carry holds the held looks' tests check.
+    ("art/animation/sets/fight.json", &["terra_walker"]),
     // The game's files (D133): the crates on Bevy load any of them through its asset server.
     (
         "assets/",
