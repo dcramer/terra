@@ -26,6 +26,8 @@ Moves with a clear start and end that no source does well: blows first, then a t
 
 It is not for walking, running or swimming. Those are long cycles that bought clips already do well, and a person keying them by hand is slow in any studio.
 
+A small loop such as an idle goes through the same steps with less from the sheet: its panels barely differ, so the sheet gives the idea and the keys give the numbers ([the try](../research/2026-11-01-pose-sheet-blow.md#the-idle-one-flow)). It starts on the clip's own first pose, its last key equals its first, and its speed runs on through the seam (`loop`). Its empty arms hang from the chest (`hang`). `mesh.ts` is for blows; a loop's gates are the seam, the feet and `moves.ts`'s `hands` row, with `--also` naming the clip.
+
 ## Why it should hold up
 
 - **It starts where the game is.** A move begins and ends on the guard exactly, because those two keys are the guard.
@@ -45,12 +47,14 @@ One move, one owner. Each step says what stops the job.
    - a plain grey ground, clear outlines, no blur or effects;
    - each panel's pose in a sentence, and which feet stay planted.
 
-   Reject a sheet whose body can't do what it shows, or whose item changes between panels. Draw a new one; don't argue with it.
+   Reject a sheet whose body can't do what it shows, or whose item changes between panels. Draw a new one; don't argue with it. The image model may ignore the layout: read what it drew by the poses, not its panel numbers.
 4. **Write the keys.** One key per panel, more where the hand travels a long arc. Copy the body from the panels. Timing is ours, since a sheet has none: a slow wind-up, a fast strike, a slow recovery, set against the move's row. Correct what the sheet gets wrong, such as a blade that points the wrong way in the wind-up. Read the sheet as an animator would, and don't trace it.
 5. **Lay it under the sheet.** Render ours at the panels' moments from the same camera, stack it below the sheet, and correct by eye. Three rounds at most; past that, the sheet or the brief is wrong, so go back to step 1 or 3.
 6. **Pass the gates**, before any film:
    - `tools/characters/mesh.ts`: the start, the feet, the speed and the hit's moment against the guard;
    - `tools/characters/moves.ts`: the wrist, the grip, and the sword through its own shield.
+
+   A clip put into a body file keeps the old clip's foot locks until they are baked again: `glb_clips.ts` doesn't carry them, so run `tools/characters/markers.ts` on the file.
 7. **Film it twice.** The clip on our body from two sides, then the real game's duel (`cargo xtask gpu film -- cargo xtask duel --out DIR`). A clip that looks good alone has fooled us before.
 8. **Put it on the desk.** The sheet above ours, and both films. The developer's eye decides. Nothing is tuned on a scorecard row to pass it.
 9. **Keep it.** The sheet and the keys are the source, in the repository beside the set, and the clip is rebuilt from them.
@@ -60,6 +64,7 @@ One move, one owner. Each step says what stops the job.
 - `spike/pose-sheet/key.ts`: keys to clip, for the player's body and one guard. It sets the hips, chest, head, shoulders, sword hand and its blade, the shield's offset, and each foot and heel, and solves the arms and legs to reach them.
 - `spike/pose-sheet/stills.py`: the stills for step 5.
 - `spike/pose-sheet/slash.json` and `slash-sheet.jpg`: the worked example.
+- `spike/pose-sheet/idle.json` and `idle-sheet.jpg`: a loop, with `loop` and `hang`.
 
 ## What it still lacks
 

@@ -51,6 +51,28 @@ The old film is from an older main, and taking out the drive changes the fight's
 - **The gates a blow must pass.** `moves.ts` was not run, so the wrist's bar and the sword through its own shield are unchecked. The film's shield clears by eye only.
 - **The look.** Waiting on the developer, on the review desk (`pose-sheet-slash`).
 
+## The idle, one flow
+
+The developer: "the idle animation might be our good test". `Idle_Loop`, standing relaxed with empty hands, keyed as a 6 s loop from its own first pose. The bar is today's idle (8.08 s), which the developer picked on the desk.
+
+- **The sheet helped little.** One draw, of a possible two. It ignored the layout (two rows, twelve panels, repeated numbers), and its panels barely differ. It did show a hip shift onto one straight leg with the other knee soft, and a head turn. The keys' numbers are my own reading, so this is close to keying without a sheet.
+- **The tool needed two small additions.** `loop` runs the curve's speed through the seam, and `hang` lets empty arms ride the chest with a little sway.
+- **Fine motion is the open risk.** Eight keys hold the fingers at the first pose. Nobody has judged the film, so this note does not say whether it reads alive or stiff.
+
+| | Today's `Idle_Loop` | `Sheet_Idle` |
+|---|---|---|
+| Seam, pose off / speed off | not measured | 0.000 cm / 0.003 m/s |
+| Ball of the foot, left / right, range | 2.5 / 2.1 cm | 0.6 / 0.0 cm |
+| Hips, range | 2.5 cm | 6.7 cm |
+| Chest, range | 4.2 cm | 5.6 cm |
+| Head, range | 6.0 cm | 5.9 cm |
+| Hands, left / right, range | 11.8 / 6.3 cm | 6.6 / 6.1 cm |
+| `moves.ts` hands, deepest into the body | -8.0 cm, clear | -9.1 cm, clear |
+
+Ours swings its hips over twice as far as today's and its left hand about half as far. The left leg reached 100% of its length at one point, so that key is at the limit.
+
+Gates: the seam and the feet were measured directly, and the arms by `moves.ts --also`. `mesh.ts` does not apply, since it times a blow. The `held` rows don't apply either: they hang a shield on an idle that holds nothing. The film of the clip on our body exists. **The film in the real game was not made**, because the job ran out of context.
+
 ## Why this fits many clips
 
 This is how game animators work: block the key poses, then time them. The sheet stands in for the thumbnail sketches. Two pieces make it repeat: a control set the agent can write in plain places and angles, and a gate (`mesh.ts`, `moves.ts`) before any film. Nothing generates the motion, so nothing has to be cleaned up afterwards, and a wrong blow is a changed number in a short text file. It leans on D565's reference item per class: keyed once per class, then played by every item in the class's envelope.

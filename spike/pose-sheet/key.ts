@@ -14,6 +14,9 @@
 //   hand_l {at, elbow}                   an offset; else it rides half the chest's turn
 //   clav_r / clav_l {up, forward}        the shoulder lifted and pushed forward
 //   foot_r / foot_l {at, yaw, heel}      the ball moved, turned, the heel raised over the ball
+//   arm_r / arm_l {forward, out, elbow}  with `hang`: empty arms ride the chest as the guard hangs
+//                                        them, swayed by these degrees; hand_r and hand_l are unused
+// `loop` makes the curve run on through the seam; the last key must equal the first.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { apply, dot, Glb, len, qinv, qmul, rot, sub, type Pose, type Q, type V3 } from "../../tools/characters/glb.ts";
@@ -103,6 +106,8 @@ const start: Controls = {
   hand_l: { at: [0, 0, 0], elbow: [0, 0, 0] },
   clav_r: { up: 0, forward: 0 },
   clav_l: { up: 0, forward: 0 },
+  arm_r: { forward: 0, out: 0, elbow: 0 },
+  arm_l: { forward: 0, out: 0, elbow: 0 },
   foot_r: { at: [0, 0, 0], yaw: 0, heel: 0 },
   foot_l: { at: [0, 0, 0], yaw: 0, heel: 0 },
 };
@@ -125,11 +130,14 @@ function curve(ts: number[], ys: number[]): (t: number) => number {
   const n = ts.length;
   const d = ts.slice(1).map((t, i) => (ys[i + 1] - ys[i]) / (t - ts[i]));
   const m = ys.map((_, i) => {
-    if (i === 0 || i === n - 1) return 0;
-    if (d[i - 1] * d[i] <= 0) return 0;
-    const h0 = ts[i] - ts[i - 1];
-    const h1 = ts[i + 1] - ts[i];
-    return (3 * (h0 + h1)) / ((2 * h1 + h0) / d[i - 1] + (h1 + 2 * h0) / d[i]);
+    // A loop's ends are one key, so the speed runs on through the seam.
+    const end = i === 0 || i === n - 1;
+    if (end && !spec.loop) return 0;
+    const [before, after] = end ? [n - 2, 0] : [i - 1, i];
+    if (d[before] * d[after] <= 0) return 0;
+    const h0 = ts[before + 1] - ts[before];
+    const h1 = ts[after + 1] - ts[after];
+    return (3 * (h0 + h1)) / ((2 * h1 + h0) / d[before] + (h1 + 2 * h0) / d[after]);
   });
   return (t) => {
     if (t <= ts[0]) return ys[0];
@@ -244,7 +252,19 @@ function pose(t: number): Pose[] {
     const forward = about(rot(turned, [0, 1, 0]), sign * num(`clav_${side}`, "forward", t));
     bend(l, id(`clavicle_${side}`), qmul(up, forward), w);
   }
+  // Empty arms hang from the chest, a little sway laid on at the shoulder and the elbow.
+  if (spec.hang) {
+    for (const side of ["r", "l"] as const) {
+      const sign = side === "r" ? -1 : 1;
+      const across = rot(turned, [1, 0, 0]);
+      w = fk(l);
+      bend(l, id(`upperarm_${side}`), qmul(about(across, -num(`arm_${side}`, "forward", t)), about(rot(turned, [0, 0, 1]), sign * num(`arm_${side}`, "out", t))), w);
+      w = fk(l);
+      bend(l, id(`lowerarm_${side}`), about(across, -num(`arm_${side}`, "elbow", t)), w);
+    }
+  }
   // The sword hand goes to its place and points the blade; the shield rides the chest.
+  if (!spec.hang) {
   const hint = (part: string, k: Chain): V3 => {
     const v = vec(part, "elbow", t);
     return len(v) > 1e-3 ? model(v) : rot(turned, k.pole);
@@ -271,6 +291,7 @@ function pose(t: number): Pose[] {
   reach(l, arm.l, handTarget, hint("hand_l", arm.l), "arm_l");
   w = fk(l);
   setWorld(l, id("hand_l"), qmul(half, handLInChest.r), w);
+  }
   // The feet: planted where the keys put them, the leg solved up to them.
   for (const side of ["r", "l"] as const) {
     const part = `foot_${side}`;

@@ -6,6 +6,7 @@ The developer, 2026-11-01: "I have found using chatgpt to create a pose sheet of
 
 - `key.ts` turns `slash.json`, a list of key poses, into a clip: hips and chest, the sword hand's place and blade, the feet. Arms and legs are solved to reach them. The same keys always give the same clip.
 - `slash-sheet.jpg` is the sheet the keys were read from.
+- `idle.json` and `idle-sheet.jpg` are the same for the standing idle, a 6 s loop.
 - `stills.py` renders the clip at the sheet's panels from the sheet's camera, to lay beside it.
 - Output goes in `out/`, which git ignores.
 
