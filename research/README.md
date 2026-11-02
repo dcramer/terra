@@ -12,6 +12,7 @@ The table is rendered from the notes themselves (D409): each note's title and th
 
 | Note | Dated |
 |---|---|
+| [A character base where body, clothes and animations are made together](2026-11-02-character-base.md) | 2026-11-02 |
 | [Why our trees read fake: how shipped games draw trees, grass and foliage](2026-11-02-why-our-trees-read-fake.md) | 2026-11-02 |
 | [A blow keyed from a pose sheet](2026-11-01-pose-sheet-blow.md) | 2026-11-01 |
 | [Why the base body's torso looks wrong](2026-11-01-why-the-torso-looks-wrong.md) | 2026-11-01 |
