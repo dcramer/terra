@@ -664,6 +664,9 @@ export function jobEnv(env: Record<string, string | undefined>, home: string, id
   out.TERRA_RENDER_JOB = id;
   // Blender through Vulkan: over the box's Xvfb its OpenGL is software (doctor.ts `blender`).
   out.TERRA_BLENDER_GPU_BACKEND = env.TERRA_BLENDER_GPU_BACKEND ?? "vulkan";
+  // The render box is exempt from one game copy a machine (D319): each slot's copy has its own
+  // single-instance folder, so the box runs a copy a GPU slot.
+  out.TERRA_INSTANCE_DIR = `${home}/.cache/terra`;
   if (display) {
     out.DISPLAY = display;
     delete out.WAYLAND_DISPLAY;

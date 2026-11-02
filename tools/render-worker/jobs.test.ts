@@ -511,9 +511,9 @@ test("old jobs expire", () => {
   assert.deepEqual(expired([old, job({ state: "done", ended: "2026-10-30T13:00:00Z" }), job({ state: "running" })], now, 7), [old]);
 });
 
-test("the job's environment holds no token or agent socket, cargo keeps its homes, and the build is the slot's", () => {
+test("the job's environment holds no token or agent socket, cargo keeps its homes, and the build and the game's copy are the slot's", () => {
   const env = jobEnv({ HOME: "/home/u", PATH: "/bin", GH_TOKEN: "t", TRIPO_STUDIO_COOKIE: "c", SSH_AUTH_SOCK: "/s", CARGO_TARGET_DIR: "/shared" }, "/box/homes/2", "j1", "/box/slots/2/target");
-  assert.deepEqual(env, { PATH: "/bin", HOME: "/box/homes/2", CARGO_HOME: "/home/u/.cargo", RUSTUP_HOME: "/home/u/.rustup", CARGO_TARGET_DIR: "/box/slots/2/target", TERRA_RENDER_JOB: "j1", TERRA_BLENDER_GPU_BACKEND: "vulkan" });
+  assert.deepEqual(env, { PATH: "/bin", HOME: "/box/homes/2", CARGO_HOME: "/home/u/.cargo", RUSTUP_HOME: "/home/u/.rustup", CARGO_TARGET_DIR: "/box/slots/2/target", TERRA_RENDER_JOB: "j1", TERRA_BLENDER_GPU_BACKEND: "vulkan", TERRA_INSTANCE_DIR: "/box/homes/2/.cache/terra" });
   assert.equal(jobEnv({ HOME: "/h", TERRA_BLENDER_GPU_BACKEND: "opengl" }, "/b/h", "j", "/b/t").TERRA_BLENDER_GPU_BACKEND, "opengl", "the box's own choice stands");
 });
 

@@ -215,3 +215,16 @@ export function age(ms: number): string {
   if (s < 3600) return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
   return `${Math.floor(s / 3600)}h${String(Math.floor(s / 60) % 60).padStart(2, "0")}m`;
 }
+
+/// The words the game starts a refused start with (terra_world::single_instance::REFUSAL).
+export const REFUSAL = "SANDBOX ✗ refused to start";
+
+/// Why a run failed, when the game refused to start because another copy of it runs (D319, one
+/// copy a machine): the wrapper's last line says what to do, the game's lines above it who holds it.
+export function refused(tail: string): string | null {
+  if (!tail.includes(REFUSAL)) return null;
+  return (
+    "the game refused to start, as another copy of it runs on this machine (one copy a machine, D319; the lines above name it). " +
+    "Run this again once that one has ended; start game runs one after another, never side by side, and pass --multirun only for a two-player test"
+  );
+}

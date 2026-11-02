@@ -231,8 +231,11 @@ function execute(run: Run, stallMin: number, watch: string[]): Promise<number> {
   const progress = new plan.Progress(Date.now(), stallMs, HZ);
   let why: string | null = null;
   const sizes = new Map<string, number>();
+  // The last of what it said, to tell a start the game refused (another copy runs, D319).
+  let tail = "";
   const pass = (to: NodeJS.WriteStream) => (chunk: Buffer) => {
     to.write(chunk);
+    tail = (tail + chunk.toString()).slice(-8192);
     progress.output(Date.now());
   };
   child.stdout.on("data", pass(process.stdout));
@@ -278,7 +281,10 @@ function execute(run: Run, stallMin: number, watch: string[]): Promise<number> {
       const exit = why ? 124 : code ?? 128 + (signal ? os.constants.signals[signal] : 1);
       const took = plan.age(Date.now() - (run.started ?? Date.now()));
       if (exit === 0) say(`${run.class} done in ${took}`);
-      else say(`✗ ${run.class} exit ${exit} after ${took}${why ? `: ${why}` : ""}`);
+      else {
+        const reason = why ?? plan.refused(tail);
+        say(`✗ ${run.class} exit ${exit} after ${took}${reason ? `: ${reason}` : ""}`);
+      }
       done(exit);
     });
     child.on("error", (error) => {

@@ -1,7 +1,13 @@
 // The GPU wrapper's readings of the machine and its stall rule, on made-up input whose answers are known by hand.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { advise, byGroup, cpuGrowth, descendants, type Holding, outside, parseCard, parseCpu, parseFdinfo, parseLocks, parsePmon, parsePs, parseStat, Progress } from "./plan.ts";
+import { advise, byGroup, cpuGrowth, descendants, type Holding, outside, parseCard, parseCpu, parseFdinfo, parseLocks, parsePmon, parsePs, parseStat, Progress, refused } from "./plan.ts";
+
+test("a run the game refused, as another copy runs, is told apart and says what to do", () => {
+  const said = "Compiling...\nSANDBOX ✗ refused to start: another copy of the game runs on this machine\n  pid 9 on linux, in /w, since 10:00:00 UTC: terra_sandbox\n";
+  assert.match(refused(said) ?? "", /another copy of it runs on this machine .*D319.*one after another/);
+  assert.equal(refused("SANDBOX saved shot.png\n"), null);
+});
 
 test("an open file of the lock holds it, waits for it, or neither, from its fdinfo", () => {
   const held = "pos:\t0\nflags:\t0100000\nmnt_id:\t64\nino:\t28142848\nlock:\t1: FLOCK  ADVISORY  READ 2036242 00:1c:28142848 0 EOF\n";
