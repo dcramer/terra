@@ -22,7 +22,11 @@ A hold may also lay a new pose on the held clip's, after its turns: `aim` points
 order, each along a way in the body's frame (`[left, up, ahead]`, as the game's model space
 is: +X left, +Y up, +Z ahead), turned the least way at its joint with what is below it, as an
 aim constraint does (Unreal's Look At, Blender's Damped Track); `roll` then turns a bone about
-its own length by degrees (right-handed about the way it points), with what is below it. The
+its own length by degrees (right-handed about the way it points), with what is below it. A
+bone's length and the way it points are its joint line, from its joint to its main child's
+(`retarget.main_children`, as `retarget.pose` reads a limb), not its +Y: Quaternius's bones are
+kept as made (D599), their +Y up to 12 degrees off that line at the clavicles and 5 at the
+hands; on our converted bodies each bone points at that child, so the two agree. The
 fight's light blows carry the shield low at the left side so (the upper arm down and out, the
 forearm forward, the board's face forward and out; research/2026-10-25-shield-prior-art.md):
 
@@ -68,6 +72,8 @@ import bpy
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
+import retarget
+
 CHANNELS = ("location", "rotation_quaternion", "scale")
 TARGETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "art", "animation", "shield_targets.json")
 # The shield arm the `shield` op solves, the chest's bone the target is in, and the fist's socket.
@@ -85,6 +91,23 @@ PER_RADIAN = 1.0 / math.radians(3.0)
 def _gl(v):
     """A way in the body's glTF axes (+X left, +Y up, +Z ahead) in Blender's (Z up, ahead -Y)."""
     return Vector((v[0], -v[2], v[1]))
+
+
+def line(arm, name, children=None):
+    """The way bone `name` points as posed, in armature space: from its joint to its main
+    child's (`children`, retarget.main_children of `arm` by default), or its +Y when it has no
+    child (a twist bone, a fingertip). A bone whose +Y already lies on that line within float
+    noise, as each of our converted bodies' does, reads its +Y: the same line, bit for bit as
+    before, because the shield's solve (`_solve`) ends elsewhere on a start 0.4 micrometres off."""
+    pose = arm.pose.bones
+    pb = pose[name]
+    y = (pb.tail - pb.head).normalized()
+    child = (children if children is not None else retarget.main_children(arm)).get(name)
+    if child is not None and child in pose:
+        way = pose[child].head - pb.head
+        if way.length > 1e-9 and way.normalized().angle(y, 0.0) > 1e-5:
+            return way.normalized()
+    return y
 
 
 def _fk(arm, basis):
@@ -259,6 +282,7 @@ def _held_pose(arm, by_name, name, held, entries=None):
         pb.matrix = Matrix.Translation(head) @ Matrix.Rotation(math.radians(degrees), 4, up) @ Matrix.Translation(-head) @ pb.matrix
         bpy.context.view_layer.update()
     to_arm = arm.matrix_world.to_3x3().inverted()
+    children = retarget.main_children(arm)
     for bone, way in held.get("aim", {}).items():
         if bone not in bones:
             raise SystemExit(f"{name}: {bone} is not in the part below {held['bone']}")
@@ -266,7 +290,7 @@ def _held_pose(arm, by_name, name, held, entries=None):
         # The body's frame as Blender imports glTF: +X left, glTF +Y up is Blender +Z, glTF
         # +Z ahead is Blender -Y.
         want = (to_arm @ Vector((way[0], -way[2], way[1]))).normalized()
-        now = (pb.tail - pb.head).normalized()
+        now = line(arm, bone, children)
         head = pb.head.copy()
         swing = now.rotation_difference(want).to_matrix().to_4x4()
         pb.matrix = Matrix.Translation(head) @ swing @ Matrix.Translation(-head) @ pb.matrix
@@ -276,7 +300,7 @@ def _held_pose(arm, by_name, name, held, entries=None):
             raise SystemExit(f"{name}: {bone} is not in the part below {held['bone']}")
         pb = pose[bone]
         head = pb.head.copy()
-        along = (pb.tail - pb.head).normalized()
+        along = line(arm, bone, children)
         pb.matrix = Matrix.Translation(head) @ Matrix.Rotation(math.radians(degrees), 4, along) @ Matrix.Translation(-head) @ pb.matrix
         bpy.context.view_layer.update()
     if "shield" in held:

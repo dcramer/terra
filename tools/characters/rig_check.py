@@ -133,8 +133,8 @@ report["rest_pose"] = {"worst_bone": worst, "worst_deg": round(angles[worst], 2)
 # Judged only on our converted rig, the one with twist bones: twist.py turns them about their
 # segment's +Y and convert_rig.py re-points each bone at its child for it. Quaternius's
 # skeleton has no twist bones and stays as made (D599: not re-pointed), up to 12 degrees off
-# its children at the clavicles; the retarget carries clips by joint lines (retarget.pose),
-# not +Y, so its bones' axes are reported, not judged. hold.py's aim and roll still read +Y.
+# its children at the clavicles; the retarget carries clips by joint lines (retarget.pose) and
+# hold.py aims and rolls along them (hold.line), not +Y, so its bones' axes are reported, not judged.
 if any(n in arm.data.bones for n, _ in twist.names()):
     ok["rest_pose"] = angles[worst] <= LIMITS["rest_angle_deg"]
 else:
