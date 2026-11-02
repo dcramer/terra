@@ -1121,3 +1121,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-01**: D589 amended (by the agent, for D590): the boss's artifact becomes its mark, and the question of its rules is closed.
 - **2026-11-01**: D590 amended (by the developers: "yeah its a small general record"): marks are a small general record on the character, a new mark being data.
 - **2026-11-01**: D589 amended (by the agent): docs/v0-goals.md gains budgets, a design first for Server, Sound and Creatures, and five more questions (the host leaving, caves, the boss fight, the demo's end, the date and what goes first).
+- **2026-11-01**: D589 amended (on the developers' word): Windows is v0's first build, not a limit; survival's rules are the same in both realms; old saves stay unsupported until further notice (D353); no licence pass, since "if you can see them we own them".

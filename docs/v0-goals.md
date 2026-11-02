@@ -96,7 +96,7 @@ Each track can run beside the others. "Waits on" is what it truly needs first. A
 
 The proof that a realm is data. instances.md's playground proves loading and nothing else; this proves a world of another theme comes out of the same rules. It needs enough of each part to show that, not a full realm's worth.
 
-- **Need**: its land recipe, ground materials, plants, sky and light, wildlife, monsters and sound, each by the existing pipelines and the art style (D14). A realm's parts are new; the rules are not. Survival's rules stay the same in both realms: the realm file can hold different air, cold and gravity (D61, D63), and v0 differs only by its climate.
+- **Need**: its land recipe, ground materials, plants, sky and light, wildlife, monsters and sound, each by the existing pipelines and the art style (D14). A realm's parts are new; the rules are not. Survival's rules are the same in both realms, as the developers confirmed: the realm file can hold different air, cold and gravity (D61, D63), and v0 differs only by its climate.
 - **Done when**: stills and a film pass review beside the first realm, and a stranger could tell them apart at a glance while seeing one game (D14). The generator states how many variants it makes (D182).
 
 ### Land (3)
@@ -175,7 +175,7 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 
 ### Proof (a gap in the list)
 
-- **Need**: headless clients that log in and play by script (multiplayer.md's agents as players), `cargo xtask loop` for several clients, latency and loss on demand, and the v0 session as one command. A Windows build a friend can run, with a crash report they can send (D399); Windows alone for v0. One build for a whole playtest, since a save of another version is refused (D353). A licence pass over everything a build ships to someone else, bought and generated art and motion above all.
+- **Need**: headless clients that log in and play by script (multiplayer.md's agents as players), `cargo xtask loop` for several clients, latency and loss on demand, and the v0 session as one command. A Windows build a friend can run, with a crash report they can send (D399). Windows is the first build, not a limit: nothing is built to depend on it, and anyone can add another later. One build for a whole playtest, since a save of another version is refused and stays so until further notice (D353).
 - **Done when**: the session above runs unattended on main, and someone not on the team joins a game from a build they were sent.
 
 ## Budgets
