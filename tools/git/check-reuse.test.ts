@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { changesCheck, manifestDeps, reusable, save } from "./check-reuse.ts";
+import { changesCheck, checkReads, manifestDeps, reusable, save } from "./check-reuse.ts";
 
 // terra_game depends on terra_gen; terra_land is apart from both.
 const deps = new Map([
@@ -101,6 +101,29 @@ test("a pass is reused after a clean rebase over commits that touch nothing it r
   assert.equal(reuse.gained, 1);
 });
 
+test("Markdown the check never reads is left out: both appending to the log, the pass still holds", () => {
+  const log = "# log\n- one\n";
+  const r = repo();
+  r.commit({ "docs/log.md": log }, "a log");
+  const base = r.run("rev-parse", "HEAD");
+  r.run("checkout", "-q", "-b", "agent");
+  const first = r.commit({ "docs/log.md": `${log}- mine\n`, "tools/x.ts": "export {};\n" }, "mine");
+  save(r.root, first, base);
+  r.run("checkout", "-q", "main");
+  const main = r.commit({ "docs/log.md": `${log}- theirs\n` }, "theirs");
+  r.run("checkout", "-q", "agent");
+  // The log's rebase conflict, resolved as an agent does: both lines.
+  r.run("rebase", "-q", "-X", "theirs", "main");
+  r.commit({ "docs/log.md": `${log}- theirs\n- mine\n` }, "fixup");
+  r.run("reset", "-q", "--soft", "HEAD~2");
+  r.run("commit", "-q", "-m", "mine");
+  const rebased = r.run("rev-parse", "HEAD");
+  const reuse = reusable(r.root, rebased, main);
+  assert.ok("passed" in reuse && reuse.passed.sha === first, JSON.stringify(reuse));
+  // Markdown inside a crate or xtask counts (a README a test reads); every other kind of file too.
+  assert.deepEqual(["docs/log.md", "AGENTS.md", "crates/terra_land/README.md", "xtask/README.md", "docs/building-voxels.json"].map(checkReads), [false, false, true, true, true]);
+});
+
 test("a pass is not reused when main touched what it read, or the patches changed", () => {
   const overlap = race({ "crates/terra_land/src/other.rs": "pub fn o() {}\n" });
   assert.match("why" in overlap.reuse ? overlap.reuse.why : "", /in terra_land, which the push changes/);
@@ -130,5 +153,5 @@ test("a main that was rewritten under the pass, or a merge among the pushed comm
   // A merge among the pushed commits.
   r.run("checkout", "-q", "-b", "merged", r.main);
   r.run("merge", "-q", "--no-ff", "-m", "merge", r.rebased);
-  assert.deepEqual(reusable(r.root, r.run("rev-parse", "HEAD"), r.base), { why: "a merge or an empty commit among the pushed ones" });
+  assert.deepEqual(reusable(r.root, r.run("rev-parse", "HEAD"), r.base), { why: "a merge among the pushed commits, or git could not give their patches" });
 });

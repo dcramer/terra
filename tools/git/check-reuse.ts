@@ -8,8 +8,9 @@
 // main's new commits must touch none of the pushed files, no crate the pushed crates depend on
 // or that depends on them, no file every check reads (the workspace's Cargo files, the
 // toolchain, lint settings, xtask, Bevy's patches) and no file a crate's code includes
-// (`include_str!` and its kin). When in doubt it checks again: a merge in the series, a commit
-// with no patch, a main that was rewritten, a record it cannot read.
+// (`include_str!` and its kin). Markdown outside the crates and xtask, which the check never
+// reads, is left out of both the patches and the overlap (`checkReads`). When in doubt it checks
+// again: a merge in the series, a main that was rewritten, a record it cannot read.
 //
 // A pass is kept as `<git common dir>/terra-checks/<sha>.json` (`save`), shared by the
 // worktrees of one clone, a week. Node 22.18+, no dependencies.
@@ -105,8 +106,14 @@ function git(cwd: string, args: string[], input?: string): { ok: boolean; out: s
 }
 const lines = (s: string) => s.split("\n").filter(Boolean);
 
-/// The patch-ids of the commits base..sha, oldest first; undefined for a merge among them or a
-/// commit with no patch (an empty one), where it cannot tell.
+/// Whether the check reads a file at all: every file but Markdown outside the crates and xtask
+/// (docs, research, skills, READMEs), which no stage reads and no crate includes. Leaving those
+/// out matters: nearly every push appends to docs/decisions-log.md, whose patch then changes its
+/// context on every rebase, and would overlap every other push's.
+export const checkReads = (f: string) => !f.endsWith(".md") || f.startsWith("crates/") || f.startsWith("xtask/");
+
+/// The patch-ids of the commits base..sha, oldest first, over the files the check reads
+/// (`checkReads`; a commit of none is "none"); undefined for a merge among them, where it cannot tell.
 export function patchIds(cwd: string, base: string, sha: string): string[] | undefined {
   const revs = git(cwd, ["rev-list", "--reverse", "--parents", `${base}..${sha}`]);
   if (!revs.ok) return undefined;
@@ -114,7 +121,14 @@ export function patchIds(cwd: string, base: string, sha: string): string[] | und
   if (!commits.length || commits.some((c) => c.length !== 2)) return undefined;
   const ids: string[] = [];
   for (const [c] of commits) {
-    const diff = git(cwd, ["diff-tree", "-p", "--no-renames", "--binary", c]);
+    const files = git(cwd, ["diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", c]);
+    if (!files.ok) return undefined;
+    const read = lines(files.out).filter(checkReads);
+    if (!read.length) {
+      ids.push("none");
+      continue;
+    }
+    const diff = git(cwd, ["diff-tree", "-p", "--no-renames", "--binary", c, "--", ...read.map((f) => `:(literal)${f}`)]);
     const id = git(cwd, ["patch-id", "--stable"], `${diff.out}\n`);
     const word = id.out.split(" ")[0];
     if (!diff.ok || !id.ok || !/^[0-9a-f]{40,64}$/.test(word)) return undefined;
@@ -198,7 +212,7 @@ export type Reuse = { passed: Passed; gained: number } | { why: string };
 /// same patches, over a base main has since moved on from by commits that cannot change it.
 export function reusable(cwd: string, sha: string, base: string): Reuse {
   const patches = patchIds(cwd, base, sha);
-  if (!patches) return { why: "a merge or an empty commit among the pushed ones" };
+  if (!patches) return { why: "a merge among the pushed commits, or git could not give their patches" };
   const same = records(cwd).filter((p) => p.patches.length === patches.length && p.patches.every((x, i) => x === patches[i]));
   if (!same.length) return { why: "no earlier pass of these patches" };
   let why = "";
@@ -216,7 +230,7 @@ export function reusable(cwd: string, sha: string, base: string): Reuse {
       why ||= "git could not say what main gained";
       continue;
     }
-    const changed = changesCheck({ gained: lines(gained.out), pushed: lines(pushed.out), deps, included });
+    const changed = changesCheck({ gained: lines(gained.out).filter(checkReads), pushed: lines(pushed.out).filter(checkReads), deps, included });
     if (!changed) return { passed, gained: Number(git(cwd, ["rev-list", "--count", `${passed.base}..${base}`]).out) || 0 };
     why ||= changed;
   }
