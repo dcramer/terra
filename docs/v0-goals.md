@@ -1,12 +1,12 @@
 # v0 goals
 
-Status: **proposal, 2026-11-01** (D589, Open). The eight areas are the developers' list; the tracks, the gaps, the numbers and the order are the agent's recommendations, for the developers to edit. Nothing here overrides a decision until they settle it. v0 is the next milestone, not the entire game: **the foundations of the engine, not its gameplay**.
+Status: **proposal, 2026-11-01** (D589, Open). The eight areas are the developers' list; the tracks, the gaps, the numbers and the order are the agent's recommendations, for the developers to edit. Nothing here overrides a decision until they settle it. v0 is the next milestone, not the entire game: **the foundations of the engine, with one thin demo on top**.
 
-The developers, 2026-11-01: "heres our major TODO, these are the things we think we need for a v0 (but its not the entire game)". Then: "we're not really solving the reason to cross or actual gameplay yet, just trying to get foundations of an engine in place".
+The developers, 2026-11-01: "heres our major TODO, these are the things we think we need for a v0 (but its not the entire game)". Then: "we're not really solving the reason to cross or actual gameplay yet, just trying to get foundations of an engine in place". Then, on the demo: "when you beat the boss he drops an artifact, that artifact allows you to open the portal, and go to the other world, and thats basically the end of the demo (the other world is playable, but no more progression etc)".
 
 ## What v0 is
 
-An engine that can carry the game: a seed makes a large procedural world, a friend can join it, and a gate leads to a second world of another theme and back. Every system runs for real, through the server. v0 proves each of them works; it does not ask whether the game is fun or what a player is playing for.
+An engine that can carry the game: a seed makes a large procedural world, a friend can join it, and a gate leads to a second world of another theme and back. Every system runs for real, through the server. v0 proves each of them works. Its gameplay is one short line through them, the demo arc below; the rest of the game's design waits.
 
 **v0 is done when this session works, start to finish, on two machines over the internet:**
 
@@ -14,18 +14,39 @@ An engine that can carry the game: a seed makes a large procedural world, a frie
 2. They host it; a friend joins from their own title screen.
 3. Both walk through at least three biomes of the first realm, in weather that changes as they walk, with the wind in the trees.
 4. They use what the game already has: dig, gather, craft, move items, equip gear, and meet wildlife and monsters that fit the place, each seeing the same thing.
-5. They cross the gate, together or apart, and come back. The second realm's land, sky, plants, creatures and sound are its own, and what they carry goes with them.
-6. They quit and return days later. Both realms and both characters are as they were left.
+5. They beat the boss, take the artifact it drops, and open the gate with it.
+6. They cross, together or apart, and come back. The second realm's land, sky, plants, creatures and sound are its own, and what they carry goes with them.
+7. They quit and return days later. Both realms and both characters are as they were left.
 
 An agent drives the same session with two scripted clients and checks each step (D69). The frame budget (D25) holds throughout.
 
 The earlier MVP (D105, [prototypes.md](prototypes.md)) asks whether the core loop is fun, and leaves out portals and many players. v0 asks a different question: is the engine under it sound? The word MVP stays D105's.
 
+## The demo arc
+
+The developers' outline, 2026-11-01, with the details still theirs (Q7 to Q9):
+
+1. **Prepare**: the player gets ready for the boss by "some stuff (maybe level up or something, progress around? find clues?)".
+2. **Beat the boss**, in the main world. It drops an artifact.
+3. **Open the gate** with the artifact.
+4. **Cross**, and the demo is over. The other world is playable, with no more progression.
+
+The arc is a line through the engine, not a progression system: it should add as little as it can.
+
+| Track | What the arc adds |
+|---|---|
+| Land, Realms | The boss's place and the gate placed from the seed, each reachable on every seed |
+| Realms | A gate that starts shut and opens, its state saved with the realm and shared by everyone in the world |
+| Animation, Creatures | One boss: a big body, its attacks and tells, and fights that two players can share |
+| Play | The artifact, an item that opens the gate; beating the boss stays beaten (D499), so it must not be possible to lose (Q8) |
+| Server | The fight's outcome and the gate's state decided once, for everyone, and kept across a disconnect |
+| Proof | Scripted runs open the gate directly, so testing a crossing never means beating the boss; the session runs the whole arc once |
+
 ## Out of v0
 
 Proposed, to edit. What already works stays in the game and keeps working; it just gets no new work.
 
-- Gameplay design: why a player crosses, progression, balance, the economy, the game's loop. The developers said so; the engine has to allow these, not answer them.
+- Gameplay beyond the demo arc: progression past it, anything to do after the gate, balance, the economy. The developers said so; the engine has to allow these, not answer them.
 - Building, as the developers said: on hold. Villages and settlements with it, so no quests or recruits.
 - Essences and abilities (D105 has them first after the MVP), raids, factions, taming and mounts, trade.
 - A third realm, dungeons as content, a thousand players (the design keeps D52 possible; v0 does not measure it).
@@ -148,7 +169,7 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 ### Play (8)
 
 - **Have**: backpack, equipment, action bar, quiver, wear and repair, crafting at stations, gathering by tool, skills by doing, hunger, death and the dropped pack, the map (prototypes.md). Sword and shield and the bow on the combat scorecard (D452).
-- **Need**: the baseline as engine, not as balance: every change to an inventory an operation the server checks, items and gear carried across a crossing, death and return working in either realm, and what another player sees of your gear. Which items, tiers and numbers are gameplay, for later.
+- **Need**: the baseline as engine, not as balance: every change to an inventory an operation the server checks, items and gear carried across a crossing, death and return working in either realm, and what another player sees of your gear. Beyond the artifact, which items, tiers and numbers exist is gameplay, for later.
 - **Done when**: two players trade blows with the same monster, swap items through a chest, die and recover their packs, with nothing duplicated or lost across a crossing or a disconnect.
 
 ### Proof (a gap in the list)
@@ -161,22 +182,25 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 1. **Now, one or two agents**: the three seams. A bounded spike answers whether a host can hold two realms.
 2. **Then, the four that carry the most risk**: Server up to two clients walking together, Land on any seed, Animation's creature check and first plan, Realms to a working gate between placeholder realms.
 3. **As agents come free**: Front, Sound, Living world, Body, in any order. None block the others, and Front's seed and Sound's engine choice are small.
-4. **Once a gate and a server stand**: Creatures, Play on the server, Realm two's content.
+4. **Once a gate and a server stand**: Creatures and the boss, Play on the server, Realm two's content.
 5. **Last**: Proof's session end to end, fixing what it finds.
 
 Each track gets a bounded plan of its own, and a skill or scorecard if it lacks one (controller, combat and environment have theirs), before its first job.
 
 ## Questions for the developers
 
-Design calls, each with a recommendation; none is settled until they say so. The first four change the most.
+Design calls, each with a recommendation; none is settled until they say so. Q1 to Q4 shape the engine; Q7 to Q9 shape the demo.
 
 | # | Question | Recommended |
 |---|---|---|
 | Q1 | Who is v0 for, and how do they connect? | The two developers and a few friends, 2 to 4 at once. A player hosts or a server runs alone (D51). Direct address first, Steam's relay when strangers' routers get in the way (D34). A player is identified by a key kept on their machine |
 | Q2 | Does a world have a seed? D579 says no | Yes: D579's reason lapses once land comes from the seed. Amend it |
-| Q3 | What is the second realm? "Scifi" meets settings.md's "no science fiction toolsets" and "no machine guns" | A dead realm of magic-machine ruins under a strange sky, from settings.md's techno realm: alien and technological, yet still magic. Its builders made the gate, which fits the stargate. Its monsters are guardians and things grown in the ruins. Its gate is found in the world, walked through, always open (D72) |
+| Q3 | What is the second realm? "Scifi" meets settings.md's "no science fiction toolsets" and "no machine guns" | A dead realm of magic-machine ruins under a strange sky, from settings.md's techno realm: alien and technological, yet still magic. Its builders made the gate, which fits the stargate. Its monsters are guardians and things grown in the ruins. Its gate is found in the world and walked through (D72) |
 | Q4 | What is "real scale"? `play` is 2 km in radius today; the mountains and D13 say 30 km | 30 km for the first realm, since biomes need the room. 10 to 20 km for the second |
 | Q5 | How many biomes? | At least three in the first realm (forest, mountain lake, tundra) and two in the second |
 | Q6 | Which options has a new world? | Name, mode and seed. No more until there is something to tune |
+| Q7 | What does a player do to reach the boss? | Nothing new: skills by doing (D88) and gear crafted in the first realm, with a boss that starting gear cannot beat. The gate is found early, dark and shut, so a player knows what they are after. The boss's place is found by looking, with no markers (D92): something on the land seen from far off. Clues only if a playtest shows players lost |
+| Q8 | What are the artifact's rules? | Used once on the gate, it stays there, and the gate stays open for everyone in that world. Until then, dropped on a death it never decays, an exception to D84, or a lost artifact would shut a world out of the second realm for good |
+| Q9 | What is the boss, and where? | One great monster at the heart of the worst place magic pools (creatures.md's question 3, D103), never coming back once beaten. Start from the 4 m troll of the troll fight (D402), whose model and clips were made for a film |
 
 Open decisions v0 will meet, by track: D134 day length (Living world), D436 and D438 monsters (Animation), D580 load time (Land, Front), D588 pose sheets (Animation), audio.md's music and voices (Sound).
