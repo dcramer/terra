@@ -13,6 +13,9 @@ serde.workspace = true
 serde_json = "1"
 # The global allocator (D340): MIT, Microsoft's, kept current, no Bevy dependency; see main.rs.
 mimalloc = "0.1.52"
+# The heap profile (`dhat-heap`, src/heap.rs): MIT or Apache-2.0, 0.3.3 the latest; what holds
+# the process's memory by the line that made it, where the box has no heaptrack or valgrind.
+dhat = { version = "0.3.3", optional = true }
 # The controller's filmed course: its base's cubes and its ground's material (experiments/course_yard).
 terra_build.workspace = true
 terra_climate.workspace = true
@@ -33,6 +36,9 @@ terra_world.workspace = true
 hitch-log = ["terra_world/hitch-log"]
 # Tracy's client, for the Tracy profiler (terra_world's `tracy`, D577).
 tracy = ["terra_world/tracy"]
+# The heap profile (src/heap.rs): dhat-rs in place of mimalloc, written as the app exits.
+# Slow; never in a timed build.
+dhat-heap = ["dep:dhat"]
 # Bevy keeps the line of code behind every spawn and component change, for the remote's
 # `sandbox.why` (`r why`, D548). On in every dev build of the sandbox (xtask, the remote's
 # `start` and the seed pass it), never in a release or bench build, which are timed.

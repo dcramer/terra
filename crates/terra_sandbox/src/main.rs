@@ -18,15 +18,20 @@ mod experiments;
 /// mimalloc and TBB options, Bevy's examples): the game's workers make and free hundreds of
 /// megabytes of section meshes and base copies while the main and render threads run, and
 /// on Windows the system heap's lock made both wait tens of milliseconds behind them
-/// (D340).
+/// (D340). The heap profile's build (`dhat-heap`, `heap`) has its own.
+#[cfg(not(feature = "dhat-heap"))]
 #[global_allocator]
 static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+#[cfg(feature = "dhat-heap")]
+mod heap;
 
 use bevy::prelude::*;
 use terra_game::{appearance, character};
 use terra_world::{planet, shell, terrain};
 
 fn main() -> AppExit {
+    #[cfg(feature = "dhat-heap")]
+    heap::start();
     // A panic leaves a short summary for whoever reads it (terra_world::crash).
     terra_world::crash::install();
     // A film's sound bed, written and done with, no window (`bed`).
@@ -87,5 +92,10 @@ fn main() -> AppExit {
     }
     // After the experiments, so it knows whether the lush forest brought its materials.
     app.add_plugins(experiments::woods_conifers);
-    app.run()
+    #[cfg(feature = "dhat-heap")]
+    app.add_plugins(heap::plugin);
+    let exit = app.run();
+    #[cfg(feature = "dhat-heap")]
+    heap::write();
+    exit
 }
