@@ -473,6 +473,7 @@ The look, models, bodies and gear, textures and audio.
 | [D584](decisions/D584.md) | A body moves as its clip says; the game adds only foot placement, look-at and hand IK | Tech | Agent | Decided | What a body shows is the clip made for what it does… |
 | [D585](decisions/D585.md) | A gait's clip is shown within a tenth of as made at its speed; the game's speeds are fitted to the clips | Tech | Agent | Decided | Every gait (walk, jog, sprint) is played at the speed… |
 | [D588](decisions/D588.md) | Moves with a start and an end are keyed from a generated pose sheet, on our own skeleton | Design | — | Open | Recommended: moves with a clear start and end that no… |
+| [D593](decisions/D593.md) | How to fix the base body's proportions | Design | Agent | Open | The base body's arms are 11 cm short shoulder to wrist… |
 
 ## Engine and code
 
