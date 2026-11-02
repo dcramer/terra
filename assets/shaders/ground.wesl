@@ -438,6 +438,21 @@ fn stands_at(world: vec3<f32>) -> f32 {
     return textureSampleLevel(cover_stood, map_sampler, at, 0.0).r * inside;
 }
 
+// The most the cover map's lookup is moved, in metres along the world's x and along its z,
+// by its fraying noise (`fragment`: 1.4 x 0.5 and 0.4 x 0.5, 0.9 m), rounded up.
+const COVER_WARP_M: f32 = 1.0;
+
+// Whether the cover map's lookup at `world`, moved by its fraying, may land inside the map:
+// the unmoved point against the map grown by the most the fraying moves it. Outside, the map
+// says nothing (its `inside` is 0), so its four fraying noise and two lookups are spared over
+// all the ground past it (play-lake-fps j6).
+fn near_cover_map(world: vec3<f32>) -> bool {
+    let at = (ground.cover_from_world * vec4<f32>(world, 1.0)).xy;
+    let m = ground.cover_from_world;
+    let reach = COVER_WARP_M * (abs(m[0].xy) + abs(m[2].xy));
+    return all(at > -reach) && all(at < vec2<f32>(1.0) + reach);
+}
+
 // East and south of the start in the world, the cover map's axes (`floor::from_world`), or the
 // world's own where there is no map: a frame fixed over the land near the start.
 fn level_axes() -> array<vec3<f32>, 2> {
@@ -1426,7 +1441,7 @@ fn fragment(
         var roots = 0.0;
         var fresh = 0.0;
         var trodden = 0.0;
-        if ground.cover_on != 0u {
+        if ground.cover_on != 0u && near_cover_map(world) {
             // The map is half a metre a texel: looked up a little way off, by noise, so what
             // it says frays and wanders rather than ending in smooth blobs.
             let warp = vec3<f32>(noise(world * 0.7 + 41.0), 0.0, noise(world * 0.7 + 83.0)) - vec3<f32>(0.5, 0.0, 0.5);
@@ -1834,8 +1849,12 @@ fn fragment(
         // The faces' ledges hold no pale scree in lines either: it lies in the fans.
         scree *= 1.0 - 0.8 * ledge_cut * (1.0 - fan);
         scree = max(scree, smoothstep(0.2, 0.5, talus));
-        let skirt_turf = skirt * (1.0 - fan) * smoothstep(0.35, 0.6, noise(world * 0.006 + 151.0) * 0.6 + noise(world * 0.02 + 157.0) * 0.4)
-            * (1.0 - smoothstep(1900.0, 2300.0, above_sea_m + (blotch - 0.5) * 200.0));
+        // Its noise taken only on a skirt (play-lake-fps j6).
+        var skirt_turf = 0.0;
+        if skirt > 0.0 {
+            skirt_turf = skirt * (1.0 - fan) * smoothstep(0.35, 0.6, noise(world * 0.006 + 151.0) * 0.6 + noise(world * 0.02 + 157.0) * 0.4)
+                * (1.0 - smoothstep(1900.0, 2300.0, above_sea_m + (blotch - 0.5) * 200.0));
+        }
         // Far snow is not a smooth cap: rock breaks through it in outcrops tens of metres
         // across, more the steeper the ground, and its edges are sharp, as a summer's snow on
         // the Tetons' and the Tatras' tops is. Near, the vertices' snow and its frayed edge
@@ -1888,7 +1907,11 @@ fn fragment(
         // the bare heights, the green benches between the Tatras' cliff bands.
         // Since D426's round 9 only some ledges, in patches, hold it: along every lip they ruled the
         // horns in zebra stripes (the r8 review); a wall's snow lies in its couloirs (`couloir_fill`).
-        let ledge_snow = ledge * smoothstep(0.01, 0.06, in_snow_m) * smoothstep(0.36, 0.56, noise(world * 0.004 + 251.0));
+        // Its noise taken only on a ledge with snow round it (play-lake-fps j6).
+        var ledge_snow = 0.0;
+        if ledge > 0.0 && in_snow_m > 0.01 {
+            ledge_snow = ledge * smoothstep(0.01, 0.06, in_snow_m) * smoothstep(0.36, 0.56, noise(world * 0.004 + 251.0));
+        }
         // The couloirs the land fills from the gullies above them (terrain.rs `couloir_catch`,
         // round 10), near and far, on the walls: known by depth alone, the
         // tops' fed snow, as deep, capped every horn in one white sheet brighter than the sky.
