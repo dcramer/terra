@@ -70,10 +70,14 @@ impl FromWorld for Parting {
 
 /// The buffer's length in vec4s: the eye, the subject, then four for each body (its feet
 /// and head now, its feet and head a frame ago; the feet's w is its radius), then the wind,
-/// then where the climate's maps lie.
+/// then where the climate's maps lie, then the world's look.
 const fn layout_len() -> usize {
-    CLIMATE + 4
+    LOOK + 1
 }
+
+/// The world's look, last, so a shader that reads none of it declares less: in x how far
+/// round the hue circle its plants are turned (`Tweaks::foliage_hue`).
+const LOOK: usize = CLIMATE + 4;
 
 /// Where the wind is in the buffer: which way it blows, and in w how hard as a share of the
 /// climate's mean (`WorldWind::strength`), or -1 until the world has one, when each
@@ -334,6 +338,7 @@ fn write(
     mut buffers: ResMut<Assets<ShaderBuffer>>,
     wind: Option<Res<crate::wind::WorldWind>>,
     maps: Option<Res<crate::climate::ClimateMaps>>,
+    tweaks: Option<Res<crate::planet::Tweaks>>,
 ) {
     let Some(camera) = camera else { return };
     let (eye, subject) = *camera;
@@ -348,6 +353,7 @@ fn write(
     data[WIND] = wind_entry(wind.as_deref());
     let from_world = maps.map_or(Mat4::IDENTITY, |maps| maps.from_world);
     data[CLIMATE..CLIMATE + 4].copy_from_slice(&from_world.to_cols_array_2d());
+    data[LOOK][0] = tweaks.map_or(0.0, |tweaks| tweaks.foliage_hue);
     if let Some(mut buffer) = buffers.get_mut(&parting.0) {
         *buffer = ShaderBuffer::new(data, default());
     }
@@ -502,7 +508,9 @@ mod tests {
         // The bodies' last entry, the nearest's head a frame ago, comes before the wind.
         assert_eq!(WIND, 2 + 4 * (PUSHERS - 1) + 3 + 1);
         assert_eq!(CLIMATE, WIND + 1);
-        assert_eq!(layout_len(), CLIMATE + 4);
+        // Then the climate's four columns, then the look, last.
+        assert_eq!(LOOK, CLIMATE + 4);
+        assert_eq!(layout_len(), LOOK + 1);
         assert!(
             wind_entry(None)[3] < 0.0,
             "no wind yet: the materials' own way"

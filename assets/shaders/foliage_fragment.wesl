@@ -997,10 +997,22 @@ struct Parting {
     wind: vec4<f32>,
     // From a point in the world to its place on the climate's maps (climate.rs, D327).
     climate_from_world: mat4x4<f32>,
+    // The world's look: in x how far round the hue circle its plants are turned, radians
+    // (`Tweaks::foliage_hue`), 0 for their own colours.
+    look: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<storage, read> parting: Parting;
+
+// A colour turned round the hue circle by so many radians, about the grey axis, keeping its
+// brightness and greys (Rodrigues' rotation, as a colour grade's hue turn is).
+fn hue_turned(c: vec3<f32>, turn: f32) -> vec3<f32> {
+    let k = vec3<f32>(0.57735027);
+    let s = sin(turn);
+    let co = cos(turn);
+    return c * co + cross(k, c) * s + k * dot(k, c) * (1.0 - co);
+}
 
 // A third-person camera's view kept clear (D271, D274), with camera-obstruction fades as
 // Unreal games dither theirs. A plant between the camera and the figure it follows, or round
@@ -1338,6 +1350,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         pbr_input.material.base_color = vec4<f32>(pbr_input.material.base_color.rgb * inside, pbr_input.material.base_color.a);
     }
 }
+    // A realm's plants in its own colours (`Tweaks::foliage_hue`): the world's look, not the
+    // picture's, so whoever walks through it keeps theirs.
+    if parting.look.x != 0.0 {
+        let c = pbr_input.material.base_color;
+        pbr_input.material.base_color = vec4<f32>(max(hue_turned(c.rgb, parting.look.x), vec3<f32>(0.0)), c.a);
+    }
     // How much of this texel is a snow load: snow is opaque, so no leaf light comes through it
     // and no green bounces onto it, which tinted the clumps olive, a lit leaf's (weather
     // round 16's judge: "a sickly olive/yellow-green tint ... reads as lit leaf, not snow").

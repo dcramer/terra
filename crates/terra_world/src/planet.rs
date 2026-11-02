@@ -406,6 +406,11 @@ pub struct Tweaks {
     pub grass_dry: Color,
     pub grass_lush: Color,
     pub sand: Color,
+    /// How far round the hue circle the world's plants (leaves, bark, the forest floor's
+    /// cards) are turned, radians: 0 for their own colours; a realm's look, laid on the plants
+    /// rather than the picture, so whoever walks through it keeps their colours (instances j7).
+    #[inspector(min = -3.2, max = 3.2)]
+    pub foliage_hue: f32,
 }
 
 #[derive(Component)]

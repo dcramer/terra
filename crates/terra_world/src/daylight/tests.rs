@@ -397,6 +397,7 @@ fn tweaks() -> Tweaks {
         grass_dry: Color::WHITE,
         grass_lush: Color::WHITE,
         sand: Color::WHITE,
+        foliage_hue: 0.0,
     }
 }
 

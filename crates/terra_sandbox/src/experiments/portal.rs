@@ -5,8 +5,9 @@
 //!
 //! The realm is made only of what the generator already has: another seed, from the forest's
 //! and the portal's place; the sun and the sky tinted (`RealmLight`) and the sun lower; the
-//! ground's and the grass's colours turned round the hue circle, and the picture's hue on the
-//! camera's grade, for the leaves the land's colours do not reach. It gets no town. What an
+//! ground's, the grass's and the plants' colours turned round the hue circle (the plants'
+//! in their shader, `Tweaks::foliage_hue`, not on the camera's grade, so the player keeps
+//! theirs). It gets no town. What an
 //! alien realm looks like is Open, the developers' to answer: this answers none of it.
 //!
 //!   cargo xtask sandbox --experiment portal
@@ -19,7 +20,7 @@ use terra_game::play::portal::{self, Portal, Returns, StepThrough};
 use terra_walker::LocalPlayer;
 use terra_world::daylight::{Clock, RealmLight};
 use terra_world::instance::{Building, InWorld, InstanceKey, WorldSpec};
-use terra_world::planet::{MainCamera, Planet, Tweaks};
+use terra_world::planet::{Planet, Tweaks};
 
 /// The forest walk's, and the walk itself.
 pub const WITH: &[&str] = &[
@@ -91,10 +92,11 @@ fn in_playground(spec: &WorldSpec) -> bool {
     spec.kind == PLAYGROUND
 }
 
-/// How far round the hue circle the realm's picture is turned, in radians, on the camera's
-/// grade (nothing else sets its hue): the leaves and grass the lush forest draws from its
-/// own textures, which the land's colours do not reach, to violet.
-const PICTURE_HUE_TURN: f32 = 2.6;
+/// How far round the hue circle the realm's plants are turned, in radians
+/// (`Tweaks::foliage_hue`): the leaves and the floor's cards the lush forest draws from its
+/// own textures, which the land's colours do not reach, to violet. On the plants, not the
+/// camera's grade, which turned the player green with them.
+const PLANTS_HUE_TURN: f32 = 2.6;
 
 /// The realm's light: a mint sun under an amber sky, late in the afternoon.
 fn realm_light(mut commands: Commands, spec: Res<WorldSpec>, mut clock: ResMut<Clock>) {
@@ -111,26 +113,14 @@ fn realm_light(mut commands: Commands, spec: Res<WorldSpec>, mut clock: ResMut<C
 /// brown soil to slate teal.
 const HUE_TURN_DEG: f32 = 165.0;
 
-/// The ground's and the grass's colours turned, once the world's are set (the lush forest's
-/// soil included), and the picture's hue on the camera's grade, which the world's set-up
-/// made afresh (`scene`): every other world's as it was.
-fn realm_colours(
-    spec: Res<WorldSpec>,
-    mut tweaks: ResMut<Tweaks>,
-    mut grades: Query<&mut bevy::render::view::ColorGrading, With<MainCamera>>,
-) {
-    let turn = if in_playground(&spec) {
-        PICTURE_HUE_TURN
-    } else {
-        0.0
-    };
-    for mut grade in &mut grades {
-        grade.global.hue = turn;
-    }
+/// The ground's, the grass's and the plants' colours turned, once the world's are set (the
+/// lush forest's soil included): every other world's as it was, its tweaks made afresh.
+fn realm_colours(spec: Res<WorldSpec>, mut tweaks: ResMut<Tweaks>) {
     if !in_playground(&spec) {
         return;
     }
     let tweaks = &mut *tweaks;
+    tweaks.foliage_hue = PLANTS_HUE_TURN;
     for colour in [
         &mut tweaks.ground_low,
         &mut tweaks.ground_high,

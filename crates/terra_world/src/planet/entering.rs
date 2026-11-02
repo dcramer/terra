@@ -82,6 +82,7 @@ pub fn tweaks(yard: bool) -> Tweaks {
         grass_dry: Color::srgb(0.6, 0.58, 0.26),
         grass_lush: Color::srgb(0.3, 0.5, 0.2),
         sand: Color::srgb(0.84, 0.74, 0.55),
+        foliage_hue: 0.0,
     }
 }
 
