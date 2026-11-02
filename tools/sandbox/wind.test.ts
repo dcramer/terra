@@ -1,0 +1,68 @@
+// The still-camera wind measure (wind.ts) on made-up films whose answers are known: a picture
+// sliding as one block, tiles each moving on their own, and nothing moving.
+// `node --test tools/sandbox/wind.test.ts`.
+
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { HEIGHT, judge, measure, WIDTH } from "./wind.ts";
+
+/// A fixed texture of noise, by a hash of the pixel, wider than the picture so it can shift.
+const texture = (x: number, y: number) => {
+  let h = (Math.imul(x + 1000, 0x27d4eb2d) ^ Math.imul(y + 1000, 0x165667b1)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+  return (h ^ (h >>> 13)) & 0xff;
+};
+/// A frame whose pixel at (x, y) shows the texture shifted by `shift` of that pixel's tile.
+function frame(shift: (x: number, y: number) => [number, number]): Uint8Array {
+  const f = new Uint8Array(WIDTH * HEIGHT);
+  for (let y = 0; y < HEIGHT; y++) {
+    for (let x = 0; x < WIDTH; x++) {
+      const [sx, sy] = shift(x, y);
+      f[y * WIDTH + x] = texture(x - sx, y - sy);
+    }
+  }
+  return f;
+}
+/// A made-up pseudo-random integer shift in -1..1 for a step and a key, so a step's change
+/// (-2..2) stays inside the measure's reach.
+/// Mixed past the multiply, since a product's remainder by 3 follows its key in step.
+const jiggle = (t: number, k: number) => {
+  let h = Math.imul(t * 7919 + k * 104729, 0x9e3779b1) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+  h = (h ^ (h >>> 13)) >>> 0;
+  return (h % 3) - 1;
+};
+
+test("a picture sliding as one block is all shared motion, neighbours alike, and fails", () => {
+  const frames = Array.from({ length: 31 }, (_, t) => frame(() => [jiggle(Math.floor(t / 3), 1), jiggle(Math.floor(t / 3), 2)]));
+  const m = measure(frames);
+  assert.ok(m.moving > 20, `${m.moving} tiles moving`);
+  assert.ok(m.shared > 0.95, `shared ${m.shared}`);
+  assert.ok(m.neighbour > 0.95, `neighbour r ${m.neighbour}`);
+  assert.equal(judge(m).length, 2);
+});
+
+test("tiles each moving on their own share little motion, neighbours unlike, and pass", () => {
+  // Each 32-pixel tile (the measure's, from 3 px in) shifts by its own amount each step.
+  const tileOf = (x: number, y: number) => Math.floor((x - 3) / 32) + 100 * Math.floor((y - 3) / 32);
+  const frames = Array.from({ length: 61 }, (_, t) =>
+    frame((x, y) => {
+      const k = tileOf(x, y);
+      const s = Math.floor(t / 3);
+      return [jiggle(s, 3 * k + 1), jiggle(s, 3 * k + 2)];
+    }),
+  );
+  const m = measure(frames);
+  assert.ok(m.moving > 20, `${m.moving} tiles moving`);
+  assert.ok(m.shared < 0.15, `shared ${m.shared}`);
+  assert.ok(Math.abs(m.neighbour) < 0.3, `neighbour r ${m.neighbour}`);
+  assert.deepEqual(judge(m), []);
+});
+
+test("a still picture has nothing moving and fails as no wind to judge", () => {
+  const still = frame(() => [0, 0]);
+  const m = measure(Array.from({ length: 10 }, () => still));
+  assert.equal(m.moving, 0);
+  assert.equal(judge(m).length, 1);
+  assert.match(judge(m)[0], /nothing moved/);
+});
