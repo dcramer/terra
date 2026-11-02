@@ -16,6 +16,34 @@ pub(super) fn from_start(scene: &Scene) -> bool {
     scene.name.starts_with("play-")
 }
 
+/// The scenes whose load is held under so many seconds by the `Loaded in` line, the program's
+/// start to the first playable frame, failing the bench past it: the mountain lake as the
+/// developer plays it, under a minute (the developers, 2026-11-02, from 350 s on the worker and
+/// 6 min on their 3080), while the budget every load holds to is still theirs to set (D580).
+const LOAD_MOST_S: &[(&str, f32)] = &[("lake-play", 60.0)];
+
+/// The most a scene's load may take, if it is held to one.
+pub(super) fn load_most_s(scene: &Scene) -> Option<f32> {
+    LOAD_MOST_S
+        .iter()
+        .find(|(name, _)| *name == scene.name)
+        .map(|&(_, most)| most)
+}
+
+/// What a load missed of the most it may take: past it, or not said at all.
+pub(super) fn load_missed(load_s: Option<f32>, most_s: Option<f32>) -> Vec<String> {
+    match (load_s, most_s) {
+        (_, None) => Vec::new(),
+        (None, Some(most)) => vec![format!(
+            "the load not said, where it is held under {most:.0} s: no `Loaded in` line in the run's output"
+        )],
+        (Some(load), Some(most)) if load > most => vec![format!(
+            "loaded in {load:.1} s, over the {most:.0} s it is held to (the log's `Loaded in` line names the longest systems)"
+        )],
+        _ => Vec::new(),
+    }
+}
+
 /// Reads `Loaded in 15.0 s (8.2 s of it on the loading screen's frames): …`, a log line
 /// (`terra_world::loading`) wherever it sits in the line, as the load's seconds.
 pub(super) fn parse_load(line: &str) -> Option<f32> {
@@ -103,6 +131,29 @@ mod tests {
         };
         assert!(from_start(&named("play-walk")));
         assert!(!from_start(&named("world")));
+    }
+
+    #[test]
+    fn the_lakes_load_misses_past_a_minute_and_an_unheld_scenes_never() {
+        let lake = Scene {
+            name: "lake-play",
+            about: "",
+            args: &[],
+            frames: "600",
+        };
+        let most = load_most_s(&lake);
+        assert_eq!(most, Some(60.0));
+        assert!(crate::scenes::SCENES.iter().any(|s| s.name == lake.name));
+        assert_eq!(load_missed(Some(348.4), most).len(), 1);
+        assert_eq!(load_missed(None, most).len(), 1);
+        assert!(load_missed(Some(59.0), most).is_empty());
+        assert!(load_missed(Some(900.0), None).is_empty());
+        // A scene held to a load misses it whatever its frames did.
+        let mut slow = super::super::bench_tests::timing(5.0, 9.0, 12.0);
+        slow.load_s = Some(120.0);
+        assert!(slow.misses().is_empty());
+        slow.load_most_s = most;
+        assert_eq!(slow.misses().len(), 1);
     }
 
     #[test]

@@ -100,6 +100,7 @@ Bench scenes settle 240 frames before timing, so neither the load nor the first 
 - **Warm**, as a player's second launch: cooked textures present (D188); the run says if the cook cache was empty, round 1's cause, and fails then, since a number from it means nothing.
 - **Ratcheted** like the others: recorded in `research/benchmarks.csv` with two more columns, load seconds and freezes, compared with the last for the same GPU and build, marked `SLOWER` past the same margin; a freeze fails the scene, as a hitch fails a settled one. Lowering a baseline is nightly's (D414). How long a load may take a player is design, so the load is compared, not held to a budget, until the developers set one (D580).
 - `--build debug` runs it in the debug build for the A/B round 1 left open; only the optimised build is ratcheted.
+- **Held to a load**: a scene named in `LOAD_MOST_S` (`xtask/src/bench/play.rs`) misses past its load's seconds, settled scene or play scene: `lake-play` under a minute, as the developers asked on 2026-11-02 (it took 350 s). The continuous row `lake load` runs it. The budget every load holds to stays D580's, Open.
 
 ### Keeping files small
 

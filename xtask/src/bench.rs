@@ -66,6 +66,8 @@ struct Timing {
     freezes: u32,
     from_start: bool,
     load_s: Option<f32>,
+    /// The most its load may take, for a scene held to one (`play::load_most_s`).
+    load_most_s: Option<f32>,
     /// The kind of GPU it ran on as wgpu says it (`DiscreteGpu`, `IntegratedGpu`) and the
     /// preset it drew at, from the run's own line; empty if it did not say.
     device: String,
@@ -87,8 +89,16 @@ impl Timing {
 
     /// What the scene missed of its target, if anything: a play scene's walk, through ground
     /// streaming in, no freeze (D578); the integrated GPU's median at the low preset (D239);
-    /// or every gate of the frame budget (D25).
+    /// or every gate of the frame budget (D25). A scene held to a load's length misses past it
+    /// too, whatever its frames did (`play::load_most_s`).
     fn misses(&self) -> Vec<String> {
+        let mut missed = play::load_missed(self.load_s, self.load_most_s);
+        missed.extend(self.frames_missed());
+        missed
+    }
+
+    /// What its frames missed of their target.
+    fn frames_missed(&self) -> Vec<String> {
         if self.from_start {
             return (self.freezes > 0)
                 .then(|| {
@@ -218,6 +228,7 @@ fn parse_timing(line: &str) -> Option<Timing> {
         freezes: 0,
         from_start: false,
         load_s: None,
+        load_most_s: None,
         device: String::new(),
         preset: String::new(),
         ticks: ticks::Said::default(),
@@ -962,6 +973,7 @@ fn time_scene(
     }
     let mut timing = reader.join().ok()??;
     (timing.from_start, timing.load_s) = (from_start, load_s);
+    timing.load_most_s = play::load_most_s(scene);
     println!(
         "  median {:.2} ms, 99th percentile {:.2} ms, worst {:.2} ms; {:.2}% over budget, {} hitches, {:+.1}% by the end",
         timing.median_ms,

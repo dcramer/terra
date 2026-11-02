@@ -14,6 +14,7 @@ pub(crate) fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
         freezes: 0,
         from_start: false,
         load_s: None,
+        load_most_s: None,
         device: "DiscreteGpu".into(),
         preset: "high".into(),
         ticks: ticks::Said::default(),

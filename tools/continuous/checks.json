@@ -50,5 +50,12 @@
     "run": ["cargo", "xtask", "gpu", "film", "--", "cargo", "xtask", "controller", "--film"],
     "reads": "CONTROLLER",
     "minutes": 60
+  },
+  {
+    "name": "lake load",
+    "does": "the mountain lake as the developer plays it (the lake-play bench) loads in under a minute from the program's start, its bench missing past it (xtask bench/play.rs LOAD_MOST_S); at most every 6 hours, as one run of the bench takes the GPU alone for some minutes",
+    "run": ["cargo", "xtask", "gpu", "bench", "--", "cargo", "xtask", "bench", "lake-play", "--runs", "1"],
+    "rest": 6,
+    "minutes": 60
   }
 ]
