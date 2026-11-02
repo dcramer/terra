@@ -149,7 +149,9 @@ So the clips play on their bodies without retargeting in Blender's sense (by bon
 
 Stills: `~/.cache/terra-review/char-base-trial/` (naked row, dressed rows, close views, monsters, textures).
 
-**Not done** (char-base j3 stopped at its context bound): their bodies in play with the idle, walk, sword guard and crouch beside ours, and films of them. Copies of their four models with the mannequin's clips, with and without the joints' positions, are rebuilt in a minute by the job's scripts (the handoff `char-base-j3.md`).
+**The four moves, filmed** (char-base j4): the idle, walk, sword guard (the library's `Sword_Idle`) and crouch, their Ranger and Peasant beside our dressed man and woman, in the workbench (the game's renderer and light), the joints' positions dropped from their clips but the root's and pelvis's. They play cleanly, feet on the floor. Not in play itself: the game takes its clips from `fight.glb`, carried onto our base's bone frames, which differ from theirs, so play needs their clips carried by `retarget.py` first (job 2 of the plan below).
+
+**Our paint on one outfit** (char-base j4): the Ranger man's outfit and skin repainted by a Blender script that keeps the shapes, UVs and normal maps and changes only colour and roughness, as a texture artist's smart materials do. Each texel's material comes from their own roughness and metal map (metal where metal, cloth where roughness is near 1, leather the rest: 46% cloth, 48% leather, 6% metal on the Ranger). Each material gets a grain at its real size (a plain weave about 5 mm a thread pair, pebbled leather, scratched metal), wear on what sticks out and dirt in what sinks in, read from the normal map's curvature and the map's occlusion, and a grade towards plant-dye olive. A first pass: the weave reads, a little too regular; the leather's wear is faint.
 
 ## The switch in jobs
 
