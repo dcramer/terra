@@ -431,7 +431,8 @@ fn find_sky(
     climate: Res<WorldClimate>,
     clock: Res<Clock>,
 ) {
-    let path = SkyPath::over(planet.start(), climate.declination(0));
+    // Turned for the planet's own start, as the land's frame is, and seen from the camera.
+    let path = SkyPath::over(planet.origin(), climate.declination(0));
     commands.insert_resource(path.on(climate.declination(clock.day)));
 }
 

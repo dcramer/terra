@@ -63,7 +63,7 @@ pub struct ClimateFields {
 pub fn world_frame(planet: &Planet, climate: &terra_climate::Climate) -> Frame {
     let year = climate.year;
     let declination = terra_climate::declination(year.tilt_deg.to_radians(), year.phase(0));
-    Frame::turned_for(planet.start(), LATITUDE, declination).0
+    Frame::turned_for(planet.origin(), LATITUDE, declination).0
 }
 
 impl ClimateFields {

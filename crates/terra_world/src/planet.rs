@@ -106,6 +106,9 @@ pub struct Planet {
     /// seasons and its snow (D322); none
     /// asked for, the sea alone.
     round: Option<Arc<terra_land::round::Round>>,
+    /// Which way from the centre the player starts (`terra_land::spawn`): the planet's own
+    /// start, which its frame is turned for, but where a seed's search moved it.
+    start: Vec3,
 }
 
 /// What grows at a place, each from 0 to 1.
@@ -122,7 +125,19 @@ impl Planet {
         // The land lays the ground's patterned ground where its climate keeps it frozen.
         let climate: terra_climate::Climate =
             crate::data::read(crate::daylight::WorldClimate::FILE);
-        let ground = terra_land::Land::new(terra_land::ground::world(spec), climate).ground;
+        let land = terra_land::Land::new(terra_land::ground::world(spec), climate);
+        // The player's start, searched for from the seed (D596).
+        let searching = std::time::Instant::now();
+        let start = terra_land::spawn::find(&land);
+        if start != START {
+            info!(
+                "The start of seed {} searched for in {:.1} s, {:.2} km from the planet's own",
+                spec.seed.0,
+                searching.elapsed().as_secs_f32(),
+                start.angle_between(START) * spec.radius_m / 1000.0
+            );
+        }
+        let ground = land.ground;
         // Its hills, and on a world large enough its mountains (D322).
         let relief_m = RELIEF_M
             + ground
@@ -133,6 +148,7 @@ impl Planet {
             relief_m,
             cover: Noise::new(spec.seed.derive("ground cover")),
             round: None,
+            start,
         }
     }
 
@@ -144,6 +160,7 @@ impl Planet {
             relief_m: 0.0,
             cover: Noise::new(spec.seed.derive("ground cover")),
             round: None,
+            start: START,
         }
     }
 
@@ -155,6 +172,7 @@ impl Planet {
             relief_m: ROLLING_M,
             cover: Noise::new(spec.seed.derive("ground cover")),
             round: None,
+            start: START,
         }
     }
 
@@ -318,8 +336,15 @@ impl Planet {
         direction * (self.radius_m() + self.ground.field().height_m(direction))
     }
 
-    /// Where the camera starts: a point on the ground.
+    /// Where the camera and the player start: a point on the ground, searched for from the
+    /// seed on a world of biomes (`terra_land::spawn`, D596).
     pub fn start(&self) -> Vec3 {
+        self.surface(self.start)
+    }
+
+    /// The planet's own start, on the ground: the point its world's frame and sky are turned
+    /// for (`terra_land::Land`'s frame), whichever way the player's start moved.
+    pub fn origin(&self) -> Vec3 {
         self.surface(START)
     }
 

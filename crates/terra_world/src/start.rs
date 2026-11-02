@@ -1,7 +1,8 @@
 //! The start: the fixed place on the planet that every position given as metres east and
 //! south is measured from, by scripts, the map, the log and what is placed around it. It is
 //! the world's, not any system's: chosen once from the planet, as the most level ground near
-//! the planet's own start that the start's plot fits on (`Plot::START`, the example base's
+//! the start its seed's search found (`Planet::start`, `terra_land::spawn`) that the start's
+//! plot fits on (`Plot::START`, the example base's
 //! ground floor), so a run with no building in it starts in the same place as one with.
 
 use crate::planet::Planet;
