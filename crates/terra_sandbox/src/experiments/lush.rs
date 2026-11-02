@@ -61,6 +61,7 @@ pub mod conifers;
 mod far;
 mod floor;
 mod footing;
+mod kinds;
 mod lump;
 mod overgrowth;
 mod seasons;
@@ -301,6 +302,8 @@ pub fn plugin(app: &mut App) {
         seasons::plugin,
     ))
     .init_resource::<Unmipped>()
+    // Its kinds of tree are the app's, grown once (`kinds`).
+    .init_resource::<kinds::Grown>()
     // The forest is the world's (D469): planted again in each world entered.
     .world_resource::<Forest>()
     .add_systems(
@@ -570,6 +573,7 @@ const SPRUCES_OVER: f32 = 0.3;
 const PINES_APART: f32 = 0.62;
 
 /// One kind of tree at each level of detail, and the stand-in its shadow is cast from.
+#[derive(Clone)]
 struct TreeModel {
     wood: [Handle<Mesh>; 3],
     /// Every card, dropping out with distance, and far off two a clump (D223).
@@ -888,14 +892,8 @@ fn grow(
         Species::Oak => species::oak(&mut dice, height, form, young),
         _ => species::conifer(&mut dice, height, species, form, young),
     };
-    let (which, leaf, tint, far_material) = match species {
-        Species::Oak => (kind % 3, leaf_of[0], CROWN_TINTS[0], &far_crowns[0]),
-        Species::Pine => (3 + kind % 2, leaf_of[1], CROWN_TINTS[1], &far_crowns[1]),
-        // Dark green, about sRGB 0.15. The needle picture is the deep green of Norway
-        // spruce, and the tint pushes it further from blue: needles this dark are lit
-        // mostly by the blue sky, which turned them teal (D247, D248).
-        Species::Spruce => (5 + kind % 2, leaf_of[2], CROWN_TINTS[2], &far_crowns[2]),
-    };
+    let (which, s) = kinds::materials_of(kind);
+    let (leaf, tint, far_material) = (leaf_of[s], CROWN_TINTS[s], &far_crowns[s]);
     let (bark, bark_m) = barks[which].clone();
     let bark_m = bark_m * (tree.trunk_m / BARK_FOR_M).clamp(0.8, 1.5);
     let wood = [0, 1, 2, FINE].map(|detail| wood(&tree, detail, height, bark_m));
@@ -1150,7 +1148,7 @@ fn plant(
     flora: Option<Res<Flora>>,
     sun: Option<Single<Entity, With<DirectionalLight>>>,
     assets: Res<AssetServer>,
-    mut shapes: ResMut<Shapes>,
+    (mut shapes, mut grown): (ResMut<Shapes>, ResMut<kinds::Grown>),
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<Foliage>>,
     mut plain: ResMut<Assets<StandardMaterial>>,
@@ -1169,6 +1167,9 @@ fn plant(
     let (Some(planet), Some(flora), Some(sun)) = (planet, flora, sun) else {
         return;
     };
+    // The shapes of the meshes a world left behind (its logs and stumps, its rocks loaded
+    // again), which nothing will ask for again (instances j10).
+    shapes.0.retain(|mesh, _| meshes.contains(*mesh));
     // The sun sees the stand-ins as well as everything the camera sees.
     commands
         .entity(*sun)
@@ -1255,95 +1256,21 @@ fn plant(
         },
     });
 
-    let trees: Vec<TreeModel> = (0..KINDS.len())
-        .map(|kind| {
-            let (model, trunk, seen) = grow(kind, seed, &looks, Some(&ivy_leaves), &mut meshes);
-            shapes.remember(&model.wood[0], trunk);
-            shapes.remember(&model.crown_near, seen);
-            model
-        })
-        .collect();
-    // Veteran oaks: a trunk and limbs modelled (Tripo, from a concept drawn to the style
-    // guide, art/props/oak_bough), far more gnarled and burred than a grown one can be, its
-    // crown grown on it as cards at the clumps tools/blender/tips.py found along its outer
-    // branches (D235). The model's own texture read as blue-black clay beside the grown
-    // trunks, its baked shadows black: it is drawn in the grown oaks' bark instead, laid on
-    // by where each point is (D264).
-    let mut trees = trees;
-    let first_veteran = trees.len();
-    for (n, (model, tips, which)) in VETERANS.into_iter().enumerate() {
-        let (name, metres, (r, g, b), relief, moss) = BARKS[which];
-        let bark = bark_material(
-            &assets,
-            &mut materials,
-            &wind,
-            name,
-            Color::srgb(r, g, b),
-            relief / metres,
-            moss,
-        );
-        if let Some(mut material) = materials.get_mut(&bark) {
-            // From metres to the picture's repeats, as the shader projects it.
-            material.base.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / metres));
-            // Not relief-mapped: its bark is read seven times a pixel, hex-tiled from three
-            // sides (D294), and a parallax search in each read made a veteran filling the view
-            // a 7.7 ms opaque pass, 16 to 17 ms a frame, on the RTX 3080 (D309). Its own
-            // modelled bulk and the bark's normals carry its relief.
-            material.base.depth_map = None;
-        }
-        let trunk = |file: String| -> Handle<Mesh> {
-            assets.load(
-                GltfAssetLabel::Primitive {
-                    mesh: 0,
-                    primitive: 0,
-                }
-                .from_asset(file),
-            )
-        };
-        let near_trunk = trunk(format!("models/nature/forest/{model}.glb"));
-        let far_trunk = trunk(format!("models/nature/forest/{model}_far.glb"));
-        let tips: Vec<species::Tip> = terra_world::data::read(&format!("trees/{tips}.ron"));
-        let tree = species::modelled(&tips, VETERAN_TRUNK_M);
-        let mut dice = seed.derive("veteran").index(n as u64).rng();
-        let mut cards = species::crown_cards(&mut dice, &tree, VETERAN_M, looks.leaf_of[0]);
-        for card in cards.iter_mut().flatten() {
-            card.tint *= Vec3::new(0.9, 0.95, 0.85);
-            // Its trunk does not sway, so nor do its leaves much with it.
-            card.sway.x *= 0.25;
-        }
-        let near = crown_near(&cards, 2);
-        info!(
-            "lush: veteran oak {model}, {VETERAN_M:.0} m: {} clumps, crown {} near",
-            tree.tips.len(),
-            near.triangles()
-        );
-        trees.push(TreeModel {
-            wood: [near_trunk, far_trunk.clone(), far_trunk],
-            crown_near: {
-                let seen = SolidShape::crown(&near.positions, &near.indices);
-                let mesh = meshes.add(near.mesh());
-                shapes.remember(&mesh, seen);
-                mesh
-            },
-            crown_far: meshes.add(crown_far(&cards, 2).mesh()),
-            shadow: meshes.add(crown_stand_in(&cards).mesh()),
-            clumps: meshes.add(crown_clumps(&tree, 1.0, false).mesh()),
-            lumps: meshes.add(crown_clumps(&tree, SHADOW_LUMP, true).mesh()),
-            shadow_lumps: Arc::new(sky_occlusion::Lumps::new(lumps_of(&tree, SHADOW_LUMP))),
-            height: VETERAN_M,
-            trunk_m: tree.trunk_m,
-            crown: floor::crown_of(&tree.tips),
-            skirt_m: 0.0,
-            species: Species::Oak,
-            young: false,
-            bark,
-            far: looks.far_crowns[0].clone(),
-            modelled: true,
-            fine: None,
-            ivy: Vec::new(),
-        });
-    }
-    let veterans_kinds = first_veteran..trees.len();
+    // The kinds of tree, then the veteran oaks (`kinds`), in this world's materials.
+    let trees = kinds::trees(
+        &mut grown,
+        &kinds::Grow {
+            seed,
+            looks: &looks,
+            wind: &wind,
+            ivy_leaves: &ivy_leaves,
+            assets: &assets,
+        },
+        &mut meshes,
+        &mut materials,
+        &mut shapes,
+    );
+    let veterans_kinds = KINDS.len()..trees.len();
 
     let path = Path::new(seed.derive("path"));
     // For scripted runs: --face this to look, or walk, down a path from the start.
