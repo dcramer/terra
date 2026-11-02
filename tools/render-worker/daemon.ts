@@ -16,6 +16,7 @@ import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
 import { Display } from "./display.ts";
+import { wantFile, writeGate } from "./gate.ts";
 import { type DiskSettings, type DiskState, diskFull, diskSettings, fullMark, gb, type JobUse, KEEP, level, lowMark, type Prune, prune, pruneOrder, pruneTo, type SlotUse, type Space, space } from "./guard.ts";
 import { killNow, type Proc, reap, reaped, scan } from "./reap.ts";
 import { allSlots, boxSettings, checkoutsInBuild, classOf, cleanCommands, collected, displayPlan, expired, ID, incrementalClears, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, rustcIce, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
@@ -52,7 +53,8 @@ export function gather(job: Job, src: string, home: string, startedMs: number, m
 /// The running job's child, so a cancel can stop its whole process group, and the stopping of
 /// what of the job left the group (reap.ts), which the job's end waits for. A bench built ahead
 /// calls `ready` and waits until the daemon calls its `go` (`plan` says when).
-export type Running = { job: Job; child?: ChildProcess; cancelled: boolean; ready?: () => void; go?: () => void; reaping?: Promise<{ found: Proc[]; left: Proc[] }> };
+/// `gate`: a bench's gate folder between its timed runs (gate.ts).
+export type Running = { job: Job; child?: ChildProcess; cancelled: boolean; ready?: () => void; go?: () => void; gate?: string; reaping?: Promise<{ found: Proc[]; left: Proc[] }> };
 
 function run(cmd: string[], cwd: string, env: NodeJS.ProcessEnv, log: number, r: Running): Promise<number> {
   return new Promise((done) => {
@@ -174,6 +176,37 @@ function append(file: string, text: string): void {
 
 /// Runs one job to its end in its slot: its steps in the slot's checkout, then its files into out/.
 /// `save` writes its record (the daemon's keeps it to write again when the disk is full).
+/// The environment of a bench's timed run with its gate (gate.ts) first on PATH, or as it was,
+/// saying so, where no cargo is found to stand in front of.
+function gated(b: Box, id: string, env: Record<string, string>, r: Running, note: (line: string) => void): Record<string, string> {
+  const real = spawnSync("sh", ["-c", "command -v cargo"], { env, encoding: "utf8" }).stdout.trim();
+  if (!real.startsWith("/")) {
+    note("no cargo on the job's PATH to put the gate in front of: its timed runs have the box with no gaps for checks");
+    return env;
+  }
+  r.gate = join(b.jobs, id, "gate");
+  return writeGate(r.gate, real, join(b.dir, "wake"), env);
+}
+
+/// A bench at its gate since the last pass: marked so `plan` starts checks in its gap.
+export function gapBegins(r: Running, save: (j: Job) => void): void {
+  if (!r.gate || r.job.phase !== "timed" || r.job.gap || !existsSync(wantFile(r.gate))) return;
+  r.job = { ...r.job, gap: new Date().toISOString() };
+  save(r.job);
+}
+
+/// The gap ends: the bench's next timed run has the box alone; its log says how long the gap
+/// was and which checks ran in it.
+export function gapEnds(b: Box, r: Running, save: (j: Job) => void): void {
+  const from = r.job.gap as string;
+  const checks = listJobs(b).filter((j) => classOf(j) === "check" && j.started && j.started >= from);
+  r.job = { ...r.job, gap: undefined };
+  save(r.job);
+  if (r.gate) rmSync(wantFile(r.gate), { force: true });
+  const secs = Math.round((Date.now() - Date.parse(from)) / 1000);
+  append(join(outDir(b, r.job.id), "job.log"), `render-worker: gap between timed runs: ${secs} s, ${checks.length ? `checks ${checks.map((j) => j.id).join(", ")} ran in it` : "no check ran in it"}; the next timed run has the box alone\n`);
+}
+
 export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }, display?: Display, pCores?: string, save = (j: Job) => writeJob(b, j)): Promise<Job> {
   const bench = queued.kind === "run" && classOf(queued) === "bench";
   let job: Job = { ...queued, slot, state: "running", started: new Date().toISOString(), ...(bench ? { phase: "prep" as const } : {}) };
@@ -235,7 +268,9 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
       note(`${step.what}: ${step.cmd.join(" ")}`);
       if (step.run && !ran) (startedMs = Date.now()), (ran = true);
       const cmd = step.run || step.build ? [...limitArgs(job), ...step.cmd] : step.cmd;
-      const env = step.run || step.build || step.cmd[0] === "cargo" ? jobEnv(process.env, home, job.id, join(src, "target"), dpy) : process.env;
+      let env: NodeJS.ProcessEnv = step.run || step.build || step.cmd[0] === "cargo" ? jobEnv(process.env, home, job.id, join(src, "target"), dpy) : process.env;
+      // A bench's timed runs stop at a gate before each `cargo xtask bench`, where checks may run.
+      if (bench && step.run) env = gated(b, job.id, env as Record<string, string>, r, note);
       const from = statSync(logFile).size;
       let code = await run(cmd, src, env, log, r);
       const failed = code !== 0 && code !== 124 && (step.run || step.build) && !r.cancelled;
@@ -477,9 +512,10 @@ export class Keeper {
 /// ahead to let go to its timed run, and why the rest wait.
 export function next(b: Box, policy: Policy, ciLock: string | undefined, slots: Slots, now = new Date(), restarting = false): { start: Start[]; go?: Job; why?: string } {
   const jobs = listJobs(b);
-  if (!jobs.some((j) => j.state === "queued" || (j.state === "running" && j.phase === "ready"))) return { start: [] };
+  if (!jobs.some((j) => j.state === "queued" || (j.state === "running" && (j.phase === "ready" || j.gap)))) return { start: [] };
   const may = mayStart(policy, now.getHours() * 60 + now.getMinutes(), policy.afterCi && ciBusy(ciLock, now.getTime()));
-  return may.ok ? plan(jobs, slots, now.getTime(), restarting) : { start: [], why: may.why };
+  // Outside the policy nothing starts, and a bench at its gate goes straight on.
+  return may.ok ? plan(jobs, slots, now.getTime(), restarting) : { start: [], go: jobs.find((j) => j.state === "running" && j.gap), why: may.why };
 }
 
 async function daemon(b: Box): Promise<number> {
@@ -537,11 +573,16 @@ async function daemon(b: Box): Promise<number> {
       say("restarting on new code");
       return 0;
     }
+    for (const r of running.values()) gapBegins(r, keeper.save);
     // Restarting, only checks start (`plan`), and a bench built ahead still has its timed run.
     const n = full
-      ? { start: [], why: `the box's disk is full (${full}); no job starts until space is freed (cargo xtask remote-render --status says what holds it)` }
+      ? { start: [], go: [...running.values()].find((r) => r.job.gap)?.job, why: `the box's disk is full (${full}); no job starts until space is freed (cargo xtask remote-render --status says what holds it)` }
       : next(b, s.policy, s.ciLock, s.slots, new Date(), restart);
-    if (n.go) {
+    const going = n.go && running.get(n.go.id);
+    if (n.go && going && n.go.gap) {
+      say(`slot ${n.go.slot}: ${n.go.id} has the box again for its next timed run`);
+      gapEnds(b, going, keeper.save);
+    } else if (n.go) {
       say(`slot ${n.go.slot}: ${n.go.id} has the box for its timed run`);
       running.get(n.go.id)?.go?.();
     }

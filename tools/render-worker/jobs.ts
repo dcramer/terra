@@ -39,6 +39,8 @@ export type Job = {
   /// When a bench was built and ready, and when its timed run began.
   prepared?: string;
   timed?: string;
+  /// When a timed bench stopped at its gate between two timed runs (gate.ts), while it waits there.
+  gap?: string;
   exit?: number;
   note?: string;
   /// Set when the job runs uncommitted changes (`--dirty`): `rev` is then a snapshot of the
@@ -247,8 +249,8 @@ export const classOf = (job: Pick<Job, "class" | "command" | "kind">): Class => 
 /// A running bench's part: `timed` unless it says (one started before phases had the box alone).
 export const benchPhase = (job: Pick<Job, "phase">) => job.phase ?? "timed";
 
-/// Whether a running job holds the box alone: a bench in its timed run.
-const alone = (job: Job) => classOf(job) === "bench" && benchPhase(job) === "timed";
+/// Whether a running job holds the box alone: a bench in its timed run, not at its gate between two.
+const alone = (job: Job) => classOf(job) === "bench" && benchPhase(job) === "timed" && !job.gap;
 
 /// A job that takes only cores, no card: a CPU job or a check.
 const cpuLike = (job: Pick<Job, "class" | "command" | "kind">) => ["cpu", "check"].includes(classOf(job));
@@ -453,6 +455,8 @@ export function plan(jobs: Job[], s: Slots, now = Date.now(), restarting = false
   const checkQueued = queued.some((j) => classOf(j) === "check");
   const start: Start[] = [];
   if (running.some(alone)) return { start, why: queued.length ? "a bench has the box" : undefined };
+  const gapped = running.find((j) => classOf(j) === "bench" && j.gap);
+  if (gapped) return gap(gapped, running, queued, s, now);
   // The bench building or built ahead (one at a time), else the first queued.
   const held = running.find((j) => classOf(j) === "bench");
   const others = running.filter((j) => j !== held);
@@ -537,6 +541,30 @@ export function plan(jobs: Job[], s: Slots, now = Date.now(), restarting = false
   // A box empty but for the built bench, where none of the jobs ahead could start after all: it goes.
   if (held?.phase === "ready" && !others.length && !start.length) return { start, go: held, why: busyWhy };
   if (restarting && queued.some((j) => classOf(j) !== "check")) why = "restarting on new code once its jobs end; only checks start meanwhile";
+  return { start, why };
+}
+
+/// Minutes after a bench stops at its gate in which a queued check may still start there;
+/// checks already running always finish before the bench goes on.
+export const GAP_MINUTES = 10;
+
+/// A bench at its gate between two timed runs (gate.ts): only checks start, into the check slot
+/// or else any free one, those queued in the first `GAP_MINUTES` of it, and it goes on (`go`)
+/// once no check runs or may start, so its next timed run has the box alone again (D445).
+function gap(bench: Job, running: Job[], queued: Job[], s: Slots, now: number): { start: Start[]; go?: Job; why?: string } {
+  const busy = new Set(running.map((j) => j.slot ?? 1));
+  const start: Start[] = [];
+  const open = now - Date.parse(bench.gap as string) < GAP_MINUTES * 60_000;
+  const order = [...Array.from({ length: allSlots(s) - s.slots }, (_, i) => s.slots + i + 1), ...Array.from({ length: s.slots }, (_, i) => i + 1)];
+  for (const job of queued) {
+    if (!open || classOf(job) !== "check") continue;
+    const slot = order.find((n) => !busy.has(n));
+    if (!slot) break;
+    busy.add(slot);
+    start.push({ job, slot });
+  }
+  const why = queued.length ? "a bench has the box between its timed runs, where only checks start" : undefined;
+  if (!start.length && !running.some((j) => classOf(j) === "check")) return { start, go: bench, why };
   return { start, why };
 }
 

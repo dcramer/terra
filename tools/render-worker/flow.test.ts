@@ -10,9 +10,9 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, test } from "node:test";
-import { box, readJob, slotDir, slotHome } from "./box.ts";
+import { box, readJob, slotDir, slotHome, writeJob } from "./box.ts";
 import { finish, prepare, type Remote, sendLfs, snapshot, submit } from "./client.ts";
-import { next, reapOrphans, type Running, runJob, stop } from "./daemon.ts";
+import { gapBegins, gapEnds, next, reapOrphans, type Running, runJob, stop } from "./daemon.ts";
 
 // The scratch box sits on /tmp, a RAM disk of a few GB here: disk marks that never call it full
 // (guard.ts), in the environment the box's commands inherit.
@@ -353,6 +353,50 @@ test("a bench builds ahead in its slot, waits built until the box is empty, then
   const cancelled = await runJob(b, rc.job, 1, rc);
   assert.equal(cancelled.state, "cancelled");
   assert.equal(cancelled.phase, "ready");
+});
+
+test("a bench's script stops at the gate before each timed run, where a check runs, and goes on once the daemon opens it", async () => {
+  // A cargo on PATH that notes each command it runs: the gate's stands in front of it.
+  const fake = join(tmp, "fake-cargo");
+  mkdirSync(fake, { recursive: true });
+  const ran = join(tmp, "cargo-ran.txt");
+  writeFileSync(join(fake, "cargo"), `#!/bin/sh\necho "$*" >> '${ran}'\n`, { mode: 0o755 });
+  const path = process.env.PATH;
+  process.env.PATH = `${fake}:${path}`;
+  try {
+    const sub = submit(r, agent, job({ class: "bench", command: ["sh", "-c", "cargo xtask bench a && cargo build -q && cargo xtask bench b"] }));
+    assert.ok("id" in sub);
+    const starts = next(b, policy, undefined, slots).start;
+    const rb: Running = { job: starts[0].job, cancelled: false };
+    rb.ready = () => rb.go!();
+    const lines = () => (existsSync(ran) ? readFileSync(ran, "utf8").trim().split("\n") : []);
+    const gateOpens = async (sides: string[]) => {
+      const want = join(b.jobs, sub.id, "gate/want");
+      for (let i = 0; !existsSync(want) && i < 500; i++) await new Promise((w) => setTimeout(w, 20));
+      gapBegins(rb, (j) => writeJob(b, j));
+      assert.deepEqual(lines(), sides, "the timed run waits at the gate");
+      assert.ok(rb.job.gap, "the bench is between its timed runs");
+      // A check queued now starts beside it; with none left the daemon lets the bench go on.
+      const check = submit(r, agent, job({ class: "check", command: ["cargo", "xtask", "check"] }));
+      assert.ok("id" in check);
+      const n = next(b, policy, undefined, slots);
+      assert.deepEqual(n.start.map((s) => s.job.id), [check.id]);
+      assert.equal(n.go, undefined, "not while a check may start");
+      writeJob(b, { ...readJob(b, check.id)!, state: "done", started: new Date().toISOString(), ended: new Date().toISOString() });
+      assert.equal(next(b, policy, undefined, slots).go?.id, sub.id);
+      gapEnds(b, rb, (j) => writeJob(b, j));
+    };
+    const running = runJob(b, starts[0].job, starts[0].slot, rb);
+    await gateOpens([]);
+    await gateOpens(["xtask bench a", "build -q"]);
+    const ended = await running;
+    assert.equal(ended.state, "done", ended.note);
+    assert.deepEqual(lines(), ["xtask bench a", "build -q", "xtask bench b"], "every cargo command reaches the real one, in order");
+    const log = readFileSync(join(b.jobs, sub.id, "out/job.log"), "utf8");
+    assert.equal(log.match(/gap between timed runs: \d+ s, checks \S+ ran in it; the next timed run has the box alone/g)?.length, 2);
+  } finally {
+    process.env.PATH = path;
+  }
 });
 
 test("--dirty runs the working tree's changes as a patch: no hook, no ref, the index untouched, and the job says so", async () => {

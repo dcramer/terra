@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { benchHold, boxSettings, buildAhead, checkoutsInBuild, chooseWorker, cleanCommands, collected, commandKey, config, drainEnd, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, recentJobs, rustcIce, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
+import { benchHold, GAP_MINUTES, boxSettings, buildAhead, checkoutsInBuild, chooseWorker, cleanCommands, collected, commandKey, config, drainEnd, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, recentJobs, rustcIce, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -378,6 +378,33 @@ test("a push check never waits on the queue: its own slot, ahead of older jobs, 
   // A bench built, draining for a long render behind it: the check starts at once.
   const ready = running(0, "cargo xtask bench crypt", 4, "bench", { phase: "ready", prepared: iso(1), id: "20261028-115900-0000" });
   assert.deepEqual(ids(plan([running(0, "sh film.sh 1", 1, "gpu"), ready, at(5, "sh film.sh 9", { class: "gpu" }), check], s, T0 + 7 * 60_000)), ["cargo xtask check --base abc"]);
+});
+
+test("between a bench's timed runs only checks start, and the bench goes on once none runs or may start", () => {
+  const s = { slots: 4, gpuSlots: 3, benchWait: 0, checkSlots: 1 };
+  const bench = at(0, "cargo xtask gpu bench -- sh lakeperf/abn.sh 2", { class: "bench", state: "running", started: iso(0), slot: 1, phase: "timed", timed: iso(1) });
+  const check = at(30, "cargo xtask check --base abc", { class: "check" });
+  const film = at(20, "sh film.sh 1", { class: "gpu" });
+  // In its timed run (the 2 November lakeperf A/B benches held checks up to 53 minutes): nothing starts.
+  assert.deepEqual(plan([bench, film, check], s, T0 + 31 * 60_000).start, []);
+  // At its gate: the check starts in the check slot, the older film still waits, and the bench holds.
+  const gapped = { ...bench, gap: iso(31) };
+  const p = plan([gapped, film, check], s, T0 + 31.1 * 60_000);
+  assert.deepEqual(p.start.map((x) => [x.job.command.join(" "), x.slot]), [["cargo xtask check --base abc", 5]]);
+  assert.equal(p.go, undefined);
+  // The check running: a second one takes a job slot; the bench waits for both.
+  const checking = { ...check, state: "running" as const, started: iso(31.1), slot: 5 };
+  const second = at(31.5, "cargo xtask check --base def", { class: "check" });
+  const q = plan([gapped, film, checking, second], s, T0 + 32 * 60_000);
+  assert.deepEqual(q.start.map((x) => x.slot), [2]);
+  assert.equal(q.go, undefined);
+  assert.equal(plan([gapped, film, checking], s, T0 + 32 * 60_000).go, undefined, "a check still running holds the next timed run");
+  // No check left: the bench goes on, the film still behind it.
+  const after = plan([gapped, film, { ...checking, state: "done" as const, ended: iso(32) }], s, T0 + 33 * 60_000);
+  assert.deepEqual([after.start, after.go], [[], gapped]);
+  // A check queued once the gap has lasted its minutes waits for the next gap; the bench goes on.
+  const late = plan([gapped, check], s, T0 + (31 + GAP_MINUTES) * 60_000);
+  assert.deepEqual([late.start, late.go], [[], gapped]);
 });
 
 test("a daemon waiting to restart on new code starts only checks, and the built bench still goes", () => {
