@@ -16,6 +16,7 @@ pub mod adaptation;
 pub mod air;
 pub mod air_start;
 pub mod audio;
+mod bench_run;
 pub mod cache;
 pub mod choice;
 pub mod cine;

@@ -16,7 +16,18 @@ pub(crate) fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
         load_s: None,
         device: "DiscreteGpu".into(),
         preset: "high".into(),
+        ticks: ticks::Said::default(),
     }
+}
+
+/// A scene whose ticks run past their time misses its target, however its frames held.
+#[test]
+fn a_scene_misses_with_ticks_slower_than_their_time() {
+    let mut slow = timing(5.0, 9.0, 20.0);
+    assert!(slow.ticks.read(
+        "SANDBOX ticks, in ms a tick: median 12.00, 99th percentile 38.00, worst 40.00, of 600 frames' ticks, against the 15.6 ms of a tick"
+    ));
+    assert_eq!(slow.misses().len(), 1);
 }
 
 #[test]

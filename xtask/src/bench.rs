@@ -70,6 +70,8 @@ struct Timing {
     /// preset it drew at, from the run's own line; empty if it did not say.
     device: String,
     preset: String,
+    /// Its ticks against their time, and its GPU's growth over the run (`ticks`).
+    ticks: ticks::Said,
 }
 
 impl Timing {
@@ -120,6 +122,7 @@ impl Timing {
         if self.hitches > 0 {
             missed.push(format!("{} hitches", self.hitches));
         }
+        missed.extend(self.ticks.misses());
         if self.drift_pct > MOST_DRIFT_PCT {
             missed.push(format!("{:+.0}% slower by the end", self.drift_pct));
         }
@@ -217,6 +220,7 @@ fn parse_timing(line: &str) -> Option<Timing> {
         load_s: None,
         device: String::new(),
         preset: String::new(),
+        ticks: ticks::Said::default(),
     })
 }
 
@@ -314,6 +318,7 @@ fn combine(runs: &[Timing]) -> Option<Timing> {
         over_pct: middle(|t| t.over_pct),
         hitches: runs.iter().map(|t| t.hitches).max().unwrap_or(0),
         drift_pct: middle(|t| t.drift_pct),
+        ticks: ticks::Said::middle(runs.iter().map(|t| &t.ticks)),
         freezes: runs.iter().map(|t| t.freezes).max().unwrap_or(0),
         load_s: first
             .load_s
@@ -895,6 +900,10 @@ fn time_scene(
             } else if let (Some(timing), Some((preset, device))) = (&mut timing, parse_drawn(&line))
             {
                 (timing.preset, timing.device) = (preset, device);
+            } else if let Some(timing) = &mut timing
+                && timing.ticks.read(&line)
+            {
+                println!("  {}", line.trim_start_matches("SANDBOX "));
             } else if let Some(said) = worth_saying(&line) {
                 println!("  {said}");
             } else if let (Some(timing), Some((budget, over, hitches, freezes, drift))) =
@@ -967,6 +976,8 @@ fn time_scene(
 
 #[path = "bench/play.rs"]
 mod play;
+#[path = "bench/ticks.rs"]
+mod ticks;
 
 #[cfg(test)]
 #[path = "bench/tests.rs"]

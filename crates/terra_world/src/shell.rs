@@ -1102,7 +1102,7 @@ impl Plugin for ShellPlugin {
                     .chain()
                     .after(InputSystems),
             )
-            .add_systems(Update, scripted_run)
+            .add_systems(Update, (scripted_run, crate::bench_run::gather).chain())
             .add_systems(
                 Last,
                 loading::hold::count_frames.after(bevy::diagnostic::update_frame_count),

@@ -99,6 +99,7 @@ pub fn plugin(app: &mut App) {
     )
     .init_resource::<Ticks>()
     .init_resource::<TickTiming>()
+    .init_resource::<FrameTicks>()
     .add_systems(Startup, cap_catch_up)
     .add_systems(FixedFirst, (count, take_up))
     .add_systems(FixedLast, put_down)
@@ -123,6 +124,21 @@ const BEHIND_AGAIN_S: f32 = 10.0;
 #[derive(Resource, Default)]
 struct TickTiming {
     began: Option<(bevy::platform::time::Instant, u64)>,
+}
+
+/// The ticks of the frame just run: how many, and how long the fixed loop took to run them,
+/// for a benchmark to hold a tick to its timestep (`bench_run`).
+#[derive(Resource, Default, Clone, Copy, Debug)]
+pub struct FrameTicks {
+    pub ran: u64,
+    pub seconds: f32,
+}
+
+impl FrameTicks {
+    /// How long a tick of this frame took, on average; None in a frame that ran none.
+    pub fn tick_ms(&self) -> Option<f32> {
+        (self.ran > 0).then(|| self.seconds * 1000.0 / self.ran as f32)
+    }
 }
 
 /// A run of frames on end that took more than the ticks a frame catches up on.
@@ -197,12 +213,17 @@ fn behind(
     ticks: Res<Ticks>,
     timing: Res<TickTiming>,
     mut run: Local<Behind>,
+    mut frame_ticks: ResMut<FrameTicks>,
 ) {
     let capped =
         !clock.is_paused() && real.delta().mul_f64(clock.relative_speed_f64()) > clock.max_delta();
     let (ticking_s, ran) = timing.began.map_or((0.0, 0), |(at, before)| {
         (at.elapsed().as_secs_f32(), ticks.0.saturating_sub(before))
     });
+    *frame_ticks = FrameTicks {
+        ran,
+        seconds: ticking_s,
+    };
     match run.frame(capped, real.delta_secs(), ticking_s, ran) {
         Some(Said::Behind {
             for_s,
