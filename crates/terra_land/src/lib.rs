@@ -71,9 +71,10 @@ impl Land {
             ground
         };
         // The demos' pinned places kept as they are by the mountains' front rules, which
-        // reshape the ranges' edges kilometres across (D393, D395).
+        // reshape the ranges' edges kilometres across (D393, D395): on the first world's seed
+        // only, as another's land is its rules' alone (D596).
         let radius_m = ground.spec().radius_m;
-        let kept: Vec<Vec3> = site::demo_pins(radius_m)
+        let kept: Vec<Vec3> = site::demo_pins(seed, radius_m)
             .into_iter()
             .map(|(_, km)| site::along(&frame, radius_m, PLANET_START, km * 1000.0))
             .collect();
@@ -186,7 +187,7 @@ mod tests {
         };
         let ground = GeneratedPlanet::new(spec, ground::RELIEF_M, Some(ground::SEA_LEVEL_M));
         let without = Land::new(ground.with_mountains(as_pinned), climate);
-        let pins = site::demo_pins(spec.radius_m);
+        let pins = site::demo_pins(spec.seed, spec.radius_m);
         assert!(!pins.is_empty());
         let mut changed = 0;
         for (name, km) in pins {

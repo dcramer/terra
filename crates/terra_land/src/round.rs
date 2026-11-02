@@ -386,7 +386,10 @@ mod tests {
             climate,
         );
         let site = land
-            .mountain_lake(PLANET_START, &MountainLake::demo_pinned(30_000.0))
+            .mountain_lake(
+                PLANET_START,
+                &MountainLake::demo_pinned(crate::site::PINNED_SEED, 30_000.0),
+            )
             .unwrap();
         let round = Round::new(land, site.toward, 8000.0, day);
         let shore = round.land.surface(site.shore);
