@@ -252,7 +252,8 @@ pub fn find_site(planet: &Planet, name: &str) -> Found {
 }
 
 /// Where to stand a plot: the most level ground near the start that is clear of the sea,
-/// turned so its +Z side, a base's door, looks out over the water if there is any.
+/// turned so its +Z side, a base's door, looks out over the water if there is any; failing
+/// any within 126 m, the nearest out to 600 m (seed 1's valley, D596).
 fn choose_site(planet: &Planet, plot: &Plot) -> Transform {
     let start = planet.start();
     let up = start.normalize();
@@ -260,20 +261,17 @@ fn choose_site(planet: &Planet, plot: &Plot) -> Transform {
     let north = east.cross(up);
     let sea = planet.sea_radius_m();
 
-    let squares = || {
-        plot.squares()
-            .map(|[east, south]| IVec3::new(east, 0, south))
-    };
-    let low = squares().fold(IVec3::MAX, IVec3::min);
-    let high = squares().fold(IVec3::MIN, IVec3::max);
-    let (low, high) = (
-        low.as_vec3() * plot.square_m - 3.0,
-        (high + 1).as_vec3() * plot.square_m + 3.0,
-    );
+    let (low, high) = plot_bounds(plot);
     let middle = (low + high) * 0.5;
 
+    // The near rings all tried for the best; failing a level plot there, the nearest of the
+    // far rings that has one, as the land's survey takes it (`terra_land::survey::plot_rise_m`).
+    let (near, far) = terra_land::survey::PLOT_RINGS;
     let mut best: Option<(f32, Transform)> = None;
-    for ring in 3..22 {
+    for ring in near.start..far.end {
+        if ring >= far.start && best.is_some() {
+            break;
+        }
         for spoke in 0..24 {
             let angle = spoke as f32 / 24.0 * std::f32::consts::TAU;
             let offset =
@@ -288,19 +286,7 @@ fn choose_site(planet: &Planet, plot: &Plot) -> Transform {
                 // Put the middle of the base, not its corner, on the chosen spot.
                 frame.translation -= frame.rotation * Vec3::new(middle.x, 0.0, middle.z);
 
-                // How far the ground under the base rises above and falls below the frame.
-                let (mut lowest, mut highest) = (f32::MAX, f32::MIN);
-                let mut x = low.x;
-                while x <= high.x {
-                    let mut z = low.z;
-                    while z <= high.z {
-                        let height = -planet.distance(frame.transform_point(Vec3::new(x, 0.0, z)));
-                        lowest = lowest.min(height);
-                        highest = highest.max(height);
-                        z += 3.0;
-                    }
-                    x += 3.0;
-                }
+                let (lowest, highest) = ground_under(planet, &frame, low, high);
                 let above_sea = anchor.length() + lowest - sea;
                 if above_sea < 1.6 {
                     continue;
@@ -340,6 +326,38 @@ fn choose_site(planet: &Planet, plot: &Plot) -> Transform {
     })
 }
 
+/// The corners of a plot and 3 m round it, in metres east, up and south of its corner.
+fn plot_bounds(plot: &Plot) -> (Vec3, Vec3) {
+    let squares = || {
+        plot.squares()
+            .map(|[east, south]| IVec3::new(east, 0, south))
+    };
+    let low = squares().fold(IVec3::MAX, IVec3::min);
+    let high = squares().fold(IVec3::MIN, IVec3::max);
+    (
+        low.as_vec3() * plot.square_m - 3.0,
+        (high + 1).as_vec3() * plot.square_m + 3.0,
+    )
+}
+
+/// How far the ground under a frame's plot, every 3 m between its bounds, falls below and
+/// rises above the frame: the lowest and highest height over it.
+fn ground_under(planet: &Planet, frame: &Transform, low: Vec3, high: Vec3) -> (f32, f32) {
+    let (mut lowest, mut highest) = (f32::MAX, f32::MIN);
+    let mut x = low.x;
+    while x <= high.x {
+        let mut z = low.z;
+        while z <= high.z {
+            let height = -planet.distance(frame.transform_point(Vec3::new(x, 0.0, z)));
+            lowest = lowest.min(height);
+            highest = highest.max(height);
+            z += 3.0;
+        }
+        x += 3.0;
+    }
+    (lowest, highest)
+}
+
 /// The points a floor over these squares of the grid rests on, in metres east and south:
 /// each square's corners and middle.
 pub fn floor_points(
@@ -375,4 +393,31 @@ pub fn lifted(
     let up = *frame.up();
     frame.translation += up * (highest_ground + FLOOR_CLEARANCE_M);
     frame
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use terra_core::{PlanetSpec, Seed};
+
+    #[test]
+    fn the_first_worlds_base_stands_on_a_level_plot() {
+        // Seed 1's 30 km start lies in a valley with no level plot within 126 m: its base
+        // stands on the nearest level one further out, as the land's survey finds it (D596).
+        let planet = Planet::new(PlanetSpec {
+            seed: Seed(1),
+            radius_m: 30_000.0,
+        });
+        let plot = Plot::START;
+        let frame = choose_site(&planet, &plot);
+        let (low, high) = plot_bounds(&plot);
+        let (lowest, highest) = ground_under(&planet, &frame, low, high);
+        let rise = highest - lowest;
+        let away = frame.translation.distance(planet.ground_at(planet.start()));
+        assert!(
+            rise <= terra_land::survey::PLOT_RISE_M,
+            "seed 1's plot, {away:.0} m from its start, rises {rise:.1} m"
+        );
+        assert!(away <= terra_land::survey::PLOT_FAR_M + 60.0, "{away:.0} m");
+    }
 }

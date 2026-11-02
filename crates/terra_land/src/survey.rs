@@ -27,6 +27,11 @@ pub const WALKABLE_DEG: f32 = 40.0;
 /// `choose_site`): `Plot::START` and 3 m round it, its middle on rings 18 to 126 m round the
 /// start, rising no more than so many metres under it, its lowest so high over the sea.
 pub const PLOT_WITHIN_M: f32 = 126.0;
+/// Failing a level plot that near, the nearest out to so far (seed 1's start lies in a
+/// valley whose nearest level plot is past 126 m, and the demos stand on that start, D393).
+pub const PLOT_FAR_M: f32 = 600.0;
+/// The rings, 6 m apart, a plot's middle is tried on: the near ones, then the far.
+pub const PLOT_RINGS: (std::ops::Range<usize>, std::ops::Range<usize>) = (3..22, 22..101);
 pub const PLOT_RISE_M: f32 = 2.5;
 pub const PLOT_OVER_SEA_M: f32 = 1.6;
 /// So much of each biome reached makes it there, in square metres: a stand, not a cell; the
@@ -157,7 +162,7 @@ impl Survey {
         let mut faults = Vec::new();
         match self.start_rise_m {
             None => faults.push(format!(
-                "no dry plot for the start's base within {PLOT_WITHIN_M} m of the start"
+                "no dry plot for the start's base within {PLOT_FAR_M} m of the start"
             )),
             Some(rise) if rise > PLOT_RISE_M => faults.push(format!(
                 "the start's most level plot rises {rise:.1} m, over {PLOT_RISE_M} m"
@@ -305,8 +310,23 @@ pub fn of(land: &Land, start: Vec3) -> Survey {
     let grid = Grid::round(land, start, REACH_M);
     let middle = grid.region.cells / 2;
     Survey {
-        start_rise_m: least_rise_m(land, start, 0.0),
+        start_rise_m: plot_rise_m(land, start),
         walk: grid.walk((middle, middle), middle),
+    }
+}
+
+/// The least rise under the plot a start's base stands on, as `terra_world::start` chooses
+/// it: on the near rings (`least_rise_m`), or failing a level one there, on the first of the
+/// far rings out to `PLOT_FAR_M` that has one (`PLOT_RINGS`).
+pub fn plot_rise_m(land: &Land, start: Vec3) -> Option<f32> {
+    let near = least_rise_m(land, start, 0.0);
+    if near.is_some_and(|rise| rise <= PLOT_RISE_M) {
+        return near;
+    }
+    let far = rise_on_rings(land, start, PLOT_RISE_M, PLOT_RINGS.1);
+    match (near, far) {
+        (Some(near), Some(far)) => Some(near.min(far)),
+        (near, far) => near.or(far),
     }
 }
 
@@ -315,6 +335,16 @@ pub fn of(land: &Land, start: Vec3) -> Survey {
 /// the start, 24 spokes a ring, the plot turned eight ways. It stops at the first that rises
 /// no more than `enough`.
 pub fn least_rise_m(land: &Land, start: Vec3, enough: f32) -> Option<f32> {
+    rise_on_rings(land, start, enough, PLOT_RINGS.0)
+}
+
+/// [`least_rise_m`] on these rings.
+fn rise_on_rings(
+    land: &Land,
+    start: Vec3,
+    enough: f32,
+    rings: std::ops::Range<usize>,
+) -> Option<f32> {
     let plot = Plot::START;
     let squares = || plot.squares().map(|[e, s]| Vec2::new(e as f32, s as f32));
     let low = squares().fold(Vec2::MAX, Vec2::min) * plot.square_m - Vec2::splat(3.0);
@@ -340,7 +370,7 @@ pub fn least_rise_m(land: &Land, start: Vec3, enough: f32) -> Option<f32> {
         .flat_map(|spoke| (0..8).map(move |turn| (spoke, turn)))
         .collect();
     let mut best: Option<f32> = None;
-    for ring in 3..22 {
+    for ring in rings {
         let worst = best.unwrap_or(f32::MAX);
         let rises = crate::maps::par_map(&placements, |&(spoke, turn)| {
             let angle = spoke as f32 / 24.0 * std::f32::consts::TAU;
@@ -395,6 +425,14 @@ mod tests {
             assert!(walk.reached(biome) <= walk.present_m2[biome as usize]);
         }
         assert!(walk.share() > 0.0 && walk.share() < 1.0, "{survey:?}");
+        // Its valley has no level plot on the near rings, and one on the far: the first world
+        // is valid where it stands, its land as it is (D596).
+        let near = least_rise_m(&land, PLANET_START, 0.0).unwrap();
+        assert!(
+            near > PLOT_RISE_M,
+            "a level plot near seed 1's start, {near:.1} m"
+        );
+        assert!(survey.faults().is_empty(), "{:?}", survey.faults());
     }
 
     #[test]
