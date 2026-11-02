@@ -24,6 +24,22 @@ fn lake_load_by_stage() {
     let at = std::time::Instant::now();
     let (planet, start, _) = crate::planet::entering::land_of(&spec, &options);
     eprintln!("land worked out in {:.2} s", at.elapsed().as_secs_f32());
+    // Each part of the round as a hash of its `Debug` text, which tells every bit of a float
+    // apart: a change meant only to be faster leaves every one as it was.
+    if let Some(round) = planet.round() {
+        let parts: [(&str, &dyn std::fmt::Debug); 7] = [
+            ("waters", &round.waters),
+            ("pools", &round.pools),
+            ("seasons", &round.seasons),
+            ("snow", &round.snow),
+            ("snowbeds", &round.snowbeds),
+            ("drift", &round.drift),
+            ("heath", &round.heath),
+        ];
+        for (name, part) in parts {
+            eprintln!("round's {name}: {:016x}", debug_hash(part));
+        }
+    }
     let viewer = start.0.translation + start.0.translation.normalize() * 1.7;
     let at = std::time::Instant::now();
     let wanted = wanted(&planet, viewer, 1.0);
@@ -47,6 +63,22 @@ fn lake_load_by_stage() {
         coloured.len(),
         at.elapsed().as_secs_f32()
     );
+}
+
+/// A hash of a value's `Debug` text, folded in as it is written, by SplitMix64.
+fn debug_hash(value: &dyn std::fmt::Debug) -> u64 {
+    struct Fold(u64);
+    impl std::fmt::Write for Fold {
+        fn write_str(&mut self, text: &str) -> std::fmt::Result {
+            for &byte in text.as_bytes() {
+                self.0 = terra_gen::hash::splitmix64(self.0.rotate_left(8) ^ u64::from(byte));
+            }
+            Ok(())
+        }
+    }
+    let mut fold = Fold(0);
+    std::fmt::write(&mut fold, format_args!("{value:?}")).expect("Debug writes");
+    fold.0
 }
 
 #[test]
