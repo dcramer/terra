@@ -1,0 +1,11 @@
+{
+  "note": "The proportion check's bands (proportions.py, D593): each measure as a share of the body's own height, from ANSUR II (2012), the US Army's survey of 4,082 men, each man's measure over his own stature (research/2026-11-01-why-the-torso-looks-wrong.md). A body fails outside the 1st to 99th percentile of a checked measure. The survey's women are not read yet, so every body is held to the men's shares. Never widen a band to pass a body: fix the body (stretch.py).",
+  "source": "ANSUR II public data, https://www.openlab.psu.edu/ansur2/",
+  "measures": {
+    "reach": { "what": "fingertip to fingertip in the T-pose (span)", "p1": 0.9743, "mean": 1.033, "p99": 1.1035 },
+    "fingertip": { "what": "fingertips above the floor, the arm hung straight down from the shoulder joint", "p1": 0.34, "mean": 0.3724, "p99": 0.4033 },
+    "wrist": { "what": "wrist joint above the floor, the arm hung straight down from the shoulder joint", "p1": 0.4545, "mean": 0.4825, "p99": 0.5104 },
+    "crotch": { "what": "the lowest skin on the body's middle line", "p1": 0.4502, "mean": 0.4815, "p99": 0.5188 }
+  },
+  "checked": ["reach", "fingertip", "crotch"]
+}

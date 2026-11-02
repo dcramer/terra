@@ -8,6 +8,7 @@
 #   1. convert the rig onto our skeleton
 #   2. check it against our skeleton and the mannequin, and render it moving
 #   3. export it as the game loads it, with our clips re-sampled on its skeleton, and sockets
+#   4. check its proportions against a real man's (proportions.py)
 # Writes tools/characters/out/NAME.glb, rig-check-NAME.json, NAME-sheet.png and NAME-game.glb.
 # The conversion reads SMOOTH (weight smoothing passes, default 2), TRIANGLES (a triangle budget,
 # default Tripo's as made) and CREATURE=1 (keep the design's hands and feet, not a person's).
@@ -23,3 +24,5 @@ $blender $here/lift.py | grep -E "^LIFT|Error" || true
 $blender $here/rig_check.py "$here/out/$name.glb" | grep RIGCHECK || true
 $blender $here/rig_render.py "$here/out/$name.glb" "$name-sheet" | grep -E "SHEET|Error" || true
 $blender $here/export_character.py "$here/out/$name.glb" "$here/out/$name-game.glb" | grep -E "SOCKETS|EXPORTED|Error" || true
+# Its reach, fingertips and crotch against a real man's (D593).
+$blender $here/proportions.py "$here/out/$name-game.glb" | grep -E "^PROPORTIONS|Error" || true
