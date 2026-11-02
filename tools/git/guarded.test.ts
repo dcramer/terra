@@ -36,6 +36,9 @@ test("the hook runs its checks on a push to origin and none on a job push to a w
   const here = resolve(import.meta.dirname);
   writeFileSync(join(repo, "tools/git/guarded.ts"), readFileSync(join(here, "guarded.ts")));
   writeFileSync(join(repo, "tools/git/undone.ts"), "");
+  // The hook's LFS steps, which this test does not exercise: nothing to upload, no LFS patterns.
+  writeFileSync(join(repo, "tools/git/lfs.ts"), "");
+  writeFileSync(join(repo, ".gitattributes"), "");
   // remote-check.ts stands in for both the remote and the local check: TERRA_REMOTE_CHECKS=1.
   writeFileSync(join(repo, "tools/git/remote-check.ts"), `import { appendFileSync, readFileSync } from "node:fs";\nif (!process.argv.includes("--enabled")) appendFileSync(${JSON.stringify(join(root, "ran"))}, readFileSync(0, "utf8"));\n`);
   const hook = join(repo, ".githooks/pre-push");
