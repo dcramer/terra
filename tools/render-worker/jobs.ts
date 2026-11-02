@@ -440,7 +440,11 @@ export function drainEnd(running: Job[], now: number, est: Estimate): number {
 /// run against the bench and the jobs behind it times the drain they would make. Replayed on
 /// the box's queue of 27-28 October the drain rules cut the jobs' waiting by 14% and the
 /// benches' by 2%, no bench ever beside another job (D319).
-export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[]; go?: Job; why?: string } {
+///
+/// `restarting`: an update waits to restart the daemon on new code once no job runs, so only
+/// checks start meanwhile (a minute or two each, where a render holds a slot an hour): starting
+/// nothing froze every push for 36 minutes on 2026-11-02 (D445).
+export function plan(jobs: Job[], s: Slots, now = Date.now(), restarting = false): { start: Start[]; go?: Job; why?: string } {
   const running = jobs.filter((j) => j.state === "running");
   const busy = new Set(running.map((j) => j.slot ?? 1));
   // Warm builds first, then checks (a push waits on each), then the oldest.
@@ -461,7 +465,8 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
   // for an unbuilt bench on an empty box too, back to back, replayed worse: 143 h and 25 h.)
   const bench = next && ((!others.length && next.phase === "ready") || now - Date.parse(next.queued) >= wait) ? next : undefined;
   const pinned = (j: Job) => (j.slot && j.slot <= allSlots(s) ? j.slot : undefined);
-  const reserved = new Set(queued.map(pinned).filter((n) => n !== undefined));
+  // Slots queued jobs are pinned to (the warm builds'), free for checks while restarting.
+  const reserved = new Set(restarting ? [] : queued.map(pinned).filter((n) => n !== undefined));
   const est = estimator(jobs);
   const busyWhy = queued.length ? "a bench has the box" : undefined;
   let first = false;
@@ -487,6 +492,7 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
   const free = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i + 1).find((n) => !busy.has(n) && !reserved.has(n));
   for (const job of queued) {
     const c = classOf(job);
+    if (restarting && c !== "check") continue;
     if (c === "bench") {
       if (job !== bench) continue;
       const slot = Array.from({ length: s.slots }, (_, i) => i + 1).find((n) => !busy.has(n) && !reserved.has(n));
@@ -524,12 +530,13 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
   // empties on its own meanwhile.
   if (next && !bench) {
     const slot = Array.from({ length: s.slots }, (_, i) => i + 1).find((n) => !busy.has(n) && !reserved.has(n));
-    if (next.state === "queued" && slot) start.push({ job: next, slot });
+    if (next.state === "queued" && slot && !restarting) start.push({ job: next, slot });
     const left = Math.max(1, Math.ceil((Date.parse(next.queued) + wait - now) / 60_000));
     why ??= `a bench waits for the box to empty on its own, and drains it in ${left} min`;
   }
   // A box empty but for the built bench, where none of the jobs ahead could start after all: it goes.
   if (held?.phase === "ready" && !others.length && !start.length) return { start, go: held, why: busyWhy };
+  if (restarting && queued.some((j) => classOf(j) !== "check")) why = "restarting on new code once its jobs end; only checks start meanwhile";
   return { start, why };
 }
 

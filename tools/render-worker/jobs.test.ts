@@ -380,6 +380,29 @@ test("a push check never waits on the queue: its own slot, ahead of older jobs, 
   assert.deepEqual(ids(plan([running(0, "sh film.sh 1", 1, "gpu"), ready, at(5, "sh film.sh 9", { class: "gpu" }), check], s, T0 + 7 * 60_000)), ["cargo xtask check --base abc"]);
 });
 
+test("a daemon waiting to restart on new code starts only checks, and the built bench still goes", () => {
+  const s = { slots: 4, gpuSlots: 3, benchWait: 0, checkSlots: 1 };
+  const running = (q: number, command: string, slot: number, c: Job["class"], over: Partial<Job> = {}) => at(q, command, { class: c, state: "running", started: iso(q), slot, ...over });
+  // The 2 November freeze: renders running for 35-53 minutes, the update's warm builds and a test queued, then a push's check.
+  const renders = [running(0, "sh ab12.sh x", 1, "gpu"), running(1, "sh job-j11.sh", 2, "gpu")];
+  const warm = (slot: number) => job({ id: `20261028-120000-ccc${slot}`, kind: "warm", slot, class: "cpu", queued: iso(2) });
+  const test = at(3, "cargo test -p a", { class: "cpu" });
+  const check = at(4, "cargo xtask check --base abc", { class: "check" });
+  const queue = [...renders, ...[1, 2, 3, 4].map(warm), test, check];
+  const p = plan(queue, s, T0 + 5 * 60_000, true);
+  assert.deepEqual(p.start.map((x) => [x.job.command.join(" "), x.slot]), [["cargo xtask check --base abc", 5]], "the check starts, in the check slot");
+  assert.match(p.why ?? "", /restarting on new code.*only checks/);
+  // Its slot busy, a second check takes a free job slot; the warm builds and the test still wait.
+  const second = at(5, "cargo xtask check --base def", { class: "check" });
+  assert.deepEqual(plan([...queue.slice(0, -1), running(4, "cargo xtask check --base abc", 5, "check"), second], s, T0 + 6 * 60_000, true).start.map((x) => x.slot), [3]);
+  // Not restarting, the warm builds take their free slots first (the check slot is the check's).
+  assert.deepEqual(plan(queue, s, T0 + 5 * 60_000).start.map((x) => x.slot).sort(), [3, 4, 5]);
+  // A bench queued while restarting does not start building; one built on the box empty but for it goes.
+  assert.deepEqual(plan([...renders, at(3, "cargo xtask bench crypt", { class: "bench" })], s, T0 + 60 * 60_000, true).start, []);
+  const ready = running(0, "cargo xtask bench crypt", 4, "bench", { phase: "ready", prepared: iso(1) });
+  assert.equal(plan([ready], s, T0 + 5 * 60_000, true).go, ready);
+});
+
 test("replayed on random queues, a bench never runs beside another job and every job runs", () => {
   let seed = 7;
   const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);

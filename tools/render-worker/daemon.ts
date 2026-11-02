@@ -5,7 +5,7 @@
 // listens on no port: the client reaches it over ssh through box.ts, which wakes it by writing
 // `wake` in its folder. It runs as a systemd user service or under `--supervise` (box.ts
 // install), and exits to be started again on new code when an update asks (`restart`), once its
-// jobs end. A job that draws gets a display (display.ts): an Xvfb the daemon keeps when it has
+// jobs end, starting only checks meanwhile. A job that draws gets a display (display.ts): an Xvfb the daemon keeps when it has
 // none. Before each job it checks the disk, prunes the box's caches when it runs low and starts
 // no job while it is full, never crashing on ENOSPC (guard.ts, `Keeper`). `--selftest` loads it
 // and exits.
@@ -475,11 +475,11 @@ export class Keeper {
 
 /// The jobs the policy and the free slots let start now, each with its slot, the bench built
 /// ahead to let go to its timed run, and why the rest wait.
-export function next(b: Box, policy: Policy, ciLock: string | undefined, slots: Slots, now = new Date()): { start: Start[]; go?: Job; why?: string } {
+export function next(b: Box, policy: Policy, ciLock: string | undefined, slots: Slots, now = new Date(), restarting = false): { start: Start[]; go?: Job; why?: string } {
   const jobs = listJobs(b);
   if (!jobs.some((j) => j.state === "queued" || (j.state === "running" && j.phase === "ready"))) return { start: [] };
   const may = mayStart(policy, now.getHours() * 60 + now.getMinutes(), policy.afterCi && ciBusy(ciLock, now.getTime()));
-  return may.ok ? plan(jobs, slots) : { start: [], why: may.why };
+  return may.ok ? plan(jobs, slots, now.getTime(), restarting) : { start: [], why: may.why };
 }
 
 async function daemon(b: Box): Promise<number> {
@@ -537,13 +537,10 @@ async function daemon(b: Box): Promise<number> {
       say("restarting on new code");
       return 0;
     }
-    // Restarting, nothing new starts, but a bench built ahead still has its timed run.
-    const planned = next(b, s.policy, s.ciLock, s.slots);
+    // Restarting, only checks start (`plan`), and a bench built ahead still has its timed run.
     const n = full
       ? { start: [], why: `the box's disk is full (${full}); no job starts until space is freed (cargo xtask remote-render --status says what holds it)` }
-      : restart
-        ? { start: [], go: planned.go, why: "restarting on new code once its jobs end" }
-        : planned;
+      : next(b, s.policy, s.ciLock, s.slots, new Date(), restart);
     if (n.go) {
       say(`slot ${n.go.slot}: ${n.go.id} has the box for its timed run`);
       running.get(n.go.id)?.go?.();

@@ -339,7 +339,7 @@ function update(b: Box, sha: string): number {
   if (jobs.some((j) => j.state === "running") && daemonInfo(b)?.alive) {
     writeFileSync(join(b.dir, "restart"), "");
     wake(b);
-    console.log("✓ render-box: the daemon starts no new job and restarts on the new code once the running ones end");
+    console.log("✓ render-box: the daemon starts only checks and restarts on the new code once no job runs");
   } else {
     rmSync(join(b.dir, "restart"), { force: true });
     console.log(`✓ render-box: the daemon runs on the new code as ${install(b)}`);
