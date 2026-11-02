@@ -14,7 +14,7 @@ An engine that can carry the game: a seed makes a large procedural world, a frie
 2. They host it; a friend joins from their own title screen.
 3. Both walk through at least three biomes of the first realm, in weather that changes as they walk, with the wind in the trees.
 4. They use what the game already has: dig, gather, craft, move items, equip gear, and meet wildlife and monsters that fit the place, each seeing the same thing.
-5. They beat the boss, take the artifact it drops, and open the gate with it.
+5. They beat the boss, which imprints a magic mark on their arms (D590), and open the gate with it.
 6. They cross, together or apart, and come back. The second realm's land, sky, plants, creatures and sound are its own, and what they carry goes with them.
 7. They quit and return days later. Both realms and both characters are as they were left.
 
@@ -24,11 +24,11 @@ The earlier MVP (D105, [prototypes.md](prototypes.md)) asks whether the core loo
 
 ## The demo arc
 
-The developers' outline, 2026-11-01, with the details still theirs (Q7 to Q9):
+The developers' outline, 2026-11-01, with the details still theirs (Q7, Q8):
 
 1. **Prepare**: the player gets ready for the boss by "some stuff (maybe level up or something, progress around? find clues?)".
-2. **Beat the boss**, in the main world. It drops an artifact.
-3. **Open the gate** with the artifact.
+2. **Beat the boss**, in the main world. A magic mark imprints on your arm (D590).
+3. **Open the gate** with the mark.
 4. **Cross**, and the demo is over. The other world is playable, with no more progression.
 
 The arc is a line through the engine, not a progression system: it should add as little as it can.
@@ -38,7 +38,7 @@ The arc is a line through the engine, not a progression system: it should add as
 | Land, Realms | The boss's place and the gate placed from the seed, each reachable on every seed |
 | Realms | A gate that starts shut and opens, its state saved with the realm and shared by everyone in the world |
 | Animation, Creatures | One boss: a big body, its attacks and tells, and fights that two players can share |
-| Play | What the boss leaves a player with, which opens the gate. A beaten boss stays beaten (D499), so it must not be possible to lose (Q8) |
+| Play | The mark (D590): a fact on the character, kept by the server and read by the gate, shown on the arm. It is a small general record of marks, not a case for one boss, since a new mark is data (D136) |
 | Server | The fight's outcome and the gate's state decided once, for everyone, and kept across a disconnect |
 | Proof | Scripted runs open the gate directly, so testing a crossing never means beating the boss; the session runs the whole arc once |
 
@@ -169,7 +169,7 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 ### Play (8)
 
 - **Have**: backpack, equipment, action bar, quiver, wear and repair, crafting at stations, gathering by tool, skills by doing, hunger, death and the dropped pack, the map (prototypes.md). Sword and shield and the bow on the combat scorecard (D452).
-- **Need**: the baseline as engine, not as balance: every change to an inventory an operation the server checks, items and gear carried across a crossing, death and return working in either realm, and what another player sees of your gear. Beyond the artifact, which items, tiers and numbers exist is gameplay, for later.
+- **Need**: the baseline as engine, not as balance: every change to an inventory an operation the server checks, items and gear carried across a crossing, death and return working in either realm, and what another player sees of your gear. Which items, tiers and numbers exist is gameplay, for later.
 - **Done when**: two players trade blows with the same monster, swap items through a chest, die and recover their packs, with nothing duplicated or lost across a crossing or a disconnect.
 
 ### Proof (a gap in the list)
@@ -189,7 +189,7 @@ Each track gets a bounded plan of its own, and a skill or scorecard if it lacks 
 
 ## Questions for the developers
 
-Design calls, each with a recommendation; none is settled until they say so. Q1 to Q4 shape the engine; Q7 to Q9 shape the demo.
+Design calls, each with a recommendation; none is settled until they say so. Q1 to Q4 shape the engine; Q7 and Q8 shape the demo.
 
 | # | Question | Recommended |
 |---|---|---|
@@ -200,7 +200,6 @@ Design calls, each with a recommendation; none is settled until they say so. Q1 
 | Q5 | How many biomes? | At least three in the first realm (forest, mountain lake, tundra) and two in the second |
 | Q6 | Which options has a new world? | Name, mode and seed. No more until there is something to tune |
 | Q7 | What does a player do to reach the boss? | Nothing new: skills by doing (D88) and gear crafted in the first realm, with a boss that starting gear cannot beat. The gate is found early, dark and shut, so a player knows what they are after. The boss's place is found by looking, with no markers (D92): something on the land seen from far off. Clues only if a playtest shows players lost |
-| Q8 | What does the boss leave you with? The developers, 2026-11-01: an item forced into your inventory that you can't drop, or "just a 'mark' that you get on you", or a "title" | A mark. The boss's death leaves the artifact, and touching it marks you: a fact on your character, shown on your body and sheet. It needs no pack space, survives death and crossing with no exception to D84, and agrees with the lore's "what you wore is bound with you". Everyone who fought is marked, so two players don't compete for it. A marked player opens the gate, which then stays open for everyone in that world, so a friend who missed the fight isn't shut out. A title is the same record with a name, so it needs no system of its own |
-| Q9 | What is the boss, and where? | One great monster at the heart of the worst place magic pools (creatures.md's question 3, D103), never coming back once beaten. Start from the 4 m troll of the troll fight (D402), whose model and clips were made for a film |
+| Q8 | What is the boss, and where? | One great monster at the heart of the worst place magic pools (creatures.md's question 3, D103), never coming back once beaten. Start from the 4 m troll of the troll fight (D402), whose model and clips were made for a film |
 
 Open decisions v0 will meet, by track: D134 day length (Living world), D436 and D438 monsters (Animation), D580 load time (Land, Front), D588 pose sheets (Animation), audio.md's music and voices (Sound).
