@@ -6,5 +6,5 @@ Throwaway work that answers one question (D133). Each spike is a folder, `spike/
 - When its note is written, delete the spike. Git history keeps it.
 - Its scratch output goes in an ignored folder inside it, and nothing kept lives there.
 
-None open.
+- [pose-sheet](pose-sheet/README.md): a blow keyed from a generated pose sheet, waiting on the developer's eye.
 
