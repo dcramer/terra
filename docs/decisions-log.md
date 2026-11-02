@@ -1131,3 +1131,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-01**: D593 added (Open, by the agent): how to fix the base body's proportions; the measures and the recommendation are in research/2026-11-01-why-the-torso-looks-wrong.md.
 - **2026-11-01**: D589 decided (by the developers: "Yes, mark Decided"): v0 is the next milestone, as docs/v0-goals.md says.
 - **2026-11-01**: D593 amended (still Open, by the agent): a scratch copy with legs 10% longer, scaled back to 1.80 m, measured and filmed; longer legs are added as an option, with what 17% does; the numbers are in research/2026-11-01-why-the-torso-looks-wrong.md.
+- **2026-11-01**: D593 decided (by the agent; the developer: "He looks fine", then "Idk you are the expert"): arms to a 1.86 m reach and legs 10% longer, stretched in `convert_rig.py` and scaled back to 1.80 m, with a proportion check; the chest left for its own answer, the idle remade after.
