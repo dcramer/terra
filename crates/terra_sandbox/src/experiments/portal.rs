@@ -71,20 +71,18 @@ pub fn plugin(app: &mut App) {
         );
 }
 
-/// The realm a portal at `at` in `from` leads to: its seed from the world's and the place
-/// (`terra_gen::hash`), so another portal leads to another realm.
+/// The realm a portal at `at` in `from` leads to: its seed derived from the world's and the
+/// place, all 64 bits (`Seed::derive`, `Seed::at`, D596), so another portal leads to another
+/// realm. Its instance is keyed by its seed, never the home's 0.
 pub fn playground(from: &WorldSpec, at: Vec3) -> WorldSpec {
-    let seed = terra_gen::hash::of(&[
-        from.seed as u32,
-        (from.seed >> 32) as u32,
-        at.x as i32 as u32,
-        at.y as i32 as u32,
-        at.z as i32 as u32,
-    ]);
+    let realm =
+        terra_gen::Seed(from.seed)
+            .derive("portal realm")
+            .at(at.x as i32, at.y as i32, at.z as i32);
     WorldSpec {
-        key: InstanceKey((1 << 32) | u64::from(seed)),
+        key: InstanceKey(realm.0.max(1)),
         kind: PLAYGROUND.into(),
-        seed: u64::from(seed),
+        seed: realm.0,
     }
 }
 
@@ -220,5 +218,7 @@ mod tests {
         assert_ne!(realm.seed, playground(&other, at).seed);
         assert_ne!(realm.key, forest.key);
         assert_ne!(realm.seed, forest.seed);
+        // All 64 bits of it, not a 32-bit hash's.
+        assert!(realm.seed > u64::from(u32::MAX), "{:#x}", realm.seed);
     }
 }
