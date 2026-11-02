@@ -7,7 +7,6 @@
 //! when saved.
 
 use crate::instance::{Building, InWorld, InstanceApp};
-use crate::shell::Options;
 use crate::sky::Sky;
 use sea::{WaterExtension, sea_waves};
 
@@ -759,20 +758,10 @@ impl GroundExtension {
     }
 }
 
-/// The planet, its start and its ground: the land of every world entered (D469), made from
-/// its spec. The first world's is made here too, for what start-up still reads of it; the
-/// systems that read it at start-up move to entering a module at a time (docs/instances.md).
+/// The planet, its start and its ground: the land of every world entered (D469), the first
+/// included, made from its spec on entering, never as the app is built.
 pub fn plugin(app: &mut App) {
-    let options = app.world().resource::<Options>();
-    let (planet, start, sited) = entering::land_of(&entering::first_world(options), options);
-    let tweaks = entering::tweaks(options.yard());
-    if let Some(sited) = sited {
-        app.insert_resource(sited);
-    }
-    app.insert_resource(planet)
-        .insert_resource(start)
-        .insert_resource(tweaks)
-        .world_resource::<Planet>()
+    app.world_resource::<Planet>()
         .world_resource::<crate::start::Start>()
         .world_resource::<crate::start::Sited>()
         .world_resource::<Tweaks>()

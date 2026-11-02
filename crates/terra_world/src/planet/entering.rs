@@ -2,7 +2,7 @@
 //! and the land of each world entered, made from its spec.
 
 use super::{MainCamera, Planet, ROUND_M, Tweaks};
-use crate::instance::{Cross, Entered, InstanceKey, WorldSpec};
+use crate::instance::{Cross, InstanceKey, WorldSpec};
 use crate::shell::Options;
 use crate::start::{Sited, Start};
 use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
@@ -85,13 +85,9 @@ pub fn tweaks(yard: bool) -> Tweaks {
     }
 }
 
-/// Puts a world's land in: the first world's was made as the app was built, for what
-/// start-up reads of it; every later one is made here from its spec. What sets the land's
+/// Puts a world's land in, the first's too, made from its spec. What sets the land's
 /// colours goes after it, in `Building::Land`.
 pub(crate) fn land(world: &mut World) {
-    if world.contains_resource::<Planet>() {
-        return;
-    }
     let spec = world.resource::<WorldSpec>().clone();
     let options = world.resource::<Options>();
     let yard = options.yard();
@@ -110,20 +106,20 @@ pub(super) fn cross_to_the_first(mut commands: Commands, options: Res<Options>) 
     commands.queue(Cross(first_world(&options)));
 }
 
-/// The camera every world is seen through (D469), a little above the start, looking out
-/// along the ground, at speeds suited to a planet rather than a room (the wheel changes
-/// them). A player, once there is one, steers it instead.
-pub(super) fn spawn_camera(mut commands: Commands, planet: Res<Planet>) {
+/// The camera every world is seen through (D469), made before any world is: each world
+/// stands it and sets how far it sees (`stand_the_camera`). It moves at speeds suited to a
+/// planet rather than a room (the wheel changes them). A player, once there is one, steers
+/// it instead.
+pub(super) fn spawn_camera(mut commands: Commands) {
     commands.spawn((
         Name::new("Camera"),
         MainCamera,
         Camera3d::default(),
         Projection::Perspective(PerspectiveProjection {
             near: 0.2,
-            far: far_m(&planet),
             ..default()
         }),
-        looking_out(&planet),
+        Transform::default(),
         FreeCamera {
             walk_speed: 30.0,
             run_speed: 300.0,
@@ -145,18 +141,17 @@ fn far_m(planet: &Planet) -> f32 {
     planet.radius_m() * 40.0
 }
 
-/// In every world the camera sees as far as its planet asks; in every world after the
-/// first, a camera nobody steers stands above its start again.
+/// In every world the camera sees as far as its planet asks, and a camera nobody steers
+/// stands a little above its start, looking out along the ground.
 pub(super) fn stand_the_camera(
     planet: Res<Planet>,
-    entered: Res<Entered>,
     mut cameras: Query<(&mut Transform, &mut Projection, Has<FreeCamera>), With<MainCamera>>,
 ) {
     for (mut transform, mut projection, free) in &mut cameras {
         if let Projection::Perspective(perspective) = &mut *projection {
             perspective.far = far_m(&planet);
         }
-        if free && entered.0 > 1 {
+        if free {
             *transform = looking_out(&planet);
         }
     }
@@ -174,26 +169,36 @@ mod tests {
         })
     }
 
-    /// A world on a bigger planet than the first is not cut off at the first's far plane.
+    /// The camera is made before any world, and each world entered, the first included,
+    /// stands it above its start and sets its far plane: a bigger planet than the first is
+    /// not cut off at the first's.
     #[test]
     fn the_camera_sees_as_far_as_each_world_asks() {
         let mut world = World::new();
-        world.insert_resource(planet(2000.0));
-        world.insert_resource(Entered(1));
         world.run_system_once(spawn_camera).unwrap();
-        let far = |world: &mut World| {
-            let mut cameras = world.query_filtered::<&Projection, With<MainCamera>>();
-            let Projection::Perspective(seen) = cameras.single(world).unwrap() else {
+        let seen = |world: &mut World| {
+            let mut cameras = world.query_filtered::<(&Transform, &Projection), With<MainCamera>>();
+            let (at, projection) = cameras.single(world).unwrap();
+            let Projection::Perspective(seen) = projection else {
                 panic!("the camera is a perspective one");
             };
-            seen.far
+            (at.translation, seen.far)
         };
-        let first = far(&mut world);
-        world.insert_resource(planet(8000.0));
-        world.insert_resource(Entered(2));
-        world.run_system_once(stand_the_camera).unwrap();
-        let next = far(&mut world);
-        // Further than the first world's, and past the bigger world's far side.
-        assert!(next > first && next > 2.0 * 8000.0, "{first} then {next}");
+        let mut far = Vec::new();
+        for radius_m in [2000.0, 8000.0] {
+            let planet = planet(radius_m);
+            let start = planet.start();
+            world.insert_resource(planet);
+            world.run_system_once(stand_the_camera).unwrap();
+            let (at, seen_m) = seen(&mut world);
+            // Past the world's far side, and a little above its start.
+            assert!(
+                seen_m > 2.0 * radius_m,
+                "{seen_m} m on a {radius_m} m planet"
+            );
+            assert!(at.distance(start) < 50.0, "{at} against the start {start}");
+            far.push(seen_m);
+        }
+        assert!(far[1] > far[0], "{far:?}");
     }
 }
