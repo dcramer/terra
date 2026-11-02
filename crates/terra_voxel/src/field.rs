@@ -116,6 +116,10 @@ pub struct HeightMemo {
     /// The ground round about, as coarsely as looking for a cliff uphill of scree needs it,
     /// kept apart so those looks share their lattice points.
     around: Option<Box<HeightMemo>>,
+    /// The planet its points are of: a memo kept by what outlives a world (the walker's
+    /// feet, wildlife's looks) is next asked of another world's land, whose points at the
+    /// same places are other heights (D469).
+    land: Option<PlanetSpec>,
 }
 
 impl HeightMemo {
@@ -127,6 +131,15 @@ impl HeightMemo {
             heights: HashMap::default(),
             step: step.next_power_of_two(),
             around: None,
+            land: None,
+        }
+    }
+
+    /// Forgets what it holds of another planet's land before it is asked of this one's.
+    fn of(&mut self, land: PlanetSpec) {
+        if self.land != Some(land) {
+            self.heights.clear();
+            self.land = Some(land);
         }
     }
 
@@ -528,6 +541,7 @@ impl GeneratedPlanet {
 
     /// The land in a direction: a blend of the four lattice points round it.
     fn land_in(&self, direction: Vec3, memo: &mut HeightMemo) -> Node {
+        memo.of(self.spec);
         let (face, s, t) = cube_coordinates(direction);
         let cells = self.lattice as f32;
         let step = memo.step.min(self.lattice);
@@ -941,6 +955,29 @@ mod tests {
         let p = up * (ground + 0.5);
         let rounded = planet.distance_in(p.as_vec3(), &mut memo);
         assert!((planet.distance_near(p, &mut memo) - rounded).abs() < 5.0e-3);
+    }
+
+    #[test]
+    fn a_memo_asked_of_another_planet_answers_for_that_planet() {
+        // The walker's memo outlives a world: crossing to a realm, it is asked of other land.
+        let land = |seed: u64| {
+            GeneratedPlanet::new(
+                PlanetSpec {
+                    seed: Seed(seed),
+                    radius_m: 2000.0,
+                },
+                150.0,
+                None,
+            )
+        };
+        let (here, there) = (land(7), land(8));
+        let up = Vec3::new(0.3, 0.9, 0.2).normalize();
+        let mut memo = HeightMemo::default();
+        let mine = here.height_in(up, &mut memo);
+        let theirs = there.height_in(up, &mut HeightMemo::default());
+        assert!((mine - theirs).abs() > 0.01, "the two lands differ there");
+        assert_eq!(there.height_in(up, &mut memo), theirs);
+        assert_eq!(here.height_in(up, &mut memo), mine);
     }
 
     const PINNED_GROUND: [(u32, u16); 3] =
