@@ -9,7 +9,8 @@
 //              turn or points, which always win; --turn DEG writes a person's turn first
 //   3. make    the look by its kind's maker (fit_held.py, with its source_sha; a worn item
 //              build_item.sh on a full build's bodies), against the committed file's bytes
-//   4. check   attach_contract.ts on the look, its listed known faults allowed
+//   4. check   attach_contract.ts on the look, its listed known faults allowed, and a bow's nock
+//              on its string (nock.ts); a fault names the field of its data and the value to set
 //   5. moves   a held look in hand on every body template through every clip of its class
 //              (moves.ts, a template a process): its class's set with the set's partner in the
 //              other hand, else the walker's clips, carried as the game carries; how deep the
@@ -34,15 +35,18 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { KINDS, ROOT, against, holdOf, judge, knownFaults, readBody, readLook } from "./attach_contract.ts";
+import { KINDS, ROOT, type Fault, against, holdOf, judge, knownFaults, readBody, readLook } from "./attach_contract.ts";
 import { detect, sourceMesh } from "./detect.ts";
 import { Cache, closure, key } from "./fit_cache.ts";
 import { carriedClips } from "./held.ts";
+import { nockOf } from "./nock.ts";
 
 const OUT = join(ROOT, "tools", "characters", "out");
 const CHARS = join(ROOT, "tools", "characters");
 /** A held look through the body, cm (moves.ts's HELD_CM). */
 const HELD_CM = 1;
+/** A bow's nock off its string's middle as made, m (nock.ts). */
+const NOCK_M = 0.005;
 /** The walker's clips that use what is in hand (terra_walker::figure's Doing::clip), played
  * with the clips the game carries it in (held.ts's carriedClips), for a class with no set. */
 const USED = ["Interact", "Sword_Attack", "Sword_Idle"];
@@ -200,12 +204,67 @@ async function makeStage(ctx: Ctx, it: Item): Promise<[boolean, boolean]> {
   return [line(ctx, true, it.name, "make", `${rel(it.look)}: ${diff}`, kept ? -1 : t0), !was || !now.equals(was)];
 }
 
+/** What sets a fault right: the field of the item's data and its value, where one does; `found`
+ * the detector's measures of its source, when it has them. */
+export function remedy(f: Fault, it: Pick<Item, "name" | "file" | "data">, found?: { turn?: number; grip_from_end?: number }): string {
+  const file = rel(it.file);
+  const d = it.data;
+  const turnBy = (deg: number) => ((((((d.turn as number) ?? 0) + deg + 180) % 360) + 360) % 360) - 180;
+  switch (f.rule) {
+    case "facing":
+      if (d.fit === "points") return `set its "points" in ${file} so its working end lies in Y-Z, toward -Z`;
+      if (/ leans /.test(f.detail)) return `set "turn" ${turnBy(180)} in ${file}`;
+      if (found?.turn !== undefined && found.turn !== d.turn) return `set "turn" ${found.turn} in ${file} (the detector's)`;
+      return `set "turn" ${turnBy(90)} or ${turnBy(-90)} in ${file}, whichever puts its working end toward -Z`;
+    case "grip":
+      return found?.grip_from_end !== undefined ? `set "grip_from_end" ${found.grip_from_end} in ${file} (the detector's)` : `set "grip_from_end" in ${file} to where the fist closes, m from its butt`;
+    case "size":
+      return `set "length" in ${file} within its kind's range`;
+    case "hold": {
+      const m = /hold\.length is ([\d.]+) m/.exec(f.detail);
+      return m ? `set "length" ${m[1]} in ${file}, or its item's hold.length in items.ron to its look's` : `set "kind" in ${file} to a kind whose classes hold it, or its hold.class in items.ron`;
+    }
+    case "second":
+      return `set "second" in ${file}: m along +Y from the grip where the other hand closes, on its handle (holding.md section 3)`;
+    case "nock": {
+      const m = /string's middle (\[[^\]]+\])/.exec(f.detail);
+      return m ? `set "nock" ${m[1]} in ${file}` : `give its look a String material (nock.ts measures its middle)`;
+    }
+    case "stale":
+    case "marker":
+      return `make it again: node tools/characters/fit.ts ${it.name} --fresh`;
+    default:
+      return `in ${file}`;
+  }
+}
+
+/** A bow's nock off its string as made (nock.ts, the middle of its String at rest), over 5 mm. */
+export function nockFault(it: Pick<Item, "name" | "data" | "look">): Fault | undefined {
+  if (!Array.isArray(it.data.nock)) return undefined;
+  const at = nockOf(it.look);
+  const want = it.data.nock as number[];
+  if (!at) return { look: `held/${it.name}`, rule: "nock", detail: "its look has no String material to measure its nock on" };
+  const off = Math.hypot(...at.map((v, i) => v - want[i]));
+  if (off <= NOCK_M) return undefined;
+  return { look: `held/${it.name}`, rule: "nock", detail: `its data's nock [${want.join(", ")}] is ${(off * 100).toFixed(1)} cm off its string's middle [${at.join(", ")}] (bar ${NOCK_M * 100} cm)` };
+}
+
 function checkStage(ctx: Ctx, it: Item): boolean {
   const look = readLook(it.look);
   const faults = judge(look, readBody());
+  const nock = it.worn ? undefined : nockFault(it);
+  if (nock) faults.push(nock);
   const { unlisted } = against(faults, knownFaults());
-  if (unlisted.length) return line(ctx, false, it.name, "check", unlisted.map((f) => `${f.rule}: ${f.detail}`).join("; "));
-  return line(ctx, true, it.name, "check", `the attachment contract${faults.length ? `, ${faults.length} known fault${faults.length > 1 ? "s" : ""} listed` : ""}`);
+  if (unlisted.length) {
+    const found = (() => {
+      if (it.worn || it.data.fit !== "length") return undefined;
+      const f = detect(sourceMesh(it.data.source as string), it.data.kind as string, "length", it.data.length as number);
+      return f.ok ? f : undefined;
+    })();
+    return line(ctx, false, it.name, "check", unlisted.map((f) => `${f.rule}: ${f.detail}; ${remedy(f, it, found)}`).join("; "));
+  }
+  const listed = faults.length ? `, ${faults.length} known fault${faults.length > 1 ? "s" : ""} listed` : "";
+  return line(ctx, true, it.name, "check", `the attachment contract${listed}${Array.isArray(it.data.nock) ? ", its nock on its string" : ""}`);
 }
 
 /** The set a class fights with, and the hand its item goes in (holding.md section 2): the off

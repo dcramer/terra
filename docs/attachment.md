@@ -128,7 +128,7 @@ How a new model's turn is found, by kind (`fits` in `attach_kinds.json`):
 1. **Read** its data and kind; refuse a data file with no `kind`, or a source not there.
 2. **Detect**, for a detector kind with no `turn` or `points`: read the source with `glb.ts` (no Blender), measure as above, and write the turn and grip into its data, or refuse naming the measure that was not decisive.
 3. **Make** the look with its kind's maker (`fit_held.py`; `fit_gear.py` then `carry_gear.py` for one worn item on every morph, not the whole `build_bodies.sh`), writing `source_sha` into its extras.
-4. **Check** it with `attach_contract.ts`; a fault stops here.
+4. **Check** it with `attach_contract.ts`, and a bow's `nock` against its string's middle as made (`nock.ts`, within 5 mm); a fault stops here, naming the field of its data and the value to set (the detector's turn or grip where it has one).
 5. **Moves**: a held look in hand on every body template through its class's set (with the set's partner in the other hand), else through every clip the game carries it in (`CARRIED_IN`) and the walker's use clips, tipped as the game tips it where carried ("Carried", `moves.ts --carry`); it fails deeper than 1 cm into the body. A worn look is judged on every body by `build_item.sh`'s `gear_check`.
 6. **Show and icon**, when the look's bytes changed: it names the workbench sheet to look at (a held look in hand, carried and mid-swing; a worn one on the base, `heavy` and `female`) and the icon to paint again (`paint.ts <item>`); skipped when the bytes are the committed ones.
 
@@ -152,7 +152,7 @@ Read from the glTF `extras` of the look's mesh node (Bevy's `GltfExtras`); Blend
 | `hold` | a hung look | `"hung"` | `fit_held.py` | `attach_contract.ts`; tools that must tell it from a look in hand |
 | `strap` | a strapped look | `{"bone", "at", "face", "grip"}`: the bone it rides; where its origin sits in that bone's frame (m); the directions in that frame its front (-Z) and grip (+Y) turn to | `fit_held.py` from its data | `terra_walker::strap`, `tools/characters/moves.ts`, the icon rig |
 | `second` | a look held in two hands along its handle | metres along +Y where the other hand closes ("Second grip") | `fit_held.py` from its data | `attach_contract.ts`; the two-handed IK (not built) |
-| `nock` | a bow | [x, y, z], its string's middle at rest | `fit_held.py` from its data | `attach_contract.ts`; the bow's draw (not built) |
+| `nock` | a bow | [x, y, z], its string's middle at rest | `fit_held.py` from its data | `attach_contract.ts`, `fit.ts` against its string (`nock.ts`); the bow's draw (not built) |
 | `socket` | a rigid look | the socket's name | `fit_gear.py` | `terra_walker::character` (dress) |
 | `morphs` | a rigid look | `{morph: [x, y, z]}`, its shift beyond its socket's at the morph's full weight, m, in the socket's space | `carry_gear.py` | `terra_walker::character` |
 | `swing` | a loose rigid look | `{"stiffness", "drag", "gravity", "tail": [x, y, z]}` | `fit_gear.py` | `terra_walker::swing` |

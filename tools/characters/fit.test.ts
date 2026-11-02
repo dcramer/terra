@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { allItems, deepest, lookDiff, makeInputs, movesReads, runMoves, setOf } from "./fit.ts";
+import { allItems, deepest, lookDiff, makeInputs, movesReads, nockFault, remedy, runMoves, setOf } from "./fit.ts";
 import { closure } from "./fit_cache.ts";
 
 /** A GLB of one node with these extras over this binary chunk. */
@@ -109,4 +109,32 @@ test("a look's rows are merged over the bodies, each at its deepest and where it
     { row: "Walk_Loop", cm: 9.4, where: "its point (-2, 14, 0) cm in thigh_r in Walk_Loop at 0.53 s, heavy" },
   ]);
   assert.deepEqual(deepest([male], "knife"), []);
+});
+
+test("a check fault names the field of its data and the value that sets it right", () => {
+  const it = { name: "hammer", file: join(ROOT, "art", "held", "hammer.json"), data: { kind: "hafted", fit: "length", turn: -90 } };
+  const fault = (rule: string, detail: string) => ({ look: "held/hammer", rule, detail });
+  // The contract's own words for a head leaning the wrong way, and for one lying across X.
+  const contract = readFileSync(join(ROOT, "tools", "characters", "attach_contract.ts"), "utf8");
+  assert.ok(contract.includes("it leans ") && contract.includes("it lies across X"), "the contract's facing faults say how the head lies");
+  assert.equal(remedy(fault("facing", "its working end reaches 3.0 cm toward +Z and 0.5 cm toward -Z: it leans +Z, not -Z"), it), 'set "turn" 90 in art/held/hammer.json');
+  assert.equal(remedy(fault("facing", "its working end is 6.0 cm across X and 1.0 cm across Z (...): it lies across X, not in the Y-Z plane"), it), 'set "turn" 0 or -180 in art/held/hammer.json, whichever puts its working end toward -Z');
+  // The detector's turn, when it has one, is the value to set.
+  assert.equal(remedy(fault("facing", "...: it lies across X, not in the Y-Z plane"), it, { turn: 0 }), 'set "turn" 0 in art/held/hammer.json (the detector\'s)');
+  assert.equal(remedy(fault("grip", "nothing crosses y = 0: the grip is not at the origin"), it, { grip_from_end: 0.07 }), 'set "grip_from_end" 0.07 in art/held/hammer.json (the detector\'s)');
+  assert.equal(remedy(fault("hold", "its item's hold.length is 0.62 m (items.ron), its look 0.55 m"), it), 'set "length" 0.62 in art/held/hammer.json, or its item\'s hold.length in items.ron to its look\'s');
+  assert.match(remedy(fault("stale", "its source has changed since its look was made"), it), /fit\.ts hammer --fresh/);
+});
+
+test("a bow's data nock is checked against its look's string", () => {
+  const bow = JSON.parse(readFileSync(join(ROOT, "art", "held", "bow.json"), "utf8"));
+  const it = { name: "bow", look: join(ROOT, "assets", "models", "held", "bow.glb") };
+  assert.equal(nockFault({ ...it, data: bow }), undefined, "the committed bow's nock is its string's");
+  const moved = [bow.nock[0], bow.nock[1] + 0.02, bow.nock[2]];
+  const f = nockFault({ ...it, data: { ...bow, nock: moved } })!;
+  assert.match(f.detail, /2\.0 cm off its string's middle/);
+  assert.equal(remedy(f, { name: "bow", file: join(ROOT, "art", "held", "bow.json"), data: bow }), `set "nock" [${bow.nock.join(", ")}] in art/held/bow.json`);
+  // A look with no string, given a nock, is a fault; an item with none is not checked.
+  assert.match(nockFault({ name: "knife", look: join(ROOT, "assets", "models", "held", "knife.glb"), data: { nock: [0, 0, 0] } })!.detail, /no String/);
+  assert.equal(nockFault({ name: "knife", look: join(ROOT, "assets", "models", "held", "knife.glb"), data: {} }), undefined);
 });
