@@ -19,7 +19,11 @@ fn choose(menu: &mut Menu, item: Item) -> Option<Act> {
 fn world_of(root: &Path, act: Act) -> worlds::World {
     match act {
         Act::Play(world) => world,
-        Act::Make { name, creative } => worlds::make(root, &name, creative, 1, 100).unwrap(),
+        Act::Make {
+            name,
+            creative,
+            seed,
+        } => worlds::make(root, &name, creative, seed, 100).unwrap(),
         other => panic!("not a world: {other:?}"),
     }
 }
@@ -123,4 +127,39 @@ fn the_name_is_typed_and_follows_the_mode_until_typed() {
     menu.type_text("Hill fort\n");
     menu.turn();
     assert_eq!((menu.name.as_str(), menu.creative), ("Hill fort", false));
+}
+
+#[test]
+fn new_world_rolls_a_seed_kept_in_its_world_and_takes_one_typed() {
+    let root = folder_for("seeds");
+    let mut menu = Menu::new(Vec::new());
+    menu.dice = 7;
+    choose(&mut menu, Item::NewWorld);
+    let rolled = menu.seed().expect("a seed rolled");
+    // Each roll another: Enter on the seed, staying on the page.
+    assert_eq!(choose(&mut menu, Item::Seed), None);
+    assert_ne!(menu.seed().unwrap(), rolled);
+    assert_eq!(menu.page, Page::New);
+    // Typed over a rolled seed, digits alone, as far as a 64-bit number goes.
+    menu.type_text("4x2");
+    assert_eq!(menu.seed(), Some(42));
+    menu.type_text(&"9".repeat(30));
+    assert!(menu.seed.len() <= 20, "{}", menu.seed);
+    assert!(menu.seed().is_some(), "{}", menu.seed);
+    for _ in 0..30 {
+        menu.erase();
+    }
+    assert!(!menu.enabled(Item::Create), "no seed, no world");
+    menu.type_text("1234");
+    // Kept in the world made, which the list then shows.
+    let made = world_of(&root, choose(&mut menu, Item::Create).unwrap());
+    assert_eq!(made.meta.seed, 1234);
+    assert_eq!(worlds::list(&root)[0].meta.seed, 1234);
+    // A rolled seed goes whole at the first Backspace.
+    menu.back();
+    choose(&mut menu, Item::NewWorld);
+    menu.at = menu.items().iter().position(|&i| i == Item::Seed).unwrap();
+    menu.erase();
+    assert_eq!(menu.seed, "");
+    std::fs::remove_dir_all(&root).unwrap();
 }

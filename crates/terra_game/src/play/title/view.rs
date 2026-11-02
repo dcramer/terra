@@ -154,7 +154,7 @@ pub(super) fn point(
 
 /// What a drawn page shows, so it is drawn again only when that changes.
 #[derive(PartialEq, Default)]
-pub(super) struct Drawn(Option<(Page, usize, String, bool, bool)>);
+pub(super) struct Drawn(Option<(Page, usize, (String, String, bool), bool, Option<Item>)>);
 
 /// Draws the page when it changes, and marks the picked choice every frame.
 pub(super) fn draw(
@@ -165,14 +165,16 @@ pub(super) fn draw(
     mut drawn: Local<Drawn>,
 ) {
     let menu = &title.0;
-    // The name's caret shows only while it is picked.
-    let naming = menu.picked() == Some(Item::Name);
+    // The name's and the seed's carets show only while each is picked.
+    let typing = menu
+        .picked()
+        .filter(|item| matches!(item, Item::Name | Item::Seed));
     let page = Some((
         menu.page,
         menu.worlds.len(),
-        menu.name.clone(),
+        (menu.name.clone(), menu.seed.clone(), menu.seed_typed),
         menu.creative,
-        naming,
+        typing,
     ));
     if drawn.0 != page {
         drawn.0 = page;
@@ -247,7 +249,11 @@ fn words(menu: &Menu, item: Item) -> (String, Option<String>) {
             let ago = ago(worlds::now().saturating_sub(world.meta.played));
             (
                 world.meta.name.clone(),
-                Some(format!("{}, played {ago}", mode(world.meta.creative))),
+                Some(format!(
+                    "{}, seed {}, played {ago}",
+                    mode(world.meta.creative),
+                    world.meta.seed
+                )),
             )
         }
         Item::Name => {
@@ -262,6 +268,17 @@ fn words(menu: &Menu, item: Item) -> (String, Option<String>) {
                 "Every cost paid from what you gather".into()
             }),
         ),
+        Item::Seed => {
+            let caret = if menu.picked() == Some(item) { "_" } else { "" };
+            (
+                format!("Seed   {}{caret}", menu.seed),
+                Some(if menu.seed_typed {
+                    "Your own: the same seed makes the same world".into()
+                } else {
+                    "Rolled: Enter rolls another, or type your own".into()
+                }),
+            )
+        }
         Item::Create => ("Create and play".into(), None),
         Item::ConfirmDelete => ("Delete it".into(), None),
         Item::Back if matches!(menu.page, Page::Delete(_)) => ("Keep it".into(), None),

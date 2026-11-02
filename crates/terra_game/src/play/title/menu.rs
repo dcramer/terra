@@ -27,6 +27,8 @@ pub enum Item {
     World(usize),
     Name,
     Mode,
+    /// The new world's seed: rolled, or typed (D596).
+    Seed,
     Create,
     ConfirmDelete,
     Back,
@@ -36,7 +38,11 @@ pub enum Item {
 #[derive(Clone, PartialEq, Debug)]
 pub enum Act {
     Play(World),
-    Make { name: String, creative: bool },
+    Make {
+        name: String,
+        creative: bool,
+        seed: u64,
+    },
     Yard,
     Settings,
     Quit,
@@ -54,7 +60,17 @@ pub struct Menu {
     /// The new world's name and mode, while it is being made.
     pub name: String,
     pub creative: bool,
+    /// The new world's seed as shown and typed: a whole number.
+    pub seed: String,
+    /// Whether the seed shown was typed, not rolled.
+    pub seed_typed: bool,
+    /// Where the next rolled seed comes from: the screen sets it from the clock as it opens
+    /// (`super::open`); each roll steps it on (`terra_gen::hash::splitmix64`).
+    pub dice: u64,
 }
+
+/// The most digits a seed takes: a 64-bit number's.
+const SEED_DIGITS: usize = 20;
 
 impl Menu {
     pub fn new(worlds: Vec<World>) -> Self {
@@ -64,6 +80,9 @@ impl Menu {
             worlds,
             name: String::new(),
             creative: false,
+            seed: String::new(),
+            seed_typed: false,
+            dice: 0,
         };
         // Continue first when there is a world to continue, else New world.
         menu.at = usize::from(menu.worlds.is_empty()) * 2;
@@ -85,18 +104,31 @@ impl Menu {
                 .map(Item::World)
                 .chain([Item::Back])
                 .collect(),
-            Page::New => vec![Item::Name, Item::Mode, Item::Create, Item::Back],
+            Page::New => vec![Item::Name, Item::Mode, Item::Seed, Item::Create, Item::Back],
             Page::Delete(_) => vec![Item::Back, Item::ConfirmDelete],
         }
     }
 
-    /// Whether a choice can be made: Continue and Worlds need a world, Create a name.
+    /// Whether a choice can be made: Continue and Worlds need a world, Create a name and a
+    /// seed.
     pub fn enabled(&self, item: Item) -> bool {
         match item {
             Item::Continue | Item::Worlds => !self.worlds.is_empty(),
-            Item::Create => !self.name.trim().is_empty(),
+            Item::Create => !self.name.trim().is_empty() && self.seed().is_some(),
             _ => true,
         }
+    }
+
+    /// The new world's seed, if what is typed is one.
+    pub fn seed(&self) -> Option<u64> {
+        self.seed.parse().ok()
+    }
+
+    /// Rolls the new world's seed.
+    pub fn roll(&mut self) {
+        self.dice = terra_gen::hash::splitmix64(self.dice);
+        self.seed = self.dice.to_string();
+        self.seed_typed = false;
     }
 
     pub fn picked(&self) -> Option<Item> {
@@ -145,6 +177,7 @@ impl Menu {
             Item::NewWorld => {
                 self.name = worlds::next_name(&self.worlds, false);
                 self.creative = false;
+                self.roll();
                 self.go(Page::New, 0);
             }
             Item::Yard => return Some(Act::Yard),
@@ -153,10 +186,12 @@ impl Menu {
             Item::World(at) => return self.worlds.get(at).cloned().map(Act::Play),
             Item::Name => self.at = 1,
             Item::Mode => self.turn(),
+            Item::Seed => self.roll(),
             Item::Create => {
                 return Some(Act::Make {
                     name: self.name.trim().to_string(),
                     creative: self.creative,
+                    seed: self.seed()?,
                 });
             }
             Item::ConfirmDelete => {
@@ -196,20 +231,50 @@ impl Menu {
         }
     }
 
-    /// Typing into the new world's name.
+    /// Typing into the new world's name, or its seed's digits: a seed of one's own, which
+    /// takes only what keeps it a 64-bit number.
     pub fn type_text(&mut self, text: &str) {
-        if self.page == Page::New && self.picked() == Some(Item::Name) {
-            for c in text.chars().filter(|c| !c.is_control()) {
-                if self.name.chars().count() < 32 {
-                    self.name.push(c);
+        if self.page != Page::New {
+            return;
+        }
+        match self.picked() {
+            Some(Item::Name) => {
+                for c in text.chars().filter(|c| !c.is_control()) {
+                    if self.name.chars().count() < 32 {
+                        self.name.push(c);
+                    }
                 }
             }
+            Some(Item::Seed) => {
+                for c in text.chars().filter(char::is_ascii_digit) {
+                    // Typing over a rolled seed starts one's own.
+                    if !self.seed_typed {
+                        self.seed.clear();
+                        self.seed_typed = true;
+                    }
+                    let longer = format!("{}{c}", self.seed);
+                    if longer.len() <= SEED_DIGITS && longer.parse::<u64>().is_ok() {
+                        self.seed = longer;
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
     pub fn erase(&mut self) {
-        if self.page == Page::New && self.picked() == Some(Item::Name) {
-            self.name.pop();
+        if self.page != Page::New {
+            return;
+        }
+        match self.picked() {
+            Some(Item::Name) => drop(self.name.pop()),
+            // A rolled seed goes whole; one's own a digit at a time.
+            Some(Item::Seed) if !self.seed_typed => {
+                self.seed.clear();
+                self.seed_typed = true;
+            }
+            Some(Item::Seed) => drop(self.seed.pop()),
+            _ => {}
         }
     }
 }

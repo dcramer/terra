@@ -6,6 +6,7 @@
 //!   Up, Down, W, S   pick           Enter, Space   choose
 //!   Esc              back           Delete         delete the picked world, after asking
 //!   Left, Right      the new world's mode, Survival or Creative; typing names it
+//!   Enter on Seed    rolls the new world's seed again; typing digits gives one's own (D596)
 //!
 //! A world's save is read once it is chosen (`save`), and the game loads again round where
 //! its player stands. The yard is another level, so the game starts again on it. The
@@ -25,8 +26,8 @@ use bevy::{
 };
 use menu::{Act, Item, Menu, Page};
 use terra_world::choice::Choice;
+use terra_world::instance::{Cross, WorldSpec};
 use terra_world::loading::{Screen, Then};
-use terra_world::planet::entering::FIRST_SEED;
 
 /// The title screen's state while it is up.
 #[derive(Resource)]
@@ -70,7 +71,17 @@ pub fn up(screen: &State<Screen>) -> bool {
 fn open(mut commands: Commands, root: Option<Res<Root>>) {
     let worlds = root.map_or_else(Vec::new, |root| worlds::list(&root.0));
     commands.insert_resource(Then(Screen::Title));
-    commands.insert_resource(Title(Menu::new(worlds)));
+    let mut menu = Menu::new(worlds);
+    menu.dice = dice();
+    commands.insert_resource(Title(menu));
+}
+
+/// Where New world's rolled seeds start: the clock's nanoseconds, the one place the game
+/// reads chance from outside it; every world is then its seed's alone (D596).
+fn dice() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_nanos() as u64)
 }
 
 /// Where the title screen's camera stands and what it looks at, in metres east, up and
@@ -154,9 +165,10 @@ fn keys(
     }
     let menu = &mut title.0;
     let naming = menu.page == Page::New && menu.picked() == Some(Item::Name);
+    let typing = naming || (menu.page == Page::New && menu.picked() == Some(Item::Seed));
     for input in typed.read() {
         if let (true, ButtonState::Pressed, Key::Character(text)) =
-            (naming, input.state, &input.logical_key)
+            (typing, input.state, &input.logical_key)
         {
             menu.type_text(text);
         }
@@ -195,6 +207,7 @@ fn act(
     mut title: ResMut<Title>,
     mut options: ResMut<Options>,
     root: Option<Res<Root>>,
+    spec: Option<Res<WorldSpec>>,
     mut next: ResMut<NextState<Screen>>,
     mut settings: ResMut<OptionsMenu>,
     mut exit: MessageWriter<AppExit>,
@@ -202,39 +215,49 @@ fn act(
     let Some(act) = chosen.0.take() else {
         return;
     };
-    let mut play = |commands: &mut Commands, options: &mut Options, world: Option<_>| {
+    // A world of the seed of the land behind the screen is played on it; one of another seed
+    // crosses to its own land first, under the loading screen, as a portal crosses (D596).
+    let mut play = |commands: &mut Commands, options: &mut Options, world: Option<_>, seed| {
+        options.seed = Some(seed);
         if let Some(world) = world {
             worlds::play(commands, options, world);
         }
         commands.insert_resource(Then(Screen::Playing));
-        next.set(Screen::Loading);
+        match spec.as_deref() {
+            Some(loaded) if loaded.seed != seed => {
+                info!(
+                    "Crossing from the land of seed {} to seed {seed}.",
+                    loaded.seed
+                );
+                commands.queue(Cross(WorldSpec {
+                    seed,
+                    ..loaded.clone()
+                }));
+            }
+            _ => next.set(Screen::Loading),
+        }
     };
     match act {
         Act::Play(mut world) => {
             if let Err(problem) = world.played(worlds::now()) {
                 warn!("Could not mark {} played: {problem}", world.meta.name);
             }
-            let loaded = options.seed.unwrap_or(FIRST_SEED);
-            if world.meta.seed != loaded {
-                warn!(
-                    "{} is of seed {}, the land behind the title screen of seed {loaded}: crossing to it from here is not made yet; start the game with --world=\"{}\" to play it on its own land (D596).",
-                    world.meta.name, world.meta.seed, world.meta.name
-                );
-            }
-            play(&mut commands, &mut options, Some(world));
+            let seed = world.meta.seed;
+            play(&mut commands, &mut options, Some(world), seed);
         }
-        Act::Make { name, creative } => {
-            // Made from the seed of the land loaded behind the screen, which it then plays:
-            // a seed of its own waits on crossing to its land from here (D596).
-            let seed = options.seed.unwrap_or(FIRST_SEED);
+        Act::Make {
+            name,
+            creative,
+            seed,
+        } => {
             // A run keeping no worlds (a script's, without --worlds) plays one unsaved.
             let made = root.map(|root| worlds::make(&root.0, &name, creative, seed, worlds::now()));
             match made {
                 Some(Err(problem)) => warn!("Could not make the world {name}: {problem}"),
-                Some(Ok(world)) => play(&mut commands, &mut options, Some(world)),
+                Some(Ok(world)) => play(&mut commands, &mut options, Some(world), seed),
                 None => {
                     options.free_build |= creative;
-                    play(&mut commands, &mut options, None);
+                    play(&mut commands, &mut options, None, seed);
                 }
             }
         }
