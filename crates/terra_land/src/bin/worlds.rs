@@ -11,7 +11,7 @@ use std::time::Instant;
 use terra_core::{PlanetSpec, Seed};
 use terra_land::fingerprint::{self, Fingerprint};
 use terra_land::survey::{self, Biome, Survey};
-use terra_land::{Land, ground, start_climate};
+use terra_land::{Land, PLANET_START, ground, spawn, start_climate};
 
 const USAGE: &str = "cargo xtask worlds [--seeds 1-128] [--radius 30000] [--out target/worlds] [--against <an earlier worlds.tsv>]
   --seeds    the seeds swept, first to last
@@ -78,6 +78,12 @@ fn main() -> std::process::ExitCode {
 struct World {
     seed: u64,
     print: Fingerprint,
+    /// The start the search found (`spawn`), in km east and north of the planet's own.
+    start_km: (f32, f32),
+    search_s: f32,
+    tried: Option<spawn::Tried>,
+    /// The start's direction, its bits hashed, for another run to compare.
+    start_print: u64,
     survey: Survey,
 }
 
@@ -92,12 +98,30 @@ fn run() -> Result<bool, String> {
             radius_m: args.radius_m,
         };
         let land = Land::new(ground::world(spec), climate.clone());
+        let searching = Instant::now();
+        let (start, tried) = spawn::find_tried(&land);
+        let search_s = searching.elapsed().as_secs_f32();
+        let (east, north) = (
+            land.frame.east(PLANET_START),
+            land.frame.north(PLANET_START),
+        );
         World {
             seed,
             print: fingerprint::of(Seed(seed), args.radius_m, climate.clone()),
-            survey: survey::of(&land),
+            start_km: (
+                start.dot(east) * args.radius_m / 1000.0,
+                start.dot(north) * args.radius_m / 1000.0,
+            ),
+            search_s,
+            tried,
+            start_print: [start.x, start.y, start.z].iter().fold(0, |sum, x| {
+                terra_gen::hash::splitmix64(sum ^ u64::from(x.to_bits()))
+            }),
+            survey: survey::of(&land, start),
         }
     });
+    let slowest = worlds.iter().map(|w| w.search_s).fold(0.0, f32::max);
+    let moved = worlds.iter().filter(|w| w.start_km != (0.0, 0.0)).count();
     let table = table(&worlds);
     std::fs::create_dir_all(&args.out).map_err(|e| format!("{}: {e}", args.out.display()))?;
     let path = args.out.join("worlds.tsv");
@@ -110,7 +134,18 @@ fn run() -> Result<bool, String> {
         if !faults.is_empty() {
             invalid += 1;
             ok = false;
-            println!("✗ seed {}: {}", world.seed, faults.join("; "));
+            let tried = match world.tried {
+                Some(t) if world.start_km == (0.0, 0.0) => format!(
+                    " (the start's search found none: of {} places within {} km, {} walked far enough, {} of them level; spawn.rs)",
+                    t.places,
+                    spawn::SEARCH_M[1] / 1000.0,
+                    t.walked,
+                    t.level
+                ),
+                Some(_) => String::new(),
+                None => " (the planet's own start, kept: terra_land::spawn::find)".into(),
+            };
+            println!("✗ seed {}: {}{tried}", world.seed, faults.join("; "));
         }
     }
     let against = match &args.against {
@@ -134,8 +169,11 @@ fn run() -> Result<bool, String> {
     let digest = worlds.iter().fold(0u64, |sum, w| {
         terra_gen::hash::splitmix64(sum ^ w.print.whole())
     });
+    let starts = worlds.iter().fold(0u64, |sum, w| {
+        terra_gen::hash::splitmix64(sum ^ w.start_print)
+    });
     println!(
-        "{} worlds: seeds {}-{} on {} km worlds, {} valid, in {:.0} s; their fingerprints' digest {digest:016x}{against}; the table in {}",
+        "{} worlds: seeds {}-{} on {} km worlds, {} valid, in {:.0} s; {moved} starts moved by the search, the slowest in {slowest:.1} s; their fingerprints' digest {digest:016x}, their starts' {starts:016x}{against}; the table in {}",
         if ok { "✓" } else { "✗" },
         args.seeds.0,
         args.seeds.1,
@@ -150,7 +188,7 @@ fn run() -> Result<bool, String> {
 /// The table: a row a seed, its fingerprint's parts and what its survey found.
 fn table(worlds: &[World]) -> String {
     let mut out = String::from(
-        "seed\tfingerprint\tground\tstands\ttrees\tweather\tstart_rise_m\treached_share",
+        "seed\tfingerprint\tground\tstands\ttrees\tweather\tstart\tstart_east_km\tstart_north_km\tsearch_s\tstart_rise_m\treached_share\treached_land_km2",
     );
     for biome in Biome::ALL {
         let _ = write!(out, "\t{}_km2", biome.name());
@@ -160,17 +198,22 @@ fn table(worlds: &[World]) -> String {
         let p = &w.print;
         let _ = write!(
             out,
-            "{}\t{:016x}\t{:016x}\t{:016x}\t{:016x}\t{:016x}\t{}\t{:.3}",
+            "{}\t{:016x}\t{:016x}\t{:016x}\t{:016x}\t{:016x}\t{:016x}\t{:.3}\t{:.3}\t{:.1}\t{}\t{:.3}\t{:.2}",
             w.seed,
             p.whole(),
             p.ground,
             p.stands,
             p.trees,
             p.weather,
+            w.start_print,
+            w.start_km.0,
+            w.start_km.1,
+            w.search_s,
             w.survey
                 .start_rise_m
                 .map_or("-".into(), |r| format!("{r:.2}")),
-            w.survey.reached_share,
+            w.survey.walk.share(),
+            w.survey.walk.land_m2.0 / 1e6,
         );
         for biome in Biome::ALL {
             let _ = write!(out, "\t{:.2}", w.survey.reached(biome) / 1e6);
@@ -183,6 +226,10 @@ fn table(worlds: &[World]) -> String {
 /// Each seed whose fingerprint differs from an earlier table's, and which parts.
 fn differences(earlier: &str, worlds: &[World]) -> Vec<String> {
     let mut found = Vec::new();
+    let starts_kept = earlier
+        .lines()
+        .next()
+        .is_some_and(|header| header.split('\t').nth(6) == Some("start"));
     for w in worlds {
         let Some(row) = earlier
             .lines()
@@ -194,12 +241,16 @@ fn differences(earlier: &str, worlds: &[World]) -> Vec<String> {
             continue;
         };
         let parts = w.print.parts();
-        let differ: Vec<&str> = parts
+        let mut differ: Vec<&str> = parts
             .iter()
             .enumerate()
             .filter(|(i, (_, hash))| row.get(i + 2) != Some(&format!("{hash:016x}").as_str()))
             .map(|(_, (name, _))| *name)
             .collect();
+        // A table from before the start was searched for has no start to compare.
+        if starts_kept && row.get(6) != Some(&format!("{:016x}", w.start_print).as_str()) {
+            differ.push("start");
+        }
         if !differ.is_empty() {
             found.push(format!(
                 "seed {}: its {} differ from the earlier run's",
