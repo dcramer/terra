@@ -32,6 +32,7 @@ use terra_gen::Seed;
 use terra_world::cover::CoverRules;
 use terra_world::daylight::{Clock, SkyPath};
 use terra_world::flora::{Obstacles, Trunk, Trunks};
+use terra_world::instance::InstanceApp;
 use terra_world::lod::Viewpoint;
 use terra_world::parting::ObstructionFade;
 use terra_world::planet::{MainCamera, Planet};
@@ -136,11 +137,16 @@ const LAPSE_C_PER_M: f32 = 0.0065;
 const PICTURE_EDGE: f32 = 1.15;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Cells>()
-        .init_resource::<Perches>()
-        .init_resource::<Thickets>()
+    // What is about, where birds sit, what hides them and how warm the land is are the
+    // world's: made afresh on entering each, so the cells round the arrival are looked at
+    // and put out again from their seeds, as when a player walks back into their reach
+    // (D469). Kept across a crossing, the forest's cells were taken as looked at already,
+    // their animals gone with the world, and the hares never came back (instances j7).
+    app.init_world_resource::<Cells>()
+        .init_world_resource::<Perches>()
+        .init_world_resource::<Thickets>()
         .add_systems(Update, hiding::file_thickets)
-        .init_resource::<Warmth>()
+        .init_world_resource::<Warmth>()
         // Wherever the world says what grows: not on the yard, the flat test level, unless a
         // forest is grown on it.
         .init_resource::<asked::Asking>()

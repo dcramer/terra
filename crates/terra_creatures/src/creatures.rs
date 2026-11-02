@@ -37,6 +37,7 @@ use terra_walker::Player;
 use terra_walker::bodies::Body;
 use terra_world::flora::ClearAround;
 use terra_world::flora::{Obstacles, Trunk, Trunks};
+use terra_world::instance::{InstanceApp, Living};
 use terra_world::loading::Loading;
 use terra_world::lod::Detail;
 use terra_world::planet::{HeightMemo, Planet};
@@ -108,8 +109,9 @@ pub enum State {
 #[derive(Component, Default)]
 pub struct Tame;
 
+/// A creature lives on by the clock, so the census counts it apart (`Living`, D469).
 #[derive(Component)]
-#[require(Smoothed, Detail)]
+#[require(Smoothed, Detail, Living)]
 pub struct Creature {
     pub species: Species,
     pub health: f32,
@@ -287,7 +289,11 @@ pub struct Form(pub Species, pub Vec3);
 pub fn plugin(app: &mut App) {
     // The kinds of creature, read with the other registries (D136).
     terra_survival::registries::read_with_the_rest::<Bestiary>(app);
-    app.add_message::<Bitten>()
+    // Whether the world's herds are out, and its lair, are the world's: the next world puts
+    // out its own (D469).
+    app.world_resource::<Populated>()
+        .world_resource::<Lair>()
+        .add_message::<Bitten>()
         .add_message::<Form>()
         .add_plugins((appear::plugin, wake::plugin))
         .add_systems(Startup, load)

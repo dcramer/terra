@@ -131,6 +131,14 @@ impl Global {
     }
 }
 
+/// Lives on by the clock: a creature, which wanders, is met, born and let go as time passes,
+/// and which its module's rules put out again on entering, from the world's seed, as when a
+/// player walks back into its reach (D469). The [`Census`] counts such a root apart, by its
+/// `Name`, with what hangs from it and the observers watching them, so a round trip is
+/// compared exactly on the rest; that each kind comes back is the census's to check.
+#[derive(Component, Default, Clone, Copy, Debug)]
+pub struct Living;
+
 /// The order a world is built in on entering, in `OnEnter(InWorld)`, as the start-up
 /// schedules ordered it before worlds came and went: what a module did in `Startup` goes in
 /// [`Building::Place`], in `PostStartup` in [`Building::View`], after the body and camera

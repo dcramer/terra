@@ -4,7 +4,9 @@
 // the census in the forest before the first trip and after each return, and in the realm, and
 // holds it to the doc's rules: after trips 2 to 5 the forest's entities by archetype, assets by
 // type and resources equal trip 1's exactly, and the GPU's memory and the process's resident
-// memory are within 2% of trip 1's; in the realm, what of the forest is still there is listed;
+// memory are within 2% of trip 1's; what lives (creatures, D469) is counted apart, by kind, and
+// each kind living before the first trip lives after every return; in the realm, what of the
+// forest is still there is listed;
 // the forest's state before the first trip and after the last differs only in the player's
 // place. Says each crossing's time, as the game measured it (step through to play).
 //
@@ -34,13 +36,24 @@ type Census = {
   entered: number | null;
   gpu: { allocated_mib: number; reserved_mib: number } | null;
   resident_mib: number | null;
+  /// What lives on by the clock (creatures), by kind, and the entities it is made of: put out
+  /// again by its rules on entering, so not compared exactly (D469).
+  living: Record<string, number>;
+  living_parts: number;
 };
 const census = async () => (await call("world.census")) as Census;
-// What is compared: the counts, without how many worlds the run has entered.
+// What is compared exactly: the counts, without how many worlds the run has entered and
+// without what lives, whose numbers move with time.
 const counts = (c: Census) => {
-  const { entered: _entered, ...rest } = snaps.counted(c) as Record<string, unknown>;
+  const { entered: _entered, living: _living, living_parts: _parts, ...rest } = snaps.counted(c) as Record<string, unknown>;
   return rest;
 };
+const living = (c: Census) =>
+  Object.entries(c.living ?? {})
+    .map(([kind, n]) => `${n} ${kind}`)
+    .join(", ") || "none";
+// Each kind living in the forest as it was first entered is living there after a return.
+const lost = (first: Census, home: Census) => Object.keys(first.living ?? {}).filter((kind) => !(home.living ?? {})[kind]);
 
 let entered = 0;
 let line = 0;
@@ -66,7 +79,7 @@ try {
   const before = await snaps.take("before");
   const first = await census();
   line = (await said(0, undefined, 1)).next_line;
-  console.log(`forest: ${first.world?.kind} ${first.world?.key}, ${Object.values(first.entities).reduce((a, b) => a + b, 0)} entities, ${memory(first)}`);
+  console.log(`forest: ${first.world?.kind} ${first.world?.key}, ${Object.values(first.entities).reduce((a, b) => a + b, 0)} entities, ${memory(first)}; living ${living(first)}`);
   let trip1: Census | undefined;
   for (let trip = 1; trip <= TRIPS; trip++) {
     const there = await cross();
@@ -80,9 +93,14 @@ try {
     }
     const back = await cross();
     const home = back.census;
-    console.log(`trip ${trip} back: ${back.took}; ${memory(home)}`);
+    console.log(`trip ${trip} back: ${back.took}; ${memory(home)}; living ${living(home)}`);
     if (home.world?.key !== first.world?.key) {
       console.log(`  FAIL: back in ${home.world?.kind} ${home.world?.key}, not the forest`);
+      failed = true;
+    }
+    const gone = lost(first, home);
+    if (gone.length) {
+      console.log(`  FAIL: ${gone.join(", ")} living before the first trip, not after this one`);
       failed = true;
     }
     if (!trip1) {

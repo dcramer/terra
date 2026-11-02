@@ -7,10 +7,10 @@
 //! as `world.census` through the remote probe, with the GPU's memory by label and the
 //! process's resident memory beside it, which are measured rather than compared exactly.
 
-use super::{Global, WorldScoped};
+use super::{Global, Living, WorldScoped};
 use bevy::{
     asset::ReflectAsset,
-    ecs::{component::ComponentId, resource::IS_RESOURCE},
+    ecs::{component::ComponentId, observer::ObservedBy, resource::IS_RESOURCE},
     prelude::*,
     remote::BrpResult,
 };
@@ -35,6 +35,12 @@ pub struct Census {
     pub assets: BTreeMap<String, usize>,
     /// The resources present, by type name.
     pub resources: BTreeSet<String>,
+    /// What lives on by the clock ([`Living`]): its roots by name. Counted apart from the
+    /// rest, with what hangs from them, since their number moves with time.
+    pub living: BTreeMap<String, usize>,
+    /// The entities of what lives, its roots with what hangs from them and the observers
+    /// watching them, left out of `entities` and the scopes.
+    pub living_parts: usize,
 }
 
 /// Asset types counted beyond those registered for reflection, with how to count each.
@@ -81,8 +87,16 @@ impl Census {
         let components = world.components();
         let scoped = components.component_id::<WorldScoped>();
         let global = components.component_id::<Global>();
+        let living = census.living_of(world);
         for archetype in world.archetypes().iter() {
-            let n = archetype.len() as usize;
+            let mut n = archetype.len() as usize;
+            if !living.is_empty() {
+                n -= archetype
+                    .entities()
+                    .iter()
+                    .filter(|each| living.contains(&each.id()))
+                    .count();
+            }
             if n == 0 || archetype.contains(IS_RESOURCE) {
                 continue;
             }
@@ -126,12 +140,48 @@ impl Census {
         census
     }
 
+    /// Counts what lives by its roots' names, and says every entity it is made of: each
+    /// [`Living`] root, what hangs from it and the observers watching any of them.
+    fn living_of(&mut self, world: &World) -> HashSet<Entity> {
+        let mut parts = HashSet::new();
+        let Some(id) = world.components().component_id::<Living>() else {
+            return parts;
+        };
+        let roots = world
+            .archetypes()
+            .iter()
+            .filter(|archetype| archetype.contains(id))
+            .flat_map(|archetype| archetype.entities().iter().map(|each| each.id()));
+        let mut open: Vec<Entity> = Vec::new();
+        for root in roots {
+            let name = world
+                .get::<Name>(root)
+                .map_or_else(|| "unnamed".to_string(), |name| name.as_str().to_string());
+            *self.living.entry(name).or_default() += 1;
+            open.push(root);
+        }
+        while let Some(entity) = open.pop() {
+            if !parts.insert(entity) {
+                continue;
+            }
+            if let Some(children) = world.get::<Children>(entity) {
+                open.extend(children.iter());
+            }
+            if let Some(observers) = world.get::<ObservedBy>(entity) {
+                open.extend(observers.get().iter().copied());
+            }
+        }
+        self.living_parts = parts.len();
+        parts
+    }
+
     /// What changed from `self` to `after`, a line a change: `~` a count changed, `+` came,
     /// `-` went. Empty when nothing did.
     pub fn diff(&self, after: &Census) -> Vec<String> {
         let mut lines = Vec::new();
         counts("entities", &self.entities, &after.entities, &mut lines);
         counts("assets", &self.assets, &after.assets, &mut lines);
+        counts("living", &self.living, &after.living, &mut lines);
         for (what, was, now) in [
             ("scoped", self.scoped, after.scoped),
             ("global", self.global, after.global),

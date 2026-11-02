@@ -266,3 +266,29 @@ fn the_main_camera_outlives_every_world() {
     let camera = app.world().entity(camera);
     assert!(camera.contains::<Global>() && !camera.contains::<WorldScoped>());
 }
+
+#[test]
+fn what_lives_is_counted_apart_by_name_with_what_hangs_from_it_and_watches_it() {
+    let mut world = World::new();
+    let empty = Census::take(&world);
+    let all = |census: &Census| census.entities.values().sum::<usize>();
+    let hare = world.spawn((Name::new("Hare"), Living)).id();
+    world.spawn((Name::new("leg"), ChildOf(hare)));
+    world.entity_mut(hare).observe(|_: On<Add<Tint>>| {});
+    world.spawn((Name::new("Hare"), Living));
+    world.spawn(Name::new("stone"));
+    world.flush();
+    let census = Census::take(&world);
+    assert_eq!(
+        census.living,
+        std::collections::BTreeMap::from([("Hare".to_string(), 2)])
+    );
+    assert_eq!(census.living_parts, 4, "two hares, a leg and a watcher");
+    assert_eq!(
+        all(&census),
+        all(&empty) + 1,
+        "the stone alone among the rest: {:?}",
+        census.entities
+    );
+    assert_eq!(census.neither, empty.neither + 1);
+}
