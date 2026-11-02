@@ -111,6 +111,75 @@ fn in_shell(id: ChunkId, detail: &Detail) -> bool {
     farthest >= detail.shell.0 && nearest <= detail.shell.1
 }
 
+/// Whether nothing in a chunk can be seen from a viewer, nor from anywhere within `moved_m`
+/// of it, because all of the chunk's surface lies below the horizon: the line from the viewer
+/// to any point of it passes through the solid ball under the shell (`Detail::shell`'s inner
+/// radius, below which the planet holds no surface, so is rock all through). A chunk past the
+/// horizon on a small planet is never seen, so need not be meshed: as engines cull terrain
+/// behind the horizon (Outerra's and Space Engine's planets, Unreal's horizon culling of
+/// landscape), only conservative here, so that what is seen is the same.
+///
+/// A point `p` from the centre, above a ball of radius `r`, shows over its rim to a viewer `v`
+/// from the centre only within `acos(r / v) + acos(r / p)` of the viewer's direction; the
+/// chunk's box is split in eighths a few times so its corners do not hold the test back.
+pub fn below_horizon(id: ChunkId, viewer: Vec3, detail: &Detail, moved_m: f32) -> bool {
+    let (under, over) = detail.shell;
+    let far = viewer.length() + moved_m;
+    if viewer.length() - moved_m <= under || under <= 0.0 {
+        return false;
+    }
+    let horizon = Horizon {
+        up: viewer.normalize(),
+        // Moving along the ground turns the viewer's direction too, by `moved_m / under` at
+        // most.
+        seen_to: libm::acosf(under / far) + moved_m / under,
+        under,
+        over,
+    };
+    horizon.hides(chunk_origin(id), chunk_size_m(id.level), 3)
+}
+
+/// The ball a viewer looks over and how far round it they see, for [`below_horizon`].
+struct Horizon {
+    up: Vec3,
+    seen_to: f32,
+    under: f32,
+    over: f32,
+}
+
+impl Horizon {
+    /// Whether every point of a box that the surface can reach is hidden, split `depth` more
+    /// times where its bounding sphere alone does not say so.
+    fn hides(&self, low: Vec3, size: f32, depth: u8) -> bool {
+        let reach = size * 0.5 * 3f32.sqrt();
+        let middle = low + Vec3::splat(size * 0.5);
+        let out = middle.length();
+        // Wholly above where the surface can be, or wholly in the solid ball: nothing to see.
+        if out - reach > self.over || out + reach < self.under {
+            return true;
+        }
+        if out > reach {
+            let spread = libm::asinf(reach / out);
+            let angle = libm::acosf((self.up.dot(middle) / out).clamp(-1.0, 1.0));
+            let top = (out + reach).min(self.over);
+            let shows_to = if top > self.under {
+                libm::acosf(self.under / top)
+            } else {
+                0.0
+            };
+            if angle - spread > self.seen_to + shows_to {
+                return true;
+            }
+        }
+        depth > 0
+            && (0..8).all(|i| {
+                let corner =
+                    Vec3::new((i & 1) as f32, ((i >> 1) & 1) as f32, ((i >> 2) & 1) as f32);
+                self.hides(low + corner * size * 0.5, size * 0.5, depth - 1)
+            })
+    }
+}
+
 /// How far a point is from a chunk's box.
 fn distance_to(id: ChunkId, point: Vec3) -> f32 {
     let low = chunk_origin(id);
@@ -277,6 +346,46 @@ mod tests {
             .iter()
             .find(|(id, _)| distance_to(*id, point) == 0.0)
             .map(|(id, _)| id.level)
+    }
+
+    #[test]
+    fn ground_below_the_horizon_is_hidden_behind_the_ground_and_the_rest_is_kept() {
+        // Every chunk the cull drops holds only ground the line of sight from the viewer
+        // meets other ground before: marched along the real land, not the ball the cull
+        // reasons with. And it drops some, on the far side, but none near the viewer.
+        let planet = planet();
+        let detail = detail();
+        let underground = |point: Vec3| point.length() < 2000.0 + planet.field().height_m(point);
+        for height in [1.7, 300.0] {
+            let viewer = ground(Vec3::Y) + Vec3::Y * height;
+            let chunks = around(&[viewer]);
+            let hidden: Vec<ChunkId> = chunks
+                .iter()
+                .map(|&(id, _)| id)
+                .filter(|&id| below_horizon(id, viewer, &detail, 0.0))
+                .collect();
+            assert!(
+                hidden.len() * 10 > chunks.len(),
+                "{} of {} hidden",
+                hidden.len(),
+                chunks.len()
+            );
+            assert!(hidden.iter().all(|&id| distance_to(id, viewer) > 500.0));
+            for &id in &hidden {
+                let size = chunk_size_m(id.level);
+                for k in 0..64 {
+                    let at = Vec3::new((k & 3) as f32, ((k >> 2) & 3) as f32, (k >> 4) as f32);
+                    let point = ground(chunk_origin(id) + (at + 0.5) * size * 0.25);
+                    if distance_to(id, point) > 0.0 {
+                        continue;
+                    }
+                    // Short of the point itself, whose own slope would hide it.
+                    let blocked =
+                        (1..390).any(|step| underground(viewer.lerp(point, step as f32 / 400.0)));
+                    assert!(blocked, "{point} in {id:?} seen from {height} m up");
+                }
+            }
+        }
     }
 
     #[test]

@@ -26,8 +26,8 @@ use std::collections::HashMap;
 use terra_core::{ChunkId, ChunkMesh, MaterialId};
 use terra_gen::smoothstep;
 use terra_voxel::{
-    Detail, Field, Sides, chunk_origin, chunk_size_m, chunks_around, material, may_hold_surface,
-    mesh_chunk,
+    Detail, Field, Sides, below_horizon, chunk_origin, chunk_size_m, chunks_around, material,
+    may_hold_surface, mesh_chunk,
 };
 
 /// The camera moves this far before the chunks are chosen again.
@@ -122,15 +122,21 @@ fn detail(planet: &Planet, reach: f32) -> Detail {
     }
 }
 
-/// The chunks a viewer at a place should see.
+/// The chunks a viewer at a place should see: those the surface may pass through, less those
+/// below the horizon from anywhere the camera goes before they are chosen again. The tree is
+/// shaped first, so a chunk the horizon hides changes no neighbour's seams.
 fn wanted(planet: &Planet, viewer: Vec3, reach: f32) -> HashMap<ChunkId, Sides> {
     let ground = planet.voxels();
-    chunks_around(&[viewer], &detail(planet, reach), |id| {
-        may_hold_surface(&**ground, id)
-    })
-    .into_iter()
-    .collect()
+    let detail = detail(planet, reach);
+    chunks_around(&[viewer], &detail, |id| may_hold_surface(&**ground, id))
+        .into_iter()
+        .filter(|&(id, _)| !below_horizon(id, viewer, &detail, HORIZON_MOVED_M))
+        .collect()
 }
+
+/// How far the camera may go between one choice of chunks and the next one coming in, for
+/// the horizon's cull: far past `RECHOOSE_M`, as a choice on a worker takes a while.
+const HORIZON_MOVED_M: f32 = 64.0;
 
 /// How a vertex's colour tells the ground shader what grows there and what it is made of:
 /// red is grass, green how lush, blue rock showing through (half for stone, all for ore),
