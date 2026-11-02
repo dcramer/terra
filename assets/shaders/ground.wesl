@@ -272,12 +272,6 @@ fn fetch(uv: vec2<f32>, ddx: vec2<f32>, ddy: vec2<f32>, index: u32) -> Texel {
     return Texel(colour, xy, sqrt(max(1.0 - dot(xy, xy), 0.0)) * 0.5 + 0.5);
 }
 
-fn turned(v: vec2<f32>, angle: f32) -> vec2<f32> {
-    let c = cos(angle);
-    let s = sin(angle);
-    return vec2<f32>(c * v.x - s * v.y, s * v.x + c * v.y);
-}
-
 fn hash2(p: vec2<f32>) -> vec2<f32> {
     let q = vec3<f32>(p.x, p.y, p.x + p.y);
     return vec2<f32>(hash(q), hash(q + 19.19));
@@ -302,31 +296,59 @@ fn hex_tiled(uv: vec2<f32>, ddx: vec2<f32>, ddy: vec2<f32>, index: u32, turn: f3
     let z = 1.0 - f.x - f.y;
     let s = step(0.0, -z);
     let s2 = 2.0 * s - 1.0;
-    let w = vec3<f32>(-z * s2, s - f.y * s2, s - f.x * s2);
-    var corners = array<vec2<f32>, 3>(base + vec2<f32>(s, s), base + vec2<f32>(s, 1.0 - s), base + vec2<f32>(1.0 - s, s));
-    var texels: array<Texel, 3>;
-    var weights = vec3<f32>(0.0);
-    for (var k = 0u; k < 3u; k++) {
-        let corner = corners[k];
-        let middle = vec2<f32>(corner.x + 0.5 * corner.y, corner.y / 1.15470054) / (2.0 * sqrt(3.0) * HEX_PER_REPEAT);
-        let dice = hash2(corner);
-        let angle = (dice.x - 0.5) * 6.2831853 * turn;
-        let at = turned(uv - middle, angle) + middle + dice;
-        var texel = fetch(at, turned(ddx, angle), turned(ddy, angle), index);
-        // The relief was sampled turned; turned back.
-        texel.relief = turned(texel.relief, -angle);
-        texels[k] = texel;
+    let w = max(vec3<f32>(-z * s2, s - f.y * s2, s - f.x * s2), vec3<f32>(0.0));
+    // Mikkelsen's weights: each copy's own by how near its middle is, sharpened (to the
+    // seventh power, by multiplying rather than pow's logarithm and exponential), and by how
+    // high it stands (his luminance, our height, below).
+    let w2 = w * w;
+    let sharper = w2 * w2 * w2 * w;
+    // Each lowered by HEX_SKIP of the largest, so a copy whose share is under that is not
+    // fetched at all: over most of each hexagon one or two copies are left, sparing the rest's
+    // hashes, turns and fetches (play-lake-fps j6), and a copy's weight still falls smoothly to
+    // nothing where it drops out, leaving no seam.
+    let sharp = max(sharper - vec3<f32>(max(max(sharper.x, sharper.y), sharper.z) * HEX_SKIP), vec3<f32>(0.0));
+    let keep = sharp > vec3<f32>(0.0);
+    var texels = array<Texel, 3>(Texel(vec3<f32>(0.0), vec2<f32>(0.0), 0.0), Texel(vec3<f32>(0.0), vec2<f32>(0.0), 0.0), Texel(vec3<f32>(0.0), vec2<f32>(0.0), 0.0));
+    if keep.x {
+        texels[0] = hex_copy(uv, ddx, ddy, index, turn, base + vec2<f32>(s, s));
     }
-    // Mikkelsen's weights: each copy's own by how near its middle is, sharpened, and by how
-    // high it stands (his luminance, our height).
+    if keep.y {
+        texels[1] = hex_copy(uv, ddx, ddy, index, turn, base + vec2<f32>(s, 1.0 - s));
+    }
+    if keep.z {
+        texels[2] = hex_copy(uv, ddx, ddy, index, turn, base + vec2<f32>(1.0 - s, s));
+    }
     let lifted = mix(vec3<f32>(1.0), vec3<f32>(texels[0].height, texels[1].height, texels[2].height), 0.6);
-    weights = lifted * pow(w, vec3<f32>(7.0));
+    var weights = lifted * sharp;
     weights /= weights.x + weights.y + weights.z;
     return Texel(
         texels[0].colour * weights.x + texels[1].colour * weights.y + texels[2].colour * weights.z,
         texels[0].relief * weights.x + texels[1].relief * weights.y + texels[2].relief * weights.z,
         texels[0].height * weights.x + texels[1].height * weights.y + texels[2].height * weights.z,
     );
+}
+
+// How much of the largest copy's sharpened weight every copy's is lowered by (`hex_tiled`).
+const HEX_SKIP: f32 = 0.01;
+
+// One hexagon's copy of the texture, the hexagon's middle at `corner` of the skewed grid:
+// moved and turned by its dice, its relief turned back.
+fn hex_copy(uv: vec2<f32>, ddx: vec2<f32>, ddy: vec2<f32>, index: u32, turn: f32, corner: vec2<f32>) -> Texel {
+    let middle = vec2<f32>(corner.x + 0.5 * corner.y, corner.y / 1.15470054) / (2.0 * sqrt(3.0) * HEX_PER_REPEAT);
+    let dice = hash2(corner);
+    let angle = (dice.x - 0.5) * 6.2831853 * turn;
+    // The turn's cosine and sine taken once, for the lookup, its gradients and the relief.
+    let cs = vec2<f32>(cos(angle), sin(angle));
+    let at = rotated(uv - middle, cs) + middle + dice;
+    var texel = fetch(at, rotated(ddx, cs), rotated(ddy, cs), index);
+    // The relief was sampled turned; turned back.
+    texel.relief = rotated(texel.relief, vec2<f32>(cs.x, -cs.y));
+    return texel;
+}
+
+// `v` turned by the angle whose cosine and sine are `cs`.
+fn rotated(v: vec2<f32>, cs: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(cs.x * v.x - cs.y * v.y, cs.y * v.x + cs.x * v.y);
 }
 
 // Where a surface faces along each axis, how much each axis's projection counts: sharply
