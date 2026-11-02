@@ -107,6 +107,55 @@ export function hits(o: V3, d: V3, pos: Float64Array, tris: Uint32Array, list: n
   return out;
 }
 
+/** Triangles (index of the first corner) filed by the cubes of `size` their bounds touch, so a
+ *  ray tries only those in the cubes it passes (Amanatides and Woo 1987), not every one. */
+export class Grid {
+  private cells = new Map<number, number[]>();
+  private seen: Uint32Array;
+  private stamp = 0;
+  private size: number;
+  constructor(pos: Float64Array, tris: Uint32Array, keep: (k: number) => boolean = () => true, size = 0.02) {
+    this.size = size;
+    this.seen = new Uint32Array(tris.length / 3 + 1);
+    const cube = (x: number) => Math.floor(x / size);
+    for (let k = 0; k < tris.length; k += 3) {
+      if (!keep(k)) continue;
+      const lo = [Infinity, Infinity, Infinity];
+      const hi = [-Infinity, -Infinity, -Infinity];
+      for (let c = 0; c < 3; c++)
+        for (let a = 0; a < 3; a++) ((lo[a] = Math.min(lo[a], pos[3 * tris[k + c] + a])), (hi[a] = Math.max(hi[a], pos[3 * tris[k + c] + a])));
+      for (let x = cube(lo[0] - 1e-4); x <= cube(hi[0] + 1e-4); x++)
+        for (let y = cube(lo[1] - 1e-4); y <= cube(hi[1] + 1e-4); y++)
+          for (let z = cube(lo[2] - 1e-4); z <= cube(hi[2] + 1e-4); z++) {
+            const id = Grid.id(x, y, z);
+            const list = this.cells.get(id);
+            if (list) list.push(k);
+            else this.cells.set(id, [k]);
+          }
+    }
+  }
+  private static id = (x: number, y: number, z: number) => ((x + 4096) * 8192 + (y + 4096)) * 8192 + (z + 4096);
+  /** The triangles in the cubes a ray from `o` along unit `d` passes within `length`. */
+  along(o: V3, d: V3, length: number, out: number[] = []): number[] {
+    out.length = 0;
+    this.stamp++;
+    const s = this.size;
+    const i = [Math.floor(o[0] / s), Math.floor(o[1] / s), Math.floor(o[2] / s)];
+    const step = d.map((x) => (x > 0 ? 1 : x < 0 ? -1 : 0));
+    const next = [0, 1, 2].map((a) => (d[a] === 0 ? Infinity : ((i[a] + (step[a] > 0 ? 1 : 0)) * s - o[a]) / d[a]));
+    const delta = [0, 1, 2].map((a) => (d[a] === 0 ? Infinity : s / Math.abs(d[a])));
+    for (let t = 0; t <= length; ) {
+      for (const k of this.cells.get(Grid.id(i[0], i[1], i[2])) ?? [])
+        if (this.seen[k / 3] !== this.stamp) ((this.seen[k / 3] = this.stamp), out.push(k));
+      const a = next[0] < next[1] ? (next[0] < next[2] ? 0 : 2) : next[1] < next[2] ? 1 : 2;
+      t = next[a];
+      next[a] += delta[a];
+      i[a] += step[a];
+    }
+    return out;
+  }
+}
+
 /** The vertices on a piece's open boundary within `band` of its highest point: its top edge. */
 export function topEdge(p: Piece, band = 0.03): number[] {
   let top = -Infinity;
@@ -133,7 +182,7 @@ export function openEdge(p: Piece): number[] {
   return out;
 }
 
-export type Frame = { worst: number; at: number; poking: number; uncovered: number; edge: number; holes: number[]; deep: [number, number][] };
+export type Frame = { worst: number; at: number; poking: number; uncovered: number; edge: number; holes: number[]; through: number[]; deep: [number, number][] };
 
 /** One frame: how far the inner pokes through the outer (metres, and how many vertices past
  *  `slack`), and how many of the inner's top-edge vertices the outer does not cover. */
@@ -147,9 +196,24 @@ export function layered(
   outerTris: number[],
   slack = 0.002,
 ): Frame {
-  const vi = skinned(inner, joints);
-  const vo = skinned(outer, joints);
-  const f: Frame = { worst: 0, at: -1, poking: 0, uncovered: 0, edge: edge.length, holes: [], deep: [] };
+  return cover(inner, skinned(inner, joints), skinned(outer, joints), outer.tris, () => outerTris, joints, children, near, edge, slack);
+}
+
+/** `layered` on vertices skinned already (`vi` the inner's, `vo` the outer's), the outer's
+ *  triangles to try along each ray given by `candidates` (a list, or a `Grid` walk). */
+export function cover(
+  inner: Piece,
+  vi: Float64Array,
+  vo: Float64Array,
+  outerTris: Uint32Array,
+  candidates: (o: V3, d: V3, length: number) => number[],
+  joints: Map<string, Pose>,
+  children: Map<string, string[]>,
+  near: number[],
+  edge: number[],
+  slack = 0.002,
+): Frame {
+  const f: Frame = { worst: 0, at: -1, poking: 0, uncovered: 0, edge: edge.length, holes: [], through: [], deep: [] };
   const buf: number[] = [];
   const onEdge = new Set(edge);
   for (const i of new Set([...near, ...edge])) {
@@ -159,9 +223,11 @@ export function layered(
     const L = Math.hypot(...to);
     if (L < 1e-6) continue;
     const d = scale(to, 1 / L);
-    const ts = hits(a, d, vo, outer.tris, outerTris, buf);
+    const ts = hits(a, d, vo, outerTris, candidates(a, d, L), buf);
     const last = ts.length ? Math.max(...ts) : -1;
     if (onEdge.has(i) && last <= L) (f.uncovered++, f.holes.push(i));
+    // Nothing of the outer anywhere on the ray: a hole to see through, not only an edge showing.
+    if (onEdge.has(i) && last < 0) f.through.push(i);
     if (last >= 0 && last < L) {
       const depth = L - last;
       if (depth > slack) (f.poking++, f.deep.push([i, depth]));

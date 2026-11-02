@@ -8,7 +8,8 @@ files stay as shipped; the cuts are separate outputs, and `intact.ts` names each
 
 Writes tools/characters/out/quaternius-SEX-bare-{torso,legs,feet}.glb, and
 quaternius-SEX-patched.glb: their full body whole, with its skin patches (patches.py) in a
-second UV set, as the game would hide it under worn pieces (the trial's other way).
+third UV set (TEXCOORD_2: their body has two already, so the game, which reads the patch from
+the second, would need it moved; D600), as the game would hide it under worn pieces.
 
 A face goes to a slot by its centre's height, so a cut runs along their edges: the faces of
 their UpperBody are left to it; below, feet under FEET_M, legs under WAIST_M, the torso above.

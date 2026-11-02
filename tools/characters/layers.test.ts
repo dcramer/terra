@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { Glb, type Pose, posed } from "./glb.ts";
 import type { Piece } from "./intact.ts";
-import { layered, retargeted, topEdge } from "./layers.ts";
+import { cover, Grid, layered, retargeted, skinned, topEdge } from "./layers.ts";
 
 const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
@@ -79,4 +79,18 @@ test("a clip carried onto its own skeleton is the clip", () => {
     const [a, b] = [mine.get(name)!.t, theirs[man.named(name)].t];
     assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 0.002, `${name}: ${a} against ${b}`);
   }
+});
+
+test("a grid walk measures as trying every triangle does", () => {
+  const [inner, outer] = [tube(0.15, 0.2, 0.6), tube(0.12, 0.3, 0.8)];
+  const all = Array.from({ length: inner.count }, (_, i) => i);
+  const vi = skinned(inner, still);
+  const vo = skinned(outer, still);
+  const grid = new Grid(vo, outer.tris);
+  const buf: number[] = [];
+  const f = cover(inner, vi, vo, outer.tris, (o, d, l) => grid.along(o, d, l + 0.12, buf), still, bones, all, topEdge(inner));
+  const brute = wear(inner, outer);
+  assert.equal(f.poking, brute.poking);
+  assert.ok(Math.abs(f.worst - brute.worst) < 1e-9, `${f.worst} against ${brute.worst}`);
+  assert.equal(f.uncovered, brute.uncovered);
 });
