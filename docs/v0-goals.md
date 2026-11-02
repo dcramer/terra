@@ -82,7 +82,7 @@ Each track can run beside the others. "Waits on" is what it truly needs first. A
 ### Front (1)
 
 - **Have**: the title screen (D579, `--title`): Continue, Worlds, New world, The yard, Settings, Quit. Several worlds, each with a name and mode, kept on disk. Deleting asks first.
-- **Need**: a seed on New world, rolled by default, typed if wanted, kept in `world.ron` and shown in the list. New world options kept few (name, mode, seed, Q6). Host and Join. A screen for the creator of a few sliders (D111), which has none yet (`terra_walker::appearance` holds the look), so two players can tell each other apart. Quit to title without restarting the program, which a crossing's leaving should now make possible.
+- **Need**: a seed on New world, rolled by default, typed if wanted, kept in `world.ron` and shown in the list. New world options kept few (name, mode, seed, Q6). Host and Join. A screen for the creator of a few sliders (D111), which has none yet (`terra_walker::appearance` holds the look), so two players can tell each other apart. Quit to title without restarting the program, which a crossing's leaving should now make possible. A plain message for every way a join fails: wrong version, no answer, world full, connection lost.
 - **Done when**: a scripted run makes two worlds from different seeds, sees different land, and returns to the title and loads the first, in one process.
 - **Note**: D579 says no seed is offered, because the land was one world. Generating from a seed removes that reason, but the decision is the developers' to amend (Q2).
 
@@ -96,7 +96,7 @@ Each track can run beside the others. "Waits on" is what it truly needs first. A
 
 The proof that a realm is data. instances.md's playground proves loading and nothing else; this proves a world of another theme comes out of the same rules. It needs enough of each part to show that, not a full realm's worth.
 
-- **Need**: its land recipe, ground materials, plants, sky and light, wildlife, monsters and sound, each by the existing pipelines and the art style (D14). A realm's parts are new; the rules are not.
+- **Need**: its land recipe, ground materials, plants, sky and light, wildlife, monsters and sound, each by the existing pipelines and the art style (D14). A realm's parts are new; the rules are not. Survival's rules stay the same in both realms: the realm file can hold different air, cold and gravity (D61, D63), and v0 differs only by its climate.
 - **Done when**: stills and a film pass review beside the first realm, and a stranger could tell them apart at a glance while seeing one game (D14). The generator states how many variants it makes (D182).
 
 ### Land (3)
@@ -147,6 +147,7 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 
 - **Have**: the fixed tick (D138), rules in plain crates (D28), operations in order (D21), the same world on every machine (D30), and the plan to use `renet` with our own messages (D34).
 - **Need**:
+  - **A design first** (D49). multiplayer.md says what a server must do, not how: there is no research note on netcode and no design for prediction, what is sent or when. D34 chose `renet` and no replication framework without one. The first job surveys shipped games and current Bevy libraries, then writes the design, and D34 stands or changes on it.
   - `terra_net`, a server program with no window, and the same server started inside the game (D51).
   - **Always a client.** Even solo, the drawn game is a client of a server. Otherwise there are two code paths.
   - **Two realms at once.** One player can be in each realm, so a host's server runs both while its own client draws one. instances.md's split (a headless `App` per instance on the server, the client's world in the main `World`) means a host holds its realm twice. Measure that memory before building on it.
@@ -174,8 +175,22 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 
 ### Proof (a gap in the list)
 
-- **Need**: headless clients that log in and play by script (multiplayer.md's agents as players), `cargo xtask loop` for several clients, latency and loss on demand, and the v0 session as one command. A Windows build a friend can run, with a crash report they can send (D399).
+- **Need**: headless clients that log in and play by script (multiplayer.md's agents as players), `cargo xtask loop` for several clients, latency and loss on demand, and the v0 session as one command. A Windows build a friend can run, with a crash report they can send (D399); Windows alone for v0. One build for a whole playtest, since a save of another version is refused (D353). A licence pass over everything a build ships to someone else, bought and generated art and motion above all.
 - **Done when**: the session above runs unattended on main, and someone not on the team joins a game from a build they were sent.
+
+## Budgets
+
+D25 holds a client's frame and D501 a crossing. Nothing yet holds the rest, and each needs a number before its track ends. The first measures set them, then a ratchet holds them (D452).
+
+| Budget | Stands at |
+|---|---|
+| A host's frame: client, server and both realms on one machine | Unset. D25 counts only a client |
+| A server's tick for one realm with players in it | Unset; 64 ticks a second leaves 15.6 ms for everything |
+| Bytes per player per second, standing and travelling | Unset, multiplayer.md's first measure |
+| Memory on a host and on a client | Unset |
+| Load to first playable frame | D580, Open |
+| Making a new world, bakes included | Unset |
+| A crossing's cover | Under 3 s (D501), aim under 1 s warmed |
 
 ## Order
 
@@ -185,11 +200,11 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 4. **Once a gate and a server stand**: Creatures and the boss, Play on the server, Realm two's content.
 5. **Last**: Proof's session end to end, fixing what it finds.
 
-Each track gets a bounded plan of its own, and a skill or scorecard if it lacks one (controller, combat and environment have theirs), before its first job.
+Each track gets a bounded plan of its own, and a skill or scorecard if it lacks one (controller, combat and environment have theirs), before its first job. Server, Sound and Creatures start from a research note and a design, since they have neither (D49, D196).
 
 ## Questions for the developers
 
-Design calls, each with a recommendation; none is settled until they say so. Q1 to Q4 shape the engine; Q7 and Q8 shape the demo.
+Design calls, each with a recommendation; none is settled until they say so. Q1 to Q4 and Q9, Q10 shape the engine; Q7, Q8, Q11 and Q12 shape the demo; Q13 shapes the plan.
 
 | # | Question | Recommended |
 |---|---|---|
@@ -201,5 +216,10 @@ Design calls, each with a recommendation; none is settled until they say so. Q1 
 | Q6 | Which options has a new world? | Name, mode and seed. No more until there is something to tune |
 | Q7 | What does a player do to reach the boss? | Nothing new: skills by doing (D88) and gear crafted in the first realm, with a boss that starting gear cannot beat. The gate is found early, dark and shut, so a player knows what they are after. The boss's place is found by looking, with no markers (D92): something on the land seen from far off. Clues only if a playtest shows players lost |
 | Q8 | What is the boss, and where? | One great monster at the heart of the worst place magic pools (creatures.md's question 3, D103), never coming back once beaten. Start from the 4 m troll of the troll fight (D402), whose model and clips were made for a film |
+| Q9 | What happens when the host leaves? | The session ends for everyone with a plain message and the world is saved. No handing over to another player. Friends' characters are kept with the host's world. A server running alone is the answer for a world that stays up |
+| Q10 | Are there caves? | One natural kind, small. worlds.md leaves this open, and adding them later changes the generator, streaming and light underground, the engine's voxel core. Sea and lakes stay as they are; rivers wait |
+| Q11 | How does the boss fight work? | A second player doesn't make it stronger. It heals when nobody is left near it. No bar or name over it, as player.md's rule; its body shows how it fares |
+| Q12 | How does the demo end? | A short notice the first time a player crosses, and they keep playing |
+| Q13 | Is there a date, who owns each track, and what goes first if it slips? | Content before foundations: the relay, then front-and-back sound, then the second realm's second biome and kinds. The date and owners are the developers' |
 
 Open decisions v0 will meet, by track: D134 day length (Living world), D436 and D438 monsters (Animation), D580 load time (Land, Front), D588 pose sheets (Animation), audio.md's music and voices (Sound).

@@ -1120,3 +1120,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-01**: D590 decided (by the developers: "lets do the \"mark\"", "a magic mark that imprints on your arm or something"): the demo's boss leaves no item; beating it imprints a mark, a fact on the character that can't be lost, and a marked player opens the gate for the whole world.
 - **2026-11-01**: D589 amended (by the agent, for D590): the boss's artifact becomes its mark, and the question of its rules is closed.
 - **2026-11-01**: D590 amended (by the developers: "yeah its a small general record"): marks are a small general record on the character, a new mark being data.
+- **2026-11-01**: D589 amended (by the agent): docs/v0-goals.md gains budgets, a design first for Server, Sound and Creatures, and five more questions (the host leaving, caves, the boss fight, the demo's end, the date and what goes first).
