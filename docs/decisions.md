@@ -473,7 +473,7 @@ The look, models, bodies and gear, textures and audio.
 | [D584](decisions/D584.md) | A body moves as its clip says; the game adds only foot placement, look-at and hand IK | Tech | Agent | Decided | What a body shows is the clip made for what it does… |
 | [D585](decisions/D585.md) | A gait's clip is shown within a tenth of as made at its speed; the game's speeds are fitted to the clips | Tech | Agent | Decided | Every gait (walk, jog, sprint) is played at the speed… |
 | [D588](decisions/D588.md) | Moves with a start and an end are keyed from a generated pose sheet, on our own skeleton | Design | — | Open | Recommended: moves with a clear start and end that no… |
-| [D593](decisions/D593.md) | The base body's arms and legs are stretched in the character pipeline | Design | Agent | Decided | The base body's arms are lengthened to a 1.86 m reach… |
+| [D593](decisions/D593.md) | The base body's arms and legs are stretched in the character pipeline | Design | Agent | Leaning | The base body's arms are lengthened to a 1.86 m reach… |
 
 ## Engine and code
 
@@ -681,6 +681,6 @@ Kept so their numbers still resolve. They no longer bind anything.
 | [D283](decisions/D283.md) | Mesh slabs start at 64 MiB and double | Tech | — | Superseded by D420 | Was: Bevy keeps meshes in shared slabs of GPU memory… |
 | [D369](decisions/D369.md) | A grey card grey at noon in the open | Tech | — | Superseded by D370 | Was: the day grade warmed only under a closed canopy… |
 | [D413](decisions/D413.md) | Landing takes turns: a push's check runs again only what a rebase changed, and at most two build and test at once | Tech | — | Superseded by D37 | Was: a push's check that passed stamped its tree… |
-| [D564](decisions/D564.md) | A tool carried by the rule tips at the wrist, little in the fist, its forearm kept down | Tech | Agent | Superseded by D584 | Superseded by D584 (2026-10-30, holding as an overlay… |
+| [D564](decisions/D564.md) | A tool carried by the rule tips at the wrist, little in the fist, its forearm kept down | Tech | — | Superseded by D584 | Superseded by D584 (2026-10-30, holding as an overlay… |
 
 <!-- end of rendered -->

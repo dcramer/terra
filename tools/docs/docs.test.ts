@@ -222,6 +222,7 @@ test("a skill naming a path that is not there is a fault; placeholders, patterns
     "Run `node tools/props/props.ts --into tools/prop/x.glb`, then `tools/props/`.",
     "Name it `art/<name>/sheet.png`, `art/NAME/sheet.png`, `art/x/*.png` or `docs/Dnnn.md`; `target/x.rs` is no top here.",
     "It writes `tools/out-ignored/a.glb`; `art/gone.png`, `art/gone.png`.",
+    "A clip in a model: `node tools/props/props.ts tools/props:Open_Slash@1.21 art/gone.png:Idle`.",
     "```\ncrates/fenced/out.rs\n```",
   ].join("\n");
   const exists = (path: string) => there.has(path) || path.startsWith("tools/out-ignored");

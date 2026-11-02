@@ -383,7 +383,8 @@ export function unknownTasks(file: string, markdown: string, tasks: Set<string>)
 /**
  * The repository paths a page names in backticks that do not exist: each word in a code span
  * that begins with one of the repository's top folders (`crates/…`, `node tools/x.ts --y`),
- * less a trailing `:line`, `#anchor` or punctuation. A word with a placeholder or a pattern in it
+ * less a trailing `:line`, `:Clip@rate` (a clip in a model, as tools/characters take it),
+ * `#anchor` or punctuation. A word with a placeholder or a pattern in it
  * (`<name>`, `NAME`, `*`, `{a,b}`, `…`, `$X`) names no one path and is skipped. `exists` says
  * whether a path is in the repository or is somewhere git ignores, where a tool writes.
  */
@@ -391,7 +392,7 @@ export function missingPaths(file: string, markdown: string, exists: (path: stri
   const faults = new Set<string>();
   for (const [, span] of withoutFences(markdown).matchAll(/`([^`\n]+)`/g)) {
     for (const word of span.split(/[\s=]+/)) {
-      const path = word.replace(/^["'(]+/, "").replace(/(:\d+(-\d+)?|#[\w-]*)?["'),.;:]*$/, "").replace(/\/$/, "");
+      const path = word.replace(/^["'(]+/, "").replace(/(:\d+(-\d+)?|:[A-Za-z_]\w*(@[\d.]+)?|#[\w-]*)?["'),.;:]*$/, "").replace(/\/$/, "");
       const top = path.split("/")[0];
       const placeholder = /[<>*{}…$\[\]|]/.test(path) || path.split("/").some((part) => /^[A-Z]+$|nnn|NNN/.test(part));
       if (!path.includes("/") || !tops.has(top) || placeholder) continue;
