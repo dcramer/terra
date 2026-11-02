@@ -35,6 +35,8 @@ pub enum Interactable {
     Door,
     /// Shutters fitted over a window, to open or shut.
     Shutters,
+    /// A portal to another world, to step through (D470).
+    Portal,
 }
 
 impl Interactable {
@@ -51,6 +53,7 @@ impl Interactable {
             Interactable::Storage => (0.4, 0.6),
             Interactable::Door => (1.1, 0.7),
             Interactable::Shutters => (0.5, 0.6),
+            Interactable::Portal => (1.4, 1.2),
         }
     }
 
@@ -68,6 +71,7 @@ impl Interactable {
             Interactable::Storage => "open it".to_string(),
             Interactable::Door => "open or shut the door".to_string(),
             Interactable::Shutters => "open or shut the shutters".to_string(),
+            Interactable::Portal => "step through".to_string(),
         }
     }
 }

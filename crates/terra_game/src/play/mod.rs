@@ -16,6 +16,7 @@ pub use footprint::Footprint;
 mod map;
 pub mod music;
 mod noises;
+pub mod portal;
 mod probe;
 pub use props::{
     Look as PropLook, Making as PropMaking, glowing as prop_glowing, lit as prop_lit,
@@ -117,6 +118,8 @@ impl Plugin for GameplayPlugin {
         storage::plugin(app);
         storage_screen::plugin(app);
         interact::plugin(app);
+        // Crossing to another world through a portal (D470), when a run stands one.
+        portal::plugin(app);
         claim::plugin(app);
         vitals::plugin(app);
         breath::plugin(app);

@@ -283,6 +283,30 @@ fn haze_for(horizon: Vec3, open: f32, air: crate::air::AirScale) -> (Vec3, f32) 
     (shade.lerp(horizon * OPEN_AIR, open), visible)
 }
 
+/// A realm's own light, the world's (D468): how its sun's colour and its sky's (the horizon,
+/// the zenith, the glow and the shade) are tinted against the forest's, which has none. Only
+/// the portal's placeholder realm sets one; what an alien realm looks like is Open
+/// (docs/instances.md "The first slice").
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct RealmLight {
+    pub sun: Vec3,
+    pub sky: Vec3,
+}
+
+impl Light {
+    fn in_realm(mut self, realm: Option<&RealmLight>) -> Light {
+        if let Some(realm) = realm {
+            self.light *= realm.sun;
+            self.warm *= realm.sun;
+            self.horizon *= realm.sky;
+            self.zenith *= realm.sky;
+            self.glow *= realm.sun;
+            self.shade *= realm.sky;
+        }
+        self
+    }
+}
+
 /// The light with the sun so many degrees above the horizon.
 fn light_at(height: f32) -> Light {
     let keys = keys();
@@ -357,6 +381,7 @@ pub fn plugin(app: &mut App) {
 pub(crate) fn entering(app: &mut App) {
     app.world_resource::<Clock>()
         .world_resource::<SkyPath>()
+        .world_resource::<RealmLight>()
         .init_world_resource::<Nightfall>()
         .add_systems(
             OnEnter(InWorld),
@@ -476,6 +501,7 @@ fn shine(
         Option<Res<crate::indoor::ShutOff>>,
         Option<Res<crate::air::AirDust>>,
     ),
+    realm: Option<Res<RealmLight>>,
     mut clear_sky: Local<Option<f32>>,
 ) {
     let Some(path) = path else { return };
@@ -483,7 +509,7 @@ fn shine(
     // sliver each frame redraws every shadow edge a little differently, and they crawl.
     let sun = path.sun((clock.hour * SUN_STEPS).round() / SUN_STEPS);
     let height = path.height(clock.hour);
-    let light = light_at(height);
+    let light = light_at(height).in_realm(realm.as_deref());
     let colour = |rgb: Vec3| Color::srgb(rgb.x, rgb.y, rgb.z);
     // Under cloud (D418): the sun's beam thins to nothing under a deck, the sky's light stays
     // near a clear sky's, and the shade takes the deck's grey.
