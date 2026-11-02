@@ -9,6 +9,7 @@
 //! it; `cargo xtask fields` maps it without the GPU (D326).
 
 pub mod drift;
+pub mod fingerprint;
 pub mod frame;
 pub mod ground;
 pub mod heath;
