@@ -14,18 +14,18 @@ The research behind it: [modern-character-variety.md](../research/modern-charact
 - **Many characters on screen**, toward a thousand players (D127).
 - **One command** to add a body parameter, an item or a clip, and one command to check everything.
 
-Nothing ready-made fits. Reallusion Character Creator's and Synty Sidekick's licences forbid generated or AI work, Daz needs a game licence per item, MetaHuman is made only in Unreal and is realistic, and Unreal's Mutable and Unity's UMA are tied to their engines. We rebuild their techniques on Bevy (D184).
+One ready-made set fits: Quaternius's base bodies and fantasy outfits, CC0, on the skeleton our clips are cut from. Terra's people are built on their shapes in our own paint (D599), the switch made by [the research note's jobs](../research/2026-11-02-character-base.md#the-switch-in-jobs); until it lands the game's base is today's Tripo body, and this page describes both where they differ. Reallusion Character Creator's and Synty Sidekick's licences forbid generated or AI work, Daz needs a game licence per item, MetaHuman is made only in Unreal and is realistic, and Unreal's Mutable and Unity's UMA are tied to their engines. We rebuild their techniques on Bevy (D184).
 
 ## The contracts
 
 Games that do this well don't fit items to characters. They fix a few contracts that every asset follows, and the fitting falls out of them:
 
-- **One base body, and every body is a few parameters on it.** Build and sex are morphs of the same mesh, height is a scale. Each slider setting and each named template is a setting of those, not a separate model.
+- **One base body a sex, and every body is a few parameters on it.** Build is a morph of the mesh, height is a scale. On Quaternius's bodies the man and the woman are two meshes, each with its own copy of every look, as Valheim and Kenshi do it (D599); today's Tripo base makes the woman a morph of the man (D112). Each slider setting and each named template is a setting of those, not a separate model.
 - **One skeleton.** Every body has our skeleton (D115), and every animation plays on every body.
 - **Gear is made once, on the base.** It rides the skeleton, so proportions come free, and it carries the base's morphs, copied by a tool. That is how Starfield, Red Dead Redemption 2, Final Fantasy XIV and Bannerlord fit one item to every body.
 - **The body hides what is covered.** The body is divided into patches; each item says which it covers, and those are not drawn while it is worn. The patches are the same on every body, because the mesh is.
 - **What does not bend hangs on named points with fixed axes.** Every body has the same sockets, placed for that body. A sword or a quiver is made once to its kind's convention and fits every body; how each kind of look goes on, with the sockets' axes and every key its file carries, is [the attachment contract](attachment.md) (D546).
-- **Generated art supplies the look, not the shape's structure.** Tripo makes a body's look; that body becomes a shape of the shared mesh with its texture copied onto the shared layout. Tripo makes a garment's look once, as the base body wearing it; that look is baked onto the garment.
+- **Quaternius supplies the shapes, we supply the paint** (D599): their bodies' and outfits' meshes, UVs, normal maps and weights are kept, their colour and roughness repainted in our materials to the art style. Until the switch, generated art supplies the look, not the shape's structure: Tripo makes a body's look; that body becomes a shape of the shared mesh with its texture copied onto the shared layout. Tripo makes a garment's look once, as the base body wearing it; that look is baked onto the garment.
 
 ### Bodies
 
@@ -74,6 +74,7 @@ No layers (one piece per slot), but pieces from different slots overlap: a pack'
 
 ## The base body
 
+- **Moving to Quaternius's Regular man and woman** (D599), each made once and checked before anything is built on it. Until then:
 - **One mesh, made once and checked**: our own base male in our T-pose, drawn as a design sheet and made by Tripo (D115), wearing plain close-fitting underwear painted on with almost no relief (D186). It has our skeleton, skin weights made for it, the skin patches (1,024) and the socket rules, and passes the rig checks before anything uses it.
 - **One skeleton**, with Unreal's bone names, which Quaternius's animation libraries use; Tripo's V3 rig is converted onto it, keeping its weighted twist bones (D115).
 - **Twist and skinning**: a limb's roll is moved to the hand and foot and spread over the twist bones, baked into each clip (Unreal's twist bones); bodies and gear are skinned weight-blended, dual quaternions but round the hips (our own skinning shader).
@@ -94,7 +95,7 @@ The pipeline is in [tools/characters](../tools/characters/README.md) and the ste
 
 The checks run on every item, on every body, through clips that bend and reach, so a person isn't the test:
 
-- **Bodies:** the rig checks against our skeleton and the mannequin, and a deformation check along every limb; their proportions (reach, where the fingertips hang, the crotch) against ANSUR II's men (`proportions.py`). Generated bodies come with short arms and a low crotch, so the pipeline stretches every person's arms and legs and scales them back to their height, and their designs and dressed models by the same warp (`stretch.py`, D593).
+- **Bodies:** the rig checks against our skeleton and the mannequin, and a deformation check along every limb; their proportions (reach, where the fingertips hang, the crotch) against ANSUR II's men (`proportions.py`). Generated bodies come with short arms and a low crotch, so the pipeline stretches every person's arms and legs and scales them back to their height, and their designs and dressed models by the same warp (`stretch.py`, D593). The stretch goes with the Tripo body; whether Quaternius's man gets a smaller one, once, at import, is open (D599).
 - **The attachment contract:** every committed held and worn look against its kind's rules, and the base's sockets against their axes, from the files alone in a second (`tools/characters/attach_contract.ts`, in `cargo xtask check`; [the check](attachment.md#the-check)).
 - **Clips:** each one is one our skinning can follow.
 - **Clothing and armour:** how much skin pokes through it, frame by frame; the clipping fixer (BodySlide's, per morph, through our clips) records how far each part must move out, and a round is kept only while it helps.

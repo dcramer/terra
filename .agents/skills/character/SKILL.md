@@ -7,6 +7,8 @@ description: Make a game character for Terra (a base body, an NPC, a body templa
 
 From a design to a model that plays every animation in the game, with Tripo doing the hard parts and scripts doing the rest. Worked out on 2026-10-11 ([research](../../../research/ai-models-for-art.md#characters-made-and-rigged), D115). The male base body was made this way.
 
+**The base bodies are moving to Quaternius's** (D599): their Regular man and woman and their fantasy outfits, CC0, kept in shape and repainted in our materials, by the jobs in [the research note](../../../research/2026-11-02-character-base.md#the-switch-in-jobs). Make no new base body or base garment with Tripo; until the switch lands, the steps below keep today's base and its gear building. Tripo still makes held things and packs' bags.
+
 Everything runs from the repository root under WSL, with the Windows Blender (`tools/blender/run.sh`, which finds it) for the steps that must run inside Blender, and the Tripo CLI (`tools/tripo/tripo.ts`, the `tripo` skill) for everything Tripo does, logged in with `TRIPO_STUDIO_COOKIE` in `.env`. Check it first with `node tools/tripo/tripo.ts balance`.
 
 Costs per character, on the Studio subscription: design sheets are free (100 images a month); the model and the rig cost what [tools/tripo/README.md](../../../tools/tripo/README.md) lists.

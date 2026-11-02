@@ -151,6 +151,30 @@ Stills: `~/.cache/terra-review/char-base-trial/` (naked row, dressed rows, close
 
 **Not done** (char-base j3 stopped at its context bound): their bodies in play with the idle, walk, sword guard and crouch beside ours, and films of them. Copies of their four models with the mannequin's clips, with and without the joints' positions, are rebuilt in a minute by the job's scripts (the handoff `char-base-j3.md`).
 
+## The switch in jobs
+
+The developer chose, 2026-11-02: "Their shapes, our paint" (D599). The shortest path to what v0 needs ([v0-goals.md](../docs/v0-goals.md)): a man and a woman, a few sliders that tell two players apart, the gear v0 already has (the starting kit's small pack, leather coat, trousers and boots, its tools, the sword and shield), the arm the mark shows on (D590), and our locomotion and fight clips on them. Each job is bounded and lands on its own; today's base stays in the game until job 7.
+
+| # | Job | Done when |
+|---|---|---|
+| 1 | **Vendor the files.** The Regular man and woman (full body and head), their eyes, the five hairstyles to start, and the Ranger and Peasant outfits, into `art/characters/quaternius/`, textures cut to 2K, with Quaternius's CC0 notice beside them, a `THIRD_PARTY.md` row and `art/README.md`'s line. Only what v0 uses | A clean checkout holds them; nothing reads them yet |
+| 2 | **The man through our pipeline.** An import step in place of Tripo's conversion: each bone turned to point at its child (the rest-pose check fails at 12° today), the 8 twist bones added with the forearm's and shin's weights split along them, the arm stretch if the developer wants it (D599's open point), sockets and the 1,024 skin patches, clips carried by `retarget.py` | `rig_check`, `proportions.py`, `clip_check` and `attach_contract` pass on him |
+| 3 | **The woman, the same.** Her own mesh, so her own patches and her own copy of each look; `proportions.py` given a woman's ANSUR II bands first | The same checks pass on her, against a woman's bands |
+| 4 | **The paint as a tool.** This job's repaint (`target/job`'s `paint.py`, below) graduated to `tools/characters/`, the materials and their numbers as data per outfit, for both bodies and two skin tones | Both bodies and the Ranger and Peasant repainted by one command; the art style's checklist on the sheets |
+| 5 | **The starting kit as outfit data.** Their parts mapped onto our slots as `fit.json` data (a `vendor` kind: the part's mesh, already skinned to the skeleton, rebound as it is): Ranger body as the leather coat, legs as trousers, boots as boots, each on both bodies; the small pack's bag and harness refitted by `fit_gear.py` and `bands.py`; the patches each hides | `gear_check` under 2% through every clip on both bodies; the icons repainted |
+| 6 | **The fight on them.** The sword and shield refitted to the new sockets (`fit_held.py`), `fight.glb` rebuilt, the locomotion set carried; the carry aims and arm keeping dropped one by one where the checks allow | `cargo xtask combat` and `cargo xtask controller` no worse than their baselines; `moves.ts` passes |
+| 7 | **Into the game.** `build_bodies.sh` writes a body a sex; the game's appearance chooses the body by sex rather than a `female` morph (`terra_walker::appearance`, `templates.json`); the arm's skin region named as data for the mark (D590) | The play and workbench films of the four moves on both bodies; the developer's yes on the desk |
+| 8 | **What goes.** Today's Tripo base and its designs (`art/characters/base-male`, `base-female`, the `dressed-*` art), `convert_rig.py`'s Tripo path, `stretch.py` (unless the developer keeps the arm stretch), `make_character.sh` and `finish_character.sh` for bodies, `paint_skin.sh`, and `shell_garment.py` and `hung_garment.py` with the looks only they make, once nothing in v0 wears them | `cargo xtask check --all` passes with none of them |
+
+The checks move with the jobs: the rig baseline is recorded again on the new man (job 2), the proportion bands gain a woman's (3), the gear gate and the attachment contract's socket axes run on both bodies (5, 6), and the workbench sheets and films are made again from the same views (7).
+
+**Later, past v0:**
+- The build morphs (heavy, thin, strong) on both bodies, unless Front's creator wants a build slider for v0. Two players are told apart by sex, height, skin and hair without them.
+- The other outfits (Knight, Noble, Wizard) and the full catalogue as data, recoloured by role (D182).
+- Triangle budgets for crowds: a body with an outfit is about 33k triangles against the art style's 2,500 to 5,000. Two players draw that easily; a town of NPCs needs levels of detail cut to budget (docs/characters.md, phase 6).
+
+**The Bestiary's monsters for v0.** The skeletons, the Hellwarden and the Tidebreaker are on the same 65 joints (the Lycan adds a tail, the Imp and Puglin have 55), with no clips of their own, so our humanoid clips play on them. They fit a cave (the troll's, D591). They would need our paint and levels of detail (7.5k to 19.8k triangles against a creature's 1.5k to 4k), and v0's monsters come from the creature pipeline's body plans (D436). They could serve as humanoid monsters; nothing is built on that.
+
 ## Limits
 
 - The trial above supersedes this bullet for Quaternius: Nothing was downloaded or tried: the shared skeleton, the layouts and the proportions of Quaternius's bodies are claims until the comparison job measures them. Its free editions need itch.io's download page, which a script could not reach.

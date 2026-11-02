@@ -359,7 +359,7 @@ The look, models, bodies and gear, textures and audio.
 | [D112](decisions/D112.md) | How body templates are made | Tech | Agent | Leaning | One base body, made once and checked: one mesh… |
 | [D113](decisions/D113.md) | How sound is put together | Tech | Agent | Decided | Gameplay says what happened as a `Noise` (what, where)… |
 | [D114](decisions/D114.md) | What the game sounds like, for now | Design | Agent | Leaning | Sound carries information; music is sparse and follows… |
-| [D115](decisions/D115.md) | How characters are made and rigged | Tech | Agent | Leaning | A character's base body is drawn as a design sheet in a… |
+| [D115](decisions/D115.md) | How characters are made and rigged | Tech | Agent | Leaning | The base bodies are moving onto Quaternius's (D599)… |
 | [D120](decisions/D120.md) | Scripting Tripo | Tech | Agent | Decided | One command-line tool, tools/tripo… |
 | [D128](decisions/D128.md) | How equipment fits every body | Tech | Agent | Leaning | Every item fits every body by contract… |
 | [D147](decisions/D147.md) | Props with no free model | Tech | Agent | Leaning | A prop no free pack covers is made by tools/props… |
@@ -476,6 +476,7 @@ The look, models, bodies and gear, textures and audio.
 | [D588](decisions/D588.md) | Moves with a start and an end are keyed from a generated pose sheet, on our own skeleton | Design | Developers | Decided | Moves with a clear start and end that no source does… |
 | [D593](decisions/D593.md) | The base body's arms and legs are stretched in the character pipeline | Design | Agent | Leaning | The base body's arms are lengthened to a 1.86 m reach… |
 | [D597](decisions/D597.md) | Trees sway as a hierarchy: trunk, each branch about its own root with its own phase, leaf clusters on their stalks | Tech | — | Open | Open: whether to replace the one bend every vertex of a… |
+| [D599](decisions/D599.md) | Characters are built on Quaternius's bodies and outfits, in our paint | Design | Developers | Decided | Terra's people are built on Quaternius's base bodies… |
 
 ## Engine and code
 
