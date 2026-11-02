@@ -156,9 +156,10 @@ impl Game<'_> {
             None => None,
         };
         // The kits' files are read from the source's assets, through WSL's share, so one saved
-        // while the copy runs is seen (WSLENV's `/p` gives Windows the path as it names it).
+        // while the copy runs is seen (WSLENV's `/p` gives Windows the path as it names it). The
+        // worktree goes as WSL names it, for the game's single-instance record (D319).
         let wslenv = std::env::var("WSLENV").unwrap_or_default();
-        let wslenv = [wslenv.as_str(), "TERRA_SOURCE_ASSETS/p"]
+        let wslenv = [wslenv.as_str(), "TERRA_SOURCE_ASSETS/p", "TERRA_WORKTREE"]
             .into_iter()
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
@@ -170,6 +171,7 @@ impl Game<'_> {
             if on_wsl() {
                 command
                     .env("TERRA_SOURCE_ASSETS", root().join("assets"))
+                    .env("TERRA_WORKTREE", root())
                     .env("WSLENV", &wslenv);
             } else {
                 // Run outside Cargo, a Bevy program looks for assets/ next to itself.

@@ -81,6 +81,7 @@ pub mod shader_patch;
 mod shaders_tests;
 pub mod shell;
 pub mod shore;
+pub mod single_instance;
 pub mod sky;
 pub mod sky_occlusion;
 pub mod skylight;

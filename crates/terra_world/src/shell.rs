@@ -78,6 +78,9 @@ usage: terra_sandbox [options]
                         screen asleep or locked, covers nothing, measures every machine at
                         the same size, and waits for the GPU each frame so a benchmark
                         times the GPU's work too
+  --multirun            start beside the copy of the game already running, for a
+                        two-player test on one machine; the game otherwise refuses a
+                        second copy, and nothing allows a third (D319)
   --quality <preset>    draw at the low, medium, high or ultra quality preset, rather than
                         the one chosen for the GPU (an integrated GPU low, any other
                         high); ultra, for films, spends the GPU on distance (D428)
@@ -295,6 +298,9 @@ pub struct Options {
     pub on_top: bool,
     /// Draw into a picture instead of the window (`--offscreen`); unattended, no window opens.
     pub offscreen: bool,
+    /// One more copy of the game beside the one running, for a two-player test (`--multirun`,
+    /// D319, `single_instance`).
+    pub multirun: bool,
     pub remote_token: String,
     /// Tunables set at the start (`--tune NAME=VALUE`, D547).
     pub tunes: Vec<(String, f32)>,
@@ -522,6 +528,7 @@ impl Options {
             "--background" => &mut self.background,
             "--on-top" => &mut self.on_top,
             "--offscreen" => &mut self.offscreen,
+            crate::single_instance::SWITCH => &mut self.multirun,
             "--clean" => &mut self.clean,
             "--water-mask" => &mut self.water_mask,
             "--flame-matte" => &mut self.flame_matte,
@@ -578,6 +585,7 @@ impl Options {
             background: false,
             on_top: false,
             offscreen: false,
+            multirun: false,
             remote_token: String::new(),
             tunes: Vec::new(),
             clean: false,
@@ -1004,6 +1012,7 @@ fn window(options: &Options) -> Window {
 
 impl Plugin for ShellPlugin {
     fn build(&self, app: &mut App) {
+        crate::single_instance::take(self.0.multirun);
         if self.0.scripted() {
             stay_awake();
         }
@@ -1674,7 +1683,7 @@ pub fn counting(options: &Options, screen: &State<Screen>, hold: &loading::Hold)
 }
 
 /// Whether this is Linux under Windows.
-fn on_wsl() -> bool {
+pub(crate) fn on_wsl() -> bool {
     std::fs::read_to_string("/proc/version").is_ok_and(|v| v.to_lowercase().contains("microsoft"))
 }
 
