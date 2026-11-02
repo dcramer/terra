@@ -83,3 +83,7 @@ This is how game animators work: block the key poses, then time them. The sheet 
 - The body's short arms (0.44 m shoulder to wrist) keep the wind-up lower than the sheet's.
 - The forearm's roll and the fingers are simple: half the wrist's turn goes up the forearm, and the fingers hold the guard's grip.
 - `key.ts` knows the player's body and one guard; other bodies and templates were not tried.
+
+## The idle's palms
+
+The developer, on today's `Idle_Loop`: "hes standing there with his palms out". Measured at its first frame, a resting palm should face the thigh or a little behind it, as `Walk_Loop`'s do (17-27% backward on the right). Today's left palm is 36 degrees off the thigh and faces 40% forward; the right faces 10% forward. The keyed idle had copied those hands from its start pose, so it had the same fault. `palms` in the keys rolls each forearm (right 15, left 35 degrees), which brought the right to 16% backward. No test failed on this, and only the eye caught it: the idle was picked and passed the checks with its palms out. The arms still stand well away from the body in both idles.

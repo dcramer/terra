@@ -5,6 +5,7 @@
   "end": 6,
   "loop": true,
   "hang": true,
+  "palms": { "r": 15, "l": 35 },
   "keys": [
     { "t": 0, "guard": true, "panel": 1 },
     { "t": 0.9, "panel": 2,

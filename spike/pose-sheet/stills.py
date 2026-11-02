@@ -1,7 +1,9 @@
 """Stills of a clip at given moments, from the pose sheet's camera, tiled in a strip to lay beside
 the sheet. Run through tools/blender/run.sh:
 
-    tools/blender/run.sh spike/pose-sheet/stills.py OUT.png BODY.glb CLIP SIDE t1,t2,...
+    tools/blender/run.sh spike/pose-sheet/stills.py OUT.png BODY.glb CLIP SIDE t1,t2,... [empty]
+
+"empty" hangs no sword or shield and comes in close on the arms.
 """
 
 import math
@@ -16,7 +18,8 @@ from mathutils import Vector
 import look
 
 FPS = 30
-out, body, clip, side, moments = look.args()
+out, body, clip, side, moments, *rest = look.args()
+empty = bool(rest)
 out = look.path(out)
 look.reset()
 scene = bpy.context.scene
@@ -29,7 +32,7 @@ scene.render.resolution_x, scene.render.resolution_y = 360, 600
 bpy.ops.import_scene.gltf(filepath=look.path(body))
 arm = next(o for o in scene.objects if o.type == "ARMATURE")
 look.skin_as_game()
-for s, path in zip("RL", ("assets/models/held/arming_sword.glb", "assets/models/held/heater_shield.glb")):
+for s, path in () if empty else zip("RL", ("assets/models/held/arming_sword.glb", "assets/models/held/heater_shield.glb")):
     socket = next(o for o in scene.objects if o.name.startswith(f"socket.hand.{s}"))
     before = set(scene.objects)
     bpy.ops.import_scene.gltf(filepath=look.path(path))
@@ -53,8 +56,8 @@ cam.data.lens = 50
 scene.collection.objects.link(cam)
 scene.camera = cam
 a = math.radians(float(side))
-look_at = Vector((0, -0.2, 1.05))
-cam.location = look_at + Vector((-math.sin(a), -math.cos(a), 0)) * 5.2 + Vector((0, 0, 0.25))
+look_at = Vector((0, 0, 0.95)) if empty else Vector((0, -0.2, 1.05))
+cam.location = look_at + Vector((-math.sin(a), -math.cos(a), 0)) * (2.6 if empty else 5.2) + Vector((0, 0, 0.25))
 cam.rotation_euler = (look_at - cam.location).to_track_quat("-Z", "Y").to_euler()
 
 tiles = []
