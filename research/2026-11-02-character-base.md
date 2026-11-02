@@ -153,14 +153,43 @@ Stills: `~/.cache/terra-review/char-base-trial/` (naked row, dressed rows, close
 
 **Our paint on one outfit** (char-base j4): the Ranger man's outfit and skin repainted by a Blender script that keeps the shapes, UVs and normal maps and changes only colour and roughness, as a texture artist's smart materials do. Each texel's material comes from their own roughness and metal map (metal where metal, cloth where roughness is near 1, leather the rest: 46% cloth, 48% leather, 6% metal on the Ranger). Each material gets a grain at its real size (a plain weave about 5 mm a thread pair, pebbled leather, scratched metal), wear on what sticks out and dirt in what sinks in, read from the normal map's curvature and the map's occlusion, and a grade towards plant-dye olive. A first pass: the weave reads, a little too regular; the leather's wear is faint.
 
+## Clothing on the Quaternius bodies
+
+char-switch j1, 2026-11-02, the developer's worry: "we might have an issue w/ clothing/etc". Stopped part-way at the developer's call; what is measured is marked so, the rest is the next job's. Measured on `All_Male.blend` (every outfit piece's mesh, materials, modifiers and bounds, by a Blender script) and the glTF exports' references.
+
+**The rule.** Their parts stay as made (D599, the developers): no push, stretch, scaling, retopology, decimation or cutting of their meshes; only paint on their UVs and new pieces of our own fitted to them.
+
+**How their outfits are built** (measured):
+- **One piece a slot, separate meshes:** Head, Body, Arms, Legs, Feet, and accessories (pauldrons, belts, bracers, a scarf). The Ranger man is Hood 2,136 triangles, Body 2,998, two belts 804 each, Arms 2,464 and Bracer 1,818 (each one side in the `.blend`, mirrored), Pauldron 1,376, Legs 1,128, Boots 9,172; the Peasant man is Body 3,856, Arms 5,338, Legs 1,112, Feet 2,588. Each is skinned to the same 65-joint armature.
+- **They replace the body, not cover it.** The pack's readme: "When using the clothing, only the head of the model is required. Using the full body will result in clipping." An outfit is worn on the head-only body, and its pieces carry the skin they show: the Ranger's Arms piece is 470 faces of skin (`MI_Regular_Male`) and 763 of cloth, the Peasant's Arms 1,967 of skin (hands and forearms) and 704 of cloth.
+- **Pieces overlap at the waist:** each Body's hem hangs 13 to 15 cm over the Legs' waistband (Ranger Body down to 0.909 m, Peasant Legs up to 1.054 m; Peasant Body to 0.921 m, Ranger Legs up to 1.051 m), the tunic over the trousers.
+- **One texture set an outfit, shared by the man's and the woman's pieces** (`T_Ranger_BaseColor/Normal/ORM`, 4096², referenced by both sexes' glTFs), with two more colourways.
+- **In the `.blend`, several pieces are not final:** Arms and Bracers carry a mirror modifier, and the Peasant, Noble and Ranger bodies a geometry-nodes modifier. The glTF exports have them applied, so the exports are the shipped pieces and the reference our outputs are checked against. The Peasant's `.blend` uses its DirectX-style normal map (`Normals-UnrealEngine`); the glTF export's sits beside it.
+
+**Against our items** (the slots in `assets/data/items.ron`; by bounds and names, not yet worn):
+
+| Our item (slot) | Their piece | Gap |
+|---|---|---|
+| `leather_coat` (Body) | Ranger Body + Arms (+ Bracers, belts) | We have no Arms slot: one item is two or more of their pieces |
+| `trousers` (Legs) | Ranger Legs or Peasant Legs | — |
+| `boots` (Feet) | Ranger Boots or Peasant Feet | — |
+| `small_pack` (Pack) | None | A new piece of ours on their body |
+| `quiver` (Belt) | None | Ours, rigid on the belt socket |
+| Plain shirt, apron | Peasant Body is a tunic; no apron | Apron ours |
+| Sword, shield | None (held, not worn) | Ours, refitted to their sockets |
+
+**The question this raises, for the developer:** an empty slot. Their pieces assume a piece in every slot on a head-only body. Our game lets a player take the coat off, so something must show where it was: their full body under their pieces clips (their readme), and hiding the body's skin under a piece is a cut "beyond what they ship". Our skin patches hide skin by a shader mask without changing the mesh (`body_mask.wesl`); whether that counts as cutting is the developer's call. The alternative within the rule is a "bare" piece for each slot, which they do not ship.
+
+**Not measured yet** (the next job): pieces from different outfits worn together through the clips (`gear_check`, the Ranger body on Peasant legs); our garment tools making the pack or coat on their body; one piece repainted beside an unpainted one; the woman's pieces. The woman's cost is already plain in part: her pieces are her own meshes (each item made and checked twice), but they share the outfit's textures, so paint is once an outfit.
+
 ## The switch in jobs
 
 The developer chose, 2026-11-02: "Their shapes, our paint" (D599). The shortest path to what v0 needs ([v0-goals.md](../docs/v0-goals.md)): a man and a woman, a few sliders that tell two players apart, the gear v0 already has (the starting kit's small pack, leather coat, trousers and boots, its tools, the sword and shield), the arm the mark shows on (D590), and our locomotion and fight clips on them. Each job is bounded and lands on its own; today's base stays in the game until job 7.
 
 | # | Job | Done when |
 |---|---|---|
-| 1 | **Vendor the files.** The Regular man and woman (full body and head), their eyes, the five hairstyles to start, and the Ranger and Peasant outfits, into `art/characters/quaternius/`, textures cut to 2K, with Quaternius's CC0 notice beside them, a `THIRD_PARTY.md` row and `art/README.md`'s line. Only what v0 uses | A clean checkout holds them; nothing reads them yet |
-| 2 | **The man through our pipeline.** An import step in place of Tripo's conversion: each bone turned to point at its child (the rest-pose check fails at 12° today), the 8 twist bones added with the forearm's and shin's weights split along them, the arm stretch if the developer wants it (D599's open point), sockets and the 1,024 skin patches, clips carried by `retarget.py` | `rig_check`, `proportions.py`, `clip_check` and `attach_contract` pass on him |
+| 1 | **Vendor the files.** The Regular man and woman (full body and head), their eyes, the five hairstyles to start, and the Ranger and Peasant outfits, into `art/characters/quaternius/`, as shipped (textures at 4096², never edited; any smaller copy is an output), with Quaternius's CC0 notice beside them, a `THIRD_PARTY.md` row and `art/README.md`'s line. Only what v0 uses. **Done** (char-switch j1) but for the hairstyles, as the glTF exports, 126 MB in Git LFS | A clean checkout holds them; nothing reads them yet |
+| 2 | **The man through our pipeline.** An import step in place of Tripo's conversion: each bone turned to point at its child (the rest-pose check fails at 12° today), the 8 twist bones added with the forearm's and shin's weights split along them, no stretch (D599: their parts stay as made; turning their bones and splitting their weights onto twist bones changes their bones and weights too, so this step is to be re-planned within the rule first), sockets and the 1,024 skin patches, clips carried by `retarget.py` | `rig_check`, `proportions.py`, `clip_check` and `attach_contract` pass on him |
 | 3 | **The woman, the same.** Her own mesh, so her own patches and her own copy of each look; `proportions.py` given a woman's ANSUR II bands first | The same checks pass on her, against a woman's bands |
 | 4 | **The paint as a tool.** This job's repaint (`target/job`'s `paint.py`, below) graduated to `tools/characters/`, the materials and their numbers as data per outfit, for both bodies and two skin tones | Both bodies and the Ranger and Peasant repainted by one command; the art style's checklist on the sheets |
 | 5 | **The starting kit as outfit data.** Their parts mapped onto our slots as `fit.json` data (a `vendor` kind: the part's mesh, already skinned to the skeleton, rebound as it is): Ranger body as the leather coat, legs as trousers, boots as boots, each on both bodies; the small pack's bag and harness refitted by `fit_gear.py` and `bands.py`; the patches each hides | `gear_check` under 2% through every clip on both bodies; the icons repainted |

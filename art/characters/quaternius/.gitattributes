@@ -1,0 +1,3 @@
+# Quaternius's files are kept byte for byte as shipped (D599): no line-ending conversion, so
+# SHA256SUMS holds on every checkout. Images and buffers still go to LFS by the root's rules.
+* -text
