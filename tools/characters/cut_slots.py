@@ -1,0 +1,105 @@
+"""The bare slot pieces for D600's trial, cut from a copy of Quaternius's full body: a torso, legs
+and feet, each an exact cut (every triangle, vertex, normal, UV and weight theirs, nothing
+moved or added), as their own UpperBody is a cut of their FullBody. With their UpperBody (head,
+shoulders, arms and hands) the four make the whole body again, triangle for triangle. Their
+files stay as shipped; the cuts are separate outputs, and `intact.ts` names each as a cut.
+
+    tools/blender/run.sh tools/characters/cut_slots.py [male|female]
+
+Writes tools/characters/out/quaternius-SEX-bare-{torso,legs,feet}.glb, and
+quaternius-SEX-patched.glb: their full body whole, with its skin patches (patches.py) in a
+second UV set, as the game would hide it under worn pieces (the trial's other way).
+
+A face goes to a slot by its centre's height, so a cut runs along their edges: the faces of
+their UpperBody are left to it; below, feet under FEET_M, legs under WAIST_M, the torso above.
+The heights sit where the man's Ranger pieces both cover (measured on their rims): the legs'
+hem at 0.42-0.43 m and the boots' top at 0.56 m, so a bare foot reaches up under the legs and a
+bare shin down into the boots; the tunic's hem from 0.92 m and the legs' top at 1.05 m.
+"""
+
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import bmesh
+import bpy
+from mathutils.kdtree import KDTree
+
+import look
+import patches
+
+FEET_M = 0.44
+WAIST_M = 1.03
+SEX = (look.args() or ["male"])[0].capitalize()
+UBC = os.path.join(look.ART, "characters", "quaternius", "universal-base-characters")
+FULL = os.path.join(UBC, f"Regular_{SEX}_FullBody.gltf")
+UPPER = os.path.join(UBC, f"Regular_{SEX}_UpperBody.gltf")
+OUT = look.OUT
+
+
+def load(path):
+    look.reset()
+    bpy.ops.import_scene.gltf(filepath=path)
+    arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
+    body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.polygons))
+    return arm, body
+
+
+def export(path, objects):
+    for o in bpy.context.scene.objects:
+        o.select_set(o in objects)
+    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_animations=False,
+                              export_all_influences=True, export_extras=True, export_morph=False)
+    print("WROTE", os.path.relpath(path, look.ROOT))
+
+
+# Their UpperBody's faces by centre, so the cuts leave them to it.
+_, upper = load(UPPER)
+uc = [upper.matrix_world @ p.center for p in upper.data.polygons]
+tree = KDTree(len(uc))
+for i, c in enumerate(uc):
+    tree.insert(c, i)
+tree.balance()
+
+arm, body = load(FULL)
+centres = [body.matrix_world @ p.center for p in body.data.polygons]
+slot = []
+for c in centres:
+    if tree.find(c)[2] < 1e-5:
+        slot.append("upper")
+    else:
+        slot.append("feet" if c.z < FEET_M else "legs" if c.z < WAIST_M else "torso")
+counts = {s: slot.count(s) for s in ("upper", "torso", "legs", "feet")}
+print("SLOTS", ", ".join(f"{s} {n}" for s, n in counts.items()), f"of {len(slot)} faces; UpperBody has {len(uc)}")
+if counts["upper"] != len(uc):
+    raise SystemExit(f"cut_slots: {counts['upper']} of the full body's faces match their UpperBody's {len(uc)}; the two files no longer agree, so the cuts would not make the body whole again")
+
+# The whole body with its patches, for the hidden way; the eyes and brows go with it.
+patches.mark(body)
+export(os.path.join(OUT, f"quaternius-{SEX.lower()}-patched.glb"), [arm, *[o for o in bpy.context.scene.objects if o.type == "MESH"]])
+body.data.uv_layers.remove(body.data.uv_layers[patches.LAYER])
+
+for name in ("torso", "legs", "feet"):
+    arm, body = load(FULL)
+    for o in [o for o in bpy.context.scene.objects if o.type == "MESH" and o is not body]:
+        bpy.data.objects.remove(o)
+    # Their normals, corner by corner, kept: Blender holds custom normals relative to each
+    # corner's fan of faces, so taking faces away would turn the border's normals (up to 22
+    # degrees at the ankle) unless they are set again as they were.
+    me = body.data
+    kept = [p.index for p in me.polygons if slot[p.index] == name]
+    normals = [tuple(me.corner_normals[li].vector) for i in kept for li in me.polygons[i].loop_indices]
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if slot[f.index] != name], context="FACES_ONLY")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bm.to_mesh(me)
+    bm.free()
+    if len(me.loops) != len(normals):
+        raise SystemExit(f"cut_slots: the {name} cut has {len(me.loops)} corners, {len(normals)} expected")
+    me.normals_split_custom_set(normals)
+    body.name = body.data.name = f"Regular{SEX}_Bare_{name.capitalize()}"
+    export(os.path.join(OUT, f"quaternius-{SEX.lower()}-bare-{name}.glb"), [arm, body])

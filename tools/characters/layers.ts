@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { type Clip, Glb, matrix, mmul, type Pose, posed, qinv, qmul, rot, type V3 } from "./glb.ts";
 import { type Piece, pieces } from "./intact.ts";
 
-const MANNEQUIN = fileURLToPath(new URL("../../assets/models/character/mannequin.glb", import.meta.url));
+export const MANNEQUIN = fileURLToPath(new URL("../../assets/models/character/mannequin.glb", import.meta.url));
 
 /** Each node of `body` by name, in the model's space, posed by `clip` at `t` as made on `from`'s
  *  skeleton (no clip: at rest). */
@@ -109,6 +109,13 @@ export function hits(o: V3, d: V3, pos: Float64Array, tris: Uint32Array, list: n
 
 /** The vertices on a piece's open boundary within `band` of its highest point: its top edge. */
 export function topEdge(p: Piece, band = 0.03): number[] {
+  let top = -Infinity;
+  for (let i = 0; i < p.count; i++) top = Math.max(top, p.pos[3 * i + 1]);
+  return openEdge(p).filter((i) => p.pos[3 * i + 1] > top - band);
+}
+
+/** The vertices on a piece's open boundary (edges of one triangle), one per place. */
+export function openEdge(p: Piece): number[] {
   const key = (i: number) => `${Math.round(p.pos[3 * i] * 1e4)},${Math.round(p.pos[3 * i + 1] * 1e4)},${Math.round(p.pos[3 * i + 2] * 1e4)}`;
   const keys = Array.from({ length: p.count }, (_, i) => key(i));
   const edges = new Map<string, number>();
@@ -120,11 +127,9 @@ export function topEdge(p: Piece, band = 0.03): number[] {
     }
   const open = new Set<string>();
   for (const [id, n] of edges) if (n === 1) id.split("|").forEach((k) => open.add(k));
-  let top = -Infinity;
-  for (let i = 0; i < p.count; i++) top = Math.max(top, p.pos[3 * i + 1]);
   const seen = new Set<string>();
   const out: number[] = [];
-  for (let i = 0; i < p.count; i++) if (open.has(keys[i]) && p.pos[3 * i + 1] > top - band && !seen.has(keys[i])) (seen.add(keys[i]), out.push(i));
+  for (let i = 0; i < p.count; i++) if (open.has(keys[i]) && !seen.has(keys[i])) (seen.add(keys[i]), out.push(i));
   return out;
 }
 
@@ -186,7 +191,7 @@ export function anchor(p: Piece, i: number, v: V3, joints: Map<string, Pose>, ch
 }
 
 /** Each vertex of `a` within `r` of a vertex of `b`, at rest. */
-function within(a: Piece, b: Piece, r: number): number[] {
+export function within(a: Piece, b: Piece, r: number): number[] {
   const out: number[] = [];
   for (let i = 0; i < a.count; i++)
     for (let j = 0; j < b.count; j++)
@@ -198,7 +203,7 @@ function within(a: Piece, b: Piece, r: number): number[] {
 }
 
 /** The outer's triangles (index of the first corner) with a corner within `r` of a vertex listed. */
-function trianglesNear(outer: Piece, inner: Piece, list: number[], r: number): number[] {
+export function trianglesNear(outer: Piece, inner: Piece, list: number[], r: number): number[] {
   const close = new Uint8Array(outer.count);
   for (let j = 0; j < outer.count; j++)
     for (const i of list)

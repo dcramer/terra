@@ -374,8 +374,8 @@ if (import.meta.main) {
     const r = check(new Glb(f), srcs);
     const list = (xs: string[]) => (xs.length > 6 ? `${xs.slice(0, 6).join(", ")}, ...` : xs.join(", "));
     const ours = r.ours.length ? `; ${r.ours.length} of ours not checked (${list(r.ours)})` : "";
-    const cuts = r.cuts.length ? `; ${r.cuts.length} exact cuts of theirs: ${r.cuts.join(", ")}` : "";
-    if (r.ok) console.log(r.theirs.length || r.cuts.length ? `✓ intact: ${f} keeps ${r.theirs.length} of their pieces as made (${r.theirs.join(", ")})${cuts}${ours}` : `· intact: ${f} has none of their pieces${ours}`);
+    const said = [r.theirs.length && `keeps ${r.theirs.length} of their pieces as made (${r.theirs.join(", ")})`, r.cuts.length && `has ${r.cuts.length} exact cuts of theirs: ${r.cuts.join(", ")}`].filter(Boolean).join("; ");
+    if (r.ok) console.log(said ? `✓ intact: ${f} ${said}${ours}` : `· intact: ${f} has none of their pieces${ours}`);
     else {
       failed = true;
       console.log(`✗ intact: ${f}\n  ${r.lines.join("\n  ")}`);
