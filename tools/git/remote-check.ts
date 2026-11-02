@@ -3,7 +3,9 @@
 // one-definition lints, clippy of the crates changed) on the worker at each commit being pushed,
 // over what it changed since its merge-base with origin/main, and passes or fails on the result.
 // For a machine that must not build (an embargo, a laptop); never a way to skip the checks: a
-// worker that cannot be reached fails the push.
+// worker that cannot be reached fails the push. A pass is kept, and a push that lost its race
+// and was rebased cleanly reuses it when its patches are the same and main's new commits touch
+// nothing the check read (check-reuse.ts; TERRA_RECHECK=1 checks again regardless).
 //
 //   node tools/git/remote-check.ts --enabled   exits 0 when TERRA_REMOTE_CHECKS=1
 //   node tools/git/remote-check.ts             the commits on stdin, as git gives a pre-push hook
@@ -17,6 +19,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { envFile } from "../render-worker/client.ts";
+import { reusable, save } from "./check-reuse.ts";
 
 const CLIENT = resolve(import.meta.dirname, "../render-worker/client.ts");
 const ZERO = /^0+$/;
@@ -69,7 +72,20 @@ function main(argv: string[]): number {
   if (argv.includes("--enabled")) return enabled(cwd) ? 0 : 1;
   const stdin = process.stdin.isTTY ? "" : readFileSync(0, "utf8");
   const shas = stdin.trim() ? pushed(stdin) : [git(cwd, ["rev-parse", "HEAD"])];
-  for (const sha of shas) if (!check(cwd, sha)) return 1;
+  for (const sha of shas) {
+    const base = git(cwd, ["merge-base", sha, "origin/main"]);
+    // A lost race costs a re-push, not a re-check (check-reuse.ts): the same patches, passed
+    // over an older main whose new commits cannot change the check's result.
+    const reuse = base && process.env.TERRA_RECHECK !== "1" ? reusable(cwd, sha, base) : { why: "TERRA_RECHECK=1" };
+    if ("passed" in reuse) {
+      const { passed, gained } = reuse;
+      console.log(`✓ remote check of ${sha.slice(0, 9)}: reused the pass of ${passed.sha.slice(0, 9)} (${passed.at.slice(0, 16).replace("T", " ")} UTC), the same patches; main's ${gained} new commit${gained === 1 ? "" : "s"} since touch nothing it read (D445; TERRA_RECHECK=1 checks again)`);
+      continue;
+    }
+    if (base) console.log(`remote check of ${sha.slice(0, 9)}: no pass to reuse (${reuse.why})`);
+    if (!check(cwd, sha)) return 1;
+    if (base) save(cwd, sha, base);
+  }
   return 0;
 }
 
