@@ -15,7 +15,7 @@ The developer, after five rounds of the troll fight ([troll-fight.md](troll-figh
 - **Realistic but fun** (D122): weight and momentum read true; responsiveness wins where realism would be a chore.
 - **The server decides** (D51) and **shared state stays out of Bevy** (D28): where a body is, what move it is in, and whether a blow landed are simulation; the pose is presentation.
 - **Many of everything** (D127) and **kinds as data** (D136): a thousand players, crowds of people, packs of monsters; a new creature or move is a file, never code.
-- **One skeleton for people** (D115), clips made with Kimodo (D316) and carried onto each body by its limbs' turns from a retarget pose (D542, D360); creatures that are not people are animated by rule over their own skeletons (creatures.md).
+- **One skeleton for people** (D115), clips from the sources [animation.md](animation.md#where-a-clip-comes-from) lists (D532, D588 proposed) and carried onto each body by its limbs' turns from a retarget pose (D542, D360); creatures that are not people are animated by rule over their own skeletons (creatures.md).
 - **Layers** (D198): what a body does to move belongs to the walker; moves, hits and reactions to gameplay.
 
 ## The layers
@@ -61,7 +61,7 @@ A body's kind names its **move set** (`assets/data/moves/*.ron`): locomotion cli
 - its warp limits (how far and how much turn toward a target, and in which frames), and its aim: how far its body faces off the way it strikes, for a cut that lands off the clip's ahead (D573);
 - what it strikes with (a held item's socket, or bones), its damage and stamina, its sounds and effects by name.
 
-A **reaction set** per kind: additive flinches per zone, a stagger, a knockdown, a death, chosen by the blow's poise damage against the body's poise. A new move is a Kimodo prompt (`art/animation/sets/*.json`, made to start and end in its set's guard pose) and a few lines; a new creature is a body, a plan, a size, its volumes and its move set.
+A **reaction set** per kind: additive flinches per zone, a stagger, a knockdown, a death, chosen by the blow's poise damage against the body's poise. A new move is a Kimodo prompt (`art/animation/sets/*.json`, made to start and end in its set's guard pose) and a few lines, or under D588 a pose sheet and a file of keys; a new creature is a body, a plan, a size, its volumes and its move set.
 
 ## What we port, build and keep
 
@@ -148,7 +148,7 @@ They added: "we probably need to build better tools so you can ensure things are
 | Step | What it does | Fails on |
 |---|---|---|
 | Reference | Enshrouded's combat measured from first-party trailers and footage: a light blow's length, the cadence of a chain, wind-up, hit-stop, the roll's length and time, how fast a guard rises, a stagger, how close fighters stand, and the camera's distance and framing. The numbers and their sources are committed; the pictures are kept out of the repository | — |
-| Clip | One command a move: its spec (start and end in the guard pose, the way its blade sweeps, its length) made from the chosen source, carried onto the base body by aim and exported; its phases written into the move set from the clip, never typed | `moves.ts` |
+| Clip | One command a move: its spec (start and end in the guard pose, the way its blade sweeps, its length) made from the chosen source ([animation.md](animation.md#where-a-clip-comes-from); proposed for blows, a pose sheet keyed on our skeleton, D588, [keyed-moves.md](keyed-moves.md)), carried onto the base body by aim and exported; its phases written into the move set from the clip, never typed | `moves.ts` |
 | Rules | `terra_motion`'s duel test; our timings against the reference's ranges | The duel test; a timing check |
 | Look | A scripted duel in the yard, filmed from fixed cameras and the player's: a frame sheet and checks on the film (feet sliding, a gap where a chain was asked for, bodies overlapping). The player is driven by a fight script of intents (`--duel duels/yard.ron`, `terra_motion::script`), and the game writes every frame's fighters, asks and contacts (`--fight-log`, places in the start's terms as `--cine` takes them) for the checks to read; `cargo xtask duel` runs, films and checks it (tools/sandbox/duel.ts) | The film's checks |
 | Review | A blind adversarial review of the sheet against Enshrouded's frames, scored out of 10; stopped at the bar, or after two jobs without a gain | The score |

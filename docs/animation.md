@@ -43,6 +43,17 @@ This is the method every job that changes how a body moves follows. D584 holds t
    - Numbers are guard rails (foot sliding, the bone audit, nothing through the body), not the goal. A row passing never stands in for a look approved.
 7. **One owner at a time.** One job at a time changes how bodies move, working through the order below. Jobs on unrelated things run alongside it, but not on the same bodies.
 
+## Where a clip comes from
+
+The first step of every clip. Pick the row before making or buying anything.
+
+| The clip | Comes from | Then |
+|---|---|---|
+| Long cycles: idle, walk, jog, sprint, swim | Quaternius's packs, then Uthana (D532) | The ladder: raw, carried, eased, driven, in game |
+| Moves with a start and an end, where a source does them well | Quaternius's packs, then Uthana (D532) | The same ladder |
+| Blows, a tool's swing, a way of holding, where no source meshes | Today, our keyed takes through Kimodo (D450). Proposed: keyed against a pose sheet on our own skeleton (D588, Open, [keyed-moves.md](keyed-moves.md)) | Its gates, then both films. A keyed clip starts on the guard, so it needs no ease; it is driven only by a step it keys itself |
+| Anything else none of these has | Kimodo (D532) | The ladder |
+
 ## Order of work
 
 Each step ends with a film on the desk and the developer's yes before the next starts.

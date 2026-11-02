@@ -6,6 +6,20 @@ An image model draws a move as a strip of poses. An agent reads the strip and wr
 
 Status: proposal (D588, Open). One blow has been made this way, the slash, as a spike ([the note](../research/2026-11-01-pose-sheet-blow.md)); nothing in the game uses it. This doc says how the process runs and what it still lacks. [animation.md](animation.md) stays the method every clip follows: the film card, a wrong clip replaced and never patched, the developer's eye as the judge.
 
+## Where it sits in the pipeline
+
+It is the proposed source for one row of [animation.md's table of where a clip comes from](animation.md#where-a-clip-comes-from). Every doc an agent follows to make a clip points here, so nobody starts a blow without seeing it.
+
+If the developers take it up (D588 Decided), these change in one commit, the word "proposed" goes, and the row's Kimodo route is deleted (clean as you go):
+
+- [animation.md](animation.md): the table's row and step 5 of the order of work
+- [movement.md](movement.md): the pipeline's Clip step, the skeleton line and what a new move is
+- [assembled-items.md](assembled-items.md): how a class's clips are made
+- [tools/characters/README.md](../tools/characters/README.md): Made clips
+- the `combat` and `character` skills, and D450, D532 and D565 where they name the source
+
+If they don't, those lines and this doc are deleted, with the spike.
+
 ## What it is for
 
 Moves with a clear start and end that no source does well: blows first, then a tool's swing, a shield bash, a drink, a way of holding. It is how game animators work: block the key poses, then time them. The sheet stands in for their thumbnail sketches.

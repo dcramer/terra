@@ -17,7 +17,7 @@ Read [docs/movement.md](../../../docs/movement.md) ("The goal", the pipeline) be
 ## The loop, one job
 
 1. **Pick** the top failing criterion of the list below (or the one the brief names). One criterion, or one move's criteria together when one clip fixes them.
-2. **Change** the least that moves it: a key in `art/animation/sets/fight.json` and `clip.ts`, a number in `assets/data/moves/sword.shielded.ron`, a rule in `crates/terra_motion`.
+2. **Change** the least that moves it: a key in `art/animation/sets/fight.json` and `clip.ts`, a number in `assets/data/moves/sword.shielded.ron`, a rule in `crates/terra_motion`. A new blow: pick its source in [animation.md](../../../docs/animation.md#where-a-clip-comes-from) first (D588 proposes [keyed-moves.md](../../../docs/keyed-moves.md)).
 3. **Score**: `cargo xtask combat`. Nothing `✗`; the criterion's number lower.
 4. **Bank**: land on main (AGENTS.md); nightly lowers the baseline. Two jobs without a gain on a criterion: stop, step back (AGENTS.md), and hand it off with what was tried.
 5. **Film** when a move changed: `cargo xtask gpu film -- cargo xtask combat --film` (the duel's film and its checks; the film in `~/.cache/terra-review/duel/`). On a clean checkout of main its checks are kept by commit, so nightly banks the film's rows (`--filmed`, D452); a film of uncommitted work is never banked. A clip change never lands on the quick card alone: it skips 17 of the film's rows, and a set with a 68 cm foot slide once read 3 worse there (fight-swap j8). Run a bought clip up the ladder first (raw, carried, eased, driven, in game), before tuning its rows (research/2026-10-31-why-the-bought-blows-slide.md).
