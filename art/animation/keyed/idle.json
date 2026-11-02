@@ -34,7 +34,10 @@
   {
    "t": 0,
    "guard": true,
-   "panel": 1
+   "panel": 1,
+   "arm_r": {
+    "out": 0.3
+   }
   },
   {
    "t": 1.4,
@@ -63,7 +66,7 @@
    },
    "arm_r": {
     "forward": -1,
-    "out": 1,
+    "out": 2.5,
     "elbow": 2
    }
   },
@@ -125,7 +128,7 @@
    },
    "arm_l": {
     "forward": 0,
-    "out": 0,
+    "out": -0.5,
     "elbow": 0
    }
   },
@@ -195,7 +198,10 @@
   {
    "t": 6,
    "guard": true,
-   "panel": 5
+   "panel": 5,
+   "arm_r": {
+    "out": 0.3
+   }
   }
  ]
 }

@@ -55,5 +55,6 @@ test("the game's clips file swings a carried arm through the jog at its pose's s
   };
   const [tool, torch] = [turns(shares.Carry_Tool), turns(shares.Carry_Torch)];
   assert.ok(tool > 10 && torch < tool, `the jog swings the tool's arm ${tool.toFixed(1)} deg, the torch's ${torch.toFixed(1)}`);
-  assert.equal(turns(0), 0);
+  // No share, no swing: the arm as held, to float rounding (the file's quaternions are not exactly unit).
+  assert.ok(turns(0) < 1e-3, `a share of 0 still turns the arm ${turns(0)} deg`);
 });

@@ -6,7 +6,8 @@ mannequin file, each in place of the library's clip of the same name
 
 Each clip in art/animation/made.json has its take, a BVH on Kimodo's SOMA skeleton in its
 standard T-pose, at art/animation/made/<clip>.bvh, or a GLB on our own skeleton made by Uthana
-(D532) at art/animation/made/<clip>.glb (both made by motion.ts). For each:
+(D532) at art/animation/made/<clip>.glb (both made by motion.ts), or, for an entry with "keys",
+a GLB on our skeleton solved from its key poses by key.ts (D588) each run. For each:
 
   - the stride: from one left heel strike to the next, in the take's steady middle, whose first
     and last poses are nearest alike, so it loops with the smallest seam; or for a clip marked
@@ -24,8 +25,6 @@ standard T-pose, at art/animation/made/<clip>.bvh, or a GLB on our own skeleton 
     its seam, how far the hands, feet and head are from where they started relative to the
     hips before the easing, printed (cm) beside the most a limb or the trunk turned (deg), and
     the take's mean turn of its bones there, which chose the loop (apart);
-  - for an idle with "stand", its hips raised toward the body's rest and its head drawn back
-    over them, its feet where they stood (stand.py);
   - for a swim made lying in the water with "afloat" (m), raised as one so its hips' mean height
     is that over the ground: where the swimmer's mover floats the body, so the game lays
     nothing down (D584);
@@ -64,7 +63,6 @@ import bpy
 from mathutils import Matrix, Quaternion, Vector
 
 import look
-import stand
 
 MADE = os.path.join(look.ART, "animation", "made")
 LIST = os.path.join(look.ART, "animation", "made.json")
@@ -90,6 +88,20 @@ PLANTED_MPS = 0.75  # a foot slower than this over the ground, near its lowest, 
                     # planted foot still slides a little in the take)
 LOW_M = 0.05
 EASE = 4            # frames eased into the loop's seam
+
+
+def keyed(name, keys):
+    """A keyed clip's take (D588): solved from its keys (`keys`, from the repository's root) by
+    key.ts onto the body they name, the mannequin unless they say, into out/keyed/<name>.glb, a
+    GLB on our skeleton that load_take reads as it reads Uthana's. Its start is a pose file beside
+    the keys, never the mannequin's own clip, which this run is about to replace."""
+    out = os.path.join(HERE, "out", "keyed", f"{name}.glb")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    run = subprocess.run(["node", os.path.join(HERE, "key.ts"), keys, out], cwd=look.ROOT, capture_output=True, text=True)
+    print(run.stdout.strip() or run.stderr.strip())
+    if run.returncode:
+        raise SystemExit(f"key.ts exited {run.returncode} on {keys}: fix the keys (node tools/characters/key.ts {keys} OUT.glb shows why)")
+    return out
 
 
 def load_take(path):
@@ -556,10 +568,13 @@ def main():
         made = json.load(f)
     # An entry with no take kept yet is still being made (motion.ts); the library's clip stays.
     # A take tried is made alone, into a copy that already has the kept ones.
-    # A clip's take is Uthana's GLB if it has one, else Kimodo's BVH.
+    # A clip's take is solved from its keys if it has them (key.ts, D588), else Uthana's GLB if
+    # it has one, else Kimodo's BVH.
     def take_of(name):
+        if made[name].get("keys"):
+            return keyed(name, made[name]["keys"])
         return next((p for p in (os.path.join(kept, f"{name}{ext}") for ext in (".glb", ".bvh")) if os.path.exists(p)), None)
-    takes = {name: look.path(path) for name, path in tried.items()} or {name: take_of(name) for name in made if take_of(name)}
+    takes = {name: look.path(path) for name, path in tried.items()} or {name: path for name in made if (path := take_of(name))}
     look.reset()
     bpy.ops.import_scene.gltf(filepath=look.FIGURE if chosen else out)
     arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
@@ -611,14 +626,6 @@ def main():
                   + (f", now {now[0]} to {now[1]}" if now else ", kept"))
         if "fist" in entry:
             close_hands(action, fist, entry["fist"])
-        if entry.get("stand"):
-            ad.action = action
-            if getattr(action, "slots", None) and len(action.slots):
-                ad.action_slot = action.slots[0]
-            times = sorted({kp.co[0] for fc in curves(action) if fc.data_path == 'pose.bones["pelvis"].location' for kp in fc.keyframe_points})
-            rise, c, back, lumbar = stand.stand(arm, action, times, bpy.context.view_layer.update, without_roll)
-            print(f"STAND {name}: lower back's held bend of {lumbar:.1f} deg taken out, hips raised {rise:.1f} cm "
-                  f"(each knee's bend over {stand.KNEE_MIN:.0f} deg kept {c:.2f} of the take's), head drawn back {back:.1f} cm at the neck")
         bpy.data.objects.remove(src)
         ad.action = None
         if old is not None:
