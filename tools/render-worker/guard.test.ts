@@ -89,6 +89,7 @@ test("the keeper prunes a real box in order: an idle slot's debug incremental fi
   for (const n of [1, 2]) {
     put(join(slotDir(b, n), "target/debug/incremental/s/a.bin"), 3000);
     put(join(slotDir(b, n), "target/release/incremental/s/a.bin"), 3000);
+    put(join(slotDir(b, n), "target/fmt.log"), 1);
   }
   put(join(b.jobs, "20261025-000000-0001/out/film.mp4"), 1000);
   put(join(b.jobs, "20261025-000000-0001/out/job.log"), 10);

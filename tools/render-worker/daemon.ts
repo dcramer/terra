@@ -347,11 +347,12 @@ function slotUses(b: Box, slots: number, busy: ReadonlySet<number>, before: numb
   const out: SlotUse[] = [];
   for (let n = 1; n <= slots; n++) {
     const target = join(slotDir(b, n), "target");
-    const profiles = existsSync(target) ? readdirSync(target).filter((p) => lstatSync(join(target, p, "incremental"), { throwIfNoEntry: false })?.isDirectory()) : [];
+    // A target/ holds files too (logs a script left): only folders with an incremental/ in them.
+    const profiles = existsSync(target) ? readdirSync(target, { withFileTypes: true }).filter((e) => e.isDirectory() && lstatSync(join(target, e.name, "incremental"), { throwIfNoEntry: false })?.isDirectory()).map((e) => e.name) : [];
     const review = join(slotHome(b, n), ".cache/terra-review");
     const files: string[] = [];
     if (!busy.has(n)) walk(review, files);
-    const old = files.some((f) => statSync(f).mtimeMs < before);
+    const old = files.some((f) => (statSync(f, { throwIfNoEntry: false })?.mtimeMs ?? before) < before);
     out.push({ slot: n, busy: busy.has(n), target, profiles, ...(old ? { review } : {}) });
   }
   return out;
@@ -440,7 +441,13 @@ export class Keeper {
       const mine = new Set([...running.keys(), ...this.unsaved.keys()]);
       housekeep(this.b, keepDays, now, mine, this.save);
       await reapOrphans(this.b, mine);
-      await this.prune(slots, new Set([...running.values()].map((r) => r.job.slot ?? 1)), now);
+      try {
+        await this.prune(slots, new Set([...running.values()].map((r) => r.job.slot ?? 1)), now);
+      } catch (e) {
+        // Pruning that breaks on something else (a file it cannot remove) is said, never fatal.
+        if (diskFull(e)) throw e;
+        this.log(`✗ disk: pruning stopped: ${(e as Error).message}`);
+      }
     } catch (e) {
       if (!diskFull(e)) throw e;
       this.noSpace ||= (e as Error).message;
