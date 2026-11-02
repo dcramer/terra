@@ -25,7 +25,7 @@ fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
         bolt: Vec3::ZERO,
         pace: Pace::Startled,
         progress: Default::default(),
-        dice: own_dice(Vec3::ZERO),
+        dice: own_dice(Seed(1), Vec3::ZERO),
         lived: 0,
     };
     assert!(creature.unaware());
@@ -52,7 +52,7 @@ fn spider(world: &mut World, at: Vec3) -> Entity {
                 bolt: Vec3::ZERO,
                 pace: Pace::Startled,
                 progress: Default::default(),
-                dice: own_dice(at),
+                dice: own_dice(Seed(1), at),
                 lived: 0,
             },
             Transform::from_translation(at),

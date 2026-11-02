@@ -146,10 +146,10 @@ fn own_number(home: Vec3) -> u32 {
     terra_gen::hash::of(&[home.x.to_bits(), home.y.to_bits(), home.z.to_bits()])
 }
 
-/// A creature's own dice, from where it was put out: the same in every run of the same
-/// world, whatever else formed before it or thinks before it in a tick.
-fn own_dice(home: Vec3) -> Rng {
-    Seed(31)
+/// A creature's own dice, from the world's seed and where it was put out: the same in every
+/// run of the same world, whatever else formed before it or thinks before it in a tick (D596).
+fn own_dice(world: Seed, home: Vec3) -> Rng {
+    world
         .derive("creatures")
         .index(u64::from(own_number(home)))
         .rng()
@@ -230,7 +230,7 @@ impl Creature {
             bolt: Vec3::ZERO,
             pace: Pace::Startled,
             progress: Default::default(),
-            dice: own_dice(home),
+            dice: own_dice(Seed(1), home),
             lived: 0,
         }
     }
@@ -364,7 +364,7 @@ fn prepare(
     options: Res<terra_world::shell::Options>,
 ) {
     // Where each of a herd stands round its home, drawn once in the bestiary's order.
-    let mut dice = Seed(31).derive("creatures").rng();
+    let mut dice = planet.seed().derive("herds").rng();
     if kinds
         .models
         .iter()
@@ -570,7 +570,7 @@ pub fn spawn(
                 bolt: Vec3::ZERO,
                 pace: Pace::Startled,
                 progress: Default::default(),
-                dice: own_dice(feet),
+                dice: own_dice(planet.seed(), feet),
                 lived: 0,
             },
             bestiary.body(species),

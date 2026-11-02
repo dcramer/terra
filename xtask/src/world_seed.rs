@@ -53,14 +53,6 @@ const ALLOWED: &[(&str, &str)] = &[
         "when a fish rises: a moment's effect, not the world",
     ),
     (
-        "crates/terra_creatures/src/creatures.rs",
-        "a creature's dice are keyed by its home, which the world's seed chose (wildlife meetings); deriving them from the world's seed changes every duel's rolls, the combat scorecard's to take",
-    ),
-    (
-        "crates/terra_creatures/src/wildlife/mod.rs",
-        "the climate's growing season at sea level, kept once for every world, which the climate's noise does not move",
-    ),
-    (
         "crates/terra_sandbox/src/experiments/lush.rs",
         "the lush forest, a demo scene of one forest, its look baselines and the trailer's, until its rules are the world's flora",
     ),

@@ -534,7 +534,7 @@ impl Surroundings<'_, '_> {
                 .growing_mean_c;
         }
         let over_sea = ground.length() - self.planet.sea_radius_m();
-        start_warmth_c() - over_sea.max(0.0) * LAPSE_C_PER_M
+        start_warmth_c(self.planet.seed()) - over_sea.max(0.0) * LAPSE_C_PER_M
     }
 }
 
@@ -546,22 +546,32 @@ fn grass_height(g: &terra_world::cover::Growing) -> f32 {
     (0.12 + 0.42 * libm::powf(g.grass, 0.7) * (0.6 + 0.4 * g.lush)) * (1.0 + 0.5 * g.tall) * 0.85
 }
 
-/// The growing season's mean at sea level at the start's latitude, by the world's climate.
-fn start_warmth_c() -> f32 {
-    use std::sync::OnceLock;
-    static WARMTH: OnceLock<f32> = OnceLock::new();
-    *WARMTH.get_or_init(|| {
-        let climate: terra_climate::Climate =
-            terra_world::data::read(terra_world::daylight::WorldClimate::FILE);
-        let fields = terra_climate::Fields::new(climate, Seed(0));
-        fields
-            .season(terra_climate::Place::level(
-                Vec3::ZERO,
-                0.0,
-                terra_world::daylight::LATITUDE,
-            ))
-            .growing_mean_c
-    })
+/// The growing season's mean at sea level at the start's latitude, by the world's climate and
+/// its fields from the world's seed, as the land's are (`terra_land::Land::new`), kept for
+/// the last world asked about.
+fn start_warmth_c(world: Seed) -> f32 {
+    use std::sync::Mutex;
+    static WARMTH: Mutex<Option<(Seed, f32)>> = Mutex::new(None);
+    let mut kept = WARMTH
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((seed, warmth)) = *kept
+        && seed == world
+    {
+        return warmth;
+    }
+    let climate: terra_climate::Climate =
+        terra_world::data::read(terra_world::daylight::WorldClimate::FILE);
+    let fields = terra_climate::Fields::new(climate, world);
+    let warmth = fields
+        .season(terra_climate::Place::level(
+            Vec3::ZERO,
+            0.0,
+            terra_world::daylight::LATITUDE,
+        ))
+        .growing_mean_c;
+    *kept = Some((world, warmth));
+    warmth
 }
 
 /// Puts out the animals of the cells near each player, and lets go of those nobody is near.
