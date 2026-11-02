@@ -101,7 +101,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D544](decisions/D544.md) | The world's heights: how high one goes and where the clouds stand | Design | Developers | Decided | Heights are Earth's up to 3 km over the sea… |
 | [D559](decisions/D559.md) | The hewn mine is the second dungeon theme built, after the barrow halls | Design | Developers | Decided | The dungeon themes of D527 are built in this order so… |
 | [D591](decisions/D591.md) | Natural caves are part of core world design | Design | Developers | Decided | Natural caves are part of how a world is generated… |
-| [D598](decisions/D598.md) | Conifer crowns fuller, of many smaller sprays in layered masses, and warmer in colour | Design | Agent | Open | Open: whether the lush forest's Scots pines and spruces… |
+| [D598](decisions/D598.md) | Conifer crowns fuller, of many smaller sprays in layered masses, and warmer in colour | Design | — | Open | Open: whether the lush forest's Scots pines and spruces… |
 
 ## The player and survival
 
@@ -475,7 +475,7 @@ The look, models, bodies and gear, textures and audio.
 | [D585](decisions/D585.md) | A gait's clip is shown within a tenth of as made at its speed; the game's speeds are fitted to the clips | Tech | Agent | Decided | Every gait (walk, jog, sprint) is played at the speed… |
 | [D588](decisions/D588.md) | Moves with a start and an end are keyed from a generated pose sheet, on our own skeleton | Design | Developers | Decided | Moves with a clear start and end that no source does… |
 | [D593](decisions/D593.md) | The base body's arms and legs are stretched in the character pipeline | Design | Agent | Leaning | The base body's arms are lengthened to a 1.86 m reach… |
-| [D597](decisions/D597.md) | Trees sway as a hierarchy: trunk, each branch about its own root with its own phase, leaf clusters on their stalks | Tech | Agent | Open | Open: whether to replace the one bend every vertex of a… |
+| [D597](decisions/D597.md) | Trees sway as a hierarchy: trunk, each branch about its own root with its own phase, leaf clusters on their stalks | Tech | — | Open | Open: whether to replace the one bend every vertex of a… |
 
 ## Engine and code
 
