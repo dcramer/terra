@@ -21,6 +21,7 @@ use crate::adaptation::Adaptation;
 use crate::climate::ClimateFields;
 use crate::daylight::Clock;
 use crate::footprint::Footprint;
+use crate::instance::{Building, InWorld, InstanceApp};
 use crate::quality::Quality;
 use bevy::{
     asset::RenderAssetUsages,
@@ -366,12 +367,24 @@ pub fn plugin(app: &mut App) {
             MaterialPlugin::<FireMaterial>::default(),
             MaterialPlugin::<FireSmokeMaterial>::default(),
         ))
-        .add_systems(Startup, setup)
         .add_systems(Update, scorch)
         .add_systems(
             PostUpdate,
-            (hearth::keep, blow, show, sim::tell, light::light).chain(),
+            (hearth::keep, blow, show, sim::tell, light::light)
+                .chain()
+                .run_if(resource_exists::<Drawn>),
         );
+    entering(app);
+}
+
+/// What of the fires is the world's (D469): their cards, lights and glows, spawned with a
+/// place and so gone with the world, made again on entering the next from the books, which
+/// are read once, at the start.
+pub(crate) fn entering(app: &mut App) {
+    app.world_resource::<Drawn>()
+        .add_systems(Startup, read_books)
+        .add_systems(OnEnter(InWorld), setup.in_set(Building::Place));
+    fog::entering(app);
 }
 
 /// A mesh of cards, `count` of them, every corner at the origin: the first texture
@@ -514,27 +527,66 @@ fn spawn_cards(
     }
 }
 
+/// The fires' books, read once for every world (D469): art, as a kit's data is, that no
+/// world owns. What draws with them is the world's ([`Drawn`]).
+#[derive(Resource)]
+struct Library {
+    flames: Handle<Image>,
+    motions: Handle<Image>,
+    ramp: Handle<Image>,
+    near: Handle<Image>,
+    far: Handle<Image>,
+    noise: Handle<Image>,
+    sim: Handle<Image>,
+    sets: [Vec4; books::SETS.len()],
+    ramp_scale: Vec4,
+    reach: Vec4,
+    light_scales: Vec4,
+}
+
+fn read_books(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let books = books::read();
+    let smoke = books::read_smoke();
+    commands.insert_resource(Library {
+        flames: images.add(books.flames),
+        motions: images.add(books.motions),
+        ramp: images.add(books.ramp),
+        near: images.add(smoke.near),
+        far: images.add(smoke.far),
+        noise: images.add(volume::noise()),
+        sim: images.add(sim::unread()),
+        sets: books.sets,
+        ramp_scale: books.ramp_scale,
+        reach: books.reach,
+        light_scales: smoke.light_scales,
+    });
+}
+
+/// The fires' cards, lights and materials, made on entering each world (D469).
+#[allow(clippy::too_many_arguments)]
 fn setup(
     mut commands: Commands,
     quality: Res<Quality>,
+    library: Res<Library>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut buffers: ResMut<Assets<ShaderBuffer>>,
-    mut images: ResMut<Assets<Image>>,
     adaptation: Res<Adaptation>,
     mut fires: ResMut<Assets<FireMaterial>>,
     mut smokes: ResMut<Assets<FireSmokeMaterial>>,
 ) {
     let count = slots(*quality);
     let slots = buffers.add(ShaderBuffer::from(vec![[0.0f32; 4]; count * 2]));
-    let books = books::read();
-    let smoke_books = books::read_smoke();
-    let near = images.add(smoke_books.near);
-    let far = images.add(smoke_books.far);
-    let flames = images.add(books.flames);
-    let motions = images.add(books.motions);
-    let ramp = images.add(books.ramp);
-    let noise = images.add(volume::noise());
-    let sim = images.add(sim::unread());
+    let books = &*library;
+    let Library {
+        near,
+        far,
+        flames,
+        motions,
+        ramp,
+        noise,
+        sim,
+        ..
+    } = books;
     // Nothing let go yet: born an hour ago, long gone.
     let haze = buffers.add(ShaderBuffer::from(vec![[0.0f32; 4]; fogged::HAZE_VEC4S]));
     let puffs = Puffs {
@@ -604,7 +656,7 @@ fn setup(
             extension: FireSmokeExtension {
                 uniform: FireSmokeUniform {
                     kind: Vec4::new(kind, 0.0, if which.torches { 1.0 } else { 0.0 }, 0.0),
-                    sets: smoke_books.light_scales,
+                    sets: books.light_scales,
                     ..default()
                 },
                 slots: slots.clone(),

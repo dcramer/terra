@@ -806,6 +806,10 @@ pub(super) fn light(
     shut_off: Option<Res<crate::indoor::ShutOff>>,
     mut shadow_fade: Local<ShadowFade>,
 ) {
+    // A world's lights are its own (D469): the last world's twins and fades went with it.
+    if drawn.is_added() {
+        *shadow_fade = ShadowFade::default();
+    }
     let t = time.elapsed_secs_wrapped();
     // Whether a light had shadows, for `choose` to hold them on it: whether it wanted them
     // (one waiting for another's to fade has none yet), or shone in the fog unshadowed.

@@ -12,6 +12,7 @@
 //! sun lights white. It thickens as the night comes (`Sky::night`).
 
 use super::light::LIGHTS;
+use crate::instance::{Building, InWorld, InstanceApp};
 use bevy::{
     asset::RenderAssetUsages,
     image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
@@ -73,9 +74,17 @@ pub(super) struct Glows(pub Vec<Glow>);
 struct Volumes(Vec<Entity>);
 
 pub(super) fn plugin(app: &mut App) {
-    app.init_resource::<Glows>()
-        .add_systems(Startup, setup)
-        .add_systems(PostUpdate, show.after(super::light::light));
+    app.init_resource::<Glows>().add_systems(
+        PostUpdate,
+        show.after(super::light::light)
+            .run_if(resource_exists::<Volumes>),
+    );
+}
+
+/// The glows' fog volumes are the world's (D469), made on entering each.
+pub(super) fn entering(app: &mut App) {
+    app.world_resource::<Volumes>()
+        .add_systems(OnEnter(InWorld), setup.in_set(Building::Place));
 }
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {

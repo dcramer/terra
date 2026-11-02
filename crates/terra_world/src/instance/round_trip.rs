@@ -1,6 +1,6 @@
 //! The world's own modules leave nothing behind (docs/instances.md, "The test that proves
 //! nothing leaks"), without a GPU: the land, sky, air, lakes, scene, day, climate, weather
-//! and wind are built on entering a world as in the game, from their own `entering`, and
+//! wind and fires are built on entering a world as in the game, from their own `entering`, and
 //! after a round trip to another world and back the census equals the one before.
 
 use super::*;
@@ -52,6 +52,14 @@ fn app() -> App {
         .init_asset::<AutoExposureCompensationCurve>()
         .init_asset::<crate::lakes::LakeMaterial>()
         .init_asset::<crate::lakes::MistMaterial>()
+        .init_asset::<bevy::render::storage::ShaderBuffer>()
+        .init_asset::<crate::fire::FireMaterial>()
+        .init_asset::<crate::fire::FireSmokeMaterial>()
+        .init_resource::<crate::quality::Quality>()
+        .insert_resource(crate::adaptation::Adaptation(Handle::default()))
+        .census_assets::<bevy::render::storage::ShaderBuffer>()
+        .census_assets::<crate::fire::FireMaterial>()
+        .census_assets::<crate::fire::FireSmokeMaterial>()
         .census_assets::<Mesh>()
         .census_assets::<Image>()
         .census_assets::<crate::sky::SkyMaterial>()
@@ -79,6 +87,7 @@ fn app() -> App {
     crate::climate::entering(&mut app);
     crate::weather::entering(&mut app);
     crate::wind::entering(&mut app);
+    crate::fire::entering(&mut app);
     settle(&mut app);
     app
 }
@@ -142,6 +151,14 @@ fn the_worlds_modules_leave_nothing_behind() {
     }
     let skies = names(&mut app).iter().filter(|name| *name == "Sky").count();
     assert_eq!(skies, 1, "the first world's sky went with it");
+    // The fires' pool is made again in each world, and the last world's is gone.
+    for pooled in ["Fire: light 0", "Fire: glow 0"] {
+        let count = names(&mut app)
+            .iter()
+            .filter(|name| *name == pooled)
+            .count();
+        assert_eq!(count, 1, "{pooled} in the next world");
+    }
 
     cross(&mut app, spec(1));
     let after = Census::take(app.world());

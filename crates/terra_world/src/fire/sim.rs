@@ -398,8 +398,16 @@ fn decode_bc5(data: &[u8], [w, h, d]: [u32; 3]) -> Vec<u8> {
     out
 }
 
-/// Each kept fire that plays the loop told its place in it, the loop read and bound the first
-/// time one does.
+/// The loop as read, its volume, the wind it leans in, and the materials it was bound to.
+pub(super) struct Read {
+    sim: Sim,
+    image: Handle<Image>,
+    wind: Vec3,
+    bound: Option<AssetId<FireMaterial>>,
+}
+
+/// Each kept fire that plays the loop told its place in it, the loop read the first time one
+/// does and bound to each world's materials.
 pub(super) fn tell(
     time: Res<Time>,
     blazes: Res<Blazes>,
@@ -407,25 +415,36 @@ pub(super) fn tell(
     device: Option<Res<RenderDevice>>,
     mut images: ResMut<Assets<Image>>,
     mut fires: ResMut<Assets<FireMaterial>>,
-    mut read: Local<Option<(Sim, Vec3)>>,
+    mut read: Local<Option<Read>>,
     (clock, mut on_the_world): (Option<Res<Clock>>, Local<LoopClock>),
 ) {
     let baked = Body::Baked.told();
     if read.is_none() && !blazes.bodies.contains(&baked) {
         return;
     }
-    let (sim, wind) = read.get_or_insert_with(|| {
+    let read = read.get_or_insert_with(|| {
         let sim = Sim::read();
         let features = device.map_or(WgpuFeatures::empty(), |device| device.features());
         let image = images.add(volume(&sim, features));
+        Read {
+            sim,
+            image,
+            wind: drawn.wind,
+            bound: None,
+        }
+    });
+    // Each world's materials are its own (D469), so the loop is bound to the ones drawing now.
+    let drawing = drawn.fire[0].id();
+    if read.bound != Some(drawing) {
+        read.bound = Some(drawing);
         for handle in &drawn.fire {
             if let Some(mut material) = fires.get_mut(handle) {
-                material.extension.sim = image.clone();
-                material.extension.uniform.sim = sim.packed();
+                material.extension.sim = read.image.clone();
+                material.extension.uniform.sim = read.sim.packed();
             }
         }
-        (sim, drawn.wind)
-    });
+    }
+    let (sim, wind) = (&read.sim, &mut read.wind);
     *wind = wind.lerp(
         drawn.wind,
         1.0 - libm::expf(-time.delta_secs() / TURN_EASE_S),
