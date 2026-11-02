@@ -284,12 +284,12 @@ fn stood(
 ) -> (Vec<Tree>, Vec<Tree>, Vec<Tree>) {
     let woods = Woods::of(round);
     let began = std::time::Instant::now();
-    let near = woods.trees(middle, 0.0, NEAR_M, SPACING_M, seed);
     // The cards stand for every tree, the grown ones too, as an impostor stands for its
     // model: seen from away from the start, past the grown trees' last level of detail, they
-    // are the trees. Near the camera they give way to the grown ones (`near`).
-    let mid: Vec<Tree> = woods
-        .trees(middle, 0.0, COARSE_M, SPACING_M, seed)
+    // are the trees. Near the camera they give way to the grown ones (`near`), the same trees
+    // from the same pass.
+    let (mid, near) = woods.trees_and_nearest(middle, 0.0, COARSE_M, NEAR_M, SPACING_M, seed);
+    let mid: Vec<Tree> = mid
         .into_iter()
         .filter(|tree| tree.at.distance(middle) > CLEAR_M)
         .collect();

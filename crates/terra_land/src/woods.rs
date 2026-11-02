@@ -374,6 +374,29 @@ impl<'a> Woods<'a> {
         spacing_m: f32,
         seed: terra_gen::Seed,
     ) -> Vec<Tree> {
+        self.trees_and_nearest(
+            middle,
+            inner_m,
+            radius_m,
+            f32::NEG_INFINITY,
+            spacing_m,
+            seed,
+        )
+        .0
+    }
+
+    /// The trees as [`Woods::trees`] has them, and of them those within `nearest_m` of the
+    /// direction, as `trees` within it would have them, in the same order: the grown trees
+    /// near the start and the cards round them from one pass over the ground, not two.
+    pub fn trees_and_nearest(
+        &self,
+        middle: glam::Vec3,
+        inner_m: f32,
+        radius_m: f32,
+        nearest_m: f32,
+        spacing_m: f32,
+        seed: terra_gen::Seed,
+    ) -> (Vec<Tree>, Vec<Tree>) {
         let land = &self.round.land;
         let middle = middle.normalize();
         // A stand is not one age (D381): it is a mosaic of cohorts tens of metres across, each
@@ -387,7 +410,7 @@ impl<'a> Woods<'a> {
         let cells = (radius_m / spacing_m).ceil() as i32;
         let rows: Vec<i32> = (-cells..cells).collect();
         let found = crate::maps::par_map(&rows, |&row| {
-            let mut out = Vec::new();
+            let (mut out, mut nearest) = (Vec::new(), Vec::new());
             for column in -cells..cells {
                 let mut rng = seed
                     .index(((row as i64) << 32 | (column as u32 as i64)) as u64)
@@ -440,18 +463,26 @@ impl<'a> Woods<'a> {
                 } else {
                     (AGES.0 + (AGES.1 - AGES.0) * cohort + (rng.unit() - 0.5) * 0.18).min(AGES.1)
                 };
-                out.push(Tree {
+                let tree = Tree {
                     at: point,
                     kind,
                     stature,
                     luck,
                     footing,
                     age,
-                });
+                };
+                if distance <= nearest_m {
+                    nearest.push(tree);
+                }
+                out.push(tree);
             }
-            out
+            (out, nearest)
         });
-        found.into_iter().flatten().collect()
+        let (out, nearest): (Vec<_>, Vec<_>) = found.into_iter().unzip();
+        (
+            out.into_iter().flatten().collect(),
+            nearest.into_iter().flatten().collect(),
+        )
     }
 }
 
@@ -655,6 +686,19 @@ mod tests {
             .unwrap();
         let round = crate::round::Round::new(land, site.toward, 1_400.0, day);
         let trees = Woods::of(&round).trees(site.toward, 0.0, 600.0, 6.5, terra_gen::Seed(5));
+        // The nearest from the same pass are the trees a pass of their own lays out, as the
+        // grown ones and the cards are laid at the start (`trees_and_nearest`), on the round
+        // this test builds anyway.
+        let (all, nearest) = Woods::of(&round).trees_and_nearest(
+            site.toward,
+            0.0,
+            600.0,
+            250.0,
+            6.5,
+            terra_gen::Seed(5),
+        );
+        let alone = Woods::of(&round).trees(site.toward, 0.0, 250.0, 6.5, terra_gen::Seed(5));
+        assert!(all == trees && nearest == alone && !alone.is_empty());
         // How sunward the ground each kind stands on faces, on average.
         let facing = |kind: TreeKind| {
             let sunward: Vec<f32> = trees
