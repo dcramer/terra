@@ -114,6 +114,38 @@ def reset():
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
+def join(src):
+    """Imports a figure and returns its armature and every mesh it moves. `src` is one file, or
+    several joined by "+": a body then pieces skinned to its skeleton (Quaternius's outfit pieces
+    on their head-only body), each piece bound to the first file's skeleton and its own thrown
+    away, as compare.py and the game put a skinned look on. Everything else is removed."""
+    for k, part in enumerate(src.split("+")):
+        had = set(bpy.context.scene.objects)
+        bpy.ops.import_scene.gltf(filepath=path(part))
+        if k == 0:
+            arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
+            continue
+        added = [o for o in bpy.context.scene.objects if o not in had]
+        for o in added:
+            mods = [m for m in o.modifiers if m.type == "ARMATURE"] if o.type == "MESH" else []
+            if mods:
+                mw = o.matrix_world.copy()
+                o.parent = arm
+                o.matrix_world = mw
+                for m in mods:
+                    m.object = arm
+        for o in added:
+            if o.type == "ARMATURE":
+                bpy.data.objects.remove(o)
+    # Every mesh the skeleton moves, not only the largest: Quaternius's body brings its eyes and
+    # brows, and a body dressed in their pieces is several meshes, none of them the whole figure.
+    skinned = [o for o in bpy.context.scene.objects if o.type == "MESH" and any(m.type == "ARMATURE" and m.object == arm for m in o.modifiers)]
+    for o in list(bpy.context.scene.objects):
+        if o is not arm and o not in skinned:
+            bpy.data.objects.remove(o)
+    return arm, skinned
+
+
 # Weight-blended skinning, as the game does it (crates/terra_walker/src/skinning.rs): dual
 # quaternions, which keep a limb's volume through a roll and a knee's or elbow's through a deep
 # bend, but for the skin the joints in `linear_joints` move: round the hips, across the wide

@@ -12,8 +12,11 @@
 // re-export may reorder both: every vertex must have one of theirs with the same position,
 // normal, UVs (each set theirs has) and weights by joint name, to float tolerance; the
 // triangles must be theirs, every one, with their winding; and each joint it is weighted to
-// must keep its bind matrix. A mesh with no name of theirs is ours, unless most of its vertices
-// sit on one of their pieces (theirs renamed, merged or cut), which fails. Materials, textures,
+// must keep its bind matrix. A piece whose every vertex, triangle and bind is theirs but which
+// leaves some of their triangles out is an exact cut of theirs, named as one with how many it
+// keeps (their UpperBody is such a cut of their FullBody; the D600 trial cuts bare slot pieces
+// so). A mesh with no name of theirs is ours, unless most of its vertices sit on one of their
+// pieces without being an exact cut (theirs renamed, merged or changed), which fails. Materials, textures,
 // vertex colours and shape keys are not compared: paint and build morphs are ours to add.
 //
 // Node 22.18 or later; no dependencies.
@@ -196,7 +199,9 @@ function canon(p: Piece, t: Tolerance): Int32Array {
 /** A triangle as a key the same however its corners are numbered round, its winding kept. */
 const tri = (a: number, b: number, c: number) => (a <= b && a <= c ? `${a},${b},${c}` : b <= c ? `${b},${c},${a}` : `${c},${a},${b}`);
 
-export type Verdict = { ok: boolean; misses: number; lines: string[] };
+/** `cut`: every vertex, triangle and bind of it theirs, but only some of their triangles, as
+ *  their own UpperBody is a cut of their FullBody; `kept` of their triangles are here. */
+export type Verdict = { ok: boolean; misses: number; lines: string[]; cut: boolean; kept: number };
 
 /** Whether `out` is `src` as made, and if not, what differs, a line an attribute. */
 export function compare(out: Piece, src: Piece, t: Tolerance = TOLERANCE): Verdict {
@@ -275,7 +280,8 @@ export function compare(out: Piece, src: Piece, t: Tolerance = TOLERANCE): Verdi
   }
   if (moved.length) lines.push(`bind: ${moved.length} of the ${used.size} joints it is weighted to moved: ${moved.slice(0, 5).join(", ")}${moved.length > 5 ? ", ..." : ""}`);
   const misses = [...worst.values()].reduce((a, w) => a + w.n, 0) + strange + missing + moved.length;
-  return { ok: lines.length === 0, misses, lines };
+  const cut = worst.size === 0 && touched === 0 && strange === 0 && moved.length === 0 && missing > 0;
+  return { ok: lines.length === 0, misses, lines, cut, kept: out.tris.length / 3 };
 }
 
 const n = (x: number) => x.toLocaleString("en");
@@ -290,11 +296,16 @@ export function sources(paths: string[] = [THEIRS]): Piece[] {
 const stem = (s: string) => s.replace(/\.\d{3}$/, "");
 const names = (p: Piece) => new Set([stem(p.node), stem(p.mesh)]);
 
-export type Report = { ok: boolean; theirs: string[]; ours: string[]; lines: string[] };
+export type Report = { ok: boolean; theirs: string[]; cuts: string[]; ours: string[]; lines: string[] };
 
-/** Every piece of `out` checked against theirs: theirs as made, or ours. */
+/** A cut's line: its name, how many of their triangles it keeps, and whose. */
+const cutOf = (p: Piece, s: Piece, v: Verdict) => `${p.node} (${n(v.kept)} of their ${n(s.tris.length / 3)} triangles of ${s.node}, ${s.file})`;
+
+/** Every piece of `out` checked against theirs: theirs as made, an exact cut of theirs (every
+ *  vertex, triangle and bind theirs, some of their triangles left out, as their own UpperBody is
+ *  of their FullBody: the D600 trial's bare slot pieces), or ours. */
 export function check(out: Glb | Piece[], srcs: Piece[], t: Tolerance = TOLERANCE): Report {
-  const report: Report = { ok: true, theirs: [], ours: [], lines: [] };
+  const report: Report = { ok: true, theirs: [], cuts: [], ours: [], lines: [] };
   let at: Map<string, Set<number>> | undefined;
   for (const p of Array.isArray(out) ? out : pieces(out)) {
     const mine = names(p);
@@ -305,6 +316,11 @@ export function check(out: Glb | Piece[], srcs: Piece[], t: Tolerance = TOLERANC
       const pass = verdicts.find(({ v }) => v.ok);
       if (pass) {
         report.theirs.push(p.node);
+        continue;
+      }
+      const cut = verdicts.find(({ v }) => v.cut);
+      if (cut) {
+        report.cuts.push(cutOf(p, cut.s, cut.v));
         continue;
       }
       const { s, v } = verdicts.reduce((a, b) => (b.v.misses < a.v.misses ? b : a));
@@ -325,9 +341,16 @@ export function check(out: Glb | Piece[], srcs: Piece[], t: Tolerance = TOLERANC
     const hits = new Array(srcs.length).fill(0);
     for (let i = 0; i < p.count; i++) for (const si of at.get(cell(p.pos, i)) ?? []) hits[si]++;
     const best = hits.indexOf(Math.max(...hits));
-    if (p.count && hits[best] / p.count > 0.5) {
+    // Mostly on theirs: an exact cut of one of them is named as one, of the smallest it fits.
+    const cut = srcs
+      .filter((_, si) => p.count && hits[si] / p.count > 0.5)
+      .sort((a, b) => a.tris.length - b.tris.length)
+      .map((s) => ({ s, v: compare(p, s, t) }))
+      .find(({ v }) => v.cut);
+    if (cut) report.cuts.push(cutOf(p, cut.s, cut.v));
+    else if (p.count && hits[best] / p.count > 0.5) {
       report.ok = false;
-      report.lines.push(`${p.node} (mesh ${p.mesh}) has ${Math.round((100 * hits[best]) / p.count)}% of its vertices on their ${srcs[best].node} (${srcs[best].file}): theirs renamed, merged or cut; keep their piece whole under its name`);
+      report.lines.push(`${p.node} (mesh ${p.mesh}) has ${Math.round((100 * hits[best]) / p.count)}% of its vertices on their ${srcs[best].node} (${srcs[best].file}): theirs renamed, merged or changed; keep their piece whole under its name, or an exact cut of it`);
     } else report.ours.push(p.node);
   }
   return report;
@@ -351,7 +374,8 @@ if (import.meta.main) {
     const r = check(new Glb(f), srcs);
     const list = (xs: string[]) => (xs.length > 6 ? `${xs.slice(0, 6).join(", ")}, ...` : xs.join(", "));
     const ours = r.ours.length ? `; ${r.ours.length} of ours not checked (${list(r.ours)})` : "";
-    if (r.ok) console.log(r.theirs.length ? `✓ intact: ${f} keeps ${r.theirs.length} of their pieces as made (${list(r.theirs)})${ours}` : `· intact: ${f} has none of their pieces${ours}`);
+    const cuts = r.cuts.length ? `; ${r.cuts.length} exact cuts of theirs: ${r.cuts.join(", ")}` : "";
+    if (r.ok) console.log(r.theirs.length || r.cuts.length ? `✓ intact: ${f} keeps ${r.theirs.length} of their pieces as made (${r.theirs.join(", ")})${cuts}${ours}` : `· intact: ${f} has none of their pieces${ours}`);
     else {
       failed = true;
       console.log(`✗ intact: ${f}\n  ${r.lines.join("\n  ")}`);

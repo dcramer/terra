@@ -40,27 +40,32 @@ def frames_of(action):
 
 def lowest(arm, body, action, shape=None):
     """The world height of `body`'s lowest point at every frame of `action` on `arm`, skinned
-    as it is set up (call look.skin_as_game first). `shape`: a shape key held at full weight."""
+    as it is set up (call look.skin_as_game first). `body` may be a list of meshes, a figure
+    dressed in pieces: the lowest of them all. `shape`: a shape key held at full weight."""
     ad = arm.animation_data or arm.animation_data_create()
     ad.action = action
     if getattr(action, "slots", None) and len(action.slots):
         ad.action_slot = action.slots[0]
-    keys = body.data.shape_keys.key_blocks if body.data.shape_keys else []
+    bodies = list(body) if isinstance(body, (list, tuple)) else [body]
+    keys = [k for b in bodies if b.data.shape_keys for k in b.data.shape_keys.key_blocks]
     for k in keys:
         k.value = 1.0 if k.name == shape else 0.0
     depsgraph = bpy.context.evaluated_depsgraph_get()
     out = []
     for f in frames_of(action):
         bpy.context.scene.frame_set(f)
-        ev = body.evaluated_get(depsgraph)
-        me = ev.to_mesh()
-        co = np.empty(len(me.vertices) * 3)
-        me.vertices.foreach_get("co", co)
-        co = co.reshape(-1, 3)
-        mw = np.array(ev.matrix_world)
-        z = co @ mw[2, :3] + mw[2, 3]
-        out.append(float(z.min()))
-        ev.to_mesh_clear()
+        low = float("inf")
+        for b in bodies:
+            ev = b.evaluated_get(depsgraph)
+            me = ev.to_mesh()
+            co = np.empty(len(me.vertices) * 3)
+            me.vertices.foreach_get("co", co)
+            co = co.reshape(-1, 3)
+            mw = np.array(ev.matrix_world)
+            z = co @ mw[2, :3] + mw[2, 3]
+            low = min(low, float(z.min()))
+            ev.to_mesh_clear()
+        out.append(low)
     for k in keys:
         k.value = 0.0
     return np.array(out)

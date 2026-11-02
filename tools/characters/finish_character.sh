@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The character pipeline from Tripo's rig on, free: convert, check, render, export.
 #
-#   tools/characters/finish_character.sh NAME HEIGHT [RIGGED.glb]
+#   tools/characters/finish_character.sh NAME HEIGHT [RIGGED.glb | HEAD.gltf+PIECE.gltf+...]
 #
 # RIGGED defaults to art/characters/NAME/rigged.glb, as make_character.sh leaves it, or is one
 # of Quaternius's bodies under art/characters/quaternius/, which skips step 1 (D599). Run it
@@ -16,9 +16,22 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 name=$1 height=$2
-rigged=$(realpath "${3:-$root/art/characters/$name/rigged.glb}")
 cd "$root"
 blender=tools/blender/run.sh here=tools/characters
+# A dressed figure of theirs: "HEAD.gltf+PIECE.gltf+...", their head-only body and outfit
+# pieces, rendered and exported joined on the head's skeleton (look.join), then proved theirs.
+# The rig check and the proportions judge one body, so they run on their full body, not here.
+if [[ "${3:-}" == *+* ]]; then
+  for part in ${3//+/ }; do
+    case "$(realpath "$part")" in "$root/art/characters/quaternius/"*) ;; *) echo "✗ finish_character: $part is not one of Quaternius's files; a dressed figure joins their head and pieces as made (D599)"; exit 1 ;; esac
+  done
+  $blender $here/lift.py | grep -E "^LIFT|Error" || true
+  $blender $here/rig_render.py "$3" "$name-sheet" | grep -E "SHEET|Error" || true
+  $blender $here/export_character.py "$3" "$here/out/$name-game.glb" | grep -E "SOCKETS|PATCHES|RETARGET|EXPORTED|Error" || true
+  node $here/intact.ts "$here/out/$name-game.glb"
+  exit 0
+fi
+rigged=$(realpath "${3:-$root/art/characters/$name/rigged.glb}")
 # Quaternius's bodies (art/characters/quaternius/) are on our skeleton as made and stay so
 # (D599): no conversion, no stretch, no twist bones; the rig is their file itself, and every
 # output is proved theirs vertex for vertex (intact.ts). HEIGHT is then unused: theirs as made.

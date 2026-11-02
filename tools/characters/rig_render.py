@@ -27,33 +27,8 @@ src, name = look.args()[:2]
 ACTIONS = [a for a in (look.args()[2:] or ["Idle_Loop", "Walk_Loop", "Sword_Attack", "Crouch_Idle_Loop", "Roll"])]
 
 look.reset()
-# "body.gltf+piece.gltf+...": a body and pieces skinned to the same skeleton (Quaternius's
-# outfit pieces on their head-only body), each piece bound to the first file's skeleton, its own
-# thrown away, as compare.py and the game put a skinned look on.
-for k, part in enumerate(src.split("+")):
-    had = set(bpy.context.scene.objects)
-    bpy.ops.import_scene.gltf(filepath=look.path(part))
-    if k == 0:
-        arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
-        continue
-    added = [o for o in bpy.context.scene.objects if o not in had]
-    for o in added:
-        mods = [m for m in o.modifiers if m.type == "ARMATURE"] if o.type == "MESH" else []
-        if mods:
-            mw = o.matrix_world.copy()
-            o.parent = arm
-            o.matrix_world = mw
-            for m in mods:
-                m.object = arm
-    for o in added:
-        if o.type == "ARMATURE":
-            bpy.data.objects.remove(o)
-# Every mesh the skeleton moves, not only the largest: Quaternius's body brings its eyes and
-# brows, and a body dressed in their pieces is several meshes, none of them the whole figure.
-skinned = [o for o in bpy.context.scene.objects if o.type == "MESH" and any(m.type == "ARMATURE" and m.object == arm for m in o.modifiers)]
-for o in list(bpy.context.scene.objects):
-    if o is not arm and o not in skinned:
-        bpy.data.objects.remove(o)
+# "body.gltf+piece.gltf+...": a body and pieces skinned to its skeleton (look.join).
+arm, skinned = look.join(src)
 before = set(bpy.data.objects)
 bpy.ops.import_scene.gltf(filepath=FIGURE)  # brings the animations
 mannequin = retarget.source(next(o for o in bpy.data.objects if o not in before and o.type == "ARMATURE"))

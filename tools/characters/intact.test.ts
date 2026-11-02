@@ -110,3 +110,27 @@ test("a mesh of ours beside theirs is listed as ours", () => {
   assert.deepEqual(r.ours, ["Strap"]);
   assert.deepEqual(r.theirs, ["Male_Ranger_Legs"]);
 });
+
+test("an exact cut of theirs is named as one, with how many of their triangles it keeps", () => {
+  const [p] = legs();
+  const half = p.tris.length / 6;
+  const cut: Piece = { ...p, node: "Bare_Shin", mesh: "Bare_Shin", tris: p.tris.slice(0, 3 * half), canon: undefined };
+  const r = check([cut], srcs);
+  assert.ok(r.ok, r.lines.join("; "));
+  assert.equal(r.cuts.length, 1);
+  assert.match(r.cuts[0], new RegExp(`^Bare_Shin \\(${half.toLocaleString("en")} of their 1,128 triangles of Male_Ranger_Legs`));
+});
+
+test("a cut with one vertex moved is not a cut but theirs changed", () => {
+  const [p] = legs();
+  const cut: Piece = { ...p, node: "Bare_Shin", mesh: "Bare_Shin", pos: p.pos.slice(), tris: p.tris.slice(0, 300), canon: undefined };
+  cut.pos[3 * cut.tris[0]] += 0.001;
+  assert.match(fails([cut]), /Bare_Shin .* on their Male_Ranger_Legs/);
+});
+
+test("their UpperBody under another name is a cut of their FullBody", () => {
+  const up = pieces(new Glb(join(THEIRS, "universal-base-characters/Regular_Male_UpperBody.gltf"))).find((p) => p.node === "RegularMale")!;
+  const r = check([{ ...up, node: "Bare_Upper", mesh: "Bare_Upper" }], srcs);
+  assert.ok(r.ok, r.lines.join("; "));
+  assert.match(r.cuts[0] ?? "", /^Bare_Upper \(8,056 of their 12,128 triangles of RegularMale, universal-base-characters\/Regular_Male_FullBody\.gltf\)/);
+});

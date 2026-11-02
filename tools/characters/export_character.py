@@ -41,15 +41,15 @@ LISTED = next((look.path(a.split("=", 1)[1]) for a in look.args() if a.startswit
 src, dst = look.args()[:2]
 
 look.reset()
-bpy.ops.import_scene.gltf(filepath=look.path(src))
-arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
 # Every mesh the skeleton moves is kept (Quaternius's body brings its eyes and brows as their
-# own meshes, D599); the largest is the body the sockets, patches and lift are read from.
-skinned = [o for o in bpy.context.scene.objects if o.type == "MESH" and any(m.type == "ARMATURE" and m.object == arm for m in o.modifiers)]
+# own meshes, D599). SRC may be a dressed figure, "HEAD+PIECE+...", their head-only body and
+# outfit pieces on its skeleton (look.join): the game file of a dressed man.
+arm, skinned = look.join(src)
+DRESSED = "+" in src
+# The largest mesh is the body the patches and morphs are read from; the sockets and the lift
+# read what the figure wears outermost: the body alone, or every piece of a dressed figure.
 body = max(skinned, key=lambda o: len(o.data.vertices))
-for o in list(bpy.context.scene.objects):
-    if o is not arm and o not in skinned:
-        bpy.data.objects.remove(o)
+wear = skinned if DRESSED else [body]
 arm.name = "Rig"
 for pb in arm.pose.bones:
     pb.matrix_basis.identity()
@@ -64,18 +64,20 @@ bpy.context.view_layer.update()
 #   socket.belt.R/L  the side of the waist. These face as the body does: +Y up, +Z forward.
 # Blender's Z is up and the body faces -Y; the exporter turns Y up, so in glTF a socket
 # with Blender's identity rotation faces as the body does.
-names = {g.index: g.name for g in body.vertex_groups}
 mw = body.matrix_world
 
 
 def region(bones):
-    """Rest positions of the vertices whose strongest bone is one of `bones`."""
+    """Rest positions of the vertices of what the figure wears (`wear`) whose strongest bone is
+    one of `bones`."""
     pts = []
-    for v in body.data.vertices:
-        if v.groups:
-            g = max(v.groups, key=lambda g: g.weight)
-            if names.get(g.group) in bones:
-                pts.append(mw @ v.co)
+    for o in wear:
+        names = {g.index: g.name for g in o.vertex_groups}
+        for v in o.data.vertices:
+            if v.groups:
+                g = max(v.groups, key=lambda g: g.weight)
+                if names.get(g.group) in bones:
+                    pts.append(o.matrix_world @ v.co)
     return pts
 
 
@@ -135,7 +137,9 @@ print("SOCKETS", ", ".join(f"{e.name} {tuple(round(c, 3) for c in e.matrix_world
 # The body's patches, which what is worn can hide (patches.py).
 # A body that is a shape of the base keeps the base's patches, so what a garment hides
 # is the same skin on every body; only a new base cuts them.
-if len(body.data.uv_layers) >= 2:
+if DRESSED:
+    print("PATCHES none: a dressed figure of their pieces hides nothing under them (D600)")
+elif len(body.data.uv_layers) >= 2:
     print("PATCHES kept from the base")
 else:
     patches.mark(body)
@@ -147,6 +151,8 @@ else:
 # as offsets in the model's space, glTF's axes (x, z, -y of Blender's), and kept on the
 # skeleton's node as `{"morphs": {M: {node: [x, y, z]}}}` in its glTF extras.
 MORPHS = next((a.split("=", 1)[1].split(",") for a in look.args() if a.startswith("--morphs=")), [])
+if MORPHS and DRESSED:
+    raise SystemExit(f"{src}: morphs are made on one body (D112), not a dressed figure of several pieces; export the body with --morphs and the pieces without")
 if MORPHS:
     import json
     from mathutils.kdtree import KDTree
@@ -232,7 +238,7 @@ if LISTED:
 # how much more or less each morph needs, for the game to mix by the body's sliders.
 look.skin_as_game()
 floor = lift.reference()
-lift.bake(arm, actions, lift.needed(arm, body, actions, floor))
+lift.bake(arm, actions, lift.needed(arm, wear if DRESSED else body, actions, floor))
 if MORPHS:
     scene = bpy.context.scene
     by_clip = lift.morph_lifts(arm, body, actions, floor, MORPHS)
