@@ -20,6 +20,7 @@ pub mod region;
 pub mod round;
 pub mod site;
 pub mod snow;
+pub mod survey;
 pub mod town;
 pub mod tundra;
 pub mod water;

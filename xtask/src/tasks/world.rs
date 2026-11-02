@@ -38,6 +38,26 @@ pub(crate) const TASKS: &[Task] = &[
             run("cargo", &cargo)
         },
     },
+    Task {
+        name: "worlds",
+        takes: "[--seeds 1-128] [--radius 30000] [--out target/worlds] [--against <an earlier worlds.tsv>]",
+        does: "the seed sweep (D596): each seed's world on every core, found valid by its survey (a level start, forest and tundra reached on foot) and fingerprinted, a row a seed in worlds.tsv; --against an earlier run's table fails on any world not the same bit for bit; CPU only (terra_land::survey)",
+        group: "Play and check",
+        run: |args| {
+            let mut cargo = vec![
+                "run",
+                "-q",
+                "--release",
+                "-p",
+                "terra_land",
+                "--bin",
+                "worlds",
+                "--",
+            ];
+            cargo.extend(args.iter().map(String::as_str));
+            run("cargo", &cargo)
+        },
+    },
 ];
 
 /// A crate's example program, built quietly and run from the root.
