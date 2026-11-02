@@ -3,7 +3,8 @@
 //! or filled.
 //!
 //! The first view is meshed before the first frame, across every core, so nothing is
-//! seen half built. After that, as the camera moves on, the chunks it now wants are meshed
+//! seen half built, all but its coarsest levels (`STREAM_FROM`), kilometres off, which are
+//! meshed after the loading screen lifts (`crate::streaming`). After that, as the camera moves on, the chunks it now wants are meshed
 //! in the background, and the ones it no longer wants stay until their replacements are
 //! ready, so the ground never shows holes. Which chunks are wanted is worked out on a
 //! worker too, as Voxel Tools updates its level-of-detail octree off the main thread: it
@@ -15,6 +16,7 @@ use crate::instance::{Building, InWorld, InstanceApp};
 use crate::loading::{self, Progress};
 use crate::planet::MainCamera;
 use crate::planet::{GroundLook, Planet};
+use crate::streaming::Streaming;
 use bevy::{
     asset::RenderAssetUsages,
     mesh::Indices,
@@ -32,6 +34,11 @@ use terra_voxel::{
 
 /// The camera moves this far before the chunks are chosen again.
 const RECHOOSE_M: f32 = 4.0;
+
+/// The first view's chunks this coarse and coarser (2 km and wider, from some kilometres
+/// off) are meshed after the loading screen lifts, on the streaming pool: on the mountain
+/// lake they were 39% of the first view's work (levels 7 to 9, 420 of 1080 thread-seconds).
+const STREAM_FROM: u8 = 7;
 
 /// A chunk of the ground on screen.
 #[derive(Component)]
@@ -52,6 +59,10 @@ pub(crate) struct Terrain {
     /// chunks were last brought up to date, whose chunks are meshed again once they are.
     choosing: Option<Task<HashMap<ChunkId, Sides>>>,
     changed: Vec<(Vec3, f32)>,
+    /// The first view's far chunks, meshed once the loading screen lifts ([`stream_far`]).
+    later: HashMap<ChunkId, Sides>,
+    /// When they began streaming and how many, until the last is in, for the log.
+    streaming_since: Option<(std::time::Instant, usize)>,
 }
 
 /// A chunk drawn: with which faces stitched to finer neighbours, and its entity, if its
@@ -64,6 +75,8 @@ struct Shown {
 struct Pending {
     sides: Sides,
     task: Task<Option<Mesh>>,
+    /// One of the first view's far chunks, which the loading screen does not wait for.
+    streamed: bool,
 }
 
 /// The first view of each world is meshed in this set, on entering it, from where the
@@ -78,22 +91,64 @@ pub fn plugin(app: &mut App) {
     app.init_world_resource::<Terrain>()
         .configure_sets(OnEnter(InWorld), FirstView.in_set(Building::View))
         .add_systems(OnEnter(InWorld), first_view.in_set(FirstView))
+        .init_resource::<Streaming>()
         .add_systems(
             Update,
-            (choose, receive, track.in_set(loading::Track)).chain(),
+            (
+                stream_far.run_if(crate::streaming::lifted),
+                choose,
+                receive,
+                track.in_set(loading::Track),
+            )
+                .chain(),
         );
 }
 
 impl Terrain {
-    /// How much of the ground is still coming: chunks being meshed, and a choice being made.
+    /// How much of the ground is still coming: chunks being meshed or waiting to be, and a
+    /// choice being made. A scripted run is held for all of it (`loading::hold`).
     pub(crate) fn coming(&self) -> usize {
-        self.pending.len() + usize::from(self.choosing.is_some())
+        self.pending.len() + self.later.len() + usize::from(self.choosing.is_some())
+    }
+
+    /// What of it the loading screen waits for: all but the first view's far chunks.
+    fn coming_near(&self) -> usize {
+        let streamed = self.pending.values().filter(|p| p.streamed).count();
+        self.pending.len() - streamed + usize::from(self.choosing.is_some())
     }
 }
 
-/// The loading screen waits for the ground in view to be meshed.
+/// The loading screen waits for the ground in view to be meshed, but for its far levels.
 fn track(terrain: Res<Terrain>, mut progress: ResMut<Progress>) {
-    progress.report("Shaping the ground", terrain.coming(), terrain.shown.len());
+    progress.report(
+        "Shaping the ground",
+        terrain.coming_near(),
+        terrain.shown.len(),
+    );
+}
+
+/// Once the loading screen has lifted, meshes the first view's far chunks on the streaming
+/// pool, the nearer (finer) levels first.
+fn stream_far(planet: Res<Planet>, streaming: Res<Streaming>, mut terrain: ResMut<Terrain>) {
+    if terrain.later.is_empty() {
+        return;
+    }
+    let mut later: Vec<(ChunkId, Sides)> = terrain.later.drain().collect();
+    later.sort_by_key(|(id, _)| (id.level, id.coord.to_array()));
+    terrain.streaming_since = Some((std::time::Instant::now(), later.len()));
+    for (id, sides) in later {
+        let planet = planet.clone();
+        let task = streaming.0.spawn(async move { mesh(&planet, id, sides) });
+        let streamed = true;
+        (terrain.pending).insert(
+            id,
+            Pending {
+                sides,
+                task,
+                streamed,
+            },
+        );
+    }
 }
 
 /// Chunks this coarse and coarser split within `FAR_SPLIT` of their sizes on a world with
@@ -624,7 +679,11 @@ fn first_view(
         .ground_reach();
     let wanted = wanted(&planet, viewer, reach);
     let chosen = started.elapsed().as_secs_f32();
-    let chunks: Vec<(ChunkId, Sides)> = wanted.iter().map(|(&id, &sides)| (id, sides)).collect();
+    let (chunks, later): (Vec<(ChunkId, Sides)>, Vec<(ChunkId, Sides)>) = wanted
+        .iter()
+        .map(|(&id, &sides)| (id, sides))
+        .partition(|(id, _)| id.level < STREAM_FROM);
+    terrain.later = later.into_iter().collect();
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
     let planet_ref = &*planet;
     let meshed = terra_gen::par::map(&chunks, |&(id, sides)| {
@@ -658,7 +717,8 @@ fn first_view(
         })
         .collect();
     info!(
-        "Meshed the first view of the ground: {count} chunks in {secs:.2} s on {threads} threads, {chosen:.2} s of it choosing them; {} (summed over threads).",
+        "Meshed the first view of the ground: {count} chunks in {secs:.2} s on {threads} threads, {chosen:.2} s of it choosing them, {} far ones of level {STREAM_FROM} and up left for after the loading screen; {} (summed over threads).",
+        terrain.later.len(),
         by_level.join("; ")
     );
     terrain.wanted = wanted;
@@ -720,9 +780,13 @@ fn choose(
     // keeps the threads busy long after the walk, and keeps old chunks from being taken
     // away, which waits for nothing to be pending.
     let Terrain {
-        pending, wanted, ..
+        pending,
+        wanted,
+        later,
+        ..
     } = &mut *terrain;
     pending.retain(|id, _| wanted.contains_key(id));
+    later.retain(|id, sides| wanted.get(id) == Some(sides));
     let touched = |id: ChunkId| {
         let low = chunk_origin(id);
         let high = low + Vec3::splat(chunk_size_m(id.level));
@@ -743,12 +807,23 @@ fn choose(
             .get(&id)
             .is_some_and(|pending| pending.sides == sides)
             && !touched(id);
-        if up_to_date || underway {
+        // A far chunk of the first view still waiting for the loading screen to lift.
+        let waiting = terrain.later.contains_key(&id) && !touched(id);
+        if up_to_date || underway || waiting {
             continue;
         }
+        terrain.later.remove(&id);
         let planet = planet.clone();
         let task = pool.spawn(async move { mesh(&planet, id, sides) });
-        terrain.pending.insert(id, Pending { sides, task });
+        let streamed = false;
+        (terrain.pending).insert(
+            id,
+            Pending {
+                sides,
+                task,
+                streamed,
+            },
+        );
     }
 }
 
@@ -781,7 +856,17 @@ fn receive(
         let entity = show(&mut commands, &mut meshes, &look, id, mesh);
         terrain.shown.insert(id, Shown { sides, entity });
     }
-    if terrain.pending.is_empty() {
+    // The far chunks streaming in hold back no stale chunk's going: they are kilometres off,
+    // and the chunks walked past would pile up, drawn over each other, meanwhile.
+    let streaming = terrain.pending.values().any(|pending| pending.streamed);
+    if let (false, Some((since, count))) = (streaming, terrain.streaming_since) {
+        terrain.streaming_since = None;
+        let secs = since.elapsed().as_secs_f32();
+        info!(
+            "Streamed the first view's far ground: {count} chunks in {secs:.1} s after the loading screen lifted"
+        );
+    }
+    if terrain.pending.values().all(|pending| pending.streamed) {
         let stale: Vec<ChunkId> = terrain
             .shown
             .keys()

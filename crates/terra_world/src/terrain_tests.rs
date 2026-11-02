@@ -144,3 +144,64 @@ fn a_frame_that_moves_the_camera_on_does_not_wait_for_the_new_ground() {
         "and only those"
     );
 }
+
+#[test]
+fn the_far_levels_come_after_the_loading_screen_and_a_scripted_run_waits_for_them() {
+    let mut app = app();
+    app.init_state::<crate::loading::Screen>();
+    app.update();
+    // The small world has no chunk as coarse as `STREAM_FROM`: three of its first view's
+    // stand for them, taken back to be meshed after the loading screen.
+    let far: Vec<ChunkId> = {
+        let world = app.world_mut();
+        let mut terrain = world.resource_mut::<Terrain>();
+        let mut ids: Vec<ChunkId> = (terrain.shown.iter())
+            .filter(|(_, shown)| shown.entity.is_some())
+            .map(|(id, _)| *id)
+            .collect();
+        ids.sort_by_key(|id| (id.level, id.coord.to_array()));
+        ids.truncate(3);
+        let mut gone = Vec::new();
+        for id in &ids {
+            let shown = terrain.shown.remove(id).unwrap();
+            terrain.later.insert(*id, shown.sides);
+            gone.extend(shown.entity);
+        }
+        for entity in gone {
+            world.despawn(entity);
+        }
+        ids
+    };
+    for _ in 0..5 {
+        app.update();
+        let terrain = app.world().resource::<Terrain>();
+        assert_eq!(
+            terrain.coming_near(),
+            0,
+            "the loading screen waits for none"
+        );
+        assert_eq!(coming(&app), 3, "a scripted run waits for all three");
+        assert!(
+            far.iter().all(|id| !terrain.shown.contains_key(id)),
+            "none is meshed while the loading screen is up"
+        );
+    }
+    (app.world_mut()
+        .resource_mut::<NextState<crate::loading::Screen>>())
+    .set(crate::loading::Screen::Playing);
+    let began = Instant::now();
+    app.update();
+    while coming(&app) > 0 {
+        assert!(
+            began.elapsed() < Duration::from_secs(60),
+            "the far ground came"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+        app.update();
+    }
+    let terrain = app.world().resource::<Terrain>();
+    assert!(
+        (far.iter()).all(|id| (terrain.shown.get(id)).is_some_and(|s| s.entity.is_some())),
+        "once it lifted, each was meshed and drawn"
+    );
+}
