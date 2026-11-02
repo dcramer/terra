@@ -1,6 +1,6 @@
 # A blow keyed from a pose sheet
 
-2026-11-01. Question: can an agent make a fight clip that meshes with our guard by reading a generated pose sheet and writing key poses on our own skeleton, with no motion generator in between? The developer's idea: "I have found using chatgpt to create a pose sheet of the animation sequence, and then I get opus to animate against the pose sheet reasonably effective." One blow, the slash, on the player's body. The tools are in [spike/pose-sheet](../spike/pose-sheet/README.md).
+2026-11-01. Question: can an agent make a fight clip that meshes with our guard by reading a generated pose sheet and writing key poses on our own skeleton, with no motion generator in between? The developer's idea: "I have found using chatgpt to create a pose sheet of the animation sequence, and then I get opus to animate against the pose sheet reasonably effective." One blow, the slash, on the player's body. The tools are in [spike/pose-sheet](../spike/pose-sheet/README.md); the process is in [docs/keyed-moves.md](../docs/keyed-moves.md) (D588).
 
 ## In plain words
 
