@@ -101,10 +101,12 @@ export function measure(clip: Clip, template: string, t: number, arms = false): 
   return res;
 }
 
-const f = (m: string, v: number) => `${v.toFixed(0)}${UNITS[m]}`;
+// Gaps to a millimetre, since their bars (-1.5, "down to 2") sit within one of a rounded centimetre.
+const digits = (m: string) => (m.endsWith("gap") ? 1 : 0);
+const f = (m: string, v: number) => `${v.toFixed(digits(m))}${UNITS[m]}`;
 const range = (m: string, vs: number[]) => {
   const [a, b] = [Math.min(...vs), Math.max(...vs)];
-  return { a, b, text: Math.abs(b - a) < 0.5 ? f(m, a) : `${a.toFixed(0)}..${f(m, b)}` };
+  return { a, b, text: Math.abs(b - a) < 0.5 ? f(m, a) : `${a.toFixed(digits(m))}..${f(m, b)}` };
 };
 
 /// Each side's line and whether it passed: every measure over the clip on every template.
