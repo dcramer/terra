@@ -1013,6 +1013,7 @@ fn window(options: &Options) -> Window {
 impl Plugin for ShellPlugin {
     fn build(&self, app: &mut App) {
         crate::single_instance::take(self.0.multirun);
+        app.add_systems(Last, release_at_exit);
         if self.0.scripted() {
             stay_awake();
         }
@@ -1670,9 +1671,18 @@ fn finish(exit: &mut MessageWriter<AppExit>, how: AppExit) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(CLOSING_S));
         println!("SANDBOX took over {CLOSING_S} s to close, so it was ended");
+        crate::single_instance::release();
         // A render failure fails the run however it ended (render_errors).
         std::process::exit(i32::from(!success || crate::render_errors::failed()));
     });
+}
+
+/// Gives up this copy's single-instance slot as the game closes, its record removed, so the next
+/// start on the other side of the WSL line need not watch a stale record (D319).
+fn release_at_exit(mut exits: MessageReader<AppExit>) {
+    if exits.read().next().is_some() {
+        crate::single_instance::release();
+    }
 }
 
 /// Whether a scripted run's frames are being counted: once loading is done, unless held

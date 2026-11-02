@@ -1,4 +1,6 @@
 use super::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 /// Quick enough for a test: a beat every 20 ms, watched for 150.
 const QUICK: Timing = Timing {
@@ -134,6 +136,36 @@ fn a_copy_across_the_wsl_line_that_stopped_beating_is_taken_over() {
     other_side(&dir, &copy(61, "windows", "terra_sandbox.exe"));
     let next = take(&dir, false, &copy(62, "linux", "terra_sandbox")).unwrap();
     assert_eq!(next.slot, 0);
+}
+
+#[test]
+fn a_copy_that_closed_cleanly_keeps_the_other_side_of_the_wsl_line_from_waiting() {
+    // A watch long enough to tell apart from a start that skipped it.
+    let slow = Timing {
+        beat: QUICK.beat,
+        settle: Duration::from_secs(2),
+    };
+    let dir = folder("released");
+    let linux = take_in(&dir, false, &copy(91, "linux", "terra_sandbox"), slow)
+        .unwrap()
+        .unwrap();
+    linux.release();
+    // No beat left running brings the record back.
+    std::thread::sleep(QUICK.beat * 4);
+    assert!(
+        !record_path(&dir, 0).exists(),
+        "the record outlived its copy"
+    );
+    let started = Instant::now();
+    let windows = take_in(&dir, false, &copy(92, "windows", "terra_sandbox.exe"), slow)
+        .unwrap()
+        .unwrap();
+    assert_eq!(windows.slot, 0);
+    assert!(
+        started.elapsed() < slow.settle / 2,
+        "the start waited {:?} on a record from a copy that had closed",
+        started.elapsed()
+    );
 }
 
 #[test]

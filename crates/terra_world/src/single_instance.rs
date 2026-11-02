@@ -10,7 +10,8 @@
 //! Linux, `LockFileEx` on Windows) for the run's life, so a crash frees it at once and a dead
 //! copy's slot is simply taken. Beside each a record, `instance-<n>.txt`, says who holds it
 //! (pid, system, worktree, command, since when) for the refusal (D556); it is a file of its own
-//! because a Windows lock is mandatory and would stop another copy reading the slot file.
+//! because a Windows lock is mandatory and would stop another copy reading the slot file. A
+//! copy closing cleanly removes its record ([`release`]); one that dies leaves it behind.
 //!
 //! The folder is the Windows one, `%LOCALAPPDATA%\terra`, seen from WSL through `/mnt/c`, so
 //! both sides take the same slots; `TERRA_INSTANCE_DIR` moves it. A lock taken on one side of
@@ -28,8 +29,7 @@ use std::fmt;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 /// The switch allowing one more copy, for a two-player test on one machine; named as Valve's
@@ -136,17 +136,40 @@ impl Record {
     }
 }
 
-/// A slot held: its lock, and the beat rewriting its record. The game keeps it for its life; a
-/// test drops it to free the slot as a copy's death would, its record left behind.
+/// A slot held: its lock, and the beat rewriting its record. The game keeps it for its life and
+/// [`release`]s it as it closes; dropping it frees the slot as a copy's death would, its record
+/// left behind.
 pub struct Held {
     pub slot: usize,
     _lock: File,
-    beating: Arc<AtomicBool>,
+    /// The record's path while the beat rewrites it; none once stopped. The beat writes under
+    /// this lock, so once it is none no beat writes the record again.
+    beating: Arc<Mutex<Option<PathBuf>>>,
+}
+
+impl Held {
+    /// Ends the hold as a copy closing cleanly does: stops the beat and removes the record while
+    /// the lock is still held, then frees the lock. The next start, on either side of the WSL
+    /// line, finds no record and so need not watch one for [`Timing::settle`].
+    pub fn release(self) {
+        let record = self.stop();
+        if let Some(path) = record {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    /// Stops the beat, giving back the record's path if it was beating.
+    fn stop(&self) -> Option<PathBuf> {
+        self.beating
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+    }
 }
 
 impl Drop for Held {
     fn drop(&mut self) {
-        self.beating.store(false, Ordering::Relaxed);
+        self.stop();
     }
 }
 
@@ -216,8 +239,17 @@ fn clock(since: u64) -> String {
     format!("{:02}:{:02}:{:02}", day / 3600, day % 3600 / 60, day % 60)
 }
 
-/// The slot this run holds, for its life.
-static HELD: OnceLock<Held> = OnceLock::new();
+/// The slot this run holds, until it closes.
+static HELD: Mutex<Option<Held>> = Mutex::new(None);
+
+/// Releases this run's slot as the game closes cleanly ([`Held::release`]); nothing if it holds
+/// none. A copy that dies instead leaves its record, which the next start sees is dead.
+pub fn release() {
+    let held = HELD.lock().unwrap_or_else(PoisonError::into_inner).take();
+    if let Some(held) = held {
+        held.release();
+    }
+}
 
 /// Takes this run's slot for its life, or says who holds the slots and exits with [`REFUSED`].
 /// `multirun` is the switch. Where no folder can be used, it says so and the run goes on.
@@ -227,7 +259,7 @@ pub fn take(multirun: bool) {
     for folder in folders() {
         match take_in(&folder, multirun, &me, TIMING) {
             Ok(Ok(held)) => {
-                let _ = HELD.set(held);
+                *HELD.lock().unwrap_or_else(PoisonError::into_inner) = Some(held);
                 return;
             }
             Ok(Err(refusal)) => {
@@ -390,7 +422,7 @@ fn look(folder: &Path, slot: usize, os: &str, timing: Timing) -> io::Result<Slot
 fn hold(folder: &Path, slot: usize, lock: File, me: &Record, beat: Duration) -> Held {
     let path = record_path(folder, slot);
     let _ = std::fs::write(&path, me.text());
-    let beating = Arc::new(AtomicBool::new(true));
+    let beating = Arc::new(Mutex::new(Some(path)));
     let still = beating.clone();
     let mut record = me.clone();
     let _ = std::thread::Builder::new()
@@ -398,11 +430,12 @@ fn hold(folder: &Path, slot: usize, lock: File, me: &Record, beat: Duration) -> 
         .spawn(move || {
             loop {
                 std::thread::sleep(beat);
-                if !still.load(Ordering::Relaxed) {
+                let path = still.lock().unwrap_or_else(PoisonError::into_inner);
+                let Some(path) = path.as_ref() else {
                     return;
-                }
+                };
                 record.beat += 1;
-                let _ = std::fs::write(&path, record.text());
+                let _ = std::fs::write(path, record.text());
             }
         });
     Held {
