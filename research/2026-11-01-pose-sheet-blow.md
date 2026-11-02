@@ -42,7 +42,7 @@ In the real duel, with the clip in place of `Open_Slash` and its rows retimed on
 | Blows in reach in their active frames | 7 | 2 |
 | Contacts | 7 | 5 |
 
-The old film is from an older main, and taking out the drive changes the fight's length, so the foot row is an indication and not a clean before and after. The drop in reach and contacts is the cost of the blow standing still.
+The old film is from an older main, and taking out the drive changes the fight's length, so the foot row is an indication and not a clean before and after. The drop in reach and contacts is the cost of the blow standing still. `glb_clips.ts` does not carry a clip's foot locks, so this run probably played the new clip on `Open_Slash`'s old locks, which makes the foot row weaker still; that is read from the code, not checked against the run.
 
 ## What the test does not show
 
