@@ -144,6 +144,42 @@ Motion maps: `motion-side-by-side.png` (ours on top). Our film: `wind-film-ours.
 4. **Fuller crowns of smaller sprays** (D598). The larger content change, and a design call on how full the pines' crowns are. It costs triangles, to be measured against the near tree's budget.
 5. **Later:** octahedral impostors captured from the grown variants for the far forest, and dead branch stubs on the boles.
 
+## Follow-up: the experiment (2026-11-02, veg-wind j1)
+
+D597 and D598 stay Open; the look changes are patches, not on main (`~/.cache/terra-handoff/veg-wind-j1-wind.patch`, `-hue.patch`).
+
+**The wind measure is a tool**: `node tools/sandbox/wind.ts` (on main). The view the table above calls "under the pines' crowns" is in fact the one looking up under a crown by the spruce grove (`-21.9,1.7,-96` to `-21.9,12,-114`, the film `wind-oak.mp4`). The pines view (`-56,1.7,-43`) looks toward the sun, and is the "nothing moved" row. On the earlier main film the tool reads exactly the scratch script's 0.85 and 0.91.
+
+**Wind in levels, as built for the experiment.**
+- *The data.* Each limb's great limb (depth 1) is found when the tree grows: a limb's root sits on the nearest limb of lesser depth, and a clump of leaves on the nearest limb. The great limb's root, its length and a phase (golden-ratio steps by index) ride in one vertex attribute, `Terra_Pivot` (Float32x4, shader location 15). The wood, the near and far crowns and the shadow stand-in all carry it (`lush/pivots.rs`).
+- *The shader.* `foliage.wesl` gains a second entry point, `vertex_pivoted`, which the lush material picks for meshes carrying pivots in every pass. Every foliage pipeline now names its entry point, since wgpu cannot choose between two. The motion has three levels:
+  - the trunk leans by its height squared, about its foot, with its length kept, its phase the tree's;
+  - each great limb turns about its root, pushed downwind and bobbing at a pace of 3.2/√length rad/s, with its own phase;
+  - each near card flaps about its middle, with a phase and a pace (7 to 12 rad/s) of its own.
+- *Not done.* Only one limb level: twigs ride their great limb. The solid shadow lumps and the veteran oaks keep the old sway.
+
+**Measured, same camera, same wind (1.7 m/s, 15:00, the patch's base `0945c0d92`):**
+
+| | amplitude (p90) | shared | neighbour r | 4 apart |
+|---|---|---|---|---|
+| Enshrouded, Springlands | 0.03 to 0.04 px | 0.11 to 0.24 | 0.36 to 0.43 | 0.19 to 0.34 |
+| Main | 0.03 px (1.09) | 0.71 | 0.79 | 0.78 |
+| Wind in levels, first constants | 0.42 px (1.67) | 0.53 | 0.56 | 0.12 |
+
+The first constants move far more than Enshrouded's, and the shared share falls but does not pass. Looking up under one crown, a few great limbs fill the view, so one limb's turn reads as shared. A second set of constants is queued: trunk a quarter, limbs 0.4 times, cards' flap 1.7 times. Its numbers are in the handoff.
+
+**Frame cost.** Main at `0945c0d92`, RTX 4090, median and 99th percentile: forest-run 8.31 and 10.12 ms; lake-play 9.76 and 13.64 ms. lake-play misses D25 on main already. The first experiment bench did not count: its pivoted pipelines failed to build (the two entry points), so no tree was drawn. The bench of the fixed patch is queued.
+
+**Crown hue** (look.ts, five stills at 15:00 on the clear default day, with each tint's red and blue scaled):
+
+| warmth (red, blue) | mean crown hue | by view |
+|---|---|---|
+| 1.0, 1.0 (main) | 72.0° | 63 to 89° |
+| 1.2, 0.75 | 68.7° | 62 to 83° |
+| 1.35, 0.6 | 66.5° | 60 to 79° |
+
+Tint alone gets only part of the way to about 62°. The views that stay teal are the ones looking up against the sky, so what is left is the light (sky through and around the leaves), not the cards. `-hue.patch` is the 1.35, 0.6 step. Stills: `~/.cache/terra-review/veg-wind/hue/w0` (main) to `w2`.
+
 ## Sources
 
 - Sousa, "Vegetation Procedural Animation and Shading in Crysis", GPU Gems 3 ch. 16, NVIDIA/Crytek, 2007. https://developer.nvidia.com/gpugems/gpugems3/part-iii-rendering/chapter-16-vegetation-procedural-animation-and-shading-crysis
