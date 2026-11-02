@@ -1,10 +1,11 @@
-// Reading a binary glTF (.glb) and posing its skeleton through a clip, for the character
+// Reading a glTF (.glb, or .gltf with its buffer) and posing its skeleton through a clip, for the character
 // tools that measure clips without Blender or the game (phases.ts, moves.ts): accessors,
 // the nodes' rest and animated transforms, and linear blend skinning.
 //
 // Node 22.18 or later; no dependencies.
 
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 export type V3 = [number, number, number];
 export type Q = [number, number, number, number];
@@ -73,13 +74,25 @@ export class Glb {
 
   readonly file: string;
 
-  /** A file's path, or its bytes already read. */
-  constructor(file: string | Buffer) {
+  /** A file's path, or its bytes already read: a binary .glb, or a .gltf's JSON with its one
+   *  buffer beside it (by its `uri`) or given as `bin`. */
+  constructor(file: string | Buffer, bin?: Buffer) {
     this.file = typeof file === "string" ? file : "(bytes)";
-    this.bytes = typeof file === "string" ? readFileSync(file) : file;
-    const jsonLen = this.bytes.readUInt32LE(12);
-    this.gltf = JSON.parse(this.bytes.subarray(20, 20 + jsonLen).toString());
-    this.bin = 20 + jsonLen + 8;
+    const bytes = typeof file === "string" ? readFileSync(file) : file;
+    if (bytes.toString("latin1", 0, 4) === "glTF") {
+      this.bytes = bytes;
+      const jsonLen = this.bytes.readUInt32LE(12);
+      this.gltf = JSON.parse(this.bytes.subarray(20, 20 + jsonLen).toString());
+      this.bin = 20 + jsonLen + 8;
+    } else {
+      this.gltf = JSON.parse(bytes.toString());
+      const buffers = (this.gltf as { buffers?: { uri?: string }[] }).buffers ?? [];
+      if (buffers.length > 1) throw new Error(`${this.file}: ${buffers.length} buffers; this reader takes a .gltf with one (re-export it with one, or extend glb.ts)`);
+      const uri = buffers[0]?.uri;
+      if (!bin && (typeof file !== "string" || !uri)) throw new Error(`${this.file}: a .gltf read from bytes needs its buffer passed as \`bin\``);
+      this.bytes = bin ?? readFileSync(join(dirname(file as string), decodeURIComponent(uri!)));
+      this.bin = 0;
+    }
     this.gltf.nodes.forEach((n, i) => n.children?.forEach((c) => (this.parentOf[c] = i)));
   }
 
