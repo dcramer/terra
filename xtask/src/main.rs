@@ -11,6 +11,7 @@ mod check;
 mod doctor;
 mod launcher;
 mod load;
+mod local;
 mod nightly;
 mod primitives;
 mod profile;
@@ -117,7 +118,13 @@ fn main() -> ExitCode {
     let ok = match all_tasks()
         .find(|task| task.name == name || (name == "help" && task.name == "tools"))
     {
-        Some(task) => (task.run)(&rest),
+        Some(task) => match local::refusal(task.name) {
+            Some(refusal) => {
+                eprintln!("{refusal}");
+                false
+            }
+            None => (task.run)(&rest),
+        },
         None => {
             eprintln!("{}", usage());
             false

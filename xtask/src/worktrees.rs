@@ -136,7 +136,12 @@ pub fn worktrees(args: &[String]) -> bool {
             .canonicalize()
             .ok()
             .and_then(|tree_path| active_paths.as_ref().map(|paths| in_use(&tree_path, paths)));
-        let action = choose_action(ours, agent, merged, changes, idle, target.is_dir(), in_use);
+        let action =
+            match choose_action(ours, agent, merged, changes, idle, target.is_dir(), in_use) {
+                // A machine that builds nothing (crate::local) frees the build and seeds nothing.
+                Action::Reseed if !crate::local::builds_here() => Action::FreeBuild,
+                action => action,
+            };
 
         let state = [
             if merged { "on main" } else { "not on main" }.to_string(),
