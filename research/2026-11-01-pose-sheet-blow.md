@@ -87,3 +87,13 @@ This is how game animators work: block the key poses, then time them. The sheet 
 ## The idle's palms
 
 The developer, on today's `Idle_Loop`: "hes standing there with his palms out". Measured at its first frame, a resting palm should face the thigh or a little behind it, as `Walk_Loop`'s do (17-27% backward on the right). Today's left palm is 36 degrees off the thigh and faces 40% forward; the right faces 10% forward. The keyed idle had copied those hands from its start pose, so it had the same fault. `palms` in the keys rolls each forearm (right 15, left 35 degrees), which brought the right to 16% backward. No test failed on this, and only the eye caught it: the idle was picked and passed the checks with its palms out. The arms still stand well away from the body in both idles.
+
+## The idle again, through the pipeline
+
+The developer asked for the arms in, then: "remember this is a test of our new pipeline". So the change went through the steps, not a tweak.
+
+- **The brief made the sheet.** The same model, asked for one row of five panels with each one's difference spelled out and the hands by name, followed the layout and drew clearly different poses. The first sheet was vague, not unusable: step 3 works for small moves when the brief is exact.
+- **The layover now works** for empty hands (`stills.py ... empty`), so step 5 ran.
+- **A new gate catches the fault.** `rest.ts` fails today's `Idle_Loop` on both hands (left palm 46% forward, wrists 26 and 27 cm out) with bars from `Walk_Loop`.
+- **Two gates pull against each other.** Arms 12 degrees in leave the right wrist 19 cm out against the 18 cm bar, and at 15 degrees the hand goes 2.9 cm into the thigh on the female template. The clip keeps 12: hands clear of every body (0.2 cm), `rest.ts` still ✗ on the right by a centimetre.
+- **Still inherited.** The head stays turned as in `Idle_Loop`'s first pose, where the sheet looks ahead, and the feet stand closer than the sheet's. The left leg reaches full stretch at one point. Fingers don't move. The look and the game are unjudged.

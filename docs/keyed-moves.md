@@ -40,19 +40,26 @@ A small loop such as an idle goes through the same steps with less from the shee
 One move, one owner. Each step says what stops the job.
 
 1. **Brief the move.** Say what it does in the fight: where it starts and ends, the hit's moment, how far the body travels, which foot steps, and which reference item it is made for (D565).
-2. **Render the start.** Our body in its start pose, from two sides, with the item in hand (`tools/characters/clip_sheet.ts`).
+2. **Look at the start pose before anything else.** A keyed move inherits its start pose's faults: today's idle had its palms out and arms wide, and the keyed idle copied both until the developer saw them. Judge the start pose first, and name in the brief what must differ.
+
+   **Render the start.** Our body in its start pose, from two sides, with the item in hand (`tools/characters/clip_sheet.ts`).
 3. **Make the sheet.** `node tools/tripo/tripo.ts image "…" --ref guard.png --model gpt-image-2.5 --aspect 16:9`. The prompt asks for:
    - one strip of eight numbered panels, the first and last the start pose;
    - the same camera and scale in every panel, the reference's own view, the whole body and whole item always in frame;
    - a plain grey ground, clear outlines, no blur or effects;
    - each panel's pose in a sentence, and which feet stay planted.
 
+   The brief decides how good the sheet is. On the idle, a vague prompt gave twelve near-identical panels; asking for one row of five, each panel's difference spelled out, and the hands by name gave poses worth keying. Fewer panels work for a small move.
+
    Reject a sheet whose body can't do what it shows, or whose item changes between panels. Draw a new one; don't argue with it. The image model may ignore the layout: read what it drew by the poses, not its panel numbers.
 4. **Write the keys.** One key per panel, more where the hand travels a long arc. Copy the body from the panels. Timing is ours, since a sheet has none: a slow wind-up, a fast strike, a slow recovery, set against the move's row. Correct what the sheet gets wrong, such as a blade that points the wrong way in the wind-up. Read the sheet as an animator would, and don't trace it.
 5. **Lay it under the sheet.** Render ours at the panels' moments from the same camera, stack it below the sheet, and correct by eye. Three rounds at most; past that, the sheet or the brief is wrong, so go back to step 1 or 3.
 6. **Pass the gates**, before any film:
    - `tools/characters/mesh.ts`: the start, the feet, the speed and the hit's moment against the guard;
-   - `tools/characters/moves.ts`: the wrist, the grip, and the sword through its own shield.
+   - `tools/characters/moves.ts`: the wrist, the grip, the sword through its own shield, and hands into the body on every body template;
+   - `spike/pose-sheet/rest.ts`, for empty hands: palms not forward, arms near the sides, against `Walk_Loop`.
+
+   `mesh.ts` and the `held` rows are for blows; an idle doesn't use them.
 
    A clip put into a body file keeps the old clip's foot locks until they are baked again: `glb_clips.ts` doesn't carry them, so run `tools/characters/markers.ts` on the file.
 7. **Film it twice.** The clip on our body from two sides, then the real game's duel (`cargo xtask gpu film -- cargo xtask duel --out DIR`). A clip that looks good alone has fooled us before.

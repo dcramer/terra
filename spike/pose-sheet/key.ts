@@ -16,6 +16,7 @@
 //   foot_r / foot_l {at, yaw, heel}      the ball moved, turned, the heel raised over the ball
 //   arm_r / arm_l {forward, out, elbow}  with `hang`: empty arms ride the chest as the guard hangs
 //   palms {r, l}                         with `hang`: degrees each forearm rolls the palm toward the thigh
+//   arms_in {r, l}                       with `hang`: degrees each arm hangs nearer the side, the whole clip
 //                                        them, swayed by these degrees; hand_r and hand_l are unused
 // `loop` makes the curve run on through the seam; the last key must equal the first.
 
@@ -259,7 +260,7 @@ function pose(t: number): Pose[] {
       const sign = side === "r" ? -1 : 1;
       const across = rot(turned, [1, 0, 0]);
       w = fk(l);
-      bend(l, id(`upperarm_${side}`), qmul(about(across, -num(`arm_${side}`, "forward", t)), about(rot(turned, [0, 0, 1]), sign * num(`arm_${side}`, "out", t))), w);
+      bend(l, id(`upperarm_${side}`), qmul(about(across, -num(`arm_${side}`, "forward", t)), about(rot(turned, [0, 0, 1]), sign * (num(`arm_${side}`, "out", t) - (spec.arms_in?.[side] ?? 0)))), w);
       w = fk(l);
       bend(l, id(`lowerarm_${side}`), about(across, -num(`arm_${side}`, "elbow", t)), w);
       // The palm rolls with the forearm, half of it up the twist bone, as a forearm rolls.
