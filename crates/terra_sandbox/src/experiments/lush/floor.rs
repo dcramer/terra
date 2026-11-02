@@ -970,6 +970,30 @@ impl Lay<'_, '_, '_> {
         most
     }
 
+    /// Whether a clump of a kind is started where it is tried, by the dice's `roll` against
+    /// how much it likes the place times its drifts.
+    fn starts(&self, kind: Under, at: Vec2, mut here: Here, roll: f32, drifts: f32) -> bool {
+        if roll > self.likes_at_most(kind, &mut here) * drifts {
+            return false;
+        }
+        roll <= kind.likes(&self.in_sun(kind, at, here)) * drifts
+    }
+
+    /// What a place is for a clump's member, if it is clear of the bark, what lies and the
+    /// path by `clear` (`Under::clear_of`) and liked enough to stand there.
+    fn member(&self, kind: Under, p: Vec2, mut here: Here, clear: (f32, f32, f32)) -> Option<Here> {
+        let (bark_m, lying_m, path_m) = clear;
+        if here.bark < bark_m
+            || here.lying < lying_m
+            || here.path < path_m
+            || self.likes_at_most(kind, &mut here) < 0.1
+        {
+            return None;
+        }
+        let here = self.in_sun(kind, p, here);
+        (kind.likes(&here) >= 0.1).then_some(here)
+    }
+
     /// A place on the ground, `at` east and south of the start, turned at random about its
     /// up, sunk `sink`, `scale` times its size.
     fn on(&self, at: Vec2, dice: &mut Rng, sink: f32, scale: f32) -> Transform {
@@ -1435,7 +1459,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
     for placement in &PLACEMENTS {
         let variants = lay.grow(placement);
         let drift = Noise::new(lay.seed.derive(placement.name).index(placement.kind as u64));
-        let (bark_m, lying_m, path_m) = placement.kind.clear_of();
+        let clear = placement.kind.clear_of();
         let mut count = 0;
         let mut closest = Vec2::splat(f32::MAX);
         for _ in 0..placement.tries {
@@ -1445,13 +1469,7 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 0.62,
                 0.5 + 0.5 * drift.fbm(Vec3::new(at.x, 0.0, at.y) / placement.drift_m, 2, 2.0, 0.5),
             );
-            let mut here = map.here(at);
-            let roll = dice.unit();
-            if roll > lay.likes_at_most(placement.kind, &mut here) * drifts {
-                continue;
-            }
-            let here = lay.in_sun(placement.kind, at, here);
-            if roll > placement.kind.likes(&here) * drifts {
+            if !lay.starts(placement.kind, at, map.here(at), dice.unit(), drifts) {
                 continue;
             }
             let many = placement.clump.0 + dice.below(placement.clump.1 - placement.clump.0 + 1);
@@ -1461,18 +1479,9 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 } else {
                     round(&mut dice, at, placement.spread_m)
                 };
-                let mut here = map.here(p);
-                if here.bark < bark_m
-                    || here.lying < lying_m
-                    || here.path < path_m
-                    || lay.likes_at_most(placement.kind, &mut here) < 0.1
-                {
+                let Some(here) = lay.member(placement.kind, p, map.here(p), clear) else {
                     continue;
-                }
-                let here = lay.in_sun(placement.kind, p, here);
-                if placement.kind.likes(&here) < 0.1 {
-                    continue;
-                }
+                };
                 // Smaller toward the clump's edge.
                 let edge = 1.0 - 0.3 * (p.distance(at) / (placement.spread_m * 2.0)).min(1.0);
                 let scale = dice.range(placement.scale.0, placement.scale.1) * edge;

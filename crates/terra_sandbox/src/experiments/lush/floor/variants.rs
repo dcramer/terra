@@ -16,6 +16,7 @@ use crate::experiments::lush::shade::ShadowSet;
 use crate::experiments::lush::thicket::{self, Stool};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+use terra_gen::Rng;
 use terra_world::grown::{build as grown_build, plants};
 
 /// Each kind's variants, by kind, without the world's materials; a kind is grown the first
@@ -153,6 +154,48 @@ impl Lay<'_, '_, '_> {
         bare
     }
 
+    /// A variant of the floor's rosettes, the fronds' or the herbs'.
+    fn rosette(&mut self, kind: Under, n: u64, dice: &mut Rng) -> Bare {
+        let (picture, tint, size) = if kind == Under::Frond {
+            // Some young and small, some old and broad.
+            let size = [1.0, 0.8, 1.25, 0.65, 1.1, 0.9][n as usize];
+            ("fern", Vec3::new(0.54, 0.6, 0.52), size)
+        } else {
+            // A herb is a third of a metre across, not a metre.
+            ("herb", Vec3::new(0.6, 0.62, 0.54), 0.4)
+        };
+        let tint = variant_tint(dice, tint);
+        // Lady fern's shuttlecocks, broad and arching, and male fern's, upright and narrow,
+        // as two kinds of each.
+        let upright = n % 2 == 1;
+        let def = if kind == Under::Frond {
+            terra_world::grown::RosetteDef {
+                card: "fern".into(),
+                tint: (1.0, 1.0, 1.0),
+                leaves: if upright { (6, 9) } else { (9, 15) },
+                tilt: if upright { (55.0, 78.0) } else { (25.0, 60.0) },
+                stalk: (0.03, 0.97),
+                tip: (0.97, 0.03),
+            }
+        } else {
+            terra_world::grown::RosetteDef {
+                card: "herb".into(),
+                tint: (1.0, 1.0, 1.0),
+                leaves: (4, 7),
+                tilt: (15.0, 45.0),
+                stalk: (0.5, 0.97),
+                tip: (0.5, 0.05),
+            }
+        };
+        let mut build = plants::rosette(dice, &def, self.cards.get(picture), tint);
+        for p in &mut build.positions {
+            for c in p.iter_mut() {
+                *c *= size;
+            }
+        }
+        Bare::one(self.meshes.add(build.mesh(false)), Paint::Atlas)
+    }
+
     /// A kind's variants grown from the forest's seed (the fern's scan apart).
     fn grow_bare(&mut self, kind: Under) -> Vec<Bare> {
         let mut dice = self
@@ -172,48 +215,7 @@ impl Lay<'_, '_, '_> {
                     Bare::one(self.meshes.add(build.mesh(false)), atlas)
                 }
                 Under::Fern => unreachable!("the fern is its scan, loaded in each world"),
-                Under::Frond => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.54, 0.6, 0.52));
-                    // Lady fern's shuttlecocks, broad and arching, and male fern's, upright
-                    // and narrow, as two kinds of each.
-                    let upright = n % 2 == 1;
-                    let def = terra_world::grown::RosetteDef {
-                        card: "fern".into(),
-                        tint: (1.0, 1.0, 1.0),
-                        leaves: if upright { (6, 9) } else { (9, 15) },
-                        tilt: if upright { (55.0, 78.0) } else { (25.0, 60.0) },
-                        stalk: (0.03, 0.97),
-                        tip: (0.97, 0.03),
-                    };
-                    let mut build = plants::rosette(&mut dice, &def, &card("fern"), tint);
-                    // Some young and small, some old and broad.
-                    let size = [1.0, 0.8, 1.25, 0.65, 1.1, 0.9][n as usize];
-                    for p in &mut build.positions {
-                        for c in p.iter_mut() {
-                            *c *= size;
-                        }
-                    }
-                    Bare::one(self.meshes.add(build.mesh(false)), atlas)
-                }
-                Under::Herb => {
-                    let tint = variant_tint(&mut dice, Vec3::new(0.6, 0.62, 0.54));
-                    let def = terra_world::grown::RosetteDef {
-                        card: "herb".into(),
-                        tint: (1.0, 1.0, 1.0),
-                        leaves: (4, 7),
-                        tilt: (15.0, 45.0),
-                        stalk: (0.5, 0.97),
-                        tip: (0.5, 0.05),
-                    };
-                    let mut build = plants::rosette(&mut dice, &def, &card("herb"), tint);
-                    // A herb is a third of a metre across, not a metre.
-                    for p in &mut build.positions {
-                        for c in p.iter_mut() {
-                            *c *= 0.4;
-                        }
-                    }
-                    Bare::one(self.meshes.add(build.mesh(false)), atlas)
-                }
+                Under::Frond | Under::Herb => self.rosette(kind, n, &mut dice),
                 Under::Hazel => {
                     // Young stools on the floor, a metre or two: rods, a vase, a fan, each
                     // with its stems showing, at the size their leaves are (D276).
