@@ -31,6 +31,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod busy;
 mod entities;
 
 /// The frame rate the game is made to hold (D25), at the high preset on the developers'
@@ -602,12 +603,13 @@ fn report(mut frames: ResMut<Frames>, recorder: Option<Res<crate::recorder::Reco
         .filter(|sample| sample.work_ms() > FRAME_BUDGET_MS)
         .count();
     info!(
-        "Last minute, {} frames, in ms as median/99th/worst: {}; {}; {}; {}. {over} over budget.",
+        "Last minute, {} frames, in ms as median/99th/worst: {}; {}; {}; {}. {over} over budget.{}",
         samples.len(),
         line("work", spread(&samples, |s| Some(s.work_ms()))),
         line("game", spread(&samples, |s| Some(s.game_ms))),
         line("render", spread(&samples, |s| s.render_ms)),
         line("GPU", spread(&samples, |s| s.gpu_ms)),
+        busy::clause(&samples).unwrap_or_default(),
     );
 }
 
