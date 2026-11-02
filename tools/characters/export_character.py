@@ -43,9 +43,12 @@ src, dst = look.args()[:2]
 look.reset()
 bpy.ops.import_scene.gltf(filepath=look.path(src))
 arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
-body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
+# Every mesh the skeleton moves is kept (Quaternius's body brings its eyes and brows as their
+# own meshes, D599); the largest is the body the sockets, patches and lift are read from.
+skinned = [o for o in bpy.context.scene.objects if o.type == "MESH" and any(m.type == "ARMATURE" and m.object == arm for m in o.modifiers)]
+body = max(skinned, key=lambda o: len(o.data.vertices))
 for o in list(bpy.context.scene.objects):
-    if o not in (arm, body):
+    if o is not arm and o not in skinned:
         bpy.data.objects.remove(o)
 arm.name = "Rig"
 for pb in arm.pose.bones:
@@ -257,7 +260,7 @@ for a in actions:
     track.mute = True
 ad.action = None
 for o in bpy.context.scene.objects:
-    o.select_set(o in (arm, body) or o in sockets)
+    o.select_set(o is arm or o in skinned or o in sockets)
 bpy.context.view_layer.objects.active = arm
 # A part painted to glow (an emissive map, wake.py) ships dark, its factor 0: the game lights
 # it when the creature wakes (staged.glow, D536).
@@ -270,6 +273,9 @@ look.fit_textures(sys.argv)
 bpy.ops.export_scene.gltf(
     filepath=look.path(dst), export_format="GLB", use_selection=True,
     export_animations=True, export_animation_mode="NLA_TRACKS", export_force_sampling=True,
-    export_influence_nb=4, export_extras=True, export_morph=True,
+    # Every weight a vertex has: a converted body has four at most (convert_rig.py), and
+    # Quaternius's are kept as made (D599; the woman's Ranger pieces carry eight), which
+    # Blender's default of four would cut.
+    export_all_influences=True, export_extras=True, export_morph=True,
 )
 print("EXPORTED", dst, len(actions), "clips")

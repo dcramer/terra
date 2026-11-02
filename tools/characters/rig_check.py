@@ -12,8 +12,9 @@ is added or changed (say why in the commit).
 Checks:
   skeleton      same bones, same parents as our skeleton
   rest pose     every bone points at its next joint (retarget.main_children), as our
-                skeleton's do; one without a child the same way as in our skeleton. The
-                clips are carried by the bones' turns (retarget.py), which reads +Y as the limb
+                skeleton's do; one without a child the same way as in our skeleton. Judged
+                on a rig with twist bones (twist.py turns them about +Y); Quaternius's
+                skeleton has none and stays as made (D599), so it is reported, not judged
   weights       every vertex weighted, at most 4 bones each, weights summing to 1
   seams         copies of a vertex split at a texture seam carry the same weights, or the
                 seam opens into a gap as the body moves
@@ -129,7 +130,17 @@ def meant(n):
 angles = {n: math.degrees(dirs[n].angle(meant(n), 0)) for n in dirs if n in ref_dirs}
 worst = max(angles, key=angles.get)
 report["rest_pose"] = {"worst_bone": worst, "worst_deg": round(angles[worst], 2)}
-ok["rest_pose"] = angles[worst] <= LIMITS["rest_angle_deg"]
+# Judged only on our converted rig, the one with twist bones: twist.py turns them about their
+# segment's +Y and convert_rig.py re-points each bone at its child for it. Quaternius's
+# skeleton has no twist bones and stays as made (D599: not re-pointed), up to 12 degrees off
+# its children at the clavicles; the retarget carries clips by joint lines (retarget.pose),
+# not +Y, so its bones' axes are reported, not judged. hold.py's aim and roll still read +Y.
+if any(n in arm.data.bones for n, _ in twist.names()):
+    ok["rest_pose"] = angles[worst] <= LIMITS["rest_angle_deg"]
+else:
+    report["rest_pose"]["judged"] = "no: no twist bones, their skeleton as made (D599)"
+    report["rest_pose"]["over_limit"] = sorted(n for n, a in angles.items() if a > LIMITS["rest_angle_deg"])
+    ok["rest_pose"] = True
 
 # Weights.
 groups = {g.index: g.name for g in body.vertex_groups}

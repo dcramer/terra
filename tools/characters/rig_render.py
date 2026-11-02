@@ -1,7 +1,10 @@
 """Renders a rigged body through our animations: a row per animation, four moments each,
 and a close row of the deepest crouch, to look at what the checker's numbers mean.
 
-    tools/blender/run.sh tools/characters/rig_render.py tools/characters/out/base-male-tripo-s2.glb sheet-name
+    tools/blender/run.sh tools/characters/rig_render.py tools/characters/out/base-male-tripo-s2.glb sheet-name [CLIP ...]
+
+The model may be several files joined by "+", a body then pieces skinned to its skeleton:
+    tools/blender/run.sh tools/characters/rig_render.py HEAD.gltf+BODY.gltf+LEGS.gltf sheet-name Sword_Idle
 """
 
 import math
@@ -24,11 +27,32 @@ src, name = look.args()[:2]
 ACTIONS = [a for a in (look.args()[2:] or ["Idle_Loop", "Walk_Loop", "Sword_Attack", "Crouch_Idle_Loop", "Roll"])]
 
 look.reset()
-bpy.ops.import_scene.gltf(filepath=look.path(src))
-arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
-body = max((o for o in bpy.context.scene.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
+# "body.gltf+piece.gltf+...": a body and pieces skinned to the same skeleton (Quaternius's
+# outfit pieces on their head-only body), each piece bound to the first file's skeleton, its own
+# thrown away, as compare.py and the game put a skinned look on.
+for k, part in enumerate(src.split("+")):
+    had = set(bpy.context.scene.objects)
+    bpy.ops.import_scene.gltf(filepath=look.path(part))
+    if k == 0:
+        arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
+        continue
+    added = [o for o in bpy.context.scene.objects if o not in had]
+    for o in added:
+        mods = [m for m in o.modifiers if m.type == "ARMATURE"] if o.type == "MESH" else []
+        if mods:
+            mw = o.matrix_world.copy()
+            o.parent = arm
+            o.matrix_world = mw
+            for m in mods:
+                m.object = arm
+    for o in added:
+        if o.type == "ARMATURE":
+            bpy.data.objects.remove(o)
+# Every mesh the skeleton moves, not only the largest: Quaternius's body brings its eyes and
+# brows, and a body dressed in their pieces is several meshes, none of them the whole figure.
+skinned = [o for o in bpy.context.scene.objects if o.type == "MESH" and any(m.type == "ARMATURE" and m.object == arm for m in o.modifiers)]
 for o in list(bpy.context.scene.objects):
-    if o not in (arm, body):
+    if o is not arm and o not in skinned:
         bpy.data.objects.remove(o)
 before = set(bpy.data.objects)
 bpy.ops.import_scene.gltf(filepath=FIGURE)  # brings the animations
@@ -47,9 +71,10 @@ cam.data.lens = 50
 scene.collection.objects.link(cam)
 scene.camera = cam
 sun = bpy.data.objects["Sun"]
-# Framed for a person 1.8 m tall and scaled by this body's height, so a troll fits as a man does.
-size = (max((body.matrix_world @ Vector(c)).z for c in body.bound_box)
-        - min((body.matrix_world @ Vector(c)).z for c in body.bound_box)) / 1.8
+# Framed for a person 1.8 m tall and scaled by the whole figure's height (every mesh at rest),
+# so a troll fits as a man does.
+corners = [(o.matrix_world @ Vector(c)).z for o in skinned for c in o.bound_box]
+size = (max(corners) - min(corners)) / 1.8
 rows = []
 for action_name in ACTIONS:
     action = bpy.data.actions.get(action_name) or next(a for a in bpy.data.actions if a.name.startswith(action_name))

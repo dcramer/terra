@@ -94,6 +94,13 @@ def test_the_stretched_figure_has_a_persons_reach():
     assert not any(f.startswith("reach") for f in faults)
 
 
+def test_a_body_of_quaternius_is_known_by_its_mesh_name_and_ours_is_not():
+    # Their man's body node and mesh as Blender names them on import (D599: reported, not failed).
+    assert proportions.theirs("RegularMale", "RegularMale.001")
+    assert proportions.theirs("Body", "Female_Regular.001")
+    assert not proportions.theirs("Body", "Body.001")
+
+
 if __name__ == "__main__":
     tests = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

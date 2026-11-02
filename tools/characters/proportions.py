@@ -75,6 +75,25 @@ def judge(m, data=None):
 ADVICE = ("Every body of a person is stretched to a person's proportions as it is converted (stretch.py in convert_rig.py, D593); "
           "a body this far off was not, or was made another way: rebuild it with tools/characters/build_bodies.sh. "
           "Don't widen a band in art/characters/proportions.json to pass it.")
+# Quaternius's bodies stay as made (D599): their man's fingertips sit 2.2 cm above the 99th
+# percentile and the developers keep his arms so, so a body of theirs out of band is reported
+# to them with the evidence, not failed or stretched.
+THEIRS = os.path.join(HERE, "..", "..", "art", "characters", "quaternius")
+AS_MADE = ("Their parts stay as made (D599): reported to the developers with these numbers, never stretched; "
+           "no band in art/characters/proportions.json is widened for it.")
+
+
+def theirs(*names):
+    """Whether any of `names` (an object's or mesh's, Blender's ".001" ignored) is the name of a
+    node or mesh in one of Quaternius's files under art/characters/quaternius/."""
+    known = set()
+    for folder, _, files in os.walk(THEIRS):
+        for f in files:
+            if f.endswith(".gltf"):
+                with open(os.path.join(folder, f)) as fh:
+                    g = json.load(fh)
+                known |= {n.get("name") for n in g.get("nodes", []) if "mesh" in n} | {m.get("name") for m in g.get("meshes", [])}
+    return any(n.split(".0")[0] in known or n in known for n in names)
 
 
 def main():
@@ -104,7 +123,9 @@ def main():
         result, faults = judge(measure(P, E.reshape(-1, 2), J))
         name = os.path.basename(given)
         print("PROPORTIONS", json.dumps({"file": name, "pass": not faults, "measures": result}), flush=True)
-        if faults:
+        if faults and theirs(body.name, body.data.name):
+            print(f"PROPORTIONS as made {name}: {'; '.join(faults)}. {AS_MADE}", flush=True)
+        elif faults:
             print(f"PROPORTIONS fail {name}: {'; '.join(faults)}. {ADVICE}", flush=True)
 
 
