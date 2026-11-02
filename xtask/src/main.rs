@@ -26,6 +26,7 @@ mod tasks;
 mod tracy;
 mod windows;
 mod worktrees;
+mod world_seed;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};

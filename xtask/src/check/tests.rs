@@ -23,7 +23,10 @@ fn names(stages: &[(Step, How)]) -> Vec<String> {
 #[test]
 fn the_hook_formats_and_lints_only_the_crates_changed() {
     let stages = hook(&changed(&["terra_core"]));
-    assert_eq!(names(&stages), ["fmt", "sizes", "one definition", "clippy"]);
+    assert_eq!(
+        names(&stages),
+        ["fmt", "sizes", "one definition", "world seed", "clippy"]
+    );
     for (step, how) in &stages {
         let How::Command(command) = how else {
             assert!(matches!(how, How::Here(_)), "{} runs nothing", step.name());

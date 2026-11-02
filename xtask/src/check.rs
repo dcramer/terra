@@ -1,5 +1,5 @@
-//! `cargo xtask check` (D37): the hook before a push, formatting, the size and
-//! one-definition lints and clippy of the crates changed since main, and nothing else; and
+//! `cargo xtask check` (D37): the hook before a push, formatting, the size, one-definition
+//! and world-seed lints and clippy of the crates changed since main, and nothing else; and
 //! `--all`, the full check the scheduled run on main runs (`.github/workflows/main.yml`),
 //! with the gates only it runs: every test, the tools'
 //! tests, the kits, foliage, artifacts and fuzz ratchets, the combat and controller scorecards (D452, D457), the
@@ -148,9 +148,9 @@ fn clippy(selected: &[String]) -> (Step, How) {
 }
 
 /// The code-health rules (D396): no file or function past its size, no shared primitive
-/// written out again. Lints in all but name, well under a second together, so the hook runs
-/// them beside clippy.
-fn code_health() -> [(Step, How); 2] {
+/// written out again, no random stream but from the world's seed (D596). Lints in all but
+/// name, well under a second together, so the hook runs them beside clippy.
+fn code_health() -> [(Step, How); 3] {
     [
         (
             Step::new("sizes", Said::Printed, LOGS).rerun("cargo xtask sizes"),
@@ -159,6 +159,10 @@ fn code_health() -> [(Step, How); 2] {
         (
             Step::new("one definition", Said::Printed, LOGS),
             How::Here(crate::primitives::one_definition),
+        ),
+        (
+            Step::new("world seed", Said::Printed, LOGS),
+            How::Here(crate::world_seed::seeded_from_the_world),
         ),
     ]
 }
@@ -197,11 +201,12 @@ fn full() -> Vec<(Step, How)> {
         "test",
         &["--workspace", "--", "--format=pretty"].map(String::from),
     );
-    let [sizes, one_definition] = code_health();
+    let [sizes, one_definition, world_seed] = code_health();
     let mut stages = vec![
         fmt(&Scope::everything("--all")),
         sizes,
         one_definition,
+        world_seed,
         clippy(&workspace),
         (
             Step::new("tests", Said::Cargo, LOGS)
