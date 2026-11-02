@@ -54,6 +54,7 @@ use terra_survival::work::Hold;
 use terra_walker::controls::Action;
 use terra_walker::intent::Intent;
 use terra_walker::{IsLocalPlayer, Player};
+use terra_world::instance::Global;
 use terra_world::tick::Sim;
 
 mod act;
@@ -653,9 +654,11 @@ fn setup(
     let looks = colours.map(|colour| film(colour, 0.16));
     // A ghost is a whole object, not a patch on a wall, and needs to be seen as one.
     let ghost_looks = colours.map(|colour| film(colour, 0.4));
+    // The tool's own marks are the builder's, not a world's: they outlive each (D469).
     let unseen = || {
         (
             MeshMaterial3d(looks[0].clone()),
+            Global,
             Transform::default(),
             Visibility::Hidden,
             NotShadowCaster,
@@ -672,6 +675,7 @@ fn setup(
     let rising = commands
         .spawn((
             Name::new("Item being built"),
+            Global,
             Transform::default(),
             Visibility::Hidden,
         ))

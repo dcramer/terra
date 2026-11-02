@@ -17,6 +17,7 @@ use bevy::{
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
+use terra_world::instance::{Building, InWorld, InstanceApp, WorldScoped};
 
 /// The map's size in pixels, and the ground each pixel covers.
 const PIXELS: usize = 128;
@@ -61,10 +62,23 @@ struct You;
 #[derive(Component)]
 struct Yours;
 
+/// The map of the world the run is in (D469): drawn on entering each, what was seen of it
+/// starting afresh.
 pub fn plugin(app: &mut App) {
     app.register_required_components::<Player, Explored>()
-        .add_systems(PostStartup, draw_land)
+        .world_resource::<Chart>()
+        .add_systems(
+            OnEnter(InWorld),
+            (unexplored, draw_land).in_set(Building::View),
+        )
         .add_systems(Update, (explore, toggle, place_marks).chain());
+}
+
+/// Each player has seen nothing of a world on entering it.
+fn unexplored(mut players: Query<&mut Explored>) {
+    for mut explored in &mut players {
+        *explored = Explored::default();
+    }
 }
 
 /// Where a pixel of the map is on the planet.
@@ -137,6 +151,7 @@ fn draw_land(
     commands
         .spawn((
             Sheet,
+            WorldScoped,
             Node {
                 position_type: PositionType::Absolute,
                 left: percent(50),

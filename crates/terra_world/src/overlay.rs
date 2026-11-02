@@ -35,6 +35,8 @@ pub fn plugin(app: &mut App) {
 fn spawn(mut commands: Commands) {
     commands.spawn((
         Name::new("Interface camera"),
+        // The interface is drawn over every world (D469).
+        crate::instance::Global,
         Camera2d,
         Camera {
             order: ORDER,

@@ -23,6 +23,7 @@ use bevy::prelude::*;
 use terra_gen::{Rng, Seed};
 use terra_world::climate::ClimateFields;
 use terra_world::flora::{Obstacles, Trunks};
+use terra_world::instance::{Building, InWorld, WorldScoped};
 
 /// How often the place is looked at again.
 const LOOK_EVERY_S: f32 = 0.25;
@@ -38,7 +39,11 @@ const BIRDS_GONE_M: f32 = 40.0;
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(Bells(Seed(19).derive("bells").rng()))
-        .add_systems(Startup, surround.run_if(audio::speaking))
+        // The world's own beds (D469): a realm sounds as its own place, made on entering it.
+        .add_systems(
+            OnEnter(InWorld),
+            surround.run_if(audio::speaking).in_set(Building::Place),
+        )
         .add_systems(
             Update,
             (
@@ -106,7 +111,7 @@ fn surround(mut commands: Commands, mut synths: ResMut<Assets<Synth>>, mix: Res<
             None,
             1.0,
         );
-        commands.entity(layer).insert(Layer(sound));
+        commands.entity(layer).insert((Layer(sound), WorldScoped));
     }
 }
 

@@ -219,6 +219,8 @@ fn setup(mut commands: Commands) {
     ] {
         commands.spawn((
             Name::new("Icon light"),
+            // The icons' studio is no world's (D469).
+            terra_world::instance::Global,
             DirectionalLight {
                 color: colour,
                 illuminance: lux,

@@ -808,7 +808,10 @@ pub fn plugin(app: &mut App) {
             (
                 entering::land.in_set(Building::Land),
                 setup.in_set(Building::Place),
-                entering::stand_the_camera.in_set(Building::Arrive),
+                // Before anything else stands it: a run's set-up, the player's arrival.
+                entering::stand_the_camera
+                    .after(entering::land)
+                    .in_set(Building::Land),
             ),
         )
         .add_systems(Update, sea_waves)
