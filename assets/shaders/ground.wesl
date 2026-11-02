@@ -527,10 +527,31 @@ struct HeathHere {
     ground: vec4<f32>,
 }
 
+// The most heath_here's warp moves a point, in metres: under 10 an axis (noise is 0 to 1), so
+// under 17.4 in all, with room for the planet's coordinates' rounding.
+const HEATH_WARP_M: f32 = 40.0;
+
 fn heath_here(world: vec3<f32>) -> HeathHere {
     var none = HeathHere(vec4<f32>(0.0), vec4<f32>(0.0));
     if ground.land_north.w < 0.5 {
         return none;
+    }
+    // Farther outside the map than the warp below can carry a point, none, and its six noise
+    // are not taken (most of the land is outside the heath). The warp moves a point under
+    // HEATH_WARP_M; that moves the plane's point by at most 2 HEATH_WARP_M (1 + |u|) / along,
+    // u its offset over along, while along > 2 HEATH_WARP_M.
+    let along_here = dot(world, ground.land_middle.xyz);
+    if along_here <= -HEATH_WARP_M {
+        return none;
+    }
+    if along_here > 2.0 * HEATH_WARP_M {
+        let u = vec2<f32>(dot(world, ground.land_east.xyz), dot(world, ground.land_north.xyz)) / along_here;
+        let reach = 2.0 * HEATH_WARP_M * (1.0 + max(abs(u.x), abs(u.y))) / along_here;
+        let uv_here = vec2<f32>(u.x, -u.y) * ground.land_middle.w / ground.land_east.w + 0.5;
+        let reach_uv = reach * ground.land_middle.w / ground.land_east.w;
+        if min(min(uv_here.x, uv_here.y), min(1.0 - uv_here.x, 1.0 - uv_here.y)) < -reach_uv {
+            return none;
+        }
     }
     // Looked up a little way off, by noise at two scales, so the map's 10 m cells never show
     // as squares and the communities' edges wander as a real mosaic's do.
