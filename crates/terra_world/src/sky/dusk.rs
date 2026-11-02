@@ -170,6 +170,30 @@ pub(super) mod tests {
         }
     }
 
+    /// And so it does as the camera is set, not only at the hour's key: out in the open on a
+    /// world that sees far the eye is opened about a stop and a half (D338), and the sky drawn
+    /// over Bevy's air is to hold against the land it lights as the key's sunset does. Drawn
+    /// at the key's brightness under the opened eye, the settlement's meadow at 5.5 degrees
+    /// under showed 2.8 times as bright as that sky allowed, lit as by day (settlement j9).
+    #[test]
+    fn the_dusk_sky_is_exposed_as_the_land_it_lights() {
+        let luma = |c: Vec3| c.dot(Vec3::new(0.2126, 0.7152, 0.0722));
+        let against_land = |(sky, land): (f32, f32), under: f32, bearing: f32, up: f32| {
+            luma(seen(under, bearing, up)) * sky / land
+        };
+        for (bearing, up) in [(180.0, 70.0), (90.0, 20.0), (180.0, 8.0), (150.0, 35.0)] {
+            let sunset = against_land(crate::daylight::sky_and_land(0.0), 0.0, bearing, up);
+            for under in [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0] {
+                let opened = crate::daylight::sky_and_land_seen(-under);
+                let now = against_land(opened, under, bearing, up);
+                assert!(
+                    now > 0.75 * sunset,
+                    "{under} under, {bearing} round, {up} up: {now} opened, {sunset} at the key"
+                );
+            }
+        }
+    }
+
     /// The numbers of a function's body in a source, in order.
     pub(in crate::sky) fn numbers(source: &str, function: &str) -> Vec<f32> {
         let start = source.find(&format!("fn {function}(")).unwrap();

@@ -52,6 +52,20 @@ pub(super) fn open_exposure(
     wooded - open * (OPEN_EYE_EV * (1.0 - night) + OPEN_NIGHT_EV * night)
 }
 
+/// How bright the sky's own light (`Sky::brightness`, the hour's `sky`) is drawn with the camera
+/// set at `set` against the hour's `key`: over Bevy's air it lights only the dusk's colours
+/// (dusk.wesl), drawn on screen as tuned for the key (D432), so they are opened with the eye as
+/// the air and the land are; the painted sky of a world with no air keeps them, tuned so by eye.
+/// Left at the key, the far-seeing world's eye, opened 1.5 stops in the open (D338), lit the
+/// settlement's meadow at 5.5 degrees under 2.8 times as bright as the sky over it allowed.
+pub(super) fn dusk_brightness(sky: f32, key: f32, set: f32, over_air: bool) -> f32 {
+    if over_air {
+        sky * libm::exp2f(key - set)
+    } else {
+        sky
+    }
+}
+
 /// How many stops the eye opens by night under the trees, so far into the night with the sky
 /// so `open` over it: none in the open, where the moon lights the land, all of [`WOODED_NIGHT_EV`]
 /// under a closed canopy; none in a closed room (`outdoors`, `IndoorSky` 0), its dark meant and

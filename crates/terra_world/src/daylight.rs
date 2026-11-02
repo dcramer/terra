@@ -18,7 +18,7 @@ use crate::planet::{MainCamera, Planet, Tweaks};
 use crate::shell::Options;
 use crate::sky::Sky;
 use bevy::{camera::Exposure, pbr::DistanceFog, prelude::*};
-use eye::{SNOW_DARK_ADAPTS, open_exposure, wooded_night_ev};
+use eye::{SNOW_DARK_ADAPTS, dusk_brightness, open_exposure, wooded_night_ev};
 use keys::{air_sun_gain, keys};
 use std::f32::consts::TAU;
 use terra_gen::smoothstep;
@@ -348,6 +348,19 @@ pub(crate) fn sky_and_land(height: f32) -> (f32, f32) {
     (light.sky, light.ambient * libm::exp2f(-light.exposure))
 }
 
+/// As [`sky_and_land`], with the camera set as `shine` sets it out in the open on a world that
+/// sees far, over Bevy's air (D338): the sky as drawn and the land as it shows.
+#[cfg(test)]
+pub(crate) fn sky_and_land_seen(height: f32) -> (f32, f32) {
+    let light = light_at(height);
+    let dark = 1.0 - smoothstep(-12.0, 0.0, height);
+    let set = open_exposure(light.exposure, None, true, dark, 1.0);
+    (
+        dusk_brightness(light.sky, light.exposure, set, true),
+        light.ambient * libm::exp2f(-set),
+    )
+}
+
 /// The moon's light with the sun so many degrees below the horizon: none as it sets,
 /// growing to the night's as the twilight goes.
 fn moonlight(height: f32) -> f32 {
@@ -604,7 +617,7 @@ fn shine(
         &path,
         (clear, &weather, sky_lit),
         &light,
-        (sun, height, clock.hour),
+        (sun, height, clock.hour, set),
     );
     let lit = SkyLight {
         shade: colour(crate::weather::under_deck(light.shade, deck)),
@@ -667,13 +680,14 @@ fn haze_under_deck(air: Vec3, veil: Vec3, deck: f32) -> LinearRgba {
 }
 
 /// Paints the sky for the hour: the weather's cloud over the clear sky's own, the deck lit
-/// by the sky's light `lit`, the light's colours, the sun and the stars' turn.
+/// by the sky's light `lit`, the light's colours exposed as the camera is `set`, the sun and the
+/// stars' turn.
 fn paint_sky(
     sky: &mut Sky,
     path: &SkyPath,
     (clear, weather, lit): (f32, &crate::weather::Weather, f32),
     light: &Light,
-    (sun, height, hour): (Vec3, f32, f32),
+    (sun, height, hour, set): (Vec3, f32, f32, f32),
 ) {
     let colour = |rgb: Vec3| Color::srgb(rgb.x, rgb.y, rgb.z);
     let cloudiness = clear.max(weather.cloud);
@@ -684,7 +698,7 @@ fn paint_sky(
     sky.deck = crate::weather::deck(weather, lit);
     sky.zenith = colour(light.zenith);
     sky.glow = colour(light.glow);
-    sky.brightness = light.sky;
+    sky.brightness = dusk_brightness(light.sky, light.exposure, set, sky.over_air);
     sky.night = light.night;
     sky.twilight = 1.0 - smoothstep(-1.0, 6.0, height);
     sky.sun = sun;
