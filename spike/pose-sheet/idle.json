@@ -1,13 +1,29 @@
 {
  "name": "Sheet_Idle",
- "brief": "The standing idle with nothing in hand, a 6 s loop from Idle_Loop's first pose back to it. Arms hang relaxed near his sides, palms facing the thighs or a little behind, never forward. Feet planted. Weight moves onto the right leg, back through a breath in, onto the left leg with the head turned a little, and back.",
+ "brief": "The standing idle with nothing in hand, a 6 s loop from a neutral start back to it: head facing ahead, shoulders down as the walk carries them, arms relaxed near his sides, palms facing the thighs, never forward, feet planted under the hips. Weight settles onto the left leg (the right knee soft, its heel lifting), back through the middle on a breath in, onto the right leg with a small glance to his left, and back.",
  "guard": "Idle_Loop",
+ "start": {
+  "chest": {
+   "roll": 0
+  },
+  "head": {
+   "yaw": 0,
+   "pitch": 2,
+   "roll": 0
+  },
+  "shoulders": "Walk_Loop",
+  "stance": 0.22
+ },
  "end": 6,
  "loop": true,
  "hang": true,
  "palms": {
   "r": 15,
   "l": 35
+ },
+ "arms_in": {
+  "r": 11,
+  "l": 15
  },
  "keys": [
   {
@@ -19,60 +35,48 @@
    "t": 1.4,
    "panel": 2,
    "pelvis": {
-    "move": [
-     0.035,
-     -0.02,
-     0
-    ],
-    "yaw": -3,
-    "roll": -2
+    "move": [-0.03, -0.022, 0],
+    "yaw": 3,
+    "roll": 5
    },
    "chest": {
-    "yaw": 2,
+    "yaw": -2,
     "pitch": 0.5,
-    "roll": 2
+    "roll": -6
    },
-   "foot_l": {
-    "heel": 5
-   },
-   "arm_r": {
-    "forward": 2,
-    "out": 4,
-    "elbow": 2
+   "foot_r": {
+    "heel": 11
    },
    "arm_l": {
+    "forward": 2,
+    "out": 3,
+    "elbow": 2
+   },
+   "arm_r": {
     "forward": -1,
-    "out": 2,
-    "elbow": 1
+    "out": 1,
+    "elbow": 2
    }
   },
   {
    "t": 2.1,
    "panel": 2.5,
    "pelvis": {
-    "move": [
-     0.03,
-     -0.01,
-     0
-    ],
-    "yaw": -2,
-    "roll": -1.5
+    "move": [-0.025, -0.018, 0],
+    "yaw": 2,
+    "roll": 4
    },
    "chest": {
-    "yaw": 1,
+    "yaw": -1,
     "pitch": 0,
-    "roll": 1.5
+    "roll": -5
    }
   },
   {
    "t": 3,
    "panel": 3,
    "pelvis": {
-    "move": [
-     0,
-     0.006,
-     0
-    ],
+    "move": [0, 0.004, 0],
     "yaw": 0,
     "roll": 0
    },
@@ -83,12 +87,12 @@
    },
    "head": {
     "yaw": 0,
-    "pitch": -3
-   },
-   "foot_l": {
-    "heel": 0
+    "pitch": -2
    },
    "foot_r": {
+    "heel": 0
+   },
+   "foot_l": {
     "heel": 0
    },
    "clav_r": {
@@ -112,25 +116,21 @@
    "t": 4.4,
    "panel": 4,
    "pelvis": {
-    "move": [
-     -0.03,
-     -0.01,
-     0
-    ],
-    "yaw": 3,
-    "roll": 2
+    "move": [0.03, -0.022, 0],
+    "yaw": -3,
+    "roll": -5
    },
    "chest": {
-    "yaw": -2,
+    "yaw": 2,
     "pitch": 0.5,
-    "roll": -2
+    "roll": 6
    },
    "head": {
-    "yaw": -10,
+    "yaw": 7,
     "pitch": 0
    },
-   "foot_r": {
-    "heel": 4
+   "foot_l": {
+    "heel": 11
    },
    "clav_r": {
     "up": 0
@@ -139,13 +139,13 @@
     "up": 0
    },
    "arm_r": {
-    "forward": -1,
-    "out": 2,
-    "elbow": 1
+    "forward": 2,
+    "out": 3,
+    "elbow": 2
    },
    "arm_l": {
-    "forward": 2,
-    "out": 4,
+    "forward": -1,
+    "out": 1,
     "elbow": 2
    }
   },
@@ -153,21 +153,17 @@
    "t": 5.1,
    "panel": 4.5,
    "pelvis": {
-    "move": [
-     -0.025,
-     -0.008,
-     0
-    ],
-    "yaw": 2,
-    "roll": 1.5
+    "move": [0.025, -0.018, 0],
+    "yaw": -2,
+    "roll": -4
    },
    "chest": {
-    "yaw": -1,
+    "yaw": 1,
     "pitch": 0,
-    "roll": -1.5
+    "roll": 5
    },
    "head": {
-    "yaw": -8,
+    "yaw": 5,
     "pitch": 0
    }
   },
@@ -176,9 +172,5 @@
    "guard": true,
    "panel": 5
   }
- ],
- "arms_in": {
-  "r": 12,
-  "l": 12
- }
+ ]
 }

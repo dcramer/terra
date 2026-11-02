@@ -19,6 +19,7 @@
 //   arms_in {r, l}                       with `hang`: degrees each arm hangs nearer the side, the whole clip
 //                                        them, swayed by these degrees; hand_r and hand_l are unused
 // `loop` makes the curve run on through the seam; the last key must equal the first.
+// `start` {chest, head, shoulders, stance} sets the start pose afresh (below, where it is made).
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { apply, dot, Glb, len, qinv, qmul, rot, sub, type Pose, type Q, type V3 } from "../../tools/characters/glb.ts";
@@ -90,6 +91,59 @@ function fk(l: Pose[]): Pose[] {
   const at = (i: number): Pose => (w[i] ??= g.parentOf[i] === undefined ? l[i] : apply(at(g.parentOf[i]), l[i]));
   l.forEach((_, i) => at(i));
   return w;
+}
+// A new start pose (`start`): the guard's first frame with the chest, head and shoulders set
+// afresh, so a loop needn't inherit a turned head or raised shoulders from the clip it began on.
+// Its chest and head are degrees turned from the bind pose, in the model, a field left out keeping
+// the guard's; its shoulders are a clip's mean (the walk's, so the idle starts where the walk
+// carries them); the arms keep the way they hung in the guard.
+const spread: Record<string, V3> = { r: [0, 0, 0], l: [0, 0, 0] };
+if (spec.start) {
+  const s = spec.start;
+  const bind = fk(nodes.map((_, i) => g.rest(i)));
+  const before = fk(base);
+  const deg = (r: number) => (r * 180) / Math.PI;
+  /// A world turn from the bind pose as yaw, pitch and roll, the inverse of `euler`.
+  const angles = (q: Q) => {
+    const [x, y, f] = [rot(q, [1, 0, 0]), rot(q, [0, 1, 0]), rot(q, [0, 0, 1])];
+    return { yaw: deg(Math.atan2(f[0], f[2])), pitch: deg(-Math.asin(Math.max(-1, Math.min(1, f[1])))), roll: deg(Math.atan2(x[1], y[1])) };
+  };
+  /// The turn that takes bone `i` from where it stands to the angles `want` names.
+  const toward = (i: number, want: Record<string, number>): Q => {
+    const w = fk(base)[i].r;
+    const a = { ...angles(qmul(w, qinv(bind[i].r))), ...want };
+    return qmul(qmul(euler(a.yaw, a.pitch, a.roll), bind[i].r), qinv(w));
+  };
+  if (s.chest) {
+    const c = toward(id("spine_03"), s.chest);
+    for (const name of ["spine_01", "spine_02", "spine_03"]) bend(base, id(name), slerpId(c, 1 / 3), fk(base));
+  }
+  if (s.head) {
+    bend(base, id("neck_01"), slerpId(toward(id("Head"), s.head), 0.5), fk(base));
+    bend(base, id("Head"), toward(id("Head"), s.head), fk(base));
+  }
+  if (s.shoulders) {
+    const from = g.clip(s.shoulders);
+    if (!from) throw new Error(`key: start.shoulders names ${s.shoulders}, which ${body} lacks; name a clip it holds`);
+    for (const side of ["r", "l"]) {
+      const track = from.tracks.get(`clavicle_${side}`)!.r!;
+      const sum: Q = [0, 0, 0, 0];
+      for (let k = 0; k < 24; k++) {
+        const q = track((k / 24) * from.end) as Q;
+        const sign = dot([q[0], q[1], q[2]], [sum[0], sum[1], sum[2]]) + q[3] * sum[3] < 0 ? -1 : 1;
+        q.forEach((v, j) => (sum[j] += sign * v));
+      }
+      const n = Math.hypot(...sum);
+      base[id(`clavicle_${side}`)].r = sum.map((v) => v / n) as Q;
+    }
+  }
+  for (const side of ["r", "l"]) setWorld(base, id(`upperarm_${side}`), before[id(`upperarm_${side}`)].r, fk(base));
+  // The stance: the balls of the feet this far apart, metres, centred under the hips.
+  if (s.stance) {
+    const middle = (before[id("thigh_r")].t[0] + before[id("thigh_l")].t[0]) / 2;
+    // He faces +Z, so his right is -X.
+    for (const [side, sign] of [["r", -1], ["l", 1]] as const) spread[side] = [middle + (sign * s.stance) / 2 - before[id(`ball_${side}`)].t[0], 0, 0];
+  }
 }
 const G = fk(base);
 
@@ -306,7 +360,7 @@ function pose(t: number): Pose[] {
     const yaw = about([0, 1, 0], num(part, "yaw", t));
     const ballG = G[id(`ball_${side}`)];
     const footG = G[id(`foot_${side}`)];
-    const ball = add(ballG.t, model(footAt(side, t)));
+    const ball = add(add(ballG.t, spread[side]), model(footAt(side, t)));
     const along = rot(yaw, sub(footG.t, ballG.t));
     const side_axis = rot(yaw, norm(cross(sub(footG.t, ballG.t), [0, 1, 0])));
     const heel = about(side_axis, -num(part, "heel", t) * (dot(cross(side_axis, along), [0, 1, 0]) > 0 ? -1 : 1));
