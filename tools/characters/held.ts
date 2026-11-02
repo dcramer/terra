@@ -14,8 +14,9 @@ import { gripOf, handleOf, seatOf } from "./grip.ts";
 // the clash (clash.ts), in that frame. `front` is the way the look's painted front (its -Z)
 // looks; `up` the way its -X looks (a heater's top: its point is +X, art/held/heater_shield.json);
 // `grip` where its origin (the place it is held at) sits and `bar` the way its handle (+Y) runs,
-// or a strapped look's hand strap (+X).
-export type Held = { hand: string; socket: string; name: string; points: V3[]; tip: V3; thin: V3; front: V3; up: V3; centre: V3; grip: V3; bar: V3; balls?: Ball[]; board?: Board; strap?: Strap };
+// or a strapped look's hand strap (+X). `own` are the same vertices in the look's own frame (its
+// grip at the origin, its handle along +Y), so a check can say which of its points went where.
+export type Held = { hand: string; socket: string; name: string; points: V3[]; own: V3[]; tip: V3; thin: V3; front: V3; up: V3; centre: V3; grip: V3; bar: V3; balls?: Ball[]; board?: Board; strap?: Strap };
 // `at`, in place of `fist`, is the strap of files before D554's round 2 (one place on the bone
 // for every body, metres), read so shield_place.ts --at can read an older commit's assets.
 export type Strap = { bone: string; fist?: string; at?: V3; face: V3; grip: V3 };
@@ -114,7 +115,7 @@ export function hang(body: Glb, rest: Pose[], hand: string, file: string): Held 
   // A held grip's bar runs along its handle (+Y); a strapped look's hand strap runs across its
   // board, square to the forearm (+X), where the fist closes on it (D459, D504).
   const bar = turned(rot(pose.r, strap ? [1, 0, 0] : [0, 1, 0]));
-  return { hand, socket, name, points: points.map(put), tip: put(tip), thin: turned(thin), front, up, centre: put(centre), grip: put(pose.t), bar, balls, board: plate, strap };
+  return { hand, socket, name, points: points.map(put), own: points, tip: put(tip), thin: turned(thin), front, up, centre: put(centre), grip: put(pose.t), bar, balls, board: plate, strap };
 }
 
 type CarryExtras = { carry_hold?: string; carry_upright?: boolean };

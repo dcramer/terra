@@ -99,7 +99,9 @@ const { values: opt } = parseArgs({
     verbose: { type: "boolean", default: false },
     // The rows also as JSON, for a caller (clip.ts, tools/combat/scorecard.ts): [{move, clip,
     // bad, gaps, measured}], gaps the metres from the guard at the move's start and end, a
-    // blow's only; measured each number the row was judged by, named by what it is.
+    // blow's only; measured each number the row was judged by, named by what it is; where, for
+    // each held look's depth (held_cm.<look>), which of its points went in, into what, when, on
+    // which body.
     json: { type: "string" },
     // Carried: in the clips the game carries in (terra_walker::character::CARRIED_IN), a look in
     // hand has its arm in the carry pose its look names (carry_hold), as the game lays it (fit.ts).
@@ -383,12 +385,16 @@ function penetration(clip: Clip, from: number, to: number, carrying: [number, nu
           const deg = (Math.acos(Math.max(-1, Math.min(1, up[1] / len(up)))) * 180) / Math.PI;
           upBy.set(h.name, worse(upBy.get(h.name)!, deg, `at ${t.toFixed(2)} s, ${shape.name}`));
         }
-        for (const q of h.points) {
+        h.points.forEach((q, i) => {
           const { depth, part } = inside(place(socket, q));
           const where = `${h.name} in ${part} at ${t.toFixed(2)} s, ${shape.name}`;
           heldW = worse(heldW, depth * 100, where);
-          byLook.set(h.name, worse(byLook.get(h.name)!, depth * 100, where));
-        }
+          // Which of its points, in its own frame (cm from the grip, its handle +Y): fit.ts names it.
+          if (depth * 100 > byLook.get(h.name)!.cm) {
+            const [x, y, z] = h.own[i].map((v) => Math.round(v * 100));
+            byLook.set(h.name, { cm: depth * 100, where: `its point (${x}, ${y}, ${z}) cm in ${part} in ${clip.name} at ${t.toFixed(2)} s, ${shape.name}` });
+          }
+        });
       }
       if (sword && shield) {
         const [S, B] = [frame(sword, pose), frame(shield, pose)];
@@ -528,7 +534,7 @@ const clashBad = (pen: Pen): string[] =>
     : [];
 const clashParts = (pen: Pen) => (sword && shield ? [`sword in shield ${cm(pen.sword.cm)} (${pen.sword.where})`, `shield in arm ${cm(pen.arm.cm)} (${pen.arm.where})`] : []);
 const failures: string[] = [];
-type Row = { move?: string; clip: string; bad: string[]; gaps?: [number, number]; measured: Record<string, number> };
+type Row = { move?: string; clip: string; bad: string[]; gaps?: [number, number]; measured: Record<string, number>; where?: Record<string, string> };
 const rows: Row[] = [];
 const row = (what: string, parts: string[], bad: string[], json: Omit<Row, "bad">) => {
   for (const [k, v] of Object.entries(json.measured)) json.measured[k] = Math.round(v * 1000) / 1000;
@@ -551,6 +557,9 @@ const heldBy = (pen: Pen) => ({
   // `held_up_deg.<look>`: a look carried in a pose, its handle off up (a carried clip's rows).
   ...Object.fromEntries([...pen.upBy].filter(([, w]) => w.cm > -Infinity).map(([name, w]) => [`held_up_deg.${name}`, w.cm])),
 });
+/** Where each held look goes deepest, by its `held_cm.<look>`: which of its points (its own frame,
+ * cm), into what, in which clip, when and on which body (fit.ts shows it on a failure). */
+const heldWhere = (pen: Pen) => Object.fromEntries([...pen.byLook].map(([name, w]) => [`held_cm.${name}`, w.where]));
 const byName = new Map(moves.map((m) => [m.name, m]));
 const smooth = (lo: number, hi: number, t: number) => {
   const x = Math.max(0, Math.min(1, (t - lo) / (hi - lo)));
@@ -733,7 +742,7 @@ for (const move of checked) {
     parts.push(`shield face ${g.off.toFixed(0)}° off ahead, ${g.ahead.toFixed(2)} m ahead, ${g.aboveHead.toFixed(2)} m above the head`);
     if (g.off > FACE_DEG) bad.push(`shield face ${g.off.toFixed(0)}° off ahead (bar ${FACE_DEG}°)`);
   }
-  row(`${move.name} (${move.clip})`, parts, bad, { move: move.name, clip: move.clip, gaps, measured });
+  row(`${move.name} (${move.clip})`, parts, bad, { move: move.name, clip: move.clip, gaps, measured, where: heldWhere(pen) });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
 if (shield && carried.high.cm > -Infinity) {
@@ -780,7 +789,7 @@ for (const name of opt.also!.split(",").filter(Boolean)) {
   if (pen.hands.cm > HAND_CM) bad.push(`hands ${cm(pen.hands.cm)} deep, ${pen.hands.where}`);
   if (pen.held.cm > HELD_CM) bad.push(`held ${cm(pen.held.cm)} deep, ${pen.held.where}`);
   bad.push(...clashBad(pen));
-  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...heldBy(pen), ...clashed(pen), ...carriedBy(pen) } });
+  row(name, [`hands ${cm(pen.hands.cm)}`, `held ${cm(pen.held.cm)}`, ...clashParts(pen)], bad, { clip: name, measured: { hands_cm: pen.hands.cm, held_cm: pen.held.cm, ...heldBy(pen), ...clashed(pen), ...carriedBy(pen) }, where: heldWhere(pen) });
   if (opt.verbose) for (const b of bad) console.log(`    ${b}`);
 }
 // The fists on what they hold (grip.ts fistOff): each finger bone's gap to the handle's surface,
