@@ -136,7 +136,9 @@ impl Quality {
     pub fn haze_steps(self) -> Option<u32> {
         match self {
             Quality::Ultra => Some(96),
-            Quality::High => Some(48),
+            // 32, not 48: a third off the volumetric pass (1.06 to 0.72 ms at the lake on a
+            // 4090) and, the march jittered for TAA, no change a still shows (play-lake-fps j10).
+            Quality::High => Some(32),
             Quality::Medium => Some(24),
             Quality::Low => None,
         }
