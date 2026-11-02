@@ -54,7 +54,7 @@ The switch as bounded jobs (the research note's "The switch in jobs" has the det
 4. **The paint as a tool**: our materials on their UVs, the Ranger's first pass refined.
 5. **The starting kit as outfit data**: their pieces where they have them, new pieces made on their body where not.
 6. **The fight on the new bodies**: `cargo xtask combat` and the carry poses against their baselines.
-7. **Into the game**, one body a sex, the arm left clear for the mark; the creator's few sliders.
+7. **Into the game**, one body a sex, the arm left clear for the mark; the creator's few choices (D111, Leaning: sex, skin tone, eye colour, hair; no height or build).
 8. **Delete the Tripo base** and the scripts it alone needed (`stretch.py`, the clipping fixer's use on bought pieces).
 
 ## Open with the developers

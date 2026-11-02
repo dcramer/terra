@@ -114,7 +114,7 @@ Needs, death, the body, the map and options.
 | [D76](decisions/D76.md) | A map | Design | Developers | Decided | There is a map system. |
 | [D80](decisions/D80.md) | Options menu | Design | Developers | Decided | An options menu with the settings players expect… |
 | [D101](decisions/D101.md) | Food and death | Design | Developers | Decided | Food is essential: going without weakens you and in the… |
-| [D111](decisions/D111.md) | Character creator | Design | Developers | Decided | A creator of a few sliders, not templates: sex, build… |
+| [D111](decisions/D111.md) | Character creator | Design | Developers | Leaning | A creator of a few simple choices: sex… |
 | [D153](decisions/D153.md) | Body temperature | Design | Developers | Decided | A survival attribute of its own, for players and… |
 | [D171](decisions/D171.md) | Coming back from death | Design | Agent | Decided | A soul that dies falls into the astral and is lost… |
 | [D312](decisions/D312.md) | Climate shared where it changes play, each machine's where it is only seen | Design | Developers | Decided | What a season or the weather does to play is worked out… |
