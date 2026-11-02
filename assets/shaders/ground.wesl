@@ -801,6 +801,10 @@ fn trail_at(world: vec3<f32>, along: vec3<f32>, worn: f32) -> vec4<f32> {
 
 fn snow_on(depth_m: f32, world: vec3<f32>, up_facing: f32, under: f32) -> f32 {
     let lying = depth_m * (1.0 - SNOW_UNDER_CROWNS * under);
+    // None lies under a millimetre (the step below): its edge's noise is not taken there.
+    if lying < 0.001 {
+        return 0.0;
+    }
     let edge = noise(world * 0.35 + 91.0) * 0.6 + noise(world * 1.9 + 23.0) * 0.4;
     let cover = smoothstep(0.0, 1.0, (lying - 0.004) / SNOW_COVERS_M + (edge - 0.5) * 0.9);
     return cover * smoothstep(SNOW_SLOPE.x, SNOW_SLOPE.y, up_facing) * step(0.001, lying);
@@ -2404,29 +2408,39 @@ fn fragment(
     let wet = max(climate.g * 0.6, climate.b) * (1.0 - snow);
     colour *= mix(1.0, 0.6, wet);
     pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.5, wet * 0.7);
-    let rime = climate.a * (1.0 - snow) * smoothstep(0.6, 0.9, level) * smoothstep(0.3, 0.7, noise(world * 4.3 + 61.0));
-    colour = mix(colour, RIME, rime * 0.5);
-    let sparkle = 0.94 + 0.12 * noise(world * 9.0 + 3.0);
-    colour = mix(colour, SNOW * sparkle, snow);
+    // The frost's, the snow's sparkle's and the snow's surface's noise are taken only where
+    // there is frost or snow: each is mixed in by it, so elsewhere they changed nothing and cost
+    // over a millisecond at the lake (play-lake-fps j4's probe).
+    if climate.a != 0.0 {
+        let rime = climate.a * (1.0 - snow) * smoothstep(0.6, 0.9, level) * smoothstep(0.3, 0.7, noise(world * 4.3 + 61.0));
+        colour = mix(colour, RIME, rime * 0.5);
+    }
+    if snow > 0.0 {
+        let sparkle = 0.94 + 0.12 * noise(world * 9.0 + 3.0);
+        colour = mix(colour, SNOW * sparkle, snow);
+    }
     lying = snow;
     pbr_input.material.perceptual_roughness = mix(pbr_input.material.perceptual_roughness, 0.8, snow);
     // The snow's own surface: drifted in soft swells a metre or two across, and grained finer.
     let geometric = normalize(in.world_normal);
     let tangent = normalize(cross(geometric, vec3<f32>(0.0, 0.0, 1.0)) + vec3<f32>(1e-4, 0.0, 0.0));
     let bitangent = cross(geometric, tangent);
-    let swell = vec2<f32>(
-        noise(world * 0.6 + tangent * 0.4 + 7.0) - noise(world * 0.6 - tangent * 0.4 + 7.0),
-        noise(world * 0.6 + bitangent * 0.4 + 7.0) - noise(world * 0.6 - bitangent * 0.4 + 7.0),
-    ) * 2.2 + vec2<f32>(noise(world * 5.0 + 3.0) - 0.5, noise(world * 5.0 + 19.0) - 0.5) * 0.25
-        // And broad undulations five to ten metres across, so a low sun shades the floor in
-        // long soft swells, not one even plane (winter round 9's judge).
-        + vec2<f32>(
-            noise(world * 0.15 + tangent * 1.5 + 41.0) - noise(world * 0.15 - tangent * 1.5 + 41.0),
-            noise(world * 0.15 + bitangent * 1.5 + 41.0) - noise(world * 0.15 - bitangent * 1.5 + 41.0),
-        ) * 0.9;
-    // The broad swells' hollows hold a cooler shade, the sky over them a little hidden.
-    let hollow = 1.0 - smoothstep(0.3, 0.7, noise(world * 0.15 + 41.0));
-    colour = mix(colour, colour * vec3<f32>(0.9, 0.94, 1.0), hollow * snow * 0.6);
+    var swell = vec2<f32>(0.0);
+    if snow > 0.0 {
+        swell = vec2<f32>(
+            noise(world * 0.6 + tangent * 0.4 + 7.0) - noise(world * 0.6 - tangent * 0.4 + 7.0),
+            noise(world * 0.6 + bitangent * 0.4 + 7.0) - noise(world * 0.6 - bitangent * 0.4 + 7.0),
+        ) * 2.2 + vec2<f32>(noise(world * 5.0 + 3.0) - 0.5, noise(world * 5.0 + 19.0) - 0.5) * 0.25
+            // And broad undulations five to ten metres across, so a low sun shades the floor in
+            // long soft swells, not one even plane (winter round 9's judge).
+            + vec2<f32>(
+                noise(world * 0.15 + tangent * 1.5 + 41.0) - noise(world * 0.15 - tangent * 1.5 + 41.0),
+                noise(world * 0.15 + bitangent * 1.5 + 41.0) - noise(world * 0.15 - bitangent * 1.5 + 41.0),
+            ) * 0.9;
+        // The broad swells' hollows hold a cooler shade, the sky over them a little hidden.
+        let hollow = 1.0 - smoothstep(0.3, 0.7, noise(world * 0.15 + 41.0));
+        colour = mix(colour, colour * vec3<f32>(0.9, 0.94, 1.0), hollow * snow * 0.6);
+    }
     // Where the floor lies open, the wind shapes it (winter round 12's judge: "a flat sheet"):
     // ripples across the wind, a gentle windward face and a steep lee, in patches; and long
     // sastrugi-like ridges along it, so a low light streaks the open snow. One prevailing way
@@ -2474,7 +2488,10 @@ fn fragment(
     // side its trunk keeps the sun from, its edge broken; and banks up in a soft rounded lip
     // beyond, lit where it faces the light. Its slope from how the nearness changes half a
     // metre either way: a well leans toward what stands, the lip's outer face away.
-    let stands = stands_at(world) + (noise(world * 1.9 + 31.0) - 0.5) * 0.18;
+    var stands = 0.0;
+    if snow > 0.0 {
+        stands = stands_at(world) + (noise(world * 1.9 + 31.0) - 0.5) * 0.18;
+    }
     var lean = vec2<f32>(0.0);
     var well = 0.0;
     if stands > 0.02 && snow > 0.0 {
