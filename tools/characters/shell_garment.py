@@ -148,7 +148,7 @@ skin = BVHTree.FromPolygons(skin_pts, [tuple(p.vertices) for p in body.data.poly
 top = max(p.z for p in skin_pts)
 
 # 1. The dressed model, turned to face -Y as ours do (Tripo's face +X), scaled and lined up.
-dressed = skin_piece.line_up(look.path(dressed_path), skin, top, MATCH_M)
+dressed = skin_piece.line_up(look.path(dressed_path), skin, top, MATCH_M, skin_piece.stretch_plan(body_name, SHAPE))
 dressed_tree = BVHTree.FromPolygons([v.co for v in dressed.data.vertices], [tuple(p.vertices) for p in dressed.data.polygons])
 
 

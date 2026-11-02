@@ -242,7 +242,7 @@ def fit_back(ob, height, harness):
         o.select_set(True)
     bpy.context.view_layer.objects.active = straps[0]
     bpy.ops.object.join()
-    dressed = skin_piece.line_up(look.path(harness), bands.tree_of(body), height_of_body, 0.03)
+    dressed = skin_piece.line_up(look.path(harness), bands.tree_of(body), height_of_body, 0.03, skin_piece.stretch_plan())
     # Its own role, so a tint can recolour it apart from the bag and its icon can leave it out
     # (it is made on the body, and hangs loose without one).
     skin_piece.bake(straps[0], dressed, f"{ob.name}_harness", "Harness", HARNESS_TEXTURE, HARNESS_LOOK_M)

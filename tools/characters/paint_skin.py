@@ -20,9 +20,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import bpy
+import numpy as np
 from mathutils import Matrix, Vector
 
 import look
+import skin_piece
+import stretch
 
 OUT = look.OUT
 step, name = look.args()[:2]
@@ -72,6 +75,20 @@ else:
     fit = Matrix.Translation((lo + hi) / 2) @ Matrix.Scale(k, 4) @ Matrix.Translation(-(plo + phi) / 2)
     for o in painted:
         o.matrix_world = fit @ o.matrix_world
+    # Painted on the body as it stood before its stretch (D593): stretched as it was, so the
+    # painting lies on the skin it was painted on.
+    for o in painted:
+        o.data.transform(o.matrix_world)
+        o.matrix_world = Matrix.Identity(4)
+    co = [np.zeros(len(o.data.vertices) * 3) for o in painted]
+    for o, c in zip(painted, co):
+        o.data.vertices.foreach_get("co", c)
+    moved = stretch.line_up(skin_piece.stretch_plan(shape=name), np.concatenate([c.reshape(-1, 3) for c in co]))
+    at = 0
+    for o, c in zip(painted, co):
+        o.data.vertices.foreach_set("co", moved[at : at + len(c) // 3].reshape(-1))
+        o.data.update()
+        at += len(c) // 3
     mat = body.data.materials[0].copy()
     body.data.materials[0] = mat
     tex = next(n for n in mat.node_tree.nodes if n.type == "TEX_IMAGE")

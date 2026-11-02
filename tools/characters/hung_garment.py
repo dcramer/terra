@@ -141,7 +141,7 @@ heights = np.array([morphed_z(z) for z in heights_b])
 print("HUNG", item, kind, f"from {top_b:.2f} to {hem_b:.2f} m on the base, {heights[0]:.2f} to {heights[-1]:.2f} on {SHAPE or 'it'}")
 
 # The dressed model, lined up with this skin; and what it is worn over and under.
-dressed = skin_piece.line_up(look.path(dressed_path), skin_tree, float(skin[:, 2].max()), 0.03)
+dressed = skin_piece.line_up(look.path(dressed_path), skin_tree, float(skin[:, 2].max()), 0.03, skin_piece.stretch_plan(body_name, SHAPE))
 dressed_tree = BVHTree.FromPolygons([v.co for v in dressed.data.vertices], [tuple(p.vertices) for p in dressed.data.polygons])
 over_pts = np.concatenate([skin_piece.made(body_name, o, base, delta)[1] for o in OVER]) if OVER else np.zeros((0, 3))
 under_trees = [skin_piece.made(body_name, u, base, delta)[0] for u in UNDER]
