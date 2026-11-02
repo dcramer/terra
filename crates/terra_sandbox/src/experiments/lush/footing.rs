@@ -327,6 +327,9 @@ fn footings(
     mut obstacles: ResMut<Obstacles>,
 ) {
     let Some(planet) = planet else { return };
+    // Each kind's shape and each thing's sinking here; each fit, sampling the ground under
+    // it, on every core (as `trunks`).
+    let mut fits = Vec::new();
     for (entity, mesh, mut transform, sink, name) in &mut pending {
         if meshes.get(&mesh.0).is_none() {
             continue;
@@ -345,12 +348,19 @@ fn footings(
             transform.translation += down;
             commands.entity(entity).remove::<Sink>();
         }
-        let place = placement(&planet, &transform);
+        fits.push((entity, shape, *transform));
+    }
+    let planet: &Planet = &planet;
+    let solids = terra_gen::par::map(&fits, |(_, shape, transform)| {
+        let place = placement(planet, transform);
+        let ground = ground_under(planet, &place, &shape.relief);
+        Solid::fit(&shape.relief, place, ground, Vec::new())
+    });
+    for ((entity, shape, _), solid) in fits.into_iter().zip(solids) {
         // How tall it stands over the ground under it, at its tallest.
         let mut top_m = 0.0;
         let mut low = None;
-        let ground = ground_under(&planet, &place, &shape.relief);
-        if let Some(solid) = Solid::fit(&shape.relief, place, ground, Vec::new()) {
+        if let Some(solid) = solid {
             low = lowest(&solid);
             top_m = solid.top().unwrap_or(0.0);
             obstacles.add_solid(solid.at, solid);
@@ -376,6 +386,9 @@ fn trunks(
     mut obstacles: ResMut<Obstacles>,
 ) {
     let Some(planet) = planet else { return };
+    // Each kind's shapes, once, here; each tree's fit, sampling the ground under it, on every
+    // core: a world's 3,500 trees took 5 to 8 s of one frame on entering it (instances j9).
+    let mut fits = Vec::new();
     for (entity, trunk, transform) in &pending {
         let reach = trunk.reach_m;
         let Some(wood) = shapes.get(&trunk.wood, &meshes, |p| {
@@ -386,37 +399,14 @@ fn trunks(
         let seen = shapes
             .get(&trunk.crown, &meshes, |p| p.y < LOW_CROWN_M)
             .unwrap_or_else(|| wood.clone());
-        let place = placement(&planet, transform);
-        // Its skirt: SKIRT of the way out to where its leaves and twigs reach, at each turn
-        // round it, where they hang within a body's height of the ground (D248).
-        let skirt: Vec<Piece> = if trunk.skirt_m > 0.0 && !Arc::ptr_eq(&seen, &wood) {
-            Solid::fit(
-                &seen.relief,
-                place,
-                ground_under(&planet, &place, &seen.relief),
-                Vec::new(),
-            )
-            .map(|low| {
-                low.pieces
-                    .into_iter()
-                    .map(|piece| Piece {
-                        hull: piece.hull.iter().map(|p| *p * SKIRT).collect(),
-                        radius: piece.radius * SKIRT,
-                        top: f32::INFINITY,
-                        crest: f32::INFINITY,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
-        if let Some(mut solid) = trunk_solid(&planet, place, &wood.relief, skirt) {
-            // Nobody stands on a trunk.
-            for piece in &mut solid.pieces {
-                piece.top = f32::INFINITY;
-                piece.crest = f32::INFINITY;
-            }
+        fits.push((entity, wood, seen, trunk.skirt_m > 0.0, *transform));
+    }
+    let planet: &Planet = &planet;
+    let solids = terra_gen::par::map(&fits, |(_, wood, seen, skirted, transform)| {
+        tree_solid(planet, transform, wood, seen, *skirted)
+    });
+    for ((entity, wood, seen, _, transform), solid) in fits.into_iter().zip(solids) {
+        if let Some(solid) = solid {
             obstacles.add_solid(transform.translation, solid);
         }
         commands.entity(entity).remove::<Trunk>().insert(Fitted {
@@ -426,6 +416,49 @@ fn trunks(
             low: None,
         });
     }
+}
+
+/// A tree's solid where it stands: its trunk, and its skirt if `skirted` and its low crown
+/// is its own.
+fn tree_solid(
+    planet: &Planet,
+    transform: &Transform,
+    wood: &Arc<SolidShape>,
+    seen: &Arc<SolidShape>,
+    skirted: bool,
+) -> Option<Solid> {
+    let place = placement(planet, transform);
+    // Its skirt: SKIRT of the way out to where its leaves and twigs reach, at each turn
+    // round it, where they hang within a body's height of the ground (D248).
+    let skirt: Vec<Piece> = if skirted && !Arc::ptr_eq(seen, wood) {
+        Solid::fit(
+            &seen.relief,
+            place,
+            ground_under(planet, &place, &seen.relief),
+            Vec::new(),
+        )
+        .map(|low| {
+            low.pieces
+                .into_iter()
+                .map(|piece| Piece {
+                    hull: piece.hull.iter().map(|p| *p * SKIRT).collect(),
+                    radius: piece.radius * SKIRT,
+                    top: f32::INFINITY,
+                    crest: f32::INFINITY,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let mut solid = trunk_solid(planet, place, &wood.relief, skirt)?;
+    // Nobody stands on a trunk.
+    for piece in &mut solid.pieces {
+        piece.top = f32::INFINITY;
+        piece.crest = f32::INFINITY;
+    }
+    Some(solid)
 }
 
 /// A tree's trunk fitted where it stands, with its skirt. Its bole, its wood taller than a
