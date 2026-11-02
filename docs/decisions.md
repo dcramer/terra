@@ -472,7 +472,7 @@ The look, models, bodies and gear, textures and audio.
 | [D567](decisions/D567.md) | Six kinds' holds: a one-hander blocks alone, the pickaxe is two-handed, the spear upright, the torch put out at the hip, the bow low in the left hand, the basket in the off hand | Design | Developers | Decided | The six questions the kinds table left to the developers… |
 | [D584](decisions/D584.md) | A body moves as its clip says; the game adds only foot placement, look-at and hand IK | Tech | Agent | Decided | What a body shows is the clip made for what it does… |
 | [D585](decisions/D585.md) | A gait's clip is shown within a tenth of as made at its speed; the game's speeds are fitted to the clips | Tech | Agent | Decided | Every gait (walk, jog, sprint) is played at the speed… |
-| [D588](decisions/D588.md) | Moves with a start and an end are keyed from a generated pose sheet, on our own skeleton | Design | — | Open | Recommended: moves with a clear start and end that no… |
+| [D588](decisions/D588.md) | Moves with a start and an end are keyed from a generated pose sheet, on our own skeleton | Design | Developers | Decided | Moves with a clear start and end that no source does… |
 | [D593](decisions/D593.md) | The base body's arms and legs are stretched in the character pipeline | Design | Agent | Leaning | The base body's arms are lengthened to a 1.86 m reach… |
 
 ## Engine and code

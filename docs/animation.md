@@ -16,7 +16,7 @@ This is the method every job that changes how a body moves follows. D584 holds t
 
 | Studio | Us |
 |---|---|
-| Motion-capture stage, actors | Quaternius's packs we bought (UAL1 Pro, UAL2 Source) first; Uthana's text-to-motion (trained on capture) for what they lack; Kimodo only for what neither has (D532); a pose sheet keyed by an agent for moves none does well, if the developers take it up (D588, [keyed-moves.md](keyed-moves.md)) |
+| Motion-capture stage, actors | Quaternius's packs we bought (UAL1 Pro, UAL2 Source) first; Uthana's text-to-motion (trained on capture) for what they lack; Kimodo only for what neither has (D532); a pose sheet keyed by an agent for moves none does well and for the idle (D588, [keyed-moves.md](keyed-moves.md)) |
 | Animators cleaning up capture | Agents with Blender scripts (tools/characters), retaking rather than patching |
 | One skeleton, retargeting | Ours: carried onto every body by D542, measured faithful to 0.0° |
 | Animation director, daily reviews | The developer, by eye, on the review desk: a before/after film from the game's own camera for every change |
@@ -49,9 +49,9 @@ The first step of every clip. Pick the row before making or buying anything.
 
 | The clip | Comes from | Then |
 |---|---|---|
-| Long cycles: idle, walk, jog, sprint, swim | Quaternius's packs, then Uthana (D532) | The ladder: raw, carried, eased, driven, in game |
+| Long cycles: walk, jog, sprint, swim | Quaternius's packs, then Uthana (D532) | The ladder: raw, carried, eased, driven, in game |
 | Moves with a start and an end, where a source does them well | Quaternius's packs, then Uthana (D532) | The same ladder |
-| Blows, a tool's swing, a way of holding, where no source meshes | Today, our keyed takes through Kimodo (D450). Proposed: keyed against a pose sheet on our own skeleton (D588, Open, [keyed-moves.md](keyed-moves.md)) | Its gates, then both films. A keyed clip starts on the guard, so it needs no ease; it is driven only by a step it keys itself |
+| Blows, a tool's swing, a way of holding, where no source meshes; small loops such as the idle | Keyed against a pose sheet on our own skeleton, the keys built into the game's clips (D588, [keyed-moves.md](keyed-moves.md)). The game's blows are Kimodo takes (D450) until each is keyed again | Its gates, then both films. A keyed clip starts on the guard, so it needs no ease; it is driven only by a step it keys itself |
 | Anything else none of these has | Kimodo (D532) | The ladder |
 
 ## Order of work
@@ -66,7 +66,7 @@ Each step ends with a film on the desk and the developer's yes before the next s
 4. **Swims:** done 2026-10-30 (Uthana, lying in the water). Open faults: the quiver shows skin in the dive, and the tread reads as a squat.
 5. **The fight set:** each blow made striking, from the bought packs where they have it, Uthana otherwise. Hand IK only, by the same ladder (raw, carried, in game).
    - Tried and parked, 2026-10-31: Quaternius's blows and Uthana's both failed to mesh (research/2026-10-31-why-the-bought-blows-slide.md, research/2026-10-31-uthana-sword-blows.md). The game keeps our keyed blows until the developers come back to it; the Quaternius set is parked on origin/wip/fight-swap-j9.
-   - Tried, 2026-11-01: a slash keyed from a pose sheet meshed at the first attempt; the process is in [keyed-moves.md](keyed-moves.md) (D588, Open), and the game's blows have not changed.
+   - Tried, 2026-11-01: a slash keyed from a pose sheet meshed at the first attempt; the process is in [keyed-moves.md](keyed-moves.md). Decided 2026-11-02 (D588): blows are keyed so from now on, the idle first; the game's blows change as each is keyed.
 6. **Then attachments and assembled items resume** (D565), on bodies that move right. Resumed 2026-10-31 on the developer's word.
 
 ## Our example to follow

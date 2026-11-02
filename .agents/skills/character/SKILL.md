@@ -67,7 +67,7 @@ The checker compares the rig with our skeleton and with the hand-rigged mannequi
 
 The clips come from Quaternius's Universal Animation Library 1 and 2 (current versions, bought; `art/README.md`), on a skeleton with Unreal's bone names that Tripo's rig shares. `art/animation/clips.txt` lists the ones the game plays; `clips.py` cuts them into `assets/models/character/mannequin.glb`. To add a clip (or make one, `made.json`), add its name there, rerun `clips.py`, then `clip_check.py`, then `rig_check.py` on the mannequin with `--baseline` (`tools/blender/run.sh tools/characters/rig_check.py assets/models/character/mannequin.glb --baseline`, which rewrites `art/characters/rig-baseline.json`; say why in the commit. Without it the mannequin is held to its recorded scores, and a clip missing from them is held to the bare limit on a body), then `build_bodies.sh`, and commit the base and gear it writes with the clip.
 
-Pick a new clip's source in [docs/animation.md](../../../docs/animation.md#where-a-clip-comes-from) first; D588 proposes keying blows from a pose sheet ([docs/keyed-moves.md](../../../docs/keyed-moves.md)).
+Pick a new clip's source in [docs/animation.md](../../../docs/animation.md#where-a-clip-comes-from) first: blows, a way of holding and small loops such as the idle are keyed from a pose sheet (D588, [docs/keyed-moves.md](../../../docs/keyed-moves.md)).
 
 A combat move's clip is made from its spec in its set's list by one command (D450): `node tools/characters/clip.ts CLIP` (keys, Kimodo takes, aimed export, phases, `moves.ts`, the take kept, into a scratch set; `--into SET.ron` for the game's).
 
