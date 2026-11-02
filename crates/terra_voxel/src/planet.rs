@@ -368,6 +368,24 @@ impl<F: Field> Ground for VoxelPlanet<F> {
         self.distance_in(point, &mut F::Memo::default())
     }
 
+    /// Marched with one memo, so the land's lattice points along the ray are worked out once,
+    /// not again at each of its few hundred steps: the builder's aim casts 200 m each frame
+    /// (3 to 5 ms unmemoised on the 30 km world's land, play at the lake).
+    fn raycast(
+        &self,
+        origin: Vec3,
+        direction: Vec3,
+        max_distance: f32,
+    ) -> Option<terra_core::RayHit> {
+        let mut memo = F::Memo::default();
+        terra_core::march(
+            |point| self.distance_in(point, &mut memo),
+            origin,
+            direction,
+            max_distance,
+        )
+    }
+
     fn material(&self, point: Vec3) -> MaterialId {
         let sample = self.sample(point);
         if sample.solid() {
@@ -641,6 +659,31 @@ mod tests {
             memo.keep_within(64);
         }
         assert!(memo.held() <= 64 + 4, "{} points held", memo.held());
+    }
+
+    #[test]
+    fn a_ray_marched_with_a_memo_meets_the_ground_where_one_asked_point_by_point_does() {
+        // A fan of rays from eye height over dug ground, low over it as an aim looks: the
+        // memo shares the land's lattice points, never changes an answer.
+        let mut planet = planet();
+        let (ground, up) = surface(&planet);
+        planet.apply(&Operation::Dig {
+            centre: ground + up.any_orthonormal_vector() * 6.0,
+            radius: 1.5,
+        });
+        let eye = ground + up * 1.7;
+        let side = up.any_orthonormal_vector();
+        let other = up.cross(side);
+        let mut met = 0;
+        for i in 0..24 {
+            let turn = i as f32 * 0.26;
+            let flat = side * libm::cosf(turn) + other * libm::sinf(turn);
+            let direction = (flat - up * (0.02 + i as f32 * 0.01)).normalize();
+            let alone = terra_core::march(|p| Ground::distance(&planet, p), eye, direction, 200.0);
+            assert_eq!(planet.raycast(eye, direction, 200.0), alone, "ray {i}");
+            met += usize::from(alone.is_some());
+        }
+        assert!(met > 12, "only {met} of 24 rays met the ground");
     }
 
     #[test]

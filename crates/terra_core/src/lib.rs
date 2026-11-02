@@ -20,7 +20,7 @@ mod walker;
 
 pub use avoid::{Avoidance, Round};
 pub use glam::{IVec3, Vec3};
-pub use ground::{Ground, RayHit, Water};
+pub use ground::{Ground, RayHit, Water, march};
 pub use mesh::{ChunkId, ChunkMesh, MaterialWeights};
 pub use operation::{Harvested, KindId, ObjectId, Operation, Yield};
 pub use plot::Plot;
