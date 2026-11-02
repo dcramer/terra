@@ -147,3 +147,24 @@ Not carried by a clip swap: the carry poses made of the idle (`Carry_Torch` and 
 **Every body.** The hand touches the thigh on the widest hips and hangs 2 to 4 cm off it on the thin body; the hips' sway moves it 3 cm more. One clip can't touch every thigh, so the clip is posed for the middle and the game's per-body correction (D535's hip keeping, `rest.ts --arms`) turns the arm out where a wide body would take the hand in: as the game composes it, every template passes. The clip alone has the right hand 2 cm into the female thigh at the deepest of the sway (bar 1.5).
 
 **The clothes.** The shirt's swollen shoulders were not changed and are a later job; with the arms against the sides they will show more, since the sleeve now sits on the ribs.
+
+## The idle's feet and thumbs
+
+2026-11-02. The start still carried two faults of the guard's legs. The right foot toed out 12.8 degrees against the left's 2.2 (along the ankle-to-ball line, which in the bind runs with the sole's long axis, 13 to 15 degrees out; the ball bone's own axis points straight ahead and reads 0 there, so it is no measure of turn-out). And the guard holds the right ball 1 cm off the floor and both heels 6 degrees down into it, so the right knee bent 23 to the left's 15 and stood 3 cm ahead of it.
+
+`key.ts` `start.turn_out` sets both feet alike: 7 degrees each, as people standing at ease place them (McIlroy and Maki 1997, Clin Biomech 12:66: 14 degrees between the feet). The stance now puts each ball at the bind's height and each sole at its pitch. Flat soles under the guard's hips crouched both knees to 26, so `start.knees` raises the hips (1.4 cm here, to 0.2 cm over the bind's) until the start's knees bend 16; the leg solver stops at 11.5 (99.5% of full reach), and the breath key raises the hips 4 mm, which takes 16 to about 12.
+
+The thumbs were the guard's. Measured against the index finger, its base and middle joint already lay the tip against the index's side, a resting hand's place; only the last joint was near straight (3 to 8 degrees). `thumb` bends it 18; the tip now sits 1.3 to 1.5 cm from the index's line.
+
+| | before | now |
+|---|---|---|
+| Feet out, right / left | 12.8 / 2.2° | 7.0 / 7.0° |
+| Ball height, right / left | 4.6 / 3.5 cm | 3.7 / 3.7 cm (the bind's) |
+| Knees at the start, right / left | 23 / 15° | 16 / 16° |
+| Thumb's last joint | 3..8° | 18° |
+| `rest.ts --arms` | ✓ | ✓ (hand gap female right -1.4, thin left 1.9 cm) |
+| `rest.ts`, the clip alone | ✗ female right -1.7 cm | ✗ female right -1.8 cm |
+| `moves.ts` hands | 0.8 cm | 0.9 cm |
+| Blend to the walk, first pose | 3.8 cm | 3.9 cm |
+
+Turning the feet even moved the hands' gaps by 2 mm each way (a leg turned in takes its thigh toward the hand), which first failed `--arms` by a millimetre; levelling the balls and soles brought it back inside.
