@@ -1503,16 +1503,21 @@ fn fragment(
             // two apart and changing fast across a drift's edge, is only a share of where it
             // lies, the noise the rest. On a fell's face the patch thins out into fingers
             // round the ground's ribs rather than ending in a cut-out line.
-            let edge = noise(world * 0.35 + 91.0) * 0.5 + noise(world * 1.9 + 23.0) * 0.3 + noise(world * 0.06 + 5.0) * 0.2;
             in_snow_m = in.uv.y;
             in_couloir = clamp(-in.uv.x, 0.0, 1.0);
-            let deep = clamp((in.uv.y - 0.02) / 0.3, 0.0, 1.0);
-            // On a fell's steeper faces thin snow keeps to the lees and gullies, the ribs
-            // between bare: patchy by a noise tens of metres across, rather than an even cap.
-            let ribs = noise(world * 0.018 + 51.0) * 0.6 + noise(world * 0.05 + 53.0) * 0.4;
-            let shed = (1.0 - smoothstep(0.75, 0.95, flatness)) * (ribs - 0.45) * 1.4;
-            let patches = (noise(world * 0.0032 + 71.0) * 0.65 + noise(world * 0.009 + 73.0) * 0.35 - 0.5) * 1.3 * (1.0 - smoothstep(0.75, 0.95, flatness));
-            snow = smoothstep(0.3, 0.7, deep + (edge - 0.5) * 1.1 + (fleck - 0.5) * 0.12 - max(shed, 0.0) - max(patches, -0.15)) * up_facing;
+            // Only where the vertices lay some snow: with none, the noise alone broke a faint
+            // fleck of snow out of a summer's meadow wherever it stood high, and its seven
+            // noise ran over all the ground (play-lake-fps j6).
+            if in.uv.y > 0.0 && up_facing > 0.0 {
+                let edge = noise(world * 0.35 + 91.0) * 0.5 + noise(world * 1.9 + 23.0) * 0.3 + noise(world * 0.06 + 5.0) * 0.2;
+                let deep = clamp((in.uv.y - 0.02) / 0.3, 0.0, 1.0);
+                // On a fell's steeper faces thin snow keeps to the lees and gullies, the ribs
+                // between bare: patchy by a noise tens of metres across, rather than an even cap.
+                let ribs = noise(world * 0.018 + 51.0) * 0.6 + noise(world * 0.05 + 53.0) * 0.4;
+                let shed = (1.0 - smoothstep(0.75, 0.95, flatness)) * (ribs - 0.45) * 1.4;
+                let patches = (noise(world * 0.0032 + 71.0) * 0.65 + noise(world * 0.009 + 73.0) * 0.35 - 0.5) * 1.3 * (1.0 - smoothstep(0.75, 0.95, flatness));
+                snow = smoothstep(0.3, 0.7, deep + (edge - 0.5) * 1.1 + (fleck - 0.5) * 0.12 - max(shed, 0.0) - max(patches, -0.15)) * up_facing;
+            }
         }
 @if(VERTEX_UVS_B)
         {
