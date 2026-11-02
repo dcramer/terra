@@ -15,7 +15,9 @@
    "roll": 0
   },
   "shoulders": "Walk_Loop",
-  "stance": 0.22
+  "stance": 0.22,
+  "turn_out": 7,
+  "knees": 16
  },
  "end": 6,
  "loop": true,

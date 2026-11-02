@@ -22,7 +22,7 @@
 // the elbow bent, the palm rolled from facing the thigh (+ toward the front). `fingers` is the
 // degrees each finger curls over its three joints, the little finger most (the resting cascade).
 // `loop` makes the curve run on through the seam; the last key must equal the first.
-// `start` {pelvis, chest, head, shoulders, stance} sets the start pose afresh (below, where it is made).
+// `start` {pelvis, chest, head, shoulders, stance, turn_out, knees} sets the start pose afresh (below, where it is made).
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { apply, dot, Glb, len, qinv, qmul, rot, sub, type Pose, type Q, type V3 } from "../../tools/characters/glb.ts";
@@ -101,11 +101,14 @@ function fk(l: Pose[]): Pose[] {
 // keeping the guard's (the hips' roll levelled, the shoulders sit alike either side); its shoulders are a clip's mean (the walk's, so the idle starts where the walk
 // carries them); the arms keep the way they hung in the guard.
 const spread: Record<string, V3> = { r: [0, 0, 0], l: [0, 0, 0] };
+const turnOut: Record<string, number> = { r: 0, l: 0 };
+const heelUp: Record<string, number> = { r: 0, l: 0 };
+let rise = 0;
+const deg = (r: number) => (r * 180) / Math.PI;
 if (spec.start) {
   const s = spec.start;
   const bind = fk(nodes.map((_, i) => g.rest(i)));
   const before = fk(base);
-  const deg = (r: number) => (r * 180) / Math.PI;
   /// A world turn from the bind pose as yaw, pitch and roll, the inverse of `euler`.
   const angles = (q: Q) => {
     const [x, y, f] = [rot(q, [1, 0, 0]), rot(q, [0, 1, 0]), rot(q, [0, 0, 1])];
@@ -142,14 +145,38 @@ if (spec.start) {
     }
   }
   for (const side of ["r", "l"]) setWorld(base, id(`upperarm_${side}`), before[id(`upperarm_${side}`)].r, fk(base));
-  // The stance: the balls of the feet this far apart, metres, centred under the hips and level
-  // front to back (the guard's stagger dropped), measured after the hips are set.
+  // The stance: the balls of the feet this far apart, metres, centred under the hips, level front
+  // to back (the guard's stagger dropped), measured after the hips are set, and flat on the floor:
+  // each ball at the bind pose's height and each sole at its pitch (the guard holds the right ball
+  // 1 cm up, so that knee bent 23 to the left's 15, and both heels 6 degrees down into the floor).
   if (s.stance) {
     const now = fk(base);
     const middle = (now[id("thigh_r")].t[0] + now[id("thigh_l")].t[0]) / 2;
     const ahead = (now[id("ball_r")].t[2] + now[id("ball_l")].t[2]) / 2;
+    const pitch = (w: Pose[], side: string) => {
+      const d = sub(w[id(`foot_${side}`)].t, w[id(`ball_${side}`)].t);
+      return deg(Math.atan2(d[1], Math.hypot(d[0], d[2])));
+    };
     // He faces +Z, so his right is -X.
-    for (const [side, sign] of [["r", -1], ["l", 1]] as const) spread[side] = [middle + (sign * s.stance) / 2 - now[id(`ball_${side}`)].t[0], 0, ahead - now[id(`ball_${side}`)].t[2]];
+    for (const [side, sign] of [["r", -1], ["l", 1]] as const) {
+      const ball = now[id(`ball_${side}`)].t;
+      spread[side] = [middle + (sign * s.stance) / 2 - ball[0], bind[id(`ball_${side}`)].t[1] - ball[1], ahead - ball[2]];
+      heelUp[side] = pitch(bind, side) - pitch(now, side);
+    }
+  }
+  // The turn-out: each foot's toes this many degrees out from straight ahead, both alike, along
+  // the ankle-to-ball line (the bind's runs with the sole's long axis, 13 to 15 out, while the
+  // ball bone's own axis points straight ahead). The guard toes the right foot out about 13 and
+  // the left 2; a person standing at ease turns each about 7 (McIlroy and Maki 1997, 14 between
+  // the feet).
+  if (s.turn_out !== undefined) {
+    const now = fk(base);
+    for (const [side, out] of [["r", -1], ["l", 1]] as const) {
+      const d = sub(now[id(`ball_${side}`)].t, now[id(`foot_${side}`)].t);
+      // He faces +Z and his left is +X; yaw is + to his left, so the right foot turns out by -.
+      const has = deg(Math.atan2(out * d[0], d[2]));
+      turnOut[side] = out * (s.turn_out - has);
+    }
   }
 }
 const G = fk(base);
@@ -346,7 +373,7 @@ function pose(t: number): Pose[] {
   // The hips, then the chest over them.
   let w = fk(l);
   const pel = id("pelvis");
-  const moved = add(G[pel].t, model(vec("pelvis", "move", t)));
+  const moved = add(add(G[pel].t, [0, rise, 0]), model(vec("pelvis", "move", t)));
   const parent = w[g.parentOf[pel]];
   l[pel].t = scale(rot(qinv(parent.r), sub(moved, parent.t)), 1 / parent.s[0]);
   setWorld(l, pel, qmul(euler(num("pelvis", "yaw", t), num("pelvis", "pitch", t), num("pelvis", "roll", t)), G[pel].r), w);
@@ -415,13 +442,13 @@ function pose(t: number): Pose[] {
   // The feet: planted where the keys put them, the leg solved up to them.
   for (const side of ["r", "l"] as const) {
     const part = `foot_${side}`;
-    const yaw = about([0, 1, 0], num(part, "yaw", t));
+    const yaw = about([0, 1, 0], num(part, "yaw", t) + turnOut[side]);
     const ballG = G[id(`ball_${side}`)];
     const footG = G[id(`foot_${side}`)];
     const ball = add(add(ballG.t, spread[side]), model(footAt(side, t)));
     const along = rot(yaw, sub(footG.t, ballG.t));
     const side_axis = rot(yaw, norm(cross(sub(footG.t, ballG.t), [0, 1, 0])));
-    const heel = about(side_axis, -num(part, "heel", t) * (dot(cross(side_axis, along), [0, 1, 0]) > 0 ? -1 : 1));
+    const heel = about(side_axis, -(num(part, "heel", t) + heelUp[side]) * (dot(cross(side_axis, along), [0, 1, 0]) > 0 ? -1 : 1));
     const ankle = add(ball, rot(heel, along));
     reach(l, leg[side], ankle, footPole(side, leg[side]), `leg_${side}`);
     w = fk(l);
@@ -432,6 +459,24 @@ function pose(t: number): Pose[] {
   return l;
 }
 const footPole = (_side: string, k: Chain): V3 => k.pole;
+
+// The knees (`start.knees`): with the soles flat the guard's hips stand low enough to bend both
+// knees 26 degrees, a crouch; the hips rise (or drop) until the start's knees bend this much.
+if (spec.start?.knees !== undefined) {
+  const bent = () => {
+    const w = fk(pose(0));
+    const at = (n: string) => w[id(n)].t;
+    const knee = (s: string) => deg(Math.acos(Math.max(-1, Math.min(1, dot(norm(sub(at(`calf_${s}`), at(`thigh_${s}`))), norm(sub(at(`foot_${s}`), at(`calf_${s}`))))))));
+    return (knee("r") + knee("l")) / 2;
+  };
+  let [lo, hi] = [-0.05, 0.05];
+  for (let k = 0; k < 30; k++) {
+    rise = (lo + hi) / 2;
+    if (bent() > spec.start.knees) lo = rise;
+    else hi = rise;
+  }
+  for (const k of Object.keys(stretched)) delete stretched[k];
+}
 
 // Sample it and write it as a new clip in a copy of the body.
 const frames = Math.round(spec.end * FPS) + 1;
