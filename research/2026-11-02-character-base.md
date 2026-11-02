@@ -178,7 +178,20 @@ char-switch j1, 2026-11-02, the developer's worry: "we might have an issue w/ cl
 | Plain shirt, apron | Peasant Body is a tunic; no apron | Apron ours |
 | Sword, shield | None (held, not worn) | Ours, refitted to their sockets |
 
-**The question this raises, for the developer:** an empty slot. Their pieces assume a piece in every slot on a head-only body. Our game lets a player take the coat off, so something must show where it was: their full body under their pieces clips (their readme), and hiding the body's skin under a piece is a cut "beyond what they ship". Our skin patches hide skin by a shader mask without changing the mesh (`body_mask.wesl`); whether that counts as cutting is the developer's call. The alternative within the rule is a "bare" piece for each slot, which they do not ship.
+**The question this raises, for the developer:** an empty slot. Their pieces assume a piece in every slot on a head-only body. Our game lets a player take the coat off, so something must show where it was: their full body under their pieces clips (their readme), and hiding the body's skin under a piece is a cut "beyond what they ship". Our skin patches hide skin by a shader mask without changing the mesh (`body_mask.wesl`); whether that counts as cutting is the developer's call. The alternative within the rule is a "bare" piece for each slot, which they do not ship. The developers lean to the bare piece and asked for both to be tried (D600).
+
+**What bare pieces the packs ship** (measured, char-switch j3, every file in both zips listed; each body cut compared with its full body by `intact.ts --source`):
+
+| Slot | Man | Woman |
+|---|---|---|
+| Head | `Regular_Male_OnlyHead`: head and neck, 1,707 vertices, every triangle the full body's; 32 normals on the neck's cut edge turned up to 10° | `Regular_Female_OnlyHead`, likewise |
+| Arms | None alone. `Regular_Male_UpperBody`: head, neck, shoulders, bare arms and hands (everything above 1.34 m in the T-pose), 4,764 vertices, an exact cut of the full body (8,056 of 8,056 triangles, every vertex, normal and weight its own) | `Regular_Female_UpperBody`, above 1.25 m, 4,985 vertices; 28 normals on the cut edge turned up to 5° |
+| Body (torso), legs, feet | None | None |
+| Underclothes | No piece. The full body's skin texture paints dark briefs on | Briefs and a top, painted likewise |
+
+- The outfit pack's 62 pieces (Knight, Knight Cloth, Noble, Peasant, Ranger and Wizard, each sex) are all clothing; none is bare. The `T_Regular_*` textures in it are the body's own skin texture (the same file, by hash), which the Ranger and Peasant arms pieces use for the hands and forearms they carry.
+- The pack's readme: "only the head of the model is required. Using the full body will result in clipping. (Removing the unseen parts of the body is better of performance as well)". The upper body serves outfits without an arms piece; every fantasy outfit has one.
+- **So the bare-piece swap works within the rule for the arms only**: taking the coat's arms off swaps `OnlyHead` for `UpperBody`. A bare torso, legs or feet would have to be a cut of their full body (D599 forbids it), a bare piece of ours, or the full body under, hidden where covered. The man's upper body is vendored for the trial (`art/characters/quaternius/universal-base-characters/`).
 
 **Pieces of two outfits worn together** (measured, char-switch j2; `tools/characters/layers.ts`). The man's body piece over the legs piece, both outfits as Quaternius made them and both mixes, through the mannequin's 34 clips at 12 moments each, on their skeleton. Poke-through is the legs showing out through the body piece, by vertex; the waistband is the legs' top edge (22 points round), which must stay under the body piece or the empty inside of the head-only body shows. The arms and feet pieces stay with their own outfit in both mixes, so the waist is the one new seam.
 
