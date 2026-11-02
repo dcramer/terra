@@ -200,6 +200,17 @@ fn a_tune_that_is_not_an_assignment_or_set_twice_is_refused() {
 }
 
 #[test]
+fn a_picture_size_is_passed_on_and_a_bad_one_refused() {
+    let a = asked_from(&["lake", "--picture", "1901x1550"]).unwrap();
+    assert_eq!(a.picture.as_deref(), Some("1901x1550"));
+    assert!(asked_from(&["lake"]).unwrap().picture.is_none());
+    for bad in ["1901", "1901x", "x1550", "1901x50", "big", "1901 x 1550"] {
+        assert!(asked_from(&["--picture", bad]).is_none(), "{bad} was taken");
+    }
+    assert!(asked_from(&["--picture"]).is_none());
+}
+
+#[test]
 fn a_tuned_run_has_a_key_of_its_own() {
     assert_eq!(result_key("lake", None, &[]), "lake");
     let tunes = ["sky.cloud.heaped_cover=0.25".to_string()];

@@ -348,8 +348,19 @@ struct Asked {
     /// Each `NAME=VALUE` passed on as `--tune` (D547), sorted by name so a key reads the same
     /// whichever order they were given in.
     tunes: Vec<String>,
+    /// The picture's size, `WxH`, passed on as the sandbox's `--picture`: a player's window
+    /// measured as drawn (1920x1080 when not given). Its results are told apart by the size
+    /// the run reports, which every comparison matches.
+    picture: Option<String>,
     chosen: Vec<&'static Scene>,
     all_scenes: bool,
+}
+
+/// A picture size as `--picture` takes it, `WxH`, each at least 64; None if not one.
+fn picture_size(arg: &str) -> Option<String> {
+    let (w, h) = arg.split_once('x')?;
+    let (w, h): (u32, u32) = (w.parse().ok()?, h.parse().ok()?);
+    (w >= 64 && h >= 64).then(|| format!("{w}x{h}"))
 }
 
 /// A `--tune` assignment as its key spells it: `NAME=VALUE`, a number written the shortest
@@ -404,11 +415,23 @@ fn asked(args: &[String]) -> Option<Asked> {
     // films' (D428), is measured for its cost and held to no budget.
     let mut quality: Option<String> = None;
     let mut tunes: Vec<(String, String)> = Vec::new();
+    let mut picture: Option<String> = None;
     let mut chosen: Vec<&'static Scene> = Vec::new();
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--record" => record = true,
+            "--picture" => match args.next().map(|arg| (arg, picture_size(arg))) {
+                Some((_, Some(size))) => picture = Some(size),
+                given => {
+                    let given = given.map_or("nothing".into(), |(arg, _)| format!("`{arg}`"));
+                    eprintln!(
+                        "--picture needs a width and height of at least 64, like 1901x1550 \
+                         (a player's window), not {given}"
+                    );
+                    return None;
+                }
+            },
             "--copy" => match args.next() {
                 Some(name) => copy = format!("bench-{name}"),
                 None => {
@@ -472,6 +495,7 @@ fn asked(args: &[String]) -> Option<Asked> {
             .into_iter()
             .map(|(name, value)| format!("{name}={value}"))
             .collect(),
+        picture,
         chosen,
         all_scenes,
     })
@@ -488,6 +512,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
         copy,
         quality,
         tunes,
+        picture,
         chosen,
         all_scenes,
     }) = asked(args)
@@ -561,7 +586,14 @@ pub(crate) fn bench(args: &[String]) -> bool {
             };
             println!("\n> {name} {attempt}/{runs}{extra}{said}");
             let watch = load::Watch::start();
-            let timing = time_scene(&program, &folder, scene, quality.as_deref(), &tunes);
+            let timing = time_scene(
+                &program,
+                &folder,
+                scene,
+                quality.as_deref(),
+                &tunes,
+                picture.as_deref(),
+            );
             let during = watch.stop();
             if let Some(during) = during {
                 println!(
@@ -616,6 +648,28 @@ pub(crate) fn bench(args: &[String]) -> bool {
             ok &= append_line(&root().join(BENCHMARKS), BENCHMARKS_HEADER, &row);
         }
     }
+    ok &= print_table(&lines, &csv, build, &commit, runs, record, held);
+    // A full benchmark also checks that nothing pops as detail changes (D230): what is
+    // measured is only worth having if it looks right.
+    if all_scenes && !debug {
+        println!("\n> lodcheck");
+        ok &= run("node", &["tools/sandbox/lodcheck.ts"]);
+    }
+    ok
+}
+
+/// Prints the scenes' table, each against its last record and its budget; false if a held
+/// scene missed it.
+fn print_table(
+    lines: &[(String, Timing, String, Note)],
+    csv: &str,
+    build: &str,
+    commit: &str,
+    runs: usize,
+    record: bool,
+    held: bool,
+) -> bool {
+    let mut ok = true;
     if let Some((_, first, _, _)) = lines.first() {
         // The scene column as wide as its longest key, a tuned one's included.
         let w = lines
@@ -640,7 +694,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
             "drift",
             "verdict"
         );
-        for (name, timing, against, note) in &lines {
+        for (name, timing, against, note) in lines {
             let missed = timing.misses();
             let verdict = format!(
                 "{} {}",
@@ -663,7 +717,7 @@ pub(crate) fn bench(args: &[String]) -> bool {
                 timing.drift_pct,
             );
             if timing.from_start {
-                let said = play::said(&csv, timing, build, name, SLOWER_BY);
+                let said = play::said(csv, timing, build, name, SLOWER_BY);
                 println!("  {:w$} {said}", "");
             }
             for miss in &missed {
@@ -711,12 +765,6 @@ pub(crate) fn bench(args: &[String]) -> bool {
         if record {
             println!("  Recorded in {BENCHMARKS}.");
         }
-    }
-    // A full benchmark also checks that nothing pops as detail changes (D230): what is
-    // measured is only worth having if it looks right.
-    if all_scenes && !debug {
-        println!("\n> lodcheck");
-        ok &= run("node", &["tools/sandbox/lodcheck.ts"]);
     }
     ok
 }
@@ -786,12 +834,16 @@ fn time_scene(
     scene: &Scene,
     quality: Option<&str>,
     tunes: &[String],
+    picture: Option<&str>,
 ) -> Option<Timing> {
     use std::io::{BufRead, BufReader};
     let mut command = Command::new(program);
     command.args(scene.args);
     if let Some(preset) = quality {
         command.args(["--quality", preset]);
+    }
+    if let Some(size) = picture {
+        command.args(["--picture", size]);
     }
     for tune in tunes {
         command.args(["--tune", tune]);
