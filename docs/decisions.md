@@ -43,6 +43,7 @@ What we are building, its tenets, scope and players.
 | [D127](decisions/D127.md) | Many of everything | Design | Developers | Decided | A core principle: assume a large quantity of every kind… |
 | [D182](decisions/D182.md) | Hundreds of variants, not millions | Design | Developers | Decided | A core tenet: almost everything is modular and… |
 | [D187](decisions/D187.md) | What we are building | Design | Developers | Decided | First and foremost, an extremely ambitious sandbox… |
+| [D589](decisions/D589.md) | The v0 milestone | Design | — | Open | Recommended: the next milestone is v0… |
 
 ## Worlds and realms
 
