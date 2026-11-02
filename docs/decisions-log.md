@@ -1125,3 +1125,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-01**: D591 decided (by the developers: "we want natural caves as part of core world design, so the troll can live in one"): caves are in the world's generation and in v0, the troll is the demo's boss and lives in one.
 - **2026-11-01**: D592 decided (by the developers: "characters get saved on the server"): a character's record is kept by its server, with the world.
 - **2026-11-01**: D589 amended (on the developers' word: "we dont care about dates etc"): no date, owners or cut order in v0's plan; docs/v0-goals.md's questions cut to nine.
+- **2026-11-01**: D589 amended (on the developers' word: "yeah if host leaves session ends, at some point we'd probably have host-less dedicated server"): a host leaving ends the session in v0; a dedicated server as a way to play is out of v0, built later from the same code (D51).

@@ -50,6 +50,7 @@ Proposed, to edit. What already works stays in the game and keeps working; it ju
 - Building, as the developers said: on hold. Villages and settlements with it, so no quests or recruits.
 - Essences and abilities (D105 has them first after the MVP), raids, factions, taming and mounts, trade.
 - A third realm, dungeons as content, a thousand players (the design keeps D52 possible; v0 does not measure it).
+- A host-less dedicated server as a way to play, which the developers expect at some point.
 - First person, gamepad, voice chat, a store page.
 
 ## Three seams that come first
@@ -148,11 +149,11 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 - **Have**: the fixed tick (D138), rules in plain crates (D28), operations in order (D21), the same world on every machine (D30), and the plan to use `renet` with our own messages (D34).
 - **Need**:
   - **A design first** (D49). multiplayer.md says what a server must do, not how: there is no research note on netcode and no design for prediction, what is sent or when. D34 chose `renet` and no replication framework without one. The first job surveys shipped games and current Bevy libraries, then writes the design, and D34 stands or changes on it.
-  - `terra_net`, a server program with no window, and the same server started inside the game (D51).
+  - `terra_net`, and a server started inside the game. The same server running with no window is for scripted runs now (D51); offering it to players comes later.
   - **Always a client.** Even solo, the drawn game is a client of a server. Otherwise there are two code paths.
   - **Two realms at once.** One player can be in each realm, so a host's server runs both while its own client draws one. instances.md's split (a headless `App` per instance on the server, the client's world in the main `World`) means a host holds its realm twice. Measure that memory before building on it.
   - Sending by area, a snapshot then changes, others shown between ticks, late join, leaving and rejoining mid-fight, and a version check on connect.
-  - Each player's character kept by the server (D592) under an identity (Q1). When the host leaves, the session ends for everyone with a plain message and the world is saved; there is no handing over to another player. A server running alone is the answer for a world that stays up.
+  - Each player's character kept by the server (D592) under an identity (Q1). When the host leaves, the session ends for everyone with a plain message and the world is saved, as the developers confirmed; there is no handing over to another player.
   - Every action checked: in reach, owned, allowed (D51).
   - Text chat and a player list.
 - **Done when**: engine.md's test passes (two peers end the same, a late joiner catches up), then four clients for 30 minutes at 100 ms and 1% loss show no lasting mismatch, with the bytes per player per second reported.
@@ -208,7 +209,7 @@ Design calls, each with a recommendation; none is settled until they say so. Q1 
 
 | # | Question | Recommended |
 |---|---|---|
-| Q1 | Who is v0 for, and how do they connect? | The two developers and a few friends, 2 to 4 at once. A player hosts or a server runs alone (D51). Direct address first, Steam's relay when strangers' routers get in the way (D34). A player is identified by a key kept on their machine |
+| Q1 | Who is v0 for, and how do they connect? | The two developers and a few friends, 2 to 4 at once. A player hosts; a host-less dedicated server comes later, from the same code (D51). Direct address first, Steam's relay when strangers' routers get in the way (D34). A player is identified by a key kept on their machine |
 | Q2 | Does a world have a seed? D579 says no | Yes: D579's reason lapses once land comes from the seed. Amend it |
 | Q3 | What is the second realm? "Scifi" meets settings.md's "no science fiction toolsets" and "no machine guns" | A dead realm of magic-machine ruins under a strange sky, from settings.md's techno realm: alien and technological, yet still magic. Its builders made the gate, which fits the stargate. Its monsters are guardians and things grown in the ruins. Its gate is found in the world and walked through (D72) |
 | Q4 | What is "real scale"? `play` is 2 km in radius today; the mountains and D13 say 30 km | 30 km for the first realm, since biomes need the room. 10 to 20 km for the second |
