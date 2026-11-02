@@ -38,7 +38,7 @@ The arc is a line through the engine, not a progression system: it should add as
 | Land, Realms | The boss's place and the gate placed from the seed, each reachable on every seed |
 | Realms | A gate that starts shut and opens, its state saved with the realm and shared by everyone in the world |
 | Animation, Creatures | One boss: a big body, its attacks and tells, and fights that two players can share |
-| Play | The artifact, an item that opens the gate; beating the boss stays beaten (D499), so it must not be possible to lose (Q8) |
+| Play | What the boss leaves a player with, which opens the gate. A beaten boss stays beaten (D499), so it must not be possible to lose (Q8) |
 | Server | The fight's outcome and the gate's state decided once, for everyone, and kept across a disconnect |
 | Proof | Scripted runs open the gate directly, so testing a crossing never means beating the boss; the session runs the whole arc once |
 
@@ -200,7 +200,7 @@ Design calls, each with a recommendation; none is settled until they say so. Q1 
 | Q5 | How many biomes? | At least three in the first realm (forest, mountain lake, tundra) and two in the second |
 | Q6 | Which options has a new world? | Name, mode and seed. No more until there is something to tune |
 | Q7 | What does a player do to reach the boss? | Nothing new: skills by doing (D88) and gear crafted in the first realm, with a boss that starting gear cannot beat. The gate is found early, dark and shut, so a player knows what they are after. The boss's place is found by looking, with no markers (D92): something on the land seen from far off. Clues only if a playtest shows players lost |
-| Q8 | What are the artifact's rules? | Used once on the gate, it stays there, and the gate stays open for everyone in that world. Until then, dropped on a death it never decays, an exception to D84, or a lost artifact would shut a world out of the second realm for good |
+| Q8 | What does the boss leave you with? The developers, 2026-11-01: an item forced into your inventory that you can't drop, or "just a 'mark' that you get on you", or a "title" | A mark. The boss's death leaves the artifact, and touching it marks you: a fact on your character, shown on your body and sheet. It needs no pack space, survives death and crossing with no exception to D84, and agrees with the lore's "what you wore is bound with you". Everyone who fought is marked, so two players don't compete for it. A marked player opens the gate, which then stays open for everyone in that world, so a friend who missed the fight isn't shut out. A title is the same record with a name, so it needs no system of its own |
 | Q9 | What is the boss, and where? | One great monster at the heart of the worst place magic pools (creatures.md's question 3, D103), never coming back once beaten. Start from the 4 m troll of the troll fight (D402), whose model and clips were made for a film |
 
 Open decisions v0 will meet, by track: D134 day length (Living world), D436 and D438 monsters (Animation), D580 load time (Land, Front), D588 pose sheets (Animation), audio.md's music and voices (Sound).
