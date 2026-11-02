@@ -581,6 +581,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D586](decisions/D586.md) | High's sun shadows in three cascades | Tech | Agent | Decided | The high preset draws the sun's shadows in three… |
 | [D587](decisions/D587.md) | The render world's visibility ranges are kept as they change, not read again whole | Tech | Agent | Decided | Bevy 0.20's `extract_visibility_ranges` cleared its… |
 | [D594](decisions/D594.md) | The volumetric fog's ray direction is turned from view space, not taken as two world positions' difference | Tech | Agent | Decided | Bevy 0.20's `volumetric_fog.wesl` took each pixel's ray… |
+| [D595](decisions/D595.md) | The volumetric fog's point and spot light march is skipped where no cluster along the ray holds one | Tech | Agent | Decided | Bevy 0.20's `volumetric_fog.wesl` marches every fog… |
 
 ## Tools and workflow
 

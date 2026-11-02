@@ -239,6 +239,9 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     // going to recompute this over and over again for each directional light,
     // coming up with the same values each time.
     var background_alpha = 1.0;
+    // Terra's patch (D595): whether a directional light's march has worked out
+    // `background_alpha` (below).
+    var alpha_marched = false;
 
     // If we have a density texture, transform to its local space.
     @if(DENSITY_TEXTURE)
@@ -267,6 +270,8 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 
         // Reset `background_alpha` for a new raymarch.
         background_alpha = 1.0;
+        // Terra's patch (D595): this march's `background_alpha` is the point lights' march's.
+        alpha_marched = true;
 
         // Start raymarching.
         for (var step = 0u; step < step_count; step += 1u) {
@@ -358,6 +363,29 @@ fn fragment(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
 
     // Point lights and Spot lights
     let is_orthographic = view.clip_from_view[3].w == 1.0;
+
+    // Terra's patch (D595): marched only where a cluster the ray passes through holds a point
+    // or spot light. Where none does, every step below adds nothing to `accumulated_color`
+    // and works `background_alpha` out step for step as the directional light's march did,
+    // so its 48 cluster lookups and density samples a pixel (a quarter of the haze's 1.4 ms at
+    // the lake, play-lake-fps j6) are spared. A pixel's clusters along its ray are one run of
+    // indices, its depth slices (`fragment_cluster_index`).
+    if (alpha_marched) {
+        let last_z = (view_start_pos + Rd_view * f32(step_count - 1u) * step_size_world).z;
+        let first_cluster = clustering::view_fragment_cluster_index(frag_coord.xy, view_start_pos.z, is_orthographic);
+        let last_cluster = clustering::view_fragment_cluster_index(frag_coord.xy, last_z, is_orthographic);
+        var lit = false;
+        for (var cluster = min(first_cluster, last_cluster); cluster <= max(first_cluster, last_cluster); cluster += 1u) {
+            let ranges = clustering::unpack_clusterable_object_index_ranges(cluster);
+            if (ranges.first_point_light_index_offset < ranges.first_rect_light_index_offset) {
+                lit = true;
+                break;
+            }
+        }
+        if (!lit) {
+            return vec4(accumulated_color, 1.0 - background_alpha);
+        }
+    }
 
     // Reset `background_alpha` for a new raymarch.
     background_alpha = 1.0;
