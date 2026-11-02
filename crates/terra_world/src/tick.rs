@@ -98,13 +98,134 @@ pub fn plugin(app: &mut App) {
         (Sim::Act, Sim::World, Sim::Resolve, Sim::End).chain(),
     )
     .init_resource::<Ticks>()
+    .init_resource::<TickTiming>()
     .add_systems(Startup, cap_catch_up)
     .add_systems(FixedFirst, (count, take_up))
     .add_systems(FixedLast, put_down)
     .add_systems(
         RunFixedMainLoop,
-        show.in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
+        (
+            time_ticks.in_set(RunFixedMainLoopSystems::BeforeFixedMainLoop),
+            (show, behind).in_set(RunFixedMainLoopSystems::AfterFixedMainLoop),
+        ),
     );
+}
+
+/// How long frames must have run past `MOST_TICKS_A_FRAME` on end before the log says the
+/// game is behind: a hitch is not, a death spiral is (play at the lake, 2026-11-02: 4 fps for
+/// minutes with nothing in the log naming the ticks).
+const BEHIND_TELL_S: f32 = 1.0;
+/// How often it says so again while the game stays behind.
+const BEHIND_AGAIN_S: f32 = 10.0;
+
+/// When this frame's ticks began, and how many had run by then, for `behind` on the far side
+/// of them.
+#[derive(Resource, Default)]
+struct TickTiming {
+    began: Option<(bevy::platform::time::Instant, u64)>,
+}
+
+/// A run of frames on end that took more than the ticks a frame catches up on.
+#[derive(Default, Debug, PartialEq)]
+struct Behind {
+    /// Real seconds of the run's frames.
+    for_s: f32,
+    frames: u32,
+    /// Seconds the fixed loop took over the run, and its ticks.
+    ticking_s: f32,
+    ticks: u64,
+    /// When in the run it last said so.
+    told_at_s: Option<f32>,
+}
+
+/// What the log says of a run of frames past the tick cap.
+#[derive(Debug, PartialEq)]
+enum Said {
+    Behind {
+        for_s: f32,
+        frame_ms: f32,
+        tick_ms: f32,
+    },
+    CaughtUp {
+        after_s: f32,
+    },
+}
+
+impl Behind {
+    /// A frame: whether it hit the cap, how long it took, and how long its ticks took and
+    /// how many ran. Says when the run has lasted `BEHIND_TELL_S`, every `BEHIND_AGAIN_S`
+    /// after, and once when a run it told of ends.
+    fn frame(&mut self, capped: bool, frame_s: f32, ticking_s: f32, ticks: u64) -> Option<Said> {
+        if !capped {
+            let said = self.told_at_s.map(|_| Said::CaughtUp {
+                after_s: self.for_s,
+            });
+            *self = Behind::default();
+            return said;
+        }
+        self.for_s += frame_s;
+        self.frames += 1;
+        self.ticking_s += ticking_s;
+        self.ticks += ticks;
+        let due = match self.told_at_s {
+            None => self.for_s >= BEHIND_TELL_S,
+            Some(at) => self.for_s - at >= BEHIND_AGAIN_S,
+        };
+        due.then(|| {
+            self.told_at_s = Some(self.for_s);
+            Said::Behind {
+                for_s: self.for_s,
+                frame_ms: self.for_s * 1000.0 / self.frames as f32,
+                tick_ms: self.ticking_s * 1000.0 / self.ticks.max(1) as f32,
+            }
+        })
+    }
+}
+
+fn time_ticks(ticks: Res<Ticks>, mut timing: ResMut<TickTiming>) {
+    timing.began = Some((bevy::platform::time::Instant::now(), ticks.0));
+}
+
+/// Says in the log when the game has fallen behind the clock: frames slower than the ticks a
+/// frame catches up on (`MOST_TICKS_A_FRAME`) for a second on end, so the game runs slower
+/// than time, naming how long a tick takes against its rate, so the next death spiral names
+/// itself (D138).
+fn behind(
+    real: Res<Time<Real>>,
+    clock: Res<Time<Virtual>>,
+    tick: Res<Time<Fixed>>,
+    ticks: Res<Ticks>,
+    timing: Res<TickTiming>,
+    mut run: Local<Behind>,
+) {
+    let capped =
+        !clock.is_paused() && real.delta().mul_f64(clock.relative_speed_f64()) > clock.max_delta();
+    let (ticking_s, ran) = timing.began.map_or((0.0, 0), |(at, before)| {
+        (at.elapsed().as_secs_f32(), ticks.0.saturating_sub(before))
+    });
+    match run.frame(capped, real.delta_secs(), ticking_s, ran) {
+        Some(Said::Behind {
+            for_s,
+            frame_ms,
+            tick_ms,
+        }) => warn!(
+            "The game is behind: frames have taken {frame_ms:.0} ms for {for_s:.0} s on end, \
+             past the {MOST_TICKS_A_FRAME} ticks of {:.1} ms a frame catches up on, so the game \
+             runs slower than the clock (D138). A tick takes {tick_ms:.1} ms against its {:.1}: \
+             {}. The session report (`cargo xtask profile play`) names the systems.",
+            tick.timestep().as_secs_f32() * 1000.0,
+            tick.timestep().as_secs_f32() * 1000.0,
+            if tick_ms > tick.timestep().as_secs_f32() * 1000.0 {
+                "the ticks themselves are too slow, so each frame runs more of them (a death spiral)"
+            } else {
+                "the ticks keep up, so what is slow is the rest of the frame"
+            }
+        ),
+        Some(Said::CaughtUp { after_s }) => {
+            info!("The game has caught up with the clock after {after_s:.1} s behind.")
+        }
+        None => {}
+    }
 }
 
 /// A frame's time taken up to `MOST_TICKS_A_FRAME` ticks of it, at the tick's rate.
@@ -200,6 +321,36 @@ mod tests {
         )));
         app.update();
         assert_eq!(ticks(&app) - slow, 3, "a frame of 50 ms has its own ticks");
+    }
+
+    #[test]
+    fn frames_past_the_cap_for_a_second_say_the_game_is_behind_then_that_it_caught_up() {
+        let mut run = Behind::default();
+        // Frames of 125 ms, each running six ticks of 20 ms: said once a second has gone,
+        // at the eighth.
+        let frame = |run: &mut Behind| run.frame(true, 0.125, 0.12, 6);
+        let said: Vec<_> = (0..12).filter_map(|_| frame(&mut run)).collect();
+        let [
+            Said::Behind {
+                for_s,
+                frame_ms,
+                tick_ms,
+            },
+        ] = said[..]
+        else {
+            panic!("said once: {said:?}");
+        };
+        assert_eq!((for_s, frame_ms), (1.0, 125.0));
+        assert!((tick_ms - 20.0).abs() < 0.01, "{said:?}");
+        // Said again ten seconds on, not before: 1.5 s in, a hundred frames more.
+        assert_eq!((0..100).filter_map(|_| frame(&mut run)).count(), 1);
+        // A frame in time ends the run, said once.
+        let ended = run.frame(false, 0.01, 0.0, 1);
+        assert_eq!(ended, Some(Said::CaughtUp { after_s: 14.0 }));
+        assert_eq!(run.frame(false, 0.01, 0.0, 1), None);
+        // A hitch of over half a second is not a game behind, and its end says nothing.
+        assert!((0..5).all(|_| frame(&mut run).is_none()));
+        assert_eq!(run.frame(false, 0.01, 0.0, 1), None);
     }
 
     #[test]
