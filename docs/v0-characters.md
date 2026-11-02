@@ -43,6 +43,9 @@ The animation libraries we already use (UAL1, UAL2) are CC0.
   - The swap's cuts meet with no crack; its gaps are a centimetre at the back of the calf and the torso's edge over the leggings' waistband.
   - The hidden body shows skin through the sleeves, a sole through the boot and holes in the roll.
   - The numbers are in D600.
+- **2026-11-02, the hidden body fixed** (char-switch j5b). The developer saw j5's skin through the sleeves as wrong. It was our trial's rule: a patch was hidden when 90% of it met a worn piece looking out from 2 mm, and their sleeves and leggings lie flush on the skin (0.0 mm), so none of the arm's 404 patches was hidden. Now each worn slot hides the region its bare piece holds (Skyrim's body partitions, WoW's geosets), with patches made within the regions (`cut_slots.py`, `patches.mark(group=)`), and `slots.test.ts` holds that a flush sleeve hides the whole arm.
+  - Both ways now draw the same triangles and measure the same in every state; the stills' rows match.
+  - They differ in cost (the hidden body sends 9.0k more triangles and 12.4k more vertices dressed, one draw fewer with a slot empty) and in D599 (the swap cuts their body). The numbers are in D600.
 
 ## Next, in v0's order
 
@@ -59,7 +62,7 @@ The switch as bounded jobs (the research note's "The switch in jobs" has the det
 
 ## Open with the developers
 
-- **An empty slot** (D600, Open): a bare piece swapped in (the developers' leaning) or their full body under, hidden while covered; both to be tried on the man before they choose. Both measured with stills (char-switch j5, numbers in D600), on the desk for their choice; the agents recommend the swap. Next from `~/.cache/terra-handoff/char-switch-j6.md`. The packs ship bare pieces for the head and for the head with bare arms (`UpperBody`) only, so the swap works within the rule for the arms; a bare torso, legs or feet would be a cut of their body, a piece of ours, or the body under.
+- **An empty slot** (D600, Open): a bare piece swapped in (the developers' leaning) or their full body under, hidden while covered; both to be tried on the man before they choose. Both measured with stills (char-switch j5, the hidden body fixed in j5b, numbers in D600), on the desk for their choice: they look the same, so the agents now recommend the hidden body by region (their body uncut, as D599 asks, and one mask with our gear), at 9k more triangles sent. Next from `~/.cache/terra-handoff/char-switch-j5b.md`, then `char-switch-j6.md`. The packs ship bare pieces for the head and for the head with bare arms (`UpperBody`) only, so the swap works within the rule for the arms; a bare torso, legs or feet would be a cut of their body, a piece of ours, or the body under.
 - **The starting kit's trousers**: the leather coat is their Ranger body and arms; under it the Peasant trousers' waistband shows 1–2 cm at the hips in the sprint, sword stance and jumps, the Ranger leggings do not (the research note's "Pieces of two outfits worn together"). On the desk, recommending the Ranger leggings.
 - Their man's arms (fingertips 2.2 cm above the 99th percentile) stay as made under the rule; D599 withdrew the stretch.
 
