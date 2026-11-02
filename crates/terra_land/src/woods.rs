@@ -650,7 +650,7 @@ mod tests {
         let site = land
             .mountain_lake(
                 crate::PLANET_START,
-                &MountainLake::demo_pinned(crate::site::PINNED_SEED, 30_000.0),
+                &MountainLake::demo_pinned(terra_core::Seed(crate::site::PINNED_SEED), 30_000.0),
             )
             .unwrap();
         let round = crate::round::Round::new(land, site.toward, 1_400.0, day);

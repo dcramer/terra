@@ -388,7 +388,7 @@ mod tests {
         let site = land
             .mountain_lake(
                 PLANET_START,
-                &MountainLake::demo_pinned(crate::site::PINNED_SEED, 30_000.0),
+                &MountainLake::demo_pinned(Seed(crate::site::PINNED_SEED), 30_000.0),
             )
             .unwrap();
         let round = Round::new(land, site.toward, 8000.0, day);

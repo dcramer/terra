@@ -90,7 +90,7 @@ const PLACES: &str = include_str!("../../../tools/sandbox/places.ts");
 
 /// The seed the demos' places are pinned on: the first world's (D393, D596). Another seed's
 /// land has none of them, so its ground is all its own rules'.
-pub const PINNED_SEED: Seed = Seed(1);
+pub const PINNED_SEED: u64 = 1;
 
 /// The pins of the demos' places on a world of this seed and so many metres' radius, by name,
 /// kilometres east and north of the start: each place in `places.ts` whose arguments give that
@@ -98,7 +98,7 @@ pub const PINNED_SEED: Seed = Seed(1);
 /// (`GeneratedPlanet::with_kept_spots`).
 pub fn demo_pins(seed: Seed, radius_m: f32) -> Vec<(&'static str, Vec2)> {
     let mut pins = Vec::new();
-    if seed != PINNED_SEED {
+    if seed.0 != PINNED_SEED {
         return pins;
     }
     for line in PLACES.lines() {
@@ -575,7 +575,7 @@ mod tests {
         // The lake the demo walks round, where it is pinned: the best lake the query finds
         // over the whole world changes as the ranges' rules do (D395).
         let land = land(30_000.0);
-        let want = MountainLake::demo_pinned(PINNED_SEED, 30_000.0);
+        let want = MountainLake::demo_pinned(Seed(PINNED_SEED), 30_000.0);
         assert!(want.pinned_km.is_some());
         let site = land.mountain_lake(PLANET_START, &want).unwrap();
         let waters = crate::water::Waters::round(&land, site.toward, 10_000.0, 10.0);
@@ -622,13 +622,13 @@ mod tests {
             .filter(|site| site.contains('@'))
             .collect();
         assert!(!written.is_empty(), "places.ts pins no place");
-        let pins = demo_pins(PINNED_SEED, 30_000.0);
+        let pins = demo_pins(Seed(PINNED_SEED), 30_000.0);
         for site in written {
             let (name, km) = pinned(site).unwrap();
             assert!(pins.contains(&(name, km.unwrap())), "{site} is not kept");
         }
         assert!(
-            demo_pins(PINNED_SEED, 2_000.0).is_empty(),
+            demo_pins(Seed(PINNED_SEED), 2_000.0).is_empty(),
             "a pin of the 30 km world kept on another"
         );
         // Another seed's land is its rules' alone (D596).
