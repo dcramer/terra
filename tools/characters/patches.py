@@ -17,14 +17,18 @@ PATCHES = 1024
 LAYER = "patch"
 
 
-def mark(body, seed=7):
-    """Writes each face's patch into a second texture coordinate layer of `body`."""
+def mark(body, seed=7, group=None):
+    """Writes each face's patch into a second texture coordinate layer of `body`. `group`, a
+    number a face, keeps each patch within one group (a body region a worn piece stands in for,
+    D600), so hiding a region hides whole patches and nothing beyond it."""
     mesh = body.data
     centres = np.array([tuple(body.matrix_world @ p.center) for p in mesh.polygons])
     normals = np.array([tuple((body.matrix_world.to_3x3() @ p.normal).normalized()) for p in mesh.polygons])
     # Facing counts a little, so the two sides of a thin gap (between the legs, under an
-    # arm) fall in different patches.
+    # arm) fall in different patches. A group is 100 m from the next, so no patch spans two.
     points = np.hstack([centres, normals * 0.04])
+    if group is not None:
+        points = np.hstack([points, np.asarray(group, dtype=float)[:, None] * 100.0])
     rng = np.random.default_rng(seed)
     centroids = points[rng.choice(len(points), PATCHES, replace=False)]
     def nearest_of(points, centroids):

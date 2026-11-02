@@ -10,17 +10,19 @@
 // - **Swap**: each empty slot holds its bare piece, an exact cut of their full body
 //   (`cut_slots.py`, out/quaternius-SEX-bare-*.glb); the head piece is their OnlyHead while the
 //   arms are worn, else their UpperBody (head, shoulders, arms and hands).
-// - **Hidden**: their whole body (out/quaternius-SEX-patched.glb) under what is worn, the patches
-//   a worn piece covers at rest not drawn, as the game's `body_mask.wesl` does: a patch is hidden
-//   when 90% of its vertices, looking straight out from 2 mm off the skin, meet a worn piece within
-//   12 cm (`fit_gear.covers`, COVERED and REACH_M).
+// - **Hidden**: their whole body (out/quaternius-SEX-patched.glb) under what is worn, each worn
+//   slot's region not drawn, as the game's `body_mask.wesl` collapses patches: the region is the
+//   faces the slot's bare piece holds (the arms: their UpperBody less their OnlyHead), and its
+//   patches lie within it (`cut_slots.py`). Not our gear's rule (`fit_gear.covers`, a patch hidden
+//   when 90% of it meets a worn piece within 12 cm looking out): their sleeves and leggings lie on
+//   the skin, flush to 0.0 mm, so a ray from 2 mm out finds nothing and no arm patch was hidden.
 //
 // Measured each frame, as `layers.ts` measures one piece under another (a ray from the bone out
 // through each vertex): **poke**, skin past a worn piece by more than 2 mm, of the skin within
 // 8 cm of one; **open border**, skin that should be covered and is not covered from outside (a
-// swap piece's cut border with no twin in a neighbouring bare piece, or a hidden patch's skin),
-// and of those the **see-through** ones, with no worn piece anywhere on the ray (a hidden patch
-// whose skin stood proud of the cloth collapses onto the cloth: open, not see-through); **open rim**, a worn piece's rim with nothing inside it (looking
+// swap piece's cut border with no twin in a neighbouring bare piece, or the hidden body's drawn
+// skin at the edge of a hidden region), and of those the **see-through** ones, with no worn
+// piece anywhere on the ray; **open rim**, a worn piece's rim with nothing inside it (looking
 // in from the rim towards the bone meets no skin and no other piece: a see-through gap). At rest
 // also **cracks**: cut-border vertices whose twin in the neighbouring bare piece has other
 // weights (a crack can open in motion) or a normal more than 1 degree off (a shading seam). Draw
@@ -55,7 +57,6 @@ export const STATES: { name: string; worn: Slot[] }[] = [
 const BARE: Partial<Record<Slot, string>> = { body: "torso", legs: "legs", feet: "feet" };
 const NEAR_M = 0.08;
 const REACH_M = 0.12;
-const COVERED = 0.9;
 
 /** A file worn or shown: its pieces joined for measuring, its draw cost. */
 type Part = { label: string; file: string; piece: Piece; tris: number; verts: number; draws: number };
@@ -84,6 +85,10 @@ function outfitFile(sex: string, outfit: string, slot: Slot): string {
 }
 
 const key = (p: Piece, i: number) => `${Math.round(p.pos[3 * i] * 1e4)},${Math.round(p.pos[3 * i + 1] * 1e4)},${Math.round(p.pos[3 * i + 2] * 1e4)}`;
+
+/** One vertex a point: a mesh splits a vertex where its UVs or patches part, and a border is
+ *  counted in points, so the hidden body's patch splits count no more than the swap's seams. */
+const points = (p: Piece, list: number[]) => [...new Map(list.map((i) => [key(p, i), i])).values()];
 
 /** A swap figure's borders at rest: each bare piece's open-edge vertices (their full body's own
  *  open edges left out) with no twin in another bare piece shown, which a worn piece must cover;
@@ -117,23 +122,59 @@ function borders(bare: Part[], own: Set<string>) {
   return { lone, twins, cracks, creases };
 }
 
-/** The patches of `body` its worn pieces hide at rest, as `fit_gear.covers` finds them. */
-function hiddenPatches(body: Part, patch: Int32Array, worn: Part[], joints: Map<string, Pose>): Set<number> {
-  const { pos, tris } = gather(worn.map((w) => [w, skinned(w.piece, joints)]));
-  const grid = new Grid(pos, tris);
-  const v = skinned(body.piece, joints);
-  const n = body.piece.nrm!;
-  const hit = new Map<number, number>();
-  const total = new Map<number, number>();
-  const buf: number[] = [];
-  const ts: number[] = [];
-  for (let i = 0; i < body.piece.count; i++) {
-    const d: V3 = [n[3 * i], n[3 * i + 1], n[3 * i + 2]];
-    const o: V3 = [v[3 * i] + 0.002 * d[0], v[3 * i + 1] + 0.002 * d[1], v[3 * i + 2] + 0.002 * d[2]];
-    total.set(patch[i], (total.get(patch[i]) ?? 0) + 1);
-    if (hits(o, d, pos, tris, grid.along(o, d, REACH_M, buf), ts).some((t) => t <= REACH_M)) hit.set(patch[i], (hit.get(patch[i]) ?? 0) + 1);
+/** A region of their full body: the faces a slot's bare piece holds, or the head (their OnlyHead). */
+export type Region = Slot | "head";
+
+const centre = (p: Piece, k: number): V3 => {
+  const c = (a: number) => (p.pos[3 * p.tris[k] + a] + p.pos[3 * p.tris[k + 1] + a] + p.pos[3 * p.tris[k + 2] + a]) / 3;
+  return [c(0), c(1), c(2)];
+};
+const SAME_M = 1e-5;
+const CELL_M = 1e-3;
+
+/** Each patch of `body` by the region it lies in: a triangle's region is the first holder with
+ *  the same face (its centre within 0.01 mm, as `cut_slots.py` matches them, so their head is
+ *  matched before the UpperBody that holds it too). A patch must lie in one region and every
+ *  triangle in one, else the patch layer was made without the regions (rerun `cut_slots.py`). */
+export function regions(body: Piece, patch: Int32Array, holders: [Region, Piece][]): Map<Region, number[]> {
+  const cell = (c: V3, o = [0, 0, 0]) => c.map((x, a) => Math.floor(x / CELL_M) + o[a]).join(",");
+  const cells = new Map<string, [V3, Region][]>();
+  for (const [r, p] of holders)
+    for (let k = 0; k < p.tris.length; k += 3) {
+      const c = centre(p, k);
+      cells.set(cell(c), [...(cells.get(cell(c)) ?? []), [c, r]]);
+    }
+  const near = [-1, 0, 1].flatMap((x) => [-1, 0, 1].flatMap((y) => [-1, 0, 1].map((z) => [x, y, z])));
+  const find = (c: V3) => {
+    let best: [number, Region] | undefined;
+    for (const o of near)
+      for (const [h, r] of cells.get(cell(c, o)) ?? []) {
+        const d = Math.hypot(h[0] - c[0], h[1] - c[1], h[2] - c[2]);
+        const rank = holders.findIndex(([x]) => x === r);
+        if (d < SAME_M && (!best || rank < holders.findIndex(([x]) => x === best![1]))) best = [d, r];
+      }
+    return best?.[1];
+  };
+  const of = new Map<number, Region>();
+  for (let k = 0; k < body.tris.length; k += 3) {
+    const r = find(centre(body, k));
+    const p = patch[body.tris[k]];
+    if (!r) throw new Error(`slots: a face of ${body.file} (patch ${p}) is in no slot's piece; the bare cuts and the patched body come from different runs, so rerun tools/blender/run.sh tools/characters/cut_slots.py`);
+    if (of.has(p) && of.get(p) !== r)
+      throw new Error(`slots: patch ${p} of ${body.file} spans the ${of.get(p)} and the ${r}; its patches were made across the slot borders, so a worn piece would hide part of the next region (D600); rerun tools/blender/run.sh tools/characters/cut_slots.py`);
+    of.set(p, r);
   }
-  return new Set([...total].filter(([p, t]) => (hit.get(p) ?? 0) / t >= COVERED).map(([p]) => p));
+  const out = new Map<Region, number[]>();
+  for (const [p, r] of of) out.set(r, [...(out.get(r) ?? []), p]);
+  return out;
+}
+
+/** The patches the worn slots hide: the whole region each stands in for, as Skyrim's body
+ *  partitions and WoW's geosets do (a slot's piece replaces its region of skin), whatever lies
+ *  how close under it. Theirs drop the region's skin from the draw; ours keep one body and
+ *  collapse its patches (`body_mask.wesl`). */
+export function hiddenPatches(by: Map<Region, number[]>, worn: Slot[]): Set<number> {
+  return new Set(worn.flatMap((s) => by.get(s) ?? []));
 }
 
 /** Several parts' skinned vertices as one array, with their triangles and each one's owner. */
@@ -249,8 +290,8 @@ export function figures(sex: string, outfits: Record<Slot, string>) {
   const patch = Int32Array.from({ length: body.piece.count }, (_, i) => Math.floor(layer[2 * i]));
   const worn = new Map<Slot, Part>(SLOTS.map((s) => [s, part(`${outfits[s]} ${s}`, outfitFile(Sex, outfits[s], s))]));
   const own = new Set(openEdge(body.piece).map((i) => key(body.piece, i)));
+  const by = regions(body.piece, patch, [["head", head.piece], ["arms", upper.piece], ...[...bare].map(([s, p]): [Region, Piece] => [s, p.piece])]);
   const skel = new Glb(head.file);
-  const rest = retargeted(skel, skel, undefined, 0);
   const nearCache = new Map<string, Set<number>>();
   const near = (inner: Part, outer: Part[]) => {
     const s = new Set<number>();
@@ -274,28 +315,34 @@ export function figures(sex: string, outfits: Record<Slot, string>) {
       way: "swap",
       shown: [...shown, ...on],
       worn: on,
-      inner: shown.map((p) => ({ part: p, near: near(p, on), edge: b.lone.get(p)! })),
+      inner: shown.map((p) => ({ part: p, near: near(p, on), edge: points(p.piece, b.lone.get(p)!) })),
       rims,
       keep: () => true,
       drawn: sum([...shown, ...on], "tris"),
       cracks: { twins: b.twins, cracks: b.cracks, creases: b.creases },
     });
     // Hidden.
-    const hid = on.length ? hiddenPatches(body, patch, on, rest) : new Set<number>();
+    const hid = hiddenPatches(by, st.worn);
     const collapsed = (k: number) => hid.has(patch[body.piece.tris[k]]);
-    const close = new Set(near(body, on));
-    const visible: number[] = [];
-    const under: number[] = [];
-    for (const i of close) (hid.has(patch[i]) ? under : visible).push(i);
+    const visible = near(body, on).filter((i) => !hid.has(patch[i]));
+    // The drawn skin's edge against the hidden region, which a worn piece must cover, as the
+    // swap's cut border is.
+    const under = new Set<string>();
     let gone = 0;
-    for (let k = 0; k < body.piece.tris.length; k += 3) if (collapsed(k)) gone++;
+    for (let k = 0; k < body.piece.tris.length; k += 3) {
+      if (!collapsed(k)) continue;
+      gone++;
+      for (let c = 0; c < 3; c++) under.add(key(body.piece, body.piece.tris[k + c]));
+    }
+    const edge: number[] = [];
+    for (let k = 0; k < body.piece.tris.length; k += 3) if (!collapsed(k)) for (let c = 0; c < 3; c++) if (under.has(key(body.piece, body.piece.tris[k + c]))) edge.push(body.piece.tris[k + c]);
     const whole = part("full body", body.file);
     out.push({
       state: st.name,
       way: "hidden",
       shown: [whole, ...on],
       worn: on,
-      inner: [{ part: body, near: visible, edge: under }],
+      inner: [{ part: body, near: visible, edge: points(body.piece, edge) }],
       rims,
       keep: (p, k) => p !== body || !collapsed(k),
       drawn: sum([whole, ...on], "tris") - gone,

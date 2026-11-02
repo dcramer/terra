@@ -1,6 +1,7 @@
 """D600's two ways side by side: for each state of undress `slots.ts` measured, the swap figure
 (a bare piece in each empty slot) in the top row and the hidden figure (their whole body under
-what is worn, the covered patches taken out as the game collapses them) in the bottom row, the
+what is worn, each worn slot's region of skin taken out as the game collapses its patches: the
+patches `slots.ts` lists, made within the regions by `cut_slots.py`) in the bottom row, the
 same moments from the same camera: Sword_Idle and Sprint_Loop at two moments each, then the
 state's worst poke and worst open border of either way.
 
@@ -46,7 +47,8 @@ def moment(where):
 
 def figure(files, hidden):
     """Imports a figure from its files (the first brings the skeleton), takes out the hidden
-    patches' faces of the whole body, and bakes the clips it needs onto it."""
+    patches' faces of the whole body (every face of the worn slots' regions), and bakes the
+    clips it needs onto it."""
     look.reset()
     arm, meshes = look.join("+".join(look.path(f) for f in files))
     if hidden:
