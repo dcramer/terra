@@ -255,7 +255,16 @@ pub struct Surroundings<'w, 's> {
     clock: Res<'w, Clock>,
     /// The cameras drawing the world now, for what they see.
     eyes: Query<'w, 's, (&'static GlobalTransform, &'static Projection), With<MainCamera>>,
+    /// The land's lattice points asked already, kept from run to run of the system asking.
+    memo: Local<'s, GroundMemo>,
 }
+
+/// The ground's memo behind `Surroundings`' `&self` asks: a look at a fresh cell asks the
+/// ground a few hundred times over it (its places, the views of it), 0.1 to 0.2 ms an ask
+/// unmemoised on the 30 km world's land, which held a frame 30 to 50 ms at the lake. Asked
+/// on one thread at a time, so the lock is never waited on.
+#[derive(Default)]
+struct GroundMemo(std::sync::Mutex<terra_world::planet::HeightMemo>);
 
 /// How far toward the sun a point is looked from for what shades it.
 const SUN_LOOKS_M: f32 = 60.0;
@@ -322,14 +331,20 @@ pub struct Warmth(std::sync::Mutex<HashMap<IVec3, f32>>);
 const WARMTH_PATCH_M: f32 = 48.0;
 
 impl Surroundings<'_, '_> {
-    /// The ground at or under a point.
+    /// The ground at or under a point, through the memo of the land's lattice points.
     pub fn ground(&self, point: Vec3) -> Vec3 {
-        self.planet.ground_at(point)
+        let mut memo = self
+            .memo
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        memo.keep_within(crate::creatures::GROUND_MEMO_MOST);
+        self.planet.ground_at_in(point, &mut memo)
     }
 
     /// How deep the water over the ground at a point is; below nothing where it is dry.
     pub fn depth_m(&self, point: Vec3) -> f32 {
-        self.planet.water_radius_m(point) - self.planet.ground_at(point).length()
+        self.planet.water_radius_m(point) - self.ground(point).length()
     }
 
     /// The standing trees within so far of a point.
@@ -343,7 +358,7 @@ impl Surroundings<'_, '_> {
 
     /// What a point on the ground is like.
     pub fn place(&self, point: Vec3) -> Place {
-        let ground = self.planet.ground_at(point);
+        let ground = self.ground(point);
         let up = ground.normalize();
         let depth_m = self.depth_m(ground);
         let side = up.any_orthonormal_vector();
@@ -442,7 +457,7 @@ impl Surroundings<'_, '_> {
         const GROUND_SAMPLES: usize = 8;
         !(1..GROUND_SAMPLES).any(|i| {
             let point = eye + line * (i as f32 / GROUND_SAMPLES as f32);
-            self.planet.ground_at(point).length() > point.length() + 0.05
+            self.ground(point).length() > point.length() + 0.05
         })
     }
 

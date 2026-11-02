@@ -37,7 +37,7 @@ pub fn afloat(ground: Vec3, water_radius_m: f32) -> Vec3 {
 impl Surroundings<'_, '_> {
     /// Where an animal put out at a spot shows (`afloat`).
     pub fn shows_at(&self, spot: Vec3) -> Vec3 {
-        let ground = self.planet.ground_at(spot);
+        let ground = self.ground(spot);
         afloat(ground, self.planet.water_radius_m(ground))
     }
 

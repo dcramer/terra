@@ -635,7 +635,7 @@ const CLIMB_MPS: f32 = 2.2;
 const CLINGS_M: f32 = 0.06;
 /// The most lattice points the creatures' ground memo keeps before it starts over: a few
 /// dozen a creature where it stands, for a hundred or so about at once.
-const GROUND_MEMO_MOST: usize = 4096;
+pub(crate) const GROUND_MEMO_MOST: usize = 4096;
 
 /// Moves each creature by what it is doing: over the ground, afloat, on the wing or up a
 /// trunk.
