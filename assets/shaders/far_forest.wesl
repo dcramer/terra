@@ -31,6 +31,8 @@ import bevy_pbr::render::{
 
 @if(!PREPASS_PIPELINE)
 import super::horizon::horizon_lit;
+@if(!PREPASS_PIPELINE)
+import super::hue::hue_turned;
 
 @if(PREPASS_PIPELINE)
 @group(0) @binding(1) var<uniform> globals: Globals;
@@ -55,6 +57,20 @@ var<uniform> far: Far;
 var horizon_map: texture_2d_array<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(102)
 var horizon_sampler: sampler;
+
+// As foliage.wesl's shared buffer (terra_world's parting, D271), read here for its last
+// entry alone: the world's look, in x how far round the hue circle its plants are turned.
+struct Parting {
+    eye: vec4<f32>,
+    subject: vec4<f32>,
+    bodies: array<vec4<f32>, 32>,
+    wind: vec4<f32>,
+    climate_from_world: mat4x4<f32>,
+    look: vec4<f32>,
+}
+
+@group(constants::MATERIAL_BIND_GROUP) @binding(103)
+var<storage, read> parting: Parting;
 // The penumbra either side of a horizon, radians (ground.wesl's HORIZON_SOFT).
 const HORIZON_SOFT: f32 = 0.008;
 
@@ -314,6 +330,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     } else if s.part == 2u {
         colour = far.crowns[0].rgb * vec3<f32>(0.8, 0.9, 0.7) * mix(1.0, grain, 0.5);
     }
+    // A realm's plants in its own colours, as its near trees are (hue.wesl).
+    colour = hue_turned(colour, parting.look.x);
     input.material.base_color = vec4<f32>(colour * s.light, 1.0);
     let n = world_normal(in.world_position.xyz, s.normal);
     input.N = n;

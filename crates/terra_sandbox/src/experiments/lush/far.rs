@@ -18,6 +18,7 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     platform::collections::HashMap,
     prelude::*,
+    render::storage::ShaderBuffer,
 };
 use terra_gen::{Noise, Seed};
 use terra_world::{
@@ -58,6 +59,9 @@ pub(super) struct Lay<'a> {
     pub leaves: Handle<Image>,
     /// The near crowns' leaves' colours, oak, pine and spruce, linear.
     pub crowns: [Vec3; 3],
+    /// The plants' shared buffer (terra_world's parting), whose look turns the far crowns
+    /// with the near ones.
+    pub parting: Handle<ShaderBuffer>,
 }
 
 /// One far tree's card, in the mesh of its square.
@@ -89,6 +93,7 @@ pub(super) fn lay(
         extension: FarExtension::new(
             lay.crowns.map(|c| c.extend(1.0)),
             Vec4::new(25.0, 45.0, 0.0, 0.0),
+            lay.parting.clone(),
         ),
     });
     let edge = Noise::new(lay.seed.derive("far edge"));

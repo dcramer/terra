@@ -17,6 +17,7 @@ import bevy_pbr::render::{
     shadows::fetch_directional_shadow,
     clustered_forward::{view_fragment_cluster_index, unpack_clusterable_object_index_ranges},
 };
+import super::hue::hue_turned;
 @if(IRRADIANCE_VOLUME) import bevy_pbr::light_probe::irradiance_volume::irradiance_volume_light;
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP) import bevy_pbr::render::mesh_view_bindings::{light_probes, environment_map_sampler};
 @if(IRRADIANCE_VOLUME && ENVIRONMENT_MAP && MULTIPLE_LIGHT_PROBES_IN_ARRAY) import bevy_pbr::render::mesh_view_bindings::diffuse_environment_maps;
@@ -1005,15 +1006,6 @@ struct Parting {
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
 var<storage, read> parting: Parting;
 
-// A colour turned round the hue circle by so many radians, about the grey axis, keeping its
-// brightness and greys (Rodrigues' rotation, as a colour grade's hue turn is).
-fn hue_turned(c: vec3<f32>, turn: f32) -> vec3<f32> {
-    let k = vec3<f32>(0.57735027);
-    let s = sin(turn);
-    let co = cos(turn);
-    return c * co + cross(k, c) * s + k * dot(k, c) * (1.0 - co);
-}
-
 // A third-person camera's view kept clear (D271, D274), with camera-obstruction fades as
 // Unreal games dither theirs. A plant between the camera and the figure it follows, or round
 // the lens, fades as a whole, stems and leaves alike, by as much as its mesh's tag says
@@ -1354,7 +1346,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // picture's, so whoever walks through it keeps theirs.
     if parting.look.x != 0.0 {
         let c = pbr_input.material.base_color;
-        pbr_input.material.base_color = vec4<f32>(max(hue_turned(c.rgb, parting.look.x), vec3<f32>(0.0)), c.a);
+        pbr_input.material.base_color = vec4<f32>(hue_turned(c.rgb, parting.look.x), c.a);
     }
     // How much of this texel is a snow load: snow is opaque, so no leaf light comes through it
     // and no green bounces onto it, which tinted the clumps olive, a lit leaf's (weather

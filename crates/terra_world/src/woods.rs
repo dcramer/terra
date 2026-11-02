@@ -22,7 +22,7 @@ use bevy::{
     pbr::{ExtendedMaterial, MaterialExtension},
     platform::collections::HashMap,
     prelude::*,
-    render::render_resource::AsBindGroup,
+    render::{render_resource::AsBindGroup, storage::ShaderBuffer},
     shader::ShaderRef,
 };
 use std::sync::Arc;
@@ -122,15 +122,20 @@ pub struct FarExtension {
     #[texture(101, dimension = "2d_array")]
     #[sampler(102)]
     horizon_map: Option<Handle<Image>>,
+    /// The plants' shared buffer (`crate::parting`), for the world's look in its last entry:
+    /// the far crowns turn round the hue circle with the near ones (`hue.wesl`).
+    #[storage(103, read_only)]
+    parting: Handle<ShaderBuffer>,
 }
 
 impl FarExtension {
-    /// The crowns' colours and the near fade; the horizon's come from `see_horizon` once the
-    /// land's is baked (until then `horizon_lit` reads lit, D416).
-    pub fn new(crowns: [Vec4; 3], near: Vec4) -> Self {
+    /// The crowns' colours, the near fade and the plants' shared buffer; the horizon's come
+    /// from `see_horizon` once the land's is baked (until then `horizon_lit` reads lit, D416).
+    pub fn new(crowns: [Vec4; 3], near: Vec4, parting: Handle<ShaderBuffer>) -> Self {
         Self {
             crowns,
             near,
+            parting,
             ..Default::default()
         }
     }
@@ -426,16 +431,15 @@ fn plant(
             diffuse_transmission: 0.3,
             ..default()
         },
-        extension: FarExtension {
-            crowns: [oak, pine, spruce],
-            // A card standing for a grown tree comes in as that tree's last level goes, over
-            // the same last fifth (its colour's blue says where, `HANDOVER_SCALE_M`); one past
-            // the grown trees, nothing else standing for its tree, is gone only when walked
-            // into, as the far forest's are (D273).
-            near: Vec4::new(25.0, 45.0, HANDOVER_SCALE_M, 1.0 - grown::FADE),
-            // The horizon's, until `see_horizon` has one.
-            ..Default::default()
-        },
+        // A card standing for a grown tree comes in as that tree's last level goes, over the
+        // same last fifth (its colour's blue says where, `HANDOVER_SCALE_M`); one past the
+        // grown trees, nothing else standing for its tree, is gone only when walked into, as
+        // the far forest's are (D273). The horizon's, until `see_horizon` has one.
+        extension: FarExtension::new(
+            [oak, pine, spruce],
+            Vec4::new(25.0, 45.0, HANDOVER_SCALE_M, 1.0 - grown::FADE),
+            parting.map(|parting| parting.0.clone()).unwrap_or_default(),
+        ),
     });
     let (east, north) = (land.frame.east(middle), land.frame.north(middle));
     let mut squares: HashMap<(i32, i32), Vec<Card>> = HashMap::default();

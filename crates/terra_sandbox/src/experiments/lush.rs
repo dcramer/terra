@@ -1181,10 +1181,8 @@ fn plant(
     let south = east.cross(up);
     let seed = forest_seed();
 
-    let wind = wind(
-        east,
-        parting.map(|parting| parting.0.clone()).unwrap_or_default(),
-    );
+    let parting = parting.map(|parting| parting.0.clone()).unwrap_or_default();
+    let wind = wind(east, parting.clone());
     // Read at a slant, as leaves edge-on are, a picture blurs unless sampled along the
     // slant too (anisotropic filtering).
     let slanted = |settings: &mut ImageLoaderSettings| {
@@ -1635,6 +1633,7 @@ fn plant(
             clumps: &clumps,
             leaves: leaf_picture.clone(),
             crowns: [0, 1, 2].map(|k| LEAF_MEANS[k] * CROWN_TINTS[k] * (1.0 - LEAF.y)),
+            parting,
         },
         &mut commands,
         &mut meshes,

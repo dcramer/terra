@@ -12,6 +12,7 @@ import bevy_pbr::render::{
     mesh_view_bindings::view,
     view_transformations::position_world_to_clip,
 };
+import super::hue::hue_turned;
 
 @if(PREPASS_PIPELINE)
 import bevy_pbr::prepass::io::{Vertex, VertexOutput, decompress_vertex};
@@ -58,6 +59,8 @@ struct Parting {
     wind: vec4<f32>,
     // From a point in the world to its place on the climate's maps (climate.rs, D327).
     climate_from_world: mat4x4<f32>,
+    // The world's look: in x how far round the hue circle its plants are turned (hue.wesl).
+    look: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(101)
@@ -285,6 +288,11 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
             let own = select(0.0, 1.0, vertex.uv_b.y >= 1.5);
             colour = mix(mix(colour, straw * clamp(light, 0.5, 1.6), browned), colour, max(head, own));
         }
+    }
+    // A realm's plants in its own colours, as its leaves are (hue.wesl), before rime and snow.
+    colour = hue_turned(colour, parting.look.x);
+    if grass.climate_on != 0u {
+        let at = climate_place(world.xyz);
 @if(VERTEX_UVS_B) {
         let frost = textureSampleLevel(climate_ground, climate_ground_sampler, at, 0.0).a;
         colour = mix(colour, RIME, frost * 0.6 * vertex.uv_b.x);
