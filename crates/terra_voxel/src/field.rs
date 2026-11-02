@@ -5,8 +5,11 @@
 use crate::mountains::{Mountains, Range};
 use crate::patterned::Patterned;
 use glam::{DVec3, Vec3};
+use known::Known;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
+
+mod known;
 use terra_core::{MaterialId, PlanetSpec};
 use terra_gen::Noise;
 
@@ -282,6 +285,8 @@ pub struct GeneratedPlanet {
     range: Option<Range>,
     /// Its patterned ground where it is frozen at depth, on a world whose climate is known.
     patterned: Option<Patterned>,
+    /// The lattice points worked out so far, for every memo asked of it.
+    known: Known,
 }
 
 impl GeneratedPlanet {
@@ -321,12 +326,14 @@ impl GeneratedPlanet {
             lattice: (quarter_round / Self::LATTICE_M).ceil().max(1.0) as u32,
             range: None,
             patterned: None,
+            known: Known::default(),
         }
     }
 
     /// The same planet with mountains (D322).
     pub fn with_mountains(mut self, mountains: Mountains) -> Self {
         self.range = Some(Range::new(mountains, self.spec.seed));
+        self.known = Known::default();
         self
     }
 
@@ -337,12 +344,14 @@ impl GeneratedPlanet {
         self.range = self
             .range
             .map(|range| range.with_kept(spots).keeping_ranges_round(radius_m));
+        self.known = Known::default();
         self
     }
 
     /// The same planet with patterned ground where its world's climate keeps it frozen.
     pub fn with_patterned(mut self, patterned: Patterned) -> Self {
         self.patterned = Some(patterned);
+        self.known = Known::default();
         self
     }
 
@@ -384,12 +393,14 @@ impl GeneratedPlanet {
     /// test level wants.
     pub fn smooth(mut self) -> Self {
         self.detail_m = 0.0;
+        self.known = Known::default();
         self
     }
 
     /// The same planet with its finer detail this tall, for gently uneven ground.
     pub fn with_detail_m(mut self, detail_m: f32) -> Self {
         self.detail_m = detail_m;
+        self.known = Known::default();
         self
     }
 
@@ -555,8 +566,10 @@ impl GeneratedPlanet {
         let ((i, i2, fi), (j, j2, fj)) = (at(s), at(t));
         let mut node = |i: u32, j: u32| {
             *memo.heights.entry((face, i, j)).or_insert_with(|| {
-                let u = |k: u32| k as f32 / cells * 2.0 - 1.0;
-                self.exact(cube_direction(face, u(i), u(j)))
+                self.known.get_or((face, i, j), || {
+                    let u = |k: u32| k as f32 / cells * 2.0 - 1.0;
+                    self.exact(cube_direction(face, u(i), u(j)))
+                })
             })
         };
         let (a, b, c, d) = (node(i, j), node(i2, j), node(i, j2), node(i2, j2));

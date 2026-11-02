@@ -617,34 +617,43 @@ fn first_view(
         .unwrap_or_default()
         .ground_reach();
     let wanted = wanted(&planet, viewer, reach);
+    let chosen = started.elapsed().as_secs_f32();
     let chunks: Vec<(ChunkId, Sides)> = wanted.iter().map(|(&id, &sides)| (id, sides)).collect();
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
     let planet_ref = &*planet;
-    let meshed: Vec<(ChunkId, Sides, Option<Mesh>)> = std::thread::scope(|scope| {
-        let handles: Vec<_> = chunks
-            .chunks(chunks.len().div_ceil(threads).max(1))
-            .map(|some| {
-                scope.spawn(move || {
-                    some.iter()
-                        .map(|&(id, sides)| (id, sides, mesh(planet_ref, id, sides)))
-                        .collect::<Vec<_>>()
-                })
-            })
-            .collect();
-        handles
-            .into_iter()
-            .flat_map(|handle| handle.join().unwrap_or_default())
-            .collect()
+    let meshed = terra_gen::par::map(&chunks, |&(id, sides)| {
+        let at = std::time::Instant::now();
+        let chunk = mesh_chunk(&**planet_ref.voxels(), id, sides);
+        let shaped = at.elapsed().as_secs_f32();
+        let vertices = chunk.positions.len();
+        let mesh = to_mesh(planet_ref, id, chunk);
+        let coloured = at.elapsed().as_secs_f32() - shaped;
+        (id, sides, mesh, [shaped, coloured], vertices)
     });
     let count = meshed.len();
-    for (id, sides, mesh) in meshed {
+    let mut levels: std::collections::BTreeMap<u8, (usize, f32, f32, usize)> = default();
+    for (id, sides, mesh, [shaped, coloured], vertices) in meshed {
+        let level = levels.entry(id.level).or_default();
+        *level = (
+            level.0 + 1,
+            level.1 + shaped,
+            level.2 + coloured,
+            level.3 + vertices,
+        );
         let entity = show(&mut commands, &mut meshes, &look, id, mesh);
         terrain.shown.insert(id, Shown { sides, entity });
     }
     // How long, on how many threads: what a change to a chunk's meshing or colouring costs.
     let secs = started.elapsed().as_secs_f32();
+    let by_level: Vec<String> = levels
+        .iter()
+        .map(|(level, (n, shaped, coloured, vertices))| {
+            format!("level {level} {n} chunks, {vertices} vertices, {shaped:.1} s shaped and {coloured:.1} s coloured")
+        })
+        .collect();
     info!(
-        "Meshed the first view of the ground: {count} chunks in {secs:.2} s on {threads} threads."
+        "Meshed the first view of the ground: {count} chunks in {secs:.2} s on {threads} threads, {chosen:.2} s of it choosing them; {} (summed over threads).",
+        by_level.join("; ")
     );
     terrain.wanted = wanted;
     terrain.chosen_from = Some(viewer);
@@ -784,6 +793,55 @@ fn receive(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// How long the lake's load takes by stage, on the CPU alone: the land, choosing the
+    /// first view's chunks, shaping and colouring them, each on every core as the game does.
+    /// A measure, not a check: `cargo xtask remote-render --cpu -- cargo test --release -p
+    /// terra_world --lib lake_load_by_stage -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn lake_load_by_stage() {
+        let args = [
+            "--experiment",
+            "play",
+            "--radius",
+            "30000",
+            "--site",
+            "lake@-15.34,1.68",
+            "--date",
+            "06-10",
+            "--time",
+            "17",
+        ];
+        let options = crate::shell::Options::from_args(args.iter().map(|a| a.to_string())).unwrap();
+        let spec = crate::planet::entering::first_world(&options);
+        let at = std::time::Instant::now();
+        let (planet, start, _) = crate::planet::entering::land_of(&spec, &options);
+        eprintln!("land worked out in {:.2} s", at.elapsed().as_secs_f32());
+        let viewer = start.0.translation + start.0.translation.normalize() * 1.7;
+        let at = std::time::Instant::now();
+        let wanted = wanted(&planet, viewer, 1.0);
+        eprintln!(
+            "chose {} chunks in {:.2} s",
+            wanted.len(),
+            at.elapsed().as_secs_f32()
+        );
+        let chunks: Vec<(ChunkId, Sides)> = wanted.iter().map(|(&id, &s)| (id, s)).collect();
+        let at = std::time::Instant::now();
+        let shaped = terra_gen::par::map(&chunks, |&(id, sides)| {
+            (id, mesh_chunk(&**planet.voxels(), id, sides))
+        });
+        eprintln!("shaped in {:.2} s", at.elapsed().as_secs_f32());
+        let at = std::time::Instant::now();
+        let coloured = terra_gen::par::map(&shaped, |(id, chunk)| {
+            to_mesh(&planet, *id, chunk.clone()).is_some()
+        });
+        eprintln!(
+            "coloured {} in {:.2} s",
+            coloured.len(),
+            at.elapsed().as_secs_f32()
+        );
+    }
 
     #[test]
     fn a_couloirs_key_deepens_into_its_bed_not_across_the_flank() {
