@@ -26,12 +26,15 @@ The animation libraries we already use (UAL1, UAL2) are CC0.
 - **2026-11-01 to 11-02, on the old Tripo body.** Arms and legs stretched to real proportions (D593, now Leaning: it goes with the Tripo body). The idle remade through the pose sheet, its arms posed from an upright-CT study of people at ease (Yoshida et al. 2022), and landed with the carry poses rebuilt (881de686). Clothing faults traced to our clipping fixer piling pushes up to 9 cm (crotch spike, straps standing off) and to the body's 55 cm shoulders; not fixed, parked as moot.
 - **2026-11-02, the base question.** Research ([character-base](../research/2026-11-02-character-base.md)) found every ripple came from building gear and clips on a body that was then changed, with clips made for another body. Ready-made sets compared; only Quaternius fits licence, skeleton and style. A trial in our renderer: crisp, detailed shapes; smooth painted colour, a step more stylised than our art style; the same 65 joints as the mannequin, all 33 clips play. A first repaint of their Ranger in our materials (weave reads a little like a grid, wear faint).
 - **2026-11-02, stopped here** at the developers' request: the review desk wiped (old items saved in `~/.cache/terra-review/desk-archive-2026-11-02/`), the two running jobs told to land what is checked and hand off.
+- **2026-11-02, their files in** (8a2e5a46). The Regular man and woman (whole body and head alone), and the Ranger and Peasant outfits for both, piece by piece: their glTF exports, byte for byte, in `art/characters/quaternius/`, 126 MB with the images in Git LFS, each pack's CC0 licence beside it, a README, `SHA256SUMS`, and rows in `THIRD_PARTY.md` and `art/README.md`. The .blend sources are left out (some pieces unfinished in them) and the hairstyles wait for a choice. D599 now records the rule on their parts and withdraws the arm stretch.
+- **What their clothing is, so far.** One mesh a slot (head, body, arms, legs, feet, extras) on our skeleton. Outfits replace the body rather than cover it: they are worn on the head alone, and the arms piece carries the hands and forearms it shows. A body piece hangs 13–15 cm over the trousers' waistband. Of v0's starting kit, trousers and boots have a matching piece; our leather coat needs two of theirs (body and arms, a slot we lack); there is no pack, quiver or apron. The woman's pieces are separate meshes (each fitted and checked twice), but the two share one set of textures an outfit, so each is painted once.
+- **One game copy a machine** was stopped before code (`~/.cache/terra-handoff/one-copy-j1.md`): five tools film 2 to 4 copies at once on purpose, so the developers must say whether they should film in turn.
 
 ## Next, in v0's order
 
 The switch as bounded jobs (the research note's "The switch in jobs" has the detail). One game run at a time.
 
-1. **Their files in, and the clothing answer**: bodies and outfits under `art/` with their licences; the intact-parts check; how their outfits split, how they map to our slots and v0's starting kit (small_pack, leather_coat, trousers, boots, sword and shield), what they lack, whether pieces of different outfits mix, what the separate woman costs. In progress: `~/.cache/terra-handoff/char-switch-j2.md` when it stops.
+1. **Their files in, and the clothing answer**: bodies and outfits under `art/` with their licences; the intact-parts check; how their outfits split, how they map to our slots and v0's starting kit (small_pack, leather_coat, trousers, boots, sword and shield), what they lack, whether pieces of different outfits mix, what the separate woman costs. Files in; the rest picks up from `~/.cache/terra-handoff/char-switch-j2.md`, starting with the intact-parts check and its test, then the mixing test, our garment tools on their body, and the recommendation with its cost.
 2. **The man through our pipeline**: their body as the base, our clips retargeted once onto it (`retarget.py`).
 3. **The woman**, with a woman's proportion bands in `proportions.py` (it has only a man's).
 4. **The paint as a tool**: our materials on their UVs, the Ranger's first pass refined.
@@ -42,8 +45,11 @@ The switch as bounded jobs (the research note's "The switch in jobs" has the det
 
 ## Open with the developers
 
-- Their man's fingertips hang 2.2 cm higher than the 99th percentile allows. Recommended: one stretch of about 3 cm at import, before anything is built on him. Until they say, he stays as made, which the rule above also asks.
+- **An empty slot.** Their outfits replace the body, so what shows when a player takes the coat off? Recommended: their whole body stays underneath and our existing skin hiding hides what a worn piece covers, with no change to their meshes. Does that count as changing their parts?
+- **Twist bones.** Job 2 as planned re-points their bones and moves forearm and shin weights onto twist bones, which changes their bones and weights. Recommended: keep theirs exactly and drop the twist bones, unless a film shows their forearm wringing in a sword swing.
 - Is the repainted Ranger the right direction for "our paint"?
+- One game copy a machine: should the five tools that film several copies at once film in turn, and does the render box count as its own machine?
+- Their man's arms (fingertips 2.2 cm above the 99th percentile) stay as made under the rule; D599 withdrew the stretch.
 
 ## Later, past v0
 
