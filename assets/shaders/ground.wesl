@@ -1004,6 +1004,13 @@ const AERIAL_AIR: vec3<f32> = vec3<f32>(0.5, 0.76, 1.32);
 const STREAKED: f32 = 0.6;
 // How much more a steep wall's far snow breaks than its slope alone says (round 14).
 const WALL_BARE: f32 = 0.3;
+// How far down into its gully's bed a wall's couloir holds its caught snow (`couloir_key`),
+// from the first to whole at the second, and the flatness (up . normal) under which a wall too
+// steep for any snow sheds it, about 87 to 84 degrees (mountains round 12). From 0.35 the horns
+// stood all but bare (8% of the dusk range's rock snowed, main's 18%); from 0.1 their walls lay
+// in one white sheet again (mountains round 13).
+const CAUGHT_BED: vec2<f32> = vec2<f32>(0.18, 0.4);
+const CAUGHT_STEEPEST: vec2<f32> = vec2<f32>(0.05, 0.1);
 // How dark the rock's own cast shadows under its beds and in its joints stand (`jointing`).
 const JOINT_SHADOW: f32 = 0.5;
 const JOINT_RECESS: f32 = 0.35;
@@ -1434,7 +1441,7 @@ fn fragment(
         var bare = 0.0;
         var snow = 0.0;
         var in_snow_m = 0.0;
-        // How far into a wall's couloir, its avalanche snow's (terrain.rs `couloir_catch`).
+        // How far down into a wall's couloir, its avalanche snow's (terrain.rs `couloir_key`).
         var in_couloir = 0.0;
         var woods = 0.0;
 @if(VERTEX_UVS_A)
@@ -1858,11 +1865,18 @@ fn fragment(
         // horns in zebra stripes (the r8 review); a wall's snow lies in its couloirs (`couloir_fill`).
         let ledge_snow = ledge * smoothstep(0.01, 0.06, in_snow_m) * smoothstep(0.36, 0.56, noise(world * 0.004 + 251.0));
         // The couloirs the land fills from the gullies above them (terrain.rs `couloir_catch`,
-        // round 10), near and far, on any wall up to about 75 degrees: known by depth alone, the
+        // round 10), near and far, on the walls: known by depth alone, the
         // tops' fed snow, as deep, capped every horn in one white sheet brighter than the sky.
         // Only on the walls: a gentler slope's deep snow is the vertices', broken by its outcrops
         // far off; filled here too, a far col lay as one smooth sheet brighter than the sky.
-        let caught = smoothstep(0.25, 0.6, in_couloir + (blotch - 0.5) * 0.4 + (fleck - 0.5) * 0.1) * smoothstep(0.05, 0.3, in_snow_m) * smoothstep(0.18, 0.32, flatness) * (1.0 - smoothstep(0.6, 0.75, flatness)) * (1.0 - under_woods);
+        // Keyed to how deep into the gully's bed a point lies (`couloir_key`), past a threshold
+        // well down into it, not to the fragment's slope: the horns' walls stand at 72 to 80
+        // degrees, on any slope limit, and cut at the slope each bump of the far mesh lost its
+        // snow on its steeper side, in round dark holes the judges read as camouflage blotches;
+        // frayed, in vertical smears; opened, with the bed's flanks counted whole, the walls lay
+        // in one white sheet (mountains rounds 10 to 12). Only a wall past about 85 degrees,
+        // where nothing lies, sheds it by its slope.
+        let caught = smoothstep(CAUGHT_BED.x, CAUGHT_BED.y, in_couloir + (blotch - 0.5) * 0.4 + (fleck - 0.5) * 0.1) * smoothstep(0.05, 0.3, in_snow_m) * smoothstep(CAUGHT_STEEPEST.x, CAUGHT_STEEPEST.y, flatness) * (1.0 - smoothstep(0.6, 0.75, flatness)) * (1.0 - under_woods);
         // Broken far off by the same outcrops as the far snow: whole, the far horns' walls,
         // kilometres off, lay in broad white sheets brighter than the sky (round 11).
         couloir_fill = max(couloir_fill, caught * 0.97 * (1.0 - far_broken));

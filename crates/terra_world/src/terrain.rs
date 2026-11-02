@@ -196,8 +196,8 @@ fn lying(
     let (loose, footing) = match made_of {
         material::SCREE => (1.0, Footing::Loose),
         material::GRAVEL => (2.0, Footing::Loose),
-        // A wall's couloir, to the ground shader, as rock below none: its avalanche snow
-        // (`couloir_catch`), told from the wall's own fed snow, which lies as deep on its tops.
+        // A wall's couloir, to the ground shader, as rock below none: how far down into it its
+        // avalanche snow lies (`couloir_key`), told from the wall's own fed snow, which lies as deep on its tops.
         material::STONE => (-couloir, Footing::Rock),
         _ => (0.0, Footing::Soil),
     };
@@ -224,8 +224,8 @@ fn lying(
 }
 
 /// How deep the snow lies at a point on the ground facing `normal`, in metres, as the land lays
-/// it, `snow_m` the climate's on the day asked, and how far the point lies in a wall's couloir
-/// (`couloir_catch`): on a mountain's walls fed by the avalanches off the range above (D395,
+/// it, `snow_m` the climate's on the day asked, and how far down into a wall's couloir the point
+/// lies (`couloir_key`): on a mountain's walls fed by the avalanches off the range above (D395,
 /// D426).
 fn laid_snow(
     round: &terra_land::round::Round,
@@ -263,7 +263,8 @@ fn laid_snow(
         let height_m = round.place(point, up).height_m;
         let fed = snow_m(point + up * fed_from_m(height_m), up) * FED_SHARE;
         let level = smoothstep(FED_WALL.0, FED_WALL.1, normal.dot(up));
-        let here = smoothstep(SNOW_BED.0, SNOW_BED.1, bed(point));
+        let in_bed = bed(point);
+        let here = smoothstep(SNOW_BED.0, SNOW_BED.1, in_bed);
         let gullied = if here > 0.0 {
             snow_m(point + up * FED_GULLY_M, up) * FED_SHARE
         } else {
@@ -288,8 +289,9 @@ fn laid_snow(
         // but for its couloirs, so fed from `FED_M` alone its gullies lay bare too (r28).
         let fed = fed.max(gullied);
         if fed > COULOIR_FED_M && level < 1.0 && here > 0.0 {
-            let couloir = (1.0 - level) * here * couloir_catch(point, normal, up, bed);
-            (snow.max(couloir * fed), couloir)
+            let flow = couloir_catch(point, normal, up, bed);
+            let couloir = (1.0 - level) * here * flow;
+            (snow.max(couloir * fed), couloir_key(level, in_bed, flow))
         } else {
             (snow, 0.0)
         }
@@ -354,6 +356,21 @@ fn couloir_catch(point: Vec3, normal: Vec3, up: Vec3, bed: &mut dyn FnMut(Vec3) 
     }
     let flow = gathered / COULOIR_PATH_M.len() as f32;
     smoothstep(COULOIR_FLOW.0, COULOIR_FLOW.1, flow)
+}
+
+/// How far down into a wall's couloir a point lies, 0 to 1, for the ground shader to lay its
+/// avalanche snow by (`caught` in ground.wesl): the gully's bed there, as deep as it lies, where
+/// the slope above it gathers into it (`couloir_catch`), on walls only. Its bed as it lies, not
+/// past a threshold: the shader keys the snow to the deepest part of it, so it lies in the
+/// gullies' bottoms and the ribs between stand bare at any slope. Terrain tools lay a peak's
+/// snow so, by a flow or concavity mask the slope above feeds, sharpened, rather than by the
+/// slope of each facet (Wysilab Instant Terra's Advanced Snow, whose snow flows onto the
+/// concave ground; World Machine's flow-map snow, its flow blurred and its contrast raised).
+/// Keyed to the fragment's slope instead, a horn's walls at 72 to 80 degrees, on the snow's
+/// slope limit, lost it bump by bump of the far mesh, in round dark holes the judges read as
+/// camouflage blotches (mountains rounds 10 to 12).
+fn couloir_key(level: f32, in_bed: f32, flow: f32) -> f32 {
+    (1.0 - level) * in_bed.clamp(0.0, 1.0) * flow
 }
 
 /// Where along the level way uphill a couloir's catch is gathered, in metres.
@@ -767,6 +784,21 @@ fn receive(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_couloirs_key_deepens_into_its_bed_not_across_the_flank() {
+        // On a wall the snow's key is the bed's depth: the flank a quarter of the way down keys a
+        // quarter of what the bottom does, where `SNOW_BED`'s fade already counts it near whole,
+        // so a threshold on the key lays the snow in the bottom alone and the ribs stand bare.
+        let flank = couloir_key(0.0, 0.25, 1.0);
+        let bottom = couloir_key(0.0, 1.0, 1.0);
+        assert!((bottom - 1.0).abs() < 1e-6 && (flank - 0.25).abs() < 1e-6);
+        assert!(smoothstep(SNOW_BED.0, SNOW_BED.1, 0.25) > 0.4);
+        // None on a rib, none where the slope above gathers nothing, none on level ground.
+        assert_eq!(couloir_key(0.0, 0.0, 1.0), 0.0);
+        assert_eq!(couloir_key(0.0, 1.0, 0.0), 0.0);
+        assert_eq!(couloir_key(1.0, 1.0, 1.0), 0.0);
+    }
 
     #[test]
     fn a_gully_bed_keeps_snow_under_the_open_faces_reach() {
