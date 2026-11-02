@@ -180,7 +180,23 @@ char-switch j1, 2026-11-02, the developer's worry: "we might have an issue w/ cl
 
 **The question this raises, for the developer:** an empty slot. Their pieces assume a piece in every slot on a head-only body. Our game lets a player take the coat off, so something must show where it was: their full body under their pieces clips (their readme), and hiding the body's skin under a piece is a cut "beyond what they ship". Our skin patches hide skin by a shader mask without changing the mesh (`body_mask.wesl`); whether that counts as cutting is the developer's call. The alternative within the rule is a "bare" piece for each slot, which they do not ship.
 
-**Not measured yet** (the next job): pieces from different outfits worn together through the clips (`gear_check`, the Ranger body on Peasant legs); our garment tools making the pack or coat on their body; one piece repainted beside an unpainted one; the woman's pieces. The woman's cost is already plain in part: her pieces are her own meshes (each item made and checked twice), but they share the outfit's textures, so paint is once an outfit.
+**Pieces of two outfits worn together** (measured, char-switch j2; `tools/characters/layers.ts`). The man's body piece over the legs piece, both outfits as Quaternius made them and both mixes, through the mannequin's 34 clips at 12 moments each, on their skeleton. Poke-through is the legs showing out through the body piece, by vertex; the waistband is the legs' top edge (22 points round), which must stay under the body piece or the empty inside of the head-only body shows. The arms and feet pieces stay with their own outfit in both mixes, so the waist is the one new seam.
+
+| Body piece over legs | Frames with a poke past 2 mm (of 408) | Deepest | Frames showing more waistband than at rest | Most waistband points showing | Clips past 5 mm or opening it (of 34) |
+|---|---|---|---|---|---|
+| Ranger over Ranger (theirs) | 126 | 44 mm, crouch | 141 | 6, jump start | 16 |
+| Peasant over Peasant (theirs) | 72 | 74 mm, roll | 15 | 1, roll | 11 |
+| Ranger over Peasant | 182 | 43 mm, roll | 194 | 10, jump landing | 23 |
+| Peasant over Ranger | 64 | 77 mm, roll | 0 | 0 | 10 |
+
+- **The Peasant tunic over the Ranger leggings mixes as cleanly as either outfit**: the waistband never shows, and its deep pokes are in the same doubled-up clips as theirs.
+- **The Ranger tunic over the Peasant trousers does not**: the trousers are fuller at the hips (13.5 cm from the middle against the leggings' 12.8), and their waistband shows 10 to 20 mm through the tunic's hips and front in the sprint, the sword stance and attack, the jumps and sitting. Idle and walk stay clean, the jog loop 4 mm.
+- **Every pairing, theirs included, pokes 40 to 77 mm in the roll, crouch, kneel and sitting**: the tunic's front folding into the thighs. That is how their own outfits behave, not something mixing adds.
+- **The Ranger tunic has a narrow slit at the front** (under 6 mm wide at the waist), so one waistband point already shows at rest on its own leggings.
+- **For v0's kit**: the leather coat is the Ranger body and arms, so its trousers should be the Ranger leggings (as made), not the Peasant trousers. For any other pairing, run `layers.ts` on it first.
+- **Limits.** The clips are carried by turning each bone as the mannequin's turns from its rest (no limb alignment as `retarget.py` does), on the man only, sampled at 12 moments. There is no picture yet: `rig_render.py` framed their model off screen (it expects our body), so stills wait for job 2's import.
+
+**Not measured yet** (the next job): our garment tools making the pack or coat on their body; one piece repainted beside an unpainted one; the woman's pieces. The woman's cost is already plain in part: her pieces are her own meshes (each item made and checked twice), but they share the outfit's textures, so paint is once an outfit.
 
 ## The switch in jobs
 
