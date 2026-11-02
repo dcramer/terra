@@ -2,10 +2,11 @@
 // for what is wrong the fix; the client runs it over ssh (`cargo xtask remote-render --doctor`).
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, statfsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type Box, boxEnv, daemonInfo, git, listJobs, pathEnv } from "./box.ts";
+import { type Box, boxEnv, daemonInfo, diskOf, git, listJobs, pathEnv } from "./box.ts";
+import { diskLine, level, space } from "./guard.ts";
 import { ago, boxSettings, displayPlan, gpuFix } from "./jobs.ts";
 
 const sh = (cmd: string, args: string[]) => {
@@ -128,9 +129,12 @@ export function doctor(b: Box): number {
     "ImageMagick's AppImage from github.com/ImageMagick/ImageMagick/releases: --appimage-extract into ~/opt, AppRun linked as ~/.local/bin/magick",
   ]);
 
-  const fs = statfsSync(existsSync(b.dir) ? b.dir : homedir());
-  const freeGb = Math.round((fs.bavail * fs.bsize) / 1024 ** 3);
-  line(freeGb >= 100 || (freeGb >= 30 ? "warn" : false), `disk: ${freeGb} GB free for ${b.dir}`, ["each slot's build and caches take tens of GB; free some, lower TERRA_RENDER_SLOTS, or old jobs go after 7 days"]);
+  const ds = diskOf(b);
+  const sp = space(existsSync(b.dir) ? b.dir : homedir());
+  const lvl = level(ds, sp);
+  line(lvl === "ok" || (lvl === "low" ? "warn" : false), `${diskLine(ds, sp)} (${b.dir})`, [
+    lvl === "low" ? "the daemon prunes idle slots' incremental builds and old jobs' files (docs/render-worker.md#the-disk)" : "the daemon takes no job: free space by hand (cargo xtask remote-render --status says how)",
+  ]);
 
   const s = boxSettings(boxEnv(b));
   line(!("error" in s), "error" in s ? `settings: ${s.error}` : `settings: ${s.policy.window ? `jobs start ${boxEnv(b).TERRA_RENDER_WINDOW}` : "jobs start at any hour"}${s.ciLock ? `, after the CI lock ${s.ciLock}` : ""}, ${s.slots.slots} slots (${s.slots.gpuSlots} for GPU jobs)`, [

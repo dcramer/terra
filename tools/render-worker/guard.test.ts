@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { box, jobFile, readJob, slotDir, slotHome, writeJob } from "./box.ts";
+import { box, jobFile, readJob, slotDir, slotHome, waitFor, writeJob } from "./box.ts";
 import { Keeper, writeStatus } from "./daemon.ts";
 import { DISK, diskSettings, GB, health, level, lowMark, type Prune, prune, pruneOrder, type SlotUse } from "./guard.ts";
 import type { Job } from "./jobs.ts";
@@ -165,4 +165,34 @@ test("health: a daemon silent for minutes, and a full disk, each say what is wro
   assert.match(full[0].fix, /du -xsh \/b\/slots\/\*\/target/);
   assert.match(health(undefined, DISK, { free: 5 * GB, total: 1800 * GB }, "/b", now)[1].what, /5 GB free, under the 30 GB mark/);
   assert.deepEqual(health({ ...d, alive: true }, DISK, sp, "/b", now), []);
+});
+
+test("a wait gives up at once on a dead daemon, and on a full disk while its job is queued", async () => {
+  const { b } = scratchBox("wait");
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (l: string) => lines.push(l);
+  try {
+    writeJob(b, job({ id: "20261102-000000-00cc", state: "running", queued: now.toISOString() }));
+    writeFileSync(join(b.dir, "daemon.json"), JSON.stringify({ pid: 999_999_999, mode: "systemd", rev: "x", since: daysAgo(3), beat: daysAgo(2), status: "idle" }));
+    assert.equal(await waitFor(b, "20261102-000000-00cc", 10), 1);
+    assert.match(lines.join("\n"), /✗ render-box: render 20261102-000000-00cc is running on a box that cannot end it: the daemon has not answered .*cargo xtask remote-render --update.*--wait 20261102-000000-00cc/);
+
+    lines.length = 0;
+    const beat = () => new Date().toISOString();
+    const alive = { pid: process.pid, mode: "test", rev: "x", since: beat(), beat: beat(), status: "idle", disk: { free: 1, total: 2, at: beat(), full: "a write failed: ENOSPC" } };
+    writeFileSync(join(b.dir, "daemon.json"), JSON.stringify(alive));
+    writeJob(b, job({ id: "20261102-000000-00dd", state: "queued", queued: now.toISOString() }));
+    assert.equal(await waitFor(b, "20261102-000000-00dd", 10), 1);
+    assert.match(lines.join("\n"), /disk is full/);
+
+    // A running job on a full disk may still finish: the wait warns and goes on.
+    lines.length = 0;
+    writeJob(b, job({ id: "20261102-000000-00ee", state: "running", queued: now.toISOString() }));
+    setTimeout(() => writeJob(b, job({ id: "20261102-000000-00ee", state: "done", queued: now.toISOString() })), 50);
+    assert.equal(await waitFor(b, "20261102-000000-00ee", 10), 0);
+    assert.match(lines.join("\n"), /render 20261102-000000-00ee: ✗ the box's disk is full[\s\S]*JOB /);
+  } finally {
+    console.log = log;
+  }
 });

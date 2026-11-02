@@ -13,6 +13,7 @@ import { homedir, hostname, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { objects } from "../git/lfs.ts";
+import type { Problem } from "./guard.ts";
 import { ago, backoff, type ClientArgs, chooseWorker, config, type Job, jobClass, jobId, parseClient, parseEnvFile, type Patch, type Seen, short, USAGE } from "./jobs.ts";
 
 /// A render box as the client reaches it: over ssh, or `local`, this machine (the tests).
@@ -46,7 +47,8 @@ function why(r: Remote, res: ReturnType<typeof onBox>): string {
   return lastLine(res.stdout) || lastLine(res.stderr) || `exit ${res.status}`;
 }
 
-type BoxStatus = { daemon?: { alive: boolean; status: string }; rev: string; jobs: Job[] };
+/// `problems` (guard.ts `health`): its daemon down, its disk full; absent from an older box.
+type BoxStatus = { daemon?: { alive: boolean; status: string }; rev: string; jobs: Job[]; problems?: Problem[] };
 
 export function boxStatus(r: Remote): BoxStatus | { error: string } {
   const res = onBox(r, boxCmd(r, ["status", "--json"]));
@@ -64,7 +66,8 @@ export function submit(r: Remote, cwd: string, job: Omit<Job, "id" | "kind" | "q
   if (lfs) return { error: lfs };
   const res = onBox(r, boxCmd(r, ["submit"]), JSON.stringify(full));
   if (res.status !== 0) return { error: why(r, res) };
-  const { alive, ahead } = JSON.parse(lastLine(res.stdout)) as { alive: boolean; ahead: number };
+  const { alive, ahead, problems } = JSON.parse(lastLine(res.stdout)) as { alive: boolean; ahead: number; problems?: Problem[] };
+  if (problems?.length) return { id: full.id, note: `but the box cannot run it now: ${problems.map((p) => `${p.what} (${p.fix})`).join("; ")}` };
   return { id: full.id, note: alive ? (ahead ? `${ahead} queued ahead of it` : "next") : "the daemon is not running; the job waits for it (--update starts it)" };
 }
 
@@ -99,22 +102,33 @@ export function snapshot(cwd: string): { rev: string; patch: Patch } | { error: 
   }
 }
 
+/// How long a wait goes on trying a box it cannot reach before it gives up (the job may still run).
+export const UNREACHABLE_MS = 30 * 60_000;
+
 /// Waits on the box for the job to end (the box watches it; a line when its state changes) and
-/// returns it. A dropped ssh is tried again, 5 s, then up to 2 min apart.
+/// returns it. The box's wait gives up at once on a daemon down or a full disk (box.ts
+/// `waitFor`), its last ✗ line the error. A dropped ssh is tried again, 5 s, then up to 2 min
+/// apart, for UNREACHABLE_MS.
 export async function waitOn(r: Remote, id: string, print = (l: string) => console.log(l)): Promise<Job | { error: string }> {
+  let lost = 0;
   for (let n = 0; ; n++) {
     const [exe, args] = isLocal(r) ? ["sh", ["-c", boxCmd(r, ["wait", id])]] : ["ssh", [...SSH, r.host, boxCmd(r, ["wait", id])]];
     const child = spawn(exe, args, { stdio: ["ignore", "pipe", "pipe"] });
     let job: Job | undefined;
     let err = "";
+    let failed = "";
     child.stderr.on("data", (d) => (err += d));
     for await (const line of createInterface({ input: child.stdout })) {
+      lost = 0;
       if (line.startsWith("JOB ")) job = JSON.parse(line.slice(4)) as Job;
+      else if (line.startsWith("✗ render-box: ")) failed = line.slice("✗ render-box: ".length);
       else print(line);
     }
     const code = await new Promise<number>((done) => (child.exitCode !== null ? done(child.exitCode) : child.on("close", (c) => done(c ?? 1))));
     if (job) return job;
-    if (code !== 255 || isLocal(r)) return { error: lastLine(err) || `the box's wait exited ${code}` };
+    if (code !== 255 || isLocal(r)) return { error: failed || lastLine(err) || `the box's wait exited ${code}` };
+    lost ||= Date.now();
+    if (Date.now() - lost >= UNREACHABLE_MS) return { error: `${r.host} unreachable over ssh for ${Math.round((Date.now() - lost) / 60_000)} min (${lastLine(err)}); the job may still run there: cargo xtask remote-render --wait ${id} once it answers` };
     print(`render ${id}: lost ssh to ${r.host} (${lastLine(err)}); again in ${backoff(n)} s`);
     await new Promise((done) => setTimeout(done, backoff(n) * 1000));
   }
@@ -275,7 +289,7 @@ async function run(args: ClientArgs, remotes: Remote[], cwd: string, outOf: (id:
   const seen: Seen[] = remotes.map((r) => {
     const s = boxStatus(r);
     if ("error" in s) return { host: r.host, reachable: false, alive: false, waiting: 0 };
-    return { host: r.host, reachable: true, alive: !!s.daemon?.alive, waiting: s.jobs.filter((j) => j.state === "queued" || j.state === "running").length };
+    return { host: r.host, reachable: true, alive: !!s.daemon?.alive && !s.problems?.length, waiting: s.jobs.filter((j) => j.state === "queued" || j.state === "running").length };
   });
   const chosen = chooseWorker(seen);
   if ("error" in chosen) return console.log(`✗ remote-render: ${chosen.error}`), 1;

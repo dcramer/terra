@@ -14,6 +14,10 @@ import { box, readJob, slotDir, slotHome } from "./box.ts";
 import { finish, prepare, type Remote, sendLfs, snapshot, submit } from "./client.ts";
 import { next, reapOrphans, type Running, runJob, stop } from "./daemon.ts";
 
+// The scratch box sits on /tmp, a RAM disk of a few GB here: disk marks that never call it full
+// (guard.ts), in the environment the box's commands inherit.
+process.env.TERRA_RENDER_DISK_LOW_GB = "2";
+process.env.TERRA_RENDER_DISK_FULL_GB = "1";
 const tmp = mkdtempSync(join(tmpdir(), "render-flow-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 const sh = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, encoding: "utf8" }).trim();
@@ -55,6 +59,9 @@ test("a box is set up from nothing, and a job hands back what it wrote, and only
     console.log = log;
   }
   assert.ok(existsSync(join(b.repo, ".git")));
+  // The test runs the jobs itself, so it stands in for the daemon a box's wait looks for.
+  const now = new Date().toISOString();
+  writeFileSync(join(b.dir, "daemon.json"), JSON.stringify({ pid: process.pid, mode: "test", rev: "test", since: now, beat: now, status: "the test runs the jobs" }));
   const review = join(slotHome(b, 1), ".cache/terra-review");
   mkdirSync(join(review, "old"), { recursive: true });
   writeFileSync(join(review, "old/before.png"), "x");

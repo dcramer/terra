@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { homedir, userInfo } from "node:os";
 import { join, resolve } from "node:path";
 import { doctor } from "./doctor.ts";
+import { DISK, type DiskSettings, type DiskState, DOWN_MS, diskLine, diskSettings, health, type Problem, space } from "./guard.ts";
 import { ago, benchHold, boxSettings, ID, type Job, jobClass, jobId, mayStart, parseEnvFile, plan as planJobs, recentJobs, short, steps, UPDATE_REF } from "./jobs.ts";
 
 /// `src` and `home` are the single job checkout and HOME from before slots, which slot 1 takes
@@ -75,7 +76,7 @@ export const wake = (b: Box) => writeFileSync(join(b.dir, "wake"), new Date().to
 
 // ---- The daemon's record of itself ----
 
-export type DaemonInfo = { pid: number; mode: string; rev: string; since: string; beat: string; status: string; display?: string };
+export type DaemonInfo = { pid: number; mode: string; rev: string; since: string; beat: string; status: string; display?: string; disk?: DiskState };
 
 export function daemonInfo(b: Box, now = Date.now()): (DaemonInfo & { alive: boolean }) | undefined {
   try {
@@ -97,7 +98,16 @@ export function boxEnv(b: Box, env = process.env): Record<string, string | undef
   return { ...(existsSync(file) ? parseEnvFile(readFileSync(file, "utf8")) : {}), ...env };
 }
 
-export const ciBusy = (lock: string | undefined, now = Date.now()) => !!lock && existsSync(lock) && now - statSync(lock).mtimeMs < 6 * 3600_000;
+/// The box's disk settings, the defaults when they are wrong (the daemon says so as it stops).
+export const diskOf = (b: Box): DiskSettings => {
+  const ds = diskSettings(boxEnv(b));
+  return "error" in ds ? DISK : ds;
+};
+
+/// What is wrong with the box now (guard.ts `health`): its daemon down, its disk full.
+export const problems = (b: Box, now = new Date()): Problem[] => health(daemonInfo(b, now.getTime()), diskOf(b), space(existsSync(b.dir) ? b.dir : homedir()), b.dir, now);
+
+export const ciBusy =(lock: string | undefined, now = Date.now()) => !!lock && existsSync(lock) && now - statSync(lock).mtimeMs < 6 * 3600_000;
 
 // ---- Commands ----
 
@@ -114,7 +124,7 @@ function submit(b: Box, text: string): number {
   wake(b);
   const d = daemonInfo(b);
   const ahead = listJobs(b).filter((j) => j.id < job.id && j.state === "queued").length;
-  console.log(JSON.stringify({ alive: !!d?.alive, ahead }));
+  console.log(JSON.stringify({ alive: !!d?.alive, ahead, problems: problems(b) }));
   return 0;
 }
 
@@ -123,10 +133,13 @@ function fail(line: string): number {
   return 1;
 }
 
-/// Blocks until the job ends, watching its folder (and looking each minute, should a watch miss
-/// it), a line on each change of state; then `JOB {…}` for the client.
-async function waitFor(b: Box, id: string): Promise<number> {
+/// Blocks until the job ends, watching its folder (and looking every 30 s, should a watch miss
+/// it), a line on each change of state; then `JOB {…}` for the client. A box that cannot end
+/// the job is said at once, and given up on rather than waited on for days: a daemon down for
+/// DOWN_MS (a job shown running there is not), or a full disk while the job is queued.
+export async function waitFor(b: Box, id: string, tick = 30_000): Promise<number> {
   let said = "";
+  const warned = new Set<string>();
   for (;;) {
     const job = readJob(b, id);
     if (!job) return fail(`no job ${id} (deleted after TERRA_RENDER_KEEP_DAYS?)`);
@@ -138,9 +151,13 @@ async function waitFor(b: Box, id: string): Promise<number> {
       console.log(`JOB ${JSON.stringify(job)}`);
       return 0;
     }
+    const ps = problems(b);
+    for (const p of ps.filter((p) => !warned.has(p.stops))) warned.add(p.stops), console.log(`render ${id}: ✗ ${p.what}; ${p.fix}`);
+    const fatal = ps.find((p) => (p.stops === "queued" ? job.state === "queued" : (p.downMs ?? 0) >= DOWN_MS));
+    if (fatal) return fail(`render ${id} is ${job.state} on a box that cannot end it: ${fatal.what}. ${fatal.fix}. Once that is fixed: cargo xtask remote-render --wait ${id}`);
     await new Promise<void>((done) => {
       const w = watch(join(b.jobs, id), () => finish());
-      const t = setTimeout(() => finish(), 60_000);
+      const t = setTimeout(() => finish(), tick);
       function finish() {
         w.close();
         clearTimeout(t);
@@ -155,24 +172,27 @@ function status(b: Box, json: boolean, all = false): number {
   const jobs = listJobs(b);
   const rev = git(b.repo, ["rev-parse", "--short=9", "HEAD"]).stdout.trim();
   if (json) {
-    console.log(JSON.stringify({ daemon: d, rev, jobs }));
+    console.log(JSON.stringify({ daemon: d, rev, jobs, problems: problems(b) }));
     return 0;
   }
   const now = new Date();
   console.log(d ? `daemon: ${d.alive ? "running" : "not running"} (${d.mode}, at ${d.rev}, since ${ago(d.since, now)} ago, last word ${ago(d.beat, now)} ago): ${d.status}` : "daemon: never started (cargo xtask remote-render --update)");
+  console.log(diskLine(diskOf(b), space(existsSync(b.dir) ? b.dir : homedir())));
+  for (const p of problems(b, now)) console.log(`✗ ${p.what}\n  fix: ${p.fix}`);
+  const stale = d?.alive ? "" : " (stale: the daemon is down)";
   const s = boxSettings(boxEnv(b));
   if (!("error" in s)) {
     console.log(`slots: ${s.slots.slots}, of them ${s.slots.gpuSlots} for GPU jobs; a bench builds in a slot, then has the box alone for its timed run`);
     for (let n = 1; n <= s.slots.slots; n++) {
       const j = jobs.find((j) => j.state === "running" && (j.slot ?? 1) === n);
       const doing = j?.phase === "prep" ? "building ahead" : j?.phase === "ready" ? "built, waits for the box" : "running";
-      console.log(`  slot ${n}: ${j ? `${j.id} ${doing} ${ago(j.started ?? j.queued, now)}  ${short(j)}` : "free"}`);
+      console.log(`  slot ${n}: ${j ? `${j.id} ${doing}${stale} ${ago(j.started ?? j.queued, now)}  ${short(j)}` : "free"}`);
     }
   }
   for (const line of benchHold(jobs, now)) console.log(line);
   const shown = all ? jobs : recentJobs(jobs, now);
   console.log(shown.length < jobs.length ? `jobs (the last day's, and every one queued or running; ${jobs.length - shown.length} older: --status --all):` : "jobs:");
-  for (const j of shown) console.log(`  ${j.id} ${j.state.padEnd(9)} ${ago(j.queued, now).padStart(5)} ago  ${short(j)}${j.note ? `  [${j.note}]` : ""}`);
+  for (const j of shown) console.log(`  ${j.id} ${j.state.padEnd(9)} ${ago(j.queued, now).padStart(5)} ago  ${short(j)}${j.state === "running" ? stale : ""}${j.note ? `  [${j.note}]` : ""}`);
   if (!jobs.length) console.log("  no jobs");
   return 0;
 }
