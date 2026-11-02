@@ -14,12 +14,16 @@ use crate::species::{Bestiary, CoatDef};
 use crate::wildlife::Surroundings;
 use bevy::{platform::collections::HashMap, prelude::*};
 use terra_world::daylight::{Clock, WorldClimate};
+use terra_world::instance::InstanceApp;
 
 /// How many steps a coat is taken in, from summer's to winter's.
 const STEPS: f32 = 6.0;
 
 pub fn plugin(app: &mut App) {
-    app.init_resource::<Tints>()
+    // The world's (D469): its animals' materials go with it, and with them the strong
+    // handles to the models' own materials they were made from, which an app resource kept
+    // for every world ever entered.
+    app.init_world_resource::<Tints>()
         .add_systems(Update, (choose, dress).chain());
 }
 
