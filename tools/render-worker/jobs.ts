@@ -381,14 +381,22 @@ export function estimator(jobs: Job[]): Estimate {
   };
 }
 
-/// When the box will have drained of its running jobs, at the soonest the estimates allow: the
-/// latest of their earliest likely ends, `now` for any past its shortest run or of a kind never
-/// run (it may end at any moment).
+/// When the box will have drained of its running jobs, at the soonest likely: the latest of their
+/// likely ends, each no sooner than its kind's shortest run and no sooner than it has run again
+/// as long as it has run so far, nor later than its limit. A job's age is the estimate a kind
+/// never run, or one past its shortest run, still has: a job that has run t is as likely as not
+/// to run t more where lengths are heavy-tailed, as Unix processes' are (Harchol-Balter and
+/// Downey, "Exploiting process lifetime distributions for dynamic load balancing", 1997), and
+/// the box's are (a check 1 minute, a render 55). Taking `now` for those instead left three
+/// slots idle 49 minutes beside a 55-minute render on 2026-11-02.
 export function drainEnd(running: Job[], now: number, est: Estimate): number {
   let end = now;
   for (const j of running) {
+    if (!j.started) continue;
+    const started = Date.parse(j.started);
     const short = est(j, "short");
-    if (short !== undefined && j.started) end = Math.max(end, Date.parse(j.started) + short);
+    const likely = Math.max(short === undefined ? now : started + short, now + (now - started));
+    end = Math.max(end, Math.min(likely, started + j.minutes * 60_000));
   }
   return end;
 }
@@ -407,7 +415,7 @@ export function drainEnd(running: Job[], now: number, est: Estimate): number {
 ///
 /// Once a bench is queued the box drains for it. Jobs queued ahead of it keep their turn. A job
 /// behind it starts only if it will be over before the box would empty anyway: the longest of
-/// the last of its kind (`estimator`) ends before the running jobs' soonest end and the bench's
+/// the last of its kind (`estimator`) ends before the running jobs' likely end and the bench's
 /// build (`drainEnd`), so it fills a free slot and never holds the bench back. On a box empty
 /// but for the bench, it goes ahead of the jobs queued before it since the last one (back to
 /// back) when that costs less waiting than draining again for it: those jobs times the bench's
@@ -466,8 +474,9 @@ export function plan(jobs: Job[], s: Slots, now = Date.now()): { start: Start[];
     // The bench goes ahead of the jobs queued before it on the box empty for it.
     if (bench && first && job.id.localeCompare(bench.id) < 0) continue;
     if (bench && job.id.localeCompare(bench.id) > 0 && !(c === "check" && draining)) {
-      const long = est(job, "long");
-      if (long === undefined || now + long > until) continue;
+      // A kind never run is as long as its limit, which `timeout` holds it to (--minutes; Slurm's
+      // backfill takes a job's time limit so).
+      if (now + (est(job, "long") ?? job.minutes * 60_000) > until) continue;
     }
     if (c === "gpu" && gpu >= s.gpuSlots) {
       why ??= `the ${s.gpuSlots} GPU slots are taken`;
@@ -526,7 +535,7 @@ export function benchHold(jobs: Job[], now: Date): string[] {
     if (held?.phase === "prep") out.push(`  building ${held.id} ahead in slot ${held.slot} for ${ago(held.started ?? held.queued, now)}: ${short(held)}`);
     if (held?.phase === "ready") out.push(`  ${held.id} built in slot ${held.slot} ${ago(held.prepared ?? held.queued, now)} ago, its timed run next: ${short(held)}`);
     const left = drainEnd(others, t, est) - t;
-    out.push(`  draining: ${others.length} job${others.length === 1 ? "" : "s"} still running, the box empty ${left >= 60_000 ? `in ${span(left)} at the soonest` : "any moment"}; only jobs that end before then start`);
+    out.push(`  draining: ${others.length} job${others.length === 1 ? "" : "s"} running, the box likely empty ${left >= 60_000 ? `in ${span(left)}` : "any moment"}; only jobs that end before then start`);
   }
   if (next.length) out.push(`  benches next: ${next.map((j) => `${j.id} (waiting ${ago(j.queued, now)}${kind(j)})`).join(", ")}`);
   const behind = queued.filter((j) => classOf(j) !== "bench");

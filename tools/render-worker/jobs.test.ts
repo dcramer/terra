@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { benchHold, boxSettings, buildAhead, checkoutsInBuild, chooseWorker, cleanCommands, collected, commandKey, config, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, recentJobs, rustcIce, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
+import { benchHold, boxSettings, buildAhead, checkoutsInBuild, chooseWorker, cleanCommands, collected, commandKey, config, drainEnd, estimator, displayPlan, expired, freeDisplay, gpuFix, ID, incrementalClears, inWindow, type Job, jobClass, jobEnv, jobId, mayStart, needsDisplay, parseClient, parseEnvFile, parseWindow, performanceCores, plan, recentJobs, rustcIce, short, staleBuild, steps, takenDisplays, WARM, workspacePackages, xvfbArgs, xvfbBackoff } from "./jobs.ts";
 
 const job = (over: Partial<Job> = {}): Job => ({
   id: "20261023-120000-aaaa",
@@ -201,28 +201,47 @@ test("while the box drains for a bench, only jobs that will be over before it ha
   assert.equal(p.why, "a bench waits for the box to empty");
   const building = { ...bench, state: "running" as const, started: iso(2), slot: 2, phase: "prep" as const };
   assert.deepEqual(ids(plan([...history, film, building, ...behind], s4, T0 + 5 * 60_000)), ["cargo test -p a", "sh still.sh"]);
-  // Two minutes before the film's soonest end the three-minute still no longer fits.
-  assert.deepEqual(ids(plan([...history, film, building, ...behind], s4, T0 + 28 * 60_000)), ["cargo test -p a", "cargo test -p b"]);
-  // Past its shortest run the film may end any moment: nothing behind the bench starts.
-  assert.deepEqual(plan([...history, film, building, ...behind], s4, T0 + 31 * 60_000).start, []);
-  // A running job of a kind never run gives no end to fill up to.
-  assert.deepEqual(plan([...history, { ...film, command: ["node", "other.ts"] }, building, ...behind], s4, T0 + 5 * 60_000).start, []);
-  // A push check starts whatever its length while the film still runs, past its shortest run
-  // too, or of a kind never run; a CPU job of its length does not.
+  // Past its shortest run, at minute 28, the film likely runs as long again: the still fits,
+  // the 40-minute job does not.
+  assert.deepEqual(ids(plan([...history, film, building, ...behind], s4, T0 + 28 * 60_000)), ["cargo test -p a", "sh still.sh"]);
+  // Two minutes before its limit (60) it is over by then at the latest: the still no longer fits.
+  assert.deepEqual(ids(plan([...history, film, building, ...behind], s4, T0 + 58 * 60_000)), ["cargo test -p a", "cargo test -p b"]);
+  // A running job of a kind never run likely runs as long again as it has (5 minutes): the
+  // test and the still fit.
+  assert.deepEqual(ids(plan([...history, { ...film, command: ["node", "other.ts"] }, building, ...behind], s4, T0 + 5 * 60_000)), ["cargo test -p a", "sh still.sh"]);
+  // A job behind of a kind never run is as long as its limit (--minutes).
+  const fresh = (minutes: number) => at(9, "node fresh.ts", { class: "gpu", minutes });
+  assert.deepEqual(ids(plan([...history, film, building, fresh(10)], s4, T0 + 5 * 60_000)), ["node fresh.ts"]);
+  assert.deepEqual(plan([...history, film, building, fresh(60)], s4, T0 + 5 * 60_000).start, []);
+  // A push check starts whatever its length while the film still runs, at its limit too, or
+  // of a kind never run; a CPU job of its length does not.
   const check = at(7, "cargo xtask check --base abc", { class: "check" });
-  assert.deepEqual(ids(plan([...history, film, building, ...behind, check], s4, T0 + 31 * 60_000)), ["cargo xtask check --base abc"]);
+  assert.deepEqual(ids(plan([...history, { ...film, minutes: 31 }, building, ...behind, check], s4, T0 + 31 * 60_000)), ["cargo xtask check --base abc"]);
   assert.deepEqual(ids(plan([...history, { ...film, command: ["node", "other.ts"] }, building, check], s4, T0 + 5 * 60_000)), ["cargo xtask check --base abc"]);
-  // Once only checks hold the box, the built bench waits for them, and no new check starts.
+  // Once only checks hold the box, the built bench waits for them, and no new check starts
+  // that would outlast them (one took 5 minutes; the one running, a minute in, likely 2).
   const checking = { ...check, state: "running" as const, started: iso(30), slot: 3 };
   const ready = { ...building, phase: "ready" as const, prepared: iso(4) };
   const next = at(8, "cargo xtask check --base def", { class: "check" });
-  const p2 = plan([...history, checking, ready, next], s4, T0 + 31 * 60_000);
+  const p2 = plan([...history, ran(-60, "cargo xtask check --base x", 5, { class: "check" }), checking, ready, next], s4, T0 + 31 * 60_000);
   assert.equal(p2.go, undefined);
   assert.deepEqual(p2.start, []);
   assert.equal(plan([...history, { ...checking, state: "done", ended: iso(31) }, ready, next], s4, T0 + 32 * 60_000).go, ready);
   // A job queued ahead of the bench keeps its turn, however long, and the bench builds after it.
   const ahead = at(0.5, "sh long.sh", { class: "gpu", id: "20261028-120030-0000" });
   assert.deepEqual(ids(plan([...history, film, ahead, bench], s4, T0 + 5 * 60_000)), ["sh long.sh", "cargo xtask bench crypt"]);
+});
+
+test("a running job likely ends once it has run as long again, no sooner than its kind's shortest run, by its limit", () => {
+  const est = estimator([ran(-200, "sh film.sh 1", 30, { class: "gpu" })]);
+  const film = at(0, "sh film.sh 2", { class: "gpu", state: "running", started: iso(0), minutes: 60 });
+  const end = (j: Job, minute: number) => (drainEnd([j], T0 + minute * 60_000, est) - T0) / 60_000;
+  assert.equal(end(film, 10), 30, "its kind's shortest run");
+  assert.equal(end(film, 20), 40, "as long again as it has run");
+  assert.equal(end(film, 45), 60, "its limit");
+  assert.equal(end({ ...film, command: ["node", "new.ts"] }, 5), 10, "a kind never run: as long again");
+  assert.equal(end(film, 70), 70, "past its limit: any moment");
+  assert.equal(drainEnd([], T0, est), T0);
 });
 
 test("benches queued together run back to back on the drained box; a job between goes first only when cheaper", () => {
@@ -333,7 +352,8 @@ test("--status says how long benches have held the queue, what runs or drains, a
   const behind = [at(12, "sh film.sh 3", { class: "gpu" }), at(14, "cargo test -p a", { class: "cpu" })];
   const draining = benchHold([ran(-200, "sh film.sh 1", 30, { class: "gpu" }), benchKind, film, b1, ...behind], new Date(T0 + 20 * 60_000));
   assert.match(draining[0], /^bench hold: 10m, since 12:10 UTC$/);
-  assert.match(draining[1], /draining: 1 job still running, the box empty in 10m at the soonest/);
+  // The film, 20 minutes in, likely runs as long again.
+  assert.match(draining[1], /draining: 1 job running, the box likely empty in 20m;/);
   assert.match(draining[2], /benches next: 20261028-121000-0010 \(waiting 10m, its kind took up to 20m\)/);
   assert.match(draining[3], /waiting behind it: 2 jobs \(1 GPU, 1 CPU\), the oldest 20261028-121200-0012 for 8m/);
   // The first bench ran from minute 30; a second queued meanwhile keeps the hold going from minute 10.
