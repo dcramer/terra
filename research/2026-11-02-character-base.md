@@ -103,9 +103,57 @@ Rebuild the base on a body that is right before anything is built on it, and cho
 
 Quaternius first because it is the only set where body, clothes and clips were made together and the licence fits, and its skeleton is already ours. Not Reallusion or a store pack: they cannot sit in the repository, and Reallusion forbids a character creator in the game. Not today's base, fixed fault by fault: every fix to the body breaks what was built on it, and it is far over its triangle budget.
 
+## The trial: Quaternius's set beside ours
+
+2026-11-02, char-base j3. The developer downloaded the **Source** editions of Universal Base Characters, Modular Character Outfits: Fantasy (v2.1) and Bestiary: Dungeon Monsters Kit; all three CC0. Nothing from them is committed. Measured with our tools (`proportions.py`, `rig_check.py`, `glb_clips.ts`) and the workbench, in the game's renderer and light, on the Windows GPU.
+
+**In plain words.** They are not low-poly cartoon: 13k to 33k triangles, smooth, with folds, seams and stitching sculpted into their normal maps and buckles and straps modelled. They are a step more stylised than our style in their materials: the cloth and skin are smooth painted colour with no weave, grain or wear, so at play distance a tunic reads as a clean field of green. The faces are lightly stylised (strong jaws, large eyes) and the hair is solid sculpted locks. Beside ours they look cleaner and more finished. Ours look more realistic but blotchy. Their skeleton is the mannequin's, joint for joint, and the mannequin's clips play on them without a fault. Their arms are short, as ours were before D593. The man and the woman are two different meshes, so the woman cannot be a morph of the man (D112).
+
+### What the packs hold
+
+| Pack | What | Formats | Textures | Triangles | Joints |
+|---|---|---|---|---|---|
+| Universal Base Characters | 6 bodies (Regular, Superhero, Teen; man and woman), each also cut to head only and upper body; 20 hairstyles, beards and brows on the head bone; Godot, Unity and Unreal projects | .blend, glTF (external PNGs), FBX | Painted, smooth: 2048² colour (light and dark skin), normal, roughness; eyes 256² | Regular man 13,880 (body 12,128), woman 14,932; Superhero 14,318 and 15,060; Teen 13,992 and 15,136; a head alone 4,840 and 5,532 | 65, the mannequin's names and parents |
+| Modular Character Outfits: Fantasy | Knight, Noble, Peasant, Ranger, Wizard (and Knight with cloth), each for man and woman, 62 parts; `All_Male` and `All_Female` | .blend, glTF, FBX | Painted, smooth: 4096² colour, normal, ORM, three colourways each | As exported, without the head: Ranger 26,982 (man) and 26,966 (woman), Knight 25,187, Noble 24,097, Wizard 14,430, Peasant 12,894 and 13,568 | 65, the same |
+| Bestiary: Dungeon Monsters | Hellwarden, Imp, Lycan, Puglin, two skeletons, Tidebreaker; no clips | .blend, GLB, FBX | Painted: 2048² colour, normal, ORM, emissive, three colourways | Hellwarden 19,840, Skeleton A 18,310, B 16,205, Tidebreaker 15,176, Imp 15,232, Lycan 14,145, Puglin 7,528 | 65 (skeletons, Hellwarden, Tidebreaker), 71 (Lycan, plus 6 tail), 55 (Imp, Puglin) |
+
+As built for the trial: their man as the Ranger, with a head and a beard, is 32,856 triangles; their woman as the Peasant, with a head and buns, 22,384. Ours is 28,916 naked. The art style's budget for a body is 2,500 to 5,000 and for a creature 1,500 to 4,000, so both sets need levels of detail cut to budget either way.
+
+### Against the art style's checklist
+
+| Item | Theirs | Ours today |
+|---|---|---|
+| Silhouette | Clear: hood, belts, bracers, boots | Clear |
+| Size | Life size: man 1.81 m, woman 1.77 m | 1.80 m |
+| Shapes | Big, medium and small, with modelled detail where it tells (buckles, straps, rivets) | Big shapes; the clothes' detail is in the colour only |
+| Material | Leather and metal read, but cloth and skin are smooth colour with no grain or wear | Real cloth and leather grain, blotchy at play distance |
+| Shading | Painted and simplified, closer to hand-painted than "a little shaded" | A little shaded |
+| One grade | One grade across the set; cleaner and brighter than our props (the barrel) | Matches the props |
+| Values | Parts differ in lightness | Parts often the same muddy brown |
+| Normals | Smooth, split at creases | Smooth |
+| Budget | 5 to 7 times over | 6 times over |
+| Contracts | No sockets, no twist bones | Pass |
+
+### Fit, measured
+
+| Measure | Their man | Their woman | Ours |
+|---|---|---|---|
+| Joints against the mannequin's | The same 65 names and parents | The same | The same, plus 8 twist bones |
+| Rest joints from the mannequin's | Mean 6.0 cm, at most 8.4 cm (fingertips); bones within 11° | Mean 10.8 cm, at most 15.7 cm; within 14° | Mean 10.3 cm, at most 14.1 cm; clavicles 34° |
+| Mesh | Body 7,047 vertices | Body 7,308 vertices: another mesh | One mesh, the woman a morph |
+| `proportions.py` | Fails: fingertip 0.754 m, over the 99th percentile's 0.732 (arms short); reach 1.80 m and crotch 0.90 m in band | Fails: reach 1.66 m under 1.73, fingertip 0.742 over 0.714 (the bands are a man's; there are none for a woman yet) | Passes |
+| `rig_check.py`, the mannequin's 33 clips | Motion passes every clip; weights, seams, reach and symmetry pass; rest pose fails (clavicle 12°, limit 3°: its bones do not point at their child, which `retarget.py` reads as the limb) | The same; hand 7° | Passes |
+| The clips as they are in a glb (`glb_clips.ts`) | The mannequin's clips carry every joint's position, so played unchanged they pull the joints up to 84 mm to the mannequin's (longer arms) | Up to 157 mm | Carried by `retarget.py` |
+
+So the clips play on their bodies without retargeting in Blender's sense (by bone turns) and pass every motion check; in the game they need either the joints' positions dropped from the clips (all but the root and pelvis, the simplest retarget) or `retarget.py`, as ours do.
+
+Stills: `~/.cache/terra-review/char-base-trial/` (naked row, dressed rows, close views, monsters, textures).
+
+**Not done** (char-base j3 stopped at its context bound): their bodies in play with the idle, walk, sword guard and crouch beside ours, and films of them. Copies of their four models with the mannequin's clips, with and without the joints' positions, are rebuilt in a minute by the job's scripts (the handoff `char-base-j3.md`).
+
 ## Limits
 
-- Nothing was downloaded or tried: the shared skeleton, the layouts and the proportions of Quaternius's bodies are claims until the comparison job measures them. Its free editions need itch.io's download page, which a script could not reach.
+- The trial above supersedes this bullet for Quaternius: Nothing was downloaded or tried: the shared skeleton, the layouts and the proportions of Quaternius's bodies are claims until the comparison job measures them. Its free editions need itch.io's download page, which a script could not reach.
 - The Synty licence page refused to load (HTTP 429); its terms here come from Synty's product page and a search excerpt of its 2024 purchase licence. Mixamo's FAQ refused to load (HTTP 403); its terms come from Adobe's community answers.
 - Enshrouded's and Soulmask's pipelines are not public; the Valheim and Kenshi rows rest on mod tools and mod authors' threads.
 
