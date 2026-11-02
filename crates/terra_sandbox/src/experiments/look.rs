@@ -14,6 +14,7 @@ use bevy::{
     render::view::{ColorGrading, ColorGradingGlobal},
 };
 use terra_gen::{Noise, Seed};
+use terra_world::instance::{Building, InWorld};
 use terra_world::planet::MainCamera;
 use terra_world::planet::{Planet, Tweaks};
 use terra_world::sky::{Sky, SkyPlugin};
@@ -37,8 +38,13 @@ pub fn plugin(app: &mut App) {
             brightness: 700.0,
             ..default()
         })
-        .add_systems(Startup, (preset, dress))
-        .add_systems(PostStartup, style_camera);
+        .add_systems(
+            OnEnter(InWorld),
+            (
+                (preset, dress).in_set(Building::Stage),
+                style_camera.in_set(Building::View),
+            ),
+        );
 }
 
 fn preset(mut tweaks: ResMut<Tweaks>) {

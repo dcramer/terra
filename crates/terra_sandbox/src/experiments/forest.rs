@@ -19,6 +19,7 @@ use bevy::{
 use std::time::Instant;
 use terra_core::{Harvested, KindId, ObjectId, Operation, Yield};
 use terra_gen::{Rng, Seed};
+use terra_world::instance::{Building, InWorld, WorldScoped};
 use terra_world::planet::MainCamera;
 use terra_world::planet::{FACES, Planet};
 
@@ -66,7 +67,7 @@ struct Forest {
 struct Readout;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup)
+    app.add_systems(OnEnter(InWorld), setup.in_set(Building::Stage))
         .add_systems(Update, (stream, chop, update_readout).chain());
 }
 
@@ -269,6 +270,7 @@ fn setup(
     });
     commands.spawn((
         Readout,
+        WorldScoped,
         Text::new(""),
         Node {
             position_type: PositionType::Absolute,

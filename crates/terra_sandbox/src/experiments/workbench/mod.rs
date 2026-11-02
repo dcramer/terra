@@ -199,9 +199,12 @@ pub fn lit(app: &mut App) {
 pub fn plugin(app: &mut App) {
     // Posed after the clips as in play (the fists, the arms, the carry, the shield arm).
     terra_walker::pose::plugin(app);
-    app.add_systems(Startup, setup)
-        .add_systems(Update, (spawn, measure, recarry, sheet::capture).chain())
-        .add_systems(Update, draw_contracts);
+    app.add_systems(
+        OnEnter(terra_world::instance::InWorld),
+        setup.in_set(terra_world::instance::Building::Stage),
+    )
+    .add_systems(Update, (spawn, measure, recarry, sheet::capture).chain())
+    .add_systems(Update, draw_contracts);
     remote::method(app, "workbench.pose", pose_method);
     remote::method(app, "workbench.shape", shape_method);
     sheet::plugin(app);

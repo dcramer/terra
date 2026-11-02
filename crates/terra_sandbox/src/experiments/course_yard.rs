@@ -23,6 +23,7 @@ use terra_build::{BuildOp, Cube, Facing, Fill, Kind, Shape};
 use terra_core::Operation;
 use terra_game::build::{Build, BuildLook, Built, frame_at, kit_names};
 use terra_voxel::material;
+use terra_world::instance::{Building, InWorld};
 use terra_world::planet::Planet;
 use terra_world::start::Start;
 
@@ -81,10 +82,11 @@ const CUBE_M: f32 = 0.5;
 const KIT: &str = "stone";
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, dig).add_systems(
-        Update,
-        put_up.run_if(resource_exists::<BuildLook>.and_then(resource_exists::<Pending>)),
-    );
+    app.add_systems(OnEnter(InWorld), dig.in_set(Building::Stage))
+        .add_systems(
+            Update,
+            put_up.run_if(resource_exists::<BuildLook>.and_then(resource_exists::<Pending>)),
+        );
 }
 
 /// The base's frame, waiting for building's look.

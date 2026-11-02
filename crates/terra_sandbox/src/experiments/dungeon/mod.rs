@@ -21,6 +21,7 @@ use terra_dungeon::{ModuleSet, Theme};
 use terra_game::build::{BuildLook, frame_at, kit_names};
 use terra_gen::Seed;
 use terra_walker::walker::ArriveAt;
+use terra_world::instance::{Building, InWorld};
 use terra_world::planet::Planet;
 use terra_world::start::Start;
 
@@ -87,7 +88,7 @@ struct Pending {
 pub fn plugin(app: &mut App, experiment: &'static str) {
     interior::plugin(app);
     app.insert_resource(Wanted(experiment))
-        .add_systems(Startup, lay_out)
+        .add_systems(OnEnter(InWorld), lay_out.in_set(Building::Stage))
         .add_systems(
             Update,
             spawn::put_up.run_if(resource_exists::<BuildLook>.and_then(resource_exists::<Pending>)),

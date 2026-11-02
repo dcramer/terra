@@ -11,6 +11,7 @@
 
 use bevy::prelude::*;
 use terra_game::play::town::{AT_THE_SITE_M, SEED, Wanted};
+use terra_world::instance::{Building, InWorld};
 use terra_world::planet::Planet;
 use terra_world::start::{Found, Sited, Start};
 
@@ -26,13 +27,13 @@ fn wanted(lived_in: bool) -> Wanted {
 
 pub fn plugin(app: &mut App) {
     app.insert_resource(wanted(true))
-        .add_systems(Startup, at_the_site);
+        .add_systems(OnEnter(InWorld), at_the_site.in_set(Building::Stage));
 }
 
 /// The same town with nobody in it, to measure what its people and animals cost.
 pub fn empty(app: &mut App) {
     app.insert_resource(wanted(false))
-        .add_systems(Startup, at_the_site);
+        .add_systems(OnEnter(InWorld), at_the_site.in_set(Building::Stage));
 }
 
 /// The town wanted where the land's rules found a place for it (`--site town`), in metres

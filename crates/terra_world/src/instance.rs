@@ -139,6 +139,10 @@ impl Global {
 pub enum Building {
     /// The world's resources made afresh, and the land from its spec: the planet, the start.
     Land,
+    /// What a run sets up on the land before the world's own things stand on it, as its
+    /// `Startup` did once the land was made: an experiment's dug course or dungeon and where
+    /// it says the player arrives, its scene, the land's colours it presets.
+    Stage,
     /// What stands in the world from the first: the sea, the sun, the sky, the lakes.
     Place,
     /// This machine's body and the camera stood at the arrival.
@@ -292,7 +296,12 @@ pub fn plugin(app: &mut App) {
         .configure_sets(
             OnEnter(InWorld),
             (
-                (Building::Land, Building::Place, Building::Arrive)
+                (
+                    Building::Land,
+                    Building::Stage,
+                    Building::Place,
+                    Building::Arrive,
+                )
                     .chain()
                     .before(TransformSystems::Propagate),
                 Building::View.after(TransformSystems::Propagate),

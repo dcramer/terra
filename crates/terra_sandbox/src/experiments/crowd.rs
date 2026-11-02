@@ -18,6 +18,7 @@ use terra_game::{
     planet::{MainCamera, Planet},
     shell::Options,
 };
+use terra_world::instance::{Building, InWorld};
 
 const BODY: &str = "models/character/base.glb";
 const OUTFIT: [&str; 4] = ["leather_coat", "trousers", "small_pack", "quiver"];
@@ -37,7 +38,7 @@ struct Crowd {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Startup, setup)
+    app.add_systems(OnEnter(InWorld), setup.in_set(Building::Stage))
         .add_systems(Update, (spawn, report));
 }
 
