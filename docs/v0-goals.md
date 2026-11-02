@@ -128,6 +128,8 @@ The proof that a realm is data. instances.md's playground proves loading and not
 
 ### Animation (5)
 
+The people's log and next steps: [v0-characters.md](v0-characters.md).
+
 - **Have**: the method (animation.md, D584, D585). People by the character pipeline (D115), moving onto Quaternius's bodies and outfits in our paint (D599). Sixteen animal kinds on two body plans, their skeletons placed by hand (creature-rigs.md).
 - **Need**: creature-rigs.md's order of work: the creature check, body plans as data, skeletons fitted to the mesh, weights, paces from size. Then one template body for each plan monsters need. The man and the woman on D599's bodies, by its jobs, before the player's locomotion and fight sets are finished on them, one job a body at a time. Which plans come first is D436, how monsters move D438, and blows from a pose sheet D588.
 - **Done when**: for each plan v0 uses, a new creature goes from a concept to the game with no hand edits, passes the creature check, and scores 7 or more on review (D437). The time and credits a creature takes are reported, since that sets how many a realm can have.
