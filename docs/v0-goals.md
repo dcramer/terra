@@ -24,12 +24,12 @@ The earlier MVP (D105, [prototypes.md](prototypes.md)) asks whether the core loo
 
 ## The demo arc
 
-The developers' outline, 2026-11-01, with the details still theirs (Q7 to Q9):
+The developers' outline, 2026-11-01, the details left for later:
 
 1. **Prepare**: the player gets ready for the boss by "some stuff (maybe level up or something, progress around? find clues?)".
 2. **Beat the boss**, in the main world. A magic mark imprints on your arm (D590).
 3. **Open the gate** with the mark.
-4. **Cross**, and the demo is over. The other world is playable, with no more progression.
+4. **Cross.** The demo doesn't end formally: the other world is playable, with no more progression.
 
 The arc is a line through the engine, not a progression system: it should add as little as it can.
 
@@ -69,7 +69,7 @@ Each track can run beside the others. "Waits on" is what it truly needs first. A
 |---|---|---|---|---|
 | **Front** | 1 | Seam 2; Server for join | `terra_game::play::title`, `worlds` | Nothing |
 | **Realms** | 2 | Seams 1, 2 | `terra_world::instance`, each module's `entering`, `play::save` | Land, Living world, at each module's entry |
-| **Realm two** | 2 | Realms for the crossing; can start its art now | `assets`, `art`, the realm's data | Nothing |
+| **Realm two** | 2 | Its theme, settled later; Realms for the crossing | `assets`, `art`, the realm's data | Nothing |
 | **Land** | 3 | Seam 2 | `terra_land`, `terra_voxel`, `terra_world::planet` | Realms, at the planet |
 | **Living world** | 3 | Nothing | `terra_climate`, `terra_world` sky, weather, wind, flora | Realms, at each module's entry |
 | **Body** | 4 | Server, for prediction | `terra_motion`, `terra_walker` | Animation, on the player's body |
@@ -83,27 +83,26 @@ Each track can run beside the others. "Waits on" is what it truly needs first. A
 ### Front (1)
 
 - **Have**: the title screen (D579, `--title`): Continue, Worlds, New world, The yard, Settings, Quit. Several worlds, each with a name and mode, kept on disk. Deleting asks first.
-- **Need**: a seed on New world, rolled by default, typed if wanted, kept in `world.ron` and shown in the list. New world options kept few (name, mode, seed, Q6). Host and Join. A screen for the creator of a few sliders (D111), which has none yet (`terra_walker::appearance` holds the look), so two players can tell each other apart. Quit to title without restarting the program, which a crossing's leaving should now make possible. A plain message for every way a join fails: wrong version, no answer, world full, connection lost.
+- **Need**: a seed on New world, rolled by default, typed if wanted, kept in `world.ron` and shown in the list. New world options kept few: name, mode, seed. Host and Join. A screen for the creator of a few sliders (D111), which has none yet (`terra_walker::appearance` holds the look), so two players can tell each other apart. Quit to title without restarting the program, which a crossing's leaving should now make possible. A plain message for every way a join fails: wrong version, no answer, world full, connection lost.
 - **Done when**: a scripted run makes two worlds from different seeds, sees different land, and returns to the title and loads the first, in one process.
-- **Note**: D579 says no seed is offered, because the land was one world. Generating from a seed removes that reason, but the decision is the developers' to amend (Q2).
 
 ### Realms (2)
 
 - **Have**: `terra_world::instance` built: states, scoping, leaving, the census, crossing in one frame, and a round-trip test with no GPU. Most modules are built on entering.
-- **Need**: the rest of the modules moved (fire, the map, the soundscape). A gate entity, `Door`, with its model and effect. Asset sets (D471). The save split into a character's and an instance's (D471). The return stack (D470). Warming as you approach. A gate placed by generation in each realm, from the seed, on reachable ground (Q3).
+- **Need**: the rest of the modules moved (fire, the map, the soundscape). A gate entity, `Door`, with its model and effect. Asset sets (D471). The save split into a character's and an instance's (D471). The return stack (D470). Warming as you approach. A gate placed by generation in each realm, from the seed, on reachable ground.
 - **Done when**: instances.md's test passes: five round trips with the census equal and memory within 2%; the cover under 3 s (D501), aiming under 1 s for a warmed realm.
 
 ### Realm two (2)
 
 The proof that a realm is data. instances.md's playground proves loading and nothing else; this proves a world of another theme comes out of the same rules. It needs enough of each part to show that, not a full realm's worth.
 
-- **Need**: its land recipe, ground materials, plants, sky and light, wildlife, monsters and sound, each by the existing pipelines and the art style (D14). A realm's parts are new; the rules are not. Survival's rules are the same in both realms, as the developers confirmed: the realm file can hold different air, cold and gravity (D61, D63), and v0 differs only by its climate.
+- **Need**: a theme, which someone settles later; until then Realms works with instances.md's placeholder realm. Then its land recipe, ground materials, plants, sky and light, wildlife, monsters and sound, each by the existing pipelines and the art style (D14). A realm's parts are new; the rules are not. Survival's rules are the same in both realms, as the developers confirmed: the realm file can hold different air, cold and gravity (D61, D63), and v0 differs only by its climate.
 - **Done when**: stills and a film pass review beside the first realm, and a stranger could tell them apart at a glance while seeing one game (D14). The generator states how many variants it makes (D182).
 
 ### Land (3)
 
-- **Have**: smooth voxels, dug and saved (`terra_voxel`). The land by its rules (`terra_land`). Forest, mountain lake, tundra and town, made as demos on the 30 km world at places their queries found. `play` itself runs a 2 km world with one seed; mountains need `--radius 30000` (Q4).
-- **Need**: the generator holding up on *any* seed, not on the demos' pinned places: a walkable start, biomes reached by walking, a blend between them, the gate reachable. Natural caves (D591): generated, streamed from below as well as round the player, lit underground, with a camera that works in tight space and a chamber that fits a 4 m troll on every seed. The moving origin (D36), which is not built, though the mover is already in 64-bit (D482). Streaming and load times at that size.
+- **Have**: smooth voxels, dug and saved (`terra_voxel`). The land by its rules (`terra_land`). Forest, mountain lake, tundra and town, made as demos on the 30 km world at places their queries found. `play` itself runs a 2 km world with one seed; mountains need `--radius 30000`.
+- **Need**: a first realm big enough for its biomes, mountains and caves, which means D13's 30 km; the second's size comes with its theme. The generator holding up on *any* seed, not on the demos' pinned places: a walkable start, biomes reached by walking, a blend between them, the gate reachable. Natural caves (D591): generated, streamed from below as well as round the player, lit underground, with a camera that works in tight space and a chamber that fits a 4 m troll on every seed. The moving origin (D36), which is not built, though the mover is already in 64-bit (D482). Streaming and load times at that size.
 - **Done when**: a sweep over at least 100 seeds (`cargo xtask fields`, by CPU, `terra_gen::par::map`) finds every world valid, a walked film crosses three biomes with no visible seam, and another goes from the surface down into a cave. Terrain still digs everywhere.
 
 ### Living world (3)
@@ -153,7 +152,7 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
   - **Always a client.** Even solo, the drawn game is a client of a server. Otherwise there are two code paths.
   - **Two realms at once.** One player can be in each realm, so a host's server runs both while its own client draws one. instances.md's split (a headless `App` per instance on the server, the client's world in the main `World`) means a host holds its realm twice. Measure that memory before building on it.
   - Sending by area, a snapshot then changes, others shown between ticks, late join, leaving and rejoining mid-fight, and a version check on connect.
-  - Each player's character kept by the server (D592) under an identity (Q1). When the host leaves, the session ends for everyone with a plain message and the world is saved, as the developers confirmed; there is no handing over to another player.
+  - Each player's character kept by the server (D592) under an identity, a key kept on the player's machine. Direct address first, Steam's relay later (D34). When the host leaves, the session ends for everyone with a plain message and the world is saved, as the developers confirmed; there is no handing over to another player.
   - Every action checked: in reach, owned, allowed (D51).
   - Text chat and a player list.
 - **Done when**: engine.md's test passes (two peers end the same, a late joiner catches up), then four clients for 30 minutes at 100 ms and 1% loss show no lasting mismatch, with the bytes per player per second reported.
@@ -203,20 +202,11 @@ D25 holds a client's frame and D501 a crossing. Nothing yet holds the rest, and 
 
 Each track gets a bounded plan of its own, and a skill or scorecard if it lacks one (controller, combat and environment have theirs), before its first job. Server, Sound and Creatures start from a research note and a design, since they have neither (D49, D196).
 
-## Questions for the developers
+## Left for later
 
-Design calls, each with a recommendation; none is settled until they say so. Q1 to Q4 shape the engine; Q7 to Q9 shape the demo.
+The developers, 2026-11-01: "who cares who v0 is for, its a demo. the seed is just an rng thing like normal procedural generation goes. the second realm someone else will figure out later, world size idk big enough?, we will figure out boss/boss fight rules/etc later.. demo doesnt \"end\" formally".
 
-| # | Question | Recommended |
-|---|---|---|
-| Q1 | Who is v0 for, and how do they connect? | The two developers and a few friends, 2 to 4 at once. A player hosts; a host-less dedicated server comes later, from the same code (D51). Direct address first, Steam's relay when strangers' routers get in the way (D34). A player is identified by a key kept on their machine |
-| Q2 | Does a world have a seed? D579 says no | Yes: D579's reason lapses once land comes from the seed. Amend it |
-| Q3 | What is the second realm? "Scifi" meets settings.md's "no science fiction toolsets" and "no machine guns" | A dead realm of magic-machine ruins under a strange sky, from settings.md's techno realm: alien and technological, yet still magic. Its builders made the gate, which fits the stargate. Its monsters are guardians and things grown in the ruins. Its gate is found in the world and walked through (D72) |
-| Q4 | What is "real scale"? `play` is 2 km in radius today; the mountains and D13 say 30 km | 30 km for the first realm, since biomes need the room. 10 to 20 km for the second |
-| Q5 | How many biomes? | At least three in the first realm (forest, mountain lake, tundra) and two in the second |
-| Q6 | Which options has a new world? | Name, mode and seed. No more until there is something to tune |
-| Q7 | What does a player do to reach the boss? | Nothing new: skills by doing (D88) and gear crafted in the first realm, with a boss that starting gear cannot beat. The gate is found early, dark and shut, so a player knows what they are after. The boss's place is found by looking, with no markers (D92): something on the land seen from far off. Clues only if a playtest shows players lost |
-| Q8 | How does the boss fight work? | A second player doesn't make it stronger. It heals when nobody is left near it. No bar or name over it, as player.md's rule; its body shows how it fares |
-| Q9 | How does the demo end? | A short notice the first time a player crosses, and they keep playing |
+- **The second realm's theme.** Whoever takes it has "scifi or something else" to start from, and settings.md's standing "no science fiction toolsets" and "no machine guns" to square with it; that doc's techno realm is worked through already.
+- **The way to the boss and the fight's rules**: what a player does first, how the fight goes.
 
 Open decisions v0 will meet, by track: D134 day length (Living world), D436 and D438 monsters (Animation), D580 load time (Land, Front), D588 pose sheets (Animation), audio.md's music and voices (Sound).

@@ -1126,3 +1126,5 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-01**: D592 decided (by the developers: "characters get saved on the server"): a character's record is kept by its server, with the world.
 - **2026-11-01**: D589 amended (on the developers' word: "we dont care about dates etc"): no date, owners or cut order in v0's plan; docs/v0-goals.md's questions cut to nine.
 - **2026-11-01**: D589 amended (on the developers' word: "yeah if host leaves session ends, at some point we'd probably have host-less dedicated server"): a host leaving ends the session in v0; a dedicated server as a way to play is out of v0, built later from the same code (D51).
+- **2026-11-01**: D579 amended (by the developers: "the seed is just an rng thing like normal procedural generation goes"): a new world rolls a seed and keeps it; "no seed is offered" is gone.
+- **2026-11-01**: D589 amended (on the developers' word): its questions closed; v0's audience is not a question, the first realm is big enough at D13's 30 km, the demo doesn't end formally, and the second realm's theme, the way to the boss and the fight's rules are left for later.
