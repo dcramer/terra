@@ -312,30 +312,22 @@ for (const quality of qualities) {
   rmSync(out, { recursive: true, force: true });
   mkdirSync(resolve(out, "sheet"), { recursive: true });
   const runs = RUNS.filter((run) => only.includes(run.check));
-  // Two runs at a time share the GPU.
+  // One run after another, as the game allows one copy a machine (D319).
   const results: Result[][] = [];
-  for (let i = 0; i < runs.length; i += 2) {
-    const batch = runs.slice(i, i + 2);
-    const done = await Promise.all(
-      batch.map((run) => {
-        const dir = resolve(out, `${run.check}-${run.name}`);
-        mkdirSync(dir, { recursive: true });
-        const [command, words] = offscreenRun(`artifacts-${run.check}-${run.name}`, [
-          "--clean", "--quality", quality, ...run.args,
-          "--shots", `${offscreenPath(dir)}/f@${run.shots ? run.shots.join(",") : `${run.frames[0]}-${run.frames[1]}`}`,
-        ]);
-        return runCommand(command, words);
-      }),
-    );
-    batch.forEach((run, k) => {
-      const { status, said } = done[k];
-      if (status !== 0 || !said.includes("SANDBOX saved")) {
-        console.error(said.split("\n").slice(-20).join("\n"));
-        process.exit(1);
-      }
-      if (/thread .* panicked|ERROR/.test(said)) console.log(`artifacts: ${run.check} ${run.name}: the run reported errors:\n${said.split("\n").filter((l) => /panicked|ERROR/.test(l)).slice(0, 5).join("\n")}`);
-      results.push(analyse(run, resolve(out, `${run.check}-${run.name}`), quality));
-    });
+  for (const run of runs) {
+    const dir = resolve(out, `${run.check}-${run.name}`);
+    mkdirSync(dir, { recursive: true });
+    const [command, words] = offscreenRun(`artifacts-${run.check}-${run.name}`, [
+      "--clean", "--quality", quality, ...run.args,
+      "--shots", `${offscreenPath(dir)}/f@${run.shots ? run.shots.join(",") : `${run.frames[0]}-${run.frames[1]}`}`,
+    ]);
+    const { status, said } = await runCommand(command, words);
+    if (status !== 0 || !said.includes("SANDBOX saved")) {
+      console.error(said.split("\n").slice(-20).join("\n"));
+      process.exit(1);
+    }
+    if (/thread .* panicked|ERROR/.test(said)) console.log(`artifacts: ${run.check} ${run.name}: the run reported errors:\n${said.split("\n").filter((l) => /panicked|ERROR/.test(l)).slice(0, 5).join("\n")}`);
+    results.push(analyse(run, dir, quality));
   }
   console.log(`artifacts: ${quality}:`);
   for (const [r, run] of results.map((r, i) => [r, runs[i]] as const)) {

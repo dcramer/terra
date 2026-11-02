@@ -5,7 +5,7 @@
 // measures, each hour gated by their middle-half mean (`held`). Exit 1 when either hour misses.
 //
 // The gate is paired (paired.ts): the base (`--base <sha>`, else where HEAD leaves origin/main) is
-// built in a worktree of its own and filmed beside the build in the same run, and a measure the
+// built in a worktree of its own and filmed after the build in the same run, and a measure the
 // build misses passes when the build is no further outside its bar than the base, within the
 // run-to-run spread repeat films of one flame show. `--alone` films the build alone, bars only.
 // A base that falls to the build itself (HEAD, nothing uncommitted: on the worker, a --dirty job's
@@ -262,7 +262,7 @@ if (import.meta.main) {
   const opt = (k: string) => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : undefined);
   const seconds = +(opt("--seconds") ?? 20);
   if (argv[0] === "--side") {
-    // A side's films, run by the gate as a process of its own so base and build film side by side.
+    // A side's films, run by the gate as a process of its own, with its own log beside its films.
     const [, root, bin, out, secs, rev, films] = argv;
     filmSide(root, bin, out, +secs, rev, films === "--films");
     process.exit(0);
@@ -303,17 +303,16 @@ if (import.meta.main) {
         const p = spawn(process.execPath, [fileURLToPath(import.meta.url), "--side", r, b, out, String(seconds), rev, ...keep], { cwd: r, stdio: ["ignore", log, log] });
         p.on("exit", (code) => done(code ?? 1));
       });
-    // The base films beside the build, at once, so whatever the box does meanwhile falls on both.
-    const sides = [side(root, join(root, "target/gate/build-sandbox"), join(OUT, "build"), head)];
-    if (base) sides.push(side(other.root, other.bin, join(OUT, "base"), base.rev));
-    const codes = await Promise.all(sides);
+    // The base films after the build, not beside it: the game allows one copy a machine (D319).
+    const codes = [await side(root, join(root, "target/gate/build-sandbox"), join(OUT, "build"), head)];
+    if (base) codes.push(await side(other.root, other.bin, join(OUT, "base"), base.rev));
     const bad = codes.map((c, i) => (c ? join(OUT, ["build", "base"][i], "side.log") : "")).filter(Boolean);
     if (bad.length) {
       console.log(`✗ films failed: ${bad.join(", ")}`);
       process.exit(1);
     }
     if (base && !base.same) git(root, ["worktree", "remove", "--force", other.root]);
-    const what = base ? `the build and base ${base.rev.slice(0, 9)}${base.same ? " (HEAD, one build filmed twice)" : ""} side by side` : "the build alone";
+    const what = base ? `the build and base ${base.rev.slice(0, 9)}${base.same ? " (HEAD, one build filmed twice)" : ""} one after the other` : "the build alone";
     console.log(`✓ filmed ${what}: ${PLACEMENTS.length} placements x ${TAKES} takes x ${HOURS.length} hours, ${seconds} s each, in ${OUT} (${argv.includes("--films") ? "films kept" : "measures only; --films keeps the films"})`);
     process.exit(judge(OUT, alone) ? 1 : 0);
   }

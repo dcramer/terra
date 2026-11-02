@@ -100,8 +100,11 @@ if (!args.includes("--check")) {
   console.log(`yard: built (${took()})`);
   const work = resolve(ROOT, "shots/controller-yard");
   rmSync(work, { recursive: true, force: true });
-  // Beside them the bone audit's run on the bare yard (bones.ts), its own record in bones/.
-  const runs = await Promise.all([...[...PACES, LAKE].map((pace) => film(pace, work)), bonesRun(join(out, "bones")).then((r) => ({ name: "bones", ...r }))]);
+  // One run after another, as the game allows one copy a machine (D319); then the bone audit's
+  // run on the bare yard (bones.ts), its own record in bones/.
+  const runs: { name: string; ok: boolean; log: string }[] = [];
+  for (const pace of [...PACES, LAKE]) runs.push(await film(pace, work));
+  runs.push({ name: "bones", ...(await bonesRun(join(out, "bones"))) });
   for (const each of runs.filter((r) => !r.ok)) console.log(`yard: ✗ ${each.name} did not finish; its log: ${each.log}`);
   console.log(`yard: ran ${runs.map((r) => `${r.name}${r.ok ? "" : " (did not finish)"}`).join(", ")} (${took()})`);
   const done = (runs: Run[]) => runs.every((pace) => finished(pace.name));

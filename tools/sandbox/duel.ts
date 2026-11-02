@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The yard's duel, filmed and checked (docs/movement.md's Look row): the player driven by
 // the fight script (`--duel duels/yard.ron`) against the sparring partner, run four times
-// side by side, each filmed from one camera by `--cine` (the HUD hidden, the exposure and
+// one after another (one game copy a machine, D319), each filmed from one camera by `--cine` (the HUD hidden, the exposure and
 // clock held): from the side, from behind the player's right shoulder and raised, from
 // above, and the game's own camera behind the player. Each run writes its fight record
 // (`--fight-log`); the four must be the same fight, and the checks in duel/checks.ts read
@@ -93,7 +93,9 @@ mkdirSync(out, { recursive: true });
 if (!buildOffscreen()) process.exit(1);
 console.log(`duel: built (${took()})`);
 rmSync(work, { recursive: true, force: true });
-const filmed = await Promise.all(CAMERAS.map((camera) => film(camera)));
+// One camera's run after another, as the game allows one copy a machine (D319).
+const filmed: { name: string; ok: boolean; log: string }[] = [];
+for (const camera of CAMERAS) filmed.push(await film(camera));
 for (const each of filmed.filter((each) => !each.ok)) console.log(`duel: ✗ ${each.name} did not finish; its log: ${each.log}`);
 console.log(`duel: filmed ${filmed.map((each) => `${each.name}${each.ok ? "" : " (did not finish)"}`).join(", ")} (${took()})`);
 const { ok, records, unfinished } = judged();

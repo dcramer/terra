@@ -120,7 +120,9 @@ if (!args.includes("--check")) {
   if (!buildOffscreen()) process.exit(1);
   console.log("layers: built");
   rmSync(work, { recursive: true, force: true });
-  const ran = await Promise.all(COLUMNS.map(film));
+  // One column after another, as the game allows one copy a machine (D319).
+  const ran: boolean[] = [];
+  for (const column of COLUMNS) ran.push(await film(column));
   if (ran.every(Boolean)) compose();
 } else if (COLUMNS.every((c) => existsSync(frame(c.name, LAST)))) {
   // A run's frames left by a composition that failed: composed again.
