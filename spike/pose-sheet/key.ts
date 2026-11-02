@@ -14,12 +14,15 @@
 //   hand_l {at, elbow}                   an offset; else it rides half the chest's turn
 //   clav_r / clav_l {up, forward}        the shoulder lifted and pushed forward
 //   foot_r / foot_l {at, yaw, heel}      the ball moved, turned, the heel raised over the ball
-//   arm_r / arm_l {forward, out, elbow}  with `hang`: empty arms ride the chest as the guard hangs
-//   palms {r, l}                         with `hang`: degrees each forearm rolls the palm toward the thigh
-//   arms_in {r, l}                       with `hang`: degrees each arm hangs nearer the side, the whole clip
-//                                        them, swayed by these degrees; hand_r and hand_l are unused
+//   arm_r / arm_l {forward, out, elbow}  with `hang`: empty arms hang as `rest_arm` sets them, swayed
+//                                        by these degrees; hand_r and hand_l are unused
+// `rest_arm` {out, forward, turn_in, elbow, palm} poses both empty arms afresh from the bind pose,
+// nothing kept from the guard, the same both sides: the upper arm degrees out from straight down
+// and forward of it, turned in about its length (the forearm swings toward the thigh's front),
+// the elbow bent, the palm rolled from facing the thigh (+ toward the front). `fingers` is the
+// degrees each finger curls over its three joints, the little finger most (the resting cascade).
 // `loop` makes the curve run on through the seam; the last key must equal the first.
-// `start` {chest, head, shoulders, stance} sets the start pose afresh (below, where it is made).
+// `start` {pelvis, chest, head, shoulders, stance} sets the start pose afresh (below, where it is made).
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { apply, dot, Glb, len, qinv, qmul, rot, sub, type Pose, type Q, type V3 } from "../../tools/characters/glb.ts";
@@ -94,8 +97,8 @@ function fk(l: Pose[]): Pose[] {
 }
 // A new start pose (`start`): the guard's first frame with the chest, head and shoulders set
 // afresh, so a loop needn't inherit a turned head or raised shoulders from the clip it began on.
-// Its chest and head are degrees turned from the bind pose, in the model, a field left out keeping
-// the guard's; its shoulders are a clip's mean (the walk's, so the idle starts where the walk
+// Its hips, chest and head are degrees turned from the bind pose, in the model, a field left out
+// keeping the guard's (the hips' roll levelled, the shoulders sit alike either side); its shoulders are a clip's mean (the walk's, so the idle starts where the walk
 // carries them); the arms keep the way they hung in the guard.
 const spread: Record<string, V3> = { r: [0, 0, 0], l: [0, 0, 0] };
 if (spec.start) {
@@ -114,6 +117,7 @@ if (spec.start) {
     const a = { ...angles(qmul(w, qinv(bind[i].r))), ...want };
     return qmul(qmul(euler(a.yaw, a.pitch, a.roll), bind[i].r), qinv(w));
   };
+  if (s.pelvis) bend(base, id("pelvis"), toward(id("pelvis"), s.pelvis), fk(base));
   if (s.chest) {
     const c = toward(id("spine_03"), s.chest);
     for (const name of ["spine_01", "spine_02", "spine_03"]) bend(base, id(name), slerpId(c, 1 / 3), fk(base));
@@ -138,11 +142,14 @@ if (spec.start) {
     }
   }
   for (const side of ["r", "l"]) setWorld(base, id(`upperarm_${side}`), before[id(`upperarm_${side}`)].r, fk(base));
-  // The stance: the balls of the feet this far apart, metres, centred under the hips.
+  // The stance: the balls of the feet this far apart, metres, centred under the hips and level
+  // front to back (the guard's stagger dropped), measured after the hips are set.
   if (s.stance) {
-    const middle = (before[id("thigh_r")].t[0] + before[id("thigh_l")].t[0]) / 2;
+    const now = fk(base);
+    const middle = (now[id("thigh_r")].t[0] + now[id("thigh_l")].t[0]) / 2;
+    const ahead = (now[id("ball_r")].t[2] + now[id("ball_l")].t[2]) / 2;
     // He faces +Z, so his right is -X.
-    for (const [side, sign] of [["r", -1], ["l", 1]] as const) spread[side] = [middle + (sign * s.stance) / 2 - before[id(`ball_${side}`)].t[0], 0, 0];
+    for (const [side, sign] of [["r", -1], ["l", 1]] as const) spread[side] = [middle + (sign * s.stance) / 2 - now[id(`ball_${side}`)].t[0], 0, ahead - now[id(`ball_${side}`)].t[2]];
   }
 }
 const G = fk(base);
@@ -278,6 +285,62 @@ const chestG = G[id("spine_03")];
 const handLInChest = { t: rot(qinv(chestG.r), sub(G[id("hand_l")].t, chestG.t)), r: qmul(qinv(chestG.r), G[id("hand_l")].r) };
 const forearmAxis = norm(g.rest(id("hand_r")).t);
 
+// The resting arm (`rest_arm`, `fingers`), built from the bind pose so nothing of the guard's arm
+// survives. In the bind pose the arm lies out to the side, palm down, and its elbow bends toward
+// the front; the same hinge carried down the side gives the palm facing the thigh, thumb forward.
+const bindW = fk(nodes.map((_, i) => g.rest(i)));
+const rad = (d: number) => (d * Math.PI) / 180;
+const FINGERS: [string, number][] = [["index", 0.8], ["middle", 1], ["ring", 1.1], ["pinky", 1.25]];
+const JOINT_SHARE = [0.35, 0.45, 0.2];
+function restArm(l: Pose[], side: "r" | "l", turned: Q) {
+  const a = { out: 0, forward: 0, turn_in: 0, elbow: 0, palm: 0, ...spec.rest_arm };
+  const sign = side === "r" ? -1 : 1;
+  const b = (n: string) => id(`${n}_${side}`);
+  const f = rot(turned, [0, 0, 1]);
+  const ahead = norm([f[0], 0, f[2]]);
+  const outward = scale(cross([0, 1, 0], ahead), sign);
+  // The upper arm's way, and the way its elbow bends: ahead, turned in toward the thigh's front.
+  const D = norm(add(add([0, -1, 0], scale(outward, Math.tan(rad(a.out)))), scale(ahead, Math.tan(rad(a.forward)))));
+  const front = norm(perp(ahead, D));
+  const inward = norm(perp(scale(outward, -1), D));
+  const F = norm(add(scale(front, Math.cos(rad(a.turn_in))), scale(inward, Math.sin(rad(a.turn_in)))));
+  const A0 = norm(sub(bindW[b("lowerarm")].t, bindW[b("upperarm")].t));
+  const F0 = norm(perp([0, 0, 1], A0));
+  const R = qmul(basis(D, F, cross(D, F)), qinv(basis(A0, F0, cross(A0, F0))));
+  setWorld(l, b("upperarm"), qmul(R, bindW[b("upperarm")].r), fk(l));
+  // The bind pose's elbow is already a little bent; `elbow` is the whole bend.
+  const fore0 = norm(sub(bindW[b("hand")].t, bindW[b("lowerarm")].t));
+  const bent0 = (Math.acos(Math.max(-1, Math.min(1, dot(A0, fore0)))) * 180) / Math.PI;
+  const E = qmul(about(cross(D, F), a.elbow - bent0), R);
+  setWorld(l, b("lowerarm"), qmul(E, bindW[b("lowerarm")].r), fk(l));
+  // The palm rolls with the forearm, half of it up the twist bone, as a forearm rolls.
+  const roll = -sign * a.palm;
+  setWorld(l, b("hand"), qmul(about(rot(E, A0), roll), qmul(E, bindW[b("hand")].r)), fk(l));
+  for (const n of ["upperarm_twist_01", "lowerarm_twist_01"]) l[b(n)] = { ...l[b(n)], r: g.rest(b(n)).r };
+  l[b("lowerarm_twist_01")].r = qmul(l[b("lowerarm_twist_01")].r, about(g.rest(b("hand")).t, roll * 0.5));
+  // The fingers from flat, each curled toward the palm over its three joints.
+  if (spec.fingers === undefined) return;
+  for (const [finger] of FINGERS) {
+    for (let j = 0; j < 3; j++) {
+      const bone = b(`${finger}_0${j + 1}`);
+      l[bone] = { ...l[bone], r: g.rest(bone).r };
+    }
+  }
+  for (const [finger, k] of FINGERS) {
+    for (let j = 0; j < 3; j++) {
+      const w = fk(l);
+      const at = (n: string) => w[b(n)].t;
+      const along = norm(sub(at(`middle_01`), at("hand")));
+      const thumbward = norm(sub(at("index_01"), at("pinky_01")));
+      const palm = side === "r" ? cross(thumbward, along) : cross(along, thumbward);
+      const bone = b(`${finger}_0${j + 1}`);
+      const next = j < 2 ? b(`${finger}_0${j + 2}`) : b(`${finger}_04_leaf`);
+      const dir = norm(sub(w[next].t, w[bone].t));
+      bend(l, bone, about(cross(dir, palm), spec.fingers * k * JOINT_SHARE[j]), w);
+    }
+  }
+}
+
 function pose(t: number): Pose[] {
   const l = base.map((p) => ({ ...p }));
   // The hips, then the chest over them.
@@ -308,21 +371,16 @@ function pose(t: number): Pose[] {
     const forward = about(rot(turned, [0, 1, 0]), sign * num(`clav_${side}`, "forward", t));
     bend(l, id(`clavicle_${side}`), qmul(up, forward), w);
   }
-  // Empty arms hang from the chest, a little sway laid on at the shoulder and the elbow.
+  // Empty arms hang as `rest_arm` poses them, a little sway laid on at the shoulder and the elbow.
   if (spec.hang) {
     for (const side of ["r", "l"] as const) {
       const sign = side === "r" ? -1 : 1;
       const across = rot(turned, [1, 0, 0]);
+      if (spec.rest_arm) restArm(l, side, turned);
       w = fk(l);
-      bend(l, id(`upperarm_${side}`), qmul(about(across, -num(`arm_${side}`, "forward", t)), about(rot(turned, [0, 0, 1]), sign * (num(`arm_${side}`, "out", t) - (spec.arms_in?.[side] ?? 0)))), w);
+      bend(l, id(`upperarm_${side}`), qmul(about(across, -num(`arm_${side}`, "forward", t)), about(rot(turned, [0, 0, 1]), sign * num(`arm_${side}`, "out", t))), w);
       w = fk(l);
       bend(l, id(`lowerarm_${side}`), about(across, -num(`arm_${side}`, "elbow", t)), w);
-      // The palm rolls with the forearm, half of it up the twist bone, as a forearm rolls.
-      const roll = sign * (spec.palms?.[side] ?? 0);
-      w = fk(l);
-      bend(l, id(`hand_${side}`), about(sub(w[id(`hand_${side}`)].t, w[id(`lowerarm_${side}`)].t), roll), w);
-      const twist = id(`lowerarm_twist_01_${side}`);
-      l[twist] = { ...l[twist], r: qmul(l[twist].r, about(g.rest(id(`hand_${side}`)).t, roll * 0.5)) };
     }
   }
   // The sword hand goes to its place and points the blade; the shield rides the chest.

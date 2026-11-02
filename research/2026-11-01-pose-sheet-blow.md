@@ -123,3 +123,27 @@ The developer asked for the arms in, then: "remember this is a test of our new p
 Not carried by a clip swap: the carry poses made of the idle (`Carry_Torch` and the rest, `hold.py`) and its arm swing (`Idle_Loop.Arm_*_Add`, `additive.ts`) are built from `Idle_Loop` by the `fight` step, so landing the clip means rebuilding them from it and checking every carried look again (`moves.ts --carry`). The in-game film below swapped the clip and rebuilt the arm swing, not the carry poses.
 
 **In the game.** The first time the flow reached the game: the clip put into `base.glb` and `fight.glb` on a working copy (`glb_clips.ts`, `additive.ts`, `markers.ts`), the player filmed standing on the yard with empty hands (an empty slot pressed, since he starts holding the hammer, whose carry pose overrides the arm), from one fixed camera (`--cine`), then today's the same way, and the files put back. The game's pose layers (feet, gaze, the fit) run over the clip and change nothing the eye catches: the arms stay near the sides, the shoulders low, the pack's bedroll now showing over the lowered shoulder. A camera's `lens` in a `--cine` shot is not a 35 mm lens: 35 gives 22.6 degrees high, so a man at 3.4 m wants about 20. The look is the developer's to judge.
+
+## The idle's arms, from a person at ease
+
+2026-11-02. The developer, on the in-game film: "the arms still dont look natural?", then that the sheet's arms look wonky too. The sheet had been drawn with a render of our start pose as its reference, so it copied our arms. So the arms' bars came from people, not clips or sheets, and a new sheet was drawn from the brief alone (`idle-sheet-2.jpg`: no reference image, the arms written out: upper arm against the side, elbow a little bent and pointing back, hand resting against the outer thigh, palm in, thumb forward, fingers loosely curled).
+
+**The bars** (`rest.ts`): an upright CT of 79 adults standing at ease with "the palms touching the lateral sides of the thighs" (Yoshida et al. 2022, J Orthop Surg Res 17:239, PMC9013055): the arm 4.5 degrees out at the shoulder (IQR 1 to 8), the elbow bent 15.5 (13 to 18), the forearm mid-turn, the arm turned in 9. The resting hand's finger cascade (Lee and Jung 2014, Int J Occup Saf Ergon 20:91). Gaps are skin to skin on every body template, from the move check's skin.
+
+**The bought idles are no bar.** Measured with the same tool, they all hold the arms off the body: Quaternius UAL1's `Idle_Loop` 17 to 20 degrees out, its fingers near a fist (155); the Uthana takes 7 to 25 out, palms turned back 40 to 60 (their prompt asked for arms "a little away from the body"). Arms held out clear every body, which is why bought clips do it.
+
+| | `Idle_Loop` | `Sheet_Idle` before | `Sheet_Idle` now |
+|---|---|---|---|
+| Upper arm out | 12..20° ✗ | 3..8° | 6..9° |
+| Elbow bent | 3..16° ✗ | 4..11° ✗ | 17..20° |
+| Palm from facing the thigh | -8..30° ✗ | -14..-8° | -18..-11° |
+| Fingers (middle, two joints) | 6..74° ✗ | 52..71° | 72..77° |
+| Hand gap, male / female | 15..19 / 10..13 cm ✗ | 4..8 / 0..5 cm ✗ | 1..4 / -2..2 cm (game: -1..3) |
+| `moves.ts` hands | -7.5 cm | -0.8 cm | 0.8 cm (bar 2) |
+| Blend to the walk, first pose | 8.5 cm | 4.5 cm | 3.8 cm |
+
+**What changed.** `key.ts` `rest_arm` poses both arms whole from the bind pose (out, forward, turned in, elbow, palm; the same both sides), `fingers` curls each finger in the resting cascade; `arms_in` and `palms` are gone. The new sheet's panel 1 measured by eye: upper arm 5 degrees out, the forearm foreshortened for a bend of 15 to 20, hands touching the thighs, palms in, fingers curled; it passed the bars, so it was keyed (out 7.5 on our broader body, turned in 20, elbow 18, fingers 90). Its other panels barely move, so the weight shifts stay the keys' (as the idle note above says), the glance taken from its panel 4 (15 degrees). The start levelled the hips and set the feet level front to back: the guard's tilted hips and staggered feet had put one hand 2 cm nearer its thigh than the other.
+
+**Every body.** The hand touches the thigh on the widest hips and hangs 2 to 4 cm off it on the thin body; the hips' sway moves it 3 cm more. One clip can't touch every thigh, so the clip is posed for the middle and the game's per-body correction (D535's hip keeping, `rest.ts --arms`) turns the arm out where a wide body would take the hand in: as the game composes it, every template passes. The clip alone has the right hand 2 cm into the female thigh at the deepest of the sway (bar 1.5).
+
+**The clothes.** The shirt's swollen shoulders were not changed and are a later job; with the arms against the sides they will show more, since the sleeve now sits on the ribs.

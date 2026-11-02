@@ -26,7 +26,7 @@ Moves with a clear start and end that no source does well: blows first, then a t
 
 It is not for walking, running or swimming. Those are long cycles that bought clips already do well, and a person keying them by hand is slow in any studio.
 
-A small loop such as an idle goes through the same steps with less from the sheet: its panels barely differ, so the sheet gives the idea and the keys give the numbers ([the try](../research/2026-11-01-pose-sheet-blow.md#the-idle-one-flow)). It starts on a neutral pose of its own (`start`: head ahead, the walk's shoulders, feet under the hips), not the old clip's first frame, whose faults it would copy; its last key equals its first, and its speed runs on through the seam (`loop`). Its empty arms hang from the chest (`hang`). `mesh.ts` is for blows; a loop's gates are the seam, the feet and `moves.ts`'s `hands` row, with `--also` naming the clip.
+A small loop such as an idle goes through the same steps with less from the sheet: its panels barely differ, so the sheet gives the idea and the keys give the numbers ([the try](../research/2026-11-01-pose-sheet-blow.md#the-idle-one-flow)). It starts on a neutral pose of its own (`start`: hips level, head ahead, the walk's shoulders, feet level under the hips), not the old clip's first frame, whose faults it would copy; its last key equals its first, and its speed runs on through the seam (`loop`). Its empty arms are posed whole from the bind pose (`hang`, `rest_arm`, `fingers`), never as corrections on the old clip's arms. `mesh.ts` is for blows; a loop's gates are the seam, the feet and `moves.ts`'s `hands` row, with `--also` naming the clip.
 
 ## Why it should hold up
 
@@ -49,6 +49,8 @@ One move, one owner. Each step says what stops the job.
    - a plain grey ground, clear outlines, no blur or effects;
    - each panel's pose in a sentence, and which feet stay planted.
 
+   **Check the reference before keying.** A sheet drawn from our own render inherits that render's faults (the idle's sheet copied our stiff, flared arms), so a reference render must first pass the real-pose bars (`rest.ts` for empty hands), and the sheet's poses are measured against the same bars before a key is read from them; for a pose our render gets wrong, draw from the brief alone, with no reference.
+
    The brief decides how good the sheet is. On the idle, a vague prompt gave twelve near-identical panels; asking for one row of five, each panel's difference spelled out, and the hands by name gave poses worth keying. Fewer panels work for a small move.
 
    Reject a sheet whose body can't do what it shows, or whose item changes between panels. Draw a new one; don't argue with it. The image model may ignore the layout: read what it drew by the poses, not its panel numbers.
@@ -57,7 +59,7 @@ One move, one owner. Each step says what stops the job.
 6. **Pass the gates**, before any film:
    - `tools/characters/mesh.ts`: the start, the feet, the speed and the hit's moment against the guard;
    - `tools/characters/moves.ts`: the wrist, the grip, the sword through its own shield, and hands into the body on every body template;
-   - `spike/pose-sheet/rest.ts`, for empty hands: palms not forward, arms near the sides, against `Walk_Loop`.
+   - `spike/pose-sheet/rest.ts`, for empty hands: the upper arm against the side, the elbow a little bent, the palm toward the thigh and touching it, the fingers curled, on every template, against a person at ease (an upright CT study), not a clip; `--arms` as the game composes it.
 
    `mesh.ts` and the `held` rows are for blows; an idle doesn't use them.
 
@@ -71,7 +73,7 @@ One move, one owner. Each step says what stops the job.
 - `spike/pose-sheet/key.ts`: keys to clip, for the player's body and one guard. It sets the hips, chest, head, shoulders, sword hand and its blade, the shield's offset, and each foot and heel, and solves the arms and legs to reach them.
 - `spike/pose-sheet/stills.py`: the stills for step 5.
 - `spike/pose-sheet/slash.json` and `slash-sheet.jpg`: the worked example.
-- `spike/pose-sheet/idle.json` and `idle-sheet.jpg`: a loop, with `loop`, `hang` and a neutral `start`.
+- `spike/pose-sheet/idle.json` and `idle-sheet-2.jpg`: a loop, with `loop`, `hang`, `rest_arm` and a neutral `start`, keyed from a sheet drawn from the brief alone (`idle-sheet.jpg`, drawn from our render, copied its arms).
 - `spike/pose-sheet/rest.ts` and `blend.ts`: empty hands hanging as a person's do, and a start's distance from the clips the game blends into.
 
 ## What it still lacks
