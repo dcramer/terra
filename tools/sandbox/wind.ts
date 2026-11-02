@@ -15,9 +15,11 @@
 // - amplitude: the median tile's RMS shift about its own mean, pixels a tenth of a second;
 // - shared: the share of that motion one shift common to the whole view explains (1: the view
 //   slides as one block; 0: every tile moves on its own);
-// - neighbour r: how alike side-by-side tiles' motion is (their correlation), and 4 apart.
-// It fails, exit 1, when shared or neighbour r is above Enshrouded's (SHARED, NEIGHBOUR), or
-// when nothing moved. Needs ffmpeg. Node 22.18 or later; no dependencies.
+// - neighbour r: how alike side-by-side tiles' motion is (their correlation), and 4 apart;
+// - second against step: how much further a tile moves over a second than over a step (a
+//   sway near 10, a buzz under 2).
+// It fails, exit 1, when shared or neighbour r is above Enshrouded's (SHARED, NEIGHBOUR), when
+// the motion buzzes (under SLOW), or when nothing moved. Needs ffmpeg. Node 22.18 or later; no dependencies.
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
@@ -29,6 +31,9 @@ import { place } from "./places.ts";
 /// to 0.43 (the research note's table; the clips in ~/.cache/terra-review/refs/enshrouded/yt/).
 export const SHARED = 0.3;
 export const NEIGHBOUR = 0.5;
+/// And its motion over a second at least this many times a step's: Enshrouded's 7.2 to 7.3
+/// and main's 7.9 sway; D597's first experiment, at 2.0 to 3.1, buzzed.
+export const SLOW = 5;
 
 /// The size the film is measured at, the tile and how far a tile is searched.
 export const WIDTH = 640;
@@ -48,7 +53,14 @@ export type Motion = {
   shared: number;
   neighbour: number;
   apart4: number;
+  /// The median moving tile's RMS shift over a second against over a step: a slow sway is
+  /// near the second's steps (10), random jitter their root (3.2), a buzz faster than half a
+  /// second under 2 (the wind round's judge: a flap that reads as an electric fan).
+  slow: number;
 };
+
+/// Steps in the `slow` measure's window: a second at a tenth of a second a step.
+const SLOW_STEPS = 10;
 
 const mean = (v: number[]) => v.reduce((p, q) => p + q, 0) / Math.max(1, v.length);
 const corr = (p: number[], q: number[]) => {
@@ -167,7 +179,32 @@ export function measure(frames: Uint8Array[], top = 0.6, step = 3): Motion {
     return r.length ? mean(r) : Number.NaN;
   };
   const sorted = [...rms].sort((p, q) => p - q);
+  // Each moving tile's shift summed over a second's window, about its mean, against a step's.
+  const slows = moving
+    .map((k) => {
+      const mx = mean(dxs[k]);
+      const my = mean(dys[k]);
+      let quick = 0;
+      for (let t = 0; t < steps; t++) quick += (dxs[k][t] - mx) ** 2 + (dys[k][t] - my) ** 2;
+      quick /= Math.max(1, steps);
+      let long = 0;
+      let windows = 0;
+      for (let t = 0; t + SLOW_STEPS <= steps; t++) {
+        let sx = 0;
+        let sy = 0;
+        for (let u = t; u < t + SLOW_STEPS; u++) {
+          sx += dxs[k][u] - mx;
+          sy += dys[k][u] - my;
+        }
+        long += sx * sx + sy * sy;
+        windows++;
+      }
+      return quick > 0 && windows > 0 ? Math.sqrt(long / windows / quick) : Number.NaN;
+    })
+    .filter((v) => !Number.isNaN(v))
+    .sort((p, q) => p - q);
   return {
+    slow: slows.length ? slows[Math.floor(slows.length / 2)] : Number.NaN,
     steps,
     textured: live.length,
     moving: moving.length,
@@ -185,6 +222,7 @@ export function judge(m: Motion): string[] {
   const failed: string[] = [];
   if (!(m.shared <= SHARED)) failed.push(`shared ${m.shared.toFixed(2)} over ${SHARED}: the crowns slide as one block`);
   if (!(m.neighbour <= NEIGHBOUR)) failed.push(`neighbour r ${m.neighbour.toFixed(2)} over ${NEIGHBOUR}: neighbouring patches move alike`);
+  if (!(m.slow >= SLOW)) failed.push(`second against step ${m.slow.toFixed(1)} under ${SLOW}: the crowns buzz rather than sway; slow the fastest level (the cards' flap)`);
   return failed;
 }
 
@@ -200,7 +238,7 @@ export function decode(clip: string): Uint8Array[] {
 
 const line = (name: string, m: Motion) =>
   `${name}: amplitude ${m.amplitude.toFixed(2)} px (p90 ${m.p90.toFixed(2)}), shared ${m.shared.toFixed(2)} (at most ${SHARED}), ` +
-  `neighbour r ${m.neighbour.toFixed(2)} (at most ${NEIGHBOUR}), 4 apart ${m.apart4.toFixed(2)}; ${m.moving} of ${m.textured} tiles moving`;
+  `neighbour r ${m.neighbour.toFixed(2)} (at most ${NEIGHBOUR}), 4 apart ${m.apart4.toFixed(2)}, second against step ${m.slow.toFixed(1)} (at least ${SLOW}); ${m.moving} of ${m.textured} tiles moving`;
 
 /// The views a still camera films: up under a crown by the spruce grove, where the research
 /// note measured 0.85 shared and r 0.91 on main (2026-11-02, its film `wind-oak.mp4`). The

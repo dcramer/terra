@@ -1,5 +1,5 @@
 // The still-camera wind measure (wind.ts) on made-up films whose answers are known: a picture
-// sliding as one block, tiles each moving on their own, and nothing moving.
+// sliding as one block, tiles each moving on their own, nothing moving, a sway and a buzz.
 // `node --test tools/sandbox/wind.test.ts`.
 
 import assert from "node:assert/strict";
@@ -39,10 +39,11 @@ test("a picture sliding as one block is all shared motion, neighbours alike, and
   assert.ok(m.moving > 20, `${m.moving} tiles moving`);
   assert.ok(m.shared > 0.95, `shared ${m.shared}`);
   assert.ok(m.neighbour > 0.95, `neighbour r ${m.neighbour}`);
-  assert.equal(judge(m).length, 2);
+  // Shared, neighbours alike, and (a new place each step) a buzz.
+  assert.equal(judge(m).length, 3);
 });
 
-test("tiles each moving on their own share little motion, neighbours unlike, and pass", () => {
+test("tiles each moving on their own share little motion, neighbours unlike, and pass those", () => {
   // Each 32-pixel tile (the measure's, from 3 px in) shifts by its own amount each step.
   const tileOf = (x: number, y: number) => Math.floor((x - 3) / 32) + 100 * Math.floor((y - 3) / 32);
   const frames = Array.from({ length: 61 }, (_, t) =>
@@ -56,7 +57,12 @@ test("tiles each moving on their own share little motion, neighbours unlike, and
   assert.ok(m.moving > 20, `${m.moving} tiles moving`);
   assert.ok(m.shared < 0.15, `shared ${m.shared}`);
   assert.ok(Math.abs(m.neighbour) < 0.3, `neighbour r ${m.neighbour}`);
-  assert.deepEqual(judge(m), []);
+  // Jitter, a new place every step, goes no further in a second: it fails as a buzz alone.
+  assert.ok(m.slow < 1.5, `second against step ${m.slow}`);
+  assert.deepEqual(
+    judge(m).map((f) => f.split(" ")[0]),
+    ["second"],
+  );
 });
 
 test("a still picture has nothing moving and fails as no wind to judge", () => {
@@ -65,4 +71,16 @@ test("a still picture has nothing moving and fails as no wind to judge", () => {
   assert.equal(m.moving, 0);
   assert.equal(judge(m).length, 1);
   assert.match(judge(m)[0], /nothing moved/);
+});
+
+test("a slow sway moves far more over a second than a step; a buzz moves no further", () => {
+  // Positions a step apart (three frames, a tenth of a second at 30 a second).
+  const film = (at: (s: number) => number) => Array.from({ length: 181 }, (_, t) => frame(() => [at(Math.floor(t / 3)), 0]));
+  // Eight pixels each way over four seconds; and a pixel back and forth every step.
+  const sway = measure(film((s) => Math.round(8 * Math.sin((2 * Math.PI * s) / 40))));
+  const buzz = measure(film((s) => s % 2));
+  assert.ok(sway.slow > 5, `sway: second against step ${sway.slow}`);
+  assert.ok(buzz.slow < 1, `buzz: second against step ${buzz.slow}`);
+  assert.ok(!judge(sway).some((f) => f.includes("buzz")));
+  assert.ok(judge(buzz).some((f) => f.includes("buzz")));
 });
