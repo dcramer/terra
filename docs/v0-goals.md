@@ -1,6 +1,6 @@
 # v0 goals
 
-Status: **proposal, 2026-11-01** (D589, Open). The eight areas are the developers' list; the tracks, the gaps, the numbers and the order are the agent's recommendations, for the developers to edit. Nothing here overrides a decision until they settle it. v0 is the next milestone, not the entire game: **the foundations of the engine, with one thin demo on top**.
+Status: **decided, 2026-11-01** (D589). The eight areas and the demo are the developers'; the tracks, the gaps, the numbers and the order are the agent's, and change as the work teaches. v0 is the next milestone, not the entire game: **the foundations of the engine, with one thin demo on top**.
 
 The developers, 2026-11-01: "heres our major TODO, these are the things we think we need for a v0 (but its not the entire game)". Then: "we're not really solving the reason to cross or actual gameplay yet, just trying to get foundations of an engine in place". Then, on the demo: "when you beat the boss he drops an artifact, that artifact allows you to open the portal, and go to the other world, and thats basically the end of the demo (the other world is playable, but no more progression etc)".
 

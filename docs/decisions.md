@@ -43,7 +43,7 @@ What we are building, its tenets, scope and players.
 | [D127](decisions/D127.md) | Many of everything | Design | Developers | Decided | A core principle: assume a large quantity of every kind… |
 | [D182](decisions/D182.md) | Hundreds of variants, not millions | Design | Developers | Decided | A core tenet: almost everything is modular and… |
 | [D187](decisions/D187.md) | What we are building | Design | Developers | Decided | First and foremost, an extremely ambitious sandbox… |
-| [D589](decisions/D589.md) | The v0 milestone | Design | — | Open | Recommended: the next milestone is v0… |
+| [D589](decisions/D589.md) | The v0 milestone | Design | Developers | Decided | The next milestone is v0, the foundations of the engine… |
 | [D590](decisions/D590.md) | Beating the demo's boss imprints a mark on you | Design | Developers | Decided | In v0's demo (D589) the boss leaves no item… |
 | [D592](decisions/D592.md) | Characters are saved on the server | Design | Developers | Decided | A character's record is kept by the server it plays on… |
 

@@ -1,6 +1,6 @@
 # Prototypes
 
-The MVP, the first playable (D105), and how we judge it. Where the engine under it stands is in [engine.md](engine.md#tracks). The milestone proposed after it, with two realms and multiplayer, is [v0](v0-goals.md) (D589).
+The MVP, the first playable (D105), and how we judge it. Where the engine under it stands is in [engine.md](engine.md#tracks). The milestone after it, with two realms and multiplayer, is [v0](v0-goals.md) (D589).
 
 ## Before
 
