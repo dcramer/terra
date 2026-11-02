@@ -6,13 +6,17 @@
 // `wake` in its folder. It runs as a systemd user service or under `--supervise` (box.ts
 // install), and exits to be started again on new code when an update asks (`restart`), once its
 // jobs end. A job that draws gets a display (display.ts): an Xvfb the daemon keeps when it has
-// none. `--selftest` loads it and exits.
+// none. Before each job it checks the disk, prunes the box's caches when it runs low and starts
+// no job while it is full, never crashing on ENOSPC (guard.ts, `Keeper`). `--selftest` loads it
+// and exits.
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, watch, writeFileSync, writeSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
 import { Display } from "./display.ts";
+import { type DiskSettings, type DiskState, diskFull, diskSettings, fullMark, gb, type JobUse, KEEP, level, lowMark, type Prune, prune, pruneOrder, pruneTo, type SlotUse, type Space, space } from "./guard.ts";
 import { killNow, type Proc, reap, reaped, scan } from "./reap.ts";
 import { boxSettings, checkoutsInBuild, classOf, cleanCommands, collected, displayPlan, expired, ID, incrementalClears, type Job, jobEnv, jobRef, limitArgs, mayStart, needsDisplay, performanceCores, plan, type Policy, rustcIce, type Slots, type Start, short, staleBuild, steps, workspacePackages } from "./jobs.ts";
 
@@ -80,7 +84,7 @@ export async function reapOrphans(b: Box, mine: ReadonlySet<string>, graceMs?: n
   for (const id of new Set(r.found.map((p) => p.job))) {
     const log = join(outDir(b, id), "job.log");
     const one = { found: r.found.filter((p) => p.job === id), left: r.left.filter((p) => p.job === id) };
-    if (existsSync(dirname(log))) appendFileSync(log, `render-worker: ${reaped(id, one, "found running after its job ended (the daemon restarted during it, or it escaped its end)")}\n`);
+    if (existsSync(dirname(log))) append(log, `render-worker: ${reaped(id, one, "found running after its job ended (the daemon restarted during it, or it escaped its end)")}\n`);
     say(`${one.left.length ? "✗" : "✓"} ${id}: ${reaped(id, one, "orphans")}`);
   }
   return r.found;
@@ -159,17 +163,27 @@ async function endProcesses(id: string, r: Running, why: string, note: (line: st
   return last.found.length ? `stopped ${last.found.length} of its processes left running` : "";
 }
 
+/// A line in a log that is lost, not thrown, when the disk is full (guard.ts).
+function append(file: string, text: string): void {
+  try {
+    appendFileSync(file, text);
+  } catch (e) {
+    if (!diskFull(e)) throw e;
+  }
+}
+
 /// Runs one job to its end in its slot: its steps in the slot's checkout, then its files into out/.
-export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }, display?: Display, pCores?: string): Promise<Job> {
+/// `save` writes its record (the daemon's keeps it to write again when the disk is full).
+export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: queued, cancelled: false }, display?: Display, pCores?: string, save = (j: Job) => writeJob(b, j)): Promise<Job> {
   const bench = queued.kind === "run" && classOf(queued) === "bench";
   let job: Job = { ...queued, slot, state: "running", started: new Date().toISOString(), ...(bench ? { phase: "prep" as const } : {}) };
   r.job = job;
-  writeJob(b, job);
+  save(job);
   const out = outDir(b, job.id);
   mkdirSync(out, { recursive: true });
   const logFile = join(out, "job.log");
   writeFileSync(logFile, "");
-  const note = (line: string) => appendFileSync(logFile, `render-worker: ${line}\n`);
+  const note = (line: string) => append(logFile, `render-worker: ${line}\n`);
   const log = openSync(logFile, "a");
   let exit = 0;
   let why = "";
@@ -178,6 +192,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
   let cleaned = "";
   let iced = "";
   let strays = "";
+  let nospace = "";
   const absent: string[] = [];
   const home = slotHome(b, slot);
   let src = slotDir(b, slot);
@@ -201,7 +216,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
         // Built: hold the slot until the box is empty but for this bench, then time it alone.
         job = { ...job, phase: "ready", prepared: new Date().toISOString() };
         r.job = job;
-        writeJob(b, job);
+        save(job);
         note(`built ahead in ${Math.round((Date.parse(job.prepared as string) - Date.parse(job.started as string)) / 1000)} s; waiting for the box to empty`);
         await new Promise<void>((resolve) => {
           r.go = () => {
@@ -209,7 +224,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
             if (r.cancelled) return resolve();
             job = { ...job, phase: "timed", timed: new Date().toISOString() };
             r.job = job;
-            writeJob(b, job);
+            save(job);
             note(`the box is empty after ${Math.round((Date.parse(job.timed as string) - Date.parse(job.prepared as string)) / 1000)} s: the timed run has it alone`);
             resolve();
           };
@@ -224,6 +239,7 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
       const from = statSync(logFile).size;
       let code = await run(cmd, src, env, log, r);
       const failed = code !== 0 && code !== 124 && (step.run || step.build) && !r.cancelled;
+      if (failed && !nospace && NO_SPACE.test(since(logFile, from))) nospace = step.what;
       // rustc crashing (any ICE) is often its incremental state's fault, a corrupt session or
       // a query answered from it: the crates' sessions are removed and the step runs once more
       // without incremental, so a cache that breaks again cannot fail it twice.
@@ -293,29 +309,160 @@ export async function runJob(b: Box, queued: Job, slot = 1, r: Running = { job: 
     if (!why) why = job.kind === "warm" ? "built" : `${files.length} files, ${Math.round(size / 1024 ** 2)} MB`;
   } catch (e) {
     exit ||= 1;
-    why = (e as Error).message;
+    why = diskFull(e) ? `the box's disk filled during it (${(e as Error).message})` : (e as Error).message;
     note(why);
     strays ||= await endProcesses(job.id, r, why, note);
   }
   closeSync(log);
+  if (nospace) why += `; the box's disk filled during its ${nospace} ("No space left on device" in its log): the daemon prunes, and takes no job while the disk stays full; run it again`;
   if (cleaned) why += `; cleaned a stale build of ${cleaned} and ran it again`;
   if (iced) why += `; ${iced}`;
   if (strays) why += `; ${strays}`;
   if (absent.length) why += `; not there to collect: ${absent.join(", ")}`;
   job = { ...job, state: r.cancelled ? "cancelled" : exit ? "failed" : "done", exit, ended: new Date().toISOString(), note: why };
-  writeJob(b, job);
+  save(job);
   return job;
 }
 
+/// What a tool prints when a write fails for want of space.
+const NO_SPACE = /No space left on device|\bENOSPC\b/;
+
 /// Deletes jobs past their days, with their files and refs; fails jobs a dead daemon left running
-/// (any running job not in `mine`, the jobs this daemon runs).
-export function housekeep(b: Box, keepDays: number, now = new Date(), mine: ReadonlySet<string> = new Set()): void {
+/// (any running job not in `mine`, the jobs this daemon runs or holds a record of to write).
+export function housekeep(b: Box, keepDays: number, now = new Date(), mine: ReadonlySet<string> = new Set(), save = (j: Job) => writeJob(b, j)): void {
   for (const j of listJobs(b)) {
-    if (j.state === "running" && !mine.has(j.id)) writeJob(b, { ...j, state: "failed", exit: 1, ended: now.toISOString(), note: "the daemon stopped during it" });
+    if (j.state === "running" && !mine.has(j.id)) save({ ...j, state: "failed", exit: 1, ended: now.toISOString(), note: "the daemon stopped during it" });
   }
   for (const j of expired(listJobs(b), now, keepDays)) {
     rmSync(join(b.jobs, j.id), { recursive: true, force: true });
     if (j.kind === "run") git(b.repo, ["update-ref", "-d", jobRef(j)]);
+  }
+}
+
+// ---- The disk (guard.ts) ----
+
+/// The slots as the pruner sees them; a HOME review cache only when it holds files from before
+/// `before` (ms).
+function slotUses(b: Box, slots: number, busy: ReadonlySet<number>, before: number): SlotUse[] {
+  const out: SlotUse[] = [];
+  for (let n = 1; n <= slots; n++) {
+    const target = join(slotDir(b, n), "target");
+    const profiles = existsSync(target) ? readdirSync(target).filter((p) => lstatSync(join(target, p, "incremental"), { throwIfNoEntry: false })?.isDirectory()) : [];
+    const review = join(slotHome(b, n), ".cache/terra-review");
+    const files: string[] = [];
+    if (!busy.has(n)) walk(review, files);
+    const old = files.some((f) => statSync(f).mtimeMs < before);
+    out.push({ slot: n, busy: busy.has(n), target, profiles, ...(old ? { review } : {}) });
+  }
+  return out;
+}
+
+/// Ended jobs whose out/ holds more than their log.
+function jobUses(b: Box): JobUse[] {
+  return listJobs(b)
+    .filter((j) => j.state !== "queued" && j.state !== "running")
+    .map((j) => ({ id: j.id, state: j.state, queued: j.queued, ended: j.ended, out: outDir(b, j.id) }))
+    .filter((j) => existsSync(j.out) && readdirSync(j.out).some((n) => !KEEP.includes(n)));
+}
+
+/// Removes one thing `pruneOrder` named, off the event loop (fs/promises), so the daemon keeps
+/// its heartbeat through a prune of hundreds of GB.
+async function removePrune(p: Prune, now = new Date()): Promise<void> {
+  if (p.kind === "dir") return rm(p.path, { recursive: true, force: true });
+  if (p.kind === "media") {
+    for (const name of readdirSync(p.path).filter((n) => !KEEP.includes(n))) await rm(join(p.path, name), { recursive: true, force: true });
+    return append(join(p.path, "job.log"), `render-worker: its collected files were deleted ${now.toISOString()} to free the box's disk (older than TERRA_RENDER_MEDIA_DAYS); this log is kept\n`);
+  }
+  const files: string[] = [];
+  walk(p.path, files);
+  for (const f of files) if ((statSync(f, { throwIfNoEntry: false })?.mtimeMs ?? Number.POSITIVE_INFINITY) < (p.before ?? 0)) await rm(f, { force: true });
+}
+
+/// Writes daemon.json whole and renames it into place; on a full disk, over the blocks the
+/// file already holds (it is padded to 4 KiB for that), so `--status` still reads the daemon's
+/// last word when not one new block can be had.
+export function writeStatus(file: string, text: string): void {
+  const bytes = Buffer.byteLength(text);
+  const padded = Buffer.from(text.padEnd(text.length + Math.ceil((bytes + 1) / 4096) * 4096 - bytes, " "));
+  try {
+    writeFileSync(`${file}.tmp`, padded);
+    renameSync(`${file}.tmp`, file);
+  } catch (e) {
+    if (!diskFull(e)) throw e;
+    rmSync(`${file}.tmp`, { force: true });
+    const size = statSync(file, { throwIfNoEntry: false })?.size ?? 0;
+    if (size < padded.length) throw e;
+    const fd = openSync(file, "r+");
+    try {
+      writeSync(fd, Buffer.concat([padded, Buffer.alloc(size - padded.length, " ")]), 0, size, 0);
+    } finally {
+      closeSync(fd);
+    }
+  }
+}
+
+/// The daemon's hold on its disk: before each pass's job starts, it writes again the job
+/// records a full disk kept it from writing (`save` keeps them rather than throw), does the
+/// housekeeping, and prunes when free space is under the low mark (guard.ts `pruneOrder`). A
+/// full disk (ENOSPC on any write, or free space under the full mark after pruning) never
+/// throws out of `pass`: it returns why, and the daemon starts no job while it says so.
+export class Keeper {
+  readonly unsaved = new Map<string, Job>();
+  /// The first write this pass that failed for want of space.
+  noSpace = "";
+  disk?: DiskState;
+  readonly b: Box;
+  readonly ds: DiskSettings;
+  readonly log: (line: string) => void;
+  readonly measure: () => Space;
+  constructor(b: Box, ds: DiskSettings, log: (line: string) => void = say, measure: () => Space = () => space(b.dir)) {
+    this.b = b;
+    this.ds = ds;
+    this.log = log;
+    this.measure = measure;
+  }
+
+  save = (j: Job) => {
+    try {
+      writeJob(this.b, j);
+      this.unsaved.delete(j.id);
+    } catch (e) {
+      if (!diskFull(e)) throw e;
+      this.unsaved.set(j.id, j);
+      this.noSpace ||= (e as Error).message;
+    }
+  };
+
+  async pass(keepDays: number, running: ReadonlyMap<string, Running>, slots: number, now = new Date()): Promise<string> {
+    this.noSpace = "";
+    try {
+      for (const j of [...this.unsaved.values()]) this.save(j);
+      const mine = new Set([...running.keys(), ...this.unsaved.keys()]);
+      housekeep(this.b, keepDays, now, mine, this.save);
+      await reapOrphans(this.b, mine);
+      await this.prune(slots, new Set([...running.values()].map((r) => r.job.slot ?? 1)), now);
+    } catch (e) {
+      if (!diskFull(e)) throw e;
+      this.noSpace ||= (e as Error).message;
+    }
+    const sp = this.measure();
+    const full = this.noSpace ? `a write failed: ${this.noSpace}` : sp.free < fullMark(this.ds) ? `${gb(sp.free)} free, under the ${gb(fullMark(this.ds))} mark` : "";
+    if (full && !this.disk?.full) this.log(`✗ disk full (${full}): no job starts until space is freed; cargo xtask remote-render --status says what holds it`);
+    if (!full && this.disk?.full) this.log(`✓ disk: ${gb(sp.free)} free again; taking jobs`);
+    this.disk = { ...sp, at: now.toISOString(), ...(full ? { full } : {}) };
+    return full;
+  }
+
+  /// Prunes in `pruneOrder`'s order while free space is under the low mark (or a write failed),
+  /// up to `pruneTo`, saying what it freed.
+  async prune(slots: number, busy: ReadonlySet<number>, now: Date): Promise<void> {
+    const sp = this.measure();
+    if (level(this.ds, sp) === "ok" && !this.noSpace) return;
+    const items = pruneOrder(slotUses(this.b, slots, busy, now.getTime() - this.ds.mediaDays * 86400_000), jobUses(this.b), now, this.ds.mediaDays);
+    if (!items.length) return;
+    this.log(`disk: ${gb(sp.free)} free of ${gb(sp.total)}, under the low mark of ${gb(lowMark(this.ds, sp.total))}: pruning to ${gb(pruneTo(this.ds, sp.total))}`);
+    await prune(items, pruneTo(this.ds, sp.total), () => this.measure().free, (p) => removePrune(p, now), this.log);
+    this.log(`disk: ${gb(this.measure().free)} free after pruning`);
   }
 }
 
@@ -339,8 +486,14 @@ async function daemon(b: Box): Promise<number> {
     say(`✗ ${dp.error}`);
     return 1;
   }
+  const ds = diskSettings(boxEnv(b));
+  if ("error" in ds) {
+    say(`✗ ${ds.error}`);
+    return 1;
+  }
   const display = new Display(dp, say);
   const running = new Map<string, Running>();
+  const keeper = new Keeper(b, ds);
   // A daemon stopped mid-job takes its jobs' processes with it (systemd would kill its cgroup,
   // the supervisor would not); one that dies uncleanly leaves them to the next (`reapOrphans`).
   process.on("exit", () => (display.stop(), killNow((j) => running.has(j))));
@@ -349,8 +502,17 @@ async function daemon(b: Box): Promise<number> {
   const since = new Date().toISOString();
   const mode = process.env.TERRA_RENDER_MODE ?? "by hand";
   let status = "starting";
-  const beat = () => writeFileSync(join(b.dir, "daemon.json"), JSON.stringify({ pid: process.pid, mode, rev, since, beat: new Date().toISOString(), status, display: display.describe() }));
-  housekeep(b, s.keepDays);
+  // Its last word, on every pass and every 30 s between (a prune of hundreds of GB takes
+  // minutes), so `--status` and a client's wait know it alive; never thrown for a full disk.
+  const beat = () => {
+    try {
+      writeStatus(join(b.dir, "daemon.json"), JSON.stringify({ pid: process.pid, mode, rev, since, beat: new Date().toISOString(), status, display: display.describe(), disk: keeper.disk }));
+    } catch (e) {
+      if (!diskFull(e)) throw e;
+    }
+  };
+  beat();
+  setInterval(beat, 30_000).unref();
   // A bench runs on the performance cores of a hybrid processor (jobs.ts `steps`).
   const lscpu = spawnSync("lscpu", ["-p=CPU,MAXMHZ"], { encoding: "utf8" });
   const pCores = lscpu.status === 0 && spawnSync("taskset", ["-V"]).status === 0 ? performanceCores(lscpu.stdout) : undefined;
@@ -359,17 +521,22 @@ async function daemon(b: Box): Promise<number> {
   watch(b.dir, (_e, name) => name === "wake" && wakeUp());
   let lastWhy = "";
   for (;;) {
-    housekeep(b, s.keepDays, new Date(), new Set(running.keys()));
-    await reapOrphans(b, new Set(running.keys()));
+    // Housekeeping and the disk's check before any job starts (guard.ts); a full disk stops
+    // new jobs, not the daemon.
+    const full = await keeper.pass(s.keepDays, running, s.slots.slots);
     const restart = existsSync(join(b.dir, "restart"));
-    if (restart && !running.size) {
+    if (restart && !running.size && !keeper.unsaved.size) {
       rmSync(join(b.dir, "restart"), { force: true });
       say("restarting on new code");
       return 0;
     }
     // Restarting, nothing new starts, but a bench built ahead still has its timed run.
     const planned = next(b, s.policy, s.ciLock, s.slots);
-    const n = restart ? { start: [], go: planned.go, why: "restarting on new code once its jobs end" } : planned;
+    const n = full
+      ? { start: [], why: `the box's disk is full (${full}); no job starts until space is freed (cargo xtask remote-render --status says what holds it)` }
+      : restart
+        ? { start: [], go: planned.go, why: "restarting on new code once its jobs end" }
+        : planned;
     if (n.go) {
       say(`slot ${n.go.slot}: ${n.go.id} has the box for its timed run`);
       running.get(n.go.id)?.go?.();
@@ -378,11 +545,21 @@ async function daemon(b: Box): Promise<number> {
       const r: Running = { job, cancelled: false, ready: () => wakeUp() };
       running.set(job.id, r);
       say(`slot ${slot}: running ${job.id} (${short(job)})`);
-      runJob(b, job, slot, r, display, pCores).then((j) => {
-        say(`${j.state === "done" ? "✓" : "✗"} slot ${slot}: ${j.id} ${j.state}: ${j.note}`);
-        running.delete(j.id);
-        wakeUp();
-      });
+      runJob(b, job, slot, r, display, pCores, keeper.save)
+        .then(
+          (j) => say(`${j.state === "done" ? "✓" : "✗"} slot ${slot}: ${j.id} ${j.state}: ${j.note}`),
+          (e) => {
+            // A job's run that throws (its folder unwritable on a full disk) fails that job, not the daemon.
+            stop(r);
+            const why = diskFull(e) ? `the box's disk filled during it (${(e as Error).message})` : `the daemon failed running it: ${(e as Error).message}`;
+            keeper.save({ ...r.job, state: "failed", exit: 1, ended: new Date().toISOString(), note: why });
+            say(`✗ slot ${slot}: ${job.id} failed: ${why}`);
+          },
+        )
+        .finally(() => {
+          running.delete(job.id);
+          wakeUp();
+        });
     }
     for (const r of running.values()) {
       if (!r.cancelled && existsSync(join(b.jobs, r.job.id, "cancel"))) {
@@ -409,7 +586,7 @@ async function supervise(b: Box): Promise<number> {
       c.on("close", (code) => done(code ?? 1));
     });
     closeSync(fd);
-    appendFileSync(log, `supervisor: the daemon exited ${code}; starting it again in 5 s\n`);
+    append(log, `supervisor: the daemon exited ${code}; starting it again in 5 s\n`);
     await new Promise((r) => setTimeout(r, 5000));
   }
 }
@@ -422,6 +599,8 @@ async function main(argv: string[]): Promise<number> {
     if ("error" in s) return console.log(s.error), 1;
     const dp = displayPlan(boxEnv(b));
     if ("error" in dp) return console.log(dp.error), 1;
+    const ds = diskSettings(boxEnv(b));
+    if ("error" in ds) return console.log(ds.error), 1;
     if (spawnSync("git", ["--version"]).status !== 0) return console.log("no git"), 1;
     return 0;
   }

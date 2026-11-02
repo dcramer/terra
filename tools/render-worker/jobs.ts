@@ -110,7 +110,8 @@ export type Config = {
   connectTimeout: number;
 };
 
-const whole = (v: string | undefined, fallback: number, max: number) => {
+/// A setting's whole number from 1 to `max`, `fallback` when unset, undefined when invalid.
+export const whole = (v: string | undefined, fallback: number, max: number) => {
   const n = v === undefined || v === "" ? fallback : Number(v);
   return Number.isInteger(n) && n >= 1 && n <= max ? n : undefined;
 };
