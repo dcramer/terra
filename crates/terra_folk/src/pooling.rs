@@ -12,6 +12,7 @@ use terra_creatures::creatures::{Creature, Form, Lair};
 use terra_creatures::species::Bestiary;
 use terra_survival::interact::Interactable;
 use terra_world::flora::ClearAround;
+use terra_world::instance::InstanceApp;
 use terra_world::tick::Sim;
 
 /// How many spiders the place keeps, and how often it forms another below that.
@@ -42,17 +43,19 @@ struct Pool {
 }
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(
-        Update,
-        (
-            mark.run_if(resource_added::<Lair>),
-            rise.run_if(resource_exists::<Pool>),
-        ),
-    )
-    .add_systems(
-        FixedUpdate,
-        form.run_if(resource_exists::<Pool>).in_set(Sim::World),
-    );
+    // The pool is the world's, by its lair (D469).
+    app.world_resource::<Pool>()
+        .add_systems(
+            Update,
+            (
+                mark.run_if(resource_added::<Lair>),
+                rise.run_if(resource_exists::<Pool>),
+            ),
+        )
+        .add_systems(
+            FixedUpdate,
+            form.run_if(resource_exists::<Pool>).in_set(Sim::World),
+        );
 }
 
 /// Once the lair is chosen, lights it, fills it with motes and puts the prisoner there.

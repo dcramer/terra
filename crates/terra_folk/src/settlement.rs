@@ -28,6 +28,7 @@ use terra_town::village::Palette;
 use terra_world::daylight::{Clock, SkyPath};
 use terra_world::flora::ClearAround;
 use terra_world::footprint::Footprint;
+use terra_world::instance::InstanceApp;
 use terra_world::planet::Planet;
 use terra_world::start::Start;
 use terra_world::tick::Sim;
@@ -110,7 +111,9 @@ pub const PEOPLE: [Villager; 4] = [
 ];
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, found.run_if(resource_added::<Lair>))
+    // The village is the world's, set down by its lair (D469).
+    app.world_resource::<Village>()
+        .add_systems(Update, found.run_if(resource_added::<Lair>))
         .add_systems(
             FixedUpdate,
             talk.run_if(resource_exists::<Village>).in_set(Sim::World),

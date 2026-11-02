@@ -19,6 +19,7 @@ use terra_town::{Animals, Life, Plan, village::Palette};
 use terra_world::daylight::{Clock, DAY_SECONDS};
 use terra_world::flora::ClearAround;
 use terra_world::footprint::Footprint;
+use terra_world::instance::InstanceApp;
 use terra_world::lod::Viewpoint;
 use terra_world::planet::{MainCamera, Planet};
 use terra_world::smoke::{Burning, Smoke};
@@ -890,7 +891,9 @@ pub fn plugin(app: &mut App) {
             .in_set(Sim::World)
             .in_set(Live),
     )
-    .init_resource::<Lit>()
+    // The town laid out and its lights are the world's, left with it on a crossing (D469).
+    .world_resource::<Market>()
+    .init_world_resource::<Lit>()
     .add_systems(
         Update,
         (burn, light, report).run_if(resource_exists::<Market>),

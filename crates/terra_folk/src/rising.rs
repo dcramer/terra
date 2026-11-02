@@ -402,6 +402,8 @@ struct Waits {
 }
 
 pub fn plugin(app: &mut App) {
+    // The scaffolds' decks are the town's, by its buildings (D469).
+    terra_world::instance::InstanceApp::world_resource::<crate::scaffold::Decks>(app);
     app.add_systems(Startup, read).add_systems(
         Update,
         (
