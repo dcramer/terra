@@ -38,6 +38,19 @@ impl Snow {
         latitude: (f32, f32),
         height_m: (f32, f32),
     ) -> Self {
+        let [snow] = Self::on_days(fields, [day], at, latitude, height_m);
+        snow
+    }
+
+    /// The snow on several days, each as [`Snow::on`] has it, a later day's folded on from an
+    /// earlier's (`terra_climate::pasts`): the snow on the day played and on the snowbeds'.
+    pub fn on_days<const N: usize>(
+        fields: &Fields,
+        days: [i64; N],
+        at: glam::Vec3,
+        latitude: (f32, f32),
+        height_m: (f32, f32),
+    ) -> [Self; N] {
         let sunward = (-0.9, 0.9);
         let steps = (
             (((latitude.1 - latitude.0).to_degrees() / 0.25).ceil() as usize).max(1),
@@ -50,7 +63,7 @@ impl Snow {
         let value = |range: (f32, f32), step: usize, of: usize| {
             range.0 + (range.1 - range.0) * step as f32 / of as f32
         };
-        let table = crate::maps::par_map(&points, |&(i, j, k)| {
+        let tables = crate::maps::par_map(&points, |&(i, j, k)| {
             // Snow too high for anything to ever melt it would pile up for ever; the fold
             // starts at the summer before, so it holds a winter's at most.
             CATCHES.map(|catch| {
@@ -61,17 +74,20 @@ impl Snow {
                     sunward: value(sunward, k, steps.2),
                     catch,
                 };
-                terra_climate::past(fields, place, day).snow_depth_m()
+                terra_climate::pasts(fields, place, days).map(|past| past.snow_depth_m())
             })
         });
-        Self {
-            day,
+        std::array::from_fn(|n| Self {
+            day: days[n],
             latitude,
             height_m,
             sunward,
             steps,
-            table,
-        }
+            table: tables
+                .iter()
+                .map(|catches| catches.map(|days| days[n]))
+                .collect(),
+        })
     }
 
     /// How deep the snow lies, in metres, at a latitude, a height over the sea and a leaning,

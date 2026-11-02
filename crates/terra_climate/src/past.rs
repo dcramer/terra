@@ -130,6 +130,24 @@ pub fn past(fields: &Fields, place: Place, day: i64) -> Past {
     fold_from(fields, place, Past::fresh(), start, day)
 }
 
+/// The pasts at a place at the starts of several days, the same as [`past`] for each, but a
+/// later day whose fold starts where an earlier one's did carries on from it rather than
+/// folding the year again: the snow of a day and of the snowbeds' later day in one fold.
+pub fn pasts<const N: usize>(fields: &Fields, place: Place, days: [i64; N]) -> [Past; N] {
+    let mut last: Option<(i64, i64, Past)> = None;
+    days.map(|day| {
+        let start = fold_start(fields, day);
+        let past = match last {
+            Some((from, upto, past)) if from == start && upto <= day => {
+                fold_from(fields, place, past, upto, day)
+            }
+            _ => fold_from(fields, place, Past::fresh(), start, day),
+        };
+        last = Some((start, day, past));
+        past
+    })
+}
+
 /// Folds the days from `from` up to `to` (not including it) into a past.
 fn fold_from(fields: &Fields, place: Place, mut past: Past, from: i64, to: i64) -> Past {
     for day in from..to {
@@ -432,6 +450,24 @@ mod tests {
                 (ends(0.0) - ends(GROUND_HOLDS_MM)).abs() < 1.0,
                 "{place:?} {day}"
             );
+        }
+    }
+
+    #[test]
+    fn several_days_folded_together_are_each_days_own_fold() {
+        // Later days carried on from earlier ones, earlier after later, and a day whose fold
+        // starts a year on: each the same as folding it alone.
+        let fields = Fields::new(temperate(), Seed(4));
+        let mut rng = Seed(11).rng();
+        let place = place(&mut rng);
+        for days in [
+            [160, 196, 200],
+            [196, 160, 160],
+            [100, 300, 560],
+            [-30, 20, 400],
+        ] {
+            let alone = days.map(|day| past(&fields, place, day));
+            assert_eq!(pasts(&fields, place, days), alone, "days {days:?}");
         }
     }
 

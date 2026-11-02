@@ -85,26 +85,33 @@ impl Round {
         let latitudes = (latitude - reach, latitude + reach);
         let heights = (-50.0, land.ground.reach_m() + 50.0);
         let seasons = Seasons::over(&land.fields, latitudes, heights);
-        let snow = Snow::on(
-            &land.fields,
-            day,
-            middle * land.radius_m(),
-            latitudes,
-            heights,
-        );
         let snowbed_day = terra_climate::Date::parse(SNOWBED_DATE)
             .expect("SNOWBED_DATE is a date")
             .day(&land.fields.climate().year);
-        let snowbeds = if snowbed_day == day {
-            snow.clone()
-        } else {
-            Snow::on(
+        // In one fold, the earlier day first, so the later carries on from it.
+        let (snow, snowbeds) = if snowbed_day == day {
+            let snow = Snow::on(
                 &land.fields,
-                snowbed_day,
+                day,
                 middle * land.radius_m(),
                 latitudes,
                 heights,
-            )
+            );
+            (snow.clone(), snow)
+        } else {
+            let earlier = day.min(snowbed_day);
+            let [first, second] = Snow::on_days(
+                &land.fields,
+                [earlier, day.max(snowbed_day)],
+                middle * land.radius_m(),
+                latitudes,
+                heights,
+            );
+            if earlier == day {
+                (first, second)
+            } else {
+                (second, first)
+            }
         };
         let pools = land
             .ground

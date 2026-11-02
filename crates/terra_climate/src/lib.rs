@@ -30,7 +30,7 @@ mod time;
 pub use fields::{Conditions, Day, Daylight, Fields, Place, Wind, snow_share};
 pub use past::{
     CELL_M, CHILL_BASE_C, Cell, GROUND_HOLDS_MM, Past, PastCache, WARMTH_BASE_C, fold_start, past,
-    step,
+    pasts, step,
 };
 pub use plants::{LeafYear, Leaves, Ramp, SPREAD};
 pub use season::{GROWING_DAY_C, Season, TREE_LINE_DAYS, TREE_LINE_SEASON_C};
