@@ -30,6 +30,7 @@
 
 use crate::instance::{Cross, Entered, WorldSpec};
 use crate::shell::Options;
+use bevy::platform::time::Instant;
 use bevy::{
     asset::{LoadState, UntypedAssetId},
     pbr::{PreparedMaterial, RenderMaterialInstances, RenderMeshInstances},
@@ -109,9 +110,13 @@ pub struct Loading {
     shown: f32,
     /// How long the screen has been up, in real time.
     up_for: Duration,
-    /// When a load after the first began, by the real clock: a world chosen on the title
-    /// screen is timed from the choice, not from the start (D579).
-    began: Option<Duration>,
+    /// When a load after the first began, by the wall clock: a world chosen on the title
+    /// screen is timed from the choice, not from the start (D579). Not `Time<Real>`, which
+    /// a scripted run steps by a sixtieth a frame however long the frame took.
+    began: Option<Instant>,
+    /// Whether this load's clock started before its screen went up: a crossing's, on
+    /// leaving the last world (`leaving`).
+    timed: bool,
     /// Whether a load has ended since the start.
     ended_once: bool,
 }
@@ -125,13 +130,10 @@ impl Loading {
         self.asked += 1;
     }
 
-    /// How long this load has taken: the first from the app's start, a later one from when
-    /// it began.
-    fn took(&self, real: &Time<Real>) -> Duration {
-        match self.began {
-            Some(began) => real.elapsed().saturating_sub(began),
-            None => real.startup().elapsed(),
-        }
+    /// How long this load has taken by `now`: the first from the app's start, a later one
+    /// from when it began.
+    fn took(&self, real: &Time<Real>, now: Instant) -> Duration {
+        now.saturating_duration_since(self.began.unwrap_or(real.startup()))
     }
 }
 
@@ -305,6 +307,7 @@ pub fn plugin(app: &mut App) {
             Update,
             Track.run_if(in_state(Screen::Loading)).before(watch),
         )
+        .add_systems(OnEnter(crate::instance::Travel::Leaving), leaving)
         .add_systems(OnEnter(Screen::Loading), (cover, hold_clock))
         .add_systems(OnExit(Screen::Loading), (uncover, release_clock))
         .add_systems(
@@ -458,12 +461,30 @@ fn release_clock(mut time: ResMut<Time<Virtual>>) {
     time.unpause();
 }
 
+/// Starts a later load's clock now (D579), and the recorder's count of its longest systems.
+fn begin(loading: &mut Loading, recorder: Option<&crate::recorder::Recorder>) {
+    loading.began = Some(Instant::now());
+    if let Some(recorder) = recorder {
+        recorder.loading_again();
+    }
+}
+
+/// A crossing is timed from leaving the last world, not from when the screen goes up: the
+/// next world is built in `OnEnter(InWorld)` and its first frames before the screen's state
+/// changes, seconds a player waits in the dark, whose systems are the load's longest.
+fn leaving(mut loading: ResMut<Loading>, recorder: Option<Res<crate::recorder::Recorder>>) {
+    if loading.ended_once {
+        begin(&mut loading, recorder.as_deref());
+        loading.timed = true;
+    }
+}
+
 fn cover(
     mut commands: Commands,
     mut loading: ResMut<Loading>,
     mut drawables: ResMut<Drawables>,
     old: Query<Entity, With<Cover>>,
-    (real, recorder): (Res<Time<Real>>, Option<Res<crate::recorder::Recorder>>),
+    recorder: Option<Res<crate::recorder::Recorder>>,
     entered: Option<Res<Entered>>,
 ) {
     // A crossing's cover is the dark alone (D501); the title and bar are the start's.
@@ -472,11 +493,8 @@ fn cover(
     } else {
         Visibility::Inherited
     };
-    if loading.ended_once {
-        loading.began = Some(real.elapsed());
-        if let Some(recorder) = &recorder {
-            recorder.loading_again();
-        }
+    if loading.ended_once && !loading.timed {
+        begin(&mut loading, recorder.as_deref());
     }
     // Loading again while the last screen is still fading.
     for entity in &old {
@@ -595,8 +613,9 @@ fn watch(
         // Its longest systems, summed over its frames and threads, say why it took that
         // long without a trace (the frame recorder, D576). A load after the first, a world
         // chosen on the title screen, from when it began.
-        let seconds = loading.took(&real).as_secs_f32();
+        let seconds = loading.took(&real, Instant::now()).as_secs_f32();
         loading.ended_once = true;
+        loading.timed = false;
         if let Some(recorder) = &recorder {
             recorder.loaded(seconds);
         }
@@ -875,16 +894,64 @@ mod tests {
         for _ in 0..=QUIET_FRAMES {
             frame(&mut world, 0, 1, 10.0);
         }
+        let startup = world.resource::<Time<Real>>().startup();
+        let first = Duration::from_secs(100);
+        let took = |world: &World, now| {
+            world
+                .resource::<Loading>()
+                .took(world.resource::<Time<Real>>(), now)
+        };
         assert!(world.resource::<Loading>().ended_once);
+        assert_eq!(
+            took(&world, startup + first),
+            first,
+            "the first from the start"
+        );
         // A world is chosen: the screen goes up again, and loads for 3 s.
         world.run_system_cached(cover).unwrap();
-        world
-            .resource_mut::<Time<Real>>()
-            .update_with_duration(Duration::from_secs(3));
-        let took = world
+        let began = world
             .resource::<Loading>()
-            .took(world.resource::<Time<Real>>());
-        assert_eq!(took, Duration::from_secs(3));
+            .began
+            .expect("timed from the choice");
+        let three = Duration::from_secs(3);
+        assert_eq!(took(&world, began + three), three);
+    }
+
+    /// A crossing is timed from leaving the last world: the next world's first frames,
+    /// before its screen goes up, are part of the wait as the player sees it. A later load
+    /// chosen on the title screen is timed from its screen again.
+    #[test]
+    fn a_crossing_is_timed_from_leaving_not_from_the_screen() {
+        let mut world = screen();
+        for _ in 0..=QUIET_FRAMES {
+            frame(&mut world, 0, 1, 10.0);
+        }
+        world.run_system_cached(leaving).unwrap();
+        let left = world
+            .resource::<Loading>()
+            .began
+            .expect("timed from leaving");
+        // The next world's first frames take a while before the screen goes up.
+        std::thread::sleep(Duration::from_millis(2));
+        world.run_system_cached(cover).unwrap();
+        assert_eq!(world.resource::<Loading>().began, Some(left));
+        // The screen's own bar and words away, so the frames watch this test's.
+        let put_up: Vec<Entity> = world
+            .query_filtered::<Entity, With<Cover>>()
+            .iter(&world)
+            .collect();
+        for entity in put_up {
+            world.despawn(entity);
+        }
+        for _ in 0..=QUIET_FRAMES {
+            frame(&mut world, 0, 1, 0.1);
+        }
+        assert!(
+            !world.resource::<Loading>().timed,
+            "the next load timed afresh"
+        );
+        world.run_system_cached(cover).unwrap();
+        assert!(world.resource::<Loading>().began > Some(left));
     }
 
     #[test]
