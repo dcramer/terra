@@ -1,31 +1,31 @@
 # v0 goals
 
-Status: **proposal, 2026-11-01** (D589, Open). The eight areas are the developers' list; the tracks, the gaps, the numbers and the order are the agent's recommendations, for the developers to edit. Nothing here overrides a decision until they settle it. v0 is the next milestone, not the entire game.
+Status: **proposal, 2026-11-01** (D589, Open). The eight areas are the developers' list; the tracks, the gaps, the numbers and the order are the agent's recommendations, for the developers to edit. Nothing here overrides a decision until they settle it. v0 is the next milestone, not the entire game: **the foundations of the engine, not its gameplay**.
 
-The developers, 2026-11-01: "heres our major TODO, these are the things we think we need for a v0 (but its not the entire game)".
+The developers, 2026-11-01: "heres our major TODO, these are the things we think we need for a v0 (but its not the entire game)". Then: "we're not really solving the reason to cross or actual gameplay yet, just trying to get foundations of an engine in place".
 
 ## What v0 is
 
-A player starts the game, makes a world from a seed, opens it to a friend, and the two of them survive, fight and explore a large procedural world, then cross through a gate into a second, stranger one and come back with something worth having.
+An engine that can carry the game: a seed makes a large procedural world, a friend can join it, and a gate leads to a second world of another theme and back. Every system runs for real, through the server. v0 proves each of them works; it does not ask whether the game is fun or what a player is playing for.
 
 **v0 is done when this session works, start to finish, on two machines over the internet:**
 
 1. On the title screen, a player makes a world: a name, Survival or Creative, and a seed, rolled or typed.
 2. They host it; a friend joins from their own title screen.
 3. Both walk through at least three biomes of the first realm, in weather that changes as they walk, with the wind in the trees.
-4. They gather, craft and equip gear, and fight wildlife and monsters that fit the place.
-5. They find the gate and cross, together or apart. The second realm's land, sky, plants, creatures and sound are its own.
-6. They bring back something the first realm doesn't have, and it matters.
-7. They quit and return days later. Both realms and both characters are as they were left.
+4. They use what the game already has: dig, gather, craft, move items, equip gear, and meet wildlife and monsters that fit the place, each seeing the same thing.
+5. They cross the gate, together or apart, and come back. The second realm's land, sky, plants, creatures and sound are its own, and what they carry goes with them.
+6. They quit and return days later. Both realms and both characters are as they were left.
 
 An agent drives the same session with two scripted clients and checks each step (D69). The frame budget (D25) holds throughout.
 
-The earlier MVP (D105, [prototypes.md](prototypes.md)) asked whether the core loop is fun, and left out portals and many players. v0 takes that loop as built and adds the two things it left out. The word MVP stays D105's.
+The earlier MVP (D105, [prototypes.md](prototypes.md)) asks whether the core loop is fun, and leaves out portals and many players. v0 asks a different question: is the engine under it sound? The word MVP stays D105's.
 
 ## Out of v0
 
 Proposed, to edit. What already works stays in the game and keeps working; it just gets no new work.
 
+- Gameplay design: why a player crosses, progression, balance, the economy, the game's loop. The developers said so; the engine has to allow these, not answer them.
 - Building, as the developers said: on hold. Villages and settlements with it, so no quests or recruits.
 - Essences and abilities (D105 has them first after the MVP), raids, factions, taming and mounts, trade.
 - A third realm, dungeons as content, a thousand players (the design keeps D52 possible; v0 does not measure it).
@@ -61,7 +61,7 @@ Each track can run beside the others. "Waits on" is what it truly needs first. A
 ### Front (1)
 
 - **Have**: the title screen (D579, `--title`): Continue, Worlds, New world, The yard, Settings, Quit. Several worlds, each with a name and mode, kept on disk. Deleting asks first.
-- **Need**: a seed on New world, rolled by default, typed if wanted, kept in `world.ron` and shown in the list. New world options kept few (name, mode, seed, Q9). Host and Join. A screen for the creator of a few sliders (D111), which has none yet (`terra_walker::appearance` holds the look), so two players can tell each other apart. Quit to title without restarting the program, which a crossing's leaving should now make possible.
+- **Need**: a seed on New world, rolled by default, typed if wanted, kept in `world.ron` and shown in the list. New world options kept few (name, mode, seed, Q6). Host and Join. A screen for the creator of a few sliders (D111), which has none yet (`terra_walker::appearance` holds the look), so two players can tell each other apart. Quit to title without restarting the program, which a crossing's leaving should now make possible.
 - **Done when**: a scripted run makes two worlds from different seeds, sees different land, and returns to the title and loads the first, in one process.
 - **Note**: D579 says no seed is offered, because the land was one world. Generating from a seed removes that reason, but the decision is the developers' to amend (Q2).
 
@@ -73,7 +73,7 @@ Each track can run beside the others. "Waits on" is what it truly needs first. A
 
 ### Realm two (2)
 
-The largest piece of content, and the gap most likely to be underestimated. A second realm is not a palette swap: instances.md's playground proves loading and nothing else.
+The proof that a realm is data. instances.md's playground proves loading and nothing else; this proves a world of another theme comes out of the same rules. It needs enough of each part to show that, not a full realm's worth.
 
 - **Need**: its land recipe, ground materials, plants, sky and light, wildlife, monsters and sound, each by the existing pipelines and the art style (D14). A realm's parts are new; the rules are not.
 - **Done when**: stills and a film pass review beside the first realm, and a stranger could tell them apart at a glance while seeing one game (D14). The generator states how many variants it makes (D182).
@@ -100,7 +100,7 @@ The largest piece of content, and the gap most likely to be underestimated. A se
 | Dodge | In the fight |
 | Starts, stops, turns, lean into turns, blends by speed and direction | To do (animation.md, step 2) |
 | Climb, pull up, lunge | The mover has them; off in the game until the figure has clips (D477) |
-| Crouch or sneak | Not built; a design call, tied to whether creatures hear (Q10) |
+| Crouch or sneak | Not built; waits for gameplay |
 | Prediction: the client moves at once, the server corrects | Not built; the mover's plain, fixed-tick code is ready for it (D138) |
 
 - **Done when**: `cargo xtask controller` shows every row passing, a before-and-after film earns the developers' yes (animation.md), and the same walk feels right at 100 ms of latency.
@@ -116,9 +116,9 @@ The largest piece of content, and the gap most likely to be underestimated. A se
 An animation pipeline gives a body that moves; nothing in the list says what it chooses to do.
 
 - **Have**: wildlife with routines, startled by rule, put out in cells as a player nears (D380, D384). Spiders at a place where magic pools. The fight's rules, and the duel.
-- **Need**: behaviour as data: sensing, hunting, fleeing, packs, each kind's attacks and tells, leashing back home. Finding a way over dug ground, which has no solution yet for creatures. Spawning by a realm's theme and where magic pools (D59, D103). All of it on the server, with cells shared between players rather than kept round one eye. What each kind drops.
-- **Proposed roster**: the first realm's sixteen kinds plus three monsters; the second, four wildlife and three monsters plus one big one. To edit (Q7).
-- **Done when**: each monster reads as itself in a film, a duel run per plan passes, and two players at opposite ends of a pack see the same fight.
+- **Need**: behaviour as data: sensing, hunting, fleeing, packs, each kind's attacks and tells, leashing back home. Finding a way over dug ground, which has no solution yet for creatures. Spawning by a realm's theme and where magic pools (D59, D103). All of it on the server, with cells shared between players rather than kept round one eye.
+- **How many**: enough hostile and harmless kinds to prove each body plan in each realm's theme. The count is what the pipeline can carry, once a creature's cost is measured.
+- **Done when**: a new kind's behaviour is a data file, a duel run per plan passes, and two players at opposite ends of a pack see the same fight.
 
 ### Server (6)
 
@@ -148,7 +148,7 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 ### Play (8)
 
 - **Have**: backpack, equipment, action bar, quiver, wear and repair, crafting at stations, gathering by tool, skills by doing, hunger, death and the dropped pack, the map (prototypes.md). Sword and shield and the bow on the combat scorecard (D452).
-- **Need**: every change to an inventory an operation the server checks. Loot. A small ladder of gear running across both realms, so the second one matters (Q6). A few more weapon kinds (D116's "different ways to play"; assembled items, D565). Where you come back when you die in the second realm, since a hearth sits in a claim (D171, Q8). What another player sees of your gear.
+- **Need**: the baseline as engine, not as balance: every change to an inventory an operation the server checks, items and gear carried across a crossing, death and return working in either realm, and what another player sees of your gear. Which items, tiers and numbers are gameplay, for later.
 - **Done when**: two players trade blows with the same monster, swap items through a chest, die and recover their packs, with nothing duplicated or lost across a crossing or a disconnect.
 
 ### Proof (a gap in the list)
@@ -161,7 +161,7 @@ The largest risk and the only track at zero. No `terra_net` exists yet.
 1. **Now, one or two agents**: the three seams. A bounded spike answers whether a host can hold two realms.
 2. **Then, the four that carry the most risk**: Server up to two clients walking together, Land on any seed, Animation's creature check and first plan, Realms to a working gate between placeholder realms.
 3. **As agents come free**: Front, Sound, Living world, Body, in any order. None block the others, and Front's seed and Sound's engine choice are small.
-4. **Once a gate and a server stand**: Creatures, Play on the server, Realm two's full content.
+4. **Once a gate and a server stand**: Creatures, Play on the server, Realm two's content.
 5. **Last**: Proof's session end to end, fixing what it finds.
 
 Each track gets a bounded plan of its own, and a skill or scorecard if it lacks one (controller, combat and environment have theirs), before its first job.
@@ -177,10 +177,6 @@ Design calls, each with a recommendation; none is settled until they say so. The
 | Q3 | What is the second realm? "Scifi" meets settings.md's "no science fiction toolsets" and "no machine guns" | A dead realm of magic-machine ruins under a strange sky, from settings.md's techno realm: alien and technological, yet still magic. Its builders made the gate, which fits the stargate. Its monsters are guardians and things grown in the ruins. Its gate is found in the world, walked through, always open (D72) |
 | Q4 | What is "real scale"? `play` is 2 km in radius today; the mountains and D13 say 30 km | 30 km for the first realm, since biomes need the room. 10 to 20 km for the second |
 | Q5 | How many biomes? | At least three in the first realm (forest, mountain lake, tundra) and two in the second |
-| Q6 | Why cross? | The second realm alone holds a material or monster drop that makes the next tier of gear, and a player has to go there to get it. The danger is a step up, so the first realm has to be mastered first |
-| Q7 | How many creatures? | As Creatures proposes, to be set against what a creature measures to cost |
-| Q8 | With building on hold, what is home? | Claims, hearths and what building exists stay as they are. Dying in the second realm brings you back at your hearth, with the pack left where it fell, so a crossing is a risk |
-| Q9 | Which options has a new world? | Name, mode and seed. No more until there is something to tune |
-| Q10 | Do creatures hear, and can you sneak? | Yes, from the same noises (audio.md's question 3). It gives sound a job and needs one more move |
+| Q6 | Which options has a new world? | Name, mode and seed. No more until there is something to tune |
 
-Open decisions v0 will meet, by track: D134 day length (Living world), D436 and D438 monsters (Animation), D580 load time (Land, Front), D588 pose sheets (Animation), audio.md's music and voices (Sound), movement.md's lock-on and commitment (Play).
+Open decisions v0 will meet, by track: D134 day length (Living world), D436 and D438 monsters (Animation), D580 load time (Land, Front), D588 pose sheets (Animation), audio.md's music and voices (Sound).
