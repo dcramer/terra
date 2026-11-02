@@ -11,6 +11,7 @@
 - **The shrug is mostly the animation.** `Idle_Loop` holds the shoulders about 6 cm higher than `Walk_Loop`, on the mannequin too.
 - **It came from the drawing.** Every design sheet we have drew the arms short, and nothing in the pipeline measures proportions.
 - **A stretch of the arms in the pipeline fixes most of it, free.** A scratch copy with 25% longer arms and the notch's weights moved looks like a person. It needs a rebuild and a re-check of combat, no new art.
+- **Legs 10% longer, the whole man scaled back to 1.80 m, helps too, and moves well.** A second copy has a 1.86 m reach, the crotch at 0.85 m and a smaller head, and walks on the game's clips with its feet closer to the ground than today's. Going on to 17% puts the crotch at 0.87 m but looks stilted, and the hips by then sit 7 cm too high: the crotch is low in the model's shape, not because the legs are short. See [the second test](#the-second-test-longer-arms-and-longer-legs).
 
 ## Numbers
 
@@ -110,7 +111,7 @@ What longer arms touch, whichever way:
 3. Rebuild, re-check gear, re-measure combat.
 4. Lower the shoulders in the idle, in the clip.
 
-The heavy chest and low crotch are a separate design call. The stretch does not reach them, and a local shape change or C would.
+The heavy chest and low crotch are a separate design call. The arm stretch does not reach them, and a local shape change or C would. Legs 10% longer and the whole-body scale, tested below, take the chest to the edge of normal and the crotch to 0.85 m; add them to step 2 if the developer likes the look.
 
 ## The scratch
 
@@ -124,6 +125,46 @@ A copy in memory, exported nowhere (`target/job/after.py`): both arm bones 25.5%
 | Flank step | 1.5, 1.75 cm | 0.07, 0.32 cm | 0.38, 1.08 cm | |
 
 The reach overshoots the mean by 4 cm, inside the normal range, because our shoulder joints sit wide. Letting the shoulders down brings part of the notch back, so the weights and that pose want working out together.
+
+## The second test: longer arms and longer legs
+
+The developer asked to try both. Scratch copies again, no game file changed: thigh and shin lengthened together along each leg's own line, the feet moved whole, the arms stretched and the flank freed as above, then the whole body scaled back to 1.80 m. Each copy went through `export_character.py` and so plays clips carried onto its own bones, not a pose borrowed from the old body. An arms-only control keeps today's floor and walk figures to the hundredth, so the route adds nothing of its own.
+
+| At 1.80 m | Today | Arms only | Legs +5% | Legs +10% | Legs +17% | Real mean (1st to 99th) |
+|---|---|---|---|---|---|---|
+| Whole-body scale | 1 | 1 | 0.978 | 0.956 | 0.929 | |
+| Height in heads | 7.35 | 7.35 | 7.52 | 7.69 | 7.92 | |
+| Reach | 1.68 m | 1.86 | 1.86 | 1.86 | 1.86 | 1.86 (1.75 to 1.99) |
+| Shoulder joint to wrist | 0.445 m | 0.538 | 0.539 | 0.547 | 0.558 | about 0.56 |
+| Fingertips, standing | 0.82 m | 0.73 | 0.73 | 0.74 | 0.74 | 0.67 (0.61 to 0.73) |
+| Wrists, standing | 1.00 to 1.03 m | 0.92 to 0.94 | the same | the same | the same | 0.87 (0.82 to 0.92) |
+| Crotch | 0.81 m | 0.81 | 0.83 | 0.85 | 0.87 | 0.87 (0.81 to 0.93) |
+| Hip joint | 0.93 m | 0.93 | 0.95 | 0.97 | 0.99 | 0.92 |
+| Knee | 0.50 m | 0.50 | 0.51 | 0.52 | 0.53 | 0.50 |
+| Most both feet are off the ground in `Walk_Loop` | 3.5 cm | 3.5 | 2.8 | 2.2 | 1.5 | |
+| Deepest into the ground in `Walk_Loop` | 0.05 cm | 0.05 | 0.15 | 0.21 | none | |
+| `Walk_Loop`'s pace | 1.38 m/s | 1.38 | 1.41 | 1.44 | 1.48 | |
+
+What it shows:
+
+- **The reach went to the mean, not below it.** Trimming to 1.83 m put the fingertips at 0.75 m, past the 99th. At 1.86 m they stop at 0.74 m, a centimetre past it. Shoulder height and the idle's shrug hold them up, so lowering the idle's shoulders (step 4) is what closes the rest.
+- **Longer legs do not float the feet.** They do the reverse: the walk's gap closes as the legs lengthen, and sinking stays about 2 mm. `Idle_Loop` does not change.
+- **The crotch is low in the model's shape.** It sits 12 cm under the hip joints, a real man's about 5 cm. Legs alone reach 0.87 m only at +17%, with the hip joint 7 cm above the real height and the knee 3 cm above. A local lift of the crotch would close the last 2 cm from +10% without that; it was not tried.
+- **The artist's warning holds at +17%.** By eye, +5% and +10% read as the same man, a little taller in the leg, and +17% starts to look stilted under the heavy chest. +10% is the last that looks right to this eye; that is the developer's call.
+- **The scale helps the top half,** by plain arithmetic on the first table: chest 0.36 to 0.34 m, the edge of normal; shoulders 0.61 to 0.58 m; crotch to shoulder top 0.70 to 0.68 m (real 0.61, to 0.67). The top of the shoulder rises from 1.51 to about 1.52 m, a centimetre past the 99th, and hand and foot shrink 4%.
+- **No new fault found in the skin.** `rig_check.py` passes on the +10% copy, as on today's base. There is no tear or smear at the hips or thighs, front or back. Its skin was stretched without new normals, a scratch shortcut.
+
+With sword and shield, on the +10% copy, the fight set carried by the same export with its holds (`fight-mannequin.glb`, `hold.py`). The steps after that export were not run on the copy (`clear.ts`, `wrist_limit.ts`, `mirror.ts`, `additive.ts`, `markers.ts`), and today's column is the finished `fight.glb`, so a small part of the difference may be theirs:
+
+| | Today | Legs +10% |
+|---|---|---|
+| `Low_Guard`: left wrist (shield) | 1.03 m high | 1.04 m; `hold.py` sets the board 0.5 cm off its target |
+| `Low_Guard`: right wrist (sword) | 1.04 m high | 1.00 m, and 3 cm further forward |
+| `Low_Guard`: deepest foot in the ground | 0.96 cm | 0.49 cm |
+| `Carry_Tool`: wrists | 1.02 m | 0.93 to 0.95 m |
+| `Carry_Tool`: lowest point of a sword held in it | 0.34 m | 0.27 m |
+
+The carries hang about 8 cm lower, as the hands do, and a long item's end comes 7 cm nearer the ground; nothing touches it. Measured in the middle of each clip, from Blender, with the fingers open as this tool leaves them. More of the sword counts as inside the body in `Low_Guard` (164 of 1,734 points against 40), not located; `moves.ts` must rule on that, and on every other row, against a real rebuild. Not checked: gear, morphs, the game's own renderer.
 
 ## Sources
 

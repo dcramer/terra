@@ -1130,3 +1130,4 @@ Add a line at the end of the file. Git merges this file by union (`.gitattribute
 - **2026-11-01**: D589 amended (on the developers' word): its questions closed; v0's audience is not a question, the first realm is big enough at D13's 30 km, the demo doesn't end formally, and the second realm's theme, the way to the boss and the fight's rules are left for later.
 - **2026-11-01**: D593 added (Open, by the agent): how to fix the base body's proportions; the measures and the recommendation are in research/2026-11-01-why-the-torso-looks-wrong.md.
 - **2026-11-01**: D589 decided (by the developers: "Yes, mark Decided"): v0 is the next milestone, as docs/v0-goals.md says.
+- **2026-11-01**: D593 amended (still Open, by the agent): a scratch copy with legs 10% longer, scaled back to 1.80 m, measured and filmed; longer legs are added as an option, with what 17% does; the numbers are in research/2026-11-01-why-the-torso-looks-wrong.md.
