@@ -955,6 +955,21 @@ impl Lay<'_, '_, '_> {
         here
     }
 
+    /// The most a kind could like a place once `in_sun` has asked the sun: the verge's as
+    /// much as in full sun, so a place it would pass over even lit is passed over without the
+    /// sun's test, each a line through every crown's shadow lumps (0.2 to 1 s of the floor's
+    /// laying when every try asked it, instances j10). The same places are kept, by the same
+    /// dice: the test only decides, it rolls none.
+    fn likes_at_most(&self, kind: Under, here: &mut Here) -> f32 {
+        if kind != Under::Verge || self.sun.is_none() {
+            return kind.likes(here);
+        }
+        let sun = std::mem::replace(&mut here.sun, 1.0);
+        let most = kind.likes(here);
+        here.sun = sun;
+        most
+    }
+
     /// A place on the ground, `at` east and south of the start, turned at random about its
     /// up, sunk `sink`, `scale` times its size.
     fn on(&self, at: Vec2, dice: &mut Rng, sink: f32, scale: f32) -> Transform {
@@ -1430,8 +1445,13 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 0.62,
                 0.5 + 0.5 * drift.fbm(Vec3::new(at.x, 0.0, at.y) / placement.drift_m, 2, 2.0, 0.5),
             );
-            let here = lay.in_sun(placement.kind, at, map.here(at));
-            if dice.unit() > placement.kind.likes(&here) * drifts {
+            let mut here = map.here(at);
+            let roll = dice.unit();
+            if roll > lay.likes_at_most(placement.kind, &mut here) * drifts {
+                continue;
+            }
+            let here = lay.in_sun(placement.kind, at, here);
+            if roll > placement.kind.likes(&here) * drifts {
                 continue;
             }
             let many = placement.clump.0 + dice.below(placement.clump.1 - placement.clump.0 + 1);
@@ -1441,12 +1461,16 @@ pub(super) fn lay(lay: &mut Lay, path: Path, canopy: Crowns) -> Map {
                 } else {
                     round(&mut dice, at, placement.spread_m)
                 };
-                let here = lay.in_sun(placement.kind, p, map.here(p));
+                let mut here = map.here(p);
                 if here.bark < bark_m
                     || here.lying < lying_m
                     || here.path < path_m
-                    || placement.kind.likes(&here) < 0.1
+                    || lay.likes_at_most(placement.kind, &mut here) < 0.1
                 {
+                    continue;
+                }
+                let here = lay.in_sun(placement.kind, p, here);
+                if placement.kind.likes(&here) < 0.1 {
                     continue;
                 }
                 // Smaller toward the clump's edge.

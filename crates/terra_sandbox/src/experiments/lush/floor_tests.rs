@@ -268,6 +268,27 @@ fn verge_bracken_grows_on_a_sunlit_path_side_not_in_the_deep_wood() {
 }
 
 #[test]
+fn the_verge_likes_no_place_more_for_the_sun_missing_it() {
+    // What lets the floor skip the sun's test where full sun would not keep a plant
+    // (`Lay::likes_at_most`): a place the sun misses is liked no more than if it reached it.
+    let (open, _) = map_with(&[]);
+    let mut asked = 0;
+    for (at, _) in grid_by_path(&open) {
+        let mut here = open.here(at);
+        here.sun = 1.0;
+        let lit = Under::Verge.likes(&here);
+        here.sun = 0.0;
+        let missed = Under::Verge.likes(&here);
+        assert!(
+            missed <= lit,
+            "at {at}: {missed} missed by the sun, {lit} lit"
+        );
+        asked += (lit > 0.0) as u32;
+    }
+    assert!(asked > 10, "the grid crosses the verge: {asked} places");
+}
+
+#[test]
 fn verge_tries_start_just_outside_a_paths_edge() {
     // Tried over the whole floor, a path's verge, about a hundredth of it, took 31 plants of
     // 2600 tries (forest fix r2); tried beside the paths, every start is on a verge.
