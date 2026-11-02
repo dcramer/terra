@@ -65,7 +65,15 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
 
-@if(SKINNED)
+@if(SKINNED && SKINNED_EIGHT)
+    var world_from_local = skinning::skin_model_eight(
+        vertex.joint_indices,
+        vertex.joint_weights,
+        vertex.joint_indices_1,
+        vertex.joint_weights_1,
+        vertex_no_morph.instance_index
+    );
+@elif(SKINNED)
     var world_from_local = skinning::skin_model(
         vertex.joint_indices,
         vertex.joint_weights,
@@ -106,7 +114,15 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     out.color = vertex.color;
 
 @if(PREPASS_PIPELINE && MOTION_VECTOR_PREPASS) {
-@if(SKINNED && HAS_PREVIOUS_SKIN)
+@if(SKINNED && HAS_PREVIOUS_SKIN && SKINNED_EIGHT)
+    let prev_model = skinning::skin_prev_model_eight(
+        uncompressed_vertex_no_morph.joint_indices,
+        uncompressed_vertex_no_morph.joint_weights,
+        uncompressed_vertex_no_morph.joint_indices_1,
+        uncompressed_vertex_no_morph.joint_weights_1,
+        vertex_no_morph.instance_index
+    );
+@elif(SKINNED && HAS_PREVIOUS_SKIN)
     let prev_model = skinning::skin_prev_model(
         uncompressed_vertex_no_morph.joint_indices,
         uncompressed_vertex_no_morph.joint_weights,

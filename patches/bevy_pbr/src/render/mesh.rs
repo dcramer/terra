@@ -3345,6 +3345,17 @@ pub fn setup_morph_and_skinning_defs(
         shader_defs.push("SKINNED".into());
         vertex_attributes.push(Mesh::ATTRIBUTE_JOINT_INDEX.at_shader_location(offset));
         vertex_attributes.push(Mesh::ATTRIBUTE_JOINT_WEIGHT.at_shader_location(offset + 1));
+        // Terra's patch (D601): a mesh with a second set of four influences (glTF's JOINTS_1
+        // and WEIGHTS_1) is skinned with eight, as Unreal's `GPUSKIN_USE_EXTRA_INFLUENCES`
+        // does; locations 8 and 9 are free in the forward and the prepass vertex alike. A
+        // mesh with four has neither, and keeps its layout and pipeline.
+        if layout.0.contains(Mesh::ATTRIBUTE_JOINT_INDEX_1)
+            && layout.0.contains(Mesh::ATTRIBUTE_JOINT_WEIGHT_1)
+        {
+            shader_defs.push("SKINNED_EIGHT".into());
+            vertex_attributes.push(Mesh::ATTRIBUTE_JOINT_INDEX_1.at_shader_location(8));
+            vertex_attributes.push(Mesh::ATTRIBUTE_JOINT_WEIGHT_1.at_shader_location(9));
+        }
     };
 
     match (

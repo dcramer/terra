@@ -77,7 +77,7 @@ No layers (one piece per slot), but pieces from different slots overlap: a pack'
 - **Moving to Quaternius's Regular man and woman** (D599), each made once and checked before anything is built on it. Until then:
 - **One mesh, made once and checked**: our own base male in our T-pose, drawn as a design sheet and made by Tripo (D115), wearing plain close-fitting underwear painted on with almost no relief (D186). It has our skeleton, skin weights made for it, the skin patches (1,024) and the socket rules, and passes the rig checks before anything uses it.
 - **One skeleton**, with Unreal's bone names, which Quaternius's animation libraries use; Tripo's V3 rig is converted onto it, keeping its weighted twist bones (D115).
-- **Twist and skinning**: a limb's roll is moved to the hand and foot and spread over the twist bones, baked into each clip (Unreal's twist bones); bodies and gear are skinned weight-blended, dual quaternions but round the hips (our own skinning shader).
+- **Twist and skinning**: a limb's roll is moved to the hand and foot and spread over the twist bones, baked into each clip (Unreal's twist bones); bodies and gear are skinned weight-blended, dual quaternions but round the hips (our own skinning shader), with up to eight joints a vertex where a file has them (glTF's `JOINTS_1`, D601).
 - **The morphs are made once each from designs of the base person** (heavier, thinner, stronger, a woman, later another head): the base's mesh is registered onto each design's model and what moved is kept as a morph, joints included.
 - **A template from a design**: the parameters that bring the base closest to it are estimated, and Tripo paints the base's layout in those proportions as that template's skin.
 

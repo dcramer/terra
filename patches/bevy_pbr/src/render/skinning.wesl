@@ -61,6 +61,33 @@ fn skin_prev_model(
         + weights.w * prev_joint_matrices[skin_index + indexes.w];
 }
 
+// Terra's patch (D601): a vertex's eight influences, glTF's JOINTS_0 and JOINTS_1 with their
+// weights, linearly blended. Terra's game puts its own skinning shader in this one's place
+// (terra_walker's skinning.rs), with the same functions.
+@if(SKINNED && SKINNED_EIGHT)
+fn skin_model_eight(
+    indexes: vec4<u32>,
+    weights: vec4<f32>,
+    indexes_1: vec4<u32>,
+    weights_1: vec4<f32>,
+    instance_index: u32,
+) -> mat4x4<f32> {
+    return skin_model(indexes, weights, instance_index)
+        + skin_model(indexes_1, weights_1, instance_index);
+}
+
+@if(SKINNED && SKINNED_EIGHT)
+fn skin_prev_model_eight(
+    indexes: vec4<u32>,
+    weights: vec4<f32>,
+    indexes_1: vec4<u32>,
+    weights_1: vec4<f32>,
+    instance_index: u32,
+) -> mat4x4<f32> {
+    return skin_prev_model(indexes, weights, instance_index)
+        + skin_prev_model(indexes_1, weights_1, instance_index);
+}
+
 @if(SKINNED)
 fn inverse_transpose_3x3m(in: mat3x3<f32>) -> mat3x3<f32> {
     let x = cross(in[1], in[2]);

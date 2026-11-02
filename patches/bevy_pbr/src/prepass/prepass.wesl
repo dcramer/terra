@@ -78,7 +78,16 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
 
-@if(SKINNED)
+// Terra's patch (D601): eight influences a vertex where the mesh has a second set of four.
+@if(SKINNED && SKINNED_EIGHT)
+    var world_from_local = skinning::skin_model_eight(
+        vertex.joint_indices,
+        vertex.joint_weights,
+        vertex.joint_indices_1,
+        vertex.joint_weights_1,
+        vertex_no_morph.instance_index
+    );
+@elif(SKINNED)
     // Use vertex_no_morph.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
     // See https://github.com/gfx-rs/naga/issues/2416
     var world_from_local = skinning::skin_model(
@@ -139,7 +148,15 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     let prev_vertex = uncompressed_vertex_no_morph;
 
     // Take skinning into account.
-@if(SKINNED && HAS_PREVIOUS_SKIN)
+@if(SKINNED && HAS_PREVIOUS_SKIN && SKINNED_EIGHT)
+    let prev_model = skinning::skin_prev_model_eight(
+        prev_vertex.joint_indices,
+        prev_vertex.joint_weights,
+        prev_vertex.joint_indices_1,
+        prev_vertex.joint_weights_1,
+        vertex_no_morph.instance_index
+    );
+@elif(SKINNED && HAS_PREVIOUS_SKIN)
     let prev_model = skinning::skin_prev_model(
         prev_vertex.joint_indices,
         prev_vertex.joint_weights,

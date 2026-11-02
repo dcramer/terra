@@ -491,23 +491,45 @@ fn trim(
 ) -> Option<(Vec<usize>, Handle<SkinnedMeshInverseBindposes>)> {
     let all: Vec<Mat4> = bindposes.get(poses)?.to_vec();
     let mut mesh = meshes.get_mut(id)?;
-    let weights = match mesh.attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT)? {
-        VertexAttributeValues::Float32x4(w) => w.clone(),
-        _ => return None,
-    };
-    let Some(VertexAttributeValues::Uint16x4(indices)) =
-        mesh.attribute_mut(Mesh::ATTRIBUTE_JOINT_INDEX)
-    else {
-        return None;
-    };
-    let (kept, index) = used_joints(indices, &weights, count);
-    if kept.is_empty() || kept.len() == count {
+    // Both sets of four where the mesh has eight influences a vertex (D601).
+    let sets = [
+        (Mesh::ATTRIBUTE_JOINT_INDEX, Mesh::ATTRIBUTE_JOINT_WEIGHT),
+        (
+            Mesh::ATTRIBUTE_JOINT_INDEX_1,
+            Mesh::ATTRIBUTE_JOINT_WEIGHT_1,
+        ),
+    ];
+    let mut influences = (Vec::new(), Vec::new());
+    let mut vertices = 0;
+    for (i, (index, weight)) in sets.iter().enumerate() {
+        match (mesh.attribute(*index), mesh.attribute(*weight)) {
+            (
+                Some(VertexAttributeValues::Uint16x4(j)),
+                Some(VertexAttributeValues::Float32x4(w)),
+            ) if j.len() == w.len() && (i == 0 || w.len() == vertices) => {
+                vertices = w.len();
+                influences.0.extend_from_slice(j);
+                influences.1.extend_from_slice(w);
+            }
+            _ if i == 0 => return None,
+            _ => {}
+        }
+    }
+    let (kept, index) = used_joints(&influences.0, &influences.1, count);
+    if kept.is_empty() || kept.len() == count || vertices == 0 {
         return None;
     }
-    for (joints, ws) in indices.iter_mut().zip(&weights) {
-        for (j, w) in joints.iter_mut().zip(ws) {
-            // An unused slot points at the first joint kept, with no weight.
-            *j = if *w > 0.0 { index[*j as usize] } else { 0 };
+    let mut weights = influences.1.chunks(vertices);
+    for (joint_index, _) in sets {
+        let Some(ws) = weights.next() else { break };
+        let Some(VertexAttributeValues::Uint16x4(indices)) = mesh.attribute_mut(joint_index) else {
+            break;
+        };
+        for (joints, ws) in indices.iter_mut().zip(ws) {
+            for (j, w) in joints.iter_mut().zip(ws) {
+                // An unused slot points at the first joint kept, with no weight.
+                *j = if *w > 0.0 { index[*j as usize] } else { 0 };
+            }
         }
     }
     let handle = bindposes.add(SkinnedMeshInverseBindposes::from(
@@ -640,6 +662,52 @@ fn dress(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_skin_of_eight_influences_is_trimmed_by_both_sets() {
+        // Five joints: the first set uses 1, the second 3 (D601); 0, 2 and 4 none.
+        let mut meshes = Assets::<Mesh>::default();
+        let mut bindposes = Assets::<SkinnedMeshInverseBindposes>::default();
+        let poses: Vec<Mat4> = (0..5)
+            .map(|i| Mat4::from_translation(Vec3::X * i as f32))
+            .collect();
+        let posed = bindposes.add(SkinnedMeshInverseBindposes::from(poses.clone()));
+        let mesh = meshes.add(
+            Mesh::new(
+                bevy::mesh::PrimitiveTopology::TriangleList,
+                bevy::asset::RenderAssetUsages::default(),
+            )
+            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![Vec3::ZERO])
+            .with_inserted_attribute(
+                Mesh::ATTRIBUTE_JOINT_INDEX,
+                VertexAttributeValues::Uint16x4(vec![[1, 2, 2, 2]]),
+            )
+            .with_inserted_attribute(Mesh::ATTRIBUTE_JOINT_WEIGHT, vec![[0.9f32, 0.0, 0.0, 0.0]])
+            .with_inserted_attribute(
+                Mesh::ATTRIBUTE_JOINT_INDEX_1,
+                VertexAttributeValues::Uint16x4(vec![[3, 4, 4, 4]]),
+            )
+            .with_inserted_attribute(
+                Mesh::ATTRIBUTE_JOINT_WEIGHT_1,
+                vec![[0.1f32, 0.0, 0.0, 0.0]],
+            ),
+        );
+        let (kept, handle) = trim(mesh.id(), &posed, 5, &mut meshes, &mut bindposes).unwrap();
+        assert_eq!(kept, vec![1, 3]);
+        assert_eq!(
+            bindposes.get(&handle).unwrap().to_vec(),
+            vec![poses[1], poses[3]]
+        );
+        let mesh = meshes.get(&mesh).unwrap();
+        assert_eq!(
+            mesh.attribute(Mesh::ATTRIBUTE_JOINT_INDEX),
+            Some(&VertexAttributeValues::Uint16x4(vec![[0, 0, 0, 0]]))
+        );
+        assert_eq!(
+            mesh.attribute(Mesh::ATTRIBUTE_JOINT_INDEX_1),
+            Some(&VertexAttributeValues::Uint16x4(vec![[1, 0, 0, 0]]))
+        );
+    }
 
     #[test]
     fn a_dye_keeps_a_texture_bright() {

@@ -402,6 +402,28 @@ impl Mesh {
     pub const ATTRIBUTE_JOINT_INDEX: MeshVertexAttribute =
         MeshVertexAttribute::new("Vertex_JointIndex", 7, VertexFormat::Uint16x4);
 
+    /// A vertex's fifth to eighth joint weights, glTF's `WEIGHTS_1`, beside
+    /// [`Mesh::ATTRIBUTE_JOINT_WEIGHT`]'s first four (Terra's patch, D601). A mesh with it
+    /// and [`Mesh::ATTRIBUTE_JOINT_INDEX_1`] is skinned with eight influences a vertex, as
+    /// Unreal's extra influences and Godot's eight bone weights are; one without keeps four.
+    ///
+    /// The format of this attribute is [`VertexFormat::Float32x4`].
+    pub const ATTRIBUTE_JOINT_WEIGHT_1: MeshVertexAttribute = MeshVertexAttribute::new(
+        "Vertex_JointWeight_1",
+        0x5445_5252_4a57_0001,
+        VertexFormat::Float32x4,
+    );
+
+    /// A vertex's fifth to eighth joint indices, glTF's `JOINTS_1` (Terra's patch, D601; see
+    /// [`Mesh::ATTRIBUTE_JOINT_WEIGHT_1`]).
+    ///
+    /// The format of this attribute is [`VertexFormat::Uint16x4`].
+    pub const ATTRIBUTE_JOINT_INDEX_1: MeshVertexAttribute = MeshVertexAttribute::new(
+        "Vertex_JointIndex_1",
+        0x5445_5252_4a49_0001,
+        VertexFormat::Uint16x4,
+    );
+
     /// The first index that can be used for custom vertex attributes.
     /// Only the attributes with an index below this are used by Bevy.
     pub const FIRST_AVAILABLE_CUSTOM_ATTRIBUTE: u64 = 8;

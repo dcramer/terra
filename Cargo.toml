@@ -73,6 +73,8 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 # Vertex buffers packed in ordinary memory, then copied in one write to the GPU's staging
 # memory (D435, bevyengine/bevy#17000).
 bevy_mesh = { path = "patches/bevy_mesh" }
+# A vertex's fifth to eighth influences, glTF's JOINTS_1 and WEIGHTS_1, read and skinned (D601).
+bevy_gltf = { path = "patches/bevy_gltf" }
 # A reflection probe smaller than every irradiance volume holding a fragment gives its diffuse
 # light, so a closed room's probe wins over a forest's sky volume (D485).
 bevy_pbr = { path = "patches/bevy_pbr" }

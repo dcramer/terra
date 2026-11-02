@@ -16,6 +16,11 @@ struct UncompressedVertex {
     @location(6) joint_indices: vec4<u32>,
     @if(SKINNED)
     @location(7) joint_weights: vec4<f32>,
+    // Terra's patch (D601): the fifth to eighth influences (render/mesh.rs).
+    @if(SKINNED && SKINNED_EIGHT)
+    @location(8) joint_indices_1: vec4<u32>,
+    @if(SKINNED && SKINNED_EIGHT)
+    @location(9) joint_weights_1: vec4<f32>,
     @if(MORPH_TARGETS)
     @builtin(vertex_index) index: u32,
 };
@@ -48,6 +53,10 @@ struct Vertex {
     @location(6) joint_indices: vec4<u32>,
     @if(SKINNED)
     @location(7) joint_weights: vec4<f32>,
+    @if(SKINNED && SKINNED_EIGHT)
+    @location(8) joint_indices_1: vec4<u32>,
+    @if(SKINNED && SKINNED_EIGHT)
+    @location(9) joint_weights_1: vec4<f32>,
     @if(MORPH_TARGETS)
     @builtin(vertex_index) index: u32,
 };
@@ -89,6 +98,10 @@ fn decompress_vertex(vertex_in: Vertex, instance_index: u32) -> UncompressedVert
 @if(SKINNED) {
     uncompressed_vertex.joint_indices = vertex_in.joint_indices;
     uncompressed_vertex.joint_weights = vertex_in.joint_weights;
+}
+@if(SKINNED && SKINNED_EIGHT) {
+    uncompressed_vertex.joint_indices_1 = vertex_in.joint_indices_1;
+    uncompressed_vertex.joint_weights_1 = vertex_in.joint_weights_1;
 }
 @if(MORPH_TARGETS)
     uncompressed_vertex.index = vertex_in.index;

@@ -52,6 +52,9 @@ enum Part {
     Tangents,
     Colours,
     Skin,
+    /// A skin of eight influences a vertex, glTF's JOINTS_1 and WEIGHTS_1 beside the first
+    /// four (D601, bevy_pbr's patched `render/mesh.rs`).
+    SkinEight,
     Dither,
 }
 use Part::*;
@@ -312,6 +315,7 @@ const DRAWS: &[Draw] = &[
         meshes: &[
             &[Normals, Uvs, Tangents, Skin],
             &[Normals, Uvs, Tangents, Skin, Dither],
+            &[Normals, Uvs, Tangents, SkinEight],
         ],
         ..DRAW
     },
@@ -391,6 +395,8 @@ fn mesh_defs(mesh: &[Part], normals: bool, motion: bool) -> Vec<&'static str> {
             Colours => &["VERTEX_COLORS"],
             Skin if motion => &["SKINNED", "HAS_PREVIOUS_SKIN"],
             Skin => &["SKINNED"],
+            SkinEight if motion => &["SKINNED", "SKINNED_EIGHT", "HAS_PREVIOUS_SKIN"],
+            SkinEight => &["SKINNED", "SKINNED_EIGHT"],
             Dither => &["VISIBILITY_RANGE_DITHER"],
         });
     }
@@ -543,8 +549,18 @@ fn compiles_of(draw: &Draw, out: &mut Vec<Compile>) {
 /// a skin its joints: storage buffers, and uniform buffers where a vertex shader may not
 /// read storage.
 fn stand_in_compiles(bevys: &str, out: &mut Vec<Compile>) {
-    let mesh = &[Normals, Uvs, Tangents, Skin];
-    for uniform in [&[][..], &["SKINS_USE_UNIFORM_BUFFERS"]] {
+    for (mesh, uniform) in [
+        (&[Normals, Uvs, Tangents, Skin], &[][..]),
+        (
+            &[Normals, Uvs, Tangents, Skin],
+            &["SKINS_USE_UNIFORM_BUFFERS"],
+        ),
+        (&[Normals, Uvs, Tangents, SkinEight], &[]),
+        (
+            &[Normals, Uvs, Tangents, SkinEight],
+            &["SKINS_USE_UNIFORM_BUFFERS"],
+        ),
+    ] {
         let view = &VIEWS[0];
         let passes = [
             (MESH_SHADER, forward(view, Opaque, mesh), "the forward pass"),
@@ -560,7 +576,9 @@ fn stand_in_compiles(bevys: &str, out: &mut Vec<Compile>) {
             out.push(Compile {
                 path: through.into(),
                 defs,
-                what: format!("{pass} in {bevys}'s place, through {through}, with {uniform:?}"),
+                what: format!(
+                    "{pass} in {bevys}'s place, through {through}, on {mesh:?} with {uniform:?}"
+                ),
             });
         }
     }

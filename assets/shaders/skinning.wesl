@@ -10,8 +10,9 @@
 // to one plus the share; weights that sum to one, as any mesh it did not touch has, are skinned
 // with the linear blend alone, as Bevy would.
 //
-// Bevy's own render/skinning.wesl with only `skin_model` and `skin_prev_model` changed; the
-// rest, and every binding, as it has them. It stands in for Bevy's as the module
+// Bevy's own render/skinning.wesl with only `skin_model` and `skin_prev_model` changed, and
+// their eight-influence forms our patched Bevy adds (D601); the rest, and every binding, as it
+// has them. It stands in for Bevy's as the module
 // `bevy_pbr::render::skinning`, so `package` here is `bevy_pbr`. A joint matrix here may carry
 // a uniform scale (a skeleton scaled as an object, a body made taller), blended on its own;
 // never a shear. That split, scale blended linearly beside the rigid part's dual quaternions,
@@ -88,6 +89,14 @@ fn blend(a: Joint, b: Joint, c: Joint, d: Joint, weights: vec4<f32>) -> mat4x4<f
     var real = weights.x * a.real + wb * b.real + wc * c.real + wd * d.real;
     var dual = weights.x * a.dual + wb * b.dual + wc * c.dual + wd * d.dual;
     let scale = dot(weights, vec4<f32>(a.scale, b.scale, c.scale, d.scale));
+    return matrix_of(real, dual, scale);
+}
+
+// A blended dual quaternion (real, dual), not yet normalised, and its uniform scale as a matrix.
+@if(SKINNED)
+fn matrix_of(blended_real: vec4<f32>, blended_dual: vec4<f32>, scale: f32) -> mat4x4<f32> {
+    var real = blended_real;
+    var dual = blended_dual;
     let n = length(real);
     real = real / n;
     dual = dual / n;
@@ -118,6 +127,42 @@ fn skinned(m0: mat4x4<f32>, m1: mat4x4<f32>, m2: mat4x4<f32>, m3: mat4x4<f32>, w
     }
     let dual = blend(joint_of(m0), joint_of(m1), joint_of(m2), joint_of(m3), w);
     return linear * (1.0 - share) + dual * share;
+}
+
+// As `skinned`, for a vertex of eight influences (D601): glTF's JOINTS_0 and JOINTS_1 with
+// their weights, which together sum to one plus the share. Only a mesh with the second set
+// (bevy_pbr's `SKINNED_EIGHT`) comes here, so a mesh of four pays nothing for it. A joint of
+// no weight is not turned into a dual quaternion.
+@if(SKINNED && SKINNED_EIGHT)
+fn skinned_eight(matrices: array<mat4x4<f32>, 8>, weights: vec4<f32>, weights_1: vec4<f32>) -> mat4x4<f32> {
+    let total = dot(weights, vec4<f32>(1.0)) + dot(weights_1, vec4<f32>(1.0));
+    let a = weights / total;
+    let b = weights_1 / total;
+    var m = matrices;
+    var w = array<f32, 8>(a.x, a.y, a.z, a.w, b.x, b.y, b.z, b.w);
+    var linear = w[0] * m[0];
+    for (var i = 1u; i < 8u; i++) {
+        linear += w[i] * m[i];
+    }
+    let share = clamp(total - 1.0, 0.0, 1.0);
+    if share < 0.001 {
+        return linear;
+    }
+    let first = joint_of(m[0]);
+    var real = w[0] * first.real;
+    var dual = w[0] * first.dual;
+    var scale = w[0] * first.scale;
+    for (var i = 1u; i < 8u; i++) {
+        if w[i] <= 0.0 {
+            continue;
+        }
+        let j = joint_of(m[i]);
+        let signed = select(w[i], -w[i], dot(first.real, j.real) < 0.0);
+        real += signed * j.real;
+        dual += signed * j.dual;
+        scale += w[i] * j.scale;
+    }
+    return linear * (1.0 - share) + matrix_of(real, dual, scale) * share;
 }
 
 @if(SKINNED)
@@ -174,6 +219,77 @@ fn skin_prev_model(
         prev_joint_matrices[skin_index + indexes.w],
         weights,
     );
+}
+
+// The skin matrix of a vertex's eight influences (D601), as bevy_pbr's patched mesh and prepass
+// shaders call it where the mesh has a second set of four.
+@if(SKINNED && SKINNED_EIGHT)
+fn skin_model_eight(
+    indexes: vec4<u32>,
+    weights: vec4<f32>,
+    indexes_1: vec4<u32>,
+    weights_1: vec4<f32>,
+    instance_index: u32,
+) -> mat4x4<f32> {
+@if(SKINS_USE_UNIFORM_BUFFERS)
+    return skinned_eight(array<mat4x4<f32>, 8>(
+        joint_matrices.data[indexes.x],
+        joint_matrices.data[indexes.y],
+        joint_matrices.data[indexes.z],
+        joint_matrices.data[indexes.w],
+        joint_matrices.data[indexes_1.x],
+        joint_matrices.data[indexes_1.y],
+        joint_matrices.data[indexes_1.z],
+        joint_matrices.data[indexes_1.w],
+    ), weights, weights_1);
+@if(!SKINS_USE_UNIFORM_BUFFERS)
+    let skin_index = mesh[instance_index].current_skin_index;
+@if(!SKINS_USE_UNIFORM_BUFFERS)
+    return skinned_eight(array<mat4x4<f32>, 8>(
+        joint_matrices[skin_index + indexes.x],
+        joint_matrices[skin_index + indexes.y],
+        joint_matrices[skin_index + indexes.z],
+        joint_matrices[skin_index + indexes.w],
+        joint_matrices[skin_index + indexes_1.x],
+        joint_matrices[skin_index + indexes_1.y],
+        joint_matrices[skin_index + indexes_1.z],
+        joint_matrices[skin_index + indexes_1.w],
+    ), weights, weights_1);
+}
+
+// As `skin_model_eight`, from the previous frame's joints, for motion vectors.
+@if(SKINNED && SKINNED_EIGHT)
+fn skin_prev_model_eight(
+    indexes: vec4<u32>,
+    weights: vec4<f32>,
+    indexes_1: vec4<u32>,
+    weights_1: vec4<f32>,
+    instance_index: u32,
+) -> mat4x4<f32> {
+@if(SKINS_USE_UNIFORM_BUFFERS)
+    return skinned_eight(array<mat4x4<f32>, 8>(
+        prev_joint_matrices.data[indexes.x],
+        prev_joint_matrices.data[indexes.y],
+        prev_joint_matrices.data[indexes.z],
+        prev_joint_matrices.data[indexes.w],
+        prev_joint_matrices.data[indexes_1.x],
+        prev_joint_matrices.data[indexes_1.y],
+        prev_joint_matrices.data[indexes_1.z],
+        prev_joint_matrices.data[indexes_1.w],
+    ), weights, weights_1);
+@if(!SKINS_USE_UNIFORM_BUFFERS)
+    let skin_index = mesh[instance_index].current_skin_index;
+@if(!SKINS_USE_UNIFORM_BUFFERS)
+    return skinned_eight(array<mat4x4<f32>, 8>(
+        prev_joint_matrices[skin_index + indexes.x],
+        prev_joint_matrices[skin_index + indexes.y],
+        prev_joint_matrices[skin_index + indexes.z],
+        prev_joint_matrices[skin_index + indexes.w],
+        prev_joint_matrices[skin_index + indexes_1.x],
+        prev_joint_matrices[skin_index + indexes_1.y],
+        prev_joint_matrices[skin_index + indexes_1.z],
+        prev_joint_matrices[skin_index + indexes_1.w],
+    ), weights, weights_1);
 }
 
 @if(SKINNED)

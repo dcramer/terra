@@ -587,6 +587,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D594](decisions/D594.md) | The volumetric fog's ray direction is turned from view space, not taken as two world positions' difference | Tech | Agent | Decided | Bevy 0.20's `volumetric_fog.wesl` took each pixel's ray… |
 | [D595](decisions/D595.md) | The volumetric fog's point and spot light march is skipped where no cluster along the ray holds one | Tech | Agent | Decided | Bevy 0.20's `volumetric_fog.wesl` marches every fog… |
 | [D596](decisions/D596.md) | A world is made from its seed alone | Tech | Agent | Decided | A world's seed, a `u64`, is the only input its… |
+| [D601](decisions/D601.md) | Eight joint influences a vertex, read from glTF's JOINTS_1 and skinned in our patched Bevy | Tech | Agent | Decided | A vertex may be skinned to up to eight joints… |
 
 ## Tools and workflow
 

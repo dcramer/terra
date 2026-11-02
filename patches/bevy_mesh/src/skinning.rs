@@ -348,6 +348,10 @@ pub struct InfluenceIterator<'a> {
     vertex_count: usize,
     joint_indices: &'a [[u16; 4]],
     joint_weights: &'a [[f32; 4]],
+    /// The fifth to eighth influences, when the mesh has them (Terra's patch, D601).
+    joint_indices_1: &'a [[u16; 4]],
+    joint_weights_1: &'a [[f32; 4]],
+    max_influences: usize,
     vertex_index: usize,
     influence_index: usize,
 }
@@ -356,20 +360,32 @@ impl<'a> InfluenceIterator<'a> {
     pub fn new(mesh: &'a Mesh) -> Result<Self, MeshAttributeError> {
         let joint_indices = expect_attribute_uint16x4(mesh, Mesh::ATTRIBUTE_JOINT_INDEX)?;
         let joint_weights = expect_attribute_float32x4(mesh, Mesh::ATTRIBUTE_JOINT_WEIGHT)?;
+        let vertex_count = joint_indices.len().min(joint_weights.len());
+        // Terra's patch (D601): a mesh with a second set of four is iterated over all eight.
+        let (joint_indices_1, joint_weights_1) = match (
+            expect_attribute_uint16x4(mesh, Mesh::ATTRIBUTE_JOINT_INDEX_1),
+            expect_attribute_float32x4(mesh, Mesh::ATTRIBUTE_JOINT_WEIGHT_1),
+        ) {
+            (Ok(indices), Ok(weights))
+                if indices.len() >= vertex_count && weights.len() >= vertex_count =>
+            {
+                (indices.as_slice(), weights.as_slice())
+            }
+            _ => (&[][..], &[][..]),
+        };
+        let max_influences = if joint_indices_1.is_empty() { 4 } else { 8 };
 
         Ok(InfluenceIterator {
-            vertex_count: joint_indices.len().min(joint_weights.len()),
+            vertex_count,
             joint_indices,
             joint_weights,
+            joint_indices_1,
+            joint_weights_1,
+            max_influences,
             vertex_index: 0,
             influence_index: 0,
         })
     }
-
-    // `Mesh` only supports four influences, so we can make this const for
-    // simplicity. If `Mesh` gains support for variable influences then this
-    // will become a variable.
-    const MAX_INFLUENCES: usize = 4;
 }
 
 impl Iterator for InfluenceIterator<'_> {
@@ -377,10 +393,10 @@ impl Iterator for InfluenceIterator<'_> {
 
     fn next(&mut self) -> Option<Influence> {
         loop {
-            assert!(self.influence_index <= Self::MAX_INFLUENCES);
+            assert!(self.influence_index <= self.max_influences);
             assert!(self.vertex_index <= self.vertex_count);
 
-            if self.influence_index >= Self::MAX_INFLUENCES {
+            if self.influence_index >= self.max_influences {
                 self.influence_index = 0;
                 self.vertex_index += 1;
             }
@@ -389,8 +405,17 @@ impl Iterator for InfluenceIterator<'_> {
                 return None;
             }
 
-            let joint_index = self.joint_indices[self.vertex_index][self.influence_index];
-            let joint_weight = self.joint_weights[self.vertex_index][self.influence_index];
+            let (joint_index, joint_weight) = if self.influence_index < 4 {
+                (
+                    self.joint_indices[self.vertex_index][self.influence_index],
+                    self.joint_weights[self.vertex_index][self.influence_index],
+                )
+            } else {
+                (
+                    self.joint_indices_1[self.vertex_index][self.influence_index - 4],
+                    self.joint_weights_1[self.vertex_index][self.influence_index - 4],
+                )
+            };
 
             self.influence_index += 1;
 
@@ -644,6 +669,49 @@ mod tests {
         assert_eq!(
             InfluenceIterator::new(&mesh).unwrap().collect::<Vec<_>>(),
             expected
+        );
+    }
+
+    // Terra's patch (D601): a second set of four is walked after the first, vertex by vertex.
+    #[test]
+    fn influence_iterator_eight() {
+        let mesh = Mesh::new(
+            wgpu_types::PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        )
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_JOINT_INDEX,
+            VertexAttributeValues::Uint16x4(vec![[1, 2, 3, 4], [9, 0, 0, 0]]),
+        )
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_JOINT_WEIGHT,
+            VertexAttributeValues::Float32x4(vec![[0.3, 0.2, 0.1, 0.1], [1.0, 0.0, 0.0, 0.0]]),
+        )
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_JOINT_INDEX_1,
+            VertexAttributeValues::Uint16x4(vec![[5, 6, 7, 8], [0, 0, 0, 0]]),
+        )
+        .with_inserted_attribute(
+            Mesh::ATTRIBUTE_JOINT_WEIGHT_1,
+            VertexAttributeValues::Float32x4(vec![[0.1, 0.1, 0.05, 0.05], [0.0; 4]]),
+        );
+        let found: Vec<(usize, u16)> = InfluenceIterator::new(&mesh)
+            .unwrap()
+            .map(|i| (i.vertex_index, i.joint_index.0))
+            .collect();
+        assert_eq!(
+            found,
+            vec![
+                (0, 1),
+                (0, 2),
+                (0, 3),
+                (0, 4),
+                (0, 5),
+                (0, 6),
+                (0, 7),
+                (0, 8),
+                (1, 9)
+            ]
         );
     }
 
