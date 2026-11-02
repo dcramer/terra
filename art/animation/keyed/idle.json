@@ -1,7 +1,7 @@
 {
- "name": "Sheet_Idle",
- "brief": "The standing idle with nothing in hand, a 6 s loop from a neutral start back to it, keyed from idle-sheet-2.jpg (drawn from the brief alone, no render of ours). Head facing ahead, shoulders down as the walk carries them, hips level. The arms as a person at ease holds them, the same both sides: each upper arm against the side of the chest, the elbow bent a little and pointing back, the forearm angled forward and in so the hand rests against the outer thigh, palm toward it, thumb forward, fingers loosely curled. Weight settles onto the left leg (the right knee soft, its heel lifting), back through the middle on a breath in, onto the right leg with a glance to his left, and back.",
- "guard": "Idle_Loop",
+ "name": "Idle_Loop",
+ "brief": "The standing idle with nothing in hand, a 6 s loop from a neutral start back to it, keyed from idle-sheet.jpg (drawn from the brief alone, no render of ours). Head facing ahead, shoulders down as the walk carries them (idle-start.json holds the walk's), hips level. The arms as a person at ease holds them, the same both sides: each upper arm against the side of the chest, the elbow bent a little and pointing back, the forearm angled forward and in so the hand rests against the outer thigh, palm toward it, thumb forward, fingers loosely curled. Weight settles onto the left leg (the right knee soft, its heel lifting), back through the middle on a breath in, onto the right leg with a glance to his left, and back.",
+ "guard": "idle-start.json",
  "start": {
   "pelvis": {
    "roll": 0
@@ -14,7 +14,6 @@
    "pitch": 2,
    "roll": 0
   },
-  "shoulders": "Walk_Loop",
   "stance": 0.22,
   "turn_out": 7,
   "knees": 16

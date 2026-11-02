@@ -1,7 +1,7 @@
 """Stills of a clip at given moments, from the pose sheet's camera, tiled in a strip to lay beside
 the sheet. Run through tools/blender/run.sh:
 
-    tools/blender/run.sh spike/pose-sheet/stills.py OUT.png BODY.glb CLIP SIDE t1,t2,... [empty]
+    tools/blender/run.sh tools/characters/sheet_stills.py OUT.png BODY.glb CLIP SIDE t1,t2,... [empty]
 
 "empty" hangs no sword or shield and comes in close on the arms.
 """
@@ -10,7 +10,7 @@ import math
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../tools/characters"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bpy
 from mathutils import Vector

@@ -4,14 +4,10 @@
 // knees from the pelvis (the hips' turn taken out, a lean kept), cm. Compare a new start against
 // the clip it replaces: a crossfade from a nearer pose moves the body less.
 //
-//   node spike/pose-sheet/blend.ts LOOP.glb LOOP_CLIP OTHER.glb CLIP...
+//   node tools/characters/blend.ts LOOP.glb LOOP_CLIP OTHER.glb CLIP...
 
-import { Glb, len, posed, qinv, rot, sub, type Q, type V3 } from "../../tools/characters/glb.ts";
+import { Glb, len, posed, qinv, rot, sub, type Q, type V3 } from "./glb.ts";
 
-const [loopFile, loopName, otherFile, ...others] = process.argv.slice(2);
-if (!others.length) throw new Error("blend: give LOOP.glb LOOP_CLIP OTHER.glb and the clips the game plays from the loop");
-const a = new Glb(loopFile);
-const b = new Glb(otherFile);
 const JOINTS = ["Head", "upperarm_r", "upperarm_l", "lowerarm_r", "lowerarm_l", "hand_r", "hand_l", "calf_r", "calf_l"];
 function shape(g: Glb, name: string, t: number): V3[] {
   const clip = g.clip(name);
@@ -25,9 +21,23 @@ function shape(g: Glb, name: string, t: number): V3[] {
 }
 const samples = (g: Glb, name: string, n: number) => Array.from({ length: n }, (_, k) => shape(g, name, (k / n) * g.clip(name)!.end));
 const dist = (x: V3[], y: V3[]) => (x.reduce((s, v, i) => s + len(sub(v, y[i])), 0) / x.length) * 100;
-const loop = samples(a, loopName, 24);
-for (const name of others) {
+
+/// For each of the loop's 24 moments, the nearest of the other clip's 48 poses (cm): from its
+/// first pose, the mean and the worst.
+export function blend(a: Glb, loopName: string, b: Glb, name: string): { first: number; mean: number; worst: number } {
+  const loop = samples(a, loopName, 24);
   const to = samples(b, name, 48);
   const near = loop.map((s) => Math.min(...to.map((o) => dist(s, o))));
-  console.log(`${loopName} -> ${name}: from its first pose ${near[0].toFixed(1)} cm, mean ${(near.reduce((x, y) => x + y, 0) / near.length).toFixed(1)}, worst ${Math.max(...near).toFixed(1)}`);
+  return { first: near[0], mean: near.reduce((x, y) => x + y, 0) / near.length, worst: Math.max(...near) };
+}
+
+if (import.meta.main) {
+  const [loopFile, loopName, otherFile, ...others] = process.argv.slice(2);
+  if (!others.length) throw new Error("blend: give LOOP.glb LOOP_CLIP OTHER.glb and the clips the game plays from the loop");
+  const a = new Glb(loopFile);
+  const b = new Glb(otherFile);
+  for (const name of others) {
+    const r = blend(a, loopName, b, name);
+    console.log(`${loopName} -> ${name}: from its first pose ${r.first.toFixed(1)} cm, mean ${r.mean.toFixed(1)}, worst ${r.worst.toFixed(1)}`);
+  }
 }

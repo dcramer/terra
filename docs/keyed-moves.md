@@ -30,7 +30,7 @@ A small loop such as an idle goes through the same steps with less from the shee
 One move, one owner. Each step says what stops the job.
 
 1. **Brief the move.** Say what it does in the fight: where it starts and ends, the hit's moment, how far the body travels, which foot steps, and which reference item it is made for (D565).
-2. **Look at the start pose before anything else.** A keyed move inherits its start pose's faults: today's idle had its palms out, arms wide, head turned and shoulders raised, and the keyed idle copied them until the developer saw them. Judge the start pose first, name in the brief what must differ, and set it with `start` in the keys. A new start must still blend with what the game plays from it: measure how far it stands from those clips' nearest poses, against the old start (`spike/pose-sheet/blend.ts`).
+2. **Look at the start pose before anything else.** A keyed move inherits its start pose's faults: today's idle had its palms out, arms wide, head turned and shoulders raised, and the keyed idle copied them until the developer saw them. Judge the start pose first, name in the brief what must differ, and set it with `start` in the keys. A new start must still blend with what the game plays from it: measure how far it stands from those clips' nearest poses, against the old start (`tools/characters/blend.ts`).
 
    **Render the start.** Our body in its start pose, from two sides, with the item in hand (`tools/characters/clip_sheet.ts`).
 3. **Make the sheet.** `node tools/tripo/tripo.ts image "…" --ref guard.png --model gpt-image-2.5 --aspect 16:9`. The prompt asks for:
@@ -49,7 +49,7 @@ One move, one owner. Each step says what stops the job.
 6. **Pass the gates**, before any film:
    - `tools/characters/mesh.ts`: the start, the feet, the speed and the hit's moment against the guard;
    - `tools/characters/moves.ts`: the wrist, the grip, the sword through its own shield, and hands into the body on every body template;
-   - `spike/pose-sheet/rest.ts`, for empty hands: the upper arm against the side, the elbow a little bent, the palm toward the thigh and touching it, the fingers curled, on every template, against a person at ease (an upright CT study), not a clip; `--arms` as the game composes it.
+   - `tools/characters/rest.ts`, for empty hands: the upper arm against the side, the elbow a little bent, the palm toward the thigh and touching it, the fingers curled, on every template, against a person at ease (an upright CT study), not a clip; `--arms` as the game composes it.
 
    `mesh.ts` and the `held` rows are for blows; an idle doesn't use them.
 
@@ -60,11 +60,10 @@ One move, one owner. Each step says what stops the job.
 
 ## What exists
 
-- `spike/pose-sheet/key.ts`: keys to clip, for the player's body and one guard. It sets the hips, chest, head, shoulders, sword hand and its blade, the shield's offset, and each foot and heel, and solves the arms and legs to reach them.
-- `spike/pose-sheet/stills.py`: the stills for step 5.
-- `spike/pose-sheet/slash.json` and `slash-sheet.jpg`: the worked example.
-- `spike/pose-sheet/idle.json` and `idle-sheet-2.jpg`: a loop, with `loop`, `hang`, `rest_arm` and a neutral `start`, keyed from a sheet drawn from the brief alone (`idle-sheet.jpg`, drawn from our render, copied its arms).
-- `spike/pose-sheet/rest.ts` and `blend.ts`: empty hands hanging as a person's do, and a start's distance from the clips the game blends into.
+- `tools/characters/key.ts`: keys to a take (the body with that one clip), solved on the body the keys name (the mannequin unless they say), from a guard that is a clip of it or a kept pose file. It sets the hips, chest, head, shoulders, sword hand and its blade, the shield's offset, and each foot and heel, and solves the arms and legs to reach them. Tested in `key.test.ts`.
+- `tools/characters/sheet_stills.py`: the stills for step 5.
+- `art/animation/keyed/`, the keys and their sheets, the source: `slash.json` and `slash-sheet.jpg`, the worked blow, keyed on `fight.glb`; `idle.json` and `idle-sheet.jpg`, a loop with `loop`, `hang`, `rest_arm` and a neutral `start`, keyed from a sheet drawn from the brief alone, starting from `idle-start.json` (Uthana's idle's first frame with the walk's shoulders, kept so the idle no longer depends on the clip it replaces).
+- `tools/characters/rest.ts` and `blend.ts`: empty hands hanging as a person's do, and a start's distance from the clips the game blends into; tested beside them.
 
 ## What it still lacks
 
@@ -73,7 +72,7 @@ In the order to build them:
 1. **The step.** The test blow stands still, so it lands less often. Travel has to be keyed: the lead foot steps, the body moves with it, and the game reads the travel from the clip instead of a hand-set `drive`. Getting close enough to hit, without the feet sliding, is the biggest open question: the bought blows slid because the game moved the body over feet the clip kept still.
 2. **The gates.** Run `moves.ts` on a keyed clip and fix what it finds. The wrist and the sword through the shield have not been checked.
 3. **The rest of the set.** The backhand, finisher and heavy, then a chain judged as a whole.
-4. **A real tool.** `key.ts` moves to `tools/characters`, with a test, and joins the incremental build (`tools/characters/build.ts`) so a clip remakes itself when its keys change. It must take any start pose, both hands on one item, and any item class's reference.
+4. **A real tool.** `key.ts` is in `tools/characters` with a test; next it joins the incremental build (`tools/characters/build.ts`, a made.json entry naming its keys) so a clip remakes itself when its keys change. It must take both hands on one item and any item class's reference.
 5. **Other bodies.** Keys are places in metres, so a clip might be solved again for each body template instead of carried across. Untried.
 
 ## What could still go wrong

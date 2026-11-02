@@ -1,5 +1,6 @@
 {
   "name": "Sheet_Slash",
+  "body": "assets/models/character/fight.glb",
   "guard": "Low_Guard",
   "end": 1.15,
   "keys": [

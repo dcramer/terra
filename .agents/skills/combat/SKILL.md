@@ -53,7 +53,7 @@ Not measurable yet (`?`, each with what it needs in `criteria.json`): the blind 
 |---|---|
 | The move check, every body template | `node tools/characters/moves.ts` (`--json rows.json` for the numbers, `--set`, `--clips`, `--spec`) |
 | A clip from its spec (Kimodo, D450) | `node tools/characters/clip.ts <Clip>` into a scratch set; `--measure` rescores; `--into assets/data/moves/sword.shielded.ron` keeps it, refused if the scorecard is worse |
-| A blow keyed from a pose sheet (D588) | [docs/keyed-moves.md](../../../docs/keyed-moves.md); `node spike/pose-sheet/key.ts <keys.json> <out.glb>` |
+| A blow keyed from a pose sheet (D588) | [docs/keyed-moves.md](../../../docs/keyed-moves.md); `node tools/characters/key.ts art/animation/keyed/<move>.json <take.glb>` |
 | A clip's keys, before its takes (D565 step 3): judged, searched, between two | `node tools/characters/keys.ts check <Clip>` (a key past the wrist's bar or too soon after the guard refused); `search <Clip> <at>` (`--edge-toward`, `--swing`, `--twist`, `--dev`, `--grip`, `--yaw=-15`); `between <Clip> <a> guard` for recovery keys. Check every key before `clip.ts` spends a take |
 | A shield pose's board place against the chest, on every template, from any commit's assets (D554) | `node tools/characters/shield_place.ts` (`--at <commit>`, `--capture <Pose>` into `art/animation/shield_targets.json`, `--json`) |
 | Does a take made elsewhere mesh with the fight, before anything is eased or driven | `node tools/characters/mesh.ts assets/models/character/fight.glb:Open_Slash@1.21 take.glb` (start against the guard, feet, body, shape; the first clip names the bars) |

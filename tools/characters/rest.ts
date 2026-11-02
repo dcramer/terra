@@ -17,14 +17,14 @@
 // tool hold the arms out for every body and are no bar: research/2026-11-01-pose-sheet-blow.md,
 // "The idle's arms, from a person at ease".
 //
-//   node spike/pose-sheet/rest.ts FILE.glb CLIP [--arms]
+//   node tools/characters/rest.ts FILE.glb CLIP [--arms]
 //
 // `--arms` measures the pose the game shows: the clip, then the walker's hip-keeping turn
 // (arms.ts, D535) laid over it on each template, as moves.ts --arms does.
 
-import { Glb, len, sub, type V3 } from "../../tools/characters/glb.ts";
-import { keptOff } from "../../tools/characters/arms.ts";
-import { shaped, skinOf } from "../../tools/characters/skin.ts";
+import { Glb, len, sub, type Clip, type V3 } from "./glb.ts";
+import { keptOff } from "./arms.ts";
+import { shaped, skinOf } from "./skin.ts";
 
 // [least, most, and the least it must come to at some moment] for each measure:
 //   upper arm   the CT's IQR (1 to 8 at the shoulder) and a little for the sway
@@ -54,27 +54,24 @@ const norm = (a: V3): V3 => {
 const deg = (r: number) => (r * 180) / Math.PI;
 const between = (a: V3, b: V3) => deg(Math.acos(Math.max(-1, Math.min(1, dot(norm(a), norm(b))))));
 
-const args = process.argv.slice(2);
-const arms = args.includes("--arms");
-const [file, name] = args.filter((a) => a !== "--arms");
-const from = new Glb(file);
-const clip = from.clip(name);
-if (!clip) throw new Error(`rest: no clip ${name} in ${file}; give a clip the file holds (${from.clipNames().slice(0, 6).join(", ")}, ...)`);
 // Played on the game's body and its templates, whatever file the clip comes from, as moves.ts does.
 const g = new Glb("assets/models/character/base.glb");
 const { shapes, skinned } = skinOf(g, "assets/models/character/templates.json");
 const bone = (n: string) => {
   const i = g.named(n);
-  if (i < 0) throw new Error(`rest: no bone ${n} in ${file}; the measures need our skeleton's arm, hand and thigh bones`);
+  if (i < 0) throw new Error(`rest: no bone ${n} in base.glb; the measures need our skeleton's arm, hand and thigh bones`);
   return i;
 };
 
-type Side = "r" | "l";
-/// Each side's measures at one moment on one template, in the body's own frame: its side-to-side
-/// axis from the hip joints, level, so a clip turned in the file reads the same.
-function measure(shape: (typeof shapes)[number], t: number): Record<Side, Record<string, number>> {
-  let p = shaped(g, shape, clip!, t);
-  if (arms) p = shaped(g, shape, clip!, t, keptOff(g, p));
+export type Side = "r" | "l";
+/// Each side's measures of `clip` at one moment on one template (`male`, `female`, ...), in the
+/// body's own frame: its side-to-side axis from the hip joints, level, so a clip turned in the
+/// file reads the same. `arms`: with the walker's hip-keeping turn laid over it.
+export function measure(clip: Clip, template: string, t: number, arms = false): Record<Side, Record<string, number>> {
+  const shape = shapes.find((s) => s.name === template);
+  if (!shape) throw new Error(`rest: no template ${template}; templates.json has ${shapes.map((s) => s.name).join(", ")}`);
+  let p = shaped(g, shape, clip, t);
+  if (arms) p = shaped(g, shape, clip, t, keptOff(g, p));
   const inside = skinned(shape, p);
   const at = (n: string) => p[bone(n)].t;
   const across = sub(at("thigh_r"), at("thigh_l"));
@@ -104,28 +101,44 @@ function measure(shape: (typeof shapes)[number], t: number): Record<Side, Record
   return res;
 }
 
-let failed = false;
 const f = (m: string, v: number) => `${v.toFixed(0)}${UNITS[m]}`;
 const range = (m: string, vs: number[]) => {
   const [a, b] = [Math.min(...vs), Math.max(...vs)];
   return { a, b, text: Math.abs(b - a) < 0.5 ? f(m, a) : `${a.toFixed(0)}..${f(m, b)}` };
 };
-const all = shapes.map((shape) => ({ shape: shape.name, moments: Array.from({ length: 13 }, (_, k) => measure(shape, (k / 12) * clip.end)) }));
-for (const side of ["r", "l"] as const) {
-  const parts: string[] = [];
-  const bad: string[] = [];
-  for (const [m, [lo, hi, reaches = Infinity]] of Object.entries(BARS)) {
-    // The gaps by template, since the widest hips and the narrowest set them; the angles over all.
-    const byShape = m.endsWith("gap") ? all.map((x) => ({ who: x.shape, ...range(m, x.moments.map((y) => y[side][m])) })) : [{ who: "", ...range(m, all.flatMap((x) => x.moments.map((y) => y[side][m]))) }];
-    const off = byShape.filter((r) => r.a < lo || r.b > hi || r.a > reaches);
-    const text = byShape.length > 1 ? byShape.map((r) => `${r.who} ${r.text}`).join(" ") : byShape[0].text;
-    parts.push(`${m} ${text}${off.length ? " ✗" : ""}`);
-    if (off.length) bad.push(m);
-  }
-  failed ||= bad.length > 0;
-  console.log(`${bad.length ? "✗" : "✓"} ${name} ${side}${arms ? " (as the game shows it)" : ""}: ${parts.join("; ")}`);
+
+/// Each side's line and whether it passed: every measure over the clip on every template.
+export function judge(clip: Clip, arms = false): { side: Side; pass: boolean; parts: string[] }[] {
+  const all = shapes.map((shape) => ({ shape: shape.name, moments: Array.from({ length: 13 }, (_, k) => measure(clip, shape.name, (k / 12) * clip.end, arms)) }));
+  return (["r", "l"] as const).map((side) => {
+    const parts: string[] = [];
+    let pass = true;
+    for (const [m, [lo, hi, reaches = Infinity]] of Object.entries(BARS)) {
+      // The gaps by template, since the widest hips and the narrowest set them; the angles over all.
+      const byShape = m.endsWith("gap") ? all.map((x) => ({ who: x.shape, ...range(m, x.moments.map((y) => y[side][m])) })) : [{ who: "", ...range(m, all.flatMap((x) => x.moments.map((y) => y[side][m]))) }];
+      const off = byShape.filter((r) => r.a < lo || r.b > hi || r.a > reaches);
+      const text = byShape.length > 1 ? byShape.map((r) => `${r.who} ${r.text}`).join(" ") : byShape[0].text;
+      parts.push(`${m} ${text}${off.length ? " ✗" : ""}`);
+      if (off.length) pass = false;
+    }
+    return { side, pass, parts };
+  });
 }
-const barText = ([m, [lo, hi, reaches]]: [string, [number, number, number?]]) => `${m} ${lo === -Infinity ? `at most ${f(m, hi)}` : `${lo}..${f(m, hi)}`}${reaches === undefined ? "" : `, down to ${f(m, reaches)} at some moment`}`;
-console.log(`  bars: ${Object.entries(BARS).map(barText).join("; ")}`);
-if (failed) console.log("  pose the hanging arm in the keys (`rest_arm`, `fingers`); don't widen the bars: they are a person at ease, the header says whose");
-process.exit(failed ? 1 : 0);
+
+if (import.meta.main) {
+  const args = process.argv.slice(2);
+  const arms = args.includes("--arms");
+  const [file, name] = args.filter((a) => a !== "--arms");
+  const from = new Glb(file);
+  const clip = from.clip(name);
+  if (!clip) throw new Error(`rest: no clip ${name} in ${file}; give a clip the file holds (${from.clipNames().slice(0, 6).join(", ")}, ...)`);
+  let failed = false;
+  for (const { side, pass, parts } of judge(clip, arms)) {
+    failed ||= !pass;
+    console.log(`${pass ? "✓" : "✗"} ${name} ${side}${arms ? " (as the game shows it)" : ""}: ${parts.join("; ")}`);
+  }
+  const barText = ([m, [lo, hi, reaches]]: [string, [number, number, number?]]) => `${m} ${lo === -Infinity ? `at most ${f(m, hi)}` : `${lo}..${f(m, hi)}`}${reaches === undefined ? "" : `, down to ${f(m, reaches)} at some moment`}`;
+  console.log(`  bars: ${Object.entries(BARS).map(barText).join("; ")}`);
+  if (failed) console.log("  pose the hanging arm in the keys (`rest_arm`, `fingers`); don't widen the bars: they are a person at ease, the header says whose");
+  process.exit(failed ? 1 : 0);
+}
