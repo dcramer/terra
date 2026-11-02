@@ -115,7 +115,7 @@ export function between(a: V3, b: V3): Q {
   return [c[0] / l, c[1] / l, c[2] / l, w / l];
 }
 
-/** Two-bone IK (Unreal's Two Bone IK, stand.py's `two_bone`): the knee for a thigh from `hip`
+/** Two-bone IK (Unreal's Two Bone IK): the knee for a thigh from `hip`
  * and a shin reaching `ankle`, in the plane of the hip, the ankle and the knee it had (`knee`),
  * the segments their lengths now; and the ankle reached (short of it, on its line, past reach). */
 export function twoBone(hip: V3, knee: V3, ankle: V3, goal: V3): { knee: V3; ankle: V3 } {

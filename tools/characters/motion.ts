@@ -72,6 +72,8 @@ type Entry = {
   speeds?: [number, number][]; travels?: boolean;
   source?: "uthana"; looped?: number; motion?: string; model?: "1" | "2" | "3" | "loco"; foot_ik?: boolean;
   style?: string | string[]; strides?: number;
+  /** Keyed, not generated (D588): its key poses, which made_clips.py solves with key.ts. */
+  keys?: string;
 };
 
 /** A take of an Uthana entry: the motion made, its prompt, the model and seed that made it, the
@@ -241,6 +243,7 @@ async function main() {
   const list: Record<string, Entry> = JSON.parse(readFileSync(LIST, "utf8"));
   const entry = list[clip];
   if (!entry) throw new Error(`${clip} is not in ${named}; add its prompt, speed, seconds and seed`);
+  if (entry.keys) throw new Error(`${clip} is keyed from ${entry.keys} (D588), not generated: change its keys and rebuild (tools/characters/build_bodies.sh), or take "keys" out of its entry to generate it again`);
   // How many takes are made: the entry's, so its kept take can be made again, or 3.
   const samples = values.samples ?? String(entry.samples ?? 3);
   const dir = values.list ? join(OUT, basename(MADE), clip) : join(OUT, clip);

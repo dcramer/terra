@@ -45,7 +45,7 @@ export const SECTIONS = ["== 0. the clips", "== 1. the base", "== 2. its gear", 
 export const MODULE_DATA: Record<string, string[]> = {
   "tools/characters/look.py": ["assets/models/character/skinning.json", "art/animation/clips.txt", "tools/blender/run.sh", "tools/blender/version", "assets/models/character/mannequin.glb"],
   "tools/characters/clips.py": ["art/animation/library", "art/animation/made.json"],
-  "tools/characters/made_clips.py": ["art/animation/made", "art/animation/made.json", "tools/characters/glb_clips.ts"],
+  "tools/characters/made_clips.py": ["art/animation/made", "art/animation/made.json", "tools/characters/glb_clips.ts", "art/animation/keyed", "tools/characters/key.ts"],
   "tools/characters/export_character.py": ["art/animation/made.json"],
   "tools/characters/hold.py": ["art/animation/shield_targets.json"],
   "tools/characters/rig_check.py": ["art/characters/rig-baseline.json"],
