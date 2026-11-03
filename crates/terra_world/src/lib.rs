@@ -90,6 +90,7 @@ pub mod spatial;
 pub mod start;
 mod streaming;
 pub mod terrain;
+pub mod threads;
 pub mod tick;
 pub mod tune;
 #[cfg(test)]

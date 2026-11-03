@@ -6,37 +6,24 @@
 //! same world on any machine.
 
 use crate::loading::Screen;
-use bevy::{
-    prelude::*,
-    tasks::{TaskPool, TaskPoolBuilder},
-};
+use bevy::{prelude::*, tasks::TaskPool};
+use terra_gen::par::Work;
 
-/// The pool the far things are worked out on: a quarter of the cores, each thread working its
-/// task alone (`terra_gen::par::keep_to_this_thread`), so the game's own threads (the main,
-/// render and Bevy's pools) keep their cores while it works, as Unreal's background workers
-/// sit below the game and render threads. With all but two of the cores (14 of the bench's
-/// 16) the lake's main thread took 15 to 22 ms a frame for the 30 s the far ground streamed,
-/// not 6.5 ms; nice 19 did not help (load-time j5), as the threads shared the game's cores'
-/// caches and hyperthreads, not only their time (perf-regress j1, D603).
+/// The pool the far things are worked out on: the streaming's share of the background in the
+/// table of the game's threads (D606), each thread working its task alone
+/// (`terra_gen::par::keep_to_this_thread`), so the game's own threads (the main, render and
+/// Bevy's pools) keep their cores while it works, as Unreal's background workers sit below
+/// the game and render threads. With all but two of the cores (14 of the bench's 16) the
+/// lake's main thread took 15 to 22 ms a frame for the 30 s the far ground streamed, not 6.5
+/// ms; nice 19 did not help (load-time j5), as the threads shared the game's cores' caches and
+/// hyperthreads, not only their time (perf-regress j1, D603).
 #[derive(Resource)]
 pub(crate) struct Streaming(pub(crate) TaskPool);
 
 impl Default for Streaming {
     fn default() -> Self {
-        let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
-        Self(
-            TaskPoolBuilder::new()
-                .num_threads(threads(cores))
-                .thread_name("Streaming far".into())
-                .on_thread_spawn(terra_gen::par::keep_to_this_thread)
-                .build(),
-        )
+        Self(crate::threads::pool(Work::Streaming, "Streaming far"))
     }
-}
-
-/// The streaming pool's threads on a machine of `cores`: a quarter, at least one.
-fn threads(cores: usize) -> usize {
-    (cores / 4).max(1)
 }
 
 /// Whether the loading screen has lifted, so the far things may start: any screen but the
@@ -50,14 +37,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_streaming_pool_leaves_the_game_three_quarters_of_the_cores_and_never_fans_out() {
-        // A quarter of any machine's cores, at least one: the bench's 16 give 4.
-        for (cores, most) in [(1, 1), (4, 1), (16, 4), (32, 8)] {
-            assert_eq!(threads(cores), most, "{cores} cores");
-        }
+    fn the_streaming_pool_has_its_share_of_the_background_and_never_fans_out() {
+        let pool = Streaming::default();
+        assert_eq!(pool.0.thread_num(), terra_gen::par::threads().streaming);
         // A map asked on one of its threads stays on that thread (the woods' far cards ask
         // one), however many cores the machine has.
-        let pool = Streaming::default();
         let items: Vec<u32> = (0..64).collect();
         let (here, workers) = bevy::tasks::block_on(pool.0.spawn(async move {
             let workers = terra_gen::par::map(&items, |_| {

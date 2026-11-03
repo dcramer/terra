@@ -25,7 +25,7 @@ pub fn engine(app: &mut App, windowless: bool) -> PluginGroupBuilder {
     // frame). Blocks of 64 MiB, a full mesh slab's page (D420), cost 2.5 ms each instead; VMA,
     // the allocator Godot's Vulkan driver uses, likewise begins with blocks an eighth of its
     // 256 MiB default (D543).
-    let engine = DefaultPlugins.build().set(bevy::render::RenderPlugin {
+    let render = bevy::render::RenderPlugin {
         render_creation: bevy::render::settings::WgpuSettings {
             memory_hints: bevy::render::settings::MemoryHints::Manual {
                 suballocated_device_memory_block_size: MEMORY_BLOCK..MEMORY_BLOCK,
@@ -34,7 +34,13 @@ pub fn engine(app: &mut App, windowless: bool) -> PluginGroupBuilder {
         }
         .into(),
         ..default()
-    });
+    };
+    // Bevy's pools are sized from the table of the game's threads (D606), not each a quarter
+    // of the cores as if alone.
+    let engine = DefaultPlugins
+        .build()
+        .set(crate::threads::plugin())
+        .set(render);
     if !windowless {
         return engine;
     }
