@@ -16,7 +16,7 @@ use crate::instance::{Building, InWorld, InstanceApp};
 use crate::loading::{self, Progress};
 use crate::planet::MainCamera;
 use crate::planet::{GroundLook, Planet};
-use crate::streaming::Streaming;
+use crate::streaming::{Class, Place, Streaming, Ticket};
 use bevy::{
     asset::RenderAssetUsages,
     mesh::Indices,
@@ -74,9 +74,26 @@ struct Shown {
 
 struct Pending {
     sides: Sides,
-    task: Task<Option<Mesh>>,
+    task: Meshing,
     /// One of the first view's far chunks, which the loading screen does not wait for.
     streamed: bool,
+}
+
+/// A chunk's meshing: near, on Bevy's async pool at once; far, asked of the streaming's
+/// scheduler, started in its turn (D608). Dropping either stops it.
+enum Meshing {
+    Near(Task<Option<Mesh>>),
+    Far(Ticket<Option<Mesh>>),
+}
+
+impl Meshing {
+    /// The mesh, if it is made.
+    fn poll(&mut self) -> Option<Option<Mesh>> {
+        match self {
+            Meshing::Near(task) => block_on(future::poll_once(task)),
+            Meshing::Far(ticket) => ticket.take(),
+        }
+    }
 }
 
 /// The first view of each world is meshed in this set, on entering it, from where the
@@ -90,18 +107,19 @@ pub struct FirstView;
 pub fn plugin(app: &mut App) {
     app.init_world_resource::<Terrain>()
         .configure_sets(OnEnter(InWorld), FirstView.in_set(Building::View))
-        .add_systems(OnEnter(InWorld), first_view.in_set(FirstView))
-        .init_resource::<Streaming>()
-        .add_systems(
-            Update,
-            (
-                stream_far.run_if(crate::streaming::lifted),
-                choose,
-                receive,
-                track.in_set(loading::Track),
-            )
-                .chain(),
-        );
+        .add_systems(OnEnter(InWorld), first_view.in_set(FirstView));
+    crate::streaming::plugin(app);
+    app.add_systems(
+        Update,
+        (
+            stream_far.run_if(crate::streaming::lifted),
+            choose,
+            receive,
+            track.in_set(loading::Track),
+            crate::streaming::time_far_view,
+        )
+            .chain(),
+    );
 }
 
 impl Terrain {
@@ -127,19 +145,25 @@ fn track(terrain: Res<Terrain>, mut progress: ResMut<Progress>) {
     );
 }
 
-/// Once the loading screen has lifted, meshes the first view's far chunks on the streaming
-/// pool, the nearer (finer) levels first.
-fn stream_far(planet: Res<Planet>, streaming: Res<Streaming>, mut terrain: ResMut<Terrain>) {
+/// Once the loading screen has lifted, asks the streaming's scheduler to mesh the first
+/// view's far chunks (D608): it starts a few at a time, nearest the camera first, so the
+/// woods' far cards, asked of the same pool, start behind a few chunks and not all 1473
+/// (perf-regress j2), and the chunks the camera walks toward come sooner.
+fn stream_far(planet: Res<Planet>, mut streaming: ResMut<Streaming>, mut terrain: ResMut<Terrain>) {
     terra_gen::stat_scope!("terrain");
     if terrain.later.is_empty() {
         return;
     }
-    let mut later: Vec<(ChunkId, Sides)> = terrain.later.drain().collect();
-    later.sort_by_key(|(id, _)| (id.level, id.coord.to_array()));
-    terrain.streaming_since = Some((std::time::Instant::now(), later.len()));
+    let later: Vec<(ChunkId, Sides)> = terrain.later.drain().collect();
+    if terrain.streaming_since.is_none() {
+        terrain.streaming_since = Some((std::time::Instant::now(), later.len()));
+    }
     for (id, sides) in later {
         let planet = planet.clone();
-        let task = streaming.0.spawn(async move { mesh(&planet, id, sides) });
+        let low = chunk_origin(id);
+        let place = Place::Bounds(low, low + Vec3::splat(chunk_size_m(id.level)));
+        let ticket = streaming.ask(Class::FarGround, place, move || mesh(&planet, id, sides));
+        let task = Meshing::Far(ticket);
         let streamed = true;
         (terrain.pending).insert(
             id,
@@ -816,7 +840,7 @@ fn choose(
         }
         terrain.later.remove(&id);
         let planet = planet.clone();
-        let task = pool.spawn(async move { mesh(&planet, id, sides) });
+        let task = Meshing::Near(pool.spawn(async move { mesh(&planet, id, sides) }));
         let streamed = false;
         (terrain.pending).insert(
             id,
@@ -839,6 +863,7 @@ fn receive(
     mut commands: Commands,
     look: Option<Res<GroundLook>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut streaming: ResMut<Streaming>,
     mut terrain: ResMut<Terrain>,
 ) {
     terra_gen::stat_scope!("terrain");
@@ -848,7 +873,18 @@ fn receive(
         let Some(pending) = terrain.pending.get_mut(&id) else {
             continue;
         };
-        let Some(mesh) = block_on(future::poll_once(&mut pending.task)) else {
+        // The far ground enters under the frame's budget (D608); the near always does, and
+        // counts against it.
+        let class = if pending.streamed {
+            Class::FarGround
+        } else {
+            Class::NearGround
+        };
+        if !streaming.may_enter(class) {
+            continue;
+        }
+        let began = std::time::Instant::now();
+        let Some(mesh) = pending.task.poll() else {
             continue;
         };
         let sides = pending.sides;
@@ -856,13 +892,16 @@ fn receive(
         if let Some(old) = terrain.shown.remove(&id).and_then(|shown| shown.entity) {
             commands.entity(old).despawn();
         }
+        let bytes = mesh.as_ref().map_or(0, crate::streaming::mesh_bytes);
         let entity = show(&mut commands, &mut meshes, &look, id, mesh);
         terrain.shown.insert(id, Shown { sides, entity });
+        streaming.entered(class, began, bytes);
     }
     // The far chunks streaming in hold back no stale chunk's going: they are kilometres off,
     // and the chunks walked past would pile up, drawn over each other, meanwhile.
-    let streaming = terrain.pending.values().any(|pending| pending.streamed);
-    if let (false, Some((since, count))) = (streaming, terrain.streaming_since) {
+    let far_coming =
+        !terrain.later.is_empty() || terrain.pending.values().any(|pending| pending.streamed);
+    if let (false, Some((since, count))) = (far_coming, terrain.streaming_since) {
         terrain.streaming_since = None;
         let secs = since.elapsed().as_secs_f32();
         info!(

@@ -14,9 +14,8 @@ use crate::grown::{self, Cards};
 use crate::instance::{Building, InWorld, InstanceApp};
 use crate::planet::Planet;
 use crate::start::Start;
-use crate::streaming::Streaming;
+use crate::streaming::{Class, Place, Streaming, Ticket};
 use bevy::platform::time::Instant;
-use bevy::tasks::{Task, block_on, futures_lite::future::poll_once};
 use bevy::{
     asset::RenderAssetUsages,
     camera::{primitives::Aabb, visibility::NoAutoAabb},
@@ -207,11 +206,11 @@ impl MaterialExtension for FarExtension {
 }
 
 pub fn plugin(app: &mut App) {
+    crate::streaming::plugin(app);
     // The woods and the conifers they are drawn from are the world's (D469).
     app.add_plugins(MaterialPlugin::<FarWoods>::default())
         .world_resource::<Conifers>()
         .init_world_resource::<FarCards>()
-        .init_resource::<Streaming>()
         .configure_sets(OnEnter(InWorld), Planting.in_set(Building::View))
         .add_systems(OnEnter(InWorld), plant.in_set(Planting))
         .add_systems(
@@ -342,21 +341,36 @@ fn stood(
     (near, mid)
 }
 
-/// The coarser cards past `COARSE_M` to `FAR_M`, none in a snowbed, merged a square at a
-/// time: worked out after the loading screen lifts, on the streaming pool, as they were 60%
-/// of the woods' laying. With how many trees they stand for.
-fn coarse_squares(planet: &Planet, middle: Vec3, seed: terra_gen::Seed) -> Squares {
+/// The coarser cards' trees from `inner_m` to `outer_m` of `middle`, none in a snowbed: one
+/// ring of [`rings`], each a task of the streaming's scheduler, as one task on one thread took
+/// 150 s at the lake (perf-regress j2). A tree is laid by its own cell of the ground's grid,
+/// so the rings together lay the trees one pass from `COARSE_M` to `FAR_M` would.
+fn coarse_trees(
+    planet: &Planet,
+    middle: Vec3,
+    (inner_m, outer_m): (f32, f32),
+    seed: terra_gen::Seed,
+) -> Vec<Tree> {
     let Some(round) = planet.round() else {
-        return default();
+        return Vec::new();
     };
     let coarse = Woods::of(round).trees(
         middle,
-        COARSE_M,
-        FAR_M,
+        inner_m,
+        outer_m,
         SPACING_M * 2.0,
         seed.derive("coarse"),
     );
-    let coarse = off_snowbeds(planet, coarse);
+    off_snowbeds(planet, coarse)
+}
+
+/// The coarser cards past `COARSE_M` to `FAR_M` merged a square at a time: worked out after
+/// the loading screen lifts, on the streaming pool, as they were 60% of the woods' laying.
+/// With how many trees they stand for.
+fn coarse_squares(planet: &Planet, middle: Vec3, coarse: Vec<Tree>) -> Squares {
+    let Some(round) = planet.round() else {
+        return default();
+    };
     let land = &round.land;
     let (east, north) = (land.frame.east(middle), land.frame.north(middle));
     let cards = coarse.iter().map(|tree| Card {
@@ -391,7 +405,21 @@ fn squares(
 #[derive(Resource, Default)]
 pub(crate) struct FarCards {
     asked: Option<(Vec3, terra_gen::Seed, Handle<FarWoods>)>,
-    making: Option<(Task<Squares>, Handle<FarWoods>, Instant)>,
+    making: Option<Making>,
+}
+
+/// The far cards on their way: their rings' trees being laid, then merged into squares, then
+/// the squares entering the world, the nearest first, under the frame's budget (D608).
+struct Making {
+    middle: Vec3,
+    material: Handle<FarWoods>,
+    since: Instant,
+    rings: Vec<Ticket<Vec<Tree>>>,
+    trees: Vec<Tree>,
+    merging: Option<Ticket<Squares>>,
+    /// The squares made, the farthest first, and how many trees and squares in all.
+    entering: Vec<(Mesh, Vec3, Aabb)>,
+    made: Option<(usize, usize)>,
 }
 
 /// The far cards' squares, each its mesh, middle and bounds, and how many trees they hold.
@@ -404,39 +432,87 @@ impl FarCards {
     }
 }
 
-/// Lays and merges the coarse cards on the streaming pool once the loading screen has lifted,
-/// and puts them in the world when they are made.
+/// Lays and merges the coarse cards through the streaming's scheduler once the loading screen
+/// has lifted, a ring a task so the pool's threads share them, and lets the squares into the
+/// world under the frame's budget, the nearest first.
 fn stream_cards(
     mut commands: Commands,
     planet: Res<Planet>,
-    streaming: Res<Streaming>,
+    mut streaming: ResMut<Streaming>,
     mut cards: ResMut<FarCards>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     terra_gen::stat_scope!("flora");
     if let Some((middle, seed, material)) = cards.asked.take() {
-        let planet = planet.clone();
-        let task = (streaming.0).spawn(async move { coarse_squares(&planet, middle, seed) });
-        cards.making = Some((task, material, Instant::now()));
+        let rings = crate::streaming::order::rings(COARSE_M, FAR_M, streaming.in_flight())
+            .into_iter()
+            .map(|ring| {
+                let planet = planet.clone();
+                let place = Place::Ring {
+                    middle,
+                    inner_m: ring.0,
+                };
+                streaming.ask(Class::FarWoods, place, move || {
+                    coarse_trees(&planet, middle, ring, seed)
+                })
+            })
+            .collect();
+        cards.making = Some(Making {
+            middle,
+            material,
+            since: Instant::now(),
+            rings,
+            trees: Vec::new(),
+            merging: None,
+            entering: Vec::new(),
+            made: None,
+        });
         return;
     }
-    let Some((task, ..)) = cards.making.as_mut() else {
+    let Some(making) = cards.making.as_mut() else {
         return;
     };
-    let Some((squares, trees)) = block_on(poll_once(task)) else {
-        return;
-    };
-    let Some((_, material, since)) = cards.making.take() else {
-        return;
-    };
-    let count = squares.len();
-    for (mesh, middle, aabb) in squares {
-        commands.spawn(far_square(meshes.add(mesh), material.clone(), middle, aabb));
+    making.rings.retain(|ring| match ring.take() {
+        Some(trees) => {
+            making.trees.extend(trees);
+            false
+        }
+        None => true,
+    });
+    if making.rings.is_empty() && making.merging.is_none() && making.made.is_none() {
+        let (planet, middle) = (planet.clone(), making.middle);
+        let trees = std::mem::take(&mut making.trees);
+        let place = Place::Ring {
+            middle,
+            inner_m: COARSE_M,
+        };
+        let merge = move || coarse_squares(&planet, middle, trees);
+        making.merging = Some(streaming.ask(Class::FarWoods, place, merge));
     }
+    if let Some((mut squares, trees)) = making.merging.as_ref().and_then(Ticket::take) {
+        let middle = making.middle;
+        squares.sort_by(|a, b| b.1.distance(middle).total_cmp(&a.1.distance(middle)));
+        making.made = Some((trees, squares.len()));
+        making.entering = squares;
+        making.merging = None;
+    }
+    while streaming.may_enter(Class::FarWoods)
+        && let Some((mesh, middle, aabb)) = making.entering.pop()
+    {
+        let began = std::time::Instant::now();
+        let bytes = crate::streaming::mesh_bytes(&mesh);
+        let material = making.material.clone();
+        commands.spawn(far_square(meshes.add(mesh), material, middle, aabb));
+        streaming.entered(Class::FarWoods, began, bytes);
+    }
+    let Some((trees, count)) = making.made.filter(|_| making.entering.is_empty()) else {
+        return;
+    };
     info!(
         "Woods: {trees} coarse cards from {COARSE_M:.0} to {FAR_M:.0} m in {count} squares, streamed in {:.1} s after the loading screen lifted",
-        since.elapsed().as_secs_f32()
+        making.since.elapsed().as_secs_f32()
     );
+    cards.making = None;
 }
 
 /// A square of far cards, as one entity.
@@ -755,6 +831,7 @@ fn outward([across, up]: [i32; 2]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use bevy::mesh::VertexAttributeValues;
 
     /// The lush experiment's far forest draws by `far_mesh` too: a square's bounds hold its
