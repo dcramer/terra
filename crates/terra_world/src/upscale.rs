@@ -9,6 +9,11 @@
 //!
 //! The picture's scale factor is the screen's times the share, so the camera's view in
 //! logical pixels is the screen's and pointing with the mouse is unchanged.
+//!
+//! A window larger than the preset is made for is drawn at no more pixels than a budget
+//! (`PIXEL_BUDGET`, D616), as shipped games cap their render resolution below a large output
+//! (Unreal's screen percentage, consoles' fixed internal resolution): shading pixels is most
+//! of the frame at the lake, so a window of twice 1080p's pixels costs about twice its frame.
 
 use crate::planet::MainCamera;
 use crate::quality::Quality;
@@ -20,11 +25,34 @@ use bevy::{
     render::render_resource::{TextureFormat, TextureUsages},
     window::{PrimaryWindow, WindowRef},
 };
+use terra_gen::tune::Tunable;
 
 /// The render layer the upscaled picture and the camera showing it are on.
 const SHOWN_LAYER: usize = 31;
 
+/// The most pixels the world is drawn at, in millions, before it is scaled up to the screen
+/// (D616); 0 draws it at the preset's share of the screen whatever the screen's size.
+pub static PIXEL_BUDGET: Tunable = Tunable::new(
+    "render.pixel_budget",
+    0.0,
+    0.0..=40.0,
+    "the most pixels the world is drawn at, in millions, scaled up to a larger screen; 0 no limit",
+);
+
+/// The share of the screen's width and height the world is drawn at: the preset's, or less
+/// where the screen has more pixels than the budget (in millions; 0 none) allows.
+pub fn share(preset: f32, screen: UVec2, budget_mpx: f32) -> f32 {
+    let pixels = screen.x as f32 * screen.y as f32;
+    if budget_mpx <= 0.0 || pixels <= 0.0 {
+        return preset;
+    }
+    let within = libm::sqrtf(budget_mpx * 1.0e6 / pixels);
+    // In hundredths, so a window dragged a pixel wider makes no new picture.
+    preset.min(libm::floorf(within * 100.0) / 100.0)
+}
+
 pub fn plugin(app: &mut App) {
+    terra_gen::tune::register(&[&PIXEL_BUDGET]);
     app.add_systems(PostUpdate, (follow, sharpen)).add_systems(
         PostUpdate,
         stand_with_the_camera.before(bevy::transform::TransformSystems::Propagate),
@@ -93,16 +121,15 @@ fn follow(
     mut scaled: Local<Option<Scaled>>,
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
-    mut camera: Query<&mut RenderTarget, (With<MainCamera>, Without<Presenter>)>,
+    mut camera: Query<(&mut RenderTarget, &mut Projection), (With<MainCamera>, Without<Presenter>)>,
     window: Query<&Window, With<PrimaryWindow>>,
     picture: Option<Res<Picture>>,
     presenters: Query<Entity, With<Presenter>>,
     mut shown: Query<&mut Sprite, With<Shown>>,
 ) {
-    let Some(mut target) = camera.iter_mut().next() else {
+    let Some((mut target, mut projection)) = camera.iter_mut().next() else {
         return;
     };
-    let share = quality.render_scale();
     // Where the world is shown: where the main camera drew before it was scaled.
     let shown_on = scaled
         .as_ref()
@@ -123,13 +150,23 @@ fn follow(
         },
         _ => return,
     };
+    let share = share(quality.render_scale(), size, PIXEL_BUDGET.get());
     if share >= 1.0 || size.x == 0 || size.y == 0 {
         // Full size: drawn straight to the screen.
         if let Some(scaled) = scaled.take() {
             *target = scaled.shown_on;
+            // Bevy 0.20's `camera_system` measures a camera's target again only when the
+            // camera is added, its projection changes or the target's window or image says it
+            // changed, never when the `RenderTarget` itself is swapped; back on a picture
+            // that already existed it kept the scaled size and drew into a corner of it.
+            projection.set_changed();
             for presenter in &presenters {
                 commands.entity(presenter).despawn();
             }
+            info!(
+                "Graphics: the world drawn at the screen's {}x{}.",
+                size.x, size.y
+            );
         }
         return;
     }
@@ -205,4 +242,33 @@ fn follow(
         size: wanted,
         shown_on,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A screen over the budget is drawn at about the budget's pixels, never more; one within
+    /// it, or with no budget, at the preset's share.
+    #[test]
+    fn a_screen_over_the_budget_is_drawn_at_no_more_pixels_than_it() {
+        let wide = UVec2::new(3816, 1550);
+        let s = share(1.0, wide, 2.0736);
+        let drawn = (wide.as_vec2() * s).round();
+        let pixels = drawn.x * drawn.y;
+        assert!(
+            pixels <= 2.0736e6,
+            "{pixels} pixels drawn over a 2.07 M budget"
+        );
+        assert!(
+            pixels > 0.95 * 2.0736e6,
+            "{pixels} pixels drawn, far under the budget"
+        );
+        assert_eq!(share(1.0, UVec2::new(1920, 1080), 2.0736), 1.0);
+        assert_eq!(share(1.0, wide, 0.0), 1.0);
+        assert_eq!(share(0.6, wide, 0.0), 0.6);
+        // The low preset's share is a ceiling the budget only lowers.
+        assert_eq!(share(0.6, UVec2::new(1920, 1080), 2.0736), 0.6);
+        assert!(share(0.6, UVec2::new(7680, 4320), 2.0736) < 0.6);
+    }
 }
