@@ -177,6 +177,12 @@ def worn_over():
     figure = bpy.context.view_layer.objects.active
     figure.name = "Figure"
     figure["dressed"] = True
+    # Every face kept apart, for rays cast from outside (bands.path), whose first hit is the
+    # outside anyway: where a piece tucks under another's overhang (his tunic's skirt under its
+    # green part), each is under the other and both go, leaving a slit a ray slips through.
+    whole = figure.data.copy()
+    whole.use_fake_user = True
+    figure["whole"] = whole.name
     import bmesh
     from mathutils.bvhtree import BVHTree
     bm = bmesh.new()

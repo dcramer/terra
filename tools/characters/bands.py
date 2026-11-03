@@ -14,6 +14,7 @@ import bmesh
 import bpy
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.geometry import intersect_point_line
 
 import skin_piece
 
@@ -23,9 +24,18 @@ CUT_CLEAR_M = 0.001     # the cut kept this far from the body's vertices (skin_p
 EDGE_RELAX_ROUNDS = 3   # rounds of evening its edges out
 
 
-def tree_of(body):
+def tree_of(body, mesh=None):
     mw = body.matrix_world
-    return BVHTree.FromPolygons([mw @ v.co for v in body.data.vertices], [tuple(p.vertices) for p in body.data.polygons])
+    mesh = mesh or body.data
+    return BVHTree.FromPolygons([mw @ v.co for v in mesh.vertices], [tuple(p.vertices) for p in mesh.polygons])
+
+
+def outside_of(body):
+    """The tree rays from outside are cast at: a dressed figure's every face (look.worn_over
+    keeps them as its "whole"), since the first face such a ray meets is the outside, and the
+    figure less the faces under a layer has slits where one piece tucks under another."""
+    whole = body.get("whole")
+    return tree_of(body, bpy.data.meshes[whole]) if whole else tree_of(body)
 
 
 def on_skin(tree, p):
@@ -37,13 +47,14 @@ def path(body, rays):
     """The path through where `rays` (origin, direction) first meet the body's skin, filled in
     along the skin between them."""
     tree = tree_of(body)
+    outside = outside_of(body)
     anchors = []
     for origin, direction in rays:
         # A ray that passes beside a narrower body moves in toward its middle until it meets
         # skin, so the same route fits any body.
         origin = Vector(origin)
         for _ in range(8):
-            hit = tree.ray_cast(origin, Vector(direction).normalized(), 3.0)
+            hit = outside.ray_cast(origin, Vector(direction).normalized(), 3.0)
             if hit[0] is not None:
                 break
             origin.x *= 0.85
@@ -66,6 +77,23 @@ RIBBON_ACROSS = 5          # points across a ribbon where the surface under it i
 RIBBON_RAMP_M = 0.06       # a ribbon rises to clear what stands under it over this length
 
 
+def bone_lines(body):
+    """Each bone of `body`'s skeleton at rest, as a line from its head to its tail in the world."""
+    arm = body.find_armature()
+    return [(arm.matrix_world @ b.head_local, arm.matrix_world @ b.tail_local) for b in arm.data.bones]
+
+
+def outward(n, p, bones):
+    """`n` turned, if need be, to face away from the bone nearest `p`."""
+    best = None
+    for a, b in bones:
+        q, k = intersect_point_line(p, a, b)
+        q = a if k < 0 else b if k > 1 else q
+        if best is None or (p - q).length < (p - best).length:
+            best = q
+    return -n if n.dot(p - best) < 0 else n
+
+
 def ribbon(body, rays, width, offset, name, material, inner):
     """A new object: a strap laid over `body` along `rays`, as a strap is laid over clothes,
     not cut from them: a solid ribbon `width` wide, from `inner` to `offset` off the highest
@@ -81,9 +109,12 @@ def ribbon(body, rays, width, offset, name, material, inner):
     for _ in range(RIBBON_SMOOTH_ROUNDS):
         line = [line[0]] + [(line[i - 1] + 2 * line[i] + line[i + 1]) / 4 for i in range(1, len(line) - 1)] + [line[-1]]
         line = [on_skin(tree, p) for p in line]
-    # The surface's facing, evened along the line too, so the ribbon does not twist where it
-    # steps from one layer onto another.
-    normals = [tree.find_nearest(p)[1].normalized() for p in line]
+    # The surface's facing, turned away from the bones (a face of a figure in pieces may face
+    # in: a belt's inner side where it stands off the tunic, which turned the ribbon 5 cm into
+    # him), and evened along the line, so the ribbon does not twist where it steps from one
+    # layer onto another.
+    bones = bone_lines(body)
+    normals = [outward(tree.find_nearest(p)[1].normalized(), p, bones) for p in line]
     reach = max(1, int(RIBBON_RAMP_M / STEP_M))
     normals = [sum(normals[max(0, i - reach): i + reach + 1], Vector()).normalized() for i in range(len(line))]
     frames = []
