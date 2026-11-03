@@ -84,6 +84,8 @@ struct Ground {
     // The open sky's light for shaded snow (skylight.rs `snow_light`): the zenith's colour, and
     // the open sky's diffuse light facing up, each at a luminance of one; w is 1 once known.
     snow_light: array<vec4<f32>, 2>,
+    // Whether `noise` reads its corners from `lattice` (1) or hashes them (0).
+    noise_from: u32,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -128,6 +130,10 @@ var climate_leaves: texture_2d_array<f32>;
 var land_map: texture_2d_array<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(115)
 var horizon_map: texture_2d_array<f32>;
+// The value noise's lattice (ground_lattice.rs): a random value at each of LATTICE cells a
+// side, a layer a step in z, each layer a row and a column wider, its last the first again.
+@group(constants::MATERIAL_BIND_GROUP) @binding(116)
+var lattice: texture_2d_array<f32>;
 
 // Snow this deep is the climate map's brightest (`climate::SNOW_FULL_M`).
 const SNOW_FULL_M: f32 = 0.5;
@@ -1231,10 +1237,28 @@ fn jointing(world: vec3<f32>, up: vec3<f32>, spacing: f32, soft: f32, sun: vec3<
     return Joints(turn, crack, ledge, shadow, recess);
 }
 
+// Cells a side before the lattice repeats (ground_lattice.rs `LATTICE`), a power of two.
+const LATTICE: f32 = 128.0;
+
+// Smooth value noise: random values at the integer lattice's points, blended by smoothstep.
 fn noise(p: vec3<f32>) -> f32 {
     let cell = floor(p);
     let f = fract(p);
     let u = f * f * (3.0 - 2.0 * f);
+    if ground.noise_from == 1u {
+        // The eight corners from the lattice in two gathers, a layer each: the cell wrapped
+        // into the lattice (exact, by a power of two), its four corners in x and y one gather
+        // at their shared corner, whose texels come as (x0, y1), (x1, y1), (x1, y0), (x0, y0).
+        let c = cell - LATTICE * floor(cell / LATTICE);
+        let at = (c.xy + 1.0) / (LATTICE + 1.0);
+        let z = i32(c.z);
+        let near = textureGather(0, lattice, ground_sampler, at, z);
+        let far = textureGather(0, lattice, ground_sampler, at, (z + 1) % i32(LATTICE));
+        let y0 = mix(vec2<f32>(near.w, far.w), vec2<f32>(near.z, far.z), u.x);
+        let y1 = mix(vec2<f32>(near.x, far.x), vec2<f32>(near.y, far.y), u.x);
+        let zs = mix(y0, y1, u.y);
+        return mix(zs.x, zs.y, u.z);
+    }
     let x00 = mix(hash(cell), hash(cell + vec3<f32>(1.0, 0.0, 0.0)), u.x);
     let x10 = mix(hash(cell + vec3<f32>(0.0, 1.0, 0.0)), hash(cell + vec3<f32>(1.0, 1.0, 0.0)), u.x);
     let x01 = mix(hash(cell + vec3<f32>(0.0, 0.0, 1.0)), hash(cell + vec3<f32>(1.0, 0.0, 1.0)), u.x);

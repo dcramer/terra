@@ -574,6 +574,11 @@ pub struct GroundExtension {
     snow_light: [Vec4; 2],
     #[texture(115, dimension = "2d_array")]
     horizon_map: Option<Handle<Image>>,
+    /// Whether the noise is read from its lattice (`crate::ground_lattice`, 1) or hashed (0).
+    #[uniform(100)]
+    pub(crate) noise_from: u32,
+    #[texture(116, dimension = "2d_array")]
+    lattice: Option<Handle<Image>>,
 }
 
 /// What covers the open ground past the trees round the land's middle, as the land's rules
@@ -772,11 +777,7 @@ impl GroundExtension {
             color: Some(textures.color.clone()),
             normal: Some(textures.normal.clone()),
             cover_from_world: cover.from_world,
-            cover_on: match (&cover.image, cover.sows) {
-                (None, _) => 0,
-                (Some(_), false) => 1,
-                (Some(_), true) => 2,
-            },
+            cover_on: cover.image.as_ref().map_or(0, |_| 1 + cover.sows as u32),
             cheap: quality == crate::quality::Quality::Low,
             // Bevy's blank picture stands in for a map until there is one.
             cover_map: Some(cover.image.clone().unwrap_or_default()),
@@ -790,11 +791,7 @@ impl GroundExtension {
             climate_leaves: climate.leaves.clone(),
             land_middle: land.middle,
             land_east: land.east,
-            land_north: if land.image.is_some() {
-                land.north
-            } else {
-                Vec4::ZERO
-            },
+            land_north: land.image.as_ref().map_or(Vec4::ZERO, |_| land.north),
             heath_layer: climate.heath_layer,
             grass_layer: climate.grass_layer,
             heath_autumn: climate.autumn_of(climate.heath_layer),
@@ -804,6 +801,8 @@ impl GroundExtension {
             horizon_north: horizon.2,
             snow_light: [Vec4::ZERO; 2],
             horizon_map: horizon.3,
+            noise_from: crate::ground_lattice::from_table(),
+            lattice: Some(crate::ground_lattice::TABLE),
         }
     }
 }
@@ -833,6 +832,7 @@ pub fn plugin(app: &mut App) {
             MaterialPlugin::<WaterMaterial>::default(),
             crate::lakes::plugin,
             crate::horizon::plugin,
+            crate::ground_lattice::plugin,
         ))
         .add_plugins(
             ResourceInspectorPlugin::<Tweaks>::default()

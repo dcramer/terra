@@ -55,6 +55,10 @@ const ALLOWED: &[(&str, &str)] = &[
         "the sound bank's dice: what is heard, not the world",
     ),
     (
+        "crates/terra_world/src/ground_lattice.rs",
+        "the ground shader's noise lattice: a look's grain, as the hashed noise it stands for is the same in every world",
+    ),
+    (
         "crates/terra_world/src/rises.rs",
         "when a fish rises: a moment's effect, not the world",
     ),
@@ -174,6 +178,11 @@ const KEYED_BY_PLACE: &[(&str, &str, &str)] = &[
         "crates/terra_world/src/scene.rs",
         "",
         "the haze's density texture: a look's grain",
+    ),
+    (
+        "crates/terra_world/src/ground_lattice.rs",
+        "value",
+        "the ground shader's noise lattice: a look's grain, as the hashed noise it stands for is the same in every world",
     ),
     (
         "crates/terra_world/src/waves.rs",
