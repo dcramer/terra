@@ -38,33 +38,75 @@ impl Fields {
     /// A place's growing season over a year of its days, from the averages alone, so it is
     /// the same whichever year is asked.
     pub fn season(&self, place: Place) -> Season {
+        self.seasons_up(place, &[place.height_m])[0]
+    }
+
+    /// The growing seasons at a place's latitude and leaning, at each of so many heights over
+    /// the sea, as [`Fields::season`] has each: a day's sun on the ground is worked out once
+    /// for all of them, since only the lapse changes with height.
+    pub fn seasons_up(&self, place: Place, heights_m: &[f32]) -> Vec<Season> {
         let days = self.climate().year.days.round() as i64;
-        let (mut growing, mut warmth, mut sum) = (0.0, 0.0, 0.0);
-        let (mut coldest, mut warmest) = (f32::MAX, f32::MIN);
+        let mut years = vec![Tally::new(); heights_m.len()];
         for day in 0..days {
-            let mean = self.day(place, day).mean_c();
-            sum += mean;
-            coldest = coldest.min(mean);
-            warmest = warmest.max(mean);
-            if mean > GROWING_DAY_C {
-                growing += 1.0;
-                warmth += mean;
+            let today = self.day(place, day);
+            let slope_c = today.slope_c();
+            let (warmth_c, annual_c) = self.level_warmth(place.latitude, today.phase);
+            for (tally, &height_m) in years.iter_mut().zip(heights_m) {
+                tally.add(self.base_c(warmth_c, height_m, annual_c) + slope_c);
             }
         }
-        let year_mean_c = sum / days as f32;
+        years.iter().map(|tally| tally.season(days)).collect()
+    }
+}
+
+/// A year's days' means, counted as they come.
+#[derive(Clone, Copy)]
+struct Tally {
+    growing: f32,
+    warmth: f32,
+    sum: f32,
+    coldest: f32,
+    warmest: f32,
+}
+
+impl Tally {
+    fn new() -> Self {
+        Self {
+            growing: 0.0,
+            warmth: 0.0,
+            sum: 0.0,
+            coldest: f32::MAX,
+            warmest: f32::MIN,
+        }
+    }
+
+    fn add(&mut self, mean: f32) {
+        self.sum += mean;
+        self.coldest = self.coldest.min(mean);
+        self.warmest = self.warmest.max(mean);
+        if mean > GROWING_DAY_C {
+            self.growing += 1.0;
+            self.warmth += mean;
+        }
+    }
+
+    fn season(&self, days: i64) -> Season {
+        let year_mean_c = self.sum / days as f32;
         Season {
-            growing_days: growing,
-            growing_mean_c: if growing > 0.0 {
-                warmth / growing
+            growing_days: self.growing,
+            growing_mean_c: if self.growing > 0.0 {
+                self.warmth / self.growing
             } else {
                 year_mean_c
             },
             year_mean_c,
-            coldest_c: coldest,
-            warmest_c: warmest,
+            coldest_c: self.coldest,
+            warmest_c: self.warmest,
         }
     }
+}
 
+impl Fields {
     /// How high over the sea the tree line stands at a latitude, on ground leaning so far
     /// toward the equator: the lowest height whose season no longer holds trees, found by
     /// halving, within a metre. `None` where trees grow at any height up to `highest_m`, or
@@ -126,6 +168,46 @@ mod tests {
         // The year's mean falls by the lapse rate, whatever the season does.
         assert!((low.year_mean_c - high.year_mean_c - 1.5 * 6.5).abs() < 0.05);
         assert!(low.coldest_c < low.year_mean_c && low.year_mean_c < low.warmest_c);
+    }
+
+    /// The season as it was counted before `seasons_up`: each day's mean at the place itself.
+    fn counted_day_by_day(fields: &Fields, place: Place) -> Season {
+        let days = fields.climate().year.days.round() as i64;
+        let mut tally = Tally::new();
+        for day in 0..days {
+            tally.add(fields.day(place, day).mean_c());
+        }
+        tally.season(days)
+    }
+
+    #[test]
+    fn the_seasons_up_a_place_are_each_heights_own_to_the_bit() {
+        let fields = Fields::new(temperate(), Seed(1));
+        let heights: Vec<f32> = (0..40).map(|j| -50.0 + 97.5 * j as f32).collect();
+        for latitude_deg in [-71.3, -15.34, 0.0, 23.9, 48.2, 66.6] {
+            for sunward in [-0.9, -0.3, 0.0, 0.45, 0.9] {
+                let place = at(0.0, latitude_deg, sunward);
+                let up = fields.seasons_up(place, &heights);
+                for (season, &height_m) in up.iter().zip(&heights) {
+                    let own = counted_day_by_day(&fields, Place { height_m, ..place });
+                    let bits = |s: &Season| {
+                        [
+                            s.growing_days,
+                            s.growing_mean_c,
+                            s.year_mean_c,
+                            s.coldest_c,
+                            s.warmest_c,
+                        ]
+                        .map(f32::to_bits)
+                    };
+                    assert_eq!(
+                        bits(season),
+                        bits(&own),
+                        "{latitude_deg} {sunward} {height_m}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

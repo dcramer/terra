@@ -175,13 +175,8 @@ impl Fields {
         let climate = &self.climate;
         let phase = climate.year.phase(day);
         let swing = |share: f32, most: f32| share * libm::cosf(TAU * (phase - most));
-        let t = &climate.temperature;
-        let sine = libm::sinf(place.latitude);
-        let lag = t.annual_lag_days / climate.year.days as f32;
-        let annual = t.annual_swing_c * sine.abs() / FRAC_1_SQRT_2;
-        let base_c = t.equator_c + (t.pole_c - t.equator_c) * sine * sine
-            - t.lapse_c_per_km * place.height_m / 1000.0
-            - annual * libm::cosf(TAU * (phase - lag));
+        let (warmth_c, annual_c) = self.level_warmth(place.latitude, phase);
+        let base_c = self.base_c(warmth_c, place.height_m, annual_c);
         let p = &climate.precipitation;
         let share = p.share * (1.0 + swing(p.annual_swing, p.wettest));
         let h = &climate.humidity;
@@ -198,6 +193,26 @@ impl Fields {
             threshold: upper_quantile(share),
             humidity: h.mean + swing(h.annual_swing, h.most_humid),
         }
+    }
+
+    /// A day's warmth at the sea at a latitude, and its season's swing below that, at `phase`
+    /// in the year: the parts of its temperature that do not change with height.
+    pub(crate) fn level_warmth(&self, latitude: f32, phase: f32) -> (f32, f32) {
+        let climate = &self.climate;
+        let t = &climate.temperature;
+        let sine = libm::sinf(latitude);
+        let lag = t.annual_lag_days / climate.year.days as f32;
+        let annual = t.annual_swing_c * sine.abs() / FRAC_1_SQRT_2;
+        (
+            t.equator_c + (t.pole_c - t.equator_c) * sine * sine,
+            annual * libm::cosf(TAU * (phase - lag)),
+        )
+    }
+
+    /// The day's temperature before its own swing and the weather's, so high over the sea,
+    /// from its parts at the sea (`level_warmth`).
+    pub(crate) fn base_c(&self, warmth_c: f32, height_m: f32, annual_c: f32) -> f32 {
+        warmth_c - self.climate.temperature.lapse_c_per_km * height_m / 1000.0 - annual_c
     }
 
     /// The climate at a place and a moment.
@@ -308,6 +323,12 @@ impl Day<'_> {
     /// season's warmth, less the lapse with height, and what the ground's leaning toward or
     /// away from the sun makes of a clear day.
     pub fn mean_c(&self) -> f32 {
+        self.base_c + self.slope_c()
+    }
+
+    /// What the ground's leaning toward or away from the sun makes of a clear day's mean, the
+    /// same at every height.
+    pub(crate) fn slope_c(&self) -> f32 {
         let samples = 24;
         let slope: f32 = (0..samples)
             .map(|k| {
@@ -317,7 +338,7 @@ impl Day<'_> {
             })
             .sum::<f32>()
             / samples as f32;
-        self.base_c + SLOPE_WARMS_C_PER_W_M2 * slope
+        SLOPE_WARMS_C_PER_W_M2 * slope
     }
 
     pub(crate) fn weather(&self, hour: f32) -> Weather {

@@ -209,25 +209,34 @@ impl Seasons {
             (((height_m.1 - height_m.0) / height_step_m).ceil() as usize).max(1),
             leanings.max(1),
         );
-        let points: Vec<(usize, usize, usize)> = (0..=steps.0)
-            .flat_map(|i| (0..=steps.1).flat_map(move |j| (0..=steps.2).map(move |k| (i, j, k))))
-            .collect();
         let at = |range: (f32, f32), step: usize, of: usize| {
             range.0 + (range.1 - range.0) * step as f32 / of as f32
         };
-        let table = crate::maps::par_map(&points, |&(i, j, k)| {
-            let season = fields.season(terra_climate::Place {
-                height_m: at(height_m, j, steps.1),
+        // A latitude's and leaning's seasons at every height at once, which share their sun.
+        let columns: Vec<(usize, usize)> = (0..=steps.0)
+            .flat_map(|i| (0..=steps.2).map(move |k| (i, k)))
+            .collect();
+        let heights: Vec<f32> = (0..=steps.1).map(|j| at(height_m, j, steps.1)).collect();
+        let up = crate::maps::par_map(&columns, |&(i, k)| {
+            let place = terra_climate::Place {
                 latitude: at(latitude, i, steps.0),
                 sunward: at(sunward, k, steps.2),
                 ..terra_climate::Place::level(glam::Vec3::ZERO, 0.0, 0.0)
-            });
-            [
-                season.growing_mean_c,
-                season.growing_days,
-                season.year_mean_c,
-            ]
+            };
+            fields.seasons_up(place, &heights)
         });
+        let (leanings, rows) = (steps.2 + 1, steps.1 + 1);
+        let table = (0..(steps.0 + 1) * rows * leanings)
+            .map(|n| {
+                let (i, j, k) = (n / (rows * leanings), n / leanings % rows, n % leanings);
+                let season = up[i * leanings + k][j];
+                [
+                    season.growing_mean_c,
+                    season.growing_days,
+                    season.year_mean_c,
+                ]
+            })
+            .collect();
         Self {
             latitude,
             height_m,
@@ -550,6 +559,38 @@ mod tests {
         assert!(closed.density > 0.99 && !closed.krummholz());
         let above = stand(&season(TREE_LINE_SEASON_C - 0.4), 10.0, Footing::Soil);
         assert!(above.density > 0.0 && above.krummholz(), "{above:?}");
+    }
+
+    #[test]
+    fn the_seasons_tables_points_are_each_places_season_to_the_bit() {
+        let climate = crate::start_climate().unwrap();
+        let fields = terra_climate::Fields::new(climate, terra_gen::Seed(1));
+        let (latitude, height_m) = ((-20f32.to_radians(), 50f32.to_radians()), (-50.0, 2950.0));
+        let seasons = Seasons::over_by(&fields, latitude, height_m, 10.0, 500.0, 4);
+        let (a, b, c) = seasons.steps;
+        assert_eq!(seasons.table.len(), (a + 1) * (b + 1) * (c + 1));
+        let at = |range: (f32, f32), step: usize, of: usize| {
+            range.0 + (range.1 - range.0) * step as f32 / of as f32
+        };
+        for (n, point) in seasons.table.iter().enumerate() {
+            let (i, j, k) = (n / ((b + 1) * (c + 1)), n / (c + 1) % (b + 1), n % (c + 1));
+            let season = fields.season(terra_climate::Place {
+                height_m: at(height_m, j, b),
+                latitude: at(latitude, i, a),
+                sunward: at(seasons.sunward, k, c),
+                ..terra_climate::Place::level(glam::Vec3::ZERO, 0.0, 0.0)
+            });
+            let own = [
+                season.growing_mean_c,
+                season.growing_days,
+                season.year_mean_c,
+            ];
+            assert_eq!(
+                point.map(f32::to_bits),
+                own.map(f32::to_bits),
+                "{i} {j} {k}"
+            );
+        }
     }
 
     #[test] // Slow: minutes.
