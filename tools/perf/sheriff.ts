@@ -9,7 +9,7 @@
 // and a regression is bisected (bisect.ts) to its first bad commit, which the alert then names. One perf bench at a time, a rest between two, so the row
 // never holds the box with benches back to back (D319, D445).
 
-import { type Bisect, CAP, found, next as nextStep, type Options, start, step } from "./bisect.ts";
+import { anchor, type Bisect, CAP, found, next as nextStep, type Options, STALE, start, step } from "./bisect.ts";
 import { centre, changeLine, FLOORS, type Judged, judge, least, METRICS, type Metric, mannWhitney, type Point, series, type Why } from "./history.ts";
 
 /// A landing's metric past its band, waiting for its retrigger.
@@ -41,7 +41,9 @@ export type Alert = {
   bad: string;
   /// Commits in the range touching what the row reads.
   commits: number;
-  state: "bisecting" | "found" | "narrowed" | "open" | "better";
+  /// `gone`: its bisect found every step good, the bad end too when benched again beside its
+  /// good neighbour, so the change was the box's level while the ends were measured.
+  state: "bisecting" | "found" | "narrowed" | "gone" | "open" | "better";
   /// The confirm's runs at each end and its rank test's p-value (`before` and `after` are its
   /// ends' centres).
   runs?: { good: number; bad: number };
@@ -86,8 +88,9 @@ export function plan(s: State, tip: string, touched: boolean, now: number, rest 
   if (s.lastEnded && now - Date.parse(s.lastEnded) < rest * 60_000) return { wait: `resting ${rest} min after its last bench` };
   if (s.retrigger) return s.retrigger.phase === "good" && s.retrigger.good ? { rev: s.retrigger.good, why: "baseline" } : { rev: s.retrigger.rev, why: "retrigger" };
   const landing = tip !== s.benched && touched;
-  const bisect = s.bisect && nextStep(s.bisect);
-  if (landing && (!bisect || s.lastWhy !== "landing")) return { rev: tip, why: "landing" };
+  const bisect = s.bisect && nextStep(s.bisect, now);
+  // A step whose good neighbour was just benched again goes next, so the two stay beside each other.
+  if (landing && (!bisect || (s.lastWhy !== "landing" && !s.bisect?.refreshed))) return { rev: tip, why: "landing" };
   if (bisect) return { rev: bisect.rev, why: "bisect", end: bisect.end };
   return { wait: tip === s.benched ? `main's tip ${tip.slice(0, 9)} is benched` : `nothing the row reads changed since ${s.benched?.slice(0, 9)}` };
 }
@@ -98,14 +101,16 @@ export const confirmOptions = (s: State, runs = CONFIRM): Options => ({ scenes: 
 const key = (scene: string, metric: Metric) => `${scene} ${metric}`;
 const alertId = (scene: string, metric: Metric, bad: string) => `${scene}/${metric}@${bad.slice(0, 9)}`;
 
+const GONE = "no first bad: every step, and its bad end benched again, measured like its good neighbour beside it, so the box's level moved, not the code (close it with `perf.ts alert <id> --invalid`)";
+
 /// An alert in a line: what changed, by how much, where, and what the bisect found.
 export function alertLine(a: Alert): string {
-  const mark = a.closed ? "·" : a.state === "better" ? "✓" : "✗";
+  const mark = a.closed || a.state === "gone" ? "·" : a.state === "better" ? "✓" : "✗";
   const where = `in ${a.good.slice(0, 9)}..${a.bad.slice(0, 9)} (${a.commits} commit${a.commits === 1 ? "" : "s"} touching the row)`;
   const runs = a.runs ? `, ${a.runs.good} runs at its good end and ${a.runs.bad} at its bad, p ${a.p?.toFixed(3)}` : "";
   const what = `${changeLine(a.scene, { metric: a.metric, before: a.before, after: a.after, width: a.width, change: "worse" })}${runs}`;
   const tail =
-    a.state === "found" ? `; first bad ${a.first?.slice(0, 9)}` : a.state === "narrowed" ? `; bisect narrowed it to ${a.left?.length} commits: ${a.left?.map((c) => c.slice(0, 9)).join(" ")}` : a.state === "bisecting" ? "; bisecting" : a.state === "better" ? "; better, not bisected" : "";
+    a.state === "found" ? `; first bad ${a.first?.slice(0, 9)}` : a.state === "gone" ? `; ${GONE}` : a.state === "narrowed" ? `; bisect narrowed it to ${a.left?.length} commits: ${a.left?.map((c) => c.slice(0, 9)).join(" ")}` : a.state === "bisecting" ? "; bisecting" : a.state === "better" ? "; better, not bisected" : "";
   const closed = a.closed ? `; closed ${a.closed.as} ${a.closed.when.slice(0, 16).replace("T", " ")} UTC: ${a.closed.reason}` : "";
   return `${mark} perf ${a.when.slice(0, 16).replace("T", " ")} UTC: ${what}, ${where}${tail}${closed}`;
 }
@@ -130,14 +135,25 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
     const scenes = b.scenes ?? [b.scene];
     const samples = points.filter((p) => scenes.includes(p.scene)).flatMap((p) => (p.values[b.metric] === undefined ? [] : [p.values[b.metric] as number]));
     const floor = FLOORS[b.metric].abs ?? 0;
-    s.bisect = step(b, job.rev, samples, floor);
-    lines.push(samples.length ? `· perf bisect ${b.scene} ${b.metric}: ${job.rev.slice(0, 9)}${job.end ? ` (the ${job.end} end)` : ""} ran ${samples.join(", ")}` : `· perf bisect: ${job.rev.slice(0, 9)} gave no ${scenes.join(", ")} numbers, skipped`);
+    s.bisect = step(b, job.rev, samples, floor, now, job.end);
+    const again = job.end === "good" && b.goodValue !== undefined;
+    const what = again
+      ? ` (its good neighbour benched again beside the next step, its last measure over ${STALE} min old, as Pinpoint measures neighbours together)`
+      : job.end === "bad" && b.badValue !== undefined
+        ? " (the bad end again, beside its good neighbour)"
+        : job.end
+          ? ` (the ${job.end} end)`
+          : "";
+    const a = anchor(b);
+    const judged = !again && (!job.end || (job.end === "bad" && b.badValue !== undefined));
+    const verdict = judged ? `: ${s.bisect.lo !== b.lo ? "good" : "bad"}, against ${a.rev.slice(0, 9)}'s ${a.value} (the ends ${b.goodValue} and ${b.badValue})` : "";
+    lines.push(samples.length ? `· perf bisect ${b.scene} ${b.metric}: ${job.rev.slice(0, 9)}${what} ran ${samples.join(", ")}${verdict}` : `· perf bisect: ${job.rev.slice(0, 9)} gave no ${scenes.join(", ")} numbers, skipped`);
     const { goodValue, goodWorst, badValue: v } = s.bisect;
     const g = b.metric === "hitches" ? goodWorst : goodValue;
     if (g !== undefined && v !== undefined && v - g <= floor) {
       lines.push(`· perf bisect ${b.scene} ${b.metric} ${b.good.slice(0, 9)}..${b.bad.slice(0, 9)}: its ends measured ${g} and ${v}, no change to look for`);
       s.bisect = s.waiting.shift();
-    } else if (!nextStep(s.bisect)) lines.push(...finishBisect(s));
+    } else if (!nextStep(s.bisect, Date.parse(now))) lines.push(...finishBisect(s));
     return { state: s, lines };
   }
   if (!points.length) {
@@ -245,7 +261,7 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
     if (j.change === "worse") {
       worse = true;
       // One commit is its own answer; more are bisected, each step as many runs as an end's.
-      if (range.length > 1) s.waiting.push(start(j.scene, j.metric, good, r.rev, range, { goodValue: g, badValue: b, goodWorst: Math.max(...base) }, cap, a.id, { runs }));
+      if (range.length > 1) s.waiting.push(start(j.scene, j.metric, good, r.rev, range, { goodValue: g, badValue: b, goodWorst: Math.max(...base), goodAt: now, badAt: now }, cap, a.id, { runs }));
     }
     raised.push(a);
   }
@@ -274,10 +290,10 @@ function finishBisect(s: State): string[] {
   const lines: string[] = [];
   const a = s.alerts.find((a) => a.id === b.alert);
   if (a) {
-    Object.assign(a, f.first ? { state: "found", first: f.first } : { state: "narrowed", left: f.left });
+    Object.assign(a, f.first ? { state: "found", first: f.first } : f.left.length ? { state: "narrowed", left: f.left } : { state: "gone" });
     lines.push(alertLine(a));
   } else {
-    const what = f.first ? `first bad ${f.first.slice(0, 9)}` : `narrowed to ${f.left.length} commits: ${f.left.map((c) => c.slice(0, 9)).join(" ")}`;
+    const what = f.first ? `first bad ${f.first.slice(0, 9)}` : f.left.length ? `narrowed to ${f.left.length} commits: ${f.left.map((c) => c.slice(0, 9)).join(" ")}` : GONE;
     lines.push(`${f.first ? "✗" : "·"} perf bisect ${b.scene} ${b.metric} ${b.good.slice(0, 9)}..${b.bad.slice(0, 9)}: ${b.goodValue} → ${b.badValue}, ${what} (${b.benches} benches)`);
   }
   s.bisect = s.waiting.shift();

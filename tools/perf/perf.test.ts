@@ -356,6 +356,73 @@ test("a flaky metric's bisect judges every run: a step is bad when one run hitch
   assert.ok(8 / 10 < (FLOORS.hitches.abs ?? 0));
 });
 
+test("a bisect benches its good neighbour again beside a step when it is over an hour old: 2026-11-03's lake-play replayed", () => {
+  // The alert of 14:20 UTC: lake-play median_ms 9.30 → 9.68 ms over 316f1d5e3..4688fd3d7, its
+  // good end from the 11:45 landing, its bad end the 13:59 retrigger. Its bisect benched
+  // e3bdab3ab at 15:15, 9.62 ms, nearer 9.68 than 9.30: "first bad e3bdab3ab", a refactor of
+  // xtask's bench bookkeeping. An A/B in the next hour gave 9.71 ms at 316f1d5e3 and 9.63 at
+  // e3bdab3ab: the box's level had risen about 4% since the good end was measured.
+  const [good, e3b, bad] = ["316f1d5e3a46fda78c75f7c76de9e75a53d79aa2", "e3bdab3abb54c4b4b0729f555fbd8c97eea05632", "4688fd3d7298269448c8bab21e7bdac18106de43"];
+  const ends = { goodValue: 9.3, badValue: 9.68, goodWorst: 9.3, goodAt: "2026-11-03T11:55:00Z", badAt: "2026-11-03T14:20:00Z" };
+  const lake = (rev: string, job: string, values: number[]): Point[] =>
+    values.map((v) => ({ rev, job, why: "bisect", date: "2026-11-03", gpu: "RTX 4090", size: "1920x1080 offscreen", build: "release", scene: "lake-play", values: { median_ms: v } }));
+  // The old rule, a step against ends measured hours before: e3bdab3ab is called bad.
+  const old = step(start("lake-play", "median_ms", good, bad, [e3b, bad], ends), e3b, [9.62]);
+  assert.equal(found(old).first, e3b, "the wrong commit the old rule named");
+  // The new: before the 15:15 step, the good end (measured 3 h 20 before) is benched again.
+  let s: State = { ...empty(), benched: bad, good: bad, lastWhy: "bisect", bisect: start("lake-play", "median_ms", good, bad, [e3b, bad], ends, 5, "lake-play/median_ms@4688fd3d7", { runs: 5 }) };
+  s.alerts.push({ id: "lake-play/median_ms@4688fd3d7", when: "2026-11-03T14:20:00Z", scene: "lake-play", metric: "median_ms", before: 9.3, after: 9.68, width: 0.28, good, bad, commits: 2, state: "bisecting" });
+  const lines: string[] = [];
+  const bench = (at: string, values: number[], tip = bad) => {
+    const p = plan(s, tip, tip !== s.benched, Date.parse(at), 20);
+    assert.ok(!("wait" in p), JSON.stringify(p));
+    const job = { id: at, rev: p.rev, why: p.why, end: p.end };
+    const r = ingest({ ...s, job }, job, lake(p.rev, at, values), [], () => [e3b, bad], new Date(Date.parse(at) + 11 * 60_000).toISOString());
+    lines.push(...r.lines);
+    s = r.state;
+    return p.end ? { rev: p.rev, why: p.why, end: p.end } : { rev: p.rev, why: p.why };
+  };
+  assert.deepEqual(bench("2026-11-03T15:15:00Z", [9.69, 9.71, 9.73, 9.7, 9.72]), { rev: good, why: "bisect", end: "good" }, "its good end again first");
+  // A landing waits: the step goes beside its neighbour, not an hour later.
+  const landing = "ba31f1ee78e2c93054c96662ef1eb41c880477f3";
+  assert.deepEqual(bench("2026-11-03T15:46:00Z", [9.61, 9.63, 9.65, 9.62, 9.64], landing), { rev: e3b, why: "bisect" });
+  assert.match(lines.at(-1) ?? "", /e3bdab3ab ran .*: good, against 316f1d5e3's 9.71/, lines.join("\n"));
+  // Only the bad end is left, measured 14:20, over an hour before its neighbour: again, beside
+  // it. (Its value here is assumed: the A/B did not bench it; like its neighbours, the box's.)
+  s = { ...s, benched: landing }; // the landing benched in between
+  assert.deepEqual(bench("2026-11-03T16:37:00Z", [9.64, 9.66, 9.68, 9.65, 9.67], landing), { rev: bad, why: "bisect", end: "bad" });
+  const alert = s.alerts[0];
+  assert.equal(alert.state, "gone", lines.join("\n"));
+  assert.equal(alert.first, undefined, "no commit named for the box's drift");
+  assert.match(lines.at(-1) ?? "", /no first bad: .* the box's level moved, not the code/);
+  assert.equal(s.bisect, undefined);
+});
+
+test("a real change found under a drifting box: the step judged against its neighbour, not the hours-old ends", () => {
+  // 8 ms, +0.6 ms from c06 on; the box's level rises 0.25 ms an hour; a step an hour apart
+  // (its bench, a rest, a landing, a rest). The ends measured together at hour 0.
+  const range = commits.slice(1, 10); // c01..c09
+  const t0 = Date.parse("2026-11-03T12:00:00Z");
+  const runs = (rev: string, at: number) => [-0.02, 0, 0.02, -0.01, 0.01].map((w) => 8 + (commits.indexOf(rev) >= 6 ? 0.6 : 0) + (0.25 * (at - t0)) / 3_600_000 + w);
+  const ends = { goodValue: 8, badValue: 8.6, goodWorst: 8.02, goodAt: new Date(t0).toISOString(), badAt: new Date(t0).toISOString() };
+  const drive = (clocked: boolean) => {
+    let b = start("lake-play", "median_ms", commits[0], commits[9], range, ends, 5);
+    let at = t0;
+    for (let n = 0; n < 12; n++) {
+      at += 60 * 60_000;
+      const pick = next(b, clocked ? at : undefined);
+      if (!pick) break;
+      b = clocked ? step(b, pick.rev, runs(pick.rev, at), 0.2, new Date(at).toISOString(), pick.end) : step(b, pick.rev, runs(pick.rev, at), 0.2);
+    }
+    return b;
+  };
+  const old = drive(false);
+  assert.notEqual(found(old).first, commits[6], `the old rule, ends hours old, names ${found(old).first?.slice(0, 3)}`);
+  const now = drive(true);
+  assert.equal(found(now).first, commits[6], JSON.stringify(now));
+  assert.ok((now.refreshes ?? 0) >= 1 && now.benches <= 5, "the good side benched again beside a step, outside the cap");
+});
+
 test("a regression in a batch of one commit names it without a bisect", () => {
   const bench = fakeBench(11);
   const history: Point[] = [];

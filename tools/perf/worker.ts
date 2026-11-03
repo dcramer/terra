@@ -151,7 +151,7 @@ export function tick(b: Box, say: (line: string) => void, now = new Date(), forc
   if ("error" in job) return note([`✗ perf: ${job.error}`]);
   s = { ...s, job: { id: job.id, rev: p.rev, why: p.why, end: p.end } };
   saveState(b, s);
-  note([`perf: queued ${job.id}, the row at ${p.rev.slice(0, 9)} (${p.why}${p.end ? `, the bisect's ${p.end} end` : ""})`]);
+  note([`perf: queued ${job.id}, the row at ${p.rev.slice(0, 9)} (${p.why}${p.end ? (p.end === "good" && s.bisect?.goodValue !== undefined ? ", the bisect's good neighbour again, beside its next step" : p.end === "bad" && s.bisect?.badValue !== undefined ? ", the bisect's bad end again, beside its good neighbour" : `, the bisect's ${p.end} end`) : ""})`]);
 }
 
 /// Main's side at `rev`: the newest commit at or before it on main's first-parent line that the
