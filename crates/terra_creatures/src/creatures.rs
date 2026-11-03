@@ -52,15 +52,22 @@ const SIZES: f32 = 0.09;
 /// How fast one that does not fly from place to place flies when it takes wing to flee.
 const TAKES_WING_MPS: f32 = 11.0;
 
-/// Two numbers from 0 to 1 that are an animal's own, from where it was put out: its size,
-/// the beat its idle and grazing keep, its coat (`coats`).
-pub fn luck(home: Vec3) -> Vec2 {
+/// What a world's creatures' own numbers start from: its seed, derived for them (D596), so
+/// one put out at a place is of another size, beat, coat and facing in another world.
+fn creatures_seed(world: Seed) -> u64 {
+    world.derive("creature luck").0
+}
+
+/// Two numbers from 0 to 1 that are an animal's own, from the world's seed and where it was
+/// put out: its size, the beat its idle and grazing keep, its coat (`coats`).
+pub fn luck(world: Seed, home: Vec3) -> Vec2 {
     let bits = |v: f32| (v * 16.0).round() as i64 as u64;
     let h = terra_gen::hash::splitmix64(
-        bits(home.x)
-            .wrapping_mul(0x9E37_79B9_7F4A_7C15)
-            .wrapping_add(bits(home.y).wrapping_mul(0xC2B2_AE3D_27D4_EB4F))
-            .wrapping_add(bits(home.z).wrapping_mul(0x1656_67B1_9E37_79F9)),
+        creatures_seed(world)
+            ^ bits(home.x)
+                .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                .wrapping_add(bits(home.y).wrapping_mul(0xC2B2_AE3D_27D4_EB4F))
+                .wrapping_add(bits(home.z).wrapping_mul(0x1656_67B1_9E37_79F9)),
     );
     Vec2::new(
         (h & 0xFFFF) as f32 / 65535.0,
@@ -136,6 +143,8 @@ pub struct Creature {
     /// shared by all drew differently for every spider once one more animal formed first
     /// (mine round 11).
     dice: Rng,
+    /// Its own two numbers (`luck`), from the world's seed and its home.
+    luck: Vec2,
     /// The ticks it has lived, which with its `turn` say when it thinks far off: the world's
     /// count goes on through the loading, however long that took.
     lived: u64,
@@ -174,6 +183,11 @@ impl Creature {
     /// in every run of the same world, so it tells one creature from another.
     pub fn home(&self) -> Vec3 {
         self.home
+    }
+
+    /// Its own two numbers from 0 to 1 (`luck`): its size, its beat at rest, its coat.
+    pub fn luck(&self) -> Vec2 {
+        self.luck
     }
 
     /// Which of the ticks it thinks on when far off (`Detail::thinks`), from its home, so
@@ -231,6 +245,7 @@ impl Creature {
             pace: Pace::Startled,
             progress: Default::default(),
             dice: own_dice(Seed(1), home),
+            luck: luck(Seed(1), home),
             lived: 0,
         }
     }
@@ -551,8 +566,10 @@ pub fn spawn(
     let up = feet.normalize();
     // Each its own way: all facing one way, a fox met ahead sat square to the lens (lake
     // film r10).
-    let bits = [feet.x.to_bits(), feet.y.to_bits(), feet.z.to_bits()];
-    let turn = terra_gen::hash::unit(terra_gen::hash::of(&bits)) * std::f32::consts::TAU;
+    let seed = creatures_seed(planet.seed()) as u32;
+    let turned = terra_gen::hash::of(&[seed, feet.x.to_bits(), feet.y.to_bits(), feet.z.to_bits()]);
+    let turn = terra_gen::hash::unit(turned) * std::f32::consts::TAU;
+    let own = luck(planet.seed(), feet);
     let facing = Quat::from_axis_angle(up, turn) * up.any_orthonormal_vector();
     let creature = commands
         .spawn((
@@ -571,6 +588,7 @@ pub fn spawn(
                 pace: Pace::Startled,
                 progress: Default::default(),
                 dice: own_dice(planet.seed(), feet),
+                luck: own,
                 lived: 0,
             },
             bestiary.body(species),
@@ -582,7 +600,7 @@ pub fn spawn(
         .id();
     let (graph, clips) = (graph.clone(), *clips);
     // No two of a kind quite the same size.
-    let size = 1.0 + (luck(feet).y - 0.5) * 2.0 * SIZES;
+    let size = 1.0 + (own.y - 0.5) * 2.0 * SIZES;
     commands
         .spawn((
             WorldAssetRoot(scene.clone()),
@@ -832,7 +850,7 @@ fn animate(
         let clips = animates.clips;
         // Each keeps its own beat at rest, and picks up its clips where it will, so a group
         // does not idle and graze in step.
-        let own = luck(creature.home());
+        let own = creature.luck();
         let beat = 0.85 + own.y * 0.3;
         let (wanted, speed) = match creature.state {
             State::Idle(_) | State::Perch { .. } | State::Roost { .. } => (clips.idle, beat),

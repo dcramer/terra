@@ -26,6 +26,7 @@ fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
         pace: Pace::Startled,
         progress: Default::default(),
         dice: own_dice(Seed(1), Vec3::ZERO),
+        luck: Vec2::ZERO,
         lived: 0,
     };
     assert!(creature.unaware());
@@ -34,6 +35,23 @@ fn a_creature_about_its_day_is_unaware_and_one_that_has_noticed_is_not() {
     creature.state = State::Idle(1.0);
     creature.hurt = true;
     assert!(!creature.unaware());
+}
+
+/// D596: a creature's own numbers (its size, beat and coat) are the world's seed's and its
+/// home's: the same each time in one world, another at the same place in another world.
+#[test]
+fn creatures_put_out_at_one_place_differ_between_worlds() {
+    let homes: Vec<Vec3> = (0..64)
+        .map(|i| Vec3::new(i as f32 * 3.1, 40.0, -(i as f32) * 1.7))
+        .collect();
+    let lucks = |seed| -> Vec<Vec2> { homes.iter().map(|&h| luck(Seed(seed), h)).collect() };
+    assert_eq!(lucks(1), lucks(1));
+    let apart = lucks(1)
+        .iter()
+        .zip(lucks(2))
+        .filter(|(a, b)| (**a - *b).abs().max_element() > 0.01)
+        .count();
+    assert!(apart > 56, "{apart} of 64 differ");
 }
 
 fn spider(world: &mut World, at: Vec3) -> Entity {
@@ -53,6 +71,7 @@ fn spider(world: &mut World, at: Vec3) -> Entity {
                 pace: Pace::Startled,
                 progress: Default::default(),
                 dice: own_dice(Seed(1), at),
+                luck: luck(Seed(1), at),
                 lived: 0,
             },
             Transform::from_translation(at),

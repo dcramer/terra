@@ -9,7 +9,7 @@
 //! `creatures.ron`), laid on as a material of its own; animals of a kind share a few, the
 //! coat taken in steps, so a hundred hares are a handful of materials (D127).
 
-use crate::creatures::{Creature, luck};
+use crate::creatures::Creature;
 use crate::species::{Bestiary, CoatDef};
 use crate::wildlife::Surroundings;
 use bevy::{platform::collections::HashMap, prelude::*};
@@ -75,7 +75,7 @@ fn choose(
             continue;
         };
         // Each its own: a few days either way in its moult, and its tone.
-        let luck = luck(creature.home());
+        let luck = creature.luck();
         let own = (luck.x - 0.5) * 0.05;
         let white = if def.moults {
             whiteness(phase, around.warmth_c(creature.home()), own)
