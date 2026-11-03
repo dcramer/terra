@@ -100,6 +100,7 @@ fn mark(
                 end: now,
                 own: now - clock.last,
             }];
+            shared.sum_schedule(name, now - clock.last);
             if last {
                 // The update's own time is what the marks took between the schedules.
                 spans.push(Span {
@@ -118,6 +119,43 @@ fn mark(
     }
     *labels = marked;
     schedules
+}
+
+impl Shared {
+    /// Adds a schedule's run to its sum until a bench takes it.
+    fn sum_schedule(&self, name: u32, ns: u64) {
+        let mut sums = (self.schedules.lock()).unwrap_or_else(|poisoned| poisoned.into_inner());
+        match sums.iter_mut().find(|(each, _)| *each == name) {
+            Some((_, sum)) => *sum += ns,
+            None => sums.push((name, ns)),
+        }
+    }
+}
+
+impl super::Recorder {
+    /// Each world's schedules' time since last taken, in ms by name (`PostUpdate`, the render
+    /// world's as `render.Render`), and starts them again from zero: what a bench holds to its
+    /// budgets (D607), as Unreal's engine stat groups. Empty in a `hitch-log` build, which
+    /// has Bevy's spans and no marks.
+    pub fn take_schedules(&self) -> Vec<(String, f32)> {
+        let taken = std::mem::take(
+            &mut *(self.0.schedules.lock()).unwrap_or_else(|poisoned| poisoned.into_inner()),
+        );
+        let names = self.0.names();
+        (taken.into_iter())
+            .map(|(name, ns)| {
+                let shown = names.shown.get(name as usize).map_or("", String::as_str);
+                let label = shown.strip_suffix(SCHEDULE).unwrap_or(shown);
+                let label = label.replace(|c: char| !c.is_alphanumeric(), "_");
+                let world = names.world.get(name as usize).copied().flatten();
+                let label = match world {
+                    Some(Held::Render) => format!("render.{label}"),
+                    _ => label,
+                };
+                (label, ns as f32 / 1e6)
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -154,5 +192,29 @@ mod tests {
         }
         let first = named("First schedule").expect("First is marked");
         assert!(runs(first).all(|span| span.end - span.start < 20_000_000));
+    }
+
+    #[test]
+    fn a_bench_takes_each_schedules_time_once() {
+        let shared = Arc::new(Shared::new());
+        let recorder = crate::recorder::Recorder(shared.clone());
+        let mut app = App::new();
+        app.add_plugins(Marks(shared.clone()))
+            .add_systems(Update, || {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            });
+        app.finish();
+        app.cleanup();
+        app.update();
+        app.update();
+        let taken = recorder.take_schedules();
+        let ms = |label: &str| taken.iter().find(|(name, _)| name == label).map(|t| t.1);
+        let update = ms("Update").expect("Update is taken by its label");
+        assert!(
+            (40.0..1000.0).contains(&update),
+            "two updates of 20 ms: {taken:?}"
+        );
+        assert!(ms("First").is_some_and(|first| first < 20.0), "{taken:?}");
+        assert!(recorder.take_schedules().is_empty(), "taken once");
     }
 }

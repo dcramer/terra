@@ -6,7 +6,8 @@
 //! phases its budgets hold (D607, `assets/data/perf/budgets.ron`): the settle, the first
 //! seconds after the loading screen lifts with the script standing still and the world
 //! streaming in (`--bench-settle`), timed apart from play, and each phase's groups of systems
-//! (`terra_gen::stat`) by their ms a frame.
+//! (`terra_gen::stat`) and each world's schedules (the frame recorder's marks, D576) by their
+//! ms a frame, as Unreal budgets its engine's stat groups beside the game's.
 
 use crate::{
     debug::{FrameParts, STUTTER_MS},
@@ -31,6 +32,8 @@ pub struct Gathered {
     settle_tick_ms: Vec<f32>,
     settle_groups: Groups,
     play_groups: Groups,
+    settle_schedules: Groups,
+    play_schedules: Groups,
 }
 
 /// Each group's ms in each frame of a phase, a frame it did not run in counting 0; and how
@@ -38,24 +41,29 @@ pub struct Gathered {
 #[derive(Default)]
 struct Groups {
     frames: usize,
-    ms: BTreeMap<&'static str, Vec<f32>>,
+    ms: BTreeMap<String, Vec<f32>>,
     scopes: u64,
 }
 
 impl Groups {
-    fn add(&mut self, taken: &[terra_gen::stat::Taken]) {
+    /// A frame's groups: each one's name, ms and scopes.
+    fn add<'a>(&mut self, taken: impl IntoIterator<Item = (&'a str, f32, u64)>) {
         self.frames += 1;
-        for group in taken {
-            let ms = self
-                .ms
-                .entry(group.group)
-                .or_insert_with(|| vec![0.0; self.frames - 1]);
-            ms.push(group.ns as f32 / 1e6);
-            self.scopes += group.scopes;
+        for (group, ms_now, scopes) in taken {
+            let frames = self.frames;
+            let ms = (self.ms.entry(group.to_string())).or_insert_with(|| vec![0.0; frames - 1]);
+            ms.resize(frames - 1, 0.0);
+            ms.push(ms_now);
+            self.scopes += scopes;
         }
         for ms in self.ms.values_mut() {
             ms.resize(self.frames, 0.0);
         }
+    }
+
+    /// A frame's groups of systems (`terra_gen::stat`).
+    fn add_stats(&mut self, taken: &[terra_gen::stat::Taken]) {
+        self.add(taken.iter().map(|t| (t.group, t.ns as f32 / 1e6, t.scopes)));
     }
 }
 
@@ -91,6 +99,7 @@ pub fn gather(
     ticks: Option<Res<FrameTicks>>,
     parts: Option<Res<FrameParts>>,
     tick: Res<Time<Fixed>>,
+    recorder: Option<Res<crate::recorder::Recorder>>,
     mut exits: MessageReader<AppExit>,
     mut run: Local<Gathered>,
 ) {
@@ -98,8 +107,10 @@ pub fn gather(
     if !options.bench || run.said {
         return;
     }
-    // Each frame's groups, taken every frame so a phase holds only its own.
+    // Each frame's groups and schedules, taken every frame so a phase holds only its own.
     let taken = terra_gen::stat::take();
+    let schedules = recorder.map(|r| r.take_schedules()).unwrap_or_default();
+    let schedules = schedules.iter().map(|(name, ms)| (name.as_str(), *ms, 0));
     let now = Instant::now();
     let frame_ms = run
         .last
@@ -110,13 +121,15 @@ pub fn gather(
             run.settle_ms.extend(frame_ms);
             run.settle_tick_ms
                 .extend(ticks.as_ref().and_then(|t| t.tick_ms()));
-            run.settle_groups.add(&taken);
+            run.settle_groups.add_stats(&taken);
+            run.settle_schedules.add(schedules);
         } else if crate::shell::counting(&options, &screen, &hold) {
             run.frame += 1;
             if run.frame > options.settle_frames {
                 run.tick_ms.extend(ticks.and_then(|t| t.tick_ms()));
                 run.gpu_ms.extend(parts.and_then(|p| p.gpu_ms));
-                run.play_groups.add(&taken);
+                run.play_groups.add_stats(&taken);
+                run.play_schedules.add(schedules);
             }
         }
         return;
@@ -136,8 +149,13 @@ pub fn gather(
     ) {
         println!("{line}");
     }
-    for (phase, groups) in [("settle", &run.settle_groups), ("play", &run.play_groups)] {
-        if let Some(line) = groups_line(phase, groups) {
+    for (what, phase, groups) in [
+        ("groups", "settle", &run.settle_groups),
+        ("groups", "play", &run.play_groups),
+        ("schedules", "settle", &run.settle_schedules),
+        ("schedules", "play", &run.play_schedules),
+    ] {
+        if let Some(line) = groups_line(what, phase, groups) {
             println!("{line}");
         }
     }
@@ -165,10 +183,10 @@ fn settle_line(seconds: f32, frame_ms: &mut [f32], tick_ms: &mut [f32]) -> Optio
     ))
 }
 
-/// A phase's groups' line: each group's median and 99th percentile ms a frame, and the scopes
-/// a frame that timed them.
-fn groups_line(phase: &str, groups: &Groups) -> Option<String> {
-    if groups.frames == 0 {
+/// A phase's groups' or schedules' line: each one's median and 99th percentile ms a frame,
+/// and the scopes a frame that timed groups (a schedule's marks are no scopes).
+fn groups_line(what: &str, phase: &str, groups: &Groups) -> Option<String> {
+    if groups.frames == 0 || groups.ms.is_empty() {
         return None;
     }
     let each: Vec<String> = groups
@@ -181,10 +199,16 @@ fn groups_line(phase: &str, groups: &Groups) -> Option<String> {
             format!("{name} {:.2} ({:.2})", ms[n / 2], ms[n * 99 / 100])
         })
         .collect();
+    let scopes = match what {
+        "groups" => format!(
+            "; {:.0} scopes a frame",
+            groups.scopes as f64 / groups.frames as f64
+        ),
+        _ => String::new(),
+    };
     Some(format!(
-        "SANDBOX groups in the {phase} phase, ms a frame, median (99th): {}; {:.0} scopes a frame",
+        "SANDBOX {what} in the {phase} phase, ms a frame, median (99th): {}{scopes}",
         each.join(", "),
-        groups.scopes as f64 / groups.frames as f64
     ))
 }
 
@@ -271,15 +295,26 @@ mod tests {
             scopes: 2,
         };
         let mut groups = Groups::default();
-        groups.add(&[taken("flora", 1.0)]);
-        groups.add(&[taken("flora", 3.0), taken("creatures", 2.0)]);
-        groups.add(&[taken("flora", 2.0), taken("creatures", 2.0)]);
+        groups.add_stats(&[taken("flora", 1.0)]);
+        groups.add_stats(&[taken("flora", 3.0), taken("creatures", 2.0)]);
+        groups.add_stats(&[taken("flora", 2.0), taken("creatures", 2.0)]);
         assert_eq!(groups.ms["creatures"], vec![0.0, 2.0, 2.0]);
-        let line = groups_line("play", &groups).unwrap();
+        let line = groups_line("groups", "play", &groups).unwrap();
         assert_eq!(
             line,
             "SANDBOX groups in the play phase, ms a frame, median (99th): creatures 2.00 (2.00), flora 2.00 (3.00); 3 scopes a frame"
         );
-        assert_eq!(groups_line("settle", &Groups::default()), None);
+        assert_eq!(groups_line("groups", "settle", &Groups::default()), None);
+    }
+
+    #[test]
+    fn the_schedules_line_says_each_schedule_without_scopes() {
+        let mut schedules = Groups::default();
+        schedules.add([("PostUpdate", 5.0, 0), ("render.Render", 3.0, 0)]);
+        schedules.add([("PostUpdate", 4.0, 0)]);
+        assert_eq!(
+            groups_line("schedules", "play", &schedules).unwrap(),
+            "SANDBOX schedules in the play phase, ms a frame, median (99th): PostUpdate 5.00 (5.00), render.Render 3.00 (3.00)"
+        );
     }
 }

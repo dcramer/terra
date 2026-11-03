@@ -122,6 +122,9 @@ struct Shared {
     state: Mutex<State>,
     /// The session report, when asked for.
     report: Mutex<Option<report::Report>>,
+    /// Each schedule's time the marks summed since a bench last took it (`marks`, D607): a
+    /// dozen names, so as small left untaken.
+    schedules: Mutex<Vec<(u32, u64)>>,
 }
 
 /// A span's name as shown, and its world when known (ours and unknown ones are either).
@@ -182,6 +185,7 @@ impl Shared {
             threads: Mutex::default(),
             state: Mutex::default(),
             report: Mutex::new(report::asked().map(report::Report::new)),
+            schedules: Mutex::default(),
         }
     }
 
