@@ -80,9 +80,17 @@ fn parse_bodies(text: &str) -> Result<HashMap<String, BodyFiles>, serde_json::Er
     Ok(serde_json::from_str::<File>(text)?.bodies)
 }
 
+/// The bodies the templates stand on, each once, by model: what a crowd of any of them loads.
+pub fn template_bodies() -> Vec<&'static BodyFiles> {
+    let mut found: Vec<&'static BodyFiles> = templates().values().map(Appearance::body).collect();
+    found.sort_by(|a, b| a.model.cmp(&b.model));
+    found.dedup_by(|a, b| a.model == b.model);
+    found
+}
+
 /// The folder of the worn looks made on the body whose model is `model` (a path under
 /// `assets/`, with or without a `#` label): what is drawn on a body follows the model it
-/// stands on, so a body loaded by name (the folk still load the old base) keeps its gear. None
+/// stands on, so a body loaded by name keeps its gear. None
 /// for a model no body names, or one with no gear of its own (Quaternius's dressed man).
 pub fn gear_for_model(model: &str) -> Option<&'static str> {
     let model = model.split('#').next().unwrap_or(model);

@@ -1,6 +1,6 @@
 //! People (game design 001, people.md): figures in the world who are not the player.
 //!
-//! Each stands on the base body, as the player does, shaped by a template
+//! Each stands on the body of their template's sex, as the player does, shaped by a template
 //! (`appearance::Appearance`), and wears an outfit of their own
 //! (`character::Outfit`, shown by `worn`). Each has a role and a few
 //! states: a prisoner kneels bound until freed, then follows you; a smith who follows you
@@ -125,10 +125,15 @@ impl Person {
     }
 }
 
-/// The base body's model and the animations people use, once loaded.
+/// Each body people stand on (every template's, `appearance::template_bodies`).
 #[derive(Resource)]
+struct Figures(Vec<Figure>);
+
+/// A body's model, the file of its clips, and the animations people use, once loaded.
 struct Figure {
+    body: &'static appearance::BodyFiles,
     model: Handle<Gltf>,
+    clips: Handle<Gltf>,
     ready: Option<(Handle<WorldAsset>, Handle<AnimationGraph>, Clips)>,
 }
 
@@ -155,7 +160,7 @@ struct Animates {
     was_at: Option<Vec3>,
 }
 
-/// Asks for a person to be stood in the world, on the base body shaped by a template
+/// Asks for a person to be stood in the world, on their sex's body shaped by a template
 /// (`appearance::Appearance::template`, such as "female" or "heavy"), wearing
 /// items by id (`character::item_id`), each dyed a colour if given (its leather, or the
 /// role its look names).
@@ -187,31 +192,49 @@ pub fn plugin(app: &mut App) {
 }
 
 fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
-    let model = assets.load(appearance::BASE);
-    loading.wait_for(&model);
-    commands.insert_resource(Figure { model, ready: None });
+    let figures = appearance::template_bodies()
+        .into_iter()
+        .map(|body| {
+            let model = assets.load(body.model.clone());
+            let clips = assets.load(body.clips().to_string());
+            loading.wait_for(&model);
+            loading.wait_for(&clips);
+            Figure {
+                body,
+                model,
+                clips,
+                ready: None,
+            }
+        })
+        .collect();
+    commands.insert_resource(Figures(figures));
 }
 
 fn prepare(
     assets: Res<AssetServer>,
     gltfs: Res<Assets<Gltf>>,
     gltf_nodes: Res<Assets<bevy::gltf::GltfNode>>,
-    mut figure: ResMut<Figure>,
+    mut figures: ResMut<Figures>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
-    if figure.ready.is_some() || !assets.is_loaded_with_dependencies(&figure.model) {
-        return;
+    for figure in figures.0.iter_mut().filter(|f| f.ready.is_none()) {
+        if !assets.is_loaded_with_dependencies(&figure.model)
+            || !assets.is_loaded_with_dependencies(&figure.clips)
+        {
+            continue;
+        }
+        let (Some(model), Some(clips)) = (gltfs.get(&figure.model), gltfs.get(&figure.clips))
+        else {
+            continue;
+        };
+        let Some(scene) = model.default_scene.clone() else {
+            continue;
+        };
+        figure.ready = Some(prepared(clips, &gltf_nodes, scene, &mut graphs));
     }
-    let Some(gltf) = gltfs.get(&figure.model) else {
-        return;
-    };
-    let Some(scene) = gltf.default_scene.clone() else {
-        return;
-    };
-    figure.ready = Some(prepared(gltf, &gltf_nodes, scene, &mut graphs));
 }
 
-/// A body's scene, and the clips people use built into a graph.
+/// A body's scene, and the clips people use, from its clips file, built into a graph.
 fn prepared(
     gltf: &Gltf,
     gltf_nodes: &Assets<bevy::gltf::GltfNode>,
@@ -248,7 +271,7 @@ fn prepared(
 /// Stands each person asked for in the world, once their body is ready.
 fn arrive(
     mut commands: Commands,
-    figure: Res<Figure>,
+    figures: Res<Figures>,
     planet: Res<Planet>,
     start: Res<Start>,
     mut asked: MessageReader<Arrive>,
@@ -262,6 +285,12 @@ fn arrive(
                 "{} has a template there is none of: {}",
                 arrival.name, arrival.template
             );
+            continue;
+        };
+        // The body of the template's sex (`Appearance::body`).
+        let model = &shape.body().model;
+        let Some(figure) = figures.0.iter().find(|f| &f.body.model == model) else {
+            warn!("{} stands on {model}, which is not loaded", arrival.name);
             continue;
         };
         let Some((scene, graph, clips)) = &figure.ready else {
@@ -730,12 +759,20 @@ mod tests {
         }
     }
 
-    /// The town's walk and jog paces are the base body's clips' own, and every speed someone
+    /// The town's walk and jog paces are each body's clips' own, and every speed someone
     /// walks or jogs at, here or in a town, is shown within a tenth of its clip (D585): the
     /// walk was played 1.37 times as fast as made, and the town's runners at 0.63.
     #[test]
     fn people_walk_and_jog_within_a_tenth_of_their_clips() {
-        let file = model_files::json(appearance::BASE);
+        let bodies = appearance::template_bodies();
+        assert!(bodies.len() >= 2, "a man's body and a woman's");
+        for body in bodies {
+            walks_and_jogs_within_a_tenth(body.clips());
+        }
+    }
+
+    fn walks_and_jogs_within_a_tenth(clips: &str) {
+        let file = model_files::json(clips);
         let mut broken = Vec::new();
         for (clip, town) in [
             ("Walk_Loop", terra_town::WALK_PACE),
@@ -744,7 +781,7 @@ mod tests {
             let pace = model_files::pace(&file, clip);
             assert!(
                 (town / pace - 1.0).abs() < 0.01,
-                "terra_town's pace for {clip} is {town}, its clip's {pace}: set it to the clip's"
+                "terra_town's pace for {clip} is {town}, {clips}'s {pace}: set it to the clip's"
             );
             let spread = terra_town::GAIT_SPREAD;
             for speed in [town * (1.0 - spread), town * (1.0 + spread)] {
@@ -755,6 +792,6 @@ mod tests {
             let pace = model_files::pace(&file, clip);
             broken.extend(terra_walker::pace::matched(clip, pace, speed).err());
         }
-        assert!(broken.is_empty(), "{}", broken.join("\n"));
+        assert!(broken.is_empty(), "{clips}: {}", broken.join("\n"));
     }
 }

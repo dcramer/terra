@@ -88,8 +88,19 @@ fn a_body_is_chosen_by_sex_from_data() {
 }
 
 #[test]
+fn a_crowd_loads_each_body_its_templates_stand_on_once() {
+    let loaded: Vec<&str> = template_bodies().iter().map(|b| b.model.as_str()).collect();
+    for (name, template) in templates() {
+        let model = template.body().model.as_str();
+        let times = loaded.iter().filter(|m| **m == model).count();
+        assert_eq!(times, 1, "{name} stands on {model}, loaded {times} times");
+    }
+    assert!(loaded.len() >= 2, "a man's body and a woman's: {loaded:?}");
+}
+
+#[test]
 fn gear_is_drawn_only_on_the_body_it_was_made_on() {
-    // The folk still load the old base by name: it keeps its gear.
+    // A body loaded by its model keeps the gear made on it.
     assert_eq!(gear_for_model(BASE), Some("models/gear"));
     assert_eq!(
         gear_for_model(&format!("{BASE}#Scene0")),
