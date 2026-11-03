@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type Bisect, found, next, start, step } from "./bisect.ts";
-import { appended, band, FLOORS, historyLine, judge, mannWhitney, type Point, pointOf, readHistory, type Why } from "./history.ts";
+import { appended, band, FLOORS, historyLine, judge, mannWhitney, perJob, type Point, pointOf, readHistory, type Why } from "./history.ts";
 import { alertLine, askBisect, CONFIRM, cancelBisect, closeAlert, empty, ingest, plan, type State } from "./sheriff.ts";
 
 const commits = Array.from({ length: 30 }, (_, i) => `c${String(i).padStart(2, "0")}${"0".repeat(38)}`);
@@ -63,11 +63,25 @@ test("the band is the window's median and the wider of its floor and three robus
 });
 
 test("a value is judged against the series since its last change point", () => {
-  const p = (rev: string, v: number): Point => ({ rev, job: "j", why: "landing", date: "", gpu: "g", size: "s", build: "release", scene: "x", values: { median_ms: v } });
+  const p = (rev: string, v: number): Point => ({ rev, job: rev, why: "landing", date: "", gpu: "g", size: "s", build: "release", scene: "x", values: { median_ms: v } });
   const before = [p("a", 8), p("b", 8), p("c", 8), p("d", 10), p("e", 10), p("f", 10)];
   assert.equal(judge(before.slice(0, 3), "median_ms", 10).change, "worse", "against the old level, 10 is worse");
   assert.equal(judge(before, "median_ms", 10, "d").change, "same", "against the level since d, it is not");
   assert.equal(judge(before, "median_ms", 7, "d").change, "better");
+});
+
+test("the window counts a job once, its runs' median, so a retrigger's tight runs do not narrow the band", () => {
+  const p = (job: string, v: number, why: Why = "landing"): Point => ({ rev: job, job, why, date: "", gpu: "g", size: "s", build: "release", scene: "x", values: { median_ms: v } });
+  // Five landings over the day spread ±0.6 ms, then a retrigger's five runs in one hour, alike.
+  const day = [p("a", 8.0), p("b", 8.6), p("c", 7.6), p("d", 8.4), p("e", 7.8)];
+  const retrigger = [8.0, 8.01, 7.99, 8.0, 8.02].map((v) => p("r", v, "retrigger"));
+  assert.deepEqual(perJob([...day, ...retrigger], "median_ms"), [8.0, 8.6, 7.6, 8.4, 7.8, 8.0]);
+  // As one point: deviations 0, .6, .4, .4, .2, 0, their median .3, three robust deviations
+  // 3 x 1.4826 x .3 = 1.33 ms, so 8.5 ms is inside. As five, the median deviation is 0 and
+  // the band falls to its 3% floor (0.24 ms): the day's spread lost, 8.5 ms an alert.
+  const j = judge([...day, ...retrigger], "median_ms", 8.5);
+  assert.equal(j.change, "same");
+  assert.ok(j.change === "same" && Math.abs(j.width - 3 * 1.4826 * 0.3) < 1e-9, JSON.stringify(j));
 });
 
 test("the bench's appended rows become history and read back", () => {
@@ -145,7 +159,7 @@ test("a level shift of the box alone, both ends moved together, is no alert, and
 
 test("ends that differ past the floor but not surely are benched once more, then let go", () => {
   const at = (rev: string, why: Why, values: number[]): Point[] =>
-    values.map((v, i) => ({ rev, job: `${why}${i}`, why, date: "", gpu: "g", size: "s", build: "release", scene: "lake-play", values: { median_ms: v } }));
+    values.map((v, i) => ({ rev, job: `${rev.slice(0, 3)}-${why}-${i}`, why, date: "", gpu: "g", size: "s", build: "release", scene: "lake-play", values: { median_ms: v } }));
   const history = [...at(commits[1], "landing", [9.3]), ...at(commits[2], "landing", [9.28]), ...at(commits[3], "landing", [9.32])];
   let s: State = { ...empty(), benched: commits[3], good: commits[3] };
   const take = (rev: string, why: Why, values: number[]) => {

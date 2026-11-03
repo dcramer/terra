@@ -85,7 +85,7 @@ export const FLOORS: Record<Metric, Floor> = {
   hitches: { abs: 2 },
   load_s: { pct: 10, abs: 2 },
 };
-/// Points of the window before a new one (Perfherder's back window).
+/// Points of the window before a new one, one a job (`perJob`; Perfherder's back window).
 export const WINDOW = 12;
 /// Fewer points than this and there is no band yet: the row is still learning its noise.
 export const LEAST = 3;
@@ -174,6 +174,23 @@ export function series(points: Point[], like: Pick<Point, "scene" | "gpu" | "siz
   return points.filter((p) => (p.why === "landing" || p.why === "retrigger") && !p.busy && p.scene === like.scene && p.gpu === like.gpu && p.size === like.size && p.build === like.build);
 }
 
+/// A series' points as the window counts them: one a job, its runs' median, in the order the
+/// jobs were benched. A retrigger's five runs at one commit are one hour of the box, so as five
+/// points they would narrow the band below the day's spread and outweigh the landings around
+/// them; Perfherder's back window likewise counts pushes, not runs (analyze.py's
+/// RevisionDatum, one a push with its runs' values).
+export function perJob(points: Point[], metric: Metric): number[] {
+  const jobs = new Map<string, number[]>();
+  for (const p of points) {
+    const v = p.values[metric];
+    if (v === undefined) continue;
+    const runs = jobs.get(p.job);
+    if (runs) runs.push(v);
+    else jobs.set(p.job, [v]);
+  }
+  return [...jobs.values()].map(median);
+}
+
 /// What a value says against the window before it.
 export type Judged = { metric: Metric; before: number; after: number; width: number; change: "worse" | "better" | "same" } | { metric: Metric; change: "learning" };
 
@@ -185,11 +202,7 @@ export function judge(before: Point[], metric: Metric, after: number, since?: st
     const i = before.findIndex((p) => p.rev === since);
     if (i >= 0) from = i;
   }
-  const values = before
-    .slice(from)
-    .map((p) => p.values[metric])
-    .filter((v): v is number => v !== undefined)
-    .slice(-WINDOW);
+  const values = perJob(before.slice(from), metric).slice(-WINDOW);
   const b = band(values, FLOORS[metric]);
   if (!b) return { metric, change: "learning" };
   const change = after > b.base + b.width ? "worse" : after < b.base - b.width ? "better" : "same";

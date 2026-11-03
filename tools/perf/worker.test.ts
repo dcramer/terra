@@ -78,7 +78,7 @@ test("the row queues its bench at main's tip, takes the job's rows in, and bench
 });
 
 test("an A/B reads main's side from the history: each metric inside or past main's band", () => {
-  const p = (rev: string, hitches: number, median: number) => ({ rev, job: "j", why: "landing" as const, date: "", gpu: "RTX 3080", size: "1920x1080 offscreen", build: "release", scene: "forest-run", values: { median_ms: median, hitches } });
+  const p = (rev: string, hitches: number, median: number) => ({ rev, job: rev, why: "landing" as const, date: "", gpu: "RTX 3080", size: "1920x1080 offscreen", build: "release", scene: "forest-run", values: { median_ms: median, hitches } });
   const window = [p("a", 0, 8.0), p("b", 1, 8.1), p("c", 0, 7.9), p("d", 0, 8.0)];
   const same = compare([p("", 1, 8.1)], window);
   assert.equal(same.worse, false, same.lines.join("\n"));
