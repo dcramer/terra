@@ -2,6 +2,7 @@
 //! their outline, and rounded lumps for far crowns and shadows.
 
 use super::Card;
+use super::pivots::{ATTRIBUTE_PIVOT, ATTRIBUTE_TWIG, NO_PIVOT, Pivots};
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
@@ -20,10 +21,30 @@ pub struct Build {
     pub sway: Vec<[f32; 2]>,
     pub colours: Vec<[f32; 4]>,
     pub indices: Vec<u32>,
+    /// For a tree's wood, crowns and lumps, wind in levels (D597, `pivots`): each vertex's
+    /// great limb's pivot and its clump's own, the ones the next vertices take, and whether
+    /// the mesh carries them.
+    pub pivots: Vec<[f32; 4]>,
+    pub twigs: Vec<[f32; 4]>,
+    pub pivot: Option<[f32; 4]>,
+    pub twig: Option<[f32; 4]>,
+    pub levels: bool,
 }
 
 impl Build {
+    /// A build whose vertices carry pivots, where there are any.
+    pub fn levelled(pivots: &Pivots) -> Self {
+        Build {
+            levels: pivots.any(),
+            ..Default::default()
+        }
+    }
+
     pub fn vertex(&mut self, at: Vec3, normal: Vec3, uv: Vec2, sway: Vec2, colour: Vec3) -> u32 {
+        if self.levels {
+            self.pivots.push(self.pivot.unwrap_or(NO_PIVOT));
+            self.twigs.push(self.twig.unwrap_or(NO_PIVOT));
+        }
         self.positions.push(at.into());
         self.normals.push(normal.into());
         self.uvs.push(uv.into());
@@ -61,6 +82,11 @@ impl Build {
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.sway)
         .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.colours)
         .with_inserted_indices(Indices::U32(self.indices));
+        if self.levels {
+            mesh = mesh
+                .with_inserted_attribute(ATTRIBUTE_PIVOT, self.pivots)
+                .with_inserted_attribute(ATTRIBUTE_TWIG, self.twigs);
+        }
         if tangents && let Err(problem) = mesh.generate_tangents() {
             warn!("No tangents for a grown mesh: {problem}");
         }

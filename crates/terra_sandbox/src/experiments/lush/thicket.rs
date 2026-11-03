@@ -14,6 +14,7 @@ use bevy::{mesh::VertexAttributeValues, prelude::*};
 use std::f32::consts::{PI, TAU};
 use terra_gen::Rng;
 use terra_world::grown::build::{Build, Limb, Placing, tube};
+use terra_world::grown::pivots::Pivots;
 use terra_world::grown::tree::{self as grown_tree, Canopy, Spray, Tree};
 use terra_world::grown::{Card, Habit, TreeDef};
 
@@ -102,8 +103,10 @@ fn leafy(dice: &mut Rng, tree: &Tree, leaf: &Card, tint: Vec3, bare: bool) -> Sh
 fn drawn(tree: &Tree, canopy: &Canopy, placed: &[Vec<Placing>], leaf: &Card, bare: bool) -> Shrub {
     // Near, each card folded and drooping, so a bush a stride off is not planes of leaves.
     let mut near = grown_tree::crown_folded(placed, leaf);
-    let mut far = grown_tree::crown(placed, tree, leaf, 1);
-    let shadow = grown_tree::shadow_cards(placed, tree, leaf);
+    // A shrub sways as one, with its folded near cards (no pivots).
+    let none = Pivots::default();
+    let mut far = grown_tree::crown(placed, tree, leaf, 1, &none);
+    let shadow = grown_tree::shadow_cards(placed, tree, leaf, &none);
     let mut wood = [wood::wood(tree, 0, bare), wood::wood(tree, 1, bare)];
     for build in [&mut near, &mut far].into_iter().chain(wood.iter_mut()) {
         build.see_sky(|at| canopy.sky(at));

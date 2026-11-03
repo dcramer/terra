@@ -5,6 +5,7 @@
 //! spike.md), with the conifer's and birch's habits added.
 
 use super::build::{Build, Limb, Placing, card, folded_card, lump, tube};
+use super::pivots::{self, Clump, Line, Pivots};
 use super::{Card, Habit, TreeDef};
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -362,7 +363,29 @@ fn leader(dice: &mut Rng, def: &TreeDef, tree: &mut Tree) {
 /// A tree's wood at a level of detail: all of it, then without the twigs, then only the
 /// trunk and great limbs; rounder near the camera. A conifer's many thin branches are left
 /// out at the last level, where its sprays are big enough to hide that.
-pub fn wood(tree: &Tree, detail: usize, bark_m: f32) -> Build {
+/// Each limb's and spray's pivots, for wind in levels (D597), from the tree's own limbs.
+pub fn pivots(tree: &Tree) -> Pivots {
+    let limbs: Vec<Line> = tree
+        .limbs
+        .iter()
+        .map(|limb| Line {
+            points: &limb.points,
+            depth: limb.depth,
+        })
+        .collect();
+    let clumps: Vec<Clump> = tree
+        .sprays
+        .iter()
+        .map(|spray| Clump {
+            at: spray.at,
+            size: spray.size,
+            along: spray.along.unwrap_or(Vec3::ZERO),
+        })
+        .collect();
+    pivots::of(&limbs, &clumps)
+}
+
+pub fn wood(tree: &Tree, detail: usize, bark_m: f32, pivots: &Pivots) -> Build {
     let (deepest, sides) = match tree.habit {
         Habit::Spreading => (
             [3, 2, 1][detail],
@@ -377,8 +400,12 @@ pub fn wood(tree: &Tree, detail: usize, bark_m: f32) -> Build {
             [[10, 5, 3, 3], [7, 4, 3, 3], [5, 3, 3, 3]][detail],
         ),
     };
-    let mut build = Build::default();
-    for limb in tree.limbs.iter().filter(|limb| limb.depth <= deepest) {
+    let mut build = Build::levelled(pivots);
+    for (i, limb) in tree.limbs.iter().enumerate() {
+        if limb.depth > deepest {
+            continue;
+        }
+        build.pivot = pivots.limbs.get(i).copied();
         tube(
             &mut build,
             limb,
@@ -640,9 +667,16 @@ pub fn crown_cards(dice: &mut Rng, tree: &Tree, canopy: &Canopy) -> Vec<Vec<Plac
 
 /// A tree's crown at a level of detail: every card near; then three of each clump, or
 /// every other conifer spray, enlarged; then one, or every third.
-pub fn crown(cards: &[Vec<Placing>], tree: &Tree, leaf: &Card, detail: usize) -> Build {
-    let mut build = Build::default();
+pub fn crown(
+    cards: &[Vec<Placing>],
+    tree: &Tree,
+    leaf: &Card,
+    detail: usize,
+    pivots: &Pivots,
+) -> Build {
+    let mut build = Build::levelled(pivots);
     for (i, (spray, set)) in tree.sprays.iter().zip(cards).enumerate() {
+        (build.pivot, build.twig) = pivots.of_clump(i);
         let (keep, grow) = if spray.along.is_some() {
             let (every, grow) = [(1, 1.0), (2, 1.45), (3, 2.0)][detail];
             if i % every != 0 {
@@ -692,9 +726,10 @@ const DROOP: (f32, f32) = (0.05, 0.2);
 /// What a crown's shadow is cast from near the camera: the first two cards of every clump,
 /// or every other conifer spray, the crown's own, enlarged as the simpler levels are, so
 /// the light comes through in flecks where it does through the crown.
-pub fn shadow_cards(cards: &[Vec<Placing>], tree: &Tree, leaf: &Card) -> Build {
-    let mut build = Build::default();
+pub fn shadow_cards(cards: &[Vec<Placing>], tree: &Tree, leaf: &Card, pivots: &Pivots) -> Build {
+    let mut build = Build::levelled(pivots);
     for (i, (spray, set)) in tree.sprays.iter().zip(cards).enumerate() {
+        (build.pivot, build.twig) = pivots.of_clump(i);
         let (keep, grow) = if spray.along.is_some() {
             if i % 2 != 0 {
                 continue;
@@ -717,9 +752,11 @@ pub fn shadow_cards(cards: &[Vec<Placing>], tree: &Tree, leaf: &Card) -> Build {
 /// What a crown is far off, and what its shadow is cast from farther off: a rounded lump
 /// for each branch, as big as most of its leaves times `scale`, solid so the GPU can skip
 /// what is hidden, in the leaves' colour, darker underneath. A conifer's many branches are
-/// taken a few whorls at a time, its lumps stacked up its trunk.
-pub fn lumps(tree: &Tree, scale: f32, colour: Vec3) -> Build {
-    let mut build = Build::default();
+/// taken a few whorls at a time, its lumps stacked up its trunk. Each lump turns with the
+/// great limb of its first spray (D597), so a far crown and the shade it casts stir as the
+/// near one does.
+pub fn lumps(tree: &Tree, scale: f32, colour: Vec3, pivots: &Pivots) -> Build {
+    let mut build = Build::levelled(pivots);
     let groups = if tree.branches > 24 {
         10
     } else {
@@ -728,14 +765,16 @@ pub fn lumps(tree: &Tree, scale: f32, colour: Vec3) -> Build {
     let crown =
         tree.sprays.iter().fold(Vec3::ZERO, |sum, s| sum + s.at) / tree.sprays.len().max(1) as f32;
     for group in 0..groups {
-        let sprays: Vec<&Spray> = tree
-            .sprays
-            .iter()
-            .filter(|s| s.branch * groups / tree.branches.max(1) == group)
-            .collect();
+        let in_group = |s: &Spray| s.branch * groups / tree.branches.max(1) == group;
+        let sprays: Vec<&Spray> = tree.sprays.iter().filter(|s| in_group(s)).collect();
         if sprays.is_empty() {
             continue;
         }
+        build.pivot = tree
+            .sprays
+            .iter()
+            .position(in_group)
+            .and_then(|first| pivots.tips.get(first).copied());
         let centre = sprays.iter().fold(Vec3::ZERO, |sum, s| sum + s.at) / sprays.len() as f32;
         let size = sprays.iter().map(|s| s.size).sum::<f32>() / sprays.len() as f32;
         let spread = sprays

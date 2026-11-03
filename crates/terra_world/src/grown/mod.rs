@@ -428,13 +428,12 @@ impl MaterialExtension for FoliageExtension {
     fn specialize(
         _pipeline: &bevy::pbr::MaterialExtensionPipeline,
         descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
-        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        layout: &bevy::mesh::MeshVertexBufferLayoutRef,
         key: bevy::pbr::MaterialExtensionKey<Self>,
     ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
         test_depth_early(descriptor, key.mesh_key);
-        // foliage.wesl has a second entry point for meshes carrying pivots (D597's
-        // experiment), so wgpu cannot pick one on its own.
-        descriptor.vertex.entry_point = Some("vertex".into());
+        // A grown tree's meshes carry its limbs' pivots, wind in levels (D597).
+        pivots::specialize(descriptor, layout);
         Ok(())
     }
 }
@@ -645,15 +644,16 @@ pub fn grow(
                     let shape = tree::grow(&mut dice, def, height);
                     let (leaf, tint) = (cards.get(&def.leaves), vec3(def.tint));
                     let canopy = tree::Canopy::of(&shape, tint);
-                    let mut wood = [0, 1, 2].map(|detail| tree::wood(&shape, detail, def.bark_m));
+                    let pivots = tree::pivots(&shape);
+                    let mut wood = [0, 1, 2].map(|detail| tree::wood(&shape, detail, def.bark_m, &pivots));
                     let cards = tree::crown_cards(&mut dice, &shape, &canopy);
-                    let mut crown = [0, 1, 2].map(|detail| tree::crown(&cards, &shape, leaf, detail));
+                    let mut crown = [0, 1, 2].map(|detail| tree::crown(&cards, &shape, leaf, detail, &pivots));
                     for build in wood.iter_mut().chain(crown.iter_mut()) {
                         build.see_sky(|at| canopy.sky(at));
                     }
-                    let shadow_cards = tree::shadow_cards(&cards, &shape, leaf);
-                    let far = tree::lumps(&shape, 1.0, leaf.colour * tint * 0.85);
-                    let shadow_lumps = tree::lumps(&shape, SHADOW_LUMP, Vec3::ONE);
+                    let shadow_cards = tree::shadow_cards(&cards, &shape, leaf, &pivots);
+                    let far = tree::lumps(&shape, 1.0, leaf.colour * tint * 0.85, &pivots);
+                    let shadow_lumps = tree::lumps(&shape, SHADOW_LUMP, Vec3::ONE, &pivots);
                     debug!(
                         "{name} {index}, {height:.0} m: wood {} {} {}, crown {} {} {}, shadow {} {}, far {} triangles",
                         wood[0].triangles(),
@@ -976,9 +976,9 @@ mod tests {
                     let shape = tree::grow(&mut dice, def, height);
                     let leaf = cards.get(&def.leaves);
                     let canopy = tree::Canopy::of(&shape, Vec3::ONE);
-                    let wood = tree::wood(&shape, 0, def.bark_m);
+                    let wood = tree::wood(&shape, 0, def.bark_m, &tree::pivots(&shape));
                     let cards = tree::crown_cards(&mut dice, &shape, &canopy);
-                    let crown = tree::crown(&cards, &shape, leaf, 0);
+                    let crown = tree::crown(&cards, &shape, leaf, 0, &tree::pivots(&shape));
                     (wood.triangles(), crown.triangles(), crown.positions)
                 };
                 let (wood, crown, positions) = grown(3);

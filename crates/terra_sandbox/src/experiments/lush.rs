@@ -936,7 +936,7 @@ fn grow(
     let near = crown_near(&cards, keep, &tips);
     let far = crown_far(&cards, keep, &tips);
     let shadow = crown_stand_in(&cards, &tips);
-    let clumps = crown_clumps(&tree, 1.0, false, &[]);
+    let clumps = crown_clumps(&tree, 1.0, false, &pivots.tips);
     let lumps = crown_clumps(&tree, SHADOW_LUMP, true, &pivots.tips);
     info!(
         "lush: tree {kind}, {species:?} {form:?}{}, {height:.0} m: wood {} {} {} triangles, crown {} near and {} far, shadows {} {}",
