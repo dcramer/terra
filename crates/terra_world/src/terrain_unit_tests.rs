@@ -2,8 +2,10 @@ use super::*;
 
 /// How long the lake's load takes by stage, on the CPU alone: the land, choosing the
 /// first view's chunks, shaping and colouring them, each on every core as the game does.
-/// A measure, not a check: `cargo xtask remote-render --cpu -- cargo test --release -p
-/// terra_world --lib lake_load_by_stage -- --ignored --nocapture`.
+/// A measure, and a check that the land's round comes out as pinned (`PINNED_ROUND`), so a
+/// change meant only to make the load faster fails if it changes the land: `cargo xtask
+/// remote-render --cpu -- cargo test --release -p terra_world --lib lake_load_by_stage --
+/// --ignored --nocapture`.
 #[test]
 #[ignore]
 fn lake_load_by_stage() {
@@ -25,19 +27,28 @@ fn lake_load_by_stage() {
     let (planet, start, _) = crate::planet::entering::land_of(&spec, &options, None);
     eprintln!("land worked out in {:.2} s", at.elapsed().as_secs_f32());
     // Each part of the round as a hash of its `Debug` text, which tells every bit of a float
-    // apart: a change meant only to be faster leaves every one as it was.
-    if let Some(round) = planet.round() {
-        let parts: [(&str, &dyn std::fmt::Debug); 7] = [
-            ("waters", &round.waters),
-            ("pools", &round.pools),
-            ("seasons", &round.seasons),
-            ("snow", &round.snow),
-            ("snowbeds", &round.snowbeds),
-            ("drift", &round.drift),
-            ("heath", &round.heath),
-        ];
-        for (name, part) in parts {
-            eprintln!("round's {name}: {:016x}", debug_hash(part));
+    // apart: a change meant only to be faster leaves every one as it was, and one that changes
+    // the land on purpose says so here, with its reason in the commit.
+    let round = planet.round().expect("the lake's land has a round");
+    let parts: [(&str, &dyn std::fmt::Debug); 7] = [
+        ("waters", &round.waters),
+        ("pools", &round.pools),
+        ("seasons", &round.seasons),
+        ("snow", &round.snow),
+        ("snowbeds", &round.snowbeds),
+        ("drift", &round.drift),
+        ("heath", &round.heath),
+    ];
+    let mut changed = Vec::new();
+    for ((name, part), (pinned_name, pinned)) in parts.into_iter().zip(PINNED_ROUND) {
+        let hash = debug_hash(part);
+        eprintln!("round's {name}: {hash:016x}");
+        assert_eq!(
+            name, pinned_name,
+            "PINNED_ROUND lists the parts in this order"
+        );
+        if hash != pinned {
+            changed.push(format!("{name} {hash:016x} (pinned {pinned:016x})"));
         }
     }
     let viewer = start.0.translation + start.0.translation.normalize() * 1.7;
@@ -63,7 +74,27 @@ fn lake_load_by_stage() {
         coloured.len(),
         at.elapsed().as_secs_f32()
     );
+    // Held to last, so a change to the land still shows how long each stage took.
+    assert!(
+        changed.is_empty(),
+        "the lake's round changed: {}. A change meant only to be faster must leave it bit for \
+         bit; one that changes the land on purpose updates PINNED_ROUND with its reason in the \
+         commit (D596)",
+        changed.join(", ")
+    );
 }
+
+/// The lake's round as `lake_load_by_stage` hashes it, part by part. Changed last by the
+/// mountains' slopes blended between lattice points (load-time j8).
+const PINNED_ROUND: [(&str, u64); 7] = [
+    ("waters", 0xdc77_c452_4238_5f5b),
+    ("pools", 0x1d55_61d2_c8e4_2671),
+    ("seasons", 0xb171_e859_1d64_925e),
+    ("snow", 0x805e_28b6_21cd_b673),
+    ("snowbeds", 0xadeb_8b91_1aed_0b00),
+    ("drift", 0xb1c6_6c95_f10b_9ccb),
+    ("heath", 0xfdc2_cb91_28d6_d0da),
+];
 
 /// A hash of a value's `Debug` text, folded in as it is written, by SplitMix64.
 fn debug_hash(value: &dyn std::fmt::Debug) -> u64 {
