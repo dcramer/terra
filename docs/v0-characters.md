@@ -71,6 +71,7 @@ The switch as bounded jobs (the research note's "The switch in jobs" has the det
 ## Open with the developers
 
 - Their man's arms (fingertips 2.2 cm above the 99th percentile) stay as made under the rule; D599 withdrew the stretch.
+- Where the mark (D590) shows while he wears the Ranger, whose sleeves and gloves cover all his arm skin: drawn over the sleeve (recommended), only on the bare arm, or a new arm piece of ours with one forearm bare. On the desk.
 
 ## Later, past v0
 
