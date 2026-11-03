@@ -23,8 +23,10 @@ pub(super) struct Limits {
     pub integrated_median_ms: Option<f32>,
     /// The render world's CPU, median ms a frame.
     pub render_cpu_ms: Option<f32>,
-    /// Each group's median ms a frame (`terra_gen::stat`), and each GPU pass's.
+    /// Each group's median ms a frame (`terra_gen::stat`), each schedule's (the recorder's
+    /// marks: `PostUpdate`, `render.Render`), and each GPU pass's.
     pub groups: Vec<(String, f32)>,
+    pub schedules: Vec<(String, f32)>,
     pub gpu: Vec<(String, f32)>,
 }
 
@@ -120,6 +122,7 @@ impl Limits {
             "integrated_median_ms",
             "render_cpu_ms",
             "groups",
+            "schedules",
             "gpu",
         ];
         known(value, of, &names)?;
@@ -127,11 +130,11 @@ impl Limits {
             let number = field.number().map(|n| n as f32);
             let wanted = || format!("{FILE}: {of}'s `{key}` wants a number of ms or a count");
             match key.as_str() {
-                "groups" | "gpu" => {
-                    let into = if key == "groups" {
-                        &mut self.groups
-                    } else {
-                        &mut self.gpu
+                "groups" | "schedules" | "gpu" => {
+                    let into = match key.as_str() {
+                        "groups" => &mut self.groups,
+                        "schedules" => &mut self.schedules,
+                        _ => &mut self.gpu,
                     };
                     for (name, ms) in field.fields() {
                         let ms = ms.number().ok_or_else(wanted)? as f32;
@@ -188,7 +191,8 @@ mod tests {
     fn a_scene_lays_its_own_over_every_scenes() {
         let text = r#"(
             every: (play: (frame_p99_ms: 13.3, groups: {"creatures": 1.0, "flora": 2.0})),
-            scenes: {"castle": (load_s: 40, play: (frame_p99_ms: 20, groups: {"flora": 3.5}))},
+            scenes: {"castle": (load_s: 40, play: (frame_p99_ms: 20, groups: {"flora": 3.5},
+                schedules: {"render.Render": 4.0}))},
         )"#;
         let castle = parse(text, "castle").unwrap();
         assert_eq!(castle.load_s, Some(40.0));
@@ -196,6 +200,10 @@ mod tests {
         assert_eq!(
             castle.play.groups,
             vec![("creatures".to_string(), 1.0), ("flora".to_string(), 3.5)]
+        );
+        assert_eq!(
+            castle.play.schedules,
+            vec![("render.Render".to_string(), 4.0)]
         );
         let forest = parse(text, "forest-run").unwrap();
         assert_eq!(forest.play.frame_p99_ms, Some(13.3));

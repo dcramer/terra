@@ -63,8 +63,10 @@ struct Timing {
     /// preset it drew at, from the run's own line; empty if it did not say.
     device: String,
     preset: String,
-    /// Its ticks against their time, and its GPU's growth over the run (`ticks`).
+    /// Its ticks against their time, and its GPU's growth over the run (`ticks`); its settle
+    /// phase, groups, schedules, render CPU and GPU passes (`phases`).
     ticks: ticks::Said,
+    phases: phases::Said,
 }
 
 impl Timing {
@@ -177,6 +179,7 @@ fn parse_timing(line: &str) -> Option<Timing> {
         device: String::new(),
         preset: String::new(),
         ticks: ticks::Said::default(),
+        phases: phases::Said::default(),
     })
 }
 
@@ -275,6 +278,7 @@ fn combine(runs: &[Timing]) -> Option<Timing> {
         hitches: runs.iter().map(|t| t.hitches).max().unwrap_or(0),
         drift_pct: middle(|t| t.drift_pct),
         ticks: ticks::Said::middle(runs.iter().map(|t| &t.ticks)),
+        phases: phases::Said::middle(runs.iter().map(|t| &t.phases)),
         freezes: runs.iter().map(|t| t.freezes).max().unwrap_or(0),
         load_s: first
             .load_s
@@ -819,6 +823,10 @@ fn time_scene(
         .args(["--offscreen", "--bench", "--settle", settle])
         .args(["--bench-frames", scene.frames])
         .current_dir(folder);
+    // The settle phase after the loading screen lifts, timed apart (D607).
+    if let Some(seconds) = budget.settle.seconds.filter(|s| !from_start && *s > 0.0) {
+        command.args(["--bench-settle", &seconds.to_string()]);
+    }
     // Run outside Cargo, a Bevy program looks for assets/ next to itself, which is where
     // the Windows copy has them; the native one is pointed at the root's.
     if !on_wsl() {
@@ -860,7 +868,7 @@ fn time_scene(
             {
                 (timing.preset, timing.device) = (preset, device);
             } else if let Some(timing) = &mut timing
-                && timing.ticks.read(&line)
+                && (timing.ticks.read(&line) || timing.phases.read(&line))
             {
                 println!("  {}", line.trim_start_matches("SANDBOX "));
             } else if let Some(said) = worth_saying(&line) {
@@ -939,6 +947,8 @@ fn time_scene(
 mod budgets;
 #[path = "bench/judge.rs"]
 mod judge;
+#[path = "bench/phases.rs"]
+mod phases;
 #[path = "bench/play.rs"]
 mod play;
 #[path = "bench/ticks.rs"]

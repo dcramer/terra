@@ -27,6 +27,7 @@ pub(super) fn missed(timing: &Timing) -> Vec<String> {
         return missed;
     }
     missed.extend(frames(timing, limits));
+    missed.extend(timing.phases.misses(&budget.settle, limits));
     missed
 }
 

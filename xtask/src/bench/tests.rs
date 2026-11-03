@@ -14,11 +14,16 @@ pub(crate) fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
         freezes: 0,
         from_start: false,
         load_s: None,
-        // A scene held to every scene's budgets and no load of its own.
-        budget: budgets::of("world").unwrap(),
+        // A scene held to every scene's play budgets and no load of its own; no settle phase,
+        // which these runs do not say (`phases`' tests hold it).
+        budget: budgets::Scene {
+            settle: budgets::Limits::default(),
+            ..budgets::of("world").unwrap()
+        },
         device: "DiscreteGpu".into(),
         preset: "high".into(),
         ticks: ticks::Said::default(),
+        phases: phases::Said::default(),
     }
 }
 
