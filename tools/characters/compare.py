@@ -152,9 +152,11 @@ for k, (side, z, scale) in enumerate(views):
     cam.data.ortho_scale = scale
     if k == 3 or only_face:
         scene.render.resolution_y = 512 if only_face else 320
-    path = os.path.join(look.OUT, f"compare-{k}.png")
+    path = os.path.join(look.OUT, f"compare-{os.getpid()}-{k}.png")
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
     tiles.append(path)
 look.stack(tiles, os.path.join(look.ROOT, out))
+for t in tiles:
+    os.remove(t)
 print("COMPARED", out)

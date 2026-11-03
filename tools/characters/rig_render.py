@@ -68,11 +68,11 @@ for action_name in ACTIONS:
         ly, lp = y + math.radians(50), math.radians(40)
         towards = Vector((math.sin(ly) * math.cos(lp), -math.cos(ly) * math.cos(lp), math.sin(lp)))
         sun.rotation_euler = (-towards).to_track_quat("-Z", "Y").to_euler()
-        tile = os.path.join(OUT, f"rr-{name}-{action_name}-{k}.png")
+        tile = os.path.join(OUT, f"rr-{os.getpid()}-{name}-{action_name}-{k}.png")
         scene.render.filepath = tile
         bpy.ops.render.render(write_still=True)
         tiles.append(tile)
-    row = os.path.join(OUT, f"rr-{name}-{action_name}.png")
+    row = os.path.join(OUT, f"rr-{os.getpid()}-{name}-{action_name}.png")
     look.stitch(tiles, row)
     for t in tiles:
         os.remove(t)
