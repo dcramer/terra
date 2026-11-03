@@ -100,10 +100,11 @@ pub(super) fn lay(
     let cells = (TO_M / CELL_M).ceil() as i32;
     let mut squares: HashMap<(i32, i32), Vec<Card>> = HashMap::default();
     let mut count = [0usize; 3];
+    let seed = far_seed(lay.seed);
     for i in -cells..=cells {
         for j in -cells..=cells {
             let cell = Vec2::new(i as f32, j as f32);
-            let luck = |salt: u32| hash(i, j, salt);
+            let luck = |salt: u32| hash(seed, i, j, salt);
             let at = (cell + Vec2::new(luck(1), luck(2))) * CELL_M;
             let distance = at.length();
             // The meadow's far edge wanders, as a wood's edge does.
@@ -214,10 +215,16 @@ fn merged(cards: &[Card]) -> (Mesh, Vec3, Aabb) {
     (mesh, middle, Aabb::from_min_max(low, high))
 }
 
-/// A number from 0 to 1 for a square of the grid, the same every run.
-fn hash(i: i32, j: i32, salt: u32) -> f32 {
+/// The word the far trees' squares are drawn by: the forest's seed, derived for them.
+fn far_seed(forest: Seed) -> u32 {
+    forest.derive("far trees").0 as u32
+}
+
+/// A number from 0 to 1 for a square of the grid, the same every run of a world: the far
+/// trees stand by the forest's seed, the world's (D596).
+fn hash(seed: u32, i: i32, j: i32, salt: u32) -> f32 {
     let x = terra_gen::hash::lowbias32(
-        (i as u32).wrapping_mul(0x9E37_79B9)
+        seed ^ (i as u32).wrapping_mul(0x9E37_79B9)
             ^ (j as u32).wrapping_mul(0x85EB_CA6B)
             ^ salt.wrapping_mul(0xC2B2_AE35),
     );
@@ -271,11 +278,31 @@ mod tests {
 
     #[test]
     fn the_grids_luck_is_spread_and_repeatable() {
-        let draws: Vec<f32> = (0..2000).map(|k| hash(k % 50 - 25, k / 50, 3)).collect();
+        let draws: Vec<f32> = (0..2000).map(|k| hash(9, k % 50 - 25, k / 50, 3)).collect();
         assert!(draws.iter().all(|d| (0.0..=1.0).contains(d)));
         let mean = draws.iter().sum::<f32>() / draws.len() as f32;
         assert!((mean - 0.5).abs() < 0.03, "{mean}");
-        assert_eq!(hash(7, -3, 1), hash(7, -3, 1));
-        assert_ne!(hash(7, -3, 1), hash(7, -3, 2));
+        assert_eq!(hash(9, 7, -3, 1), hash(9, 7, -3, 1));
+        assert_ne!(hash(9, 7, -3, 1), hash(9, 7, -3, 2));
+    }
+
+    /// D596: the far trees stand by the world's seed: two worlds' far forests differ square
+    /// by square.
+    #[test]
+    fn two_worlds_far_trees_stand_apart() {
+        let grid = |seed: Seed| -> Vec<f32> {
+            let word = far_seed(seed);
+            (0..400)
+                .map(|k| hash(word, k % 20 - 10, k / 20, 1))
+                .collect()
+        };
+        let (one, two) = (grid(Seed(1)), grid(Seed(2)));
+        assert_eq!(one, grid(Seed(1)));
+        let apart = one
+            .iter()
+            .zip(&two)
+            .filter(|(a, b)| (*a - *b).abs() > 0.01)
+            .count();
+        assert!(apart > 380, "{apart} of 400 squares differ");
     }
 }
