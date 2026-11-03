@@ -479,6 +479,7 @@ The look, models, bodies and gear, textures and audio.
 | [D597](decisions/D597.md) | Trees sway as a hierarchy: trunk, each branch about its own root with its own phase, leaf clusters on their stalks | Tech | Developers | Decided | Every tree the game grows sways in levels, as SpeedTree… |
 | [D599](decisions/D599.md) | Characters are built on Quaternius's bodies and outfits, in our paint | Design | Developers | Decided | Terra's people are built on Quaternius's base bodies… |
 | [D600](decisions/D600.md) | What shows in an empty clothing slot on Quaternius's bodies | Design | Developers | Decided | **The swap.** Each clothing slot always holds one piece… |
+| [D611](decisions/D611.md) | Characters are composed per slot at run time from a wardrobe catalogue | Tech | Agent | Decided | A character on Quaternius's bodies… |
 
 ## Engine and code
 
