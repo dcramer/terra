@@ -16,6 +16,7 @@
 //! a material from the same tool.
 
 pub mod build;
+pub mod pivots;
 pub mod plants;
 pub mod tree;
 
@@ -642,8 +643,7 @@ pub fn grow(
                 Grown::Tree(def) => {
                     let height = size.0 + (size.1 - size.0) * (index as f32 + 0.5) / count as f32;
                     let shape = tree::grow(&mut dice, def, height);
-                    let leaf = cards.get(&def.leaves);
-                    let tint = vec3(def.tint);
+                    let (leaf, tint) = (cards.get(&def.leaves), vec3(def.tint));
                     let canopy = tree::Canopy::of(&shape, tint);
                     let mut wood = [0, 1, 2].map(|detail| tree::wood(&shape, detail, def.bark_m));
                     let cards = tree::crown_cards(&mut dice, &shape, &canopy);
