@@ -5,11 +5,12 @@
 use crate::mountains::{Mountains, Range};
 use crate::patterned::Patterned;
 use glam::{DVec3, Vec3};
-use known::Known;
+use known::{Known, LatticeHasher};
 use std::collections::HashMap;
-use std::hash::{BuildHasherDefault, Hasher};
+use std::hash::BuildHasherDefault;
 
 mod known;
+mod slopes;
 use terra_core::{MaterialId, PlanetSpec};
 use terra_gen::Noise;
 
@@ -227,34 +228,6 @@ const GRAVEL_UNDER_DEG: f32 = 28.0;
 const GRAVEL_OVER_DEG: f32 = 5.0;
 const GRAVEL_BED: f32 = 0.8;
 
-/// A quick hash for lattice points, which are small integers.
-#[derive(Default)]
-pub struct LatticeHasher(u64);
-
-impl Hasher for LatticeHasher {
-    fn finish(&self) -> u64 {
-        self.0
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        for &byte in bytes {
-            self.write_u64(byte as u64);
-        }
-    }
-
-    fn write_u8(&mut self, value: u8) {
-        self.write_u64(value as u64);
-    }
-
-    fn write_u32(&mut self, value: u32) {
-        self.write_u64(value as u64);
-    }
-
-    fn write_u64(&mut self, value: u64) {
-        self.0 = (self.0.rotate_left(5) ^ value).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
-    }
-}
-
 /// A planet generated from its seed: large hills, with finer detail on them, soil over
 /// stone, sand by the sea, and veins of ore in the stone.
 ///
@@ -419,7 +392,8 @@ impl GeneratedPlanet {
     }
 
     /// The land at a lattice point, worked out from the noise.
-    fn exact(&self, direction: Vec3) -> Node {
+    fn exact(&self, at: (u8, u32, u32)) -> Node {
+        let direction = self.lattice_direction(at);
         let mut node = Node {
             height: self.exact_height(direction),
             ..Node::default()
@@ -566,12 +540,10 @@ impl GeneratedPlanet {
         };
         let ((i, i2, fi), (j, j2, fj)) = (at(s), at(t));
         let mut node = |i: u32, j: u32| {
-            *memo.heights.entry((face, i, j)).or_insert_with(|| {
-                self.known.get_or((face, i, j), || {
-                    let u = |k: u32| k as f32 / cells * 2.0 - 1.0;
-                    self.exact(cube_direction(face, u(i), u(j)))
-                })
-            })
+            *memo
+                .heights
+                .entry((face, i, j))
+                .or_insert_with(|| self.known.get_or((face, i, j), || self.exact((face, i, j))))
         };
         let (a, b, c, d) = (node(i, j), node(i2, j), node(i, j2), node(i2, j2));
         a.lerp(b, fi).lerp(c.lerp(d, fi), fj)

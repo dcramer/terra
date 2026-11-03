@@ -331,12 +331,12 @@ const WALL_ROCK: (f32, f32) = (0.65, 0.75);
 const FADE_TO_RIB: f32 = 0.02;
 /// How far across the ground the ridges' slope is measured, for the gullies to follow it: the
 /// fall over tens of metres, not the crease at a crest, so the gullies turn smoothly over one.
-const SLOPE_STEP_M: f32 = 20.0;
+pub(crate) const SLOPE_STEP_M: f32 = 20.0;
 /// How far across the ground the slope a wall's faces step by is measured (`Range::stepped`):
 /// wider than a ledge, so how hard a wall is stepped barely changes across one. Measured over
 /// `SLOPE_STEP_M`, the share stepped followed the slope across each ledge and, falling outward,
 /// lifted the ledge's outer edge, so ledges climbed 5 to 15 cm (round 21).
-const FACES_SLOPE_M: f32 = 150.0;
+pub(crate) const FACES_SLOPE_M: f32 = 150.0;
 
 impl Range {
     pub fn new(mountains: Mountains, seed: Seed) -> Self {
@@ -674,6 +674,36 @@ impl Range {
     /// What the mountains make of the ground in a direction from the centre of a planet of so
     /// many metres' radius.
     pub fn rise(&self, direction: Vec3, radius_m: f32) -> Rise {
+        let point = direction * radius_m;
+        self.rise_by(
+            direction,
+            radius_m,
+            || self.gradient(point, SLOPE_STEP_M),
+            || self.gradient(point, FACES_SLOPE_M),
+        )
+    }
+
+    /// How the ridges rise round a point, unprojected, in metres a metre: the change of
+    /// [`Range::unribbed`] over `step_m` either side along each of the world's axes, which
+    /// unlike any pair of directions across the ground never turn over. Centred, so at a
+    /// summit or in a hollow, where the ground has no way down, it is level.
+    pub(crate) fn gradient(&self, point: Vec3, step_m: f32) -> Vec3 {
+        let across = |axis: Vec3| {
+            self.unribbed(point + axis * step_m) - self.unribbed(point - axis * step_m)
+        };
+        Vec3::new(across(Vec3::X), across(Vec3::Y), across(Vec3::Z)) / (2.0 * step_m)
+    }
+
+    /// [`Range::rise`], with the ridges' rise round the point ([`Range::gradient`]) over
+    /// `SLOPE_STEP_M` given by `slope` and over `FACES_SLOPE_M` by `broad`, each asked only
+    /// if wanted, so they may come from a sparser lattice (`field::slopes`, D604).
+    pub(crate) fn rise_by(
+        &self,
+        direction: Vec3,
+        radius_m: f32,
+        slope: impl FnOnce() -> Vec3,
+        broad: impl FnOnce() -> Vec3,
+    ) -> Rise {
         let up = direction;
         let point = direction * radius_m;
         let (ridged, upper, foot, ribs) = self.ridged_upper_and_foot(point);
@@ -687,16 +717,9 @@ impl Range {
                 ..Rise::default()
             };
         }
-        // How the ridges rise round the point, over a few metres along each of the world's
-        // axes, which unlike any pair of directions across the ground never turn over, then
-        // laid level.
-        // Centred, so at a summit or in a hollow, where the ground has no way down, it is
-        // level and no gully is cut.
-        let across = |axis: Vec3| {
-            self.unribbed(point + axis * SLOPE_STEP_M) - self.unribbed(point - axis * SLOPE_STEP_M)
-        };
-        let rise =
-            Vec3::new(across(Vec3::X), across(Vec3::Y), across(Vec3::Z)) / (2.0 * SLOPE_STEP_M);
+        // How the ridges rise round the point, over a few tens of metres, laid level: at a
+        // summit or in a hollow none, and no gully is cut.
+        let rise = slope();
         let mut slope = rise - up * rise.dot(up);
         let steepness = slope.length();
         // The gullies, each set following the slope the ones before it left.
@@ -784,12 +807,7 @@ impl Range {
         // The faces step by the wall's broad slope, measured over a ledge's width or more
         // (`FACES_SLOPE_M`), not the local one, which turns across every ledge.
         let broad = || {
-            let across = |axis: Vec3| {
-                self.unribbed(point + axis * FACES_SLOPE_M)
-                    - self.unribbed(point - axis * FACES_SLOPE_M)
-            };
-            let rise = Vec3::new(across(Vec3::X), across(Vec3::Y), across(Vec3::Z))
-                / (2.0 * FACES_SLOPE_M);
+            let rise = broad();
             (rise - up * rise.dot(up)).length()
         };
         let step = self.stepped(point, height_m, broad, (upper, rib));

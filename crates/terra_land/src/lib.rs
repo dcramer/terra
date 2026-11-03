@@ -209,4 +209,69 @@ mod tests {
         }
         assert!(changed > 0, "the newer rules change nothing anywhere");
     }
+
+    #[test]
+    fn the_mountains_slopes_blended_between_their_points_stray_little_over_the_lakes_view() {
+        // The mountains' slopes blended from every so many lattice points (terra_voxel's
+        // field::slopes, D604), not measured at each. Over the lake's first
+        // view, 3 km across round the pinned lake on points 11 m apart (prime to the slopes'
+        // spacings, so every place between their points is met), the way the gullies run
+        // turns little from the slope measured at the point, and the broad slope the faces
+        // step by is nearly as steep.
+        let spec = PlanetSpec {
+            seed: Seed(1),
+            radius_m: 30_000.0,
+        };
+        let land = Land::new(ground::world(spec), start_climate().unwrap());
+        let lake = site::demo_pins(spec.seed, spec.radius_m)
+            .into_iter()
+            .find(|(name, _)| *name == "lake")
+            .expect("the lake is pinned")
+            .1;
+        const SIDE: usize = 273;
+        let cells: Vec<Vec2> = (0..SIDE * SIDE)
+            .map(|k| Vec2::new((k % SIDE) as f32, (k / SIDE) as f32) * 11.0 - 1500.0)
+            .collect();
+        let slopes = terra_gen::par::map(&cells, |&off| {
+            let at = land.along(PLANET_START, lake * 1000.0 + off);
+            land.ground.mountain_slopes(at)
+        });
+        // The angle between the gullies' two ways, where the slope is steep enough that they
+        // are cut (`Range::rise`, past 0.02); how much the broad slope's steepness differs,
+        // where the faces step (`Range::stepped`, past 0.2).
+        let mut turned: Vec<f32> = Vec::new();
+        let mut steeper: Vec<f32> = Vec::new();
+        for [(slope, at_point), (broad, broad_at_point)] in slopes.into_iter().flatten() {
+            if at_point.length() > 0.02 {
+                let cos = slope.normalize_or_zero().dot(at_point.normalize());
+                turned.push(libm::acosf(cos.clamp(-1.0, 1.0)).to_degrees());
+            }
+            if broad_at_point.length() > 0.2 {
+                steeper.push((broad.length() - broad_at_point.length()).abs());
+            }
+        }
+        let spread = |values: &mut Vec<f32>| {
+            values.sort_by(f32::total_cmp);
+            let at = |share: f32| values[((values.len() - 1) as f32 * share) as usize];
+            (values.len(), at(0.5), at(0.99), *values.last().unwrap())
+        };
+        let (n, median, p99, most) = spread(&mut turned);
+        let (m, broad_median, broad_p99, broad_most) = spread(&mut steeper);
+        eprintln!(
+            "the gullies' way turned at {n} points: median {median:.3}°, 99% {p99:.3}°, \
+             most {most:.3}°; the broad slope at {m}: median {broad_median:.5}, \
+             99% {broad_p99:.5}, most {broad_most:.5}"
+        );
+        assert!(
+            n > SIDE * SIDE / 4 && m > 1000,
+            "{n} and {m} points on the slopes"
+        );
+        // Measured first (load-time j7): median 0.020°, 99% 0.70°, most 29° where the slope
+        // turns over at a crest; the broad slope's median 0.0005, 99% 0.012, most 0.042.
+        assert!(median < 0.1 && p99 < 2.0, "the gullies' way turned too far");
+        assert!(
+            broad_median < 0.002 && broad_p99 < 0.03,
+            "the broad slope strays"
+        );
+    }
 }

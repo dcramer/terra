@@ -1,6 +1,7 @@
 //! The lattice points a planet's land has been worked out at, shared by every memo.
 
-use super::{LatticeHasher, Node};
+use super::Node;
+use glam::Vec3;
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::RwLock;
@@ -16,11 +17,24 @@ use std::sync::RwLock;
 /// Sharded, as Unreal's derived data cache and every concurrent memo table are, so threads
 /// meshing side by side rarely wait on one another; a shard that grows past its share of
 /// `KNOWN_MOST` is emptied, which bounds the memory a long walk adds and changes no answer.
+///
+/// It holds the mountains' slopes measured at their sparser lattice points too
+/// (`super::slopes`), each kind apart.
+#[derive(Default)]
 pub(super) struct Known {
-    shards: Box<[RwLock<LatticeMap>]>,
+    nodes: Shards<Node>,
+    /// The gullies' slope (`super::slopes::SLOPE_EVERY`).
+    pub(super) slopes: Shards<Vec3>,
+    /// The faces' broad slope (`super::slopes::BROAD_EVERY`).
+    pub(super) broad: Shards<Vec3>,
 }
 
-type LatticeMap = HashMap<(u8, u32, u32), Node, BuildHasherDefault<LatticeHasher>>;
+/// One kind of value worked out at lattice points, sharded.
+pub(super) struct Shards<V> {
+    shards: Box<[RwLock<LatticeMap<V>>]>,
+}
+
+type LatticeMap<V> = HashMap<(u8, u32, u32), V, BuildHasherDefault<LatticeHasher>>;
 
 /// Lattice points the shared memo holds at most, over its shards: about 28 bytes each held,
 /// so some 230 MB.
@@ -28,7 +42,14 @@ const KNOWN_MOST: usize = 8 << 20;
 const KNOWN_SHARDS: usize = 64;
 
 impl Known {
-    fn shard(&self, key: (u8, u32, u32)) -> &RwLock<LatticeMap> {
+    /// The land at a lattice point, worked out by `exact` only if no one has yet.
+    pub(super) fn get_or(&self, key: (u8, u32, u32), exact: impl FnOnce() -> Node) -> Node {
+        self.nodes.get_or(key, exact)
+    }
+}
+
+impl<V: Copy> Shards<V> {
+    fn shard(&self, key: (u8, u32, u32)) -> &RwLock<LatticeMap<V>> {
         let mut hasher = LatticeHasher::default();
         hasher.write_u8(key.0);
         hasher.write_u32(key.1);
@@ -37,25 +58,25 @@ impl Known {
         &self.shards[(hasher.finish() >> 58) as usize % KNOWN_SHARDS]
     }
 
-    /// The land at a lattice point, worked out by `exact` only if no one has yet.
-    pub(super) fn get_or(&self, key: (u8, u32, u32), exact: impl FnOnce() -> Node) -> Node {
+    /// The value at a lattice point, worked out by `exact` only if no one has yet.
+    pub(super) fn get_or(&self, key: (u8, u32, u32), exact: impl FnOnce() -> V) -> V {
         let shard = self.shard(key);
-        if let Some(node) = shard.read().ok().and_then(|held| held.get(&key).copied()) {
-            return node;
+        if let Some(value) = shard.read().ok().and_then(|held| held.get(&key).copied()) {
+            return value;
         }
         // Worked out outside the lock: two threads asking at once both work it out, alike.
-        let node = exact();
+        let value = exact();
         if let Ok(mut held) = shard.write() {
             if held.len() >= KNOWN_MOST / KNOWN_SHARDS {
                 held.clear();
             }
-            held.insert(key, node);
+            held.insert(key, value);
         }
-        node
+        value
     }
 }
 
-impl Default for Known {
+impl<V> Default for Shards<V> {
     fn default() -> Self {
         Self {
             shards: (0..KNOWN_SHARDS)
@@ -75,6 +96,34 @@ impl Clone for Known {
 impl std::fmt::Debug for Known {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Known")
+    }
+}
+
+/// A quick hash for lattice points, which are small integers.
+#[derive(Default)]
+pub(super) struct LatticeHasher(u64);
+
+impl Hasher for LatticeHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_u64(byte as u64);
+        }
+    }
+
+    fn write_u8(&mut self, value: u8) {
+        self.write_u64(value as u64);
+    }
+
+    fn write_u32(&mut self, value: u32) {
+        self.write_u64(value as u64);
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.0 = (self.0.rotate_left(5) ^ value).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
     }
 }
 
