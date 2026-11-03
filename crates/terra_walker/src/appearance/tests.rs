@@ -46,14 +46,19 @@ fn the_shipped_templates_name_morphs_and_skins_there_are() {
         "../../../../assets/models/character/templates.json"
     ))
     .unwrap();
-    let morphs = model_files::morphs(&model_files::json(BASE));
-    assert!(!morphs.is_empty());
+    assert!(!model_files::morphs(&model_files::json(BASE)).is_empty());
     for (name, template) in &templates {
-        // A morph the body lacks would be left out of its shape without a word.
+        let body = bodies().get(&template.sex);
+        let body = body.unwrap_or_else(|| panic!("{name}: no body for sex {}", template.sex));
+        let morphs = model_files::morphs(&model_files::json(&body.model));
+        // A morph the body lacks would be left out of its shape without a word. A body with
+        // none (Quaternius's man: his builds wait, D111) takes no weights at all; the weights
+        // stay for the old base the tools still measure on.
         for (morph, weight) in &template.morphs {
             assert!(
-                morphs.contains(morph),
-                "{name}: the base body has no {morph}"
+                morphs.is_empty() || morphs.contains(morph),
+                "{name}: {} has no {morph}",
+                body.model
             );
             assert!(weight.is_finite(), "{name}: {morph}");
         }
@@ -65,6 +70,70 @@ fn the_shipped_templates_name_morphs_and_skins_there_are() {
     }
     // That the templates the game asks for by name are here is checked where they are
     // named (`terra_folk::people`).
+}
+
+#[test]
+fn a_body_is_chosen_by_sex_from_data() {
+    let bodies = parse_bodies(
+        r#"{"bodies": {"male": {"model": "m.glb"}, "female": {"model": "f.glb", "clips": "c.glb", "gear": "g"}}}"#,
+    )
+    .unwrap();
+    assert_eq!(bodies["male"].clips(), "m.glb", "a model's own clips");
+    assert_eq!(bodies["male"].gear, None);
+    assert_eq!(bodies["female"].clips(), "c.glb");
+    assert_eq!(bodies["female"].gear.as_deref(), Some("g"));
+    let templates = parse_templates(r#"{"a": {"sex": "female"}, "b": {}}"#).unwrap();
+    assert_eq!(templates["a"].sex, "female");
+    assert_eq!(templates["b"].sex, "male", "a man when nothing says");
+}
+
+#[test]
+fn gear_is_drawn_only_on_the_body_it_was_made_on() {
+    // The folk still load the old base by name: it keeps its gear.
+    assert_eq!(gear_for_model(BASE), Some("models/gear"));
+    assert_eq!(
+        gear_for_model(&format!("{BASE}#Scene0")),
+        Some("models/gear")
+    );
+    let man = Appearance::template("male").unwrap();
+    assert_ne!(man.body().model, BASE, "a man stands on his own body");
+    assert_eq!(
+        gear_for_model(&man.body().model),
+        None,
+        "the old base's gear is not his"
+    );
+    assert_eq!(gear_for_model("models/elsewhere.glb"), None);
+}
+
+#[test]
+fn every_sex_stands_on_a_body_with_every_clip_the_old_base_plays() {
+    // The game asks for clips by name (`figure`, `melee`, the folk), as the old base's file has
+    // them: each body's clips file has every one, and its skeleton every joint they turn.
+    let clips = |file: &str| -> std::collections::BTreeSet<String> {
+        model_files::animations(&model_files::json(file))
+            .into_iter()
+            .collect()
+    };
+    let old = clips(crate::figure::CLIPS);
+    let female = Appearance::template("female").unwrap();
+    assert_eq!(female.body().model, BASE, "a woman stays on the old base");
+    assert_eq!(female.body().clips(), crate::figure::CLIPS);
+    assert_eq!(female.body().gear.as_deref(), Some("models/gear"));
+    for (sex, body) in bodies() {
+        let theirs = clips(body.clips());
+        let missing: Vec<_> = old.difference(&theirs).collect();
+        assert!(
+            missing.is_empty(),
+            "{sex}: {} lacks {missing:?}",
+            body.clips()
+        );
+        let joints = model_files::joints(&model_files::json(&body.model));
+        assert!(joints.iter().any(|j| j == crate::character::HIPS), "{sex}");
+        let nodes = model_files::nodes(&model_files::json(&body.model));
+        for socket in [crate::character::HAND_R, crate::character::HAND_L] {
+            assert!(nodes.iter().any(|n| n == socket), "{sex}: no {socket}");
+        }
+    }
 }
 
 #[test]

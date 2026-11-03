@@ -191,9 +191,15 @@ pub fn item_id(name: &str) -> String {
     name.to_lowercase().replace(' ', "_")
 }
 
-/// Where an item's look is: one for every body (`appearance`).
+/// Where an item's look made on the old base is: one for each of its morphs (`appearance`).
 pub fn look(item: &str) -> String {
-    format!("models/gear/{item}.glb")
+    look_in("models/gear", item)
+}
+
+/// Where an item's look is among the looks made on one body, `gear` its folder
+/// (`appearance::BodyFiles::gear`).
+pub fn look_in(gear: &str, item: &str) -> String {
+    format!("{gear}/{item}.glb")
 }
 
 /// Where a held item's look is: the same for every body, since every hand socket is alike.

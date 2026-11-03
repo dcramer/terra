@@ -1,7 +1,7 @@
 {
-  "male": { "morphs": { "thin": 0.8 } },
-  "female": { "morphs": { "female": 1.0 }, "skin": "female" },
-  "heavy": { "morphs": { "heavy": 1.0 } },
-  "thin": { "morphs": { "thin": 1.0 } },
-  "strong": { "morphs": { "strong": 1.0 } }
+  "male": { "sex": "male", "morphs": { "thin": 0.8 } },
+  "female": { "sex": "female", "morphs": { "female": 1.0 }, "skin": "female" },
+  "heavy": { "sex": "male", "morphs": { "heavy": 1.0 } },
+  "thin": { "sex": "male", "morphs": { "thin": 1.0 } },
+  "strong": { "sex": "male", "morphs": { "strong": 1.0 } }
 }

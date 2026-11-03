@@ -1,13 +1,11 @@
-//! The player's body: the base body (D112, `appearance`), shaped as the player's template,
-//! made with Tripo and rigged onto the skeleton of a free animation library (D115,
-//! THIRD_PARTY.md), with what is in hand held in its right hand's socket (`character`).
-//! Every player stands on one, and which animation plays follows what that player is doing.
+//! The player's body: the body of the player's template's sex (`appearance::bodies`, D111): a
+//! man's is Quaternius's, dressed in their Ranger outfit (D599, D602), on the skeleton of the
+//! free animation library our clips come from (THIRD_PARTY.md), with what is in hand held in
+//! its hands' sockets (`character`). Every player stands on one, and which animation plays
+//! follows what that player is doing.
 //!
-//! A base body has no hair or clothes of its own; those are parts still to come (D111,
-//! D112).
-//!
-//! Its clips are the fight file's (`CLIPS`: the base's and the sword fight's, on the base's
-//! skeleton), two of each so a clip played again blends from itself, and the same masked for
+//! Its clips are its body's clips file's (the game's and the sword fight's, sampled on that
+//! body's skeleton: `CLIPS` for the old base), two of each so a clip played again blends from itself, and the same masked for
 //! the hold layer (`layer`): two off the arms, for a clip played under a hold, and one on the
 //! arms alone, for the hold. A layer above may ask for a clip in place of what walking shows
 //! (`Acting`), with a stance's hold over it, as the sword fight does (`melee`).
@@ -32,7 +30,8 @@ const BLEND: Duration = Duration::from_millis(180);
 /// tread: long enough that the blend from an upright clip to a stroke made lying reads as the
 /// body lying down in the water, as `swim::Pitch` eases its pitch.
 const SWIM_BLEND: Duration = Duration::from_millis(400);
-/// The figure's clips: the base's and the sword fight's, on the base's skeleton.
+/// The old base's clips: the game's and the sword fight's, on the base's skeleton (a woman's,
+/// until her own body comes in; `appearance::bodies` names each body's).
 pub const CLIPS: &str = "models/character/fight.glb";
 
 #[derive(Resource)]
@@ -322,9 +321,17 @@ pub fn plugin(app: &mut App) {
         );
 }
 
+/// The player's appearance: its template's.
+fn appearance() -> crate::appearance::Appearance {
+    crate::appearance::Appearance::template(TEMPLATE).unwrap_or_default()
+}
+
+/// Loads the body the player's appearance stands on, and the file of its clips: every player
+/// is one template today, so one body and one set of clips serve all.
 fn load(mut commands: Commands, assets: Res<AssetServer>, mut loading: ResMut<Loading>) {
-    let model = assets.load(crate::appearance::BASE);
-    let clips = assets.load(CLIPS);
+    let body = appearance().body();
+    let model = assets.load(body.model.clone());
+    let clips = assets.load(body.clips().to_string());
     loading.wait_for(&model);
     loading.wait_for(&clips);
     commands.insert_resource(FigureModel { model, clips });
@@ -380,7 +387,7 @@ fn stand(
             .spawn((
                 Name::new("Figure"),
                 crate::character::Body,
-                crate::appearance::Appearance::template(TEMPLATE).unwrap_or_default(),
+                appearance(),
                 WorldAssetRoot(scene.clone()),
                 // The model faces +Z; things here face -Z.
                 Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),

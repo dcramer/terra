@@ -1,11 +1,14 @@
 //! What is worn, on each character: each item in its outfit (`character::Outfit`) shown as
-//! that item's look, which fits every body (`appearance`), found by the item's name and put on as its
+//! that item's look made on the character's body (`appearance::gear_for_model`), which fits each
+//! of that body's morphs, found by the item's name and put on as its
 //! file says (`character`). Nothing here knows any one item; a new piece of gear is a new
 //! look file. Looks change only when an outfit does. The player's outfit is what its
 //! equipment holds.
 
 use crate::inventory::{Gear, Items};
+use bevy::world_serialization::WorldAssetRoot;
 use bevy::{gltf::GltfAssetLabel, prelude::*};
+use terra_walker::appearance::gear_for_model;
 use terra_walker::character::{self, Body, BodyReady, Clothing, Outfit, Worn};
 
 /// The outfit a body is shown wearing, so its looks are changed only when that changes.
@@ -41,15 +44,22 @@ fn outfit_from_gear(
     }
 }
 
-/// Puts on each loaded body what its character wears, when that changes.
+/// Puts on each loaded body what its character wears, when that changes: the looks made on
+/// the model it stands on (`appearance::gear_for_model`). A body with none, such as
+/// Quaternius's man dressed in his Ranger outfit as made (D602), shows only what its model
+/// wears: gear made on another body is never drawn on it, though it is still equipped and
+/// still counts.
 fn show(
     mut commands: Commands,
-    bodies: Query<(Entity, &ChildOf, Option<&Dressed>), (With<Body>, With<BodyReady>)>,
+    bodies: Query<
+        (Entity, &ChildOf, Option<&Dressed>, Option<&WorldAssetRoot>),
+        (With<Body>, With<BodyReady>),
+    >,
     outfits: Query<Ref<Outfit>>,
     looks: Query<(Entity, &Worn)>,
     assets: Res<AssetServer>,
 ) {
-    for (root, parent, dressed) in &bodies {
+    for (root, parent, dressed, model) in &bodies {
         let Ok(outfit) = outfits.get(parent.parent()) else {
             continue;
         };
@@ -61,8 +71,14 @@ fn show(
                 commands.entity(look).despawn();
             }
         }
-        for clothing in &outfit.0 {
-            let file = character::look(&clothing.item);
+        let gear = model
+            .and_then(|model| model.0.path())
+            .and_then(|path| gear_for_model(&path.to_string()));
+        for (gear, clothing) in gear
+            .into_iter()
+            .flat_map(|gear| outfit.0.iter().map(move |c| (gear, c)))
+        {
+            let file = character::look_in(gear, &clothing.item);
             let look = character::wear(
                 &mut commands,
                 assets.load(GltfAssetLabel::Scene(0).from_asset(file)),

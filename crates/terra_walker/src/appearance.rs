@@ -1,8 +1,12 @@
-//! What a body looks like (D112, docs/characters.md): every character stands on the one base
-//! body, `models/character/base.glb`, shaped by how much of each of its morphs it has, and
-//! wearing a skin. Male and female, heavy, thin and strong are morphs of the same mesh, so the
-//! base's skeleton, weights and skin patches serve every body, and every worn look, made once,
-//! carries the same morphs and follows (`tools/characters/build_bodies.sh` makes them).
+//! What a body looks like (D112, docs/characters.md): a character stands on the body of its
+//! sex (D111, D599), as `models/character/bodies.json` names it (`bodies`): its model, the
+//! file its clips come from, and where the worn looks made on it are. A man stands on
+//! Quaternius's, dressed in the Ranger outfit as made (D602); a woman, until her own body comes
+//! in, on the old base body, `models/character/base.glb`, as its `female` morph. A body is
+//! shaped by how much of each of its morphs it has and wears a skin. The base's morphs (female,
+//! heavy, thin, strong) are of one mesh, so its skeleton, weights and skin patches serve each,
+//! and every worn look, made once on it, carries the same morphs and follows
+//! (`tools/characters/build_bodies.sh` makes them). A body with no morphs takes no weights.
 //!
 //! A morph changes the skeleton as well as the skin: a woman's joints and a heavier man's
 //! sockets are not the base's. The body's file says, for each morph, how far each joint and
@@ -30,14 +34,79 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-/// The body every character stands on.
+/// The old base body (Tripo's, D115), on which a woman stands until her own body comes in
+/// (D599), with its morphs and the worn looks made on it.
 pub const BASE: &str = "models/character/base.glb";
 
-/// How a body is shaped and skinned (D111): how much of each of the base's morphs (by name)
-/// it has, its height, and which painted skin it wears (`models/character/skins/<skin>.png`;
-/// none is the base's). On a body's root (with `Body`).
+/// The files of the body a sex stands on (`models/character/bodies.json`).
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct BodyFiles {
+    /// The body's model, under `assets/`.
+    pub model: String,
+    /// The file its clips come from, on its skeleton; none: the model's own.
+    #[serde(default)]
+    clips: Option<String>,
+    /// The folder of the worn looks made on it (`character::look`); none: it shows only what
+    /// its model is dressed in, and what is worn on it is not drawn.
+    #[serde(default)]
+    pub gear: Option<String>,
+}
+
+impl BodyFiles {
+    /// The file its clips come from.
+    pub fn clips(&self) -> &str {
+        self.clips.as_deref().unwrap_or(&self.model)
+    }
+}
+
+/// The body each sex stands on, by sex, from the data file the game ships with.
+pub fn bodies() -> &'static HashMap<String, BodyFiles> {
+    static BODIES: OnceLock<HashMap<String, BodyFiles>> = OnceLock::new();
+    BODIES.get_or_init(|| {
+        parse_bodies(include_str!("../../../assets/models/character/bodies.json")).unwrap_or_else(
+            |error| {
+                error!("models/character/bodies.json: {error}");
+                HashMap::new()
+            },
+        )
+    })
+}
+
+fn parse_bodies(text: &str) -> Result<HashMap<String, BodyFiles>, serde_json::Error> {
+    #[derive(Deserialize)]
+    struct File {
+        bodies: HashMap<String, BodyFiles>,
+    }
+    Ok(serde_json::from_str::<File>(text)?.bodies)
+}
+
+/// The folder of the worn looks made on the body whose model is `model` (a path under
+/// `assets/`, with or without a `#` label): what is drawn on a body follows the model it
+/// stands on, so a body loaded by name (the folk still load the old base) keeps its gear. None
+/// for a model no body names, or one with no gear of its own (Quaternius's dressed man).
+pub fn gear_for_model(model: &str) -> Option<&'static str> {
+    let model = model.split('#').next().unwrap_or(model);
+    bodies()
+        .values()
+        .chain([old_base()])
+        .find(|body| body.model == model)?
+        .gear
+        .as_deref()
+}
+
+/// The sex a body is when nothing says (`Appearance::default`).
+fn default_sex() -> String {
+    "male".to_string()
+}
+
+/// How a body is shaped and skinned (D111): its sex, which chooses the body it stands on
+/// (`body`), how much of each of that body's morphs (by name) it has, its height, and which
+/// painted skin it wears (`models/character/skins/<skin>.png`; none is the body's own). On a
+/// body's root (with `Body`).
 #[derive(Component, Clone, Debug, PartialEq, Deserialize)]
 pub struct Appearance {
+    #[serde(default = "default_sex")]
+    pub sex: String,
     #[serde(default)]
     pub morphs: Vec<(String, f32)>,
     #[serde(default)]
@@ -56,6 +125,7 @@ fn full_height() -> f32 {
 impl Default for Appearance {
     fn default() -> Self {
         Appearance {
+            sex: default_sex(),
             morphs: Vec::new(),
             skin: None,
             height: full_height(),
@@ -63,10 +133,29 @@ impl Default for Appearance {
     }
 }
 
+/// The old base's files, as every body stood on before the bodies were chosen by sex: what a
+/// sex the data does not name stands on.
+fn old_base() -> &'static BodyFiles {
+    static OLD: OnceLock<BodyFiles> = OnceLock::new();
+    OLD.get_or_init(|| BodyFiles {
+        model: BASE.to_string(),
+        clips: Some(crate::figure::CLIPS.to_string()),
+        gear: Some("models/gear".to_string()),
+    })
+}
+
 impl Appearance {
     /// A template by name, from `models/character/templates.json`.
     pub fn template(name: &str) -> Option<Appearance> {
         templates().get(name).cloned()
+    }
+
+    /// The files of the body it stands on: its sex's (`bodies`).
+    pub fn body(&self) -> &'static BodyFiles {
+        bodies().get(&self.sex).unwrap_or_else(|| {
+            warn!("No body for sex {:?}; the old base stands in.", self.sex);
+            old_base()
+        })
     }
 
     /// How much of a morph it has.
@@ -93,6 +182,8 @@ impl Appearance {
 
 #[derive(Deserialize)]
 struct TemplateFile {
+    #[serde(default = "default_sex")]
+    sex: String,
     #[serde(default)]
     morphs: HashMap<String, f32>,
     #[serde(default)]
@@ -125,6 +216,7 @@ fn parse_templates(text: &str) -> Result<HashMap<String, Appearance>, serde_json
             (
                 name,
                 Appearance {
+                    sex: template.sex,
                     morphs,
                     skin: template.skin,
                     height: template.height,

@@ -15,12 +15,13 @@ use terra_survival::inventory::Items;
 use terra_survival::vitals;
 use terra_walker::bodies::Body;
 use terra_walker::character;
-use terra_walker::figure::CLIPS;
 use terra_walker::{Player, Stamina, Stance};
 use terra_world::shell::ScriptFrame;
 
 /// Its name on the stage.
 const NAME: &str = "sparring_partner";
+/// The partner's template (`appearance::Appearance::template`): a man.
+const TEMPLATE: &str = "male";
 /// How far ahead of the player it steps up, metres.
 const AHEAD_M: f32 = 4.0;
 /// How near it closes before it guards, and how far off it closes again.
@@ -120,11 +121,15 @@ pub fn bring(
             .reject_from(up)
             .normalize_or(up.any_orthonormal_vector())
             * AHEAD_M;
+    // On the body its template's sex stands on (D111), with that body's clips.
+    let body = terra_walker::appearance::Appearance::template(TEMPLATE)
+        .unwrap_or_default()
+        .body();
     let call = json!({
         "name": NAME,
-        "model": terra_walker::appearance::BASE,
-        "template": "male",
-        "clips": CLIPS,
+        "model": body.model,
+        "template": TEMPLATE,
+        "clips": body.clips(),
         "wears": ["shirt", "trousers", "boots", "leather_coat"],
         "hold": hold,
         "at": spot.to_array(),
