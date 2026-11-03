@@ -15,6 +15,7 @@ pub(crate) fn timing(median_ms: f32, p99_ms: f32, worst_ms: f32) -> Timing {
         freezes: 0,
         from_start: false,
         load_s: None,
+        hitch_at: None,
         // A scene held to every scene's play budgets and no load of its own; no settle phase,
         // which these runs do not say (`phases`' tests hold it).
         budget: budgets::Scene {
@@ -179,15 +180,17 @@ fn busy_runs_are_left_out_when_enough_are_quiet() {
     assert!(during.busy());
 }
 
-/// A run that hitched while the machine's clock collapsed after it loaded is the machine's
-/// (D185), so it is busy and another stands in; a collapse without a hitch, a hitch without
-/// one, or a collapse only while it loaded is not.
+/// A run whose every hitch ended in a collapse of the machine's clock (from 0.1 s before its
+/// fall to 1 s after) is the machine's (D185), so it is busy and another stands in; one hitch
+/// outside them is the game's, and so is a hitch the run did not say the time of.
 #[test]
 fn a_hitch_in_a_clock_collapse_is_the_machines() {
-    let run = |hitches, at_s: &[f32]| Run {
+    // The run started at 1000 s since the epoch; its clock fell 25 s and 40 s in.
+    let start = 1000.0;
+    let run = |hitch_at: Option<&[f64]>| Run {
         timing: Timing {
-            hitches,
-            load_s: Some(10.0),
+            hitches: hitch_at.map_or(2, |at| at.len() as u32),
+            hitch_at: hitch_at.map(<[f64]>::to_vec),
             ..timing(5.0, 9.0, 40.0)
         },
         before: None,
@@ -197,30 +200,43 @@ fn a_hitch_in_a_clock_collapse_is_the_machines() {
             clock: Some(Clock {
                 median_mhz: 5300.0,
                 lowest_mhz: 900.0,
-                at_s: at_s.to_vec(),
+                at_s: vec![25.0, 40.0],
+                start_epoch_s: start,
             }),
         }),
     };
-    assert!(run(2, &[3.0, 25.0]).busy());
-    assert!(!run(0, &[25.0]).busy());
-    assert!(!run(2, &[]).busy());
-    assert!(!run(2, &[3.0, 8.0]).busy());
-    let said = run(2, &[3.0, 25.0]).clock_said().unwrap();
+    let inside = [start + 25.05, start + 25.6, start + 39.95];
+    assert_eq!(run(Some(&inside)).hitches_split(), Some((3, 0)));
+    assert!(run(Some(&inside)).busy());
+    let said = run(Some(&inside)).clock_said().unwrap();
     assert!(said.contains("fell to 900 MHz 2 times") && said.contains("another stands in"));
+    // One a second and a half after a fall, or before it: the game's, so the run is not busy.
+    let late = [start + 25.05, start + 26.5];
+    assert_eq!(run(Some(&late)).hitches_split(), Some((1, 1)));
+    assert!(!run(Some(&late)).busy());
+    assert!(!run(Some(&[start + 24.8])).busy());
     assert!(
-        run(2, &[3.0])
+        run(Some(&[start + 24.8]))
             .clock_said()
             .unwrap()
-            .ends_with("all while it loaded")
+            .contains("the game's")
     );
-    assert_eq!(run(2, &[]).clock_said(), None);
-    // The settle phase's hitches count as the play's do.
-    let mut settled = run(0, &[25.0]);
-    let line = "SANDBOX settle phase, the first 30 s after the loading screen lifted: 1800 frames, median 8.00 ms, 99th percentile 20.00 ms, worst 90.00 ms; 3 hitches over 26.7 ms, 0 freezes of 100 ms or more; ticks' 99th percentile 4.00 ms";
-    settled.timing.phases.read(line);
-    assert!(settled.busy());
-    let (used, was_busy) = chosen_runs(&[run(0, &[]), run(3, &[25.0]), run(0, &[25.0])]);
+    // No hitches, or hitches with no times said: not the machine's.
+    assert!(!run(Some(&[])).busy());
+    assert!(!run(None).busy());
+    assert!(run(None).clock_said().unwrap().contains("did not say"));
+    let (used, was_busy) = chosen_runs(&[run(Some(&[])), run(Some(&inside)), run(Some(&late))]);
     assert_eq!((used.len(), was_busy), (2, false));
+    // The sandbox's line.
+    let line =
+        "SANDBOX hitches ended at, seconds since the Unix epoch: 1762171234.51 1762171240.02";
+    assert_eq!(
+        runs::parse_hitch_times(line),
+        Some(vec![1762171234.51, 1762171240.02])
+    );
+    let none = "SANDBOX hitches ended at, seconds since the Unix epoch: none";
+    assert_eq!(runs::parse_hitch_times(none), Some(vec![]));
+    assert_eq!(runs::parse_hitch_times("SANDBOX frames on"), None);
 }
 
 #[test]

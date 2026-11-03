@@ -121,6 +121,7 @@ pub(crate) struct Watch {
     samples: Arc<Mutex<Vec<Load>>>,
     clocks: Arc<Mutex<Vec<(f32, f32)>>>,
     threads: Vec<std::thread::JoinHandle<()>>,
+    start_epoch_s: f64,
 }
 
 /// What the load was during a run: its mean and its most; and the processors' clock, where
@@ -135,14 +136,6 @@ pub(crate) struct During {
 impl During {
     pub(crate) fn busy(&self) -> bool {
         self.mean_cpu_pct > BUSY_DURING_CPU_PCT || self.most_cpu_pct > BUSY_DURING_MOST_PCT
-    }
-
-    /// How many times the machine's clock collapsed from `from_s` seconds into the run on (a
-    /// play scene's collapses while it loads slow no frame it is judged on).
-    pub(crate) fn collapses_from(&self, from_s: f32) -> usize {
-        self.clock.as_ref().map_or(0, |clock| {
-            clock.at_s.iter().filter(|&&at| at >= from_s).count()
-        })
     }
 }
 
@@ -166,6 +159,15 @@ pub(crate) struct Clock {
     pub median_mhz: f32,
     pub lowest_mhz: f32,
     pub at_s: Vec<f32>,
+    /// The run's start, seconds since the Unix epoch, to lay the sandbox's hitches beside.
+    pub start_epoch_s: f64,
+}
+
+/// Seconds since the Unix epoch now, as the sandbox stamps its hitches.
+pub(crate) fn epoch_s() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |since| since.as_secs_f64())
 }
 
 /// The clock of a run from its readings, each its second from the run's start and its MHz,
@@ -200,6 +202,7 @@ pub(crate) fn clock(series: &[(f32, f32)]) -> Option<Clock> {
         median_mhz,
         lowest_mhz: if at_s.is_empty() { sorted[0] } else { lowest },
         at_s,
+        start_epoch_s: 0.0,
     })
 }
 
@@ -262,6 +265,7 @@ impl Watch {
         let samples = Arc::new(Mutex::new(Vec::new()));
         let clocks = Arc::new(Mutex::new(Vec::new()));
         let mut threads = Vec::new();
+        let start_epoch_s = epoch_s();
         let files = watched_cpus();
         if !files.is_empty() {
             let (stopping, kept) = (stop.clone(), clocks.clone());
@@ -301,6 +305,7 @@ impl Watch {
             samples,
             clocks,
             threads,
+            start_epoch_s,
         }
     }
 
@@ -312,6 +317,9 @@ impl Watch {
         let samples = self.samples.lock().ok()?;
         let mut seen = during(&samples)?;
         seen.clock = self.clocks.lock().ok().and_then(|series| clock(&series));
+        if let Some(clock) = seen.clock.as_mut() {
+            clock.start_epoch_s = self.start_epoch_s;
+        }
         Some(seen)
     }
 }
@@ -554,16 +562,6 @@ mod tests {
         assert!((seen.at_s[0] - 4.0).abs() < 1e-3 && (seen.at_s[1] - 8.6).abs() < 1e-3);
         assert_eq!(seen.lowest_mhz, 900.0);
         assert!((5000.0..=5600.0).contains(&seen.median_mhz));
-        // The run's collapses from a second on: one after its load of 6 s, none after 9 s.
-        let during = During {
-            mean_cpu_pct: 2.0,
-            most_cpu_pct: 3.0,
-            clock: Some(seen),
-        };
-        assert_eq!(
-            [0.0, 6.0, 9.0].map(|from| during.collapses_from(from)),
-            [2, 1, 0]
-        );
 
         // Nothing but steady, and a dip to 60% of it: none, the lowest of all said.
         let mut dipped = steady(300);

@@ -34,6 +34,9 @@ pub struct Gathered {
     play_groups: Groups,
     settle_schedules: Groups,
     play_schedules: Groups,
+    /// When each settle or timed frame over `STUTTER_MS` ended, seconds since the Unix epoch:
+    /// the bench lays them beside the machine's clock (D185), read in another process.
+    hitch_at: Vec<f64>,
 }
 
 /// Each group's ms in each frame of a phase, a frame it did not run in counting 0; and how
@@ -116,8 +119,17 @@ pub fn gather(
         .last
         .replace(now)
         .map(|last| (now - last).as_secs_f32() * 1000.0);
+    let hitched = frame_ms.is_some_and(|ms| ms > STUTTER_MS);
+    let epoch_s = || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0.0, |since| since.as_secs_f64())
+    };
     if !ended {
         if hold.settling {
+            if hitched {
+                run.hitch_at.push(epoch_s());
+            }
             run.settle_ms.extend(frame_ms);
             run.settle_tick_ms
                 .extend(ticks.as_ref().and_then(|t| t.tick_ms()));
@@ -126,6 +138,9 @@ pub fn gather(
         } else if crate::shell::counting(&options, &screen, &hold) {
             run.frame += 1;
             if run.frame > options.settle_frames {
+                if hitched {
+                    run.hitch_at.push(epoch_s());
+                }
                 run.tick_ms.extend(ticks.and_then(|t| t.tick_ms()));
                 run.gpu_ms.extend(parts.and_then(|p| p.gpu_ms));
                 run.play_groups.add_stats(&taken);
@@ -149,6 +164,7 @@ pub fn gather(
     ) {
         println!("{line}");
     }
+    println!("{}", hitches_line(&run.hitch_at));
     for (what, phase, groups) in [
         ("groups", "settle", &run.settle_groups),
         ("groups", "play", &run.play_groups),
@@ -159,6 +175,20 @@ pub fn gather(
             println!("{line}");
         }
     }
+}
+
+/// When the settle and timed frames' hitches ended, for the bench to tell the machine's from
+/// the game's (`xtask/src/bench/runs.rs`, D185).
+pub fn hitches_line(at: &[f64]) -> String {
+    let at: Vec<String> = at.iter().map(|s| format!("{s:.2}")).collect();
+    format!(
+        "SANDBOX hitches ended at, seconds since the Unix epoch: {}",
+        if at.is_empty() {
+            "none".to_string()
+        } else {
+            at.join(" ")
+        }
+    )
 }
 
 /// The settle phase's line: its frames' spread, hitches and freezes, and its ticks' 99th
@@ -260,6 +290,18 @@ mod tests {
         assert!(line.contains("median 5.10, 99th percentile 10.00, worst 10.00"));
         assert!(line.ends_with("against the 15.6 ms of a tick"));
         assert_eq!(ticks_line(&mut [], 15.625), None);
+    }
+
+    /// The bench reads this line (`xtask/src/bench/runs.rs`'s `parse_hitch_times`, whose
+    /// test holds the same text) to lay each hitch beside the machine's clock (D185).
+    #[test]
+    fn the_hitches_line_says_when_each_ended() {
+        let prefix = "SANDBOX hitches ended at, seconds since the Unix epoch: ";
+        assert_eq!(hitches_line(&[]), format!("{prefix}none"));
+        assert_eq!(
+            hitches_line(&[1762171234.512, 1762171240.0]),
+            format!("{prefix}1762171234.51 1762171240.00")
+        );
     }
 
     #[test]

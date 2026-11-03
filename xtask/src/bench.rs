@@ -57,6 +57,8 @@ struct Timing {
     freezes: u32,
     from_start: bool,
     load_s: Option<f32>,
+    /// When its settle and timed hitches ended, seconds since the Unix epoch, where it said.
+    hitch_at: Option<Vec<f64>>,
     /// What its scene is held to (`budgets`, D607).
     budget: budgets::Scene,
     /// The kind of GPU it ran on as wgpu says it (`DiscreteGpu`, `IntegratedGpu`) and the
@@ -182,6 +184,7 @@ fn parse_timing(line: &str) -> Option<Timing> {
         freezes: 0,
         from_start: false,
         load_s: None,
+        hitch_at: None,
         budget: budgets::Scene::default(),
         device: String::new(),
         preset: String::new(),
@@ -848,6 +851,8 @@ fn time_scene(
             } else if let (Some(timing), Some((preset, device))) = (&mut timing, parse_drawn(&line))
             {
                 (timing.preset, timing.device) = (preset, device);
+            } else if let (Some(timing), Some(at)) = (&mut timing, runs::parse_hitch_times(&line)) {
+                timing.hitch_at = Some(at);
             } else if let Some(timing) = &mut timing
                 && (timing.ticks.read(&line) || timing.phases.read(&line))
             {
