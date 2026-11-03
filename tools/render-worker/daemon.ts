@@ -15,6 +15,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, linkSync, lstatSyn
 import { rm } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { type Box, box, boxEnv, ciBusy, daemonInfo, git, listJobs, outDir, slotDir, slotHome, writeJob } from "./box.ts";
+import { tick as perfTick } from "../perf/worker.ts";
 import { Display } from "./display.ts";
 import { wantFile, writeGate } from "./gate.ts";
 import { type DiskSettings, type DiskState, diskFull, diskSettings, fullMark, gb, type JobUse, KEEP, level, lowMark, type Prune, prune, pruneOrder, pruneTo, type SlotUse, type Space, space } from "./guard.ts";
@@ -616,6 +617,13 @@ async function daemon(b: Box): Promise<number> {
     status = n.why ? `${busy}; a job waits: ${n.why}` : busy;
     if ((n.why ?? "") !== lastWhy && n.why) say(`a job waits: ${n.why}`);
     lastWhy = n.why ?? "";
+    // The perf row (D610, tools/perf): every few minutes, a bench of main's newest landings
+    // queued here, and a finished one's numbers judged; never the daemon's failure.
+    try {
+      perfTick(b, say);
+    } catch (e) {
+      say(`✗ perf: ${(e as Error).message}`);
+    }
     beat();
     await new Promise<void>((r) => ((wakeUp = r), setTimeout(r, 60_000).unref()));
   }

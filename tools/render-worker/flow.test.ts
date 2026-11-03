@@ -18,6 +18,8 @@ import { gapBegins, gapEnds, next, reapOrphans, type Running, runJob, stop } fro
 // (guard.ts), in the environment the box's commands inherit.
 process.env.TERRA_RENDER_DISK_LOW_GB = "2";
 process.env.TERRA_RENDER_DISK_FULL_GB = "1";
+// A daemon started here queues no perf row of its own (D610, tools/perf).
+process.env.TERRA_PERF = "0";
 const tmp = mkdtempSync(join(tmpdir(), "render-flow-"));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 const sh = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, encoding: "utf8" }).trim();

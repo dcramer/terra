@@ -24,7 +24,7 @@ let SSH = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveI
 export const q = (s: string) => (/^[A-Za-z0-9_./~:@=+,-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
 
 /// A shell command on the box: through ssh (in the user's home), or `sh -c` here.
-function onBox(r: Remote, cmd: string, input?: string, inherit = false) {
+export function onBox(r: Remote, cmd: string, input?: string, inherit = false) {
   const [exe, args] = isLocal(r) ? ["sh", ["-c", cmd]] : ["ssh", [...SSH, r.host, cmd]];
   return spawnSync(exe, args, { encoding: "utf8", input, stdio: [input === undefined ? "ignore" : "pipe", inherit ? "inherit" : "pipe", inherit ? "inherit" : "pipe"], maxBuffer: 64 * 1024 ** 2 });
 }

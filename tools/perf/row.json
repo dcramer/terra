@@ -1,0 +1,11 @@
+{
+  "does": "the perf row (D610): the play scenes benched once at each landing batch on main by the render worker, their numbers kept by commit, a change past its noise band retriggered, alerted and bisected",
+  "scenes": ["lake-play", "forest-run", "town-dusk"],
+  "runs": 1,
+  "reads": ["crates", "assets", "patches", "Cargo.toml", "Cargo.lock", ".cargo", "xtask/src/bench", "xtask/src/bench.rs", "xtask/src/scenes.rs"],
+  "origin": "https://github.com/dcramer/terra.git",
+  "every": 5,
+  "rest": 20,
+  "cap": 5,
+  "minutes": 120
+}
