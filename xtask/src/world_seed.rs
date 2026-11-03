@@ -3,7 +3,7 @@
 //! never from a seed written into the code or from the operating system's randomness. Then
 //! the same seed makes the same world on every machine, and two seeds make two worlds.
 //!
-//! Two rules over the crates' own code (tests, benches, examples and programs are free to pick
+//! Three rules over the crates' own code (tests, benches, examples and programs are free to pick
 //! a seed, as they are about one world):
 //!
 //! - **No seed written in**: `Seed(1)`, `Seed(0x5EED)`. A stream is the world's seed derived
@@ -11,6 +11,10 @@
 //!   [`ALLOWED`] with why.
 //! - **No system randomness**: `thread_rng`, `rand::random` and the like, anywhere. The clock
 //!   is the shared crates' rule (`check`); a Bevy crate times itself with it.
+//! - **No hash keyed by place alone**: a `terra_gen::hash` call whose arguments name no seed
+//!   (`hash::unit3(0, x, y, z)`) draws the same at the same place in every world. World
+//!   content takes the world's seed; a look's grain, a moment's effect or a thing's own
+//!   detail keyed in its own frame is listed in [`KEYED_BY_PLACE`] with why.
 //!
 //! The determinism tests (`terra_land::fingerprint`) check what this cannot see: the same seed
 //! gives the same world bit for bit, and each part of it changes with the seed.
@@ -51,6 +55,118 @@ const ALLOWED: &[(&str, &str)] = &[
     (
         "crates/terra_world/src/rises.rs",
         "when a fish rises: a moment's effect, not the world",
+    ),
+];
+
+/// terra_gen's hashes (`terra_gen::hash`): what draws a number from words (`of`, `unit3`,
+/// `mix3`) and the mixers a hash or stream is made of.
+const HASHES: [&str; 8] = [
+    "of",
+    "unit3",
+    "mix3",
+    "splitmix64",
+    "lowbias32",
+    "lowbias32_round",
+    "prospector32",
+    "prospector32_round",
+];
+
+/// Words in a hash's arguments that show it takes the world's seed: a seed derived from it
+/// (`seed`, `building_seed`, `settings.seed`), or the state of a stream begun from one and
+/// stepped on (`state`, `self.0`). Case counts: a `SEED` constant is a seed written in.
+const SEEDED: [&str; 3] = ["seed", "state", "self."];
+
+/// Hashes keyed by a place or a number alone that may be, as none makes one world unlike
+/// another: the file or folder (ending `/`), the function (or "" for all of them), and why.
+/// Each is a look's grain (a texture, a shader's mirror), a moment's effect, a thing's own
+/// detail keyed in its own frame (a build's cells, whose plan the world's seed laid), or not
+/// a draw at all. World content (where things are, layouts, land, flora, creatures, weather)
+/// takes the world's seed instead.
+const KEYED_BY_PLACE: &[(&str, &str, &str)] = &[
+    (
+        "crates/terra_build_layout/",
+        "",
+        "a build laid from its own cells (a Base's grid): its boards, stones, stairs and trims follow what is built, as a blueprint's, the same in every world; what is built and where is the world's",
+    ),
+    (
+        "crates/terra_build_mesh/",
+        "",
+        "a build's meshes, chips and rubble from its own cells, as terra_build_layout",
+    ),
+    (
+        "crates/terra_build/src/fire.rs",
+        "",
+        "how fire takes a build's cubes: a moment's effect",
+    ),
+    (
+        "crates/terra_build/src/loss.rs",
+        "",
+        "what falls when a build is broken: a moment's effect",
+    ),
+    (
+        "crates/terra_building/src/loss/",
+        "",
+        "the dust and debris of a build's fall and their textures: a moment's effect",
+    ),
+    (
+        "crates/terra_bases/src/arrays/",
+        "",
+        "the crack masks drawn on damaged builds: a texture's grain",
+    ),
+    (
+        "crates/terra_dungeon/src/stamp/",
+        "",
+        "a laid dungeon's cubes and furnishings from its own cells; its rooms and dressing are laid from its seed (terra_dungeon::generate)",
+    ),
+    (
+        "crates/terra_world/src/fire/",
+        "",
+        "flames, embers and their light: a moment's effect",
+    ),
+    (
+        "crates/terra_world/src/sky/",
+        "",
+        "the clouds' noise texture: a look's grain; the weather that moves them is the world's",
+    ),
+    (
+        "crates/terra_world/src/scene.rs",
+        "",
+        "the haze's density texture: a look's grain",
+    ),
+    (
+        "crates/terra_world/src/waves.rs",
+        "",
+        "the sea's wave train: a look's grain",
+    ),
+    (
+        "crates/terra_voxel/src/planet/index.rs",
+        "",
+        "a map's key, not a draw",
+    ),
+    (
+        "crates/terra_creatures/src/creatures.rs",
+        "own_number",
+        "a creature's number from its home, which its dice take with the world's seed (own_dice) and which spreads its far thinking over the ticks (turn)",
+    ),
+    (
+        "crates/terra_creatures/src/melee/burst.rs",
+        "",
+        "a blow's burst: a moment's effect",
+    ),
+    (
+        "crates/terra_town/src/animals.rs",
+        "unit",
+        "a fold over its callers' words, each led by the town's seed",
+    ),
+    (
+        "crates/terra_folk/src/town/windows.rs",
+        "",
+        "which windows are lit at night and how their glass looks: the evening's look",
+    ),
+    (
+        "crates/terra_sandbox/src/experiments/lush/thicket/",
+        "",
+        "a tree's twigs keyed by the limb they grow on, whose shape the forest's seed grew",
     ),
 ];
 
@@ -143,6 +259,103 @@ fn written_seed(line: &str) -> bool {
     })
 }
 
+/// The name of the function the end of `code` is in: the last `fn name` before it.
+fn enclosing_fn(code: &str) -> &str {
+    let ident = |c: char| c.is_alphanumeric() || c == '_';
+    let mut end = code.len();
+    while let Some(found) = code[..end].rfind("fn ") {
+        if !code[..found].ends_with(ident) {
+            let name = &code[found + 3..];
+            return &name[..name.find(|c: char| !ident(c)).unwrap_or(name.len())];
+        }
+        end = found;
+    }
+    ""
+}
+
+/// The calls of terra_gen's hashes in a file's code, tests and comments left out, by
+/// `hash::name(` or by a name the file imports (`use terra_gen::hash::{of, unit}`): each its
+/// line, the hash, the function it is in and its arguments.
+fn hash_calls(text: &str) -> Vec<(usize, &'static str, String, String)> {
+    let lines = code_lines(text);
+    let (mut code, mut starts) = (String::new(), Vec::new());
+    for (number, line) in &lines {
+        starts.push((code.len(), *number));
+        code.push_str(line);
+        code.push('\n');
+    }
+    let imported: Vec<&str> = lines
+        .iter()
+        .filter_map(|(_, line)| line.trim().strip_prefix("use terra_gen::hash::"))
+        .flat_map(|names| {
+            let names = names.trim_end_matches(';');
+            names.trim_matches(['{', '}']).split(',').map(str::trim)
+        })
+        .collect();
+    let ident = |c: char| c.is_alphanumeric() || c == '_' || c == ':' || c == '.';
+    let mut found = Vec::new();
+    for hash in HASHES {
+        let called = format!("{hash}(");
+        for (at, _) in code.match_indices(&called) {
+            let before = &code[..at];
+            let by_name = imported.contains(&hash) && !before.ends_with(ident);
+            if !before.ends_with("hash::") && !by_name {
+                continue;
+            }
+            let open = at + called.len();
+            let mut depth = 1;
+            let close = code[open..]
+                .char_indices()
+                .find_map(|(i, c)| {
+                    match c {
+                        '(' => depth += 1,
+                        ')' => depth -= 1,
+                        _ => {}
+                    }
+                    (depth == 0).then_some(open + i)
+                })
+                .unwrap_or(code.len());
+            let line = starts
+                .iter()
+                .rev()
+                .find(|(start, _)| *start <= at)
+                .map_or(0, |(_, number)| *number);
+            let within = enclosing_fn(before).to_string();
+            found.push((line, hash, within, code[open..close].to_string()));
+        }
+    }
+    found.sort_by_key(|call| call.0);
+    found
+}
+
+/// A file's hashes keyed by a place or a number alone, not by the world's seed, as lines to
+/// print; those listed in [`KEYED_BY_PLACE`] are marked used instead.
+fn unseeded(path: &str, text: &str, used: &mut [bool]) -> Vec<String> {
+    if path.starts_with("crates/terra_gen/") {
+        return Vec::new();
+    }
+    let mut found = Vec::new();
+    for (line, hash, within, arguments) in hash_calls(text) {
+        if SEEDED.iter().any(|word| arguments.contains(word)) {
+            continue;
+        }
+        let listed = KEYED_BY_PLACE.iter().position(|(place, function, _)| {
+            let here = match place.ends_with('/') {
+                true => path.starts_with(place),
+                false => path == *place,
+            };
+            here && (function.is_empty() || *function == within)
+        });
+        match listed {
+            Some(entry) => used[entry] = true,
+            None => found.push(format!(
+                "{path}:{line}: {hash}(…) in {within} is keyed by a place or a number alone, the same in every world: take the world's seed into it (the system's own, from planet.seed().derive(\"what it is for\")); a look's grain, a moment's effect or a thing's own detail in its own frame may be listed in xtask/src/world_seed.rs's KEYED_BY_PLACE with why"
+            )),
+        }
+    }
+    found
+}
+
 /// What in one file breaks the rules, as lines to print.
 fn breaches(path: &str, text: &str) -> Vec<String> {
     let mut found = Vec::new();
@@ -183,16 +396,25 @@ pub(crate) fn seeded_from_the_world(out: &mut String) -> bool {
         })
     };
     let mut found = Vec::new();
+    let mut used = vec![false; KEYED_BY_PLACE.len()];
     for (path, text) in sources
         .iter()
         .filter(|(path, _)| checked(path) && !a_test(path))
     {
         found.extend(breaches(path, text));
+        found.extend(unseeded(path, text, &mut used));
     }
     for (file, _) in ALLOWED {
         if !root().join(file).exists() {
             found.push(format!(
                 "{file} is allowed a seed of its own but is gone: take it out of ALLOWED"
+            ));
+        }
+    }
+    for ((place, function, _), used) in KEYED_BY_PLACE.iter().zip(&used) {
+        if !used {
+            found.push(format!(
+                "{place} {function} is listed in KEYED_BY_PLACE, but no hash there is keyed by place alone now: take it out"
             ));
         }
     }
@@ -253,6 +475,31 @@ mod tests {
             test_modules("crates/w/src/movement.rs", moved)[0],
             "crates/w/src/movement_mover.rs"
         );
+    }
+
+    #[test]
+    fn a_hash_keyed_by_place_alone_is_found_and_one_taking_a_seed_is_not() {
+        let text = "use terra_gen::hash::{of, splitmix64};\nfn lay(at: IVec3, seed: u32) {\n    let a = terra_gen::hash::unit3(0, at.x as u32, 1, 2);\n    let b = hash::of(&[seed, at.x as u32]);\n    let c = hash::of(&[\n        at.x as u32,\n        7,\n    ]);\n    let d = size_of(&[1]) + of(&[seed]) + std::mem::size_of::<u8>();\n}\nfn step(&mut self) -> u64 { self.0 = splitmix64(self.0); splitmix64(7) }\n#[cfg(test)]\nfn t() { hash::of(&[1]); }\n";
+        let mut used = vec![false; KEYED_BY_PLACE.len()];
+        let found = unseeded("crates/terra_x/src/lay.rs", text, &mut used);
+        assert_eq!(found.len(), 3, "{found:#?}");
+        assert!(found[0].starts_with("crates/terra_x/src/lay.rs:3: unit3(…) in lay "));
+        assert!(found[1].starts_with("crates/terra_x/src/lay.rs:5: of(…) in lay "));
+        assert!(found[2].starts_with("crates/terra_x/src/lay.rs:11: splitmix64(…) in step "));
+        assert!(!used.contains(&true));
+        // Listed, for a file or a folder and for all its functions or one.
+        let waves = "crates/terra_world/src/waves.rs";
+        assert!(unseeded(waves, text, &mut used).is_empty());
+        let entry = KEYED_BY_PLACE
+            .iter()
+            .position(|(place, ..)| *place == waves);
+        assert!(used[entry.unwrap()]);
+        let creatures = "crates/terra_creatures/src/creatures.rs";
+        assert_eq!(unseeded(creatures, text, &mut used).len(), 3);
+        let own = text.replace("fn lay", "fn own_number");
+        assert_eq!(unseeded(creatures, &own, &mut used).len(), 1);
+        // terra_gen's own primitives are what the rule is about.
+        assert!(unseeded("crates/terra_gen/src/seed.rs", text, &mut used).is_empty());
     }
 
     #[test]
