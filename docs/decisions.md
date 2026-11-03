@@ -101,7 +101,7 @@ Ground, water, weather, seasons, life and how realms join.
 | [D544](decisions/D544.md) | The world's heights: how high one goes and where the clouds stand | Design | Developers | Decided | Heights are Earth's up to 3 km over the sea… |
 | [D559](decisions/D559.md) | The hewn mine is the second dungeon theme built, after the barrow halls | Design | Developers | Decided | The dungeon themes of D527 are built in this order so… |
 | [D591](decisions/D591.md) | Natural caves are part of core world design | Design | Developers | Decided | Natural caves are part of how a world is generated… |
-| [D598](decisions/D598.md) | Conifer crowns fuller, of many smaller sprays in layered masses, and warmer in colour | Design | — | Open | Open: whether the lush forest's Scots pines and spruces… |
+| [D598](decisions/D598.md) | Tree crowns fuller, of many smaller sprays in layered masses, and warmer in colour | Design | Developers | Decided | Every tree the game grows (the lush forest's Scots pines… |
 
 ## The player and survival
 
