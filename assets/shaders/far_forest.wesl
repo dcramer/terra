@@ -167,21 +167,47 @@ struct Shape {
 }
 
 // A mass of leaves round a middle with these half sizes, its edge broken into lobes so
-// many metres across: its surface rounded as the mass is, and lumped by the lobes.
-fn mass(p: vec2<f32>, middle: vec2<f32>, half: vec2<f32>, lobe: f32, ragged: f32, luck: f32) -> Shape {
-    var s: Shape;
-    let q = (p - middle) / half;
-    let seed = vec2<f32>(luck * 37.0, luck * 91.0);
-    let n = smooth_noise(p / lobe + seed);
-    let fine = smooth_noise(p / (lobe * 0.35) + seed * 1.7);
+// many metres across.
+struct Mass {
+    middle: vec2<f32>,
+    half: vec2<f32>,
+    lobe: f32,
+    luck: f32,
+}
+
+fn seed_of(m: Mass) -> vec2<f32> {
+    return vec2<f32>(m.luck * 37.0, m.luck * 91.0);
+}
+
+// How far inside a mass a point is (above 0 is in it), and its lobes' noise there.
+fn depth_in(p: vec2<f32>, m: Mass, ragged: f32) -> vec2<f32> {
+    let q = (p - m.middle) / m.half;
+    let seed = seed_of(m);
+    let n = smooth_noise(p / m.lobe + seed);
+    let fine = smooth_noise(p / (m.lobe * 0.35) + seed * 1.7);
     // Sprays of leaves at its edge, half a metre across.
     let sprays = smooth_noise(p / 0.5 + seed * 2.3);
-    s.inside = (1.0 - length(q)) - ragged * (n - 0.5) - 0.14 * (fine - 0.5) - 0.12 * (sprays - 0.5);
+    return vec2<f32>((1.0 - length(q)) - ragged * (n - 0.5) - 0.14 * (fine - 0.5) - 0.12 * (sprays - 0.5), n);
+}
+
+// The most `depth_in` can give a point: its noises (0 to 1 each) at their most.
+fn deepest_in(p: vec2<f32>, m: Mass, ragged: f32) -> f32 {
+    return (1.0 - length((p - m.middle) / m.half)) + 0.5 * ragged + 0.07 + 0.06;
+}
+
+// The point in the mass it is deepest in (`depth` its `depth_in`): its surface rounded as the
+// mass is, and lumped by the lobes. Worked out for that mass alone, not every one.
+fn mass(p: vec2<f32>, m: Mass, depth: vec2<f32>) -> Shape {
+    var s: Shape;
+    let q = (p - m.middle) / m.half;
+    let seed = seed_of(m);
+    let n = depth.y;
+    s.inside = depth.x;
     let round = clamp(q, vec2<f32>(-1.0), vec2<f32>(1.0));
     let lumps = vec2<f32>(
-        smooth_noise((p + vec2<f32>(0.3, 0.0)) / lobe + seed) - n,
-        smooth_noise((p + vec2<f32>(0.0, 0.3)) / lobe + seed) - n,
-    ) / 0.3 * lobe;
+        smooth_noise((p + vec2<f32>(0.3, 0.0)) / m.lobe + seed) - n,
+        smooth_noise((p + vec2<f32>(0.0, 0.3)) / m.lobe + seed) - n,
+    ) / 0.3 * m.lobe;
     s.normal = normalize(vec3<f32>(round + lumps * 0.5, sqrt(max(1.0 - dot(round, round), 0.05))));
     // Darker low in the crown and in the gaps between its lobes.
     s.light = (0.7 + 0.3 * smoothstep(-0.9, 0.5, q.y)) * (0.75 + 0.25 * n);
@@ -189,26 +215,29 @@ fn mass(p: vec2<f32>, middle: vec2<f32>, half: vec2<f32>, lobe: f32, ragged: f32
     return s;
 }
 
-// Of two masses of leaves, the one a point is deeper inside.
-fn deeper(a: Shape, b: Shape) -> Shape {
-    if b.inside > a.inside {
-        return b;
-    }
-    return a;
-}
-
 // A crown of several masses round a middle: one in the middle and others about it, where
-// the great limbs carry them, so its outline is lumped as a real crown's, not one ball.
+// the great limbs carry them, so its outline is lumped as a real crown's, not one ball. A
+// point is the mass it is deepest in (the first of equals); a mass that cannot be deeper than
+// the deepest yet is passed over without its noise, which changes nothing it shows.
 fn crown(p: vec2<f32>, middle: vec2<f32>, half: vec2<f32>, masses: u32, lobe: f32, ragged: f32, luck: f32) -> Shape {
-    var s = mass(p, middle, half * vec2<f32>(0.7, 0.75), lobe, ragged, luck);
+    var best = Mass(middle, half * vec2<f32>(0.7, 0.75), lobe, luck);
+    var depth = depth_in(p, best, ragged);
     for (var k = 0u; k < masses; k++) {
         let f = f32(k);
         let a = luck * 6.283 + f * 6.283 / f32(masses) + 0.6 * hash(vec2<f32>(luck * 9.0, f));
         let reach = 0.55 + 0.25 * hash(vec2<f32>(f, luck * 5.0));
         let at = middle + vec2<f32>(cos(a), sin(a) * 0.8) * half * reach * 0.62;
         let size = half * (0.42 + 0.18 * hash(vec2<f32>(luck * 3.0 + f, 2.0)));
-        s = deeper(s, mass(p, at, size, lobe * 0.8, ragged, luck + f * 0.37));
+        let m = Mass(at, size, lobe * 0.8, luck + f * 0.37);
+        if deepest_in(p, m, ragged) > depth.x {
+            let d = depth_in(p, m, ragged);
+            if d.x > depth.x {
+                depth = d;
+                best = m;
+            }
+        }
     }
+    var s = mass(p, best, depth);
     // Lit higher in the crown, deeper in its shade low down.
     s.light *= 0.7 + 0.3 * smoothstep(middle.y - half.y, middle.y + half.y, p.y);
     return s;
