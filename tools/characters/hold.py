@@ -265,6 +265,14 @@ def between(a, b, s, arc=0.0):
 def _held_pose(arm, by_name, name, held, entries=None):
     """A hold's part as it is to be held: each bone's location, rotation and scale in its own
     frame, at the held clip's first frame with the hold's turns laid on."""
+    # A body without a bone a hold names (Quaternius's have no twist bones, D599) leaves that
+    # part as the clip has it: a twist bone only spreads a forearm's roll over its skin.
+    lacks = sorted({held["bone"], *held.get("turn", {}), *held.get("aim", {}), *held.get("roll", {})} - set(arm.data.bones.keys()))
+    if lacks:
+        print(f"HOLD {name}: this body has no {', '.join(lacks)}; left as the clip has it")
+        if held["bone"] in lacks:
+            return {}
+        held = {**held, **{k: {b: v for b, v in held[k].items() if b not in lacks} for k in ("turn", "aim", "roll") if k in held}}
     hand = _strap_hand(arm, by_name, name, held, entries) if "shield" in held else None
     pose = arm.pose.bones
     from_clip = by_name.get(held["clip"])
