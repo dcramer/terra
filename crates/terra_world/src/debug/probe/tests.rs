@@ -44,6 +44,27 @@ fn a_plan_reads_its_variants_and_levers() {
     }
 }
 
+/// j19's levers, `tune.render.spread_aerial_view_lut=0`, failed every load as naming no
+/// tunable; the refusal now says to drop the prefix and gives the lever to write.
+#[test]
+fn a_tune_prefixed_lever_is_refused_with_the_bare_name() {
+    let error = Plan::parse("thread: tune.render.spread_aerial_view_lut=0").unwrap_err();
+    assert!(error.contains("drop the prefix"), "said {error}");
+    assert!(
+        error.contains("`render.spread_aerial_view_lut=0`"),
+        "said {error}"
+    );
+    assert!(error.contains("D609"), "said {error}");
+    // The bare name parses.
+    assert_eq!(
+        Plan::parse("thread: render.spread_aerial_view_lut=0")
+            .unwrap()
+            .variants[0]
+            .levers,
+        [Lever::Tune("render.spread_aerial_view_lut".into(), 0.0)]
+    );
+}
+
 #[test]
 fn rounds_alternate_the_variants() {
     // A variant an argument, as `--probe` is repeated.

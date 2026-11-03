@@ -29,7 +29,8 @@ pub struct Plan {
 
 /// How `--probe` is written, for its errors.
 pub const GRAMMAR: &str = "`--probe \"<name>: <lever>, …\"` a variant, repeated for each, a \
-     lever `tune.name=value` or `hide=<part of a material's type name>`, e.g. `--probe \"old: \
+     lever `<tunable>=<value>` (the bare tunable name, D547, no `tune.` prefix) or \
+     `hide=<part of a material's type name>`, e.g. `--probe \"old: \
      fog.light_span=0\" --probe \"new: fog.light_span=1\"` (D609)";
 
 impl Plan {
@@ -65,6 +66,13 @@ impl Plan {
                 .map(|l| match l.strip_prefix("hide=") {
                     Some("") => Err(format!("--probe's `hide=` names no material: {GRAMMAR}")),
                     Some(part) => Ok(Lever::Hide(part.to_string())),
+                    // j19 wrote `tune.render.x=0` after the old grammar's wording and lost
+                    // its timing to "names no tunable".
+                    None if l.starts_with("tune.") => Err(format!(
+                        "--probe's lever `{l}` names its tunable with a `tune.` prefix, which \
+                         no tunable has: drop the prefix, `{}`; {GRAMMAR}",
+                        &l["tune.".len()..]
+                    )),
                     None => parse_assignment(l)
                         .map(|(n, v)| Lever::Tune(n, v))
                         .map_err(|e| format!("--probe's lever `{l}`: {e}; {GRAMMAR}")),
