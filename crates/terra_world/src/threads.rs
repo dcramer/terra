@@ -19,6 +19,9 @@ pub fn plugin() -> TaskPoolPlugin {
 
 /// Bevy's three pools from `threads`: each pool's count fixed, and their total all of them,
 /// so Bevy's own share-out (IO, then async compute, then compute the rest) gives each its own.
+/// The async compute pool's threads each work their task alone, as a background pool's do
+/// ([`pool`]): the sky's occlusion round the player, made there, fanned its `par::map` out
+/// over every core, beside the frame's threads, and a pool of two held sixteen.
 fn options(threads: Threads) -> TaskPoolOptions {
     let fixed = |count: usize| TaskPoolThreadAssignmentPolicy {
         min_threads: count,
@@ -32,7 +35,10 @@ fn options(threads: Threads) -> TaskPoolOptions {
         min_total_threads: total,
         max_total_threads: total,
         io: fixed(threads.io),
-        async_compute: fixed(threads.async_compute),
+        async_compute: TaskPoolThreadAssignmentPolicy {
+            on_thread_spawn: Some(std::sync::Arc::new(terra_gen::par::keep_to_this_thread)),
+            ..fixed(threads.async_compute)
+        },
         compute: fixed(threads.frame),
     }
 }
@@ -97,18 +103,48 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_background_pool_has_its_share_and_never_fans_out() {
-        let pool = pool(Work::Building, "test");
-        assert_eq!(pool.thread_num(), terra_gen::par::threads().load_building);
+    /// The threads a `par::map` asked on `pool` ran on, and the thread that asked.
+    fn mapped_on(pool: &TaskPool) -> (std::thread::ThreadId, Vec<std::thread::ThreadId>) {
         let items: Vec<u32> = (0..64).collect();
-        let (here, workers) = bevy::tasks::block_on(pool.spawn(async move {
+        bevy::tasks::block_on(pool.spawn(async move {
             let workers = terra_gen::par::map(&items, |_| {
                 std::thread::sleep(std::time::Duration::from_millis(1));
                 std::thread::current().id()
             });
             (std::thread::current().id(), workers)
-        }));
+        }))
+    }
+
+    #[test]
+    fn bevys_async_compute_threads_never_fan_out() {
+        // The pool built as Bevy builds its async compute pool from the options (bevy_app
+        // 0.20, `TaskPoolOptions::create_default_pools`), not Bevy's global one, which a test
+        // could find made already.
+        let policy = options(Threads::on(16)).async_compute;
+        let spawn = policy
+            .on_thread_spawn
+            .clone()
+            .expect("a hook on each new thread");
+        let pool = TaskPoolBuilder::new()
+            .num_threads(policy.max_threads)
+            .on_thread_spawn(move || spawn())
+            .build();
+        let (here, workers) = mapped_on(&pool);
+        assert!(workers.iter().all(|id| *id == here), "the map fanned out");
+        // Where the hook is left off, the same map fans out, so the test sees what it checks.
+        let wide = TaskPoolBuilder::new().num_threads(2).build();
+        let (here, workers) = mapped_on(&wide);
+        assert_eq!(
+            workers.iter().any(|id| *id != here),
+            terra_gen::par::cores() > 1
+        );
+    }
+
+    #[test]
+    fn a_background_pool_has_its_share_and_never_fans_out() {
+        let pool = pool(Work::Building, "test");
+        assert_eq!(pool.thread_num(), terra_gen::par::threads().load_building);
+        let (here, workers) = mapped_on(&pool);
         assert!(workers.iter().all(|id| *id == here), "the map fanned out");
     }
 }

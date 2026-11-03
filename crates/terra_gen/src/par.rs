@@ -22,7 +22,8 @@ pub enum Work {
     /// the main thread (Unreal's foreground workers).
     Frame,
     /// Wanted soon, never waited on by the frame: Bevy's async compute pool (the ground, grass
-    /// and the sky's light round the player, the horizon, climate's painting).
+    /// and the sky's light round the player, the horizon, climate's painting), its threads
+    /// each working their task alone ([`keep_to_this_thread`]) so the pool keeps its share.
     Async,
     /// Background: a base laid and drawn again after an edit or on the load, on building's
     /// own pool (`terra_bases::layout::builders`), apart so it never queues behind streaming.
