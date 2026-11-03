@@ -45,6 +45,68 @@ pub(crate) const PRIMITIVES: &[Primitive] = &[
 /// The folders whose Rust is searched: the workspace and the tasks. Spikes are thrown away.
 const SEARCHED: [&str; 2] = ["crates", "xtask"];
 
+/// What only one file of the game may write (D606): a pool or a loop sized by its own ask of
+/// the cores takes them as if it were alone, as the far view's streaming took 14 of the
+/// bench's 16 (perf-regress j1). The words, in code, not comments; the files that may.
+pub(crate) struct Owned {
+    pub(crate) what: &'static str,
+    pub(crate) words: &'static [&'static str],
+    pub(crate) homes: &'static [&'static str],
+    pub(crate) call: &'static str,
+}
+
+pub(crate) const OWNED: &[Owned] = &[
+    Owned {
+        what: "asks the machine's cores itself",
+        words: &["available_parallelism"],
+        homes: &["crates/terra_gen/src/par.rs"],
+        call: "terra_gen::par::threads().of(Work::…) for a pool, terra_gen::par::width() for work shared out on this thread, or terra_gen::par::map",
+    },
+    Owned {
+        what: "sizes a thread pool of its own",
+        words: &["TaskPoolBuilder", "TaskPoolOptions", "ThreadPoolBuilder"],
+        homes: &[
+            "crates/terra_world/src/threads.rs",
+            // A bench of the walkers' crowd on rayon's and Bevy's pools, each of the same
+            // fixed count so the two compare; no game thread.
+            "crates/terra_walker/src/movement_bench.rs",
+        ],
+        call: "terra_world::threads::pool(Work::…, name), or a new row of terra_gen::par::Threads for a new kind of work",
+    },
+];
+
+/// The game's sources (`crates/`) only: the tasks' own threads are a tool's, not the game's,
+/// and a test's pool of a fixed count is the test's (D406).
+const OWNED_SEARCHED: &str = "crates/";
+
+fn owned_searched(path: &str) -> bool {
+    path.starts_with(OWNED_SEARCHED) && !path.contains("/tests/") && !path.ends_with("tests.rs")
+}
+
+/// Where a source writes a word only its homes may: line (from 1) and what to say of it.
+fn owned_uses(path: &str, text: &str, owned: &[Owned]) -> Vec<String> {
+    let mut found = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let code = line.split("//").next().unwrap_or("");
+        for rule in owned {
+            if rule.homes.contains(&path) {
+                continue;
+            }
+            for word in rule.words {
+                if code.contains(word) {
+                    found.push(format!(
+                        "{path}:{}: `{word}` {}: the game's threads come from one table (D606); call {} instead",
+                        number + 1,
+                        rule.what,
+                        rule.call
+                    ));
+                }
+            }
+        }
+    }
+    found
+}
+
 /// Every hex literal on a line, as lower-case digits without separators or leading zeros.
 fn hex_literals(line: &str) -> Vec<String> {
     let mut found = Vec::new();
@@ -144,6 +206,16 @@ pub(crate) fn one_definition(out: &mut String) -> bool {
             continue;
         };
         found.extend(copies(path, &text, PRIMITIVES));
+        if owned_searched(path) {
+            found.extend(owned_uses(path, &text, OWNED));
+        }
+    }
+    for home in OWNED.iter().flat_map(|rule| rule.homes) {
+        if !root().join(home).exists() {
+            found.push(format!(
+                "{home} is gone: move its row of OWNED in xtask/src/primitives.rs"
+            ));
+        }
     }
     for primitive in PRIMITIVES {
         if !root().join(primitive.home).exists() {
@@ -158,7 +230,7 @@ pub(crate) fn one_definition(out: &mut String) -> bool {
     }
     let _ = writeln!(
         out,
-        "a shared primitive written out again; call the one in its home instead, with the same input, so what it gives stays the same:"
+        "a shared primitive written out again, or a thread count of its own; call the one in its home instead, with the same input, so what it gives stays the same:"
     );
     for line in found {
         let _ = writeln!(out, "  {line}");
@@ -219,6 +291,29 @@ mod tests {
         assert!(copies(easing.home, planted, PRIMITIVES).is_empty());
         let fine = "    let k = smoothstep(0.0, 1.0, x);\nfn smoothstep_twice(x: f32) -> f32 {\n// fn smoothstep(\n";
         assert!(copies("crates/x.rs", fine, PRIMITIVES).is_empty());
+    }
+
+    #[test]
+    fn a_pool_sized_outside_the_table_fails_and_its_home_and_comments_pass() {
+        let own = "let n = std::thread::available_parallelism().map_or(4, |n| n.get());\nlet pool = TaskPoolBuilder::new().num_threads(n).build();\n";
+        let found = owned_uses("crates/terra_game/src/planted.rs", own, OWNED);
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(
+            found[0].starts_with("crates/terra_game/src/planted.rs:1: `available_parallelism`")
+        );
+        assert!(found[0].contains("terra_gen::par::"), "{found:?}");
+        assert!(found[1].contains("terra_world::threads::pool"), "{found:?}");
+        assert!(owned_uses(OWNED[0].homes[0], own, &OWNED[..1]).is_empty());
+        let said = "// the one-definition check fails `available_parallelism` here\nlet n = terra_gen::par::width(); // not TaskPoolBuilder\n";
+        assert!(owned_uses("crates/x.rs", said, OWNED).is_empty());
+        assert!(owned_searched("crates/terra_world/src/flora.rs"));
+        for test in [
+            "crates/terra_world/tests/gltf_gate.rs",
+            "crates/a/src/mover_world_tests.rs",
+            "xtask/src/seed.rs",
+        ] {
+            assert!(!owned_searched(test), "{test}");
+        }
     }
 
     #[test]
