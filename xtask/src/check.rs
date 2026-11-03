@@ -49,10 +49,12 @@ const SLOW_TEST_SECS: u64 = 120;
 /// Where the check's stages keep their logs, relative to the root.
 const LOGS: &str = "target/check";
 
-/// How a stage runs: a command, a check made here, or not at all, and why.
+/// How a stage runs: a command, a check made here (`Since`: against the change's base
+/// commit), or not at all, and why.
 enum How {
     Command(Command),
     Here(fn(&mut String) -> bool),
+    Since(fn(&str, &mut String) -> bool, String),
     Skip(&'static str),
 }
 
@@ -97,6 +99,7 @@ pub(crate) fn check(args: &[String]) -> bool {
         let passed = match how {
             How::Command(command) => step.run(command),
             How::Here(check) => step.run_here(check),
+            How::Since(check, base) => step.run_here(|out| check(&base, out)),
             How::Skip(why) => {
                 skipped.push(format!("{} ({why})", step.name()));
                 true
@@ -171,6 +174,8 @@ fn code_health() -> [(Step, How); 3] {
 /// the workspace when the build itself changed (`Scope::all`). A change checked over
 /// everything runs the code-health lints too: `Scope::everything` leaves `rust` unset, and
 /// c78201ec2 grew planet.rs past its baseline beside a patched Bevy crate's file and passed.
+/// A change to a ratchet's baseline is held to what D414 lets a change do, against the base:
+/// nothing raised by hand, and a size row never raised or added (D396).
 fn hook(scope: &Scope) -> Vec<(Step, How)> {
     let lint = if scope.all() {
         clippy(&["--workspace".to_string()])
@@ -183,6 +188,16 @@ fn hook(scope: &Scope) -> Vec<(Step, How)> {
         clippy(&scope::package_args(&scope.changed))
     };
     let mut stages = vec![fmt(scope)];
+    if scope.all() || scope.baselines {
+        let step = Step::new("baselines", Said::Printed, LOGS);
+        stages.push(match &scope.base {
+            Some(base) => (
+                step,
+                How::Since(crate::baselines::only_lowered, base.clone()),
+            ),
+            None => (step, How::Skip("no base to compare the baselines with")),
+        });
+    }
     if scope.all() || scope.rust {
         stages.extend(code_health());
     }

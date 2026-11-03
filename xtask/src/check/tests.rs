@@ -29,7 +29,11 @@ fn the_hook_formats_and_lints_only_the_crates_changed() {
     );
     for (step, how) in &stages {
         let How::Command(command) = how else {
-            assert!(matches!(how, How::Here(_)), "{} runs nothing", step.name());
+            assert!(
+                matches!(how, How::Here(_) | How::Since(..)),
+                "{} runs nothing",
+                step.name()
+            );
             continue;
         };
         let args: Vec<String> = command
@@ -67,6 +71,38 @@ fn a_push_checked_over_everything_runs_the_size_lint() {
     // The workspace's own manifest checks everything too, with no Rust file among the changes.
     let manifest = scope::classify(&["Cargo.toml".to_string()], &packages);
     assert!(names(&hook(&manifest)).iter().any(|name| name == "sizes"));
+}
+
+/// A push that changes a ratchet's baseline is held to D414 against its base: nothing stopped
+/// a hand from raising planet.rs's row in `xtask/sizes-baseline.tsv`, after which the size lint
+/// passed it. The baselines stage runs alone (no Rust, nothing to build) and over everything.
+#[test]
+fn a_push_changing_a_baseline_holds_it_against_its_base() {
+    let packages = std::collections::BTreeSet::from(["xtask".to_string()]);
+    let mut scope = scope::classify(&[crate::baselines::SIZES.to_string()], &packages);
+    scope.base = Some("0123abc".into());
+    let stages = hook(&scope);
+    assert_eq!(names(&stages), ["baselines"]);
+    assert!(
+        stages.iter().any(|(step, how)| step.name() == "baselines"
+            && matches!(how, How::Since(_, base) if base == "0123abc")),
+        "the baselines stage compares with the push's base"
+    );
+    let mut everything = scope::classify(&["Cargo.toml".to_string()], &packages);
+    everything.base = Some("0123abc".into());
+    assert!(
+        names(&hook(&everything))
+            .iter()
+            .any(|name| name == "baselines")
+    );
+    // No base known: nothing to compare with, said, not passed silently as checked.
+    scope.base = None;
+    let stages = hook(&scope);
+    assert!(
+        stages
+            .iter()
+            .any(|(step, how)| step.name() == "baselines" && matches!(how, How::Skip(_)))
+    );
 }
 
 /// The full check runs every stage, the tests and the ratchets among them.

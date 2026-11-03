@@ -219,6 +219,9 @@ pub(crate) struct Scope {
     /// A ratchet's baseline changed (`baselines::is_baseline`), which only the baselines
     /// stage reads.
     pub(crate) baselines: bool,
+    /// The commit the change is taken from (`push`), which the baselines stage reads the
+    /// baselines at; none when no base is known.
+    pub(crate) base: Option<String>,
 }
 
 impl Scope {
@@ -363,13 +366,15 @@ pub(crate) fn push(base: Option<&str>) -> Scope {
             None => return Scope::everything("no merge-base with origin/main"),
         },
     };
-    match lines(output(
+    let mut scope = match lines(output(
         "git",
         &["diff", "--name-only", "--no-renames", &base],
     )) {
         Some(files) => classify(&files, &packages()),
         None => Scope::everything("git cannot say what changed"),
-    }
+    };
+    scope.base = Some(base);
+    scope
 }
 
 /// The packages given and every workspace package depending on them, through normal, build
