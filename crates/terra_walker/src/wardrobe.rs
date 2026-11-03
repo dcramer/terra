@@ -6,7 +6,8 @@
 //! code, so a new piece or look is a row and a file (D136).
 //!
 //! The rule: each slot shows the look's piece when its item is worn, else another of the
-//! body's pieces for a worn item in that slot, else the body's bare piece (D600); the head
+//! body's pieces for a worn item in that slot, the first that the pairing matrix does not
+//! refuse with a piece already shown, else the body's bare piece (D600); the head
 //! shows unless a shown piece holds the head's region (their UpperBody, the bare arms, carries
 //! the head too). So every region of the body is drawn exactly once, which the tests hold for
 //! every look in every state of undress.
@@ -37,6 +38,18 @@ pub struct Wardrobe {
     pub bodies: BTreeMap<String, Body>,
     pub pieces: BTreeMap<String, Piece>,
     pub looks: BTreeMap<String, Look>,
+    /// Two pieces of different slots and whether they may be worn together, measured through
+    /// the clips (`tools/characters/pairings.ts`), never written by hand.
+    #[serde(default)]
+    pub pairings: Vec<Pairing>,
+}
+
+/// A row of the pairing matrix; its numbers stay in the file for whoever reads it.
+#[derive(Debug, Deserialize)]
+pub struct Pairing {
+    pub pieces: [String; 2],
+    /// `apart`, `theirs`, `pass` or `refused`.
+    pub verdict: String,
 }
 
 /// A body of the wardrobe.
@@ -124,7 +137,29 @@ impl Wardrobe {
                 return Err(format!("piece {name}'s slot {slot} is not a slot"));
             }
         }
+        for pairing in &w.pairings {
+            if let Some(p) = pairing.pieces.iter().find(|p| !w.pieces.contains_key(*p)) {
+                return Err(format!("a pairing names {p}, which is not a piece"));
+            }
+        }
+        for (name, look) in &w.looks {
+            let pieces: Vec<&String> = look.pieces.values().collect();
+            for (i, a) in pieces.iter().enumerate() {
+                if let Some(b) = pieces[i + 1..].iter().find(|b| w.refused(a, b)) {
+                    return Err(format!("look {name} wears {a} with {b}, a refused pairing"));
+                }
+            }
+        }
         Ok(w)
+    }
+
+    /// Whether the pairing matrix refuses `a` worn with `b`.
+    pub fn refused(&self, a: &str, b: &str) -> bool {
+        self.pairings.iter().any(|p| {
+            p.verdict == "refused"
+                && ((p.pieces[0] == a && p.pieces[1] == b)
+                    || (p.pieces[0] == b && p.pieces[1] == a))
+        })
     }
 
     /// The wardrobe body whose file is `model` (a path under `assets/`, with or without a `#`
@@ -156,15 +191,20 @@ impl Wardrobe {
                 .and_then(|l| l.pieces.get(slot))
                 .and_then(|name| self.pieces.get_key_value(name.as_str()))
                 .filter(|(_, p)| wears(p));
-            let other = || {
-                worn?;
-                self.pieces.iter().find(|(_, p)| {
-                    p.body == body && p.slot.as_ref() == Some(slot) && p.item.is_some() && wears(p)
-                })
-            };
+            let others = self.pieces.iter().filter(|(_, p)| {
+                worn.is_some()
+                    && p.body == body
+                    && p.slot.as_ref() == Some(slot)
+                    && p.item.is_some()
+                    && wears(p)
+            });
+            // The first that pairs with every piece shown so far: a refused pairing is never
+            // composed, so a worn item with no piece that pairs shows bare.
             let chosen = of_look
-                .or_else(other)
+                .into_iter()
+                .chain(others)
                 .map(|(name, _)| name.as_str())
+                .find(|name| !shown.iter().any(|s| self.refused(s, name)))
                 .or_else(|| b.bare.get(slot).map(String::as_str));
             shown.extend(chosen);
         }

@@ -1,5 +1,5 @@
 {
-  "about": "The wardrobe catalogue (D611): every body, piece and look characters on Quaternius's bodies are composed from, per slot, by the game (crates/terra_walker/src/wardrobe.rs) and built by tools/characters/build_bodies.sh (a `wardrobe:<body>` step a body), checked by `node tools/characters/wardrobe.ts`. A new piece or look is a row here and a file, never code (D136). slots: what a look fills, one piece each. regions: the parts of a body, each drawn exactly once. bodies: the body's file (`model`: his skeleton, sockets and the fight's clips sampled on him, no mesh); the folder its pieces' game files go in (`pieces`, each <piece>.gltf with its textures shared in textures/); its head piece, shown unless a shown piece holds the head; a bare piece a slot (D600); its default look. pieces: `body` the body it was made on; `source` the file it comes from under art/ (theirs, untouched, D599), with `cut` the region cut_slots.py cuts from it for a bare piece; `slot` (none: the head); `item` the item it is the look of (none: bare skin); `layer` 0 skin, 1 worn; `regions` the body's regions it stands for, so hides; `colourways` their shipped colours it comes in; `dye_mask` its dye regions (later: the paint job); `tags`. looks: a piece a slot, a colourway, hair (none yet: their hairstyles are not vendored). pairings and populations are for later jobs (pairings measured by layers.ts and slots.ts; populations by role).",
+  "about": "The wardrobe catalogue (D611): every body, piece and look characters on Quaternius's bodies are composed from, per slot, by the game (crates/terra_walker/src/wardrobe.rs) and built by tools/characters/build_bodies.sh (a `wardrobe:<body>` step a body), checked by `node tools/characters/wardrobe.ts`. A new piece or look is a row here and a file, never code (D136). slots: what a look fills, one piece each. regions: the parts of a body, each drawn exactly once. bodies: the body's file (`model`: his skeleton, sockets and the fight's clips sampled on him, no mesh); the folder its pieces' game files go in (`pieces`, each <piece>.gltf with its textures shared in textures/); its head piece, shown unless a shown piece holds the head; a bare piece a slot (D600); its default look. pieces: `body` the body it was made on; `source` the file it comes from under art/ (theirs, untouched, D599), with `cut` the region cut_slots.py cuts from it for a bare piece; `outfit` their outfit it belongs to, whose own pairings a mixed one is judged against; `slot` (none: the head); `item` the item it is the look of (none: bare skin); `layer` 0 skin, 1 worn; `regions` the body's regions it stands for, so hides; `colourways` their shipped colours it comes in; `dye_mask` its dye regions (later: the paint job); `tags`. looks: a piece a slot, a colourway, hair (none yet: their hairstyles are not vendored). pairings: every two worn pieces of a body's different slots, written by `node tools/characters/pairings.ts` from their measure through the clips, never by hand: `apart`, `theirs` (one outfit as made), `pass` or `refused` (pokes or opens where neither outfit's own pairing does, or pokes more at rest), with `over` the outer piece, `clips` the clips past 5 mm or opening the edge, `worse` those worse than theirs, `rest` the vertices poking at rest, `poke_mm` and `worst` its deepest; the game composes no refused pairing and no look may wear one. populations are for a later job (by role).",
   "slots": ["body", "arms", "legs", "feet"],
   "regions": ["head", "torso", "arms", "legs", "feet"],
   "bodies": {
@@ -62,6 +62,7 @@
     "male_ranger_body": {
       "body": "male",
       "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Ranger_Body.gltf",
+      "outfit": "ranger",
       "slot": "body",
       "item": "leather_coat",
       "layer": 1,
@@ -73,6 +74,7 @@
     "male_ranger_arms": {
       "body": "male",
       "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Ranger_Arms.gltf",
+      "outfit": "ranger",
       "slot": "arms",
       "item": "leather_coat",
       "layer": 1,
@@ -84,6 +86,7 @@
     "male_ranger_legs": {
       "body": "male",
       "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Ranger_Legs.gltf",
+      "outfit": "ranger",
       "slot": "legs",
       "item": "trousers",
       "layer": 1,
@@ -95,6 +98,7 @@
     "male_ranger_boots": {
       "body": "male",
       "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Ranger_Feet_Boots.gltf",
+      "outfit": "ranger",
       "slot": "feet",
       "item": "boots",
       "layer": 1,
@@ -102,6 +106,54 @@
       "colourways": ["shipped"],
       "dye_mask": null,
       "tags": ["work"]
+    },
+    "male_peasant_body": {
+      "body": "male",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Peasant_Body.gltf",
+      "outfit": "peasant",
+      "slot": "body",
+      "item": "shirt",
+      "layer": 1,
+      "regions": ["torso"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "plain"]
+    },
+    "male_peasant_arms": {
+      "body": "male",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Peasant_Arms.gltf",
+      "outfit": "peasant",
+      "slot": "arms",
+      "item": "shirt",
+      "layer": 1,
+      "regions": ["arms"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "plain"]
+    },
+    "male_peasant_legs": {
+      "body": "male",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Peasant_Legs.gltf",
+      "outfit": "peasant",
+      "slot": "legs",
+      "item": "trousers",
+      "layer": 1,
+      "regions": ["legs"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "plain"]
+    },
+    "male_peasant_feet": {
+      "body": "male",
+      "source": "art/characters/quaternius/modular-outfits-fantasy/Male_Peasant_Feet.gltf",
+      "outfit": "peasant",
+      "slot": "feet",
+      "item": "shoes",
+      "layer": 1,
+      "regions": ["feet"],
+      "colourways": ["shipped"],
+      "dye_mask": null,
+      "tags": ["work", "plain"]
     }
   },
   "looks": {
@@ -111,8 +163,40 @@
       "pieces": { "body": "male_ranger_body", "arms": "male_ranger_arms", "legs": "male_ranger_legs", "feet": "male_ranger_boots" },
       "colourway": "shipped",
       "hair": null
+    },
+    "peasant": {
+      "about": "Their Peasant as made: the tunic and its sleeves as the shirt, the trousers, the shoes.",
+      "body": "male",
+      "pieces": { "body": "male_peasant_body", "arms": "male_peasant_arms", "legs": "male_peasant_legs", "feet": "male_peasant_feet" },
+      "colourway": "shipped",
+      "hair": null
     }
   },
-  "pairings": [],
+  "pairings": [
+    {"pieces":["male_peasant_arms","male_peasant_body"],"verdict":"theirs","over":"male_peasant_body","clips":30,"rest":0,"poke_mm":26.3,"worst":"Hammer_Loop@0.43","open":19,"frames":408},
+    {"pieces":["male_peasant_arms","male_peasant_feet"],"verdict":"apart"},
+    {"pieces":["male_peasant_arms","male_peasant_legs"],"verdict":"apart"},
+    {"pieces":["male_peasant_arms","male_ranger_body"],"verdict":"pass","over":"male_ranger_body","clips":34,"rest":0,"poke_mm":50.9,"worst":"Sitting_Exit@0.00","open":6,"frames":408,"worse":0,"theirs_rest":0},
+    {"pieces":["male_peasant_arms","male_ranger_boots"],"verdict":"apart"},
+    {"pieces":["male_peasant_arms","male_ranger_legs"],"verdict":"apart"},
+    {"pieces":["male_peasant_body","male_peasant_feet"],"verdict":"apart"},
+    {"pieces":["male_peasant_body","male_peasant_legs"],"verdict":"theirs","over":"male_peasant_body","clips":11,"rest":0,"poke_mm":73.5,"worst":"Roll@0.73","open":1,"frames":408},
+    {"pieces":["male_peasant_body","male_ranger_arms"],"verdict":"pass","over":"male_peasant_body","clips":28,"rest":0,"poke_mm":26.3,"worst":"Hammer_Loop@0.43","open":5,"frames":408,"worse":0,"theirs_rest":0},
+    {"pieces":["male_peasant_body","male_ranger_boots"],"verdict":"apart"},
+    {"pieces":["male_peasant_body","male_ranger_legs"],"verdict":"pass","over":"male_peasant_body","clips":10,"rest":0,"poke_mm":76.6,"worst":"Roll@0.73","open":0,"frames":408,"worse":0,"theirs_rest":0},
+    {"pieces":["male_peasant_feet","male_peasant_legs"],"verdict":"theirs","over":"male_peasant_feet","clips":34,"rest":10,"poke_mm":110.9,"worst":"Swim_Fwd_Loop@5.54","open":0,"frames":408},
+    {"pieces":["male_peasant_feet","male_ranger_arms"],"verdict":"apart"},
+    {"pieces":["male_peasant_feet","male_ranger_body"],"verdict":"apart"},
+    {"pieces":["male_peasant_feet","male_ranger_legs"],"verdict":"pass","over":"male_peasant_feet","clips":26,"rest":2,"poke_mm":109.6,"worst":"Swim_Fwd_Loop@5.54","open":0,"frames":408,"worse":0,"theirs_rest":10},
+    {"pieces":["male_peasant_legs","male_ranger_arms"],"verdict":"apart"},
+    {"pieces":["male_peasant_legs","male_ranger_body"],"verdict":"refused","over":"male_ranger_body","clips":23,"rest":0,"poke_mm":42.6,"worst":"Roll@0.73","open":10,"frames":408,"worse":22,"theirs_rest":0},
+    {"pieces":["male_peasant_legs","male_ranger_boots"],"verdict":"refused","over":"male_ranger_boots","clips":34,"rest":34,"poke_mm":116.2,"worst":"Swim_Dive_Loop@0.00","open":0,"frames":408,"worse":0,"theirs_rest":10},
+    {"pieces":["male_ranger_arms","male_ranger_body"],"verdict":"theirs","over":"male_ranger_body","clips":34,"rest":0,"poke_mm":69.1,"worst":"Swim_Fwd_Loop@5.54","open":6,"frames":408},
+    {"pieces":["male_ranger_arms","male_ranger_boots"],"verdict":"apart"},
+    {"pieces":["male_ranger_arms","male_ranger_legs"],"verdict":"apart"},
+    {"pieces":["male_ranger_body","male_ranger_boots"],"verdict":"apart"},
+    {"pieces":["male_ranger_body","male_ranger_legs"],"verdict":"theirs","over":"male_ranger_body","clips":16,"rest":0,"poke_mm":43.9,"worst":"Crouch_Idle_Loop@2.43","open":6,"frames":408},
+    {"pieces":["male_ranger_boots","male_ranger_legs"],"verdict":"theirs","over":"male_ranger_boots","clips":29,"rest":4,"poke_mm":108.6,"worst":"Swim_Fwd_Loop@1.51","open":1,"frames":408}
+  ],
   "populations": {}
 }

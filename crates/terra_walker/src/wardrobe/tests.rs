@@ -168,3 +168,76 @@ fn every_body_and_piece_of_the_catalogue_has_its_game_file() {
         assert!(assets.join(&file).is_file(), "{file} is missing");
     }
 }
+
+#[test]
+fn no_look_wearing_any_of_the_catalogues_items_composes_a_refused_pairing() {
+    let w = wardrobe();
+    let mut items: Vec<String> = w.pieces.values().filter_map(|p| p.item.clone()).collect();
+    items.sort();
+    items.dedup();
+    let mut checked = 0;
+    for (name, look) in &w.looks {
+        for worn in states(&items) {
+            let shown = w.compose(&look.body, name, Some(&worn));
+            assert!(
+                faults(w, &look.body, &shown).is_empty(),
+                "{name} wearing {worn:?}"
+            );
+            for (i, a) in shown.iter().enumerate() {
+                for b in &shown[i + 1..] {
+                    assert!(
+                        !w.refused(a, b),
+                        "{name} wearing {worn:?} shows {a} with {b}"
+                    );
+                }
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked >= 32, "only {checked} states checked");
+}
+
+#[test]
+fn a_refused_pairing_is_never_composed_and_no_look_may_wear_one() {
+    let catalogue = |look: &str| {
+        format!(
+            r#"{{
+            "slots": ["body", "legs"], "regions": ["head", "torso", "legs"],
+            "bodies": {{"b": {{"model": "m.glb", "pieces": "p", "head": "head", "bare": {{"body": "skin", "legs": "bare_legs"}}, "look": "plain"}}}},
+            "pieces": {{
+                "head": {{"body": "b", "regions": ["head"]}},
+                "skin": {{"body": "b", "slot": "body", "regions": ["torso"]}},
+                "bare_legs": {{"body": "b", "slot": "legs", "regions": ["legs"]}},
+                "coat": {{"body": "b", "slot": "body", "item": "coat", "regions": ["torso"]}},
+                "full_trousers": {{"body": "b", "slot": "legs", "item": "trousers", "regions": ["legs"]}},
+                "narrow_trousers": {{"body": "b", "slot": "legs", "item": "trousers", "regions": ["legs"]}},
+                "kilt": {{"body": "b", "slot": "legs", "item": "kilt", "regions": ["legs"]}}
+            }},
+            "looks": {{"plain": {{"body": "b", "pieces": {look}}}}},
+            "pairings": [
+                {{"pieces": ["coat", "full_trousers"], "verdict": "refused", "worse": 22}},
+                {{"pieces": ["coat", "kilt"], "verdict": "refused"}},
+                {{"pieces": ["coat", "narrow_trousers"], "verdict": "pass"}}
+            ]
+        }}"#
+        )
+    };
+    let bad = Wardrobe::parse(&catalogue(r#"{"body": "coat", "legs": "full_trousers"}"#));
+    assert!(bad.unwrap_err().contains("refused pairing"));
+    let w = Wardrobe::parse(&catalogue(r#"{"legs": "full_trousers"}"#)).unwrap();
+    let wearing = |items: &[&str]| -> Vec<String> { items.iter().map(|s| s.to_string()).collect() };
+    // The look's own trousers, until the coat is worn: then the trousers that pair with it.
+    assert_eq!(
+        w.compose("b", "plain", Some(&wearing(&["trousers"]))),
+        ["skin", "full_trousers", "head"]
+    );
+    assert_eq!(
+        w.compose("b", "plain", Some(&wearing(&["coat", "trousers"]))),
+        ["coat", "narrow_trousers", "head"]
+    );
+    // Nothing that pairs: the slot shows bare rather than the refused pairing.
+    assert_eq!(
+        w.compose("b", "plain", Some(&wearing(&["coat", "kilt"]))),
+        ["coat", "bare_legs", "head"]
+    );
+}

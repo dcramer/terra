@@ -15,7 +15,9 @@
 //   moves with him in the game and stands where it was made.
 // - **looks**: every look in every state of undress, composed by the game's own rule
 //   (`terra_walker::wardrobe::compose`, its tests run here): each slot filled or bare, every
-//   region drawn once, no piece twice.
+//   region drawn once, no piece twice, no pairing the matrix refuses.
+// - **pairings**: every two worn pieces of a body's different slots measured (pairings.ts writes
+//   the rows; the game composes no refused one).
 //
 // Node 22.18 or later; no dependencies. Exits 1 on any failure, its details under the stage.
 
@@ -26,6 +28,7 @@ import { fileURLToPath } from "node:url";
 import { gltfFiles, type Wardrobe, wardrobeData } from "./build_steps.ts";
 import { Glb, matrix, mmul, posed } from "./glb.ts";
 import { check, sources } from "./intact.ts";
+import { figures, type Pairing, pairs } from "./pairings.ts";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const LOG = join(ROOT, "target", "check", "wardrobe.log");
@@ -51,6 +54,19 @@ function catalogue(w: Wardrobe): Stage {
   for (const [name, l] of Object.entries(w.looks)) for (const [s, p] of Object.entries(l.pieces)) on(p, l.body, s, `look ${name}'s ${s}`);
   const n = (o: object) => Object.keys(o).length;
   return { name: "catalogue", faults, said: `${n(w.bodies)} bodies, ${n(w.pieces)} pieces, ${n(w.looks)} looks` };
+}
+
+/** Every two worn pieces of a body's different slots have their measured row, so a new piece
+ *  waits on the matrix (pairings.ts) before the game may compose it with another. */
+function pairings(w: Wardrobe): Stage {
+  const rows = (w as Wardrobe & { pairings?: Pairing[] }).pairings ?? [];
+  const has = new Set(rows.map((r) => [...r.pieces].sort().join("|")));
+  const want = pairs(w);
+  const faults = want.filter(([a, b]) => !has.has([a, b].sort().join("|"))).map(([a, b]) => `${a} with ${b} is not measured: node tools/characters/pairings.ts`);
+  for (const r of rows) for (const p of r.pieces) if (!w.pieces[p]) faults.push(`a pairing names ${p}, which is not a piece`);
+  const n = (v: string) => rows.filter((r) => r.verdict === v).length;
+  const dressed = Object.keys(w.bodies).map((b) => `${b} ${figures(w, rows, b).count}`);
+  return { name: "pairings", faults, said: `${want.length} pairings measured: ${n("apart")} apart, ${n("theirs")} theirs, ${n("pass")} pass, ${n("refused")} refused; dressed figures they let through: ${dressed.join(", ")}` };
 }
 
 const pieceFile = (w: Wardrobe, piece: string) => `assets/${w.bodies[w.pieces[piece].body].pieces}/${piece}.gltf`;
@@ -122,7 +138,7 @@ if (import.meta.main) {
   writeFileSync(LOG, "");
   const w = wardrobeData(ROOT);
   let failed = false;
-  for (const stage of [catalogue, files, intact, bound, looks]) {
+  for (const stage of [catalogue, pairings, files, intact, bound, looks]) {
     const s = stage(w);
     console.log(s.faults.length ? `✗ ${s.name}\n  ${s.faults.join("\n  ")}` : `✓ ${s.name}: ${s.said}`);
     if (s.faults.length) {

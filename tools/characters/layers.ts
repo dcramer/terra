@@ -319,8 +319,13 @@ export type Run = { rest: Frame; worst: Frame & { clip: string; t: number }; ope
  *  stands off the back (fit_gear.py's REACH_BACK_M). */
 const REACH_M = 0.3;
 
+/** Which of the inner's edges the outer must keep covered: its top edge (a waistband under a
+ *  tunic), or every open edge of it within 8 cm of the outer (a trouser hem inside a boot, a
+ *  shoe's top under a trouser leg), for a pairing of any two slots (pairings.ts). */
+export type Edge = "top" | "near";
+
 /** Two files' pieces made ready to measure, and one frame measured: `one(clip, t)`. */
-export function pair(outerFile: string, innerFile: string, clipsFile = MANNEQUIN) {
+export function pair(outerFile: string, innerFile: string, clipsFile = MANNEQUIN, edges: Edge = "top") {
   const body = new Glb(outerFile);
   const from = new Glb(clipsFile);
   const outer = joined(pieces(body));
@@ -328,7 +333,8 @@ export function pair(outerFile: string, innerFile: string, clipsFile = MANNEQUIN
   const children = new Map<string, string[]>();
   body.gltf.nodes.forEach((n) => n.name && children.set(n.name, (n.children ?? []).map((c) => body.gltf.nodes[c].name ?? "")));
   const near = within(inner, outer, 0.08);
-  const edge = topEdge(inner);
+  const close = new Set(near);
+  const edge = edges === "top" ? topEdge(inner) : openEdge(inner).filter((i) => close.has(i));
   const tris = trianglesNear(outer, inner, [...new Set([...near, ...edge])], 0.15);
   const still = retargeted(body, body, undefined, 0);
   const listed = new Set(tris);
@@ -341,12 +347,12 @@ export function pair(outerFile: string, innerFile: string, clipsFile = MANNEQUIN
     const grid = new Grid(vo, outer.tris, (k) => listed.has(k));
     return cover(inner, skinned(inner, joints), vo, outer.tris, (o, d, l) => grid.along(o, d, l + REACH_M, buf), joints, children, near, edge);
   };
-  return { body, from, outer, inner, one };
+  return { body, from, outer, inner, near, edge, one };
 }
 
 /** The inner under the outer through every clip of `clips`, `frames` moments each. */
-export function measure(outerFile: string, innerFile: string, clipsFile = MANNEQUIN, frames = 12): Run {
-  const { from, one } = pair(outerFile, innerFile, clipsFile);
+export function measure(outerFile: string, innerFile: string, clipsFile = MANNEQUIN, frames = 12, edges: Edge = "top"): Run {
+  const { from, one } = pair(outerFile, innerFile, clipsFile, edges);
   const rest = one(undefined, 0);
   const run: Run = { rest, worst: { ...rest, clip: "rest", t: 0 }, open: { ...rest, clip: "rest", t: 0 }, frames: 0, poked: 0, holed: 0, clips: new Map() };
   for (const name of from.clipNames()) {
