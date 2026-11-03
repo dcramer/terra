@@ -106,7 +106,7 @@ impl CrownShadow {
             return false;
         }
         lumps.each.iter().any(|(middle, half)| {
-            let half = half.max(Vec3::splat(0.05));
+            let half = (*half * LUMP_DRAWN).max(Vec3::splat(0.05));
             let (o, d) = ((from - *middle) / half, along / half);
             let (a, b, c) = (d.dot(d), o.dot(d), o.dot(o) - 1.0);
             let disc = b * b - a * c;
@@ -118,6 +118,13 @@ impl CrownShadow {
         })
     }
 }
+
+/// How big a shadow lump is drawn against the ball its half sizes give: the shadow pass's
+/// lump is six round and four rings high, its corners on the ball, so it covers what a ball
+/// this much smaller across (as wide as the hexagon, as tall as the octagon, by area) would.
+/// Tested as the whole ball, a crown of many small lumps (D598's fuller crowns) hid a fifth
+/// more of a path's verge from a low sun than its rendered shadow did (`lush/sun_tests.rs`).
+const LUMP_DRAWN: Vec3 = Vec3::new(0.91, 0.95, 0.91);
 
 /// A line through a crown within this share of its size, as thick as its leaves close, is
 /// hidden by them; one through the rest of it passes the gaps at its edge.
