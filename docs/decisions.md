@@ -667,7 +667,7 @@ Checks, developer tools, languages and the repository.
 | [D577](decisions/D577.md) | Tracy is the profiler for the detail | Tech | Agent | Decided | A `tracy` feature on `terra_sandbox`… |
 | [D578](decisions/D578.md) | A play benchmark measures the load and the freezes of a walk | Tech | Agent | Decided | `cargo xtask bench` gets a scene timed from the… |
 | [D581](decisions/D581.md) | `make play` runs the release build | Tech | Agent | Decided | `cargo xtask play` (`make play`, `yard`) builds and runs… |
-| [D607](decisions/D607.md) | Performance budgets are one data file the bench gates, with a settle phase after the load | Tech | Agent | Leaning | The game's performance budgets live in one data file… |
+| [D607](decisions/D607.md) | Performance budgets are one data file the bench gates, with a settle phase after the load | Tech | Agent | Decided | The game's performance budgets live in one data file… |
 | [D609](decisions/D609.md) | A performance probe is one tool on main that measures only a settled frame | Tech | Agent | Decided | A probe of what a change costs (a shader's variant, a… |
 | [D610](decisions/D610.md) | The play scenes are benched at each landing, a failure bisected unattended, and an A/B reads main's side from it | Tech | Agent | Leaning | A continuous row `perf` (`tools/continuous/checks.json`… |
 
