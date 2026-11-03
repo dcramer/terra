@@ -23,13 +23,33 @@ fn a_meadows_drifts_vary_smoothly_over_its_whole_range() {
     let (mut low, mut high) = (1.0f32, 0.0f32);
     for i in 0..400 {
         let p = Vec2::new(i as f32 * 0.37, i as f32 * 0.21);
-        let v = patch(p);
+        let v = patch(7, p);
         assert!((0.0..=1.0).contains(&v));
-        assert!((patch(p + Vec2::splat(0.01)) - v).abs() < 0.05);
+        assert!((patch(7, p + Vec2::splat(0.01)) - v).abs() < 0.05);
         low = low.min(v);
         high = high.max(v);
     }
     assert!(low < 0.2 && high > 0.8, "{low} {high}");
+}
+
+/// D596: a world's meadows drift by its own seed, so two worlds' meadows drift apart, and a
+/// world's drift is the same each time it is made.
+#[test]
+fn two_worlds_meadows_drift_apart() {
+    let world = |seed| {
+        meadow_seed(&Planet::new(terra_core::PlanetSpec {
+            seed: terra_gen::Seed(seed),
+            radius_m: 2000.0,
+        }))
+    };
+    let (one, two) = (world(1), world(2));
+    assert_eq!(one, world(1));
+    let drifts = |seed| (0..200).map(move |i| patch(seed, Vec2::new(i as f32 * 0.7, 3.1)));
+    let apart = drifts(one)
+        .zip(drifts(two))
+        .filter(|(a, b)| (a - b).abs() > 0.05)
+        .count();
+    assert!(apart > 100, "{apart} of 200 places drift apart");
 }
 
 /// D381: a plot and the square are trodden over a few seconds as the settlement rises,

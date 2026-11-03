@@ -506,11 +506,12 @@ fn treading(worn: f32) -> (f32, f32) {
     (libm::sqrtf(w), w * w)
 }
 
-/// Smooth value noise from 0 to 1 over a place, a unit a cell: the drifts of a meadow's mix.
-fn patch(p: Vec2) -> f32 {
+/// Smooth value noise from 0 to 1 over a place, a unit a cell: the drifts of a meadow's mix,
+/// laid by the world's seed (`meadow_seed`, D596), so another world's meadow drifts elsewhere.
+fn patch(seed: u32, p: Vec2) -> f32 {
     let hash = |x: i32, y: i32| {
         let h = terra_gen::hash::prospector32_round(
-            (x as u32).wrapping_mul(0x9e37_79b9) ^ (y as u32).wrapping_mul(0x85eb_ca6b),
+            seed ^ (x as u32).wrapping_mul(0x9e37_79b9) ^ (y as u32).wrapping_mul(0x85eb_ca6b),
         );
         (h & 0xffff) as f32 / 65535.0
     };
@@ -523,6 +524,11 @@ fn patch(p: Vec2) -> f32 {
     top + (bottom - top) * sy
 }
 
+/// The seed a world's meadows drift by: its own, derived for them (D596).
+fn meadow_seed(planet: &Planet) -> u32 {
+    planet.seed().derive("meadow").0 as u32
+}
+
 /// A meadow is a mix (D381): taller grass in drifts, greener and drier patches, and toward
 /// the forest's edge (`kept` of it kept here) bracken and low shrubs coming back into the
 /// clearing; along a lowland lake's bank rank grass and sedge.
@@ -533,10 +539,11 @@ fn meadow_mix(
     kept: f32,
     growing: &mut terra_world::cover::Growing,
 ) {
-    growing.tall = (patch(p / 9.0) - 0.35).max(0.0) * 1.5;
-    growing.lush = (growing.lush + (patch(p / 14.0 + 31.0) - 0.5) * 0.4).clamp(0.0, 1.0);
+    let seed = meadow_seed(planet);
+    growing.tall = (patch(seed, p / 9.0) - 0.35).max(0.0) * 1.5;
+    growing.lush = (growing.lush + (patch(seed, p / 14.0 + 31.0) - 0.5) * 0.4).clamp(0.0, 1.0);
     let edge = (kept / MEADOW_KEPT).clamp(0.0, 1.0);
-    growing.shrub = edge * (patch(p / 5.0 + 77.0) - 0.45).max(0.0) * 1.2;
+    growing.shrub = edge * (patch(seed, p / 5.0 + 77.0) - 0.45).max(0.0) * 1.2;
     // A lowland lake's bank in a meadow: rank grass and sedge thick and tall along the
     // waterline in clumps, as reeds and sedge fringe a lake by a pasture, hiding where the
     // water meets the bank (D381). The lakes' grid is asked first, which is cheap.
@@ -546,7 +553,7 @@ fn meadow_mix(
     {
         let over = ground.length() - level;
         let band = smoothstep(-0.15, 0.05, over) * (1.0 - smoothstep(0.6, 1.4, over));
-        let fringe = band * (0.55 + 0.9 * patch(p / 4.0 + 13.0)).min(1.0);
+        let fringe = band * (0.55 + 0.9 * patch(seed, p / 4.0 + 13.0)).min(1.0);
         growing.grass = growing.grass.max(fringe);
         growing.tall = growing.tall.max(fringe * 1.3);
         growing.lush = growing.lush.max(fringe);
