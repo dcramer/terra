@@ -7,7 +7,7 @@
 // commit, which the alert then names. One perf bench at a time, a rest between two, so the row
 // never holds the box with benches back to back (D319, D445).
 
-import { type Bisect, CAP, found, next as nextStep, start, step } from "./bisect.ts";
+import { type Bisect, CAP, found, next as nextStep, type Options, start, step } from "./bisect.ts";
 import { changeLine, FLOORS, type Judged, judge, METRICS, type Metric, type Point, series, type Why } from "./history.ts";
 
 /// A landing's metric past its band, waiting for its retrigger.
@@ -90,11 +90,15 @@ export function ingest(s0: State, job: InFlight, points: Point[], history: Point
   if (job.why === "bisect") {
     const b = s.bisect;
     if (!b) return { state: s, lines };
-    const p = points.find((p) => p.scene === b.scene);
-    s.bisect = step(b, job.rev, p?.values[b.metric]);
-    if (!p) lines.push(`· perf bisect: ${job.rev.slice(0, 9)} gave no ${b.scene} numbers, skipped`);
-    const { goodValue: g, badValue: v } = s.bisect;
-    if (g !== undefined && v !== undefined && v - g <= (FLOORS[b.metric].abs ?? 0)) {
+    // Every run of every scene it judges: a step of five runs of two scenes is ten samples.
+    const scenes = b.scenes ?? [b.scene];
+    const samples = points.filter((p) => scenes.includes(p.scene)).flatMap((p) => (p.values[b.metric] === undefined ? [] : [p.values[b.metric] as number]));
+    const floor = FLOORS[b.metric].abs ?? 0;
+    s.bisect = step(b, job.rev, samples, floor);
+    lines.push(samples.length ? `· perf bisect ${b.scene} ${b.metric}: ${job.rev.slice(0, 9)}${job.end ? ` (the ${job.end} end)` : ""} ran ${samples.join(", ")}` : `· perf bisect: ${job.rev.slice(0, 9)} gave no ${scenes.join(", ")} numbers, skipped`);
+    const { goodValue, goodWorst, badValue: v } = s.bisect;
+    const g = b.metric === "hitches" ? goodWorst : goodValue;
+    if (g !== undefined && v !== undefined && v - g <= floor) {
       lines.push(`· perf bisect ${b.scene} ${b.metric} ${b.good.slice(0, 9)}..${b.bad.slice(0, 9)}: its ends measured ${g} and ${v}, no change to look for`);
       s.bisect = s.waiting.shift();
     } else if (!nextStep(s.bisect)) lines.push(...finishBisect(s));
@@ -186,7 +190,7 @@ function finishBisect(s: State): string[] {
 }
 
 /// A bisect asked for by hand (`perf.ts bisect`): its ends measured first unless known.
-export function askBisect(s: State, scene: string, metric: Metric, good: string, bad: string, range: string[], cap = CAP): State {
-  const b = start(scene, metric, good, bad, range, {}, cap);
+export function askBisect(s: State, scene: string, metric: Metric, good: string, bad: string, range: string[], cap = CAP, options: Options = {}): State {
+  const b = start(scene, metric, good, bad, range, {}, cap, undefined, options);
   return s.bisect ? { ...s, waiting: [...s.waiting, b] } : { ...s, bisect: b };
 }

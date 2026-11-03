@@ -173,6 +173,23 @@ test("the whole row on the fake bench bisects the alert to its first bad commit 
   assert.equal(s.bisect, undefined);
 });
 
+test("a flaky metric's bisect judges every run: a step is bad when one run hitched past the good end's worst", () => {
+  // Bad from c07 on: about 8 hitches in one run of three, else 0 or 1 (2026-11-03's forest-run).
+  let run = 0;
+  const runs = (rev: string) => Array.from({ length: 10 }, () => (commits.indexOf(rev) >= 7 && ++run % 3 === 0 ? 8 : run++ % 2));
+  const range = commits.slice(1, 13);
+  let b = start("forest-run", "hitches", commits[0], commits[12], range, {}, 7, undefined, { scenes: ["forest-run", "lake-play"], runs: 5 });
+  for (let n = 0; n < 7; n++) {
+    const pick = next(b);
+    if (!pick) break;
+    b = step(b, pick.rev, runs(pick.rev), FLOORS.hitches.abs);
+  }
+  assert.equal(b.goodWorst, 1);
+  assert.equal(found(b).first, commits[7], JSON.stringify(b));
+  // A mean would have called a bad step good: 8 in one run of ten is a mean under the floor.
+  assert.ok(8 / 10 < (FLOORS.hitches.abs ?? 0));
+});
+
 test("a regression in a batch of one commit names it without a bisect", () => {
   const bench = fakeBench(11);
   const history: Point[] = [];

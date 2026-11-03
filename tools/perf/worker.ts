@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { type Box, box, boxEnv, git, outDir, readJob, wake, writeJob } from "../render-worker/box.ts";
 import { type Job, jobId } from "../render-worker/jobs.ts";
 import { appended, HISTORY_HEADER, historyLine, METRICS, type Metric, type Point, pointOf, readHistory, series, WINDOW } from "./history.ts";
+import type { Options } from "./bisect.ts";
 import { alertLine, askBisect, empty, ingest, plan, type State } from "./sheriff.ts";
 
 export type Row = { scenes: string[]; runs: number; reads: string[]; origin: string; every: number; rest: number; cap: number; minutes: number };
@@ -57,7 +58,16 @@ function tipOfMain(b: Box, origin: string): string | { error: string } {
 }
 
 /// The bench job of the row at `rev`, queued in the box's own queue under refs/jobs/<id>.
-function queueBench(b: Box, r: Row, rev: string, why: string, now: Date): Job | { error: string } {
+/// A bisect's step of a flaky metric is `runs` benches of one run each, every one its own load,
+/// with `patch` applied first where the commit lacks it.
+export function benchCommand(scenes: string[], runs: number, o: Options = {}): string[] {
+  const bench = `cargo xtask bench ${scenes.join(" ")} --runs 1 --record`;
+  if (!o.patch && (o.runs ?? 1) <= 1) return ["cargo", "xtask", "bench", ...scenes, "--runs", String(runs), "--record"];
+  const patch = o.patch ? `{ git merge-base --is-ancestor ${o.patch} HEAD || git -c user.name=perf -c user.email=perf@terra.invalid cherry-pick --no-commit ${o.patch} || exit 3; }; ` : "";
+  return ["sh", "-c", `${patch}for i in $(seq ${o.runs ?? 1}); do ${bench}; done; true`];
+}
+
+function queueBench(b: Box, r: Row, rev: string, why: string, now: Date, o: Options = {}): Job | { error: string } {
   const id = jobId(now, Math.random().toString(16).slice(2, 6).padEnd(4, "0"));
   const ref = git(b.repo, ["update-ref", `refs/jobs/${id}`, rev]);
   if (ref.status !== 0) return { error: `git update-ref refs/jobs/${id} ${rev.slice(0, 9)}: ${ref.stderr.trim()}` };
@@ -65,7 +75,7 @@ function queueBench(b: Box, r: Row, rev: string, why: string, now: Date): Job | 
     id,
     kind: "run",
     rev,
-    command: ["cargo", "xtask", "bench", ...r.scenes, "--runs", String(r.runs), "--record"],
+    command: benchCommand(o.scenes ?? r.scenes, r.runs, o),
     collect: ["research/benchmarks.csv"],
     cook: true,
     minutes: r.minutes,
@@ -137,7 +147,7 @@ export function tick(b: Box, say: (line: string) => void, now = new Date(), forc
   const touched = !s.benched || git(b.repo, ["diff", "--quiet", s.benched, tip, "--", ...r.reads]).status !== 0;
   const p = plan(s, tip, touched, now.getTime(), r.rest);
   if ("wait" in p) return;
-  const job = queueBench(b, r, p.rev, p.why, now);
+  const job = queueBench(b, r, p.rev, p.why, now, p.why === "bisect" && s.bisect ? s.bisect : {});
   if ("error" in job) return note([`✗ perf: ${job.error}`]);
   s = { ...s, job: { id: job.id, rev: p.rev, why: p.why, end: p.end } };
   saveState(b, s);
@@ -191,15 +201,23 @@ export function perfCommand(b: Box, args: string[]): number {
     console.log(JSON.stringify(mainSide(b, rev)));
     return 0;
   }
-  if (what === "bisect" && rest.length === 4 && (METRICS as string[]).includes(rest[1])) {
-    const [scene, metric, goodArg, badArg] = rest;
+  if (what === "bisect" && rest.length >= 4 && (METRICS as string[]).includes(rest[1])) {
+    const [scene, metric, goodArg, badArg, ...flags] = rest;
+    // --scenes a,b  --runs 5  --patch <sha>  --cap 7: a flaky metric's bisect (bisect.ts Options).
+    const flag = (name: string) => flags[flags.indexOf(name) + 1] ?? undefined;
+    const opts: Options = {
+      scenes: flags.includes("--scenes") ? flag("--scenes")?.split(",") : undefined,
+      runs: flags.includes("--runs") ? Number(flag("--runs")) : undefined,
+      patch: flags.includes("--patch") ? git(b.repo, ["rev-parse", "-q", "--verify", `${flag("--patch")}^{commit}`]).stdout.trim() || undefined : undefined,
+    };
+    const cap = flags.includes("--cap") ? Number(flag("--cap")) : row().cap;
     const tipped = tipOfMain(b, row().origin);
     if (typeof tipped !== "string") return console.log(`✗ perf: ${tipped.error}`), 1;
     const [good, bad] = [goodArg, badArg].map((c) => git(b.repo, ["rev-parse", "-q", "--verify", `${c}^{commit}`]).stdout.trim());
     if (!good || !bad) return console.log(`✗ perf: the box lacks ${good ? badArg : goodArg}; it fetches main, so name commits on main`), 1;
     const range = commitsBetween(b.repo, good, bad, row().reads);
     if (!range.length) return console.log(`✗ perf: no commit in ${goodArg}..${badArg} touches what the row reads (row.json reads)`), 1;
-    saveState(b, askBisect(s, scene, metric as Metric, good, bad, range, row().cap));
+    saveState(b, askBisect(s, scene, metric as Metric, good, bad, range, cap, opts));
     console.log(`✓ perf: bisect of ${scene} ${metric} over ${range.length} commits queued${s.bisect ? " behind the one running" : ""}; its ends are benched first; \`node tools/perf/perf.ts\` follows it`);
     return 0;
   }
