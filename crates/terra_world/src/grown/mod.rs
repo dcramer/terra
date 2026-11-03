@@ -431,6 +431,9 @@ impl MaterialExtension for FoliageExtension {
         key: bevy::pbr::MaterialExtensionKey<Self>,
     ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
         test_depth_early(descriptor, key.mesh_key);
+        // foliage.wesl has a second entry point for meshes carrying pivots (D597's
+        // experiment), so wgpu cannot pick one on its own.
+        descriptor.vertex.entry_point = Some("vertex".into());
         Ok(())
     }
 }

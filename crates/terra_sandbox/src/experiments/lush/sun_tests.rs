@@ -51,7 +51,7 @@ fn pine_stand() -> (SkyOccluders, Vec<(Vec3, f32, Vec<[Vec3; 3]>)>) {
             let mut dice = Seed(7).derive("tree").index(kind as u64).rng();
             let height = dice.range(low, high);
             let tree = species::conifer(&mut dice, height, species, form, young);
-            let build = crown_clumps(&tree, SHADOW_LUMP, true);
+            let build = crown_clumps(&tree, SHADOW_LUMP, true, &[]);
             let triangles: Vec<[Vec3; 3]> = build
                 .indices
                 .chunks(3)

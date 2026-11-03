@@ -16,12 +16,20 @@ const FAR_POINT: f32 = std::f32::consts::SQRT_2;
 /// rounded lump for each branch, as big as most of its leaves, solid so the GPU can skip
 /// what is hidden. The light no longer comes through in flecks, which nobody sees at that
 /// distance.
-pub(super) fn crown_clumps(tree: &Tree, scale: f32, shadow: bool) -> Build {
+/// With `pivots`, one a tip, each lump carries its branch's first clump's great limb pivot,
+/// so it turns with the limb whose leaves it stands for (D597's wind in levels).
+pub(super) fn crown_clumps(tree: &Tree, scale: f32, shadow: bool, pivots: &[[f32; 4]]) -> Build {
     let mut build = Build {
         offset_in_colour: shadow,
+        levels: !pivots.is_empty(),
         ..Default::default()
     };
-    for (centre, radii) in lumps_of(tree, scale) {
+    // Each lump's branch's first tip, in the order `lumps_of` makes them.
+    let firsts = (0..tree.branches)
+        .filter_map(|branch| tree.branch_of.iter().position(|&of| of == branch))
+        .collect::<Vec<_>>();
+    for ((centre, radii), first) in lumps_of(tree, scale).into_iter().zip(firsts) {
+        build.pivot = pivots.get(first).copied();
         if shadow {
             lump(&mut build, centre, radii);
         } else {

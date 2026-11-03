@@ -64,6 +64,7 @@ mod footing;
 mod kinds;
 mod lump;
 mod overgrowth;
+mod pivots;
 mod seasons;
 mod shade;
 mod species;
@@ -286,10 +287,11 @@ impl MaterialExtension for FoliageExtension {
     fn specialize(
         _pipeline: &bevy::pbr::MaterialExtensionPipeline,
         descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
-        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        layout: &bevy::mesh::MeshVertexBufferLayoutRef,
         key: bevy::pbr::MaterialExtensionKey<Self>,
     ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
         terra_world::grown::test_depth_early(descriptor, key.mesh_key);
+        pivots::specialize(descriptor, layout);
         Ok(())
     }
 }
@@ -897,7 +899,9 @@ fn grow(
     let (leaf, tint, far_material) = (leaf_of[s], CROWN_TINTS[s], &far_crowns[s]);
     let (bark, bark_m) = barks[which].clone();
     let bark_m = bark_m * (tree.trunk_m / BARK_FOR_M).clamp(0.8, 1.5);
-    let wood = [0, 1, 2, FINE].map(|detail| wood(&tree, detail, height, bark_m));
+    // Each limb's and clump's pivot, for wind in levels (D597).
+    let pivots = pivots::of(&tree);
+    let wood = [0, 1, 2, FINE].map(|detail| wood(&tree, detail, height, bark_m, &pivots.limbs));
     // Every level of the crown, and its shadow, from one set of cards (D221).
     let mut cards = species::crown_cards(&mut dice, &tree, height, leaf);
     for card in cards.iter_mut().flatten() {
@@ -907,11 +911,17 @@ fn grow(
     // pine, grown about twice to cover its clump, merged its separate tufts into a blob as
     // wide as a broadleaf's at 40 m (D318).
     let keep = 2;
-    let near = crown_near(&cards, keep);
-    let far = crown_far(&cards, keep);
-    let shadow = crown_stand_in(&cards);
-    let clumps = crown_clumps(&tree, 1.0, false);
-    let lumps = crown_clumps(&tree, SHADOW_LUMP, true);
+    let tips: Vec<[[f32; 4]; 2]> = pivots
+        .tips
+        .iter()
+        .zip(&pivots.twigs)
+        .map(|(&limb, &twig)| [limb, twig])
+        .collect();
+    let near = crown_near(&cards, keep, &tips);
+    let far = crown_far(&cards, keep, &tips);
+    let shadow = crown_stand_in(&cards, &tips);
+    let clumps = crown_clumps(&tree, 1.0, false, &[]);
+    let lumps = crown_clumps(&tree, SHADOW_LUMP, true, &pivots.tips);
     info!(
         "lush: tree {kind}, {species:?} {form:?}{}, {height:.0} m: wood {} {} {} triangles, crown {} near and {} far, shadows {} {}",
         if young { " young" } else { "" },
@@ -1750,10 +1760,20 @@ struct Build {
     /// or lump's middle in its colour, since Bevy's shadow passes are given no tangents
     /// (D234).
     offset_in_colour: bool,
+    /// For a grown tree's wood and crowns, wind in levels (D597, `pivots`): each vertex's
+    /// great limb's pivot, the one the next vertices take, and whether the mesh carries them.
+    pivots: Vec<[f32; 4]>,
+    pivot: Option<[f32; 4]>,
+    /// Each vertex's clump's own pivot, where it sits on its limb (`pivots::ATTRIBUTE_TWIG`).
+    twigs: Vec<[f32; 4]>,
+    twig: Option<[f32; 4]>,
+    levels: bool,
 }
 
 impl Build {
     fn vertex(&mut self, at: Vec3, normal: Vec3, uv: Vec2, sway: Vec2, colour: Vec3) -> u32 {
+        self.pivots.push(self.pivot.unwrap_or(pivots::NO_PIVOT));
+        self.twigs.push(self.twig.unwrap_or(pivots::NO_PIVOT));
         self.positions.push(at.into());
         self.normals.push(normal.into());
         self.uvs.push(uv.into());
@@ -1777,6 +1797,12 @@ impl Build {
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.sway)
         .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.colours)
         .with_inserted_indices(Indices::U32(self.indices));
+        let mesh = if self.levels {
+            mesh.with_inserted_attribute(pivots::ATTRIBUTE_PIVOT, self.pivots)
+                .with_inserted_attribute(pivots::ATTRIBUTE_TWIG, self.twigs)
+        } else {
+            mesh
+        };
         if self.dropping.is_empty() {
             mesh
         } else {
@@ -1848,7 +1874,7 @@ struct Tree {
 /// dither, and a canopy's worth of twigs leaving the sun's view at once, where the near level
 /// gives way to the next, popped the light shafts through it (D309). The crown's shadow
 /// stand-in already casts their share.
-fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
+fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2, pivots: &[[f32; 4]]) -> Build {
     // Near the camera, round enough that no limb shows facets and a trunk's roots each have
     // sides to swell on (D264).
     let (deepest, sides) = match tree.species {
@@ -1866,7 +1892,10 @@ fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
     } else {
         u32::MAX
     };
-    let mut build = Build::default();
+    let mut build = Build {
+        levels: !pivots.is_empty(),
+        ..default()
+    };
     let mut dead = Vec::new();
     for (i, limb) in tree.limbs.iter().enumerate() {
         if limb.depth > deepest
@@ -1875,6 +1904,7 @@ fn wood(tree: &Tree, detail: usize, height: f32, bark_m: Vec2) -> Build {
         {
             continue;
         }
+        build.pivot = pivots.get(i).copied();
         let from = build.positions.len();
         tube(
             &mut build,
@@ -2173,9 +2203,15 @@ fn tube(build: &mut Build, limb: &Limb, sides: u32, height: f32, bark_m: Vec2) {
 /// shrinks to its middle one by one with distance while the rest grow to cover as much, as
 /// SpeedTree's leaves drop out: the crown thins without ever being swapped (D223), down to
 /// `keep` a clump.
-fn crown_near(cards: &[Vec<Card>], keep: usize) -> Build {
-    let mut build = Build::default();
-    for tip in cards {
+/// With `pivots`, one a tip, it carries them for wind in levels (D597); empty, it does not.
+fn crown_near(cards: &[Vec<Card>], keep: usize, pivots: &[[[f32; 4]; 2]]) -> Build {
+    let mut build = Build {
+        levels: !pivots.is_empty(),
+        ..default()
+    };
+    for (i, tip) in cards.iter().enumerate() {
+        build.pivot = pivots.get(i).map(|p| p[0]);
+        build.twig = pivots.get(i).map(|p| p[1]);
         for (k, card) in tip.iter().enumerate() {
             card.draw_ranked(&mut build, 1.0, Some((k, tip.len(), keep)));
         }
@@ -2186,9 +2222,14 @@ fn crown_near(cards: &[Vec<Card>], keep: usize) -> Build {
 /// A crown far off: `keep` cards a clump, the first of its near crown's, grown as they are
 /// there when the rest have dropped out (D223): two (D318), each the rectangle round its
 /// leaves rather than their octagon (`Card::draw_far`).
-fn crown_far(cards: &[Vec<Card>], keep: usize) -> Build {
-    let mut build = Build::default();
-    for tip in cards {
+fn crown_far(cards: &[Vec<Card>], keep: usize, pivots: &[[[f32; 4]; 2]]) -> Build {
+    let mut build = Build {
+        levels: !pivots.is_empty(),
+        ..default()
+    };
+    for (i, tip) in cards.iter().enumerate() {
+        build.pivot = pivots.get(i).map(|p| p[0]);
+        build.twig = pivots.get(i).map(|p| p[1]);
         let keep = keep.min(tip.len());
         let grow = libm::powf(tip.len() as f32 / keep as f32, 0.55);
         for card in &tip[..keep] {
@@ -2201,12 +2242,15 @@ fn crown_far(cards: &[Vec<Card>], keep: usize) -> Build {
 /// What a crown's shadow is cast from near the camera: the first two cards of every tip,
 /// the same as the crown's own, enlarged as the simpler levels are, so the light still
 /// comes through in flecks where it does through the crown.
-fn crown_stand_in(cards: &[Vec<Card>]) -> Build {
+fn crown_stand_in(cards: &[Vec<Card>], pivots: &[[[f32; 4]; 2]]) -> Build {
     let mut build = Build {
         offset_in_colour: true,
+        levels: !pivots.is_empty(),
         ..default()
     };
-    for tip in cards {
+    for (i, tip) in cards.iter().enumerate() {
+        build.pivot = pivots.get(i).map(|p| p[0]);
+        build.twig = pivots.get(i).map(|p| p[1]);
         let keep = 2.min(tip.len());
         // Two cards for all of a clump's, a little smaller than they cover together, as the
         // clumps overlap: grown as far as the levels grow theirs, a crown of more clumps closed

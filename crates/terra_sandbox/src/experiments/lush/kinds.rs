@@ -147,7 +147,16 @@ fn veteran(n: usize, with: &Grow, meshes: &mut Assets<Mesh>, shapes: &mut Shapes
         // Its trunk does not sway, so nor do its leaves much with it.
         card.sway.x *= 0.25;
     }
-    let near = crown_near(&cards, 2);
+    // Its limbs are modelled and stand still, so its clumps stir at the twig's level alone
+    // (D597's wind in levels).
+    let pivots = super::pivots::of(&tree);
+    let tips: Vec<[[f32; 4]; 2]> = pivots
+        .tips
+        .iter()
+        .zip(&pivots.twigs)
+        .map(|(&limb, &twig)| [limb, twig])
+        .collect();
+    let near = crown_near(&cards, 2, &tips);
     info!(
         "lush: veteran oak {model}, {VETERAN_M:.0} m: {} clumps, crown {} near",
         tree.tips.len(),
@@ -161,10 +170,10 @@ fn veteran(n: usize, with: &Grow, meshes: &mut Assets<Mesh>, shapes: &mut Shapes
             shapes.remember(&mesh, seen);
             mesh
         },
-        crown_far: meshes.add(crown_far(&cards, 2).mesh()),
-        shadow: meshes.add(crown_stand_in(&cards).mesh()),
-        clumps: meshes.add(crown_clumps(&tree, 1.0, false).mesh()),
-        lumps: meshes.add(crown_clumps(&tree, SHADOW_LUMP, true).mesh()),
+        crown_far: meshes.add(crown_far(&cards, 2, &tips).mesh()),
+        shadow: meshes.add(crown_stand_in(&cards, &tips).mesh()),
+        clumps: meshes.add(crown_clumps(&tree, 1.0, false, &[]).mesh()),
+        lumps: meshes.add(crown_clumps(&tree, SHADOW_LUMP, true, &[]).mesh()),
         shadow_lumps: Arc::new(sky_occlusion::Lumps::new(lumps_of(&tree, SHADOW_LUMP))),
         height: VETERAN_M,
         trunk_m: tree.trunk_m,
