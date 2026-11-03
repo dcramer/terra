@@ -591,6 +591,7 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D601](decisions/D601.md) | Eight joint influences a vertex, read from glTF's JOINTS_1 and skinned in our patched Bevy | Tech | Agent | Decided | A vertex may be skinned to up to eight joints… |
 | [D603](decisions/D603.md) | The start's far view streams in after the loading screen | Tech | Agent | Decided | The loading screen waits for what is near the start… |
 | [D604](decisions/D604.md) | The volumetric fog takes the air's dimming of the sun at a ray's two ends, not at every lit step | Tech | Agent | Decided | Bevy 0.20's `volumetric_fog.wesl`, with an atmosphere on… |
+| [D605](decisions/D605.md) | The mountains' slopes are blended between every so many lattice points | Tech | Agent | Decided | A mountain's ground point takes the two slopes its shape… |
 
 ## Tools and workflow
 

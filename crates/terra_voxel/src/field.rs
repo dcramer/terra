@@ -399,7 +399,7 @@ impl GeneratedPlanet {
             ..Node::default()
         };
         if let Some(range) = &self.range {
-            let rise = range.rise(direction, self.spec.radius_m);
+            let rise = self.rise_at(range, at, direction);
             node.height += rise.height_m;
             node.bed = rise.bed;
             node.wall = rise.wall;

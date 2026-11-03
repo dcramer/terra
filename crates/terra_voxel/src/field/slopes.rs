@@ -1,5 +1,5 @@
-//! The mountains' slopes blended between every so many of the ground's lattice points, not
-//! measured at each (D604).
+//! The mountains' slopes as the land takes them (D605): blended between every so many of the
+//! ground's lattice points, not measured at each.
 //!
 //! A mountain's ground point asks the ridges' height 13 times: once where it is, 6 times for
 //! the slope its gullies follow (over `SLOPE_STEP_M` either side along each axis) and 6 for
@@ -12,7 +12,7 @@
 //! so many lattice points already, are measured where they are.
 
 use super::{GeneratedPlanet, cube_direction};
-use crate::mountains::{FACES_SLOPE_M, Range, SLOPE_STEP_M};
+use crate::mountains::{FACES_SLOPE_M, Range, Rise, SLOPE_STEP_M};
 use glam::Vec3;
 
 /// Every how many of the ground's lattice points the gullies' slope is measured.
@@ -43,6 +43,17 @@ impl GeneratedPlanet {
         let cells = self.lattice as f32;
         let u = |k: u32| k as f32 / cells * 2.0 - 1.0;
         cube_direction(face, u(i), u(j))
+    }
+
+    /// What the mountains make of the ground at a lattice point, in its direction, their
+    /// slopes blended from the points they are measured at.
+    pub(super) fn rise_at(&self, range: &Range, at: (u8, u32, u32), direction: Vec3) -> Rise {
+        range.rise_by(
+            direction,
+            self.spec.radius_m,
+            || self.slope_at(range, at, SLOPE_EVERY, SLOPE_STEP_M),
+            || self.slope_at(range, at, BROAD_EVERY, FACES_SLOPE_M),
+        )
     }
 
     /// The ridges' rise round a lattice point over `step_m` (`Range::gradient`), blended from
@@ -88,7 +99,7 @@ impl GeneratedPlanet {
     /// The mountains' two slopes at the lattice point nearest a direction, each across the
     /// ground in metres a metre: the gullies' and the faces' broad one, each as the land takes
     /// it and as measured at the point itself; none off the ranges. For the measure of how far
-    /// the one strays from the other (`terra_land`'s `slopes` test, D604).
+    /// the one strays from the other (`terra_land`'s `slopes` test, D605).
     pub fn mountain_slopes(&self, direction: Vec3) -> Option<[(Vec3, Vec3); 2]> {
         let range = self.range.as_ref()?;
         let (face, s, t) = super::cube_coordinates(direction);

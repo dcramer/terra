@@ -696,7 +696,7 @@ impl Range {
 
     /// [`Range::rise`], with the ridges' rise round the point ([`Range::gradient`]) over
     /// `SLOPE_STEP_M` given by `slope` and over `FACES_SLOPE_M` by `broad`, each asked only
-    /// if wanted, so they may come from a sparser lattice (`field::slopes`, D604).
+    /// if wanted, so they may come from a sparser lattice (`field::slopes`, D605).
     pub(crate) fn rise_by(
         &self,
         direction: Vec3,

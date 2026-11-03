@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn the_mountains_slopes_blended_between_their_points_stray_little_over_the_lakes_view() {
         // The mountains' slopes blended from every so many lattice points (terra_voxel's
-        // field::slopes, D604), not measured at each. Over the lake's first
+        // field::slopes, D605), not measured at each. Over the lake's first
         // view, 3 km across round the pinned lake on points 11 m apart (prime to the slopes'
         // spacings, so every place between their points is met), the way the gullies run
         // turns little from the slope measured at the point, and the broad slope the faces
