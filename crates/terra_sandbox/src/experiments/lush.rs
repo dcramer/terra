@@ -200,12 +200,24 @@ const FAR_CROWNS: [Color; 3] = [
 ];
 /// Each kind's crown cards tinted, oak, pine and spruce (D247, D248); the spruce's as it read
 /// when the crowns' leaves were greyed and darkened (D292); the Scots pine's tufts are drawn in
-/// their own dark grey-green (D318).
+/// their own dark grey-green (D318); each `warmed` (D598).
 const CROWN_TINTS: [Vec3; 3] = [
-    Vec3::new(0.92, 0.95, 0.85),
-    Vec3::new(1.05, 1.0, 1.0),
-    Vec3::new(1.48, 1.36, 0.67),
+    warmed(Vec3::new(0.92, 0.95, 0.85)),
+    warmed(Vec3::new(1.05, 1.0, 1.0)),
+    warmed(Vec3::new(1.48, 1.36, 0.67)),
 ];
+/// A living crown's olive (D598): every tree's leaves, its far levels' colours with them, have
+/// their linear red and blue scaled so. The crowns' median hue was 71 to 78 degrees on a clear
+/// day against Sons of the Forest's and Enshrouded's 62 to 63, teal against olive. The sky's
+/// light through the leaves (`sky_through` in foliage_fragment.wesl) was not the cause: drawn
+/// grey, or not at all, it moved the hue under 1.5 degrees; red 1.35 and blue 0.6 took it
+/// to 67, these to 65 (five views at 15:00).
+pub(super) const WARM: Vec3 = Vec3::new(1.6, 1.0, 0.5);
+
+/// `colour` warmed to a living crown's olive (`WARM`).
+pub(super) const fn warmed(colour: Vec3) -> Vec3 {
+    Vec3::new(colour.x * WARM.x, colour.y * WARM.y, colour.z * WARM.z)
+}
 /// The atlas's oakbranch, Scots pine and spruce pictures' average colour where they are leaf,
 /// linear, measured from `materials/foliage/cards.png` by hand-run script: what the far
 /// forest's crowns are coloured from, tinted and darkened as the crowns' cards are (D273).
@@ -820,7 +832,11 @@ impl Looks {
                 ..default()
             })
         };
-        looks.far_crowns = FAR_CROWNS.map(&mut far_crown);
+        // Warmed as the near crowns are (D598), so a tree's last level keeps their colour.
+        looks.far_crowns = FAR_CROWNS.map(|colour| {
+            let warm = warmed(colour.to_linear().to_vec3());
+            far_crown(Color::linear_rgb(warm.x, warm.y, warm.z))
+        });
         // Each kind's bark in several scans or shades, so a stand of them is not one bark (D247):
         // old oaks' deep-furrowed willow, it again larger and greyer (Bark Willow, dark mud
         // without plates, read as fur, D264) and a grey-brown with knots; pines' pine

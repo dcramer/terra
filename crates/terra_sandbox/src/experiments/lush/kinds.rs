@@ -143,7 +143,7 @@ fn veteran(n: usize, with: &Grow, meshes: &mut Assets<Mesh>, shapes: &mut Shapes
     let mut dice = with.seed.derive("veteran").index(n as u64).rng();
     let mut cards = species::crown_cards(&mut dice, &tree, VETERAN_M, with.looks.leaf_of[0]);
     for card in cards.iter_mut().flatten() {
-        card.tint *= Vec3::new(0.9, 0.95, 0.85);
+        card.tint *= super::warmed(Vec3::new(0.9, 0.95, 0.85));
         // Its trunk does not sway, so nor do its leaves much with it.
         card.sway.x *= 0.25;
     }

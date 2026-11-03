@@ -14,6 +14,7 @@ use super::{
 use crate::experiments::lush::floor::placements::Placement;
 use crate::experiments::lush::shade::ShadowSet;
 use crate::experiments::lush::thicket::{self, Stool};
+use crate::experiments::lush::warmed;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use terra_gen::Rng;
@@ -245,7 +246,8 @@ impl Lay<'_, '_, '_> {
                     self.layered(shrub, Paint::Bark)
                 }
                 Under::Sapling => {
-                    let tint = variant_tint(&mut dice, THICKET_TINT);
+                    // A young tree, warmed as the grown ones' crowns are (D598).
+                    let tint = variant_tint(&mut dice, warmed(THICKET_TINT));
                     let leaves = if n % 2 == 0 { "oak" } else { "hazel" };
                     let shrub = thicket::sapling(&mut dice, &card(leaves), tint);
                     self.layered(shrub, Paint::Bark)
@@ -289,7 +291,7 @@ impl Lay<'_, '_, '_> {
                     self.layered(shrub, Paint::Bark)
                 }
                 Under::Spruce => {
-                    let tint = variant_tint(&mut dice, Vec3::new(1.6, 1.75, 0.7));
+                    let tint = variant_tint(&mut dice, warmed(Vec3::new(1.6, 1.75, 0.7)));
                     let height = dice.range(1.4, 4.4);
                     let shrub = thicket::evergreen(&mut dice, &card("spruce"), tint, height, 0.5);
                     self.layered(shrub, Paint::SpruceBark)
