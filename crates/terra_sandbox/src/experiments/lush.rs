@@ -694,9 +694,10 @@ fn bark_material(
     })
 }
 
-/// The seed the forest grows from: its kinds of tree, where they stand, and all the rest.
-fn forest_seed() -> Seed {
-    Seed(77).derive("lush")
+/// The seed the forest grows from: its kinds of tree, where they stand, and all the rest; the
+/// world's own, derived for the forest (D596).
+fn forest_seed(planet: &Planet) -> Seed {
+    planet.seed().derive("lush forest")
 }
 
 /// The foliage shader's settings every material of the forest starts from: the wind blowing
@@ -1184,7 +1185,7 @@ fn plant(
     // which is away from where the yard's base faces.
     let east = up.cross(Vec3::X).normalize().cross(up);
     let south = east.cross(up);
-    let seed = forest_seed();
+    let seed = forest_seed(&planet);
 
     let parting = parting.map(|parting| parting.0.clone()).unwrap_or_default();
     let wind = wind(east, parting.clone());

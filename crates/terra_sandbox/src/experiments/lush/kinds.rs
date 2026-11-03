@@ -1,8 +1,9 @@
-//! The forest's kinds of tree, grown once for the app and drawn in each world's materials.
+//! The forest's kinds of tree, grown once for a seed and drawn in each world's materials.
 //!
-//! The kinds are grown from the forest's own seed (`forest_seed`), so they are the same in
-//! every world it is planted in; only their materials differ, as those take the world's wind.
-//! So their meshes are grown on the first entry and kept for the app, as a streaming game
+//! The kinds are grown from the forest's own seed (`forest_seed`, the world's derived), so
+//! they are the same in every world of that seed it is planted in; only their materials
+//! differ, as those take the world's wind. So their meshes are grown on the first entry and
+//! kept until a world of another seed is entered, as a streaming game
 //! keeps the meshes its cells share resident while cells come and go (Unreal's World
 //! Partition streams actors, not the static meshes they instance): grown again on each
 //! entry they were about a second of the crossing's longest frame, and each crossing gave
@@ -19,10 +20,11 @@ use std::sync::Arc;
 use terra_gen::Seed;
 use terra_world::sky_occlusion;
 
-/// Every kind's model, the grown `KINDS` then the `VETERANS`, without its materials; empty
-/// until the forest is first planted.
+/// Every kind's model, the grown `KINDS` then the `VETERANS`, without its materials, and the
+/// forest's seed they grew from; empty until the forest is first planted, and grown again
+/// for a world of another seed.
 #[derive(Resource, Default)]
-pub(super) struct Grown(Vec<TreeModel>);
+pub(super) struct Grown(Vec<TreeModel>, Option<Seed>);
 
 /// Which of `BARKS` a grown kind's wood is drawn in, and which species' leaves, tint and far
 /// crown it takes (0 oak, 1 pine, 2 spruce).
@@ -55,7 +57,9 @@ pub(super) fn trees(
     materials: &mut Assets<Foliage>,
     shapes: &mut Shapes,
 ) -> Vec<TreeModel> {
-    if grown.0.is_empty() {
+    if grown.1 != Some(with.seed) {
+        grown.0.clear();
+        grown.1 = Some(with.seed);
         for kind in 0..KINDS.len() {
             let (model, trunk, seen) =
                 grow(kind, with.seed, with.looks, Some(with.ivy_leaves), meshes);

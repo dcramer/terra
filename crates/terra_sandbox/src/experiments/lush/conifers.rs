@@ -195,7 +195,7 @@ fn grow_conifers(
         parting.map(|parting| parting.0.clone()).unwrap_or_default(),
     );
     let looks = Looks::new(&assets, &mut materials, &mut plain, &cards, &wind);
-    let seed = forest_seed();
+    let seed = forest_seed(&planet);
     let models: Vec<TreeModel> = (0..KINDS.len())
         .map(|kind| grow(kind, seed, &looks, None, &mut meshes).0)
         .collect();

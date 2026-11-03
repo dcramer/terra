@@ -52,10 +52,6 @@ const ALLOWED: &[(&str, &str)] = &[
         "crates/terra_world/src/rises.rs",
         "when a fish rises: a moment's effect, not the world",
     ),
-    (
-        "crates/terra_sandbox/src/experiments/lush.rs",
-        "the lush forest, a demo scene of one forest, its look baselines and the trailer's, until its rules are the world's flora",
-    ),
 ];
 
 /// Whether a file is the crates' own code, not a test's, a bench's, an example's or a program's.
