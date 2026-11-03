@@ -173,6 +173,34 @@ impl MaterialExtension for FarExtension {
     fn prepass_fragment_shader() -> ShaderRef {
         "shaders/far_forest.wesl".into()
     }
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        _layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        // The main pass shades only the card's fragments the depth prepass kept, as the leaf
+        // cards' does (`grown::test_depth_early`), and tests for equal depth too: a card's empty
+        // part over the land behind it is nearer than the land's depth and passed the usual
+        // greater-or-equal test, running the whole tree shape only to be discarded; tested
+        // equal, the hardware rejects it before the shader runs. The same vertex shader writes
+        // both passes' depth. 0.35 ms off the lake's route view on a 4090, 0.48 under its trees,
+        // no pixel changed (play-lake-fps j10).
+        grown::test_depth_early(descriptor, key.mesh_key);
+        let prepass = descriptor
+            .label
+            .as_ref()
+            .is_some_and(|l| l.contains("prepass") || l.contains("shadow"));
+        if !prepass
+            && key
+                .mesh_key
+                .contains(bevy::pbr::MeshPipelineKey::DEPTH_PREPASS)
+            && let Some(depth) = descriptor.depth_stencil.as_mut()
+        {
+            depth.depth_compare = Some(bevy::render::render_resource::CompareFunction::Equal);
+        }
+        Ok(())
+    }
 }
 
 pub fn plugin(app: &mut App) {
