@@ -169,7 +169,11 @@ export function mainSide(b: Box, rev: string): { at?: string; between: number; t
   const upTo = points.slice(0, points.findLastIndex((p) => p.rev === at) + 1);
   const window = r.scenes.flatMap((scene) => {
     const last = upTo.findLast((p) => p.scene === scene);
-    return last ? series(upTo, last).slice(-WINDOW) : [];
+    if (!last) return [];
+    // The window is the last WINDOW jobs, each one point (history.ts perJob), not runs.
+    const all = series(upTo, last);
+    const jobs = new Set([...new Set(all.map((p) => p.job))].slice(-WINDOW));
+    return all.filter((p) => jobs.has(p.job));
   });
   return { at, between: i, touched, window };
 }
