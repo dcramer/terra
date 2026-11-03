@@ -17,7 +17,11 @@
 //   slides as one block; 0: every tile moves on its own);
 // - neighbour r: how alike side-by-side tiles' motion is (their correlation), and 4 apart;
 // - second against step: how much further a tile moves over a second than over a step (a
-//   sway near 10, a buzz under 2).
+//   sway near 10, a buzz under 2);
+// - over a second, shared and regional r: the shared share of how far each tile went in a
+//   sliding second, and how alike that is of tiles up to 3 apart, so a slow wave the crowns
+//   sway in together shows though each step is mostly their own stirring (Enshrouded's
+//   Springlands 0.19 to 0.26 and 0.52 to 0.55).
 // It fails, exit 1, when shared or neighbour r is above Enshrouded's (SHARED, NEIGHBOUR), when
 // the motion buzzes (under SLOW), or when nothing moved. Needs ffmpeg. Node 22.18 or later; no dependencies.
 
@@ -57,7 +61,17 @@ export type Motion = {
   /// near the second's steps (10), random jitter their root (3.2), a buzz faster than half a
   /// second under 2 (the wind round's judge: a flap that reads as an electric fan).
   slow: number;
+  /// Shared and regional over a second: the share of the tiles' motion over a sliding
+  /// second's window one shift common to the view explains, and how alike the second's motion
+  /// is of tiles within REGION of each other. A slow wave the crowns sway in together shows
+  /// here though each tenth's step is mostly the crowns' own (the wind round's judge tracked
+  /// one period of about 2.5 s across Enshrouded's view, alike 0.72 to 0.86 within a region).
+  wave: number;
+  regional: number;
 };
+
+/// Tiles this many apart or fewer, across and down, are one region for `regional`.
+const REGION = 3;
 
 /// Steps in the `slow` measure's window: a second at a tenth of a second a step.
 const SLOW_STEPS = 10;
@@ -149,25 +163,23 @@ export function measure(frames: Uint8Array[], top = 0.6, step = 3): Motion {
     return Math.sqrt(mean(dxs[k].map((v, t) => (v - mx) ** 2 + (dys[k][t] - my) ** 2)));
   });
   const moving = live.filter((_, i) => rms[i] > STILL);
-  // Shared: the variance the view's mean shift explains, against the tiles' whole variance.
-  const centre = new Map(moving.map((k) => [k, [mean(dxs[k]), mean(dys[k])]]));
-  let common = 0;
-  let total = 0;
-  for (let t = 0; t < steps; t++) {
-    let mx = 0;
-    let my = 0;
-    for (const k of moving) {
-      const [cx, cy] = centre.get(k) as number[];
-      const ex = dxs[k][t] - cx;
-      const ey = dys[k][t] - cy;
-      mx += ex;
-      my += ey;
-      total += ex * ex + ey * ey;
+  const shared = sharedOf(moving, dxs, dys);
+  // The same over a second: each tile's shift summed over a sliding second's window, how far
+  // it went in a second, so a slow wave every crown follows shows above the step's noise.
+  const second = (d: number[]) => {
+    const m = mean(d);
+    const out: number[] = [];
+    for (let t = 0; t + SLOW_STEPS <= d.length; t++) {
+      let s = 0;
+      for (let u = t; u < t + SLOW_STEPS; u++) s += d[u] - m;
+      out.push(s);
     }
-    mx /= Math.max(1, moving.length);
-    my /= Math.max(1, moving.length);
-    common += moving.length * (mx * mx + my * my);
-  }
+    return out;
+  };
+  const sx: number[][] = dxs.map((d, k) => (moving.includes(k) ? second(d) : []));
+  const sy: number[][] = dys.map((d, k) => (moving.includes(k) ? second(d) : []));
+  const wave = sharedOf(moving, sx, sy);
+  const regional = regionalOf(moving, tx, sx, sy);
   const set = new Set(moving);
   const at = (gap: number) => {
     const r: number[] = [];
@@ -210,10 +222,57 @@ export function measure(frames: Uint8Array[], top = 0.6, step = 3): Motion {
     moving: moving.length,
     amplitude: sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0,
     p90: sorted.length ? sorted[Math.floor(sorted.length * 0.9)] : 0,
-    shared: total > 0 ? common / total : Number.NaN,
+    shared,
     neighbour: at(1),
     apart4: at(4),
+    wave,
+    regional,
   };
+}
+
+/// The share of the tiles' motion (each a series of shifts, x and y) one shift common to the
+/// whole view explains: the variance of the view's mean shift against the tiles' whole.
+export function sharedOf(tiles: number[], xs: number[][], ys: number[][]): number {
+  const steps = tiles.length ? xs[tiles[0]].length : 0;
+  const centre = new Map(tiles.map((k) => [k, [mean(xs[k]), mean(ys[k])]]));
+  let common = 0;
+  let total = 0;
+  for (let t = 0; t < steps; t++) {
+    let mx = 0;
+    let my = 0;
+    for (const k of tiles) {
+      const [cx, cy] = centre.get(k) as number[];
+      const ex = xs[k][t] - cx;
+      const ey = ys[k][t] - cy;
+      mx += ex;
+      my += ey;
+      total += ex * ex + ey * ey;
+    }
+    mx /= Math.max(1, tiles.length);
+    my /= Math.max(1, tiles.length);
+    common += tiles.length * (mx * mx + my * my);
+  }
+  return total > 0 ? common / total : Number.NaN;
+}
+
+/// How alike the motion of tiles within REGION of each other is (rows `across` tiles wide):
+/// the mean correlation of their shifts, x and y together, over every such pair.
+export function regionalOf(tiles: number[], across: number, xs: number[][], ys: number[][]): number {
+  const set = new Set(tiles);
+  const r: number[] = [];
+  for (const k of tiles) {
+    const [i, j] = [k % across, Math.floor(k / across)];
+    for (let dj = 0; dj <= REGION; dj++) {
+      for (let di = -REGION; di <= REGION; di++) {
+        if ((dj === 0 && di <= 0) || i + di < 0 || i + di >= across) continue;
+        const o = (j + dj) * across + i + di;
+        if (!set.has(o)) continue;
+        const c = corr([...xs[k], ...ys[k]], [...xs[o], ...ys[o]]);
+        if (!Number.isNaN(c)) r.push(c);
+      }
+    }
+  }
+  return r.length ? mean(r) : Number.NaN;
 }
 
 /// What fails in a measured view, each with what it means; none when it holds.
@@ -238,7 +297,8 @@ export function decode(clip: string): Uint8Array[] {
 
 const line = (name: string, m: Motion) =>
   `${name}: amplitude ${m.amplitude.toFixed(2)} px (p90 ${m.p90.toFixed(2)}), shared ${m.shared.toFixed(2)} (at most ${SHARED}), ` +
-  `neighbour r ${m.neighbour.toFixed(2)} (at most ${NEIGHBOUR}), 4 apart ${m.apart4.toFixed(2)}, second against step ${m.slow.toFixed(1)} (at least ${SLOW}); ${m.moving} of ${m.textured} tiles moving`;
+  `neighbour r ${m.neighbour.toFixed(2)} (at most ${NEIGHBOUR}), 4 apart ${m.apart4.toFixed(2)}, second against step ${m.slow.toFixed(1)} (at least ${SLOW}); ` +
+  `over a second: shared ${m.wave.toFixed(2)}, regional r ${m.regional.toFixed(2)}; ${m.moving} of ${m.textured} tiles moving`;
 
 /// The views a still camera films: up under a crown by the spruce grove, where the research
 /// note measured 0.85 shared and r 0.91 on main (2026-11-02, its film `wind-oak.mp4`). The

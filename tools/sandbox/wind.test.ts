@@ -84,3 +84,26 @@ test("a slow sway moves far more over a second than a step; a buzz moves no furt
   assert.ok(!judge(sway).some((f) => f.includes("buzz")));
   assert.ok(judge(buzz).some((f) => f.includes("buzz")));
 });
+
+test("one slow wave under each tile's own jitter is little shared a step but most of it over a second", () => {
+  // Each tile follows one sine, 2.5 s a swing (25 steps), three pixels each way, with a
+  // jitter of its own each step on top, as Enshrouded's crowns sway together under their own
+  // stirring; and the same tiles each on a sine of their own phase.
+  const tileOf = (x: number, y: number) => Math.floor((x - 3) / 32) + 100 * Math.floor((y - 3) / 32);
+  const film = (phase: (k: number) => number) =>
+    Array.from({ length: 181 }, (_, t) =>
+      frame((x, y) => {
+        const k = tileOf(x, y);
+        const s = Math.floor(t / 3);
+        return [Math.round(3 * Math.sin((2 * Math.PI * s) / 25 + phase(k))) + jiggle(s, 3 * k + 1), jiggle(s, 3 * k + 2)];
+      }),
+    );
+  const together = measure(film(() => 0));
+  assert.ok(together.shared < 0.3, `a step's shared ${together.shared}`);
+  assert.ok(together.wave > 0.7, `a second's shared ${together.wave}`);
+  assert.ok(together.regional > 0.7, `a second's regional r ${together.regional}`);
+  // Each on its own phase: nothing common over a second either.
+  const apart = measure(film((k) => k * 2.399));
+  assert.ok(apart.wave < 0.2, `apart, a second's shared ${apart.wave}`);
+  assert.ok(Math.abs(apart.regional) < 0.3, `apart, a second's regional r ${apart.regional}`);
+});
