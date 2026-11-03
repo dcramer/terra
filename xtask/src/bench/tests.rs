@@ -261,3 +261,29 @@ fn a_tuned_key_is_recorded_only_when_new() {
     assert_eq!(recorded_already(&csv, &keys), [tuned]);
     assert!(recorded_already(&format!("{BENCHMARKS_HEADER}\n"), &keys).is_empty());
 }
+
+/// A settled scene's load goes in its row's `load_s` and its table's line, read against the
+/// last one recorded, so a slower load has a baseline as a slower median does.
+#[test]
+fn a_settled_scenes_load_is_recorded_and_said_against_the_last() {
+    let mut town = timing(9.7, 12.2, 16.8);
+    town.load_s = Some(76.8);
+    let row = csv_row(["2026-11-03", "abc", "release", "town-dusk"], &town, 3);
+    let cells: Vec<&str> = row.split(',').collect();
+    let header: Vec<&str> = BENCHMARKS_HEADER.split(',').collect();
+    assert_eq!(cells.len(), header.len());
+    let load = header
+        .iter()
+        .position(|h| *h == "load_s")
+        .expect("a load column");
+    assert_eq!(cells[load], "76.8");
+    let csv = format!("{BENCHMARKS_HEADER}\n{row}\n");
+    town.load_s = Some(40.0);
+    assert_eq!(
+        play::load_said(&csv, &town, "release", "town-dusk", SLOWER_BY),
+        "loaded in 40.0 s, -48% on abc"
+    );
+    town.load_s = None;
+    let unsaid = csv_row(["2026-11-03", "abc", "release", "town-dusk"], &town, 3);
+    assert_eq!(unsaid.split(',').nth(load), Some(""));
+}

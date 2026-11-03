@@ -733,8 +733,7 @@ fn print_table(
                 timing.hitches,
                 timing.drift_pct,
             );
-            if timing.from_start {
-                let said = play::said(csv, timing, build, name, SLOWER_BY);
+            if let Some(said) = play::second_line(csv, timing, build, name, SLOWER_BY) {
                 println!("  {:w$} {said}", "");
             }
             for miss in &missed {

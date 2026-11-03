@@ -87,10 +87,47 @@ fn last_load(csv: &str, timing: &Timing, build: &str, scene: &str) -> Option<(f3
         .last()
 }
 
+/// A scene's second line in the table, if it has one: a play scene's load and freezes
+/// ([`said`]); a settled scene's load ([`load_said`]), which its row records too, so it is
+/// read beside its frames and copied with them.
+pub(super) fn second_line(
+    csv: &str,
+    timing: &Timing,
+    build: &str,
+    scene: &str,
+    slower_by: f32,
+) -> Option<String> {
+    if timing.from_start {
+        Some(said(csv, timing, build, scene, slower_by))
+    } else {
+        timing
+            .load_s
+            .map(|_| load_said(csv, timing, build, scene, slower_by))
+    }
+}
+
 /// A play scene's second line in the table: its load against the last recorded, SLOWER past
 /// `slower_by` as a median is, and its freezes.
 pub(super) fn said(csv: &str, timing: &Timing, build: &str, scene: &str, slower_by: f32) -> String {
-    let load = match (timing.load_s, last_load(csv, timing, build, scene)) {
+    format!(
+        "{}; {} freezes of {FREEZE_MS:.0} ms or more",
+        load_said(csv, timing, build, scene, slower_by),
+        timing.freezes
+    )
+}
+
+/// A scene's load against the last recorded, SLOWER past `slower_by`: every scene's, a
+/// settled one's too, its load in the results' `load_s` beside its frames, so a slower load
+/// has a baseline to be seen against (a settled scene's load had none, its rows written
+/// from the table, which said only a play scene's).
+pub(super) fn load_said(
+    csv: &str,
+    timing: &Timing,
+    build: &str,
+    scene: &str,
+    slower_by: f32,
+) -> String {
+    match (timing.load_s, last_load(csv, timing, build, scene)) {
         (None, _) => "the load not said".to_string(),
         (Some(load), None) => format!("loaded in {load:.1} s, nothing recorded"),
         (Some(load), Some((before, then))) => {
@@ -101,11 +138,7 @@ pub(super) fn said(csv: &str, timing: &Timing, build: &str, scene: &str, slower_
                 change * 100.0
             )
         }
-    };
-    format!(
-        "{load}; {} freezes of {FREEZE_MS:.0} ms or more",
-        timing.freezes
-    )
+    }
 }
 
 #[cfg(test)]
