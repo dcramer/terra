@@ -592,6 +592,8 @@ Rust and Bevy, terrain, shared state, networking and the game's model.
 | [D603](decisions/D603.md) | The start's far view streams in after the loading screen | Tech | Agent | Decided | The loading screen waits for what is near the start… |
 | [D604](decisions/D604.md) | The volumetric fog takes the air's dimming of the sun at a ray's two ends, not at every lit step | Tech | Agent | Decided | Bevy 0.20's `volumetric_fog.wesl`, with an atmosphere on… |
 | [D605](decisions/D605.md) | The mountains' slopes are blended between every so many lattice points | Tech | Agent | Decided | A mountain's ground point takes the two slopes its shape… |
+| [D606](decisions/D606.md) | One table owns the game's threads and each kind of work's share of the cores | Tech | Agent | Leaning | Every thread the game starts takes its count from one… |
+| [D608](decisions/D608.md) | Work after the load runs in priority classes under a per-frame budget | Tech | Agent | Leaning | What streams after the loading screen lifts… |
 
 ## Tools and workflow
 
@@ -665,6 +667,9 @@ Checks, developer tools, languages and the repository.
 | [D577](decisions/D577.md) | Tracy is the profiler for the detail | Tech | Agent | Decided | A `tracy` feature on `terra_sandbox`… |
 | [D578](decisions/D578.md) | A play benchmark measures the load and the freezes of a walk | Tech | Agent | Decided | `cargo xtask bench` gets a scene timed from the… |
 | [D581](decisions/D581.md) | `make play` runs the release build | Tech | Agent | Decided | `cargo xtask play` (`make play`, `yard`) builds and runs… |
+| [D607](decisions/D607.md) | Performance budgets are one data file the bench gates, with a settle phase after the load | Tech | Agent | Leaning | The game's performance budgets live in one data file… |
+| [D609](decisions/D609.md) | A performance probe is one tool on main that measures only a settled frame | Tech | Agent | Leaning | A probe of what a change costs (a shader's variant, a… |
+| [D610](decisions/D610.md) | The play scenes are benched at each landing, a failure bisected unattended, and an A/B reads main's side from it | Tech | Agent | Leaning | A continuous row `perf` (`tools/continuous/checks.json`… |
 
 ## Superseded and rejected
 
