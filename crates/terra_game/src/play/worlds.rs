@@ -17,7 +17,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use terra_world::choice::Choice;
-use terra_world::planet::entering::FIRST_SEED;
+use terra_world::planet::Planet;
+use terra_world::planet::entering::{FIRST_SEED, KnownStart};
 
 const META: &str = "world.ron";
 const SAVE: &str = "save.ron";
@@ -37,6 +38,23 @@ pub struct Meta {
     /// Seconds since 1970, when made and when last played.
     pub made: u64,
     pub played: u64,
+    /// The start its land's search found when it was first entered, by the planet's radius
+    /// (the way from the centre, D596): searching again takes seconds on a large world, and
+    /// the start depends on the seed and radius alone, so it is found once.
+    #[serde(default)]
+    pub starts: Vec<(f32, [f32; 3])>,
+}
+
+impl Meta {
+    /// The start kept for a planet of its seed and that radius.
+    pub fn known_start(&self, radius_m: f32) -> Option<KnownStart> {
+        let (_, direction) = self.starts.iter().find(|(kept, _)| *kept == radius_m)?;
+        Some(KnownStart {
+            seed: self.seed,
+            radius_m,
+            direction: Vec3::from_array(*direction),
+        })
+    }
 }
 
 fn first_seed() -> u64 {
@@ -123,6 +141,7 @@ pub fn make(
         seed,
         made: now,
         played: now,
+        starts: Vec::new(),
     };
     write_meta(&dir, &meta)?;
     Ok(World { dir, meta })
@@ -240,7 +259,35 @@ pub fn play(commands: &mut Commands, options: &mut Options, world: World) {
     commands.insert_resource(SavePath(world.save()));
     options.free_build |= world.meta.creative;
     options.seed = Some(world.meta.seed);
+    know_the_start(commands, &world.meta, options.radius_m);
     commands.insert_resource(Playing(world));
+}
+
+/// The start a world found before taken as it is when its land is made, or none known.
+fn know_the_start(commands: &mut Commands, meta: &Meta, radius_m: f32) {
+    match meta.known_start(radius_m) {
+        Some(known) => commands.insert_resource(known),
+        None => commands.remove_resource::<KnownStart>(),
+    }
+}
+
+/// Keeps in the world played the start its land's search found, the first time it is
+/// entered at this radius, so the next entry takes it unsearched (`KnownStart`).
+pub fn keep_the_start(mut playing: ResMut<Playing>, planet: Option<Res<Planet>>) {
+    let Some(planet) = planet else {
+        return;
+    };
+    let radius_m = planet.radius_m();
+    let meta = &playing.0.meta;
+    if planet.seed().0 != meta.seed || meta.known_start(radius_m).is_some() {
+        return;
+    }
+    let direction = planet.start_direction().to_array();
+    let world = &mut playing.0;
+    world.meta.starts.push((radius_m, direction));
+    if let Err(problem) = write_meta(&world.dir, &world.meta) {
+        warn!("Could not keep {}'s start: {problem}", world.meta.name);
+    }
 }
 
 /// At the start: where the worlds are kept, the old save moved in, and, unless the title
@@ -277,8 +324,11 @@ pub fn choose(mut commands: Commands, mut options: ResMut<Options>, choice: Res<
     commands.insert_resource(Root(root.clone()));
     if choice.title {
         // The title screen opens over the world Continue plays, so it is loaded already.
-        if options.seed.is_none() {
-            options.seed = list(&root).first().map(|world| world.meta.seed);
+        if options.seed.is_none()
+            && let Some(world) = list(&root).first()
+        {
+            options.seed = Some(world.meta.seed);
+            know_the_start(&mut commands, &world.meta, options.radius_m);
         }
         return;
     }

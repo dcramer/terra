@@ -177,6 +177,7 @@ pub fn plugin(app: &mut App) {
             (
                 load.run_if(resource_added::<SavePath>),
                 (restore_people, restore_claim, autosave).run_if(resource_exists::<SavePath>),
+                super::worlds::keep_the_start.run_if(resource_exists::<super::worlds::Playing>),
             )
                 .chain(),
         )

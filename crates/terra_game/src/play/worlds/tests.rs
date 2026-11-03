@@ -154,5 +154,67 @@ fn a_world_keeps_the_seed_it_was_made_from_and_one_from_before_seeds_has_the_fir
     let kept = list(&root);
     let old = kept.iter().find(|w| w.meta.name == "Old").unwrap();
     assert_eq!(old.meta.seed, FIRST_SEED);
+    assert!(
+        old.meta.starts.is_empty(),
+        "one from before kept starts has none"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// The start a world's land found is kept in its folder the first time it is entered, read
+/// back bit for bit, and taken by its land again only on a planet of its seed and radius, so
+/// a world loaded again is not searched again and stands where it first did (D596).
+#[test]
+fn a_worlds_start_is_kept_once_and_taken_again_as_it_was() {
+    use bevy::ecs::system::RunSystemOnce;
+    use terra_core::{PlanetSpec, Seed};
+    let root = folder_for("start");
+    let world = make(&root, "Kept", false, SEED, 1).unwrap();
+    let spec = PlanetSpec {
+        seed: Seed(SEED),
+        radius_m: 2_000.0,
+    };
+    let planet = Planet::new(spec);
+    let mut app = bevy::ecs::world::World::new();
+    app.insert_resource(Playing(world));
+    app.insert_resource(planet.clone());
+    app.run_system_once(keep_the_start).unwrap();
+    app.run_system_once(keep_the_start).unwrap();
+    let kept = list(&root).remove(0).meta;
+    assert_eq!(kept.starts.len(), 1, "kept once: {:?}", kept.starts);
+    let known = kept.known_start(spec.radius_m);
+    assert_eq!(
+        known.map(|known| known.direction),
+        Some(planet.start_direction()),
+        "read back as it was found"
+    );
+    assert_eq!(
+        KnownStart::of(known.as_ref(), spec),
+        Some(planet.start_direction())
+    );
+    let larger = PlanetSpec {
+        radius_m: 30_000.0,
+        ..spec
+    };
+    assert_eq!(
+        KnownStart::of(known.as_ref(), larger),
+        None,
+        "another radius searches"
+    );
+    let other = PlanetSpec {
+        seed: Seed(SEED + 1),
+        ..spec
+    };
+    assert_eq!(
+        KnownStart::of(known.as_ref(), other),
+        None,
+        "another seed searches"
+    );
+    let again = Planet::starting(spec, KnownStart::of(known.as_ref(), spec));
+    assert_eq!(
+        again.start(),
+        planet.start(),
+        "the land stands where it first did"
+    );
     std::fs::remove_dir_all(root).unwrap();
 }

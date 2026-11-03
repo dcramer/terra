@@ -122,14 +122,20 @@ pub struct Cover {
 
 impl Planet {
     pub fn new(spec: PlanetSpec) -> Self {
+        Self::starting(spec, None)
+    }
+
+    /// As `new`, its start the one a kept world found before for this seed and radius
+    /// (`entering::KnownStart`), not searched for again.
+    pub fn starting(spec: PlanetSpec, known: Option<Vec3>) -> Self {
         // The land lays the ground's patterned ground where its climate keeps it frozen.
         let climate: terra_climate::Climate =
             crate::data::read(crate::daylight::WorldClimate::FILE);
         let land = terra_land::Land::new(terra_land::ground::world(spec), climate);
         // The player's start, searched for from the seed (D596).
         let searching = std::time::Instant::now();
-        let start = terra_land::spawn::find(&land);
-        if start != START {
+        let start = known.unwrap_or_else(|| terra_land::spawn::find(&land));
+        if known.is_none() && start != START {
             info!(
                 "The start of seed {} searched for in {:.1} s, {:.2} km from the planet's own",
                 spec.seed.0,
@@ -340,6 +346,11 @@ impl Planet {
     /// seed on a world of biomes (`terra_land::spawn`, D596).
     pub fn start(&self) -> Vec3 {
         self.surface(self.start)
+    }
+
+    /// Which way from the centre the start is, as a kept world keeps it.
+    pub fn start_direction(&self) -> Vec3 {
+        self.start
     }
 
     /// The planet's own start, on the ground: the point its world's frame and sky are turned

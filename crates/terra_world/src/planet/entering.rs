@@ -30,12 +30,35 @@ pub fn planet_spec(world: &WorldSpec, radius_m: f32) -> PlanetSpec {
     }
 }
 
+/// The start a world kept on disk found when it was first entered, so entering it again does
+/// not search for it (seconds on a 30 km world, D596): the way from the centre it is on a
+/// planet of that seed and radius, taken only by a planet of both.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct KnownStart {
+    pub seed: u64,
+    pub radius_m: f32,
+    pub direction: Vec3,
+}
+
+impl KnownStart {
+    /// The start it knows for a planet of that spec, if it is that planet's.
+    pub fn of(known: Option<&KnownStart>, spec: PlanetSpec) -> Option<Vec3> {
+        known
+            .filter(|known| known.seed == spec.seed.0 && known.radius_m == spec.radius_m)
+            .map(|known| known.direction)
+    }
+}
+
 /// A world's land: its planet, the start on it and the site it was asked to stand at
 /// (`--site`). On a world with mountains the land round the start is worked out before
 /// anything stands on it (D322): its lakes, seasons and snow on the clock's date. A site the
 /// land's rules make is found first, and the start stood on its shore once its lakes are
-/// known.
-pub fn land_of(world: &WorldSpec, options: &Options) -> (Planet, Start, Option<Sited>) {
+/// known. A start found before (`known`) is taken for a planet of its seed and radius.
+pub fn land_of(
+    world: &WorldSpec,
+    options: &Options,
+    known: Option<&KnownStart>,
+) -> (Planet, Start, Option<Sited>) {
     let yard = options.yard();
     let spec = planet_spec(world, options.radius_m);
     crate::crash::note("seed", spec.seed.0);
@@ -44,7 +67,7 @@ pub fn land_of(world: &WorldSpec, options: &Options) -> (Planet, Start, Option<S
     } else if yard {
         Planet::smooth(spec)
     } else {
-        Planet::new(spec)
+        Planet::starting(spec, KnownStart::of(known, spec))
     };
     let climate: terra_climate::Climate = crate::data::read(crate::daylight::WorldClimate::FILE);
     let day = options.date.map_or(0, |date| date.day(&climate.year));
@@ -97,7 +120,7 @@ pub(crate) fn land(world: &mut World) {
     let spec = world.resource::<WorldSpec>().clone();
     let options = world.resource::<Options>();
     let yard = options.yard();
-    let (planet, start, sited) = land_of(&spec, options);
+    let (planet, start, sited) = land_of(&spec, options, world.get_resource::<KnownStart>());
     world.insert_resource(planet);
     world.insert_resource(start);
     if let Some(sited) = sited {
